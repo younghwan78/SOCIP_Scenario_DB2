@@ -164,6 +164,8 @@ Run integration tests only when Docker/PostgreSQL test containers are available:
 uv run --group dev pytest tests\integration
 ```
 
+The current read-side contract is documented in [docs/read-api-contract.md](docs/read-api-contract.md). Update that file and the related tests before changing Read API response shapes.
+
 Equivalent explicit virtual environment commands:
 
 ```powershell

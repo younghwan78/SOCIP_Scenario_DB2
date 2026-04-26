@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Generic, TypeVar
+from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel
 
@@ -54,4 +54,4 @@ class PagedResponse(BaseModel, Generic[T]):
 
 class ErrorResponse(BaseModel):
     error: str
-    detail: str | list
+    detail: str | list | dict[str, Any]

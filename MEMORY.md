@@ -55,3 +55,12 @@ uv run --group dev pytest tests\unit
 
 - `71c6a42 Add ELK viewer rendering`
 - `de327fc Align viewer fixture with legacy ELK layout`
+- `d879b9c Document viewer runbook and test workflow`
+
+## 2026-04-26 Read API Wrap-Up
+
+- Read API is considered ready to freeze for the current viewer/demo milestone.
+- The read-side contract is documented in `docs/read-api-contract.md`.
+- Error responses are normalized as `{ "error": "...", "detail": ... }` for handled `HTTPException`, `NoResultFound`, `IntegrityError`, and request validation errors.
+- Runtime/view contract tests are concentrated in `tests/integration/test_runtime_view_e2e.py`.
+- Before changing Read API response shape, update the contract document and tests first.

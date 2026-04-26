@@ -1,4 +1,4 @@
-"""FastAPI view router — GET /api/v1/scenarios/{sid}/variants/{vid}/view."""
+﻿"""FastAPI view router ??GET /api/v1/scenarios/{sid}/variants/{vid}/view."""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -19,16 +19,20 @@ router = APIRouter(tags=["view"])
 def get_view(
     scenario_id: str,
     variant_id: str,
-    level: int = Query(0, ge=0, le=2, description="View depth: 0=lane, 1=IP DAG, 2=drill-down"),
+    level: int = Query(0, ge=0, le=2, description="View depth: 0=overview/topology, 1=IP DAG, 2=drill-down"),
     mode: str = Query("architecture", description="architecture | topology"),
     expand: str | None = Query(None, description="IP id to expand (Level 2 only)"),
     db: Session = Depends(get_db),
 ):
-    """Return Cytoscape-ready node/edge data for the pipeline viewer.
+    """Return viewer projection data for the ELK/SVG pipeline viewer.
 
-    Level 0: Lane architecture view (preset layout, 6 lanes × 4 stages).
-    Level 1: IP DAG with ELK layered layout.
-    Level 2: Composite-IP drill-down (requires expand=<ip_id>).
+    Level 0:
+      - mode=architecture: App/Framework/HAL/Kernel/HW/Memory overview.
+      - mode=topology: SW task topology DAG.
+    Level 1:
+      - Grouped IP detail DAG.
+    Level 2:
+      - Drill-down view. Requires expand=camera|video|display or an IP/node id.
     """
     try:
         if level == 0:
@@ -45,3 +49,4 @@ def get_view(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     raise HTTPException(status_code=400, detail=f"Unsupported level: {level}")
+

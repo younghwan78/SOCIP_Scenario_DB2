@@ -49,9 +49,14 @@ def test_view_architecture_projection_e2e(api_client):
     assert response.status_code == 200
     body = response.json()
     assert body["mode"] == "architecture"
+    assert body["level"] == 0
+    assert body["summary"]["scenario_id"] == SCENARIO_ID
+    assert body["summary"]["variant_id"] == VARIANT_ID
+    assert {"nodes", "edges", "risks", "metadata", "overlays_available"}.issubset(body)
     assert any(node["data"]["layer"] == "hw" for node in body["nodes"])
     assert any(node["data"]["layer"] == "memory" for node in body["nodes"])
     assert any(edge["data"]["flow_type"] == "M2M" for edge in body["edges"])
+    assert "llc-allocation" in body["overlays_available"]
 
 
 def test_view_topology_projection_e2e(api_client):
@@ -81,6 +86,46 @@ def test_view_drilldown_projection_e2e(api_client):
     assert any(node["data"]["type"] == "submodule" for node in body["nodes"])
     assert any(node["data"]["type"] == "dma_group" for node in body["nodes"])
     assert any(node["data"]["type"] == "sysmmu" for node in body["nodes"])
+
+
+def test_view_level1_projection_contract_e2e(api_client):
+    response = api_client.get(
+        f"/api/v1/scenarios/{SCENARIO_ID}/variants/{VARIANT_ID}/view",
+        params={"level": 1},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["level"] == 1
+    assert body["metadata"]["layout"] == "level1-reference"
+    assert any(node["data"]["id"] == "grp-isp" for node in body["nodes"])
+    assert any(node["data"]["active_operations"] for node in body["nodes"])
+    assert any(edge["data"]["memory"] for edge in body["edges"] if edge["data"]["flow_type"] == "M2M")
+
+
+def test_view_level2_requires_expand_error_contract(api_client):
+    response = api_client.get(
+        f"/api/v1/scenarios/{SCENARIO_ID}/variants/{VARIANT_ID}/view",
+        params={"level": 2},
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "error": "validation_error",
+        "detail": "expand= required for level=2",
+    }
+
+
+def test_view_unknown_scenario_error_contract(api_client):
+    response = api_client.get(
+        f"/api/v1/scenarios/unknown-scenario/variants/{VARIANT_ID}/view",
+        params={"level": 0, "mode": "architecture"},
+    )
+
+    assert response.status_code == 404
+    body = response.json()
+    assert body["error"] == "not_found"
+    assert "Scenario not found" in body["detail"]
 
 
 def test_view_level2_camera_reference_projection_e2e(api_client):
