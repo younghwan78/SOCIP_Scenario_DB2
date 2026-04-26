@@ -1,4 +1,4 @@
-"""Pipeline Viewer for ScenarioDB.
+r"""Pipeline Viewer for ScenarioDB.
 
 Run from the project virtual environment:
   .\.venv\Scripts\python.exe -m streamlit run dashboard/Home.py
@@ -18,7 +18,7 @@ for path in (_root / "src", _root, _root / "dashboard"):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
-from dashboard.components.cytoscape_viewer import ALL_EDGE_TYPES, ALL_LAYERS, render_level0
+from dashboard.components.elk_viewer import render_elk_view
 from scenario_db.api.schemas.view import ViewResponse
 from scenario_db.view.service import build_sample_level0
 
@@ -316,30 +316,24 @@ with main_col:
 
     if level == 0:
         st.markdown('<div class="section-card">', unsafe_allow_html=True)
-        render_level0(
+        render_elk_view(
             arch_view,
-            visible_layers=ALL_LAYERS,
-            visible_edge_types=ALL_EDGE_TYPES,
-            canvas_height=720,
+            canvas_height=820,
             title="Level 0 - Architecture View",
         )
         st.markdown("</div>", unsafe_allow_html=True)
 
         st.markdown('<div class="section-card">', unsafe_allow_html=True)
-        render_level0(
+        render_elk_view(
             topo_view,
-            visible_layers=ALL_LAYERS,
-            visible_edge_types=ALL_EDGE_TYPES,
             canvas_height=1680,
             title="Level 0 - SW Task Topology View",
         )
         st.markdown("</div>", unsafe_allow_html=True)
     elif level == 1:
         st.markdown('<div class="section-card">', unsafe_allow_html=True)
-        render_level0(
+        render_elk_view(
             primary,
-            visible_layers=ALL_LAYERS,
-            visible_edge_types=ALL_EDGE_TYPES,
             canvas_height=1360,
             title="Level 1 - IP Detail DAG",
         )
@@ -347,10 +341,8 @@ with main_col:
     else:
         st.markdown('<div class="section-card">', unsafe_allow_html=True)
         level2_height = int(primary.metadata.get("canvas_h") or 980)
-        render_level0(
+        render_elk_view(
             primary,
-            visible_layers=ALL_LAYERS,
-            visible_edge_types=ALL_EDGE_TYPES,
             canvas_height=min(max(level2_height, 860), 1320),
             title=f"Level 2 - Drill Down ({expand_label})",
         )

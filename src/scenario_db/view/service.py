@@ -1331,6 +1331,19 @@ def _architecture_edges(graph: CanonicalScenarioGraph) -> list[EdgeElement]:
         flow_type = _edge_flow_type(edge)
         buffer_ref = edge.get("buffer")
         if buffer_ref:
+            # Level 0 must still show the direct HW pipeline relationship.
+            # The buffer edges provide memory detail; this summary edge keeps
+            # HW-to-HW connectivity visible in the architecture overview.
+            edges.append(
+                _e(
+                    f"e-{idx}-hw-summary",
+                    source,
+                    target,
+                    flow_type,
+                    buffer_ref=buffer_ref,
+                    label=f"{flow_type} path",
+                )
+            )
             buffer_id = f"buf-{_safe_id(buffer_ref)}"
             edges.append(_e(f"e-{idx}-src-buf", source, buffer_id, flow_type, buffer_ref=buffer_ref))
             edges.append(_e(f"e-{idx}-buf-tgt", buffer_id, target, flow_type, buffer_ref=buffer_ref))
