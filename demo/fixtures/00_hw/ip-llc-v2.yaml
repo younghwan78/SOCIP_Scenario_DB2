@@ -1,0 +1,17 @@
+id: ip-llc-v2
+schema_version: "2.2"
+kind: ip
+category: memory
+rtl_version: "2.0"
+compatible_soc:
+  - soc-exynos2500
+
+hierarchy:
+  type: simple
+
+capabilities:
+  operating_modes:
+    - id: shared
+      throughput_mpps: null
+    - id: per_ip_partition
+      throughput_mpps: null

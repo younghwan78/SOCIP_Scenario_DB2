@@ -1,0 +1,30 @@
+id: rule-known-issue-match
+schema_version: "2.2"
+kind: decision.gate_rule
+
+metadata:
+  name: "Known Issue Match Check"
+  category: [issue_tracking]
+  severity: heavy
+
+trigger:
+  events: [on_evidence_register]
+
+applies_to:
+  match:
+    "variant.severity":
+      $in: [heavy, critical]
+
+condition:
+  match:
+    "evidence.resolution_result.sw_resolution.violations":
+      $not_empty: true
+
+action:
+  gate_result: WARN
+  message_template: >
+    Known issue detected in {{variant_ref}}: {{violation_count}} SW violation(s).
+    Check open issues for matching PMU signatures.
+  required_resolution: waiver_or_fix
+  escalation:
+    notify: [reviewer]

@@ -1,0 +1,55 @@
+id: meas-uc-camera-recording-UHD60-HDR10-H265-A0-sw123-20260419
+schema_version: "2.2"
+kind: evidence.measurement
+
+scenario_ref: uc-camera-recording
+variant_ref: UHD60-HDR10-H265
+
+execution_context:
+  silicon_rev: A0
+  sw_baseline_ref: sw-vendor-v1.2.3
+  thermal: hot
+  ambient_temp_c: 35.0
+  power_state: charging
+
+provenance:
+  device_id: "EVT0-S24-SN-1234"
+  chamber_controlled: true
+  chamber_temp_c: 25.0
+  build_id: "S9280AAAA2"
+  sw_baseline_ref: sw-vendor-v1.2.3
+  runtime_sw_state:
+    kernel_loaded_sha: "9f3c21b"
+    hal_loaded_version: "4.5.0"
+    active_firmware:
+      isp: "0x41"
+      dsp: "0x22"
+  collection_method: "perfetto+simpleperf+power_monitor"
+  collection_tool_versions:
+    perfetto: "v47.0"
+    simpleperf: "v34.0"
+  sample_count: 10
+  duration_per_sample_s: 180.0
+  confidence_level: 0.95
+  raw_artifacts:
+    - type: perfetto_trace
+      path: "results/meas-20260419/trace.pb"
+      sha256: "cafebabe5678"
+
+aggregation:
+  strategy: mean_with_ci_95
+
+kpi:
+  total_power_mw:
+    mean: 2150.0
+    p95: 2240.0
+    std: 45.0
+    ci_95: [2120.0, 2180.0]
+    n: 10
+  peak_power_mw:
+    mean: 2480.0
+    p95: 2560.0
+    std: 60.0
+    ci_95: [2445.0, 2515.0]
+    n: 10
+  frame_latency_ms: 15.3

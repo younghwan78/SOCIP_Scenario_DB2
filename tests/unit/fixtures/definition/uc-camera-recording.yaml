@@ -1,0 +1,136 @@
+id: uc-camera-recording
+schema_version: "2.2"
+kind: scenario.usecase
+project_ref: proj-A-exynos2500
+
+metadata:
+  name: "Camera Recording Pipeline"
+  category: [camera, codec]
+  domain: [camera]
+
+pipeline:
+  nodes:
+    - { id: csis0, ip_ref: ip-csis-v8, instance_index: 0 }
+    - { id: isp0,  ip_ref: ip-isp-v12, instance_index: 0, role: main }
+    - { id: mfc,   ip_ref: ip-mfc-v14 }
+    - { id: dpu,   ip_ref: ip-dpu-v9 }
+    - { id: llc,   ip_ref: ip-llc-v2 }
+  edges:
+    - { from: csis0, to: isp0, type: OTF }
+    - { from: isp0,  to: mfc,  type: M2M, buffer: "RECORD_BUF" }
+    - { from: isp0,  to: dpu,  type: M2M, buffer: "PREVIEW_BUF" }
+
+size_profile:
+  anchors:
+    sensor_full: "4000x3000"
+    record_out:  "1920x1080"
+    preview_out: "1920x1080"
+
+design_axes:
+  - { name: resolution,  enum: [FHD, UHD, 8K] }
+  - { name: fps,         enum: [30, 60, 120] }
+  - { name: codec,       enum: ["H.264", "H.265", AV1] }
+  - { name: hdr,         enum: [SDR, HDR10, HDR10plus] }
+  - { name: concurrency, enum: [single, with_preview, dual_cam] }
+
+variants:
+  # --- Production variant (Strict) ---
+  - id: UHD60-HDR10-H265
+    severity: heavy
+    design_conditions:
+      resolution: UHD
+      fps: 60
+      codec: "H.265"
+      hdr: HDR10
+      concurrency: with_preview
+    size_overrides:
+      record_out:  "3840x2160"
+      preview_out: "1920x1080"
+
+    ip_requirements:
+      isp0:
+        required_throughput_mpps: 498
+        required_bitdepth: 10
+        required_features: [HDR10]
+      mfc:
+        required_codec: "H.265"
+        required_level: "5.1"
+      llc:
+        required_allocations: { "ISP.TNR": 2MB, MFC: 1MB }
+
+    sw_requirements:
+      profile_constraints:
+        min_version: "v1.2.0"
+      required_features:
+        - LLC_dynamic_allocation: enabled
+        - TNR_early_abort: enabled
+        - MFC_hwae: enabled
+      required_hal:
+        camera: { min_version: "4.5" }
+        codec:  { min_version: "3.0" }
+
+    violation_policy:
+      classification: production
+      per_requirement:
+        default:
+          action: FAIL_FAST
+      overall:
+        if_any_fail: abort_simulation
+        report_level: error
+
+    tags: [thermal_sensitive, ddr_bw_critical]
+
+  # --- Exploration variant (Best Effort) ---
+  - id: 8K120-HDR10plus-AV1-exploration
+    severity: critical
+    design_conditions:
+      resolution: 8K
+      fps: 120
+      codec: AV1
+      hdr: HDR10plus
+      concurrency: single
+
+    ip_requirements:
+      isp0:
+        required_throughput_mpps: 3981
+      mfc:
+        required_codec: AV1
+        required_level: "6.2"
+
+    sw_requirements:
+      required_features:
+        - LLC_per_ip_partition: enabled
+
+    violation_policy:
+      classification: exploration
+      per_requirement:
+        isp0.required_throughput_mpps:
+          action: WARN_AND_CAP
+          cap_source: capability_max
+          report_gap: true
+        default:
+          action: WARN_AND_EMULATE
+      overall:
+        if_any_fail: continue_with_flag
+        result_flag: "exploration_only"
+
+  # --- Derived variant ---
+  - id: UHD60-HDR10-sustained-10min
+    severity: critical
+    derived_from_variant: UHD60-HDR10-H265
+    design_conditions_override:
+      duration_category: sustained_10min
+
+inheritance_policy:
+  max_depth: 3
+  cycle_detection: required
+
+parametric_sweeps:
+  - id: zoom_sweep
+    applies_to: [UHD60-HDR10-H265]
+    axis: "size_profile.transforms[1].crop_ratio"
+    values: [1.0, 0.5, 0.25, 0.1]
+
+references:
+  known_issues:
+    - iss-LLC-thrashing-0221

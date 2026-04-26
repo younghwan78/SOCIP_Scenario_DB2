@@ -1,0 +1,51 @@
+id: iss-LLC-thrashing-0221
+schema_version: "2.2"
+kind: decision.issue
+
+metadata:
+  title: "LLC thrashing at >55°C with TNR strong mode"
+  severity: heavy
+  status: resolved
+  discovered_in: proj-A-exynos2500
+  discovered_at: "2026-02-21"
+  sw_regression:
+    discovered_in_sw: sw-vendor-v1.2.1
+    last_good_sw: sw-vendor-v1.2.0
+    root_cause_sw_change:
+      area: camera.llc_policy
+      description: "LLC shared → per-IP 변경으로 TNR 할당 부족"
+    fixed_in_sw: sw-vendor-v1.3.0
+
+affects:
+  - scenario_ref: uc-camera-recording
+    match_rule:
+      scope:
+        project_ref: "*"
+        soc_ref: soc-exynos2500
+      all:
+        - { axis: resolution, op: in,  value: [UHD, 8K] }
+        - { axis: thermal,    op: in,  value: [hot, critical] }
+      any:
+        - { ip: ISP.TNR, field: mode, op: eq, value: strong }
+        - { ip: ISP.DNS, field: mode, op: eq, value: strong }
+      sw_conditions:
+        any:
+          - { sw_feature: LLC_dynamic_allocation, op: eq, value: disabled }
+          - { sw_component: kernel.drivers.camera, op: matches, value: "exynos-cam-v[12]\\..*" }
+      none:
+        - { axis: power_state, op: eq, value: battery }
+
+affects_ip:
+  - { ip_ref: ip-isp-v12, submodule: ISP.TNR }
+  - { ip_ref: ip-llc-v2 }
+
+pmu_signature:
+  - { counter: STALL_BACKEND_MEM, threshold: ">40%" }
+  - { counter: L2D_CACHE_REFILL,  threshold: ">1M/s" }
+
+resolution:
+  fix_commit: abc1234
+  fix_sw_ref: sw-vendor-v1.3.0
+  fix_description: "LLC allocation policy: per-IP allocation with TNR 4MB minimum"
+  verified_in_evidence: sim-uc-camera-recording-UHD60-HDR10-H265-A0-sw123-20260419
+  fix_date: "2026-03-05"

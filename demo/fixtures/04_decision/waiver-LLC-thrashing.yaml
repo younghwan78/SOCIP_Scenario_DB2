@@ -1,0 +1,44 @@
+id: waiver-LLC-thrashing-UHD60-A0-20260417
+schema_version: "2.2"
+kind: decision.waiver
+
+title: "LLC thrashing on UHD60 HDR10 with Silicon A0"
+issue_ref: iss-LLC-thrashing-0221
+
+scope:
+  variant_scope:
+    scenario_ref: uc-camera-recording
+    match_rule:
+      all:
+        - { axis: resolution, op: eq, value: UHD }
+        - { axis: fps,        op: eq, value: 60 }
+        - { axis: hdr,        op: eq, value: HDR10 }
+  execution_scope:
+    all:
+      - { axis: silicon_rev,     op: eq, value: A0 }
+      - { axis: thermal,         op: in, value: [hot, critical] }
+      - { axis: sw_baseline_ref, op: in, value: [sw-vendor-v1.2.1, sw-vendor-v1.2.3] }
+
+justification: >
+  Mitigation: LLC allocation 2MB → 4MB.
+  Fixed in sw-vendor-v1.3.0 (참조: iss-LLC-thrashing-0221).
+  A0 silicon + sw1.2.x 구간에 한정 승인. A1부터 재평가.
+
+attestation:
+  approver_claim: "LeeSR (chief architect)"
+  claim_at: "2026-04-17"
+  git_attestation:
+    commit_sha: "def5678"
+    commit_author_email: "leesr@company.internal"
+    signed: true
+  server_attestation:
+    approved_by_auth: "leesr@company.internal"
+    auth_method: mfa
+    auth_timestamp: "2026-04-17T14:32:00+09:00"
+    auth_session_id: "sess-waiver-20260417-0001"
+
+approved_at: "2026-04-17"
+expires_on: "2026-09-30"
+status: approved
+review_cycle: quarterly
+next_review_due: "2026-07-31"

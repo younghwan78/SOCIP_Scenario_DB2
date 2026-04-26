@@ -1,0 +1,54 @@
+id: rev-camera-recording-UHD60-A0-sw130-20260419
+schema_version: "2.2"
+kind: decision.review
+
+scenario_ref: uc-camera-recording
+variant_ref: UHD60-HDR10-H265
+
+evidence_refs:
+  - sim-uc-camera-recording-UHD60-HDR10-H265-A0-sw130-20260419
+
+gate_result: PASS
+
+auto_checks:
+  - rule_ref: rule-feasibility-check
+    status: PASS
+    detail: "overall_feasibility=production_ready"
+  - rule_ref: rule-known-issue-match
+    status: PASS
+    detail: "No open issues match — iss-LLC-thrashing-0221 resolved in sw-vendor-v1.3.0"
+
+attestation:
+  approver_claim: "YHJOO"
+  claim_at: "2026-04-19"
+  git_attestation:
+    commit_sha: "def5678"
+    commit_author_email: "yhjoo@company.internal"
+    signed: true
+  server_attestation:
+    approved_by_auth: "yhjoo@company.internal"
+    auth_method: mfa
+    auth_timestamp: "2026-04-19T12:00:00+09:00"
+    auth_session_id: "sess-review-20260419-sw130"
+
+decision: approved
+waiver_ref: null
+rationale: >
+  sw-vendor-v1.3.0에서 LLC_per_ip_partition enabled 확인.
+  iss-LLC-thrashing-0221 수정 완료, violation 0건.
+  production_ready 판정 — waiver 불필요.
+
+validation:
+  last_validated_on: "2026-04-19"
+  next_review_due: "2027-04-19"
+  review_cycle: yearly
+
+review_scope:
+  variant_scope:
+    scenario_ref: uc-camera-recording
+    variant_ref: UHD60-HDR10-H265
+  execution_scope:
+    silicon_rev: A0
+    sw_baseline_ref: sw-vendor-v1.3.0
+    thermal:
+      - hot

@@ -1,0 +1,65 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+build/
+dist/
+wheels/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+.python-version
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Database and Docker volumes
+pgdata/
+*.sqlite
+*.sqlite3
+*.db
+
+# Test and quality caches
+.pytest_cache/
+pytest-cache-files-*/
+.coverage
+htmlcov/
+.tox/
+.ruff_cache/
+.mypy_cache/
+
+# Runtime outputs
+output/
+*.log
+*.tmp
+*.bak
+level0_view_sample.png
+
+# Jupyter generated files
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/
+*.ipynb_checkpoints
+demo/notebooks/*.png
+demo/notebooks/*.svg
+demo/notebooks/*.html
+
+# IDE and OS files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local agent/tooling state
+.claude/
+

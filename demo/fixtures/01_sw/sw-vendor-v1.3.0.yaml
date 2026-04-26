@@ -1,0 +1,56 @@
+id: sw-vendor-v1.3.0
+schema_version: "2.2"
+kind: sw_profile
+
+metadata:
+  baseline_family: vendor
+  version: "1.3.0"
+  release_date: "2026-04-01"
+  release_type: production
+  compatible_soc:
+    - soc-exynos2500
+  git_branch: "release/vendor-v1.3.0"
+  git_commit_sha: "def5678abc"
+
+components:
+  hal:
+    - domain: camera
+      ref: hal-cam-v4.5
+    - domain: codec
+      ref: hal-codec-v3.1
+    - domain: display
+      ref: hal-disp-v2.7
+  kernel:
+    ref: kernel-6.1.55-android15
+    config_deltas:
+      - "CONFIG_EXYNOS_CAM_LLC=y"
+      - "CONFIG_EXYNOS_LLC_PER_IP=y"
+  firmware:
+    - target: isp
+      ref: fw-isp-0x42
+    - target: dsp
+      ref: fw-dsp-0x23
+
+feature_flags:
+  camera_zsl: enabled
+  camera_ois_hw: enabled
+  camera_super_hdr: enabled
+  LLC_dynamic_allocation: enabled
+  LLC_per_ip_partition: enabled
+  ddr_governor: performance
+  TNR_early_abort: enabled
+  DNS_adaptive_strength: enabled
+  ISP_bypass_for_preview: disabled
+  MFC_hwae: enabled
+  MFC_b_frame: enabled
+  DPU_write_back_cache: disabled
+  DPU_compositing_mode: layered
+  preview_buffer_count: 8
+  capture_buffer_count: 4
+
+compatibility:
+  replaces: sw-vendor-v1.2.3
+  min_compatible_version: "v1.2.0"
+  breaking_changes: []
+
+known_issues_at_release: []

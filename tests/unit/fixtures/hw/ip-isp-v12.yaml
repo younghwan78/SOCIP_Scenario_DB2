@@ -1,0 +1,33 @@
+id: ip-isp-v12
+schema_version: "2.2"
+kind: ip
+category: camera
+rtl_version: "12.0"
+compatible_soc:
+  - soc-exynos2500
+
+hierarchy:
+  type: composite
+  submodules:
+    - ref: sub-3aa-v4
+      instance_id: ISP.3AA0
+    - ref: sub-tnr-v3
+      instance_id: ISP.TNR
+    - ref: sub-dns-v2
+      instance_id: ISP.DNS
+
+capabilities:
+  operating_modes:
+    - id: normal
+      throughput_mpps: 500
+    - id: low_power
+      max_clock_mhz: 266.0
+      throughput_mpps: 250
+    - id: high_throughput
+      min_clock_mhz: 533.0
+      throughput_mpps: 800
+
+  supported_features:
+    bitdepth: [8, 10, 12]
+    hdr_formats: [HDR10, HDR10plus, DolbyVision]
+    compression: [SBWC_v4, AFBC_v2]

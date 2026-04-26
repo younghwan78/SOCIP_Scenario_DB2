@@ -1,0 +1,33 @@
+id: hal-cam-v4.5
+schema_version: "2.2"
+kind: sw_component
+category: hal
+
+metadata:
+  name: "Camera HAL v4.5"
+  version: "4.5.0"
+  compatible_soc:
+    - soc-exynos2500
+    - soc-exynos2600
+  source: vendor
+
+feature_flags:
+  zsl_ring_buffer: enabled
+  hdr_fusion_inline: enabled
+  preview_buffer_count: 8
+  capture_buffer_count: 4
+
+hw_bindings:
+  required_ips:
+    - ip-isp-v12
+    - ip-csis-v8
+  required_min_ip_version:
+    ip-isp-v12: "12.0"
+
+required_interfaces:
+  - "android.hardware.camera.device@3.7"
+  - "ioctl:exynos-cam-v2"
+
+performance_notes:
+  preview_latency_overhead_ms: 2.5
+  capture_processing_overhead_ms: 8.0

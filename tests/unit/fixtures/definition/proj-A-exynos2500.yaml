@@ -1,0 +1,15 @@
+id: proj-A-exynos2500
+schema_version: "2.2"
+kind: project
+
+metadata:
+  name: "Project A"
+  soc_ref: soc-exynos2500
+  target_launch_date: "2026-10-31"
+
+globals:
+  default_sw_profile_ref: sw-vendor-v1.2.3
+  tested_sw_profiles:
+    - sw-vendor-v1.2.0
+    - sw-vendor-v1.2.3
+    - sw-vendor-v1.3.0-beta

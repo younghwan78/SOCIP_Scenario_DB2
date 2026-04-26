@@ -1,0 +1,83 @@
+id: sim-uc-camera-recording-UHD60-HDR10-H265-A0-sw123-20260419
+schema_version: "2.2"
+kind: evidence.simulation
+
+scenario_ref: uc-camera-recording
+variant_ref: UHD60-HDR10-H265
+project_ref: proj-A-exynos2500
+
+execution_context:
+  silicon_rev: A0
+  sw_baseline_ref: sw-vendor-v1.2.3
+  thermal: hot
+  ambient_temp_c: 35.0
+  power_state: charging
+
+resolution_result:
+  hw_resolution:
+    isp0:
+      requested:
+        throughput_mpps: 498
+      matched_mode: high_throughput
+      capability_max: 800
+      headroom:
+        throughput_mpps: 302
+      violations: []
+    mfc:
+      requested:
+        codec: "H.265"
+        level: "5.1"
+      matched_mode: normal
+      violations: []
+  sw_resolution:
+    profile_ref: sw-vendor-v1.2.3
+    required_features_check:
+      - { feature: LLC_dynamic_allocation, required: enabled, actual: enabled, status: PASS }
+      - { feature: TNR_early_abort,        required: enabled, actual: enabled, status: PASS }
+      - { feature: MFC_hwae,               required: enabled, actual: enabled, status: PASS }
+    hal_compatibility:
+      camera: { required_min: "4.5", actual: "4.5", status: PASS }
+      codec:  { required_min: "3.0", actual: "3.1", status: PASS }
+    violations: []
+  overall_feasibility: production_ready
+  violation_summary:
+    total: 0
+    fail_fast: 0
+    warn_and_cap: 0
+    warn_and_emulate: 0
+
+run:
+  timestamp: "2026-04-19T10:00:00+09:00"
+  tool: mmip_simulator
+  tool_version: "2.3.1"
+  writer: YHJOO
+  git_commit: abc1234
+  source: calculated
+
+aggregation:
+  strategy: single_run
+
+kpi:
+  total_power_mw: 2150
+  peak_power_mw: 2480
+  avg_ddr_bw_gbps: 13
+  peak_ddr_bw_gbps: 17
+  frame_latency_ms: 15
+
+ip_breakdown:
+  - ip: ip-isp-v12
+    instance_index: 0
+    power_mW: 780
+    submodules:
+      - { sub: ISP.TNR, power_mW: 320 }
+      - { sub: ISP.3AA0, power_mW: 210 }
+  - ip: ip-mfc-v14
+    instance_index: 0
+    power_mW: 450
+    submodules: []
+
+artifacts:
+  - type: gantt_html
+    storage: minio
+    path: "results/sim-20260419/gantt.html"
+    sha256: "deadbeef1234"

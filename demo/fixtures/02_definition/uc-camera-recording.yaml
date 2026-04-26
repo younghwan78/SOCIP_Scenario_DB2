@@ -1,0 +1,248 @@
+id: uc-camera-recording
+schema_version: "2.2"
+kind: scenario.usecase
+project_ref: proj-A-exynos2500
+
+metadata:
+  name: "Camera Recording Pipeline"
+  category: [camera, codec]
+  domain: [camera]
+
+pipeline:
+  nodes:
+    - { id: csis0, ip_ref: ip-csis-v8, instance_index: 0 }
+    - { id: isp0,  ip_ref: ip-isp-v12, instance_index: 0, role: main }
+    - { id: mfc,   ip_ref: ip-mfc-v14 }
+    - { id: dpu,   ip_ref: ip-dpu-v9 }
+    - { id: llc,   ip_ref: ip-llc-v2 }
+  edges:
+    - { from: csis0, to: isp0, type: OTF }
+    - { from: isp0,  to: mfc,  type: M2M, buffer: "RECORD_BUF" }
+    - { from: isp0,  to: dpu,  type: M2M, buffer: "PREVIEW_BUF" }
+  buffers:
+    RAW_BAYER_MAIN:
+      label: RAW Bayer Buffer
+      format: BAYER_PACKED
+      bitdepth: 12
+      planes: 1
+      size_ref: sensor_full
+      compression: SBWC_v4
+      alignment: 256B
+    RECORD_BUF:
+      label: Encoder Input Buffer
+      format: YUV420
+      bitdepth: 10
+      planes: 2
+      size_ref: record_out
+      compression: SBWC_v4
+      alignment: 256B
+      placement:
+        llc_allocated: true
+        llc_allocation_mb: 1
+        llc_policy: dedicated
+        allocation_owner: MFC
+    PREVIEW_BUF:
+      label: Preview Buffer
+      format: YUV420
+      bitdepth: 10
+      planes: 2
+      size_ref: preview_out
+      compression: none
+      alignment: 128B
+    ENCODED_BITSTREAM:
+      label: Encoded Bitstream
+      format: H.265
+      bitdepth: 10
+      planes: 1
+      size_ref: bitstream
+      placement:
+        llc_allocated: false
+  task_graph:
+    layout: vertical-topology
+    nodes:
+      - { id: t_sensor, label: "t_sensor\n(Sensor)\n{sensor_full}@{fps}", layer: hw, ip_ref: ip-csis-v8, x: 520, y: 70, width: 150, height: 60 }
+      - { id: t_csislink, label: "t_csislink\n(CSIS_LINK)\n{sensor_full}", layer: hw, ip_ref: ip-csis-v8, x: 520, y: 170 }
+      - { id: t_csis, label: "t_csis\n(CSIS)\n{sensor_full}", layer: hw, ip_ref: ip-csis-v8, x: 520, y: 270 }
+      - { id: t_pdp, label: "t_pdp\n(PDP)\n{sensor_full}", layer: hw, x: 300, y: 390 }
+      - { id: t_prep, label: "t_prep\n(PREP)\n{sensor_full}", layer: hw, x: 705, y: 390 }
+      - { id: t_cstat, label: "t_cstat\n(CSTAT)\n{sensor_full}->{record_out}", layer: hw, x: 705, y: 520, width: 184, height: 66, badges: [S, C], operations: { crop: true, scale: true, scale_from: sensor_full, scale_to: record_out } }
+      - { id: t_byrp, label: "t_byrp\n(BYRP)\n{sensor_full}", layer: hw, x: 520, y: 405 }
+      - { id: t_rgbp, label: "t_rgbp\n(RGBP)\n{sensor_full}", layer: hw, x: 520, y: 520 }
+      - { id: t_mlsc, label: "t_mlsc\n(MLSC)\n{sensor_full}->{record_out}", layer: hw, x: 520, y: 660, width: 184, height: 66, badges: [S, C], operations: { scale: true, scale_from: sensor_full, scale_to: record_out } }
+      - { id: t_postIRTA, label: "t_postIRTA\n(CPU_MID_Cluster)", layer: kernel, x: 520, y: 805, width: 180, height: 52, sw_ref: sw-vendor-v1.2.3 }
+      - { id: t_postIRTA2, label: "t_postIRTA2\n(CPU_MID_Cluster)", layer: kernel, x: 520, y: 925, width: 180, height: 52, sw_ref: sw-vendor-v1.2.3 }
+      - { id: t_mtnr1, label: "t_mtnr1\n(MTNR1)\n{preview_out}", layer: hw, x: 390, y: 1060, operations: { scale: true, scale_to: preview_out } }
+      - { id: t_mtnr0, label: "t_mtnr0\n(MTNR0)\n{record_out}", layer: hw, x: 650, y: 1060 }
+      - { id: t_msnr, label: "t_msnr\n(MSNR)\n{record_out}", layer: hw, x: 520, y: 1205 }
+      - { id: t_yuvp, label: "t_yuvp\n(YUVP)\n{record_out}", layer: hw, x: 520, y: 1340 }
+      - { id: t_mcsc, label: "t_mcsc\n(MCSC)\n{record_out}", layer: hw, x: 520, y: 1480, operations: { scale: true, scale_to: record_out } }
+      - { id: t_codec2, label: "t_codec2\n(CPU_MID_Cluster)", layer: kernel, x: 430, y: 1640, width: 180, height: 52, sw_ref: sw-vendor-v1.2.3 }
+      - { id: t_hw_composer, label: "t_hw_composer\n(CPU_MID_Cluster)", layer: kernel, x: 650, y: 1640, width: 190, height: 52, sw_ref: sw-vendor-v1.2.3 }
+      - { id: t_mfc, label: "t_mfc\n(MFC)\n{record_out}", layer: hw, ip_ref: ip-mfc-v14, x: 430, y: 1790 }
+      - { id: t_dpu, label: "t_dpu\n(DPU)\n{preview_out}", layer: hw, ip_ref: ip-dpu-v9, x: 650, y: 1790 }
+    edges:
+      - { id: eo_0, from: t_sensor, to: t_csislink, type: OTF, label: OTF }
+      - { id: eo_1, from: t_csislink, to: t_csis, type: OTF, label: "OTF: LINK->NFI_DEC" }
+      - { id: eo_2, from: t_csis, to: t_pdp, type: OTF, label: "OTF: IBUF->REORDER" }
+      - { id: eo_3, from: t_csis, to: t_prep, type: OTF, label: "OTF: COUTFIFO->CINFIFO" }
+      - { id: em_4, from: t_csis, to: t_byrp, type: M2M, buffer: RAW_BAYER_MAIN, label: "CSIS_WDMA->COMP_RD0_RDMA | {sensor_full} | BAYER_PACKED | 12bit | COMP" }
+      - { id: eo_5, from: t_prep, to: t_cstat, type: OTF, label: "OTF: COUTFIFO->CINFIFO" }
+      - { id: eo_6, from: t_byrp, to: t_rgbp, type: OTF, label: "OTF: COUTFIFO->CINFIFO" }
+      - { id: eo_7, from: t_rgbp, to: t_mlsc, type: OTF, label: "OTF: COUTFIFO->CINFIFO" }
+      - { id: esw_8, from: t_mlsc, to: t_postIRTA, type: control, label: SW }
+      - { id: esw_9, from: t_postIRTA, to: t_postIRTA2, type: control, label: SW }
+      - { id: esw_10, from: t_postIRTA2, to: t_mtnr1, type: control, label: SW }
+      - { id: esw_11, from: t_postIRTA2, to: t_mtnr0, type: control, label: SW }
+      - { id: eo_12, from: t_mtnr0, to: t_msnr, type: OTF, label: "OTF: L0_COUTFIFO->L0_CINFIFO" }
+      - { id: eo_13, from: t_mtnr1, to: t_msnr, type: OTF, label: "OTF: L1/L2/L3/G4 COUTFIFO->CINFIFO" }
+      - { id: eo_14, from: t_msnr, to: t_yuvp, type: OTF, label: "OTF: COUTFIFO->CINFIFO" }
+      - { id: eo_15, from: t_yuvp, to: t_mcsc, type: OTF, label: "OTF: COUTFIFO->CINFIFO" }
+      - { id: em_16, from: t_mcsc, to: t_codec2, type: M2M, buffer: RECORD_BUF, label: "P0_WDMA->input | {record_out} | YUV420 | 10bit" }
+      - { id: em_17, from: t_mcsc, to: t_hw_composer, type: M2M, buffer: PREVIEW_BUF, label: "P1_WDMA->input | {preview_out} | YUV420 | 10bit" }
+      - { id: esw_18, from: t_codec2, to: t_mfc, type: control, label: SW }
+      - { id: esw_19, from: t_hw_composer, to: t_dpu, type: control, label: SW }
+  level1_graph:
+    layout: grouped_ip_detail
+    groups:
+      - { id: grp-sensor, label: Sensor, x: 520, y: 85, width: 180, height: 100 }
+      - { id: grp-isp, label: ISP, x: 580, y: 470, width: 900, height: 620 }
+      - { id: grp-cpu, label: CPU, x: 580, y: 980, width: 520, height: 210 }
+      - { id: grp-codec, label: CODEC, x: 460, y: 1250, width: 190, height: 120 }
+      - { id: grp-dpu, label: DPU, x: 700, y: 1250, width: 190, height: 120 }
+    nodes_from_task_graph: true
+    node_overrides:
+      t_sensor: { label: "Sensor\n{sensor_full}@{fps}fps", x: 520, y: 110, width: 136, height: 56 }
+      t_csislink: { label: "CSIS_LINK\n{sensor_full}", x: 520, y: 255, width: 126, height: 50 }
+      t_csis: { label: "CSIS\n{sensor_full}", x: 520, y: 350, width: 126, height: 50 }
+      t_pdp: { label: "PDP\n{sensor_full}", x: 305, y: 470, width: 126, height: 50 }
+      t_prep: { label: "PREP\n{sensor_full}", x: 735, y: 470, width: 126, height: 50 }
+      t_cstat: { label: "CSTAT\n{sensor_full}->{record_out}", x: 735, y: 590, width: 170, height: 64 }
+      t_byrp: { label: "BYRP\n{sensor_full}", x: 520, y: 470, width: 126, height: 50 }
+      t_rgbp: { label: "RGBP\n{sensor_full}", x: 520, y: 590, width: 126, height: 50 }
+      t_mlsc: { label: "MLSC\n{sensor_full}->{record_out}", x: 520, y: 720, width: 170, height: 64 }
+      t_mtnr1: { label: "MTNR1\n{preview_out}", x: 835, y: 280, width: 126, height: 50 }
+      t_mtnr0: { label: "MTNR0\n{record_out}", x: 1015, y: 280, width: 126, height: 50 }
+      t_msnr: { label: "MSNR\n{record_out}", x: 925, y: 430, width: 126, height: 50 }
+      t_yuvp: { label: "YUVP\n{record_out}", x: 925, y: 590, width: 126, height: 50 }
+      t_mcsc: { label: "MCSC\n{record_out}", x: 925, y: 710, width: 126, height: 50 }
+      t_postIRTA: { label: CPU_MID_Cluster, x: 390, y: 955, width: 150, height: 46 }
+      t_postIRTA2: { label: CPU_MID_Cluster, x: 390, y: 1070, width: 150, height: 46 }
+      t_codec2: { label: CPU_MID_Cluster, x: 580, y: 955, width: 150, height: 46 }
+      t_hw_composer: { label: CPU_MID_Cluster, x: 770, y: 955, width: 160, height: 46 }
+      t_mfc: { label: "MFC\n{record_out}", x: 460, y: 1305, width: 130, height: 58 }
+      t_dpu: { label: "DPU\n{preview_out}", x: 700, y: 1305, width: 130, height: 58 }
+
+size_profile:
+  anchors:
+    sensor_full: "4000x3000"
+    record_out:  "1920x1080"
+    preview_out: "1920x1080"
+
+design_axes:
+  - { name: resolution,  enum: [FHD, UHD, 8K] }
+  - { name: fps,         enum: [30, 60, 120] }
+  - { name: codec,       enum: ["H.264", "H.265", AV1] }
+  - { name: hdr,         enum: [SDR, HDR10, HDR10plus] }
+  - { name: concurrency, enum: [single, with_preview, dual_cam] }
+
+variants:
+  # --- Production variant (Strict) ---
+  - id: UHD60-HDR10-H265
+    severity: heavy
+    design_conditions:
+      resolution: UHD
+      fps: 60
+      codec: "H.265"
+      hdr: HDR10
+      concurrency: with_preview
+    size_overrides:
+      record_out:  "3840x2160"
+      preview_out: "1920x1080"
+
+    ip_requirements:
+      isp0:
+        required_throughput_mpps: 498
+        required_bitdepth: 10
+        required_features: [HDR10]
+      mfc:
+        required_codec: "H.265"
+        required_level: "5.1"
+      llc:
+        required_allocations: { "ISP.TNR": 2MB, MFC: 1MB }
+
+    sw_requirements:
+      profile_constraints:
+        min_version: "v1.2.0"
+      required_features:
+        - LLC_dynamic_allocation: enabled
+        - TNR_early_abort: enabled
+        - MFC_hwae: enabled
+      required_hal:
+        camera: { min_version: "4.5" }
+        codec:  { min_version: "3.0" }
+
+    violation_policy:
+      classification: production
+      per_requirement:
+        default:
+          action: FAIL_FAST
+      overall:
+        if_any_fail: abort_simulation
+        report_level: error
+
+    tags: [thermal_sensitive, ddr_bw_critical]
+
+  # --- Exploration variant (Best Effort) ---
+  - id: 8K120-HDR10plus-AV1-exploration
+    severity: critical
+    design_conditions:
+      resolution: 8K
+      fps: 120
+      codec: AV1
+      hdr: HDR10plus
+      concurrency: single
+
+    ip_requirements:
+      isp0:
+        required_throughput_mpps: 3981
+      mfc:
+        required_codec: AV1
+        required_level: "6.2"
+
+    sw_requirements:
+      required_features:
+        - LLC_per_ip_partition: enabled
+
+    violation_policy:
+      classification: exploration
+      per_requirement:
+        isp0.required_throughput_mpps:
+          action: WARN_AND_CAP
+          cap_source: capability_max
+          report_gap: true
+        default:
+          action: WARN_AND_EMULATE
+      overall:
+        if_any_fail: continue_with_flag
+        result_flag: "exploration_only"
+
+  # --- Derived variant ---
+  - id: UHD60-HDR10-sustained-10min
+    severity: critical
+    derived_from_variant: UHD60-HDR10-H265
+    design_conditions_override:
+      duration_category: sustained_10min
+
+inheritance_policy:
+  max_depth: 3
+  cycle_detection: required
+
+parametric_sweeps:
+  - id: zoom_sweep
+    applies_to: [UHD60-HDR10-H265]
+    axis: "size_profile.transforms[1].crop_ratio"
+    values: [1.0, 0.5, 0.25, 0.1]
+
+references:
+  known_issues:
+    - iss-LLC-thrashing-0221

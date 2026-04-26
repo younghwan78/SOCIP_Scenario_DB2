@@ -1,0 +1,57 @@
+id: rev-camera-recording-UHD60-A0-sw123-20260419
+schema_version: "2.2"
+kind: decision.review
+
+scenario_ref: uc-camera-recording
+variant_ref: UHD60-HDR10-H265
+
+evidence_refs:
+  - sim-uc-camera-recording-UHD60-HDR10-H265-A0-sw123-20260419
+  - meas-uc-camera-recording-UHD60-HDR10-H265-A0-sw123-20260419
+
+gate_result: WARN
+
+auto_checks:
+  - rule_ref: rule-feasibility-check
+    status: WARN
+    detail: "overall_feasibility=exploration_only — LLC_per_ip_partition disabled"
+  - rule_ref: rule-known-issue-match
+    status: WARN
+    matched_issues:
+      - iss-LLC-thrashing-0221
+
+attestation:
+  approver_claim: "YHJOO"
+  claim_at: "2026-04-19"
+  git_attestation:
+    commit_sha: "abc1234"
+    commit_author_email: "yhjoo@company.internal"
+    signed: true
+  server_attestation:
+    approved_by_auth: "yhjoo@company.internal"
+    auth_method: mfa
+    auth_timestamp: "2026-04-19T11:00:00+09:00"
+    auth_session_id: "sess-review-20260419-sw123"
+
+decision: approved_with_waiver
+waiver_ref: waiver-LLC-thrashing-UHD60-A0-20260417
+rationale: >
+  LLC_per_ip_partition disabled in sw-vendor-v1.2.3으로 탐색 모드 실행.
+  iss-LLC-thrashing-0221 대응 waiver 적용.
+  sw-vendor-v1.3.0 적용 후 재검증 필요.
+
+validation:
+  last_validated_on: "2026-04-19"
+  next_review_due: "2026-09-30"
+  review_cycle: quarterly
+
+review_scope:
+  variant_scope:
+    scenario_ref: uc-camera-recording
+    variant_ref: UHD60-HDR10-H265
+  execution_scope:
+    silicon_rev: A0
+    sw_baseline_ref: sw-vendor-v1.2.3
+    thermal:
+      - hot
+      - critical
