@@ -57,6 +57,12 @@ pipeline:
       size_ref: bitstream
       placement:
         llc_allocated: false
+  architecture_graph:
+    layout: layered-lanes
+    layer_order: [app, framework, hal, kernel, hw, memory]
+    intent: "Level 0 review overview with SW stack, HW path, and memory placement."
+    memory_below_hw: true
+    show_hw_summary_edges: true
   task_graph:
     layout: vertical-topology
     nodes:
