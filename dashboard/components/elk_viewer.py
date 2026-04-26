@@ -453,6 +453,7 @@ const tip = document.getElementById('tip');
 let scale = 1, tx = 0, ty = 0;
 let layoutGraph = null;
 const PAD = 36;
+const NP = {{}};
 
 function markerFor(color) {{
   if (color === '#2BB3AA') return 'url(#arrow-teal)';
@@ -593,12 +594,19 @@ function drawLeaves(g, graph, ox=0, oy=0) {{
 }}
 
 function drawGraphEdges(g, graph, ox=0, oy=0) {{
-  drawEdges(g, graph.edges || [], ox, oy);
+  drawEdges(g, graph.edges || [], graph.id);
   (graph.children || []).forEach(node => {{
     if (node.children && node.children.length) {{
       drawGraphEdges(g, node, (node.x || 0) + ox, (node.y || 0) + oy);
     }}
   }});
+}}
+
+function collectPositions(node, ox=0, oy=0) {{
+  const x = (node.x || 0) + ox;
+  const y = (node.y || 0) + oy;
+  NP[node.id] = {{x, y}};
+  (node.children || []).forEach(child => collectPositions(child, x, y));
 }}
 
 function drawNode(g, node, ox=0, oy=0) {{
@@ -643,11 +651,14 @@ function pathFromSection(section, ox, oy) {{
   return 'M ' + (pts[0].x + ox) + ' ' + (pts[0].y + oy) + pts.slice(1).map(p => ' L ' + (p.x + ox) + ' ' + (p.y + oy)).join('');
 }}
 
-function drawEdges(g, edges, ox=0, oy=0) {{
+function drawEdges(g, edges, defaultContainer='root') {{
   (edges || []).forEach(edge => {{
     const m = M[edge.id] || {{}};
     if (m.hidden) return;
     const color = m.stroke || '#64748B';
+    const cp = NP[edge.container || defaultContainer] || {{x:0, y:0}};
+    const ox = cp.x;
+    const oy = cp.y;
     (edge.sections || []).forEach(section => {{
       const p = svgEl('path', {{
         class:'edge', d: pathFromSection(section, ox, oy), fill:'none', stroke:color,
@@ -682,6 +693,8 @@ async function mainRender() {{
     const elk = new ELK();
     layoutGraph = await elk.layout(G);
     main.innerHTML = '';
+    Object.keys(NP).forEach(k => delete NP[k]);
+    collectPositions(layoutGraph, 0, 0);
     drawBackgrounds(main, layoutGraph, 0, 0);
     drawGraphEdges(main, layoutGraph, 0, 0);
     drawLeaves(main, layoutGraph, 0, 0);

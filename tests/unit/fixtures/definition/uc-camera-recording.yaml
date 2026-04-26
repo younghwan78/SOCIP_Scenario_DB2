@@ -19,6 +19,104 @@ pipeline:
     - { from: csis0, to: isp0, type: OTF }
     - { from: isp0,  to: mfc,  type: M2M, buffer: "RECORD_BUF" }
     - { from: isp0,  to: dpu,  type: M2M, buffer: "PREVIEW_BUF" }
+  buffers:
+    RECORD_BUF:
+      size_ref: record_out
+      format: NV12
+      bitdepth: 10
+      planes: 2
+      alignment: 256B
+      compression: SBWC_v4
+      placement:
+        llc_allocated: true
+        llc_allocation_mb: 2.0
+        llc_policy: pinned
+        allocation_owner: MFC
+        expected_bw_reduction_gbps: 1.5
+    PREVIEW_BUF:
+      size_ref: preview_out
+      format: NV12
+      bitdepth: 10
+      planes: 2
+      alignment: 256B
+      compression: none
+      placement:
+        llc_allocated: false
+        llc_policy: none
+    STATS_BUF:
+      size_ref: sensor_full
+      format: STAT
+      bitdepth: 16
+      planes: 1
+      alignment: 64B
+      compression: none
+      placement:
+        llc_allocated: true
+        llc_allocation_mb: 0.5
+        llc_policy: shared
+        allocation_owner: ISP.TNR
+        expected_bw_reduction_gbps: 0.4
+  architecture_graph:
+    layout: layered-lanes
+    layer_order: [app, framework, hal, kernel, hw, memory]
+    intent: "Level 0 review overview with SW stack, HW path, and memory placement."
+    memory_below_hw: true
+    show_hw_summary_edges: true
+  task_graph:
+    layout: task-topology
+    nodes:
+      - { id: t_csis, label: "t_csis\n(CSIS)\n{sensor_full}", layer: hw, x: 520, y: 120, width: 150, height: 60, ip_ref: ip-csis-v8 }
+      - { id: t_pdp, label: "t_pdp\n(PDP)\n{sensor_full}", layer: hw, x: 280, y: 270, width: 132, height: 54 }
+      - { id: t_byrp, label: "t_byrp\n(BYRP)\n{sensor_full}", layer: hw, x: 520, y: 270, width: 132, height: 54 }
+      - { id: t_prep, label: "t_prep\n(PREP)\n{sensor_full}", layer: hw, x: 760, y: 270, width: 132, height: 54 }
+      - { id: t_rgbp, label: "t_rgbp\n(RGBP)\n{sensor_full}", layer: hw, x: 520, y: 430, width: 140, height: 58 }
+      - { id: t_cstat, label: "t_cstat\n(CSTAT)\n{sensor_full}->{record_out}", layer: hw, x: 760, y: 430, width: 190, height: 66, ip_ref: ip-isp-v12, badges: [S, C], operations: { crop: true, scale: true, scale_from: sensor_full, scale_to: record_out } }
+      - { id: t_mlsc, label: "t_mlsc\n(MLSC)\n{sensor_full}->{record_out}", layer: hw, x: 520, y: 610, width: 190, height: 66, ip_ref: ip-isp-v12, badges: [S, C], operations: { crop: true, scale: true, scale_from: sensor_full, scale_to: record_out, colorspace_convert: "BAYER->YUV" } }
+      - { id: t_postirta, label: "t_postIRTA\n(CPU_MID_Cluster)", layer: kernel, x: 520, y: 770, width: 170, height: 54 }
+      - { id: t_mtnr1, label: "t_mtnr1\n(MTNR1)\n960x540", layer: hw, x: 380, y: 930, width: 140, height: 58 }
+      - { id: t_mtnr0, label: "t_mtnr0\n(MTNR0)\n{preview_out}", layer: hw, x: 660, y: 930, width: 140, height: 58 }
+      - { id: t_msnr, label: "t_msnr\n(MSNR)\n{record_out}", layer: hw, x: 520, y: 1110, width: 150, height: 60, ip_ref: ip-isp-v12 }
+      - { id: t_yuvp, label: "t_yuvp\n(YUVP)\n{record_out}", layer: hw, x: 520, y: 1280, width: 140, height: 58 }
+      - { id: t_mfc, label: "t_mfc\n(MFC)\n{record_out}", layer: hw, x: 520, y: 1460, width: 140, height: 58, ip_ref: ip-mfc-v14 }
+      - { id: t_dpu, label: "t_dpu\n(DPU)\n{preview_out}", layer: hw, x: 760, y: 1460, width: 140, height: 58, ip_ref: ip-dpu-v9 }
+    edges:
+      - { from: t_csis, to: t_pdp, type: OTF, label: "OTF: IBUF->REORDER" }
+      - { from: t_csis, to: t_byrp, type: OTF, label: "OTF: COUTFIFO->CINFIFO" }
+      - { from: t_csis, to: t_prep, type: OTF, label: "OTF: COUTFIFO->CINFIFO" }
+      - { from: t_byrp, to: t_rgbp, type: OTF, label: "OTF: COUTFIFO->CINFIFO" }
+      - { from: t_prep, to: t_cstat, type: OTF, label: "OTF: COUTFIFO->CINFIFO" }
+      - { from: t_rgbp, to: t_mlsc, type: OTF, label: "OTF: COUTFIFO->CINFIFO" }
+      - { from: t_cstat, to: t_mlsc, type: OTF, label: "vOTF: line-delayed stats", buffer: STATS_BUF }
+      - { from: t_mlsc, to: t_postirta, type: control, label: "SW" }
+      - { from: t_postirta, to: t_mtnr1, type: control, label: "SW" }
+      - { from: t_postirta, to: t_mtnr0, type: control, label: "SW" }
+      - { from: t_mtnr1, to: t_msnr, type: OTF, label: "OTF: L1_CINFIFO" }
+      - { from: t_mtnr0, to: t_msnr, type: OTF, label: "OTF: L0_CINFIFO" }
+      - { from: t_msnr, to: t_yuvp, type: OTF, label: "OTF: COUTFIFO->CINFIFO" }
+      - { from: t_yuvp, to: t_mfc, type: M2M, label: "YUVP_WDMA -> MFC input | {record_out} | NV12 | 10bit | COMP", buffer: RECORD_BUF }
+      - { from: t_yuvp, to: t_dpu, type: M2M, label: "YUVP_WDMA -> DPU input | {preview_out} | NV12 | 10bit", buffer: PREVIEW_BUF }
+  level1_graph:
+    nodes_from_task_graph: true
+    groups:
+      - { id: grp-isp, label: ISP, x: 540, y: 560, width: 820, height: 1080 }
+      - { id: grp-cpu, label: CPU, x: 540, y: 1030, width: 360, height: 180 }
+      - { id: grp-codec, label: CODEC, x: 430, y: 1470, width: 190, height: 120 }
+      - { id: grp-dpu, label: DPU, x: 760, y: 1470, width: 190, height: 120 }
+    node_overrides:
+      t_csis: { x: 520, y: 210 }
+      t_pdp: { x: 300, y: 390 }
+      t_byrp: { x: 520, y: 390 }
+      t_prep: { x: 740, y: 390 }
+      t_rgbp: { x: 520, y: 550 }
+      t_cstat: { x: 740, y: 550 }
+      t_mlsc: { x: 520, y: 720 }
+      t_postirta: { x: 520, y: 970 }
+      t_mtnr1: { x: 380, y: 1120 }
+      t_mtnr0: { x: 660, y: 1120 }
+      t_msnr: { x: 520, y: 1290 }
+      t_yuvp: { x: 520, y: 1430 }
+      t_mfc: { x: 430, y: 1570 }
+      t_dpu: { x: 760, y: 1570 }
 
 size_profile:
   anchors:

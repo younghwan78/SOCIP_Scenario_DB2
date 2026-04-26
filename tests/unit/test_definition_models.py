@@ -319,6 +319,20 @@ def test_size_profile_parsed():
     assert obj.size_profile.anchors["sensor_full"] == "4000x3000"
 
 
+def test_view_fixture_graphs_are_present():
+    obj = roundtrip(
+        Usecase,
+        FIXTURES / "definition" / "uc-camera-recording.yaml",
+        by_alias=True,
+    )
+
+    assert obj.pipeline.buffers["RECORD_BUF"]["placement"]["llc_allocated"] is True
+    assert obj.pipeline.architecture_graph["memory_below_hw"] is True
+    assert obj.pipeline.task_graph["layout"] == "task-topology"
+    assert len(obj.pipeline.task_graph["nodes"]) >= 10
+    assert obj.pipeline.level1_graph["nodes_from_task_graph"] is True
+
+
 # ---------------------------------------------------------------------------
 # Parametric sweeps & references
 # ---------------------------------------------------------------------------
