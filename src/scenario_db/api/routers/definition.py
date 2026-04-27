@@ -17,6 +17,7 @@ from scenario_db.api.schemas.definition import (
     ScenarioVariantResponse,
 )
 from scenario_db.db.models.definition import Project, Scenario, ScenarioVariant
+from scenario_db.db.repositories.variant_resolution import resolve_variant, resolve_variant_from_rows
 from scenario_db.matcher.context import MatcherContext
 
 router = APIRouter(tags=["definition"])
@@ -87,7 +88,14 @@ def list_variants_for_scenario(
     sort_by = validate_sort_column(ScenarioVariant, sort_by)
     q = db.query(ScenarioVariant).filter_by(scenario_id=scenario_id)
     q = apply_sort(q, ScenarioVariant, sort_by, sort_dir)
-    return PagedResponse.from_query(q, limit=limit, offset=offset)
+    total = q.count()
+    rows = q.offset(offset).limit(limit).all()
+    row_map = {
+        row.id: row
+        for row in db.query(ScenarioVariant).filter_by(scenario_id=scenario_id).all()
+    }
+    items = [resolve_variant_from_rows(row_map, scenario_id, row.id) for row in rows]
+    return PagedResponse.from_items(items, total=total, limit=limit, offset=offset)
 
 
 @router.get(
@@ -95,11 +103,7 @@ def list_variants_for_scenario(
     response_model=ScenarioVariantResponse,
 )
 def get_variant(scenario_id: str, variant_id: str, db: Session = Depends(get_db)):
-    row = (
-        db.query(ScenarioVariant)
-        .filter_by(scenario_id=scenario_id, id=variant_id)
-        .one_or_none()
-    )
+    row = resolve_variant(db, scenario_id, variant_id)
     if row is None:
         raise NoResultFound(f"Variant '{scenario_id}/{variant_id}' not found")
     return row
@@ -120,11 +124,7 @@ def matched_issues(
     Issue.affects 룰을 variant context에 대해 평가하여 해당 variant에 영향을 미치는 Issue 목록 반환.
     eval_time_ms: 룰 평가 순수 소요 시간 (ms).
     """
-    variant = (
-        db.query(ScenarioVariant)
-        .filter_by(scenario_id=scenario_id, id=variant_id)
-        .one_or_none()
-    )
+    variant = resolve_variant(db, scenario_id, variant_id)
     if variant is None:
         raise NoResultFound(f"Variant '{scenario_id}/{variant_id}' not found")
 
@@ -168,4 +168,19 @@ def list_all_variants(
             Scenario.project_ref == project
         )
     q = apply_sort(q, ScenarioVariant, sort_by, sort_dir)
-    return PagedResponse.from_query(q, limit=limit, offset=offset)
+    total = q.count()
+    rows = q.offset(offset).limit(limit).all()
+    scenario_ids = {row.scenario_id for row in rows}
+    resolved_items = []
+    for sid in scenario_ids:
+        row_map = {
+            row.id: row
+            for row in db.query(ScenarioVariant).filter_by(scenario_id=sid).all()
+        }
+        for row in rows:
+            if row.scenario_id == sid:
+                resolved_items.append(resolve_variant_from_rows(row_map, sid, row.id))
+    # Preserve query order after resolving by scenario group.
+    by_key = {(item.scenario_id, item.id): item for item in resolved_items}
+    items = [by_key[(row.scenario_id, row.id)] for row in rows]
+    return PagedResponse.from_items(items, total=total, limit=limit, offset=offset)

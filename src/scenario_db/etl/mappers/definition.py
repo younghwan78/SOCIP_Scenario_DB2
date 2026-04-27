@@ -42,6 +42,12 @@ def upsert_usecase(raw: dict, sha256: str, session: Session) -> None:
         vrow = ScenarioVariant(scenario_id=obj.id, id=v.id)
         vrow.severity            = str(v.severity)
         vrow.design_conditions   = v.design_conditions or {}
+        vrow.design_conditions_override = v.design_conditions_override or {}
+        vrow.size_overrides      = v.size_overrides or {}
+        vrow.routing_switch      = {}
+        vrow.topology_patch      = {}
+        vrow.node_configs        = {}
+        vrow.buffer_overrides    = {}
         vrow.ip_requirements     = {
             k: vv.model_dump(exclude_none=True)
             for k, vv in v.ip_requirements.items()

@@ -31,8 +31,16 @@ class ScenarioVariantResponse(BaseModel):
     id: str
     severity: str | None = None
     design_conditions: dict | None = None
+    design_conditions_override: dict | None = None
+    size_overrides: dict | None = None
+    routing_switch: dict | None = None
+    topology_patch: dict | None = None
+    node_configs: dict | None = None
+    buffer_overrides: dict | None = None
     ip_requirements: dict | None = None
     sw_requirements: dict | None = None
     violation_policy: dict | None = None
     tags: list | None = None
     derived_from_variant: str | None = None
+    resolved: bool | None = None
+    inheritance_chain: list[str] | None = None

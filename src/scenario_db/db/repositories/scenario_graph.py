@@ -7,8 +7,9 @@ from sqlalchemy.orm import Session
 
 from scenario_db.db.models.capability import IpCatalog, SocPlatform, SwProfile
 from scenario_db.db.models.decision import GateRule, Issue, Review, Waiver
-from scenario_db.db.models.definition import Project, Scenario, ScenarioVariant
+from scenario_db.db.models.definition import Project, Scenario
 from scenario_db.db.models.evidence import Evidence
+from scenario_db.db.repositories.variant_resolution import ResolvedScenarioVariant, resolve_variant
 
 
 @dataclass(slots=True)
@@ -16,7 +17,7 @@ class CanonicalScenarioGraph:
     """DB-backed aggregate used by resolver, gate, API, and view projection."""
 
     scenario: Scenario
-    variant: ScenarioVariant
+    variant: ResolvedScenarioVariant
     project: Project | None = None
     soc: SocPlatform | None = None
     ip_catalog: dict[str, IpCatalog] = field(default_factory=dict)
@@ -61,11 +62,7 @@ def load_canonical_graph(
     if scenario is None:
         raise LookupError(f"Scenario not found: {scenario_id}")
 
-    variant = (
-        db.query(ScenarioVariant)
-        .filter_by(scenario_id=scenario_id, id=variant_id)
-        .one_or_none()
-    )
+    variant = resolve_variant(db, scenario_id, variant_id)
     if variant is None:
         raise LookupError(f"Variant not found: {scenario_id}/{variant_id}")
 

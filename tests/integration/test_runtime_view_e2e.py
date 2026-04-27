@@ -3,6 +3,7 @@ from __future__ import annotations
 
 SCENARIO_ID = "uc-camera-recording"
 VARIANT_ID = "UHD60-HDR10-H265"
+DERIVED_VARIANT_ID = "UHD60-HDR10-sustained-10min"
 
 
 def test_runtime_graph_summary_e2e(api_client):
@@ -26,6 +27,17 @@ def test_runtime_resolver_e2e(api_client):
     assert body["variant_id"] == VARIANT_ID
     assert "isp0" in body["ip_resolutions"]
     assert body["ip_resolutions"]["isp0"]["status"] == "PASS"
+
+
+def test_runtime_resolver_uses_resolved_derived_variant(api_client):
+    response = api_client.get(f"/api/v1/scenarios/{SCENARIO_ID}/variants/{DERIVED_VARIANT_ID}/resolve")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["scenario_id"] == SCENARIO_ID
+    assert body["variant_id"] == DERIVED_VARIANT_ID
+    assert "mfc" in body["ip_resolutions"]
+    assert body["ip_resolutions"]["mfc"]["requested"]["required_codec"] == "H.265"
 
 
 def test_runtime_review_gate_e2e(api_client):
@@ -57,6 +69,24 @@ def test_view_architecture_projection_e2e(api_client):
     assert any(node["data"]["layer"] == "memory" for node in body["nodes"])
     assert any(edge["data"]["flow_type"] == "M2M" for edge in body["edges"])
     assert "llc-allocation" in body["overlays_available"]
+
+
+def test_view_summary_uses_resolved_derived_variant(api_client):
+    response = api_client.get(
+        f"/api/v1/scenarios/{SCENARIO_ID}/variants/{DERIVED_VARIANT_ID}/view",
+        params={"level": 0, "mode": "architecture"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["summary"]["variant_id"] == DERIVED_VARIANT_ID
+    assert body["summary"]["fps"] == 60
+    assert body["summary"]["resolution"] == "3840 x 2160"
+    assert any(
+        node["data"].get("memory", {}).get("width") == 3840
+        for node in body["nodes"]
+        if node["data"]["type"] == "buffer"
+    )
 
 
 def test_view_topology_projection_e2e(api_client):

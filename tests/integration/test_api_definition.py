@@ -63,6 +63,21 @@ def test_get_specific_variant(api_client: TestClient):
     assert v["scenario_id"] == SCENARIO_ID
 
 
+def test_get_derived_variant_returns_resolved_overlay(api_client: TestClient):
+    resp = api_client.get(f"/api/v1/scenarios/{SCENARIO_ID}/variants/UHD60-HDR10-sustained-10min")
+    assert resp.status_code == 200
+    v = resp.json()
+    assert v["id"] == "UHD60-HDR10-sustained-10min"
+    assert v["derived_from_variant"] == VARIANT_ID
+    assert v["resolved"] is True
+    assert v["inheritance_chain"] == [VARIANT_ID, "UHD60-HDR10-sustained-10min"]
+    assert v["design_conditions"]["resolution"] == "UHD"
+    assert v["design_conditions"]["fps"] == 60
+    assert v["design_conditions"]["duration_category"] == "sustained_10min"
+    assert v["size_overrides"]["record_out"] == "3840x2160"
+    assert v["ip_requirements"]["mfc"]["required_codec"] == "H.265"
+
+
 def test_get_variant_404(api_client: TestClient):
     resp = api_client.get(f"/api/v1/scenarios/{SCENARIO_ID}/variants/no-such-variant")
     assert resp.status_code == 404

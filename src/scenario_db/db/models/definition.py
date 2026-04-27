@@ -36,6 +36,12 @@ class ScenarioVariant(Base):
     id                   = Column(Text, primary_key=True)   # freeform: "UHD60-HDR10-H265"
     severity             = Column(Text)
     design_conditions    = Column(JSONB)
+    design_conditions_override = Column(JSONB)
+    size_overrides       = Column(JSONB)
+    routing_switch       = Column(JSONB)
+    topology_patch       = Column(JSONB)
+    node_configs         = Column(JSONB)
+    buffer_overrides     = Column(JSONB)
     ip_requirements      = Column(JSONB)
     sw_requirements      = Column(JSONB)
     violation_policy     = Column(JSONB)

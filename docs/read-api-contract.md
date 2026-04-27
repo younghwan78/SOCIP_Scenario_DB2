@@ -13,6 +13,10 @@ Read API covers these public read paths:
 - Runtime: canonical graph, resolver result, review gate result.
 - View: Level 0/1/2 viewer projections.
 
+Variant read paths return resolved variant overlays. If a variant has
+`derived_from_variant`, the API merges the parent chain before returning the
+variant, running resolver/review gate, or building viewer projections.
+
 Write/admin endpoints remain out of scope for the current phase.
 
 ## Runtime And Viewer Endpoints
@@ -28,6 +32,21 @@ Write/admin endpoints remain out of scope for the current phase.
 | `GET /api/v1/scenarios/{scenario_id}/variants/{variant_id}/view?level=2&expand=camera` | Camera drill-down with submodule, DMA, SYSMMU, and buffer context. |
 | `GET /api/v1/scenarios/{scenario_id}/variants/{variant_id}/view?level=2&expand=video` | Video encode drill-down. |
 | `GET /api/v1/scenarios/{scenario_id}/variants/{variant_id}/view?level=2&expand=display` | Display output drill-down. |
+
+## Variant Resolution Contract
+
+`GET /api/v1/scenarios/{scenario_id}/variants/{variant_id}` and list endpoints
+return the effective variant configuration:
+
+- Parent values are applied first.
+- Child dict fields deep-merge over the parent.
+- `design_conditions_override` is applied on top of inherited `design_conditions`.
+- `routing_switch` and `topology_patch` list fields are appended without duplicates.
+- `tags` are appended without duplicates.
+- `resolved=true` and `inheritance_chain` identify that the response is a read projection.
+
+The canonical DB rows remain authored data. Resolution is a deterministic read
+projection used by Read API, resolver, review gate, and viewer projection.
 
 ## ViewResponse Required Shape
 
