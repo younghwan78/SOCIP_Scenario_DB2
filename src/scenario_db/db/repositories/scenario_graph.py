@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -38,13 +39,23 @@ class CanonicalScenarioGraph:
 
     @property
     def pipeline_nodes(self) -> list[dict[str, Any]]:
-        pipeline = self.scenario.pipeline or {}
-        return list(pipeline.get("nodes") or [])
+        return _effective_pipeline(self.scenario.pipeline or {}, self.variant)[0]
 
     @property
     def pipeline_edges(self) -> list[dict[str, Any]]:
-        pipeline = self.scenario.pipeline or {}
-        return list(pipeline.get("edges") or [])
+        return _effective_pipeline(self.scenario.pipeline or {}, self.variant)[1]
+
+    @property
+    def has_topology_overlay(self) -> bool:
+        routing = self.variant.routing_switch or {}
+        patch = self.variant.topology_patch or {}
+        return bool(
+            routing.get("disabled_nodes")
+            or routing.get("disabled_edges")
+            or patch.get("remove_edges")
+            or patch.get("add_nodes")
+            or patch.get("add_edges")
+        )
 
     def ip_ref_for_node(self, node_id: str) -> str | None:
         for node in self.pipeline_nodes:
@@ -75,9 +86,10 @@ def load_canonical_graph(
         if soc_ref:
             soc = db.query(SocPlatform).filter_by(id=soc_ref).one_or_none()
 
+    effective_nodes, _ = _effective_pipeline(scenario.pipeline or {}, variant)
     ip_refs = {
         node.get("ip_ref")
-        for node in (scenario.pipeline or {}).get("nodes", [])
+        for node in effective_nodes
         if node.get("ip_ref")
     }
     ip_catalog = {
@@ -122,3 +134,83 @@ def load_canonical_graph(
         reviews=reviews,
         gate_rules=gate_rules,
     )
+
+
+def _effective_pipeline(
+    pipeline: dict[str, Any],
+    variant: ResolvedScenarioVariant,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    nodes = [deepcopy(node) for node in pipeline.get("nodes") or []]
+    edges = [deepcopy(edge) for edge in pipeline.get("edges") or []]
+
+    routing_switch = getattr(variant, "routing_switch", None) or {}
+    topology_patch = getattr(variant, "topology_patch", None) or {}
+    disabled_nodes = set((routing_switch or {}).get("disabled_nodes") or [])
+    remove_specs = [
+        *((routing_switch or {}).get("disabled_edges") or []),
+        *((topology_patch or {}).get("remove_edges") or []),
+    ]
+
+    patch = topology_patch or {}
+    for add_node in patch.get("add_nodes") or []:
+        if not isinstance(add_node, dict):
+            continue
+        node_id = add_node.get("id")
+        if not node_id or node_id in disabled_nodes:
+            continue
+        if not any(node.get("id") == node_id for node in nodes):
+            nodes.append(deepcopy(add_node))
+
+    valid_node_ids = {node.get("id") for node in nodes if node.get("id") not in disabled_nodes}
+    nodes = [node for node in nodes if node.get("id") in valid_node_ids]
+
+    edges = [
+        edge
+        for edge in edges
+        if not _edge_removed(edge, remove_specs)
+        and _edge_source(edge) in valid_node_ids
+        and _edge_target(edge) in valid_node_ids
+    ]
+
+    existing_keys = {_edge_key(edge) for edge in edges}
+    for add_edge in patch.get("add_edges") or []:
+        if not isinstance(add_edge, dict):
+            continue
+        source = _edge_source(add_edge)
+        target = _edge_target(add_edge)
+        if source not in valid_node_ids or target not in valid_node_ids:
+            continue
+        normalized = deepcopy(add_edge)
+        if "source" in normalized and "from" not in normalized:
+            normalized["from"] = normalized.pop("source")
+        if "target" in normalized and "to" not in normalized:
+            normalized["to"] = normalized.pop("target")
+        key = _edge_key(normalized)
+        if key not in existing_keys:
+            edges.append(normalized)
+            existing_keys.add(key)
+
+    return nodes, edges
+
+
+def _edge_removed(edge: dict[str, Any], remove_specs: list[Any]) -> bool:
+    return any(isinstance(spec, dict) and _edge_matches(edge, spec) for spec in remove_specs)
+
+
+def _edge_matches(edge: dict[str, Any], spec: dict[str, Any]) -> bool:
+    spec_id = spec.get("id")
+    if spec_id and spec_id == edge.get("id"):
+        return True
+    return _edge_source(edge) == _edge_source(spec) and _edge_target(edge) == _edge_target(spec)
+
+
+def _edge_key(edge: dict[str, Any]) -> tuple[Any, Any, Any, Any]:
+    return (edge.get("id"), _edge_source(edge), _edge_target(edge), edge.get("type"))
+
+
+def _edge_source(edge: dict[str, Any]) -> Any:
+    return edge.get("from") if edge.get("from") is not None else edge.get("source")
+
+
+def _edge_target(edge: dict[str, Any]) -> Any:
+    return edge.get("to") if edge.get("to") is not None else edge.get("target")

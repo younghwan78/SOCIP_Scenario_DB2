@@ -1,0 +1,26 @@
+{
+  "kind": "scenario.variant_overlay",
+  "actor": "runbook@example.com",
+  "note": "Derived variant overlay inheriting production UHD60 settings",
+  "payload": {
+    "scenario_ref": "uc-camera-recording",
+    "variant": {
+      "id": "UHD60-HDR10-H265-runbook-derived",
+      "severity": "critical",
+      "derived_from_variant": "UHD60-HDR10-H265",
+      "design_conditions_override": {
+        "duration_category": "sustained_30min"
+      },
+      "node_configs": {
+        "mfc": {
+          "selected_mode": "high_throughput",
+          "target_clock_mhz": 400
+        }
+      },
+      "tags": [
+        "runbook",
+        "derived"
+      ]
+    }
+  }
+}

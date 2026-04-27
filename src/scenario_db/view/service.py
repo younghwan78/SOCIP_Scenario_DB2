@@ -265,6 +265,8 @@ def project_level0(
         return build_sample_level0()
     graph = load_canonical_graph(db, scenario_id, variant_id)
     if mode == "topology":
+        if graph.has_topology_overlay:
+            return _project_topology(graph, level=0)
         return _project_reference_task_topology(graph, level=0)
     return _project_architecture(graph, level=0)
 
@@ -295,13 +297,13 @@ def _project_architecture(graph: CanonicalScenarioGraph, level: int) -> ViewResp
         if not node_id:
             continue
         stage = _stage_for_node(node_id, pipeline_node)
-        layer = "memory" if _is_memory_ip(graph, pipeline_node) else "hw"
+        layer = _pipeline_node_layer(graph, pipeline_node)
         order = _next_order(stage_orders, layer, stage)
         nodes.append(
             _n(
                 f"ip-{node_id}",
                 _node_label(node_id, pipeline_node),
-                "ip",
+                _pipeline_node_type(layer),
                 layer,
                 STAGE_X.get(stage, STAGE_X["processing"]) + (order * 115),
                 LANE_Y[layer],
@@ -341,14 +343,14 @@ def _project_topology(graph: CanonicalScenarioGraph, level: int) -> ViewResponse
             _n(
                 f"ip-{node_id}",
                 _node_label(node_id, pipeline_node),
-                "ip",
-                "memory" if _is_memory_ip(graph, pipeline_node) else "hw",
+                _pipeline_node_type(_pipeline_node_layer(graph, pipeline_node)),
+                _pipeline_node_layer(graph, pipeline_node),
                 430,
                 85 + rank * 110,
                 ip_ref=pipeline_node.get("ip_ref"),
                 capability_badges=_capability_badges(graph, pipeline_node),
                 active_operations=_operation_summary(graph, node_id, pipeline_node),
-                view_hints=ViewHints(lane="hw", stage=_stage_for_node(node_id, pipeline_node), order=rank),
+                view_hints=ViewHints(lane=_pipeline_node_layer(graph, pipeline_node), stage=_stage_for_node(node_id, pipeline_node), order=rank),
             )
         )
 
@@ -476,7 +478,7 @@ def _buffer_memory_from_spec(
 ) -> MemoryDescriptor | None:
     if not buffer_ref:
         return None
-    spec = ((graph.scenario.pipeline or {}).get("buffers") or {}).get(buffer_ref)
+    spec = _buffer_spec(graph, buffer_ref)
     if not spec:
         return _memory_descriptor(graph, buffer_ref)
     size_ref = spec.get("size_ref")
@@ -496,10 +498,26 @@ def _buffer_memory_from_spec(
 def _buffer_placement_from_spec(graph: CanonicalScenarioGraph, buffer_ref: str | None) -> MemoryPlacement | None:
     if not buffer_ref:
         return None
-    spec = ((graph.scenario.pipeline or {}).get("buffers") or {}).get(buffer_ref)
+    spec = _buffer_spec(graph, buffer_ref)
     if spec and spec.get("placement"):
         return MemoryPlacement(**spec["placement"])
     return _memory_placement(graph, buffer_ref)
+
+
+def _buffer_spec(graph: CanonicalScenarioGraph, buffer_ref: str) -> dict[str, Any]:
+    base = ((graph.scenario.pipeline or {}).get("buffers") or {}).get(buffer_ref) or {}
+    override = (getattr(graph.variant, "buffer_overrides", None) or {}).get(buffer_ref) or {}
+    return _deep_merge(base, override)
+
+
+def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(base)
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _deep_merge(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
 
 
 def _task_node_from_spec(
@@ -1641,6 +1659,26 @@ def _first_hw_node(graph: CanonicalScenarioGraph, tokens: tuple[str, ...]) -> st
 def _is_memory_ip(graph: CanonicalScenarioGraph, pipeline_node: dict[str, Any]) -> bool:
     ip_row = graph.ip_catalog.get(pipeline_node.get("ip_ref") or "")
     return bool(ip_row and ip_row.category == "memory")
+
+
+def _pipeline_node_layer(graph: CanonicalScenarioGraph, pipeline_node: dict[str, Any]) -> str:
+    explicit = str(pipeline_node.get("layer") or "").lower()
+    if explicit in {"app", "framework", "hal", "kernel", "hw", "memory"}:
+        return explicit
+    node_type = str(pipeline_node.get("node_type") or pipeline_node.get("kind") or "").lower()
+    if node_type in {"sw", "task", "cpu"}:
+        return "kernel"
+    if _is_memory_ip(graph, pipeline_node):
+        return "memory"
+    return "hw"
+
+
+def _pipeline_node_type(layer: str) -> str:
+    if layer in {"app", "framework", "hal", "kernel"}:
+        return "sw"
+    if layer == "memory":
+        return "buffer"
+    return "ip"
 
 
 def _node_label(node_id: str, pipeline_node: dict[str, Any]) -> str:

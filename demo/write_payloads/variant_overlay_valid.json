@@ -1,0 +1,55 @@
+{
+  "kind": "scenario.variant_overlay",
+  "actor": "runbook@example.com",
+  "note": "Valid variant overlay with routing switch and buffer placement",
+  "payload": {
+    "scenario_ref": "uc-camera-recording",
+    "variant": {
+      "id": "FHD30-SDR-H265-runbook",
+      "severity": "medium",
+      "design_conditions": {
+        "resolution": "FHD",
+        "fps": 30,
+        "codec": "H.265",
+        "hdr": "SDR",
+        "concurrency": "with_preview"
+      },
+      "size_overrides": {
+        "record_out": "1920x1080",
+        "preview_out": "1280x720"
+      },
+      "routing_switch": {
+        "disabled_nodes": [
+          "dpu"
+        ]
+      },
+      "node_configs": {
+        "mfc": {
+          "selected_mode": "normal",
+          "target_clock_mhz": 300
+        }
+      },
+      "buffer_overrides": {
+        "RECORD_BUF": {
+          "format": "YUV420",
+          "compression": "SBWC_v4",
+          "placement": {
+            "llc_allocated": true,
+            "llc_allocation_mb": 1,
+            "llc_policy": "dedicated",
+            "allocation_owner": "MFC"
+          }
+        }
+      },
+      "ip_requirements": {
+        "mfc": {
+          "required_codec": "H.265"
+        }
+      },
+      "tags": [
+        "runbook",
+        "write_api"
+      ]
+    }
+  }
+}

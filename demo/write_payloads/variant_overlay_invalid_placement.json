@@ -1,0 +1,26 @@
+{
+  "kind": "scenario.variant_overlay",
+  "actor": "runbook@example.com",
+  "note": "Invalid example: compression is incorrectly placed under placement",
+  "payload": {
+    "scenario_ref": "uc-camera-recording",
+    "variant": {
+      "id": "invalid-placement-runbook",
+      "severity": "medium",
+      "design_conditions": {
+        "resolution": "FHD",
+        "fps": 30
+      },
+      "buffer_overrides": {
+        "RECORD_BUF": {
+          "format": "YUV420",
+          "placement": {
+            "llc_allocated": true,
+            "llc_allocation_mb": 1,
+            "compression": "SBWC_v4"
+          }
+        }
+      }
+    }
+  }
+}

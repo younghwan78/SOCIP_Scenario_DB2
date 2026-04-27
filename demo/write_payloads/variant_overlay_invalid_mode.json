@@ -1,0 +1,21 @@
+{
+  "kind": "scenario.variant_overlay",
+  "actor": "runbook@example.com",
+  "note": "Invalid example: selected mode is not in IP capability operating_modes",
+  "payload": {
+    "scenario_ref": "uc-camera-recording",
+    "variant": {
+      "id": "invalid-mode-runbook",
+      "severity": "medium",
+      "design_conditions": {
+        "resolution": "FHD",
+        "fps": 30
+      },
+      "node_configs": {
+        "mfc": {
+          "selected_mode": "low_power"
+        }
+      }
+    }
+  }
+}

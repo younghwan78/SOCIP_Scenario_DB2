@@ -8,6 +8,7 @@ The current implementation focuses on four flows:
 - Canonical scenario resolver and review gate engine.
 - FastAPI read endpoints for scenario, runtime, and viewer data.
 - Streamlit + ELK/SVG pipeline viewer with Level 0/1/2 projections.
+- Write API staging flow for variant overlays.
 
 ## Repository Layout
 
@@ -25,7 +26,8 @@ The current implementation focuses on four flows:
 │   ├── models/               # Pydantic YAML models
 │   ├── resolver/             # Scenario resolution logic
 │   ├── review_gate/          # Review gate rules and issue matching
-│   └── view/                 # Viewer projection service
+│   ├── view/                 # Viewer projection service
+│   └── write/                # Write staging, validation, diff, apply services
 └── tests/                    # Unit and integration tests
 ```
 
@@ -104,6 +106,40 @@ Quick API smoke check from another PowerShell:
 Invoke-RestMethod "http://127.0.0.1:18000/api/v1/scenarios/uc-camera-recording/variants/UHD60-HDR10-H265/view?level=0&mode=architecture"
 ```
 
+## Write API
+
+The first write target is `scenario.variant_overlay`. It uses a staged flow:
+
+```text
+stage -> validate -> diff -> apply
+```
+
+Use this to add or update a variant overlay without directly mutating the base
+scenario topology. The applied overlay is resolved by Read API, Runtime API, and
+Viewer projection as an effective topology.
+
+Run a valid sample:
+
+```powershell
+$api="http://127.0.0.1:18000/api/v1"
+$payload = Get-Content .\demo\write_payloads\variant_overlay_valid.json -Raw
+$stage = Invoke-RestMethod -Method Post -Uri "$api/write/staging" -ContentType "application/json" -Body $payload
+$batchId = $stage.batch_id
+Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/validate"
+Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/diff"
+Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/apply"
+```
+
+Inspect the result:
+
+```powershell
+Invoke-RestMethod "$api/scenarios/uc-camera-recording/variants/FHD30-SDR-H265-runbook"
+Invoke-RestMethod "$api/scenarios/uc-camera-recording/variants/FHD30-SDR-H265-runbook/graph"
+```
+
+More examples are in [docs/write-api-runbook.md](docs/write-api-runbook.md).
+The write contract is in [docs/write-api-contract.md](docs/write-api-contract.md).
+
 ## Run Viewer
 
 Start the API first. Then open a new PowerShell and run:
@@ -164,6 +200,12 @@ Run integration tests only when Docker/PostgreSQL test containers are available:
 uv run --group dev pytest tests\integration
 ```
 
+Run Write API focused tests:
+
+```powershell
+uv run --group dev pytest tests\unit\test_write_service.py tests\integration\test_write_api.py
+```
+
 The current read-side contract is documented in [docs/read-api-contract.md](docs/read-api-contract.md). Update that file and the related tests before changing Read API response shapes.
 
 Equivalent explicit virtual environment commands:
@@ -182,3 +224,4 @@ Equivalent explicit virtual environment commands:
 - Level 2 drill-down for `camera`, `video`, and `display`.
 - Review gate risk overlay from known issue matching.
 - Memory descriptors and placement, including compression and LLC allocation.
+- Write API examples for variant overlay, derived variants, routing switch, SW task injection, and validation failures.

@@ -62,6 +62,23 @@ def _valid_payload(variant_id: str = "FHD30-SDR-H265-write-test") -> dict:
     }
 
 
+def _stage_validate_apply(api_client: TestClient, payload: dict) -> str:
+    stage = api_client.post("/api/v1/write/staging", json=payload)
+    assert stage.status_code == 200
+    batch_id = stage.json()["batch_id"]
+
+    validation = api_client.post(f"/api/v1/write/staging/{batch_id}/validate")
+    assert validation.status_code == 200
+    assert validation.json()["valid"] is True
+
+    diff = api_client.post(f"/api/v1/write/staging/{batch_id}/diff")
+    assert diff.status_code == 200
+
+    applied = api_client.post(f"/api/v1/write/staging/{batch_id}/apply")
+    assert applied.status_code == 200
+    return batch_id
+
+
 def test_variant_overlay_stage_validate_diff_apply(api_client: TestClient):
     stage = api_client.post("/api/v1/write/staging", json=_valid_payload())
     assert stage.status_code == 200
@@ -95,6 +112,74 @@ def test_variant_overlay_stage_validate_diff_apply(api_client: TestClient):
     assert body["size_overrides"]["preview_out"] == "1280x720"
     assert body["node_configs"]["mfc"]["selected_mode"] == "normal"
     assert body["buffer_overrides"]["RECORD_BUF"]["placement"]["llc_allocated"] is True
+
+
+def test_applied_routing_switch_changes_runtime_graph_and_view(api_client: TestClient):
+    variant_id = "FHD30-routing-switch-write-test"
+    payload = _valid_payload(variant_id)
+    payload["payload"]["variant"]["routing_switch"] = {
+        "disabled_nodes": ["dpu"],
+    }
+    _stage_validate_apply(api_client, payload)
+
+    graph = api_client.get(f"/api/v1/scenarios/{SCENARIO_ID}/variants/{variant_id}/graph")
+    assert graph.status_code == 200
+    graph_body = graph.json()
+    assert graph_body["node_count"] == 4
+    assert graph_body["edge_count"] == 2
+    assert "ip-dpu-v9" not in graph_body["ip_refs"]
+
+    view = api_client.get(
+        f"/api/v1/scenarios/{SCENARIO_ID}/variants/{variant_id}/view",
+        params={"level": 0, "mode": "architecture"},
+    )
+    assert view.status_code == 200
+    node_ids = {node["data"]["id"] for node in view.json()["nodes"]}
+    edge_pairs = {(edge["data"]["source"], edge["data"]["target"]) for edge in view.json()["edges"]}
+    assert "ip-dpu" not in node_ids
+    assert ("ip-isp0", "ip-dpu") not in edge_pairs
+
+
+def test_applied_topology_patch_injects_sw_task_in_topology_view(api_client: TestClient):
+    variant_id = "FHD30-sw-injection-write-test"
+    payload = _valid_payload(variant_id)
+    payload["payload"]["variant"]["topology_patch"] = {
+        "remove_edges": [{"from": "isp0", "to": "mfc"}],
+        "add_nodes": [
+            {
+                "id": "sw_filter",
+                "label": "SW Filter",
+                "node_type": "SW",
+                "layer": "kernel",
+            }
+        ],
+        "add_edges": [
+            {"from": "isp0", "to": "sw_filter", "type": "M2M", "buffer": "RECORD_BUF"},
+            {"from": "sw_filter", "to": "mfc", "type": "control"},
+        ],
+    }
+    _stage_validate_apply(api_client, payload)
+
+    graph = api_client.get(f"/api/v1/scenarios/{SCENARIO_ID}/variants/{variant_id}/graph")
+    assert graph.status_code == 200
+    graph_body = graph.json()
+    assert graph_body["node_count"] == 6
+    assert graph_body["edge_count"] == 4
+
+    topology = api_client.get(
+        f"/api/v1/scenarios/{SCENARIO_ID}/variants/{variant_id}/view",
+        params={"level": 0, "mode": "topology"},
+    )
+    assert topology.status_code == 200
+    body = topology.json()
+    assert body["metadata"]["layout"] == "vertical-topology"
+    nodes = {node["data"]["id"]: node["data"] for node in body["nodes"]}
+    edge_pairs = {(edge["data"]["source"], edge["data"]["target"]) for edge in body["edges"]}
+    assert nodes["ip-sw_filter"]["type"] == "sw"
+    assert nodes["ip-sw_filter"]["layer"] == "kernel"
+    assert ("ip-isp0", "ip-mfc") not in edge_pairs
+    assert ("ip-isp0", "buf-record-buf") in edge_pairs
+    assert ("ip-sw_filter", "ip-mfc") in edge_pairs
 
 
 def test_variant_overlay_validation_rejects_unknown_base_route(api_client: TestClient):

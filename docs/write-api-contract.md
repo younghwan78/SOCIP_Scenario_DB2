@@ -133,3 +133,13 @@ HTTP requests still return the standard API error contract.
 
 Canonical data is changed only by `apply`; `stage`, `validate`, and `diff` never
 modify scenario or variant records.
+
+## Read Projection Semantics
+
+After apply, Read API and viewer projections resolve the variant overlay into an
+effective topology:
+
+- Disabled nodes are removed with all touching edges.
+- Disabled or removed edges are filtered from the base topology.
+- SW task injection nodes and edges are appended if their endpoints remain valid.
+- Base scenario topology remains unchanged; the effective graph is a read-time projection.

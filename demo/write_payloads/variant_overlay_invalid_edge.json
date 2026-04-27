@@ -1,0 +1,24 @@
+{
+  "kind": "scenario.variant_overlay",
+  "actor": "runbook@example.com",
+  "note": "Invalid example: disables a non-existing base edge",
+  "payload": {
+    "scenario_ref": "uc-camera-recording",
+    "variant": {
+      "id": "invalid-edge-runbook",
+      "severity": "medium",
+      "design_conditions": {
+        "resolution": "FHD",
+        "fps": 30
+      },
+      "routing_switch": {
+        "disabled_edges": [
+          {
+            "from": "isp0",
+            "to": "npu0"
+          }
+        ]
+      }
+    }
+  }
+}

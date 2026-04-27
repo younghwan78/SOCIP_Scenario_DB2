@@ -48,6 +48,15 @@ return the effective variant configuration:
 The canonical DB rows remain authored data. Resolution is a deterministic read
 projection used by Read API, resolver, review gate, and viewer projection.
 
+Effective topology is also resolved at read time:
+
+- `routing_switch.disabled_nodes` removes nodes and all touching edges.
+- `routing_switch.disabled_edges` removes matching base edges.
+- `topology_patch.remove_edges` removes matching base edges.
+- `topology_patch.add_nodes` injects validated SW task nodes.
+- `topology_patch.add_edges` injects validated SW task edges.
+- Viewer projections use this effective topology when an overlay is present.
+
 ## ViewResponse Required Shape
 
 The viewer depends on these top-level fields:

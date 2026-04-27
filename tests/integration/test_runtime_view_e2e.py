@@ -83,7 +83,7 @@ def test_view_summary_uses_resolved_derived_variant(api_client):
     assert body["summary"]["fps"] == 60
     assert body["summary"]["resolution"] == "3840 x 2160"
     assert any(
-        node["data"].get("memory", {}).get("width") == 3840
+        (node["data"].get("memory") or {}).get("width") == 3840
         for node in body["nodes"]
         if node["data"]["type"] == "buffer"
     )
