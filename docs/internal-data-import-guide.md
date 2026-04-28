@@ -629,8 +629,10 @@ legacy_import scaffold
 
 ## 13. Current Legacy Importer Command
 
-The initial importer scaffold can already convert legacy HW catalog YAML into
-canonical `kind: ip` YAML files.
+The current importer scaffold converts legacy HW, sensor, and optional display
+sidecar YAML into canonical `kind: ip` catalog YAML files. This is the Step 3C
+scope: catalog import only. Scenario YAML, variants, and pipeline generation are
+still handled in the next importer step.
 
 Example:
 
@@ -638,9 +640,24 @@ Example:
 cd E:\50_Codex_Soc_Scenario_DB\implementation
 uv run python -m scenario_db.legacy_import.cli `
   --hw E:\10_Codes\23_MMIP_Scenario_simulation2\hw_config\projectA_hw.yaml `
+  --sensor E:\10_Codes\23_MMIP_Scenario_simulation2\hw_config\sensor_config.yaml `
+  --display generated\display_config.yaml `
   --out generated\scenariodb `
   --project proj-projectA `
   --strict
+```
+
+If no display YAML exists in the legacy repo yet, create a small sidecar file
+before running the importer:
+
+```yaml
+displays:
+  FHD_PANEL:
+    display_size: [2400, 1080]
+    ppi: 420
+    refresh_rates: [60, 120]
+    bitdepth: [8, 10]
+    hdr_formats: [SDR, HDR10]
 ```
 
 Output:
@@ -655,9 +672,12 @@ generated/scenariodb/
 Current importer scope:
 
 - Converts `projectA_hw.yaml` list entries into `ip_catalog` YAML.
+- Converts `sensor_config.yaml` entries into `category: sensor` catalog YAML.
+- Converts optional display sidecar entries into `category: display` catalog YAML.
 - Preserves modules, DMA ports, internal edges, min/max size, crop/scale/rotate flags, supported modes, and compression data.
+- Preserves sensor modes and calculates `v_valid_ms` when `sensor_size`, `sensor_pclk`, and `sensor_line_length_pck` are available.
+- Preserves display size, PPI, refresh rates, bitdepth, and HDR formats.
 - Emits an import report.
-- Does not yet convert `sensor_config.yaml`.
 - Does not yet convert scenario YAML or variants.
 
 After generation, load the generated YAML with the normal canonical ETL:

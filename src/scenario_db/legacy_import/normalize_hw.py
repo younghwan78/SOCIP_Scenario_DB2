@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import re
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+from scenario_db.legacy_import.ids import ip_id
 from scenario_db.legacy_import.read_legacy import read_yaml
 from scenario_db.legacy_import.report import ImportReport
 
@@ -38,7 +38,6 @@ def convert_hw_catalog(
     schema_version: str,
     report: ImportReport,
 ) -> list[dict[str, Any]]:
-    project_slug = _project_slug(project_ref)
     docs: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
     for index, block in enumerate(blocks):
@@ -54,7 +53,7 @@ def convert_hw_catalog(
                 source,
             )
 
-        doc_id = _ip_id(name, project_slug)
+        doc_id = ip_id(name, project_ref)
         if doc_id in seen_ids:
             report.error("duplicate_ip_id", f"Duplicate generated IP id: {doc_id}", source)
             continue
@@ -166,21 +165,9 @@ def _category_for(block: dict[str, Any]) -> str:
     return "camera"
 
 
-def _project_slug(project_ref: str) -> str:
-    value = project_ref.removeprefix("proj-")
-    slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
-    return slug or "legacy"
-
-
-def _ip_id(name: str, project_slug: str) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
-    return f"ip-{slug}-{project_slug}"
-
-
 def _optional_bool(key: str, value: Any) -> dict[str, bool]:
     return {key: value} if isinstance(value, bool) else {}
 
 
 def _drop_none(value: dict[str, Any]) -> dict[str, Any]:
     return {key: item for key, item in value.items() if item is not None}
-

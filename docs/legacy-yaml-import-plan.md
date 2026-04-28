@@ -870,6 +870,12 @@ Exit criteria:
 
 ### Step 3: Legacy Importer Scaffold
 
+Status:
+
+- Step 3A: HW catalog conversion implemented.
+- Step 3B: capability model accepts sensor/display catalog categories.
+- Step 3C: sensor config and optional display sidecar conversion implemented.
+
 Files:
 
 - `src/scenario_db/legacy_import/*`
