@@ -17,6 +17,7 @@ FEATURE_FLAGS_WHITELIST: frozenset[str] = frozenset({
 
 IP_CATEGORIES_WHITELIST: frozenset[str] = frozenset({
     "ISP", "MFC", "DPU", "GPU", "LLC",
+    "camera", "codec", "display", "memory", "sensor",
 })
 
 SW_COMPONENT_CATEGORIES_WHITELIST: frozenset[str] = frozenset({

@@ -48,6 +48,18 @@ def test_ip_catalog_category_filter_valid_returns_200(api_client: TestClient):
     assert isinstance(data["total"], int)
 
 
+@pytest.mark.parametrize("category, expected_id", [
+    ("sensor", "ip-sensor-hp2-projectA"),
+    ("display", "ip-display-fhd-panel-projectA"),
+])
+def test_ip_catalog_external_category_filters(api_client: TestClient, category: str, expected_id: str):
+    resp = api_client.get("/api/v1/ip-catalogs", params={"category": category})
+    assert resp.status_code == 200
+    data = resp.json()
+    ids = {item["id"] for item in data["items"]}
+    assert expected_id in ids
+
+
 def test_ip_catalog_invalid_category_400(api_client: TestClient):
     resp = api_client.get("/api/v1/ip-catalogs", params={"category": "INVALID_CAT"})
     assert resp.status_code == 400

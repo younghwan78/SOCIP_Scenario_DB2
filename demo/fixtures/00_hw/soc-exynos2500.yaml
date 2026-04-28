@@ -17,3 +17,7 @@ ips:
     instance_count: 4
   - ref: ip-llc-v2
     instance_count: 1
+  - ref: ip-sensor-hp2-projectA
+    instance_count: 1
+  - ref: ip-display-fhd-panel-projectA
+    instance_count: 1

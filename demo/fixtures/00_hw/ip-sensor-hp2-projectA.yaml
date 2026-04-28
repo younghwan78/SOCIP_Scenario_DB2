@@ -1,0 +1,44 @@
+id: ip-sensor-hp2-projectA
+schema_version: "2.2"
+kind: ip
+category: sensor
+compatible_soc:
+  - soc-exynos2500
+
+hierarchy:
+  type: simple
+
+capabilities:
+  operating_modes:
+    - id: mode0
+    - id: mode1
+  supported_features:
+    bitdepth: [12]
+    compression: [SBWC_v4]
+  properties:
+    legacy_name: HP2
+    modes:
+      mode0:
+        sensor_name: "A-08 SENSOR_HP2_4000x2252_60FPS_12BIT"
+        sensor_size: [4000, 2252]
+        sensor_fps: 60.0
+        sensor_pclk: 1760000000
+        sensor_line_length_pck: 6440
+        sensor_format: BAYER
+        sensor_bitwidth: 12
+        sensor_ln_mode: 1
+        sensor_mipi_speed: 3.712
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+      mode1:
+        sensor_name: "A-10 SENSOR_HP2_4000x2252_30FPS_LN4"
+        sensor_size: [4000, 2252]
+        sensor_fps: 30.0
+        sensor_pclk: 1760000000
+        sensor_line_length_pck: 18304
+        sensor_format: BAYER
+        sensor_bitwidth: 12
+        sensor_ln_mode: 1
+        sensor_mipi_speed: 3.712
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY

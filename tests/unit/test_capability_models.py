@@ -17,6 +17,7 @@ from scenario_db.models.common import (
 )
 
 FIXTURES = Path(__file__).parent / "fixtures"
+DEMO_FIXTURES = Path(__file__).parents[2] / "demo" / "fixtures"
 
 
 # ---------------------------------------------------------------------------
@@ -191,6 +192,35 @@ def test_ip_catalog_roundtrip():
     modes = {m.id for m in obj.capabilities.operating_modes}
     assert modes == {"normal", "low_power", "high_throughput"}
     assert obj.capabilities.supported_features.bitdepth == [8, 10, 12]
+
+
+def test_sensor_catalog_properties_roundtrip():
+    obj = roundtrip(IpCatalog, DEMO_FIXTURES / "00_hw" / "ip-sensor-hp2-projectA.yaml")
+    assert obj.category == "sensor"
+    assert {mode.id for mode in obj.capabilities.operating_modes} == {"mode0", "mode1"}
+    assert obj.capabilities.properties["legacy_name"] == "HP2"
+    assert obj.capabilities.properties["modes"]["mode0"]["sensor_size"] == [4000, 2252]
+    assert obj.capabilities.properties["modes"]["mode1"]["sensor_fps"] == 30.0
+
+
+def test_display_catalog_properties_roundtrip():
+    obj = roundtrip(IpCatalog, DEMO_FIXTURES / "00_hw" / "ip-display-fhd-panel-projectA.yaml")
+    assert obj.category == "display"
+    assert {mode.id for mode in obj.capabilities.operating_modes} == {"60hz", "120hz"}
+    assert obj.capabilities.properties["display_size"] == [2400, 1080]
+    assert obj.capabilities.properties["ppi"] == 420
+    assert obj.capabilities.properties["refresh_rates"] == [60, 120]
+
+
+def test_ip_supported_features_accept_crop_scale_rotate():
+    raw = load_yaml(FIXTURES / "hw" / "ip-isp-v12.yaml")
+    raw["capabilities"]["supported_features"]["crop"] = True
+    raw["capabilities"]["supported_features"]["scale"] = True
+    raw["capabilities"]["supported_features"]["rotate"] = False
+    obj = IpCatalog.model_validate(raw)
+    assert obj.capabilities.supported_features.crop is True
+    assert obj.capabilities.supported_features.scale is True
+    assert obj.capabilities.supported_features.rotate is False
 
 
 def test_sw_profile_roundtrip():

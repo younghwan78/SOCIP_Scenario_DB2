@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field, model_validator
 
@@ -28,11 +28,15 @@ class SupportedFeatures(BaseScenarioModel):
     bitdepth: list[int] = Field(default_factory=list)
     hdr_formats: list[str] = Field(default_factory=list)
     compression: list[str] = Field(default_factory=list)
+    crop: bool | None = None
+    scale: bool | None = None
+    rotate: bool | None = None
 
 
 class IpCapabilities(BaseScenarioModel):
     operating_modes: list[OperatingMode] = Field(default_factory=list)
     supported_features: SupportedFeatures | None = None
+    properties: dict[str, Any] = Field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------

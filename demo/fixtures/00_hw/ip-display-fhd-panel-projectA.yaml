@@ -1,0 +1,22 @@
+id: ip-display-fhd-panel-projectA
+schema_version: "2.2"
+kind: ip
+category: display
+compatible_soc:
+  - soc-exynos2500
+
+hierarchy:
+  type: simple
+
+capabilities:
+  operating_modes:
+    - id: 60hz
+    - id: 120hz
+  supported_features:
+    bitdepth: [8, 10]
+    hdr_formats: [SDR, HDR10]
+  properties:
+    legacy_name: FHD_PANEL
+    display_size: [2400, 1080]
+    ppi: 420
+    refresh_rates: [60, 120]
