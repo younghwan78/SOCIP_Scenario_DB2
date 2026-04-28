@@ -653,7 +653,7 @@ size_profiles:
 The importer should support:
 
 ```bash
-uv run python -m scenario_db.legacy_importer \
+uv run python -m scenario_db.legacy_import.cli \
   --hw E:/10_Codes/23_MMIP_Scenario_simulation2/hw_config/projectA_hw.yaml \
   --sensor E:/10_Codes/23_MMIP_Scenario_simulation2/hw_config/sensor_config.yaml \
   --scenario-dir E:/10_Codes/23_MMIP_Scenario_simulation2/scenario_config \

@@ -627,3 +627,41 @@ legacy_import scaffold
   -> Viewer smoke
 ```
 
+## 13. Current Legacy Importer Command
+
+The initial importer scaffold can already convert legacy HW catalog YAML into
+canonical `kind: ip` YAML files.
+
+Example:
+
+```powershell
+cd E:\50_Codex_Soc_Scenario_DB\implementation
+uv run python -m scenario_db.legacy_import.cli `
+  --hw E:\10_Codes\23_MMIP_Scenario_simulation2\hw_config\projectA_hw.yaml `
+  --out generated\scenariodb `
+  --project proj-projectA `
+  --strict
+```
+
+Output:
+
+```text
+generated/scenariodb/
+  00_hw/
+    ip-*.yaml
+  import_report.json
+```
+
+Current importer scope:
+
+- Converts `projectA_hw.yaml` list entries into `ip_catalog` YAML.
+- Preserves modules, DMA ports, internal edges, min/max size, crop/scale/rotate flags, supported modes, and compression data.
+- Emits an import report.
+- Does not yet convert `sensor_config.yaml`.
+- Does not yet convert scenario YAML or variants.
+
+After generation, load the generated YAML with the normal canonical ETL:
+
+```powershell
+uv run python -m scenario_db.etl.loader generated\scenariodb
+```
