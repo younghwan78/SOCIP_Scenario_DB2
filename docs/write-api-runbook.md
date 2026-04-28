@@ -6,8 +6,10 @@ This runbook shows how to use the first Write API flow:
 stage -> validate -> diff -> apply
 ```
 
-The current write scope is `scenario.variant_overlay` only. Base scenario
-topology writes are intentionally not open yet.
+The current write scope supports:
+
+- `scenario.variant_overlay`: one variant overlay.
+- `scenario.pipeline_patch`: base scenario pipeline patch affecting every variant.
 
 ## Prerequisites
 
@@ -115,6 +117,37 @@ Expected resolved behavior:
 - `inheritance_chain` shows parent then child.
 - `resolved` is `true`.
 
+## Base Pipeline Patch Example
+
+Use this only when the base scenario topology or buffer catalog needs to change.
+Unlike a variant overlay, this affects every variant in the scenario.
+
+```powershell
+$payload = Get-Content .\demo\write_payloads\pipeline_patch_valid.json -Raw
+$stage = Invoke-RestMethod -Method Post -Uri "$api/write/staging" -ContentType "application/json" -Body $payload
+$batchId = $stage.batch_id
+$validation = Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/validate"
+$diff = Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/diff"
+$diff.changes | Format-Table field, change
+$diff.impact
+```
+
+Expected behavior:
+
+- Validation returns `valid=true`.
+- Diff target is the scenario ID, not a variant ID.
+- `impact.variant_count` shows how many variants are affected by the base patch.
+- `impact.blocking_variant_count` must be `0` before apply.
+
+Apply:
+
+```powershell
+Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/apply"
+Invoke-RestMethod "$api/scenarios/uc-camera-recording/variants/UHD60-HDR10-H265/graph"
+```
+
+The runtime graph should include the newly added base edge or buffer.
+
 ## Routing Switch Example
 
 `routing_switch` disables existing base topology nodes or edges. It does not
@@ -206,6 +239,37 @@ compression_in_placement
 
 Compression belongs to the buffer descriptor. LLC allocation belongs to
 `placement`.
+
+### Pipeline Patch Unknown Endpoint
+
+```powershell
+$payload = Get-Content .\demo\write_payloads\pipeline_patch_invalid_endpoint.json -Raw
+$stage = Invoke-RestMethod -Method Post -Uri "$api/write/staging" -ContentType "application/json" -Body $payload
+$validation = Invoke-RestMethod -Method Post -Uri "$api/write/staging/$($stage.batch_id)/validate"
+$validation.issues
+```
+
+Expected issue code:
+
+```text
+edge_target_not_found
+```
+
+### Pipeline Patch Invalid HW Edge
+
+```powershell
+$payload = Get-Content .\demo\write_payloads\pipeline_patch_invalid_otf.json -Raw
+$stage = Invoke-RestMethod -Method Post -Uri "$api/write/staging" -ContentType "application/json" -Body $payload
+$validation = Invoke-RestMethod -Method Post -Uri "$api/write/staging/$($stage.batch_id)/validate"
+$validation.issues
+```
+
+Expected issue codes:
+
+```text
+otf_edge_must_not_have_buffer
+physical_edge_endpoint_invalid
+```
 
 ## Response Interpretation
 

@@ -1,0 +1,18 @@
+{
+  "kind": "scenario.pipeline_patch",
+  "actor": "architect@example.com",
+  "note": "Invalid patch: edge endpoint does not exist",
+  "payload": {
+    "scenario_ref": "uc-camera-recording",
+    "patch": {
+      "add_edges": [
+        {
+          "from": "isp0",
+          "to": "npu0",
+          "type": "M2M",
+          "buffer": "RECORD_BUF"
+        }
+      ]
+    }
+  }
+}

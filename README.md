@@ -8,7 +8,7 @@ The current implementation focuses on four flows:
 - Canonical scenario resolver and review gate engine.
 - FastAPI read endpoints for scenario, runtime, and viewer data.
 - Streamlit + ELK/SVG pipeline viewer with Level 0/1/2 projections.
-- Write API staging flow for variant overlays.
+- Write API staging flow for variant overlays and base pipeline patches.
 
 ## Repository Layout
 
@@ -108,15 +108,17 @@ Invoke-RestMethod "http://127.0.0.1:18000/api/v1/scenarios/uc-camera-recording/v
 
 ## Write API
 
-The first write target is `scenario.variant_overlay`. It uses a staged flow:
+The write targets are `scenario.variant_overlay` and `scenario.pipeline_patch`.
+Both use a staged flow:
 
 ```text
 stage -> validate -> diff -> apply
 ```
 
-Use this to add or update a variant overlay without directly mutating the base
-scenario topology. The applied overlay is resolved by Read API, Runtime API, and
-Viewer projection as an effective topology.
+Use variant overlay writes to add or update a single variant without directly
+mutating the base scenario topology. Use pipeline patch writes only when the
+base `pipeline.nodes`, `pipeline.edges`, or `pipeline.buffers` must change for
+the entire scenario and all variants.
 
 Run a valid sample:
 
@@ -136,6 +138,21 @@ Inspect the result:
 Invoke-RestMethod "$api/scenarios/uc-camera-recording/variants/FHD30-SDR-H265-runbook"
 Invoke-RestMethod "$api/scenarios/uc-camera-recording/variants/FHD30-SDR-H265-runbook/graph"
 ```
+
+Run a base pipeline patch sample:
+
+```powershell
+$payload = Get-Content .\demo\write_payloads\pipeline_patch_valid.json -Raw
+$stage = Invoke-RestMethod -Method Post -Uri "$api/write/staging" -ContentType "application/json" -Body $payload
+$batchId = $stage.batch_id
+Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/validate"
+$diff = Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/diff"
+$diff.impact
+Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/apply"
+```
+
+Pipeline patch diff includes an `impact` block that shows whether existing
+variant overlays would become stale after the base change.
 
 More examples are in [docs/write-api-runbook.md](docs/write-api-runbook.md).
 The write contract is in [docs/write-api-contract.md](docs/write-api-contract.md).
@@ -224,4 +241,4 @@ Equivalent explicit virtual environment commands:
 - Level 2 drill-down for `camera`, `video`, and `display`.
 - Review gate risk overlay from known issue matching.
 - Memory descriptors and placement, including compression and LLC allocation.
-- Write API examples for variant overlay, derived variants, routing switch, SW task injection, and validation failures.
+- Write API examples for variant overlay, derived variants, routing switch, SW task injection, base pipeline patch, and validation failures.

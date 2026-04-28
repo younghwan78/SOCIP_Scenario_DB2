@@ -5,7 +5,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 
-WriteKind = Literal["scenario.variant_overlay"]
+WriteKind = Literal["scenario.variant_overlay", "scenario.pipeline_patch"]
 
 
 class StageWriteRequest(BaseModel):
@@ -63,6 +63,7 @@ class DiffPreviewResponse(BaseModel):
     target_id: str
     operation: Literal["create", "update"]
     changes: list[DiffEntry] = Field(default_factory=list)
+    impact: dict[str, Any] | None = None
 
 
 class ApplyWriteResponse(BaseModel):

@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from scenario_db.db.models.capability import IpCatalog
 from scenario_db.db.models.definition import Scenario, ScenarioVariant
-from scenario_db.write.service import normalize_payload, validate_variant_overlay
+from scenario_db.write.service import (
+    normalize_payload,
+    normalize_pipeline_patch_payload,
+    validate_pipeline_patch,
+    validate_variant_overlay,
+)
 
 
 class _Query:
@@ -52,12 +57,27 @@ class _Db:
         self.ip = IpCatalog(
             id="ip-mfc-v14",
             schema_version="2.2",
+            category="codec",
             capabilities={
                 "operating_modes": [
                     {"id": "normal"},
                     {"id": "high_throughput"},
                 ]
             },
+            yaml_sha256="test",
+        )
+        self.ip_isp = IpCatalog(
+            id="ip-isp-v12",
+            schema_version="2.2",
+            category="camera",
+            capabilities={},
+            yaml_sha256="test",
+        )
+        self.ip_csis = IpCatalog(
+            id="ip-csis-v8",
+            schema_version="2.2",
+            category="camera",
+            capabilities={},
             yaml_sha256="test",
         )
         self.variant = ScenarioVariant(
@@ -71,7 +91,7 @@ class _Db:
         if model is ScenarioVariant:
             return _Query([self.variant])
         if model is IpCatalog:
-            return _Query([self.ip])
+            return _Query([self.ip, self.ip_isp, self.ip_csis])
         return _Query([])
 
 
@@ -159,3 +179,79 @@ def test_validate_variant_overlay_rejects_compression_inside_placement():
         ),
     )
     assert any(issue.code == "compression_in_placement" for issue in issues)
+
+
+def _pipeline_patch_payload(patch):
+    return {"scenario_ref": "uc-camera-recording", "patch": patch}
+
+
+def test_normalize_pipeline_patch_defaults_optional_lists():
+    normalized = normalize_pipeline_patch_payload(
+        _pipeline_patch_payload(
+            {
+                "upsert_buffers": {
+                    "ANALYSIS_BUF": {"format": "YUV420"},
+                }
+            }
+        )
+    )
+    patch = normalized["patch"]
+    assert normalized["scenario_ref"] == "uc-camera-recording"
+    assert patch["add_nodes"] == []
+    assert patch["add_edges"] == []
+    assert patch["upsert_buffers"]["ANALYSIS_BUF"]["format"] == "YUV420"
+
+
+def test_validate_pipeline_patch_accepts_buffer_and_m2m_edge():
+    normalized = normalize_pipeline_patch_payload(
+        _pipeline_patch_payload(
+            {
+                "upsert_buffers": {
+                    "ANALYSIS_BUF": {"format": "YUV420"},
+                },
+                "add_edges": [
+                    {"from": "isp0", "to": "mfc", "type": "M2M", "buffer": "ANALYSIS_BUF"},
+                ],
+            }
+        )
+    )
+    issues = validate_pipeline_patch(_Db(), normalized)
+    assert not any(issue.severity == "error" for issue in issues)
+
+
+def test_validate_pipeline_patch_rejects_unknown_endpoint():
+    normalized = normalize_pipeline_patch_payload(
+        _pipeline_patch_payload(
+            {
+                "add_edges": [
+                    {"from": "isp0", "to": "npu0", "type": "M2M", "buffer": "RECORD_BUF"},
+                ],
+            }
+        )
+    )
+    issues = validate_pipeline_patch(_Db(), normalized)
+    assert any(issue.code == "edge_target_not_found" for issue in issues)
+
+
+def test_validate_pipeline_patch_rejects_otf_with_buffer():
+    normalized = normalize_pipeline_patch_payload(
+        _pipeline_patch_payload(
+            {
+                "add_edges": [
+                    {"from": "csis0", "to": "isp0", "type": "OTF", "buffer": "RECORD_BUF"},
+                ],
+            }
+        )
+    )
+    issues = validate_pipeline_patch(_Db(), normalized)
+    assert any(issue.code == "otf_edge_must_not_have_buffer" for issue in issues)
+
+
+def test_validate_pipeline_patch_rejects_variant_overlay_breakage():
+    db = _Db()
+    db.variant.node_configs = {"mfc": {"selected_mode": "normal"}}
+    normalized = normalize_pipeline_patch_payload(
+        _pipeline_patch_payload({"remove_nodes": ["mfc"]})
+    )
+    issues = validate_pipeline_patch(db, normalized)
+    assert any(issue.code == "variant_overlay_impact" for issue in issues)

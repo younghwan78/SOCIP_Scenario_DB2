@@ -1,0 +1,18 @@
+{
+  "kind": "scenario.pipeline_patch",
+  "actor": "architect@example.com",
+  "note": "Invalid patch: OTF edge to memory with buffer",
+  "payload": {
+    "scenario_ref": "uc-camera-recording",
+    "patch": {
+      "add_edges": [
+        {
+          "from": "isp0",
+          "to": "llc",
+          "type": "OTF",
+          "buffer": "RECORD_BUF"
+        }
+      ]
+    }
+  }
+}

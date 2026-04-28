@@ -234,3 +234,125 @@ def test_variant_overlay_validation_rejects_unsupported_selected_mode(api_client
     body = validation.json()
     assert body["valid"] is False
     assert any(issue["code"] == "unsupported_selected_mode" for issue in body["issues"])
+
+
+def _pipeline_patch_payload(patch: dict) -> dict:
+    return {
+        "kind": "scenario.pipeline_patch",
+        "actor": "codex-test",
+        "note": "integration test base pipeline patch",
+        "payload": {
+            "scenario_ref": SCENARIO_ID,
+            "patch": patch,
+        },
+    }
+
+
+def test_pipeline_patch_stage_validate_diff_apply_updates_base_graph(api_client: TestClient):
+    payload = _pipeline_patch_payload(
+        {
+            "upsert_buffers": {
+                "ANALYSIS_BUF": {
+                    "label": "Analysis Buffer",
+                    "format": "YUV420",
+                    "bitdepth": 10,
+                    "planes": 2,
+                    "size_ref": "record_out",
+                    "compression": "none",
+                    "alignment": "128B",
+                }
+            },
+            "add_edges": [
+                {"from": "isp0", "to": "llc", "type": "M2M", "buffer": "ANALYSIS_BUF"},
+            ],
+        }
+    )
+    stage = api_client.post("/api/v1/write/staging", json=payload)
+    assert stage.status_code == 200
+    batch_id = stage.json()["batch_id"]
+    assert stage.json()["target_id"] == SCENARIO_ID
+
+    validation = api_client.post(f"/api/v1/write/staging/{batch_id}/validate")
+    assert validation.status_code == 200
+    assert validation.json()["valid"] is True
+
+    diff = api_client.post(f"/api/v1/write/staging/{batch_id}/diff")
+    assert diff.status_code == 200
+    diff_body = diff.json()
+    assert diff_body["target_id"] == SCENARIO_ID
+    assert diff_body["impact"]["variant_count"] >= 3
+    assert diff_body["impact"]["blocking_variant_count"] == 0
+    changed_fields = {item["field"]: item["change"] for item in diff_body["changes"]}
+    assert changed_fields["pipeline.edges"] == "modify"
+    assert changed_fields["pipeline.buffers"] == "modify"
+
+    applied = api_client.post(f"/api/v1/write/staging/{batch_id}/apply")
+    assert applied.status_code == 200
+    assert applied.json()["applied_refs"]["operation"] == "pipeline_patch"
+
+    graph = api_client.get(f"/api/v1/scenarios/{SCENARIO_ID}/variants/UHD60-HDR10-H265/graph")
+    assert graph.status_code == 200
+    assert graph.json()["edge_count"] >= 4
+
+
+def test_pipeline_patch_validation_rejects_unknown_edge_endpoint(api_client: TestClient):
+    stage = api_client.post(
+        "/api/v1/write/staging",
+        json=_pipeline_patch_payload(
+            {
+                "add_edges": [
+                    {"from": "isp0", "to": "npu0", "type": "M2M", "buffer": "RECORD_BUF"},
+                ],
+            }
+        ),
+    )
+    assert stage.status_code == 200
+    validation = api_client.post(f"/api/v1/write/staging/{stage.json()['batch_id']}/validate")
+    assert validation.status_code == 200
+    body = validation.json()
+    assert body["valid"] is False
+    assert any(issue["code"] == "edge_target_not_found" for issue in body["issues"])
+
+
+def test_pipeline_patch_validation_rejects_otf_buffer_and_non_hw_endpoint(api_client: TestClient):
+    stage = api_client.post(
+        "/api/v1/write/staging",
+        json=_pipeline_patch_payload(
+            {
+                "add_edges": [
+                    {"from": "isp0", "to": "llc", "type": "OTF", "buffer": "RECORD_BUF"},
+                ],
+            }
+        ),
+    )
+    assert stage.status_code == 200
+    validation = api_client.post(f"/api/v1/write/staging/{stage.json()['batch_id']}/validate")
+    assert validation.status_code == 200
+    codes = {issue["code"] for issue in validation.json()["issues"]}
+    assert "otf_edge_must_not_have_buffer" in codes
+    assert "physical_edge_endpoint_invalid" in codes
+
+
+def test_pipeline_patch_validation_reports_variant_overlay_impact(api_client: TestClient):
+    overlay = _valid_payload("pipeline-patch-buffer-impact-test")
+    overlay["payload"]["variant"]["node_configs"] = {}
+    overlay["payload"]["variant"]["buffer_overrides"] = {
+        "PREVIEW_BUF": {"format": "YUV420"}
+    }
+    _stage_validate_apply(api_client, overlay)
+
+    stage = api_client.post(
+        "/api/v1/write/staging",
+        json=_pipeline_patch_payload(
+            {
+                "remove_edges": [{"from": "isp0", "to": "dpu"}],
+                "remove_buffers": ["PREVIEW_BUF"],
+            }
+        ),
+    )
+    assert stage.status_code == 200
+    validation = api_client.post(f"/api/v1/write/staging/{stage.json()['batch_id']}/validate")
+    assert validation.status_code == 200
+    body = validation.json()
+    assert body["valid"] is False
+    assert any(issue["code"] == "variant_overlay_impact" for issue in body["issues"])

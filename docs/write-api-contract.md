@@ -4,13 +4,17 @@ This document defines the first write-side contract after the Read API freeze.
 
 ## Scope
 
-The first Write API target is intentionally narrow:
+The Write API targets are intentionally narrow:
 
 - Supported: `scenario.variant_overlay`
+- Supported: `scenario.pipeline_patch`
 - Deferred: full `scenario.usecase` replacement, capability catalog write, evidence write, issue/waiver write, YAML export.
 
-The goal is to let users add or modify scenario variants without breaking the
-canonical base topology or the existing Read API/viewer contract.
+The goal is to let users modify the data that blocks authoring first:
+
+- `scenario.variant_overlay` adds or modifies one scenario variant.
+- `scenario.pipeline_patch` modifies the base scenario pipeline and therefore
+  affects every variant in that scenario.
 
 ## Authoring Model
 
@@ -23,6 +27,11 @@ Scenario authoring is split into two layers.
 
 The base scenario should contain the physically possible topology. A variant
 must not create new HW-to-HW routes that are absent from the base topology.
+
+`scenario.pipeline_patch` is stricter than a variant overlay because it changes
+the common base for all variants. A valid pipeline patch must preserve base
+node/edge/buffer referential integrity and must not leave existing variant
+overlays with stale references.
 
 ## Variant Overlay Fields
 
@@ -53,7 +62,7 @@ belong in evidence or review records.
 | `POST /api/v1/write/staging/{batch_id}/diff` | Preview canonical changes before apply. |
 | `POST /api/v1/write/staging/{batch_id}/apply` | Apply a validated batch to canonical tables. |
 
-## Request Shape
+## Variant Overlay Request Shape
 
 ```json
 {
@@ -103,7 +112,66 @@ belong in evidence or review records.
 }
 ```
 
+## Pipeline Patch Request Shape
+
+Use `scenario.pipeline_patch` to patch `scenarios.pipeline.nodes`,
+`scenarios.pipeline.edges`, and `scenarios.pipeline.buffers`.
+
+```json
+{
+  "kind": "scenario.pipeline_patch",
+  "actor": "architect@example.com",
+  "note": "Add analysis buffer path through LLC",
+  "payload": {
+    "scenario_ref": "uc-camera-recording",
+    "patch": {
+      "add_nodes": [],
+      "update_nodes": [
+        {
+          "id": "isp0",
+          "role": "main"
+        }
+      ],
+      "remove_nodes": [],
+      "upsert_buffers": {
+        "ANALYSIS_BUF": {
+          "label": "Analysis Buffer",
+          "format": "YUV420",
+          "bitdepth": 10,
+          "planes": 2,
+          "size_ref": "record_out",
+          "compression": "none",
+          "alignment": "128B"
+        }
+      },
+      "remove_buffers": [],
+      "add_edges": [
+        {
+          "from": "isp0",
+          "to": "llc",
+          "type": "M2M",
+          "buffer": "ANALYSIS_BUF"
+        }
+      ],
+      "remove_edges": []
+    }
+  }
+}
+```
+
+Patch operation rules:
+
+- `add_nodes`: adds base pipeline nodes. `id` is required. `ip_ref`, when present, must exist in `ip_catalog`.
+- `update_nodes`: updates existing base pipeline nodes. `id` is required.
+- `remove_nodes`: removes existing base pipeline nodes and touching base edges.
+- `upsert_buffers`: adds or updates base buffer descriptors.
+- `remove_buffers`: removes base buffer descriptors only when remaining base edges and variants do not reference them.
+- `add_edges`: adds base pipeline edges. `from`, `to`, and `type` are required.
+- `remove_edges`: removes existing base edges by `id` or by `from`/`to`.
+
 ## Validation Rules
+
+### Variant Overlay
 
 - `kind` must be `scenario.variant_overlay`.
 - `payload.scenario_ref` must reference an existing scenario.
@@ -119,20 +187,76 @@ belong in evidence or review records.
 - `buffer_overrides` must reference existing scenario buffers.
 - Compression and LLC placement must remain separate fields.
 
+### Pipeline Patch
+
+- `kind` must be `scenario.pipeline_patch`.
+- `payload.scenario_ref` must reference an existing scenario.
+- Added node IDs must not already exist in the base pipeline.
+- Updated and removed node IDs must exist in the base pipeline.
+- `ip_ref`, when present, must reference an existing IP catalog row.
+- Removed edges must exist in the base pipeline.
+- Every edge endpoint must reference a node that exists after the patch.
+- Base edge `type` must be one of `OTF`, `vOTF`, or `M2M`.
+- `OTF` and `vOTF` edges must connect HW endpoints and must not declare a buffer.
+- `M2M` edges must declare a buffer, and that buffer must exist after the patch.
+- Removed buffers must not be referenced by remaining base edges.
+- Existing variant overlays must remain valid after the base patch. Stale `routing_switch`, `topology_patch`, `node_configs`, or `buffer_overrides` references are blocking errors.
+
 Validation returns `200` with `valid=false` for business-rule failures. Malformed
 HTTP requests still return the standard API error contract.
 
 ## Apply Semantics
 
-`apply` is idempotent for the same latest staged payload:
+`apply` is idempotent for the same latest staged payload.
+
+For `scenario.variant_overlay`:
 
 - Existing variant: update overlay fields in place.
 - New variant: insert a new `scenario_variants` row.
 - Batch status becomes `applied`.
 - Write events record stage, validate, diff, and apply actions for audit.
 
+For `scenario.pipeline_patch`:
+
+- Existing scenario: update `scenarios.pipeline` JSONB in place.
+- `nodes`, `edges`, and `buffers` are patched as one atomic DB transaction.
+- Batch `applied_refs` records the affected scenario and resulting node/edge/buffer counts.
+- The patch changes Read API, Runtime API, and Viewer projections for all variants of that scenario.
+
 Canonical data is changed only by `apply`; `stage`, `validate`, and `diff` never
 modify scenario or variant records.
+
+## Diff Semantics
+
+Variant overlay diff reports field-level changes for one variant.
+
+Pipeline patch diff reports base pipeline changes and an `impact` block:
+
+```json
+{
+  "target_id": "uc-camera-recording",
+  "operation": "update",
+  "changes": [
+    {"field": "pipeline.nodes", "change": "unchanged"},
+    {"field": "pipeline.edges", "change": "modify"},
+    {"field": "pipeline.buffers", "change": "modify"}
+  ],
+  "impact": {
+    "variant_count": 3,
+    "blocking_variant_count": 0,
+    "affected_variants": [
+      {
+        "variant_id": "UHD60-HDR10-H265",
+        "warnings": ["base_pipeline_changed"],
+        "errors": []
+      }
+    ]
+  }
+}
+```
+
+If `blocking_variant_count` is greater than zero, validation should fail and
+`apply` is rejected.
 
 ## Read Projection Semantics
 

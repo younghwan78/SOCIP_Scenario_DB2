@@ -1,0 +1,45 @@
+{
+  "kind": "scenario.pipeline_patch",
+  "actor": "architect@example.com",
+  "note": "Add analysis buffer path for base pipeline validation",
+  "payload": {
+    "scenario_ref": "uc-camera-recording",
+    "patch": {
+      "add_nodes": [],
+      "update_nodes": [
+        {
+          "id": "isp0",
+          "role": "main"
+        }
+      ],
+      "remove_nodes": [],
+      "upsert_buffers": {
+        "ANALYSIS_BUF": {
+          "label": "Analysis Buffer",
+          "format": "YUV420",
+          "bitdepth": 10,
+          "planes": 2,
+          "size_ref": "record_out",
+          "compression": "none",
+          "alignment": "128B",
+          "placement": {
+            "llc_allocated": true,
+            "llc_allocation_mb": 1,
+            "llc_policy": "shared",
+            "allocation_owner": "ISP"
+          }
+        }
+      },
+      "remove_buffers": [],
+      "add_edges": [
+        {
+          "from": "isp0",
+          "to": "llc",
+          "type": "M2M",
+          "buffer": "ANALYSIS_BUF"
+        }
+      ],
+      "remove_edges": []
+    }
+  }
+}
