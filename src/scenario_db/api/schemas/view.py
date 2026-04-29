@@ -68,6 +68,7 @@ class NodeData(BaseModel):
     dma_count: int | None = None
     shared_resource: bool = False
     matched_issues: list[str] = []
+    detail_items: list[str] = []
     severity: str | None = None
     warning: bool = False
     collapsed_children_count: int = 0
@@ -91,6 +92,7 @@ class EdgeData(BaseModel):
     memory: MemoryDescriptor | None = None
     placement: MemoryPlacement | None = None
     label: str | None = None
+    detail_items: list[str] = []
 
 
 class EdgeElement(BaseModel):

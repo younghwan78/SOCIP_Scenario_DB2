@@ -294,6 +294,7 @@ def _node_meta(node: NodeElement) -> dict[str, Any]:
     data = node.data
     style = _style_for_node(node)
     details: list[str] = []
+    details.extend(data.detail_items)
     if data.ip_ref:
         details.append(f"IP: {data.ip_ref}")
     if data.capability_badges:
@@ -339,6 +340,7 @@ def _node_meta(node: NodeElement) -> dict[str, Any]:
 def _edge_meta(edge: EdgeElement) -> dict[str, Any]:
     data = edge.data
     details = [f"{data.source} -> {data.target}", f"Type: {data.flow_type}"]
+    details.extend(data.detail_items)
     if data.latency_class:
         details.append(f"Latency: {data.latency_class}")
     if data.buffer_ref:

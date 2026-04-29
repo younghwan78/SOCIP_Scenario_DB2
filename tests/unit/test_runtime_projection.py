@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from scenario_db.db.repositories.scenario_graph import CanonicalScenarioGraph
 from scenario_db.resolver.models import ResolverResult
 from scenario_db.review_gate.engine import run_review_gate
-from scenario_db.view.service import _project_topology
+from scenario_db.view.service import _project_architecture, _project_reference_level1, _project_topology
 
 
 def _graph() -> CanonicalScenarioGraph:
@@ -164,3 +164,145 @@ def test_topology_projection_contains_vertical_buffer_and_llc_metadata():
     assert buffer_node.data.memory.format == "NV12"
     assert buffer_node.data.placement.llc_allocated is True
     assert any(edge.data.buffer_ref == "RECORD_BUF" for edge in view.edges)
+
+
+def _imported_variant_graph() -> CanonicalScenarioGraph:
+    scenario = SimpleNamespace(
+        id="uc-imported-camera-recording",
+        project_ref="proj-projectA",
+        metadata_={"name": "Imported Camera Recording"},
+        pipeline={
+            "nodes": [
+                {"id": "t_csis", "ip_ref": "ip-csis-v8", "role": "sensor"},
+                {"id": "t_postIRTA", "ip_ref": "ip-cpu-mid", "node_type": "sw", "role": "sw_task"},
+                {"id": "t_mfc", "ip_ref": "ip-mfc-v14", "role": "codec"},
+                {"id": "t_dpu", "ip_ref": "ip-dpu-v9", "role": "display"},
+            ],
+            "edges": [
+                {"from": "t_csis", "to": "t_postIRTA", "type": "control"},
+                {"from": "t_postIRTA", "to": "t_mfc", "type": "M2M", "buffer": "RECORD_BUF"},
+                {"from": "t_postIRTA", "to": "t_dpu", "type": "M2M", "buffer": "PREVIEW_BUF"},
+            ],
+            "buffers": {
+                "RECORD_BUF": {
+                    "format": "NV12",
+                    "bitdepth": 8,
+                    "size_ref": "record",
+                    "alignment": "64B",
+                },
+                "PREVIEW_BUF": {
+                    "format": "NV12",
+                    "bitdepth": 8,
+                    "size_ref": "preview",
+                    "alignment": "64B",
+                },
+            },
+            "task_graph": {
+                "layout": "task-topology",
+                "nodes": [
+                    {"id": "t_csis", "label": "CSIS", "layer": "hw", "x": 500, "y": 100},
+                    {"id": "t_postIRTA", "label": "postIRTA", "layer": "kernel", "x": 500, "y": 230},
+                    {"id": "t_mfc", "label": "MFC", "layer": "hw", "x": 420, "y": 360, "buffer": "RECORD_BUF"},
+                    {"id": "t_dpu", "label": "DPU", "layer": "hw", "x": 610, "y": 360, "buffer": "PREVIEW_BUF"},
+                ],
+                "edges": [
+                    {"from": "t_csis", "to": "t_postIRTA", "type": "SW"},
+                    {"from": "t_postIRTA", "to": "t_mfc", "type": "M2M", "buffer": "RECORD_BUF"},
+                    {"from": "t_postIRTA", "to": "t_dpu", "type": "M2M", "buffer": "PREVIEW_BUF"},
+                ],
+            },
+            "level1_graph": {
+                "nodes_from_task_graph": True,
+                "groups": [{"id": "grp-imported", "label": "Imported Path", "x": 520, "y": 260, "width": 520, "height": 420}],
+            },
+        },
+        size_profile={"anchors": {"sensor_full": "4000x2252", "record_out": "1920x1080", "preview_out": "1280x720"}},
+    )
+    variant = SimpleNamespace(
+        id="FHD30-Recording-NoDisplay",
+        severity="medium",
+        design_conditions={"resolution": "FHD", "fps": 30, "codec": "H.265"},
+        size_overrides={"record_out": "1920x1080", "preview_out": "1280x720"},
+        routing_switch={
+            "disabled_nodes": ["t_dpu"],
+            "disabled_edges": [{"from": "t_postIRTA", "to": "t_dpu", "buffer": "PREVIEW_BUF"}],
+        },
+        topology_patch={},
+        node_configs={
+            "t_postIRTA": {
+                "kind": "sw_task",
+                "name": "postIRTA",
+                "processor": "CPU_MID_Cluster",
+                "duration_ms": 4.0,
+            },
+            "t_mfc": {
+                "kind": "ip",
+                "mode": "Normal",
+                "inputs": [{"port": "MFC_RDMA", "size": [0, 0, 1920, 1080], "format": "YUV420", "bitwidth": 10}],
+            },
+        },
+        buffer_overrides={
+            "RECORD_BUF": {
+                "format": "YUV420",
+                "bitdepth": 10,
+                "compression": "SBWC_v4",
+                "placement": {
+                    "llc_allocated": True,
+                    "llc_allocation_mb": 1.0,
+                    "llc_policy": "dedicated",
+                    "allocation_owner": "MFC",
+                },
+            }
+        },
+        ip_requirements={},
+        sw_requirements={},
+        resolved=True,
+        inheritance_chain=["FHD30-Recording-NoDisplay"],
+    )
+    return CanonicalScenarioGraph(
+        scenario=scenario,
+        variant=variant,
+        soc=SimpleNamespace(id="soc-projectA"),
+        ip_catalog={
+            "ip-csis-v8": SimpleNamespace(category="camera", capabilities={}, hierarchy={}),
+            "ip-cpu-mid": SimpleNamespace(category="cpu", capabilities={}, hierarchy={}),
+            "ip-mfc-v14": SimpleNamespace(category="codec", capabilities={}, hierarchy={}),
+            "ip-dpu-v9": SimpleNamespace(category="display", capabilities={}, hierarchy={}),
+        },
+    )
+
+
+def test_imported_variant_routing_switch_hides_disabled_branch_in_view_projections():
+    graph = _imported_variant_graph()
+
+    architecture = _project_architecture(graph, level=0)
+    topology = _project_topology(graph, level=0)
+    level1 = _project_reference_level1(graph)
+
+    for view in (architecture, topology, level1):
+        node_ids = {node.data.id for node in view.nodes}
+        assert "ip-t_dpu" not in node_ids
+        assert "t_dpu" not in node_ids
+        assert all(edge.data.target not in {"ip-t_dpu", "t_dpu"} for edge in view.edges)
+        assert view.metadata["variant_overlay"]["disabled_nodes"] == ["t_dpu"]
+
+
+def test_imported_variant_detail_payload_exposes_node_config_buffer_override_and_llc():
+    graph = _imported_variant_graph()
+    view = _project_reference_level1(graph)
+
+    sw_node = next(node for node in view.nodes if node.data.id == "t_postIRTA")
+    assert any("SW task" in item for item in sw_node.data.detail_items)
+    assert any("CPU_MID_Cluster" in item for item in sw_node.data.detail_items)
+
+    mfc_node = next(node for node in view.nodes if node.data.id == "t_mfc")
+    assert any("Inputs:" in item and "MFC_RDMA" in item for item in mfc_node.data.detail_items)
+    assert any("Buffer override" in item for item in mfc_node.data.detail_items)
+    assert mfc_node.data.placement.llc_allocated is True
+
+    m2m_edge = next(edge for edge in view.edges if edge.data.buffer_ref == "RECORD_BUF")
+    assert any("Buffer override" in item for item in m2m_edge.data.detail_items)
+    assert m2m_edge.data.placement.llc_allocated is True
+    assert view.metadata["variant_overlay"]["node_config_count"] == 2
+    assert view.metadata["variant_overlay"]["buffer_override_count"] == 1
+    assert view.metadata["variant_overlay"]["sw_task_count"] == 1

@@ -90,6 +90,7 @@ Viewer-critical optional node fields:
 - `data.dma_count`
 - `data.shared_resource`
 - `data.matched_issues`
+- `data.detail_items`
 - `data.warning`
 - `data.view_hints`
 
@@ -107,6 +108,27 @@ Viewer-critical optional edge fields:
 - `data.memory`
 - `data.placement`
 - `data.label`
+- `data.detail_items`
+
+`detail_items` is a pre-rendered list of concise strings for Viewer tooltips and
+right-side inspectors. It should expose the resolved variant context that is hard
+to infer from graph shape alone:
+
+- `node_configs`: selected mode, input/output ports, format, bitdepth, SW task processor, and duration.
+- `buffer_overrides`: per-variant format, bitdepth, compression, alignment, and buffer size.
+- `memory placement`: LLC allocation policy, allocation size, owner, and expected BW reduction when available.
+
+The response `metadata.variant_overlay` summarizes the resolved overlay used by
+the projection:
+
+- `resolved`
+- `inheritance_chain`
+- `disabled_nodes`
+- `disabled_edge_count`
+- `topology_patch.add_nodes/add_edges/remove_edges`
+- `node_config_count`
+- `buffer_override_count`
+- `sw_task_count`
 
 ## Memory Contract
 

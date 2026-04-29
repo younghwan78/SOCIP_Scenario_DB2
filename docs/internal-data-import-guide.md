@@ -536,6 +536,10 @@ Viewer:
 - Check Level 0 task topology.
 - Check Level 1 IP detail.
 - Check Level 2 camera/video/display drill-down if available.
+- Check `metadata.variant_overlay.disabled_nodes` and `disabled_edge_count` to
+  confirm variant branch switching.
+- Check node/edge tooltip detail for `node_configs`, `buffer_overrides`, SW task
+  processor/duration, and LLC placement.
 
 DB:
 

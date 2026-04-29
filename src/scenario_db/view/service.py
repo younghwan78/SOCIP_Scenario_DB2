@@ -310,6 +310,7 @@ def _project_architecture(graph: CanonicalScenarioGraph, level: int) -> ViewResp
                 ip_ref=pipeline_node.get("ip_ref"),
                 capability_badges=_capability_badges(graph, pipeline_node),
                 active_operations=_operation_summary(graph, node_id, pipeline_node),
+                detail_items=_node_detail_items(graph, node_id, pipeline_node),
                 view_hints=ViewHints(lane=layer, stage=stage, order=order),
             )
         )
@@ -350,6 +351,7 @@ def _project_topology(graph: CanonicalScenarioGraph, level: int) -> ViewResponse
                 ip_ref=pipeline_node.get("ip_ref"),
                 capability_badges=_capability_badges(graph, pipeline_node),
                 active_operations=_operation_summary(graph, node_id, pipeline_node),
+                detail_items=_node_detail_items(graph, node_id, pipeline_node),
                 view_hints=ViewHints(lane=_pipeline_node_layer(graph, pipeline_node), stage=_stage_for_node(node_id, pipeline_node), order=rank),
             )
         )
@@ -370,6 +372,7 @@ def _project_topology(graph: CanonicalScenarioGraph, level: int) -> ViewResponse
                 85 + ((source_rank + target_rank) / 2) * 110,
                 memory=_memory_descriptor(graph, buffer_ref),
                 placement=_memory_placement(graph, buffer_ref),
+                detail_items=_buffer_detail_items(graph, buffer_ref),
                 view_hints=ViewHints(lane="memory", stage="processing", order=idx),
             )
         )
@@ -424,6 +427,7 @@ def _ref_task_node(
     ops: OperationSummary | None = None,
     memory: MemoryDescriptor | None = None,
     placement: MemoryPlacement | None = None,
+    detail_items: list[str] | None = None,
 ) -> NodeElement:
     return _n(
         node_id,
@@ -438,6 +442,7 @@ def _ref_task_node(
         active_operations=ops,
         memory=memory,
         placement=placement,
+        detail_items=detail_items or [],
         view_hints=ViewHints(lane=layer, stage="processing", width=width, height=height),
     )
 
@@ -520,6 +525,145 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
     return merged
 
 
+def _node_detail_items(
+    graph: CanonicalScenarioGraph,
+    node_id: str | None,
+    pipeline_node: dict[str, Any] | None = None,
+) -> list[str]:
+    if not node_id:
+        return []
+    config = (getattr(graph.variant, "node_configs", None) or {}).get(node_id) or {}
+    details: list[str] = []
+    if pipeline_node:
+        role = pipeline_node.get("role")
+        if role:
+            details.append(f"Role: {role}")
+    if not isinstance(config, dict) or not config:
+        return details
+
+    kind = config.get("kind") or config.get("type")
+    if kind:
+        details.append(f"Variant config: {kind}")
+    mode = config.get("mode")
+    if mode:
+        details.append(f"Mode: {mode}")
+    if kind == "sw_task" or config.get("processor") or config.get("duration_ms") is not None:
+        details.append(_sw_task_summary(config))
+
+    input_summary = _port_summary(config.get("inputs"))
+    if input_summary:
+        details.append("Inputs: " + input_summary)
+    output_summary = _port_summary(config.get("outputs"))
+    if output_summary:
+        details.append("Outputs: " + output_summary)
+    return details
+
+
+def _task_node_detail_items(
+    graph: CanonicalScenarioGraph,
+    node_id: str,
+    node_spec: dict[str, Any],
+) -> list[str]:
+    details = _node_detail_items(graph, node_id, node_spec)
+    if node_spec.get("buffer"):
+        details.extend(_buffer_detail_items(graph, str(node_spec["buffer"])))
+    return details
+
+
+def _edge_detail_items(
+    graph: CanonicalScenarioGraph,
+    edge: dict[str, Any],
+    buffer_ref: str | None,
+) -> list[str]:
+    details: list[str] = []
+    source = edge.get("from") or edge.get("source")
+    target = edge.get("to") or edge.get("target")
+    if source and target:
+        details.append(f"Route: {source} -> {target}")
+    edge_type = edge.get("type")
+    if edge_type:
+        details.append(f"Edge type: {edge_type}")
+    if buffer_ref:
+        details.extend(_buffer_detail_items(graph, buffer_ref))
+    return details
+
+
+def _buffer_detail_items(graph: CanonicalScenarioGraph, buffer_ref: str | None) -> list[str]:
+    if not buffer_ref:
+        return []
+    spec = _buffer_spec(graph, buffer_ref)
+    override = (getattr(graph.variant, "buffer_overrides", None) or {}).get(buffer_ref) or {}
+    details: list[str] = []
+    if override:
+        details.append("Buffer override: variant-specific")
+    if spec:
+        bits = [
+            spec.get("format"),
+            _size_text(spec.get("size_ref") or spec.get("size")),
+            f"{spec.get('bitdepth')}b" if spec.get("bitdepth") is not None else None,
+            spec.get("compression"),
+            spec.get("alignment"),
+        ]
+        summary = " / ".join(str(bit) for bit in bits if bit)
+        if summary:
+            details.append(f"Buffer: {summary}")
+        placement = spec.get("placement") or {}
+        if placement:
+            details.append("Placement: " + _placement_summary(placement))
+    return details
+
+
+def _sw_task_summary(config: dict[str, Any]) -> str:
+    bits = [
+        config.get("name") or config.get("group") or "SW task",
+        config.get("processor"),
+        f"{config.get('duration_ms')}ms" if config.get("duration_ms") is not None else None,
+    ]
+    return "SW task: " + " / ".join(str(bit) for bit in bits if bit)
+
+
+def _port_summary(value: Any) -> str | None:
+    if not isinstance(value, list):
+        return None
+    items: list[str] = []
+    for item in value[:3]:
+        if not isinstance(item, dict):
+            continue
+        bits = [
+            item.get("port"),
+            _size_text(item.get("size")),
+            item.get("format"),
+            f"{item.get('bitwidth')}b" if item.get("bitwidth") is not None else None,
+            item.get("comp"),
+        ]
+        items.append(" ".join(str(bit) for bit in bits if bit))
+    if len(value) > 3:
+        items.append(f"+{len(value) - 3} more")
+    return "; ".join(items) if items else None
+
+
+def _size_text(value: Any) -> str | None:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list) and len(value) >= 4:
+        return f"{value[2]}x{value[3]}"
+    if isinstance(value, dict):
+        width = value.get("width")
+        height = value.get("height")
+        if width and height:
+            return f"{width}x{height}"
+    return None
+
+
+def _placement_summary(placement: dict[str, Any]) -> str:
+    if placement.get("llc_allocated") is True:
+        mb = placement.get("llc_allocation_mb")
+        policy = placement.get("llc_policy") or "llc"
+        owner = placement.get("allocation_owner")
+        return "LLC " + " ".join(str(part) for part in (f"{mb}MB" if mb else None, policy, owner) if part)
+    return ", ".join(f"{key}={value}" for key, value in placement.items())
+
+
 def _task_node_from_spec(
     graph: CanonicalScenarioGraph,
     spec: dict[str, Any],
@@ -543,6 +687,7 @@ def _task_node_from_spec(
         ops=_operation_from_spec(merged, tokens),
         memory=_buffer_memory_from_spec(graph, merged.get("buffer"), tokens),
         placement=_buffer_placement_from_spec(graph, merged.get("buffer")),
+        detail_items=_task_node_detail_items(graph, str(merged["id"]), merged),
     )
 
 
@@ -579,6 +724,7 @@ def _task_edges_from_spec(
                 buffer_ref=buffer_ref,
                 memory=_buffer_memory_from_spec(graph, buffer_ref, tokens),
                 placement=_buffer_placement_from_spec(graph, buffer_ref),
+                detail_items=_edge_detail_items(graph, spec, buffer_ref),
             )
         )
     return edges
@@ -727,6 +873,7 @@ def _detail_node(
     dma_count: int | None = None,
     shared_resource: bool = False,
     warning: bool = False,
+    detail_items: list[str] | None = None,
 ) -> NodeElement:
     return _n(
         node_id,
@@ -745,6 +892,7 @@ def _detail_node(
         dma_count=dma_count,
         shared_resource=shared_resource,
         warning=warning,
+        detail_items=detail_items or [],
         view_hints=ViewHints(width=width, height=height),
     )
 
@@ -781,6 +929,7 @@ def _detail_buffer(
         height=height,
         memory=memory,
         placement=placement,
+        detail_items=_buffer_detail_items(graph, buffer_ref),
     )
 
 
@@ -1275,6 +1424,7 @@ def _project_drilldown(graph: CanonicalScenarioGraph, expand: str) -> ViewRespon
                 500,
                 memory=_memory_descriptor(graph, buffer_ref),
                 placement=_memory_placement(graph, buffer_ref),
+                detail_items=_buffer_detail_items(graph, buffer_ref),
                 view_hints=ViewHints(lane="memory", stage="processing", order=idx),
             )
         )
@@ -1287,6 +1437,7 @@ def _project_drilldown(graph: CanonicalScenarioGraph, expand: str) -> ViewRespon
                 buffer_ref=buffer_ref,
                 memory=_memory_descriptor(graph, buffer_ref),
                 placement=_memory_placement(graph, buffer_ref),
+                detail_items=_edge_detail_items(graph, edge, buffer_ref),
             )
         )
 
@@ -1308,6 +1459,8 @@ def _response(
     edges: list[EdgeElement],
     metadata: dict[str, Any],
 ) -> ViewResponse:
+    enriched_metadata = dict(metadata)
+    enriched_metadata["variant_overlay"] = _variant_overlay_metadata(graph)
     return ViewResponse(
         level=level,
         mode=mode,
@@ -1317,9 +1470,35 @@ def _response(
         edges=edges,
         risks=_risk_cards(graph),
         summary=_summary(graph),
-        metadata=metadata,
+        metadata=enriched_metadata,
         overlays_available=["issues", "review-gate", "memory-path", "llc-allocation", "compression"],
     )
+
+
+def _variant_overlay_metadata(graph: CanonicalScenarioGraph) -> dict[str, Any]:
+    routing = getattr(graph.variant, "routing_switch", None) or {}
+    topology_patch = getattr(graph.variant, "topology_patch", None) or {}
+    node_configs = getattr(graph.variant, "node_configs", None) or {}
+    buffer_overrides = getattr(graph.variant, "buffer_overrides", None) or {}
+    return {
+        "resolved": bool(getattr(graph.variant, "resolved", True)),
+        "inheritance_chain": list(getattr(graph.variant, "inheritance_chain", None) or []),
+        "disabled_nodes": list(routing.get("disabled_nodes") or []),
+        "disabled_edge_count": len(routing.get("disabled_edges") or []),
+        "topology_patch": {
+            "add_nodes": len(topology_patch.get("add_nodes") or []),
+            "add_edges": len(topology_patch.get("add_edges") or []),
+            "remove_edges": len(topology_patch.get("remove_edges") or []),
+        },
+        "node_config_count": len(node_configs),
+        "buffer_override_count": len(buffer_overrides),
+        "sw_task_count": sum(
+            1
+            for config in node_configs.values()
+            if isinstance(config, dict)
+            and (config.get("kind") == "sw_task" or config.get("processor"))
+        ),
+    }
 
 
 def _summary(graph: CanonicalScenarioGraph) -> ViewSummary:
@@ -1407,13 +1586,14 @@ def _architecture_edges(graph: CanonicalScenarioGraph) -> list[EdgeElement]:
                     flow_type,
                     buffer_ref=buffer_ref,
                     label=f"{flow_type} path",
+                    detail_items=_edge_detail_items(graph, edge, buffer_ref),
                 )
             )
             buffer_id = f"buf-{_safe_id(buffer_ref)}"
-            edges.append(_e(f"e-{idx}-src-buf", source, buffer_id, flow_type, buffer_ref=buffer_ref))
-            edges.append(_e(f"e-{idx}-buf-tgt", buffer_id, target, flow_type, buffer_ref=buffer_ref))
+            edges.append(_e(f"e-{idx}-src-buf", source, buffer_id, flow_type, buffer_ref=buffer_ref, detail_items=_edge_detail_items(graph, edge, buffer_ref)))
+            edges.append(_e(f"e-{idx}-buf-tgt", buffer_id, target, flow_type, buffer_ref=buffer_ref, detail_items=_edge_detail_items(graph, edge, buffer_ref)))
         else:
-            edges.append(_e(f"e-{idx}-{source}-{target}", source, target, flow_type))
+            edges.append(_e(f"e-{idx}-{source}-{target}", source, target, flow_type, detail_items=_edge_detail_items(graph, edge, None)))
     return edges
 
 
@@ -1426,10 +1606,11 @@ def _topology_edges(graph: CanonicalScenarioGraph) -> list[EdgeElement]:
         buffer_ref = edge.get("buffer")
         if buffer_ref:
             buffer_id = f"buf-{_safe_id(buffer_ref)}"
-            edges.append(_e(f"e-topo-{idx}-src-buf", source, buffer_id, flow_type, buffer_ref=buffer_ref))
-            edges.append(_e(f"e-topo-{idx}-buf-tgt", buffer_id, target, flow_type, buffer_ref=buffer_ref))
+            details = _edge_detail_items(graph, edge, buffer_ref)
+            edges.append(_e(f"e-topo-{idx}-src-buf", source, buffer_id, flow_type, buffer_ref=buffer_ref, detail_items=details))
+            edges.append(_e(f"e-topo-{idx}-buf-tgt", buffer_id, target, flow_type, buffer_ref=buffer_ref, detail_items=details))
         else:
-            edges.append(_e(f"e-topo-{idx}", source, target, flow_type))
+            edges.append(_e(f"e-topo-{idx}", source, target, flow_type, detail_items=_edge_detail_items(graph, edge, None)))
     return edges
 
 
@@ -1458,6 +1639,7 @@ def _buffer_nodes_from_edges(
                 LANE_Y["memory"],
                 memory=_memory_descriptor(graph, buffer_ref),
                 placement=_memory_placement(graph, buffer_ref),
+                detail_items=_buffer_detail_items(graph, buffer_ref),
                 view_hints=ViewHints(lane="memory", stage=stage, order=order),
             )
         )
