@@ -875,6 +875,7 @@ Status:
 - Step 3A: HW catalog conversion implemented.
 - Step 3B: capability model accepts sensor/display catalog categories.
 - Step 3C: sensor config and optional display sidecar conversion implemented.
+- Step 3D: variant overlay fields preserved by model and ETL mapper.
 
 Files:
 
@@ -894,6 +895,13 @@ Exit criteria:
 
 ### Step 4: Legacy Scenario To Variant Conversion
 
+Prerequisite added before Step 4:
+
+- Step 3D: canonical `Variant` model and ETL mapper must preserve
+  `routing_switch`, `topology_patch`, `node_configs`, and `buffer_overrides`.
+  Without this, the importer can generate useful YAML but DB load loses the
+  variant-specific configuration needed by the Viewer and resolver.
+
 Changes:
 
 - Convert one legacy scenario YAML into:
@@ -901,10 +909,18 @@ Changes:
   - one variant
   - generated task graph
   - generated buffers
+- Generate a small project stub so `scenario.usecase.project_ref` can satisfy
+  DB foreign-key loading in an isolated import folder.
+- Preserve legacy task IDs as canonical pipeline node IDs.
+- Preserve `ip_settings.inputs/outputs`, `tasks`, and `sw_tasks` under
+  variant `node_configs`.
+- Generate M2M buffer descriptors from edge ports and mirror them to
+  variant `buffer_overrides`.
 
 Exit criteria:
 
 - `projectA_FHD30_recording_scenario.yaml` imports.
+- Generated `uc-fhd30-recording.yaml` validates with the canonical Usecase model.
 - Viewer Level 0 and topology view show the expected path.
 
 ### Step 5: Variant Grouping
@@ -914,11 +930,18 @@ Changes:
 - Group `FHD30/FHD60/UHD30/UHD60` scenario YAMLs into one `camera-recording` scenario.
 - Generate one base pipeline and multiple variants.
 - Deduplicate common IP topology.
+- Use Superset & Switch for optional branches that are structurally present in
+  most variants, such as preview/display, codec branch, or SW task branch.
+- Use Delta Patch for real topology differences, such as a missing task,
+  additional IP, or different producer/consumer edge.
+- Store per-variant size/format/mode differences in `size_overrides`,
+  `node_configs`, and `buffer_overrides`; avoid duplicating the full scenario.
 
 Exit criteria:
 
 - Viewer can switch variants without duplicating base scenario.
 - Read API returns expected `design_conditions` and `size_overrides`.
+- Variant inheritance and patch resolution preserve all node/buffer overrides.
 
 ### Step 6: Variant Generation From Axes
 

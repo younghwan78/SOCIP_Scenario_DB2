@@ -44,10 +44,10 @@ def upsert_usecase(raw: dict, sha256: str, session: Session) -> None:
         vrow.design_conditions   = v.design_conditions or {}
         vrow.design_conditions_override = v.design_conditions_override or {}
         vrow.size_overrides      = v.size_overrides or {}
-        vrow.routing_switch      = {}
-        vrow.topology_patch      = {}
-        vrow.node_configs        = {}
-        vrow.buffer_overrides    = {}
+        vrow.routing_switch      = v.routing_switch or {}
+        vrow.topology_patch      = v.topology_patch or {}
+        vrow.node_configs        = v.node_configs or {}
+        vrow.buffer_overrides    = v.buffer_overrides or {}
         vrow.ip_requirements     = {
             k: vv.model_dump(exclude_none=True)
             for k, vv in v.ip_requirements.items()

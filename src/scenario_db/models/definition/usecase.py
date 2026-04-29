@@ -151,6 +151,10 @@ class Variant(BaseScenarioModel):
     severity: Severity
     design_conditions: dict[str, str | int | float] = Field(default_factory=dict)
     size_overrides: dict[str, str] = Field(default_factory=dict)
+    routing_switch: dict[str, Any] = Field(default_factory=dict)
+    topology_patch: dict[str, Any] = Field(default_factory=dict)
+    node_configs: dict[str, Any] = Field(default_factory=dict)
+    buffer_overrides: dict[str, Any] = Field(default_factory=dict)
     ip_requirements: dict[str, IpRequirementSpec] = Field(default_factory=dict)
     sw_requirements: SwRequirements | None = None
     violation_policy: ViolationPolicy | None = None

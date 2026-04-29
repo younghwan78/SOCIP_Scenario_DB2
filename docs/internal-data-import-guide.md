@@ -629,10 +629,10 @@ legacy_import scaffold
 
 ## 13. Current Legacy Importer Command
 
-The current importer scaffold converts legacy HW, sensor, and optional display
-sidecar YAML into canonical `kind: ip` catalog YAML files. This is the Step 3C
-scope: catalog import only. Scenario YAML, variants, and pipeline generation are
-still handled in the next importer step.
+The current importer converts legacy HW, sensor, optional display sidecar, and
+one scenario YAML into canonical ScenarioDB YAML. This is the Step 4 scope:
+single-scenario conversion. Multi-scenario variant grouping is still handled in
+Step 5.
 
 Example:
 
@@ -641,9 +641,12 @@ cd E:\50_Codex_Soc_Scenario_DB\implementation
 uv run python -m scenario_db.legacy_import.cli `
   --hw E:\10_Codes\23_MMIP_Scenario_simulation2\hw_config\projectA_hw.yaml `
   --sensor E:\10_Codes\23_MMIP_Scenario_simulation2\hw_config\sensor_config.yaml `
+  --scenario E:\10_Codes\23_MMIP_Scenario_simulation2\scenario_config\projectA_FHD30_recording_scenario.yaml `
   --display generated\display_config.yaml `
   --out generated\scenariodb `
   --project proj-projectA `
+  --project-name "Project A" `
+  --soc soc-projectA `
   --strict
 ```
 
@@ -666,6 +669,9 @@ Output:
 generated/scenariodb/
   00_hw/
     ip-*.yaml
+  02_definition/
+    proj-projectA.yaml
+    uc-fhd30-recording.yaml
   import_report.json
 ```
 
@@ -674,11 +680,15 @@ Current importer scope:
 - Converts `projectA_hw.yaml` list entries into `ip_catalog` YAML.
 - Converts `sensor_config.yaml` entries into `category: sensor` catalog YAML.
 - Converts optional display sidecar entries into `category: display` catalog YAML.
+- Converts one legacy scenario YAML into `scenario.usecase` plus one variant.
 - Preserves modules, DMA ports, internal edges, min/max size, crop/scale/rotate flags, supported modes, and compression data.
 - Preserves sensor modes and calculates `v_valid_ms` when `sensor_size`, `sensor_pclk`, and `sensor_line_length_pck` are available.
 - Preserves display size, PPI, refresh rates, bitdepth, and HDR formats.
+- Preserves legacy task IDs in `pipeline.nodes`, `pipeline.edges`, and `pipeline.task_graph`.
+- Generates variant `node_configs` from `ip_settings`, `tasks`, and `sw_tasks`.
+- Generates M2M buffer descriptors and mirrors them into variant `buffer_overrides`.
 - Emits an import report.
-- Does not yet convert scenario YAML or variants.
+- Does not yet group multiple scenario YAML files into one scenario with multiple variants.
 
 After generation, load the generated YAML with the normal canonical ETL:
 
