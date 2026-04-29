@@ -7,8 +7,13 @@ from pathlib import Path
 from scenario_db.legacy_import.emit_canonical_yaml import emit_catalog, emit_hw_catalog
 from scenario_db.legacy_import.normalize_display import convert_display_catalog, load_legacy_display
 from scenario_db.legacy_import.normalize_hw import convert_hw_catalog, load_legacy_hw
-from scenario_db.legacy_import.normalize_scenario import convert_scenario_usecase, load_legacy_scenario
+from scenario_db.legacy_import.normalize_scenario import (
+    convert_scenario_group_usecase,
+    convert_scenario_usecase,
+    load_legacy_scenario,
+)
 from scenario_db.legacy_import.normalize_sensor import convert_sensor_catalog, load_legacy_sensor
+from scenario_db.legacy_import.read_legacy import read_yaml
 from scenario_db.legacy_import.report import ImportReport
 
 
@@ -20,6 +25,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--sensor", type=Path, help="Legacy sensor_config.yaml path.")
     parser.add_argument("--display", type=Path, help="Optional display sidecar YAML path.")
     parser.add_argument("--scenario", type=Path, help="Legacy scenario_config/*.yaml path.")
+    parser.add_argument(
+        "--scenario-group",
+        type=Path,
+        nargs="+",
+        help="Legacy scenario YAML paths to group into one canonical scenario with multiple variants.",
+    )
+    parser.add_argument("--group-id", default="uc-camera-recording", help="Usecase ID for --scenario-group output.")
+    parser.add_argument("--group-name", default="Camera Recording", help="Usecase display name for --scenario-group output.")
+    parser.add_argument("--grouping-policy", type=Path, help="Optional YAML policy for scenario grouping guardrails.")
     parser.add_argument("--out", type=Path, required=True, help="Generated canonical YAML output directory.")
     parser.add_argument("--project", default="proj-legacy", help="Project ref used for generated IDs.")
     parser.add_argument("--project-name", default="Legacy Imported Project", help="Project display name for generated project YAML.")
@@ -33,10 +47,10 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     report = ImportReport()
 
-    if not any((args.hw, args.sensor, args.display, args.scenario)):
+    if not any((args.hw, args.sensor, args.display, args.scenario, args.scenario_group)):
         report.error(
             "legacy_import_no_input",
-            "At least one input must be provided: --hw, --sensor, --display, or --scenario.",
+            "At least one input must be provided: --hw, --sensor, --display, --scenario, or --scenario-group.",
         )
 
     if args.hw and not args.hw.exists():
@@ -81,17 +95,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.scenario and not args.scenario.exists():
         report.error("scenario_file_not_found", f"Scenario config not found: {args.scenario}", str(args.scenario))
     elif args.scenario:
-        project_doc = {
-            "id": args.project,
-            "schema_version": args.schema_version,
-            "kind": "project",
-            "metadata": {
-                "name": args.project_name,
-                "soc_ref": args.soc,
-            },
-        }
-        emit_catalog(args.out, [project_doc], "02_definition")
-        report.increment("project")
+        _emit_project_stub(args, report)
         raw = load_legacy_scenario(args.scenario, report)
         doc = convert_scenario_usecase(
             raw,
@@ -103,11 +107,59 @@ def main(argv: list[str] | None = None) -> int:
         emitted = emit_catalog(args.out, [doc], "02_definition") if doc else []
         report.info("scenario_usecase_emitted", f"Emitted {len(emitted)} scenario usecase YAML files.", str(args.out))
 
+    if args.scenario_group:
+        _emit_project_stub(args, report)
+        grouping_policy = _load_grouping_policy(args.grouping_policy, report)
+        scenarios = []
+        for path in args.scenario_group:
+            if not path.exists():
+                report.error("scenario_file_not_found", f"Scenario config not found: {path}", str(path))
+                continue
+            scenarios.append((str(path), load_legacy_scenario(path, report)))
+        doc = convert_scenario_group_usecase(
+            scenarios,
+            project_ref=args.project,
+            schema_version=args.schema_version,
+            report=report,
+            group_id=args.group_id,
+            group_name=args.group_name,
+            grouping_policy=grouping_policy,
+        )
+        emitted = emit_catalog(args.out, [doc], "02_definition") if doc else []
+        report.info("scenario_group_usecase_emitted", f"Emitted {len(emitted)} scenario group YAML files.", str(args.out))
+
     report_path = args.out / "import_report.json"
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(json.dumps(report.to_dict(), indent=2), encoding="utf-8")
     print(json.dumps(report.to_dict(), indent=2))
     return 1 if args.strict and not report.ok else 0
+
+
+def _emit_project_stub(args: argparse.Namespace, report: ImportReport) -> None:
+    project_doc = {
+        "id": args.project,
+        "schema_version": args.schema_version,
+        "kind": "project",
+        "metadata": {
+            "name": args.project_name,
+            "soc_ref": args.soc,
+        },
+    }
+    emit_catalog(args.out, [project_doc], "02_definition")
+    report.increment("project")
+
+
+def _load_grouping_policy(path: Path | None, report: ImportReport) -> dict | None:
+    if path is None:
+        return None
+    if not path.exists():
+        report.error("grouping_policy_file_not_found", f"Grouping policy not found: {path}", str(path))
+        return None
+    raw = read_yaml(path)
+    if not isinstance(raw, dict):
+        report.error("grouping_policy_not_object", "Grouping policy must be a YAML object.", str(path))
+        return None
+    return raw
 
 
 if __name__ == "__main__":

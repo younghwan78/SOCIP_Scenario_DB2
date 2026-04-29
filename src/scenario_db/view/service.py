@@ -584,6 +584,51 @@ def _task_edges_from_spec(
     return edges
 
 
+def _visible_task_node_specs(
+    graph: CanonicalScenarioGraph,
+    specs: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], set[str]]:
+    disabled = set(((getattr(graph.variant, "routing_switch", None) or {}).get("disabled_nodes") or []))
+    visible = [spec for spec in specs if str(spec.get("id")) not in disabled]
+    return visible, {str(spec.get("id")) for spec in visible}
+
+
+def _visible_task_edge_specs(
+    graph: CanonicalScenarioGraph,
+    specs: list[dict[str, Any]],
+    visible_node_ids: set[str],
+) -> list[dict[str, Any]]:
+    routing = getattr(graph.variant, "routing_switch", None) or {}
+    patch = getattr(graph.variant, "topology_patch", None) or {}
+    remove_specs = [
+        *(routing.get("disabled_edges") or []),
+        *(patch.get("remove_edges") or []),
+    ]
+    return [
+        spec
+        for spec in specs
+        if str(spec.get("from")) in visible_node_ids
+        and str(spec.get("to")) in visible_node_ids
+        and not _task_edge_removed(spec, remove_specs)
+    ]
+
+
+def _task_edge_removed(edge: dict[str, Any], remove_specs: list[Any]) -> bool:
+    return any(isinstance(spec, dict) and _task_edge_matches(edge, spec) for spec in remove_specs)
+
+
+def _task_edge_matches(edge: dict[str, Any], spec: dict[str, Any]) -> bool:
+    spec_id = spec.get("id")
+    if spec_id and spec_id == edge.get("id"):
+        return True
+    if edge.get("from") != spec.get("from") or edge.get("to") != spec.get("to"):
+        return False
+    for field in ("type", "buffer"):
+        if spec.get(field) is not None and edge.get(field) is not None and edge.get(field) != spec.get(field):
+            return False
+    return True
+
+
 def _project_task_graph_from_fixture(
     graph: CanonicalScenarioGraph,
     *,
@@ -591,12 +636,13 @@ def _project_task_graph_from_fixture(
     mode: str,
 ) -> ViewResponse | None:
     spec = (graph.scenario.pipeline or {}).get("task_graph") or {}
-    task_nodes = spec.get("nodes") or []
+    task_nodes, visible_node_ids = _visible_task_node_specs(graph, spec.get("nodes") or [])
     if not task_nodes:
         return None
     tokens = _reference_sizes(graph)
     nodes = [_task_node_from_spec(graph, node_spec, tokens) for node_spec in task_nodes]
-    edges = _task_edges_from_spec(graph, spec.get("edges") or [], tokens, "task-edge")
+    edge_specs = _visible_task_edge_specs(graph, spec.get("edges") or [], visible_node_ids)
+    edges = _task_edges_from_spec(graph, edge_specs, tokens, "task-edge")
     max_y = max((node.position["y"] for node in nodes), default=600)
     return _response(
         graph=graph,
@@ -615,7 +661,7 @@ def _project_task_graph_from_fixture(
 def _project_level1_from_fixture(graph: CanonicalScenarioGraph) -> ViewResponse | None:
     level1 = (graph.scenario.pipeline or {}).get("level1_graph") or {}
     task_graph = (graph.scenario.pipeline or {}).get("task_graph") or {}
-    task_nodes = task_graph.get("nodes") or []
+    task_nodes, visible_node_ids = _visible_task_node_specs(graph, task_graph.get("nodes") or [])
     if not level1 or not task_nodes:
         return None
     tokens = _reference_sizes(graph)
@@ -638,7 +684,8 @@ def _project_level1_from_fixture(graph: CanonicalScenarioGraph) -> ViewResponse 
             continue
         nodes.append(_task_node_from_spec(graph, node_spec, tokens, override))
 
-    edges = _task_edges_from_spec(graph, task_graph.get("edges") or [], tokens, "level1-edge")
+    edge_specs = _visible_task_edge_specs(graph, task_graph.get("edges") or [], visible_node_ids)
+    edges = _task_edges_from_spec(graph, edge_specs, tokens, "level1-edge")
     return _response(
         graph=graph,
         level=1,

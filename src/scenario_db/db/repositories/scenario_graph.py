@@ -201,7 +201,12 @@ def _edge_matches(edge: dict[str, Any], spec: dict[str, Any]) -> bool:
     spec_id = spec.get("id")
     if spec_id and spec_id == edge.get("id"):
         return True
-    return _edge_source(edge) == _edge_source(spec) and _edge_target(edge) == _edge_target(spec)
+    if _edge_source(edge) != _edge_source(spec) or _edge_target(edge) != _edge_target(spec):
+        return False
+    for field in ("type", "buffer"):
+        if spec.get(field) is not None and edge.get(field) != spec.get(field):
+            return False
+    return True
 
 
 def _edge_key(edge: dict[str, Any]) -> tuple[Any, Any, Any, Any]:

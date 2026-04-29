@@ -876,6 +876,8 @@ Status:
 - Step 3B: capability model accepts sensor/display catalog categories.
 - Step 3C: sensor config and optional display sidecar conversion implemented.
 - Step 3D: variant overlay fields preserved by model and ETL mapper.
+- Step 4: single legacy scenario conversion implemented.
+- Step 5: multi-scenario superset grouping implemented.
 
 Files:
 
@@ -925,6 +927,15 @@ Exit criteria:
 
 ### Step 5: Variant Grouping
 
+Status:
+
+- Implemented in `convert_scenario_group_usecase`.
+- CLI entry: `--scenario-group <scenario1.yaml> <scenario2.yaml> ...`.
+- Optional guardrail: `--grouping-policy grouping_policy.yaml`.
+- Current grouping creates independent variants under one base scenario. It does
+  not yet infer `derived_from_variant`; that should be added after a real
+  internal dataset shows stable inheritance candidates.
+
 Changes:
 
 - Group `FHD30/FHD60/UHD30/UHD60` scenario YAMLs into one `camera-recording` scenario.
@@ -936,12 +947,30 @@ Changes:
   additional IP, or different producer/consumer edge.
 - Store per-variant size/format/mode differences in `size_overrides`,
   `node_configs`, and `buffer_overrides`; avoid duplicating the full scenario.
+- If a SW task enables or disables a HW branch, keep both the SW task and the
+  dependent HW IP in the base superset and disable the unused branch per variant
+  through `routing_switch.disabled_nodes` and `routing_switch.disabled_edges`.
 
 Exit criteria:
 
 - Viewer can switch variants without duplicating base scenario.
 - Read API returns expected `design_conditions` and `size_overrides`.
 - Variant inheritance and patch resolution preserve all node/buffer overrides.
+
+Implementation notes:
+
+- Superset base is deliberately more verbose than any single scenario. This is
+  acceptable because the base is not the executed path; the resolved variant is.
+- `routing_switch` is preferred for branch on/off because it is reviewable and
+  reversible.
+- `topology_patch` should be reserved for actual add/remove topology deltas that
+  cannot be expressed by switching off a superset branch.
+- `node_configs` remains the authoritative per-variant place for IP mode,
+  input/output ports, size, format, manual clock, and SW task duration.
+- `buffer_overrides` remains the authoritative per-variant place for format,
+  bitdepth, compression, size, producer/consumer, and later LLC placement.
+- `docs/legacy-scenario-grouping-policy.md` defines the practical split-vs-
+  variant decision rules for camera/display/video/audio families.
 
 ### Step 6: Variant Generation From Axes
 

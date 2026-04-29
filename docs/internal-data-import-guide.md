@@ -650,6 +650,45 @@ uv run python -m scenario_db.legacy_import.cli `
   --strict
 ```
 
+For Step 5 grouping, pass multiple scenario YAML files with `--scenario-group`.
+This creates one superset base scenario and one variant per input file:
+
+```powershell
+uv run python -m scenario_db.legacy_import.cli `
+  --hw E:\10_Codes\23_MMIP_Scenario_simulation2\hw_config\projectA_hw.yaml `
+  --sensor E:\10_Codes\23_MMIP_Scenario_simulation2\hw_config\sensor_config.yaml `
+  --scenario-group `
+    E:\path\to\projectA_FHD30_recording_scenario.yaml `
+    E:\path\to\projectA_FHD60_recording_scenario.yaml `
+    E:\path\to\projectA_UHD30_recording_scenario.yaml `
+    E:\path\to\projectA_UHD60_recording_scenario.yaml `
+  --group-id uc-camera-recording `
+  --group-name "Camera Recording" `
+  --grouping-policy generated\grouping_policy.yaml `
+  --out generated\scenariodb `
+  --project proj-projectA `
+  --project-name "Project A" `
+  --soc soc-projectA `
+  --strict
+```
+
+Recommended first grouping policy:
+
+```yaml
+require_same_family: true
+require_same_usecase: true
+min_pipeline_overlap: 0.60
+max_optional_node_ratio: 0.50
+error_on_violation: true
+allowed_families: [camera]
+allowed_usecases: [camera_recording]
+required_common_roles: [sensor, isp]
+```
+
+Use a looser policy only when reviewers intentionally want multiple close
+camera paths on the same screen, for example recording with or without a
+solution branch.
+
 If no display YAML exists in the legacy repo yet, create a small sidecar file
 before running the importer:
 
@@ -687,8 +726,21 @@ Current importer scope:
 - Preserves legacy task IDs in `pipeline.nodes`, `pipeline.edges`, and `pipeline.task_graph`.
 - Generates variant `node_configs` from `ip_settings`, `tasks`, and `sw_tasks`.
 - Generates M2M buffer descriptors and mirrors them into variant `buffer_overrides`.
+- Groups multiple scenario YAML files into one superset base scenario with one variant per file.
+- Represents SW-task-driven branch differences with `routing_switch.disabled_nodes` and `routing_switch.disabled_edges`.
 - Emits an import report.
-- Does not yet group multiple scenario YAML files into one scenario with multiple variants.
+- Does not yet infer variant inheritance automatically; generated variants are independent overlays under the same base scenario.
+
+Variant grouping rule:
+
+- Common path: keep in base `pipeline.nodes`, `pipeline.edges`, and `pipeline.task_graph`.
+- Optional branch: keep in the base superset and disable it per variant using `routing_switch`.
+- Different size/format/mode: keep the node/edge in base and store variant-specific values in `node_configs` and `buffer_overrides`.
+- Different producer/consumer path: keep both paths in base and disable the unused path per variant.
+- SW task changes HW path: model the SW task and dependent HW nodes as optional branch nodes, then disable the missing branch in the variants that do not use it.
+
+See `docs/legacy-scenario-grouping-policy.md` for the detailed split-vs-variant
+rules.
 
 After generation, load the generated YAML with the normal canonical ETL:
 
