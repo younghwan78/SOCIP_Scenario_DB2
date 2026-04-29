@@ -99,7 +99,8 @@ uv run python -m scenario_db.etl.loader /opt/scenariodb/data/generated/scenariod
 
 - `etl.loader`는 현재 파일별 실패를 skip하고 계속 진행한다.
 - 사내 데이터 최초 이관에서는 반드시 import log를 확인해야 한다.
-- strict mode는 별도 구현 대상이다.
+- strict mode는 legacy importer에서 지원한다. `--strict`는 error 발생 시 non-zero로 종료하고,
+  `--fail-on-warning`을 함께 쓰면 warning도 이관 실패로 처리한다.
 
 ## 4. Legacy To Canonical Mapping
 
@@ -629,12 +630,12 @@ legacy_import scaffold
 
 ## 13. Current Legacy Importer Command
 
-The current importer converts legacy HW, sensor, optional display sidecar, and
-one scenario YAML into canonical ScenarioDB YAML. This is the Step 4 scope:
-single-scenario conversion. Multi-scenario variant grouping is still handled in
-Step 5.
+The current importer converts legacy HW, sensor, optional display sidecar, one
+scenario YAML, a scenario directory, or an explicit scenario group into canonical
+ScenarioDB YAML. Generated YAML is validated against the canonical Pydantic
+models before DB load unless `--skip-generated-validation` is passed.
 
-Example:
+Single scenario example:
 
 ```powershell
 cd E:\50_Codex_Soc_Scenario_DB\implementation
@@ -650,7 +651,28 @@ uv run python -m scenario_db.legacy_import.cli `
   --strict
 ```
 
-For Step 5 grouping, pass multiple scenario YAML files with `--scenario-group`.
+Directory import example:
+
+```powershell
+uv run python -m scenario_db.legacy_import.cli `
+  --hw E:\10_Codes\23_MMIP_Scenario_simulation2\hw_config\projectA_hw.yaml `
+  --sensor E:\10_Codes\23_MMIP_Scenario_simulation2\hw_config\sensor_config.yaml `
+  --display generated\display_config.yaml `
+  --scenario-dir E:\10_Codes\23_MMIP_Scenario_simulation2\scenario_config `
+  --out generated\scenariodb `
+  --project proj-projectA `
+  --project-name "Project A" `
+  --soc soc-projectA `
+  --strict
+```
+
+`--scenario-dir` converts each supported `*.yaml` file as an independent
+`scenario.usecase`. YAML files that do not look like legacy scenario definitions
+are skipped with `scenario_file_skipped_unsupported`. Use `--fail-on-warning`
+when the first company-side pilot should stop on any skipped or partially
+normalized input.
+
+For variant grouping, pass multiple scenario YAML files with `--scenario-group`.
 This creates one superset base scenario and one variant per input file:
 
 ```powershell
@@ -728,6 +750,8 @@ Current importer scope:
 - Generates M2M buffer descriptors and mirrors them into variant `buffer_overrides`.
 - Groups multiple scenario YAML files into one superset base scenario with one variant per file.
 - Represents SW-task-driven branch differences with `routing_switch.disabled_nodes` and `routing_switch.disabled_edges`.
+- Imports all supported scenario YAML files in a directory with `--scenario-dir`.
+- Validates generated `ip`, `project`, and `scenario.usecase` YAML against canonical ScenarioDB models before DB load.
 - Emits an import report.
 - Does not yet infer variant inheritance automatically; generated variants are independent overlays under the same base scenario.
 

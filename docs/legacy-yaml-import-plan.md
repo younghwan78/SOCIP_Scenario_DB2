@@ -878,6 +878,8 @@ Status:
 - Step 3D: variant overlay fields preserved by model and ETL mapper.
 - Step 4: single legacy scenario conversion implemented.
 - Step 5: multi-scenario superset grouping implemented.
+- Step 7A: strict error exit, warning gate, generated YAML validation, and
+  scenario directory import implemented.
 
 Files:
 
@@ -887,13 +889,15 @@ Files:
 Changes:
 
 - Add CLI that reads legacy paths and emits canonical YAML.
-- Start with HW + sensor + display only.
+- Supports HW, sensor, display, single scenario, scenario directory, and explicit
+  scenario group inputs.
 
 Exit criteria:
 
 - `projectA_hw.yaml` converts into `ip` documents.
 - `sensor_config.yaml` converts into `sensor` catalog documents.
 - optional display sidecar converts into `display` catalog documents.
+- generated canonical YAML validates before DB load.
 
 ### Step 4: Legacy Scenario To Variant Conversion
 
@@ -986,6 +990,16 @@ Exit criteria:
 - Generated variants validate before DB load.
 
 ### Step 7: Strict Import Mode
+
+Status:
+
+- Implemented for current importer outputs.
+- `--strict` fails on errors.
+- `--fail-on-warning` fails on warnings when combined with `--strict`.
+- generated YAML is validated by default unless `--skip-generated-validation` is
+  passed.
+- `--scenario-dir` supports first-pass bulk import and reports unsupported files
+  as warnings.
 
 Changes:
 

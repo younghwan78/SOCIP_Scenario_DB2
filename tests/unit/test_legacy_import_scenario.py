@@ -10,6 +10,7 @@ import yaml
 from scenario_db.legacy_import.cli import main
 from scenario_db.legacy_import.normalize_scenario import convert_scenario_group_usecase, convert_scenario_usecase
 from scenario_db.legacy_import.report import ImportReport
+from scenario_db.legacy_import.validate_generated import validate_generated_yaml
 from scenario_db.models.definition.project import Project
 from scenario_db.models.definition.usecase import Usecase
 
@@ -325,6 +326,101 @@ def test_legacy_import_cli_emits_project_and_scenario_usecase_yaml():
         assert report["generated"]["project"] == 1
         assert report["generated"]["scenario_usecase"] == 1
         assert report["generated"]["scenario_variant"] == 1
+        assert report["generated"]["validated_yaml"] == 2
+    finally:
+        if tmp_path.exists():
+            shutil.rmtree(tmp_path)
+
+
+def test_legacy_import_cli_imports_scenario_dir_and_skips_unsupported_yaml():
+    tmp_path = Path(__file__).parents[2] / f"_tmp_legacy_scenario_dir_{uuid.uuid4().hex}"
+    try:
+        scenario_dir = tmp_path / "scenario_config"
+        out_dir = tmp_path / "generated"
+        scenario_dir.mkdir(parents=True)
+        (scenario_dir / "projectA_FHD30_recording_scenario.yaml").write_text(
+            yaml.safe_dump(_legacy_scenario(), sort_keys=False),
+            encoding="utf-8",
+        )
+        (scenario_dir / "exploration_FHD30.yaml").write_text(
+            yaml.safe_dump({"base_scenario": "FHD30_Recording", "sweeps": []}, sort_keys=False),
+            encoding="utf-8",
+        )
+
+        exit_code = main([
+            "--scenario-dir",
+            str(scenario_dir),
+            "--out",
+            str(out_dir),
+            "--project",
+            "proj-projectA",
+            "--project-name",
+            "Project A",
+            "--soc",
+            "soc-projectA",
+            "--strict",
+        ])
+
+        assert exit_code == 0
+        generated = sorted((out_dir / "02_definition").glob("*.yaml"))
+        assert [path.name for path in generated] == [
+            "proj-projectA.yaml",
+            "uc-fhd30-recording.yaml",
+        ]
+        report = json.loads((out_dir / "import_report.json").read_text(encoding="utf-8"))
+        assert report["ok"] is True
+        assert report["generated"]["scenario_usecase"] == 1
+        assert report["generated"]["validated_yaml"] == 2
+        assert any(message["code"] == "scenario_file_skipped_unsupported" for message in report["messages"])
+    finally:
+        if tmp_path.exists():
+            shutil.rmtree(tmp_path)
+
+
+def test_legacy_import_cli_fail_on_warning_turns_scenario_dir_skip_into_failure():
+    tmp_path = Path(__file__).parents[2] / f"_tmp_legacy_scenario_dir_warning_{uuid.uuid4().hex}"
+    try:
+        scenario_dir = tmp_path / "scenario_config"
+        out_dir = tmp_path / "generated"
+        scenario_dir.mkdir(parents=True)
+        (scenario_dir / "exploration_FHD30.yaml").write_text(
+            yaml.safe_dump({"base_scenario": "FHD30_Recording", "sweeps": []}, sort_keys=False),
+            encoding="utf-8",
+        )
+
+        exit_code = main([
+            "--scenario-dir",
+            str(scenario_dir),
+            "--out",
+            str(out_dir),
+            "--strict",
+            "--fail-on-warning",
+        ])
+
+        assert exit_code == 1
+        report = json.loads((out_dir / "import_report.json").read_text(encoding="utf-8"))
+        assert report["ok"] is True
+        assert any(message["code"] == "scenario_file_skipped_unsupported" for message in report["messages"])
+    finally:
+        if tmp_path.exists():
+            shutil.rmtree(tmp_path)
+
+
+def test_generated_yaml_validator_reports_schema_errors():
+    tmp_path = Path(__file__).parents[2] / f"_tmp_legacy_validation_{uuid.uuid4().hex}"
+    try:
+        tmp_path.mkdir()
+        path = tmp_path / "ip-invalid.yaml"
+        path.write_text(
+            yaml.safe_dump({"id": "ip-invalid", "schema_version": "2.2", "kind": "ip"}, sort_keys=False),
+            encoding="utf-8",
+        )
+        report = ImportReport()
+
+        validate_generated_yaml([path], report)
+
+        assert not report.ok
+        assert any(message.code == "generated_yaml_schema_invalid" for message in report.messages)
     finally:
         if tmp_path.exists():
             shutil.rmtree(tmp_path)
