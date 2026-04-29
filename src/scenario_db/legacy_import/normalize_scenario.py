@@ -43,7 +43,7 @@ def convert_scenario_usecase(
 
     anchors = _size_anchors(raw, node_configs)
     variant_id = _variant_id(name)
-    design_conditions = _design_conditions(raw, anchors)
+    design_conditions = _design_conditions(raw, anchors, node_configs)
     usecase = {
         "id": f"uc-{_slug(name)}",
         "schema_version": schema_version,
@@ -198,20 +198,21 @@ def _collect_tasks(
         if not task_id or not hw:
             report.warning("legacy_task_missing_id_or_hw", f"Skipping task without id/hw: {item}", source)
             continue
+        is_sensor_task = hw == sensor.get("hw")
         _append_task(tasks, seen, {
             "id": task_id,
-            "kind": "sensor" if hw == sensor.get("hw") else "hw",
+            "kind": "sensor" if is_sensor_task else "hw",
             "hw": hw,
-            "ip_ref": catalog_id("sensor", hw, project_ref) if hw == sensor.get("hw") else ip_id(hw, project_ref),
+            "ip_ref": catalog_id("sensor", hw, project_ref) if is_sensor_task else ip_id(hw, project_ref),
             "label": item.get("description") or hw,
-            "role": "sensor" if hw == sensor.get("hw") else None,
+            "role": "sensor" if is_sensor_task else _role_for_hw(hw),
         }, report, source)
-        configs[task_id] = {
-            "kind": "sensor",
+        configs[task_id] = _drop_none({
+            "kind": "sensor" if is_sensor_task else "hw",
             "hw": hw,
-            "sensor_mode": sensor.get("mode"),
+            "sensor_mode": sensor.get("mode") if is_sensor_task else None,
             "description": item.get("description"),
-        }
+        })
 
     for index, block in enumerate(_list_of_dicts(raw.get("ip_blocks"), report, f"{source}.ip_blocks")):
         block_source = f"{source}.ip_blocks[{index}]"
@@ -411,14 +412,20 @@ def _size_anchors(raw: dict[str, Any], node_configs: dict[str, Any]) -> dict[str
     }
 
 
-def _design_conditions(raw: dict[str, Any], anchors: dict[str, str]) -> dict[str, str | int | float]:
+def _design_conditions(
+    raw: dict[str, Any],
+    anchors: dict[str, str],
+    node_configs: dict[str, Any],
+) -> dict[str, str | int | float]:
     name = str(raw.get("name") or "")
     sensor = raw.get("sensor") if isinstance(raw.get("sensor"), dict) else {}
     fps = _fps_from_name(name) or _fps_from_period(raw)
+    roles = {_role_for_node_config(config) for config in node_configs.values()}
+    roles.discard("")
     return _drop_none({
         "resolution": _resolution_from_size(anchors.get("record_out") or ""),
         "fps": fps,
-        "usecase": "recording" if "record" in name.lower() else _slug(name),
+        "usecase": _usecase_for_roles(roles, name),
         "sensor": sensor.get("hw"),
         "sensor_mode": sensor.get("mode"),
     })
@@ -830,6 +837,8 @@ def _family_for_roles(roles: set[str], name: str) -> str:
         return "camera"
     if "youtube" in lowered:
         return "video_playback"
+    if "audio" in roles and "codec" not in roles and "display" not in roles:
+        return "audio"
     if "playback" in lowered or "gallery" in lowered or "codec" in roles:
         return "display_video"
     if "audio" in roles:
@@ -839,10 +848,18 @@ def _family_for_roles(roles: set[str], name: str) -> str:
 
 def _usecase_for_roles(roles: set[str], name: str) -> str:
     lowered = name.lower()
+    if "voice" in lowered or "call" in lowered:
+        return "voice_call"
     if "youtube" in lowered:
         return "youtube_playback"
     if "gallery" in lowered:
         return "gallery_display"
+    if "mp3" in lowered and "audio" in roles:
+        return "audio_mp3_playback"
+    if "stream" in lowered and "audio" in roles and "codec" not in roles:
+        return "audio_streaming"
+    if "audio" in roles and "codec" not in roles and "display" not in roles:
+        return "audio"
     if "playback" in lowered and "sensor" not in roles:
         return "video_playback"
     if "capture" in lowered or "jpeg" in roles:
@@ -853,8 +870,6 @@ def _usecase_for_roles(roles: set[str], name: str) -> str:
         return "camera_recording_apv"
     if "record" in lowered or ("sensor" in roles and "codec" in roles):
         return "camera_recording"
-    if "voice" in lowered or "call" in lowered:
-        return "voice_call"
     if "audio" in roles:
         return "audio"
     return _slug(name)

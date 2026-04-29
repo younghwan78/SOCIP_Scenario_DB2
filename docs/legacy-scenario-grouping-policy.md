@@ -165,3 +165,23 @@ For camera data, the first safe grouping target is:
 - One `camera_recording` usecase.
 - Variants for FHD/UHD/FPS/HDR/sensor/audio/solution branch.
 - Separate usecases for `camera_capture`, `camera_recording_apv` if APV has a separate path, and display/video/audio-only scenarios.
+
+## Test Fixture Coverage
+
+The unit fixtures intentionally cover these boundary cases before internal data
+is available:
+
+- Camera recording with optional DPU/GPU/NPU/audio branches remains one
+  `camera_recording` usecase when policy allows optional branches.
+- Camera recording and camera capture are rejected as one usecase when
+  `require_same_usecase: true` because capture uses JPEG-style output.
+- APV recording is treated as `camera_recording_apv`, so it can be split from
+  normal MFC recording when APV has a separate review owner or KPI.
+- Camera recording and gallery display are rejected by default because they are
+  different families even though both can use DPU.
+- YouTube playback and gallery display can be grouped only with an explicit
+  relaxed policy; the importer reports the mixed family warning.
+- MP3 playback and audio streaming can be grouped under audio when usecase
+  matching is relaxed.
+- Voice call is rejected from audio playback grouping because it has a distinct
+  `voice_call` family and review model.

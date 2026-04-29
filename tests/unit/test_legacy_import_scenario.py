@@ -115,6 +115,151 @@ def _legacy_preview_scenario() -> dict:
     return scenario
 
 
+def _append_hw_task(
+    scenario: dict,
+    *,
+    hw: str,
+    task_id: str,
+    source: str,
+    source_port: str | None = None,
+    dst_port: str = "RDMA",
+    size: list[int] | None = None,
+    fmt: str = "YUV420",
+) -> dict:
+    result = yaml.safe_load(yaml.safe_dump(scenario, sort_keys=False))
+    result["ip_blocks"].append({
+        "ip_settings": {
+            "hw": hw,
+            "mode": "Normal",
+            "inputs": [{"port": dst_port, "size": size or [0, 0, 1920, 1080], "format": fmt, "bitwidth": 10}],
+            "outputs": [{"port": "WDMA", "size": size or [0, 0, 1920, 1080], "format": fmt, "bitwidth": 10}],
+        },
+        "tasks": [{"id": task_id, "hw": hw, "description": hw}],
+        "edges": [{
+            "src": source,
+            **({"src_port": source_port} if source_port else {}),
+            "dst": task_id,
+            "dst_port": dst_port,
+            "type": "M2M",
+        }],
+    })
+    return result
+
+
+def _camera_recording_with_solution_branches() -> dict:
+    scenario = _legacy_scenario()
+    scenario["name"] = "FHD30_Recording_GPU_NPU_Audio"
+    scenario = _append_hw_task(scenario, hw="DPU", task_id="t_dpu", source="t_byrp", dst_port="DPU_RDMA")
+    scenario = _append_hw_task(scenario, hw="GPU", task_id="t_gpu_ui", source="t_dpu", dst_port="GPU_RDMA")
+    scenario = _append_hw_task(scenario, hw="NPU", task_id="t_npu_solution", source="t_byrp", dst_port="NPU_RDMA")
+    scenario = _append_hw_task(scenario, hw="AUDIO_DSP", task_id="t_audio_record", source="t_mfc", dst_port="AUDIO_RDMA", fmt="PCM")
+    return scenario
+
+
+def _camera_capture_jpeg_scenario() -> dict:
+    scenario = _legacy_scenario()
+    scenario["name"] = "FHD30_Capture"
+    scenario["ip_blocks"] = scenario["ip_blocks"][:2]
+    return _append_hw_task(scenario, hw="JPEG", task_id="t_jpeg", source="t_byrp", dst_port="JPEG_RDMA")
+
+
+def _camera_recording_apv_scenario() -> dict:
+    scenario = _legacy_scenario()
+    scenario["name"] = "FHD30_Recording_APV"
+    scenario["ip_blocks"] = scenario["ip_blocks"][:3]
+    return _append_hw_task(scenario, hw="APV", task_id="t_apv", source="t_postIRTA", dst_port="APV_RDMA")
+
+
+def _gallery_display_scenario() -> dict:
+    return {
+        "name": "Gallery_Display",
+        "tasks": [{"id": "t_app", "hw": "CPU_MID_Clustor", "description": "Gallery App"}],
+        "ip_blocks": [
+            {
+                "ip_settings": {
+                    "hw": "GPU",
+                    "mode": "Normal",
+                    "inputs": [{"port": "GPU_RDMA", "size": [0, 0, 1920, 1080], "format": "RGBA8888", "bitwidth": 8}],
+                    "outputs": [{"port": "GPU_WDMA", "size": [0, 0, 1920, 1080], "format": "RGBA8888", "bitwidth": 8}],
+                },
+                "tasks": [{"id": "t_gpu", "hw": "GPU", "description": "GPU Composition"}],
+                "edges": [{"src": "t_app", "dst": "t_gpu", "dst_port": "GPU_RDMA", "type": "M2M"}],
+            },
+            {
+                "ip_settings": {
+                    "hw": "DPU",
+                    "mode": "Normal",
+                    "inputs": [{"port": "DPU_RDMA", "size": [0, 0, 1920, 1080], "format": "RGBA8888", "bitwidth": 8}],
+                    "outputs": [{"port": "COUTFIFO", "size": [0, 0, 1920, 1080]}],
+                },
+                "tasks": [{"id": "t_dpu", "hw": "DPU", "description": "DPU"}],
+                "edges": [{"src": "t_gpu", "dst": "t_dpu", "dst_port": "DPU_RDMA", "type": "M2M"}],
+            },
+        ],
+    }
+
+
+def _youtube_playback_scenario() -> dict:
+    scenario = _gallery_display_scenario()
+    scenario["name"] = "Youtube_Playback"
+    scenario["ip_blocks"].insert(0, {
+        "ip_settings": {
+            "hw": "MFC",
+            "mode": "Normal",
+            "inputs": [{"port": "MFC_RDMA", "size": [0, 0, 1920, 1080], "format": "H.265", "bitwidth": 8}],
+            "outputs": [{"port": "MFC_WDMA", "size": [0, 0, 1920, 1080], "format": "YUV420", "bitwidth": 8}],
+        },
+        "tasks": [{"id": "t_mfc", "hw": "MFC", "description": "MFC Decode"}],
+        "edges": [{"src": "t_app", "dst": "t_mfc", "dst_port": "MFC_RDMA", "type": "M2M"}],
+    })
+    scenario["ip_blocks"][1]["edges"] = [{"src": "t_mfc", "dst": "t_gpu", "dst_port": "GPU_RDMA", "type": "M2M"}]
+    scenario["ip_blocks"].append({
+        "ip_settings": {
+            "hw": "AUDIO_DSP",
+            "mode": "Normal",
+            "inputs": [{"port": "AUDIO_RDMA", "size": [0, 0, 1, 1], "format": "AAC", "bitwidth": 16}],
+            "outputs": [{"port": "AUDIO_WDMA", "size": [0, 0, 1, 1], "format": "PCM", "bitwidth": 16}],
+        },
+        "tasks": [{"id": "t_audio", "hw": "AUDIO_DSP", "description": "Audio Decode"}],
+        "edges": [{"src": "t_app", "dst": "t_audio", "dst_port": "AUDIO_RDMA", "type": "M2M"}],
+    })
+    return scenario
+
+
+def _audio_mp3_scenario() -> dict:
+    return {
+        "name": "MP3_Playback",
+        "tasks": [{"id": "t_app", "hw": "CPU_MID_Clustor", "description": "MP3 App"}],
+        "ip_blocks": [
+            {
+                "ip_settings": {
+                    "hw": "AUDIO_DSP",
+                    "mode": "Normal",
+                    "inputs": [{"port": "AUDIO_RDMA", "size": [0, 0, 1, 1], "format": "MP3", "bitwidth": 16}],
+                    "outputs": [{"port": "AUDIO_WDMA", "size": [0, 0, 1, 1], "format": "PCM", "bitwidth": 16}],
+                },
+                "tasks": [{"id": "t_audio", "hw": "AUDIO_DSP", "description": "Audio Decode"}],
+                "edges": [{"src": "t_app", "dst": "t_audio", "dst_port": "AUDIO_RDMA", "type": "M2M"}],
+            }
+        ],
+    }
+
+
+def _voice_call_scenario() -> dict:
+    scenario = _audio_mp3_scenario()
+    scenario["name"] = "Voice_Call"
+    scenario["ip_blocks"][0]["tasks"][0]["description"] = "Voice Call Audio Path"
+    return scenario
+
+
+def _audio_streaming_scenario() -> dict:
+    scenario = _audio_mp3_scenario()
+    scenario["name"] = "Audio_Streaming"
+    scenario["ip_blocks"][0]["ip_settings"]["inputs"][0]["format"] = "AAC"
+    scenario["ip_blocks"][0]["tasks"][0]["description"] = "Streaming Audio Decode"
+    return scenario
+
+
 def test_convert_scenario_usecase_generates_pipeline_variant_and_overlays():
     report = ImportReport()
     doc = convert_scenario_usecase(
@@ -328,3 +473,154 @@ def test_legacy_import_cli_applies_grouping_policy_yaml():
     finally:
         if tmp_path.exists():
             shutil.rmtree(tmp_path)
+
+
+def test_camera_recording_solution_branches_can_be_variants_under_same_usecase():
+    report = ImportReport()
+    doc = convert_scenario_group_usecase(
+        [
+            ("recording.yaml", _legacy_scenario()),
+            ("recording_solution.yaml", _camera_recording_with_solution_branches()),
+        ],
+        project_ref="proj-projectA",
+        schema_version="2.2",
+        report=report,
+        group_id="uc-camera-recording",
+        group_name="Camera Recording",
+        grouping_policy={
+            "require_same_family": True,
+            "require_same_usecase": True,
+            "min_pipeline_overlap": 0.5,
+            "max_optional_node_ratio": 0.5,
+            "required_common_roles": ["sensor", "isp", "codec"],
+        },
+    )
+
+    assert doc is not None
+    assert report.ok
+    assert {node["id"] for node in doc["pipeline"]["nodes"]} >= {
+        "t_dpu",
+        "t_gpu_ui",
+        "t_npu_solution",
+        "t_audio_record",
+    }
+    recording = next(variant for variant in doc["variants"] if variant["id"] == "FHD30-Recording")
+    solution = next(variant for variant in doc["variants"] if variant["id"] == "FHD30-Recording-GPU-NPU-Audio")
+    assert set(recording["routing_switch"]["disabled_nodes"]) == {
+        "t_dpu",
+        "t_gpu_ui",
+        "t_npu_solution",
+        "t_audio_record",
+    }
+    assert "routing_switch" not in solution
+    assert "t_audio_record" in solution["node_configs"]
+    assert "t_gpu_ui" in solution["node_configs"]
+    assert "t_npu_solution" in solution["node_configs"]
+    Usecase.model_validate(doc)
+
+
+def test_camera_capture_and_apv_are_not_forced_into_recording_variants():
+    report = ImportReport()
+    doc = convert_scenario_group_usecase(
+        [
+            ("recording.yaml", _legacy_scenario()),
+            ("capture.yaml", _camera_capture_jpeg_scenario()),
+            ("apv.yaml", _camera_recording_apv_scenario()),
+        ],
+        project_ref="proj-projectA",
+        schema_version="2.2",
+        report=report,
+        group_id="uc-camera-recording",
+        group_name="Camera Recording",
+        grouping_policy={"require_same_usecase": True},
+    )
+
+    assert doc is None
+    assert not report.ok
+    assert any(message.code == "legacy_group_mixed_usecase" for message in report.messages)
+
+
+def test_camera_and_display_gallery_are_different_families():
+    report = ImportReport()
+    doc = convert_scenario_group_usecase(
+        [
+            ("recording.yaml", _legacy_scenario()),
+            ("gallery.yaml", _gallery_display_scenario()),
+        ],
+        project_ref="proj-projectA",
+        schema_version="2.2",
+        report=report,
+        group_id="uc-mixed",
+        group_name="Mixed",
+    )
+
+    assert doc is None
+    assert not report.ok
+    assert any(message.code == "legacy_group_mixed_family" for message in report.messages)
+
+
+def test_youtube_playback_and_gallery_are_not_camera_variants():
+    report = ImportReport()
+    doc = convert_scenario_group_usecase(
+        [
+            ("youtube.yaml", _youtube_playback_scenario()),
+            ("gallery.yaml", _gallery_display_scenario()),
+        ],
+        project_ref="proj-projectA",
+        schema_version="2.2",
+        report=report,
+        group_id="uc-video-display",
+        group_name="Video Display",
+        grouping_policy={"require_same_family": True, "error_on_violation": False},
+    )
+
+    assert doc is not None
+    assert report.ok
+    assert any(message.code == "legacy_group_mixed_family" for message in report.messages)
+    usecases = {axis["name"]: axis["enum"] for axis in doc["design_axes"]}
+    assert "youtube_playback" in usecases["usecase"]
+    assert "gallery_display" in usecases["usecase"]
+
+
+def test_audio_playback_and_streaming_can_group_but_voice_call_splits():
+    audio_report = ImportReport()
+    audio_doc = convert_scenario_group_usecase(
+        [
+            ("mp3.yaml", _audio_mp3_scenario()),
+            ("streaming.yaml", _audio_streaming_scenario()),
+        ],
+        project_ref="proj-projectA",
+        schema_version="2.2",
+        report=audio_report,
+        group_id="uc-audio-playback",
+        group_name="Audio Playback",
+        grouping_policy={
+            "require_same_family": True,
+            "require_same_usecase": False,
+            "allowed_families": ["audio"],
+            "min_pipeline_overlap": 0.3,
+        },
+    )
+
+    assert audio_doc is not None
+    assert audio_report.ok
+    axes = {axis["name"]: axis["enum"] for axis in audio_doc["design_axes"]}
+    assert axes["usecase"] == ["audio_mp3_playback", "audio_streaming"]
+
+    voice_report = ImportReport()
+    voice_doc = convert_scenario_group_usecase(
+        [
+            ("mp3.yaml", _audio_mp3_scenario()),
+            ("voice.yaml", _voice_call_scenario()),
+        ],
+        project_ref="proj-projectA",
+        schema_version="2.2",
+        report=voice_report,
+        group_id="uc-audio-mixed",
+        group_name="Audio Mixed",
+        grouping_policy={"require_same_family": True},
+    )
+
+    assert voice_doc is None
+    assert not voice_report.ok
+    assert any(message.code == "legacy_group_mixed_family" for message in voice_report.messages)
