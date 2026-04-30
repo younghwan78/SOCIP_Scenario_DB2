@@ -1,0 +1,19 @@
+id: ip-dpu-v9
+schema_version: "2.2"
+kind: ip
+category: display
+rtl_version: "9.0"
+compatible_soc:
+  - soc-exynos2500
+hierarchy:
+  type: simple
+capabilities:
+  operating_modes:
+    - id: normal
+      throughput_mpps: 800
+    - id: low_power
+      throughput_mpps: 400
+  supported_features:
+    bitdepth: [8, 10]
+    hdr_formats: [HDR10]
+    compression: [AFBC_v2, SBWC_v4]

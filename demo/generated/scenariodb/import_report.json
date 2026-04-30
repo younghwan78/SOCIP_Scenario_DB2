@@ -1,0 +1,19 @@
+{
+  "ok": true,
+  "generated": {
+    "ip": 5,
+    "project": 1,
+    "scenario_usecase": 1,
+    "scenario_variant": 1,
+    "soc": 1,
+    "validated_yaml": 8
+  },
+  "messages": [
+    {
+      "level": "info",
+      "code": "demo_generated_import",
+      "message": "Demo canonical import folder for Import Workbench smoke testing.",
+      "source": "demo/generated/scenariodb"
+    }
+  ]
+}
