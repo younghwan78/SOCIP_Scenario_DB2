@@ -258,6 +258,37 @@ def test_validate_pipeline_patch_rejects_otf_with_buffer():
     assert any(issue.code == "otf_edge_must_not_have_buffer" for issue in issues)
 
 
+def test_validate_pipeline_patch_requires_votf_buffer():
+    normalized = normalize_pipeline_patch_payload(
+        _pipeline_patch_payload(
+            {
+                "add_edges": [
+                    {"from": "csis0", "to": "isp0", "type": "vOTF"},
+                ],
+            }
+        )
+    )
+    issues = validate_pipeline_patch(_Db(), normalized)
+    assert any(issue.code == "votf_edge_missing_buffer" for issue in issues)
+
+
+def test_validate_pipeline_patch_accepts_votf_with_buffer():
+    normalized = normalize_pipeline_patch_payload(
+        _pipeline_patch_payload(
+            {
+                "upsert_buffers": {
+                    "LINE_DELAY_BUF": {"format": "LINE", "placement": {"llc_allocated": True}},
+                },
+                "add_edges": [
+                    {"from": "csis0", "to": "isp0", "type": "vOTF", "buffer": "LINE_DELAY_BUF"},
+                ],
+            }
+        )
+    )
+    issues = validate_pipeline_patch(_Db(), normalized)
+    assert not any(issue.severity == "error" for issue in issues)
+
+
 def test_validate_pipeline_patch_rejects_variant_overlay_breakage():
     db = _Db()
     db.variant.node_configs = {"mfc": {"selected_mode": "normal"}}
@@ -343,9 +374,20 @@ def test_validate_import_bundle_rejects_missing_edge_buffer():
     assert any(issue.code == "import_edge_buffer_not_found" for issue in issues)
 
 
-def test_validate_import_bundle_accepts_votf_edge_without_buffer():
+def test_validate_import_bundle_rejects_votf_edge_without_buffer():
     doc = _import_usecase_doc()
     doc["pipeline"]["edges"].append({"from": "csis0", "to": "isp0", "type": "vOTF"})
+    normalized = normalize_import_bundle_payload({"documents": [doc]})
+
+    issues = validate_import_bundle(_Db(), normalized)
+
+    assert any(issue.code == "import_votf_edge_missing_buffer" for issue in issues)
+
+
+def test_validate_import_bundle_accepts_votf_edge_with_buffer():
+    doc = _import_usecase_doc()
+    doc["pipeline"]["buffers"]["LINE_DELAY_BUF"] = {"format": "LINE", "placement": {"llc_allocated": True}}
+    doc["pipeline"]["edges"].append({"from": "csis0", "to": "isp0", "type": "vOTF", "buffer": "LINE_DELAY_BUF"})
     normalized = normalize_import_bundle_payload({"documents": [doc]})
 
     issues = validate_import_bundle(_Db(), normalized)

@@ -683,7 +683,8 @@ def _validate_candidate_pipeline(db: Session, pipeline: dict[str, Any]) -> list[
             continue
         if edge_type in {"OTF", "vOTF"}:
             if edge.get("buffer"):
-                issues.append(_issue("error", "otf_edge_must_not_have_buffer", f"{edge_type} edge must not declare buffer", f"{path}.buffer"))
+                if edge_type == "OTF":
+                    issues.append(_issue("error", "otf_edge_must_not_have_buffer", "OTF edge must not declare buffer", f"{path}.buffer"))
             if _node_class(db, nodes.get(source) or {}) != "hw" or _node_class(db, nodes.get(target) or {}) != "hw":
                 issues.append(
                     _issue(
@@ -693,10 +694,11 @@ def _validate_candidate_pipeline(db: Session, pipeline: dict[str, Any]) -> list[
                         path,
                     )
                 )
-        if edge_type == "M2M":
+        if edge_type in {"vOTF", "M2M"}:
             buffer_id = edge.get("buffer")
             if not buffer_id:
-                issues.append(_issue("error", "m2m_edge_missing_buffer", f"M2M edge requires buffer: {source}->{target}", f"{path}.buffer"))
+                code = "votf_edge_missing_buffer" if edge_type == "vOTF" else "m2m_edge_missing_buffer"
+                issues.append(_issue("error", code, f"{edge_type} edge requires buffer: {source}->{target}", f"{path}.buffer"))
             elif buffer_id not in buffers:
                 issues.append(_issue("error", "edge_buffer_not_found", f"Edge buffer not found: {buffer_id}", f"{path}.buffer"))
         key = (_edge_source(edge), _edge_target(edge), edge.get("type"), edge.get("buffer"))
@@ -811,12 +813,13 @@ def _validate_import_usecase_refs(
             issues.append(_issue("error", "import_edge_target_not_found", f"Edge target not found: {target}", f"{edge_path}.to"))
         if edge_type not in ALLOWED_BASE_EDGE_TYPES:
             issues.append(_issue("error", "import_edge_type_not_allowed", f"Import edge type is not allowed: {edge_type}", f"{edge_path}.type"))
-        if edge_type in {"OTF", "vOTF"} and edge.get("buffer"):
-            issues.append(_issue("error", "import_otf_edge_must_not_have_buffer", f"{edge_type} edge must not declare buffer", f"{edge_path}.buffer"))
-        if edge_type == "M2M":
+        if edge_type == "OTF" and edge.get("buffer"):
+            issues.append(_issue("error", "import_otf_edge_must_not_have_buffer", "OTF edge must not declare buffer", f"{edge_path}.buffer"))
+        if edge_type in {"vOTF", "M2M"}:
             buffer_id = edge.get("buffer")
             if not buffer_id:
-                issues.append(_issue("error", "import_m2m_edge_missing_buffer", f"M2M edge requires buffer: {source}->{target}", f"{edge_path}.buffer"))
+                code = "import_votf_edge_missing_buffer" if edge_type == "vOTF" else "import_m2m_edge_missing_buffer"
+                issues.append(_issue("error", code, f"{edge_type} edge requires buffer: {source}->{target}", f"{edge_path}.buffer"))
             elif buffer_id not in buffer_ids:
                 issues.append(_issue("error", "import_edge_buffer_not_found", f"Edge buffer not found: {buffer_id}", f"{edge_path}.buffer"))
         key = (source, target, edge_type, edge.get("buffer"))

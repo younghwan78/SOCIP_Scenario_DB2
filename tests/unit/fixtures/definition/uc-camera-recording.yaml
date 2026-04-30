@@ -86,7 +86,7 @@ pipeline:
       - { from: t_byrp, to: t_rgbp, type: OTF, label: "OTF: COUTFIFO->CINFIFO" }
       - { from: t_prep, to: t_cstat, type: OTF, label: "OTF: COUTFIFO->CINFIFO" }
       - { from: t_rgbp, to: t_mlsc, type: OTF, label: "OTF: COUTFIFO->CINFIFO" }
-      - { from: t_cstat, to: t_mlsc, type: OTF, label: "vOTF: line-delayed stats", buffer: STATS_BUF }
+      - { from: t_cstat, to: t_mlsc, type: vOTF, label: "vOTF: line-delayed stats", buffer: STATS_BUF }
       - { from: t_mlsc, to: t_postirta, type: control, label: "SW" }
       - { from: t_postirta, to: t_mtnr1, type: control, label: "SW" }
       - { from: t_postirta, to: t_mtnr0, type: control, label: "SW" }

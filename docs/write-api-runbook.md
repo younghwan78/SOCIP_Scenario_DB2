@@ -315,6 +315,10 @@ otf_edge_must_not_have_buffer
 physical_edge_endpoint_invalid
 ```
 
+`vOTF` is different from `OTF`: it must declare a buffer because the connection
+is modeled as a low-latency line-buffer path. If the buffer is LLC-backed, record
+that in the buffer descriptor or variant `buffer_overrides.placement`.
+
 ### Import Bundle Missing Buffer
 
 ```powershell

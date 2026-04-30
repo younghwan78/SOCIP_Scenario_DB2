@@ -287,7 +287,8 @@ Supported canonical document kinds in the first implementation:
 - Removed edges must exist in the base pipeline.
 - Every edge endpoint must reference a node that exists after the patch.
 - Base edge `type` must be one of `OTF`, `vOTF`, or `M2M`.
-- `OTF` and `vOTF` edges must connect HW endpoints and must not declare a buffer.
+- `OTF` edges must connect HW endpoints and must not declare a buffer.
+- `vOTF` edges must connect HW endpoints, must declare a buffer, and that buffer must exist after the patch. Use the buffer descriptor or variant `buffer_overrides` to describe LLC allocation.
 - `M2M` edges must declare a buffer, and that buffer must exist after the patch.
 - Removed buffers must not be referenced by remaining base edges.
 - Existing variant overlays must remain valid after the base patch. Stale `routing_switch`, `topology_patch`, `node_configs`, or `buffer_overrides` references are blocking errors.
@@ -304,7 +305,8 @@ Supported canonical document kinds in the first implementation:
 - `pipeline.nodes.*.ip_ref` must exist in DB or be included as an `ip` document in the same bundle.
 - Pipeline edge endpoints must reference nodes in the same usecase document.
 - Base edge `type` must be one of `OTF`, `vOTF`, or `M2M`.
-- `OTF` and `vOTF` import edges must not declare a buffer.
+- `OTF` import edges must not declare a buffer.
+- `vOTF` import edges must declare a buffer and the buffer must exist in `pipeline.buffers`. Use the buffer descriptor or variant `buffer_overrides` to describe LLC allocation.
 - `M2M` import edges must declare a buffer and the buffer must exist in `pipeline.buffers`.
 - Variant `node_configs` must reference base nodes or variant-injected SW nodes.
 - Variant `buffer_overrides` must reference usecase pipeline buffers.
