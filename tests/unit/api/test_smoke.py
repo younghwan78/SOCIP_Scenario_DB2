@@ -183,6 +183,11 @@ def test_list_projects_200(client):
     assert r.status_code == 200
 
 
+def test_list_projects_board_filters_200(client):
+    r = client.get("/api/v1/projects?soc_ref=soc-exynos2600&board_type=ERD")
+    assert r.status_code == 200
+
+
 def test_get_project_404(client):
     r = client.get("/api/v1/projects/nonexistent")
     assert r.status_code == 404
@@ -190,6 +195,11 @@ def test_get_project_404(client):
 
 def test_list_scenarios_200(client):
     r = client.get("/api/v1/scenarios")
+    assert r.status_code == 200
+
+
+def test_list_scenarios_project_board_filters_200(client):
+    r = client.get("/api/v1/scenarios?project_ref=proj-thetis-erd&soc_ref=soc-exynos2600&board_type=ERD")
     assert r.status_code == 200
 
 
@@ -215,6 +225,11 @@ def test_matched_issues_404(client):
 
 def test_list_all_variants_200(client):
     r = client.get("/api/v1/variants")
+    assert r.status_code == 200
+
+
+def test_list_all_variants_hierarchy_filters_200(client):
+    r = client.get("/api/v1/variants?scenario_id=uc-camera&project=proj-thetis-erd&soc_ref=soc-exynos2600&board_type=ERD")
     assert r.status_code == 200
 
 

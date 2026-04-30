@@ -12,6 +12,21 @@ router = APIRouter(tags=["view"])
 
 
 @router.get(
+    "/scenarios/{scenario_id}/view",
+    response_model=ViewResponse,
+    summary="Base scenario pipeline view data (no variant overlay)",
+)
+def get_base_view(
+    scenario_id: str,
+    level: int = Query(0, ge=0, le=2, description="View depth: 0=overview/topology, 1=IP DAG, 2=drill-down"),
+    mode: str = Query("architecture", description="architecture | topology"),
+    expand: str | None = Query(None, description="IP id to expand (Level 2 only)"),
+    db: Session = Depends(get_db),
+):
+    return _build_view(scenario_id, None, level=level, mode=mode, expand=expand, db=db)
+
+
+@router.get(
     "/scenarios/{scenario_id}/variants/{variant_id}/view",
     response_model=ViewResponse,
     summary="Pipeline view data (Level 0/1/2)",
@@ -34,6 +49,18 @@ def get_view(
     Level 2:
       - Drill-down view. Requires expand=camera|video|display or an IP/node id.
     """
+    return _build_view(scenario_id, variant_id, level=level, mode=mode, expand=expand, db=db)
+
+
+def _build_view(
+    scenario_id: str,
+    variant_id: str | None,
+    *,
+    level: int,
+    mode: str,
+    expand: str | None,
+    db: Session,
+) -> ViewResponse:
     try:
         if level == 0:
             return project_level0(scenario_id, variant_id, db=db, mode=mode)

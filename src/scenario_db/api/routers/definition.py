@@ -29,6 +29,8 @@ router = APIRouter(tags=["definition"])
 
 @router.get("/projects", response_model=PagedResponse[ProjectResponse])
 def list_projects(
+    soc_ref: str | None = Query(None, description="Filter by project metadata.soc_ref"),
+    board_type: str | None = Query(None, description="Filter by project metadata.board_type such as ERD/SEP1/SEP2"),
     limit: int = Query(50, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     sort_by: str | None = Query(None),
@@ -36,7 +38,12 @@ def list_projects(
     db: Session = Depends(get_db),
 ):
     sort_by = validate_sort_column(Project, sort_by)
-    q = apply_sort(db.query(Project), Project, sort_by, sort_dir)
+    q = db.query(Project)
+    if soc_ref is not None:
+        q = q.filter(Project.metadata_["soc_ref"].astext == soc_ref)
+    if board_type is not None:
+        q = q.filter(Project.metadata_["board_type"].astext == board_type)
+    q = apply_sort(q, Project, sort_by, sort_dir)
     return PagedResponse.from_query(q, limit=limit, offset=offset)
 
 
@@ -54,6 +61,9 @@ def get_project(project_id: str, db: Session = Depends(get_db)):
 
 @router.get("/scenarios", response_model=PagedResponse[ScenarioResponse])
 def list_scenarios(
+    project_ref: str | None = Query(None, description="Filter by owning project id"),
+    soc_ref: str | None = Query(None, description="Filter by owning project metadata.soc_ref"),
+    board_type: str | None = Query(None, description="Filter by owning project metadata.board_type"),
     limit: int = Query(50, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     sort_by: str | None = Query(None),
@@ -61,7 +71,16 @@ def list_scenarios(
     db: Session = Depends(get_db),
 ):
     sort_by = validate_sort_column(Scenario, sort_by)
-    q = apply_sort(db.query(Scenario), Scenario, sort_by, sort_dir)
+    q = db.query(Scenario)
+    if project_ref is not None:
+        q = q.filter(Scenario.project_ref == project_ref)
+    if soc_ref is not None or board_type is not None:
+        q = q.join(Project, Scenario.project_ref == Project.id)
+        if soc_ref is not None:
+            q = q.filter(Project.metadata_["soc_ref"].astext == soc_ref)
+        if board_type is not None:
+            q = q.filter(Project.metadata_["board_type"].astext == board_type)
+    q = apply_sort(q, Scenario, sort_by, sort_dir)
     return PagedResponse.from_query(q, limit=limit, offset=offset)
 
 
@@ -147,6 +166,9 @@ def matched_issues(
 
 @router.get("/variants", response_model=PagedResponse[ScenarioVariantResponse])
 def list_all_variants(
+    scenario_id: str | None = Query(None, description="scenario_id filter"),
+    soc_ref: str | None = Query(None, description="owning project metadata.soc_ref filter"),
+    board_type: str | None = Query(None, description="owning project metadata.board_type filter"),
     project: str | None = Query(None, description="project_ref 필터 (scenario 경유)"),
     severity: str | None = Query(None),
     tag: str | None = Query(None, description="tags 배열에 포함된 값 필터"),
@@ -159,14 +181,26 @@ def list_all_variants(
     """전체 variant 목록 (cross-scenario). ?project=, ?severity=, ?tag= 필터 지원."""
     sort_by = validate_sort_column(ScenarioVariant, sort_by)
     q = db.query(ScenarioVariant)
+    joined_scenario = False
+    if scenario_id is not None:
+        q = q.filter(ScenarioVariant.scenario_id == scenario_id)
     if severity is not None:
         q = q.filter(ScenarioVariant.severity == severity)
     if tag is not None:
         q = q.filter(ScenarioVariant.tags.contains([tag]))
-    if project is not None:
-        q = q.join(Scenario, ScenarioVariant.scenario_id == Scenario.id).filter(
-            Scenario.project_ref == project
-        )
+    if project is not None or soc_ref is not None or board_type is not None:
+        q = q.join(Scenario, ScenarioVariant.scenario_id == Scenario.id)
+        joined_scenario = True
+        if project is not None:
+            q = q.filter(Scenario.project_ref == project)
+    if soc_ref is not None or board_type is not None:
+        if not joined_scenario:
+            q = q.join(Scenario, ScenarioVariant.scenario_id == Scenario.id)
+        q = q.join(Project, Scenario.project_ref == Project.id)
+        if soc_ref is not None:
+            q = q.filter(Project.metadata_["soc_ref"].astext == soc_ref)
+        if board_type is not None:
+            q = q.filter(Project.metadata_["board_type"].astext == board_type)
     q = apply_sort(q, ScenarioVariant, sort_by, sort_dir)
     total = q.count()
     rows = q.offset(offset).limit(limit).all()

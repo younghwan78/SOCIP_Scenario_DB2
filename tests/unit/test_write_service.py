@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from copy import deepcopy
+
 from scenario_db.db.models.capability import IpCatalog
 from scenario_db.db.models.definition import Project, Scenario, ScenarioVariant
 from scenario_db.write.service import (
     build_import_bundle_diff,
-    normalize_payload,
     normalize_import_bundle_payload,
+    normalize_payload,
     normalize_pipeline_patch_payload,
     validate_import_bundle,
     validate_pipeline_patch,
@@ -334,6 +336,32 @@ def _import_usecase_doc(**overrides):
     return doc
 
 
+def _sync_db_scenario_from_doc(db: _Db, doc: dict) -> None:
+    db.scenario.id = doc["id"]
+    db.scenario.schema_version = doc["schema_version"]
+    db.scenario.project_ref = doc["project_ref"]
+    db.scenario.metadata_ = deepcopy(doc["metadata"])
+    db.scenario.pipeline = deepcopy(doc["pipeline"])
+    db.scenario.size_profile = deepcopy(doc.get("size_profile"))
+    db.scenario.design_axes = deepcopy(doc.get("design_axes") or [])
+    first_variant = doc["variants"][0]
+    db.variant.scenario_id = doc["id"]
+    db.variant.id = first_variant["id"]
+    db.variant.severity = first_variant["severity"]
+    db.variant.design_conditions = deepcopy(first_variant.get("design_conditions") or {})
+    db.variant.design_conditions_override = deepcopy(first_variant.get("design_conditions_override") or {})
+    db.variant.size_overrides = deepcopy(first_variant.get("size_overrides") or {})
+    db.variant.routing_switch = deepcopy(first_variant.get("routing_switch") or {})
+    db.variant.topology_patch = deepcopy(first_variant.get("topology_patch") or {})
+    db.variant.node_configs = deepcopy(first_variant.get("node_configs") or {})
+    db.variant.buffer_overrides = deepcopy(first_variant.get("buffer_overrides") or {})
+    db.variant.ip_requirements = deepcopy(first_variant.get("ip_requirements") or {})
+    db.variant.sw_requirements = deepcopy(first_variant.get("sw_requirements"))
+    db.variant.violation_policy = deepcopy(first_variant.get("violation_policy"))
+    db.variant.tags = deepcopy(first_variant.get("tags") or [])
+    db.variant.derived_from_variant = first_variant.get("derived_from_variant")
+
+
 def test_normalize_import_bundle_accepts_import_report_and_documents():
     normalized = normalize_import_bundle_payload(
         {
@@ -430,3 +458,32 @@ def test_import_bundle_diff_reports_document_and_variant_impact():
     assert diff.impact["import_report"]["messages_by_level"]["warning"] == 1
     assert diff.impact["scenario_impacts"][0]["variants_added"] == ["FHD30-Imported"]
     assert diff.impact["scenario_impacts"][0]["variants_removed"] == ["OldVariant"]
+
+
+def test_import_bundle_diff_marks_identical_documents_unchanged():
+    db = _Db()
+    doc = _import_usecase_doc()
+    _sync_db_scenario_from_doc(db, doc)
+    db.scenario.yaml_sha256 = "legacy-file-sha"
+    normalized = normalize_import_bundle_payload({"documents": [doc]})
+
+    diff = build_import_bundle_diff(db, normalized)
+
+    scenario_change = next(change for change in diff.changes if change.field == "documents.scenario.usecase")
+    assert scenario_change.change == "unchanged"
+    assert scenario_change.after["unchanged_ids"] == [doc["id"]]
+    assert scenario_change.after["modified_ids"] == []
+
+
+def test_import_bundle_diff_marks_existing_changed_documents_modified():
+    db = _Db()
+    doc = _import_usecase_doc()
+    _sync_db_scenario_from_doc(db, doc)
+    doc["metadata"]["name"] = "Imported Camera Recording Updated"
+    normalized = normalize_import_bundle_payload({"documents": [doc]})
+
+    diff = build_import_bundle_diff(db, normalized)
+
+    scenario_change = next(change for change in diff.changes if change.field == "documents.scenario.usecase")
+    assert scenario_change.change == "modify"
+    assert scenario_change.after["modified_ids"] == [doc["id"]]

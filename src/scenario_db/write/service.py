@@ -471,20 +471,41 @@ def build_import_bundle_diff(db: Session, normalized: dict[str, Any]) -> DiffPre
         if not kind_docs:
             continue
         ids = [str(doc["id"]) for doc in kind_docs]
-        existing_ids = _existing_import_doc_ids(db, kind, ids)
+        existing_hashes = _existing_import_doc_signatures(db, kind, ids)
+        existing_ids = set(existing_hashes)
         existing_any = existing_any or bool(existing_ids)
-        if not existing_ids:
+        imported_hashes = {str(doc["id"]): _document_signature(kind, doc) for doc in kind_docs}
+        added_ids = sorted(set(imported_hashes) - existing_ids)
+        removed_ids: list[str] = []
+        unchanged_ids = sorted(
+            doc_id
+            for doc_id, sha256 in imported_hashes.items()
+            if doc_id in existing_hashes and existing_hashes[doc_id] == sha256
+        )
+        modified_ids = sorted(
+            doc_id
+            for doc_id, sha256 in imported_hashes.items()
+            if doc_id in existing_hashes and existing_hashes[doc_id] != sha256
+        )
+        if added_ids and not modified_ids and not unchanged_ids:
             change = "add"
-        elif len(existing_ids) == len(ids):
+        elif modified_ids or added_ids or removed_ids:
             change = "modify"
         else:
-            change = "modify"
+            change = "unchanged"
         changes.append(
             DiffEntry(
                 field=f"documents.{kind}",
                 change=change,
                 before={"existing_ids": sorted(existing_ids), "count": len(existing_ids)},
-                after={"ids": ids, "count": len(ids)},
+                after={
+                    "ids": ids,
+                    "count": len(ids),
+                    "added_ids": added_ids,
+                    "modified_ids": modified_ids,
+                    "unchanged_ids": unchanged_ids,
+                    "removed_ids": removed_ids,
+                },
             )
         )
     return DiffPreviewResponse(
@@ -846,16 +867,119 @@ def _validate_import_usecase_refs(
     return issues
 
 
-def _existing_import_doc_ids(db: Session, kind: str, ids: list[str]) -> set[str]:
+def _existing_import_doc_signatures(db: Session, kind: str, ids: list[str]) -> dict[str, str | None]:
     model = IMPORT_DB_MODEL_BY_KIND.get(kind)
     if model is None or not ids:
-        return set()
+        return {}
     id_set = set(ids)
-    return {
-        row.id
-        for row in db.query(model).all()
-        if row.id in id_set
-    }
+    result: dict[str, str | None] = {}
+    for row in db.query(model).all():
+        if row.id not in id_set:
+            continue
+        result[row.id] = _existing_row_signature(db, kind, row)
+    return result
+
+
+def _existing_row_signature(db: Session, kind: str, row: Any) -> str | None:
+    doc = _existing_row_to_import_doc(db, kind, row)
+    if doc is None:
+        return getattr(row, "yaml_sha256", None)
+    try:
+        return _document_signature(kind, doc)
+    except Exception:
+        return getattr(row, "yaml_sha256", None)
+
+
+def _existing_row_to_import_doc(db: Session, kind: str, row: Any) -> dict[str, Any] | None:
+    if kind == "soc":
+        return _compact_doc(
+            {
+                "id": row.id,
+                "schema_version": row.schema_version,
+                "kind": "soc",
+                "process_node": row.process_node,
+                "memory_type": row.memory_type,
+                "bus_protocol": row.bus_protocol,
+                "ips": row.ips or [],
+            }
+        )
+    if kind == "ip":
+        return _compact_doc(
+            {
+                "id": row.id,
+                "schema_version": row.schema_version,
+                "kind": "ip",
+                "category": row.category,
+                "hierarchy": row.hierarchy,
+                "capabilities": row.capabilities,
+                "rtl_version": row.rtl_version,
+                "compatible_soc": row.compatible_soc or [],
+            }
+        )
+    if kind == "project":
+        return _compact_doc(
+            {
+                "id": row.id,
+                "schema_version": row.schema_version,
+                "kind": "project",
+                "metadata": row.metadata_ or {},
+                "globals": row.globals_,
+            }
+        )
+    if kind == "scenario.usecase":
+        variants = [
+            _compact_doc(
+                {
+                    "id": variant.id,
+                    "severity": variant.severity,
+                    "design_conditions": variant.design_conditions or {},
+                    "design_conditions_override": variant.design_conditions_override or None,
+                    "size_overrides": variant.size_overrides or {},
+                    "routing_switch": variant.routing_switch or {},
+                    "topology_patch": variant.topology_patch or {},
+                    "node_configs": variant.node_configs or {},
+                    "buffer_overrides": variant.buffer_overrides or {},
+                    "ip_requirements": variant.ip_requirements or {},
+                    "sw_requirements": variant.sw_requirements,
+                    "violation_policy": variant.violation_policy,
+                    "tags": variant.tags or [],
+                    "derived_from_variant": variant.derived_from_variant,
+                }
+            )
+            for variant in sorted(db.query(ScenarioVariant).filter_by(scenario_id=row.id).all(), key=lambda item: item.id)
+        ]
+        return _compact_doc(
+            {
+                "id": row.id,
+                "schema_version": row.schema_version,
+                "kind": "scenario.usecase",
+                "project_ref": row.project_ref,
+                "metadata": row.metadata_ or {},
+                "pipeline": row.pipeline or {},
+                "size_profile": row.size_profile,
+                "design_axes": row.design_axes or [],
+                "variants": variants,
+            }
+        )
+    return None
+
+
+def _document_signature(kind: str, doc: dict[str, Any]) -> str:
+    model = IMPORT_MODEL_BY_KIND[kind]
+    normalized = model.model_validate(doc).model_dump(by_alias=True, exclude_none=True)
+    return _document_sha256(normalized)
+
+
+def _compact_doc(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _compact_doc(item)
+            for key, item in value.items()
+            if item is not None
+        }
+    if isinstance(value, list):
+        return [_compact_doc(item) for item in value]
+    return value
 
 
 def _import_bundle_impact(db: Session, normalized: dict[str, Any]) -> dict[str, Any]:

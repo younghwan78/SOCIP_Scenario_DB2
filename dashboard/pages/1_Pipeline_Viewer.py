@@ -19,6 +19,18 @@ for path in (_root / "src", _root, _root / "dashboard"):
         sys.path.insert(0, str(path))
 
 from dashboard.components.elk_viewer import render_elk_view
+from dashboard.components.viewer_api_client import (
+    ViewerApiError,
+    default_variant_id,
+    list_projects,
+    list_scenarios,
+    list_soc_platforms,
+    list_variants,
+    project_label,
+    scenario_label,
+    soc_label,
+    variant_label,
+)
 from scenario_db.api.schemas.view import ViewResponse
 from scenario_db.view.service import build_sample_level0
 
@@ -160,7 +172,7 @@ st.markdown(
 def _load_view(
     base_url: str,
     scenario_id: str,
-    variant_id: str,
+    variant_id: str | None,
     level: int,
     mode: str | None = None,
     expand: str | None = None,
@@ -171,7 +183,10 @@ def _load_view(
     if level == 2 and expand:
         params["expand"] = expand
     try:
-        url = f"{base_url.rstrip('/')}/scenarios/{scenario_id}/variants/{variant_id}/view"
+        if variant_id:
+            url = f"{base_url.rstrip('/')}/scenarios/{scenario_id}/variants/{variant_id}/view"
+        else:
+            url = f"{base_url.rstrip('/')}/scenarios/{scenario_id}/view"
         response = requests.get(url, params=params, timeout=5)
         response.raise_for_status()
         return ViewResponse.model_validate(response.json()), "api"
@@ -179,6 +194,38 @@ def _load_view(
         fallback = build_sample_level0()
         fallback.metadata["load_error"] = str(exc)
         return fallback, "sample-fallback"
+
+
+@st.cache_data(ttl=30)
+def _load_soc_options(base_url: str) -> tuple[list[dict], str | None]:
+    try:
+        return list_soc_platforms(base_url), None
+    except ViewerApiError as exc:
+        return [], str(exc)
+
+
+@st.cache_data(ttl=30)
+def _load_project_options(base_url: str, soc_ref: str | None) -> tuple[list[dict], str | None]:
+    try:
+        return list_projects(base_url, soc_ref=soc_ref), None
+    except ViewerApiError as exc:
+        return [], str(exc)
+
+
+@st.cache_data(ttl=30)
+def _load_scenario_options(base_url: str, project_ref: str | None) -> tuple[list[dict], str | None]:
+    try:
+        return list_scenarios(base_url, project_ref=project_ref), None
+    except ViewerApiError as exc:
+        return [], str(exc)
+
+
+@st.cache_data(ttl=30)
+def _load_variant_options(base_url: str, scenario_id: str) -> tuple[list[dict], str | None]:
+    try:
+        return list_variants(base_url, scenario_id), None
+    except ViewerApiError as exc:
+        return [], str(exc)
 
 
 def _render_detail_panel(view: ViewResponse) -> None:
@@ -229,8 +276,101 @@ with st.sidebar:
         "API Base",
         value=os.environ.get("SCENARIODB_API_BASE", "http://127.0.0.1:18000/api/v1"),
     )
-    scenario_id_input = st.text_input("Scenario", value="uc-camera-recording")
-    variant_id_input = st.text_input("Variant", value="UHD60-HDR10-H265")
+    if st.button("Refresh scenario list", use_container_width=True):
+        _load_soc_options.clear()
+        _load_project_options.clear()
+        _load_scenario_options.clear()
+        _load_variant_options.clear()
+        _load_view.clear()
+        st.rerun()
+
+    query_params = st.query_params
+    query_soc_id = query_params.get("soc_id")
+    query_project_id = query_params.get("project_id")
+    query_scenario_id = query_params.get("scenario_id")
+    query_variant_id = query_params.get("variant_id")
+
+    socs, soc_error = _load_soc_options(api_base)
+    if socs:
+        soc_ids = [str(item.get("id")) for item in socs if item.get("id")]
+        previous_soc = query_soc_id or st.session_state.get("viewer_soc_id") or (soc_ids[0] if soc_ids else "")
+        soc_index = soc_ids.index(previous_soc) if previous_soc in soc_ids else 0
+        soc_id_input = st.selectbox(
+            "SoC Platform",
+            soc_ids,
+            index=soc_index,
+            format_func=lambda soc_id: soc_label(
+                next((item for item in socs if item.get("id") == soc_id), {"id": soc_id})
+            ),
+        )
+        st.session_state["viewer_soc_id"] = soc_id_input
+    else:
+        if soc_error:
+            st.caption(f"SoC list unavailable: {soc_error}")
+        soc_id_input = st.text_input("SoC Platform", value=query_soc_id or st.session_state.get("viewer_soc_id", ""))
+        st.session_state["viewer_soc_id"] = soc_id_input
+
+    projects, project_error = _load_project_options(api_base, soc_id_input or None)
+    if projects:
+        project_ids = [str(item.get("id")) for item in projects if item.get("id")]
+        previous_project = query_project_id or st.session_state.get("viewer_project_id") or (project_ids[0] if project_ids else "")
+        project_index = project_ids.index(previous_project) if previous_project in project_ids else 0
+        project_id_input = st.selectbox(
+            "Project / Board",
+            project_ids,
+            index=project_index,
+            format_func=lambda project_id: project_label(
+                next((item for item in projects if item.get("id") == project_id), {"id": project_id})
+            ),
+        )
+        st.session_state["viewer_project_id"] = project_id_input
+    else:
+        if project_error:
+            st.caption(f"Project list unavailable: {project_error}")
+        project_id_input = st.text_input("Project / Board", value=query_project_id or st.session_state.get("viewer_project_id", ""))
+        st.session_state["viewer_project_id"] = project_id_input
+
+    scenarios, scenario_error = _load_scenario_options(api_base, project_id_input or None)
+    if scenarios:
+        scenario_ids = [str(item.get("id")) for item in scenarios if item.get("id")]
+        previous_scenario = query_scenario_id or st.session_state.get("viewer_scenario_id", "uc-camera-recording")
+        scenario_index = scenario_ids.index(previous_scenario) if previous_scenario in scenario_ids else 0
+        scenario_id_input = st.selectbox(
+            "Scenario",
+            scenario_ids,
+            index=scenario_index,
+            format_func=lambda scenario_id: scenario_label(
+                next((item for item in scenarios if item.get("id") == scenario_id), {"id": scenario_id})
+            ),
+        )
+        st.session_state["viewer_scenario_id"] = scenario_id_input
+    else:
+        if scenario_error:
+            st.caption(f"Scenario list unavailable: {scenario_error}")
+        scenario_id_input = st.text_input("Scenario", value=query_scenario_id or st.session_state.get("viewer_scenario_id", "uc-camera-recording"))
+        st.session_state["viewer_scenario_id"] = scenario_id_input
+
+    variants, variant_error = _load_variant_options(api_base, scenario_id_input) if scenario_id_input else ([], None)
+    if variants:
+        variant_ids = [str(item.get("id")) for item in variants if item.get("id")]
+        selected_variant = default_variant_id(variants, query_variant_id or st.session_state.get("viewer_variant_id", "UHD60-HDR10-H265"))
+        variant_index = variant_ids.index(selected_variant) if selected_variant in variant_ids else 0
+        variant_id_input = st.selectbox(
+            "Variant",
+            variant_ids,
+            index=variant_index,
+            format_func=lambda variant_id: variant_label(
+                next((item for item in variants if item.get("id") == variant_id), {"id": variant_id})
+            ),
+        )
+        st.session_state["viewer_variant_id"] = variant_id_input
+    else:
+        if variant_error:
+            st.caption(f"Variant list unavailable: {variant_error}")
+        st.info("No variants found for this scenario. Viewer will load the base scenario pipeline.")
+        variant_id_input = ""
+        st.session_state["viewer_variant_id"] = variant_id_input
+
     view_level = st.radio(
         "View Level",
         ["0 - Architecture + Task Topology", "1 - IP Detail DAG", "2 - Drill-Down"],
@@ -244,7 +384,6 @@ with st.sidebar:
     }
     expand_label = st.selectbox("Expand IP (Level 2)", list(expand_options.keys()), index=0)
     expand_id = expand_options[expand_label]
-
 
 if level == 0:
     arch_view, arch_source = _load_view(api_base, scenario_id_input, variant_id_input, 0, "architecture")

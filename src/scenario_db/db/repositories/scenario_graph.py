@@ -77,6 +77,44 @@ def load_canonical_graph(
     if variant is None:
         raise LookupError(f"Variant not found: {scenario_id}/{variant_id}")
 
+    return _load_graph_with_variant(db, scenario, variant)
+
+
+def load_base_canonical_graph(
+    db: Session,
+    scenario_id: str,
+) -> CanonicalScenarioGraph:
+    scenario = db.query(Scenario).filter_by(id=scenario_id).one_or_none()
+    if scenario is None:
+        raise LookupError(f"Scenario not found: {scenario_id}")
+
+    variant = ResolvedScenarioVariant(
+        scenario_id=scenario_id,
+        id="BASE",
+        severity=None,
+        design_conditions={},
+        design_conditions_override={},
+        size_overrides={},
+        routing_switch={},
+        topology_patch={},
+        node_configs={},
+        buffer_overrides={},
+        ip_requirements={},
+        sw_requirements=None,
+        violation_policy=None,
+        tags=[],
+        derived_from_variant=None,
+        resolved=True,
+        inheritance_chain=[],
+    )
+    return _load_graph_with_variant(db, scenario, variant)
+
+
+def _load_graph_with_variant(
+    db: Session,
+    scenario: Scenario,
+    variant: ResolvedScenarioVariant,
+) -> CanonicalScenarioGraph:
     project = db.query(Project).filter_by(id=scenario.project_ref).one_or_none()
     soc = None
     if project is not None:
@@ -99,7 +137,7 @@ def load_canonical_graph(
 
     evidence = (
         db.query(Evidence)
-        .filter_by(scenario_ref=scenario_id, variant_ref=variant_id)
+        .filter_by(scenario_ref=scenario.id, variant_ref=variant.id)
         .all()
     )
     sw_refs = {
@@ -116,7 +154,7 @@ def load_canonical_graph(
     waivers = db.query(Waiver).all()
     reviews = (
         db.query(Review)
-        .filter_by(scenario_ref=scenario_id, variant_ref=variant_id)
+        .filter_by(scenario_ref=scenario.id, variant_ref=variant.id)
         .all()
     )
     gate_rules = db.query(GateRule).all()

@@ -93,6 +93,28 @@ def validation_issue_rows(validation: dict[str, Any]) -> list[dict[str, Any]]:
     return rows
 
 
+def diff_change_rows(diff: dict[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for change in diff.get("changes") or []:
+        if not isinstance(change, dict):
+            continue
+        before = change.get("before") if isinstance(change.get("before"), dict) else {}
+        after = change.get("after") if isinstance(change.get("after"), dict) else {}
+        rows.append(
+            {
+                "field": change.get("field", ""),
+                "change": change.get("change", ""),
+                "existing_count": before.get("count", ""),
+                "import_count": after.get("count", ""),
+                "added": _join_values(after.get("added_ids")),
+                "modified": _join_values(after.get("modified_ids")),
+                "unchanged": _join_values(after.get("unchanged_ids")),
+                "removed": _join_values(after.get("removed_ids")),
+            }
+        )
+    return rows
+
+
 def scenario_impact_rows(diff: dict[str, Any]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     impact = diff.get("impact") or {}
@@ -111,6 +133,14 @@ def scenario_impact_rows(diff: dict[str, Any]) -> list[dict[str, Any]]:
             }
         )
     return rows
+
+
+def _join_values(values: Any) -> str:
+    if not values:
+        return ""
+    if isinstance(values, list):
+        return ", ".join(str(value) for value in values)
+    return str(values)
 
 
 def _request_json(

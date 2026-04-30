@@ -11,6 +11,7 @@ import os
 import sys
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 
 import streamlit as st
 
@@ -23,6 +24,7 @@ from dashboard.components.import_api_client import (
     ImportApiError,
     apply_batch,
     diff_batch,
+    diff_change_rows,
     document_rows,
     health_check,
     import_report_rows,
@@ -135,6 +137,60 @@ def _save_payload(path_text: str, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=True), encoding="utf-8")
     st.session_state["import_bundle_path"] = str(path)
+
+
+def _viewer_links_for_apply(payload: dict[str, Any], scenario_refs: list[str]) -> list[tuple[str, str]]:
+    documents = (payload.get("payload") or {}).get("documents") or []
+    projects = {
+        str(doc.get("id")): doc
+        for doc in documents
+        if isinstance(doc, dict) and doc.get("kind") == "project" and doc.get("id")
+    }
+    scenarios = {
+        str(doc.get("id")): doc
+        for doc in documents
+        if isinstance(doc, dict) and doc.get("kind") == "scenario.usecase" and doc.get("id")
+    }
+    links: list[tuple[str, str]] = []
+    for scenario_id in scenario_refs:
+        scenario = scenarios.get(str(scenario_id)) or {}
+        project_id = str(scenario.get("project_ref") or "")
+        project = projects.get(project_id) or {}
+        project_metadata = project.get("metadata") if isinstance(project.get("metadata"), dict) else {}
+        soc_id = str(project_metadata.get("soc_ref") or "")
+        variants = scenario.get("variants") if isinstance(scenario.get("variants"), list) else []
+        variant_ids = [str(item.get("id")) for item in variants if isinstance(item, dict) and item.get("id")]
+        if not variant_ids:
+            links.append(
+                (
+                    f"{scenario_id} (base scenario)",
+                    f"Pipeline_Viewer?{urlencode(_clean_link_params(soc_id, project_id, str(scenario_id), None))}",
+                )
+            )
+            continue
+        for variant_id in variant_ids:
+            links.append(
+                (
+                    f"{scenario_id} / {variant_id}",
+                    f"Pipeline_Viewer?{urlencode(_clean_link_params(soc_id, project_id, str(scenario_id), variant_id))}",
+                )
+            )
+    return links
+
+
+def _clean_link_params(
+    soc_id: str,
+    project_id: str,
+    scenario_id: str,
+    variant_id: str | None,
+) -> dict[str, str]:
+    params = {
+        "soc_id": soc_id,
+        "project_id": project_id,
+        "scenario_id": scenario_id,
+        "variant_id": variant_id or "",
+    }
+    return {key: value for key, value in params.items() if value}
 
 
 def _is_relative_to(path: Path, root: Path) -> bool:
@@ -405,7 +461,7 @@ with st.container():
     if diff:
         st.markdown("#### Diff Preview")
         st.json({"target_id": diff.get("target_id"), "operation": diff.get("operation")})
-        changes = diff.get("changes") or []
+        changes = diff_change_rows(diff)
         if changes:
             st.dataframe(changes, use_container_width=True, hide_index=True)
         impacts = scenario_impact_rows(diff)
@@ -443,4 +499,10 @@ with st.container():
         if scenario_refs:
             st.caption("Applied scenario refs:")
             st.code("\n".join(scenario_refs))
+            payload = st.session_state.get("import_bundle_payload") or {}
+            viewer_links = _viewer_links_for_apply(payload, scenario_refs)
+            if viewer_links:
+                st.markdown("#### Open in Viewer")
+                for label, href in viewer_links:
+                    st.markdown(f"- [{label}]({href})")
     st.markdown("</div>", unsafe_allow_html=True)

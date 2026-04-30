@@ -4,6 +4,7 @@ import pytest
 
 from dashboard.components.import_api_client import (
     ImportApiError,
+    diff_change_rows,
     document_rows,
     import_report_rows,
     scenario_impact_rows,
@@ -71,6 +72,21 @@ def test_import_workbench_table_helpers_are_stable():
         ]
     }
     diff = {
+        "changes": [
+            {
+                "field": "documents.ip",
+                "change": "modify",
+                "before": {"existing_ids": ["ip-a"], "count": 1},
+                "after": {
+                    "ids": ["ip-a", "ip-b"],
+                    "count": 2,
+                    "added_ids": ["ip-b"],
+                    "modified_ids": ["ip-a"],
+                    "unchanged_ids": [],
+                    "removed_ids": [],
+                },
+            }
+        ],
         "impact": {
             "scenario_impacts": [
                 {
@@ -89,4 +105,9 @@ def test_import_workbench_table_helpers_are_stable():
     assert document_rows(payload)[0]["name"] == "Project A"
     assert import_report_rows(payload["payload"]["import_report"])[0]["code"] == "legacy_warn"
     assert validation_issue_rows(validation)[0]["severity"] == "error"
+    diff_row = diff_change_rows(diff)[0]
+    assert diff_row["existing_count"] == 1
+    assert diff_row["import_count"] == 2
+    assert diff_row["added"] == "ip-b"
+    assert diff_row["modified"] == "ip-a"
     assert scenario_impact_rows(diff)[0]["variants_added"] == "FHD30, UHD60"

@@ -106,6 +106,22 @@ Quick API smoke check from another PowerShell:
 Invoke-RestMethod "http://127.0.0.1:18000/api/v1/scenarios/uc-camera-recording/variants/UHD60-HDR10-H265/view?level=0&mode=architecture"
 ```
 
+Board-aware Read API filters:
+
+```powershell
+$api="http://127.0.0.1:18000/api/v1"
+Invoke-RestMethod "$api/soc-platforms?limit=100"
+Invoke-RestMethod "$api/projects?soc_ref=soc-exynos2500&board_type=ERD"
+Invoke-RestMethod "$api/scenarios?project_ref=proj-demo-import"
+Invoke-RestMethod "$api/variants?scenario_id=uc-demo-import-recording"
+```
+
+Base scenario view is available even when a scenario has no variants:
+
+```powershell
+Invoke-RestMethod "$api/scenarios/uc-demo-import-recording/view?level=0&mode=architecture"
+```
+
 ## Write API
 
 The write targets are `scenario.variant_overlay`, `scenario.pipeline_patch`, and
@@ -191,6 +207,11 @@ The repo includes `demo\generated\scenariodb` as a small generated-output
 example for Workbench smoke testing. Real importer output should be generated
 into a separate working directory.
 
+After `Apply to DB`, the Workbench shows `Open in Viewer` links for applied
+scenarios/variants. The link passes `soc_id`, `project_id`, `scenario_id`, and
+`variant_id` query parameters to the Viewer so imported data can be inspected
+without manually copying IDs.
+
 ## Run Viewer
 
 Start the API first. Then open a new PowerShell and run:
@@ -210,6 +231,18 @@ http://127.0.0.1:18502/Pipeline_Viewer
 The home page also links to `Pipeline Viewer` and `Import Workbench`.
 
 If `streamlit` is not found, run `uv sync --group dashboard` and retry.
+
+The Viewer selector is hierarchical:
+
+```text
+SoC Platform -> Project / Board -> Scenario -> Variant -> View Level
+```
+
+Use `Project / Board` to separate board form-factor conditions under the same
+SoC, for example `ERD`, `SEP1`, and `SEP2`. Project metadata can carry
+`board_type`, `board_name`, `sensor_module_ref`, `display_module_ref`, and
+`default_sw_profile_ref`. If a scenario has no variants, the Viewer loads the
+base scenario pipeline through `/api/v1/scenarios/{scenario_id}/view`.
 
 ## Viewer Check
 
@@ -244,7 +277,7 @@ uv run --group dev pytest tests\unit
 Run focused viewer/model tests:
 
 ```powershell
-uv run --group dev pytest tests\unit\test_definition_models.py tests\unit\test_elk_viewer.py tests\unit\test_runtime_projection.py
+uv run --group dev pytest tests\unit\test_definition_models.py tests\unit\test_elk_viewer.py tests\unit\test_runtime_projection.py tests\unit\test_viewer_api_client.py
 ```
 
 Run integration tests only when Docker/PostgreSQL test containers are available:

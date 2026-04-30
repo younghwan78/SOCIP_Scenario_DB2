@@ -10,6 +10,11 @@ from scenario_db.models.common import BaseScenarioModel, DocumentId, SchemaVersi
 class ProjectMetadata(BaseScenarioModel):
     name: str
     soc_ref: DocumentId
+    board_type: str | None = None
+    board_name: str | None = None
+    sensor_module_ref: str | None = None
+    display_module_ref: str | None = None
+    default_sw_profile_ref: DocumentId | None = None
     target_launch_date: str | None = None
 
 

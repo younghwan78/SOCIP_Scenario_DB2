@@ -64,3 +64,15 @@ uv run --group dev pytest tests\unit
 - Error responses are normalized as `{ "error": "...", "detail": ... }` for handled `HTTPException`, `NoResultFound`, `IntegrityError`, and request validation errors.
 - Runtime/view contract tests are concentrated in `tests/integration/test_runtime_view_e2e.py`.
 - Before changing Read API response shape, update the contract document and tests first.
+
+## 2026-05-01 Import And Board-Aware Viewer Selection
+
+- Import Workbench now builds `scenario.import_bundle` payloads from generated canonical YAML, stages them through Write API, validates, previews semantic diff, and applies through canonical upsert mappers.
+- Import diff should classify documents by canonical content, not by legacy YAML file hash alone. Identical imported documents should appear as `unchanged`; changed same-ID documents should appear as `modified`.
+- Diff Preview in the Workbench should show flat columns: `field`, `change`, `existing_count`, `import_count`, `added`, `modified`, `unchanged`, and `removed`.
+- After apply, Import Workbench should offer `Open in Viewer` links with `soc_id`, `project_id`, `scenario_id`, and `variant_id` query parameters.
+- Viewer selection hierarchy is now `SoC Platform -> Project / Board -> Scenario -> Variant -> View Level`.
+- `Project` is the board/form-factor boundary under the same SoC. Use project metadata for `board_type`, `board_name`, `sensor_module_ref`, `display_module_ref`, and `default_sw_profile_ref`.
+- Example board types under the same SoC include `ERD`, `SEP1`, and `SEP2`.
+- Scenarios may have no variants. Viewer should use base scenario view endpoint `/api/v1/scenarios/{scenario_id}/view` rather than forcing a dummy variant.
+- Board-aware Read API filters are available on `/projects`, `/scenarios`, and `/variants`.

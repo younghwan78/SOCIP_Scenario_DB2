@@ -58,6 +58,27 @@ def test_project_roundtrip():
     assert len(obj.globals.tested_sw_profiles) == 3
 
 
+def test_project_metadata_accepts_board_form_factor_fields():
+    obj = Project.model_validate(
+        {
+            "id": "proj-thetis-erd",
+            "schema_version": "1.0",
+            "kind": "project",
+            "metadata": {
+                "name": "Thetis ERD",
+                "soc_ref": "soc-exynos2600",
+                "board_type": "ERD",
+                "board_name": "internal-dev-board",
+                "sensor_module_ref": "sensor-hp2",
+                "display_module_ref": "display-amoled-qhd",
+                "default_sw_profile_ref": "sw-vendor-v1.2.3",
+            },
+        }
+    )
+    assert obj.metadata.board_type == "ERD"
+    assert obj.metadata.sensor_module_ref == "sensor-hp2"
+
+
 def test_extra_fields_forbidden_project():
     raw = load_yaml(FIXTURES / "definition" / "proj-A-exynos2500.yaml")
     raw["unexpected"] = "oops"

@@ -15,7 +15,11 @@ from scenario_db.api.schemas.view import (
     NodeData, NodeElement, OperationSummary, RiskCard,
     ViewHints, ViewResponse, ViewSummary,
 )
-from scenario_db.db.repositories.scenario_graph import CanonicalScenarioGraph, load_canonical_graph
+from scenario_db.db.repositories.scenario_graph import (
+    CanonicalScenarioGraph,
+    load_base_canonical_graph,
+    load_canonical_graph,
+)
 from scenario_db.review_gate.engine import run_review_gate
 from scenario_db.view.layout import (
     BG_CENTER_X, BG_WIDTH, CANVAS_H, CANVAS_W,
@@ -256,14 +260,14 @@ def _deprecated_project_level2(scenario_id: str, variant_id: str, expand: str, d
 
 def project_level0(
     scenario_id: str,
-    variant_id: str,
+    variant_id: str | None,
     db=None,
     mode: str = "architecture",
 ) -> ViewResponse:
     """Project scenario/variant DB data into Level 0 viewer data."""
     if db is None:
         return build_sample_level0()
-    graph = load_canonical_graph(db, scenario_id, variant_id)
+    graph = _load_graph(db, scenario_id, variant_id)
     if mode == "topology":
         if graph.has_topology_overlay:
             return _project_topology(graph, level=0)
@@ -271,18 +275,24 @@ def project_level0(
     return _project_architecture(graph, level=0)
 
 
-def project_level1(scenario_id: str, variant_id: str, db=None) -> ViewResponse:
+def project_level1(scenario_id: str, variant_id: str | None, db=None) -> ViewResponse:
     if db is None:
         return build_sample_level0()
-    graph = load_canonical_graph(db, scenario_id, variant_id)
+    graph = _load_graph(db, scenario_id, variant_id)
     return _project_reference_level1(graph)
 
 
-def project_level2(scenario_id: str, variant_id: str, expand: str, db=None) -> ViewResponse:
+def project_level2(scenario_id: str, variant_id: str | None, expand: str, db=None) -> ViewResponse:
     if db is None:
         return build_sample_level0()
-    graph = load_canonical_graph(db, scenario_id, variant_id)
+    graph = _load_graph(db, scenario_id, variant_id)
     return _project_drilldown(graph, expand)
+
+
+def _load_graph(db, scenario_id: str, variant_id: str | None) -> CanonicalScenarioGraph:
+    if variant_id:
+        return load_canonical_graph(db, scenario_id, variant_id)
+    return load_base_canonical_graph(db, scenario_id)
 
 
 def _project_architecture(graph: CanonicalScenarioGraph, level: int) -> ViewResponse:
