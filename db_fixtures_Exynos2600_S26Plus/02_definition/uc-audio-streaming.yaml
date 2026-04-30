@@ -1,0 +1,91 @@
+id: uc-audio-streaming
+schema_version: '2.2'
+kind: scenario.usecase
+project_ref: proj-sm-s947b
+metadata:
+  name: Audio Streaming
+  category:
+  - audio
+  - audio
+  domain:
+  - audio
+pipeline:
+  nodes:
+  - id: network
+    ip_ref: ip-cpu-s5e9965
+    role: source
+    instance_index: 0
+  - id: sw_decoder
+    ip_ref: ip-cpu-s5e9965
+    role: audio_decode
+    instance_index: 0
+  - id: audio_hal
+    ip_ref: ip-cpu-s5e9965
+    role: audio_hal
+    instance_index: 0
+  - id: speaker
+    ip_ref: ip-cpu-s5e9965
+    role: audio_output
+    instance_index: 0
+  - id: bt_codec
+    ip_ref: ip-cpu-s5e9965
+    role: bt_output
+    instance_index: 0
+  edges:
+  - from: network
+    to: sw_decoder
+    type: M2M
+    buffer: STREAM_BUF
+  - from: sw_decoder
+    to: audio_hal
+    type: M2M
+  - from: audio_hal
+    to: speaker
+    type: M2M
+  - from: audio_hal
+    to: bt_codec
+    type: M2M
+  buffers:
+    STREAM_BUF:
+      format: AUDIO_PCM
+      bitdepth: 16
+      compression: COMP_OFF
+variants:
+- id: audio-stream-aac-screen-on
+  severity: light
+  design_conditions:
+    format: AAC_LC
+    bitrate_kbps: 320
+    screen_on: true
+    output: speaker
+  routing_switch:
+    disabled_nodes:
+    - bt_codec
+    disabled_edges:
+    - from: audio_hal
+      to: bt_codec
+- id: audio-stream-aac-screen-off
+  severity: light
+  design_conditions:
+    format: AAC_LC
+    bitrate_kbps: 320
+    screen_on: false
+    output: speaker
+  routing_switch:
+    disabled_nodes:
+    - bt_codec
+    disabled_edges:
+    - from: audio_hal
+      to: bt_codec
+- id: audio-stream-bt-screen-off
+  severity: light
+  design_conditions:
+    format: AAC_LC
+    output: Bluetooth
+    screen_on: false
+  routing_switch:
+    disabled_nodes:
+    - speaker
+    disabled_edges:
+    - from: audio_hal
+      to: speaker

@@ -1,0 +1,40 @@
+id: ip-display-panel-s5e9965
+schema_version: '2.2'
+kind: ip
+category: display
+hierarchy:
+  type: simple
+capabilities:
+  operating_modes:
+  - id: 60hz
+  - id: 90hz
+  - id: 120hz
+  - id: 1hz_lpm
+  supported_features:
+    bitdepth:
+    - 8
+    - 10
+    hdr_formats:
+    - SDR
+    - HDR10
+    - HDR10_PLUS
+    - HLG
+  properties:
+    role: panel
+    display_size:
+    - 3088
+    - 1440
+    ppi: 501
+    panel_type: Dynamic AMOLED 2X
+    refresh_rates:
+    - 1
+    - 24
+    - 30
+    - 48
+    - 60
+    - 90
+    - 120
+    peak_brightness_nit: 2600
+    color_gamut: Display-P3
+compatible_soc:
+- soc-exynos2600

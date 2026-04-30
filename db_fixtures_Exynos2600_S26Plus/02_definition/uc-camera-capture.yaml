@@ -1,0 +1,813 @@
+id: uc-camera-capture
+schema_version: '2.2'
+kind: scenario.usecase
+project_ref: proj-sm-s947b
+metadata:
+  name: Camera Capture
+  category:
+  - camera
+  domain:
+  - camera
+pipeline:
+  nodes:
+  - id: sensor_rear
+    ip_ref: ip-sensor-rear-s5e9965
+    role: sensor
+    instance_index: 0
+  - id: sensor_rear2
+    ip_ref: ip-sensor-rear-s5e9965
+    role: sensor
+    instance_index: 0
+  - id: sensor_front
+    ip_ref: ip-sensor-front-s5e9965
+    role: sensor
+    instance_index: 0
+  - id: csispdp
+    ip_ref: ip-isp-s5e9965
+    role: csispdp
+    instance_index: 0
+  - id: n3aa
+    ip_ref: ip-isp-s5e9965
+    role: 3aa_stats
+    instance_index: 0
+  - id: byrp
+    ip_ref: ip-isp-s5e9965
+    role: byrp
+    instance_index: 0
+  - id: rgbp
+    ip_ref: ip-isp-s5e9965
+    role: rgbp
+    instance_index: 0
+  - id: yuvsc
+    ip_ref: ip-isp-s5e9965
+    role: yuvsc
+    instance_index: 0
+  - id: mtnr
+    ip_ref: ip-isp-s5e9965
+    role: mtnr
+    instance_index: 0
+  - id: msnr
+    ip_ref: ip-isp-s5e9965
+    role: msnr
+    instance_index: 0
+  - id: yuvp
+    ip_ref: ip-isp-s5e9965
+    role: yuvp
+    instance_index: 0
+  - id: mcsc
+    ip_ref: ip-mcsc-s5e9965
+    role: mcsc
+    instance_index: 0
+  - id: npu
+    ip_ref: ip-npu-s5e9965
+    role: npu
+    instance_index: 0
+  - id: post_proc
+    ip_ref: ip-cpu-s5e9965
+    role: jpeg_encode
+    instance_index: 0
+  - id: storage
+    ip_ref: ip-cpu-s5e9965
+    role: storage_sink
+    instance_index: 0
+  edges:
+  - from: sensor_rear
+    to: csispdp
+    type: OTF
+  - from: sensor_rear2
+    to: csispdp
+    type: OTF
+  - from: sensor_front
+    to: csispdp
+    type: OTF
+  - from: csispdp
+    to: byrp
+    type: OTF
+  - from: byrp
+    to: rgbp
+    type: OTF
+  - from: rgbp
+    to: yuvsc
+    type: OTF
+  - from: yuvsc
+    to: mtnr
+    type: M2M
+    buffer: YUVSC_MTNR_BUF
+  - from: mtnr
+    to: msnr
+    type: OTF
+  - from: msnr
+    to: yuvp
+    type: OTF
+  - from: yuvp
+    to: mcsc
+    type: OTF
+  - from: csispdp
+    to: n3aa
+    type: M2M
+    buffer: CSISPDP_3AA_BUF
+  - from: csispdp
+    to: npu
+    type: M2M
+    buffer: CSISPDP_NPU_BUF
+  - from: npu
+    to: mtnr
+    type: M2M
+    buffer: NPU_MTNR_BUF
+  - from: mcsc
+    to: post_proc
+    type: M2M
+    buffer: MCSC_WDMA_CAP_BUF
+  - from: post_proc
+    to: storage
+    type: M2M
+    buffer: JPEG_BUF
+  buffers:
+    YUVSC_MTNR_BUF:
+      format: YUV420
+      bitdepth: 10
+      compression: COMP_OFF
+      note: M2M break — multi-frame TNR input
+    CSISPDP_3AA_BUF:
+      format: BAYER
+      bitdepth: 10
+      compression: COMP_OFF
+      note: 3A stats sidecar
+    CSISPDP_NPU_BUF:
+      format: YUV420
+      bitdepth: 10
+      compression: COMP_OFF
+      note: AI remosaic NPU input
+    NPU_MTNR_BUF:
+      format: YUV420
+      bitdepth: 10
+      compression: COMP_OFF
+      note: NPU → MTNR AI pre-processed
+    MCSC_WDMA_CAP_BUF:
+      format: YUV420
+      bitdepth: 10
+      compression: COMP_BAYER_LOSSLESS
+      note: MCSC OUTPUT2 capture WDMA — full/high-res size
+    ZSL_RING_BUF:
+      format: YUV420
+      bitdepth: 10
+      compression: COMP_BAYER_LOSSLESS
+      note: ZSL ring buffer (capture 직전 N프레임 보관)
+    JPEG_BUF:
+      format: JPEG
+      bitdepth: 8
+      compression: COMP_OFF
+      note: JPEG encoded output
+variants:
+- id: cam-cap-r1-sf
+  severity: light
+  design_conditions:
+    subscenario: STILL_SF_CAPTURE
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_CAPTURE
+    sensor_place: rear
+    capture_type: ZSL
+    capture_hint: none
+    flash: false
+    extend_mode: EX_NONE
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_front
+    - npu
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+  node_configs:
+    mtnr:
+      selected_mode: Capture_SF
+  buffer_overrides:
+    MCSC_WDMA_CAP_BUF:
+      size_role: MCSC_OUTPUT2_FULL
+- id: cam-cap-r1-sf-burst
+  severity: light
+  design_conditions:
+    subscenario: STILL_SF_CAPTURE
+    sensor_place: rear
+    capture_type: ZSL
+    capture_hint: burst
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_front
+    - npu
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+  node_configs:
+    mtnr:
+      selected_mode: Capture_SF
+- id: cam-cap-r1-sf-single-take
+  severity: light
+  design_conditions:
+    subscenario: STILL_SF_CAPTURE
+    capture_hint: single_take
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_front
+    - npu
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+- id: cam-cap-r1-sf-agif
+  severity: light
+  design_conditions:
+    subscenario: STILL_SF_CAPTURE
+    capture_hint: agif
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_front
+    - npu
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+- id: cam-cap-r1-sf-flash
+  severity: light
+  design_conditions:
+    subscenario: STILL_SF_CAPTURE
+    sensor_place: rear
+    capture_type: ZSL
+    flash: true
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_front
+    - npu
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+- id: cam-cap-r1-sf-pro
+  severity: light
+  design_conditions:
+    subscenario: STILL_PRO_SF_CAPTURE
+    sensor_place: rear
+    is_scenario: IS_SCENARIO_PRO_VIDEO
+    extend_mode: EX_NONE
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_front
+    - npu
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+- id: cam-cap-r1-mf
+  severity: light
+  design_conditions:
+    subscenario: STILL_MF_CAPTURE
+    sensor_place: rear
+    capture_type: non_ZSL
+    flash: false
+    isp_features: MTNR,MSNR
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_front
+    - npu
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+  node_configs:
+    mtnr:
+      selected_mode: Capture_MF
+      isp_features:
+      - MTNR
+      - MSNR
+  buffer_overrides:
+    YUVSC_MTNR_BUF:
+      note: multi-frame accumulation — N×frame 입력
+- id: cam-cap-r1-mf-flash
+  severity: light
+  design_conditions:
+    subscenario: STILL_FLASH_MF_CAPTURE
+    sensor_place: rear
+    flash: true
+    isp_features: MTNR,MSNR
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_front
+    - npu
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+  node_configs:
+    mtnr:
+      selected_mode: Capture_MF
+      isp_features:
+      - MTNR
+      - MSNR
+- id: cam-cap-r1-mf-high-res
+  severity: light
+  design_conditions:
+    subscenario: STILL_HIGH_RES_MF_CAPTURE
+    sensor_place: rear
+    isp_features: MTNR,MSNR,DJAG
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_front
+    - npu
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+  node_configs:
+    mtnr:
+      selected_mode: Capture_MF
+      isp_features:
+      - MTNR
+      - MSNR
+      - DJAG
+- id: cam-cap-r1-remosaic-sf
+  severity: light
+  design_conditions:
+    subscenario: STILL_REMOSAIC_SF_CAPTURE
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_REMOSAIC_CAPTURE
+    extend_mode: EX_SEAMLESS_TETRA
+    is_scenario: IS_SCENARIO_FULL_SIZE
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_front
+    - npu
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+  node_configs:
+    sensor_rear:
+      selected_mode: full_remosaic
+    mtnr:
+      selected_mode: Remosaic
+  buffer_overrides:
+    MCSC_WDMA_CAP_BUF:
+      format: YUV420
+      bitdepth: 10
+      note: 200MP full-res output
+- id: cam-cap-r1-remosaic-mf
+  severity: light
+  design_conditions:
+    subscenario: STILL_REMOSAIC_MF_CAPTURE
+    extend_mode: EX_SEAMLESS_TETRA
+    isp_features: MTNR,MSNR
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_front
+    - npu
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+  node_configs:
+    sensor_rear:
+      selected_mode: full_remosaic
+    mtnr:
+      selected_mode: Remosaic
+- id: cam-cap-r1-ai-remosaic
+  severity: light
+  design_conditions:
+    subscenario: STILL_REMOSAIC_SF_CAPTURE
+    extend_mode: EX_AI_REMOSAIC
+    npu_used: true
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_front
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+  node_configs:
+    sensor_rear:
+      selected_mode: full_remosaic
+    npu:
+      selected_mode: Normal
+- id: cam-cap-r1-remosaic-cal
+  severity: light
+  design_conditions:
+    subscenario: STILL_SF_CAPTURE
+    extend_mode: EX_REMOSAIC_CAL
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_front
+    - npu
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+- id: cam-cap-r1-low-res-tetra
+  severity: light
+  design_conditions:
+    subscenario: STILL_SF_CAPTURE
+    extend_mode: EX_LOW_RES_TETRA
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_front
+    - npu
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+- id: cam-cap-r1-remosaic-pro
+  severity: light
+  design_conditions:
+    subscenario: STILL_REMOSAIC_PRO_SF_CAPTURE
+    extend_mode: EX_SEAMLESS_TETRA
+    is_scenario: IS_SCENARIO_PRO_VIDEO
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_front
+    - npu
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+  node_configs:
+    sensor_rear:
+      selected_mode: full_remosaic
+    mtnr:
+      selected_mode: Remosaic
+- id: cam-cap-r1-hhdr
+  severity: light
+  design_conditions:
+    subscenario: STILL_HHDR_AID_CAPTURE
+    extend_mode: EX_3DHDR
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_front
+    - npu
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+  node_configs:
+    csispdp:
+      selected_mode: VC_DT
+- id: cam-cap-r1-dcg
+  severity: light
+  design_conditions:
+    subscenario: STILL_SF_CAPTURE
+    extend_mode: EX_DCG
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_front
+    - npu
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+- id: cam-cap-r1-night
+  severity: light
+  design_conditions:
+    subscenario: NIGHT_CAPTURE
+    extend_mode: EX_NIGHT
+    super_night: true
+    isp_features: MSNR
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_front
+    - npu
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+  node_configs:
+    mtnr:
+      selected_mode: Capture_MF
+      isp_features:
+      - MSNR
+- id: cam-cap-r1-night-max
+  severity: light
+  design_conditions:
+    subscenario: NIGHT_CAPTURE
+    extend_mode: EX_NIGHT
+    super_night: max
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_front
+    - npu
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+- id: cam-cap-r1-night-remosaic
+  severity: light
+  design_conditions:
+    subscenario: REMOSAIC_NIGHT_CAPTURE
+    extend_mode: EX_SEAMLESS_TETRA
+    super_night: true
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_front
+    - npu
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+  node_configs:
+    sensor_rear:
+      selected_mode: full_remosaic
+- id: cam-cap-r1-srzoom
+  severity: light
+  design_conditions:
+    subscenario: SRZOOM_CAPTURE
+    camera_mode: dual_sync
+  routing_switch:
+    disabled_nodes:
+    - sensor_front
+    - npu
+    disabled_edges:
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+- id: cam-cap-r1-motion-free-sf
+  severity: light
+  design_conditions:
+    subscenario: STILL_MOTION_FREE_SF_CAPTURE
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_front
+    - npu
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+- id: cam-cap-r1-motion-free-mf
+  severity: light
+  design_conditions:
+    subscenario: STILL_MOTION_FREE_MF_CAPTURE
+    isp_features: MTNR,MSNR
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_front
+    - npu
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+  node_configs:
+    mtnr:
+      selected_mode: Capture_MF
+      isp_features:
+      - MTNR
+      - MSNR
+- id: cam-cap-r1-high-res-raw
+  severity: light
+  design_conditions:
+    subscenario: HIGH_RES_RAW_CAPTURE
+    extend_mode: EX_PDAF_OFF
+    output_format: RAW_BAYER_16
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_front
+    - npu
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+  buffer_overrides:
+    MCSC_WDMA_CAP_BUF:
+      format: RAW_BAYER
+      bitdepth: 16
+      compression: COMP_OFF
+    JPEG_BUF:
+      format: DNG_RAW
+      bitdepth: 16
+      compression: COMP_OFF
+- id: cam-cap-r1-expert-raw
+  severity: light
+  design_conditions:
+    subscenario: STILL_EXPERT_RAW_CAPTURE
+    extend_mode: EX_PDAF_OFF
+    output_format: RAW_BAYER_16
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_front
+    - npu
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+  buffer_overrides:
+    MCSC_WDMA_CAP_BUF:
+      format: RAW_BAYER
+      bitdepth: 16
+      compression: COMP_OFF
+- id: cam-cap-rdual
+  severity: light
+  design_conditions:
+    subscenario: STILL_SF_CAPTURE
+    dvfs_sn: IS_DVFS_SN_REAR_DUAL_CAPTURE
+    camera_mode: dual_sync
+  routing_switch:
+    disabled_nodes:
+    - sensor_front
+    - npu
+    disabled_edges:
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+- id: cam-cap-rtriple
+  severity: light
+  design_conditions:
+    subscenario: STILL_SF_CAPTURE
+    dvfs_sn: IS_DVFS_SN_TRIPLE_CAPTURE
+    camera_mode: triple
+  routing_switch:
+    disabled_nodes:
+    - sensor_front
+    - npu
+    disabled_edges:
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+- id: cam-cap-f1
+  severity: light
+  design_conditions:
+    subscenario: STILL_SF_CAPTURE
+    dvfs_sn: IS_DVFS_SN_FRONT_SINGLE_CAPTURE
+    sensor_place: front
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear
+    - sensor_rear2
+    - npu
+    disabled_edges:
+    - from: sensor_rear
+      to: csispdp
+    - from: sensor_rear2
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+- id: cam-cap-pip-dual
+  severity: light
+  design_conditions:
+    subscenario: STILL_SF_CAPTURE
+    dvfs_sn: IS_DVFS_SN_PIP_DUAL_CAPTURE
+    camera_mode: dual_async
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - npu
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr

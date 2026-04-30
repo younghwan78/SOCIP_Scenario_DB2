@@ -1,0 +1,14 @@
+id: proj-sm-s947b
+schema_version: '2.2'
+kind: project
+metadata:
+  name: Exynos2600 Thetis S26 Plus
+  soc_ref: soc-exynos2600
+  board_type: SM-S947B
+  board_name: S26 Plus
+  sensor_module_ref: ip-sensor-rear-s5e9965
+  display_module_ref: ip-display-panel-s5e9965
+  default_sw_profile_ref: sw-vendor-v1.2.3
+globals:
+  default_sw_profile_ref: sw-vendor-v1.2.3
+  tested_sw_profiles: []

@@ -19,13 +19,14 @@ from scenario_db.api.schemas.write import (
     ValidateWriteResponse,
     ValidationIssue,
 )
-from scenario_db.db.models.capability import IpCatalog, SocPlatform
+from scenario_db.db.models.capability import IpCatalog, SocPlatform, SwProfile
 from scenario_db.db.models.definition import Project, Scenario, ScenarioVariant
 from scenario_db.db.models.write import WriteBatch, WriteEvent
-from scenario_db.etl.mappers.capability import upsert_ip, upsert_soc
+from scenario_db.etl.mappers.capability import upsert_ip, upsert_soc, upsert_sw_profile
 from scenario_db.etl.mappers.definition import upsert_project, upsert_usecase
 from scenario_db.models.capability.hw import IpCatalog as PydanticIpCatalog
 from scenario_db.models.capability.hw import SocPlatform as PydanticSocPlatform
+from scenario_db.models.capability.sw import SwProfile as PydanticSwProfile
 from scenario_db.models.definition.project import Project as PydanticProject
 from scenario_db.models.definition.usecase import Usecase as PydanticUsecase
 
@@ -72,22 +73,25 @@ PATCH_LIST_FIELDS = {
     "remove_buffers",
 }
 ALLOWED_BASE_EDGE_TYPES = {"OTF", "vOTF", "M2M"}
-IMPORT_KIND_ORDER = ["soc", "ip", "project", "scenario.usecase"]
+IMPORT_KIND_ORDER = ["soc", "ip", "sw_profile", "project", "scenario.usecase"]
 IMPORT_MODEL_BY_KIND = {
     "soc": PydanticSocPlatform,
     "ip": PydanticIpCatalog,
+    "sw_profile": PydanticSwProfile,
     "project": PydanticProject,
     "scenario.usecase": PydanticUsecase,
 }
 IMPORT_UPSERT_BY_KIND = {
     "soc": upsert_soc,
     "ip": upsert_ip,
+    "sw_profile": upsert_sw_profile,
     "project": upsert_project,
     "scenario.usecase": upsert_usecase,
 }
 IMPORT_DB_MODEL_BY_KIND = {
     "soc": SocPlatform,
     "ip": IpCatalog,
+    "sw_profile": SwProfile,
     "project": Project,
     "scenario.usecase": Scenario,
 }
@@ -914,6 +918,18 @@ def _existing_row_to_import_doc(db: Session, kind: str, row: Any) -> dict[str, A
                 "capabilities": row.capabilities,
                 "rtl_version": row.rtl_version,
                 "compatible_soc": row.compatible_soc or [],
+            }
+        )
+    if kind == "sw_profile":
+        return _compact_doc(
+            {
+                "id": row.id,
+                "schema_version": row.schema_version,
+                "kind": "sw_profile",
+                "metadata": row.metadata_ or {},
+                "components": row.components or {},
+                "feature_flags": row.feature_flags or {},
+                "compatibility": row.compatibility,
             }
         )
     if kind == "project":

@@ -1,0 +1,74 @@
+id: ip-dpu-s5e9965
+schema_version: '2.2'
+kind: ip
+category: display
+hierarchy:
+  type: simple
+capabilities:
+  operating_modes:
+  - id: Normal
+  - id: LowPower
+  - id: VRR
+  supported_features:
+    bitdepth:
+    - 8
+    - 10
+    hdr_formats:
+    - SDR
+    - HDR10
+    - HDR10_PLUS
+    - HLG
+    compression:
+    - COMP_OFF
+    - COMP_SBWC_LOSSLESS
+    - COMP_SBWC_LOSSY
+  properties:
+    ip_group: DPU
+    hierarchy_group: Display
+    subblocks:
+    - DECON
+    - DPP
+    - DSIM
+    hdr_bitmask:
+      HDR_DOLBY_VISION: 1
+      HDR_HDR10: 4
+      HDR_HLG: 8
+      HDR_HDR10_PLUS: 16
+    vrr:
+      bts_fps_field: bts_fps
+      esync_hz_field: esync_hz
+      min_frame_interval_hz_field: min_frame_interval_hz
+    sbwc_consumer: true
+    secure_layer: true
+    composition:
+      max_hw_layers: 12
+      dpp_planes: 12
+      supported_input_formats:
+      - RGBA8888
+      - BGRA8888
+      - RGB565
+      - NV12
+      - NV21
+      - NV16
+      - RGBA1010102
+      - NV12_10BIT
+      - YUV420_SBWC
+      - YUV420_SBWCL
+      fallback:
+        gpu:
+          trigger:
+          - dpu_layer_count > 12
+          - layer format not in supported_input_formats
+          - blend mode not supported by DPP (e.g. multiply, overlay)
+          - rotation other than 0/90/180/270
+          composer: SurfaceFlinger RenderThread (OpenGL ES / Vulkan)
+          output_format: RGBA8888
+        m2m_scaler:
+          trigger:
+          - input scaling ratio outside DPP limits
+          - YUV422 / YUV444 format conversion required before DPU
+          - pre-compositing required to reduce layer count
+          composer: G2D or MCSC M2M path
+          output_format: RGBA8888
+compatible_soc:
+- soc-exynos2600

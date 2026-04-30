@@ -1,0 +1,33 @@
+id: soc-exynos2600
+schema_version: '2.2'
+kind: soc
+process_node: 3nm
+memory_type: LPDDR5X
+bus_protocol: AMBA/AXI
+ips:
+- ref: ip-sensor-rear-s5e9965
+  instance_count: 1
+- ref: ip-sensor-front-s5e9965
+  instance_count: 1
+- ref: ip-csis-s5e9965
+  instance_count: 1
+- ref: ip-isp-s5e9965
+  instance_count: 1
+- ref: ip-lme-s5e9965
+  instance_count: 1
+- ref: ip-mcsc-s5e9965
+  instance_count: 1
+- ref: ip-mfc-s5e9965
+  instance_count: 1
+- ref: ip-apv-s5e9965
+  instance_count: 1
+- ref: ip-dpu-s5e9965
+  instance_count: 1
+- ref: ip-npu-s5e9965
+  instance_count: 1
+- ref: ip-gpu-s5e9965
+  instance_count: 1
+- ref: ip-cpu-s5e9965
+  instance_count: 1
+- ref: ip-display-panel-s5e9965
+  instance_count: 1

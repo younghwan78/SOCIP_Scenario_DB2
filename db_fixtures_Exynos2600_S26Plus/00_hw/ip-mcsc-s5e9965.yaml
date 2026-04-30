@@ -1,0 +1,53 @@
+id: ip-mcsc-s5e9965
+schema_version: '2.2'
+kind: ip
+category: camera
+hierarchy:
+  type: simple
+capabilities:
+  operating_modes:
+  - id: Normal
+  - id: SBWC
+  - id: HDR10P
+  supported_features:
+    bitdepth:
+    - 8
+    - 10
+    compression:
+    - COMP_OFF
+    - COMP_LOSSLESS
+    - COMP_LOSSY
+    crop: true
+    scale: true
+  properties:
+    ip_group: MCSC
+    hierarchy_group: ISP
+    max_size:
+    - 7680
+    - 4320
+    outputs:
+    - port: OUTPUT0
+      name: P0
+      role: preview
+      mcsc_index: 0
+    - port: OUTPUT1
+      name: P1
+      role: recording
+      mcsc_index: 1
+    - port: OUTPUT2
+      name: P2
+      role: capture
+      mcsc_index: 2
+    - port: OUTPUT3
+      name: P3
+      role: thumbnail
+      mcsc_index: 3
+    - port: HDR10P
+      name: HDR10Plus
+      role: hdr_metadata
+    sbwc_types:
+      COMP_OFF: 0
+      COMP_LOSSLESS: 1
+      COMP_LOSSY: 2
+compatible_soc:
+- soc-exynos2600

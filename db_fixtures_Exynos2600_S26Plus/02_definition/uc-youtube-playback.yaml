@@ -1,0 +1,481 @@
+id: uc-youtube-playback
+schema_version: '2.2'
+kind: scenario.usecase
+project_ref: proj-sm-s947b
+metadata:
+  name: YouTube Playback
+  category:
+  - video_playback
+  - video
+  domain:
+  - video_playback
+pipeline:
+  nodes:
+  - id: network
+    ip_ref: ip-cpu-s5e9965
+    role: source
+    instance_index: 0
+  - id: sw_demux
+    ip_ref: ip-cpu-s5e9965
+    role: demux
+    instance_index: 0
+  - id: mfc_dec
+    ip_ref: ip-mfc-s5e9965
+    role: decoder
+    instance_index: 0
+  - id: gpu
+    ip_ref: ip-gpu-s5e9965
+    role: composer
+    instance_index: 0
+  - id: m2m_scaler
+    ip_ref: ip-cpu-s5e9965
+    role: m2m_scaler
+    instance_index: 0
+  - id: dpu
+    ip_ref: ip-dpu-s5e9965
+    role: display_controller
+    instance_index: 0
+  - id: panel
+    ip_ref: ip-display-panel-s5e9965
+    role: display_output
+    instance_index: 0
+  edges:
+  - from: network
+    to: sw_demux
+    type: M2M
+  - from: sw_demux
+    to: mfc_dec
+    type: M2M
+    buffer: NET_ES_BUF
+  - from: mfc_dec
+    to: dpu
+    type: M2M
+    buffer: MFC_DPU_BUF
+  - from: mfc_dec
+    to: gpu
+    type: M2M
+    buffer: MFC_GPU_BUF
+  - from: gpu
+    to: dpu
+    type: M2M
+    buffer: GPU_DPU_BUF
+  - from: mfc_dec
+    to: m2m_scaler
+    type: M2M
+    buffer: MFC_M2M_BUF
+  - from: m2m_scaler
+    to: dpu
+    type: M2M
+    buffer: M2M_DPU_BUF
+  - from: dpu
+    to: panel
+    type: OTF
+  buffers:
+    NET_ES_BUF:
+      format: BITSTREAM
+      compression: COMP_OFF
+    MFC_DPU_BUF:
+      format: YUV420
+      bitdepth: 8
+      compression: COMP_OFF
+    MFC_GPU_BUF:
+      format: YUV420
+      bitdepth: 8
+      compression: COMP_OFF
+    GPU_DPU_BUF:
+      format: RGBA8888
+      bitdepth: 8
+      compression: COMP_OFF
+    MFC_M2M_BUF:
+      format: YUV420
+      bitdepth: 8
+      compression: COMP_OFF
+    M2M_DPU_BUF:
+      format: RGBA8888
+      bitdepth: 8
+      compression: COMP_OFF
+variants:
+- id: yt-1080p30-h264-sdr
+  severity: light
+  design_conditions:
+    codec_mfc: H264_DEC
+    resolution: FHD
+    fps: 30
+    hdr: SDR
+    dpu_layer_count: 4
+    dpu_composer: DPU_DIRECT
+  routing_switch:
+    disabled_nodes:
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: mfc_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: Normal
+      codec: H264_DEC
+- id: yt-1080p60-h264-sdr
+  severity: medium
+  design_conditions:
+    codec_mfc: H264_DEC
+    resolution: FHD
+    fps: 60
+    hdr: SDR
+    dpu_layer_count: 4
+    dpu_composer: DPU_DIRECT
+  routing_switch:
+    disabled_nodes:
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: mfc_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: Normal
+      codec: H264_DEC
+- id: yt-1080p30-vp9-sdr
+  severity: light
+  design_conditions:
+    codec_mfc: VP9_DEC
+    resolution: FHD
+    fps: 30
+    hdr: SDR
+    dpu_layer_count: 4
+    dpu_composer: DPU_DIRECT
+  routing_switch:
+    disabled_nodes:
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: mfc_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: Normal
+      codec: VP9_DEC
+- id: yt-1080p60-vp9-hdr10
+  severity: medium
+  design_conditions:
+    codec_mfc: VP9_DEC
+    resolution: FHD
+    fps: 60
+    hdr: HDR10
+    hdr_dpu: HDR_HDR10
+    bit_depth: 10
+    dpu_layer_count: 4
+    dpu_composer: DPU_DIRECT
+  routing_switch:
+    disabled_nodes:
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: mfc_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: Normal
+      codec: VP9_DEC
+  buffer_overrides:
+    MFC_DPU_BUF:
+      format: YUV420_10BIT
+      bitdepth: 10
+      compression: COMP_OFF
+- id: yt-4k30-vp9-hdr10
+  severity: heavy
+  design_conditions:
+    codec_mfc: VP9_DEC
+    resolution: UHD
+    fps: 30
+    hdr: HDR10
+    hdr_dpu: HDR_HDR10
+    bit_depth: 10
+    dpu_layer_count: 4
+    dpu_composer: DPU_DIRECT
+  routing_switch:
+    disabled_nodes:
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: mfc_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: Normal
+      codec: VP9_DEC
+  buffer_overrides:
+    MFC_DPU_BUF:
+      format: YUV420_10BIT
+      bitdepth: 10
+      compression: COMP_OFF
+- id: yt-4k60-vp9-hdr10
+  severity: heavy
+  design_conditions:
+    codec_mfc: VP9_DEC
+    resolution: UHD
+    fps: 60
+    hdr: HDR10
+    hdr_dpu: HDR_HDR10
+    bit_depth: 10
+    dpu_layer_count: 4
+    dpu_composer: DPU_DIRECT
+  routing_switch:
+    disabled_nodes:
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: mfc_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: Normal
+      codec: VP9_DEC
+  buffer_overrides:
+    MFC_DPU_BUF:
+      format: YUV420_10BIT
+      bitdepth: 10
+      compression: COMP_OFF
+- id: yt-1080p30-av1-sdr
+  severity: light
+  design_conditions:
+    codec_mfc: AV1_DEC
+    resolution: FHD
+    fps: 30
+    hdr: SDR
+    dpu_layer_count: 4
+    dpu_composer: DPU_DIRECT
+  routing_switch:
+    disabled_nodes:
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: mfc_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: Normal
+      codec: AV1_DEC
+- id: yt-4k30-av1-sdr
+  severity: heavy
+  design_conditions:
+    codec_mfc: AV1_DEC
+    resolution: UHD
+    fps: 30
+    hdr: SDR
+    dpu_layer_count: 4
+    dpu_composer: DPU_DIRECT
+  routing_switch:
+    disabled_nodes:
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: mfc_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: Normal
+      codec: AV1_DEC
+- id: yt-4k30-av1-hdr10
+  severity: heavy
+  design_conditions:
+    codec_mfc: AV1_DEC
+    resolution: UHD
+    fps: 30
+    hdr: HDR10
+    hdr_dpu: HDR_HDR10
+    bit_depth: 10
+    dpu_layer_count: 4
+    dpu_composer: DPU_DIRECT
+  routing_switch:
+    disabled_nodes:
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: mfc_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: Normal
+      codec: AV1_DEC
+  buffer_overrides:
+    MFC_DPU_BUF:
+      format: YUV420_10BIT
+      bitdepth: 10
+      compression: COMP_OFF
+- id: yt-4k60-av1-hdr10
+  severity: heavy
+  design_conditions:
+    codec_mfc: AV1_DEC
+    resolution: UHD
+    fps: 60
+    hdr: HDR10
+    hdr_dpu: HDR_HDR10
+    bit_depth: 10
+    dpu_layer_count: 4
+    dpu_composer: DPU_DIRECT
+  routing_switch:
+    disabled_nodes:
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: mfc_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: Normal
+      codec: AV1_DEC
+  buffer_overrides:
+    MFC_DPU_BUF:
+      format: YUV420_10BIT
+      bitdepth: 10
+      compression: COMP_OFF
+- id: yt-1080p-audio-bg
+  severity: light
+  design_conditions:
+    codec_mfc: H264_DEC
+    resolution: FHD
+    fps: 30
+    screen_on: false
+    audio: true
+    note: 화면 꺼진 YouTube 백그라운드 재생
+  routing_switch:
+    disabled_nodes:
+    - dpu
+    - panel
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: mfc_dec
+      to: dpu
+    - from: dpu
+      to: panel
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: mfc_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: LowPower
+      codec: H264_DEC
+- id: yt-1080p30-av1-gpu-overlay
+  severity: light
+  design_conditions:
+    codec_mfc: AV1_DEC
+    resolution: FHD
+    fps: 30
+    hdr: SDR
+    dpu_layer_count: 14
+    dpu_composer: GPU_FALLBACK
+    note: 영상+광고 배너+댓글 패널+시스템UI 레이어 합산 >12 → GPU fallback
+  routing_switch:
+    disabled_nodes:
+    - m2m_scaler
+    disabled_edges:
+    - from: mfc_dec
+      to: dpu
+    - from: mfc_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: Normal
+      codec: AV1_DEC
+- id: yt-4k30-av1-m2m-scale
+  severity: heavy
+  design_conditions:
+    codec_mfc: AV1_DEC
+    resolution: UHD
+    fps: 30
+    hdr: SDR
+    dpu_layer_count: 4
+    dpu_composer: M2M_SCALER_FALLBACK
+    note: 4K 디코드 → M2M 스케일러 → 패널 해상도(3088×1440) 맞춤 후 DPU
+  routing_switch:
+    disabled_nodes:
+    - gpu
+    disabled_edges:
+    - from: mfc_dec
+      to: dpu
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: Normal
+      codec: AV1_DEC
+  buffer_overrides:
+    MFC_M2M_BUF:
+      format: YUV420
+      bitdepth: 8
+      compression: COMP_OFF
+    M2M_DPU_BUF:
+      format: RGBA8888
+      bitdepth: 8
+      compression: COMP_OFF

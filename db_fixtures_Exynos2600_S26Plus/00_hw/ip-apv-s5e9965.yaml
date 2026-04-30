@@ -1,0 +1,55 @@
+id: ip-apv-s5e9965
+schema_version: '2.2'
+kind: ip
+category: codec
+hierarchy:
+  type: simple
+capabilities:
+  operating_modes:
+  - id: Normal
+  - id: HighQuality
+  supported_features:
+    bitdepth:
+    - 10
+    - 12
+    hdr_formats:
+    - SDR
+    - HDR10
+    - HDR10_PLUS
+  properties:
+    ip_group: APV
+    hierarchy_group: Codec
+    description: Samsung Advanced Professional Video codec — pro video capture
+    chroma_formats:
+      '4:2:2':
+        chroma_format_idc: 1
+      '4:4:4':
+        chroma_format_idc: 2
+    band_idc:
+      default:
+        band_idc: 0
+        description: standard quality
+      high_quality:
+        band_idc: 1
+        description: high quality, higher bitrate
+    enc_profiles:
+      0:
+        name: APV_PROFILE_422_10
+        chroma: '4:2:2'
+        bitdepth: 10
+      1:
+        name: APV_PROFILE_444_10
+        chroma: '4:4:4'
+        bitdepth: 10
+      2:
+        name: APV_PROFILE_422_12
+        chroma: '4:2:2'
+        bitdepth: 12
+    v4l2_controls:
+    - V4L2_CID_MPEG_VIDEO_APV_PROFILE
+    - V4L2_CID_MPEG_VIDEO_APV_LEVEL
+    - V4L2_CID_MPEG_VIDEO_APV_BAND
+    - V4L2_CID_MPEG_VIDEO_APV_TILE_WIDTH
+    - V4L2_CID_MPEG_VIDEO_APV_TILE_HEIGHT
+compatible_soc:
+- soc-exynos2600

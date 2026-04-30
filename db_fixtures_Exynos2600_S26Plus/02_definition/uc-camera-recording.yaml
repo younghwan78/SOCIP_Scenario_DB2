@@ -1,0 +1,2439 @@
+id: uc-camera-recording
+schema_version: '2.2'
+kind: scenario.usecase
+project_ref: proj-sm-s947b
+metadata:
+  name: Camera Recording
+  category:
+  - camera
+  domain:
+  - camera
+pipeline:
+  nodes:
+  - id: sensor_rear
+    ip_ref: ip-sensor-rear-s5e9965
+    role: sensor
+    instance_index: 0
+  - id: sensor_rear2
+    ip_ref: ip-sensor-rear-s5e9965
+    role: sensor
+    instance_index: 0
+  - id: sensor_rear3
+    ip_ref: ip-sensor-rear-s5e9965
+    role: sensor
+    instance_index: 0
+  - id: sensor_front
+    ip_ref: ip-sensor-front-s5e9965
+    role: sensor
+    instance_index: 0
+  - id: csispdp
+    ip_ref: ip-isp-s5e9965
+    role: csispdp
+    instance_index: 0
+  - id: n3aa
+    ip_ref: ip-isp-s5e9965
+    role: stats_3aa
+    instance_index: 0
+  - id: byrp
+    ip_ref: ip-isp-s5e9965
+    role: bayer_processing
+    instance_index: 0
+  - id: rgbp
+    ip_ref: ip-isp-s5e9965
+    role: rgb_processing
+    instance_index: 0
+  - id: yuvsc
+    ip_ref: ip-isp-s5e9965
+    role: yuv_scaler
+    instance_index: 0
+  - id: mtnr
+    ip_ref: ip-isp-s5e9965
+    role: temporal_nr
+    instance_index: 0
+  - id: msnr
+    ip_ref: ip-isp-s5e9965
+    role: spatial_nr
+    instance_index: 0
+  - id: yuvp
+    ip_ref: ip-isp-s5e9965
+    role: yuv_post
+    instance_index: 0
+  - id: mcsc
+    ip_ref: ip-mcsc-s5e9965
+    role: mcsc
+    instance_index: 0
+  - id: lme
+    ip_ref: ip-lme-s5e9965
+    role: lme
+    instance_index: 0
+  - id: npu
+    ip_ref: ip-npu-s5e9965
+    role: npu
+    instance_index: 0
+  - id: eis
+    ip_ref: ip-cpu-s5e9965
+    role: sw_task
+    instance_index: 0
+  - id: gdc_m
+    ip_ref: ip-isp-s5e9965
+    role: gdc_preview
+    instance_index: 0
+  - id: gdc_o
+    ip_ref: ip-isp-s5e9965
+    role: gdc_video
+    instance_index: 0
+  - id: mfc_enc
+    ip_ref: ip-mfc-s5e9965
+    role: encoder
+    instance_index: 0
+  - id: dpu
+    ip_ref: ip-dpu-s5e9965
+    role: display_controller
+    instance_index: 0
+  - id: panel
+    ip_ref: ip-display-panel-s5e9965
+    role: display_output
+    instance_index: 0
+  edges:
+  - from: sensor_rear
+    to: csispdp
+    type: OTF
+  - from: sensor_rear2
+    to: csispdp
+    type: OTF
+  - from: sensor_rear3
+    to: csispdp
+    type: OTF
+  - from: sensor_front
+    to: csispdp
+    type: OTF
+  - from: csispdp
+    to: byrp
+    type: OTF
+  - from: byrp
+    to: rgbp
+    type: OTF
+  - from: rgbp
+    to: yuvsc
+    type: OTF
+  - from: yuvsc
+    to: mtnr
+    type: M2M
+    buffer: YUVSC_MTNR_BUF
+  - from: mtnr
+    to: msnr
+    type: OTF
+  - from: msnr
+    to: yuvp
+    type: OTF
+  - from: yuvp
+    to: mcsc
+    type: OTF
+  - from: csispdp
+    to: n3aa
+    type: M2M
+    buffer: CSISPDP_3AA_BUF
+  - from: lme
+    to: mtnr
+    type: M2M
+    buffer: LME_MTNR_BUF
+  - from: csispdp
+    to: npu
+    type: M2M
+    buffer: CSISPDP_NPU_BUF
+  - from: npu
+    to: mtnr
+    type: M2M
+    buffer: NPU_MTNR_BUF
+  - from: mcsc
+    to: gdc_m
+    type: M2M
+    buffer: MCSC_WDMA_PREV_BUF
+  - from: mcsc
+    to: eis
+    type: M2M
+    buffer: MCSC_WDMA_EIS_BUF
+  - from: eis
+    to: gdc_m
+    type: M2M
+    buffer: EIS_GDC_M_BUF
+  - from: mcsc
+    to: gdc_o
+    type: M2M
+    buffer: MCSC_WDMA_VIDEO_BUF
+  - from: eis
+    to: gdc_o
+    type: M2M
+    buffer: EIS_GDC_O_BUF
+  - from: gdc_m
+    to: dpu
+    type: M2M
+    buffer: GDC_M_DPU_BUF
+  - from: gdc_o
+    to: mfc_enc
+    type: M2M
+    buffer: GDC_O_MFC_BUF
+  - from: dpu
+    to: panel
+    type: OTF
+  buffers:
+    CSISPDP_3AA_BUF:
+      format: RAW_BAYER_16
+      bitdepth: 12
+      compression: COMP_BAYER_LOSSLESS
+    YUVSC_MTNR_BUF:
+      format: YUV422
+      bitdepth: 10
+      compression: COMP_OFF
+    LME_MTNR_BUF:
+      format: MV
+      compression: COMP_OFF
+    CSISPDP_NPU_BUF:
+      format: RAW_BAYER_16
+      bitdepth: 10
+      compression: COMP_BAYER_LOSSY
+    NPU_MTNR_BUF:
+      format: YUV422
+      bitdepth: 10
+      compression: COMP_OFF
+    MCSC_WDMA_PREV_BUF:
+      format: YUV420
+      bitdepth: 8
+      compression: COMP_OFF
+    MCSC_WDMA_VIDEO_BUF:
+      format: YUV420
+      bitdepth: 8
+      compression: COMP_OFF
+    MCSC_WDMA_EIS_BUF:
+      format: YUV420
+      bitdepth: 8
+      compression: COMP_OFF
+    EIS_GDC_M_BUF:
+      format: YUV420
+      bitdepth: 8
+      compression: COMP_OFF
+    EIS_GDC_O_BUF:
+      format: YUV420
+      bitdepth: 8
+      compression: COMP_OFF
+    GDC_M_DPU_BUF:
+      format: YUV420
+      bitdepth: 8
+      compression: COMP_SBWC_LOSSLESS
+    GDC_O_MFC_BUF:
+      format: YUV420
+      bitdepth: 8
+      compression: COMP_SBWC_LOSSLESS
+variants:
+- id: cam-rec-r1-fhd30-sdr
+  severity: light
+  design_conditions:
+    subscenario: FHD_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_FHD30
+    sensor_place: rear
+    resolution: FHD
+    fps: 30
+    hdr: SDR
+    stabilization: false
+    codec_mfc: HEVC_ENC
+    audio: true
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+  node_configs:
+    mfc_enc:
+      selected_mode: Normal
+      codec: HEVC_ENC
+- id: cam-rec-r1-fhd30-ois
+  severity: light
+  design_conditions:
+    subscenario: FHD_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_FHD30
+    sensor_place: rear
+    resolution: FHD
+    fps: 30
+    hdr: SDR
+    stabilization: OIS
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+- id: cam-rec-r1-fhd30-vdis
+  severity: light
+  design_conditions:
+    subscenario: FHD_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_FHD30
+    sensor_place: rear
+    resolution: FHD
+    fps: 30
+    is_scenario: IS_SCENARIO_SWVDIS
+    stabilization: SWVDIS
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - npu
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: gdc_m
+    - from: mcsc
+      to: gdc_o
+- id: cam-rec-r1-fhd30-supersteady
+  severity: light
+  design_conditions:
+    subscenario: SUPER_STEADY_FHD_30FPS_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_FHD30_SUPERSTEADY
+    sensor_place: rear
+    resolution: FHD
+    fps: 30
+    stabilization: SuperSteady
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+  node_configs:
+    lme:
+      selected_mode: SuperSteady
+- id: cam-rec-r1-fhd30-recursive
+  severity: light
+  design_conditions:
+    subscenario: FHD_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_FHD30_RECURSIVE
+    sensor_place: rear
+    resolution: FHD
+    fps: 30
+    note: preview→recording 전환 직후 DVFS tick 유예 구간
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+- id: cam-rec-r1-fhd30-hdr10
+  severity: medium
+  design_conditions:
+    subscenario: HDR10_FHD_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_FHD30
+    sensor_place: rear
+    resolution: FHD
+    fps: 30
+    hdr: HDR10
+    stabilization: false
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+  buffer_overrides:
+    GDC_O_MFC_BUF:
+      format: YUV420_10BIT
+      bitdepth: 10
+      compression: COMP_OFF
+- id: cam-rec-r1-fhd30-hdr10-supersteady
+  severity: medium
+  design_conditions:
+    subscenario: SUPER_STEADY_HDR10_FHD_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_FHD30_SUPERSTEADY
+    sensor_place: rear
+    resolution: FHD
+    fps: 30
+    hdr: HDR10
+    stabilization: SuperSteady
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+  node_configs:
+    lme:
+      selected_mode: SuperSteady
+  buffer_overrides:
+    GDC_O_MFC_BUF:
+      format: YUV420_10BIT
+      bitdepth: 10
+      compression: COMP_OFF
+- id: cam-rec-r1-fhd60-sdr
+  severity: medium
+  design_conditions:
+    subscenario: FHD_60FPS_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_FHD60
+    sensor_place: rear
+    resolution: FHD
+    fps: 60
+    hdr: SDR
+    codec_mfc: HEVC_ENC
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+  node_configs:
+    mfc_enc:
+      selected_mode: Normal
+      codec: HEVC_ENC
+- id: cam-rec-r1-fhd60-supersteady
+  severity: medium
+  design_conditions:
+    subscenario: FHD_60FPS_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_FHD60_SUPERSTEADY
+    sensor_place: rear
+    resolution: FHD
+    fps: 60
+    stabilization: SuperSteady
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+  node_configs:
+    lme:
+      selected_mode: SuperSteady
+- id: cam-rec-r1-fhd60-hdr10
+  severity: medium
+  design_conditions:
+    subscenario: HDR10_FHD_60FPS_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_FHD60
+    sensor_place: rear
+    resolution: FHD
+    fps: 60
+    hdr: HDR10
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+  buffer_overrides:
+    GDC_O_MFC_BUF:
+      format: YUV420_10BIT
+      bitdepth: 10
+      compression: COMP_OFF
+- id: cam-rec-r1-fhd120
+  severity: heavy
+  design_conditions:
+    subscenario: HIGH_SPEED_FHD_120_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_FHD120
+    sensor_place: rear
+    resolution: FHD
+    fps: 120
+    sensor_mode: high_speed
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+  node_configs:
+    sensor_rear:
+      selected_mode: high_speed
+    mtnr:
+      selected_mode: HighSpeed
+- id: cam-rec-r1-fhd240
+  severity: critical
+  design_conditions:
+    subscenario: HIGH_SPEED_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_FHD240
+    sensor_place: rear
+    resolution: FHD
+    fps: 240
+    sensor_mode: high_speed
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+  node_configs:
+    sensor_rear:
+      selected_mode: high_speed
+    mtnr:
+      selected_mode: HighSpeed
+- id: cam-rec-r1-fhd480
+  severity: critical
+  design_conditions:
+    subscenario: HIGH_SPEED_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_FHD480
+    sensor_place: rear
+    resolution: FHD
+    fps: 480
+    extend_mode: EX_DUALFPS_480
+    sensor_mode: high_speed
+    dpu_layer_count: 1
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+  node_configs:
+    sensor_rear:
+      selected_mode: high_speed
+    mtnr:
+      selected_mode: HighSpeed
+- id: cam-rec-r1-fhd960-ssm
+  severity: critical
+  design_conditions:
+    subscenario: HIGH_SPEED_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_SSM
+    sensor_place: rear
+    resolution: FHD
+    fps: 960
+    extend_mode: EX_DUALFPS_960
+    is_scenario: IS_SCENARIO_HIGH_SPEED_DUALFPS
+    dpu_layer_count: 1
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+  node_configs:
+    sensor_rear:
+      selected_mode: high_speed
+    mtnr:
+      selected_mode: HighSpeed
+- id: cam-rec-r1-qhd30-supersteady
+  severity: light
+  design_conditions:
+    subscenario: SUPER_STEADY_QHD_30FPS_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_FHD30_SUPERSTEADY
+    sensor_place: rear
+    resolution: QHD
+    fps: 30
+    stabilization: SuperSteady
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+  node_configs:
+    lme:
+      selected_mode: SuperSteady
+- id: cam-rec-r1-qhd30-hdr10-supersteady
+  severity: medium
+  design_conditions:
+    subscenario: SUPER_STEADY_HDR10_QHD_VIDEO
+    sensor_place: rear
+    resolution: QHD
+    fps: 30
+    hdr: HDR10
+    stabilization: SuperSteady
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+  node_configs:
+    lme:
+      selected_mode: SuperSteady
+  buffer_overrides:
+    GDC_O_MFC_BUF:
+      format: YUV420_10BIT
+      bitdepth: 10
+      compression: COMP_OFF
+- id: cam-rec-r1-uhd30-sdr
+  severity: heavy
+  design_conditions:
+    subscenario: UHD_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_UHD30
+    sensor_place: rear
+    resolution: UHD
+    fps: 30
+    hdr: SDR
+    codec_mfc: HEVC_ENC
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+  node_configs:
+    mfc_enc:
+      selected_mode: Normal
+      codec: HEVC_ENC
+- id: cam-rec-r1-uhd30-supersteady
+  severity: heavy
+  design_conditions:
+    subscenario: UHD_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_UHD30_SUPERSTEADY
+    sensor_place: rear
+    resolution: UHD
+    fps: 30
+    stabilization: SuperSteady
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+  node_configs:
+    lme:
+      selected_mode: SuperSteady
+- id: cam-rec-r1-uhd30-vdis
+  severity: heavy
+  design_conditions:
+    subscenario: UHD_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_UHD30
+    sensor_place: rear
+    resolution: UHD
+    fps: 30
+    is_scenario: IS_SCENARIO_SWVDIS
+    stabilization: SWVDIS
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - npu
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: gdc_m
+    - from: mcsc
+      to: gdc_o
+- id: cam-rec-r1-uhd30-recursive
+  severity: heavy
+  design_conditions:
+    subscenario: UHD_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_UHD30_RECURSIVE
+    sensor_place: rear
+    resolution: UHD
+    fps: 30
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+- id: cam-rec-r1-uhd30-hdr10
+  severity: heavy
+  design_conditions:
+    subscenario: HDR10_UHD_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_UHD30
+    sensor_place: rear
+    resolution: UHD
+    fps: 30
+    hdr: HDR10
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+  buffer_overrides:
+    GDC_O_MFC_BUF:
+      format: YUV420_10BIT
+      bitdepth: 10
+      compression: COMP_OFF
+- id: cam-rec-r1-uhd60-sdr
+  severity: heavy
+  design_conditions:
+    subscenario: UHD_60FPS_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_UHD60
+    sensor_place: rear
+    resolution: UHD
+    fps: 60
+    hdr: SDR
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+- id: cam-rec-r1-uhd60-supersteady
+  severity: heavy
+  design_conditions:
+    subscenario: UHD_60FPS_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_UHD60_SUPERSTEADY
+    sensor_place: rear
+    resolution: UHD
+    fps: 60
+    stabilization: SuperSteady
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+  node_configs:
+    lme:
+      selected_mode: SuperSteady
+- id: cam-rec-r1-uhd60-psm
+  severity: heavy
+  design_conditions:
+    subscenario: UHD_60FPS_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_UHD60_PSM
+    sensor_place: rear
+    resolution: UHD
+    fps: 60
+    power_saving_mode: true
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+  node_configs:
+    mfc_enc:
+      selected_mode: LowPower
+- id: cam-rec-r1-uhd60-hdr10
+  severity: heavy
+  design_conditions:
+    subscenario: HDR10_UHD_60FPS_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_UHD60
+    sensor_place: rear
+    resolution: UHD
+    fps: 60
+    hdr: HDR10
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+  buffer_overrides:
+    GDC_O_MFC_BUF:
+      format: YUV420_10BIT
+      bitdepth: 10
+      compression: COMP_OFF
+- id: cam-rec-r1-uhd120
+  severity: heavy
+  design_conditions:
+    subscenario: HIGH_SPEED_UHD_120_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_UHD120
+    sensor_place: rear
+    resolution: UHD
+    fps: 120
+    sensor_mode: high_speed
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+  node_configs:
+    sensor_rear:
+      selected_mode: high_speed
+    mtnr:
+      selected_mode: HighSpeed
+- id: cam-rec-r1-8k24-sdr
+  severity: critical
+  design_conditions:
+    subscenario: 8K_30FPS_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_8K24
+    sensor_place: rear
+    resolution: 8K
+    fps: 24
+    hdr: SDR
+    codec_mfc: HEVC_ENC
+    dpu_layer_count: 2
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+  node_configs:
+    mfc_enc:
+      selected_mode: Normal
+      codec: HEVC_ENC
+- id: cam-rec-r1-8k24-hf
+  severity: critical
+  design_conditions:
+    subscenario: 8K_30FPS_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_8K24_HF
+    sensor_place: rear
+    resolution: 8K
+    fps: 24
+    isp_features: HF
+    dpu_layer_count: 2
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+  node_configs:
+    yuvp:
+      selected_mode: Recording
+      isp_features:
+      - HF
+- id: cam-rec-r1-8k24-psm
+  severity: critical
+  design_conditions:
+    subscenario: 8K_30FPS_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_8K24_PSM
+    sensor_place: rear
+    resolution: 8K
+    fps: 24
+    power_saving_mode: true
+    dpu_layer_count: 2
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+  node_configs:
+    mfc_enc:
+      selected_mode: LowPower
+- id: cam-rec-r1-8k30-sdr
+  severity: critical
+  design_conditions:
+    subscenario: 8K_30FPS_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_8K30
+    sensor_place: rear
+    resolution: 8K
+    fps: 30
+    hdr: SDR
+    dpu_layer_count: 2
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+- id: cam-rec-r1-8k30-hf
+  severity: critical
+  design_conditions:
+    subscenario: 8K_30FPS_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_8K30_HF
+    sensor_place: rear
+    resolution: 8K
+    fps: 30
+    isp_features: HF
+    dpu_layer_count: 2
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+  node_configs:
+    yuvp:
+      selected_mode: Recording
+      isp_features:
+      - HF
+- id: cam-rec-r1-8k30-psm
+  severity: critical
+  design_conditions:
+    subscenario: 8K_30FPS_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_8K30_PSM
+    sensor_place: rear
+    resolution: 8K
+    fps: 30
+    power_saving_mode: true
+    dpu_layer_count: 2
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+  node_configs:
+    mfc_enc:
+      selected_mode: LowPower
+- id: cam-rec-rcv-fhd30-sdr
+  severity: light
+  design_conditions:
+    subscenario: RCV_FHD_VIDEO
+    sensor_place: rear_and_front
+    resolution: FHD
+    fps: 30
+    hdr: SDR
+    camera_mode: dual_async
+    dpu_layer_count: 4
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+- id: cam-rec-rcv-uhd30-sdr
+  severity: heavy
+  design_conditions:
+    subscenario: RCV_UHD_VIDEO
+    sensor_place: rear_and_front
+    resolution: UHD
+    fps: 30
+    hdr: SDR
+    camera_mode: dual_async
+    dpu_layer_count: 4
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+- id: cam-rec-rcv-fhd30-hdr10
+  severity: medium
+  design_conditions:
+    subscenario: HDR10_RCV_FHD_VIDEO
+    sensor_place: rear_and_front
+    resolution: FHD
+    fps: 30
+    hdr: HDR10
+    dpu_layer_count: 4
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+  buffer_overrides:
+    GDC_O_MFC_BUF:
+      format: YUV420_10BIT
+      bitdepth: 10
+      compression: COMP_OFF
+- id: cam-rec-rcv-uhd30-hdr10
+  severity: heavy
+  design_conditions:
+    subscenario: HDR10_RCV_UHD_VIDEO
+    sensor_place: rear_and_front
+    resolution: UHD
+    fps: 30
+    hdr: HDR10
+    dpu_layer_count: 4
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+  buffer_overrides:
+    GDC_O_MFC_BUF:
+      format: YUV420_10BIT
+      bitdepth: 10
+      compression: COMP_OFF
+- id: cam-rec-rdual-fhd30
+  severity: light
+  design_conditions:
+    subscenario: FHD_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_DUAL_VIDEO_FHD30
+    camera_mode: dual_sync
+    resolution: FHD
+    fps: 30
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear3
+    - sensor_front
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+- id: cam-rec-rdual-fhd60
+  severity: medium
+  design_conditions:
+    subscenario: FHD_60FPS_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_DUAL_VIDEO_FHD60
+    camera_mode: dual_sync
+    resolution: FHD
+    fps: 60
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear3
+    - sensor_front
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+- id: cam-rec-rdual-uhd30
+  severity: heavy
+  design_conditions:
+    subscenario: UHD_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_DUAL_VIDEO_UHD30
+    camera_mode: dual_sync
+    resolution: UHD
+    fps: 30
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear3
+    - sensor_front
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+- id: cam-rec-rdual-uhd60
+  severity: heavy
+  design_conditions:
+    subscenario: UHD_60FPS_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_DUAL_VIDEO_UHD60
+    camera_mode: dual_sync
+    resolution: UHD
+    fps: 60
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear3
+    - sensor_front
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+- id: cam-rec-rtriple-fhd30
+  severity: light
+  design_conditions:
+    subscenario: FHD_VIDEO
+    dvfs_sn: IS_DVFS_SN_TRIPLE_VIDEO_FHD30
+    camera_mode: triple
+    resolution: FHD
+    fps: 30
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_front
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_front
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+- id: cam-rec-rtriple-fhd60
+  severity: medium
+  design_conditions:
+    subscenario: FHD_60FPS_VIDEO
+    dvfs_sn: IS_DVFS_SN_TRIPLE_VIDEO_FHD60
+    camera_mode: triple
+    resolution: FHD
+    fps: 60
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_front
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_front
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+- id: cam-rec-rtriple-uhd30
+  severity: heavy
+  design_conditions:
+    subscenario: UHD_VIDEO
+    dvfs_sn: IS_DVFS_SN_TRIPLE_VIDEO_UHD30
+    camera_mode: triple
+    resolution: UHD
+    fps: 30
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_front
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_front
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+- id: cam-rec-rtriple-uhd60
+  severity: heavy
+  design_conditions:
+    subscenario: UHD_60FPS_VIDEO
+    dvfs_sn: IS_DVFS_SN_TRIPLE_VIDEO_UHD60
+    camera_mode: triple
+    resolution: UHD
+    fps: 60
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_front
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_front
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+- id: cam-rec-f1-fhd30
+  severity: light
+  design_conditions:
+    subscenario: FHD_VIDEO
+    dvfs_sn: IS_DVFS_SN_FRONT_SINGLE_VIDEO_FHD30
+    sensor_place: front
+    resolution: FHD
+    fps: 30
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear
+    - sensor_rear2
+    - sensor_rear3
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear
+      to: csispdp
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+- id: cam-rec-f1-fhd30-recursive
+  severity: light
+  design_conditions:
+    subscenario: FHD_VIDEO
+    dvfs_sn: IS_DVFS_SN_FRONT_SINGLE_VIDEO_FHD30_RECURSIVE
+    sensor_place: front
+    resolution: FHD
+    fps: 30
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear
+    - sensor_rear2
+    - sensor_rear3
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear
+      to: csispdp
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+- id: cam-rec-f1-fhd60
+  severity: medium
+  design_conditions:
+    subscenario: FHD_60FPS_VIDEO
+    dvfs_sn: IS_DVFS_SN_FRONT_SINGLE_VIDEO_FHD60
+    sensor_place: front
+    resolution: FHD
+    fps: 60
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear
+    - sensor_rear2
+    - sensor_rear3
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear
+      to: csispdp
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+- id: cam-rec-f1-fhd120
+  severity: heavy
+  design_conditions:
+    subscenario: HIGH_SPEED_FHD_120_VIDEO
+    dvfs_sn: IS_DVFS_SN_FRONT_SINGLE_VIDEO_FHD120
+    sensor_place: front
+    resolution: FHD
+    fps: 120
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear
+    - sensor_rear2
+    - sensor_rear3
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear
+      to: csispdp
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+  node_configs:
+    sensor_front:
+      selected_mode: high_speed
+    mtnr:
+      selected_mode: HighSpeed
+- id: cam-rec-f1-uhd30
+  severity: heavy
+  design_conditions:
+    subscenario: UHD_VIDEO
+    dvfs_sn: IS_DVFS_SN_FRONT_SINGLE_VIDEO_UHD30
+    sensor_place: front
+    resolution: UHD
+    fps: 30
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear
+    - sensor_rear2
+    - sensor_rear3
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear
+      to: csispdp
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+- id: cam-rec-f1-uhd30-recursive
+  severity: heavy
+  design_conditions:
+    dvfs_sn: IS_DVFS_SN_FRONT_SINGLE_VIDEO_UHD30_RECURSIVE
+    sensor_place: front
+    resolution: UHD
+    fps: 30
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear
+    - sensor_rear2
+    - sensor_rear3
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear
+      to: csispdp
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+- id: cam-rec-f1-uhd60
+  severity: heavy
+  design_conditions:
+    subscenario: UHD_60FPS_VIDEO
+    dvfs_sn: IS_DVFS_SN_FRONT_SINGLE_VIDEO_UHD60
+    sensor_place: front
+    resolution: UHD
+    fps: 60
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear
+    - sensor_rear2
+    - sensor_rear3
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear
+      to: csispdp
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+- id: cam-rec-f1-uhd120
+  severity: heavy
+  design_conditions:
+    subscenario: HIGH_SPEED_UHD_120_VIDEO
+    dvfs_sn: IS_DVFS_SN_FRONT_SINGLE_VIDEO_UHD120
+    sensor_place: front
+    fps: 120
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear
+    - sensor_rear2
+    - sensor_rear3
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear
+      to: csispdp
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+  node_configs:
+    sensor_front:
+      selected_mode: high_speed
+    mtnr:
+      selected_mode: HighSpeed
+- id: cam-rec-pip-fhd30
+  severity: light
+  design_conditions:
+    subscenario: FHD_VIDEO
+    dvfs_sn: IS_DVFS_SN_PIP_DUAL_VIDEO_FHD30
+    camera_mode: dual_async
+    resolution: FHD
+    fps: 30
+    dpu_layer_count: 5
+    dpu_composer: DPU_DIRECT
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+- id: cam-rec-pip-uhd30
+  severity: heavy
+  design_conditions:
+    subscenario: UHD_VIDEO
+    dvfs_sn: IS_DVFS_SN_PIP_DUAL_VIDEO_UHD30
+    camera_mode: dual_async
+    resolution: UHD
+    fps: 30
+    dpu_layer_count: 5
+    dpu_composer: DPU_DIRECT
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+- id: cam-rec-3rdparty-fhd30
+  severity: light
+  design_conditions:
+    subscenario: 3RD_PARTY_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_FHD30
+    sensor_place: rear
+    resolution: FHD
+    fps: 30
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+- id: cam-rec-3rdparty-binning
+  severity: light
+  design_conditions:
+    subscenario: 3RD_PARTY_BINNING_VIDEO
+    sensor_place: rear
+    resolution: FHD
+    fps: 30
+    sensor_binning: true
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+  node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
+- id: cam-rec-3rdparty-hdr10
+  severity: medium
+  design_conditions:
+    subscenario: 3RD_PARTY_HDR10_VIDEO
+    hdr: HDR10
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+  buffer_overrides:
+    GDC_O_MFC_BUF:
+      format: YUV420_10BIT
+      bitdepth: 10
+      compression: COMP_OFF
+- id: cam-rec-3rdparty-hlg
+  severity: medium
+  design_conditions:
+    subscenario: 3RD_PARTY_HLG_VIDEO
+    hdr: HLG
+    dpu_layer_count: 3
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o
+- id: cam-rec-iq-eval
+  severity: light
+  design_conditions:
+    subscenario: IQ_EVAL_VIDEO
+    dpu_layer_count: 2
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - lme
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: lme
+      to: mtnr
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+    - from: eis
+      to: gdc_o

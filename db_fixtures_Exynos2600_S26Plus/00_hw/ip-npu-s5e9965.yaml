@@ -1,0 +1,25 @@
+id: ip-npu-s5e9965
+schema_version: '2.2'
+kind: ip
+category: compute
+hierarchy:
+  type: simple
+capabilities:
+  operating_modes:
+  - id: Normal
+  - id: LowPower
+  supported_features:
+    bitdepth:
+    - 8
+    - 16
+  properties:
+    ip_group: NPU
+    hierarchy_group: Compute
+    use_cases:
+    - AI_REMOSAIC
+    - AI_AF
+    - scene_detection
+    - super_resolution
+    - game_sr
+compatible_soc:
+- soc-exynos2600

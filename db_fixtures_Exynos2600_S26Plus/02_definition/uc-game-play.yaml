@@ -1,0 +1,322 @@
+id: uc-game-play
+schema_version: '2.2'
+kind: scenario.usecase
+project_ref: proj-sm-s947b
+metadata:
+  name: Game Play
+  category:
+  - game
+  - game
+  domain:
+  - game
+pipeline:
+  nodes:
+  - id: cpu
+    ip_ref: ip-cpu-s5e9965
+    role: cpu
+    instance_index: 0
+  - id: gpu
+    ip_ref: ip-gpu-s5e9965
+    role: gpu_renderer
+    instance_index: 0
+  - id: npu
+    ip_ref: ip-npu-s5e9965
+    role: npu
+    instance_index: 0
+  - id: m2m_scaler
+    ip_ref: ip-cpu-s5e9965
+    role: m2m_scaler
+    instance_index: 0
+  - id: dpu
+    ip_ref: ip-dpu-s5e9965
+    role: display_controller
+    instance_index: 0
+  - id: panel
+    ip_ref: ip-display-panel-s5e9965
+    role: display_output
+    instance_index: 0
+  edges:
+  - from: cpu
+    to: gpu
+    type: M2M
+  - from: gpu
+    to: dpu
+    type: M2M
+    buffer: GPU_DPU_BUF
+  - from: gpu
+    to: npu
+    type: M2M
+    buffer: GPU_NPU_BUF
+  - from: npu
+    to: dpu
+    type: M2M
+    buffer: NPU_DPU_BUF
+  - from: gpu
+    to: m2m_scaler
+    type: M2M
+    buffer: GPU_M2M_BUF
+  - from: m2m_scaler
+    to: dpu
+    type: M2M
+    buffer: M2M_DPU_BUF
+  - from: dpu
+    to: panel
+    type: OTF
+  buffers:
+    GPU_NPU_BUF:
+      format: RGBA8888
+      bitdepth: 8
+      compression: COMP_OFF
+    GPU_DPU_BUF:
+      format: RGBA8888
+      bitdepth: 8
+      compression: COMP_OFF
+    NPU_DPU_BUF:
+      format: RGBA8888
+      bitdepth: 8
+      compression: COMP_OFF
+    GPU_M2M_BUF:
+      format: RGBA8888
+      bitdepth: 8
+      compression: COMP_OFF
+    M2M_DPU_BUF:
+      format: RGBA8888
+      bitdepth: 8
+      compression: COMP_OFF
+variants:
+- id: game-fhd-60fps-sdr
+  severity: light
+  design_conditions:
+    resolution: FHD
+    target_fps: 60
+    hdr: SDR
+    gpu_governor: performance
+    panel_fps_hz: 60
+    npu_used: false
+    dpu_layer_count: 5
+    dpu_composer: DPU_DIRECT
+  routing_switch:
+    disabled_nodes:
+    - npu
+    - m2m_scaler
+    disabled_edges:
+    - from: gpu
+      to: npu
+    - from: npu
+      to: dpu
+    - from: gpu
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    gpu:
+      selected_mode: performance
+    panel:
+      selected_mode: 60hz
+- id: game-fhd-90fps-sdr
+  severity: light
+  design_conditions:
+    resolution: FHD
+    target_fps: 90
+    hdr: SDR
+    panel_fps_hz: 90
+    npu_used: false
+    dpu_layer_count: 5
+    dpu_composer: DPU_DIRECT
+  routing_switch:
+    disabled_nodes:
+    - npu
+    - m2m_scaler
+    disabled_edges:
+    - from: gpu
+      to: npu
+    - from: npu
+      to: dpu
+    - from: gpu
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    gpu:
+      selected_mode: performance
+    panel:
+      selected_mode: 90hz
+- id: game-fhd-120fps-sdr
+  severity: light
+  design_conditions:
+    resolution: FHD
+    target_fps: 120
+    hdr: SDR
+    panel_fps_hz: 120
+    npu_used: false
+    note: 고주사율 게임 (GTS 타겟 120Hz)
+    dpu_layer_count: 5
+    dpu_composer: DPU_DIRECT
+  routing_switch:
+    disabled_nodes:
+    - npu
+    - m2m_scaler
+    disabled_edges:
+    - from: gpu
+      to: npu
+    - from: npu
+      to: dpu
+    - from: gpu
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    gpu:
+      selected_mode: performance
+    panel:
+      selected_mode: 120hz
+- id: game-uhd-60fps-sdr
+  severity: heavy
+  design_conditions:
+    resolution: UHD
+    target_fps: 60
+    hdr: SDR
+    panel_fps_hz: 60
+    npu_used: false
+    dpu_layer_count: 5
+    dpu_composer: DPU_DIRECT
+  routing_switch:
+    disabled_nodes:
+    - npu
+    - m2m_scaler
+    disabled_edges:
+    - from: gpu
+      to: npu
+    - from: npu
+      to: dpu
+    - from: gpu
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    gpu:
+      selected_mode: performance
+    panel:
+      selected_mode: 60hz
+- id: game-fhd-60fps-npu-ai
+  severity: light
+  design_conditions:
+    resolution: FHD
+    target_fps: 60
+    hdr: SDR
+    npu_used: true
+    gpu_governor: performance
+    note: AI 게임 가속 / SR (NPU 슈퍼 해상도)
+    dpu_layer_count: 5
+    dpu_composer: DPU_DIRECT
+  routing_switch:
+    disabled_nodes:
+    - m2m_scaler
+    disabled_edges:
+    - from: gpu
+      to: dpu
+    - from: gpu
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    gpu:
+      selected_mode: balanced
+    npu:
+      selected_mode: Normal
+    panel:
+      selected_mode: 60hz
+- id: game-fhd-120fps-hdr10
+  severity: medium
+  design_conditions:
+    resolution: FHD
+    target_fps: 120
+    hdr: HDR10
+    hdr_dpu: HDR_HDR10
+    panel_fps_hz: 120
+    npu_used: false
+    dpu_layer_count: 5
+    dpu_composer: DPU_DIRECT
+  routing_switch:
+    disabled_nodes:
+    - npu
+    - m2m_scaler
+    disabled_edges:
+    - from: gpu
+      to: npu
+    - from: npu
+      to: dpu
+    - from: gpu
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    gpu:
+      selected_mode: performance
+    panel:
+      selected_mode: 120hz
+  buffer_overrides:
+    GPU_DPU_BUF:
+      format: RGBA1010102
+      bitdepth: 10
+      compression: COMP_OFF
+- id: game-fhd-60fps-m2m-upscale
+  severity: light
+  design_conditions:
+    render_resolution: QHD
+    target_fps: 60
+    hdr: SDR
+    panel_fps_hz: 60
+    npu_used: false
+    dpu_layer_count: 5
+    dpu_composer: M2M_SCALER_FALLBACK
+    note: GPU QHD 렌더 → M2M 스케일러 QHD→UHD 업스케일 → DPU (GPU 부하 절감)
+  routing_switch:
+    disabled_nodes:
+    - npu
+    disabled_edges:
+    - from: gpu
+      to: npu
+    - from: npu
+      to: dpu
+    - from: gpu
+      to: dpu
+  node_configs:
+    gpu:
+      selected_mode: balanced
+    panel:
+      selected_mode: 60hz
+  buffer_overrides:
+    GPU_M2M_BUF:
+      format: RGBA8888
+      bitdepth: 8
+      compression: COMP_OFF
+- id: game-fhd-60fps-gpu-heavy-overlay
+  severity: light
+  design_conditions:
+    resolution: FHD
+    target_fps: 60
+    hdr: SDR
+    panel_fps_hz: 60
+    npu_used: false
+    dpu_layer_count: 13
+    dpu_composer: GPU_FALLBACK
+    note: 게임+시스템UI+인앱브라우저+알림 레이어 합산 >12 → SurfaceFlinger GPU fallback
+  routing_switch:
+    disabled_nodes:
+    - npu
+    - m2m_scaler
+    disabled_edges:
+    - from: gpu
+      to: npu
+    - from: npu
+      to: dpu
+    - from: gpu
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    gpu:
+      selected_mode: performance
+    panel:
+      selected_mode: 60hz

@@ -1,0 +1,140 @@
+id: ip-isp-s5e9965
+schema_version: '2.2'
+kind: ip
+category: camera
+hierarchy:
+  type: simple
+capabilities:
+  operating_modes:
+  - id: Preview
+  - id: Recording
+  - id: Capture_SF
+  - id: Capture_MF
+  - id: Remosaic
+  - id: HighSpeed
+  supported_features:
+    bitdepth:
+    - 8
+    - 10
+    - 12
+    compression:
+    - COMP_BAYER_LOSSLESS
+    - COMP_BAYER_LOSSY
+    crop: true
+    scale: true
+  properties:
+    ip_group: ISP
+    hierarchy_group: ISP
+    subblocks:
+    - CSISPDP
+    - 3AA
+    - BYRP
+    - RGBP
+    - YUVSC
+    - MTNR
+    - MSNR
+    - YUVP
+    - MCSC
+    chain_ids:
+    - ID_3AA_0
+    - ID_3AA_1
+    - ID_ISP_0
+    - ID_ISP_1
+    - ID_YPP
+    isp_features:
+    - MSNR
+    - MTNR
+    - DJAG
+    - HF
+    pipeline_description: 'OTF: CSISPDP -> BYRP -> RGBP -> YUVSC
+
+      M2M: YUVSC => MTNR  (M2M break for multi-frame buffering)
+
+      OTF: MTNR -> MSNR -> YUVP -> MCSC
+
+      Side: CSISPDP => 3AA (M2M, 3A statistics)
+
+      '
+    post_isp:
+      gdc:
+        GDC_M: preview output  (M2M) -> DPU
+        GDC_O: video output    (M2M) -> MFC_ENC
+      eis: SW task between MCSC WDMA and GDC when EIS/SuperSteady active
+    max_size:
+    - 16384
+    - 12288
+    modules:
+    - name: CSISPDP_WDMA
+      type: DMA
+      direction: write
+      max_bandwidth: 51200000000
+      supported_compressions:
+      - COMP_BAYER_LOSSLESS
+      - COMP_BAYER_LOSSY
+    - name: 3AA_RDMA
+      type: DMA
+      direction: read
+      max_bandwidth: 4096000000
+    - name: YUVSC_WDMA
+      type: DMA
+      direction: write
+      max_bandwidth: 12800000000
+      supported_compressions:
+      - COMP_OFF
+    - name: MTNR_RDMA
+      type: DMA
+      direction: read
+      max_bandwidth: 12800000000
+    - name: MCSC_WDMA_PREV
+      type: DMA
+      direction: write
+      role: preview_output
+      max_bandwidth: 8192000000
+      supported_compressions:
+      - COMP_OFF
+      - COMP_SBWC_LOSSLESS
+      - COMP_SBWC_LOSSY
+    - name: MCSC_WDMA_VIDEO
+      type: DMA
+      direction: write
+      role: video_output
+      max_bandwidth: 8192000000
+      supported_compressions:
+      - COMP_OFF
+      - COMP_SBWC_LOSSLESS
+      - COMP_SBWC_LOSSY
+    - name: MCSC_WDMA_CAPTURE
+      type: DMA
+      direction: write
+      role: capture_output
+      max_bandwidth: 16384000000
+      supported_compressions:
+      - COMP_OFF
+      - COMP_BAYER_LOSSLESS
+    internal_edges:
+    - from: CSISPDP
+      to: BYRP
+      type: OTF
+    - from: BYRP
+      to: RGBP
+      type: OTF
+    - from: RGBP
+      to: YUVSC
+      type: OTF
+    - from: YUVSC
+      to: MTNR
+      type: M2M
+    - from: MTNR
+      to: MSNR
+      type: OTF
+    - from: MSNR
+      to: YUVP
+      type: OTF
+    - from: YUVP
+      to: MCSC
+      type: OTF
+    - from: CSISPDP
+      to: 3AA
+      type: M2M
+compatible_soc:
+- soc-exynos2600

@@ -1,0 +1,60 @@
+id: uc-voice-call
+schema_version: '2.2'
+kind: scenario.usecase
+project_ref: proj-sm-s947b
+metadata:
+  name: Voice Call
+  category:
+  - voice_call
+  - audio
+  domain:
+  - voice_call
+pipeline:
+  nodes:
+  - id: modem
+    ip_ref: ip-cpu-s5e9965
+    role: modem
+    instance_index: 0
+  - id: audio_hal
+    ip_ref: ip-cpu-s5e9965
+    role: audio_hal
+    instance_index: 0
+  - id: speaker
+    ip_ref: ip-cpu-s5e9965
+    role: earpiece
+    instance_index: 0
+  - id: mic
+    ip_ref: ip-cpu-s5e9965
+    role: microphone
+    instance_index: 0
+  edges:
+  - from: modem
+    to: audio_hal
+    type: M2M
+  - from: audio_hal
+    to: speaker
+    type: M2M
+  - from: mic
+    to: audio_hal
+    type: M2M
+  - from: audio_hal
+    to: modem
+    type: M2M
+  buffers: {}
+variants:
+- id: voice-call-volte
+  severity: light
+  design_conditions:
+    call_type: VoLTE
+    camera_active: false
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VT
+- id: voice-call-vowifi
+  severity: light
+  design_conditions:
+    call_type: VoWiFi
+    camera_active: false
+- id: voice-call-vonr
+  severity: light
+  design_conditions:
+    call_type: VoNR
+    camera_active: false

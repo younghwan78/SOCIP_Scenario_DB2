@@ -1,0 +1,150 @@
+id: uc-audio-mp3-playback
+schema_version: '2.2'
+kind: scenario.usecase
+project_ref: proj-sm-s947b
+metadata:
+  name: Audio MP3 Playback
+  category:
+  - audio
+  - audio
+  domain:
+  - audio
+pipeline:
+  nodes:
+  - id: storage
+    ip_ref: ip-cpu-s5e9965
+    role: source
+    instance_index: 0
+  - id: sw_decoder
+    ip_ref: ip-cpu-s5e9965
+    role: audio_decode
+    instance_index: 0
+  - id: dsp_offload
+    ip_ref: ip-cpu-s5e9965
+    role: dsp_offload
+    instance_index: 0
+  - id: audio_hal
+    ip_ref: ip-cpu-s5e9965
+    role: audio_hal
+    instance_index: 0
+  - id: speaker
+    ip_ref: ip-cpu-s5e9965
+    role: audio_output
+    instance_index: 0
+  - id: bt_codec
+    ip_ref: ip-cpu-s5e9965
+    role: bt_output
+    instance_index: 0
+  edges:
+  - from: storage
+    to: sw_decoder
+    type: M2M
+    buffer: AUDIO_ES_BUF
+  - from: storage
+    to: dsp_offload
+    type: M2M
+    buffer: AUDIO_OFFLOAD_BUF
+  - from: sw_decoder
+    to: audio_hal
+    type: M2M
+  - from: dsp_offload
+    to: audio_hal
+    type: M2M
+  - from: audio_hal
+    to: speaker
+    type: M2M
+  - from: audio_hal
+    to: bt_codec
+    type: M2M
+  buffers:
+    AUDIO_ES_BUF:
+      format: AUDIO_PCM
+      bitdepth: 16
+      compression: COMP_OFF
+    AUDIO_OFFLOAD_BUF:
+      format: AUDIO_PCM
+      bitdepth: 16
+      compression: COMP_OFF
+variants:
+- id: audio-mp3-screen-on
+  severity: light
+  design_conditions:
+    format: MP3
+    bitrate_kbps: 320
+    screen_on: true
+    offload: false
+    output: speaker
+  routing_switch:
+    disabled_nodes:
+    - dsp_offload
+    - bt_codec
+    disabled_edges:
+    - from: storage
+      to: dsp_offload
+    - from: dsp_offload
+      to: audio_hal
+    - from: audio_hal
+      to: bt_codec
+- id: audio-mp3-screen-off-offload
+  severity: light
+  design_conditions:
+    format: MP3
+    bitrate_kbps: 320
+    screen_on: false
+    offload: true
+    output: speaker
+    note: 화면 꺼진 상태 HW offload 재생 (저전력)
+  routing_switch:
+    disabled_nodes:
+    - sw_decoder
+    - bt_codec
+    disabled_edges:
+    - from: storage
+      to: sw_decoder
+    - from: sw_decoder
+      to: audio_hal
+    - from: audio_hal
+      to: bt_codec
+- id: audio-flac-hires-screen-off
+  severity: light
+  design_conditions:
+    format: FLAC
+    sample_rate_khz: 192
+    bit_depth: 24
+    screen_on: false
+    offload: false
+    output: speaker
+  routing_switch:
+    disabled_nodes:
+    - dsp_offload
+    - bt_codec
+    disabled_edges:
+    - from: storage
+      to: dsp_offload
+    - from: dsp_offload
+      to: audio_hal
+    - from: audio_hal
+      to: bt_codec
+  buffer_overrides:
+    AUDIO_ES_BUF:
+      format: AUDIO_PCM
+      bitdepth: 24
+      compression: COMP_OFF
+- id: audio-aac-bt-screen-on
+  severity: light
+  design_conditions:
+    format: AAC
+    output: Bluetooth
+    screen_on: true
+    codec_bt: aptX_HD
+  routing_switch:
+    disabled_nodes:
+    - dsp_offload
+    - speaker
+    disabled_edges:
+    - from: storage
+      to: dsp_offload
+    - from: dsp_offload
+      to: audio_hal
+    - from: audio_hal
+      to: speaker

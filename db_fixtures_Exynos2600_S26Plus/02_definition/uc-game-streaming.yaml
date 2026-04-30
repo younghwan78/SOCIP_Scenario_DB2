@@ -1,0 +1,254 @@
+id: uc-game-streaming
+schema_version: '2.2'
+kind: scenario.usecase
+project_ref: proj-sm-s947b
+metadata:
+  name: Game Streaming
+  category:
+  - game
+  - game
+  domain:
+  - game
+pipeline:
+  nodes:
+  - id: network
+    ip_ref: ip-cpu-s5e9965
+    role: source
+    instance_index: 0
+  - id: sw_demux
+    ip_ref: ip-cpu-s5e9965
+    role: demux
+    instance_index: 0
+  - id: mfc_dec
+    ip_ref: ip-mfc-s5e9965
+    role: decoder
+    instance_index: 0
+  - id: gpu
+    ip_ref: ip-gpu-s5e9965
+    role: composer
+    instance_index: 0
+  - id: m2m_scaler
+    ip_ref: ip-cpu-s5e9965
+    role: m2m_scaler
+    instance_index: 0
+  - id: dpu
+    ip_ref: ip-dpu-s5e9965
+    role: display_controller
+    instance_index: 0
+  - id: panel
+    ip_ref: ip-display-panel-s5e9965
+    role: display_output
+    instance_index: 0
+  edges:
+  - from: network
+    to: sw_demux
+    type: M2M
+  - from: sw_demux
+    to: mfc_dec
+    type: M2M
+    buffer: STREAM_ES_BUF
+  - from: mfc_dec
+    to: dpu
+    type: M2M
+    buffer: MFC_DPU_BUF
+  - from: mfc_dec
+    to: gpu
+    type: M2M
+    buffer: MFC_GPU_BUF
+  - from: gpu
+    to: dpu
+    type: M2M
+    buffer: GPU_DPU_BUF
+  - from: mfc_dec
+    to: m2m_scaler
+    type: M2M
+    buffer: MFC_M2M_BUF
+  - from: m2m_scaler
+    to: dpu
+    type: M2M
+    buffer: M2M_DPU_BUF
+  - from: dpu
+    to: panel
+    type: OTF
+  buffers:
+    STREAM_ES_BUF:
+      format: BITSTREAM
+      compression: COMP_OFF
+    MFC_DPU_BUF:
+      format: YUV420
+      bitdepth: 8
+      compression: COMP_SBWC_LOSSLESS
+    MFC_GPU_BUF:
+      format: YUV420
+      bitdepth: 8
+      compression: COMP_OFF
+    GPU_DPU_BUF:
+      format: RGBA8888
+      bitdepth: 8
+      compression: COMP_OFF
+    MFC_M2M_BUF:
+      format: YUV420
+      bitdepth: 8
+      compression: COMP_OFF
+    M2M_DPU_BUF:
+      format: RGBA8888
+      bitdepth: 8
+      compression: COMP_OFF
+variants:
+- id: game-stream-fhd60-h264
+  severity: medium
+  design_conditions:
+    codec_mfc: H264_DEC
+    resolution: FHD
+    fps: 60
+    dpu_layer_count: 3
+    dpu_composer: DPU_DIRECT
+  routing_switch:
+    disabled_nodes:
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: mfc_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: Normal
+      codec: H264_DEC
+- id: game-stream-fhd60-hevc
+  severity: medium
+  design_conditions:
+    codec_mfc: HEVC_DEC
+    resolution: FHD
+    fps: 60
+    dpu_layer_count: 3
+    dpu_composer: DPU_DIRECT
+  routing_switch:
+    disabled_nodes:
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: mfc_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: Normal
+      codec: HEVC_DEC
+- id: game-stream-fhd60-hevc-low-latency
+  severity: medium
+  design_conditions:
+    codec_mfc: HEVC_DEC
+    resolution: FHD
+    fps: 60
+    low_latency_mode: true
+    note: MFC 저지연 모드 활성화 — 레이턴시 최소화 우선, DPU direct 경로
+    dpu_layer_count: 2
+    dpu_composer: DPU_DIRECT
+  routing_switch:
+    disabled_nodes:
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: mfc_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: LowLatency
+      codec: HEVC_DEC
+- id: game-stream-uhd60-hevc
+  severity: heavy
+  design_conditions:
+    codec_mfc: HEVC_DEC
+    resolution: UHD
+    fps: 60
+    dpu_layer_count: 3
+    dpu_composer: DPU_DIRECT
+  routing_switch:
+    disabled_nodes:
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: mfc_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: Normal
+      codec: HEVC_DEC
+- id: game-stream-fhd60-hevc-gpu-overlay
+  severity: medium
+  design_conditions:
+    codec_mfc: HEVC_DEC
+    resolution: FHD
+    fps: 60
+    dpu_layer_count: 13
+    dpu_composer: GPU_FALLBACK
+    note: 게임+스트리밍 컨트롤 UI+채팅+알림 레이어 합산 >12 → GPU fallback
+  routing_switch:
+    disabled_nodes:
+    - m2m_scaler
+    disabled_edges:
+    - from: mfc_dec
+      to: dpu
+    - from: mfc_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: Normal
+      codec: HEVC_DEC
+- id: game-stream-fhd60-hevc-m2m-scale
+  severity: medium
+  design_conditions:
+    codec_mfc: HEVC_DEC
+    resolution: FHD
+    fps: 60
+    dpu_layer_count: 3
+    dpu_composer: M2M_SCALER_FALLBACK
+    note: FHD 스트림 → M2M 스케일러 → 패널 해상도(3088×1440) 업스케일 후 DPU
+  routing_switch:
+    disabled_nodes:
+    - gpu
+    disabled_edges:
+    - from: mfc_dec
+      to: dpu
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: Normal
+      codec: HEVC_DEC
+  buffer_overrides:
+    MFC_M2M_BUF:
+      format: YUV420
+      bitdepth: 8
+      compression: COMP_OFF
+    M2M_DPU_BUF:
+      format: RGBA8888
+      bitdepth: 8
+      compression: COMP_OFF

@@ -1,0 +1,160 @@
+id: uc-video-call
+schema_version: '2.2'
+kind: scenario.usecase
+project_ref: proj-sm-s947b
+metadata:
+  name: Video Call
+  category:
+  - voice_call
+  - video
+  domain:
+  - voice_call
+pipeline:
+  nodes:
+  - id: sensor_rear
+    ip_ref: ip-sensor-rear-s5e9965
+    role: sensor
+    instance_index: 0
+  - id: sensor_front
+    ip_ref: ip-sensor-front-s5e9965
+    role: sensor
+    instance_index: 0
+  - id: csis
+    ip_ref: ip-csis-s5e9965
+    role: csis
+    instance_index: 0
+  - id: isp
+    ip_ref: ip-isp-s5e9965
+    role: isp
+    instance_index: 0
+  - id: mcsc
+    ip_ref: ip-mcsc-s5e9965
+    role: mcsc
+    instance_index: 0
+  - id: mfc_enc
+    ip_ref: ip-mfc-s5e9965
+    role: encoder
+    instance_index: 0
+  - id: mfc_dec
+    ip_ref: ip-mfc-s5e9965
+    role: decoder
+    instance_index: 0
+  - id: network
+    ip_ref: ip-cpu-s5e9965
+    role: network
+    instance_index: 0
+  - id: dpu
+    ip_ref: ip-dpu-s5e9965
+    role: display_controller
+    instance_index: 0
+  - id: panel
+    ip_ref: ip-display-panel-s5e9965
+    role: display_output
+    instance_index: 0
+  edges:
+  - from: sensor_rear
+    to: csis
+    type: OTF
+  - from: sensor_front
+    to: csis
+    type: OTF
+  - from: csis
+    to: isp
+    type: OTF
+  - from: isp
+    to: mcsc
+    type: OTF
+  - from: mcsc
+    to: mfc_enc
+    type: OTF
+  - from: mfc_enc
+    to: network
+    type: M2M
+    buffer: LOCAL_ENC_BUF
+  - from: network
+    to: mfc_dec
+    type: M2M
+    buffer: REMOTE_ES_BUF
+  - from: mfc_dec
+    to: dpu
+    type: M2M
+    buffer: REMOTE_DEC_BUF
+  - from: dpu
+    to: panel
+    type: OTF
+  buffers:
+    LOCAL_ENC_BUF:
+      format: BITSTREAM
+      compression: COMP_OFF
+    REMOTE_ES_BUF:
+      format: BITSTREAM
+      compression: COMP_OFF
+    REMOTE_DEC_BUF:
+      format: YUV420
+      bitdepth: 8
+      compression: COMP_OFF
+variants:
+- id: vcall-fhd30-rear
+  severity: light
+  design_conditions:
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VT
+    sensor_place: rear
+    sensor_scenario: SENSOR_SCENARIO_NORMAL
+    resolution: FHD
+    fps: 30
+  routing_switch:
+    disabled_nodes:
+    - sensor_front
+    disabled_edges:
+    - from: sensor_front
+      to: csis
+  node_configs:
+    mfc_enc:
+      selected_mode: Normal
+      codec: H264_ENC
+    mfc_dec:
+      selected_mode: Normal
+      codec: H264_DEC
+- id: vcall-fhd30-front
+  severity: light
+  design_conditions:
+    dvfs_sn: IS_DVFS_SN_FRONT_SINGLE_VT
+    sensor_place: front
+    sensor_scenario: SENSOR_SCENARIO_NORMAL
+    resolution: FHD
+    fps: 30
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear
+    disabled_edges:
+    - from: sensor_rear
+      to: csis
+  node_configs:
+    mfc_enc:
+      selected_mode: Normal
+      codec: H264_ENC
+    mfc_dec:
+      selected_mode: Normal
+      codec: H264_DEC
+- id: vcall-fhd30-front-lowlight
+  severity: light
+  design_conditions:
+    dvfs_sn: IS_DVFS_SN_FRONT_SINGLE_VT
+    sensor_place: front
+    resolution: FHD
+    fps: 30
+    extend_mode: EX_LN
+    note: 저조도 화상 통화 (Low Noise 모드)
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear
+    disabled_edges:
+    - from: sensor_rear
+      to: csis
+  node_configs:
+    mfc_enc:
+      selected_mode: Normal
+      codec: H264_ENC
+    mfc_dec:
+      selected_mode: Normal
+      codec: H264_DEC

@@ -9,12 +9,13 @@ from scenario_db.legacy_import.read_legacy import read_yaml
 
 
 WRITE_BUNDLE_KIND = "scenario.import_bundle"
-SUPPORTED_DOCUMENT_KINDS = {"soc", "ip", "project", "scenario.usecase"}
+SUPPORTED_DOCUMENT_KINDS = {"soc", "ip", "sw_profile", "project", "scenario.usecase"}
 DOCUMENT_KIND_ORDER = {
     "soc": 0,
     "ip": 1,
-    "project": 2,
-    "scenario.usecase": 3,
+    "sw_profile": 2,
+    "project": 3,
+    "scenario.usecase": 4,
 }
 
 

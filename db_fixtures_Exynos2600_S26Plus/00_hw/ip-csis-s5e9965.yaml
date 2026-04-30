@@ -1,0 +1,42 @@
+id: ip-csis-s5e9965
+schema_version: '2.2'
+kind: ip
+category: camera
+hierarchy:
+  type: simple
+capabilities:
+  operating_modes:
+  - id: Normal
+  - id: VC_DT
+  supported_features:
+    bitdepth:
+    - 8
+    - 10
+    - 12
+    compression:
+    - COMP_BAYER_LOSSLESS
+    - COMP_BAYER_LOSSY
+    crop: false
+    scale: false
+  properties:
+    ip_group: CSIS
+    hierarchy_group: ISP
+    min_size:
+    - 64
+    - 64
+    max_size:
+    - 16384
+    - 12288
+    modules:
+    - name: CSIS_WDMA
+      type: DMA
+      direction: write
+      max_bandwidth: 25600000000
+      supported_compressions:
+      - COMP_BAYER_LOSSLESS
+      - COMP_BAYER_LOSSY
+    internal_edges:
+    - from: PHY_IN
+      to: CSIS_WDMA
+compatible_soc:
+- soc-exynos2600

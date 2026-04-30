@@ -1,0 +1,1135 @@
+id: uc-video-playback-local
+schema_version: '2.2'
+kind: scenario.usecase
+project_ref: proj-sm-s947b
+metadata:
+  name: Video Playback Local
+  category:
+  - video_playback
+  - video
+  domain:
+  - video_playback
+pipeline:
+  nodes:
+  - id: storage
+    ip_ref: ip-cpu-s5e9965
+    role: source
+    instance_index: 0
+  - id: mfc_dec
+    ip_ref: ip-mfc-s5e9965
+    role: decoder
+    instance_index: 0
+  - id: apv_dec
+    ip_ref: ip-apv-s5e9965
+    role: decoder
+    instance_index: 0
+  - id: drm_dec
+    ip_ref: ip-cpu-s5e9965
+    role: drm_decrypt
+    instance_index: 0
+  - id: gpu
+    ip_ref: ip-gpu-s5e9965
+    role: composer
+    instance_index: 0
+  - id: m2m_scaler
+    ip_ref: ip-cpu-s5e9965
+    role: m2m_scaler
+    instance_index: 0
+  - id: dpu
+    ip_ref: ip-dpu-s5e9965
+    role: display_controller
+    instance_index: 0
+  - id: panel
+    ip_ref: ip-display-panel-s5e9965
+    role: display_output
+    instance_index: 0
+  edges:
+  - from: storage
+    to: mfc_dec
+    type: M2M
+    buffer: ES_BUF
+  - from: storage
+    to: apv_dec
+    type: M2M
+    buffer: APV_ES_BUF
+  - from: storage
+    to: drm_dec
+    type: M2M
+    buffer: DRM_ES_BUF
+  - from: drm_dec
+    to: mfc_dec
+    type: M2M
+    buffer: DRM_DEC_BUF
+  - from: mfc_dec
+    to: dpu
+    type: M2M
+    buffer: MFC_DPU_BUF
+  - from: apv_dec
+    to: dpu
+    type: M2M
+    buffer: APV_DPU_BUF
+  - from: mfc_dec
+    to: gpu
+    type: M2M
+    buffer: MFC_GPU_BUF
+  - from: gpu
+    to: dpu
+    type: M2M
+    buffer: GPU_DPU_BUF
+  - from: apv_dec
+    to: m2m_scaler
+    type: M2M
+    buffer: APV_M2M_BUF
+  - from: m2m_scaler
+    to: dpu
+    type: M2M
+    buffer: M2M_DPU_BUF
+  - from: dpu
+    to: panel
+    type: OTF
+  buffers:
+    ES_BUF:
+      format: BITSTREAM
+      compression: COMP_OFF
+    APV_ES_BUF:
+      format: BITSTREAM
+      compression: COMP_OFF
+    DRM_ES_BUF:
+      format: BITSTREAM
+      compression: COMP_OFF
+    DRM_DEC_BUF:
+      format: BITSTREAM
+      compression: COMP_OFF
+    MFC_DPU_BUF:
+      format: YUV420
+      bitdepth: 8
+      compression: COMP_OFF
+    APV_DPU_BUF:
+      format: YUV422
+      bitdepth: 10
+      compression: COMP_OFF
+    MFC_GPU_BUF:
+      format: YUV420
+      bitdepth: 8
+      compression: COMP_OFF
+    GPU_DPU_BUF:
+      format: RGBA8888
+      bitdepth: 8
+      compression: COMP_OFF
+    APV_M2M_BUF:
+      format: YUV422
+      bitdepth: 10
+      compression: COMP_OFF
+    M2M_DPU_BUF:
+      format: RGBA8888
+      bitdepth: 8
+      compression: COMP_OFF
+variants:
+- id: vplay-local-h264-fhd30-sdr
+  severity: light
+  design_conditions:
+    codec_mfc: H264_DEC
+    resolution: FHD
+    fps: 30
+    hdr: SDR
+    bit_depth: 8
+  routing_switch:
+    disabled_nodes:
+    - apv_dec
+    - drm_dec
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: storage
+      to: apv_dec
+    - from: storage
+      to: drm_dec
+    - from: drm_dec
+      to: mfc_dec
+    - from: apv_dec
+      to: dpu
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: apv_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: Normal
+      codec: H264_DEC
+- id: vplay-local-h264-fhd60-sdr
+  severity: medium
+  design_conditions:
+    codec_mfc: H264_DEC
+    resolution: FHD
+    fps: 60
+    hdr: SDR
+    bit_depth: 8
+  routing_switch:
+    disabled_nodes:
+    - apv_dec
+    - drm_dec
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: storage
+      to: apv_dec
+    - from: storage
+      to: drm_dec
+    - from: drm_dec
+      to: mfc_dec
+    - from: apv_dec
+      to: dpu
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: apv_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: Normal
+      codec: H264_DEC
+- id: vplay-local-hevc-fhd30-sdr
+  severity: light
+  design_conditions:
+    codec_mfc: HEVC_DEC
+    resolution: FHD
+    fps: 30
+    hdr: SDR
+    bit_depth: 8
+  routing_switch:
+    disabled_nodes:
+    - apv_dec
+    - drm_dec
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: storage
+      to: apv_dec
+    - from: storage
+      to: drm_dec
+    - from: drm_dec
+      to: mfc_dec
+    - from: apv_dec
+      to: dpu
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: apv_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: Normal
+      codec: HEVC_DEC
+- id: vplay-local-hevc-fhd30-hdr10
+  severity: medium
+  design_conditions:
+    codec_mfc: HEVC_DEC
+    resolution: FHD
+    fps: 30
+    hdr: HDR10
+    hdr_dpu: HDR_HDR10
+    bit_depth: 10
+    mfc_format_flag: MFC_FMT_10BIT
+  routing_switch:
+    disabled_nodes:
+    - apv_dec
+    - drm_dec
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: storage
+      to: apv_dec
+    - from: storage
+      to: drm_dec
+    - from: drm_dec
+      to: mfc_dec
+    - from: apv_dec
+      to: dpu
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: apv_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: Normal
+      codec: HEVC_DEC
+  buffer_overrides:
+    MFC_DPU_BUF:
+      format: YUV420_10BIT
+      bitdepth: 10
+      compression: COMP_OFF
+- id: vplay-local-hevc-uhd30-sdr
+  severity: heavy
+  design_conditions:
+    codec_mfc: HEVC_DEC
+    resolution: UHD
+    fps: 30
+    hdr: SDR
+    bit_depth: 8
+  routing_switch:
+    disabled_nodes:
+    - apv_dec
+    - drm_dec
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: storage
+      to: apv_dec
+    - from: storage
+      to: drm_dec
+    - from: drm_dec
+      to: mfc_dec
+    - from: apv_dec
+      to: dpu
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: apv_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: Normal
+      codec: HEVC_DEC
+- id: vplay-local-hevc-uhd30-hdr10
+  severity: heavy
+  design_conditions:
+    codec_mfc: HEVC_DEC
+    resolution: UHD
+    fps: 30
+    hdr: HDR10
+    hdr_dpu: HDR_HDR10
+    bit_depth: 10
+  routing_switch:
+    disabled_nodes:
+    - apv_dec
+    - drm_dec
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: storage
+      to: apv_dec
+    - from: storage
+      to: drm_dec
+    - from: drm_dec
+      to: mfc_dec
+    - from: apv_dec
+      to: dpu
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: apv_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: Normal
+      codec: HEVC_DEC
+  buffer_overrides:
+    MFC_DPU_BUF:
+      format: YUV420_10BIT
+      bitdepth: 10
+      compression: COMP_OFF
+- id: vplay-local-hevc-uhd60-hdr10
+  severity: heavy
+  design_conditions:
+    codec_mfc: HEVC_DEC
+    resolution: UHD
+    fps: 60
+    hdr: HDR10
+    hdr_dpu: HDR_HDR10
+    bit_depth: 10
+  routing_switch:
+    disabled_nodes:
+    - apv_dec
+    - drm_dec
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: storage
+      to: apv_dec
+    - from: storage
+      to: drm_dec
+    - from: drm_dec
+      to: mfc_dec
+    - from: apv_dec
+      to: dpu
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: apv_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: Normal
+      codec: HEVC_DEC
+  buffer_overrides:
+    MFC_DPU_BUF:
+      format: YUV420_10BIT
+      bitdepth: 10
+      compression: COMP_OFF
+- id: vplay-local-hevc-uhd30-hdr10plus
+  severity: heavy
+  design_conditions:
+    codec_mfc: HEVC_DEC
+    resolution: UHD
+    fps: 30
+    hdr: HDR10_PLUS
+    hdr_dpu: HDR_HDR10_PLUS
+    bit_depth: 10
+    dynamic_metadata: true
+  routing_switch:
+    disabled_nodes:
+    - apv_dec
+    - drm_dec
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: storage
+      to: apv_dec
+    - from: storage
+      to: drm_dec
+    - from: drm_dec
+      to: mfc_dec
+    - from: apv_dec
+      to: dpu
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: apv_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: Normal
+      codec: HEVC_DEC
+- id: vplay-local-vp9-fhd30-sdr
+  severity: light
+  design_conditions:
+    codec_mfc: VP9_DEC
+    resolution: FHD
+    fps: 30
+    hdr: SDR
+    bit_depth: 8
+  routing_switch:
+    disabled_nodes:
+    - apv_dec
+    - drm_dec
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: storage
+      to: apv_dec
+    - from: storage
+      to: drm_dec
+    - from: drm_dec
+      to: mfc_dec
+    - from: apv_dec
+      to: dpu
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: apv_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: Normal
+      codec: VP9_DEC
+- id: vplay-local-vp9-uhd30-hdr10
+  severity: heavy
+  design_conditions:
+    codec_mfc: VP9_DEC
+    resolution: UHD
+    fps: 30
+    hdr: HDR10
+    hdr_dpu: HDR_HDR10
+    bit_depth: 10
+  routing_switch:
+    disabled_nodes:
+    - apv_dec
+    - drm_dec
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: storage
+      to: apv_dec
+    - from: storage
+      to: drm_dec
+    - from: drm_dec
+      to: mfc_dec
+    - from: apv_dec
+      to: dpu
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: apv_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: Normal
+      codec: VP9_DEC
+- id: vplay-local-vp9-uhd60-hdr10
+  severity: heavy
+  design_conditions:
+    codec_mfc: VP9_DEC
+    resolution: UHD
+    fps: 60
+    hdr: HDR10
+    hdr_dpu: HDR_HDR10
+    bit_depth: 10
+  routing_switch:
+    disabled_nodes:
+    - apv_dec
+    - drm_dec
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: storage
+      to: apv_dec
+    - from: storage
+      to: drm_dec
+    - from: drm_dec
+      to: mfc_dec
+    - from: apv_dec
+      to: dpu
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: apv_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: Normal
+      codec: VP9_DEC
+- id: vplay-local-av1-fhd30-sdr
+  severity: light
+  design_conditions:
+    codec_mfc: AV1_DEC
+    resolution: FHD
+    fps: 30
+    hdr: SDR
+    bit_depth: 8
+  routing_switch:
+    disabled_nodes:
+    - apv_dec
+    - drm_dec
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: storage
+      to: apv_dec
+    - from: storage
+      to: drm_dec
+    - from: drm_dec
+      to: mfc_dec
+    - from: apv_dec
+      to: dpu
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: apv_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: Normal
+      codec: AV1_DEC
+- id: vplay-local-av1-uhd30-sdr
+  severity: heavy
+  design_conditions:
+    codec_mfc: AV1_DEC
+    resolution: UHD
+    fps: 30
+    hdr: SDR
+    bit_depth: 8
+  routing_switch:
+    disabled_nodes:
+    - apv_dec
+    - drm_dec
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: storage
+      to: apv_dec
+    - from: storage
+      to: drm_dec
+    - from: drm_dec
+      to: mfc_dec
+    - from: apv_dec
+      to: dpu
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: apv_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: Normal
+      codec: AV1_DEC
+- id: vplay-local-av1-uhd30-hdr10
+  severity: heavy
+  design_conditions:
+    codec_mfc: AV1_DEC
+    resolution: UHD
+    fps: 30
+    hdr: HDR10
+    hdr_dpu: HDR_HDR10
+    bit_depth: 10
+  routing_switch:
+    disabled_nodes:
+    - apv_dec
+    - drm_dec
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: storage
+      to: apv_dec
+    - from: storage
+      to: drm_dec
+    - from: drm_dec
+      to: mfc_dec
+    - from: apv_dec
+      to: dpu
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: apv_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: Normal
+      codec: AV1_DEC
+- id: vplay-local-av1-uhd60-hdr10
+  severity: heavy
+  design_conditions:
+    codec_mfc: AV1_DEC
+    resolution: UHD
+    fps: 60
+    hdr: HDR10
+    hdr_dpu: HDR_HDR10
+    bit_depth: 10
+  routing_switch:
+    disabled_nodes:
+    - apv_dec
+    - drm_dec
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: storage
+      to: apv_dec
+    - from: storage
+      to: drm_dec
+    - from: drm_dec
+      to: mfc_dec
+    - from: apv_dec
+      to: dpu
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: apv_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: Normal
+      codec: AV1_DEC
+- id: vplay-local-apv-uhd30-422-sdr
+  severity: heavy
+  design_conditions:
+    codec_apv: APV_DEC
+    resolution: UHD
+    fps: 30
+    hdr: SDR
+    apv_chroma_format_idc: 1
+    apv_chroma_format: '4:2:2'
+  routing_switch:
+    disabled_nodes:
+    - mfc_dec
+    - drm_dec
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: storage
+      to: mfc_dec
+    - from: storage
+      to: drm_dec
+    - from: drm_dec
+      to: mfc_dec
+    - from: mfc_dec
+      to: dpu
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: apv_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    apv_dec:
+      selected_mode: Normal
+      chroma_format_idc: 1
+- id: vplay-local-apv-uhd30-422-hdr10
+  severity: heavy
+  design_conditions:
+    codec_apv: APV_DEC
+    resolution: UHD
+    fps: 30
+    hdr: HDR10
+    hdr_dpu: HDR_HDR10
+    apv_chroma_format_idc: 1
+    apv_chroma_format: '4:2:2'
+  routing_switch:
+    disabled_nodes:
+    - mfc_dec
+    - drm_dec
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: storage
+      to: mfc_dec
+    - from: storage
+      to: drm_dec
+    - from: drm_dec
+      to: mfc_dec
+    - from: mfc_dec
+      to: dpu
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: apv_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    apv_dec:
+      selected_mode: Normal
+      chroma_format_idc: 1
+  buffer_overrides:
+    APV_DPU_BUF:
+      format: YUV422_10BIT
+      bitdepth: 10
+      compression: COMP_OFF
+- id: vplay-local-hevc-uhd30-sbwc-sdr
+  severity: heavy
+  design_conditions:
+    codec_mfc: HEVC_DEC
+    resolution: UHD
+    fps: 30
+    hdr: SDR
+    mfc_format_flag: MFC_FMT_SBWC
+    note: SBWC 포맷 → DPU 직접 소비 (BW 절감)
+  routing_switch:
+    disabled_nodes:
+    - apv_dec
+    - drm_dec
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: storage
+      to: apv_dec
+    - from: storage
+      to: drm_dec
+    - from: drm_dec
+      to: mfc_dec
+    - from: apv_dec
+      to: dpu
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: apv_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: Normal
+      codec: HEVC_DEC
+  buffer_overrides:
+    MFC_DPU_BUF:
+      format: YUV420_SBWC
+      bitdepth: 8
+      compression: COMP_SBWC_LOSSLESS
+- id: vplay-local-hevc-uhd30-sbwcl-sdr
+  severity: heavy
+  design_conditions:
+    codec_mfc: HEVC_DEC
+    resolution: UHD
+    fps: 30
+    hdr: SDR
+    mfc_format_flag: MFC_FMT_SBWCL
+    note: SBWC Lossless
+  routing_switch:
+    disabled_nodes:
+    - apv_dec
+    - drm_dec
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: storage
+      to: apv_dec
+    - from: storage
+      to: drm_dec
+    - from: drm_dec
+      to: mfc_dec
+    - from: apv_dec
+      to: dpu
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: apv_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: Normal
+      codec: HEVC_DEC
+  buffer_overrides:
+    MFC_DPU_BUF:
+      format: YUV420_SBWCL
+      bitdepth: 8
+      compression: COMP_SBWC_LOSSY
+- id: vplay-local-hevc-fhd30-drm
+  severity: light
+  design_conditions:
+    codec_mfc: HEVC_DEC
+    resolution: FHD
+    fps: 30
+    hdr: SDR
+    drm_protected: true
+  routing_switch:
+    disabled_nodes:
+    - apv_dec
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: storage
+      to: apv_dec
+    - from: storage
+      to: mfc_dec
+    - from: apv_dec
+      to: dpu
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: apv_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: Normal
+      codec: HEVC_DEC
+      secure: true
+- id: vplay-local-hevc-uhd30-drm
+  severity: heavy
+  design_conditions:
+    codec_mfc: HEVC_DEC
+    resolution: UHD
+    fps: 30
+    hdr: HDR10
+    hdr_dpu: HDR_HDR10
+    drm_protected: true
+  routing_switch:
+    disabled_nodes:
+    - apv_dec
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: storage
+      to: apv_dec
+    - from: storage
+      to: mfc_dec
+    - from: apv_dec
+      to: dpu
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: apv_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: Normal
+      codec: HEVC_DEC
+      secure: true
+- id: vplay-local-h264-fhd30-panel120hz
+  severity: light
+  design_conditions:
+    codec_mfc: H264_DEC
+    resolution: FHD
+    fps: 30
+    panel_fps_hz: 120
+    note: 30fps 소스를 120Hz 패널에서 재생 (BTS fps=120)
+  routing_switch:
+    disabled_nodes:
+    - apv_dec
+    - drm_dec
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: storage
+      to: apv_dec
+    - from: storage
+      to: drm_dec
+    - from: drm_dec
+      to: mfc_dec
+    - from: apv_dec
+      to: dpu
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: apv_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: Normal
+      codec: H264_DEC
+    panel:
+      selected_mode: 120hz
+- id: vplay-local-hevc-uhd60-panel60hz
+  severity: heavy
+  design_conditions:
+    codec_mfc: HEVC_DEC
+    resolution: UHD
+    fps: 60
+    panel_fps_hz: 60
+    hdr: HDR10
+    hdr_dpu: HDR_HDR10
+  routing_switch:
+    disabled_nodes:
+    - apv_dec
+    - drm_dec
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: storage
+      to: apv_dec
+    - from: storage
+      to: drm_dec
+    - from: drm_dec
+      to: mfc_dec
+    - from: apv_dec
+      to: dpu
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: apv_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: Normal
+      codec: HEVC_DEC
+    panel:
+      selected_mode: 60hz
+- id: vplay-local-hevc-fhd-background
+  severity: light
+  design_conditions:
+    codec_mfc: HEVC_DEC
+    resolution: FHD
+    fps: 30
+    screen_on: false
+    audio: true
+    note: 화면 꺼진 백그라운드 오디오+비디오 재생
+  routing_switch:
+    disabled_nodes:
+    - apv_dec
+    - drm_dec
+    - dpu
+    - panel
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: storage
+      to: apv_dec
+    - from: storage
+      to: drm_dec
+    - from: drm_dec
+      to: mfc_dec
+    - from: apv_dec
+      to: dpu
+    - from: mfc_dec
+      to: dpu
+    - from: dpu
+      to: panel
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: apv_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: LowPower
+      codec: HEVC_DEC
+- id: vplay-local-hevc-fhd-gpu-heavy-overlay
+  severity: light
+  design_conditions:
+    codec_mfc: HEVC_DEC
+    resolution: FHD
+    fps: 30
+    hdr: SDR
+    dpu_layer_count: 14
+    dpu_composer: GPU_FALLBACK
+    note: 자막+UI+PiP 레이어 합산 >12 → SurfaceFlinger GPU fallback
+  routing_switch:
+    disabled_nodes:
+    - apv_dec
+    - drm_dec
+    - m2m_scaler
+    disabled_edges:
+    - from: storage
+      to: apv_dec
+    - from: storage
+      to: drm_dec
+    - from: drm_dec
+      to: mfc_dec
+    - from: apv_dec
+      to: dpu
+    - from: mfc_dec
+      to: dpu
+    - from: apv_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: Normal
+      codec: HEVC_DEC
+- id: vplay-local-hevc-uhd30-gpu-pip
+  severity: heavy
+  design_conditions:
+    codec_mfc: HEVC_DEC
+    resolution: UHD
+    fps: 30
+    hdr: SDR
+    pip_active: true
+    dpu_layer_count: 8
+    dpu_composer: GPU_FALLBACK
+    note: PiP 두 번째 스트림 GPU 합성 후 단일 레이어로 DPU 전달
+  routing_switch:
+    disabled_nodes:
+    - apv_dec
+    - drm_dec
+    - m2m_scaler
+    disabled_edges:
+    - from: storage
+      to: apv_dec
+    - from: storage
+      to: drm_dec
+    - from: drm_dec
+      to: mfc_dec
+    - from: apv_dec
+      to: dpu
+    - from: mfc_dec
+      to: dpu
+    - from: apv_dec
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    mfc_dec:
+      selected_mode: Normal
+      codec: HEVC_DEC
+- id: vplay-local-apv-uhd30-422-m2m-scale
+  severity: heavy
+  design_conditions:
+    codec_apv: APV_DEC
+    resolution: UHD
+    fps: 30
+    hdr: SDR
+    apv_chroma_format_idc: 1
+    apv_chroma_format: '4:2:2'
+    dpu_layer_count: 4
+    dpu_composer: M2M_SCALER_FALLBACK
+    note: YUV422 10bit → M2M 스케일러 → RGBA DPU 직접 소비
+  routing_switch:
+    disabled_nodes:
+    - mfc_dec
+    - drm_dec
+    - gpu
+    disabled_edges:
+    - from: storage
+      to: mfc_dec
+    - from: storage
+      to: drm_dec
+    - from: drm_dec
+      to: mfc_dec
+    - from: mfc_dec
+      to: dpu
+    - from: apv_dec
+      to: dpu
+    - from: mfc_dec
+      to: gpu
+    - from: gpu
+      to: dpu
+  node_configs:
+    apv_dec:
+      selected_mode: Normal
+      chroma_format_idc: 1
+  buffer_overrides:
+    APV_M2M_BUF:
+      format: YUV422_10BIT
+      bitdepth: 10
+      compression: COMP_OFF
+    M2M_DPU_BUF:
+      format: RGBA8888
+      bitdepth: 8
+      compression: COMP_OFF

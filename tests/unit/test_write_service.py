@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 
-from scenario_db.db.models.capability import IpCatalog
+from scenario_db.db.models.capability import IpCatalog, SwProfile
 from scenario_db.db.models.definition import Project, Scenario, ScenarioVariant
 from scenario_db.write.service import (
     build_import_bundle_diff,
@@ -95,6 +95,23 @@ class _Db:
             metadata_={"name": "Project A", "soc_ref": "soc-A"},
             yaml_sha256="test",
         )
+        self.sw_profile = SwProfile(
+            id="sw-vendor-v1.2.3",
+            schema_version="2.2",
+            metadata_={
+                "baseline_family": "vendor",
+                "version": "1.2.3",
+                "compatible_soc": ["soc-A"],
+            },
+            components={
+                "hal": [{"domain": "camera", "ref": "hal-cam-v4.5"}],
+                "kernel": {"ref": "kernel-6.12-android16", "config_deltas": []},
+                "firmware": [],
+            },
+            feature_flags={"LLC_dynamic_allocation": "enabled"},
+            compatibility={"min_compatible_version": "v1.2.0", "breaking_changes": []},
+            yaml_sha256="test",
+        )
 
     def query(self, model):
         if model is Scenario:
@@ -105,6 +122,8 @@ class _Db:
             return _Query([self.project])
         if model is IpCatalog:
             return _Query([self.ip, self.ip_isp, self.ip_csis])
+        if model is SwProfile:
+            return _Query([self.sw_profile])
         return _Query([])
 
 
@@ -336,6 +355,28 @@ def _import_usecase_doc(**overrides):
     return doc
 
 
+def _import_sw_profile_doc(**overrides):
+    doc = {
+        "id": "sw-vendor-v1.2.3",
+        "schema_version": "2.2",
+        "kind": "sw_profile",
+        "metadata": {
+            "baseline_family": "vendor",
+            "version": "1.2.3",
+            "compatible_soc": ["soc-A"],
+        },
+        "components": {
+            "hal": [{"domain": "camera", "ref": "hal-cam-v4.5"}],
+            "kernel": {"ref": "kernel-6.12-android16", "config_deltas": []},
+            "firmware": [],
+        },
+        "feature_flags": {"LLC_dynamic_allocation": "enabled"},
+        "compatibility": {"min_compatible_version": "v1.2.0", "breaking_changes": []},
+    }
+    doc.update(overrides)
+    return doc
+
+
 def _sync_db_scenario_from_doc(db: _Db, doc: dict) -> None:
     db.scenario.id = doc["id"]
     db.scenario.schema_version = doc["schema_version"]
@@ -365,21 +406,36 @@ def _sync_db_scenario_from_doc(db: _Db, doc: dict) -> None:
 def test_normalize_import_bundle_accepts_import_report_and_documents():
     normalized = normalize_import_bundle_payload(
         {
-            "documents": [_import_usecase_doc()],
-            "import_report": {"ok": True, "generated": {"scenario_usecase": 1}, "messages": []},
+            "documents": [_import_sw_profile_doc(), _import_usecase_doc()],
+            "import_report": {
+                "ok": True,
+                "generated": {"sw_profile": 1, "scenario_usecase": 1},
+                "messages": [],
+            },
         }
     )
 
-    assert normalized["documents"][0]["kind"] == "scenario.usecase"
+    assert normalized["documents"][0]["kind"] == "sw_profile"
+    assert normalized["documents"][1]["kind"] == "scenario.usecase"
+    assert normalized["import_report"]["generated"]["sw_profile"] == 1
     assert normalized["import_report"]["generated"]["scenario_usecase"] == 1
 
 
 def test_validate_import_bundle_accepts_canonical_usecase_doc():
-    normalized = normalize_import_bundle_payload({"documents": [_import_usecase_doc()]})
+    normalized = normalize_import_bundle_payload({"documents": [_import_sw_profile_doc(), _import_usecase_doc()]})
 
     issues = validate_import_bundle(_Db(), normalized)
 
     assert issues == []
+
+
+def test_validate_import_bundle_rejects_invalid_sw_profile_doc():
+    doc = _import_sw_profile_doc(metadata={"baseline_family": "vendor"})
+    normalized = normalize_import_bundle_payload({"documents": [doc]})
+
+    issues = validate_import_bundle(_Db(), normalized)
+
+    assert any(issue.code == "import_document_schema_invalid" for issue in issues)
 
 
 def test_validate_import_bundle_rejects_missing_import_ip_ref():
@@ -473,6 +529,29 @@ def test_import_bundle_diff_marks_identical_documents_unchanged():
     assert scenario_change.change == "unchanged"
     assert scenario_change.after["unchanged_ids"] == [doc["id"]]
     assert scenario_change.after["modified_ids"] == []
+
+
+def test_import_bundle_diff_marks_identical_sw_profile_unchanged():
+    normalized = normalize_import_bundle_payload({"documents": [_import_sw_profile_doc()]})
+
+    diff = build_import_bundle_diff(_Db(), normalized)
+
+    sw_change = next(change for change in diff.changes if change.field == "documents.sw_profile")
+    assert sw_change.change == "unchanged"
+    assert sw_change.after["unchanged_ids"] == ["sw-vendor-v1.2.3"]
+    assert sw_change.after["modified_ids"] == []
+
+
+def test_import_bundle_diff_reports_sw_profile_add():
+    normalized = normalize_import_bundle_payload(
+        {"documents": [_import_sw_profile_doc(id="sw-vendor-v1.2.4")]}
+    )
+
+    diff = build_import_bundle_diff(_Db(), normalized)
+
+    sw_change = next(change for change in diff.changes if change.field == "documents.sw_profile")
+    assert sw_change.change == "add"
+    assert sw_change.after["added_ids"] == ["sw-vendor-v1.2.4"]
 
 
 def test_import_bundle_diff_marks_existing_changed_documents_modified():

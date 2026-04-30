@@ -1,0 +1,19 @@
+{
+  "ok": true,
+  "generated": {
+    "validated_yaml": 29,
+    "validated_yaml_ip": 13,
+    "validated_yaml_project": 1,
+    "validated_yaml_scenario_usecase": 13,
+    "validated_yaml_soc": 1,
+    "validated_yaml_sw_profile": 1
+  },
+  "messages": [
+    {
+      "level": "info",
+      "code": "canonical_fixture",
+      "source": "db_fixtures_Exynos2600_S26Plus",
+      "message": "Exynos2600 Thetis / SM-S947B canonical fixture for import and viewer coverage."
+    }
+  ]
+}

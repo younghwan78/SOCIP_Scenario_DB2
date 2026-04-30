@@ -1,0 +1,85 @@
+id: ip-mfc-s5e9965
+schema_version: '2.2'
+kind: ip
+category: codec
+hierarchy:
+  type: simple
+capabilities:
+  operating_modes:
+  - id: Normal
+  - id: LowPower
+  - id: LowLatency
+  - id: OTF
+  supported_features:
+    bitdepth:
+    - 8
+    - 10
+    compression:
+    - COMP_OFF
+    - COMP_SBWC_LOSSLESS
+    - COMP_SBWC_LOSSY
+    hdr_formats:
+    - SDR
+    - HDR10
+    - HDR10_PLUS
+    - HLG
+  properties:
+    ip_group: MFC
+    hierarchy_group: Codec
+    codecs:
+      decoders:
+        H264_DEC:
+          id: 0
+          name: H.264/AVC
+          max_resolution: UHD
+          max_fps: 120
+        HEVC_DEC:
+          id: 17
+          name: H.265/HEVC
+          max_resolution: 8K
+          max_fps: 60
+        VP9_DEC:
+          id: 18
+          name: VP9
+          max_resolution: UHD
+          max_fps: 60
+        AV1_DEC:
+          id: 19
+          name: AV1
+          max_resolution: UHD
+          max_fps: 60
+        BPG_DEC:
+          id: 32
+          name: BPG
+          max_resolution: UHD
+          max_fps: 30
+      encoders:
+        H264_ENC:
+          id: 20
+          name: H.264/AVC
+          max_resolution: UHD
+          max_fps: 60
+        HEVC_ENC:
+          id: 26
+          name: H.265/HEVC
+          max_resolution: 8K
+          max_fps: 30
+        VP9_ENC:
+          id: 27
+          name: VP9
+          max_resolution: UHD
+          max_fps: 30
+    format_flags:
+      MFC_FMT_STREAM: 1
+      MFC_FMT_FRAME: 2
+      MFC_FMT_10BIT: 4
+      MFC_FMT_422: 8
+      MFC_FMT_RGB: 16
+      MFC_FMT_SBWC: 32
+      MFC_FMT_SBWCL: 64
+      MFC_FMT_DEC: 128
+      MFC_FMT_ENC: 256
+    sbwc_support: true
+    secure_mode: true
+compatible_soc:
+- soc-exynos2600

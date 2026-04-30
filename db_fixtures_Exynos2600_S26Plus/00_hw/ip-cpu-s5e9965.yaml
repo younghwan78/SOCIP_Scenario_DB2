@@ -1,0 +1,18 @@
+id: ip-cpu-s5e9965
+schema_version: '2.2'
+kind: ip
+category: cpu
+hierarchy:
+  type: simple
+capabilities:
+  operating_modes:
+  - id: normal
+  - id: performance
+  properties:
+    role: sw_task_host
+    clusters:
+    - LITTLE
+    - MID
+    - BIG
+compatible_soc:
+- soc-exynos2600

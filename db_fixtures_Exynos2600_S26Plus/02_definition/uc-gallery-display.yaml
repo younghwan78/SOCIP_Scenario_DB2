@@ -1,0 +1,362 @@
+id: uc-gallery-display
+schema_version: '2.2'
+kind: scenario.usecase
+project_ref: proj-sm-s947b
+metadata:
+  name: Gallery Display
+  category:
+  - display
+  - display
+  domain:
+  - display
+pipeline:
+  nodes:
+  - id: storage
+    ip_ref: ip-cpu-s5e9965
+    role: source
+    instance_index: 0
+  - id: gpu
+    ip_ref: ip-gpu-s5e9965
+    role: composer
+    instance_index: 0
+  - id: m2m_scaler
+    ip_ref: ip-cpu-s5e9965
+    role: m2m_scaler
+    instance_index: 0
+  - id: dpu
+    ip_ref: ip-dpu-s5e9965
+    role: display_controller
+    instance_index: 0
+  - id: panel
+    ip_ref: ip-display-panel-s5e9965
+    role: display_output
+    instance_index: 0
+  edges:
+  - from: storage
+    to: dpu
+    type: M2M
+    buffer: STORAGE_DPU_BUF
+  - from: storage
+    to: gpu
+    type: M2M
+    buffer: STORAGE_GPU_BUF
+  - from: gpu
+    to: dpu
+    type: M2M
+    buffer: GPU_DPU_BUF
+  - from: storage
+    to: m2m_scaler
+    type: M2M
+    buffer: STORAGE_M2M_BUF
+  - from: m2m_scaler
+    to: dpu
+    type: M2M
+    buffer: M2M_DPU_BUF
+  - from: dpu
+    to: panel
+    type: OTF
+  buffers:
+    STORAGE_DPU_BUF:
+      format: RGBA8888
+      bitdepth: 8
+      compression: COMP_OFF
+    STORAGE_GPU_BUF:
+      format: RGBA8888
+      bitdepth: 8
+      compression: COMP_OFF
+    GPU_DPU_BUF:
+      format: RGBA8888
+      bitdepth: 8
+      compression: COMP_OFF
+    STORAGE_M2M_BUF:
+      format: YUV420
+      bitdepth: 8
+      compression: COMP_OFF
+    M2M_DPU_BUF:
+      format: RGBA8888
+      bitdepth: 8
+      compression: COMP_OFF
+variants:
+- id: disp-gallery-fhd-sdr-60hz
+  severity: light
+  design_conditions:
+    resolution: FHD
+    hdr: SDR
+    color_mode: HAL_COLOR_MODE_DISPLAY_P3
+    panel_fps_hz: 60
+    dpu_layer_count: 4
+    dpu_composer: DPU_DIRECT
+  routing_switch:
+    disabled_nodes:
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: storage
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: storage
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    panel:
+      selected_mode: 60hz
+- id: disp-gallery-fhd-sdr-120hz
+  severity: light
+  design_conditions:
+    resolution: FHD
+    hdr: SDR
+    color_mode: HAL_COLOR_MODE_DISPLAY_P3
+    panel_fps_hz: 120
+    dpu_layer_count: 4
+    dpu_composer: DPU_DIRECT
+  routing_switch:
+    disabled_nodes:
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: storage
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: storage
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    panel:
+      selected_mode: 120hz
+- id: disp-gallery-uhd-hdr10-60hz
+  severity: heavy
+  design_conditions:
+    resolution: UHD
+    hdr: HDR10
+    hdr_dpu: HDR_HDR10
+    color_mode: HAL_COLOR_MODE_BT2020
+    bit_depth: 10
+    panel_fps_hz: 60
+    dpu_layer_count: 4
+    dpu_composer: DPU_DIRECT
+  routing_switch:
+    disabled_nodes:
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: storage
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: storage
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    dpu:
+      selected_mode: Normal
+    panel:
+      selected_mode: 60hz
+  buffer_overrides:
+    STORAGE_DPU_BUF:
+      format: RGBA1010102
+      bitdepth: 10
+      compression: COMP_OFF
+- id: disp-gallery-fhd-hdr10plus-60hz
+  severity: light
+  design_conditions:
+    resolution: FHD
+    hdr: HDR10_PLUS
+    hdr_dpu: HDR_HDR10_PLUS
+    dynamic_metadata: true
+    color_mode: HAL_COLOR_MODE_BT2020
+    bit_depth: 10
+    panel_fps_hz: 60
+    dpu_layer_count: 4
+    dpu_composer: DPU_DIRECT
+  routing_switch:
+    disabled_nodes:
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: storage
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: storage
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    dpu:
+      selected_mode: Normal
+    panel:
+      selected_mode: 60hz
+  buffer_overrides:
+    STORAGE_DPU_BUF:
+      format: RGBA1010102
+      bitdepth: 10
+      compression: COMP_OFF
+- id: disp-gallery-fhd-hlg-60hz
+  severity: medium
+  design_conditions:
+    resolution: FHD
+    hdr: HLG
+    hdr_dpu: HDR_HLG
+    transfer: EXYNOS_TRANSFER_HLG
+    panel_fps_hz: 60
+    dpu_layer_count: 4
+    dpu_composer: DPU_DIRECT
+  routing_switch:
+    disabled_nodes:
+    - gpu
+    - m2m_scaler
+    disabled_edges:
+    - from: storage
+      to: gpu
+    - from: gpu
+      to: dpu
+    - from: storage
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    dpu:
+      selected_mode: Normal
+    panel:
+      selected_mode: 60hz
+  buffer_overrides:
+    STORAGE_DPU_BUF:
+      format: RGBA1010102
+      bitdepth: 10
+      compression: COMP_OFF
+- id: disp-gallery-fhd-sdr-gpu-heavy
+  severity: light
+  design_conditions:
+    resolution: FHD
+    hdr: SDR
+    panel_fps_hz: 60
+    dpu_layer_count: 15
+    dpu_composer: GPU_FALLBACK
+    note: 'layer_count > 12: SurfaceFlinger GPU fallback (RenderThread GLES)'
+  routing_switch:
+    disabled_nodes:
+    - m2m_scaler
+    disabled_edges:
+    - from: storage
+      to: dpu
+    - from: storage
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    panel:
+      selected_mode: 60hz
+- id: disp-gallery-fhd-sdr-gpu-filter
+  severity: light
+  design_conditions:
+    resolution: FHD
+    hdr: SDR
+    panel_fps_hz: 60
+    dpu_layer_count: 6
+    dpu_composer: GPU_FALLBACK
+    blend_mode: custom_filter
+    note: DPP 미지원 blend mode (multiply/overlay 등) → GPU 합성
+  routing_switch:
+    disabled_nodes:
+    - m2m_scaler
+    disabled_edges:
+    - from: storage
+      to: dpu
+    - from: storage
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    panel:
+      selected_mode: 60hz
+- id: disp-gallery-uhd-hdr10-gpu-fallback
+  severity: heavy
+  design_conditions:
+    resolution: UHD
+    hdr: HDR10
+    hdr_dpu: HDR_HDR10
+    panel_fps_hz: 60
+    dpu_layer_count: 20
+    dpu_composer: GPU_FALLBACK
+    note: '썸네일 그리드: 다수 이미지 레이어 동시 합성 → GPU fallback'
+  routing_switch:
+    disabled_nodes:
+    - m2m_scaler
+    disabled_edges:
+    - from: storage
+      to: dpu
+    - from: storage
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    panel:
+      selected_mode: 60hz
+  buffer_overrides:
+    STORAGE_GPU_BUF:
+      format: RGBA1010102
+      bitdepth: 10
+      compression: COMP_OFF
+    GPU_DPU_BUF:
+      format: RGBA1010102
+      bitdepth: 10
+      compression: COMP_OFF
+- id: disp-gallery-yuv422-m2m-scale
+  severity: light
+  design_conditions:
+    resolution: FHD
+    hdr: SDR
+    panel_fps_hz: 60
+    input_format: YUV422
+    dpu_layer_count: 4
+    dpu_composer: M2M_SCALER_FALLBACK
+    note: YUV422 포맷은 DPP 직접 입력 불가 → M2M 변환 후 DPU
+  routing_switch:
+    disabled_nodes:
+    - gpu
+    disabled_edges:
+    - from: storage
+      to: dpu
+    - from: storage
+      to: gpu
+    - from: gpu
+      to: dpu
+  node_configs:
+    panel:
+      selected_mode: 60hz
+  buffer_overrides:
+    STORAGE_M2M_BUF:
+      format: YUV422
+      bitdepth: 10
+      compression: COMP_OFF
+    M2M_DPU_BUF:
+      format: RGBA8888
+      bitdepth: 8
+      compression: COMP_OFF
+- id: disp-gallery-fhd-sdr-m2m-prescale
+  severity: light
+  design_conditions:
+    resolution: FHD
+    hdr: SDR
+    panel_fps_hz: 60
+    dpu_layer_count: 10
+    dpu_composer: M2M_SCALER_FALLBACK
+    note: M2M 스케일러로 복수 레이어 pre-composite → DPU 입력 레이어 수 감소
+  routing_switch:
+    disabled_nodes:
+    - gpu
+    disabled_edges:
+    - from: storage
+      to: dpu
+    - from: storage
+      to: gpu
+    - from: gpu
+      to: dpu
+  node_configs:
+    panel:
+      selected_mode: 60hz

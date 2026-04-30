@@ -1,0 +1,216 @@
+id: uc-camera-recording-apv
+schema_version: '2.2'
+kind: scenario.usecase
+project_ref: proj-sm-s947b
+metadata:
+  name: Camera Recording APV
+  category:
+  - camera
+  domain:
+  - camera
+pipeline:
+  nodes:
+  - id: sensor_rear
+    ip_ref: ip-sensor-rear-s5e9965
+    role: sensor
+    instance_index: 0
+  - id: csis
+    ip_ref: ip-csis-s5e9965
+    role: csis
+    instance_index: 0
+  - id: isp
+    ip_ref: ip-isp-s5e9965
+    role: isp
+    instance_index: 0
+  - id: lme
+    ip_ref: ip-lme-s5e9965
+    role: lme
+    instance_index: 0
+  - id: mcsc
+    ip_ref: ip-mcsc-s5e9965
+    role: mcsc
+    instance_index: 0
+  - id: apv_enc
+    ip_ref: ip-apv-s5e9965
+    role: encoder
+    instance_index: 0
+  edges:
+  - from: sensor_rear
+    to: csis
+    type: OTF
+  - from: csis
+    to: isp
+    type: OTF
+  - from: isp
+    to: lme
+    type: OTF
+  - from: lme
+    to: mcsc
+    type: OTF
+  - from: mcsc
+    to: apv_enc
+    type: M2M
+    buffer: MCSC_APV_BUF
+  buffers:
+    MCSC_APV_BUF:
+      format: YUV422
+      bitdepth: 10
+      compression: COMP_OFF
+variants:
+- id: cam-rec-apv-uhd30-422-sdr
+  severity: heavy
+  design_conditions:
+    subscenario: UHD_VIDEO
+    sensor_place: rear
+    resolution: UHD
+    fps: 30
+    hdr: SDR
+    apv_chroma_format_idc: 1
+    apv_chroma_format: '4:2:2'
+    apv_band_idc: 0
+    apv_enc_profile: 0
+  node_configs:
+    apv_enc:
+      selected_mode: Normal
+      chroma_format_idc: 1
+      band_idc: 0
+      enc_profile: 0
+- id: cam-rec-apv-uhd30-444-sdr
+  severity: heavy
+  design_conditions:
+    subscenario: UHD_VIDEO
+    sensor_place: rear
+    resolution: UHD
+    fps: 30
+    hdr: SDR
+    apv_chroma_format_idc: 2
+    apv_chroma_format: '4:4:4'
+    apv_band_idc: 0
+    apv_enc_profile: 1
+  node_configs:
+    apv_enc:
+      selected_mode: Normal
+      chroma_format_idc: 2
+      band_idc: 0
+      enc_profile: 1
+  buffer_overrides:
+    MCSC_APV_BUF:
+      format: YUV444
+      bitdepth: 10
+      compression: COMP_OFF
+- id: cam-rec-apv-uhd30-422-hdr10
+  severity: heavy
+  design_conditions:
+    subscenario: HDR10_UHD_VIDEO
+    sensor_place: rear
+    resolution: UHD
+    fps: 30
+    hdr: HDR10
+    apv_chroma_format_idc: 1
+    apv_chroma_format: '4:2:2'
+    apv_band_idc: 0
+    apv_hdr10_plus_avail: false
+    note: MaxCLL/MaxFALL 정적 메타데이터
+  node_configs:
+    apv_enc:
+      selected_mode: Normal
+      chroma_format_idc: 1
+      band_idc: 0
+- id: cam-rec-apv-uhd30-422-hdr10plus
+  severity: heavy
+  design_conditions:
+    subscenario: HDR10_UHD_VIDEO
+    sensor_place: rear
+    resolution: UHD
+    fps: 30
+    hdr: HDR10_PLUS
+    apv_chroma_format_idc: 1
+    apv_chroma_format: '4:2:2'
+    apv_hdr10_plus_avail: true
+    note: 동적 메타데이터 포함 (d_display_info_1.hdr10_plus_avail=1)
+  node_configs:
+    apv_enc:
+      selected_mode: HighQuality
+      chroma_format_idc: 1
+- id: cam-rec-apv-uhd60-422-sdr
+  severity: heavy
+  design_conditions:
+    subscenario: UHD_60FPS_VIDEO
+    sensor_place: rear
+    resolution: UHD
+    fps: 60
+    hdr: SDR
+    apv_chroma_format_idc: 1
+    apv_chroma_format: '4:2:2'
+  node_configs:
+    apv_enc:
+      selected_mode: Normal
+      chroma_format_idc: 1
+- id: cam-rec-apv-uhd60-422-hdr10
+  severity: heavy
+  design_conditions:
+    subscenario: HDR10_UHD_60FPS_VIDEO
+    sensor_place: rear
+    resolution: UHD
+    fps: 60
+    hdr: HDR10
+    apv_chroma_format_idc: 1
+    apv_chroma_format: '4:2:2'
+  node_configs:
+    apv_enc:
+      selected_mode: Normal
+      chroma_format_idc: 1
+- id: cam-rec-apv-8k24-422-sdr
+  severity: critical
+  design_conditions:
+    subscenario: 8K_30FPS_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_8K24
+    sensor_place: rear
+    resolution: 8K
+    fps: 24
+    hdr: SDR
+    apv_chroma_format_idc: 1
+    apv_chroma_format: '4:2:2'
+  node_configs:
+    apv_enc:
+      selected_mode: Normal
+      chroma_format_idc: 1
+- id: cam-rec-apv-8k30-422-sdr
+  severity: critical
+  design_conditions:
+    subscenario: 8K_30FPS_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_8K30
+    sensor_place: rear
+    resolution: 8K
+    fps: 30
+    hdr: SDR
+    apv_chroma_format_idc: 1
+    apv_chroma_format: '4:2:2'
+  node_configs:
+    apv_enc:
+      selected_mode: Normal
+      chroma_format_idc: 1
+- id: cam-rec-apv-pro-uhd30-444
+  severity: heavy
+  design_conditions:
+    subscenario: UHD_VIDEO
+    sensor_place: rear
+    is_scenario: IS_SCENARIO_PRO_VIDEO
+    resolution: UHD
+    fps: 30
+    hdr: SDR
+    apv_chroma_format_idc: 2
+    apv_chroma_format: '4:4:4'
+    apv_band_idc: 1
+    apv_enc_profile: 1
+  node_configs:
+    apv_enc:
+      selected_mode: HighQuality
+      chroma_format_idc: 2
+      band_idc: 1
+      enc_profile: 1
+  buffer_overrides:
+    MCSC_APV_BUF:
+      format: YUV444
+      bitdepth: 10
+      compression: COMP_OFF

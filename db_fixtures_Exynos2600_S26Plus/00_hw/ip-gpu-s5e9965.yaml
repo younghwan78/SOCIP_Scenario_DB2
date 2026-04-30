@@ -1,0 +1,31 @@
+id: ip-gpu-s5e9965
+schema_version: '2.2'
+kind: ip
+category: compute
+hierarchy:
+  type: simple
+capabilities:
+  operating_modes:
+  - id: performance
+  - id: balanced
+  - id: powersave
+  - id: game_boost
+  supported_features:
+    bitdepth:
+    - 8
+    - 10
+    - 16
+    - 32
+    hdr_formats:
+    - SDR
+    - HDR10
+  properties:
+    ip_group: SGPU
+    hierarchy_group: Compute
+    vendor: Samsung/AMD
+    driver_path: exynos/external-modules/sgpu/
+    supports_vulkan: true
+    supports_opengl_es: '3.2'
+    gpu_composer: true
+compatible_soc:
+- soc-exynos2600

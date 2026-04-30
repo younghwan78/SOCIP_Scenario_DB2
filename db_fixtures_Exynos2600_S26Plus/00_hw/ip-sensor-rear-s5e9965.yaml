@@ -1,0 +1,67 @@
+id: ip-sensor-rear-s5e9965
+schema_version: '2.2'
+kind: ip
+category: sensor
+hierarchy:
+  type: simple
+capabilities:
+  operating_modes:
+  - id: binning_4x4
+  - id: binning_2x2
+  - id: full_remosaic
+  - id: high_speed
+  - id: tetra_crop
+  supported_features:
+    bitdepth:
+    - 10
+    - 12
+    compression:
+    - COMP_BAYER_LOSSLESS
+    - COMP_BAYER_LOSSY
+  properties:
+    place: rear
+    pixel_size_um: 0.6
+    phy_type: CPHY
+    mipi_lanes: 4
+    modes:
+      binning_4x4:
+        sensor_name: HP2 12MP 4-in-1 binning
+        sensor_size:
+        - 4000
+        - 3000
+        sensor_fps: 60.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+      binning_2x2:
+        sensor_name: HP2 50MP 2-in-1 binning
+        sensor_size:
+        - 8000
+        - 6000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 3.712
+        sensor_sbwc: enable
+      full_remosaic:
+        sensor_name: HP2 200MP full resolution
+        sensor_size:
+        - 16384
+        - 12288
+        sensor_fps: 10.0
+        sensor_format: BAYER
+        sensor_bitwidth: 12
+        sensor_mipi_speed: 4.0
+      high_speed:
+        sensor_name: HP2 high speed binning
+        sensor_size:
+        - 1920
+        - 1080
+        sensor_fps: 960.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 4.0
+compatible_soc:
+- soc-exynos2600

@@ -1,0 +1,850 @@
+id: uc-camera-preview
+schema_version: '2.2'
+kind: scenario.usecase
+project_ref: proj-sm-s947b
+metadata:
+  name: Camera Preview
+  category:
+  - camera
+  domain:
+  - camera
+pipeline:
+  nodes:
+  - id: sensor_rear
+    ip_ref: ip-sensor-rear-s5e9965
+    role: sensor
+    instance_index: 0
+  - id: sensor_rear2
+    ip_ref: ip-sensor-rear-s5e9965
+    role: sensor
+    instance_index: 0
+  - id: sensor_rear3
+    ip_ref: ip-sensor-rear-s5e9965
+    role: sensor
+    instance_index: 0
+  - id: sensor_front
+    ip_ref: ip-sensor-front-s5e9965
+    role: sensor
+    instance_index: 0
+  - id: csispdp
+    ip_ref: ip-isp-s5e9965
+    role: csispdp
+    instance_index: 0
+  - id: n3aa
+    ip_ref: ip-isp-s5e9965
+    role: 3aa_stats
+    instance_index: 0
+  - id: byrp
+    ip_ref: ip-isp-s5e9965
+    role: byrp
+    instance_index: 0
+  - id: rgbp
+    ip_ref: ip-isp-s5e9965
+    role: rgbp
+    instance_index: 0
+  - id: yuvsc
+    ip_ref: ip-isp-s5e9965
+    role: yuvsc
+    instance_index: 0
+  - id: mtnr
+    ip_ref: ip-isp-s5e9965
+    role: mtnr
+    instance_index: 0
+  - id: msnr
+    ip_ref: ip-isp-s5e9965
+    role: msnr
+    instance_index: 0
+  - id: yuvp
+    ip_ref: ip-isp-s5e9965
+    role: yuvp
+    instance_index: 0
+  - id: mcsc
+    ip_ref: ip-mcsc-s5e9965
+    role: mcsc
+    instance_index: 0
+  - id: npu
+    ip_ref: ip-npu-s5e9965
+    role: npu
+    instance_index: 0
+  - id: eis
+    ip_ref: ip-cpu-s5e9965
+    role: eis_stabilization
+    instance_index: 0
+  - id: gdc_m
+    ip_ref: ip-isp-s5e9965
+    role: gdc_preview
+    instance_index: 0
+  - id: dpu
+    ip_ref: ip-dpu-s5e9965
+    role: display_controller
+    instance_index: 0
+  - id: panel
+    ip_ref: ip-display-panel-s5e9965
+    role: display_output
+    instance_index: 0
+  edges:
+  - from: sensor_rear
+    to: csispdp
+    type: OTF
+  - from: sensor_rear2
+    to: csispdp
+    type: OTF
+  - from: sensor_rear3
+    to: csispdp
+    type: OTF
+  - from: sensor_front
+    to: csispdp
+    type: OTF
+  - from: csispdp
+    to: byrp
+    type: OTF
+  - from: byrp
+    to: rgbp
+    type: OTF
+  - from: rgbp
+    to: yuvsc
+    type: OTF
+  - from: yuvsc
+    to: mtnr
+    type: M2M
+    buffer: YUVSC_MTNR_BUF
+  - from: mtnr
+    to: msnr
+    type: OTF
+  - from: msnr
+    to: yuvp
+    type: OTF
+  - from: yuvp
+    to: mcsc
+    type: OTF
+  - from: csispdp
+    to: n3aa
+    type: M2M
+    buffer: CSISPDP_3AA_BUF
+  - from: csispdp
+    to: npu
+    type: M2M
+    buffer: CSISPDP_NPU_BUF
+  - from: npu
+    to: mtnr
+    type: M2M
+    buffer: NPU_MTNR_BUF
+  - from: mcsc
+    to: gdc_m
+    type: M2M
+    buffer: MCSC_WDMA_PREV_BUF
+  - from: mcsc
+    to: eis
+    type: M2M
+    buffer: MCSC_WDMA_PREV_BUF
+  - from: eis
+    to: gdc_m
+    type: M2M
+    buffer: EIS_GDC_M_BUF
+  - from: gdc_m
+    to: dpu
+    type: M2M
+    buffer: GDC_M_DPU_BUF
+  - from: dpu
+    to: panel
+    type: OTF
+  buffers:
+    YUVSC_MTNR_BUF:
+      format: YUV420
+      bitdepth: 10
+      compression: COMP_OFF
+      note: M2M break — multi-frame TNR input
+    CSISPDP_3AA_BUF:
+      format: BAYER
+      bitdepth: 10
+      compression: COMP_OFF
+      note: 3A stats sidecar
+    CSISPDP_NPU_BUF:
+      format: YUV420
+      bitdepth: 10
+      compression: COMP_OFF
+      note: AI remosaic / AI-AF NPU input
+    NPU_MTNR_BUF:
+      format: YUV420
+      bitdepth: 10
+      compression: COMP_OFF
+      note: NPU → MTNR AI pre-processed
+    MCSC_WDMA_PREV_BUF:
+      format: YUV420
+      bitdepth: 10
+      compression: COMP_OFF
+      note: MCSC OUTPUT0 preview WDMA — larger than display (EIS margin)
+    EIS_GDC_M_BUF:
+      format: YUV420
+      bitdepth: 10
+      compression: COMP_OFF
+      note: EIS warp map + frame → GDC_M
+    GDC_M_DPU_BUF:
+      format: YUV420
+      bitdepth: 10
+      compression: COMP_SBWC_LOSSLESS
+      note: GDC_M crop/warp output → DPU (SBWC zero-copy)
+variants:
+- id: cam-prev-r1-30
+  severity: light
+  design_conditions:
+    subscenario: STILL_PREVIEW
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_PHOTO
+    sensor_place: rear
+    camera_mode: single
+    fps: 30
+    hdr: SDR
+    stabilization: false
+    extend_mode: EX_NONE
+    super_night: false
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+  node_configs:
+    csispdp:
+      selected_mode: Normal
+    mtnr:
+      selected_mode: Preview
+- id: cam-prev-r1-60
+  severity: medium
+  design_conditions:
+    subscenario: STILL_PREVIEW
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_PHOTO_60
+    sensor_place: rear
+    camera_mode: single
+    fps: 60
+    hdr: SDR
+    extend_mode: EX_NONE
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+  node_configs:
+    sensor_rear:
+      selected_mode: binning_4x4
+    csispdp:
+      selected_mode: Normal
+- id: cam-prev-r1-full-res
+  severity: light
+  design_conditions:
+    subscenario: STILL_PREVIEW
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_PHOTO_FULL
+    sensor_place: rear
+    fps: 30
+    extend_mode: EX_NONE
+    note: remosaic 캡처 직전 sensor full-size 프리뷰
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+  node_configs:
+    sensor_rear:
+      selected_mode: binning_2x2
+- id: cam-prev-r1-remosaic
+  severity: light
+  design_conditions:
+    subscenario: STILL_REMOSAIC_PREVIEW
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_REMOSAIC_PHOTO
+    sensor_place: rear
+    fps: 30
+    extend_mode: EX_SEAMLESS_TETRA
+    is_scenario: IS_SCENARIO_FULL_SIZE
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+  node_configs:
+    sensor_rear:
+      selected_mode: full_remosaic
+    mtnr:
+      selected_mode: Remosaic
+- id: cam-prev-r1-ai-remosaic
+  severity: light
+  design_conditions:
+    subscenario: STILL_REMOSAIC_PREVIEW
+    sensor_place: rear
+    fps: 30
+    extend_mode: EX_AI_REMOSAIC
+    npu_used: true
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+  node_configs:
+    sensor_rear:
+      selected_mode: full_remosaic
+    npu:
+      selected_mode: Normal
+    mtnr:
+      selected_mode: Remosaic
+- id: cam-prev-r1-night
+  severity: light
+  design_conditions:
+    subscenario: STILL_SUPER_NIGHT_PREVIEW
+    sensor_place: rear
+    fps: 30
+    extend_mode: EX_NIGHT
+    super_night: true
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+- id: cam-prev-r1-night-max
+  severity: light
+  design_conditions:
+    subscenario: STILL_SUPER_NIGHT_PREVIEW
+    sensor_place: rear
+    fps: 30
+    extend_mode: EX_NIGHT
+    super_night: max
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+- id: cam-prev-r1-crop-zoom
+  severity: light
+  design_conditions:
+    subscenario: STILL_PREVIEW
+    sensor_place: rear
+    fps: 30
+    extend_mode: EX_CROP_ZOOM
+    freeform_sensor_crop: true
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+  node_configs:
+    csispdp:
+      freeform_crop: true
+- id: cam-prev-r1-dcg
+  severity: light
+  design_conditions:
+    subscenario: STILL_PREVIEW
+    sensor_place: rear
+    fps: 30
+    extend_mode: EX_DCG
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+- id: cam-prev-r1-ln
+  severity: light
+  design_conditions:
+    subscenario: STILL_PREVIEW
+    sensor_place: rear
+    fps: 30
+    extend_mode: EX_LN
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+- id: cam-prev-r1-3dhdr
+  severity: light
+  design_conditions:
+    subscenario: STILL_PREVIEW
+    sensor_place: rear
+    fps: 30
+    extend_mode: EX_3DHDR
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+  node_configs:
+    csispdp:
+      selected_mode: VC_DT
+- id: cam-prev-r1-portrait
+  severity: light
+  design_conditions:
+    subscenario: STILL_PORTRAIT_PREVIEW
+    camera_mode: dual_sync
+    fps: 30
+    extend_mode: EX_LIVEFOCUS
+    face_detect: FACEDETECT_MODE_FULL
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear3
+    - sensor_front
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+- id: cam-prev-r1-expert-raw
+  severity: light
+  design_conditions:
+    subscenario: STILL_EXPERT_RAW_PREVIEW
+    sensor_place: rear
+    fps: 30
+    extend_mode: EX_PDAF_OFF
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+- id: cam-prev-r1-pro
+  severity: light
+  design_conditions:
+    subscenario: STILL_PREVIEW_PRO_MODE
+    sensor_place: rear
+    fps: 30
+    is_scenario: IS_SCENARIO_PRO_VIDEO
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+- id: cam-prev-f1-30
+  severity: light
+  design_conditions:
+    subscenario: STILL_PREVIEW
+    dvfs_sn: IS_DVFS_SN_FRONT_SINGLE_PHOTO
+    sensor_place: front
+    camera_mode: single
+    fps: 30
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear
+    - sensor_rear2
+    - sensor_rear3
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear
+      to: csispdp
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+- id: cam-prev-f1-60
+  severity: medium
+  design_conditions:
+    subscenario: STILL_PREVIEW
+    dvfs_sn: IS_DVFS_SN_FRONT_SINGLE_PHOTO_60
+    sensor_place: front
+    fps: 60
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear
+    - sensor_rear2
+    - sensor_rear3
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear
+      to: csispdp
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+- id: cam-prev-f1-full-res
+  severity: light
+  design_conditions:
+    subscenario: STILL_PREVIEW
+    dvfs_sn: IS_DVFS_SN_FRONT_SINGLE_PHOTO_FULL
+    sensor_place: front
+    fps: 30
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear
+    - sensor_rear2
+    - sensor_rear3
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear
+      to: csispdp
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+  node_configs:
+    sensor_front:
+      selected_mode: full_res
+- id: cam-prev-rdual-30
+  severity: light
+  design_conditions:
+    subscenario: STILL_PREVIEW
+    dvfs_sn: IS_DVFS_SN_REAR_DUAL_PHOTO
+    camera_mode: dual_sync
+    sensor_places: rear,rear2
+    fps: 30
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear3
+    - sensor_front
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+- id: cam-prev-rdual-60
+  severity: medium
+  design_conditions:
+    subscenario: STILL_PREVIEW
+    dvfs_sn: IS_DVFS_SN_REAR_DUAL_PHOTO_60
+    camera_mode: dual_sync
+    fps: 60
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear3
+    - sensor_front
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+- id: cam-prev-rtriple-30
+  severity: light
+  design_conditions:
+    subscenario: STILL_PREVIEW
+    dvfs_sn: IS_DVFS_SN_TRIPLE_PHOTO
+    camera_mode: triple
+    sensor_places: rear,rear2,rear3
+    fps: 30
+  routing_switch:
+    disabled_nodes:
+    - sensor_front
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+- id: cam-prev-rtriple-60
+  severity: medium
+  design_conditions:
+    subscenario: STILL_PREVIEW
+    dvfs_sn: IS_DVFS_SN_TRIPLE_PHOTO_60
+    camera_mode: triple
+    fps: 60
+  routing_switch:
+    disabled_nodes:
+    - sensor_front
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+- id: cam-prev-pip-dual
+  severity: light
+  design_conditions:
+    subscenario: STILL_3RD_PARTY_PREVIEW
+    dvfs_sn: IS_DVFS_SN_PIP_DUAL_PHOTO
+    camera_mode: dual_async
+    fps: 30
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m

@@ -1,0 +1,51 @@
+id: ip-sensor-front-s5e9965
+schema_version: '2.2'
+kind: ip
+category: sensor
+hierarchy:
+  type: simple
+capabilities:
+  operating_modes:
+  - id: normal
+  - id: full_res
+  - id: high_speed
+  supported_features:
+    bitdepth:
+    - 10
+    - 12
+    compression:
+    - COMP_BAYER_LOSSLESS
+  properties:
+    place: front
+    phy_type: CPHY
+    mipi_lanes: 2
+    modes:
+      normal:
+        sensor_name: Front 10MP normal
+        sensor_size:
+        - 3648
+        - 2736
+        sensor_fps: 60.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.0
+      full_res:
+        sensor_name: Front 10MP full
+        sensor_size:
+        - 3648
+        - 2736
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 12
+        sensor_mipi_speed: 2.5
+      high_speed:
+        sensor_name: Front 10MP high speed
+        sensor_size:
+        - 1920
+        - 1080
+        sensor_fps: 120.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.0
+compatible_soc:
+- soc-exynos2600
