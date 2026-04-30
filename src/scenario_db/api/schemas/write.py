@@ -5,7 +5,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 
-WriteKind = Literal["scenario.variant_overlay", "scenario.pipeline_patch"]
+WriteKind = Literal["scenario.variant_overlay", "scenario.pipeline_patch", "scenario.import_bundle"]
 
 
 class StageWriteRequest(BaseModel):
@@ -49,6 +49,7 @@ class ValidateWriteResponse(BaseModel):
     valid: bool
     issues: list[ValidationIssue] = Field(default_factory=list)
     normalized_payload: dict[str, Any] | None = None
+    import_report: dict[str, Any] | None = None
 
 
 class DiffEntry(BaseModel):

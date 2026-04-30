@@ -1,0 +1,108 @@
+{
+  "kind": "scenario.import_bundle",
+  "actor": "importer@example.com",
+  "note": "Stage canonical documents generated from legacy YAML",
+  "payload": {
+    "import_report": {
+      "ok": true,
+      "generated": {
+        "scenario_usecase": 1,
+        "scenario_variant": 1,
+        "validated_yaml": 1
+      },
+      "messages": [
+        {
+          "level": "warning",
+          "code": "legacy_optional_field_ignored",
+          "message": "legacy hw_dvfs was ignored by canonical import"
+        }
+      ]
+    },
+    "documents": [
+      {
+        "id": "uc-imported-camera-recording",
+        "schema_version": "2.2",
+        "kind": "scenario.usecase",
+        "project_ref": "proj-A-exynos2500",
+        "metadata": {
+          "name": "Imported Camera Recording",
+          "category": ["camera"],
+          "domain": ["camera"]
+        },
+        "pipeline": {
+          "nodes": [
+            {"id": "csis0", "ip_ref": "ip-csis-v8"},
+            {"id": "isp0", "ip_ref": "ip-isp-v12"},
+            {"id": "mfc", "ip_ref": "ip-mfc-v14"},
+            {"id": "dpu", "ip_ref": "ip-dpu-v9"}
+          ],
+          "edges": [
+            {"from": "csis0", "to": "isp0", "type": "OTF"},
+            {"from": "isp0", "to": "mfc", "type": "M2M", "buffer": "RECORD_BUF"},
+            {"from": "isp0", "to": "dpu", "type": "M2M", "buffer": "PREVIEW_BUF"}
+          ],
+          "buffers": {
+            "RECORD_BUF": {
+              "format": "YUV420",
+              "bitdepth": 10,
+              "planes": 2,
+              "size_ref": "record_out",
+              "compression": "SBWC_v4",
+              "alignment": "256B"
+            },
+            "PREVIEW_BUF": {
+              "format": "YUV420",
+              "bitdepth": 8,
+              "planes": 2,
+              "size_ref": "preview_out",
+              "compression": "none",
+              "alignment": "128B"
+            }
+          }
+        },
+        "size_profile": {
+          "anchors": {
+            "record_out": "1920x1080",
+            "preview_out": "1920x1080"
+          }
+        },
+        "variants": [
+          {
+            "id": "FHD30-Imported",
+            "severity": "medium",
+            "design_conditions": {
+              "resolution": "FHD",
+              "fps": 30,
+              "codec": "H.265",
+              "scenario_type": "recording"
+            },
+            "node_configs": {
+              "isp0": {
+                "operation": {
+                  "crop": false,
+                  "scale": true,
+                  "rotate": false
+                }
+              },
+              "mfc": {
+                "selected_mode": "normal"
+              }
+            },
+            "buffer_overrides": {
+              "RECORD_BUF": {
+                "format": "YUV420",
+                "compression": "SBWC_v4",
+                "placement": {
+                  "llc_allocated": true,
+                  "llc_allocation_mb": 1,
+                  "llc_policy": "shared",
+                  "allocation_owner": "MFC"
+                }
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

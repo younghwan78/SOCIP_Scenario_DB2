@@ -356,3 +356,87 @@ def test_pipeline_patch_validation_reports_variant_overlay_impact(api_client: Te
     body = validation.json()
     assert body["valid"] is False
     assert any(issue["code"] == "variant_overlay_impact" for issue in body["issues"])
+
+
+def _import_bundle_payload() -> dict:
+    return {
+        "kind": "scenario.import_bundle",
+        "actor": "codex-test",
+        "note": "integration test import bundle",
+        "payload": {
+            "import_report": {
+                "ok": True,
+                "generated": {"scenario_usecase": 1, "scenario_variant": 1, "validated_yaml": 1},
+                "messages": [{"level": "warning", "code": "legacy_hw_unknown_type", "message": "Imported with warning"}],
+            },
+            "documents": [
+                {
+                    "id": "uc-import-bundle-write-test",
+                    "schema_version": "2.2",
+                    "kind": "scenario.usecase",
+                    "project_ref": "proj-A-exynos2500",
+                    "metadata": {"name": "Import Bundle Write Test", "category": ["camera"], "domain": ["camera"]},
+                    "pipeline": {
+                        "nodes": [
+                            {"id": "csis0", "ip_ref": "ip-csis-v8"},
+                            {"id": "isp0", "ip_ref": "ip-isp-v12"},
+                            {"id": "mfc", "ip_ref": "ip-mfc-v14"},
+                        ],
+                        "edges": [
+                            {"from": "csis0", "to": "isp0", "type": "OTF"},
+                            {"from": "isp0", "to": "mfc", "type": "M2M", "buffer": "RECORD_BUF"},
+                        ],
+                        "buffers": {
+                            "RECORD_BUF": {
+                                "format": "YUV420",
+                                "bitdepth": 10,
+                                "planes": 2,
+                                "size_ref": "record_out",
+                                "compression": "SBWC_v4",
+                                "alignment": "256B",
+                            },
+                        },
+                    },
+                    "size_profile": {"anchors": {"record_out": "1920x1080"}},
+                    "variants": [
+                        {
+                            "id": "FHD30-Imported",
+                            "severity": "medium",
+                            "design_conditions": {"resolution": "FHD", "fps": 30, "codec": "H.265"},
+                            "node_configs": {"mfc": {"selected_mode": "normal"}},
+                            "buffer_overrides": {"RECORD_BUF": {"format": "YUV420", "compression": "SBWC_v4"}},
+                        }
+                    ],
+                }
+            ],
+        },
+    }
+
+
+def test_import_bundle_stage_validate_diff_apply(api_client: TestClient):
+    stage = api_client.post("/api/v1/write/staging", json=_import_bundle_payload())
+    assert stage.status_code == 200
+    batch_id = stage.json()["batch_id"]
+    assert stage.json()["target_id"] == "uc-import-bundle-write-test"
+
+    validation = api_client.post(f"/api/v1/write/staging/{batch_id}/validate")
+    assert validation.status_code == 200
+    assert validation.json()["valid"] is True
+    assert validation.json()["import_report"]["messages_by_level"]["warning"] == 1
+
+    diff = api_client.post(f"/api/v1/write/staging/{batch_id}/diff")
+    assert diff.status_code == 200
+    diff_body = diff.json()
+    assert diff_body["operation"] == "create"
+    assert diff_body["impact"]["document_counts"]["scenario.usecase"] == 1
+    assert diff_body["impact"]["scenario_impacts"][0]["variants_added"] == ["FHD30-Imported"]
+
+    applied = api_client.post(f"/api/v1/write/staging/{batch_id}/apply")
+    assert applied.status_code == 200
+    assert applied.json()["applied_refs"]["operation"] == "import_bundle"
+
+    scenario = api_client.get("/api/v1/scenarios/uc-import-bundle-write-test")
+    assert scenario.status_code == 200
+    variant = api_client.get("/api/v1/scenarios/uc-import-bundle-write-test/variants/FHD30-Imported")
+    assert variant.status_code == 200
+    assert variant.json()["buffer_overrides"]["RECORD_BUF"]["compression"] == "SBWC_v4"

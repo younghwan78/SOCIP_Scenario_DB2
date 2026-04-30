@@ -10,6 +10,7 @@ The current write scope supports:
 
 - `scenario.variant_overlay`: one variant overlay.
 - `scenario.pipeline_patch`: base scenario pipeline patch affecting every variant.
+- `scenario.import_bundle`: canonical importer output staged before DB apply.
 
 ## Prerequisites
 
@@ -148,6 +149,49 @@ Invoke-RestMethod "$api/scenarios/uc-camera-recording/variants/UHD60-HDR10-H265/
 
 The runtime graph should include the newly added base edge or buffer.
 
+## Import Bundle Example
+
+Use this after the legacy YAML importer has generated canonical documents. This
+keeps importer output on the same review path as manually-authored writes:
+
+```text
+import -> stage -> validate -> diff -> apply
+```
+
+```powershell
+$payload = Get-Content .\demo\write_payloads\import_bundle_valid.json -Raw
+$stage = Invoke-RestMethod -Method Post -Uri "$api/write/staging" -ContentType "application/json" -Body $payload
+$batchId = $stage.batch_id
+$validation = Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/validate"
+$validation.import_report
+```
+
+Expected behavior:
+
+- Validation returns `valid=true`.
+- `import_report.messages_by_level` summarizes importer warnings/errors.
+- Any importer message with `level=error` makes validation fail.
+- `target_id` is the imported scenario ID when the bundle contains a `scenario.usecase`.
+
+Preview impact before apply:
+
+```powershell
+$diff = Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/diff"
+$diff.changes | Format-Table field, change
+$diff.impact.scenario_impacts
+```
+
+The diff shows whether each canonical document is new or existing and whether
+variants will be added, updated, or removed for each imported scenario.
+
+Apply and read back:
+
+```powershell
+$apply = Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/apply"
+$apply.applied_refs
+Invoke-RestMethod "$api/scenarios/uc-imported-camera-recording/variants/FHD30-Imported"
+```
+
 ## Routing Switch Example
 
 `routing_switch` disables existing base topology nodes or edges. It does not
@@ -269,6 +313,24 @@ Expected issue codes:
 ```text
 otf_edge_must_not_have_buffer
 physical_edge_endpoint_invalid
+```
+
+### Import Bundle Missing Buffer
+
+```powershell
+$payload = Get-Content .\demo\write_payloads\import_bundle_valid.json -Raw | ConvertFrom-Json
+$payload.payload.documents[0].pipeline.edges += @{
+  from="isp0"; to="mfc"; type="M2M"; buffer="MISSING_BUF"
+}
+$stage = Invoke-RestMethod -Method Post -Uri "$api/write/staging" -ContentType "application/json" -Body ($payload | ConvertTo-Json -Depth 30)
+$validation = Invoke-RestMethod -Method Post -Uri "$api/write/staging/$($stage.batch_id)/validate"
+$validation.issues
+```
+
+Expected issue code:
+
+```text
+import_edge_buffer_not_found
 ```
 
 ## Response Interpretation

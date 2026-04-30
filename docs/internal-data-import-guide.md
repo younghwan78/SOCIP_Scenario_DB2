@@ -770,8 +770,27 @@ Variant grouping rule:
 See `docs/legacy-scenario-grouping-policy.md` for the detailed split-vs-variant
 rules.
 
-After generation, load the generated YAML with the normal canonical ETL:
+After generation, there are two load paths.
+
+Recommended review path for real project data:
+
+```text
+legacy YAML -> canonical documents + import_report -> Write API staging
+           -> validate -> diff -> apply
+```
+
+Use `scenario.import_bundle` when the generated documents need reviewer-visible
+validation and impact preview before DB apply. This path links importer warnings
+to Write API validation, checks canonical document schema, checks project/IP
+references, checks pipeline edge/buffer integrity, and shows scenario/variant
+impact before apply.
+
+Direct ETL path for local fixtures or controlled reset loads:
 
 ```powershell
 uv run python -m scenario_db.etl.loader generated\scenariodb
 ```
+
+Direct ETL bypasses Write API staging and should not be the default path for
+first-time internal data migration because reviewers cannot see the staged diff
+or import report in the write audit trail.

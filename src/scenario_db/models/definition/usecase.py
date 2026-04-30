@@ -29,6 +29,7 @@ class PipelineNode(BaseScenarioModel):
 
 class EdgeType(StrEnum):
     OTF = "OTF"
+    vOTF = "vOTF"
     M2M = "M2M"
 
 

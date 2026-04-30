@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from scenario_db.db.models.capability import IpCatalog
-from scenario_db.db.models.definition import Scenario, ScenarioVariant
+from scenario_db.db.models.definition import Project, Scenario, ScenarioVariant
 from scenario_db.write.service import (
+    build_import_bundle_diff,
     normalize_payload,
+    normalize_import_bundle_payload,
     normalize_pipeline_patch_payload,
+    validate_import_bundle,
     validate_pipeline_patch,
     validate_variant_overlay,
 )
@@ -84,12 +87,20 @@ class _Db:
             scenario_id="uc-camera-recording",
             id="existing",
         )
+        self.project = Project(
+            id="proj-A",
+            schema_version="2.2",
+            metadata_={"name": "Project A", "soc_ref": "soc-A"},
+            yaml_sha256="test",
+        )
 
     def query(self, model):
         if model is Scenario:
             return _Query([self.scenario])
         if model is ScenarioVariant:
             return _Query([self.variant])
+        if model is Project:
+            return _Query([self.project])
         if model is IpCatalog:
             return _Query([self.ip, self.ip_isp, self.ip_csis])
         return _Query([])
@@ -255,3 +266,125 @@ def test_validate_pipeline_patch_rejects_variant_overlay_breakage():
     )
     issues = validate_pipeline_patch(db, normalized)
     assert any(issue.code == "variant_overlay_impact" for issue in issues)
+
+
+def _import_usecase_doc(**overrides):
+    doc = {
+        "id": "uc-camera-recording-imported",
+        "schema_version": "2.2",
+        "kind": "scenario.usecase",
+        "project_ref": "proj-A",
+        "metadata": {"name": "Imported Camera Recording", "category": ["camera"], "domain": ["camera"]},
+        "pipeline": {
+            "nodes": [
+                {"id": "csis0", "ip_ref": "ip-csis-v8"},
+                {"id": "isp0", "ip_ref": "ip-isp-v12"},
+                {"id": "mfc", "ip_ref": "ip-mfc-v14"},
+            ],
+            "edges": [
+                {"from": "csis0", "to": "isp0", "type": "OTF"},
+                {"from": "isp0", "to": "mfc", "type": "M2M", "buffer": "RECORD_BUF"},
+            ],
+            "buffers": {
+                "RECORD_BUF": {"format": "YUV420", "bitdepth": 10},
+            },
+        },
+        "variants": [
+            {
+                "id": "FHD30-Imported",
+                "severity": "medium",
+                "design_conditions": {"resolution": "FHD", "fps": 30},
+                "node_configs": {"mfc": {"selected_mode": "normal"}},
+                "buffer_overrides": {"RECORD_BUF": {"format": "YUV420"}},
+            }
+        ],
+    }
+    doc.update(overrides)
+    return doc
+
+
+def test_normalize_import_bundle_accepts_import_report_and_documents():
+    normalized = normalize_import_bundle_payload(
+        {
+            "documents": [_import_usecase_doc()],
+            "import_report": {"ok": True, "generated": {"scenario_usecase": 1}, "messages": []},
+        }
+    )
+
+    assert normalized["documents"][0]["kind"] == "scenario.usecase"
+    assert normalized["import_report"]["generated"]["scenario_usecase"] == 1
+
+
+def test_validate_import_bundle_accepts_canonical_usecase_doc():
+    normalized = normalize_import_bundle_payload({"documents": [_import_usecase_doc()]})
+
+    issues = validate_import_bundle(_Db(), normalized)
+
+    assert issues == []
+
+
+def test_validate_import_bundle_rejects_missing_import_ip_ref():
+    doc = _import_usecase_doc()
+    doc["pipeline"]["nodes"].append({"id": "npu0", "ip_ref": "ip-npu-v1"})
+    normalized = normalize_import_bundle_payload({"documents": [doc]})
+
+    issues = validate_import_bundle(_Db(), normalized)
+
+    assert any(issue.code == "import_ip_ref_not_found" for issue in issues)
+
+
+def test_validate_import_bundle_rejects_missing_edge_buffer():
+    doc = _import_usecase_doc()
+    doc["pipeline"]["edges"].append({"from": "isp0", "to": "mfc", "type": "M2M", "buffer": "MISSING_BUF"})
+    normalized = normalize_import_bundle_payload({"documents": [doc]})
+
+    issues = validate_import_bundle(_Db(), normalized)
+
+    assert any(issue.code == "import_edge_buffer_not_found" for issue in issues)
+
+
+def test_validate_import_bundle_accepts_votf_edge_without_buffer():
+    doc = _import_usecase_doc()
+    doc["pipeline"]["edges"].append({"from": "csis0", "to": "isp0", "type": "vOTF"})
+    normalized = normalize_import_bundle_payload({"documents": [doc]})
+
+    issues = validate_import_bundle(_Db(), normalized)
+
+    assert issues == []
+
+
+def test_validate_import_bundle_rejects_import_report_errors():
+    normalized = normalize_import_bundle_payload(
+        {
+            "documents": [_import_usecase_doc()],
+            "import_report": {
+                "ok": False,
+                "messages": [{"level": "error", "code": "legacy_parse_failed", "message": "bad yaml"}],
+            },
+        }
+    )
+
+    issues = validate_import_bundle(_Db(), normalized)
+
+    assert any(issue.code == "import_report_error" for issue in issues)
+
+
+def test_import_bundle_diff_reports_document_and_variant_impact():
+    db = _Db()
+    db.scenario.id = "uc-camera-recording-imported"
+    db.variant.scenario_id = "uc-camera-recording-imported"
+    db.variant.id = "OldVariant"
+    normalized = normalize_import_bundle_payload(
+        {
+            "documents": [_import_usecase_doc()],
+            "import_report": {"ok": True, "generated": {"validated_yaml": 1}, "messages": [{"level": "warning"}]},
+        }
+    )
+
+    diff = build_import_bundle_diff(db, normalized)
+
+    assert diff.target_id == "uc-camera-recording-imported"
+    assert diff.operation == "update"
+    assert diff.impact["import_report"]["messages_by_level"]["warning"] == 1
+    assert diff.impact["scenario_impacts"][0]["variants_added"] == ["FHD30-Imported"]
+    assert diff.impact["scenario_impacts"][0]["variants_removed"] == ["OldVariant"]

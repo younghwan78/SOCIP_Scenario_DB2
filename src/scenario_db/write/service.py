@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any
@@ -17,13 +19,20 @@ from scenario_db.api.schemas.write import (
     ValidateWriteResponse,
     ValidationIssue,
 )
-from scenario_db.db.models.capability import IpCatalog
-from scenario_db.db.models.definition import Scenario, ScenarioVariant
+from scenario_db.db.models.capability import IpCatalog, SocPlatform
+from scenario_db.db.models.definition import Project, Scenario, ScenarioVariant
 from scenario_db.db.models.write import WriteBatch, WriteEvent
+from scenario_db.etl.mappers.capability import upsert_ip, upsert_soc
+from scenario_db.etl.mappers.definition import upsert_project, upsert_usecase
+from scenario_db.models.capability.hw import IpCatalog as PydanticIpCatalog
+from scenario_db.models.capability.hw import SocPlatform as PydanticSocPlatform
+from scenario_db.models.definition.project import Project as PydanticProject
+from scenario_db.models.definition.usecase import Usecase as PydanticUsecase
 
 VARIANT_OVERLAY_KIND = "scenario.variant_overlay"
 PIPELINE_PATCH_KIND = "scenario.pipeline_patch"
-SUPPORTED_KINDS = {VARIANT_OVERLAY_KIND, PIPELINE_PATCH_KIND}
+IMPORT_BUNDLE_KIND = "scenario.import_bundle"
+SUPPORTED_KINDS = {VARIANT_OVERLAY_KIND, PIPELINE_PATCH_KIND, IMPORT_BUNDLE_KIND}
 
 VARIANT_FIELDS = [
     "severity",
@@ -63,6 +72,25 @@ PATCH_LIST_FIELDS = {
     "remove_buffers",
 }
 ALLOWED_BASE_EDGE_TYPES = {"OTF", "vOTF", "M2M"}
+IMPORT_KIND_ORDER = ["soc", "ip", "project", "scenario.usecase"]
+IMPORT_MODEL_BY_KIND = {
+    "soc": PydanticSocPlatform,
+    "ip": PydanticIpCatalog,
+    "project": PydanticProject,
+    "scenario.usecase": PydanticUsecase,
+}
+IMPORT_UPSERT_BY_KIND = {
+    "soc": upsert_soc,
+    "ip": upsert_ip,
+    "project": upsert_project,
+    "scenario.usecase": upsert_usecase,
+}
+IMPORT_DB_MODEL_BY_KIND = {
+    "soc": SocPlatform,
+    "ip": IpCatalog,
+    "project": Project,
+    "scenario.usecase": Scenario,
+}
 
 
 def stage_write(db: Session, request: StageWriteRequest) -> StageWriteResponse:
@@ -102,6 +130,8 @@ def validate_batch(db: Session, batch_id: str) -> ValidateWriteResponse:
         "valid": valid,
         "issues": [issue.model_dump() for issue in issues],
     }
+    if batch.kind == IMPORT_BUNDLE_KIND:
+        result["import_report"] = _import_report_summary(normalized.get("import_report") or {})
     batch.normalized_payload = normalized
     batch.validation_result = result
     batch.status = "validated" if valid else "validation_failed"
@@ -113,6 +143,7 @@ def validate_batch(db: Session, batch_id: str) -> ValidateWriteResponse:
         valid=valid,
         issues=issues,
         normalized_payload=normalized,
+        import_report=result.get("import_report"),
     )
 
 
@@ -144,6 +175,8 @@ def apply_batch(db: Session, batch_id: str) -> ApplyWriteResponse:
         applied_refs = _apply_variant_overlay(db, normalized)
     elif batch.kind == PIPELINE_PATCH_KIND:
         applied_refs = _apply_pipeline_patch(db, normalized)
+    elif batch.kind == IMPORT_BUNDLE_KIND:
+        applied_refs = _apply_import_bundle(db, normalized)
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported write kind: {batch.kind}")
 
@@ -160,6 +193,8 @@ def normalize_write_payload(kind: str, payload: dict[str, Any]) -> dict[str, Any
         return normalize_payload(payload)
     if kind == PIPELINE_PATCH_KIND:
         return normalize_pipeline_patch_payload(payload)
+    if kind == IMPORT_BUNDLE_KIND:
+        return normalize_import_bundle_payload(payload)
     raise HTTPException(status_code=400, detail=f"Unsupported write kind: {kind}")
 
 
@@ -168,6 +203,8 @@ def validate_write_payload(db: Session, kind: str, normalized: dict[str, Any]) -
         return validate_variant_overlay(db, normalized)
     if kind == PIPELINE_PATCH_KIND:
         return validate_pipeline_patch(db, normalized)
+    if kind == IMPORT_BUNDLE_KIND:
+        return validate_import_bundle(db, normalized)
     return [_issue("error", "unsupported_write_kind", f"Unsupported write kind: {kind}", "kind")]
 
 
@@ -176,6 +213,8 @@ def build_write_diff(db: Session, kind: str, normalized: dict[str, Any]) -> Diff
         return build_diff(db, normalized)
     if kind == PIPELINE_PATCH_KIND:
         return build_pipeline_patch_diff(db, normalized)
+    if kind == IMPORT_BUNDLE_KIND:
+        return build_import_bundle_diff(db, normalized)
     raise HTTPException(status_code=400, detail=f"Unsupported write kind: {kind}")
 
 
@@ -229,6 +268,38 @@ def normalize_pipeline_patch_payload(payload: dict[str, Any]) -> dict[str, Any]:
     normalized_patch["remove_nodes"] = [_normalize_ref(item) for item in normalized_patch["remove_nodes"]]
     normalized_patch["remove_buffers"] = [_normalize_ref(item) for item in normalized_patch["remove_buffers"]]
     return {"scenario_ref": scenario_ref, "patch": normalized_patch}
+
+
+def normalize_import_bundle_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="payload must be an object")
+    documents = (
+        payload.get("documents")
+        or payload.get("canonical_documents")
+        or payload.get("generated_documents")
+        or payload.get("usecases")
+        or []
+    )
+    if payload.get("document"):
+        documents = [payload["document"], *list(documents or [])]
+    if not isinstance(documents, list):
+        raise HTTPException(status_code=400, detail="payload.documents must be a list")
+    if not documents:
+        raise HTTPException(status_code=400, detail="payload.documents must not be empty")
+
+    normalized_docs: list[dict[str, Any]] = []
+    for idx, doc in enumerate(documents):
+        if not isinstance(doc, dict):
+            raise HTTPException(status_code=400, detail=f"payload.documents[{idx}] must be an object")
+        normalized_docs.append(deepcopy(doc))
+    import_report = deepcopy(payload.get("import_report") or {})
+    if import_report and not isinstance(import_report, dict):
+        raise HTTPException(status_code=400, detail="payload.import_report must be an object")
+    return {
+        "documents": normalized_docs,
+        "import_report": import_report,
+        "options": deepcopy(payload.get("options") or {}),
+    }
 
 
 def validate_variant_overlay(db: Session, normalized: dict[str, Any]) -> list[ValidationIssue]:
@@ -295,6 +366,50 @@ def validate_pipeline_patch(db: Session, normalized: dict[str, Any]) -> list[Val
     return issues
 
 
+def validate_import_bundle(db: Session, normalized: dict[str, Any]) -> list[ValidationIssue]:
+    issues: list[ValidationIssue] = []
+    docs = normalized["documents"]
+    included = _included_import_refs(docs)
+    seen: set[tuple[str, str]] = set()
+
+    for idx, doc in enumerate(docs):
+        kind = doc.get("kind")
+        doc_id = doc.get("id")
+        path = f"documents[{idx}]"
+        if not isinstance(kind, str) or not isinstance(doc_id, str):
+            issues.append(_issue("error", "import_document_missing_identity", "Import document requires string id and kind", path))
+            continue
+        if kind not in IMPORT_MODEL_BY_KIND:
+            issues.append(_issue("error", "import_document_kind_unsupported", f"Unsupported import document kind: {kind}", f"{path}.kind"))
+            continue
+        key = (kind, doc_id)
+        if key in seen:
+            issues.append(_issue("error", "import_document_duplicate", f"Duplicate import document: {kind}/{doc_id}", path))
+        seen.add(key)
+        try:
+            IMPORT_MODEL_BY_KIND[kind].model_validate(doc)
+        except Exception as exc:
+            issues.append(_issue("error", "import_document_schema_invalid", str(exc), path))
+            continue
+        if kind == "scenario.usecase":
+            issues.extend(_validate_import_usecase_refs(db, doc, included, path))
+
+    report = normalized.get("import_report") or {}
+    if report and report.get("ok") is False:
+        issues.append(_issue("warning", "import_report_not_ok", "Import report has ok=false; review before apply", "import_report.ok"))
+    for message in report.get("messages") or []:
+        if isinstance(message, dict) and message.get("level") == "error":
+            issues.append(
+                _issue(
+                    "error",
+                    "import_report_error",
+                    str(message.get("message") or message.get("code") or "import report error"),
+                    "import_report.messages",
+                )
+            )
+    return issues
+
+
 def build_diff(db: Session, normalized: dict[str, Any]) -> DiffPreviewResponse:
     scenario_ref = normalized["scenario_ref"]
     variant = normalized["variant"]
@@ -347,6 +462,40 @@ def build_pipeline_patch_diff(db: Session, normalized: dict[str, Any]) -> DiffPr
     )
 
 
+def build_import_bundle_diff(db: Session, normalized: dict[str, Any]) -> DiffPreviewResponse:
+    docs = normalized["documents"]
+    changes: list[DiffEntry] = []
+    existing_any = False
+    for kind in IMPORT_KIND_ORDER:
+        kind_docs = [doc for doc in docs if doc.get("kind") == kind]
+        if not kind_docs:
+            continue
+        ids = [str(doc["id"]) for doc in kind_docs]
+        existing_ids = _existing_import_doc_ids(db, kind, ids)
+        existing_any = existing_any or bool(existing_ids)
+        if not existing_ids:
+            change = "add"
+        elif len(existing_ids) == len(ids):
+            change = "modify"
+        else:
+            change = "modify"
+        changes.append(
+            DiffEntry(
+                field=f"documents.{kind}",
+                change=change,
+                before={"existing_ids": sorted(existing_ids), "count": len(existing_ids)},
+                after={"ids": ids, "count": len(ids)},
+            )
+        )
+    return DiffPreviewResponse(
+        batch_id="",
+        target_id=_target_id(normalized),
+        operation="update" if existing_any else "create",
+        changes=changes,
+        impact=_import_bundle_impact(db, normalized),
+    )
+
+
 def _apply_variant_overlay(db: Session, normalized: dict[str, Any]) -> dict[str, Any]:
     scenario_ref = normalized["scenario_ref"]
     variant = normalized["variant"]
@@ -385,6 +534,25 @@ def _apply_pipeline_patch(db: Session, normalized: dict[str, Any]) -> dict[str, 
         "node_count": len(after.get("nodes") or []),
         "edge_count": len(after.get("edges") or []),
         "buffer_count": len(after.get("buffers") or {}),
+    }
+
+
+def _apply_import_bundle(db: Session, normalized: dict[str, Any]) -> dict[str, Any]:
+    counts: dict[str, int] = {}
+    scenario_refs: list[str] = []
+    for kind in IMPORT_KIND_ORDER:
+        for doc in [item for item in normalized["documents"] if item.get("kind") == kind]:
+            upsert = IMPORT_UPSERT_BY_KIND[kind]
+            upsert(doc, _document_sha256(doc), db)
+            counts[kind] = counts.get(kind, 0) + 1
+            if kind == "scenario.usecase":
+                scenario_refs.append(str(doc["id"]))
+    db.flush()
+    return {
+        "operation": "import_bundle",
+        "document_counts": counts,
+        "scenario_refs": scenario_refs,
+        "import_report": _import_report_summary(normalized.get("import_report") or {}),
     }
 
 
@@ -591,6 +759,164 @@ def _pipeline_patch_impact(db: Session, scenario_ref: str, candidate: dict[str, 
         "affected_variants": affected,
         "blocking_variant_count": sum(1 for variant in affected if variant["errors"]),
     }
+
+
+def _included_import_refs(docs: list[dict[str, Any]]) -> dict[str, set[str]]:
+    refs: dict[str, set[str]] = {}
+    for doc in docs:
+        kind = doc.get("kind")
+        doc_id = doc.get("id")
+        if isinstance(kind, str) and isinstance(doc_id, str):
+            refs.setdefault(kind, set()).add(doc_id)
+    return refs
+
+
+def _validate_import_usecase_refs(
+    db: Session,
+    doc: dict[str, Any],
+    included: dict[str, set[str]],
+    path: str,
+) -> list[ValidationIssue]:
+    issues: list[ValidationIssue] = []
+    project_ref = doc.get("project_ref")
+    if project_ref and project_ref not in included.get("project", set()) and db.query(Project).filter_by(id=project_ref).one_or_none() is None:
+        issues.append(_issue("error", "import_project_ref_not_found", f"Project not found: {project_ref}", f"{path}.project_ref"))
+
+    ip_refs = included.get("ip", set())
+    db_ip_refs = {
+        row.id
+        for row in db.query(IpCatalog).all()
+    }
+    pipeline = doc.get("pipeline") or {}
+    node_ids = {node.get("id") for node in pipeline.get("nodes") or [] if isinstance(node, dict)}
+    buffer_ids = set((pipeline.get("buffers") or {}).keys())
+    for idx, node in enumerate(pipeline.get("nodes") or []):
+        if not isinstance(node, dict):
+            continue
+        ip_ref = node.get("ip_ref")
+        if ip_ref and ip_ref not in ip_refs and ip_ref not in db_ip_refs:
+            issues.append(_issue("error", "import_ip_ref_not_found", f"IP catalog not found: {ip_ref}", f"{path}.pipeline.nodes[{idx}].ip_ref"))
+
+    seen_edges: set[tuple[Any, Any, Any, Any]] = set()
+    for idx, edge in enumerate(pipeline.get("edges") or []):
+        if not isinstance(edge, dict):
+            continue
+        edge_path = f"{path}.pipeline.edges[{idx}]"
+        source = _edge_source(edge)
+        target = _edge_target(edge)
+        edge_type = str(edge.get("type") or "")
+        if source not in node_ids:
+            issues.append(_issue("error", "import_edge_source_not_found", f"Edge source not found: {source}", f"{edge_path}.from"))
+        if target not in node_ids:
+            issues.append(_issue("error", "import_edge_target_not_found", f"Edge target not found: {target}", f"{edge_path}.to"))
+        if edge_type not in ALLOWED_BASE_EDGE_TYPES:
+            issues.append(_issue("error", "import_edge_type_not_allowed", f"Import edge type is not allowed: {edge_type}", f"{edge_path}.type"))
+        if edge_type in {"OTF", "vOTF"} and edge.get("buffer"):
+            issues.append(_issue("error", "import_otf_edge_must_not_have_buffer", f"{edge_type} edge must not declare buffer", f"{edge_path}.buffer"))
+        if edge_type == "M2M":
+            buffer_id = edge.get("buffer")
+            if not buffer_id:
+                issues.append(_issue("error", "import_m2m_edge_missing_buffer", f"M2M edge requires buffer: {source}->{target}", f"{edge_path}.buffer"))
+            elif buffer_id not in buffer_ids:
+                issues.append(_issue("error", "import_edge_buffer_not_found", f"Edge buffer not found: {buffer_id}", f"{edge_path}.buffer"))
+        key = (source, target, edge_type, edge.get("buffer"))
+        if key in seen_edges:
+            issues.append(_issue("warning", "import_duplicate_edge", f"Duplicate import edge: {key}", edge_path))
+        seen_edges.add(key)
+
+    for variant_idx, variant in enumerate(doc.get("variants") or []):
+        if not isinstance(variant, dict):
+            continue
+        variant_path = f"{path}.variants[{variant_idx}]"
+        injected_nodes = {
+            node.get("id")
+            for node in ((variant.get("topology_patch") or {}).get("add_nodes") or [])
+            if isinstance(node, dict) and node.get("id")
+        }
+        known_nodes = node_ids | injected_nodes
+        for node_id in (variant.get("node_configs") or {}):
+            if node_id not in known_nodes:
+                issues.append(_issue("error", "import_variant_node_config_not_found", f"node_configs references missing node: {node_id}", f"{variant_path}.node_configs"))
+        for buffer_id in (variant.get("buffer_overrides") or {}):
+            if buffer_id not in buffer_ids:
+                issues.append(_issue("error", "import_variant_buffer_override_not_found", f"buffer_overrides references missing buffer: {buffer_id}", f"{variant_path}.buffer_overrides"))
+    return issues
+
+
+def _existing_import_doc_ids(db: Session, kind: str, ids: list[str]) -> set[str]:
+    model = IMPORT_DB_MODEL_BY_KIND.get(kind)
+    if model is None or not ids:
+        return set()
+    id_set = set(ids)
+    return {
+        row.id
+        for row in db.query(model).all()
+        if row.id in id_set
+    }
+
+
+def _import_bundle_impact(db: Session, normalized: dict[str, Any]) -> dict[str, Any]:
+    report = normalized.get("import_report") or {}
+    scenario_impacts: list[dict[str, Any]] = []
+    for doc in normalized["documents"]:
+        if doc.get("kind") != "scenario.usecase":
+            continue
+        scenario_id = str(doc["id"])
+        existing_variants = {
+            row.id
+            for row in db.query(ScenarioVariant).filter_by(scenario_id=scenario_id).all()
+        }
+        imported_variants = {
+            variant["id"]
+            for variant in doc.get("variants") or []
+            if isinstance(variant, dict) and variant.get("id")
+        }
+        scenario_impacts.append(
+            {
+                "scenario_id": scenario_id,
+                "operation": "update" if db.query(Scenario).filter_by(id=scenario_id).one_or_none() else "create",
+                "variant_count_before": len(existing_variants),
+                "variant_count_after": len(imported_variants),
+                "variants_added": sorted(imported_variants - existing_variants),
+                "variants_removed": sorted(existing_variants - imported_variants),
+                "variants_updated": sorted(imported_variants & existing_variants),
+            }
+        )
+    return {
+        "document_count": len(normalized["documents"]),
+        "document_counts": _count_docs_by_kind(normalized["documents"]),
+        "scenario_impacts": scenario_impacts,
+        "import_report": _import_report_summary(report),
+    }
+
+
+def _count_docs_by_kind(docs: list[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for doc in docs:
+        kind = str(doc.get("kind"))
+        counts[kind] = counts.get(kind, 0) + 1
+    return counts
+
+
+def _import_report_summary(report: dict[str, Any]) -> dict[str, Any]:
+    messages = report.get("messages") or []
+    by_level: dict[str, int] = {}
+    for message in messages:
+        if not isinstance(message, dict):
+            continue
+        level = str(message.get("level") or "unknown")
+        by_level[level] = by_level.get(level, 0) + 1
+    return {
+        "ok": report.get("ok"),
+        "generated": report.get("generated") or {},
+        "message_count": len(messages),
+        "messages_by_level": by_level,
+    }
+
+
+def _document_sha256(doc: dict[str, Any]) -> str:
+    raw = json.dumps(doc, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
 
 
 def _patched_pipeline(pipeline: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
@@ -904,6 +1230,15 @@ def _pipeline_count_diff(field: str, before: Any, after: Any) -> DiffEntry:
 def _target_id(normalized: dict[str, Any]) -> str:
     if "variant" in normalized:
         return f"{normalized['scenario_ref']}/{normalized['variant']['id']}"
+    if "documents" in normalized:
+        scenario_ids = [
+            str(doc["id"])
+            for doc in normalized["documents"]
+            if doc.get("kind") == "scenario.usecase"
+        ]
+        if scenario_ids:
+            return ",".join(scenario_ids)
+        return f"import_bundle:{len(normalized['documents'])}"
     return normalized["scenario_ref"]
 
 
