@@ -785,6 +785,39 @@ to Write API validation, checks canonical document schema, checks project/IP
 references, checks pipeline edge/buffer integrity, and shows scenario/variant
 impact before apply.
 
+Build the Write API staging payload from generated canonical YAML:
+
+```powershell
+uv run python -m scenario_db.legacy_import.write_bundle `
+  --generated generated\scenariodb `
+  --out generated\scenariodb\import_bundle.json `
+  --actor legacy-importer `
+  --note "projectA legacy import" `
+  --strict
+```
+
+Then stage it:
+
+```powershell
+$api="http://127.0.0.1:18000/api/v1"
+$payload = Get-Content generated\scenariodb\import_bundle.json -Raw
+$stage = Invoke-RestMethod -Method Post -Uri "$api/write/staging" -ContentType "application/json" -Body $payload
+$validation = Invoke-RestMethod -Method Post -Uri "$api/write/staging/$($stage.batch_id)/validate"
+$diff = Invoke-RestMethod -Method Post -Uri "$api/write/staging/$($stage.batch_id)/diff"
+```
+
+Only apply after checking `$validation.valid`, `$validation.import_report`,
+and `$diff.impact`:
+
+```powershell
+Invoke-RestMethod -Method Post -Uri "$api/write/staging/$($stage.batch_id)/apply"
+```
+
+If the bundle command reports `bundle_document_kind_unsupported`, the generated
+folder contains a canonical document kind that the first Write API import flow
+does not yet apply. Move that document to the direct ETL path or extend
+`scenario.import_bundle` support before using strict staging.
+
 Direct ETL path for local fixtures or controlled reset loads:
 
 ```powershell

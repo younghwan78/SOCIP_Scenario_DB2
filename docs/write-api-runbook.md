@@ -158,8 +158,23 @@ keeps importer output on the same review path as manually-authored writes:
 import -> stage -> validate -> diff -> apply
 ```
 
+Build the staging payload from a generated canonical YAML directory:
+
 ```powershell
-$payload = Get-Content .\demo\write_payloads\import_bundle_valid.json -Raw
+uv run python -m scenario_db.legacy_import.write_bundle `
+  --generated generated\scenariodb `
+  --out generated\scenariodb\import_bundle.json `
+  --actor legacy-importer `
+  --note "projectA legacy import" `
+  --strict
+```
+
+The output JSON is a complete request body for `POST /api/v1/write/staging`.
+For a quick smoke test, the repo also includes
+`demo\write_payloads\import_bundle_valid.json`.
+
+```powershell
+$payload = Get-Content generated\scenariodb\import_bundle.json -Raw
 $stage = Invoke-RestMethod -Method Post -Uri "$api/write/staging" -ContentType "application/json" -Body $payload
 $batchId = $stage.batch_id
 $validation = Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/validate"

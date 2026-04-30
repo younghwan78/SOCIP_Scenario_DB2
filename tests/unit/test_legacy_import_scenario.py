@@ -11,6 +11,7 @@ from scenario_db.legacy_import.cli import main
 from scenario_db.legacy_import.normalize_scenario import convert_scenario_group_usecase, convert_scenario_usecase
 from scenario_db.legacy_import.report import ImportReport
 from scenario_db.legacy_import.validate_generated import validate_generated_yaml
+from scenario_db.legacy_import.write_bundle import build_import_bundle_request, main as bundle_main
 from scenario_db.models.definition.project import Project
 from scenario_db.models.definition.usecase import Usecase
 
@@ -327,6 +328,88 @@ def test_legacy_import_cli_emits_project_and_scenario_usecase_yaml():
         assert report["generated"]["scenario_usecase"] == 1
         assert report["generated"]["scenario_variant"] == 1
         assert report["generated"]["validated_yaml"] == 2
+    finally:
+        if tmp_path.exists():
+            shutil.rmtree(tmp_path)
+
+
+def test_legacy_import_bundle_wraps_generated_yaml_for_write_api():
+    tmp_path = Path(__file__).parents[2] / f"_tmp_legacy_write_bundle_{uuid.uuid4().hex}"
+    try:
+        tmp_path.mkdir()
+        scenario_path = tmp_path / "projectA_FHD30_recording_scenario.yaml"
+        out_dir = tmp_path / "generated"
+        scenario_path.write_text(yaml.safe_dump(_legacy_scenario(), sort_keys=False), encoding="utf-8")
+
+        exit_code = main([
+            "--scenario",
+            str(scenario_path),
+            "--out",
+            str(out_dir),
+            "--project",
+            "proj-projectA",
+            "--project-name",
+            "Project A",
+            "--soc",
+            "soc-projectA",
+            "--strict",
+        ])
+        assert exit_code == 0
+
+        payload, issues = build_import_bundle_request(out_dir, actor="codex-test", note="bundle test")
+
+        assert issues == []
+        assert payload["kind"] == "scenario.import_bundle"
+        assert payload["actor"] == "codex-test"
+        assert payload["payload"]["import_report"]["ok"] is True
+        assert [doc["kind"] for doc in payload["payload"]["documents"]] == ["project", "scenario.usecase"]
+        assert payload["payload"]["documents"][1]["id"] == "uc-fhd30-recording"
+
+        bundle_path = tmp_path / "import_bundle.json"
+        bundle_exit = bundle_main([
+            "--generated",
+            str(out_dir),
+            "--out",
+            str(bundle_path),
+            "--actor",
+            "codex-test",
+            "--note",
+            "bundle test",
+            "--strict",
+        ])
+
+        assert bundle_exit == 0
+        written = json.loads(bundle_path.read_text(encoding="utf-8"))
+        assert written["payload"]["documents"][0]["kind"] == "project"
+    finally:
+        if tmp_path.exists():
+            shutil.rmtree(tmp_path)
+
+
+def test_legacy_import_bundle_reports_unsupported_generated_document():
+    tmp_path = Path(__file__).parents[2] / f"_tmp_legacy_write_bundle_unsupported_{uuid.uuid4().hex}"
+    try:
+        generated = tmp_path / "generated"
+        definition = generated / "02_definition"
+        definition.mkdir(parents=True)
+        (generated / "import_report.json").write_text(
+            json.dumps({"ok": True, "generated": {}, "messages": []}),
+            encoding="utf-8",
+        )
+        (definition / "sub-test.yaml").write_text(
+            yaml.safe_dump({"id": "sub-test", "kind": "submodule", "schema_version": "2.2"}, sort_keys=False),
+            encoding="utf-8",
+        )
+
+        payload, issues = build_import_bundle_request(generated)
+
+        assert any(issue["code"] == "bundle_document_kind_unsupported" for issue in issues)
+        assert payload["payload"]["import_report"]["ok"] is False
+        assert payload["payload"]["documents"] == []
+        assert any(
+            message["code"] == "bundle_document_kind_unsupported"
+            for message in payload["payload"]["import_report"]["messages"]
+        )
     finally:
         if tmp_path.exists():
             shutil.rmtree(tmp_path)
