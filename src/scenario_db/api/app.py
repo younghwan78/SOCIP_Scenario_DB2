@@ -9,7 +9,7 @@ from sqlalchemy import create_engine
 
 from scenario_db.api.cache import RuleCache
 from scenario_db.api.exceptions import register_handlers
-from scenario_db.api.routers import capability, decision, definition, evidence, runtime, write
+from scenario_db.api.routers import capability, decision, definition, evidence, explorer, runtime, write
 from scenario_db.api.routers.utility import health_router
 from scenario_db.api.routers import view as view_router
 from scenario_db.config import get_settings
@@ -70,6 +70,7 @@ def create_app() -> FastAPI:
         evidence.router,
         decision.router,
         runtime.router,
+        explorer.router,
         view_router.router,
         write.router,
     ]:

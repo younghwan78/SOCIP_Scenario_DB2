@@ -72,7 +72,7 @@ PATCH_LIST_FIELDS = {
     "remove_edges",
     "remove_buffers",
 }
-ALLOWED_BASE_EDGE_TYPES = {"OTF", "vOTF", "M2M"}
+ALLOWED_BASE_EDGE_TYPES = {"OTF", "vOTF", "M2M", "control"}
 IMPORT_KIND_ORDER = ["soc", "ip", "sw_profile", "project", "scenario.usecase"]
 IMPORT_MODEL_BY_KIND = {
     "soc": PydanticSocPlatform,
@@ -982,8 +982,21 @@ def _existing_row_to_import_doc(db: Session, kind: str, row: Any) -> dict[str, A
 
 def _document_signature(kind: str, doc: dict[str, Any]) -> str:
     model = IMPORT_MODEL_BY_KIND[kind]
-    normalized = model.model_validate(doc).model_dump(by_alias=True, exclude_none=True)
+    normalized = model.model_validate(_canonical_import_doc_for_signature(kind, doc)).model_dump(
+        by_alias=True,
+        exclude_none=True,
+    )
     return _document_sha256(normalized)
+
+
+def _canonical_import_doc_for_signature(kind: str, doc: dict[str, Any]) -> dict[str, Any]:
+    normalized = deepcopy(doc)
+    if kind == "scenario.usecase":
+        normalized["variants"] = sorted(
+            normalized.get("variants") or [],
+            key=lambda item: str(item.get("id") if isinstance(item, dict) else item),
+        )
+    return normalized
 
 
 def _compact_doc(value: Any) -> Any:
@@ -1005,15 +1018,35 @@ def _import_bundle_impact(db: Session, normalized: dict[str, Any]) -> dict[str, 
         if doc.get("kind") != "scenario.usecase":
             continue
         scenario_id = str(doc["id"])
-        existing_variants = {
-            row.id
+        existing_variant_docs = {
+            row.id: _variant_doc_for_signature(
+                {
+                    "id": row.id,
+                    "severity": row.severity,
+                    "design_conditions": row.design_conditions or {},
+                    "design_conditions_override": row.design_conditions_override,
+                    "size_overrides": row.size_overrides or {},
+                    "routing_switch": row.routing_switch or {},
+                    "topology_patch": row.topology_patch or {},
+                    "node_configs": row.node_configs or {},
+                    "buffer_overrides": row.buffer_overrides or {},
+                    "ip_requirements": row.ip_requirements or {},
+                    "sw_requirements": row.sw_requirements,
+                    "violation_policy": row.violation_policy,
+                    "tags": row.tags or [],
+                    "derived_from_variant": row.derived_from_variant,
+                }
+            )
             for row in db.query(ScenarioVariant).filter_by(scenario_id=scenario_id).all()
         }
-        imported_variants = {
-            variant["id"]
+        imported_variant_docs = {
+            str(variant["id"]): _variant_doc_for_signature(variant)
             for variant in doc.get("variants") or []
             if isinstance(variant, dict) and variant.get("id")
         }
+        existing_variants = set(existing_variant_docs)
+        imported_variants = set(imported_variant_docs)
+        common_variants = imported_variants & existing_variants
         scenario_impacts.append(
             {
                 "scenario_id": scenario_id,
@@ -1022,7 +1055,11 @@ def _import_bundle_impact(db: Session, normalized: dict[str, Any]) -> dict[str, 
                 "variant_count_after": len(imported_variants),
                 "variants_added": sorted(imported_variants - existing_variants),
                 "variants_removed": sorted(existing_variants - imported_variants),
-                "variants_updated": sorted(imported_variants & existing_variants),
+                "variants_updated": sorted(
+                    variant_id
+                    for variant_id in common_variants
+                    if _document_sha256(existing_variant_docs[variant_id]) != _document_sha256(imported_variant_docs[variant_id])
+                ),
             }
         )
     return {
@@ -1031,6 +1068,37 @@ def _import_bundle_impact(db: Session, normalized: dict[str, Any]) -> dict[str, 
         "scenario_impacts": scenario_impacts,
         "import_report": _import_report_summary(report),
     }
+
+
+def _variant_doc_for_signature(variant: dict[str, Any]) -> dict[str, Any]:
+    return _compact_doc(
+        {
+            "id": variant.get("id"),
+            "severity": variant.get("severity"),
+            "design_conditions": _canonical_design_conditions(variant.get("design_conditions") or {}),
+            "design_conditions_override": _canonical_design_conditions(variant.get("design_conditions_override") or None),
+            "size_overrides": variant.get("size_overrides") or {},
+            "routing_switch": variant.get("routing_switch") or {},
+            "topology_patch": variant.get("topology_patch") or {},
+            "node_configs": variant.get("node_configs") or {},
+            "buffer_overrides": variant.get("buffer_overrides") or {},
+            "ip_requirements": variant.get("ip_requirements") or {},
+            "sw_requirements": variant.get("sw_requirements"),
+            "violation_policy": variant.get("violation_policy"),
+            "tags": variant.get("tags") or [],
+            "derived_from_variant": variant.get("derived_from_variant"),
+        }
+    )
+
+
+def _canonical_design_conditions(value: Any) -> Any:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, dict):
+        return {key: _canonical_design_conditions(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_canonical_design_conditions(item) for item in value]
+    return value
 
 
 def _count_docs_by_kind(docs: list[dict[str, Any]]) -> dict[str, int]:

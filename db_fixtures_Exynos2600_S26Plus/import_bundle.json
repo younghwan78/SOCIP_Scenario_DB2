@@ -1290,22 +1290,22 @@
             {
               "from": "sw_decoder",
               "to": "audio_hal",
-              "type": "M2M"
+              "type": "control"
             },
             {
               "from": "dsp_offload",
               "to": "audio_hal",
-              "type": "M2M"
+              "type": "control"
             },
             {
               "from": "audio_hal",
               "to": "speaker",
-              "type": "M2M"
+              "type": "control"
             },
             {
               "from": "audio_hal",
               "to": "bt_codec",
-              "type": "M2M"
+              "type": "control"
             }
           ],
           "buffers": {
@@ -1514,17 +1514,17 @@
             {
               "from": "sw_decoder",
               "to": "audio_hal",
-              "type": "M2M"
+              "type": "control"
             },
             {
               "from": "audio_hal",
               "to": "speaker",
-              "type": "M2M"
+              "type": "control"
             },
             {
               "from": "audio_hal",
               "to": "bt_codec",
-              "type": "M2M"
+              "type": "control"
             }
           ],
           "buffers": {
@@ -9214,7 +9214,7 @@
             {
               "from": "cpu",
               "to": "gpu",
-              "type": "M2M"
+              "type": "control"
             },
             {
               "from": "gpu",
@@ -9720,7 +9720,7 @@
             {
               "from": "network",
               "to": "sw_demux",
-              "type": "M2M"
+              "type": "control"
             },
             {
               "from": "sw_demux",
@@ -12193,22 +12193,22 @@
             {
               "from": "modem",
               "to": "audio_hal",
-              "type": "M2M"
+              "type": "control"
             },
             {
               "from": "audio_hal",
               "to": "speaker",
-              "type": "M2M"
+              "type": "control"
             },
             {
               "from": "mic",
               "to": "audio_hal",
-              "type": "M2M"
+              "type": "control"
             },
             {
               "from": "audio_hal",
               "to": "modem",
-              "type": "M2M"
+              "type": "control"
             }
           ],
           "buffers": {}
@@ -12305,7 +12305,7 @@
             {
               "from": "network",
               "to": "sw_demux",
-              "type": "M2M"
+              "type": "control"
             },
             {
               "from": "sw_demux",

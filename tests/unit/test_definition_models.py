@@ -163,6 +163,17 @@ def test_pipeline_valid():
     assert len(p.edges) == 1
 
 
+def test_pipeline_accepts_control_edge_without_buffer():
+    p = Pipeline.model_validate({
+        "nodes": [
+            {"id": "a", "ip_ref": "ip-cpu-v1"},
+            {"id": "b", "ip_ref": "ip-gpu-v1"},
+        ],
+        "edges": [{"from": "a", "to": "b", "type": "control"}],
+    })
+    assert p.edges[0].type == EdgeType.control
+
+
 # ---------------------------------------------------------------------------
 # ViolationPolicy enums
 # ---------------------------------------------------------------------------

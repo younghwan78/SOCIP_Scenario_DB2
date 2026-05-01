@@ -175,6 +175,34 @@ def test_list_sw_components_invalid_category_400(client):
 
 
 # ---------------------------------------------------------------------------
+# Explorer
+# ---------------------------------------------------------------------------
+
+def test_explorer_summary_200(client):
+    r = client.get("/api/v1/explorer/summary")
+    assert r.status_code == 200
+    assert r.json()["totals"]["scenario"] == 0
+
+
+def test_explorer_scenario_catalog_200(client):
+    r = client.get("/api/v1/explorer/scenario-catalog")
+    assert r.status_code == 200
+    assert r.json()["items"] == []
+
+
+def test_explorer_variant_matrix_200(client):
+    r = client.get("/api/v1/explorer/variant-matrix")
+    assert r.status_code == 200
+    assert r.json()["axis_keys"] == []
+
+
+def test_explorer_import_health_200(client):
+    r = client.get("/api/v1/explorer/import-health")
+    assert r.status_code == 200
+    assert r.json()["issues"] == []
+
+
+# ---------------------------------------------------------------------------
 # Definition
 # ---------------------------------------------------------------------------
 

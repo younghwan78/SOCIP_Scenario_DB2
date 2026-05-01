@@ -42,7 +42,7 @@ pipeline:
   edges:
   - from: network
     to: sw_demux
-    type: M2M
+    type: control
   - from: sw_demux
     to: mfc_dec
     type: M2M

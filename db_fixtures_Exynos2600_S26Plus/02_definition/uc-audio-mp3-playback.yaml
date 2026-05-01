@@ -46,16 +46,16 @@ pipeline:
     buffer: AUDIO_OFFLOAD_BUF
   - from: sw_decoder
     to: audio_hal
-    type: M2M
+    type: control
   - from: dsp_offload
     to: audio_hal
-    type: M2M
+    type: control
   - from: audio_hal
     to: speaker
-    type: M2M
+    type: control
   - from: audio_hal
     to: bt_codec
-    type: M2M
+    type: control
   buffers:
     AUDIO_ES_BUF:
       format: AUDIO_PCM

@@ -78,6 +78,20 @@ with col1:
     st.markdown(
         """
 <div class="home-card">
+  <h3>DB Explorer</h3>
+  <p>Database-level overview, scenario catalog, variant matrix, and import health checks.</p>
+  <span class="status-ready">Available</span>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+    if st.button("Open DB Explorer", type="primary", use_container_width=True):
+        st.switch_page("pages/1_DB_Explorer.py")
+
+with col2:
+    st.markdown(
+        """
+<div class="home-card">
   <h3>Pipeline Viewer</h3>
   <p>Level 0 architecture, task topology, Level 1 IP detail, and Level 2 drill-down views.</p>
   <span class="status-ready">Available</span>
@@ -85,10 +99,10 @@ with col1:
 """,
         unsafe_allow_html=True,
     )
-    if st.button("Open Pipeline Viewer", type="primary", use_container_width=True):
-        st.switch_page("pages/1_Pipeline_Viewer.py")
+    if st.button("Open Pipeline Viewer", use_container_width=True):
+        st.switch_page("pages/2_Pipeline_Viewer.py")
 
-with col2:
+with col3:
     st.markdown(
         """
 <div class="home-card">
@@ -100,9 +114,9 @@ with col2:
         unsafe_allow_html=True,
     )
     if st.button("Open Import Workbench", use_container_width=True):
-        st.switch_page("pages/2_Import_Workbench.py")
+        st.switch_page("pages/3_Import_Workbench.py")
 
-with col3:
+with col4:
     st.markdown(
         """
 <div class="home-card">
@@ -114,19 +128,6 @@ with col3:
         unsafe_allow_html=True,
     )
     st.button("Evidence Dashboard", disabled=True, use_container_width=True)
-
-with col4:
-    st.markdown(
-        """
-<div class="home-card">
-  <h3>Issue Explorer</h3>
-  <p>Matched issue browser with gate rule status, waiver tracking, and review history.</p>
-  <span class="status-later">Deferred</span>
-</div>
-""",
-        unsafe_allow_html=True,
-    )
-    st.button("Issue Explorer", disabled=True, use_container_width=True)
 
 st.divider()
 st.caption("ScenarioDB v0.1.0 | Read API, Write API staging, import bundle, and viewer MVP")

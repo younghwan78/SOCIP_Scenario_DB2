@@ -12,6 +12,7 @@ from scenario_db.write.service import (
     validate_import_bundle,
     validate_pipeline_patch,
     validate_variant_overlay,
+    _document_signature,
 )
 
 
@@ -479,6 +480,33 @@ def test_validate_import_bundle_accepts_votf_edge_with_buffer():
     assert issues == []
 
 
+def test_validate_import_bundle_accepts_control_edge_without_buffer():
+    doc = _import_usecase_doc()
+    doc["pipeline"]["nodes"].append({"id": "cpu_task", "ip_ref": "ip-cpu-v1"})
+    doc["pipeline"]["edges"].append({"from": "cpu_task", "to": "mfc", "type": "control"})
+    db = _Db()
+    db.ip_cpu = IpCatalog(
+        id="ip-cpu-v1",
+        schema_version="2.2",
+        category="cpu",
+        capabilities={},
+        yaml_sha256="test",
+    )
+    original_query = db.query
+
+    def query(model):
+        if model is IpCatalog:
+            return _Query([db.ip, db.ip_isp, db.ip_csis, db.ip_cpu])
+        return original_query(model)
+
+    db.query = query
+    normalized = normalize_import_bundle_payload({"documents": [doc]})
+
+    issues = validate_import_bundle(db, normalized)
+
+    assert issues == []
+
+
 def test_validate_import_bundle_rejects_import_report_errors():
     normalized = normalize_import_bundle_payload(
         {
@@ -529,6 +557,29 @@ def test_import_bundle_diff_marks_identical_documents_unchanged():
     assert scenario_change.change == "unchanged"
     assert scenario_change.after["unchanged_ids"] == [doc["id"]]
     assert scenario_change.after["modified_ids"] == []
+    assert diff.impact["scenario_impacts"][0]["variants_updated"] == []
+
+
+def test_import_bundle_signature_ignores_variant_order():
+    doc_a = _import_usecase_doc()
+    doc_b = deepcopy(doc_a)
+    doc_a["variants"].append(
+        {
+            "id": "A-Variant",
+            "severity": "light",
+            "design_conditions": {"resolution": "HD", "fps": 30},
+        }
+    )
+    doc_b["variants"].insert(
+        0,
+        {
+            "id": "A-Variant",
+            "severity": "light",
+            "design_conditions": {"resolution": "HD", "fps": 30},
+        },
+    )
+
+    assert _document_signature("scenario.usecase", doc_a) == _document_signature("scenario.usecase", doc_b)
 
 
 def test_import_bundle_diff_marks_identical_sw_profile_unchanged():
@@ -566,3 +617,16 @@ def test_import_bundle_diff_marks_existing_changed_documents_modified():
     scenario_change = next(change for change in diff.changes if change.field == "documents.scenario.usecase")
     assert scenario_change.change == "modify"
     assert scenario_change.after["modified_ids"] == [doc["id"]]
+    assert diff.impact["scenario_impacts"][0]["variants_updated"] == []
+
+
+def test_import_bundle_diff_reports_only_changed_variants_updated():
+    db = _Db()
+    doc = _import_usecase_doc()
+    _sync_db_scenario_from_doc(db, doc)
+    doc["variants"][0]["buffer_overrides"]["RECORD_BUF"]["format"] = "P010"
+    normalized = normalize_import_bundle_payload({"documents": [doc]})
+
+    diff = build_import_bundle_diff(db, normalized)
+
+    assert diff.impact["scenario_impacts"][0]["variants_updated"] == ["FHD30-Imported"]

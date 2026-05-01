@@ -38,7 +38,7 @@ pipeline:
   edges:
   - from: cpu
     to: gpu
-    type: M2M
+    type: control
   - from: gpu
     to: dpu
     type: M2M

@@ -30,16 +30,16 @@ pipeline:
   edges:
   - from: modem
     to: audio_hal
-    type: M2M
+    type: control
   - from: audio_hal
     to: speaker
-    type: M2M
+    type: control
   - from: mic
     to: audio_hal
-    type: M2M
+    type: control
   - from: audio_hal
     to: modem
-    type: M2M
+    type: control
   buffers: {}
 variants:
 - id: voice-call-volte
