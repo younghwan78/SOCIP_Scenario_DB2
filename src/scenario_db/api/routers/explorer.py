@@ -30,9 +30,21 @@ def explorer_summary(
     soc_ref: str | None = Query(None),
     board_type: str | None = Query(None),
     project_ref: str | None = Query(None),
+    category: list[str] | None = Query(None),
+    domain: list[str] | None = Query(None),
+    scenario_id: list[str] | None = Query(None),
+    severity: list[str] | None = Query(None),
     db: Session = Depends(get_db),
 ):
     projects, scenarios, variants = _filtered_rows(db, soc_ref, board_type, project_ref)
+    scenarios, variants = _filter_scenarios_and_variants(
+        scenarios,
+        variants,
+        categories=category,
+        domains=domain,
+        scenario_ids=scenario_id,
+        severities=severity,
+    )
     category_counts = Counter()
     severity_counts = Counter()
     board_counts = Counter()
@@ -46,7 +58,7 @@ def explorer_summary(
 
     soc_ids = {str(_project_meta(project, "soc_ref")) for project in projects if _project_meta(project, "soc_ref")}
     return ExplorerSummaryResponse(
-        filters=_filters(soc_ref, board_type, project_ref),
+        filters=_filters(soc_ref, board_type, project_ref, category=category, domain=domain, scenario_id=scenario_id, severity=severity),
         totals={
             "soc": _count_matching_socs(db, soc_ids) if soc_ids else db.query(SocPlatform).count(),
             "project": len(projects),
@@ -67,19 +79,29 @@ def scenario_catalog(
     soc_ref: str | None = Query(None),
     board_type: str | None = Query(None),
     project_ref: str | None = Query(None),
-    category: str | None = Query(None),
+    category: list[str] | None = Query(None),
+    domain: list[str] | None = Query(None),
+    scenario_id: list[str] | None = Query(None),
+    severity: list[str] | None = Query(None),
     limit: int = Query(500, ge=1, le=5000),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
     projects, scenarios, variants = _filtered_rows(db, soc_ref, board_type, project_ref)
+    scenarios, variants = _filter_scenarios_and_variants(
+        scenarios,
+        variants,
+        categories=category,
+        domains=domain,
+        scenario_ids=scenario_id,
+        severities=severity,
+    )
     project_by_id = {project.id: project for project in projects}
     variants_by_scenario = _variants_by_scenario(variants)
     items: list[ScenarioCatalogItem] = []
     for scenario in sorted(scenarios, key=lambda row: row.id):
         categories = _scenario_list_meta(scenario, "category")
-        if category is not None and category not in categories:
-            continue
+        domains = _scenario_list_meta(scenario, "domain")
         project = project_by_id.get(scenario.project_ref)
         if project is None:
             continue
@@ -111,7 +133,7 @@ def scenario_catalog(
             )
         )
     return ScenarioCatalogResponse(
-        filters={**_filters(soc_ref, board_type, project_ref), "category": category},
+        filters=_filters(soc_ref, board_type, project_ref, category=category, domain=domain, scenario_id=scenario_id, severity=severity),
         total=len(items),
         items=items[offset : offset + limit],
     )
@@ -122,13 +144,23 @@ def variant_matrix(
     soc_ref: str | None = Query(None),
     board_type: str | None = Query(None),
     project_ref: str | None = Query(None),
-    category: str | None = Query(None),
-    scenario_id: str | None = Query(None),
+    category: list[str] | None = Query(None),
+    domain: list[str] | None = Query(None),
+    scenario_id: list[str] | None = Query(None),
+    severity: list[str] | None = Query(None),
     limit: int = Query(1000, ge=1, le=10000),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
     projects, scenarios, variants = _filtered_rows(db, soc_ref, board_type, project_ref)
+    scenarios, variants = _filter_scenarios_and_variants(
+        scenarios,
+        variants,
+        categories=category,
+        domains=domain,
+        scenario_ids=scenario_id,
+        severities=severity,
+    )
     project_by_id = {project.id: project for project in projects}
     scenario_by_id = {scenario.id: scenario for scenario in scenarios}
     axis_keys: set[str] = set()
@@ -138,10 +170,7 @@ def variant_matrix(
         if scenario is None:
             continue
         categories = _scenario_list_meta(scenario, "category")
-        if category is not None and category not in categories:
-            continue
-        if scenario_id is not None and scenario.id != scenario_id:
-            continue
+        domains = _scenario_list_meta(scenario, "domain")
         project = project_by_id.get(scenario.project_ref)
         if project is None:
             continue
@@ -158,6 +187,7 @@ def variant_matrix(
                 scenario_id=scenario.id,
                 scenario_name=str(_scenario_meta(scenario, "name") or scenario.id),
                 category=categories,
+                domain=domains,
                 variant_id=variant.id,
                 severity=variant.severity,
                 design_conditions=design,
@@ -172,7 +202,7 @@ def variant_matrix(
             )
         )
     return VariantMatrixResponse(
-        filters={**_filters(soc_ref, board_type, project_ref), "category": category, "scenario_id": scenario_id},
+        filters=_filters(soc_ref, board_type, project_ref, category=category, domain=domain, scenario_id=scenario_id, severity=severity),
         total=len(items),
         axis_keys=_sorted_axis_keys(axis_keys),
         items=items[offset : offset + limit],
@@ -184,15 +214,51 @@ def import_health(
     soc_ref: str | None = Query(None),
     board_type: str | None = Query(None),
     project_ref: str | None = Query(None),
+    category: list[str] | None = Query(None),
+    domain: list[str] | None = Query(None),
+    scenario_id: list[str] | None = Query(None),
+    severity: list[str] | None = Query(None),
+    issue_severity: list[str] | None = Query(None),
+    code: list[str] | None = Query(None),
+    document_kind: list[str] | None = Query(None),
+    document_id: list[str] | None = Query(None),
     limit: int = Query(500, ge=1, le=5000),
     db: Session = Depends(get_db),
 ):
     projects, scenarios, variants = _filtered_rows(db, soc_ref, board_type, project_ref)
+    scenarios, variants = _filter_scenarios_and_variants(
+        scenarios,
+        variants,
+        categories=category,
+        domains=domain,
+        scenario_ids=scenario_id,
+        severities=severity,
+    )
     issues = _data_quality_issues(db, projects, scenarios, variants)
+    issues = [
+        issue
+        for issue in issues
+        if _matches_selected([issue.severity], issue_severity)
+        and _matches_selected([issue.code], code)
+        and _matches_selected([issue.document_kind], document_kind)
+        and _matches_selected([issue.document_id], document_id)
+    ]
     issues = issues[:limit]
     counts = Counter(issue.severity for issue in issues)
     return ImportHealthResponse(
-        filters=_filters(soc_ref, board_type, project_ref),
+        filters=_filters(
+            soc_ref,
+            board_type,
+            project_ref,
+            category=category,
+            domain=domain,
+            scenario_id=scenario_id,
+            severity=severity,
+            issue_severity=issue_severity,
+            code=code,
+            document_kind=document_kind,
+            document_id=document_id,
+        ),
         issue_counts=dict(sorted(counts.items())),
         issues=issues,
         latest_import_batches=_latest_import_batches(db),
@@ -226,6 +292,46 @@ def _filtered_rows(
     return projects, scenarios, variants
 
 
+def _filter_scenarios_and_variants(
+    scenarios: list[Scenario],
+    variants: list[ScenarioVariant],
+    *,
+    categories: list[str] | None,
+    domains: list[str] | None,
+    scenario_ids: list[str] | None,
+    severities: list[str] | None,
+) -> tuple[list[Scenario], list[ScenarioVariant]]:
+    filtered_scenarios = [
+        scenario
+        for scenario in scenarios
+        if _matches_selected(_scenario_list_meta(scenario, "category"), categories)
+        and _matches_selected(_scenario_list_meta(scenario, "domain"), domains)
+        and _matches_selected([scenario.id], scenario_ids)
+    ]
+    filtered_scenario_ids = {scenario.id for scenario in filtered_scenarios}
+    filtered_variants = [
+        variant
+        for variant in variants
+        if variant.scenario_id in filtered_scenario_ids
+        and _matches_selected([variant.severity or "unknown"], severities)
+    ]
+    if severities:
+        scenario_ids_with_variants = {variant.scenario_id for variant in filtered_variants}
+        filtered_scenarios = [
+            scenario
+            for scenario in filtered_scenarios
+            if scenario.id in scenario_ids_with_variants
+        ]
+    return filtered_scenarios, filtered_variants
+
+
+def _matches_selected(values: list[Any], selected: list[str] | None) -> bool:
+    if not selected:
+        return True
+    value_set = {str(value).lower() for value in values}
+    return any(str(item).lower() in value_set for item in selected)
+
+
 def _data_quality_issues(
     db: Session,
     projects: list[Project],
@@ -248,6 +354,23 @@ def _data_quality_issues(
         _check_ref(issues, sw_ref, sw_profile_ids, "project_sw_profile_ref_missing", project.id, "metadata.default_sw_profile_ref", "Add sw_profile YAML under 01_sw or fix default_sw_profile_ref.")
 
     for scenario in scenarios:
+        metadata = scenario.metadata_ or {}
+        _check_duplicate_values(
+            issues,
+            metadata.get("category"),
+            "scenario_duplicate_category",
+            scenario.id,
+            "metadata.category",
+            "Remove duplicate category values from scenario metadata.",
+        )
+        _check_duplicate_values(
+            issues,
+            metadata.get("domain"),
+            "scenario_duplicate_domain",
+            scenario.id,
+            "metadata.domain",
+            "Remove duplicate domain values from scenario metadata.",
+        )
         if scenario.project_ref not in project_ids:
             issues.append(_health_issue("error", "scenario_project_ref_missing", f"Project not found: {scenario.project_ref}", "scenario.usecase", scenario.id, "project_ref", "Import the project YAML before scenario YAML."))
         pipeline = scenario.pipeline or {}
@@ -325,6 +448,38 @@ def _check_ref(
         issues.append(_health_issue("error", code, f"Reference not found: {ref}", "project", document_id, path, fix_hint))
 
 
+def _check_duplicate_values(
+    issues: list[ImportHealthIssue],
+    values: Any,
+    code: str,
+    document_id: str,
+    path: str,
+    fix_hint: str,
+) -> None:
+    if not isinstance(values, list):
+        return
+    seen: set[str] = set()
+    duplicates: list[str] = []
+    for value in values:
+        text = str(value)
+        key = text.lower()
+        if key in seen and text not in duplicates:
+            duplicates.append(text)
+        seen.add(key)
+    if duplicates:
+        issues.append(
+            _health_issue(
+                "warning",
+                code,
+                f"Duplicate metadata values: {', '.join(duplicates)}",
+                "scenario.usecase",
+                document_id,
+                path,
+                fix_hint,
+            )
+        )
+
+
 def _health_issue(
     severity: str,
     code: str,
@@ -399,8 +554,14 @@ def _viewer_query(project: Project, scenario_id: str, variant_id: str | None) ->
     return {key: value for key, value in query.items() if value}
 
 
-def _filters(soc_ref: str | None, board_type: str | None, project_ref: str | None) -> dict[str, Any]:
-    return {key: value for key, value in {"soc_ref": soc_ref, "board_type": board_type, "project_ref": project_ref}.items() if value is not None}
+def _filters(
+    soc_ref: str | None,
+    board_type: str | None,
+    project_ref: str | None,
+    **extra: Any,
+) -> dict[str, Any]:
+    filters = {"soc_ref": soc_ref, "board_type": board_type, "project_ref": project_ref, **extra}
+    return {key: value for key, value in filters.items() if value not in (None, "", [])}
 
 
 def _counter_items(counter: Counter[str]) -> list[ExplorerCount]:

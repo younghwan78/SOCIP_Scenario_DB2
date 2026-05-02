@@ -172,7 +172,11 @@ def _metadata(item: dict[str, Any]) -> dict[str, Any]:
 
 
 def _clean_params(params: dict[str, Any]) -> dict[str, Any]:
-    return {key: value for key, value in params.items() if value is not None}
+    return {
+        key: value
+        for key, value in params.items()
+        if value not in (None, "", [])
+    }
 
 
 def _request_json(

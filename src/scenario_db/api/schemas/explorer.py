@@ -69,6 +69,7 @@ class VariantMatrixItem(BaseModel):
     scenario_id: str
     scenario_name: str
     category: list[str] = Field(default_factory=list)
+    domain: list[str] = Field(default_factory=list)
     variant_id: str
     severity: str | None = None
     design_conditions: dict[str, Any] = Field(default_factory=dict)

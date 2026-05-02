@@ -7,10 +7,12 @@ from __future__ import annotations
 
 import os
 import sys
+from collections import Counter
 from html import escape
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
 import streamlit as st
 
 _root = Path(__file__).resolve().parents[2]
@@ -134,7 +136,7 @@ st.markdown(
     border-radius: 13px;
     background: #FFFFFF;
     padding: 12px 14px;
-    margin-bottom: 10px;
+    min-height: 128px;
   }
   .catalog-card-title {
     font-weight: 850;
@@ -151,9 +153,64 @@ st.markdown(
     font-size: 12px;
     margin-top: 6px;
   }
+  .catalog-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .catalog-mini-metrics {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .catalog-mini-metric {
+    border: 1px solid #EEF0F3;
+    border-radius: 8px;
+    background: #F9FAFB;
+    padding: 6px 7px;
+  }
+  .catalog-mini-label {
+    color: #6B7280;
+    font-size: 10px;
+    font-weight: 750;
+    text-transform: uppercase;
+  }
+  .catalog-mini-value {
+    color: #111827;
+    font-size: 13px;
+    font-weight: 850;
+    margin-top: 2px;
+  }
   .health-error { color: #B91C1C; font-weight: 800; }
   .health-warning { color: #92400E; font-weight: 800; }
   .health-info { color: #1D4ED8; font-weight: 800; }
+  .matrix-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 8px;
+    margin: 8px 0 12px 0;
+  }
+  .matrix-summary-card {
+    border: 1px solid #E8E4DF;
+    border-radius: 11px;
+    background: #FFFFFF;
+    padding: 9px 10px;
+  }
+  .matrix-summary-title {
+    color: #6B7280;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .matrix-summary-body {
+    color: #111827;
+    font-size: 12px;
+    font-weight: 700;
+  }
 </style>
 """,
     unsafe_allow_html=True,
@@ -183,6 +240,32 @@ _DOMAIN_PALETTE = {
     "npu": ("#ECFEFF", "#67E8F9", "#0E7490"),
 }
 
+_SEVERITY_ROW_STYLES = {
+    "critical": "background-color: #FEF2F2; color: #7F1D1D;",
+    "heavy": "background-color: #FFF7ED; color: #7C2D12;",
+    "medium": "background-color: #FEFCE8; color: #713F12;",
+    "light": "background-color: #F0FDF4; color: #14532D;",
+}
+
+_CONDITION_PRIORITY = [
+    "resolution",
+    "fps",
+    "hdr",
+    "codec",
+    "codec_mfc",
+    "camera_mode",
+    "subscenario",
+    "panel_fps_hz",
+    "format",
+    "output",
+    "screen_on",
+    "dpu_composer",
+    "dpu_layer_count",
+    "gpu_ui",
+    "npu_used",
+    "audio",
+]
+
 
 @st.cache_data(ttl=30)
 def _load_soc_options(api_base: str) -> tuple[list[dict[str, Any]], str | None]:
@@ -198,6 +281,16 @@ def _load_project_options(api_base: str, soc_ref: str | None, board_type: str | 
         return list_projects(api_base, soc_ref=soc_ref, board_type=board_type), None
     except ViewerApiError as exc:
         return [], str(exc)
+
+
+@st.cache_data(ttl=30)
+def _load_filter_options(api_base: str, filters: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any], str | None]:
+    try:
+        summary = get_summary(api_base, **filters)
+        catalog = get_scenario_catalog(api_base, **{**filters, "limit": 5000})
+        return summary, catalog, None
+    except ViewerApiError as exc:
+        return {}, {}, str(exc)
 
 
 @st.cache_data(ttl=30)
@@ -258,6 +351,11 @@ def _unique_labels(labels: list[Any]) -> list[str]:
     return result
 
 
+def _labels_not_in(labels: list[Any], existing: list[Any]) -> list[str]:
+    existing_keys = {str(label).lower() for label in existing}
+    return [label for label in _unique_labels(labels) if label.lower() not in existing_keys]
+
+
 def _rows_with_viewer_link(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     rows = []
     for item in items:
@@ -266,6 +364,41 @@ def _rows_with_viewer_link(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
         row.pop("viewer_query", None)
         rows.append(row)
     return rows
+
+
+def _diff_profile(item: dict[str, Any]) -> str:
+    flags = []
+    if item.get("disabled_nodes"):
+        flags.append("routing")
+    if item.get("disabled_edges"):
+        flags.append("edge")
+    if item.get("node_config_count"):
+        flags.append("node_cfg")
+    if item.get("buffer_override_count"):
+        flags.append("buffer")
+    return "+".join(flags) if flags else "base"
+
+
+def _change_score(item: dict[str, Any]) -> int:
+    return (
+        len(item.get("disabled_nodes") or [])
+        + int(item.get("disabled_edges") or 0)
+        + int(item.get("node_config_count") or 0)
+        + int(item.get("buffer_override_count") or 0)
+    )
+
+
+def _key_condition_summary(design: dict[str, Any]) -> str:
+    pairs: list[str] = []
+    used: set[str] = set()
+    for key in _CONDITION_PRIORITY:
+        if key in design and design.get(key) not in (None, ""):
+            pairs.append(f"{key}={design.get(key)}")
+            used.add(key)
+    for key in sorted(design):
+        if key not in used and design.get(key) not in (None, ""):
+            pairs.append(f"{key}={design.get(key)}")
+    return ", ".join(pairs[:7])
 
 
 def _catalog_table_rows(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -303,7 +436,12 @@ def _matrix_table_rows(items: list[dict[str, Any]], axis_keys: list[str]) -> lis
             "board_type": item.get("board_type"),
             "scenario_id": item.get("scenario_id"),
             "variant_id": item.get("variant_id"),
+            "category": ", ".join(item.get("category") or []),
+            "domain": ", ".join(item.get("domain") or []),
             "severity": item.get("severity"),
+            "diff_profile": _diff_profile(item),
+            "change_score": _change_score(item),
+            "key_conditions": _key_condition_summary(design),
             "enabled_nodes": item.get("enabled_nodes"),
             "disabled_nodes": ", ".join(item.get("disabled_nodes") or []),
             "disabled_edges": item.get("disabled_edges"),
@@ -315,6 +453,43 @@ def _matrix_table_rows(items: list[dict[str, Any]], axis_keys: list[str]) -> lis
             row[key] = design.get(key)
         rows.append(row)
     return rows
+
+
+def _style_variant_matrix(df: pd.DataFrame) -> pd.io.formats.style.Styler:
+    def style_row(row: pd.Series) -> list[str]:
+        severity = str(row.get("severity") or "").lower()
+        row_style = _SEVERITY_ROW_STYLES.get(severity, "")
+        styles = [row_style for _ in row]
+        if str(row.get("diff_profile") or "base") != "base":
+            for idx, column in enumerate(row.index):
+                if column in {"diff_profile", "change_score", "key_conditions"}:
+                    styles[idx] = "background-color: #EFF6FF; color: #1E3A8A; font-weight: 800;"
+        return styles
+
+    return df.style.apply(style_row, axis=1)
+
+
+def _render_variant_matrix_summary(items: list[dict[str, Any]]) -> None:
+    severity_counts = Counter(str(item.get("severity") or "unknown") for item in items)
+    diff_counts = Counter(_diff_profile(item) for item in items)
+    changed_count = sum(1 for item in items if _diff_profile(item) != "base")
+    max_score = max((_change_score(item) for item in items), default=0)
+    cards = [
+        ("Severity", "".join(_tag_chip(key, "category", count) for key, count in sorted(severity_counts.items()))),
+        ("Diff profile", "".join(_tag_chip(key, "domain", count) for key, count in sorted(diff_counts.items()))),
+        ("Changed variants", f"{changed_count} / {len(items)}"),
+        ("Max change score", str(max_score)),
+    ]
+    html = "".join(
+        f"""
+<div class="matrix-summary-card">
+  <div class="matrix-summary-title">{escape(title)}</div>
+  <div class="matrix-summary-body">{body}</div>
+</div>
+"""
+        for title, body in cards
+    )
+    st.markdown(f'<div class="matrix-summary-grid">{html}</div>', unsafe_allow_html=True)
 
 
 def _health_table_rows(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -367,23 +542,35 @@ def _render_help() -> None:
 
 
 def _render_catalog_cards(items: list[dict[str, Any]], limit: int = 12) -> None:
+    cards: list[str] = []
     for item in items[:limit]:
         severity = item.get("severity_counts") or {}
         severity_text = ", ".join(f"{key}:{value}" for key, value in severity.items()) if severity else "none"
-        st.markdown(
+        categories = _unique_labels(item.get("category") or [])
+        domain_only = _labels_not_in(item.get("domain") or [], categories)
+        cards.append(
             f"""
 <div class="catalog-card">
   <div class="catalog-card-title">{escape(str(item.get("scenario_name") or item.get("scenario_id")))}</div>
   <div class="catalog-card-meta">
     {escape(str(item.get("scenario_id")))} / {escape(str(item.get("project_id")))}
   </div>
-  <div>{_tag_chips(item.get("category") or [], "category")}{_tag_chips(item.get("domain") or [], "domain")}</div>
+  <div>{_tag_chips(categories, "category")}{_tag_chips(domain_only, "domain") if domain_only else ""}</div>
+  <div class="catalog-mini-metrics">
+    <div class="catalog-mini-metric"><div class="catalog-mini-label">Variants</div><div class="catalog-mini-value">{escape(str(item.get("variant_count")))}</div></div>
+    <div class="catalog-mini-metric"><div class="catalog-mini-label">Nodes</div><div class="catalog-mini-value">{escape(str(item.get("node_count")))}</div></div>
+    <div class="catalog-mini-metric"><div class="catalog-mini-label">Edges</div><div class="catalog-mini-value">{escape(str(item.get("edge_count")))}</div></div>
+    <div class="catalog-mini-metric"><div class="catalog-mini-label">Buffers</div><div class="catalog-mini-value">{escape(str(item.get("buffer_count")))}</div></div>
+  </div>
   <div class="catalog-card-kv">
-    variants={escape(str(item.get("variant_count")))} | severity_counts={escape(severity_text)} |
-    nodes={escape(str(item.get("node_count")))} | edges={escape(str(item.get("edge_count")))} | buffers={escape(str(item.get("buffer_count")))}
+    severity_counts={escape(severity_text)}
   </div>
 </div>
-""",
+"""
+        )
+    if cards:
+        st.markdown(
+            f'<div class="catalog-card-grid">{"".join(cards)}</div>',
             unsafe_allow_html=True,
         )
     if len(items) > limit:
@@ -409,6 +596,7 @@ with st.sidebar:
     if st.button("Refresh Explorer", use_container_width=True):
         _load_soc_options.clear()
         _load_project_options.clear()
+        _load_filter_options.clear()
         _load_explorer.clear()
         st.rerun()
 
@@ -435,13 +623,48 @@ with st.sidebar:
     if project_error:
         st.caption(f"Project list unavailable: {project_error}")
 
-    category_filter = st.text_input("Category", value=st.session_state.get("explorer_category", ""))
-    st.session_state["explorer_category"] = category_filter
+    base_filters = {
+        "soc_ref": selected_soc or None,
+        "board_type": board_type or None,
+        "project_ref": selected_project or None,
+    }
+    filter_summary, filter_catalog, filter_error = _load_filter_options(api_base, base_filters)
+    if filter_error:
+        st.caption(f"Filter options unavailable: {filter_error}")
+
+    category_options = [str(item.get("key")) for item in filter_summary.get("category_counts") or [] if item.get("key")]
+    severity_options = [str(item.get("key")) for item in filter_summary.get("severity_counts") or [] if item.get("key")]
+    domain_options = sorted(
+        {
+            str(domain)
+            for item in filter_catalog.get("items") or []
+            for domain in (item.get("domain") or [])
+        }
+    )
+    scenario_options = [str(item.get("scenario_id")) for item in filter_catalog.get("items") or [] if item.get("scenario_id")]
+    scenario_label_by_id = {
+        str(item.get("scenario_id")): f"{item.get('scenario_id')} - {item.get('scenario_name')}"
+        for item in filter_catalog.get("items") or []
+        if item.get("scenario_id")
+    }
+
+    selected_categories = st.multiselect("Category", category_options)
+    selected_domains = st.multiselect("Domain", domain_options)
+    selected_scenarios = st.multiselect(
+        "Scenario",
+        scenario_options,
+        format_func=lambda scenario_id: scenario_label_by_id.get(scenario_id, scenario_id),
+    )
+    selected_severities = st.multiselect("Variant Severity", severity_options)
 
 filters = {
     "soc_ref": selected_soc or None,
     "board_type": board_type or None,
     "project_ref": selected_project or None,
+    "category": selected_categories or None,
+    "domain": selected_domains or None,
+    "scenario_id": selected_scenarios or None,
+    "severity": selected_severities or None,
 }
 summary, catalog, matrix, health, load_error = _load_explorer(api_base, filters)
 
@@ -464,13 +687,8 @@ if load_error:
 
 _render_help()
 
-category = category_filter or None
 catalog_items = catalog.get("items") or []
-if category:
-    catalog_items = [item for item in catalog_items if category in (item.get("category") or [])]
 matrix_items = matrix.get("items") or []
-if category:
-    matrix_items = [item for item in matrix_items if category in (item.get("category") or [])]
 
 tabs = st.tabs(["Overview", "Scenario Catalog", "Variant Matrix", "Import Health"])
 
@@ -516,9 +734,14 @@ with tabs[1]:
 with tabs[2]:
     axis_keys = matrix.get("axis_keys") or []
     st.markdown(f"**Variant Matrix** - {len(matrix_items)} rows")
-    st.caption("Rows are variants. Axis columns are inferred from design_conditions across the filtered data.")
+    st.caption(
+        "Rows are variants. Row color follows severity. diff_profile highlights variant-level deltas such as routing, node config, and buffer overrides."
+    )
+    _render_variant_matrix_summary(matrix_items)
+    matrix_rows = _matrix_table_rows(matrix_items, axis_keys)
+    matrix_df = pd.DataFrame(matrix_rows)
     st.dataframe(
-        _matrix_table_rows(matrix_items, axis_keys),
+        _style_variant_matrix(matrix_df) if not matrix_df.empty else matrix_df,
         hide_index=True,
         use_container_width=True,
         height=650,
@@ -526,13 +749,40 @@ with tabs[2]:
     )
 
 with tabs[3]:
-    counts = health.get("issue_counts") or {}
+    health_items = health.get("issues") or []
+    h1, h2, h3 = st.columns(3)
+    with h1:
+        issue_severity_filter = st.multiselect(
+            "Issue Severity",
+            sorted({str(item.get("severity")) for item in health_items if item.get("severity")}),
+        )
+    with h2:
+        issue_code_filter = st.multiselect(
+            "Issue Code",
+            sorted({str(item.get("code")) for item in health_items if item.get("code")}),
+        )
+    with h3:
+        issue_kind_filter = st.multiselect(
+            "Document Kind",
+            sorted({str(item.get("document_kind")) for item in health_items if item.get("document_kind")}),
+        )
+    if issue_severity_filter:
+        health_items = [item for item in health_items if item.get("severity") in issue_severity_filter]
+    if issue_code_filter:
+        health_items = [item for item in health_items if item.get("code") in issue_code_filter]
+    if issue_kind_filter:
+        health_items = [item for item in health_items if item.get("document_kind") in issue_kind_filter]
+
+    counts = {}
+    for item in health_items:
+        severity = str(item.get("severity") or "unknown")
+        counts[severity] = counts.get(severity, 0) + 1
     st.markdown(
         f"""<span class="health-error">Errors {counts.get('error', 0)}</span> -
         <span class="health-warning">Warnings {counts.get('warning', 0)}</span> -
         <span class="health-info">Info {counts.get('info', 0)}</span>""",
         unsafe_allow_html=True,
     )
-    st.dataframe(_health_table_rows(health.get("issues") or []), hide_index=True, use_container_width=True, height=520)
+    st.dataframe(_health_table_rows(health_items), hide_index=True, use_container_width=True, height=520)
     st.markdown("**Latest Import Batches**")
     st.dataframe(health.get("latest_import_batches") or [], hide_index=True, use_container_width=True)
