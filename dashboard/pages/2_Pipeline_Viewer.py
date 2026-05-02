@@ -213,11 +213,23 @@ def _load_project_options(base_url: str, soc_ref: str | None) -> tuple[list[dict
 
 
 @st.cache_data(ttl=30)
-def _load_scenario_options(base_url: str, project_ref: str | None) -> tuple[list[dict], str | None]:
+def _load_scenario_options(
+    base_url: str,
+    project_ref: str | None,
+    soc_ref: str | None,
+) -> tuple[list[dict], str, str | None]:
     try:
-        return list_scenarios(base_url, project_ref=project_ref), None
+        if project_ref:
+            project_items = list_scenarios(base_url, project_ref=project_ref)
+            if project_items:
+                return project_items, "project", None
+        if soc_ref:
+            soc_items = list_scenarios(base_url, soc_ref=soc_ref)
+            if soc_items:
+                return soc_items, "soc", None
+        return list_scenarios(base_url), "all", None
     except ViewerApiError as exc:
-        return [], str(exc)
+        return [], "none", str(exc)
 
 
 @st.cache_data(ttl=30)
@@ -330,7 +342,7 @@ with st.sidebar:
         project_id_input = st.text_input("Project / Board", value=query_project_id or st.session_state.get("viewer_project_id", ""))
         st.session_state["viewer_project_id"] = project_id_input
 
-    scenarios, scenario_error = _load_scenario_options(api_base, project_id_input or None)
+    scenarios, scenario_scope, scenario_error = _load_scenario_options(api_base, project_id_input or None, soc_id_input or None)
     if scenarios:
         scenario_ids = [str(item.get("id")) for item in scenarios if item.get("id")]
         previous_scenario = query_scenario_id or st.session_state.get("viewer_scenario_id", "uc-camera-recording")
@@ -344,11 +356,15 @@ with st.sidebar:
             ),
         )
         st.session_state["viewer_scenario_id"] = scenario_id_input
+        if scenario_scope == "soc":
+            st.caption("Selected project has no scenarios. Showing scenarios for selected SoC.")
+        elif scenario_scope == "all":
+            st.caption("Selected project/SoC has no scenarios. Showing all scenarios.")
     else:
         if scenario_error:
             st.caption(f"Scenario list unavailable: {scenario_error}")
-        scenario_id_input = st.text_input("Scenario", value=query_scenario_id or st.session_state.get("viewer_scenario_id", "uc-camera-recording"))
-        st.session_state["viewer_scenario_id"] = scenario_id_input
+        st.error("No scenarios are available from the API.")
+        st.stop()
 
     variants, variant_error = _load_variant_options(api_base, scenario_id_input) if scenario_id_input else ([], None)
     if variants:

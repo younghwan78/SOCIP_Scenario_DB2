@@ -301,34 +301,12 @@ def _project_architecture(graph: CanonicalScenarioGraph, level: int) -> ViewResp
     stage_orders: dict[tuple[str, str], int] = {}
 
     nodes.extend(_sw_stack_nodes(graph))
-
-    for pipeline_node in graph.pipeline_nodes:
-        node_id = pipeline_node.get("id")
-        if not node_id:
-            continue
-        stage = _stage_for_node(node_id, pipeline_node)
-        layer = _pipeline_node_layer(graph, pipeline_node)
-        order = _next_order(stage_orders, layer, stage)
-        nodes.append(
-            _n(
-                f"ip-{node_id}",
-                _node_label(node_id, pipeline_node),
-                _pipeline_node_type(layer),
-                layer,
-                STAGE_X.get(stage, STAGE_X["processing"]) + (order * 115),
-                LANE_Y[layer],
-                ip_ref=pipeline_node.get("ip_ref"),
-                capability_badges=_capability_badges(graph, pipeline_node),
-                active_operations=_operation_summary(graph, node_id, pipeline_node),
-                detail_items=_node_detail_items(graph, node_id, pipeline_node),
-                view_hints=ViewHints(lane=layer, stage=stage, order=order),
-            )
-        )
-
-    nodes.extend(_buffer_nodes_from_edges(graph, stage_orders))
-    edges.extend(_architecture_edges(graph))
-    edges.extend(_sw_control_edges(graph))
-    edges.extend(_risk_edges(graph))
+    arch_nodes, node_map = _architecture_resource_nodes(graph, stage_orders)
+    nodes.extend(arch_nodes)
+    nodes.extend(_buffer_nodes_from_architecture_edges(graph, node_map, stage_orders))
+    edges.extend(_architecture_edges(graph, node_map))
+    edges.extend(_sw_control_edges(graph, node_map, {node.data.id for node in nodes}))
+    edges.extend(_risk_edges(graph, node_map))
 
     return _response(
         graph=graph,
@@ -1544,44 +1522,164 @@ def _summary(graph: CanonicalScenarioGraph) -> ViewSummary:
 
 
 def _sw_stack_nodes(graph: CanonicalScenarioGraph) -> list[NodeElement]:
-    has_mfc = any("mfc" in str(n.get("id", "")).lower() for n in graph.pipeline_nodes)
-    has_dpu = any("dpu" in str(n.get("id", "")).lower() for n in graph.pipeline_nodes)
-    nodes = [
-        _n("app-camera", "Camera App", "sw", "app", STAGE_X["capture"], LANE_Y["app"],
-           view_hints=ViewHints(lane="app", stage="capture", order=0)),
-        _n("fw-camera", "CameraService", "sw", "framework", STAGE_X["capture"], LANE_Y["framework"],
-           view_hints=ViewHints(lane="framework", stage="capture", order=0)),
-        _n("hal-camera", "Camera HAL", "sw", "hal", STAGE_X["capture"], LANE_Y["hal"],
-           view_hints=ViewHints(lane="hal", stage="capture", order=0)),
-        _n("ker-camera", "V4L2 Camera Driver", "sw", "kernel", STAGE_X["capture"], LANE_Y["kernel"],
-           view_hints=ViewHints(lane="kernel", stage="capture", order=0)),
-    ]
-    if has_mfc:
-        nodes.extend([
-            _n("app-recorder", "Recorder App", "sw", "app", STAGE_X["processing"], LANE_Y["app"],
-               view_hints=ViewHints(lane="app", stage="processing", order=0)),
-            _n("fw-media", "MediaRecorder", "sw", "framework", STAGE_X["processing"], LANE_Y["framework"],
-               view_hints=ViewHints(lane="framework", stage="processing", order=0)),
-            _n("hal-codec", "Codec2 HAL", "sw", "hal", STAGE_X["processing"], LANE_Y["hal"],
-               view_hints=ViewHints(lane="hal", stage="processing", order=0)),
-            _n("ker-mfc", "MFC Driver", "sw", "kernel", STAGE_X["processing"], LANE_Y["kernel"],
-               view_hints=ViewHints(lane="kernel", stage="processing", order=0)),
-            _n("fw-codec", "MediaCodec FW", "sw", "framework", STAGE_X["encode"], LANE_Y["framework"],
-               view_hints=ViewHints(lane="framework", stage="encode", order=0)),
-        ])
-    if has_dpu:
-        nodes.append(
-            _n("ker-drm", "DRM / KMS", "sw", "kernel", STAGE_X["display"], LANE_Y["kernel"],
-               view_hints=ViewHints(lane="kernel", stage="display", order=0))
+    """Build scenario-specific SW overview nodes.
+
+    This is intentionally not a full Android stack model.  It shows only the
+    stack families implied by scenario metadata and active HW resources so
+    non-camera scenarios do not inherit Camera HAL/V4L2 by default.
+    """
+    categories = {str(value).lower() for value in (graph.scenario.metadata_ or {}).get("category", [])}
+    domains = {str(value).lower() for value in (graph.scenario.metadata_ or {}).get("domain", [])}
+    resource_kinds = {_architecture_resource_kind(graph, node) for node in graph.pipeline_nodes}
+    tags = categories | domains | resource_kinds
+    specs: list[tuple[str, str, str, str, str, int]] = []
+
+    def add(node_id: str, label: str, layer: str, stage: str, order: int) -> None:
+        spec = (node_id, label, "sw", layer, stage, order)
+        if spec not in specs:
+            specs.append(spec)
+
+    if "camera" in tags or "sensor" in tags or "isp" in tags:
+        add("sw-camera-app", "Camera App", "app", "capture", 0)
+        add("sw-camera-fw", "CameraService", "framework", "capture", 0)
+        add("sw-camera-hal", "Camera HAL", "hal", "capture", 0)
+        add("sw-camera-driver", "V4L2 Camera Driver", "kernel", "capture", 0)
+
+    if "audio" in tags:
+        add("sw-audio-app", "Audio App", "app", "capture", 0)
+        add("sw-audio-fw", "AudioFlinger", "framework", "processing", 0)
+        add("sw-audio-hal", "Audio HAL", "hal", "processing", 0)
+        add("sw-audio-driver", "ALSA / PCM Driver", "kernel", "processing", 0)
+
+    if "video" in tags or "video_playback" in tags or "mfc" in tags or "codec" in tags:
+        label = "Camera App" if "camera" in tags else "Player App"
+        framework = "MediaRecorder" if "camera" in tags else "MediaExtractor"
+        if "camera" not in tags:
+            add("sw-media-app", label, "app", "processing", 1)
+        add("sw-media-fw", framework, "framework", "processing", 1)
+        add("sw-codec-hal", "Codec2 HAL", "hal", "encode", 0)
+        add("sw-codec-driver", "MFC Driver", "kernel", "encode", 0)
+
+    if "display" in tags or "dpu" in tags or "panel" in tags:
+        add("sw-surface", "SurfaceFlinger", "framework", "display", 0)
+        add("sw-hwc", "HWC / Display HAL", "hal", "display", 0)
+        add("sw-drm", "DRM / KMS", "kernel", "display", 0)
+
+    if "game" in tags or "gpu" in tags:
+        add("sw-game-app", "Game App", "app", "processing", 0)
+        add("sw-graphics-fw", "Graphics Framework", "framework", "processing", 2)
+        add("sw-gpu-hal", "GPU HAL", "hal", "processing", 1)
+        add("sw-gpu-driver", "GPU Driver", "kernel", "processing", 1)
+
+    return [
+        _n(
+            node_id,
+            label,
+            node_type,
+            layer,
+            STAGE_X.get(stage, STAGE_X["processing"]),
+            LANE_Y[layer],
+            detail_items=[f"Scenario SW stack: {label}"],
+            view_hints=ViewHints(lane=layer, stage=stage, order=order),
         )
-    return nodes
+        for node_id, label, node_type, layer, stage, order in specs
+    ]
 
 
-def _architecture_edges(graph: CanonicalScenarioGraph) -> list[EdgeElement]:
+def _architecture_resource_nodes(
+    graph: CanonicalScenarioGraph,
+    stage_orders: dict[tuple[str, str], int],
+) -> tuple[list[NodeElement], dict[str, str]]:
+    groups: dict[str, dict[str, Any]] = {}
+    node_map: dict[str, str] = {}
+
+    for pipeline_node in graph.pipeline_nodes:
+        node_id = pipeline_node.get("id")
+        if not node_id:
+            continue
+        if _is_explicit_sw_task(graph, pipeline_node):
+            layer = _sw_layer_for_node(pipeline_node)
+            stage = _stage_for_node(node_id, pipeline_node)
+            order = _next_order(stage_orders, layer, stage)
+            view_id = f"sw-task-{_safe_id(node_id)}"
+            groups[view_id] = {
+                "id": view_id,
+                "label": _node_label(node_id, pipeline_node),
+                "layer": layer,
+                "type": "sw",
+                "stage": stage,
+                "order": order,
+                "members": [pipeline_node],
+                "detail_items": _node_detail_items(graph, node_id, pipeline_node),
+            }
+            node_map[str(node_id)] = view_id
+            continue
+
+        kind = _architecture_resource_kind(graph, pipeline_node)
+        view_id = f"res-{kind}"
+        node_map[str(node_id)] = view_id
+        group_layer = "external" if kind in {"sensor", "panel"} else ("memory" if kind == "memory" else "hw")
+        group = groups.setdefault(
+            view_id,
+            {
+                "id": view_id,
+                "label": _architecture_resource_label(kind),
+                "layer": group_layer,
+                "type": "ip" if kind not in {"memory"} else "buffer",
+                "stage": _architecture_resource_stage(kind, node_id, pipeline_node),
+                "members": [],
+                "capability_badges": [],
+                "detail_items": [],
+            },
+        )
+        group["members"].append(pipeline_node)
+        for badge in _capability_badges(graph, pipeline_node):
+            if badge not in group["capability_badges"]:
+                group["capability_badges"].append(badge)
+
+    nodes: list[NodeElement] = []
+    for group in groups.values():
+        members = group["members"]
+        layer = group["layer"]
+        stage = group["stage"]
+        order = group.get("order")
+        if order is None:
+            order = _next_order(stage_orders, layer, stage)
+        detail_items = list(group.get("detail_items") or [])
+        if members:
+            detail_items.append(
+                "Members: "
+                + ", ".join(str(member.get("id")) for member in members[:8])
+                + (f" +{len(members) - 8}" if len(members) > 8 else "")
+            )
+        representative = members[0] if members else {}
+        nodes.append(
+            _n(
+                group["id"],
+                group["label"],
+                group["type"],
+                layer,
+                STAGE_X.get(stage, STAGE_X["processing"]) + (int(order) * 115),
+                LANE_Y[layer],
+                ip_ref=representative.get("ip_ref"),
+                summary_badges=[f"{len(members)} nodes"] if len(members) > 1 else [],
+                capability_badges=list(group.get("capability_badges") or [])[:6],
+                active_operations=_operation_summary(graph, representative.get("id"), representative) if representative else None,
+                detail_items=detail_items,
+                collapsed_children_count=max(0, len(members) - 1),
+                view_hints=ViewHints(lane=layer, stage=stage, order=int(order)),
+            )
+        )
+    return nodes, node_map
+
+
+def _architecture_edges(graph: CanonicalScenarioGraph, node_map: dict[str, str]) -> list[EdgeElement]:
     edges: list[EdgeElement] = []
     for idx, edge in enumerate(graph.pipeline_edges):
-        source = f"ip-{edge.get('from')}"
-        target = f"ip-{edge.get('to')}"
+        source = node_map.get(str(edge.get("from")))
+        target = node_map.get(str(edge.get("to")))
+        if not source or not target or source == target:
+            continue
         flow_type = _edge_flow_type(edge)
         buffer_ref = edge.get("buffer")
         if buffer_ref:
@@ -1599,7 +1697,7 @@ def _architecture_edges(graph: CanonicalScenarioGraph) -> list[EdgeElement]:
                     detail_items=_edge_detail_items(graph, edge, buffer_ref),
                 )
             )
-            buffer_id = f"buf-{_safe_id(buffer_ref)}"
+            buffer_id = _architecture_buffer_id(buffer_ref)
             edges.append(_e(f"e-{idx}-src-buf", source, buffer_id, flow_type, buffer_ref=buffer_ref, detail_items=_edge_detail_items(graph, edge, buffer_ref)))
             edges.append(_e(f"e-{idx}-buf-tgt", buffer_id, target, flow_type, buffer_ref=buffer_ref, detail_items=_edge_detail_items(graph, edge, buffer_ref)))
         else:
@@ -1622,6 +1720,43 @@ def _topology_edges(graph: CanonicalScenarioGraph) -> list[EdgeElement]:
         else:
             edges.append(_e(f"e-topo-{idx}", source, target, flow_type, detail_items=_edge_detail_items(graph, edge, None)))
     return edges
+
+
+def _buffer_nodes_from_architecture_edges(
+    graph: CanonicalScenarioGraph,
+    node_map: dict[str, str],
+    stage_orders: dict[tuple[str, str], int],
+) -> list[NodeElement]:
+    nodes: list[NodeElement] = []
+    seen: set[str] = set()
+    for edge in graph.pipeline_edges:
+        buffer_ref = edge.get("buffer")
+        if not buffer_ref or buffer_ref in seen:
+            continue
+        source = node_map.get(str(edge.get("from")))
+        target = node_map.get(str(edge.get("to")))
+        if not source or not target or source == target:
+            continue
+        seen.add(buffer_ref)
+        target_node = _find_pipeline_node(graph, edge.get("to"))
+        source_node = _find_pipeline_node(graph, edge.get("from"))
+        stage = _stage_for_node(edge.get("to"), target_node or source_node or {})
+        order = _next_order(stage_orders, "memory", stage)
+        nodes.append(
+            _n(
+                _architecture_buffer_id(buffer_ref),
+                _buffer_label(buffer_ref),
+                "buffer",
+                "memory",
+                STAGE_X.get(stage, STAGE_X["processing"]) + (order * 170),
+                LANE_Y["memory"],
+                memory=_memory_descriptor(graph, buffer_ref),
+                placement=_memory_placement(graph, buffer_ref),
+                detail_items=_buffer_detail_items(graph, buffer_ref),
+                view_hints=ViewHints(lane="memory", stage=stage, order=order),
+            )
+        )
+    return nodes
 
 
 def _buffer_nodes_from_edges(
@@ -1656,32 +1791,60 @@ def _buffer_nodes_from_edges(
     return nodes
 
 
-def _sw_control_edges(graph: CanonicalScenarioGraph) -> list[EdgeElement]:
-    edges = [
-        _e("e-sw-app-fw-camera", "app-camera", "fw-camera", "control"),
-        _e("e-sw-fw-hal-camera", "fw-camera", "hal-camera", "control"),
-        _e("e-sw-hal-ker-camera", "hal-camera", "ker-camera", "control"),
-    ]
-    first_hw = _first_hw_node(graph, ("csis", "sensor", "isp"))
-    if first_hw:
-        edges.append(_e("e-sw-ker-hw-camera", "ker-camera", f"ip-{first_hw}", "control"))
-    if any("mfc" in str(n.get("id", "")).lower() for n in graph.pipeline_nodes):
-        edges.extend([
-            _e("e-sw-app-rec", "app-camera", "app-recorder", "control"),
-            _e("e-sw-rec-fw", "app-recorder", "fw-media", "control"),
-            _e("e-sw-media-hal", "fw-media", "hal-codec", "control"),
-            _e("e-sw-hal-kmfc", "hal-codec", "ker-mfc", "control"),
-        ])
-        mfc = _first_hw_node(graph, ("mfc",))
-        if mfc:
-            edges.append(_e("e-sw-kmfc-hw", "ker-mfc", f"ip-{mfc}", "control"))
-    dpu = _first_hw_node(graph, ("dpu", "display"))
-    if dpu:
-        edges.append(_e("e-sw-drm-dpu", "ker-drm", f"ip-{dpu}", "control"))
+def _sw_control_edges(
+    graph: CanonicalScenarioGraph,
+    node_map: dict[str, str],
+    node_ids: set[str],
+) -> list[EdgeElement]:
+    edges: list[EdgeElement] = []
+
+    def add(edge_id: str, source: str, target: str, label: str | None = None) -> None:
+        if source in node_ids and target in node_ids:
+            edges.append(_e(edge_id, source, target, "control", label=label))
+
+    add("e-sw-camera-0", "sw-camera-app", "sw-camera-fw", "Camera API")
+    add("e-sw-camera-1", "sw-camera-fw", "sw-camera-hal", "HAL call")
+    add("e-sw-camera-2", "sw-camera-hal", "sw-camera-driver", "V4L2")
+    if "res-sensor" in node_ids:
+        add("e-sw-camera-sensor", "sw-camera-driver", "res-sensor", "subdev")
+    elif "res-isp" in node_ids:
+        add("e-sw-camera-isp", "sw-camera-driver", "res-isp", "subdev")
+
+    add("e-sw-audio-0", "sw-audio-app", "sw-audio-fw", "AudioTrack")
+    add("e-sw-audio-1", "sw-audio-fw", "sw-audio-hal", "Audio HAL")
+    add("e-sw-audio-2", "sw-audio-hal", "sw-audio-driver", "PCM")
+
+    media_app_source = "sw-camera-app" if "sw-camera-app" in node_ids else "sw-media-app"
+    add("e-sw-media-0", media_app_source, "sw-media-fw", "Media API")
+    add("e-sw-media-1", "sw-media-fw", "sw-codec-hal", "Codec2")
+    add("e-sw-media-2", "sw-codec-hal", "sw-codec-driver", "V4L2 M2M")
+    add("e-sw-media-mfc", "sw-codec-driver", "res-mfc", "driver")
+    add("e-sw-media-apv", "sw-codec-driver", "res-apv", "driver")
+
+    add("e-sw-display-0", "sw-surface", "sw-hwc", "composition")
+    add("e-sw-display-1", "sw-hwc", "sw-drm", "KMS")
+    add("e-sw-display-dpu", "sw-drm", "res-dpu", "atomic")
+
+    add("e-sw-game-0", "sw-game-app", "sw-graphics-fw", "render")
+    add("e-sw-game-1", "sw-graphics-fw", "sw-gpu-hal", "EGL/Vulkan")
+    add("e-sw-game-2", "sw-gpu-hal", "sw-gpu-driver", "ioctl")
+    add("e-sw-game-gpu", "sw-gpu-driver", "res-gpu", "driver")
+
+    for pipeline_node in graph.pipeline_nodes:
+        node_id = pipeline_node.get("id")
+        if not node_id:
+            continue
+        view_id = node_map.get(str(node_id))
+        if not view_id or view_id not in node_ids:
+            continue
+        role = str(pipeline_node.get("role") or "").lower()
+        if role in {"sw_task", "eis", "m2m_scaler", "audio_decode", "demux", "dsp_offload"}:
+            add(f"e-sw-task-{_safe_id(node_id)}", "sw-camera-driver" if "sw-camera-driver" in node_ids else "sw-media-fw", view_id, "SW task")
+
     return edges
 
 
-def _risk_edges(graph: CanonicalScenarioGraph) -> list[EdgeElement]:
+def _risk_edges(graph: CanonicalScenarioGraph, node_map: dict[str, str] | None = None) -> list[EdgeElement]:
     gate = run_review_gate(graph)
     matched_issue_ids = {matched.issue_id for matched in gate.matched_issues}
     affected_ip_refs: set[str] = set()
@@ -1698,7 +1861,8 @@ def _risk_edges(graph: CanonicalScenarioGraph) -> list[EdgeElement]:
         if pipeline_node.get("ip_ref") not in affected_ip_refs:
             continue
         node_id = pipeline_node.get("id")
-        edges.append(_e(f"e-risk-{node_id}", f"ip-{node_id}", f"ip-{node_id}", "risk", label="Known issue"))
+        view_id = (node_map or {}).get(str(node_id)) or f"ip-{node_id}"
+        edges.append(_e(f"e-risk-{node_id}", view_id, view_id, "risk", label="Known issue"))
     return edges
 
 
@@ -1737,6 +1901,106 @@ def _issue_components(graph: CanonicalScenarioGraph, issue_id: str) -> list[str]
         if issue.id == issue_id:
             return [item.get("submodule") or item.get("ip_ref") for item in issue.affects_ip or [] if item]
     return []
+
+
+def _architecture_resource_kind(graph: CanonicalScenarioGraph, pipeline_node: dict[str, Any]) -> str:
+    text = (
+        f"{pipeline_node.get('id', '')} {pipeline_node.get('ip_ref', '')} "
+        f"{pipeline_node.get('role', '')} {pipeline_node.get('node_type', '')}"
+    ).lower()
+    ip_row = graph.ip_catalog.get(pipeline_node.get("ip_ref") or "")
+    category = str(getattr(ip_row, "category", "") or "").lower()
+    if "sensor" in text or category == "sensor":
+        return "sensor"
+    if any(token in text for token in ("csis", "csi", "pdp")):
+        return "camera_frontend"
+    if any(token in text for token in ("isp", "3aa", "byrp", "rgbp", "yuv", "mcsc", "mtnr", "msnr", "lme", "gdc")) or category == "camera":
+        return "isp"
+    if "apv" in text:
+        return "apv"
+    if "jpeg" in text:
+        return "jpeg"
+    if any(token in text for token in ("mfc", "codec", "enc", "dec")) or category == "codec":
+        return "mfc"
+    if any(token in text for token in ("dpu", "decon", "display_controller")):
+        return "dpu"
+    if "panel" in text or "display_output" in text:
+        return "panel"
+    if "gpu" in text or category == "gpu":
+        return "gpu"
+    if "npu" in text or category == "npu":
+        return "npu"
+    if category == "memory":
+        return "memory"
+    if category:
+        return category
+    return _safe_id(str(pipeline_node.get("id") or "hw"))
+
+
+def _architecture_resource_label(kind: str) -> str:
+    labels = {
+        "sensor": "Sensor Module",
+        "camera_frontend": "Camera Frontend",
+        "isp": "ISP",
+        "mfc": "MFC",
+        "apv": "APV",
+        "jpeg": "JPEG",
+        "dpu": "DPU",
+        "panel": "Display Module",
+        "gpu": "GPU",
+        "npu": "NPU",
+        "memory": "Memory Resource",
+        "cpu": "CPU / SW Resource",
+    }
+    return labels.get(kind, kind.replace("_", " ").title())
+
+
+def _architecture_resource_stage(kind: str, node_id: str | None, pipeline_node: dict[str, Any]) -> str:
+    if kind in {"sensor", "camera_frontend"}:
+        return "capture"
+    if kind in {"mfc", "apv", "jpeg"}:
+        return "encode"
+    if kind in {"dpu", "panel", "gpu"}:
+        return "display"
+    return _stage_for_node(node_id, pipeline_node)
+
+
+def _architecture_buffer_id(buffer_ref: str) -> str:
+    return f"buf-arch-{_safe_id(buffer_ref)}"
+
+
+def _is_explicit_sw_task(graph: CanonicalScenarioGraph, pipeline_node: dict[str, Any]) -> bool:
+    role = str(pipeline_node.get("role") or "").lower()
+    node_type = str(pipeline_node.get("node_type") or pipeline_node.get("kind") or "").lower()
+    ip_row = graph.ip_catalog.get(pipeline_node.get("ip_ref") or "")
+    category = str(getattr(ip_row, "category", "") or "").lower()
+    if node_type in {"sw", "task", "cpu"}:
+        return True
+    if category != "cpu":
+        return False
+    return role in {
+        "source",
+        "sw_task",
+        "eis",
+        "m2m_scaler",
+        "audio_decode",
+        "dsp_offload",
+        "audio_hal",
+        "audio_output",
+        "bt_output",
+        "demux",
+    }
+
+
+def _sw_layer_for_node(pipeline_node: dict[str, Any]) -> str:
+    text = f"{pipeline_node.get('id', '')} {pipeline_node.get('role', '')}".lower()
+    if any(token in text for token in ("app", "source", "network", "storage")):
+        return "app"
+    if any(token in text for token in ("hal", "audio_hal")):
+        return "hal"
+    if any(token in text for token in ("driver", "v4l2", "drm", "kms", "dsp", "offload", "eis", "m2m_scaler")):
+        return "kernel"
+    return "framework"
 
 
 def _capability_badges(graph: CanonicalScenarioGraph, pipeline_node: dict[str, Any]) -> list[str]:
@@ -1906,7 +2170,10 @@ def _pipeline_node_layer(graph: CanonicalScenarioGraph, pipeline_node: dict[str,
         return explicit
     node_type = str(pipeline_node.get("node_type") or pipeline_node.get("kind") or "").lower()
     if node_type in {"sw", "task", "cpu"}:
-        return "kernel"
+        return _sw_layer_for_node(pipeline_node)
+    ip_row = graph.ip_catalog.get(pipeline_node.get("ip_ref") or "")
+    if str(getattr(ip_row, "category", "") or "").lower() == "cpu":
+        return _sw_layer_for_node(pipeline_node)
     if _is_memory_ip(graph, pipeline_node):
         return "memory"
     return "hw"

@@ -56,7 +56,7 @@ class NodeData(BaseModel):
     label: str
     type: Literal["sw", "ip", "submodule", "buffer", "dma_group", "dma_channel", "sysmmu",
                   "lane_bg", "lane_label", "stage_header"]
-    layer: Literal["app", "framework", "hal", "kernel", "hw", "memory", "meta"] = "meta"
+    layer: Literal["app", "framework", "hal", "kernel", "external", "hw", "memory", "meta"] = "meta"
     parent: str | None = None
     ip_ref: str | None = None
     sw_ref: str | None = None

@@ -18,7 +18,7 @@ import streamlit.components.v1 as components
 from dashboard.components.viewer_theme import EDGE_COLOR, LAYER_GRADIENT
 from scenario_db.api.schemas.view import EdgeElement, NodeElement, ViewResponse
 
-ALL_LAYERS = ["app", "framework", "hal", "kernel", "hw", "memory"]
+ALL_LAYERS = ["app", "framework", "hal", "kernel", "external", "hw", "memory"]
 ALL_EDGE_TYPES = ["OTF", "vOTF", "M2M", "control", "risk"]
 
 LAYER_LABELS = {
@@ -26,6 +26,7 @@ LAYER_LABELS = {
     "framework": "Framework",
     "hal": "HAL",
     "kernel": "Kernel",
+    "external": "External",
     "hw": "HW",
     "memory": "Memory",
 }
@@ -35,6 +36,7 @@ LAYER_TINT = {
     "framework": "#ECF2FF",
     "hal": "#E9FBF8",
     "kernel": "#F2ECFF",
+    "external": "#F8FAFC",
     "hw": "#FFF4E8",
     "memory": "#E9FBF6",
     "meta": "#F8FAFC",
@@ -43,6 +45,11 @@ LAYER_TINT = {
 TYPE_STYLE = {
     "sw": {"fill": "#FFFFFF", "stroke": "#64748B", "text": "#1F2937"},
     "ip": {"fill": "#FED7AA", "stroke": "#F97316", "text": "#7C2D12"},
+    "external": {"fill": "#F8FAFC", "stroke": "#64748B", "text": "#334155"},
+    "isp": {"fill": "#FFEDD5", "stroke": "#F97316", "text": "#7C2D12"},
+    "codec": {"fill": "#F5F3FF", "stroke": "#7C3AED", "text": "#4C1D95"},
+    "display": {"fill": "#EFF6FF", "stroke": "#2563EB", "text": "#1E3A8A"},
+    "accelerator": {"fill": "#ECFDF5", "stroke": "#059669", "text": "#064E3B"},
     "submodule": {"fill": "#DBEAFE", "stroke": "#3B82F6", "text": "#1E3A8A"},
     "dma_group": {"fill": "#FFEDD5", "stroke": "#F97316", "text": "#7C2D12"},
     "dma_channel": {"fill": "#FFF7ED", "stroke": "#FB923C", "text": "#7C2D12"},
@@ -369,6 +376,19 @@ def _style_for_node(node: NodeElement) -> dict[str, str]:
         return {"fill": gradient["g2"], "stroke": gradient["border"], "text": gradient["text"]}
     if data.type == "buffer":
         return TYPE_STYLE["buffer"]
+    if data.layer == "external":
+        return TYPE_STYLE["external"]
+    label = data.label.lower()
+    role_text = " ".join(data.detail_items).lower()
+    key_text = f"{data.id} {label} {data.ip_ref or ''} {role_text}"
+    if any(token in key_text for token in ("isp", "camera pipeline", "camera frontend", "csis", "mcsc", "gdc")):
+        return TYPE_STYLE["isp"]
+    if any(token in key_text for token in ("mfc", "codec", "apv", "jpeg")):
+        return TYPE_STYLE["codec"]
+    if any(token in key_text for token in ("dpu", "display")):
+        return TYPE_STYLE["display"]
+    if any(token in key_text for token in ("gpu", "npu")):
+        return TYPE_STYLE["accelerator"]
     return TYPE_STYLE.get(data.type, TYPE_STYLE["sw"])
 
 

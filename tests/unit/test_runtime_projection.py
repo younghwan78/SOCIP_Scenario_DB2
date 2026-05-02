@@ -306,3 +306,55 @@ def test_imported_variant_detail_payload_exposes_node_config_buffer_override_and
     assert view.metadata["variant_overlay"]["node_config_count"] == 2
     assert view.metadata["variant_overlay"]["buffer_override_count"] == 1
     assert view.metadata["variant_overlay"]["sw_task_count"] == 1
+
+
+def test_level0_architecture_uses_scenario_specific_sw_stack_and_collapsed_hw():
+    scenario = SimpleNamespace(
+        id="uc-audio-mp3-playback",
+        project_ref="proj-audio",
+        metadata_={"name": "Audio MP3 Playback", "category": ["audio"], "domain": ["audio"]},
+        pipeline={
+            "nodes": [
+                {"id": "storage", "ip_ref": "ip-cpu-v1", "role": "source"},
+                {"id": "sw_decoder", "ip_ref": "ip-cpu-v1", "role": "audio_decode"},
+                {"id": "audio_hal", "ip_ref": "ip-cpu-v1", "role": "audio_hal"},
+            ],
+            "edges": [
+                {"from": "storage", "to": "sw_decoder", "type": "M2M", "buffer": "AUDIO_ES_BUF"},
+                {"from": "sw_decoder", "to": "audio_hal", "type": "control"},
+            ],
+            "buffers": {"AUDIO_ES_BUF": {"format": "AUDIO_PCM", "bitdepth": 16}},
+        },
+        size_profile={},
+    )
+    variant = SimpleNamespace(
+        id="audio-mp3-screen-on",
+        severity="light",
+        design_conditions={"format": "MP3"},
+        size_overrides={},
+        routing_switch={},
+        topology_patch={},
+        node_configs={},
+        buffer_overrides={},
+        ip_requirements={},
+        sw_requirements={},
+        resolved=True,
+        inheritance_chain=["audio-mp3-screen-on"],
+    )
+    graph = CanonicalScenarioGraph(
+        scenario=scenario,
+        variant=variant,
+        soc=SimpleNamespace(id="soc-audio"),
+        ip_catalog={"ip-cpu-v1": SimpleNamespace(category="cpu", capabilities={}, hierarchy={})},
+    )
+
+    view = _project_architecture(graph, level=0)
+    labels = {node.data.label for node in view.nodes}
+    node_ids = {node.data.id for node in view.nodes}
+
+    assert "AudioFlinger" in labels
+    assert "Audio HAL" in labels
+    assert "Camera HAL" not in labels
+    assert "V4L2 Camera Driver" not in labels
+    assert "sw-task-storage" in node_ids
+    assert "res-isp" not in node_ids
