@@ -285,6 +285,7 @@ def test_imported_variant_routing_switch_hides_disabled_branch_in_view_projectio
         assert "t_dpu" not in node_ids
         assert all(edge.data.target not in {"ip-t_dpu", "t_dpu"} for edge in view.edges)
         assert view.metadata["variant_overlay"]["disabled_nodes"] == ["t_dpu"]
+    assert "res-dpu" not in {node.data.id for node in architecture.nodes}
 
 
 def test_imported_variant_detail_payload_exposes_node_config_buffer_override_and_llc():
@@ -358,3 +359,20 @@ def test_level0_architecture_uses_scenario_specific_sw_stack_and_collapsed_hw():
     assert "V4L2 Camera Driver" not in labels
     assert "sw-task-storage" in node_ids
     assert "res-isp" not in node_ids
+
+
+def test_level0_camera_overview_infers_display_path_when_not_declared():
+    graph = _graph()
+    view = _project_architecture(graph, level=0)
+    labels = {node.data.label for node in view.nodes}
+    node_ids = {node.data.id for node in view.nodes}
+    edge_pairs = {(edge.data.source, edge.data.target) for edge in view.edges}
+
+    assert "SurfaceFlinger" in labels
+    assert "DRM / KMS" in labels
+    assert "res-sensor" in node_ids
+    assert "res-dpu" in node_ids
+    assert "res-panel" in node_ids
+    assert ("res-sensor", "res-camera_frontend") in edge_pairs
+    assert ("res-isp", "res-dpu") in edge_pairs
+    assert ("res-dpu", "res-panel") in edge_pairs

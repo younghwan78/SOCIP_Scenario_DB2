@@ -305,6 +305,7 @@ def _project_architecture(graph: CanonicalScenarioGraph, level: int) -> ViewResp
     nodes.extend(arch_nodes)
     nodes.extend(_buffer_nodes_from_architecture_edges(graph, node_map, stage_orders))
     edges.extend(_architecture_edges(graph, node_map))
+    edges.extend(_inferred_architecture_edges(graph, {node.data.id for node in nodes}))
     edges.extend(_sw_control_edges(graph, node_map, {node.data.id for node in nodes}))
     edges.extend(_risk_edges(graph, node_map))
 
@@ -1532,6 +1533,8 @@ def _sw_stack_nodes(graph: CanonicalScenarioGraph) -> list[NodeElement]:
     domains = {str(value).lower() for value in (graph.scenario.metadata_ or {}).get("domain", [])}
     resource_kinds = {_architecture_resource_kind(graph, node) for node in graph.pipeline_nodes}
     tags = categories | domains | resource_kinds
+    if _camera_overview_uses_display(graph):
+        tags.add("camera")
     specs: list[tuple[str, str, str, str, str, int]] = []
 
     def add(node_id: str, label: str, layer: str, stage: str, order: int) -> None:
@@ -1560,7 +1563,7 @@ def _sw_stack_nodes(graph: CanonicalScenarioGraph) -> list[NodeElement]:
         add("sw-codec-hal", "Codec2 HAL", "hal", "encode", 0)
         add("sw-codec-driver", "MFC Driver", "kernel", "encode", 0)
 
-    if "display" in tags or "dpu" in tags or "panel" in tags:
+    if "camera" in tags or "display" in tags or "dpu" in tags or "panel" in tags:
         add("sw-surface", "SurfaceFlinger", "framework", "display", 0)
         add("sw-hwc", "HWC / Display HAL", "hal", "display", 0)
         add("sw-drm", "DRM / KMS", "kernel", "display", 0)
@@ -1592,10 +1595,13 @@ def _architecture_resource_nodes(
 ) -> tuple[list[NodeElement], dict[str, str]]:
     groups: dict[str, dict[str, Any]] = {}
     node_map: dict[str, str] = {}
+    disabled_nodes = _disabled_node_ids(graph)
 
     for pipeline_node in graph.pipeline_nodes:
         node_id = pipeline_node.get("id")
         if not node_id:
+            continue
+        if str(node_id) in disabled_nodes:
             continue
         if _is_explicit_sw_task(graph, pipeline_node):
             layer = _sw_layer_for_node(pipeline_node)
@@ -1637,6 +1643,11 @@ def _architecture_resource_nodes(
             if badge not in group["capability_badges"]:
                 group["capability_badges"].append(badge)
 
+    if _camera_overview_uses_display(graph):
+        _ensure_inferred_resource_group(groups, "sensor", "external")
+        _ensure_inferred_resource_group(groups, "dpu", "hw")
+        _ensure_inferred_resource_group(groups, "panel", "external")
+
     nodes: list[NodeElement] = []
     for group in groups.values():
         members = group["members"]
@@ -1673,9 +1684,28 @@ def _architecture_resource_nodes(
     return nodes, node_map
 
 
+def _ensure_inferred_resource_group(groups: dict[str, dict[str, Any]], kind: str, layer: str) -> None:
+    view_id = f"res-{kind}"
+    if view_id in groups:
+        return
+    groups[view_id] = {
+        "id": view_id,
+        "label": _architecture_resource_label(kind),
+        "layer": layer,
+        "type": "ip",
+        "stage": _architecture_resource_stage(kind, None, {}),
+        "members": [],
+        "capability_badges": ["inferred"],
+        "detail_items": ["Inferred camera display path for Level 0 overview."],
+    }
+
+
 def _architecture_edges(graph: CanonicalScenarioGraph, node_map: dict[str, str]) -> list[EdgeElement]:
     edges: list[EdgeElement] = []
+    remove_specs = _disabled_edge_specs(graph)
     for idx, edge in enumerate(graph.pipeline_edges):
+        if _task_edge_removed(edge, remove_specs):
+            continue
         source = node_map.get(str(edge.get("from")))
         target = node_map.get(str(edge.get("to")))
         if not source or not target or source == target:
@@ -1702,6 +1732,71 @@ def _architecture_edges(graph: CanonicalScenarioGraph, node_map: dict[str, str])
             edges.append(_e(f"e-{idx}-buf-tgt", buffer_id, target, flow_type, buffer_ref=buffer_ref, detail_items=_edge_detail_items(graph, edge, buffer_ref)))
         else:
             edges.append(_e(f"e-{idx}-{source}-{target}", source, target, flow_type, detail_items=_edge_detail_items(graph, edge, None)))
+    return edges
+
+
+def _inferred_architecture_edges(graph: CanonicalScenarioGraph, node_ids: set[str]) -> list[EdgeElement]:
+    if not _camera_overview_uses_display(graph):
+        return []
+
+    edges: list[EdgeElement] = []
+    if "res-sensor" in node_ids:
+        target = next((node_id for node_id in ("res-camera_frontend", "res-isp") if node_id in node_ids), None)
+        has_declared_sensor_path = any(
+            _architecture_resource_kind(graph, source_node) == "sensor"
+            for edge in graph.pipeline_edges
+            if (source_node := _find_pipeline_node(graph, edge.get("from")))
+        )
+        if target and not has_declared_sensor_path:
+            edges.append(
+                _e(
+                    "e-inferred-sensor-input",
+                    "res-sensor",
+                    target,
+                    "OTF",
+                    label="sensor in",
+                    detail_items=["Inferred camera sensor input for Level 0 overview."],
+                )
+            )
+
+    if "res-dpu" not in node_ids:
+        return edges
+
+    has_declared_dpu_path = any(
+        _architecture_resource_kind(graph, target_node) == "dpu"
+        for edge in graph.pipeline_edges
+        if (target_node := _find_pipeline_node(graph, edge.get("to")))
+    )
+    if not has_declared_dpu_path:
+        source = next((node_id for node_id in ("res-isp", "res-camera_frontend", "res-mfc") if node_id in node_ids), None)
+        if source:
+            edges.append(
+                _e(
+                    "e-inferred-camera-display",
+                    source,
+                    "res-dpu",
+                    "M2M",
+                    label="display path",
+                    detail_items=["Inferred camera preview/display path for Level 0 overview."],
+                )
+            )
+
+    has_declared_panel_path = any(
+        _architecture_resource_kind(graph, source_node) == "dpu" and _architecture_resource_kind(graph, target_node) == "panel"
+        for edge in graph.pipeline_edges
+        if (source_node := _find_pipeline_node(graph, edge.get("from"))) and (target_node := _find_pipeline_node(graph, edge.get("to")))
+    )
+    if "res-panel" in node_ids and not has_declared_panel_path:
+        edges.append(
+            _e(
+                "e-inferred-dpu-panel",
+                "res-dpu",
+                "res-panel",
+                "OTF",
+                label="display out",
+                detail_items=["Inferred panel output for Level 0 overview."],
+            )
+        )
     return edges
 
 
@@ -1912,6 +2007,10 @@ def _architecture_resource_kind(graph: CanonicalScenarioGraph, pipeline_node: di
     category = str(getattr(ip_row, "category", "") or "").lower()
     if "sensor" in text or category == "sensor":
         return "sensor"
+    if "panel" in text or "display_output" in text:
+        return "panel"
+    if any(token in text for token in ("dpu", "decon", "display_controller")) or category == "display":
+        return "dpu"
     if any(token in text for token in ("csis", "csi", "pdp")):
         return "camera_frontend"
     if any(token in text for token in ("isp", "3aa", "byrp", "rgbp", "yuv", "mcsc", "mtnr", "msnr", "lme", "gdc")) or category == "camera":
@@ -1922,10 +2021,6 @@ def _architecture_resource_kind(graph: CanonicalScenarioGraph, pipeline_node: di
         return "jpeg"
     if any(token in text for token in ("mfc", "codec", "enc", "dec")) or category == "codec":
         return "mfc"
-    if any(token in text for token in ("dpu", "decon", "display_controller")):
-        return "dpu"
-    if "panel" in text or "display_output" in text:
-        return "panel"
     if "gpu" in text or category == "gpu":
         return "gpu"
     if "npu" in text or category == "npu":
@@ -1967,6 +2062,35 @@ def _architecture_resource_stage(kind: str, node_id: str | None, pipeline_node: 
 
 def _architecture_buffer_id(buffer_ref: str) -> str:
     return f"buf-arch-{_safe_id(buffer_ref)}"
+
+
+def _disabled_node_ids(graph: CanonicalScenarioGraph) -> set[str]:
+    return set(((getattr(graph.variant, "routing_switch", None) or {}).get("disabled_nodes") or []))
+
+
+def _disabled_edge_specs(graph: CanonicalScenarioGraph) -> list[Any]:
+    routing = getattr(graph.variant, "routing_switch", None) or {}
+    patch = getattr(graph.variant, "topology_patch", None) or {}
+    return [
+        *(routing.get("disabled_edges") or []),
+        *(patch.get("remove_edges") or []),
+    ]
+
+
+def _camera_overview_uses_display(graph: CanonicalScenarioGraph) -> bool:
+    disabled_nodes = _disabled_node_ids(graph)
+    if disabled_nodes:
+        declared_nodes = (getattr(graph.scenario, "pipeline", {}) or {}).get("nodes") or []
+        for node in declared_nodes:
+            if node.get("id") in disabled_nodes and _architecture_resource_kind(graph, node) in {"dpu", "panel"}:
+                return False
+
+    metadata = graph.scenario.metadata_ or {}
+    tags = {str(value).lower() for value in metadata.get("category", [])}
+    tags.update(str(value).lower() for value in metadata.get("domain", []))
+    tags.add(str(getattr(graph.scenario, "id", "") or "").lower())
+    tags.add(str(metadata.get("name", "") or "").lower())
+    return any("camera" in tag for tag in tags)
 
 
 def _is_explicit_sw_task(graph: CanonicalScenarioGraph, pipeline_node: dict[str, Any]) -> bool:

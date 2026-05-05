@@ -99,22 +99,43 @@ def _build_layered_architecture(view: ViewResponse) -> tuple[dict[str, Any], dic
         layer = node.data.layer if node.data.layer in ALL_LAYERS else "hw"
         nodes_by_layer[layer].append(node)
 
-    layer_groups: list[dict[str, Any]] = []
+    groups_by_layer: dict[str, dict[str, Any]] = {}
+    widths = {
+        "app": 300,
+        "framework": 430,
+        "hal": 430,
+        "kernel": 430,
+        "external": 330,
+        "hw": 430,
+        "memory": 430,
+    }
     for layer in ALL_LAYERS:
-        children = [_elk_leaf(node, meta) for node in _sort_nodes(nodes_by_layer.get(layer, []))]
-        if not children:
+        layer_nodes = _sort_nodes(nodes_by_layer.get(layer, []))
+        if not layer_nodes or layer not in widths:
             continue
-        layer_groups.append(_elk_group(f"layer-{layer}", LAYER_LABELS[layer], layer, children, meta, direction="RIGHT"))
+        group, _ = _manual_layer_group(
+            layer,
+            layer_nodes,
+            meta,
+            x=0,
+            y=0,
+            width=widths[layer],
+            columns=_manual_layer_columns(layer, len(layer_nodes)),
+        )
+        groups_by_layer[layer] = group
 
-    visible_edges = _elk_edges(view.edges, meta)
-    graph = _elk_root(
-        children=layer_groups,
-        edges=visible_edges + _layer_order_edges([group["id"] for group in layer_groups], meta),
-        direction="DOWN",
-        spacing=38,
-        node_node=26,
-        hierarchy=True,
-    )
+    groups, positions, graph_width, graph_height = _position_layer_rows(groups_by_layer)
+
+    edges = _manual_edges(view.edges, meta, positions)
+    graph = {
+        "id": "root",
+        "manualLayout": True,
+        "width": graph_width,
+        "height": graph_height,
+        "layoutOptions": {"elk.algorithm": "manual"},
+        "children": groups,
+        "edges": edges,
+    }
     return graph, meta
 
 
@@ -222,6 +243,346 @@ def _elk_group(
     }
 
 
+def _manual_layer_columns(layer: str, count: int) -> int:
+    return 1
+
+
+def _position_layer_rows(
+    groups_by_layer: dict[str, dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, dict[str, float]], int, int]:
+    """Place Level 0 groups from measured sizes, not fixed coordinates.
+
+    Scenario families have different counts of SW tasks, HW blocks, and buffers.
+    Fixed coordinates inevitably overlap for some scenarios, so row placement is
+    computed from each group's actual width/height after its children are laid
+    out.
+    """
+    rows = [
+        ["app", "framework"],
+        ["hal", "kernel"],
+        ["external", "hw", "memory"],
+    ]
+    left = 48
+    top = 18
+    row_gap = 72
+    col_gap = 84
+    groups: list[dict[str, Any]] = []
+    positions: dict[str, dict[str, float]] = {}
+    y = top
+    graph_width = 0
+
+    for row in rows:
+        present = [groups_by_layer[layer] for layer in row if layer in groups_by_layer]
+        if not present:
+            continue
+        x = left
+        row_height = max(int(group.get("height", 0)) for group in present)
+        for group in present:
+            group["x"] = x
+            group["y"] = y
+            groups.append(group)
+            positions.update(_group_global_positions(group))
+            x += int(group.get("width", 0)) + col_gap
+        graph_width = max(graph_width, x - col_gap + left)
+        y += row_height + row_gap
+
+    graph_height = y + 70
+    return groups, positions, max(1500, graph_width), max(900, graph_height)
+
+
+def _group_global_positions(group: dict[str, Any]) -> dict[str, dict[str, float]]:
+    gx = float(group.get("x", 0))
+    gy = float(group.get("y", 0))
+    positions: dict[str, dict[str, float]] = {}
+    for child in group.get("children", []):
+        positions[child["id"]] = {
+            "x": gx + float(child.get("x", 0)),
+            "y": gy + float(child.get("y", 0)),
+            "width": float(child.get("width", 0)),
+            "height": float(child.get("height", 0)),
+        }
+    return positions
+
+
+def _manual_layer_group(
+    layer: str,
+    nodes: list[NodeElement],
+    meta: dict[str, Any],
+    *,
+    x: int,
+    y: int,
+    width: int,
+    columns: int,
+) -> tuple[dict[str, Any], dict[str, dict[str, float]]]:
+    children: list[dict[str, Any]] = []
+    positions: dict[str, dict[str, float]] = {}
+    pad_x = 28
+    pad_top = 44
+    gap_x = 0
+    gap_y = 53
+    cell_w = max(118, (width - (pad_x * 2) - (gap_x * (columns - 1))) // columns)
+    max_h = 0
+    max_w = width
+    step_x = min(170, max(104, width // 4))
+    stair = [0, step_x, step_x * 2, step_x, 0]
+    for idx, node in enumerate(nodes):
+        leaf = _elk_leaf(node, meta)
+        row = idx // columns
+        col = idx % columns
+        if layer == "memory":
+            leaf["width"] = min(max(int(leaf.get("width", 150)), 220), cell_w)
+            leaf["height"] = 64
+        else:
+            leaf["width"] = min(int(leaf.get("width", 150)), cell_w)
+            leaf["height"] = min(int(leaf.get("height", 52)), 48)
+        used_w = (cell_w * columns) + (gap_x * (columns - 1))
+        start_x = max(pad_x, (width - used_w) // 2)
+        leaf["x"] = start_x + col * (cell_w + gap_x) + stair[idx % len(stair)]
+        leaf["y"] = pad_top + row * (int(leaf.get("height", 48)) + gap_y)
+        children.append(leaf)
+        positions[node.data.id] = {
+            "x": x + float(leaf["x"]),
+            "y": y + float(leaf["y"]),
+            "width": float(leaf["width"]),
+            "height": float(leaf["height"]),
+        }
+        max_h = max(max_h, int(leaf["y"]) + int(leaf["height"]) + 26)
+        max_w = max(max_w, int(leaf["x"]) + int(leaf["width"]) + pad_x)
+    height = max(118, max_h)
+    width = max(width, max_w)
+    meta[f"layer-{layer}"] = {
+        "id": f"layer-{layer}",
+        "label": LAYER_LABELS[layer],
+        "type": "group",
+        "layer": layer,
+        "fill": LAYER_TINT.get(layer, "#F8FAFC"),
+        "stroke": _layer_stroke(layer),
+        "text": "#334155",
+        "details": [],
+    }
+    return (
+        {
+            "id": f"layer-{layer}",
+            "x": x,
+            "y": y,
+            "width": width,
+            "height": height,
+            "labels": [{"text": LAYER_LABELS[layer]}],
+            "children": children,
+            "edges": [],
+        },
+        positions,
+    )
+
+
+def _manual_edges(
+    edges: list[EdgeElement],
+    meta: dict[str, Any],
+    positions: dict[str, dict[str, float]],
+) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    parallel_counts: dict[tuple[str, str], int] = defaultdict(int)
+    flow_lane_counts: dict[str, int] = defaultdict(int)
+    lane_offsets = [0, 22, -22, 44, -44, 66, -66]
+    for edge in edges:
+        data = edge.data
+        source = positions.get(data.source)
+        target = positions.get(data.target)
+        if not source or not target:
+            continue
+        meta[data.id] = _edge_meta(edge)
+        label = data.label or ("SW" if data.flow_type == "control" else data.flow_type)
+        pair = (data.source, data.target)
+        parallel_counts[pair] += 1
+        flow_key = data.flow_type if data.flow_type in {"M2M", "control", "OTF", "vOTF"} else "other"
+        flow_lane_counts[flow_key] += 1
+        lane_offset = lane_offsets[(flow_lane_counts[flow_key] - 1) % len(lane_offsets)]
+        parallel_offset = (parallel_counts[pair] - 1) * 14
+        offset = lane_offset + parallel_offset
+        section, label_x, label_y = _manual_edge_section(source, target, data.flow_type, offset)
+        out.append(
+            {
+                "id": data.id,
+                "sources": [data.source],
+                "targets": [data.target],
+                "sections": [section],
+                "labels": [{"text": label, "x": label_x, "y": label_y, "width": max(38, min(260, len(label) * 6 + 14)), "height": 18}],
+            }
+        )
+    return out
+
+
+def _manual_edge_section(
+    source: dict[str, float],
+    target: dict[str, float],
+    flow_type: str,
+    offset: float,
+) -> tuple[dict[str, Any], float, float]:
+    source_side, target_side = _choose_anchor_sides(source, target, flow_type)
+    start = _anchor_point(source, source_side)
+    end = _anchor_point(target, target_side)
+    stub = 34 + min(34, abs(offset) * 0.25)
+    start_outer = _move_from_side(start, source_side, stub)
+    end_outer = _move_from_side(end, target_side, stub)
+
+    if source_side in {"left", "right"} and target_side in {"left", "right"}:
+        mid_x = (start_outer["x"] + end_outer["x"]) / 2 + offset * 0.35
+        bends = [
+            start_outer,
+            {"x": mid_x, "y": start_outer["y"]},
+            {"x": mid_x, "y": end_outer["y"]},
+            end_outer,
+        ]
+        label_x = mid_x - 18
+        label_y = (start_outer["y"] + end_outer["y"]) / 2 - 18
+    elif source_side in {"top", "bottom"} and target_side in {"top", "bottom"}:
+        facing_vertical = (source_side, target_side) in {("bottom", "top"), ("top", "bottom")}
+        if facing_vertical:
+            # Facing top/bottom anchors often have short gaps.  Do not push
+            # stubs past each other; route through the gap between the nodes.
+            min_y = min(start["y"], end["y"])
+            max_y = max(start["y"], end["y"])
+            raw_mid = (start["y"] + end["y"]) / 2 + _vertical_lane_bias(flow_type, offset)
+            if max_y - min_y > 20:
+                mid_y = min(max(raw_mid, min_y + 8), max_y - 8)
+            else:
+                mid_y = (start["y"] + end["y"]) / 2
+            bends = [
+                {"x": start["x"], "y": mid_y},
+                {"x": end["x"], "y": mid_y},
+            ]
+        else:
+            mid_y = (start_outer["y"] + end_outer["y"]) / 2 + _vertical_lane_bias(flow_type, offset)
+            bends = [
+                start_outer,
+                {"x": start_outer["x"], "y": mid_y},
+                {"x": end_outer["x"], "y": mid_y},
+                end_outer,
+            ]
+        label_x = (start["x"] + end["x"]) / 2 - 18
+        label_y = mid_y - 18
+    else:
+        elbow_a = {"x": start_outer["x"], "y": end_outer["y"]}
+        elbow_b = {"x": end_outer["x"], "y": end_outer["y"]}
+        if source_side in {"top", "bottom"}:
+            elbow_a = {"x": start_outer["x"], "y": start_outer["y"] + (end_outer["y"] - start_outer["y"]) * 0.55}
+            elbow_b = {"x": end_outer["x"], "y": elbow_a["y"]}
+        bends = [start_outer, elbow_a, elbow_b, end_outer]
+        label_x = (elbow_a["x"] + elbow_b["x"]) / 2 - 18
+        label_y = (elbow_a["y"] + elbow_b["y"]) / 2 - 18
+
+    return (
+        {
+            "startPoint": start,
+            "bendPoints": _dedupe_points(bends, start, end),
+            "endPoint": end,
+        },
+        label_x,
+        label_y,
+    )
+
+
+def _choose_anchor_sides(source: dict[str, float], target: dict[str, float], flow_type: str) -> tuple[str, str]:
+    scx, scy = _rect_center(source)
+    tcx, tcy = _rect_center(target)
+    dx = tcx - scx
+    dy = tcy - scy
+    if flow_type in {"OTF", "vOTF"} and abs(dy) >= max(24, abs(dx) * 0.65):
+        return ("bottom", "top") if dy >= 0 else ("top", "bottom")
+    if flow_type == "M2M" or abs(dx) >= abs(dy) * 0.72:
+        return ("right", "left") if dx >= 0 else ("left", "right")
+    return ("bottom", "top") if dy >= 0 else ("top", "bottom")
+
+
+def _rect_center(rect: dict[str, float]) -> tuple[float, float]:
+    return rect["x"] + rect["width"] / 2, rect["y"] + rect["height"] / 2
+
+
+def _anchor_point(rect: dict[str, float], side: str) -> dict[str, float]:
+    cx, cy = _rect_center(rect)
+    if side == "left":
+        return {"x": rect["x"], "y": cy}
+    if side == "right":
+        return {"x": rect["x"] + rect["width"], "y": cy}
+    if side == "top":
+        return {"x": cx, "y": rect["y"]}
+    return {"x": cx, "y": rect["y"] + rect["height"]}
+
+
+def _move_from_side(point: dict[str, float], side: str, distance: float) -> dict[str, float]:
+    if side == "left":
+        return {"x": point["x"] - distance, "y": point["y"]}
+    if side == "right":
+        return {"x": point["x"] + distance, "y": point["y"]}
+    if side == "top":
+        return {"x": point["x"], "y": point["y"] - distance}
+    return {"x": point["x"], "y": point["y"] + distance}
+
+
+def _vertical_lane_bias(flow_type: str, offset: float) -> float:
+    if flow_type == "control":
+        return -abs(offset) * 0.35
+    if flow_type == "M2M":
+        return abs(offset) * 0.35
+    return offset * 0.2
+
+
+def _dedupe_points(
+    bend_points: list[dict[str, float]],
+    start: dict[str, float],
+    end: dict[str, float],
+) -> list[dict[str, float]]:
+    out: list[dict[str, float]] = []
+    last = start
+    for point in bend_points:
+        if abs(point["x"] - last["x"]) < 0.1 and abs(point["y"] - last["y"]) < 0.1:
+            continue
+        if abs(point["x"] - end["x"]) < 0.1 and abs(point["y"] - end["y"]) < 0.1:
+            continue
+        out.append(point)
+        last = point
+    return out
+
+
+def _elk_row_group(
+    node_id: str,
+    children: list[dict[str, Any]],
+    meta: dict[str, Any],
+    edges: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Invisible compound row used only to keep selected Level 0 layers horizontal."""
+    width = max(360, sum(int(child.get("width", 260)) for child in children) + 84)
+    height = max(140, max(int(child.get("height", 120)) for child in children) + 70)
+    child_order_edges = _layer_order_edges([child["id"] for child in children], meta, prefix=f"__{node_id}_order")
+    meta[node_id] = {
+        "id": node_id,
+        "label": "",
+        "type": "layout_row",
+        "layer": "meta",
+        "hidden": True,
+        "fill": "transparent",
+        "stroke": "transparent",
+        "text": "transparent",
+        "details": [],
+    }
+    return {
+        "id": node_id,
+        "width": width,
+        "height": height,
+        "labels": [],
+        "layoutOptions": {
+            "elk.algorithm": "layered",
+            "elk.direction": "RIGHT",
+            "elk.edgeRouting": "ORTHOGONAL",
+            "elk.spacing.nodeNode": "34",
+            "elk.layered.spacing.nodeNodeBetweenLayers": "48",
+            "elk.padding": "[top=14,left=10,bottom=14,right=10]",
+        },
+        "children": children,
+        "edges": edges + child_order_edges,
+    }
+
+
 def _elk_leaf(node: NodeElement, meta: dict[str, Any]) -> dict[str, Any]:
     width, height = _node_size(node)
     meta[node.data.id] = _node_meta(node)
@@ -250,11 +611,11 @@ def _elk_edges(edges: list[EdgeElement], meta: dict[str, Any]) -> list[dict[str,
     return out
 
 
-def _layer_order_edges(layer_group_ids: list[str], meta: dict[str, Any]) -> list[dict[str, Any]]:
+def _layer_order_edges(layer_group_ids: list[str], meta: dict[str, Any], *, prefix: str = "__layer_order") -> list[dict[str, Any]]:
     """Invisible edges keep Level 0 groups in App->...->Memory order."""
     edges: list[dict[str, Any]] = []
     for idx, (source, target) in enumerate(zip(layer_group_ids, layer_group_ids[1:])):
-        edge_id = f"__layer_order_{idx}"
+        edge_id = f"{prefix}_{idx}"
         meta[edge_id] = {"id": edge_id, "type": "edge", "hidden": True}
         edges.append({"id": edge_id, "sources": [source], "targets": [target]})
     return edges
@@ -301,6 +662,7 @@ def _node_meta(node: NodeElement) -> dict[str, Any]:
     data = node.data
     style = _style_for_node(node)
     details: list[str] = []
+    subtitle = ""
     details.extend(data.detail_items)
     if data.ip_ref:
         details.append(f"IP: {data.ip_ref}")
@@ -323,12 +685,23 @@ def _node_meta(node: NodeElement) -> dict[str, Any]:
             details.append("Ops: " + ", ".join(ops))
     if data.memory:
         mem = data.memory
-        mem_bits = [mem.format, f"{mem.width}x{mem.height}" if mem.width and mem.height else None, f"{mem.fps}fps" if mem.fps else None, mem.compression]
-        details.append("Memory: " + " / ".join(str(bit) for bit in mem_bits if bit))
+        size_label = _format_size_bytes(mem.size_bytes)
+        mem_bits = [
+            mem.format,
+            f"{mem.width}x{mem.height}" if mem.width and mem.height else None,
+            f"{mem.fps}fps" if mem.fps else None,
+            f"{mem.bitdepth}b" if mem.bitdepth else None,
+            mem.compression,
+            size_label,
+        ]
+        subtitle = " / ".join(str(bit) for bit in mem_bits if bit)
+        details.append("Memory: " + subtitle)
     if data.placement and data.placement.llc_allocated:
         placement = data.placement
         mb = f"{placement.llc_allocation_mb:g}MB " if placement.llc_allocation_mb else ""
         details.append(f"LLC: {mb}{placement.llc_policy}")
+    if data.type == "buffer" and not subtitle:
+        subtitle = _fallback_buffer_subtitle(data.detail_items, data.ip_ref)
     return {
         "id": data.id,
         "label": data.label,
@@ -338,10 +711,29 @@ def _node_meta(node: NodeElement) -> dict[str, Any]:
         "stroke": style["stroke"],
         "text": style["text"],
         "badges": data.summary_badges[:4],
+        "subtitle": subtitle,
         "details": details,
         "warning": data.warning,
         "severity": data.severity,
     }
+
+
+def _format_size_bytes(size_bytes: int | None) -> str | None:
+    if not size_bytes:
+        return None
+    if size_bytes >= 1024 * 1024:
+        return f"{size_bytes / (1024 * 1024):.1f}MiB"
+    if size_bytes >= 1024:
+        return f"{size_bytes / 1024:.1f}KiB"
+    return f"{size_bytes}B"
+
+
+def _fallback_buffer_subtitle(detail_items: list[str], ip_ref: str | None) -> str:
+    for prefix in ("Buffer:", "Members:", "Placement:"):
+        for item in detail_items:
+            if item.startswith(prefix):
+                return item.split(":", 1)[1].strip()
+    return ip_ref or "memory resource"
 
 
 def _edge_meta(edge: EdgeElement) -> dict[str, Any]:
@@ -358,15 +750,44 @@ def _edge_meta(edge: EdgeElement) -> dict[str, Any]:
         details.append("Memory: " + " / ".join(str(bit) for bit in bits if bit))
     if data.placement and data.placement.llc_allocated:
         details.append(f"LLC: {data.placement.llc_policy}")
+    edge_role = _edge_role(edge)
     return {
         "id": data.id,
         "label": data.label or data.flow_type,
         "type": "edge",
         "flow_type": data.flow_type,
-        "stroke": EDGE_COLOR.get(data.flow_type, "#64748B"),
+        "edge_role": edge_role,
+        "stroke": _edge_stroke(data.flow_type, edge_role),
         "dash": data.flow_type in {"control", "risk", "M2M"},
         "details": details,
     }
+
+
+def _edge_role(edge: EdgeElement) -> str:
+    data = edge.data
+    text = " ".join(
+        [
+            data.id,
+            data.label or "",
+            data.source,
+            data.target,
+            data.buffer_ref or "",
+            " ".join(data.detail_items),
+        ]
+    ).lower().replace("_", " ")
+    if "sensor in" in text or "sensor input" in text:
+        return "sensor_in"
+    if "display out" in text or "display output" in text:
+        return "display_out"
+    return data.flow_type.lower()
+
+
+def _edge_stroke(flow_type: str, edge_role: str) -> str:
+    if edge_role == "sensor_in":
+        return "#16A34A"
+    if edge_role == "display_out":
+        return "#0EA5E9"
+    return EDGE_COLOR.get(flow_type, "#64748B")
 
 
 def _style_for_node(node: NodeElement) -> dict[str, str]:
@@ -455,12 +876,16 @@ def _html(graph: dict[str, Any], meta: dict[str, Any], title: str, height: int) 
     <marker id="arrow-orange" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill="#F97316"/></marker>
     <marker id="arrow-gray" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill="#9B8EC4"/></marker>
     <marker id="arrow-red" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill="#EF4444"/></marker>
+    <marker id="arrow-green" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill="#16A34A"/></marker>
+    <marker id="arrow-sky" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill="#0EA5E9"/></marker>
   </defs><g id="main"></g></svg>
   <div class="elk-legend">
     <span><svg width="38" height="8"><path d="M1 4 H35" stroke="#4A6CF7" stroke-width="2"/><path d="M31 1 L37 4 L31 7" fill="#4A6CF7"/></svg> OTF</span>
     <span><svg width="38" height="8"><path d="M1 4 H35" stroke="#2BB3AA" stroke-width="2"/><path d="M31 1 L37 4 L31 7" fill="#2BB3AA"/></svg> vOTF</span>
     <span><svg width="38" height="8"><path d="M1 4 H35" stroke="#F97316" stroke-width="2" stroke-dasharray="5 4"/><path d="M31 1 L37 4 L31 7" fill="#F97316"/></svg> M2M</span>
     <span><svg width="38" height="8"><path d="M1 4 H35" stroke="#9B8EC4" stroke-width="2" stroke-dasharray="5 4"/><path d="M31 1 L37 4 L31 7" fill="#9B8EC4"/></svg> SW</span>
+    <span><svg width="38" height="8"><path d="M1 4 H35" stroke="#16A34A" stroke-width="2"/><path d="M31 1 L37 4 L31 7" fill="#16A34A"/></svg> Sensor In</span>
+    <span><svg width="38" height="8"><path d="M1 4 H35" stroke="#0EA5E9" stroke-width="2"/><path d="M31 1 L37 4 L31 7" fill="#0EA5E9"/></svg> Display Out</span>
     <span><svg width="38" height="8"><path d="M1 4 H35" stroke="#EF4444" stroke-width="2" stroke-dasharray="4 4"/><path d="M31 1 L37 4 L31 7" fill="#EF4444"/></svg> Risk</span>
   </div>
   <div class="tip" id="tip"></div>
@@ -482,6 +907,8 @@ function markerFor(color) {{
   if (color === '#F97316') return 'url(#arrow-orange)';
   if (color === '#9B8EC4') return 'url(#arrow-gray)';
   if (color === '#EF4444') return 'url(#arrow-red)';
+  if (color === '#16A34A') return 'url(#arrow-green)';
+  if (color === '#0EA5E9') return 'url(#arrow-sky)';
   return 'url(#arrow-blue)';
 }}
 
@@ -573,6 +1000,10 @@ function drawBackgrounds(g, graph, ox=0, oy=0) {{
     const m = M[node.id] || {{}};
     const isGroup = !!(node.children && node.children.length);
     if (isGroup) {{
+      if (m.hidden) {{
+        drawBackgrounds(g, node, x, y);
+        return;
+      }}
       const ng = svgEl('g', {{class:'node group-bg'}});
       ng.appendChild(svgEl('rect', {{
         x, y, width: node.width || 200, height: node.height || 100, rx: 9, ry: 9,
@@ -599,13 +1030,46 @@ function drawLeaves(g, graph, ox=0, oy=0) {{
       return;
     }}
     const ng = svgEl('g', {{class:'node'}});
-    ng.appendChild(svgEl('rect', {{
-      x, y, width: node.width || 140, height: node.height || 54, rx: 8, ry: 8,
-      fill: m.fill || '#FFFFFF', stroke: m.stroke || '#64748B',
-      'stroke-width': m.warning ? 2.4 : 1.8,
-      filter: 'drop-shadow(0 2px 4px rgba(15,23,42,.08))'
-    }}));
-    drawLabel(ng, m.label || node.id, x, y + Math.max(0, ((node.height || 54) - 42) / 2), node.width || 140, m.text || '#111827');
+    const w = node.width || 140;
+    const h = node.height || 54;
+    if (m.type === 'buffer' || m.layer === 'memory') {{
+      ng.appendChild(svgEl('rect', {{
+        x, y, width:w, height:h, rx:18, ry:18,
+        fill:m.fill || '#ECFEFF', stroke:m.stroke || '#0F766E',
+        'stroke-width':m.warning ? 2.4 : 1.9,
+        filter:'drop-shadow(0 2px 4px rgba(15,23,42,.08))'
+      }}));
+      ng.appendChild(svgEl('path', {{
+        d:`M ${{x + 14}} ${{y + 10}} H ${{x + w - 14}}`,
+        fill:'none', stroke:m.stroke || '#0F766E', 'stroke-width':1.2, opacity:0.55
+      }}));
+      ng.appendChild(svgEl('path', {{
+        d:`M ${{x + 14}} ${{y + h - 10}} H ${{x + w - 14}}`,
+        fill:'none', stroke:m.stroke || '#0F766E', 'stroke-width':1.2, opacity:0.35
+      }}));
+    }} else {{
+      ng.appendChild(svgEl('rect', {{
+        x, y, width:w, height:h, rx:8, ry:8,
+        fill:m.fill || '#FFFFFF', stroke:m.stroke || '#64748B',
+        'stroke-width':m.warning ? 2.4 : 1.8,
+        filter:'drop-shadow(0 2px 4px rgba(15,23,42,.08))'
+      }}));
+    }}
+    const hasSubtitle = !!m.subtitle;
+    drawLabel(ng, m.label || node.id, x, y + (hasSubtitle ? 6 : Math.max(0, (h - 42) / 2)), w, m.text || '#111827');
+    if (hasSubtitle) {{
+      const subtitle = svgEl('text', {{
+        x: x + w / 2,
+        y: y + h - 13,
+        'text-anchor':'middle',
+        'font-size':8.5,
+        'font-weight':700,
+        fill:'#64748B'
+      }});
+      const maxSubtitle = Math.max(34, Math.floor(w / 5.2));
+      subtitle.textContent = String(m.subtitle || '').length > maxSubtitle ? String(m.subtitle || '').slice(0, maxSubtitle - 3) + '...' : String(m.subtitle || '');
+      ng.appendChild(subtitle);
+    }}
     if (m.warning) {{
       ng.appendChild(svgEl('circle', {{cx: x + (node.width || 140) - 13, cy: y + 13, r: 6, fill:'#F97316'}}));
     }}
@@ -712,8 +1176,12 @@ function drawEdges(g, edges, defaultContainer='root') {{
 
 async function mainRender() {{
   try {{
-    const elk = new ELK();
-    layoutGraph = await elk.layout(G);
+    if (G.manualLayout) {{
+      layoutGraph = G;
+    }} else {{
+      const elk = new ELK();
+      layoutGraph = await elk.layout(G);
+    }}
     main.innerHTML = '';
     Object.keys(NP).forEach(k => delete NP[k]);
     collectPositions(layoutGraph, 0, 0);
