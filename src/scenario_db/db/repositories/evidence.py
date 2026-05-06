@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from scenario_db.api.pagination import apply_sort
 from scenario_db.db.models.evidence import Evidence
+from scenario_db.models.evidence.simulation import SimulationEvidence
 
 
 def list_evidence(
@@ -35,3 +36,47 @@ def list_evidence(
 
 def get_evidence(db: Session, evidence_id: str) -> Evidence | None:
     return db.query(Evidence).filter_by(id=evidence_id).one_or_none()
+
+
+def upsert_simulation_evidence(
+    db: Session,
+    evidence: SimulationEvidence,
+    *,
+    yaml_sha256: str | None = None,
+) -> Evidence:
+    row = db.query(Evidence).filter_by(id=evidence.id).one_or_none() or Evidence(id=evidence.id)
+    row.schema_version = evidence.schema_version
+    row.kind = evidence.kind
+    row.scenario_ref = str(evidence.scenario_ref)
+    row.variant_ref = evidence.variant_ref
+    row.sw_baseline_ref = str(evidence.execution_context.sw_baseline_ref)
+    row.sweep_job_id = evidence.sweep_context.sweep_job_id if evidence.sweep_context else None
+    row.execution_context = evidence.execution_context.model_dump(exclude_none=True)
+    row.sweep_context = evidence.sweep_context.model_dump(exclude_none=True) if evidence.sweep_context else None
+    row.resolution_result = evidence.resolution_result.model_dump(exclude_none=True) if evidence.resolution_result else None
+    row.overall_feasibility = (
+        str(evidence.resolution_result.overall_feasibility)
+        if evidence.resolution_result else None
+    )
+    row.aggregation = evidence.aggregation.model_dump(exclude_none=True)
+    row.kpi = dict(evidence.kpi)
+    row.run_info = evidence.run.model_dump(exclude_none=True)
+    row.ip_breakdown = [item.model_dump(exclude_none=True) for item in evidence.ip_breakdown]
+    row.dma_breakdown = [item.model_dump(exclude_none=True) for item in evidence.dma_breakdown]
+    row.timing_breakdown = [item.model_dump(exclude_none=True) for item in evidence.timing_breakdown]
+    row.dvfs_breakdown = [item.model_dump(exclude_none=True) for item in evidence.dvfs_breakdown]
+    row.timeline_events = [item.model_dump(exclude_none=True) for item in evidence.timeline_events]
+    row.vdd_power = evidence.vdd_power or {}
+    row.params_hash = evidence.params_hash
+    row.artifacts = [item.model_dump(exclude_none=True) for item in evidence.artifacts]
+    row.yaml_sha256 = yaml_sha256 or _evidence_sha256(evidence)
+    db.add(row)
+    return row
+
+
+def _evidence_sha256(evidence: SimulationEvidence) -> str:
+    import hashlib
+
+    return hashlib.sha256(
+        evidence.model_dump_json(exclude_none=True).encode("utf-8")
+    ).hexdigest()

@@ -110,6 +110,29 @@ class IPWorkload(BaseScenarioModel):
         return max(0, self.width) * max(0, self.height)
 
 
+class SimulationRunConfig(BaseScenarioModel):
+    asv_group: int = 4
+    fps: float | None = None
+    sw_margin: float = 0.25
+    bw_power_coeff: float = 80.0
+    vbat: float = 4.0
+    pmic_efficiency: float = 0.85
+    h_blank_margin: float = 0.05
+    dvfs_overrides: dict[str, int] = Field(default_factory=dict)
+    include_timeline: bool = True
+
+
+class SimulationInputs(BaseScenarioModel):
+    scenario_id: str
+    variant_id: str
+    project_ref: str | None = None
+    config: SimulationRunConfig
+    workloads: list[IPWorkload] = Field(default_factory=list)
+    port_transfers: list[PortTransferSpec] = Field(default_factory=list)
+    timeline_tasks: list[dict] = Field(default_factory=list)
+    timeline_edges: list[dict] = Field(default_factory=list)
+
+
 class ResolvedIPConfig(BaseScenarioModel):
     node_id: str
     ip_ref: str | None = None
@@ -191,4 +214,3 @@ class SimRunResult(BaseScenarioModel):
     timing_breakdown: list[IPTimingResult] = Field(default_factory=list)
     timeline_events: list[TimelineEvent] = Field(default_factory=list)
     vdd_power: dict[str, dict[str, float]] = Field(default_factory=dict)
-
