@@ -30,6 +30,7 @@ pgdata/
 .pytest_cache/
 pytest-cache-files-*/
 .coverage
+coverage.xml
 htmlcov/
 .tox/
 .ruff_cache/
@@ -62,4 +63,3 @@ desktop.ini
 
 # Local agent/tooling state
 .claude/
-

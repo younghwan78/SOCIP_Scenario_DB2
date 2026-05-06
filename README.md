@@ -292,6 +292,12 @@ Run Write API focused tests:
 uv run --group dev pytest tests\unit\test_write_service.py tests\integration\test_write_api.py
 ```
 
+Run a core module coverage baseline without changing the default test gate:
+
+```powershell
+uv run --group dev pytest tests\unit --cov=scenario_db --cov-report=term-missing
+```
+
 The current read-side contract is documented in [docs/read-api-contract.md](docs/read-api-contract.md). Update that file and the related tests before changing Read API response shapes.
 
 Equivalent explicit virtual environment commands:

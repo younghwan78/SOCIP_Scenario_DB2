@@ -105,6 +105,14 @@ def _state_default(key: str, value: Any) -> None:
         st.session_state[key] = value
 
 
+_WIDGET_STATE_PAIRS = (
+    ("generated_dir_text", "generated_dir_widget"),
+    ("output_payload_text", "output_payload_widget"),
+    ("dir_browser_root", "dir_browser_root_widget"),
+    ("write_batch_id", "write_batch_id_widget"),
+)
+
+
 for _key, _value in {
     "import_bundle_payload": None,
     "import_bundle_issues": [],
@@ -120,6 +128,36 @@ for _key, _value in {
     "dir_browser_current": str(_root / "demo" / "generated"),
 }.items():
     _state_default(_key, _value)
+
+
+def _sync_requested_widget_state() -> None:
+    """Copy domain state into Streamlit widget keys before widgets render."""
+
+    for domain_key, widget_key in _WIDGET_STATE_PAIRS:
+        sync_key = f"_sync_{widget_key}"
+        if st.session_state.pop(sync_key, False) or widget_key not in st.session_state:
+            st.session_state[widget_key] = st.session_state.get(domain_key, "")
+
+
+def _request_widget_sync(*widget_keys: str) -> None:
+    for widget_key in widget_keys:
+        st.session_state[f"_sync_{widget_key}"] = True
+
+
+def _set_import_paths(generated_dir: Path) -> None:
+    st.session_state["generated_dir_text"] = str(generated_dir)
+    st.session_state["output_payload_text"] = str(generated_dir / "import_bundle.json")
+    _request_widget_sync("generated_dir_widget", "output_payload_widget")
+
+
+def _set_write_batch_id(batch_id: str) -> None:
+    st.session_state["write_batch_id"] = batch_id
+    # Stage button runs before the text input is rendered, so direct widget
+    # update is safe and keeps the visible field in sync in the same rerun.
+    st.session_state["write_batch_id_widget"] = batch_id
+
+
+_sync_requested_widget_state()
 
 
 def _show_api_error(exc: ImportApiError) -> None:
@@ -205,9 +243,10 @@ def _render_directory_browser() -> None:
     st.markdown("#### Folder Browser")
     browser_root_text = st.text_input(
         "Browser root",
-        key="dir_browser_root",
+        key="dir_browser_root_widget",
         help="Root directory visible in this server-side folder browser.",
     )
+    st.session_state["dir_browser_root"] = browser_root_text
     root = Path(browser_root_text).expanduser().resolve()
     if not root.exists() or not root.is_dir():
         st.warning("Browser root does not exist or is not a directory.")
@@ -233,9 +272,7 @@ def _render_directory_browser() -> None:
         st.code(str(current), language="text")
 
     if st.button("Use this folder as generated directory", key="dir_browser_select_current", type="primary"):
-        selected = str(current)
-        st.session_state["generated_dir_text"] = selected
-        st.session_state["output_payload_text"] = str(current / "import_bundle.json")
+        _set_import_paths(current)
         st.rerun()
 
     try:
@@ -262,8 +299,7 @@ def _render_directory_browser() -> None:
                 st.rerun()
         with col_select:
             if st.button("Select", key=f"dir_browser_select_{index}_{child.name}"):
-                st.session_state["generated_dir_text"] = str(child)
-                st.session_state["output_payload_text"] = str(child / "import_bundle.json")
+                _set_import_paths(child)
                 st.rerun()
         with col_name:
             has_report = (child / "import_report.json").exists()
@@ -317,15 +353,17 @@ with st.container():
     with path_col1:
         generated_dir_text = st.text_input(
             "Generated canonical directory",
-            key="generated_dir_text",
+            key="generated_dir_widget",
             help="Directory that contains 00_hw, 02_definition, and import_report.json.",
         )
+        st.session_state["generated_dir_text"] = generated_dir_text
     with path_col2:
         output_payload_text = st.text_input(
             "Bundle output JSON",
-            key="output_payload_text",
+            key="output_payload_widget",
             help="Optional JSON file path for the generated scenario.import_bundle request body.",
         )
+        st.session_state["output_payload_text"] = output_payload_text
     with st.expander("Browse folders", expanded=not Path(generated_dir_text).is_dir()):
         _render_directory_browser()
     generated_path = Path(generated_dir_text)
@@ -402,7 +440,7 @@ with st.container():
         try:
             result = stage_import_bundle(api_base, payload)
             st.session_state["stage_result"] = result
-            st.session_state["write_batch_id"] = result.get("batch_id", "")
+            _set_write_batch_id(result.get("batch_id", ""))
             st.session_state["validation_result"] = None
             st.session_state["diff_result"] = None
             st.session_state["apply_result"] = None
@@ -414,7 +452,7 @@ with st.container():
     if stage_result:
         st.json(stage_result)
 
-    batch_id = st.text_input("Batch ID", value=st.session_state["write_batch_id"])
+    batch_id = st.text_input("Batch ID", key="write_batch_id_widget")
     st.session_state["write_batch_id"] = batch_id
     st.markdown("</div>", unsafe_allow_html=True)
 

@@ -21,6 +21,11 @@ from scenario_db.db.repositories.scenario_graph import (
     load_canonical_graph,
 )
 from scenario_db.review_gate.engine import run_review_gate
+from scenario_db.view.level0 import (
+    Level0ProjectionDeps,
+    project_architecture as _level0_project_architecture,
+    project_topology as _level0_project_topology,
+)
 from scenario_db.view.layout import (
     BG_CENTER_X, BG_WIDTH, CANVAS_H, CANVAS_W,
     LANE_H, LANE_LABEL_W, LANE_Y, LANE_DISPLAY_NAMES,
@@ -295,90 +300,40 @@ def _load_graph(db, scenario_id: str, variant_id: str | None) -> CanonicalScenar
     return load_base_canonical_graph(db, scenario_id)
 
 
-def _project_architecture(graph: CanonicalScenarioGraph, level: int) -> ViewResponse:
-    nodes: list[NodeElement] = []
-    edges: list[EdgeElement] = []
-    stage_orders: dict[tuple[str, str], int] = {}
-
-    nodes.extend(_sw_stack_nodes(graph))
-    arch_nodes, node_map = _architecture_resource_nodes(graph, stage_orders)
-    nodes.extend(arch_nodes)
-    nodes.extend(_buffer_nodes_from_architecture_edges(graph, node_map, stage_orders))
-    edges.extend(_architecture_edges(graph, node_map))
-    edges.extend(_inferred_architecture_edges(graph, {node.data.id for node in nodes}))
-    edges.extend(_sw_control_edges(graph, node_map, {node.data.id for node in nodes}))
-    edges.extend(_risk_edges(graph, node_map))
-
-    return _response(
-        graph=graph,
-        level=level,
-        mode="architecture",
-        nodes=nodes,
-        edges=edges,
-        metadata={"canvas_w": CANVAS_W, "canvas_h": CANVAS_H, "layout": "layered-lanes"},
+def _level0_projection_deps() -> Level0ProjectionDeps:
+    return Level0ProjectionDeps(
+        sw_stack_nodes=_sw_stack_nodes,
+        architecture_resource_nodes=_architecture_resource_nodes,
+        buffer_nodes_from_architecture_edges=_buffer_nodes_from_architecture_edges,
+        architecture_edges=_architecture_edges,
+        inferred_architecture_edges=_inferred_architecture_edges,
+        sw_control_edges=_sw_control_edges,
+        risk_edges=_risk_edges,
+        response=_response,
+        pipeline_ranks=_pipeline_ranks,
+        node_element=_n,
+        node_label=_node_label,
+        pipeline_node_type=_pipeline_node_type,
+        pipeline_node_layer=_pipeline_node_layer,
+        capability_badges=_capability_badges,
+        operation_summary=_operation_summary,
+        node_detail_items=_node_detail_items,
+        stage_for_node=_stage_for_node,
+        memory_descriptor=_memory_descriptor,
+        memory_placement=_memory_placement,
+        buffer_detail_items=_buffer_detail_items,
+        safe_id=_safe_id,
+        buffer_label=_buffer_label,
+        topology_edges=_topology_edges,
     )
+
+
+def _project_architecture(graph: CanonicalScenarioGraph, level: int) -> ViewResponse:
+    return _level0_project_architecture(graph, level, _level0_projection_deps())
 
 
 def _project_topology(graph: CanonicalScenarioGraph, level: int) -> ViewResponse:
-    nodes: list[NodeElement] = []
-    edges: list[EdgeElement] = []
-    ranks = _pipeline_ranks(graph)
-
-    for pipeline_node in graph.pipeline_nodes:
-        node_id = pipeline_node.get("id")
-        if not node_id:
-            continue
-        rank = ranks.get(node_id, len(nodes))
-        nodes.append(
-            _n(
-                f"ip-{node_id}",
-                _node_label(node_id, pipeline_node),
-                _pipeline_node_type(_pipeline_node_layer(graph, pipeline_node)),
-                _pipeline_node_layer(graph, pipeline_node),
-                430,
-                85 + rank * 110,
-                ip_ref=pipeline_node.get("ip_ref"),
-                capability_badges=_capability_badges(graph, pipeline_node),
-                active_operations=_operation_summary(graph, node_id, pipeline_node),
-                detail_items=_node_detail_items(graph, node_id, pipeline_node),
-                view_hints=ViewHints(lane=_pipeline_node_layer(graph, pipeline_node), stage=_stage_for_node(node_id, pipeline_node), order=rank),
-            )
-        )
-
-    for idx, edge in enumerate(graph.pipeline_edges):
-        buffer_ref = edge.get("buffer")
-        if not buffer_ref:
-            continue
-        source_rank = ranks.get(edge.get("from"), idx)
-        target_rank = ranks.get(edge.get("to"), source_rank + 1)
-        nodes.append(
-            _n(
-                f"buf-{_safe_id(buffer_ref)}",
-                _buffer_label(buffer_ref),
-                "buffer",
-                "memory",
-                720,
-                85 + ((source_rank + target_rank) / 2) * 110,
-                memory=_memory_descriptor(graph, buffer_ref),
-                placement=_memory_placement(graph, buffer_ref),
-                detail_items=_buffer_detail_items(graph, buffer_ref),
-                view_hints=ViewHints(lane="memory", stage="processing", order=idx),
-            )
-        )
-
-    edges.extend(_topology_edges(graph))
-    return _response(
-        graph=graph,
-        level=level,
-        mode="topology",
-        nodes=nodes,
-        edges=edges,
-        metadata={
-            "canvas_w": 980,
-            "canvas_h": max(520, 160 + (len(nodes) * 85)),
-            "layout": "vertical-topology",
-        },
-    )
+    return _level0_project_topology(graph, level, _level0_projection_deps())
 
 
 def _reference_sizes(graph: CanonicalScenarioGraph) -> dict[str, str]:
