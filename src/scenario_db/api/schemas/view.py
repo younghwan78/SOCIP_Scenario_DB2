@@ -51,6 +51,23 @@ class MemoryPlacement(BaseModel):
     expected_bw_reduction_gbps: float | None = None
 
 
+class SimOverlay(BaseModel):
+    required_clock_mhz: float | None = None
+    set_clock_mhz: float | None = None
+    set_voltage_mv: float | None = None
+    power_mw: float | None = None
+    hw_time_ms: float | None = None
+    feasible: bool = True
+    evidence_id: str | None = None
+
+
+class EdgeSimOverlay(BaseModel):
+    bw_mbs: float | None = None
+    bw_power_mw: float | None = None
+    bw_mbs_worst: float | None = None
+    evidence_id: str | None = None
+
+
 class NodeData(BaseModel):
     id: str
     label: str
@@ -73,6 +90,7 @@ class NodeData(BaseModel):
     warning: bool = False
     collapsed_children_count: int = 0
     view_hints: ViewHints | None = None
+    sim_overlay: SimOverlay | None = None
 
 
 class NodeElement(BaseModel):
@@ -91,6 +109,7 @@ class EdgeData(BaseModel):
     consumer: str | None = None
     memory: MemoryDescriptor | None = None
     placement: MemoryPlacement | None = None
+    sim_overlay: EdgeSimOverlay | None = None
     label: str | None = None
     detail_items: list[str] = []
 

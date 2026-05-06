@@ -285,6 +285,14 @@ def test_evidence_summary_invalid_groupby_400(client):
     assert r.status_code == 400
 
 
+def test_list_simulation_results_200(client):
+    r = client.get("/api/v1/simulation/results")
+    assert r.status_code == 200
+    body = r.json()
+    assert "items" in body
+    assert body["total"] == 0
+
+
 def test_compare_evidence_200(client):
     r = client.get("/api/v1/compare/evidence?variant=v1&sw1=sw-v1&sw2=sw-v2")
     assert r.status_code == 200

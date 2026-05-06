@@ -38,6 +38,48 @@ def get_evidence(db: Session, evidence_id: str) -> Evidence | None:
     return db.query(Evidence).filter_by(id=evidence_id).one_or_none()
 
 
+def get_simulation_evidence_by_params_hash(
+    db: Session,
+    *,
+    scenario_ref: str,
+    variant_ref: str,
+    params_hash: str,
+) -> Evidence | None:
+    return (
+        db.query(Evidence)
+        .filter_by(
+            kind="evidence.simulation",
+            scenario_ref=scenario_ref,
+            variant_ref=variant_ref,
+            params_hash=params_hash,
+        )
+        .order_by(Evidence.id.desc())
+        .first()
+    )
+
+
+def list_simulation_results(
+    db: Session,
+    *,
+    scenario_ref: str | None = None,
+    variant_ref: str | None = None,
+    latest: bool = False,
+    limit: int = 50,
+    offset: int = 0,
+) -> tuple[list[Evidence], int]:
+    q = db.query(Evidence).filter_by(kind="evidence.simulation")
+    if scenario_ref is not None:
+        q = q.filter(Evidence.scenario_ref == scenario_ref)
+    if variant_ref is not None:
+        q = q.filter(Evidence.variant_ref == variant_ref)
+    q = q.order_by(Evidence.id.desc())
+    total = q.count()
+    if latest:
+        rows = q.limit(1).all()
+        return rows, min(total, len(rows))
+    return q.offset(offset).limit(limit).all(), total
+
+
 def upsert_simulation_evidence(
     db: Session,
     evidence: SimulationEvidence,

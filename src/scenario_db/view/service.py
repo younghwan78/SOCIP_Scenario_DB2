@@ -11,9 +11,9 @@ from __future__ import annotations
 from typing import Any
 
 from scenario_db.api.schemas.view import (
-    EdgeData, EdgeElement, MemoryDescriptor, MemoryPlacement,
+    EdgeData, EdgeElement, EdgeSimOverlay, MemoryDescriptor, MemoryPlacement,
     NodeData, NodeElement, OperationSummary, RiskCard,
-    ViewHints, ViewResponse, ViewSummary,
+    SimOverlay, ViewHints, ViewResponse, ViewSummary,
 )
 from scenario_db.db.repositories.scenario_graph import (
     CanonicalScenarioGraph,
@@ -292,6 +292,180 @@ def project_level2(scenario_id: str, variant_id: str | None, expand: str, db=Non
         return build_sample_level0()
     graph = _load_graph(db, scenario_id, variant_id)
     return _project_drilldown(graph, expand)
+
+
+def apply_simulation_overlay(view: ViewResponse, evidence) -> ViewResponse:
+    """Overlay persisted simulation evidence onto an existing view response."""
+
+    if evidence is None:
+        return view
+    evidence_id = getattr(evidence, "id", None)
+    node_rows = _sim_node_rows(evidence)
+    dma_rows = _sim_dma_rows(evidence)
+
+    for node in view.nodes:
+        row = _match_node_sim_row(node.data, node_rows)
+        if not row:
+            continue
+        timing = row.get("_timing") or {}
+        node.data.sim_overlay = SimOverlay(
+            required_clock_mhz=_num(row.get("required_clock_mhz")),
+            set_clock_mhz=_num(row.get("set_clock_mhz")),
+            set_voltage_mv=_num(row.get("set_voltage_mv")),
+            power_mw=_num(row.get("total_power_mw") or row.get("active_power_mw")),
+            hw_time_ms=_num(timing.get("hw_time_ms")),
+            feasible=bool(row.get("feasible", timing.get("feasible", True))),
+            evidence_id=evidence_id,
+        )
+        _append_sim_node_text(node.data)
+
+    for edge in view.edges:
+        rows = _match_edge_dma_rows(edge.data, dma_rows)
+        if not rows:
+            continue
+        bw_mbs = sum(_num(row.get("bw_mbs")) or 0.0 for row in rows)
+        bw_power_mw = sum(_num(row.get("bw_power_mw")) or 0.0 for row in rows)
+        worst_values = [_num(row.get("bw_mbs_worst")) for row in rows if row.get("bw_mbs_worst") is not None]
+        edge.data.sim_overlay = EdgeSimOverlay(
+            bw_mbs=bw_mbs,
+            bw_power_mw=bw_power_mw,
+            bw_mbs_worst=sum(value or 0.0 for value in worst_values) if worst_values else None,
+            evidence_id=evidence_id,
+        )
+        _append_sim_edge_text(edge.data)
+
+    if "simulation" not in view.overlays_available:
+        view.overlays_available.append("simulation")
+    view.metadata["simulation_evidence_id"] = evidence_id
+    return view
+
+
+def _sim_node_rows(evidence) -> list[dict[str, Any]]:
+    timing_by_node = {
+        str(row.get("node_id")): row
+        for row in (getattr(evidence, "timing_breakdown", None) or [])
+        if isinstance(row, dict) and row.get("node_id")
+    }
+    rows: list[dict[str, Any]] = []
+    for row in getattr(evidence, "dvfs_breakdown", None) or []:
+        if not isinstance(row, dict):
+            continue
+        merged = dict(row)
+        timing = timing_by_node.get(str(row.get("node_id")))
+        if timing:
+            merged["_timing"] = timing
+        rows.append(merged)
+    for node_id, timing in timing_by_node.items():
+        if not any(str(row.get("node_id")) == node_id for row in rows):
+            rows.append({"node_id": node_id, "_timing": timing, **timing})
+    return rows
+
+
+def _sim_dma_rows(evidence) -> list[dict[str, Any]]:
+    return [
+        row
+        for row in (getattr(evidence, "dma_breakdown", None) or [])
+        if isinstance(row, dict)
+    ]
+
+
+def _match_node_sim_row(data: NodeData, rows: list[dict[str, Any]]) -> dict[str, Any] | None:
+    node_text = f"{data.id} {data.label} {data.ip_ref or ''}".lower()
+    for row in rows:
+        node_id = str(row.get("node_id") or "").lower()
+        if node_id and (data.id.lower() == node_id or node_id in node_text):
+            return row
+    for row in rows:
+        ip_ref = str(row.get("ip_ref") or "").lower()
+        if ip_ref and data.ip_ref and data.ip_ref.lower() == ip_ref:
+            return row
+    for row in rows:
+        hw_name = str(row.get("hw_name") or "").lower()
+        if hw_name and hw_name in node_text:
+            return row
+    return None
+
+
+def _match_edge_dma_rows(data: EdgeData, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    edge_text = f"{data.id} {data.source} {data.target} {data.producer or ''} {data.consumer or ''} {data.buffer_ref or ''}".lower()
+    matched = [
+        row
+        for row in rows
+        if (
+            (node_id := str(row.get("node_id") or "").lower())
+            and node_id in edge_text
+        )
+        or (
+            (hw_name := str(row.get("hw_name") or "").lower())
+            and hw_name in edge_text
+        )
+    ]
+    if matched:
+        return matched
+    # Architecture summary edges often collapse resource groups. Attach DMA rows
+    # to M2M edges only when there is no precise node match.
+    if data.flow_type == "M2M" and rows:
+        return rows
+    return []
+
+
+def _append_sim_node_text(data: NodeData) -> None:
+    overlay = data.sim_overlay
+    if overlay is None:
+        return
+    badges = []
+    if overlay.set_clock_mhz is not None:
+        badges.append(f"{overlay.set_clock_mhz:.0f}MHz")
+    if overlay.power_mw is not None:
+        badges.append(f"{overlay.power_mw:.1f}mW")
+    for badge in badges:
+        if badge not in data.summary_badges:
+            data.summary_badges.append(badge)
+    detail = _sim_node_detail(overlay)
+    if detail and detail not in data.detail_items:
+        data.detail_items.append(detail)
+
+
+def _append_sim_edge_text(data: EdgeData) -> None:
+    overlay = data.sim_overlay
+    if overlay is None:
+        return
+    bits = []
+    if overlay.bw_mbs is not None:
+        bits.append(f"BW {overlay.bw_mbs:.1f} MB/s")
+    if overlay.bw_power_mw is not None:
+        bits.append(f"BW power {overlay.bw_power_mw:.1f} mW")
+    if overlay.bw_mbs_worst is not None:
+        bits.append(f"worst {overlay.bw_mbs_worst:.1f} MB/s")
+    detail = "Sim: " + ", ".join(bits) if bits else None
+    if detail and detail not in data.detail_items:
+        data.detail_items.append(detail)
+
+
+def _sim_node_detail(overlay: SimOverlay) -> str | None:
+    bits = []
+    if overlay.required_clock_mhz is not None:
+        bits.append(f"req {overlay.required_clock_mhz:.1f}MHz")
+    if overlay.set_clock_mhz is not None:
+        bits.append(f"set {overlay.set_clock_mhz:.1f}MHz")
+    if overlay.set_voltage_mv is not None:
+        bits.append(f"{overlay.set_voltage_mv:.0f}mV")
+    if overlay.power_mw is not None:
+        bits.append(f"{overlay.power_mw:.1f}mW")
+    if overlay.hw_time_ms is not None:
+        bits.append(f"{overlay.hw_time_ms:.2f}ms")
+    if not overlay.feasible:
+        bits.append("infeasible")
+    return "Sim: " + ", ".join(bits) if bits else None
+
+
+def _num(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _load_graph(db, scenario_id: str, variant_id: str | None) -> CanonicalScenarioGraph:
