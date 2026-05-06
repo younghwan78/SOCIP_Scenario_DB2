@@ -67,6 +67,44 @@ def test_adapter_runner_builds_evidence_from_canonical_graph():
     assert evidence.timeline_events[-1].end_ms > 0
 
 
+def test_adapter_uses_mode_specific_sim_params():
+    graph = _graph()
+    graph.variant.node_configs["isp0"]["selected_mode"] = "tDMSC"
+    graph.ip_catalog["ip-isp-v12"].capabilities = {
+        "operating_modes": [],
+        "sim": {
+            "hw_name": "ISP",
+            "vdd": "VDD_CAM",
+            "dvfs_group": "CAM",
+            "modes": {
+                "Normal": {"ppc": 4, "unit_power_mw_mp": 10},
+                "tDMSC": {"ppc": 2, "unit_power_mw_mp": 14.5},
+            },
+        },
+    }
+
+    inputs = build_simulation_inputs(graph, SimulationRunConfig(include_timeline=False))
+    isp = next(item for item in inputs.workloads if item.node_id == "isp0")
+
+    assert isp.mode == "tDMSC"
+    assert isp.sim_params.ppc == 2
+    assert isp.sim_params.unit_power_mw_mp == 14.5
+    assert inputs.warnings == []
+
+
+def test_adapter_warns_when_sim_params_default_to_zero():
+    graph = _graph()
+    graph.ip_catalog["ip-isp-v12"].capabilities = {"operating_modes": [], "sim": {"hw_name": "ISP"}}
+
+    inputs = build_simulation_inputs(graph, SimulationRunConfig(include_timeline=False))
+    isp = next(item for item in inputs.workloads if item.node_id == "isp0")
+
+    assert isp.sim_params.ppc == 0.0
+    assert isp.sim_params.unit_power_mw_mp == 0.0
+    assert any("isp0" in warning and "ppc=0" in warning for warning in inputs.warnings)
+    assert any("isp0" in warning and "unit_power_mw_mp=0.0" in warning for warning in inputs.warnings)
+
+
 def _graph() -> CanonicalScenarioGraph:
     scenario = Scenario(
         id="uc-camera-recording",

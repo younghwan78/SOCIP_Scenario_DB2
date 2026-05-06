@@ -19,8 +19,8 @@ class IPSimParams(BaseScenarioModel):
     """Per-IP simulation parameters sourced from IpCatalog capabilities."""
 
     hw_name: str
-    ppc: float
-    unit_power_mw_mp: float
+    ppc: float = 0.0
+    unit_power_mw_mp: float = 0.0
     idc: float = 0.0
     vdd: str | None = None
     dvfs_group: str | None = None
@@ -131,6 +131,7 @@ class SimulationInputs(BaseScenarioModel):
     port_transfers: list[PortTransferSpec] = Field(default_factory=list)
     timeline_tasks: list[dict] = Field(default_factory=list)
     timeline_edges: list[dict] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
 
 
 class ResolvedIPConfig(BaseScenarioModel):
@@ -214,3 +215,4 @@ class SimRunResult(BaseScenarioModel):
     timing_breakdown: list[IPTimingResult] = Field(default_factory=list)
     timeline_events: list[TimelineEvent] = Field(default_factory=list)
     vdd_power: dict[str, dict[str, float]] = Field(default_factory=dict)
+    warnings: list[str] = Field(default_factory=list)

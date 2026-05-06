@@ -26,6 +26,7 @@ def test_simulation_run_endpoint(monkeypatch):
             "status": "completed",
             "cached": False,
             "params_hash": "abc123",
+            "warnings": ["isp0 has ppc=0"],
             "kpi": {"total_power_mw": 1.0},
             "result": None,
         }
@@ -50,5 +51,5 @@ def test_simulation_run_endpoint(monkeypatch):
     body = response.json()
     assert body["evidence_id"].startswith("sim-uc-camera-recording")
     assert body["cached"] is False
+    assert body["warnings"] == ["isp0 has ppc=0"]
     assert body["kpi"]["total_power_mw"] == 1.0
-

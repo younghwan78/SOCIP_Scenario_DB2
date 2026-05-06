@@ -99,6 +99,7 @@ def run_simulation(
         timing_breakdown=timing_breakdown,
         timeline_events=timeline_events,
         vdd_power=_vdd_power(resolved, dma_breakdown),
+        warnings=list(inputs.warnings),
     )
 
 
@@ -235,4 +236,3 @@ def _evidence_id(result: SimRunResult, hash_value: str | None) -> str:
 
 def _safe(value: str) -> str:
     return "".join(ch if ch.isalnum() or ch in ".-" else "-" for ch in value)
-

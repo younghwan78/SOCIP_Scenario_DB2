@@ -23,6 +23,6 @@ class SimulateRunResponse(BaseModel):
     status: Literal["completed"]
     cached: bool
     params_hash: str
+    warnings: list[str] = Field(default_factory=list)
     kpi: dict
     result: SimRunResult | None = None
-

@@ -23,6 +23,7 @@ def build_simulation_inputs(
     fps = _fps(graph, run_config)
     workloads: list[IPWorkload] = []
     transfers: list[PortTransferSpec] = []
+    warnings: list[str] = []
 
     for node in graph.pipeline_nodes:
         node_id = str(node.get("id") or "")
@@ -34,8 +35,8 @@ def build_simulation_inputs(
             continue
         node_config = (graph.variant.node_configs or {}).get(node_id) or {}
         sim_block = node_config.get("sim") or {}
-        sim_params = _sim_params(ip_row, sim_block)
         mode = str(sim_block.get("mode") or node_config.get("selected_mode") or "Normal")
+        sim_params = _sim_params(ip_row, sim_block, mode=mode, node_id=node_id, warnings=warnings)
         width, height = _workload_size(graph, node_id, sim_block)
         workloads.append(
             IPWorkload(
@@ -62,6 +63,7 @@ def build_simulation_inputs(
         port_transfers=transfers,
         timeline_tasks=_timeline_tasks(graph),
         timeline_edges=_timeline_edges(graph),
+        warnings=warnings,
     )
 
 
@@ -72,29 +74,53 @@ def _fps(graph: CanonicalScenarioGraph, config: SimulationRunConfig) -> float:
     return float(design.get("fps") or 30.0)
 
 
-def _sim_params(ip_row: Any, sim_block: dict[str, Any]) -> IPSimParams:
+def _sim_params(
+    ip_row: Any,
+    sim_block: dict[str, Any],
+    *,
+    mode: str,
+    node_id: str,
+    warnings: list[str],
+) -> IPSimParams:
     capabilities = ip_row.capabilities or {}
     sim = (
         capabilities.get("sim")
         or (capabilities.get("properties") or {}).get("sim")
         or {}
     )
-    merged = {**sim, **(sim_block.get("ip_params") or {})}
+    mode_params = _mode_sim_params(sim, mode)
+    override_params = sim_block.get("ip_params") or {}
+    override_mode_params = _mode_sim_params(override_params, mode)
+    merged = {**sim, **mode_params, **override_params, **override_mode_params}
     hw_name = merged.get("hw_name") or merged.get("hw_name_in_sim") or _fallback_hw_name(ip_row.id)
-    if "ppc" not in merged or "unit_power_mw_mp" not in merged:
-        raise ValueError(
-            f"IP '{ip_row.id}' needs capabilities.sim.ppc and "
-            "capabilities.sim.unit_power_mw_mp for simulation"
+    ppc = float(merged.get("ppc") or 0.0)
+    unit_power = float(merged.get("unit_power_mw_mp") or 0.0)
+    if ppc <= 0:
+        warnings.append(
+            f"{node_id} ({ip_row.id}, mode={mode}) has ppc=0; "
+            "clock and timing estimates may be zero."
+        )
+    if unit_power <= 0:
+        warnings.append(
+            f"{node_id} ({ip_row.id}, mode={mode}) has unit_power_mw_mp=0.0; "
+            "core power estimate will be zero."
         )
     return IPSimParams(
         hw_name=str(hw_name),
-        ppc=float(merged["ppc"]),
-        unit_power_mw_mp=float(merged["unit_power_mw_mp"]),
+        ppc=ppc,
+        unit_power_mw_mp=unit_power,
         idc=float(merged.get("idc") or 0.0),
         vdd=merged.get("vdd"),
         dvfs_group=merged.get("dvfs_group"),
         max_clock_mhz=merged.get("max_clock_mhz"),
     )
+
+
+def _mode_sim_params(sim: dict[str, Any], mode: str) -> dict[str, Any]:
+    modes = sim.get("modes") or {}
+    if not isinstance(modes, dict):
+        return {}
+    return modes.get(mode) or modes.get(str(mode)) or {}
 
 
 def _workload_size(
@@ -256,4 +282,3 @@ def _edge_source(edge: dict[str, Any]) -> Any:
 
 def _edge_target(edge: dict[str, Any]) -> Any:
     return edge.get("to") if edge.get("to") is not None else edge.get("target")
-

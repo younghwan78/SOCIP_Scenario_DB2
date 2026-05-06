@@ -39,6 +39,7 @@ def run_simulation_request(db: Session, request: SimulateRequest) -> SimulateRun
                 status="completed",
                 cached=True,
                 params_hash=hash_value,
+                warnings=list(inputs.warnings),
                 kpi=cached.kpi or {},
                 result=None,
             )
@@ -59,6 +60,7 @@ def run_simulation_request(db: Session, request: SimulateRequest) -> SimulateRun
         status="completed",
         cached=False,
         params_hash=hash_value,
+        warnings=result.warnings,
         kpi=evidence.kpi,
         result=result,
     )
@@ -74,4 +76,3 @@ def _request_hash(inputs, request: SimulateRequest) -> str:
     }
     raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
-
