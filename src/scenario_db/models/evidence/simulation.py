@@ -14,6 +14,12 @@ from scenario_db.models.evidence.common import (
     SweepContext,
 )
 from scenario_db.models.evidence.resolution import ResolutionResult
+from scenario_db.sim.models import (
+    IPTimingResult,
+    PortBWResult,
+    ResolvedIPConfig,
+    TimelineEvent,
+)
 
 _KPI_KEY_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
@@ -44,6 +50,12 @@ class SimulationEvidence(BaseScenarioModel):
     aggregation: Aggregation
     kpi: dict[str, float | int] = Field(default_factory=dict)
     ip_breakdown: list[IpBreakdown] = Field(default_factory=list)
+    dma_breakdown: list[PortBWResult] = Field(default_factory=list)
+    timing_breakdown: list[IPTimingResult] = Field(default_factory=list)
+    dvfs_breakdown: list[ResolvedIPConfig] = Field(default_factory=list)
+    timeline_events: list[TimelineEvent] = Field(default_factory=list)
+    vdd_power: dict[str, dict[str, float]] = Field(default_factory=dict)
+    params_hash: str | None = None
     artifacts: list[Artifact] = Field(default_factory=list)
 
     @model_validator(mode="after")

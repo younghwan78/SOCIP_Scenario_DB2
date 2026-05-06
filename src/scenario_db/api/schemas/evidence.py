@@ -21,6 +21,12 @@ class EvidenceResponse(BaseModel):
     kpi: dict = {}
     run_info: dict | None = None
     ip_breakdown: list | None = None
+    dma_breakdown: list | None = None
+    timing_breakdown: list | None = None
+    dvfs_breakdown: list | None = None
+    timeline_events: list | None = None
+    vdd_power: dict | None = None
+    params_hash: str | None = None
     provenance: dict | None = None
     artifacts: list | None = None
     sw_version_hint: str | None = None

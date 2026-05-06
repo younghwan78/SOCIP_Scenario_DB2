@@ -48,6 +48,10 @@ dashboard = [
     "streamlit>=1.40",
     "requests>=2.31",
 ]
+sim = [
+    "networkx>=3.0",
+    "simpy>=4.0",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests/unit"]

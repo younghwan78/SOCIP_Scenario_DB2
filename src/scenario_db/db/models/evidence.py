@@ -39,6 +39,12 @@ class Evidence(Base):
     kpi                 = Column(JSONB, nullable=False)
     run_info            = Column(JSONB)             # sim only
     ip_breakdown        = Column(JSONB)             # sim only
+    dma_breakdown       = Column(JSONB)             # sim only
+    timing_breakdown    = Column(JSONB)             # sim only
+    dvfs_breakdown      = Column(JSONB)             # sim only
+    timeline_events     = Column(JSONB)             # sim only
+    vdd_power           = Column(JSONB)             # sim only
+    params_hash         = Column(Text, index=True)  # sim cache key
     provenance          = Column(JSONB)             # meas only
     artifacts           = Column(JSONB)
     yaml_sha256         = Column(Text, nullable=False)

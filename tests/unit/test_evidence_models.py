@@ -29,6 +29,7 @@ from scenario_db.models.evidence.simulation import (
     SimulationEvidence,
     SubmoduleBreakdown,
 )
+from scenario_db.sim.models import TimelineEvent
 
 FIXTURES = Path(__file__).parent / "fixtures" / "evidence"
 
@@ -407,3 +408,37 @@ def test_sim_ip_breakdown():
     subs = {s.sub: s.power_mW for s in isp.submodules}
     assert subs["ISP.TNR"] == 320
     assert subs["ISP.3AA0"] == 210
+
+
+def test_sim_evidence_accepts_timeline_events():
+    obj = SimulationEvidence.model_validate({
+        "id": "sim-test-timeline-01",
+        "schema_version": "2.2",
+        "kind": "evidence.simulation",
+        "scenario_ref": "uc-camera-recording",
+        "variant_ref": "UHD60-HDR10-H265",
+        "execution_context": {
+            "silicon_rev": "A0",
+            "sw_baseline_ref": "sw-vendor-v1.2.3",
+            "thermal": "hot",
+        },
+        "run": {"timestamp": "2026-05-06T23:00:00+09:00", "tool": "scenariodb-sim", "source": "calculated"},
+        "aggregation": {"strategy": "single_run"},
+        "timeline_events": [
+            {
+                "task_id": "t_codec2",
+                "node_id": "codec2",
+                "hw_name": "CPU",
+                "task_type": "sw",
+                "start_ms": 2.0,
+                "end_ms": 6.0,
+                "duration_ms": 4.0,
+                "predecessors": ["t_isp"],
+            }
+        ],
+        "params_hash": "abc123",
+    })
+
+    assert isinstance(obj.timeline_events[0], TimelineEvent)
+    assert obj.timeline_events[0].task_type == "sw"
+    assert obj.params_hash == "abc123"

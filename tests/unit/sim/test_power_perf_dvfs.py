@@ -1,0 +1,90 @@
+from __future__ import annotations
+
+import pytest
+
+from scenario_db.sim.dvfs_resolver import DvfsResolver
+from scenario_db.sim.models import DVFSLevel, DVFSTable, IPSimParams, IPWorkload
+from scenario_db.sim.perf_calc import calc_processing_time_ms
+from scenario_db.sim.power_calc import calc_active_power_mw
+
+
+def test_power_formula_uses_voltage_squared_and_fps_scale():
+    assert calc_active_power_mw(
+        unit_power_mw_mp=10.0,
+        resolution_mp=2.0,
+        voltage_mv=710.0,
+        fps=60.0,
+    ) == pytest.approx(40.0)
+
+
+def test_processing_time_uses_h_blank_margin():
+    result = calc_processing_time_ms(
+        pixels=1920 * 1080,
+        set_clock_mhz=400,
+        ppc=4,
+        h_blank_margin=0.05,
+    )
+
+    assert result == pytest.approx(1.3608, rel=1e-3)
+
+
+def test_dvfs_resolver_aligns_shared_vdd_voltage():
+    resolver = DvfsResolver(
+        {
+            "CAM": DVFSTable(
+                domain="CAM",
+                levels=[
+                    DVFSLevel(level=0, speed_mhz=600, voltages={4: 780}),
+                    DVFSLevel(level=1, speed_mhz=400, voltages={4: 700}),
+                ],
+            ),
+            "INT": DVFSTable(
+                domain="INT",
+                levels=[
+                    DVFSLevel(level=0, speed_mhz=533, voltages={4: 760}),
+                    DVFSLevel(level=1, speed_mhz=266, voltages={4: 680}),
+                ],
+            ),
+        },
+        asv_group=4,
+    )
+    workloads = [
+        IPWorkload(
+            node_id="isp0",
+            ip_ref="ip-isp-v12",
+            hw_name="ISP",
+            width=3840,
+            height=2160,
+            fps=200,
+            sim_params=IPSimParams(
+                hw_name="ISP",
+                ppc=4,
+                unit_power_mw_mp=10,
+                vdd="VDD_CAM",
+                dvfs_group="CAM",
+            ),
+        ),
+        IPWorkload(
+            node_id="mfc",
+            ip_ref="ip-mfc-v14",
+            hw_name="MFC",
+            width=1920,
+            height=1080,
+            fps=60,
+            sim_params=IPSimParams(
+                hw_name="MFC",
+                ppc=4,
+                unit_power_mw_mp=5,
+                vdd="VDD_CAM",
+                dvfs_group="INT",
+            ),
+        ),
+    ]
+
+    resolved = resolver.resolve(workloads)
+
+    assert resolved["isp0"].set_clock_mhz == 600
+    assert resolved["mfc"].set_clock_mhz == 266
+    assert resolved["isp0"].set_voltage_mv == 780
+    assert resolved["mfc"].set_voltage_mv == 780
+    assert resolved["mfc"].vdd_leader == "isp0"

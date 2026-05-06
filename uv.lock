@@ -51,6 +51,10 @@ notebook = [
     { name = "seaborn" },
     { name = "tabulate" },
 ]
+sim = [
+    { name = "networkx" },
+    { name = "simpy" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -86,6 +90,10 @@ notebook = [
     { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "seaborn", specifier = ">=0.13" },
     { name = "tabulate", specifier = ">=0.9" },
+]
+sim = [
+    { name = "networkx", specifier = ">=3.0" },
+    { name = "simpy", specifier = ">=4.0" },
 ]
 
 [[package]]
@@ -3003,6 +3011,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/0b/a0/fc26e8d67c2cf9bf4742f1d81c2d15067731be2f60972ad0b780d70e7460/simplejson-4.0.1-cp314-cp314t-win32.whl", hash = "sha256:3e49d709a121d47acaf6932803407b6feee5d5fac5c7f2a370d7ba5b6fedaea3", size = 90571, upload-time = "2026-04-18T22:45:40.401Z" },
     { url = "https://files.pythonhosted.org/packages/3d/6b/1858670f2b22fcdb26efe9255d9354377d3259e08ed26d0652c7a4bd5aa3/simplejson-4.0.1-cp314-cp314t-win_amd64.whl", hash = "sha256:d8c702e19fd99fd75f3371de70b5489dc9f659cd69ada0c72a2f6dce76bd624c", size = 93474, upload-time = "2026-04-18T22:45:41.552Z" },
     { url = "https://files.pythonhosted.org/packages/a9/2d/93a5b862ac29f182a658eb3fc2c98fe28acbb5c05a9076402572c7eb6966/simplejson-4.0.1-py3-none-any.whl", hash = "sha256:dfa6e9923c0ec2880738d09e5ce045741eb6cd4551e261dcd6c3625d26666075", size = 69242, upload-time = "2026-04-18T22:46:16.183Z" },
+]
+
+[[package]]
+name = "simpy"
+version = "4.1.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/a8/66/860505ec021a16f9d8cf4b8c4d60ee07bb427649b643312303698c93b551/simpy-4.1.1.tar.gz", hash = "sha256:06d0750a7884b11e0e8e20ce0bc7c6d4ed5f1743d456695340d13fdff95001a6", size = 408997, upload-time = "2023-11-13T03:39:04.909Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/48/72/920ed1224c94a8a5a69e6c1275ac7fe4eb911ba8feffddf469f1629d47f3/simpy-4.1.1-py3-none-any.whl", hash = "sha256:7c5ae380240fd2238671160e4830956f8055830a8317edf5c05e495b3823cd88", size = 27224, upload-time = "2023-11-13T03:39:03.362Z" },
 ]
 
 [[package]]
