@@ -69,6 +69,11 @@ def run_simulation_request(db: Session, request: SimulateRequest) -> SimulateRun
 def _request_hash(inputs, request: SimulateRequest) -> str:
     payload = {
         "inputs_hash": params_hash(inputs),
+        "execution_context": request.execution_context.model_dump(
+            mode="json",
+            exclude_none=True,
+        ),
+        "config": request.config.model_dump(mode="json", exclude_none=True),
         "dvfs_tables": {
             key: value.model_dump(mode="json", exclude_none=True)
             for key, value in request.dvfs_tables.items()

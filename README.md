@@ -286,7 +286,9 @@ should match IP `dvfs_group` values such as `CAM`, `CSIS`, `INTCAM`, and `INT`.
 Persisted results are shown in `Simulation Results`. `Open Pipeline Viewer
 Overlay` opens the Pipeline Viewer in a new browser tab and passes the selected
 SoC, project, scenario, variant, API base, and simulation evidence id as query
-parameters. The original Evidence Dashboard state remains in place.
+parameters. The original Evidence Dashboard state remains in place. Use
+`Download JSON`, `Download KPI CSV`, or `Download DMA CSV` to copy selected
+simulation evidence into a separate report, spreadsheet, or baseline archive.
 
 Simulation API examples:
 
@@ -317,10 +319,13 @@ Invoke-RestMethod "$api/simulation/results/$($run.evidence_id)" | ConvertTo-Json
 ```
 
 Simulation evidence is not an unbounded append log for identical inputs. The
-run request computes a `params_hash` and reuses a matching persisted result
-unless `force=true`. Distinct scenario/variant or simulation inputs create
-distinct evidence ids. Use `persist=false` for a temporary run that returns the
-calculated result without saving it to DB.
+run request computes a `params_hash` from the effective simulation inputs,
+execution context, run config, and DVFS tables. It reuses a matching persisted
+result unless `force=true`. Execution control flags such as `persist` and
+`force` are excluded from the hash. Distinct scenario/variant, thermal/SW
+context, config, or DVFS inputs create distinct evidence ids. Use
+`persist=false` for a temporary run that returns the calculated result without
+saving it to DB.
 
 ## Viewer Check
 

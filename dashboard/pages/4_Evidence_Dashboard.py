@@ -5,6 +5,8 @@ Run from the project virtual environment:
 """
 from __future__ import annotations
 
+import csv
+import io
 import json
 import os
 import sys
@@ -419,6 +421,91 @@ def _render_viewer_tab_link(api_base: str, scenario_id: str, variant_id: str, ev
     )
 
 
+def _render_export_actions(result: dict[str, Any]) -> None:
+    evidence_id = str(result.get("id") or "simulation-evidence")
+    filename_base = _safe_filename(evidence_id)
+    json_text = _evidence_json_text(result)
+    col_json, col_kpi, col_dma = st.columns(3)
+    col_json.download_button(
+        "Download JSON",
+        data=json_text.encode("utf-8"),
+        file_name=f"{filename_base}.json",
+        mime="application/json",
+        use_container_width=True,
+        key=f"download_json_{evidence_id}",
+    )
+    col_kpi.download_button(
+        "Download KPI CSV",
+        data=_summary_csv_bytes(result),
+        file_name=f"{filename_base}-summary.csv",
+        mime="text/csv",
+        use_container_width=True,
+        key=f"download_kpi_{evidence_id}",
+    )
+    col_dma.download_button(
+        "Download DMA CSV",
+        data=_rows_csv_bytes(result.get("dma_breakdown") or []),
+        file_name=f"{filename_base}-dma.csv",
+        mime="text/csv",
+        use_container_width=True,
+        key=f"download_dma_{evidence_id}",
+    )
+    with st.expander("Raw JSON for copy", expanded=False):
+        st.code(json_text, language="json")
+
+
+def _evidence_json_text(result: dict[str, Any]) -> str:
+    return json.dumps(result, indent=2, sort_keys=True, ensure_ascii=False, default=str)
+
+
+def _summary_csv_bytes(result: dict[str, Any]) -> bytes:
+    execution_context = result.get("execution_context") if isinstance(result.get("execution_context"), dict) else {}
+    run_info = result.get("run_info") if isinstance(result.get("run_info"), dict) else {}
+    kpi = result.get("kpi") if isinstance(result.get("kpi"), dict) else {}
+    row: dict[str, Any] = {
+        "id": result.get("id"),
+        "scenario_ref": result.get("scenario_ref"),
+        "variant_ref": result.get("variant_ref"),
+        "sw_baseline_ref": result.get("sw_baseline_ref"),
+        "silicon_rev": execution_context.get("silicon_rev"),
+        "thermal": execution_context.get("thermal"),
+        "ambient_temp_c": execution_context.get("ambient_temp_c"),
+        "overall_feasibility": result.get("overall_feasibility"),
+        "params_hash": result.get("params_hash"),
+        "timestamp": run_info.get("timestamp"),
+    }
+    for key, value in kpi.items():
+        row[f"kpi_{key}"] = value
+    return _rows_csv_bytes([row])
+
+
+def _rows_csv_bytes(rows: list[dict[str, Any]]) -> bytes:
+    clean_rows = [row for row in rows if isinstance(row, dict)]
+    if not clean_rows:
+        return b""
+    fieldnames: list[str] = []
+    for row in clean_rows:
+        for key in row:
+            if key not in fieldnames:
+                fieldnames.append(key)
+    buffer = io.StringIO(newline="")
+    writer = csv.DictWriter(buffer, fieldnames=fieldnames, extrasaction="ignore")
+    writer.writeheader()
+    for row in clean_rows:
+        writer.writerow({key: _csv_cell(row.get(key)) for key in fieldnames})
+    return buffer.getvalue().encode("utf-8-sig")
+
+
+def _csv_cell(value: Any) -> Any:
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, sort_keys=True, ensure_ascii=False, default=str)
+    return value
+
+
+def _safe_filename(value: str) -> str:
+    return "".join(ch if ch.isalnum() or ch in ".-" else "_" for ch in value)[:160]
+
+
 def _kpi(kpi: dict[str, Any], *keys: str) -> Any:
     for key in keys:
         if key in kpi:
@@ -604,4 +691,5 @@ with result_col:
         c3.metric("Bandwidth", f"{_round(_kpi(kpi, 'total_bw_mbs', 'bw_mbs')) or 0:g} MB/s")
         c4.metric("HW Time", f"{_round(_kpi(kpi, 'hw_time_max_ms', 'hw_time_ms')) or 0:g} ms")
         _render_viewer_tab_link(api_base, scenario_id, variant_id, selected_id)
+        _render_export_actions(selected)
         _render_breakdown(selected)
