@@ -11,7 +11,6 @@ capabilities:
   sim:
     hw_name: CPU_Cluster
     source: legacy_project_info_csv
-    source_project: A
     modes:
       Normal:
         unit_power_mw_mp: 1.0
@@ -19,12 +18,7 @@ capabilities:
         ppc: 4.0
         vdd: VDD_CPUCL0
         dvfs_group: CPU
-      normal:
-        unit_power_mw_mp: 1.0
-        idc: 0.0
-        ppc: 4.0
-        vdd: VDD_CPUCL0
-        dvfs_group: CPU
+    source_project: A
   properties:
     role: sw_task_host
     clusters:

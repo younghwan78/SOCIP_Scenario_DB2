@@ -1,0 +1,49 @@
+source_csv: E:/10_Codes/23_MMIP_Scenario_simulation2/hw_config/projectA_info.csv
+catalog_root: .
+catalogs:
+  - catalog: 00_hw/ip-csis-s5e9965.yaml
+    hw_name: CSIS
+
+  - catalog: 00_hw/ip-isp-s5e9965.yaml
+    hw_name: ISP
+    source_note: Role-level mapping from projectA_info.csv camera IP rows.
+    base:
+      hw_name: ISP
+      source_project: A
+      modes:
+        Normal:
+          unit_power_mw_mp: 0.0
+          idc: 0.0
+          ppc: 0.0
+          vdd: VDD_CAM
+          dvfs_group: CAM
+    role_modes:
+      csispdp: PDP
+      3aa_stats: CSTAT
+      stats_3aa: CSTAT
+      bayer_processing: BYRP
+      byrp: BYRP
+      rgb_processing: RGBP
+      rgbp: RGBP
+      yuv_scaler: YUVP
+      yuvsc: YUVP
+      temporal_nr: MTNR0
+      mtnr: MTNR0
+      spatial_nr: MSNR
+      msnr: MSNR
+      yuv_post: YUVP
+      yuvp: YUVP
+      gdc_preview: MCSC
+      gdc_video: MCSC
+
+  - catalog: 00_hw/ip-mcsc-s5e9965.yaml
+    hw_name: MCSC
+
+  - catalog: 00_hw/ip-mfc-s5e9965.yaml
+    hw_name: MFC
+
+  - catalog: 00_hw/ip-dpu-s5e9965.yaml
+    hw_name: DPU
+
+  - catalog: 00_hw/ip-cpu-s5e9965.yaml
+    hw_name: CPU_Cluster

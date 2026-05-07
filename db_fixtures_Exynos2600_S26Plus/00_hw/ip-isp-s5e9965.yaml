@@ -15,8 +15,6 @@ capabilities:
   sim:
     hw_name: ISP
     source: legacy_project_info_csv
-    source_project: A
-    source_note: Role-level mapping from projectA_info.csv camera IP rows.
     modes:
       Normal:
         unit_power_mw_mp: 0.0
@@ -24,6 +22,8 @@ capabilities:
         ppc: 0.0
         vdd: VDD_CAM
         dvfs_group: CAM
+    source_project: A
+    source_note: Role-level mapping from projectA_info.csv camera IP rows.
     role_modes:
       csispdp:
         hw_name: PDP
@@ -61,11 +61,23 @@ capabilities:
             ppc: 4.0
             vdd: VDD_CAM
             dvfs_group: CAM
+          tDMSC:
+            unit_power_mw_mp: 4.36
+            idc: 0.0
+            ppc: 4.0
+            vdd: VDD_CAM
+            dvfs_group: CAM
       byrp:
         hw_name: BYRP
         modes:
           Normal:
             unit_power_mw_mp: 4.34
+            idc: 0.0
+            ppc: 4.0
+            vdd: VDD_CAM
+            dvfs_group: CAM
+          tDMSC:
+            unit_power_mw_mp: 4.36
             idc: 0.0
             ppc: 4.0
             vdd: VDD_CAM
@@ -79,11 +91,23 @@ capabilities:
             ppc: 4.0
             vdd: VDD_CAM
             dvfs_group: CAM
+          tDMSC:
+            unit_power_mw_mp: 4.72
+            idc: 0.0
+            ppc: 4.0
+            vdd: VDD_CAM
+            dvfs_group: CAM
       rgbp:
         hw_name: RGBP
         modes:
           Normal:
             unit_power_mw_mp: 3.728
+            idc: 0.0
+            ppc: 4.0
+            vdd: VDD_CAM
+            dvfs_group: CAM
+          tDMSC:
+            unit_power_mw_mp: 4.72
             idc: 0.0
             ppc: 4.0
             vdd: VDD_CAM
@@ -97,11 +121,35 @@ capabilities:
             ppc: 4.0
             vdd: VDD_CAM
             dvfs_group: CAM
+          FHD:
+            unit_power_mw_mp: 0.403
+            idc: 0.0
+            ppc: 4.0
+            vdd: VDD_CAM
+            dvfs_group: CAM
+          8K:
+            unit_power_mw_mp: 0.331
+            idc: 0.0
+            ppc: 4.0
+            vdd: VDD_CAM
+            dvfs_group: CAM
       yuvsc:
         hw_name: YUVP
         modes:
           Normal:
             unit_power_mw_mp: 0.352
+            idc: 0.0
+            ppc: 4.0
+            vdd: VDD_CAM
+            dvfs_group: CAM
+          FHD:
+            unit_power_mw_mp: 0.403
+            idc: 0.0
+            ppc: 4.0
+            vdd: VDD_CAM
+            dvfs_group: CAM
+          8K:
+            unit_power_mw_mp: 0.331
             idc: 0.0
             ppc: 4.0
             vdd: VDD_CAM
@@ -151,11 +199,35 @@ capabilities:
             ppc: 4.0
             vdd: VDD_CAM
             dvfs_group: CAM
+          FHD:
+            unit_power_mw_mp: 0.403
+            idc: 0.0
+            ppc: 4.0
+            vdd: VDD_CAM
+            dvfs_group: CAM
+          8K:
+            unit_power_mw_mp: 0.331
+            idc: 0.0
+            ppc: 4.0
+            vdd: VDD_CAM
+            dvfs_group: CAM
       yuvp:
         hw_name: YUVP
         modes:
           Normal:
             unit_power_mw_mp: 0.352
+            idc: 0.0
+            ppc: 4.0
+            vdd: VDD_CAM
+            dvfs_group: CAM
+          FHD:
+            unit_power_mw_mp: 0.403
+            idc: 0.0
+            ppc: 4.0
+            vdd: VDD_CAM
+            dvfs_group: CAM
+          8K:
+            unit_power_mw_mp: 0.331
             idc: 0.0
             ppc: 4.0
             vdd: VDD_CAM
