@@ -163,6 +163,9 @@ class PortBWResult(BaseScenarioModel):
     hw_name: str
     port: str
     direction: Literal["read", "write", "otf"]
+    width: int | None = None
+    height: int | None = None
+    size_mp: float | None = None
     bw_mbs: float
     bw_mbs_best: float | None = None
     bw_mbs_worst: float | None = None

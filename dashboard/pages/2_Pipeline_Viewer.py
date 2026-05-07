@@ -312,9 +312,11 @@ def _fmt(value: float | None, suffix: str) -> str:
 
 with st.sidebar:
     st.markdown("### ScenarioDB Viewer")
+    query_params = st.query_params
+    query_api_base = query_params.get("api_base")
     api_base = st.text_input(
         "API Base",
-        value=os.environ.get("SCENARIODB_API_BASE", "http://127.0.0.1:18000/api/v1"),
+        value=query_api_base or os.environ.get("SCENARIODB_API_BASE", "http://127.0.0.1:18000/api/v1"),
     )
     if st.button("Refresh scenario list", use_container_width=True):
         _load_soc_options.clear()
@@ -324,7 +326,6 @@ with st.sidebar:
         _load_view.clear()
         st.rerun()
 
-    query_params = st.query_params
     query_soc_id = query_params.get("soc_id")
     query_project_id = query_params.get("project_id")
     query_scenario_id = query_params.get("scenario_id")

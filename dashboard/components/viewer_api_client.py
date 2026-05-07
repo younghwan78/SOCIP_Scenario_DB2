@@ -104,6 +104,22 @@ def list_variants(
     return [item for item in response.get("items") or [] if isinstance(item, dict)]
 
 
+def list_sw_profiles(
+    api_base: str,
+    request_func: RequestFunc | None = None,
+    *,
+    limit: int = 500,
+) -> list[dict[str, Any]]:
+    response = _request_json(
+        "GET",
+        api_base,
+        "/sw-profiles",
+        request_func=request_func,
+        params={"limit": limit, "sort_by": "id", "sort_dir": "asc"},
+    )
+    return [item for item in response.get("items") or [] if isinstance(item, dict)]
+
+
 def scenario_label(item: dict[str, Any]) -> str:
     scenario_id = str(item.get("id") or "")
     metadata = _metadata(item)
@@ -155,6 +171,25 @@ def variant_label(item: dict[str, Any]) -> str:
         if value is not None:
             chips.append(f"{key}={value}")
     return f"{variant_id} | {', '.join(chips)}" if chips else variant_id
+
+
+def sw_profile_label(item: dict[str, Any]) -> str:
+    profile_id = str(item.get("id") or "")
+    metadata = _metadata(item)
+    version = metadata.get("version")
+    family = metadata.get("baseline_family")
+    release_type = metadata.get("release_type")
+    compatible = metadata.get("compatible_soc")
+    chips = []
+    if version:
+        chips.append(f"v{version}")
+    if family:
+        chips.append(str(family))
+    if release_type:
+        chips.append(str(release_type))
+    if isinstance(compatible, list) and compatible:
+        chips.append(",".join(str(item) for item in compatible[:2]))
+    return f"{profile_id} | {', '.join(chips)}" if chips else profile_id
 
 
 def default_variant_id(variants: list[dict[str, Any]], previous: str | None = None) -> str:

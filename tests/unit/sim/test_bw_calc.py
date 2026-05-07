@@ -27,6 +27,9 @@ def test_calc_port_bw_dma_write_with_compression():
     )
 
     assert result.direction == "write"
+    assert result.width == 1920
+    assert result.height == 1080
+    assert result.size_mp == pytest.approx(2.0736)
     assert result.bw_mbs == pytest.approx(46.656)
     assert result.bw_mbs_best == pytest.approx(27.9936)
     assert result.bw_mbs_worst == pytest.approx(65.3184)
@@ -49,4 +52,3 @@ def test_calc_port_bw_otf_returns_zero():
     assert result.direction == "otf"
     assert result.bw_mbs == 0.0
     assert result.bw_power_mw == 0.0
-

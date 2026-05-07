@@ -28,6 +28,9 @@ def calc_port_bw(
             hw_name=spec.hw_name,
             port=spec.port,
             direction=direction,
+            width=spec.width,
+            height=spec.height,
+            size_mp=_size_mp(spec.width, spec.height),
             bw_mbs=0.0,
             bw_power_mw=0.0,
             bw_power_ma=0.0,
@@ -54,6 +57,9 @@ def calc_port_bw(
         hw_name=spec.hw_name,
         port=spec.port,
         direction=direction,
+        width=spec.width,
+        height=spec.height,
+        size_mp=_size_mp(spec.width, spec.height),
         bw_mbs=bw_mbs,
         bw_mbs_best=_optional_bw(spec, fps, bpp, spec.comp_ratio_min),
         bw_mbs_worst=_optional_bw(spec, fps, bpp, spec.comp_ratio_max),
@@ -96,10 +102,13 @@ def _optional_bw(
     return _bw_mbs(spec, fps=fps, bpp=bpp, comp_ratio=comp_ratio)
 
 
+def _size_mp(width: int, height: int) -> float:
+    return width * height / 1e6 if width > 0 and height > 0 else 0.0
+
+
 def _direction(port_type: PortType) -> str:
     if port_type == PortType.DMA_READ:
         return "read"
     if port_type == PortType.DMA_WRITE:
         return "write"
     return "otf"
-

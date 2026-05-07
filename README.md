@@ -2,13 +2,14 @@
 
 PostgreSQL-backed ScenarioDB prototype for Android SoC multimedia scenario review.
 
-The current implementation focuses on four flows:
+The current implementation focuses on these flows:
 
 - YAML fixture ETL into PostgreSQL.
 - Canonical scenario resolver and review gate engine.
 - FastAPI read endpoints for scenario, runtime, and viewer data.
 - Streamlit + ELK/SVG pipeline viewer with Level 0/1/2 projections.
 - Write API staging flow for variant overlays and base pipeline patches.
+- Scenario/variant simulation for BW, power, timing, and persisted evidence overlays.
 
 ## Repository Layout
 
@@ -26,6 +27,7 @@ The current implementation focuses on four flows:
 │   ├── models/               # Pydantic YAML models
 │   ├── resolver/             # Scenario resolution logic
 │   ├── review_gate/          # Review gate rules and issue matching
+│   ├── sim/                  # BW, power, DVFS, and timing simulation
 │   ├── view/                 # Viewer projection service
 │   └── write/                # Write staging, validation, diff, apply services
 └── tests/                    # Unit and integration tests
@@ -244,6 +246,82 @@ SoC, for example `ERD`, `SEP1`, and `SEP2`. Project metadata can carry
 `default_sw_profile_ref`. If a scenario has no variants, the Viewer loads the
 base scenario pipeline through `/api/v1/scenarios/{scenario_id}/view`.
 
+## Simulation Evidence Dashboard
+
+Start PostgreSQL, reload fixtures, run the API, and run the Streamlit dashboard
+as shown above. Then open:
+
+```text
+http://127.0.0.1:18502/Evidence_Dashboard
+```
+
+The Evidence Dashboard runs scenario/variant simulation and can persist the
+result as `evidence.simulation` rows in PostgreSQL. The simulation currently
+calculates:
+
+- IP power from `capabilities.sim.modes` unit power and PPC parameters.
+- DMA bandwidth and bandwidth power, including size, format, bitwidth,
+  compression, and LLC fields in the result table.
+- HW timing and optional SW/HW timeline events.
+- DVFS-selected clock/voltage breakdowns.
+
+The left sidebar selects the simulation context:
+
+```text
+SoC Platform -> Project / Board -> Scenario Category -> Scenario -> Variant
+```
+
+The run form provides selectable silicon revision, SW baseline, and thermal
+bucket. Thermal buckets are sent with an `ambient_temp_c` value:
+
+```text
+normal ~= 25C ambient
+hot    ~= 85C chamber
+cold   ~= -20C chamber
+```
+
+The DVFS Tables JSON field is prefilled with a default table shape. Domain keys
+should match IP `dvfs_group` values such as `CAM`, `CSIS`, `INTCAM`, and `INT`.
+
+Persisted results are shown in `Simulation Results`. `Open Pipeline Viewer
+Overlay` opens the Pipeline Viewer in a new browser tab and passes the selected
+SoC, project, scenario, variant, API base, and simulation evidence id as query
+parameters. The original Evidence Dashboard state remains in place.
+
+Simulation API examples:
+
+```powershell
+$api="http://127.0.0.1:18000/api/v1"
+
+$payload = @{
+  scenario_id = "uc-camera-recording"
+  variant_id = "cam-rec-f1-fhd30"
+  execution_context = @{
+    silicon_rev = "A0"
+    sw_baseline_ref = "sw-vendor-v1.2.3"
+    thermal = "normal"
+    ambient_temp_c = 25
+  }
+  config = @{
+    asv_group = 4
+    include_timeline = $true
+  }
+  dvfs_tables = @{}
+  persist = $true
+  force = $false
+} | ConvertTo-Json -Depth 20
+
+$run = Invoke-RestMethod -Method Post -Uri "$api/simulation/run" -ContentType "application/json" -Body $payload
+$run.evidence_id
+Invoke-RestMethod "$api/simulation/results/$($run.evidence_id)" | ConvertTo-Json -Depth 20
+```
+
+Simulation evidence is not an unbounded append log for identical inputs. The
+run request computes a `params_hash` and reuses a matching persisted result
+unless `force=true`. Distinct scenario/variant or simulation inputs create
+distinct evidence ids. Use `persist=false` for a temporary run that returns the
+calculated result without saving it to DB.
+
 ## Viewer Check
 
 Use the default scenario and variant:
@@ -290,6 +368,12 @@ Run Write API focused tests:
 
 ```powershell
 uv run --group dev pytest tests\unit\test_write_service.py tests\integration\test_write_api.py
+```
+
+Run simulation focused tests:
+
+```powershell
+uv run --group dev --group sim pytest tests\unit\sim tests\unit\api\test_simulation.py
 ```
 
 Run a core module coverage baseline without changing the default test gate:
