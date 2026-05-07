@@ -56,7 +56,7 @@ def roundtrip(model_cls, path: Path, **dump_kwargs):
 # ---------------------------------------------------------------------------
 
 def test_sim_evidence_roundtrip():
-    obj = roundtrip(SimulationEvidence, FIXTURES / "sim-camera-recording-UHD60-A0-sw123.yaml")
+    obj = roundtrip(SimulationEvidence, FIXTURES / "sim-camera-recording-UHD60-EVT0-sw123.yaml")
     assert obj.kind == "evidence.simulation"
     assert obj.scenario_ref == "uc-camera-recording"
     assert obj.variant_ref == "UHD60-HDR10-H265"
@@ -64,7 +64,7 @@ def test_sim_evidence_roundtrip():
 
 
 def test_meas_evidence_roundtrip():
-    obj = roundtrip(MeasurementEvidence, FIXTURES / "meas-camera-recording-UHD60-A0-sw123.yaml")
+    obj = roundtrip(MeasurementEvidence, FIXTURES / "meas-camera-recording-UHD60-EVT0-sw123.yaml")
     assert obj.kind == "evidence.measurement"
     assert obj.aggregation.strategy == "mean_with_ci_95"
 
@@ -76,7 +76,7 @@ def test_meas_evidence_roundtrip():
 def test_execution_context_sw_ref_is_document_id():
     """sw_baseline_ref must be a valid DocumentId (FK to sw_profiles)."""
     ctx = ExecutionContext.model_validate({
-        "silicon_rev": "A0",
+        "silicon_rev": "EVT0",
         "sw_baseline_ref": "sw-vendor-v1.2.3",
         "thermal": "hot",
     })
@@ -86,7 +86,7 @@ def test_execution_context_sw_ref_is_document_id():
 def test_execution_context_invalid_sw_ref():
     with pytest.raises(ValidationError):
         ExecutionContext.model_validate({
-            "silicon_rev": "A0",
+            "silicon_rev": "EVT0",
             "sw_baseline_ref": "vendor-v1.2.3",  # missing prefix
             "thermal": "hot",
         })
@@ -239,7 +239,7 @@ def test_measured_kpi_flat_number_stays_float():
         "scenario_ref": "uc-camera-recording",
         "variant_ref": "UHD60-HDR10-H265",
         "execution_context": {
-            "silicon_rev": "A0",
+            "silicon_rev": "EVT0",
             "sw_baseline_ref": "sw-vendor-v1.2.3",
             "thermal": "hot",
         },
@@ -260,7 +260,7 @@ def test_measured_kpi_stat_object_parsed_as_model():
         "scenario_ref": "uc-camera-recording",
         "variant_ref": "UHD60-HDR10-H265",
         "execution_context": {
-            "silicon_rev": "A0",
+            "silicon_rev": "EVT0",
             "sw_baseline_ref": "sw-vendor-v1.2.3",
             "thermal": "hot",
         },
@@ -285,7 +285,7 @@ def test_measured_kpi_mixed_flat_and_stat():
         "scenario_ref": "uc-camera-recording",
         "variant_ref": "UHD60-HDR10-H265",
         "execution_context": {
-            "silicon_rev": "A0",
+            "silicon_rev": "EVT0",
             "sw_baseline_ref": "sw-vendor-v1.2.3",
             "thermal": "hot",
         },
@@ -314,7 +314,7 @@ def test_sim_kpi_key_invalid_camelcase():
             "scenario_ref": "uc-camera-recording",
             "variant_ref": "UHD60-HDR10-H265",
             "execution_context": {
-                "silicon_rev": "A0",
+                "silicon_rev": "EVT0",
                 "sw_baseline_ref": "sw-vendor-v1.2.3",
                 "thermal": "hot",
             },
@@ -333,7 +333,7 @@ def test_meas_kpi_key_invalid_with_space():
             "scenario_ref": "uc-camera-recording",
             "variant_ref": "UHD60-HDR10-H265",
             "execution_context": {
-                "silicon_rev": "A0",
+                "silicon_rev": "EVT0",
                 "sw_baseline_ref": "sw-vendor-v1.2.3",
                 "thermal": "hot",
             },
@@ -359,7 +359,7 @@ def test_violation_action_imported_from_common():
 # ---------------------------------------------------------------------------
 
 def test_provenance_runtime_sw_state():
-    obj = roundtrip(MeasurementEvidence, FIXTURES / "meas-camera-recording-UHD60-A0-sw123.yaml")
+    obj = roundtrip(MeasurementEvidence, FIXTURES / "meas-camera-recording-UHD60-EVT0-sw123.yaml")
     fw = obj.provenance.runtime_sw_state.active_firmware
     assert fw["isp"] == "0x41"
     assert fw["dsp"] == "0x22"
@@ -372,14 +372,14 @@ def test_provenance_runtime_sw_state():
 # ---------------------------------------------------------------------------
 
 def test_extra_fields_forbidden_sim():
-    raw = load_yaml(FIXTURES / "sim-camera-recording-UHD60-A0-sw123.yaml")
+    raw = load_yaml(FIXTURES / "sim-camera-recording-UHD60-EVT0-sw123.yaml")
     raw["unknown_field"] = "oops"
     with pytest.raises(ValidationError):
         SimulationEvidence.model_validate(raw)
 
 
 def test_extra_fields_forbidden_meas():
-    raw = load_yaml(FIXTURES / "meas-camera-recording-UHD60-A0-sw123.yaml")
+    raw = load_yaml(FIXTURES / "meas-camera-recording-UHD60-EVT0-sw123.yaml")
     raw["ghost"] = True
     with pytest.raises(ValidationError):
         MeasurementEvidence.model_validate(raw)
@@ -390,7 +390,7 @@ def test_extra_fields_forbidden_meas():
 # ---------------------------------------------------------------------------
 
 def test_sim_resolution_result_structure():
-    obj = roundtrip(SimulationEvidence, FIXTURES / "sim-camera-recording-UHD60-A0-sw123.yaml")
+    obj = roundtrip(SimulationEvidence, FIXTURES / "sim-camera-recording-UHD60-EVT0-sw123.yaml")
     rr = obj.resolution_result
     assert rr.overall_feasibility == OverallFeasibility.production_ready
     assert rr.violation_summary.total == 0
@@ -402,7 +402,7 @@ def test_sim_resolution_result_structure():
 
 
 def test_sim_ip_breakdown():
-    obj = roundtrip(SimulationEvidence, FIXTURES / "sim-camera-recording-UHD60-A0-sw123.yaml")
+    obj = roundtrip(SimulationEvidence, FIXTURES / "sim-camera-recording-UHD60-EVT0-sw123.yaml")
     isp = next(b for b in obj.ip_breakdown if b.ip == "ip-isp-v12")
     assert isp.power_mW == 780
     subs = {s.sub: s.power_mW for s in isp.submodules}
@@ -418,7 +418,7 @@ def test_sim_evidence_accepts_timeline_events():
         "scenario_ref": "uc-camera-recording",
         "variant_ref": "UHD60-HDR10-H265",
         "execution_context": {
-            "silicon_rev": "A0",
+            "silicon_rev": "EVT0",
             "sw_baseline_ref": "sw-vendor-v1.2.3",
             "thermal": "hot",
         },

@@ -41,7 +41,7 @@ def _request(
         scenario_id="uc-camera-recording",
         variant_id="cam-rec-f1-fhd30",
         execution_context={
-            "silicon_rev": "A0",
+            "silicon_rev": "EVT0",
             "sw_baseline_ref": "sw-vendor-v1.2.3",
             "thermal": thermal,
             "ambient_temp_c": ambient_temp_c,

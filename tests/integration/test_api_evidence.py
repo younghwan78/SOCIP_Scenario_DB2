@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 pytestmark = pytest.mark.integration
 
-EVIDENCE_ID = "sim-uc-camera-recording-UHD60-HDR10-H265-A0-sw123-20260419"
+EVIDENCE_ID = "sim-uc-camera-recording-UHD60-HDR10-H265-EVT0-sw123-20260419"
 VARIANT_REF = "UHD60-HDR10-H265"
 SW_VERSION = "sw-vendor-v1.2.3"
 

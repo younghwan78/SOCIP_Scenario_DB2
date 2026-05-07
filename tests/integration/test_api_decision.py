@@ -7,7 +7,7 @@ from scenario_db.api.cache import RuleCache
 pytestmark = pytest.mark.integration
 
 ISSUE_ID = "iss-LLC-thrashing-0221"
-WAIVER_ID = "waiver-LLC-thrashing-UHD60-A0-20260417"
+WAIVER_ID = "waiver-LLC-thrashing-UHD60-EVT0-20260417"
 
 
 def test_cache_is_loaded(rule_cache: RuleCache):

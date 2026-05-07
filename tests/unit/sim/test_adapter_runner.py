@@ -49,7 +49,7 @@ def test_adapter_runner_builds_evidence_from_canonical_graph():
     evidence = build_simulation_evidence(
         result,
         execution_context=ExecutionContext(
-            silicon_rev="A0",
+            silicon_rev="EVT0",
             sw_baseline_ref="sw-vendor-v1.2.3",
             thermal="hot",
         ),
@@ -167,6 +167,38 @@ def test_adapter_warns_when_sim_params_default_to_zero():
     assert isp.sim_params.unit_power_mw_mp == 0.0
     assert any("isp0" in warning and "ppc=0" in warning for warning in inputs.warnings)
     assert any("isp0" in warning and "unit_power_mw_mp=0.0" in warning for warning in inputs.warnings)
+
+
+def test_adapter_excludes_external_sensor_and_panel_from_compute_workloads():
+    graph = _graph()
+    graph.scenario.pipeline["nodes"].extend(
+        [
+            {"id": "sensor_front", "ip_ref": "ip-sensor-front-s5e9965", "role": "sensor"},
+            {"id": "panel", "ip_ref": "ip-display-panel-s5e9965", "role": "panel"},
+        ]
+    )
+    graph.ip_catalog["ip-sensor-front-s5e9965"] = IpCatalog(
+        id="ip-sensor-front-s5e9965",
+        schema_version="2.2",
+        category="sensor",
+        hierarchy={},
+        capabilities={"sim": {"modes": {"Normal": {"ppc": 0, "unit_power_mw_mp": 0}}}},
+        yaml_sha256="sha",
+    )
+    graph.ip_catalog["ip-display-panel-s5e9965"] = IpCatalog(
+        id="ip-display-panel-s5e9965",
+        schema_version="2.2",
+        category="display",
+        hierarchy={},
+        capabilities={"sim": {"modes": {"Normal": {"ppc": 0, "unit_power_mw_mp": 0}}}},
+        yaml_sha256="sha",
+    )
+
+    inputs = build_simulation_inputs(graph, SimulationRunConfig(include_timeline=False))
+
+    assert {item.node_id for item in inputs.workloads} == {"isp0", "mfc"}
+    assert not any("sensor_front" in warning for warning in inputs.warnings)
+    assert not any("panel" in warning for warning in inputs.warnings)
 
 
 def _graph() -> CanonicalScenarioGraph:

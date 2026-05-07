@@ -272,7 +272,9 @@ SoC Platform -> Project / Board -> Scenario Category -> Scenario -> Variant
 ```
 
 The run form provides selectable silicon revision, SW baseline, and thermal
-bucket. Thermal buckets are sent with an `ambient_temp_c` value:
+bucket. Silicon revision defaults to the common bring-up labels `EVT0` and
+`EVT1`, and includes `EVT1.3` for Exynos2600 final silicon. Use `Custom` for
+other minor revisions. Thermal buckets are sent with an `ambient_temp_c` value:
 
 ```text
 normal ~= 25C ambient
@@ -299,7 +301,7 @@ $payload = @{
   scenario_id = "uc-camera-recording"
   variant_id = "cam-rec-f1-fhd30"
   execution_context = @{
-    silicon_rev = "A0"
+    silicon_rev = "EVT0"
     sw_baseline_ref = "sw-vendor-v1.2.3"
     thermal = "normal"
     ambient_temp_c = 25

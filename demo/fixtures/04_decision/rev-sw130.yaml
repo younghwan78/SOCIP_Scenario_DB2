@@ -1,4 +1,4 @@
-id: rev-camera-recording-UHD60-A0-sw130-20260419
+id: rev-camera-recording-UHD60-EVT1-sw130-20260419
 schema_version: "2.2"
 kind: decision.review
 
@@ -6,7 +6,7 @@ scenario_ref: uc-camera-recording
 variant_ref: UHD60-HDR10-H265
 
 evidence_refs:
-  - sim-uc-camera-recording-UHD60-HDR10-H265-A0-sw130-20260419
+  - sim-uc-camera-recording-UHD60-HDR10-H265-EVT1-sw130-20260419
 
 gate_result: PASS
 
@@ -48,7 +48,7 @@ review_scope:
     scenario_ref: uc-camera-recording
     variant_ref: UHD60-HDR10-H265
   execution_scope:
-    silicon_rev: A0
+    silicon_rev: EVT1
     sw_baseline_ref: sw-vendor-v1.3.0
     thermal:
       - hot

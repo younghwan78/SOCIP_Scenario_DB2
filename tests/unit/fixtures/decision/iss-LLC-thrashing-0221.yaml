@@ -47,5 +47,5 @@ resolution:
   fix_commit: abc1234
   fix_sw_ref: sw-vendor-v1.3.0
   fix_description: "LLC allocation policy: per-IP allocation with TNR 4MB minimum"
-  verified_in_evidence: sim-uc-camera-recording-UHD60-HDR10-H265-A0-sw123-20260419
+  verified_in_evidence: sim-uc-camera-recording-UHD60-HDR10-H265-EVT0-sw123-20260419
   fix_date: "2026-03-05"

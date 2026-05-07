@@ -43,7 +43,7 @@ THERMAL_PRESETS = {
     "cold": {"label": "cold (~-20C chamber)", "ambient_temp_c": -20.0, "note": "Cold-start validation condition."},
 }
 
-SILICON_REVS = ["A0", "A1", "B0", "B1", "C0"]
+SILICON_REVS = ["EVT0", "EVT1", "EVT1.3", "Custom"]
 
 DEFAULT_DVFS_TABLES = {
     "CSIS": {
@@ -506,6 +506,13 @@ def _safe_filename(value: str) -> str:
     return "".join(ch if ch.isalnum() or ch in ".-" else "_" for ch in value)[:160]
 
 
+def _default_silicon_rev() -> str:
+    soc_id = str(st.session_state.get("evidence_soc_id") or st.session_state.get("viewer_soc_id") or "").lower()
+    if "exynos2600" in soc_id:
+        return "EVT1.3"
+    return "EVT0"
+
+
 def _kpi(kpi: dict[str, Any], *keys: str) -> Any:
     for key in keys:
         if key in kpi:
@@ -582,7 +589,21 @@ run_col, result_col = st.columns([0.9, 1.6], gap="large")
 with run_col:
     st.subheader("Run Simulation")
     with st.form("run-simulation"):
-        silicon_rev = st.selectbox("Silicon Rev", SILICON_REVS, key="evidence_silicon_rev")
+        _ensure_choice("evidence_silicon_rev", SILICON_REVS, preferred=_default_silicon_rev())
+        silicon_rev_choice = st.selectbox(
+            "Silicon Rev",
+            SILICON_REVS,
+            key="evidence_silicon_rev",
+            help="Typical bring-up revisions are EVT0 and EVT1. Exynos2600 final is EVT1.3. Use Custom for other minor revisions.",
+        )
+        if silicon_rev_choice == "Custom":
+            silicon_rev = st.text_input(
+                "Custom Silicon Rev",
+                value=st.session_state.get("evidence_custom_silicon_rev", "EVT1.3"),
+                key="evidence_custom_silicon_rev",
+            )
+        else:
+            silicon_rev = silicon_rev_choice
         sw_profiles, sw_error = _load_sw_profile_options(api_base)
         if sw_profiles:
             sw_ids = [str(item.get("id")) for item in sw_profiles if item.get("id")]

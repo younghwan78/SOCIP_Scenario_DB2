@@ -29,6 +29,8 @@ through FastAPI and the Streamlit viewer/dashboard.
    - Use `node_configs.*.sim` for per-node port/workload simulation inputs.
    - Use `IpCatalog.capabilities.sim` for IP simulation parameters such as
      `hw_name`, `ppc`, `unit_power_mw_mp`, `vdd`, and `dvfs_group`.
+   - Treat sensor modules and display panels as external source/sink parts, not
+     SoC compute IP. They should not create PPC/clock/power workloads.
 
 4. Evidence persistence
    - Keep existing `kpi` and `ip_breakdown` fields.
@@ -67,6 +69,26 @@ This is enough to save SW-task-inclusive timing evidence in DB. Resource
 contention, M2M/OTF token queues, join policies, and multi-frame behavior can be
 added later without changing the persisted `timeline_events` shape.
 
+## Follow-Up Scope
+
+1. Sensor source timing metadata
+   - Keep sensor modules out of SoC power/performance workloads.
+   - Read sensor mode metadata such as `sensor_fps`, line length, pixel clock,
+     frame length, and calculated `v_valid_ms` when available.
+   - Use that metadata as a source timing constraint for CSIS/camera pipeline
+     timeline analysis, not as sensor core power or PPC timing.
+
+2. Display sink timing metadata
+   - Keep display panels out of SoC power/performance workloads.
+   - Use panel refresh/scanout timing as a sink constraint for DPU/display
+     timeline analysis when panel metadata is available.
+
+3. Timing evidence expansion
+   - Add source/sink constraint fields to `timeline_events` or a companion
+     evidence detail block only after the UI/API consumer shape is clear.
+   - Preserve the current `timeline_events` compatibility shape for existing
+     viewer overlays.
+
 ## Verification
 
 Use the project environment:
@@ -75,4 +97,3 @@ Use the project environment:
 uv sync --group dev --group sim
 uv run --group dev --group sim pytest tests\unit
 ```
-

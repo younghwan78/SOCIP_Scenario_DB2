@@ -40,7 +40,7 @@ def test_simulation_run_endpoint(monkeypatch):
             "scenario_id": "uc-camera-recording",
             "variant_id": "FHD30-SDR-H265",
             "execution_context": {
-                "silicon_rev": "A0",
+                "silicon_rev": "EVT0",
                 "sw_baseline_ref": "sw-vendor-v1.2.3",
                 "thermal": "hot",
             },

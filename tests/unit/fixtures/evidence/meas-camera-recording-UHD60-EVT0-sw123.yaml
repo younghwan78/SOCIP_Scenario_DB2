@@ -1,4 +1,4 @@
-id: meas-uc-camera-recording-UHD60-HDR10-H265-A0-sw123-20260419
+id: meas-uc-camera-recording-UHD60-HDR10-H265-EVT0-sw123-20260419
 schema_version: "2.2"
 kind: evidence.measurement
 
@@ -6,7 +6,7 @@ scenario_ref: uc-camera-recording
 variant_ref: UHD60-HDR10-H265
 
 execution_context:
-  silicon_rev: A0
+  silicon_rev: EVT0
   sw_baseline_ref: sw-vendor-v1.2.3
   thermal: hot
   ambient_temp_c: 35.0

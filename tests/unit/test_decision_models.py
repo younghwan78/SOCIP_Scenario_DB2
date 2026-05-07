@@ -58,14 +58,14 @@ def roundtrip(model_cls, path: Path, **dump_kwargs):
 # ---------------------------------------------------------------------------
 
 def test_review_roundtrip():
-    obj = roundtrip(Review, FIXTURES / "rev-camera-recording-UHD60-A0-20260417.yaml")
+    obj = roundtrip(Review, FIXTURES / "rev-camera-recording-UHD60-EVT0-20260417.yaml")
     assert obj.kind == "decision.review"
     assert obj.gate_result == GateResultStatus.WARN
     assert obj.decision == ReviewDecision.approved_with_waiver
 
 
 def test_waiver_roundtrip():
-    obj = roundtrip(Waiver, FIXTURES / "waiver-LLC-thrashing-UHD60-A0-20260417.yaml")
+    obj = roundtrip(Waiver, FIXTURES / "waiver-LLC-thrashing-UHD60-EVT0-20260417.yaml")
     assert obj.kind == "decision.waiver"
     assert obj.status == WaiverStatus.pending_auth
 
@@ -280,7 +280,7 @@ def test_issue_pmu_signature():
 # ---------------------------------------------------------------------------
 
 def test_auto_check_with_matched_issues():
-    obj = roundtrip(Review, FIXTURES / "rev-camera-recording-UHD60-A0-20260417.yaml")
+    obj = roundtrip(Review, FIXTURES / "rev-camera-recording-UHD60-EVT0-20260417.yaml")
     known_issue_check = next(
         c for c in obj.auto_checks if c.matched_issues
     )
@@ -288,8 +288,8 @@ def test_auto_check_with_matched_issues():
 
 
 def test_review_waiver_ref_document_id():
-    obj = roundtrip(Review, FIXTURES / "rev-camera-recording-UHD60-A0-20260417.yaml")
-    assert obj.waiver_ref == "waiver-LLC-thrashing-UHD60-A0-20260417"
+    obj = roundtrip(Review, FIXTURES / "rev-camera-recording-UHD60-EVT0-20260417.yaml")
+    assert obj.waiver_ref == "waiver-LLC-thrashing-UHD60-EVT0-20260417"
     # waiver- prefix는 DocumentId 패턴에 포함
     with pytest.raises(ValidationError):
         AutoCheck.model_validate({
@@ -331,14 +331,14 @@ def test_gate_condition_sugar_dict_typing():
 # ---------------------------------------------------------------------------
 
 def test_extra_fields_forbidden_review():
-    raw = load_yaml(FIXTURES / "rev-camera-recording-UHD60-A0-20260417.yaml")
+    raw = load_yaml(FIXTURES / "rev-camera-recording-UHD60-EVT0-20260417.yaml")
     raw["unknown_field"] = "oops"
     with pytest.raises(ValidationError):
         Review.model_validate(raw)
 
 
 def test_extra_fields_forbidden_waiver():
-    raw = load_yaml(FIXTURES / "waiver-LLC-thrashing-UHD60-A0-20260417.yaml")
+    raw = load_yaml(FIXTURES / "waiver-LLC-thrashing-UHD60-EVT0-20260417.yaml")
     raw["ghost"] = True
     with pytest.raises(ValidationError):
         Waiver.model_validate(raw)

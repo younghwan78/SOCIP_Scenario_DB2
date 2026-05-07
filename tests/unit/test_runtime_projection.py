@@ -44,9 +44,9 @@ def _graph() -> CanonicalScenarioGraph:
         },
     )
     evidence = SimpleNamespace(
-        id="sim-UHD60-A0-sw123",
+        id="sim-UHD60-EVT0-sw123",
         execution_context={
-            "silicon_rev": "A0",
+            "silicon_rev": "EVT0",
             "thermal": "hot",
             "power_state": "charging",
             "sw_baseline_ref": "sw-vendor-v1.2.3",
@@ -105,7 +105,7 @@ def _graph() -> CanonicalScenarioGraph:
             },
             "execution_scope": {
                 "all": [
-                    {"axis": "silicon_rev", "op": "eq", "value": "A0"},
+                    {"axis": "silicon_rev", "op": "eq", "value": "EVT0"},
                     {"axis": "thermal", "op": "eq", "value": "hot"},
                 ]
             },

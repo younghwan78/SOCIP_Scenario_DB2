@@ -33,6 +33,8 @@ def build_simulation_inputs(
         ip_row = graph.ip_catalog.get(str(ip_ref))
         if ip_row is None:
             continue
+        if _is_external_non_compute_node(node, ip_row):
+            continue
         node_config = (graph.variant.node_configs or {}).get(node_id) or {}
         sim_block = node_config.get("sim") or {}
         mode = str(sim_block.get("mode") or node_config.get("selected_mode") or "Normal")
@@ -83,6 +85,27 @@ def _fps(graph: CanonicalScenarioGraph, config: SimulationRunConfig) -> float:
         return float(config.fps)
     design = graph.variant.design_conditions or {}
     return float(design.get("fps") or 30.0)
+
+
+def _is_external_non_compute_node(node: dict[str, Any], ip_row: Any) -> bool:
+    """Return true for external source/sink parts that should not be DVFS workloads."""
+
+    category = str(getattr(ip_row, "category", "") or "").lower()
+    text = " ".join(
+        str(value or "").lower()
+        for value in (
+            node.get("id"),
+            node.get("role"),
+            node.get("node_type"),
+            node.get("label"),
+            getattr(ip_row, "id", ""),
+        )
+    )
+    if category == "sensor" or "sensor" in text:
+        return True
+    if category == "panel" or "panel" in text:
+        return True
+    return False
 
 
 def _sim_params(
