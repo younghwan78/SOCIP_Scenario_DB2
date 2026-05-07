@@ -36,6 +36,7 @@ class SupportedFeatures(BaseScenarioModel):
 class IpCapabilities(BaseScenarioModel):
     operating_modes: list[OperatingMode] = Field(default_factory=list)
     supported_features: SupportedFeatures | None = None
+    sim: dict[str, Any] = Field(default_factory=dict)
     properties: dict[str, Any] = Field(default_factory=dict)
 
 

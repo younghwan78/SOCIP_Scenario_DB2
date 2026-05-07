@@ -36,7 +36,15 @@ def build_simulation_inputs(
         node_config = (graph.variant.node_configs or {}).get(node_id) or {}
         sim_block = node_config.get("sim") or {}
         mode = str(sim_block.get("mode") or node_config.get("selected_mode") or "Normal")
-        sim_params = _sim_params(ip_row, sim_block, mode=mode, node_id=node_id, warnings=warnings)
+        role = str(node.get("role") or node_id)
+        sim_params = _sim_params(
+            ip_row,
+            sim_block,
+            mode=mode,
+            node_id=node_id,
+            role=role,
+            warnings=warnings,
+        )
         width, height = _workload_size(graph, node_id, sim_block)
         workloads.append(
             IPWorkload(
@@ -53,6 +61,9 @@ def build_simulation_inputs(
             )
         )
         transfers.extend(_port_transfers(node_id, str(ip_ref), sim_params.hw_name, sim_block))
+
+    if not transfers:
+        transfers.extend(_edge_port_transfers(graph, {item.node_id: item for item in workloads}))
 
     return SimulationInputs(
         scenario_id=graph.scenario_id,
@@ -80,6 +91,7 @@ def _sim_params(
     *,
     mode: str,
     node_id: str,
+    role: str,
     warnings: list[str],
 ) -> IPSimParams:
     capabilities = ip_row.capabilities or {}
@@ -89,9 +101,11 @@ def _sim_params(
         or {}
     )
     mode_params = _mode_sim_params(sim, mode)
+    role_params = _role_sim_params(sim, role)
+    role_mode_params = _mode_sim_params(role_params, mode)
     override_params = sim_block.get("ip_params") or {}
     override_mode_params = _mode_sim_params(override_params, mode)
-    merged = {**sim, **mode_params, **override_params, **override_mode_params}
+    merged = {**sim, **mode_params, **role_params, **role_mode_params, **override_params, **override_mode_params}
     hw_name = merged.get("hw_name") or merged.get("hw_name_in_sim") or _fallback_hw_name(ip_row.id)
     ppc = float(merged.get("ppc") or 0.0)
     unit_power = float(merged.get("unit_power_mw_mp") or 0.0)
@@ -123,6 +137,24 @@ def _mode_sim_params(sim: dict[str, Any], mode: str) -> dict[str, Any]:
     return modes.get(mode) or modes.get(str(mode)) or {}
 
 
+def _role_sim_params(sim: dict[str, Any], role: str) -> dict[str, Any]:
+    role_modes = sim.get("role_modes") or {}
+    if not isinstance(role_modes, dict):
+        return {}
+    candidates = [
+        role,
+        role.lower(),
+        role.upper(),
+        role.replace("_", "-").lower(),
+        role.replace("-", "_").lower(),
+    ]
+    for candidate in candidates:
+        params = role_modes.get(candidate)
+        if isinstance(params, dict):
+            return params
+    return {}
+
+
 def _workload_size(
     graph: CanonicalScenarioGraph,
     node_id: str,
@@ -148,7 +180,65 @@ def _workload_size(
     candidates = [item for item in candidates if item[0] and item[1]]
     if candidates:
         return max(candidates, key=lambda item: item[0] * item[1])
+    design_size = _design_size(graph)
+    if design_size != (0, 0):
+        return design_size
     return 0, 0
+
+
+def _edge_port_transfers(
+    graph: CanonicalScenarioGraph,
+    workloads: dict[str, IPWorkload],
+) -> list[PortTransferSpec]:
+    buffers = (graph.scenario.pipeline or {}).get("buffers") or {}
+    specs: list[PortTransferSpec] = []
+    for edge in graph.pipeline_edges:
+        if str(edge.get("type") or "").upper() != "M2M":
+            continue
+        source = str(_edge_source(edge) or "")
+        target = str(_edge_target(edge) or "")
+        buffer = buffers.get(edge.get("buffer")) if edge.get("buffer") else {}
+        width, height = _buffer_size(graph, buffer) if isinstance(buffer, dict) else (0, 0)
+        if width == 0 or height == 0:
+            width, height = _design_size(graph)
+        if width == 0 or height == 0:
+            continue
+        bitwidth = int(buffer.get("bitdepth") or 8) if isinstance(buffer, dict) else 8
+        compression = str(buffer.get("compression") or "disable") if isinstance(buffer, dict) else "disable"
+        fmt = buffer.get("format") if isinstance(buffer, dict) else None
+        if source in workloads:
+            workload = workloads[source]
+            specs.append(
+                PortTransferSpec(
+                    node_id=source,
+                    ip_ref=workload.ip_ref,
+                    hw_name=workload.hw_name,
+                    port=f"{edge.get('buffer') or target}_WDMA",
+                    port_type=PortType.DMA_WRITE,
+                    width=width,
+                    height=height,
+                    format=fmt,
+                    bitwidth=bitwidth,
+                    compression=compression,
+                )
+            )
+        if target in workloads:
+            workload = workloads[target]
+            specs.append(
+                PortTransferSpec(
+                    node_id=target,
+                    ip_ref=workload.ip_ref,
+                    hw_name=workload.hw_name,
+                    port=f"{edge.get('buffer') or source}_RDMA",
+                    port_type=PortType.DMA_READ,
+                    width=width,
+                    height=height,
+                    format=fmt,
+                    bitwidth=bitwidth,
+                    compression=compression,
+                )
+            )
+    return specs
 
 
 def _port_transfers(
@@ -252,6 +342,24 @@ def _buffer_size(graph: CanonicalScenarioGraph, buffer: dict[str, Any]) -> tuple
         left, right = size.lower().split("x", 1)
         return int(left), int(right)
     return 0, 0
+
+
+def _design_size(graph: CanonicalScenarioGraph) -> tuple[int, int]:
+    design = graph.variant.design_conditions or {}
+    for key in ("size", "resolution_size", "output_size"):
+        value = design.get(key)
+        if isinstance(value, str) and "x" in value.lower():
+            left, right = value.lower().split("x", 1)
+            return int(left), int(right)
+    value = design.get("resolution")
+    mapping = {
+        "FHD": (1920, 1080),
+        "QHD": (2560, 1440),
+        "UHD": (3840, 2160),
+        "4K": (3840, 2160),
+        "8K": (7680, 4320),
+    }
+    return mapping.get(str(value).upper(), (0, 0))
 
 
 def _fallback_hw_name(ip_ref: str) -> str:

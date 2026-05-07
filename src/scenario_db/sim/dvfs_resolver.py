@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 
+from scenario_db.sim.constants import REFERENCE_VOLTAGE_MV
 from scenario_db.sim.models import DVFSTable, IPWorkload, ResolvedIPConfig
 from scenario_db.sim.power_calc import calc_active_power_mw
 
@@ -79,6 +80,7 @@ class DvfsResolver:
                 continue
             table = self.dvfs_tables.get(config.dvfs_group)
             if table is None:
+                config.required_voltage_mv = REFERENCE_VOLTAGE_MV
                 continue
             level = table.find_min_level_for_speed(
                 config.required_clock_mhz,
@@ -179,4 +181,3 @@ def _group_by(
         if key:
             groups[str(key)].append(node_id)
     return groups
-

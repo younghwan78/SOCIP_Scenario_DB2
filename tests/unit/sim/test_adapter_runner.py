@@ -92,6 +92,70 @@ def test_adapter_uses_mode_specific_sim_params():
     assert inputs.warnings == []
 
 
+def test_adapter_uses_role_specific_sim_params():
+    graph = _graph()
+    graph.scenario.pipeline["nodes"][0]["role"] = "bayer_processing"
+    graph.ip_catalog["ip-isp-v12"].capabilities = {
+        "operating_modes": [],
+        "sim": {
+            "hw_name": "ISP",
+            "modes": {
+                "Normal": {"ppc": 0, "unit_power_mw_mp": 0},
+            },
+            "role_modes": {
+                "bayer_processing": {
+                    "hw_name": "BYRP",
+                    "modes": {
+                        "Normal": {
+                            "ppc": 4,
+                            "unit_power_mw_mp": 4.34,
+                            "vdd": "VDD_CAM",
+                            "dvfs_group": "CAM",
+                        }
+                    },
+                }
+            },
+        },
+    }
+
+    inputs = build_simulation_inputs(graph, SimulationRunConfig(include_timeline=False))
+    isp = next(item for item in inputs.workloads if item.node_id == "isp0")
+
+    assert isp.hw_name == "BYRP"
+    assert isp.sim_params.ppc == 4
+    assert isp.sim_params.unit_power_mw_mp == 4.34
+    assert inputs.warnings == []
+
+
+def test_runner_uses_reference_voltage_when_dvfs_table_is_missing():
+    graph = _graph()
+    inputs = build_simulation_inputs(graph, SimulationRunConfig(include_timeline=False))
+
+    result = run_simulation(inputs, dvfs_tables={})
+
+    assert result.core_power_mw > 0
+    assert result.resolved["isp0"].set_voltage_mv > 0
+
+
+def test_adapter_falls_back_to_variant_resolution_and_m2m_edges():
+    graph = _graph()
+    graph.scenario.size_profile = None
+    graph.variant.design_conditions = {"fps": 30, "resolution": "FHD"}
+    graph.variant.node_configs["isp0"]["sim"] = {}
+    graph.variant.node_configs["mfc"]["sim"] = {}
+
+    inputs = build_simulation_inputs(graph, SimulationRunConfig(include_timeline=False))
+
+    assert {item.node_id: (item.width, item.height) for item in inputs.workloads} == {
+        "isp0": (1920, 1080),
+        "mfc": (1920, 1080),
+    }
+    assert [(item.node_id, item.port_type) for item in inputs.port_transfers] == [
+        ("isp0", "DMA_WRITE"),
+        ("mfc", "DMA_READ"),
+    ]
+
+
 def test_adapter_warns_when_sim_params_default_to_zero():
     graph = _graph()
     graph.ip_catalog["ip-isp-v12"].capabilities = {"operating_modes": [], "sim": {"hw_name": "ISP"}}

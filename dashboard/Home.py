@@ -121,13 +121,14 @@ with col4:
         """
 <div class="home-card">
   <h3>Evidence Dashboard</h3>
-  <p>KPI comparison, feasibility charts, and SW regression analysis across variants.</p>
-  <span class="status-later">Deferred</span>
+  <p>Run BW, power, and timing simulation, persist evidence, and inspect per-IP breakdowns.</p>
+  <span class="status-ready">Available</span>
 </div>
 """,
         unsafe_allow_html=True,
     )
-    st.button("Evidence Dashboard", disabled=True, use_container_width=True)
+    if st.button("Open Evidence Dashboard", use_container_width=True):
+        st.switch_page("pages/4_Evidence_Dashboard.py")
 
 st.divider()
 st.caption("ScenarioDB v0.1.0 | Read API, Write API staging, import bundle, and viewer MVP")

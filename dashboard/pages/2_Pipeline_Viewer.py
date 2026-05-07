@@ -176,12 +176,18 @@ def _load_view(
     level: int,
     mode: str | None = None,
     expand: str | None = None,
+    sim_mode: str = "none",
+    sim_evidence_id: str | None = None,
 ) -> tuple[ViewResponse, str]:
     params: dict[str, object] = {"level": level}
     if mode:
         params["mode"] = mode
     if level == 2 and expand:
         params["expand"] = expand
+    if sim_evidence_id:
+        params["sim_evidence_id"] = sim_evidence_id
+    elif sim_mode == "latest":
+        params["sim"] = "latest"
     try:
         if variant_id:
             url = f"{base_url.rstrip('/')}/scenarios/{scenario_id}/variants/{variant_id}/view"
@@ -242,6 +248,20 @@ def _load_variant_options(base_url: str, scenario_id: str) -> tuple[list[dict], 
 
 def _render_detail_panel(view: ViewResponse) -> None:
     summary = view.summary
+    sim_nodes = [
+        node.data
+        for node in view.nodes
+        if node.data.sim_overlay is not None and node.data.type in {"ip", "submodule", "dma_group", "sysmmu"}
+    ][:6]
+    sim_rows = []
+    for data in sim_nodes:
+        overlay = data.sim_overlay
+        if overlay is None:
+            continue
+        sim_rows.append(
+            f"""<div class="ip-mini-row"><b>{escape(data.label.splitlines()[0])}</b>
+            <span>{_fmt(overlay.power_mw, 'mW')} · {_fmt(overlay.set_clock_mhz, 'MHz')} · {_fmt(overlay.hw_time_ms, 'ms')}</span></div>"""
+        )
     risks = "".join(
         f"""<div class="detail-risk"><b>{escape(risk.severity)}</b> {escape(risk.title)}<br>
         <span>{escape(risk.component)} · {escape(risk.impact)}</span></div>"""
@@ -277,9 +297,17 @@ def _render_detail_panel(view: ViewResponse) -> None:
   {risks}
   <h4>IP Summary</h4>
   {''.join(ip_rows) if ip_rows else '<p>No IP nodes in current view.</p>'}
+  <h4>Simulation Overlay</h4>
+  {''.join(sim_rows) if sim_rows else '<p>No simulation overlay loaded.</p>'}
 </div>
 """
     st.markdown(html, unsafe_allow_html=True)
+
+
+def _fmt(value: float | None, suffix: str) -> str:
+    if value is None:
+        return "-"
+    return f"{value:g}{suffix}"
 
 
 with st.sidebar:
@@ -401,15 +429,73 @@ with st.sidebar:
     expand_label = st.selectbox("Expand IP (Level 2)", list(expand_options.keys()), index=0)
     expand_id = expand_options[expand_label]
 
+    st.divider()
+    st.markdown("**Simulation Overlay**")
+    query_sim = query_params.get("sim")
+    query_sim_evidence_id = query_params.get("sim_evidence_id")
+    previous_sim_mode = st.session_state.get("viewer_sim_mode") or ("specific" if query_sim_evidence_id else query_sim or "none")
+    sim_options = {
+        "none": "None",
+        "latest": "Latest Evidence",
+        "specific": "Specific Evidence ID",
+    }
+    sim_mode = st.selectbox(
+        "Overlay Source",
+        list(sim_options.keys()),
+        index=list(sim_options.keys()).index(previous_sim_mode) if previous_sim_mode in sim_options else 0,
+        format_func=lambda value: sim_options[value],
+    )
+    st.session_state["viewer_sim_mode"] = sim_mode
+    sim_evidence_id = ""
+    if sim_mode == "specific":
+        sim_evidence_id = st.text_input(
+            "Simulation Evidence ID",
+            value=query_sim_evidence_id or st.session_state.get("viewer_sim_evidence_id", ""),
+        )
+        st.session_state["viewer_sim_evidence_id"] = sim_evidence_id
+
+overlay_evidence_id = sim_evidence_id if sim_mode == "specific" and sim_evidence_id else None
+
 if level == 0:
-    arch_view, arch_source = _load_view(api_base, scenario_id_input, variant_id_input, 0, "architecture")
-    topo_view, topo_source = _load_view(api_base, scenario_id_input, variant_id_input, 0, "topology")
+    arch_view, arch_source = _load_view(
+        api_base,
+        scenario_id_input,
+        variant_id_input,
+        0,
+        "architecture",
+        sim_mode=sim_mode,
+        sim_evidence_id=overlay_evidence_id,
+    )
+    topo_view, topo_source = _load_view(
+        api_base,
+        scenario_id_input,
+        variant_id_input,
+        0,
+        "topology",
+        sim_mode=sim_mode,
+        sim_evidence_id=overlay_evidence_id,
+    )
     primary = arch_view
 elif level == 1:
-    primary, arch_source = _load_view(api_base, scenario_id_input, variant_id_input, 1)
+    primary, arch_source = _load_view(
+        api_base,
+        scenario_id_input,
+        variant_id_input,
+        1,
+        sim_mode=sim_mode,
+        sim_evidence_id=overlay_evidence_id,
+    )
     topo_view, topo_source = primary, arch_source
 else:
-    primary, arch_source = _load_view(api_base, scenario_id_input, variant_id_input, 2, expand=expand_id)
+    primary, arch_source = _load_view(
+        api_base,
+        scenario_id_input,
+        variant_id_input,
+        2,
+        expand=expand_id,
+        sim_mode=sim_mode,
+        sim_evidence_id=overlay_evidence_id,
+    )
     topo_view, topo_source = primary, arch_source
 
 s = primary.summary
@@ -438,6 +524,8 @@ with st.sidebar:
     st.caption(f"Variant: {primary.variant_id}")
     st.caption(f"Nodes: {len(primary.nodes)} | Edges: {len(primary.edges)}")
     st.caption(f"Risks: {len(primary.risks)}")
+    if "simulation" in primary.overlays_available:
+        st.caption("Overlay: simulation")
 
 main_col, detail_col = st.columns([5.6, 0.95], gap="small")
 

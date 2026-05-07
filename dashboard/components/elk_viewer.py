@@ -700,8 +700,20 @@ def _node_meta(node: NodeElement) -> dict[str, Any]:
         placement = data.placement
         mb = f"{placement.llc_allocation_mb:g}MB " if placement.llc_allocation_mb else ""
         details.append(f"LLC: {mb}{placement.llc_policy}")
+    if data.sim_overlay:
+        overlay = data.sim_overlay
+        sim_bits = [
+            _format_number(overlay.power_mw, "mW"),
+            _format_number(overlay.set_clock_mhz, "MHz"),
+            _format_number(overlay.set_voltage_mv, "mV"),
+            _format_number(overlay.hw_time_ms, "ms"),
+        ]
+        details.append("Simulation: " + " / ".join(bit for bit in sim_bits if bit))
+        if not subtitle:
+            subtitle = " / ".join(bit for bit in sim_bits[:2] if bit)
     if data.type == "buffer" and not subtitle:
         subtitle = _fallback_buffer_subtitle(data.detail_items, data.ip_ref)
+    warning = data.warning or bool(data.sim_overlay and not data.sim_overlay.feasible)
     return {
         "id": data.id,
         "label": data.label,
@@ -713,7 +725,7 @@ def _node_meta(node: NodeElement) -> dict[str, Any]:
         "badges": data.summary_badges[:4],
         "subtitle": subtitle,
         "details": details,
-        "warning": data.warning,
+        "warning": warning,
         "severity": data.severity,
     }
 
@@ -726,6 +738,12 @@ def _format_size_bytes(size_bytes: int | None) -> str | None:
     if size_bytes >= 1024:
         return f"{size_bytes / 1024:.1f}KiB"
     return f"{size_bytes}B"
+
+
+def _format_number(value: float | None, suffix: str) -> str | None:
+    if value is None:
+        return None
+    return f"{value:g}{suffix}"
 
 
 def _fallback_buffer_subtitle(detail_items: list[str], ip_ref: str | None) -> str:
@@ -750,10 +768,18 @@ def _edge_meta(edge: EdgeElement) -> dict[str, Any]:
         details.append("Memory: " + " / ".join(str(bit) for bit in bits if bit))
     if data.placement and data.placement.llc_allocated:
         details.append(f"LLC: {data.placement.llc_policy}")
+    if data.sim_overlay:
+        overlay = data.sim_overlay
+        sim_bits = [
+            _format_number(overlay.bw_mbs, "MB/s"),
+            _format_number(overlay.bw_power_mw, "mW"),
+            _format_number(overlay.bw_mbs_worst, "MB/s worst"),
+        ]
+        details.append("Simulation: " + " / ".join(bit for bit in sim_bits if bit))
     edge_role = _edge_role(edge)
     return {
         "id": data.id,
-        "label": data.label or data.flow_type,
+        "label": data.label or _sim_edge_label(data) or data.flow_type,
         "type": "edge",
         "flow_type": data.flow_type,
         "edge_role": edge_role,
@@ -761,6 +787,12 @@ def _edge_meta(edge: EdgeElement) -> dict[str, Any]:
         "dash": data.flow_type in {"control", "risk", "M2M"},
         "details": details,
     }
+
+
+def _sim_edge_label(data: Any) -> str | None:
+    if not data.sim_overlay or data.sim_overlay.bw_mbs is None:
+        return None
+    return f"{data.flow_type} {data.sim_overlay.bw_mbs:g} MB/s"
 
 
 def _edge_role(edge: EdgeElement) -> str:

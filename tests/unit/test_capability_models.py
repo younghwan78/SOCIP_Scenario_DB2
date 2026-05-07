@@ -212,6 +212,13 @@ def test_display_catalog_properties_roundtrip():
     assert obj.capabilities.properties["refresh_rates"] == [60, 120]
 
 
+def test_demo_ip_catalog_sim_modes_roundtrip():
+    obj = roundtrip(IpCatalog, DEMO_FIXTURES / "00_hw" / "ip-csis-v8.yaml")
+    assert obj.capabilities.sim["hw_name"] == "CSIS"
+    assert obj.capabilities.sim["modes"]["Normal"]["unit_power_mw_mp"] == 0.21
+    assert obj.capabilities.sim["modes"]["Normal"]["ppc"] == 8.0
+
+
 def test_ip_supported_features_accept_crop_scale_rotate():
     raw = load_yaml(FIXTURES / "hw" / "ip-isp-v12.yaml")
     raw["capabilities"]["supported_features"]["crop"] = True

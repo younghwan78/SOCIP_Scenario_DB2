@@ -31,3 +31,15 @@ capabilities:
     bitdepth: [8, 10, 12]
     hdr_formats: [HDR10, HDR10plus, DolbyVision]
     compression: [SBWC_v4, AFBC_v2]
+  sim:
+    hw_name: ISP
+    source: legacy_project_info_csv
+    source_project: A
+    source_note: projectA_info.csv has BYRP/RGBP/YUVP/MLSC/MCSC rows, but no aggregate ISP row.
+    modes:
+      Normal:
+        unit_power_mw_mp: 0.0
+        idc: 0.0
+        ppc: 0.0
+        vdd: VDD_CAM
+        dvfs_group: CAM

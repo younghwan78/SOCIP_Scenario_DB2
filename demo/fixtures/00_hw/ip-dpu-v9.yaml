@@ -20,3 +20,14 @@ capabilities:
     bitdepth: [8, 10]
     hdr_formats: [HDR10, HDR10plus, DolbyVision]
     compression: [AFBC_v2, SBWC_v4]
+  sim:
+    hw_name: DPU
+    source: legacy_project_info_csv
+    source_project: A
+    modes:
+      Normal:
+        unit_power_mw_mp: 1.0
+        idc: 0.0
+        ppc: 4.0
+        vdd: VDD_INT
+        dvfs_group: INT

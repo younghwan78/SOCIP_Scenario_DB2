@@ -12,6 +12,172 @@ capabilities:
   - id: Capture_MF
   - id: Remosaic
   - id: HighSpeed
+  sim:
+    hw_name: ISP
+    source: legacy_project_info_csv
+    source_project: A
+    source_note: Role-level mapping from projectA_info.csv camera IP rows.
+    modes:
+      Normal:
+        unit_power_mw_mp: 0.0
+        idc: 0.0
+        ppc: 0.0
+        vdd: VDD_CAM
+        dvfs_group: CAM
+    role_modes:
+      csispdp:
+        hw_name: PDP
+        modes:
+          Normal:
+            unit_power_mw_mp: 0.17
+            idc: 0.0
+            ppc: 8.0
+            vdd: VDD_CAM
+            dvfs_group: CSIS
+      3aa_stats:
+        hw_name: CSTAT
+        modes:
+          Normal:
+            unit_power_mw_mp: 2.17
+            idc: 0.0
+            ppc: 8.0
+            vdd: VDD_CAM
+            dvfs_group: CSIS
+      stats_3aa:
+        hw_name: CSTAT
+        modes:
+          Normal:
+            unit_power_mw_mp: 2.17
+            idc: 0.0
+            ppc: 8.0
+            vdd: VDD_CAM
+            dvfs_group: CSIS
+      bayer_processing:
+        hw_name: BYRP
+        modes:
+          Normal:
+            unit_power_mw_mp: 4.34
+            idc: 0.0
+            ppc: 4.0
+            vdd: VDD_CAM
+            dvfs_group: CAM
+      byrp:
+        hw_name: BYRP
+        modes:
+          Normal:
+            unit_power_mw_mp: 4.34
+            idc: 0.0
+            ppc: 4.0
+            vdd: VDD_CAM
+            dvfs_group: CAM
+      rgb_processing:
+        hw_name: RGBP
+        modes:
+          Normal:
+            unit_power_mw_mp: 3.728
+            idc: 0.0
+            ppc: 4.0
+            vdd: VDD_CAM
+            dvfs_group: CAM
+      rgbp:
+        hw_name: RGBP
+        modes:
+          Normal:
+            unit_power_mw_mp: 3.728
+            idc: 0.0
+            ppc: 4.0
+            vdd: VDD_CAM
+            dvfs_group: CAM
+      yuv_scaler:
+        hw_name: YUVP
+        modes:
+          Normal:
+            unit_power_mw_mp: 0.352
+            idc: 0.0
+            ppc: 4.0
+            vdd: VDD_CAM
+            dvfs_group: CAM
+      yuvsc:
+        hw_name: YUVP
+        modes:
+          Normal:
+            unit_power_mw_mp: 0.352
+            idc: 0.0
+            ppc: 4.0
+            vdd: VDD_CAM
+            dvfs_group: CAM
+      temporal_nr:
+        hw_name: MTNR0
+        modes:
+          Normal:
+            unit_power_mw_mp: 1.0
+            idc: 0.0
+            ppc: 4.0
+            vdd: VDD_INTCAM
+            dvfs_group: INTCAM
+      mtnr:
+        hw_name: MTNR0
+        modes:
+          Normal:
+            unit_power_mw_mp: 1.0
+            idc: 0.0
+            ppc: 4.0
+            vdd: VDD_INTCAM
+            dvfs_group: INTCAM
+      spatial_nr:
+        hw_name: MSNR
+        modes:
+          Normal:
+            unit_power_mw_mp: 1.0
+            idc: 0.0
+            ppc: 4.0
+            vdd: VDD_INTCAM
+            dvfs_group: INTCAM
+      msnr:
+        hw_name: MSNR
+        modes:
+          Normal:
+            unit_power_mw_mp: 1.0
+            idc: 0.0
+            ppc: 4.0
+            vdd: VDD_INTCAM
+            dvfs_group: INTCAM
+      yuv_post:
+        hw_name: YUVP
+        modes:
+          Normal:
+            unit_power_mw_mp: 0.352
+            idc: 0.0
+            ppc: 4.0
+            vdd: VDD_CAM
+            dvfs_group: CAM
+      yuvp:
+        hw_name: YUVP
+        modes:
+          Normal:
+            unit_power_mw_mp: 0.352
+            idc: 0.0
+            ppc: 4.0
+            vdd: VDD_CAM
+            dvfs_group: CAM
+      gdc_preview:
+        hw_name: MCSC
+        modes:
+          Normal:
+            unit_power_mw_mp: 1.5
+            idc: 0.0
+            ppc: 4.0
+            vdd: VDD_CAM
+            dvfs_group: CAM
+      gdc_video:
+        hw_name: MCSC
+        modes:
+          Normal:
+            unit_power_mw_mp: 1.5
+            idc: 0.0
+            ppc: 4.0
+            vdd: VDD_CAM
+            dvfs_group: CAM
   supported_features:
     bitdepth:
     - 8
