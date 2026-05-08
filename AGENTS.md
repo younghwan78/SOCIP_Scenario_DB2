@@ -29,7 +29,7 @@ Primary goal:
 ## Useful Commands
 
 ```powershell
-$env:DATABASE_URL="postgresql+psycopg2://scenario_user:scenario_pass@localhost:5432/scenario_db"
+$env:DATABASE_URL="postgresql+psycopg2://scenario_user:scenario_pass@localhost:15432/scenario_db"
 uv sync --group dev --group dashboard
 uv run alembic upgrade head
 uv run python -m scenario_db.etl.loader demo\fixtures

@@ -347,7 +347,7 @@ Checklist:
 
 ```powershell
 cd E:\50_Codex_Soc_Scenario_DB\implementation
-$env:DATABASE_URL="postgresql+psycopg2://scenario_user:scenario_pass@localhost:5432/scenario_db"
+$env:DATABASE_URL="postgresql+psycopg2://scenario_user:scenario_pass@localhost:15432/scenario_db"
 uv run uvicorn scenario_db.api.app:app --host 127.0.0.1 --port 18000
 ```
 

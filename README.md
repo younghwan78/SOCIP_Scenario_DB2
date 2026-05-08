@@ -70,7 +70,7 @@ docker compose up -d
 Set the database URL for the current PowerShell session:
 
 ```powershell
-$env:DATABASE_URL="postgresql+psycopg2://scenario_user:scenario_pass@localhost:5432/scenario_db"
+$env:DATABASE_URL="postgresql+psycopg2://scenario_user:scenario_pass@localhost:15432/scenario_db"
 ```
 
 Apply migrations:
@@ -92,7 +92,7 @@ Reload fixtures after changing YAML. The API reads from PostgreSQL, not directly
 The FastAPI ASGI entry point is `scenario_db.api.app:app`.
 
 ```powershell
-$env:DATABASE_URL="postgresql+psycopg2://scenario_user:scenario_pass@localhost:5432/scenario_db"
+$env:DATABASE_URL="postgresql+psycopg2://scenario_user:scenario_pass@localhost:15432/scenario_db"
 uv run uvicorn scenario_db.api.app:app --host 127.0.0.1 --port 18000
 ```
 

@@ -79,7 +79,7 @@ Windows 개발 환경:
 
 ```powershell
 cd E:\50_Codex_Soc_Scenario_DB\implementation
-$env:DATABASE_URL="postgresql+psycopg2://scenario_user:scenario_pass@localhost:5432/scenario_db"
+$env:DATABASE_URL="postgresql+psycopg2://scenario_user:scenario_pass@localhost:15432/scenario_db"
 uv run alembic upgrade head
 uv run python -m scenario_db.etl.loader generated\scenariodb
 ```
