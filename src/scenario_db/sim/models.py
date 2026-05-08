@@ -120,6 +120,8 @@ class SimulationRunConfig(BaseScenarioModel):
     h_blank_margin: float = 0.05
     dvfs_overrides: dict[str, int] = Field(default_factory=dict)
     include_timeline: bool = True
+    timeline_frame_count: int = 1
+    timeline_frame_period_ms: float | None = None
 
 
 class SimulationInputs(BaseScenarioModel):
@@ -195,9 +197,16 @@ class TimelineEvent(BaseScenarioModel):
     node_id: str | None = None
     hw_name: str | None = None
     task_type: Literal["hw", "sw"] = "hw"
+    frame_index: int | None = None
+    resource_id: str | None = None
     start_ms: float
     end_ms: float
     duration_ms: float
+    ready_ms: float | None = None
+    resource_wait_ms: float = 0.0
+    token_wait_ms: float = 0.0
+    critical: bool = False
+    critical_path_rank: int | None = None
     predecessors: list[str] = Field(default_factory=list)
 
 

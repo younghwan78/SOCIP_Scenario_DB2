@@ -430,9 +430,16 @@ def test_sim_evidence_accepts_timeline_events():
                 "node_id": "codec2",
                 "hw_name": "CPU",
                 "task_type": "sw",
+                "frame_index": 0,
+                "resource_id": "cpu-mid",
                 "start_ms": 2.0,
                 "end_ms": 6.0,
                 "duration_ms": 4.0,
+                "ready_ms": 1.5,
+                "resource_wait_ms": 0.5,
+                "token_wait_ms": 0.0,
+                "critical": True,
+                "critical_path_rank": 1,
                 "predecessors": ["t_isp"],
             }
         ],
@@ -441,4 +448,6 @@ def test_sim_evidence_accepts_timeline_events():
 
     assert isinstance(obj.timeline_events[0], TimelineEvent)
     assert obj.timeline_events[0].task_type == "sw"
+    assert obj.timeline_events[0].resource_id == "cpu-mid"
+    assert obj.timeline_events[0].critical is True
     assert obj.params_hash == "abc123"

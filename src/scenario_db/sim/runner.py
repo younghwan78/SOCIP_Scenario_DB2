@@ -69,7 +69,13 @@ def run_simulation(
     timeline_events = []
     if config.include_timeline and inputs.timeline_tasks:
         timeline_tasks = _with_calculated_durations(inputs.timeline_tasks, timing_breakdown)
-        timeline_events = build_timeline_events(timeline_tasks, inputs.timeline_edges)
+        timeline_events = build_timeline_events(
+            timeline_tasks,
+            inputs.timeline_edges,
+            frame_count=config.timeline_frame_count,
+            frame_period_ms=config.timeline_frame_period_ms
+            or (1000.0 / config.fps if config.fps and config.fps > 0 else None),
+        )
 
     core_power_mw = sum(item.total_power_mw for item in resolved.values())
     bw_power_mw = sum(item.bw_power_mw for item in dma_breakdown)
@@ -119,6 +125,7 @@ def build_simulation_evidence(
         if result.feasible
         else OverallFeasibility.infeasible
     )
+    critical_events = [event for event in result.timeline_events if event.critical]
     return SimulationEvidence(
         id=evidence_id or _evidence_id(result, params_hash),
         schema_version="2.2",
@@ -149,6 +156,8 @@ def build_simulation_evidence(
             "total_bw_mbs": result.bw_total_mbs,
             "hw_time_max_ms": result.hw_time_max_ms,
             "timeline_end_ms": result.timeline_end_ms or 0.0,
+            "critical_path_ms": max((event.end_ms for event in critical_events), default=0.0),
+            "critical_path_task_count": len(critical_events),
         },
         ip_breakdown=[
             IpBreakdown(

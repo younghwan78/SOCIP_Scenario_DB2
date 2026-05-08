@@ -65,9 +65,21 @@ The first NetworkX+SimPy implementation is intentionally small:
   `task_id`, `node_id`, `hw_name`, `task_type`, `start_ms`, `end_ms`,
   `duration_ms`, `predecessors`
 
-This is enough to save SW-task-inclusive timing evidence in DB. Resource
-contention, M2M/OTF token queues, join policies, and multi-frame behavior can be
-added later without changing the persisted `timeline_events` shape.
+The current implementation keeps that base shape and adds optional timing
+details:
+
+- `frame_index`
+- `resource_id`
+- `ready_ms`
+- `resource_wait_ms`
+- `token_wait_ms`
+- `critical`
+- `critical_path_rank`
+
+Resource contention, M2M/OTF token transfer delay, multi-frame release timing,
+and critical-path marking are modeled without removing existing
+`timeline_events` fields. Evidence KPI also records `critical_path_ms` and
+`critical_path_task_count`.
 
 ## Follow-Up Scope
 

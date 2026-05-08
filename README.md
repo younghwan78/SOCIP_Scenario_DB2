@@ -262,7 +262,9 @@ calculates:
 - IP power from `capabilities.sim.modes` unit power and PPC parameters.
 - DMA bandwidth and bandwidth power, including size, format, bitwidth,
   compression, and LLC fields in the result table.
-- HW timing and optional SW/HW timeline events.
+- HW timing and optional SW/HW timeline events, including resource wait,
+  M2M/OTF token delay, multi-frame timing, and critical-path markers when
+  timeline inputs provide those constraints.
 - DVFS-selected clock/voltage breakdowns.
 
 The left sidebar selects the simulation context:

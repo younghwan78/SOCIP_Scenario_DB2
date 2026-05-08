@@ -63,6 +63,8 @@ def test_adapter_runner_builds_evidence_from_canonical_graph():
     assert result.timeline_events[-1].task_id == "mfc"
     assert evidence.kind == "evidence.simulation"
     assert evidence.params_hash == hash_value
+    assert evidence.kpi["critical_path_ms"] > 0
+    assert evidence.kpi["critical_path_task_count"] >= 1
     assert {item.port for item in evidence.dma_breakdown} == {"RDMA_FE", "WDMA_BE", "MFC_RDMA"}
     assert evidence.timeline_events[-1].end_ms > 0
 
