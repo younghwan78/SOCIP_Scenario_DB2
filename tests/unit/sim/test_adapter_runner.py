@@ -203,6 +203,60 @@ def test_adapter_excludes_external_sensor_and_panel_from_compute_workloads():
     assert not any("panel" in warning for warning in inputs.warnings)
 
 
+def test_adapter_adds_sensor_source_and_panel_sink_timing_constraints():
+    graph = _graph()
+    graph.variant.design_conditions["fps"] = 60
+    graph.scenario.pipeline["task_graph"] = {
+        "nodes": [
+            {"id": "t_sensor", "label": "Sensor", "layer": "hw"},
+            {"id": "t_csis", "label": "CSIS", "layer": "hw", "ip_ref": "ip-csis-v8"},
+            {"id": "t_dpu", "label": "DPU", "layer": "hw", "ip_ref": "ip-dpu-v9"},
+        ],
+        "edges": [
+            {"from": "t_sensor", "to": "t_csis", "type": "OTF"},
+            {"from": "t_csis", "to": "t_dpu", "type": "M2M"},
+        ],
+    }
+    graph.ip_catalog["ip-sensor-front-s5e9965"] = IpCatalog(
+        id="ip-sensor-front-s5e9965",
+        schema_version="2.2",
+        category="sensor",
+        hierarchy={},
+        capabilities={
+            "properties": {
+                "modes": {
+                    "mode0": {
+                        "sensor_fps": 60.0,
+                        "sensor_size": [4000, 2252],
+                        "sensor_pclk": 1_760_000_000,
+                        "sensor_line_length_pck": 6440,
+                    }
+                }
+            }
+        },
+        yaml_sha256="sha",
+    )
+    graph.ip_catalog["ip-display-panel-s5e9965"] = IpCatalog(
+        id="ip-display-panel-s5e9965",
+        schema_version="2.2",
+        category="display",
+        hierarchy={},
+        capabilities={"properties": {"refresh_rates": [60, 120]}},
+        yaml_sha256="sha",
+    )
+
+    inputs = build_simulation_inputs(graph, SimulationRunConfig(include_timeline=True))
+    by_task = {task["id"]: task for task in inputs.timeline_tasks}
+
+    assert by_task["t_sensor"]["constraint_type"] == "source"
+    assert by_task["t_sensor"]["source_fps"] == 60.0
+    assert by_task["t_sensor"]["v_valid_ms"] == pytest.approx(8.240273)
+    assert by_task["t_sensor"]["duration_ms"] == pytest.approx(8.240273)
+    assert by_task["t_dpu"]["constraint_type"] == "sink"
+    assert by_task["t_dpu"]["refresh_hz"] == 60.0
+    assert by_task["t_dpu"]["deadline_ms"] == pytest.approx(16.666667)
+
+
 def _graph() -> CanonicalScenarioGraph:
     scenario = Scenario(
         id="uc-camera-recording",

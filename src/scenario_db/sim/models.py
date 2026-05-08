@@ -199,9 +199,16 @@ class TimelineEvent(BaseScenarioModel):
     task_type: Literal["hw", "sw"] = "hw"
     frame_index: int | None = None
     resource_id: str | None = None
+    constraint_type: Literal["source", "sink"] | None = None
+    source_fps: float | None = None
+    v_valid_ms: float | None = None
+    refresh_hz: float | None = None
+    scanout_ms: float | None = None
     start_ms: float
     end_ms: float
     duration_ms: float
+    deadline_ms: float | None = None
+    slack_ms: float | None = None
     ready_ms: float | None = None
     resource_wait_ms: float = 0.0
     token_wait_ms: float = 0.0

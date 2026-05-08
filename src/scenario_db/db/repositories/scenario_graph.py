@@ -130,6 +130,15 @@ def _load_graph_with_variant(
         for node in effective_nodes
         if node.get("ip_ref")
     }
+    if project is not None:
+        metadata = project.metadata_ or {}
+        for key in ("sensor_module_ref", "display_module_ref"):
+            if metadata.get(key):
+                ip_refs.add(metadata[key])
+    if soc is not None:
+        for item in soc.ips or []:
+            if getattr(item, "ref", None):
+                ip_refs.add(item.ref)
     ip_catalog = {
         row.id: row
         for row in db.query(IpCatalog).filter(IpCatalog.id.in_(ip_refs)).all()

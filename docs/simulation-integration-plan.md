@@ -75,13 +75,20 @@ details:
 - `token_wait_ms`
 - `critical`
 - `critical_path_rank`
+- `constraint_type`
+- `source_fps`
+- `v_valid_ms`
+- `refresh_hz`
+- `scanout_ms`
+- `deadline_ms`
+- `slack_ms`
 
 Resource contention, M2M/OTF token transfer delay, multi-frame release timing,
 and critical-path marking are modeled without removing existing
 `timeline_events` fields. Evidence KPI also records `critical_path_ms` and
 `critical_path_task_count`.
 
-## Follow-Up Scope
+## Source/Sink Timing Scope
 
 1. Sensor source timing metadata
    - Keep sensor modules out of SoC power/performance workloads.
@@ -89,16 +96,23 @@ and critical-path marking are modeled without removing existing
      frame length, and calculated `v_valid_ms` when available.
    - Use that metadata as a source timing constraint for CSIS/camera pipeline
      timeline analysis, not as sensor core power or PPC timing.
+   - Current implementation injects `constraint_type=source`, `source_fps`,
+     `release_period_ms`, and `v_valid_ms` into sensor timeline tasks. If
+     `v_valid_ms` is missing, it is calculated from `sensor_size`,
+     `sensor_pclk`, and `sensor_line_length_pck` when possible.
 
 2. Display sink timing metadata
    - Keep display panels out of SoC power/performance workloads.
    - Use panel refresh/scanout timing as a sink constraint for DPU/display
      timeline analysis when panel metadata is available.
+   - Current implementation injects `constraint_type=sink`, `refresh_hz`,
+     `scanout_ms`, `deadline_ms`, and calculated `slack_ms` into display sink
+     timeline tasks.
 
-3. Timing evidence expansion
-   - Add source/sink constraint fields to `timeline_events` or a companion
-     evidence detail block only after the UI/API consumer shape is clear.
-   - Preserve the current `timeline_events` compatibility shape for existing
+3. Remaining viewer work
+   - Render source valid windows, sink deadlines, and slack in the Pipeline
+     Viewer overlay.
+   - Keep the current `timeline_events` compatibility shape for existing
      viewer overlays.
 
 ## Verification

@@ -18,6 +18,8 @@ class _TaskRun:
     ready_ms: float = 0.0
     start_ms: float = 0.0
     end_ms: float = 0.0
+    deadline_ms: float | None = None
+    slack_ms: float | None = None
     resource_wait_ms: float = 0.0
     token_wait_ms: float = 0.0
     resource_id: str | None = None
@@ -42,6 +44,9 @@ def build_timeline_events(
       - duration_ms
       - resource or resource_id
       - resource_capacity
+      - release_period_ms
+      - source_valid_ms or v_valid_ms
+      - deadline_ms
 
     Edge dicts accept:
       - from/source
@@ -122,7 +127,7 @@ def build_timeline_events(
 
         run.ready_ms = float(env.now)
         run.token_wait_ms = token_wait
-        duration = float(run.task.get("duration_ms") or 0.0)
+        duration = _task_duration(run.task)
         resource_id = _task_resource_id(run.task)
         run.resource_id = resource_id
         if resource_id:
@@ -136,6 +141,10 @@ def build_timeline_events(
             run.start_ms = float(env.now)
             yield env.timeout(duration)
         run.end_ms = float(env.now)
+        relative_deadline = _task_deadline(run.task)
+        if relative_deadline is not None:
+            run.deadline_ms = run.release_ms + relative_deadline
+            run.slack_ms = run.deadline_ms - run.end_ms
 
     for instance_id in list(nx.topological_sort(graph)):
         processes[instance_id] = env.process(run_task(instance_id))
@@ -165,8 +174,9 @@ def _expand_task_runs(
 ) -> dict[str, _TaskRun]:
     runs: dict[str, _TaskRun] = {}
     for frame_index in range(frame_count):
-        release_ms = frame_index * frame_period_ms
         for task_id, task in tasks.items():
+            release_period = float(task.get("release_period_ms") or frame_period_ms)
+            release_ms = frame_index * release_period
             instance_id = _instance_id(task_id, frame_index, frame_count)
             runs[instance_id] = _TaskRun(
                 instance_id=instance_id,
@@ -250,9 +260,16 @@ def _timeline_events(runs: dict[str, _TaskRun], graph) -> list[TimelineEvent]:
                 task_type=task.get("task_type") or "hw",
                 frame_index=run.frame_index,
                 resource_id=run.resource_id,
+                constraint_type=task.get("constraint_type"),
+                source_fps=task.get("source_fps"),
+                v_valid_ms=task.get("v_valid_ms") or task.get("source_valid_ms"),
+                refresh_hz=task.get("refresh_hz"),
+                scanout_ms=task.get("scanout_ms"),
                 start_ms=run.start_ms,
                 end_ms=run.end_ms,
                 duration_ms=run.end_ms - run.start_ms,
+                deadline_ms=run.deadline_ms,
+                slack_ms=run.slack_ms,
                 ready_ms=run.ready_ms,
                 resource_wait_ms=run.resource_wait_ms,
                 token_wait_ms=run.token_wait_ms,
@@ -282,6 +299,22 @@ def _task_resource_id(task: dict[str, Any]) -> str | None:
 
 def _task_resource_capacity(task: dict[str, Any]) -> int:
     return int(task.get("resource_capacity") or task.get("capacity") or 1)
+
+
+def _task_duration(task: dict[str, Any]) -> float:
+    duration = task.get("duration_ms")
+    if duration is None or float(duration or 0.0) <= 0.0:
+        duration = task.get("source_valid_ms") or task.get("v_valid_ms")
+    return float(duration or 0.0)
+
+
+def _task_deadline(task: dict[str, Any]) -> float | None:
+    value = task.get("deadline_ms")
+    if value is None:
+        value = task.get("sink_deadline_ms")
+    if value is None:
+        return None
+    return float(value)
 
 
 def _edge_token_resource(edge: dict[str, Any]) -> str | None:

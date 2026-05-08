@@ -265,6 +265,9 @@ calculates:
 - HW timing and optional SW/HW timeline events, including resource wait,
   M2M/OTF token delay, multi-frame timing, and critical-path markers when
   timeline inputs provide those constraints.
+- Sensor source timing from `sensor_fps` and `v_valid_ms`, plus display sink
+  timing from panel refresh/scanout metadata when sensor/panel catalog entries
+  are available.
 - DVFS-selected clock/voltage breakdowns.
 
 The left sidebar selects the simulation context:

@@ -325,7 +325,7 @@ def _timeline_tasks(graph: CanonicalScenarioGraph) -> list[dict]:
     task_graph = (graph.scenario.pipeline or {}).get("task_graph") or {}
     nodes = task_graph.get("nodes") or []
     if nodes:
-        return [
+        tasks = [
             {
                 "id": str(node.get("id")),
                 "node_id": node.get("id"),
@@ -336,7 +336,8 @@ def _timeline_tasks(graph: CanonicalScenarioGraph) -> list[dict]:
             for node in nodes
             if node.get("id")
         ]
-    return [
+        return _apply_source_sink_constraints(graph, tasks, nodes)
+    tasks = [
         {
             "id": str(node.get("id")),
             "node_id": node.get("id"),
@@ -347,11 +348,171 @@ def _timeline_tasks(graph: CanonicalScenarioGraph) -> list[dict]:
         for node in graph.pipeline_nodes
         if node.get("id")
     ]
+    return _apply_source_sink_constraints(graph, tasks, graph.pipeline_nodes)
 
 
 def _timeline_edges(graph: CanonicalScenarioGraph) -> list[dict]:
     task_graph = (graph.scenario.pipeline or {}).get("task_graph") or {}
     return list(task_graph.get("edges") or graph.pipeline_edges)
+
+
+def _apply_source_sink_constraints(
+    graph: CanonicalScenarioGraph,
+    tasks: list[dict[str, Any]],
+    source_nodes: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    sensor_mode = _selected_sensor_mode(graph)
+    panel = _selected_panel_properties(graph)
+    node_by_id = {str(node.get("id")): node for node in source_nodes if node.get("id")}
+    result: list[dict[str, Any]] = []
+    for task in tasks:
+        updated = dict(task)
+        node = node_by_id.get(str(task.get("id"))) or {}
+        if sensor_mode and _is_sensor_timeline_task(task, node):
+            _apply_sensor_constraint(updated, sensor_mode)
+        if panel and _is_display_sink_task(task, node):
+            _apply_panel_constraint(updated, panel, graph)
+        result.append(updated)
+    return result
+
+
+def _selected_sensor_mode(graph: CanonicalScenarioGraph) -> dict[str, Any] | None:
+    candidates = [
+        row
+        for row in graph.ip_catalog.values()
+        if str(getattr(row, "category", "") or "").lower() == "sensor"
+    ]
+    if not candidates:
+        return None
+    design = graph.variant.design_conditions or {}
+    selected_mode = design.get("sensor_mode") or design.get("sensor_mode_ref") or design.get("sensor")
+    for row in candidates:
+        properties = _capability_properties(row)
+        modes = properties.get("modes") if isinstance(properties.get("modes"), dict) else {}
+        if selected_mode and selected_mode in modes:
+            return dict(modes[selected_mode])
+        if modes:
+            preferred = _mode_by_fps(modes, _variant_fps(graph))
+            return dict(preferred or next(iter(modes.values())))
+    return None
+
+
+def _selected_panel_properties(graph: CanonicalScenarioGraph) -> dict[str, Any] | None:
+    for row in graph.ip_catalog.values():
+        category = str(getattr(row, "category", "") or "").lower()
+        properties = _capability_properties(row)
+        if "refresh_rates" in properties or "refresh_rate" in properties or "panel" in str(getattr(row, "id", "")).lower():
+            if category in {"display", "panel"}:
+                return dict(properties)
+    return None
+
+
+def _apply_sensor_constraint(task: dict[str, Any], sensor_mode: dict[str, Any]) -> None:
+    sensor_fps = _float_or_none(sensor_mode.get("sensor_fps"))
+    v_valid_ms = _float_or_none(sensor_mode.get("v_valid_ms")) or _calc_v_valid_ms(sensor_mode)
+    task["constraint_type"] = "source"
+    if sensor_fps and sensor_fps > 0:
+        task["source_fps"] = sensor_fps
+        task["release_period_ms"] = 1000.0 / sensor_fps
+    if v_valid_ms and v_valid_ms > 0:
+        task["v_valid_ms"] = v_valid_ms
+        task["source_valid_ms"] = v_valid_ms
+        if not float(task.get("duration_ms") or 0.0):
+            task["duration_ms"] = v_valid_ms
+
+
+def _apply_panel_constraint(task: dict[str, Any], panel: dict[str, Any], graph: CanonicalScenarioGraph) -> None:
+    refresh_hz = _selected_refresh_hz(panel, _variant_fps(graph))
+    if not refresh_hz or refresh_hz <= 0:
+        return
+    scanout_ms = 1000.0 / refresh_hz
+    task["constraint_type"] = "sink"
+    task["refresh_hz"] = refresh_hz
+    task["scanout_ms"] = scanout_ms
+    task["deadline_ms"] = scanout_ms
+
+
+def _is_sensor_timeline_task(task: dict[str, Any], node: dict[str, Any]) -> bool:
+    text = _task_node_text(task, node)
+    return "sensor" in text
+
+
+def _is_display_sink_task(task: dict[str, Any], node: dict[str, Any]) -> bool:
+    text = _task_node_text(task, node)
+    return "panel" in text or "dpu" in text or "display" in text
+
+
+def _task_node_text(task: dict[str, Any], node: dict[str, Any]) -> str:
+    return " ".join(
+        str(value or "").lower()
+        for value in (
+            task.get("id"),
+            task.get("node_id"),
+            task.get("hw_name"),
+            node.get("id"),
+            node.get("role"),
+            node.get("label"),
+            node.get("ip_ref"),
+        )
+    )
+
+
+def _capability_properties(ip_row: Any) -> dict[str, Any]:
+    capabilities = ip_row.capabilities or {}
+    properties = capabilities.get("properties") if isinstance(capabilities, dict) else None
+    return properties if isinstance(properties, dict) else {}
+
+
+def _mode_by_fps(modes: dict[str, Any], fps: float) -> dict[str, Any] | None:
+    best: tuple[float, dict[str, Any]] | None = None
+    for mode in modes.values():
+        if not isinstance(mode, dict):
+            continue
+        sensor_fps = _float_or_none(mode.get("sensor_fps"))
+        if sensor_fps is None:
+            continue
+        score = abs(sensor_fps - fps)
+        if best is None or score < best[0]:
+            best = (score, mode)
+    return best[1] if best else None
+
+
+def _selected_refresh_hz(panel: dict[str, Any], fps: float) -> float | None:
+    raw = panel.get("refresh_rates") or panel.get("refresh_rate")
+    rates = raw if isinstance(raw, list) else [raw]
+    values = sorted(value for value in (_float_or_none(item) for item in rates) if value and value > 0)
+    if not values:
+        return None
+    for value in values:
+        if value >= fps:
+            return value
+    return values[-1]
+
+
+def _calc_v_valid_ms(mode: dict[str, Any]) -> float | None:
+    size = mode.get("sensor_size")
+    pclk = _float_or_none(mode.get("sensor_pclk"))
+    line_length = _float_or_none(mode.get("sensor_line_length_pck"))
+    if not isinstance(size, list) or len(size) < 2 or not pclk or not line_length:
+        return None
+    height = _float_or_none(size[1])
+    if not height:
+        return None
+    return round(line_length * 1000.0 / pclk * height, 6)
+
+
+def _float_or_none(value: Any) -> float | None:
+    try:
+        if value is None or value == "":
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _variant_fps(graph: CanonicalScenarioGraph) -> float:
+    design = graph.variant.design_conditions or {}
+    return float(design.get("fps") or 30.0)
 
 
 def _buffer_size(graph: CanonicalScenarioGraph, buffer: dict[str, Any]) -> tuple[int, int]:

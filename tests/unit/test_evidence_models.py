@@ -432,9 +432,16 @@ def test_sim_evidence_accepts_timeline_events():
                 "task_type": "sw",
                 "frame_index": 0,
                 "resource_id": "cpu-mid",
+                "constraint_type": "source",
+                "source_fps": 60.0,
+                "v_valid_ms": 8.2,
+                "refresh_hz": 60.0,
+                "scanout_ms": 16.666667,
                 "start_ms": 2.0,
                 "end_ms": 6.0,
                 "duration_ms": 4.0,
+                "deadline_ms": 16.666667,
+                "slack_ms": 10.666667,
                 "ready_ms": 1.5,
                 "resource_wait_ms": 0.5,
                 "token_wait_ms": 0.0,
@@ -449,5 +456,7 @@ def test_sim_evidence_accepts_timeline_events():
     assert isinstance(obj.timeline_events[0], TimelineEvent)
     assert obj.timeline_events[0].task_type == "sw"
     assert obj.timeline_events[0].resource_id == "cpu-mid"
+    assert obj.timeline_events[0].source_fps == 60.0
+    assert obj.timeline_events[0].deadline_ms == 16.666667
     assert obj.timeline_events[0].critical is True
     assert obj.params_hash == "abc123"

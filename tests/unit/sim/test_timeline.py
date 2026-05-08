@@ -107,6 +107,56 @@ def test_timeline_expands_multiple_frames_with_release_period():
     assert by_task["mfc#f1"].start_ms == 14.0
 
 
+def test_timeline_applies_source_release_period_and_valid_window():
+    events = build_timeline_events(
+        tasks=[
+            {
+                "id": "sensor",
+                "hw_name": "Sensor",
+                "task_type": "hw",
+                "duration_ms": 0.0,
+                "constraint_type": "source",
+                "source_fps": 60.0,
+                "v_valid_ms": 8.2,
+                "source_valid_ms": 8.2,
+                "release_period_ms": 16.666667,
+            }
+        ],
+        edges=[],
+        frame_count=2,
+        frame_period_ms=33.333333,
+    )
+
+    by_task = {event.task_id: event for event in events}
+    assert by_task["sensor#f0"].constraint_type == "source"
+    assert by_task["sensor#f0"].duration_ms == 8.2
+    assert by_task["sensor#f0"].v_valid_ms == 8.2
+    assert by_task["sensor#f1"].start_ms == pytest.approx(16.666667)
+
+
+def test_timeline_calculates_sink_deadline_slack():
+    events = build_timeline_events(
+        tasks=[
+            {
+                "id": "dpu",
+                "hw_name": "DPU",
+                "task_type": "hw",
+                "duration_ms": 12.0,
+                "constraint_type": "sink",
+                "refresh_hz": 60.0,
+                "scanout_ms": 16.666667,
+                "deadline_ms": 16.666667,
+            }
+        ],
+        edges=[],
+    )
+
+    event = events[0]
+    assert event.constraint_type == "sink"
+    assert event.deadline_ms == pytest.approx(16.666667)
+    assert event.slack_ms == pytest.approx(4.666667)
+
+
 def test_timeline_marks_critical_path():
     events = build_timeline_events(
         tasks=[
