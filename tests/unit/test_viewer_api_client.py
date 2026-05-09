@@ -4,6 +4,10 @@ import pytest
 
 from dashboard.components.viewer_api_client import (
     ViewerApiError,
+    compact_project_label,
+    compact_scenario_label,
+    compact_soc_label,
+    compact_variant_label,
     default_variant_id,
     list_projects,
     list_scenarios,
@@ -101,5 +105,19 @@ def test_viewer_labels_and_default_variant_are_readable():
     ) == "proj-thetis-erd | Thetis ERD | soc=soc-exynos2600 | board=ERD | internal-dev"
     assert scenario_label(scenario) == "uc-demo-import-recording | Demo Recording | project=proj-demo-import"
     assert variant_label(variant) == "UHD60-HDR10-H265 | resolution=UHD, fps=60, codec=H.265, dynamic_range=HDR10"
+    assert compact_soc_label({"id": "soc-exynos2600", "process_node": "3nm"}) == "Exynos2600"
+    assert compact_project_label(
+        {
+            "id": "proj-thetis-erd",
+            "metadata_": {
+                "name": "Thetis ERD",
+                "soc_ref": "soc-exynos2600",
+                "board_type": "ERD",
+                "board_name": "internal-dev",
+            },
+        }
+    ) == "ERD"
+    assert compact_scenario_label(scenario) == "Demo Recording"
+    assert compact_variant_label(variant) == "UHD60-HDR10-H265"
     assert default_variant_id(variants, "UHD60-HDR10-H265") == "UHD60-HDR10-H265"
     assert default_variant_id([], "missing") == ""

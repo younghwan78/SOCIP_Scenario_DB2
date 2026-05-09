@@ -34,17 +34,17 @@ from dashboard.components.evidence_dashboard_contract import (
 )
 from dashboard.components.viewer_api_client import (
     ViewerApiError,
+    compact_project_label,
+    compact_scenario_label,
+    compact_soc_label,
+    compact_variant_label,
     default_variant_id,
     list_projects,
     list_scenarios,
     list_soc_platforms,
     list_sw_profiles,
     list_variants,
-    project_label,
-    scenario_label,
-    soc_label,
     sw_profile_label,
-    variant_label,
 )
 
 THERMAL_PRESETS = {
@@ -225,7 +225,7 @@ def _select_context(api_base: str) -> tuple[str, str]:
             soc_ids,
             key="evidence_soc_id",
             on_change=_clear_context_after_soc,
-            format_func=lambda value: soc_label(next((item for item in socs if item.get("id") == value), {"id": value})),
+            format_func=lambda value: compact_soc_label(next((item for item in socs if item.get("id") == value), {"id": value})),
         )
         soc_id = st.session_state["evidence_soc_id"]
     else:
@@ -243,7 +243,7 @@ def _select_context(api_base: str) -> tuple[str, str]:
             project_ids,
             key="evidence_project_id",
             on_change=_clear_context_after_project,
-            format_func=lambda value: project_label(
+            format_func=lambda value: compact_project_label(
                 next((item for item in projects if item.get("id") == value), {"id": value})
             ),
         )
@@ -263,12 +263,14 @@ def _select_context(api_base: str) -> tuple[str, str]:
         st.stop()
     categories = _scenario_categories(scenarios)
     _ensure_choice("evidence_scenario_category", categories, preferred=st.session_state.get("evidence_scenario_category", "all"))
-    st.selectbox(
+    st.pills(
         "Scenario Category",
         categories,
+        selection_mode="single",
         key="evidence_scenario_category",
         on_change=_clear_context_after_category,
-        format_func=lambda value: "All categories" if value == "all" else value,
+        format_func=_category_label,
+        width="stretch",
     )
     filtered_scenarios = _filter_scenarios_by_category(scenarios, st.session_state["evidence_scenario_category"])
 
@@ -279,7 +281,7 @@ def _select_context(api_base: str) -> tuple[str, str]:
         scenario_ids,
         key="evidence_scenario_id",
         on_change=_clear_context_after_scenario,
-        format_func=lambda value: scenario_label(next((item for item in filtered_scenarios if item.get("id") == value), {"id": value})),
+        format_func=lambda value: compact_scenario_label(next((item for item in filtered_scenarios if item.get("id") == value), {"id": value})),
     )
     scenario_id = st.session_state["evidence_scenario_id"]
     st.session_state["viewer_scenario_id"] = scenario_id
@@ -299,7 +301,7 @@ def _select_context(api_base: str) -> tuple[str, str]:
         variant_ids,
         key="evidence_variant_id",
         on_change=_clear_context_after_variant,
-        format_func=lambda value: variant_label(next((item for item in variants if item.get("id") == value), {"id": value})),
+        format_func=lambda value: compact_variant_label(next((item for item in variants if item.get("id") == value), {"id": value})),
     )
     variant_id = st.session_state["evidence_variant_id"]
     st.session_state["viewer_variant_id"] = variant_id
@@ -352,6 +354,12 @@ def _scenario_categories(scenarios: list[dict[str, Any]]) -> list[str]:
             elif value:
                 categories.add(str(value))
     return ["all", *sorted(category for category in categories if category != "all")]
+
+
+def _category_label(category: str) -> str:
+    if category == "all":
+        return "All"
+    return category.replace("_", " ").title()
 
 
 def _filter_scenarios_by_category(scenarios: list[dict[str, Any]], category: str) -> list[dict[str, Any]]:

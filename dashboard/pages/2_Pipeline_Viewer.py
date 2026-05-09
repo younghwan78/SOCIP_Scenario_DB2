@@ -21,15 +21,15 @@ for path in (_root / "src", _root, _root / "dashboard"):
 from dashboard.components.elk_viewer import render_elk_view
 from dashboard.components.viewer_api_client import (
     ViewerApiError,
+    compact_project_label,
+    compact_scenario_label,
+    compact_soc_label,
+    compact_variant_label,
     default_variant_id,
     list_projects,
     list_scenarios,
     list_soc_platforms,
     list_variants,
-    project_label,
-    scenario_label,
-    soc_label,
-    variant_label,
 )
 from scenario_db.api.schemas.view import ViewResponse
 from scenario_db.view.service import build_sample_level0
@@ -340,7 +340,7 @@ with st.sidebar:
             "SoC Platform",
             soc_ids,
             index=soc_index,
-            format_func=lambda soc_id: soc_label(
+            format_func=lambda soc_id: compact_soc_label(
                 next((item for item in socs if item.get("id") == soc_id), {"id": soc_id})
             ),
         )
@@ -360,7 +360,7 @@ with st.sidebar:
             "Project / Board",
             project_ids,
             index=project_index,
-            format_func=lambda project_id: project_label(
+            format_func=lambda project_id: compact_project_label(
                 next((item for item in projects if item.get("id") == project_id), {"id": project_id})
             ),
         )
@@ -380,7 +380,7 @@ with st.sidebar:
             "Scenario",
             scenario_ids,
             index=scenario_index,
-            format_func=lambda scenario_id: scenario_label(
+            format_func=lambda scenario_id: compact_scenario_label(
                 next((item for item in scenarios if item.get("id") == scenario_id), {"id": scenario_id})
             ),
         )
@@ -404,7 +404,7 @@ with st.sidebar:
             "Variant",
             variant_ids,
             index=variant_index,
-            format_func=lambda variant_id: variant_label(
+            format_func=lambda variant_id: compact_variant_label(
                 next((item for item in variants if item.get("id") == variant_id), {"id": variant_id})
             ),
         )

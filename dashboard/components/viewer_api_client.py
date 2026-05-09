@@ -133,6 +133,14 @@ def scenario_label(item: dict[str, Any]) -> str:
     return " | ".join(parts)
 
 
+def compact_scenario_label(item: dict[str, Any]) -> str:
+    metadata = _metadata(item)
+    name = metadata.get("name")
+    if name:
+        return _compact_text(str(name), 32)
+    return _compact_text(_title_from_id(str(item.get("id") or ""), prefixes=("uc-",)), 32)
+
+
 def soc_label(item: dict[str, Any]) -> str:
     soc_id = str(item.get("id") or "")
     chips = []
@@ -141,6 +149,10 @@ def soc_label(item: dict[str, Any]) -> str:
         if value:
             chips.append(str(value))
     return f"{soc_id} | {', '.join(chips)}" if chips else soc_id
+
+
+def compact_soc_label(item: dict[str, Any]) -> str:
+    return _compact_text(_title_from_id(str(item.get("id") or ""), prefixes=("soc-",)), 24)
 
 
 def project_label(item: dict[str, Any]) -> str:
@@ -162,6 +174,16 @@ def project_label(item: dict[str, Any]) -> str:
     return f"{project_id} | {' | '.join(chips)}" if chips else project_id
 
 
+def compact_project_label(item: dict[str, Any]) -> str:
+    project_id = str(item.get("id") or "")
+    metadata = _metadata(item)
+    for key in ("board_type", "board_name", "name"):
+        value = metadata.get(key)
+        if value:
+            return _compact_text(str(value), 28)
+    return _compact_text(_title_from_id(project_id, prefixes=("proj-",)), 28)
+
+
 def variant_label(item: dict[str, Any]) -> str:
     variant_id = str(item.get("id") or "")
     design = item.get("design_conditions") if isinstance(item.get("design_conditions"), dict) else {}
@@ -171,6 +193,10 @@ def variant_label(item: dict[str, Any]) -> str:
         if value is not None:
             chips.append(f"{key}={value}")
     return f"{variant_id} | {', '.join(chips)}" if chips else variant_id
+
+
+def compact_variant_label(item: dict[str, Any]) -> str:
+    return _compact_text(str(item.get("id") or ""), 32)
 
 
 def sw_profile_label(item: dict[str, Any]) -> str:
@@ -204,6 +230,44 @@ def _metadata(item: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(metadata, dict):
         metadata = item.get("metadata")
     return metadata if isinstance(metadata, dict) else {}
+
+
+def _compact_text(value: str, max_len: int) -> str:
+    text = " ".join(str(value).split())
+    if len(text) <= max_len:
+        return text
+    return f"{text[: max_len - 1]}…"
+
+
+def _title_from_id(value: str, *, prefixes: tuple[str, ...] = ()) -> str:
+    text = value
+    for prefix in prefixes:
+        if text.lower().startswith(prefix):
+            text = text[len(prefix) :]
+            break
+    words = [word for word in text.replace("_", "-").split("-") if word]
+    return " ".join(_title_word(word) for word in words) or value
+
+
+def _title_word(word: str) -> str:
+    lower = word.lower()
+    known = {
+        "apv": "APV",
+        "cpu": "CPU",
+        "dpu": "DPU",
+        "fhd": "FHD",
+        "gpu": "GPU",
+        "hdr": "HDR",
+        "mfc": "MFC",
+        "npu": "NPU",
+        "uhd": "UHD",
+        "vdis": "VDIS",
+    }
+    if lower in known:
+        return known[lower]
+    if lower.startswith("exynos"):
+        return f"Exynos{word[6:]}"
+    return word[:1].upper() + word[1:]
 
 
 def _clean_params(params: dict[str, Any]) -> dict[str, Any]:
