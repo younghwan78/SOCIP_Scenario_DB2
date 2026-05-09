@@ -176,7 +176,7 @@ def _ip_traces(
                     "fps": workload.fps,
                 },
                 "required_clock": {
-                    "formula": "pixels * fps / (1 - sw_margin) / ppc / 1e6",
+                    "formula": "max(base_required, manual_clock_mhz, clock_correction_mhz), then align by DVFS domain",
                     "inputs": {
                         "pixels": workload.pixels,
                         "fps": workload.fps,
@@ -186,8 +186,11 @@ def _ip_traces(
                         "clock_correction_mhz": workload.clock_correction_mhz,
                         "clock_correction_reason": workload.clock_correction_reason,
                     },
+                    "base_formula": "pixels * fps / (1 - sw_margin) / ppc / 1e6",
                     "initial_required_mhz": initial_required,
                     "before_group_align_mhz": required_before_group,
+                    "clock_correction_mhz": workload.clock_correction_mhz,
+                    "clock_correction_reason": workload.clock_correction_reason,
                     "sensor_otf_clock_correction_mhz": workload.clock_correction_mhz,
                     "sensor_otf_clock_correction_reason": workload.clock_correction_reason,
                     "after_group_align_mhz": config.required_clock_mhz,

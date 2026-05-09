@@ -193,7 +193,8 @@ def test_runner_builds_debug_calculation_trace():
     assert trace is not None
     assert trace["kpi"]["total_power_mw"]["result"] == result.total_power_mw
     assert trace["kpi"]["total_bw_mbs"]["result"] == result.bw_total_mbs
-    assert trace["ip"][0]["required_clock"]["formula"].startswith("pixels * fps")
+    assert trace["ip"][0]["required_clock"]["base_formula"].startswith("pixels * fps")
+    assert "clock_correction_mhz" in trace["ip"][0]["required_clock"]
     assert trace["dma"][0]["result"]["bw_mbs"] == result.dma_breakdown[0].bw_mbs
     assert trace["timeline"]["summary"]["event_count"] == len(result.timeline_events)
 
@@ -487,6 +488,131 @@ def test_adapter_applies_sensor_otf_csis_clock_correction():
     assert sensor["v_valid_source"] == "sensor_line_length_pck * 1000 / sensor_pclk * height"
     assert sensor["line_length_pck"] == 29_216
     assert sensor["pclk"] == 3_532_800_000
+
+
+def test_adapter_aligns_sensor_otf_group_without_reapplying_mipi_clock_to_downstream_ips():
+    graph = _graph()
+    graph.variant.design_conditions.update(
+        {
+            "fps": 30,
+            "resolution": "FHD",
+            "subscenario": "FHD_VIDEO",
+            "sensor_place": "rear",
+        }
+    )
+    graph.scenario.pipeline["nodes"] = [
+        {"id": "sensor_rear", "ip_ref": "ip-sensor-rear-s5e9965", "role": "sensor"},
+        {"id": "csispdp", "ip_ref": "ip-isp-v12", "role": "csispdp"},
+        {"id": "byrp", "ip_ref": "ip-isp-v12", "role": "byrp"},
+    ]
+    graph.scenario.pipeline["edges"] = [
+        {"from": "sensor_rear", "to": "csispdp", "type": "OTF"},
+        {"from": "csispdp", "to": "byrp", "type": "OTF"},
+    ]
+    graph.variant.node_configs = {
+        "csispdp": {
+            "selected_mode": "Normal",
+            "sim": {"inputs": [{"port": "OTF_IN", "width": 1920, "height": 1080, "format": "BAYER"}]},
+        },
+        "byrp": {
+            "selected_mode": "Normal",
+            "sim": {"inputs": [{"port": "OTF_IN", "width": 1920, "height": 1080, "format": "BAYER"}]},
+        },
+    }
+    graph.ip_catalog["ip-isp-v12"].capabilities = {
+        "operating_modes": [],
+        "sim": {
+            "hw_name": "ISP",
+            "vdd": "VDD_CAM",
+            "dvfs_group": "CAM",
+            "modes": {"Normal": {"ppc": 0, "unit_power_mw_mp": 0}},
+            "role_modes": {
+                "csispdp": {
+                    "hw_name": "PDP",
+                    "modes": {
+                        "Normal": {
+                            "ppc": 8,
+                            "unit_power_mw_mp": 1,
+                            "vdd": "VDD_CAM",
+                            "dvfs_group": "CSIS",
+                        }
+                    },
+                },
+                "byrp": {
+                    "hw_name": "BYRP",
+                    "modes": {
+                        "Normal": {
+                            "ppc": 4,
+                            "unit_power_mw_mp": 1,
+                            "vdd": "VDD_CAM",
+                            "dvfs_group": "CAM",
+                        }
+                    },
+                },
+            },
+        },
+    }
+    graph.ip_catalog["ip-sensor-rear-s5e9965"] = IpCatalog(
+        id="ip-sensor-rear-s5e9965",
+        schema_version="2.2",
+        category="sensor",
+        hierarchy={},
+        capabilities={
+            "properties": {
+                "place": "rear",
+                "phy_type": "CPHY",
+                "modes": {
+                    "wide_video_16_9_30": {
+                        "sensor_size": [4080, 2296],
+                        "sensor_fps": 30.0,
+                        "sensor_pclk": 3_532_800_000,
+                        "sensor_line_length_pck": 29_216,
+                        "sensor_format": "BAYER",
+                        "sensor_bitwidth": 12,
+                        "sensor_mipi_speed": 3.993,
+                        "sensor_sbwc": "enable",
+                    }
+                },
+            }
+        },
+        yaml_sha256="sha",
+    )
+
+    inputs = build_simulation_inputs(graph, SimulationRunConfig(include_timeline=True))
+    by_node = {item.node_id: item for item in inputs.workloads}
+    result = run_simulation(
+        inputs,
+        dvfs_tables={
+            "CSIS": DVFSTable(
+                domain="CSIS",
+                levels=[
+                    DVFSLevel(level=0, speed_mhz=800, voltages={4: 800}),
+                    DVFSLevel(level=2, speed_mhz=533, voltages={4: 675}),
+                    DVFSLevel(level=4, speed_mhz=332, voltages={4: 606.25}),
+                    DVFSLevel(level=7, speed_mhz=133, voltages={4: 562.5}),
+                ],
+            ),
+            "CAM": DVFSTable(
+                domain="CAM",
+                levels=[
+                    DVFSLevel(level=0, speed_mhz=800, voltages={4: 800}),
+                    DVFSLevel(level=2, speed_mhz=533, voltages={4: 675}),
+                    DVFSLevel(level=4, speed_mhz=332, voltages={4: 606.25}),
+                    DVFSLevel(level=7, speed_mhz=133, voltages={4: 562.5}),
+                ],
+            ),
+        },
+    )
+
+    ingress_clock = 3.993 * (16 / 7) * 3 / (12 * 8) * 1000
+    downstream_mipi_clock = 3.993 * (16 / 7) * 3 / (12 * 4) * 1000
+    assert by_node["csispdp"].clock_correction_mhz == pytest.approx(ingress_clock)
+    assert by_node["csispdp"].clock_correction_reason.startswith("sensor_ingress_req_csis_clock")
+    assert by_node["byrp"].clock_correction_mhz == pytest.approx(ingress_clock)
+    assert by_node["byrp"].clock_correction_mhz < downstream_mipi_clock
+    assert by_node["byrp"].clock_correction_reason == "otf_group_clock_align(otf-0, leader=csispdp)"
+    assert result.resolved["csispdp"].set_clock_mhz == pytest.approx(332.0)
+    assert result.resolved["byrp"].set_clock_mhz == pytest.approx(332.0)
 
 
 def _graph() -> CanonicalScenarioGraph:
