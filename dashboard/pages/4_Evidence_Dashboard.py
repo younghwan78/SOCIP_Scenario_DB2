@@ -669,6 +669,17 @@ def _render_timing_summary(result: dict[str, Any]) -> None:
     token_wait_event = max(events, key=lambda event: _numeric(event.get("token_wait_ms")) or 0.0)
     slack_events = [event for event in events if _numeric(event.get("slack_ms")) is not None]
     tightest_slack_event = min(slack_events, key=lambda event: _numeric(event.get("slack_ms")) or 0.0) if slack_events else None
+    cadence_events = [
+        event
+        for event in events
+        if _numeric(event.get("cadence_avg_interval_ms")) is not None
+        and _numeric(event.get("cadence_budget_ms")) is not None
+    ]
+    tightest_cadence_event = (
+        min(cadence_events, key=lambda event: _numeric(event.get("cadence_slack_ms")) or 0.0)
+        if cadence_events
+        else None
+    )
     source_events = [
         event
         for event in events
@@ -709,15 +720,25 @@ def _render_timing_summary(result: dict[str, Any]) -> None:
         )
     else:
         cols[1].metric("Source Window", "-")
-    if sink_events:
+    if tightest_cadence_event:
+        cols[2].metric(
+            "Output Cadence Slack",
+            _format_ms(tightest_cadence_event.get("cadence_slack_ms")),
+            help=(
+                f"{_event_id(tightest_cadence_event)} / "
+                f"avg interval={_format_ms(tightest_cadence_event.get('cadence_avg_interval_ms'))} / "
+                f"budget={_format_ms(tightest_cadence_event.get('cadence_budget_ms'))}"
+            ),
+        )
+    elif sink_events:
         sink = min(sink_events, key=lambda event: _numeric(event.get("slack_ms")) or 0.0)
         cols[2].metric(
-            "Sink Deadline Slack",
+            "Sink Latency Slack",
             _format_ms(sink.get("slack_ms")),
             help=f"{_event_id(sink)} / deadline={_format_ms(sink.get('deadline_ms'))}",
         )
     else:
-        cols[2].metric("Sink Deadline Slack", "-")
+        cols[2].metric("Output Cadence Slack", "-")
 
 
 def _timeline_chart_color(event: dict[str, Any]) -> str:
@@ -754,6 +775,10 @@ def _timeline_hover(event: dict[str, Any]) -> str:
         ("token_wait", _format_ms(event.get("token_wait_ms"))),
         ("deadline", _format_ms(event.get("deadline_ms"))),
         ("slack", _format_ms(event.get("slack_ms"))),
+        ("cadence_interval", _format_ms(event.get("cadence_interval_ms"))),
+        ("cadence_avg_interval", _format_ms(event.get("cadence_avg_interval_ms"))),
+        ("cadence_budget", _format_ms(event.get("cadence_budget_ms"))),
+        ("cadence_slack", _format_ms(event.get("cadence_slack_ms"))),
     ]
     return "<br>".join(f"{key}: {value}" for key, value in fields if value not in (None, "-"))
 
@@ -883,10 +908,18 @@ def _render_timing_chart(result: dict[str, Any], *, key_prefix: str = "stored") 
             if deadline is None:
                 continue
             slack = _numeric(event.get("slack_ms"))
+            cadence_slack = _numeric(event.get("cadence_slack_ms"))
             deadline_x.append(deadline)
             deadline_y.append(label)
-            deadline_text.append(f"deadline: {_format_ms(deadline)}<br>slack: {_format_ms(slack)}<br>task: {_event_id(event)}")
-            deadline_color.append("#16A34A" if slack is None or slack >= 0 else "#DC2626")
+            deadline_text.append(
+                f"latency deadline: {_format_ms(deadline)}<br>"
+                f"latency slack: {_format_ms(slack)}<br>"
+                f"avg cadence: {_format_ms(event.get('cadence_avg_interval_ms'))}<br>"
+                f"cadence slack: {_format_ms(cadence_slack)}<br>"
+                f"task: {_event_id(event)}"
+            )
+            effective_slack = cadence_slack if cadence_slack is not None else slack
+            deadline_color.append("#16A34A" if effective_slack is None or effective_slack >= 0 else "#DC2626")
         if deadline_x:
             fig.add_trace(
                 go.Scatter(
@@ -935,6 +968,11 @@ def _render_timing_chart(result: dict[str, Any], *, key_prefix: str = "stored") 
                 "resource_wait_ms",
                 "token_wait_ms",
                 "slack_ms",
+                "cadence_interval_ms",
+                "cadence_avg_interval_ms",
+                "cadence_budget_ms",
+                "cadence_slack_ms",
+                "cadence_violation",
             ],
         )
     ]
@@ -1327,6 +1365,11 @@ def _render_breakdown(result: dict[str, Any], *, key_prefix: str = "stored") -> 
                 "token_wait_ms",
                 "deadline_ms",
                 "slack_ms",
+                "cadence_interval_ms",
+                "cadence_avg_interval_ms",
+                "cadence_budget_ms",
+                "cadence_slack_ms",
+                "cadence_violation",
                 "source_fps",
                 "v_valid_ms",
                 "refresh_hz",
@@ -1413,6 +1456,16 @@ with run_col:
         asv_group = st.number_input("ASV Group", min_value=0, max_value=8, value=4, step=1, key="evidence_asv_group")
         fps_value = st.text_input("FPS Override", value="", key="evidence_fps_override")
         include_timeline = st.checkbox("Include timing timeline", value=True, key="evidence_include_timeline")
+        timeline_frame_count = st.number_input(
+            "Timeline Frames",
+            min_value=1,
+            max_value=16,
+            value=4,
+            step=1,
+            key="evidence_timeline_frame_count",
+            help="Use multiple frames for buffered M2M/display cadence analysis. Single-frame latency can exceed one frame period and still meet steady-state cadence.",
+            disabled=not include_timeline,
+        )
         force = st.checkbox("Force recompute", value=False, key="evidence_force_recompute")
         debug_trace = st.checkbox(
             "Debug calculation trace",
@@ -1461,6 +1514,7 @@ with run_col:
                     "asv_group": asv_group,
                     "fps": fps,
                     "include_timeline": include_timeline,
+                    "timeline_frame_count": int(timeline_frame_count),
                     "debug_trace": debug_trace,
                     "debug_trace_level": debug_trace_level,
                 },

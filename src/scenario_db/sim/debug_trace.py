@@ -336,6 +336,7 @@ def _timeline_trace(
             "otf": "Tasks in the same OTF group are scheduled as a streaming group; the bottleneck task determines group throughput.",
             "m2m": "M2M edges consume producer completion/token availability before the downstream task starts.",
             "resource": "Tasks sharing the same resource_id can wait for that resource.",
+            "cadence": "For multi-frame runs, criticality is based on average output cadence across sink/terminal frames rather than first-frame latency.",
         },
         "otf_groups": [
             {

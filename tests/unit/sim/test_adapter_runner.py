@@ -23,7 +23,7 @@ def test_adapter_runner_builds_evidence_from_canonical_graph():
     graph = _graph()
     inputs = build_simulation_inputs(
         graph,
-        SimulationRunConfig(include_timeline=True),
+        SimulationRunConfig(include_timeline=True, timeline_frame_count=1),
     )
 
     assert [item.node_id for item in inputs.workloads] == ["isp0", "mfc"]

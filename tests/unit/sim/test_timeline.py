@@ -290,3 +290,79 @@ def test_timeline_marks_frame_over_budget_chain_as_critical():
 
     assert [event.task_id for event in events if event.critical] == ["isp", "mfc"]
     assert any(event.bottleneck_reason for event in events if event.critical)
+
+
+def test_timeline_uses_sink_cadence_instead_of_first_frame_latency_for_buffered_path():
+    events = build_timeline_events(
+        tasks=[
+            {
+                "id": "sensor",
+                "hw_name": "SENSOR",
+                "task_type": "hw",
+                "duration_ms": 19.0,
+                "constraint_type": "source",
+                "release_period_ms": 33.333333,
+            },
+            {"id": "eis", "hw_name": "CPU", "task_type": "sw", "duration_ms": 26.0},
+            {
+                "id": "dpu",
+                "hw_name": "DPU",
+                "task_type": "hw",
+                "duration_ms": 4.0,
+                "constraint_type": "sink",
+                "deadline_ms": 33.333333,
+                "scanout_ms": 4.0,
+            },
+        ],
+        edges=[
+            {"from": "sensor", "to": "eis", "type": "M2M", "buffer": "camera"},
+            {"from": "eis", "to": "dpu", "type": "M2M", "buffer": "display"},
+        ],
+        frame_count=4,
+        frame_period_ms=33.333333,
+        critical_budget_ms=33.333333,
+    )
+
+    sink_events = [event for event in events if event.node_id == "dpu" or event.task_id.startswith("dpu")]
+    assert sink_events[0].slack_ms < 0.0
+    assert sink_events[-1].cadence_avg_interval_ms == pytest.approx(33.333333)
+    assert sink_events[-1].cadence_slack_ms == pytest.approx(0.0)
+    assert [event.task_id for event in events if event.critical] == []
+
+
+def test_timeline_marks_sink_cadence_violation_when_pipeline_throughput_is_slow():
+    events = build_timeline_events(
+        tasks=[
+            {
+                "id": "sensor",
+                "hw_name": "SENSOR",
+                "task_type": "hw",
+                "duration_ms": 19.0,
+                "constraint_type": "source",
+                "release_period_ms": 33.333333,
+            },
+            {"id": "eis", "hw_name": "CPU", "task_type": "sw", "resource_id": "CPU", "duration_ms": 40.0},
+            {
+                "id": "dpu",
+                "hw_name": "DPU",
+                "task_type": "hw",
+                "duration_ms": 4.0,
+                "constraint_type": "sink",
+                "deadline_ms": 33.333333,
+                "scanout_ms": 4.0,
+            },
+        ],
+        edges=[
+            {"from": "sensor", "to": "eis", "type": "M2M", "buffer": "camera"},
+            {"from": "eis", "to": "dpu", "type": "M2M", "buffer": "display"},
+        ],
+        frame_count=4,
+        frame_period_ms=33.333333,
+        critical_budget_ms=33.333333,
+    )
+
+    sink_events = [event for event in events if event.task_id.startswith("dpu")]
+    assert sink_events[-1].cadence_avg_interval_ms > 33.333333
+    assert sink_events[-1].cadence_violation is True
+    assert sink_events[-1].critical is True
+    assert sink_events[-1].bottleneck_reason == "output average cadence exceeds frame period"

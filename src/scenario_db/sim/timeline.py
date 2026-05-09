@@ -20,6 +20,11 @@ class _TaskRun:
     end_ms: float = 0.0
     deadline_ms: float | None = None
     slack_ms: float | None = None
+    cadence_interval_ms: float | None = None
+    cadence_avg_interval_ms: float | None = None
+    cadence_budget_ms: float | None = None
+    cadence_slack_ms: float | None = None
+    cadence_violation: bool = False
     resource_wait_ms: float = 0.0
     token_wait_ms: float = 0.0
     resource_id: str | None = None
@@ -325,7 +330,9 @@ def _mark_critical_path(
 ) -> None:
     if not runs:
         return
+    cadence_violations: list[_TaskRun] = []
     if critical_budget_ms is not None and critical_budget_ms > 0:
+        cadence_violations = _annotate_output_cadence(runs, graph, critical_budget_ms)
         if _runs_fit_frame_budget(runs, critical_budget_ms):
             return
     by_resource: dict[str, list[_TaskRun]] = {}
@@ -336,7 +343,18 @@ def _mark_critical_path(
         items.sort(key=lambda item: (item.start_ms, item.end_ms, item.instance_id))
 
     chain: list[_TaskRun] = []
-    current = max(runs.values(), key=lambda item: (item.end_ms, item.start_ms))
+    current = (
+        max(
+            cadence_violations,
+            key=lambda item: (
+                abs(float(item.cadence_slack_ms or 0.0)),
+                item.end_ms,
+                item.start_ms,
+            ),
+        )
+        if cadence_violations
+        else max(runs.values(), key=lambda item: (item.end_ms, item.start_ms))
+    )
     while True:
         chain.append(current)
         parent = _critical_parent(current, runs, graph, by_resource)
@@ -379,6 +397,10 @@ def _critical_parent(
 
 
 def _runs_fit_frame_budget(runs: dict[str, _TaskRun], budget_ms: float) -> bool:
+    cadence_runs = [run for run in runs.values() if run.cadence_budget_ms is not None]
+    if cadence_runs:
+        return not any(run.cadence_violation for run in cadence_runs)
+
     grouped: dict[str, list[_TaskRun]] = {}
     for run in runs.values():
         if run.slack_ms is not None and run.slack_ms < 0:
@@ -395,6 +417,51 @@ def _runs_fit_frame_budget(runs: dict[str, _TaskRun], budget_ms: float) -> bool:
         if (end - start) > budget_ms:
             return False
     return True
+
+
+def _annotate_output_cadence(runs: dict[str, _TaskRun], graph, budget_ms: float) -> list[_TaskRun]:
+    """Mark steady-state output cadence violations across multiple frames.
+
+    M2M-buffered camera/display pipelines can have single-frame latency above
+    one frame period while still sustaining one displayed frame per period.
+    Criticality is therefore based on average completion cadence whenever
+    we have at least two frames for a sink or terminal output task.
+    """
+
+    endpoint_base_ids = {
+        run.base_id
+        for run in runs.values()
+        if _task_is_sink(run.task) or graph.out_degree(run.instance_id) == 0
+    }
+    by_endpoint: dict[str, list[_TaskRun]] = {}
+    for run in runs.values():
+        if run.base_id in endpoint_base_ids:
+            by_endpoint.setdefault(run.base_id, []).append(run)
+
+    violations: list[_TaskRun] = []
+    for endpoint_runs in by_endpoint.values():
+        endpoint_runs.sort(key=lambda item: (item.frame_index, item.end_ms, item.instance_id))
+        if len(endpoint_runs) < 2:
+            continue
+        first = endpoint_runs[0]
+        last = endpoint_runs[-1]
+        average_interval = (last.end_ms - first.end_ms) / max(1, len(endpoint_runs) - 1)
+        slack = budget_ms - average_interval
+        violates = slack < -1e-6
+        previous_end: float | None = None
+        for run in endpoint_runs:
+            run.cadence_interval_ms = None if previous_end is None else run.end_ms - previous_end
+            run.cadence_avg_interval_ms = average_interval
+            run.cadence_budget_ms = budget_ms
+            run.cadence_slack_ms = slack
+            run.cadence_violation = violates
+            if violates:
+                run.bottleneck = True
+                run.bottleneck_reason = "output average cadence exceeds frame period"
+            previous_end = run.end_ms
+        if violates:
+            violations.append(last)
+    return violations
 
 
 def _timeline_events(runs: dict[str, _TaskRun], graph) -> list[TimelineEvent]:
@@ -435,6 +502,11 @@ def _timeline_events(runs: dict[str, _TaskRun], graph) -> list[TimelineEvent]:
                 duration_ms=run.end_ms - run.start_ms,
                 deadline_ms=run.deadline_ms,
                 slack_ms=run.slack_ms,
+                cadence_interval_ms=run.cadence_interval_ms,
+                cadence_avg_interval_ms=run.cadence_avg_interval_ms,
+                cadence_budget_ms=run.cadence_budget_ms,
+                cadence_slack_ms=run.cadence_slack_ms,
+                cadence_violation=run.cadence_violation,
                 ready_ms=run.ready_ms,
                 resource_wait_ms=run.resource_wait_ms,
                 token_wait_ms=run.token_wait_ms,
@@ -447,17 +519,23 @@ def _timeline_events(runs: dict[str, _TaskRun], graph) -> list[TimelineEvent]:
 
 
 def _bottleneck_reason(run: _TaskRun) -> str | None:
+    if run.cadence_violation:
+        return "output average cadence exceeds frame period"
     if run.bottleneck:
         return "longest duration in OTF streaming group"
     if run.resource_wait_ms > 0:
         return "waited for shared resource"
     if run.token_wait_ms > 0:
         return "waited for M2M/VOTF token queue"
-    if run.slack_ms is not None and run.slack_ms < 0:
-        return "missed sink deadline"
+    if run.slack_ms is not None and run.slack_ms < 0 and run.cadence_budget_ms is None:
+        return "missed single-frame sink deadline"
     if run.critical:
         return "on critical path after frame-budget check"
     return None
+
+
+def _task_is_sink(task: dict[str, Any]) -> bool:
+    return str(task.get("constraint_type") or "").lower() == "sink" or task.get("scanout_ms") is not None
 
 
 def _incoming_edge_type(instance_id: str, graph) -> str | None:

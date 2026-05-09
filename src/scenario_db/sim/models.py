@@ -123,7 +123,7 @@ class SimulationRunConfig(BaseScenarioModel):
     h_blank_margin: float = 0.05
     dvfs_overrides: dict[str, int] = Field(default_factory=dict)
     include_timeline: bool = True
-    timeline_frame_count: int = 1
+    timeline_frame_count: int = 4
     timeline_frame_period_ms: float | None = None
     debug_trace: bool = False
     debug_trace_level: Literal["summary", "formula", "full"] = "formula"
@@ -228,6 +228,11 @@ class TimelineEvent(BaseScenarioModel):
     duration_ms: float
     deadline_ms: float | None = None
     slack_ms: float | None = None
+    cadence_interval_ms: float | None = None
+    cadence_avg_interval_ms: float | None = None
+    cadence_budget_ms: float | None = None
+    cadence_slack_ms: float | None = None
+    cadence_violation: bool = False
     ready_ms: float | None = None
     resource_wait_ms: float = 0.0
     token_wait_ms: float = 0.0
