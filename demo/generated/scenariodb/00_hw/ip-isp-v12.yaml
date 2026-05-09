@@ -21,3 +21,46 @@ capabilities:
     crop: true
     scale: true
     rotate: false
+  sim:
+    hw_name: ISP
+    source: legacy_project_info_csv
+    source_project: A
+    source_note: projectA_info.csv has role-level ISP rows; main uses a demo aggregate for imported scenarios.
+    modes:
+      Normal:
+        unit_power_mw_mp: 0.0
+        idc: 0.0
+        ppc: 0.0
+        vdd: VDD_CAM
+        dvfs_group: CAM
+    role_modes:
+      main:
+        hw_name: ISP
+        modes:
+          normal:
+            unit_power_mw_mp: 9.92
+            idc: 0.0
+            ppc: 4.0
+            vdd: VDD_CAM
+            dvfs_group: CAM
+          Normal:
+            unit_power_mw_mp: 9.92
+            idc: 0.0
+            ppc: 4.0
+            vdd: VDD_CAM
+            dvfs_group: CAM
+      isp0:
+        hw_name: ISP
+        modes:
+          normal:
+            unit_power_mw_mp: 9.92
+            idc: 0.0
+            ppc: 4.0
+            vdd: VDD_CAM
+            dvfs_group: CAM
+          Normal:
+            unit_power_mw_mp: 9.92
+            idc: 0.0
+            ppc: 4.0
+            vdd: VDD_CAM
+            dvfs_group: CAM

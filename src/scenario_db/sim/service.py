@@ -6,6 +6,7 @@ import json
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from scenario_db.api.schemas.evidence import EvidenceResponse
 from scenario_db.api.schemas.simulation import SimulateRequest, SimulateRunResponse
 from scenario_db.db.repositories.evidence import (
     get_simulation_evidence_by_params_hash,
@@ -33,7 +34,11 @@ def run_simulation_request(db: Session, request: SimulateRequest) -> SimulateRun
             variant_ref=request.variant_id,
             params_hash=hash_value,
         )
-        if cached is not None:
+        cache_has_required_trace = (
+            cached is not None
+            and (not request.config.debug_trace or bool(cached.calculation_trace))
+        )
+        if cached is not None and cache_has_required_trace:
             return SimulateRunResponse(
                 evidence_id=cached.id,
                 status="completed",
@@ -42,6 +47,8 @@ def run_simulation_request(db: Session, request: SimulateRequest) -> SimulateRun
                 warnings=list(inputs.warnings),
                 kpi=cached.kpi or {},
                 result=None,
+                evidence=EvidenceResponse.model_validate(cached).model_dump(mode="json"),
+                persisted=True,
             )
 
     result = run_simulation(inputs, dvfs_tables=request.dvfs_tables)
@@ -63,6 +70,8 @@ def run_simulation_request(db: Session, request: SimulateRequest) -> SimulateRun
         warnings=result.warnings,
         kpi=evidence.kpi,
         result=result,
+        evidence=_simulation_evidence_dict(evidence),
+        persisted=request.persist,
     )
 
 
@@ -73,7 +82,11 @@ def _request_hash(inputs, request: SimulateRequest) -> str:
             mode="json",
             exclude_none=True,
         ),
-        "config": request.config.model_dump(mode="json", exclude_none=True),
+        "config": request.config.model_dump(
+            mode="json",
+            exclude_none=True,
+            exclude={"debug_trace", "debug_trace_level"},
+        ),
         "dvfs_tables": {
             key: value.model_dump(mode="json", exclude_none=True)
             for key, value in request.dvfs_tables.items()
@@ -81,3 +94,37 @@ def _request_hash(inputs, request: SimulateRequest) -> str:
     }
     raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+
+
+def _simulation_evidence_dict(evidence) -> dict:
+    resolution_result = (
+        evidence.resolution_result.model_dump(mode="json", exclude_none=True)
+        if evidence.resolution_result else None
+    )
+    return {
+        "id": evidence.id,
+        "schema_version": evidence.schema_version,
+        "kind": evidence.kind,
+        "scenario_ref": evidence.scenario_ref,
+        "variant_ref": evidence.variant_ref,
+        "sw_baseline_ref": str(evidence.execution_context.sw_baseline_ref),
+        "execution_context": evidence.execution_context.model_dump(mode="json", exclude_none=True),
+        "sweep_context": evidence.sweep_context.model_dump(mode="json", exclude_none=True) if evidence.sweep_context else None,
+        "resolution_result": resolution_result,
+        "overall_feasibility": (
+            str(evidence.resolution_result.overall_feasibility)
+            if evidence.resolution_result else None
+        ),
+        "aggregation": evidence.aggregation.model_dump(mode="json", exclude_none=True),
+        "kpi": dict(evidence.kpi),
+        "run_info": evidence.run.model_dump(mode="json", exclude_none=True),
+        "ip_breakdown": [item.model_dump(mode="json", exclude_none=True) for item in evidence.ip_breakdown],
+        "dma_breakdown": [item.model_dump(mode="json", exclude_none=True) for item in evidence.dma_breakdown],
+        "timing_breakdown": [item.model_dump(mode="json", exclude_none=True) for item in evidence.timing_breakdown],
+        "dvfs_breakdown": [item.model_dump(mode="json", exclude_none=True) for item in evidence.dvfs_breakdown],
+        "timeline_events": [item.model_dump(mode="json", exclude_none=True) for item in evidence.timeline_events],
+        "vdd_power": evidence.vdd_power or {},
+        "calculation_trace": evidence.calculation_trace,
+        "params_hash": evidence.params_hash,
+        "artifacts": [item.model_dump(mode="json", exclude_none=True) for item in evidence.artifacts],
+    }

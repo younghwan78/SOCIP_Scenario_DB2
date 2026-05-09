@@ -14,7 +14,7 @@ class SimulateRequest(BaseModel):
     execution_context: ExecutionContext
     config: SimulationRunConfig = Field(default_factory=SimulationRunConfig)
     dvfs_tables: dict[str, DVFSTable] = Field(default_factory=dict)
-    persist: bool = True
+    persist: bool = False
     force: bool = False
 
 
@@ -26,3 +26,5 @@ class SimulateRunResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     kpi: dict
     result: SimRunResult | None = None
+    evidence: dict | None = None
+    persisted: bool = False

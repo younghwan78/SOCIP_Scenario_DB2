@@ -304,27 +304,29 @@ def _ensure_choice(key: str, options: list[str], *, preferred: str | None = None
 
 
 def _clear_context_after_soc() -> None:
-    for key in ("evidence_project_id", "evidence_scenario_category", "evidence_scenario_id", "evidence_variant_id", "evidence_selected_evidence_id"):
+    for key in ("evidence_project_id", "evidence_scenario_category", "evidence_scenario_id", "evidence_variant_id", "evidence_selected_evidence_id", "evidence_preview_result", "evidence_preview_payload"):
         st.session_state.pop(key, None)
 
 
 def _clear_context_after_project() -> None:
-    for key in ("evidence_scenario_category", "evidence_scenario_id", "evidence_variant_id", "evidence_selected_evidence_id"):
+    for key in ("evidence_scenario_category", "evidence_scenario_id", "evidence_variant_id", "evidence_selected_evidence_id", "evidence_preview_result", "evidence_preview_payload"):
         st.session_state.pop(key, None)
 
 
 def _clear_context_after_category() -> None:
-    for key in ("evidence_scenario_id", "evidence_variant_id", "evidence_selected_evidence_id"):
+    for key in ("evidence_scenario_id", "evidence_variant_id", "evidence_selected_evidence_id", "evidence_preview_result", "evidence_preview_payload"):
         st.session_state.pop(key, None)
 
 
 def _clear_context_after_scenario() -> None:
-    for key in ("evidence_variant_id", "evidence_selected_evidence_id"):
+    for key in ("evidence_variant_id", "evidence_selected_evidence_id", "evidence_preview_result", "evidence_preview_payload"):
         st.session_state.pop(key, None)
 
 
 def _clear_context_after_variant() -> None:
     st.session_state.pop("evidence_selected_evidence_id", None)
+    st.session_state.pop("evidence_preview_result", None)
+    st.session_state.pop("evidence_preview_payload", None)
 
 
 def _scenario_categories(scenarios: list[dict[str, Any]]) -> list[str]:
@@ -396,7 +398,7 @@ def _ordered_table(rows: list[dict[str, Any]], priority: list[str]) -> list[dict
     return ordered
 
 
-def _pipeline_viewer_url(api_base: str, scenario_id: str, variant_id: str, evidence_id: str) -> str:
+def _pipeline_viewer_url(api_base: str, scenario_id: str, variant_id: str, evidence_id: str | None = None) -> str:
     query = {
         "api_base": api_base,
         "soc_id": st.session_state.get("evidence_soc_id") or st.session_state.get("viewer_soc_id"),
@@ -409,12 +411,19 @@ def _pipeline_viewer_url(api_base: str, scenario_id: str, variant_id: str, evide
     return f"/Pipeline_Viewer?{urlencode(clean)}"
 
 
-def _render_viewer_tab_link(api_base: str, scenario_id: str, variant_id: str, evidence_id: str) -> None:
+def _render_viewer_tab_link(
+    api_base: str,
+    scenario_id: str,
+    variant_id: str,
+    evidence_id: str | None = None,
+    *,
+    label: str = "Open Pipeline Viewer",
+) -> None:
     href = _pipeline_viewer_url(api_base, scenario_id, variant_id, evidence_id)
     st.markdown(
         f"""
 <a class="viewer-tab-link" href="{href}" target="_blank" rel="noopener noreferrer">
-  Open Pipeline Viewer Overlay
+  {label}
 </a>
 """,
         unsafe_allow_html=True,
@@ -462,6 +471,51 @@ def _render_export_actions(result: dict[str, Any]) -> None:
             if exc.body:
                 st.code(exc.body)
     with st.expander("Raw JSON for copy", expanded=False):
+        st.code(json_text, language="json")
+
+
+def _render_preview_actions(api_base: str, result: dict[str, Any]) -> None:
+    evidence_id = str(result.get("id") or "simulation-preview")
+    filename_base = _safe_filename(evidence_id)
+    json_text = _evidence_json_text(result)
+    col_save, col_json, col_kpi = st.columns(3)
+    if col_save.button("Confirm & Save Evidence", type="primary", use_container_width=True):
+        payload = st.session_state.get("evidence_preview_payload")
+        if not isinstance(payload, dict):
+            st.error("No preview payload is available to save.")
+            return
+        try:
+            response = run_simulation(api_base, payload)
+            saved_id = str(response.get("evidence_id") or evidence_id)
+            _load_sim_results.clear()
+            st.session_state.pop("evidence_preview_result", None)
+            st.session_state.pop("evidence_preview_payload", None)
+            st.session_state["viewer_sim_mode"] = "specific"
+            st.session_state["viewer_sim_evidence_id"] = saved_id
+            st.session_state["evidence_selected_evidence_id"] = saved_id
+            st.success(f"Saved confirmed evidence: {saved_id}")
+            st.rerun()
+        except ViewerApiError as exc:
+            st.error(str(exc))
+            if exc.body:
+                st.code(exc.body)
+    col_json.download_button(
+        "Download Preview JSON",
+        data=json_text.encode("utf-8"),
+        file_name=f"{filename_base}-preview.json",
+        mime="application/json",
+        use_container_width=True,
+        key=f"download_preview_json_{evidence_id}",
+    )
+    col_kpi.download_button(
+        "Download Preview KPI CSV",
+        data=_summary_csv_bytes(result),
+        file_name=f"{filename_base}-preview-summary.csv",
+        mime="text/csv",
+        use_container_width=True,
+        key=f"download_preview_kpi_{evidence_id}",
+    )
+    with st.expander("Preview JSON for copy", expanded=False):
         st.code(json_text, language="json")
 
 
@@ -696,7 +750,7 @@ def _timeline_hover(event: dict[str, Any]) -> str:
     return "<br>".join(f"{key}: {value}" for key, value in fields if value not in (None, "-"))
 
 
-def _render_timing_chart(result: dict[str, Any]) -> None:
+def _render_timing_chart(result: dict[str, Any], *, key_prefix: str = "stored") -> None:
     events = _timeline_events(result)
     if not events:
         st.info("No timeline events are available for chart rendering.")
@@ -718,11 +772,11 @@ def _render_timing_chart(result: dict[str, Any]) -> None:
     )
     if len(frame_values) > 1:
         frame_options = ["All", *[str(value) for value in frame_values]]
-        frame_choice = st.selectbox("Frame", frame_options, key=f"timing_chart_frame_{evidence_id}", index=0)
+        frame_choice = st.selectbox("Frame", frame_options, key=f"{key_prefix}_timing_chart_frame_{evidence_id}", index=0)
     else:
         frame_choice = "All"
-    show_waits = st.checkbox("Show queue waits", value=True, key=f"timing_chart_waits_{evidence_id}")
-    show_deadlines = st.checkbox("Show deadlines", value=True, key=f"timing_chart_deadlines_{evidence_id}")
+    show_waits = st.checkbox("Show queue waits", value=True, key=f"{key_prefix}_timing_chart_waits_{evidence_id}")
+    show_deadlines = st.checkbox("Show deadlines", value=True, key=f"{key_prefix}_timing_chart_deadlines_{evidence_id}")
 
     event_order = {id(event): index for index, event in enumerate(events)}
     visible_events = events
@@ -851,7 +905,7 @@ def _render_timing_chart(result: dict[str, Any]) -> None:
     )
     fig.update_xaxes(rangemode="tozero", showgrid=True, gridcolor="#E5E7EB")
     fig.update_yaxes(autorange="reversed")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, key=f"{key_prefix}_timing_chart_plot_{evidence_id}_{frame_choice}")
 
     critical_rows = [
         row
@@ -904,10 +958,184 @@ def _render_timing_chart(result: dict[str, Any]) -> None:
         st.dataframe(issue_rows, use_container_width=True, hide_index=True)
 
 
-def _render_breakdown(result: dict[str, Any]) -> None:
-    tabs = st.tabs(["IP Power", "DMA BW", "Timing Chart", "Timing Table", "Timeline Table", "Raw Evidence"])
+def _render_debug_trace(result: dict[str, Any]) -> None:
+    trace = result.get("calculation_trace")
+    if not isinstance(trace, dict):
+        st.info("No calculation trace is stored for this result. Run a simulation preview with Debug trace enabled, then confirm/save it if needed.")
+        return
+
+    st.caption("Formula-level trace for KPI, IP power/performance, DMA bandwidth, and timing scheduling inputs.")
+    config = trace.get("config") if isinstance(trace.get("config"), dict) else {}
+    if config:
+        with st.expander("Run config used by calculations", expanded=False):
+            st.json(config)
+
+    kpi_rows = []
+    for name, item in (trace.get("kpi") or {}).items():
+        if not isinstance(item, dict):
+            continue
+        kpi_rows.append(
+            {
+                "kpi": name,
+                "formula": item.get("formula"),
+                "inputs": item.get("inputs"),
+                "result": item.get("result"),
+            }
+        )
+    if kpi_rows:
+        st.markdown("**KPI formulas**")
+        st.dataframe(kpi_rows, use_container_width=True, hide_index=True)
+
+    ip_rows = []
+    for item in trace.get("ip") or []:
+        if not isinstance(item, dict):
+            continue
+        required = item.get("required_clock") if isinstance(item.get("required_clock"), dict) else {}
+        dvfs = item.get("dvfs") if isinstance(item.get("dvfs"), dict) else {}
+        power = item.get("power") if isinstance(item.get("power"), dict) else {}
+        timing = item.get("timing") if isinstance(item.get("timing"), dict) else {}
+        ip_rows.append(
+            {
+                "node_id": item.get("node_id"),
+                "hw_name": item.get("hw_name"),
+                "mode": item.get("mode"),
+                "required_before_group_mhz": required.get("before_group_align_mhz"),
+                "required_after_group_mhz": required.get("after_group_align_mhz"),
+                "dvfs_group": dvfs.get("dvfs_group"),
+                "dvfs_level": dvfs.get("selected_level"),
+                "set_clock_mhz": dvfs.get("set_clock_mhz"),
+                "set_voltage_mv": dvfs.get("set_voltage_mv"),
+                "vdd": dvfs.get("vdd"),
+                "vdd_leader": dvfs.get("vdd_leader"),
+                "power_mw": power.get("result_mw"),
+                "hw_time_ms": timing.get("result_ms"),
+                "feasible": dvfs.get("feasible"),
+                "infeasible_reason": dvfs.get("infeasible_reason"),
+            }
+        )
+    if ip_rows:
+        st.markdown("**IP power / DVFS / performance trace**")
+        st.dataframe(ip_rows, use_container_width=True, hide_index=True)
+
+    dma_rows = []
+    for item in trace.get("dma") or []:
+        if not isinstance(item, dict):
+            continue
+        inputs = item.get("inputs") if isinstance(item.get("inputs"), dict) else {}
+        intermediate = item.get("intermediate") if isinstance(item.get("intermediate"), dict) else {}
+        result_values = item.get("result") if isinstance(item.get("result"), dict) else {}
+        dma_rows.append(
+            {
+                "node_id": item.get("node_id"),
+                "port": item.get("port"),
+                "direction": item.get("direction"),
+                "width": inputs.get("width"),
+                "height": inputs.get("height"),
+                "fps": inputs.get("fps"),
+                "format": inputs.get("format"),
+                "bitwidth": inputs.get("bitwidth"),
+                "compression": inputs.get("compression"),
+                "comp_ratio": inputs.get("comp_ratio"),
+                "format_bpp_factor": intermediate.get("format_bpp_factor"),
+                "llc_enabled": inputs.get("llc_enabled"),
+                "llc_weight": intermediate.get("llc_weight"),
+                "bw_mbs": result_values.get("bw_mbs"),
+                "bw_power_mw": result_values.get("bw_power_mw"),
+                "bw_power_ma": result_values.get("bw_power_ma"),
+            }
+        )
+    if dma_rows:
+        st.markdown("**DMA bandwidth trace**")
+        st.dataframe(dma_rows, use_container_width=True, hide_index=True)
+
+    timeline = trace.get("timeline") if isinstance(trace.get("timeline"), dict) else {}
+    otf_groups = timeline.get("otf_groups") if isinstance(timeline.get("otf_groups"), list) else []
+    if otf_groups:
+        st.markdown("**Timing / OTF group trace**")
+        st.dataframe(otf_groups, use_container_width=True, hide_index=True)
+    with st.expander("Raw calculation trace", expanded=False):
+        st.json(trace)
+
+
+def _result_warnings(result: dict[str, Any]) -> list[str]:
+    direct = result.get("warnings")
+    if isinstance(direct, list):
+        return [str(item) for item in direct if item]
+    trace = result.get("calculation_trace")
+    if isinstance(trace, dict) and isinstance(trace.get("warnings"), list):
+        return [str(item) for item in trace["warnings"] if item]
+    return []
+
+
+def _render_result_warnings(result: dict[str, Any]) -> None:
+    warnings = _result_warnings(result)
+    if not warnings:
+        return
+    severe = any(
+        marker in warning
+        for warning in warnings
+        for marker in ("All compute IP core power is zero", "All compute IP HW time is zero")
+    )
+    message = "\n".join(f"- {warning}" for warning in warnings)
+    if severe:
+        st.error(message)
+    else:
+        st.warning(message)
+
+
+def _ip_power_rows(result: dict[str, Any]) -> list[dict[str, Any]]:
+    dvfs_rows = result.get("dvfs_breakdown") if isinstance(result.get("dvfs_breakdown"), list) else []
+    if dvfs_rows:
+        return _ordered_table(
+            [
+                {
+                    "node_id": row.get("node_id"),
+                    "hw_name": row.get("hw_name"),
+                    "mode": row.get("mode"),
+                    "ip_ref": row.get("ip_ref"),
+                    "power_mw": row.get("total_power_mw"),
+                    "active_power_mw": row.get("active_power_mw"),
+                    "required_clock_mhz": row.get("required_clock_mhz"),
+                    "set_clock_mhz": row.get("set_clock_mhz"),
+                    "dvfs_level": row.get("dvfs_level"),
+                    "set_voltage_mv": row.get("set_voltage_mv"),
+                    "vdd": row.get("vdd"),
+                    "vdd_leader": row.get("vdd_leader"),
+                    "ppc": row.get("ppc"),
+                    "unit_power_mw_mp": row.get("unit_power_mw_mp"),
+                    "resolution_mp": row.get("input_resolution_mp"),
+                    "fps": row.get("fps"),
+                    "feasible": row.get("feasible"),
+                    "infeasible_reason": row.get("infeasible_reason"),
+                }
+                for row in dvfs_rows
+                if isinstance(row, dict)
+            ],
+            [
+                "node_id",
+                "hw_name",
+                "mode",
+                "ip_ref",
+                "power_mw",
+                "set_clock_mhz",
+                "dvfs_level",
+                "set_voltage_mv",
+                "vdd",
+                "ppc",
+                "unit_power_mw_mp",
+            ],
+        )
+    return _ordered_table(
+        result.get("ip_breakdown") or [],
+        ["ip", "instance_index", "power_mW", "submodules"],
+    )
+
+
+def _render_breakdown(result: dict[str, Any], *, key_prefix: str = "stored") -> None:
+    tabs = st.tabs(["IP/Node Power", "DMA BW", "Timing Chart", "Timing Table", "Timeline Table", "Debug Trace", "Raw Evidence"])
     with tabs[0]:
-        st.dataframe(result.get("ip_breakdown") or [], use_container_width=True, hide_index=True)
+        st.caption("Power is calculated per scenario node / hardware role. `ip_ref` is the catalog source and can repeat for multiple ISP roles.")
+        st.dataframe(_ip_power_rows(result), use_container_width=True, hide_index=True)
     with tabs[1]:
         st.dataframe(
             _ordered_table(
@@ -933,7 +1161,7 @@ def _render_breakdown(result: dict[str, Any]) -> None:
         )
     with tabs[2]:
         _render_timing_summary(result)
-        _render_timing_chart(result)
+        _render_timing_chart(result, key_prefix=key_prefix)
     with tabs[3]:
         st.dataframe(result.get("timing_breakdown") or [], use_container_width=True, hide_index=True)
     with tabs[4]:
@@ -973,11 +1201,13 @@ def _render_breakdown(result: dict[str, Any]) -> None:
             hide_index=True,
         )
     with tabs[5]:
+        _render_debug_trace(result)
+    with tabs[6]:
         st.json(result)
 
 
 st.title("Evidence Dashboard")
-st.caption("Run scenario/variant simulation, persist simulation evidence, and inspect KPI breakdowns.")
+st.caption("Run scenario/variant simulation as a preview, save only confirmed evidence, and inspect KPI breakdowns.")
 
 with st.sidebar:
     st.markdown("### Simulation Context")
@@ -1044,7 +1274,19 @@ with run_col:
         fps_value = st.text_input("FPS Override", value="", key="evidence_fps_override")
         include_timeline = st.checkbox("Include timing timeline", value=True, key="evidence_include_timeline")
         force = st.checkbox("Force recompute", value=False, key="evidence_force_recompute")
-        persist = st.checkbox("Persist evidence", value=True, key="evidence_persist")
+        debug_trace = st.checkbox(
+            "Debug calculation trace",
+            value=False,
+            key="evidence_debug_trace",
+            help="Attach formula-level calculation details to the preview. It is saved to DB only when you confirm the result.",
+        )
+        debug_trace_level = st.selectbox(
+            "Debug detail",
+            ["formula", "summary", "full"],
+            key="evidence_debug_trace_level",
+            help="formula is the normal debug mode. summary is compact; full is reserved for deeper timing details.",
+            disabled=not debug_trace,
+        )
         default_dvfs_json = json.dumps(DEFAULT_DVFS_TABLES, indent=2)
         if "evidence_dvfs_json" not in st.session_state:
             st.session_state["evidence_dvfs_json"] = default_dvfs_json
@@ -1059,7 +1301,8 @@ with run_col:
                 "`speed_mhz` is the available DVFS clock. `voltages` maps ASV group to mV. "
                 "If a domain is omitted, simulation falls back to the reference voltage for power calculation."
             )
-        submitted = st.form_submit_button("Run Simulation", type="primary", use_container_width=True)
+        st.caption("Simulation runs are preview-only by default. Use Confirm & Save Evidence after reviewing the result.")
+        submitted = st.form_submit_button("Run Preview", type="primary", use_container_width=True)
 
     if submitted:
         try:
@@ -1078,21 +1321,35 @@ with run_col:
                     "asv_group": asv_group,
                     "fps": fps,
                     "include_timeline": include_timeline,
+                    "debug_trace": debug_trace,
+                    "debug_trace_level": debug_trace_level,
                 },
                 "dvfs_tables": dvfs_tables,
-                "persist": persist,
+                "persist": False,
                 "force": force,
             }
             response = run_simulation(api_base, payload)
-            _load_sim_results.clear()
             evidence_id = str(response.get("evidence_id") or "")
-            st.session_state["viewer_sim_mode"] = "specific"
-            st.session_state["viewer_sim_evidence_id"] = evidence_id
-            st.session_state["evidence_selected_evidence_id"] = evidence_id
-            st.success(f"Simulation completed: {evidence_id}")
+            if response.get("persisted"):
+                _load_sim_results.clear()
+                st.session_state["viewer_sim_mode"] = "specific"
+                st.session_state["viewer_sim_evidence_id"] = evidence_id
+                st.session_state["evidence_selected_evidence_id"] = evidence_id
+                st.session_state.pop("evidence_preview_result", None)
+                st.session_state.pop("evidence_preview_payload", None)
+                st.success(f"Existing confirmed evidence matched this run: {evidence_id}")
+            else:
+                preview = response.get("evidence")
+                if isinstance(preview, dict):
+                    preview["warnings"] = response.get("warnings") or []
+                    save_payload = dict(payload)
+                    save_payload["persist"] = True
+                    st.session_state["evidence_preview_result"] = preview
+                    st.session_state["evidence_preview_payload"] = save_payload
+                st.success(f"Simulation preview completed: {evidence_id} (not saved)")
             for warning in response.get("warnings") or []:
                 st.warning(str(warning))
-            st.json({key: response.get(key) for key in ("cached", "params_hash", "kpi")})
+            st.json({key: response.get(key) for key in ("cached", "persisted", "params_hash", "kpi")})
         except json.JSONDecodeError as exc:
             st.error(f"DVFS JSON is invalid: {exc}")
         except ViewerApiError as exc:
@@ -1104,25 +1361,52 @@ with run_col:
 
 with result_col:
     st.subheader("Simulation Results")
-    latest_only = st.toggle("Latest result only", value=False, key="evidence_latest_only")
-    results, results_error = _load_sim_results(api_base, scenario_id, variant_id, latest_only)
-    if results_error:
-        st.error(results_error)
-    elif not results:
-        st.info("No simulation evidence is stored for the selected scenario/variant.")
-    else:
-        rows = _result_rows(results)
-        st.dataframe(rows, use_container_width=True, hide_index=True)
-        evidence_ids = [str(row["id"]) for row in rows if row.get("id")]
-        _ensure_choice("evidence_selected_evidence_id", evidence_ids)
-        selected_id = st.selectbox("Selected Evidence", evidence_ids, key="evidence_selected_evidence_id")
-        selected = next((item for item in results if item.get("id") == selected_id), results[0])
-        kpi = selected.get("kpi") if isinstance(selected.get("kpi"), dict) else {}
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Power", f"{_round(_kpi(kpi, 'total_power_mw', 'power_mw')) or 0:g} mW")
-        c2.metric("Current", f"{_round(_kpi(kpi, 'total_power_ma', 'power_ma')) or 0:g} mA")
-        c3.metric("Bandwidth", f"{_round(_kpi(kpi, 'total_bw_mbs', 'bw_mbs')) or 0:g} MB/s")
-        c4.metric("HW Time", f"{_round(_kpi(kpi, 'hw_time_max_ms', 'hw_time_ms')) or 0:g} ms")
-        _render_viewer_tab_link(api_base, scenario_id, variant_id, selected_id)
-        _render_export_actions(selected)
-        _render_breakdown(selected)
+    preview_tab, saved_tab = st.tabs(["Preview Run", "Saved Evidence"])
+    with preview_tab:
+        preview_result = st.session_state.get("evidence_preview_result")
+        if isinstance(preview_result, dict):
+            st.markdown("**Simulation Preview (not saved)**")
+            st.caption("Review this preview first. It will not appear in the evidence list until you confirm and save it.")
+            preview_kpi = preview_result.get("kpi") if isinstance(preview_result.get("kpi"), dict) else {}
+            p1, p2, p3, p4 = st.columns(4)
+            p1.metric("Power", f"{_round(_kpi(preview_kpi, 'total_power_mw', 'power_mw')) or 0:g} mW")
+            p2.metric("Current", f"{_round(_kpi(preview_kpi, 'total_power_ma', 'power_ma')) or 0:g} mA")
+            p3.metric("Bandwidth", f"{_round(_kpi(preview_kpi, 'total_bw_mbs', 'bw_mbs')) or 0:g} MB/s")
+            p4.metric("HW Time", f"{_round(_kpi(preview_kpi, 'hw_time_max_ms', 'hw_time_ms')) or 0:g} ms")
+            _render_result_warnings(preview_result)
+            _render_preview_actions(api_base, preview_result)
+            _render_viewer_tab_link(
+                api_base,
+                scenario_id,
+                variant_id,
+                None,
+                label="Open Scenario in Pipeline Viewer",
+            )
+            _render_breakdown(preview_result, key_prefix="preview")
+        else:
+            st.info("Run a simulation preview from the left panel. Preview results stay separate from saved evidence until confirmed.")
+
+    with saved_tab:
+        latest_only = st.toggle("Latest result only", value=False, key="evidence_latest_only")
+        results, results_error = _load_sim_results(api_base, scenario_id, variant_id, latest_only)
+        if results_error:
+            st.error(results_error)
+        elif not results:
+            st.info("No simulation evidence is stored for the selected scenario/variant.")
+        else:
+            rows = _result_rows(results)
+            st.dataframe(rows, use_container_width=True, hide_index=True)
+            evidence_ids = [str(row["id"]) for row in rows if row.get("id")]
+            _ensure_choice("evidence_selected_evidence_id", evidence_ids)
+            selected_id = st.selectbox("Selected Evidence", evidence_ids, key="evidence_selected_evidence_id")
+            selected = next((item for item in results if item.get("id") == selected_id), results[0])
+            kpi = selected.get("kpi") if isinstance(selected.get("kpi"), dict) else {}
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Power", f"{_round(_kpi(kpi, 'total_power_mw', 'power_mw')) or 0:g} mW")
+            c2.metric("Current", f"{_round(_kpi(kpi, 'total_power_ma', 'power_ma')) or 0:g} mA")
+            c3.metric("Bandwidth", f"{_round(_kpi(kpi, 'total_bw_mbs', 'bw_mbs')) or 0:g} MB/s")
+            c4.metric("HW Time", f"{_round(_kpi(kpi, 'hw_time_max_ms', 'hw_time_ms')) or 0:g} ms")
+            _render_result_warnings(selected)
+            _render_viewer_tab_link(api_base, scenario_id, variant_id, selected_id)
+            _render_export_actions(selected)
+            _render_breakdown(selected, key_prefix="stored")

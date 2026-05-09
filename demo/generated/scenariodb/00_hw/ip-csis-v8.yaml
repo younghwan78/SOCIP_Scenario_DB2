@@ -13,3 +13,20 @@ capabilities:
       throughput_mpps: 600
     - id: low_power
       throughput_mpps: 300
+  sim:
+    hw_name: CSIS
+    source: legacy_project_info_csv
+    source_project: A
+    modes:
+      Normal:
+        unit_power_mw_mp: 0.21
+        idc: 0.0
+        ppc: 8.0
+        vdd: VDD_CAM
+        dvfs_group: CSIS
+      normal:
+        unit_power_mw_mp: 0.21
+        idc: 0.0
+        ppc: 8.0
+        vdd: VDD_CAM
+        dvfs_group: CSIS

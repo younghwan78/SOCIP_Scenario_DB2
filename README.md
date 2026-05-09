@@ -64,10 +64,12 @@ If you prefer explicit `.venv` execution, the project-local Python is:
 Start PostgreSQL:
 
 ```powershell
-docker compose up -d
+docker compose up -d postgres
 ```
 
-Set the database URL for the current PowerShell session:
+Set the database URL for the current PowerShell session, or keep the same value
+in a local `.env` file. Alembic and the API both read `DATABASE_URL`; Alembic
+also accepts `SCENARIO_DB_DATABASE_URL` with higher priority.
 
 ```powershell
 $env:DATABASE_URL="postgresql+psycopg2://scenario_user:scenario_pass@localhost:15432/scenario_db"
@@ -94,6 +96,22 @@ The FastAPI ASGI entry point is `scenario_db.api.app:app`.
 ```powershell
 $env:DATABASE_URL="postgresql+psycopg2://scenario_user:scenario_pass@localhost:15432/scenario_db"
 uv run uvicorn scenario_db.api.app:app --host 127.0.0.1 --port 18000
+```
+
+If you want to launch FastAPI in a background PowerShell window, set the
+environment variable in the parent shell and let `Start-Process` inherit it.
+Avoid building a double-quoted command such as
+`"$env:DATABASE_URL='...'; uv run ..."` because PowerShell expands
+`$env:DATABASE_URL` before the child process starts.
+
+```powershell
+$env:DATABASE_URL="postgresql+psycopg2://scenario_user:scenario_pass@localhost:15432/scenario_db"
+Start-Process powershell.exe -WindowStyle Hidden -ArgumentList @(
+  "-NoProfile",
+  "-ExecutionPolicy", "Bypass",
+  "-Command",
+  "uv run uvicorn scenario_db.api.app:app --host 127.0.0.1 --port 18000"
+)
 ```
 
 Open API docs:
@@ -224,6 +242,19 @@ $env:SCENARIODB_API_BASE="http://127.0.0.1:18000/api/v1"
 uv run --group dashboard streamlit run dashboard\Home.py --server.port 18502 --server.address 127.0.0.1
 ```
 
+Background launch follows the same rule: set the environment variable in the
+parent shell or use a single-quoted child command.
+
+```powershell
+$env:SCENARIODB_API_BASE="http://127.0.0.1:18000/api/v1"
+Start-Process powershell.exe -WindowStyle Hidden -ArgumentList @(
+  "-NoProfile",
+  "-ExecutionPolicy", "Bypass",
+  "-Command",
+  "uv run --group dashboard streamlit run dashboard\Home.py --server.port 18502 --server.address 127.0.0.1 --server.headless true"
+)
+```
+
 Open:
 
 ```text
@@ -255,8 +286,9 @@ as shown above. Then open:
 http://127.0.0.1:18502/Evidence_Dashboard
 ```
 
-The Evidence Dashboard runs scenario/variant simulation and can persist the
-result as `evidence.simulation` rows in PostgreSQL. The simulation currently
+The Evidence Dashboard runs scenario/variant simulation as a preview first.
+Only results confirmed with `Confirm & Save Evidence` are persisted as
+`evidence.simulation` rows in PostgreSQL. The simulation currently
 calculates:
 
 - IP power from `capabilities.sim.modes` unit power and PPC parameters.
@@ -269,6 +301,8 @@ calculates:
   timing from panel refresh/scanout metadata when sensor/panel catalog entries
   are available.
 - DVFS-selected clock/voltage breakdowns.
+- Optional debug calculation traces that explain formula inputs,
+  intermediate values, and final KPI values.
 
 The left sidebar selects the simulation context:
 
@@ -289,8 +323,11 @@ cold   ~= -20C chamber
 
 The DVFS Tables JSON field is prefilled with a default table shape. Domain keys
 should match IP `dvfs_group` values such as `CAM`, `CSIS`, `INTCAM`, and `INT`.
+Enable `Debug calculation trace` when you need to audit how power, current,
+bandwidth, DVFS, HW timing, and timeline summary values were derived.
 
-Persisted results are shown in `Simulation Results`. `Open Pipeline Viewer
+Preview results appear above `Simulation Results` and are not saved to DB until
+confirmed. Persisted results are shown in `Simulation Results`. `Open Pipeline Viewer
 Overlay` opens the Pipeline Viewer in a new browser tab and passes the selected
 SoC, project, scenario, variant, API base, and simulation evidence id as query
 parameters. The original Evidence Dashboard state remains in place. Use
@@ -314,15 +351,23 @@ $payload = @{
   config = @{
     asv_group = 4
     include_timeline = $true
+    debug_trace = $true
+    debug_trace_level = "formula"
   }
   dvfs_tables = @{}
-  persist = $true
+  persist = $false
   force = $false
 } | ConvertTo-Json -Depth 20
 
 $run = Invoke-RestMethod -Method Post -Uri "$api/simulation/run" -ContentType "application/json" -Body $payload
 $run.evidence_id
-Invoke-RestMethod "$api/simulation/results/$($run.evidence_id)" | ConvertTo-Json -Depth 20
+$run.evidence.calculation_trace.kpi | ConvertTo-Json -Depth 20
+
+# Save only after reviewing the preview.
+$savePayload = $payload | ConvertFrom-Json
+$savePayload.persist = $true
+$saved = Invoke-RestMethod -Method Post -Uri "$api/simulation/run" -ContentType "application/json" -Body ($savePayload | ConvertTo-Json -Depth 20)
+Invoke-RestMethod "$api/simulation/results/$($saved.evidence_id)" | ConvertTo-Json -Depth 20
 ```
 
 Simulation evidence is not an unbounded append log for identical inputs. The
@@ -332,7 +377,10 @@ result unless `force=true`. Execution control flags such as `persist` and
 `force` are excluded from the hash. Distinct scenario/variant, thermal/SW
 context, config, or DVFS inputs create distinct evidence ids. Use
 `persist=false` for a temporary run that returns the calculated result without
-saving it to DB.
+saving it to DB. Debug trace flags are also excluded from the hash; if a
+confirmed evidence row exists without a requested trace, the API recomputes the
+same result and updates that evidence with `calculation_trace` when
+`persist=true`.
 
 ## Viewer Check
 

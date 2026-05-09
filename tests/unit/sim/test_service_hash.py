@@ -21,6 +21,17 @@ def test_request_hash_ignores_persist_and_force_flags() -> None:
     assert baseline == transient_forced
 
 
+def test_request_hash_ignores_debug_trace_flags() -> None:
+    inputs = _inputs()
+    baseline = _request_hash(inputs, _request())
+    debug = _request_hash(
+        inputs,
+        _request(config=SimulationRunConfig(asv_group=4, include_timeline=True, debug_trace=True, debug_trace_level="full")),
+    )
+
+    assert baseline == debug
+
+
 def _inputs() -> SimulationInputs:
     return SimulationInputs(
         scenario_id="uc-camera-recording",
@@ -36,6 +47,7 @@ def _request(
     ambient_temp_c: float = 25.0,
     persist: bool = True,
     force: bool = False,
+    config: SimulationRunConfig | None = None,
 ) -> SimulateRequest:
     return SimulateRequest(
         scenario_id="uc-camera-recording",
@@ -46,7 +58,7 @@ def _request(
             "thermal": thermal,
             "ambient_temp_c": ambient_temp_c,
         },
-        config=SimulationRunConfig(asv_group=4, include_timeline=True),
+        config=config or SimulationRunConfig(asv_group=4, include_timeline=True),
         persist=persist,
         force=force,
     )

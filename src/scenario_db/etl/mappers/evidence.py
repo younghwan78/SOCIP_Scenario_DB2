@@ -35,6 +35,7 @@ def upsert_simulation(raw: dict, sha256: str, session: Session) -> None:
     row.dvfs_breakdown      = [b.model_dump(exclude_none=True) for b in obj.dvfs_breakdown]
     row.timeline_events     = [b.model_dump(exclude_none=True) for b in obj.timeline_events]
     row.vdd_power           = obj.vdd_power or {}
+    row.calculation_trace   = obj.calculation_trace
     row.params_hash         = obj.params_hash
     row.artifacts           = [a.model_dump(exclude_none=True) for a in obj.artifacts]
     row.yaml_sha256         = sha256

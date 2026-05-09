@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field, model_validator
 
@@ -56,6 +56,7 @@ class SimulationEvidence(BaseScenarioModel):
     timeline_events: list[TimelineEvent] = Field(default_factory=list)
     vdd_power: dict[str, dict[str, float]] = Field(default_factory=dict)
     params_hash: str | None = None
+    calculation_trace: dict[str, Any] | None = None
     artifacts: list[Artifact] = Field(default_factory=list)
 
     @model_validator(mode="after")

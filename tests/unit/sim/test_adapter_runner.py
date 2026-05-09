@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
+import yaml
 
 
 pytest.importorskip("networkx")
 pytest.importorskip("simpy")
 
 from scenario_db.db.models.capability import IpCatalog
-from scenario_db.db.models.definition import Scenario
+from scenario_db.db.models.definition import Scenario, ScenarioVariant
 from scenario_db.db.repositories.scenario_graph import CanonicalScenarioGraph
-from scenario_db.db.repositories.variant_resolution import ResolvedScenarioVariant
+from scenario_db.db.repositories.variant_resolution import ResolvedScenarioVariant, resolve_variant_from_rows
 from scenario_db.models.evidence.common import ExecutionContext
 from scenario_db.sim.adapter import build_simulation_inputs
 from scenario_db.sim.models import DVFSLevel, DVFSTable, SimulationRunConfig
@@ -94,6 +97,32 @@ def test_adapter_uses_mode_specific_sim_params():
     assert inputs.warnings == []
 
 
+def test_adapter_matches_sim_modes_case_insensitively():
+    graph = _graph()
+    graph.variant.node_configs["mfc"]["selected_mode"] = "normal"
+    graph.ip_catalog["ip-mfc-v14"].capabilities = {
+        "operating_modes": [],
+        "sim": {
+            "hw_name": "MFC",
+            "modes": {
+                "Normal": {
+                    "ppc": 4,
+                    "unit_power_mw_mp": 1.0,
+                    "vdd": "VDD_INT",
+                    "dvfs_group": "INT",
+                },
+            },
+        },
+    }
+
+    inputs = build_simulation_inputs(graph, SimulationRunConfig(include_timeline=False))
+    mfc = next(item for item in inputs.workloads if item.node_id == "mfc")
+
+    assert mfc.sim_params.ppc == 4
+    assert mfc.sim_params.unit_power_mw_mp == 1.0
+    assert inputs.warnings == []
+
+
 def test_adapter_uses_role_specific_sim_params():
     graph = _graph()
     graph.scenario.pipeline["nodes"][0]["role"] = "bayer_processing"
@@ -139,6 +168,35 @@ def test_runner_uses_reference_voltage_when_dvfs_table_is_missing():
     assert result.resolved["isp0"].set_voltage_mv > 0
 
 
+def test_runner_builds_debug_calculation_trace():
+    graph = _graph()
+    inputs = build_simulation_inputs(
+        graph,
+        SimulationRunConfig(include_timeline=True, debug_trace=True),
+    )
+
+    result = run_simulation(inputs, dvfs_tables={})
+    evidence = build_simulation_evidence(
+        result,
+        execution_context=ExecutionContext(
+            silicon_rev="EVT0",
+            sw_baseline_ref="sw-vendor-v1.2.3",
+            thermal="normal",
+        ),
+        project_ref=inputs.project_ref,
+        params_hash=params_hash(inputs),
+        timestamp="2026-05-07T00:00:00+09:00",
+    )
+
+    trace = evidence.calculation_trace
+    assert trace is not None
+    assert trace["kpi"]["total_power_mw"]["result"] == result.total_power_mw
+    assert trace["kpi"]["total_bw_mbs"]["result"] == result.bw_total_mbs
+    assert trace["ip"][0]["required_clock"]["formula"].startswith("pixels * fps")
+    assert trace["dma"][0]["result"]["bw_mbs"] == result.dma_breakdown[0].bw_mbs
+    assert trace["timeline"]["summary"]["event_count"] == len(result.timeline_events)
+
+
 def test_adapter_falls_back_to_variant_resolution_and_m2m_edges():
     graph = _graph()
     graph.scenario.size_profile = None
@@ -171,6 +229,34 @@ def test_adapter_warns_when_sim_params_default_to_zero():
     assert any("isp0" in warning and "unit_power_mw_mp=0.0" in warning for warning in inputs.warnings)
 
 
+def test_runner_warns_when_all_compute_core_power_is_zero():
+    graph = _graph()
+    graph.ip_catalog["ip-isp-v12"].capabilities = {"operating_modes": []}
+    graph.ip_catalog["ip-mfc-v14"].capabilities = {"operating_modes": []}
+
+    inputs = build_simulation_inputs(graph, SimulationRunConfig(include_timeline=False))
+    result = run_simulation(inputs, dvfs_tables={})
+
+    assert any("no capabilities.sim" in warning for warning in result.warnings)
+    assert any("All compute IP core power is zero" in warning for warning in result.warnings)
+    assert any("All compute IP HW time is zero" in warning for warning in result.warnings)
+
+
+def test_demo_imported_fhd30_fixture_has_nonzero_compute_power_without_warnings():
+    graph = _demo_generated_graph("uc-demo-import-recording", "FHD30-Imported")
+
+    inputs = build_simulation_inputs(graph, SimulationRunConfig(include_timeline=True))
+    result = run_simulation(inputs, dvfs_tables={})
+
+    assert result.warnings == []
+    assert result.core_power_mw > 0
+    assert result.hw_time_max_ms > 0
+    power_by_node = {node_id: item.total_power_mw for node_id, item in result.resolved.items()}
+    for node_id in ("csis0", "isp0", "mfc", "dpu"):
+        assert power_by_node[node_id] > 0
+    assert "llc" not in power_by_node
+
+
 def test_adapter_excludes_external_sensor_and_panel_from_compute_workloads():
     graph = _graph()
     graph.scenario.pipeline["nodes"].extend(
@@ -201,6 +287,24 @@ def test_adapter_excludes_external_sensor_and_panel_from_compute_workloads():
     assert {item.node_id for item in inputs.workloads} == {"isp0", "mfc"}
     assert not any("sensor_front" in warning for warning in inputs.warnings)
     assert not any("panel" in warning for warning in inputs.warnings)
+
+
+def test_adapter_excludes_llc_memory_from_compute_workloads():
+    graph = _graph()
+    graph.scenario.pipeline["nodes"].append({"id": "llc", "ip_ref": "ip-llc-v2", "role": "memory"})
+    graph.ip_catalog["ip-llc-v2"] = IpCatalog(
+        id="ip-llc-v2",
+        schema_version="2.2",
+        category="memory",
+        hierarchy={},
+        capabilities={"sim": {"modes": {"Normal": {"ppc": 0, "unit_power_mw_mp": 0}}}},
+        yaml_sha256="sha",
+    )
+
+    inputs = build_simulation_inputs(graph, SimulationRunConfig(include_timeline=False))
+
+    assert {item.node_id for item in inputs.workloads} == {"isp0", "mfc"}
+    assert not any("llc" in warning for warning in inputs.warnings)
 
 
 def test_adapter_adds_sensor_source_and_panel_sink_timing_constraints():
@@ -377,3 +481,67 @@ def _graph() -> CanonicalScenarioGraph:
             ),
         },
     )
+
+
+def _demo_generated_graph(scenario_id: str, variant_id: str) -> CanonicalScenarioGraph:
+    root = Path(__file__).resolve().parents[3]
+    scenario_raw = _read_yaml(root / "demo" / "generated" / "scenariodb" / "02_definition" / f"{scenario_id}.yaml")
+    scenario = Scenario(
+        id=scenario_raw["id"],
+        schema_version=str(scenario_raw["schema_version"]),
+        project_ref=scenario_raw["project_ref"],
+        metadata_=scenario_raw.get("metadata") or {},
+        pipeline=scenario_raw.get("pipeline") or {},
+        size_profile=scenario_raw.get("size_profile"),
+        design_axes=scenario_raw.get("design_axes"),
+        yaml_sha256="sha",
+    )
+    variant_rows = {
+        item["id"]: ScenarioVariant(
+            scenario_id=scenario_id,
+            id=item["id"],
+            severity=item.get("severity"),
+            design_conditions=item.get("design_conditions") or {},
+            design_conditions_override=item.get("design_conditions_override") or {},
+            size_overrides=item.get("size_overrides") or {},
+            routing_switch=item.get("routing_switch") or {},
+            topology_patch=item.get("topology_patch") or {},
+            node_configs=item.get("node_configs") or {},
+            buffer_overrides=item.get("buffer_overrides") or {},
+            ip_requirements=item.get("ip_requirements") or {},
+            sw_requirements=item.get("sw_requirements"),
+            violation_policy=item.get("violation_policy"),
+            tags=item.get("tags") or [],
+            derived_from_variant=item.get("derived_from_variant"),
+        )
+        for item in scenario_raw.get("variants") or []
+    }
+    variant = resolve_variant_from_rows(variant_rows, scenario_id, variant_id)
+    hw_dir = root / "demo" / "generated" / "scenariodb" / "00_hw"
+    ip_catalog = {
+        ip_id: _ip_catalog_from_yaml(hw_dir / f"{ip_id}.yaml")
+        for ip_id in ("ip-csis-v8", "ip-isp-v12", "ip-mfc-v14", "ip-dpu-v9", "ip-llc-v2")
+    }
+    return CanonicalScenarioGraph(
+        scenario=scenario,
+        variant=variant,
+        ip_catalog=ip_catalog,
+    )
+
+
+def _ip_catalog_from_yaml(path: Path) -> IpCatalog:
+    raw = _read_yaml(path)
+    return IpCatalog(
+        id=raw["id"],
+        schema_version=str(raw["schema_version"]),
+        category=raw.get("category"),
+        hierarchy=raw.get("hierarchy") or {},
+        capabilities=raw.get("capabilities") or {},
+        rtl_version=raw.get("rtl_version"),
+        compatible_soc=raw.get("compatible_soc") or [],
+        yaml_sha256="sha",
+    )
+
+
+def _read_yaml(path: Path) -> dict:
+    return yaml.safe_load(path.read_text(encoding="utf-8"))

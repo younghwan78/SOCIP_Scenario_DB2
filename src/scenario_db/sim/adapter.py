@@ -105,6 +105,8 @@ def _is_external_non_compute_node(node: dict[str, Any], ip_row: Any) -> bool:
         return True
     if category == "panel" or "panel" in text:
         return True
+    if category == "memory" or "llc" in text:
+        return True
     return False
 
 
@@ -123,11 +125,28 @@ def _sim_params(
         or (capabilities.get("properties") or {}).get("sim")
         or {}
     )
+    if not isinstance(sim, dict):
+        sim = {}
     mode_params = _mode_sim_params(sim, mode)
     role_params = _role_sim_params(sim, role)
     role_mode_params = _mode_sim_params(role_params, mode)
     override_params = sim_block.get("ip_params") or {}
+    if not isinstance(override_params, dict):
+        override_params = {}
     override_mode_params = _mode_sim_params(override_params, mode)
+    if not sim and not override_params:
+        warnings.append(
+            f"{node_id} ({ip_row.id}, mode={mode}) has no capabilities.sim or sim.ip_params; "
+            "ppc, unit power, DVFS group, and timing defaults will be zero."
+        )
+    elif _declares_modes(sim, role_params, override_params) and not any(
+        _has_sim_values(params)
+        for params in (sim, mode_params, role_params, role_mode_params, override_params, override_mode_params)
+    ):
+        warnings.append(
+            f"{node_id} ({ip_row.id}, mode={mode}) has no matching sim mode; "
+            "mode-specific ppc and unit power may default to zero."
+        )
     merged = {**sim, **mode_params, **role_params, **role_mode_params, **override_params, **override_mode_params}
     hw_name = merged.get("hw_name") or merged.get("hw_name_in_sim") or _fallback_hw_name(ip_row.id)
     ppc = float(merged.get("ppc") or 0.0)
@@ -157,7 +176,26 @@ def _mode_sim_params(sim: dict[str, Any], mode: str) -> dict[str, Any]:
     modes = sim.get("modes") or {}
     if not isinstance(modes, dict):
         return {}
-    return modes.get(mode) or modes.get(str(mode)) or {}
+    if mode in modes:
+        return modes[mode]
+    mode_text = str(mode)
+    if mode_text in modes:
+        return modes[mode_text]
+    for key, value in modes.items():
+        if str(key).lower() == mode_text.lower() and isinstance(value, dict):
+            return value
+    return {}
+
+
+def _declares_modes(*blocks: dict[str, Any]) -> bool:
+    return any(isinstance(block.get("modes"), dict) and bool(block.get("modes")) for block in blocks)
+
+
+def _has_sim_values(block: dict[str, Any]) -> bool:
+    return any(
+        key in block and block.get(key) not in (None, "")
+        for key in ("ppc", "unit_power_mw_mp", "vdd", "dvfs_group", "max_clock_mhz")
+    )
 
 
 def _role_sim_params(sim: dict[str, Any], role: str) -> dict[str, Any]:

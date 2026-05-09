@@ -12,6 +12,7 @@ from scenario_db.models.evidence.resolution import (
 )
 from scenario_db.models.evidence.simulation import IpBreakdown, SimulationEvidence
 from scenario_db.sim.bw_calc import calc_port_bw
+from scenario_db.sim.debug_trace import build_calculation_trace
 from scenario_db.sim.dvfs_resolver import DvfsResolver
 from scenario_db.sim.models import (
     DVFSTable,
@@ -33,6 +34,7 @@ def run_simulation(
 
     dvfs_tables = dvfs_tables or {}
     config = inputs.config
+    effective_fps = float(config.fps or 30.0)
     resolved = DvfsResolver(dvfs_tables, asv_group=config.asv_group).resolve(
         inputs.workloads,
         dvfs_overrides=config.dvfs_overrides,
@@ -40,7 +42,7 @@ def run_simulation(
     dma_breakdown = [
         calc_port_bw(
             transfer,
-            fps=float(config.fps or 30.0),
+            fps=effective_fps,
             bw_power_coeff=config.bw_power_coeff,
             vbat=config.vbat,
             pmic_efficiency=config.pmic_efficiency,
@@ -87,6 +89,33 @@ def run_simulation(
     )
     feasible = all(item.feasible for item in resolved.values())
     infeasible_reason = _first_infeasible_reason(timing_breakdown)
+    bw_total_mbs = sum(item.bw_mbs for item in dma_breakdown)
+    hw_time_max_ms = max((item.hw_time_ms for item in timing_breakdown), default=0.0)
+    timeline_end_ms = max((item.end_ms for item in timeline_events), default=None)
+    warnings = _simulation_warnings(
+        inputs,
+        core_power_mw=core_power_mw,
+        hw_time_max_ms=hw_time_max_ms,
+    )
+    calculation_trace = None
+    if config.debug_trace:
+        calculation_trace = build_calculation_trace(
+            inputs,
+            dvfs_tables=dvfs_tables,
+            resolved=resolved,
+            dma_breakdown=dma_breakdown,
+            timing_breakdown=timing_breakdown,
+            timeline_events=timeline_events,
+            core_power_mw=core_power_mw,
+            bw_power_mw=bw_power_mw,
+            total_power_mw=total_power_mw,
+            total_power_ma=total_power_ma,
+            bw_total_mbs=bw_total_mbs,
+            hw_time_max_ms=hw_time_max_ms,
+            timeline_end_ms=timeline_end_ms,
+            effective_fps=effective_fps,
+        )
+        calculation_trace["warnings"] = list(warnings)
 
     return SimRunResult(
         scenario_id=inputs.scenario_id,
@@ -95,9 +124,9 @@ def run_simulation(
         total_power_ma=total_power_ma,
         core_power_mw=core_power_mw,
         bw_power_mw=bw_power_mw,
-        bw_total_mbs=sum(item.bw_mbs for item in dma_breakdown),
-        hw_time_max_ms=max((item.hw_time_ms for item in timing_breakdown), default=0.0),
-        timeline_end_ms=max((item.end_ms for item in timeline_events), default=None),
+        bw_total_mbs=bw_total_mbs,
+        hw_time_max_ms=hw_time_max_ms,
+        timeline_end_ms=timeline_end_ms,
         feasible=feasible,
         infeasible_reason=infeasible_reason,
         resolved=resolved,
@@ -105,7 +134,8 @@ def run_simulation(
         timing_breakdown=timing_breakdown,
         timeline_events=timeline_events,
         vdd_power=_vdd_power(resolved, dma_breakdown),
-        warnings=list(inputs.warnings),
+        warnings=warnings,
+        calculation_trace=calculation_trace,
     )
 
 
@@ -174,6 +204,7 @@ def build_simulation_evidence(
         timeline_events=result.timeline_events,
         vdd_power=result.vdd_power,
         params_hash=params_hash,
+        calculation_trace=result.calculation_trace,
     )
 
 
@@ -234,6 +265,27 @@ def _first_infeasible_reason(timing_breakdown: list[IPTimingResult]) -> str | No
         if not item.feasible:
             return item.infeasible_reason
     return None
+
+
+def _simulation_warnings(
+    inputs: SimulationInputs,
+    *,
+    core_power_mw: float,
+    hw_time_max_ms: float,
+) -> list[str]:
+    warnings = list(inputs.warnings)
+    has_compute_workload = bool(inputs.workloads)
+    if has_compute_workload and core_power_mw <= 0:
+        warnings.append(
+            "All compute IP core power is zero; check capabilities.sim.modes/role_modes "
+            "unit_power_mw_mp, ppc, vdd, and DVFS metadata for this scenario variant."
+        )
+    if has_compute_workload and hw_time_max_ms <= 0:
+        warnings.append(
+            "All compute IP HW time is zero; check ppc, workload size, selected mode, "
+            "and DVFS clock metadata for this scenario variant."
+        )
+    return warnings
 
 
 def _evidence_id(result: SimRunResult, hash_value: str | None) -> str:

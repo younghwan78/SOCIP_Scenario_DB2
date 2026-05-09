@@ -43,3 +43,34 @@ capabilities:
         ppc: 0.0
         vdd: VDD_CAM
         dvfs_group: CAM
+    role_modes:
+      main:
+        hw_name: ISP
+        modes:
+          normal:
+            unit_power_mw_mp: 9.92
+            idc: 0.0
+            ppc: 4.0
+            vdd: VDD_CAM
+            dvfs_group: CAM
+          Normal:
+            unit_power_mw_mp: 9.92
+            idc: 0.0
+            ppc: 4.0
+            vdd: VDD_CAM
+            dvfs_group: CAM
+      isp0:
+        hw_name: ISP
+        modes:
+          normal:
+            unit_power_mw_mp: 9.92
+            idc: 0.0
+            ppc: 4.0
+            vdd: VDD_CAM
+            dvfs_group: CAM
+          Normal:
+            unit_power_mw_mp: 9.92
+            idc: 0.0
+            ppc: 4.0
+            vdd: VDD_CAM
+            dvfs_group: CAM

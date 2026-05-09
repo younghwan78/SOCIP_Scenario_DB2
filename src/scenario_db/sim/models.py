@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field, model_validator
 
@@ -122,6 +122,8 @@ class SimulationRunConfig(BaseScenarioModel):
     include_timeline: bool = True
     timeline_frame_count: int = 1
     timeline_frame_period_ms: float | None = None
+    debug_trace: bool = False
+    debug_trace_level: Literal["summary", "formula", "full"] = "formula"
 
 
 class SimulationInputs(BaseScenarioModel):
@@ -239,3 +241,4 @@ class SimRunResult(BaseScenarioModel):
     timeline_events: list[TimelineEvent] = Field(default_factory=list)
     vdd_power: dict[str, dict[str, float]] = Field(default_factory=dict)
     warnings: list[str] = Field(default_factory=list)
+    calculation_trace: dict[str, Any] | None = None

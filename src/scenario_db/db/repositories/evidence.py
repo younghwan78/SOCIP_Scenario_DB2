@@ -117,6 +117,7 @@ def upsert_simulation_evidence(
     row.dvfs_breakdown = [item.model_dump(exclude_none=True) for item in evidence.dvfs_breakdown]
     row.timeline_events = [item.model_dump(exclude_none=True) for item in evidence.timeline_events]
     row.vdd_power = evidence.vdd_power or {}
+    row.calculation_trace = evidence.calculation_trace
     row.params_hash = evidence.params_hash
     row.artifacts = [item.model_dump(exclude_none=True) for item in evidence.artifacts]
     row.yaml_sha256 = yaml_sha256 or _evidence_sha256(evidence)
