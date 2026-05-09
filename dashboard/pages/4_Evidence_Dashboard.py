@@ -12,7 +12,6 @@ import os
 import sys
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlencode
 
 import streamlit as st
 
@@ -22,6 +21,16 @@ for path in (_root / "src", _root, _root / "dashboard"):
         sys.path.insert(0, str(path))
 
 from dashboard.components.simulation_api_client import delete_simulation_result, list_simulation_results, run_simulation
+from dashboard.components.evidence_dashboard_contract import (
+    PREVIEW_ACTION_LABELS,
+    RESULT_BREAKDOWN_TABS,
+    SAVED_ACTION_LABELS,
+    SIMULATION_RESULT_TOP_TABS,
+    VIEWER_LINK_LABEL_PREVIEW,
+    VIEWER_LINK_LABEL_SAVED,
+    build_pipeline_viewer_url,
+    warning_severity,
+)
 from dashboard.components.viewer_api_client import (
     ViewerApiError,
     default_variant_id,
@@ -399,16 +408,14 @@ def _ordered_table(rows: list[dict[str, Any]], priority: list[str]) -> list[dict
 
 
 def _pipeline_viewer_url(api_base: str, scenario_id: str, variant_id: str, evidence_id: str | None = None) -> str:
-    query = {
-        "api_base": api_base,
-        "soc_id": st.session_state.get("evidence_soc_id") or st.session_state.get("viewer_soc_id"),
-        "project_id": st.session_state.get("evidence_project_id") or st.session_state.get("viewer_project_id"),
-        "scenario_id": scenario_id,
-        "variant_id": variant_id,
-        "sim_evidence_id": evidence_id,
-    }
-    clean = {key: value for key, value in query.items() if value not in (None, "")}
-    return f"/Pipeline_Viewer?{urlencode(clean)}"
+    return build_pipeline_viewer_url(
+        api_base=api_base,
+        soc_id=st.session_state.get("evidence_soc_id") or st.session_state.get("viewer_soc_id"),
+        project_id=st.session_state.get("evidence_project_id") or st.session_state.get("viewer_project_id"),
+        scenario_id=scenario_id,
+        variant_id=variant_id,
+        evidence_id=evidence_id,
+    )
 
 
 def _render_viewer_tab_link(
@@ -417,7 +424,7 @@ def _render_viewer_tab_link(
     variant_id: str,
     evidence_id: str | None = None,
     *,
-    label: str = "Open Pipeline Viewer",
+    label: str = VIEWER_LINK_LABEL_SAVED,
 ) -> None:
     href = _pipeline_viewer_url(api_base, scenario_id, variant_id, evidence_id)
     st.markdown(
@@ -436,7 +443,7 @@ def _render_export_actions(result: dict[str, Any]) -> None:
     json_text = _evidence_json_text(result)
     col_json, col_kpi, col_dma, col_delete = st.columns(4)
     col_json.download_button(
-        "Download JSON",
+        SAVED_ACTION_LABELS[1],
         data=json_text.encode("utf-8"),
         file_name=f"{filename_base}.json",
         mime="application/json",
@@ -444,7 +451,7 @@ def _render_export_actions(result: dict[str, Any]) -> None:
         key=f"download_json_{evidence_id}",
     )
     col_kpi.download_button(
-        "Download KPI CSV",
+        SAVED_ACTION_LABELS[2],
         data=_summary_csv_bytes(result),
         file_name=f"{filename_base}-summary.csv",
         mime="text/csv",
@@ -452,14 +459,14 @@ def _render_export_actions(result: dict[str, Any]) -> None:
         key=f"download_kpi_{evidence_id}",
     )
     col_dma.download_button(
-        "Download DMA CSV",
+        SAVED_ACTION_LABELS[3],
         data=_rows_csv_bytes(result.get("dma_breakdown") or []),
         file_name=f"{filename_base}-dma.csv",
         mime="text/csv",
         use_container_width=True,
         key=f"download_dma_{evidence_id}",
     )
-    if col_delete.button("Delete Evidence", use_container_width=True, key=f"delete_evidence_{evidence_id}"):
+    if col_delete.button(SAVED_ACTION_LABELS[4], use_container_width=True, key=f"delete_evidence_{evidence_id}"):
         try:
             delete_simulation_result(st.session_state["evidence_api_base"], evidence_id)
             _load_sim_results.clear()
@@ -479,7 +486,7 @@ def _render_preview_actions(api_base: str, result: dict[str, Any]) -> None:
     filename_base = _safe_filename(evidence_id)
     json_text = _evidence_json_text(result)
     col_save, col_json, col_kpi = st.columns(3)
-    if col_save.button("Confirm & Save Evidence", type="primary", use_container_width=True):
+    if col_save.button(PREVIEW_ACTION_LABELS[0], type="primary", use_container_width=True):
         payload = st.session_state.get("evidence_preview_payload")
         if not isinstance(payload, dict):
             st.error("No preview payload is available to save.")
@@ -500,7 +507,7 @@ def _render_preview_actions(api_base: str, result: dict[str, Any]) -> None:
             if exc.body:
                 st.code(exc.body)
     col_json.download_button(
-        "Download Preview JSON",
+        PREVIEW_ACTION_LABELS[1],
         data=json_text.encode("utf-8"),
         file_name=f"{filename_base}-preview.json",
         mime="application/json",
@@ -508,7 +515,7 @@ def _render_preview_actions(api_base: str, result: dict[str, Any]) -> None:
         key=f"download_preview_json_{evidence_id}",
     )
     col_kpi.download_button(
-        "Download Preview KPI CSV",
+        PREVIEW_ACTION_LABELS[2],
         data=_summary_csv_bytes(result),
         file_name=f"{filename_base}-preview-summary.csv",
         mime="text/csv",
@@ -1071,13 +1078,8 @@ def _render_result_warnings(result: dict[str, Any]) -> None:
     warnings = _result_warnings(result)
     if not warnings:
         return
-    severe = any(
-        marker in warning
-        for warning in warnings
-        for marker in ("All compute IP core power is zero", "All compute IP HW time is zero")
-    )
     message = "\n".join(f"- {warning}" for warning in warnings)
-    if severe:
+    if warning_severity(warnings) == "error":
         st.error(message)
     else:
         st.warning(message)
@@ -1132,7 +1134,7 @@ def _ip_power_rows(result: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _render_breakdown(result: dict[str, Any], *, key_prefix: str = "stored") -> None:
-    tabs = st.tabs(["IP/Node Power", "DMA BW", "Timing Chart", "Timing Table", "Timeline Table", "Debug Trace", "Raw Evidence"])
+    tabs = st.tabs(list(RESULT_BREAKDOWN_TABS))
     with tabs[0]:
         st.caption("Power is calculated per scenario node / hardware role. `ip_ref` is the catalog source and can repeat for multiple ISP roles.")
         st.dataframe(_ip_power_rows(result), use_container_width=True, hide_index=True)
@@ -1361,7 +1363,7 @@ with run_col:
 
 with result_col:
     st.subheader("Simulation Results")
-    preview_tab, saved_tab = st.tabs(["Preview Run", "Saved Evidence"])
+    preview_tab, saved_tab = st.tabs(list(SIMULATION_RESULT_TOP_TABS))
     with preview_tab:
         preview_result = st.session_state.get("evidence_preview_result")
         if isinstance(preview_result, dict):
@@ -1380,7 +1382,7 @@ with result_col:
                 scenario_id,
                 variant_id,
                 None,
-                label="Open Scenario in Pipeline Viewer",
+                label=VIEWER_LINK_LABEL_PREVIEW,
             )
             _render_breakdown(preview_result, key_prefix="preview")
         else:
@@ -1407,6 +1409,6 @@ with result_col:
             c3.metric("Bandwidth", f"{_round(_kpi(kpi, 'total_bw_mbs', 'bw_mbs')) or 0:g} MB/s")
             c4.metric("HW Time", f"{_round(_kpi(kpi, 'hw_time_max_ms', 'hw_time_ms')) or 0:g} ms")
             _render_result_warnings(selected)
-            _render_viewer_tab_link(api_base, scenario_id, variant_id, selected_id)
+            _render_viewer_tab_link(api_base, scenario_id, variant_id, selected_id, label=VIEWER_LINK_LABEL_SAVED)
             _render_export_actions(selected)
             _render_breakdown(selected, key_prefix="stored")
