@@ -33,6 +33,7 @@ from dashboard.components.import_api_client import (
     validate_batch,
     validation_issue_rows,
 )
+from dashboard.components.table_actions import render_copyable_dataframe
 from scenario_db.legacy_import.write_bundle import build_import_bundle_request
 
 
@@ -403,7 +404,12 @@ with st.container():
     issues = st.session_state["import_bundle_issues"]
     if issues:
         st.warning("Bundle builder reported issues.")
-        st.dataframe(issues, use_container_width=True, hide_index=True)
+        render_copyable_dataframe(
+            issues,
+            key="import_bundle_builder_issues",
+            use_container_width=True,
+            hide_index=True,
+        )
 
     if payload:
         report = (payload.get("payload") or {}).get("import_report") or {}
@@ -417,13 +423,23 @@ with st.container():
         st.markdown("#### Import Report Messages")
         rows = import_report_rows(report)
         if rows:
-            st.dataframe(rows, use_container_width=True, hide_index=True)
+            render_copyable_dataframe(
+                rows,
+                key="import_report_messages",
+                use_container_width=True,
+                hide_index=True,
+            )
         else:
             st.caption("No import report messages.")
 
         st.markdown("#### Canonical Documents")
         if documents:
-            st.dataframe(documents, use_container_width=True, hide_index=True)
+            render_copyable_dataframe(
+                documents,
+                key="import_canonical_documents",
+                use_container_width=True,
+                hide_index=True,
+            )
         else:
             st.caption("No supported canonical documents in bundle.")
 
@@ -493,7 +509,12 @@ with st.container():
         issues = validation_issue_rows(validation)
         if issues:
             st.markdown("#### Validation Issues")
-            st.dataframe(issues, use_container_width=True, hide_index=True)
+            render_copyable_dataframe(
+                issues,
+                key="import_validation_issues",
+                use_container_width=True,
+                hide_index=True,
+            )
 
     diff = st.session_state["diff_result"]
     if diff:
@@ -501,11 +522,21 @@ with st.container():
         st.json({"target_id": diff.get("target_id"), "operation": diff.get("operation")})
         changes = diff_change_rows(diff)
         if changes:
-            st.dataframe(changes, use_container_width=True, hide_index=True)
+            render_copyable_dataframe(
+                changes,
+                key="import_diff_changes",
+                use_container_width=True,
+                hide_index=True,
+            )
         impacts = scenario_impact_rows(diff)
         if impacts:
             st.markdown("#### Scenario Impact")
-            st.dataframe(impacts, use_container_width=True, hide_index=True)
+            render_copyable_dataframe(
+                impacts,
+                key="import_scenario_impact",
+                use_container_width=True,
+                hide_index=True,
+            )
         with st.expander("Raw diff JSON"):
             st.code(json.dumps(diff, indent=2, ensure_ascii=True), language="json")
     st.markdown("</div>", unsafe_allow_html=True)

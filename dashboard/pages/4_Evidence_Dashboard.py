@@ -21,6 +21,7 @@ for path in (_root / "src", _root, _root / "dashboard"):
         sys.path.insert(0, str(path))
 
 from dashboard.components.simulation_api_client import delete_simulation_result, list_simulation_results, run_simulation
+from dashboard.components.table_actions import render_copyable_dataframe
 from dashboard.components.evidence_dashboard_contract import (
     PREVIEW_ACTION_LABELS,
     RESULT_BREAKDOWN_TABS,
@@ -792,7 +793,12 @@ def _render_timing_chart(result: dict[str, Any], *, key_prefix: str = "stored") 
         import plotly.graph_objects as go
     except ImportError:
         st.warning("Plotly is not installed in this environment. The timeline table is shown instead.")
-        st.dataframe(events, use_container_width=True, hide_index=True)
+        render_copyable_dataframe(
+            events,
+            key=f"{key_prefix}_timing_chart_fallback",
+            use_container_width=True,
+            hide_index=True,
+        )
         return
 
     evidence_id = _safe_filename(str(result.get("id") or "selected"))
@@ -1000,10 +1006,20 @@ def _render_timing_chart(result: dict[str, Any], *, key_prefix: str = "stored") 
     detail_cols = st.columns(2)
     with detail_cols[0]:
         st.caption("Critical path")
-        st.dataframe(critical_rows, use_container_width=True, hide_index=True)
+        render_copyable_dataframe(
+            critical_rows,
+            key=f"{key_prefix}_critical_path_rows",
+            use_container_width=True,
+            hide_index=True,
+        )
     with detail_cols[1]:
         st.caption("Top wait/slack candidates")
-        st.dataframe(issue_rows, use_container_width=True, hide_index=True)
+        render_copyable_dataframe(
+            issue_rows,
+            key=f"{key_prefix}_wait_slack_rows",
+            use_container_width=True,
+            hide_index=True,
+        )
 
 
 def _render_debug_trace(result: dict[str, Any]) -> None:
@@ -1032,7 +1048,12 @@ def _render_debug_trace(result: dict[str, Any]) -> None:
         )
     if kpi_rows:
         st.markdown("**KPI formulas**")
-        st.dataframe(kpi_rows, use_container_width=True, hide_index=True)
+        render_copyable_dataframe(
+            kpi_rows,
+            key=f"debug_kpi_rows_{_safe_filename(str(result.get('id') or 'preview'))}",
+            use_container_width=True,
+            hide_index=True,
+        )
 
     ip_rows = []
     for item in trace.get("ip") or []:
@@ -1063,7 +1084,12 @@ def _render_debug_trace(result: dict[str, Any]) -> None:
         )
     if ip_rows:
         st.markdown("**IP power / DVFS / performance trace**")
-        st.dataframe(ip_rows, use_container_width=True, hide_index=True)
+        render_copyable_dataframe(
+            ip_rows,
+            key=f"debug_ip_rows_{_safe_filename(str(result.get('id') or 'preview'))}",
+            use_container_width=True,
+            hide_index=True,
+        )
 
     dma_rows = []
     for item in trace.get("dma") or []:
@@ -1094,13 +1120,23 @@ def _render_debug_trace(result: dict[str, Any]) -> None:
         )
     if dma_rows:
         st.markdown("**DMA bandwidth trace**")
-        st.dataframe(dma_rows, use_container_width=True, hide_index=True)
+        render_copyable_dataframe(
+            dma_rows,
+            key=f"debug_dma_rows_{_safe_filename(str(result.get('id') or 'preview'))}",
+            use_container_width=True,
+            hide_index=True,
+        )
 
     timeline = trace.get("timeline") if isinstance(trace.get("timeline"), dict) else {}
     otf_groups = timeline.get("otf_groups") if isinstance(timeline.get("otf_groups"), list) else []
     if otf_groups:
         st.markdown("**Timing / OTF group trace**")
-        st.dataframe(otf_groups, use_container_width=True, hide_index=True)
+        render_copyable_dataframe(
+            otf_groups,
+            key=f"debug_otf_rows_{_safe_filename(str(result.get('id') or 'preview'))}",
+            use_container_width=True,
+            hide_index=True,
+        )
     with st.expander("Raw calculation trace", expanded=False):
         st.json(trace)
 
@@ -1325,20 +1361,44 @@ def _render_breakdown(result: dict[str, Any], *, key_prefix: str = "stored") -> 
             st.info("No external sensor/display device metadata is stored for this result.")
         else:
             st.caption("Sensor/display conditions used as source/sink constraints. External devices are excluded from IP core power.")
-            st.dataframe(rows, use_container_width=True, hide_index=True, height=_table_height(rows))
+            render_copyable_dataframe(
+                rows,
+                key=f"{key_prefix}_external_device_info",
+                use_container_width=True,
+                hide_index=True,
+                height=_table_height(rows),
+            )
     with tabs[1]:
         st.caption("Power is calculated per scenario node / hardware role. `ip_ref` is the catalog source and can repeat for multiple ISP roles.")
         rows = _ip_power_rows(result)
-        st.dataframe(rows, use_container_width=True, hide_index=True, height=_table_height(rows))
+        render_copyable_dataframe(
+            rows,
+            key=f"{key_prefix}_ip_node_power",
+            use_container_width=True,
+            hide_index=True,
+            height=_table_height(rows),
+        )
     with tabs[2]:
         rows = _dma_rows(result)
-        st.dataframe(rows, use_container_width=True, hide_index=True, height=_table_height(rows))
+        render_copyable_dataframe(
+            rows,
+            key=f"{key_prefix}_dma_bw",
+            use_container_width=True,
+            hide_index=True,
+            height=_table_height(rows),
+        )
     with tabs[3]:
         _render_timing_summary(result)
         _render_timing_chart(result, key_prefix=key_prefix)
     with tabs[4]:
         rows = result.get("timing_breakdown") or []
-        st.dataframe(rows, use_container_width=True, hide_index=True, height=_table_height(rows if isinstance(rows, list) else []))
+        render_copyable_dataframe(
+            rows,
+            key=f"{key_prefix}_timing_table",
+            use_container_width=True,
+            hide_index=True,
+            height=_table_height(rows if isinstance(rows, list) else []),
+        )
     with tabs[5]:
         rows = _ordered_table(
             result.get("timeline_events") or [],
@@ -1377,8 +1437,9 @@ def _render_breakdown(result: dict[str, Any], *, key_prefix: str = "stored") -> 
                 "predecessors",
             ],
         )
-        st.dataframe(
+        render_copyable_dataframe(
             rows,
+            key=f"{key_prefix}_timeline_table",
             use_container_width=True,
             hide_index=True,
             height=_table_height(rows),
@@ -1589,7 +1650,12 @@ with result_col:
             st.info("No simulation evidence is stored for the selected scenario/variant.")
         else:
             rows = _result_rows(results)
-            st.dataframe(rows, use_container_width=True, hide_index=True)
+            render_copyable_dataframe(
+                rows,
+                key="saved_evidence_result_list",
+                use_container_width=True,
+                hide_index=True,
+            )
             evidence_ids = [str(row["id"]) for row in rows if row.get("id")]
             _ensure_choice("evidence_selected_evidence_id", evidence_ids)
             selected_id = st.selectbox("Selected Evidence", evidence_ids, key="evidence_selected_evidence_id")

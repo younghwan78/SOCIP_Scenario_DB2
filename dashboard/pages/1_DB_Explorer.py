@@ -28,6 +28,7 @@ from dashboard.components.explorer_api_client import (  # noqa: E402
     get_variant_matrix,
     viewer_link,
 )
+from dashboard.components.table_actions import render_copyable_dataframe  # noqa: E402
 from dashboard.components.viewer_api_client import (  # noqa: E402
     list_projects,
     list_soc_platforms,
@@ -511,7 +512,13 @@ def _render_counts(title: str, rows: list[dict[str, Any]]) -> None:
     st.markdown(f"**{title}**")
     if rows:
         table_height = 42 + len(rows) * 36
-        st.dataframe(rows, hide_index=True, use_container_width=True, height=table_height)
+        render_copyable_dataframe(
+            rows,
+            key=f"explorer_counts_{title}",
+            hide_index=True,
+            use_container_width=True,
+            height=table_height,
+        )
     else:
         st.caption("No data")
 
@@ -718,13 +725,19 @@ with tabs[0]:
     with right:
         _render_counts("Board Counts", summary.get("board_counts") or [])
     st.markdown("**Latest Import Batches**")
-    st.dataframe(summary.get("latest_import_batches") or [], hide_index=True, use_container_width=True)
+    render_copyable_dataframe(
+        summary.get("latest_import_batches") or [],
+        key="explorer_latest_import_batches_overview",
+        hide_index=True,
+        use_container_width=True,
+    )
 
 with tabs[1]:
     st.markdown(f"**Scenario Catalog** - {len(catalog_items)} rows")
     _render_catalog_cards(catalog_items)
-    st.dataframe(
+    render_copyable_dataframe(
         _catalog_table_rows(catalog_items),
+        key="explorer_scenario_catalog",
         hide_index=True,
         use_container_width=True,
         height=620,
@@ -740,8 +753,11 @@ with tabs[2]:
     _render_variant_matrix_summary(matrix_items)
     matrix_rows = _matrix_table_rows(matrix_items, axis_keys)
     matrix_df = pd.DataFrame(matrix_rows)
-    st.dataframe(
-        _style_variant_matrix(matrix_df) if not matrix_df.empty else matrix_df,
+    styled_matrix = _style_variant_matrix(matrix_df) if not matrix_df.empty else matrix_df
+    render_copyable_dataframe(
+        styled_matrix,
+        key="explorer_variant_matrix",
+        copy_data=matrix_df,
         hide_index=True,
         use_container_width=True,
         height=650,
@@ -783,6 +799,17 @@ with tabs[3]:
         <span class="health-info">Info {counts.get('info', 0)}</span>""",
         unsafe_allow_html=True,
     )
-    st.dataframe(_health_table_rows(health_items), hide_index=True, use_container_width=True, height=520)
+    render_copyable_dataframe(
+        _health_table_rows(health_items),
+        key="explorer_import_health_issues",
+        hide_index=True,
+        use_container_width=True,
+        height=520,
+    )
     st.markdown("**Latest Import Batches**")
-    st.dataframe(health.get("latest_import_batches") or [], hide_index=True, use_container_width=True)
+    render_copyable_dataframe(
+        health.get("latest_import_batches") or [],
+        key="explorer_latest_import_batches_health",
+        hide_index=True,
+        use_container_width=True,
+    )
