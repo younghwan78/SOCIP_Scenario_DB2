@@ -27,6 +27,7 @@ class _TaskRun:
     otf_group_id: str | None = None
     latency_offset_ms: float | None = None
     bottleneck: bool = False
+    bottleneck_reason: str | None = None
     critical: bool = False
     critical_path_rank: int | None = None
 
@@ -37,6 +38,7 @@ def build_timeline_events(
     *,
     frame_count: int = 1,
     frame_period_ms: float | None = None,
+    critical_budget_ms: float | None = None,
 ) -> list[TimelineEvent]:
     """Build task timing events with DAG, resource, token, and frame scheduling.
 
@@ -207,6 +209,8 @@ def build_timeline_events(
             run.token_wait_ms = token_wait
             run.otf_group_id = group_id
             run.bottleneck = _task_duration(run.task) == max_duration
+            if run.bottleneck:
+                run.bottleneck_reason = "longest duration in OTF streaming group"
             task_processes.append(env.process(run_otf_group_task(run, base_start, max_duration)))
         if task_processes:
             yield simpy.events.AllOf(env, task_processes)
@@ -243,7 +247,7 @@ def build_timeline_events(
             env.process(run_task(instance_id))
     env.run()
 
-    _mark_critical_path(runs, graph)
+    _mark_critical_path(runs, graph, critical_budget_ms=critical_budget_ms)
     return _timeline_events(runs, graph)
 
 
@@ -313,9 +317,17 @@ def _expand_graph(nx, base_graph, runs: dict[str, _TaskRun]):
     return graph
 
 
-def _mark_critical_path(runs: dict[str, _TaskRun], graph) -> None:
+def _mark_critical_path(
+    runs: dict[str, _TaskRun],
+    graph,
+    *,
+    critical_budget_ms: float | None = None,
+) -> None:
     if not runs:
         return
+    if critical_budget_ms is not None and critical_budget_ms > 0:
+        if _runs_fit_frame_budget(runs, critical_budget_ms):
+            return
     by_resource: dict[str, list[_TaskRun]] = {}
     for run in runs.values():
         if run.resource_id:
@@ -366,6 +378,25 @@ def _critical_parent(
     return max(candidates, key=lambda item: (item[0], item[1].start_ms))[1]
 
 
+def _runs_fit_frame_budget(runs: dict[str, _TaskRun], budget_ms: float) -> bool:
+    grouped: dict[str, list[_TaskRun]] = {}
+    for run in runs.values():
+        if run.slack_ms is not None and run.slack_ms < 0:
+            return False
+        if run.resource_wait_ms > 0 or run.token_wait_ms > 0:
+            return False
+        if run.otf_group_id:
+            grouped.setdefault(run.otf_group_id, []).append(run)
+        elif (run.end_ms - run.start_ms) > budget_ms:
+            return False
+    for group_runs in grouped.values():
+        start = min(run.start_ms for run in group_runs)
+        end = max(run.end_ms for run in group_runs)
+        if (end - start) > budget_ms:
+            return False
+    return True
+
+
 def _timeline_events(runs: dict[str, _TaskRun], graph) -> list[TimelineEvent]:
     result: list[TimelineEvent] = []
     rank = {node: index for index, node in enumerate(graph.nodes)}
@@ -393,6 +424,7 @@ def _timeline_events(runs: dict[str, _TaskRun], graph) -> list[TimelineEvent]:
                 otf_group_id=run.otf_group_id,
                 latency_offset_ms=run.latency_offset_ms,
                 bottleneck=run.bottleneck,
+                bottleneck_reason=run.bottleneck_reason or _bottleneck_reason(run),
                 constraint_type=task.get("constraint_type"),
                 source_fps=task.get("source_fps"),
                 v_valid_ms=task.get("v_valid_ms") or task.get("source_valid_ms"),
@@ -412,6 +444,20 @@ def _timeline_events(runs: dict[str, _TaskRun], graph) -> list[TimelineEvent]:
             )
         )
     return result
+
+
+def _bottleneck_reason(run: _TaskRun) -> str | None:
+    if run.bottleneck:
+        return "longest duration in OTF streaming group"
+    if run.resource_wait_ms > 0:
+        return "waited for shared resource"
+    if run.token_wait_ms > 0:
+        return "waited for M2M/VOTF token queue"
+    if run.slack_ms is not None and run.slack_ms < 0:
+        return "missed sink deadline"
+    if run.critical:
+        return "on critical path after frame-budget check"
+    return None
 
 
 def _incoming_edge_type(instance_id: str, graph) -> str | None:

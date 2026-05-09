@@ -66,8 +66,9 @@ def test_adapter_runner_builds_evidence_from_canonical_graph():
     assert result.timeline_events[-1].task_id == "mfc"
     assert evidence.kind == "evidence.simulation"
     assert evidence.params_hash == hash_value
-    assert evidence.kpi["critical_path_ms"] > 0
-    assert evidence.kpi["critical_path_task_count"] >= 1
+    assert evidence.kpi["timeline_end_ms"] > 0
+    assert evidence.kpi["critical_path_ms"] == 0.0
+    assert evidence.kpi["critical_path_task_count"] == 0
     assert {item.port for item in evidence.dma_breakdown} == {"RDMA_FE", "WDMA_BE", "MFC_RDMA"}
     assert evidence.timeline_events[-1].end_ms > 0
 
@@ -359,6 +360,133 @@ def test_adapter_adds_sensor_source_and_panel_sink_timing_constraints():
     assert by_task["t_dpu"]["constraint_type"] == "sink"
     assert by_task["t_dpu"]["refresh_hz"] == 60.0
     assert by_task["t_dpu"]["deadline_ms"] == pytest.approx(16.666667)
+
+
+def test_adapter_records_external_devices_and_prefers_sensor_place():
+    graph = _graph()
+    graph.variant.design_conditions.update(
+        {
+            "fps": 30,
+            "resolution": "FHD",
+            "subscenario": "FHD_VIDEO",
+            "sensor_place": "front",
+        }
+    )
+    graph.scenario.pipeline["nodes"] = [
+        {"id": "sensor_rear", "ip_ref": "ip-sensor-rear-s5e9965", "role": "sensor"},
+        {"id": "sensor_front", "ip_ref": "ip-sensor-front-s5e9965", "role": "sensor"},
+        *graph.scenario.pipeline["nodes"],
+        {"id": "panel", "ip_ref": "ip-display-panel-s5e9965", "role": "display_output"},
+    ]
+    graph.scenario.pipeline["edges"] = [
+        {"from": "sensor_front", "to": "isp0", "type": "OTF"},
+        *graph.scenario.pipeline["edges"],
+        {"from": "mfc", "to": "panel", "type": "OTF"},
+    ]
+    graph.ip_catalog["ip-sensor-rear-s5e9965"] = IpCatalog(
+        id="ip-sensor-rear-s5e9965",
+        schema_version="2.2",
+        category="sensor",
+        hierarchy={},
+        capabilities={
+            "properties": {
+                "place": "rear",
+                "modes": {"binning_4x4": {"sensor_size": [4000, 3000], "sensor_fps": 60, "sensor_format": "BAYER"}},
+            }
+        },
+        yaml_sha256="sha",
+    )
+    graph.ip_catalog["ip-sensor-front-s5e9965"] = IpCatalog(
+        id="ip-sensor-front-s5e9965",
+        schema_version="2.2",
+        category="sensor",
+        hierarchy={},
+        capabilities={
+            "properties": {
+                "place": "front",
+                "modes": {"normal": {"sensor_size": [3648, 2736], "sensor_fps": 60, "sensor_format": "BAYER"}},
+            }
+        },
+        yaml_sha256="sha",
+    )
+    graph.ip_catalog["ip-display-panel-s5e9965"] = IpCatalog(
+        id="ip-display-panel-s5e9965",
+        schema_version="2.2",
+        category="display",
+        hierarchy={},
+        capabilities={"properties": {"display_size": [3088, 1440], "format": "RGB", "refresh_rates": [60, 120]}},
+        yaml_sha256="sha",
+    )
+
+    inputs = build_simulation_inputs(graph, SimulationRunConfig(include_timeline=False))
+    devices = {item["node_id"]: item for item in inputs.external_devices}
+
+    assert devices["sensor_front"]["ip_ref"] == "ip-sensor-front-s5e9965"
+    assert devices["sensor_front"]["catalog_size"] == "3648x2736"
+    assert devices["sensor_front"]["active_size"] == "3648x2052"
+    assert devices["sensor_front"]["active_size_source"] == "derived_16_9_crop_from_catalog_width"
+    assert devices["sensor_front"]["v_valid_ms"] == pytest.approx(1000.0 / 60.0)
+    assert devices["sensor_front"]["v_valid_source"] == "frame_period_fallback_no_vblank"
+    assert devices["panel"]["size"] == "3088x1440"
+
+
+def test_adapter_applies_sensor_otf_csis_clock_correction():
+    graph = _graph()
+    graph.variant.design_conditions.update(
+        {
+            "fps": 30,
+            "resolution": "FHD",
+            "subscenario": "FHD_VIDEO",
+            "sensor_place": "rear",
+        }
+    )
+    graph.scenario.pipeline["nodes"] = [
+        {"id": "sensor_rear", "ip_ref": "ip-sensor-rear-s5e9965", "role": "sensor"},
+        *graph.scenario.pipeline["nodes"],
+    ]
+    graph.scenario.pipeline["edges"] = [
+        {"from": "sensor_rear", "to": "isp0", "type": "OTF"},
+        *graph.scenario.pipeline["edges"],
+    ]
+    graph.ip_catalog["ip-sensor-rear-s5e9965"] = IpCatalog(
+        id="ip-sensor-rear-s5e9965",
+        schema_version="2.2",
+        category="sensor",
+        hierarchy={},
+        capabilities={
+            "properties": {
+                "place": "rear",
+                "phy_type": "CPHY",
+                "modes": {
+                    "wide_video_16_9_30": {
+                        "sensor_size": [4080, 2296],
+                        "sensor_fps": 30.0,
+                        "sensor_pclk": 3_532_800_000,
+                        "sensor_line_length_pck": 29_216,
+                        "sensor_format": "BAYER",
+                        "sensor_bitwidth": 12,
+                        "sensor_mipi_speed": 3.993,
+                        "sensor_sbwc": "enable",
+                    }
+                },
+            }
+        },
+        yaml_sha256="sha",
+    )
+
+    inputs = build_simulation_inputs(graph, SimulationRunConfig(include_timeline=True))
+    by_node = {item.node_id: item for item in inputs.workloads}
+    result = run_simulation(inputs, dvfs_tables={})
+
+    expected_clock = 3.993 * (16 / 7) * 3 / (12 * 4) * 1000
+    assert by_node["isp0"].clock_correction_mhz == pytest.approx(expected_clock)
+    assert by_node["mfc"].clock_correction_mhz == 0.0
+    assert result.resolved["isp0"].required_clock_mhz == pytest.approx(expected_clock)
+    sensor = next(item for item in inputs.external_devices if item["device_type"] == "sensor")
+    assert sensor["v_valid_ms"] == pytest.approx((29_216 * 1000 / 3_532_800_000) * 2296)
+    assert sensor["v_valid_source"] == "sensor_line_length_pck * 1000 / sensor_pclk * height"
+    assert sensor["line_length_pck"] == 29_216
+    assert sensor["pclk"] == 3_532_800_000
 
 
 def _graph() -> CanonicalScenarioGraph:

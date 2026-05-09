@@ -71,12 +71,19 @@ def run_simulation(
     timeline_events = []
     if config.include_timeline and inputs.timeline_tasks:
         timeline_tasks = _with_calculated_durations(inputs.timeline_tasks, timing_breakdown)
+        critical_budget_ms = (
+            (config.timeline_frame_period_ms or (1000.0 / config.fps))
+            * max(0.0, 1.0 - config.sw_margin)
+            if config.fps and config.fps > 0
+            else None
+        )
         timeline_events = build_timeline_events(
             timeline_tasks,
             inputs.timeline_edges,
             frame_count=config.timeline_frame_count,
             frame_period_ms=config.timeline_frame_period_ms
             or (1000.0 / config.fps if config.fps and config.fps > 0 else None),
+            critical_budget_ms=critical_budget_ms,
         )
 
     core_power_mw = sum(item.total_power_mw for item in resolved.values())
@@ -87,6 +94,12 @@ def run_simulation(
         if config.vbat > 0 and config.pmic_efficiency > 0
         else 0.0
     )
+    for item in resolved.values():
+        item.total_power_ma = (
+            item.total_power_mw / config.vbat / config.pmic_efficiency
+            if config.vbat > 0 and config.pmic_efficiency > 0
+            else 0.0
+        )
     feasible = all(item.feasible for item in resolved.values())
     infeasible_reason = _first_infeasible_reason(timing_breakdown)
     bw_total_mbs = sum(item.bw_mbs for item in dma_breakdown)
@@ -133,6 +146,8 @@ def run_simulation(
         dma_breakdown=dma_breakdown,
         timing_breakdown=timing_breakdown,
         timeline_events=timeline_events,
+        external_devices=inputs.external_devices,
+        topology_order=inputs.topology_order,
         vdd_power=_vdd_power(resolved, dma_breakdown),
         warnings=warnings,
         calculation_trace=calculation_trace,
@@ -202,6 +217,8 @@ def build_simulation_evidence(
         timing_breakdown=result.timing_breakdown,
         dvfs_breakdown=list(result.resolved.values()),
         timeline_events=result.timeline_events,
+        external_devices=result.external_devices,
+        topology_order=result.topology_order,
         vdd_power=result.vdd_power,
         params_hash=params_hash,
         calculation_trace=result.calculation_trace,

@@ -25,6 +25,8 @@ class EvidenceResponse(BaseModel):
     timing_breakdown: list | None = None
     dvfs_breakdown: list | None = None
     timeline_events: list | None = None
+    external_devices: list | None = None
+    topology_order: list | None = None
     vdd_power: dict | None = None
     calculation_trace: dict | None = None
     params_hash: str | None = None

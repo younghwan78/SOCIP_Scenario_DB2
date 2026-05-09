@@ -48,6 +48,7 @@ def build_simulation_inputs(
             warnings=warnings,
         )
         width, height = _workload_size(graph, node_id, sim_block)
+        workload_format = _workload_format(graph, node_id, sim_block)
         workloads.append(
             IPWorkload(
                 node_id=node_id,
@@ -56,6 +57,7 @@ def build_simulation_inputs(
                 mode=mode,
                 width=width,
                 height=height,
+                format=workload_format,
                 fps=fps,
                 sw_margin=float(sim_block.get("sw_margin") or run_config.sw_margin),
                 manual_clock_mhz=sim_block.get("manual_clock_mhz"),
@@ -67,6 +69,8 @@ def build_simulation_inputs(
     if not transfers:
         transfers.extend(_edge_port_transfers(graph, {item.node_id: item for item in workloads}))
 
+    _apply_sensor_otf_clock_corrections(graph, workloads, warnings)
+
     return SimulationInputs(
         scenario_id=graph.scenario_id,
         variant_id=graph.variant_id,
@@ -76,8 +80,47 @@ def build_simulation_inputs(
         port_transfers=transfers,
         timeline_tasks=_timeline_tasks(graph),
         timeline_edges=_timeline_edges(graph),
+        external_devices=_external_devices(graph),
+        topology_order=[item.node_id for item in workloads],
         warnings=warnings,
     )
+
+
+def _apply_sensor_otf_clock_corrections(
+    graph: CanonicalScenarioGraph,
+    workloads: list[IPWorkload],
+    warnings: list[str],
+) -> None:
+    workload_by_node = {item.node_id: item for item in workloads}
+    for sensor_node in _active_sensor_nodes(graph):
+        sensor_mode = _selected_sensor_mode(graph, sensor_node)
+        if not sensor_mode:
+            continue
+        mipi_speed = _float_or_none(sensor_mode.get("sensor_mipi_speed"))
+        bitwidth = _float_or_none(sensor_mode.get("sensor_bitwidth"))
+        phy_type = str(sensor_mode.get("sensor_phy_type") or "DPHY").upper()
+        if not mipi_speed or not bitwidth:
+            warnings.append(
+                f"{sensor_node.get('id')} has no sensor_mipi_speed/sensor_bitwidth; "
+                "sensor OTF clock correction is not applied."
+            )
+            continue
+        for node_id in _sensor_otf_connected_node_ids(graph, str(sensor_node.get("id"))):
+            workload = workload_by_node.get(node_id)
+            if workload is None or workload.sim_params.ppc <= 0:
+                continue
+            req_clock = _req_csis_clock_mhz(
+                sensor_mipi_speed=mipi_speed,
+                sensor_bitwidth=bitwidth,
+                sensor_phy_type=phy_type,
+                ppc=workload.sim_params.ppc,
+            )
+            if req_clock > workload.clock_correction_mhz:
+                workload.clock_correction_mhz = req_clock
+                workload.clock_correction_reason = (
+                    f"sensor_otf_req_csis_clock({sensor_node.get('id')}, "
+                    f"phy={phy_type}, mipi={mipi_speed:g}Gbps, bitwidth={bitwidth:g})"
+                )
 
 
 def _fps(graph: CanonicalScenarioGraph, config: SimulationRunConfig) -> float:
@@ -247,6 +290,30 @@ def _workload_size(
     return 0, 0
 
 
+def _workload_format(
+    graph: CanonicalScenarioGraph,
+    node_id: str,
+    sim_block: dict[str, Any],
+) -> str | None:
+    if sim_block.get("format"):
+        return str(sim_block["format"])
+    for key in ("inputs", "outputs"):
+        for port in sim_block.get(key) or []:
+            if port.get("format"):
+                return str(port["format"])
+    buffers = (graph.scenario.pipeline or {}).get("buffers") or {}
+    for edge in graph.pipeline_edges:
+        if node_id not in {_edge_source(edge), _edge_target(edge)}:
+            continue
+        buffer_ref = edge.get("buffer")
+        buffer = buffers.get(buffer_ref) if buffer_ref else None
+        if isinstance(buffer, dict) and buffer.get("format"):
+            return str(buffer["format"])
+    design = graph.variant.design_conditions or {}
+    fmt = design.get("format") or design.get("pixel_format")
+    return str(fmt) if fmt else None
+
+
 def _edge_port_transfers(
     graph: CanonicalScenarioGraph,
     workloads: dict[str, IPWorkload],
@@ -399,13 +466,13 @@ def _apply_source_sink_constraints(
     tasks: list[dict[str, Any]],
     source_nodes: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    sensor_mode = _selected_sensor_mode(graph)
     panel = _selected_panel_properties(graph)
     node_by_id = {str(node.get("id")): node for node in source_nodes if node.get("id")}
     result: list[dict[str, Any]] = []
     for task in tasks:
         updated = dict(task)
         node = node_by_id.get(str(task.get("id"))) or {}
+        sensor_mode = _selected_sensor_mode(graph, node)
         if sensor_mode and _is_sensor_timeline_task(task, node):
             _apply_sensor_constraint(updated, sensor_mode)
         if panel and _is_display_sink_task(task, node):
@@ -414,7 +481,105 @@ def _apply_source_sink_constraints(
     return result
 
 
-def _selected_sensor_mode(graph: CanonicalScenarioGraph) -> dict[str, Any] | None:
+def _external_devices(graph: CanonicalScenarioGraph) -> list[dict[str, Any]]:
+    devices: list[dict[str, Any]] = []
+    for node in graph.pipeline_nodes:
+        ip_ref = str(node.get("ip_ref") or "")
+        ip_row = graph.ip_catalog.get(ip_ref)
+        if ip_row is None:
+            continue
+        category = str(getattr(ip_row, "category", "") or "").lower()
+        text = _task_node_text({}, node)
+        properties = _capability_properties(ip_row)
+        panel_like = (
+            category == "panel"
+            or "panel" in text
+            or str(properties.get("role") or "").lower() == "panel"
+        )
+        if category == "sensor" or "sensor" in text:
+            mode = _selected_sensor_mode(graph, node) or {}
+            device = _sensor_device_info(graph, node, ip_row, mode)
+            if device:
+                devices.append(device)
+        elif panel_like:
+            panel = _selected_panel_properties(graph) or {}
+            device = _display_device_info(graph, node, ip_row, panel)
+            if device:
+                devices.append(device)
+    return devices
+
+
+def _active_sensor_nodes(graph: CanonicalScenarioGraph) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    for node in graph.pipeline_nodes:
+        ip_ref = str(node.get("ip_ref") or "")
+        ip_row = graph.ip_catalog.get(ip_ref)
+        category = str(getattr(ip_row, "category", "") or "").lower() if ip_row is not None else ""
+        if category == "sensor" or "sensor" in _task_node_text({}, node):
+            result.append(node)
+    return result
+
+
+def _sensor_otf_connected_node_ids(graph: CanonicalScenarioGraph, sensor_node_id: str) -> set[str]:
+    edges_by_source: dict[str, list[dict[str, Any]]] = {}
+    for edge in graph.pipeline_edges:
+        edges_by_source.setdefault(str(_edge_source(edge) or ""), []).append(edge)
+    visited: set[str] = set()
+    connected: set[str] = set()
+    queue = [sensor_node_id]
+    while queue:
+        current = queue.pop(0)
+        if current in visited:
+            continue
+        visited.add(current)
+        for edge in edges_by_source.get(current, []):
+            if str(edge.get("type") or "").upper() != "OTF":
+                continue
+            target = str(_edge_target(edge) or "")
+            if not target:
+                continue
+            if target != sensor_node_id:
+                connected.add(target)
+            queue.append(target)
+    connected.discard(sensor_node_id)
+    return connected
+
+
+def _req_csis_clock_mhz(
+    *,
+    sensor_mipi_speed: float,
+    sensor_bitwidth: float,
+    sensor_phy_type: str,
+    ppc: float,
+) -> float:
+    if sensor_mipi_speed <= 0 or sensor_bitwidth <= 0 or ppc <= 0:
+        return 0.0
+    if sensor_phy_type.upper() == "CPHY":
+        return sensor_mipi_speed * (16.0 / 7.0) * 3.0 / (sensor_bitwidth * ppc) * 1000.0
+    return sensor_mipi_speed * 4.0 / (sensor_bitwidth * ppc) * 1000.0
+
+
+def _selected_sensor_mode(graph: CanonicalScenarioGraph, node: dict[str, Any] | None = None) -> dict[str, Any] | None:
+    row = _selected_sensor_row(graph, node)
+    if row is None:
+        return None
+    design = graph.variant.design_conditions or {}
+    selected_mode = design.get("sensor_mode") or design.get("sensor_mode_ref") or design.get("sensor")
+    properties = _capability_properties(row)
+    modes = properties.get("modes") if isinstance(properties.get("modes"), dict) else {}
+    if not modes:
+        return None
+    if selected_mode and selected_mode in modes and isinstance(modes[selected_mode], dict):
+        return _annotated_sensor_mode(row, selected_mode, modes[selected_mode], graph)
+    preferred = _preferred_sensor_mode(modes, graph)
+    if preferred:
+        mode_id, mode = preferred
+        return _annotated_sensor_mode(row, mode_id, mode, graph)
+    mode_id, mode = next((key, value) for key, value in modes.items() if isinstance(value, dict))
+    return _annotated_sensor_mode(row, str(mode_id), mode, graph)
+
+
+def _selected_sensor_row(graph: CanonicalScenarioGraph, node: dict[str, Any] | None = None) -> Any | None:
     candidates = [
         row
         for row in graph.ip_catalog.values()
@@ -422,17 +587,61 @@ def _selected_sensor_mode(graph: CanonicalScenarioGraph) -> dict[str, Any] | Non
     ]
     if not candidates:
         return None
+    if node and node.get("ip_ref"):
+        row = graph.ip_catalog.get(str(node.get("ip_ref")))
+        if row is not None and str(getattr(row, "category", "") or "").lower() == "sensor":
+            return row
     design = graph.variant.design_conditions or {}
-    selected_mode = design.get("sensor_mode") or design.get("sensor_mode_ref") or design.get("sensor")
-    for row in candidates:
-        properties = _capability_properties(row)
-        modes = properties.get("modes") if isinstance(properties.get("modes"), dict) else {}
-        if selected_mode and selected_mode in modes:
-            return dict(modes[selected_mode])
-        if modes:
-            preferred = _mode_by_fps(modes, _variant_fps(graph))
-            return dict(preferred or next(iter(modes.values())))
+    sensor_place = str(design.get("sensor_place") or design.get("sensor_places") or "").lower()
+    if sensor_place:
+        for row in candidates:
+            properties = _capability_properties(row)
+            place = str(properties.get("place") or "").lower()
+            row_id = str(getattr(row, "id", "") or "").lower()
+            if place and place in sensor_place:
+                return row
+            if place and place in row_id and place in sensor_place:
+                return row
+    return candidates[0]
+
+
+def _preferred_sensor_mode(modes: dict[str, Any], graph: CanonicalScenarioGraph) -> tuple[str, dict[str, Any]] | None:
+    fps = _variant_fps(graph)
+    design = graph.variant.design_conditions or {}
+    design_text = " ".join(str(value or "").lower() for value in design.values())
+    video = "video" in design_text or "rec" in str(graph.scenario_id).lower()
+    if video:
+        video_modes = [
+            (str(key), value)
+            for key, value in modes.items()
+            if isinstance(value, dict)
+            and ("wide" in str(key).lower() or "video" in str(key).lower() or _is_16_9_size(value.get("sensor_size")))
+        ]
+        if video_modes:
+            return min(
+                video_modes,
+                key=lambda item: abs((_float_or_none(item[1].get("sensor_fps")) or fps) - fps),
+            )
+    best = _mode_by_fps(modes, fps)
+    if best:
+        for key, value in modes.items():
+            if value is best:
+                return str(key), best
     return None
+
+
+def _annotated_sensor_mode(row: Any, mode_id: str, mode: dict[str, Any], graph: CanonicalScenarioGraph) -> dict[str, Any]:
+    properties = _capability_properties(row)
+    result = dict(mode)
+    result["mode_id"] = mode_id
+    result["ip_ref"] = getattr(row, "id", None)
+    result["place"] = properties.get("place")
+    result["sensor_phy_type"] = result.get("sensor_phy_type") or properties.get("phy_type")
+    active_size, source = _active_sensor_size(result, graph)
+    if active_size:
+        result["active_size"] = list(active_size)
+        result["active_size_source"] = source
+    return result
 
 
 def _selected_panel_properties(graph: CanonicalScenarioGraph) -> dict[str, Any] | None:
@@ -443,6 +652,124 @@ def _selected_panel_properties(graph: CanonicalScenarioGraph) -> dict[str, Any] 
             if category in {"display", "panel"}:
                 return dict(properties)
     return None
+
+
+def _sensor_device_info(
+    graph: CanonicalScenarioGraph,
+    node: dict[str, Any],
+    ip_row: Any,
+    mode: dict[str, Any],
+) -> dict[str, Any]:
+    v_valid_ms = _float_or_none(mode.get("v_valid_ms")) or _calc_v_valid_ms(mode)
+    active_size = mode.get("active_size")
+    sensor_size = mode.get("sensor_size")
+    size = active_size if isinstance(active_size, list) and len(active_size) >= 2 else sensor_size
+    return {
+        "device_type": "sensor",
+        "node_id": node.get("id"),
+        "ip_ref": getattr(ip_row, "id", None),
+        "role": node.get("role"),
+        "place": mode.get("place") or _capability_properties(ip_row).get("place"),
+        "mode": mode.get("mode_id") or mode.get("sensor_mode") or mode.get("sensor_name"),
+        "name": mode.get("sensor_name"),
+        "size": _size_text(size),
+        "catalog_size": _size_text(sensor_size),
+        "active_size": _size_text(active_size),
+        "active_size_source": mode.get("active_size_source"),
+        "format": mode.get("sensor_format"),
+        "bitwidth": mode.get("sensor_bitwidth"),
+        "fps": mode.get("sensor_fps") or _variant_fps(graph),
+        "v_valid_ms": v_valid_ms,
+        "v_valid_source": _v_valid_source(mode),
+        "pclk": mode.get("sensor_pclk"),
+        "line_length_pck": mode.get("sensor_line_length_pck"),
+        "phy_type": mode.get("sensor_phy_type"),
+        "mipi_speed": mode.get("sensor_mipi_speed"),
+        "sbwc": mode.get("sensor_sbwc"),
+    }
+
+
+def _display_device_info(
+    graph: CanonicalScenarioGraph,
+    node: dict[str, Any],
+    ip_row: Any,
+    panel: dict[str, Any],
+) -> dict[str, Any]:
+    refresh_hz = _selected_refresh_hz(panel, _variant_fps(graph))
+    display_size = panel.get("display_size") or panel.get("layout_size")
+    return {
+        "device_type": "display",
+        "node_id": node.get("id"),
+        "ip_ref": getattr(ip_row, "id", None),
+        "role": node.get("role"),
+        "layout": panel.get("layout") or panel.get("panel_layout"),
+        "size": _size_text(display_size),
+        "format": panel.get("format") or panel.get("pixel_format"),
+        "fps": _variant_fps(graph),
+        "refresh_hz": refresh_hz,
+        "scanout_ms": (1000.0 / refresh_hz) if refresh_hz and refresh_hz > 0 else None,
+        "panel_type": panel.get("panel_type"),
+        "ppi": panel.get("ppi"),
+    }
+
+
+def _active_sensor_size(mode: dict[str, Any], graph: CanonicalScenarioGraph) -> tuple[tuple[int, int] | None, str | None]:
+    for key in ("active_size", "sensor_active_size", "video_size", "crop_size"):
+        size = _size_tuple(mode.get(key))
+        if size:
+            return size, key
+    catalog_size = _size_tuple(mode.get("sensor_size"))
+    if not catalog_size:
+        return None, None
+    design = graph.variant.design_conditions or {}
+    design_size = _design_size(graph)
+    design_text = " ".join(str(value or "").lower() for value in design.values())
+    video = "video" in design_text or "rec" in str(graph.scenario_id).lower()
+    if video and design_size and _is_16_9_tuple(design_size) and not _is_16_9_tuple(catalog_size):
+        width, height = catalog_size
+        cropped_height = int(round(width * 9 / 16))
+        if 0 < cropped_height <= height:
+            return (width, _make_even(cropped_height)), "derived_16_9_crop_from_catalog_width"
+        cropped_width = int(round(height * 16 / 9))
+        if 0 < cropped_width <= width:
+            return (_make_even(cropped_width), height), "derived_16_9_crop_from_catalog_height"
+    return catalog_size, "catalog_sensor_size"
+
+
+def _size_text(value: Any) -> str | None:
+    size = _size_tuple(value)
+    if not size:
+        return None
+    return f"{size[0]}x{size[1]}"
+
+
+def _size_tuple(value: Any) -> tuple[int, int] | None:
+    if isinstance(value, str) and "x" in value.lower():
+        left, right = value.lower().split("x", 1)
+        try:
+            return int(left), int(right)
+        except ValueError:
+            return None
+    if isinstance(value, (list, tuple)) and len(value) >= 2:
+        try:
+            return int(value[0] or 0), int(value[1] or 0)
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
+def _is_16_9_size(value: Any) -> bool:
+    size = _size_tuple(value)
+    return bool(size and _is_16_9_tuple(size))
+
+
+def _is_16_9_tuple(size: tuple[int, int]) -> bool:
+    width, height = size
+    return width > 0 and height > 0 and abs((width / height) - (16 / 9)) < 0.02
+
+
+def _make_even(value: int) -> int:
+    return value if value % 2 == 0 else value - 1
 
 
 def _apply_sensor_constraint(task: dict[str, Any], sensor_mode: dict[str, Any]) -> None:
@@ -528,15 +855,26 @@ def _selected_refresh_hz(panel: dict[str, Any], fps: float) -> float | None:
 
 
 def _calc_v_valid_ms(mode: dict[str, Any]) -> float | None:
-    size = mode.get("sensor_size")
+    size = mode.get("active_size") or mode.get("sensor_size")
     pclk = _float_or_none(mode.get("sensor_pclk"))
     line_length = _float_or_none(mode.get("sensor_line_length_pck"))
-    if not isinstance(size, list) or len(size) < 2 or not pclk or not line_length:
-        return None
-    height = _float_or_none(size[1])
-    if not height:
-        return None
-    return round(line_length * 1000.0 / pclk * height, 6)
+    height = _size_tuple(size)[1] if _size_tuple(size) else None
+    if height and pclk and line_length:
+        return round(line_length * 1000.0 / pclk * height, 6)
+    sensor_fps = _float_or_none(mode.get("sensor_fps"))
+    if sensor_fps and sensor_fps > 0:
+        return round(1000.0 / sensor_fps, 6)
+    return None
+
+
+def _v_valid_source(mode: dict[str, Any]) -> str | None:
+    if mode.get("v_valid_ms") is not None:
+        return "explicit_v_valid_ms"
+    if mode.get("sensor_pclk") and mode.get("sensor_line_length_pck"):
+        return "sensor_line_length_pck * 1000 / sensor_pclk * height"
+    if mode.get("sensor_fps"):
+        return "frame_period_fallback_no_vblank"
+    return None
 
 
 def _float_or_none(value: Any) -> float | None:

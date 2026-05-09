@@ -16,6 +16,7 @@ SIDEBAR_SELECTORS = (
 SIMULATION_RESULT_TOP_TABS = ("Preview Run", "Saved Evidence")
 
 RESULT_BREAKDOWN_TABS = (
+    "External Device Info",
     "IP/Node Power",
     "DMA BW",
     "Timing Chart",

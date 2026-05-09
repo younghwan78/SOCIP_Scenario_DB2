@@ -57,6 +57,7 @@ def test_required_evidence_dashboard_labels_are_contractually_present():
     )
     assert SIMULATION_RESULT_TOP_TABS == ("Preview Run", "Saved Evidence")
     assert RESULT_BREAKDOWN_TABS == (
+        "External Device Info",
         "IP/Node Power",
         "DMA BW",
         "Timing Chart",

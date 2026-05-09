@@ -261,3 +261,32 @@ def test_timeline_marks_critical_path():
     critical = [event.task_id for event in events if event.critical]
     assert critical == ["long", "join"]
     assert [event.critical_path_rank for event in events if event.critical] == [0, 1]
+
+
+def test_timeline_does_not_mark_frame_fit_chain_as_critical_when_budget_passes():
+    events = build_timeline_events(
+        tasks=[
+            {"id": "isp", "hw_name": "ISP", "task_type": "hw", "duration_ms": 4.0},
+            {"id": "mfc", "hw_name": "MFC", "task_type": "hw", "duration_ms": 3.0},
+        ],
+        edges=[{"from": "isp", "to": "mfc", "type": "M2M", "transfer_ms": 1.0}],
+        frame_period_ms=33.333,
+        critical_budget_ms=25.0,
+    )
+
+    assert [event.task_id for event in events if event.critical] == []
+
+
+def test_timeline_marks_frame_over_budget_chain_as_critical():
+    events = build_timeline_events(
+        tasks=[
+            {"id": "isp", "hw_name": "ISP", "task_type": "hw", "duration_ms": 7.0},
+            {"id": "mfc", "hw_name": "MFC", "task_type": "hw", "duration_ms": 3.0},
+        ],
+        edges=[{"from": "isp", "to": "mfc", "type": "M2M", "transfer_ms": 1.0}],
+        frame_period_ms=33.333,
+        critical_budget_ms=6.0,
+    )
+
+    assert [event.task_id for event in events if event.critical] == ["isp", "mfc"]
+    assert any(event.bottleneck_reason for event in events if event.critical)

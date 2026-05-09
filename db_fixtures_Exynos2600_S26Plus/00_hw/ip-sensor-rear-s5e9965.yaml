@@ -11,6 +11,8 @@ capabilities:
   - id: full_remosaic
   - id: high_speed
   - id: tetra_crop
+  - id: wide_video_16_9
+  - id: wide_video_16_9_30
   supported_features:
     bitdepth:
     - 10
@@ -63,5 +65,33 @@ capabilities:
         sensor_format: BAYER
         sensor_bitwidth: 10
         sensor_mipi_speed: 4.0
+      wide_video_16_9:
+        sensor_name: GNG wide video 16:9 crop 60fps
+        sensor_size:
+        - 4080
+        - 2296
+        sensor_fps: 60.0
+        sensor_pclk: 3532800000
+        sensor_line_length_pck: 17712
+        sensor_format: BAYER
+        sensor_bitwidth: 12
+        sensor_mipi_speed: 3.993
+        sensor_ln_mode: 1
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
+      wide_video_16_9_30:
+        sensor_name: GNG wide video 16:9 crop 30fps
+        sensor_size:
+        - 4080
+        - 2296
+        sensor_fps: 30.0
+        sensor_pclk: 3532800000
+        sensor_line_length_pck: 29216
+        sensor_format: BAYER
+        sensor_bitwidth: 12
+        sensor_mipi_speed: 3.993
+        sensor_ln_mode: 4
+        sensor_sbwc: enable
+        sensor_phy_type: CPHY
 compatible_soc:
 - soc-exynos2600

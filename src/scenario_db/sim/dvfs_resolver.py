@@ -43,8 +43,11 @@ class DvfsResolver:
         if workload.pixels > 0 and workload.fps > 0 and params.ppc > 0:
             usable = max(1e-9, 1.0 - workload.sw_margin)
             required_clock = workload.pixels * workload.fps / usable / params.ppc / 1e6
+        base_required_clock = required_clock
         if workload.manual_clock_mhz and workload.manual_clock_mhz > required_clock:
             required_clock = workload.manual_clock_mhz
+        if workload.clock_correction_mhz > required_clock:
+            required_clock = workload.clock_correction_mhz
 
         return ResolvedIPConfig(
             node_id=workload.node_id,
@@ -52,11 +55,17 @@ class DvfsResolver:
             hw_name=workload.hw_name,
             mode=workload.mode,
             required_clock_mhz=required_clock,
+            base_required_clock_mhz=base_required_clock,
+            clock_correction_mhz=workload.clock_correction_mhz,
+            clock_correction_reason=workload.clock_correction_reason,
             set_clock_mhz=required_clock,
             dvfs_group=params.dvfs_group,
             required_voltage_mv=0.0,
             set_voltage_mv=0.0,
             vdd=params.vdd,
+            width=workload.width,
+            height=workload.height,
+            format=workload.format,
             unit_power_mw_mp=params.unit_power_mw_mp,
             ppc=params.ppc,
             input_resolution_mp=workload.pixels / 1e6,

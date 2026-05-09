@@ -745,6 +745,7 @@ def _timeline_hover(event: dict[str, Any]) -> str:
         ("edge", event.get("edge_type")),
         ("otf_group", event.get("otf_group_id")),
         ("bottleneck", event.get("bottleneck")),
+        ("bottleneck_reason", event.get("bottleneck_reason")),
         ("type", _constraint_label(event)),
         ("start", _format_ms(event.get("start_ms"))),
         ("end", _format_ms(event.get("end_ms"))),
@@ -926,6 +927,7 @@ def _render_timing_chart(result: dict[str, Any], *, key_prefix: str = "stored") 
                 "edge_type",
                 "otf_group_id",
                 "bottleneck",
+                "bottleneck_reason",
                 "frame_index",
                 "start_ms",
                 "end_ms",
@@ -953,6 +955,7 @@ def _render_timing_chart(result: dict[str, Any], *, key_prefix: str = "stored") 
             "token_wait_ms",
             "deadline_ms",
             "slack_ms",
+            "bottleneck_reason",
             "predecessors",
         ],
     )
@@ -1085,10 +1088,54 @@ def _render_result_warnings(result: dict[str, Any]) -> None:
         st.warning(message)
 
 
+def _table_height(rows: list[dict[str, Any]], *, row_height: int = 35) -> int:
+    return max(120, row_height * (len(rows) + 1) + 12)
+
+
+def _topology_rank(result: dict[str, Any]) -> dict[str, int]:
+    explicit = result.get("topology_order")
+    if isinstance(explicit, list) and explicit:
+        return {str(node_id): index for index, node_id in enumerate(explicit)}
+    rank: dict[str, int] = {}
+    for source in (result.get("timeline_events"), result.get("dvfs_breakdown"), result.get("dma_breakdown")):
+        if not isinstance(source, list):
+            continue
+        for item in source:
+            if not isinstance(item, dict):
+                continue
+            node_id = item.get("node_id")
+            if node_id is not None and str(node_id) not in rank:
+                rank[str(node_id)] = len(rank)
+    return rank
+
+
+def _size_text_from_row(row: dict[str, Any]) -> str | None:
+    if row.get("size"):
+        return str(row["size"])
+    width = _numeric(row.get("width"))
+    height = _numeric(row.get("height"))
+    if width and height:
+        return f"{int(width)}x{int(height)}"
+    return None
+
+
+def _power_ma(row: dict[str, Any], result: dict[str, Any]) -> float | None:
+    direct = _numeric(row.get("total_power_ma") or row.get("power_ma"))
+    if direct is not None:
+        return direct
+    kpi = result.get("kpi") if isinstance(result.get("kpi"), dict) else {}
+    total_mw = _numeric(kpi.get("total_power_mw") or kpi.get("power_mw"))
+    total_ma = _numeric(kpi.get("total_power_ma") or kpi.get("power_ma"))
+    power_mw = _numeric(row.get("total_power_mw") or row.get("power_mw"))
+    if total_mw and total_ma is not None and power_mw is not None:
+        return power_mw * total_ma / total_mw
+    return None
+
+
 def _ip_power_rows(result: dict[str, Any]) -> list[dict[str, Any]]:
     dvfs_rows = result.get("dvfs_breakdown") if isinstance(result.get("dvfs_breakdown"), list) else []
     if dvfs_rows:
-        return _ordered_table(
+        rows = _ordered_table(
             [
                 {
                     "node_id": row.get("node_id"),
@@ -1096,9 +1143,15 @@ def _ip_power_rows(result: dict[str, Any]) -> list[dict[str, Any]]:
                     "mode": row.get("mode"),
                     "ip_ref": row.get("ip_ref"),
                     "power_mw": row.get("total_power_mw"),
+                    "power_ma": _power_ma(row, result),
                     "active_power_mw": row.get("active_power_mw"),
                     "required_clock_mhz": row.get("required_clock_mhz"),
+                    "base_required_clock_mhz": row.get("base_required_clock_mhz"),
+                    "clock_correction_mhz": row.get("clock_correction_mhz"),
+                    "clock_correction_reason": row.get("clock_correction_reason"),
                     "set_clock_mhz": row.get("set_clock_mhz"),
+                    "size": _size_text_from_row(row),
+                    "format": row.get("format"),
                     "dvfs_level": row.get("dvfs_level"),
                     "set_voltage_mv": row.get("set_voltage_mv"),
                     "vdd": row.get("vdd"),
@@ -1119,92 +1172,177 @@ def _ip_power_rows(result: dict[str, Any]) -> list[dict[str, Any]]:
                 "mode",
                 "ip_ref",
                 "power_mw",
+                "power_ma",
                 "set_clock_mhz",
+                "required_clock_mhz",
+                "size",
+                "format",
                 "dvfs_level",
-                "set_voltage_mv",
                 "vdd",
-                "ppc",
+                "set_voltage_mv",
                 "unit_power_mw_mp",
+                "active_power_mw",
+                "vdd_leader",
+                "ppc",
+                "resolution_mp",
+                "fps",
+                "base_required_clock_mhz",
+                "clock_correction_mhz",
+                "clock_correction_reason",
             ],
         )
+        if rows:
+            rows.append(
+                {
+                    "node_id": "total",
+                    "hw_name": "",
+                    "mode": "",
+                    "ip_ref": "",
+                    "power_mw": sum(_numeric(row.get("power_mw")) or 0.0 for row in rows),
+                    "power_ma": sum(_numeric(row.get("power_ma")) or 0.0 for row in rows),
+                    "active_power_mw": sum(_numeric(row.get("active_power_mw")) or 0.0 for row in rows),
+                }
+            )
+        return rows
     return _ordered_table(
         result.get("ip_breakdown") or [],
         ["ip", "instance_index", "power_mW", "submodules"],
     )
 
 
+def _dma_rows(result: dict[str, Any]) -> list[dict[str, Any]]:
+    rank = _topology_rank(result)
+    rows = [row for row in result.get("dma_breakdown") or [] if isinstance(row, dict)]
+    rows.sort(
+        key=lambda row: (
+            rank.get(str(row.get("node_id")), 10_000),
+            str(row.get("node_id") or ""),
+            str(row.get("port") or ""),
+        )
+    )
+    return _ordered_table(
+        rows,
+        [
+            "node_id",
+            "port",
+            "direction",
+            "bw_mbs",
+            "bw_power_mw",
+            "bw_power_ma",
+            "width",
+            "height",
+            "size_mp",
+            "format",
+            "bitwidth",
+            "compression",
+            "llc_enabled",
+        ],
+    )
+
+
+def _external_device_rows(result: dict[str, Any]) -> list[dict[str, Any]]:
+    rows = result.get("external_devices") if isinstance(result.get("external_devices"), list) else []
+    if rows:
+        return _ordered_table(
+            [row for row in rows if isinstance(row, dict)],
+            [
+                "device_type",
+                "node_id",
+                "ip_ref",
+                "role",
+                "place",
+                "mode",
+                "name",
+                "size",
+                "catalog_size",
+                "active_size",
+                "active_size_source",
+                "format",
+                "bitwidth",
+                "fps",
+                "v_valid_ms",
+                "v_valid_source",
+                "pclk",
+                "line_length_pck",
+                "phy_type",
+                "mipi_speed",
+                "sbwc",
+                "layout",
+                "refresh_hz",
+                "scanout_ms",
+                "panel_type",
+                "ppi",
+            ],
+        )
+    trace = result.get("calculation_trace") if isinstance(result.get("calculation_trace"), dict) else {}
+    trace_rows = trace.get("external_devices") if isinstance(trace.get("external_devices"), list) else []
+    return [row for row in trace_rows if isinstance(row, dict)]
+
+
 def _render_breakdown(result: dict[str, Any], *, key_prefix: str = "stored") -> None:
     tabs = st.tabs(list(RESULT_BREAKDOWN_TABS))
     with tabs[0]:
-        st.caption("Power is calculated per scenario node / hardware role. `ip_ref` is the catalog source and can repeat for multiple ISP roles.")
-        st.dataframe(_ip_power_rows(result), use_container_width=True, hide_index=True)
+        rows = _external_device_rows(result)
+        if not rows:
+            st.info("No external sensor/display device metadata is stored for this result.")
+        else:
+            st.caption("Sensor/display conditions used as source/sink constraints. External devices are excluded from IP core power.")
+            st.dataframe(rows, use_container_width=True, hide_index=True, height=_table_height(rows))
     with tabs[1]:
-        st.dataframe(
-            _ordered_table(
-                result.get("dma_breakdown") or [],
-                [
-                    "node_id",
-                    "port",
-                    "direction",
-                    "bw_mbs",
-                    "bw_power_mw",
-                    "bw_power_ma",
-                    "width",
-                    "height",
-                    "size_mp",
-                    "format",
-                    "bitwidth",
-                    "compression",
-                    "llc_enabled",
-                ],
-            ),
-            use_container_width=True,
-            hide_index=True,
-        )
+        st.caption("Power is calculated per scenario node / hardware role. `ip_ref` is the catalog source and can repeat for multiple ISP roles.")
+        rows = _ip_power_rows(result)
+        st.dataframe(rows, use_container_width=True, hide_index=True, height=_table_height(rows))
     with tabs[2]:
+        rows = _dma_rows(result)
+        st.dataframe(rows, use_container_width=True, hide_index=True, height=_table_height(rows))
+    with tabs[3]:
         _render_timing_summary(result)
         _render_timing_chart(result, key_prefix=key_prefix)
-    with tabs[3]:
-        st.dataframe(result.get("timing_breakdown") or [], use_container_width=True, hide_index=True)
     with tabs[4]:
+        rows = result.get("timing_breakdown") or []
+        st.dataframe(rows, use_container_width=True, hide_index=True, height=_table_height(rows if isinstance(rows, list) else []))
+    with tabs[5]:
+        rows = _ordered_table(
+            result.get("timeline_events") or [],
+            [
+                "frame_index",
+                "critical_path_rank",
+                "critical",
+                "task_id",
+                "node_id",
+                "hw_name",
+                "resource_id",
+                "edge_type",
+                "otf_group_id",
+                "bottleneck",
+                "bottleneck_reason",
+                "latency_offset_ms",
+                "task_type",
+                "constraint_type",
+                "start_ms",
+                "end_ms",
+                "duration_ms",
+                "ready_ms",
+                "resource_wait_ms",
+                "token_wait_ms",
+                "deadline_ms",
+                "slack_ms",
+                "source_fps",
+                "v_valid_ms",
+                "refresh_hz",
+                "scanout_ms",
+                "predecessors",
+            ],
+        )
         st.dataframe(
-            _ordered_table(
-                result.get("timeline_events") or [],
-                [
-                    "frame_index",
-                    "critical_path_rank",
-                    "critical",
-                    "task_id",
-                    "node_id",
-                    "hw_name",
-                    "resource_id",
-                    "edge_type",
-                    "otf_group_id",
-                    "bottleneck",
-                    "latency_offset_ms",
-                    "task_type",
-                    "constraint_type",
-                    "start_ms",
-                    "end_ms",
-                    "duration_ms",
-                    "ready_ms",
-                    "resource_wait_ms",
-                    "token_wait_ms",
-                    "deadline_ms",
-                    "slack_ms",
-                    "source_fps",
-                    "v_valid_ms",
-                    "refresh_hz",
-                    "scanout_ms",
-                    "predecessors",
-                ],
-            ),
+            rows,
             use_container_width=True,
             hide_index=True,
+            height=_table_height(rows),
         )
-    with tabs[5]:
-        _render_debug_trace(result)
     with tabs[6]:
+        _render_debug_trace(result)
+    with tabs[7]:
         st.json(result)
 
 

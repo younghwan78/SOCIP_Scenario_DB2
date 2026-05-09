@@ -85,6 +85,8 @@ def build_calculation_trace(
             vbat=config.vbat,
             pmic_efficiency=config.pmic_efficiency,
         ),
+        "external_devices": list(inputs.external_devices),
+        "topology_order": list(inputs.topology_order),
         "timeline": _timeline_trace(inputs.timeline_tasks, inputs.timeline_edges, timeline_events),
         "warnings": list(inputs.warnings),
     }
@@ -170,6 +172,7 @@ def _ip_traces(
                     "height": workload.height,
                     "pixels": workload.pixels,
                     "resolution_mp": workload.pixels / 1e6,
+                    "format": workload.format,
                     "fps": workload.fps,
                 },
                 "required_clock": {
@@ -180,9 +183,13 @@ def _ip_traces(
                         "sw_margin": workload.sw_margin,
                         "ppc": params.ppc,
                         "manual_clock_mhz": workload.manual_clock_mhz,
+                        "clock_correction_mhz": workload.clock_correction_mhz,
+                        "clock_correction_reason": workload.clock_correction_reason,
                     },
                     "initial_required_mhz": initial_required,
                     "before_group_align_mhz": required_before_group,
+                    "sensor_otf_clock_correction_mhz": workload.clock_correction_mhz,
+                    "sensor_otf_clock_correction_reason": workload.clock_correction_reason,
                     "after_group_align_mhz": config.required_clock_mhz,
                 },
                 "dvfs": {

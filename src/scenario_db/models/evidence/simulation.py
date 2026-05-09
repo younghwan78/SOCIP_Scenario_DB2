@@ -54,6 +54,8 @@ class SimulationEvidence(BaseScenarioModel):
     timing_breakdown: list[IPTimingResult] = Field(default_factory=list)
     dvfs_breakdown: list[ResolvedIPConfig] = Field(default_factory=list)
     timeline_events: list[TimelineEvent] = Field(default_factory=list)
+    external_devices: list[dict[str, Any]] = Field(default_factory=list)
+    topology_order: list[str] = Field(default_factory=list)
     vdd_power: dict[str, dict[str, float]] = Field(default_factory=dict)
     params_hash: str | None = None
     calculation_trace: dict[str, Any] | None = None

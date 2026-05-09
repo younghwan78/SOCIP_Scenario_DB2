@@ -9,6 +9,8 @@ capabilities:
   - id: normal
   - id: full_res
   - id: high_speed
+  - id: wide_video_16_9
+  - id: wide_video_16_9_30
   supported_features:
     bitdepth:
     - 10
@@ -47,5 +49,25 @@ capabilities:
         sensor_format: BAYER
         sensor_bitwidth: 10
         sensor_mipi_speed: 2.0
+      wide_video_16_9:
+        sensor_name: Front 10MP wide video 16:9 crop 60fps
+        sensor_size:
+        - 3648
+        - 2052
+        sensor_fps: 60.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.0
+        sensor_phy_type: CPHY
+      wide_video_16_9_30:
+        sensor_name: Front 10MP wide video 16:9 crop 30fps
+        sensor_size:
+        - 3648
+        - 2052
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.5
+        sensor_phy_type: CPHY
 compatible_soc:
 - soc-exynos2600

@@ -100,9 +100,12 @@ class IPWorkload(BaseScenarioModel):
     mode: str = "Normal"
     width: int = 0
     height: int = 0
+    format: str | None = None
     fps: float
     sw_margin: float = 0.25
     manual_clock_mhz: float | None = None
+    clock_correction_mhz: float = 0.0
+    clock_correction_reason: str | None = None
     sim_params: IPSimParams
 
     @property
@@ -135,6 +138,8 @@ class SimulationInputs(BaseScenarioModel):
     port_transfers: list[PortTransferSpec] = Field(default_factory=list)
     timeline_tasks: list[dict] = Field(default_factory=list)
     timeline_edges: list[dict] = Field(default_factory=list)
+    external_devices: list[dict[str, Any]] = Field(default_factory=list)
+    topology_order: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
 
 
@@ -144,18 +149,25 @@ class ResolvedIPConfig(BaseScenarioModel):
     hw_name: str
     mode: str
     required_clock_mhz: float
+    base_required_clock_mhz: float = 0.0
+    clock_correction_mhz: float = 0.0
+    clock_correction_reason: str | None = None
     set_clock_mhz: float
     dvfs_level: int | None = None
     dvfs_group: str | None = None
     required_voltage_mv: float
     set_voltage_mv: float
     vdd: str | None = None
+    width: int = 0
+    height: int = 0
+    format: str | None = None
     unit_power_mw_mp: float
     ppc: float
     input_resolution_mp: float
     fps: float
     active_power_mw: float
     total_power_mw: float
+    total_power_ma: float = 0.0
     vdd_leader: str | None = None
     feasible: bool = True
     infeasible_reason: str | None = None
@@ -205,6 +217,7 @@ class TimelineEvent(BaseScenarioModel):
     otf_group_id: str | None = None
     latency_offset_ms: float | None = None
     bottleneck: bool = False
+    bottleneck_reason: str | None = None
     constraint_type: Literal["source", "sink"] | None = None
     source_fps: float | None = None
     v_valid_ms: float | None = None
@@ -239,6 +252,8 @@ class SimRunResult(BaseScenarioModel):
     dma_breakdown: list[PortBWResult] = Field(default_factory=list)
     timing_breakdown: list[IPTimingResult] = Field(default_factory=list)
     timeline_events: list[TimelineEvent] = Field(default_factory=list)
+    external_devices: list[dict[str, Any]] = Field(default_factory=list)
+    topology_order: list[str] = Field(default_factory=list)
     vdd_power: dict[str, dict[str, float]] = Field(default_factory=dict)
     warnings: list[str] = Field(default_factory=list)
     calculation_trace: dict[str, Any] | None = None

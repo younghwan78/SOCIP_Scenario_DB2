@@ -43,6 +43,8 @@ class Evidence(Base):
     timing_breakdown    = Column(JSONB)             # sim only
     dvfs_breakdown      = Column(JSONB)             # sim only
     timeline_events     = Column(JSONB)             # sim only
+    external_devices    = Column(JSONB)             # sim only
+    topology_order      = Column(JSONB)             # sim only
     vdd_power           = Column(JSONB)             # sim only
     calculation_trace   = Column(JSONB)             # sim debug trace, optional
     params_hash         = Column(Text, index=True)  # sim cache key
