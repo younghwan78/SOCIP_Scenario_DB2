@@ -21,7 +21,7 @@ for path in (_root / "src", _root, _root / "dashboard"):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
-from dashboard.components.simulation_api_client import list_simulation_results, run_simulation
+from dashboard.components.simulation_api_client import delete_simulation_result, list_simulation_results, run_simulation
 from dashboard.components.viewer_api_client import (
     ViewerApiError,
     default_variant_id,
@@ -425,7 +425,7 @@ def _render_export_actions(result: dict[str, Any]) -> None:
     evidence_id = str(result.get("id") or "simulation-evidence")
     filename_base = _safe_filename(evidence_id)
     json_text = _evidence_json_text(result)
-    col_json, col_kpi, col_dma = st.columns(3)
+    col_json, col_kpi, col_dma, col_delete = st.columns(4)
     col_json.download_button(
         "Download JSON",
         data=json_text.encode("utf-8"),
@@ -450,6 +450,17 @@ def _render_export_actions(result: dict[str, Any]) -> None:
         use_container_width=True,
         key=f"download_dma_{evidence_id}",
     )
+    if col_delete.button("Delete Evidence", use_container_width=True, key=f"delete_evidence_{evidence_id}"):
+        try:
+            delete_simulation_result(st.session_state["evidence_api_base"], evidence_id)
+            _load_sim_results.clear()
+            st.session_state.pop("evidence_selected_evidence_id", None)
+            st.success(f"Deleted evidence: {evidence_id}")
+            st.rerun()
+        except ViewerApiError as exc:
+            st.error(str(exc))
+            if exc.body:
+                st.code(exc.body)
     with st.expander("Raw JSON for copy", expanded=False):
         st.code(json_text, language="json")
 
@@ -529,8 +540,372 @@ def _round(value: Any) -> float | None:
         return None
 
 
+def _numeric(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _format_ms(value: Any) -> str:
+    number = _numeric(value)
+    if number is None:
+        return "-"
+    text = f"{number:.3f}".rstrip("0").rstrip(".")
+    return f"{text} ms"
+
+
+def _format_value(value: Any, suffix: str = "") -> str:
+    number = _numeric(value)
+    if number is None:
+        return "-"
+    text = f"{number:.3f}".rstrip("0").rstrip(".")
+    return f"{text}{suffix}"
+
+
+def _timeline_events(result: dict[str, Any]) -> list[dict[str, Any]]:
+    return [row for row in result.get("timeline_events") or [] if isinstance(row, dict)]
+
+
+def _event_id(event: dict[str, Any]) -> str:
+    return str(event.get("task_id") or event.get("node_id") or event.get("hw_name") or "task")
+
+
+def _event_label(event: dict[str, Any], *, include_frame: bool) -> str:
+    name = _event_id(event)
+    resource = event.get("resource_id") or event.get("task_type") or event.get("constraint_type")
+    if resource and resource not in name:
+        name = f"{resource} / {name}"
+    if include_frame and event.get("frame_index") is not None:
+        name = f"F{event.get('frame_index')} / {name}"
+    return name
+
+
+def _constraint_label(event: dict[str, Any]) -> str:
+    if event.get("constraint_type"):
+        return str(event.get("constraint_type"))
+    task_type = str(event.get("task_type") or "")
+    if task_type:
+        return task_type
+    return "task"
+
+
+def _render_timing_summary(result: dict[str, Any]) -> None:
+    events = _timeline_events(result)
+    kpi = result.get("kpi") if isinstance(result.get("kpi"), dict) else {}
+    if not events:
+        st.info("No timeline events are available for this evidence.")
+        return
+
+    end_ms = _numeric(kpi.get("timeline_end_ms"))
+    if end_ms is None:
+        end_ms = max((_numeric(event.get("end_ms")) or 0.0 for event in events), default=0.0)
+    critical_ms = _numeric(kpi.get("critical_path_ms"))
+    critical_count = _numeric(kpi.get("critical_path_task_count"))
+    resource_wait_event = max(events, key=lambda event: _numeric(event.get("resource_wait_ms")) or 0.0)
+    token_wait_event = max(events, key=lambda event: _numeric(event.get("token_wait_ms")) or 0.0)
+    slack_events = [event for event in events if _numeric(event.get("slack_ms")) is not None]
+    tightest_slack_event = min(slack_events, key=lambda event: _numeric(event.get("slack_ms")) or 0.0) if slack_events else None
+    source_events = [
+        event
+        for event in events
+        if event.get("constraint_type") == "source" or _numeric(event.get("v_valid_ms")) is not None
+    ]
+    sink_events = [
+        event
+        for event in events
+        if event.get("constraint_type") == "sink" or _numeric(event.get("scanout_ms")) is not None
+    ]
+
+    cols = st.columns(4)
+    cols[0].metric("Timeline End", _format_ms(end_ms))
+    critical_detail = f"{int(critical_count)} tasks" if critical_count is not None else "-"
+    cols[1].metric("Critical Path", _format_ms(critical_ms), help=critical_detail)
+    cols[2].metric(
+        "Max Resource Wait",
+        _format_ms(resource_wait_event.get("resource_wait_ms")),
+        help=_event_id(resource_wait_event),
+    )
+    cols[3].metric(
+        "Max Token Wait",
+        _format_ms(token_wait_event.get("token_wait_ms")),
+        help=_event_id(token_wait_event),
+    )
+
+    cols = st.columns(3)
+    if tightest_slack_event:
+        cols[0].metric("Tightest Slack", _format_ms(tightest_slack_event.get("slack_ms")), help=_event_id(tightest_slack_event))
+    else:
+        cols[0].metric("Tightest Slack", "-")
+    if source_events:
+        source = source_events[0]
+        cols[1].metric(
+            "Source Window",
+            _format_ms(source.get("v_valid_ms") or source.get("duration_ms")),
+            help=f"{_event_id(source)} / fps={_format_value(source.get('source_fps'))}",
+        )
+    else:
+        cols[1].metric("Source Window", "-")
+    if sink_events:
+        sink = min(sink_events, key=lambda event: _numeric(event.get("slack_ms")) or 0.0)
+        cols[2].metric(
+            "Sink Deadline Slack",
+            _format_ms(sink.get("slack_ms")),
+            help=f"{_event_id(sink)} / deadline={_format_ms(sink.get('deadline_ms'))}",
+        )
+    else:
+        cols[2].metric("Sink Deadline Slack", "-")
+
+
+def _timeline_chart_color(event: dict[str, Any]) -> str:
+    if event.get("critical"):
+        return "#EF4444"
+    constraint = event.get("constraint_type")
+    if constraint == "source":
+        return "#22C55E"
+    if constraint == "sink":
+        return "#3B82F6"
+    task_type = str(event.get("task_type") or "").lower()
+    if "sw" in task_type:
+        return "#8B5CF6"
+    if "dma" in task_type or "m2m" in task_type:
+        return "#F59E0B"
+    return "#64748B"
+
+
+def _timeline_hover(event: dict[str, Any]) -> str:
+    fields = [
+        ("task", _event_id(event)),
+        ("node", event.get("node_id")),
+        ("resource", event.get("resource_id")),
+        ("frame", event.get("frame_index")),
+        ("edge", event.get("edge_type")),
+        ("otf_group", event.get("otf_group_id")),
+        ("bottleneck", event.get("bottleneck")),
+        ("type", _constraint_label(event)),
+        ("start", _format_ms(event.get("start_ms"))),
+        ("end", _format_ms(event.get("end_ms"))),
+        ("duration", _format_ms(event.get("duration_ms"))),
+        ("resource_wait", _format_ms(event.get("resource_wait_ms"))),
+        ("token_wait", _format_ms(event.get("token_wait_ms"))),
+        ("deadline", _format_ms(event.get("deadline_ms"))),
+        ("slack", _format_ms(event.get("slack_ms"))),
+    ]
+    return "<br>".join(f"{key}: {value}" for key, value in fields if value not in (None, "-"))
+
+
+def _render_timing_chart(result: dict[str, Any]) -> None:
+    events = _timeline_events(result)
+    if not events:
+        st.info("No timeline events are available for chart rendering.")
+        return
+    try:
+        import plotly.graph_objects as go
+    except ImportError:
+        st.warning("Plotly is not installed in this environment. The timeline table is shown instead.")
+        st.dataframe(events, use_container_width=True, hide_index=True)
+        return
+
+    evidence_id = _safe_filename(str(result.get("id") or "selected"))
+    frame_values = sorted(
+        {
+            int(value)
+            for value in (_numeric(event.get("frame_index")) for event in events)
+            if value is not None
+        }
+    )
+    if len(frame_values) > 1:
+        frame_options = ["All", *[str(value) for value in frame_values]]
+        frame_choice = st.selectbox("Frame", frame_options, key=f"timing_chart_frame_{evidence_id}", index=0)
+    else:
+        frame_choice = "All"
+    show_waits = st.checkbox("Show queue waits", value=True, key=f"timing_chart_waits_{evidence_id}")
+    show_deadlines = st.checkbox("Show deadlines", value=True, key=f"timing_chart_deadlines_{evidence_id}")
+
+    event_order = {id(event): index for index, event in enumerate(events)}
+    visible_events = events
+    if frame_choice != "All":
+        frame_index = int(frame_choice)
+        visible_events = [
+            event
+            for event in events
+            if _numeric(event.get("frame_index")) is not None and int(_numeric(event.get("frame_index")) or 0) == frame_index
+        ]
+    visible_events = sorted(
+        visible_events,
+        key=lambda event: (
+            _numeric(event.get("frame_index")) or 0.0,
+            _numeric(event.get("start_ms")) or 0.0,
+            event_order.get(id(event), 0),
+        ),
+    )
+    include_frame = frame_choice == "All" and len(frame_values) > 1
+    labels = [_event_label(event, include_frame=include_frame) for event in visible_events]
+    fig = go.Figure()
+    legend_seen: set[str] = set()
+
+    for label, event in zip(labels, visible_events, strict=False):
+        start = _numeric(event.get("start_ms")) or 0.0
+        end = _numeric(event.get("end_ms"))
+        duration = _numeric(event.get("duration_ms"))
+        if duration is None and end is not None:
+            duration = max(0.0, end - start)
+        duration = duration or 0.0
+        color = _timeline_chart_color(event)
+        segment_name = "Critical" if event.get("critical") else _constraint_label(event).title()
+        showlegend = segment_name not in legend_seen
+        legend_seen.add(segment_name)
+        fig.add_trace(
+            go.Bar(
+                x=[duration],
+                y=[label],
+                base=[start],
+                orientation="h",
+                name=segment_name,
+                marker={
+                    "color": color,
+                    "line": {"color": "#B91C1C" if event.get("critical") else color, "width": 2 if event.get("critical") else 0},
+                },
+                hovertext=[_timeline_hover(event)],
+                hoverinfo="text",
+                showlegend=showlegend,
+            )
+        )
+
+        if show_waits:
+            ready = _numeric(event.get("ready_ms"))
+            token_wait = _numeric(event.get("token_wait_ms")) or 0.0
+            if ready is not None and token_wait > 0:
+                showlegend = "Token Wait" not in legend_seen
+                legend_seen.add("Token Wait")
+                fig.add_trace(
+                    go.Bar(
+                        x=[token_wait],
+                        y=[label],
+                        base=[max(0.0, ready - token_wait)],
+                        orientation="h",
+                        name="Token Wait",
+                        marker={"color": "#FDBA74", "pattern": {"shape": "/"}},
+                        hovertext=[f"token_wait: {_format_ms(token_wait)}<br>task: {_event_id(event)}"],
+                        hoverinfo="text",
+                        showlegend=showlegend,
+                    )
+                )
+            resource_wait = _numeric(event.get("resource_wait_ms")) or 0.0
+            if ready is not None and resource_wait > 0:
+                showlegend = "Resource Wait" not in legend_seen
+                legend_seen.add("Resource Wait")
+                fig.add_trace(
+                    go.Bar(
+                        x=[resource_wait],
+                        y=[label],
+                        base=[ready],
+                        orientation="h",
+                        name="Resource Wait",
+                        marker={"color": "#CBD5E1", "pattern": {"shape": "x"}},
+                        hovertext=[f"resource_wait: {_format_ms(resource_wait)}<br>task: {_event_id(event)}"],
+                        hoverinfo="text",
+                        showlegend=showlegend,
+                    )
+                )
+
+    if show_deadlines:
+        deadline_x: list[float] = []
+        deadline_y: list[str] = []
+        deadline_text: list[str] = []
+        deadline_color: list[str] = []
+        for label, event in zip(labels, visible_events, strict=False):
+            deadline = _numeric(event.get("deadline_ms"))
+            if deadline is None:
+                continue
+            slack = _numeric(event.get("slack_ms"))
+            deadline_x.append(deadline)
+            deadline_y.append(label)
+            deadline_text.append(f"deadline: {_format_ms(deadline)}<br>slack: {_format_ms(slack)}<br>task: {_event_id(event)}")
+            deadline_color.append("#16A34A" if slack is None or slack >= 0 else "#DC2626")
+        if deadline_x:
+            fig.add_trace(
+                go.Scatter(
+                    x=deadline_x,
+                    y=deadline_y,
+                    mode="markers",
+                    name="Deadline",
+                    marker={"symbol": "x", "size": 10, "color": deadline_color, "line": {"width": 2}},
+                    hovertext=deadline_text,
+                    hoverinfo="text",
+                )
+            )
+
+    height = max(420, min(900, 120 + 30 * max(1, len(labels))))
+    fig.update_layout(
+        height=height,
+        barmode="overlay",
+        bargap=0.28,
+        margin={"l": 16, "r": 16, "t": 24, "b": 32},
+        xaxis_title="Time (ms)",
+        yaxis_title="Task",
+        legend_title_text="Segment",
+        hovermode="closest",
+    )
+    fig.update_xaxes(rangemode="tozero", showgrid=True, gridcolor="#E5E7EB")
+    fig.update_yaxes(autorange="reversed")
+    st.plotly_chart(fig, use_container_width=True)
+
+    critical_rows = [
+        row
+        for row in _ordered_table(
+            [event for event in visible_events if event.get("critical")],
+            [
+                "critical_path_rank",
+                "task_id",
+                "node_id",
+                "resource_id",
+                "edge_type",
+                "otf_group_id",
+                "bottleneck",
+                "frame_index",
+                "start_ms",
+                "end_ms",
+                "duration_ms",
+                "resource_wait_ms",
+                "token_wait_ms",
+                "slack_ms",
+            ],
+        )
+    ]
+    issue_rows = _ordered_table(
+        sorted(
+            visible_events,
+            key=lambda event: (
+                -((_numeric(event.get("resource_wait_ms")) or 0.0) + (_numeric(event.get("token_wait_ms")) or 0.0)),
+                _numeric(event.get("slack_ms")) if _numeric(event.get("slack_ms")) is not None else 1e12,
+            ),
+        )[:12],
+        [
+            "task_id",
+            "node_id",
+            "resource_id",
+            "frame_index",
+            "resource_wait_ms",
+            "token_wait_ms",
+            "deadline_ms",
+            "slack_ms",
+            "predecessors",
+        ],
+    )
+    detail_cols = st.columns(2)
+    with detail_cols[0]:
+        st.caption("Critical path")
+        st.dataframe(critical_rows, use_container_width=True, hide_index=True)
+    with detail_cols[1]:
+        st.caption("Top wait/slack candidates")
+        st.dataframe(issue_rows, use_container_width=True, hide_index=True)
+
+
 def _render_breakdown(result: dict[str, Any]) -> None:
-    tabs = st.tabs(["IP Power", "DMA BW", "Timing", "Timeline", "Raw Evidence"])
+    tabs = st.tabs(["IP Power", "DMA BW", "Timing Chart", "Timing Table", "Timeline Table", "Raw Evidence"])
     with tabs[0]:
         st.dataframe(result.get("ip_breakdown") or [], use_container_width=True, hide_index=True)
     with tabs[1]:
@@ -557,10 +932,47 @@ def _render_breakdown(result: dict[str, Any]) -> None:
             hide_index=True,
         )
     with tabs[2]:
-        st.dataframe(result.get("timing_breakdown") or [], use_container_width=True, hide_index=True)
+        _render_timing_summary(result)
+        _render_timing_chart(result)
     with tabs[3]:
-        st.dataframe(result.get("timeline_events") or [], use_container_width=True, hide_index=True)
+        st.dataframe(result.get("timing_breakdown") or [], use_container_width=True, hide_index=True)
     with tabs[4]:
+        st.dataframe(
+            _ordered_table(
+                result.get("timeline_events") or [],
+                [
+                    "frame_index",
+                    "critical_path_rank",
+                    "critical",
+                    "task_id",
+                    "node_id",
+                    "hw_name",
+                    "resource_id",
+                    "edge_type",
+                    "otf_group_id",
+                    "bottleneck",
+                    "latency_offset_ms",
+                    "task_type",
+                    "constraint_type",
+                    "start_ms",
+                    "end_ms",
+                    "duration_ms",
+                    "ready_ms",
+                    "resource_wait_ms",
+                    "token_wait_ms",
+                    "deadline_ms",
+                    "slack_ms",
+                    "source_fps",
+                    "v_valid_ms",
+                    "refresh_hz",
+                    "scanout_ms",
+                    "predecessors",
+                ],
+            ),
+            use_container_width=True,
+            hide_index=True,
+        )
+    with tabs[5]:
         st.json(result)
 
 

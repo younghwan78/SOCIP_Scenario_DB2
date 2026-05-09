@@ -30,6 +30,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dashboard = [
+    { name = "plotly" },
     { name = "requests" },
     { name = "streamlit" },
 ]
@@ -70,6 +71,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dashboard = [
+    { name = "plotly", specifier = ">=5.20" },
     { name = "requests", specifier = ">=2.31" },
     { name = "streamlit", specifier = ">=1.40" },
 ]

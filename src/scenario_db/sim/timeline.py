@@ -23,6 +23,10 @@ class _TaskRun:
     resource_wait_ms: float = 0.0
     token_wait_ms: float = 0.0
     resource_id: str | None = None
+    edge_type: str | None = None
+    otf_group_id: str | None = None
+    latency_offset_ms: float | None = None
+    bottleneck: bool = False
     critical: bool = False
     critical_path_rank: int | None = None
 
@@ -80,11 +84,26 @@ def build_timeline_events(
     frame_period = float(frame_period_ms or 0.0)
     runs = _expand_task_runs(base_tasks, base_graph, frame_count, frame_period)
     graph = _expand_graph(nx, base_graph, runs)
+    otf_groups = _otf_groups(nx, base_graph)
+    base_group_by_task = {
+        task_id: f"otf-{index}"
+        for index, group in enumerate(otf_groups)
+        for task_id in group
+    }
+    instance_group_by_task = {
+        run.instance_id: base_group_by_task[run.base_id]
+        for run in runs.values()
+        if run.base_id in base_group_by_task
+    }
+    for run in runs.values():
+        run.otf_group_id = instance_group_by_task.get(run.instance_id)
+        run.edge_type = _incoming_edge_type(run.instance_id, graph)
 
     env = simpy.Environment()
     resource_pool: dict[str, Any] = {}
     token_pool: dict[str, Any] = {}
-    processes: dict[str, Any] = {}
+    start_events: dict[str, Any] = {instance_id: env.event() for instance_id in runs}
+    end_events: dict[str, Any] = {instance_id: env.event() for instance_id in runs}
 
     def compute_resource(resource_id: str, capacity: int):
         if resource_id not in resource_pool:
@@ -108,21 +127,35 @@ def build_timeline_events(
             yield env.timeout(duration)
             return wait
 
+    def run_edge_ready(pred_id: str, target_id: str):
+        edge = graph.edges[pred_id, target_id].get("edge", {})
+        dependency_event = start_events[pred_id] if _edge_is_streaming(edge) else end_events[pred_id]
+        yield dependency_event
+        if _edge_is_streaming(edge) and not _edge_token_resource(edge):
+            duration = _edge_duration(edge)
+            if duration > 0:
+                yield env.timeout(duration)
+            return 0.0
+        return (yield from run_edge_transfer(edge))
+
+    def finalize_run(run: _TaskRun) -> None:
+        relative_deadline = _task_deadline(run.task)
+        if relative_deadline is not None:
+            run.deadline_ms = run.release_ms + relative_deadline
+            run.slack_ms = run.deadline_ms - run.end_ms
+
     def run_task(instance_id: str):
         run = runs[instance_id]
         predecessor_ids = list(graph.predecessors(instance_id))
-        if predecessor_ids:
-            yield simpy.events.AllOf(env, [processes[pred] for pred in predecessor_ids])
         if run.release_ms > env.now:
             yield env.timeout(run.release_ms - float(env.now))
 
         token_wait = 0.0
-        transfers = []
+        edge_ready = []
         for pred in predecessor_ids:
-            edge = graph.edges[pred, instance_id].get("edge", {})
-            transfers.append(env.process(run_edge_transfer(edge)))
-        if transfers:
-            results = yield simpy.events.AllOf(env, transfers)
+            edge_ready.append(env.process(run_edge_ready(pred, instance_id)))
+        if edge_ready:
+            results = yield simpy.events.AllOf(env, edge_ready)
             token_wait = sum(float(value or 0.0) for value in results.values())
 
         run.ready_ms = float(env.now)
@@ -136,18 +169,78 @@ def build_timeline_events(
                 yield request
                 run.resource_wait_ms = float(env.now) - start_wait
                 run.start_ms = float(env.now)
+                if not start_events[instance_id].triggered:
+                    start_events[instance_id].succeed(run.start_ms)
                 yield env.timeout(duration)
         else:
             run.start_ms = float(env.now)
+            if not start_events[instance_id].triggered:
+                start_events[instance_id].succeed(run.start_ms)
             yield env.timeout(duration)
         run.end_ms = float(env.now)
-        relative_deadline = _task_deadline(run.task)
-        if relative_deadline is not None:
-            run.deadline_ms = run.release_ms + relative_deadline
-            run.slack_ms = run.deadline_ms - run.end_ms
+        if not end_events[instance_id].triggered:
+            end_events[instance_id].succeed(run.end_ms)
+        finalize_run(run)
 
+    def run_otf_group(group_instance_ids: list[str], group_id: str):
+        group_runs = [runs[instance_id] for instance_id in group_instance_ids]
+        release_ms = max((run.release_ms for run in group_runs), default=0.0)
+        if release_ms > env.now:
+            yield env.timeout(release_ms - float(env.now))
+
+        external_ready = []
+        for run in group_runs:
+            for pred in graph.predecessors(run.instance_id):
+                if pred not in group_instance_ids:
+                    external_ready.append(env.process(run_edge_ready(pred, run.instance_id)))
+        token_wait = 0.0
+        if external_ready:
+            results = yield simpy.events.AllOf(env, external_ready)
+            token_wait = sum(float(value or 0.0) for value in results.values())
+
+        base_start = float(env.now)
+        max_duration = max((_task_duration(run.task) for run in group_runs), default=0.0)
+        task_processes = []
+        for run in group_runs:
+            run.resource_id = _task_resource_id(run.task)
+            run.ready_ms = base_start
+            run.token_wait_ms = token_wait
+            run.otf_group_id = group_id
+            run.bottleneck = _task_duration(run.task) == max_duration
+            task_processes.append(env.process(run_otf_group_task(run, base_start, max_duration)))
+        if task_processes:
+            yield simpy.events.AllOf(env, task_processes)
+
+    def run_otf_group_task(run: _TaskRun, base_start: float, group_duration: float):
+        latency_offset = _task_latency_offset(run.task)
+        run.latency_offset_ms = latency_offset
+        if latency_offset > 0:
+            yield env.timeout(latency_offset)
+        run.start_ms = base_start + latency_offset
+        if not start_events[run.instance_id].triggered:
+            start_events[run.instance_id].succeed(run.start_ms)
+        yield env.timeout(group_duration)
+        run.end_ms = float(env.now)
+        if not end_events[run.instance_id].triggered:
+            end_events[run.instance_id].succeed(run.end_ms)
+        finalize_run(run)
+
+    scheduled: set[str] = set()
+    for frame_index in range(frame_count):
+        for group_index, group in enumerate(otf_groups):
+            group_id = f"otf-{group_index}#f{frame_index}" if frame_count > 1 else f"otf-{group_index}"
+            group_instance_ids = [
+                _instance_id(task_id, frame_index, frame_count)
+                for task_id in group
+                if _instance_id(task_id, frame_index, frame_count) in runs
+            ]
+            if not group_instance_ids:
+                continue
+            scheduled.update(group_instance_ids)
+            env.process(run_otf_group(group_instance_ids, group_id))
     for instance_id in list(nx.topological_sort(graph)):
-        processes[instance_id] = env.process(run_task(instance_id))
+        if instance_id not in scheduled:
+            env.process(run_task(instance_id))
     env.run()
 
     _mark_critical_path(runs, graph)
@@ -164,6 +257,23 @@ def _build_base_graph(nx, tasks: dict[str, dict[str, Any]], edges: list[dict[str
         if source in tasks and target in tasks:
             graph.add_edge(str(source), str(target), edge=edge)
     return graph
+
+
+def _otf_groups(nx, graph) -> list[list[str]]:
+    otf_edges = [
+        (source, target)
+        for source, target, data in graph.edges(data=True)
+        if _edge_is_otf_group_edge(data.get("edge", {}))
+    ]
+    if not otf_edges:
+        return []
+    otf_graph = nx.DiGraph()
+    otf_graph.add_edges_from(otf_edges)
+    groups: list[list[str]] = []
+    rank = {node: index for index, node in enumerate(nx.topological_sort(graph))}
+    for component in nx.weakly_connected_components(otf_graph):
+        groups.append(sorted((str(node) for node in component), key=lambda node: rank.get(node, 0)))
+    return sorted(groups, key=lambda group: min(rank.get(node, 0) for node in group))
 
 
 def _expand_task_runs(
@@ -233,7 +343,15 @@ def _critical_parent(
     graph,
     by_resource: dict[str, list[_TaskRun]],
 ) -> _TaskRun | None:
-    candidates = [runs[pred] for pred in graph.predecessors(run.instance_id)]
+    candidates: list[tuple[float, _TaskRun]] = []
+    for pred in graph.predecessors(run.instance_id):
+        predecessor = runs[pred]
+        edge = graph.edges[pred, run.instance_id].get("edge", {})
+        if _edge_is_streaming(edge):
+            ready_time = predecessor.start_ms + _edge_duration(edge)
+        else:
+            ready_time = predecessor.end_ms + _edge_duration(edge)
+        candidates.append((ready_time, predecessor))
     if run.resource_id:
         previous_on_resource = [
             item
@@ -241,15 +359,26 @@ def _critical_parent(
             if item.instance_id != run.instance_id and item.end_ms <= run.start_ms
         ]
         if previous_on_resource:
-            candidates.append(max(previous_on_resource, key=lambda item: item.end_ms))
+            previous = max(previous_on_resource, key=lambda item: item.end_ms)
+            candidates.append((previous.end_ms, previous))
     if not candidates:
         return None
-    return max(candidates, key=lambda item: (item.end_ms, item.start_ms))
+    return max(candidates, key=lambda item: (item[0], item[1].start_ms))[1]
 
 
 def _timeline_events(runs: dict[str, _TaskRun], graph) -> list[TimelineEvent]:
     result: list[TimelineEvent] = []
-    ordered = sorted(runs.values(), key=lambda item: (item.frame_index, item.start_ms, item.end_ms, item.instance_id))
+    rank = {node: index for index, node in enumerate(graph.nodes)}
+    ordered = sorted(
+        runs.values(),
+        key=lambda item: (
+            item.frame_index,
+            item.start_ms,
+            rank.get(item.instance_id, 0),
+            item.end_ms,
+            item.instance_id,
+        ),
+    )
     for run in ordered:
         task = run.task
         result.append(
@@ -260,6 +389,10 @@ def _timeline_events(runs: dict[str, _TaskRun], graph) -> list[TimelineEvent]:
                 task_type=task.get("task_type") or "hw",
                 frame_index=run.frame_index,
                 resource_id=run.resource_id,
+                edge_type=run.edge_type,
+                otf_group_id=run.otf_group_id,
+                latency_offset_ms=run.latency_offset_ms,
+                bottleneck=run.bottleneck,
                 constraint_type=task.get("constraint_type"),
                 source_fps=task.get("source_fps"),
                 v_valid_ms=task.get("v_valid_ms") or task.get("source_valid_ms"),
@@ -279,6 +412,22 @@ def _timeline_events(runs: dict[str, _TaskRun], graph) -> list[TimelineEvent]:
             )
         )
     return result
+
+
+def _incoming_edge_type(instance_id: str, graph) -> str | None:
+    incoming = list(graph.predecessors(instance_id))
+    if not incoming:
+        return None
+    edge_types = [
+        str((graph.edges[pred, instance_id].get("edge", {}) or {}).get("type") or "")
+        for pred in incoming
+    ]
+    edge_types = [edge_type for edge_type in edge_types if edge_type]
+    if not edge_types:
+        return None
+    if len(set(edge_types)) == 1:
+        return edge_types[0]
+    return ",".join(edge_types)
 
 
 def _normalized_edge(edge: dict[str, Any]) -> dict[str, Any]:
@@ -308,6 +457,10 @@ def _task_duration(task: dict[str, Any]) -> float:
     return float(duration or 0.0)
 
 
+def _task_latency_offset(task: dict[str, Any]) -> float:
+    return float(task.get("latency_offset_ms") or task.get("latency_ms") or 0.0)
+
+
 def _task_deadline(task: dict[str, Any]) -> float | None:
     value = task.get("deadline_ms")
     if value is None:
@@ -322,7 +475,7 @@ def _edge_token_resource(edge: dict[str, Any]) -> str | None:
     if explicit:
         return str(explicit)
     edge_type = str(edge.get("type") or "").upper()
-    if edge_type in {"M2M", "OTF", "VOTF"}:
+    if edge_type in {"M2M", "VOTF"}:
         return f"{edge_type}:{edge.get('buffer') or edge.get('source')}->{edge.get('target')}"
     return None
 
@@ -332,7 +485,21 @@ def _edge_token_capacity(edge: dict[str, Any]) -> int:
 
 
 def _edge_duration(edge: dict[str, Any]) -> float:
-    return float(edge.get("duration_ms") or edge.get("transfer_ms") or edge.get("latency_ms") or 0.0)
+    return float(
+        edge.get("duration_ms")
+        or edge.get("transfer_ms")
+        or edge.get("latency_ms")
+        or edge.get("line_delay_ms")
+        or 0.0
+    )
+
+
+def _edge_is_streaming(edge: dict[str, Any]) -> bool:
+    return str(edge.get("type") or "").upper() in {"OTF", "VOTF"}
+
+
+def _edge_is_otf_group_edge(edge: dict[str, Any]) -> bool:
+    return str(edge.get("type") or "").upper() == "OTF"
 
 
 def _instance_id(task_id: str, frame_index: int, frame_count: int) -> str:

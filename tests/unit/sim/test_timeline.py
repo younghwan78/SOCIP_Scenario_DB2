@@ -69,6 +69,94 @@ def test_timeline_models_m2m_token_transfer_delay():
     assert by_task["consumer"].token_wait_ms == 0.0
 
 
+def test_timeline_models_otf_group_as_shared_bottleneck_timing():
+    events = build_timeline_events(
+        tasks=[
+            {"id": "producer", "hw_name": "CSIS", "task_type": "hw", "duration_ms": 8.0},
+            {"id": "consumer", "hw_name": "PDP", "task_type": "hw", "duration_ms": 5.0, "latency_offset_ms": 0.2},
+        ],
+        edges=[
+            {
+                "from": "producer",
+                "to": "consumer",
+                "type": "OTF",
+            }
+        ],
+    )
+
+    by_task = {event.task_id: event for event in events}
+    assert by_task["producer"].start_ms == 0.0
+    assert by_task["producer"].end_ms == 8.0
+    assert by_task["producer"].otf_group_id == "otf-0"
+    assert by_task["producer"].bottleneck is True
+    assert by_task["consumer"].ready_ms == pytest.approx(0.0)
+    assert by_task["consumer"].start_ms == pytest.approx(0.2)
+    assert by_task["consumer"].end_ms == pytest.approx(8.2)
+    assert by_task["consumer"].duration_ms == pytest.approx(8.0)
+
+
+def test_timeline_does_not_serialize_independent_otf_edges_by_default():
+    events = build_timeline_events(
+        tasks=[
+            {"id": "p0", "hw_name": "CSIS0", "task_type": "hw", "duration_ms": 8.0},
+            {"id": "p1", "hw_name": "CSIS1", "task_type": "hw", "duration_ms": 8.0},
+            {"id": "c0", "hw_name": "PDP0", "task_type": "hw", "duration_ms": 5.0},
+            {"id": "c1", "hw_name": "PDP1", "task_type": "hw", "duration_ms": 5.0},
+        ],
+        edges=[
+            {"from": "p0", "to": "c0", "type": "OTF"},
+            {"from": "p1", "to": "c1", "type": "OTF"},
+        ],
+    )
+
+    by_task = {event.task_id: event for event in events}
+    assert by_task["c0"].start_ms == pytest.approx(0.0)
+    assert by_task["c1"].start_ms == pytest.approx(0.0)
+    assert by_task["c0"].token_wait_ms == 0.0
+    assert by_task["c1"].token_wait_ms == 0.0
+
+
+def test_timeline_splits_camera_otf_groups_at_m2m_break():
+    tasks = [
+        {"id": task_id, "hw_name": task_id.upper(), "task_type": "hw", "duration_ms": duration}
+        for task_id, duration in [
+            ("sensor", 8.0),
+            ("csispdp", 7.0),
+            ("byrp", 6.0),
+            ("rgbp", 5.0),
+            ("yuvsc", 4.0),
+            ("mtnr", 3.0),
+            ("msnr", 2.0),
+            ("yuvp", 2.0),
+            ("mcsc", 2.0),
+        ]
+    ]
+    events = build_timeline_events(
+        tasks=tasks,
+        edges=[
+            {"from": "sensor", "to": "csispdp", "type": "OTF"},
+            {"from": "csispdp", "to": "byrp", "type": "OTF"},
+            {"from": "byrp", "to": "rgbp", "type": "OTF"},
+            {"from": "rgbp", "to": "yuvsc", "type": "OTF"},
+            {"from": "yuvsc", "to": "mtnr", "type": "M2M", "transfer_ms": 1.5, "buffer": "YUVSC_MTNR_BUF"},
+            {"from": "mtnr", "to": "msnr", "type": "OTF"},
+            {"from": "msnr", "to": "yuvp", "type": "OTF"},
+            {"from": "yuvp", "to": "mcsc", "type": "OTF"},
+        ],
+    )
+
+    by_task = {event.task_id: event for event in events}
+    first_group = {by_task[task_id].otf_group_id for task_id in ("sensor", "csispdp", "byrp", "rgbp", "yuvsc")}
+    second_group = {by_task[task_id].otf_group_id for task_id in ("mtnr", "msnr", "yuvp", "mcsc")}
+    assert len(first_group) == 1
+    assert len(second_group) == 1
+    assert first_group != second_group
+    assert {by_task[task_id].start_ms for task_id in ("sensor", "csispdp", "byrp", "rgbp", "yuvsc")} == {0.0}
+    assert by_task["mtnr"].start_ms == pytest.approx(9.5)
+    assert by_task["msnr"].start_ms == pytest.approx(9.5)
+    assert by_task["mcsc"].end_ms == pytest.approx(12.5)
+
+
 def test_timeline_serializes_shared_m2m_token_queue():
     events = build_timeline_events(
         tasks=[

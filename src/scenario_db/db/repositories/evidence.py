@@ -38,6 +38,14 @@ def get_evidence(db: Session, evidence_id: str) -> Evidence | None:
     return db.query(Evidence).filter_by(id=evidence_id).one_or_none()
 
 
+def delete_simulation_evidence(db: Session, evidence_id: str) -> bool:
+    row = db.query(Evidence).filter_by(id=evidence_id).one_or_none()
+    if row is None or row.kind != "evidence.simulation":
+        return False
+    db.delete(row)
+    return True
+
+
 def get_simulation_evidence_by_params_hash(
     db: Session,
     *,
@@ -72,7 +80,7 @@ def list_simulation_results(
         q = q.filter(Evidence.scenario_ref == scenario_ref)
     if variant_ref is not None:
         q = q.filter(Evidence.variant_ref == variant_ref)
-    q = q.order_by(Evidence.id.desc())
+    q = q.order_by(Evidence.run_info["timestamp"].astext.desc().nullslast(), Evidence.id.desc())
     total = q.count()
     if latest:
         rows = q.limit(1).all()

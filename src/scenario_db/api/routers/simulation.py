@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Session
 
@@ -9,6 +9,7 @@ from scenario_db.api.schemas.common import PagedResponse
 from scenario_db.api.schemas.evidence import EvidenceResponse
 from scenario_db.api.schemas.simulation import SimulateRequest, SimulateRunResponse
 from scenario_db.db.repositories.evidence import (
+    delete_simulation_evidence,
     get_evidence,
     list_simulation_results,
 )
@@ -48,3 +49,12 @@ def get_result(evidence_id: str, db: Session = Depends(get_db)):
     if row is None or row.kind != "evidence.simulation":
         raise NoResultFound(f"Simulation evidence '{evidence_id}' not found")
     return row
+
+
+@router.delete("/results/{evidence_id}", status_code=204)
+def delete_result(evidence_id: str, db: Session = Depends(get_db)):
+    deleted = delete_simulation_evidence(db, evidence_id)
+    if not deleted:
+        raise NoResultFound(f"Simulation evidence '{evidence_id}' not found")
+    db.commit()
+    return Response(status_code=204)

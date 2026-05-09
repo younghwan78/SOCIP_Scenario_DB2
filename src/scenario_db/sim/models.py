@@ -199,6 +199,10 @@ class TimelineEvent(BaseScenarioModel):
     task_type: Literal["hw", "sw"] = "hw"
     frame_index: int | None = None
     resource_id: str | None = None
+    edge_type: str | None = None
+    otf_group_id: str | None = None
+    latency_offset_ms: float | None = None
+    bottleneck: bool = False
     constraint_type: Literal["source", "sink"] | None = None
     source_fps: float | None = None
     v_valid_ms: float | None = None

@@ -53,3 +53,43 @@ def test_simulation_run_endpoint(monkeypatch):
     assert body["cached"] is False
     assert body["warnings"] == ["isp0 has ppc=0"]
     assert body["kpi"]["total_power_mw"] == 1.0
+
+
+def test_delete_simulation_result_endpoint(monkeypatch):
+    app = create_app()
+    db = MagicMock()
+
+    def _override_db():
+        yield db
+
+    app.dependency_overrides[get_db] = _override_db
+
+    def _fake_delete(db_arg, evidence_id):
+        assert db_arg is db
+        assert evidence_id == "sim-1"
+        return True
+
+    monkeypatch.setattr(simulation_router, "delete_simulation_evidence", _fake_delete)
+    client = TestClient(app, raise_server_exceptions=False)
+
+    response = client.delete("/api/v1/simulation/results/sim-1")
+
+    assert response.status_code == 204
+    db.commit.assert_called_once()
+
+
+def test_delete_simulation_result_404(monkeypatch):
+    app = create_app()
+    db = MagicMock()
+
+    def _override_db():
+        yield db
+
+    app.dependency_overrides[get_db] = _override_db
+    monkeypatch.setattr(simulation_router, "delete_simulation_evidence", lambda db_arg, evidence_id: False)
+    client = TestClient(app, raise_server_exceptions=False)
+
+    response = client.delete("/api/v1/simulation/results/missing")
+
+    assert response.status_code == 404
+    db.commit.assert_not_called()

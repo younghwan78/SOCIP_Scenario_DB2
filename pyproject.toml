@@ -45,6 +45,7 @@ notebook = [
     "python-dotenv>=1.2.2",
 ]
 dashboard = [
+    "plotly>=5.20",
     "streamlit>=1.40",
     "requests>=2.31",
 ]
