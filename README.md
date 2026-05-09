@@ -89,6 +89,19 @@ uv run python -m scenario_db.etl.loader demo\fixtures
 
 Reload fixtures after changing YAML. The API reads from PostgreSQL, not directly from YAML.
 
+Scenario IDs are global in the current schema. If two fixture sets contain the
+same scenario id under different projects, the default ETL policy rejects the
+incoming conflicting scenario instead of silently moving it between projects.
+Load into a clean database when switching fixture families, or make replacement
+explicit:
+
+```powershell
+uv run python -m scenario_db.etl.loader db_fixtures_Exynos2600_S26Plus --replace-scenario-project-collisions
+```
+
+Use `--skip-scenario-project-collisions` only when you intentionally want to
+keep the existing scenario owner and ignore conflicting incoming YAML.
+
 ## Run API
 
 The FastAPI ASGI entry point is `scenario_db.api.app:app`.

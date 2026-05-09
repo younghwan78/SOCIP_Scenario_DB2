@@ -59,12 +59,23 @@ LOAD_ORDER = [
 ]
 
 
-def load_yaml_dir(directory: Path, session: Session) -> dict[str, int]:
+def load_yaml_dir(
+    directory: Path,
+    session: Session,
+    *,
+    scenario_project_collision_policy: str = "error",
+) -> dict[str, int]:
     """
     디렉터리 내 모든 YAML을 kind 기준으로 적재.
     파일 단위 SAVEPOINT — 오류 파일은 skip, 나머지는 보존.
     반환: {kind: 성공 건수}
     """
+    if scenario_project_collision_policy not in {"error", "replace", "skip"}:
+        raise ValueError("scenario_project_collision_policy must be one of: error, replace, skip")
+
+    previous_policy = getattr(session, "info", {}).get("scenario_project_collision_policy")
+    session.info["scenario_project_collision_policy"] = scenario_project_collision_policy
+
     # 파일 발견 → kind별 그룹화
     by_kind: dict[str, list[tuple[Path, dict, str]]] = defaultdict(list)
     for path in sorted(directory.rglob("*.yaml")):
@@ -83,26 +94,32 @@ def load_yaml_dir(directory: Path, session: Session) -> dict[str, int]:
     counts: dict[str, int] = {}
     skipped: list[str] = []
 
-    for kind in LOAD_ORDER:
-        success = 0
-        for path, raw, sha256 in by_kind.get(kind, []):
-            try:
-                with session.begin_nested():          # PostgreSQL SAVEPOINT
-                    MAPPER_REGISTRY[kind](raw, sha256, session)
-                success += 1
-            except Exception as exc:
-                logger.error("skip %-45s [%s] %s", path.name, kind, exc)
-                skipped.append(f"{path.name}: {exc}")
-        counts[kind] = success
+    try:
+        for kind in LOAD_ORDER:
+            success = 0
+            for path, raw, sha256 in by_kind.get(kind, []):
+                try:
+                    with session.begin_nested():          # PostgreSQL SAVEPOINT
+                        MAPPER_REGISTRY[kind](raw, sha256, session)
+                    success += 1
+                except Exception as exc:
+                    logger.error("skip %-45s [%s] %s", path.name, kind, exc)
+                    skipped.append(f"{path.name}: {exc}")
+            counts[kind] = success
 
-    session.commit()
+        session.commit()
+    finally:
+        if previous_policy is None:
+            session.info.pop("scenario_project_collision_policy", None)
+        else:
+            session.info["scenario_project_collision_policy"] = previous_policy
 
     total = sum(counts.values())
     logger.info("ETL complete — %d loaded, %d skipped", total, len(skipped))
     return counts
 
 
-def main(directory: str) -> None:
+def main(directory: str, *, scenario_project_collision_policy: str = "error") -> None:
     """CLI 진입점: python -m scenario_db.etl.loader <directory>"""
     import os
     from scenario_db.db.base import make_engine
@@ -114,7 +131,11 @@ def main(directory: str) -> None:
     )
     engine = make_engine(os.environ["DATABASE_URL"])
     with get_session(engine) as session:
-        counts = load_yaml_dir(Path(directory), session)
+        counts = load_yaml_dir(
+            Path(directory),
+            session,
+            scenario_project_collision_policy=scenario_project_collision_policy,
+        )
 
     print("\nETL 결과:")
     for kind, n in counts.items():
@@ -124,7 +145,16 @@ def main(directory: str) -> None:
 
 if __name__ == "__main__":
     import sys
-    if len(sys.argv) != 2:
-        print("Usage: python -m scenario_db.etl.loader <fixtures_directory>")
+    if len(sys.argv) not in {2, 3}:
+        print("Usage: python -m scenario_db.etl.loader <fixtures_directory> [--replace-scenario-project-collisions|--skip-scenario-project-collisions]")
         sys.exit(1)
-    main(sys.argv[1])
+    policy = "error"
+    if len(sys.argv) == 3:
+        if sys.argv[2] == "--replace-scenario-project-collisions":
+            policy = "replace"
+        elif sys.argv[2] == "--skip-scenario-project-collisions":
+            policy = "skip"
+        else:
+            print(f"Unknown option: {sys.argv[2]}")
+            sys.exit(1)
+    main(sys.argv[1], scenario_project_collision_policy=policy)

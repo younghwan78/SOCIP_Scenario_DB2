@@ -3,8 +3,10 @@ from __future__ import annotations
 import logging
 from copy import deepcopy
 
+import pytest
+
 from scenario_db.db.models.definition import Scenario, ScenarioVariant
-from scenario_db.etl.mappers.definition import upsert_usecase
+from scenario_db.etl.mappers.definition import ScenarioProjectCollisionError, upsert_usecase
 
 
 class _MapperQuery:
@@ -34,6 +36,7 @@ class _MapperSession:
     def __init__(self):
         self.scenarios = {}
         self.variants = []
+        self.info = {}
 
     def get(self, model, key):
         if model is Scenario:
@@ -105,6 +108,7 @@ def test_upsert_usecase_persists_pipeline_and_replaces_variants():
         }
     ]
 
+    db.info["scenario_project_collision_policy"] = "replace"
     upsert_usecase(updated, "sha-b", db)
 
     row = db.scenarios["uc-import-test"]
@@ -113,7 +117,7 @@ def test_upsert_usecase_persists_pipeline_and_replaces_variants():
     assert [variant.id for variant in db.variants] == ["UHD60"]
 
 
-def test_upsert_usecase_warns_when_scenario_id_moves_between_projects(caplog):
+def test_upsert_usecase_rejects_scenario_id_project_collision_by_default():
     db = _MapperSession()
     doc = _usecase_doc()
     upsert_usecase(doc, "sha-a", db)
@@ -121,9 +125,41 @@ def test_upsert_usecase_warns_when_scenario_id_moves_between_projects(caplog):
     updated = deepcopy(doc)
     updated["project_ref"] = "proj-B"
 
+    with pytest.raises(ScenarioProjectCollisionError, match="scenario id collision"):
+        upsert_usecase(updated, "sha-b", db)
+
+    assert db.scenarios["uc-import-test"].project_ref == "proj-A"
+    assert [variant.id for variant in db.variants] == ["FHD30"]
+
+
+def test_upsert_usecase_warns_when_collision_replacement_is_explicit(caplog):
+    db = _MapperSession()
+    doc = _usecase_doc()
+    upsert_usecase(doc, "sha-a", db)
+
+    updated = deepcopy(doc)
+    updated["project_ref"] = "proj-B"
+    db.info["scenario_project_collision_policy"] = "replace"
+
     with caplog.at_level(logging.WARNING, logger="scenario_db.etl.mappers.definition"):
         upsert_usecase(updated, "sha-b", db)
 
     assert "scenario id collision" in caplog.text
     assert "project_ref=proj-A" in caplog.text
     assert "project_ref=proj-B" in caplog.text
+    assert db.scenarios["uc-import-test"].project_ref == "proj-B"
+
+
+def test_upsert_usecase_can_skip_project_collision_when_explicit():
+    db = _MapperSession()
+    doc = _usecase_doc()
+    upsert_usecase(doc, "sha-a", db)
+
+    updated = deepcopy(doc)
+    updated["project_ref"] = "proj-B"
+    db.info["scenario_project_collision_policy"] = "skip"
+
+    upsert_usecase(updated, "sha-b", db)
+
+    assert db.scenarios["uc-import-test"].project_ref == "proj-A"
+    assert [variant.id for variant in db.variants] == ["FHD30"]

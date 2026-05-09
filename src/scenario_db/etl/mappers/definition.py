@@ -12,6 +12,10 @@ from scenario_db.models.definition.usecase import Usecase as PydanticUsecase
 logger = logging.getLogger(__name__)
 
 
+class ScenarioProjectCollisionError(ValueError):
+    """Raised when a global scenario id would move between projects."""
+
+
 def upsert_project(raw: dict, sha256: str, session: Session) -> None:
     obj = PydanticProject.model_validate(raw)
     row = session.get(Project, obj.id) or Project(id=obj.id)
@@ -31,13 +35,21 @@ def upsert_usecase(raw: dict, sha256: str, session: Session) -> None:
         return
     previous_project = getattr(row, "project_ref", None)
     if previous_project and previous_project != str(obj.project_ref):
-        logger.warning(
-            "scenario id collision: %s is moving from project_ref=%s to project_ref=%s; "
-            "scenario ids are global in the current schema, so the previous project will no longer list it",
-            obj.id,
-            previous_project,
-            obj.project_ref,
+        policy = _scenario_project_collision_policy(session)
+        message = (
+            f"scenario id collision: {obj.id} already belongs to project_ref={previous_project}; "
+            f"incoming project_ref={obj.project_ref}. Scenario ids are global in the current schema."
         )
+        if policy == "replace":
+            logger.warning("%s Replacing because collision_policy=replace.", message)
+        elif policy == "skip":
+            logger.warning("%s Skipping incoming scenario because collision_policy=skip.", message)
+            return
+        else:
+            raise ScenarioProjectCollisionError(
+                f"{message} Load into a clean DB, rename one scenario id, or rerun ETL with "
+                "scenario_project_collision_policy='replace' only when this replacement is intentional."
+            )
 
     row.schema_version = obj.schema_version
     row.project_ref = str(obj.project_ref)
@@ -70,3 +82,11 @@ def upsert_usecase(raw: dict, sha256: str, session: Session) -> None:
         vrow.tags = list(v.tags)
         vrow.derived_from_variant = v.derived_from_variant
         session.add(vrow)
+
+
+def _scenario_project_collision_policy(session: Session) -> str:
+    info = getattr(session, "info", {}) or {}
+    policy = str(info.get("scenario_project_collision_policy") or "error").lower()
+    if policy not in {"error", "replace", "skip"}:
+        return "error"
+    return policy
