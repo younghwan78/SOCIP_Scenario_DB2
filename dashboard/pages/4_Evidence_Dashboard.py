@@ -654,6 +654,28 @@ def _constraint_label(event: dict[str, Any]) -> str:
     return "task"
 
 
+OTF_COLOR_FAMILIES = [
+    ["#2563EB", "#3B82F6", "#60A5FA", "#93C5FD"],
+    ["#0F766E", "#14B8A6", "#2DD4BF", "#5EEAD4"],
+    ["#7C3AED", "#8B5CF6", "#A78BFA", "#C4B5FD"],
+    ["#059669", "#10B981", "#34D399", "#6EE7B7"],
+    ["#0284C7", "#0EA5E9", "#38BDF8", "#7DD3FC"],
+]
+M2M_COLOR_FAMILIES = [
+    "#D97706",
+    "#EA580C",
+    "#BE123C",
+    "#A16207",
+    "#C2410C",
+]
+SW_COLOR_FAMILIES = [
+    "#9333EA",
+    "#C026D3",
+    "#DB2777",
+    "#7E22CE",
+]
+
+
 def _render_timing_summary(result: dict[str, Any]) -> None:
     events = _timeline_events(result)
     kpi = result.get("kpi") if isinstance(result.get("kpi"), dict) else {}
@@ -742,20 +764,66 @@ def _render_timing_summary(result: dict[str, Any]) -> None:
         cols[2].metric("Output Cadence Slack", "-")
 
 
+def _base_task_id(task_id: Any) -> str:
+    return str(task_id or "").split("#f", 1)[0]
+
+
+def _base_otf_group_id(group_id: Any) -> str | None:
+    if not group_id:
+        return None
+    return str(group_id).split("#f", 1)[0]
+
+
+def _timeline_group_index(value: str | None, fallback: str) -> int:
+    text = value or fallback
+    digits = "".join(ch for ch in text if ch.isdigit())
+    if digits:
+        return int(digits)
+    return sum(ord(ch) for ch in text)
+
+
 def _timeline_chart_color(event: dict[str, Any]) -> str:
-    if event.get("critical"):
-        return "#EF4444"
     constraint = event.get("constraint_type")
     if constraint == "source":
         return "#22C55E"
-    if constraint == "sink":
-        return "#3B82F6"
     task_type = str(event.get("task_type") or "").lower()
     if "sw" in task_type:
-        return "#8B5CF6"
+        index = _timeline_group_index(str(event.get("resource_id") or ""), _base_task_id(event.get("task_id")))
+        return SW_COLOR_FAMILIES[index % len(SW_COLOR_FAMILIES)]
+
+    otf_group = _base_otf_group_id(event.get("otf_group_id"))
+    if otf_group:
+        family = OTF_COLOR_FAMILIES[_timeline_group_index(otf_group, otf_group) % len(OTF_COLOR_FAMILIES)]
+        shade_index = _timeline_group_index(None, _base_task_id(event.get("task_id"))) % len(family)
+        return family[shade_index]
+
+    if constraint == "sink":
+        return "#0284C7"
+    edge_type = str(event.get("edge_type") or "").upper()
+    if edge_type in {"M2M", "VOTF"}:
+        index = _timeline_group_index(str(event.get("resource_id") or edge_type), _base_task_id(event.get("task_id")))
+        return M2M_COLOR_FAMILIES[index % len(M2M_COLOR_FAMILIES)]
     if "dma" in task_type or "m2m" in task_type:
-        return "#F59E0B"
+        index = _timeline_group_index(str(event.get("resource_id") or ""), _base_task_id(event.get("task_id")))
+        return M2M_COLOR_FAMILIES[index % len(M2M_COLOR_FAMILIES)]
     return "#64748B"
+
+
+def _timeline_legend_name(event: dict[str, Any]) -> str:
+    task_type = str(event.get("task_type") or "").lower()
+    if "sw" in task_type:
+        return "SW Task"
+    if event.get("constraint_type") == "source":
+        return "Sensor In"
+    otf_group = _base_otf_group_id(event.get("otf_group_id"))
+    if otf_group:
+        return f"HW OTF {otf_group.replace('otf-', '')}"
+    edge_type = str(event.get("edge_type") or "").upper()
+    if edge_type in {"M2M", "VOTF"}:
+        return f"HW {edge_type}"
+    if event.get("constraint_type") == "sink":
+        return "Display Out"
+    return "HW Task"
 
 
 def _timeline_hover(event: dict[str, Any]) -> str:
@@ -782,6 +850,94 @@ def _timeline_hover(event: dict[str, Any]) -> str:
         ("cadence_slack", _format_ms(event.get("cadence_slack_ms"))),
     ]
     return "<br>".join(f"{key}: {value}" for key, value in fields if value not in (None, "-"))
+
+
+def _timeline_frame_outputs(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    predecessor_ids = {
+        str(predecessor)
+        for event in events
+        for predecessor in (event.get("predecessors") or [])
+        if predecessor is not None
+    }
+    by_frame: dict[int, list[dict[str, Any]]] = {}
+    for event in events:
+        frame_value = _numeric(event.get("frame_index"))
+        frame_index = int(frame_value) if frame_value is not None else 0
+        by_frame.setdefault(frame_index, []).append(event)
+
+    outputs: list[dict[str, Any]] = []
+    for frame_index, frame_events in sorted(by_frame.items()):
+        source_events = [
+            event
+            for event in frame_events
+            if event.get("constraint_type") == "source" or _numeric(event.get("v_valid_ms")) is not None
+        ]
+        start_source = source_events if source_events else frame_events
+        if not start_source:
+            continue
+        start_ms = min(_numeric(event.get("start_ms")) or 0.0 for event in start_source)
+        candidates = [
+            event
+            for event in frame_events
+            if event.get("constraint_type") == "sink"
+            or _numeric(event.get("scanout_ms")) is not None
+            or str(event.get("task_id")) not in predecessor_ids
+        ]
+        if not candidates:
+            candidates = frame_events
+        output = max(candidates, key=lambda event: (_numeric(event.get("end_ms")) or 0.0, _numeric(event.get("start_ms")) or 0.0))
+        output_ms = _numeric(output.get("end_ms")) or 0.0
+        outputs.append(
+            {
+                "frame_index": frame_index,
+                "start_ms": start_ms,
+                "output_ms": output_ms,
+                "latency_ms": output_ms - start_ms,
+                "output_task": _event_id(output),
+            }
+        )
+    return outputs
+
+
+def _render_timing_chart_metrics(events: list[dict[str, Any]]) -> None:
+    outputs = _timeline_frame_outputs(events)
+    if not outputs:
+        return
+    preferred = next((item for item in outputs if item["frame_index"] == 1), outputs[0])
+    intervals = [
+        {
+            "from": previous["frame_index"],
+            "to": current["frame_index"],
+            "interval_ms": current["output_ms"] - previous["output_ms"],
+        }
+        for previous, current in zip(outputs, outputs[1:], strict=False)
+    ]
+
+    cols = st.columns(3)
+    cols[0].metric(
+        f"Frame {preferred['frame_index']} Latency",
+        _format_ms(preferred["latency_ms"]),
+        help=(
+            f"start={_format_ms(preferred['start_ms'])} / "
+            f"output={_format_ms(preferred['output_ms'])} / "
+            f"task={preferred['output_task']}"
+        ),
+    )
+    if intervals:
+        avg_interval = sum(item["interval_ms"] for item in intervals) / len(intervals)
+        last_interval = intervals[-1]
+        cols[1].metric(
+            "Avg Output Interval",
+            _format_ms(avg_interval),
+            help=f"{len(intervals)} intervals across {len(outputs)} frames",
+        )
+        cols[2].metric(
+            f"F{last_interval['from']} -> F{last_interval['to']} Interval",
+            _format_ms(last_interval["interval_ms"]),
+        )
+    else:
+        cols[1].metric("Avg Output Interval", "-")
+        cols[2].metric("Last Output Interval", "-")
 
 
 def _render_timing_chart(result: dict[str, Any], *, key_prefix: str = "stored") -> None:
@@ -816,6 +972,7 @@ def _render_timing_chart(result: dict[str, Any], *, key_prefix: str = "stored") 
         frame_choice = "All"
     show_waits = st.checkbox("Show queue waits", value=True, key=f"{key_prefix}_timing_chart_waits_{evidence_id}")
     show_deadlines = st.checkbox("Show deadlines", value=True, key=f"{key_prefix}_timing_chart_deadlines_{evidence_id}")
+    _render_timing_chart_metrics(events)
 
     event_order = {id(event): index for index, event in enumerate(events)}
     visible_events = events
@@ -847,7 +1004,7 @@ def _render_timing_chart(result: dict[str, Any], *, key_prefix: str = "stored") 
             duration = max(0.0, end - start)
         duration = duration or 0.0
         color = _timeline_chart_color(event)
-        segment_name = "Critical" if event.get("critical") else _constraint_label(event).title()
+        segment_name = _timeline_legend_name(event)
         showlegend = segment_name not in legend_seen
         legend_seen.add(segment_name)
         fig.add_trace(
@@ -999,27 +1156,28 @@ def _render_timing_chart(result: dict[str, Any], *, key_prefix: str = "stored") 
             "token_wait_ms",
             "deadline_ms",
             "slack_ms",
+            "cadence_interval_ms",
+            "cadence_avg_interval_ms",
+            "cadence_slack_ms",
+            "cadence_violation",
             "bottleneck_reason",
             "predecessors",
         ],
     )
-    detail_cols = st.columns(2)
-    with detail_cols[0]:
-        st.caption("Critical path")
-        render_copyable_dataframe(
-            critical_rows,
-            key=f"{key_prefix}_critical_path_rows",
-            use_container_width=True,
-            hide_index=True,
-        )
-    with detail_cols[1]:
-        st.caption("Top wait/slack candidates")
-        render_copyable_dataframe(
-            issue_rows,
-            key=f"{key_prefix}_wait_slack_rows",
-            use_container_width=True,
-            hide_index=True,
-        )
+    st.caption("Critical path")
+    render_copyable_dataframe(
+        critical_rows,
+        key=f"{key_prefix}_critical_path_rows",
+        use_container_width=True,
+        hide_index=True,
+    )
+    st.caption("Top wait/slack candidates")
+    render_copyable_dataframe(
+        issue_rows,
+        key=f"{key_prefix}_wait_slack_rows",
+        use_container_width=True,
+        hide_index=True,
+    )
 
 
 def _render_debug_trace(result: dict[str, Any]) -> None:
