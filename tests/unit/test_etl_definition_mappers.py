@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from copy import deepcopy
 
 from scenario_db.db.models.definition import Scenario, ScenarioVariant
@@ -110,3 +111,19 @@ def test_upsert_usecase_persists_pipeline_and_replaces_variants():
     assert row.project_ref == "proj-B"
     assert row.pipeline["buffers"]["VIDEO_BUF"]["format"] == "P010"
     assert [variant.id for variant in db.variants] == ["UHD60"]
+
+
+def test_upsert_usecase_warns_when_scenario_id_moves_between_projects(caplog):
+    db = _MapperSession()
+    doc = _usecase_doc()
+    upsert_usecase(doc, "sha-a", db)
+
+    updated = deepcopy(doc)
+    updated["project_ref"] = "proj-B"
+
+    with caplog.at_level(logging.WARNING, logger="scenario_db.etl.mappers.definition"):
+        upsert_usecase(updated, "sha-b", db)
+
+    assert "scenario id collision" in caplog.text
+    assert "project_ref=proj-A" in caplog.text
+    assert "project_ref=proj-B" in caplog.text

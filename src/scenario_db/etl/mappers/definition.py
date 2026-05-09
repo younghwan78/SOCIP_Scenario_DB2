@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import logging
+
 from sqlalchemy.orm import Session
 
 from scenario_db.db.models.definition import Project, Scenario, ScenarioVariant
 from scenario_db.models.definition.project import Project as PydanticProject
 from scenario_db.models.definition.usecase import Usecase as PydanticUsecase
+
+
+logger = logging.getLogger(__name__)
 
 
 def upsert_project(raw: dict, sha256: str, session: Session) -> None:
@@ -24,6 +29,15 @@ def upsert_usecase(raw: dict, sha256: str, session: Session) -> None:
     row = session.get(Scenario, obj.id) or Scenario(id=obj.id)
     if row.yaml_sha256 == sha256:
         return
+    previous_project = getattr(row, "project_ref", None)
+    if previous_project and previous_project != str(obj.project_ref):
+        logger.warning(
+            "scenario id collision: %s is moving from project_ref=%s to project_ref=%s; "
+            "scenario ids are global in the current schema, so the previous project will no longer list it",
+            obj.id,
+            previous_project,
+            obj.project_ref,
+        )
 
     row.schema_version = obj.schema_version
     row.project_ref = str(obj.project_ref)
