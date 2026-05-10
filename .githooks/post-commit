@@ -1,0 +1,10 @@
+#!/bin/sh
+
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+script="$repo_root/scripts/write_memory_commit_note.ps1"
+
+if [ -f "$script" ]; then
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$script" -RepoRoot "$repo_root" >/dev/null 2>&1 || true
+fi
+
+exit 0
