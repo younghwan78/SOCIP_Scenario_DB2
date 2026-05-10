@@ -98,3 +98,11 @@ def test_evidence_dashboard_page_renders_readiness_component():
     source = (root / "dashboard" / "pages" / "4_Evidence_Dashboard.py").read_text(encoding="utf-8")
 
     assert "render_simulation_readiness" in source
+
+
+def test_evidence_dashboard_sidebar_keeps_scenario_search_control():
+    root = Path(__file__).resolve().parents[3]
+    source = (root / "dashboard" / "pages" / "4_Evidence_Dashboard.py").read_text(encoding="utf-8")
+
+    assert '"Scenario Search"' in source
+    assert "_filter_scenarios_by_text" in source

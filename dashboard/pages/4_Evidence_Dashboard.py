@@ -273,7 +273,16 @@ def _select_context(api_base: str) -> tuple[str, str]:
         format_func=_category_label,
         width="stretch",
     )
-    filtered_scenarios = _filter_scenarios_by_category(scenarios, st.session_state["evidence_scenario_category"])
+    category_scenarios = _filter_scenarios_by_category(scenarios, st.session_state["evidence_scenario_category"])
+    scenario_query = st.text_input(
+        "Scenario Search",
+        key="evidence_scenario_filter",
+        placeholder="Filter by id or name",
+    )
+    filtered_scenarios = _filter_scenarios_by_text(category_scenarios, scenario_query)
+    if not filtered_scenarios and scenario_query:
+        st.warning("No scenarios match the current search filter.")
+        filtered_scenarios = category_scenarios
 
     scenario_ids = [str(item.get("id")) for item in filtered_scenarios if item.get("id")]
     _ensure_choice("evidence_scenario_id", scenario_ids, preferred=st.session_state.get("viewer_scenario_id", "uc-camera-recording"))
@@ -379,6 +388,30 @@ def _filter_scenarios_by_category(scenarios: list[dict[str, Any]], category: str
             elif value:
                 values.append(str(value))
         if category in values:
+            filtered.append(item)
+    return filtered
+
+
+def _filter_scenarios_by_text(scenarios: list[dict[str, Any]], query: str | None) -> list[dict[str, Any]]:
+    needle = str(query or "").strip().lower()
+    if not needle:
+        return scenarios
+    filtered = []
+    for item in scenarios:
+        metadata = item.get("metadata_") if isinstance(item.get("metadata_"), dict) else item.get("metadata")
+        metadata = metadata if isinstance(metadata, dict) else {}
+        text = " ".join(
+            str(value or "").lower()
+            for value in (
+                item.get("id"),
+                item.get("name"),
+                metadata.get("name"),
+                metadata.get("title"),
+                metadata.get("category"),
+                metadata.get("domain"),
+            )
+        )
+        if needle in text:
             filtered.append(item)
     return filtered
 
