@@ -109,6 +109,18 @@ def test_evidence_dashboard_page_renders_readiness_component():
     assert "render_simulation_readiness" in source
 
 
+def test_evidence_dashboard_page_uses_run_form_component():
+    root = Path(__file__).resolve().parents[3]
+    source = (root / "dashboard" / "pages" / "4_Evidence_Dashboard.py").read_text(encoding="utf-8")
+    form_source = (root / "dashboard" / "components" / "simulation_run_form.py").read_text(encoding="utf-8")
+
+    assert "render_simulation_run_form" in source
+    assert '"Run Preview"' in form_source
+    assert "DEFAULT_DVFS_TABLES" in form_source
+    assert "THERMAL_PRESETS" in form_source
+    assert "persist" in form_source
+
+
 def test_evidence_dashboard_sidebar_keeps_scenario_search_control():
     root = Path(__file__).resolve().parents[3]
     source = (root / "dashboard" / "pages" / "4_Evidence_Dashboard.py").read_text(encoding="utf-8")
