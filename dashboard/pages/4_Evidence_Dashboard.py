@@ -5,8 +5,6 @@ Run from the project virtual environment:
 """
 from __future__ import annotations
 
-import csv
-import io
 import json
 import os
 import sys
@@ -20,19 +18,23 @@ for path in (_root / "src", _root, _root / "dashboard"):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
-from dashboard.components.simulation_api_client import delete_simulation_result, list_simulation_results, run_simulation
+from dashboard.components.simulation_api_client import list_simulation_results, run_simulation
 from dashboard.components.simulation_readiness import render_simulation_readiness
 from dashboard.components.table_actions import render_copyable_dataframe
 from dashboard.components.ui_theme import apply_app_theme, render_page_header
+from dashboard.components.evidence_actions import (
+    render_kpi_metrics,
+    render_preview_actions,
+    render_result_warnings,
+    render_saved_export_actions,
+    render_viewer_tab_link,
+    result_rows,
+)
 from dashboard.components.evidence_result_view import render_result_breakdown
 from dashboard.components.evidence_dashboard_contract import (
-    PREVIEW_ACTION_LABELS,
-    SAVED_ACTION_LABELS,
     SIMULATION_RESULT_TOP_TABS,
     VIEWER_LINK_LABEL_PREVIEW,
     VIEWER_LINK_LABEL_SAVED,
-    build_pipeline_viewer_url,
-    warning_severity,
 )
 from dashboard.components.viewer_api_client import (
     ViewerApiError,
@@ -418,198 +420,6 @@ def _filter_scenarios_by_text(scenarios: list[dict[str, Any]], query: str | None
     return filtered
 
 
-def _result_rows(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    rows = []
-    for item in results:
-        kpi = item.get("kpi") if isinstance(item.get("kpi"), dict) else {}
-        run_info = item.get("run_info") if isinstance(item.get("run_info"), dict) else {}
-        rows.append(
-            {
-                "id": item.get("id"),
-                "feasibility": item.get("overall_feasibility"),
-                "power_mw": _round(_kpi(kpi, "total_power_mw", "power_mw")),
-                "power_ma": _round(_kpi(kpi, "total_power_ma", "power_ma")),
-                "bw_mbs": _round(_kpi(kpi, "total_bw_mbs", "bw_mbs")),
-                "hw_time_ms": _round(_kpi(kpi, "hw_time_max_ms", "hw_time_ms")),
-                "timeline_end_ms": _round(kpi.get("timeline_end_ms")),
-                "timestamp": run_info.get("timestamp"),
-                "params_hash": item.get("params_hash"),
-            }
-        )
-    return rows
-
-
-def _pipeline_viewer_url(api_base: str, scenario_id: str, variant_id: str, evidence_id: str | None = None) -> str:
-    return build_pipeline_viewer_url(
-        api_base=api_base,
-        soc_id=st.session_state.get("evidence_soc_id") or st.session_state.get("viewer_soc_id"),
-        project_id=st.session_state.get("evidence_project_id") or st.session_state.get("viewer_project_id"),
-        scenario_id=scenario_id,
-        variant_id=variant_id,
-        evidence_id=evidence_id,
-    )
-
-
-def _render_viewer_tab_link(
-    api_base: str,
-    scenario_id: str,
-    variant_id: str,
-    evidence_id: str | None = None,
-    *,
-    label: str = VIEWER_LINK_LABEL_SAVED,
-) -> None:
-    href = _pipeline_viewer_url(api_base, scenario_id, variant_id, evidence_id)
-    st.markdown(
-        f"""
-<a class="viewer-tab-link" href="{href}" target="_blank" rel="noopener noreferrer">
-  {label}
-</a>
-""",
-        unsafe_allow_html=True,
-    )
-
-
-def _render_export_actions(result: dict[str, Any]) -> None:
-    evidence_id = str(result.get("id") or "simulation-evidence")
-    filename_base = _safe_filename(evidence_id)
-    json_text = _evidence_json_text(result)
-    col_json, col_kpi, col_dma, col_delete = st.columns(4)
-    col_json.download_button(
-        SAVED_ACTION_LABELS[1],
-        data=json_text.encode("utf-8"),
-        file_name=f"{filename_base}.json",
-        mime="application/json",
-        use_container_width=True,
-        key=f"download_json_{evidence_id}",
-    )
-    col_kpi.download_button(
-        SAVED_ACTION_LABELS[2],
-        data=_summary_csv_bytes(result),
-        file_name=f"{filename_base}-summary.csv",
-        mime="text/csv",
-        use_container_width=True,
-        key=f"download_kpi_{evidence_id}",
-    )
-    col_dma.download_button(
-        SAVED_ACTION_LABELS[3],
-        data=_rows_csv_bytes(result.get("dma_breakdown") or []),
-        file_name=f"{filename_base}-dma.csv",
-        mime="text/csv",
-        use_container_width=True,
-        key=f"download_dma_{evidence_id}",
-    )
-    if col_delete.button(SAVED_ACTION_LABELS[4], use_container_width=True, key=f"delete_evidence_{evidence_id}"):
-        try:
-            delete_simulation_result(st.session_state["evidence_api_base"], evidence_id)
-            _load_sim_results.clear()
-            st.session_state.pop("evidence_selected_evidence_id", None)
-            st.success(f"Deleted evidence: {evidence_id}")
-            st.rerun()
-        except ViewerApiError as exc:
-            st.error(str(exc))
-            if exc.body:
-                st.code(exc.body)
-    with st.expander("Raw JSON for copy", expanded=False):
-        st.code(json_text, language="json")
-
-
-def _render_preview_actions(api_base: str, result: dict[str, Any]) -> None:
-    evidence_id = str(result.get("id") or "simulation-preview")
-    filename_base = _safe_filename(evidence_id)
-    json_text = _evidence_json_text(result)
-    col_save, col_json, col_kpi = st.columns(3)
-    if col_save.button(PREVIEW_ACTION_LABELS[0], type="primary", use_container_width=True):
-        payload = st.session_state.get("evidence_preview_payload")
-        if not isinstance(payload, dict):
-            st.error("No preview payload is available to save.")
-            return
-        try:
-            response = run_simulation(api_base, payload)
-            saved_id = str(response.get("evidence_id") or evidence_id)
-            _load_sim_results.clear()
-            st.session_state.pop("evidence_preview_result", None)
-            st.session_state.pop("evidence_preview_payload", None)
-            st.session_state["viewer_sim_mode"] = "specific"
-            st.session_state["viewer_sim_evidence_id"] = saved_id
-            st.session_state["evidence_selected_evidence_id"] = saved_id
-            st.success(f"Saved confirmed evidence: {saved_id}")
-            st.rerun()
-        except ViewerApiError as exc:
-            st.error(str(exc))
-            if exc.body:
-                st.code(exc.body)
-    col_json.download_button(
-        PREVIEW_ACTION_LABELS[1],
-        data=json_text.encode("utf-8"),
-        file_name=f"{filename_base}-preview.json",
-        mime="application/json",
-        use_container_width=True,
-        key=f"download_preview_json_{evidence_id}",
-    )
-    col_kpi.download_button(
-        PREVIEW_ACTION_LABELS[2],
-        data=_summary_csv_bytes(result),
-        file_name=f"{filename_base}-preview-summary.csv",
-        mime="text/csv",
-        use_container_width=True,
-        key=f"download_preview_kpi_{evidence_id}",
-    )
-    with st.expander("Preview JSON for copy", expanded=False):
-        st.code(json_text, language="json")
-
-
-def _evidence_json_text(result: dict[str, Any]) -> str:
-    return json.dumps(result, indent=2, sort_keys=True, ensure_ascii=False, default=str)
-
-
-def _summary_csv_bytes(result: dict[str, Any]) -> bytes:
-    execution_context = result.get("execution_context") if isinstance(result.get("execution_context"), dict) else {}
-    run_info = result.get("run_info") if isinstance(result.get("run_info"), dict) else {}
-    kpi = result.get("kpi") if isinstance(result.get("kpi"), dict) else {}
-    row: dict[str, Any] = {
-        "id": result.get("id"),
-        "scenario_ref": result.get("scenario_ref"),
-        "variant_ref": result.get("variant_ref"),
-        "sw_baseline_ref": result.get("sw_baseline_ref"),
-        "silicon_rev": execution_context.get("silicon_rev"),
-        "thermal": execution_context.get("thermal"),
-        "ambient_temp_c": execution_context.get("ambient_temp_c"),
-        "overall_feasibility": result.get("overall_feasibility"),
-        "params_hash": result.get("params_hash"),
-        "timestamp": run_info.get("timestamp"),
-    }
-    for key, value in kpi.items():
-        row[f"kpi_{key}"] = value
-    return _rows_csv_bytes([row])
-
-
-def _rows_csv_bytes(rows: list[dict[str, Any]]) -> bytes:
-    clean_rows = [row for row in rows if isinstance(row, dict)]
-    if not clean_rows:
-        return b""
-    fieldnames: list[str] = []
-    for row in clean_rows:
-        for key in row:
-            if key not in fieldnames:
-                fieldnames.append(key)
-    buffer = io.StringIO(newline="")
-    writer = csv.DictWriter(buffer, fieldnames=fieldnames, extrasaction="ignore")
-    writer.writeheader()
-    for row in clean_rows:
-        writer.writerow({key: _csv_cell(row.get(key)) for key in fieldnames})
-    return buffer.getvalue().encode("utf-8-sig")
-
-
-def _csv_cell(value: Any) -> Any:
-    if isinstance(value, (dict, list)):
-        return json.dumps(value, sort_keys=True, ensure_ascii=False, default=str)
-    return value
-
-
-def _safe_filename(value: str) -> str:
-    return "".join(ch if ch.isalnum() or ch in ".-" else "_" for ch in value)[:160]
-
-
 def _default_silicon_rev() -> str:
     soc_id = str(st.session_state.get("evidence_soc_id") or st.session_state.get("viewer_soc_id") or "").lower()
     if "exynos2600" in soc_id:
@@ -617,41 +427,18 @@ def _default_silicon_rev() -> str:
     return "EVT0"
 
 
-def _kpi(kpi: dict[str, Any], *keys: str) -> Any:
-    for key in keys:
-        if key in kpi:
-            return kpi[key]
-    return None
+def _after_preview_saved(saved_id: str) -> None:
+    _load_sim_results.clear()
+    st.session_state.pop("evidence_preview_result", None)
+    st.session_state.pop("evidence_preview_payload", None)
+    st.session_state["viewer_sim_mode"] = "specific"
+    st.session_state["viewer_sim_evidence_id"] = saved_id
+    st.session_state["evidence_selected_evidence_id"] = saved_id
 
 
-def _round(value: Any) -> float | None:
-    if value is None:
-        return None
-    try:
-        return round(float(value), 3)
-    except (TypeError, ValueError):
-        return None
-
-
-def _result_warnings(result: dict[str, Any]) -> list[str]:
-    direct = result.get("warnings")
-    if isinstance(direct, list):
-        return [str(item) for item in direct if item]
-    trace = result.get("calculation_trace")
-    if isinstance(trace, dict) and isinstance(trace.get("warnings"), list):
-        return [str(item) for item in trace["warnings"] if item]
-    return []
-
-
-def _render_result_warnings(result: dict[str, Any]) -> None:
-    warnings = _result_warnings(result)
-    if not warnings:
-        return
-    message = "\n".join(f"- {warning}" for warning in warnings)
-    if warning_severity(warnings) == "error":
-        st.error(message)
-    else:
-        st.warning(message)
+def _after_evidence_deleted(_deleted_id: str) -> None:
+    _load_sim_results.clear()
+    st.session_state.pop("evidence_selected_evidence_id", None)
 
 
 render_page_header(
@@ -831,18 +618,21 @@ with result_col:
             st.markdown("**Simulation Preview (not saved)**")
             st.caption("Review this preview first. It will not appear in the evidence list until you confirm and save it.")
             preview_kpi = preview_result.get("kpi") if isinstance(preview_result.get("kpi"), dict) else {}
-            p1, p2, p3, p4 = st.columns(4)
-            p1.metric("Power", f"{_round(_kpi(preview_kpi, 'total_power_mw', 'power_mw')) or 0:g} mW")
-            p2.metric("Current", f"{_round(_kpi(preview_kpi, 'total_power_ma', 'power_ma')) or 0:g} mA")
-            p3.metric("Bandwidth", f"{_round(_kpi(preview_kpi, 'total_bw_mbs', 'bw_mbs')) or 0:g} MB/s")
-            p4.metric("HW Time", f"{_round(_kpi(preview_kpi, 'hw_time_max_ms', 'hw_time_ms')) or 0:g} ms")
-            _render_result_warnings(preview_result)
-            _render_preview_actions(api_base, preview_result)
-            _render_viewer_tab_link(
-                api_base,
-                scenario_id,
-                variant_id,
-                None,
+            render_kpi_metrics(preview_kpi)
+            render_result_warnings(preview_result)
+            render_preview_actions(
+                preview_result,
+                api_base=api_base,
+                preview_payload=st.session_state.get("evidence_preview_payload"),
+                on_saved=lambda saved_id: _after_preview_saved(saved_id),
+            )
+            render_viewer_tab_link(
+                api_base=api_base,
+                scenario_id=scenario_id,
+                variant_id=variant_id,
+                soc_id=st.session_state.get("evidence_soc_id") or st.session_state.get("viewer_soc_id"),
+                project_id=st.session_state.get("evidence_project_id") or st.session_state.get("viewer_project_id"),
+                evidence_id=None,
                 label=VIEWER_LINK_LABEL_PREVIEW,
             )
             render_result_breakdown(preview_result, key_prefix="preview")
@@ -857,7 +647,7 @@ with result_col:
         elif not results:
             st.info("No simulation evidence is stored for the selected scenario/variant.")
         else:
-            rows = _result_rows(results)
+            rows = result_rows(results)
             render_copyable_dataframe(
                 rows,
                 key="saved_evidence_result_list",
@@ -869,12 +659,20 @@ with result_col:
             selected_id = st.selectbox("Selected Evidence", evidence_ids, key="evidence_selected_evidence_id")
             selected = next((item for item in results if item.get("id") == selected_id), results[0])
             kpi = selected.get("kpi") if isinstance(selected.get("kpi"), dict) else {}
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Power", f"{_round(_kpi(kpi, 'total_power_mw', 'power_mw')) or 0:g} mW")
-            c2.metric("Current", f"{_round(_kpi(kpi, 'total_power_ma', 'power_ma')) or 0:g} mA")
-            c3.metric("Bandwidth", f"{_round(_kpi(kpi, 'total_bw_mbs', 'bw_mbs')) or 0:g} MB/s")
-            c4.metric("HW Time", f"{_round(_kpi(kpi, 'hw_time_max_ms', 'hw_time_ms')) or 0:g} ms")
-            _render_result_warnings(selected)
-            _render_viewer_tab_link(api_base, scenario_id, variant_id, selected_id, label=VIEWER_LINK_LABEL_SAVED)
-            _render_export_actions(selected)
+            render_kpi_metrics(kpi)
+            render_result_warnings(selected)
+            render_viewer_tab_link(
+                api_base=api_base,
+                scenario_id=scenario_id,
+                variant_id=variant_id,
+                soc_id=st.session_state.get("evidence_soc_id") or st.session_state.get("viewer_soc_id"),
+                project_id=st.session_state.get("evidence_project_id") or st.session_state.get("viewer_project_id"),
+                evidence_id=selected_id,
+                label=VIEWER_LINK_LABEL_SAVED,
+            )
+            render_saved_export_actions(
+                selected,
+                api_base=api_base,
+                on_deleted=lambda deleted_id: _after_evidence_deleted(deleted_id),
+            )
             render_result_breakdown(selected, key_prefix="stored")

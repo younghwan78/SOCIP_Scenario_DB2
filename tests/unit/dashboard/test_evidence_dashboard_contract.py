@@ -82,18 +82,24 @@ def test_evidence_dashboard_page_uses_shared_contract_for_viewer_links():
     root = Path(__file__).resolve().parents[3]
     source = (root / "dashboard" / "pages" / "4_Evidence_Dashboard.py").read_text(encoding="utf-8")
     result_view_source = (root / "dashboard" / "components" / "evidence_result_view.py").read_text(encoding="utf-8")
+    actions_source = (root / "dashboard" / "components" / "evidence_actions.py").read_text(encoding="utf-8")
 
     assert "VIEWER_LINK_LABEL_PREVIEW" in source
     assert "VIEWER_LINK_LABEL_SAVED" in source
     assert "RESULT_BREAKDOWN_TABS" in result_view_source
     assert "render_result_breakdown" in source
+    assert "render_preview_actions" in source
+    assert "render_saved_export_actions" in source
     assert "SIMULATION_RESULT_TOP_TABS" in source
-    assert source.count("_render_viewer_tab_link(") >= 3
+    assert source.count("render_viewer_tab_link(") >= 2
+    assert "build_pipeline_viewer_url" in actions_source
+    assert "PREVIEW_ACTION_LABELS" in actions_source
+    assert "SAVED_ACTION_LABELS" in actions_source
 
     preview_block = source[source.index("with preview_tab:"):source.index("with saved_tab:")]
     saved_block = source[source.index("with saved_tab:"):]
-    assert "_render_viewer_tab_link(" in preview_block
-    assert "_render_viewer_tab_link(" in saved_block
+    assert "render_viewer_tab_link(" in preview_block
+    assert "render_viewer_tab_link(" in saved_block
 
 
 def test_evidence_dashboard_page_renders_readiness_component():
