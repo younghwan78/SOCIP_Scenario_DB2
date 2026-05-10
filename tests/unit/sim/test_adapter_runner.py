@@ -259,6 +259,58 @@ def test_demo_imported_fhd30_fixture_has_nonzero_compute_power_without_warnings(
     assert "llc" not in power_by_node
 
 
+def test_simulation_regression_smoke_keeps_reference_kpis_and_clocks_stable():
+    base_inputs = build_simulation_inputs(
+        _graph(),
+        SimulationRunConfig(include_timeline=True, timeline_frame_count=2, debug_trace=True),
+    )
+    base_result = run_simulation(
+        base_inputs,
+        dvfs_tables={
+            "CAM": DVFSTable(
+                domain="CAM",
+                levels=[
+                    DVFSLevel(level=0, speed_mhz=600, voltages={4: 780}),
+                    DVFSLevel(level=1, speed_mhz=400, voltages={4: 700}),
+                ],
+            ),
+            "INT": DVFSTable(
+                domain="INT",
+                levels=[
+                    DVFSLevel(level=0, speed_mhz=533, voltages={4: 760}),
+                    DVFSLevel(level=1, speed_mhz=266, voltages={4: 680}),
+                ],
+            ),
+        },
+    )
+
+    assert base_result.warnings == []
+    assert base_result.total_power_mw == pytest.approx(48.328742, rel=1e-6)
+    assert base_result.bw_total_mbs == pytest.approx(233.28)
+    assert base_result.hw_time_max_ms == pytest.approx(2.046316, rel=1e-6)
+    assert base_result.timeline_end_ms == pytest.approx(36.740449, rel=1e-6)
+    assert base_result.resolved["isp0"].set_clock_mhz == pytest.approx(400.0)
+    assert base_result.resolved["mfc"].set_clock_mhz == pytest.approx(266.0)
+
+    demo_inputs = build_simulation_inputs(
+        _demo_generated_graph("uc-demo-import-recording", "FHD30-Imported"),
+        SimulationRunConfig(include_timeline=True, timeline_frame_count=2, debug_trace=True),
+    )
+    demo_result = run_simulation(demo_inputs, dvfs_tables={})
+
+    assert demo_result.warnings == []
+    assert demo_result.total_power_mw == pytest.approx(58.745088, rel=1e-6)
+    assert demo_result.bw_total_mbs == pytest.approx(419.904)
+    assert demo_result.hw_time_max_ms == pytest.approx(26.25)
+    assert demo_result.timeline_end_ms == pytest.approx(85.833333, rel=1e-6)
+    assert demo_result.resolved["csis0"].clock_correction_reason == "otf_group_clock_align(otf-0, leader=isp0)"
+    assert demo_result.resolved["isp0"].clock_correction_reason == "otf_group_clock_align(otf-0, leader=isp0)"
+    assert demo_result.resolved["csis0"].required_clock_mhz == pytest.approx(20.736)
+    assert demo_result.resolved["isp0"].required_clock_mhz == pytest.approx(20.736)
+    assert demo_result.resolved["mfc"].required_clock_mhz == pytest.approx(20.736)
+    assert demo_result.resolved["dpu"].required_clock_mhz == pytest.approx(20.736)
+
+
 def test_adapter_excludes_external_sensor_and_panel_from_compute_workloads():
     graph = _graph()
     graph.scenario.pipeline["nodes"].extend(
