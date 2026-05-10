@@ -138,6 +138,17 @@ def test_evidence_dashboard_page_uses_run_form_component():
     assert "persist" in form_source
 
 
+def test_evidence_dashboard_can_hide_run_panel_for_wide_results():
+    root = Path(__file__).resolve().parents[3]
+    source = (root / "dashboard" / "pages" / "4_Evidence_Dashboard.py").read_text(encoding="utf-8")
+
+    assert "evidence_run_panel_visible" in source
+    assert "Hide Run Simulation" in source
+    assert "Show Run Simulation" in source
+    assert "st.container()" in source
+    assert "render_evidence_results_panel" in source
+
+
 def test_evidence_dashboard_sidebar_keeps_scenario_search_control():
     root = Path(__file__).resolve().parents[3]
     source = (root / "dashboard" / "pages" / "4_Evidence_Dashboard.py").read_text(encoding="utf-8")

@@ -74,6 +74,14 @@ def _clear_dashboard_caches() -> None:
     clear_evidence_results_cache()
 
 
+def _run_panel_visible() -> bool:
+    return bool(st.session_state.get("evidence_run_panel_visible", True))
+
+
+def _toggle_run_panel() -> None:
+    st.session_state["evidence_run_panel_visible"] = not _run_panel_visible()
+
+
 render_page_header(
     "Evidence Dashboard",
     "Run scenario/variant simulation as a preview, save only confirmed evidence, and inspect KPI breakdowns.",
@@ -86,18 +94,35 @@ with st.sidebar:
         on_refresh=_clear_dashboard_caches,
     )
 
-run_col, result_col = st.columns([0.9, 1.6], gap="large")
-
-with run_col:
-    render_evidence_run_panel(
-        api_base=context.api_base,
-        scenario_id=context.scenario_id,
-        variant_id=context.variant_id,
-        default_silicon_rev=default_silicon_rev(context.soc_id),
-        on_persisted=lambda _evidence_id: clear_evidence_results_cache(),
+run_visible = _run_panel_visible()
+toolbar_col, _spacer_col = st.columns([0.18, 0.82])
+with toolbar_col:
+    st.button(
+        "Hide Run Simulation" if run_visible else "Show Run Simulation",
+        key="evidence_run_panel_toggle",
+        on_click=_toggle_run_panel,
+        use_container_width=True,
+        help="Hide the run form to give Simulation Results the full dashboard width.",
     )
 
-with result_col:
+if run_visible:
+    run_col, result_col = st.columns([0.9, 1.6], gap="large")
+
+    with run_col:
+        render_evidence_run_panel(
+            api_base=context.api_base,
+            scenario_id=context.scenario_id,
+            variant_id=context.variant_id,
+            default_silicon_rev=default_silicon_rev(context.soc_id),
+            on_persisted=lambda _evidence_id: clear_evidence_results_cache(),
+        )
+
+    result_container = result_col
+else:
+    st.caption("Run Simulation is hidden. Use Show Run Simulation to adjust inputs or run another preview.")
+    result_container = st.container()
+
+with result_container:
     render_evidence_results_panel(
         api_base=context.api_base,
         scenario_id=context.scenario_id,
