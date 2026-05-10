@@ -81,10 +81,12 @@ def test_warning_severity_promotes_zero_compute_results_to_error():
 def test_evidence_dashboard_page_uses_shared_contract_for_viewer_links():
     root = Path(__file__).resolve().parents[3]
     source = (root / "dashboard" / "pages" / "4_Evidence_Dashboard.py").read_text(encoding="utf-8")
+    result_view_source = (root / "dashboard" / "components" / "evidence_result_view.py").read_text(encoding="utf-8")
 
     assert "VIEWER_LINK_LABEL_PREVIEW" in source
     assert "VIEWER_LINK_LABEL_SAVED" in source
-    assert "RESULT_BREAKDOWN_TABS" in source
+    assert "RESULT_BREAKDOWN_TABS" in result_view_source
+    assert "render_result_breakdown" in source
     assert "SIMULATION_RESULT_TOP_TABS" in source
     assert source.count("_render_viewer_tab_link(") >= 3
 
