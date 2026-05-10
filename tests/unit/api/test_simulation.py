@@ -93,3 +93,41 @@ def test_delete_simulation_result_404(monkeypatch):
 
     assert response.status_code == 404
     db.commit.assert_not_called()
+
+
+def test_simulation_readiness_endpoint(monkeypatch):
+    app = create_app()
+    db = MagicMock()
+
+    def _override_db():
+        yield db
+
+    app.dependency_overrides[get_db] = _override_db
+
+    def _fake_readiness(db_arg, scenario_id, variant_id):
+        assert db_arg is db
+        assert scenario_id == "uc-camera-recording"
+        assert variant_id == "FHD30-SDR-H265"
+        return {
+            "status": "ready",
+            "scenario_id": scenario_id,
+            "variant_id": variant_id,
+            "soc_id": "soc-exynos2500",
+            "profile": {"soc_id": "soc-exynos2500"},
+            "summary": {"compute_nodes": 2},
+            "errors": [],
+            "warnings": [],
+        }
+
+    monkeypatch.setattr(simulation_router, "check_simulation_readiness_request", _fake_readiness)
+    client = TestClient(app, raise_server_exceptions=False)
+
+    response = client.get(
+        "/api/v1/simulation/readiness",
+        params={"scenario_id": "uc-camera-recording", "variant_id": "FHD30-SDR-H265"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "ready"
+    assert body["summary"]["compute_nodes"] == 2

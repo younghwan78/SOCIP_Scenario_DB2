@@ -7,13 +7,14 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from scenario_db.api.schemas.evidence import EvidenceResponse
-from scenario_db.api.schemas.simulation import SimulateRequest, SimulateRunResponse
+from scenario_db.api.schemas.simulation import SimulateRequest, SimulateRunResponse, SimulationReadinessResponse
 from scenario_db.db.repositories.evidence import (
     get_simulation_evidence_by_params_hash,
     upsert_simulation_evidence,
 )
 from scenario_db.db.repositories.scenario_graph import load_canonical_graph
 from scenario_db.sim.adapter import build_simulation_inputs
+from scenario_db.sim.readiness import check_simulation_readiness
 from scenario_db.sim.runner import build_simulation_evidence, params_hash, run_simulation
 
 
@@ -58,6 +59,20 @@ def run_simulation_request(db: Session, request: SimulateRequest) -> SimulateRun
         project_ref=inputs.project_ref,
         params_hash=hash_value,
     )
+
+
+def check_simulation_readiness_request(
+    db: Session,
+    scenario_id: str,
+    variant_id: str,
+) -> SimulationReadinessResponse:
+    try:
+        graph = load_canonical_graph(db, scenario_id, variant_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return SimulationReadinessResponse.model_validate(check_simulation_readiness(graph))
     if request.persist:
         upsert_simulation_evidence(db, evidence)
         db.commit()

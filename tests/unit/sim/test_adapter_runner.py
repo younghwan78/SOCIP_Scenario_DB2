@@ -15,6 +15,7 @@ from scenario_db.db.repositories.scenario_graph import CanonicalScenarioGraph
 from scenario_db.db.repositories.variant_resolution import ResolvedScenarioVariant, resolve_variant_from_rows
 from scenario_db.models.evidence.common import ExecutionContext
 from scenario_db.sim.adapter import build_simulation_inputs
+from scenario_db.sim.readiness import check_simulation_readiness
 from scenario_db.sim.models import DVFSLevel, DVFSTable, SimulationRunConfig
 from scenario_db.sim.runner import build_simulation_evidence, params_hash, run_simulation
 
@@ -229,6 +230,30 @@ def test_adapter_warns_when_sim_params_default_to_zero():
     assert isp.sim_params.unit_power_mw_mp == 0.0
     assert any("isp0" in warning and "ppc=0" in warning for warning in inputs.warnings)
     assert any("isp0" in warning and "unit_power_mw_mp=0.0" in warning for warning in inputs.warnings)
+
+
+def test_simulation_readiness_reports_blocking_catalog_gaps():
+    graph = _graph()
+    graph.ip_catalog["ip-isp-v12"].capabilities = {"operating_modes": []}
+
+    report = check_simulation_readiness(graph)
+
+    assert report["status"] == "blocked"
+    assert report["summary"]["compute_nodes"] == 2
+    assert any(issue["code"] == "MISSING_PPC" and issue["node_id"] == "isp0" for issue in report["errors"])
+    assert any(issue["code"] == "MISSING_UNIT_POWER" and issue["node_id"] == "isp0" for issue in report["warnings"])
+
+
+def test_simulation_readiness_uses_soc_profile_for_clean_graph():
+    graph = _graph()
+
+    report = check_simulation_readiness(graph)
+
+    assert report["status"] == "ready"
+    assert report["soc_id"] == "generic"
+    assert report["summary"]["compute_nodes"] == 2
+    assert report["errors"] == []
+    assert report["warnings"] == []
 
 
 def test_runner_warns_when_all_compute_core_power_is_zero():

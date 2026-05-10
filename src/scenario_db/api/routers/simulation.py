@@ -7,13 +7,13 @@ from sqlalchemy.orm import Session
 from scenario_db.api.deps import get_db
 from scenario_db.api.schemas.common import PagedResponse
 from scenario_db.api.schemas.evidence import EvidenceResponse
-from scenario_db.api.schemas.simulation import SimulateRequest, SimulateRunResponse
+from scenario_db.api.schemas.simulation import SimulateRequest, SimulateRunResponse, SimulationReadinessResponse
 from scenario_db.db.repositories.evidence import (
     delete_simulation_evidence,
     get_evidence,
     list_simulation_results,
 )
-from scenario_db.sim.service import run_simulation_request
+from scenario_db.sim.service import check_simulation_readiness_request, run_simulation_request
 
 router = APIRouter(prefix="/simulation", tags=["simulation"])
 
@@ -21,6 +21,15 @@ router = APIRouter(prefix="/simulation", tags=["simulation"])
 @router.post("/run", response_model=SimulateRunResponse)
 def run_simulation(request: SimulateRequest, db: Session = Depends(get_db)):
     return run_simulation_request(db, request)
+
+
+@router.get("/readiness", response_model=SimulationReadinessResponse)
+def readiness(
+    scenario_id: str = Query(...),
+    variant_id: str = Query(...),
+    db: Session = Depends(get_db),
+):
+    return check_simulation_readiness_request(db, scenario_id, variant_id)
 
 
 @router.get("/results", response_model=PagedResponse[EvidenceResponse])

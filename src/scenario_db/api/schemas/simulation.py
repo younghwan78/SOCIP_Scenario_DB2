@@ -28,3 +28,22 @@ class SimulateRunResponse(BaseModel):
     result: SimRunResult | None = None
     evidence: dict | None = None
     persisted: bool = False
+
+
+class SimulationReadinessIssue(BaseModel):
+    severity: Literal["error", "warning"]
+    code: str
+    message: str
+    node_id: str | None = None
+    ip_ref: str | None = None
+
+
+class SimulationReadinessResponse(BaseModel):
+    status: Literal["ready", "warning", "blocked"]
+    scenario_id: str
+    variant_id: str
+    soc_id: str
+    profile: dict = Field(default_factory=dict)
+    summary: dict = Field(default_factory=dict)
+    errors: list[SimulationReadinessIssue] = Field(default_factory=list)
+    warnings: list[SimulationReadinessIssue] = Field(default_factory=list)
