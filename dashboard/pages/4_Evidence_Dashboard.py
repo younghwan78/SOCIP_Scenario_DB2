@@ -21,6 +21,7 @@ for path in (_root / "src", _root, _root / "dashboard"):
         sys.path.insert(0, str(path))
 
 from dashboard.components.simulation_api_client import delete_simulation_result, list_simulation_results, run_simulation
+from dashboard.components.simulation_readiness import render_simulation_readiness
 from dashboard.components.table_actions import render_copyable_dataframe
 from dashboard.components.evidence_dashboard_contract import (
     PREVIEW_ACTION_LABELS,
@@ -1635,6 +1636,7 @@ with st.sidebar:
         _load_sim_results.clear()
         st.rerun()
     scenario_id, variant_id = _select_context(api_base)
+    render_simulation_readiness(api_base, scenario_id, variant_id)
 
 run_col, result_col = st.columns([0.9, 1.6], gap="large")
 

@@ -91,3 +91,10 @@ def test_evidence_dashboard_page_uses_shared_contract_for_viewer_links():
     saved_block = source[source.index("with saved_tab:"):]
     assert "_render_viewer_tab_link(" in preview_block
     assert "_render_viewer_tab_link(" in saved_block
+
+
+def test_evidence_dashboard_page_renders_readiness_component():
+    root = Path(__file__).resolve().parents[3]
+    source = (root / "dashboard" / "pages" / "4_Evidence_Dashboard.py").read_text(encoding="utf-8")
+
+    assert "render_simulation_readiness" in source

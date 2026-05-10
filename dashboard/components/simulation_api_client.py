@@ -60,6 +60,22 @@ def delete_simulation_result(
     )
 
 
+def get_simulation_readiness(
+    api_base: str,
+    *,
+    scenario_id: str,
+    variant_id: str,
+    request_func: RequestFunc | None = None,
+) -> dict[str, Any]:
+    return _request_json(
+        "GET",
+        api_base,
+        "/simulation/readiness",
+        request_func=request_func,
+        params={"scenario_id": scenario_id, "variant_id": variant_id},
+    )
+
+
 def _request_no_content(
     method: str,
     api_base: str,
