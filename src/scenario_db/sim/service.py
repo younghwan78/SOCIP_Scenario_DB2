@@ -59,20 +59,6 @@ def run_simulation_request(db: Session, request: SimulateRequest) -> SimulateRun
         project_ref=inputs.project_ref,
         params_hash=hash_value,
     )
-
-
-def check_simulation_readiness_request(
-    db: Session,
-    scenario_id: str,
-    variant_id: str,
-) -> SimulationReadinessResponse:
-    try:
-        graph = load_canonical_graph(db, scenario_id, variant_id)
-    except LookupError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return SimulationReadinessResponse.model_validate(check_simulation_readiness(graph))
     if request.persist:
         upsert_simulation_evidence(db, evidence)
         db.commit()
@@ -88,6 +74,20 @@ def check_simulation_readiness_request(
         evidence=_simulation_evidence_dict(evidence),
         persisted=request.persist,
     )
+
+
+def check_simulation_readiness_request(
+    db: Session,
+    scenario_id: str,
+    variant_id: str,
+) -> SimulationReadinessResponse:
+    try:
+        graph = load_canonical_graph(db, scenario_id, variant_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return SimulationReadinessResponse.model_validate(check_simulation_readiness(graph))
 
 
 def _request_hash(inputs, request: SimulateRequest) -> str:

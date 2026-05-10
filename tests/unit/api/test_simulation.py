@@ -6,7 +6,11 @@ from fastapi.testclient import TestClient
 
 from scenario_db.api.app import create_app
 from scenario_db.api.deps import get_db
+from scenario_db.api.schemas.simulation import SimulateRequest
 from scenario_db.api.routers import simulation as simulation_router
+from scenario_db.models.evidence.common import ExecutionContext
+from scenario_db.sim.models import SimRunResult
+from scenario_db.sim.service import run_simulation_request
 
 
 def test_simulation_run_endpoint(monkeypatch):
@@ -131,3 +135,83 @@ def test_simulation_readiness_endpoint(monkeypatch):
     body = response.json()
     assert body["status"] == "ready"
     assert body["summary"]["compute_nodes"] == 2
+
+
+def test_run_simulation_request_returns_response_on_cache_miss(monkeypatch):
+    db = MagicMock()
+
+    class _Inputs:
+        scenario_id = "scenario"
+        variant_id = "variant"
+        project_ref = "project"
+        warnings = []
+
+    class _Evidence:
+        id = "sim-1"
+        kpi = {"total_power_mw": 1.0}
+        resolution_result = None
+        schema_version = "2.2"
+        kind = "evidence.simulation"
+        scenario_ref = "scenario"
+        variant_ref = "variant"
+        execution_context = ExecutionContext(
+            silicon_rev="EVT0",
+            sw_baseline_ref="sw-vendor-v1.2.3",
+            thermal="normal",
+        )
+        sweep_context = None
+        aggregation = MagicMock()
+        run = MagicMock()
+        ip_breakdown = []
+        dma_breakdown = []
+        timing_breakdown = []
+        dvfs_breakdown = []
+        timeline_events = []
+        external_devices = []
+        topology_order = []
+        vdd_power = {}
+        calculation_trace = None
+        params_hash = "abc123"
+        artifacts = []
+
+    _Evidence.aggregation.model_dump.return_value = {}
+    _Evidence.run.model_dump.return_value = {}
+
+    monkeypatch.setattr("scenario_db.sim.service.load_canonical_graph", lambda db_arg, scenario_id, variant_id: object())
+    monkeypatch.setattr("scenario_db.sim.service.build_simulation_inputs", lambda graph, config: _Inputs())
+    monkeypatch.setattr("scenario_db.sim.service.params_hash", lambda inputs: "inputs-hash")
+    monkeypatch.setattr("scenario_db.sim.service.get_simulation_evidence_by_params_hash", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        "scenario_db.sim.service.run_simulation",
+        lambda inputs, dvfs_tables: SimRunResult(
+            scenario_id="scenario",
+            variant_id="variant",
+            total_power_mw=1.0,
+            total_power_ma=0.0,
+            core_power_mw=1.0,
+            bw_power_mw=0.0,
+            bw_total_mbs=0.0,
+            hw_time_max_ms=0.0,
+            feasible=True,
+        ),
+    )
+    monkeypatch.setattr("scenario_db.sim.service.build_simulation_evidence", lambda *args, **kwargs: _Evidence())
+
+    response = run_simulation_request(
+        db,
+        SimulateRequest(
+            scenario_id="scenario",
+            variant_id="variant",
+            execution_context=ExecutionContext(
+                silicon_rev="EVT0",
+                sw_baseline_ref="sw-vendor-v1.2.3",
+                thermal="normal",
+            ),
+            force=True,
+        ),
+    )
+
+    assert response.evidence_id == "sim-1"
+    assert response.status == "completed"
+    assert response.cached is False
+    assert response.persisted is False
