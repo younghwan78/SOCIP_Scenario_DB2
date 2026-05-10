@@ -1,0 +1,40 @@
+cases:
+  demo-fhd30-imported:
+    scenario_id: uc-demo-import-recording
+    variant_id: FHD30-Imported
+    config:
+      include_timeline: true
+      timeline_frame_count: 2
+      debug_trace: true
+    expected:
+      warnings: []
+      metrics:
+        total_power_mw:
+          value: 58.745088
+          rel_tol: 0.000001
+        bw_total_mbs:
+          value: 419.904
+          abs_tol: 0.000001
+        hw_time_max_ms:
+          value: 26.25
+          abs_tol: 0.000001
+        timeline_end_ms:
+          value: 85.833333
+          rel_tol: 0.000001
+      resolved:
+        csis0:
+          required_clock_mhz:
+            value: 20.736
+            abs_tol: 0.000001
+        isp0:
+          required_clock_mhz:
+            value: 20.736
+            abs_tol: 0.000001
+        mfc:
+          required_clock_mhz:
+            value: 20.736
+            abs_tol: 0.000001
+        dpu:
+          required_clock_mhz:
+            value: 20.736
+            abs_tol: 0.000001

@@ -15,6 +15,7 @@ from scenario_db.db.repositories.scenario_graph import CanonicalScenarioGraph
 from scenario_db.db.repositories.variant_resolution import ResolvedScenarioVariant, resolve_variant_from_rows
 from scenario_db.models.evidence.common import ExecutionContext
 from scenario_db.sim.adapter import build_simulation_inputs
+from scenario_db.sim.golden import compare_golden_result
 from scenario_db.sim.readiness import check_simulation_readiness
 from scenario_db.sim.models import DVFSLevel, DVFSTable, SimulationRunConfig
 from scenario_db.sim.runner import build_simulation_evidence, params_hash, run_simulation
@@ -334,6 +335,26 @@ def test_simulation_regression_smoke_keeps_reference_kpis_and_clocks_stable():
     assert demo_result.resolved["isp0"].required_clock_mhz == pytest.approx(20.736)
     assert demo_result.resolved["mfc"].required_clock_mhz == pytest.approx(20.736)
     assert demo_result.resolved["dpu"].required_clock_mhz == pytest.approx(20.736)
+
+
+def test_golden_comparator_accepts_reference_result_and_reports_diffs():
+    inputs = build_simulation_inputs(
+        _demo_generated_graph("uc-demo-import-recording", "FHD30-Imported"),
+        SimulationRunConfig(include_timeline=True, timeline_frame_count=2, debug_trace=True),
+    )
+    result = run_simulation(inputs, dvfs_tables={})
+    expected = {
+        "warnings": [],
+        "metrics": {
+            "total_power_mw": {"value": 58.745088, "rel_tol": 1e-6},
+            "bw_total_mbs": {"value": 419.904, "abs_tol": 1e-6},
+        },
+        "resolved": {"csis0": {"required_clock_mhz": {"value": 20.736, "abs_tol": 1e-6}}},
+    }
+
+    assert compare_golden_result(result, expected) == []
+    diffs = compare_golden_result(result, {"metrics": {"total_power_mw": {"value": 1.0, "abs_tol": 0.0}}})
+    assert diffs[0]["field"] == "metrics.total_power_mw"
 
 
 def test_adapter_excludes_external_sensor_and_panel_from_compute_workloads():
