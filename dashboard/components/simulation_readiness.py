@@ -4,6 +4,7 @@ from typing import Any
 
 import streamlit as st
 
+from dashboard.components.evidence_dashboard_contract import readiness_issue_lines
 from dashboard.components.simulation_api_client import get_simulation_readiness
 from dashboard.components.viewer_api_client import ViewerApiError
 
@@ -29,6 +30,12 @@ def render_simulation_readiness(api_base: str, scenario_id: str, variant_id: str
         st.warning(label)
     else:
         st.success(label)
+
+    visible_issues = readiness_issue_lines(report, limit=4)
+    if visible_issues:
+        st.caption("Readiness blockers / warnings")
+        for line in visible_issues:
+            st.write(f"- {line}")
 
     if errors or warnings:
         with st.expander("Simulation readiness details"):

@@ -81,3 +81,19 @@ def warning_severity(warnings: list[str]) -> str:
     if warnings:
         return "warning"
     return "none"
+
+
+def readiness_issue_lines(report: dict, *, limit: int = 3) -> list[str]:
+    """Build concise readiness issue lines for always-visible dashboard display."""
+
+    issues = []
+    for key in ("errors", "warnings"):
+        for issue in report.get(key) or []:
+            if not isinstance(issue, dict):
+                continue
+            code = str(issue.get("code") or "ISSUE")
+            node = str(issue.get("node_id") or issue.get("ip_ref") or "").strip()
+            message = str(issue.get("message") or "").strip()
+            prefix = f"{code} / {node}" if node else code
+            issues.append(f"{prefix}: {message}" if message else prefix)
+    return issues[: max(0, limit)]

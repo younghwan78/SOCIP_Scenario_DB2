@@ -5,6 +5,22 @@ category: camera
 hierarchy:
   type: simple
 capabilities:
+  sim:
+    hw_name: LME
+    source_note: Estimated from GDC-level camera processing defaults until project-specific LME unit power is provided.
+    modes:
+      Normal:
+        unit_power_mw_mp: 1.5
+        idc: 0.0
+        ppc: 4.0
+        vdd: VDD_CAM
+        dvfs_group: CAM
+      SuperSteady:
+        unit_power_mw_mp: 1.5
+        idc: 0.0
+        ppc: 4.0
+        vdd: VDD_CAM
+        dvfs_group: CAM
   operating_modes:
   - id: Normal
   - id: SuperSteady

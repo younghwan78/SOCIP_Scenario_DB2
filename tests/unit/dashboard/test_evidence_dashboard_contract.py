@@ -12,6 +12,7 @@ from dashboard.components.evidence_dashboard_contract import (
     VIEWER_LINK_LABEL_PREVIEW,
     VIEWER_LINK_LABEL_SAVED,
     build_pipeline_viewer_url,
+    readiness_issue_lines,
     warning_severity,
 )
 
@@ -106,3 +107,27 @@ def test_evidence_dashboard_sidebar_keeps_scenario_search_control():
 
     assert '"Scenario Search"' in source
     assert "_filter_scenarios_by_text" in source
+
+
+def test_readiness_issue_lines_include_blocking_node_reason():
+    report = {
+        "errors": [
+            {
+                "code": "MISSING_PPC",
+                "node_id": "lme",
+                "message": "ppc is required for clock and timing simulation.",
+            }
+        ],
+        "warnings": [
+            {
+                "code": "MISSING_UNIT_POWER",
+                "node_id": "lme",
+                "message": "unit_power_mw_mp is zero.",
+            }
+        ],
+    }
+
+    assert readiness_issue_lines(report) == [
+        "MISSING_PPC / lme: ppc is required for clock and timing simulation.",
+        "MISSING_UNIT_POWER / lme: unit_power_mw_mp is zero.",
+    ]
