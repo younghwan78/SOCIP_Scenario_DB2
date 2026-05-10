@@ -15,6 +15,8 @@ for path in (_root / "src", _root, _root / "dashboard"):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
+from dashboard.components.ui_theme import apply_app_theme, render_page_header
+
 
 st.set_page_config(
     page_title="ScenarioDB Dashboard",
@@ -67,10 +69,13 @@ st.markdown(
 """,
     unsafe_allow_html=True,
 )
+apply_app_theme(sidebar_width=288)
 
-st.title("ScenarioDB Dashboard")
-st.markdown("Mobile SoC multimedia scenario database: import, review, and architecture viewer.")
-st.divider()
+render_page_header(
+    "ScenarioDB Dashboard",
+    "Mobile SoC multimedia scenario database: import, review, simulation, and architecture viewer.",
+    chips=("Read API", "Write staging", "Simulation", "Viewer"),
+)
 
 col1, col2, col3, col4 = st.columns(4)
 
@@ -85,7 +90,7 @@ with col1:
 """,
         unsafe_allow_html=True,
     )
-    if st.button("Open DB Explorer", type="primary", use_container_width=True):
+    if st.button("Open DB Explorer", use_container_width=True):
         st.switch_page("pages/1_DB_Explorer.py")
 
 with col2:

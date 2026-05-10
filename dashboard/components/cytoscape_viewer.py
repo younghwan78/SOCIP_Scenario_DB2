@@ -263,9 +263,9 @@ def _build_stylesheet(canvas_h: int) -> list[dict]:
         "style": {
             "background-fill": "linear-gradient",
             "background-gradient-direction": "to-bottom-right",
-            "background-gradient-stop-colors": "#DBEAFE #BFDBFE",
-            "border-color": "#60A5FA",
-            "color": "#1E3A8A",
+            "background-gradient-stop-colors": "#E8F1EF #B9D2CC",
+            "border-color": "#3D8A82",
+            "color": "#174D47",
         },
     })
     styles.append({
@@ -303,9 +303,9 @@ def _build_stylesheet(canvas_h: int) -> list[dict]:
     styles.append({
         "selector": "node:selected",
         "style": {
-            "border-color": "#1D4ED8",
+            "border-color": "#2F6F68",
             "border-width": 3,
-            "overlay-color": "#1D4ED8",
+            "overlay-color": "#2F6F68",
             "overlay-opacity": 0.08,
             "overlay-padding": 4,
         },
@@ -388,7 +388,7 @@ def _build_stylesheet(canvas_h: int) -> list[dict]:
     # edge selected
     styles.append({
         "selector": "edge:selected",
-        "style": {"width": 2.8, "overlay-color": "#1D4ED8", "overlay-opacity": 0.10},
+        "style": {"width": 2.8, "overlay-color": "#2F6F68", "overlay-opacity": 0.10},
     })
 
     return styles
@@ -560,15 +560,15 @@ def _build_html(
     box-shadow: 0 1px 3px rgba(17,24,39,0.04);
   }}
   #view-controls button:hover {{
-    border-color: #A5B4FC;
-    color: #4338CA;
-    background: #F8FAFF;
+    border-color: #B9D2CC;
+    color: #174D47;
+    background: #E8F1EF;
   }}
   .tt-title {{ font-size: 13px; font-weight: 700; color: #111827;
     margin-bottom: 5px; border-bottom: 1px solid #F3F4F6; padding-bottom: 4px; }}
   .tt-row {{ display: flex; gap: 8px; font-size: 11px; color: #6B7280; margin-top: 2px; }}
   .tt-row .k {{ min-width: 76px; color: #9CA3AF; }}
-  .tt-badge {{ display: inline-block; background: #EEF2FF; color: #3730A3;
+  .tt-badge {{ display: inline-block; background: #E8F1EF; color: #174D47;
     border-radius: 4px; padding: 1px 5px; font-size: 10px; font-weight: 600;
     margin: 0 2px 1px 0; }}
   .tt-risk {{ background: #FEE2E2 !important; color: #991B1B !important; }}

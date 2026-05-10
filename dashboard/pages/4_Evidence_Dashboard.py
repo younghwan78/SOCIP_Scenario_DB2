@@ -23,6 +23,7 @@ for path in (_root / "src", _root, _root / "dashboard"):
 from dashboard.components.simulation_api_client import delete_simulation_result, list_simulation_results, run_simulation
 from dashboard.components.simulation_readiness import render_simulation_readiness
 from dashboard.components.table_actions import render_copyable_dataframe
+from dashboard.components.ui_theme import apply_app_theme, render_page_header
 from dashboard.components.evidence_dashboard_contract import (
     PREVIEW_ACTION_LABELS,
     RESULT_BREAKDOWN_TABS,
@@ -107,7 +108,7 @@ st.markdown(
     """
 <style>
   .block-container { padding-top: 0.6rem !important; max-width: none !important; }
-  header[data-testid="stHeader"], footer, #MainMenu { display: none !important; }
+  footer, #MainMenu { display: none !important; }
   .metric-row {
     border: 1px solid #E5E7EB;
     border-radius: 8px;
@@ -140,6 +141,7 @@ st.markdown(
 """,
     unsafe_allow_html=True,
 )
+apply_app_theme(sidebar_width=288)
 
 
 @st.cache_data(ttl=30)
@@ -697,7 +699,7 @@ def _constraint_label(event: dict[str, Any]) -> str:
 
 
 OTF_COLOR_FAMILIES = [
-    ["#2563EB", "#3B82F6", "#60A5FA", "#93C5FD"],
+    ["#2F6F68", "#3D8A82", "#75B2A8", "#B9D2CC"],
     ["#0F766E", "#14B8A6", "#2DD4BF", "#5EEAD4"],
     ["#7C3AED", "#8B5CF6", "#A78BFA", "#C4B5FD"],
     ["#059669", "#10B981", "#34D399", "#6EE7B7"],
@@ -1650,8 +1652,11 @@ def _render_breakdown(result: dict[str, Any], *, key_prefix: str = "stored") -> 
         st.json(result)
 
 
-st.title("Evidence Dashboard")
-st.caption("Run scenario/variant simulation as a preview, save only confirmed evidence, and inspect KPI breakdowns.")
+render_page_header(
+    "Evidence Dashboard",
+    "Run scenario/variant simulation as a preview, save only confirmed evidence, and inspect KPI breakdowns.",
+    chips=("Preview first", "Confirm to save", "Power/BW/Timing"),
+)
 
 with st.sidebar:
     st.markdown("### Simulation Context")

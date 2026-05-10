@@ -31,6 +31,7 @@ from dashboard.components.viewer_api_client import (
     list_soc_platforms,
     list_variants,
 )
+from dashboard.components.ui_theme import apply_app_theme
 from scenario_db.api.schemas.view import ViewResponse
 from scenario_db.view.service import build_sample_level0
 
@@ -52,7 +53,7 @@ st.markdown(
     padding-right: 1.2rem !important;
     max-width: none !important;
   }
-  header[data-testid="stHeader"], footer, #MainMenu { display: none !important; }
+  footer, #MainMenu { display: none !important; }
   section[data-testid="stSidebar"] { width: 260px !important; min-width: 260px !important; }
   section[data-testid="stSidebar"] > div { width: 260px !important; }
   .viewer-header {
@@ -166,6 +167,7 @@ st.markdown(
 """,
     unsafe_allow_html=True,
 )
+apply_app_theme(sidebar_width=288)
 
 
 @st.cache_data(ttl=30)

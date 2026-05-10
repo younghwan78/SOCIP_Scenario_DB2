@@ -48,9 +48,9 @@ TYPE_STYLE = {
     "external": {"fill": "#F8FAFC", "stroke": "#64748B", "text": "#334155"},
     "isp": {"fill": "#FFEDD5", "stroke": "#F97316", "text": "#7C2D12"},
     "codec": {"fill": "#F5F3FF", "stroke": "#7C3AED", "text": "#4C1D95"},
-    "display": {"fill": "#EFF6FF", "stroke": "#2563EB", "text": "#1E3A8A"},
+    "display": {"fill": "#E8F1EF", "stroke": "#2F6F68", "text": "#174D47"},
     "accelerator": {"fill": "#ECFDF5", "stroke": "#059669", "text": "#064E3B"},
-    "submodule": {"fill": "#DBEAFE", "stroke": "#3B82F6", "text": "#1E3A8A"},
+    "submodule": {"fill": "#E8F1EF", "stroke": "#3D8A82", "text": "#174D47"},
     "dma_group": {"fill": "#FFEDD5", "stroke": "#F97316", "text": "#7C2D12"},
     "dma_channel": {"fill": "#FFF7ED", "stroke": "#FB923C", "text": "#7C2D12"},
     "sysmmu": {"fill": "#E2E8F0", "stroke": "#64748B", "text": "#334155"},
@@ -903,7 +903,7 @@ def _html(graph: dict[str, Any], meta: dict[str, Any], title: str, height: int) 
     </div>
   </div>
   <svg id="svg"><defs>
-    <marker id="arrow-blue" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill="#4A6CF7"/></marker>
+    <marker id="arrow-blue" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill="#4E6E81"/></marker>
     <marker id="arrow-teal" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill="#2BB3AA"/></marker>
     <marker id="arrow-orange" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill="#F97316"/></marker>
     <marker id="arrow-gray" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill="#9B8EC4"/></marker>
@@ -912,7 +912,7 @@ def _html(graph: dict[str, Any], meta: dict[str, Any], title: str, height: int) 
     <marker id="arrow-sky" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill="#0EA5E9"/></marker>
   </defs><g id="main"></g></svg>
   <div class="elk-legend">
-    <span><svg width="38" height="8"><path d="M1 4 H35" stroke="#4A6CF7" stroke-width="2"/><path d="M31 1 L37 4 L31 7" fill="#4A6CF7"/></svg> OTF</span>
+    <span><svg width="38" height="8"><path d="M1 4 H35" stroke="#4E6E81" stroke-width="2"/><path d="M31 1 L37 4 L31 7" fill="#4E6E81"/></svg> OTF</span>
     <span><svg width="38" height="8"><path d="M1 4 H35" stroke="#2BB3AA" stroke-width="2"/><path d="M31 1 L37 4 L31 7" fill="#2BB3AA"/></svg> vOTF</span>
     <span><svg width="38" height="8"><path d="M1 4 H35" stroke="#F97316" stroke-width="2" stroke-dasharray="5 4"/><path d="M31 1 L37 4 L31 7" fill="#F97316"/></svg> M2M</span>
     <span><svg width="38" height="8"><path d="M1 4 H35" stroke="#9B8EC4" stroke-width="2" stroke-dasharray="5 4"/><path d="M31 1 L37 4 L31 7" fill="#9B8EC4"/></svg> SW</span>

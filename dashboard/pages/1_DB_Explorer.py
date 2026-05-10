@@ -35,6 +35,7 @@ from dashboard.components.viewer_api_client import (  # noqa: E402
     project_label,
     soc_label,
 )
+from dashboard.components.ui_theme import apply_app_theme  # noqa: E402
 
 
 st.set_page_config(
@@ -53,7 +54,7 @@ st.markdown(
     padding-right: 1.2rem !important;
     max-width: none !important;
   }
-  header[data-testid="stHeader"], footer, #MainMenu { display: none !important; }
+  footer, #MainMenu { display: none !important; }
   section[data-testid="stSidebar"] { width: 275px !important; min-width: 275px !important; }
   section[data-testid="stSidebar"] > div { width: 275px !important; }
   .explorer-header {
@@ -186,7 +187,7 @@ st.markdown(
   }
   .health-error { color: #B91C1C; font-weight: 800; }
   .health-warning { color: #92400E; font-weight: 800; }
-  .health-info { color: #1D4ED8; font-weight: 800; }
+  .health-info { color: #2F6F68; font-weight: 800; }
   .matrix-summary-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
@@ -216,11 +217,12 @@ st.markdown(
 """,
     unsafe_allow_html=True,
 )
+apply_app_theme(sidebar_width=288)
 
 
 _CATEGORY_PALETTE = {
     "camera": ("#FFF7ED", "#FDBA74", "#9A3412"),
-    "display": ("#EFF6FF", "#93C5FD", "#1D4ED8"),
+    "display": ("#E8F1EF", "#B9D2CC", "#174D47"),
     "video": ("#F5F3FF", "#C4B5FD", "#5B21B6"),
     "codec": ("#FAF5FF", "#D8B4FE", "#7E22CE"),
     "audio": ("#ECFDF5", "#86EFAC", "#166534"),
@@ -232,7 +234,7 @@ _CATEGORY_PALETTE = {
 
 _DOMAIN_PALETTE = {
     "camera": ("#F0FDFA", "#99F6E4", "#115E59"),
-    "display": ("#EEF2FF", "#A5B4FC", "#3730A3"),
+    "display": ("#E8F1EF", "#B9D2CC", "#174D47"),
     "video": ("#F5F3FF", "#DDD6FE", "#6D28D9"),
     "codec": ("#FDF2F8", "#F9A8D4", "#BE185D"),
     "audio": ("#F0FDF4", "#BBF7D0", "#15803D"),
@@ -464,7 +466,7 @@ def _style_variant_matrix(df: pd.DataFrame) -> pd.io.formats.style.Styler:
         if str(row.get("diff_profile") or "base") != "base":
             for idx, column in enumerate(row.index):
                 if column in {"diff_profile", "change_score", "key_conditions"}:
-                    styles[idx] = "background-color: #EFF6FF; color: #1E3A8A; font-weight: 800;"
+                    styles[idx] = "background-color: #E8F1EF; color: #174D47; font-weight: 800;"
         return styles
 
     return df.style.apply(style_row, axis=1)

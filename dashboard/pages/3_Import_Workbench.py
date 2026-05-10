@@ -34,6 +34,7 @@ from dashboard.components.import_api_client import (
     validation_issue_rows,
 )
 from dashboard.components.table_actions import render_copyable_dataframe
+from dashboard.components.ui_theme import apply_app_theme
 from scenario_db.legacy_import.write_bundle import build_import_bundle_request
 
 
@@ -53,7 +54,7 @@ st.markdown(
     padding-right: 1.4rem !important;
     max-width: none !important;
   }
-  header[data-testid="stHeader"], footer, #MainMenu { display: none !important; }
+  footer, #MainMenu { display: none !important; }
   section[data-testid="stSidebar"] { width: 300px !important; min-width: 300px !important; }
   section[data-testid="stSidebar"] > div { width: 300px !important; }
   .workbench-header {
@@ -99,6 +100,7 @@ st.markdown(
 """,
     unsafe_allow_html=True,
 )
+apply_app_theme(sidebar_width=300)
 
 
 def _state_default(key: str, value: Any) -> None:
