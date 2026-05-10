@@ -3,6 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+from dashboard.components.evidence_context import (
+    category_label,
+    default_silicon_rev,
+    filter_scenarios_by_category,
+    filter_scenarios_by_text,
+    scenario_categories,
+)
 from dashboard.components.evidence_dashboard_contract import (
     PREVIEW_ACTION_LABELS,
     RESULT_BREAKDOWN_TABS,
@@ -83,21 +90,27 @@ def test_evidence_dashboard_page_uses_shared_contract_for_viewer_links():
     source = (root / "dashboard" / "pages" / "4_Evidence_Dashboard.py").read_text(encoding="utf-8")
     result_view_source = (root / "dashboard" / "components" / "evidence_result_view.py").read_text(encoding="utf-8")
     actions_source = (root / "dashboard" / "components" / "evidence_actions.py").read_text(encoding="utf-8")
+    results_panel_source = (root / "dashboard" / "components" / "evidence_results_panel.py").read_text(encoding="utf-8")
 
-    assert "VIEWER_LINK_LABEL_PREVIEW" in source
-    assert "VIEWER_LINK_LABEL_SAVED" in source
+    assert "render_evidence_results_panel" in source
+    assert "VIEWER_LINK_LABEL_PREVIEW" in results_panel_source
+    assert "VIEWER_LINK_LABEL_SAVED" in results_panel_source
     assert "RESULT_BREAKDOWN_TABS" in result_view_source
-    assert "render_result_breakdown" in source
-    assert "render_preview_actions" in source
-    assert "render_saved_export_actions" in source
-    assert "SIMULATION_RESULT_TOP_TABS" in source
-    assert source.count("render_viewer_tab_link(") >= 2
+    assert "render_result_breakdown" in results_panel_source
+    assert "render_preview_actions" in results_panel_source
+    assert "render_saved_export_actions" in results_panel_source
+    assert "SIMULATION_RESULT_TOP_TABS" in results_panel_source
+    assert results_panel_source.count("render_viewer_tab_link(") >= 2
     assert "build_pipeline_viewer_url" in actions_source
     assert "PREVIEW_ACTION_LABELS" in actions_source
     assert "SAVED_ACTION_LABELS" in actions_source
 
-    preview_block = source[source.index("with preview_tab:"):source.index("with saved_tab:")]
-    saved_block = source[source.index("with saved_tab:"):]
+    preview_block = results_panel_source[
+        results_panel_source.index("def _render_preview_result"):results_panel_source.index("def _render_saved_results")
+    ]
+    saved_block = results_panel_source[
+        results_panel_source.index("def _render_saved_result_detail"):results_panel_source.index("def _after_preview_saved")
+    ]
     assert "render_viewer_tab_link(" in preview_block
     assert "render_viewer_tab_link(" in saved_block
 
@@ -105,16 +118,20 @@ def test_evidence_dashboard_page_uses_shared_contract_for_viewer_links():
 def test_evidence_dashboard_page_renders_readiness_component():
     root = Path(__file__).resolve().parents[3]
     source = (root / "dashboard" / "pages" / "4_Evidence_Dashboard.py").read_text(encoding="utf-8")
+    context_source = (root / "dashboard" / "components" / "evidence_context.py").read_text(encoding="utf-8")
 
-    assert "render_simulation_readiness" in source
+    assert "render_evidence_context_sidebar" in source
+    assert "render_simulation_readiness" in context_source
 
 
 def test_evidence_dashboard_page_uses_run_form_component():
     root = Path(__file__).resolve().parents[3]
     source = (root / "dashboard" / "pages" / "4_Evidence_Dashboard.py").read_text(encoding="utf-8")
+    run_panel_source = (root / "dashboard" / "components" / "evidence_run_panel.py").read_text(encoding="utf-8")
     form_source = (root / "dashboard" / "components" / "simulation_run_form.py").read_text(encoding="utf-8")
 
-    assert "render_simulation_run_form" in source
+    assert "render_evidence_run_panel" in source
+    assert "render_simulation_run_form" in run_panel_source
     assert '"Run Preview"' in form_source
     assert "DEFAULT_DVFS_TABLES" in form_source
     assert "THERMAL_PRESETS" in form_source
@@ -124,9 +141,31 @@ def test_evidence_dashboard_page_uses_run_form_component():
 def test_evidence_dashboard_sidebar_keeps_scenario_search_control():
     root = Path(__file__).resolve().parents[3]
     source = (root / "dashboard" / "pages" / "4_Evidence_Dashboard.py").read_text(encoding="utf-8")
+    context_source = (root / "dashboard" / "components" / "evidence_context.py").read_text(encoding="utf-8")
 
-    assert '"Scenario Search"' in source
-    assert "_filter_scenarios_by_text" in source
+    assert "render_evidence_context_sidebar" in source
+    assert '"Scenario Search"' in context_source
+    assert "filter_scenarios_by_text" in context_source
+
+
+def test_evidence_context_filters_scenarios_by_category_and_text():
+    scenarios = [
+        {"id": "uc-camera-recording", "metadata": {"category": "camera", "name": "Camera Recording"}},
+        {"id": "uc-video-playback", "metadata_": {"domain": "video_playback", "name": "Video Playback"}},
+        {"id": "uc-audio-call", "metadata": {"category": ["audio", "voice_call"], "name": "Voice Call"}},
+    ]
+
+    assert scenario_categories(scenarios) == ["all", "audio", "camera", "video_playback", "voice_call"]
+    assert category_label("video_playback") == "Video Playback"
+    assert [item["id"] for item in filter_scenarios_by_category(scenarios, "camera")] == ["uc-camera-recording"]
+    assert [item["id"] for item in filter_scenarios_by_category(scenarios, "voice_call")] == ["uc-audio-call"]
+    assert [item["id"] for item in filter_scenarios_by_text(scenarios, "record")] == ["uc-camera-recording"]
+    assert filter_scenarios_by_text(scenarios, "") == scenarios
+
+
+def test_evidence_context_default_silicon_rev_uses_soc_generation():
+    assert default_silicon_rev("soc-exynos2600") == "EVT1.3"
+    assert default_silicon_rev("soc-exynos2500") == "EVT0"
 
 
 def test_readiness_issue_lines_include_blocking_node_reason():
