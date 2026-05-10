@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from scenario_db.sim.dvfs_resolver import DvfsResolver
-from scenario_db.sim.models import DVFSLevel, DVFSTable, IPSimParams, IPWorkload
+from scenario_db.sim.models import DVFSLevel, DVFSTable, IPSimParams, IPWorkload, SimulationRunConfig
 from scenario_db.sim.perf_calc import calc_processing_time_ms
 from scenario_db.sim.power_calc import calc_active_power_mw
 
@@ -26,6 +26,19 @@ def test_processing_time_uses_h_blank_margin():
     )
 
     assert result == pytest.approx(1.3608, rel=1e-3)
+
+
+def test_simulation_default_sw_margin_is_15_percent():
+    assert SimulationRunConfig().sw_margin == pytest.approx(0.15)
+    assert IPWorkload(
+        node_id="isp0",
+        ip_ref="ip-isp-v12",
+        hw_name="ISP",
+        width=1920,
+        height=1080,
+        fps=30,
+        sim_params=IPSimParams(hw_name="ISP"),
+    ).sw_margin == pytest.approx(0.15)
 
 
 def test_dvfs_resolver_aligns_shared_vdd_voltage():
@@ -88,3 +101,61 @@ def test_dvfs_resolver_aligns_shared_vdd_voltage():
     assert resolved["isp0"].set_voltage_mv == 780
     assert resolved["mfc"].set_voltage_mv == 780
     assert resolved["mfc"].vdd_leader == "isp0"
+
+
+def test_manual_clock_shared_set_clock_preserves_required_voltage_lookup():
+    resolver = DvfsResolver(
+        {
+            "CAM": DVFSTable(
+                domain="CAM",
+                levels=[
+                    DVFSLevel(level=0, speed_mhz=600, voltages={4: 780}),
+                    DVFSLevel(level=1, speed_mhz=400, voltages={4: 700}),
+                    DVFSLevel(level=2, speed_mhz=133, voltages={4: 562.5}),
+                ],
+            ),
+        },
+        asv_group=4,
+    )
+    workloads = [
+        IPWorkload(
+            node_id="isp0",
+            ip_ref="ip-isp-v12",
+            hw_name="ISP",
+            width=1920,
+            height=1080,
+            fps=30,
+            manual_clock_mhz=600,
+            sim_params=IPSimParams(
+                hw_name="ISP",
+                ppc=4,
+                unit_power_mw_mp=10,
+                vdd="VDD_CAM",
+                dvfs_group="CAM",
+            ),
+        ),
+        IPWorkload(
+            node_id="byrp",
+            ip_ref="ip-isp-v12",
+            hw_name="BYRP",
+            width=1920,
+            height=1080,
+            fps=30,
+            sim_params=IPSimParams(
+                hw_name="BYRP",
+                ppc=4,
+                unit_power_mw_mp=10,
+                vdd="VDD_CAM",
+                dvfs_group="CAM",
+            ),
+        ),
+    ]
+
+    resolved = resolver.resolve(workloads)
+
+    assert resolved["isp0"].required_clock_mhz == pytest.approx(600)
+    assert resolved["isp0"].required_voltage_mv == pytest.approx(780)
+    assert resolved["byrp"].required_clock_mhz < 133
+    assert resolved["byrp"].required_voltage_mv == pytest.approx(562.5)
+    assert resolved["byrp"].set_clock_mhz == pytest.approx(600)
+    assert resolved["byrp"].set_voltage_mv == pytest.approx(780)

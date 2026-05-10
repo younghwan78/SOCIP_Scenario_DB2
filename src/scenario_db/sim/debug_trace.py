@@ -157,7 +157,8 @@ def _ip_traces(
             else 0.0
         )
         manual_clock = workload.manual_clock_mhz or 0.0
-        required_before_group = max(initial_required, manual_clock)
+        required_before_group = max(initial_required, workload.clock_correction_mhz)
+        required_after_manual = max(config.required_clock_mhz, manual_clock)
         timing = timing_by_node.get(workload.node_id)
         table = dvfs_tables.get(config.dvfs_group or "")
         selected_level = table.get_level(config.dvfs_level) if table and config.dvfs_level is not None else None
@@ -189,6 +190,8 @@ def _ip_traces(
                     "base_formula": "pixels * fps / (1 - sw_margin) / ppc / 1e6",
                     "initial_required_mhz": initial_required,
                     "before_group_align_mhz": required_before_group,
+                    "manual_clock_mhz": workload.manual_clock_mhz,
+                    "after_manual_clock_mhz": required_after_manual,
                     "clock_correction_mhz": workload.clock_correction_mhz,
                     "clock_correction_reason": workload.clock_correction_reason,
                     "sensor_otf_clock_correction_mhz": workload.clock_correction_mhz,
@@ -199,6 +202,8 @@ def _ip_traces(
                     "dvfs_group": config.dvfs_group,
                     "asv_group": asv_group,
                     "selection_rule": "minimum DVFS level whose speed_mhz >= required_clock_mhz and voltage exists for ASV group",
+                    "required_voltage_rule": "lookup voltage from DVFS table using required_clock_mhz; no formula is applied",
+                    "set_voltage_rule": "align to max required_voltage_mv in the shared VDD domain",
                     "candidate_levels": _dvfs_candidates(table, asv_group),
                     "selected_level": config.dvfs_level,
                     "selected_speed_mhz": selected_level.speed_mhz if selected_level else config.set_clock_mhz,

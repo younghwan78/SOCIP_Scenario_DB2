@@ -30,6 +30,7 @@ class DvfsResolver:
             for workload in workloads
         }
         self._align_required_clock_by_dvfs_group(resolved)
+        self._apply_manual_clocks(resolved)
         self._apply_dvfs_tables(resolved)
         self._apply_dvfs_overrides(resolved, dvfs_overrides or {})
         self._align_set_clock_by_dvfs_group(resolved)
@@ -44,8 +45,6 @@ class DvfsResolver:
             usable = max(1e-9, 1.0 - workload.sw_margin)
             required_clock = workload.pixels * workload.fps / usable / params.ppc / 1e6
         base_required_clock = required_clock
-        if workload.manual_clock_mhz and workload.manual_clock_mhz > required_clock:
-            required_clock = workload.manual_clock_mhz
         if workload.clock_correction_mhz > required_clock:
             required_clock = workload.clock_correction_mhz
 
@@ -56,6 +55,7 @@ class DvfsResolver:
             mode=workload.mode,
             required_clock_mhz=required_clock,
             base_required_clock_mhz=base_required_clock,
+            manual_clock_mhz=workload.manual_clock_mhz,
             clock_correction_mhz=workload.clock_correction_mhz,
             clock_correction_reason=workload.clock_correction_reason,
             set_clock_mhz=required_clock,
@@ -82,6 +82,15 @@ class DvfsResolver:
             max_required = max(resolved[node_id].required_clock_mhz for node_id in node_ids)
             for node_id in node_ids:
                 resolved[node_id].required_clock_mhz = max_required
+
+    def _apply_manual_clocks(
+        self,
+        resolved: dict[str, ResolvedIPConfig],
+    ) -> None:
+        for config in resolved.values():
+            manual_clock = config.manual_clock_mhz or 0.0
+            if manual_clock > config.required_clock_mhz:
+                config.required_clock_mhz = manual_clock
 
     def _apply_dvfs_tables(self, resolved: dict[str, ResolvedIPConfig]) -> None:
         for config in resolved.values():
@@ -144,12 +153,10 @@ class DvfsResolver:
             target_level = table.find_min_level_for_speed(max_set, asv_group=self.asv_group)
             if target_level is None:
                 continue
-            target_voltage = table.voltage_for(target_level, self.asv_group)
             for node_id in node_ids:
                 config = resolved[node_id]
                 config.set_clock_mhz = max(config.set_clock_mhz, max_set)
                 config.dvfs_level = target_level.level
-                config.required_voltage_mv = max(config.required_voltage_mv, target_voltage)
 
     def _align_voltage_by_vdd(self, resolved: dict[str, ResolvedIPConfig]) -> None:
         for _, node_ids in _group_by(resolved, "vdd").items():

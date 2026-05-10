@@ -327,14 +327,14 @@ def test_simulation_regression_smoke_keeps_reference_kpis_and_clocks_stable():
     assert demo_result.warnings == []
     assert demo_result.total_power_mw == pytest.approx(58.745088, rel=1e-6)
     assert demo_result.bw_total_mbs == pytest.approx(419.904)
-    assert demo_result.hw_time_max_ms == pytest.approx(26.25)
-    assert demo_result.timeline_end_ms == pytest.approx(85.833333, rel=1e-6)
+    assert demo_result.hw_time_max_ms == pytest.approx(29.75)
+    assert demo_result.timeline_end_ms == pytest.approx(92.833333, rel=1e-6)
     assert demo_result.resolved["csis0"].clock_correction_reason == "otf_group_clock_align(otf-0, leader=isp0)"
     assert demo_result.resolved["isp0"].clock_correction_reason == "otf_group_clock_align(otf-0, leader=isp0)"
-    assert demo_result.resolved["csis0"].required_clock_mhz == pytest.approx(20.736)
-    assert demo_result.resolved["isp0"].required_clock_mhz == pytest.approx(20.736)
-    assert demo_result.resolved["mfc"].required_clock_mhz == pytest.approx(20.736)
-    assert demo_result.resolved["dpu"].required_clock_mhz == pytest.approx(20.736)
+    assert demo_result.resolved["csis0"].required_clock_mhz == pytest.approx(18.296470588235298)
+    assert demo_result.resolved["isp0"].required_clock_mhz == pytest.approx(18.296470588235298)
+    assert demo_result.resolved["mfc"].required_clock_mhz == pytest.approx(18.296470588235298)
+    assert demo_result.resolved["dpu"].required_clock_mhz == pytest.approx(18.296470588235298)
 
 
 def test_golden_comparator_accepts_reference_result_and_reports_diffs():
@@ -349,7 +349,7 @@ def test_golden_comparator_accepts_reference_result_and_reports_diffs():
             "total_power_mw": {"value": 58.745088, "rel_tol": 1e-6},
             "bw_total_mbs": {"value": 419.904, "abs_tol": 1e-6},
         },
-        "resolved": {"csis0": {"required_clock_mhz": {"value": 20.736, "abs_tol": 1e-6}}},
+        "resolved": {"csis0": {"required_clock_mhz": {"value": 18.296470588235298, "abs_tol": 1e-6}}},
     }
 
     assert compare_golden_result(result, expected) == []

@@ -6,6 +6,7 @@ from typing import Any, Literal
 from pydantic import Field, model_validator
 
 from scenario_db.models.common import BaseScenarioModel
+from scenario_db.sim.constants import SW_MARGIN_DEFAULT
 
 
 class PortType(StrEnum):
@@ -102,7 +103,7 @@ class IPWorkload(BaseScenarioModel):
     height: int = 0
     format: str | None = None
     fps: float
-    sw_margin: float = 0.25
+    sw_margin: float = SW_MARGIN_DEFAULT
     manual_clock_mhz: float | None = None
     clock_correction_mhz: float = 0.0
     clock_correction_reason: str | None = None
@@ -116,7 +117,7 @@ class IPWorkload(BaseScenarioModel):
 class SimulationRunConfig(BaseScenarioModel):
     asv_group: int = 4
     fps: float | None = None
-    sw_margin: float = 0.25
+    sw_margin: float = SW_MARGIN_DEFAULT
     bw_power_coeff: float = 80.0
     vbat: float = 4.0
     pmic_efficiency: float = 0.85
@@ -150,6 +151,7 @@ class ResolvedIPConfig(BaseScenarioModel):
     mode: str
     required_clock_mhz: float
     base_required_clock_mhz: float = 0.0
+    manual_clock_mhz: float | None = None
     clock_correction_mhz: float = 0.0
     clock_correction_reason: str | None = None
     set_clock_mhz: float

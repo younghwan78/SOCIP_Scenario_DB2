@@ -16,25 +16,25 @@ cases:
           value: 419.904
           abs_tol: 0.000001
         hw_time_max_ms:
-          value: 26.25
+          value: 29.75
           abs_tol: 0.000001
         timeline_end_ms:
-          value: 85.833333
+          value: 92.833333
           rel_tol: 0.000001
       resolved:
         csis0:
           required_clock_mhz:
-            value: 20.736
+            value: 18.296470588235298
             abs_tol: 0.000001
         isp0:
           required_clock_mhz:
-            value: 20.736
+            value: 18.296470588235298
             abs_tol: 0.000001
         mfc:
           required_clock_mhz:
-            value: 20.736
+            value: 18.296470588235298
             abs_tol: 0.000001
         dpu:
           required_clock_mhz:
-            value: 20.736
+            value: 18.296470588235298
             abs_tol: 0.000001
