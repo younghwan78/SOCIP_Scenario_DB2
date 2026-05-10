@@ -41,7 +41,10 @@ async def _not_found_handler(request: Request, exc: NoResultFound) -> JSONRespon
 async def _conflict_handler(request: Request, exc: IntegrityError) -> JSONResponse:
     return JSONResponse(
         status_code=409,
-        content={"error": "conflict", "detail": str(exc.orig)},
+        content={
+            "error": "conflict",
+            "detail": "Database constraint violation. Check request identifiers and references.",
+        },
     )
 
 
