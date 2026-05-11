@@ -30,10 +30,11 @@ from dashboard.components.explorer_api_client import (  # noqa: E402
 )
 from dashboard.components.table_actions import render_copyable_dataframe  # noqa: E402
 from dashboard.components.viewer_api_client import (  # noqa: E402
+    compact_project_label,
+    compact_scenario_label,
+    compact_soc_label,
     list_projects,
     list_soc_platforms,
-    project_label,
-    soc_label,
 )
 from dashboard.components.ui_theme import apply_app_theme  # noqa: E402
 
@@ -614,7 +615,7 @@ with st.sidebar:
     selected_soc = st.selectbox(
         "SoC",
         soc_ids,
-        format_func=lambda soc_id: "All SoCs" if not soc_id else soc_label(next((item for item in socs if item.get("id") == soc_id), {"id": soc_id})),
+        format_func=lambda soc_id: "All SoCs" if not soc_id else compact_soc_label(next((item for item in socs if item.get("id") == soc_id), {"id": soc_id})),
     )
     if soc_error:
         st.caption(f"SoC list unavailable: {soc_error}")
@@ -627,7 +628,7 @@ with st.sidebar:
     selected_project = st.selectbox(
         "Project / Board",
         project_ids,
-        format_func=lambda project_id: "All Projects" if not project_id else project_label(next((item for item in projects if item.get("id") == project_id), {"id": project_id})),
+        format_func=lambda project_id: "All Projects" if not project_id else compact_project_label(next((item for item in projects if item.get("id") == project_id), {"id": project_id})),
     )
     if project_error:
         st.caption(f"Project list unavailable: {project_error}")
@@ -652,7 +653,12 @@ with st.sidebar:
     )
     scenario_options = [str(item.get("scenario_id")) for item in filter_catalog.get("items") or [] if item.get("scenario_id")]
     scenario_label_by_id = {
-        str(item.get("scenario_id")): f"{item.get('scenario_id')} - {item.get('scenario_name')}"
+        str(item.get("scenario_id")): compact_scenario_label(
+            {
+                "id": item.get("scenario_id"),
+                "metadata": {"name": item.get("scenario_name")},
+            }
+        )
         for item in filter_catalog.get("items") or []
         if item.get("scenario_id")
     }

@@ -172,6 +172,18 @@ def test_evidence_dashboard_sidebar_keeps_scenario_search_control():
     assert "filter_scenarios_by_text" in context_source
 
 
+def test_db_explorer_sidebar_uses_compact_context_labels():
+    root = Path(__file__).resolve().parents[3]
+    source = (root / "dashboard" / "pages" / "1_DB_Explorer.py").read_text(encoding="utf-8")
+
+    assert "compact_soc_label" in source
+    assert "compact_project_label" in source
+    assert "compact_scenario_label" in source
+    assert "\n    soc_label,\n" not in source
+    assert "\n    project_label,\n" not in source
+    assert "scenario_id} - " not in source
+
+
 def test_evidence_context_filters_scenarios_by_category_and_text():
     scenarios = [
         {"id": "uc-camera-recording", "metadata": {"category": "camera", "name": "Camera Recording"}},
