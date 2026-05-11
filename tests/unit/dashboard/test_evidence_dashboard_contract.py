@@ -91,11 +91,15 @@ def test_evidence_dashboard_page_uses_shared_contract_for_viewer_links():
     result_view_source = (root / "dashboard" / "components" / "evidence_result_view.py").read_text(encoding="utf-8")
     actions_source = (root / "dashboard" / "components" / "evidence_actions.py").read_text(encoding="utf-8")
     results_panel_source = (root / "dashboard" / "components" / "evidence_results_panel.py").read_text(encoding="utf-8")
+    timing_chart_source = (root / "dashboard" / "components" / "timing_chart.py").read_text(encoding="utf-8")
 
     assert "render_evidence_results_panel" in source
     assert "VIEWER_LINK_LABEL_PREVIEW" in results_panel_source
     assert "VIEWER_LINK_LABEL_SAVED" in results_panel_source
     assert "RESULT_BREAKDOWN_TABS" in result_view_source
+    assert "render_timing_chart" in result_view_source
+    assert "def render_timing_chart" in timing_chart_source
+    assert "def render_timing_summary" in timing_chart_source
     assert "render_result_breakdown" in results_panel_source
     assert "render_preview_actions" in results_panel_source
     assert "render_saved_export_actions" in results_panel_source
