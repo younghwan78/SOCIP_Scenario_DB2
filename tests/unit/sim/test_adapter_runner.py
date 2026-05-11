@@ -337,6 +337,40 @@ def test_simulation_regression_smoke_keeps_reference_kpis_and_clocks_stable():
     assert demo_result.resolved["dpu"].required_clock_mhz == pytest.approx(18.296470588235298)
 
 
+def test_exynos2600_camera_recording_vdis_golden_keeps_kpis_clocks_and_external_timing_stable():
+    inputs = build_simulation_inputs(
+        _exynos2600_generated_graph("uc-camera-recording", "cam-rec-r1-fhd30-vdis"),
+        SimulationRunConfig(include_timeline=True, timeline_frame_count=4, debug_trace=True),
+    )
+    result = run_simulation(inputs, dvfs_tables={})
+
+    assert result.warnings == []
+    assert result.total_power_mw == pytest.approx(170.2674432, rel=1e-6)
+    assert result.bw_total_mbs == pytest.approx(1555.2, abs=1e-6)
+    assert result.hw_time_max_ms == pytest.approx(29.75)
+    assert result.timeline_end_ms == pytest.approx(412.9044206666666, rel=1e-6)
+    assert result.total_power_ma == pytest.approx(50.07865976470589, rel=1e-6)
+
+    sensor = next(item for item in result.external_devices if item["device_type"] == "sensor")
+    assert sensor["mode"] == "wide_video_16_9_30"
+    assert sensor["size"] == "4080x2296"
+    assert sensor["fps"] == pytest.approx(30.0)
+    assert sensor["v_valid_ms"] == pytest.approx(18.987754, abs=1e-6)
+
+    assert result.resolved["csispdp"].clock_correction_reason.startswith("sensor_ingress_req_csis_clock")
+    assert result.resolved["csispdp"].required_clock_mhz == pytest.approx(285.2142857142857)
+    assert result.resolved["byrp"].clock_correction_reason == "otf_group_clock_align(otf-0, leader=csispdp)"
+    assert result.resolved["byrp"].set_clock_mhz == pytest.approx(result.resolved["csispdp"].set_clock_mhz)
+    assert result.resolved["rgbp"].set_clock_mhz == pytest.approx(result.resolved["csispdp"].set_clock_mhz)
+    assert result.resolved["yuvsc"].set_clock_mhz == pytest.approx(result.resolved["csispdp"].set_clock_mhz)
+    assert result.resolved["lme"].set_clock_mhz == pytest.approx(18.296470588235298)
+
+    sink_events = [event for event in result.timeline_events if event.node_id == "panel"]
+    assert len(sink_events) == 4
+    assert sink_events[-1].cadence_violation is True
+    assert sink_events[-1].cadence_avg_interval_ms == pytest.approx(69.41666666666666)
+
+
 def test_golden_comparator_accepts_reference_result_and_reports_diffs():
     inputs = build_simulation_inputs(
         _demo_generated_graph("uc-demo-import-recording", "FHD30-Imported"),
@@ -873,6 +907,61 @@ def _demo_generated_graph(scenario_id: str, variant_id: str) -> CanonicalScenari
     ip_catalog = {
         ip_id: _ip_catalog_from_yaml(hw_dir / f"{ip_id}.yaml")
         for ip_id in ("ip-csis-v8", "ip-isp-v12", "ip-mfc-v14", "ip-dpu-v9", "ip-llc-v2")
+    }
+    return CanonicalScenarioGraph(
+        scenario=scenario,
+        variant=variant,
+        ip_catalog=ip_catalog,
+    )
+
+
+def _exynos2600_generated_graph(scenario_id: str, variant_id: str) -> CanonicalScenarioGraph:
+    root = Path(__file__).resolve().parents[3]
+    fixture_root = root / "db_fixtures_Exynos2600_S26Plus"
+    scenario_raw = _read_yaml(fixture_root / "02_definition" / f"{scenario_id}.yaml")
+    scenario = Scenario(
+        id=scenario_raw["id"],
+        schema_version=str(scenario_raw["schema_version"]),
+        project_ref=scenario_raw["project_ref"],
+        metadata_=scenario_raw.get("metadata") or {},
+        pipeline=scenario_raw.get("pipeline") or {},
+        size_profile=scenario_raw.get("size_profile"),
+        design_axes=scenario_raw.get("design_axes"),
+        yaml_sha256="sha",
+    )
+    variant_rows = {
+        item["id"]: ScenarioVariant(
+            scenario_id=scenario_id,
+            id=item["id"],
+            severity=item.get("severity"),
+            design_conditions=item.get("design_conditions") or {},
+            design_conditions_override=item.get("design_conditions_override") or {},
+            size_overrides=item.get("size_overrides") or {},
+            routing_switch=item.get("routing_switch") or {},
+            topology_patch=item.get("topology_patch") or {},
+            node_configs=item.get("node_configs") or {},
+            buffer_overrides=item.get("buffer_overrides") or {},
+            ip_requirements=item.get("ip_requirements") or {},
+            sw_requirements=item.get("sw_requirements"),
+            violation_policy=item.get("violation_policy"),
+            tags=item.get("tags") or [],
+            derived_from_variant=item.get("derived_from_variant"),
+        )
+        for item in scenario_raw.get("variants") or []
+    }
+    variant = resolve_variant_from_rows(variant_rows, scenario_id, variant_id)
+    ip_catalog = {
+        raw["id"]: IpCatalog(
+            id=raw["id"],
+            schema_version=str(raw["schema_version"]),
+            category=raw.get("category"),
+            hierarchy=raw.get("hierarchy") or {},
+            capabilities=raw.get("capabilities") or {},
+            rtl_version=raw.get("rtl_version"),
+            compatible_soc=raw.get("compatible_soc") or [],
+            yaml_sha256="sha",
+        )
+        for raw in (_read_yaml(path) for path in (fixture_root / "00_hw").glob("ip-*.yaml"))
     }
     return CanonicalScenarioGraph(
         scenario=scenario,

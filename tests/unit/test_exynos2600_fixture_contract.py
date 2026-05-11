@@ -27,6 +27,7 @@ def test_exynos2600_recording_fixture_keeps_expected_fhd30_variant():
 
     assert "cam-rec-f1-fhd30" in variant_ids
     assert "cam-rec-f1-fhd30-recursive" in variant_ids
+    assert "cam-rec-r1-fhd30-vdis" in variant_ids
 
 
 def _read_yaml(path: Path) -> dict:

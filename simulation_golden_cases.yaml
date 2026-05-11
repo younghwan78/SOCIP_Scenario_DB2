@@ -38,3 +38,55 @@ cases:
           required_clock_mhz:
             value: 18.296470588235298
             abs_tol: 0.000001
+  exynos2600-camera-recording-r1-fhd30-vdis:
+    scenario_id: uc-camera-recording
+    variant_id: cam-rec-r1-fhd30-vdis
+    config:
+      include_timeline: true
+      timeline_frame_count: 4
+      debug_trace: true
+    expected:
+      warnings: []
+      metrics:
+        total_power_mw:
+          value: 170.2674432
+          rel_tol: 0.000001
+        total_power_ma:
+          value: 50.07865976470589
+          rel_tol: 0.000001
+        bw_total_mbs:
+          value: 1555.2
+          abs_tol: 0.000001
+        hw_time_max_ms:
+          value: 29.75
+          abs_tol: 0.000001
+        timeline_end_ms:
+          value: 412.9044206666666
+          rel_tol: 0.000001
+      resolved:
+        csispdp:
+          required_clock_mhz:
+            value: 285.2142857142857
+            abs_tol: 0.000001
+          set_clock_mhz:
+            value: 285.2142857142857
+            abs_tol: 0.000001
+        byrp:
+          required_clock_mhz:
+            value: 285.2142857142857
+            abs_tol: 0.000001
+          set_clock_mhz:
+            value: 285.2142857142857
+            abs_tol: 0.000001
+        rgbp:
+          set_clock_mhz:
+            value: 285.2142857142857
+            abs_tol: 0.000001
+        yuvsc:
+          set_clock_mhz:
+            value: 285.2142857142857
+            abs_tol: 0.000001
+        lme:
+          set_clock_mhz:
+            value: 18.296470588235298
+            abs_tol: 0.000001
