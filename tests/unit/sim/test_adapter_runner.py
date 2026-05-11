@@ -199,6 +199,9 @@ def test_runner_builds_debug_calculation_trace():
     assert "clock_correction_mhz" in trace["ip"][0]["required_clock"]
     assert trace["dma"][0]["result"]["bw_mbs"] == result.dma_breakdown[0].bw_mbs
     assert trace["timeline"]["summary"]["event_count"] == len(result.timeline_events)
+    assert "critical_path" in trace["timeline"]
+    assert "top_waits" in trace["timeline"]
+    assert "cadence" in trace["timeline"]
 
 
 def test_adapter_falls_back_to_variant_resolution_and_m2m_edges():
@@ -369,6 +372,25 @@ def test_exynos2600_camera_recording_vdis_golden_keeps_kpis_clocks_and_external_
     assert len(sink_events) == 4
     assert sink_events[-1].cadence_violation is True
     assert sink_events[-1].cadence_avg_interval_ms == pytest.approx(69.41666666666666)
+    trace = result.calculation_trace
+    assert trace is not None
+    assert trace["timeline"]["summary"]["cadence_violation_count"] >= 1
+    assert any(row["task_id"] == "panel#f3" for row in trace["timeline"]["cadence"])
+    assert any(row["bottleneck_reason"] == "output average cadence exceeds frame period" for row in trace["timeline"]["top_waits"])
+
+
+def test_full_debug_trace_includes_timeline_event_rows():
+    inputs = build_simulation_inputs(
+        _exynos2600_generated_graph("uc-camera-recording", "cam-rec-r1-fhd30-vdis"),
+        SimulationRunConfig(include_timeline=True, timeline_frame_count=2, debug_trace=True, debug_trace_level="full"),
+    )
+    result = run_simulation(inputs, dvfs_tables={})
+
+    trace = result.calculation_trace
+    assert trace is not None
+    assert trace["trace_level"] == "full"
+    assert len(trace["timeline"]["events"]) == len(result.timeline_events)
+    assert {"task_id", "start_ms", "end_ms", "bottleneck_reason"}.issubset(trace["timeline"]["events"][0])
 
 
 @pytest.mark.parametrize(

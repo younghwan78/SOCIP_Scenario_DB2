@@ -87,7 +87,7 @@ def build_calculation_trace(
         ),
         "external_devices": list(inputs.external_devices),
         "topology_order": list(inputs.topology_order),
-        "timeline": _timeline_trace(inputs.timeline_tasks, inputs.timeline_edges, timeline_events),
+        "timeline": _timeline_trace(inputs.timeline_tasks, inputs.timeline_edges, timeline_events, trace_level=config.debug_trace_level),
         "warnings": list(inputs.warnings),
     }
 
@@ -327,18 +327,34 @@ def _timeline_trace(
     tasks: list[dict],
     edges: list[dict],
     events: list[TimelineEvent],
+    *,
+    trace_level: str = "formula",
 ) -> dict[str, Any]:
     group_map: dict[str, list[TimelineEvent]] = {}
     for event in events:
         if event.otf_group_id:
             group_map.setdefault(event.otf_group_id, []).append(event)
-    return {
+    cadence_events = [event for event in events if event.cadence_budget_ms is not None]
+    wait_events = [
+        event
+        for event in events
+        if (event.resource_wait_ms or 0.0) > 0.0
+        or (event.token_wait_ms or 0.0) > 0.0
+        or (event.slack_ms is not None and event.slack_ms < 0.0)
+        or event.cadence_violation
+    ]
+    result: dict[str, Any] = {
         "summary": {
             "task_count": len(tasks),
             "edge_count": len(edges),
             "event_count": len(events),
             "otf_group_count": len(group_map),
             "m2m_edge_count": sum(1 for edge in edges if str(edge.get("type") or "").upper() == "M2M"),
+            "critical_path_task_count": sum(1 for event in events if event.critical),
+            "cadence_event_count": len(cadence_events),
+            "cadence_violation_count": sum(1 for event in cadence_events if event.cadence_violation),
+            "max_resource_wait_ms": max((event.resource_wait_ms for event in events), default=0.0),
+            "max_token_wait_ms": max((event.token_wait_ms for event in events), default=0.0),
         },
         "rules": {
             "otf": "Tasks in the same OTF group are scheduled as a streaming group; the bottleneck task determines group throughput.",
@@ -356,5 +372,58 @@ def _timeline_trace(
             }
             for group_id, group_events in sorted(group_map.items())
         ],
+        "critical_path": [
+            _event_trace_row(event)
+            for event in sorted(
+                (event for event in events if event.critical),
+                key=lambda event: event.critical_path_rank if event.critical_path_rank is not None else 10**9,
+            )
+        ],
+        "top_waits": [
+            _event_trace_row(event)
+            for event in sorted(
+                wait_events,
+                key=lambda event: (
+                    event.cadence_slack_ms if event.cadence_slack_ms is not None else 0.0,
+                    -(event.resource_wait_ms or 0.0) - (event.token_wait_ms or 0.0),
+                    event.start_ms,
+                ),
+            )[:10]
+        ],
+        "cadence": [_event_trace_row(event) for event in cadence_events],
         "edges": [dict(edge) for edge in edges],
+    }
+    if trace_level == "full":
+        result["events"] = [_event_trace_row(event) for event in events]
+    return result
+
+
+def _event_trace_row(event: TimelineEvent) -> dict[str, Any]:
+    return {
+        "task_id": event.task_id,
+        "node_id": event.node_id,
+        "hw_name": event.hw_name,
+        "task_type": event.task_type,
+        "frame_index": event.frame_index,
+        "resource_id": event.resource_id,
+        "edge_type": event.edge_type,
+        "otf_group_id": event.otf_group_id,
+        "start_ms": event.start_ms,
+        "end_ms": event.end_ms,
+        "duration_ms": event.duration_ms,
+        "ready_ms": event.ready_ms,
+        "resource_wait_ms": event.resource_wait_ms,
+        "token_wait_ms": event.token_wait_ms,
+        "deadline_ms": event.deadline_ms,
+        "slack_ms": event.slack_ms,
+        "cadence_interval_ms": event.cadence_interval_ms,
+        "cadence_avg_interval_ms": event.cadence_avg_interval_ms,
+        "cadence_budget_ms": event.cadence_budget_ms,
+        "cadence_slack_ms": event.cadence_slack_ms,
+        "cadence_violation": event.cadence_violation,
+        "critical": event.critical,
+        "critical_path_rank": event.critical_path_rank,
+        "bottleneck": event.bottleneck,
+        "bottleneck_reason": event.bottleneck_reason,
+        "predecessors": list(event.predecessors),
     }

@@ -43,6 +43,21 @@ def render_debug_trace(result: dict[str, Any]) -> None:
         otf_group_trace_rows(trace),
         key=f"debug_otf_rows_{evidence_id}",
     )
+    _render_section(
+        "Timing cadence trace",
+        timeline_cadence_rows(trace),
+        key=f"debug_cadence_rows_{evidence_id}",
+    )
+    _render_section(
+        "Timing critical path trace",
+        timeline_critical_path_rows(trace),
+        key=f"debug_critical_path_rows_{evidence_id}",
+    )
+    _render_section(
+        "Timing wait/slack trace",
+        timeline_wait_rows(trace),
+        key=f"debug_wait_rows_{evidence_id}",
+    )
     with st.expander("Raw calculation trace", expanded=False):
         st.json(trace)
 
@@ -128,6 +143,24 @@ def dma_trace_rows(trace: dict[str, Any]) -> list[dict[str, Any]]:
 def otf_group_trace_rows(trace: dict[str, Any]) -> list[dict[str, Any]]:
     timeline = trace.get("timeline") if isinstance(trace.get("timeline"), dict) else {}
     rows = timeline.get("otf_groups") if isinstance(timeline.get("otf_groups"), list) else []
+    return [row for row in rows if isinstance(row, dict)]
+
+
+def timeline_cadence_rows(trace: dict[str, Any]) -> list[dict[str, Any]]:
+    return _timeline_rows(trace, "cadence")
+
+
+def timeline_critical_path_rows(trace: dict[str, Any]) -> list[dict[str, Any]]:
+    return _timeline_rows(trace, "critical_path")
+
+
+def timeline_wait_rows(trace: dict[str, Any]) -> list[dict[str, Any]]:
+    return _timeline_rows(trace, "top_waits")
+
+
+def _timeline_rows(trace: dict[str, Any], key: str) -> list[dict[str, Any]]:
+    timeline = trace.get("timeline") if isinstance(trace.get("timeline"), dict) else {}
+    rows = timeline.get(key) if isinstance(timeline.get(key), list) else []
     return [row for row in rows if isinstance(row, dict)]
 
 

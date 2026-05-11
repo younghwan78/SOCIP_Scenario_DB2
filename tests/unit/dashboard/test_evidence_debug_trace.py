@@ -5,6 +5,9 @@ from dashboard.components.evidence_debug_trace import (
     ip_trace_rows,
     kpi_trace_rows,
     otf_group_trace_rows,
+    timeline_cadence_rows,
+    timeline_critical_path_rows,
+    timeline_wait_rows,
 )
 
 
@@ -67,7 +70,10 @@ def test_debug_trace_row_builders_flatten_formula_sections():
                     "start_ms": 0,
                     "end_ms": 10,
                 }
-            ]
+            ],
+            "cadence": [{"task_id": "panel#f1", "cadence_avg_interval_ms": 33.3}],
+            "critical_path": [{"task_id": "gdc#f1", "critical_path_rank": 0}],
+            "top_waits": [{"task_id": "gdc#f1", "resource_wait_ms": 1.2}],
         },
     }
 
@@ -83,6 +89,9 @@ def test_debug_trace_row_builders_flatten_formula_sections():
     assert ip_trace_rows(trace)[0]["vdd_leader"] == "isp0"
     assert dma_trace_rows(trace)[0]["format_bpp_factor"] == 1.5
     assert otf_group_trace_rows(trace)[0]["bottleneck_tasks"] == ["pdp"]
+    assert timeline_cadence_rows(trace)[0]["task_id"] == "panel#f1"
+    assert timeline_critical_path_rows(trace)[0]["critical_path_rank"] == 0
+    assert timeline_wait_rows(trace)[0]["resource_wait_ms"] == 1.2
 
 
 def test_debug_trace_row_builders_tolerate_missing_sections():
@@ -90,3 +99,6 @@ def test_debug_trace_row_builders_tolerate_missing_sections():
     assert ip_trace_rows({"ip": [None, "bad"]}) == []
     assert dma_trace_rows({"dma": [None, "bad"]}) == []
     assert otf_group_trace_rows({"timeline": {"otf_groups": [None, "bad"]}}) == []
+    assert timeline_cadence_rows({"timeline": {"cadence": [None, "bad"]}}) == []
+    assert timeline_critical_path_rows({"timeline": {"critical_path": [None, "bad"]}}) == []
+    assert timeline_wait_rows({"timeline": {"top_waits": [None, "bad"]}}) == []
