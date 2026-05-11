@@ -371,6 +371,76 @@ def test_exynos2600_camera_recording_vdis_golden_keeps_kpis_clocks_and_external_
     assert sink_events[-1].cadence_avg_interval_ms == pytest.approx(69.41666666666666)
 
 
+@pytest.mark.parametrize(
+    ("variant_id", "expected"),
+    [
+        (
+            "cam-rec-r1-uhd30-vdis",
+            {
+                "total_power_mw": 681.0697728,
+                "total_power_ma": 200.31463905882356,
+                "bw_total_mbs": 6220.8,
+                "timeline_end_ms": 412.9044206666666,
+                "sensor_mode": "wide_video_16_9_30",
+                "sensor_size": "4080x2296",
+                "sensor_v_valid_ms": 18.987754,
+                "csispdp_required_mhz": 285.2142857142857,
+                "otf0_set_clock_mhz": 285.2142857142857,
+                "lme_set_clock_mhz": 73.18588235294119,
+                "sink_cadence_avg_ms": 69.41666666666666,
+            },
+        ),
+        (
+            "cam-rec-f1-fhd30",
+            {
+                "total_power_mw": 140.2002432,
+                "total_power_ma": 41.23536564705882,
+                "bw_total_mbs": 1244.16,
+                "timeline_end_ms": 420.083333,
+                "sensor_mode": "wide_video_16_9_30",
+                "sensor_size": "3648x2052",
+                "sensor_v_valid_ms": 33.333333,
+                "csispdp_required_mhz": 214.28571428571425,
+                "otf0_set_clock_mhz": 214.28571428571425,
+                "lme_set_clock_mhz": None,
+                "sink_cadence_avg_ms": 89.25,
+            },
+        ),
+    ],
+)
+def test_exynos2600_camera_recording_golden_matrix_keeps_key_paths_stable(variant_id, expected):
+    inputs = build_simulation_inputs(
+        _exynos2600_generated_graph("uc-camera-recording", variant_id),
+        SimulationRunConfig(include_timeline=True, timeline_frame_count=4, debug_trace=True),
+    )
+    result = run_simulation(inputs, dvfs_tables={})
+
+    assert result.warnings == []
+    assert result.total_power_mw == pytest.approx(expected["total_power_mw"], rel=1e-6)
+    assert result.total_power_ma == pytest.approx(expected["total_power_ma"], rel=1e-6)
+    assert result.bw_total_mbs == pytest.approx(expected["bw_total_mbs"], abs=1e-6)
+    assert result.hw_time_max_ms == pytest.approx(29.75)
+    assert result.timeline_end_ms == pytest.approx(expected["timeline_end_ms"], rel=1e-6)
+
+    sensor = next(item for item in result.external_devices if item["device_type"] == "sensor")
+    assert sensor["mode"] == expected["sensor_mode"]
+    assert sensor["size"] == expected["sensor_size"]
+    assert sensor["v_valid_ms"] == pytest.approx(expected["sensor_v_valid_ms"], abs=1e-6)
+    assert result.resolved["csispdp"].required_clock_mhz == pytest.approx(expected["csispdp_required_mhz"])
+    assert result.resolved["byrp"].set_clock_mhz == pytest.approx(expected["otf0_set_clock_mhz"])
+    assert result.resolved["rgbp"].set_clock_mhz == pytest.approx(expected["otf0_set_clock_mhz"])
+    assert result.resolved["yuvsc"].set_clock_mhz == pytest.approx(expected["otf0_set_clock_mhz"])
+    if expected["lme_set_clock_mhz"] is None:
+        assert "lme" not in result.resolved
+    else:
+        assert result.resolved["lme"].set_clock_mhz == pytest.approx(expected["lme_set_clock_mhz"])
+
+    sink_events = [event for event in result.timeline_events if event.node_id == "panel"]
+    assert len(sink_events) == 4
+    assert sink_events[-1].cadence_violation is True
+    assert sink_events[-1].cadence_avg_interval_ms == pytest.approx(expected["sink_cadence_avg_ms"])
+
+
 def test_golden_comparator_accepts_reference_result_and_reports_diffs():
     inputs = build_simulation_inputs(
         _demo_generated_graph("uc-demo-import-recording", "FHD30-Imported"),

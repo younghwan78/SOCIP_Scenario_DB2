@@ -28,6 +28,15 @@ def test_exynos2600_recording_fixture_keeps_expected_fhd30_variant():
     assert "cam-rec-f1-fhd30" in variant_ids
     assert "cam-rec-f1-fhd30-recursive" in variant_ids
     assert "cam-rec-r1-fhd30-vdis" in variant_ids
+    assert "cam-rec-r1-uhd30-vdis" in variant_ids
+
+
+def test_exynos2600_apv_recording_fixture_keeps_expected_uhd30_variant():
+    apv = _read_yaml(FIXTURE_ROOT / "02_definition" / "uc-camera-recording-apv.yaml")
+    variant_ids = {item["id"] for item in apv.get("variants") or []}
+
+    assert "cam-rec-apv-uhd30-422-sdr" in variant_ids
+    assert "cam-rec-apv-uhd30-444-sdr" in variant_ids
 
 
 def _read_yaml(path: Path) -> dict:
