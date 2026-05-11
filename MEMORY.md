@@ -76,3 +76,41 @@ uv run --group dev pytest tests\unit
 - Example board types under the same SoC include `ERD`, `SEP1`, and `SEP2`.
 - Scenarios may have no variants. Viewer should use base scenario view endpoint `/api/v1/scenarios/{scenario_id}/view` rather than forcing a dummy variant.
 - Board-aware Read API filters are available on `/projects`, `/scenarios`, and `/variants`.
+
+## 2026-05-12 Simulation Refactoring And Debug Trace Wrap-Up
+
+- Current pushed GitHub head is `a3d9539 Add detailed simulation formula trace tables`.
+- API entrypoint is `scenario_db.api.app:app`; previous `scenario_db.api.main` is not valid.
+- Standard local ports remain FastAPI `127.0.0.1:18000` and Streamlit `127.0.0.1:18502`.
+- Latest local verification after the refactoring/debug-trace work was `uv run pytest tests/unit -q` with `408 passed`.
+- Evidence Dashboard result rendering has been split across smaller components:
+  - `dashboard/components/evidence_result_view.py` only orchestrates result tabs.
+  - `dashboard/components/timing_chart.py` owns timing chart rendering and timing summary.
+  - `dashboard/components/simulation_tables.py` owns external device, IP/node power, DMA BW, timing, and timeline tables.
+  - `dashboard/components/evidence_debug_trace.py` owns Debug Trace tables.
+  - `dashboard/components/evidence_compare.py` owns preview-vs-saved comparison rows/UI.
+- Simulation preview results are not saved by default. Users must click Confirm & Save Evidence before a preview becomes persisted evidence.
+- Evidence Dashboard table rendering now uses row-count-based dataframe height via `dashboard/components/table_actions.py`, so table vertical scroll should generally be avoided and page-level scroll should be used instead.
+- Debug Trace now exposes formula-level detail:
+  - KPI formulas.
+  - IP power / DVFS / performance trace.
+  - IP power formula detail, including `unit_power_mw_mp`, `resolution_mp`, voltage scale, FPS scale, and `result_mw`.
+  - DMA bandwidth trace.
+  - DMA bandwidth / power formula detail, including `bw_formula`, `bw_power_formula`, `bw_power_ma_formula`, `bw_mbs`, `bw_power_mw`, and `bw_power_ma`.
+  - Timing / OTF group trace with `span_ms`.
+  - Timing cadence, critical path, and wait/slack trace tables.
+- Power formula currently interprets `unit_power_mw_mp` as a reference value at `REFERENCE_VOLTAGE_MV = 710mV` and `REFERENCE_FPS = 30`.
+  - Displayed formula: `unit_power_mw_mp * resolution_mp * (set_voltage_mv / 710)^2 * (fps / 30)`.
+  - If future per-project unit power data uses a different measurement voltage, add explicit per-IP/mode reference voltage metadata instead of treating `710mV` as universal.
+- Exynos2600 camera recording regression coverage was expanded:
+  - `cam-rec-r1-fhd30-vdis`
+  - `cam-rec-r1-uhd30-vdis`
+  - `cam-rec-f1-fhd30`
+  - Checks include KPI, sensor mode/size/v-valid, OTF clock alignment, and cadence behavior.
+- `simulation_golden_cases.yaml` now includes Exynos2600 camera recording golden entries in addition to the demo imported FHD30 case.
+- The next planned work starts with **SoC extensibility cleanup**:
+  - Validate SoC fixture quality by SoC/project/scenario, especially `capabilities.sim`, ppc, unit power, DVFS group, VDD, and external-device classification.
+  - Separate compute IP catalog gaps from external sensor/display metadata gaps.
+  - Clarify readiness severity rules: error/block vs warning.
+  - Make SoC-specific default DVFS/power/capability import paths explicit and testable.
+  - Keep Exynos2600 camera golden cases as the first regression guard while adding SoC-level validators.
