@@ -18,6 +18,7 @@ from dashboard.components.evidence_dashboard_contract import (
     VIEWER_LINK_LABEL_PREVIEW,
     VIEWER_LINK_LABEL_SAVED,
 )
+from dashboard.components.evidence_compare import render_preview_saved_comparison
 from dashboard.components.evidence_result_view import render_result_breakdown
 from dashboard.components.simulation_api_client import list_simulation_results
 from dashboard.components.table_actions import render_copyable_dataframe
@@ -148,6 +149,11 @@ def _render_saved_result_detail(
         label=VIEWER_LINK_LABEL_SAVED,
     )
     render_saved_export_actions(selected, api_base=api_base, on_deleted=_after_evidence_deleted)
+    render_preview_saved_comparison(
+        preview=st.session_state.get("evidence_preview_result"),
+        saved=selected,
+        key_prefix=f"stored_{selected_id}",
+    )
     render_result_breakdown(selected, key_prefix="stored")
 
 

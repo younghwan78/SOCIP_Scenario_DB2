@@ -93,6 +93,7 @@ def test_evidence_dashboard_page_uses_shared_contract_for_viewer_links():
     results_panel_source = (root / "dashboard" / "components" / "evidence_results_panel.py").read_text(encoding="utf-8")
     timing_chart_source = (root / "dashboard" / "components" / "timing_chart.py").read_text(encoding="utf-8")
     tables_source = (root / "dashboard" / "components" / "simulation_tables.py").read_text(encoding="utf-8")
+    compare_source = (root / "dashboard" / "components" / "evidence_compare.py").read_text(encoding="utf-8")
 
     assert "render_evidence_results_panel" in source
     assert "VIEWER_LINK_LABEL_PREVIEW" in results_panel_source
@@ -108,6 +109,9 @@ def test_evidence_dashboard_page_uses_shared_contract_for_viewer_links():
     assert "render_result_breakdown" in results_panel_source
     assert "render_preview_actions" in results_panel_source
     assert "render_saved_export_actions" in results_panel_source
+    assert "render_preview_saved_comparison" in results_panel_source
+    assert "def render_preview_saved_comparison" in compare_source
+    assert "def comparison_rows" in compare_source
     assert "SIMULATION_RESULT_TOP_TABS" in results_panel_source
     assert results_panel_source.count("render_viewer_tab_link(") >= 2
     assert "build_pipeline_viewer_url" in actions_source
