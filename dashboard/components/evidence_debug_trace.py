@@ -143,7 +143,18 @@ def dma_trace_rows(trace: dict[str, Any]) -> list[dict[str, Any]]:
 def otf_group_trace_rows(trace: dict[str, Any]) -> list[dict[str, Any]]:
     timeline = trace.get("timeline") if isinstance(trace.get("timeline"), dict) else {}
     rows = timeline.get("otf_groups") if isinstance(timeline.get("otf_groups"), list) else []
-    return [row for row in rows if isinstance(row, dict)]
+    result: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        item = dict(row)
+        if item.get("span_ms") is None:
+            start = _numeric(item.get("start_ms"))
+            end = _numeric(item.get("end_ms"))
+            if start is not None and end is not None:
+                item["span_ms"] = end - start
+        result.append(item)
+    return result
 
 
 def timeline_cadence_rows(trace: dict[str, Any]) -> list[dict[str, Any]]:
@@ -173,3 +184,12 @@ def _render_section(title: str, rows: list[dict[str, Any]], *, key: str) -> None
 
 def _safe_filename(value: str) -> str:
     return "".join(ch if ch.isalnum() or ch in ".-" else "_" for ch in value)[:160]
+
+
+def _numeric(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None

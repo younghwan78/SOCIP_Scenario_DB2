@@ -369,6 +369,7 @@ def _timeline_trace(
                 "bottleneck_tasks": [event.task_id for event in group_events if event.bottleneck],
                 "start_ms": min(event.start_ms for event in group_events),
                 "end_ms": max(event.end_ms for event in group_events),
+                "span_ms": max(event.end_ms for event in group_events) - min(event.start_ms for event in group_events),
             }
             for group_id, group_events in sorted(group_map.items())
         ],

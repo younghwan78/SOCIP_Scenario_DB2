@@ -21,9 +21,11 @@ def render_copyable_dataframe(
 ) -> None:
     """Render a Streamlit dataframe with a browser clipboard copy action."""
 
-    rows = tabular_rows(copy_data if copy_data is not None else data)
-    if rows:
-        render_copy_table_button(rows, key=key, label=copy_label)
+    display_rows = tabular_rows(data)
+    copy_rows = tabular_rows(copy_data if copy_data is not None else data)
+    if copy_rows:
+        render_copy_table_button(copy_rows, key=key, label=copy_label)
+    dataframe_kwargs.setdefault("height", table_height(display_rows))
     st.dataframe(data, **dataframe_kwargs)
 
 
@@ -120,6 +122,12 @@ def rows_to_tsv(rows: list[dict[str, Any]]) -> str:
     for row in clean_rows:
         writer.writerow({key: _cell(row.get(key)) for key in fieldnames})
     return buffer.getvalue()
+
+
+def table_height(rows: list[dict[str, Any]], *, row_height: int = 44) -> int:
+    """Return a no-vertical-scroll dataframe height for Streamlit tables."""
+
+    return max(132, row_height * (len(rows) + 1) + 28)
 
 
 def _cell(value: Any) -> Any:

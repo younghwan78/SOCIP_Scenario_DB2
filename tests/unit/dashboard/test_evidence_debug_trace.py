@@ -89,6 +89,7 @@ def test_debug_trace_row_builders_flatten_formula_sections():
     assert ip_trace_rows(trace)[0]["vdd_leader"] == "isp0"
     assert dma_trace_rows(trace)[0]["format_bpp_factor"] == 1.5
     assert otf_group_trace_rows(trace)[0]["bottleneck_tasks"] == ["pdp"]
+    assert otf_group_trace_rows(trace)[0]["span_ms"] == 10
     assert timeline_cadence_rows(trace)[0]["task_id"] == "panel#f1"
     assert timeline_critical_path_rows(trace)[0]["critical_path_rank"] == 0
     assert timeline_wait_rows(trace)[0]["resource_wait_ms"] == 1.2
@@ -102,3 +103,9 @@ def test_debug_trace_row_builders_tolerate_missing_sections():
     assert timeline_cadence_rows({"timeline": {"cadence": [None, "bad"]}}) == []
     assert timeline_critical_path_rows({"timeline": {"critical_path": [None, "bad"]}}) == []
     assert timeline_wait_rows({"timeline": {"top_waits": [None, "bad"]}}) == []
+
+
+def test_otf_group_trace_rows_backfill_span_from_start_end():
+    trace = {"timeline": {"otf_groups": [{"group_id": "otf-0", "start_ms": 3.5, "end_ms": 9.25}]}}
+
+    assert otf_group_trace_rows(trace)[0]["span_ms"] == 5.75

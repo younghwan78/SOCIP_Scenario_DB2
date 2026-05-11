@@ -5,7 +5,7 @@ from typing import Any
 
 import streamlit as st
 
-from dashboard.components.table_actions import render_copyable_dataframe
+from dashboard.components.table_actions import render_copyable_dataframe, table_height
 
 
 IP_POWER_PRIORITY = [
@@ -269,10 +269,6 @@ def ordered_table(rows: list[dict[str, Any]], priority: list[str]) -> list[dict[
                 item[key] = value
         ordered.append(item)
     return ordered
-
-
-def table_height(rows: list[dict[str, Any]], *, row_height: int = 35) -> int:
-    return max(120, row_height * (len(rows) + 1) + 12)
 
 
 def numeric(value: Any) -> float | None:
