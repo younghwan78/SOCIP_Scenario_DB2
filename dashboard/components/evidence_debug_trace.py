@@ -34,9 +34,19 @@ def render_debug_trace(result: dict[str, Any]) -> None:
         key=f"debug_ip_rows_{evidence_id}",
     )
     _render_section(
+        "IP power formula detail",
+        ip_power_formula_rows(trace),
+        key=f"debug_ip_power_formula_rows_{evidence_id}",
+    )
+    _render_section(
         "DMA bandwidth trace",
         dma_trace_rows(trace),
         key=f"debug_dma_rows_{evidence_id}",
+    )
+    _render_section(
+        "DMA bandwidth / power formula detail",
+        dma_formula_rows(trace),
+        key=f"debug_dma_formula_rows_{evidence_id}",
     )
     _render_section(
         "Timing / OTF group trace",
@@ -109,6 +119,34 @@ def ip_trace_rows(trace: dict[str, Any]) -> list[dict[str, Any]]:
     return rows
 
 
+def ip_power_formula_rows(trace: dict[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for item in trace.get("ip") or []:
+        if not isinstance(item, dict):
+            continue
+        power = item.get("power") if isinstance(item.get("power"), dict) else {}
+        inputs = power.get("inputs") if isinstance(power.get("inputs"), dict) else {}
+        intermediate = power.get("intermediate") if isinstance(power.get("intermediate"), dict) else {}
+        rows.append(
+            {
+                "node_id": item.get("node_id"),
+                "hw_name": item.get("hw_name"),
+                "mode": item.get("mode"),
+                "formula": power.get("formula"),
+                "unit_power_mw_mp": inputs.get("unit_power_mw_mp"),
+                "resolution_mp": inputs.get("resolution_mp"),
+                "set_voltage_mv": inputs.get("set_voltage_mv"),
+                "reference_voltage_mv": inputs.get("reference_voltage_mv"),
+                "voltage_scale": intermediate.get("voltage_scale"),
+                "fps": inputs.get("fps"),
+                "reference_fps": inputs.get("reference_fps"),
+                "fps_scale": intermediate.get("fps_scale"),
+                "result_mw": power.get("result_mw"),
+            }
+        )
+    return rows
+
+
 def dma_trace_rows(trace: dict[str, Any]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for item in trace.get("dma") or []:
@@ -134,6 +172,44 @@ def dma_trace_rows(trace: dict[str, Any]) -> list[dict[str, Any]]:
                 "llc_weight": intermediate.get("llc_weight"),
                 "bw_mbs": result_values.get("bw_mbs"),
                 "bw_power_mw": result_values.get("bw_power_mw"),
+                "bw_power_ma": result_values.get("bw_power_ma"),
+            }
+        )
+    return rows
+
+
+def dma_formula_rows(trace: dict[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for item in trace.get("dma") or []:
+        if not isinstance(item, dict):
+            continue
+        inputs = item.get("inputs") if isinstance(item.get("inputs"), dict) else {}
+        intermediate = item.get("intermediate") if isinstance(item.get("intermediate"), dict) else {}
+        result_values = item.get("result") if isinstance(item.get("result"), dict) else {}
+        rows.append(
+            {
+                "node_id": item.get("node_id"),
+                "port": item.get("port"),
+                "direction": item.get("direction"),
+                "bw_formula": item.get("bw_formula") or item.get("formula"),
+                "width": inputs.get("width"),
+                "height": inputs.get("height"),
+                "fps": inputs.get("fps"),
+                "format": inputs.get("format"),
+                "bitwidth": inputs.get("bitwidth"),
+                "format_bpp_factor": intermediate.get("format_bpp_factor"),
+                "compression": inputs.get("compression"),
+                "comp_ratio": inputs.get("comp_ratio"),
+                "r_w_rate": inputs.get("r_w_rate"),
+                "bw_mbs": result_values.get("bw_mbs"),
+                "bw_power_formula": item.get("bw_power_formula"),
+                "bw_power_coeff": inputs.get("bw_power_coeff"),
+                "llc_enabled": inputs.get("llc_enabled"),
+                "llc_weight": intermediate.get("llc_weight"),
+                "bw_power_mw": result_values.get("bw_power_mw"),
+                "bw_power_ma_formula": item.get("bw_power_ma_formula"),
+                "vbat": inputs.get("vbat"),
+                "pmic_efficiency": inputs.get("pmic_efficiency"),
                 "bw_power_ma": result_values.get("bw_power_ma"),
             }
         )

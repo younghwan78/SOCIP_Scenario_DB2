@@ -198,6 +198,7 @@ def test_runner_builds_debug_calculation_trace():
     assert trace["ip"][0]["required_clock"]["base_formula"].startswith("pixels * fps")
     assert "clock_correction_mhz" in trace["ip"][0]["required_clock"]
     assert trace["dma"][0]["result"]["bw_mbs"] == result.dma_breakdown[0].bw_mbs
+    assert trace["dma"][0]["bw_power_formula"] == "bw_mbs * bw_power_coeff / 1000 * llc_weight"
     assert trace["timeline"]["summary"]["event_count"] == len(result.timeline_events)
     assert "critical_path" in trace["timeline"]
     assert "top_waits" in trace["timeline"]

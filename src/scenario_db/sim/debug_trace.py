@@ -292,6 +292,9 @@ def _dma_traces(
                 "port": spec.port,
                 "direction": result.direction,
                 "formula": "comp_ratio * fps * width * height * (bitwidth / 8) * format_bpp_factor * r_w_rate / 1e6",
+                "bw_formula": "comp_ratio * fps * width * height * (bitwidth / 8) * format_bpp_factor * r_w_rate / 1e6",
+                "bw_power_formula": "bw_mbs * bw_power_coeff / 1000 * llc_weight",
+                "bw_power_ma_formula": "bw_power_mw / vbat / pmic_efficiency",
                 "inputs": {
                     "width": spec.width,
                     "height": spec.height,
