@@ -92,6 +92,7 @@ def test_evidence_dashboard_page_uses_shared_contract_for_viewer_links():
     actions_source = (root / "dashboard" / "components" / "evidence_actions.py").read_text(encoding="utf-8")
     results_panel_source = (root / "dashboard" / "components" / "evidence_results_panel.py").read_text(encoding="utf-8")
     timing_chart_source = (root / "dashboard" / "components" / "timing_chart.py").read_text(encoding="utf-8")
+    tables_source = (root / "dashboard" / "components" / "simulation_tables.py").read_text(encoding="utf-8")
 
     assert "render_evidence_results_panel" in source
     assert "VIEWER_LINK_LABEL_PREVIEW" in results_panel_source
@@ -100,6 +101,10 @@ def test_evidence_dashboard_page_uses_shared_contract_for_viewer_links():
     assert "render_timing_chart" in result_view_source
     assert "def render_timing_chart" in timing_chart_source
     assert "def render_timing_summary" in timing_chart_source
+    assert "render_ip_node_power" in result_view_source
+    assert "def render_ip_node_power" in tables_source
+    assert "def render_dma_bw" in tables_source
+    assert "def render_external_device_info" in tables_source
     assert "render_result_breakdown" in results_panel_source
     assert "render_preview_actions" in results_panel_source
     assert "render_saved_export_actions" in results_panel_source
