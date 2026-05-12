@@ -136,6 +136,10 @@ def sim_params_for_node(
         vdd=merged.get("vdd"),
         dvfs_group=merged.get("dvfs_group"),
         max_clock_mhz=merged.get("max_clock_mhz"),
+        source=merged.get("source") or sim.get("source"),
+        source_project=merged.get("source_project") or sim.get("source_project"),
+        source_note=merged.get("source_note") or sim.get("source_note"),
+        mapping_source=_mapping_source(sim_block),
     )
 
 
@@ -299,3 +303,8 @@ def fallback_hw_name(ip_ref: str) -> str:
 
 def _use_propagated_shape(sim_block: dict[str, Any]) -> bool:
     return bool(sim_block.get("inherit_shape") or sim_block.get("shape_propagation"))
+
+
+def _mapping_source(sim_block: dict[str, Any]) -> dict[str, Any]:
+    mapping = sim_block.get("mapping_source") or sim_block.get("provenance") or {}
+    return mapping if isinstance(mapping, dict) else {}

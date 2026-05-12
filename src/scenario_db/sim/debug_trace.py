@@ -176,6 +176,13 @@ def _ip_traces(
                     "format": workload.format,
                     "fps": workload.fps,
                 },
+                "provenance": {
+                    "catalog_source": params.source,
+                    "source_project": params.source_project,
+                    "source_note": params.source_note,
+                    "mapping_source": dict(params.mapping_source or {}),
+                    "is_borrowed": _is_borrowed(params),
+                },
                 "required_clock": {
                     "formula": "max(base_required, manual_clock_mhz, clock_correction_mhz), then align by DVFS domain",
                     "inputs": {
@@ -217,6 +224,12 @@ def _ip_traces(
                 },
                 "power": {
                     "formula": "unit_power_mw_mp * resolution_mp * (set_voltage_mv / 710)^2 * (fps / 30)",
+                    "unit_power_source": {
+                        "catalog_source": params.source,
+                        "source_project": params.source_project,
+                        "mapping_source": dict(params.mapping_source or {}),
+                        "confidence": (params.mapping_source or {}).get("confidence"),
+                    },
                     "inputs": {
                         "unit_power_mw_mp": config.unit_power_mw_mp,
                         "resolution_mp": config.input_resolution_mp,
@@ -263,6 +276,12 @@ def _dvfs_candidates(table: DVFSTable | None, asv_group: int) -> list[dict[str, 
         }
         for level in table.levels
     ]
+
+
+def _is_borrowed(params: Any) -> bool:
+    mapping = getattr(params, "mapping_source", None) or {}
+    confidence = str(mapping.get("confidence") or "").lower()
+    return confidence in {"borrowed", "estimated", "mapped"} or bool(mapping.get("source_ip_ref"))
 
 
 def _dma_traces(

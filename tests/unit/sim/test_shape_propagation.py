@@ -6,7 +6,8 @@ from scenario_db.db.repositories.scenario_graph import CanonicalScenarioGraph
 from scenario_db.db.repositories.variant_resolution import ResolvedScenarioVariant
 from scenario_db.sim.adapter import build_simulation_inputs
 from scenario_db.sim.models import SimulationRunConfig
-from scenario_db.sim.shape_propagation import propagate_shapes
+from scenario_db.sim.runner import run_simulation
+from scenario_db.sim.shape_propagation import propagate_shapes, validate_shape_propagation
 
 
 def test_shape_propagation_carries_sensor_shape_through_otf_and_scale():
@@ -33,6 +34,50 @@ def test_adapter_uses_propagated_shape_for_workloads_and_port_defaults():
     gdc_wdma = next(item for item in inputs.port_transfers if item.node_id == "gdc" and item.port == "GDC_WDMA")
     assert (gdc_wdma.width, gdc_wdma.height) == (1920, 1080)
     assert gdc_wdma.format == "YUV420"
+
+
+def test_shape_propagation_uses_port_specific_output_shapes_for_multi_output_dma():
+    graph = _sensor_graph()
+    graph.variant.node_configs["gdc"]["sim"]["outputs"] = [
+        {"port": "GDC_PREV_WDMA", "port_type": "DMA_WRITE", "width": 1280, "height": 720, "format": "YUV420"},
+        {"port": "GDC_VIDEO_WDMA", "port_type": "DMA_WRITE", "width": 1920, "height": 1080, "format": "YUV422"},
+    ]
+
+    inputs = build_simulation_inputs(graph, SimulationRunConfig(include_timeline=False))
+
+    by_port = {item.port: item for item in inputs.port_transfers if item.node_id == "gdc"}
+    assert (by_port["GDC_PREV_WDMA"].width, by_port["GDC_PREV_WDMA"].height) == (1280, 720)
+    assert by_port["GDC_PREV_WDMA"].format == "YUV420"
+    assert (by_port["GDC_VIDEO_WDMA"].width, by_port["GDC_VIDEO_WDMA"].height) == (1920, 1080)
+    assert by_port["GDC_VIDEO_WDMA"].format == "YUV422"
+
+
+def test_shape_propagation_validation_warns_when_crop_exceeds_input():
+    graph = _sensor_graph()
+    graph.variant.node_configs["gdc"]["sim"]["crop"] = {"width": 8192, "height": 1080}
+    shapes = propagate_shapes(graph)
+
+    warnings = validate_shape_propagation(graph, shapes)
+
+    assert any("gdc.crop.width=8192 exceeds input width" in warning for warning in warnings)
+
+
+def test_mapping_provenance_reaches_debug_trace():
+    graph = _sensor_graph()
+    graph.variant.node_configs["byrp"]["sim"]["mapping_source"] = {
+        "confidence": "borrowed",
+        "source_project": "proj-sm-s947b",
+        "source_ip_ref": "ip-isp-s5e9965",
+        "source_role": "byrp",
+        "scale": 1.0,
+    }
+
+    inputs = build_simulation_inputs(graph, SimulationRunConfig(include_timeline=False, debug_trace=True))
+    result = run_simulation(inputs, dvfs_tables={})
+
+    byrp_trace = next(item for item in result.calculation_trace["ip"] if item["node_id"] == "byrp")
+    assert byrp_trace["provenance"]["is_borrowed"] is True
+    assert byrp_trace["power"]["unit_power_source"]["mapping_source"]["source_role"] == "byrp"
 
 
 def _sensor_graph() -> CanonicalScenarioGraph:

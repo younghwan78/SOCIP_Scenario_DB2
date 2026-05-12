@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class ExplorationSource(BaseModel):
@@ -17,6 +17,16 @@ class ExplorationSource(BaseModel):
     bitwidth: int = 12
     compression: str = "disable"
 
+    @model_validator(mode="after")
+    def _validate_source(self) -> ExplorationSource:
+        if self.width <= 0 or self.height <= 0:
+            raise ValueError("source width/height must be positive")
+        if self.fps <= 0:
+            raise ValueError("source fps must be positive")
+        if self.bitwidth <= 0:
+            raise ValueError("source bitwidth must be positive")
+        return self
+
 
 class ExplorationPort(BaseModel):
     port: str | None = None
@@ -28,6 +38,18 @@ class ExplorationPort(BaseModel):
     compression: str | None = None
     comp_ratio: float | None = None
     llc_enabled: bool | None = None
+
+    @model_validator(mode="after")
+    def _validate_port(self) -> ExplorationPort:
+        if self.width is not None and self.width <= 0:
+            raise ValueError("port width must be positive when provided")
+        if self.height is not None and self.height <= 0:
+            raise ValueError("port height must be positive when provided")
+        if self.bitwidth is not None and self.bitwidth <= 0:
+            raise ValueError("port bitwidth must be positive when provided")
+        if self.comp_ratio is not None and self.comp_ratio <= 0:
+            raise ValueError("port comp_ratio must be positive when provided")
+        return self
 
 
 class ExplorationBlock(BaseModel):
@@ -42,6 +64,20 @@ class ExplorationBlock(BaseModel):
     scale: dict[str, int] | None = None
     output_format: str | None = None
     ip_params: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _validate_block(self) -> ExplorationBlock:
+        for field_name in ("crop", "scale"):
+            value = getattr(self, field_name)
+            if value is None:
+                continue
+            width = value.get("width", value.get("w"))
+            height = value.get("height", value.get("h"))
+            if width is not None and int(width) <= 0:
+                raise ValueError(f"{field_name}.width must be positive")
+            if height is not None and int(height) <= 0:
+                raise ValueError(f"{field_name}.height must be positive")
+        return self
 
 
 class MappingEntry(BaseModel):
@@ -77,6 +113,18 @@ class ExplorationRecipe(BaseModel):
     design_conditions: dict[str, Any] = Field(default_factory=dict)
     tags: list[str] = Field(default_factory=lambda: ["exploration"])
 
+    @model_validator(mode="after")
+    def _validate_recipe(self) -> ExplorationRecipe:
+        if not self.pipeline:
+            raise ValueError("pipeline must contain at least one exploration block")
+        ids = [block.id for block in self.pipeline]
+        duplicates = sorted({item for item in ids if ids.count(item) > 1})
+        if duplicates:
+            raise ValueError(f"duplicate exploration block ids: {duplicates}")
+        if self.source.node_id in set(ids):
+            raise ValueError(f"source node id collides with pipeline block id: {self.source.node_id}")
+        return self
+
 
 class ExplorationCompileResult(BaseModel):
     scenario: dict[str, Any]
@@ -89,6 +137,16 @@ class SweepAxis(BaseModel):
     name: str
     path: str
     values: list[Any]
+
+    @model_validator(mode="after")
+    def _validate_axis(self) -> SweepAxis:
+        if not self.name.strip():
+            raise ValueError("axis name must not be empty")
+        if not self.path.strip():
+            raise ValueError("axis path must not be empty")
+        if not self.values:
+            raise ValueError("axis values must not be empty")
+        return self
 
 
 class ExplorationSweep(BaseModel):

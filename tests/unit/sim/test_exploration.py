@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import yaml
+import pytest
 
+from scenario_db.db.models.capability import IpCatalog
+from scenario_db.db.models.definition import Project
 from scenario_db.models.definition.usecase import Usecase
 from scenario_db.sim.exploration import (
     ExplorationRecipe,
@@ -9,6 +12,7 @@ from scenario_db.sim.exploration import (
     compile_exploration_recipe,
     compile_exploration_sweep,
 )
+from scenario_db.write.service import normalize_import_bundle_payload, validate_import_bundle
 
 
 def test_compile_exploration_recipe_emits_valid_scenario_usecase():
@@ -143,3 +147,90 @@ def test_compile_exploration_sweep_merges_variants_when_pipeline_is_stable():
     assert variants[0]["id"] == "explore-fps-30-fmt-raw"
     assert variants[-1]["design_conditions"]["fps"] == 60.0
     assert result.cases[-1]["axis_values"] == {"fps": 60.0, "fmt": "YUV"}
+
+
+def test_exploration_recipe_validation_rejects_duplicate_blocks():
+    with pytest.raises(ValueError, match="duplicate exploration block ids"):
+        ExplorationRecipe.model_validate(
+            {
+                "id": "bad",
+                "project_ref": "proj-next",
+                "source": {"width": 1920, "height": 1080},
+                "pipeline": [
+                    {"id": "ip0", "template": "isp", "ip_ref": "ip-isp-v12"},
+                    {"id": "ip0", "template": "gdc", "ip_ref": "ip-isp-v12"},
+                ],
+            }
+        )
+
+
+def test_compiled_import_bundle_validates_against_write_import_contract():
+    recipe = ExplorationRecipe.model_validate(
+        {
+            "id": "write-link",
+            "project_ref": "proj-next",
+            "source": {"ip_ref": "ip-sensor", "width": 1920, "height": 1080},
+            "pipeline": [{"id": "ip0", "template": "isp", "ip_ref": "ip-isp-v12"}],
+        }
+    )
+    result = compile_exploration_recipe(recipe)
+    normalized = normalize_import_bundle_payload(result.import_bundle)
+
+    issues = validate_import_bundle(_ImportDb(), normalized)
+
+    assert issues == []
+
+
+class _Query:
+    def __init__(self, rows):
+        self._rows = list(rows)
+
+    def filter_by(self, **kwargs):
+        return _Query(
+            row
+            for row in self._rows
+            if all(getattr(row, key) == value for key, value in kwargs.items())
+        )
+
+    def one_or_none(self):
+        if not self._rows:
+            return None
+        if len(self._rows) > 1:
+            raise AssertionError("fake query expected at most one row")
+        return self._rows[0]
+
+    def all(self):
+        return self._rows
+
+
+class _ImportDb:
+    def __init__(self):
+        self.project = Project(
+            id="proj-next",
+            schema_version="2.2",
+            metadata_={"name": "Next", "soc_ref": "soc-next"},
+            yaml_sha256="sha",
+        )
+        self.ips = [
+            IpCatalog(
+                id="ip-sensor",
+                schema_version="2.2",
+                category="sensor",
+                capabilities={},
+                yaml_sha256="sha",
+            ),
+            IpCatalog(
+                id="ip-isp-v12",
+                schema_version="2.2",
+                category="camera",
+                capabilities={},
+                yaml_sha256="sha",
+            ),
+        ]
+
+    def query(self, model):
+        if model is Project:
+            return _Query([self.project])
+        if model is IpCatalog:
+            return _Query(self.ips)
+        return _Query([])

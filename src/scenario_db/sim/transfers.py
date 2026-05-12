@@ -21,7 +21,7 @@ def port_transfers_for_node(
     for key, default_type in (("inputs", PortType.DMA_READ), ("outputs", PortType.DMA_WRITE)):
         for port in sim_block.get(key) or []:
             width, height = port_size(port)
-            fallback_shape = _port_fallback_shape(default_type, shape) if _use_propagated_shape(sim_block) else None
+            fallback_shape = _port_fallback_shape(default_type, shape, port) if _use_propagated_shape(sim_block) else None
             if (width == 0 or height == 0) and fallback_shape:
                 width, height = fallback_shape.width, fallback_shape.height
             port_type = port_type_for_config(port, default_type)
@@ -48,10 +48,17 @@ def port_transfers_for_node(
     return specs
 
 
-def _port_fallback_shape(default_type: PortType, shape: NodeShape | None) -> SurfaceShape | None:
+def _port_fallback_shape(
+    default_type: PortType,
+    shape: NodeShape | None,
+    port: dict[str, Any],
+) -> SurfaceShape | None:
     if shape is None:
         return None
-    return shape.input if default_type == PortType.DMA_READ else shape.output
+    port_name = port.get("port") or port.get("name") or port.get("port_type") or port.get("type")
+    if default_type == PortType.DMA_READ:
+        return shape.input_port(str(port_name)) or shape.input
+    return shape.output_port(str(port_name)) or shape.output
 
 
 def _use_propagated_shape(sim_block: dict[str, Any]) -> bool:

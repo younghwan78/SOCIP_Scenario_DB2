@@ -26,6 +26,10 @@ class IPSimParams(BaseScenarioModel):
     vdd: str | None = None
     dvfs_group: str | None = None
     max_clock_mhz: float | None = None
+    source: str | None = None
+    source_project: str | None = None
+    source_note: str | None = None
+    mapping_source: dict[str, Any] = Field(default_factory=dict)
 
 
 class PortTransferSpec(BaseScenarioModel):

@@ -146,6 +146,24 @@ Existing production fixtures do not opt in automatically, so current golden
 simulation behavior remains stable unless a scenario explicitly uses
 `inherit_shape` or `shape_propagation`.
 
+## Mapping Provenance
+
+Mapping profiles are part of the simulation result interpretation, not only a
+compile-time convenience. Compiled exploration nodes include:
+
+```yaml
+sim:
+  mapping_source:
+    confidence: borrowed
+    source_ip_ref: ip-isp-s5e9965
+    source_role: byrp
+    scale: 1.0
+```
+
+When debug trace is enabled, this provenance is emitted under each IP trace as
+`provenance` and under `power.unit_power_source`. This lets reviewers distinguish
+native SoC values from borrowed or estimated values before promoting a candidate.
+
 ## Recommended Usage
 
 1. Validate the target SoC fixture contract.
@@ -153,3 +171,20 @@ simulation behavior remains stable unless a scenario explicitly uses
 3. Compile a small recipe and run simulation preview.
 4. Expand into a sweep for burst comparison.
 5. Promote selected candidates into normal variants or save confirmed evidence.
+
+## Sweep Preview Backend
+
+The backend helper `run_exploration_sweep_preview()` compiles a sweep and runs
+each generated case through the existing simulation runner without persisting
+evidence.
+
+Returned data includes:
+
+- case id, scenario id, variant id
+- axis values
+- KPI values: power, BW, HW time, timeline end
+- delta from the first baseline case
+- warnings and feasibility
+
+This keeps burst exploration separate from evidence storage. A later API or UI
+flow should persist only user-selected candidates.

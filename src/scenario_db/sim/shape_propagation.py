@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from scenario_db.db.repositories.scenario_graph import CanonicalScenarioGraph
@@ -37,6 +37,14 @@ class NodeShape:
     node_id: str
     input: SurfaceShape
     output: SurfaceShape
+    input_ports: dict[str, SurfaceShape] = field(default_factory=dict)
+    output_ports: dict[str, SurfaceShape] = field(default_factory=dict)
+
+    def input_port(self, port: str | None) -> SurfaceShape | None:
+        return self.input_ports.get(_port_key(port))
+
+    def output_port(self, port: str | None) -> SurfaceShape | None:
+        return self.output_ports.get(_port_key(port))
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,13 +75,21 @@ def propagate_shapes(graph: CanonicalScenarioGraph) -> PropagatedShapes:
         if not node_id:
             continue
         sim = _node_sim_block(graph, node_id)
-        explicit_input = _first_port_shape(sim.get("inputs") or [], source=f"{node_id}.sim.inputs")
-        explicit_output = _first_port_shape(sim.get("outputs") or [], source=f"{node_id}.sim.outputs")
+        explicit_inputs = _port_shapes(sim.get("inputs") or [], source=f"{node_id}.sim.inputs")
+        explicit_outputs = _port_shapes(sim.get("outputs") or [], source=f"{node_id}.sim.outputs")
+        explicit_input = _first_shape(explicit_inputs)
+        explicit_output = _first_shape(explicit_outputs)
         source_shape = _sensor_source_shape(graph, node)
         current = nodes[node_id]
         input_shape = explicit_input.with_fallback(current.input)
         output_shape = explicit_output.with_fallback(source_shape).with_fallback(current.output)
-        nodes[node_id] = NodeShape(node_id=node_id, input=input_shape, output=output_shape)
+        nodes[node_id] = NodeShape(
+            node_id=node_id,
+            input=input_shape,
+            output=output_shape,
+            input_ports=_merge_port_shapes(current.input_ports, explicit_inputs, input_shape),
+            output_ports=_merge_port_shapes(current.output_ports, explicit_outputs, output_shape),
+        )
 
     # A few passes are enough for DAG-like camera/display topologies and keep
     # this independent from NetworkX for simple unit-test usage.
@@ -99,7 +115,13 @@ def propagate_shapes(graph: CanonicalScenarioGraph) -> PropagatedShapes:
             target_shape = nodes[target]
             merged_input = target_shape.input.with_fallback(transfer_shape)
             transformed_output = _apply_node_transform(graph, target, merged_input).with_fallback(target_shape.output)
-            updated = NodeShape(node_id=target, input=merged_input, output=transformed_output)
+            updated = NodeShape(
+                node_id=target,
+                input=merged_input,
+                output=transformed_output,
+                input_ports=_merge_port_shapes(target_shape.input_ports, {}, merged_input),
+                output_ports=_merge_port_shapes(target_shape.output_ports, {}, transformed_output),
+            )
             if updated != target_shape:
                 nodes[target] = updated
                 changed = True
@@ -112,8 +134,46 @@ def propagate_shapes(graph: CanonicalScenarioGraph) -> PropagatedShapes:
                 node_id=node_id,
                 input=shape.input.with_fallback(design),
                 output=shape.output.with_fallback(design),
+                input_ports=_merge_port_shapes(shape.input_ports, {}, design),
+                output_ports=_merge_port_shapes(shape.output_ports, {}, design),
             )
     return PropagatedShapes(nodes=nodes, buffers=buffers)
+
+
+def validate_shape_propagation(graph: CanonicalScenarioGraph, shapes: PropagatedShapes) -> list[str]:
+    """Return non-blocking shape/crop/scale warnings for opt-in nodes."""
+
+    warnings: list[str] = []
+    for node in graph.pipeline_nodes:
+        node_id = str(node.get("id") or "")
+        sim = _node_sim_block(graph, node_id)
+        if not _shape_opt_in(sim):
+            continue
+        shape = shapes.node(node_id)
+        if shape is None:
+            continue
+        for key in ("crop", "scale"):
+            value = sim.get(key)
+            if not isinstance(value, dict):
+                continue
+            width = _dimension(value, "width", "w")
+            height = _dimension(value, "height", "h")
+            if width is not None and width <= 0:
+                warnings.append(f"{node_id}.{key}.width must be positive for shape propagation.")
+            if height is not None and height <= 0:
+                warnings.append(f"{node_id}.{key}.height must be positive for shape propagation.")
+            if key == "crop" and shape.input.valid_size:
+                if width is not None and width > shape.input.width:
+                    warnings.append(
+                        f"{node_id}.crop.width={width} exceeds input width {shape.input.width}."
+                    )
+                if height is not None and height > shape.input.height:
+                    warnings.append(
+                        f"{node_id}.crop.height={height} exceeds input height {shape.input.height}."
+                    )
+        if not shape.input.valid_size and not shape.output.valid_size:
+            warnings.append(f"{node_id} opted into shape propagation but no input/output shape was resolved.")
+    return warnings
 
 
 def shape_from_port(port: dict[str, Any], *, source: str | None = None) -> SurfaceShape:
@@ -143,6 +203,42 @@ def shape_to_port_defaults(shape: SurfaceShape) -> dict[str, Any]:
     if shape.compression:
         result["compression"] = shape.compression
     return result
+
+
+def _shape_opt_in(sim_block: dict[str, Any]) -> bool:
+    return bool(sim_block.get("inherit_shape") or sim_block.get("shape_propagation"))
+
+
+def _port_shapes(ports: list[dict[str, Any]], *, source: str) -> dict[str, SurfaceShape]:
+    result: dict[str, SurfaceShape] = {}
+    for index, port in enumerate(ports):
+        if not isinstance(port, dict):
+            continue
+        shape = shape_from_port(port, source=f"{source}[{index}]")
+        if shape.valid_size or shape.format:
+            result[_port_key(port.get("port") or port.get("name") or port.get("port_type") or index)] = shape
+    return result
+
+
+def _first_shape(shapes: dict[str, SurfaceShape]) -> SurfaceShape:
+    return next(iter(shapes.values()), SurfaceShape())
+
+
+def _merge_port_shapes(
+    existing: dict[str, SurfaceShape],
+    explicit: dict[str, SurfaceShape],
+    fallback: SurfaceShape,
+) -> dict[str, SurfaceShape]:
+    result = {key: value.with_fallback(fallback) for key, value in existing.items()}
+    for key, value in explicit.items():
+        result[key] = value.with_fallback(fallback)
+    if not result and (fallback.valid_size or fallback.format):
+        result["default"] = fallback
+    return result
+
+
+def _port_key(value: Any) -> str:
+    return str(value or "default").strip().lower()
 
 
 def _initial_buffer_shapes(graph: CanonicalScenarioGraph) -> dict[str, SurfaceShape]:
@@ -247,6 +343,16 @@ def _first_port_shape(ports: list[dict[str, Any]], *, source: str) -> SurfaceSha
         if shape.valid_size or shape.format:
             return shape
     return SurfaceShape()
+
+
+def _dimension(value: dict[str, Any], *keys: str) -> int | None:
+    for key in keys:
+        if value.get(key) is not None:
+            try:
+                return int(value[key])
+            except (TypeError, ValueError):
+                return None
+    return None
 
 
 def _design_shape(graph: CanonicalScenarioGraph) -> SurfaceShape:
