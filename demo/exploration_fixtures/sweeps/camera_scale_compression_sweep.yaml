@@ -1,0 +1,61 @@
+id: camera-scale-compression-sweep
+base_recipe:
+  id: explore-camera-scale-compression
+  scenario_id: uc-explore-camera-scale-compression
+  variant_id: explore
+  project_ref: proj-A-exynos2500
+  soc_ref: soc-exynos2500
+  name: Camera Scale Compression Sweep
+  category: [camera, exploration]
+  source:
+    type: sensor
+    node_id: sensor_src
+    ip_ref: ip-sensor-hp2-projectA
+    width: 4080
+    height: 2296
+    fps: 30
+    format: RAW_BAYER_16
+    bitwidth: 12
+  mapping_profile:
+    id: map-explore-from-projectA-camera
+    source_project_ref: proj-A-exynos2500
+    target_soc_ref: soc-exynos2500
+    role_mappings:
+      gdc_like:
+        source_ip_ref: ip-isp-v12
+        target_ip_ref: ip-isp-v12
+        source_role: gdc_video
+        target_role: gdc_video
+        confidence: borrowed
+        ip_params:
+          hw_name: GDC
+          ppc: 4
+          unit_power_mw_mp: 1.0
+          vdd: VDD_CAM
+          dvfs_group: CAM
+  pipeline:
+    - id: gdc0
+      template: gdc_like
+      selected_mode: Normal
+      inputs:
+        - type: CIN
+      outputs:
+        - type: WDMA
+          port: GDC_WDMA
+          format: YUV420
+          bitwidth: 8
+          compression: COMP_OFF
+      scale:
+        width: 1920
+        height: 1080
+      output_format: YUV420
+axes:
+  - name: scale_width
+    path: pipeline[0].scale.width
+    values: [1920, 2560]
+  - name: scale_height
+    path: pipeline[0].scale.height
+    values: [1080, 1440]
+  - name: compression
+    path: pipeline[0].outputs[0].compression
+    values: [COMP_OFF, COMP_SBWC_LOSSLESS]

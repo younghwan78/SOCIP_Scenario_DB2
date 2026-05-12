@@ -1,0 +1,79 @@
+id: explore-camera-crop-scale-m2m
+scenario_id: uc-explore-camera-crop-scale
+variant_id: crop-scale-fhd30
+project_ref: proj-A-exynos2500
+soc_ref: soc-exynos2500
+name: Camera Crop Scale M2M Exploration
+category: [camera, exploration]
+source:
+  type: sensor
+  node_id: sensor_src
+  ip_ref: ip-sensor-hp2-projectA
+  width: 4080
+  height: 2296
+  fps: 30
+  format: RAW_BAYER_16
+  bitwidth: 12
+  compression: COMP_BAYER_LOSSLESS
+mapping_profile:
+  id: map-explore-from-projectA-camera
+  source_project_ref: proj-A-exynos2500
+  target_soc_ref: soc-exynos2500
+  role_mappings:
+    byrp_like:
+      source_ip_ref: ip-isp-v12
+      target_ip_ref: ip-isp-v12
+      source_role: byrp
+      target_role: byrp
+      confidence: borrowed
+      ip_params:
+        hw_name: BYRP
+        ppc: 4
+        unit_power_mw_mp: 4.34
+        vdd: VDD_CAM
+        dvfs_group: CAM
+    gdc_like:
+      source_ip_ref: ip-isp-v12
+      target_ip_ref: ip-isp-v12
+      source_role: gdc_video
+      target_role: gdc_video
+      confidence: borrowed
+      ip_params:
+        hw_name: GDC
+        ppc: 4
+        unit_power_mw_mp: 1.0
+        vdd: VDD_CAM
+        dvfs_group: CAM
+pipeline:
+  - id: byrp0
+    template: byrp_like
+    selected_mode: Normal
+    inputs:
+      - type: CIN
+    outputs:
+      - type: COUT
+    crop:
+      x: 0
+      y: 0
+      width: 3840
+      height: 2160
+  - id: gdc0
+    template: gdc_like
+    selected_mode: Normal
+    inputs:
+      - type: RDMA
+    outputs:
+      - type: WDMA
+        port: GDC_WDMA
+        format: YUV420
+        bitwidth: 8
+        compression: COMP_SBWC_LOSSLESS
+        comp_ratio: 0.5
+    scale:
+      width: 1920
+      height: 1080
+    output_format: YUV420
+design_conditions:
+  exploration_stage: pre_architecture
+  crop_source: wide_sensor_16_9
+  output_resolution: FHD

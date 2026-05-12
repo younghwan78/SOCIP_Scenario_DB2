@@ -1,0 +1,66 @@
+id: explore-camera-multi-output-fanout
+scenario_id: uc-explore-camera-multi-output
+variant_id: fanout-fhd30
+project_ref: proj-A-exynos2500
+soc_ref: soc-exynos2500
+name: Camera Multi Output Fanout Exploration
+category: [camera, exploration]
+source:
+  type: sensor
+  node_id: sensor_src
+  ip_ref: ip-sensor-hp2-projectA
+  width: 4080
+  height: 2296
+  fps: 30
+  format: RAW_BAYER_16
+  bitwidth: 12
+mapping_profile:
+  id: map-explore-from-projectA-camera
+  source_project_ref: proj-A-exynos2500
+  target_soc_ref: soc-exynos2500
+  role_mappings:
+    yuvp_like:
+      source_ip_ref: ip-isp-v12
+      target_ip_ref: ip-isp-v12
+      source_role: yuvp
+      target_role: yuvp
+      confidence: borrowed
+      ip_params:
+        hw_name: YUVP
+        ppc: 4
+        unit_power_mw_mp: 0.403
+        vdd: VDD_CAM
+        dvfs_group: CAM
+pipeline:
+  - id: yuvp0
+    template: yuvp_like
+    selected_mode: Normal
+    inputs:
+      - type: CIN
+    outputs:
+      - type: WDMA
+        port: PREVIEW_WDMA
+        width: 1280
+        height: 720
+        format: YUV420
+        bitwidth: 8
+        compression: COMP_OFF
+      - type: WDMA
+        port: VIDEO_WDMA
+        width: 1920
+        height: 1080
+        format: YUV420
+        bitwidth: 8
+        compression: COMP_SBWC_LOSSLESS
+        comp_ratio: 0.5
+      - type: WDMA
+        port: ANALYTICS_WDMA
+        width: 960
+        height: 540
+        format: YUV422
+        bitwidth: 10
+        compression: COMP_OFF
+        llc_enabled: true
+design_conditions:
+  exploration_stage: pre_architecture
+  outputs: preview_video_analytics

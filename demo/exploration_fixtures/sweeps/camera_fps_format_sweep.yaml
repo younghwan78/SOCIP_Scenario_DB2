@@ -1,0 +1,59 @@
+id: camera-fps-format-sweep
+base_recipe:
+  id: explore-camera-fps-format
+  scenario_id: uc-explore-camera-fps-format
+  variant_id: explore
+  project_ref: proj-A-exynos2500
+  soc_ref: soc-exynos2500
+  name: Camera FPS Format Sweep
+  category: [camera, exploration]
+  source:
+    type: sensor
+    node_id: sensor_src
+    ip_ref: ip-sensor-hp2-projectA
+    width: 4080
+    height: 2296
+    fps: 30
+    format: RAW_BAYER_16
+    bitwidth: 12
+    compression: COMP_BAYER_LOSSLESS
+  mapping_profile:
+    id: map-explore-from-projectA-camera
+    source_project_ref: proj-A-exynos2500
+    target_soc_ref: soc-exynos2500
+    role_mappings:
+      isp_like:
+        source_ip_ref: ip-isp-v12
+        target_ip_ref: ip-isp-v12
+        source_role: isp0
+        target_role: isp0
+        confidence: borrowed
+        ip_params:
+          hw_name: ISP
+          ppc: 4
+          unit_power_mw_mp: 9.92
+          vdd: VDD_CAM
+          dvfs_group: CAM
+  pipeline:
+    - id: isp0
+      template: isp_like
+      selected_mode: Normal
+      inputs:
+        - type: CIN
+      outputs:
+        - type: WDMA
+          port: ISP_WDMA
+          format: YUV420
+          bitwidth: 8
+          compression: COMP_OFF
+      scale:
+        width: 1920
+        height: 1080
+      output_format: YUV420
+axes:
+  - name: fps
+    path: source.fps
+    values: [30, 60]
+  - name: source_format
+    path: source.format
+    values: [RAW_BAYER_16, RAW_BAYER_12]

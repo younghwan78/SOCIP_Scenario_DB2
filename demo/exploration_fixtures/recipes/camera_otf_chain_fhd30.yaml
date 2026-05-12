@@ -1,0 +1,64 @@
+id: explore-camera-otf-chain-fhd30
+scenario_id: uc-explore-camera-otf-chain
+variant_id: otf-fhd30
+project_ref: proj-A-exynos2500
+soc_ref: soc-exynos2500
+name: Camera OTF Chain FHD30 Exploration
+category: [camera, exploration]
+source:
+  type: sensor
+  node_id: sensor_src
+  ip_ref: ip-sensor-hp2-projectA
+  width: 4000
+  height: 2250
+  fps: 30
+  format: RAW_BAYER_16
+  bitwidth: 12
+  compression: COMP_BAYER_LOSSLESS
+mapping_profile:
+  id: map-explore-from-projectA-camera
+  source_project_ref: proj-A-exynos2500
+  target_soc_ref: soc-exynos2500
+  role_mappings:
+    csis_like:
+      source_ip_ref: ip-csis-v8
+      target_ip_ref: ip-csis-v8
+      source_role: csis
+      target_role: csis
+      confidence: borrowed
+      ip_params:
+        hw_name: CSIS
+        ppc: 8
+        unit_power_mw_mp: 0.21
+        vdd: VDD_CAM
+        dvfs_group: CAM
+    isp_like:
+      source_ip_ref: ip-isp-v12
+      target_ip_ref: ip-isp-v12
+      source_role: isp0
+      target_role: isp0
+      confidence: borrowed
+      ip_params:
+        hw_name: ISP
+        ppc: 4
+        unit_power_mw_mp: 9.92
+        vdd: VDD_CAM
+        dvfs_group: CAM
+pipeline:
+  - id: csis0
+    template: csis_like
+    selected_mode: Normal
+    inputs:
+      - type: CIN
+    outputs:
+      - type: COUT
+  - id: isp_front
+    template: isp_like
+    selected_mode: Normal
+    inputs:
+      - type: CIN
+    outputs:
+      - type: COUT
+design_conditions:
+  exploration_stage: pre_architecture
+  note: OTF-only chain keeps source shape unless downstream crop/scale is added.
