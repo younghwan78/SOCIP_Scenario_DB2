@@ -8,6 +8,7 @@ from scenario_db.sim.external_devices import (
     selected_sensor_mode,
 )
 from scenario_db.sim.models import SimulationInputs, SimulationRunConfig
+from scenario_db.sim.shape_propagation import propagate_shapes
 from scenario_db.sim.timeline_adapter import timeline_edges, timeline_tasks
 from scenario_db.sim.transfers import edge_port_transfers, port_transfers_for_node
 from scenario_db.sim.workloads import build_workload_for_node, node_sim_block
@@ -21,12 +22,21 @@ def build_simulation_inputs(
 
     run_config = config or SimulationRunConfig()
     fps = _fps(graph, run_config)
+    shapes = propagate_shapes(graph)
     workloads: list[IPWorkload] = []
     transfers: list[PortTransferSpec] = []
     warnings: list[str] = []
 
     for node in graph.pipeline_nodes:
-        workload = build_workload_for_node(graph, node, fps=fps, run_config=run_config, warnings=warnings)
+        node_id = str(node.get("id") or "")
+        workload = build_workload_for_node(
+            graph,
+            node,
+            fps=fps,
+            run_config=run_config,
+            warnings=warnings,
+            shape=shapes.node(node_id),
+        )
         if workload is None:
             continue
         workloads.append(workload)
@@ -36,6 +46,7 @@ def build_simulation_inputs(
                 workload.ip_ref,
                 workload.hw_name,
                 node_sim_block(graph, workload.node_id),
+                shape=shapes.node(workload.node_id),
             )
         )
 

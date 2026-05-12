@@ -5,6 +5,7 @@ from typing import Any
 from scenario_db.db.repositories.scenario_graph import CanonicalScenarioGraph
 from scenario_db.sim.graph_edges import edge_source, edge_target, edge_type
 from scenario_db.sim.models import IPWorkload, PortTransferSpec, PortType
+from scenario_db.sim.shape_propagation import NodeShape, SurfaceShape
 from scenario_db.sim.workloads import buffer_size, design_size_for_graph, port_size
 
 
@@ -13,11 +14,16 @@ def port_transfers_for_node(
     ip_ref: str,
     hw_name: str,
     sim_block: dict[str, Any],
+    *,
+    shape: NodeShape | None = None,
 ) -> list[PortTransferSpec]:
     specs: list[PortTransferSpec] = []
     for key, default_type in (("inputs", PortType.DMA_READ), ("outputs", PortType.DMA_WRITE)):
         for port in sim_block.get(key) or []:
             width, height = port_size(port)
+            fallback_shape = _port_fallback_shape(default_type, shape) if _use_propagated_shape(sim_block) else None
+            if (width == 0 or height == 0) and fallback_shape:
+                width, height = fallback_shape.width, fallback_shape.height
             port_type = port_type_for_config(port, default_type)
             specs.append(
                 PortTransferSpec(
@@ -28,9 +34,9 @@ def port_transfers_for_node(
                     port_type=port_type,
                     width=width,
                     height=height,
-                    format=port.get("format"),
-                    bitwidth=int(port.get("bitwidth") or 8),
-                    compression=str(port.get("compression") or port.get("comp") or "disable"),
+                    format=port.get("format") or (fallback_shape.format if fallback_shape else None),
+                    bitwidth=int(port.get("bitwidth") or port.get("bitdepth") or (fallback_shape.bitwidth if fallback_shape else 8) or 8),
+                    compression=str(port.get("compression") or port.get("comp") or (fallback_shape.compression if fallback_shape else None) or "disable"),
                     comp_ratio=float(port.get("comp_ratio") or 1.0),
                     comp_ratio_min=port.get("comp_ratio_min"),
                     comp_ratio_max=port.get("comp_ratio_max"),
@@ -40,6 +46,16 @@ def port_transfers_for_node(
                 )
             )
     return specs
+
+
+def _port_fallback_shape(default_type: PortType, shape: NodeShape | None) -> SurfaceShape | None:
+    if shape is None:
+        return None
+    return shape.input if default_type == PortType.DMA_READ else shape.output
+
+
+def _use_propagated_shape(sim_block: dict[str, Any]) -> bool:
+    return bool(sim_block.get("inherit_shape") or sim_block.get("shape_propagation"))
 
 
 def edge_port_transfers(
@@ -115,4 +131,3 @@ def enabled(value: Any) -> bool:
     if isinstance(value, bool):
         return value
     return str(value).lower() in {"enable", "enabled", "true", "1", "yes"}
-

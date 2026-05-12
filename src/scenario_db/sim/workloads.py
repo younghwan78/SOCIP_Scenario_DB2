@@ -5,6 +5,7 @@ from typing import Any
 from scenario_db.db.repositories.scenario_graph import CanonicalScenarioGraph
 from scenario_db.sim.graph_edges import edge_source, edge_target
 from scenario_db.sim.models import IPSimParams, IPWorkload, SimulationRunConfig
+from scenario_db.sim.shape_propagation import NodeShape
 
 
 def build_workload_for_node(
@@ -14,6 +15,7 @@ def build_workload_for_node(
     fps: float,
     run_config: SimulationRunConfig,
     warnings: list[str],
+    shape: NodeShape | None = None,
 ) -> IPWorkload | None:
     node_id = str(node.get("id") or "")
     ip_ref = node.get("ip_ref")
@@ -35,8 +37,8 @@ def build_workload_for_node(
         role=role,
         warnings=warnings,
     )
-    width, height = workload_size(graph, node_id, sim_block)
-    workload_format = workload_format_for_node(graph, node_id, sim_block)
+    width, height = workload_size(graph, node_id, sim_block, shape=shape)
+    workload_format = workload_format_for_node(graph, node_id, sim_block, shape=shape)
     return IPWorkload(
         node_id=node_id,
         ip_ref=str(ip_ref),
@@ -185,6 +187,8 @@ def workload_size(
     graph: CanonicalScenarioGraph,
     node_id: str,
     sim_block: dict[str, Any],
+    *,
+    shape: NodeShape | None = None,
 ) -> tuple[int, int]:
     if sim_block.get("width") and sim_block.get("height"):
         return int(sim_block["width"]), int(sim_block["height"])
@@ -193,6 +197,10 @@ def workload_size(
             width, height = port_size(port)
             if width > 0 and height > 0:
                 return width, height
+    if _use_propagated_shape(sim_block) and shape is not None:
+        for candidate in (shape.output, shape.input):
+            if candidate.width > 0 and candidate.height > 0:
+                return candidate.width, candidate.height
 
     candidates: list[tuple[int, int]] = []
     buffers = (graph.scenario.pipeline or {}).get("buffers") or {}
@@ -215,6 +223,8 @@ def workload_format_for_node(
     graph: CanonicalScenarioGraph,
     node_id: str,
     sim_block: dict[str, Any],
+    *,
+    shape: NodeShape | None = None,
 ) -> str | None:
     if sim_block.get("format"):
         return str(sim_block["format"])
@@ -222,6 +232,11 @@ def workload_format_for_node(
         for port in sim_block.get(key) or []:
             if port.get("format"):
                 return str(port["format"])
+    if _use_propagated_shape(sim_block) and shape is not None:
+        if shape.output.format:
+            return str(shape.output.format)
+        if shape.input.format:
+            return str(shape.input.format)
     buffers = (graph.scenario.pipeline or {}).get("buffers") or {}
     for edge in graph.pipeline_edges:
         if node_id not in {edge_source(edge), edge_target(edge)}:
@@ -281,3 +296,6 @@ def fallback_hw_name(ip_ref: str) -> str:
         return parts[1].upper()
     return str(ip_ref).upper()
 
+
+def _use_propagated_shape(sim_block: dict[str, Any]) -> bool:
+    return bool(sim_block.get("inherit_shape") or sim_block.get("shape_propagation"))
