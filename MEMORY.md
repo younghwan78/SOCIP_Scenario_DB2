@@ -114,3 +114,53 @@ uv run --group dev pytest tests\unit
   - Clarify readiness severity rules: error/block vs warning.
   - Make SoC-specific default DVFS/power/capability import paths explicit and testable.
   - Keep Exynos2600 camera golden cases as the first regression guard while adding SoC-level validators.
+
+## 2026-05-13 SoC Extensibility And Exploration API Wrap-Up
+
+- SoC extensibility cleanup phase was implemented and committed locally after validating fixture quality/readiness rules:
+  - `src/scenario_db/sim/fixture_contract.py`
+  - `scripts/check_soc_sim_contract.py`
+  - `docs/soc-simulation-contract.md`
+  - `tests/unit/sim/test_fixture_contract.py`
+- Exploration recipe and sweep foundations are now in place:
+  - `src/scenario_db/sim/shape_propagation.py`
+  - `src/scenario_db/sim/exploration.py`
+  - `src/scenario_db/sim/exploration_runner.py`
+  - `scripts/compile_exploration_recipe.py`
+  - `scripts/compile_exploration_sweep.py`
+  - `docs/exploration-simulation-workflow.md`
+- Shape propagation is opt-in through `sim.inherit_shape` / `sim.shape_propagation`. Existing production fixtures are not auto-mutated by this path.
+- Exploration recipes automatically enable inherited shape and support source shape, crop, scale, output format, port-level RDMA/WDMA/CIN/COUT, mapping provenance, and preview-only sweep comparison.
+- Exploration examples were added under `demo/exploration_fixtures`:
+  - camera OTF chain FHD30
+  - camera crop/scale M2M
+  - camera multi-output fanout
+  - codec/display path
+  - camera FPS/format sweep
+  - camera scale/compression sweep
+- Korean usage guide is available at `docs/exploration-fixture-guide-ko.md`.
+- Exploration API contract and endpoints were added:
+  - `docs/exploration-api-contract.md`
+  - `GET /api/v1/exploration/examples`
+  - `GET /api/v1/exploration/examples/{example_id}`
+  - `POST /api/v1/exploration/recipes/compile`
+  - `POST /api/v1/exploration/sweeps/compile`
+  - `POST /api/v1/exploration/sweeps/preview`
+- Exploration API is preview-first. It does not persist evidence; responses should keep `persisted=false` until a later explicit save/promote workflow is implemented.
+- Latest verification before push:
+  - `uv run pytest tests/unit/api/test_exploration.py -q` -> `7 passed`
+  - `uv run pytest tests/unit/api -q` -> `81 passed`
+  - `uv run pytest tests/unit/sim/test_exploration.py tests/unit/sim/test_exploration_runner.py tests/unit/sim/test_exploration_fixtures.py -q` -> `14 passed`
+  - `uv run pytest tests/unit -q` -> `438 passed`
+- Local commits after `a3d9539` were prepared for GitHub push:
+  - `48f1346 Add SoC simulation fixture contract validator`
+  - `2f3253c Add exploration recipe and shape propagation foundation`
+  - `2b1ef99 Complete exploration simulation backend foundations`
+  - `b9fcc88 Add exploration fixture examples`
+  - `4e8500e Document exploration fixture usage in Korean`
+  - `914f8af Add exploration API contract and endpoints`
+- Next likely work:
+  - Add Streamlit Exploration Workbench page using the existing Evidence Dashboard result viewer components.
+  - Add candidate comparison UI for sweep results.
+  - Add explicit save/promote flow only after user confirmation, keeping preview and persisted evidence separated.
+  - Expand API/dashboard tests around exploration examples, compile, and preview result rendering.
