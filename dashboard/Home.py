@@ -73,11 +73,11 @@ apply_app_theme(sidebar_width=288)
 
 render_page_header(
     "ScenarioDB Dashboard",
-    "Mobile SoC multimedia scenario database: import, review, simulation, and architecture viewer.",
-    chips=("Read API", "Write staging", "Simulation", "Viewer"),
+    "Mobile SoC multimedia scenario database: import, review, simulation, exploration, and architecture viewer.",
+    chips=("Read API", "Write staging", "Simulation", "Exploration", "Viewer"),
 )
 
-col1, col2, col3, col4 = st.columns(4)
+col1, col2, col3, col4, col5 = st.columns(5)
 
 with col1:
     st.markdown(
@@ -135,5 +135,19 @@ with col4:
     if st.button("Open Evidence Dashboard", use_container_width=True):
         st.switch_page("pages/4_Evidence_Dashboard.py")
 
+with col5:
+    st.markdown(
+        """
+<div class="home-card">
+  <h3>Exploration Workbench</h3>
+  <p>Load exploration recipes or sweeps, compile candidates, run preview simulations, and compare KPI deltas.</p>
+  <span class="status-ready">Available</span>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+    if st.button("Open Exploration Workbench", use_container_width=True):
+        st.switch_page("pages/5_Exploration_Workbench.py")
+
 st.divider()
-st.caption("ScenarioDB v0.1.0 | Read API, Write API staging, import bundle, and viewer MVP")
+st.caption("ScenarioDB v0.1.0 | Read API, Write API staging, import bundle, simulation, exploration, and viewer MVP")

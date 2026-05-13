@@ -1,0 +1,854 @@
+r"""Architecture exploration workbench for ScenarioDB.
+
+Run from the project virtual environment:
+  uv run --group dashboard streamlit run dashboard/Home.py
+"""
+from __future__ import annotations
+
+import json
+import os
+import sys
+from pathlib import Path
+from typing import Any
+
+import streamlit as st
+import yaml
+from yaml.nodes import MappingNode, Node, ScalarNode, SequenceNode
+
+_root = Path(__file__).resolve().parents[2]
+for path in (_root / "src", _root, _root / "dashboard"):
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
+
+from dashboard.components.exploration_api_client import (
+    compile_exploration_recipe,
+    compile_exploration_sweep,
+    get_exploration_example,
+    list_exploration_examples,
+    preview_exploration_sweep,
+)
+from dashboard.components.exploration_candidate_compare import render_candidate_comparison, selected_candidate
+from dashboard.components.exploration_result_view import render_candidate_detail
+from dashboard.components.table_actions import render_copyable_dataframe
+from dashboard.components.ui_theme import apply_app_theme, render_page_header
+from dashboard.components.viewer_api_client import ViewerApiError
+
+INPUT_TYPE_LABELS = {
+    "single": "Single Design",
+    "batch": "Batch Exploration",
+    "unknown": "Unknown",
+}
+
+
+st.set_page_config(
+    page_title="Exploration Workbench - ScenarioDB",
+    page_icon="",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+st.markdown(
+    """
+<style>
+  footer, #MainMenu { display: none !important; }
+  .block-container { padding-top: 0.85rem !important; max-width: none !important; }
+  .exploration-note {
+    border: 1px solid var(--sdb-primary-border);
+    background: var(--sdb-primary-soft);
+    color: var(--sdb-primary-text);
+    border-radius: var(--sdb-radius);
+    padding: 10px 12px;
+    font-size: 13px;
+    font-weight: 700;
+  }
+</style>
+""",
+    unsafe_allow_html=True,
+)
+apply_app_theme(sidebar_width=288)
+
+
+def _load_examples(base_url: str) -> tuple[list[dict[str, Any]], str | None]:
+    try:
+        return list_exploration_examples(base_url), None
+    except ViewerApiError as exc:
+        return [], _error_text(exc)
+
+
+@st.cache_data(ttl=20)
+def _cached_examples(base_url: str) -> tuple[list[dict[str, Any]], str | None]:
+    return _load_examples(base_url)
+
+
+def _clear_example_cache() -> None:
+    _cached_examples.clear()
+
+
+def _example_label(item: dict[str, Any]) -> str:
+    kind = str(item.get("type") or "example")
+    title = str(item.get("title") or item.get("fixture_id") or item.get("id") or "")
+    tags = item.get("tags") if isinstance(item.get("tags"), list) else []
+    tag_text = ", ".join(str(tag) for tag in tags[:2])
+    return f"{kind}: {title}" + (f" | {tag_text}" if tag_text else "")
+
+
+def _load_selected_example(api_base: str, example_id: str) -> None:
+    try:
+        detail = get_exploration_example(api_base, example_id)
+    except ViewerApiError as exc:
+        _render_api_error("Example load failed", exc)
+        return
+    st.session_state["explore_yaml"] = str(detail.get("yaml_text") or "")
+    st.session_state["explore_loaded_example"] = example_id
+    st.session_state.pop("explore_compile_result", None)
+    st.session_state.pop("explore_preview_result", None)
+
+
+def _load_uploaded_yaml(uploaded_file: Any) -> None:
+    try:
+        text = uploaded_file.getvalue().decode("utf-8")
+    except UnicodeDecodeError:
+        text = uploaded_file.getvalue().decode("utf-8-sig")
+    st.session_state["explore_yaml"] = text
+    st.session_state["explore_loaded_example"] = f"uploaded:{getattr(uploaded_file, 'name', 'yaml')}"
+    st.session_state.pop("explore_compile_result", None)
+    st.session_state.pop("explore_preview_result", None)
+
+
+def _start_blank_yaml() -> None:
+    st.session_state["explore_yaml"] = ""
+    st.session_state["explore_loaded_example"] = "blank"
+    st.session_state.pop("explore_compile_result", None)
+    st.session_state.pop("explore_preview_result", None)
+
+
+def _compile_current(api_base: str, source_yaml: str) -> None:
+    payload = _parse_editor_yaml(source_yaml)
+    if payload is None:
+        return
+    kind = _detect_yaml_kind_from_payload(payload)
+    try:
+        if kind == "batch":
+            result = compile_exploration_sweep(api_base, source_yaml=source_yaml)
+        else:
+            result = compile_exploration_recipe(api_base, source_yaml=source_yaml)
+    except ViewerApiError as exc:
+        _render_api_error("Compile failed", exc, source_yaml=source_yaml)
+        return
+    st.session_state["explore_compile_result"] = result
+    st.session_state["explore_compile_kind"] = kind
+    st.success("Compile completed.")
+
+
+def _preview_current(api_base: str, source_yaml: str, *, timeline_frames: int, debug_trace: bool) -> None:
+    payload = _parse_editor_yaml(source_yaml)
+    if payload is None:
+        return
+    kind = _detect_yaml_kind_from_payload(payload)
+    config = {
+        "include_timeline": True,
+        "timeline_frame_count": int(timeline_frames),
+        "debug_trace": bool(debug_trace),
+        "debug_trace_level": "formula",
+    }
+    try:
+        if kind == "batch":
+            result = preview_exploration_sweep(api_base, source_yaml=source_yaml, include_results=True, config=config)
+        else:
+            result = preview_exploration_sweep(
+                api_base,
+                sweep=_single_recipe_sweep(source_yaml),
+                include_results=True,
+                config=config,
+            )
+    except (ViewerApiError, ValueError) as exc:
+        _render_api_error("Preview failed", exc, source_yaml=source_yaml)
+        return
+    st.session_state["explore_preview_result"] = result
+    st.session_state["explore_preview_kind"] = kind
+    st.success("Preview completed. Results are not saved.")
+
+
+def _single_recipe_sweep(source_yaml: str) -> dict[str, Any]:
+    recipe = _parse_yaml_mapping(source_yaml)
+    recipe_id = str(recipe.get("id") or "inline-recipe")
+    return {
+        "id": f"{recipe_id}-single-preview",
+        "base_recipe": recipe,
+        "axes": [],
+        "merge_variants": True,
+    }
+
+
+def _render_compile_result(result: dict[str, Any], *, kind: str) -> None:
+    st.subheader("Compile Result")
+    if not result:
+        st.info("Load an example or write YAML, then run Compile.")
+        return
+    st.caption(
+        "Compile converts the recipe/sweep YAML into canonical ScenarioDB import-bundle documents. "
+        "It does not write to the DB or save evidence."
+    )
+    generated = result.get("import_bundle", {}).get("import_report", {}).get("generated", {})
+    persisted = bool(result.get("persisted", False))
+    doc_count = len(result.get("import_bundle", {}).get("documents") or [])
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Saved to DB", "yes" if persisted else "no")
+    c1.caption("No means this is a preview/compile result only.")
+    c2.metric("Generated Documents", doc_count)
+    c2.caption("Canonical ScenarioDB YAML documents generated for import review.")
+    c3.metric("Candidates", len(result.get("cases") or []))
+    c3.caption("Batch candidates generated from axes. Single Design compile can be 0 here.")
+    c4.metric("Warnings", len(result.get("warnings") or []))
+    c4.caption("Warnings need review, but do not always block preview.")
+
+    help_tab, summary_tab, topology_tab, mapping_tab, raw_tab = st.tabs(["What this means", "Summary", "Topology", "Mapping Provenance", "Raw Bundle"])
+    with help_tab:
+        _render_compile_help(kind=kind, result=result)
+    with summary_tab:
+        render_copyable_dataframe(_compile_summary_rows(result, kind=kind), key="explore_compile_summary", use_container_width=True, hide_index=True)
+        warnings = result.get("warnings") if isinstance(result.get("warnings"), list) else []
+        if warnings:
+            st.warning("\n".join(f"- {item}" for item in warnings))
+        if generated:
+            st.caption(f"Generated: {generated}")
+    with topology_tab:
+        _render_topology_summary(result)
+    with mapping_tab:
+        rows = _mapping_rows(result)
+        if rows:
+            render_copyable_dataframe(rows, key="explore_mapping_provenance", use_container_width=True, hide_index=True)
+        else:
+            st.info("No mapping provenance is available for this compile result.")
+    with raw_tab:
+        bundle = result.get("import_bundle") or {}
+        st.download_button(
+            "Download import bundle JSON",
+            data=json.dumps(bundle, indent=2, ensure_ascii=False, default=str).encode("utf-8"),
+            file_name="exploration-import-bundle.json",
+            mime="application/json",
+            use_container_width=True,
+        )
+        st.json(bundle)
+
+
+def _render_preview_result(preview: dict[str, Any]) -> None:
+    st.subheader("Candidate Comparison")
+    if not preview:
+        st.info("Run Simulation to compare candidates. Preview results are not persisted.")
+        return
+    st.markdown('<div class="exploration-note">Preview-only result. No scenario variant or evidence is saved from this page yet.</div>', unsafe_allow_html=True)
+    with st.expander("What is Candidate Comparison?", expanded=False):
+        st.markdown(
+            """
+- Each row is one candidate generated from the current YAML.
+- The first candidate is used as the baseline.
+- `delta_*` columns mean `candidate value - baseline value`.
+- Lower power, bandwidth, and timing values are generally better.
+- `warning_count` means mapping or metadata needs review before trusting the result.
+- Selecting a candidate updates the detail viewer below.
+"""
+        )
+    selected_id = render_candidate_comparison(preview, key_prefix="explore")
+    candidate = selected_candidate(preview, selected_id)
+    if not candidate:
+        return
+    st.divider()
+    render_candidate_detail(candidate, key_prefix=f"explore_{candidate.get('case_id', 'candidate')}")
+    st.divider()
+    c1, c2, c3 = st.columns(3)
+    c1.button("Promote selected to Variant", disabled=True, use_container_width=True, help="Promote API will be added in a later phase.")
+    c2.button("Save selected as Evidence", disabled=True, use_container_width=True, help="Evidence save is intentionally explicit and not part of the preview API.")
+    c3.download_button(
+        "Download selected candidate JSON",
+        data=json.dumps(candidate, indent=2, ensure_ascii=False, default=str).encode("utf-8"),
+        file_name=f"{candidate.get('case_id', 'candidate')}.json",
+        mime="application/json",
+        use_container_width=True,
+    )
+
+
+def _compile_summary_rows(result: dict[str, Any], *, kind: str) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    documents = result.get("import_bundle", {}).get("documents") or []
+    for doc in documents:
+        if not isinstance(doc, dict):
+            continue
+        pipeline = doc.get("pipeline") if isinstance(doc.get("pipeline"), dict) else {}
+        rows.append(
+            {
+                "kind": kind,
+                "scenario_id": doc.get("id"),
+                "project_ref": doc.get("project_ref"),
+                "variants": len(doc.get("variants") or []),
+                "nodes": len(pipeline.get("nodes") or []),
+                "edges": len(pipeline.get("edges") or []),
+                "buffers": len(pipeline.get("buffers") or {}),
+            }
+        )
+    if not rows and result.get("scenario"):
+        scenario = result["scenario"]
+        pipeline = scenario.get("pipeline") if isinstance(scenario.get("pipeline"), dict) else {}
+        rows.append(
+            {
+                "kind": kind,
+                "scenario_id": scenario.get("id"),
+                "project_ref": scenario.get("project_ref"),
+                "variants": len(scenario.get("variants") or []),
+                "nodes": len(pipeline.get("nodes") or []),
+                "edges": len(pipeline.get("edges") or []),
+                "buffers": len(pipeline.get("buffers") or {}),
+            }
+        )
+    return rows
+
+
+def _mapping_rows(result: dict[str, Any]) -> list[dict[str, Any]]:
+    rows = []
+    if isinstance(result.get("mapping_trace"), list):
+        rows.extend(row for row in result["mapping_trace"] if isinstance(row, dict))
+    for case in result.get("cases") or []:
+        if not isinstance(case, dict):
+            continue
+        for row in case.get("mapping_trace") or []:
+            if isinstance(row, dict):
+                rows.append({"case_id": case.get("case_id"), **row})
+    return rows
+
+
+def _error_text(exc: BaseException) -> str:
+    if isinstance(exc, ViewerApiError) and exc.body:
+        return f"{exc}\n{exc.body}"
+    return str(exc)
+
+
+def _render_api_error(title: str, exc: BaseException, *, source_yaml: str | None = None) -> None:
+    st.error(f"{title}: {exc}")
+    body = exc.body if isinstance(exc, ViewerApiError) else None
+    detail = _api_error_detail(body, source_yaml=source_yaml)
+    if detail:
+        st.markdown("**Details**")
+        for line in detail:
+            if "\n" in line:
+                first, rest = line.split("\n", 1)
+                st.write(f"- {first}")
+                st.code(rest, language="yaml")
+            else:
+                st.write(f"- {line}")
+    elif body:
+        st.code(body, language="json")
+
+
+def _api_error_detail(body: str | None, *, source_yaml: str | None = None) -> list[str]:
+    if not body:
+        return []
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError:
+        return [body]
+    detail = payload.get("detail") if isinstance(payload, dict) else payload
+    return _flatten_error_detail(detail, source_yaml=source_yaml)
+
+
+def _flatten_error_detail(detail: Any, *, source_yaml: str | None = None) -> list[str]:
+    if detail is None:
+        return []
+    if isinstance(detail, str):
+        return [detail]
+    if isinstance(detail, list):
+        lines: list[str] = []
+        for item in detail:
+            lines.extend(_flatten_error_detail(item, source_yaml=source_yaml))
+        return lines
+    if isinstance(detail, dict):
+        location = detail.get("loc")
+        message = detail.get("msg") or detail.get("message") or detail.get("detail")
+        if location or message:
+            loc_path = _clean_error_location(location)
+            loc_text = ".".join(str(part) for part in loc_path)
+            line = _line_for_yaml_path(source_yaml, loc_path) if source_yaml else None
+            prefix = f"Line {line}: " if line else ""
+            context = f"\n{_line_context(source_yaml, line)}" if source_yaml and line else ""
+            message_text = f"{loc_text}: {message}" if loc_text else str(message)
+            hint = _schema_hint(loc_path, str(message or ""))
+            hint_text = f" Hint: {hint}" if hint else ""
+            return [f"{prefix}{message_text}{hint_text}{context}"]
+        return [json.dumps(detail, ensure_ascii=False, sort_keys=True, default=str)]
+    return [str(detail)]
+
+
+def _render_compile_help(*, kind: str, result: dict[str, Any]) -> None:
+    doc_count = len(result.get("import_bundle", {}).get("documents") or [])
+    case_count = len(result.get("cases") or [])
+    persisted = bool(result.get("persisted", False))
+    kind_label = INPUT_TYPE_LABELS.get(kind, kind)
+    st.markdown(
+        f"""
+- **Input Type**: `{kind_label}` is detected from the YAML content.
+- **Saved to DB**: `{"yes" if persisted else "no"}` means whether compile wrote anything to the database. For this Workbench it should normally be `no`.
+- **Generated Documents**: `{doc_count}` means how many canonical ScenarioDB documents were generated. Usually this is one `scenario.usecase` document containing one or more variants.
+- **Candidates**: `{case_count}` means how many Batch Exploration cases were expanded from axes. A Single Design compile may show `0` because it is not a batch comparison.
+- **Warnings**: metadata or mapping issues that should be reviewed before treating a result as reliable.
+"""
+    )
+    if kind == "single":
+        st.info("Single Design compile produces one scenario document with one variant candidate. Use Run Simulation to simulate it as a one-case batch.")
+    else:
+        st.info("Batch Exploration compile expands axes into candidate variants. Run Simulation to execute and compare those candidates.")
+
+
+def _render_topology_summary(result: dict[str, Any]) -> None:
+    nodes, edges, buffers = _topology_rows(result)
+    scenario = _first_scenario_document(result)
+    edge_counts: dict[str, int] = {}
+    for edge in edges:
+        edge_type = str(edge.get("type") or "unknown")
+        edge_counts[edge_type] = edge_counts.get(edge_type, 0) + 1
+    st.caption(
+        "Text topology from the compiled scenario document. This is shown before DB import so it can be used for debugging generated nodes, links, and buffers."
+    )
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Nodes", len(nodes))
+    c2.metric("Edges", len(edges))
+    c3.metric("Buffers", len(buffers))
+    c4.metric("OTF/M2M/vOTF", f"{edge_counts.get('OTF', 0)}/{edge_counts.get('M2M', 0)}/{edge_counts.get('vOTF', 0)}")
+    port_flow = _port_flow_text(scenario)
+    if port_flow:
+        st.markdown("**Port Flow**")
+        st.caption("Continuous flow showing which IP port writes/reads each connection. M2M/vOTF boundaries show the buffer between writer and reader ports.")
+        st.code(port_flow, language="text")
+    buffer_usage = _buffer_usage_rows(scenario)
+    if buffer_usage:
+        st.markdown("**Buffer Usage**")
+        render_copyable_dataframe(buffer_usage, key="explore_topology_buffer_usage", use_container_width=True, hide_index=True)
+    if nodes:
+        st.markdown("**Nodes**")
+        render_copyable_dataframe(nodes, key="explore_topology_nodes", use_container_width=True, hide_index=True)
+    if edges:
+        st.markdown("**Edges**")
+        render_copyable_dataframe(edges, key="explore_topology_edges", use_container_width=True, hide_index=True)
+    if buffers:
+        st.markdown("**Buffers**")
+        render_copyable_dataframe(buffers, key="explore_topology_buffers", use_container_width=True, hide_index=True)
+
+
+def _topology_rows(result: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    scenario = _first_scenario_document(result)
+    pipeline = scenario.get("pipeline") if isinstance(scenario.get("pipeline"), dict) else {}
+    nodes = [
+        {
+            "node_id": row.get("id"),
+            "role": row.get("role"),
+            "ip_ref": row.get("ip_ref"),
+            "instance_index": row.get("instance_index"),
+        }
+        for row in pipeline.get("nodes") or []
+        if isinstance(row, dict)
+    ]
+    edges = [
+        {
+            "from": row.get("from"),
+            "to": row.get("to"),
+            "type": row.get("type"),
+            "buffer": row.get("buffer"),
+        }
+        for row in pipeline.get("edges") or []
+        if isinstance(row, dict)
+    ]
+    buffers_source = pipeline.get("buffers") if isinstance(pipeline.get("buffers"), dict) else {}
+    buffers = [
+        {
+            "buffer_id": buffer_id,
+            "size": row.get("size"),
+            "format": row.get("format"),
+            "bitdepth": row.get("bitdepth"),
+            "compression": row.get("compression"),
+        }
+        for buffer_id, row in buffers_source.items()
+        if isinstance(row, dict)
+    ]
+    return nodes, edges, buffers
+
+
+def _first_scenario_document(result: dict[str, Any]) -> dict[str, Any]:
+    if isinstance(result.get("scenario"), dict):
+        return result["scenario"]
+    documents = result.get("import_bundle", {}).get("documents") or []
+    for doc in documents:
+        if isinstance(doc, dict) and doc.get("kind") == "scenario.usecase":
+            return doc
+    return documents[0] if documents and isinstance(documents[0], dict) else {}
+
+
+def _port_flow_text(scenario: dict[str, Any]) -> str:
+    pipeline = scenario.get("pipeline") if isinstance(scenario.get("pipeline"), dict) else {}
+    edges = [edge for edge in pipeline.get("edges") or [] if isinstance(edge, dict)]
+    if not edges:
+        return ""
+    nodes = {str(node.get("id")): node for node in pipeline.get("nodes") or [] if isinstance(node, dict) and node.get("id")}
+    buffers = pipeline.get("buffers") if isinstance(pipeline.get("buffers"), dict) else {}
+    node_configs = _node_configs(scenario)
+    ordered_edges = _ordered_edges(edges)
+    lines: list[str] = []
+    for index, edge in enumerate(ordered_edges, start=1):
+        source = str(edge.get("from") or "")
+        target = str(edge.get("to") or "")
+        edge_type = str(edge.get("type") or "unknown")
+        source_port = _node_port(source, "output", edge_type=edge_type, node_configs=node_configs, source_node=True)
+        target_port = _node_port(target, "input", edge_type=edge_type, node_configs=node_configs, source_node=False)
+        source_label = _node_port_label(source, source_port, nodes)
+        target_label = _node_port_label(target, target_port, nodes)
+        if edge_type == "OTF":
+            lines.append(f"{index:02d}. {source_label} -- OTF --> {target_label}")
+            continue
+        buffer_id = str(edge.get("buffer") or "")
+        buffer_text = _buffer_label(buffer_id, buffers.get(buffer_id) if buffer_id else None)
+        lines.append(f"{index:02d}. {source_label} -- {edge_type} write --> {buffer_text} -- read --> {target_label}")
+    return "\n".join(lines)
+
+
+def _buffer_usage_rows(scenario: dict[str, Any]) -> list[dict[str, Any]]:
+    pipeline = scenario.get("pipeline") if isinstance(scenario.get("pipeline"), dict) else {}
+    edges = [edge for edge in pipeline.get("edges") or [] if isinstance(edge, dict)]
+    nodes = {str(node.get("id")): node for node in pipeline.get("nodes") or [] if isinstance(node, dict) and node.get("id")}
+    buffers = pipeline.get("buffers") if isinstance(pipeline.get("buffers"), dict) else {}
+    node_configs = _node_configs(scenario)
+    rows: list[dict[str, Any]] = []
+    for edge in _ordered_edges(edges):
+        buffer_id = edge.get("buffer")
+        if not buffer_id:
+            continue
+        source = str(edge.get("from") or "")
+        target = str(edge.get("to") or "")
+        edge_type = str(edge.get("type") or "unknown")
+        buffer = buffers.get(str(buffer_id)) if isinstance(buffers.get(str(buffer_id)), dict) else {}
+        rows.append(
+            {
+                "buffer_id": buffer_id,
+                "edge_type": edge_type,
+                "writer": _node_port_label(source, _node_port(source, "output", edge_type=edge_type, node_configs=node_configs, source_node=True), nodes),
+                "reader": _node_port_label(target, _node_port(target, "input", edge_type=edge_type, node_configs=node_configs, source_node=False), nodes),
+                "size": buffer.get("size"),
+                "format": buffer.get("format"),
+                "bitdepth": buffer.get("bitdepth"),
+                "compression": buffer.get("compression"),
+            }
+        )
+    return rows
+
+
+def _ordered_edges(edges: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    remaining = list(edges)
+    targets = {str(edge.get("to")) for edge in remaining if edge.get("to") is not None}
+    current = next((str(edge.get("from")) for edge in remaining if edge.get("from") is not None and str(edge.get("from")) not in targets), None)
+    ordered: list[dict[str, Any]] = []
+    while remaining and current is not None:
+        next_edge = next((edge for edge in remaining if str(edge.get("from")) == current), None)
+        if next_edge is None:
+            break
+        ordered.append(next_edge)
+        remaining.remove(next_edge)
+        current = str(next_edge.get("to")) if next_edge.get("to") is not None else None
+    ordered.extend(remaining)
+    return ordered
+
+
+def _node_configs(scenario: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    variants = scenario.get("variants") if isinstance(scenario.get("variants"), list) else []
+    first_variant = variants[0] if variants and isinstance(variants[0], dict) else {}
+    configs = first_variant.get("node_configs") if isinstance(first_variant.get("node_configs"), dict) else {}
+    return {str(node_id): config for node_id, config in configs.items() if isinstance(config, dict)}
+
+
+def _node_port(
+    node_id: str,
+    direction: str,
+    *,
+    edge_type: str,
+    node_configs: dict[str, dict[str, Any]],
+    source_node: bool,
+) -> str:
+    config = node_configs.get(node_id) or {}
+    sim = config.get("sim") if isinstance(config.get("sim"), dict) else {}
+    key = "outputs" if direction == "output" else "inputs"
+    ports = [port for port in sim.get(key) or [] if isinstance(port, dict)]
+    if not ports:
+        if direction == "output":
+            return "COUT" if source_node or edge_type in {"OTF", "vOTF"} else "WDMA"
+        return "CIN" if edge_type == "OTF" else "RDMA"
+    preferred = _preferred_port_type(direction, edge_type)
+    for port in ports:
+        if str(port.get("port_type") or "") == preferred:
+            return str(port.get("port") or preferred)
+    return str(ports[0].get("port") or ports[0].get("port_type") or ("output" if direction == "output" else "input"))
+
+
+def _preferred_port_type(direction: str, edge_type: str) -> str:
+    if edge_type == "OTF":
+        return "OTF_OUT" if direction == "output" else "OTF_IN"
+    if edge_type == "vOTF" and direction == "output":
+        return "OTF_OUT"
+    return "DMA_WRITE" if direction == "output" else "DMA_READ"
+
+
+def _node_port_label(node_id: str, port: str, nodes: dict[str, dict[str, Any]]) -> str:
+    node = nodes.get(node_id) or {}
+    role = node.get("role")
+    ip_ref = node.get("ip_ref")
+    tags = " | ".join(str(item) for item in (role, ip_ref) if item)
+    return f"{node_id}.{port}" + (f" [{tags}]" if tags else "")
+
+
+def _buffer_label(buffer_id: str, buffer: Any) -> str:
+    if not buffer_id:
+        return "BUFFER: <unspecified>"
+    if not isinstance(buffer, dict):
+        return f"BUFFER: {buffer_id}"
+    parts = []
+    for key in ("format", "size", "compression"):
+        value = buffer.get(key)
+        if value not in (None, "", []):
+            parts.append(str(value))
+    return f"BUFFER: {buffer_id}" + (f" [{', '.join(parts)}]" if parts else "")
+
+
+def _parse_editor_yaml(source_yaml: str) -> dict[str, Any] | None:
+    try:
+        return _parse_yaml_mapping(source_yaml)
+    except yaml.YAMLError as exc:
+        _render_yaml_parse_error(exc, source_yaml)
+    except ValueError as exc:
+        st.error(str(exc))
+    return None
+
+
+def _parse_yaml_mapping(source_yaml: str) -> dict[str, Any]:
+    try:
+        payload = yaml.safe_load(source_yaml)
+    except yaml.YAMLError:
+        raise
+    if not isinstance(payload, dict):
+        raise ValueError("Exploration YAML must be a mapping.")
+    return payload
+
+
+def _render_yaml_parse_error(exc: yaml.YAMLError, source_yaml: str) -> None:
+    mark = getattr(exc, "problem_mark", None)
+    if mark is None:
+        st.error(f"YAML parse error: {exc}")
+        return
+    line = int(mark.line) + 1
+    column = int(mark.column) + 1
+    st.error(f"YAML parse error at line {line}, column {column}: {getattr(exc, 'problem', exc)}")
+    st.code(_line_context(source_yaml, line, pointer_column=column), language="yaml")
+
+
+def _detect_yaml_kind(source_yaml: str) -> str:
+    try:
+        payload = yaml.safe_load(source_yaml) if source_yaml.strip() else None
+    except yaml.YAMLError:
+        return "unknown"
+    return _detect_yaml_kind_from_payload(payload)
+
+
+def _detect_yaml_kind_from_payload(payload: Any) -> str:
+    if isinstance(payload, dict) and isinstance(payload.get("base_recipe"), dict):
+        return "batch"
+    if isinstance(payload, dict) and ("source" in payload or "pipeline" in payload):
+        return "single"
+    return "unknown"
+
+
+def _clean_error_location(location: Any) -> list[Any]:
+    if isinstance(location, list):
+        parts = location
+    elif isinstance(location, tuple):
+        parts = list(location)
+    elif location:
+        parts = [location]
+    else:
+        parts = []
+    return [part for part in parts if part not in {"body", "source_yaml", "recipe", "sweep"}]
+
+
+def _schema_hint(loc_path: list[Any], message: str) -> str | None:
+    if loc_path == ["base_recipe"] and "required" in message.lower():
+        return "Batch Exploration YAML needs top-level base_recipe. If this is one candidate, use Single Design YAML with source and pipeline."
+    if loc_path == ["pipeline"] and "required" in message.lower():
+        return "Single Design YAML needs a pipeline list."
+    if loc_path == ["source"] and "required" in message.lower():
+        return "Single Design YAML needs source width/height/fps information."
+    return None
+
+
+def _line_for_yaml_path(source_yaml: str | None, path: list[Any]) -> int | None:
+    if not source_yaml:
+        return None
+    line_map = _yaml_line_map(source_yaml)
+    if not line_map:
+        return None
+    normalized = tuple(str(part) for part in path)
+    current = normalized
+    while current:
+        if current in line_map:
+            return line_map[current]
+        current = current[:-1]
+    return 1
+
+
+def _yaml_line_map(source_yaml: str) -> dict[tuple[str, ...], int]:
+    try:
+        root = yaml.compose(source_yaml)
+    except yaml.YAMLError:
+        return {}
+    result: dict[tuple[str, ...], int] = {}
+    if root is not None:
+        _walk_yaml_node(root, (), result)
+    return result
+
+
+def _walk_yaml_node(node: Node, path: tuple[str, ...], result: dict[tuple[str, ...], int]) -> None:
+    if path:
+        result.setdefault(path, node.start_mark.line + 1)
+    if isinstance(node, MappingNode):
+        for key_node, value_node in node.value:
+            if not isinstance(key_node, ScalarNode):
+                continue
+            key = str(key_node.value)
+            child_path = (*path, key)
+            result[child_path] = key_node.start_mark.line + 1
+            _walk_yaml_node(value_node, child_path, result)
+    elif isinstance(node, SequenceNode):
+        for index, child in enumerate(node.value):
+            child_path = (*path, str(index))
+            result[child_path] = child.start_mark.line + 1
+            _walk_yaml_node(child, child_path, result)
+
+
+def _line_context(source_yaml: str | None, line: int | None, *, radius: int = 2, pointer_column: int | None = None) -> str:
+    if not source_yaml or not line:
+        return ""
+    lines = source_yaml.splitlines()
+    start = max(1, line - radius)
+    end = min(len(lines), line + radius)
+    width = len(str(end))
+    context = []
+    for line_no in range(start, end + 1):
+        prefix = ">" if line_no == line else " "
+        context.append(f"{prefix} {line_no:{width}d} | {lines[line_no - 1]}")
+        if pointer_column and line_no == line:
+            context.append(f"  {' ' * width} | {' ' * max(pointer_column - 1, 0)}^")
+    return "\n".join(context)
+
+
+def _input_panel_visible() -> bool:
+    return bool(st.session_state.get("explore_input_panel_visible", True))
+
+
+def _toggle_input_panel() -> None:
+    st.session_state["explore_input_panel_visible"] = not _input_panel_visible()
+
+
+render_page_header(
+    "Exploration Workbench",
+    "Compile recipe/sweep YAML, run preview-only simulations, compare candidates, and inspect selected simulation details.",
+    chips=("Preview only", "Candidate compare", "No auto-save"),
+)
+
+with st.sidebar:
+    st.subheader("Exploration Context")
+    api_base = st.text_input(
+        "API Base",
+        value=os.environ.get("SCENARIODB_API_BASE", "http://127.0.0.1:18000/api/v1"),
+        key="explore_api_base",
+    )
+    if st.button("Refresh examples", use_container_width=True):
+        _clear_example_cache()
+    examples, examples_error = _cached_examples(api_base)
+    if examples_error:
+        st.error(examples_error)
+    example_ids = [str(item.get("id")) for item in examples if item.get("id")]
+    example_map = {str(item.get("id")): item for item in examples if item.get("id")}
+    if example_ids:
+        if st.session_state.get("explore_example_id") not in example_ids:
+            st.session_state["explore_example_id"] = example_ids[0]
+        selected_example_id = st.selectbox(
+            "Example",
+            example_ids,
+            key="explore_example_id",
+            format_func=lambda value: _example_label(example_map.get(str(value), {"id": value})),
+        )
+        if st.button("Load selected example", type="primary", use_container_width=True):
+            _load_selected_example(api_base, selected_example_id)
+    else:
+        st.info("No exploration examples are available from the API.")
+
+    uploaded_yaml = st.file_uploader(
+        "Upload Exploration YAML",
+        type=["yaml", "yml"],
+        key="explore_yaml_upload",
+        help="Uploads the selected browser-side YAML into the editor. The file is not saved by the Workbench.",
+    )
+    if uploaded_yaml is not None and st.button("Load uploaded YAML", use_container_width=True):
+        _load_uploaded_yaml(uploaded_yaml)
+    if st.button("Start blank YAML", use_container_width=True):
+        _start_blank_yaml()
+
+    st.divider()
+    st.subheader("Preview Options")
+    timeline_frames = st.number_input("Timeline Frames", min_value=1, max_value=16, value=4, step=1)
+    debug_trace = st.checkbox("Debug calculation trace", value=True)
+
+if "explore_kind" not in st.session_state:
+    st.session_state["explore_kind"] = "sweep"
+if "explore_yaml" not in st.session_state:
+    st.session_state["explore_yaml"] = ""
+
+input_visible = _input_panel_visible()
+toolbar_col, _spacer_col = st.columns([0.18, 0.82])
+with toolbar_col:
+    st.button(
+        "Hide Exploration YAML" if input_visible else "Show Exploration YAML",
+        key="explore_input_panel_toggle",
+        on_click=_toggle_input_panel,
+        use_container_width=True,
+        help="Hide the YAML input form to give candidate comparison and details the full dashboard width.",
+    )
+
+source_yaml_current = str(st.session_state.get("explore_yaml") or "")
+detected_kind = _detect_yaml_kind(source_yaml_current)
+kind = detected_kind if detected_kind != "unknown" else str(st.session_state.get("explore_compile_kind") or "single")
+
+if input_visible:
+    input_col, result_col = st.columns([0.85, 1.45], gap="large")
+
+    with input_col:
+        st.subheader("Exploration YAML")
+        st.caption("Load an example, upload a YAML file, or paste YAML directly. Compile and simulation use the current editor content.")
+        source_yaml = st.text_area(
+            "Exploration YAML",
+            key="explore_yaml",
+            height=520,
+            placeholder="Load an example, upload a YAML file, or paste Exploration YAML.",
+        )
+        detected_kind = _detect_yaml_kind(source_yaml)
+        kind = detected_kind if detected_kind != "unknown" else "single"
+        st.info(f"Detected input type: {INPUT_TYPE_LABELS.get(detected_kind, 'Unknown')}")
+        compile_col, preview_col = st.columns(2)
+        if compile_col.button("Compile", type="primary", use_container_width=True, disabled=not bool(source_yaml.strip())):
+            _compile_current(api_base, source_yaml)
+        if preview_col.button("Run Simulation", use_container_width=True, disabled=not bool(source_yaml.strip())):
+            _preview_current(api_base, source_yaml, timeline_frames=timeline_frames, debug_trace=debug_trace)
+        st.caption("Single Design simulation is wrapped as a one-case Batch Exploration. Compile/simulation responses remain in memory and are not persisted.")
+
+    result_container = result_col
+else:
+    st.caption("Exploration YAML input is hidden. Use Show Exploration YAML to edit YAML or run another simulation.")
+    result_container = st.container()
+
+with result_container:
+    top_tab, preview_tab = st.tabs(["Compile", "Preview Results"])
+    with top_tab:
+        _render_compile_result(st.session_state.get("explore_compile_result") or {}, kind=kind)
+    with preview_tab:
+        _render_preview_result(st.session_state.get("explore_preview_result") or {})

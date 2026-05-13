@@ -61,7 +61,6 @@ def apply_app_theme(*, sidebar_width: int = 288) -> None:
   }}
 
   div[data-testid="collapsedControl"] button,
-  section[data-testid="stSidebar"] button:not(:has(p)),
   button[title="Show sidebar"],
   button[title="Hide sidebar"],
   button[aria-label="Show sidebar"],
@@ -76,7 +75,6 @@ def apply_app_theme(*, sidebar_width: int = 288) -> None:
     opacity: 1 !important;
   }}
 
-  section[data-testid="stSidebar"] button:not(:has(p)):hover,
   div[data-testid="collapsedControl"] button:hover,
   button[title="Show sidebar"]:hover,
   button[title="Hide sidebar"]:hover,
@@ -85,12 +83,6 @@ def apply_app_theme(*, sidebar_width: int = 288) -> None:
     background: var(--sdb-primary-soft) !important;
     border-color: var(--sdb-primary-border) !important;
     color: var(--sdb-primary-text) !important;
-  }}
-
-  section[data-testid="stSidebar"] button:not(:has(p)) {{
-    position: fixed !important;
-    top: 14px !important;
-    left: {max(8, sidebar_width - 44)}px !important;
   }}
 
   div[data-testid="collapsedControl"] {{
