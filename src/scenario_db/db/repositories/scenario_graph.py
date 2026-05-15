@@ -168,7 +168,7 @@ def _load_graph_with_variant(
     )
     gate_rules = db.query(GateRule).all()
 
-    return CanonicalScenarioGraph(
+    graph = CanonicalScenarioGraph(
         scenario=scenario,
         variant=variant,
         project=project,
@@ -181,6 +181,74 @@ def _load_graph_with_variant(
         reviews=reviews,
         gate_rules=gate_rules,
     )
+    _apply_sensor_mode_size_overrides(graph)
+    return graph
+
+
+def _apply_sensor_mode_size_overrides(graph: CanonicalScenarioGraph) -> None:
+    """Fill sensor_full from an explicitly selected sensor node mode.
+
+    Existing variant overrides remain authoritative. Base scenario anchors still
+    work as before when no sensor node mode is explicitly selected.
+    """
+
+    overrides = getattr(graph.variant, "size_overrides", None) or {}
+    if overrides.get("sensor_full"):
+        return
+    sensor_full = _selected_sensor_mode_size_text(graph)
+    if not sensor_full:
+        return
+    updated = dict(overrides)
+    updated["sensor_full"] = sensor_full
+    graph.variant.size_overrides = updated
+
+
+def _selected_sensor_mode_size_text(graph: CanonicalScenarioGraph) -> str | None:
+    for node in graph.pipeline_nodes:
+        node_id = str(node.get("id") or "")
+        mode_id = _explicit_node_mode(graph, node_id)
+        if not mode_id or not _is_sensor_node(graph, node):
+            continue
+        from scenario_db.sim.external_devices import selected_sensor_mode
+
+        mode = selected_sensor_mode(graph, node) or {}
+        width, height = _size_tuple(mode.get("active_size") or mode.get("sensor_size"))
+        if width and height:
+            return f"{width}x{height}"
+    return None
+
+
+def _explicit_node_mode(graph: CanonicalScenarioGraph, node_id: str) -> Any | None:
+    config = (getattr(graph.variant, "node_configs", None) or {}).get(node_id) or {}
+    if not isinstance(config, dict):
+        return None
+    for key in ("mode", "selected_mode", "sensor_mode", "sensor_mode_ref"):
+        if config.get(key):
+            return config[key]
+    return None
+
+
+def _is_sensor_node(graph: CanonicalScenarioGraph, node: dict[str, Any]) -> bool:
+    ip_ref = str(node.get("ip_ref") or "")
+    row = graph.ip_catalog.get(ip_ref)
+    category = str(getattr(row, "category", "") or "").lower() if row is not None else ""
+    text = f"{node.get('id', '')} {node.get('role', '')} {ip_ref}".lower()
+    return category == "sensor" or "sensor" in text
+
+
+def _size_tuple(value: Any) -> tuple[int, int]:
+    if isinstance(value, str) and "x" in value.lower():
+        left, right = value.lower().split("x", 1)
+        try:
+            return int(left), int(right)
+        except ValueError:
+            return 0, 0
+    if isinstance(value, (list, tuple)) and len(value) >= 2:
+        try:
+            return int(value[0] or 0), int(value[1] or 0)
+        except (TypeError, ValueError):
+            return 0, 0
+    return 0, 0
 
 
 def _effective_pipeline(

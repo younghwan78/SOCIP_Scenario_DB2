@@ -69,7 +69,7 @@ def selected_sensor_mode(graph: CanonicalScenarioGraph, node: dict[str, Any] | N
     if row is None:
         return None
     design = graph.variant.design_conditions or {}
-    selected_mode = design.get("sensor_mode") or design.get("sensor_mode_ref") or design.get("sensor")
+    selected_mode = _node_selected_sensor_mode(graph, node) or design.get("sensor_mode") or design.get("sensor_mode_ref") or design.get("sensor")
     properties = _capability_properties(row)
     modes = properties.get("modes") if isinstance(properties.get("modes"), dict) else {}
     if not modes:
@@ -118,6 +118,20 @@ def _selected_sensor_row(graph: CanonicalScenarioGraph, node: dict[str, Any] | N
             if place and place in row_id and place in sensor_place:
                 return row
     return candidates[0]
+
+
+def _node_selected_sensor_mode(graph: CanonicalScenarioGraph, node: dict[str, Any] | None) -> Any | None:
+    if not node:
+        return None
+    node_id = str(node.get("id") or "")
+    config = (getattr(graph.variant, "node_configs", None) or {}).get(node_id) or {}
+    if not isinstance(config, dict):
+        return None
+    for key in ("mode", "selected_mode", "sensor_mode", "sensor_mode_ref"):
+        value = config.get(key)
+        if value:
+            return value
+    return None
 
 
 def _preferred_sensor_mode(modes: dict[str, Any], graph: CanonicalScenarioGraph) -> tuple[str, dict[str, Any]] | None:
