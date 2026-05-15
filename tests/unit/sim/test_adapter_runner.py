@@ -15,6 +15,7 @@ from scenario_db.db.repositories.scenario_graph import CanonicalScenarioGraph
 from scenario_db.db.repositories.variant_resolution import ResolvedScenarioVariant, resolve_variant_from_rows
 from scenario_db.models.evidence.common import ExecutionContext
 from scenario_db.sim.adapter import build_simulation_inputs
+from scenario_db.sim.clock_corrections import _req_csis_clock_mhz
 from scenario_db.sim.golden import compare_golden_result
 from scenario_db.sim.readiness import check_simulation_readiness
 from scenario_db.sim.models import DVFSLevel, DVFSTable, SimulationRunConfig
@@ -423,8 +424,8 @@ def test_full_debug_trace_includes_timeline_event_rows():
                 "sensor_mode": "wide_video_16_9_30",
                 "sensor_size": "3648x2052",
                 "sensor_v_valid_ms": 33.333333,
-                "csispdp_required_mhz": 214.28571428571425,
-                "otf0_set_clock_mhz": 214.28571428571425,
+                "csispdp_required_mhz": 1714.285714285714,
+                "otf0_set_clock_mhz": 1714.285714285714,
                 "lme_set_clock_mhz": None,
                 "sink_cadence_avg_ms": 89.25,
             },
@@ -713,6 +714,25 @@ def test_adapter_applies_sensor_otf_csis_clock_correction():
     assert sensor["v_valid_source"] == "sensor_line_length_pck * 1000 / sensor_pclk * height"
     assert sensor["line_length_pck"] == 29_216
     assert sensor["pclk"] == 3_532_800_000
+
+
+@pytest.mark.parametrize(
+    ("phy_type", "sbwc_enabled", "expected"),
+    [
+        ("CPHY", False, 3.993 * (16 / 7) * 3 / 12 * 1000),
+        ("CPHY", True, 3.993 * (16 / 7) * 3 / (12 * 4) * 1000),
+        ("DPHY", False, 3.993 * 4 / 12 * 1000),
+        ("DPHY", True, 3.993 * 4 / (12 * 4) * 1000),
+    ],
+)
+def test_csis_mipi_clock_formula_applies_ppc_only_for_sbwc(phy_type, sbwc_enabled, expected):
+    assert _req_csis_clock_mhz(
+        sensor_mipi_speed=3.993,
+        sensor_bitwidth=12,
+        sensor_phy_type=phy_type,
+        ppc=4,
+        sensor_sbwc_enabled=sbwc_enabled,
+    ) == pytest.approx(expected)
 
 
 def test_adapter_aligns_sensor_otf_group_without_reapplying_mipi_clock_to_downstream_ips():

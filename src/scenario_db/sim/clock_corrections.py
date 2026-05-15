@@ -21,6 +21,7 @@ def apply_sensor_otf_clock_corrections(
         mipi_speed = _float_or_none(sensor_mode.get("sensor_mipi_speed"))
         bitwidth = _float_or_none(sensor_mode.get("sensor_bitwidth"))
         phy_type = str(sensor_mode.get("sensor_phy_type") or "DPHY").upper()
+        sbwc_enabled = _sensor_sbwc_enabled(sensor_mode.get("sensor_sbwc"))
         v_valid_ms = _float_or_none(sensor_mode.get("v_valid_ms")) or _calc_v_valid_ms(sensor_mode)
         if not mipi_speed or not bitwidth:
             warnings.append(
@@ -37,6 +38,7 @@ def apply_sensor_otf_clock_corrections(
                     sensor_bitwidth=bitwidth,
                     sensor_phy_type=phy_type,
                     ppc=workload.sim_params.ppc,
+                    sensor_sbwc_enabled=sbwc_enabled,
                 )
                 _raise_clock_correction(
                     workload,
@@ -193,12 +195,18 @@ def _req_csis_clock_mhz(
     sensor_bitwidth: float,
     sensor_phy_type: str,
     ppc: float,
+    sensor_sbwc_enabled: bool = False,
 ) -> float:
-    if sensor_mipi_speed <= 0 or sensor_bitwidth <= 0 or ppc <= 0:
+    if sensor_mipi_speed <= 0 or sensor_bitwidth <= 0:
         return 0.0
+    ppc_factor = ppc if sensor_sbwc_enabled and ppc > 0 else 1.0
     if sensor_phy_type.upper() == "CPHY":
-        return sensor_mipi_speed * (16.0 / 7.0) * 3.0 / (sensor_bitwidth * ppc) * 1000.0
-    return sensor_mipi_speed * 4.0 / (sensor_bitwidth * ppc) * 1000.0
+        return sensor_mipi_speed * (16.0 / 7.0) * 3.0 / (sensor_bitwidth * ppc_factor) * 1000.0
+    return sensor_mipi_speed * 4.0 / (sensor_bitwidth * ppc_factor) * 1000.0
+
+
+def _sensor_sbwc_enabled(value: Any) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "enable", "enabled", "sbwc"}
 
 
 def _calc_v_valid_ms(mode: dict[str, Any]) -> float | None:

@@ -167,20 +167,20 @@ cases:
       resolved:
         csispdp:
           required_clock_mhz:
-            value: 214.28571428571425
+            value: 1714.285714285714
             abs_tol: 0.000001
           set_clock_mhz:
-            value: 214.28571428571425
+            value: 1714.285714285714
             abs_tol: 0.000001
         byrp:
           set_clock_mhz:
-            value: 214.28571428571425
+            value: 1714.285714285714
             abs_tol: 0.000001
         rgbp:
           set_clock_mhz:
-            value: 214.28571428571425
+            value: 1714.285714285714
             abs_tol: 0.000001
         yuvsc:
           set_clock_mhz:
-            value: 214.28571428571425
+            value: 1714.285714285714
             abs_tol: 0.000001
