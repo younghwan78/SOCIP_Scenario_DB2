@@ -24,6 +24,7 @@ for:
 | File | Coverage |
 | --- | --- |
 | `sweeps/camera_fps_format_sweep.yaml` | Burst expansion across fps and source format. |
+| `sweeps/camera_pyramid_sbwc_sweep.yaml` | 32-case camera pyramid fanout sweep across L0/L1/L2/L3/G4 SBWC enable combinations. |
 | `sweeps/camera_scale_compression_sweep.yaml` | Burst expansion across scale target and compression. |
 
 ## Compile Examples

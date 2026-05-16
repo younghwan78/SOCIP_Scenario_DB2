@@ -5,6 +5,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from scenario_db.sim.bw_calc import compression_enabled
+
 
 class ExplorationSource(BaseModel):
     type: Literal["sensor", "display", "buffer"] = "sensor"
@@ -284,7 +286,7 @@ def compile_exploration_sweep(sweep: ExplorationSweep) -> ExplorationSweepResult
         scenario["variants"] = [deepcopy(result.scenario["variants"][0]) for result in compiled]
         documents = [scenario]
     else:
-        documents = [result.scenario for result in compiled]
+        documents = [_non_merged_sweep_document(result, recipe) for recipe, result in zip(recipes, compiled, strict=True)]
     import_bundle = {
         "kind": "scenario.import_bundle",
         "documents": documents,
@@ -306,15 +308,21 @@ def compile_exploration_sweep(sweep: ExplorationSweep) -> ExplorationSweepResult
         cases=[
             {
                 "case_id": recipe.variant_id,
-                "scenario_id": compiled_result.scenario["id"],
+                "scenario_id": documents[index]["id"] if len(documents) > 1 else compiled_result.scenario["id"],
                 "variant_id": recipe.variant_id,
                 "axis_values": _axis_values_for_case(sweep.axes, recipe),
                 "mapping_trace": compiled_result.mapping_trace,
             }
-            for recipe, compiled_result in zip(recipes, compiled, strict=True)
+            for index, (recipe, compiled_result) in enumerate(zip(recipes, compiled, strict=True))
         ],
         warnings=warnings,
     )
+
+
+def _non_merged_sweep_document(result: ExplorationCompileResult, recipe: ExplorationRecipe) -> dict[str, Any]:
+    scenario = deepcopy(result.scenario)
+    scenario["id"] = f"{scenario['id']}-{_safe_id(recipe.variant_id)}"
+    return scenario
 
 
 def _source_node(recipe: ExplorationRecipe) -> dict[str, Any]:
@@ -339,8 +347,8 @@ def _expand_sweep_recipes(sweep: ExplorationSweep) -> list[ExplorationRecipe]:
         for raw, suffixes in cases:
             for value in axis.values:
                 item = deepcopy(raw)
-                _set_path(item, axis.path, value)
-                expanded.append((item, [*suffixes, f"{axis.name}-{_safe_id(value)}"]))
+                _set_path(item, axis.path, _axis_value_payload(value))
+                expanded.append((item, [*suffixes, f"{axis.name}-{_safe_id(_axis_value_label(value))}"]))
         cases = expanded
     recipes: list[ExplorationRecipe] = []
     base_variant = sweep.base_recipe.variant_id
@@ -397,6 +405,18 @@ def _get_path(source: dict[str, Any], path: str) -> Any:
     for part in _path_parts(path):
         current = current[part] if isinstance(part, int) else current.get(part)
     return current
+
+
+def _axis_value_payload(value: Any) -> Any:
+    if isinstance(value, dict) and "label" in value and "value" in value:
+        return value["value"]
+    return value
+
+
+def _axis_value_label(value: Any) -> Any:
+    if isinstance(value, dict) and "label" in value and "value" in value:
+        return value["label"]
+    return value
 
 
 def _safe_id(value: Any) -> str:
@@ -475,6 +495,8 @@ def _port_config(port: ExplorationPort, *, direction: str) -> dict[str, Any]:
         "port_type": _port_type(port),
     }
     for key in ("width", "height", "format", "bitwidth", "compression", "comp_ratio", "llc_enabled"):
+        if key == "comp_ratio" and not compression_enabled(port.compression):
+            continue
         value = getattr(port, key)
         if value is not None:
             result[key] = value

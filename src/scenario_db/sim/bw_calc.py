@@ -41,7 +41,7 @@ def calc_port_bw(
         )
 
     bpp = BPP_MAP.get((spec.format or "").upper(), BPP_DEFAULT)
-    comp_ratio = spec.comp_ratio if spec.compression != "disable" else 1.0
+    comp_ratio = effective_comp_ratio(spec)
     llc_weight = spec.llc_weight if spec.llc_enabled else 1.0
     bw_mbs = _bw_mbs(spec, fps=fps, bpp=bpp, comp_ratio=comp_ratio)
     bw_power_mw = bw_mbs * bw_power_coeff / 1000.0 * llc_weight
@@ -97,9 +97,18 @@ def _optional_bw(
     bpp: float,
     comp_ratio: float | None,
 ) -> float | None:
-    if comp_ratio is None or spec.compression == "disable":
+    if comp_ratio is None or not compression_enabled(spec.compression):
         return None
     return _bw_mbs(spec, fps=fps, bpp=bpp, comp_ratio=comp_ratio)
+
+
+def effective_comp_ratio(spec: PortTransferSpec) -> float:
+    return spec.comp_ratio if compression_enabled(spec.compression) else 1.0
+
+
+def compression_enabled(compression: str | None) -> bool:
+    normalized = str(compression or "").strip().lower()
+    return normalized not in {"", "none", "no", "false", "off", "disable", "disabled", "comp_off"}
 
 
 def _size_mp(width: int, height: int) -> float:

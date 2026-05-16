@@ -43,7 +43,7 @@ def candidate_to_result(candidate: dict[str, Any]) -> dict[str, Any]:
 def render_candidate_detail(candidate: dict[str, Any], *, key_prefix: str) -> None:
     result = candidate_to_result(candidate)
     st.markdown("**Selected Candidate Detail**")
-    st.caption("Preview detail is not stored as evidence. Use it to inspect the selected candidate before any future promote/save step.")
+    st.caption("Preview detail is not stored as evidence. Download the candidate JSON if it needs separate import/review.")
     render_kpi_metrics(result.get("kpi") if isinstance(result.get("kpi"), dict) else {})
     render_result_warnings(result)
     render_result_breakdown(result, key_prefix=key_prefix)

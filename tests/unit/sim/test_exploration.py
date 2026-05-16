@@ -149,6 +149,83 @@ def test_compile_exploration_sweep_merges_variants_when_pipeline_is_stable():
     assert result.cases[-1]["axis_values"] == {"fps": 60.0, "fmt": "YUV"}
 
 
+def test_compile_exploration_sweep_supports_labeled_object_axis_values():
+    sweep = ExplorationSweep.model_validate(
+        {
+            "id": "output-object-sweep",
+            "base_recipe": {
+                "id": "next-camera-fhd",
+                "scenario_id": "uc-next-camera-fhd",
+                "variant_id": "explore",
+                "project_ref": "proj-next",
+                "source": {"width": 2400, "height": 1350, "fps": 30, "format": "RAW"},
+                "pipeline": [
+                    {
+                        "id": "mlsc0",
+                        "template": "mlsc_like",
+                        "ip_ref": "ip-isp-v12",
+                        "inputs": [{"type": "CIN"}],
+                        "outputs": [
+                            {
+                                "type": "WDMA",
+                                "port": "MLSC_WDMA0_L0",
+                                "width": 2400,
+                                "height": 1350,
+                                "format": "YUV420",
+                                "bitwidth": 10,
+                                "compression": "COMP_OFF",
+                                "comp_ratio": 1.0,
+                            }
+                        ],
+                    }
+                ],
+            },
+            "axes": [
+                {
+                    "name": "l0",
+                    "path": "pipeline[0].outputs[0]",
+                    "values": [
+                        {
+                            "label": "off",
+                            "value": {
+                                "type": "WDMA",
+                                "port": "MLSC_WDMA0_L0",
+                                "width": 2400,
+                                "height": 1350,
+                                "format": "YUV420",
+                                "bitwidth": 10,
+                                "compression": "COMP_OFF",
+                                "comp_ratio": 1.0,
+                            },
+                        },
+                        {
+                            "label": "sbwc",
+                            "value": {
+                                "type": "WDMA",
+                                "port": "MLSC_WDMA0_L0",
+                                "width": 2400,
+                                "height": 1350,
+                                "format": "YUV420",
+                                "bitwidth": 10,
+                                "compression": "COMP_SBWC_LOSSLESS",
+                                "comp_ratio": 0.5,
+                            },
+                        },
+                    ],
+                }
+            ],
+        }
+    )
+
+    result = compile_exploration_sweep(sweep)
+
+    variants = result.import_bundle["documents"][0]["variants"]
+    assert [variant["id"] for variant in variants] == ["explore-l0-off", "explore-l0-sbwc"]
+    assert "comp_ratio" not in variants[0]["node_configs"]["mlsc0"]["sim"]["outputs"][0]
+    assert result.cases[1]["axis_values"]["l0"]["compression"] == "COMP_SBWC_LOSSLESS"
+    assert result.cases[1]["axis_values"]["l0"]["comp_ratio"] == 0.5
+
+
 def test_exploration_recipe_validation_rejects_duplicate_blocks():
     with pytest.raises(ValueError, match="duplicate exploration block ids"):
         ExplorationRecipe.model_validate(

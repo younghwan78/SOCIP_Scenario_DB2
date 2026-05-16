@@ -36,6 +36,31 @@ def test_calc_port_bw_dma_write_with_compression():
     assert result.bw_power_mw == pytest.approx(3.73248)
 
 
+def test_calc_port_bw_ignores_comp_ratio_when_compression_is_off():
+    result = calc_port_bw(
+        PortTransferSpec(
+            node_id="mlsc0",
+            ip_ref="ip-isp-v12",
+            hw_name="MLSC",
+            port="MLSC_WDMA0_L0",
+            port_type=PortType.DMA_WRITE,
+            width=2400,
+            height=1350,
+            format="YUV420",
+            bitwidth=10,
+            compression="COMP_OFF",
+            comp_ratio=0.5,
+            comp_ratio_min=0.3,
+            comp_ratio_max=0.7,
+        ),
+        fps=30,
+    )
+
+    assert result.bw_mbs == pytest.approx(182.25)
+    assert result.bw_mbs_best is None
+    assert result.bw_mbs_worst is None
+
+
 def test_calc_port_bw_otf_returns_zero():
     result = calc_port_bw(
         PortTransferSpec(

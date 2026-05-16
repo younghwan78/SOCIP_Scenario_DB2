@@ -13,8 +13,8 @@ Exploration fixture는 아직 최종 IP 구성이 확정되지 않은 차기 과
 | --- | --- | --- |
 | 예제 fixture | repo 내 Single Design/Batch Exploration YAML 예제 | 사용자별 예제 저장소 |
 | CLI compile | exploration YAML을 canonical scenario/import bundle로 변환 | CLI에서 DB apply까지 자동 수행 |
-| API | 예제 조회, compile, batch preview simulation | promote/save API |
-| Streamlit | YAML load/edit, compile, preview simulation, 후보 비교, topology 확인 | 선택 후보를 정식 variant/evidence로 승격 |
+| API | 예제 조회, compile, batch preview simulation | 대용량 비동기 job queue |
+| Streamlit | YAML load/edit, template 생성, compile, preview simulation, 후보 비교, topology 확인 | mapping profile catalog 선택, 대량 실행 관리 |
 | Simulation | preview-only, evidence DB 미저장 | 승인된 후보만 evidence로 저장하는 workflow |
 
 ## 폴더 구조
@@ -29,6 +29,7 @@ demo/exploration_fixtures/
     codec_display_path.yaml
   sweeps/
     camera_fps_format_sweep.yaml
+    camera_pyramid_sbwc_sweep.yaml
     camera_scale_compression_sweep.yaml
 ```
 
@@ -104,11 +105,12 @@ http://127.0.0.1:18502/Exploration_Workbench
 1. 왼쪽 `Exploration Context`에서 API base를 확인합니다.
 2. `Example`에서 기본 예제를 고르거나, `Upload Exploration YAML`로 YAML 파일을 올립니다.
 3. `Load selected example` 또는 `Load uploaded YAML`을 누르면 `Exploration YAML` editor에 내용이 들어갑니다.
-4. `Start blank YAML`은 빈 editor에서 직접 YAML을 작성할 때 사용합니다.
-5. editor에서 YAML을 수정한 뒤 `Compile`로 canonical scenario/import bundle 생성을 확인합니다.
-6. `Run Simulation`으로 preview-only simulation을 실행합니다.
-7. `Candidate Comparison`에서 후보별 KPI와 delta를 비교합니다.
-8. `Selected Candidate Detail`에서 기존 Evidence Dashboard viewer component로 후보 상세 결과를 확인합니다.
+4. `New Single Design` 또는 `New Batch Exploration`으로 편집 가능한 시작 template을 만들 수 있습니다.
+5. `Clear YAML editor`는 editor를 비우고 직접 YAML을 작성할 때 사용합니다.
+6. editor에서 YAML을 수정한 뒤 `Compile`로 canonical scenario/import bundle 생성을 확인합니다.
+7. `Run Simulation`으로 preview-only simulation을 실행합니다.
+8. `Candidate Comparison`에서 후보별 KPI와 delta를 비교합니다.
+9. `Selected Candidate Detail`에서 기존 Evidence Dashboard viewer component로 후보 상세 결과를 확인합니다.
 
 Workbench는 YAML top-level 구조를 보고 자동으로 입력 종류를 판단합니다.
 
@@ -132,7 +134,7 @@ Workbench의 `Compile Result`는 다음 값을 보여줍니다.
 | `Warnings` | borrowed mapping, 미정 capability 등 검토가 필요한 경고 수입니다. |
 
 현재 Workbench는 preview-first 정책입니다. `Run Simulation` 결과도 `persisted=false`이며 evidence DB에 저장되지 않습니다.
-선택 후보를 정식 variant/evidence로 승격하는 promote/save flow는 다음 단계 항목입니다.
+정식 반영이 필요하면 선택 후보 JSON을 다운로드한 뒤 일반 import/review flow에서 다시 점검하는 방향으로 운용합니다.
 
 ### Error Line/Context
 
@@ -163,7 +165,8 @@ byrp0.YUV_WDMA -- M2M write --> buf_yuv -- M2M read --> gdc0.YUV_RDMA
 gdc0.DISPLAY_COUT -- OTF --> dpu0.CIN
 ```
 
-`Buffer Usage` table은 buffer별 writer/reader와 size, format, compression을 보여줍니다.
+`Compact Graph`는 IP와 buffer를 간단한 graph로 보여줍니다. `Buffer Usage` table은 buffer별 writer/reader와
+size, format, compression을 보여줍니다.
 M2M/vOTF path의 DMA 연결을 빠르게 디버깅할 때 이 tab을 먼저 확인하는 것이 좋습니다.
 
 ## API 사용
@@ -195,7 +198,7 @@ $payload = @{
   include_results = $true
   config = @{
     include_timeline = $false
-    timeline_frames = 4
+    timeline_frame_count = 4
     debug_trace = $true
   }
 } | ConvertTo-Json -Depth 100
@@ -385,6 +388,79 @@ compression: COMP_OFF, COMP_SBWC_LOSSLESS
 2 x 2 x 2 = 8 variants
 ```
 
+### 7. `camera_pyramid_sbwc_sweep.yaml`
+
+목적:
+
+- FHD30 recording의 multi-scale pyramid 구조를 더 실제 camera path에 가깝게 모델링
+- `sensor(hp2) -> CSIS -> PDP -> BYRP -> RGBP -> YUVP -> MLSC` 전단과
+  `MLSC L0/L1/L2/L3/G4 -> MTNR -> MSNR -> MCSC` 후단을 하나의 exploration 입력으로 검증
+- MLSC의 L0/L1/L2/L3/G4 WDMA output에 대해 SBWC 적용 조합을 burst set으로 비교
+
+주요 구조:
+
+```text
+sensor_src --OTF--> csis0 --OTF--> pdp0 --M2M--> byrp0 --OTF--> rgbp0 --OTF--> yuvp0 --OTF--> mlsc0
+mlsc0.WDMA0_L0 --M2M--> mtnr0.RDMA0_L0
+mlsc0.WDMA1_L1 --M2M--> mtnr0.RDMA1_L1
+mlsc0.WDMA2_L2 --M2M--> mtnr0.RDMA2_L2
+mlsc0.WDMA3_L3 --M2M--> mtnr0.RDMA3_L3
+mlsc0.WDMA4_G4 --M2M--> mtnr0.RDMA4_G4
+mtnr0 --OTF--> msnr0 --OTF--> mcsc0
+mcsc0.WDMA0_DISPLAY -> memory/display path
+mcsc0.WDMA1_CODEC -> memory/codec path
+```
+
+Pyramid size:
+
+| Level | Size |
+| --- | --- |
+| L0 | 2400 x 1350 |
+| L1 | 1200 x 675 |
+| L2 | 600 x 338 |
+| L3 | 300 x 169 |
+| G4 | 150 x 85 |
+
+축:
+
+```text
+l0: COMP_OFF, COMP_SBWC_LOSSLESS(comp_ratio=0.5)
+l1: COMP_OFF, COMP_SBWC_LOSSLESS(comp_ratio=0.5)
+l2: COMP_OFF, COMP_SBWC_LOSSLESS(comp_ratio=0.5)
+l3: COMP_OFF, COMP_SBWC_LOSSLESS(comp_ratio=0.5)
+g4: COMP_OFF, COMP_SBWC_LOSSLESS(comp_ratio=0.5)
+```
+
+생성 후보 수:
+
+```text
+2 x 2 x 2 x 2 x 2 = 32 variants
+```
+
+이 예제는 `compression`과 `comp_ratio`를 동시에 바꿔야 하므로 sweep axis 값에 다음처럼
+`label/value` 형식을 사용합니다. `label`은 variant id를 짧게 만들기 위한 이름이고,
+`value`는 실제로 path에 적용되는 port descriptor입니다.
+
+```yaml
+axes:
+  - name: l0
+    path: pipeline[5].outputs[0]
+    values:
+      - label: "off"
+        value: {type: WDMA, port: MLSC_WDMA0_L0, width: 2400, height: 1350, compression: COMP_OFF}
+      - label: sbwc
+        value: {type: WDMA, port: MLSC_WDMA0_L0, width: 2400, height: 1350, compression: COMP_SBWC_LOSSLESS, comp_ratio: 0.5}
+```
+
+주의:
+
+- 현재 exploration compiler는 main path edge를 block 순서 기준으로 구성합니다.
+- 따라서 multi-output fanout/fanin의 모든 branch가 canonical edge로 분기되지는 않지만,
+  MLSC output port와 MTNR input port에는 각 DMA의 size/format/compression 조건이 보존되어 BW/power preview에 사용됩니다.
+- `COMP_OFF`는 comp ratio를 사용하지 않습니다. YAML에 값이 들어와도 BW 계산과 debug trace에서는 무압축 `1.0`으로 취급하고,
+  exploration compiler는 compiled sim port에서 `comp_ratio`를 내보내지 않습니다.
+- `off`는 YAML에서 boolean으로 해석될 수 있으므로 label로 쓸 때 `"off"`처럼 quote 처리합니다.
+
 ## 결과 해석 포인트
 
 ### `inherit_shape`
@@ -427,6 +503,13 @@ mapping_source:
 ### Candidate Comparison
 
 Preview simulation은 각 case별 KPI와 baseline 대비 delta를 계산합니다.
+Workbench에서는 baseline 후보를 바꿔 delta를 다시 볼 수 있고, feasible 후보만 보기, warning 있는 후보 숨기기,
+Pareto 후보만 보기 필터를 사용할 수 있습니다.
+
+KPI distribution chart는 Power, DMA BW, HW Time을 각각 horizontal box plot으로 보여줍니다.
+후보가 많을 때는 개별 막대를 모두 나열하기보다 전체 분포, 변동폭, baseline/default 위치, lowest/highest 조합을 먼저 확인하는 것이 목적입니다.
+각 KPI의 min/default/max와 spread는 chart 아래 summary table에서 확인합니다. 이 table은 default 대비 delta와 percent만 보여주고,
+전체 후보별 세부 값은 그 아래 comparison table에서 확인합니다.
 
 주요 비교 값:
 
@@ -525,14 +608,13 @@ uv run pytest tests\unit -q
 
 - Exploration API/Workbench는 현재 preview-only입니다.
 - Workbench에서 `Saved to DB: no`, simulation result의 `persisted=false`가 정상입니다.
-- 후보를 정식 evidence로 저장하려면 별도 confirm/promote flow가 필요합니다.
+- 후보를 정식 데이터로 반영해야 하는 경우 Workbench에서 바로 저장하지 않고 다운로드 후 일반 import/review flow에서 점검합니다.
 - borrowed mapping은 초기 exploration에는 유용하지만, 과제 진행 중 native unit power/PPC/DVFS가 확보되면 fixture contract/readiness rule로 교체해야 합니다.
 - server 사용자도 Workbench에서 YAML upload 또는 paste로 사용할 수 있으므로 local CLI 환경이 필수는 아닙니다.
 
 ## 다음 개선 후보
 
-1. 선택 후보를 정식 variant/evidence로 승격하는 promote/save API와 UI.
-2. mapping profile을 독립 catalog로 저장하고 SoC/과제별로 선택하는 기능.
-3. Workbench에서 candidate 간 power/BW/timing scatter plot과 Pareto filtering.
-4. Topology를 port-flow text와 함께 간단한 graph view로 표시.
-5. 사용자별 exploration YAML 저장소와 revision 관리.
+1. mapping profile을 독립 catalog로 저장하고 SoC/과제별로 선택하는 기능.
+2. 후보 수가 많은 Batch Exploration을 위한 job/progress/retry 관리.
+3. 사용자별 exploration YAML 저장소와 revision 관리.
+4. 선택 후보를 일반 import/review flow로 넘기는 export bundle 강화.

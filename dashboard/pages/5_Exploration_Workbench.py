@@ -39,6 +39,118 @@ INPUT_TYPE_LABELS = {
     "unknown": "Unknown",
 }
 
+SINGLE_DESIGN_TEMPLATE = """id: explore-camera-single
+scenario_id: uc-explore-camera-single
+variant_id: single-fhd30
+project_ref: proj-A-exynos2500
+soc_ref: soc-exynos2500
+name: Camera Single Design Exploration
+category: [camera, exploration]
+source:
+  type: sensor
+  node_id: sensor_src
+  ip_ref: ip-sensor-hp2-projectA
+  width: 4000
+  height: 2250
+  fps: 30
+  format: RAW_BAYER_16
+  bitwidth: 12
+  compression: COMP_BAYER_LOSSLESS
+pipeline:
+  - id: csis0
+    template: csis_like
+    role: csis_like
+    inputs: [{type: CIN}]
+    outputs: [{type: COUT}]
+  - id: isp0
+    template: isp_like
+    role: isp_like
+    inputs: [{type: CIN}]
+    outputs:
+      - type: WDMA
+        port: ISP_WDMA
+        width: 1920
+        height: 1080
+        format: YUV420
+        bitwidth: 10
+        compression: COMP_OFF
+mapping_profile:
+  id: inline-borrowed-camera
+  source_project_ref: proj-A-exynos2500
+  target_soc_ref: soc-exynos2500
+  role_mappings:
+    csis_like:
+      source_ip_ref: ip-csis-v8
+      target_ip_ref: ip-csis-v8
+      source_role: csis
+      target_role: csis
+      confidence: borrowed
+      ip_params: {hw_name: CSIS, ppc: 8, unit_power_mw_mp: 0.21, vdd: VDD_CAM, dvfs_group: CAM}
+    isp_like:
+      source_ip_ref: ip-isp-v12
+      target_ip_ref: ip-isp-v12
+      source_role: isp
+      target_role: isp
+      confidence: borrowed
+      ip_params: {hw_name: ISP, ppc: 4, unit_power_mw_mp: 9.92, vdd: VDD_CAM, dvfs_group: CAM}
+"""
+
+BATCH_EXPLORATION_TEMPLATE = """id: explore-camera-batch
+base_recipe:
+  id: explore-camera-batch-base
+  scenario_id: uc-explore-camera-batch
+  variant_id: batch-fhd30
+  project_ref: proj-A-exynos2500
+  soc_ref: soc-exynos2500
+  name: Camera Batch Exploration
+  category: [camera, exploration]
+  source:
+    type: sensor
+    node_id: sensor_src
+    ip_ref: ip-sensor-hp2-projectA
+    width: 4000
+    height: 2250
+    fps: 30
+    format: RAW_BAYER_16
+    bitwidth: 12
+    compression: COMP_BAYER_LOSSLESS
+  pipeline:
+    - id: isp0
+      template: isp_like
+      role: isp_like
+      inputs: [{type: CIN}]
+      outputs:
+        - type: WDMA
+          port: ISP_WDMA
+          width: 1920
+          height: 1080
+          format: YUV420
+          bitwidth: 10
+          compression: COMP_OFF
+  mapping_profile:
+    id: inline-borrowed-camera
+    source_project_ref: proj-A-exynos2500
+    target_soc_ref: soc-exynos2500
+    role_mappings:
+      isp_like:
+        source_ip_ref: ip-isp-v12
+        target_ip_ref: ip-isp-v12
+        source_role: isp
+        target_role: isp
+        confidence: borrowed
+        ip_params: {hw_name: ISP, ppc: 4, unit_power_mw_mp: 9.92, vdd: VDD_CAM, dvfs_group: CAM}
+axes:
+  - name: fps
+    path: base_recipe.source.fps
+    values: [30, 60]
+  - name: output_width
+    path: base_recipe.pipeline[0].outputs[0].width
+    values: [1920, 2560]
+  - name: output_height
+    path: base_recipe.pipeline[0].outputs[0].height
+    values: [1080, 1440]
+"""
+
 
 st.set_page_config(
     page_title="Exploration Workbench - ScenarioDB",
@@ -118,6 +230,17 @@ def _load_uploaded_yaml(uploaded_file: Any) -> None:
 def _start_blank_yaml() -> None:
     st.session_state["explore_yaml"] = ""
     st.session_state["explore_loaded_example"] = "blank"
+    st.session_state.pop("explore_compile_result", None)
+    st.session_state.pop("explore_preview_result", None)
+
+
+def _start_template_yaml(kind: str) -> None:
+    if kind == "batch":
+        st.session_state["explore_yaml"] = BATCH_EXPLORATION_TEMPLATE
+        st.session_state["explore_loaded_example"] = "template:batch"
+    else:
+        st.session_state["explore_yaml"] = SINGLE_DESIGN_TEMPLATE
+        st.session_state["explore_loaded_example"] = "template:single"
     st.session_state.pop("explore_compile_result", None)
     st.session_state.pop("explore_preview_result", None)
 
@@ -237,7 +360,7 @@ def _render_preview_result(preview: dict[str, Any]) -> None:
     if not preview:
         st.info("Run Simulation to compare candidates. Preview results are not persisted.")
         return
-    st.markdown('<div class="exploration-note">Preview-only result. No scenario variant or evidence is saved from this page yet.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="exploration-note">Preview-only result. Use the download action if a candidate needs to be reviewed through the normal import flow.</div>', unsafe_allow_html=True)
     with st.expander("What is Candidate Comparison?", expanded=False):
         st.markdown(
             """
@@ -256,10 +379,7 @@ def _render_preview_result(preview: dict[str, Any]) -> None:
     st.divider()
     render_candidate_detail(candidate, key_prefix=f"explore_{candidate.get('case_id', 'candidate')}")
     st.divider()
-    c1, c2, c3 = st.columns(3)
-    c1.button("Promote selected to Variant", disabled=True, use_container_width=True, help="Promote API will be added in a later phase.")
-    c2.button("Save selected as Evidence", disabled=True, use_container_width=True, help="Evidence save is intentionally explicit and not part of the preview API.")
-    c3.download_button(
+    st.download_button(
         "Download selected candidate JSON",
         data=json.dumps(candidate, indent=2, ensure_ascii=False, default=str).encode("utf-8"),
         file_name=f"{candidate.get('case_id', 'candidate')}.json",
@@ -412,6 +532,14 @@ def _render_topology_summary(result: dict[str, Any]) -> None:
     c2.metric("Edges", len(edges))
     c3.metric("Buffers", len(buffers))
     c4.metric("OTF/M2M/vOTF", f"{edge_counts.get('OTF', 0)}/{edge_counts.get('M2M', 0)}/{edge_counts.get('vOTF', 0)}")
+    dot = _topology_dot(scenario)
+    if dot:
+        st.markdown("**Compact Graph**")
+        st.caption("Topology-only graph. Buffers are shown as intermediate nodes for M2M/vOTF links.")
+        try:
+            st.graphviz_chart(dot, use_container_width=True)
+        except Exception:
+            st.code(dot, language="dot")
     port_flow = _port_flow_text(scenario)
     if port_flow:
         st.markdown("**Port Flow**")
@@ -505,6 +633,71 @@ def _port_flow_text(scenario: dict[str, Any]) -> str:
         buffer_text = _buffer_label(buffer_id, buffers.get(buffer_id) if buffer_id else None)
         lines.append(f"{index:02d}. {source_label} -- {edge_type} write --> {buffer_text} -- read --> {target_label}")
     return "\n".join(lines)
+
+
+def _topology_dot(scenario: dict[str, Any]) -> str:
+    pipeline = scenario.get("pipeline") if isinstance(scenario.get("pipeline"), dict) else {}
+    nodes = [node for node in pipeline.get("nodes") or [] if isinstance(node, dict) and node.get("id")]
+    edges = [edge for edge in pipeline.get("edges") or [] if isinstance(edge, dict)]
+    if not nodes and not edges:
+        return ""
+    buffers = pipeline.get("buffers") if isinstance(pipeline.get("buffers"), dict) else {}
+    lines = [
+        "digraph ExplorationTopology {",
+        '  graph [rankdir=LR, bgcolor="transparent", pad="0.2", nodesep="0.45", ranksep="0.7"];',
+        '  node [shape=box, style="rounded,filled", color="#CFC7BA", fillcolor="#FFFFFF", fontname="Arial", fontsize=10];',
+        '  edge [fontname="Arial", fontsize=9, arrowsize=0.8];',
+    ]
+    for node in nodes:
+        node_id = str(node.get("id"))
+        role = str(node.get("role") or "")
+        ip_ref = str(node.get("ip_ref") or "")
+        label = "\\n".join(part for part in (node_id, role, ip_ref) if part)
+        lines.append(f'  "{_dot_escape(node_id)}" [label="{_dot_escape(label)}"];')
+    buffer_ids = {str(edge.get("buffer")) for edge in edges if edge.get("buffer")}
+    for buffer_id in sorted(buffer_ids):
+        buffer = buffers.get(buffer_id) if isinstance(buffers.get(buffer_id), dict) else {}
+        label = _buffer_label(buffer_id, buffer).replace("BUFFER: ", "")
+        lines.append(
+            f'  "buffer::{_dot_escape(buffer_id)}" [label="{_dot_escape(label)}", shape=folder, '
+            'fillcolor="#F8F1E7", color="#D7B98A"];'
+        )
+    for edge in _ordered_edges(edges):
+        source = str(edge.get("from") or "")
+        target = str(edge.get("to") or "")
+        edge_type = str(edge.get("type") or "unknown")
+        color = _edge_dot_color(edge_type)
+        style = "dashed" if edge_type in {"M2M", "vOTF"} else "solid"
+        buffer_id = str(edge.get("buffer") or "")
+        if buffer_id:
+            buffer_node = f"buffer::{buffer_id}"
+            lines.append(
+                f'  "{_dot_escape(source)}" -> "{_dot_escape(buffer_node)}" '
+                f'[label="{_dot_escape(edge_type)} write", color="{color}", fontcolor="{color}", style="{style}"];'
+            )
+            lines.append(
+                f'  "{_dot_escape(buffer_node)}" -> "{_dot_escape(target)}" '
+                f'[label="read", color="{color}", fontcolor="{color}", style="{style}"];'
+            )
+        else:
+            lines.append(
+                f'  "{_dot_escape(source)}" -> "{_dot_escape(target)}" '
+                f'[label="{_dot_escape(edge_type)}", color="{color}", fontcolor="{color}", style="{style}"];'
+            )
+    lines.append("}")
+    return "\n".join(lines)
+
+
+def _edge_dot_color(edge_type: str) -> str:
+    return {
+        "OTF": "#2F5BFF",
+        "M2M": "#F97316",
+        "vOTF": "#0F9F8A",
+    }.get(edge_type, "#64748B")
+
+
+def _dot_escape(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
 
 
 def _buffer_usage_rows(scenario: dict[str, Any]) -> list[dict[str, Any]]:
@@ -610,6 +803,55 @@ def _buffer_label(buffer_id: str, buffer: Any) -> str:
         if value not in (None, "", []):
             parts.append(str(value))
     return f"BUFFER: {buffer_id}" + (f" [{', '.join(parts)}]" if parts else "")
+
+
+def _mapping_profile_rows_from_payload(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    recipe = _recipe_payload(payload)
+    profile = recipe.get("mapping_profile") if isinstance(recipe.get("mapping_profile"), dict) else {}
+    mappings = profile.get("role_mappings") if isinstance(profile.get("role_mappings"), dict) else {}
+    rows: list[dict[str, Any]] = []
+    for key, mapping in mappings.items():
+        if not isinstance(mapping, dict):
+            continue
+        ip_params = mapping.get("ip_params") if isinstance(mapping.get("ip_params"), dict) else {}
+        rows.append(
+            {
+                "mapping_key": key,
+                "source_project_ref": profile.get("source_project_ref"),
+                "target_soc_ref": profile.get("target_soc_ref"),
+                "source_role": mapping.get("source_role"),
+                "target_role": mapping.get("target_role"),
+                "source_ip_ref": mapping.get("source_ip_ref"),
+                "target_ip_ref": mapping.get("target_ip_ref"),
+                "confidence": mapping.get("confidence"),
+                "ppc": ip_params.get("ppc"),
+                "unit_power_mw_mp": ip_params.get("unit_power_mw_mp"),
+                "vdd": ip_params.get("vdd"),
+                "dvfs_group": ip_params.get("dvfs_group"),
+            }
+        )
+    return rows
+
+
+def _unmapped_pipeline_roles(payload: dict[str, Any]) -> list[str]:
+    recipe = _recipe_payload(payload)
+    profile = recipe.get("mapping_profile") if isinstance(recipe.get("mapping_profile"), dict) else {}
+    mappings = profile.get("role_mappings") if isinstance(profile.get("role_mappings"), dict) else {}
+    mapped_keys = set(str(key) for key in mappings)
+    missing: list[str] = []
+    for block in recipe.get("pipeline") or []:
+        if not isinstance(block, dict):
+            continue
+        candidates = [block.get("role"), block.get("template"), block.get("id")]
+        if not any(str(candidate) in mapped_keys for candidate in candidates if candidate):
+            missing.append(str(block.get("id") or block.get("role") or block.get("template") or "unknown"))
+    return missing
+
+
+def _recipe_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    if isinstance(payload.get("base_recipe"), dict):
+        return payload["base_recipe"]
+    return payload
 
 
 def _parse_editor_yaml(source_yaml: str) -> dict[str, Any] | None:
@@ -741,6 +983,29 @@ def _line_context(source_yaml: str | None, line: int | None, *, radius: int = 2,
     return "\n".join(context)
 
 
+def _render_editor_mapping_summary(source_yaml: str) -> None:
+    if not source_yaml.strip():
+        return
+    try:
+        payload = yaml.safe_load(source_yaml)
+    except yaml.YAMLError:
+        return
+    if not isinstance(payload, dict):
+        return
+    rows = _mapping_profile_rows_from_payload(payload)
+    missing = _unmapped_pipeline_roles(payload)
+    if not rows and not missing:
+        return
+    with st.expander("Mapping profile summary", expanded=False):
+        if rows:
+            st.caption("Borrowed simulation parameters embedded in the current YAML.")
+            render_copyable_dataframe(rows, key="explore_editor_mapping_profile", use_container_width=True, hide_index=True)
+        else:
+            st.info("No role_mappings are defined in the current YAML.")
+        if missing:
+            st.warning("Pipeline blocks without a direct mapping key: " + ", ".join(missing))
+
+
 def _input_panel_visible() -> bool:
     return bool(st.session_state.get("explore_input_panel_visible", True))
 
@@ -791,7 +1056,13 @@ with st.sidebar:
     )
     if uploaded_yaml is not None and st.button("Load uploaded YAML", use_container_width=True):
         _load_uploaded_yaml(uploaded_yaml)
-    if st.button("Start blank YAML", use_container_width=True):
+    st.caption("Templates start from editable YAML and are not saved automatically.")
+    template_cols = st.columns(2)
+    if template_cols[0].button("New Single Design", use_container_width=True):
+        _start_template_yaml("single")
+    if template_cols[1].button("New Batch Exploration", use_container_width=True):
+        _start_template_yaml("batch")
+    if st.button("Clear YAML editor", use_container_width=True):
         _start_blank_yaml()
 
     st.divider()
@@ -834,6 +1105,7 @@ if input_visible:
         detected_kind = _detect_yaml_kind(source_yaml)
         kind = detected_kind if detected_kind != "unknown" else "single"
         st.info(f"Detected input type: {INPUT_TYPE_LABELS.get(detected_kind, 'Unknown')}")
+        _render_editor_mapping_summary(source_yaml)
         compile_col, preview_col = st.columns(2)
         if compile_col.button("Compile", type="primary", use_container_width=True, disabled=not bool(source_yaml.strip())):
             _compile_current(api_base, source_yaml)

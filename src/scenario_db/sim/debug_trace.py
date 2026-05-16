@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from scenario_db.sim.bw_calc import effective_comp_ratio
 from scenario_db.sim.constants import (
     BPP_DEFAULT,
     BPP_MAP,
@@ -301,7 +302,7 @@ def _dma_traces(
             continue
         effective_fps = float(fps)
         bpp_factor = BPP_MAP.get((spec.format or "").upper(), BPP_DEFAULT)
-        comp_ratio = spec.comp_ratio if spec.compression != "disable" else 1.0
+        comp_ratio = effective_comp_ratio(spec)
         llc_weight = spec.llc_weight if spec.llc_enabled else 1.0
         traces.append(
             {

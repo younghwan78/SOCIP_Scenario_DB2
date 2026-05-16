@@ -71,8 +71,42 @@ def test_exploration_fixtures_cover_expected_use_cases():
     }.issubset(recipe_names)
     assert {
         "camera_fps_format_sweep.yaml",
+        "camera_pyramid_sbwc_sweep.yaml",
         "camera_scale_compression_sweep.yaml",
     }.issubset(sweep_names)
+
+
+def test_camera_pyramid_sbwc_sweep_expands_all_l0_to_g4_compression_combinations():
+    path = FIXTURE_ROOT / "sweeps" / "camera_pyramid_sbwc_sweep.yaml"
+    sweep = ExplorationSweep.model_validate(_read_yaml(path))
+
+    compiled = compile_exploration_sweep(sweep)
+
+    assert len(compiled.cases) == 32
+    document_ids = [document["id"] for document in compiled.import_bundle["documents"]]
+    assert len(document_ids) == len(set(document_ids))
+    variant_ids = [case["variant_id"] for case in compiled.cases]
+    assert "pyramid-l0-off-l1-off-l2-off-l3-off-g4-off" in variant_ids
+    assert "pyramid-l0-sbwc-l1-sbwc-l2-sbwc-l3-sbwc-g4-sbwc" in variant_ids
+    variants = [
+        variant
+        for document in compiled.import_bundle["documents"]
+        for variant in document["variants"]
+    ]
+    full_sbwc = next(
+        variant
+        for variant in variants
+        if variant["id"] == "pyramid-l0-sbwc-l1-sbwc-l2-sbwc-l3-sbwc-g4-sbwc"
+    )
+    mlsc_outputs = full_sbwc["node_configs"]["mlsc0"]["sim"]["outputs"]
+    assert [output["compression"] for output in mlsc_outputs] == ["COMP_SBWC_LOSSLESS"] * 5
+    assert [output["comp_ratio"] for output in mlsc_outputs] == [0.5] * 5
+    all_off = next(
+        variant
+        for variant in variants
+        if variant["id"] == "pyramid-l0-off-l1-off-l2-off-l3-off-g4-off"
+    )
+    assert all("comp_ratio" not in output for output in all_off["node_configs"]["mlsc0"]["sim"]["outputs"])
 
 
 def _read_yaml(path: Path) -> dict:
