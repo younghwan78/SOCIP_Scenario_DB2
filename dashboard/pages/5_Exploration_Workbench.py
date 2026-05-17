@@ -24,10 +24,12 @@ from dashboard.components.exploration_api_client import (
     compile_exploration_recipe,
     compile_exploration_sweep,
     compile_exploration_template,
+    compile_exploration_template_sweep,
     get_exploration_example,
     list_exploration_examples,
     preview_exploration_sweep,
     preview_exploration_template,
+    preview_exploration_template_sweep,
 )
 from dashboard.components.exploration_candidate_compare import render_candidate_comparison, selected_candidate
 from dashboard.components.exploration_result_view import render_candidate_detail
@@ -39,6 +41,7 @@ INPUT_TYPE_LABELS = {
     "single": "Single Design",
     "batch": "Batch Exploration",
     "template": "Chain Template",
+    "template_sweep": "Template Sweep",
     "unknown": "Unknown",
 }
 
@@ -258,6 +261,8 @@ def _compile_current(api_base: str, source_yaml: str) -> None:
             result = compile_exploration_sweep(api_base, source_yaml=source_yaml)
         elif kind == "template":
             result = compile_exploration_template(api_base, source_yaml=source_yaml)
+        elif kind == "template_sweep":
+            result = compile_exploration_template_sweep(api_base, source_yaml=source_yaml)
         else:
             result = compile_exploration_recipe(api_base, source_yaml=source_yaml)
     except ViewerApiError as exc:
@@ -284,6 +289,8 @@ def _preview_current(api_base: str, source_yaml: str, *, timeline_frames: int, d
             result = preview_exploration_sweep(api_base, source_yaml=source_yaml, include_results=True, config=config)
         elif kind == "template":
             result = preview_exploration_template(api_base, source_yaml=source_yaml, include_results=True, config=config)
+        elif kind == "template_sweep":
+            result = preview_exploration_template_sweep(api_base, source_yaml=source_yaml, include_results=True, config=config)
         else:
             result = preview_exploration_sweep(
                 api_base,
@@ -522,6 +529,8 @@ def _render_compile_help(*, kind: str, result: dict[str, Any]) -> None:
         st.info("Single Design compile produces one scenario document with one variant candidate. Use Run Simulation to simulate it as a one-case batch.")
     elif kind == "template":
         st.info("Chain Template compile normalizes compact buffers/links into one canonical scenario document. Use Run Simulation to preview the generated chain.")
+    elif kind == "template_sweep":
+        st.info("Template Sweep expands one versioned chain template across axis values. Each candidate remains preview-only until imported through a normal review flow.")
     else:
         st.info("Batch Exploration compile expands axes into candidate variants. Run Simulation to execute and compare those candidates.")
 
@@ -903,6 +912,8 @@ def _detect_yaml_kind(source_yaml: str) -> str:
 
 
 def _detect_yaml_kind_from_payload(payload: Any) -> str:
+    if isinstance(payload, dict) and payload.get("kind") == "scenario.chain_template_sweep":
+        return "template_sweep"
     if isinstance(payload, dict) and payload.get("kind") == "scenario.chain_template":
         return "template"
     if isinstance(payload, dict) and isinstance(payload.get("base_recipe"), dict):

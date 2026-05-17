@@ -243,3 +243,27 @@ uv run --group dev pytest tests\unit
   - `uv run pytest tests/unit/sim/test_chain_templates.py tests/unit/sim/test_exploration_fixtures.py tests/unit/api/test_exploration.py tests/unit/dashboard/test_exploration_workbench.py -q` -> `38 passed`
   - `uv run python scripts/compile_chain_template.py demo/exploration_fixtures/templates/camera_recording_pyramid_v1.yaml --normalized-output .runlogs/camera_recording_pyramid.normalized.yaml --output .runlogs/camera_recording_pyramid.compiled.yaml --bundle-output .runlogs/camera_recording_pyramid.bundle.json` -> passed
   - `uv run pytest tests/unit -q` -> `471 passed`
+
+## 2026-05-17 Chain Template Sweep Support
+
+- Added `scenario.chain_template_sweep` support so a versioned compact chain template can be expanded across axis values.
+- Current sweep behavior intentionally emits one scenario document per candidate because candidate axis values may change scenario-level `pipeline.buffers`.
+- New implementation:
+  - `compile_chain_template_sweep(...)` in `src/scenario_db/sim/chain_templates.py`
+  - `run_chain_template_sweep_preview(...)` in `src/scenario_db/sim/exploration_runner.py`
+  - `scripts/compile_chain_template_sweep.py`
+- New API endpoints:
+  - `POST /api/v1/exploration/template-sweeps/compile`
+  - `POST /api/v1/exploration/template-sweeps/preview`
+  - example discovery now includes `template_sweep:*`.
+- Exploration Workbench now detects `kind: scenario.chain_template_sweep` as `Template Sweep` and routes compile/run simulation to the new endpoints.
+- Added fixture:
+  - `demo/exploration_fixtures/template_sweeps/camera_recording_pyramid_sbwc_template_sweep.yaml`
+  - 4-case L0/L1 SBWC on/off sweep over the camera recording pyramid template.
+- Documentation updated:
+  - `docs/chain-template-contract-ko.md`
+  - `demo/exploration_fixtures/README.md`
+- Verification:
+  - `uv run pytest tests/unit/sim/test_chain_templates.py tests/unit/sim/test_exploration_fixtures.py tests/unit/api/test_exploration.py tests/unit/dashboard/test_exploration_workbench.py -q` -> `42 passed`
+  - `uv run python scripts/compile_chain_template_sweep.py demo/exploration_fixtures/template_sweeps/camera_recording_pyramid_sbwc_template_sweep.yaml --bundle-output .runlogs/camera_recording_pyramid_template_sweep.bundle.json --cases-output .runlogs/camera_recording_pyramid_template_sweep.cases.json` -> passed
+  - `uv run pytest tests/unit -q` -> `475 passed`

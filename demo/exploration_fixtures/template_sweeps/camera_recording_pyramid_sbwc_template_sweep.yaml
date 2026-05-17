@@ -1,0 +1,81 @@
+kind: scenario.chain_template_sweep
+id: camera-recording-pyramid-sbwc-template-sweep
+base_template:
+  kind: scenario.chain_template
+  id: camera-recording-pyramid
+  version: 1.0.0
+  schema_version: 1
+  scenario_id: uc-explore-camera-recording-pyramid-template-sweep
+  variant_id: pyramid
+  project_ref: proj-A-exynos2500
+  soc_ref: soc-exynos2500
+  name: Camera Recording Pyramid Template Sweep
+  category: [camera, exploration]
+  tags: [camera, recording, pyramid, template-sweep]
+  source:
+    type: sensor
+    node_id: sensor_src
+    ip_ref: ip-sensor-hp2-projectA
+    width: 4080
+    height: 2296
+    fps: 30
+    format: RAW_BAYER_16
+    bitwidth: 12
+    compression: COMP_BAYER_LOSSLESS
+  buffer_columns: [x, y, width, height, format, bitwidth, compression, comp_ratio]
+  buffers:
+    B_3AA: [0, 0, 4080, 2296, RAW_BAYER_16, 12, COMP_BAYER_LOSSLESS, 1.0]
+    L0: [0, 0, 2400, 1350, YUV420, 10, COMP_OFF, 1.0]
+    L1: [0, 0, 1200, 675, YUV420, 10, COMP_OFF, 1.0]
+    L2: [0, 0, 600, 338, YUV420, 10, COMP_OFF, 1.0]
+    L3: [0, 0, 300, 169, YUV420, 10, COMP_OFF, 1.0]
+    G4: [0, 0, 150, 84, YUV420, 10, COMP_OFF, 1.0]
+    DISPLAY_OUT: [0, 0, 1920, 1080, YUV420, 8, COMP_OFF, 1.0]
+    CODEC_OUT: [0, 0, 1920, 1080, YUV420, 10, COMP_OFF, 1.0]
+  blocks:
+    - {id: csis, template: csis_like, role: csis, ip_ref: ip-csis-v8}
+    - {id: pdp, template: pdp_like, role: pdp, ip_ref: ip-isp-v12}
+    - {id: byrp, template: byrp_like, role: byrp, ip_ref: ip-isp-v12}
+    - {id: rgbp, template: rgbp_like, role: rgbp, ip_ref: ip-isp-v12}
+    - {id: yuvp, template: yuvp_like, role: yuvp, ip_ref: ip-isp-v12}
+    - {id: mlsc, template: mlsc_like, role: mlsc, ip_ref: ip-isp-v12}
+    - {id: mtnr, template: mtnr_like, role: mtnr, ip_ref: ip-isp-v12}
+    - {id: msnr, template: msnr_like, role: msnr, ip_ref: ip-isp-v12}
+    - {id: mcsc, template: mcsc_like, role: mcsc, ip_ref: ip-isp-v12}
+    - {id: dpu, template: dpu_like, role: dpu, ip_ref: ip-dpu-v9}
+    - {id: codec, template: codec_like, role: codec, ip_ref: ip-mfc-v14}
+  links:
+    - "sensor_src:COUT -> csis:CIN | OTF"
+    - "csis:COUT -> pdp:CIN | OTF"
+    - "csis:WDMA_3AA -> B_3AA | M2M"
+    - "B_3AA -> byrp:RDMA_3AA | M2M"
+    - "byrp:COUT -> rgbp:CIN | OTF"
+    - "rgbp:COUT -> yuvp:CIN | OTF"
+    - "yuvp:COUT -> mlsc:CIN | OTF"
+    - "mlsc:WDMA0 -> L0 | M2M"
+    - "mlsc:WDMA1 -> L1 | M2M"
+    - "mlsc:WDMA2 -> L2 | M2M"
+    - "mlsc:WDMA3 -> L3 | M2M"
+    - "mlsc:WDMA4 -> G4 | M2M"
+    - "L0 -> mtnr:RDMA0 | M2M"
+    - "L1 -> mtnr:RDMA1 | M2M"
+    - "L2 -> mtnr:RDMA2 | M2M"
+    - "L3 -> mtnr:RDMA3 | M2M"
+    - "G4 -> mtnr:RDMA4 | M2M"
+    - "mtnr:COUT -> msnr:CIN | OTF"
+    - "msnr:COUT -> mcsc:CIN | OTF"
+    - "mcsc:WDMA0 -> DISPLAY_OUT | M2M"
+    - "DISPLAY_OUT -> dpu:RDMA0 | M2M"
+    - "mcsc:WDMA1 -> CODEC_OUT | M2M"
+    - "CODEC_OUT -> codec:RDMA0 | M2M"
+axes:
+  - name: l0
+    path: buffers.L0
+    values:
+      - {label: off, value: [0, 0, 2400, 1350, YUV420, 10, COMP_OFF, 1.0]}
+      - {label: sbwc, value: [0, 0, 2400, 1350, YUV420, 10, COMP_SBWC_LOSSLESS, 0.5]}
+  - name: l1
+    path: buffers.L1
+    values:
+      - {label: off, value: [0, 0, 1200, 675, YUV420, 10, COMP_OFF, 1.0]}
+      - {label: sbwc, value: [0, 0, 1200, 675, YUV420, 10, COMP_SBWC_LOSSLESS, 0.5]}

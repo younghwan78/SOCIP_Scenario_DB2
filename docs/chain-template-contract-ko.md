@@ -143,6 +143,43 @@ mapping_profile:
 Borrowed 값은 native SoC 측정값처럼 조용히 병합하지 않고, compile result의
 `mapping_trace`와 simulation debug trace에서 provenance로 확인할 수 있어야 한다.
 
+## Template Sweep
+
+복잡한 topology는 그대로 두고 buffer compression, size, format, IP parameter만
+바꿔 비교하려면 `scenario.chain_template_sweep`을 사용한다.
+
+```yaml
+kind: scenario.chain_template_sweep
+id: camera-recording-pyramid-sbwc-template-sweep
+base_template:
+  kind: scenario.chain_template
+  id: camera-recording-pyramid
+  version: 1.0.0
+  schema_version: 1
+  project_ref: proj-A-exynos2500
+  source:
+    width: 4080
+    height: 2296
+  buffers:
+    L0: [0, 0, 2400, 1350, YUV420, 10, COMP_OFF, 1.0]
+  blocks:
+    - {id: mlsc, template: mlsc_like, ip_ref: ip-isp-v12}
+    - {id: mtnr, template: mtnr_like, ip_ref: ip-isp-v12}
+  links:
+    - "mlsc:WDMA0 -> L0 | M2M"
+    - "L0 -> mtnr:RDMA0 | M2M"
+axes:
+  - name: l0
+    path: buffers.L0
+    values:
+      - {label: off, value: [0, 0, 2400, 1350, YUV420, 10, COMP_OFF, 1.0]}
+      - {label: sbwc, value: [0, 0, 2400, 1350, YUV420, 10, COMP_SBWC_LOSSLESS, 0.5]}
+```
+
+현재 구현은 후보별로 scenario document를 분리한다. 이는 후보마다
+`pipeline.buffers`가 달라질 수 있기 때문이다. 나중에 pipeline이 완전히 같은
+case에 한해서 variant merge 최적화를 추가할 수 있다.
+
 ## 실행 예
 
 Template fixture compile:
@@ -150,6 +187,7 @@ Template fixture compile:
 ```powershell
 uv run pytest tests\unit\sim\test_chain_templates.py -q
 uv run pytest tests\unit\sim\test_exploration_fixtures.py::test_exploration_chain_template_fixtures_compile_to_valid_scenarios -q
+uv run pytest tests\unit\sim\test_exploration_fixtures.py::test_exploration_chain_template_sweep_fixtures_compile_and_preview -q
 ```
 
 API endpoint:
@@ -157,8 +195,9 @@ API endpoint:
 ```text
 POST /api/v1/exploration/templates/compile
 POST /api/v1/exploration/templates/preview
+POST /api/v1/exploration/template-sweeps/compile
+POST /api/v1/exploration/template-sweeps/preview
 ```
 
 Streamlit Exploration Workbench에서는 `template:` 예제를 불러오면
 `Chain Template` input type으로 인식하고 compile/run preview를 수행한다.
-

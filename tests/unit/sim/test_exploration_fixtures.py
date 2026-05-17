@@ -14,8 +14,8 @@ from scenario_db.sim.exploration import (
     compile_exploration_recipe,
     compile_exploration_sweep,
 )
-from scenario_db.sim.chain_templates import compile_chain_template
-from scenario_db.sim.exploration_runner import run_exploration_sweep_preview
+from scenario_db.sim.chain_templates import compile_chain_template, compile_chain_template_sweep
+from scenario_db.sim.exploration_runner import run_chain_template_sweep_preview, run_exploration_sweep_preview
 from scenario_db.sim.models import SimulationRunConfig
 from scenario_db.write.service import normalize_import_bundle_payload, validate_import_bundle
 
@@ -72,10 +72,31 @@ def test_exploration_chain_template_fixtures_compile_to_valid_scenarios(path: Pa
     assert result.scenario["pipeline"]["buffers"]
 
 
+@pytest.mark.parametrize("path", sorted((FIXTURE_ROOT / "template_sweeps").glob("*.yaml")))
+def test_exploration_chain_template_sweep_fixtures_compile_and_preview(path: Path):
+    sweep = _read_yaml(path)
+
+    compiled = compile_chain_template_sweep(sweep)
+    preview = run_chain_template_sweep_preview(
+        sweep,
+        ip_catalog=_ip_catalog(),
+        project=_ImportDb().project,
+        config=SimulationRunConfig(include_timeline=False),
+    )
+
+    normalized = normalize_import_bundle_payload(compiled.import_bundle)
+    assert validate_import_bundle(_ImportDb(), normalized) == []
+    assert compiled.cases
+    assert preview.persisted is False
+    assert len(preview.cases) == len(compiled.cases)
+    assert len(preview.comparison) == len(compiled.cases)
+
+
 def test_exploration_fixtures_cover_expected_use_cases():
     recipe_names = {path.name for path in (FIXTURE_ROOT / "recipes").glob("*.yaml")}
     sweep_names = {path.name for path in (FIXTURE_ROOT / "sweeps").glob("*.yaml")}
     template_names = {path.name for path in (FIXTURE_ROOT / "templates").glob("*.yaml")}
+    template_sweep_names = {path.name for path in (FIXTURE_ROOT / "template_sweeps").glob("*.yaml")}
 
     assert {
         "camera_otf_chain_fhd30.yaml",
@@ -91,6 +112,9 @@ def test_exploration_fixtures_cover_expected_use_cases():
     assert {
         "camera_recording_pyramid_v1.yaml",
     }.issubset(template_names)
+    assert {
+        "camera_recording_pyramid_sbwc_template_sweep.yaml",
+    }.issubset(template_sweep_names)
 
 
 def test_camera_pyramid_sbwc_sweep_expands_all_l0_to_g4_compression_combinations():

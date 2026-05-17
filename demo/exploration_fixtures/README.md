@@ -9,6 +9,7 @@ for:
 - `scripts\compile_exploration_recipe.py`
 - `scripts\compile_exploration_sweep.py`
 - `scripts\compile_chain_template.py`
+- `scripts\compile_chain_template_sweep.py`
 - `scenario_db.sim.exploration_runner.run_exploration_sweep_preview`
 
 ## Recipes
@@ -38,6 +39,16 @@ ScenarioDB scenario documents.
 | --- | --- |
 | `templates/camera_recording_pyramid_v1.yaml` | Versioned HP2 recording pyramid chain with CSIS/PDP/BYRP/RGBP/YUVP/MLSC/MTNR/MSNR/MCSC/DPU/CODEC and compact L0/L1/L2/L3/G4 buffers. |
 
+## Template Sweeps
+
+Template sweeps expand one versioned chain template across axis values. This is
+the preferred authoring format when the topology is complex but the exploration
+mainly changes buffer compression, size, format, or selected IP parameters.
+
+| File | Coverage |
+| --- | --- |
+| `template_sweeps/camera_recording_pyramid_sbwc_template_sweep.yaml` | 4-case L0/L1 SBWC on/off sweep over the versioned camera recording pyramid template. |
+
 ## Compile Examples
 
 ```powershell
@@ -46,6 +57,8 @@ uv run python scripts\compile_exploration_recipe.py demo\exploration_fixtures\re
 uv run python scripts\compile_exploration_sweep.py demo\exploration_fixtures\sweeps\camera_fps_format_sweep.yaml --bundle-output .runlogs\camera_fps_format_sweep.bundle.json --cases-output .runlogs\camera_fps_format_sweep.cases.json
 
 uv run python scripts\compile_chain_template.py demo\exploration_fixtures\templates\camera_recording_pyramid_v1.yaml --output .runlogs\camera_recording_pyramid.compiled.yaml --bundle-output .runlogs\camera_recording_pyramid.bundle.json --normalized-output .runlogs\camera_recording_pyramid.normalized.yaml
+
+uv run python scripts\compile_chain_template_sweep.py demo\exploration_fixtures\template_sweeps\camera_recording_pyramid_sbwc_template_sweep.yaml --bundle-output .runlogs\camera_recording_pyramid_sweep.bundle.json --cases-output .runlogs\camera_recording_pyramid_sweep.cases.json
 ```
 
 The compiled bundles are preview/staging inputs. Persist only selected

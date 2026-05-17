@@ -32,6 +32,7 @@ def test_exploration_examples_list_endpoint():
     assert "recipe:camera_crop_scale_m2m" in ids
     assert "sweep:camera_fps_format_sweep" in ids
     assert "template:camera_recording_pyramid_v1" in ids
+    assert "template_sweep:camera_recording_pyramid_sbwc_template_sweep" in ids
 
 
 def test_exploration_example_detail_endpoint():
@@ -153,6 +154,51 @@ links:
     assert body["import_bundle"]["import_report"]["generated"]["chain_template"] == 1
 
 
+def test_exploration_template_sweep_compile_endpoint_from_yaml():
+    client, _ = _client_with_db()
+
+    response = client.post(
+        "/api/v1/exploration/template-sweeps/compile",
+        json={
+            "source_yaml": """
+kind: scenario.chain_template_sweep
+id: api-template-sweep
+base_template:
+  kind: scenario.chain_template
+  id: api-template
+  version: 1.0.0
+  schema_version: 1
+  project_ref: proj-next
+  source:
+    width: 1920
+    height: 1080
+  buffers:
+    B0: [0, 0, 1920, 1080, YUV420, 8, COMP_OFF, 1.0]
+  blocks:
+    - {id: isp0, template: isp, ip_ref: ip-isp-v12}
+    - {id: dpu0, template: dpu, ip_ref: ip-dpu-v9}
+  links:
+    - "sensor_src:COUT -> isp0:CIN | OTF"
+    - "isp0:WDMA0 -> B0 | M2M"
+    - "B0 -> dpu0:RDMA0 | M2M"
+axes:
+  - name: b0
+    path: buffers.B0
+    values:
+      - {label: off, value: [0, 0, 1920, 1080, YUV420, 8, COMP_OFF, 1.0]}
+      - {label: sbwc, value: [0, 0, 1920, 1080, YUV420, 8, COMP_SBWC_LOSSLESS, 0.5]}
+"""
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["persisted"] is False
+    assert len(body["cases"]) == 2
+    assert body["cases"][1]["variant_id"] == "api-template-1p0p0-b0-sbwc"
+    assert body["import_bundle"]["import_report"]["generated"]["chain_template_sweep_case"] == 2
+
+
 def test_exploration_sweep_preview_endpoint(monkeypatch):
     client, db = _client_with_db()
 
@@ -230,3 +276,47 @@ def test_exploration_template_preview_endpoint(monkeypatch):
     body = response.json()
     assert body["baseline_case_id"] == "template-fhd30"
     assert body["comparison"][0]["template"] == "api-template@1.0.0"
+
+
+def test_exploration_template_sweep_preview_endpoint(monkeypatch):
+    client, db = _client_with_db()
+
+    def _fake_preview(db_arg, request):
+        assert db_arg is db
+        assert request.include_results is False
+        return {
+            "persisted": False,
+            "baseline_case_id": "template-b0-off",
+            "cases": [],
+            "comparison": [{"case_id": "template-b0-off", "total_power_mw": 1.0}],
+            "import_bundle": {"kind": "scenario.import_bundle"},
+        }
+
+    monkeypatch.setattr(exploration_router, "preview_template_sweep_request", _fake_preview)
+
+    response = client.post(
+        "/api/v1/exploration/template-sweeps/preview",
+        json={
+            "sweep": {
+                "kind": "scenario.chain_template_sweep",
+                "id": "api-template-sweep",
+                "base_template": {
+                    "kind": "scenario.chain_template",
+                    "id": "api-template",
+                    "version": "1.0.0",
+                    "schema_version": 1,
+                    "project_ref": "proj-next",
+                    "source": {"width": 1920, "height": 1080},
+                    "buffers": {"B0": [0, 0, 1920, 1080, "YUV420", 8, "COMP_OFF", 1.0]},
+                    "blocks": [{"id": "isp0", "template": "isp", "ip_ref": "ip-isp-v12"}],
+                    "links": ["sensor_src:COUT -> isp0:CIN | OTF"],
+                },
+                "axes": [],
+            },
+            "include_results": False,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["baseline_case_id"] == "template-b0-off"

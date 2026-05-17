@@ -6,7 +6,7 @@ from copy import deepcopy
 from typing import Any
 
 from scenario_db.sim.bw_calc import compression_enabled
-from scenario_db.sim.exploration import ExplorationCompileResult
+from scenario_db.sim.exploration import ExplorationCompileResult, ExplorationSweepResult
 
 
 DEFAULT_BUFFER_COLUMNS = ["x", "y", "width", "height", "format", "bitwidth", "compression", "comp_ratio"]
@@ -159,6 +159,58 @@ def compile_chain_template(payload: dict[str, Any]) -> ExplorationCompileResult:
         import_bundle=import_bundle,
         warnings=[],
         mapping_trace=mapping_trace,
+    )
+
+
+def compile_chain_template_sweep(payload: dict[str, Any]) -> ExplorationSweepResult:
+    """Expand a versioned chain template sweep into scenario import documents."""
+
+    if not isinstance(payload, dict):
+        raise ValueError("chain template sweep payload must be a mapping")
+    if payload.get("kind") not in {"scenario.chain_template_sweep", "chain_template_sweep"}:
+        raise ValueError("chain template sweep kind must be scenario.chain_template_sweep")
+    sweep_id = _required_str(payload, "id")
+    base_template = payload.get("base_template")
+    if not isinstance(base_template, dict):
+        raise ValueError("chain template sweep must define base_template")
+    axes = payload.get("axes") or []
+    if not isinstance(axes, list):
+        raise ValueError("chain template sweep axes must be a list")
+
+    templates = _expand_template_sweep(base_template, axes)
+    compiled = [compile_chain_template(template) for template in templates]
+    documents = [_non_merged_template_document(result.scenario, template) for result, template in zip(compiled, templates, strict=True)]
+    cases = [
+        {
+            "case_id": str(template.get("variant_id")),
+            "scenario_id": document["id"],
+            "variant_id": str(template.get("variant_id")),
+            "axis_values": _axis_values_for_template_case(axes, template),
+            "template_ref": f"{template.get('id')}@{template.get('version')}",
+        }
+        for template, document in zip(templates, documents, strict=True)
+    ]
+    return ExplorationSweepResult(
+        import_bundle={
+            "kind": "scenario.import_bundle",
+            "documents": documents,
+            "import_report": {
+                "ok": True,
+                "generated": {
+                    "scenario_usecase": len(documents),
+                    "scenario_variant": len(documents),
+                    "chain_template_sweep": 1,
+                    "chain_template_sweep_case": len(documents),
+                },
+                "sweep": {
+                    "id": sweep_id,
+                    "base_template": f"{base_template.get('id')}@{base_template.get('version')}",
+                },
+                "messages": [],
+            },
+        },
+        cases=cases,
+        warnings=[],
     )
 
 
@@ -512,3 +564,100 @@ def _stable_hash(payload: dict[str, Any]) -> str:
     copy.pop("normalized_hash", None)
     data = json.dumps(copy, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(data.encode("utf-8")).hexdigest()[:16]
+
+
+def _expand_template_sweep(base_template: dict[str, Any], axes: list[Any]) -> list[dict[str, Any]]:
+    if not axes:
+        return [deepcopy(base_template)]
+    cases: list[tuple[dict[str, Any], list[str]]] = [(deepcopy(base_template), [])]
+    for raw_axis in axes:
+        if not isinstance(raw_axis, dict):
+            raise ValueError("each template sweep axis must be a mapping")
+        axis_name = _required_str(raw_axis, "name")
+        axis_path = _required_str(raw_axis, "path")
+        values = raw_axis.get("values") or []
+        if not isinstance(values, list) or not values:
+            raise ValueError(f"template sweep axis {axis_name} must define values")
+        expanded: list[tuple[dict[str, Any], list[str]]] = []
+        for raw, suffixes in cases:
+            for value in values:
+                item = deepcopy(raw)
+                _set_path(item, axis_path, _axis_value_payload(value))
+                expanded.append((item, [*suffixes, f"{axis_name}-{_safe_id(_axis_value_label(value))}"]))
+        cases = expanded
+    base_variant = str(
+        base_template.get("variant_id")
+        or f"{_safe_id(base_template.get('id') or 'template')}-{_safe_id(base_template.get('version') or 'v0')}"
+    )
+    result: list[dict[str, Any]] = []
+    for raw, suffixes in cases:
+        raw["variant_id"] = f"{base_variant}-{'-'.join(suffixes)}" if suffixes else base_variant
+        result.append(raw)
+    return result
+
+
+def _non_merged_template_document(scenario: dict[str, Any], template: dict[str, Any]) -> dict[str, Any]:
+    document = deepcopy(scenario)
+    document["id"] = f"{scenario['id']}-{_safe_id(template.get('variant_id'))}"
+    return document
+
+
+def _axis_values_for_template_case(axes: list[Any], template: dict[str, Any]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for raw_axis in axes:
+        if not isinstance(raw_axis, dict):
+            continue
+        name = str(raw_axis.get("name") or "")
+        path = str(raw_axis.get("path") or "")
+        if name and path:
+            result[name] = _get_path(template, path)
+    return result
+
+
+def _set_path(target: dict[str, Any], path: str, value: Any) -> None:
+    parts = _path_parts(path)
+    current: Any = target
+    for part in parts[:-1]:
+        if isinstance(part, int):
+            current = current[part]
+        else:
+            current = current.setdefault(part, {})
+    last = parts[-1]
+    if isinstance(last, int):
+        current[last] = value
+    else:
+        current[last] = value
+
+
+def _get_path(source: dict[str, Any], path: str) -> Any:
+    current: Any = source
+    for part in _path_parts(path):
+        current = current[part] if isinstance(part, int) else current.get(part)
+    return current
+
+
+def _path_parts(path: str) -> list[str | int]:
+    parts: list[str | int] = []
+    for token in path.split("."):
+        rest = token
+        while "[" in rest and "]" in rest:
+            name, tail = rest.split("[", 1)
+            if name:
+                parts.append(name)
+            index, rest = tail.split("]", 1)
+            parts.append(int(index))
+        if rest:
+            parts.append(rest)
+    return parts
+
+
+def _axis_value_payload(value: Any) -> Any:
+    if isinstance(value, dict) and "label" in value and "value" in value:
+        return value["value"]
+    return value
+
+
+def _axis_value_label(value: Any) -> Any:
+    if isinstance(value, dict) and "label" in value and "value" in value:
+        return value["label"]
+    return value

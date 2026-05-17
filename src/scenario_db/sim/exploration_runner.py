@@ -10,7 +10,7 @@ from scenario_db.db.repositories.scenario_graph import CanonicalScenarioGraph
 from scenario_db.db.repositories.variant_resolution import ResolvedScenarioVariant
 from scenario_db.sim.adapter import build_simulation_inputs
 from scenario_db.sim.exploration import ExplorationSweep, compile_exploration_sweep
-from scenario_db.sim.chain_templates import compile_chain_template
+from scenario_db.sim.chain_templates import compile_chain_template, compile_chain_template_sweep
 from scenario_db.sim.models import DVFSTable, SimRunResult, SimulationRunConfig
 from scenario_db.sim.runner import run_simulation
 
@@ -86,6 +86,30 @@ def run_chain_template_preview(
             "axis_values": {"template": design.get("template_ref")},
         }
     }
+    return run_import_bundle_preview(
+        compiled.import_bundle,
+        case_meta=case_meta,
+        ip_catalog=ip_catalog,
+        project=project,
+        soc=soc,
+        config=config,
+        dvfs_tables=dvfs_tables,
+        include_results=include_results,
+    )
+
+
+def run_chain_template_sweep_preview(
+    sweep: dict[str, Any],
+    *,
+    ip_catalog: dict[str, IpCatalog],
+    project: Project | None = None,
+    soc: SocPlatform | None = None,
+    config: SimulationRunConfig | None = None,
+    dvfs_tables: dict[str, DVFSTable] | None = None,
+    include_results: bool = False,
+) -> SweepPreviewResult:
+    compiled = compile_chain_template_sweep(sweep)
+    case_meta = {item["variant_id"]: item for item in compiled.cases}
     return run_import_bundle_preview(
         compiled.import_bundle,
         case_meta=case_meta,

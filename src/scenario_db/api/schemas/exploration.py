@@ -10,7 +10,7 @@ from scenario_db.sim.models import DVFSTable, SimulationRunConfig
 
 class ExplorationExampleSummary(BaseModel):
     id: str
-    type: Literal["recipe", "sweep", "template"]
+    type: Literal["recipe", "sweep", "template", "template_sweep"]
     title: str
     fixture_id: str | None = None
     path: str
@@ -69,6 +69,19 @@ class ExplorationTemplateCompileResponse(BaseModel):
 
 class ExplorationTemplatePreviewRequest(BaseModel):
     template: dict[str, Any] | None = None
+    source_yaml: str | None = None
+    config: SimulationRunConfig = Field(default_factory=lambda: SimulationRunConfig(include_timeline=False))
+    dvfs_tables: dict[str, DVFSTable] = Field(default_factory=dict)
+    include_results: bool = False
+
+
+class ExplorationTemplateSweepCompileRequest(BaseModel):
+    sweep: dict[str, Any] | None = None
+    source_yaml: str | None = None
+
+
+class ExplorationTemplateSweepPreviewRequest(BaseModel):
+    sweep: dict[str, Any] | None = None
     source_yaml: str | None = None
     config: SimulationRunConfig = Field(default_factory=lambda: SimulationRunConfig(include_timeline=False))
     dvfs_tables: dict[str, DVFSTable] = Field(default_factory=dict)

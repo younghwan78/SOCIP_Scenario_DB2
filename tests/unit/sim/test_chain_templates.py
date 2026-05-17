@@ -5,6 +5,7 @@ import pytest
 from scenario_db.models.definition.usecase import Usecase
 from scenario_db.sim.chain_templates import (
     compile_chain_template,
+    compile_chain_template_sweep,
     normalize_chain_template,
 )
 
@@ -96,6 +97,47 @@ def test_chain_template_rejects_unknown_derive_buffer():
 
     with pytest.raises(ValueError, match="derive_from references unknown buffer"):
         normalize_chain_template(template)
+
+
+def test_compile_chain_template_sweep_expands_buffer_tuple_axis_values():
+    sweep = {
+        "kind": "scenario.chain_template_sweep",
+        "id": "template-sbwc-sweep",
+        "base_template": _template_payload(),
+        "axes": [
+            {
+                "name": "l0",
+                "path": "buffers.L0",
+                "values": [
+                    {
+                        "label": "off",
+                        "value": [0, 0, 2400, 1350, "YUV420", 10, "COMP_OFF", 1.0],
+                    },
+                    {
+                        "label": "sbwc",
+                        "value": [0, 0, 2400, 1350, "YUV420", 10, "COMP_SBWC_LOSSLESS", 0.5],
+                    },
+                ],
+            }
+        ],
+    }
+
+    result = compile_chain_template_sweep(sweep)
+
+    assert len(result.import_bundle["documents"]) == 2
+    assert [case["variant_id"] for case in result.cases] == ["template-fhd30-l0-off", "template-fhd30-l0-sbwc"]
+    assert result.cases[1]["axis_values"]["l0"][6] == "COMP_SBWC_LOSSLESS"
+    off_variant = result.import_bundle["documents"][0]["variants"][0]
+    sbwc_variant = result.import_bundle["documents"][1]["variants"][0]
+    assert off_variant["id"] == "template-fhd30-l0-off"
+    assert sbwc_variant["id"] == "template-fhd30-l0-sbwc"
+    off_output = off_variant["node_configs"]["mlsc"]["sim"]["outputs"][0]
+    sbwc_output = sbwc_variant["node_configs"]["mlsc"]["sim"]["outputs"][0]
+    assert off_output["compression"] == "COMP_OFF"
+    assert "comp_ratio" not in off_output
+    assert sbwc_output["compression"] == "COMP_SBWC_LOSSLESS"
+    assert sbwc_output["comp_ratio"] == 0.5
+    assert result.import_bundle["import_report"]["generated"]["chain_template_sweep_case"] == 2
 
 
 def _template_payload() -> dict:

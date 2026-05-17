@@ -17,15 +17,19 @@ from scenario_db.api.schemas.exploration import (
     ExplorationTemplateCompileRequest,
     ExplorationTemplateCompileResponse,
     ExplorationTemplatePreviewRequest,
+    ExplorationTemplateSweepCompileRequest,
+    ExplorationTemplateSweepPreviewRequest,
 )
 from scenario_db.api.services.exploration import (
     compile_recipe_request,
     compile_sweep_request,
     compile_template_request,
+    compile_template_sweep_request,
     get_exploration_example,
     list_exploration_examples,
     preview_sweep_request,
     preview_template_request,
+    preview_template_sweep_request,
     validation_detail,
 )
 
@@ -66,6 +70,14 @@ def compile_template(request: ExplorationTemplateCompileRequest):
         raise HTTPException(status_code=422, detail=validation_detail(exc)) from exc
 
 
+@router.post("/template-sweeps/compile", response_model=ExplorationSweepCompileResponse)
+def compile_template_sweep(request: ExplorationTemplateSweepCompileRequest):
+    try:
+        return compile_template_sweep_request(request)
+    except (ValidationError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=validation_detail(exc)) from exc
+
+
 @router.post("/sweeps/preview", response_model=ExplorationSweepPreviewResponse)
 def preview_sweep(request: ExplorationSweepPreviewRequest, db: Session = Depends(get_db)):
     try:
@@ -78,5 +90,13 @@ def preview_sweep(request: ExplorationSweepPreviewRequest, db: Session = Depends
 def preview_template(request: ExplorationTemplatePreviewRequest, db: Session = Depends(get_db)):
     try:
         return preview_template_request(db, request)
+    except (ValidationError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=validation_detail(exc)) from exc
+
+
+@router.post("/template-sweeps/preview", response_model=ExplorationSweepPreviewResponse)
+def preview_template_sweep(request: ExplorationTemplateSweepPreviewRequest, db: Session = Depends(get_db)):
+    try:
+        return preview_template_sweep_request(db, request)
     except (ValidationError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=validation_detail(exc)) from exc
