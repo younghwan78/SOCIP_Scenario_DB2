@@ -31,6 +31,7 @@ def test_exploration_examples_list_endpoint():
     ids = {item["id"] for item in body["items"]}
     assert "recipe:camera_crop_scale_m2m" in ids
     assert "sweep:camera_fps_format_sweep" in ids
+    assert "template:camera_recording_pyramid_v1" in ids
 
 
 def test_exploration_example_detail_endpoint():
@@ -116,6 +117,42 @@ def test_exploration_sweep_compile_endpoint_from_dict():
     assert body["cases"][0]["axis_values"]["fps"] == 30.0
 
 
+def test_exploration_template_compile_endpoint_from_yaml():
+    client, _ = _client_with_db()
+
+    response = client.post(
+        "/api/v1/exploration/templates/compile",
+        json={
+            "source_yaml": """
+kind: scenario.chain_template
+id: api-template
+version: 1.0.0
+schema_version: 1
+project_ref: proj-next
+source:
+  width: 1920
+  height: 1080
+buffers:
+  B0: [0, 0, 1920, 1080, YUV420, 8, COMP_OFF, 1.0]
+blocks:
+  - {id: isp0, template: isp, ip_ref: ip-isp-v12}
+  - {id: dpu0, template: dpu, ip_ref: ip-dpu-v9}
+links:
+  - "sensor_src:COUT -> isp0:CIN | OTF"
+  - "isp0:WDMA0 -> B0 | M2M"
+  - "B0 -> dpu0:RDMA0 | M2M"
+"""
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["persisted"] is False
+    assert body["scenario"]["id"] == "uc-api-template"
+    assert body["scenario"]["variants"][0]["design_conditions"]["template_ref"] == "api-template@1.0.0"
+    assert body["import_bundle"]["import_report"]["generated"]["chain_template"] == 1
+
+
 def test_exploration_sweep_preview_endpoint(monkeypatch):
     client, db = _client_with_db()
 
@@ -153,3 +190,43 @@ def test_exploration_sweep_preview_endpoint(monkeypatch):
     body = response.json()
     assert body["persisted"] is False
     assert body["comparison"][0]["total_power_mw"] == 1.0
+
+
+def test_exploration_template_preview_endpoint(monkeypatch):
+    client, db = _client_with_db()
+
+    def _fake_preview(db_arg, request):
+        assert db_arg is db
+        assert request.include_results is False
+        return {
+            "persisted": False,
+            "baseline_case_id": "template-fhd30",
+            "cases": [],
+            "comparison": [{"case_id": "template-fhd30", "template": "api-template@1.0.0"}],
+            "import_bundle": {"kind": "scenario.import_bundle"},
+        }
+
+    monkeypatch.setattr(exploration_router, "preview_template_request", _fake_preview)
+
+    response = client.post(
+        "/api/v1/exploration/templates/preview",
+        json={
+            "template": {
+                "kind": "scenario.chain_template",
+                "id": "api-template",
+                "version": "1.0.0",
+                "schema_version": 1,
+                "project_ref": "proj-next",
+                "source": {"width": 1920, "height": 1080},
+                "buffers": {"B0": [0, 0, 1920, 1080, "YUV420", 8, "COMP_OFF", 1.0]},
+                "blocks": [{"id": "isp0", "template": "isp", "ip_ref": "ip-isp-v12"}],
+                "links": ["sensor_src:COUT -> isp0:CIN | OTF"],
+            },
+            "include_results": False,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["baseline_case_id"] == "template-fhd30"
+    assert body["comparison"][0]["template"] == "api-template@1.0.0"

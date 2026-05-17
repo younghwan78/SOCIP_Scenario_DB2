@@ -18,6 +18,9 @@ from scenario_db.api.schemas.exploration import (
     ExplorationSweepCompileResponse,
     ExplorationSweepPreviewRequest,
     ExplorationSweepPreviewResponse,
+    ExplorationTemplateCompileRequest,
+    ExplorationTemplateCompileResponse,
+    ExplorationTemplatePreviewRequest,
 )
 from scenario_db.db.models.capability import IpCatalog, SocPlatform
 from scenario_db.db.models.definition import Project
@@ -27,7 +30,8 @@ from scenario_db.sim.exploration import (
     compile_exploration_recipe,
     compile_exploration_sweep,
 )
-from scenario_db.sim.exploration_runner import run_exploration_sweep_preview
+from scenario_db.sim.chain_templates import compile_chain_template
+from scenario_db.sim.exploration_runner import run_chain_template_preview, run_exploration_sweep_preview
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 _FIXTURE_ROOT = _REPO_ROOT / "demo" / "exploration_fixtures"
@@ -36,6 +40,7 @@ _FIXTURE_ROOT = _REPO_ROOT / "demo" / "exploration_fixtures"
 def list_exploration_examples() -> ExplorationExampleListResponse:
     items = [_example_summary(path, "recipe") for path in sorted((_FIXTURE_ROOT / "recipes").glob("*.yaml"))]
     items.extend(_example_summary(path, "sweep") for path in sorted((_FIXTURE_ROOT / "sweeps").glob("*.yaml")))
+    items.extend(_example_summary(path, "template") for path in sorted((_FIXTURE_ROOT / "templates").glob("*.yaml")))
     return ExplorationExampleListResponse(items=items, total=len(items))
 
 
@@ -75,6 +80,16 @@ def compile_sweep_request(request: ExplorationSweepCompileRequest) -> Exploratio
     )
 
 
+def compile_template_request(request: ExplorationTemplateCompileRequest) -> ExplorationTemplateCompileResponse:
+    result = compile_chain_template(_payload_from_request(request.source_yaml, request.template, "template"))
+    return ExplorationTemplateCompileResponse(
+        scenario=result.scenario,
+        import_bundle=result.import_bundle,
+        warnings=result.warnings,
+        mapping_trace=result.mapping_trace,
+    )
+
+
 def preview_sweep_request(db: Session, request: ExplorationSweepPreviewRequest) -> ExplorationSweepPreviewResponse:
     sweep = ExplorationSweep.model_validate(_payload_from_request(request.source_yaml, request.sweep, "sweep"))
     preview = run_exploration_sweep_preview(
@@ -95,7 +110,30 @@ def preview_sweep_request(db: Session, request: ExplorationSweepPreviewRequest) 
     )
 
 
-def _example_summary(path: Path, kind: Literal["recipe", "sweep"]) -> ExplorationExampleSummary:
+def preview_template_request(db: Session, request: ExplorationTemplatePreviewRequest) -> ExplorationSweepPreviewResponse:
+    template = _payload_from_request(request.source_yaml, request.template, "template")
+    soc_ref = template.get("soc_ref")
+    if not soc_ref and isinstance(template.get("mapping_profile"), dict):
+        soc_ref = template["mapping_profile"].get("target_soc_ref")
+    preview = run_chain_template_preview(
+        template,
+        ip_catalog=_load_ip_catalog(db),
+        project=_load_project(db, template.get("project_ref")),
+        soc=_load_soc(db, soc_ref),
+        config=request.config,
+        dvfs_tables=request.dvfs_tables,
+        include_results=request.include_results,
+    )
+    return ExplorationSweepPreviewResponse(
+        persisted=False,
+        baseline_case_id=preview.baseline_case_id,
+        cases=preview.cases,
+        comparison=preview.comparison,
+        import_bundle=preview.import_bundle,
+    )
+
+
+def _example_summary(path: Path, kind: Literal["recipe", "sweep", "template"]) -> ExplorationExampleSummary:
     payload = _load_yaml_text(path.read_text(encoding="utf-8"))
     fixture_id = str(payload.get("id") or path.stem)
     base_recipe = payload.get("base_recipe") if kind == "sweep" else payload
@@ -114,11 +152,11 @@ def _example_summary(path: Path, kind: Literal["recipe", "sweep"]) -> Exploratio
     )
 
 
-def _parse_example_id(example_id: str) -> tuple[Literal["recipe", "sweep"], str]:
+def _parse_example_id(example_id: str) -> tuple[Literal["recipe", "sweep", "template"], str]:
     if ":" not in example_id:
         raise NoResultFound(f"Exploration example '{example_id}' not found")
     kind, stem = example_id.split(":", 1)
-    if kind not in {"recipe", "sweep"} or not stem:
+    if kind not in {"recipe", "sweep", "template"} or not stem:
         raise NoResultFound(f"Exploration example '{example_id}' not found")
     return kind, stem  # type: ignore[return-value]
 

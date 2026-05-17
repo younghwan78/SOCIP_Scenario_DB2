@@ -164,3 +164,82 @@ uv run --group dev pytest tests\unit
   - Add candidate comparison UI for sweep results.
   - Add explicit save/promote flow only after user confirmation, keeping preview and persisted evidence separated.
   - Expand API/dashboard tests around exploration examples, compile, and preview result rendering.
+
+## 2026-05-17 Exploration Workbench Wrap-Up
+
+- Current pushed GitHub head for the exploration wrap-up is `7883931 Add exploration pyramid sweep comparison` on branch `codex/fix-csis-sbwc-clock-formula`.
+- Exploration Workbench is considered **1st-pass complete** for the current scope:
+  - Example list/load, YAML upload, editable YAML input, and input hide/show are available.
+  - Single Design and Batch Exploration templates are available from the sidebar.
+  - Compile and Run Simulation are preview-only; results are not persisted as evidence.
+  - Preview Results show candidate comparison, selected candidate detail via the shared evidence result viewer, and topology/port-flow debugging.
+- Candidate comparison UI now emphasizes sweep-level decision making:
+  - Baseline candidate can be selected and deltas are recomputed against that baseline.
+  - Feasible-only, Pareto-only, and hide-warning filters are available.
+  - KPI Distribution by Sweep uses horizontal box plots for Power, DMA BW, and HW Time.
+  - The graph focuses on distribution, default, min, and max instead of rendering every candidate as a long bar list.
+  - The graph is followed by a min/default/max/spread summary table with metric-specific row tinting and default-row emphasis.
+  - Full candidate comparison table remains below for detailed inspection.
+- Added complex pyramid SBWC sweep fixture:
+  - `demo/exploration_fixtures/sweeps/camera_pyramid_sbwc_sweep.yaml`.
+  - Models HP2 FHD30 recording-style pyramid path with CSIS/PDP/BYRP/RGBP/YUVP/MLSC/MTNR/MSNR/MCSC roles.
+  - MLSC L0/L1/L2/L3/G4 SBWC on/off axes generate 32 preview candidates.
+  - The fixture preserves multi-output MLSC and multi-RDMA MTNR port conditions for BW/power preview, while the current exploration compiler still keeps the main canonical edge path linear.
+- Sweep axis handling was extended:
+  - `axes[].values[]` can use `{label, value}` to apply object-valued changes while keeping readable variant ids.
+  - This is used when one sweep choice must update a full port descriptor, such as `compression` and `comp_ratio` together.
+  - Non-merged sweep documents now get unique scenario ids derived from variant id to avoid duplicate import-document validation failures.
+- Compression handling was corrected:
+  - `COMP_OFF` and other disabled/off compression labels ignore `comp_ratio`.
+  - Exploration compiler omits `comp_ratio` from compiled sim ports when compression is disabled.
+  - BW calculation and debug trace use the same effective compression-ratio logic.
+  - `COMP_SBWC_LOSSLESS` with `comp_ratio: 0.5` remains the SBWC case for pyramid sweep outputs.
+- Documentation updated:
+  - `docs/exploration-fixture-guide-ko.md` documents Workbench operation, topology/port-flow debugging, candidate comparison behavior, and the new pyramid SBWC example.
+  - `demo/exploration_fixtures/README.md` lists the new sweep example.
+- Latest verification before/after push:
+  - `uv run pytest tests/unit/dashboard -q` -> `40 passed`
+  - `uv run pytest tests/unit -q` -> `465 passed`
+  - API and Streamlit were restarted and checked on FastAPI `127.0.0.1:18000` and Streamlit `127.0.0.1:18502`.
+- Workbench follow-up candidates are no longer blocking for the current scope:
+  - Mapping profile catalog and project/SoC mapping selection.
+  - Large sweep job/progress/retry management.
+  - Optional export/import workflow for selected candidates.
+  - More accurate fanout/fanin canonical topology compiler if exploration graph fidelity becomes a priority.
+- Recommended next major work returns to **SoC extensibility cleanup**:
+  - SoC-specific fixture/capability validation.
+  - Native unit power/PPC/DVFS import paths.
+  - Readiness rules for missing compute IP metadata vs external sensor/display metadata.
+  - Additional SoC/project exploration fixtures guarded by regression tests.
+
+## 2026-05-17 Chain Template / SoC Extensibility Start
+
+- Added first-pass versioned chain template support for complex SoC/ISP topology authoring.
+- New compact template contract:
+  - `kind: scenario.chain_template`
+  - immutable `id + version`
+  - `schema_version`
+  - compact `buffer_columns` tuple syntax, for example `[x, y, width, height, format, bitwidth, compression, comp_ratio]`
+  - compact port-level link syntax, for example `"mlsc:WDMA0 -> L0 | M2M"`
+  - `derive_from + scale` buffer derivation for pyramid buffers.
+- New implementation:
+  - `src/scenario_db/sim/chain_templates.py`
+  - `normalize_chain_template(...)`
+  - `compile_chain_template(...)`
+  - `run_chain_template_preview(...)` through the existing exploration preview path.
+- New API endpoints:
+  - `POST /api/v1/exploration/templates/compile`
+  - `POST /api/v1/exploration/templates/preview`
+  - `GET /api/v1/exploration/examples` now includes `template:*` examples.
+- Exploration Workbench now detects `scenario.chain_template` YAML as `Chain Template` and can compile/run preview through the new template endpoints.
+- Added complex template fixture:
+  - `demo/exploration_fixtures/templates/camera_recording_pyramid_v1.yaml`
+  - Models HP2 recording-style chain with CSIS/PDP/BYRP/RGBP/YUVP/MLSC/MTNR/MSNR/MCSC/DPU/CODEC, multi-WDMA MLSC, multi-RDMA MTNR, and L0/L1/L2/L3/G4 pyramid buffers.
+- Added documentation and CLI:
+  - `docs/chain-template-contract-ko.md`
+  - `scripts/compile_chain_template.py`
+  - `demo/exploration_fixtures/README.md` updated with template usage.
+- Verification:
+  - `uv run pytest tests/unit/sim/test_chain_templates.py tests/unit/sim/test_exploration_fixtures.py tests/unit/api/test_exploration.py tests/unit/dashboard/test_exploration_workbench.py -q` -> `38 passed`
+  - `uv run python scripts/compile_chain_template.py demo/exploration_fixtures/templates/camera_recording_pyramid_v1.yaml --normalized-output .runlogs/camera_recording_pyramid.normalized.yaml --output .runlogs/camera_recording_pyramid.compiled.yaml --bundle-output .runlogs/camera_recording_pyramid.bundle.json` -> passed
+  - `uv run pytest tests/unit -q` -> `471 passed`

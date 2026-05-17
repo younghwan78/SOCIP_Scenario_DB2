@@ -10,6 +10,7 @@ from scenario_db.db.repositories.scenario_graph import CanonicalScenarioGraph
 from scenario_db.db.repositories.variant_resolution import ResolvedScenarioVariant
 from scenario_db.sim.adapter import build_simulation_inputs
 from scenario_db.sim.exploration import ExplorationSweep, compile_exploration_sweep
+from scenario_db.sim.chain_templates import compile_chain_template
 from scenario_db.sim.models import DVFSTable, SimRunResult, SimulationRunConfig
 from scenario_db.sim.runner import run_simulation
 
@@ -52,8 +53,64 @@ def run_exploration_sweep_preview(
     """
 
     compiled = compile_exploration_sweep(sweep)
-    docs = compiled.import_bundle.get("documents") or []
     case_meta = {item["variant_id"]: item for item in compiled.cases}
+    return run_import_bundle_preview(
+        compiled.import_bundle,
+        case_meta=case_meta,
+        ip_catalog=ip_catalog,
+        project=project,
+        soc=soc,
+        config=config,
+        dvfs_tables=dvfs_tables,
+        include_results=include_results,
+    )
+
+
+def run_chain_template_preview(
+    template: dict[str, Any],
+    *,
+    ip_catalog: dict[str, IpCatalog],
+    project: Project | None = None,
+    soc: SocPlatform | None = None,
+    config: SimulationRunConfig | None = None,
+    dvfs_tables: dict[str, DVFSTable] | None = None,
+    include_results: bool = False,
+) -> SweepPreviewResult:
+    compiled = compile_chain_template(template)
+    scenario = compiled.scenario
+    variant = (scenario.get("variants") or [{}])[0]
+    design = variant.get("design_conditions") or {}
+    case_meta = {
+        str(variant.get("id")): {
+            "case_id": variant.get("id"),
+            "axis_values": {"template": design.get("template_ref")},
+        }
+    }
+    return run_import_bundle_preview(
+        compiled.import_bundle,
+        case_meta=case_meta,
+        ip_catalog=ip_catalog,
+        project=project,
+        soc=soc,
+        config=config,
+        dvfs_tables=dvfs_tables,
+        include_results=include_results,
+    )
+
+
+def run_import_bundle_preview(
+    import_bundle: dict[str, Any],
+    *,
+    case_meta: dict[str, dict[str, Any]] | None = None,
+    ip_catalog: dict[str, IpCatalog],
+    project: Project | None = None,
+    soc: SocPlatform | None = None,
+    config: SimulationRunConfig | None = None,
+    dvfs_tables: dict[str, DVFSTable] | None = None,
+    include_results: bool = False,
+) -> SweepPreviewResult:
+    docs = import_bundle.get("documents") or []
+    meta_by_variant = case_meta or {}
     cases: list[SweepPreviewCase] = []
     run_config = config or SimulationRunConfig(include_timeline=False)
     for doc in docs:
@@ -69,7 +126,7 @@ def run_exploration_sweep_preview(
             )
             inputs = build_simulation_inputs(graph, run_config)
             result = run_simulation(inputs, dvfs_tables=dvfs_tables or {})
-            meta = case_meta.get(variant.id, {})
+            meta = meta_by_variant.get(variant.id, {})
             cases.append(
                 SweepPreviewCase(
                     case_id=str(meta.get("case_id") or variant.id),
@@ -103,7 +160,7 @@ def run_exploration_sweep_preview(
             }
             for case in cases
         ],
-        import_bundle=compiled.import_bundle,
+        import_bundle=import_bundle,
     )
 
 

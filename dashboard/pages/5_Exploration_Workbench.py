@@ -23,9 +23,11 @@ for path in (_root / "src", _root, _root / "dashboard"):
 from dashboard.components.exploration_api_client import (
     compile_exploration_recipe,
     compile_exploration_sweep,
+    compile_exploration_template,
     get_exploration_example,
     list_exploration_examples,
     preview_exploration_sweep,
+    preview_exploration_template,
 )
 from dashboard.components.exploration_candidate_compare import render_candidate_comparison, selected_candidate
 from dashboard.components.exploration_result_view import render_candidate_detail
@@ -36,6 +38,7 @@ from dashboard.components.viewer_api_client import ViewerApiError
 INPUT_TYPE_LABELS = {
     "single": "Single Design",
     "batch": "Batch Exploration",
+    "template": "Chain Template",
     "unknown": "Unknown",
 }
 
@@ -253,6 +256,8 @@ def _compile_current(api_base: str, source_yaml: str) -> None:
     try:
         if kind == "batch":
             result = compile_exploration_sweep(api_base, source_yaml=source_yaml)
+        elif kind == "template":
+            result = compile_exploration_template(api_base, source_yaml=source_yaml)
         else:
             result = compile_exploration_recipe(api_base, source_yaml=source_yaml)
     except ViewerApiError as exc:
@@ -277,6 +282,8 @@ def _preview_current(api_base: str, source_yaml: str, *, timeline_frames: int, d
     try:
         if kind == "batch":
             result = preview_exploration_sweep(api_base, source_yaml=source_yaml, include_results=True, config=config)
+        elif kind == "template":
+            result = preview_exploration_template(api_base, source_yaml=source_yaml, include_results=True, config=config)
         else:
             result = preview_exploration_sweep(
                 api_base,
@@ -507,12 +514,14 @@ def _render_compile_help(*, kind: str, result: dict[str, Any]) -> None:
 - **Input Type**: `{kind_label}` is detected from the YAML content.
 - **Saved to DB**: `{"yes" if persisted else "no"}` means whether compile wrote anything to the database. For this Workbench it should normally be `no`.
 - **Generated Documents**: `{doc_count}` means how many canonical ScenarioDB documents were generated. Usually this is one `scenario.usecase` document containing one or more variants.
-- **Candidates**: `{case_count}` means how many Batch Exploration cases were expanded from axes. A Single Design compile may show `0` because it is not a batch comparison.
+- **Candidates**: `{case_count}` means how many Batch Exploration cases were expanded from axes. A Single Design or Chain Template compile may show `0` because it is not a batch comparison.
 - **Warnings**: metadata or mapping issues that should be reviewed before treating a result as reliable.
 """
     )
     if kind == "single":
         st.info("Single Design compile produces one scenario document with one variant candidate. Use Run Simulation to simulate it as a one-case batch.")
+    elif kind == "template":
+        st.info("Chain Template compile normalizes compact buffers/links into one canonical scenario document. Use Run Simulation to preview the generated chain.")
     else:
         st.info("Batch Exploration compile expands axes into candidate variants. Run Simulation to execute and compare those candidates.")
 
@@ -894,6 +903,8 @@ def _detect_yaml_kind(source_yaml: str) -> str:
 
 
 def _detect_yaml_kind_from_payload(payload: Any) -> str:
+    if isinstance(payload, dict) and payload.get("kind") == "scenario.chain_template":
+        return "template"
     if isinstance(payload, dict) and isinstance(payload.get("base_recipe"), dict):
         return "batch"
     if isinstance(payload, dict) and ("source" in payload or "pipeline" in payload):
@@ -910,7 +921,7 @@ def _clean_error_location(location: Any) -> list[Any]:
         parts = [location]
     else:
         parts = []
-    return [part for part in parts if part not in {"body", "source_yaml", "recipe", "sweep"}]
+    return [part for part in parts if part not in {"body", "source_yaml", "recipe", "sweep", "template"}]
 
 
 def _schema_hint(loc_path: list[Any], message: str) -> str | None:
@@ -920,6 +931,8 @@ def _schema_hint(loc_path: list[Any], message: str) -> str | None:
         return "Single Design YAML needs a pipeline list."
     if loc_path == ["source"] and "required" in message.lower():
         return "Single Design YAML needs source width/height/fps information."
+    if loc_path == ["kind"] and "required" in message.lower():
+        return "Chain Template YAML needs kind: scenario.chain_template."
     return None
 
 

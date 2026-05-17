@@ -53,6 +53,21 @@ def compile_exploration_sweep(
     )
 
 
+def compile_exploration_template(
+    api_base: str,
+    *,
+    source_yaml: str,
+    request_func: RequestFunc | None = None,
+) -> dict[str, Any]:
+    return _request_json(
+        "POST",
+        api_base,
+        "/exploration/templates/compile",
+        request_func=request_func,
+        json={"source_yaml": source_yaml},
+    )
+
+
 def preview_exploration_sweep(
     api_base: str,
     *,
@@ -76,6 +91,27 @@ def preview_exploration_sweep(
         "/exploration/sweeps/preview",
         request_func=request_func,
         json=payload,
+    )
+
+
+def preview_exploration_template(
+    api_base: str,
+    *,
+    source_yaml: str,
+    include_results: bool = True,
+    config: dict[str, Any] | None = None,
+    request_func: RequestFunc | None = None,
+) -> dict[str, Any]:
+    return _request_json(
+        "POST",
+        api_base,
+        "/exploration/templates/preview",
+        request_func=request_func,
+        json={
+            "source_yaml": source_yaml,
+            "include_results": include_results,
+            "config": config or {"include_timeline": True, "timeline_frame_count": 4, "debug_trace": True, "debug_trace_level": "formula"},
+        },
     )
 
 

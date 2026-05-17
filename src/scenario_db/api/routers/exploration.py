@@ -14,13 +14,18 @@ from scenario_db.api.schemas.exploration import (
     ExplorationSweepCompileResponse,
     ExplorationSweepPreviewRequest,
     ExplorationSweepPreviewResponse,
+    ExplorationTemplateCompileRequest,
+    ExplorationTemplateCompileResponse,
+    ExplorationTemplatePreviewRequest,
 )
 from scenario_db.api.services.exploration import (
     compile_recipe_request,
     compile_sweep_request,
+    compile_template_request,
     get_exploration_example,
     list_exploration_examples,
     preview_sweep_request,
+    preview_template_request,
     validation_detail,
 )
 
@@ -53,9 +58,25 @@ def compile_sweep(request: ExplorationSweepCompileRequest):
         raise HTTPException(status_code=422, detail=validation_detail(exc)) from exc
 
 
+@router.post("/templates/compile", response_model=ExplorationTemplateCompileResponse)
+def compile_template(request: ExplorationTemplateCompileRequest):
+    try:
+        return compile_template_request(request)
+    except (ValidationError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=validation_detail(exc)) from exc
+
+
 @router.post("/sweeps/preview", response_model=ExplorationSweepPreviewResponse)
 def preview_sweep(request: ExplorationSweepPreviewRequest, db: Session = Depends(get_db)):
     try:
         return preview_sweep_request(db, request)
+    except (ValidationError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=validation_detail(exc)) from exc
+
+
+@router.post("/templates/preview", response_model=ExplorationSweepPreviewResponse)
+def preview_template(request: ExplorationTemplatePreviewRequest, db: Session = Depends(get_db)):
+    try:
+        return preview_template_request(db, request)
     except (ValidationError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=validation_detail(exc)) from exc

@@ -14,6 +14,7 @@ from scenario_db.sim.exploration import (
     compile_exploration_recipe,
     compile_exploration_sweep,
 )
+from scenario_db.sim.chain_templates import compile_chain_template
 from scenario_db.sim.exploration_runner import run_exploration_sweep_preview
 from scenario_db.sim.models import SimulationRunConfig
 from scenario_db.write.service import normalize_import_bundle_payload, validate_import_bundle
@@ -59,9 +60,22 @@ def test_exploration_sweep_fixtures_compile_and_preview(path: Path):
     assert preview.comparison[0]["delta_total_power_mw"] == 0.0
 
 
+@pytest.mark.parametrize("path", sorted((FIXTURE_ROOT / "templates").glob("*.yaml")))
+def test_exploration_chain_template_fixtures_compile_to_valid_scenarios(path: Path):
+    result = compile_chain_template(_read_yaml(path))
+
+    Usecase.model_validate(result.scenario)
+    normalized = normalize_import_bundle_payload(result.import_bundle)
+    assert validate_import_bundle(_ImportDb(), normalized) == []
+    assert result.scenario["variants"][0]["design_conditions"]["template_ref"]
+    assert result.scenario["pipeline"]["edges"]
+    assert result.scenario["pipeline"]["buffers"]
+
+
 def test_exploration_fixtures_cover_expected_use_cases():
     recipe_names = {path.name for path in (FIXTURE_ROOT / "recipes").glob("*.yaml")}
     sweep_names = {path.name for path in (FIXTURE_ROOT / "sweeps").glob("*.yaml")}
+    template_names = {path.name for path in (FIXTURE_ROOT / "templates").glob("*.yaml")}
 
     assert {
         "camera_otf_chain_fhd30.yaml",
@@ -74,6 +88,9 @@ def test_exploration_fixtures_cover_expected_use_cases():
         "camera_pyramid_sbwc_sweep.yaml",
         "camera_scale_compression_sweep.yaml",
     }.issubset(sweep_names)
+    assert {
+        "camera_recording_pyramid_v1.yaml",
+    }.issubset(template_names)
 
 
 def test_camera_pyramid_sbwc_sweep_expands_all_l0_to_g4_compression_combinations():
