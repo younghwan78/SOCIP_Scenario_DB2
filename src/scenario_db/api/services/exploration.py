@@ -37,19 +37,23 @@ from scenario_db.sim.exploration_runner import run_chain_template_preview, run_c
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
 _FIXTURE_ROOT = _REPO_ROOT / "demo" / "exploration_fixtures"
+ExampleKind = Literal["recipe", "sweep", "template", "template_sweep"]
+_EXAMPLE_DIRS: dict[ExampleKind, str] = {
+    "recipe": "recipes",
+    "sweep": "sweeps",
+    "template": "templates",
+    "template_sweep": "template_sweeps",
+}
 
 
 def list_exploration_examples() -> ExplorationExampleListResponse:
-    items = [_example_summary(path, "recipe") for path in sorted((_FIXTURE_ROOT / "recipes").glob("*.yaml"))]
-    items.extend(_example_summary(path, "sweep") for path in sorted((_FIXTURE_ROOT / "sweeps").glob("*.yaml")))
-    items.extend(_example_summary(path, "template") for path in sorted((_FIXTURE_ROOT / "templates").glob("*.yaml")))
-    items.extend(_example_summary(path, "template_sweep") for path in sorted((_FIXTURE_ROOT / "template_sweeps").glob("*.yaml")))
+    items = [_example_summary(path, kind) for kind, path in _iter_example_paths()]
     return ExplorationExampleListResponse(items=items, total=len(items))
 
 
 def get_exploration_example(example_id: str) -> ExplorationExampleResponse:
     kind, stem = _parse_example_id(example_id)
-    path = _FIXTURE_ROOT / f"{kind}s" / f"{stem}.yaml"
+    path = _example_path(kind, stem)
     if not path.exists():
         raise NoResultFound(f"Exploration example '{example_id}' not found")
     yaml_text = path.read_text(encoding="utf-8")
@@ -65,41 +69,23 @@ def get_exploration_example(example_id: str) -> ExplorationExampleResponse:
 def compile_recipe_request(request: ExplorationRecipeCompileRequest) -> ExplorationRecipeCompileResponse:
     recipe = ExplorationRecipe.model_validate(_payload_from_request(request.source_yaml, request.recipe, "recipe"))
     result = compile_exploration_recipe(recipe)
-    return ExplorationRecipeCompileResponse(
-        scenario=result.scenario,
-        import_bundle=result.import_bundle,
-        warnings=result.warnings,
-        mapping_trace=result.mapping_trace,
-    )
+    return _recipe_compile_response(result)
 
 
 def compile_sweep_request(request: ExplorationSweepCompileRequest) -> ExplorationSweepCompileResponse:
     sweep = ExplorationSweep.model_validate(_payload_from_request(request.source_yaml, request.sweep, "sweep"))
     result = compile_exploration_sweep(sweep)
-    return ExplorationSweepCompileResponse(
-        import_bundle=result.import_bundle,
-        cases=result.cases,
-        warnings=result.warnings,
-    )
+    return _sweep_compile_response(result)
 
 
 def compile_template_request(request: ExplorationTemplateCompileRequest) -> ExplorationTemplateCompileResponse:
     result = compile_chain_template(_payload_from_request(request.source_yaml, request.template, "template"))
-    return ExplorationTemplateCompileResponse(
-        scenario=result.scenario,
-        import_bundle=result.import_bundle,
-        warnings=result.warnings,
-        mapping_trace=result.mapping_trace,
-    )
+    return _template_compile_response(result)
 
 
 def compile_template_sweep_request(request: ExplorationTemplateSweepCompileRequest) -> ExplorationSweepCompileResponse:
     result = compile_chain_template_sweep(_payload_from_request(request.source_yaml, request.sweep, "template_sweep"))
-    return ExplorationSweepCompileResponse(
-        import_bundle=result.import_bundle,
-        cases=result.cases,
-        warnings=result.warnings,
-    )
+    return _sweep_compile_response(result)
 
 
 def preview_sweep_request(db: Session, request: ExplorationSweepPreviewRequest) -> ExplorationSweepPreviewResponse:
@@ -113,53 +99,65 @@ def preview_sweep_request(db: Session, request: ExplorationSweepPreviewRequest) 
         dvfs_tables=request.dvfs_tables,
         include_results=request.include_results,
     )
-    return ExplorationSweepPreviewResponse(
-        persisted=False,
-        baseline_case_id=preview.baseline_case_id,
-        cases=preview.cases,
-        comparison=preview.comparison,
-        import_bundle=preview.import_bundle,
-    )
+    return _preview_response(preview)
 
 
 def preview_template_sweep_request(db: Session, request: ExplorationTemplateSweepPreviewRequest) -> ExplorationSweepPreviewResponse:
     sweep = _payload_from_request(request.source_yaml, request.sweep, "template_sweep")
-    base_template = sweep.get("base_template") if isinstance(sweep.get("base_template"), dict) else {}
-    soc_ref = base_template.get("soc_ref")
-    if not soc_ref and isinstance(base_template.get("mapping_profile"), dict):
-        soc_ref = base_template["mapping_profile"].get("target_soc_ref")
+    base_template = _base_template_payload(sweep)
     preview = run_chain_template_sweep_preview(
         sweep,
         ip_catalog=_load_ip_catalog(db),
         project=_load_project(db, base_template.get("project_ref")),
-        soc=_load_soc(db, soc_ref),
+        soc=_load_soc(db, _soc_ref_from_template_payload(base_template)),
         config=request.config,
         dvfs_tables=request.dvfs_tables,
         include_results=request.include_results,
     )
-    return ExplorationSweepPreviewResponse(
-        persisted=False,
-        baseline_case_id=preview.baseline_case_id,
-        cases=preview.cases,
-        comparison=preview.comparison,
-        import_bundle=preview.import_bundle,
-    )
+    return _preview_response(preview)
 
 
 def preview_template_request(db: Session, request: ExplorationTemplatePreviewRequest) -> ExplorationSweepPreviewResponse:
     template = _payload_from_request(request.source_yaml, request.template, "template")
-    soc_ref = template.get("soc_ref")
-    if not soc_ref and isinstance(template.get("mapping_profile"), dict):
-        soc_ref = template["mapping_profile"].get("target_soc_ref")
     preview = run_chain_template_preview(
         template,
         ip_catalog=_load_ip_catalog(db),
         project=_load_project(db, template.get("project_ref")),
-        soc=_load_soc(db, soc_ref),
+        soc=_load_soc(db, _soc_ref_from_template_payload(template)),
         config=request.config,
         dvfs_tables=request.dvfs_tables,
         include_results=request.include_results,
     )
+    return _preview_response(preview)
+
+
+def _recipe_compile_response(result: Any) -> ExplorationRecipeCompileResponse:
+    return ExplorationRecipeCompileResponse(
+        scenario=result.scenario,
+        import_bundle=result.import_bundle,
+        warnings=result.warnings,
+        mapping_trace=result.mapping_trace,
+    )
+
+
+def _template_compile_response(result: Any) -> ExplorationTemplateCompileResponse:
+    return ExplorationTemplateCompileResponse(
+        scenario=result.scenario,
+        import_bundle=result.import_bundle,
+        warnings=result.warnings,
+        mapping_trace=result.mapping_trace,
+    )
+
+
+def _sweep_compile_response(result: Any) -> ExplorationSweepCompileResponse:
+    return ExplorationSweepCompileResponse(
+        import_bundle=result.import_bundle,
+        cases=result.cases,
+        warnings=result.warnings,
+    )
+
+
+def _preview_response(preview: Any) -> ExplorationSweepPreviewResponse:
     return ExplorationSweepPreviewResponse(
         persisted=False,
         baseline_case_id=preview.baseline_case_id,
@@ -169,7 +167,18 @@ def preview_template_request(db: Session, request: ExplorationTemplatePreviewReq
     )
 
 
-def _example_summary(path: Path, kind: Literal["recipe", "sweep", "template", "template_sweep"]) -> ExplorationExampleSummary:
+def _iter_example_paths() -> list[tuple[ExampleKind, Path]]:
+    items: list[tuple[ExampleKind, Path]] = []
+    for kind, folder in _EXAMPLE_DIRS.items():
+        items.extend((kind, path) for path in sorted((_FIXTURE_ROOT / folder).glob("*.yaml")))
+    return items
+
+
+def _example_path(kind: ExampleKind, stem: str) -> Path:
+    return _FIXTURE_ROOT / _EXAMPLE_DIRS[kind] / f"{stem}.yaml"
+
+
+def _example_summary(path: Path, kind: ExampleKind) -> ExplorationExampleSummary:
     payload = _load_yaml_text(path.read_text(encoding="utf-8"))
     fixture_id = str(payload.get("id") or path.stem)
     base_recipe = payload.get("base_recipe") if kind == "sweep" else payload.get("base_template") if kind == "template_sweep" else payload
@@ -188,13 +197,18 @@ def _example_summary(path: Path, kind: Literal["recipe", "sweep", "template", "t
     )
 
 
-def _parse_example_id(example_id: str) -> tuple[Literal["recipe", "sweep", "template", "template_sweep"], str]:
+def _parse_example_id(example_id: str) -> tuple[ExampleKind, str]:
     if ":" not in example_id:
         raise NoResultFound(f"Exploration example '{example_id}' not found")
     kind, stem = example_id.split(":", 1)
-    if kind not in {"recipe", "sweep", "template", "template_sweep"} or not stem:
+    if kind not in _EXAMPLE_DIRS or not stem:
         raise NoResultFound(f"Exploration example '{example_id}' not found")
     return kind, stem  # type: ignore[return-value]
+
+
+def _base_template_payload(sweep: dict[str, Any]) -> dict[str, Any]:
+    base_template = sweep.get("base_template")
+    return base_template if isinstance(base_template, dict) else {}
 
 
 def _payload_from_request(source_yaml: str | None, payload: dict[str, Any] | None, label: str) -> dict[str, Any]:
@@ -240,6 +254,13 @@ def _soc_ref_from_sweep(sweep: ExplorationSweep) -> str | None:
     if recipe.mapping_profile and recipe.mapping_profile.target_soc_ref:
         return recipe.mapping_profile.target_soc_ref
     return None
+
+
+def _soc_ref_from_template_payload(template: dict[str, Any]) -> str | None:
+    soc_ref = template.get("soc_ref")
+    if not soc_ref and isinstance(template.get("mapping_profile"), dict):
+        soc_ref = template["mapping_profile"].get("target_soc_ref")
+    return soc_ref if isinstance(soc_ref, str) else None
 
 
 def _repo_relative_path(path: Path) -> str:

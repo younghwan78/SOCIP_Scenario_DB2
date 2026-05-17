@@ -6,6 +6,13 @@ import requests
 
 from dashboard.components.viewer_api_client import RequestFunc, ViewerApiError
 
+_DEFAULT_PREVIEW_CONFIG = {
+    "include_timeline": True,
+    "timeline_frame_count": 4,
+    "debug_trace": True,
+    "debug_trace_level": "formula",
+}
+
 
 def list_exploration_examples(
     api_base: str,
@@ -29,13 +36,7 @@ def compile_exploration_recipe(
     source_yaml: str,
     request_func: RequestFunc | None = None,
 ) -> dict[str, Any]:
-    return _request_json(
-        "POST",
-        api_base,
-        "/exploration/recipes/compile",
-        request_func=request_func,
-        json={"source_yaml": source_yaml},
-    )
+    return _compile_yaml(api_base, "/exploration/recipes/compile", source_yaml=source_yaml, request_func=request_func)
 
 
 def compile_exploration_sweep(
@@ -44,13 +45,7 @@ def compile_exploration_sweep(
     source_yaml: str,
     request_func: RequestFunc | None = None,
 ) -> dict[str, Any]:
-    return _request_json(
-        "POST",
-        api_base,
-        "/exploration/sweeps/compile",
-        request_func=request_func,
-        json={"source_yaml": source_yaml},
-    )
+    return _compile_yaml(api_base, "/exploration/sweeps/compile", source_yaml=source_yaml, request_func=request_func)
 
 
 def compile_exploration_template(
@@ -59,13 +54,7 @@ def compile_exploration_template(
     source_yaml: str,
     request_func: RequestFunc | None = None,
 ) -> dict[str, Any]:
-    return _request_json(
-        "POST",
-        api_base,
-        "/exploration/templates/compile",
-        request_func=request_func,
-        json={"source_yaml": source_yaml},
-    )
+    return _compile_yaml(api_base, "/exploration/templates/compile", source_yaml=source_yaml, request_func=request_func)
 
 
 def compile_exploration_template_sweep(
@@ -74,13 +63,7 @@ def compile_exploration_template_sweep(
     source_yaml: str,
     request_func: RequestFunc | None = None,
 ) -> dict[str, Any]:
-    return _request_json(
-        "POST",
-        api_base,
-        "/exploration/template-sweeps/compile",
-        request_func=request_func,
-        json={"source_yaml": source_yaml},
-    )
+    return _compile_yaml(api_base, "/exploration/template-sweeps/compile", source_yaml=source_yaml, request_func=request_func)
 
 
 def preview_exploration_sweep(
@@ -92,10 +75,7 @@ def preview_exploration_sweep(
     config: dict[str, Any] | None = None,
     request_func: RequestFunc | None = None,
 ) -> dict[str, Any]:
-    payload: dict[str, Any] = {
-        "include_results": include_results,
-        "config": config or {"include_timeline": True, "timeline_frame_count": 4, "debug_trace": True, "debug_trace_level": "formula"},
-    }
+    payload = _preview_payload(include_results=include_results, config=config)
     if source_yaml is not None:
         payload["source_yaml"] = source_yaml
     if sweep is not None:
@@ -117,16 +97,13 @@ def preview_exploration_template_sweep(
     config: dict[str, Any] | None = None,
     request_func: RequestFunc | None = None,
 ) -> dict[str, Any]:
-    return _request_json(
-        "POST",
+    return _preview_yaml(
         api_base,
         "/exploration/template-sweeps/preview",
+        source_yaml=source_yaml,
+        include_results=include_results,
+        config=config,
         request_func=request_func,
-        json={
-            "source_yaml": source_yaml,
-            "include_results": include_results,
-            "config": config or {"include_timeline": True, "timeline_frame_count": 4, "debug_trace": True, "debug_trace_level": "formula"},
-        },
     )
 
 
@@ -138,17 +115,55 @@ def preview_exploration_template(
     config: dict[str, Any] | None = None,
     request_func: RequestFunc | None = None,
 ) -> dict[str, Any]:
+    return _preview_yaml(
+        api_base,
+        "/exploration/templates/preview",
+        source_yaml=source_yaml,
+        include_results=include_results,
+        config=config,
+        request_func=request_func,
+    )
+
+
+def _compile_yaml(
+    api_base: str,
+    path: str,
+    *,
+    source_yaml: str,
+    request_func: RequestFunc | None = None,
+) -> dict[str, Any]:
     return _request_json(
         "POST",
         api_base,
-        "/exploration/templates/preview",
+        path,
         request_func=request_func,
-        json={
-            "source_yaml": source_yaml,
-            "include_results": include_results,
-            "config": config or {"include_timeline": True, "timeline_frame_count": 4, "debug_trace": True, "debug_trace_level": "formula"},
-        },
+        json={"source_yaml": source_yaml},
     )
+
+
+def _preview_yaml(
+    api_base: str,
+    path: str,
+    *,
+    source_yaml: str,
+    include_results: bool,
+    config: dict[str, Any] | None,
+    request_func: RequestFunc | None = None,
+) -> dict[str, Any]:
+    payload = _preview_payload(include_results=include_results, config=config)
+    payload["source_yaml"] = source_yaml
+    return _request_json("POST", api_base, path, request_func=request_func, json=payload)
+
+
+def _preview_payload(
+    *,
+    include_results: bool,
+    config: dict[str, Any] | None,
+) -> dict[str, Any]:
+    return {
+        "include_results": include_results,
+        "config": config or dict(_DEFAULT_PREVIEW_CONFIG),
+    }
 
 
 def _request_json(
