@@ -31,7 +31,9 @@ def test_exploration_examples_list_endpoint():
     ids = {item["id"] for item in body["items"]}
     assert "recipe:camera_crop_scale_m2m" in ids
     assert "sweep:camera_fps_format_sweep" in ids
+    assert "template:camera_minimal_otf_v1" in ids
     assert "template:camera_recording_pyramid_v1" in ids
+    assert "template_sweep:camera_recording_pyramid_full_sbwc_template_sweep" in ids
     assert "template_sweep:camera_recording_pyramid_sbwc_template_sweep" in ids
 
 
@@ -185,7 +187,7 @@ axes:
   - name: b0
     path: buffers.B0
     values:
-      - {label: off, value: [0, 0, 1920, 1080, YUV420, 8, COMP_OFF, 1.0]}
+      - {label: "off", value: [0, 0, 1920, 1080, YUV420, 8, COMP_OFF, 1.0]}
       - {label: sbwc, value: [0, 0, 1920, 1080, YUV420, 8, COMP_SBWC_LOSSLESS, 0.5]}
 """
         },
@@ -195,6 +197,7 @@ axes:
     body = response.json()
     assert body["persisted"] is False
     assert len(body["cases"]) == 2
+    assert body["cases"][0]["variant_id"] == "api-template-1p0p0-b0-off"
     assert body["cases"][1]["variant_id"] == "api-template-1p0p0-b0-sbwc"
     assert body["import_bundle"]["import_report"]["generated"]["chain_template_sweep_case"] == 2
 

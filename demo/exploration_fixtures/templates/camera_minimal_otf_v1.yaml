@@ -1,0 +1,50 @@
+kind: scenario.chain_template
+id: camera-minimal-otf
+version: 1.0.0
+schema_version: 1
+scenario_id: uc-explore-camera-minimal-otf
+variant_id: minimal-otf-fhd30
+project_ref: proj-A-exynos2500
+soc_ref: soc-exynos2500
+name: Camera Minimal OTF Template
+category: [camera, exploration]
+tags: [camera, otf, template, minimal]
+
+source:
+  type: sensor
+  node_id: sensor_src
+  ip_ref: ip-sensor-hp2-projectA
+  width: 1920
+  height: 1080
+  fps: 30
+  format: RAW_BAYER_16
+  bitwidth: 12
+  compression: COMP_BAYER_LOSSLESS
+
+blocks:
+  - {id: csis, template: csis_like, role: csis, ip_ref: ip-csis-v8}
+  - {id: pdp, template: pdp_like, role: pdp, ip_ref: ip-isp-v12}
+
+links:
+  - "sensor_src:COUT -> csis:CIN | OTF"
+  - "csis:COUT -> pdp:CIN | OTF"
+
+mapping_profile:
+  id: map-minimal-template-from-projectA-camera
+  source_project_ref: proj-A-exynos2500
+  target_soc_ref: soc-exynos2500
+  role_mappings:
+    csis_like:
+      source_ip_ref: ip-csis-v8
+      target_ip_ref: ip-csis-v8
+      source_role: csis
+      target_role: csis
+      confidence: borrowed
+      ip_params: {hw_name: CSIS, ppc: 8, unit_power_mw_mp: 0.21, vdd: VDD_CAM, dvfs_group: CAM}
+    pdp_like:
+      source_ip_ref: ip-isp-v12
+      target_ip_ref: ip-isp-v12
+      source_role: pdp
+      target_role: pdp
+      confidence: borrowed
+      ip_params: {hw_name: ISP, ppc: 4, unit_power_mw_mp: 9.92, vdd: VDD_CAM, dvfs_group: CAM}

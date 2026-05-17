@@ -172,13 +172,16 @@ axes:
   - name: l0
     path: buffers.L0
     values:
-      - {label: off, value: [0, 0, 2400, 1350, YUV420, 10, COMP_OFF, 1.0]}
+      - {label: "off", value: [0, 0, 2400, 1350, YUV420, 10, COMP_OFF, 1.0]}
       - {label: sbwc, value: [0, 0, 2400, 1350, YUV420, 10, COMP_SBWC_LOSSLESS, 0.5]}
 ```
 
 현재 구현은 후보별로 scenario document를 분리한다. 이는 후보마다
 `pipeline.buffers`가 달라질 수 있기 때문이다. 나중에 pipeline이 완전히 같은
 case에 한해서 variant merge 최적화를 추가할 수 있다.
+
+YAML parser에 따라 unquoted `off`가 boolean `false`로 해석될 수 있으므로
+axis label에는 `"off"`처럼 quote를 붙인다.
 
 ## 실행 예
 

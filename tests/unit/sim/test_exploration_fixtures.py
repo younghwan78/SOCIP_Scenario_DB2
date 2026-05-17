@@ -69,7 +69,7 @@ def test_exploration_chain_template_fixtures_compile_to_valid_scenarios(path: Pa
     assert validate_import_bundle(_ImportDb(), normalized) == []
     assert result.scenario["variants"][0]["design_conditions"]["template_ref"]
     assert result.scenario["pipeline"]["edges"]
-    assert result.scenario["pipeline"]["buffers"]
+    assert "buffers" in result.scenario["pipeline"]
 
 
 @pytest.mark.parametrize("path", sorted((FIXTURE_ROOT / "template_sweeps").glob("*.yaml")))
@@ -110,9 +110,11 @@ def test_exploration_fixtures_cover_expected_use_cases():
         "camera_scale_compression_sweep.yaml",
     }.issubset(sweep_names)
     assert {
+        "camera_minimal_otf_v1.yaml",
         "camera_recording_pyramid_v1.yaml",
     }.issubset(template_names)
     assert {
+        "camera_recording_pyramid_full_sbwc_template_sweep.yaml",
         "camera_recording_pyramid_sbwc_template_sweep.yaml",
     }.issubset(template_sweep_names)
 
@@ -148,6 +150,42 @@ def test_camera_pyramid_sbwc_sweep_expands_all_l0_to_g4_compression_combinations
         if variant["id"] == "pyramid-l0-off-l1-off-l2-off-l3-off-g4-off"
     )
     assert all("comp_ratio" not in output for output in all_off["node_configs"]["mlsc0"]["sim"]["outputs"])
+
+
+def test_minimal_chain_template_documents_compact_otf_path():
+    path = FIXTURE_ROOT / "templates" / "camera_minimal_otf_v1.yaml"
+    result = compile_chain_template(_read_yaml(path))
+
+    design = result.scenario["variants"][0]["design_conditions"]
+    assert design["template_ref"] == "camera-minimal-otf@1.0.0"
+    assert result.scenario["pipeline"]["edges"] == [
+        {"from": "sensor_src", "to": "csis", "type": "OTF"},
+        {"from": "csis", "to": "pdp", "type": "OTF"},
+    ]
+    assert result.import_bundle["import_report"]["generated"]["chain_template"] == 1
+
+
+def test_template_sweep_full_sbwc_fixture_expands_all_l0_to_g4_combinations():
+    path = FIXTURE_ROOT / "template_sweeps" / "camera_recording_pyramid_full_sbwc_template_sweep.yaml"
+    result = compile_chain_template_sweep(_read_yaml(path))
+
+    assert len(result.cases) == 32
+    variant_ids = [case["variant_id"] for case in result.cases]
+    assert "pyramid-full-l0-off-l1-off-l2-off-l3-off-g4-off" in variant_ids
+    assert "pyramid-full-l0-sbwc-l1-sbwc-l2-sbwc-l3-sbwc-g4-sbwc" in variant_ids
+    documents = result.import_bundle["documents"]
+    all_off = next(
+        document["variants"][0]
+        for document in documents
+        if document["variants"][0]["id"] == "pyramid-full-l0-off-l1-off-l2-off-l3-off-g4-off"
+    )
+    full_sbwc = next(
+        document["variants"][0]
+        for document in documents
+        if document["variants"][0]["id"] == "pyramid-full-l0-sbwc-l1-sbwc-l2-sbwc-l3-sbwc-g4-sbwc"
+    )
+    assert all("comp_ratio" not in output for output in all_off["node_configs"]["mlsc"]["sim"]["outputs"])
+    assert [output["comp_ratio"] for output in full_sbwc["node_configs"]["mlsc"]["sim"]["outputs"]] == [0.5] * 5
 
 
 def _read_yaml(path: Path) -> dict:

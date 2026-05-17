@@ -31,6 +31,12 @@ demo/exploration_fixtures/
     camera_fps_format_sweep.yaml
     camera_pyramid_sbwc_sweep.yaml
     camera_scale_compression_sweep.yaml
+  templates/
+    camera_minimal_otf_v1.yaml
+    camera_recording_pyramid_v1.yaml
+  template_sweeps/
+    camera_recording_pyramid_sbwc_template_sweep.yaml
+    camera_recording_pyramid_full_sbwc_template_sweep.yaml
 ```
 
 ## 용어
@@ -68,6 +74,80 @@ axes:
 ```
 
 Compiler는 축 조합을 variant 후보로 펼치고, preview simulation은 후보별 KPI와 baseline 대비 delta를 반환합니다.
+
+### Chain Template
+
+`Chain Template`은 실제 camera/ISP chain처럼 IP, DMA, buffer가 많아서 일반 Single Design YAML이 길어질 때 쓰는
+versioned authoring format입니다. 내부 schema marker는 다음과 같습니다.
+
+```yaml
+kind: scenario.chain_template
+id: camera-recording-pyramid
+version: 1.0.0
+schema_version: 1
+```
+
+Template은 compile될 때 canonical `scenario.usecase`로 변환되고, variant의 `design_conditions`에는
+`template_ref`, `template_schema_version`, `template_normalized_hash`가 남습니다. 따라서 같은 topology라도 template version을
+바꿔가며 비교할 수 있습니다.
+
+### Template Sweep
+
+`Template Sweep`은 versioned Chain Template 하나를 기준으로 buffer compression, size, format, IP parameter 등을 조합으로
+펼치는 Batch Exploration입니다.
+
+```yaml
+kind: scenario.chain_template_sweep
+base_template:
+  kind: scenario.chain_template
+  id: camera-recording-pyramid
+axes:
+  - name: l0
+    path: buffers.L0
+    values:
+      - {label: "off", value: [0, 0, 2400, 1350, YUV420, 10, COMP_OFF, 1.0]}
+      - {label: sbwc, value: [0, 0, 2400, 1350, YUV420, 10, COMP_SBWC_LOSSLESS, 0.5]}
+```
+
+실제 ISP chain처럼 DMA port와 intermediate buffer가 많은 경우에는 일반 `sweeps/`보다 `template_sweeps/`가 더 읽기 쉽습니다.
+
+### Compact Buffer / Link 문법
+
+Template은 YAML 줄 수를 줄이기 위해 compact buffer tuple을 지원합니다.
+
+```yaml
+buffer_columns: [x, y, width, height, format, bitwidth, compression, comp_ratio]
+buffers:
+  L0: [0, 0, 2400, 1350, YUV420, 10, COMP_SBWC_LOSSLESS, 0.5]
+  L1: {derive_from: L0, scale: 0.5}
+```
+
+위 tuple은 다음 explicit mapping과 같은 의미입니다.
+
+```yaml
+L0:
+  roi: [0, 0, 2400, 1350]
+  width: 2400
+  height: 1350
+  format: YUV420
+  bitwidth: 10
+  compression: COMP_SBWC_LOSSLESS
+  comp_ratio: 0.5
+```
+
+`COMP_OFF`일 때는 `comp_ratio`를 사용하지 않습니다. tuple에 `1.0`을 넣어도 compile된 sim port에는 `comp_ratio`가 남지 않습니다.
+
+Port/DMA 연결은 다음처럼 한 줄로 표현할 수 있습니다.
+
+```yaml
+links:
+  - "sensor_src:COUT -> csis:CIN | OTF"
+  - "mlsc:WDMA0 -> L0 | M2M"
+  - "L0 -> mtnr:RDMA0 | M2M"
+```
+
+node-to-node는 direct edge가 되고, node-to-buffer와 buffer-to-node 조합은 buffer를 매개로 한 M2M edge가 됩니다.
+YAML parser에 따라 unquoted `off`가 boolean `false`로 해석될 수 있으므로 axis label에는 `"off"`처럼 quote를 쓰는 것이 안전합니다.
 
 ### Mapping Profile
 
@@ -116,6 +196,8 @@ Workbench는 YAML top-level 구조를 보고 자동으로 입력 종류를 판�
 
 | YAML 형태 | 판단 |
 | --- | --- |
+| `kind: scenario.chain_template_sweep` | Template Sweep |
+| `kind: scenario.chain_template` | Chain Template |
 | `base_recipe`가 있음 | Batch Exploration |
 | `source`와 `pipeline`이 있음 | Single Design |
 
@@ -186,6 +268,10 @@ http://127.0.0.1:18000/api/v1/exploration
 | `POST` | `/recipes/compile` | Single Design compile |
 | `POST` | `/sweeps/compile` | Batch Exploration compile |
 | `POST` | `/sweeps/preview` | Batch Exploration preview simulation |
+| `POST` | `/templates/compile` | Chain Template compile |
+| `POST` | `/templates/preview` | Chain Template preview simulation |
+| `POST` | `/template-sweeps/compile` | Template Sweep compile |
+| `POST` | `/template-sweeps/preview` | Template Sweep preview simulation |
 
 PowerShell 예:
 
@@ -250,6 +336,42 @@ uv run python scripts\compile_exploration_sweep.py `
 ```
 
 `cases.json`에는 각 후보의 axis 값과 mapping trace가 들어갑니다.
+
+### Chain Template Compile
+
+```powershell
+uv run python scripts\compile_chain_template.py `
+  demo\exploration_fixtures\templates\camera_recording_pyramid_v1.yaml `
+  --output .runlogs\camera_recording_pyramid.compiled.yaml `
+  --bundle-output .runlogs\camera_recording_pyramid.bundle.json `
+  --normalized-output .runlogs\camera_recording_pyramid.normalized.yaml
+```
+
+생성 파일:
+
+```text
+.runlogs/camera_recording_pyramid.compiled.yaml
+.runlogs/camera_recording_pyramid.bundle.json
+.runlogs/camera_recording_pyramid.normalized.yaml
+```
+
+`normalized.yaml`은 compact tuple/link가 explicit buffer/link structure로 풀린 결과입니다.
+
+### Template Sweep Compile
+
+```powershell
+uv run python scripts\compile_chain_template_sweep.py `
+  demo\exploration_fixtures\template_sweeps\camera_recording_pyramid_full_sbwc_template_sweep.yaml `
+  --bundle-output .runlogs\camera_recording_pyramid_full_sweep.bundle.json `
+  --cases-output .runlogs\camera_recording_pyramid_full_sweep.cases.json
+```
+
+생성 파일:
+
+```text
+.runlogs/camera_recording_pyramid_full_sweep.bundle.json
+.runlogs/camera_recording_pyramid_full_sweep.cases.json
+```
 
 ## 예제별 설명
 
@@ -461,6 +583,94 @@ axes:
   exploration compiler는 compiled sim port에서 `comp_ratio`를 내보내지 않습니다.
 - `off`는 YAML에서 boolean으로 해석될 수 있으므로 label로 쓸 때 `"off"`처럼 quote 처리합니다.
 
+### 8. `camera_minimal_otf_v1.yaml`
+
+목적:
+
+- Chain Template 문법을 가장 작은 예제로 확인
+- `kind`, `version`, `schema_version`, `blocks`, compact `links`의 기본 형태 학습
+- buffer가 없는 순수 OTF path도 canonical scenario로 compile되는지 확인
+
+주요 구조:
+
+```text
+sensor_src.COUT --OTF--> csis.CIN
+csis.COUT --OTF--> pdp.CIN
+```
+
+적합한 용도:
+
+- 새 SoC의 camera front-end template 작성을 시작할 때 skeleton으로 사용
+- `Compile` 결과의 `template_ref`, `template_normalized_hash` 확인
+
+### 9. `camera_recording_pyramid_v1.yaml`
+
+목적:
+
+- 실제 recording chain에 가까운 복잡한 IP/DMA/buffer topology를 compact template으로 표현
+- L0/L1/L2/L3/G4 pyramid buffer를 `derive_from`과 compact tuple로 표현
+- `template_ref: camera-recording-pyramid@1.0.0`처럼 versioned template provenance가 결과에 남는지 확인
+
+주요 구조:
+
+```text
+sensor -> CSIS -> PDP -> B_3AA -> BYRP -> RGBP -> YUVP -> MLSC
+MLSC.WDMA0..4 -> L0/L1/L2/L3/G4 -> MTNR.RDMA0..4
+MTNR -> MSNR -> MCSC -> DISPLAY_OUT/DPU, CODEC_OUT/CODEC
+```
+
+적합한 용도:
+
+- 실제 과제의 긴 camera chain을 YAML line 수를 줄여 작성
+- port/DMA 연결을 Workbench Topology tab에서 확인
+
+### 10. `camera_recording_pyramid_sbwc_template_sweep.yaml`
+
+목적:
+
+- versioned pyramid template에서 L0/L1만 SBWC on/off로 바꾸는 작은 template sweep
+- Template Sweep 기본 동작을 빠르게 확인
+
+생성 후보 수:
+
+```text
+2 x 2 = 4 variants
+```
+
+적합한 용도:
+
+- Workbench candidate comparison UI를 가볍게 확인
+- full 32-case 전에 template sweep 문법을 점검
+
+### 11. `camera_recording_pyramid_full_sbwc_template_sweep.yaml`
+
+목적:
+
+- 같은 pyramid template에서 L0/L1/L2/L3/G4 전체 SBWC on/off 조합을 비교
+- 실제 exploration에 가까운 32-case burst set 검증
+
+축:
+
+```text
+l0: "off", sbwc
+l1: "off", sbwc
+l2: "off", sbwc
+l3: "off", sbwc
+g4: "off", sbwc
+```
+
+생성 후보 수:
+
+```text
+2 x 2 x 2 x 2 x 2 = 32 variants
+```
+
+적합한 용도:
+
+- Power/DMA BW/HW Time distribution chart 확인
+- min/default/max summary table로 SBWC 효과 범위 확인
+- 복잡한 실제 chain을 template_sweep으로 작성하는 기준 예제
+
 ## 결과 해석 포인트
 
 ### `inherit_shape`
@@ -535,7 +745,7 @@ uv run pytest tests\unit\sim\test_exploration_fixtures.py tests\unit\api\test_ex
 현재 기준 기대 결과:
 
 ```text
-14 passed
+26 passed
 ```
 
 Exploration Workbench contract 검증:
@@ -547,7 +757,7 @@ uv run pytest tests\unit\dashboard\test_exploration_workbench.py -q
 현재 기준 기대 결과:
 
 ```text
-9 passed
+16 passed
 ```
 
 Dashboard unit regression:
@@ -559,7 +769,7 @@ uv run pytest tests\unit\dashboard -q
 현재 기준 기대 결과:
 
 ```text
-33 passed
+40 passed
 ```
 
 전체 unit regression:
@@ -571,7 +781,7 @@ uv run pytest tests\unit -q
 현재 기준 기대 결과:
 
 ```text
-447 passed
+479 passed
 ```
 
 ## 테스트가 확인하는 것
@@ -580,11 +790,14 @@ uv run pytest tests\unit -q
 
 - 모든 Single Design YAML이 `ExplorationRecipe` schema를 통과하는지
 - 모든 Batch Exploration YAML이 `ExplorationSweep` schema를 통과하는지
+- 모든 Chain Template YAML이 compact buffer/link normalize 후 valid scenario로 compile되는지
+- 모든 Template Sweep YAML이 후보 set으로 확장되고 preview simulation을 실행하는지
 - compile 결과가 `Usecase` model validation을 통과하는지
 - compile된 `scenario.import_bundle`이 Write API import validation을 통과하는지
 - compiled node config에 `sim.inherit_shape: true`가 포함되는지
 - mapping provenance가 `sim.mapping_source`에 남는지
 - Batch Exploration preview backend가 각 후보를 simulation preview로 실행하는지
+- Template Sweep의 quoted `"off"` label이 boolean `false`로 변하지 않고 variant id에 유지되는지
 - preview 결과가 evidence로 저장되지 않고 `persisted=false` 경계를 유지하는지
 
 `tests/unit/api/test_exploration.py`는 다음을 확인합니다.

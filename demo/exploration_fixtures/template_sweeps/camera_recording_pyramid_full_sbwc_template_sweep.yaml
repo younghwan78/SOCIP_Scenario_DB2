@@ -1,17 +1,17 @@
 kind: scenario.chain_template_sweep
-id: camera-recording-pyramid-sbwc-template-sweep
+id: camera-recording-pyramid-full-sbwc-template-sweep
 base_template:
   kind: scenario.chain_template
   id: camera-recording-pyramid
   version: 1.0.0
   schema_version: 1
-  scenario_id: uc-explore-camera-recording-pyramid-template-sweep
-  variant_id: pyramid
+  scenario_id: uc-explore-camera-recording-pyramid-full-template-sweep
+  variant_id: pyramid-full
   project_ref: proj-A-exynos2500
   soc_ref: soc-exynos2500
-  name: Camera Recording Pyramid Template Sweep
+  name: Camera Recording Pyramid Full SBWC Template Sweep
   category: [camera, exploration]
-  tags: [camera, recording, pyramid, template-sweep]
+  tags: [camera, recording, pyramid, template-sweep, sbwc-full]
   source:
     type: sensor
     node_id: sensor_src
@@ -79,3 +79,18 @@ axes:
     values:
       - {label: "off", value: [0, 0, 1200, 675, YUV420, 10, COMP_OFF, 1.0]}
       - {label: sbwc, value: [0, 0, 1200, 675, YUV420, 10, COMP_SBWC_LOSSLESS, 0.5]}
+  - name: l2
+    path: buffers.L2
+    values:
+      - {label: "off", value: [0, 0, 600, 338, YUV420, 10, COMP_OFF, 1.0]}
+      - {label: sbwc, value: [0, 0, 600, 338, YUV420, 10, COMP_SBWC_LOSSLESS, 0.5]}
+  - name: l3
+    path: buffers.L3
+    values:
+      - {label: "off", value: [0, 0, 300, 169, YUV420, 10, COMP_OFF, 1.0]}
+      - {label: sbwc, value: [0, 0, 300, 169, YUV420, 10, COMP_SBWC_LOSSLESS, 0.5]}
+  - name: g4
+    path: buffers.G4
+    values:
+      - {label: "off", value: [0, 0, 150, 84, YUV420, 10, COMP_OFF, 1.0]}
+      - {label: sbwc, value: [0, 0, 150, 84, YUV420, 10, COMP_SBWC_LOSSLESS, 0.5]}
