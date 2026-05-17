@@ -99,6 +99,54 @@ def test_candidate_comparison_rows_and_selection():
     assert rebased[1]["baseline"] is True
 
 
+def test_candidate_comparison_rows_stringify_compact_axis_values_for_arrow():
+    preview = {
+        "cases": [
+            {
+                "case_id": "l0-off",
+                "variant_id": "v-off",
+                "axis_values": {"l0": [0, 0, 2400, 1350, "YUV420", 10, "COMP_OFF", 1.0]},
+            }
+        ],
+        "comparison": [],
+    }
+
+    rows = comparison_rows(preview)
+
+    assert rows[0]["l0"] == '[0, 0, 2400, 1350, "YUV420", 10, "COMP_OFF", 1.0]'
+
+
+def test_candidate_comparison_rows_from_preview_comparison_are_pyarrow_compatible():
+    import pandas as pd
+    import pyarrow as pa
+
+    preview = {
+        "cases": [{"case_id": "l0-off"}, {"case_id": "l0-sbwc"}],
+        "comparison": [
+            {
+                "case_id": "l0-off",
+                "variant_id": "v-off",
+                "l0": [0, 0, 2400, 1350, "YUV420", 10, "COMP_OFF", 1.0],
+                "l1": {"width": 1200, "height": 675, "format": "YUV420", "compression": "COMP_OFF"},
+                "total_power_mw": 10.0,
+            },
+            {
+                "case_id": "l0-sbwc",
+                "variant_id": "v-sbwc",
+                "l0": [0, 0, 2400, 1350, "YUV420", 10, "COMP_SBWC_LOSSLESS", 0.5],
+                "l1": {"width": 1200, "height": 675, "format": "YUV420", "compression": "COMP_SBWC_LOSSLESS"},
+                "total_power_mw": 9.0,
+            },
+        ],
+    }
+
+    rows = comparison_rows(preview)
+
+    assert isinstance(rows[0]["l0"], str)
+    assert isinstance(rows[0]["l1"], str)
+    pa.Table.from_pandas(pd.DataFrame(rows))
+
+
 def test_candidate_comparison_marks_pareto_and_filters():
     preview = {
         "cases": [{"case_id": "low-power"}, {"case_id": "balanced"}, {"case_id": "dominated"}],

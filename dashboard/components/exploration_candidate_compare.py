@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import streamlit as st
@@ -665,4 +666,6 @@ def _numeric(value: Any) -> float | None:
 def _format_value(value: Any) -> Any:
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         return rounded_number(value)
+    if isinstance(value, (dict, list, tuple)):
+        return json.dumps(value, ensure_ascii=False, default=str)
     return value
