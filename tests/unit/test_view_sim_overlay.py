@@ -5,8 +5,11 @@ from types import SimpleNamespace
 from scenario_db.api.schemas.view import (
     EdgeData,
     EdgeElement,
+    Level0MetricBreakdown,
+    Level0ResourceOverview,
     NodeData,
     NodeElement,
+    ResourceOverviewRow,
     ViewResponse,
     ViewSummary,
 )
@@ -52,6 +55,21 @@ def test_apply_simulation_overlay_adds_node_and_edge_details():
             fps=30,
             variant_label="FHD30",
         ),
+        level0_resource_overview=Level0ResourceOverview(
+            rows=[
+                ResourceOverviewRow(
+                    sequence_index=1,
+                    node_id="isp0",
+                    label="ISP",
+                    resource_domain="soc_resource",
+                    resource_kind="isp",
+                    subsystem="camera",
+                    flow="M2M",
+                    buffer_refs=["YUV_BUF"],
+                )
+            ],
+            metric_breakdown=[Level0MetricBreakdown(subsystem="camera", node_count=1)],
+        ),
     )
     evidence = SimpleNamespace(
         id="sim-test-01",
@@ -91,6 +109,13 @@ def test_apply_simulation_overlay_adds_node_and_edge_details():
     assert any(item.startswith("Sim:") for item in node.detail_items)
     assert edge.sim_overlay is not None
     assert edge.sim_overlay.bw_mbs == 46.6
+    assert result.level0_resource_overview is not None
+    resource_row = result.level0_resource_overview.rows[0]
+    assert resource_row.metrics is not None
+    assert resource_row.metrics.power_mw == 12.5
+    assert resource_row.metrics.bw_total_mbs == 46.6
+    assert resource_row.metrics.hw_time_ms == 1.2
+    assert result.level0_resource_overview.metric_breakdown[0].power_mw == 12.5
+    assert result.level0_resource_overview.metric_breakdown[0].bw_total_mbs == 46.6
     assert "simulation" in result.overlays_available
     assert result.metadata["simulation_evidence_id"] == "sim-test-01"
-

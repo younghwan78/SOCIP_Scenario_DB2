@@ -68,6 +68,87 @@ class EdgeSimOverlay(BaseModel):
     evidence_id: str | None = None
 
 
+class IoSummary(BaseModel):
+    width: int | None = None
+    height: int | None = None
+    fps: float | None = None
+    format: str | None = None
+    bitdepth: int | None = None
+    compression: str | None = None
+    size_label: str | None = None
+
+
+class ResourceMetricSummary(BaseModel):
+    power_mw: float | None = None
+    bw_read_mbs: float | None = None
+    bw_write_mbs: float | None = None
+    bw_total_mbs: float | None = None
+    hw_time_ms: float | None = None
+    evidence_id: str | None = None
+
+
+class ResourceOverviewRow(BaseModel):
+    sequence_index: int
+    node_id: str
+    label: str
+    resource_domain: Literal["external_source", "soc_resource", "memory", "external_sink"]
+    resource_kind: str
+    subsystem: str
+    role: str | None = None
+    input: IoSummary | None = None
+    output: IoSummary | None = None
+    flow: Literal["OTF", "vOTF", "M2M", "control", "risk", "mixed", "none"] = "none"
+    buffer_refs: list[str] = []
+    status: Literal["active", "inactive", "warning", "blocked"] = "active"
+    badges: list[str] = []
+    metrics: ResourceMetricSummary | None = None
+    detail_items: list[str] = []
+
+
+class DisplayLayerSummary(BaseModel):
+    name: str
+    buffer_ref: str | None = None
+    format: str | None = None
+    src_frame: str | None = None
+    dst_frame: str | None = None
+    transform: str | None = None
+    alpha: float | None = None
+
+
+class DisplayCompositionSummary(BaseModel):
+    node_id: str
+    composer: str | None = None
+    layer_count: int | None = None
+    panel_mode: str | None = None
+    output: IoSummary | None = None
+    layers: list[DisplayLayerSummary] = []
+
+
+class SensorEndpointSummary(BaseModel):
+    node_id: str
+    sensor_mode: str | None = None
+    module_ref: str | None = None
+    output: IoSummary | None = None
+    downstream: list[str] = []
+
+
+class Level0MetricBreakdown(BaseModel):
+    subsystem: str
+    power_mw: float | None = None
+    bw_total_mbs: float | None = None
+    hw_time_ms: float | None = None
+    node_count: int = 0
+    warning_count: int = 0
+
+
+class Level0ResourceOverview(BaseModel):
+    rows: list[ResourceOverviewRow] = []
+    metric_breakdown: list[Level0MetricBreakdown] = []
+    sensors: list[SensorEndpointSummary] = []
+    displays: list[DisplayCompositionSummary] = []
+    notes: list[str] = []
+
+
 class NodeData(BaseModel):
     id: str
     label: str
@@ -152,3 +233,4 @@ class ViewResponse(BaseModel):
     summary: ViewSummary
     metadata: dict = {}
     overlays_available: list[str] = []
+    level0_resource_overview: Level0ResourceOverview | None = None

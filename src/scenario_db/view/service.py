@@ -8,11 +8,12 @@ dashboard can also call this module directly without an HTTP round-trip.
 """
 from __future__ import annotations
 
+from collections import defaultdict
 from typing import Any
 
 from scenario_db.api.schemas.view import (
     EdgeData, EdgeElement, EdgeSimOverlay, MemoryDescriptor, MemoryPlacement,
-    NodeData, NodeElement, OperationSummary, RiskCard,
+    Level0MetricBreakdown, NodeData, NodeElement, OperationSummary, ResourceMetricSummary, RiskCard,
     SimOverlay, ViewHints, ViewResponse, ViewSummary,
 )
 from scenario_db.db.repositories.scenario_graph import (
@@ -26,6 +27,7 @@ from scenario_db.view.level0 import (
     project_architecture as _level0_project_architecture,
     project_topology as _level0_project_topology,
 )
+from scenario_db.view.level0_v2 import build_resource_overview
 from scenario_db.view.layout import (
     BG_CENTER_X, BG_WIDTH, CANVAS_H, CANVAS_W,
     LANE_H, LANE_LABEL_W, LANE_Y, LANE_DISPLAY_NAMES,
@@ -337,6 +339,7 @@ def apply_simulation_overlay(view: ViewResponse, evidence) -> ViewResponse:
     if "simulation" not in view.overlays_available:
         view.overlays_available.append("simulation")
     view.metadata["simulation_evidence_id"] = evidence_id
+    _apply_level0_resource_metrics(view, evidence_id, node_rows, dma_rows)
     return view
 
 
@@ -407,6 +410,113 @@ def _match_edge_dma_rows(data: EdgeData, rows: list[dict[str, Any]]) -> list[dic
     if data.flow_type == "M2M" and rows:
         return rows
     return []
+
+
+def _apply_level0_resource_metrics(
+    view: ViewResponse,
+    evidence_id: str | None,
+    node_rows: list[dict[str, Any]],
+    dma_rows: list[dict[str, Any]],
+) -> None:
+    overview = view.level0_resource_overview
+    if overview is None:
+        return
+
+    for row in overview.rows:
+        node_row = _match_resource_node_row(row.node_id, row.label, node_rows)
+        matched_dma = _match_resource_dma_rows(row.node_id, row.label, row.buffer_refs, dma_rows)
+        if not node_row and not matched_dma:
+            continue
+        timing = (node_row or {}).get("_timing") or {}
+        bw_total = sum(_num(item.get("bw_mbs")) or 0.0 for item in matched_dma)
+        read_total = _sum_dma_direction(matched_dma, "read")
+        write_total = _sum_dma_direction(matched_dma, "write")
+        row.metrics = ResourceMetricSummary(
+            power_mw=_num((node_row or {}).get("total_power_mw") or (node_row or {}).get("active_power_mw")),
+            bw_read_mbs=read_total,
+            bw_write_mbs=write_total,
+            bw_total_mbs=bw_total if matched_dma else None,
+            hw_time_ms=_num(timing.get("hw_time_ms") or (node_row or {}).get("hw_time_ms")),
+            evidence_id=evidence_id,
+        )
+
+    _refresh_level0_metric_breakdown(overview)
+
+
+def _match_resource_node_row(node_id: str, label: str, rows: list[dict[str, Any]]) -> dict[str, Any] | None:
+    node_text = f"{node_id} {label}".lower()
+    for row in rows:
+        candidate = str(row.get("node_id") or "").lower()
+        if candidate and (candidate == node_id.lower() or candidate in node_text):
+            return row
+    for row in rows:
+        hw_name = str(row.get("hw_name") or "").lower()
+        if hw_name and hw_name in node_text:
+            return row
+    return None
+
+
+def _match_resource_dma_rows(
+    node_id: str,
+    label: str,
+    buffer_refs: list[str],
+    rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    text = f"{node_id} {label} {' '.join(buffer_refs)}".lower()
+    matched = []
+    for row in rows:
+        candidate = str(row.get("node_id") or "").lower()
+        hw_name = str(row.get("hw_name") or "").lower()
+        buffer_ref = str(row.get("buffer_ref") or row.get("buffer") or "").lower()
+        if (candidate and (candidate == node_id.lower() or candidate in text)) or (hw_name and hw_name in text):
+            matched.append(row)
+            continue
+        if buffer_ref and buffer_ref in {ref.lower() for ref in buffer_refs}:
+            matched.append(row)
+    return matched
+
+
+def _sum_dma_direction(rows: list[dict[str, Any]], direction: str) -> float | None:
+    selected = [
+        _num(row.get("bw_mbs")) or 0.0
+        for row in rows
+        if str(row.get("direction") or "").lower() == direction
+    ]
+    return sum(selected) if selected else None
+
+
+def _refresh_level0_metric_breakdown(overview) -> None:
+    aggregates: dict[str, dict[str, float]] = defaultdict(lambda: {"power": 0.0, "bw": 0.0, "time": 0.0})
+    has_value: dict[str, dict[str, bool]] = defaultdict(lambda: {"power": False, "bw": False, "time": False})
+    counts: dict[str, int] = defaultdict(int)
+    warnings: dict[str, int] = defaultdict(int)
+    for row in overview.rows:
+        counts[row.subsystem] += 1
+        if row.status in {"warning", "blocked"}:
+            warnings[row.subsystem] += 1
+        if row.metrics is None:
+            continue
+        if row.metrics.power_mw is not None:
+            aggregates[row.subsystem]["power"] += row.metrics.power_mw
+            has_value[row.subsystem]["power"] = True
+        if row.metrics.bw_total_mbs is not None:
+            aggregates[row.subsystem]["bw"] += row.metrics.bw_total_mbs
+            has_value[row.subsystem]["bw"] = True
+        if row.metrics.hw_time_ms is not None:
+            aggregates[row.subsystem]["time"] = max(aggregates[row.subsystem]["time"], row.metrics.hw_time_ms)
+            has_value[row.subsystem]["time"] = True
+
+    overview.metric_breakdown = [
+        Level0MetricBreakdown(
+            subsystem=subsystem,
+            power_mw=aggregates[subsystem]["power"] if has_value[subsystem]["power"] else None,
+            bw_total_mbs=aggregates[subsystem]["bw"] if has_value[subsystem]["bw"] else None,
+            hw_time_ms=aggregates[subsystem]["time"] if has_value[subsystem]["time"] else None,
+            node_count=counts[subsystem],
+            warning_count=warnings[subsystem],
+        )
+        for subsystem in sorted(counts)
+    ]
 
 
 def _append_sim_node_text(data: NodeData) -> None:
@@ -1590,6 +1700,7 @@ def _response(
         summary=_summary(graph),
         metadata=enriched_metadata,
         overlays_available=["issues", "review-gate", "memory-path", "llc-allocation", "compression"],
+        level0_resource_overview=build_resource_overview(graph) if level == 0 else None,
     )
 
 

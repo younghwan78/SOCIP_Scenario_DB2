@@ -19,6 +19,7 @@ for path in (_root / "src", _root, _root / "dashboard"):
         sys.path.insert(0, str(path))
 
 from dashboard.components.elk_viewer import render_elk_view
+from dashboard.components.level0_resource_overview import render_level0_resource_overview
 from dashboard.components.viewer_api_client import (
     ViewerApiError,
     compact_project_label,
@@ -561,6 +562,8 @@ with main_col:
         )
 
     if level == 0:
+        render_level0_resource_overview(primary)
+
         st.markdown('<div class="section-card">', unsafe_allow_html=True)
         render_elk_view(
             arch_view,
