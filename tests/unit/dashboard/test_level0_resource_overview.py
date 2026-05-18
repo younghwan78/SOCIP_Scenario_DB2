@@ -13,6 +13,7 @@ from dashboard.components.level0_resource_overview import (
     sensor_summary_rows,
 )
 from scenario_db.api.schemas.view import (
+    BufferHandoffSummary,
     DisplayCompositionSummary,
     IoSummary,
     Level0MetricBreakdown,
@@ -49,8 +50,36 @@ def _view() -> ViewResponse:
                 output=IoSummary(width=1920, height=1080, fps=60, format="RGBA8888"),
                 flow="M2M",
                 buffer_refs=["GPU_NPU_BUF"],
+                input_buffer_refs=[],
                 badges=["GPU", "M2M", "BUF"],
             ),
+            ResourceOverviewRow(
+                sequence_index=3,
+                node_id="npu",
+                label="NPU",
+                resource_domain="soc_resource",
+                resource_kind="npu",
+                subsystem="ai",
+                input_buffer_refs=["GPU_NPU_BUF"],
+                flow="M2M",
+                badges=["NPU"],
+            ),
+        ],
+        buffers=[
+            BufferHandoffSummary(
+                buffer_ref="GPU_NPU_BUF",
+                subsystem="display",
+                producer_node_id="gpu",
+                consumer_node_ids=["npu"],
+                size_label="1920x1080",
+                format="RGBA8888",
+                bitdepth=8,
+                compression="COMP_SBWC_LOSSLESS",
+                comp_ratio=0.5,
+                llc_allocated=True,
+                llc_policy="dedicated",
+                llc_allocation_mb=1.0,
+            )
         ],
         metric_breakdown=[
             Level0MetricBreakdown(subsystem="camera", node_count=1, bw_total_mbs=1200.0),
@@ -117,7 +146,16 @@ def test_level0_resource_overview_formatter_exposes_resource_and_buffer_tables()
     assert rows[0]["Domain"] == "External Source"
     assert rows[0]["Output"] == "4080x2296 @ 30fps / RAW10 / 10b"
     assert rows[1]["Badges"] == "GPU | M2M | BUF"
-    assert buffers == [{"Buffer": "GPU_NPU_BUF", "Producer": "gpu", "Subsystem": "display", "Output": "1920x1080 @ 60fps / RGBA8888"}]
+    assert buffers == [
+        {
+            "Buffer": "GPU_NPU_BUF",
+            "Subsystem": "display",
+            "Producer": "gpu",
+            "Consumer": "npu",
+            "Size": "1920x1080",
+            "Format / Placement": "RGBA8888 / 8b / COMP_SBWC_LOSSLESS / ratio 0.5 / LLC dedicated 1MB",
+        }
+    ]
     assert metrics[0]["Subsystem"] == "camera"
     assert metrics[1]["Power"] == "85.5 mW"
 
@@ -160,7 +198,10 @@ def test_pipeline_viewer_page_renders_level0_resource_overview_component():
     source = Path("dashboard/pages/2_Pipeline_Viewer.py").read_text(encoding="utf-8")
 
     assert "render_level0_resource_overview" in source
-    assert source.index("render_level0_resource_overview") < source.index("Level 0 - Architecture View")
+    assert '"resource"' in source
+    assert '"topology"' in source
+    assert "Level 0 - Architecture View" not in source
+    assert source.index("render_level0_resource_overview") < source.index("Level 0 - Topology Overview")
 
 
 def test_level0_resource_overview_component_uses_vertical_table_layout():

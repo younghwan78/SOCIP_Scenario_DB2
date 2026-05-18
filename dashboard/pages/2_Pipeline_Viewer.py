@@ -19,6 +19,7 @@ for path in (_root / "src", _root, _root / "dashboard"):
         sys.path.insert(0, str(path))
 
 from dashboard.components.elk_viewer import render_elk_view
+from dashboard.components.level0_detail_panel import scenario_context_description, scenario_context_rows
 from dashboard.components.level0_resource_overview import render_level0_resource_overview
 from dashboard.components.viewer_api_client import (
     ViewerApiError,
@@ -284,17 +285,16 @@ def _render_detail_panel(view: ViewResponse) -> None:
         if len(ip_rows) >= 8:
             break
 
+    context_rows = "".join(
+        f"<tr><td>{escape(label)}</td><td>{escape(value)}</td></tr>"
+        for label, value in scenario_context_rows(view)
+    )
     html = f"""
 <div class="detail-panel">
   <h4>Node / Edge Detail</h4>
-  <p>Click a node inside the graph for inline tooltip details. This panel keeps scenario-level context visible while scrolling.</p>
+  <p>{escape(scenario_context_description(view))}</p>
   <table class="detail-table">
-    <tr><td>Scenario</td><td>{escape(summary.name)}</td></tr>
-    <tr><td>Variant</td><td>{escape(summary.variant_id)}</td></tr>
-    <tr><td>Resolution</td><td>{escape(summary.resolution)}</td></tr>
-    <tr><td>Frame Rate</td><td>{summary.fps} fps</td></tr>
-    <tr><td>Period</td><td>{summary.period_ms} ms</td></tr>
-    <tr><td>Budget</td><td>{summary.budget_ms} ms</td></tr>
+    {context_rows}
   </table>
   <h4>Risks</h4>
   {risks}
@@ -421,7 +421,7 @@ with st.sidebar:
 
     view_level = st.radio(
         "View Level",
-        ["0 - Architecture + Task Topology", "1 - IP Detail DAG", "2 - Drill-Down"],
+        ["0 - Resource + Topology", "1 - IP Detail DAG", "2 - Drill-Down"],
         index=0,
     )
     level = int(view_level.split(" ", 1)[0])
@@ -461,12 +461,12 @@ with st.sidebar:
 overlay_evidence_id = sim_evidence_id if sim_mode == "specific" and sim_evidence_id else None
 
 if level == 0:
-    arch_view, arch_source = _load_view(
+    resource_view, resource_source = _load_view(
         api_base,
         scenario_id_input,
         variant_id_input,
         0,
-        "architecture",
+        "resource",
         sim_mode=sim_mode,
         sim_evidence_id=overlay_evidence_id,
     )
@@ -479,7 +479,7 @@ if level == 0:
         sim_mode=sim_mode,
         sim_evidence_id=overlay_evidence_id,
     )
-    primary = arch_view
+    primary = resource_view
 elif level == 1:
     primary, arch_source = _load_view(
         api_base,
@@ -503,6 +503,9 @@ else:
     topo_view, topo_source = primary, arch_source
 
 s = primary.summary
+graph_node_count = len(topo_view.nodes) if level == 0 else len(primary.nodes)
+graph_edge_count = len(topo_view.edges) if level == 0 else len(primary.edges)
+mode_label = "resource + topology" if level == 0 else str(primary.mode)
 
 st.markdown(
     f"""
@@ -521,12 +524,12 @@ st.markdown(
 with st.sidebar:
     st.divider()
     st.markdown("**Loaded View**")
-    st.caption(f"Data source: {arch_source if level != 0 else arch_source + ' / ' + topo_source}")
+    st.caption(f"Data source: {arch_source if level != 0 else resource_source + ' / ' + topo_source}")
     if primary.metadata.get("load_error"):
         st.caption(f"API fallback reason: {primary.metadata['load_error']}")
     st.caption(f"Scenario: {primary.scenario_id}")
     st.caption(f"Variant: {primary.variant_id}")
-    st.caption(f"Nodes: {len(primary.nodes)} | Edges: {len(primary.edges)}")
+    st.caption(f"Nodes: {graph_node_count} | Edges: {graph_edge_count}")
     st.caption(f"Risks: {len(primary.risks)}")
     if "simulation" in primary.overlays_available:
         st.caption("Overlay: simulation")
@@ -543,9 +546,9 @@ with main_col:
   <h4>Scenario Summary</h4>
   <span class="meta-chip">Resolution {s.resolution}</span>
   <span class="meta-chip">FPS {s.fps}</span>
-  <span class="meta-chip">Mode {primary.mode}</span>
-  <span class="meta-chip">Nodes {len(primary.nodes)}</span>
-  <span class="meta-chip">Edges {len(primary.edges)}</span>
+  <span class="meta-chip">Mode {mode_label}</span>
+  <span class="meta-chip">Nodes {graph_node_count}</span>
+  <span class="meta-chip">Edges {graph_edge_count}</span>
 </div>
 """,
         unsafe_allow_html=True,
@@ -562,21 +565,13 @@ with main_col:
         )
 
     if level == 0:
-        render_level0_resource_overview(primary)
-
-        st.markdown('<div class="section-card">', unsafe_allow_html=True)
-        render_elk_view(
-            arch_view,
-            canvas_height=820,
-            title="Level 0 - Architecture View",
-        )
-        st.markdown("</div>", unsafe_allow_html=True)
+        render_level0_resource_overview(resource_view)
 
         st.markdown('<div class="section-card">', unsafe_allow_html=True)
         render_elk_view(
             topo_view,
-            canvas_height=1680,
-            title="Level 0 - SW Task Topology View",
+            canvas_height=1280,
+            title="Level 0 - Topology Overview",
         )
         st.markdown("</div>", unsafe_allow_html=True)
     elif level == 1:

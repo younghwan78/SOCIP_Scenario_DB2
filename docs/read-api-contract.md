@@ -26,8 +26,9 @@ Write/admin endpoints remain out of scope for the current phase.
 | `GET /api/v1/scenarios/{scenario_id}/variants/{variant_id}/graph` | Canonical graph summary for a scenario variant. |
 | `GET /api/v1/scenarios/{scenario_id}/variants/{variant_id}/resolve` | Resolver result against HW/SW capability data. |
 | `GET /api/v1/scenarios/{scenario_id}/variants/{variant_id}/gate` | Review gate status, matched rules, issue/waiver result. |
-| `GET /api/v1/scenarios/{scenario_id}/variants/{variant_id}/view?level=0&mode=architecture` | Level 0 App/Framework/HAL/Kernel/HW/Memory overview. |
-| `GET /api/v1/scenarios/{scenario_id}/variants/{variant_id}/view?level=0&mode=topology` | Level 0 SW task topology DAG. |
+| `GET /api/v1/scenarios/{scenario_id}/variants/{variant_id}/view?level=0&mode=resource` | Level 0 Scenario Resource Overview payload for resource rows, buffers, endpoints, and subsystem metrics. |
+| `GET /api/v1/scenarios/{scenario_id}/variants/{variant_id}/view?level=0&mode=topology` | Level 0 active topology graph with scenario nodes and explicit buffer handoff nodes. |
+| `GET /api/v1/scenarios/{scenario_id}/variants/{variant_id}/view?level=0&mode=architecture` | Legacy Level 0 App/Framework/HAL/Kernel/HW/Memory architecture overview. |
 | `GET /api/v1/scenarios/{scenario_id}/variants/{variant_id}/view?level=1` | Grouped IP detail DAG. |
 | `GET /api/v1/scenarios/{scenario_id}/variants/{variant_id}/view?level=2&expand=camera` | Camera drill-down with submodule, DMA, SYSMMU, and buffer context. |
 | `GET /api/v1/scenarios/{scenario_id}/variants/{variant_id}/view?level=2&expand=video` | Video encode drill-down. |
@@ -71,6 +72,7 @@ The viewer depends on these top-level fields:
 - `risks`
 - `metadata`
 - `overlays_available`
+- `level0_resource_overview` when `level=0`
 
 Each node must include:
 
@@ -129,6 +131,45 @@ the projection:
 - `node_config_count`
 - `buffer_override_count`
 - `sw_task_count`
+
+## Level 0 V2 View Contract
+
+Level 0 is split into two normal consumer modes:
+
+- `mode=resource` returns the Scenario Resource Overview. `nodes` and `edges`
+  are intentionally empty, while `level0_resource_overview` carries the table,
+  buffer handoff list, sensor endpoint details, display composition details,
+  and subsystem metric breakdown.
+- `mode=topology` returns the active scenario topology. It uses the effective
+  resolved graph, emits one `ip-*` node for each active pipeline node, emits
+  one `buf-*` node for each active buffered handoff, and splits buffered edges
+  into `producer -> buffer -> consumer`. The dashboard renders this as
+  `Level 0 - Topology Overview`.
+
+`mode=architecture` remains available as a legacy compatibility projection, but
+the Pipeline Viewer uses `resource` plus `topology` for Level 0.
+
+`level0_resource_overview.rows[]` includes:
+
+- `sequence_index`
+- `node_id`
+- `label`
+- `resource_domain`
+- `resource_kind`
+- `subsystem`
+- `role`
+- `input`
+- `output`
+- `flow`
+- `buffer_refs`
+- `badges`
+- `metrics`
+- `detail_items`
+
+`level0_resource_overview.sensors[]` describes active sensor endpoints and
+selected modes. `level0_resource_overview.displays[]` describes DPU composition,
+panel mode, and display layers when those fields are available from the
+scenario/variant.
 
 ## Memory Contract
 

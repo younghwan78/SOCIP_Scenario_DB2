@@ -5,8 +5,10 @@ from scenario_db.api.schemas.view import (
     EdgeData,
     EdgeElement,
     MemoryDescriptor,
+    MemoryPlacement,
     NodeData,
     NodeElement,
+    OperationSummary,
     ViewHints,
     ViewResponse,
     ViewSummary,
@@ -207,3 +209,47 @@ def test_detail_view_keeps_group_boxes_as_compound_nodes():
     assert {"t_csis", "t_cstat"} <= child_ids
     assert any(child["id"] == "t_mfc" for child in graph["children"])
     assert meta["e-cstat-mfc"]["flow_type"] == "M2M"
+
+
+def test_level0_topology_meta_distinguishes_subsystems_sw_ops_and_llc_buffers():
+    view = ViewResponse(
+        level=0,
+        mode="topology",
+        scenario_id="uc-camera-recording",
+        variant_id="cam-rec-r1-fhd30",
+        summary=_summary(),
+        nodes=[
+            _node(
+                "ip-isp",
+                "ISP",
+                "ip",
+                "hw",
+                100,
+                100,
+                summary_badges=["camera"],
+                active_operations=OperationSummary(scale=True, crop=True),
+            ),
+            _node("ip-gpu", "GPU", "ip", "hw", 300, 100, summary_badges=["display"]),
+            _node("sw-filter", "SW Filter", "sw", "kernel", 500, 100),
+            _node(
+                "buf-record",
+                "Record Buffer",
+                "buffer",
+                "memory",
+                700,
+                100,
+                memory=MemoryDescriptor(format="NV12", width=1920, height=1080, compression="SBWC_v4"),
+                placement=MemoryPlacement(llc_allocated=True, llc_policy="dedicated", llc_allocation_mb=1.0),
+            ),
+        ],
+        edges=[],
+        metadata={"layout": "level0-resource-topology"},
+    )
+
+    _, meta = build_elk_graph(view)
+
+    assert meta["ip-isp"]["fill"] != meta["ip-gpu"]["fill"]
+    assert meta["ip-isp"]["fill"] != meta["buf-record"]["fill"]
+    assert meta["sw-filter"]["subtitle"] == "<sw>"
+    assert meta["ip-isp"]["subtitle"] == "Crop / Scale"
+    assert "LLC dedicated 1MB" in meta["buf-record"]["subtitle"]

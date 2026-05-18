@@ -115,6 +115,19 @@ def buffer_handoff_rows(view: ViewResponse) -> list[dict[str, str]]:
     overview = view.level0_resource_overview
     if not overview:
         return []
+    if overview.buffers:
+        return [
+            {
+                "Buffer": buffer.buffer_ref,
+                "Subsystem": buffer.subsystem,
+                "Producer": _text(buffer.producer_node_id),
+                "Consumer": ", ".join(buffer.consumer_node_ids) if buffer.consumer_node_ids else "-",
+                "Size": _text(buffer.size_label),
+                "Format / Placement": _buffer_format_text(buffer),
+            }
+            for buffer in overview.buffers
+        ]
+
     rows: list[dict[str, str]] = []
     seen: set[tuple[str, str]] = set()
     for row in overview.rows:
@@ -126,12 +139,31 @@ def buffer_handoff_rows(view: ViewResponse) -> list[dict[str, str]]:
             rows.append(
                 {
                     "Buffer": buffer_ref,
-                    "Producer": row.node_id,
                     "Subsystem": row.subsystem,
-                    "Output": _io_text(row.output),
+                    "Producer": row.node_id,
+                    "Consumer": "-",
+                    "Size": _text(row.output.size_label if row.output else None),
+                    "Format / Placement": _io_text(row.output),
                 }
             )
     return rows
+
+
+def _buffer_format_text(buffer: Any) -> str:
+    bits = [
+        buffer.format,
+        f"{buffer.bitdepth}b" if buffer.bitdepth is not None else None,
+        buffer.compression,
+        f"ratio {_num_text(buffer.comp_ratio)}" if buffer.comp_ratio is not None else None,
+    ]
+    if buffer.llc_allocated:
+        llc = "LLC"
+        if buffer.llc_policy:
+            llc = f"{llc} {buffer.llc_policy}"
+        if buffer.llc_allocation_mb:
+            llc = f"{llc} {_num_text(buffer.llc_allocation_mb)}MB"
+        bits.append(llc)
+    return " / ".join(str(bit) for bit in bits if bit) if any(bits) else "-"
 
 
 def sensor_summary_rows(view: ViewResponse) -> list[dict[str, str]]:

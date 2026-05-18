@@ -58,6 +58,18 @@ TYPE_STYLE = {
     "group": {"fill": "#F8FAFC", "stroke": "#CBD5E1", "text": "#334155"},
 }
 
+SUBSYSTEM_STYLE = {
+    "camera": {"fill": "#FFE4D6", "stroke": "#C2410C", "text": "#7C2D12"},
+    "video": {"fill": "#F1EAFE", "stroke": "#7C3AED", "text": "#4C1D95"},
+    "display": {"fill": "#E0F2FE", "stroke": "#0284C7", "text": "#075985"},
+    "ai": {"fill": "#FCE7F3", "stroke": "#DB2777", "text": "#831843"},
+    "game": {"fill": "#FEF3C7", "stroke": "#D97706", "text": "#78350F"},
+    "audio": {"fill": "#EDE9FE", "stroke": "#6D28D9", "text": "#4C1D95"},
+    "compute": {"fill": "#F1F5F9", "stroke": "#475569", "text": "#1E293B"},
+}
+
+LLC_BUFFER_STYLE = {"fill": "#DCFCE7", "stroke": "#16A34A", "text": "#064E3B"}
+
 DEFAULT_SIZE = {
     "sw": (165, 52),
     "ip": (150, 58),
@@ -673,16 +685,22 @@ def _node_meta(node: NodeElement) -> dict[str, Any]:
     if data.active_operations:
         op = data.active_operations
         ops = []
+        op_labels = []
         if op.crop:
             ops.append("crop")
+            op_labels.append("Crop")
         if op.scale:
             ops.append(f"scale {op.scale_from or ''}->{op.scale_to or ''}".strip())
+            op_labels.append("Scale")
         if op.rotate is not None:
             ops.append(f"rotate {op.rotate}")
+            op_labels.append("Rotate")
         if op.colorspace_convert:
             ops.append(f"csc {op.colorspace_convert}")
         if ops:
             details.append("Ops: " + ", ".join(ops))
+            if not subtitle:
+                subtitle = " / ".join(op_labels)
     if data.memory:
         mem = data.memory
         size_label = _format_size_bytes(mem.size_bytes)
@@ -698,8 +716,10 @@ def _node_meta(node: NodeElement) -> dict[str, Any]:
         details.append("Memory: " + subtitle)
     if data.placement and data.placement.llc_allocated:
         placement = data.placement
-        mb = f"{placement.llc_allocation_mb:g}MB " if placement.llc_allocation_mb else ""
-        details.append(f"LLC: {mb}{placement.llc_policy}")
+        llc = _llc_text(placement)
+        details.append(f"LLC: {llc}")
+        if data.type == "buffer":
+            subtitle = f"{subtitle} / {llc}" if subtitle else llc
     if data.sim_overlay:
         overlay = data.sim_overlay
         sim_bits = [
@@ -713,6 +733,8 @@ def _node_meta(node: NodeElement) -> dict[str, Any]:
             subtitle = " / ".join(bit for bit in sim_bits[:2] if bit)
     if data.type == "buffer" and not subtitle:
         subtitle = _fallback_buffer_subtitle(data.detail_items, data.ip_ref)
+    if data.type == "sw" and not subtitle:
+        subtitle = "<sw>"
     warning = data.warning or bool(data.sim_overlay and not data.sim_overlay.feasible)
     return {
         "id": data.id,
@@ -744,6 +766,13 @@ def _format_number(value: float | None, suffix: str) -> str | None:
     if value is None:
         return None
     return f"{value:g}{suffix}"
+
+
+def _llc_text(placement: Any) -> str:
+    text = f"LLC {placement.llc_policy or 'allocated'}"
+    if placement.llc_allocation_mb:
+        text = f"{text} {placement.llc_allocation_mb:g}MB"
+    return text
 
 
 def _fallback_buffer_subtitle(detail_items: list[str], ip_ref: str | None) -> str:
@@ -828,9 +857,14 @@ def _style_for_node(node: NodeElement) -> dict[str, str]:
         gradient = LAYER_GRADIENT[data.layer]
         return {"fill": gradient["g2"], "stroke": gradient["border"], "text": gradient["text"]}
     if data.type == "buffer":
+        if data.placement and data.placement.llc_allocated:
+            return LLC_BUFFER_STYLE
         return TYPE_STYLE["buffer"]
     if data.layer == "external":
         return TYPE_STYLE["external"]
+    subsystem = _subsystem_from_badges(data.summary_badges)
+    if data.type == "ip" and subsystem:
+        return SUBSYSTEM_STYLE[subsystem]
     label = data.label.lower()
     role_text = " ".join(data.detail_items).lower()
     key_text = f"{data.id} {label} {data.ip_ref or ''} {role_text}"
@@ -843,6 +877,14 @@ def _style_for_node(node: NodeElement) -> dict[str, str]:
     if any(token in key_text for token in ("gpu", "npu")):
         return TYPE_STYLE["accelerator"]
     return TYPE_STYLE.get(data.type, TYPE_STYLE["sw"])
+
+
+def _subsystem_from_badges(badges: list[str]) -> str | None:
+    for badge in badges:
+        lowered = str(badge).lower()
+        if lowered in SUBSYSTEM_STYLE:
+            return lowered
+    return None
 
 
 def _layer_stroke(layer: str) -> str:

@@ -172,7 +172,7 @@ def test_applied_topology_patch_injects_sw_task_in_topology_view(api_client: Tes
     )
     assert topology.status_code == 200
     body = topology.json()
-    assert body["metadata"]["layout"] == "vertical-topology"
+    assert body["metadata"]["layout"] == "level0-resource-topology"
     nodes = {node["data"]["id"]: node["data"] for node in body["nodes"]}
     edge_pairs = {(edge["data"]["source"], edge["data"]["target"]) for edge in body["edges"]}
     assert nodes["ip-sw_filter"]["type"] == "sw"

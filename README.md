@@ -136,7 +136,8 @@ http://127.0.0.1:18000/docs
 Quick API smoke check from another PowerShell:
 
 ```powershell
-Invoke-RestMethod "http://127.0.0.1:18000/api/v1/scenarios/uc-camera-recording/variants/UHD60-HDR10-H265/view?level=0&mode=architecture"
+Invoke-RestMethod "http://127.0.0.1:18000/api/v1/scenarios/uc-camera-recording/variants/UHD60-HDR10-H265/view?level=0&mode=resource"
+Invoke-RestMethod "http://127.0.0.1:18000/api/v1/scenarios/uc-camera-recording/variants/UHD60-HDR10-H265/view?level=0&mode=topology"
 ```
 
 Board-aware Read API filters:
@@ -152,7 +153,7 @@ Invoke-RestMethod "$api/variants?scenario_id=uc-demo-import-recording"
 Base scenario view is available even when a scenario has no variants:
 
 ```powershell
-Invoke-RestMethod "$api/scenarios/uc-demo-import-recording/view?level=0&mode=architecture"
+Invoke-RestMethod "$api/scenarios/uc-demo-import-recording/view?level=0&mode=resource"
 ```
 
 ## Write API
@@ -406,7 +407,7 @@ Variant:  UHD60-HDR10-H265
 
 Check these views:
 
-- `0 - Architecture + Task Topology`: Level 0 architecture should show App, Framework, HAL, Kernel, HW, and Memory. The task topology should be shown below it on the same page.
+- `0 - Resource + Topology`: Level 0 should show the Scenario Resource Overview first, then the Level 0 - Topology Overview graph below it. The resource overview summarizes active resources, buffer handoffs, sensor/display endpoint details, and subsystem power/BW metrics when simulation overlay data is loaded.
 - `1 - IP Detail DAG`: grouped IP detail view using the fixture-backed task graph.
 - `2 - Drill-Down`: selectable drill-down for `Camera pipeline`, `Video encode`, and `Display output`.
 
@@ -415,6 +416,9 @@ Important viewer notes:
 - The viewer uses ELK.js and SVG rendering.
 - Edges are routed as orthogonal lines.
 - Memory descriptors include format, bitdepth, alignment, compression, and LLC placement.
+- Level 0 API consumers should use `level=0&mode=resource` for tables and
+  `level=0&mode=topology` for the buffer-aware graph. `mode=architecture`
+  remains available for legacy callers.
 - If fixture YAML changes, reload ETL and restart the API.
 
 ## Test
@@ -467,8 +471,8 @@ Equivalent explicit virtual environment commands:
 ## Current Demo Coverage
 
 - Camera recording UHD60 HDR10 H.265 scenario.
-- Level 0 architecture overview with SW stack, HW path, and memory context.
-- Level 0 SW task topology view.
+- Level 0 Scenario Resource Overview with active IP/resource rows, buffer handoffs, endpoint details, and subsystem metric summary.
+- Level 0 active topology overview with explicit buffer handoff nodes.
 - Level 1 grouped IP detail DAG.
 - Level 2 drill-down for `camera`, `video`, and `display`.
 - Review gate risk overlay from known issue matching.

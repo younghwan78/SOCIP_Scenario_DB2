@@ -98,9 +98,11 @@ def test_view_topology_projection_e2e(api_client):
     assert response.status_code == 200
     body = response.json()
     assert body["mode"] == "topology"
-    assert body["metadata"]["layout"] == "vertical-topology"
-    assert any(node["data"]["id"] == "t_csis" for node in body["nodes"])
-    assert not any(node["data"]["type"] == "buffer" for node in body["nodes"])
+    assert body["metadata"]["layout"] == "level0-resource-topology"
+    buffer_ids = {node["data"]["id"] for node in body["nodes"] if node["data"]["type"] == "buffer"}
+    assert any(node["data"]["id"].startswith("ip-") for node in body["nodes"])
+    assert buffer_ids
+    assert any(edge["data"]["target"] in buffer_ids for edge in body["edges"] if edge["data"].get("buffer_ref"))
 
 
 def test_view_drilldown_projection_e2e(api_client):

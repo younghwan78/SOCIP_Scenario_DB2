@@ -27,7 +27,11 @@ from scenario_db.view.level0 import (
     project_architecture as _level0_project_architecture,
     project_topology as _level0_project_topology,
 )
-from scenario_db.view.level0_v2 import build_resource_overview
+from scenario_db.view.level0_v2 import (
+    build_resource_overview,
+    project_level0_resource_view,
+    project_level0_topology_view,
+)
 from scenario_db.view.layout import (
     BG_CENTER_X, BG_WIDTH, CANVAS_H, CANVAS_W,
     LANE_H, LANE_LABEL_W, LANE_Y, LANE_DISPLAY_NAMES,
@@ -275,10 +279,10 @@ def project_level0(
     if db is None:
         return build_sample_level0()
     graph = _load_graph(db, scenario_id, variant_id)
+    if mode == "resource":
+        return _project_level0_resource_v2(graph, level=0)
     if mode == "topology":
-        if graph.has_topology_overlay:
-            return _project_topology(graph, level=0)
-        return _project_reference_task_topology(graph, level=0)
+        return _project_level0_topology_v2(graph, level=0)
     return _project_architecture(graph, level=0)
 
 
@@ -618,6 +622,30 @@ def _project_architecture(graph: CanonicalScenarioGraph, level: int) -> ViewResp
 
 def _project_topology(graph: CanonicalScenarioGraph, level: int) -> ViewResponse:
     return _level0_project_topology(graph, level, _level0_projection_deps())
+
+
+def _project_level0_resource_v2(graph: CanonicalScenarioGraph, level: int) -> ViewResponse:
+    projection = project_level0_resource_view(graph)
+    return _response(
+        graph=graph,
+        level=level,
+        mode="resource",
+        nodes=projection.nodes,
+        edges=projection.edges,
+        metadata=projection.metadata,
+    )
+
+
+def _project_level0_topology_v2(graph: CanonicalScenarioGraph, level: int) -> ViewResponse:
+    projection = project_level0_topology_view(graph)
+    return _response(
+        graph=graph,
+        level=level,
+        mode="topology",
+        nodes=projection.nodes,
+        edges=projection.edges,
+        metadata=projection.metadata,
+    )
 
 
 def _reference_sizes(graph: CanonicalScenarioGraph) -> dict[str, str]:

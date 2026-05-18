@@ -99,10 +99,26 @@ class ResourceOverviewRow(BaseModel):
     output: IoSummary | None = None
     flow: Literal["OTF", "vOTF", "M2M", "control", "risk", "mixed", "none"] = "none"
     buffer_refs: list[str] = []
+    input_buffer_refs: list[str] = []
     status: Literal["active", "inactive", "warning", "blocked"] = "active"
     badges: list[str] = []
     metrics: ResourceMetricSummary | None = None
     detail_items: list[str] = []
+
+
+class BufferHandoffSummary(BaseModel):
+    buffer_ref: str
+    subsystem: str
+    producer_node_id: str | None = None
+    consumer_node_ids: list[str] = []
+    size_label: str | None = None
+    format: str | None = None
+    bitdepth: int | None = None
+    compression: str | None = None
+    comp_ratio: float | None = None
+    llc_allocated: bool = False
+    llc_policy: str | None = None
+    llc_allocation_mb: float | None = None
 
 
 class DisplayLayerSummary(BaseModel):
@@ -143,6 +159,7 @@ class Level0MetricBreakdown(BaseModel):
 
 class Level0ResourceOverview(BaseModel):
     rows: list[ResourceOverviewRow] = []
+    buffers: list[BufferHandoffSummary] = []
     metric_breakdown: list[Level0MetricBreakdown] = []
     sensors: list[SensorEndpointSummary] = []
     displays: list[DisplayCompositionSummary] = []
