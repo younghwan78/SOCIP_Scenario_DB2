@@ -70,6 +70,44 @@ SUBSYSTEM_STYLE = {
 
 LLC_BUFFER_STYLE = {"fill": "#DCFCE7", "stroke": "#16A34A", "text": "#064E3B"}
 
+HIERARCHY_GROUP_STYLE = {
+    "Sensor": {"fill": "#EFF6FF", "stroke": "#60A5FA", "text": "#1E3A8A"},
+    "ISP": {"fill": "#ECFDF5", "stroke": "#34D399", "text": "#064E3B"},
+    "Compute": {"fill": "#F0FDF4", "stroke": "#22C55E", "text": "#14532D"},
+    "CODEC": {"fill": "#FFF7ED", "stroke": "#FB923C", "text": "#7C2D12"},
+    "DPU": {"fill": "#E0F2FE", "stroke": "#38BDF8", "text": "#075985"},
+    "Display": {"fill": "#E0F2FE", "stroke": "#38BDF8", "text": "#075985"},
+    "GPU": {"fill": "#F0FDFA", "stroke": "#14B8A6", "text": "#134E4A"},
+    "NPU": {"fill": "#FCE7F3", "stroke": "#DB2777", "text": "#831843"},
+    "CPU/SW": {"fill": "#F8FAFC", "stroke": "#64748B", "text": "#334155"},
+    "Memory": {"fill": "#FEFCE8", "stroke": "#CA8A04", "text": "#713F12"},
+}
+
+IP_GROUP_STYLE = {
+    "CSIS": {"fill": "#E0F2FE", "stroke": "#0284C7", "text": "#075985"},
+    "CSIS/PDP": {"fill": "#DBEAFE", "stroke": "#2563EB", "text": "#1E3A8A"},
+    "3AA/CSTAT": {"fill": "#E0E7FF", "stroke": "#4F46E5", "text": "#312E81"},
+    "BYRP": {"fill": "#D9F99D", "stroke": "#65A30D", "text": "#365314"},
+    "RGBP": {"fill": "#FFE4E6", "stroke": "#E11D48", "text": "#881337"},
+    "YUVSC": {"fill": "#FEF3C7", "stroke": "#D97706", "text": "#78350F"},
+    "MTNR": {"fill": "#EDE9FE", "stroke": "#7C3AED", "text": "#4C1D95"},
+    "MSNR": {"fill": "#FCE7F3", "stroke": "#DB2777", "text": "#831843"},
+    "YUVP": {"fill": "#E0F2FE", "stroke": "#0284C7", "text": "#075985"},
+    "MCSC": {"fill": "#F5F3FF", "stroke": "#7C3AED", "text": "#4C1D95"},
+    "GDC": {"fill": "#FAE8FF", "stroke": "#C026D3", "text": "#701A75"},
+    "LME": {"fill": "#FFE4E6", "stroke": "#E11D48", "text": "#881337"},
+    "ISP Core": {"fill": "#DCFCE7", "stroke": "#16A34A", "text": "#14532D"},
+    "SGPU": {"fill": "#D1FAE5", "stroke": "#059669", "text": "#064E3B"},
+    "MFC": {"fill": "#FFEDD5", "stroke": "#EA580C", "text": "#7C2D12"},
+    "APV": {"fill": "#FEF3C7", "stroke": "#D97706", "text": "#78350F"},
+    "DPU": {"fill": "#E0F2FE", "stroke": "#0284C7", "text": "#075985"},
+    "Panel": {"fill": "#F0F9FF", "stroke": "#0EA5E9", "text": "#075985"},
+    "GPU": {"fill": "#CCFBF1", "stroke": "#0F766E", "text": "#134E4A"},
+    "NPU": {"fill": "#FCE7F3", "stroke": "#DB2777", "text": "#831843"},
+    "CPU/SW": {"fill": "#F1F5F9", "stroke": "#475569", "text": "#1E293B"},
+    "Sensor": {"fill": "#DBEAFE", "stroke": "#2563EB", "text": "#1E3A8A"},
+}
+
 DEFAULT_SIZE = {
     "sw": (165, 52),
     "ip": (150, 58),
@@ -155,23 +193,38 @@ def _build_grouped_graph(view: ViewResponse) -> tuple[dict[str, Any], dict[str, 
     meta: dict[str, Any] = {"__view__": _view_meta(view)}
     group_nodes = [node for node in view.nodes if _is_group_box(node)]
     leaf_nodes = [node for node in _functional_nodes(view.nodes) if not _is_group_box(node)]
+    group_by_id = {node.data.id: node for node in group_nodes}
+    children_by_group: dict[str, list[NodeElement]] = defaultdict(list)
+
+    assigned_groups: set[str] = set()
+    for group in group_nodes:
+        parent = group.data.parent
+        if parent and parent in group_by_id:
+            children_by_group[parent].append(group)
+            assigned_groups.add(group.data.id)
 
     assigned: set[str] = set()
-    children: list[dict[str, Any]] = []
+    for node in leaf_nodes:
+        parent = node.data.parent
+        if parent and parent in group_by_id:
+            children_by_group[parent].append(node)
+            assigned.add(node.data.id)
+
+    # Legacy/reference views do not always carry semantic parent IDs.  Keep the
+    # coordinate containment fallback for those, but prefer explicit ownership.
     for group in _sort_nodes(group_nodes):
-        contained = [node for node in leaf_nodes if _inside_group(group, node)]
+        contained = [node for node in leaf_nodes if node.data.id not in assigned and _inside_group(group, node)]
         if not contained:
             continue
+        children_by_group[group.data.id].extend(contained)
         assigned.update(node.data.id for node in contained)
+
+    children: list[dict[str, Any]] = []
+    for group in _sort_nodes([node for node in group_nodes if node.data.id not in assigned_groups]):
+        if not children_by_group.get(group.data.id):
+            continue
         children.append(
-            _elk_group(
-                group.data.id,
-                group.data.label,
-                "meta",
-                [_elk_leaf(node, meta) for node in _sort_nodes(contained)],
-                meta,
-                direction="DOWN",
-            )
+            _elk_group_from_node(group, _group_children(group.data.id, children_by_group, meta), meta, direction="DOWN")
         )
 
     for node in _sort_nodes([node for node in leaf_nodes if node.data.id not in assigned]):
@@ -186,6 +239,22 @@ def _build_grouped_graph(view: ViewResponse) -> tuple[dict[str, Any], dict[str, 
         hierarchy=True,
     )
     return graph, meta
+
+
+def _group_children(
+    group_id: str,
+    children_by_group: dict[str, list[NodeElement]],
+    meta: dict[str, Any],
+) -> list[dict[str, Any]]:
+    children: list[dict[str, Any]] = []
+    for child in _sort_nodes(children_by_group.get(group_id, [])):
+        if _is_group_box(child):
+            nested = _group_children(child.data.id, children_by_group, meta)
+            if nested:
+                children.append(_elk_group_from_node(child, nested, meta, direction="DOWN"))
+            continue
+        children.append(_elk_leaf(child, meta))
+    return children
 
 
 def _elk_root(
@@ -224,18 +293,22 @@ def _elk_group(
     meta: dict[str, Any],
     *,
     direction: str,
+    group_node: NodeElement | None = None,
 ) -> dict[str, Any]:
     width = max(260, sum(int(child.get("width", 120)) for child in children) // max(len(children), 1) + 80)
     height = 110 + (len(children) * 6)
+    style = _style_for_group(group_node, layer)
     meta[node_id] = {
         "id": node_id,
         "label": label,
         "type": "group",
         "layer": layer,
-        "fill": LAYER_TINT.get(layer, "#F8FAFC"),
-        "stroke": _layer_stroke(layer),
-        "text": "#334155",
-        "details": [],
+        "fill": style["fill"],
+        "stroke": style["stroke"],
+        "text": style["text"],
+        "semantic_group": group_node.data.hierarchy_group if group_node else None,
+        "ip_group": group_node.data.ip_group if group_node else None,
+        "details": _group_details(group_node),
     }
     return {
         "id": node_id,
@@ -253,6 +326,48 @@ def _elk_group(
         "children": children,
         "edges": [],
     }
+
+
+def _elk_group_from_node(
+    group: NodeElement,
+    children: list[dict[str, Any]],
+    meta: dict[str, Any],
+    *,
+    direction: str,
+) -> dict[str, Any]:
+    return _elk_group(
+        group.data.id,
+        group.data.label,
+        group.data.layer,
+        children,
+        meta,
+        direction=direction,
+        group_node=group,
+    )
+
+
+def _style_for_group(group_node: NodeElement | None, layer: str) -> dict[str, str]:
+    if group_node is None:
+        return {"fill": LAYER_TINT.get(layer, "#F8FAFC"), "stroke": _layer_stroke(layer), "text": "#334155"}
+    data = group_node.data
+    if data.ip_group:
+        return IP_GROUP_STYLE.get(data.ip_group, HIERARCHY_GROUP_STYLE.get(data.hierarchy_group or "", TYPE_STYLE["group"]))
+    if data.hierarchy_group:
+        return HIERARCHY_GROUP_STYLE.get(data.hierarchy_group, TYPE_STYLE["group"])
+    return {"fill": LAYER_TINT.get(layer, "#F8FAFC"), "stroke": _layer_stroke(layer), "text": "#334155"}
+
+
+def _group_details(group_node: NodeElement | None) -> list[str]:
+    if group_node is None:
+        return []
+    data = group_node.data
+    details: list[str] = []
+    if data.hierarchy_group:
+        details.append(f"Hierarchy: {data.hierarchy_group}")
+    if data.ip_group:
+        details.append(f"IP block: {data.ip_group}")
+    details.extend(data.detail_items)
+    return details
 
 
 def _manual_layer_columns(layer: str, count: int) -> int:
@@ -678,6 +793,14 @@ def _node_meta(node: NodeElement) -> dict[str, Any]:
     details.extend(data.detail_items)
     if data.ip_ref:
         details.append(f"IP: {data.ip_ref}")
+    if data.hierarchy_group:
+        details.append(f"Hierarchy: {data.hierarchy_group}")
+    if data.ip_group:
+        details.append(f"IP block: {data.ip_group}")
+    if data.role_hw_name:
+        details.append(f"Role HW: {data.role_hw_name}")
+    if data.dvfs_group:
+        details.append(f"DVFS group: {data.dvfs_group}")
     if data.capability_badges:
         details.append("Capabilities: " + ", ".join(data.capability_badges[:6]))
     if data.summary_badges:
@@ -747,6 +870,10 @@ def _node_meta(node: NodeElement) -> dict[str, Any]:
         "badges": data.summary_badges[:4],
         "subtitle": subtitle,
         "details": details,
+        "semantic_group": data.hierarchy_group,
+        "ip_group": data.ip_group,
+        "dvfs_group": data.dvfs_group,
+        "role_hw_name": data.role_hw_name,
         "warning": warning,
         "severity": data.severity,
     }

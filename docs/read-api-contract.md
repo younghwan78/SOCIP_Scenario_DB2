@@ -29,7 +29,7 @@ Write/admin endpoints remain out of scope for the current phase.
 | `GET /api/v1/scenarios/{scenario_id}/variants/{variant_id}/view?level=0&mode=resource` | Level 0 Scenario Resource Overview payload for resource rows, buffers, endpoints, and subsystem metrics. |
 | `GET /api/v1/scenarios/{scenario_id}/variants/{variant_id}/view?level=0&mode=topology` | Level 0 active topology graph with scenario nodes and explicit buffer handoff nodes. |
 | `GET /api/v1/scenarios/{scenario_id}/variants/{variant_id}/view?level=0&mode=architecture` | Legacy Level 0 App/Framework/HAL/Kernel/HW/Memory architecture overview. |
-| `GET /api/v1/scenarios/{scenario_id}/variants/{variant_id}/view?level=1` | Grouped IP detail DAG. |
+| `GET /api/v1/scenarios/{scenario_id}/variants/{variant_id}/view?level=1` | Semantic IP detail DAG grouped by hierarchy group and IP block. |
 | `GET /api/v1/scenarios/{scenario_id}/variants/{variant_id}/view?level=2&expand=camera` | Camera drill-down with submodule, DMA, SYSMMU, and buffer context. |
 | `GET /api/v1/scenarios/{scenario_id}/variants/{variant_id}/view?level=2&expand=video` | Video encode drill-down. |
 | `GET /api/v1/scenarios/{scenario_id}/variants/{variant_id}/view?level=2&expand=display` | Display output drill-down. |
@@ -86,6 +86,11 @@ Viewer-critical optional node fields:
 
 - `data.summary_badges`
 - `data.capability_badges`
+- `data.hierarchy_group`
+- `data.ip_group`
+- `data.dvfs_group`
+- `data.role_hw_name`
+- `data.semantic_source`
 - `data.active_operations`
 - `data.memory`
 - `data.placement`

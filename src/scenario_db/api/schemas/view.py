@@ -175,6 +175,11 @@ class NodeData(BaseModel):
     parent: str | None = None
     ip_ref: str | None = None
     sw_ref: str | None = None
+    hierarchy_group: str | None = None
+    ip_group: str | None = None
+    dvfs_group: str | None = None
+    role_hw_name: str | None = None
+    semantic_source: str | None = None
     summary_badges: list[str] = []
     capability_badges: list[str] = []
     active_operations: OperationSummary | None = None

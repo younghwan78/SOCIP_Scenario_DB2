@@ -129,9 +129,10 @@ def test_view_level1_projection_contract_e2e(api_client):
     assert response.status_code == 200
     body = response.json()
     assert body["level"] == 1
-    assert body["metadata"]["layout"] == "level1-reference"
+    assert body["metadata"]["layout"] == "level1-semantic-ip-dag"
     assert any(node["data"]["id"] == "grp-isp" for node in body["nodes"])
-    assert any(node["data"]["active_operations"] for node in body["nodes"])
+    assert any(node["data"].get("hierarchy_group") == "ISP" for node in body["nodes"])
+    assert not any(node["data"]["id"] == "t_mlsc" for node in body["nodes"])
     assert any(edge["data"]["memory"] for edge in body["edges"] if edge["data"]["flow_type"] == "M2M")
 
 

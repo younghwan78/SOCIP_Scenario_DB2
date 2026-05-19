@@ -211,6 +211,117 @@ def test_detail_view_keeps_group_boxes_as_compound_nodes():
     assert meta["e-cstat-mfc"]["flow_type"] == "M2M"
 
 
+def test_detail_view_uses_explicit_parent_for_nested_groups_even_when_coordinates_do_not_contain_nodes():
+    view = ViewResponse(
+        level=1,
+        mode="level1-ip-detail",
+        scenario_id="uc-camera-recording",
+        variant_id="cam-rec-3rdparty-binning",
+        summary=_summary(),
+        nodes=[
+            _node(
+                "grp-isp",
+                "ISP",
+                "submodule",
+                "meta",
+                100,
+                100,
+                hierarchy_group="ISP",
+                view_hints=ViewHints(width=180, height=120),
+            ),
+            _node(
+                "grp-isp-byrp",
+                "BYRP",
+                "submodule",
+                "meta",
+                900,
+                900,
+                parent="grp-isp",
+                hierarchy_group="ISP",
+                ip_group="BYRP",
+                view_hints=ViewHints(width=160, height=100),
+            ),
+            _node(
+                "ip-byrp",
+                "BYRP",
+                "ip",
+                "hw",
+                1400,
+                1400,
+                parent="grp-isp-byrp",
+                hierarchy_group="ISP",
+                ip_group="BYRP",
+            ),
+            _node("ip-mfc", "MFC", "ip", "hw", 1400, 100, hierarchy_group="CODEC", ip_group="MFC"),
+        ],
+        edges=[_edge("e-byrp-mfc", "ip-byrp", "ip-mfc", "M2M")],
+        metadata={"layout": "level1-semantic-ip-dag"},
+    )
+
+    graph, meta = build_elk_graph(view)
+
+    isp_group = next(child for child in graph["children"] if child["id"] == "grp-isp")
+    byrp_group = next(child for child in isp_group["children"] if child["id"] == "grp-isp-byrp")
+    assert {child["id"] for child in byrp_group["children"]} == {"ip-byrp"}
+    assert any(child["id"] == "ip-mfc" for child in graph["children"])
+    assert meta["grp-isp"]["semantic_group"] == "ISP"
+    assert meta["grp-isp-byrp"]["ip_group"] == "BYRP"
+    assert meta["grp-isp"]["fill"] != meta["grp-isp-byrp"]["fill"]
+
+
+def test_detail_view_styles_compute_hierarchy_and_gpu_ip_group_without_fallback_colors():
+    view = ViewResponse(
+        level=1,
+        mode="level1-ip-detail",
+        scenario_id="uc-game-play",
+        variant_id="game-fhd-60fps-npu-ai",
+        summary=_summary(),
+        nodes=[
+            _node(
+                "grp-compute",
+                "Compute",
+                "submodule",
+                "meta",
+                100,
+                100,
+                hierarchy_group="Compute",
+                view_hints=ViewHints(width=220, height=160),
+            ),
+            _node(
+                "grp-compute-sgpu",
+                "SGPU",
+                "submodule",
+                "meta",
+                300,
+                300,
+                parent="grp-compute",
+                hierarchy_group="Compute",
+                ip_group="SGPU",
+                view_hints=ViewHints(width=180, height=120),
+            ),
+            _node(
+                "ip-gpu",
+                "GPU",
+                "ip",
+                "hw",
+                500,
+                500,
+                parent="grp-compute-sgpu",
+                hierarchy_group="Compute",
+                ip_group="SGPU",
+            ),
+        ],
+        edges=[],
+        metadata={"layout": "level1-semantic-ip-dag"},
+    )
+
+    _, meta = build_elk_graph(view)
+
+    assert meta["grp-compute"]["fill"] != "#F8FAFC"
+    assert meta["grp-compute-sgpu"]["fill"] != "#F8FAFC"
+    assert meta["grp-compute"]["fill"] != meta["grp-compute-sgpu"]["fill"]
+
+
 def test_level0_topology_meta_distinguishes_subsystems_sw_ops_and_llc_buffers():
     view = ViewResponse(
         level=0,
