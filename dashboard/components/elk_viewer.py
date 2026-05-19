@@ -70,6 +70,16 @@ SUBSYSTEM_STYLE = {
 
 LLC_BUFFER_STYLE = {"fill": "#DCFCE7", "stroke": "#16A34A", "text": "#064E3B"}
 
+MODULE_KIND_STYLE = {
+    "rdma": {"fill": "#EEF2FF", "stroke": "#4F46E5", "text": "#312E81"},
+    "wdma": {"fill": "#FFF7ED", "stroke": "#EA580C", "text": "#7C2D12"},
+    "dma": {"fill": "#F5F3FF", "stroke": "#7C3AED", "text": "#4C1D95"},
+    "cin": {"fill": "#E0F2FE", "stroke": "#0284C7", "text": "#075985"},
+    "cout": {"fill": "#ECFDF5", "stroke": "#059669", "text": "#064E3B"},
+    "port": {"fill": "#F8FAFC", "stroke": "#64748B", "text": "#334155"},
+    "module": {"fill": "#F8FAFC", "stroke": "#64748B", "text": "#334155"},
+}
+
 HIERARCHY_GROUP_STYLE = {
     "Sensor": {"fill": "#EFF6FF", "stroke": "#60A5FA", "text": "#1E3A8A"},
     "ISP": {"fill": "#ECFDF5", "stroke": "#34D399", "text": "#064E3B"},
@@ -801,6 +811,19 @@ def _node_meta(node: NodeElement) -> dict[str, Any]:
         details.append(f"Role HW: {data.role_hw_name}")
     if data.dvfs_group:
         details.append(f"DVFS group: {data.dvfs_group}")
+    if data.module_ref:
+        details.append(f"Module: {data.module_ref}")
+    if data.module_kind:
+        details.append(f"Module kind: {data.module_kind}")
+        if not subtitle:
+            subtitle = data.module_kind.upper()
+    if data.module_direction:
+        details.append(f"Direction: {data.module_direction}")
+        subtitle = f"{data.module_direction} / {subtitle}" if subtitle else data.module_direction
+    if data.module_status:
+        details.append(f"Status: {data.module_status}")
+    if data.port_ref:
+        details.append(f"Port: {data.port_ref}")
     if data.capability_badges:
         details.append("Capabilities: " + ", ".join(data.capability_badges[:6]))
     if data.summary_badges:
@@ -874,6 +897,11 @@ def _node_meta(node: NodeElement) -> dict[str, Any]:
         "ip_group": data.ip_group,
         "dvfs_group": data.dvfs_group,
         "role_hw_name": data.role_hw_name,
+        "module_ref": data.module_ref,
+        "module_kind": data.module_kind,
+        "module_direction": data.module_direction,
+        "module_status": data.module_status,
+        "port_ref": data.port_ref,
         "warning": warning,
         "severity": data.severity,
     }
@@ -987,6 +1015,10 @@ def _style_for_node(node: NodeElement) -> dict[str, str]:
         if data.placement and data.placement.llc_allocated:
             return LLC_BUFFER_STYLE
         return TYPE_STYLE["buffer"]
+    if data.module_kind:
+        if data.module_kind == "functional":
+            return IP_GROUP_STYLE.get(data.ip_group or "", TYPE_STYLE["submodule"])
+        return MODULE_KIND_STYLE.get(data.module_kind, MODULE_KIND_STYLE["module"])
     if data.layer == "external":
         return TYPE_STYLE["external"]
     subsystem = _subsystem_from_badges(data.summary_badges)

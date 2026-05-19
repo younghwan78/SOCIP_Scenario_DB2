@@ -30,9 +30,7 @@ Write/admin endpoints remain out of scope for the current phase.
 | `GET /api/v1/scenarios/{scenario_id}/variants/{variant_id}/view?level=0&mode=topology` | Level 0 active topology graph with scenario nodes and explicit buffer handoff nodes. |
 | `GET /api/v1/scenarios/{scenario_id}/variants/{variant_id}/view?level=0&mode=architecture` | Legacy Level 0 App/Framework/HAL/Kernel/HW/Memory architecture overview. |
 | `GET /api/v1/scenarios/{scenario_id}/variants/{variant_id}/view?level=1` | Semantic IP detail DAG grouped by hierarchy group and IP block. |
-| `GET /api/v1/scenarios/{scenario_id}/variants/{variant_id}/view?level=2&expand=camera` | Camera drill-down with submodule, DMA, SYSMMU, and buffer context. |
-| `GET /api/v1/scenarios/{scenario_id}/variants/{variant_id}/view?level=2&expand=video` | Video encode drill-down. |
-| `GET /api/v1/scenarios/{scenario_id}/variants/{variant_id}/view?level=2&expand=display` | Display output drill-down. |
+| `GET /api/v1/scenarios/{scenario_id}/variants/{variant_id}/view?level=2&expand={alias-or-node}` | Semantic module detail view. `expand` accepts `camera`, `video`, `display`, an active pipeline node id, or an IP catalog id. The projection renders only declared module data from the active graph and IP catalog. |
 
 ## Variant Resolution Contract
 
@@ -91,6 +89,11 @@ Viewer-critical optional node fields:
 - `data.dvfs_group`
 - `data.role_hw_name`
 - `data.semantic_source`
+- `data.module_ref`
+- `data.module_kind`
+- `data.module_direction`
+- `data.module_status`
+- `data.port_ref`
 - `data.active_operations`
 - `data.memory`
 - `data.placement`
@@ -175,6 +178,39 @@ the Pipeline Viewer uses `resource` plus `topology` for Level 0.
 selected modes. `level0_resource_overview.displays[]` describes DPU composition,
 panel mode, and display layers when those fields are available from the
 scenario/variant.
+
+## Level 2 Module View Contract
+
+Level 2 is a semantic module-detail projection, not a hardcoded reference
+diagram. The backend resolves the active variant topology first, then maps the
+selected `expand` target to active pipeline nodes:
+
+- `camera` expands active ISP/camera-processing nodes.
+- `video` expands active codec nodes such as MFC/APV.
+- `display` expands active DPU nodes.
+- A concrete pipeline node id or IP catalog id expands that single active node.
+
+The projection renders declared IP-internal modules only:
+
+- Functional blocks come from `capabilities.properties.subblocks` or
+  `hierarchy.submodules`.
+- DMA/CIN/COUT nodes come from `capabilities.properties.modules`.
+- Module-to-module routes come from active scenario pipeline edges and
+  `capabilities.properties.internal_edges`.
+- Buffer nodes are emitted only for actual pipeline buffer handoffs, with
+  format/compression/LLC placement from scenario buffers and variant overrides.
+
+If a selected target has no module-level declaration, the response uses:
+
+- `metadata.layout = "level2-unavailable"`
+- `metadata.level2_available = false`
+- `metadata.unavailable_reasons[]`
+- `metadata.required_data[]`
+
+When some nodes in an alias expansion are renderable and others are not, the
+response still returns `metadata.layout = "level2-module-detail"` and records
+the skipped nodes in `metadata.omitted_reasons[]`. The Viewer should show those
+reasons as data-quality guidance rather than drawing synthetic DMA/SYSMMU nodes.
 
 ## Memory Contract
 

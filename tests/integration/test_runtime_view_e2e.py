@@ -115,9 +115,10 @@ def test_view_drilldown_projection_e2e(api_client):
     body = response.json()
     assert body["level"] == 2
     assert body["metadata"]["expand"] == "isp0"
-    assert any(node["data"]["type"] == "submodule" for node in body["nodes"])
-    assert any(node["data"]["type"] == "dma_group" for node in body["nodes"])
-    assert any(node["data"]["type"] == "sysmmu" for node in body["nodes"])
+    assert body["metadata"]["layout"] == "level2-module-detail"
+    assert body["metadata"]["level2_available"] is True
+    assert any(node["data"]["module_kind"] == "functional" for node in body["nodes"])
+    assert not any(node["data"]["type"] in {"dma_group", "sysmmu"} for node in body["nodes"])
 
 
 def test_view_level1_projection_contract_e2e(api_client):
@@ -170,13 +171,13 @@ def test_view_level2_camera_reference_projection_e2e(api_client):
     assert response.status_code == 200
     body = response.json()
     node_ids = {node["data"]["id"] for node in body["nodes"]}
-    node_types = {node["data"]["type"] for node in body["nodes"]}
     assert body["metadata"]["expand"] == "camera"
-    assert body["metadata"]["layout"] == "level2-camera-detail"
-    assert "l2cam-csis" in node_ids
-    assert "l2cam-mlsc" in node_ids
-    assert "l2cam-sysmmu" in node_ids
-    assert {"sw", "submodule", "dma_channel", "sysmmu", "buffer"}.issubset(node_types)
+    assert body["metadata"]["layout"] == "level2-module-detail"
+    assert body["metadata"]["level2_available"] is True
+    assert "l2pkg-isp0" in node_ids
+    assert "l2cam-mlsc" not in node_ids
+    assert any(node["data"]["module_kind"] == "functional" for node in body["nodes"])
+    assert body["metadata"]["omitted_reasons"]
 
 
 def test_view_level2_video_reference_projection_e2e(api_client):
@@ -187,13 +188,11 @@ def test_view_level2_video_reference_projection_e2e(api_client):
 
     assert response.status_code == 200
     body = response.json()
-    node_ids = {node["data"]["id"] for node in body["nodes"]}
     assert body["metadata"]["expand"] == "video"
-    assert body["metadata"]["layout"] == "level2-video-detail"
-    assert "l2vid-mfc" in node_ids
-    assert "l2vid-sysmmu" in node_ids
-    assert any(node["data"]["type"] == "sw" for node in body["nodes"])
-    assert any(node["data"]["type"] == "dma_channel" for node in body["nodes"])
+    assert body["metadata"]["layout"] == "level2-unavailable"
+    assert body["metadata"]["level2_available"] is False
+    assert body["nodes"] == []
+    assert "module" in " ".join(body["metadata"]["required_data"]).lower()
 
 
 def test_view_level2_display_reference_projection_e2e(api_client):
@@ -204,9 +203,7 @@ def test_view_level2_display_reference_projection_e2e(api_client):
 
     assert response.status_code == 200
     body = response.json()
-    node_ids = {node["data"]["id"] for node in body["nodes"]}
     assert body["metadata"]["expand"] == "display"
-    assert body["metadata"]["layout"] == "level2-display-detail"
-    assert "l2disp-dpu" in node_ids
-    assert "l2disp-sysmmu" in node_ids
-    assert any(node["data"]["type"] == "sw" for node in body["nodes"])
+    assert body["metadata"]["layout"] == "level2-unavailable"
+    assert body["metadata"]["level2_available"] is False
+    assert body["nodes"] == []

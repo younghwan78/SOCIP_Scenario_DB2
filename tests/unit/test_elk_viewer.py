@@ -364,3 +364,62 @@ def test_level0_topology_meta_distinguishes_subsystems_sw_ops_and_llc_buffers():
     assert meta["sw-filter"]["subtitle"] == "<sw>"
     assert meta["ip-isp"]["subtitle"] == "Crop / Scale"
     assert "LLC dedicated 1MB" in meta["buf-record"]["subtitle"]
+
+
+def test_level2_module_meta_uses_module_kind_direction_and_distinct_styles():
+    view = ViewResponse(
+        level=2,
+        mode="drilldown:csispdp",
+        scenario_id="uc-camera-recording",
+        variant_id="cam-rec-3rdparty-binning",
+        summary=_summary(),
+        nodes=[
+            _node(
+                "l2pkg-csispdp",
+                "CSISPDP",
+                "submodule",
+                "meta",
+                100,
+                100,
+                hierarchy_group="ISP",
+                ip_group="CSIS/PDP",
+                view_hints=ViewHints(width=220, height=160),
+            ),
+            _node(
+                "mod-csispdp-csispdp",
+                "CSISPDP",
+                "submodule",
+                "hw",
+                140,
+                160,
+                parent="l2pkg-csispdp",
+                hierarchy_group="ISP",
+                ip_group="CSIS/PDP",
+                module_ref="CSISPDP",
+                module_kind="functional",
+            ),
+            _node(
+                "mod-csispdp-csispdp-wdma",
+                "CSISPDP WDMA",
+                "submodule",
+                "hw",
+                340,
+                160,
+                parent="l2pkg-csispdp",
+                hierarchy_group="ISP",
+                ip_group="CSIS/PDP",
+                module_ref="CSISPDP_WDMA",
+                module_kind="wdma",
+                module_direction="output",
+            ),
+        ],
+        edges=[],
+        metadata={"layout": "level2-module-detail"},
+    )
+
+    _, meta = build_elk_graph(view)
+
+    assert meta["mod-csispdp-csispdp"]["fill"] == meta["l2pkg-csispdp"]["fill"]
+    assert meta["mod-csispdp-csispdp-wdma"]["fill"] != meta["mod-csispdp-csispdp"]["fill"]
+    assert meta["mod-csispdp-csispdp-wdma"]["subtitle"] == "output / WDMA"
+    assert "Module kind: wdma" in meta["mod-csispdp-csispdp-wdma"]["details"]

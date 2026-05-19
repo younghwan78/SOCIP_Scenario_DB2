@@ -21,7 +21,7 @@ def get_base_view(
     scenario_id: str,
     level: int = Query(0, ge=0, le=2, description="View depth: 0=overview/topology, 1=IP DAG, 2=drill-down"),
     mode: str = Query("architecture", description="architecture | topology"),
-    expand: str | None = Query(None, description="IP id to expand (Level 2 only)"),
+    expand: str | None = Query(None, description="Alias, active node id, or IP catalog id to expand (Level 2 only)"),
     sim: str = Query("none", description="none | latest"),
     sim_evidence_id: str | None = Query(None, description="Specific simulation evidence id to overlay"),
     db: Session = Depends(get_db),
@@ -48,7 +48,7 @@ def get_view(
     variant_id: str,
     level: int = Query(0, ge=0, le=2, description="View depth: 0=overview/topology, 1=IP DAG, 2=drill-down"),
     mode: str = Query("architecture", description="architecture | topology"),
-    expand: str | None = Query(None, description="IP id to expand (Level 2 only)"),
+    expand: str | None = Query(None, description="Alias, active node id, or IP catalog id to expand (Level 2 only)"),
     sim: str = Query("none", description="none | latest"),
     sim_evidence_id: str | None = Query(None, description="Specific simulation evidence id to overlay"),
     db: Session = Depends(get_db),
@@ -61,7 +61,7 @@ def get_view(
     Level 1:
       - Grouped IP detail DAG.
     Level 2:
-      - Drill-down view. Requires expand=camera|video|display or an IP/node id.
+      - Semantic module detail view. Requires expand=camera|video|display or an IP/node id.
     """
     return _build_view(
         scenario_id,

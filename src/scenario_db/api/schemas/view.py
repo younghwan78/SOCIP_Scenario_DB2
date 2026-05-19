@@ -180,6 +180,11 @@ class NodeData(BaseModel):
     dvfs_group: str | None = None
     role_hw_name: str | None = None
     semantic_source: str | None = None
+    module_ref: str | None = None
+    module_kind: str | None = None
+    module_direction: str | None = None
+    module_status: str | None = None
+    port_ref: str | None = None
     summary_badges: list[str] = []
     capability_badges: list[str] = []
     active_operations: OperationSummary | None = None

@@ -21,6 +21,15 @@ for path in (_root / "src", _root, _root / "dashboard"):
 from dashboard.components.elk_viewer import render_elk_view
 from dashboard.components.level0_detail_panel import scenario_context_description, scenario_context_rows
 from dashboard.components.level0_resource_overview import render_level0_resource_overview
+from dashboard.components.level2_expand_options import (
+    CUSTOM_EXPAND_OPTION,
+    build_level2_expand_options,
+    custom_level2_expand_default,
+    default_level2_expand_value,
+    has_concrete_level2_options,
+    level2_expand_request_target,
+    selected_level2_expand_value,
+)
 from dashboard.components.viewer_api_client import (
     ViewerApiError,
     compact_project_label,
@@ -307,6 +316,57 @@ def _render_detail_panel(view: ViewResponse) -> None:
     st.markdown(html, unsafe_allow_html=True)
 
 
+def _render_level2_unavailable(view: ViewResponse) -> None:
+    reasons = [str(item) for item in view.metadata.get("unavailable_reasons") or []]
+    required = [str(item) for item in view.metadata.get("required_data") or []]
+    targets = [str(item) for item in view.metadata.get("target_nodes") or []]
+    reason_html = "".join(f"<li>{escape(item)}</li>" for item in reasons) or "<li>No reason was provided.</li>"
+    required_html = "".join(f"<li>{escape(item)}</li>" for item in required)
+    target_text = ", ".join(targets) if targets else "No active target nodes"
+    st.markdown(
+        f"""
+<div class="compact-panel">
+  <h4>Level 2 Module View Unavailable</h4>
+  <p>Expand target: <b>{escape(str(view.metadata.get("expand") or ""))}</b> · {escape(target_text)}</p>
+  <ul>{reason_html}</ul>
+  <h4>Required fixture data</h4>
+  <ul>{required_html}</ul>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+
+def _stop_on_load_error(
+    view: ViewResponse,
+    *,
+    source: str,
+    scenario_id: str,
+    variant_id: str | None,
+    level: int,
+    mode: str | None = None,
+    expand: str | None = None,
+) -> None:
+    load_error = view.metadata.get("load_error")
+    if not load_error:
+        return
+    target = f"{scenario_id}/{variant_id or 'BASE'}"
+    details = [f"level={level}"]
+    if mode:
+        details.append(f"mode={mode}")
+    if expand:
+        details.append(f"expand={expand}")
+    st.error(
+        "Requested view failed, so the sample fallback graph was not rendered. "
+        f"Target: {target} ({', '.join(details)}). Source: {source}. Error: {load_error}"
+    )
+    st.stop()
+
+
+def _state_key_suffix(value: str) -> str:
+    return "".join(ch.lower() if ch.isalnum() else "_" for ch in value).strip("_") or "default"
+
+
 def _fmt(value: float | None, suffix: str) -> str:
     if value is None:
         return "-"
@@ -425,13 +485,68 @@ with st.sidebar:
         index=0,
     )
     level = int(view_level.split(" ", 1)[0])
-    expand_options = {
-        "Camera pipeline (CSIS + ISP)": "camera",
-        "Video encode (MFC)": "video",
-        "Display output (DPU)": "display",
-    }
-    expand_label = st.selectbox("Expand IP (Level 2)", list(expand_options.keys()), index=0)
-    expand_id = expand_options[expand_label]
+    expand_label = ""
+    expand_id = ""
+    current_expand_context = f"{scenario_id_input}/{variant_id_input or 'BASE'}"
+    if level == 2:
+        level1_for_options, option_source = _load_view(
+            api_base,
+            scenario_id_input,
+            variant_id_input,
+            1,
+            sim_mode="none",
+        )
+        level2_options = build_level2_expand_options(level1_for_options)
+        if option_source != "api":
+            _stop_on_load_error(
+                level1_for_options,
+                source=option_source,
+                scenario_id=scenario_id_input,
+                variant_id=variant_id_input,
+                level=1,
+            )
+        current_expand_context = f"{scenario_id_input}/{variant_id_input or 'BASE'}"
+        previous_expand = selected_level2_expand_value(
+            level2_options,
+            previous_value=st.session_state.get("viewer_level2_expand_value") or default_level2_expand_value(level2_options),
+            previous_context=st.session_state.get("viewer_level2_expand_context"),
+            current_context=current_expand_context,
+        )
+        option_values = [option.value for option in level2_options]
+        option_index = option_values.index(previous_expand) if previous_expand in option_values else 0
+        selected_expand_option = st.selectbox(
+            "Expand IP (Level 2)",
+            level2_options,
+            index=option_index,
+            format_func=lambda option: option.label,
+        )
+        expand_label = selected_expand_option.label
+        expand_id = selected_expand_option.value
+        if option_source != "api":
+            st.caption(f"Level 2 options loaded from {option_source}.")
+        if not has_concrete_level2_options(level2_options):
+            st.caption("No active Level 2 module candidate was found for this scenario. Use a custom node/IP id only if module data exists.")
+    if expand_id == CUSTOM_EXPAND_OPTION.value:
+        selected_expand_value = expand_id
+        custom_default = custom_level2_expand_default(
+            previous_value=st.session_state.get("viewer_level2_custom_expand"),
+            previous_context=st.session_state.get("viewer_level2_custom_expand_context"),
+            current_context=current_expand_context,
+        )
+        custom_expand = st.text_input(
+            "Custom expand id",
+            value=custom_default,
+            key=f"viewer_level2_custom_expand_input_{_state_key_suffix(current_expand_context)}",
+            help="Use an active pipeline node id such as csispdp, gpu, dpu, or an IP catalog id.",
+        ).strip()
+        expand_id = level2_expand_request_target(selected_expand_value, custom_expand) or ""
+        st.session_state["viewer_level2_custom_expand"] = custom_expand
+        st.session_state["viewer_level2_custom_expand_context"] = current_expand_context
+    if level == 2 and expand_id:
+        st.session_state["viewer_level2_expand_value"] = (
+            CUSTOM_EXPAND_OPTION.value if expand_label == CUSTOM_EXPAND_OPTION.label else expand_id
+        )
+        st.session_state["viewer_level2_expand_context"] = f"{scenario_id_input}/{variant_id_input or 'BASE'}"
 
     st.divider()
     st.markdown("**Simulation Overlay**")
@@ -460,6 +575,14 @@ with st.sidebar:
 
 overlay_evidence_id = sim_evidence_id if sim_mode == "specific" and sim_evidence_id else None
 
+if level == 2 and not expand_id:
+    st.info(
+        "No Level 2 expand target is selected for this scenario. "
+        "This usually means the active graph has no declared module-level HW candidate. "
+        "Select another view level or type a custom node/IP id when fixture module data exists."
+    )
+    st.stop()
+
 if level == 0:
     resource_view, resource_source = _load_view(
         api_base,
@@ -480,6 +603,22 @@ if level == 0:
         sim_evidence_id=overlay_evidence_id,
     )
     primary = resource_view
+    _stop_on_load_error(
+        resource_view,
+        source=resource_source,
+        scenario_id=scenario_id_input,
+        variant_id=variant_id_input,
+        level=0,
+        mode="resource",
+    )
+    _stop_on_load_error(
+        topo_view,
+        source=topo_source,
+        scenario_id=scenario_id_input,
+        variant_id=variant_id_input,
+        level=0,
+        mode="topology",
+    )
 elif level == 1:
     primary, arch_source = _load_view(
         api_base,
@@ -490,6 +629,13 @@ elif level == 1:
         sim_evidence_id=overlay_evidence_id,
     )
     topo_view, topo_source = primary, arch_source
+    _stop_on_load_error(
+        primary,
+        source=arch_source,
+        scenario_id=scenario_id_input,
+        variant_id=variant_id_input,
+        level=1,
+    )
 else:
     primary, arch_source = _load_view(
         api_base,
@@ -501,6 +647,14 @@ else:
         sim_evidence_id=overlay_evidence_id,
     )
     topo_view, topo_source = primary, arch_source
+    _stop_on_load_error(
+        primary,
+        source=arch_source,
+        scenario_id=scenario_id_input,
+        variant_id=variant_id_input,
+        level=2,
+        expand=expand_id,
+    )
 
 s = primary.summary
 graph_node_count = len(topo_view.nodes) if level == 0 else len(primary.nodes)
@@ -585,9 +739,13 @@ with main_col:
     else:
         st.markdown('<div class="section-card">', unsafe_allow_html=True)
         level2_height = int(primary.metadata.get("canvas_h") or 980)
-        render_elk_view(
-            primary,
-            canvas_height=min(max(level2_height, 860), 1320),
-            title=f"Level 2 - Drill Down ({expand_label})",
-        )
+        if primary.metadata.get("level2_available") is False:
+            _render_level2_unavailable(primary)
+        else:
+            title_expand = expand_label if expand_label != "Custom node/IP id" else expand_id
+            render_elk_view(
+                primary,
+                canvas_height=min(max(level2_height, 860), 1320),
+                title=f"Level 2 - Drill Down ({title_expand})",
+            )
         st.markdown("</div>", unsafe_allow_html=True)
