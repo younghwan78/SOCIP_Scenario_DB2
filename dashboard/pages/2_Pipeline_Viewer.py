@@ -19,7 +19,16 @@ for path in (_root / "src", _root, _root / "dashboard"):
         sys.path.insert(0, str(path))
 
 from dashboard.components.elk_viewer import render_elk_view
-from dashboard.components.level0_detail_panel import scenario_context_description, scenario_context_rows
+from dashboard.components.graph_inspector import (
+    InspectorPanel,
+    build_edge_inspector,
+    build_graph_overview,
+    build_node_inspector,
+    edge_options,
+    inspector_heading_html,
+    inspector_view_source,
+    node_options,
+)
 from dashboard.components.level0_resource_overview import render_level0_resource_overview
 from dashboard.components.level2_expand_options import (
     CUSTOM_EXPAND_OPTION,
@@ -174,6 +183,45 @@ st.markdown(
     color: #64748B;
     text-align: right;
   }
+  .inspector-title {
+    margin: 2px 0 2px 0;
+    color: #111827;
+    font-size: 13px;
+    font-weight: 850;
+  }
+  .inspector-description {
+    margin: 0 0 8px 0;
+    color: #4B5563;
+    font-size: 11px;
+    line-height: 1.42;
+  }
+  .inspector-section-title {
+    margin: 11px 0 5px 0;
+    color: #111827;
+    font-size: 11px;
+    font-weight: 800;
+  }
+  .inspector-note {
+    border-left: 3px solid #CBD5E1;
+    background: #F8FAFC;
+    border-radius: 6px;
+    color: #374151;
+    font-size: 11px;
+    line-height: 1.35;
+    margin: 4px 0;
+    padding: 5px 7px;
+  }
+  .inspector-empty {
+    color: #64748B;
+    font-size: 11px;
+    line-height: 1.4;
+  }
+  .inspector-panel-heading {
+    margin: 2px 0 8px 0;
+    color: #111827;
+    font-size: 12px;
+    font-weight: 850;
+  }
 </style>
 """,
     unsafe_allow_html=True,
@@ -260,60 +308,69 @@ def _load_variant_options(base_url: str, scenario_id: str) -> tuple[list[dict], 
 
 
 def _render_detail_panel(view: ViewResponse) -> None:
-    summary = view.summary
-    sim_nodes = [
-        node.data
-        for node in view.nodes
-        if node.data.sim_overlay is not None and node.data.type in {"ip", "submodule", "dma_group", "sysmmu"}
-    ][:6]
-    sim_rows = []
-    for data in sim_nodes:
-        overlay = data.sim_overlay
-        if overlay is None:
-            continue
-        sim_rows.append(
-            f"""<div class="ip-mini-row"><b>{escape(data.label.splitlines()[0])}</b>
-            <span>{_fmt(overlay.power_mw, 'mW')} · {_fmt(overlay.set_clock_mhz, 'MHz')} · {_fmt(overlay.hw_time_ms, 'ms')}</span></div>"""
-        )
-    risks = "".join(
-        f"""<div class="detail-risk"><b>{escape(risk.severity)}</b> {escape(risk.title)}<br>
-        <span>{escape(risk.component)} · {escape(risk.impact)}</span></div>"""
-        for risk in view.risks[:3]
-    ) or "<p>No active risk cards.</p>"
-
-    ip_rows = []
-    for node in view.nodes:
-        data = node.data
-        if data.type not in {"ip", "submodule", "dma_group", "sysmmu"}:
-            continue
-        badges = ", ".join(data.capability_badges[:3]) if data.capability_badges else data.layer
-        ip_rows.append(
-            f"""<div class="ip-mini-row"><b>{escape(data.label.splitlines()[0])}</b>
-            <span>{escape(badges)}</span></div>"""
-        )
-        if len(ip_rows) >= 8:
-            break
-
-    context_rows = "".join(
-        f"<tr><td>{escape(label)}</td><td>{escape(value)}</td></tr>"
-        for label, value in scenario_context_rows(view)
+    key_suffix = _state_key_suffix(
+        f"{view.scenario_id}-{view.variant_id}-{view.level}-{view.mode or 'none'}-{view.metadata.get('expand') or 'none'}"
     )
-    html = f"""
-<div class="detail-panel">
-  <h4>Node / Edge Detail</h4>
-  <p>{escape(scenario_context_description(view))}</p>
-  <table class="detail-table">
-    {context_rows}
-  </table>
-  <h4>Risks</h4>
-  {risks}
-  <h4>IP Summary</h4>
-  {''.join(ip_rows) if ip_rows else '<p>No IP nodes in current view.</p>'}
-  <h4>Simulation Overlay</h4>
-  {''.join(sim_rows) if sim_rows else '<p>No simulation overlay loaded.</p>'}
-</div>
-"""
-    st.markdown(html, unsafe_allow_html=True)
+    node_items = node_options(view)
+    edge_items = edge_options(view)
+    st.markdown(inspector_heading_html(), unsafe_allow_html=True)
+    overview_tab, node_tab, edge_tab = st.tabs(["Overview", "Node", "Edge"])
+    with overview_tab:
+        _render_inspector_panel(build_graph_overview(view))
+    with node_tab:
+        if node_items:
+            labels = {item.id: item.label for item in node_items}
+            selected_node = st.selectbox(
+                "Node",
+                [item.id for item in node_items],
+                key=f"inspector_node_{key_suffix}",
+                format_func=lambda item_id: labels.get(item_id, item_id),
+                label_visibility="collapsed",
+            )
+            _render_inspector_panel(build_node_inspector(view, selected_node))
+        else:
+            st.markdown('<p class="inspector-empty">No inspectable nodes in current view.</p>', unsafe_allow_html=True)
+    with edge_tab:
+        if edge_items:
+            labels = {item.id: item.label for item in edge_items}
+            selected_edge = st.selectbox(
+                "Edge",
+                [item.id for item in edge_items],
+                key=f"inspector_edge_{key_suffix}",
+                format_func=lambda item_id: labels.get(item_id, item_id),
+                label_visibility="collapsed",
+            )
+            _render_inspector_panel(build_edge_inspector(view, selected_edge))
+        else:
+            st.markdown('<p class="inspector-empty">No inspectable edges in current view.</p>', unsafe_allow_html=True)
+
+
+def _render_inspector_panel(panel: InspectorPanel) -> None:
+    st.markdown(
+        f"""
+<div class="inspector-title">{escape(panel.title)}</div>
+<p class="inspector-description">{escape(panel.description)}</p>
+""",
+        unsafe_allow_html=True,
+    )
+    for section in panel.sections:
+        row_html = "".join(
+            f"<tr><td>{escape(row.label)}</td><td>{escape(row.value)}</td></tr>"
+            for row in section.rows
+        )
+        notes_html = "".join(
+            f'<div class="inspector-note">{escape(note)}</div>'
+            for note in section.notes
+        )
+        table_html = f'<table class="detail-table">{row_html}</table>' if row_html else ""
+        st.markdown(
+            f"""
+<div class="inspector-section-title">{escape(section.title)}</div>
+{table_html}
+{notes_html}
+""",
+            unsafe_allow_html=True,
+        )
 
 
 def _render_level2_unavailable(view: ViewResponse) -> None:
@@ -365,12 +422,6 @@ def _stop_on_load_error(
 
 def _state_key_suffix(value: str) -> str:
     return "".join(ch.lower() if ch.isalnum() else "_" for ch in value).strip("_") or "default"
-
-
-def _fmt(value: float | None, suffix: str) -> str:
-    if value is None:
-        return "-"
-    return f"{value:g}{suffix}"
 
 
 with st.sidebar:
@@ -691,7 +742,7 @@ with st.sidebar:
 main_col, detail_col = st.columns([5.6, 0.95], gap="small")
 
 with detail_col:
-    _render_detail_panel(primary)
+    _render_detail_panel(inspector_view_source(level, primary, topo_view))
 
 with main_col:
     st.markdown(
