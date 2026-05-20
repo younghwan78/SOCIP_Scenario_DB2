@@ -99,7 +99,13 @@ def _render_preview_result(
         evidence_id=None,
         label=VIEWER_LINK_LABEL_PREVIEW,
     )
-    render_result_breakdown(preview_result, key_prefix="preview")
+    render_result_breakdown(
+        preview_result,
+        key_prefix="preview",
+        api_base=api_base,
+        project_ref=project_id,
+        soc_ref=soc_id,
+    )
 
 
 def _render_saved_results(
@@ -154,7 +160,13 @@ def _render_saved_result_detail(
         saved=selected,
         key_prefix=f"stored_{selected_id}",
     )
-    render_result_breakdown(selected, key_prefix="stored")
+    render_result_breakdown(
+        selected,
+        key_prefix="stored",
+        api_base=api_base,
+        project_ref=project_id,
+        soc_ref=soc_id,
+    )
 
 
 def _after_preview_saved(saved_id: str) -> None:

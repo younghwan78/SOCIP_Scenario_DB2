@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from unittest.mock import MagicMock
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
@@ -9,6 +10,7 @@ from scenario_db.api.deps import get_db
 from scenario_db.api.schemas.simulation import SimulateRequest
 from scenario_db.api.routers import simulation as simulation_router
 from scenario_db.models.evidence.common import ExecutionContext
+from scenario_db.reporting.models import WrittenArtifact, WrittenReportBundle
 from scenario_db.sim.models import SimRunResult
 from scenario_db.sim.service import run_simulation_request
 
@@ -97,6 +99,93 @@ def test_delete_simulation_result_404(monkeypatch):
 
     assert response.status_code == 404
     db.commit.assert_not_called()
+
+
+def test_export_simulation_result_artifacts_endpoint(monkeypatch):
+    app = create_app()
+    db = MagicMock()
+
+    def _override_db():
+        yield db
+
+    app.dependency_overrides[get_db] = _override_db
+
+    class _Row:
+        id = "sim-1"
+        kind = "evidence.simulation"
+        schema_version = "2.2"
+        scenario_ref = "uc-camera-recording"
+        variant_ref = "FHD30-SDR-H265"
+        sw_baseline_ref = "sw-vendor-v1.2.3"
+        execution_context = {"silicon_rev": "EVT0", "sw_baseline_ref": "sw-vendor-v1.2.3", "thermal": "normal"}
+        run_info = {"timestamp": "2026-05-21T01:02:03+09:00", "tool": "scenariodb-sim"}
+        aggregation = {}
+        kpi = {"total_power_mw": 1.0}
+        ip_breakdown = []
+        dma_breakdown = []
+        timing_breakdown = []
+        dvfs_breakdown = []
+        timeline_events = []
+        external_devices = []
+        topology_order = []
+        vdd_power = {}
+        calculation_trace = None
+        params_hash = "abc123"
+        artifacts = []
+
+    out_dir = Path("E:/reports").resolve()
+
+    def _fake_write(evidence, *, context, output_dir, overwrite):
+        assert evidence["id"] == "sim-1"
+        assert context.project_ref == "projectA"
+        assert context.variant_name == "FHD30 Recording"
+        assert Path(output_dir) == out_dir
+        assert overwrite is True
+        return WrittenReportBundle(
+            prefix="projectA-FHD30_Recording",
+            output_dir=out_dir,
+            artifacts=[
+                WrittenArtifact(
+                    type="timing_chart",
+                    storage="local_file",
+                    path=out_dir / "projectA-FHD30_Recording_timing_chart.html",
+                    sha256="sha-timing",
+                    bytes=10,
+                )
+            ],
+        )
+
+    updated_artifacts = []
+
+    def _fake_update(db_arg, evidence_id, artifacts):
+        assert db_arg is db
+        assert evidence_id == "sim-1"
+        updated_artifacts.extend(artifacts)
+        return _Row()
+
+    monkeypatch.setattr(simulation_router, "get_evidence", lambda db_arg, evidence_id: _Row())
+    monkeypatch.setattr(simulation_router, "write_report_bundle", _fake_write, raising=False)
+    monkeypatch.setattr(
+        simulation_router,
+        "artifact_metadata",
+        lambda bundle: [{"type": "timing_chart", "storage": "local_file", "path": str(out_dir / "projectA-FHD30_Recording_timing_chart.html"), "sha256": "sha-timing"}],
+        raising=False,
+    )
+    monkeypatch.setattr(simulation_router, "update_simulation_artifacts", _fake_update, raising=False)
+    client = TestClient(app, raise_server_exceptions=False)
+
+    response = client.post(
+        "/api/v1/simulation/results/sim-1/artifacts/export",
+        json={"output_dir": str(out_dir), "project_ref": "projectA", "variant_name": "FHD30 Recording"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["evidence_id"] == "sim-1"
+    assert body["prefix"] == "projectA-FHD30_Recording"
+    assert body["artifacts"][0]["bytes"] == 10
+    assert updated_artifacts[0]["sha256"] == "sha-timing"
+    db.commit.assert_called_once()
 
 
 def test_simulation_readiness_endpoint(monkeypatch):

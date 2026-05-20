@@ -46,6 +46,25 @@ def delete_simulation_evidence(db: Session, evidence_id: str) -> bool:
     return True
 
 
+def update_simulation_artifacts(
+    db: Session,
+    evidence_id: str,
+    artifacts: list[dict],
+) -> Evidence | None:
+    row = db.query(Evidence).filter_by(id=evidence_id).one_or_none()
+    if row is None or row.kind != "evidence.simulation":
+        return None
+    replacement_types = {str(item.get("type")) for item in artifacts if isinstance(item, dict)}
+    existing = [
+        item
+        for item in row.artifacts or []
+        if not isinstance(item, dict) or str(item.get("type")) not in replacement_types
+    ]
+    row.artifacts = existing + [dict(item) for item in artifacts if isinstance(item, dict)]
+    db.add(row)
+    return row
+
+
 def get_simulation_evidence_by_params_hash(
     db: Session,
     *,

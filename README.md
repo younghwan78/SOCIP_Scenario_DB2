@@ -345,8 +345,20 @@ confirmed. Persisted results are shown in `Simulation Results`. `Open Pipeline V
 Overlay` opens the Pipeline Viewer in a new browser tab and passes the selected
 SoC, project, scenario, variant, API base, and simulation evidence id as query
 parameters. The original Evidence Dashboard state remains in place. Use
-`Download JSON`, `Download KPI CSV`, or `Download DMA CSV` to copy selected
-simulation evidence into a separate report, spreadsheet, or baseline archive.
+`Download JSON`, `Download KPI CSV`, `Download DMA CSV`, or the `Report` tab
+HTML downloads to copy selected simulation evidence into a separate report,
+spreadsheet, or baseline archive.
+
+The `Report` tab generates three legacy-style HTML artifacts from the stored
+`evidence.simulation` row:
+
+- `{prefix}_timing_chart.html`
+- `{prefix}_bw_chart.html`
+- `{prefix}_simulation_result.html`
+
+Saved evidence can also write the same bundle on the API host. The default
+directory is `output_simulation`; override it with `SCENARIO_DB_REPORT_DIR` or
+with the export request body.
 
 Simulation API examples:
 
@@ -382,6 +394,17 @@ $savePayload = $payload | ConvertFrom-Json
 $savePayload.persist = $true
 $saved = Invoke-RestMethod -Method Post -Uri "$api/simulation/run" -ContentType "application/json" -Body ($savePayload | ConvertTo-Json -Depth 20)
 Invoke-RestMethod "$api/simulation/results/$($saved.evidence_id)" | ConvertTo-Json -Depth 20
+
+# Export legacy-style local HTML artifacts on the API host.
+$exportPayload = @{
+  project_ref = "projectA"
+  variant_name = "FHD30 Recording"
+  overwrite = $true
+} | ConvertTo-Json -Depth 5
+Invoke-RestMethod -Method Post `
+  -Uri "$api/simulation/results/$($saved.evidence_id)/artifacts/export" `
+  -ContentType "application/json" `
+  -Body $exportPayload
 ```
 
 Simulation evidence is not an unbounded append log for identical inputs. The

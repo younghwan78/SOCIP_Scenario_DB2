@@ -11,7 +11,7 @@ The Evidence Dashboard must keep these controls available:
 - Sidebar context selectors: SoC Platform, Project / Board, Scenario Category, Scenario, Variant
 - Preview result tab: KPI metrics, warnings/errors, Confirm & Save Evidence, Download Preview JSON, Download Preview KPI CSV, Open Scenario in Pipeline Viewer
 - Saved evidence tab: evidence list, Selected Evidence, KPI metrics, warnings/errors, Open Pipeline Viewer, Download JSON, Download KPI CSV, Download DMA CSV, Delete Evidence
-- Result breakdown tabs: IP/Node Power, DMA BW, Timing Chart, Timing Table, Timeline Table, Debug Trace, Raw Evidence
+- Result breakdown tabs: IP/Node Power, DMA BW, Timing Chart, Timing Table, Timeline Table, Report, Debug Trace, Raw Evidence
 
 These labels are also defined in `dashboard/components/evidence_dashboard_contract.py`. Dashboard code and tests should use that module instead of hard-coding required labels in multiple places.
 
@@ -39,6 +39,8 @@ After dashboard layout changes, refresh `http://127.0.0.1:18502/Evidence_Dashboa
 - `Run Preview` shows preview KPI, result tabs, and `Open Scenario in Pipeline Viewer`.
 - `Confirm & Save Evidence` moves the result to Saved Evidence.
 - Saved Evidence shows `Open Pipeline Viewer` and download/delete actions.
+- The `Report` tab offers timing, BW, and simulation report HTML downloads.
+- For saved evidence, `Save HTML Bundle Locally` writes HTML artifacts and shows the returned local paths.
 - Severe zero-power or zero-HW-time warnings are shown as errors, not hidden in raw JSON.
 
 ## Scope Rule

@@ -47,3 +47,27 @@ class SimulationReadinessResponse(BaseModel):
     summary: dict = Field(default_factory=dict)
     errors: list[SimulationReadinessIssue] = Field(default_factory=list)
     warnings: list[SimulationReadinessIssue] = Field(default_factory=list)
+
+
+class SimulationArtifactExportRequest(BaseModel):
+    output_dir: str | None = None
+    overwrite: bool = True
+    project_ref: str | None = None
+    scenario_name: str | None = None
+    variant_name: str | None = None
+    soc_ref: str | None = None
+
+
+class SimulationArtifactResponse(BaseModel):
+    type: str
+    storage: str
+    path: str
+    sha256: str
+    bytes: int
+
+
+class SimulationArtifactExportResponse(BaseModel):
+    evidence_id: str
+    prefix: str
+    output_dir: str
+    artifacts: list[SimulationArtifactResponse] = Field(default_factory=list)

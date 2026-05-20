@@ -60,6 +60,35 @@ def delete_simulation_result(
     )
 
 
+def export_simulation_artifacts(
+    api_base: str,
+    evidence_id: str,
+    request_func: RequestFunc | None = None,
+    *,
+    output_dir: str | None = None,
+    overwrite: bool = True,
+    project_ref: str | None = None,
+    scenario_name: str | None = None,
+    variant_name: str | None = None,
+    soc_ref: str | None = None,
+) -> dict[str, Any]:
+    payload = {
+        "output_dir": output_dir,
+        "overwrite": overwrite,
+        "project_ref": project_ref,
+        "scenario_name": scenario_name,
+        "variant_name": variant_name,
+        "soc_ref": soc_ref,
+    }
+    return _request_json(
+        "POST",
+        api_base,
+        f"/simulation/results/{evidence_id}/artifacts/export",
+        request_func=request_func,
+        json={key: value for key, value in payload.items() if value is not None},
+    )
+
+
 def get_simulation_readiness(
     api_base: str,
     *,

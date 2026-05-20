@@ -71,6 +71,7 @@ def test_required_evidence_dashboard_labels_are_contractually_present():
         "Timing Chart",
         "Timing Table",
         "Timeline Table",
+        "Report",
         "Debug Trace",
         "Raw Evidence",
     )
@@ -109,6 +110,7 @@ def test_evidence_dashboard_page_uses_shared_contract_for_viewer_links():
     assert "def render_external_device_info" in tables_source
     assert "render_result_breakdown" in results_panel_source
     assert "render_debug_trace" in result_view_source
+    assert "render_simulation_report_tab" in result_view_source
     assert "def render_debug_trace" in debug_source
     assert "render_preview_actions" in results_panel_source
     assert "render_saved_export_actions" in results_panel_source

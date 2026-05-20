@@ -7,6 +7,7 @@ import streamlit as st
 
 from dashboard.components.evidence_dashboard_contract import RESULT_BREAKDOWN_TABS
 from dashboard.components.evidence_debug_trace import render_debug_trace
+from dashboard.components.simulation_report_actions import render_simulation_report_tab
 from dashboard.components.simulation_tables import (
     render_dma_bw,
     render_external_device_info,
@@ -17,7 +18,14 @@ from dashboard.components.simulation_tables import (
 from dashboard.components.timing_chart import render_timing_chart, render_timing_summary
 
 
-def render_result_breakdown(result: dict[str, Any], *, key_prefix: str = "stored") -> None:
+def render_result_breakdown(
+    result: dict[str, Any],
+    *,
+    key_prefix: str = "stored",
+    api_base: str | None = None,
+    project_ref: str | None = None,
+    soc_ref: str | None = None,
+) -> None:
     """Render all result breakdown tabs for a simulation preview or saved evidence."""
 
     tabs = st.tabs(list(RESULT_BREAKDOWN_TABS))
@@ -35,6 +43,14 @@ def render_result_breakdown(result: dict[str, Any], *, key_prefix: str = "stored
     with tabs[5]:
         render_timeline_table(result, key_prefix=key_prefix)
     with tabs[6]:
-        render_debug_trace(result)
+        render_simulation_report_tab(
+            result,
+            api_base=api_base,
+            key_prefix=key_prefix,
+            project_ref=project_ref,
+            soc_ref=soc_ref,
+        )
     with tabs[7]:
+        render_debug_trace(result)
+    with tabs[8]:
         st.json(result)

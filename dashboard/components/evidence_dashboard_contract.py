@@ -22,8 +22,16 @@ RESULT_BREAKDOWN_TABS = (
     "Timing Chart",
     "Timing Table",
     "Timeline Table",
+    "Report",
     "Debug Trace",
     "Raw Evidence",
+)
+
+REPORT_ACTION_LABELS = (
+    "Download Timing HTML",
+    "Download BW HTML",
+    "Download Report HTML",
+    "Save HTML Bundle Locally",
 )
 
 PREVIEW_ACTION_LABELS = (
