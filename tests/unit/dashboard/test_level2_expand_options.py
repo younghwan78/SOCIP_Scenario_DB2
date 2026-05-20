@@ -99,6 +99,24 @@ def test_level2_expand_options_include_only_aliases_present_in_active_graph():
     assert default_level2_expand_value(options) == "camera"
 
 
+def test_level2_expand_options_restore_pipeline_ids_for_hyphenated_view_nodes():
+    options = build_level2_expand_options(
+        _view(
+            [
+                _node("ip-gdc-m", "GDC M", hierarchy="ISP", ip_group="GDC"),
+                _node("ip-mfc-enc", "MFC ENC", hierarchy="CODEC", ip_group="MFC"),
+            ]
+        )
+    )
+
+    values = [option.value for option in options]
+
+    assert "gdc_m" in values
+    assert "mfc_enc" in values
+    assert "gdc-m" not in values
+    assert "mfc-enc" not in values
+
+
 def test_level2_expand_selection_resets_stale_custom_value_when_scenario_changes():
     options = build_level2_expand_options(
         _view(

@@ -120,7 +120,7 @@ def _is_display_candidate(node: NodeElement) -> bool:
 
 
 def _pipeline_node_id(node: NodeElement) -> str:
-    return node.data.id.removeprefix("ip-")
+    return node.data.id.removeprefix("ip-").replace("-", "_")
 
 
 def _node_option_label(node: NodeElement) -> str:

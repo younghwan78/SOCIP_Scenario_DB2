@@ -39,6 +39,14 @@ from dashboard.components.level2_expand_options import (
     level2_expand_request_target,
     selected_level2_expand_value,
 )
+from dashboard.components.view_html_export import (
+    DEFAULT_EXPORT_SCOPE,
+    ExportDiagram,
+    ViewExportBundle,
+    ViewExportOptions,
+    build_static_view_html,
+    export_filename,
+)
 from dashboard.components.viewer_api_client import (
     ViewerApiError,
     compact_project_label,
@@ -424,6 +432,118 @@ def _state_key_suffix(value: str) -> str:
     return "".join(ch.lower() if ch.isalnum() else "_" for ch in value).strip("_") or "default"
 
 
+def _prepare_html_export(
+    *,
+    api_base: str,
+    scenario_id: str,
+    variant_id: str | None,
+    scope: str,
+    include_raw_json: bool,
+    current_level: int,
+    current_expand_id: str,
+    sim_mode: str,
+    sim_evidence_id: str | None,
+) -> tuple[str, str]:
+    resource_view, resource_source = _load_view(
+        api_base,
+        scenario_id,
+        variant_id,
+        0,
+        "resource",
+        sim_mode=sim_mode,
+        sim_evidence_id=sim_evidence_id,
+    )
+    topology_view, topology_source = _load_view(
+        api_base,
+        scenario_id,
+        variant_id,
+        0,
+        "topology",
+        sim_mode=sim_mode,
+        sim_evidence_id=sim_evidence_id,
+    )
+    level1_view, level1_source = _load_view(
+        api_base,
+        scenario_id,
+        variant_id,
+        1,
+        sim_mode=sim_mode,
+        sim_evidence_id=sim_evidence_id,
+    )
+    _raise_if_export_load_failed(resource_view, resource_source, "Level 0 Resource")
+    _raise_if_export_load_failed(topology_view, topology_source, "Level 0 Topology")
+    _raise_if_export_load_failed(level1_view, level1_source, "Level 1 IP Detail")
+
+    targets = _level2_export_targets(level1_view, scope=scope, current_level=current_level, current_expand_id=current_expand_id)
+    level2_views: list[ViewResponse] = []
+    for target in targets:
+        level2_view, level2_source = _load_view(
+            api_base,
+            scenario_id,
+            variant_id,
+            2,
+            expand=target,
+            sim_mode=sim_mode,
+            sim_evidence_id=sim_evidence_id,
+        )
+        _raise_if_export_load_failed(level2_view, level2_source, f"Level 2 {target}")
+        level2_views.append(level2_view)
+
+    diagrams = [
+        ExportDiagram("Level 0 - Topology Overview", topology_view, 1280),
+        ExportDiagram("Level 1 - IP Detail DAG", level1_view, 1360),
+    ]
+    for level2_view in level2_views:
+        target = str(level2_view.metadata.get("expand") or _level2_target_from_mode(level2_view) or "target")
+        height = 640 if level2_view.metadata.get("level2_available") is False else min(max(int(level2_view.metadata.get("canvas_h") or 980), 860), 1320)
+        diagrams.append(ExportDiagram(f"Level 2 - Drill Down ({target})", level2_view, height))
+
+    bundle = ViewExportBundle(
+        title=f"{resource_view.summary.name} - ScenarioDB View Export",
+        resource_view=resource_view,
+        diagrams=diagrams,
+        inspector_views=[topology_view, level1_view, *level2_views],
+    )
+    html = build_static_view_html(
+        bundle,
+        ViewExportOptions(scope=scope, include_raw_json=include_raw_json),
+    )
+    filename = export_filename(resource_view.summary.name, resource_view.variant_id, scope)
+    return filename, html
+
+
+def _level2_export_targets(
+    level1_view: ViewResponse,
+    *,
+    scope: str,
+    current_level: int,
+    current_expand_id: str,
+) -> list[str]:
+    options = [
+        option.value
+        for option in build_level2_expand_options(level1_view)
+        if option.value and option.value != CUSTOM_EXPAND_OPTION.value
+    ]
+    unique_options = list(dict.fromkeys(options))
+    if scope == "full_drilldown":
+        return unique_options
+    if current_level == 2 and current_expand_id:
+        return [current_expand_id]
+    return unique_options[:1]
+
+
+def _level2_target_from_mode(view: ViewResponse) -> str | None:
+    if not view.mode or ":" not in view.mode:
+        return None
+    return view.mode.split(":", 1)[1]
+
+
+def _raise_if_export_load_failed(view: ViewResponse, source: str, label: str) -> None:
+    load_error = view.metadata.get("load_error")
+    if source != "api" or load_error:
+        raise RuntimeError(f"{label} export view failed: {load_error or source}")
+
+
 with st.sidebar:
     st.markdown("### ScenarioDB Viewer")
     query_params = st.query_params
@@ -738,6 +858,56 @@ with st.sidebar:
     st.caption(f"Risks: {len(primary.risks)}")
     if "simulation" in primary.overlays_available:
         st.caption("Overlay: simulation")
+
+    st.divider()
+    st.markdown("**HTML Export**")
+    export_scope_labels = {
+        "full_drilldown": "Full Drilldown Pack",
+        "scenario_pack": "Scenario Pack",
+    }
+    export_scope_values = ["full_drilldown", "scenario_pack"]
+    export_scope = st.selectbox(
+        "Export Scope",
+        export_scope_values,
+        index=export_scope_values.index(DEFAULT_EXPORT_SCOPE),
+        format_func=lambda value: export_scope_labels[value],
+        help="Full Drilldown exports Level 0, Level 1, and all available Level 2 targets. Scenario Pack exports Level 0, Level 1, and one representative or selected Level 2 target.",
+    )
+    export_include_raw_json = st.checkbox("Include raw ViewResponse JSON", value=False)
+    export_context = (
+        f"{api_base}|{scenario_id_input}|{variant_id_input}|{export_scope}|"
+        f"{export_include_raw_json}|{sim_mode}|{overlay_evidence_id or ''}|{expand_id}"
+    )
+    if st.button("Prepare HTML export", use_container_width=True):
+        try:
+            export_file, export_html = _prepare_html_export(
+                api_base=api_base,
+                scenario_id=scenario_id_input,
+                variant_id=variant_id_input,
+                scope=export_scope,
+                include_raw_json=export_include_raw_json,
+                current_level=level,
+                current_expand_id=expand_id,
+                sim_mode=sim_mode,
+                sim_evidence_id=overlay_evidence_id,
+            )
+            st.session_state["viewer_export_context"] = export_context
+            st.session_state["viewer_export_filename"] = export_file
+            st.session_state["viewer_export_html"] = export_html
+        except Exception as exc:
+            st.session_state.pop("viewer_export_context", None)
+            st.session_state.pop("viewer_export_filename", None)
+            st.session_state.pop("viewer_export_html", None)
+            st.error(f"HTML export failed: {exc}")
+
+    if st.session_state.get("viewer_export_context") == export_context and st.session_state.get("viewer_export_html"):
+        st.download_button(
+            "Download HTML View",
+            data=st.session_state["viewer_export_html"].encode("utf-8"),
+            file_name=st.session_state["viewer_export_filename"],
+            mime="text/html",
+            use_container_width=True,
+        )
 
 main_col, detail_col = st.columns([5.6, 0.95], gap="small")
 

@@ -136,9 +136,20 @@ def render_elk_view(
     title: str | None = None,
 ) -> None:
     """Render a ViewResponse using ELK orthogonal routing."""
+    height = canvas_height or int(view.metadata.get("canvas_h") or 900)
+    components.html(build_elk_view_html(view, canvas_height=height, title=title), height=height + 52, scrolling=False)
+
+
+def build_elk_view_html(
+    view: ViewResponse,
+    *,
+    canvas_height: int | None = None,
+    title: str | None = None,
+) -> str:
+    """Return standalone ELK/SVG HTML for Streamlit embedding or export."""
     graph, meta = build_elk_graph(view)
     height = canvas_height or int(view.metadata.get("canvas_h") or 900)
-    components.html(_html(graph, meta, title or "ScenarioDB View", height), height=height + 52, scrolling=False)
+    return _html(graph, meta, title or "ScenarioDB View", height)
 
 
 def build_elk_graph(view: ViewResponse) -> tuple[dict[str, Any], dict[str, Any]]:
