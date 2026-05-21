@@ -28,11 +28,9 @@ RESULT_BREAKDOWN_TABS = (
 )
 
 REPORT_ACTION_LABELS = (
-    "Download Timing HTML",
-    "Download BW HTML",
-    "Download Report HTML",
-    "Save HTML Bundle Locally",
-    "Download Bundle ZIP",
+    "Download Selected HTML",
+    "Download All as ZIP",
+    "Save HTML Bundle on API Server",
 )
 
 PREVIEW_ACTION_LABELS = (

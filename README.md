@@ -346,22 +346,26 @@ Overlay` opens the Pipeline Viewer in a new browser tab and passes the selected
 SoC, project, scenario, variant, API base, and simulation evidence id as query
 parameters. The original Evidence Dashboard state remains in place. Use
 `Download JSON`, `Download KPI CSV`, `Download DMA CSV`, or the `Report` tab
-HTML downloads to copy selected simulation evidence into a separate report,
+downloads to copy selected simulation evidence into a separate report,
 spreadsheet, or baseline archive.
 
 The `Report` tab generates three legacy-style HTML artifacts from the stored
-`evidence.simulation` row:
+`evidence.simulation` row, lets you select one of them for inline preview, and
+keeps browser-local downloads available:
 
 - `{prefix}_timing_chart.html`
 - `{prefix}_bw_chart.html`
 - `{prefix}_simulation_result.html`
 
-Saved evidence can also write the same bundle on the API host. The default
-directory is `output_simulation`; override it with `SCENARIO_DB_REPORT_DIR` or
-with a relative export request body such as `projectA`. Absolute custom export
-paths are rejected by default; enable `SCENARIO_DB_ALLOW_CUSTOM_REPORT_DIR=true`
-only for trusted local environments. Saved evidence can also be downloaded as a
-single ZIP without writing server-side files:
+`Download Selected HTML` saves the currently previewed artifact through the
+browser. `Download All as ZIP` saves all three HTML artifacts through the
+browser without writing server-side files. Saved evidence also exposes an
+advanced `API server local save` section that writes the same bundle on the API
+host. The default API-host directory is `output_simulation`; override it with
+`SCENARIO_DB_REPORT_DIR` or with a relative export request body such as
+`projectA`. Absolute custom export paths are rejected by default; enable
+`SCENARIO_DB_ALLOW_CUSTOM_REPORT_DIR=true` only for trusted local environments.
+The saved-evidence ZIP endpoint remains available for scripts:
 
 ```text
 GET /api/v1/simulation/results/{evidence_id}/artifacts/download.zip

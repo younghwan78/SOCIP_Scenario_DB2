@@ -37,6 +37,9 @@ def calc_port_bw(
             format=spec.format,
             bitwidth=spec.bitwidth,
             compression=spec.compression,
+            comp_ratio=effective_comp_ratio(spec),
+            llc_weight=spec.llc_weight if spec.llc_enabled else 1.0,
+            r_w_rate=spec.r_w_rate,
             llc_enabled=spec.llc_enabled,
         )
 
@@ -68,6 +71,9 @@ def calc_port_bw(
         format=spec.format,
         bitwidth=spec.bitwidth,
         compression=spec.compression,
+        comp_ratio=comp_ratio,
+        llc_weight=llc_weight,
+        r_w_rate=spec.r_w_rate,
         llc_enabled=spec.llc_enabled,
     )
 

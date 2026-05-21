@@ -39,8 +39,9 @@ After dashboard layout changes, refresh `http://127.0.0.1:18502/Evidence_Dashboa
 - `Run Preview` shows preview KPI, result tabs, and `Open Scenario in Pipeline Viewer`.
 - `Confirm & Save Evidence` moves the result to Saved Evidence.
 - Saved Evidence shows `Open Pipeline Viewer` and download/delete actions.
-- The `Report` tab offers timing, BW, simulation report HTML downloads, and a bundle ZIP link for saved evidence.
-- For saved evidence, `Save HTML Bundle Locally` writes HTML artifacts and shows the returned local paths.
+- The `Report` tab offers a selector for Simulation Report, Timing Chart, and BW Chart, and renders the selected HTML below the controls.
+- `Download Selected HTML` saves the currently selected preview through the browser, and `Download All as ZIP` saves all three HTML artifacts.
+- For saved evidence, the advanced `API server local save` section writes HTML artifacts on the API host and shows the returned local paths.
 - Severe zero-power or zero-HW-time warnings are shown as errors, not hidden in raw JSON.
 
 ## Scope Rule

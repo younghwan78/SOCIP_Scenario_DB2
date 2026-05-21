@@ -117,6 +117,15 @@ def ip_detail_rows(evidence: dict[str, Any]) -> list[dict[str, str]]:
 def dma_report_rows(evidence: dict[str, Any]) -> list[dict[str, str]]:
     rows = []
     for item in _list(evidence.get("dma_breakdown")):
+        comp_enabled = _compression_enabled(item.get("compression"))
+        comp_ratio = _number(item.get("comp_ratio"))
+        llc_enabled = _bool(item.get("llc_enabled"))
+        cell_classes = {}
+        if comp_enabled:
+            cell_classes["Comp"] = "feature-highlight"
+            cell_classes["Comp Ratio"] = "feature-highlight"
+        if llc_enabled:
+            cell_classes["LLC"] = "feature-highlight"
         rows.append(
             {
                 "Node": _text(item.get("node_id")),
@@ -127,10 +136,14 @@ def dma_report_rows(evidence: dict[str, Any]) -> list[dict[str, str]]:
                 "Format": _text(item.get("format")),
                 "Bitwidth": _text(item.get("bitwidth")),
                 "Comp": _text(item.get("compression")),
+                "Comp Ratio": _fixed(comp_ratio, 2),
+                "LLC": "enable" if llc_enabled else "disable",
+                "LLC Weight": _fixed(item.get("llc_weight"), 2),
                 "BW (MB/s)": _fixed(item.get("bw_mbs"), 1),
                 "BW Power (mW)": _fixed(item.get("bw_power_mw"), 2),
                 "BW Current (mA)": _fixed(item.get("bw_power_ma"), 2),
-                "LLC": _text(item.get("llc_enabled")),
+                "R/W Rate": _fixed(item.get("r_w_rate"), 2),
+                "_cell_classes": cell_classes,
             }
         )
     return rows
@@ -228,6 +241,17 @@ def _number(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"enable", "enabled", "true", "1", "yes"}
+
+
+def _compression_enabled(value: Any) -> bool:
+    normalized = str(value or "").strip().lower()
+    return normalized not in {"", "-", "none", "no", "false", "off", "disable", "disabled", "comp_off"}
 
 
 def _text(value: Any) -> str:

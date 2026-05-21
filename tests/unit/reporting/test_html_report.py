@@ -45,6 +45,8 @@ def _evidence() -> dict:
                 "fps": 30,
                 "total_power_mw": 100.0,
                 "total_power_ma": 29.412,
+                "required_voltage_mv": 606.25,
+                "vdd_leader": "isp",
             }
         ],
         "timing_breakdown": [{"node_id": "isp", "hw_name": "ISP", "hw_time_ms": 12.5}],
@@ -59,6 +61,7 @@ def _evidence() -> dict:
                 "format": "NV12",
                 "bitwidth": 8,
                 "compression": "disable",
+                "comp_ratio": 1.0,
                 "bw_mbs": 93.312,
                 "bw_power_mw": 7.465,
                 "bw_power_ma": 2.195,
@@ -92,3 +95,82 @@ def test_simulation_report_html_contains_legacy_sections_and_chart_links():
     assert "7. DMA Results" in html
     assert "projectA-FHD30_Recording_timing_chart.html" in html
     assert "projectA-FHD30_Recording_bw_chart.html" in html
+
+
+def test_simulation_report_highlights_vdd_driver_voltage_lift_compression_and_llc():
+    evidence = _evidence()
+    evidence["dvfs_breakdown"] = [
+        {
+            "node_id": "byrp",
+            "hw_name": "BYRP",
+            "mode": "Normal",
+            "dvfs_group": "CAM",
+            "required_clock_mhz": 90.1,
+            "set_clock_mhz": 133.0,
+            "dvfs_level": 7,
+            "required_voltage_mv": 562.5,
+            "set_voltage_mv": 587.5,
+            "vdd": "VDD_CAM",
+            "vdd_leader": "csis",
+            "unit_power_mw_mp": 9.92,
+            "input_resolution_mp": 2.0736,
+            "fps": 30,
+            "total_power_mw": 26.77,
+        },
+        {
+            "node_id": "csis",
+            "hw_name": "CSIS",
+            "mode": "Normal",
+            "dvfs_group": "CSIS",
+            "required_clock_mhz": 265.1,
+            "set_clock_mhz": 267.0,
+            "dvfs_level": 5,
+            "required_voltage_mv": 587.5,
+            "set_voltage_mv": 587.5,
+            "vdd": "VDD_CAM",
+            "vdd_leader": "csis",
+            "unit_power_mw_mp": 1.2,
+            "input_resolution_mp": 2.0736,
+            "fps": 30,
+            "total_power_mw": 1.30,
+        },
+    ]
+    evidence["dma_breakdown"] = [
+        {
+            "node_id": "byrp",
+            "hw_name": "BYRP",
+            "port": "COMP_RD0_RDMA",
+            "direction": "read",
+            "width": 4000,
+            "height": 2252,
+            "format": "BAYER_PACKED",
+            "bitwidth": 12,
+            "compression": "SBWC",
+            "comp_ratio": 0.5,
+            "llc_enabled": True,
+            "bw_mbs": 202.7,
+            "bw_power_mw": 16.21,
+            "bw_power_ma": 4.77,
+        }
+    ]
+
+    html = generate_simulation_report_html(
+        evidence,
+        context=ReportContext(
+            evidence_id="sim-1",
+            scenario_ref="uc-camera-recording",
+            variant_ref="FHD30-SDR-H265",
+            project_ref="projectA",
+            variant_name="FHD30 Recording",
+        ),
+    )
+
+    assert "DVFS Group: CAM" in html
+    assert "DVFS Group: CSIS" in html
+    assert "VDD driver" in html
+    assert "CSIS *" in html
+    assert "class='voltage-delta-positive'>+25.00" in html
+    assert "Comp Ratio" in html
+    assert "class='feature-highlight'>SBWC" in html
+    assert "class='feature-highlight'>0.50" in html
+    assert "class='feature-highlight'>enable" in html

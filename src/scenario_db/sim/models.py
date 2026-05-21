@@ -196,6 +196,9 @@ class PortBWResult(BaseScenarioModel):
     format: str | None = None
     bitwidth: int | None = None
     compression: str | None = None
+    comp_ratio: float | None = None
+    llc_weight: float | None = None
+    r_w_rate: float | None = None
     llc_enabled: bool = False
 
 

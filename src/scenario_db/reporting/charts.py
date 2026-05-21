@@ -65,6 +65,88 @@ def bw_chart_records(evidence: dict[str, Any]) -> list[dict[str, Any]]:
     )
 
 
+def timing_sequence_annotations(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    annotations = []
+    for _, frame_rows in _records_by_frame(records).items():
+        ordered = sorted(frame_rows, key=lambda row: (row["start_ms"], row["end_ms"], row["label"]))
+        for previous, current in zip(ordered, ordered[1:], strict=False):
+            if current["start_ms"] < previous["end_ms"]:
+                continue
+            annotations.append(
+                {
+                    "x": current["start_ms"],
+                    "y": current["label"],
+                    "ax": previous["end_ms"],
+                    "ay": previous["label"],
+                    "xref": "x",
+                    "yref": "y",
+                    "axref": "x",
+                    "ayref": "y",
+                    "showarrow": True,
+                    "arrowhead": 2,
+                    "arrowwidth": 1,
+                    "arrowcolor": "#64748B",
+                    "opacity": 0.8,
+                }
+            )
+    return annotations
+
+
+def timing_frame_bands(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    bands = []
+    colors = ("#F8FAFC", "#EAF2FF")
+    for index, (frame, frame_rows) in enumerate(_records_by_frame(records).items()):
+        bands.append(
+            {
+                "frame_index": frame,
+                "x0": min(row["start_ms"] for row in frame_rows),
+                "x1": max(row["end_ms"] for row in frame_rows),
+                "fillcolor": colors[index % len(colors)],
+            }
+        )
+    return bands
+
+
+def timing_frame_separator_lines(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped = _records_by_frame(records)
+    if len(grouped) <= 1:
+        return []
+    max_end = max((row["end_ms"] for row in records), default=0.0)
+    return [
+        {
+            "label": _frame_separator_label(frame),
+            "x0": 0.0,
+            "x1": max_end,
+        }
+        for index, frame in enumerate(grouped)
+        if index > 0
+    ]
+
+
+def timing_yaxis_category_order(records: list[dict[str, Any]]) -> list[str]:
+    categories = []
+    grouped = _records_by_frame(records)
+    for index, (frame, frame_rows) in enumerate(grouped.items()):
+        if index > 0:
+            categories.append(_frame_separator_label(frame))
+        for row in sorted(frame_rows, key=lambda item: (item["start_ms"], item["end_ms"], item["label"])):
+            if row["label"] not in categories:
+                categories.append(row["label"])
+    return categories
+
+
+def timeline_tick_ms(max_end_ms: float) -> int:
+    return 5 if max_end_ms <= 50 else 10
+
+
+def bw_axis_max_gbps(records: list[dict[str, Any]]) -> float:
+    peak = max(_instantaneous_bw_peak_gbps(records), max((row["bw_gbps"] for row in records), default=0.0))
+    for bucket in (1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0, 8.0, 10.0, 12.0, 16.0, 20.0):
+        if peak <= bucket:
+            return bucket
+    return float(int(peak) + 1)
+
+
 def generate_timing_chart_html(evidence: dict[str, Any], *, title: str) -> str:
     import plotly.graph_objects as go
 
@@ -99,6 +181,29 @@ def generate_timing_chart_html(evidence: dict[str, Any], *, title: str) -> str:
             )
         )
         legend_seen.add(legend)
+    for separator in timing_frame_separator_lines(records):
+        fig.add_trace(
+            go.Scatter(
+                x=[separator["x0"], separator["x1"]],
+                y=[separator["label"], separator["label"]],
+                mode="lines",
+                line={"color": "#94A3B8", "width": 2, "dash": "dash"},
+                hoverinfo="skip",
+                showlegend=False,
+            )
+        )
+    for band in timing_frame_bands(records):
+        fig.add_vrect(
+            x0=band["x0"],
+            x1=band["x1"],
+            fillcolor=band["fillcolor"],
+            opacity=0.45,
+            line_width=0,
+            layer="below",
+        )
+        if band["x0"] > 0:
+            fig.add_vline(x=band["x0"], line_color="#CBD5E1", line_dash="dash", line_width=1)
+    max_end_ms = max((row["end_ms"] for row in records), default=0.0)
     fig.update_layout(
         title=title,
         xaxis_title="Time (ms)",
@@ -106,9 +211,14 @@ def generate_timing_chart_html(evidence: dict[str, Any], *, title: str) -> str:
         barmode="overlay",
         height=max(420, min(1100, 300 + len({row["label"] for row in records}) * 40)),
         margin={"t": 60, "r": 160, "b": 40, "l": 120},
+        annotations=timing_sequence_annotations(records),
     )
-    fig.update_xaxes(rangemode="tozero", showgrid=True, gridcolor="#E5E7EB")
-    fig.update_yaxes(autorange="reversed")
+    fig.update_xaxes(rangemode="tozero", showgrid=True, gridcolor="#D7DEE8", dtick=timeline_tick_ms(max_end_ms), tick0=0)
+    fig.update_yaxes(
+        autorange="reversed",
+        categoryorder="array",
+        categoryarray=timing_yaxis_category_order(records),
+    )
     return fig.to_html(full_html=True, include_plotlyjs="cdn")
 
 
@@ -144,9 +254,9 @@ def generate_bw_chart_html(evidence: dict[str, Any], *, title: str) -> str:
     for index, ip in enumerate(ips, start=2):
         _add_bw_traces(fig, [row for row in records if row["hw_name"] == ip], row=index, show_legend=False, palette=palette)
 
-    y_max = max(1.0, total_bw_gbps) * 1.1
+    y_max = bw_axis_max_gbps(records)
     for row_index in range(1, 2 + len(ips)):
-        fig.update_yaxes(title_text="GB/s", range=[0, y_max], row=row_index, col=1)
+        fig.update_yaxes(title_text="GB/s", range=[0, y_max], dtick=0.5 if y_max <= 3.0 else 1.0, row=row_index, col=1)
     fig.update_xaxes(title_text="Time (ms)", row=1 + len(ips), col=1)
     fig.update_layout(
         title=title,
@@ -198,6 +308,33 @@ def _add_bw_traces(
         )
 
 
+def _records_by_frame(records: list[dict[str, Any]]) -> dict[int, list[dict[str, Any]]]:
+    grouped: dict[int, list[dict[str, Any]]] = {}
+    for row in records:
+        frame = row.get("frame_index")
+        frame_key = int(frame) if frame is not None else 0
+        grouped.setdefault(frame_key, []).append(row)
+    return dict(sorted(grouped.items()))
+
+
+def _instantaneous_bw_peak_gbps(records: list[dict[str, Any]]) -> float:
+    events = []
+    for row in records:
+        start = _float(row.get("start_ms"))
+        end = _float(row.get("end_ms"))
+        bw = _float(row.get("bw_gbps"))
+        if end <= start or bw <= 0:
+            continue
+        events.append((start, 1, bw))
+        events.append((end, 0, -bw))
+    current = 0.0
+    peak = 0.0
+    for _, _, delta in sorted(events):
+        current += delta
+        peak = max(peak, current)
+    return peak
+
+
 def _timeline_window_by_node(evidence: dict[str, Any]) -> dict[str, dict[str, Any]]:
     result = {}
     for event in _events(evidence):
@@ -223,8 +360,16 @@ def _dict_rows(value: Any) -> list[dict[str, Any]]:
 def _timing_label(event: dict[str, Any], *, include_frame: bool) -> str:
     name = str(event.get("hw_name") or event.get("node_id") or event.get("task_id") or "task")
     prefix = f"F{event.get('frame_index')} / " if include_frame else ""
+    if event.get("constraint_type") == "source":
+        return prefix + "Sensor In"
+    if event.get("constraint_type") == "sink":
+        return prefix + "Display Out"
     group = _base_group(event.get("otf_group_id"))
     return prefix + (group or name)
+
+
+def _frame_separator_label(frame: int) -> str:
+    return f"---- Frame {frame} start ----"
 
 
 def _base_group(value: Any) -> str | None:

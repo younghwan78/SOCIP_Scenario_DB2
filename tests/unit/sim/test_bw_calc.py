@@ -34,6 +34,8 @@ def test_calc_port_bw_dma_write_with_compression():
     assert result.bw_mbs_best == pytest.approx(27.9936)
     assert result.bw_mbs_worst == pytest.approx(65.3184)
     assert result.bw_power_mw == pytest.approx(3.73248)
+    assert result.comp_ratio == pytest.approx(0.5)
+    assert result.llc_weight == pytest.approx(1.0)
 
 
 def test_calc_port_bw_ignores_comp_ratio_when_compression_is_off():
@@ -59,6 +61,7 @@ def test_calc_port_bw_ignores_comp_ratio_when_compression_is_off():
     assert result.bw_mbs == pytest.approx(182.25)
     assert result.bw_mbs_best is None
     assert result.bw_mbs_worst is None
+    assert result.comp_ratio == pytest.approx(1.0)
 
 
 def test_calc_port_bw_otf_returns_zero():

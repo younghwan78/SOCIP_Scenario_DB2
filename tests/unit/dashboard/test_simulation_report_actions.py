@@ -1,9 +1,16 @@
 from __future__ import annotations
 
+from io import BytesIO
 from pathlib import Path
+from zipfile import ZipFile
 
 from dashboard.components.simulation_api_client import export_simulation_artifacts, simulation_artifacts_zip_url
-from dashboard.components.simulation_report_actions import report_download_payloads
+from dashboard.components.simulation_report_actions import (
+    report_preview_options,
+    report_download_payloads,
+    report_zip_payload,
+    selected_report_payload,
+)
 
 
 def _result() -> dict:
@@ -51,8 +58,52 @@ def test_report_download_payloads_build_three_html_files():
         "projectA-FHD30_Recording_bw_chart.html",
         "projectA-FHD30_Recording_simulation_result.html",
     ]
+    assert [item["artifact_type"] for item in payloads] == ["timing_chart", "bw_chart", "simulation_report"]
+    assert all(item["prefix"] == "projectA-FHD30_Recording" for item in payloads)
     assert all(item["mime"] == "text/html" for item in payloads)
+    assert "<!DOCTYPE html>" in payloads[-1]["html"]
     assert b"<!DOCTYPE html>" in payloads[-1]["data"]
+
+
+def test_selected_report_payload_uses_report_first_preview_contract():
+    payloads = report_download_payloads(_result(), project_ref="projectA", variant_name="FHD30 Recording")
+
+    default_payload = selected_report_payload(payloads, None)
+    timing_payload = selected_report_payload(payloads, "timing_chart")
+
+    assert default_payload["artifact_type"] == "simulation_report"
+    assert default_payload["title"] == "Simulation Report"
+    assert default_payload["file_name"] == "projectA-FHD30_Recording_simulation_result.html"
+    assert timing_payload["file_name"] == "projectA-FHD30_Recording_timing_chart.html"
+
+
+def test_report_zip_payload_packages_all_generated_html_files():
+    payloads = report_download_payloads(_result(), project_ref="projectA", variant_name="FHD30 Recording")
+
+    zip_payload = report_zip_payload(payloads)
+
+    assert zip_payload["label"] == "Download All as ZIP"
+    assert zip_payload["file_name"] == "projectA-FHD30_Recording_html_report_bundle.zip"
+    assert zip_payload["mime"] == "application/zip"
+
+    with ZipFile(BytesIO(zip_payload["data"])) as archive:
+        assert archive.namelist() == [
+            "projectA-FHD30_Recording_timing_chart.html",
+            "projectA-FHD30_Recording_bw_chart.html",
+            "projectA-FHD30_Recording_simulation_result.html",
+        ]
+        assert "<!DOCTYPE html>" in archive.read("projectA-FHD30_Recording_simulation_result.html").decode("utf-8")
+
+
+def test_report_preview_options_disable_inner_scroll_for_simulation_report():
+    payloads = report_download_payloads(_result(), project_ref="projectA", variant_name="FHD30 Recording")
+
+    report_options = report_preview_options(selected_report_payload(payloads, "simulation_report"), _result())
+    timing_options = report_preview_options(selected_report_payload(payloads, "timing_chart"), _result())
+
+    assert report_options["scrolling"] is False
+    assert report_options["height"] >= 1600
+    assert timing_options["scrolling"] is True
 
 
 def test_export_simulation_artifacts_client_posts_request_body():
