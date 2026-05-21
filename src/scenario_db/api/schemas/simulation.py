@@ -64,6 +64,10 @@ class SimulationArtifactResponse(BaseModel):
     path: str
     sha256: str
     bytes: int
+    mime: str | None = None
+    created_at: str | None = None
+    prefix: str | None = None
+    generator: str | None = None
 
 
 class SimulationArtifactExportResponse(BaseModel):

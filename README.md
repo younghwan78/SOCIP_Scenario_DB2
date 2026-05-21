@@ -358,7 +358,14 @@ The `Report` tab generates three legacy-style HTML artifacts from the stored
 
 Saved evidence can also write the same bundle on the API host. The default
 directory is `output_simulation`; override it with `SCENARIO_DB_REPORT_DIR` or
-with the export request body.
+with a relative export request body such as `projectA`. Absolute custom export
+paths are rejected by default; enable `SCENARIO_DB_ALLOW_CUSTOM_REPORT_DIR=true`
+only for trusted local environments. Saved evidence can also be downloaded as a
+single ZIP without writing server-side files:
+
+```text
+GET /api/v1/simulation/results/{evidence_id}/artifacts/download.zip
+```
 
 Simulation API examples:
 
@@ -399,12 +406,18 @@ Invoke-RestMethod "$api/simulation/results/$($saved.evidence_id)" | ConvertTo-Js
 $exportPayload = @{
   project_ref = "projectA"
   variant_name = "FHD30 Recording"
+  output_dir = "projectA"
   overwrite = $true
 } | ConvertTo-Json -Depth 5
 Invoke-RestMethod -Method Post `
   -Uri "$api/simulation/results/$($saved.evidence_id)/artifacts/export" `
   -ContentType "application/json" `
   -Body $exportPayload
+
+# Download the same three HTML artifacts as a ZIP without server-side file writes.
+Invoke-WebRequest `
+  -Uri "$api/simulation/results/$($saved.evidence_id)/artifacts/download.zip?project_ref=projectA&variant_name=FHD30+Recording" `
+  -OutFile ".\projectA-FHD30_Recording_html_report_bundle.zip"
 ```
 
 Simulation evidence is not an unbounded append log for identical inputs. The

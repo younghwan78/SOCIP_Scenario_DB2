@@ -32,6 +32,7 @@ REPORT_ACTION_LABELS = (
     "Download BW HTML",
     "Download Report HTML",
     "Save HTML Bundle Locally",
+    "Download Bundle ZIP",
 )
 
 PREVIEW_ACTION_LABELS = (

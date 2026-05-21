@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 from pathlib import Path
+from zipfile import ZipFile
+import io
 
 from fastapi.testclient import TestClient
 
@@ -164,6 +166,7 @@ def test_export_simulation_result_artifacts_endpoint(monkeypatch):
         return _Row()
 
     monkeypatch.setattr(simulation_router, "get_evidence", lambda db_arg, evidence_id: _Row())
+    monkeypatch.setattr(simulation_router, "get_settings", lambda: MagicMock(report_dir="output_simulation", allow_custom_report_dir=True))
     monkeypatch.setattr(simulation_router, "write_report_bundle", _fake_write, raising=False)
     monkeypatch.setattr(
         simulation_router,
@@ -186,6 +189,141 @@ def test_export_simulation_result_artifacts_endpoint(monkeypatch):
     assert body["artifacts"][0]["bytes"] == 10
     assert updated_artifacts[0]["sha256"] == "sha-timing"
     db.commit.assert_called_once()
+
+
+def test_export_simulation_result_rejects_output_dir_outside_report_root(monkeypatch):
+    app = create_app()
+    db = MagicMock()
+
+    def _override_db():
+        yield db
+
+    app.dependency_overrides[get_db] = _override_db
+
+    class _Row:
+        id = "sim-1"
+        kind = "evidence.simulation"
+        schema_version = "2.2"
+        scenario_ref = "uc-camera-recording"
+        variant_ref = "FHD30-SDR-H265"
+        execution_context = {}
+        run_info = {}
+        aggregation = {}
+        kpi = {}
+        ip_breakdown = []
+        dma_breakdown = []
+        timing_breakdown = []
+        dvfs_breakdown = []
+        timeline_events = []
+        external_devices = []
+        topology_order = []
+        vdd_power = {}
+        artifacts = []
+
+    monkeypatch.setattr(simulation_router, "get_evidence", lambda db_arg, evidence_id: _Row())
+    monkeypatch.setattr(simulation_router, "get_settings", lambda: MagicMock(report_dir="output_simulation", allow_custom_report_dir=False))
+    client = TestClient(app, raise_server_exceptions=False)
+
+    response = client.post(
+        "/api/v1/simulation/results/sim-1/artifacts/export",
+        json={"output_dir": "E:/outside-reports"},
+    )
+
+    assert response.status_code == 422
+    db.commit.assert_not_called()
+
+
+def test_export_simulation_result_existing_files_return_conflict(monkeypatch):
+    app = create_app()
+    db = MagicMock()
+
+    def _override_db():
+        yield db
+
+    app.dependency_overrides[get_db] = _override_db
+
+    class _Row:
+        id = "sim-1"
+        kind = "evidence.simulation"
+        schema_version = "2.2"
+        scenario_ref = "uc-camera-recording"
+        variant_ref = "FHD30-SDR-H265"
+        execution_context = {}
+        run_info = {}
+        aggregation = {}
+        kpi = {}
+        ip_breakdown = []
+        dma_breakdown = []
+        timing_breakdown = []
+        dvfs_breakdown = []
+        timeline_events = []
+        external_devices = []
+        topology_order = []
+        vdd_power = {}
+        artifacts = []
+
+    def _raise_exists(*args, **kwargs):
+        raise FileExistsError("already exists")
+
+    monkeypatch.setattr(simulation_router, "get_evidence", lambda db_arg, evidence_id: _Row())
+    monkeypatch.setattr(simulation_router, "get_settings", lambda: MagicMock(report_dir="output_simulation", allow_custom_report_dir=False))
+    monkeypatch.setattr(simulation_router, "write_report_bundle", _raise_exists)
+    client = TestClient(app, raise_server_exceptions=False)
+
+    response = client.post(
+        "/api/v1/simulation/results/sim-1/artifacts/export",
+        json={"output_dir": "projectA", "overwrite": False},
+    )
+
+    assert response.status_code == 409
+    db.commit.assert_not_called()
+
+
+def test_download_simulation_result_artifacts_zip_endpoint(monkeypatch):
+    app = create_app()
+    db = MagicMock()
+
+    def _override_db():
+        yield db
+
+    app.dependency_overrides[get_db] = _override_db
+
+    class _Row:
+        id = "sim-1"
+        kind = "evidence.simulation"
+        schema_version = "2.2"
+        scenario_ref = "uc-camera-recording"
+        variant_ref = "FHD30-SDR-H265"
+        execution_context = {}
+        run_info = {}
+        aggregation = {}
+        kpi = {}
+        ip_breakdown = []
+        dma_breakdown = []
+        timing_breakdown = []
+        dvfs_breakdown = []
+        timeline_events = []
+        external_devices = []
+        topology_order = []
+        vdd_power = {}
+        artifacts = []
+
+    monkeypatch.setattr(simulation_router, "get_evidence", lambda db_arg, evidence_id: _Row())
+    client = TestClient(app, raise_server_exceptions=False)
+
+    response = client.get(
+        "/api/v1/simulation/results/sim-1/artifacts/download.zip",
+        params={"project_ref": "projectA", "variant_name": "FHD30 Recording"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/zip"
+    with ZipFile(io.BytesIO(response.content)) as archive:
+        assert sorted(archive.namelist()) == [
+            "projectA-FHD30_Recording_bw_chart.html",
+            "projectA-FHD30_Recording_simulation_result.html",
+            "projectA-FHD30_Recording_timing_chart.html",
+        ]
 
 
 def test_simulation_readiness_endpoint(monkeypatch):

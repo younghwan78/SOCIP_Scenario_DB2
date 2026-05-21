@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     db_pool_size: int = 10
     db_max_overflow: int = 20
     report_dir: str = "output_simulation"
+    allow_custom_report_dir: bool = False
 
     model_config = {"env_prefix": "SCENARIO_DB_", "env_file": ".env", "extra": "ignore"}
 

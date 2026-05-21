@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-from pathlib import Path
-
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Session
 
@@ -24,7 +22,13 @@ from scenario_db.db.repositories.evidence import (
     update_simulation_artifacts,
 )
 from scenario_db.db.models.evidence import Evidence
-from scenario_db.reporting.exporter import artifact_metadata, build_report_context, write_report_bundle
+from scenario_db.reporting.exporter import (
+    artifact_metadata,
+    build_report_context,
+    build_report_zip_bytes,
+    resolve_report_output_dir,
+    write_report_bundle,
+)
 from scenario_db.sim.service import check_simulation_readiness_request, run_simulation_request
 
 router = APIRouter(prefix="/simulation", tags=["simulation"])
@@ -83,7 +87,15 @@ def export_result_artifacts(
     if row is None or row.kind != "evidence.simulation":
         raise NoResultFound(f"Simulation evidence '{evidence_id}' not found")
     evidence = _simulation_evidence_dict(row)
-    output_dir = Path(request.output_dir or get_settings().report_dir)
+    settings = get_settings()
+    try:
+        output_dir = resolve_report_output_dir(
+            request.output_dir,
+            base_dir=settings.report_dir,
+            allow_custom_dir=settings.allow_custom_report_dir,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     context = build_report_context(
         evidence,
         scenario_name=request.scenario_name,
@@ -91,7 +103,14 @@ def export_result_artifacts(
         project_ref=request.project_ref,
         soc_ref=request.soc_ref,
     )
-    written = write_report_bundle(evidence, context=context, output_dir=output_dir, overwrite=request.overwrite)
+    try:
+        written = write_report_bundle(evidence, context=context, output_dir=output_dir, overwrite=request.overwrite)
+    except FileExistsError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Report artifact export failed: {exc}") from exc
     metadata = artifact_metadata(written)
     updated = update_simulation_artifacts(db, evidence_id, metadata)
     if updated is None:
@@ -108,10 +127,42 @@ def export_result_artifacts(
                 "path": str(artifact.path),
                 "sha256": artifact.sha256,
                 "bytes": artifact.bytes,
+                "mime": artifact.mime,
+                "created_at": artifact.created_at,
+                "prefix": artifact.prefix,
+                "generator": artifact.generator,
             }
             for artifact in written.artifacts
         ],
     }
+
+
+@router.get("/results/{evidence_id}/artifacts/download.zip")
+def download_result_artifacts_zip(
+    evidence_id: str,
+    project_ref: str | None = Query(None),
+    scenario_name: str | None = Query(None),
+    variant_name: str | None = Query(None),
+    soc_ref: str | None = Query(None),
+    db: Session = Depends(get_db),
+):
+    row = get_evidence(db, evidence_id)
+    if row is None or row.kind != "evidence.simulation":
+        raise NoResultFound(f"Simulation evidence '{evidence_id}' not found")
+    evidence = _simulation_evidence_dict(row)
+    context = build_report_context(
+        evidence,
+        scenario_name=scenario_name,
+        variant_name=variant_name,
+        project_ref=project_ref,
+        soc_ref=soc_ref,
+    )
+    zip_bytes, filename = build_report_zip_bytes(evidence, context=context)
+    return Response(
+        content=zip_bytes,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.delete("/results/{evidence_id}", status_code=204)

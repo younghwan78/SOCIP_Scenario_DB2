@@ -41,6 +41,10 @@ class WrittenArtifact:
     path: Path
     sha256: str
     bytes: int
+    mime: str = "text/html"
+    created_at: str | None = None
+    prefix: str | None = None
+    generator: str = "scenario_db.reporting"
 
 
 @dataclass(frozen=True, slots=True)

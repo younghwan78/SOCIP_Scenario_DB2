@@ -6,7 +6,7 @@ from typing import Any
 import streamlit as st
 
 from dashboard.components.evidence_dashboard_contract import REPORT_ACTION_LABELS
-from dashboard.components.simulation_api_client import export_simulation_artifacts
+from dashboard.components.simulation_api_client import export_simulation_artifacts, simulation_artifacts_zip_url
 from dashboard.components.table_actions import render_copyable_dataframe
 from dashboard.components.viewer_api_client import ViewerApiError
 from scenario_db.reporting.exporter import build_report_context, generate_report_bundle
@@ -88,6 +88,18 @@ def render_simulation_report_tab(
 
     _render_existing_artifacts(result, key_prefix=key_prefix)
     if api_base and evidence_id and not key_prefix.startswith("preview"):
+        st.link_button(
+            REPORT_ACTION_LABELS[4],
+            simulation_artifacts_zip_url(
+                api_base,
+                evidence_id,
+                project_ref=project_ref or _optional_text(result.get("project_ref")),
+                scenario_name=scenario_name,
+                variant_name=variant_name,
+                soc_ref=soc_ref,
+            ),
+            use_container_width=True,
+        )
         _render_local_export_action(
             api_base=api_base,
             evidence_id=evidence_id,

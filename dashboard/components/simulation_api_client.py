@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import urlencode
 
 import requests
 
@@ -87,6 +88,26 @@ def export_simulation_artifacts(
         request_func=request_func,
         json={key: value for key, value in payload.items() if value is not None},
     )
+
+
+def simulation_artifacts_zip_url(
+    api_base: str,
+    evidence_id: str,
+    *,
+    project_ref: str | None = None,
+    scenario_name: str | None = None,
+    variant_name: str | None = None,
+    soc_ref: str | None = None,
+) -> str:
+    url = f"{api_base.rstrip('/')}/simulation/results/{evidence_id}/artifacts/download.zip"
+    query = {
+        "project_ref": project_ref,
+        "scenario_name": scenario_name,
+        "variant_name": variant_name,
+        "soc_ref": soc_ref,
+    }
+    clean = {key: value for key, value in query.items() if value not in (None, "")}
+    return f"{url}?{urlencode(clean)}" if clean else url
 
 
 def get_simulation_readiness(

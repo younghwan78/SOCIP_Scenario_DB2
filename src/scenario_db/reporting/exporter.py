@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import hashlib
+import io
 from pathlib import Path
 from typing import Any
+from zipfile import ZIP_DEFLATED, ZipFile
+from datetime import datetime, timezone
 
 from scenario_db.reporting.charts import generate_bw_chart_html, generate_timing_chart_html
 from scenario_db.reporting.filenames import artifact_filenames, build_report_prefix
@@ -60,6 +63,7 @@ def write_report_bundle(
     output_path.mkdir(parents=True, exist_ok=True)
     bundle = generate_report_bundle(evidence, context=context)
     names = artifact_filenames(bundle.prefix)
+    created_at = datetime.now(timezone.utc).isoformat()
 
     files = [
         ("timing_chart", output_path / names.timing_chart, bundle.timing_chart_html),
@@ -83,18 +87,52 @@ def write_report_bundle(
                 path=path.resolve(),
                 sha256=hashlib.sha256(data).hexdigest(),
                 bytes=len(data),
+                created_at=created_at,
+                prefix=bundle.prefix,
             )
         )
     return WrittenReportBundle(prefix=bundle.prefix, output_dir=output_path.resolve(), artifacts=artifacts)
 
 
-def artifact_metadata(bundle: WrittenReportBundle) -> list[dict[str, str]]:
+def build_report_zip_bytes(evidence: dict[str, Any], *, context: ReportContext) -> tuple[bytes, str]:
+    bundle = generate_report_bundle(evidence, context=context)
+    names = artifact_filenames(bundle.prefix)
+    buffer = io.BytesIO()
+    with ZipFile(buffer, mode="w", compression=ZIP_DEFLATED) as archive:
+        archive.writestr(names.timing_chart, bundle.timing_chart_html or "")
+        archive.writestr(names.bw_chart, bundle.bw_chart_html or "")
+        archive.writestr(names.simulation_report, bundle.simulation_report_html)
+    return buffer.getvalue(), f"{bundle.prefix}_html_report_bundle.zip"
+
+
+def resolve_report_output_dir(
+    requested_output_dir: str | Path | None,
+    *,
+    base_dir: str | Path,
+    allow_custom_dir: bool = False,
+) -> Path:
+    base = Path(base_dir).expanduser().resolve()
+    if requested_output_dir in (None, ""):
+        return base
+    requested = Path(requested_output_dir).expanduser()
+    target = requested.resolve() if requested.is_absolute() else (base / requested).resolve()
+    if allow_custom_dir or _is_relative_to(target, base):
+        return target
+    raise ValueError(f"output_dir is outside report_dir: {target}")
+
+
+def artifact_metadata(bundle: WrittenReportBundle) -> list[dict[str, Any]]:
     return [
         {
             "type": artifact.type,
             "storage": artifact.storage,
             "path": str(artifact.path),
             "sha256": artifact.sha256,
+            "bytes": artifact.bytes,
+            "mime": artifact.mime,
+            "created_at": artifact.created_at,
+            "prefix": artifact.prefix,
+            "generator": artifact.generator,
         }
         for artifact in bundle.artifacts
     ]
@@ -104,3 +142,11 @@ def _optional_text(value: Any) -> str | None:
     if value is None or value == "":
         return None
     return str(value)
+
+
+def _is_relative_to(path: Path, base: Path) -> bool:
+    try:
+        path.relative_to(base)
+        return True
+    except ValueError:
+        return False

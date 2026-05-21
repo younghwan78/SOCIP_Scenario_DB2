@@ -59,3 +59,8 @@ class Artifact(BaseScenarioModel):
     storage: str
     path: str
     sha256: str | None = None
+    bytes: int | None = None
+    mime: str | None = None
+    created_at: str | None = None
+    prefix: str | None = None
+    generator: str | None = None

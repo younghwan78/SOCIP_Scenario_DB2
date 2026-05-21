@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from dashboard.components.simulation_api_client import export_simulation_artifacts
+from dashboard.components.simulation_api_client import export_simulation_artifacts, simulation_artifacts_zip_url
 from dashboard.components.simulation_report_actions import report_download_payloads
 
 
@@ -82,3 +82,17 @@ def test_export_simulation_artifacts_client_posts_request_body():
     assert calls[0][0] == "POST"
     assert calls[0][1] == "http://api/api/v1/simulation/results/sim-1/artifacts/export"
     assert calls[0][2]["json"]["variant_name"] == "FHD30 Recording"
+
+
+def test_simulation_artifacts_zip_url_carries_report_context():
+    url = simulation_artifacts_zip_url(
+        "http://api/api/v1",
+        "sim-1",
+        project_ref="projectA",
+        variant_name="FHD30 Recording",
+    )
+
+    assert url == (
+        "http://api/api/v1/simulation/results/sim-1/artifacts/download.zip"
+        "?project_ref=projectA&variant_name=FHD30+Recording"
+    )

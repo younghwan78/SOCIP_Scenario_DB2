@@ -4,8 +4,10 @@ from pathlib import Path
 
 from scenario_db.reporting.exporter import (
     artifact_metadata,
+    build_report_zip_bytes,
     build_report_context,
     generate_report_bundle,
+    resolve_report_output_dir,
     write_report_bundle,
 )
 
@@ -71,3 +73,34 @@ def test_write_report_bundle_creates_three_html_files_and_metadata(tmp_path: Pat
     assert metadata[0]["storage"] == "local_file"
     assert metadata[0]["sha256"]
     assert metadata[0]["path"] == str(paths[metadata[0]["type"]])
+    assert metadata[0]["bytes"] > 0
+    assert metadata[0]["mime"] == "text/html"
+    assert metadata[0]["prefix"] == "projectA-FHD30_Recording"
+    assert metadata[0]["created_at"]
+
+
+def test_resolve_report_output_dir_restricts_custom_paths_to_base(tmp_path: Path):
+    base = tmp_path / "reports"
+
+    assert resolve_report_output_dir(None, base_dir=base) == base.resolve()
+    assert resolve_report_output_dir("projectA", base_dir=base) == (base / "projectA").resolve()
+    assert resolve_report_output_dir(str(base / "nested"), base_dir=base) == (base / "nested").resolve()
+
+    outside = tmp_path / "outside"
+    try:
+        resolve_report_output_dir(str(outside), base_dir=base)
+    except ValueError as exc:
+        assert "outside report_dir" in str(exc)
+    else:
+        raise AssertionError("outside output_dir should be rejected")
+
+    assert resolve_report_output_dir(str(outside), base_dir=base, allow_custom_dir=True) == outside.resolve()
+
+
+def test_build_report_zip_bytes_contains_legacy_html_files():
+    context = build_report_context(_evidence(), variant_name="FHD30 Recording")
+
+    zip_bytes, filename = build_report_zip_bytes(_evidence(), context=context)
+
+    assert filename == "projectA-FHD30_Recording_html_report_bundle.zip"
+    assert zip_bytes.startswith(b"PK")
