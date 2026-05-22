@@ -214,6 +214,72 @@ st.markdown(
     font-size: 12px;
     font-weight: 700;
   }
+  .explorer-filter-title {
+    color: #111827;
+    font-size: 15px;
+    font-weight: 850;
+    margin-bottom: 2px;
+  }
+  .explorer-filter-help {
+    color: #6B7280;
+    font-size: 12px;
+    margin-bottom: 8px;
+  }
+  .active-filter-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+  }
+  .distribution-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+    gap: 10px;
+    margin: 12px 0 14px 0;
+  }
+  .distribution-card {
+    border: 1px solid #E8E4DF;
+    border-radius: 11px;
+    background: #FFFFFF;
+    padding: 11px 12px;
+    min-height: 96px;
+  }
+  .distribution-title {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    color: #111827;
+    font-weight: 850;
+    margin-bottom: 8px;
+  }
+  .distribution-total {
+    color: #6B7280;
+    font-size: 11px;
+    font-weight: 750;
+  }
+  .import-batch-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+    gap: 10px;
+    margin: 8px 0 12px 0;
+  }
+  .import-batch-card {
+    border: 1px solid #E8E4DF;
+    border-radius: 11px;
+    background: #FFFFFF;
+    padding: 11px 12px;
+  }
+  .import-batch-title {
+    color: #111827;
+    font-weight: 850;
+    margin-bottom: 4px;
+  }
+  .import-batch-meta {
+    color: #6B7280;
+    font-size: 12px;
+    line-height: 1.45;
+  }
 </style>
 """,
     unsafe_allow_html=True,
@@ -242,6 +308,18 @@ _DOMAIN_PALETTE = {
     "cpu": ("#F9FAFB", "#D1D5DB", "#374151"),
     "gpu": ("#FFF7ED", "#FED7AA", "#C2410C"),
     "npu": ("#ECFEFF", "#67E8F9", "#0E7490"),
+}
+
+_CATEGORY_ICON_LABELS = {
+    "__all__": ("◎", "All"),
+    "audio": ("♪", "Audio"),
+    "camera": ("◉", "Camera"),
+    "codec": ("▣", "Codec"),
+    "display": ("▤", "Display"),
+    "game": ("◆", "Game"),
+    "video": ("▶", "Video"),
+    "video_playback": ("▶", "Video Playback"),
+    "voice_call": ("☎", "Voice Call"),
 }
 
 _SEVERITY_ROW_STYLES = {
@@ -353,6 +431,38 @@ def _unique_labels(labels: list[Any]) -> list[str]:
         seen.add(key)
         result.append(text)
     return result
+
+
+def _counts_by_key(rows: list[dict[str, Any]]) -> dict[str, int]:
+    return {str(row.get("key")): int(row.get("count") or 0) for row in rows if row.get("key") is not None}
+
+
+def _humanize_label(value: Any) -> str:
+    text = str(value).replace("_", " ").replace("-", " ").strip()
+    return text.title() if text else "Unknown"
+
+
+def _category_icon_label(value: str, counts: dict[str, int]) -> str:
+    icon, label = _CATEGORY_ICON_LABELS.get(value, ("○", _humanize_label(value)))
+    if value == "__all__":
+        return f"{icon} {label}"
+    return f"{icon} {label} {counts.get(value, 0)}"
+
+
+def _ensure_state_choice(key: str, options: list[str], default: str) -> None:
+    if st.session_state.get(key) not in options:
+        st.session_state[key] = default
+
+
+def _catalog_items_for_category(items: list[dict[str, Any]], category_choice: str | None) -> list[dict[str, Any]]:
+    if not category_choice or category_choice == "__all__":
+        return items
+    selected = str(category_choice).lower()
+    return [
+        item
+        for item in items
+        if selected in {str(category).lower() for category in (item.get("category") or [])}
+    ]
 
 
 def _labels_not_in(labels: list[Any], existing: list[Any]) -> list[str]:
@@ -535,6 +645,156 @@ def _render_tag_counts(title: str, rows: list[dict[str, Any]], kind: str = "cate
     st.markdown(f'<div class="chip-row">{chips}</div>', unsafe_allow_html=True)
 
 
+def _render_distribution_cards(sections: list[tuple[str, list[dict[str, Any]], str]]) -> None:
+    cards: list[str] = []
+    for title, rows, kind in sections:
+        total = sum(int(row.get("count") or 0) for row in rows)
+        body = (
+            "".join(_tag_chip(row.get("key"), kind, row.get("count")) for row in rows)
+            if rows
+            else '<span class="distribution-total">No data</span>'
+        )
+        cards.append(
+            f"""
+<div class="distribution-card">
+  <div class="distribution-title">
+    <span>{escape(title)}</span>
+    <span class="distribution-total">total {total}</span>
+  </div>
+  <div class="chip-row">{body}</div>
+</div>
+"""
+        )
+    st.markdown(f'<div class="distribution-grid">{"".join(cards)}</div>', unsafe_allow_html=True)
+
+
+def _render_import_batch_cards(rows: list[dict[str, Any]], limit: int = 3) -> None:
+    cards: list[str] = []
+    for row in rows[:limit]:
+        status = str(row.get("status") or "unknown")
+        target = str(row.get("target_id") or "")
+        short_target = target if len(target) <= 92 else target[:89] + "..."
+        validation = "valid" if row.get("validation_valid") else "check"
+        issue_count = int(row.get("validation_issue_count") or 0)
+        cards.append(
+            f"""
+<div class="import-batch-card">
+  <div class="import-batch-title">{escape(status)}</div>
+  <div class="import-batch-meta">
+    target: {escape(short_target or "-")}<br>
+    actor: {escape(str(row.get("actor") or "-"))}<br>
+    validation: {escape(validation)} / issues {issue_count}
+  </div>
+</div>
+"""
+        )
+    if cards:
+        st.markdown(f'<div class="import-batch-grid">{"".join(cards)}</div>', unsafe_allow_html=True)
+    else:
+        st.caption("No import batches")
+
+
+def _render_active_filters(filters: list[tuple[str, Any]]) -> None:
+    chips = [
+        _tag_chip(f"{label}: {value}", "domain")
+        for label, value in filters
+        if value not in (None, "", [], ())
+    ]
+    if chips:
+        st.markdown(f'<div class="active-filter-row">{"".join(chips)}</div>', unsafe_allow_html=True)
+
+
+def _render_explorer_filter_bar(
+    filter_summary: dict[str, Any],
+    filter_catalog: dict[str, Any],
+) -> tuple[list[str] | None, list[str] | None, list[str] | None, list[str] | None]:
+    category_counts = _counts_by_key(filter_summary.get("category_counts") or [])
+    category_options = [str(item.get("key")) for item in filter_summary.get("category_counts") or [] if item.get("key")]
+    category_choices = ["__all__"] + category_options
+    _ensure_state_choice("explorer_category_choice", category_choices, "__all__")
+
+    severity_options = [str(item.get("key")) for item in filter_summary.get("severity_counts") or [] if item.get("key")]
+
+    with st.container(border=True):
+        st.markdown('<div class="explorer-filter-title">Browse Scenarios</div>', unsafe_allow_html=True)
+        st.markdown(
+            '<div class="explorer-filter-help">Pick a scenario family by icon first, then narrow by text, domain, or variant load.</div>',
+            unsafe_allow_html=True,
+        )
+        category_choice = st.pills(
+            "Scenario Type",
+            category_choices,
+            selection_mode="single",
+            key="explorer_category_choice",
+            format_func=lambda value: _category_icon_label(str(value), category_counts),
+            width="stretch",
+        )
+        if not category_choice:
+            category_choice = "__all__"
+
+        catalog_items = _catalog_items_for_category(filter_catalog.get("items") or [], str(category_choice))
+        domain_options = sorted({str(domain) for item in catalog_items for domain in (item.get("domain") or [])})
+        scenario_options = [str(item.get("scenario_id")) for item in catalog_items if item.get("scenario_id")]
+        scenario_label_by_id = {
+            str(item.get("scenario_id")): compact_scenario_label(
+                {
+                    "id": item.get("scenario_id"),
+                    "metadata": {"name": item.get("scenario_name")},
+                }
+            )
+            for item in catalog_items
+            if item.get("scenario_id")
+        }
+
+        if len(domain_options) > 1:
+            f1, f2, f3 = st.columns([1.15, 1.0, 1.0])
+            with f1:
+                scenario_query = st.text_input("Scenario Search", key="explorer_scenario_search", placeholder="id or name")
+            with f2:
+                selected_domains = st.multiselect("Domain", domain_options, key="explorer_domain_filter")
+            with f3:
+                selected_severities = st.multiselect("Variant Load", severity_options, key="explorer_severity_filter")
+            inferred_domain = None
+        else:
+            st.session_state["explorer_domain_filter"] = []
+            f1, f2 = st.columns([1.15, 1.0])
+            with f1:
+                scenario_query = st.text_input("Scenario Search", key="explorer_scenario_search", placeholder="id or name")
+            with f2:
+                selected_severities = st.multiselect("Variant Load", severity_options, key="explorer_severity_filter")
+            selected_domains = []
+            inferred_domain = domain_options[0] if domain_options else None
+
+        filtered_scenarios = [
+            scenario_id
+            for scenario_id in scenario_options
+            if not scenario_query
+            or scenario_query.lower() in scenario_id.lower()
+            or scenario_query.lower() in scenario_label_by_id.get(scenario_id, "").lower()
+        ]
+        scenario_choices = [""] + filtered_scenarios
+        _ensure_state_choice("explorer_scenario_choice", scenario_choices, "")
+        selected_scenario = st.selectbox(
+            "Scenario",
+            scenario_choices,
+            key="explorer_scenario_choice",
+            format_func=lambda value: "All matching scenarios" if not value else scenario_label_by_id.get(value, value),
+        )
+
+        selected_categories = None if category_choice == "__all__" else [str(category_choice)]
+        selected_scenarios = [str(selected_scenario)] if selected_scenario else None
+        _render_active_filters(
+            [
+                ("type", "all" if not selected_categories else selected_categories[0]),
+                ("scenario", selected_scenario),
+                ("domain", ", ".join(selected_domains)),
+                ("Inferred Domain", inferred_domain),
+                ("load", ", ".join(selected_severities)),
+            ]
+        )
+        return selected_categories, selected_domains or None, selected_scenarios, selected_severities or None
+
+
 def _render_help() -> None:
     with st.expander("How to read DB Explorer", expanded=False):
         st.markdown(
@@ -620,8 +880,9 @@ with st.sidebar:
     if soc_error:
         st.caption(f"SoC list unavailable: {soc_error}")
 
-    board_type = st.text_input("Board Type", value=st.session_state.get("explorer_board_type", ""))
-    st.session_state["explorer_board_type"] = board_type
+    with st.expander("Advanced filters", expanded=False):
+        board_type = st.text_input("Board Type", value=st.session_state.get("explorer_board_type", ""))
+        st.session_state["explorer_board_type"] = board_type
 
     projects, project_error = _load_project_options(api_base, selected_soc or None, board_type or None)
     project_ids = [""] + [str(item.get("id")) for item in projects if item.get("id")]
@@ -642,47 +903,6 @@ with st.sidebar:
     if filter_error:
         st.caption(f"Filter options unavailable: {filter_error}")
 
-    category_options = [str(item.get("key")) for item in filter_summary.get("category_counts") or [] if item.get("key")]
-    severity_options = [str(item.get("key")) for item in filter_summary.get("severity_counts") or [] if item.get("key")]
-    domain_options = sorted(
-        {
-            str(domain)
-            for item in filter_catalog.get("items") or []
-            for domain in (item.get("domain") or [])
-        }
-    )
-    scenario_options = [str(item.get("scenario_id")) for item in filter_catalog.get("items") or [] if item.get("scenario_id")]
-    scenario_label_by_id = {
-        str(item.get("scenario_id")): compact_scenario_label(
-            {
-                "id": item.get("scenario_id"),
-                "metadata": {"name": item.get("scenario_name")},
-            }
-        )
-        for item in filter_catalog.get("items") or []
-        if item.get("scenario_id")
-    }
-
-    selected_categories = st.multiselect("Category", category_options)
-    selected_domains = st.multiselect("Domain", domain_options)
-    selected_scenarios = st.multiselect(
-        "Scenario",
-        scenario_options,
-        format_func=lambda scenario_id: scenario_label_by_id.get(scenario_id, scenario_id),
-    )
-    selected_severities = st.multiselect("Variant Severity", severity_options)
-
-filters = {
-    "soc_ref": selected_soc or None,
-    "board_type": board_type or None,
-    "project_ref": selected_project or None,
-    "category": selected_categories or None,
-    "domain": selected_domains or None,
-    "scenario_id": selected_scenarios or None,
-    "severity": selected_severities or None,
-}
-summary, catalog, matrix, health, load_error = _load_explorer(api_base, filters)
-
 st.markdown(
     """
 <div class="explorer-header">
@@ -695,6 +915,22 @@ st.markdown(
 """,
     unsafe_allow_html=True,
 )
+
+selected_categories, selected_domains, selected_scenarios, selected_severities = _render_explorer_filter_bar(
+    filter_summary,
+    filter_catalog,
+)
+
+filters = {
+    "soc_ref": selected_soc or None,
+    "board_type": board_type or None,
+    "project_ref": selected_project or None,
+    "category": selected_categories or None,
+    "domain": selected_domains or None,
+    "scenario_id": selected_scenarios or None,
+    "severity": selected_severities or None,
+}
+summary, catalog, matrix, health, load_error = _load_explorer(api_base, filters)
 
 if load_error:
     st.error(f"Explorer API unavailable: {load_error}")
@@ -723,22 +959,30 @@ with tabs[0]:
                 f"""<div class="metric-card"><div class="metric-label">{label}</div><div class="metric-value">{totals.get(key, 0)}</div></div>""",
                 unsafe_allow_html=True,
             )
-    st.divider()
-    left, mid, right = st.columns(3)
-    with left:
-        _render_tag_counts("Category Counts", summary.get("category_counts") or [], "category")
-        _render_counts("Raw Category Counts", summary.get("category_counts") or [])
-    with mid:
-        _render_counts("Severity Counts", summary.get("severity_counts") or [])
-    with right:
-        _render_counts("Board Counts", summary.get("board_counts") or [])
-    st.markdown("**Latest Import Batches**")
-    render_copyable_dataframe(
-        summary.get("latest_import_batches") or [],
-        key="explorer_latest_import_batches_overview",
-        hide_index=True,
-        use_container_width=True,
+    _render_distribution_cards(
+        [
+            ("Scenario Families", summary.get("category_counts") or [], "category"),
+            ("Variant Load Mix", summary.get("severity_counts") or [], "category"),
+            ("Board Coverage", summary.get("board_counts") or [], "domain"),
+        ]
     )
+    st.markdown("**Latest Import Batches**")
+    _render_import_batch_cards(summary.get("latest_import_batches") or [])
+    with st.expander("Raw summary tables", expanded=False):
+        left, mid, right = st.columns(3)
+        with left:
+            _render_counts("Category Counts", summary.get("category_counts") or [])
+        with mid:
+            _render_counts("Variant Load Counts", summary.get("severity_counts") or [])
+        with right:
+            _render_counts("Board Counts", summary.get("board_counts") or [])
+        st.markdown("**Latest Import Batches**")
+        render_copyable_dataframe(
+            summary.get("latest_import_batches") or [],
+            key="explorer_latest_import_batches_overview",
+            hide_index=True,
+            use_container_width=True,
+        )
 
 with tabs[1]:
     st.markdown(f"**Scenario Catalog** - {len(catalog_items)} rows")
