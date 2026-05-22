@@ -5,6 +5,7 @@ Run:
 """
 from __future__ import annotations
 
+import base64
 import sys
 from pathlib import Path
 
@@ -30,12 +31,38 @@ st.markdown(
 <style>
   footer, #MainMenu { display: none !important; }
   .block-container { padding-top: 1.0rem !important; }
+  .home-tile {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+  .home-logo-panel {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    border: 1px solid #E8E4DF;
+    border-bottom: 0;
+    border-radius: 12px 12px 0 0;
+    background: #FFFFFF;
+    overflow: hidden;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+  }
+  .home-tile-logo {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+    transform: scale(1.018);
+  }
   .home-card {
     border: 1px solid #E8E4DF;
-    border-radius: 12px;
-    padding: 14px 16px;
+    border-radius: 0 0 12px 12px;
+    padding: 16px 16px 14px 16px;
     background: #FFFFFF;
     min-height: 178px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
   }
   .home-card h3 {
     margin: 0 0 8px 0;
@@ -71,6 +98,38 @@ st.markdown(
 )
 apply_app_theme(sidebar_width=288)
 
+ASSET_DIR = _root / "dashboard" / "assets"
+HOME_TILE_LOGOS = {
+    "DB Explorer": "ScenarioDB_DBexplorer.png",
+    "Pipeline Viewer": "ScenarioDB_PipelineViewer.png",
+    "Import Workbench": "ScenarioDB_ImportWorkbench.png",
+    "Evidence Dashboard": "ScenarioDB_EvidenceDashboard.png",
+    "Exploration Workbench": "ScenarioDB_ExplorationWorkbench.png",
+}
+
+
+@st.cache_data(show_spinner=False)
+def _asset_data_uri(asset_name: str) -> str:
+    data = (ASSET_DIR / asset_name).read_bytes()
+    encoded = base64.b64encode(data).decode("ascii")
+    return f"data:image/png;base64,{encoded}"
+
+
+def _home_card(title: str, description: str) -> str:
+    logo = _asset_data_uri(HOME_TILE_LOGOS[title])
+    return f"""
+<div class="home-tile">
+  <div class="home-logo-panel">
+    <img class="home-tile-logo" src="{logo}" alt="{title} logo">
+  </div>
+  <div class="home-card">
+    <h3>{title}</h3>
+    <p>{description}</p>
+    <span class="status-ready">Available</span>
+  </div>
+</div>
+"""
+
 render_page_header(
     "ScenarioDB Dashboard",
     "Mobile SoC multimedia scenario database: import, review, simulation, exploration, and architecture viewer.",
@@ -81,13 +140,10 @@ col1, col2, col3, col4, col5 = st.columns(5)
 
 with col1:
     st.markdown(
-        """
-<div class="home-card">
-  <h3>DB Explorer</h3>
-  <p>Database-level overview, scenario catalog, variant matrix, and import health checks.</p>
-  <span class="status-ready">Available</span>
-</div>
-""",
+        _home_card(
+            "DB Explorer",
+            "Database-level overview, scenario catalog, variant matrix, and import health checks.",
+        ),
         unsafe_allow_html=True,
     )
     if st.button("Open DB Explorer", use_container_width=True):
@@ -95,13 +151,10 @@ with col1:
 
 with col2:
     st.markdown(
-        """
-<div class="home-card">
-  <h3>Pipeline Viewer</h3>
-  <p>Level 0 architecture, task topology, Level 1 IP detail, and Level 2 drill-down views.</p>
-  <span class="status-ready">Available</span>
-</div>
-""",
+        _home_card(
+            "Pipeline Viewer",
+            "Level 0 architecture, task topology, Level 1 IP detail, and Level 2 drill-down views.",
+        ),
         unsafe_allow_html=True,
     )
     if st.button("Open Pipeline Viewer", use_container_width=True):
@@ -109,13 +162,10 @@ with col2:
 
 with col3:
     st.markdown(
-        """
-<div class="home-card">
-  <h3>Import Workbench</h3>
-  <p>Review generated canonical YAML, stage import bundles, validate, diff, and apply through Write API.</p>
-  <span class="status-ready">Available</span>
-</div>
-""",
+        _home_card(
+            "Import Workbench",
+            "Review generated canonical YAML, stage import bundles, validate, diff, and apply through Write API.",
+        ),
         unsafe_allow_html=True,
     )
     if st.button("Open Import Workbench", use_container_width=True):
@@ -123,13 +173,10 @@ with col3:
 
 with col4:
     st.markdown(
-        """
-<div class="home-card">
-  <h3>Evidence Dashboard</h3>
-  <p>Run BW, power, and timing simulation, persist evidence, and inspect per-IP breakdowns.</p>
-  <span class="status-ready">Available</span>
-</div>
-""",
+        _home_card(
+            "Evidence Dashboard",
+            "Run BW, power, and timing simulation, persist evidence, and inspect per-IP breakdowns.",
+        ),
         unsafe_allow_html=True,
     )
     if st.button("Open Evidence Dashboard", use_container_width=True):
@@ -137,13 +184,10 @@ with col4:
 
 with col5:
     st.markdown(
-        """
-<div class="home-card">
-  <h3>Exploration Workbench</h3>
-  <p>Load exploration recipes or sweeps, compile candidates, run preview simulations, and compare KPI deltas.</p>
-  <span class="status-ready">Available</span>
-</div>
-""",
+        _home_card(
+            "Exploration Workbench",
+            "Load exploration recipes or sweeps, compile candidates, run preview simulations, and compare KPI deltas.",
+        ),
         unsafe_allow_html=True,
     )
     if st.button("Open Exploration Workbench", use_container_width=True):

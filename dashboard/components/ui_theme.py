@@ -1,15 +1,23 @@
 """Shared Streamlit UI theme for the ScenarioDB dashboard."""
 from __future__ import annotations
 
+import base64
 from html import escape
+from pathlib import Path
 from typing import Iterable
 
 import streamlit as st
 import streamlit.components.v1 as components
 
 
+SCENARIODB_ASSET_DIR = Path(__file__).resolve().parents[1] / "assets"
+SCENARIODB_SIDEBAR_LOGO = SCENARIODB_ASSET_DIR / "ScenarioDB_sidebar logo.png"
+
+
 def apply_app_theme(*, sidebar_width: int = 288) -> None:
     """Apply the ScenarioDB balanced engineering console visual theme."""
+
+    sidebar_logo_src = _asset_data_uri(SCENARIODB_SIDEBAR_LOGO) if SCENARIODB_SIDEBAR_LOGO.exists() else ""
 
     st.markdown(
         f"""
@@ -425,10 +433,16 @@ def apply_app_theme(*, sidebar_width: int = 288) -> None:
 """,
         unsafe_allow_html=True,
     )
-    _inject_sidebar_toggle(sidebar_width=sidebar_width)
+    _inject_sidebar_toggle(sidebar_width=sidebar_width, logo_src=sidebar_logo_src)
 
 
-def _inject_sidebar_toggle(*, sidebar_width: int) -> None:
+def _asset_data_uri(path: Path) -> str:
+    data = path.read_bytes()
+    encoded = base64.b64encode(data).decode("ascii")
+    return f"data:image/png;base64,{encoded}"
+
+
+def _inject_sidebar_toggle(*, sidebar_width: int, logo_src: str = "") -> None:
     """Add a persistent sidebar toggle because themed headers can hide Streamlit's native affordance."""
 
     toggle_script = """
@@ -437,6 +451,7 @@ def _inject_sidebar_toggle(*, sidebar_width: int) -> None:
   const doc = window.parent && window.parent.document;
   if (!doc) return;
   const expandedWidth = "__SIDEBAR_WIDTH__";
+  const sidebarLogoSrc = "__SIDEBAR_LOGO_SRC__";
 
   const existing = doc.getElementById("sdb-sidebar-toggle");
   const button = existing || doc.createElement("button");
@@ -476,11 +491,41 @@ def _inject_sidebar_toggle(*, sidebar_width: int) -> None:
     });
   }
 
+  function positionNativeSidebarToggle(expanded) {
+    const nativeToggle = findNativeSidebarToggle();
+    if (!nativeToggle) return;
+    if (expanded) {
+      const expandedPixels = parseInt(expandedWidth, 10) || 288;
+      nativeToggle.style.position = "fixed";
+      nativeToggle.style.top = "54px";
+      nativeToggle.style.left = `${expandedPixels - 46}px`;
+      nativeToggle.style.right = "auto";
+      nativeToggle.style.zIndex = "2147483647";
+      nativeToggle.style.display = "flex";
+      nativeToggle.style.visibility = "visible";
+      nativeToggle.style.opacity = "1";
+    } else {
+      nativeToggle.style.removeProperty("right");
+      nativeToggle.style.removeProperty("left");
+      nativeToggle.style.removeProperty("top");
+    }
+  }
+
   function syncSidebarLayout() {
     const sidebar = doc.querySelector('section[data-testid="stSidebar"]');
     if (!sidebar) return;
     const expanded = sidebar.getAttribute("aria-expanded") !== "false";
     const inner = sidebar.firstElementChild;
+    let brand = doc.getElementById("sdb-sidebar-brand");
+    if (sidebarLogoSrc && !brand) {
+      brand = doc.createElement("div");
+      brand.id = "sdb-sidebar-brand";
+      const image = doc.createElement("img");
+      image.src = sidebarLogoSrc;
+      image.alt = "ScenarioDB";
+      brand.appendChild(image);
+      doc.body.appendChild(brand);
+    }
 
     if (expanded) {
       sidebar.style.setProperty("width", expandedWidth, "important");
@@ -496,6 +541,30 @@ def _inject_sidebar_toggle(*, sidebar_width: int) -> None:
         inner.style.setProperty("min-width", expandedWidth, "important");
         inner.style.setProperty("max-width", expandedWidth, "important");
         inner.style.setProperty("background", "#F1EDE6", "important");
+        inner.style.setProperty("padding-top", "278px", "important");
+      }
+      if (brand) {
+        brand.style.display = "flex";
+        brand.style.position = "fixed";
+        brand.style.top = "74px";
+        brand.style.left = "14px";
+        brand.style.width = "260px";
+        brand.style.height = "196px";
+        brand.style.zIndex = "2147483646";
+        brand.style.alignItems = "center";
+        brand.style.justifyContent = "center";
+        brand.style.overflow = "hidden";
+        brand.style.pointerEvents = "none";
+        brand.style.background = "transparent";
+        const image = brand.querySelector("img");
+        if (image) {
+          image.style.width = "260px";
+          image.style.maxWidth = "260px";
+          image.style.height = "auto";
+          image.style.maxHeight = "196px";
+          image.style.objectFit = "contain";
+          image.style.display = "block";
+        }
       }
     } else {
       sidebar.style.setProperty("width", "0px", "important");
@@ -510,8 +579,13 @@ def _inject_sidebar_toggle(*, sidebar_width: int) -> None:
         inner.style.setProperty("min-width", "0px", "important");
         inner.style.setProperty("max-width", "0px", "important");
         inner.style.setProperty("overflow", "visible", "important");
+        inner.style.removeProperty("padding-top");
+      }
+      if (brand) {
+        brand.style.display = "none";
       }
     }
+    positionNativeSidebarToggle(expanded);
   }
 
   button.onmouseenter = function () {
@@ -543,7 +617,7 @@ def _inject_sidebar_toggle(*, sidebar_width: int) -> None:
   }
 })();
 </script>
-""".replace("__SIDEBAR_WIDTH__", f"{sidebar_width}px")
+""".replace("__SIDEBAR_WIDTH__", f"{sidebar_width}px").replace("__SIDEBAR_LOGO_SRC__", logo_src)
 
     components.html(
         toggle_script,
