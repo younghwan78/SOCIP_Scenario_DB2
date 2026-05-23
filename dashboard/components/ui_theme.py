@@ -524,7 +524,9 @@ def _inject_sidebar_toggle(*, sidebar_width: int, logo_src: str = "") -> None:
       image.src = sidebarLogoSrc;
       image.alt = "ScenarioDB";
       brand.appendChild(image);
-      doc.body.appendChild(brand);
+    }
+    if (inner && brand && brand.parentElement !== inner) {
+      inner.insertBefore(brand, inner.firstChild);
     }
 
     if (expanded) {
@@ -541,16 +543,15 @@ def _inject_sidebar_toggle(*, sidebar_width: int, logo_src: str = "") -> None:
         inner.style.setProperty("min-width", expandedWidth, "important");
         inner.style.setProperty("max-width", expandedWidth, "important");
         inner.style.setProperty("background", "#F1EDE6", "important");
-        inner.style.setProperty("padding-top", "278px", "important");
+        inner.style.removeProperty("padding-top");
       }
       if (brand) {
         brand.style.display = "flex";
-        brand.style.position = "fixed";
-        brand.style.top = "74px";
-        brand.style.left = "14px";
+        brand.style.position = "relative";
+        brand.style.margin = "58px 14px 16px 14px";
         brand.style.width = "260px";
         brand.style.height = "196px";
-        brand.style.zIndex = "2147483646";
+        brand.style.zIndex = "1";
         brand.style.alignItems = "center";
         brand.style.justifyContent = "center";
         brand.style.overflow = "hidden";

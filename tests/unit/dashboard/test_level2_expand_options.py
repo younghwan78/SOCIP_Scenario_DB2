@@ -99,6 +99,19 @@ def test_level2_expand_options_include_only_aliases_present_in_active_graph():
     assert default_level2_expand_value(options) == "camera"
 
 
+def test_exynos2600_display_fixture_offers_display_target_even_when_dpu_is_external_layer():
+    graph = _exynos2600_graph("uc-gallery-display.yaml", "disp-gallery-fhd-hdr10plus-60hz")
+    level1 = service._project_semantic_level1(graph)
+
+    options = build_level2_expand_options(level1)
+
+    values = [option.value for option in options]
+    labels = [option.label for option in options]
+    assert values[0] == "display"
+    assert "dpu" in values
+    assert "Display output (active DPU blocks)" in labels
+
+
 def test_level2_expand_options_restore_pipeline_ids_for_hyphenated_view_nodes():
     options = build_level2_expand_options(
         _view(

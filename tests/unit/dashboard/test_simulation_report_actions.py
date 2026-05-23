@@ -6,6 +6,8 @@ from zipfile import ZipFile
 
 from dashboard.components.simulation_api_client import export_simulation_artifacts, simulation_artifacts_zip_url
 from dashboard.components.simulation_report_actions import (
+    report_cache_fingerprint,
+    report_cache_payload_json,
     report_preview_options,
     report_download_payloads,
     report_zip_payload,
@@ -63,6 +65,40 @@ def test_report_download_payloads_build_three_html_files():
     assert all(item["mime"] == "text/html" for item in payloads)
     assert "<!DOCTYPE html>" in payloads[-1]["html"]
     assert b"<!DOCTYPE html>" in payloads[-1]["data"]
+
+
+def test_report_cache_fingerprint_is_stable_for_equivalent_payload_order():
+    first = _result()
+    second = _result()
+    second["kpi"] = {"hw_time_max_ms": 12.5, "total_bw_mbs": 1500.0, "total_power_mw": 120.0}
+
+    assert report_cache_fingerprint(first, project_ref="projectA", variant_name="FHD30 Recording") == (
+        report_cache_fingerprint(second, project_ref="projectA", variant_name="FHD30 Recording")
+    )
+    assert report_cache_payload_json(first, project_ref="projectA", variant_name="FHD30 Recording") == (
+        report_cache_payload_json(second, project_ref="projectA", variant_name="FHD30 Recording")
+    )
+
+
+def test_report_cache_fingerprint_changes_when_evidence_payload_changes():
+    first = _result()
+    second = _result()
+    second["timeline_events"][0]["end_ms"] = 4.0
+
+    assert report_cache_fingerprint(first, project_ref="projectA", variant_name="FHD30 Recording") != (
+        report_cache_fingerprint(second, project_ref="projectA", variant_name="FHD30 Recording")
+    )
+
+
+def test_report_cache_fingerprint_changes_when_report_context_changes():
+    result = _result()
+
+    assert report_cache_fingerprint(result, project_ref="projectA", variant_name="FHD30 Recording") != (
+        report_cache_fingerprint(result, project_ref="projectB", variant_name="FHD30 Recording")
+    )
+    assert report_cache_fingerprint(result, project_ref="projectA", variant_name="FHD30 Recording") != (
+        report_cache_fingerprint(result, project_ref="projectA", variant_name="UHD Recording")
+    )
 
 
 def test_selected_report_payload_uses_report_first_preview_contract():

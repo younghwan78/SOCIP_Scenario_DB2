@@ -27,7 +27,12 @@ def test_sidebar_logo_is_applied_through_shared_theme() -> None:
     assert "ScenarioDB_sidebar logo.png" in source
     assert "_asset_data_uri" in source
     assert "sdb-sidebar-brand" in source
-    assert "brand.style.top = \"74px\"" in source
+    assert "inner.insertBefore(brand, inner.firstChild)" in source
+    assert "brand.style.position = \"relative\"" in source
+    assert "brand.style.margin = \"58px 14px 16px 14px\"" in source
+    assert "brand.style.position = \"fixed\"" not in source
+    assert "doc.body.appendChild(brand)" not in source
+    assert "brand.style.top = \"74px\"" not in source
     assert "brand.style.width = \"260px\"" in source
     assert "brand.style.height = \"196px\"" in source
     assert "image.style.width = \"260px\"" in source
@@ -36,7 +41,7 @@ def test_sidebar_logo_is_applied_through_shared_theme() -> None:
     assert "const expandedPixels = parseInt(expandedWidth, 10) || 288" in source
     assert 'nativeToggle.style.left = `${expandedPixels - 46}px`' in source
     assert "nativeToggle.style.display = \"flex\"" in source
-    assert "inner.style.setProperty(\"padding-top\", \"278px\", \"important\")" in source
+    assert "inner.style.setProperty(\"padding-top\", \"278px\", \"important\")" not in source
 
 
 def test_home_tiles_render_each_menu_logo_above_title() -> None:

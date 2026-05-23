@@ -26,23 +26,70 @@ def render_result_breakdown(
     project_ref: str | None = None,
     soc_ref: str | None = None,
 ) -> None:
-    """Render all result breakdown tabs for a simulation preview or saved evidence."""
+    """Render the selected result breakdown section for a simulation evidence result."""
 
-    tabs = st.tabs(list(RESULT_BREAKDOWN_TABS))
-    with tabs[0]:
+    evidence_id = str(result.get("id") or "simulation-evidence")
+    key = f"{key_prefix}_{_safe_key(evidence_id)}_result_breakdown_view"
+    current = selected_breakdown_label(st.session_state.get(key))
+    selected = st.pills(
+        "Result breakdown",
+        options=list(RESULT_BREAKDOWN_TABS),
+        default=current,
+        selection_mode="single",
+        key=key,
+        label_visibility="collapsed",
+        width="stretch",
+    )
+    render_selected_result_breakdown(
+        result,
+        selected_label=selected_breakdown_label(selected),
+        key_prefix=key_prefix,
+        api_base=api_base,
+        project_ref=project_ref,
+        soc_ref=soc_ref,
+    )
+
+
+def selected_breakdown_label(label: Any) -> str:
+    """Return a valid breakdown label, falling back to the first contract label."""
+
+    text = str(label or "")
+    if text in RESULT_BREAKDOWN_TABS:
+        return text
+    return RESULT_BREAKDOWN_TABS[0]
+
+
+def render_selected_result_breakdown(
+    result: dict[str, Any],
+    *,
+    selected_label: str,
+    key_prefix: str = "stored",
+    api_base: str | None = None,
+    project_ref: str | None = None,
+    soc_ref: str | None = None,
+) -> None:
+    """Dispatch only the selected breakdown renderer.
+
+    Streamlit tabs render every tab body during each rerun. Keeping this dispatch
+    explicit prevents hidden heavy views such as Plotly charts and report HTML
+    previews from being rebuilt while the user is looking at another section.
+    """
+
+    label = selected_breakdown_label(selected_label)
+    if label == RESULT_BREAKDOWN_TABS[0]:
         render_external_device_info(result, key_prefix=key_prefix)
-    with tabs[1]:
+    elif label == RESULT_BREAKDOWN_TABS[1]:
         render_ip_node_power(result, key_prefix=key_prefix)
-    with tabs[2]:
+    elif label == RESULT_BREAKDOWN_TABS[2]:
         render_dma_bw(result, key_prefix=key_prefix)
-    with tabs[3]:
+    elif label == RESULT_BREAKDOWN_TABS[3]:
         render_timing_summary(result)
         render_timing_chart(result, key_prefix=key_prefix)
-    with tabs[4]:
+    elif label == RESULT_BREAKDOWN_TABS[4]:
         render_timing_table(result, key_prefix=key_prefix)
-    with tabs[5]:
+    elif label == RESULT_BREAKDOWN_TABS[5]:
         render_timeline_table(result, key_prefix=key_prefix)
-    with tabs[6]:
+    elif label == RESULT_BREAKDOWN_TABS[6]:
         render_simulation_report_tab(
             result,
             api_base=api_base,
@@ -50,7 +97,11 @@ def render_result_breakdown(
             project_ref=project_ref,
             soc_ref=soc_ref,
         )
-    with tabs[7]:
+    elif label == RESULT_BREAKDOWN_TABS[7]:
         render_debug_trace(result)
-    with tabs[8]:
+    elif label == RESULT_BREAKDOWN_TABS[8]:
         st.json(result)
+
+
+def _safe_key(value: str) -> str:
+    return "".join(ch if ch.isalnum() or ch in ".-" else "_" for ch in value)[:160]

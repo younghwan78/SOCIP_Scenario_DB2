@@ -11,6 +11,8 @@ from __future__ import annotations
 import html
 import json
 from collections import defaultdict
+from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 import streamlit.components.v1 as components
@@ -1078,11 +1080,12 @@ def _html(graph: dict[str, Any], meta: dict[str, Any], title: str, height: int) 
     graph_json = json.dumps(graph, ensure_ascii=False)
     meta_json = json.dumps(meta, ensure_ascii=False)
     safe_title = html.escape(title)
+    elk_runtime_script = _elk_runtime_script()
     return f"""<!doctype html>
 <html>
 <head>
 <meta charset="utf-8" />
-<script src="https://cdn.jsdelivr.net/npm/elkjs@0.9.3/lib/elk.bundled.js"></script>
+{elk_runtime_script}
 <style>
   html, body {{ margin:0; padding:0; background:#FAF9F7; font-family: Inter, Segoe UI, Arial, sans-serif; }}
   .elk-shell {{ height:{height}px; border:1px solid #E5E7EB; border-radius:12px; background:#FFFFFF; overflow:hidden; position:relative; }}
@@ -1141,6 +1144,7 @@ const shell = document.getElementById('shell');
 const svg = document.getElementById('svg');
 const main = document.getElementById('main');
 const tip = document.getElementById('tip');
+const VIEW = M.__view__ || {{}};
 let scale = 1, tx = 0, ty = 0;
 let layoutGraph = null;
 const PAD = 36;
@@ -1187,6 +1191,24 @@ function resetGraph() {{
   tx = 0;
   ty = 36;
   setTransform();
+}}
+
+function readableLevel2View() {{
+  if (!layoutGraph) return;
+  const w = shell.clientWidth - PAD * 2;
+  const gw = Math.max(1, layoutGraph.width || 1);
+  scale = Math.max(0.72, Math.min(1.05, w / gw));
+  tx = Math.max(0, (w - gw * scale) / 2);
+  ty = 36;
+  setTransform();
+}}
+
+function initialGraphView() {{
+  if (VIEW.layout === 'level2-module-detail') {{
+    readableLevel2View();
+    return;
+  }}
+  fitGraph();
 }}
 
 function zoomBy(factor) {{
@@ -1432,7 +1454,7 @@ async function mainRender() {{
     drawBackgrounds(main, layoutGraph, 0, 0);
     drawGraphEdges(main, layoutGraph, 0, 0);
     drawLeaves(main, layoutGraph, 0, 0);
-    fitGraph();
+    initialGraphView();
   }} catch (err) {{
     shell.insertAdjacentHTML('beforeend', `<div class="error">ELK layout failed: ${{esc(err && err.message ? err.message : err)}}<br/>If this network is offline, vendor elk.bundled.js into the app static assets.</div>`);
   }}
@@ -1463,3 +1485,12 @@ mainRender();
 </script>
 </body>
 </html>"""
+
+
+@lru_cache(maxsize=1)
+def _elk_runtime_script() -> str:
+    vendor_path = Path(__file__).resolve().parents[1] / "assets" / "vendor" / "elk.bundled.js"
+    try:
+        return f"<script>\n{vendor_path.read_text(encoding='utf-8')}\n</script>"
+    except OSError:
+        return '<script src="https://cdn.jsdelivr.net/npm/elkjs@0.9.3/lib/elk.bundled.js"></script>'

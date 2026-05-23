@@ -1,7 +1,9 @@
 """HTML report actions for simulation evidence."""
 from __future__ import annotations
 
+import hashlib
 import io
+import json
 from typing import Any
 from zipfile import ZIP_DEFLATED, ZipFile
 
@@ -23,6 +25,49 @@ REPORT_ARTIFACT_TITLES = {
 }
 
 REPORT_PREVIEW_ORDER = ("simulation_report", "timing_chart", "bw_chart")
+REPORT_CACHE_TTL_SECONDS = 300
+
+
+def report_cache_payload_json(
+    result: dict[str, Any],
+    *,
+    project_ref: str | None = None,
+    scenario_name: str | None = None,
+    variant_name: str | None = None,
+    soc_ref: str | None = None,
+) -> str:
+    """Build the deterministic cache payload for generated report HTML."""
+
+    payload = {
+        "result": result,
+        "context": {
+            "project_ref": project_ref,
+            "scenario_name": scenario_name,
+            "variant_name": variant_name,
+            "soc_ref": soc_ref,
+        },
+    }
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
+
+
+def report_cache_fingerprint(
+    result: dict[str, Any],
+    *,
+    project_ref: str | None = None,
+    scenario_name: str | None = None,
+    variant_name: str | None = None,
+    soc_ref: str | None = None,
+) -> str:
+    """Return a stable fingerprint that changes when evidence or report context changes."""
+
+    payload = report_cache_payload_json(
+        result,
+        project_ref=project_ref,
+        scenario_name=scenario_name,
+        variant_name=variant_name,
+        soc_ref=soc_ref,
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def report_download_payloads(
@@ -64,6 +109,41 @@ def report_download_payloads(
     ]
 
 
+def report_download_payloads_for_render(
+    result: dict[str, Any],
+    *,
+    project_ref: str | None = None,
+    scenario_name: str | None = None,
+    variant_name: str | None = None,
+    soc_ref: str | None = None,
+) -> list[dict[str, Any]]:
+    """Return report payloads through a Streamlit cache keyed by the full evidence payload."""
+
+    return _cached_report_download_payloads(
+        report_cache_payload_json(
+            result,
+            project_ref=project_ref,
+            scenario_name=scenario_name,
+            variant_name=variant_name,
+            soc_ref=soc_ref,
+        )
+    )
+
+
+@st.cache_data(show_spinner=False, ttl=REPORT_CACHE_TTL_SECONDS)
+def _cached_report_download_payloads(cache_payload_json: str) -> list[dict[str, Any]]:
+    payload = json.loads(cache_payload_json)
+    context = payload.get("context") if isinstance(payload.get("context"), dict) else {}
+    result = payload.get("result") if isinstance(payload.get("result"), dict) else {}
+    return report_download_payloads(
+        result,
+        project_ref=_optional_text(context.get("project_ref")),
+        scenario_name=_optional_text(context.get("scenario_name")),
+        variant_name=_optional_text(context.get("variant_name")),
+        soc_ref=_optional_text(context.get("soc_ref")),
+    )
+
+
 def selected_report_payload(payloads: list[dict[str, Any]], artifact_type: str | None) -> dict[str, Any]:
     selected_type = artifact_type or "simulation_report"
     for payload in payloads:
@@ -101,7 +181,7 @@ def render_simulation_report_tab(
     soc_ref: str | None = None,
 ) -> None:
     try:
-        payloads = report_download_payloads(
+        payloads = report_download_payloads_for_render(
             result,
             project_ref=project_ref,
             scenario_name=scenario_name,

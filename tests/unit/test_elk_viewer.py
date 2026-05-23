@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dashboard.components.elk_viewer import build_elk_graph
+from dashboard.components.elk_viewer import build_elk_graph, build_elk_view_html
 from scenario_db.api.schemas.view import (
     EdgeData,
     EdgeElement,
@@ -423,3 +423,48 @@ def test_level2_module_meta_uses_module_kind_direction_and_distinct_styles():
     assert meta["mod-csispdp-csispdp-wdma"]["fill"] != meta["mod-csispdp-csispdp"]["fill"]
     assert meta["mod-csispdp-csispdp-wdma"]["subtitle"] == "output / WDMA"
     assert "Module kind: wdma" in meta["mod-csispdp-csispdp-wdma"]["details"]
+
+
+def test_level2_html_uses_local_elk_runtime_and_readable_initial_view():
+    view = ViewResponse(
+        level=2,
+        mode="drilldown:camera",
+        scenario_id="uc-camera-recording",
+        variant_id="cam-rec-3rdparty-binning",
+        summary=_summary(),
+        nodes=[
+            _node(
+                "l2pkg-csispdp",
+                "CSISPDP",
+                "submodule",
+                "meta",
+                100,
+                100,
+                hierarchy_group="ISP",
+                ip_group="CSIS/PDP",
+                view_hints=ViewHints(width=220, height=160),
+            ),
+            _node(
+                "mod-csispdp-csispdp",
+                "CSISPDP",
+                "submodule",
+                "hw",
+                140,
+                160,
+                parent="l2pkg-csispdp",
+                hierarchy_group="ISP",
+                ip_group="CSIS/PDP",
+                module_ref="CSISPDP",
+                module_kind="functional",
+            ),
+        ],
+        edges=[],
+        metadata={"layout": "level2-module-detail"},
+    )
+
+    html = build_elk_view_html(view, canvas_height=980, title="Level 2 - Drill Down (camera)")
+
+    assert "cdn.jsdelivr.net/npm/elkjs" not in html
+    assert "function initialGraphView()" in html
+    assert "level2-module-detail" in html
+    assert "readableLevel2View();" in html

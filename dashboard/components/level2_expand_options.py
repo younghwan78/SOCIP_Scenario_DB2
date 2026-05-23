@@ -96,10 +96,18 @@ def _active_level1_ip_nodes(level1_view: ViewResponse | None) -> list[NodeElemen
             continue
         if not data.id.startswith("ip-"):
             continue
-        if data.layer in {"external", "memory", "meta"}:
+        if data.layer in {"memory", "meta"}:
+            continue
+        if data.layer == "external" and not _is_level2_external_hw_candidate(node):
             continue
         nodes.append(node)
     return nodes
+
+
+def _is_level2_external_hw_candidate(node: NodeElement) -> bool:
+    """Keep SoC output blocks that Level 1 groups near external devices."""
+
+    return _is_display_candidate(node)
 
 
 def _is_camera_candidate(node: NodeElement) -> bool:

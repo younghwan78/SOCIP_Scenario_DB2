@@ -684,19 +684,22 @@ with st.sidebar:
             current_context=current_expand_context,
         )
         option_values = [option.value for option in level2_options]
+        level2_option_labels = {option.value: option.label for option in level2_options}
         option_index = option_values.index(previous_expand) if previous_expand in option_values else 0
-        selected_expand_option = st.selectbox(
-            "Expand IP (Level 2)",
-            level2_options,
+        selected_expand_value = st.selectbox(
+            "Drill-down target (Level 2)",
+            option_values,
             index=option_index,
-            format_func=lambda option: option.label,
+            format_func=lambda value: level2_option_labels.get(value, value),
+            key=f"viewer_level2_target_select_{_state_key_suffix(current_expand_context)}",
+            help="Choose a subsystem alias for all active matching blocks, or a single active pipeline node for focused module details.",
         )
-        expand_label = selected_expand_option.label
-        expand_id = selected_expand_option.value
+        expand_label = level2_option_labels.get(selected_expand_value, selected_expand_value)
+        expand_id = selected_expand_value
         if option_source != "api":
             st.caption(f"Level 2 options loaded from {option_source}.")
         if not has_concrete_level2_options(level2_options):
-            st.caption("No active Level 2 module candidate was found for this scenario. Use a custom node/IP id only if module data exists.")
+            st.caption("No active Level 2 module target was found for this scenario. Use a custom node/IP id only when fixture module data exists.")
     if expand_id == CUSTOM_EXPAND_OPTION.value:
         selected_expand_value = expand_id
         custom_default = custom_level2_expand_default(
@@ -705,7 +708,7 @@ with st.sidebar:
             current_context=current_expand_context,
         )
         custom_expand = st.text_input(
-            "Custom expand id",
+            "Custom IP/node id",
             value=custom_default,
             key=f"viewer_level2_custom_expand_input_{_state_key_suffix(current_expand_context)}",
             help="Use an active pipeline node id such as csispdp, gpu, dpu, or an IP catalog id.",
