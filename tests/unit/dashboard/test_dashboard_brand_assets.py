@@ -9,6 +9,7 @@ ASSET_DIR = ROOT / "dashboard" / "assets"
 
 def test_scenariodb_logo_assets_are_packaged_with_dashboard() -> None:
     expected = {
+        "ScenarioDB_ArchitectureQuery.png",
         "ScenarioDB_DBexplorer.png",
         "ScenarioDB_EvidenceDashboard.png",
         "ScenarioDB_ExplorationWorkbench.png",
@@ -48,6 +49,7 @@ def test_home_tiles_render_each_menu_logo_above_title() -> None:
     source = (ROOT / "dashboard" / "Home.py").read_text(encoding="utf-8")
 
     for asset_name in [
+        "ScenarioDB_ArchitectureQuery.png",
         "ScenarioDB_DBexplorer.png",
         "ScenarioDB_PipelineViewer.png",
         "ScenarioDB_ImportWorkbench.png",

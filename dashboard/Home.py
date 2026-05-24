@@ -102,9 +102,10 @@ ASSET_DIR = _root / "dashboard" / "assets"
 HOME_TILE_LOGOS = {
     "DB Explorer": "ScenarioDB_DBexplorer.png",
     "Pipeline Viewer": "ScenarioDB_PipelineViewer.png",
-    "Import Workbench": "ScenarioDB_ImportWorkbench.png",
+    "Architecture Query": "ScenarioDB_ArchitectureQuery.png",
     "Evidence Dashboard": "ScenarioDB_EvidenceDashboard.png",
     "Exploration Workbench": "ScenarioDB_ExplorationWorkbench.png",
+    "Import Workbench": "ScenarioDB_ImportWorkbench.png",
 }
 
 
@@ -136,7 +137,7 @@ render_page_header(
     chips=("Read API", "Write staging", "Simulation", "Exploration", "Viewer"),
 )
 
-col1, col2, col3, col4, col5 = st.columns(5)
+col1, col2, col3, col4, col5, col6 = st.columns(6)
 
 with col1:
     st.markdown(
@@ -163,13 +164,13 @@ with col2:
 with col3:
     st.markdown(
         _home_card(
-            "Import Workbench",
-            "Review generated canonical YAML, stage import bundles, validate, diff, and apply through Write API.",
+            "Architecture Query",
+            "Filter variants by design axis, effective topology, buffer usage, and latest evidence KPI conditions.",
         ),
         unsafe_allow_html=True,
     )
-    if st.button("Open Import Workbench", use_container_width=True):
-        st.switch_page("pages/3_Import_Workbench.py")
+    if st.button("Open Architecture Query", use_container_width=True):
+        st.switch_page("pages/3_Architecture_Query.py")
 
 with col4:
     st.markdown(
@@ -193,5 +194,16 @@ with col5:
     if st.button("Open Exploration Workbench", use_container_width=True):
         st.switch_page("pages/5_Exploration_Workbench.py")
 
+with col6:
+    st.markdown(
+        _home_card(
+            "Import Workbench",
+            "Review generated canonical YAML, stage import bundles, validate, diff, and apply through Write API.",
+        ),
+        unsafe_allow_html=True,
+    )
+    if st.button("Open Import Workbench", use_container_width=True):
+        st.switch_page("pages/6_Import_Workbench.py")
+
 st.divider()
-st.caption("ScenarioDB v0.1.0 | Read API, Write API staging, import bundle, simulation, exploration, and viewer MVP")
+st.caption("ScenarioDB v0.1.0 | Read API, Write API staging, import bundle, simulation, exploration, query, and viewer MVP")
