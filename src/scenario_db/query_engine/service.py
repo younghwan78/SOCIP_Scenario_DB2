@@ -2,11 +2,22 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import datetime, timezone
+from itertools import product
 from typing import Any
 
 from sqlalchemy.orm import Session
 
-from scenario_db.api.schemas.query import QueryFacetsResponse, QueryPredicate, QueryRequest, QueryResponse, QueryResultItem
+from scenario_db.api.schemas.query import (
+    QueryAggregationBucket,
+    QueryAggregationMetric,
+    QueryAggregationSpec,
+    QueryFacetsResponse,
+    QueryPredicate,
+    QueryPredicateGroup,
+    QueryRequest,
+    QueryResponse,
+    QueryResultItem,
+)
 from scenario_db.db.models.capability import IpCatalog
 from scenario_db.db.models.decision import Issue
 from scenario_db.db.models.definition import Project, Scenario, ScenarioVariant
@@ -18,12 +29,18 @@ from scenario_db.query_engine.field_registry import OPERATORS, field_definitions
 
 def query_variants(db: Session, request: QueryRequest) -> QueryResponse:
     predicates = _scope_predicates(request.scope) + list(request.where)
-    errors = _validate_predicates(predicates)
+    errors = _validate_request(request, predicates)
     if errors:
         return QueryResponse(items=[], total=0, limit=request.limit, offset=request.offset, has_next=False, errors=errors)
 
     items = _build_items(db)
-    filtered = [item for item in items if all(_matches_predicate(item, predicate) for predicate in predicates)]
+    filtered = [
+        item
+        for item in items
+        if all(_matches_predicate(item, predicate) for predicate in predicates)
+        and all(_matches_group(item, group) for group in request.groups)
+    ]
+    aggregations = _build_aggregations(filtered, request.aggregate)
     sorted_items = _sort_items(filtered, request.sort)
     total = len(sorted_items)
     page = sorted_items[request.offset : request.offset + request.limit]
@@ -33,6 +50,7 @@ def query_variants(db: Session, request: QueryRequest) -> QueryResponse:
         limit=request.limit,
         offset=request.offset,
         has_next=request.offset + request.limit < total,
+        aggregations=aggregations,
         errors=[],
     )
 
@@ -212,12 +230,36 @@ def _scope_predicates(scope: dict[str, Any] | None) -> list[QueryPredicate]:
     return predicates
 
 
+def _validate_request(request: QueryRequest, predicates: list[QueryPredicate]) -> list[str]:
+    errors = _validate_predicates(predicates)
+    for group in request.groups:
+        errors.extend(_validate_predicates(list(group.where)))
+    aggregate = request.aggregate
+    if aggregate is not None:
+        for field in aggregate.group_by:
+            if not is_supported_field(field):
+                errors.append(f"Unsupported aggregate field: {field}")
+        for metric in aggregate.metrics:
+            if not is_supported_field(metric.field):
+                errors.append(f"Unsupported aggregate metric field: {metric.field}")
+    return errors
+
+
 def _validate_predicates(predicates: list[QueryPredicate]) -> list[str]:
     errors: list[str] = []
     for predicate in predicates:
         if not is_supported_field(predicate.field):
             errors.append(f"Unsupported query field: {predicate.field}")
     return errors
+
+
+def _matches_group(item: QueryResultItem, group: QueryPredicateGroup) -> bool:
+    predicates = list(group.where)
+    if not predicates:
+        return True
+    if group.join == "or":
+        return any(_matches_predicate(item, predicate) for predicate in predicates)
+    return all(_matches_predicate(item, predicate) for predicate in predicates)
 
 
 def _matches_predicate(item: QueryResultItem, predicate: QueryPredicate) -> bool:
@@ -314,6 +356,103 @@ def _facet_values(item: QueryResultItem) -> dict[str, list[Any]]:
         "evidence.latest.sw_version": _values_for_field(item, "evidence.latest.sw_version"),
         "evidence.latest.feasibility": _values_for_field(item, "evidence.latest.feasibility"),
     }
+
+
+def _build_aggregations(items: list[QueryResultItem], aggregate: QueryAggregationSpec | None) -> list[QueryAggregationBucket]:
+    if aggregate is None or not aggregate.group_by:
+        return []
+
+    buckets: dict[tuple[Any, ...], list[QueryResultItem]] = defaultdict(list)
+    key_values_by_tuple: dict[tuple[Any, ...], dict[str, Any]] = {}
+    for item in items:
+        for key_values in _aggregation_key_values(item, aggregate.group_by):
+            key_tuple = tuple(key_values[field] for field in aggregate.group_by)
+            buckets[key_tuple].append(item)
+            key_values_by_tuple[key_tuple] = key_values
+
+    result: list[QueryAggregationBucket] = []
+    for key_tuple, bucket_items in buckets.items():
+        result.append(
+            QueryAggregationBucket(
+                key=key_values_by_tuple[key_tuple],
+                count=len(bucket_items),
+                metrics=_aggregation_metrics(bucket_items, aggregate.metrics),
+            )
+        )
+
+    result.sort(key=lambda bucket: (-bucket.count, tuple(str(bucket.key.get(field, "")) for field in aggregate.group_by)))
+    return result[: aggregate.top_n]
+
+
+def _aggregation_key_values(item: QueryResultItem, fields: list[str]) -> list[dict[str, Any]]:
+    value_lists = [_aggregation_values_for_field(item, field) for field in fields]
+    keys: list[dict[str, Any]] = []
+    for values in product(*value_lists):
+        keys.append({field: value for field, value in zip(fields, values, strict=True)})
+    return keys
+
+
+def _aggregation_values_for_field(item: QueryResultItem, field: str) -> list[Any]:
+    values = _unique_values(value for value in _values_for_field(item, field) if value not in (None, "", []))
+    return values or ["(none)"]
+
+
+def _aggregation_metrics(items: list[QueryResultItem], metrics: list[QueryAggregationMetric]) -> dict[str, dict[str, Any]]:
+    result: dict[str, dict[str, Any]] = {}
+    for metric in metrics:
+        values = _numeric_metric_values(items, metric.field)
+        metric_result: dict[str, Any] = {}
+        for op in metric.ops:
+            if op == "count":
+                metric_result["count"] = len(items)
+            elif op == "min":
+                metric_result["min"] = min(values) if values else None
+            elif op == "avg":
+                metric_result["avg"] = sum(values) / len(values) if values else None
+            elif op == "p50":
+                metric_result["p50"] = _percentile(values, 0.50)
+            elif op == "p95":
+                metric_result["p95"] = _percentile(values, 0.95)
+            elif op == "max":
+                metric_result["max"] = max(values) if values else None
+        result[metric.field] = metric_result
+    return result
+
+
+def _numeric_metric_values(items: list[QueryResultItem], field: str) -> list[float]:
+    values: list[float] = []
+    for item in items:
+        for value in _values_for_field(item, field):
+            try:
+                values.append(float(value))
+            except (TypeError, ValueError):
+                continue
+    return values
+
+
+def _percentile(values: list[float], percentile: float) -> float | None:
+    if not values:
+        return None
+    sorted_values = sorted(values)
+    if len(sorted_values) == 1:
+        return sorted_values[0]
+    position = (len(sorted_values) - 1) * percentile
+    lower = int(position)
+    upper = min(lower + 1, len(sorted_values) - 1)
+    fraction = position - lower
+    return sorted_values[lower] + (sorted_values[upper] - sorted_values[lower]) * fraction
+
+
+def _unique_values(values: Any) -> list[Any]:
+    seen: set[str] = set()
+    result: list[Any] = []
+    for value in values:
+        key = str(_norm(value))
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(value)
+    return result
 
 
 def _nested_value(data: dict[str, Any], path: str) -> Any:

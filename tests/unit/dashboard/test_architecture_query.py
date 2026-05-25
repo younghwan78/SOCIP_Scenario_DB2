@@ -61,6 +61,20 @@ def test_architecture_query_link_can_round_trip_predicates_and_limit() -> None:
                 {"field": "buffer.compression", "op": "contains", "value": "SBWC"},
                 {"field": "evidence.latest.kpi.total_power_mw", "op": "lte", "value": 100},
             ],
+            "groups": [
+                {
+                    "join": "or",
+                    "where": [
+                        {"field": "topology.uses_ip", "op": "contains", "value": "npu"},
+                        {"field": "topology.uses_ip", "op": "contains", "value": "gpu"},
+                    ],
+                }
+            ],
+            "aggregate": {
+                "group_by": ["scenario.category"],
+                "metrics": [{"field": "evidence.latest.kpi.total_power_mw", "ops": ["count", "avg"]}],
+                "top_n": 10,
+            },
         }
     )
 
@@ -72,6 +86,20 @@ def test_architecture_query_link_can_round_trip_predicates_and_limit() -> None:
         {"field": "buffer.compression", "op": "contains", "value": "SBWC"},
         {"field": "evidence.latest.kpi.total_power_mw", "op": "lte", "value": 100},
     ]
+    assert decode_query_params(query)["groups"] == [
+        {
+            "join": "or",
+            "where": [
+                {"field": "topology.uses_ip", "op": "contains", "value": "npu"},
+                {"field": "topology.uses_ip", "op": "contains", "value": "gpu"},
+            ],
+        }
+    ]
+    assert decode_query_params(query)["aggregate"] == {
+        "group_by": ["scenario.category"],
+        "metrics": [{"field": "evidence.latest.kpi.total_power_mw", "ops": ["count", "avg"]}],
+        "top_n": 10,
+    }
 
 
 def test_decode_query_params_drops_invalid_limit() -> None:
@@ -103,6 +131,14 @@ def test_architecture_query_page_contract() -> None:
     assert "Share current query" in source
     assert "Custom / shared query" in source
     assert "Loaded from URL or custom edits." in source
+    assert "OR group (advanced)" in source
+    assert "Rows in this section are OR conditions." in source
+    assert "Aggregation View" in source
+    assert "Enable aggregation" in source
+    assert '"enabled": isinstance(aggregate, dict)' in source
+    assert "query_aggregation_enabled" in source
+    assert "aggregation_rows" in source
+    assert "st.tabs" in source
     assert "list_soc_platforms" in source
     assert "list_projects" in source
     assert "list_scenarios" in source

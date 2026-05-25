@@ -25,9 +25,31 @@ class QueryPredicate(BaseModel):
     value: Any | None = None
 
 
+QueryGroupJoin = Literal["and", "or"]
+QueryAggregationOp = Literal["count", "min", "avg", "p50", "p95", "max"]
+
+
+class QueryPredicateGroup(BaseModel):
+    join: QueryGroupJoin = "or"
+    where: list[QueryPredicate] = Field(default_factory=list)
+
+
+class QueryAggregationMetric(BaseModel):
+    field: str
+    ops: list[QueryAggregationOp] = Field(default_factory=lambda: ["count"])
+
+
+class QueryAggregationSpec(BaseModel):
+    group_by: list[str] = Field(default_factory=list)
+    metrics: list[QueryAggregationMetric] = Field(default_factory=list)
+    top_n: int = Field(default=50, ge=1, le=500)
+
+
 class QueryRequest(BaseModel):
     scope: dict[str, Any] = Field(default_factory=dict)
     where: list[QueryPredicate] = Field(default_factory=list)
+    groups: list[QueryPredicateGroup] = Field(default_factory=list)
+    aggregate: QueryAggregationSpec | None = None
     include: list[str] = Field(default_factory=list)
     sort: list[dict[str, Any]] = Field(default_factory=list)
     limit: int = Field(default=100, ge=1, le=1000)
@@ -77,10 +99,17 @@ class QueryResultItem(BaseModel):
     viewer_query: dict[str, str] = Field(default_factory=dict)
 
 
+class QueryAggregationBucket(BaseModel):
+    key: dict[str, Any] = Field(default_factory=dict)
+    count: int
+    metrics: dict[str, dict[str, Any]] = Field(default_factory=dict)
+
+
 class QueryResponse(BaseModel):
     items: list[QueryResultItem] = Field(default_factory=list)
     total: int
     limit: int
     offset: int
     has_next: bool
+    aggregations: list[QueryAggregationBucket] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)

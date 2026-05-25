@@ -4,6 +4,7 @@ from dashboard.components.query_examples import (
     EXAMPLE_CASES,
     apply_example_to_state,
     active_query_rows,
+    aggregation_rows,
     predicate_rows_for_editor,
     summarize_query_results,
     zero_result_guidance,
@@ -131,6 +132,15 @@ def test_active_query_rows_summarizes_scope_and_predicates_for_empty_results() -
             {"field": "buffer.compression", "op": "contains", "value": "SBWC"},
             {"field": "evidence.latest.kpi.total_power_mw", "op": "lte", "value": 100},
         ],
+        "groups": [
+            {
+                "join": "or",
+                "where": [
+                    {"field": "topology.uses_ip", "op": "contains", "value": "npu"},
+                    {"field": "topology.uses_ip", "op": "contains", "value": "gpu"},
+                ],
+            }
+        ],
     }
 
     assert active_query_rows(payload) == [
@@ -138,6 +148,8 @@ def test_active_query_rows_summarizes_scope_and_predicates_for_empty_results() -
         {"kind": "scope", "field": "project_ref", "op": "eq", "value": "proj-sm-s947b"},
         {"kind": "predicate", "field": "buffer.compression", "op": "contains", "value": "SBWC"},
         {"kind": "predicate", "field": "evidence.latest.kpi.total_power_mw", "op": "lte", "value": "100"},
+        {"kind": "group:or", "field": "topology.uses_ip", "op": "contains", "value": "npu"},
+        {"kind": "group:or", "field": "topology.uses_ip", "op": "contains", "value": "gpu"},
     ]
 
 
@@ -152,3 +164,32 @@ def test_zero_result_guidance_explains_and_conditions_and_next_steps() -> None:
     assert "Scope filters and predicate rows are AND conditions." in guidance
     assert "Try widening the sidebar scope" in guidance
     assert "remove one predicate at a time" in guidance
+
+
+def test_aggregation_rows_flattens_bucket_metrics_for_display() -> None:
+    rows = aggregation_rows(
+        [
+            {
+                "key": {"scenario.category": "camera", "topology.uses_ip_category": "NPU"},
+                "count": 3,
+                "metrics": {
+                    "evidence.latest.kpi.total_power_mw": {
+                        "count": 3,
+                        "avg": 1200.0,
+                        "p95": 1900.0,
+                    }
+                },
+            }
+        ]
+    )
+
+    assert rows == [
+        {
+            "scenario.category": "camera",
+            "topology.uses_ip_category": "NPU",
+            "count": 3,
+            "total_power_mw.count": 3,
+            "total_power_mw.avg": 1200.0,
+            "total_power_mw.p95": 1900.0,
+        }
+    ]

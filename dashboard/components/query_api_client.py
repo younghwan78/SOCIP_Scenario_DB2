@@ -30,14 +30,17 @@ def architecture_query_link(query: dict[str, Any]) -> str:
 
 def decode_query_params(params: dict[str, Any]) -> dict[str, Any]:
     decoded = dict(params)
-    where = decoded.get("where")
-    if isinstance(where, str) and where.strip():
-        try:
-            parsed = json.loads(where)
-        except json.JSONDecodeError:
-            parsed = None
-        if isinstance(parsed, list):
-            decoded["where"] = parsed
+    for key, expected_type in (("where", list), ("groups", list), ("aggregate", dict)):
+        value = decoded.get(key)
+        if isinstance(value, str) and value.strip():
+            try:
+                parsed = json.loads(value)
+            except json.JSONDecodeError:
+                parsed = None
+            if isinstance(parsed, expected_type):
+                decoded[key] = parsed
+            else:
+                decoded.pop(key, None)
     limit = decoded.get("limit")
     if isinstance(limit, str) and limit.strip().isdigit():
         decoded["limit"] = int(limit)

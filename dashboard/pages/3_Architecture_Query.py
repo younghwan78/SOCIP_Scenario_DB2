@@ -24,6 +24,7 @@ from dashboard.components.query_examples import (  # noqa: E402
     EXAMPLE_CASES,
     active_query_rows,
     apply_example_to_state,
+    aggregation_rows,
     predicate_rows_for_editor,
     summarize_query_results,
     zero_result_guidance,
@@ -61,6 +62,10 @@ DEFAULT_FIELDS = [
 ]
 
 DEFAULT_OPERATORS = ["eq", "neq", "in", "not_in", "gt", "gte", "lt", "lte", "contains", "exists"]
+AGGREGATION_METRIC_OPS = ["count", "min", "avg", "p50", "p95", "max"]
+DEFAULT_AGGREGATION_GROUP_BY = ["scenario.category"]
+DEFAULT_AGGREGATION_METRIC_FIELD = "evidence.latest.kpi.total_power_mw"
+DEFAULT_AGGREGATION_METRIC_OPS = ["count", "avg", "p95", "max"]
 
 FACET_SUMMARY_FIELDS = [
     "scenario.category",
@@ -184,8 +189,41 @@ def _case_by_id(case_id: str) -> dict[str, Any] | None:
     return next((case for case in EXAMPLE_CASES if case["id"] == case_id), None)
 
 
+def _or_group_rows_from_groups(groups: Any) -> list[dict[str, Any]]:
+    if not isinstance(groups, list):
+        return []
+    for group in groups:
+        if not isinstance(group, dict):
+            continue
+        where = group.get("where")
+        if isinstance(where, list):
+            return predicate_rows_for_editor(where)
+    return []
+
+
+def _aggregation_defaults(aggregate: Any) -> dict[str, Any]:
+    if not isinstance(aggregate, dict):
+        return {
+            "enabled": isinstance(aggregate, dict),
+            "group_by": [],
+            "metric_field": DEFAULT_AGGREGATION_METRIC_FIELD,
+            "metric_ops": [],
+            "top_n": 25,
+        }
+    metrics = aggregate.get("metrics") if isinstance(aggregate.get("metrics"), list) else []
+    first_metric = next((item for item in metrics if isinstance(item, dict)), {})
+    return {
+        "enabled": isinstance(aggregate, dict),
+        "group_by": aggregate.get("group_by") if isinstance(aggregate.get("group_by"), list) else DEFAULT_AGGREGATION_GROUP_BY,
+        "metric_field": str(first_metric.get("field") or DEFAULT_AGGREGATION_METRIC_FIELD),
+        "metric_ops": first_metric.get("ops") if isinstance(first_metric.get("ops"), list) else DEFAULT_AGGREGATION_METRIC_OPS,
+        "top_n": int(aggregate.get("top_n") or 25),
+    }
+
+
 def _ensure_context_state(params: dict[str, str]) -> None:
     decoded = decode_query_params(params)
+    aggregation_defaults = _aggregation_defaults(decoded.get("aggregate"))
     defaults = {
         "query_api_base": os.environ.get("SCENARIODB_API_BASE", "http://127.0.0.1:18000/api/v1"),
         "query_soc_ref": params.get("soc_ref") or params.get("soc_id") or "",
@@ -194,6 +232,12 @@ def _ensure_context_state(params: dict[str, str]) -> None:
         "query_variant_id": params.get("variant_id") or "",
         "query_limit": int(decoded.get("limit") or 100),
         "query_predicate_editor_version": 0,
+        "query_group_editor_version": 0,
+        "query_aggregation_enabled": aggregation_defaults["enabled"],
+        "query_aggregation_group_by": aggregation_defaults["group_by"],
+        "query_aggregation_metric_field": aggregation_defaults["metric_field"],
+        "query_aggregation_metric_ops": aggregation_defaults["metric_ops"],
+        "query_aggregation_top_n": aggregation_defaults["top_n"],
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
@@ -205,12 +249,15 @@ def _ensure_context_state(params: dict[str, str]) -> None:
         else:
             st.session_state["query_predicate_rows"] = _default_predicate_rows()
             st.session_state.setdefault("query_example_case", str(EXAMPLE_CASES[0]["id"]))
+    st.session_state.setdefault("query_or_group_rows", _or_group_rows_from_groups(decoded.get("groups")))
 
 
 def _apply_example_case(case: dict[str, Any]) -> None:
     updated = apply_example_to_state(dict(st.session_state), case)
     st.session_state["query_predicate_rows"] = updated["query_predicate_rows"]
     st.session_state["query_predicate_editor_version"] = updated["query_predicate_editor_version"]
+    st.session_state["query_or_group_rows"] = []
+    st.session_state["query_group_editor_version"] = int(st.session_state.get("query_group_editor_version", 0) or 0) + 1
     st.session_state.pop("query_result", None)
 
 
@@ -228,6 +275,16 @@ def _update_predicate_rows(rows: list[dict[str, Any]]) -> None:
         return
     st.session_state["query_predicate_rows"] = next_rows
     st.session_state["query_predicate_editor_version"] = int(st.session_state.get("query_predicate_editor_version", 0) or 0) + 1
+    st.session_state.pop("query_result", None)
+
+
+def _update_or_group_rows(rows: list[dict[str, Any]]) -> None:
+    next_rows = predicate_rows_for_editor(rows)
+    if predicate_rows_for_editor(st.session_state.get("query_or_group_rows") or []) == next_rows:
+        return
+    st.session_state["query_or_group_rows"] = next_rows
+    st.session_state["query_group_editor_version"] = int(st.session_state.get("query_group_editor_version", 0) or 0) + 1
+    st.session_state["query_example_case"] = CUSTOM_QUERY_CASE_ID
     st.session_state.pop("query_result", None)
 
 
@@ -289,18 +346,24 @@ def _predicate_payload(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return predicates
 
 
+def _group_payload(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    predicates = _predicate_payload(rows)
+    return [{"join": "or", "where": predicates}] if predicates else []
+
+
 def _render_predicate_editor(
     *,
     key_prefix: str,
     rows: list[dict[str, Any]],
     field_options: list[str],
     operator_options: list[str],
+    version_key: str = "query_predicate_editor_version",
 ) -> list[dict[str, str]]:
     editor_rows = predicate_rows_for_editor(rows)
     predicate_df = pd.DataFrame(editor_rows)
     edited = st.data_editor(
         predicate_df,
-        key=f"{key_prefix}_{st.session_state.get('query_predicate_editor_version', 0)}",
+        key=f"{key_prefix}_{st.session_state.get(version_key, 0)}",
         num_rows="dynamic",
         hide_index=True,
         use_container_width=True,
@@ -313,6 +376,47 @@ def _render_predicate_editor(
     )
     edited_rows = edited.to_dict(orient="records") if hasattr(edited, "to_dict") else []
     return predicate_rows_for_editor(edited_rows)
+
+
+def _render_aggregation_controls(field_options: list[str]) -> dict[str, Any] | None:
+    st.subheader("Aggregation View")
+    with st.expander("Aggregation View", expanded=bool(st.session_state.get("query_aggregation_enabled"))):
+        st.caption("Summarize the full filtered result set, not only the visible result page.")
+        enabled = st.checkbox("Enable aggregation", key="query_aggregation_enabled")
+        if not enabled:
+            st.caption("Aggregation is off. Enable it when you want grouped counts or KPI summaries.")
+            return None
+        st.session_state["query_aggregation_group_by"] = [
+            field for field in st.session_state.get("query_aggregation_group_by", []) if field in field_options
+        ] or list(DEFAULT_AGGREGATION_GROUP_BY)
+        if st.session_state.get("query_aggregation_metric_field") not in field_options:
+            st.session_state["query_aggregation_metric_field"] = DEFAULT_AGGREGATION_METRIC_FIELD
+        if not st.session_state.get("query_aggregation_metric_ops"):
+            st.session_state["query_aggregation_metric_ops"] = list(DEFAULT_AGGREGATION_METRIC_OPS)
+        group_by = st.multiselect(
+            "Group by",
+            field_options,
+            key="query_aggregation_group_by",
+            help="Collection fields are exploded, so one variant can appear in multiple buckets.",
+        )
+        metric_field = st.selectbox(
+            "Metric field",
+            field_options,
+            key="query_aggregation_metric_field",
+        )
+        metric_ops = st.multiselect(
+            "Metric ops",
+            AGGREGATION_METRIC_OPS,
+            key="query_aggregation_metric_ops",
+        )
+        top_n = st.number_input("Top buckets", min_value=1, max_value=500, step=5, key="query_aggregation_top_n")
+    if not group_by:
+        return None
+    return {
+        "group_by": group_by,
+        "metrics": [{"field": metric_field, "ops": metric_ops or ["count"]}],
+        "top_n": int(top_n),
+    }
 
 
 def _render_example_cases(field_options: list[str], operator_options: list[str]) -> list[dict[str, Any]]:
@@ -523,7 +627,6 @@ with values_col:
     _render_available_values(fields)
 
 _update_predicate_rows(edited_rows)
-run_clicked = st.button("Run Query", type="primary", use_container_width=True)
 st.markdown('<div class="query-note">Query executes against registered fields only. Raw SQL and JSONPath are intentionally not exposed.</div>', unsafe_allow_html=True)
 
 with st.expander("Custom predicates (advanced)", expanded=False):
@@ -537,20 +640,41 @@ with st.expander("Custom predicates (advanced)", expanded=False):
     )
     _update_predicate_rows(custom_rows)
 
+with st.expander("OR group (advanced)", expanded=False):
+    st.caption("Rows in this section are OR conditions. The whole group is ANDed with scope and custom predicates.")
+    or_group_rows = _render_predicate_editor(
+        key_prefix="query_or_group_editor",
+        rows=st.session_state["query_or_group_rows"],
+        field_options=field_options,
+        operator_options=operator_options,
+        version_key="query_group_editor_version",
+    )
+    _update_or_group_rows(or_group_rows)
+
+aggregation = _render_aggregation_controls(field_options)
+run_clicked = st.button("Run Query", type="primary", use_container_width=True)
 predicates = _predicate_payload(st.session_state["query_predicate_rows"])
+groups = _group_payload(st.session_state["query_or_group_rows"])
 scope = _scope_from_sidebar(params)
 payload = {
     "scope": scope,
     "where": predicates,
+    "groups": groups,
     "include": ["topology_facts", "latest_evidence"],
     "sort": [{"field": "scenario.id", "dir": "asc"}, {"field": "variant.id", "dir": "asc"}],
     "limit": int(limit),
     "offset": 0,
 }
+if aggregation:
+    payload["aggregate"] = aggregation
 share_query = dict(scope)
 share_query["limit"] = int(limit)
 if predicates:
     share_query["where"] = predicates
+if groups:
+    share_query["groups"] = groups
+if aggregation:
+    share_query["aggregate"] = aggregation
 st.markdown(f"[Share current query]({architecture_query_link(share_query)})")
 with st.expander("Payload (debug)", expanded=False):
     st.caption("This is the Query API request preview. It does not execute by itself.")
@@ -587,29 +711,52 @@ if not items:
             height=min(260, max(120, 39 * (len(active_rows) + 1))),
         )
     st.stop()
-summary = summarize_query_results(items)
-m1, m2, m3, m4 = st.columns(4)
-m1.metric("Scenarios", summary["scenario_count"])
-m2.metric("Variants", summary["variant_count"])
-m3.metric("Categories", summary["category_count"])
-m4.metric("Has More", "yes" if result.get("has_next") else "no")
-if summary["top_scenarios"]:
-    st.caption(f"Top matching scenarios: {summary['top_scenarios']}")
-rows = _result_rows(items)
-render_copyable_dataframe(
-    rows,
-    key="architecture_query_results",
-    hide_index=True,
-    use_container_width=True,
-    height=min(700, max(180, 44 * (len(rows) + 1) + 28)),
-    column_config=_link_column_config(),
-)
-
-with st.expander("Selected Row Detail", expanded=False):
-    if items:
+variants_tab, aggregation_tab, diagnostics_tab = st.tabs(["Variants", "Aggregation", "Diagnostics"])
+with variants_tab:
+    summary = summarize_query_results(items)
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Scenarios", summary["scenario_count"])
+    m2.metric("Variants", summary["variant_count"])
+    m3.metric("Categories", summary["category_count"])
+    m4.metric("Has More", "yes" if result.get("has_next") else "no")
+    if summary["top_scenarios"]:
+        st.caption(f"Top matching scenarios: {summary['top_scenarios']}")
+    rows = _result_rows(items)
+    render_copyable_dataframe(
+        rows,
+        key="architecture_query_results",
+        hide_index=True,
+        use_container_width=True,
+        height=min(700, max(180, 44 * (len(rows) + 1) + 28)),
+        column_config=_link_column_config(),
+    )
+    with st.expander("Selected Row Detail", expanded=False):
         labels = [f"{item.get('scenario_id')} / {item.get('variant_id')}" for item in items]
         selected_label = st.selectbox("Variant", labels)
         selected_index = labels.index(selected_label)
         st.json(items[selected_index])
+
+with aggregation_tab:
+    agg_rows = aggregation_rows(result.get("aggregations") or [])
+    if agg_rows:
+        render_copyable_dataframe(
+            agg_rows,
+            key="architecture_query_aggregations",
+            hide_index=True,
+            use_container_width=True,
+            height=min(520, max(160, 39 * (len(agg_rows) + 1) + 28)),
+        )
     else:
-        st.caption("No rows matched.")
+        st.info("No aggregation buckets were returned. Select at least one Group by field, then run query.")
+
+with diagnostics_tab:
+    active_rows = active_query_rows(payload)
+    if active_rows:
+        render_copyable_dataframe(
+            active_rows,
+            key="architecture_query_diagnostics_filters",
+            hide_index=True,
+            use_container_width=True,
+            height=min(320, max(120, 39 * (len(active_rows) + 1))),
+        )
+    st.json({"payload": payload, "errors": errors})

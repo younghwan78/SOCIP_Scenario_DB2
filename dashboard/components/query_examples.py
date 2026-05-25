@@ -122,6 +122,25 @@ def active_query_rows(payload: dict[str, Any]) -> list[dict[str, str]]:
                 "value": _value_text(predicate.get("value")),
             }
         )
+    groups = payload.get("groups") if isinstance(payload.get("groups"), list) else []
+    for group in groups:
+        if not isinstance(group, dict):
+            continue
+        join = str(group.get("join") or "or").lower()
+        for predicate in group.get("where") or []:
+            if not isinstance(predicate, dict):
+                continue
+            field = str(predicate.get("field") or "")
+            if not field:
+                continue
+            rows.append(
+                {
+                    "kind": f"group:{join}",
+                    "field": field,
+                    "op": str(predicate.get("op") or "eq"),
+                    "value": _value_text(predicate.get("value")),
+                }
+            )
     return rows
 
 
@@ -155,6 +174,23 @@ def summarize_query_results(items: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def aggregation_rows(aggregations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for bucket in aggregations:
+        key = bucket.get("key") if isinstance(bucket.get("key"), dict) else {}
+        row = {str(field): value for field, value in key.items()}
+        row["count"] = bucket.get("count", 0)
+        metrics = bucket.get("metrics") if isinstance(bucket.get("metrics"), dict) else {}
+        for field, values in metrics.items():
+            if not isinstance(values, dict):
+                continue
+            label = _short_field_label(str(field))
+            for op, value in values.items():
+                row[f"{label}.{op}"] = value
+        rows.append(row)
+    return rows
+
+
 def _ordered_scope_keys(scope: dict[str, Any]) -> list[str]:
     priority = ["soc_ref", "project_ref", "scenario_id", "variant_id"]
     return [key for key in priority if key in scope] + sorted(key for key in scope if key not in priority)
@@ -168,3 +204,10 @@ def _value_text(value: Any) -> str:
     if isinstance(value, dict):
         return json.dumps(value, ensure_ascii=False, sort_keys=True)
     return str(value)
+
+
+def _short_field_label(field: str) -> str:
+    for prefix in ("evidence.latest.kpi.", "topology.", "scenario.", "variant.", "buffer.", "axis."):
+        if field.startswith(prefix):
+            return field.removeprefix(prefix)
+    return field

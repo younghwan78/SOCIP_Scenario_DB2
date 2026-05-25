@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from scenario_db.api.schemas.query import QueryPredicate, QueryRequest
+from scenario_db.api.schemas.query import QueryAggregationMetric, QueryAggregationSpec, QueryPredicate, QueryPredicateGroup, QueryRequest
 from scenario_db.query_engine.service import build_facets, query_variants
 
 
@@ -211,6 +211,48 @@ def test_query_supports_exists_false_for_disabled_nodes() -> None:
     assert response.items[0].variant_id == "FHD30"
 
 
+def test_query_supports_or_groups_combined_with_top_level_and_predicates() -> None:
+    request = QueryRequest(
+        where=[QueryPredicate(field="scenario.category", op="eq", value="camera")],
+        groups=[
+            QueryPredicateGroup(
+                join="or",
+                where=[
+                    QueryPredicate(field="axis.resolution", op="eq", value="UHD"),
+                    QueryPredicate(field="axis.fps", op="eq", value=30),
+                ],
+            )
+        ],
+        sort=[{"field": "variant.id", "dir": "asc"}],
+    )
+
+    response = query_variants(_Session(), request)
+
+    assert response.errors == []
+    assert response.total == 2
+    assert [item.variant_id for item in response.items] == ["FHD30", "UHD60"]
+
+
+def test_query_supports_and_groups_for_nested_refinement() -> None:
+    request = QueryRequest(
+        groups=[
+            QueryPredicateGroup(
+                join="and",
+                where=[
+                    QueryPredicate(field="axis.resolution", op="eq", value="UHD"),
+                    QueryPredicate(field="topology.disabled_node", op="eq", value="dpu"),
+                ],
+            )
+        ],
+    )
+
+    response = query_variants(_Session(), request)
+
+    assert response.errors == []
+    assert response.total == 1
+    assert response.items[0].variant_id == "UHD60"
+
+
 def test_query_sorts_and_paginates_by_latest_kpi() -> None:
     request = QueryRequest(
         sort=[{"field": "evidence.latest.kpi.total_power_mw", "dir": "desc"}],
@@ -255,6 +297,56 @@ def test_latest_evidence_uses_utc_order_not_lexical_timestamp_order() -> None:
     assert response.total == 1
     assert response.items[0].latest_evidence_id == "ev-utc-newer"
     assert response.items[0].latest_sw_version == "sw-new"
+
+
+def test_query_aggregates_filtered_results_by_group_and_latest_kpi_metrics() -> None:
+    request = QueryRequest(
+        where=[QueryPredicate(field="scenario.category", op="eq", value="camera")],
+        aggregate=QueryAggregationSpec(
+            group_by=["scenario.category"],
+            metrics=[
+                QueryAggregationMetric(
+                    field="evidence.latest.kpi.total_power_mw",
+                    ops=["count", "min", "avg", "p50", "p95", "max"],
+                )
+            ],
+        ),
+    )
+
+    response = query_variants(_Session(), request)
+
+    assert response.errors == []
+    assert response.total == 2
+    assert len(response.aggregations) == 1
+    bucket = response.aggregations[0]
+    assert bucket.key == {"scenario.category": "camera"}
+    assert bucket.count == 2
+    metrics = bucket.metrics["evidence.latest.kpi.total_power_mw"]
+    assert metrics == {
+        "count": 2,
+        "min": 900.0,
+        "avg": 1500.0,
+        "p50": 1500.0,
+        "p95": 2040.0,
+        "max": 2100.0,
+    }
+
+
+def test_query_aggregation_explodes_collection_group_fields() -> None:
+    request = QueryRequest(
+        aggregate=QueryAggregationSpec(
+            group_by=["topology.uses_ip_category"],
+            metrics=[QueryAggregationMetric(field="evidence.latest.kpi.total_power_mw", ops=["count"])],
+        )
+    )
+
+    response = query_variants(_Session(), request)
+
+    counts = {
+        bucket.key["topology.uses_ip_category"]: bucket.count
+        for bucket in response.aggregations
+    }
+    assert counts == {"ISP": 2, "MFC": 2, "sensor": 2, "DPU": 1}
 
 
 def test_query_facets_include_dynamic_axis_kpi_and_value_hints() -> None:

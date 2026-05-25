@@ -119,6 +119,57 @@ def test_query_variants_endpoint_returns_filtered_architecture_facts() -> None:
     }
 
 
+def test_query_variants_endpoint_returns_groups_and_aggregation() -> None:
+    app = create_app()
+    mock_session = _Session()
+
+    @asynccontextmanager
+    async def _lifespan(a):
+        a.state.engine = None
+        a.state.session_factory = lambda: mock_session
+        a.state.rule_cache = None
+        yield
+
+    app.router.lifespan_context = _lifespan
+
+    def _override_db():
+        yield mock_session
+
+    app.dependency_overrides[get_db] = _override_db
+
+    with TestClient(app, raise_server_exceptions=False) as client:
+        response = client.post(
+            "/api/v1/query/variants",
+            json={
+                "where": [{"field": "scenario.category", "op": "eq", "value": "camera"}],
+                "groups": [
+                    {
+                        "join": "or",
+                        "where": [
+                            {"field": "axis.resolution", "op": "eq", "value": "UHD"},
+                            {"field": "axis.fps", "op": "eq", "value": 30},
+                        ],
+                    }
+                ],
+                "aggregate": {
+                    "group_by": ["scenario.category"],
+                    "metrics": [
+                        {
+                            "field": "evidence.latest.kpi.total_power_mw",
+                            "ops": ["count", "avg", "p95", "max"],
+                        }
+                    ],
+                },
+            },
+        )
+
+    payload = response.json()
+    assert response.status_code == 200
+    assert payload["total"] == 2
+    assert payload["aggregations"][0]["key"] == {"scenario.category": "camera"}
+    assert payload["aggregations"][0]["metrics"]["evidence.latest.kpi.total_power_mw"]["avg"] == 1500.0
+
+
 def test_query_variants_endpoint_returns_field_errors_without_server_error() -> None:
     app = create_app()
     mock_session = _Session()
