@@ -38,6 +38,7 @@ htmlcov/
 
 # Runtime outputs
 output/
+runtime_logs/
 *.log
 *.tmp
 *.bak

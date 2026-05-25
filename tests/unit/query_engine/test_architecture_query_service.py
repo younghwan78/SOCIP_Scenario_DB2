@@ -226,6 +226,37 @@ def test_query_sorts_and_paginates_by_latest_kpi() -> None:
     assert response.items[0].latest_kpi["total_power_mw"] == 2100.0
 
 
+def test_latest_evidence_uses_utc_order_not_lexical_timestamp_order() -> None:
+    session = _Session()
+    session.evidence = [
+        SimpleNamespace(
+            id="ev-lexical-later-but-utc-older",
+            scenario_ref="uc-camera",
+            variant_ref="UHD60",
+            sw_version_hint="sw-old",
+            overall_feasibility="production_ready",
+            kpi={"total_power_mw": 1800.0},
+            run_info={"timestamp": "2026-05-01T09:00:00+09:00"},
+        ),
+        SimpleNamespace(
+            id="ev-utc-newer",
+            scenario_ref="uc-camera",
+            variant_ref="UHD60",
+            sw_version_hint="sw-new",
+            overall_feasibility="production_ready",
+            kpi={"total_power_mw": 1900.0},
+            run_info={"timestamp": "2026-05-01T01:30:00Z"},
+        ),
+    ]
+    request = QueryRequest(scope={"scenario_id": "uc-camera", "variant_id": "UHD60"})
+
+    response = query_variants(session, request)
+
+    assert response.total == 1
+    assert response.items[0].latest_evidence_id == "ev-utc-newer"
+    assert response.items[0].latest_sw_version == "sw-new"
+
+
 def test_query_facets_include_dynamic_axis_kpi_and_value_hints() -> None:
     response = build_facets(_Session())
     fields = {item.field: item for item in response.fields}

@@ -3,8 +3,10 @@ from __future__ import annotations
 from dashboard.components.query_examples import (
     EXAMPLE_CASES,
     apply_example_to_state,
+    active_query_rows,
     predicate_rows_for_editor,
     summarize_query_results,
+    zero_result_guidance,
 )
 
 
@@ -120,3 +122,33 @@ def test_query_result_summary_counts_scenarios_and_variants() -> None:
         "category_count": 2,
         "top_scenarios": "uc-camera:2, uc-video:1",
     }
+
+
+def test_active_query_rows_summarizes_scope_and_predicates_for_empty_results() -> None:
+    payload = {
+        "scope": {"soc_ref": "soc-exynos2600", "project_ref": "proj-sm-s947b"},
+        "where": [
+            {"field": "buffer.compression", "op": "contains", "value": "SBWC"},
+            {"field": "evidence.latest.kpi.total_power_mw", "op": "lte", "value": 100},
+        ],
+    }
+
+    assert active_query_rows(payload) == [
+        {"kind": "scope", "field": "soc_ref", "op": "eq", "value": "soc-exynos2600"},
+        {"kind": "scope", "field": "project_ref", "op": "eq", "value": "proj-sm-s947b"},
+        {"kind": "predicate", "field": "buffer.compression", "op": "contains", "value": "SBWC"},
+        {"kind": "predicate", "field": "evidence.latest.kpi.total_power_mw", "op": "lte", "value": "100"},
+    ]
+
+
+def test_zero_result_guidance_explains_and_conditions_and_next_steps() -> None:
+    payload = {
+        "scope": {"soc_ref": "soc-exynos2600"},
+        "where": [{"field": "topology.uses_ip", "op": "contains", "value": "npu"}],
+    }
+
+    guidance = zero_result_guidance(payload)
+
+    assert "Scope filters and predicate rows are AND conditions." in guidance
+    assert "Try widening the sidebar scope" in guidance
+    assert "remove one predicate at a time" in guidance

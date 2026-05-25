@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
+import json
 from typing import Any
 
 
@@ -98,6 +99,45 @@ def predicate_rows_for_editor(rows: list[dict[str, Any]]) -> list[dict[str, str]
     return result
 
 
+def active_query_rows(payload: dict[str, Any]) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    scope = payload.get("scope") if isinstance(payload.get("scope"), dict) else {}
+    for key in _ordered_scope_keys(scope):
+        value = scope.get(key)
+        if value not in (None, "", []):
+            rows.append({"kind": "scope", "field": str(key), "op": "eq", "value": _value_text(value)})
+
+    predicates = payload.get("where") if isinstance(payload.get("where"), list) else []
+    for predicate in predicates:
+        if not isinstance(predicate, dict):
+            continue
+        field = str(predicate.get("field") or "")
+        if not field:
+            continue
+        rows.append(
+            {
+                "kind": "predicate",
+                "field": field,
+                "op": str(predicate.get("op") or "eq"),
+                "value": _value_text(predicate.get("value")),
+            }
+        )
+    return rows
+
+
+def zero_result_guidance(payload: dict[str, Any]) -> str:
+    scope = payload.get("scope") if isinstance(payload.get("scope"), dict) else {}
+    predicates = payload.get("where") if isinstance(payload.get("where"), list) else []
+    guidance = ["Scope filters and predicate rows are AND conditions."]
+    if scope:
+        guidance.append("Try widening the sidebar scope, for example All Projects or All Scenarios.")
+    if predicates:
+        guidance.append("If the scope is correct, remove one predicate at a time and re-run to find the limiting condition.")
+    if not scope and not predicates:
+        guidance.append("Select a frequent query or add at least one predicate before running again.")
+    return " ".join(guidance)
+
+
 def summarize_query_results(items: list[dict[str, Any]]) -> dict[str, Any]:
     scenario_counts = Counter(str(item.get("scenario_id")) for item in items if item.get("scenario_id"))
     categories = {
@@ -113,3 +153,18 @@ def summarize_query_results(items: list[dict[str, Any]]) -> dict[str, Any]:
         "category_count": len(categories),
         "top_scenarios": top_scenarios,
     }
+
+
+def _ordered_scope_keys(scope: dict[str, Any]) -> list[str]:
+    priority = ["soc_ref", "project_ref", "scenario_id", "variant_id"]
+    return [key for key in priority if key in scope] + sorted(key for key in scope if key not in priority)
+
+
+def _value_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, (list, tuple, set)):
+        return ", ".join(_value_text(item) for item in value)
+    if isinstance(value, dict):
+        return json.dumps(value, ensure_ascii=False, sort_keys=True)
+    return str(value)

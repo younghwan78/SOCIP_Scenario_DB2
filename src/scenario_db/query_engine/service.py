@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -146,10 +147,30 @@ def _latest_evidence_by_variant(evidence_rows: list[Any]) -> dict[tuple[str, str
     }
 
 
-def _evidence_sort_key(row: Any) -> tuple[str, str]:
+def _evidence_sort_key(row: Any) -> tuple[int, Any, str]:
     run_info = getattr(row, "run_info", None) or {}
     timestamp = run_info.get("timestamp") if isinstance(run_info, dict) else None
-    return str(timestamp or ""), str(getattr(row, "id", "") or "")
+    parsed = _parse_utc_timestamp(timestamp)
+    if parsed is not None:
+        return 1, parsed.timestamp(), str(getattr(row, "id", "") or "")
+    return 0, str(timestamp or ""), str(getattr(row, "id", "") or "")
+
+
+def _parse_utc_timestamp(value: Any) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    if text.endswith("Z"):
+        text = f"{text[:-1]}+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _matched_issue_ids(issue_rows: list[Any], scenario: Any, variant: Any) -> list[str]:

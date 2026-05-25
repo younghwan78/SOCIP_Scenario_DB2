@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 from urllib.parse import urlencode
 
@@ -19,8 +20,36 @@ def query_variants(
 
 
 def architecture_query_link(query: dict[str, Any]) -> str:
-    clean = {key: value for key, value in query.items() if value not in (None, "", [])}
+    clean = {
+        key: _encode_query_value(value)
+        for key, value in query.items()
+        if value not in (None, "", [])
+    }
     return f"/Architecture_Query?{urlencode(clean)}" if clean else "/Architecture_Query"
 
 
-__all__ = ["ViewerApiError", "architecture_query_link", "get_query_facets", "query_variants"]
+def decode_query_params(params: dict[str, Any]) -> dict[str, Any]:
+    decoded = dict(params)
+    where = decoded.get("where")
+    if isinstance(where, str) and where.strip():
+        try:
+            parsed = json.loads(where)
+        except json.JSONDecodeError:
+            parsed = None
+        if isinstance(parsed, list):
+            decoded["where"] = parsed
+    limit = decoded.get("limit")
+    if isinstance(limit, str) and limit.strip().isdigit():
+        decoded["limit"] = int(limit)
+    elif "limit" in decoded:
+        decoded.pop("limit")
+    return decoded
+
+
+def _encode_query_value(value: Any) -> Any:
+    if isinstance(value, (list, dict)):
+        return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    return value
+
+
+__all__ = ["ViewerApiError", "architecture_query_link", "decode_query_params", "get_query_facets", "query_variants"]

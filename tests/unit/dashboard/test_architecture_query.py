@@ -1,8 +1,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
-from dashboard.components.query_api_client import architecture_query_link, get_query_facets, query_variants
+from dashboard.components.query_api_client import (
+    architecture_query_link,
+    decode_query_params,
+    get_query_facets,
+    query_variants,
+)
 from dashboard.components.query_examples import EXAMPLE_CASES
 
 
@@ -46,6 +52,34 @@ def test_architecture_query_link_preserves_context() -> None:
     assert link == "/Architecture_Query?soc_ref=soc-demo&scenario_id=uc-camera"
 
 
+def test_architecture_query_link_can_round_trip_predicates_and_limit() -> None:
+    link = architecture_query_link(
+        {
+            "soc_ref": "soc-exynos2600",
+            "limit": 25,
+            "where": [
+                {"field": "buffer.compression", "op": "contains", "value": "SBWC"},
+                {"field": "evidence.latest.kpi.total_power_mw", "op": "lte", "value": 100},
+            ],
+        }
+    )
+
+    query = {key: value[0] for key, value in parse_qs(urlsplit(link).query).items()}
+
+    assert query["soc_ref"] == "soc-exynos2600"
+    assert query["limit"] == "25"
+    assert decode_query_params(query)["where"] == [
+        {"field": "buffer.compression", "op": "contains", "value": "SBWC"},
+        {"field": "evidence.latest.kpi.total_power_mw", "op": "lte", "value": 100},
+    ]
+
+
+def test_decode_query_params_drops_invalid_limit() -> None:
+    decoded = decode_query_params({"limit": "not-a-number", "where": "[]"})
+
+    assert decoded == {"where": []}
+
+
 def test_architecture_query_page_contract() -> None:
     source = PAGE.read_text(encoding="utf-8")
 
@@ -64,6 +98,11 @@ def test_architecture_query_page_contract() -> None:
         "Camera GPU 사용",
     ]
     assert "summarize_query_results" in source
+    assert "zero_result_guidance" in source
+    assert "active_query_rows" in source
+    assert "Share current query" in source
+    assert "Custom / shared query" in source
+    assert "Loaded from URL or custom edits." in source
     assert "list_soc_platforms" in source
     assert "list_projects" in source
     assert "list_scenarios" in source

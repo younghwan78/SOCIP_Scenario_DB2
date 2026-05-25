@@ -22,11 +22,19 @@ for path in (_root / "src", _root, _root / "dashboard"):
 from dashboard.components.explorer_api_client import viewer_link  # noqa: E402
 from dashboard.components.query_examples import (  # noqa: E402
     EXAMPLE_CASES,
+    active_query_rows,
     apply_example_to_state,
     predicate_rows_for_editor,
     summarize_query_results,
+    zero_result_guidance,
 )
-from dashboard.components.query_api_client import ViewerApiError, get_query_facets, query_variants  # noqa: E402
+from dashboard.components.query_api_client import (  # noqa: E402
+    ViewerApiError,
+    architecture_query_link,
+    decode_query_params,
+    get_query_facets,
+    query_variants,
+)
 from dashboard.components.table_actions import render_copyable_dataframe  # noqa: E402
 from dashboard.components.ui_theme import apply_app_theme, render_page_header  # noqa: E402
 from dashboard.components.viewer_api_client import (  # noqa: E402
@@ -63,6 +71,8 @@ FACET_SUMMARY_FIELDS = [
     "buffer.compression",
     "evidence.latest.feasibility",
 ]
+
+CUSTOM_QUERY_CASE_ID = "__custom_query__"
 
 
 st.set_page_config(
@@ -175,17 +185,26 @@ def _case_by_id(case_id: str) -> dict[str, Any] | None:
 
 
 def _ensure_context_state(params: dict[str, str]) -> None:
+    decoded = decode_query_params(params)
     defaults = {
         "query_api_base": os.environ.get("SCENARIODB_API_BASE", "http://127.0.0.1:18000/api/v1"),
         "query_soc_ref": params.get("soc_ref") or params.get("soc_id") or "",
         "query_project_ref": params.get("project_ref") or params.get("project_id") or "",
         "query_scenario_id": params.get("scenario_id") or "",
         "query_variant_id": params.get("variant_id") or "",
-        "query_limit": 100,
+        "query_limit": int(decoded.get("limit") or 100),
         "query_predicate_editor_version": 0,
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
+    if "query_predicate_rows" not in st.session_state:
+        rows = decoded.get("where")
+        if isinstance(rows, list):
+            st.session_state["query_predicate_rows"] = predicate_rows_for_editor(rows)
+            st.session_state.setdefault("query_example_case", CUSTOM_QUERY_CASE_ID)
+        else:
+            st.session_state["query_predicate_rows"] = _default_predicate_rows()
+            st.session_state.setdefault("query_example_case", str(EXAMPLE_CASES[0]["id"]))
 
 
 def _apply_example_case(case: dict[str, Any]) -> None:
@@ -298,17 +317,22 @@ def _render_predicate_editor(
 
 def _render_example_cases(field_options: list[str], operator_options: list[str]) -> list[dict[str, Any]]:
     st.subheader("자주 쓰는 Queries")
-    case_ids = [str(case["id"]) for case in EXAMPLE_CASES]
+    case_ids = [CUSTOM_QUERY_CASE_ID] + [str(case["id"]) for case in EXAMPLE_CASES]
     selected_case_id = st.selectbox(
         "자주 쓰는 Query",
         case_ids,
         key="query_example_case",
-        format_func=lambda value: str((_case_by_id(str(value)) or {}).get("title") or value),
+        format_func=lambda value: "Custom / shared query"
+        if value == CUSTOM_QUERY_CASE_ID
+        else str((_case_by_id(str(value)) or {}).get("title") or value),
     )
-    case = _case_by_id(str(selected_case_id)) or EXAMPLE_CASES[0]
-    _sync_selected_example_case(case)
-    st.caption(str(case.get("description") or ""))
-    st.caption("Presets update the query conditions automatically. Use Run Query to execute.")
+    case = _case_by_id(str(selected_case_id))
+    if case is not None:
+        _sync_selected_example_case(case)
+        st.caption(str(case.get("description") or ""))
+        st.caption("Presets update the query conditions automatically. Use Run Query to execute.")
+    else:
+        st.caption("Loaded from URL or custom edits.")
     st.caption("Edit the table below, then use Run Query.")
     return _render_predicate_editor(
         key_prefix="query_predicates_editor",
@@ -492,9 +516,6 @@ st.markdown(
 if facet_error:
     st.warning(f"Query metadata unavailable: {facet_error}")
 
-if "query_predicate_rows" not in st.session_state:
-    st.session_state["query_predicate_rows"] = _default_predicate_rows()
-
 case_col, values_col = st.columns([0.9, 1.1], gap="large")
 with case_col:
     edited_rows = _render_example_cases(field_options, operator_options)
@@ -526,6 +547,11 @@ payload = {
     "limit": int(limit),
     "offset": 0,
 }
+share_query = dict(scope)
+share_query["limit"] = int(limit)
+if predicates:
+    share_query["where"] = predicates
+st.markdown(f"[Share current query]({architecture_query_link(share_query)})")
 with st.expander("Payload (debug)", expanded=False):
     st.caption("This is the Query API request preview. It does not execute by itself.")
     st.json(payload)
@@ -548,6 +574,19 @@ if errors:
 
 items = result.get("items") or []
 st.subheader(f"Results - {len(items)} of {result.get('total', 0)}")
+if not items:
+    st.warning("No variants matched the current query.")
+    st.caption(zero_result_guidance(payload))
+    active_rows = active_query_rows(payload)
+    if active_rows:
+        render_copyable_dataframe(
+            active_rows,
+            key="architecture_query_active_filters",
+            hide_index=True,
+            use_container_width=True,
+            height=min(260, max(120, 39 * (len(active_rows) + 1))),
+        )
+    st.stop()
 summary = summarize_query_results(items)
 m1, m2, m3, m4 = st.columns(4)
 m1.metric("Scenarios", summary["scenario_count"])
