@@ -1,10 +1,44 @@
 from __future__ import annotations
 
+import importlib
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
 from scenario_db.sim.models import TimelineEvent
+
+
+class SimulationDependencyError(RuntimeError):
+    """Raised when server-side simulation dependencies are not installed."""
+
+    def __init__(self, missing: tuple[str, ...]) -> None:
+        self.missing = missing
+        packages = ", ".join(missing)
+        super().__init__(
+            f"timeline simulation dependencies are missing: {packages}. "
+            "Install the server with `uv sync --group sim`."
+        )
+
+
+def _load_timeline_dependencies():
+    missing: list[str] = []
+    modules: dict[str, Any] = {}
+    for name in ("networkx", "simpy"):
+        try:
+            modules[name] = importlib.import_module(name)
+        except ImportError:
+            missing.append(name)
+    if missing:
+        raise SimulationDependencyError(tuple(missing))
+    return modules["networkx"], modules["simpy"]
+
+
+def timeline_dependencies_status() -> dict[str, Any]:
+    try:
+        _load_timeline_dependencies()
+    except SimulationDependencyError as exc:
+        return {"available": False, "missing": list(exc.missing), "error": str(exc)}
+    return {"available": True, "missing": [], "error": None}
 
 
 @dataclass
@@ -72,14 +106,7 @@ def build_timeline_events(
     newer consumers can inspect frame/resource/wait/critical-path fields.
     """
 
-    try:
-        import networkx as nx
-        import simpy
-    except ImportError as exc:
-        raise RuntimeError(
-            "NetworkX and SimPy are required for timeline simulation. "
-            "Install the project with `uv sync --group sim`."
-        ) from exc
+    nx, simpy = _load_timeline_dependencies()
 
     base_tasks = {str(task["id"]): dict(task) for task in tasks if task.get("id")}
     base_edges = [_normalized_edge(edge) for edge in edges]

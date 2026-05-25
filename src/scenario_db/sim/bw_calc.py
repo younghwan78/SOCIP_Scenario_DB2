@@ -10,6 +10,9 @@ from scenario_db.sim.constants import (
 from scenario_db.sim.models import PortBWResult, PortTransferSpec, PortType
 
 
+BW_MBS_FORMULA = "comp_ratio * fps * width * height * (bitwidth / 8) * format_bpp_factor * r_w_rate / 1e6"
+
+
 def calc_port_bw(
     spec: PortTransferSpec,
     *,

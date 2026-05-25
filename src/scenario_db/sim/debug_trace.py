@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from scenario_db.sim.bw_calc import effective_comp_ratio
+from scenario_db.sim.bw_calc import BW_MBS_FORMULA, effective_comp_ratio
 from scenario_db.sim.constants import (
     BPP_DEFAULT,
     BPP_MAP,
@@ -311,8 +311,8 @@ def _dma_traces(
                 "hw_name": spec.hw_name,
                 "port": spec.port,
                 "direction": result.direction,
-                "formula": "comp_ratio * fps * width * height * (bitwidth / 8) * format_bpp_factor * r_w_rate / 1e6",
-                "bw_formula": "comp_ratio * fps * width * height * (bitwidth / 8) * format_bpp_factor * r_w_rate / 1e6",
+                "formula": BW_MBS_FORMULA,
+                "bw_formula": BW_MBS_FORMULA,
                 "bw_power_formula": "bw_mbs * bw_power_coeff / 1000 * llc_weight",
                 "bw_power_ma_formula": "bw_power_mw / vbat / pmic_efficiency",
                 "inputs": {

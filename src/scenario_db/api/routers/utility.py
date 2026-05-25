@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from scenario_db.api.cache import RuleCache
+from scenario_db.sim.timeline import timeline_dependencies_status
 
 # /health/live + /health/ready — prefix 없이 마운트
 health_router = APIRouter(tags=["health"])
@@ -30,7 +31,8 @@ def readiness(request: Request):
     except Exception:
         pass
 
-    ready = db_ok and cache.loaded
+    sim_dependencies = timeline_dependencies_status()
+    ready = db_ok and cache.loaded and bool(sim_dependencies["available"])
     return JSONResponse(
         status_code=200 if ready else 503,
         content={
@@ -44,5 +46,6 @@ def readiness(request: Request):
                 "gate_rules": len(cache.gate_rules),
                 "error": cache.load_error,
             },
+            "simulation_dependencies": sim_dependencies,
         },
     )

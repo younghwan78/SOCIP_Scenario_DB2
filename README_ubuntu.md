@@ -81,15 +81,21 @@ cd implementation
 Install dependencies:
 
 ```bash
-uv sync --group dev --group dashboard
+uv sync --group dev --group dashboard --group sim
 ```
 
 For a production-like server, `dev` can be omitted after the deployment process
 is stable:
 
 ```bash
-uv sync --group dashboard
+uv sync --group dashboard --group sim
 ```
+
+`--group sim` is required for the server because timeline simulation depends on
+NetworkX and SimPy. Treat missing simulation dependencies as a deployment
+configuration error, not as a degraded feature mode.
+At minimum, the deployment must include `uv sync --group sim` or an equivalent
+locked environment that contains `networkx` and `simpy`.
 
 ## Environment File
 
@@ -224,6 +230,11 @@ API smoke:
 curl -s "http://127.0.0.1:18000/health/ready"
 curl -s "http://127.0.0.1:18000/api/v1/scenarios/uc-camera-recording/variants/UHD60-HDR10-H265/graph" | python3 -m json.tool
 ```
+
+`/health/ready` includes `simulation_dependencies`. A healthy server reports
+`"available": true`. If NetworkX or SimPy is missing, readiness returns
+`status=not_ready` and HTTP 503 so traffic is not routed to a server that cannot
+run timeline simulation.
 
 ## systemd: FastAPI
 

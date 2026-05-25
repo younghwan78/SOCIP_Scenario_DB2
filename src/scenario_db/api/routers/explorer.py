@@ -4,6 +4,7 @@ from collections import Counter
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from scenario_db.api.deps import get_db
@@ -87,14 +88,25 @@ def scenario_catalog(
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
-    projects, scenarios, variants = _filtered_rows(db, soc_ref, board_type, project_ref)
-    scenarios, variants = _filter_scenarios_and_variants(
-        scenarios,
-        variants,
+    projects = _filtered_projects(db, soc_ref, board_type, project_ref)
+    project_ids = {project.id for project in projects}
+    scenarios, total = _paged_scenarios(
+        db,
+        project_ids=project_ids,
         categories=category,
         domains=domain,
         scenario_ids=scenario_id,
         severities=severity,
+        limit=limit,
+        offset=offset,
+    )
+    page_scenario_ids = {scenario.id for scenario in scenarios}
+    variants, _ = _paged_variants(
+        db,
+        scenario_ids=page_scenario_ids,
+        severities=severity,
+        limit=5000,
+        offset=0,
     )
     project_by_id = {project.id: project for project in projects}
     variants_by_scenario = _variants_by_scenario(variants)
@@ -134,8 +146,8 @@ def scenario_catalog(
         )
     return ScenarioCatalogResponse(
         filters=_filters(soc_ref, board_type, project_ref, category=category, domain=domain, scenario_id=scenario_id, severity=severity),
-        total=len(items),
-        items=items[offset : offset + limit],
+        total=total,
+        items=items,
     )
 
 
@@ -152,14 +164,25 @@ def variant_matrix(
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
 ):
-    projects, scenarios, variants = _filtered_rows(db, soc_ref, board_type, project_ref)
-    scenarios, variants = _filter_scenarios_and_variants(
-        scenarios,
-        variants,
+    projects = _filtered_projects(db, soc_ref, board_type, project_ref)
+    project_ids = {project.id for project in projects}
+    scenarios, _ = _paged_scenarios(
+        db,
+        project_ids=project_ids,
         categories=category,
         domains=domain,
         scenario_ids=scenario_id,
+        severities=None,
+        limit=100000,
+        offset=0,
+    )
+    scenario_ids_for_variants = {scenario.id for scenario in scenarios}
+    variants, total = _paged_variants(
+        db,
+        scenario_ids=scenario_ids_for_variants,
         severities=severity,
+        limit=limit,
+        offset=offset,
     )
     project_by_id = {project.id: project for project in projects}
     scenario_by_id = {scenario.id: scenario for scenario in scenarios}
@@ -203,9 +226,9 @@ def variant_matrix(
         )
     return VariantMatrixResponse(
         filters=_filters(soc_ref, board_type, project_ref, category=category, domain=domain, scenario_id=scenario_id, severity=severity),
-        total=len(items),
+        total=total,
         axis_keys=_sorted_axis_keys(axis_keys),
-        items=items[offset : offset + limit],
+        items=items,
     )
 
 
@@ -271,25 +294,111 @@ def _filtered_rows(
     board_type: str | None,
     project_ref: str | None,
 ) -> tuple[list[Project], list[Scenario], list[ScenarioVariant]]:
-    project_rows = sorted(db.query(Project).all(), key=lambda row: row.id)
-    projects = [
-        row
-        for row in project_rows
-        if (project_ref is None or row.id == project_ref)
-        and (soc_ref is None or _project_meta(row, "soc_ref") == soc_ref)
-        and (board_type is None or _project_meta(row, "board_type") == board_type)
-    ]
+    projects = _filtered_projects(db, soc_ref, board_type, project_ref)
     project_ids = {row.id for row in projects}
-    scenarios = sorted(
-        [row for row in db.query(Scenario).all() if row.project_ref in project_ids],
-        key=lambda row: row.id,
+    if not project_ids:
+        return projects, [], []
+    scenarios = (
+        db.query(Scenario)
+        .filter(Scenario.project_ref.in_(project_ids))
+        .order_by(Scenario.id)
+        .all()
     )
     scenario_ids = {row.id for row in scenarios}
-    variants = sorted(
-        [row for row in db.query(ScenarioVariant).all() if row.scenario_id in scenario_ids],
-        key=lambda row: (row.scenario_id, row.id),
+    if not scenario_ids:
+        return projects, scenarios, []
+    variants = (
+        db.query(ScenarioVariant)
+        .filter(ScenarioVariant.scenario_id.in_(scenario_ids))
+        .order_by(ScenarioVariant.scenario_id, ScenarioVariant.id)
+        .all()
     )
     return projects, scenarios, variants
+
+
+def _filtered_projects(
+    db: Session,
+    soc_ref: str | None,
+    board_type: str | None,
+    project_ref: str | None,
+) -> list[Project]:
+    project_query = db.query(Project)
+    if project_ref:
+        project_query = project_query.filter(Project.id == project_ref)
+    project_rows = project_query.order_by(Project.id).all()
+    return [
+        row
+        for row in project_rows
+        if (soc_ref is None or _project_meta(row, "soc_ref") == soc_ref)
+        and (board_type is None or _project_meta(row, "board_type") == board_type)
+    ]
+
+
+def _paged_scenarios(
+    db: Session,
+    *,
+    project_ids: set[str],
+    categories: list[str] | None,
+    domains: list[str] | None,
+    scenario_ids: list[str] | None,
+    severities: list[str] | None,
+    limit: int,
+    offset: int,
+) -> tuple[list[Scenario], int]:
+    if not project_ids:
+        return [], 0
+    query = db.query(Scenario).filter(Scenario.project_ref.in_(project_ids))
+    if scenario_ids:
+        query = query.filter(Scenario.id.in_(scenario_ids))
+    category_filter = _jsonb_metadata_any(Scenario.metadata_, "category", categories)
+    if category_filter is not None:
+        query = query.filter(category_filter)
+    domain_filter = _jsonb_metadata_any(Scenario.metadata_, "domain", domains)
+    if domain_filter is not None:
+        query = query.filter(domain_filter)
+    if severities:
+        matching_variant_scenarios = (
+            db.query(ScenarioVariant.scenario_id)
+            .filter(ScenarioVariant.severity.in_(severities))
+        )
+        query = query.filter(Scenario.id.in_(matching_variant_scenarios))
+    total = query.count()
+    rows = query.order_by(Scenario.id).offset(offset).limit(limit).all()
+    return rows, total
+
+
+def _paged_variants(
+    db: Session,
+    *,
+    scenario_ids: set[str],
+    severities: list[str] | None,
+    limit: int,
+    offset: int,
+) -> tuple[list[ScenarioVariant], int]:
+    if not scenario_ids:
+        return [], 0
+    query = db.query(ScenarioVariant).filter(ScenarioVariant.scenario_id.in_(scenario_ids))
+    if severities:
+        query = query.filter(ScenarioVariant.severity.in_(severities))
+    total = query.count()
+    rows = (
+        query
+        .order_by(ScenarioVariant.scenario_id, ScenarioVariant.id)
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+    return rows, total
+
+
+def _jsonb_metadata_any(column, key: str, selected: list[str] | None):
+    if not selected:
+        return None
+    conditions = []
+    for value in selected:
+        conditions.append(column.contains({key: [value]}))
+        conditions.append(column[key].astext == value)
+    return or_(*conditions)
 
 
 def _filter_scenarios_and_variants(
@@ -581,25 +690,34 @@ def _sorted_axis_keys(keys: set[str]) -> list[str]:
 
 
 def _count_matching_socs(db: Session, soc_ids: set[str]) -> int:
-    return sum(1 for row in db.query(SocPlatform).all() if row.id in soc_ids)
+    if not soc_ids:
+        return 0
+    return db.query(SocPlatform).filter(SocPlatform.id.in_(soc_ids)).count()
 
 
 def _count_matching_ips(db: Session, soc_ids: set[str]) -> int:
-    count = 0
-    for row in db.query(IpCatalog).all():
-        compatible = row.compatible_soc or []
-        if not compatible or any(str(item) in soc_ids for item in compatible):
-            count += 1
-    return count
+    if not soc_ids:
+        return 0
+    conditions = [
+        IpCatalog.compatible_soc.is_(None),
+        IpCatalog.compatible_soc == [],
+    ]
+    conditions.extend(IpCatalog.compatible_soc.contains([soc_id]) for soc_id in soc_ids)
+    return db.query(IpCatalog).filter(or_(*conditions)).count()
 
 
 def _count_matching_sw_profiles(db: Session, soc_ids: set[str]) -> int:
-    count = 0
-    for row in db.query(SwProfile).all():
-        compatible = (row.metadata_ or {}).get("compatible_soc") or []
-        if not compatible or any(str(item) in soc_ids for item in compatible):
-            count += 1
-    return count
+    if not soc_ids:
+        return 0
+    conditions = [
+        ~SwProfile.metadata_.has_key("compatible_soc"),  # noqa: W601 - SQLAlchemy JSONB operator
+        SwProfile.metadata_.contains({"compatible_soc": []}),
+    ]
+    conditions.extend(
+        SwProfile.metadata_.contains({"compatible_soc": [soc_id]})
+        for soc_id in soc_ids
+    )
+    return db.query(SwProfile).filter(or_(*conditions)).count()
 
 
 def _edge_source(edge: dict[str, Any]) -> Any:

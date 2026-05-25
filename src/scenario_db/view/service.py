@@ -12,9 +12,9 @@ from collections import defaultdict
 from typing import Any
 
 from scenario_db.api.schemas.view import (
-    EdgeData, EdgeElement, EdgeSimOverlay, MemoryDescriptor, MemoryPlacement,
-    Level0MetricBreakdown, NodeData, NodeElement, OperationSummary, ResourceMetricSummary, RiskCard,
-    SimOverlay, ViewHints, ViewResponse, ViewSummary,
+    EdgeData, EdgeElement, MemoryDescriptor, MemoryPlacement,
+    NodeData, NodeElement, OperationSummary, RiskCard,
+    ViewHints, ViewResponse, ViewSummary,
 )
 from scenario_db.db.repositories.scenario_graph import (
     CanonicalScenarioGraph,
@@ -37,6 +37,16 @@ from scenario_db.view.layout import (
     LANE_H, LANE_LABEL_W, LANE_Y, LANE_DISPLAY_NAMES,
     NODE_H, NODE_W, STAGE_HEADER_H, STAGE_X,
 )
+from scenario_db.view.graph_utils import (
+    edge_source as _edge_source,
+    edge_target as _edge_target,
+    parse_size as _parse_size,
+    resolution_to_size as _resolution_to_size,
+    safe_id as _safe_id,
+)
+from scenario_db.view.sample_data import build_sample_level0
+from scenario_db.view.simulation_overlay import apply_simulation_overlay
+from scenario_db.view.response import build_view_response as _response
 
 
 # ---------------------------------------------------------------------------
@@ -54,192 +64,6 @@ def _e(eid: str, src: str, tgt: str, flow_type: str, **kwargs) -> EdgeElement:
     return EdgeElement(data=data)
 
 
-def build_sample_level0() -> ViewResponse:
-    """Return a hardcoded Level 0 ViewResponse for the FHD30 demo scenario."""
-    ly = LANE_Y
-
-    # ── Functional nodes ──────────────────────────────────────────────────
-    nodes: list[NodeElement] = [
-        # App lane
-        _n("app-camera",   "Camera App",    "sw", "app",       210, ly["app"],
-           view_hints=ViewHints(lane="app", stage="capture", order=0)),
-        _n("app-recorder", "Recorder App",  "sw", "app",       510, ly["app"],
-           view_hints=ViewHints(lane="app", stage="processing", order=0)),
-
-        # Framework lane
-        _n("fw-cam-svc",   "CameraService",  "sw", "framework", 210, ly["framework"],
-           view_hints=ViewHints(lane="framework", stage="capture", order=0)),
-        _n("fw-media-rec", "MediaRecorder",  "sw", "framework", 510, ly["framework"],
-           view_hints=ViewHints(lane="framework", stage="processing", order=0)),
-        _n("fw-codec-fw",  "MediaCodec FW",  "sw", "framework", 790, ly["framework"],
-           view_hints=ViewHints(lane="framework", stage="encode", order=0)),
-
-        # HAL lane
-        _n("hal-camera",  "Camera HAL",  "sw", "hal", 210, ly["hal"],
-           view_hints=ViewHints(lane="hal", stage="capture", order=0)),
-        _n("hal-codec2",  "Codec2 HAL",  "sw", "hal", 510, ly["hal"],
-           view_hints=ViewHints(lane="hal", stage="processing", order=0)),
-
-        # Kernel lane
-        _n("ker-v4l2",   "V4L2 Camera Driver", "sw", "kernel", 210, ly["kernel"],
-           view_hints=ViewHints(lane="kernel", stage="capture", order=0)),
-        _n("ker-mfc-drv","MFC Driver",         "sw", "kernel", 510, ly["kernel"],
-           view_hints=ViewHints(lane="kernel", stage="processing", order=0)),
-        _n("ker-ion",    "ION / DMA-BUF",      "sw", "kernel", 790, ly["kernel"],
-           view_hints=ViewHints(lane="kernel", stage="encode", order=0)),
-        _n("ker-drm",    "DRM / KMS",          "sw", "kernel", 1010, ly["kernel"],
-           view_hints=ViewHints(lane="kernel", stage="display", order=0),
-           warning=False),
-
-        # HW lane — ISP active scale 4000x3000→1920x1080
-        # hw-sensor x=130: min valid = LANE_LABEL_W(80) + NODE_W["ip"](100)/2 = 130
-        _n("hw-sensor",  "Sensor",  "ip", "hw", 130, ly["hw"],
-           view_hints=ViewHints(lane="hw", stage="capture", order=0, emphasis="primary")),
-        _n("hw-csis",    "CSIS",    "ip", "hw", 240, ly["hw"],
-           view_hints=ViewHints(lane="hw", stage="capture", order=1)),
-        _n("hw-isp",     "ISP",     "ip", "hw", 410, ly["hw"],
-           ip_ref="ip-isp-v12",
-           capability_badges=["CROP", "SCALE", "HDR10"],
-           active_operations=OperationSummary(
-               scale=True, scale_from="4000x3000", scale_to="1920x1080",
-               crop=True, crop_ratio=0.9,
-           ),
-           view_hints=ViewHints(lane="hw", stage="processing", order=0, emphasis="primary")),
-        _n("hw-mlsc",    "MLSC",    "ip", "hw", 530, ly["hw"],
-           view_hints=ViewHints(lane="hw", stage="processing", order=1)),
-        _n("hw-mcsc",    "MCSC",    "ip", "hw", 645, ly["hw"],
-           view_hints=ViewHints(lane="hw", stage="processing", order=2)),
-        _n("hw-mfc",     "MFC",     "ip", "hw", 810, ly["hw"],
-           ip_ref="ip-mfc-v14",
-           capability_badges=["H.265", "AV1"],
-           matched_issues=["iss-LLC-thrashing-0221"],
-           warning=True,
-           view_hints=ViewHints(lane="hw", stage="encode", order=0, emphasis="risk")),
-        _n("hw-dpu",     "DPU",     "ip", "hw", 1010, ly["hw"],
-           ip_ref="ip-dpu-v9",
-           view_hints=ViewHints(lane="hw", stage="display", order=0)),
-
-        # Buffer (memory) lane
-        _n("buf-raw",     "RAW Buffer",           "buffer", "memory", 195, ly["memory"],
-           memory=MemoryDescriptor(format="RAW10", bitdepth=10, planes=1,
-                                   width=4000, height=3000, fps=30),
-           view_hints=ViewHints(lane="memory", stage="capture", order=0)),
-        _n("buf-yuv",     "YUV Preview Buffer",   "buffer", "memory", 415, ly["memory"],
-           memory=MemoryDescriptor(format="NV12", bitdepth=8, planes=2,
-                                   width=1920, height=1080, fps=30),
-           view_hints=ViewHints(lane="memory", stage="processing", order=0)),
-        _n("buf-enc-in",  "Encoder Input Buffer", "buffer", "memory", 605, ly["memory"],
-           memory=MemoryDescriptor(format="NV12", compression="SBWC_v4",
-                                   width=1920, height=1080, fps=30),
-           placement=MemoryPlacement(llc_allocated=True, llc_allocation_mb=1.0,
-                                      llc_policy="dedicated", allocation_owner="MFC"),
-           view_hints=ViewHints(lane="memory", stage="processing", order=1)),
-        _n("buf-enc-out", "Encoded Bitstream",    "buffer", "memory", 815, ly["memory"],
-           memory=MemoryDescriptor(format="H.265", fps=30),
-           view_hints=ViewHints(lane="memory", stage="encode", order=0)),
-        _n("buf-disp",    "Display Buffer",       "buffer", "memory", 1010, ly["memory"],
-           memory=MemoryDescriptor(format="ARGB8888", width=1920, height=1080, fps=30),
-           view_hints=ViewHints(lane="memory", stage="display", order=0)),
-    ]
-
-    # ── Edges ─────────────────────────────────────────────────────────────
-    edges: list[EdgeElement] = [
-        # App horizontal (SW/control)
-        _e("e-app-h", "app-camera", "app-recorder", "control"),
-
-        # Capture column — vertical SW/control (bidirectional)
-        _e("e-cap-app-fw",  "app-camera",   "fw-cam-svc",  "control"),
-        _e("e-cap-fw-hal",  "fw-cam-svc",   "hal-camera",  "control"),
-        _e("e-cap-hal-ker", "hal-camera",   "ker-v4l2",    "control"),
-        _e("e-cap-ker-hw",  "ker-v4l2",     "hw-csis",     "control"),
-
-        # Processing column — vertical SW/control
-        _e("e-proc-app-fw",  "app-recorder", "fw-media-rec", "control"),
-        _e("e-proc-fw-hal",  "fw-media-rec", "hal-codec2",   "control"),
-        _e("e-proc-hal-ker", "hal-codec2",   "ker-mfc-drv",  "control"),
-        _e("e-proc-ker-hw",  "ker-mfc-drv",  "hw-mlsc",      "control"),
-
-        # HAL horizontal — vOTF (bidirectional, Camera HAL ↔ Codec2 HAL)
-        _e("e-hal-votf",  "hal-camera", "hal-codec2", "vOTF"),
-        _e("e-hal-votf-r","hal-codec2", "hal-camera", "vOTF"),
-
-        # Kernel horizontal
-        _e("e-ker-otf",  "ker-v4l2",    "ker-mfc-drv", "OTF"),
-        _e("e-ker-m2m",  "ker-mfc-drv", "ker-ion",     "M2M"),
-        _e("e-ker-sw",   "ker-ion",     "ker-drm",     "control"),
-
-        # HW lane — OTF chain
-        _e("e-hw-sen-csis",  "hw-sensor", "hw-csis",  "OTF"),
-        _e("e-hw-csis-isp",  "hw-csis",   "hw-isp",   "OTF"),
-        _e("e-hw-isp-mlsc",  "hw-isp",    "hw-mlsc",  "OTF"),
-        _e("e-hw-mlsc-mcsc", "hw-mlsc",   "hw-mcsc",  "OTF"),
-        _e("e-hw-mcsc-mfc",  "hw-mcsc",   "hw-mfc",   "M2M"),
-        _e("e-hw-mfc-dpu",   "hw-mfc",    "hw-dpu",   "M2M"),
-
-        # HW → Buffer writes (M2M vertical)
-        _e("e-isp-buf-yuv",   "hw-isp",  "buf-yuv",    "M2M"),
-        _e("e-mfc-buf-out",   "hw-mfc",  "buf-enc-out", "M2M"),
-        _e("e-dpu-buf-disp",  "hw-dpu",  "buf-disp",   "M2M"),
-
-        # Buffer lane — vOTF chain (left to right)
-        _e("e-buf-raw-yuv",  "buf-raw",    "buf-yuv",    "vOTF"),
-        _e("e-buf-yuv-ein",  "buf-yuv",    "buf-enc-in", "vOTF"),
-        _e("e-buf-ein-eout", "buf-enc-in", "buf-enc-out","vOTF"),
-
-        # Risk edge — MFC latency (HW → Kernel crossing)
-        _e("e-risk-mfc", "hw-mfc", "ker-mfc-drv", "risk",
-           label="Latency > budget"),
-    ]
-
-    # ── Summary & risks ───────────────────────────────────────────────────
-    summary = ViewSummary(
-        scenario_id="uc-camera-recording",
-        variant_id="FHD30-SDR-H265",
-        name="Video Recording",
-        subtitle="FHD 30fps, 1920x1080",
-        period_ms=33.3,
-        budget_ms=30.0,
-        resolution="1920 x 1080",
-        fps=30,
-        variant_label="Samsung Exynos",
-        notes=(
-            "Scenario captured on Exynos reference board. "
-            "Measurements via SurfaceFlinger and systrace."
-        ),
-        captured_at="May 16, 2025 10:42 AM",
-    )
-
-    risks: list[RiskCard] = [
-        RiskCard(
-            id="R1",
-            title="MFC Encode Latency High",
-            component="MFC",
-            description="Encode latency 28.6 ms exceeds budget 30.0 ms (95th percentile)",
-            severity="High",
-            impact="Budget Overrun",
-        ),
-        RiskCard(
-            id="R2",
-            title="DRAM Bandwidth High",
-            component="MFC / Memory",
-            description="Peak bandwidth 18.2 GB/s near sustained limit 20.0 GB/s",
-            severity="Medium",
-            impact="Throughput Risk",
-        ),
-    ]
-
-    return ViewResponse(
-        level=0,
-        mode="architecture",
-        scenario_id="uc-camera-recording",
-        variant_id="FHD30-SDR-H265",
-        nodes=nodes,
-        edges=edges,
-        risks=risks,
-        summary=summary,
-        metadata={"canvas_w": CANVAS_W, "canvas_h": CANVAS_H},
-        overlays_available=["issues", "memory-path", "llc-allocation", "compression"],
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -303,286 +127,32 @@ def project_level2(scenario_id: str, variant_id: str | None, expand: str, db=Non
     return _project_drilldown(graph, expand)
 
 
-def apply_simulation_overlay(view: ViewResponse, evidence) -> ViewResponse:
-    """Overlay persisted simulation evidence onto an existing view response."""
-
-    if evidence is None:
-        return view
-    evidence_id = getattr(evidence, "id", None)
-    node_rows = _sim_node_rows(evidence)
-    dma_rows = _sim_dma_rows(evidence)
-
-    for node in view.nodes:
-        row = _match_node_sim_row(node.data, node_rows)
-        if not row:
-            continue
-        timing = row.get("_timing") or {}
-        node.data.sim_overlay = SimOverlay(
-            required_clock_mhz=_num(row.get("required_clock_mhz")),
-            set_clock_mhz=_num(row.get("set_clock_mhz")),
-            set_voltage_mv=_num(row.get("set_voltage_mv")),
-            power_mw=_num(row.get("total_power_mw") or row.get("active_power_mw")),
-            hw_time_ms=_num(timing.get("hw_time_ms")),
-            feasible=bool(row.get("feasible", timing.get("feasible", True))),
-            evidence_id=evidence_id,
-        )
-        _append_sim_node_text(node.data)
-
-    for edge in view.edges:
-        rows = _match_edge_dma_rows(edge.data, dma_rows)
-        if not rows:
-            continue
-        bw_mbs = sum(_num(row.get("bw_mbs")) or 0.0 for row in rows)
-        bw_power_mw = sum(_num(row.get("bw_power_mw")) or 0.0 for row in rows)
-        worst_values = [_num(row.get("bw_mbs_worst")) for row in rows if row.get("bw_mbs_worst") is not None]
-        edge.data.sim_overlay = EdgeSimOverlay(
-            bw_mbs=bw_mbs,
-            bw_power_mw=bw_power_mw,
-            bw_mbs_worst=sum(value or 0.0 for value in worst_values) if worst_values else None,
-            evidence_id=evidence_id,
-        )
-        _append_sim_edge_text(edge.data)
-
-    if "simulation" not in view.overlays_available:
-        view.overlays_available.append("simulation")
-    view.metadata["simulation_evidence_id"] = evidence_id
-    _apply_level0_resource_metrics(view, evidence_id, node_rows, dma_rows)
-    return view
 
 
-def _sim_node_rows(evidence) -> list[dict[str, Any]]:
-    timing_by_node = {
-        str(row.get("node_id")): row
-        for row in (getattr(evidence, "timing_breakdown", None) or [])
-        if isinstance(row, dict) and row.get("node_id")
-    }
-    rows: list[dict[str, Any]] = []
-    for row in getattr(evidence, "dvfs_breakdown", None) or []:
-        if not isinstance(row, dict):
-            continue
-        merged = dict(row)
-        timing = timing_by_node.get(str(row.get("node_id")))
-        if timing:
-            merged["_timing"] = timing
-        rows.append(merged)
-    for node_id, timing in timing_by_node.items():
-        if not any(str(row.get("node_id")) == node_id for row in rows):
-            rows.append({"node_id": node_id, "_timing": timing, **timing})
-    return rows
 
 
-def _sim_dma_rows(evidence) -> list[dict[str, Any]]:
-    return [
-        row
-        for row in (getattr(evidence, "dma_breakdown", None) or [])
-        if isinstance(row, dict)
-    ]
 
 
-def _match_node_sim_row(data: NodeData, rows: list[dict[str, Any]]) -> dict[str, Any] | None:
-    node_text = f"{data.id} {data.label} {data.ip_ref or ''}".lower()
-    for row in rows:
-        node_id = str(row.get("node_id") or "").lower()
-        if node_id and (data.id.lower() == node_id or node_id in node_text):
-            return row
-    for row in rows:
-        ip_ref = str(row.get("ip_ref") or "").lower()
-        if ip_ref and data.ip_ref and data.ip_ref.lower() == ip_ref:
-            return row
-    for row in rows:
-        hw_name = str(row.get("hw_name") or "").lower()
-        if hw_name and hw_name in node_text:
-            return row
-    return None
 
 
-def _match_edge_dma_rows(data: EdgeData, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    edge_text = f"{data.id} {data.source} {data.target} {data.producer or ''} {data.consumer or ''} {data.buffer_ref or ''}".lower()
-    matched = [
-        row
-        for row in rows
-        if (
-            (node_id := str(row.get("node_id") or "").lower())
-            and node_id in edge_text
-        )
-        or (
-            (hw_name := str(row.get("hw_name") or "").lower())
-            and hw_name in edge_text
-        )
-    ]
-    if matched:
-        return matched
-    # Architecture summary edges often collapse resource groups. Attach DMA rows
-    # to M2M edges only when there is no precise node match.
-    if data.flow_type == "M2M" and rows:
-        return rows
-    return []
 
 
-def _apply_level0_resource_metrics(
-    view: ViewResponse,
-    evidence_id: str | None,
-    node_rows: list[dict[str, Any]],
-    dma_rows: list[dict[str, Any]],
-) -> None:
-    overview = view.level0_resource_overview
-    if overview is None:
-        return
-
-    for row in overview.rows:
-        node_row = _match_resource_node_row(row.node_id, row.label, node_rows)
-        matched_dma = _match_resource_dma_rows(row.node_id, row.label, row.buffer_refs, dma_rows)
-        if not node_row and not matched_dma:
-            continue
-        timing = (node_row or {}).get("_timing") or {}
-        bw_total = sum(_num(item.get("bw_mbs")) or 0.0 for item in matched_dma)
-        read_total = _sum_dma_direction(matched_dma, "read")
-        write_total = _sum_dma_direction(matched_dma, "write")
-        row.metrics = ResourceMetricSummary(
-            power_mw=_num((node_row or {}).get("total_power_mw") or (node_row or {}).get("active_power_mw")),
-            bw_read_mbs=read_total,
-            bw_write_mbs=write_total,
-            bw_total_mbs=bw_total if matched_dma else None,
-            hw_time_ms=_num(timing.get("hw_time_ms") or (node_row or {}).get("hw_time_ms")),
-            evidence_id=evidence_id,
-        )
-
-    _refresh_level0_metric_breakdown(overview)
 
 
-def _match_resource_node_row(node_id: str, label: str, rows: list[dict[str, Any]]) -> dict[str, Any] | None:
-    node_text = f"{node_id} {label}".lower()
-    for row in rows:
-        candidate = str(row.get("node_id") or "").lower()
-        if candidate and (candidate == node_id.lower() or candidate in node_text):
-            return row
-    for row in rows:
-        hw_name = str(row.get("hw_name") or "").lower()
-        if hw_name and hw_name in node_text:
-            return row
-    return None
 
 
-def _match_resource_dma_rows(
-    node_id: str,
-    label: str,
-    buffer_refs: list[str],
-    rows: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    text = f"{node_id} {label} {' '.join(buffer_refs)}".lower()
-    matched = []
-    for row in rows:
-        candidate = str(row.get("node_id") or "").lower()
-        hw_name = str(row.get("hw_name") or "").lower()
-        buffer_ref = str(row.get("buffer_ref") or row.get("buffer") or "").lower()
-        if (candidate and (candidate == node_id.lower() or candidate in text)) or (hw_name and hw_name in text):
-            matched.append(row)
-            continue
-        if buffer_ref and buffer_ref in {ref.lower() for ref in buffer_refs}:
-            matched.append(row)
-    return matched
 
 
-def _sum_dma_direction(rows: list[dict[str, Any]], direction: str) -> float | None:
-    selected = [
-        _num(row.get("bw_mbs")) or 0.0
-        for row in rows
-        if str(row.get("direction") or "").lower() == direction
-    ]
-    return sum(selected) if selected else None
 
 
-def _refresh_level0_metric_breakdown(overview) -> None:
-    aggregates: dict[str, dict[str, float]] = defaultdict(lambda: {"power": 0.0, "bw": 0.0, "time": 0.0})
-    has_value: dict[str, dict[str, bool]] = defaultdict(lambda: {"power": False, "bw": False, "time": False})
-    counts: dict[str, int] = defaultdict(int)
-    warnings: dict[str, int] = defaultdict(int)
-    for row in overview.rows:
-        counts[row.subsystem] += 1
-        if row.status in {"warning", "blocked"}:
-            warnings[row.subsystem] += 1
-        if row.metrics is None:
-            continue
-        if row.metrics.power_mw is not None:
-            aggregates[row.subsystem]["power"] += row.metrics.power_mw
-            has_value[row.subsystem]["power"] = True
-        if row.metrics.bw_total_mbs is not None:
-            aggregates[row.subsystem]["bw"] += row.metrics.bw_total_mbs
-            has_value[row.subsystem]["bw"] = True
-        if row.metrics.hw_time_ms is not None:
-            aggregates[row.subsystem]["time"] = max(aggregates[row.subsystem]["time"], row.metrics.hw_time_ms)
-            has_value[row.subsystem]["time"] = True
-
-    overview.metric_breakdown = [
-        Level0MetricBreakdown(
-            subsystem=subsystem,
-            power_mw=aggregates[subsystem]["power"] if has_value[subsystem]["power"] else None,
-            bw_total_mbs=aggregates[subsystem]["bw"] if has_value[subsystem]["bw"] else None,
-            hw_time_ms=aggregates[subsystem]["time"] if has_value[subsystem]["time"] else None,
-            node_count=counts[subsystem],
-            warning_count=warnings[subsystem],
-        )
-        for subsystem in sorted(counts)
-    ]
 
 
-def _append_sim_node_text(data: NodeData) -> None:
-    overlay = data.sim_overlay
-    if overlay is None:
-        return
-    badges = []
-    if overlay.set_clock_mhz is not None:
-        badges.append(f"{overlay.set_clock_mhz:.0f}MHz")
-    if overlay.power_mw is not None:
-        badges.append(f"{overlay.power_mw:.1f}mW")
-    for badge in badges:
-        if badge not in data.summary_badges:
-            data.summary_badges.append(badge)
-    detail = _sim_node_detail(overlay)
-    if detail and detail not in data.detail_items:
-        data.detail_items.append(detail)
 
 
-def _append_sim_edge_text(data: EdgeData) -> None:
-    overlay = data.sim_overlay
-    if overlay is None:
-        return
-    bits = []
-    if overlay.bw_mbs is not None:
-        bits.append(f"BW {overlay.bw_mbs:.1f} MB/s")
-    if overlay.bw_power_mw is not None:
-        bits.append(f"BW power {overlay.bw_power_mw:.1f} mW")
-    if overlay.bw_mbs_worst is not None:
-        bits.append(f"worst {overlay.bw_mbs_worst:.1f} MB/s")
-    detail = "Sim: " + ", ".join(bits) if bits else None
-    if detail and detail not in data.detail_items:
-        data.detail_items.append(detail)
 
 
-def _sim_node_detail(overlay: SimOverlay) -> str | None:
-    bits = []
-    if overlay.required_clock_mhz is not None:
-        bits.append(f"req {overlay.required_clock_mhz:.1f}MHz")
-    if overlay.set_clock_mhz is not None:
-        bits.append(f"set {overlay.set_clock_mhz:.1f}MHz")
-    if overlay.set_voltage_mv is not None:
-        bits.append(f"{overlay.set_voltage_mv:.0f}mV")
-    if overlay.power_mw is not None:
-        bits.append(f"{overlay.power_mw:.1f}mW")
-    if overlay.hw_time_ms is not None:
-        bits.append(f"{overlay.hw_time_ms:.2f}ms")
-    if not overlay.feasible:
-        bits.append("infeasible")
-    return "Sim: " + ", ".join(bits) if bits else None
 
 
-def _num(value: Any) -> float | None:
-    if value is None:
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
 
 
 def _load_graph(db, scenario_id: str, variant_id: str | None) -> CanonicalScenarioGraph:
@@ -649,6 +219,12 @@ def _project_level0_topology_v2(graph: CanonicalScenarioGraph, level: int) -> Vi
         edges=projection.edges,
         metadata=projection.metadata,
     )
+
+
+def _project_semantic_level1(graph: CanonicalScenarioGraph) -> ViewResponse | None:
+    from scenario_db.view.level1_semantic import project_semantic_level1
+
+    return project_semantic_level1(graph)
 
 
 def _reference_sizes(graph: CanonicalScenarioGraph) -> dict[str, str]:
@@ -1537,514 +1113,50 @@ _LEVEL1_IP_GROUP_ORDER = {
 }
 
 
-def _project_semantic_level1(graph: CanonicalScenarioGraph) -> ViewResponse | None:
-    """Project active scenario IP/SW nodes into a semantic Level 1 DAG."""
-
-    raw_nodes = _level1_visible_nodes(graph)
-    if not raw_nodes:
-        return None
-
-    raw_edges = _level1_effective_edges(graph)
-    ordered_nodes = _level1_topological_nodes(raw_nodes, raw_edges)
-    semantics = {
-        str(node.get("id")): _level1_semantics_for_node(graph, node)
-        for node in ordered_nodes
-        if node.get("id")
-    }
-
-    nodes: list[NodeElement] = []
-    nodes.extend(_level1_group_nodes(semantics))
-
-    node_map: dict[str, str] = {}
-    for index, pipeline_node in enumerate(ordered_nodes):
-        node_id = str(pipeline_node.get("id") or "")
-        if not node_id:
-            continue
-        sem = semantics[node_id]
-        view_id = f"ip-{_safe_id(node_id)}"
-        node_map[node_id] = view_id
-        layer = _level1_node_layer(graph, pipeline_node, sem)
-        ops = _explicit_level1_operation_summary(graph, node_id, pipeline_node)
-        nodes.append(
-            _n(
-                view_id,
-                _level1_node_label(node_id, pipeline_node),
-                _pipeline_node_type(layer),
-                layer,
-                180 + (_LEVEL1_HIERARCHY_ORDER.get(str(sem["hierarchy_group"]), 99) * 90),
-                120 + index * 74,
-                parent=_level1_inner_group_id(str(sem["hierarchy_group"]), str(sem["ip_group"])),
-                ip_ref=pipeline_node.get("ip_ref"),
-                hierarchy_group=sem["hierarchy_group"],
-                ip_group=sem["ip_group"],
-                dvfs_group=sem.get("dvfs_group"),
-                role_hw_name=sem.get("role_hw_name"),
-                semantic_source=sem["source"],
-                summary_badges=_level1_summary_badges(sem, layer, ops),
-                capability_badges=_level1_capability_badges(sem),
-                active_operations=ops,
-                detail_items=_level1_node_detail_items(graph, node_id, pipeline_node, sem),
-                view_hints=ViewHints(
-                    lane=layer,
-                    stage=_stage_for_node(node_id, pipeline_node),
-                    order=index,
-                    width=160,
-                    height=62,
-                ),
-            )
-        )
-
-    edges: list[EdgeElement] = []
-    tokens = _reference_sizes(graph)
-    for index, edge in enumerate(raw_edges):
-        source = str(_edge_source(edge) or "")
-        target = str(_edge_target(edge) or "")
-        view_source = node_map.get(source)
-        view_target = node_map.get(target)
-        if not view_source or not view_target:
-            continue
-        buffer_ref = edge.get("buffer")
-        buffer_text = str(buffer_ref) if buffer_ref else None
-        flow_type = _edge_flow_type(edge)
-        edges.append(
-            _e(
-                str(edge.get("id") or f"l1-sem-{index}"),
-                view_source,
-                view_target,
-                flow_type,
-                label=_level1_edge_label(flow_type, buffer_text),
-                buffer_ref=buffer_text,
-                producer=source,
-                consumer=target,
-                memory=_buffer_memory_from_spec(graph, buffer_text, tokens) if buffer_text else None,
-                placement=_buffer_placement_from_spec(graph, buffer_text) if buffer_text else None,
-                detail_items=_edge_detail_items(graph, edge, buffer_text),
-            )
-        )
-
-    return _response(
-        graph=graph,
-        level=1,
-        mode="level1-ip-detail",
-        nodes=nodes,
-        edges=edges,
-        metadata={
-            "canvas_w": 1280,
-            "canvas_h": max(860, 220 + len(nodes) * 58),
-            "layout": "level1-semantic-ip-dag",
-            "active_node_count": len(ordered_nodes),
-            "active_edge_count": len(raw_edges),
-            "group_count": sum(1 for node in nodes if node.data.layer == "meta" and node.data.type == "submodule"),
-        },
-    )
 
 
-def _level1_visible_nodes(graph: CanonicalScenarioGraph) -> list[dict[str, Any]]:
-    return [node for node in graph.pipeline_nodes if not _level1_is_memory_node(graph, node)]
 
 
-def _level1_is_memory_node(graph: CanonicalScenarioGraph, node: dict[str, Any]) -> bool:
-    text = f"{node.get('id', '')} {node.get('role', '')} {node.get('ip_ref', '')}".lower()
-    ip_row = graph.ip_catalog.get(node.get("ip_ref") or "")
-    category = str(getattr(ip_row, "category", "") or "").lower() if ip_row else ""
-    return category == "memory" or "llc" in text
 
 
-def _level1_effective_edges(graph: CanonicalScenarioGraph) -> list[dict[str, Any]]:
-    memory_node_ids = {
-        str(node.get("id"))
-        for node in graph.pipeline_nodes
-        if node.get("id") and _level1_is_memory_node(graph, node)
-    }
-    if not memory_node_ids:
-        return list(graph.pipeline_edges)
-
-    outgoing_by_source: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for edge in graph.pipeline_edges:
-        outgoing_by_source[str(_edge_source(edge) or "")].append(edge)
-
-    collapsed: list[dict[str, Any]] = []
-    seen: set[tuple[Any, Any, Any, Any]] = set()
-    for edge in graph.pipeline_edges:
-        source = str(_edge_source(edge) or "")
-        target = str(_edge_target(edge) or "")
-        if source in memory_node_ids:
-            continue
-        if target not in memory_node_ids:
-            _level1_append_edge_once(collapsed, seen, edge)
-            continue
-        buffer_ref = edge.get("buffer")
-        for next_edge in outgoing_by_source.get(target, []):
-            consumer = str(_edge_target(next_edge) or "")
-            if consumer in memory_node_ids:
-                continue
-            if buffer_ref and next_edge.get("buffer") and next_edge.get("buffer") != buffer_ref:
-                continue
-            merged = dict(edge)
-            merged["to"] = consumer
-            merged.pop("target", None)
-            _level1_append_edge_once(collapsed, seen, merged)
-    return collapsed
 
 
-def _level1_append_edge_once(
-    edges: list[dict[str, Any]],
-    seen: set[tuple[Any, Any, Any, Any]],
-    edge: dict[str, Any],
-) -> None:
-    key = (_edge_source(edge), _edge_target(edge), edge.get("type"), edge.get("buffer"))
-    if key in seen:
-        return
-    seen.add(key)
-    edges.append(edge)
 
 
-def _level1_topological_nodes(nodes: list[dict[str, Any]], edges: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    by_id = {str(node.get("id")): node for node in nodes if node.get("id")}
-    original_order = {str(node.get("id")): index for index, node in enumerate(nodes) if node.get("id")}
-    indegree = {node_id: 0 for node_id in by_id}
-    outgoing: dict[str, list[str]] = defaultdict(list)
-    for edge in edges:
-        source = str(_edge_source(edge) or "")
-        target = str(_edge_target(edge) or "")
-        if source not in by_id or target not in by_id:
-            continue
-        outgoing[source].append(target)
-        indegree[target] += 1
-
-    queue = sorted([node_id for node_id, count in indegree.items() if count == 0], key=original_order.get)
-    ordered: list[str] = []
-    while queue:
-        node_id = queue.pop(0)
-        ordered.append(node_id)
-        for target in sorted(outgoing[node_id], key=original_order.get):
-            indegree[target] -= 1
-            if indegree[target] == 0:
-                queue.append(target)
-        queue.sort(key=original_order.get)
-
-    if len(ordered) != len(by_id):
-        ordered = sorted(by_id, key=original_order.get)
-    return [by_id[node_id] for node_id in ordered]
 
 
-def _level1_group_nodes(semantics: dict[str, dict[str, str | None]]) -> list[NodeElement]:
-    hierarchy_groups = sorted(
-        {str(sem["hierarchy_group"]) for sem in semantics.values()},
-        key=lambda group: (_LEVEL1_HIERARCHY_ORDER.get(group, 99), group),
-    )
-    nodes: list[NodeElement] = []
-    for index, hierarchy in enumerate(hierarchy_groups):
-        nodes.append(
-            _level1_group_node(
-                _level1_outer_group_id(hierarchy),
-                hierarchy,
-                220 + index * 130,
-                80,
-                360,
-                220,
-                hierarchy_group=hierarchy,
-                order=_LEVEL1_HIERARCHY_ORDER.get(hierarchy, 99),
-            )
-        )
-
-    inner_keys = sorted(
-        {(str(sem["hierarchy_group"]), str(sem["ip_group"])) for sem in semantics.values()},
-        key=lambda item: (
-            _LEVEL1_HIERARCHY_ORDER.get(item[0], 99),
-            _LEVEL1_IP_GROUP_ORDER.get(item[1], 999),
-            item[1],
-        ),
-    )
-    for index, (hierarchy, ip_group) in enumerate(inner_keys):
-        nodes.append(
-            _level1_group_node(
-                _level1_inner_group_id(hierarchy, ip_group),
-                ip_group,
-                220 + index * 90,
-                210,
-                260,
-                150,
-                parent=_level1_outer_group_id(hierarchy),
-                hierarchy_group=hierarchy,
-                ip_group=ip_group,
-                order=_LEVEL1_IP_GROUP_ORDER.get(ip_group, 999),
-            )
-        )
-    return nodes
 
 
-def _level1_group_node(
-    node_id: str,
-    label: str,
-    x: float,
-    y: float,
-    width: int,
-    height: int,
-    *,
-    parent: str | None = None,
-    hierarchy_group: str | None = None,
-    ip_group: str | None = None,
-    order: int = 0,
-) -> NodeElement:
-    return _n(
-        node_id,
-        label,
-        "submodule",
-        "meta",
-        x,
-        y,
-        parent=parent,
-        hierarchy_group=hierarchy_group,
-        ip_group=ip_group,
-        semantic_source="level1-semantic-group",
-        view_hints=ViewHints(width=width, height=height, emphasis="muted", order=order),
-    )
 
 
-def _level1_semantics_for_node(graph: CanonicalScenarioGraph, node: dict[str, Any]) -> dict[str, str | None]:
-    ip_row = graph.ip_catalog.get(node.get("ip_ref") or "")
-    category = str(getattr(ip_row, "category", "") or "").lower() if ip_row else ""
-    capabilities = getattr(ip_row, "capabilities", None) or {}
-    properties = capabilities.get("properties") or {}
-    role_entry = _level1_role_mode_entry(node, capabilities)
-    role_hw_name = str(role_entry.get("hw_name")) if role_entry and role_entry.get("hw_name") else None
-    hierarchy = _level1_normalize_hierarchy_group(properties.get("hierarchy_group") or _level1_hierarchy_from_category(category, node))
-    ip_group = _level1_ip_group(node, category, properties, role_hw_name, hierarchy)
-    return {
-        "hierarchy_group": hierarchy,
-        "ip_group": ip_group,
-        "dvfs_group": _level1_dvfs_group(graph, node, role_entry),
-        "role_hw_name": role_hw_name,
-        "source": "hw_role_mode" if role_entry else ("hw_properties" if properties else "category_fallback"),
-    }
 
 
-def _level1_role_mode_entry(node: dict[str, Any], capabilities: dict[str, Any]) -> dict[str, Any] | None:
-    role_modes = ((capabilities.get("sim") or {}).get("role_modes") or {})
-    keys = [
-        str(node.get("role") or ""),
-        str(node.get("id") or ""),
-        str(node.get("label") or ""),
-    ]
-    for key in keys:
-        if key in role_modes and isinstance(role_modes[key], dict):
-            return role_modes[key]
-    lowered = {key.lower(): value for key, value in role_modes.items() if isinstance(value, dict)}
-    for key in keys:
-        candidate = lowered.get(key.lower())
-        if candidate:
-            return candidate
-    return None
 
 
-def _level1_hierarchy_from_category(category: str, node: dict[str, Any]) -> str:
-    text = f"{node.get('id', '')} {node.get('role', '')} {node.get('ip_ref', '')}".lower()
-    if category == "sensor" or "sensor" in text:
-        return "Sensor"
-    if category == "cpu":
-        return "CPU/SW"
-    if category in {"compute", "gpu", "npu"}:
-        return "Compute"
-    if category == "display" or any(token in text for token in ("dpu", "display", "panel")):
-        return "Display" if "panel" in text else "DPU"
-    if category == "codec" or any(token in text for token in ("mfc", "codec", "encoder", "decoder")):
-        return "CODEC"
-    if category == "cpu" or "cpu" in text or "task" in text:
-        return "CPU/SW"
-    if category == "memory":
-        return "Memory"
-    if category == "camera" or any(token in text for token in ("isp", "csis", "3aa", "byrp", "rgbp", "yuv", "mtnr", "msnr", "mcsc", "gdc", "lme")):
-        return "ISP"
-    return "Other"
 
 
-def _level1_normalize_hierarchy_group(value: Any) -> str:
-    text = str(value or "").strip()
-    aliases = {
-        "sensor": "Sensor",
-        "isp": "ISP",
-        "camera": "ISP",
-        "compute": "Compute",
-        "codec": "CODEC",
-        "display": "Display",
-        "dpu": "DPU",
-        "gpu": "GPU",
-        "npu": "NPU",
-        "cpu": "CPU/SW",
-        "cpu/sw": "CPU/SW",
-        "memory": "Memory",
-    }
-    return aliases.get(text.lower(), text or "Other")
 
 
-def _level1_ip_group(
-    node: dict[str, Any],
-    category: str,
-    properties: dict[str, Any],
-    role_hw_name: str | None,
-    hierarchy: str,
-) -> str:
-    text = " ".join(str(value or "") for value in (node.get("id"), node.get("label"), node.get("role"), node.get("ip_ref"), role_hw_name)).lower()
-    explicit = properties.get("ip_group")
-    if category == "cpu" or hierarchy == "CPU/SW":
-        return "CPU/SW"
-    if explicit and not (hierarchy == "ISP" and explicit == "ISP"):
-        return str(explicit)
-    for tokens, group in (
-        (("csispdp", "csis", "pdp"), "CSIS/PDP"),
-        (("3aa", "cstat"), "3AA/CSTAT"),
-        (("byrp",), "BYRP"),
-        (("rgbp",), "RGBP"),
-        (("yuvsc",), "YUVSC"),
-        (("mtnr",), "MTNR"),
-        (("msnr",), "MSNR"),
-        (("yuvp", "yuv-post", "yuv_post"), "YUVP"),
-        (("gdc",), "GDC"),
-        (("mcsc",), "MCSC"),
-        (("lme",), "LME"),
-        (("mfc", "codec", "encoder", "decoder"), "MFC"),
-        (("dpu", "decon"), "DPU"),
-        (("panel",), "Panel"),
-        (("gpu",), "GPU"),
-        (("npu",), "NPU"),
-    ):
-        if any(token in text for token in tokens):
-            return group
-    if explicit and hierarchy == "ISP" and explicit == "ISP":
-        return "ISP Core"
-    if category == "sensor":
-        return "Sensor"
-    if hierarchy == "CPU/SW":
-        return "CPU/SW"
-    return str(explicit or role_hw_name or hierarchy)
 
 
-def _level1_dvfs_group(
-    graph: CanonicalScenarioGraph,
-    node: dict[str, Any],
-    role_entry: dict[str, Any] | None,
-) -> str | None:
-    if not role_entry:
-        return None
-    modes = role_entry.get("modes") or {}
-    if not isinstance(modes, dict) or not modes:
-        return None
-    node_config = (getattr(graph.variant, "node_configs", None) or {}).get(str(node.get("id") or "")) or {}
-    requested_mode = node_config.get("mode") if isinstance(node_config, dict) else None
-    for key in (requested_mode, "Normal", "normal", next(iter(modes), None)):
-        if key is None:
-            continue
-        mode = modes.get(key)
-        if isinstance(mode, dict) and mode.get("dvfs_group"):
-            return str(mode["dvfs_group"])
-    return None
 
 
-def _level1_node_layer(graph: CanonicalScenarioGraph, node: dict[str, Any], sem: dict[str, str | None]) -> str:
-    if sem["hierarchy_group"] in {"Sensor", "Display"}:
-        return "external"
-    return _pipeline_node_layer(graph, node)
 
 
-def _level1_node_label(node_id: str, pipeline_node: dict[str, Any]) -> str:
-    return str(pipeline_node.get("label") or node_id).replace("_", " ").replace("-", " ").upper()
 
 
-def _level1_summary_badges(
-    sem: dict[str, str | None],
-    layer: str,
-    ops: OperationSummary | None,
-) -> list[str]:
-    badges = [str(sem["hierarchy_group"]), str(sem["ip_group"])]
-    if layer in {"app", "framework", "hal", "kernel"}:
-        badges.append("<sw>")
-    if sem.get("dvfs_group") and sem["dvfs_group"] not in badges:
-        badges.append(str(sem["dvfs_group"]))
-    if ops:
-        if ops.crop:
-            badges.append("Crop")
-        if ops.scale:
-            badges.append("Scale")
-        if ops.rotate is not None:
-            badges.append("Rotate")
-    return badges
 
 
-def _level1_capability_badges(sem: dict[str, str | None]) -> list[str]:
-    badges: list[str] = []
-    if sem.get("role_hw_name"):
-        badges.append(f"HW:{sem['role_hw_name']}")
-    if sem.get("dvfs_group"):
-        badges.append(f"DVFS:{sem['dvfs_group']}")
-    return badges
 
 
-def _level1_node_detail_items(
-    graph: CanonicalScenarioGraph,
-    node_id: str,
-    node: dict[str, Any],
-    sem: dict[str, str | None],
-) -> list[str]:
-    details = _node_detail_items(graph, node_id, node)
-    details.extend(
-        [
-            f"Hierarchy: {sem['hierarchy_group']}",
-            f"IP block: {sem['ip_group']}",
-        ]
-    )
-    if sem.get("role_hw_name"):
-        details.append(f"Role HW: {sem['role_hw_name']}")
-    if sem.get("dvfs_group"):
-        details.append(f"DVFS group: {sem['dvfs_group']}")
-    edges = _level1_effective_edges(graph)
-    incoming = [str(edge.get("buffer")) for edge in edges if _edge_target(edge) == node_id and edge.get("buffer")]
-    outgoing = [str(edge.get("buffer")) for edge in edges if _edge_source(edge) == node_id and edge.get("buffer")]
-    if incoming:
-        details.append("Input buffers: " + ", ".join(incoming[:4]))
-    if outgoing:
-        details.append("Output buffers: " + ", ".join(outgoing[:4]))
-    return details
 
 
-def _explicit_level1_operation_summary(
-    graph: CanonicalScenarioGraph,
-    node_id: str,
-    node: dict[str, Any],
-) -> OperationSummary | None:
-    config = (getattr(graph.variant, "node_configs", None) or {}).get(node_id) or {}
-    raw_ops = config.get("operations") if isinstance(config, dict) else None
-    if raw_ops is None and isinstance(node, dict):
-        raw_ops = node.get("operations")
-    if not isinstance(raw_ops, dict):
-        return None
-    summary = OperationSummary(
-        crop=bool(raw_ops.get("crop")),
-        crop_ratio=raw_ops.get("crop_ratio"),
-        scale=bool(raw_ops.get("scale")),
-        scale_from=raw_ops.get("scale_from"),
-        scale_to=raw_ops.get("scale_to"),
-        rotate=raw_ops.get("rotate"),
-        compose=bool(raw_ops.get("compose", False)),
-        colorspace_convert=raw_ops.get("colorspace_convert"),
-    )
-    if any((summary.crop, summary.scale, summary.rotate is not None, summary.compose, summary.colorspace_convert)):
-        return summary
-    return None
 
 
-def _level1_edge_label(flow_type: str, buffer_ref: str | None) -> str:
-    if buffer_ref:
-        return f"{flow_type} / {buffer_ref}"
-    return flow_type
 
 
-def _level1_outer_group_id(hierarchy_group: str) -> str:
-    return f"grp-{_safe_id(hierarchy_group)}"
 
 
-def _level1_inner_group_id(hierarchy_group: str, ip_group: str) -> str:
-    return f"{_level1_outer_group_id(hierarchy_group)}-{_safe_id(ip_group)}"
 
 
 def _project_reference_level1(graph: CanonicalScenarioGraph) -> ViewResponse:
@@ -2182,723 +1294,22 @@ _LEVEL2_REQUIRED_DATA = [
 
 
 def _project_drilldown(graph: CanonicalScenarioGraph, expand: str) -> ViewResponse:
-    semantic = _project_semantic_level2(graph, expand)
-    if semantic is not None:
-        return semantic
+    from scenario_db.view.level2_semantic import project_drilldown
 
-    if _project_level2_reference(graph, expand) is not None:
-        raise LookupError(f"Cannot build semantic Level 2 view for legacy alias: {expand}")
-    raise LookupError(f"Cannot expand unknown IP node: {expand}")
+    return project_drilldown(graph, expand)
 
 
 def _project_semantic_level2(graph: CanonicalScenarioGraph, expand: str) -> ViewResponse | None:
-    target_nodes = _level2_target_nodes(graph, expand)
-    if target_nodes is None:
-        return None
-    if not target_nodes:
-        return _level2_unavailable_response(
-            graph,
-            expand,
-            [f"No active pipeline nodes match expand={expand!r}."],
-            target_nodes=[],
-        )
+    from scenario_db.view.level2_semantic import project_semantic_level2
 
-    specs: list[dict[str, Any]] = []
-    unavailable_reasons: list[str] = []
-    for node in target_nodes:
-        spec, reason = _level2_node_spec(graph, node)
-        if spec is None:
-            unavailable_reasons.append(reason)
-            continue
-        specs.append(spec)
+    return project_semantic_level2(graph, expand)
 
-    if not specs:
-        return _level2_unavailable_response(
-            graph,
-            expand,
-            unavailable_reasons,
-            target_nodes=[str(node.get("id") or "") for node in target_nodes if node.get("id")],
-        )
 
-    return _level2_module_response(graph, expand, specs, unavailable_reasons)
 
 
-def _level2_target_nodes(graph: CanonicalScenarioGraph, expand: str) -> list[dict[str, Any]] | None:
-    normalized = str(expand or "").strip().lower()
-    if not normalized:
-        return []
 
-    direct = _find_pipeline_node(graph, expand) or _find_pipeline_node_by_ip_ref(graph, expand)
-    if direct is not None:
-        return [direct]
 
-    alias = _LEVEL2_ALIAS_GROUPS.get(normalized)
-    if alias is None:
-        return None
 
-    nodes: list[dict[str, Any]] = []
-    for node in _level1_visible_nodes(graph):
-        if _level2_node_matches_alias(graph, node, alias):
-            nodes.append(node)
-    return _level1_topological_nodes(nodes, _level1_effective_edges(graph)) if nodes else []
-
-
-def _level2_node_matches_alias(graph: CanonicalScenarioGraph, node: dict[str, Any], alias: str) -> bool:
-    sem = _level1_semantics_for_node(graph, node)
-    hierarchy = str(sem.get("hierarchy_group") or "")
-    ip_group = str(sem.get("ip_group") or "")
-    text = f"{node.get('id', '')} {node.get('role', '')} {node.get('ip_ref', '')}".lower()
-    if alias == "camera":
-        return hierarchy == "ISP"
-    if alias == "video":
-        return hierarchy == "CODEC" or ip_group in {"MFC", "APV"} or any(token in text for token in ("mfc", "codec"))
-    if alias == "display":
-        return ip_group == "DPU" or any(token in text for token in ("dpu", "decon"))
-    return False
-
-
-def _level2_node_spec(
-    graph: CanonicalScenarioGraph,
-    pipeline_node: dict[str, Any],
-) -> tuple[dict[str, Any] | None, str]:
-    node_id = str(pipeline_node.get("id") or "")
-    ip_ref = str(pipeline_node.get("ip_ref") or "")
-    ip_row = graph.ip_catalog.get(ip_ref)
-    sem = _level1_semantics_for_node(graph, pipeline_node)
-    if ip_row is None:
-        return None, f"{node_id} references {ip_ref or 'no ip_ref'}, but the IP catalog row is not loaded."
-
-    capabilities = getattr(ip_row, "capabilities", None) or {}
-    properties = capabilities.get("properties") or {}
-    hierarchy = getattr(ip_row, "hierarchy", None) or {}
-    modules = [item for item in properties.get("modules") or [] if isinstance(item, dict)]
-    subblocks = [str(item) for item in properties.get("subblocks") or [] if item]
-    hierarchy_submodules = [item for item in hierarchy.get("submodules") or [] if isinstance(item, dict)]
-    internal_edges = [item for item in properties.get("internal_edges") or [] if isinstance(item, dict)]
-    block_name = _level2_block_name(pipeline_node, sem)
-
-    functional_modules = _level2_functional_modules(
-        pipeline_node,
-        sem,
-        block_name,
-        subblocks,
-        hierarchy_submodules,
-        modules,
-    )
-    module_nodes = _level2_matching_modules(modules, block_name, functional_modules)
-
-    if not functional_modules and not module_nodes:
-        return (
-            None,
-            (
-                f"{node_id} ({ip_ref}) has no Level 2 module declarations. "
-                "Add capabilities.properties.modules, capabilities.properties.subblocks, "
-                "or hierarchy.submodules to render IP-internal modules."
-            ),
-        )
-
-    if not functional_modules:
-        functional_modules = [block_name]
-
-    return (
-        {
-            "node": pipeline_node,
-            "node_id": node_id,
-            "ip_ref": ip_ref,
-            "ip_row": ip_row,
-            "graph": graph,
-            "sem": sem,
-            "properties": properties,
-            "block_name": block_name,
-            "functional_modules": functional_modules,
-            "module_nodes": module_nodes,
-            "internal_edges": internal_edges,
-            "functional_ids": {},
-            "read_ids": [],
-            "write_ids": [],
-        },
-        "",
-    )
-
-
-def _level2_block_name(pipeline_node: dict[str, Any], sem: dict[str, str | None]) -> str:
-    ip_group = str(sem.get("ip_group") or "")
-    if ip_group in _LEVEL2_BLOCK_BY_IP_GROUP:
-        return _LEVEL2_BLOCK_BY_IP_GROUP[ip_group]
-    role_hw = str(sem.get("role_hw_name") or "")
-    if role_hw:
-        return role_hw
-    text = f"{pipeline_node.get('id', '')} {pipeline_node.get('role', '')} {pipeline_node.get('ip_ref', '')}".lower()
-    for tokens, block in (
-        (("csispdp", "pdp"), "CSISPDP"),
-        (("csis",), "CSIS"),
-        (("3aa", "cstat"), "3AA"),
-        (("byrp",), "BYRP"),
-        (("rgbp",), "RGBP"),
-        (("yuvsc",), "YUVSC"),
-        (("mtnr",), "MTNR"),
-        (("msnr",), "MSNR"),
-        (("yuvp",), "YUVP"),
-        (("mcsc",), "MCSC"),
-        (("gdc",), "GDC"),
-        (("lme",), "LME"),
-        (("mfc", "codec"), "MFC"),
-        (("dpu", "decon"), "DPU"),
-        (("gpu", "sgpu"), "SGPU"),
-        (("npu",), "NPU"),
-    ):
-        if any(token in text for token in tokens):
-            return block
-    return str(pipeline_node.get("id") or "MODULE").upper()
-
-
-def _level2_functional_modules(
-    pipeline_node: dict[str, Any],
-    sem: dict[str, str | None],
-    block_name: str,
-    subblocks: list[str],
-    hierarchy_submodules: list[dict[str, Any]],
-    modules: list[dict[str, Any]],
-) -> list[str]:
-    if hierarchy_submodules:
-        return [
-            str(item.get("instance_id") or item.get("ref") or f"sub{index}")
-            for index, item in enumerate(hierarchy_submodules)
-        ]
-
-    matches = [name for name in subblocks if _level2_norm(name) == _level2_norm(block_name)]
-    if matches:
-        return matches
-    if subblocks and _level2_should_expand_all_subblocks(pipeline_node, sem):
-        return subblocks
-    if modules:
-        return [block_name]
-    return []
-
-
-def _level2_should_expand_all_subblocks(pipeline_node: dict[str, Any], sem: dict[str, str | None]) -> bool:
-    ip_group = str(sem.get("ip_group") or "")
-    text = f"{pipeline_node.get('id', '')} {pipeline_node.get('role', '')}".lower()
-    return ip_group in {"DPU", "ISP Core"} or text in {"isp", "isp0", "dpu"}
-
-
-def _level2_matching_modules(
-    modules: list[dict[str, Any]],
-    block_name: str,
-    functional_modules: list[str],
-) -> list[dict[str, Any]]:
-    block_norms = {_level2_norm(block_name), *(_level2_norm(item) for item in functional_modules)}
-    matched: list[dict[str, Any]] = []
-    for module in modules:
-        name = str(module.get("name") or "")
-        name_norm = _level2_norm(name)
-        if any(name_norm.startswith(block) or block in name_norm for block in block_norms if block):
-            matched.append(module)
-    return matched
-
-
-def _level2_module_response(
-    graph: CanonicalScenarioGraph,
-    expand: str,
-    specs: list[dict[str, Any]],
-    omitted_reasons: list[str],
-) -> ViewResponse:
-    nodes: list[NodeElement] = []
-    hierarchy_groups = sorted(
-        {str(spec["sem"].get("hierarchy_group") or "Other") for spec in specs},
-        key=lambda group: (_LEVEL1_HIERARCHY_ORDER.get(group, 99), group),
-    )
-    for index, hierarchy in enumerate(hierarchy_groups):
-        nodes.append(
-            _level1_group_node(
-                f"grp-l2-{_safe_id(hierarchy)}",
-                hierarchy,
-                220 + index * 160,
-                80,
-                420,
-                240,
-                hierarchy_group=hierarchy,
-                order=_LEVEL1_HIERARCHY_ORDER.get(hierarchy, 999),
-            )
-        )
-
-    for index, spec in enumerate(specs):
-        _level2_append_ip_package(nodes, spec, index)
-
-    edges = _level2_module_edges(graph, specs, nodes)
-    canvas_h = max(760, 280 + len(specs) * 140 + sum(len(spec["module_nodes"]) for spec in specs) * 42)
-    return _response(
-        graph=graph,
-        level=2,
-        mode=f"drilldown:{expand}",
-        nodes=nodes,
-        edges=edges,
-        metadata={
-            "canvas_w": 1280,
-            "canvas_h": canvas_h,
-            "layout": "level2-module-detail",
-            "expand": expand,
-            "level2_available": True,
-            "target_nodes": [spec["node_id"] for spec in specs],
-            "module_source": "ip_catalog.capabilities.properties",
-            "rendered_module_count": sum(len(spec["functional_ids"]) + len(spec["module_nodes"]) for spec in specs),
-            "omitted_reasons": omitted_reasons,
-        },
-    )
-
-
-def _level2_append_ip_package(nodes: list[NodeElement], spec: dict[str, Any], index: int) -> None:
-    node_id = spec["node_id"]
-    sem = spec["sem"]
-    hierarchy = str(sem.get("hierarchy_group") or "Other")
-    ip_group = str(sem.get("ip_group") or spec["block_name"])
-    package_id = f"l2pkg-{_safe_id(node_id)}"
-    nodes.append(
-        _n(
-            package_id,
-            _level1_node_label(node_id, spec["node"]),
-            "submodule",
-            "meta",
-            220,
-            180 + index * 130,
-            parent=f"grp-l2-{_safe_id(hierarchy)}",
-            ip_ref=spec["ip_ref"],
-            hierarchy_group=hierarchy,
-            ip_group=ip_group,
-            role_hw_name=sem.get("role_hw_name"),
-            semantic_source="level2-ip-package",
-            detail_items=_level2_package_detail_items(spec),
-            view_hints=ViewHints(lane="hw", stage="processing", order=index, width=360, height=180),
-        )
-    )
-
-    order = 0
-    for module_name in spec["functional_modules"]:
-        module_id = _level2_functional_id(node_id, module_name)
-        spec["functional_ids"][_level2_norm(module_name)] = module_id
-        nodes.append(
-            _n(
-                module_id,
-                _level2_label(module_name),
-                "submodule",
-                "hw",
-                240 + order * 64,
-                320 + index * 130,
-                parent=package_id,
-                ip_ref=spec["ip_ref"],
-                hierarchy_group=hierarchy,
-                ip_group=ip_group,
-                role_hw_name=sem.get("role_hw_name"),
-                semantic_source="level2-functional-module",
-                module_ref=module_name,
-                module_kind="functional",
-                module_status="declared",
-                summary_badges=[hierarchy, ip_group, "Module"],
-                capability_badges=_level1_capability_badges(sem),
-                active_operations=_explicit_level1_operation_summary(spec["graph"], node_id, spec["node"]) if "graph" in spec else None,
-                detail_items=_level2_functional_detail_items(spec, module_name),
-                view_hints=ViewHints(lane="hw", stage="processing", order=order, width=165, height=62),
-            )
-        )
-        order += 1
-
-    for module in spec["module_nodes"]:
-        module_name = str(module.get("name") or f"module-{order}")
-        module_kind = _level2_module_kind(module)
-        module_direction = _level2_module_direction(module)
-        module_id = _level2_module_id(node_id, module_name)
-        if module_direction == "input":
-            spec["read_ids"].append(module_id)
-        elif module_direction == "output":
-            spec["write_ids"].append(module_id)
-        nodes.append(
-            _n(
-                module_id,
-                _level2_label(module_name),
-                "submodule",
-                "hw",
-                240 + order * 64,
-                320 + index * 130,
-                parent=package_id,
-                ip_ref=spec["ip_ref"],
-                hierarchy_group=hierarchy,
-                ip_group=ip_group,
-                role_hw_name=sem.get("role_hw_name"),
-                semantic_source="level2-io-module",
-                module_ref=module_name,
-                module_kind=module_kind,
-                module_direction=module_direction,
-                module_status=_level2_module_status(module),
-                summary_badges=[module_kind.upper(), module_direction] if module_direction else [module_kind.upper()],
-                capability_badges=_level2_module_capability_badges(module),
-                detail_items=_level2_module_detail_items(module, spec),
-                view_hints=ViewHints(lane="hw", stage="processing", order=order, width=185, height=64),
-            )
-        )
-        order += 1
-
-
-def _level2_module_edges(
-    graph: CanonicalScenarioGraph,
-    specs: list[dict[str, Any]],
-    nodes: list[NodeElement],
-) -> list[EdgeElement]:
-    spec_by_node = {spec["node_id"]: spec for spec in specs}
-    block_to_functional: dict[str, str] = {}
-    for spec in specs:
-        for key, module_id in spec["functional_ids"].items():
-            block_to_functional[key] = module_id
-        block_to_functional.setdefault(_level2_norm(spec["block_name"]), _level2_primary_functional_id(spec))
-
-    tokens = _reference_sizes(graph)
-    buffer_ids: dict[str, str] = {}
-    edges: list[EdgeElement] = []
-    seen: set[tuple[str, str, str, str | None]] = set()
-
-    def ensure_buffer(buffer_ref: str, order: int) -> str:
-        buffer_id = f"buf-{_safe_id(buffer_ref)}"
-        if buffer_ref in buffer_ids:
-            return buffer_ids[buffer_ref]
-        nodes.append(
-            _n(
-                buffer_id,
-                _buffer_label(buffer_ref),
-                "buffer",
-                "memory",
-                540 + order * 180,
-                620,
-                memory=_buffer_memory_from_spec(graph, buffer_ref, tokens),
-                placement=_buffer_placement_from_spec(graph, buffer_ref),
-                detail_items=_buffer_detail_items(graph, buffer_ref),
-                view_hints=ViewHints(lane="memory", stage="processing", order=order, width=235, height=68),
-            )
-        )
-        buffer_ids[buffer_ref] = buffer_id
-        return buffer_id
-
-    def add_edge(
-        source: str,
-        target: str,
-        flow_type: str,
-        *,
-        edge: dict[str, Any] | None = None,
-        buffer_ref: str | None = None,
-        label: str | None = None,
-    ) -> None:
-        key = (source, target, flow_type, buffer_ref)
-        if key in seen:
-            return
-        seen.add(key)
-        edge_id = f"l2e-{len(edges)}-{_safe_id(source)}-{_safe_id(target)}"
-        edges.append(
-            _e(
-                edge_id,
-                source,
-                target,
-                flow_type,
-                label=label or _level1_edge_label(flow_type, buffer_ref),
-                buffer_ref=buffer_ref,
-                memory=_buffer_memory_from_spec(graph, buffer_ref, tokens) if buffer_ref else None,
-                placement=_buffer_placement_from_spec(graph, buffer_ref) if buffer_ref else None,
-                detail_items=_edge_detail_items(graph, edge or {}, buffer_ref),
-            )
-        )
-
-    for spec in specs:
-        for edge in spec["internal_edges"]:
-            source_id = block_to_functional.get(_level2_norm(str(_edge_source(edge) or "")))
-            target_id = block_to_functional.get(_level2_norm(str(_edge_target(edge) or "")))
-            if source_id and target_id:
-                add_edge(source_id, target_id, _edge_flow_type(edge), edge=edge)
-
-    for index, edge in enumerate(_level1_effective_edges(graph)):
-        source = str(_edge_source(edge) or "")
-        target = str(_edge_target(edge) or "")
-        source_spec = spec_by_node.get(source)
-        target_spec = spec_by_node.get(target)
-        if not source_spec and not target_spec:
-            continue
-
-        flow_type = _edge_flow_type(edge)
-        buffer_ref = str(edge.get("buffer")) if edge.get("buffer") else None
-        if buffer_ref:
-            buffer_id = ensure_buffer(buffer_ref, index)
-            if source_spec:
-                add_edge(
-                    _level2_source_endpoint(source_spec, flow_type),
-                    buffer_id,
-                    flow_type,
-                    edge=edge,
-                    buffer_ref=buffer_ref,
-                    label=f"{flow_type} write",
-                )
-            if target_spec:
-                add_edge(
-                    buffer_id,
-                    _level2_target_endpoint(target_spec, flow_type),
-                    flow_type,
-                    edge=edge,
-                    buffer_ref=buffer_ref,
-                    label=f"{flow_type} read",
-                )
-            continue
-
-        if source_spec and target_spec:
-            add_edge(
-                _level2_source_endpoint(source_spec, flow_type),
-                _level2_target_endpoint(target_spec, flow_type),
-                flow_type,
-                edge=edge,
-            )
-
-    return edges
-
-
-def _level2_unavailable_response(
-    graph: CanonicalScenarioGraph,
-    expand: str,
-    reasons: list[str],
-    *,
-    target_nodes: list[str],
-) -> ViewResponse:
-    clean_reasons = [reason for reason in reasons if reason] or [f"No Level 2 module data is available for {expand}."]
-    return _response(
-        graph=graph,
-        level=2,
-        mode=f"drilldown:{expand}",
-        nodes=[],
-        edges=[],
-        metadata={
-            "canvas_w": 980,
-            "canvas_h": 360,
-            "layout": "level2-unavailable",
-            "expand": expand,
-            "level2_available": False,
-            "target_nodes": target_nodes,
-            "unavailable_reasons": clean_reasons,
-            "required_data": _LEVEL2_REQUIRED_DATA,
-        },
-    )
-
-
-def _level2_primary_functional_id(spec: dict[str, Any]) -> str:
-    block_id = spec["functional_ids"].get(_level2_norm(spec["block_name"]))
-    if block_id:
-        return block_id
-    if spec["functional_ids"]:
-        return next(iter(spec["functional_ids"].values()))
-    return f"mod-{_safe_id(spec['node_id'])}-{_safe_id(spec['block_name'])}"
-
-
-def _level2_source_endpoint(spec: dict[str, Any], flow_type: str) -> str:
-    if flow_type == "M2M" and spec["write_ids"]:
-        return spec["write_ids"][0]
-    return _level2_primary_functional_id(spec)
-
-
-def _level2_target_endpoint(spec: dict[str, Any], flow_type: str) -> str:
-    if flow_type == "M2M" and spec["read_ids"]:
-        return spec["read_ids"][0]
-    return _level2_primary_functional_id(spec)
-
-
-def _level2_functional_id(node_id: str, module_name: str) -> str:
-    return f"mod-{_safe_id(node_id)}-{_safe_id(module_name)}"
-
-
-def _level2_module_id(node_id: str, module_name: str) -> str:
-    return f"mod-{_safe_id(node_id)}-{_safe_id(module_name)}"
-
-
-def _level2_module_kind(module: dict[str, Any]) -> str:
-    module_type = str(module.get("type") or "").lower()
-    direction = str(module.get("direction") or "").lower()
-    name = str(module.get("name") or "").lower()
-    if direction == "read" or "rdma" in name:
-        return "rdma"
-    if direction == "write" or "wdma" in name:
-        return "wdma"
-    if "cin" in module_type or "cin" in name:
-        return "cin"
-    if "cout" in module_type or "cout" in name:
-        return "cout"
-    if module_type == "dma" or "dma" in name:
-        return "dma"
-    return module_type or "module"
-
-
-def _level2_module_direction(module: dict[str, Any]) -> str | None:
-    direction = str(module.get("direction") or "").lower()
-    if direction == "read":
-        return "input"
-    if direction == "write":
-        return "output"
-    if direction in {"input", "output"}:
-        return direction
-    return None
-
-
-def _level2_module_status(module: dict[str, Any]) -> str:
-    if module.get("enabled") is False:
-        return "disabled"
-    return str(module.get("status") or "declared")
-
-
-def _level2_package_detail_items(spec: dict[str, Any]) -> list[str]:
-    details = [
-        f"IP: {spec['ip_ref']}",
-        f"Hierarchy: {spec['sem'].get('hierarchy_group')}",
-        f"IP block: {spec['sem'].get('ip_group')}",
-        f"Functional blocks: {', '.join(spec['functional_modules'])}",
-    ]
-    if spec["module_nodes"]:
-        details.append("I/O modules: " + ", ".join(str(module.get("name")) for module in spec["module_nodes"]))
-    return details
-
-
-def _level2_functional_detail_items(spec: dict[str, Any], module_name: str) -> list[str]:
-    details = [
-        f"Functional module: {module_name}",
-        f"Pipeline node: {spec['node_id']}",
-        f"IP catalog: {spec['ip_ref']}",
-    ]
-    pipeline = spec["properties"].get("pipeline_description")
-    if pipeline:
-        details.append("Pipeline: " + " ".join(str(pipeline).split()))
-    return details
-
-
-def _level2_module_capability_badges(module: dict[str, Any]) -> list[str]:
-    badges: list[str] = []
-    max_bw = module.get("max_bandwidth")
-    if max_bw is not None:
-        badges.append(f"MaxBW:{_level2_bandwidth_label(max_bw)}")
-    compressions = module.get("supported_compressions") or []
-    if compressions:
-        badges.append(f"Comp:{len(compressions)}")
-    return badges
-
-
-def _level2_module_detail_items(module: dict[str, Any], spec: dict[str, Any]) -> list[str]:
-    details = [
-        f"Module: {module.get('name')}",
-        f"Kind: {_level2_module_kind(module)}",
-        f"Pipeline node: {spec['node_id']}",
-    ]
-    direction = _level2_module_direction(module)
-    if direction:
-        details.append(f"Direction: {direction}")
-    if module.get("role"):
-        details.append(f"Role: {module['role']}")
-    if module.get("max_bandwidth") is not None:
-        details.append(f"Max bandwidth: {_level2_bandwidth_label(module['max_bandwidth'])}")
-    compressions = module.get("supported_compressions") or []
-    if compressions:
-        details.append("Supported compression: " + ", ".join(str(item) for item in compressions))
-    return details
-
-
-def _level2_bandwidth_label(value: Any) -> str:
-    try:
-        numeric = float(value)
-    except (TypeError, ValueError):
-        return str(value)
-    if numeric >= 1_000_000_000:
-        return f"{numeric / 1_000_000_000:g}GB/s"
-    if numeric >= 1_000_000:
-        return f"{numeric / 1_000_000:g}MB/s"
-    return f"{numeric:g}B/s"
-
-
-def _level2_label(value: Any) -> str:
-    return str(value).replace("_", " ").replace(".", " ")
-
-
-def _level2_norm(value: Any) -> str:
-    return "".join(ch.lower() for ch in str(value or "") if ch.isalnum())
-
-
-def _response(
-    graph: CanonicalScenarioGraph,
-    level: int,
-    mode: str,
-    nodes: list[NodeElement],
-    edges: list[EdgeElement],
-    metadata: dict[str, Any],
-) -> ViewResponse:
-    enriched_metadata = dict(metadata)
-    enriched_metadata["variant_overlay"] = _variant_overlay_metadata(graph)
-    return ViewResponse(
-        level=level,
-        mode=mode,
-        scenario_id=graph.scenario_id,
-        variant_id=graph.variant_id,
-        nodes=nodes,
-        edges=edges,
-        risks=_risk_cards(graph),
-        summary=_summary(graph),
-        metadata=enriched_metadata,
-        overlays_available=["issues", "review-gate", "memory-path", "llc-allocation", "compression"],
-        level0_resource_overview=build_resource_overview(graph) if level == 0 else None,
-    )
-
-
-def _variant_overlay_metadata(graph: CanonicalScenarioGraph) -> dict[str, Any]:
-    routing = getattr(graph.variant, "routing_switch", None) or {}
-    topology_patch = getattr(graph.variant, "topology_patch", None) or {}
-    node_configs = getattr(graph.variant, "node_configs", None) or {}
-    buffer_overrides = getattr(graph.variant, "buffer_overrides", None) or {}
-    return {
-        "resolved": bool(getattr(graph.variant, "resolved", True)),
-        "inheritance_chain": list(getattr(graph.variant, "inheritance_chain", None) or []),
-        "disabled_nodes": list(routing.get("disabled_nodes") or []),
-        "disabled_edge_count": len(routing.get("disabled_edges") or []),
-        "topology_patch": {
-            "add_nodes": len(topology_patch.get("add_nodes") or []),
-            "add_edges": len(topology_patch.get("add_edges") or []),
-            "remove_edges": len(topology_patch.get("remove_edges") or []),
-        },
-        "node_config_count": len(node_configs),
-        "buffer_override_count": len(buffer_overrides),
-        "sw_task_count": sum(
-            1
-            for config in node_configs.values()
-            if isinstance(config, dict)
-            and (config.get("kind") == "sw_task" or config.get("processor"))
-        ),
-    }
-
-
-def _summary(graph: CanonicalScenarioGraph) -> ViewSummary:
-    metadata = graph.scenario.metadata_ or {}
-    design = graph.variant.design_conditions or {}
-    size_profile = graph.scenario.size_profile or {}
-    anchors = size_profile.get("anchors") or {}
-    size_overrides = getattr(graph.variant, "size_overrides", None) or {}
-    fps = int(design.get("fps") or 30)
-    period_ms = round(1000 / fps, 2) if fps else 0.0
-    resolution = (
-        size_overrides.get("record_out")
-        or _resolution_to_size(design.get("resolution"))
-        or anchors.get("record_out")
-        or str(design.get("resolution", "unknown"))
-    )
-    subtitle = f"{design.get('resolution', resolution)} {fps}fps"
-    if design.get("codec"):
-        subtitle = f"{subtitle}, {design['codec']}"
-    return ViewSummary(
-        scenario_id=graph.scenario_id,
-        variant_id=graph.variant_id,
-        name=metadata.get("name") or graph.scenario_id,
-        subtitle=subtitle,
-        period_ms=period_ms,
-        budget_ms=round(period_ms * 0.9, 2) if period_ms else 0.0,
-        resolution=str(resolution).replace("x", " x "),
-        fps=fps,
-        variant_label=graph.soc.id if graph.soc else graph.scenario.project_ref,
-        notes=_latest_evidence_note(graph),
-        captured_at=_latest_evidence_timestamp(graph),
-    )
 
 
 def _sw_stack_nodes(graph: CanonicalScenarioGraph) -> list[NodeElement]:
@@ -3340,41 +1751,8 @@ def _risk_edges(graph: CanonicalScenarioGraph, node_map: dict[str, str] | None =
     return edges
 
 
-def _risk_cards(graph: CanonicalScenarioGraph) -> list[RiskCard]:
-    gate = run_review_gate(graph)
-    cards: list[RiskCard] = []
-    for idx, issue in enumerate(gate.matched_issues, start=1):
-        cards.append(
-            RiskCard(
-                id=f"R{idx}",
-                title=issue.title,
-                component=", ".join(_issue_components(graph, issue.issue_id)) or issue.issue_id,
-                description=f"Matched by {issue.matched_by}. Status: {issue.status or 'unknown'}",
-                severity=_severity_to_card(issue.severity),
-                impact="Known Issue",
-            )
-        )
-    for rule in gate.matched_rules:
-        if rule.status == "PASS":
-            continue
-        cards.append(
-            RiskCard(
-                id=f"R{len(cards) + 1}",
-                title=f"{rule.status}: {rule.rule_id}",
-                component="Review Gate",
-                description=rule.message or rule.rule_id,
-                severity="High" if rule.status == "BLOCK" else "Medium",
-                impact="Gate Result",
-            )
-        )
-    return cards
 
 
-def _issue_components(graph: CanonicalScenarioGraph, issue_id: str) -> list[str]:
-    for issue in graph.issues:
-        if issue.id == issue_id:
-            return [item.get("submodule") or item.get("ip_ref") for item in issue.affects_ip or [] if item]
-    return []
 
 
 def _architecture_resource_kind(graph: CanonicalScenarioGraph, pipeline_node: dict[str, Any]) -> str:
@@ -3636,12 +2014,8 @@ def _edge_flow_type(edge: dict[str, Any]) -> str:
     return "M2M"
 
 
-def _edge_source(edge: dict[str, Any]) -> Any:
-    return edge.get("from") if edge.get("from") is not None else edge.get("source")
 
 
-def _edge_target(edge: dict[str, Any]) -> Any:
-    return edge.get("to") if edge.get("to") is not None else edge.get("target")
 
 
 def _find_pipeline_node(graph: CanonicalScenarioGraph, node_id: str | None) -> dict[str, Any] | None:
@@ -3707,8 +2081,6 @@ def _buffer_label(buffer_ref: str) -> str:
     return str(buffer_ref).replace("_", " ").title()
 
 
-def _safe_id(value: str) -> str:
-    return "".join(ch.lower() if ch.isalnum() else "-" for ch in str(value)).strip("-")
 
 
 def _next_order(stage_orders: dict[tuple[str, str], int], layer: str, stage: str) -> int:
@@ -3718,24 +2090,8 @@ def _next_order(stage_orders: dict[tuple[str, str], int], layer: str, stage: str
     return order
 
 
-def _parse_size(size: Any) -> tuple[int | None, int | None]:
-    if not isinstance(size, str) or "x" not in size:
-        return None, None
-    left, right = size.lower().split("x", 1)
-    try:
-        return int(left), int(right)
-    except ValueError:
-        return None, None
 
 
-def _resolution_to_size(resolution: Any) -> str | None:
-    mapping = {
-        "FHD": "1920x1080",
-        "UHD": "3840x2160",
-        "4K": "3840x2160",
-        "8K": "7680x4320",
-    }
-    return mapping.get(str(resolution).upper())
 
 
 def _parse_mb(value: Any) -> float | None:
@@ -3772,32 +2128,3 @@ def _compression_for_buffer(graph: CanonicalScenarioGraph) -> str | None:
 def _dma_count_for_node(graph: CanonicalScenarioGraph, node_id: str | None) -> int:
     memory_edges = [edge for edge in _edges_touching_node(graph, node_id) if edge.get("type") == "M2M"]
     return max(1, len(memory_edges))
-
-
-def _latest_evidence_note(graph: CanonicalScenarioGraph) -> str | None:
-    if not graph.evidence:
-        return None
-    evidence = graph.evidence[-1]
-    run = getattr(evidence, "run", None) or {}
-    tool = run.get("tool")
-    source = run.get("source")
-    if tool and source:
-        return f"Evidence from {tool} ({source})."
-    return "Evidence is available for this variant."
-
-
-def _latest_evidence_timestamp(graph: CanonicalScenarioGraph) -> str | None:
-    if not graph.evidence:
-        return None
-    run = getattr(graph.evidence[-1], "run", None) or {}
-    return run.get("timestamp")
-
-
-def _severity_to_card(severity: str | None) -> str:
-    mapping = {
-        "critical": "Critical",
-        "heavy": "High",
-        "medium": "Medium",
-        "low": "Low",
-    }
-    return mapping.get(str(severity).lower(), "Medium")

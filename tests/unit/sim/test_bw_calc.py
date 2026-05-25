@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from scenario_db.sim import bw_calc, debug_trace
 from scenario_db.sim.bw_calc import calc_port_bw
 from scenario_db.sim.models import PortTransferSpec, PortType
 
@@ -80,3 +81,33 @@ def test_calc_port_bw_otf_returns_zero():
     assert result.direction == "otf"
     assert result.bw_mbs == 0.0
     assert result.bw_power_mw == 0.0
+
+
+def test_debug_trace_uses_bw_formula_from_bw_calc():
+    assert hasattr(bw_calc, "BW_MBS_FORMULA")
+    spec = PortTransferSpec(
+        node_id="isp0",
+        ip_ref="ip-isp-v12",
+        hw_name="ISP",
+        port="WDMA_BE",
+        port_type=PortType.DMA_WRITE,
+        width=1920,
+        height=1080,
+        format="NV12",
+        bitwidth=8,
+        compression="SBWC",
+        comp_ratio=0.5,
+    )
+    result = calc_port_bw(spec, fps=30)
+
+    trace = debug_trace._dma_traces(
+        [spec],
+        dma_breakdown=[result],
+        fps=30,
+        bw_power_coeff=80,
+        vbat=3.8,
+        pmic_efficiency=0.9,
+    )[0]
+
+    assert trace["formula"] == bw_calc.BW_MBS_FORMULA
+    assert trace["bw_formula"] == bw_calc.BW_MBS_FORMULA
