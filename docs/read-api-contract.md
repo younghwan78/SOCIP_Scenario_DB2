@@ -239,6 +239,25 @@ Memory descriptor and memory placement are separate concepts.
 
 Compression must not be used as a proxy for LLC placement.
 
+## Query API Contract
+
+`POST /api/v1/query/variants` returns `200 OK` only for valid query requests.
+Business validation failures such as unsupported fields or numeric aggregation
+on non-numeric fields return `400 bad_request` using the standard error
+envelope:
+
+```json
+{
+  "error": "bad_request",
+  "detail": ["Unsupported query field: raw.sql"]
+}
+```
+
+Aggregation metrics `min`, `avg`, `p50`, `p95`, and `max` require a field with
+type `number` in the query field registry. `count` is allowed for any supported
+field. Missing aggregation group values are serialized as JSON `null`; the
+literal string `"(none)"` remains distinct from a missing value.
+
 ## Error Contract
 
 All handled API errors should return:

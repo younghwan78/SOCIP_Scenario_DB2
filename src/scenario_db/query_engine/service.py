@@ -24,14 +24,20 @@ from scenario_db.db.models.definition import Project, Scenario, ScenarioVariant
 from scenario_db.db.models.evidence import Evidence
 from scenario_db.db.repositories.variant_resolution import ResolvedScenarioVariant, resolve_variant_from_rows
 from scenario_db.query_engine.facts import build_variant_facts
-from scenario_db.query_engine.field_registry import OPERATORS, field_definitions, is_supported_field
+from scenario_db.query_engine.field_registry import OPERATORS, field_definition, field_definitions, is_supported_field
+
+
+class QueryValidationError(ValueError):
+    def __init__(self, errors: list[str]) -> None:
+        super().__init__("; ".join(errors))
+        self.errors = errors
 
 
 def query_variants(db: Session, request: QueryRequest) -> QueryResponse:
     predicates = _scope_predicates(request.scope) + list(request.where)
     errors = _validate_request(request, predicates)
     if errors:
-        return QueryResponse(items=[], total=0, limit=request.limit, offset=request.offset, has_next=False, errors=errors)
+        raise QueryValidationError(errors)
 
     items = _build_items(db)
     filtered = [
@@ -242,6 +248,15 @@ def _validate_request(request: QueryRequest, predicates: list[QueryPredicate]) -
         for metric in aggregate.metrics:
             if not is_supported_field(metric.field):
                 errors.append(f"Unsupported aggregate metric field: {metric.field}")
+                continue
+            if any(op != "count" for op in metric.ops):
+                definition = field_definition(metric.field)
+                if definition is None or definition.type != "number":
+                    errors.append(
+                        "aggregation_field_type_mismatch: "
+                        f"{metric.field} is {definition.type if definition else 'unknown'}, "
+                        "but min/avg/p50/p95/max require a number field"
+                    )
     return errors
 
 
@@ -394,7 +409,7 @@ def _aggregation_key_values(item: QueryResultItem, fields: list[str]) -> list[di
 
 def _aggregation_values_for_field(item: QueryResultItem, field: str) -> list[Any]:
     values = _unique_values(value for value in _values_for_field(item, field) if value not in (None, "", []))
-    return values or ["(none)"]
+    return values or [None]
 
 
 def _aggregation_metrics(items: list[QueryResultItem], metrics: list[QueryAggregationMetric]) -> dict[str, dict[str, Any]]:

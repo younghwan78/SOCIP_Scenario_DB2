@@ -1,0 +1,298 @@
+{
+  "edges": [
+    {
+      "data": {
+        "buffer_ref": "CSISPDP_3AA_BUF",
+        "detail_items": [
+          "Route: csispdp -> n3aa",
+          "Edge type: M2M",
+          "Buffer: RAW_BAYER_16 / 12b / COMP_BAYER_LOSSLESS"
+        ],
+        "flow_type": "M2M",
+        "id": "l2e-0-mod-csispdp-csispdp-wdma-buf-csispdp-3aa-buf",
+        "label": "M2M write",
+        "memory": {
+          "bitdepth": 12,
+          "compression": "COMP_BAYER_LOSSLESS",
+          "format": "RAW_BAYER_16",
+          "fps": 30
+        },
+        "placement": {
+          "llc_allocated": false,
+          "llc_policy": "none"
+        },
+        "source": "mod-csispdp-csispdp-wdma",
+        "target": "buf-csispdp-3aa-buf"
+      }
+    }
+  ],
+  "level": 2,
+  "metadata": {
+    "canvas_h": 760,
+    "canvas_w": 1280,
+    "expand": "csispdp",
+    "layout": "level2-module-detail",
+    "level2_available": true,
+    "module_source": "ip_catalog.capabilities.properties",
+    "omitted_reasons": [],
+    "rendered_module_count": 2,
+    "target_nodes": [
+      "csispdp"
+    ],
+    "variant_overlay": {
+      "buffer_override_count": 0,
+      "disabled_edge_count": 9,
+      "disabled_nodes": [
+        "sensor_rear2",
+        "sensor_rear3",
+        "sensor_front",
+        "lme",
+        "npu",
+        "eis"
+      ],
+      "inheritance_chain": [
+        "cam-rec-3rdparty-binning"
+      ],
+      "node_config_count": 1,
+      "resolved": true,
+      "sw_task_count": 0,
+      "topology_patch": {
+        "add_edges": 0,
+        "add_nodes": 0,
+        "remove_edges": 0
+      }
+    }
+  },
+  "mode": "drilldown:csispdp",
+  "nodes": [
+    {
+      "data": {
+        "capability_badges": [],
+        "collapsed_children_count": 0,
+        "detail_items": [],
+        "hierarchy_group": "ISP",
+        "id": "grp-l2-isp",
+        "label": "ISP",
+        "layer": "meta",
+        "matched_issues": [],
+        "semantic_source": "level1-semantic-group",
+        "shared_resource": false,
+        "summary_badges": [],
+        "type": "submodule",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "muted",
+          "height": 240,
+          "order": 1,
+          "width": 420
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 220.0,
+        "y": 80.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [],
+        "collapsed_children_count": 0,
+        "detail_items": [
+          "IP: ip-isp-s5e9965",
+          "Hierarchy: ISP",
+          "IP block: CSIS/PDP",
+          "Functional blocks: CSISPDP",
+          "I/O modules: CSISPDP_WDMA"
+        ],
+        "hierarchy_group": "ISP",
+        "id": "l2pkg-csispdp",
+        "ip_group": "CSIS/PDP",
+        "ip_ref": "ip-isp-s5e9965",
+        "label": "CSISPDP",
+        "layer": "meta",
+        "matched_issues": [],
+        "parent": "grp-l2-isp",
+        "role_hw_name": "PDP",
+        "semantic_source": "level2-ip-package",
+        "shared_resource": false,
+        "summary_badges": [],
+        "type": "submodule",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "normal",
+          "height": 180,
+          "lane": "hw",
+          "order": 0,
+          "stage": "processing",
+          "width": 360
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 220.0,
+        "y": 180.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [
+          "HW:PDP",
+          "DVFS:CSIS"
+        ],
+        "collapsed_children_count": 0,
+        "detail_items": [
+          "Functional module: CSISPDP",
+          "Pipeline node: csispdp",
+          "IP catalog: ip-isp-s5e9965",
+          "Pipeline: OTF: CSISPDP -> BYRP -> RGBP -> YUVSC M2M: YUVSC => MTNR (M2M break for multi-frame buffering) OTF: MTNR -> MSNR -> YUVP -> MCSC Side: CSISPDP => 3AA (M2M, 3A statistics)"
+        ],
+        "hierarchy_group": "ISP",
+        "id": "mod-csispdp-csispdp",
+        "ip_group": "CSIS/PDP",
+        "ip_ref": "ip-isp-s5e9965",
+        "label": "CSISPDP",
+        "layer": "hw",
+        "matched_issues": [],
+        "module_kind": "functional",
+        "module_ref": "CSISPDP",
+        "module_status": "declared",
+        "parent": "l2pkg-csispdp",
+        "role_hw_name": "PDP",
+        "semantic_source": "level2-functional-module",
+        "shared_resource": false,
+        "summary_badges": [
+          "ISP",
+          "CSIS/PDP",
+          "Module"
+        ],
+        "type": "submodule",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "normal",
+          "height": 62,
+          "lane": "hw",
+          "order": 0,
+          "stage": "processing",
+          "width": 165
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 240.0,
+        "y": 320.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [
+          "MaxBW:51.2GB/s",
+          "Comp:2"
+        ],
+        "collapsed_children_count": 0,
+        "detail_items": [
+          "Module: CSISPDP_WDMA",
+          "Kind: wdma",
+          "Pipeline node: csispdp",
+          "Direction: output",
+          "Max bandwidth: 51.2GB/s",
+          "Supported compression: COMP_BAYER_LOSSLESS, COMP_BAYER_LOSSY"
+        ],
+        "hierarchy_group": "ISP",
+        "id": "mod-csispdp-csispdp-wdma",
+        "ip_group": "CSIS/PDP",
+        "ip_ref": "ip-isp-s5e9965",
+        "label": "CSISPDP WDMA",
+        "layer": "hw",
+        "matched_issues": [],
+        "module_direction": "output",
+        "module_kind": "wdma",
+        "module_ref": "CSISPDP_WDMA",
+        "module_status": "declared",
+        "parent": "l2pkg-csispdp",
+        "role_hw_name": "PDP",
+        "semantic_source": "level2-io-module",
+        "shared_resource": false,
+        "summary_badges": [
+          "WDMA",
+          "output"
+        ],
+        "type": "submodule",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "normal",
+          "height": 64,
+          "lane": "hw",
+          "order": 1,
+          "stage": "processing",
+          "width": 185
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 304.0,
+        "y": 320.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [],
+        "collapsed_children_count": 0,
+        "detail_items": [
+          "Buffer: RAW_BAYER_16 / 12b / COMP_BAYER_LOSSLESS"
+        ],
+        "id": "buf-csispdp-3aa-buf",
+        "label": "Csispdp 3Aa Buf",
+        "layer": "memory",
+        "matched_issues": [],
+        "memory": {
+          "bitdepth": 12,
+          "compression": "COMP_BAYER_LOSSLESS",
+          "format": "RAW_BAYER_16",
+          "fps": 30
+        },
+        "placement": {
+          "llc_allocated": false,
+          "llc_policy": "none"
+        },
+        "shared_resource": false,
+        "summary_badges": [],
+        "type": "buffer",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "normal",
+          "height": 68,
+          "lane": "memory",
+          "order": 8,
+          "stage": "processing",
+          "width": 235
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 1980.0,
+        "y": 620.0
+      }
+    }
+  ],
+  "overlays_available": [
+    "issues",
+    "review-gate",
+    "memory-path",
+    "llc-allocation",
+    "compression"
+  ],
+  "risks": [],
+  "scenario_id": "uc-camera-recording",
+  "summary": {
+    "budget_ms": 30.0,
+    "fps": 30,
+    "name": "Camera Recording",
+    "period_ms": 33.33,
+    "resolution": "1920 x 1080",
+    "scenario_id": "uc-camera-recording",
+    "subtitle": "FHD 30fps",
+    "variant_id": "cam-rec-3rdparty-binning",
+    "variant_label": "soc-exynos2600"
+  },
+  "variant_id": "cam-rec-3rdparty-binning"
+}

@@ -1,0 +1,1757 @@
+{
+  "edges": [
+    {
+      "data": {
+        "detail_items": [
+          "Route: sensor_rear -> csispdp",
+          "Edge type: OTF"
+        ],
+        "flow_type": "OTF",
+        "id": "e-topo-0",
+        "source": "ip-sensor_rear",
+        "target": "ip-csispdp"
+      }
+    },
+    {
+      "data": {
+        "detail_items": [
+          "Route: csispdp -> byrp",
+          "Edge type: OTF"
+        ],
+        "flow_type": "OTF",
+        "id": "e-topo-1",
+        "source": "ip-csispdp",
+        "target": "ip-byrp"
+      }
+    },
+    {
+      "data": {
+        "detail_items": [
+          "Route: byrp -> rgbp",
+          "Edge type: OTF"
+        ],
+        "flow_type": "OTF",
+        "id": "e-topo-2",
+        "source": "ip-byrp",
+        "target": "ip-rgbp"
+      }
+    },
+    {
+      "data": {
+        "detail_items": [
+          "Route: rgbp -> yuvsc",
+          "Edge type: OTF"
+        ],
+        "flow_type": "OTF",
+        "id": "e-topo-3",
+        "source": "ip-rgbp",
+        "target": "ip-yuvsc"
+      }
+    },
+    {
+      "data": {
+        "buffer_ref": "YUVSC_MTNR_BUF",
+        "consumer": "mtnr",
+        "detail_items": [
+          "Route: yuvsc -> mtnr",
+          "Edge type: M2M",
+          "Buffer: YUVSC_MTNR_BUF",
+          "YUV422 / 10b / COMP_OFF"
+        ],
+        "flow_type": "M2M",
+        "id": "e-topo-4-src-buf",
+        "memory": {
+          "bitdepth": 10,
+          "compression": "COMP_OFF",
+          "format": "YUV422",
+          "fps": 30,
+          "height": 1080,
+          "width": 1920
+        },
+        "producer": "yuvsc",
+        "source": "ip-yuvsc",
+        "target": "buf-yuvsc-mtnr-buf"
+      }
+    },
+    {
+      "data": {
+        "buffer_ref": "YUVSC_MTNR_BUF",
+        "consumer": "mtnr",
+        "detail_items": [
+          "Route: yuvsc -> mtnr",
+          "Edge type: M2M",
+          "Buffer: YUVSC_MTNR_BUF",
+          "YUV422 / 10b / COMP_OFF"
+        ],
+        "flow_type": "M2M",
+        "id": "e-topo-4-buf-tgt",
+        "memory": {
+          "bitdepth": 10,
+          "compression": "COMP_OFF",
+          "format": "YUV422",
+          "fps": 30,
+          "height": 1080,
+          "width": 1920
+        },
+        "producer": "yuvsc",
+        "source": "buf-yuvsc-mtnr-buf",
+        "target": "ip-mtnr"
+      }
+    },
+    {
+      "data": {
+        "detail_items": [
+          "Route: mtnr -> msnr",
+          "Edge type: OTF"
+        ],
+        "flow_type": "OTF",
+        "id": "e-topo-5",
+        "source": "ip-mtnr",
+        "target": "ip-msnr"
+      }
+    },
+    {
+      "data": {
+        "detail_items": [
+          "Route: msnr -> yuvp",
+          "Edge type: OTF"
+        ],
+        "flow_type": "OTF",
+        "id": "e-topo-6",
+        "source": "ip-msnr",
+        "target": "ip-yuvp"
+      }
+    },
+    {
+      "data": {
+        "detail_items": [
+          "Route: yuvp -> mcsc",
+          "Edge type: OTF"
+        ],
+        "flow_type": "OTF",
+        "id": "e-topo-7",
+        "source": "ip-yuvp",
+        "target": "ip-mcsc"
+      }
+    },
+    {
+      "data": {
+        "buffer_ref": "CSISPDP_3AA_BUF",
+        "consumer": "n3aa",
+        "detail_items": [
+          "Route: csispdp -> n3aa",
+          "Edge type: M2M",
+          "Buffer: CSISPDP_3AA_BUF",
+          "RAW_BAYER_16 / 12b / COMP_BAYER_LOSSLESS"
+        ],
+        "flow_type": "M2M",
+        "id": "e-topo-8-src-buf",
+        "memory": {
+          "bitdepth": 12,
+          "compression": "COMP_BAYER_LOSSLESS",
+          "format": "RAW_BAYER_16",
+          "fps": 30,
+          "height": 1080,
+          "width": 1920
+        },
+        "producer": "csispdp",
+        "source": "ip-csispdp",
+        "target": "buf-csispdp-3aa-buf"
+      }
+    },
+    {
+      "data": {
+        "buffer_ref": "CSISPDP_3AA_BUF",
+        "consumer": "n3aa",
+        "detail_items": [
+          "Route: csispdp -> n3aa",
+          "Edge type: M2M",
+          "Buffer: CSISPDP_3AA_BUF",
+          "RAW_BAYER_16 / 12b / COMP_BAYER_LOSSLESS"
+        ],
+        "flow_type": "M2M",
+        "id": "e-topo-8-buf-tgt",
+        "memory": {
+          "bitdepth": 12,
+          "compression": "COMP_BAYER_LOSSLESS",
+          "format": "RAW_BAYER_16",
+          "fps": 30,
+          "height": 1080,
+          "width": 1920
+        },
+        "producer": "csispdp",
+        "source": "buf-csispdp-3aa-buf",
+        "target": "ip-n3aa"
+      }
+    },
+    {
+      "data": {
+        "buffer_ref": "MCSC_WDMA_PREV_BUF",
+        "consumer": "gdc_m",
+        "detail_items": [
+          "Route: mcsc -> gdc_m",
+          "Edge type: M2M",
+          "Buffer: MCSC_WDMA_PREV_BUF",
+          "YUV420 / 8b / COMP_OFF"
+        ],
+        "flow_type": "M2M",
+        "id": "e-topo-9-src-buf",
+        "memory": {
+          "bitdepth": 8,
+          "compression": "COMP_OFF",
+          "format": "YUV420",
+          "fps": 30,
+          "height": 1080,
+          "width": 1920
+        },
+        "producer": "mcsc",
+        "source": "ip-mcsc",
+        "target": "buf-mcsc-wdma-prev-buf"
+      }
+    },
+    {
+      "data": {
+        "buffer_ref": "MCSC_WDMA_PREV_BUF",
+        "consumer": "gdc_m",
+        "detail_items": [
+          "Route: mcsc -> gdc_m",
+          "Edge type: M2M",
+          "Buffer: MCSC_WDMA_PREV_BUF",
+          "YUV420 / 8b / COMP_OFF"
+        ],
+        "flow_type": "M2M",
+        "id": "e-topo-9-buf-tgt",
+        "memory": {
+          "bitdepth": 8,
+          "compression": "COMP_OFF",
+          "format": "YUV420",
+          "fps": 30,
+          "height": 1080,
+          "width": 1920
+        },
+        "producer": "mcsc",
+        "source": "buf-mcsc-wdma-prev-buf",
+        "target": "ip-gdc_m"
+      }
+    },
+    {
+      "data": {
+        "buffer_ref": "MCSC_WDMA_VIDEO_BUF",
+        "consumer": "gdc_o",
+        "detail_items": [
+          "Route: mcsc -> gdc_o",
+          "Edge type: M2M",
+          "Buffer: MCSC_WDMA_VIDEO_BUF",
+          "YUV420 / 8b / COMP_OFF"
+        ],
+        "flow_type": "M2M",
+        "id": "e-topo-10-src-buf",
+        "memory": {
+          "bitdepth": 8,
+          "compression": "COMP_OFF",
+          "format": "YUV420",
+          "fps": 30,
+          "height": 1080,
+          "width": 1920
+        },
+        "producer": "mcsc",
+        "source": "ip-mcsc",
+        "target": "buf-mcsc-wdma-video-buf"
+      }
+    },
+    {
+      "data": {
+        "buffer_ref": "MCSC_WDMA_VIDEO_BUF",
+        "consumer": "gdc_o",
+        "detail_items": [
+          "Route: mcsc -> gdc_o",
+          "Edge type: M2M",
+          "Buffer: MCSC_WDMA_VIDEO_BUF",
+          "YUV420 / 8b / COMP_OFF"
+        ],
+        "flow_type": "M2M",
+        "id": "e-topo-10-buf-tgt",
+        "memory": {
+          "bitdepth": 8,
+          "compression": "COMP_OFF",
+          "format": "YUV420",
+          "fps": 30,
+          "height": 1080,
+          "width": 1920
+        },
+        "producer": "mcsc",
+        "source": "buf-mcsc-wdma-video-buf",
+        "target": "ip-gdc_o"
+      }
+    },
+    {
+      "data": {
+        "buffer_ref": "GDC_M_DPU_BUF",
+        "consumer": "dpu",
+        "detail_items": [
+          "Route: gdc_m -> dpu",
+          "Edge type: M2M",
+          "Buffer: GDC_M_DPU_BUF",
+          "YUV420 / 8b / COMP_SBWC_LOSSLESS"
+        ],
+        "flow_type": "M2M",
+        "id": "e-topo-11-src-buf",
+        "memory": {
+          "bitdepth": 8,
+          "compression": "COMP_SBWC_LOSSLESS",
+          "format": "YUV420",
+          "fps": 30,
+          "height": 1080,
+          "width": 1920
+        },
+        "producer": "gdc_m",
+        "source": "ip-gdc_m",
+        "target": "buf-gdc-m-dpu-buf"
+      }
+    },
+    {
+      "data": {
+        "buffer_ref": "GDC_M_DPU_BUF",
+        "consumer": "dpu",
+        "detail_items": [
+          "Route: gdc_m -> dpu",
+          "Edge type: M2M",
+          "Buffer: GDC_M_DPU_BUF",
+          "YUV420 / 8b / COMP_SBWC_LOSSLESS"
+        ],
+        "flow_type": "M2M",
+        "id": "e-topo-11-buf-tgt",
+        "memory": {
+          "bitdepth": 8,
+          "compression": "COMP_SBWC_LOSSLESS",
+          "format": "YUV420",
+          "fps": 30,
+          "height": 1080,
+          "width": 1920
+        },
+        "producer": "gdc_m",
+        "source": "buf-gdc-m-dpu-buf",
+        "target": "ip-dpu"
+      }
+    },
+    {
+      "data": {
+        "buffer_ref": "GDC_O_MFC_BUF",
+        "consumer": "mfc_enc",
+        "detail_items": [
+          "Route: gdc_o -> mfc_enc",
+          "Edge type: M2M",
+          "Buffer: GDC_O_MFC_BUF",
+          "YUV420 / 8b / COMP_SBWC_LOSSLESS"
+        ],
+        "flow_type": "M2M",
+        "id": "e-topo-12-src-buf",
+        "memory": {
+          "bitdepth": 8,
+          "compression": "COMP_SBWC_LOSSLESS",
+          "format": "YUV420",
+          "fps": 30,
+          "height": 1080,
+          "width": 1920
+        },
+        "producer": "gdc_o",
+        "source": "ip-gdc_o",
+        "target": "buf-gdc-o-mfc-buf"
+      }
+    },
+    {
+      "data": {
+        "buffer_ref": "GDC_O_MFC_BUF",
+        "consumer": "mfc_enc",
+        "detail_items": [
+          "Route: gdc_o -> mfc_enc",
+          "Edge type: M2M",
+          "Buffer: GDC_O_MFC_BUF",
+          "YUV420 / 8b / COMP_SBWC_LOSSLESS"
+        ],
+        "flow_type": "M2M",
+        "id": "e-topo-12-buf-tgt",
+        "memory": {
+          "bitdepth": 8,
+          "compression": "COMP_SBWC_LOSSLESS",
+          "format": "YUV420",
+          "fps": 30,
+          "height": 1080,
+          "width": 1920
+        },
+        "producer": "gdc_o",
+        "source": "buf-gdc-o-mfc-buf",
+        "target": "ip-mfc_enc"
+      }
+    },
+    {
+      "data": {
+        "detail_items": [
+          "Route: dpu -> panel",
+          "Edge type: OTF"
+        ],
+        "flow_type": "OTF",
+        "id": "e-topo-13",
+        "source": "ip-dpu",
+        "target": "ip-panel"
+      }
+    }
+  ],
+  "level": 0,
+  "level0_resource_overview": {
+    "buffers": [
+      {
+        "bitdepth": 10,
+        "buffer_ref": "YUVSC_MTNR_BUF",
+        "compression": "COMP_OFF",
+        "consumer_node_ids": [
+          "mtnr"
+        ],
+        "format": "YUV422",
+        "llc_allocated": false,
+        "producer_node_id": "yuvsc",
+        "size_label": "1920x1080",
+        "subsystem": "camera"
+      },
+      {
+        "bitdepth": 12,
+        "buffer_ref": "CSISPDP_3AA_BUF",
+        "compression": "COMP_BAYER_LOSSLESS",
+        "consumer_node_ids": [
+          "n3aa"
+        ],
+        "format": "RAW_BAYER_16",
+        "llc_allocated": false,
+        "producer_node_id": "csispdp",
+        "size_label": "1920x1080",
+        "subsystem": "camera"
+      },
+      {
+        "bitdepth": 8,
+        "buffer_ref": "MCSC_WDMA_PREV_BUF",
+        "compression": "COMP_OFF",
+        "consumer_node_ids": [
+          "gdc_m"
+        ],
+        "format": "YUV420",
+        "llc_allocated": false,
+        "producer_node_id": "mcsc",
+        "size_label": "1920x1080",
+        "subsystem": "camera"
+      },
+      {
+        "bitdepth": 8,
+        "buffer_ref": "MCSC_WDMA_VIDEO_BUF",
+        "compression": "COMP_OFF",
+        "consumer_node_ids": [
+          "gdc_o"
+        ],
+        "format": "YUV420",
+        "llc_allocated": false,
+        "producer_node_id": "mcsc",
+        "size_label": "1920x1080",
+        "subsystem": "camera"
+      },
+      {
+        "bitdepth": 8,
+        "buffer_ref": "GDC_M_DPU_BUF",
+        "compression": "COMP_SBWC_LOSSLESS",
+        "consumer_node_ids": [
+          "dpu"
+        ],
+        "format": "YUV420",
+        "llc_allocated": false,
+        "producer_node_id": "gdc_m",
+        "size_label": "1920x1080",
+        "subsystem": "camera"
+      },
+      {
+        "bitdepth": 8,
+        "buffer_ref": "GDC_O_MFC_BUF",
+        "compression": "COMP_SBWC_LOSSLESS",
+        "consumer_node_ids": [
+          "mfc_enc"
+        ],
+        "format": "YUV420",
+        "llc_allocated": false,
+        "producer_node_id": "gdc_o",
+        "size_label": "1920x1080",
+        "subsystem": "camera"
+      }
+    ],
+    "displays": [
+      {
+        "layer_count": 3,
+        "layers": [],
+        "node_id": "dpu"
+      }
+    ],
+    "metric_breakdown": [
+      {
+        "node_count": 12,
+        "subsystem": "camera",
+        "warning_count": 0
+      },
+      {
+        "node_count": 2,
+        "subsystem": "display",
+        "warning_count": 0
+      },
+      {
+        "node_count": 1,
+        "subsystem": "video",
+        "warning_count": 0
+      }
+    ],
+    "notes": [],
+    "rows": [
+      {
+        "badges": [
+          "SENSOR",
+          "OTF"
+        ],
+        "buffer_refs": [],
+        "detail_items": [
+          "Role: sensor"
+        ],
+        "flow": "OTF",
+        "input_buffer_refs": [],
+        "label": "SENSOR REAR",
+        "node_id": "sensor_rear",
+        "resource_domain": "external_source",
+        "resource_kind": "sensor",
+        "role": "sensor",
+        "sequence_index": 1,
+        "status": "active",
+        "subsystem": "camera"
+      },
+      {
+        "badges": [
+          "CAMERA",
+          "M2M",
+          "OTF",
+          "BUF"
+        ],
+        "buffer_refs": [
+          "CSISPDP_3AA_BUF"
+        ],
+        "detail_items": [
+          "Role: csispdp",
+          "Buffers: CSISPDP_3AA_BUF"
+        ],
+        "flow": "mixed",
+        "input_buffer_refs": [],
+        "label": "CSISPDP",
+        "node_id": "csispdp",
+        "output": {
+          "bitdepth": 12,
+          "compression": "COMP_BAYER_LOSSLESS",
+          "format": "RAW_BAYER_16",
+          "size_label": "CSISPDP_3AA_BUF"
+        },
+        "resource_domain": "soc_resource",
+        "resource_kind": "camera",
+        "role": "csispdp",
+        "sequence_index": 2,
+        "status": "active",
+        "subsystem": "camera"
+      },
+      {
+        "badges": [
+          "CAMERA"
+        ],
+        "buffer_refs": [],
+        "detail_items": [
+          "Role: stats_3aa"
+        ],
+        "flow": "none",
+        "input": {
+          "bitdepth": 12,
+          "compression": "COMP_BAYER_LOSSLESS",
+          "format": "RAW_BAYER_16",
+          "size_label": "CSISPDP_3AA_BUF"
+        },
+        "input_buffer_refs": [
+          "CSISPDP_3AA_BUF"
+        ],
+        "label": "N3AA",
+        "node_id": "n3aa",
+        "resource_domain": "soc_resource",
+        "resource_kind": "camera",
+        "role": "stats_3aa",
+        "sequence_index": 3,
+        "status": "active",
+        "subsystem": "camera"
+      },
+      {
+        "badges": [
+          "CAMERA",
+          "OTF"
+        ],
+        "buffer_refs": [],
+        "detail_items": [
+          "Role: bayer_processing"
+        ],
+        "flow": "OTF",
+        "input_buffer_refs": [],
+        "label": "BYRP",
+        "node_id": "byrp",
+        "resource_domain": "soc_resource",
+        "resource_kind": "camera",
+        "role": "bayer_processing",
+        "sequence_index": 4,
+        "status": "active",
+        "subsystem": "camera"
+      },
+      {
+        "badges": [
+          "CAMERA",
+          "OTF"
+        ],
+        "buffer_refs": [],
+        "detail_items": [
+          "Role: rgb_processing"
+        ],
+        "flow": "OTF",
+        "input_buffer_refs": [],
+        "label": "RGBP",
+        "node_id": "rgbp",
+        "resource_domain": "soc_resource",
+        "resource_kind": "camera",
+        "role": "rgb_processing",
+        "sequence_index": 5,
+        "status": "active",
+        "subsystem": "camera"
+      },
+      {
+        "badges": [
+          "CAMERA",
+          "M2M",
+          "BUF"
+        ],
+        "buffer_refs": [
+          "YUVSC_MTNR_BUF"
+        ],
+        "detail_items": [
+          "Role: yuv_scaler",
+          "Buffers: YUVSC_MTNR_BUF"
+        ],
+        "flow": "M2M",
+        "input_buffer_refs": [],
+        "label": "YUVSC",
+        "node_id": "yuvsc",
+        "output": {
+          "bitdepth": 10,
+          "compression": "COMP_OFF",
+          "format": "YUV422",
+          "size_label": "YUVSC_MTNR_BUF"
+        },
+        "resource_domain": "soc_resource",
+        "resource_kind": "camera",
+        "role": "yuv_scaler",
+        "sequence_index": 6,
+        "status": "active",
+        "subsystem": "camera"
+      },
+      {
+        "badges": [
+          "CAMERA",
+          "OTF"
+        ],
+        "buffer_refs": [],
+        "detail_items": [
+          "Role: temporal_nr"
+        ],
+        "flow": "OTF",
+        "input": {
+          "bitdepth": 10,
+          "compression": "COMP_OFF",
+          "format": "YUV422",
+          "size_label": "YUVSC_MTNR_BUF"
+        },
+        "input_buffer_refs": [
+          "YUVSC_MTNR_BUF"
+        ],
+        "label": "MTNR",
+        "node_id": "mtnr",
+        "resource_domain": "soc_resource",
+        "resource_kind": "camera",
+        "role": "temporal_nr",
+        "sequence_index": 7,
+        "status": "active",
+        "subsystem": "camera"
+      },
+      {
+        "badges": [
+          "CAMERA",
+          "OTF"
+        ],
+        "buffer_refs": [],
+        "detail_items": [
+          "Role: spatial_nr"
+        ],
+        "flow": "OTF",
+        "input_buffer_refs": [],
+        "label": "MSNR",
+        "node_id": "msnr",
+        "resource_domain": "soc_resource",
+        "resource_kind": "camera",
+        "role": "spatial_nr",
+        "sequence_index": 8,
+        "status": "active",
+        "subsystem": "camera"
+      },
+      {
+        "badges": [
+          "CAMERA",
+          "OTF"
+        ],
+        "buffer_refs": [],
+        "detail_items": [
+          "Role: yuv_post"
+        ],
+        "flow": "OTF",
+        "input_buffer_refs": [],
+        "label": "YUVP",
+        "node_id": "yuvp",
+        "resource_domain": "soc_resource",
+        "resource_kind": "camera",
+        "role": "yuv_post",
+        "sequence_index": 9,
+        "status": "active",
+        "subsystem": "camera"
+      },
+      {
+        "badges": [
+          "CAMERA",
+          "M2M",
+          "BUF"
+        ],
+        "buffer_refs": [
+          "MCSC_WDMA_PREV_BUF",
+          "MCSC_WDMA_VIDEO_BUF"
+        ],
+        "detail_items": [
+          "Role: mcsc",
+          "Buffers: MCSC_WDMA_PREV_BUF, MCSC_WDMA_VIDEO_BUF"
+        ],
+        "flow": "M2M",
+        "input_buffer_refs": [],
+        "label": "MCSC",
+        "node_id": "mcsc",
+        "output": {
+          "bitdepth": 8,
+          "compression": "COMP_OFF",
+          "format": "YUV420",
+          "size_label": "MCSC_WDMA_PREV_BUF"
+        },
+        "resource_domain": "soc_resource",
+        "resource_kind": "camera",
+        "role": "mcsc",
+        "sequence_index": 10,
+        "status": "active",
+        "subsystem": "camera"
+      },
+      {
+        "badges": [
+          "CAMERA",
+          "M2M",
+          "BUF"
+        ],
+        "buffer_refs": [
+          "GDC_M_DPU_BUF"
+        ],
+        "detail_items": [
+          "Role: gdc_preview",
+          "Buffers: GDC_M_DPU_BUF"
+        ],
+        "flow": "M2M",
+        "input": {
+          "bitdepth": 8,
+          "compression": "COMP_OFF",
+          "format": "YUV420",
+          "size_label": "MCSC_WDMA_PREV_BUF"
+        },
+        "input_buffer_refs": [
+          "MCSC_WDMA_PREV_BUF"
+        ],
+        "label": "GDC M",
+        "node_id": "gdc_m",
+        "output": {
+          "bitdepth": 8,
+          "compression": "COMP_SBWC_LOSSLESS",
+          "format": "YUV420",
+          "size_label": "GDC_M_DPU_BUF"
+        },
+        "resource_domain": "soc_resource",
+        "resource_kind": "camera",
+        "role": "gdc_preview",
+        "sequence_index": 11,
+        "status": "active",
+        "subsystem": "camera"
+      },
+      {
+        "badges": [
+          "CAMERA",
+          "M2M",
+          "BUF"
+        ],
+        "buffer_refs": [
+          "GDC_O_MFC_BUF"
+        ],
+        "detail_items": [
+          "Role: gdc_video",
+          "Buffers: GDC_O_MFC_BUF"
+        ],
+        "flow": "M2M",
+        "input": {
+          "bitdepth": 8,
+          "compression": "COMP_OFF",
+          "format": "YUV420",
+          "size_label": "MCSC_WDMA_VIDEO_BUF"
+        },
+        "input_buffer_refs": [
+          "MCSC_WDMA_VIDEO_BUF"
+        ],
+        "label": "GDC O",
+        "node_id": "gdc_o",
+        "output": {
+          "bitdepth": 8,
+          "compression": "COMP_SBWC_LOSSLESS",
+          "format": "YUV420",
+          "size_label": "GDC_O_MFC_BUF"
+        },
+        "resource_domain": "soc_resource",
+        "resource_kind": "camera",
+        "role": "gdc_video",
+        "sequence_index": 12,
+        "status": "active",
+        "subsystem": "camera"
+      },
+      {
+        "badges": [
+          "DPU",
+          "OTF"
+        ],
+        "buffer_refs": [],
+        "detail_items": [
+          "Role: display_controller"
+        ],
+        "flow": "OTF",
+        "input": {
+          "bitdepth": 8,
+          "compression": "COMP_SBWC_LOSSLESS",
+          "format": "YUV420",
+          "size_label": "GDC_M_DPU_BUF"
+        },
+        "input_buffer_refs": [
+          "GDC_M_DPU_BUF"
+        ],
+        "label": "DPU",
+        "node_id": "dpu",
+        "resource_domain": "soc_resource",
+        "resource_kind": "dpu",
+        "role": "display_controller",
+        "sequence_index": 13,
+        "status": "active",
+        "subsystem": "display"
+      },
+      {
+        "badges": [
+          "MFC"
+        ],
+        "buffer_refs": [],
+        "detail_items": [
+          "Role: encoder"
+        ],
+        "flow": "none",
+        "input": {
+          "bitdepth": 8,
+          "compression": "COMP_SBWC_LOSSLESS",
+          "format": "YUV420",
+          "size_label": "GDC_O_MFC_BUF"
+        },
+        "input_buffer_refs": [
+          "GDC_O_MFC_BUF"
+        ],
+        "label": "MFC ENC",
+        "node_id": "mfc_enc",
+        "resource_domain": "soc_resource",
+        "resource_kind": "mfc",
+        "role": "encoder",
+        "sequence_index": 14,
+        "status": "active",
+        "subsystem": "video"
+      },
+      {
+        "badges": [
+          "EXT"
+        ],
+        "buffer_refs": [],
+        "detail_items": [
+          "Role: display_output"
+        ],
+        "flow": "none",
+        "input_buffer_refs": [],
+        "label": "PANEL",
+        "node_id": "panel",
+        "resource_domain": "external_sink",
+        "resource_kind": "panel",
+        "role": "display_output",
+        "sequence_index": 15,
+        "status": "active",
+        "subsystem": "display"
+      }
+    ],
+    "sensors": [
+      {
+        "downstream": [
+          "csispdp"
+        ],
+        "module_ref": "ip-sensor-rear-s5e9965",
+        "node_id": "sensor_rear",
+        "output": {
+          "fps": 30.0
+        },
+        "sensor_mode": "binning_4x4"
+      }
+    ]
+  },
+  "metadata": {
+    "active_edge_count": 14,
+    "active_node_count": 15,
+    "buffer_node_count": 6,
+    "canvas_h": 2112,
+    "canvas_w": 1120,
+    "layout": "level0-resource-topology",
+    "variant_overlay": {
+      "buffer_override_count": 0,
+      "disabled_edge_count": 9,
+      "disabled_nodes": [
+        "sensor_rear2",
+        "sensor_rear3",
+        "sensor_front",
+        "lme",
+        "npu",
+        "eis"
+      ],
+      "inheritance_chain": [
+        "cam-rec-3rdparty-binning"
+      ],
+      "node_config_count": 1,
+      "resolved": true,
+      "sw_task_count": 0,
+      "topology_patch": {
+        "add_edges": 0,
+        "add_nodes": 0,
+        "remove_edges": 0
+      }
+    }
+  },
+  "mode": "topology",
+  "nodes": [
+    {
+      "data": {
+        "capability_badges": [
+          "SENSOR",
+          "OTF"
+        ],
+        "collapsed_children_count": 0,
+        "detail_items": [
+          "Role: sensor"
+        ],
+        "id": "ip-sensor_rear",
+        "ip_ref": "ip-sensor-rear-s5e9965",
+        "label": "SENSOR REAR",
+        "layer": "external",
+        "matched_issues": [],
+        "shared_resource": false,
+        "summary_badges": [
+          "camera"
+        ],
+        "type": "ip",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "normal",
+          "height": 58,
+          "lane": "external",
+          "order": 0,
+          "stage": "capture",
+          "width": 150
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 120.0,
+        "y": 85.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [
+          "CAMERA",
+          "M2M",
+          "OTF",
+          "BUF"
+        ],
+        "collapsed_children_count": 0,
+        "detail_items": [
+          "Role: csispdp",
+          "Buffers: CSISPDP_3AA_BUF"
+        ],
+        "id": "ip-csispdp",
+        "ip_ref": "ip-isp-s5e9965",
+        "label": "CSISPDP",
+        "layer": "hw",
+        "matched_issues": [],
+        "shared_resource": false,
+        "summary_badges": [
+          "camera"
+        ],
+        "type": "ip",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "normal",
+          "height": 58,
+          "lane": "hw",
+          "order": 1,
+          "stage": "capture",
+          "width": 150
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 560.0,
+        "y": 197.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [
+          "CAMERA"
+        ],
+        "collapsed_children_count": 0,
+        "detail_items": [
+          "Role: stats_3aa"
+        ],
+        "id": "ip-n3aa",
+        "ip_ref": "ip-isp-s5e9965",
+        "label": "N3AA",
+        "layer": "hw",
+        "matched_issues": [],
+        "shared_resource": false,
+        "summary_badges": [
+          "camera"
+        ],
+        "type": "ip",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "normal",
+          "height": 58,
+          "lane": "hw",
+          "order": 2,
+          "stage": "processing",
+          "width": 150
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 560.0,
+        "y": 309.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [
+          "CAMERA",
+          "OTF"
+        ],
+        "collapsed_children_count": 0,
+        "detail_items": [
+          "Role: bayer_processing"
+        ],
+        "id": "ip-byrp",
+        "ip_ref": "ip-isp-s5e9965",
+        "label": "BYRP",
+        "layer": "hw",
+        "matched_issues": [],
+        "shared_resource": false,
+        "summary_badges": [
+          "camera"
+        ],
+        "type": "ip",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "normal",
+          "height": 58,
+          "lane": "hw",
+          "order": 3,
+          "stage": "processing",
+          "width": 150
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 560.0,
+        "y": 421.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [
+          "CAMERA",
+          "OTF"
+        ],
+        "collapsed_children_count": 0,
+        "detail_items": [
+          "Role: rgb_processing"
+        ],
+        "id": "ip-rgbp",
+        "ip_ref": "ip-isp-s5e9965",
+        "label": "RGBP",
+        "layer": "hw",
+        "matched_issues": [],
+        "shared_resource": false,
+        "summary_badges": [
+          "camera"
+        ],
+        "type": "ip",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "normal",
+          "height": 58,
+          "lane": "hw",
+          "order": 4,
+          "stage": "processing",
+          "width": 150
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 560.0,
+        "y": 533.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [
+          "CAMERA",
+          "M2M",
+          "BUF"
+        ],
+        "collapsed_children_count": 0,
+        "detail_items": [
+          "Role: yuv_scaler",
+          "Buffers: YUVSC_MTNR_BUF"
+        ],
+        "id": "ip-yuvsc",
+        "ip_ref": "ip-isp-s5e9965",
+        "label": "YUVSC",
+        "layer": "hw",
+        "matched_issues": [],
+        "shared_resource": false,
+        "summary_badges": [
+          "camera"
+        ],
+        "type": "ip",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "normal",
+          "height": 58,
+          "lane": "hw",
+          "order": 5,
+          "stage": "processing",
+          "width": 150
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 560.0,
+        "y": 645.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [
+          "CAMERA",
+          "OTF"
+        ],
+        "collapsed_children_count": 0,
+        "detail_items": [
+          "Role: temporal_nr"
+        ],
+        "id": "ip-mtnr",
+        "ip_ref": "ip-isp-s5e9965",
+        "label": "MTNR",
+        "layer": "hw",
+        "matched_issues": [],
+        "shared_resource": false,
+        "summary_badges": [
+          "camera"
+        ],
+        "type": "ip",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "normal",
+          "height": 58,
+          "lane": "hw",
+          "order": 6,
+          "stage": "processing",
+          "width": 150
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 560.0,
+        "y": 757.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [
+          "CAMERA",
+          "OTF"
+        ],
+        "collapsed_children_count": 0,
+        "detail_items": [
+          "Role: spatial_nr"
+        ],
+        "id": "ip-msnr",
+        "ip_ref": "ip-isp-s5e9965",
+        "label": "MSNR",
+        "layer": "hw",
+        "matched_issues": [],
+        "shared_resource": false,
+        "summary_badges": [
+          "camera"
+        ],
+        "type": "ip",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "normal",
+          "height": 58,
+          "lane": "hw",
+          "order": 7,
+          "stage": "processing",
+          "width": 150
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 560.0,
+        "y": 869.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [
+          "CAMERA",
+          "OTF"
+        ],
+        "collapsed_children_count": 0,
+        "detail_items": [
+          "Role: yuv_post"
+        ],
+        "id": "ip-yuvp",
+        "ip_ref": "ip-isp-s5e9965",
+        "label": "YUVP",
+        "layer": "hw",
+        "matched_issues": [],
+        "shared_resource": false,
+        "summary_badges": [
+          "camera"
+        ],
+        "type": "ip",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "normal",
+          "height": 58,
+          "lane": "hw",
+          "order": 8,
+          "stage": "processing",
+          "width": 150
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 560.0,
+        "y": 981.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [
+          "CAMERA",
+          "M2M",
+          "BUF"
+        ],
+        "collapsed_children_count": 0,
+        "detail_items": [
+          "Role: mcsc",
+          "Buffers: MCSC_WDMA_PREV_BUF, MCSC_WDMA_VIDEO_BUF"
+        ],
+        "id": "ip-mcsc",
+        "ip_ref": "ip-mcsc-s5e9965",
+        "label": "MCSC",
+        "layer": "hw",
+        "matched_issues": [],
+        "shared_resource": false,
+        "summary_badges": [
+          "camera"
+        ],
+        "type": "ip",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "normal",
+          "height": 58,
+          "lane": "hw",
+          "order": 9,
+          "stage": "processing",
+          "width": 150
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 560.0,
+        "y": 1093.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [
+          "CAMERA",
+          "M2M",
+          "BUF"
+        ],
+        "collapsed_children_count": 0,
+        "detail_items": [
+          "Role: gdc_preview",
+          "Buffers: GDC_M_DPU_BUF"
+        ],
+        "id": "ip-gdc_m",
+        "ip_ref": "ip-isp-s5e9965",
+        "label": "GDC M",
+        "layer": "hw",
+        "matched_issues": [],
+        "shared_resource": false,
+        "summary_badges": [
+          "camera"
+        ],
+        "type": "ip",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "normal",
+          "height": 58,
+          "lane": "hw",
+          "order": 10,
+          "stage": "processing",
+          "width": 150
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 560.0,
+        "y": 1205.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [
+          "CAMERA",
+          "M2M",
+          "BUF"
+        ],
+        "collapsed_children_count": 0,
+        "detail_items": [
+          "Role: gdc_video",
+          "Buffers: GDC_O_MFC_BUF"
+        ],
+        "id": "ip-gdc_o",
+        "ip_ref": "ip-isp-s5e9965",
+        "label": "GDC O",
+        "layer": "hw",
+        "matched_issues": [],
+        "shared_resource": false,
+        "summary_badges": [
+          "camera"
+        ],
+        "type": "ip",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "normal",
+          "height": 58,
+          "lane": "hw",
+          "order": 11,
+          "stage": "processing",
+          "width": 150
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 560.0,
+        "y": 1317.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [
+          "DPU",
+          "OTF"
+        ],
+        "collapsed_children_count": 0,
+        "detail_items": [
+          "Role: display_controller"
+        ],
+        "id": "ip-dpu",
+        "ip_ref": "ip-dpu-s5e9965",
+        "label": "DPU",
+        "layer": "hw",
+        "matched_issues": [],
+        "shared_resource": false,
+        "summary_badges": [
+          "display"
+        ],
+        "type": "ip",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "normal",
+          "height": 58,
+          "lane": "hw",
+          "order": 12,
+          "stage": "display",
+          "width": 150
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 560.0,
+        "y": 1429.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [
+          "MFC"
+        ],
+        "collapsed_children_count": 0,
+        "detail_items": [
+          "Role: encoder"
+        ],
+        "id": "ip-mfc_enc",
+        "ip_ref": "ip-mfc-s5e9965",
+        "label": "MFC ENC",
+        "layer": "hw",
+        "matched_issues": [],
+        "shared_resource": false,
+        "summary_badges": [
+          "video"
+        ],
+        "type": "ip",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "normal",
+          "height": 58,
+          "lane": "hw",
+          "order": 13,
+          "stage": "encode",
+          "width": 150
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 560.0,
+        "y": 1541.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [
+          "EXT"
+        ],
+        "collapsed_children_count": 0,
+        "detail_items": [
+          "Role: display_output"
+        ],
+        "id": "ip-panel",
+        "ip_ref": "ip-display-panel-s5e9965",
+        "label": "PANEL",
+        "layer": "external",
+        "matched_issues": [],
+        "shared_resource": false,
+        "summary_badges": [
+          "display"
+        ],
+        "type": "ip",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "normal",
+          "height": 58,
+          "lane": "external",
+          "order": 14,
+          "stage": "display",
+          "width": 150
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 120.0,
+        "y": 1653.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [],
+        "collapsed_children_count": 0,
+        "detail_items": [
+          "Buffer: YUVSC_MTNR_BUF",
+          "YUV422 / 10b / COMP_OFF"
+        ],
+        "id": "buf-yuvsc-mtnr-buf",
+        "label": "Yuvsc Mtnr Buf",
+        "layer": "memory",
+        "matched_issues": [],
+        "memory": {
+          "bitdepth": 10,
+          "compression": "COMP_OFF",
+          "format": "YUV422",
+          "fps": 30,
+          "height": 1080,
+          "width": 1920
+        },
+        "shared_resource": false,
+        "summary_badges": [],
+        "type": "buffer",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "normal",
+          "height": 60,
+          "lane": "memory",
+          "order": 4,
+          "stage": "processing",
+          "width": 210
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 800.0,
+        "y": 701.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [],
+        "collapsed_children_count": 0,
+        "detail_items": [
+          "Buffer: CSISPDP_3AA_BUF",
+          "RAW_BAYER_16 / 12b / COMP_BAYER_LOSSLESS"
+        ],
+        "id": "buf-csispdp-3aa-buf",
+        "label": "Csispdp 3Aa Buf",
+        "layer": "memory",
+        "matched_issues": [],
+        "memory": {
+          "bitdepth": 12,
+          "compression": "COMP_BAYER_LOSSLESS",
+          "format": "RAW_BAYER_16",
+          "fps": 30,
+          "height": 1080,
+          "width": 1920
+        },
+        "shared_resource": false,
+        "summary_badges": [],
+        "type": "buffer",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "normal",
+          "height": 60,
+          "lane": "memory",
+          "order": 8,
+          "stage": "processing",
+          "width": 210
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 800.0,
+        "y": 253.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [],
+        "collapsed_children_count": 0,
+        "detail_items": [
+          "Buffer: MCSC_WDMA_PREV_BUF",
+          "YUV420 / 8b / COMP_OFF"
+        ],
+        "id": "buf-mcsc-wdma-prev-buf",
+        "label": "Mcsc Wdma Prev Buf",
+        "layer": "memory",
+        "matched_issues": [],
+        "memory": {
+          "bitdepth": 8,
+          "compression": "COMP_OFF",
+          "format": "YUV420",
+          "fps": 30,
+          "height": 1080,
+          "width": 1920
+        },
+        "shared_resource": false,
+        "summary_badges": [],
+        "type": "buffer",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "normal",
+          "height": 60,
+          "lane": "memory",
+          "order": 9,
+          "stage": "processing",
+          "width": 210
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 800.0,
+        "y": 1149.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [],
+        "collapsed_children_count": 0,
+        "detail_items": [
+          "Buffer: MCSC_WDMA_VIDEO_BUF",
+          "YUV420 / 8b / COMP_OFF"
+        ],
+        "id": "buf-mcsc-wdma-video-buf",
+        "label": "Mcsc Wdma Video Buf",
+        "layer": "memory",
+        "matched_issues": [],
+        "memory": {
+          "bitdepth": 8,
+          "compression": "COMP_OFF",
+          "format": "YUV420",
+          "fps": 30,
+          "height": 1080,
+          "width": 1920
+        },
+        "shared_resource": false,
+        "summary_badges": [],
+        "type": "buffer",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "normal",
+          "height": 60,
+          "lane": "memory",
+          "order": 10,
+          "stage": "processing",
+          "width": 210
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 800.0,
+        "y": 1205.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [],
+        "collapsed_children_count": 0,
+        "detail_items": [
+          "Buffer: GDC_M_DPU_BUF",
+          "YUV420 / 8b / COMP_SBWC_LOSSLESS"
+        ],
+        "id": "buf-gdc-m-dpu-buf",
+        "label": "Gdc M Dpu Buf",
+        "layer": "memory",
+        "matched_issues": [],
+        "memory": {
+          "bitdepth": 8,
+          "compression": "COMP_SBWC_LOSSLESS",
+          "format": "YUV420",
+          "fps": 30,
+          "height": 1080,
+          "width": 1920
+        },
+        "shared_resource": false,
+        "summary_badges": [],
+        "type": "buffer",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "normal",
+          "height": 60,
+          "lane": "memory",
+          "order": 11,
+          "stage": "processing",
+          "width": 210
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 800.0,
+        "y": 1317.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [],
+        "collapsed_children_count": 0,
+        "detail_items": [
+          "Buffer: GDC_O_MFC_BUF",
+          "YUV420 / 8b / COMP_SBWC_LOSSLESS"
+        ],
+        "id": "buf-gdc-o-mfc-buf",
+        "label": "Gdc O Mfc Buf",
+        "layer": "memory",
+        "matched_issues": [],
+        "memory": {
+          "bitdepth": 8,
+          "compression": "COMP_SBWC_LOSSLESS",
+          "format": "YUV420",
+          "fps": 30,
+          "height": 1080,
+          "width": 1920
+        },
+        "shared_resource": false,
+        "summary_badges": [],
+        "type": "buffer",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "normal",
+          "height": 60,
+          "lane": "memory",
+          "order": 12,
+          "stage": "processing",
+          "width": 210
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 800.0,
+        "y": 1429.0
+      }
+    }
+  ],
+  "overlays_available": [
+    "issues",
+    "review-gate",
+    "memory-path",
+    "llc-allocation",
+    "compression"
+  ],
+  "risks": [],
+  "scenario_id": "uc-camera-recording",
+  "summary": {
+    "budget_ms": 30.0,
+    "fps": 30,
+    "name": "Camera Recording",
+    "period_ms": 33.33,
+    "resolution": "1920 x 1080",
+    "scenario_id": "uc-camera-recording",
+    "subtitle": "FHD 30fps",
+    "variant_id": "cam-rec-3rdparty-binning",
+    "variant_label": "soc-exynos2600"
+  },
+  "variant_id": "cam-rec-3rdparty-binning"
+}

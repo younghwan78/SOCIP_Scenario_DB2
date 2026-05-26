@@ -1,11 +1,39 @@
 """Semantic Level 2 drilldown projection."""
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import Any
 
 from scenario_db.api.schemas.view import EdgeElement, NodeElement, ViewHints, ViewResponse
 from scenario_db.db.repositories.scenario_graph import CanonicalScenarioGraph
-from scenario_db.view.level1_semantic import (
+from scenario_db.view.buffers import (
+    _buffer_detail_items,
+    _buffer_label,
+    _buffer_memory_from_spec,
+    _buffer_placement_from_spec,
+    _reference_sizes,
+)
+from scenario_db.view.elements import _e, _n
+from scenario_db.view.graph_utils import (
+    edge_source as _edge_source,
+    edge_target as _edge_target,
+    safe_id as _safe_id,
+)
+from scenario_db.view.pipeline import (
+    _edge_detail_items,
+    _edge_flow_type,
+    _find_pipeline_node,
+    _find_pipeline_node_by_ip_ref,
+)
+from scenario_db.view.response import build_view_response as _response
+from scenario_db.view.semantic_constants import (
+    _LEVEL1_HIERARCHY_ORDER,
+    _LEVEL2_ALIAS_GROUPS,
+    _LEVEL2_BLOCK_BY_IP_GROUP,
+    _LEVEL2_REFERENCE_ALIASES,
+    _LEVEL2_REQUIRED_DATA,
+)
+from scenario_db.view.semantics import (
     _explicit_level1_operation_summary,
     _level1_capability_badges,
     _level1_effective_edges,
@@ -16,35 +44,32 @@ from scenario_db.view.level1_semantic import (
     _level1_topological_nodes,
     _level1_visible_nodes,
 )
-from scenario_db.view.service import (
-    _LEVEL1_HIERARCHY_ORDER,
-    _LEVEL2_ALIAS_GROUPS,
-    _LEVEL2_BLOCK_BY_IP_GROUP,
-    _LEVEL2_REQUIRED_DATA,
-    _buffer_detail_items,
-    _buffer_label,
-    _buffer_memory_from_spec,
-    _buffer_placement_from_spec,
-    _e,
-    _edge_detail_items,
-    _edge_flow_type,
-    _edge_source,
-    _edge_target,
-    _find_pipeline_node,
-    _find_pipeline_node_by_ip_ref,
-    _n,
-    _project_level2_reference,
-    _reference_sizes,
-    _response,
-    _safe_id,
-)
+
+
+@dataclass
+class Level2NodeSpec:
+    node: dict[str, Any]
+    node_id: str
+    ip_ref: str
+    ip_row: Any
+    graph: CanonicalScenarioGraph
+    sem: dict[str, str | None]
+    properties: dict[str, Any]
+    block_name: str
+    functional_modules: list[str]
+    module_nodes: list[dict[str, Any]]
+    internal_edges: list[dict[str, Any]]
+    functional_ids: dict[str, str] = field(default_factory=dict)
+    read_ids: list[str] = field(default_factory=list)
+    write_ids: list[str] = field(default_factory=list)
+
 
 def _project_drilldown(graph: CanonicalScenarioGraph, expand: str) -> ViewResponse:
     semantic = _project_semantic_level2(graph, expand)
     if semantic is not None:
         return semantic
 
-    if _project_level2_reference(graph, expand) is not None:
+    if str(expand or "").strip().lower() in _LEVEL2_REFERENCE_ALIASES:
         raise LookupError(f"Cannot build semantic Level 2 view for legacy alias: {expand}")
     raise LookupError(f"Cannot expand unknown IP node: {expand}")
 
@@ -61,7 +86,7 @@ def _project_semantic_level2(graph: CanonicalScenarioGraph, expand: str) -> View
             target_nodes=[],
         )
 
-    specs: list[dict[str, Any]] = []
+    specs: list[Level2NodeSpec] = []
     unavailable_reasons: list[str] = []
     for node in target_nodes:
         spec, reason = _level2_node_spec(graph, node)
@@ -118,7 +143,7 @@ def _level2_node_matches_alias(graph: CanonicalScenarioGraph, node: dict[str, An
 def _level2_node_spec(
     graph: CanonicalScenarioGraph,
     pipeline_node: dict[str, Any],
-) -> tuple[dict[str, Any] | None, str]:
+) -> tuple[Level2NodeSpec | None, str]:
     node_id = str(pipeline_node.get("id") or "")
     ip_ref = str(pipeline_node.get("ip_ref") or "")
     ip_row = graph.ip_catalog.get(ip_ref)
@@ -159,22 +184,19 @@ def _level2_node_spec(
         functional_modules = [block_name]
 
     return (
-        {
-            "node": pipeline_node,
-            "node_id": node_id,
-            "ip_ref": ip_ref,
-            "ip_row": ip_row,
-            "graph": graph,
-            "sem": sem,
-            "properties": properties,
-            "block_name": block_name,
-            "functional_modules": functional_modules,
-            "module_nodes": module_nodes,
-            "internal_edges": internal_edges,
-            "functional_ids": {},
-            "read_ids": [],
-            "write_ids": [],
-        },
+        Level2NodeSpec(
+            node=pipeline_node,
+            node_id=node_id,
+            ip_ref=ip_ref,
+            ip_row=ip_row,
+            graph=graph,
+            sem=sem,
+            properties=properties,
+            block_name=block_name,
+            functional_modules=functional_modules,
+            module_nodes=module_nodes,
+            internal_edges=internal_edges,
+        ),
         "",
     )
 
@@ -258,12 +280,12 @@ def _level2_matching_modules(
 def _level2_module_response(
     graph: CanonicalScenarioGraph,
     expand: str,
-    specs: list[dict[str, Any]],
+    specs: list[Level2NodeSpec],
     omitted_reasons: list[str],
 ) -> ViewResponse:
     nodes: list[NodeElement] = []
     hierarchy_groups = sorted(
-        {str(spec["sem"].get("hierarchy_group") or "Other") for spec in specs},
+        {str(spec.sem.get("hierarchy_group") or "Other") for spec in specs},
         key=lambda group: (_LEVEL1_HIERARCHY_ORDER.get(group, 99), group),
     )
     for index, hierarchy in enumerate(hierarchy_groups):
@@ -284,7 +306,7 @@ def _level2_module_response(
         _level2_append_ip_package(nodes, spec, index)
 
     edges = _level2_module_edges(graph, specs, nodes)
-    canvas_h = max(760, 280 + len(specs) * 140 + sum(len(spec["module_nodes"]) for spec in specs) * 42)
+    canvas_h = max(760, 280 + len(specs) * 140 + sum(len(spec.module_nodes) for spec in specs) * 42)
     return _response(
         graph=graph,
         level=2,
@@ -297,30 +319,30 @@ def _level2_module_response(
             "layout": "level2-module-detail",
             "expand": expand,
             "level2_available": True,
-            "target_nodes": [spec["node_id"] for spec in specs],
+            "target_nodes": [spec.node_id for spec in specs],
             "module_source": "ip_catalog.capabilities.properties",
-            "rendered_module_count": sum(len(spec["functional_ids"]) + len(spec["module_nodes"]) for spec in specs),
+            "rendered_module_count": sum(len(spec.functional_ids) + len(spec.module_nodes) for spec in specs),
             "omitted_reasons": omitted_reasons,
         },
     )
 
 
-def _level2_append_ip_package(nodes: list[NodeElement], spec: dict[str, Any], index: int) -> None:
-    node_id = spec["node_id"]
-    sem = spec["sem"]
+def _level2_append_ip_package(nodes: list[NodeElement], spec: Level2NodeSpec, index: int) -> None:
+    node_id = spec.node_id
+    sem = spec.sem
     hierarchy = str(sem.get("hierarchy_group") or "Other")
-    ip_group = str(sem.get("ip_group") or spec["block_name"])
+    ip_group = str(sem.get("ip_group") or spec.block_name)
     package_id = f"l2pkg-{_safe_id(node_id)}"
     nodes.append(
         _n(
             package_id,
-            _level1_node_label(node_id, spec["node"]),
+            _level1_node_label(node_id, spec.node),
             "submodule",
             "meta",
             220,
             180 + index * 130,
             parent=f"grp-l2-{_safe_id(hierarchy)}",
-            ip_ref=spec["ip_ref"],
+            ip_ref=spec.ip_ref,
             hierarchy_group=hierarchy,
             ip_group=ip_group,
             role_hw_name=sem.get("role_hw_name"),
@@ -331,9 +353,9 @@ def _level2_append_ip_package(nodes: list[NodeElement], spec: dict[str, Any], in
     )
 
     order = 0
-    for module_name in spec["functional_modules"]:
+    for module_name in spec.functional_modules:
         module_id = _level2_functional_id(node_id, module_name)
-        spec["functional_ids"][_level2_norm(module_name)] = module_id
+        spec.functional_ids[_level2_norm(module_name)] = module_id
         nodes.append(
             _n(
                 module_id,
@@ -343,7 +365,7 @@ def _level2_append_ip_package(nodes: list[NodeElement], spec: dict[str, Any], in
                 240 + order * 64,
                 320 + index * 130,
                 parent=package_id,
-                ip_ref=spec["ip_ref"],
+                ip_ref=spec.ip_ref,
                 hierarchy_group=hierarchy,
                 ip_group=ip_group,
                 role_hw_name=sem.get("role_hw_name"),
@@ -353,22 +375,22 @@ def _level2_append_ip_package(nodes: list[NodeElement], spec: dict[str, Any], in
                 module_status="declared",
                 summary_badges=[hierarchy, ip_group, "Module"],
                 capability_badges=_level1_capability_badges(sem),
-                active_operations=_explicit_level1_operation_summary(spec["graph"], node_id, spec["node"]) if "graph" in spec else None,
+                active_operations=_explicit_level1_operation_summary(spec.graph, node_id, spec.node),
                 detail_items=_level2_functional_detail_items(spec, module_name),
                 view_hints=ViewHints(lane="hw", stage="processing", order=order, width=165, height=62),
             )
         )
         order += 1
 
-    for module in spec["module_nodes"]:
+    for module in spec.module_nodes:
         module_name = str(module.get("name") or f"module-{order}")
         module_kind = _level2_module_kind(module)
         module_direction = _level2_module_direction(module)
         module_id = _level2_module_id(node_id, module_name)
         if module_direction == "input":
-            spec["read_ids"].append(module_id)
+            spec.read_ids.append(module_id)
         elif module_direction == "output":
-            spec["write_ids"].append(module_id)
+            spec.write_ids.append(module_id)
         nodes.append(
             _n(
                 module_id,
@@ -378,7 +400,7 @@ def _level2_append_ip_package(nodes: list[NodeElement], spec: dict[str, Any], in
                 240 + order * 64,
                 320 + index * 130,
                 parent=package_id,
-                ip_ref=spec["ip_ref"],
+                ip_ref=spec.ip_ref,
                 hierarchy_group=hierarchy,
                 ip_group=ip_group,
                 role_hw_name=sem.get("role_hw_name"),
@@ -398,15 +420,15 @@ def _level2_append_ip_package(nodes: list[NodeElement], spec: dict[str, Any], in
 
 def _level2_module_edges(
     graph: CanonicalScenarioGraph,
-    specs: list[dict[str, Any]],
+    specs: list[Level2NodeSpec],
     nodes: list[NodeElement],
 ) -> list[EdgeElement]:
-    spec_by_node = {spec["node_id"]: spec for spec in specs}
+    spec_by_node = {spec.node_id: spec for spec in specs}
     block_to_functional: dict[str, str] = {}
     for spec in specs:
-        for key, module_id in spec["functional_ids"].items():
+        for key, module_id in spec.functional_ids.items():
             block_to_functional[key] = module_id
-        block_to_functional.setdefault(_level2_norm(spec["block_name"]), _level2_primary_functional_id(spec))
+        block_to_functional.setdefault(_level2_norm(spec.block_name), _level2_primary_functional_id(spec))
 
     tokens = _reference_sizes(graph)
     buffer_ids: dict[str, str] = {}
@@ -463,7 +485,7 @@ def _level2_module_edges(
         )
 
     for spec in specs:
-        for edge in spec["internal_edges"]:
+        for edge in spec.internal_edges:
             source_id = block_to_functional.get(_level2_norm(str(_edge_source(edge) or "")))
             target_id = block_to_functional.get(_level2_norm(str(_edge_target(edge) or "")))
             if source_id and target_id:
@@ -539,24 +561,24 @@ def _level2_unavailable_response(
     )
 
 
-def _level2_primary_functional_id(spec: dict[str, Any]) -> str:
-    block_id = spec["functional_ids"].get(_level2_norm(spec["block_name"]))
+def _level2_primary_functional_id(spec: Level2NodeSpec) -> str:
+    block_id = spec.functional_ids.get(_level2_norm(spec.block_name))
     if block_id:
         return block_id
-    if spec["functional_ids"]:
-        return next(iter(spec["functional_ids"].values()))
-    return f"mod-{_safe_id(spec['node_id'])}-{_safe_id(spec['block_name'])}"
+    if spec.functional_ids:
+        return next(iter(spec.functional_ids.values()))
+    return f"mod-{_safe_id(spec.node_id)}-{_safe_id(spec.block_name)}"
 
 
-def _level2_source_endpoint(spec: dict[str, Any], flow_type: str) -> str:
-    if flow_type == "M2M" and spec["write_ids"]:
-        return spec["write_ids"][0]
+def _level2_source_endpoint(spec: Level2NodeSpec, flow_type: str) -> str:
+    if flow_type == "M2M" and spec.write_ids:
+        return spec.write_ids[0]
     return _level2_primary_functional_id(spec)
 
 
-def _level2_target_endpoint(spec: dict[str, Any], flow_type: str) -> str:
-    if flow_type == "M2M" and spec["read_ids"]:
-        return spec["read_ids"][0]
+def _level2_target_endpoint(spec: Level2NodeSpec, flow_type: str) -> str:
+    if flow_type == "M2M" and spec.read_ids:
+        return spec.read_ids[0]
     return _level2_primary_functional_id(spec)
 
 
@@ -602,25 +624,25 @@ def _level2_module_status(module: dict[str, Any]) -> str:
     return str(module.get("status") or "declared")
 
 
-def _level2_package_detail_items(spec: dict[str, Any]) -> list[str]:
+def _level2_package_detail_items(spec: Level2NodeSpec) -> list[str]:
     details = [
-        f"IP: {spec['ip_ref']}",
-        f"Hierarchy: {spec['sem'].get('hierarchy_group')}",
-        f"IP block: {spec['sem'].get('ip_group')}",
-        f"Functional blocks: {', '.join(spec['functional_modules'])}",
+        f"IP: {spec.ip_ref}",
+        f"Hierarchy: {spec.sem.get('hierarchy_group')}",
+        f"IP block: {spec.sem.get('ip_group')}",
+        f"Functional blocks: {', '.join(spec.functional_modules)}",
     ]
-    if spec["module_nodes"]:
-        details.append("I/O modules: " + ", ".join(str(module.get("name")) for module in spec["module_nodes"]))
+    if spec.module_nodes:
+        details.append("I/O modules: " + ", ".join(str(module.get("name")) for module in spec.module_nodes))
     return details
 
 
-def _level2_functional_detail_items(spec: dict[str, Any], module_name: str) -> list[str]:
+def _level2_functional_detail_items(spec: Level2NodeSpec, module_name: str) -> list[str]:
     details = [
         f"Functional module: {module_name}",
-        f"Pipeline node: {spec['node_id']}",
-        f"IP catalog: {spec['ip_ref']}",
+        f"Pipeline node: {spec.node_id}",
+        f"IP catalog: {spec.ip_ref}",
     ]
-    pipeline = spec["properties"].get("pipeline_description")
+    pipeline = spec.properties.get("pipeline_description")
     if pipeline:
         details.append("Pipeline: " + " ".join(str(pipeline).split()))
     return details
@@ -637,11 +659,11 @@ def _level2_module_capability_badges(module: dict[str, Any]) -> list[str]:
     return badges
 
 
-def _level2_module_detail_items(module: dict[str, Any], spec: dict[str, Any]) -> list[str]:
+def _level2_module_detail_items(module: dict[str, Any], spec: Level2NodeSpec) -> list[str]:
     details = [
         f"Module: {module.get('name')}",
         f"Kind: {_level2_module_kind(module)}",
-        f"Pipeline node: {spec['node_id']}",
+        f"Pipeline node: {spec.node_id}",
     ]
     direction = _level2_module_direction(module)
     if direction:

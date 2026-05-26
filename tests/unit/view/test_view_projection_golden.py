@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
@@ -8,10 +9,10 @@ import yaml
 
 from scenario_db.db.repositories.scenario_graph import CanonicalScenarioGraph
 from scenario_db.view import service
-from scenario_db.view.level2_semantic import Level2NodeSpec, _level2_node_spec
 
 
 FIXTURE_ROOT = Path("db_fixtures_Exynos2600_S26Plus")
+GOLDEN_ROOT = Path("tests/unit/view/golden")
 
 
 def _load_yaml(path: Path) -> dict:
@@ -85,58 +86,36 @@ def _graph(scenario_file: str, variant_id: str) -> CanonicalScenarioGraph:
     )
 
 
-def _node_by_id(view):
-    return {node.data.id: node for node in view.nodes}
+def _payload(view) -> dict:
+    return view.model_dump(mode="json", exclude_none=True)
 
 
-def test_level2_unavailable_when_ip_has_no_module_declarations():
-    graph = _graph("uc-game-play.yaml", "game-fhd-60fps-npu-ai")
-
-    view = service._project_drilldown(graph, "gpu")
-
-    assert view.metadata["layout"] == "level2-unavailable"
-    assert view.metadata["level2_available"] is False
-    assert view.nodes == []
-    assert view.edges == []
-    assert "ip-gpu-s5e9965" in " ".join(view.metadata["unavailable_reasons"])
-    assert "module" in " ".join(view.metadata["required_data"]).lower()
+def _assert_matches_golden(name: str, payload: dict) -> None:
+    expected_path = GOLDEN_ROOT / name
+    expected = json.loads(expected_path.read_text(encoding="utf-8"))
+    assert payload == expected
 
 
-def test_level2_expands_declared_modules_for_single_active_camera_node():
+def test_camera_level0_topology_projection_matches_golden():
+    graph = _graph("uc-camera-recording.yaml", "cam-rec-3rdparty-binning")
+
+    view = service._project_level0_topology_v2(graph, level=0)
+
+    _assert_matches_golden("camera_level0_topology.json", _payload(view))
+
+
+def test_camera_level1_semantic_projection_matches_golden():
+    graph = _graph("uc-camera-recording.yaml", "cam-rec-3rdparty-binning")
+
+    view = service._project_semantic_level1(graph)
+
+    assert view is not None
+    _assert_matches_golden("camera_level1_semantic.json", _payload(view))
+
+
+def test_camera_level2_drilldown_projection_matches_golden():
     graph = _graph("uc-camera-recording.yaml", "cam-rec-3rdparty-binning")
 
     view = service._project_drilldown(graph, "csispdp")
-    nodes = _node_by_id(view)
 
-    assert view.metadata["layout"] == "level2-module-detail"
-    assert view.metadata["level2_available"] is True
-    assert nodes["l2pkg-csispdp"].data.hierarchy_group == "ISP"
-    assert nodes["mod-csispdp-csispdp"].data.model_dump()["module_kind"] == "functional"
-    assert nodes["mod-csispdp-csispdp-wdma"].data.model_dump()["module_kind"] == "wdma"
-    assert nodes["mod-csispdp-csispdp-wdma"].data.model_dump()["module_direction"] == "output"
-    assert nodes["buf-csispdp-3aa-buf"].data.memory.format == "RAW_BAYER_16"
-    assert any(edge.data.buffer_ref == "CSISPDP_3AA_BUF" for edge in view.edges)
-
-
-def test_level2_camera_expand_uses_active_graph_not_hardcoded_reference_nodes():
-    graph = _graph("uc-camera-recording.yaml", "cam-rec-3rdparty-binning")
-
-    view = service._project_drilldown(graph, "camera")
-    node_ids = {node.data.id for node in view.nodes}
-
-    assert view.metadata["layout"] == "level2-module-detail"
-    assert "l2cam-mlsc" not in node_ids
-    assert {"mod-csispdp-csispdp", "mod-byrp-byrp", "mod-yuvsc-yuvsc", "mod-mtnr-mtnr"} <= node_ids
-    assert {"buf-yuvsc-mtnr-buf", "buf-csispdp-3aa-buf"} <= node_ids
-
-
-def test_level2_node_spec_uses_typed_spec_object():
-    graph = _graph("uc-camera-recording.yaml", "cam-rec-3rdparty-binning")
-    node = next(item for item in graph.pipeline_nodes if item["id"] == "csispdp")
-
-    spec, reason = _level2_node_spec(graph, node)
-
-    assert reason == ""
-    assert isinstance(spec, Level2NodeSpec)
-    assert spec.node_id == "csispdp"
-    assert spec.ip_ref == "ip-isp-s5e9965"
+    _assert_matches_golden("camera_level2_csispdp.json", _payload(view))

@@ -61,7 +61,7 @@ from dashboard.components.viewer_api_client import (
 )
 from dashboard.components.ui_theme import apply_app_theme
 from scenario_db.api.schemas.view import ViewResponse
-from scenario_db.view.service import build_sample_level0
+from scenario_db.view.demo.sample_data import build_sample_level0
 
 
 st.set_page_config(

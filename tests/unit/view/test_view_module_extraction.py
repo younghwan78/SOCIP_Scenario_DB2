@@ -7,7 +7,7 @@ from scenario_db.db.repositories.scenario_graph import CanonicalScenarioGraph
 
 
 def test_sample_data_module_owns_sample_level0_builder():
-    from scenario_db.view.sample_data import build_sample_level0
+    from scenario_db.view.demo.sample_data import build_sample_level0
 
     view = build_sample_level0()
 
@@ -91,3 +91,19 @@ def test_level2_semantic_module_exports_drilldown_entrypoint():
     from scenario_db.view.level2_semantic import project_drilldown
 
     assert callable(project_drilldown)
+
+
+def test_reference_module_exports_legacy_reference_entrypoints():
+    from scenario_db.view.reference import project_level2_reference, project_reference_level1
+
+    assert callable(project_level2_reference)
+    assert callable(project_reference_level1)
+
+
+def test_view_service_requires_explicit_db_session_for_projection():
+    import pytest
+
+    from scenario_db.view import service
+
+    with pytest.raises(ValueError, match="db session is required"):
+        service.project_level0("uc-camera-recording", "cam-rec-3rdparty-binning", db=None)

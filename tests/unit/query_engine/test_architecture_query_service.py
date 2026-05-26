@@ -1,9 +1,18 @@
 from __future__ import annotations
 
+import pytest
+
 from types import SimpleNamespace
 
-from scenario_db.api.schemas.query import QueryAggregationMetric, QueryAggregationSpec, QueryPredicate, QueryPredicateGroup, QueryRequest
-from scenario_db.query_engine.service import build_facets, query_variants
+from scenario_db.api.schemas.query import (
+    QueryAggregationMetric,
+    QueryAggregationSpec,
+    QueryPredicate,
+    QueryPredicateGroup,
+    QueryRequest,
+    QueryResultItem,
+)
+from scenario_db.query_engine.service import QueryValidationError, _build_aggregations, build_facets, query_variants
 
 
 class _Query:
@@ -163,11 +172,10 @@ def test_query_filters_by_axis_effective_topology_and_latest_kpi() -> None:
 def test_query_rejects_unknown_field() -> None:
     request = QueryRequest(where=[QueryPredicate(field="raw.sql", op="eq", value="select 1")])
 
-    response = query_variants(_Session(), request)
+    with pytest.raises(QueryValidationError) as exc_info:
+        query_variants(_Session(), request)
 
-    assert response.total == 0
-    assert response.errors
-    assert "Unsupported query field" in response.errors[0]
+    assert "Unsupported query field" in exc_info.value.errors[0]
 
 
 def test_query_combines_scope_and_sbwc_buffer_predicates() -> None:
@@ -347,6 +355,31 @@ def test_query_aggregation_explodes_collection_group_fields() -> None:
         for bucket in response.aggregations
     }
     assert counts == {"ISP": 2, "MFC": 2, "sensor": 2, "DPU": 1}
+
+
+def test_query_aggregation_distinguishes_missing_group_value_from_literal_none_string() -> None:
+    missing = QueryResultItem(
+        project_id="proj",
+        scenario_id="uc-missing",
+        scenario_name="Missing",
+        variant_id="v1",
+        category=[],
+    )
+    literal = QueryResultItem(
+        project_id="proj",
+        scenario_id="uc-literal",
+        scenario_name="Literal",
+        variant_id="v1",
+        category=["(none)"],
+    )
+
+    buckets = _build_aggregations(
+        [missing, literal],
+        QueryAggregationSpec(group_by=["scenario.category"], metrics=[]),
+    )
+
+    counts = {bucket.key["scenario.category"]: bucket.count for bucket in buckets}
+    assert counts == {None: 1, "(none)": 1}
 
 
 def test_query_facets_include_dynamic_axis_kpi_and_value_hints() -> None:

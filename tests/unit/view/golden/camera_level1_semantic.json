@@ -1,0 +1,1565 @@
+{
+  "edges": [
+    {
+      "data": {
+        "consumer": "csispdp",
+        "detail_items": [
+          "Route: sensor_rear -> csispdp",
+          "Edge type: OTF"
+        ],
+        "flow_type": "OTF",
+        "id": "l1-sem-0",
+        "label": "OTF",
+        "producer": "sensor_rear",
+        "source": "ip-sensor-rear",
+        "target": "ip-csispdp"
+      }
+    },
+    {
+      "data": {
+        "consumer": "byrp",
+        "detail_items": [
+          "Route: csispdp -> byrp",
+          "Edge type: OTF"
+        ],
+        "flow_type": "OTF",
+        "id": "l1-sem-1",
+        "label": "OTF",
+        "producer": "csispdp",
+        "source": "ip-csispdp",
+        "target": "ip-byrp"
+      }
+    },
+    {
+      "data": {
+        "consumer": "rgbp",
+        "detail_items": [
+          "Route: byrp -> rgbp",
+          "Edge type: OTF"
+        ],
+        "flow_type": "OTF",
+        "id": "l1-sem-2",
+        "label": "OTF",
+        "producer": "byrp",
+        "source": "ip-byrp",
+        "target": "ip-rgbp"
+      }
+    },
+    {
+      "data": {
+        "consumer": "yuvsc",
+        "detail_items": [
+          "Route: rgbp -> yuvsc",
+          "Edge type: OTF"
+        ],
+        "flow_type": "OTF",
+        "id": "l1-sem-3",
+        "label": "OTF",
+        "producer": "rgbp",
+        "source": "ip-rgbp",
+        "target": "ip-yuvsc"
+      }
+    },
+    {
+      "data": {
+        "buffer_ref": "YUVSC_MTNR_BUF",
+        "consumer": "mtnr",
+        "detail_items": [
+          "Route: yuvsc -> mtnr",
+          "Edge type: M2M",
+          "Buffer: YUV422 / 10b / COMP_OFF"
+        ],
+        "flow_type": "M2M",
+        "id": "l1-sem-4",
+        "label": "M2M / YUVSC_MTNR_BUF",
+        "memory": {
+          "bitdepth": 10,
+          "compression": "COMP_OFF",
+          "format": "YUV422",
+          "fps": 30
+        },
+        "placement": {
+          "llc_allocated": false,
+          "llc_policy": "none"
+        },
+        "producer": "yuvsc",
+        "source": "ip-yuvsc",
+        "target": "ip-mtnr"
+      }
+    },
+    {
+      "data": {
+        "consumer": "msnr",
+        "detail_items": [
+          "Route: mtnr -> msnr",
+          "Edge type: OTF"
+        ],
+        "flow_type": "OTF",
+        "id": "l1-sem-5",
+        "label": "OTF",
+        "producer": "mtnr",
+        "source": "ip-mtnr",
+        "target": "ip-msnr"
+      }
+    },
+    {
+      "data": {
+        "consumer": "yuvp",
+        "detail_items": [
+          "Route: msnr -> yuvp",
+          "Edge type: OTF"
+        ],
+        "flow_type": "OTF",
+        "id": "l1-sem-6",
+        "label": "OTF",
+        "producer": "msnr",
+        "source": "ip-msnr",
+        "target": "ip-yuvp"
+      }
+    },
+    {
+      "data": {
+        "consumer": "mcsc",
+        "detail_items": [
+          "Route: yuvp -> mcsc",
+          "Edge type: OTF"
+        ],
+        "flow_type": "OTF",
+        "id": "l1-sem-7",
+        "label": "OTF",
+        "producer": "yuvp",
+        "source": "ip-yuvp",
+        "target": "ip-mcsc"
+      }
+    },
+    {
+      "data": {
+        "buffer_ref": "CSISPDP_3AA_BUF",
+        "consumer": "n3aa",
+        "detail_items": [
+          "Route: csispdp -> n3aa",
+          "Edge type: M2M",
+          "Buffer: RAW_BAYER_16 / 12b / COMP_BAYER_LOSSLESS"
+        ],
+        "flow_type": "M2M",
+        "id": "l1-sem-8",
+        "label": "M2M / CSISPDP_3AA_BUF",
+        "memory": {
+          "bitdepth": 12,
+          "compression": "COMP_BAYER_LOSSLESS",
+          "format": "RAW_BAYER_16",
+          "fps": 30
+        },
+        "placement": {
+          "llc_allocated": false,
+          "llc_policy": "none"
+        },
+        "producer": "csispdp",
+        "source": "ip-csispdp",
+        "target": "ip-n3aa"
+      }
+    },
+    {
+      "data": {
+        "buffer_ref": "MCSC_WDMA_PREV_BUF",
+        "consumer": "gdc_m",
+        "detail_items": [
+          "Route: mcsc -> gdc_m",
+          "Edge type: M2M",
+          "Buffer: YUV420 / 8b / COMP_OFF"
+        ],
+        "flow_type": "M2M",
+        "id": "l1-sem-9",
+        "label": "M2M / MCSC_WDMA_PREV_BUF",
+        "memory": {
+          "bitdepth": 8,
+          "compression": "COMP_OFF",
+          "format": "YUV420",
+          "fps": 30
+        },
+        "placement": {
+          "llc_allocated": false,
+          "llc_policy": "none"
+        },
+        "producer": "mcsc",
+        "source": "ip-mcsc",
+        "target": "ip-gdc-m"
+      }
+    },
+    {
+      "data": {
+        "buffer_ref": "MCSC_WDMA_VIDEO_BUF",
+        "consumer": "gdc_o",
+        "detail_items": [
+          "Route: mcsc -> gdc_o",
+          "Edge type: M2M",
+          "Buffer: YUV420 / 8b / COMP_OFF"
+        ],
+        "flow_type": "M2M",
+        "id": "l1-sem-10",
+        "label": "M2M / MCSC_WDMA_VIDEO_BUF",
+        "memory": {
+          "bitdepth": 8,
+          "compression": "COMP_OFF",
+          "format": "YUV420",
+          "fps": 30
+        },
+        "placement": {
+          "llc_allocated": false,
+          "llc_policy": "none"
+        },
+        "producer": "mcsc",
+        "source": "ip-mcsc",
+        "target": "ip-gdc-o"
+      }
+    },
+    {
+      "data": {
+        "buffer_ref": "GDC_M_DPU_BUF",
+        "consumer": "dpu",
+        "detail_items": [
+          "Route: gdc_m -> dpu",
+          "Edge type: M2M",
+          "Buffer: YUV420 / 8b / COMP_SBWC_LOSSLESS"
+        ],
+        "flow_type": "M2M",
+        "id": "l1-sem-11",
+        "label": "M2M / GDC_M_DPU_BUF",
+        "memory": {
+          "bitdepth": 8,
+          "compression": "COMP_SBWC_LOSSLESS",
+          "format": "YUV420",
+          "fps": 30
+        },
+        "placement": {
+          "llc_allocated": false,
+          "llc_policy": "none"
+        },
+        "producer": "gdc_m",
+        "source": "ip-gdc-m",
+        "target": "ip-dpu"
+      }
+    },
+    {
+      "data": {
+        "buffer_ref": "GDC_O_MFC_BUF",
+        "consumer": "mfc_enc",
+        "detail_items": [
+          "Route: gdc_o -> mfc_enc",
+          "Edge type: M2M",
+          "Buffer: YUV420 / 8b / COMP_SBWC_LOSSLESS"
+        ],
+        "flow_type": "M2M",
+        "id": "l1-sem-12",
+        "label": "M2M / GDC_O_MFC_BUF",
+        "memory": {
+          "bitdepth": 8,
+          "compression": "COMP_SBWC_LOSSLESS",
+          "format": "YUV420",
+          "fps": 30
+        },
+        "placement": {
+          "llc_allocated": false,
+          "llc_policy": "none"
+        },
+        "producer": "gdc_o",
+        "source": "ip-gdc-o",
+        "target": "ip-mfc-enc"
+      }
+    },
+    {
+      "data": {
+        "consumer": "panel",
+        "detail_items": [
+          "Route: dpu -> panel",
+          "Edge type: OTF"
+        ],
+        "flow_type": "OTF",
+        "id": "l1-sem-13",
+        "label": "OTF",
+        "producer": "dpu",
+        "source": "ip-dpu",
+        "target": "ip-panel"
+      }
+    }
+  ],
+  "level": 1,
+  "metadata": {
+    "active_edge_count": 14,
+    "active_node_count": 15,
+    "canvas_h": 2134,
+    "canvas_w": 1280,
+    "group_count": 18,
+    "layout": "level1-semantic-ip-dag",
+    "variant_overlay": {
+      "buffer_override_count": 0,
+      "disabled_edge_count": 9,
+      "disabled_nodes": [
+        "sensor_rear2",
+        "sensor_rear3",
+        "sensor_front",
+        "lme",
+        "npu",
+        "eis"
+      ],
+      "inheritance_chain": [
+        "cam-rec-3rdparty-binning"
+      ],
+      "node_config_count": 1,
+      "resolved": true,
+      "sw_task_count": 0,
+      "topology_patch": {
+        "add_edges": 0,
+        "add_nodes": 0,
+        "remove_edges": 0
+      }
+    }
+  },
+  "mode": "level1-ip-detail",
+  "nodes": [
+    {
+      "data": {
+        "capability_badges": [],
+        "collapsed_children_count": 0,
+        "detail_items": [],
+        "hierarchy_group": "Sensor",
+        "id": "grp-sensor",
+        "label": "Sensor",
+        "layer": "meta",
+        "matched_issues": [],
+        "semantic_source": "level1-semantic-group",
+        "shared_resource": false,
+        "summary_badges": [],
+        "type": "submodule",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "muted",
+          "height": 220,
+          "order": 0,
+          "width": 360
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 220.0,
+        "y": 80.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [],
+        "collapsed_children_count": 0,
+        "detail_items": [],
+        "hierarchy_group": "ISP",
+        "id": "grp-isp",
+        "label": "ISP",
+        "layer": "meta",
+        "matched_issues": [],
+        "semantic_source": "level1-semantic-group",
+        "shared_resource": false,
+        "summary_badges": [],
+        "type": "submodule",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "muted",
+          "height": 220,
+          "order": 1,
+          "width": 360
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 350.0,
+        "y": 80.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [],
+        "collapsed_children_count": 0,
+        "detail_items": [],
+        "hierarchy_group": "CODEC",
+        "id": "grp-codec",
+        "label": "CODEC",
+        "layer": "meta",
+        "matched_issues": [],
+        "semantic_source": "level1-semantic-group",
+        "shared_resource": false,
+        "summary_badges": [],
+        "type": "submodule",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "muted",
+          "height": 220,
+          "order": 5,
+          "width": 360
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 480.0,
+        "y": 80.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [],
+        "collapsed_children_count": 0,
+        "detail_items": [],
+        "hierarchy_group": "Display",
+        "id": "grp-display",
+        "label": "Display",
+        "layer": "meta",
+        "matched_issues": [],
+        "semantic_source": "level1-semantic-group",
+        "shared_resource": false,
+        "summary_badges": [],
+        "type": "submodule",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "muted",
+          "height": 220,
+          "order": 7,
+          "width": 360
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 610.0,
+        "y": 80.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [],
+        "collapsed_children_count": 0,
+        "detail_items": [],
+        "hierarchy_group": "Sensor",
+        "id": "grp-sensor-sensor",
+        "ip_group": "Sensor",
+        "label": "Sensor",
+        "layer": "meta",
+        "matched_issues": [],
+        "parent": "grp-sensor",
+        "semantic_source": "level1-semantic-group",
+        "shared_resource": false,
+        "summary_badges": [],
+        "type": "submodule",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "muted",
+          "height": 150,
+          "order": 0,
+          "width": 260
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 220.0,
+        "y": 210.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [],
+        "collapsed_children_count": 0,
+        "detail_items": [],
+        "hierarchy_group": "ISP",
+        "id": "grp-isp-csis-pdp",
+        "ip_group": "CSIS/PDP",
+        "label": "CSIS/PDP",
+        "layer": "meta",
+        "matched_issues": [],
+        "parent": "grp-isp",
+        "semantic_source": "level1-semantic-group",
+        "shared_resource": false,
+        "summary_badges": [],
+        "type": "submodule",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "muted",
+          "height": 150,
+          "order": 10,
+          "width": 260
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 310.0,
+        "y": 210.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [],
+        "collapsed_children_count": 0,
+        "detail_items": [],
+        "hierarchy_group": "ISP",
+        "id": "grp-isp-3aa-cstat",
+        "ip_group": "3AA/CSTAT",
+        "label": "3AA/CSTAT",
+        "layer": "meta",
+        "matched_issues": [],
+        "parent": "grp-isp",
+        "semantic_source": "level1-semantic-group",
+        "shared_resource": false,
+        "summary_badges": [],
+        "type": "submodule",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "muted",
+          "height": 150,
+          "order": 20,
+          "width": 260
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 400.0,
+        "y": 210.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [],
+        "collapsed_children_count": 0,
+        "detail_items": [],
+        "hierarchy_group": "ISP",
+        "id": "grp-isp-byrp",
+        "ip_group": "BYRP",
+        "label": "BYRP",
+        "layer": "meta",
+        "matched_issues": [],
+        "parent": "grp-isp",
+        "semantic_source": "level1-semantic-group",
+        "shared_resource": false,
+        "summary_badges": [],
+        "type": "submodule",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "muted",
+          "height": 150,
+          "order": 30,
+          "width": 260
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 490.0,
+        "y": 210.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [],
+        "collapsed_children_count": 0,
+        "detail_items": [],
+        "hierarchy_group": "ISP",
+        "id": "grp-isp-rgbp",
+        "ip_group": "RGBP",
+        "label": "RGBP",
+        "layer": "meta",
+        "matched_issues": [],
+        "parent": "grp-isp",
+        "semantic_source": "level1-semantic-group",
+        "shared_resource": false,
+        "summary_badges": [],
+        "type": "submodule",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "muted",
+          "height": 150,
+          "order": 40,
+          "width": 260
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 580.0,
+        "y": 210.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [],
+        "collapsed_children_count": 0,
+        "detail_items": [],
+        "hierarchy_group": "ISP",
+        "id": "grp-isp-yuvsc",
+        "ip_group": "YUVSC",
+        "label": "YUVSC",
+        "layer": "meta",
+        "matched_issues": [],
+        "parent": "grp-isp",
+        "semantic_source": "level1-semantic-group",
+        "shared_resource": false,
+        "summary_badges": [],
+        "type": "submodule",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "muted",
+          "height": 150,
+          "order": 50,
+          "width": 260
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 670.0,
+        "y": 210.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [],
+        "collapsed_children_count": 0,
+        "detail_items": [],
+        "hierarchy_group": "ISP",
+        "id": "grp-isp-mtnr",
+        "ip_group": "MTNR",
+        "label": "MTNR",
+        "layer": "meta",
+        "matched_issues": [],
+        "parent": "grp-isp",
+        "semantic_source": "level1-semantic-group",
+        "shared_resource": false,
+        "summary_badges": [],
+        "type": "submodule",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "muted",
+          "height": 150,
+          "order": 60,
+          "width": 260
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 760.0,
+        "y": 210.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [],
+        "collapsed_children_count": 0,
+        "detail_items": [],
+        "hierarchy_group": "ISP",
+        "id": "grp-isp-msnr",
+        "ip_group": "MSNR",
+        "label": "MSNR",
+        "layer": "meta",
+        "matched_issues": [],
+        "parent": "grp-isp",
+        "semantic_source": "level1-semantic-group",
+        "shared_resource": false,
+        "summary_badges": [],
+        "type": "submodule",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "muted",
+          "height": 150,
+          "order": 70,
+          "width": 260
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 850.0,
+        "y": 210.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [],
+        "collapsed_children_count": 0,
+        "detail_items": [],
+        "hierarchy_group": "ISP",
+        "id": "grp-isp-yuvp",
+        "ip_group": "YUVP",
+        "label": "YUVP",
+        "layer": "meta",
+        "matched_issues": [],
+        "parent": "grp-isp",
+        "semantic_source": "level1-semantic-group",
+        "shared_resource": false,
+        "summary_badges": [],
+        "type": "submodule",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "muted",
+          "height": 150,
+          "order": 80,
+          "width": 260
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 940.0,
+        "y": 210.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [],
+        "collapsed_children_count": 0,
+        "detail_items": [],
+        "hierarchy_group": "ISP",
+        "id": "grp-isp-mcsc",
+        "ip_group": "MCSC",
+        "label": "MCSC",
+        "layer": "meta",
+        "matched_issues": [],
+        "parent": "grp-isp",
+        "semantic_source": "level1-semantic-group",
+        "shared_resource": false,
+        "summary_badges": [],
+        "type": "submodule",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "muted",
+          "height": 150,
+          "order": 90,
+          "width": 260
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 1030.0,
+        "y": 210.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [],
+        "collapsed_children_count": 0,
+        "detail_items": [],
+        "hierarchy_group": "ISP",
+        "id": "grp-isp-gdc",
+        "ip_group": "GDC",
+        "label": "GDC",
+        "layer": "meta",
+        "matched_issues": [],
+        "parent": "grp-isp",
+        "semantic_source": "level1-semantic-group",
+        "shared_resource": false,
+        "summary_badges": [],
+        "type": "submodule",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "muted",
+          "height": 150,
+          "order": 100,
+          "width": 260
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 1120.0,
+        "y": 210.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [],
+        "collapsed_children_count": 0,
+        "detail_items": [],
+        "hierarchy_group": "CODEC",
+        "id": "grp-codec-mfc",
+        "ip_group": "MFC",
+        "label": "MFC",
+        "layer": "meta",
+        "matched_issues": [],
+        "parent": "grp-codec",
+        "semantic_source": "level1-semantic-group",
+        "shared_resource": false,
+        "summary_badges": [],
+        "type": "submodule",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "muted",
+          "height": 150,
+          "order": 150,
+          "width": 260
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 1210.0,
+        "y": 210.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [],
+        "collapsed_children_count": 0,
+        "detail_items": [],
+        "hierarchy_group": "Display",
+        "id": "grp-display-dpu",
+        "ip_group": "DPU",
+        "label": "DPU",
+        "layer": "meta",
+        "matched_issues": [],
+        "parent": "grp-display",
+        "semantic_source": "level1-semantic-group",
+        "shared_resource": false,
+        "summary_badges": [],
+        "type": "submodule",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "muted",
+          "height": 150,
+          "order": 170,
+          "width": 260
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 1300.0,
+        "y": 210.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [],
+        "collapsed_children_count": 0,
+        "detail_items": [],
+        "hierarchy_group": "Display",
+        "id": "grp-display-panel",
+        "ip_group": "Panel",
+        "label": "Panel",
+        "layer": "meta",
+        "matched_issues": [],
+        "parent": "grp-display",
+        "semantic_source": "level1-semantic-group",
+        "shared_resource": false,
+        "summary_badges": [],
+        "type": "submodule",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "muted",
+          "height": 150,
+          "order": 180,
+          "width": 260
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 1390.0,
+        "y": 210.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [],
+        "collapsed_children_count": 0,
+        "detail_items": [
+          "Role: sensor",
+          "Hierarchy: Sensor",
+          "IP block: Sensor"
+        ],
+        "hierarchy_group": "Sensor",
+        "id": "ip-sensor-rear",
+        "ip_group": "Sensor",
+        "ip_ref": "ip-sensor-rear-s5e9965",
+        "label": "SENSOR REAR",
+        "layer": "external",
+        "matched_issues": [],
+        "parent": "grp-sensor-sensor",
+        "semantic_source": "hw_properties",
+        "shared_resource": false,
+        "summary_badges": [
+          "Sensor",
+          "Sensor"
+        ],
+        "type": "ip",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "normal",
+          "height": 62,
+          "lane": "external",
+          "order": 0,
+          "stage": "capture",
+          "width": 160
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 180.0,
+        "y": 120.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [
+          "HW:PDP",
+          "DVFS:CSIS"
+        ],
+        "collapsed_children_count": 0,
+        "detail_items": [
+          "Role: csispdp",
+          "Hierarchy: ISP",
+          "IP block: CSIS/PDP",
+          "Role HW: PDP",
+          "DVFS group: CSIS",
+          "Output buffers: CSISPDP_3AA_BUF"
+        ],
+        "dvfs_group": "CSIS",
+        "hierarchy_group": "ISP",
+        "id": "ip-csispdp",
+        "ip_group": "CSIS/PDP",
+        "ip_ref": "ip-isp-s5e9965",
+        "label": "CSISPDP",
+        "layer": "hw",
+        "matched_issues": [],
+        "parent": "grp-isp-csis-pdp",
+        "role_hw_name": "PDP",
+        "semantic_source": "hw_role_mode",
+        "shared_resource": false,
+        "summary_badges": [
+          "ISP",
+          "CSIS/PDP",
+          "CSIS"
+        ],
+        "type": "ip",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "normal",
+          "height": 62,
+          "lane": "hw",
+          "order": 1,
+          "stage": "capture",
+          "width": 160
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 270.0,
+        "y": 194.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [
+          "HW:CSTAT",
+          "DVFS:CSIS"
+        ],
+        "collapsed_children_count": 0,
+        "detail_items": [
+          "Role: stats_3aa",
+          "Hierarchy: ISP",
+          "IP block: 3AA/CSTAT",
+          "Role HW: CSTAT",
+          "DVFS group: CSIS",
+          "Input buffers: CSISPDP_3AA_BUF"
+        ],
+        "dvfs_group": "CSIS",
+        "hierarchy_group": "ISP",
+        "id": "ip-n3aa",
+        "ip_group": "3AA/CSTAT",
+        "ip_ref": "ip-isp-s5e9965",
+        "label": "N3AA",
+        "layer": "hw",
+        "matched_issues": [],
+        "parent": "grp-isp-3aa-cstat",
+        "role_hw_name": "CSTAT",
+        "semantic_source": "hw_role_mode",
+        "shared_resource": false,
+        "summary_badges": [
+          "ISP",
+          "3AA/CSTAT",
+          "CSIS"
+        ],
+        "type": "ip",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "normal",
+          "height": 62,
+          "lane": "hw",
+          "order": 2,
+          "stage": "processing",
+          "width": 160
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 270.0,
+        "y": 268.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [
+          "HW:BYRP",
+          "DVFS:CAM"
+        ],
+        "collapsed_children_count": 0,
+        "detail_items": [
+          "Role: bayer_processing",
+          "Hierarchy: ISP",
+          "IP block: BYRP",
+          "Role HW: BYRP",
+          "DVFS group: CAM"
+        ],
+        "dvfs_group": "CAM",
+        "hierarchy_group": "ISP",
+        "id": "ip-byrp",
+        "ip_group": "BYRP",
+        "ip_ref": "ip-isp-s5e9965",
+        "label": "BYRP",
+        "layer": "hw",
+        "matched_issues": [],
+        "parent": "grp-isp-byrp",
+        "role_hw_name": "BYRP",
+        "semantic_source": "hw_role_mode",
+        "shared_resource": false,
+        "summary_badges": [
+          "ISP",
+          "BYRP",
+          "CAM"
+        ],
+        "type": "ip",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "normal",
+          "height": 62,
+          "lane": "hw",
+          "order": 3,
+          "stage": "processing",
+          "width": 160
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 270.0,
+        "y": 342.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [
+          "HW:RGBP",
+          "DVFS:CAM"
+        ],
+        "collapsed_children_count": 0,
+        "detail_items": [
+          "Role: rgb_processing",
+          "Hierarchy: ISP",
+          "IP block: RGBP",
+          "Role HW: RGBP",
+          "DVFS group: CAM"
+        ],
+        "dvfs_group": "CAM",
+        "hierarchy_group": "ISP",
+        "id": "ip-rgbp",
+        "ip_group": "RGBP",
+        "ip_ref": "ip-isp-s5e9965",
+        "label": "RGBP",
+        "layer": "hw",
+        "matched_issues": [],
+        "parent": "grp-isp-rgbp",
+        "role_hw_name": "RGBP",
+        "semantic_source": "hw_role_mode",
+        "shared_resource": false,
+        "summary_badges": [
+          "ISP",
+          "RGBP",
+          "CAM"
+        ],
+        "type": "ip",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "normal",
+          "height": 62,
+          "lane": "hw",
+          "order": 4,
+          "stage": "processing",
+          "width": 160
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 270.0,
+        "y": 416.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [
+          "HW:YUVP",
+          "DVFS:CAM"
+        ],
+        "collapsed_children_count": 0,
+        "detail_items": [
+          "Role: yuv_scaler",
+          "Hierarchy: ISP",
+          "IP block: YUVSC",
+          "Role HW: YUVP",
+          "DVFS group: CAM",
+          "Output buffers: YUVSC_MTNR_BUF"
+        ],
+        "dvfs_group": "CAM",
+        "hierarchy_group": "ISP",
+        "id": "ip-yuvsc",
+        "ip_group": "YUVSC",
+        "ip_ref": "ip-isp-s5e9965",
+        "label": "YUVSC",
+        "layer": "hw",
+        "matched_issues": [],
+        "parent": "grp-isp-yuvsc",
+        "role_hw_name": "YUVP",
+        "semantic_source": "hw_role_mode",
+        "shared_resource": false,
+        "summary_badges": [
+          "ISP",
+          "YUVSC",
+          "CAM"
+        ],
+        "type": "ip",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "normal",
+          "height": 62,
+          "lane": "hw",
+          "order": 5,
+          "stage": "processing",
+          "width": 160
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 270.0,
+        "y": 490.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [
+          "HW:MTNR0",
+          "DVFS:INTCAM"
+        ],
+        "collapsed_children_count": 0,
+        "detail_items": [
+          "Role: temporal_nr",
+          "Hierarchy: ISP",
+          "IP block: MTNR",
+          "Role HW: MTNR0",
+          "DVFS group: INTCAM",
+          "Input buffers: YUVSC_MTNR_BUF"
+        ],
+        "dvfs_group": "INTCAM",
+        "hierarchy_group": "ISP",
+        "id": "ip-mtnr",
+        "ip_group": "MTNR",
+        "ip_ref": "ip-isp-s5e9965",
+        "label": "MTNR",
+        "layer": "hw",
+        "matched_issues": [],
+        "parent": "grp-isp-mtnr",
+        "role_hw_name": "MTNR0",
+        "semantic_source": "hw_role_mode",
+        "shared_resource": false,
+        "summary_badges": [
+          "ISP",
+          "MTNR",
+          "INTCAM"
+        ],
+        "type": "ip",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "normal",
+          "height": 62,
+          "lane": "hw",
+          "order": 6,
+          "stage": "processing",
+          "width": 160
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 270.0,
+        "y": 564.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [
+          "HW:MSNR",
+          "DVFS:INTCAM"
+        ],
+        "collapsed_children_count": 0,
+        "detail_items": [
+          "Role: spatial_nr",
+          "Hierarchy: ISP",
+          "IP block: MSNR",
+          "Role HW: MSNR",
+          "DVFS group: INTCAM"
+        ],
+        "dvfs_group": "INTCAM",
+        "hierarchy_group": "ISP",
+        "id": "ip-msnr",
+        "ip_group": "MSNR",
+        "ip_ref": "ip-isp-s5e9965",
+        "label": "MSNR",
+        "layer": "hw",
+        "matched_issues": [],
+        "parent": "grp-isp-msnr",
+        "role_hw_name": "MSNR",
+        "semantic_source": "hw_role_mode",
+        "shared_resource": false,
+        "summary_badges": [
+          "ISP",
+          "MSNR",
+          "INTCAM"
+        ],
+        "type": "ip",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "normal",
+          "height": 62,
+          "lane": "hw",
+          "order": 7,
+          "stage": "processing",
+          "width": 160
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 270.0,
+        "y": 638.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [
+          "HW:YUVP",
+          "DVFS:CAM"
+        ],
+        "collapsed_children_count": 0,
+        "detail_items": [
+          "Role: yuv_post",
+          "Hierarchy: ISP",
+          "IP block: YUVP",
+          "Role HW: YUVP",
+          "DVFS group: CAM"
+        ],
+        "dvfs_group": "CAM",
+        "hierarchy_group": "ISP",
+        "id": "ip-yuvp",
+        "ip_group": "YUVP",
+        "ip_ref": "ip-isp-s5e9965",
+        "label": "YUVP",
+        "layer": "hw",
+        "matched_issues": [],
+        "parent": "grp-isp-yuvp",
+        "role_hw_name": "YUVP",
+        "semantic_source": "hw_role_mode",
+        "shared_resource": false,
+        "summary_badges": [
+          "ISP",
+          "YUVP",
+          "CAM"
+        ],
+        "type": "ip",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "normal",
+          "height": 62,
+          "lane": "hw",
+          "order": 8,
+          "stage": "processing",
+          "width": 160
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 270.0,
+        "y": 712.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [],
+        "collapsed_children_count": 0,
+        "detail_items": [
+          "Role: mcsc",
+          "Hierarchy: ISP",
+          "IP block: MCSC",
+          "Output buffers: MCSC_WDMA_PREV_BUF, MCSC_WDMA_VIDEO_BUF"
+        ],
+        "hierarchy_group": "ISP",
+        "id": "ip-mcsc",
+        "ip_group": "MCSC",
+        "ip_ref": "ip-mcsc-s5e9965",
+        "label": "MCSC",
+        "layer": "hw",
+        "matched_issues": [],
+        "parent": "grp-isp-mcsc",
+        "semantic_source": "hw_properties",
+        "shared_resource": false,
+        "summary_badges": [
+          "ISP",
+          "MCSC"
+        ],
+        "type": "ip",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "normal",
+          "height": 62,
+          "lane": "hw",
+          "order": 9,
+          "stage": "processing",
+          "width": 160
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 270.0,
+        "y": 786.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [
+          "HW:MCSC",
+          "DVFS:CAM"
+        ],
+        "collapsed_children_count": 0,
+        "detail_items": [
+          "Role: gdc_preview",
+          "Hierarchy: ISP",
+          "IP block: GDC",
+          "Role HW: MCSC",
+          "DVFS group: CAM",
+          "Input buffers: MCSC_WDMA_PREV_BUF",
+          "Output buffers: GDC_M_DPU_BUF"
+        ],
+        "dvfs_group": "CAM",
+        "hierarchy_group": "ISP",
+        "id": "ip-gdc-m",
+        "ip_group": "GDC",
+        "ip_ref": "ip-isp-s5e9965",
+        "label": "GDC M",
+        "layer": "hw",
+        "matched_issues": [],
+        "parent": "grp-isp-gdc",
+        "role_hw_name": "MCSC",
+        "semantic_source": "hw_role_mode",
+        "shared_resource": false,
+        "summary_badges": [
+          "ISP",
+          "GDC",
+          "CAM"
+        ],
+        "type": "ip",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "normal",
+          "height": 62,
+          "lane": "hw",
+          "order": 10,
+          "stage": "processing",
+          "width": 160
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 270.0,
+        "y": 860.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [
+          "HW:MCSC",
+          "DVFS:CAM"
+        ],
+        "collapsed_children_count": 0,
+        "detail_items": [
+          "Role: gdc_video",
+          "Hierarchy: ISP",
+          "IP block: GDC",
+          "Role HW: MCSC",
+          "DVFS group: CAM",
+          "Input buffers: MCSC_WDMA_VIDEO_BUF",
+          "Output buffers: GDC_O_MFC_BUF"
+        ],
+        "dvfs_group": "CAM",
+        "hierarchy_group": "ISP",
+        "id": "ip-gdc-o",
+        "ip_group": "GDC",
+        "ip_ref": "ip-isp-s5e9965",
+        "label": "GDC O",
+        "layer": "hw",
+        "matched_issues": [],
+        "parent": "grp-isp-gdc",
+        "role_hw_name": "MCSC",
+        "semantic_source": "hw_role_mode",
+        "shared_resource": false,
+        "summary_badges": [
+          "ISP",
+          "GDC",
+          "CAM"
+        ],
+        "type": "ip",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "normal",
+          "height": 62,
+          "lane": "hw",
+          "order": 11,
+          "stage": "processing",
+          "width": 160
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 270.0,
+        "y": 934.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [],
+        "collapsed_children_count": 0,
+        "detail_items": [
+          "Role: encoder",
+          "Hierarchy: CODEC",
+          "IP block: MFC",
+          "Input buffers: GDC_O_MFC_BUF"
+        ],
+        "hierarchy_group": "CODEC",
+        "id": "ip-mfc-enc",
+        "ip_group": "MFC",
+        "ip_ref": "ip-mfc-s5e9965",
+        "label": "MFC ENC",
+        "layer": "hw",
+        "matched_issues": [],
+        "parent": "grp-codec-mfc",
+        "semantic_source": "hw_properties",
+        "shared_resource": false,
+        "summary_badges": [
+          "CODEC",
+          "MFC"
+        ],
+        "type": "ip",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "normal",
+          "height": 62,
+          "lane": "hw",
+          "order": 12,
+          "stage": "encode",
+          "width": 160
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 630.0,
+        "y": 1008.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [],
+        "collapsed_children_count": 0,
+        "detail_items": [
+          "Role: display_controller",
+          "Hierarchy: Display",
+          "IP block: DPU",
+          "Input buffers: GDC_M_DPU_BUF"
+        ],
+        "hierarchy_group": "Display",
+        "id": "ip-dpu",
+        "ip_group": "DPU",
+        "ip_ref": "ip-dpu-s5e9965",
+        "label": "DPU",
+        "layer": "external",
+        "matched_issues": [],
+        "parent": "grp-display-dpu",
+        "semantic_source": "hw_properties",
+        "shared_resource": false,
+        "summary_badges": [
+          "Display",
+          "DPU"
+        ],
+        "type": "ip",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "normal",
+          "height": 62,
+          "lane": "external",
+          "order": 13,
+          "stage": "display",
+          "width": 160
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 810.0,
+        "y": 1082.0
+      }
+    },
+    {
+      "data": {
+        "capability_badges": [],
+        "collapsed_children_count": 0,
+        "detail_items": [
+          "Role: display_output",
+          "Hierarchy: Display",
+          "IP block: Panel"
+        ],
+        "hierarchy_group": "Display",
+        "id": "ip-panel",
+        "ip_group": "Panel",
+        "ip_ref": "ip-display-panel-s5e9965",
+        "label": "PANEL",
+        "layer": "external",
+        "matched_issues": [],
+        "parent": "grp-display-panel",
+        "semantic_source": "hw_properties",
+        "shared_resource": false,
+        "summary_badges": [
+          "Display",
+          "Panel"
+        ],
+        "type": "ip",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "normal",
+          "height": 62,
+          "lane": "external",
+          "order": 14,
+          "stage": "display",
+          "width": 160
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 810.0,
+        "y": 1156.0
+      }
+    }
+  ],
+  "overlays_available": [
+    "issues",
+    "review-gate",
+    "memory-path",
+    "llc-allocation",
+    "compression"
+  ],
+  "risks": [],
+  "scenario_id": "uc-camera-recording",
+  "summary": {
+    "budget_ms": 30.0,
+    "fps": 30,
+    "name": "Camera Recording",
+    "period_ms": 33.33,
+    "resolution": "1920 x 1080",
+    "scenario_id": "uc-camera-recording",
+    "subtitle": "FHD 30fps",
+    "variant_id": "cam-rec-3rdparty-binning",
+    "variant_label": "soc-exynos2600"
+  },
+  "variant_id": "cam-rec-3rdparty-binning"
+}
