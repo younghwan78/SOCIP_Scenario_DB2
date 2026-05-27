@@ -10,7 +10,6 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     # SCENARIO_DB_DATABASE_URL 우선, 없으면 DATABASE_URL 읽음 (기존 .env 호환)
     database_url: str = Field(
-        default="sqlite:///:memory:",
         validation_alias=AliasChoices("SCENARIO_DB_DATABASE_URL", "DATABASE_URL"),
     )
     api_port: int = 8000

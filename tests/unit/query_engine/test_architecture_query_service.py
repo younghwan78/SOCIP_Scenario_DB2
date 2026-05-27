@@ -142,6 +142,42 @@ class _Session:
         return _Query([])
 
 
+class _FailingSession:
+    def query(self, model):
+        raise RuntimeError("database read failed")
+
+
+def test_query_propagates_database_read_errors() -> None:
+    with pytest.raises(RuntimeError, match="database read failed"):
+        query_variants(_FailingSession(), QueryRequest())
+
+
+def test_query_propagates_variant_resolution_errors() -> None:
+    session = _Session()
+    session.variants.append(
+        SimpleNamespace(
+            scenario_id="uc-camera",
+            id="BROKEN-DERIVED",
+            severity="nominal",
+            design_conditions={},
+            design_conditions_override=None,
+            size_overrides={},
+            routing_switch={},
+            topology_patch={},
+            node_configs={},
+            buffer_overrides={},
+            ip_requirements={},
+            sw_requirements={},
+            violation_policy={},
+            tags=[],
+            derived_from_variant="MISSING-PARENT",
+        )
+    )
+
+    with pytest.raises(LookupError, match="Parent variant not found"):
+        query_variants(session, QueryRequest())
+
+
 def test_query_filters_by_axis_effective_topology_and_latest_kpi() -> None:
     request = QueryRequest(
         where=[

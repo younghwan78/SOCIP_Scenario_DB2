@@ -10,6 +10,7 @@ from scenario_db.db.repositories.evidence import get_evidence, list_simulation_r
 from scenario_db.view.service import apply_simulation_overlay, project_level0, project_level1, project_level2
 
 router = APIRouter(tags=["view"])
+_LEVEL0_MODES = {"architecture", "topology", "resource"}
 
 
 @router.get(
@@ -20,7 +21,7 @@ router = APIRouter(tags=["view"])
 def get_base_view(
     scenario_id: str,
     level: int = Query(0, ge=0, le=2, description="View depth: 0=overview/topology, 1=IP DAG, 2=drill-down"),
-    mode: str = Query("architecture", description="architecture | topology"),
+    mode: str = Query("architecture", description="architecture | topology | resource"),
     expand: str | None = Query(None, description="Alias, active node id, or IP catalog id to expand (Level 2 only)"),
     sim: str = Query("none", description="none | latest"),
     sim_evidence_id: str | None = Query(None, description="Specific simulation evidence id to overlay"),
@@ -47,7 +48,7 @@ def get_view(
     scenario_id: str,
     variant_id: str,
     level: int = Query(0, ge=0, le=2, description="View depth: 0=overview/topology, 1=IP DAG, 2=drill-down"),
-    mode: str = Query("architecture", description="architecture | topology"),
+    mode: str = Query("architecture", description="architecture | topology | resource"),
     expand: str | None = Query(None, description="Alias, active node id, or IP catalog id to expand (Level 2 only)"),
     sim: str = Query("none", description="none | latest"),
     sim_evidence_id: str | None = Query(None, description="Specific simulation evidence id to overlay"),
@@ -87,6 +88,7 @@ def _build_view(
     db: Session,
 ) -> ViewResponse:
     try:
+        _validate_mode(level, mode)
         if level == 0:
             view = project_level0(scenario_id, variant_id, db=db, mode=mode)
         if level == 1:
@@ -111,6 +113,15 @@ def _build_view(
     raise HTTPException(status_code=400, detail=f"Unsupported level: {level}")
 
 
+def _validate_mode(level: int, mode: str) -> None:
+    if level == 0:
+        if mode not in _LEVEL0_MODES:
+            raise HTTPException(status_code=422, detail=f"mode must be one of {sorted(_LEVEL0_MODES)}")
+        return
+    if mode != "architecture":
+        raise HTTPException(status_code=422, detail="mode is only supported for level=0 views")
+
+
 def _apply_optional_sim_overlay(
     view: ViewResponse,
     *,
@@ -127,6 +138,16 @@ def _apply_optional_sim_overlay(
         evidence = get_evidence(db, sim_evidence_id)
         if evidence is None or evidence.kind != "evidence.simulation":
             raise HTTPException(status_code=404, detail=f"Simulation evidence not found: {sim_evidence_id}")
+        evidence_scenario = getattr(evidence, "scenario_ref", None)
+        evidence_variant = getattr(evidence, "variant_ref", None)
+        if evidence_scenario != scenario_id or evidence_variant != variant_id:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Simulation evidence {sim_evidence_id} does not match requested view "
+                    f"{scenario_id}/{variant_id or 'BASE'}"
+                ),
+            )
     elif sim == "latest" and variant_id:
         rows, _ = list_simulation_results(
             db,
@@ -138,4 +159,3 @@ def _apply_optional_sim_overlay(
         )
         evidence = rows[0] if rows else None
     return apply_simulation_overlay(view, evidence)
-

@@ -88,6 +88,8 @@ uv run python -m scenario_db.etl.loader demo\fixtures
 ```
 
 Reload fixtures after changing YAML. The API reads from PostgreSQL, not directly from YAML.
+For a practical map of required and optional DB data, see
+[docs/db-data-guide.md](docs/db-data-guide.md).
 
 Scenario IDs are global in the current schema. If two fixture sets contain the
 same scenario id under different projects, the default ETL policy rejects the

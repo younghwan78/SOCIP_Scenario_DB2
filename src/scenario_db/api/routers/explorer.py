@@ -177,6 +177,7 @@ def variant_matrix(
         offset=0,
     )
     scenario_ids_for_variants = {scenario.id for scenario in scenarios}
+    axis_keys = _variant_axis_keys(db, scenario_ids_for_variants, severity)
     variants, total = _paged_variants(
         db,
         scenario_ids=scenario_ids_for_variants,
@@ -186,7 +187,6 @@ def variant_matrix(
     )
     project_by_id = {project.id: project for project in projects}
     scenario_by_id = {scenario.id: scenario for scenario in scenarios}
-    axis_keys: set[str] = set()
     items: list[VariantMatrixItem] = []
     for variant in sorted(variants, key=lambda row: (row.scenario_id, row.id)):
         scenario = scenario_by_id.get(variant.scenario_id)
@@ -198,7 +198,6 @@ def variant_matrix(
         if project is None:
             continue
         design = variant.design_conditions or {}
-        axis_keys.update(str(key) for key in design)
         routing = variant.routing_switch or {}
         disabled_nodes = [str(item) for item in routing.get("disabled_nodes") or []]
         pipeline_node_count = len((scenario.pipeline or {}).get("nodes") or [])
@@ -389,6 +388,23 @@ def _paged_variants(
         .all()
     )
     return rows, total
+
+
+def _variant_axis_keys(
+    db: Session,
+    scenario_ids: set[str],
+    severities: list[str] | None,
+) -> set[str]:
+    if not scenario_ids:
+        return set()
+    query = db.query(ScenarioVariant).filter(ScenarioVariant.scenario_id.in_(scenario_ids))
+    if severities:
+        query = query.filter(ScenarioVariant.severity.in_(severities))
+    keys: set[str] = set()
+    for variant in query.all():
+        design = variant.design_conditions or {}
+        keys.update(str(key) for key in design)
+    return keys
 
 
 def _jsonb_metadata_any(column, key: str, selected: list[str] | None):

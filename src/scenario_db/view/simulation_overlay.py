@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+import re
 from typing import Any
 
 from scenario_db.api.schemas.view import (
@@ -109,24 +110,33 @@ def _match_node_sim_row(data: NodeData, rows: list[dict[str, Any]]) -> dict[str,
 
 
 def _match_edge_dma_rows(data: EdgeData, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    edge_text = f"{data.id} {data.source} {data.target} {data.producer or ''} {data.consumer or ''} {data.buffer_ref or ''}".lower()
+    edge_tokens = _edge_match_tokens(data)
     matched = [
         row
         for row in rows
         if (
             (node_id := str(row.get("node_id") or "").lower())
-            and node_id in edge_text
+            and node_id in edge_tokens
         )
         or (
             (hw_name := str(row.get("hw_name") or "").lower())
-            and hw_name in edge_text
+            and hw_name in edge_tokens
         )
     ]
     if matched:
         return matched
-    if data.flow_type == "M2M" and rows:
-        return rows
     return []
+
+
+def _edge_match_tokens(data: EdgeData) -> set[str]:
+    tokens: set[str] = set()
+    for value in (data.id, data.source, data.target, data.producer, data.consumer, data.buffer_ref):
+        if not value:
+            continue
+        text = str(value).lower()
+        tokens.add(text)
+        tokens.update(part for part in re.split(r"[^a-z0-9]+", text) if part)
+    return tokens
 
 
 def _apply_level0_resource_metrics(

@@ -119,3 +119,52 @@ def test_apply_simulation_overlay_adds_node_and_edge_details():
     assert result.level0_resource_overview.metric_breakdown[0].bw_total_mbs == 46.6
     assert "simulation" in result.overlays_available
     assert result.metadata["simulation_evidence_id"] == "sim-test-01"
+
+
+def test_apply_simulation_overlay_does_not_attach_unmatched_dma_to_all_m2m_edges():
+    view = ViewResponse(
+        level=0,
+        scenario_id="uc-camera-recording",
+        variant_id="FHD30-SDR-H265",
+        mode="topology",
+        nodes=[],
+        edges=[
+            EdgeElement(
+                data=EdgeData(
+                    id="e-display-path",
+                    source="dpu",
+                    target="panel",
+                    flow_type="M2M",
+                    buffer_ref="DISPLAY_BUF",
+                )
+            )
+        ],
+        summary=ViewSummary(
+            scenario_id="uc-camera-recording",
+            variant_id="FHD30-SDR-H265",
+            name="Camera",
+            subtitle="FHD30",
+            period_ms=33.3,
+            budget_ms=30.0,
+            resolution="1920x1080",
+            fps=30,
+            variant_label="FHD30",
+        ),
+    )
+    evidence = SimpleNamespace(
+        id="sim-test-02",
+        dvfs_breakdown=[],
+        timing_breakdown=[],
+        dma_breakdown=[
+            {
+                "node_id": "isp0",
+                "hw_name": "ISP",
+                "bw_mbs": 46.6,
+                "bw_power_mw": 3.7,
+            }
+        ],
+    )
+
+    result = apply_simulation_overlay(view, evidence)
+
+    assert result.edges[0].data.sim_overlay is None

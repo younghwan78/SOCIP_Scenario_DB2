@@ -22,7 +22,7 @@ from scenario_db.db.models.capability import IpCatalog
 from scenario_db.db.models.decision import Issue
 from scenario_db.db.models.definition import Project, Scenario, ScenarioVariant
 from scenario_db.db.models.evidence import Evidence
-from scenario_db.db.repositories.variant_resolution import ResolvedScenarioVariant, resolve_variant_from_rows
+from scenario_db.db.repositories.variant_resolution import resolve_variant_from_rows
 from scenario_db.query_engine.facts import build_variant_facts
 from scenario_db.query_engine.field_registry import OPERATORS, field_definition, field_definitions, is_supported_field
 
@@ -125,36 +125,12 @@ def _build_items(db: Session) -> list[QueryResultItem]:
 
 
 def _safe_all(db: Session, model: Any) -> list[Any]:
-    try:
-        rows = db.query(model).all()
-    except Exception:
-        return []
+    rows = db.query(model).all()
     return list(rows) if isinstance(rows, list) else []
 
 
 def _resolved_variant(row_map: dict[str, Any], scenario_id: str, variant_id: str, raw_variant: Any) -> Any:
-    try:
-        return resolve_variant_from_rows(row_map, scenario_id, variant_id)
-    except Exception:
-        return ResolvedScenarioVariant(
-            scenario_id=scenario_id,
-            id=variant_id,
-            severity=getattr(raw_variant, "severity", None),
-            design_conditions=getattr(raw_variant, "design_conditions", None) or {},
-            design_conditions_override=getattr(raw_variant, "design_conditions_override", None) or {},
-            size_overrides=getattr(raw_variant, "size_overrides", None) or {},
-            routing_switch=getattr(raw_variant, "routing_switch", None) or {},
-            topology_patch=getattr(raw_variant, "topology_patch", None) or {},
-            node_configs=getattr(raw_variant, "node_configs", None) or {},
-            buffer_overrides=getattr(raw_variant, "buffer_overrides", None) or {},
-            ip_requirements=getattr(raw_variant, "ip_requirements", None) or {},
-            sw_requirements=getattr(raw_variant, "sw_requirements", None),
-            violation_policy=getattr(raw_variant, "violation_policy", None),
-            tags=getattr(raw_variant, "tags", None) or [],
-            derived_from_variant=getattr(raw_variant, "derived_from_variant", None),
-            resolved=False,
-            inheritance_chain=[variant_id],
-        )
+    return resolve_variant_from_rows(row_map, scenario_id, variant_id)
 
 
 def _latest_evidence_by_variant(evidence_rows: list[Any]) -> dict[tuple[str, str], Any]:

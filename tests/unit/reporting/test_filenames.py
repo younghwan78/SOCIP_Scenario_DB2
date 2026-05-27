@@ -50,7 +50,8 @@ def test_artifact_filenames_match_legacy_suffixes():
     assert names.simulation_report == "projectA-FHD30_Recording_simulation_result.html"
 
 
-def test_report_dir_setting_defaults_to_output_simulation():
+def test_report_dir_setting_defaults_to_output_simulation(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "sqlite:///report-settings.db")
     settings = Settings()
 
     assert Path(settings.report_dir).as_posix().endswith("output_simulation")

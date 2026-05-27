@@ -187,6 +187,7 @@ Supported canonical document kinds in the first implementation:
 
 - `soc`
 - `ip`
+- `sw_profile`
 - `project`
 - `scenario.usecase`
 
@@ -298,7 +299,7 @@ Supported canonical document kinds in the first implementation:
 - `kind` must be `scenario.import_bundle`.
 - `payload.documents` must not be empty.
 - Each document must have string `kind` and `id`.
-- Document kind must be one of `soc`, `ip`, `project`, or `scenario.usecase`.
+- Document kind must be one of `soc`, `ip`, `sw_profile`, `project`, or `scenario.usecase`.
 - Each document is validated by the canonical Pydantic model before DB apply.
 - Duplicate `(kind, id)` documents in the same bundle are blocking errors.
 - `scenario.usecase.project_ref` must exist in DB or be included as a `project` document in the same bundle.
@@ -335,7 +336,7 @@ For `scenario.pipeline_patch`:
 
 For `scenario.import_bundle`:
 
-- Documents are applied in dependency order: `soc`, `ip`, `project`, then `scenario.usecase`.
+- Documents are applied in dependency order: `soc`, `ip`, `sw_profile`, `project`, then `scenario.usecase`.
 - Existing rows are upserted by document ID.
 - `scenario.usecase` apply also writes its embedded variants through the existing ETL mapper.
 - Batch `applied_refs` records document counts, scenario refs, and the import report summary.

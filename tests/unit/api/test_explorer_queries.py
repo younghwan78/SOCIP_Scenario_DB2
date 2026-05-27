@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from scenario_db.api.routers.explorer import (
     _count_matching_ips,
     _count_matching_socs,
@@ -7,6 +9,7 @@ from scenario_db.api.routers.explorer import (
     _filtered_rows,
     _paged_scenarios,
     _paged_variants,
+    variant_matrix,
 )
 from scenario_db.db.models.capability import IpCatalog, SocPlatform, SwProfile
 from scenario_db.db.models.definition import Project, Scenario, ScenarioVariant
@@ -206,3 +209,98 @@ def test_paged_variants_applies_sql_offset_and_limit_before_loading_rows():
     assert [row.id for row in rows] == ["v2", "v3"]
     assert session.queries[ScenarioVariant].offset_value == 2
     assert session.queries[ScenarioVariant].limit_value == 2
+
+
+class _VariantMatrixQuery:
+    def __init__(self, rows):
+        self.rows = rows
+        self.offset_value = 0
+        self.limit_value = None
+
+    def filter(self, *criteria):
+        return self
+
+    def order_by(self, *criteria):
+        return self
+
+    def count(self):
+        return len(self.rows)
+
+    def offset(self, value):
+        self.offset_value = value
+        return self
+
+    def limit(self, value):
+        self.limit_value = value
+        return self
+
+    def all(self):
+        if self.limit_value is None:
+            return list(self.rows)
+        return self.rows[self.offset_value : self.offset_value + self.limit_value]
+
+
+class _VariantMatrixSession:
+    def __init__(self):
+        self.project = SimpleNamespace(
+            id="proj-A",
+            metadata_={"soc_ref": "soc-A", "board_type": "ERD"},
+            globals_={},
+        )
+        self.scenario = SimpleNamespace(
+            id="uc-camera",
+            project_ref="proj-A",
+            metadata_={"name": "Camera", "category": ["camera"], "domain": ["imaging"]},
+            pipeline={"nodes": [], "edges": []},
+        )
+        self.variants = [
+            SimpleNamespace(
+                scenario_id="uc-camera",
+                id="v-fps",
+                severity="nominal",
+                design_conditions={"fps": 30},
+                routing_switch={},
+                buffer_overrides={},
+                node_configs={},
+                tags=[],
+            ),
+            SimpleNamespace(
+                scenario_id="uc-camera",
+                id="v-codec",
+                severity="nominal",
+                design_conditions={"codec": "H265"},
+                routing_switch={},
+                buffer_overrides={},
+                node_configs={},
+                tags=[],
+            ),
+        ]
+
+    def query(self, model):
+        table = getattr(model, "__tablename__", "")
+        if table == "projects":
+            return _VariantMatrixQuery([self.project])
+        if table == "scenarios":
+            return _VariantMatrixQuery([self.scenario])
+        if table == "scenario_variants":
+            return _VariantMatrixQuery(self.variants)
+        raise AssertionError(f"Unexpected query model: {model!r}")
+
+
+def test_variant_matrix_axis_keys_are_based_on_filtered_result_not_current_page():
+    response = variant_matrix(
+        soc_ref=None,
+        board_type=None,
+        project_ref=None,
+        category=None,
+        domain=None,
+        scenario_id=None,
+        severity=None,
+        limit=1,
+        offset=0,
+        db=_VariantMatrixSession(),
+    )
+
+    assert [item.variant_id for item in response.items] == ["v-fps"]
+    assert response.total == 2
+    assert response.axis_keys == ["fps", "codec"]
