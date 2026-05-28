@@ -69,6 +69,30 @@ def test_run_exploration_sweep_preview_can_include_raw_results_when_requested():
     assert preview.cases[0].result.scenario_id == "uc-single-camera"
 
 
+def test_run_exploration_sweep_preview_warns_when_fixture_ip_is_missing_from_db_catalog():
+    sweep = ExplorationSweep.model_validate(
+        {
+            "id": "missing-ip",
+            "base_recipe": {
+                "id": "missing-ip-camera",
+                "project_ref": "proj-next",
+                "source": {"ip_ref": "ip-sensor", "width": 1280, "height": 720},
+                "pipeline": [{"id": "isp0", "template": "isp", "ip_ref": "ip-missing"}],
+            },
+        }
+    )
+
+    preview = run_exploration_sweep_preview(
+        sweep,
+        ip_catalog={"ip-sensor": _ip_catalog()["ip-sensor"]},
+        config=SimulationRunConfig(include_timeline=False),
+    )
+
+    assert preview.cases[0].kpi["total_power_mw"] == 0.0
+    assert any("ip-missing" in warning and "not present" in warning for warning in preview.cases[0].warnings)
+    assert preview.comparison[0]["warning_count"] >= 1
+
+
 def _ip_catalog() -> dict[str, IpCatalog]:
     return {
         "ip-sensor": IpCatalog(

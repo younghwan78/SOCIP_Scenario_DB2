@@ -34,36 +34,40 @@ def compile_exploration_recipe(
     api_base: str,
     *,
     source_yaml: str,
+    db_project_ref: str | None = None,
     request_func: RequestFunc | None = None,
 ) -> dict[str, Any]:
-    return _compile_yaml(api_base, "/exploration/recipes/compile", source_yaml=source_yaml, request_func=request_func)
+    return _compile_yaml(api_base, "/exploration/recipes/compile", source_yaml=source_yaml, db_project_ref=db_project_ref, request_func=request_func)
 
 
 def compile_exploration_sweep(
     api_base: str,
     *,
     source_yaml: str,
+    db_project_ref: str | None = None,
     request_func: RequestFunc | None = None,
 ) -> dict[str, Any]:
-    return _compile_yaml(api_base, "/exploration/sweeps/compile", source_yaml=source_yaml, request_func=request_func)
+    return _compile_yaml(api_base, "/exploration/sweeps/compile", source_yaml=source_yaml, db_project_ref=db_project_ref, request_func=request_func)
 
 
 def compile_exploration_template(
     api_base: str,
     *,
     source_yaml: str,
+    db_project_ref: str | None = None,
     request_func: RequestFunc | None = None,
 ) -> dict[str, Any]:
-    return _compile_yaml(api_base, "/exploration/templates/compile", source_yaml=source_yaml, request_func=request_func)
+    return _compile_yaml(api_base, "/exploration/templates/compile", source_yaml=source_yaml, db_project_ref=db_project_ref, request_func=request_func)
 
 
 def compile_exploration_template_sweep(
     api_base: str,
     *,
     source_yaml: str,
+    db_project_ref: str | None = None,
     request_func: RequestFunc | None = None,
 ) -> dict[str, Any]:
-    return _compile_yaml(api_base, "/exploration/template-sweeps/compile", source_yaml=source_yaml, request_func=request_func)
+    return _compile_yaml(api_base, "/exploration/template-sweeps/compile", source_yaml=source_yaml, db_project_ref=db_project_ref, request_func=request_func)
 
 
 def preview_exploration_sweep(
@@ -71,11 +75,14 @@ def preview_exploration_sweep(
     *,
     source_yaml: str | None = None,
     sweep: dict[str, Any] | None = None,
+    db_project_ref: str | None = None,
     include_results: bool = True,
     config: dict[str, Any] | None = None,
     request_func: RequestFunc | None = None,
 ) -> dict[str, Any]:
     payload = _preview_payload(include_results=include_results, config=config)
+    if db_project_ref:
+        payload["db_project_ref"] = db_project_ref
     if source_yaml is not None:
         payload["source_yaml"] = source_yaml
     if sweep is not None:
@@ -93,6 +100,7 @@ def preview_exploration_template_sweep(
     api_base: str,
     *,
     source_yaml: str,
+    db_project_ref: str | None = None,
     include_results: bool = True,
     config: dict[str, Any] | None = None,
     request_func: RequestFunc | None = None,
@@ -101,6 +109,7 @@ def preview_exploration_template_sweep(
         api_base,
         "/exploration/template-sweeps/preview",
         source_yaml=source_yaml,
+        db_project_ref=db_project_ref,
         include_results=include_results,
         config=config,
         request_func=request_func,
@@ -111,6 +120,7 @@ def preview_exploration_template(
     api_base: str,
     *,
     source_yaml: str,
+    db_project_ref: str | None = None,
     include_results: bool = True,
     config: dict[str, Any] | None = None,
     request_func: RequestFunc | None = None,
@@ -119,6 +129,7 @@ def preview_exploration_template(
         api_base,
         "/exploration/templates/preview",
         source_yaml=source_yaml,
+        db_project_ref=db_project_ref,
         include_results=include_results,
         config=config,
         request_func=request_func,
@@ -130,14 +141,18 @@ def _compile_yaml(
     path: str,
     *,
     source_yaml: str,
+    db_project_ref: str | None,
     request_func: RequestFunc | None = None,
 ) -> dict[str, Any]:
+    payload: dict[str, Any] = {"source_yaml": source_yaml}
+    if db_project_ref:
+        payload["db_project_ref"] = db_project_ref
     return _request_json(
         "POST",
         api_base,
         path,
         request_func=request_func,
-        json={"source_yaml": source_yaml},
+        json=payload,
     )
 
 
@@ -146,12 +161,15 @@ def _preview_yaml(
     path: str,
     *,
     source_yaml: str,
+    db_project_ref: str | None,
     include_results: bool,
     config: dict[str, Any] | None,
     request_func: RequestFunc | None = None,
 ) -> dict[str, Any]:
     payload = _preview_payload(include_results=include_results, config=config)
     payload["source_yaml"] = source_yaml
+    if db_project_ref:
+        payload["db_project_ref"] = db_project_ref
     return _request_json("POST", api_base, path, request_func=request_func, json=payload)
 
 

@@ -33,6 +33,7 @@ class SweepPreviewResult(BaseModel):
     baseline_case_id: str | None = None
     cases: list[SweepPreviewCase] = Field(default_factory=list)
     comparison: list[dict[str, Any]] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
     import_bundle: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -166,6 +167,7 @@ def run_import_bundle_preview(
             )
 
     _apply_deltas(cases)
+    warnings = _unique_case_warnings(cases)
     return SweepPreviewResult(
         persisted=False,
         baseline_case_id=cases[0].case_id if cases else None,
@@ -184,6 +186,7 @@ def run_import_bundle_preview(
             }
             for case in cases
         ],
+        warnings=warnings,
         import_bundle=import_bundle,
     )
 
@@ -243,3 +246,16 @@ def _apply_deltas(cases: list[SweepPreviewCase]) -> None:
             key: float(case.kpi.get(key) or 0.0) - float(baseline.get(key) or 0.0)
             for key in ("total_power_mw", "core_power_mw", "bw_power_mw", "total_bw_mbs", "hw_time_max_ms", "timeline_end_ms")
         }
+
+
+def _unique_case_warnings(cases: list[SweepPreviewCase]) -> list[str]:
+    warnings: list[str] = []
+    seen: set[str] = set()
+    for case in cases:
+        for warning in case.warnings:
+            text = str(warning).strip()
+            if not text or text in seen:
+                continue
+            seen.add(text)
+            warnings.append(text)
+    return warnings

@@ -47,33 +47,33 @@ def get_example(example_id: str):
 
 
 @router.post("/recipes/compile", response_model=ExplorationRecipeCompileResponse)
-def compile_recipe(request: ExplorationRecipeCompileRequest):
+def compile_recipe(request: ExplorationRecipeCompileRequest, db: Session = Depends(get_db)):
     try:
-        return compile_recipe_request(request)
+        return compile_recipe_request(db, request)
     except (ValidationError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=validation_detail(exc)) from exc
 
 
 @router.post("/sweeps/compile", response_model=ExplorationSweepCompileResponse)
-def compile_sweep(request: ExplorationSweepCompileRequest):
+def compile_sweep(request: ExplorationSweepCompileRequest, db: Session = Depends(get_db)):
     try:
-        return compile_sweep_request(request)
+        return compile_sweep_request(db, request)
     except (ValidationError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=validation_detail(exc)) from exc
 
 
 @router.post("/templates/compile", response_model=ExplorationTemplateCompileResponse)
-def compile_template(request: ExplorationTemplateCompileRequest):
+def compile_template(request: ExplorationTemplateCompileRequest, db: Session = Depends(get_db)):
     try:
-        return compile_template_request(request)
+        return compile_template_request(db, request)
     except (ValidationError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=validation_detail(exc)) from exc
 
 
 @router.post("/template-sweeps/compile", response_model=ExplorationSweepCompileResponse)
-def compile_template_sweep(request: ExplorationTemplateSweepCompileRequest):
+def compile_template_sweep(request: ExplorationTemplateSweepCompileRequest, db: Session = Depends(get_db)):
     try:
-        return compile_template_sweep_request(request)
+        return compile_template_sweep_request(db, request)
     except (ValidationError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=validation_detail(exc)) from exc
 

@@ -7,6 +7,20 @@ from fastapi.testclient import TestClient
 from scenario_db.api.app import create_app
 from scenario_db.api.deps import get_db
 from scenario_db.api.routers import exploration as exploration_router
+from scenario_db.api.schemas.exploration import (
+    ExplorationRecipeCompileRequest,
+    ExplorationSweepCompileRequest,
+    ExplorationSweepPreviewRequest,
+    ExplorationTemplateSweepCompileRequest,
+)
+from scenario_db.api.services.exploration import (
+    compile_recipe_request,
+    compile_sweep_request,
+    compile_template_sweep_request,
+    preview_sweep_request,
+)
+from scenario_db.db.models.capability import IpCatalog, SocPlatform
+from scenario_db.db.models.definition import Project
 
 
 def _client_with_db(db: MagicMock | None = None) -> tuple[TestClient, MagicMock]:
@@ -92,6 +106,217 @@ def test_exploration_recipe_compile_endpoint_422_for_missing_payload():
     response = client.post("/api/v1/exploration/recipes/compile", json={})
 
     assert response.status_code == 422
+
+
+def test_exploration_recipe_compile_warns_when_selected_db_project_lacks_fixture_ips():
+    db = _ExplorationDb(
+        projects=[
+            Project(
+                id="proj-db",
+                schema_version="2.2",
+                metadata_={"soc_ref": "soc-db"},
+                yaml_sha256="sha",
+            )
+        ],
+        socs=[
+            SocPlatform(
+                id="soc-db",
+                schema_version="2.2",
+                ips=[{"ref": "ip-known"}],
+                yaml_sha256="sha",
+            )
+        ],
+        ips=[
+            IpCatalog(
+                id="ip-known",
+                schema_version="2.2",
+                category="camera",
+                hierarchy={},
+                capabilities={"sim": {"ppc": 4, "unit_power_mw_mp": 1.0}},
+                yaml_sha256="sha",
+            )
+        ],
+    )
+    request = ExplorationRecipeCompileRequest(
+        db_project_ref="proj-db",
+        source_yaml="""
+id: api-recipe
+project_ref: fixture-project
+source:
+  node_id: sensor_src
+  ip_ref: ip-sensor-missing
+  width: 1920
+  height: 1080
+pipeline:
+  - id: isp0
+    template: isp
+    ip_ref: ip-isp-missing
+"""
+    )
+
+    response = compile_recipe_request(db, request)
+
+    assert any("ip-sensor-missing" in warning for warning in response.warnings)
+    assert any("ip-isp-missing" in warning for warning in response.warnings)
+    assert response.import_bundle["import_report"]["ok"] is False
+
+
+def test_exploration_sweep_preview_exposes_selected_db_catalog_warnings():
+    db = _ExplorationDb(
+        projects=[
+            Project(
+                id="proj-db",
+                schema_version="2.2",
+                metadata_={"soc_ref": "soc-db"},
+                yaml_sha256="sha",
+            )
+        ],
+        socs=[
+            SocPlatform(
+                id="soc-db",
+                schema_version="2.2",
+                ips=[{"ref": "ip-known"}],
+                yaml_sha256="sha",
+            )
+        ],
+        ips=[
+            IpCatalog(
+                id="ip-known",
+                schema_version="2.2",
+                category="camera",
+                hierarchy={},
+                capabilities={"sim": {"ppc": 4, "unit_power_mw_mp": 1.0}},
+                yaml_sha256="sha",
+            )
+        ],
+    )
+    request = ExplorationSweepPreviewRequest(
+        db_project_ref="proj-db",
+        source_yaml="""
+id: api-preview-sweep
+base_recipe:
+  id: api-preview-recipe
+  project_ref: fixture-project
+  source:
+    node_id: sensor_src
+    ip_ref: ip-sensor-missing
+    width: 1920
+    height: 1080
+  pipeline:
+    - id: isp0
+      template: isp
+      ip_ref: ip-isp-missing
+axes: []
+""",
+    )
+
+    response = preview_sweep_request(db, request)
+
+    assert any("fixture-project" in warning and "proj-db" in warning for warning in response.warnings)
+    assert any("ip-sensor-missing" in warning for warning in response.warnings)
+    assert any("ip-isp-missing" in warning for warning in response.warnings)
+    assert any("ip-isp-missing" in warning for warning in response.cases[0].warnings)
+    assert response.import_bundle["import_report"]["ok"] is False
+
+
+def test_exploration_sweep_compile_deduplicates_missing_ip_warnings_across_cases():
+    db = _ExplorationDb(
+        projects=[
+            Project(
+                id="proj-db",
+                schema_version="2.2",
+                metadata_={"soc_ref": "soc-db"},
+                yaml_sha256="sha",
+            )
+        ],
+        socs=[
+            SocPlatform(
+                id="soc-db",
+                schema_version="2.2",
+                ips=[],
+                yaml_sha256="sha",
+            )
+        ],
+        ips=[],
+    )
+    request = ExplorationSweepCompileRequest(
+        db_project_ref="proj-db",
+        source_yaml="""
+id: api-sweep
+base_recipe:
+  id: api-sweep-recipe
+  project_ref: fixture-project
+  source:
+    width: 1920
+    height: 1080
+  pipeline:
+    - id: isp0
+      template: isp
+      ip_ref: ip-isp-missing
+axes:
+  - name: fps
+    path: source.fps
+    values: [30, 60]
+""",
+    )
+
+    response = compile_sweep_request(db, request)
+
+    assert len([warning for warning in response.warnings if "ip-isp-missing" in warning]) == 1
+
+
+def test_exploration_template_sweep_compile_deduplicates_missing_ip_warnings_across_cases():
+    db = _ExplorationDb(
+        projects=[
+            Project(
+                id="proj-db",
+                schema_version="2.2",
+                metadata_={"soc_ref": "soc-db"},
+                yaml_sha256="sha",
+            )
+        ],
+        socs=[
+            SocPlatform(
+                id="soc-db",
+                schema_version="2.2",
+                ips=[],
+                yaml_sha256="sha",
+            )
+        ],
+        ips=[],
+    )
+    request = ExplorationTemplateSweepCompileRequest(
+        db_project_ref="proj-db",
+        source_yaml="""
+kind: scenario.chain_template_sweep
+id: api-template-sweep
+base_template:
+  kind: scenario.chain_template
+  id: api-template
+  version: 1.0.0
+  schema_version: 1
+  project_ref: fixture-project
+  source:
+    width: 1920
+    height: 1080
+  buffers:
+    B0: [0, 0, 1920, 1080, YUV420, 8, COMP_OFF, 1.0]
+  blocks:
+    - {id: isp0, template: isp, ip_ref: ip-isp-missing}
+  links:
+    - "sensor_src:COUT -> isp0:CIN | OTF"
+axes:
+  - name: b0
+    path: buffers.B0
+    values:
+      - {label: "off", value: [0, 0, 1920, 1080, YUV420, 8, COMP_OFF, 1.0]}
+      - {label: sbwc, value: [0, 0, 1920, 1080, YUV420, 8, COMP_SBWC_LOSSLESS, 0.5]}
+""",
+    )
+
+    response = compile_template_sweep_request(db, request)
+
+    assert len([warning for warning in response.warnings if "ip-isp-missing" in warning]) == 1
 
 
 def test_exploration_sweep_compile_endpoint_from_dict():
@@ -323,3 +548,41 @@ def test_exploration_template_sweep_preview_endpoint(monkeypatch):
     assert response.status_code == 200
     body = response.json()
     assert body["baseline_case_id"] == "template-b0-off"
+
+
+class _ExplorationQuery:
+    def __init__(self, rows):
+        self._rows = list(rows)
+
+    def filter_by(self, **kwargs):
+        return _ExplorationQuery(
+            row
+            for row in self._rows
+            if all(getattr(row, key) == value for key, value in kwargs.items())
+        )
+
+    def all(self):
+        return self._rows
+
+    def one_or_none(self):
+        if not self._rows:
+            return None
+        if len(self._rows) > 1:
+            raise AssertionError("fake query expected at most one row")
+        return self._rows[0]
+
+
+class _ExplorationDb:
+    def __init__(self, *, projects=None, socs=None, ips=None):
+        self._projects = list(projects or [])
+        self._socs = list(socs or [])
+        self._ips = list(ips or [])
+
+    def query(self, model):
+        if model is Project:
+            return _ExplorationQuery(self._projects)
+        if model is SocPlatform:
+            return _ExplorationQuery(self._socs)
+        if model is IpCatalog:
+            return _ExplorationQuery(self._ips)
+        return _ExplorationQuery([])

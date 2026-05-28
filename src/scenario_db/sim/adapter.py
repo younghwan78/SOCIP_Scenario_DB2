@@ -27,6 +27,7 @@ def build_simulation_inputs(
     transfers: list[PortTransferSpec] = []
     warnings: list[str] = []
     warnings.extend(validate_shape_propagation(graph, shapes))
+    _append_missing_ip_catalog_warnings(graph, warnings)
 
     for node in graph.pipeline_nodes:
         node_id = str(node.get("id") or "")
@@ -81,3 +82,20 @@ def _fps(graph: CanonicalScenarioGraph, config: SimulationRunConfig) -> float:
         return float(config.fps)
     design = graph.variant.design_conditions or {}
     return float(design.get("fps") or 30.0)
+
+
+def _append_missing_ip_catalog_warnings(graph: CanonicalScenarioGraph, warnings: list[str]) -> None:
+    seen: set[tuple[str, str]] = set()
+    for node in graph.pipeline_nodes:
+        node_id = str(node.get("id") or "")
+        ip_ref = str(node.get("ip_ref") or "")
+        if not node_id or not ip_ref or ip_ref in graph.ip_catalog:
+            continue
+        key = (node_id, ip_ref)
+        if key in seen:
+            continue
+        seen.add(key)
+        warnings.append(
+            f"{node_id} references ip_ref '{ip_ref}' that is not present in the selected DB catalog; "
+            "simulation workload, power, and timing for this node will be skipped."
+        )

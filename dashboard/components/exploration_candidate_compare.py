@@ -150,6 +150,14 @@ def candidate_ids(preview: dict[str, Any]) -> list[str]:
     return ids
 
 
+def preview_warning_summary(preview: dict[str, Any], *, limit: int = 12) -> list[str]:
+    return _unique_preview_warnings(preview)[: max(0, int(limit))]
+
+
+def preview_warning_count(preview: dict[str, Any]) -> int:
+    return len(_unique_preview_warnings(preview))
+
+
 def selected_candidate(preview: dict[str, Any], case_id: str | None) -> dict[str, Any] | None:
     cases = [case for case in preview.get("cases") or [] if isinstance(case, dict)]
     if not cases:
@@ -215,6 +223,27 @@ def _comparison_from_case(case: dict[str, Any]) -> dict[str, Any]:
         "infeasible_reason": case.get("infeasible_reason"),
         **(case.get("axis_values") if isinstance(case.get("axis_values"), dict) else {}),
     }
+
+
+def _unique_preview_warnings(preview: dict[str, Any]) -> list[str]:
+    warnings: list[str] = []
+    seen: set[str] = set()
+    for value in preview.get("warnings") or []:
+        _append_warning(warnings, seen, value)
+    for case in preview.get("cases") or []:
+        if not isinstance(case, dict):
+            continue
+        for value in case.get("warnings") or []:
+            _append_warning(warnings, seen, value)
+    return warnings
+
+
+def _append_warning(warnings: list[str], seen: set[str], value: Any) -> None:
+    text = str(value).strip() if value is not None else ""
+    if not text or text in seen:
+        return
+    seen.add(text)
+    warnings.append(text)
 
 
 def _render_candidate_summary(rows: list[dict[str, Any]]) -> None:

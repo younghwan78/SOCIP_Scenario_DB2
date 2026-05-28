@@ -32,6 +32,7 @@ class ExplorationExampleResponse(ExplorationExampleSummary):
 class ExplorationRecipeCompileRequest(BaseModel):
     recipe: dict[str, Any] | None = None
     source_yaml: str | None = None
+    db_project_ref: str | None = None
 
 
 class ExplorationRecipeCompileResponse(BaseModel):
@@ -45,6 +46,7 @@ class ExplorationRecipeCompileResponse(BaseModel):
 class ExplorationSweepCompileRequest(BaseModel):
     sweep: dict[str, Any] | None = None
     source_yaml: str | None = None
+    db_project_ref: str | None = None
 
 
 class ExplorationSweepCompileResponse(BaseModel):
@@ -57,6 +59,7 @@ class ExplorationSweepCompileResponse(BaseModel):
 class ExplorationTemplateCompileRequest(BaseModel):
     template: dict[str, Any] | None = None
     source_yaml: str | None = None
+    db_project_ref: str | None = None
 
 
 class ExplorationTemplateCompileResponse(BaseModel):
@@ -70,6 +73,7 @@ class ExplorationTemplateCompileResponse(BaseModel):
 class ExplorationTemplatePreviewRequest(BaseModel):
     template: dict[str, Any] | None = None
     source_yaml: str | None = None
+    db_project_ref: str | None = None
     config: SimulationRunConfig = Field(default_factory=lambda: SimulationRunConfig(include_timeline=False))
     dvfs_tables: dict[str, DVFSTable] = Field(default_factory=dict)
     include_results: bool = False
@@ -78,11 +82,13 @@ class ExplorationTemplatePreviewRequest(BaseModel):
 class ExplorationTemplateSweepCompileRequest(BaseModel):
     sweep: dict[str, Any] | None = None
     source_yaml: str | None = None
+    db_project_ref: str | None = None
 
 
 class ExplorationTemplateSweepPreviewRequest(BaseModel):
     sweep: dict[str, Any] | None = None
     source_yaml: str | None = None
+    db_project_ref: str | None = None
     config: SimulationRunConfig = Field(default_factory=lambda: SimulationRunConfig(include_timeline=False))
     dvfs_tables: dict[str, DVFSTable] = Field(default_factory=dict)
     include_results: bool = False
@@ -91,6 +97,7 @@ class ExplorationTemplateSweepPreviewRequest(BaseModel):
 class ExplorationSweepPreviewRequest(BaseModel):
     sweep: dict[str, Any] | None = None
     source_yaml: str | None = None
+    db_project_ref: str | None = None
     config: SimulationRunConfig = Field(default_factory=lambda: SimulationRunConfig(include_timeline=False))
     dvfs_tables: dict[str, DVFSTable] = Field(default_factory=dict)
     include_results: bool = False
@@ -101,4 +108,5 @@ class ExplorationSweepPreviewResponse(BaseModel):
     baseline_case_id: str | None = None
     cases: list[SweepPreviewCase] = Field(default_factory=list)
     comparison: list[dict[str, Any]] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
     import_bundle: dict[str, Any] = Field(default_factory=dict)

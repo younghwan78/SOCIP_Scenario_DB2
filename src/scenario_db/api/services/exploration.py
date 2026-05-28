@@ -66,68 +66,81 @@ def get_exploration_example(example_id: str) -> ExplorationExampleResponse:
     )
 
 
-def compile_recipe_request(request: ExplorationRecipeCompileRequest) -> ExplorationRecipeCompileResponse:
+def compile_recipe_request(db: Session | None, request: ExplorationRecipeCompileRequest) -> ExplorationRecipeCompileResponse:
     recipe = ExplorationRecipe.model_validate(_payload_from_request(request.source_yaml, request.recipe, "recipe"))
     result = compile_exploration_recipe(recipe)
+    _apply_compile_context_warnings(result, db, request.db_project_ref)
     return _recipe_compile_response(result)
 
 
-def compile_sweep_request(request: ExplorationSweepCompileRequest) -> ExplorationSweepCompileResponse:
+def compile_sweep_request(db: Session | None, request: ExplorationSweepCompileRequest) -> ExplorationSweepCompileResponse:
     sweep = ExplorationSweep.model_validate(_payload_from_request(request.source_yaml, request.sweep, "sweep"))
     result = compile_exploration_sweep(sweep)
+    _apply_compile_context_warnings(result, db, request.db_project_ref)
     return _sweep_compile_response(result)
 
 
-def compile_template_request(request: ExplorationTemplateCompileRequest) -> ExplorationTemplateCompileResponse:
+def compile_template_request(db: Session | None, request: ExplorationTemplateCompileRequest) -> ExplorationTemplateCompileResponse:
     result = compile_chain_template(_payload_from_request(request.source_yaml, request.template, "template"))
+    _apply_compile_context_warnings(result, db, request.db_project_ref)
     return _template_compile_response(result)
 
 
-def compile_template_sweep_request(request: ExplorationTemplateSweepCompileRequest) -> ExplorationSweepCompileResponse:
+def compile_template_sweep_request(db: Session | None, request: ExplorationTemplateSweepCompileRequest) -> ExplorationSweepCompileResponse:
     result = compile_chain_template_sweep(_payload_from_request(request.source_yaml, request.sweep, "template_sweep"))
+    _apply_compile_context_warnings(result, db, request.db_project_ref)
     return _sweep_compile_response(result)
 
 
 def preview_sweep_request(db: Session, request: ExplorationSweepPreviewRequest) -> ExplorationSweepPreviewResponse:
     sweep = ExplorationSweep.model_validate(_payload_from_request(request.source_yaml, request.sweep, "sweep"))
+    project = _load_context_project(db, request.db_project_ref or sweep.base_recipe.project_ref)
+    soc = _load_context_soc(db, project, _soc_ref_from_sweep(sweep))
     preview = run_exploration_sweep_preview(
         sweep,
-        ip_catalog=_load_ip_catalog(db),
-        project=_load_project(db, sweep.base_recipe.project_ref),
-        soc=_load_soc(db, _soc_ref_from_sweep(sweep)),
+        ip_catalog=_load_ip_catalog(db, project=project, soc=soc),
+        project=project,
+        soc=soc,
         config=request.config,
         dvfs_tables=request.dvfs_tables,
         include_results=request.include_results,
     )
+    _apply_preview_context_warnings(preview, db, request.db_project_ref)
     return _preview_response(preview)
 
 
 def preview_template_sweep_request(db: Session, request: ExplorationTemplateSweepPreviewRequest) -> ExplorationSweepPreviewResponse:
     sweep = _payload_from_request(request.source_yaml, request.sweep, "template_sweep")
     base_template = _base_template_payload(sweep)
+    project = _load_context_project(db, request.db_project_ref or base_template.get("project_ref"))
+    soc = _load_context_soc(db, project, _soc_ref_from_template_payload(base_template))
     preview = run_chain_template_sweep_preview(
         sweep,
-        ip_catalog=_load_ip_catalog(db),
-        project=_load_project(db, base_template.get("project_ref")),
-        soc=_load_soc(db, _soc_ref_from_template_payload(base_template)),
+        ip_catalog=_load_ip_catalog(db, project=project, soc=soc),
+        project=project,
+        soc=soc,
         config=request.config,
         dvfs_tables=request.dvfs_tables,
         include_results=request.include_results,
     )
+    _apply_preview_context_warnings(preview, db, request.db_project_ref)
     return _preview_response(preview)
 
 
 def preview_template_request(db: Session, request: ExplorationTemplatePreviewRequest) -> ExplorationSweepPreviewResponse:
     template = _payload_from_request(request.source_yaml, request.template, "template")
+    project = _load_context_project(db, request.db_project_ref or template.get("project_ref"))
+    soc = _load_context_soc(db, project, _soc_ref_from_template_payload(template))
     preview = run_chain_template_preview(
         template,
-        ip_catalog=_load_ip_catalog(db),
-        project=_load_project(db, template.get("project_ref")),
-        soc=_load_soc(db, _soc_ref_from_template_payload(template)),
+        ip_catalog=_load_ip_catalog(db, project=project, soc=soc),
+        project=project,
+        soc=soc,
         config=request.config,
         dvfs_tables=request.dvfs_tables,
         include_results=request.include_results,
     )
+    _apply_preview_context_warnings(preview, db, request.db_project_ref)
     return _preview_response(preview)
 
 
@@ -163,6 +176,7 @@ def _preview_response(preview: Any) -> ExplorationSweepPreviewResponse:
         baseline_case_id=preview.baseline_case_id,
         cases=preview.cases,
         comparison=preview.comparison,
+        warnings=preview.warnings,
         import_bundle=preview.import_bundle,
     )
 
@@ -231,8 +245,12 @@ def _load_yaml_text(source_yaml: str) -> dict[str, Any]:
     return payload
 
 
-def _load_ip_catalog(db: Session) -> dict[str, IpCatalog]:
-    return {row.id: row for row in db.query(IpCatalog).all()}
+def _load_ip_catalog(db: Session, *, project: Project | None = None, soc: SocPlatform | None = None) -> dict[str, IpCatalog]:
+    rows = db.query(IpCatalog).all()
+    scoped_refs = _context_ip_refs(project, soc)
+    if scoped_refs:
+        rows = [row for row in rows if row.id in scoped_refs]
+    return {row.id: row for row in rows}
 
 
 def _load_project(db: Session, project_ref: str | None) -> Project | None:
@@ -245,6 +263,141 @@ def _load_soc(db: Session, soc_ref: str | None) -> SocPlatform | None:
     if not soc_ref:
         return None
     return db.query(SocPlatform).filter_by(id=soc_ref).one_or_none()
+
+
+def _load_context_project(db: Session, project_ref: str | None) -> Project | None:
+    return _load_project(db, project_ref)
+
+
+def _load_context_soc(db: Session, project: Project | None, fallback_soc_ref: str | None = None) -> SocPlatform | None:
+    return _load_soc(db, _soc_ref_from_project(project) or fallback_soc_ref)
+
+
+def _soc_ref_from_project(project: Project | None) -> str | None:
+    if project is None:
+        return None
+    metadata = project.metadata_ or {}
+    globals_ = project.globals_ or {}
+    soc_ref = metadata.get("soc_ref") or globals_.get("soc_ref")
+    return str(soc_ref) if soc_ref else None
+
+
+def _context_ip_refs(project: Project | None, soc: SocPlatform | None) -> set[str]:
+    refs: set[str] = set()
+    if soc is not None:
+        for item in soc.ips or []:
+            if isinstance(item, dict) and item.get("ref"):
+                refs.add(str(item["ref"]))
+            elif getattr(item, "ref", None):
+                refs.add(str(item.ref))
+    if project is not None:
+        metadata = project.metadata_ or {}
+        for key in ("sensor_module_ref", "display_module_ref"):
+            if metadata.get(key):
+                refs.add(str(metadata[key]))
+    return refs
+
+
+def _apply_compile_context_warnings(result: Any, db: Session | None, db_project_ref: str | None) -> None:
+    if db is None or not db_project_ref:
+        return
+    project = _load_project(db, db_project_ref)
+    context_warnings: list[str] = []
+    if project is None:
+        context_warnings.append(
+            f"Selected DB project '{db_project_ref}' was not found; IP catalog validation was skipped."
+        )
+        _append_result_warnings(result, context_warnings)
+        return
+    soc = _load_context_soc(db, project)
+    ip_catalog = _load_ip_catalog(db, project=project, soc=soc)
+    warnings = [
+        *_project_mismatch_warnings(result.import_bundle, db_project_ref),
+        *_missing_ip_warnings(result.import_bundle, ip_catalog, context=f"db_project_ref={db_project_ref}"),
+    ]
+    _append_result_warnings(result, warnings)
+
+
+def _apply_preview_context_warnings(preview: Any, db: Session | None, db_project_ref: str | None) -> None:
+    if db is None or not db_project_ref:
+        return
+    project = _load_project(db, db_project_ref)
+    if project is None:
+        _append_preview_warnings(
+            preview,
+            [f"Selected DB project '{db_project_ref}' was not found; IP catalog validation was skipped."],
+        )
+        return
+    _append_preview_warnings(preview, _project_mismatch_warnings(preview.import_bundle, db_project_ref))
+
+
+def _project_mismatch_warnings(import_bundle: dict[str, Any], db_project_ref: str) -> list[str]:
+    warnings: list[str] = []
+    seen: set[str] = set()
+    for doc in import_bundle.get("documents") or []:
+        if not isinstance(doc, dict):
+            continue
+        project_ref = doc.get("project_ref")
+        if project_ref and project_ref != db_project_ref and str(project_ref) not in seen:
+            seen.add(str(project_ref))
+            warnings.append(
+                f"YAML project_ref '{project_ref}' differs from selected DB project '{db_project_ref}'; "
+                "IP catalog validation uses the selected DB project."
+            )
+    return warnings
+
+
+def _missing_ip_warnings(import_bundle: dict[str, Any], ip_catalog: dict[str, IpCatalog], *, context: str) -> list[str]:
+    warnings: list[str] = []
+    seen: set[tuple[str, str]] = set()
+    for doc in import_bundle.get("documents") or []:
+        if not isinstance(doc, dict):
+            continue
+        pipeline = doc.get("pipeline") if isinstance(doc.get("pipeline"), dict) else {}
+        for node in pipeline.get("nodes") or []:
+            if not isinstance(node, dict):
+                continue
+            node_id = str(node.get("id") or "")
+            ip_ref = str(node.get("ip_ref") or "")
+            if not node_id or not ip_ref or ip_ref in ip_catalog:
+                continue
+            key = (node_id, ip_ref)
+            if key in seen:
+                continue
+            seen.add(key)
+            warnings.append(
+                f"{node_id} references ip_ref '{ip_ref}' that is not present in the selected DB catalog ({context}); "
+                "simulation workload, power, and timing for this node will be skipped or zero."
+            )
+    return warnings
+
+
+def _append_result_warnings(result: Any, warnings: list[str]) -> None:
+    new_warnings = [warning for warning in warnings if warning and warning not in result.warnings]
+    if not new_warnings:
+        return
+    result.warnings.extend(new_warnings)
+    _append_import_report_warnings(result.import_bundle, new_warnings)
+
+
+def _append_preview_warnings(preview: Any, warnings: list[str]) -> None:
+    new_warnings = [warning for warning in warnings if warning and warning not in preview.warnings]
+    if not new_warnings:
+        return
+    preview.warnings.extend(new_warnings)
+    _append_import_report_warnings(preview.import_bundle, new_warnings)
+
+
+def _append_import_report_warnings(import_bundle: dict[str, Any], warnings: list[str]) -> None:
+    if not warnings:
+        return
+    report = import_bundle.setdefault("import_report", {})
+    report["ok"] = False
+    messages = report.setdefault("messages", [])
+    messages.extend(
+        {"level": "warning", "code": "exploration_db_catalog_warning", "message": warning}
+        for warning in warnings
+    )
 
 
 def _soc_ref_from_sweep(sweep: ExplorationSweep) -> str | None:

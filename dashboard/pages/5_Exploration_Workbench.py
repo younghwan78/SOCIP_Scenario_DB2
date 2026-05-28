@@ -31,11 +31,23 @@ from dashboard.components.exploration_api_client import (
     preview_exploration_template,
     preview_exploration_template_sweep,
 )
-from dashboard.components.exploration_candidate_compare import render_candidate_comparison, selected_candidate
+from dashboard.components.exploration_candidate_compare import (
+    preview_warning_count,
+    preview_warning_summary,
+    render_candidate_comparison,
+    selected_candidate,
+)
+from dashboard.components.exploration_context import clear_exploration_context_results, exploration_context_from_payload
 from dashboard.components.exploration_result_view import render_candidate_detail
 from dashboard.components.table_actions import render_copyable_dataframe
 from dashboard.components.ui_theme import apply_app_theme, render_page_header
-from dashboard.components.viewer_api_client import ViewerApiError
+from dashboard.components.viewer_api_client import (
+    ViewerApiError,
+    compact_project_label,
+    compact_soc_label,
+    list_projects,
+    list_soc_platforms,
+)
 
 INPUT_TYPE_LABELS = {
     "single": "Single Design",
@@ -193,13 +205,39 @@ def _load_examples(base_url: str) -> tuple[list[dict[str, Any]], str | None]:
         return [], _error_text(exc)
 
 
+def _load_soc_options(base_url: str) -> tuple[list[dict[str, Any]], str | None]:
+    try:
+        return list_soc_platforms(base_url), None
+    except ViewerApiError as exc:
+        return [], _error_text(exc)
+
+
 @st.cache_data(ttl=20)
 def _cached_examples(base_url: str) -> tuple[list[dict[str, Any]], str | None]:
     return _load_examples(base_url)
 
 
+@st.cache_data(ttl=20)
+def _cached_soc_options(base_url: str) -> tuple[list[dict[str, Any]], str | None]:
+    return _load_soc_options(base_url)
+
+
+def _load_project_options(base_url: str, soc_ref: str | None) -> tuple[list[dict[str, Any]], str | None]:
+    try:
+        return list_projects(base_url, soc_ref=soc_ref), None
+    except ViewerApiError as exc:
+        return [], _error_text(exc)
+
+
+@st.cache_data(ttl=20)
+def _cached_project_options(base_url: str, soc_ref: str | None) -> tuple[list[dict[str, Any]], str | None]:
+    return _load_project_options(base_url, soc_ref)
+
+
 def _clear_example_cache() -> None:
     _cached_examples.clear()
+    _cached_soc_options.clear()
+    _cached_project_options.clear()
 
 
 def _example_label(item: dict[str, Any]) -> str:
@@ -210,27 +248,34 @@ def _example_label(item: dict[str, Any]) -> str:
     return f"{kind}: {title}" + (f" | {tag_text}" if tag_text else "")
 
 
-def _load_selected_example(api_base: str, example_id: str) -> None:
+def _load_selected_example(api_base: str, example_id: str) -> bool:
     try:
         detail = get_exploration_example(api_base, example_id)
     except ViewerApiError as exc:
         _render_api_error("Example load failed", exc)
-        return
+        return False
     st.session_state["explore_yaml"] = str(detail.get("yaml_text") or "")
     st.session_state["explore_loaded_example"] = example_id
+    _queue_context_from_payload(detail.get("payload"))
     st.session_state.pop("explore_compile_result", None)
     st.session_state.pop("explore_preview_result", None)
+    return True
 
 
-def _load_uploaded_yaml(uploaded_file: Any) -> None:
+def _load_uploaded_yaml(uploaded_file: Any) -> bool:
     try:
         text = uploaded_file.getvalue().decode("utf-8")
     except UnicodeDecodeError:
         text = uploaded_file.getvalue().decode("utf-8-sig")
     st.session_state["explore_yaml"] = text
     st.session_state["explore_loaded_example"] = f"uploaded:{getattr(uploaded_file, 'name', 'yaml')}"
+    try:
+        _queue_context_from_payload(_parse_yaml_mapping(text))
+    except ValueError:
+        pass
     st.session_state.pop("explore_compile_result", None)
     st.session_state.pop("explore_preview_result", None)
+    return True
 
 
 def _start_blank_yaml() -> None:
@@ -240,31 +285,61 @@ def _start_blank_yaml() -> None:
     st.session_state.pop("explore_preview_result", None)
 
 
-def _start_template_yaml(kind: str) -> None:
+def _start_template_yaml(kind: str) -> bool:
     if kind == "batch":
         st.session_state["explore_yaml"] = BATCH_EXPLORATION_TEMPLATE
         st.session_state["explore_loaded_example"] = "template:batch"
     else:
         st.session_state["explore_yaml"] = SINGLE_DESIGN_TEMPLATE
         st.session_state["explore_loaded_example"] = "template:single"
+    _queue_context_from_payload(_parse_yaml_mapping(str(st.session_state.get("explore_yaml") or "")))
     st.session_state.pop("explore_compile_result", None)
     st.session_state.pop("explore_preview_result", None)
+    return True
 
 
-def _compile_current(api_base: str, source_yaml: str) -> None:
+def _queue_context_from_payload(payload: Any) -> None:
+    if not isinstance(payload, dict):
+        return
+    context = exploration_context_from_payload(payload)
+    if context.soc_ref:
+        st.session_state["explore_pending_soc_id"] = context.soc_ref
+    if context.project_ref:
+        st.session_state["explore_pending_db_project_ref"] = context.project_ref
+
+
+def _apply_pending_soc_selection(soc_ids: list[str]) -> None:
+    pending = st.session_state.pop("explore_pending_soc_id", None)
+    if pending and str(pending) in soc_ids:
+        st.session_state["explore_soc_id"] = str(pending)
+        st.session_state["viewer_soc_id"] = str(pending)
+
+
+def _apply_pending_project_selection(project_ids: list[str]) -> None:
+    pending = st.session_state.pop("explore_pending_db_project_ref", None)
+    if pending and str(pending) in project_ids:
+        st.session_state["explore_db_project_ref"] = str(pending)
+        st.session_state["viewer_project_id"] = str(pending)
+
+
+def _clear_context_results() -> None:
+    clear_exploration_context_results(st.session_state)
+
+
+def _compile_current(api_base: str, source_yaml: str, *, db_project_ref: str | None) -> None:
     payload = _parse_editor_yaml(source_yaml)
     if payload is None:
         return
     kind = _detect_yaml_kind_from_payload(payload)
     try:
         if kind == "batch":
-            result = compile_exploration_sweep(api_base, source_yaml=source_yaml)
+            result = compile_exploration_sweep(api_base, source_yaml=source_yaml, db_project_ref=db_project_ref)
         elif kind == "template":
-            result = compile_exploration_template(api_base, source_yaml=source_yaml)
+            result = compile_exploration_template(api_base, source_yaml=source_yaml, db_project_ref=db_project_ref)
         elif kind == "template_sweep":
-            result = compile_exploration_template_sweep(api_base, source_yaml=source_yaml)
+            result = compile_exploration_template_sweep(api_base, source_yaml=source_yaml, db_project_ref=db_project_ref)
         else:
-            result = compile_exploration_recipe(api_base, source_yaml=source_yaml)
+            result = compile_exploration_recipe(api_base, source_yaml=source_yaml, db_project_ref=db_project_ref)
     except ViewerApiError as exc:
         _render_api_error("Compile failed", exc, source_yaml=source_yaml)
         return
@@ -273,7 +348,7 @@ def _compile_current(api_base: str, source_yaml: str) -> None:
     st.success("Compile completed.")
 
 
-def _preview_current(api_base: str, source_yaml: str, *, timeline_frames: int, debug_trace: bool) -> None:
+def _preview_current(api_base: str, source_yaml: str, *, db_project_ref: str | None, timeline_frames: int, debug_trace: bool) -> None:
     payload = _parse_editor_yaml(source_yaml)
     if payload is None:
         return
@@ -286,15 +361,16 @@ def _preview_current(api_base: str, source_yaml: str, *, timeline_frames: int, d
     }
     try:
         if kind == "batch":
-            result = preview_exploration_sweep(api_base, source_yaml=source_yaml, include_results=True, config=config)
+            result = preview_exploration_sweep(api_base, source_yaml=source_yaml, db_project_ref=db_project_ref, include_results=True, config=config)
         elif kind == "template":
-            result = preview_exploration_template(api_base, source_yaml=source_yaml, include_results=True, config=config)
+            result = preview_exploration_template(api_base, source_yaml=source_yaml, db_project_ref=db_project_ref, include_results=True, config=config)
         elif kind == "template_sweep":
-            result = preview_exploration_template_sweep(api_base, source_yaml=source_yaml, include_results=True, config=config)
+            result = preview_exploration_template_sweep(api_base, source_yaml=source_yaml, db_project_ref=db_project_ref, include_results=True, config=config)
         else:
             result = preview_exploration_sweep(
                 api_base,
                 sweep=_single_recipe_sweep(source_yaml),
+                db_project_ref=db_project_ref,
                 include_results=True,
                 config=config,
             )
@@ -375,6 +451,12 @@ def _render_preview_result(preview: dict[str, Any]) -> None:
         st.info("Run Simulation to compare candidates. Preview results are not persisted.")
         return
     st.markdown('<div class="exploration-note">Preview-only result. Use the download action if a candidate needs to be reviewed through the normal import flow.</div>', unsafe_allow_html=True)
+    warning_count = preview_warning_count(preview)
+    if warning_count:
+        warnings = preview_warning_summary(preview, limit=16)
+        hidden = warning_count - len(warnings)
+        suffix = f"\n- ... {hidden} more warning(s)" if hidden > 0 else ""
+        st.warning("\n".join(f"- {item}" for item in warnings) + suffix)
     with st.expander("What is Candidate Comparison?", expanded=False):
         st.markdown(
             """
@@ -1053,6 +1135,65 @@ with st.sidebar:
     )
     if st.button("Refresh examples", use_container_width=True):
         _clear_example_cache()
+
+    socs, soc_error = _cached_soc_options(api_base)
+    if socs:
+        soc_ids = [str(item.get("id")) for item in socs if item.get("id")]
+        _apply_pending_soc_selection(soc_ids)
+        previous_soc = st.session_state.get("viewer_soc_id") or st.session_state.get("explore_soc_id")
+        if st.session_state.get("explore_soc_id") not in soc_ids:
+            st.session_state["explore_soc_id"] = previous_soc if previous_soc in soc_ids else soc_ids[0]
+        selected_soc_id = str(
+            st.selectbox(
+                "SoC Platform",
+                soc_ids,
+                key="explore_soc_id",
+                format_func=lambda value: compact_soc_label(next((item for item in socs if item.get("id") == value), {"id": value})),
+                on_change=_clear_context_results,
+            )
+        )
+    else:
+        if soc_error:
+            st.caption(f"SoC list unavailable: {soc_error}")
+        selected_soc_id = st.text_input(
+            "SoC Platform",
+            key="explore_soc_id_text",
+            value=str(st.session_state.get("viewer_soc_id", "")),
+            on_change=_clear_context_results,
+        )
+    st.session_state["viewer_soc_id"] = selected_soc_id
+
+    projects, projects_error = _cached_project_options(api_base, selected_soc_id or None)
+    if projects_error:
+        st.caption(f"Project list unavailable: {projects_error}")
+    project_ids = [str(item.get("id")) for item in projects if item.get("id")]
+    project_map = {str(item.get("id")): item for item in projects if item.get("id")}
+    if project_ids:
+        _apply_pending_project_selection(project_ids)
+        previous_project = st.session_state.get("viewer_project_id") or st.session_state.get("explore_db_project_ref")
+        if st.session_state.get("explore_db_project_ref") not in project_ids:
+            st.session_state["explore_db_project_ref"] = previous_project if previous_project in project_ids else project_ids[0]
+        selected_db_project_ref = str(
+            st.selectbox(
+                "Project / Board",
+                project_ids,
+                key="explore_db_project_ref",
+                format_func=lambda value: compact_project_label(project_map.get(str(value), {"id": value})),
+                on_change=_clear_context_results,
+            )
+        )
+    else:
+        selected_db_project_ref = st.text_input(
+            "Project / Board",
+            key="explore_db_project_ref_text",
+            value=str(st.session_state.get("explore_db_project_ref", "")),
+            placeholder="Optional project id for DB catalog validation",
+            on_change=_clear_context_results,
+        )
+    selected_db_project_ref = selected_db_project_ref.strip() or None
+    if selected_db_project_ref:
+        st.session_state["viewer_project_id"] = selected_db_project_ref
+    st.caption("Compile and simulation validate fixture IP refs against the selected DB project catalog.")
     examples, examples_error = _cached_examples(api_base)
     if examples_error:
         st.error(examples_error)
@@ -1068,7 +1209,8 @@ with st.sidebar:
             format_func=lambda value: _example_label(example_map.get(str(value), {"id": value})),
         )
         if st.button("Load selected example", type="primary", use_container_width=True):
-            _load_selected_example(api_base, selected_example_id)
+            if _load_selected_example(api_base, selected_example_id):
+                st.rerun()
     else:
         st.info("No exploration examples are available from the API.")
 
@@ -1079,13 +1221,16 @@ with st.sidebar:
         help="Uploads the selected browser-side YAML into the editor. The file is not saved by the Workbench.",
     )
     if uploaded_yaml is not None and st.button("Load uploaded YAML", use_container_width=True):
-        _load_uploaded_yaml(uploaded_yaml)
+        if _load_uploaded_yaml(uploaded_yaml):
+            st.rerun()
     st.caption("Templates start from editable YAML and are not saved automatically.")
     template_cols = st.columns(2)
     if template_cols[0].button("New Single Design", use_container_width=True):
-        _start_template_yaml("single")
+        if _start_template_yaml("single"):
+            st.rerun()
     if template_cols[1].button("New Batch Exploration", use_container_width=True):
-        _start_template_yaml("batch")
+        if _start_template_yaml("batch"):
+            st.rerun()
     if st.button("Clear YAML editor", use_container_width=True):
         _start_blank_yaml()
 
@@ -1132,9 +1277,9 @@ if input_visible:
         _render_editor_mapping_summary(source_yaml)
         compile_col, preview_col = st.columns(2)
         if compile_col.button("Compile", type="primary", use_container_width=True, disabled=not bool(source_yaml.strip())):
-            _compile_current(api_base, source_yaml)
+            _compile_current(api_base, source_yaml, db_project_ref=selected_db_project_ref)
         if preview_col.button("Run Simulation", use_container_width=True, disabled=not bool(source_yaml.strip())):
-            _preview_current(api_base, source_yaml, timeline_frames=timeline_frames, debug_trace=debug_trace)
+            _preview_current(api_base, source_yaml, db_project_ref=selected_db_project_ref, timeline_frames=timeline_frames, debug_trace=debug_trace)
         st.caption("Single Design simulation is wrapped as a one-case Batch Exploration. Compile/simulation responses remain in memory and are not persisted.")
 
     result_container = result_col

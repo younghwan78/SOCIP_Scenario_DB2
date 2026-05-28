@@ -22,9 +22,12 @@ from dashboard.components.exploration_candidate_compare import (
     metric_distribution_row_style,
     metric_bar_rows,
     pareto_case_ids,
+    preview_warning_count,
+    preview_warning_summary,
     selected_candidate,
     tradeoff_plot_rows,
 )
+from dashboard.components.exploration_context import clear_exploration_context_results, exploration_context_from_payload
 from dashboard.components.exploration_result_view import candidate_to_result
 
 
@@ -58,9 +61,9 @@ def test_exploration_api_client_uses_expected_paths():
     base = "http://api/api/v1"
     assert list_exploration_examples(base, request_func=request)[0]["id"] == "recipe:demo"
     assert get_exploration_example(base, "recipe:demo", request_func=request)["payload"]["id"] == "demo"
-    assert compile_exploration_recipe(base, source_yaml="id: demo", request_func=request)["persisted"] is False
-    assert compile_exploration_sweep(base, source_yaml="id: sweep", request_func=request)["persisted"] is False
-    assert preview_exploration_sweep(base, source_yaml="id: sweep", request_func=request)["persisted"] is False
+    assert compile_exploration_recipe(base, source_yaml="id: demo", db_project_ref="proj-db", request_func=request)["persisted"] is False
+    assert compile_exploration_sweep(base, source_yaml="id: sweep", db_project_ref="proj-db", request_func=request)["persisted"] is False
+    assert preview_exploration_sweep(base, source_yaml="id: sweep", db_project_ref="proj-db", request_func=request)["persisted"] is False
 
     assert [call[1].replace(base, "") for call in calls] == [
         "/exploration/examples",
@@ -72,6 +75,65 @@ def test_exploration_api_client_uses_expected_paths():
     preview_payload = calls[-1][2]["json"]
     assert preview_payload["include_results"] is True
     assert preview_payload["config"]["include_timeline"] is True
+    assert calls[2][2]["json"]["db_project_ref"] == "proj-db"
+    assert calls[3][2]["json"]["db_project_ref"] == "proj-db"
+    assert preview_payload["db_project_ref"] == "proj-db"
+
+
+def test_exploration_context_from_template_sweep_base_template():
+    payload = {
+        "kind": "scenario.chain_template_sweep",
+        "base_template": {
+            "project_ref": "proj-A-exynos2500",
+            "soc_ref": "soc-exynos2500",
+        },
+    }
+
+    context = exploration_context_from_payload(payload)
+
+    assert context.project_ref == "proj-A-exynos2500"
+    assert context.soc_ref == "soc-exynos2500"
+
+
+def test_preview_warning_summary_aggregates_top_level_and_case_warnings():
+    preview = {
+        "warnings": ["YAML project_ref differs from selected DB project."],
+        "cases": [
+            {
+                "case_id": "case-a",
+                "warnings": [
+                    "isp0 references ip_ref 'ip-missing' that is not present in the selected DB catalog.",
+                    "isp0 references ip_ref 'ip-missing' that is not present in the selected DB catalog.",
+                ],
+            },
+            {
+                "case_id": "case-b",
+                "warnings": ["dpu0 references ip_ref 'ip-dpu-missing' that is not present in the selected DB catalog."],
+            },
+        ],
+    }
+
+    assert preview_warning_count(preview) == 3
+    assert preview_warning_summary(preview, limit=2) == [
+        "YAML project_ref differs from selected DB project.",
+        "isp0 references ip_ref 'ip-missing' that is not present in the selected DB catalog.",
+    ]
+
+
+def test_context_change_clears_compile_and_preview_results():
+    state = {
+        "explore_compile_result": {"persisted": False},
+        "explore_preview_result": {"persisted": False},
+        "explore_compile_kind": "template_sweep",
+        "explore_yaml": "id: keep-editor",
+    }
+
+    clear_exploration_context_results(state)
+
+    assert "explore_compile_result" not in state
+    assert "explore_preview_result" not in state
+    assert state["explore_compile_kind"] == "template_sweep"
+    assert state["explore_yaml"] == "id: keep-editor"
 
 
 def test_candidate_comparison_rows_and_selection():
@@ -343,6 +405,12 @@ def test_exploration_workbench_page_and_home_are_wired():
     assert "New Single Design" in page
     assert "New Batch Exploration" in page
     assert "Clear YAML editor" in page
+    assert "SoC Platform" in page
+    assert "Project / Board" in page
+    assert "list_soc_platforms" in page
+    assert "soc_ref=soc_ref" in page
+    assert "_clear_context_results" in page
+    assert "on_change=_clear_context_results" in page
     assert "SINGLE_DESIGN_TEMPLATE" in page
     assert "BATCH_EXPLORATION_TEMPLATE" in page
     assert "Topology" in page
