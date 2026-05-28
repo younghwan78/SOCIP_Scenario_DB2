@@ -65,6 +65,49 @@ def test_calc_port_bw_ignores_comp_ratio_when_compression_is_off():
     assert result.comp_ratio == pytest.approx(1.0)
 
 
+@pytest.mark.parametrize("fmt", ["YUV420_10BIT", "YUV420_SBWC", "YUV420_SBWCL"])
+def test_calc_port_bw_uses_yuv420_bpp_for_yuv420_aliases(fmt):
+    result = calc_port_bw(
+        PortTransferSpec(
+            node_id="mfc0",
+            ip_ref="ip-mfc-v12",
+            hw_name="MFC",
+            port="MFC_WDMA",
+            port_type=PortType.DMA_WRITE,
+            width=1920,
+            height=1080,
+            format=fmt,
+            bitwidth=10,
+            compression="COMP_OFF",
+        ),
+        fps=30,
+    )
+
+    assert result.bw_mbs == pytest.approx(116.64)
+
+
+def test_calc_port_bw_applies_comp_ratio_to_yuv420_sbwc_alias():
+    result = calc_port_bw(
+        PortTransferSpec(
+            node_id="dpu0",
+            ip_ref="ip-dpu-v12",
+            hw_name="DPU",
+            port="DPU_RDMA",
+            port_type=PortType.DMA_READ,
+            width=1920,
+            height=1080,
+            format="YUV420_SBWC",
+            bitwidth=8,
+            compression="COMP_SBWC_LOSSLESS",
+            comp_ratio=0.5,
+        ),
+        fps=30,
+    )
+
+    assert result.bw_mbs == pytest.approx(46.656)
+    assert result.comp_ratio == pytest.approx(0.5)
+
+
 def test_calc_port_bw_otf_returns_zero():
     result = calc_port_bw(
         PortTransferSpec(
