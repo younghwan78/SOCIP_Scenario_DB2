@@ -5,11 +5,15 @@ import json
 import logging
 import time
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from sqlalchemy.orm import Session
 
 from scenario_db.api.schemas.decision import GateRuleResponse, IssueResponse
 from scenario_db.db.models.decision import GateRule, Issue
+
+if TYPE_CHECKING:
+    from scenario_db.matcher.context import MatcherContext
 
 logger = logging.getLogger(__name__)
 

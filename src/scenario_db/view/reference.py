@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from scenario_db.api.schemas.view import MemoryDescriptor, MemoryPlacement, NodeElement, OperationSummary, ViewHints, ViewResponse
+from scenario_db.api.schemas.view import EdgeElement, MemoryDescriptor, MemoryPlacement, NodeElement, OperationSummary, ViewHints, ViewResponse
 from scenario_db.db.repositories.scenario_graph import CanonicalScenarioGraph
 from scenario_db.view.buffers import (
     _buffer_detail_items,

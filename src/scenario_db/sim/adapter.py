@@ -7,7 +7,7 @@ from scenario_db.sim.external_devices import (
     external_devices,
     selected_sensor_mode,
 )
-from scenario_db.sim.models import SimulationInputs, SimulationRunConfig
+from scenario_db.sim.models import IPWorkload, PortTransferSpec, SimulationInputs, SimulationRunConfig
 from scenario_db.sim.shape_propagation import propagate_shapes, validate_shape_propagation
 from scenario_db.sim.timeline_adapter import timeline_edges, timeline_tasks
 from scenario_db.sim.transfers import edge_port_transfers, port_transfers_for_node

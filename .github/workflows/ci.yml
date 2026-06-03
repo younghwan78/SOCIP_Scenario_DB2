@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen --group dev --group dashboard --group sim
+      - run: uv run ruff check .
+      - run: uv run mypy
+      - run: uv run pytest tests/unit --cov=scenario_db --cov-report=term-missing
+
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen --group dev --group dashboard --group sim
+      - run: uv run pytest tests/integration -q
