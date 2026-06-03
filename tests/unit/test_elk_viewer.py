@@ -115,6 +115,33 @@ def test_level0_architecture_is_converted_to_layer_hierarchy():
     assert meta["buf-record"]["subtitle"] == "NV12 / 3840x2160 / 60fps / SBWC"
 
 
+def test_elk_html_escapes_script_breakout_inside_json_payload():
+    view = ViewResponse(
+        level=0,
+        mode="architecture",
+        scenario_id="uc-script-safety",
+        variant_id="safe-json",
+        summary=_summary(),
+        nodes=[
+            _node(
+                "node-script",
+                "</script><script>alert(1)</script>",
+                "sw",
+                "app",
+                100,
+                80,
+            ),
+        ],
+        edges=[],
+        metadata={"layout": "layered-lanes"},
+    )
+
+    html = build_elk_view_html(view)
+
+    assert "</script><script>alert(1)</script>" not in html
+    assert "<\\/script><script>alert(1)<\\/script>" in html
+
+
 def test_level0_layer_groups_do_not_overlap_with_varied_node_counts():
     nodes = []
     for idx in range(3):

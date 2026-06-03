@@ -1077,8 +1077,8 @@ def _view_meta(view: ViewResponse) -> dict[str, Any]:
 
 
 def _html(graph: dict[str, Any], meta: dict[str, Any], title: str, height: int) -> str:
-    graph_json = json.dumps(graph, ensure_ascii=False)
-    meta_json = json.dumps(meta, ensure_ascii=False)
+    graph_json = _safe_script_json(graph)
+    meta_json = _safe_script_json(meta)
     safe_title = html.escape(title)
     elk_runtime_script = _elk_runtime_script()
     return f"""<!doctype html>
@@ -1485,6 +1485,16 @@ mainRender();
 </script>
 </body>
 </html>"""
+
+
+def _safe_script_json(value: Any) -> str:
+    return (
+        json.dumps(value, ensure_ascii=False)
+        .replace("</", "<\\/")
+        .replace("<!--", "<\\!--")
+        .replace("\u2028", "\\u2028")
+        .replace("\u2029", "\\u2029")
+    )
 
 
 @lru_cache(maxsize=1)

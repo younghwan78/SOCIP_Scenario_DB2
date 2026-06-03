@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+import requests
 
 from dashboard.components.viewer_api_client import (
     ViewerApiError,
@@ -72,6 +73,31 @@ def test_list_helpers_surface_http_errors():
 
     assert exc.value.status_code == 500
     assert "HTTP 500" in str(exc.value)
+
+
+def test_list_scenarios_retries_transient_request_errors():
+    calls = []
+
+    def request(method, url, **kwargs):
+        calls.append((method, url))
+        if len(calls) == 1:
+            raise requests.ConnectionError("connection reset")
+        return _Response(200, {"items": [{"id": "uc-camera"}]})
+
+    scenarios = list_scenarios("http://api/api/v1", request)
+
+    assert scenarios == [{"id": "uc-camera"}]
+    assert len(calls) == 2
+
+
+def test_list_scenarios_rejects_invalid_items_shape():
+    def request(method, url, **kwargs):
+        return _Response(200, {"items": "not-a-list"})
+
+    with pytest.raises(ViewerApiError) as exc:
+        list_scenarios("http://api/api/v1", request)
+
+    assert "items" in str(exc.value)
 
 
 def test_viewer_labels_and_default_variant_are_readable():

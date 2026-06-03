@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -14,6 +15,8 @@ class ViewerApiError(RuntimeError):
 
 
 RequestFunc = Callable[..., Any]
+RETRY_STATUS_CODES = {502, 503, 504}
+MAX_ATTEMPTS = 3
 
 
 def list_scenarios(
@@ -40,7 +43,7 @@ def list_scenarios(
         request_func=request_func,
         params=_clean_params(params),
     )
-    return [item for item in response.get("items") or [] if isinstance(item, dict)]
+    return _paged_items(response, "/scenarios")
 
 
 def list_soc_platforms(
@@ -56,7 +59,7 @@ def list_soc_platforms(
         request_func=request_func,
         params={"limit": limit, "sort_by": "id", "sort_dir": "asc"},
     )
-    return [item for item in response.get("items") or [] if isinstance(item, dict)]
+    return _paged_items(response, "/soc-platforms")
 
 
 def list_projects(
@@ -82,7 +85,7 @@ def list_projects(
             }
         ),
     )
-    return [item for item in response.get("items") or [] if isinstance(item, dict)]
+    return _paged_items(response, "/projects")
 
 
 def list_variants(
@@ -101,7 +104,7 @@ def list_variants(
         request_func=request_func,
         params={"limit": limit, "sort_by": "id", "sort_dir": "asc"},
     )
-    return [item for item in response.get("items") or [] if isinstance(item, dict)]
+    return _paged_items(response, f"/scenarios/{scenario_id}/variants")
 
 
 def list_sw_profiles(
@@ -117,7 +120,7 @@ def list_sw_profiles(
         request_func=request_func,
         params={"limit": limit, "sort_by": "id", "sort_dir": "asc"},
     )
-    return [item for item in response.get("items") or [] if isinstance(item, dict)]
+    return _paged_items(response, "/sw-profiles")
 
 
 def scenario_label(item: dict[str, Any]) -> str:
@@ -288,20 +291,44 @@ def _request_json(
 ) -> dict[str, Any]:
     requester = request_func or requests.request
     url = f"{api_base.rstrip('/')}{path}"
-    try:
-        response = requester(method, url, timeout=10, **kwargs)
-    except requests.RequestException as exc:
-        raise ViewerApiError(f"API request failed: {exc}") from exc
+    for attempt in range(MAX_ATTEMPTS):
+        try:
+            response = requester(method, url, timeout=10, **kwargs)
+        except requests.RequestException as exc:
+            if attempt < MAX_ATTEMPTS - 1:
+                _sleep_before_retry(attempt)
+                continue
+            raise ViewerApiError(f"API request failed: {exc}") from exc
 
-    status_code = getattr(response, "status_code", None)
-    if status_code is not None and status_code >= 400:
-        body = getattr(response, "text", "")
-        raise ViewerApiError(f"API returned HTTP {status_code}", status_code=status_code, body=body)
-    try:
-        result = response.json()
-    except ValueError as exc:
-        body = getattr(response, "text", "")
-        raise ViewerApiError("API response was not JSON", status_code=status_code, body=body) from exc
-    if not isinstance(result, dict):
-        raise ViewerApiError("API response JSON root was not an object", status_code=status_code)
-    return result
+        status_code = getattr(response, "status_code", None)
+        if status_code in RETRY_STATUS_CODES and attempt < MAX_ATTEMPTS - 1:
+            _sleep_before_retry(attempt)
+            continue
+        if status_code is not None and status_code >= 400:
+            body = getattr(response, "text", "")
+            raise ViewerApiError(f"API returned HTTP {status_code}", status_code=status_code, body=body)
+        try:
+            result = response.json()
+        except ValueError as exc:
+            body = getattr(response, "text", "")
+            raise ViewerApiError("API response was not JSON", status_code=status_code, body=body) from exc
+        if not isinstance(result, dict):
+            raise ViewerApiError("API response JSON root was not an object", status_code=status_code)
+        return result
+    raise ViewerApiError("API request failed after retries")
+
+
+def _sleep_before_retry(attempt: int) -> None:
+    time.sleep(0.05 * (2 ** attempt))
+
+
+def _paged_items(response: dict[str, Any], path: str) -> list[dict[str, Any]]:
+    items = response.get("items")
+    if not isinstance(items, list):
+        raise ViewerApiError(f"API response for {path} must contain list 'items'")
+    invalid_indexes = [idx for idx, item in enumerate(items) if not isinstance(item, dict)]
+    if invalid_indexes:
+        raise ViewerApiError(
+            f"API response for {path} contains non-object items at indexes: {invalid_indexes}"
+        )
+    return items
