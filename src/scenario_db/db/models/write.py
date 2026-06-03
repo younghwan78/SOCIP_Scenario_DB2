@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import Column, DateTime, ForeignKey, Text, func
+from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 
 from scenario_db.db.base import Base
@@ -8,6 +8,16 @@ from scenario_db.db.base import Base
 
 class WriteBatch(Base):
     __tablename__ = "write_batches"
+    __table_args__ = (
+        CheckConstraint(
+            "kind in ('scenario.variant_overlay', 'scenario.pipeline_patch', 'scenario.import_bundle')",
+            name="ck_write_batches_kind",
+        ),
+        CheckConstraint(
+            "status in ('staged', 'validated', 'validation_failed', 'diff_ready', 'applied')",
+            name="ck_write_batches_status",
+        ),
+    )
 
     id                 = Column(Text, primary_key=True)
     kind               = Column(Text, nullable=False)
@@ -26,6 +36,12 @@ class WriteBatch(Base):
 
 class WriteEvent(Base):
     __tablename__ = "write_events"
+    __table_args__ = (
+        CheckConstraint(
+            "action in ('stage', 'validate', 'diff', 'apply')",
+            name="ck_write_events_action",
+        ),
+    )
 
     id         = Column(Text, primary_key=True)
     batch_id   = Column(Text, ForeignKey("write_batches.id"), nullable=False)

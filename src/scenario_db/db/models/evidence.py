@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import Column, Computed, DateTime, ForeignKey, Integer, Text
+from sqlalchemy import CheckConstraint, Column, Computed, DateTime, ForeignKey, Integer, Text
 from sqlalchemy.dialects.postgresql import JSONB
 
 from scenario_db.db.base import Base
@@ -23,6 +23,12 @@ class SweepJob(Base):
 
 class Evidence(Base):
     __tablename__ = "evidence"
+    __table_args__ = (
+        CheckConstraint(
+            "kind in ('evidence.simulation', 'evidence.measurement')",
+            name="ck_evidence_kind",
+        ),
+    )
 
     id                  = Column(Text, primary_key=True)
     schema_version      = Column(Text, nullable=False)

@@ -35,6 +35,25 @@ VARIANT_OVERLAY_KIND = "scenario.variant_overlay"
 PIPELINE_PATCH_KIND = "scenario.pipeline_patch"
 IMPORT_BUNDLE_KIND = "scenario.import_bundle"
 SUPPORTED_KINDS = {VARIANT_OVERLAY_KIND, PIPELINE_PATCH_KIND, IMPORT_BUNDLE_KIND}
+WRITE_STATUS_STAGED = "staged"
+WRITE_STATUS_VALIDATED = "validated"
+WRITE_STATUS_VALIDATION_FAILED = "validation_failed"
+WRITE_STATUS_DIFF_READY = "diff_ready"
+WRITE_STATUS_APPLIED = "applied"
+WRITE_STATUSES = {
+    WRITE_STATUS_STAGED,
+    WRITE_STATUS_VALIDATED,
+    WRITE_STATUS_VALIDATION_FAILED,
+    WRITE_STATUS_DIFF_READY,
+    WRITE_STATUS_APPLIED,
+}
+VALIDATE_ALLOWED_STATUSES = {
+    WRITE_STATUS_STAGED,
+    WRITE_STATUS_VALIDATED,
+    WRITE_STATUS_VALIDATION_FAILED,
+}
+DIFF_ALLOWED_STATUSES = {WRITE_STATUS_VALIDATED, WRITE_STATUS_DIFF_READY}
+APPLY_ALLOWED_STATUSES = {WRITE_STATUS_DIFF_READY}
 
 VARIANT_FIELDS = [
     "severity",
@@ -128,6 +147,7 @@ def get_batch_or_404(db: Session, batch_id: str) -> WriteBatch:
 
 def validate_batch(db: Session, batch_id: str) -> ValidateWriteResponse:
     batch = get_batch_or_404(db, batch_id)
+    _ensure_batch_status(batch, VALIDATE_ALLOWED_STATUSES, "validate")
     normalized = normalize_write_payload(batch.kind, batch.raw_payload)
     issues = validate_write_payload(db, batch.kind, normalized)
     valid = not any(issue.severity == "error" for issue in issues)
@@ -154,6 +174,7 @@ def validate_batch(db: Session, batch_id: str) -> ValidateWriteResponse:
 
 def diff_batch(db: Session, batch_id: str) -> DiffPreviewResponse:
     batch = get_batch_or_404(db, batch_id)
+    _ensure_batch_status(batch, DIFF_ALLOWED_STATUSES, "diff")
     normalized = batch.normalized_payload or normalize_write_payload(batch.kind, batch.raw_payload)
     validation = batch.validation_result or validate_batch(db, batch_id).model_dump()
     if not validation.get("valid"):
@@ -176,6 +197,7 @@ def apply_batch(
     rule_cache: RuleCache | None = None,
 ) -> ApplyWriteResponse:
     batch = get_batch_or_404(db, batch_id)
+    _ensure_batch_status(batch, APPLY_ALLOWED_STATUSES, "apply")
     normalized = batch.normalized_payload or normalize_write_payload(batch.kind, batch.raw_payload)
     validation = batch.validation_result or validate_batch(db, batch_id).model_dump()
     if not validation.get("valid"):
@@ -198,6 +220,16 @@ def apply_batch(
     if rule_cache is not None:
         rule_cache.invalidate_all(db)
     return ApplyWriteResponse(batch_id=batch.id, status=batch.status, applied_refs=applied_refs)
+
+
+def _ensure_batch_status(batch: WriteBatch, allowed: set[str], action: str) -> None:
+    if batch.status in allowed:
+        return
+    expected = ", ".join(sorted(allowed))
+    raise HTTPException(
+        status_code=409,
+        detail=f"Cannot {action} write batch in status '{batch.status}'; expected one of: {expected}",
+    )
 
 
 def normalize_write_payload(kind: str, payload: dict[str, Any]) -> dict[str, Any]:
