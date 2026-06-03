@@ -71,6 +71,13 @@ class RuleCache:
         self.gate_rules = [GateRuleResponse.model_validate(r) for r in session.query(GateRule).all()]
         self.loaded = True
 
+    def invalidate_all(self, session: Session) -> None:
+        refreshed = type(self).load(session)
+        self.issues = refreshed.issues
+        self.gate_rules = refreshed.gate_rules
+        self.loaded = refreshed.loaded
+        self.load_error = refreshed.load_error
+
 
 # ---------------------------------------------------------------------------
 # Variant matching helpers (Week 4: @lru_cache 추가 예정)

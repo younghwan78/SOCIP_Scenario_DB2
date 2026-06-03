@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
@@ -9,6 +11,7 @@ from scenario_db.sim.timeline import timeline_dependencies_status
 
 # /health/live + /health/ready — prefix 없이 마운트
 health_router = APIRouter(tags=["health"])
+logger = logging.getLogger(__name__)
 
 
 @health_router.get("/health/live", summary="Liveness probe")
@@ -28,8 +31,8 @@ def readiness(request: Request):
         with request.app.state.session_factory() as s:
             s.execute(text("SELECT 1"))
         db_ok = True
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Readiness database probe failed: %s", exc, exc_info=True)
 
     sim_dependencies = timeline_dependencies_status()
     ready = db_ok and cache.loaded and bool(sim_dependencies["available"])

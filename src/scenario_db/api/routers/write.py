@@ -3,7 +3,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from scenario_db.api.deps import get_db
+from scenario_db.api.cache import RuleCache
+from scenario_db.api.deps import get_db, get_rule_cache
 from scenario_db.api.schemas.write import (
     ApplyWriteResponse,
     DiffPreviewResponse,
@@ -44,5 +45,9 @@ def preview_staging_diff(batch_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/staging/{batch_id}/apply", response_model=ApplyWriteResponse)
-def apply_staging_batch(batch_id: str, db: Session = Depends(get_db)):
-    return apply_batch(db, batch_id)
+def apply_staging_batch(
+    batch_id: str,
+    db: Session = Depends(get_db),
+    rule_cache: RuleCache = Depends(get_rule_cache),
+):
+    return apply_batch(db, batch_id, rule_cache=rule_cache)

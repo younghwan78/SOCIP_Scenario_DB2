@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import time as _time
 from contextlib import asynccontextmanager
 
@@ -16,9 +17,19 @@ from scenario_db.config import get_settings
 from scenario_db.db.session import make_session_factory
 
 
+def configure_logging(settings) -> None:
+    level = getattr(logging, str(settings.log_level).upper(), logging.INFO)
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+    )
+    logging.getLogger("scenario_db").setLevel(level)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
+    configure_logging(settings)
     is_sqlite = settings.database_url.startswith("sqlite")
     engine = create_engine(
         settings.database_url,

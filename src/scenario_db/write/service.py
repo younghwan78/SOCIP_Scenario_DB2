@@ -10,6 +10,7 @@ from uuid import uuid4
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from scenario_db.api.cache import RuleCache
 from scenario_db.api.schemas.write import (
     ApplyWriteResponse,
     DiffEntry,
@@ -168,7 +169,12 @@ def diff_batch(db: Session, batch_id: str) -> DiffPreviewResponse:
     return diff
 
 
-def apply_batch(db: Session, batch_id: str) -> ApplyWriteResponse:
+def apply_batch(
+    db: Session,
+    batch_id: str,
+    *,
+    rule_cache: RuleCache | None = None,
+) -> ApplyWriteResponse:
     batch = get_batch_or_404(db, batch_id)
     normalized = batch.normalized_payload or normalize_write_payload(batch.kind, batch.raw_payload)
     validation = batch.validation_result or validate_batch(db, batch_id).model_dump()
@@ -189,6 +195,8 @@ def apply_batch(db: Session, batch_id: str) -> ApplyWriteResponse:
     _touch(batch)
     _record_event(db, batch.id, "apply", batch.actor, applied_refs)
     db.commit()
+    if rule_cache is not None:
+        rule_cache.invalidate_all(db)
     return ApplyWriteResponse(batch_id=batch.id, status=batch.status, applied_refs=applied_refs)
 
 
