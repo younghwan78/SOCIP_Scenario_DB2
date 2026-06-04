@@ -9,13 +9,14 @@ from scenario_db.legacy_import.read_legacy import read_yaml
 
 
 WRITE_BUNDLE_KIND = "scenario.import_bundle"
-SUPPORTED_DOCUMENT_KINDS = {"soc", "ip", "sw_profile", "project", "scenario.usecase"}
+SUPPORTED_DOCUMENT_KINDS = {"soc", "soc.dvfs_table", "ip", "sw_profile", "project", "scenario.usecase"}
 DOCUMENT_KIND_ORDER = {
     "soc": 0,
-    "ip": 1,
-    "sw_profile": 2,
-    "project": 3,
-    "scenario.usecase": 4,
+    "soc.dvfs_table": 1,
+    "ip": 2,
+    "sw_profile": 3,
+    "project": 4,
+    "scenario.usecase": 5,
 }
 
 
@@ -23,10 +24,20 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Build a Write API scenario.import_bundle payload from generated canonical YAML.",
     )
-    parser.add_argument("--generated", type=Path, required=True, help="Generated canonical YAML directory.")
+    parser.add_argument("--generated", type=Path, help="Generated canonical YAML directory.")
     parser.add_argument("--out", type=Path, required=True, help="Output JSON payload path.")
     parser.add_argument("--actor", default="legacy-importer", help="Write API actor field.")
     parser.add_argument("--note", default="Stage legacy importer output", help="Write API note field.")
+    parser.add_argument("--soc-ref", help="Build a single soc.dvfs_table bundle for this SoC.")
+    parser.add_argument("--dvfs-version", type=int, help="SoC-scoped DVFS table version.")
+    parser.add_argument("--evt-hint", help="EVT revision hint stored as DVFS table metadata.")
+    parser.add_argument("--domains-json", type=Path, help="JSON file containing the DVFS domains object.")
+    parser.add_argument("--guide-name", help="DVFS guide name, e.g. camera_dvfs_guide.")
+    parser.add_argument("--source-revision", help="Source guide revision.")
+    parser.add_argument("--source-path", help="Source file path or URI.")
+    parser.add_argument("--source-note", help="Source note.")
+    parser.add_argument("--source-project-ref", help="Project ref when the table is project-scoped.")
+    parser.add_argument("--domain-schema-hash", help="Hash for the voltage-domain schema used by this table.")
     parser.add_argument(
         "--strict",
         action="store_true",
@@ -36,12 +47,34 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
-    payload, issues = build_import_bundle_request(
-        args.generated,
-        actor=args.actor,
-        note=args.note,
-    )
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if args.soc_ref or args.dvfs_version is not None or args.domains_json:
+        if not args.soc_ref or args.dvfs_version is None or not args.domains_json:
+            parser.error("--soc-ref, --dvfs-version, and --domains-json are required for DVFS table mode")
+        payload = build_soc_dvfs_table_bundle_request(
+            soc_ref=args.soc_ref,
+            dvfs_version=args.dvfs_version,
+            domains=_read_json_object(args.domains_json),
+            actor=args.actor,
+            note=args.note,
+            evt_hint=args.evt_hint,
+            guide_name=args.guide_name,
+            source_revision=args.source_revision,
+            source_path=args.source_path,
+            source_note=args.source_note,
+            source_project_ref=args.source_project_ref,
+            domain_schema_hash=args.domain_schema_hash,
+        )
+        issues: list[dict[str, str]] = []
+    else:
+        if args.generated is None:
+            parser.error("--generated is required unless DVFS table mode is used")
+        payload, issues = build_import_bundle_request(
+            args.generated,
+            actor=args.actor,
+            note=args.note,
+        )
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(payload, indent=2, ensure_ascii=True), encoding="utf-8")
     if issues:
@@ -49,6 +82,67 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print(json.dumps({"ok": True, "issues": [], "out": str(args.out)}, indent=2, ensure_ascii=True))
     return 1 if args.strict and issues else 0
+
+
+def build_soc_dvfs_table_bundle_request(
+    *,
+    soc_ref: str,
+    dvfs_version: int,
+    domains: dict[str, Any],
+    actor: str | None = None,
+    note: str | None = None,
+    table_id: str | None = None,
+    schema_version: str = "2.3",
+    evt_hint: str | None = None,
+    guide_name: str | None = None,
+    source_revision: str | None = None,
+    source_path: str | None = None,
+    source_note: str | None = None,
+    source_project_ref: str | None = None,
+    domain_schema_hash: str | None = None,
+) -> dict[str, Any]:
+    if dvfs_version < 0:
+        raise ValueError("dvfs_version must be non-negative")
+    document: dict[str, Any] = {
+        "id": table_id or f"dvfs-{soc_ref}-v{dvfs_version}",
+        "schema_version": schema_version,
+        "kind": "soc.dvfs_table",
+        "soc_ref": soc_ref,
+        "dvfs_version": dvfs_version,
+        "domains": domains,
+        "compatibility_scope": "soc",
+    }
+    if evt_hint:
+        document["evt_hint"] = evt_hint
+    source = _clean_dict(
+        {
+            "guide_name": guide_name,
+            "source_revision": source_revision,
+            "path": source_path,
+            "note": source_note,
+        }
+    )
+    if source:
+        document["source"] = source
+    if source_project_ref:
+        document["source_project_ref"] = source_project_ref
+        document["compatibility_scope"] = "project"
+    if domain_schema_hash:
+        document["domain_schema_hash"] = domain_schema_hash
+
+    return {
+        "kind": WRITE_BUNDLE_KIND,
+        "actor": actor,
+        "note": note,
+        "payload": {
+            "import_report": {
+                "ok": True,
+                "generated": {"soc.dvfs_table": 1},
+                "messages": [],
+            },
+            "documents": [document],
+        },
+    }
 
 
 def build_import_bundle_request(
@@ -159,6 +253,17 @@ def _iter_yaml_files(generated_dir: Path) -> list[Path]:
 
 def _issue(code: str, message: str, path: Path) -> dict[str, str]:
     return {"code": code, "message": message, "source": str(path)}
+
+
+def _read_json_object(path: Path) -> dict[str, Any]:
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(value, dict):
+        raise ValueError(f"JSON root must be an object: {path}")
+    return value
+
+
+def _clean_dict(values: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in values.items() if value not in (None, "")}
 
 
 if __name__ == "__main__":

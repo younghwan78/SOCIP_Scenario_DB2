@@ -10,6 +10,7 @@ from scenario_db.models.common import (
     InstanceId,
     SchemaVersion,
 )
+from scenario_db.sim.models import DVFSTable
 
 
 # ---------------------------------------------------------------------------
@@ -114,3 +115,33 @@ class SocPlatform(BaseScenarioModel):
     ips: list[IpEntry] = Field(default_factory=list)
     memory_type: str | None = None
     bus_protocol: str | None = None
+
+
+class SocDvfsTableSource(BaseScenarioModel):
+    guide_name: str | None = None
+    source_revision: str | None = None
+    path: str | None = None
+    note: str | None = None
+
+
+class SocDvfsTable(BaseScenarioModel):
+    id: DocumentId
+    schema_version: SchemaVersion
+    kind: Literal["soc.dvfs_table"]
+    soc_ref: DocumentId
+    dvfs_version: int
+    evt_hint: str | None = None
+    source: SocDvfsTableSource | None = None
+    domains: dict[str, DVFSTable] = Field(default_factory=dict)
+    compatibility_scope: Literal["soc", "project"] = "soc"
+    source_project_ref: DocumentId | None = None
+    domain_schema_hash: str | None = None
+
+    @model_validator(mode="after")
+    def _validate_dvfs_table(self) -> SocDvfsTable:
+        if self.dvfs_version < 0:
+            raise ValueError("dvfs_version must be non-negative")
+        for key, table in self.domains.items():
+            if table.domain != key:
+                raise ValueError(f"domains.{key}.domain must match the domain key")
+        return self

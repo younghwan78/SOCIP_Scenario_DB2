@@ -8,6 +8,7 @@ from scenario_db.api.deps import get_db
 from scenario_db.api.pagination import apply_sort, validate_sort_column
 from scenario_db.api.schemas.capability import (
     IpCatalogResponse,
+    SocDvfsTableResponse,
     SocPlatformResponse,
     SwComponentResponse,
     SwProfileResponse,
@@ -18,7 +19,7 @@ from scenario_db.api.validators import (
     validate_ip_category,
     validate_sw_component_category,
 )
-from scenario_db.db.models.capability import IpCatalog, SocPlatform, SwComponent, SwProfile
+from scenario_db.db.models.capability import IpCatalog, SocDvfsTable, SocPlatform, SwComponent, SwProfile
 
 router = APIRouter(tags=["capability"])
 
@@ -46,6 +47,36 @@ def get_soc_platform(platform_id: str, db: Session = Depends(get_db)):
     row = db.query(SocPlatform).filter_by(id=platform_id).one_or_none()
     if row is None:
         raise NoResultFound(f"SocPlatform '{platform_id}' not found")
+    return row
+
+
+# ---------------------------------------------------------------------------
+# SoC DVFS Tables
+# ---------------------------------------------------------------------------
+
+@router.get("/soc-dvfs-tables", response_model=PagedResponse[SocDvfsTableResponse])
+def list_soc_dvfs_tables(
+    soc_ref: str | None = Query(None),
+    limit: int = Query(50, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    sort_by: str | None = Query(None),
+    sort_dir: str = Query("desc"),
+    db: Session = Depends(get_db),
+):
+    """SoC-scoped DVFS table versions. EVT is metadata, not part of the sequence."""
+    sort_by = validate_sort_column(SocDvfsTable, sort_by)
+    q = db.query(SocDvfsTable)
+    if soc_ref is not None:
+        q = q.filter(SocDvfsTable.soc_ref == soc_ref)
+    q = apply_sort(q, SocDvfsTable, sort_by, sort_dir, default_col="dvfs_version")
+    return PagedResponse.from_query(q, limit=limit, offset=offset)
+
+
+@router.get("/soc-dvfs-tables/{table_id}", response_model=SocDvfsTableResponse)
+def get_soc_dvfs_table(table_id: str, db: Session = Depends(get_db)):
+    row = db.query(SocDvfsTable).filter_by(id=table_id).one_or_none()
+    if row is None:
+        raise NoResultFound(f"SocDvfsTable '{table_id}' not found")
     return row
 
 

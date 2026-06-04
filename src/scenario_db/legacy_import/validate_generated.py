@@ -7,7 +7,7 @@ from pydantic import ValidationError
 
 from scenario_db.legacy_import.read_legacy import read_yaml
 from scenario_db.legacy_import.report import ImportReport
-from scenario_db.models.capability.hw import IpCatalog, IpSubmodule, SocPlatform
+from scenario_db.models.capability.hw import IpCatalog, IpSubmodule, SocDvfsTable, SocPlatform
 from scenario_db.models.capability.sw import SwComponent, SwProfile
 from scenario_db.models.definition.project import Project
 from scenario_db.models.definition.usecase import Usecase
@@ -17,6 +17,7 @@ _MODEL_BY_KIND = {
     "ip": IpCatalog,
     "submodule": IpSubmodule,
     "soc": SocPlatform,
+    "soc.dvfs_table": SocDvfsTable,
     "sw_profile": SwProfile,
     "sw_component": SwComponent,
     "project": Project,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from unittest.mock import MagicMock
+from types import SimpleNamespace
 from pathlib import Path
 from zipfile import ZipFile
 import io
@@ -11,6 +12,7 @@ from scenario_db.api.app import create_app
 from scenario_db.api.deps import get_db
 from scenario_db.api.schemas.simulation import SimulateRequest
 from scenario_db.api.routers import simulation as simulation_router
+from scenario_db.db.models.capability import SocDvfsTable
 from scenario_db.models.evidence.common import ExecutionContext
 from scenario_db.reporting.models import WrittenArtifact, WrittenReportBundle
 from scenario_db.sim.models import SimRunResult
@@ -442,3 +444,125 @@ def test_run_simulation_request_returns_response_on_cache_miss(monkeypatch):
     assert response.status == "completed"
     assert response.cached is False
     assert response.persisted is False
+
+
+def test_run_simulation_request_loads_db_dvfs_table_and_marks_context(monkeypatch):
+    class _Inputs:
+        scenario_id = "scenario"
+        variant_id = "variant"
+        project_ref = "project"
+        warnings = []
+
+    class _Evidence:
+        def __init__(self, execution_context):
+            self.id = "sim-1"
+            self.kpi = {"total_power_mw": 1.0}
+            self.resolution_result = None
+            self.schema_version = "2.2"
+            self.kind = "evidence.simulation"
+            self.scenario_ref = "scenario"
+            self.variant_ref = "variant"
+            self.execution_context = execution_context
+            self.sweep_context = None
+            self.aggregation = MagicMock()
+            self.run = MagicMock()
+            self.ip_breakdown = []
+            self.dma_breakdown = []
+            self.timing_breakdown = []
+            self.dvfs_breakdown = []
+            self.timeline_events = []
+            self.external_devices = []
+            self.topology_order = []
+            self.vdd_power = {}
+            self.calculation_trace = None
+            self.params_hash = "abc123"
+            self.artifacts = []
+            self.aggregation.model_dump.return_value = {}
+            self.run.model_dump.return_value = {}
+
+    class _Query:
+        def __init__(self, row):
+            self.row = row
+            self.filters = {}
+
+        def filter_by(self, **kwargs):
+            self.filters.update(kwargs)
+            return self
+
+        def one_or_none(self):
+            if self.filters == {"id": "dvfs-soc-A-v4"}:
+                return self.row
+            return None
+
+    dvfs_row = SocDvfsTable(
+        id="dvfs-soc-A-v4",
+        schema_version="2.3",
+        soc_ref="soc-A",
+        dvfs_version=4,
+        evt_hint="EVT1",
+        source={"guide_name": "camera_dvfs_guide"},
+        domains={
+            "CAM": {
+                "domain": "CAM",
+                "levels": [
+                    {"level": 0, "speed_mhz": 800.0, "voltages": {4: 800.0}},
+                    {"level": 4, "speed_mhz": 332.0, "voltages": {4: 606.25}},
+                ],
+            }
+        },
+        compatibility_scope="soc",
+        yaml_sha256="sha",
+    )
+    db = MagicMock()
+    db.query.return_value = _Query(dvfs_row)
+    captured = {}
+
+    monkeypatch.setattr(
+        "scenario_db.sim.service.load_canonical_graph",
+        lambda db_arg, scenario_id, variant_id: SimpleNamespace(soc=SimpleNamespace(id="soc-A")),
+    )
+    monkeypatch.setattr("scenario_db.sim.service.build_simulation_inputs", lambda graph, config: _Inputs())
+    monkeypatch.setattr("scenario_db.sim.service.params_hash", lambda inputs: "inputs-hash")
+    monkeypatch.setattr("scenario_db.sim.service.get_simulation_evidence_by_params_hash", lambda *args, **kwargs: None)
+
+    def _run(inputs, dvfs_tables):
+        captured["dvfs_tables"] = dvfs_tables
+        return SimRunResult(
+            scenario_id="scenario",
+            variant_id="variant",
+            total_power_mw=1.0,
+            total_power_ma=0.0,
+            core_power_mw=1.0,
+            bw_power_mw=0.0,
+            bw_total_mbs=0.0,
+            hw_time_max_ms=0.0,
+            feasible=True,
+        )
+
+    def _evidence(result, *, execution_context, project_ref, params_hash):
+        captured["execution_context"] = execution_context
+        return _Evidence(execution_context)
+
+    monkeypatch.setattr("scenario_db.sim.service.run_simulation", _run)
+    monkeypatch.setattr("scenario_db.sim.service.build_simulation_evidence", _evidence)
+
+    response = run_simulation_request(
+        db,
+        SimulateRequest(
+            scenario_id="scenario",
+            variant_id="variant",
+            execution_context=ExecutionContext(
+                silicon_rev="EVT0",
+                sw_baseline_ref="sw-vendor-v1.2.3",
+                thermal="normal",
+            ),
+            dvfs_table_ref="dvfs-soc-A-v4",
+            force=True,
+        ),
+    )
+
+    assert response.evidence_id == "sim-1"
+    assert captured["dvfs_tables"]["CAM"].levels[0].speed_mhz == 800.0
+    assert captured["execution_context"].dvfs_table_ref == "dvfs-soc-A-v4"
+    assert captured["execution_context"].dvfs_version == 4
+    assert captured["execution_context"].evt_hint == "EVT1"

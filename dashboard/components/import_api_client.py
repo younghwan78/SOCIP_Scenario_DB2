@@ -5,6 +5,8 @@ from typing import Any
 
 import requests
 
+from scenario_db.legacy_import.write_bundle import build_soc_dvfs_table_bundle_request
+
 
 class ImportApiError(RuntimeError):
     def __init__(self, message: str, *, status_code: int | None = None, body: str | None = None) -> None:

@@ -4,6 +4,7 @@ import pytest
 
 from dashboard.components.import_api_client import (
     ImportApiError,
+    build_soc_dvfs_table_bundle_request,
     diff_change_rows,
     document_rows,
     import_report_rows,
@@ -38,6 +39,35 @@ def test_stage_import_bundle_posts_to_write_staging():
     assert calls[0][0] == "POST"
     assert calls[0][1] == "http://api/api/v1/write/staging"
     assert calls[0][2]["json"]["kind"] == "scenario.import_bundle"
+
+
+def test_build_soc_dvfs_table_bundle_request():
+    payload = build_soc_dvfs_table_bundle_request(
+        soc_ref="soc-exynos2700",
+        dvfs_version=4,
+        evt_hint="EVT1",
+        domains={
+            "CAM": {
+                "domain": "CAM",
+                "levels": [{"level": 0, "speed_mhz": 800.0, "voltages": {4: 800.0}}],
+            }
+        },
+        actor="engineer",
+        note="DVFS table update",
+        guide_name="camera_dvfs_guide",
+        source_revision="EVT1",
+    )
+
+    assert payload["kind"] == "scenario.import_bundle"
+    assert payload["actor"] == "engineer"
+    document = payload["payload"]["documents"][0]
+    assert document["kind"] == "soc.dvfs_table"
+    assert document["id"] == "dvfs-soc-exynos2700-v4"
+    assert document["soc_ref"] == "soc-exynos2700"
+    assert document["dvfs_version"] == 4
+    assert document["evt_hint"] == "EVT1"
+    assert document["source"]["guide_name"] == "camera_dvfs_guide"
+    assert payload["payload"]["import_report"]["generated"]["soc.dvfs_table"] == 1
 
 
 def test_stage_import_bundle_surfaces_http_error():

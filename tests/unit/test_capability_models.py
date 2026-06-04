@@ -80,6 +80,7 @@ class _DI(BaseModel):
     "kernel-6.1.50-android15",
     "fw-isp-0x41",
     "soc-exynos2500",
+    "dvfs-soc-exynos2700-v4",
     "iss-LLC-thrashing-0221",
     "rule-feasibility-check",
 ])
@@ -217,6 +218,39 @@ def test_demo_ip_catalog_sim_modes_roundtrip():
     assert obj.capabilities.sim["hw_name"] == "CSIS"
     assert obj.capabilities.sim["modes"]["Normal"]["unit_power_mw_mp"] == 0.21
     assert obj.capabilities.sim["modes"]["Normal"]["ppc"] == 8.0
+
+
+def test_soc_dvfs_table_model_keeps_evt_as_metadata():
+    from scenario_db.models.capability.hw import SocDvfsTable
+
+    obj = SocDvfsTable.model_validate(
+        {
+            "id": "dvfs-soc-exynos2700-v4",
+            "schema_version": "2.3",
+            "kind": "soc.dvfs_table",
+            "soc_ref": "soc-exynos2700",
+            "dvfs_version": 4,
+            "evt_hint": "EVT1",
+            "source": {
+                "guide_name": "camera_dvfs_guide",
+                "source_revision": "EVT1",
+            },
+            "domains": {
+                "CAM": {
+                    "domain": "CAM",
+                    "levels": [
+                        {"level": 0, "speed_mhz": 800.0, "voltages": {"4": 800.0}},
+                        {"level": 4, "speed_mhz": 332.0, "voltages": {"4": 606.25}},
+                    ],
+                }
+            },
+        }
+    )
+
+    assert obj.soc_ref == "soc-exynos2700"
+    assert obj.dvfs_version == 4
+    assert obj.evt_hint == "EVT1"
+    assert obj.domains["CAM"].levels[1].speed_mhz == 332.0
 
 
 def test_ip_supported_features_accept_crop_scale_rotate():

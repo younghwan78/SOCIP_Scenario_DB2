@@ -20,12 +20,13 @@ from scenario_db.api.schemas.write import (
     ValidateWriteResponse,
     ValidationIssue,
 )
-from scenario_db.db.models.capability import IpCatalog, SocPlatform, SwProfile
+from scenario_db.db.models.capability import IpCatalog, SocDvfsTable, SocPlatform, SwProfile
 from scenario_db.db.models.definition import Project, Scenario, ScenarioVariant
 from scenario_db.db.models.write import WriteBatch, WriteEvent
-from scenario_db.etl.mappers.capability import upsert_ip, upsert_soc, upsert_sw_profile
+from scenario_db.etl.mappers.capability import upsert_ip, upsert_soc, upsert_soc_dvfs_table, upsert_sw_profile
 from scenario_db.etl.mappers.definition import upsert_project, upsert_usecase
 from scenario_db.models.capability.hw import IpCatalog as PydanticIpCatalog
+from scenario_db.models.capability.hw import SocDvfsTable as PydanticSocDvfsTable
 from scenario_db.models.capability.hw import SocPlatform as PydanticSocPlatform
 from scenario_db.models.capability.sw import SwProfile as PydanticSwProfile
 from scenario_db.models.definition.project import Project as PydanticProject
@@ -93,9 +94,10 @@ PATCH_LIST_FIELDS = {
     "remove_buffers",
 }
 ALLOWED_BASE_EDGE_TYPES = {"OTF", "vOTF", "M2M", "control"}
-IMPORT_KIND_ORDER = ["soc", "ip", "sw_profile", "project", "scenario.usecase"]
+IMPORT_KIND_ORDER = ["soc", "soc.dvfs_table", "ip", "sw_profile", "project", "scenario.usecase"]
 IMPORT_MODEL_BY_KIND = {
     "soc": PydanticSocPlatform,
+    "soc.dvfs_table": PydanticSocDvfsTable,
     "ip": PydanticIpCatalog,
     "sw_profile": PydanticSwProfile,
     "project": PydanticProject,
@@ -103,6 +105,7 @@ IMPORT_MODEL_BY_KIND = {
 }
 IMPORT_UPSERT_BY_KIND = {
     "soc": upsert_soc,
+    "soc.dvfs_table": upsert_soc_dvfs_table,
     "ip": upsert_ip,
     "sw_profile": upsert_sw_profile,
     "project": upsert_project,
@@ -110,6 +113,7 @@ IMPORT_UPSERT_BY_KIND = {
 }
 IMPORT_DB_MODEL_BY_KIND = {
     "soc": SocPlatform,
+    "soc.dvfs_table": SocDvfsTable,
     "ip": IpCatalog,
     "sw_profile": SwProfile,
     "project": Project,
@@ -415,6 +419,7 @@ def validate_import_bundle(db: Session, normalized: dict[str, Any]) -> list[Vali
     docs = normalized["documents"]
     included = _included_import_refs(docs)
     seen: set[tuple[str, str]] = set()
+    seen_dvfs_versions: dict[tuple[str, int], str] = {}
 
     for idx, doc in enumerate(docs):
         kind = doc.get("kind")
@@ -435,6 +440,9 @@ def validate_import_bundle(db: Session, normalized: dict[str, Any]) -> list[Vali
         except Exception as exc:
             issues.append(_issue("error", "import_document_schema_invalid", str(exc), path))
             continue
+        if kind == "soc.dvfs_table":
+            issues.extend(_validate_import_dvfs_table_refs(db, doc, included, path))
+            issues.extend(_validate_import_dvfs_table_version_key(db, doc, seen_dvfs_versions, path))
         if kind == "scenario.usecase":
             issues.extend(_validate_import_usecase_refs(db, doc, included, path))
 
@@ -911,6 +919,58 @@ def _validate_import_usecase_refs(
     return issues
 
 
+def _validate_import_dvfs_table_refs(
+    db: Session,
+    doc: dict[str, Any],
+    included: dict[str, set[str]],
+    path: str,
+) -> list[ValidationIssue]:
+    issues: list[ValidationIssue] = []
+    soc_ref = doc.get("soc_ref")
+    if soc_ref and soc_ref not in included.get("soc", set()) and db.query(SocPlatform).filter_by(id=soc_ref).one_or_none() is None:
+        issues.append(_issue("error", "import_soc_ref_not_found", f"SoC not found: {soc_ref}", f"{path}.soc_ref"))
+    return issues
+
+
+def _validate_import_dvfs_table_version_key(
+    db: Session,
+    doc: dict[str, Any],
+    seen: dict[tuple[str, int], str],
+    path: str,
+) -> list[ValidationIssue]:
+    issues: list[ValidationIssue] = []
+    doc_id = str(doc.get("id") or "")
+    soc_ref = doc.get("soc_ref")
+    dvfs_version = _int_or_none(doc.get("dvfs_version"))
+    if not doc_id or not isinstance(soc_ref, str) or dvfs_version is None:
+        return issues
+
+    key = (soc_ref, dvfs_version)
+    previous_id = seen.get(key)
+    if previous_id is not None and previous_id != doc_id:
+        issues.append(
+            _issue(
+                "error",
+                "import_dvfs_version_duplicate",
+                f"Duplicate SoC DVFS version {soc_ref}/v{dvfs_version}: {previous_id} and {doc_id}",
+                path,
+            )
+        )
+    seen.setdefault(key, doc_id)
+
+    existing = db.query(SocDvfsTable).filter_by(soc_ref=soc_ref, dvfs_version=dvfs_version).one_or_none()
+    if existing is not None and existing.id != doc_id:
+        issues.append(
+            _issue(
+                "error",
+                "import_dvfs_version_conflict",
+                f"SoC DVFS version {soc_ref}/v{dvfs_version} already exists as {existing.id}",
+                f"{path}.dvfs_version",
+            )
+        )
+    return issues
+
+
 def _existing_import_doc_signatures(db: Session, kind: str, ids: list[str]) -> dict[str, str | None]:
     model = IMPORT_DB_MODEL_BY_KIND.get(kind)
     if model is None or not ids:
@@ -945,6 +1005,22 @@ def _existing_row_to_import_doc(db: Session, kind: str, row: Any) -> dict[str, A
                 "memory_type": row.memory_type,
                 "bus_protocol": row.bus_protocol,
                 "ips": row.ips or [],
+            }
+        )
+    if kind == "soc.dvfs_table":
+        return _compact_doc(
+            {
+                "id": row.id,
+                "schema_version": row.schema_version,
+                "kind": "soc.dvfs_table",
+                "soc_ref": row.soc_ref,
+                "dvfs_version": row.dvfs_version,
+                "evt_hint": row.evt_hint,
+                "source": row.source,
+                "domains": row.domains or {},
+                "compatibility_scope": row.compatibility_scope,
+                "source_project_ref": row.source_project_ref,
+                "domain_schema_hash": row.domain_schema_hash,
             }
         )
     if kind == "ip":
@@ -1049,6 +1125,15 @@ def _compact_doc(value: Any) -> Any:
     if isinstance(value, list):
         return [_compact_doc(item) for item in value]
     return value
+
+
+def _int_or_none(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _import_bundle_impact(db: Session, normalized: dict[str, Any]) -> dict[str, Any]:

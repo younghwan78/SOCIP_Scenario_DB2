@@ -207,6 +207,97 @@ $apply.applied_refs
 Invoke-RestMethod "$api/scenarios/uc-imported-camera-recording/variants/FHD30-Imported"
 ```
 
+## SoC DVFS Table Update
+
+Use this when a camera DVFS guide is recalculated against a new DVFS table.
+`dvfs_version` is a SoC-scoped sequence; `evt_hint` is only source metadata.
+
+Create `domains.json`:
+
+```powershell
+@'
+{
+  "CAM": {
+    "domain": "CAM",
+    "levels": [
+      {"level": 0, "speed_mhz": 800.0, "voltages": {"4": 800.0}},
+      {"level": 4, "speed_mhz": 332.0, "voltages": {"4": 606.25}}
+    ]
+  }
+}
+'@ | Set-Content .\domains.json -Encoding UTF8
+```
+
+Build a single-document import bundle:
+
+```powershell
+uv run python -m scenario_db.legacy_import.write_bundle `
+  --soc-ref soc-exynos2700 `
+  --dvfs-version 4 `
+  --evt-hint EVT1 `
+  --guide-name camera_dvfs_guide `
+  --source-revision EVT1 `
+  --domains-json .\domains.json `
+  --out .\dvfs_import_bundle.json `
+  --actor dvfs-importer `
+  --note "Exynos2700 DVFS table v4"
+```
+
+Stage, validate, diff, and apply it through the same Write API path:
+
+```powershell
+$payload = Get-Content .\dvfs_import_bundle.json -Raw
+$stage = Invoke-RestMethod -Method Post -Uri "$api/write/staging" -ContentType "application/json" -Body $payload
+$batchId = $stage.batch_id
+$validation = Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/validate"
+$diff = Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/diff"
+$validation.valid
+$diff.changes | Format-Table field, change
+Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/apply"
+Invoke-RestMethod "$api/soc-dvfs-tables?soc_ref=soc-exynos2700"
+```
+
+Simulation can then select the table by document ID:
+
+```powershell
+$body = @{
+  scenario_id = "uc-camera-recording"
+  variant_id = "FHD30-SDR-H265"
+  execution_context = @{
+    silicon_rev = "EVT1"
+    sw_baseline_ref = "sw-vendor-v1.2.3"
+    thermal = "normal"
+  }
+  dvfs_table_ref = "dvfs-soc-exynos2700-v4"
+  force = $true
+} | ConvertTo-Json -Depth 20
+
+Invoke-RestMethod -Method Post -Uri "$api/simulation/run" -ContentType "application/json" -Body $body
+```
+
+Or by SoC and DVFS version:
+
+```powershell
+$body = @{
+  scenario_id = "uc-camera-recording"
+  variant_id = "FHD30-SDR-H265"
+  execution_context = @{
+    silicon_rev = "EVT1"
+    sw_baseline_ref = "sw-vendor-v1.2.3"
+    thermal = "normal"
+  }
+  soc_ref = "soc-exynos2700"
+  dvfs_version = 4
+  force = $true
+} | ConvertTo-Json -Depth 20
+
+Invoke-RestMethod -Method Post -Uri "$api/simulation/run" -ContentType "application/json" -Body $body
+```
+
+The persisted simulation evidence records `execution_context.dvfs_table_ref`,
+`execution_context.dvfs_version`, `execution_context.dvfs_soc_ref`, and
+`execution_context.evt_hint`.
+
 ## Routing Switch Example
 
 `routing_switch` disables existing base topology nodes or edges. It does not

@@ -14,6 +14,21 @@ class SocPlatformResponse(BaseModel):
     ips: list | dict | None = None
 
 
+class SocDvfsTableResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    schema_version: str
+    soc_ref: str
+    dvfs_version: int
+    evt_hint: str | None = None
+    source: dict | None = None
+    domains: dict = {}
+    compatibility_scope: str
+    source_project_ref: str | None = None
+    domain_schema_hash: str | None = None
+
+
 class IpCatalogResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

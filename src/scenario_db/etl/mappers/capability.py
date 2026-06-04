@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from scenario_db.db.models.capability import IpCatalog, SocPlatform, SwComponent, SwProfile
+from scenario_db.db.models.capability import IpCatalog, SocDvfsTable, SocPlatform, SwComponent, SwProfile
 from scenario_db.models.capability.hw import IpCatalog as PydanticIp
+from scenario_db.models.capability.hw import SocDvfsTable as PydanticSocDvfsTable
 from scenario_db.models.capability.hw import SocPlatform as PydanticSoc
 from scenario_db.models.capability.sw import SwComponent as PydanticSwComponent
 from scenario_db.models.capability.sw import SwProfile as PydanticSwProfile
@@ -20,6 +21,27 @@ def upsert_soc(raw: dict, sha256: str, session: Session) -> None:
     row.bus_protocol   = obj.bus_protocol
     row.ips            = [e.model_dump(exclude_none=True) for e in obj.ips]
     row.yaml_sha256    = sha256
+    session.add(row)
+
+
+def upsert_soc_dvfs_table(raw: dict, sha256: str, session: Session) -> None:
+    obj = PydanticSocDvfsTable.model_validate(raw)
+    row = session.get(SocDvfsTable, obj.id) or SocDvfsTable(id=obj.id)
+    if row.yaml_sha256 == sha256:
+        return
+    row.schema_version = obj.schema_version
+    row.soc_ref = str(obj.soc_ref)
+    row.dvfs_version = obj.dvfs_version
+    row.evt_hint = obj.evt_hint
+    row.source = obj.source.model_dump(exclude_none=True) if obj.source else None
+    row.domains = {
+        key: value.model_dump(exclude_none=True)
+        for key, value in obj.domains.items()
+    }
+    row.compatibility_scope = obj.compatibility_scope
+    row.source_project_ref = str(obj.source_project_ref) if obj.source_project_ref else None
+    row.domain_schema_hash = obj.domain_schema_hash
+    row.yaml_sha256 = sha256
     session.add(row)
 
 

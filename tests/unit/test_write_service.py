@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 
-from scenario_db.db.models.capability import IpCatalog, SwProfile
+from scenario_db.db.models.capability import IpCatalog, SocDvfsTable, SocPlatform, SwProfile
 from scenario_db.db.models.definition import Project, Scenario, ScenarioVariant
 from scenario_db.write.service import (
     build_import_bundle_diff,
@@ -96,6 +96,14 @@ class _Db:
             metadata_={"name": "Project A", "soc_ref": "soc-A"},
             yaml_sha256="test",
         )
+        self.soc = SocPlatform(
+            id="soc-A",
+            schema_version="2.2",
+            process_node="3nm",
+            ips=[],
+            yaml_sha256="test",
+        )
+        self.dvfs_tables: list[SocDvfsTable] = []
         self.sw_profile = SwProfile(
             id="sw-vendor-v1.2.3",
             schema_version="2.2",
@@ -121,6 +129,10 @@ class _Db:
             return _Query([self.variant])
         if model is Project:
             return _Query([self.project])
+        if model is SocPlatform:
+            return _Query([self.soc])
+        if model is SocDvfsTable:
+            return _Query(self.dvfs_tables)
         if model is IpCatalog:
             return _Query([self.ip, self.ip_isp, self.ip_csis])
         if model is SwProfile:
@@ -378,6 +390,44 @@ def _import_sw_profile_doc(**overrides):
     return doc
 
 
+def _import_soc_doc(**overrides):
+    doc = {
+        "id": "soc-A",
+        "schema_version": "2.2",
+        "kind": "soc",
+        "process_node": "3nm",
+        "ips": [],
+    }
+    doc.update(overrides)
+    return doc
+
+
+def _import_dvfs_table_doc(**overrides):
+    doc = {
+        "id": "dvfs-soc-A-v4",
+        "schema_version": "2.3",
+        "kind": "soc.dvfs_table",
+        "soc_ref": "soc-A",
+        "dvfs_version": 4,
+        "evt_hint": "EVT1",
+        "source": {
+            "guide_name": "camera_dvfs_guide",
+            "source_revision": "EVT1",
+        },
+        "domains": {
+            "CAM": {
+                "domain": "CAM",
+                "levels": [
+                    {"level": 0, "speed_mhz": 800.0, "voltages": {"4": 800.0}},
+                    {"level": 4, "speed_mhz": 332.0, "voltages": {"4": 606.25}},
+                ],
+            }
+        },
+    }
+    doc.update(overrides)
+    return doc
+
+
 def _sync_db_scenario_from_doc(db: _Db, doc: dict) -> None:
     db.scenario.id = doc["id"]
     db.scenario.schema_version = doc["schema_version"]
@@ -428,6 +478,65 @@ def test_validate_import_bundle_accepts_canonical_usecase_doc():
     issues = validate_import_bundle(_Db(), normalized)
 
     assert issues == []
+
+
+def test_validate_import_bundle_accepts_soc_dvfs_table_doc():
+    normalized = normalize_import_bundle_payload(
+        {"documents": [_import_soc_doc(), _import_dvfs_table_doc()]}
+    )
+
+    issues = validate_import_bundle(_Db(), normalized)
+
+    assert issues == []
+
+
+def test_validate_import_bundle_rejects_duplicate_soc_dvfs_version():
+    normalized = normalize_import_bundle_payload(
+        {
+            "documents": [
+                _import_soc_doc(),
+                _import_dvfs_table_doc(id="dvfs-soc-A-v4-a"),
+                _import_dvfs_table_doc(id="dvfs-soc-A-v4-b"),
+            ]
+        }
+    )
+
+    issues = validate_import_bundle(_Db(), normalized)
+
+    assert any(issue.code == "import_dvfs_version_duplicate" for issue in issues)
+
+
+def test_validate_import_bundle_rejects_existing_soc_dvfs_version_conflict():
+    db = _Db()
+    db.dvfs_tables.append(
+        SocDvfsTable(
+            id="dvfs-soc-A-v4-existing",
+            schema_version="2.3",
+            soc_ref="soc-A",
+            dvfs_version=4,
+            domains={"CAM": {"domain": "CAM", "levels": []}},
+            compatibility_scope="soc",
+            yaml_sha256="sha",
+        )
+    )
+    normalized = normalize_import_bundle_payload(
+        {"documents": [_import_soc_doc(), _import_dvfs_table_doc(id="dvfs-soc-A-v4-new")]}
+    )
+
+    issues = validate_import_bundle(db, normalized)
+
+    assert any(issue.code == "import_dvfs_version_conflict" for issue in issues)
+
+
+def test_import_bundle_diff_reports_soc_dvfs_table_add():
+    normalized = normalize_import_bundle_payload({"documents": [_import_dvfs_table_doc()]})
+
+    diff = build_import_bundle_diff(_Db(), normalized)
+
+    change = next(change for change in diff.changes if change.field == "documents.soc.dvfs_table")
+    assert change.change == "add"
+    assert change.after["added_ids"] == ["dvfs-soc-A-v4"]
+    assert diff.impact["document_counts"]["soc.dvfs_table"] == 1
 
 
 def test_validate_import_bundle_rejects_invalid_sw_profile_doc():

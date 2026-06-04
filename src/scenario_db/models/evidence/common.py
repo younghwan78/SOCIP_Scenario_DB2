@@ -17,6 +17,10 @@ class ExecutionContext(BaseScenarioModel):
     ambient_temp_c: float | None = None
     power_state: str | None = None
     sw_runtime_overrides: dict[str, FeatureFlagValue] | None = None
+    evt_hint: str | None = None
+    dvfs_table_ref: DocumentId | None = None
+    dvfs_version: int | None = None
+    dvfs_soc_ref: DocumentId | None = None
 
 
 class SweepContext(BaseScenarioModel):

@@ -129,6 +129,19 @@ def test_get_soc_platform_404(client):
     assert r.status_code == 404
 
 
+def test_list_soc_dvfs_tables_200(client):
+    r = client.get("/api/v1/soc-dvfs-tables?soc_ref=soc-exynos2700")
+    assert r.status_code == 200
+    body = r.json()
+    assert "items" in body
+    assert body["total"] == 0
+
+
+def test_get_soc_dvfs_table_404(client):
+    r = client.get("/api/v1/soc-dvfs-tables/dvfs-soc-exynos2700-v4")
+    assert r.status_code == 404
+
+
 def test_list_ip_catalogs_200(client):
     r = client.get("/api/v1/ip-catalogs")
     assert r.status_code == 200

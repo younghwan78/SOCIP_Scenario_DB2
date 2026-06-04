@@ -4,6 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from scenario_db.models.common import DocumentId
 from scenario_db.models.evidence.common import ExecutionContext
 from scenario_db.sim.models import DVFSTable, SimRunResult, SimulationRunConfig
 
@@ -14,6 +15,9 @@ class SimulateRequest(BaseModel):
     execution_context: ExecutionContext
     config: SimulationRunConfig = Field(default_factory=SimulationRunConfig)
     dvfs_tables: dict[str, DVFSTable] = Field(default_factory=dict)
+    dvfs_table_ref: DocumentId | None = None
+    soc_ref: DocumentId | None = None
+    dvfs_version: int | None = Field(default=None, ge=0)
     persist: bool = False
     force: bool = False
 

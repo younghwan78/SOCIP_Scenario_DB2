@@ -23,6 +23,7 @@ for path in (_root / "src", _root, _root / "dashboard"):
 from dashboard.components.import_api_client import (
     ImportApiError,
     apply_batch,
+    build_soc_dvfs_table_bundle_request,
     diff_batch,
     diff_change_rows,
     document_rows,
@@ -180,6 +181,48 @@ def _save_payload(path_text: str, payload: dict[str, Any]) -> None:
     st.session_state["import_bundle_path"] = str(path)
 
 
+def _dvfs_domains_template() -> str:
+    return json.dumps(
+        {
+            "CAM": {
+                "domain": "CAM",
+                "levels": [
+                    {"level": 0, "speed_mhz": 800.0, "voltages": {"4": 800.0}},
+                    {"level": 4, "speed_mhz": 332.0, "voltages": {"4": 606.25}},
+                ],
+            }
+        },
+        indent=2,
+        ensure_ascii=True,
+    )
+
+
+def _parse_domains_json(text: str) -> dict[str, Any]:
+    value = json.loads(text)
+    if not isinstance(value, dict):
+        raise ValueError("DVFS domains JSON root must be an object.")
+    return value
+
+
+def _uploaded_dvfs_file_payload(uploaded_domains: Any) -> dict[str, Any]:
+    raw_text = uploaded_domains.getvalue().decode("utf-8-sig")
+    value = json.loads(raw_text)
+    if not isinstance(value, dict):
+        raise ValueError("Uploaded DVFS file must contain a JSON object.")
+    if value.get("kind") == "soc.dvfs_table":
+        domains = value.get("domains")
+        if not isinstance(domains, dict):
+            raise ValueError("Uploaded soc.dvfs_table file must contain a domains object.")
+        return {
+            "domains_text": json.dumps(domains, indent=2, ensure_ascii=True),
+            "soc_ref": value.get("soc_ref"),
+            "dvfs_version": value.get("dvfs_version"),
+            "evt_hint": value.get("evt_hint"),
+            "source": value.get("source") if isinstance(value.get("source"), dict) else {},
+        }
+    return {"domains_text": json.dumps(value, indent=2, ensure_ascii=True)}
+
+
 def _viewer_links_for_apply(payload: dict[str, Any], scenario_refs: list[str]) -> list[tuple[str, str]]:
     documents = (payload.get("payload") or {}).get("documents") or []
     projects = {
@@ -318,9 +361,18 @@ with st.sidebar:
     api_base = st.text_input(
         "API Base",
         value=os.environ.get("SCENARIODB_API_BASE", "http://127.0.0.1:18000/api/v1"),
+        help="Write API endpoint root. Local default is http://127.0.0.1:18000/api/v1.",
     )
-    actor = st.text_input("Actor", value="Joo Younghwan")
-    note = st.text_input("Note", value="legacy import workbench")
+    actor = st.text_input(
+        "Actor",
+        value="Joo Younghwan",
+        help="Name or account recorded in the Write API audit event.",
+    )
+    note = st.text_input(
+        "Note",
+        value="legacy import workbench",
+        help="Short audit note stored with the staged import batch.",
+    )
 
     st.divider()
     if st.button("Check API", use_container_width=True):
@@ -351,49 +403,208 @@ st.markdown(
 with st.container():
     st.markdown('<div class="step-card">', unsafe_allow_html=True)
     st.markdown("### 1. Build Import Bundle")
-    st.caption("Use an existing generated canonical YAML directory. Run legacy importer CLI first if this directory does not exist.")
-    path_col1, path_col2 = st.columns([1, 1])
-    with path_col1:
-        generated_dir_text = st.text_input(
-            "Generated canonical directory",
-            key="generated_dir_widget",
-            help="Directory that contains 00_hw, 02_definition, and import_report.json.",
+    build_mode = st.radio(
+        "Import mode",
+        ["Generated canonical directory", "SoC DVFS table update"],
+        horizontal=True,
+        help="Choose directory import for legacy importer output, or DVFS update for one SoC DVFS table document.",
+    )
+    if build_mode == "Generated canonical directory":
+        st.caption("Use an existing generated canonical YAML directory. Run legacy importer CLI first if this directory does not exist.")
+        path_col1, path_col2 = st.columns([1, 1])
+        with path_col1:
+            generated_dir_text = st.text_input(
+                "Generated canonical directory",
+                key="generated_dir_widget",
+                help="Directory that contains 00_hw, 02_definition, and import_report.json.",
+            )
+            st.session_state["generated_dir_text"] = generated_dir_text
+        with path_col2:
+            output_payload_text = st.text_input(
+                "Bundle output JSON",
+                key="output_payload_widget",
+                help="Optional JSON file path for the generated scenario.import_bundle request body.",
+            )
+            st.session_state["output_payload_text"] = output_payload_text
+        with st.expander("Browse folders", expanded=not Path(generated_dir_text).is_dir()):
+            _render_directory_browser()
+        generated_path = Path(generated_dir_text)
+        status_col1, status_col2, status_col3 = st.columns(3)
+        status_col1.metric("Generated dir", "exists" if generated_path.is_dir() else "missing")
+        status_col2.metric("Import report", "exists" if (generated_path / "import_report.json").exists() else "missing")
+        status_col3.metric("Output parent", "exists" if Path(output_payload_text).parent.exists() else "missing")
+        col_a, col_b = st.columns([1, 1])
+        with col_a:
+            build_clicked = st.button("Build scenario.import_bundle", type="primary")
+        with col_b:
+            save_clicked = st.button("Save bundle JSON")
+
+        if build_clicked:
+            try:
+                payload, issues = build_import_bundle_request(generated_path, actor=actor, note=note)
+                st.session_state["import_bundle_payload"] = payload
+                st.session_state["import_bundle_issues"] = issues
+                st.session_state["stage_result"] = None
+                st.session_state["validation_result"] = None
+                st.session_state["diff_result"] = None
+                st.session_state["apply_result"] = None
+                st.success("Import bundle built")
+            except Exception as exc:
+                st.session_state["import_bundle_payload"] = None
+                st.session_state["import_bundle_issues"] = [{"code": "bundle_build_failed", "message": str(exc), "source": generated_dir_text}]
+                st.error(f"Bundle build failed: {exc}")
+    else:
+        st.caption("Create a single soc.dvfs_table import bundle. dvfs_version is a SoC-scoped sequence; evt_hint is metadata.")
+        _state_default("dvfs_domains_json_text", _dvfs_domains_template())
+        _state_default("dvfs_soc_ref_widget", "soc-exynos2700")
+        _state_default("dvfs_version_widget", 0)
+        _state_default("dvfs_evt_hint_widget", "")
+        _state_default("dvfs_guide_name_widget", "camera_dvfs_guide")
+        _state_default("dvfs_source_path_widget", "")
+        _state_default("dvfs_source_revision_widget", "")
+        _state_default("dvfs_domain_schema_hash_widget", "")
+        _state_default("dvfs_source_note_widget", "")
+        _state_default("dvfs_source_project_ref_widget", "")
+
+        uploaded_domains = st.file_uploader(
+            "DVFS domains file",
+            type=["json"],
+            help="Upload either a domains JSON object or a full soc.dvfs_table JSON document.",
         )
-        st.session_state["generated_dir_text"] = generated_dir_text
-    with path_col2:
+        if uploaded_domains is not None:
+            try:
+                upload_key = f"{uploaded_domains.name}:{len(uploaded_domains.getvalue())}"
+                parsed_upload = _uploaded_dvfs_file_payload(uploaded_domains)
+                if st.session_state.get("dvfs_uploaded_domains_file") != upload_key:
+                    st.session_state["dvfs_domains_json_text"] = parsed_upload["domains_text"]
+                    if parsed_upload.get("soc_ref"):
+                        st.session_state["dvfs_soc_ref_widget"] = parsed_upload["soc_ref"]
+                    if parsed_upload.get("dvfs_version") is not None:
+                        st.session_state["dvfs_version_widget"] = int(parsed_upload["dvfs_version"])
+                    if parsed_upload.get("evt_hint"):
+                        st.session_state["dvfs_evt_hint_widget"] = parsed_upload["evt_hint"]
+                    source = parsed_upload.get("source") if isinstance(parsed_upload.get("source"), dict) else {}
+                    if source.get("guide_name"):
+                        st.session_state["dvfs_guide_name_widget"] = source["guide_name"]
+                    if source.get("source_revision"):
+                        st.session_state["dvfs_source_revision_widget"] = source["source_revision"]
+                    if source.get("path"):
+                        st.session_state["dvfs_source_path_widget"] = source["path"]
+                    if source.get("note"):
+                        st.session_state["dvfs_source_note_widget"] = source["note"]
+                    st.session_state["dvfs_uploaded_domains_file"] = upload_key
+                st.success(f"Loaded DVFS domains file: {uploaded_domains.name}")
+            except Exception as exc:
+                st.error(f"DVFS file import failed: {exc}")
+
+        soc_col, version_col, evt_col = st.columns([2, 1, 1])
+        with soc_col:
+            soc_ref = st.text_input(
+                "SoC ref",
+                key="dvfs_soc_ref_widget",
+                help="Target SoC document id, for example soc-exynos2700. The SoC must already exist or be included in the same import bundle.",
+            )
+        with version_col:
+            dvfs_version = st.number_input(
+                "DVFS version",
+                min_value=0,
+                step=1,
+                key="dvfs_version_widget",
+                help="Independent sequence per SoC. Use a new number whenever the DVFS table is recalculated, regardless of EVT.",
+            )
+        with evt_col:
+            evt_hint = st.text_input(
+                "EVT hint",
+                key="dvfs_evt_hint_widget",
+                help="Optional metadata such as EVT0 or EVT1. This is not part of the DVFS version sequence.",
+            )
+
         output_payload_text = st.text_input(
             "Bundle output JSON",
             key="output_payload_widget",
             help="Optional JSON file path for the generated scenario.import_bundle request body.",
         )
         st.session_state["output_payload_text"] = output_payload_text
-    with st.expander("Browse folders", expanded=not Path(generated_dir_text).is_dir()):
-        _render_directory_browser()
-    generated_path = Path(generated_dir_text)
-    status_col1, status_col2, status_col3 = st.columns(3)
-    status_col1.metric("Generated dir", "exists" if generated_path.is_dir() else "missing")
-    status_col2.metric("Import report", "exists" if (generated_path / "import_report.json").exists() else "missing")
-    status_col3.metric("Output parent", "exists" if Path(output_payload_text).parent.exists() else "missing")
-    col_a, col_b = st.columns([1, 1])
-    with col_a:
-        build_clicked = st.button("Build scenario.import_bundle", type="primary")
-    with col_b:
-        save_clicked = st.button("Save bundle JSON")
 
-    if build_clicked:
-        try:
-            payload, issues = build_import_bundle_request(generated_path, actor=actor, note=note)
-            st.session_state["import_bundle_payload"] = payload
-            st.session_state["import_bundle_issues"] = issues
-            st.session_state["stage_result"] = None
-            st.session_state["validation_result"] = None
-            st.session_state["diff_result"] = None
-            st.session_state["apply_result"] = None
-            st.success("Import bundle built")
-        except Exception as exc:
-            st.session_state["import_bundle_payload"] = None
-            st.session_state["import_bundle_issues"] = [{"code": "bundle_build_failed", "message": str(exc), "source": generated_dir_text}]
-            st.error(f"Bundle build failed: {exc}")
+        with st.expander("Optional source metadata", expanded=False):
+            source_col1, source_col2 = st.columns([1, 1])
+            with source_col1:
+                guide_name = st.text_input(
+                    "Guide name (optional)",
+                    key="dvfs_guide_name_widget",
+                    help="Original guide or table name, for example camera_dvfs_guide. Stored only for traceability.",
+                )
+                source_path = st.text_input(
+                    "Source path (optional)",
+                    key="dvfs_source_path_widget",
+                    help="Original file path, document link, or shared location for the source table. Stored only as metadata.",
+                )
+            with source_col2:
+                source_revision = st.text_input(
+                    "Source revision (optional)",
+                    key="dvfs_source_revision_widget",
+                    help="Revision label from the source guide, such as EVT1, rev0.3, or a release/drop date.",
+                )
+                domain_schema_hash = st.text_input(
+                    "Domain schema hash (optional)",
+                    key="dvfs_domain_schema_hash_widget",
+                    help="Optional compatibility marker when voltage-domain names or structure changed between projects.",
+                )
+            source_note = st.text_input(
+                "Source note (optional)",
+                key="dvfs_source_note_widget",
+                help="Free-form note explaining how this table was produced or recalculated.",
+            )
+            source_project_ref = st.text_input(
+                "Source project ref (optional)",
+                key="dvfs_source_project_ref_widget",
+                help="Project id to mark this table as project-scoped when the voltage-domain layout is not generally reusable for the whole SoC.",
+            )
+
+        domains_json = st.text_area(
+            "DVFS domains JSON",
+            key="dvfs_domains_json_text",
+            height=260,
+            help="Voltage-domain table JSON. Upload a JSON file above or paste/edit the domains object here.",
+        )
+
+        status_col1, status_col2, status_col3 = st.columns(3)
+        status_col1.metric("Document kind", "soc.dvfs_table")
+        status_col2.metric("Target SoC", soc_ref or "missing")
+        status_col3.metric("Output parent", "exists" if Path(output_payload_text).parent.exists() else "missing")
+        col_a, col_b = st.columns([1, 1])
+        with col_a:
+            build_clicked = st.button("Build DVFS import_bundle", type="primary")
+        with col_b:
+            save_clicked = st.button("Save bundle JSON")
+
+        if build_clicked:
+            try:
+                payload = build_soc_dvfs_table_bundle_request(
+                    soc_ref=soc_ref,
+                    dvfs_version=int(dvfs_version),
+                    evt_hint=evt_hint or None,
+                    domains=_parse_domains_json(domains_json),
+                    actor=actor,
+                    note=note,
+                    guide_name=guide_name or None,
+                    source_revision=source_revision or None,
+                    source_path=source_path or None,
+                    source_note=source_note or None,
+                    source_project_ref=source_project_ref or None,
+                    domain_schema_hash=domain_schema_hash or None,
+                )
+                st.session_state["import_bundle_payload"] = payload
+                st.session_state["import_bundle_issues"] = []
+                st.session_state["stage_result"] = None
+                st.session_state["validation_result"] = None
+                st.session_state["diff_result"] = None
+                st.session_state["apply_result"] = None
+                st.success("DVFS import bundle built")
+            except Exception as exc:
+                st.session_state["import_bundle_payload"] = None
+                st.session_state["import_bundle_issues"] = [{"code": "bundle_build_failed", "message": str(exc), "source": "dvfs_domains_json"}]
+                st.error(f"Bundle build failed: {exc}")
 
     payload = st.session_state["import_bundle_payload"]
     if save_clicked:
@@ -470,7 +681,11 @@ with st.container():
     if stage_result:
         st.json(stage_result)
 
-    batch_id = st.text_input("Batch ID", key="write_batch_id_widget")
+    batch_id = st.text_input(
+        "Batch ID",
+        key="write_batch_id_widget",
+        help="Write API staging batch id. Filled automatically after Stage bundle, or paste an existing batch id to validate/diff/apply it.",
+    )
     st.session_state["write_batch_id"] = batch_id
     st.markdown("</div>", unsafe_allow_html=True)
 

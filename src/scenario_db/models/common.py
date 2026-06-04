@@ -21,7 +21,7 @@ DocumentId = Annotated[
     StringConstraints(
         # Prefix is lowercase; suffix allows mixed-case for acronyms (e.g. iss-LLC-thrashing-0221)
         pattern=(
-            r"^(soc|ip|sub|sw|hal|kernel|fw|conn|proj|uc|"
+            r"^(soc|ip|sub|sw|hal|kernel|fw|conn|proj|uc|dvfs|"
             r"sim|meas|rev|waiver|iss|rule)-[a-zA-Z0-9][a-zA-Z0-9.\-]*$"
         )
     ),

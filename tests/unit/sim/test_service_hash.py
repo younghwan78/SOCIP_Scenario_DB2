@@ -32,6 +32,14 @@ def test_request_hash_ignores_debug_trace_flags() -> None:
     assert baseline == debug
 
 
+def test_request_hash_changes_with_dvfs_table_ref() -> None:
+    inputs = _inputs()
+    baseline = _request_hash(inputs, _request(dvfs_table_ref="dvfs-soc-exynos2700-v4"))
+    updated = _request_hash(inputs, _request(dvfs_table_ref="dvfs-soc-exynos2700-v5"))
+
+    assert baseline != updated
+
+
 def _inputs() -> SimulationInputs:
     return SimulationInputs(
         scenario_id="uc-camera-recording",
@@ -48,6 +56,7 @@ def _request(
     persist: bool = True,
     force: bool = False,
     config: SimulationRunConfig | None = None,
+    dvfs_table_ref: str | None = None,
 ) -> SimulateRequest:
     return SimulateRequest(
         scenario_id="uc-camera-recording",
@@ -59,6 +68,7 @@ def _request(
             "ambient_temp_c": ambient_temp_c,
         },
         config=config or SimulationRunConfig(asv_group=4, include_timeline=True),
+        dvfs_table_ref=dvfs_table_ref,
         persist=persist,
         force=force,
     )

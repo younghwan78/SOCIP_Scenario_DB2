@@ -6,7 +6,7 @@
 
 - Canonical YAML direct ETL: `soc`, `ip`, `sw_profile`, `sw_component`, `project`, `scenario.usecase`, `evidence.simulation`, `evidence.measurement`, `decision.*` 적재 가능.
 - Write API staging: `scenario.variant_overlay`, `scenario.pipeline_patch`, `scenario.import_bundle` 지원.
-- `scenario.import_bundle` 적용 문서: `soc`, `ip`, `sw_profile`, `project`, `scenario.usecase`.
+- `scenario.import_bundle` 적용 문서: `soc`, `soc.dvfs_table`, `ip`, `sw_profile`, `project`, `scenario.usecase`.
 - Simulation API: `POST /api/v1/simulation/run`에서 `persist=true`이면 `evidence.simulation`을 DB에 저장.
 - Exploration API: 기본적으로 DB에 저장하지 않고 canonical scenario/import bundle preview를 만든다.
 
@@ -71,9 +71,16 @@ Capability data는 "이 SoC/board/SW가 무엇을 지원하는가"를 담는다.
 | YAML kind | DB table | 필수 성격 | Query/Viewer에서 중요한 필드 |
 | --- | --- | --- | --- |
 | `soc` | `soc_platforms` | SoC identity와 포함 IP 목록 | `id`, `ips[].ref`, `process_node`, `memory_type`, `bus_protocol` |
+| `soc.dvfs_table` | `soc_dvfs_tables` | SoC 기준 DVFS table version | `soc_ref`, `dvfs_version`, `evt_hint`, `domains` |
 | `ip` | `ip_catalog` | HW IP, sensor, display, memory catalog | `id`, `category`, `hierarchy`, `capabilities`, `compatible_soc` |
 | `sw_profile` | `sw_profiles` | SW baseline 묶음 | `metadata.baseline_family`, `metadata.version`, `feature_flags`, `components` |
 | `sw_component` | `sw_components` | HAL/kernel/firmware 단품 | `category`, `metadata.version`, `feature_flags`, `capabilities` |
+
+`soc.dvfs_table`은 EVT revision과 독립적인 SoC-scoped sequence다.
+
+- `dvfs_version`: 같은 `soc_ref` 안에서 증가하는 table version. EVT0 진행 중에도 v0, v1, v2처럼 계속 늘 수 있다.
+- `evt_hint`: guide가 나온 시점이나 참고 EVT를 보존하는 메타데이터. 호환성 키나 version 축으로 쓰지 않는다.
+- `domains`: voltage domain별 DVFS level table. voltage domain 구성이 과제마다 달라질 수 있으므로 `source_project_ref`와 `domain_schema_hash`로 출처/범위를 보존할 수 있다.
 
 `ip_catalog.capabilities`는 현재 가장 중요한 확장 지점이다.
 
@@ -247,6 +254,7 @@ Supported bundle document kinds:
 
 ```text
 soc
+soc.dvfs_table
 ip
 sw_profile
 project
@@ -332,7 +340,8 @@ simulation result를 evidence로 저장하려면 API request에 `persist=true`�
 Before applying real data, check this list.
 
 - Every YAML has `id`, `schema_version`, and supported `kind`.
-- ID prefix follows the canonical pattern, such as `soc-`, `ip-`, `sw-`, `proj-`, `uc-`, `sim-`, `meas-`, `iss-`, `rule-`.
+- ID prefix follows the canonical pattern, such as `soc-`, `dvfs-`, `ip-`, `sw-`, `proj-`, `uc-`, `sim-`, `meas-`, `iss-`, `rule-`.
+- `soc.dvfs_table` uses unique `(soc_ref, dvfs_version)`; do not encode EVT as the DVFS version axis.
 - `project.metadata.soc_ref` exists in `soc_platforms`.
 - `project.metadata.sensor_module_ref` and `display_module_ref`, if present, exist in `ip_catalog`.
 - `project.metadata.default_sw_profile_ref`, if present, exists in `sw_profiles`.
