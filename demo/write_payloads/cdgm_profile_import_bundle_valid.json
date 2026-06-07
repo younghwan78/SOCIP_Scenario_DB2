@@ -1,0 +1,65 @@
+{
+  "kind": "scenario.import_bundle",
+  "actor": "cdgm-importer@example.com",
+  "note": "Stage CDGM profile document",
+  "payload": {
+    "import_report": {
+      "ok": true,
+      "generated": {
+        "soc.cdgm_profile": 1
+      },
+      "messages": []
+    },
+    "documents": [
+      {
+        "id": "cdgm-prof-soc-exynos2500-v1",
+        "schema_version": "2.3",
+        "kind": "soc.cdgm_profile",
+        "soc_ref": "soc-exynos2500",
+        "profile_version": 1,
+        "evt_hint": "EVT0",
+        "compatibility_scope": "soc",
+        "domain_schema_hash": "cam-isp-intcam-mfc-v1",
+        "source": {
+          "guide_name": "camera_dvfs_guide",
+          "source_revision": "arch-info-r1",
+          "path": "demo/cdgm_profiles/cdgm-prof-soc-exynos2500-v1.yaml",
+          "note": "Demo CDGM profile for Workbench file import."
+        },
+        "role_overrides": {
+          "MFC_MFD": {
+            "ip_ref": "ip-mfc-v14",
+            "arch_ip": "MFC_MFD",
+            "path_type": "codec",
+            "ppc": 4.0,
+            "vdd": "VDD_INT",
+            "dvfs_domain": "MFC",
+            "when": {
+              "scenario_domain": "camera",
+              "codec_flow": "decode"
+            }
+          },
+          "MFC_MFD_UHD60_HLG": {
+            "extends": "MFC_MFD",
+            "ip_ref": "ip-mfc-v14",
+            "arch_ip": "MFC_MFD_UHD60_HLG",
+            "path_type": "codec",
+            "ppc": 6.0,
+            "vdd": "VDD_INT",
+            "dvfs_domain": "MFC",
+            "when": {
+              "scenario_domain": "camera",
+              "resolution_class": "UHD",
+              "fps": 60,
+              "hdr_format": "HLG"
+            }
+          }
+        },
+        "selection_policy": {
+          "default_profile": true,
+          "note": "Use this profile when no project-specific CDGM profile is selected."
+        }
+      }
+    ]
+  }
+}

@@ -5,7 +5,7 @@ from typing import Any
 
 import requests
 
-from scenario_db.legacy_import.write_bundle import build_soc_dvfs_table_bundle_request
+from scenario_db.legacy_import.write_bundle import build_soc_cdgm_profile_bundle_request, build_soc_dvfs_table_bundle_request
 
 
 class ImportApiError(RuntimeError):

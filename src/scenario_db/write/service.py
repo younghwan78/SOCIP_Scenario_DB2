@@ -20,12 +20,13 @@ from scenario_db.api.schemas.write import (
     ValidateWriteResponse,
     ValidationIssue,
 )
-from scenario_db.db.models.capability import IpCatalog, SocDvfsTable, SocPlatform, SwProfile
+from scenario_db.db.models.capability import IpCatalog, SocCdgmProfile, SocDvfsTable, SocPlatform, SwProfile
 from scenario_db.db.models.definition import Project, Scenario, ScenarioVariant
 from scenario_db.db.models.write import WriteBatch, WriteEvent
-from scenario_db.etl.mappers.capability import upsert_ip, upsert_soc, upsert_soc_dvfs_table, upsert_sw_profile
+from scenario_db.etl.mappers.capability import upsert_ip, upsert_soc, upsert_soc_cdgm_profile, upsert_soc_dvfs_table, upsert_sw_profile
 from scenario_db.etl.mappers.definition import upsert_project, upsert_usecase
 from scenario_db.models.capability.hw import IpCatalog as PydanticIpCatalog
+from scenario_db.models.capability.hw import SocCdgmProfile as PydanticSocCdgmProfile
 from scenario_db.models.capability.hw import SocDvfsTable as PydanticSocDvfsTable
 from scenario_db.models.capability.hw import SocPlatform as PydanticSocPlatform
 from scenario_db.models.capability.sw import SwProfile as PydanticSwProfile
@@ -94,10 +95,11 @@ PATCH_LIST_FIELDS = {
     "remove_buffers",
 }
 ALLOWED_BASE_EDGE_TYPES = {"OTF", "vOTF", "M2M", "control"}
-IMPORT_KIND_ORDER = ["soc", "soc.dvfs_table", "ip", "sw_profile", "project", "scenario.usecase"]
+IMPORT_KIND_ORDER = ["soc", "soc.dvfs_table", "soc.cdgm_profile", "ip", "sw_profile", "project", "scenario.usecase"]
 IMPORT_MODEL_BY_KIND = {
     "soc": PydanticSocPlatform,
     "soc.dvfs_table": PydanticSocDvfsTable,
+    "soc.cdgm_profile": PydanticSocCdgmProfile,
     "ip": PydanticIpCatalog,
     "sw_profile": PydanticSwProfile,
     "project": PydanticProject,
@@ -106,6 +108,7 @@ IMPORT_MODEL_BY_KIND = {
 IMPORT_UPSERT_BY_KIND = {
     "soc": upsert_soc,
     "soc.dvfs_table": upsert_soc_dvfs_table,
+    "soc.cdgm_profile": upsert_soc_cdgm_profile,
     "ip": upsert_ip,
     "sw_profile": upsert_sw_profile,
     "project": upsert_project,
@@ -114,6 +117,7 @@ IMPORT_UPSERT_BY_KIND = {
 IMPORT_DB_MODEL_BY_KIND = {
     "soc": SocPlatform,
     "soc.dvfs_table": SocDvfsTable,
+    "soc.cdgm_profile": SocCdgmProfile,
     "ip": IpCatalog,
     "sw_profile": SwProfile,
     "project": Project,
@@ -443,6 +447,8 @@ def validate_import_bundle(db: Session, normalized: dict[str, Any]) -> list[Vali
         if kind == "soc.dvfs_table":
             issues.extend(_validate_import_dvfs_table_refs(db, doc, included, path))
             issues.extend(_validate_import_dvfs_table_version_key(db, doc, seen_dvfs_versions, path))
+        if kind == "soc.cdgm_profile":
+            issues.extend(_validate_import_cdgm_profile_refs(db, doc, included, path))
         if kind == "scenario.usecase":
             issues.extend(_validate_import_usecase_refs(db, doc, included, path))
 
@@ -971,6 +977,46 @@ def _validate_import_dvfs_table_version_key(
     return issues
 
 
+def _validate_import_cdgm_profile_refs(
+    db: Session,
+    doc: dict[str, Any],
+    included: dict[str, set[str]],
+    path: str,
+) -> list[ValidationIssue]:
+    issues: list[ValidationIssue] = []
+    soc_ref = doc.get("soc_ref")
+    if soc_ref and soc_ref not in included.get("soc", set()) and db.query(SocPlatform).filter_by(id=soc_ref).one_or_none() is None:
+        issues.append(_issue("error", "import_soc_ref_not_found", f"SoC not found: {soc_ref}", f"{path}.soc_ref"))
+
+    source_project_ref = doc.get("source_project_ref")
+    if source_project_ref and source_project_ref not in included.get("project", set()) and db.query(Project).filter_by(id=source_project_ref).one_or_none() is None:
+        issues.append(
+            _issue(
+                "error",
+                "import_project_ref_not_found",
+                f"Project not found: {source_project_ref}",
+                f"{path}.source_project_ref",
+            )
+        )
+
+    ip_refs = included.get("ip", set())
+    db_ip_refs = {row.id for row in db.query(IpCatalog).all()}
+    for role_key, override in (doc.get("role_overrides") or {}).items():
+        if not isinstance(override, dict):
+            continue
+        ip_ref = override.get("ip_ref")
+        if ip_ref and ip_ref not in ip_refs and ip_ref not in db_ip_refs:
+            issues.append(
+                _issue(
+                    "error",
+                    "import_cdgm_profile_ip_ref_not_found",
+                    f"CDGM role override {role_key} references missing IP catalog: {ip_ref}",
+                    f"{path}.role_overrides.{role_key}.ip_ref",
+                )
+            )
+    return issues
+
+
 def _existing_import_doc_signatures(db: Session, kind: str, ids: list[str]) -> dict[str, str | None]:
     model = IMPORT_DB_MODEL_BY_KIND.get(kind)
     if model is None or not ids:
@@ -1021,6 +1067,23 @@ def _existing_row_to_import_doc(db: Session, kind: str, row: Any) -> dict[str, A
                 "compatibility_scope": row.compatibility_scope,
                 "source_project_ref": row.source_project_ref,
                 "domain_schema_hash": row.domain_schema_hash,
+            }
+        )
+    if kind == "soc.cdgm_profile":
+        return _compact_doc(
+            {
+                "id": row.id,
+                "schema_version": row.schema_version,
+                "kind": "soc.cdgm_profile",
+                "soc_ref": row.soc_ref,
+                "profile_version": row.profile_version,
+                "evt_hint": row.evt_hint,
+                "source": row.source,
+                "compatibility_scope": row.compatibility_scope,
+                "source_project_ref": row.source_project_ref,
+                "domain_schema_hash": row.domain_schema_hash,
+                "role_overrides": row.role_overrides or {},
+                "selection_policy": row.selection_policy or {},
             }
         )
     if kind == "ip":

@@ -14,6 +14,7 @@ from typing import Any
 from urllib.parse import urlencode
 
 import streamlit as st
+import yaml
 
 _root = Path(__file__).resolve().parents[2]
 for path in (_root / "src", _root, _root / "dashboard"):
@@ -23,6 +24,7 @@ for path in (_root / "src", _root, _root / "dashboard"):
 from dashboard.components.import_api_client import (
     ImportApiError,
     apply_batch,
+    build_soc_cdgm_profile_bundle_request,
     build_soc_dvfs_table_bundle_request,
     diff_batch,
     diff_change_rows,
@@ -223,6 +225,19 @@ def _uploaded_dvfs_file_payload(uploaded_domains: Any) -> dict[str, Any]:
     return {"domains_text": json.dumps(value, indent=2, ensure_ascii=True)}
 
 
+def _uploaded_cdgm_profile_document(uploaded_profile: Any) -> dict[str, Any]:
+    raw_text = uploaded_profile.getvalue().decode("utf-8-sig")
+    if str(uploaded_profile.name).lower().endswith(".json"):
+        value = json.loads(raw_text)
+    else:
+        value = yaml.safe_load(raw_text)
+    if not isinstance(value, dict):
+        raise ValueError("Uploaded CDGM profile file must contain one YAML/JSON object.")
+    if value.get("kind") != "soc.cdgm_profile":
+        raise ValueError("Uploaded CDGM profile file must have kind: soc.cdgm_profile.")
+    return value
+
+
 def _viewer_links_for_apply(payload: dict[str, Any], scenario_refs: list[str]) -> list[tuple[str, str]]:
     documents = (payload.get("payload") or {}).get("documents") or []
     projects = {
@@ -403,13 +418,11 @@ st.markdown(
 with st.container():
     st.markdown('<div class="step-card">', unsafe_allow_html=True)
     st.markdown("### 1. Build Import Bundle")
-    build_mode = st.radio(
-        "Import mode",
-        ["Generated canonical directory", "SoC DVFS table update"],
-        horizontal=True,
-        help="Choose directory import for legacy importer output, or DVFS update for one SoC DVFS table document.",
-    )
-    if build_mode == "Generated canonical directory":
+    canonical_tab, dvfs_tab, cdgm_tab = st.tabs(["Canonical Bundle", "DVFS Table", "CDGM Profile"])
+    save_clicked = False
+    save_output_path = ""
+
+    with canonical_tab:
         st.caption("Use an existing generated canonical YAML directory. Run legacy importer CLI first if this directory does not exist.")
         path_col1, path_col2 = st.columns([1, 1])
         with path_col1:
@@ -435,9 +448,11 @@ with st.container():
         status_col3.metric("Output parent", "exists" if Path(output_payload_text).parent.exists() else "missing")
         col_a, col_b = st.columns([1, 1])
         with col_a:
-            build_clicked = st.button("Build scenario.import_bundle", type="primary")
+            build_clicked = st.button("Build scenario.import_bundle", type="primary", key="build_canonical_import_bundle")
         with col_b:
-            save_clicked = st.button("Save bundle JSON")
+            if st.button("Save bundle JSON", key="save_canonical_import_bundle"):
+                save_clicked = True
+                save_output_path = output_payload_text
 
         if build_clicked:
             try:
@@ -453,7 +468,8 @@ with st.container():
                 st.session_state["import_bundle_payload"] = None
                 st.session_state["import_bundle_issues"] = [{"code": "bundle_build_failed", "message": str(exc), "source": generated_dir_text}]
                 st.error(f"Bundle build failed: {exc}")
-    else:
+
+    with dvfs_tab:
         st.caption("Create a single soc.dvfs_table import bundle. dvfs_version is a SoC-scoped sequence; evt_hint is metadata.")
         _state_default("dvfs_domains_json_text", _dvfs_domains_template())
         _state_default("dvfs_soc_ref_widget", "soc-exynos2700")
@@ -465,10 +481,12 @@ with st.container():
         _state_default("dvfs_domain_schema_hash_widget", "")
         _state_default("dvfs_source_note_widget", "")
         _state_default("dvfs_source_project_ref_widget", "")
+        _state_default("dvfs_output_payload_text", str(_root / "demo" / "generated" / "scenariodb" / "dvfs_import_bundle.json"))
 
         uploaded_domains = st.file_uploader(
             "DVFS domains file",
             type=["json"],
+            key="dvfs_domains_file_uploader",
             help="Upload either a domains JSON object or a full soc.dvfs_table JSON document.",
         )
         if uploaded_domains is not None:
@@ -521,10 +539,11 @@ with st.container():
 
         output_payload_text = st.text_input(
             "Bundle output JSON",
-            key="output_payload_widget",
+            key="dvfs_output_payload_widget",
+            value=st.session_state["dvfs_output_payload_text"],
             help="Optional JSON file path for the generated scenario.import_bundle request body.",
         )
-        st.session_state["output_payload_text"] = output_payload_text
+        st.session_state["dvfs_output_payload_text"] = output_payload_text
 
         with st.expander("Optional source metadata", expanded=False):
             source_col1, source_col2 = st.columns([1, 1])
@@ -574,9 +593,11 @@ with st.container():
         status_col3.metric("Output parent", "exists" if Path(output_payload_text).parent.exists() else "missing")
         col_a, col_b = st.columns([1, 1])
         with col_a:
-            build_clicked = st.button("Build DVFS import_bundle", type="primary")
+            build_clicked = st.button("Build DVFS import_bundle", type="primary", key="build_dvfs_import_bundle")
         with col_b:
-            save_clicked = st.button("Save bundle JSON")
+            if st.button("Save bundle JSON", key="save_dvfs_import_bundle"):
+                save_clicked = True
+                save_output_path = output_payload_text
 
         if build_clicked:
             try:
@@ -606,11 +627,80 @@ with st.container():
                 st.session_state["import_bundle_issues"] = [{"code": "bundle_build_failed", "message": str(exc), "source": "dvfs_domains_json"}]
                 st.error(f"Bundle build failed: {exc}")
 
+    with cdgm_tab:
+        st.caption("Upload one full soc.cdgm_profile YAML or JSON document. Conditional PPC/profile overrides are staged through the same Write API flow.")
+        _state_default("cdgm_profile_json_text", "")
+        _state_default("cdgm_output_payload_text", str(_root / "demo" / "generated" / "scenariodb" / "cdgm_profile_import_bundle.json"))
+
+        uploaded_profile = st.file_uploader(
+            "CDGM profile file",
+            type=["yaml", "yml", "json"],
+            key="cdgm_profile_file_uploader",
+            help="Upload a complete soc.cdgm_profile YAML or JSON file. This is the preferred path for CDGM profile import.",
+        )
+        if uploaded_profile is not None:
+            try:
+                upload_key = f"{uploaded_profile.name}:{len(uploaded_profile.getvalue())}"
+                parsed_profile = _uploaded_cdgm_profile_document(uploaded_profile)
+                if st.session_state.get("cdgm_uploaded_profile_file") != upload_key:
+                    st.session_state["cdgm_profile_json_text"] = json.dumps(parsed_profile, indent=2, ensure_ascii=True)
+                    st.session_state["cdgm_uploaded_profile_file"] = upload_key
+                st.success(f"Loaded CDGM profile file: {uploaded_profile.name}")
+            except Exception as exc:
+                st.error(f"CDGM profile file import failed: {exc}")
+
+        cdgm_output_payload_text = st.text_input(
+            "CDGM bundle output JSON",
+            key="cdgm_output_payload_widget",
+            value=st.session_state["cdgm_output_payload_text"],
+            help="Optional JSON file path for the generated scenario.import_bundle request body.",
+        )
+        st.session_state["cdgm_output_payload_text"] = cdgm_output_payload_text
+        cdgm_profile_json = st.text_area(
+            "CDGM profile document JSON",
+            key="cdgm_profile_json_text",
+            height=320,
+            help="Parsed soc.cdgm_profile document. Upload a file above, then review or edit this JSON before building the bundle.",
+        )
+
+        status_col1, status_col2, status_col3 = st.columns(3)
+        status_col1.metric("Document kind", "soc.cdgm_profile")
+        try:
+            cdgm_preview = json.loads(cdgm_profile_json) if cdgm_profile_json.strip() else {}
+        except json.JSONDecodeError:
+            cdgm_preview = {}
+        status_col2.metric("Target SoC", cdgm_preview.get("soc_ref") or "missing")
+        status_col3.metric("Output parent", "exists" if Path(cdgm_output_payload_text).parent.exists() else "missing")
+
+        col_a, col_b = st.columns([1, 1])
+        with col_a:
+            build_clicked = st.button("Build CDGM import_bundle", type="primary", key="build_cdgm_import_bundle")
+        with col_b:
+            if st.button("Save bundle JSON", key="save_cdgm_import_bundle"):
+                save_clicked = True
+                save_output_path = cdgm_output_payload_text
+
+        if build_clicked:
+            try:
+                document = json.loads(cdgm_profile_json)
+                payload = build_soc_cdgm_profile_bundle_request(document, actor=actor, note=note)
+                st.session_state["import_bundle_payload"] = payload
+                st.session_state["import_bundle_issues"] = []
+                st.session_state["stage_result"] = None
+                st.session_state["validation_result"] = None
+                st.session_state["diff_result"] = None
+                st.session_state["apply_result"] = None
+                st.success("CDGM profile import bundle built")
+            except Exception as exc:
+                st.session_state["import_bundle_payload"] = None
+                st.session_state["import_bundle_issues"] = [{"code": "bundle_build_failed", "message": str(exc), "source": "cdgm_profile_json"}]
+                st.error(f"Bundle build failed: {exc}")
+
     payload = st.session_state["import_bundle_payload"]
     if save_clicked:
         if payload:
-            _save_payload(output_payload_text, payload)
-            st.success(f"Saved: {output_payload_text}")
+            _save_payload(save_output_path, payload)
+            st.success(f"Saved: {save_output_path}")
         else:
             st.warning("Build a bundle before saving.")
 

@@ -145,3 +145,51 @@ class SocDvfsTable(BaseScenarioModel):
             if table.domain != key:
                 raise ValueError(f"domains.{key}.domain must match the domain key")
         return self
+
+
+class CdgmProfileSource(SocDvfsTableSource):
+    pass
+
+
+class CdgmRoleOverride(BaseScenarioModel):
+    extends: str | None = None
+    ip_ref: DocumentId | None = None
+    arch_ip: str
+    path_type: Literal["rt", "nrt", "codec", "input", "output", "generic"] = "generic"
+    ppc: float
+    vdd: str | None = None
+    dvfs_domain: str
+    pos: list[str] = Field(default_factory=list)
+    when: dict[str, Any] = Field(default_factory=dict)
+    source: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _validate_role_override(self) -> CdgmRoleOverride:
+        if self.ppc <= 0:
+            raise ValueError("ppc must be positive")
+        if self.path_type == "nrt" and not self.pos:
+            raise ValueError("nrt CDGM role override must declare pos")
+        return self
+
+
+class SocCdgmProfile(BaseScenarioModel):
+    id: DocumentId
+    schema_version: SchemaVersion
+    kind: Literal["soc.cdgm_profile"]
+    soc_ref: DocumentId
+    profile_version: int
+    evt_hint: str | None = None
+    source: CdgmProfileSource | None = None
+    compatibility_scope: Literal["soc", "project"] = "soc"
+    source_project_ref: DocumentId | None = None
+    domain_schema_hash: str | None = None
+    role_overrides: dict[str, CdgmRoleOverride] = Field(default_factory=dict)
+    selection_policy: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _validate_cdgm_profile(self) -> SocCdgmProfile:
+        if self.profile_version < 0:
+            raise ValueError("profile_version must be non-negative")
+        if self.compatibility_scope == "project" and not self.source_project_ref:
+            raise ValueError("source_project_ref is required when compatibility_scope is project")
+        return self

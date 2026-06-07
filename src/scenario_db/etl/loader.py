@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from scenario_db.etl.mappers.capability import (
     upsert_ip,
     upsert_soc,
+    upsert_soc_cdgm_profile,
     upsert_soc_dvfs_table,
     upsert_sw_component,
     upsert_sw_profile,
@@ -31,6 +32,7 @@ logger = logging.getLogger(__name__)
 MAPPER_REGISTRY: dict[str, callable] = {
     "soc":                    upsert_soc,
     "soc.dvfs_table":         upsert_soc_dvfs_table,
+    "soc.cdgm_profile":       upsert_soc_cdgm_profile,
     "ip":                     upsert_ip,
     "sw_profile":             upsert_sw_profile,
     "sw_component":           upsert_sw_component,
@@ -48,6 +50,7 @@ MAPPER_REGISTRY: dict[str, callable] = {
 LOAD_ORDER = [
     "soc",
     "soc.dvfs_table",
+    "soc.cdgm_profile",
     "ip",
     "sw_profile",
     "sw_component",

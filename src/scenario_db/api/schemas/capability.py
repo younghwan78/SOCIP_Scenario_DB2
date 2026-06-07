@@ -29,6 +29,22 @@ class SocDvfsTableResponse(BaseModel):
     domain_schema_hash: str | None = None
 
 
+class SocCdgmProfileResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    schema_version: str
+    soc_ref: str
+    profile_version: int
+    evt_hint: str | None = None
+    source: dict | None = None
+    compatibility_scope: str
+    source_project_ref: str | None = None
+    domain_schema_hash: str | None = None
+    role_overrides: dict = {}
+    selection_policy: dict = {}
+
+
 class IpCatalogResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

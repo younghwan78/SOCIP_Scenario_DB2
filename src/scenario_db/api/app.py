@@ -10,7 +10,7 @@ from sqlalchemy import create_engine
 
 from scenario_db.api.cache import RuleCache
 from scenario_db.api.exceptions import register_handlers
-from scenario_db.api.routers import capability, decision, definition, evidence, exploration, explorer, query, runtime, simulation, write
+from scenario_db.api.routers import capability, cdgm, decision, definition, evidence, exploration, explorer, query, runtime, simulation, write
 from scenario_db.api.routers.utility import health_router
 from scenario_db.api.routers import view as view_router
 from scenario_db.config import get_settings
@@ -77,6 +77,7 @@ def create_app() -> FastAPI:
     # /api/v1/*
     for r in [
         capability.router,
+        cdgm.router,
         definition.router,
         evidence.router,
         decision.router,

@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from scenario_db.db.models.capability import IpCatalog, SocDvfsTable, SocPlatform, SwComponent, SwProfile
+from scenario_db.db.models.capability import IpCatalog, SocCdgmProfile, SocDvfsTable, SocPlatform, SwComponent, SwProfile
 from scenario_db.models.capability.hw import IpCatalog as PydanticIp
+from scenario_db.models.capability.hw import SocCdgmProfile as PydanticSocCdgmProfile
 from scenario_db.models.capability.hw import SocDvfsTable as PydanticSocDvfsTable
 from scenario_db.models.capability.hw import SocPlatform as PydanticSoc
 from scenario_db.models.capability.sw import SwComponent as PydanticSwComponent
@@ -41,6 +42,28 @@ def upsert_soc_dvfs_table(raw: dict, sha256: str, session: Session) -> None:
     row.compatibility_scope = obj.compatibility_scope
     row.source_project_ref = str(obj.source_project_ref) if obj.source_project_ref else None
     row.domain_schema_hash = obj.domain_schema_hash
+    row.yaml_sha256 = sha256
+    session.add(row)
+
+
+def upsert_soc_cdgm_profile(raw: dict, sha256: str, session: Session) -> None:
+    obj = PydanticSocCdgmProfile.model_validate(raw)
+    row = session.get(SocCdgmProfile, obj.id) or SocCdgmProfile(id=obj.id)
+    if row.yaml_sha256 == sha256:
+        return
+    row.schema_version = obj.schema_version
+    row.soc_ref = str(obj.soc_ref)
+    row.profile_version = obj.profile_version
+    row.evt_hint = obj.evt_hint
+    row.source = obj.source.model_dump(exclude_none=True) if obj.source else None
+    row.compatibility_scope = obj.compatibility_scope
+    row.source_project_ref = str(obj.source_project_ref) if obj.source_project_ref else None
+    row.domain_schema_hash = obj.domain_schema_hash
+    row.role_overrides = {
+        key: value.model_dump(exclude_none=True)
+        for key, value in obj.role_overrides.items()
+    }
+    row.selection_policy = dict(obj.selection_policy)
     row.yaml_sha256 = sha256
     session.add(row)
 

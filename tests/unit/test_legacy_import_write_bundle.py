@@ -4,6 +4,7 @@ import json
 
 from scenario_db.legacy_import.write_bundle import (
     build_import_bundle_request,
+    build_soc_cdgm_profile_bundle_request,
     build_soc_dvfs_table_bundle_request,
     main,
 )
@@ -102,6 +103,54 @@ domains:
     assert payload["payload"]["documents"][1]["dvfs_version"] == 4
 
 
+def test_build_import_bundle_request_includes_soc_cdgm_profile(tmp_path):
+    generated = tmp_path / "generated"
+    hw_dir = generated / "00_hw"
+    hw_dir.mkdir(parents=True)
+    (generated / "import_report.json").write_text(
+        json.dumps({"ok": True, "generated": {"validated_yaml": 1}, "messages": []}),
+        encoding="utf-8",
+    )
+    (hw_dir / "cdgm-prof-soc-A-v1.yaml").write_text(
+        """
+id: cdgm-prof-soc-A-v1
+schema_version: "2.3"
+kind: soc.cdgm_profile
+soc_ref: soc-A
+profile_version: 1
+evt_hint: EVT0
+compatibility_scope: soc
+domain_schema_hash: cam-isp-mfc-v1
+source:
+  guide_name: camera_dvfs_guide
+  source_revision: arch-info-r1
+role_overrides:
+  MFC_MFD_UHD60_HLG:
+    extends: MFC_MFD
+    ip_ref: ip-mfc-v14
+    arch_ip: MFC_MFD_UHD60_HLG
+    path_type: codec
+    ppc: 6.0
+    vdd: VDD_INT
+    dvfs_domain: MFC
+    when:
+      scenario_domain: camera
+      resolution_class: UHD
+      fps: 60
+      hdr_format: HLG
+selection_policy:
+  default_profile: true
+""".strip(),
+        encoding="utf-8",
+    )
+
+    payload, issues = build_import_bundle_request(generated)
+
+    assert issues == []
+    assert [doc["kind"] for doc in payload["payload"]["documents"]] == ["soc.cdgm_profile"]
+    assert payload["payload"]["documents"][0]["profile_version"] == 1
+
+
 def test_build_soc_dvfs_table_bundle_request_core_builder():
     payload = build_soc_dvfs_table_bundle_request(
         soc_ref="soc-exynos2700",
@@ -119,6 +168,29 @@ def test_build_soc_dvfs_table_bundle_request_core_builder():
     assert doc["id"] == "dvfs-soc-exynos2700-v5"
     assert doc["dvfs_version"] == 5
     assert doc["evt_hint"] == "EVT1"
+
+
+def test_build_soc_cdgm_profile_bundle_request_core_builder():
+    payload = build_soc_cdgm_profile_bundle_request(
+        {
+            "id": "cdgm-prof-soc-exynos2700-v1",
+            "schema_version": "2.3",
+            "kind": "soc.cdgm_profile",
+            "soc_ref": "soc-exynos2700",
+            "profile_version": 1,
+            "compatibility_scope": "soc",
+            "role_overrides": {},
+        },
+        actor="engineer",
+        note="CDGM profile update",
+    )
+
+    document = payload["payload"]["documents"][0]
+    assert payload["kind"] == "scenario.import_bundle"
+    assert payload["actor"] == "engineer"
+    assert document["kind"] == "soc.cdgm_profile"
+    assert document["profile_version"] == 1
+    assert payload["payload"]["import_report"]["generated"]["soc.cdgm_profile"] == 1
 
 
 def test_write_bundle_cli_builds_soc_dvfs_table_bundle(tmp_path):

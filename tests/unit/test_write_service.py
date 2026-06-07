@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 
-from scenario_db.db.models.capability import IpCatalog, SocDvfsTable, SocPlatform, SwProfile
+from scenario_db.db.models.capability import IpCatalog, SocCdgmProfile, SocDvfsTable, SocPlatform, SwProfile
 from scenario_db.db.models.definition import Project, Scenario, ScenarioVariant
 from scenario_db.write.service import (
     build_import_bundle_diff,
@@ -104,6 +104,7 @@ class _Db:
             yaml_sha256="test",
         )
         self.dvfs_tables: list[SocDvfsTable] = []
+        self.cdgm_profiles: list[SocCdgmProfile] = []
         self.sw_profile = SwProfile(
             id="sw-vendor-v1.2.3",
             schema_version="2.2",
@@ -133,6 +134,8 @@ class _Db:
             return _Query([self.soc])
         if model is SocDvfsTable:
             return _Query(self.dvfs_tables)
+        if model is SocCdgmProfile:
+            return _Query(self.cdgm_profiles)
         if model is IpCatalog:
             return _Query([self.ip, self.ip_isp, self.ip_csis])
         if model is SwProfile:
@@ -428,6 +431,43 @@ def _import_dvfs_table_doc(**overrides):
     return doc
 
 
+def _import_cdgm_profile_doc(**overrides):
+    doc = {
+        "id": "cdgm-prof-soc-A-v1",
+        "schema_version": "2.3",
+        "kind": "soc.cdgm_profile",
+        "soc_ref": "soc-A",
+        "profile_version": 1,
+        "evt_hint": "EVT0",
+        "compatibility_scope": "soc",
+        "domain_schema_hash": "cam-isp-mfc-v1",
+        "source": {
+            "guide_name": "camera_dvfs_guide",
+            "source_revision": "arch-info-r1",
+        },
+        "role_overrides": {
+            "MFC_MFD_UHD60_HLG": {
+                "extends": "MFC_MFD",
+                "ip_ref": "ip-mfc-v14",
+                "arch_ip": "MFC_MFD_UHD60_HLG",
+                "path_type": "codec",
+                "ppc": 6.0,
+                "vdd": "VDD_INT",
+                "dvfs_domain": "MFC",
+                "when": {
+                    "scenario_domain": "camera",
+                    "resolution_class": "UHD",
+                    "fps": 60,
+                    "hdr_format": "HLG",
+                },
+            }
+        },
+        "selection_policy": {"default_profile": True},
+    }
+    doc.update(overrides)
+    return doc
+
+
 def _sync_db_scenario_from_doc(db: _Db, doc: dict) -> None:
     db.scenario.id = doc["id"]
     db.scenario.schema_version = doc["schema_version"]
@@ -490,6 +530,35 @@ def test_validate_import_bundle_accepts_soc_dvfs_table_doc():
     assert issues == []
 
 
+def test_validate_import_bundle_accepts_soc_cdgm_profile_doc():
+    normalized = normalize_import_bundle_payload(
+        {"documents": [_import_soc_doc(), _import_cdgm_profile_doc()]}
+    )
+
+    issues = validate_import_bundle(_Db(), normalized)
+
+    assert issues == []
+
+
+def test_validate_import_bundle_rejects_soc_cdgm_profile_unknown_ip_ref():
+    doc = _import_cdgm_profile_doc(
+        role_overrides={
+            "MFC_MFD": {
+                "ip_ref": "ip-missing-v1",
+                "arch_ip": "MFC_MFD",
+                "path_type": "codec",
+                "ppc": 4.0,
+                "dvfs_domain": "MFC",
+            }
+        }
+    )
+    normalized = normalize_import_bundle_payload({"documents": [_import_soc_doc(), doc]})
+
+    issues = validate_import_bundle(_Db(), normalized)
+
+    assert any(issue.code == "import_cdgm_profile_ip_ref_not_found" for issue in issues)
+
+
 def test_validate_import_bundle_rejects_duplicate_soc_dvfs_version():
     normalized = normalize_import_bundle_payload(
         {
@@ -537,6 +606,17 @@ def test_import_bundle_diff_reports_soc_dvfs_table_add():
     assert change.change == "add"
     assert change.after["added_ids"] == ["dvfs-soc-A-v4"]
     assert diff.impact["document_counts"]["soc.dvfs_table"] == 1
+
+
+def test_import_bundle_diff_reports_soc_cdgm_profile_add():
+    normalized = normalize_import_bundle_payload({"documents": [_import_cdgm_profile_doc()]})
+
+    diff = build_import_bundle_diff(_Db(), normalized)
+
+    change = next(change for change in diff.changes if change.field == "documents.soc.cdgm_profile")
+    assert change.change == "add"
+    assert change.after["added_ids"] == ["cdgm-prof-soc-A-v1"]
+    assert diff.impact["document_counts"]["soc.cdgm_profile"] == 1
 
 
 def test_validate_import_bundle_rejects_invalid_sw_profile_doc():

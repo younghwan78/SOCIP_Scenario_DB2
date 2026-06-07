@@ -9,14 +9,23 @@ from scenario_db.legacy_import.read_legacy import read_yaml
 
 
 WRITE_BUNDLE_KIND = "scenario.import_bundle"
-SUPPORTED_DOCUMENT_KINDS = {"soc", "soc.dvfs_table", "ip", "sw_profile", "project", "scenario.usecase"}
+SUPPORTED_DOCUMENT_KINDS = {
+    "soc",
+    "soc.dvfs_table",
+    "soc.cdgm_profile",
+    "ip",
+    "sw_profile",
+    "project",
+    "scenario.usecase",
+}
 DOCUMENT_KIND_ORDER = {
     "soc": 0,
     "soc.dvfs_table": 1,
-    "ip": 2,
-    "sw_profile": 3,
-    "project": 4,
-    "scenario.usecase": 5,
+    "soc.cdgm_profile": 2,
+    "ip": 3,
+    "sw_profile": 4,
+    "project": 5,
+    "scenario.usecase": 6,
 }
 
 
@@ -138,6 +147,29 @@ def build_soc_dvfs_table_bundle_request(
             "import_report": {
                 "ok": True,
                 "generated": {"soc.dvfs_table": 1},
+                "messages": [],
+            },
+            "documents": [document],
+        },
+    }
+
+
+def build_soc_cdgm_profile_bundle_request(
+    document: dict[str, Any],
+    *,
+    actor: str | None = None,
+    note: str | None = None,
+) -> dict[str, Any]:
+    if document.get("kind") != "soc.cdgm_profile":
+        raise ValueError("CDGM profile import requires a soc.cdgm_profile document.")
+    return {
+        "kind": WRITE_BUNDLE_KIND,
+        "actor": actor,
+        "note": note,
+        "payload": {
+            "import_report": {
+                "ok": True,
+                "generated": {"soc.cdgm_profile": 1},
                 "messages": [],
             },
             "documents": [document],

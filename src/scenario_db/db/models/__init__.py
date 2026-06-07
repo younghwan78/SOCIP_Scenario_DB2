@@ -1,4 +1,4 @@
-from scenario_db.db.models.capability import IpCatalog, SocDvfsTable, SocPlatform, SwComponent, SwProfile
+from scenario_db.db.models.capability import IpCatalog, SocCdgmProfile, SocDvfsTable, SocPlatform, SwComponent, SwProfile
 from scenario_db.db.models.definition import Project, Scenario, ScenarioVariant
 from scenario_db.db.models.evidence import Evidence, SweepJob
 from scenario_db.db.models.write import WriteBatch, WriteEvent
@@ -14,6 +14,7 @@ from scenario_db.db.models.decision import (
 __all__ = [
     "SocPlatform",
     "SocDvfsTable",
+    "SocCdgmProfile",
     "IpCatalog",
     "SwProfile",
     "SwComponent",

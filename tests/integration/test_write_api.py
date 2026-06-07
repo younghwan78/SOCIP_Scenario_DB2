@@ -440,3 +440,73 @@ def test_import_bundle_stage_validate_diff_apply(api_client: TestClient):
     variant = api_client.get("/api/v1/scenarios/uc-import-bundle-write-test/variants/FHD30-Imported")
     assert variant.status_code == 200
     assert variant.json()["buffer_overrides"]["RECORD_BUF"]["compression"] == "SBWC_v4"
+
+
+def test_import_bundle_stage_validate_diff_apply_soc_cdgm_profile(api_client: TestClient):
+    payload = {
+        "kind": "scenario.import_bundle",
+        "actor": "codex-test",
+        "note": "integration test CDGM profile import",
+        "payload": {
+            "import_report": {
+                "ok": True,
+                "generated": {"soc.cdgm_profile": 1},
+                "messages": [],
+            },
+            "documents": [
+                {
+                    "id": "cdgm-prof-soc-exynos2500-v1",
+                    "schema_version": "2.3",
+                    "kind": "soc.cdgm_profile",
+                    "soc_ref": "soc-exynos2500",
+                    "profile_version": 1,
+                    "evt_hint": "EVT0",
+                    "compatibility_scope": "soc",
+                    "domain_schema_hash": "cam-isp-mfc-v1",
+                    "source": {
+                        "guide_name": "camera_dvfs_guide",
+                        "source_revision": "arch-info-r1",
+                    },
+                    "role_overrides": {
+                        "MFC_MFD_UHD60_HLG": {
+                            "extends": "MFC_MFD",
+                            "ip_ref": "ip-mfc-v14",
+                            "arch_ip": "MFC_MFD_UHD60_HLG",
+                            "path_type": "codec",
+                            "ppc": 6.0,
+                            "vdd": "VDD_INT",
+                            "dvfs_domain": "MFC",
+                            "when": {
+                                "scenario_domain": "camera",
+                                "resolution_class": "UHD",
+                                "fps": 60,
+                                "hdr_format": "HLG",
+                            },
+                        }
+                    },
+                    "selection_policy": {"default_profile": True},
+                }
+            ],
+        },
+    }
+    stage = api_client.post("/api/v1/write/staging", json=payload)
+    assert stage.status_code == 200
+    batch_id = stage.json()["batch_id"]
+
+    validation = api_client.post(f"/api/v1/write/staging/{batch_id}/validate")
+    assert validation.status_code == 200
+    assert validation.json()["valid"] is True
+
+    diff = api_client.post(f"/api/v1/write/staging/{batch_id}/diff")
+    assert diff.status_code == 200
+    assert diff.json()["impact"]["document_counts"]["soc.cdgm_profile"] == 1
+
+    applied = api_client.post(f"/api/v1/write/staging/{batch_id}/apply")
+    assert applied.status_code == 200
+    assert applied.json()["applied_refs"]["document_counts"]["soc.cdgm_profile"] == 1
+
+    profile = api_client.get("/api/v1/soc-cdgm-profiles/cdgm-prof-soc-exynos2500-v1")
+    assert profile.status_code == 200
+    body = profile.json()
+    assert body["soc_ref"] == "soc-exynos2500"
+    assert body["role_overrides"]["MFC_MFD_UHD60_HLG"]["ppc"] == 6.0

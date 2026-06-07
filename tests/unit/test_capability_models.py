@@ -76,6 +76,7 @@ class _DI(BaseModel):
 @pytest.mark.parametrize("doc_id", [
     "ip-isp-v12",
     "sw-vendor-v1.2.3",
+    "cdgm-prof-soc-A-v1",
     "hal-cam-v4.5",
     "kernel-6.1.50-android15",
     "fw-isp-0x41",
@@ -251,6 +252,68 @@ def test_soc_dvfs_table_model_keeps_evt_as_metadata():
     assert obj.dvfs_version == 4
     assert obj.evt_hint == "EVT1"
     assert obj.domains["CAM"].levels[1].speed_mhz == 332.0
+
+
+def test_soc_cdgm_profile_model_accepts_conditional_role_overrides():
+    from scenario_db.models.capability.hw import SocCdgmProfile
+
+    obj = SocCdgmProfile.model_validate(
+        {
+            "id": "cdgm-prof-soc-A-v1",
+            "schema_version": "2.3",
+            "kind": "soc.cdgm_profile",
+            "soc_ref": "soc-A",
+            "profile_version": 1,
+            "evt_hint": "EVT0",
+            "compatibility_scope": "project",
+            "source_project_ref": "proj-A",
+            "domain_schema_hash": "cam-isp-mfc-v1",
+            "source": {
+                "guide_name": "camera_dvfs_guide",
+                "source_revision": "arch-info-r1",
+            },
+            "role_overrides": {
+                "MFC_MFD_UHD60_HLG": {
+                    "extends": "MFC_MFD",
+                    "ip_ref": "ip-mfc-v14",
+                    "arch_ip": "MFC_MFD_UHD60_HLG",
+                    "path_type": "codec",
+                    "ppc": 6.0,
+                    "vdd": "VDD_INT",
+                    "dvfs_domain": "MFC",
+                    "when": {
+                        "scenario_domain": "camera",
+                        "resolution_class": "UHD",
+                        "fps": 60,
+                        "hdr_format": "HLG",
+                    },
+                }
+            },
+            "selection_policy": {"default_profile": True},
+        }
+    )
+
+    override = obj.role_overrides["MFC_MFD_UHD60_HLG"]
+    assert obj.profile_version == 1
+    assert override.extends == "MFC_MFD"
+    assert override.when["fps"] == 60
+
+
+def test_soc_cdgm_profile_project_scope_requires_project_ref():
+    from scenario_db.models.capability.hw import SocCdgmProfile
+
+    with pytest.raises(ValidationError, match="source_project_ref"):
+        SocCdgmProfile.model_validate(
+            {
+                "id": "cdgm-prof-soc-A-v2",
+                "schema_version": "2.3",
+                "kind": "soc.cdgm_profile",
+                "soc_ref": "soc-A",
+                "profile_version": 2,
+                "compatibility_scope": "project",
+                "role_overrides": {},
+            }
+        )
 
 
 def test_ip_supported_features_accept_crop_scale_rotate():

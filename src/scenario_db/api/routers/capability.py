@@ -8,6 +8,7 @@ from scenario_db.api.deps import get_db
 from scenario_db.api.pagination import apply_sort, validate_sort_column
 from scenario_db.api.schemas.capability import (
     IpCatalogResponse,
+    SocCdgmProfileResponse,
     SocDvfsTableResponse,
     SocPlatformResponse,
     SwComponentResponse,
@@ -19,7 +20,7 @@ from scenario_db.api.validators import (
     validate_ip_category,
     validate_sw_component_category,
 )
-from scenario_db.db.models.capability import IpCatalog, SocDvfsTable, SocPlatform, SwComponent, SwProfile
+from scenario_db.db.models.capability import IpCatalog, SocCdgmProfile, SocDvfsTable, SocPlatform, SwComponent, SwProfile
 
 router = APIRouter(tags=["capability"])
 
@@ -77,6 +78,36 @@ def get_soc_dvfs_table(table_id: str, db: Session = Depends(get_db)):
     row = db.query(SocDvfsTable).filter_by(id=table_id).one_or_none()
     if row is None:
         raise NoResultFound(f"SocDvfsTable '{table_id}' not found")
+    return row
+
+
+# ---------------------------------------------------------------------------
+# SoC CDGM Profiles
+# ---------------------------------------------------------------------------
+
+@router.get("/soc-cdgm-profiles", response_model=PagedResponse[SocCdgmProfileResponse])
+def list_soc_cdgm_profiles(
+    soc_ref: str | None = Query(None),
+    limit: int = Query(50, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    sort_by: str | None = Query(None),
+    sort_dir: str = Query("desc"),
+    db: Session = Depends(get_db),
+):
+    """SoC-scoped CDGM role/profile versions. EVT is metadata, not part of the sequence."""
+    sort_by = validate_sort_column(SocCdgmProfile, sort_by)
+    q = db.query(SocCdgmProfile)
+    if soc_ref is not None:
+        q = q.filter(SocCdgmProfile.soc_ref == soc_ref)
+    q = apply_sort(q, SocCdgmProfile, sort_by, sort_dir, default_col="profile_version")
+    return PagedResponse.from_query(q, limit=limit, offset=offset)
+
+
+@router.get("/soc-cdgm-profiles/{profile_id}", response_model=SocCdgmProfileResponse)
+def get_soc_cdgm_profile(profile_id: str, db: Session = Depends(get_db)):
+    row = db.query(SocCdgmProfile).filter_by(id=profile_id).one_or_none()
+    if row is None:
+        raise NoResultFound(f"SocCdgmProfile '{profile_id}' not found")
     return row
 
 

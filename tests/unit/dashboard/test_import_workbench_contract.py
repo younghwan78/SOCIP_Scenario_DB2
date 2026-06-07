@@ -18,6 +18,16 @@ def test_import_workbench_dvfs_update_accepts_domains_file_upload() -> None:
     assert "uploaded_domains.getvalue()" in source
 
 
+def test_import_workbench_cdgm_profile_has_separate_file_import_tab() -> None:
+    source = PAGE.read_text(encoding="utf-8")
+
+    assert "st.tabs" in source
+    assert '"CDGM Profile"' in source
+    assert '"CDGM profile file"' in source
+    assert "Build CDGM import_bundle" in source
+    assert "build_soc_cdgm_profile_bundle_request" in source
+
+
 def test_import_workbench_source_metadata_is_optional() -> None:
     source = PAGE.read_text(encoding="utf-8")
 
