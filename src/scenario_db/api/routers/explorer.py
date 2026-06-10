@@ -52,8 +52,8 @@ def explorer_summary(
     for project in projects:
         board_counts[_project_meta(project, "board_type") or "unknown"] += 1
     for scenario in scenarios:
-        for category in _scenario_list_meta(scenario, "category") or ["uncategorized"]:
-            category_counts[str(category)] += 1
+        for category_value in _scenario_list_meta(scenario, "category") or ["uncategorized"]:
+            category_counts[str(category_value)] += 1
     for variant in variants:
         severity_counts[variant.severity or "unknown"] += 1
 
@@ -265,8 +265,9 @@ def import_health(
         and _matches_selected([issue.document_kind], document_kind)
         and _matches_selected([issue.document_id], document_id)
     ]
-    issues = issues[:limit]
     counts = Counter(issue.severity for issue in issues)
+    total_issue_count = len(issues)
+    issues = issues[:limit]
     return ImportHealthResponse(
         filters=_filters(
             soc_ref,
@@ -282,6 +283,8 @@ def import_health(
             document_id=document_id,
         ),
         issue_counts=dict(sorted(counts.items())),
+        total_issue_count=total_issue_count,
+        truncated=total_issue_count > limit,
         issues=issues,
         latest_import_batches=_latest_import_batches(db),
     )

@@ -91,12 +91,14 @@ def _build_view(
         _validate_mode(level, mode)
         if level == 0:
             view = project_level0(scenario_id, variant_id, db=db, mode=mode)
-        if level == 1:
+        elif level == 1:
             view = project_level1(scenario_id, variant_id, db=db)
-        if level == 2:
+        elif level == 2:
             if not expand:
                 raise HTTPException(status_code=422, detail="expand= required for level=2")
             view = project_level2(scenario_id, variant_id, expand=expand, db=db)
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported level: {level}")
         return _apply_optional_sim_overlay(
             view,
             db=db,
@@ -109,8 +111,6 @@ def _build_view(
         raise HTTPException(status_code=501, detail=str(exc)) from exc
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-    raise HTTPException(status_code=400, detail=f"Unsupported level: {level}")
 
 
 def _validate_mode(level: int, mode: str) -> None:

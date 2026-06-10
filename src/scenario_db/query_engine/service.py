@@ -535,16 +535,18 @@ def _sort_items(items: list[QueryResultItem], sort_specs: list[dict[str, Any]]) 
     return result
 
 
-def _sort_key(values: list[Any]) -> tuple[int, Any]:
+def _sort_key(values: list[Any]) -> tuple[int, float, str]:
+    # Rank separates numeric, text, and missing values so mixed-type fields
+    # (e.g. axis values 1080 and "4K") never compare float against str.
     value = next((item for item in values if item not in (None, "")), None)
     if value is None:
-        return (1, "")
+        return (2, 0.0, "")
     if isinstance(value, (int, float)):
-        return (0, value)
+        return (0, float(value), "")
     try:
-        return (0, float(value))
+        return (0, float(value), "")
     except (TypeError, ValueError):
-        return (0, str(value).lower())
+        return (1, 0.0, str(value).lower())
 
 
 def _as_string_set(value: Any) -> set[str]:
