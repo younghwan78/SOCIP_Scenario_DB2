@@ -23,6 +23,8 @@ from scenario_db.db.models.decision import Issue
 from scenario_db.db.models.definition import Project, Scenario, ScenarioVariant
 from scenario_db.db.models.evidence import Evidence
 from scenario_db.db.repositories.variant_resolution import resolve_variant_from_rows
+from scenario_db.matcher.context import MatcherContext
+from scenario_db.matcher.runner import evaluate
 from scenario_db.query_engine.facts import build_variant_facts
 from scenario_db.query_engine.field_registry import OPERATORS, field_definition, field_definitions, is_supported_field
 
@@ -174,20 +176,63 @@ def _parse_utc_timestamp(value: Any) -> datetime | None:
 
 
 def _matched_issue_ids(issue_rows: list[Any], scenario: Any, variant: Any) -> list[str]:
+    """Match issues against the canonical affects list format.
+
+    Canonical format (same semantics as review_gate._match_issues and the
+    /matched-issues endpoint, variant context only):
+        affects: [{"scenario_ref": "...", "match_rule": {...}}, ...]
+    The legacy dict form ({scenario_ref(s)/variant_ref(s)}) stays supported.
+    """
     scenario_id = str(getattr(scenario, "id", "") or "")
     variant_id = str(getattr(variant, "id", "") or "")
+    ctx = MatcherContext(
+        design_conditions=getattr(variant, "design_conditions", None) or {},
+        ip_requirements=getattr(variant, "ip_requirements", None) or {},
+        sw_requirements=getattr(variant, "sw_requirements", None) or {},
+    )
     matched: list[str] = []
     for issue in issue_rows:
-        affects = getattr(issue, "affects", None) or {}
-        if not isinstance(affects, dict):
+        issue_id = getattr(issue, "id", None)
+        if not issue_id:
             continue
-        scenario_refs = _as_string_set(affects.get("scenario_ref") or affects.get("scenario_refs") or affects.get("scenario_id") or affects.get("scenario_ids"))
-        variant_refs = _as_string_set(affects.get("variant_ref") or affects.get("variant_refs") or affects.get("variant_id") or affects.get("variant_ids"))
-        scenario_matches = not scenario_refs or scenario_id in scenario_refs
-        variant_matches = not variant_refs or variant_id in variant_refs
-        if scenario_matches and variant_matches and getattr(issue, "id", None):
-            matched.append(str(getattr(issue, "id")))
+        affects = getattr(issue, "affects", None)
+        if isinstance(affects, list):
+            if _affects_entries_match(affects, scenario_id, ctx):
+                matched.append(str(issue_id))
+        elif isinstance(affects, dict):
+            if _legacy_affects_match(affects, scenario_id, variant_id):
+                matched.append(str(issue_id))
     return matched
+
+
+def _affects_entries_match(affects: list[Any], scenario_id: str, ctx: MatcherContext) -> bool:
+    for affect in affects:
+        if not isinstance(affect, dict):
+            continue
+        ref = affect.get("scenario_ref", "*")
+        if ref not in (None, "*", scenario_id):
+            continue
+        match_rule = affect.get("match_rule")
+        if not match_rule:
+            return True
+        if _safe_rule_evaluate(match_rule, ctx):
+            return True
+    return False
+
+
+def _safe_rule_evaluate(rule: dict[str, Any], ctx: MatcherContext) -> bool:
+    try:
+        return evaluate(rule, ctx)
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
+def _legacy_affects_match(affects: dict[str, Any], scenario_id: str, variant_id: str) -> bool:
+    scenario_refs = _as_string_set(affects.get("scenario_ref") or affects.get("scenario_refs") or affects.get("scenario_id") or affects.get("scenario_ids"))
+    variant_refs = _as_string_set(affects.get("variant_ref") or affects.get("variant_refs") or affects.get("variant_id") or affects.get("variant_ids"))
+    scenario_matches = not scenario_refs or scenario_id in scenario_refs
+    variant_matches = not variant_refs or variant_id in variant_refs
+    return scenario_matches and variant_matches
 
 
 def _scope_predicates(scope: dict[str, Any] | None) -> list[QueryPredicate]:
