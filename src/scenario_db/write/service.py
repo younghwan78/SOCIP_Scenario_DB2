@@ -1592,12 +1592,27 @@ def _normalize_ref(item: Any) -> str:
     return str(value) if value is not None else ""
 
 
+EXPLICIT_NODE_CLASSES = {"hw", "sw", "memory"}
+
+
+def _explicit_node_class(node: dict[str, Any]) -> str | None:
+    """Schema-declared node_class wins over every heuristic (review 5.3)."""
+    value = str(node.get("node_class") or "").lower()
+    return value if value in EXPLICIT_NODE_CLASSES else None
+
+
 def _is_sw_node(node: dict[str, Any]) -> bool:
+    explicit_class = _explicit_node_class(node)
+    if explicit_class is not None:
+        return explicit_class == "sw"
     text = f"{node.get('node_type', '')} {node.get('layer', '')} {node.get('kind', '')}".lower()
     return any(token in text.split() for token in {"sw", "app", "framework", "hal", "kernel", "task", "cpu"})
 
 
 def _node_class(db: Session, node: dict[str, Any]) -> str:
+    explicit_class = _explicit_node_class(node)
+    if explicit_class is not None:
+        return explicit_class
     if _is_sw_node(node):
         return "sw"
     explicit = f"{node.get('node_type', '')} {node.get('layer', '')} {node.get('kind', '')}".lower()

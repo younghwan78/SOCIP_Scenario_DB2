@@ -856,6 +856,10 @@ def _risk_edges(graph: CanonicalScenarioGraph, node_map: dict[str, str] | None =
 
 
 def _architecture_resource_kind(graph: CanonicalScenarioGraph, pipeline_node: dict[str, Any]) -> str:
+    # Schema-declared resource_kind wins over token heuristics (review 5.3).
+    explicit_kind = str(pipeline_node.get("resource_kind") or "").lower()
+    if explicit_kind:
+        return explicit_kind
     text = (
         f"{pipeline_node.get('id', '')} {pipeline_node.get('ip_ref', '')} "
         f"{pipeline_node.get('role', '')} {pipeline_node.get('node_type', '')}"

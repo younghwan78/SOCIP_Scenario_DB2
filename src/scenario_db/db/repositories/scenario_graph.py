@@ -253,6 +253,10 @@ def _explicit_node_mode(graph: CanonicalScenarioGraph, node_id: str) -> Any | No
 
 
 def _is_sensor_node(graph: CanonicalScenarioGraph, node: dict[str, Any]) -> bool:
+    # Schema-declared resource_kind wins over token heuristics (review 5.3).
+    explicit_kind = str(node.get("resource_kind") or "").lower()
+    if explicit_kind:
+        return explicit_kind == "sensor"
     ip_ref = str(node.get("ip_ref") or "")
     row = graph.ip_catalog.get(ip_ref)
     category = str(getattr(row, "category", "") or "").lower() if row is not None else ""

@@ -406,6 +406,10 @@ def _flow_type(edge: dict[str, Any]) -> str:
 
 
 def _resource_kind(graph: CanonicalScenarioGraph, node: dict[str, Any]) -> str:
+    # Schema-declared resource_kind wins over token heuristics (review 5.3).
+    explicit_kind = str(node.get("resource_kind") or "").lower()
+    if explicit_kind:
+        return explicit_kind
     text = _node_text(node)
     category = _ip_category(graph, node)
     if "panel" in text or "display_output" in text:
