@@ -8,6 +8,7 @@ dashboard can also call this module directly without an HTTP round-trip.
 """
 from __future__ import annotations
 
+import logging
 from collections import defaultdict
 from typing import Any
 
@@ -75,6 +76,8 @@ from scenario_db.view.semantic_constants import (
 )
 from scenario_db.view.simulation_overlay import apply_simulation_overlay
 from scenario_db.view.response import build_view_response as _response
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -1025,20 +1028,29 @@ def _operation_summary(
 
 
 def _pipeline_ranks(graph: CanonicalScenarioGraph) -> dict[str, int]:
+    pipeline_edges = graph.pipeline_edges
     ranks: dict[str, int] = {}
     for idx, node in enumerate(graph.pipeline_nodes):
         node_id = node.get("id")
         if node_id:
             ranks[node_id] = idx
-    changed = True
-    while changed:
+    # Bellman-Ford-style relaxation: a DAG converges within len(ranks) - 1
+    # rounds, so the bound only triggers when the pipeline contains a cycle.
+    for _ in range(max(len(ranks), 1)):
         changed = False
-        for edge in graph.pipeline_edges:
+        for edge in pipeline_edges:
             source = edge.get("from")
             target = edge.get("to")
             if source in ranks and target in ranks and ranks[target] <= ranks[source]:
                 ranks[target] = ranks[source] + 1
                 changed = True
+        if not changed:
+            return ranks
+    logger.warning(
+        "Pipeline ranks did not converge (cycle suspected): %s/%s",
+        getattr(graph, "scenario_id", "?"),
+        getattr(graph, "variant_id", "?"),
+    )
     return ranks
 
 

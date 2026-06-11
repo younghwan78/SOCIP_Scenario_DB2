@@ -22,6 +22,7 @@ from scenario_db.api.schemas.explorer import (
 from scenario_db.db.models.capability import IpCatalog, SocPlatform, SwProfile
 from scenario_db.db.models.definition import Project, Scenario, ScenarioVariant
 from scenario_db.db.models.write import WriteBatch
+from scenario_db.graph_checks import find_data_flow_cycle
 
 router = APIRouter(prefix="/explorer", tags=["explorer"])
 
@@ -528,6 +529,9 @@ def _data_quality_issues(
                 issues.append(_health_issue("error", "scenario_memory_edge_buffer_missing", f"{edge_type} edge requires buffer: {source}->{target}", "scenario.usecase", scenario.id, f"{edge_path}.buffer", "If this is SW scheduling/control, use type: control. If data moves through memory, add a buffer descriptor."))
             if buffer_id and buffer_id not in buffers:
                 issues.append(_health_issue("error", "scenario_edge_buffer_missing", f"Buffer not found: {buffer_id}", "scenario.usecase", scenario.id, f"{edge_path}.buffer", "Add pipeline.buffers entry or fix edge.buffer."))
+        cycle = find_data_flow_cycle(pipeline.get("nodes") or [], pipeline.get("edges") or [])
+        if cycle:
+            issues.append(_health_issue("error", "scenario_pipeline_cycle", f"Data-flow cycle detected: {' -> '.join(cycle)}", "scenario.usecase", scenario.id, "pipeline.edges", "OTF/vOTF/M2M edges must form a DAG. Use type: control for SW feedback paths."))
         if variant_counts[scenario.id] == 0:
             issues.append(_health_issue("warning", "scenario_without_variant", f"Scenario has no variants: {scenario.id}", "scenario.usecase", scenario.id, "variants", "Add at least one variant unless this is intentionally a base-only scenario."))
     return issues

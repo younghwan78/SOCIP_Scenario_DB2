@@ -25,6 +25,7 @@ from scenario_db.db.models.definition import Project, Scenario, ScenarioVariant
 from scenario_db.db.models.write import WriteBatch, WriteEvent
 from scenario_db.etl.mappers.capability import upsert_ip, upsert_soc, upsert_soc_cdgm_profile, upsert_soc_dvfs_table, upsert_sw_profile
 from scenario_db.etl.mappers.definition import upsert_project, upsert_usecase
+from scenario_db.graph_checks import find_data_flow_cycle
 from scenario_db.models.capability.hw import IpCatalog as PydanticIpCatalog
 from scenario_db.models.capability.hw import SocCdgmProfile as PydanticSocCdgmProfile
 from scenario_db.models.capability.hw import SocDvfsTable as PydanticSocDvfsTable
@@ -784,6 +785,17 @@ def _validate_candidate_pipeline(db: Session, pipeline: dict[str, Any]) -> list[
         if key in seen_edges:
             issues.append(_issue("warning", "duplicate_edge", f"Duplicate edge after patch: {key}", path))
         seen_edges.add(key)
+
+    cycle = find_data_flow_cycle(pipeline.get("nodes") or [], pipeline.get("edges") or [])
+    if cycle:
+        issues.append(
+            _issue(
+                "error",
+                "pipeline_cycle",
+                f"Data-flow cycle detected after patch: {' -> '.join(cycle)}",
+                "pipeline.edges",
+            )
+        )
     return issues
 
 
@@ -905,6 +917,17 @@ def _validate_import_usecase_refs(
         if key in seen_edges:
             issues.append(_issue("warning", "import_duplicate_edge", f"Duplicate import edge: {key}", edge_path))
         seen_edges.add(key)
+
+    cycle = find_data_flow_cycle(pipeline.get("nodes") or [], pipeline.get("edges") or [])
+    if cycle:
+        issues.append(
+            _issue(
+                "error",
+                "import_pipeline_cycle",
+                f"Data-flow cycle detected in pipeline: {' -> '.join(cycle)}",
+                f"{path}.pipeline.edges",
+            )
+        )
 
     for variant_idx, variant in enumerate(doc.get("variants") or []):
         if not isinstance(variant, dict):

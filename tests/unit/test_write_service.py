@@ -336,6 +336,35 @@ def test_validate_pipeline_patch_rejects_variant_overlay_breakage():
     assert any(issue.code == "variant_overlay_impact" for issue in issues)
 
 
+def test_validate_pipeline_patch_rejects_data_flow_cycle():
+    # Base pipeline is csis0 -> isp0 -> mfc; adding mfc -> csis0 closes a cycle.
+    normalized = normalize_pipeline_patch_payload(
+        _pipeline_patch_payload(
+            {
+                "add_edges": [
+                    {"from": "mfc", "to": "csis0", "type": "M2M", "buffer": "RECORD_BUF"},
+                ],
+            }
+        )
+    )
+    issues = validate_pipeline_patch(_Db(), normalized)
+    assert any(issue.code == "pipeline_cycle" for issue in issues)
+
+
+def test_validate_pipeline_patch_allows_control_feedback_edge():
+    normalized = normalize_pipeline_patch_payload(
+        _pipeline_patch_payload(
+            {
+                "add_edges": [
+                    {"from": "mfc", "to": "csis0", "type": "control"},
+                ],
+            }
+        )
+    )
+    issues = validate_pipeline_patch(_Db(), normalized)
+    assert not any(issue.severity == "error" for issue in issues)
+
+
 def _import_usecase_doc(**overrides):
     doc = {
         "id": "uc-camera-recording-imported",
@@ -656,6 +685,26 @@ def test_validate_import_bundle_rejects_votf_edge_without_buffer():
     issues = validate_import_bundle(_Db(), normalized)
 
     assert any(issue.code == "import_votf_edge_missing_buffer" for issue in issues)
+
+
+def test_validate_import_bundle_rejects_pipeline_cycle():
+    doc = _import_usecase_doc()
+    doc["pipeline"]["edges"].append({"from": "mfc", "to": "csis0", "type": "M2M", "buffer": "RECORD_BUF"})
+    normalized = normalize_import_bundle_payload({"documents": [doc]})
+
+    issues = validate_import_bundle(_Db(), normalized)
+
+    assert any(issue.code == "import_pipeline_cycle" for issue in issues)
+
+
+def test_validate_import_bundle_allows_control_feedback_edge():
+    doc = _import_usecase_doc()
+    doc["pipeline"]["edges"].append({"from": "mfc", "to": "csis0", "type": "control"})
+    normalized = normalize_import_bundle_payload({"documents": [doc]})
+
+    issues = validate_import_bundle(_Db(), normalized)
+
+    assert not any(issue.code == "import_pipeline_cycle" for issue in issues)
 
 
 def test_validate_import_bundle_accepts_votf_edge_with_buffer():

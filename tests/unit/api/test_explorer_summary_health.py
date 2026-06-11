@@ -156,3 +156,47 @@ def test_import_health_counts_reflect_full_result_before_truncation():
     assert response.total_issue_count == 3
     assert response.truncated is True
     assert sum(response.issue_counts.values()) == 3
+
+
+def test_import_health_reports_data_flow_cycle():
+    scenario = _scenario({"category": ["camera"]})
+    scenario.pipeline = {
+        "nodes": [{"id": "a"}, {"id": "b"}],
+        "edges": [
+            {"from": "a", "to": "b", "type": "OTF"},
+            {"from": "b", "to": "a", "type": "M2M", "buffer": "BUF"},
+        ],
+        "buffers": {"BUF": {"format": "YUV420"}},
+    }
+    session = _Session(
+        {
+            Project: [_project({})],
+            Scenario: [scenario],
+            ScenarioVariant: [ScenarioVariant(scenario_id="uc-camera", id="v1", severity="medium")],
+            SocPlatform: [],
+            IpCatalog: [],
+            SwProfile: [],
+            WriteBatch: [],
+        }
+    )
+
+    response = import_health(
+        soc_ref=None,
+        board_type=None,
+        project_ref=None,
+        category=None,
+        domain=None,
+        scenario_id=None,
+        severity=None,
+        issue_severity=None,
+        code=["scenario_pipeline_cycle"],
+        document_kind=None,
+        document_id=None,
+        limit=50,
+        db=session,
+    )
+
+    cycle_issues = [issue for issue in response.issues if issue.code == "scenario_pipeline_cycle"]
+    assert len(cycle_issues) == 1
+    assert cycle_issues[0].document_id == "uc-camera"
+    assert "a" in cycle_issues[0].message and "b" in cycle_issues[0].message
