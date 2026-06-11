@@ -81,3 +81,6 @@ uv run --group dev --group sim pytest tests\unit
   variant. Do not overlay unrelated simulation evidence onto a view.
 - Variant matrix pagination should not change the reported design-axis keys;
   compute axis keys from the full filtered result set, not only the current page.
+
+## Conversation
+- Let's think the instruction in English step by step, and then provide the final answer in Korean.
