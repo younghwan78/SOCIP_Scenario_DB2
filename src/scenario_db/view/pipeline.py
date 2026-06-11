@@ -127,10 +127,7 @@ def _edge_flow_type(edge: dict[str, Any]) -> str:
     return "M2M"
 
 def _find_pipeline_node(graph: CanonicalScenarioGraph, node_id: str | None) -> dict[str, Any] | None:
-    for node in graph.pipeline_nodes:
-        if node.get("id") == node_id:
-            return node
-    return None
+    return graph.node_by_id(node_id)
 
 def _find_pipeline_node_by_ip_ref(graph: CanonicalScenarioGraph, ip_ref: str | None) -> dict[str, Any] | None:
     for node in graph.pipeline_nodes:
