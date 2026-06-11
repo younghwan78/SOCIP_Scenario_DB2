@@ -16,10 +16,16 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class _BatchQuery:
-    def __init__(self, batch):
+    def __init__(self, batch, session=None):
         self.batch = batch
+        self.session = session
 
     def filter_by(self, **kwargs):
+        return self
+
+    def with_for_update(self):
+        if self.session is not None:
+            self.session.locked = True
         return self
 
     def one_or_none(self):
@@ -30,9 +36,10 @@ class _FakeSession:
     def __init__(self, batch):
         self.batch = batch
         self.committed = False
+        self.locked = False
 
     def query(self, model):
-        return _BatchQuery(self.batch)
+        return _BatchQuery(self.batch, self)
 
     def add(self, row) -> None:
         return None
@@ -94,6 +101,43 @@ def test_apply_batch_requires_diff_ready_status(monkeypatch) -> None:
 
     assert exc_info.value.status_code == 409
     assert "Cannot apply write batch in status 'validated'" in str(exc_info.value.detail)
+
+
+def test_state_transitions_fetch_batch_with_row_lock(monkeypatch) -> None:
+    """Regression: validate/diff/apply must lock the batch row to serialize
+    concurrent state transitions (two applies of one diff_ready batch)."""
+    monkeypatch.setattr(
+        write_service,
+        "_apply_variant_overlay",
+        lambda db, normalized: {"scenario_ref": "scenario-1", "variant_id": "variant-1"},
+    )
+    monkeypatch.setattr(
+        write_service,
+        "build_write_diff",
+        lambda db, kind, normalized: DiffPreviewResponse(
+            batch_id="batch-1",
+            target_id="scenario-1::variant-1",
+            operation="update",
+        ),
+    )
+    monkeypatch.setattr(
+        write_service,
+        "normalize_write_payload",
+        lambda kind, payload: {"scenario_ref": "scenario-1", "variant": {"id": "variant-1"}},
+    )
+    monkeypatch.setattr(write_service, "validate_write_payload", lambda db, kind, normalized: [])
+
+    validate_session = _FakeSession(_batch("staged"))
+    write_service.validate_batch(validate_session, "batch-1")
+    assert validate_session.locked is True
+
+    diff_session = _FakeSession(_batch("validated"))
+    write_service.diff_batch(diff_session, "batch-1")
+    assert diff_session.locked is True
+
+    apply_session = _FakeSession(_batch("diff_ready"))
+    write_service.apply_batch(apply_session, "batch-1")
+    assert apply_session.locked is True
 
 
 def _constraint_names(table) -> set[str]:

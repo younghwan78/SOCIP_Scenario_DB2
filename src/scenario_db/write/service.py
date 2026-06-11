@@ -147,15 +147,20 @@ def stage_write(db: Session, request: StageWriteRequest) -> StageWriteResponse:
     return StageWriteResponse(batch_id=batch.id, status=batch.status, target_id=batch.target_id)
 
 
-def get_batch_or_404(db: Session, batch_id: str) -> WriteBatch:
-    batch = db.query(WriteBatch).filter_by(id=batch_id).one_or_none()
+def get_batch_or_404(db: Session, batch_id: str, *, for_update: bool = False) -> WriteBatch:
+    query = db.query(WriteBatch).filter_by(id=batch_id)
+    if for_update:
+        # Row lock serializes concurrent state transitions on the same batch
+        # (e.g. two simultaneous applies of a diff_ready batch). No-op on SQLite.
+        query = query.with_for_update()
+    batch = query.one_or_none()
     if batch is None:
         raise HTTPException(status_code=404, detail=f"Write batch not found: {batch_id}")
     return batch
 
 
 def validate_batch(db: Session, batch_id: str) -> ValidateWriteResponse:
-    batch = get_batch_or_404(db, batch_id)
+    batch = get_batch_or_404(db, batch_id, for_update=True)
     _ensure_batch_status(batch, VALIDATE_ALLOWED_STATUSES, "validate")
     normalized = normalize_write_payload(batch.kind, batch.raw_payload)
     issues = validate_write_payload(db, batch.kind, normalized)
@@ -182,7 +187,7 @@ def validate_batch(db: Session, batch_id: str) -> ValidateWriteResponse:
 
 
 def diff_batch(db: Session, batch_id: str) -> DiffPreviewResponse:
-    batch = get_batch_or_404(db, batch_id)
+    batch = get_batch_or_404(db, batch_id, for_update=True)
     _ensure_batch_status(batch, DIFF_ALLOWED_STATUSES, "diff")
     normalized = batch.normalized_payload or normalize_write_payload(batch.kind, batch.raw_payload)
     validation = batch.validation_result or validate_batch(db, batch_id).model_dump()
@@ -205,7 +210,7 @@ def apply_batch(
     *,
     rule_cache: RuleCache | None = None,
 ) -> ApplyWriteResponse:
-    batch = get_batch_or_404(db, batch_id)
+    batch = get_batch_or_404(db, batch_id, for_update=True)
     _ensure_batch_status(batch, APPLY_ALLOWED_STATUSES, "apply")
     normalized = batch.normalized_payload or normalize_write_payload(batch.kind, batch.raw_payload)
     validation = batch.validation_result or validate_batch(db, batch_id).model_dump()
