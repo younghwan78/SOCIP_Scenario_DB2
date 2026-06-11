@@ -81,38 +81,6 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Sample scenario — Camera Recording FHD 30fps (matches design image)
-# ---------------------------------------------------------------------------
-
-
-
-
-
-
-
-# ---------------------------------------------------------------------------
-# Projection helpers (stubs for DB-backed projection)
-# ---------------------------------------------------------------------------
-
-def _deprecated_project_level0(scenario_id: str, variant_id: str, db=None) -> ViewResponse:
-    """Project DB data into a Level 0 ViewResponse.
-
-    Falls back to sample data when db is None (dashboard demo mode).
-    """
-    _require_db(db)
-    # TODO: query DB → assemble canonical graph → project to Level 0
-    raise NotImplementedError("DB-backed Level 0 projection is Phase C work")
-
-
-def _deprecated_project_level1(scenario_id: str, variant_id: str, db=None) -> ViewResponse:
-    raise NotImplementedError("Level 1 IP DAG projection is Phase C work")
-
-
-def _deprecated_project_level2(scenario_id: str, variant_id: str, expand: str, db=None) -> ViewResponse:
-    raise NotImplementedError("Level 2 composite-IP drill-down is Phase C work")
-
-
-# ---------------------------------------------------------------------------
 # DB-backed projections
 # ---------------------------------------------------------------------------
 
@@ -150,34 +118,6 @@ def project_level2(scenario_id: str, variant_id: str | None, expand: str, db=Non
 def _require_db(db) -> None:
     if db is None:
         raise ValueError("db session is required for view projection; use scenario_db.view.demo.sample_data for demo fallback")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 def _load_graph(db, scenario_id: str, variant_id: str | None) -> CanonicalScenarioGraph:
@@ -270,129 +210,6 @@ def _project_level2_reference(graph: CanonicalScenarioGraph, expand: str) -> Vie
     return project_level2_reference(graph, expand)
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 def _project_drilldown(graph: CanonicalScenarioGraph, expand: str) -> ViewResponse:
     from scenario_db.view.level2_semantic import project_drilldown
 
@@ -403,13 +220,6 @@ def _project_semantic_level2(graph: CanonicalScenarioGraph, expand: str) -> View
     from scenario_db.view.level2_semantic import project_semantic_level2
 
     return project_semantic_level2(graph, expand)
-
-
-
-
-
-
-
 
 
 def _sw_stack_nodes(graph: CanonicalScenarioGraph) -> list[NodeElement]:
@@ -744,38 +554,6 @@ def _buffer_nodes_from_architecture_edges(
     return nodes
 
 
-def _buffer_nodes_from_edges(
-    graph: CanonicalScenarioGraph,
-    stage_orders: dict[tuple[str, str], int],
-) -> list[NodeElement]:
-    nodes: list[NodeElement] = []
-    seen: set[str] = set()
-    for edge in graph.pipeline_edges:
-        buffer_ref = edge.get("buffer")
-        if not buffer_ref or buffer_ref in seen:
-            continue
-        seen.add(buffer_ref)
-        source_node = _find_pipeline_node(graph, edge.get("from"))
-        target_node = _find_pipeline_node(graph, edge.get("to"))
-        stage = _stage_for_node(edge.get("to"), target_node or source_node or {})
-        order = _next_order(stage_orders, "memory", stage)
-        nodes.append(
-            _n(
-                f"buf-{_safe_id(buffer_ref)}",
-                _buffer_label(buffer_ref),
-                "buffer",
-                "memory",
-                STAGE_X.get(stage, STAGE_X["processing"]) + (order * 170),
-                LANE_Y["memory"],
-                memory=_memory_descriptor(graph, buffer_ref),
-                placement=_memory_placement(graph, buffer_ref),
-                detail_items=_buffer_detail_items(graph, buffer_ref),
-                view_hints=ViewHints(lane="memory", stage=stage, order=order),
-            )
-        )
-    return nodes
-
-
 def _sw_control_edges(
     graph: CanonicalScenarioGraph,
     node_map: dict[str, str],
@@ -849,10 +627,6 @@ def _risk_edges(graph: CanonicalScenarioGraph, node_map: dict[str, str] | None =
         view_id = (node_map or {}).get(str(node_id)) or f"ip-{node_id}"
         edges.append(_e(f"e-risk-{node_id}", view_id, view_id, "risk", label="Known issue"))
     return edges
-
-
-
-
 
 
 def _architecture_resource_kind(graph: CanonicalScenarioGraph, pipeline_node: dict[str, Any]) -> str:
@@ -977,8 +751,6 @@ def _is_explicit_sw_task(graph: CanonicalScenarioGraph, pipeline_node: dict[str,
     }
 
 
-
-
 def _capability_badges(graph: CanonicalScenarioGraph, pipeline_node: dict[str, Any]) -> list[str]:
     ip_row = graph.ip_catalog.get(pipeline_node.get("ip_ref") or "")
     if not ip_row:
@@ -1027,10 +799,6 @@ def _operation_summary(
     return None
 
 
-
-
-
-
 def _pipeline_ranks(graph: CanonicalScenarioGraph) -> dict[str, int]:
     pipeline_edges = graph.pipeline_edges
     ranks: dict[str, int] = {}
@@ -1058,20 +826,6 @@ def _pipeline_ranks(graph: CanonicalScenarioGraph) -> dict[str, int]:
     return ranks
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 def _first_hw_node(graph: CanonicalScenarioGraph, tokens: tuple[str, ...]) -> str | None:
     for node in graph.pipeline_nodes:
         text = f"{node.get('id', '')} {node.get('ip_ref', '')}".lower()
@@ -1080,19 +834,9 @@ def _first_hw_node(graph: CanonicalScenarioGraph, tokens: tuple[str, ...]) -> st
     return None
 
 
-
-
-
-
-
-
 def _node_label(node_id: str, pipeline_node: dict[str, Any]) -> str:
     label = pipeline_node.get("label") or node_id
     return str(label).replace("_", " ").upper()
-
-
-
-
 
 
 def _next_order(stage_orders: dict[tuple[str, str], int], layer: str, stage: str) -> int:
