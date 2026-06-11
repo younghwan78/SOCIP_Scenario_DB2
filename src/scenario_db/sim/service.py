@@ -3,10 +3,10 @@ from __future__ import annotations
 import hashlib
 import json
 
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from scenario_db.api.schemas.evidence import EvidenceResponse
+from scenario_db.exceptions import NotFoundError, UnprocessableError
 from scenario_db.api.schemas.simulation import SimulateRequest, SimulateRunResponse, SimulationReadinessResponse
 from scenario_db.db.models.capability import SocDvfsTable
 from scenario_db.db.repositories.evidence import (
@@ -27,9 +27,9 @@ def run_simulation_request(db: Session, request: SimulateRequest) -> SimulateRun
         inputs = build_simulation_inputs(graph, request.config)
         dvfs_tables, execution_context = _resolve_dvfs_tables(db, graph, request)
     except LookupError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise NotFoundError(str(exc)) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise UnprocessableError(str(exc)) from exc
 
     hash_value = _request_hash(
         inputs,
@@ -91,10 +91,7 @@ def _resolve_dvfs_tables(
     request: SimulateRequest,
 ) -> tuple[dict[str, DVFSTable], ExecutionContext]:
     if request.dvfs_tables and (request.dvfs_table_ref or request.dvfs_version is not None):
-        raise HTTPException(
-            status_code=422,
-            detail="dvfs_tables cannot be combined with dvfs_table_ref or dvfs_version",
-        )
+        raise UnprocessableError("dvfs_tables cannot be combined with dvfs_table_ref or dvfs_version")
     if request.dvfs_tables:
         return request.dvfs_tables, request.execution_context
 
@@ -104,10 +101,7 @@ def _resolve_dvfs_tables(
     elif request.dvfs_version is not None:
         soc_ref = request.soc_ref or _graph_soc_ref(graph)
         if not soc_ref:
-            raise HTTPException(
-                status_code=422,
-                detail="soc_ref is required when selecting a DVFS table by dvfs_version",
-            )
+            raise UnprocessableError("soc_ref is required when selecting a DVFS table by dvfs_version")
         row = (
             db.query(SocDvfsTable)
             .filter_by(soc_ref=str(soc_ref), dvfs_version=request.dvfs_version)
@@ -116,26 +110,19 @@ def _resolve_dvfs_tables(
 
     if row is None:
         if request.dvfs_table_ref:
-            raise HTTPException(status_code=404, detail=f"DVFS table not found: {request.dvfs_table_ref}")
+            raise NotFoundError(f"DVFS table not found: {request.dvfs_table_ref}")
         if request.dvfs_version is not None:
             soc_ref = request.soc_ref or _graph_soc_ref(graph)
-            raise HTTPException(
-                status_code=404,
-                detail=f"DVFS table not found for soc_ref={soc_ref} dvfs_version={request.dvfs_version}",
+            raise NotFoundError(
+                f"DVFS table not found for soc_ref={soc_ref} dvfs_version={request.dvfs_version}"
             )
         return request.dvfs_tables, request.execution_context
 
     graph_soc_ref = _graph_soc_ref(graph)
     if graph_soc_ref and str(row.soc_ref) != str(graph_soc_ref):
-        raise HTTPException(
-            status_code=422,
-            detail=f"DVFS table {row.id} belongs to {row.soc_ref}, not {graph_soc_ref}",
-        )
+        raise UnprocessableError(f"DVFS table {row.id} belongs to {row.soc_ref}, not {graph_soc_ref}")
     if request.soc_ref and str(row.soc_ref) != str(request.soc_ref):
-        raise HTTPException(
-            status_code=422,
-            detail=f"DVFS table {row.id} belongs to {row.soc_ref}, not {request.soc_ref}",
-        )
+        raise UnprocessableError(f"DVFS table {row.id} belongs to {row.soc_ref}, not {request.soc_ref}")
 
     execution_context = request.execution_context.model_copy(
         update={
@@ -175,9 +162,9 @@ def check_simulation_readiness_request(
     try:
         graph = load_canonical_graph(db, scenario_id, variant_id)
     except LookupError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise NotFoundError(str(exc)) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise UnprocessableError(str(exc)) from exc
     return SimulationReadinessResponse.model_validate(check_simulation_readiness(graph))
 
 

@@ -4,11 +4,11 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from fastapi import HTTPException
 from sqlalchemy import CheckConstraint
 
 from scenario_db.api.schemas.write import DiffPreviewResponse
 from scenario_db.db.models.evidence import Evidence
+from scenario_db.exceptions import ConflictError
 from scenario_db.db.models.write import WriteBatch, WriteEvent
 from scenario_db.write import service as write_service
 
@@ -64,7 +64,7 @@ def _batch(status: str):
 
 
 def test_validate_batch_rejects_already_applied_batch() -> None:
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ConflictError) as exc_info:
         write_service.validate_batch(_FakeSession(_batch("applied")), "batch-1")
 
     assert exc_info.value.status_code == 409
@@ -82,7 +82,7 @@ def test_diff_batch_requires_validated_status(monkeypatch) -> None:
         ),
     )
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ConflictError) as exc_info:
         write_service.diff_batch(_FakeSession(_batch("staged")), "batch-1")
 
     assert exc_info.value.status_code == 409
@@ -96,7 +96,7 @@ def test_apply_batch_requires_diff_ready_status(monkeypatch) -> None:
         lambda db, normalized: {"scenario_ref": "scenario-1", "variant_id": "variant-1"},
     )
 
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(ConflictError) as exc_info:
         write_service.apply_batch(_FakeSession(_batch("validated")), "batch-1")
 
     assert exc_info.value.status_code == 409
