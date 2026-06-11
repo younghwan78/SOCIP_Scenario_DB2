@@ -7,10 +7,10 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
-from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from scenario_db.api.cache import RuleCache
+from scenario_db.exceptions import BadRequestError, ConflictError, NotFoundError
 from scenario_db.api.schemas.write import (
     ApplyWriteResponse,
     DiffEntry,
@@ -25,6 +25,13 @@ from scenario_db.db.models.definition import Project, Scenario, ScenarioVariant
 from scenario_db.db.models.write import WriteBatch, WriteEvent
 from scenario_db.etl.mappers.capability import upsert_ip, upsert_soc, upsert_soc_cdgm_profile, upsert_soc_dvfs_table, upsert_sw_profile
 from scenario_db.etl.mappers.definition import upsert_project, upsert_usecase
+from scenario_db.graph_checks import (
+    edge_matches as _edge_matches,
+    edge_source as _edge_source,
+    edge_target as _edge_target,
+    find_data_flow_cycle,
+    normalize_edge as _normalize_edge,
+)
 from scenario_db.models.capability.hw import IpCatalog as PydanticIpCatalog
 from scenario_db.models.capability.hw import SocCdgmProfile as PydanticSocCdgmProfile
 from scenario_db.models.capability.hw import SocDvfsTable as PydanticSocDvfsTable
@@ -127,7 +134,7 @@ IMPORT_DB_MODEL_BY_KIND = {
 
 def stage_write(db: Session, request: StageWriteRequest) -> StageWriteResponse:
     if request.kind not in SUPPORTED_KINDS:
-        raise HTTPException(status_code=400, detail=f"Unsupported write kind: {request.kind}")
+        raise BadRequestError(f"Unsupported write kind: {request.kind}")
 
     normalized = normalize_write_payload(request.kind, request.payload)
     batch = WriteBatch(
@@ -146,16 +153,25 @@ def stage_write(db: Session, request: StageWriteRequest) -> StageWriteResponse:
     return StageWriteResponse(batch_id=batch.id, status=batch.status, target_id=batch.target_id)
 
 
-def get_batch_or_404(db: Session, batch_id: str) -> WriteBatch:
-    batch = db.query(WriteBatch).filter_by(id=batch_id).one_or_none()
+def get_batch_or_404(db: Session, batch_id: str, *, for_update: bool = False) -> WriteBatch:
+    query = db.query(WriteBatch).filter_by(id=batch_id)
+    if for_update:
+        # Row lock serializes concurrent state transitions on the same batch
+        # (e.g. two simultaneous applies of a diff_ready batch). No-op on SQLite.
+        query = query.with_for_update()
+    batch = query.one_or_none()
     if batch is None:
-        raise HTTPException(status_code=404, detail=f"Write batch not found: {batch_id}")
+        raise NotFoundError(f"Write batch not found: {batch_id}")
     return batch
 
 
-def validate_batch(db: Session, batch_id: str) -> ValidateWriteResponse:
-    batch = get_batch_or_404(db, batch_id)
-    _ensure_batch_status(batch, VALIDATE_ALLOWED_STATUSES, "validate")
+def _validate_in_place(db: Session, batch: WriteBatch) -> dict[str, Any]:
+    """Run validation and update the batch row WITHOUT committing.
+
+    The single commit point stays in the public state-transition function
+    (validate/diff/apply), so a mid-function failure never leaves a half
+    persisted transition behind (review 5.2).
+    """
     normalized = normalize_write_payload(batch.kind, batch.raw_payload)
     issues = validate_write_payload(db, batch.kind, normalized)
     valid = not any(issue.severity == "error" for issue in issues)
@@ -170,23 +186,38 @@ def validate_batch(db: Session, batch_id: str) -> ValidateWriteResponse:
     batch.status = "validated" if valid else "validation_failed"
     _touch(batch)
     _record_event(db, batch.id, "validate", batch.actor, result)
+    return result
+
+
+def validate_batch(db: Session, batch_id: str) -> ValidateWriteResponse:
+    batch = get_batch_or_404(db, batch_id, for_update=True)
+    _ensure_batch_status(batch, VALIDATE_ALLOWED_STATUSES, "validate")
+    result = _validate_in_place(db, batch)
     db.commit()
     return ValidateWriteResponse(
         batch_id=batch.id,
-        valid=valid,
-        issues=issues,
-        normalized_payload=normalized,
+        valid=bool(result.get("valid")),
+        issues=[ValidationIssue.model_validate(issue) for issue in result.get("issues") or []],
+        normalized_payload=batch.normalized_payload,
         import_report=result.get("import_report"),
     )
 
 
-def diff_batch(db: Session, batch_id: str) -> DiffPreviewResponse:
-    batch = get_batch_or_404(db, batch_id)
-    _ensure_batch_status(batch, DIFF_ALLOWED_STATUSES, "diff")
-    normalized = batch.normalized_payload or normalize_write_payload(batch.kind, batch.raw_payload)
-    validation = batch.validation_result or validate_batch(db, batch_id).model_dump()
+def _ensure_valid_or_revalidate(db: Session, batch: WriteBatch, action: str) -> None:
+    """Reuse the stored validation result or revalidate in place (no nested
+    commit). On failure the validation_failed state is persisted explicitly
+    before raising, matching the previous observable behavior."""
+    validation = batch.validation_result or _validate_in_place(db, batch)
     if not validation.get("valid"):
-        raise HTTPException(status_code=409, detail="Cannot diff an invalid write batch")
+        db.commit()
+        raise ConflictError(f"Cannot {action} an invalid write batch")
+
+
+def diff_batch(db: Session, batch_id: str) -> DiffPreviewResponse:
+    batch = get_batch_or_404(db, batch_id, for_update=True)
+    _ensure_batch_status(batch, DIFF_ALLOWED_STATUSES, "diff")
+    _ensure_valid_or_revalidate(db, batch, "diff")
+    normalized = batch.normalized_payload or normalize_write_payload(batch.kind, batch.raw_payload)
 
     diff = build_write_diff(db, batch.kind, normalized)
     diff.batch_id = batch.id
@@ -204,12 +235,10 @@ def apply_batch(
     *,
     rule_cache: RuleCache | None = None,
 ) -> ApplyWriteResponse:
-    batch = get_batch_or_404(db, batch_id)
+    batch = get_batch_or_404(db, batch_id, for_update=True)
     _ensure_batch_status(batch, APPLY_ALLOWED_STATUSES, "apply")
+    _ensure_valid_or_revalidate(db, batch, "apply")
     normalized = batch.normalized_payload or normalize_write_payload(batch.kind, batch.raw_payload)
-    validation = batch.validation_result or validate_batch(db, batch_id).model_dump()
-    if not validation.get("valid"):
-        raise HTTPException(status_code=409, detail="Cannot apply an invalid write batch")
 
     if batch.kind == VARIANT_OVERLAY_KIND:
         applied_refs = _apply_variant_overlay(db, normalized)
@@ -218,7 +247,7 @@ def apply_batch(
     elif batch.kind == IMPORT_BUNDLE_KIND:
         applied_refs = _apply_import_bundle(db, normalized)
     else:
-        raise HTTPException(status_code=400, detail=f"Unsupported write kind: {batch.kind}")
+        raise BadRequestError(f"Unsupported write kind: {batch.kind}")
 
     batch.applied_refs = applied_refs
     batch.status = "applied"
@@ -227,6 +256,11 @@ def apply_batch(
     db.commit()
     if rule_cache is not None:
         rule_cache.invalidate_all(db)
+    # Applied data feeds the query engine; drop the facets cache so the next
+    # /query/facets call rebuilds from fresh rows. Lazy import avoids a cycle.
+    from scenario_db.query_engine.service import invalidate_facets_cache
+
+    invalidate_facets_cache()
     return ApplyWriteResponse(batch_id=batch.id, status=batch.status, applied_refs=applied_refs)
 
 
@@ -234,9 +268,8 @@ def _ensure_batch_status(batch: WriteBatch, allowed: set[str], action: str) -> N
     if batch.status in allowed:
         return
     expected = ", ".join(sorted(allowed))
-    raise HTTPException(
-        status_code=409,
-        detail=f"Cannot {action} write batch in status '{batch.status}'; expected one of: {expected}",
+    raise ConflictError(
+        f"Cannot {action} write batch in status '{batch.status}'; expected one of: {expected}"
     )
 
 
@@ -247,7 +280,7 @@ def normalize_write_payload(kind: str, payload: dict[str, Any]) -> dict[str, Any
         return normalize_pipeline_patch_payload(payload)
     if kind == IMPORT_BUNDLE_KIND:
         return normalize_import_bundle_payload(payload)
-    raise HTTPException(status_code=400, detail=f"Unsupported write kind: {kind}")
+    raise BadRequestError(f"Unsupported write kind: {kind}")
 
 
 def validate_write_payload(db: Session, kind: str, normalized: dict[str, Any]) -> list[ValidationIssue]:
@@ -267,21 +300,21 @@ def build_write_diff(db: Session, kind: str, normalized: dict[str, Any]) -> Diff
         return build_pipeline_patch_diff(db, normalized)
     if kind == IMPORT_BUNDLE_KIND:
         return build_import_bundle_diff(db, normalized)
-    raise HTTPException(status_code=400, detail=f"Unsupported write kind: {kind}")
+    raise BadRequestError(f"Unsupported write kind: {kind}")
 
 
 def normalize_payload(payload: dict[str, Any]) -> dict[str, Any]:
     """Backward-compatible normalizer for scenario.variant_overlay tests."""
     if not isinstance(payload, dict):
-        raise HTTPException(status_code=400, detail="payload must be an object")
+        raise BadRequestError("payload must be an object")
     scenario_ref = payload.get("scenario_ref") or payload.get("scenario_id")
     variant = payload.get("variant")
     if not isinstance(scenario_ref, str) or not scenario_ref:
-        raise HTTPException(status_code=400, detail="payload.scenario_ref is required")
+        raise BadRequestError("payload.scenario_ref is required")
     if not isinstance(variant, dict):
-        raise HTTPException(status_code=400, detail="payload.variant must be an object")
+        raise BadRequestError("payload.variant must be an object")
     if not isinstance(variant.get("id"), str) or not variant["id"]:
-        raise HTTPException(status_code=400, detail="payload.variant.id is required")
+        raise BadRequestError("payload.variant.id is required")
 
     normalized_variant: dict[str, Any] = {"id": variant["id"]}
     for field in VARIANT_FIELDS:
@@ -296,24 +329,24 @@ def normalize_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
 def normalize_pipeline_patch_payload(payload: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(payload, dict):
-        raise HTTPException(status_code=400, detail="payload must be an object")
+        raise BadRequestError("payload must be an object")
     scenario_ref = payload.get("scenario_ref") or payload.get("scenario_id")
     patch = payload.get("patch") or payload.get("pipeline_patch")
     if not isinstance(scenario_ref, str) or not scenario_ref:
-        raise HTTPException(status_code=400, detail="payload.scenario_ref is required")
+        raise BadRequestError("payload.scenario_ref is required")
     if not isinstance(patch, dict):
-        raise HTTPException(status_code=400, detail="payload.patch must be an object")
+        raise BadRequestError("payload.patch must be an object")
 
     normalized_patch: dict[str, Any] = {}
     for field in PATCH_LIST_FIELDS:
         value = deepcopy(patch.get(field) or [])
         if not isinstance(value, list):
-            raise HTTPException(status_code=400, detail=f"payload.patch.{field} must be a list")
+            raise BadRequestError(f"payload.patch.{field} must be a list")
         normalized_patch[field] = value
 
     upsert_buffers = deepcopy(patch.get("upsert_buffers") or patch.get("add_buffers") or {})
     if not isinstance(upsert_buffers, dict):
-        raise HTTPException(status_code=400, detail="payload.patch.upsert_buffers must be an object")
+        raise BadRequestError("payload.patch.upsert_buffers must be an object")
     normalized_patch["upsert_buffers"] = upsert_buffers
     normalized_patch["add_edges"] = [_normalize_edge(edge) for edge in normalized_patch["add_edges"]]
     normalized_patch["remove_edges"] = [_normalize_edge(edge) for edge in normalized_patch["remove_edges"]]
@@ -324,7 +357,7 @@ def normalize_pipeline_patch_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
 def normalize_import_bundle_payload(payload: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(payload, dict):
-        raise HTTPException(status_code=400, detail="payload must be an object")
+        raise BadRequestError("payload must be an object")
     documents = (
         payload.get("documents")
         or payload.get("canonical_documents")
@@ -335,18 +368,18 @@ def normalize_import_bundle_payload(payload: dict[str, Any]) -> dict[str, Any]:
     if payload.get("document"):
         documents = [payload["document"], *list(documents or [])]
     if not isinstance(documents, list):
-        raise HTTPException(status_code=400, detail="payload.documents must be a list")
+        raise BadRequestError("payload.documents must be a list")
     if not documents:
-        raise HTTPException(status_code=400, detail="payload.documents must not be empty")
+        raise BadRequestError("payload.documents must not be empty")
 
     normalized_docs: list[dict[str, Any]] = []
     for idx, doc in enumerate(documents):
         if not isinstance(doc, dict):
-            raise HTTPException(status_code=400, detail=f"payload.documents[{idx}] must be an object")
+            raise BadRequestError(f"payload.documents[{idx}] must be an object")
         normalized_docs.append(deepcopy(doc))
     import_report = deepcopy(payload.get("import_report") or {})
     if import_report and not isinstance(import_report, dict):
-        raise HTTPException(status_code=400, detail="payload.import_report must be an object")
+        raise BadRequestError("payload.import_report must be an object")
     return {
         "documents": normalized_docs,
         "import_report": import_report,
@@ -502,7 +535,7 @@ def build_pipeline_patch_diff(db: Session, normalized: dict[str, Any]) -> DiffPr
     scenario_ref = normalized["scenario_ref"]
     scenario = db.query(Scenario).filter_by(id=scenario_ref).one_or_none()
     if scenario is None:
-        raise HTTPException(status_code=404, detail=f"Scenario not found: {scenario_ref}")
+        raise NotFoundError(f"Scenario not found: {scenario_ref}")
 
     before = scenario.pipeline or {}
     after = _patched_pipeline(before, normalized["patch"])
@@ -601,7 +634,7 @@ def _apply_pipeline_patch(db: Session, normalized: dict[str, Any]) -> dict[str, 
     scenario_ref = normalized["scenario_ref"]
     scenario = db.query(Scenario).filter_by(id=scenario_ref).one_or_none()
     if scenario is None:
-        raise HTTPException(status_code=404, detail=f"Scenario not found: {scenario_ref}")
+        raise NotFoundError(f"Scenario not found: {scenario_ref}")
     before = scenario.pipeline or {}
     after = _patched_pipeline(before, normalized["patch"])
     scenario.pipeline = after
@@ -695,7 +728,7 @@ def _validate_pipeline_patch_node_ops(
 
 def _validate_pipeline_patch_edge_removes(
     patch: dict[str, Any],
-    base_edges: set[tuple[str | None, str | None, str | None]],
+    base_edges: list[dict[str, Any]],
 ) -> list[ValidationIssue]:
     issues: list[ValidationIssue] = []
     for idx, edge in enumerate(patch.get("remove_edges") or []):
@@ -784,6 +817,17 @@ def _validate_candidate_pipeline(db: Session, pipeline: dict[str, Any]) -> list[
         if key in seen_edges:
             issues.append(_issue("warning", "duplicate_edge", f"Duplicate edge after patch: {key}", path))
         seen_edges.add(key)
+
+    cycle = find_data_flow_cycle(pipeline.get("nodes") or [], pipeline.get("edges") or [])
+    if cycle:
+        issues.append(
+            _issue(
+                "error",
+                "pipeline_cycle",
+                f"Data-flow cycle detected after patch: {' -> '.join(cycle)}",
+                "pipeline.edges",
+            )
+        )
     return issues
 
 
@@ -864,10 +908,7 @@ def _validate_import_usecase_refs(
         issues.append(_issue("error", "import_project_ref_not_found", f"Project not found: {project_ref}", f"{path}.project_ref"))
 
     ip_refs = included.get("ip", set())
-    db_ip_refs = {
-        row.id
-        for row in db.query(IpCatalog).all()
-    }
+    db_ip_refs = {row.id for row in db.query(IpCatalog.id).all()}
     pipeline = doc.get("pipeline") or {}
     node_ids = {node.get("id") for node in pipeline.get("nodes") or [] if isinstance(node, dict)}
     buffer_ids = set((pipeline.get("buffers") or {}).keys())
@@ -905,6 +946,17 @@ def _validate_import_usecase_refs(
         if key in seen_edges:
             issues.append(_issue("warning", "import_duplicate_edge", f"Duplicate import edge: {key}", edge_path))
         seen_edges.add(key)
+
+    cycle = find_data_flow_cycle(pipeline.get("nodes") or [], pipeline.get("edges") or [])
+    if cycle:
+        issues.append(
+            _issue(
+                "error",
+                "import_pipeline_cycle",
+                f"Data-flow cycle detected in pipeline: {' -> '.join(cycle)}",
+                f"{path}.pipeline.edges",
+            )
+        )
 
     for variant_idx, variant in enumerate(doc.get("variants") or []):
         if not isinstance(variant, dict):
@@ -1000,7 +1052,7 @@ def _validate_import_cdgm_profile_refs(
         )
 
     ip_refs = included.get("ip", set())
-    db_ip_refs = {row.id for row in db.query(IpCatalog).all()}
+    db_ip_refs = {row.id for row in db.query(IpCatalog.id).all()}
     for role_key, override in (doc.get("role_overrides") or {}).items():
         if not isinstance(override, dict):
             continue
@@ -1023,7 +1075,9 @@ def _existing_import_doc_signatures(db: Session, kind: str, ids: list[str]) -> d
         return {}
     id_set = set(ids)
     result: dict[str, str | None] = {}
-    for row in db.query(model).all():
+    # SQL-side narrowing; the id_set guard stays as a cheap safety net for
+    # sessions that do not evaluate the filter (unit-test fakes).
+    for row in db.query(model).filter(model.id.in_(id_set)).all():
         if row.id not in id_set:
             continue
         result[row.id] = _existing_row_signature(db, kind, row)
@@ -1365,7 +1419,7 @@ def _patched_pipeline(pipeline: dict[str, Any], patch: dict[str, Any]) -> dict[s
 def _validate_routing_switch(
     routing_switch: dict[str, Any],
     base_node_ids: set[str],
-    base_edges: set[tuple[str | None, str | None, str | None]],
+    base_edges: list[dict[str, Any]],
 ) -> list[ValidationIssue]:
     issues: list[ValidationIssue] = []
     for node_id in routing_switch.get("disabled_nodes") or []:
@@ -1379,7 +1433,7 @@ def _validate_routing_switch(
 
 def _validate_topology_patch(
     topology_patch: dict[str, Any],
-    base_edges: set[tuple[str | None, str | None, str | None]],
+    base_edges: list[dict[str, Any]],
 ) -> tuple[set[str], list[ValidationIssue]]:
     issues: list[ValidationIssue] = []
     injected_nodes: set[str] = set()
@@ -1496,17 +1550,17 @@ def _nodes_from_pipeline(pipeline: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return {node.get("id"): node for node in nodes if isinstance(node, dict) and node.get("id")}
 
 
-def _base_edges(scenario: Scenario) -> set[tuple[str | None, str | None, str | None]]:
+def _base_edges(scenario: Scenario) -> list[dict[str, Any]]:
     return _edges_from_pipeline(scenario.pipeline or {})
 
 
-def _edges_from_pipeline(pipeline: dict[str, Any]) -> set[tuple[str | None, str | None, str | None]]:
+def _edges_from_pipeline(pipeline: dict[str, Any]) -> list[dict[str, Any]]:
     edges = pipeline.get("edges") or []
-    return {
-        (edge.get("id"), _edge_source(edge), _edge_target(edge))
+    return [
+        _normalize_edge(edge)
         for edge in edges
         if isinstance(edge, dict)
-    }
+    ]
 
 
 def _variant_ids(db: Session, scenario_ref: str) -> set[str]:
@@ -1516,44 +1570,10 @@ def _variant_ids(db: Session, scenario_ref: str) -> set[str]:
     }
 
 
-def _edge_exists(edge: Any, base_edges: set[tuple[str | None, str | None, str | None]]) -> bool:
+def _edge_exists(edge: Any, base_edges: list[dict[str, Any]]) -> bool:
     if not isinstance(edge, dict):
         return False
-    edge_id = edge.get("id")
-    source = _edge_source(edge)
-    target = _edge_target(edge)
-    for base_id, base_source, base_target in base_edges:
-        if edge_id and edge_id == base_id:
-            return True
-        if source == base_source and target == base_target:
-            return True
-    return False
-
-
-def _edge_matches(edge: dict[str, Any], spec: dict[str, Any]) -> bool:
-    spec_id = spec.get("id")
-    if spec_id and spec_id == edge.get("id"):
-        return True
-    return _edge_source(edge) == _edge_source(spec) and _edge_target(edge) == _edge_target(spec)
-
-
-def _edge_source(edge: dict[str, Any]) -> Any:
-    return edge.get("from") if edge.get("from") is not None else edge.get("source")
-
-
-def _edge_target(edge: dict[str, Any]) -> Any:
-    return edge.get("to") if edge.get("to") is not None else edge.get("target")
-
-
-def _normalize_edge(edge: Any) -> dict[str, Any]:
-    if not isinstance(edge, dict):
-        return {}
-    normalized = deepcopy(edge)
-    if "source" in normalized and "from" not in normalized:
-        normalized["from"] = normalized.pop("source")
-    if "target" in normalized and "to" not in normalized:
-        normalized["to"] = normalized.pop("target")
-    return normalized
+    return any(_edge_matches(base_edge, edge) for base_edge in base_edges)
 
 
 def _normalize_ref(item: Any) -> str:
@@ -1564,12 +1584,27 @@ def _normalize_ref(item: Any) -> str:
     return str(value) if value is not None else ""
 
 
+EXPLICIT_NODE_CLASSES = {"hw", "sw", "memory"}
+
+
+def _explicit_node_class(node: dict[str, Any]) -> str | None:
+    """Schema-declared node_class wins over every heuristic (review 5.3)."""
+    value = str(node.get("node_class") or "").lower()
+    return value if value in EXPLICIT_NODE_CLASSES else None
+
+
 def _is_sw_node(node: dict[str, Any]) -> bool:
+    explicit_class = _explicit_node_class(node)
+    if explicit_class is not None:
+        return explicit_class == "sw"
     text = f"{node.get('node_type', '')} {node.get('layer', '')} {node.get('kind', '')}".lower()
     return any(token in text.split() for token in {"sw", "app", "framework", "hal", "kernel", "task", "cpu"})
 
 
 def _node_class(db: Session, node: dict[str, Any]) -> str:
+    explicit_class = _explicit_node_class(node)
+    if explicit_class is not None:
+        return explicit_class
     if _is_sw_node(node):
         return "sw"
     explicit = f"{node.get('node_type', '')} {node.get('layer', '')} {node.get('kind', '')}".lower()

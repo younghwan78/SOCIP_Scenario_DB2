@@ -4,7 +4,8 @@ from typing import Any
 
 from scenario_db.db.repositories.scenario_graph import CanonicalScenarioGraph
 from scenario_db.matcher.context import MatcherContext
-from scenario_db.matcher.runner import evaluate
+from scenario_db.matcher.context_builders import build_evidence_matcher_context, build_variant_matcher_context
+from scenario_db.matcher.runner import EVALUATION_ERROR_TYPES, evaluate
 from scenario_db.resolver.engine import resolve_graph
 from scenario_db.resolver.models import ResolverResult
 from scenario_db.review_gate.models import (
@@ -251,61 +252,21 @@ def _match_operator(actual: Any, expr: Any) -> bool:
 
 
 def _variant_context(graph: CanonicalScenarioGraph) -> MatcherContext:
-    return MatcherContext(
-        design_conditions=graph.variant.design_conditions,
-        ip_requirements=graph.variant.ip_requirements,
-        sw_requirements=_normalized_sw_requirements(graph.variant.sw_requirements or {}, None),
-    )
+    return build_variant_matcher_context(graph.variant)
 
 
 def _evidence_context(graph: CanonicalScenarioGraph, evidence: Any) -> MatcherContext:
-    design_conditions = {
-        **(graph.variant.design_conditions or {}),
-        **(evidence.execution_context or {}),
-    }
-    return MatcherContext(
-        design_conditions=design_conditions,
-        ip_requirements=graph.variant.ip_requirements,
-        sw_requirements=_normalized_sw_requirements(graph.variant.sw_requirements or {}, evidence),
-        execution_context=evidence.execution_context,
-    )
+    return build_evidence_matcher_context(graph.variant, evidence)
 
 
 def _execution_axis_context(graph: CanonicalScenarioGraph, evidence: Any) -> MatcherContext:
-    return MatcherContext(
-        design_conditions={
-            **(graph.variant.design_conditions or {}),
-            **(evidence.execution_context or {}),
-        },
-        ip_requirements=graph.variant.ip_requirements,
-        sw_requirements=_normalized_sw_requirements(graph.variant.sw_requirements or {}, evidence),
-        execution_context=evidence.execution_context,
-    )
-
-
-def _normalized_sw_requirements(sw_requirements: dict[str, Any], evidence: Any | None) -> dict[str, Any]:
-    normalized = dict(sw_requirements)
-    feature_flags: dict[str, Any] = {}
-
-    for item in sw_requirements.get("required_features") or []:
-        if isinstance(item, dict):
-            feature_flags.update(item)
-
-    if evidence is not None:
-        sw_resolution = (evidence.resolution_result or {}).get("sw_resolution") or {}
-        for check in sw_resolution.get("required_features_check") or []:
-            if isinstance(check, dict) and "feature" in check:
-                feature_flags[check["feature"]] = check.get("actual", check.get("status"))
-
-    if feature_flags:
-        normalized["feature_flags"] = feature_flags
-    return normalized
+    return build_evidence_matcher_context(graph.variant, evidence)
 
 
 def _safe_evaluate(rule: dict[str, Any], ctx: MatcherContext) -> bool:
     try:
         return evaluate(rule, ctx)
-    except (KeyError, TypeError, ValueError):
+    except EVALUATION_ERROR_TYPES:
         return False
 
 

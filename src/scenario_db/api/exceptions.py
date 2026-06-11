@@ -5,6 +5,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError, NoResultFound
 
+from scenario_db.exceptions import ScenarioDbError
+
 
 def _error_code_for_status(status_code: int) -> str:
     if status_code == 400:
@@ -28,6 +30,16 @@ async def _http_exception_handler(request: Request, exc: HTTPException) -> JSONR
             "detail": exc.detail,
         },
         headers=exc.headers,
+    )
+
+
+async def _domain_error_handler(request: Request, exc: ScenarioDbError) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": _error_code_for_status(exc.status_code),
+            "detail": exc.detail,
+        },
     )
 
 
@@ -57,6 +69,7 @@ async def _validation_handler(request: Request, exc: RequestValidationError) -> 
 
 def register_handlers(app: FastAPI) -> None:
     app.add_exception_handler(HTTPException, _http_exception_handler)
+    app.add_exception_handler(ScenarioDbError, _domain_error_handler)
     app.add_exception_handler(NoResultFound, _not_found_handler)
     app.add_exception_handler(IntegrityError, _conflict_handler)
     app.add_exception_handler(RequestValidationError, _validation_handler)

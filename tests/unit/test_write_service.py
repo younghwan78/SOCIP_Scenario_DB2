@@ -13,12 +13,16 @@ from scenario_db.write.service import (
     validate_pipeline_patch,
     validate_variant_overlay,
     _document_signature,
+    _patched_pipeline,
 )
 
 
 class _Query:
     def __init__(self, rows):
         self._rows = list(rows)
+
+    def filter(self, *criteria):
+        return self
 
     def filter_by(self, **kwargs):
         def matches(row):
@@ -124,6 +128,9 @@ class _Db:
         )
 
     def query(self, model):
+        # Column queries (e.g. db.query(IpCatalog.id)) resolve to the owning
+        # model class; the fake rows expose the same attribute.
+        model = getattr(model, "class_", model)
         if model is Scenario:
             return _Query([self.scenario])
         if model is ScenarioVariant:
@@ -334,6 +341,105 @@ def test_validate_pipeline_patch_rejects_variant_overlay_breakage():
     )
     issues = validate_pipeline_patch(db, normalized)
     assert any(issue.code == "variant_overlay_impact" for issue in issues)
+
+
+def test_validate_pipeline_patch_rejects_data_flow_cycle():
+    # Base pipeline is csis0 -> isp0 -> mfc; adding mfc -> csis0 closes a cycle.
+    normalized = normalize_pipeline_patch_payload(
+        _pipeline_patch_payload(
+            {
+                "add_edges": [
+                    {"from": "mfc", "to": "csis0", "type": "M2M", "buffer": "RECORD_BUF"},
+                ],
+            }
+        )
+    )
+    issues = validate_pipeline_patch(_Db(), normalized)
+    assert any(issue.code == "pipeline_cycle" for issue in issues)
+
+
+def test_validate_pipeline_patch_rejects_typed_remove_when_only_parallel_endpoint_exists():
+    normalized = normalize_pipeline_patch_payload(
+        _pipeline_patch_payload(
+            {
+                "remove_edges": [
+                    {"from": "csis0", "to": "isp0", "type": "M2M", "buffer": "RECORD_BUF"},
+                ]
+            }
+        )
+    )
+
+    issues = validate_pipeline_patch(_Db(), normalized)
+
+    assert any(issue.code == "removed_edge_not_found" for issue in issues)
+
+
+def test_validate_pipeline_patch_rejects_remove_with_wrong_buffer_qualifier():
+    normalized = normalize_pipeline_patch_payload(
+        _pipeline_patch_payload(
+            {
+                "remove_edges": [
+                    {"from": "isp0", "to": "mfc", "type": "M2M", "buffer": "OTHER_BUF"},
+                ]
+            }
+        )
+    )
+
+    issues = validate_pipeline_patch(_Db(), normalized)
+
+    assert any(issue.code == "removed_edge_not_found" for issue in issues)
+
+
+def test_patched_pipeline_typed_remove_spec_keeps_parallel_edges():
+    """Regression: remove_edges with type must not delete parallel edges of
+    other types between the same node pair (canonical edge_matches semantics)."""
+    pipeline = {
+        "nodes": [{"id": "csis0"}, {"id": "isp0"}],
+        "edges": [
+            {"from": "csis0", "to": "isp0", "type": "OTF"},
+            {"from": "csis0", "to": "isp0", "type": "control"},
+        ],
+        "buffers": {},
+    }
+
+    patched = _patched_pipeline(
+        pipeline,
+        {"remove_edges": [{"from": "csis0", "to": "isp0", "type": "OTF"}]},
+    )
+
+    assert patched["edges"] == [{"from": "csis0", "to": "isp0", "type": "control"}]
+
+
+def test_patched_pipeline_untyped_remove_spec_removes_all_parallel_edges():
+    pipeline = {
+        "nodes": [{"id": "csis0"}, {"id": "isp0"}],
+        "edges": [
+            {"from": "csis0", "to": "isp0", "type": "OTF"},
+            {"from": "csis0", "to": "isp0", "type": "control"},
+        ],
+        "buffers": {},
+    }
+
+    patched = _patched_pipeline(
+        pipeline,
+        {"remove_edges": [{"from": "csis0", "to": "isp0"}]},
+    )
+
+    assert patched["edges"] == []
+
+
+def test_validate_pipeline_patch_allows_control_feedback_edge():
+    normalized = normalize_pipeline_patch_payload(
+        _pipeline_patch_payload(
+            {
+                "add_edges": [
+                    {"from": "mfc", "to": "csis0", "type": "control"},
+                ],
+            }
+        )
+    )
+    issues = validate_pipeline_patch(_Db(), normalized)
+    assert not any(issue.severity == "error" for issue in issues)
 
 
 def _import_usecase_doc(**overrides):
@@ -658,6 +764,26 @@ def test_validate_import_bundle_rejects_votf_edge_without_buffer():
     assert any(issue.code == "import_votf_edge_missing_buffer" for issue in issues)
 
 
+def test_validate_import_bundle_rejects_pipeline_cycle():
+    doc = _import_usecase_doc()
+    doc["pipeline"]["edges"].append({"from": "mfc", "to": "csis0", "type": "M2M", "buffer": "RECORD_BUF"})
+    normalized = normalize_import_bundle_payload({"documents": [doc]})
+
+    issues = validate_import_bundle(_Db(), normalized)
+
+    assert any(issue.code == "import_pipeline_cycle" for issue in issues)
+
+
+def test_validate_import_bundle_allows_control_feedback_edge():
+    doc = _import_usecase_doc()
+    doc["pipeline"]["edges"].append({"from": "mfc", "to": "csis0", "type": "control"})
+    normalized = normalize_import_bundle_payload({"documents": [doc]})
+
+    issues = validate_import_bundle(_Db(), normalized)
+
+    assert not any(issue.code == "import_pipeline_cycle" for issue in issues)
+
+
 def test_validate_import_bundle_accepts_votf_edge_with_buffer():
     doc = _import_usecase_doc()
     doc["pipeline"]["buffers"]["LINE_DELAY_BUF"] = {"format": "LINE", "placement": {"llc_allocated": True}}
@@ -684,7 +810,7 @@ def test_validate_import_bundle_accepts_control_edge_without_buffer():
     original_query = db.query
 
     def query(model):
-        if model is IpCatalog:
+        if getattr(model, "class_", model) is IpCatalog:
             return _Query([db.ip, db.ip_isp, db.ip_csis, db.ip_cpu])
         return original_query(model)
 

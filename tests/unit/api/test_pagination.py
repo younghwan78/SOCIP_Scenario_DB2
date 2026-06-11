@@ -8,10 +8,10 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import pytest
-from fastapi import HTTPException
 
 from scenario_db.api.pagination import apply_sort, validate_sort_column
 from scenario_db.api.schemas.common import PagedResponse
+from scenario_db.exceptions import BadRequestError
 
 
 # ---------------------------------------------------------------------------
@@ -58,7 +58,7 @@ def test_validate_sort_column_id_valid():
 
 def test_validate_sort_column_invalid_raises_400():
     model = _fake_model("id", "name")
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(BadRequestError) as exc_info:
         validate_sort_column(model, "nonexistent")
     assert exc_info.value.status_code == 400
     assert "nonexistent" in exc_info.value.detail
@@ -66,7 +66,7 @@ def test_validate_sort_column_invalid_raises_400():
 
 def test_validate_sort_column_error_lists_valid_cols():
     model = _fake_model("id", "name")
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(BadRequestError) as exc_info:
         validate_sort_column(model, "bad_col")
     # 에러 메시지에 유효한 컬럼 목록이 포함되어야 함
     assert "id" in exc_info.value.detail or "name" in exc_info.value.detail
@@ -79,7 +79,7 @@ def test_validate_sort_column_error_lists_valid_cols():
 def test_apply_sort_invalid_dir_raises_400():
     q = MagicMock()
     model = _fake_model("id")
-    with pytest.raises(HTTPException) as exc_info:
+    with pytest.raises(BadRequestError) as exc_info:
         apply_sort(q, model, None, "INVALID")
     assert exc_info.value.status_code == 400
 
@@ -87,15 +87,26 @@ def test_apply_sort_invalid_dir_raises_400():
 def test_apply_sort_uppercase_asc_raises_400():
     q = MagicMock()
     model = _fake_model("id")
-    with pytest.raises(HTTPException):
+    with pytest.raises(BadRequestError):
         apply_sort(q, model, None, "ASC")
 
 
 def test_apply_sort_uppercase_desc_raises_400():
     q = MagicMock()
     model = _fake_model("id")
-    with pytest.raises(HTTPException):
+    with pytest.raises(BadRequestError):
         apply_sort(q, model, None, "DESC")
+
+
+def test_apply_sort_unknown_column_raises_400():
+    """Review 5.4: apply_sort no longer silently falls back to default_col —
+    the 400 policy is identical to validate_sort_column on every path."""
+    q = MagicMock()
+    model = _fake_model("id", "name")
+    with pytest.raises(BadRequestError) as exc_info:
+        apply_sort(q, model, "nonexistent")
+    assert exc_info.value.status_code == 400
+    assert "nonexistent" in exc_info.value.detail
 
 
 # ---------------------------------------------------------------------------

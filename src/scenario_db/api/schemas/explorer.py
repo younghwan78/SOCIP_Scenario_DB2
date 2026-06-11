@@ -103,5 +103,7 @@ class ImportHealthIssue(BaseModel):
 class ImportHealthResponse(BaseModel):
     filters: dict[str, Any] = Field(default_factory=dict)
     issue_counts: dict[str, int] = Field(default_factory=dict)
+    total_issue_count: int = 0
+    truncated: bool = False
     issues: list[ImportHealthIssue] = Field(default_factory=list)
     latest_import_batches: list[ImportBatchSummary] = Field(default_factory=list)

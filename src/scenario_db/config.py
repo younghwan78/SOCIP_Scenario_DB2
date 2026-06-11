@@ -19,6 +19,12 @@ class Settings(BaseSettings):
     db_max_overflow: int = 20
     report_dir: str = "output_simulation"
     allow_custom_report_dir: bool = False
+    # Internal ops endpoints (/api/v1/admin/*) — default off; enable only on
+    # trusted networks (VPN) via SCENARIO_DB_ADMIN_ENDPOINTS_ENABLED=true.
+    admin_endpoints_enabled: bool = False
+    # /query/facets response cache TTL in seconds. 0 disables the cache;
+    # write apply invalidates it regardless of TTL.
+    query_facets_cache_ttl_seconds: float = 0.0
 
     model_config = {"env_prefix": "SCENARIO_DB_", "env_file": ".env", "extra": "ignore"}
 

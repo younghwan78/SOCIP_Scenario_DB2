@@ -11,6 +11,9 @@ from scenario_db.db.models.decision import GateRule, Issue, Review, Waiver
 from scenario_db.db.models.definition import Project, Scenario
 from scenario_db.db.models.evidence import Evidence
 from scenario_db.db.repositories.variant_resolution import ResolvedScenarioVariant, resolve_variant
+from scenario_db.graph_checks import edge_matches as _edge_matches
+from scenario_db.graph_checks import edge_source as _edge_source
+from scenario_db.graph_checks import edge_target as _edge_target
 
 
 @dataclass(slots=True)
@@ -28,6 +31,15 @@ class CanonicalScenarioGraph:
     waivers: list[Waiver] = field(default_factory=list)
     reviews: list[Review] = field(default_factory=list)
     gate_rules: list[GateRule] = field(default_factory=list)
+    # Lazy caches — the effective pipeline (deepcopy + variant patch overlay)
+    # is computed once per graph instance instead of on every property access.
+    # Callers treat the returned nodes/edges as read-only.
+    _pipeline_cache: tuple[list[dict[str, Any]], list[dict[str, Any]]] | None = field(
+        default=None, init=False, repr=False, compare=False
+    )
+    _node_by_id_cache: dict[Any, dict[str, Any]] | None = field(
+        default=None, init=False, repr=False, compare=False
+    )
 
     @property
     def scenario_id(self) -> str:
@@ -37,13 +49,27 @@ class CanonicalScenarioGraph:
     def variant_id(self) -> str:
         return self.variant.id
 
+    def _effective(self) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        if self._pipeline_cache is None:
+            self._pipeline_cache = _effective_pipeline(self.scenario.pipeline or {}, self.variant)
+        return self._pipeline_cache
+
     @property
     def pipeline_nodes(self) -> list[dict[str, Any]]:
-        return _effective_pipeline(self.scenario.pipeline or {}, self.variant)[0]
+        return self._effective()[0]
 
     @property
     def pipeline_edges(self) -> list[dict[str, Any]]:
-        return _effective_pipeline(self.scenario.pipeline or {}, self.variant)[1]
+        return self._effective()[1]
+
+    def node_by_id(self, node_id: Any) -> dict[str, Any] | None:
+        if node_id is None:
+            return None
+        if self._node_by_id_cache is None:
+            self._node_by_id_cache = {
+                node.get("id"): node for node in self.pipeline_nodes if node.get("id")
+            }
+        return self._node_by_id_cache.get(node_id)
 
     @property
     def has_topology_overlay(self) -> bool:
@@ -58,10 +84,8 @@ class CanonicalScenarioGraph:
         )
 
     def ip_ref_for_node(self, node_id: str) -> str | None:
-        for node in self.pipeline_nodes:
-            if node.get("id") == node_id:
-                return node.get("ip_ref")
-        return None
+        node = self.node_by_id(node_id)
+        return node.get("ip_ref") if node else None
 
 
 def load_canonical_graph(
@@ -229,6 +253,10 @@ def _explicit_node_mode(graph: CanonicalScenarioGraph, node_id: str) -> Any | No
 
 
 def _is_sensor_node(graph: CanonicalScenarioGraph, node: dict[str, Any]) -> bool:
+    # Schema-declared resource_kind wins over token heuristics (review 5.3).
+    explicit_kind = str(node.get("resource_kind") or "").lower()
+    if explicit_kind:
+        return explicit_kind == "sensor"
     ip_ref = str(node.get("ip_ref") or "")
     row = graph.ip_catalog.get(ip_ref)
     category = str(getattr(row, "category", "") or "").lower() if row is not None else ""
@@ -312,25 +340,5 @@ def _edge_removed(edge: dict[str, Any], remove_specs: list[Any]) -> bool:
     return any(isinstance(spec, dict) and _edge_matches(edge, spec) for spec in remove_specs)
 
 
-def _edge_matches(edge: dict[str, Any], spec: dict[str, Any]) -> bool:
-    spec_id = spec.get("id")
-    if spec_id and spec_id == edge.get("id"):
-        return True
-    if _edge_source(edge) != _edge_source(spec) or _edge_target(edge) != _edge_target(spec):
-        return False
-    for field in ("type", "buffer"):
-        if spec.get(field) is not None and edge.get(field) != spec.get(field):
-            return False
-    return True
-
-
 def _edge_key(edge: dict[str, Any]) -> tuple[Any, Any, Any, Any]:
     return (edge.get("id"), _edge_source(edge), _edge_target(edge), edge.get("type"))
-
-
-def _edge_source(edge: dict[str, Any]) -> Any:
-    return edge.get("from") if edge.get("from") is not None else edge.get("source")
-
-
-def _edge_target(edge: dict[str, Any]) -> Any:
-    return edge.get("to") if edge.get("to") is not None else edge.get("target")

@@ -22,6 +22,11 @@ from scenario_db.api.schemas.explorer import (
 from scenario_db.db.models.capability import IpCatalog, SocPlatform, SwProfile
 from scenario_db.db.models.definition import Project, Scenario, ScenarioVariant
 from scenario_db.db.models.write import WriteBatch
+from scenario_db.graph_checks import (
+    edge_source as _edge_source,
+    edge_target as _edge_target,
+    find_data_flow_cycle,
+)
 
 router = APIRouter(prefix="/explorer", tags=["explorer"])
 
@@ -52,8 +57,8 @@ def explorer_summary(
     for project in projects:
         board_counts[_project_meta(project, "board_type") or "unknown"] += 1
     for scenario in scenarios:
-        for category in _scenario_list_meta(scenario, "category") or ["uncategorized"]:
-            category_counts[str(category)] += 1
+        for category_value in _scenario_list_meta(scenario, "category") or ["uncategorized"]:
+            category_counts[str(category_value)] += 1
     for variant in variants:
         severity_counts[variant.severity or "unknown"] += 1
 
@@ -265,8 +270,9 @@ def import_health(
         and _matches_selected([issue.document_kind], document_kind)
         and _matches_selected([issue.document_id], document_id)
     ]
-    issues = issues[:limit]
     counts = Counter(issue.severity for issue in issues)
+    total_issue_count = len(issues)
+    issues = issues[:limit]
     return ImportHealthResponse(
         filters=_filters(
             soc_ref,
@@ -282,6 +288,8 @@ def import_health(
             document_id=document_id,
         ),
         issue_counts=dict(sorted(counts.items())),
+        total_issue_count=total_issue_count,
+        truncated=total_issue_count > limit,
         issues=issues,
         latest_import_batches=_latest_import_batches(db),
     )
@@ -397,12 +405,15 @@ def _variant_axis_keys(
 ) -> set[str]:
     if not scenario_ids:
         return set()
-    query = db.query(ScenarioVariant).filter(ScenarioVariant.scenario_id.in_(scenario_ids))
+    # Column-only select: axis keys need design_conditions, not full rows.
+    query = db.query(ScenarioVariant.design_conditions).filter(
+        ScenarioVariant.scenario_id.in_(scenario_ids)
+    )
     if severities:
         query = query.filter(ScenarioVariant.severity.in_(severities))
     keys: set[str] = set()
-    for variant in query.all():
-        design = variant.design_conditions or {}
+    for row in query.all():
+        design = row.design_conditions or {}
         keys.update(str(key) for key in design)
     return keys
 
@@ -464,9 +475,9 @@ def _data_quality_issues(
     variants: list[ScenarioVariant],
 ) -> list[ImportHealthIssue]:
     issues: list[ImportHealthIssue] = []
-    soc_ids = {row.id for row in db.query(SocPlatform).all()}
-    ip_ids = {row.id for row in db.query(IpCatalog).all()}
-    sw_profile_ids = {row.id for row in db.query(SwProfile).all()}
+    soc_ids = {row.id for row in db.query(SocPlatform.id).all()}
+    ip_ids = {row.id for row in db.query(IpCatalog.id).all()}
+    sw_profile_ids = {row.id for row in db.query(SwProfile.id).all()}
     project_ids = {row.id for row in projects}
     variant_counts = Counter(variant.scenario_id for variant in variants)
 
@@ -525,6 +536,9 @@ def _data_quality_issues(
                 issues.append(_health_issue("error", "scenario_memory_edge_buffer_missing", f"{edge_type} edge requires buffer: {source}->{target}", "scenario.usecase", scenario.id, f"{edge_path}.buffer", "If this is SW scheduling/control, use type: control. If data moves through memory, add a buffer descriptor."))
             if buffer_id and buffer_id not in buffers:
                 issues.append(_health_issue("error", "scenario_edge_buffer_missing", f"Buffer not found: {buffer_id}", "scenario.usecase", scenario.id, f"{edge_path}.buffer", "Add pipeline.buffers entry or fix edge.buffer."))
+        cycle = find_data_flow_cycle(pipeline.get("nodes") or [], pipeline.get("edges") or [])
+        if cycle:
+            issues.append(_health_issue("error", "scenario_pipeline_cycle", f"Data-flow cycle detected: {' -> '.join(cycle)}", "scenario.usecase", scenario.id, "pipeline.edges", "OTF/vOTF/M2M edges must form a DAG. Use type: control for SW feedback paths."))
         if variant_counts[scenario.id] == 0:
             issues.append(_health_issue("warning", "scenario_without_variant", f"Scenario has no variants: {scenario.id}", "scenario.usecase", scenario.id, "variants", "Add at least one variant unless this is intentionally a base-only scenario."))
     return issues
@@ -734,11 +748,3 @@ def _count_matching_sw_profiles(db: Session, soc_ids: set[str]) -> int:
         for soc_id in soc_ids
     )
     return db.query(SwProfile).filter(or_(*conditions)).count()
-
-
-def _edge_source(edge: dict[str, Any]) -> Any:
-    return edge.get("from") if edge.get("from") is not None else edge.get("source")
-
-
-def _edge_target(edge: dict[str, Any]) -> Any:
-    return edge.get("to") if edge.get("to") is not None else edge.get("target")

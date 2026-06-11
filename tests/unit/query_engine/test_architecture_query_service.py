@@ -18,6 +18,13 @@ from scenario_db.query_engine.service import QueryValidationError, _build_aggreg
 class _Query:
     def __init__(self, rows: list[object]) -> None:
         self._rows = rows
+        self.filters: list[object] = []
+
+    def filter(self, *criteria) -> "_Query":
+        # The fake does not evaluate SQL criteria; the service applies the
+        # scope predicates again in Python, so results stay correct.
+        self.filters.extend(criteria)
+        return self
 
     def all(self) -> list[object]:
         return list(self._rows)

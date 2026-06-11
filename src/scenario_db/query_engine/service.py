@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import time
 from collections import defaultdict
 from datetime import datetime, timezone
 from itertools import product
 from typing import Any
 
 from sqlalchemy.orm import Session
+
+from scenario_db.config import get_settings
 
 from scenario_db.api.schemas.query import (
     QueryAggregationBucket,
@@ -23,6 +26,12 @@ from scenario_db.db.models.decision import Issue
 from scenario_db.db.models.definition import Project, Scenario, ScenarioVariant
 from scenario_db.db.models.evidence import Evidence
 from scenario_db.db.repositories.variant_resolution import resolve_variant_from_rows
+from scenario_db.matcher.context import MatcherContext
+from scenario_db.matcher.context_builders import (
+    build_evidence_matcher_context,
+    build_variant_matcher_context,
+)
+from scenario_db.matcher.runner import EVALUATION_ERROR_TYPES, evaluate
 from scenario_db.query_engine.facts import build_variant_facts
 from scenario_db.query_engine.field_registry import OPERATORS, field_definition, field_definitions, is_supported_field
 
@@ -39,7 +48,7 @@ def query_variants(db: Session, request: QueryRequest) -> QueryResponse:
     if errors:
         raise QueryValidationError(errors)
 
-    items = _build_items(db)
+    items = _build_items(db, scope=request.scope)
     filtered = [
         item
         for item in items
@@ -61,7 +70,36 @@ def query_variants(db: Session, request: QueryRequest) -> QueryResponse:
     )
 
 
+# Facets respond from a short-TTL cache (review 4.2): the full-table item
+# build only reruns after the TTL or an explicit invalidation on write apply.
+# TTL 0 (default) disables caching entirely.
+_FACETS_CACHE: dict[str, Any] = {"value": None, "expires_at": 0.0}
+
+
+def _facets_cache_ttl() -> float:
+    try:
+        return float(get_settings().query_facets_cache_ttl_seconds)
+    except Exception:
+        return 0.0
+
+
+def invalidate_facets_cache() -> None:
+    _FACETS_CACHE["value"] = None
+    _FACETS_CACHE["expires_at"] = 0.0
+
+
 def build_facets(db: Session) -> QueryFacetsResponse:
+    ttl = _facets_cache_ttl()
+    if ttl > 0 and _FACETS_CACHE["value"] is not None and time.monotonic() < _FACETS_CACHE["expires_at"]:
+        return _FACETS_CACHE["value"]
+    response = _build_facets(db)
+    if ttl > 0:
+        _FACETS_CACHE["value"] = response
+        _FACETS_CACHE["expires_at"] = time.monotonic() + ttl
+    return response
+
+
+def _build_facets(db: Session) -> QueryFacetsResponse:
     items = _build_items(db)
     axis_keys: set[str] = set()
     kpi_keys: set[str] = set()
@@ -78,11 +116,8 @@ def build_facets(db: Session) -> QueryFacetsResponse:
     return QueryFacetsResponse(fields=field_definitions(axis_keys, kpi_keys, hints), operators=OPERATORS)
 
 
-def _build_items(db: Session) -> list[QueryResultItem]:
-    projects = _safe_all(db, Project)
-    scenarios = _safe_all(db, Scenario)
-    variants = _safe_all(db, ScenarioVariant)
-    evidence_rows = _safe_all(db, Evidence)
+def _build_items(db: Session, scope: dict[str, Any] | None = None) -> list[QueryResultItem]:
+    scenarios, projects, variants, evidence_rows = _load_scoped_rows(db, scope)
     issue_rows = _safe_all(db, Issue)
     ip_rows = _safe_all(db, IpCatalog)
 
@@ -110,7 +145,12 @@ def _build_items(db: Session) -> list[QueryResultItem]:
         for variant_id, raw_variant in sorted(row_map.items()):
             variant = _resolved_variant(row_map, scenario_id, variant_id, raw_variant)
             ev = latest_evidence.get((scenario_id, variant_id))
-            matched_issue_ids = _matched_issue_ids(issue_rows, scenario, variant)
+            matched_issue_ids = _matched_issue_ids(
+                issue_rows,
+                scenario,
+                variant,
+                latest_evidence=ev,
+            )
             items.append(
                 build_variant_facts(
                     project=project,
@@ -127,6 +167,67 @@ def _build_items(db: Session) -> list[QueryResultItem]:
 def _safe_all(db: Session, model: Any) -> list[Any]:
     rows = db.query(model).all()
     return list(rows) if isinstance(rows, list) else []
+
+
+def _scope_id_values(scope: dict[str, Any] | None, *keys: str) -> list[str]:
+    values: list[str] = []
+    for key in keys:
+        value = (scope or {}).get(key)
+        if value in (None, "", []):
+            continue
+        items = value if isinstance(value, list) else [value]
+        values.extend(str(item) for item in items if item not in (None, ""))
+    return values
+
+
+def _load_scoped_rows(
+    db: Session,
+    scope: dict[str, Any] | None,
+) -> tuple[list[Any], list[Any], list[Any], list[Any]]:
+    """Load the four variant-item source tables, pre-filtered in SQL when the
+    request scope pins scenarios/projects (review 4.2). The Python-side scope
+    predicates still run afterwards, so this only narrows the working set."""
+    scenario_scope = _scope_id_values(scope, "scenario_id")
+    project_scope = _scope_id_values(scope, "project_ref", "project_id")
+
+    if not scenario_scope and not project_scope:
+        return (
+            _safe_all(db, Scenario),
+            _safe_all(db, Project),
+            _safe_all(db, ScenarioVariant),
+            _safe_all(db, Evidence),
+        )
+
+    scenario_query = db.query(Scenario)
+    if scenario_scope:
+        scenario_query = scenario_query.filter(Scenario.id.in_(scenario_scope))
+    if project_scope:
+        scenario_query = scenario_query.filter(Scenario.project_ref.in_(project_scope))
+    rows = scenario_query.all()
+    scenarios = list(rows) if isinstance(rows, list) else []
+
+    scenario_ids = {str(getattr(row, "id", "")) for row in scenarios if getattr(row, "id", None)}
+    project_refs = {
+        str(getattr(row, "project_ref", ""))
+        for row in scenarios
+        if getattr(row, "project_ref", None)
+    }
+    projects = (
+        list(db.query(Project).filter(Project.id.in_(project_refs)).all() or [])
+        if project_refs
+        else []
+    )
+    variants = (
+        list(db.query(ScenarioVariant).filter(ScenarioVariant.scenario_id.in_(scenario_ids)).all() or [])
+        if scenario_ids
+        else []
+    )
+    evidence_rows = (
+        list(db.query(Evidence).filter(Evidence.scenario_ref.in_(scenario_ids)).all() or [])
+        if scenario_ids
+        else []
+    )
+    return scenarios, projects, variants, evidence_rows
 
 
 def _resolved_variant(row_map: dict[str, Any], scenario_id: str, variant_id: str, raw_variant: Any) -> Any:
@@ -173,21 +274,70 @@ def _parse_utc_timestamp(value: Any) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
-def _matched_issue_ids(issue_rows: list[Any], scenario: Any, variant: Any) -> list[str]:
+def _matched_issue_ids(
+    issue_rows: list[Any],
+    scenario: Any,
+    variant: Any,
+    *,
+    latest_evidence: Any | None = None,
+) -> list[str]:
+    """Match issues against the canonical affects list format.
+
+    Canonical affects entries share rule syntax with review_gate and
+    /matched-issues. Architecture Query evaluates the variant context plus
+    latest evidence context when available; the public endpoint remains
+    variant-only.
+        affects: [{"scenario_ref": "...", "match_rule": {...}}, ...]
+    The legacy dict form ({scenario_ref(s)/variant_ref(s)}) stays supported.
+    """
     scenario_id = str(getattr(scenario, "id", "") or "")
     variant_id = str(getattr(variant, "id", "") or "")
+    contexts = [build_variant_matcher_context(variant)]
+    if latest_evidence is not None:
+        contexts.append(build_evidence_matcher_context(variant, latest_evidence))
     matched: list[str] = []
     for issue in issue_rows:
-        affects = getattr(issue, "affects", None) or {}
-        if not isinstance(affects, dict):
+        issue_id = getattr(issue, "id", None)
+        if not issue_id:
             continue
-        scenario_refs = _as_string_set(affects.get("scenario_ref") or affects.get("scenario_refs") or affects.get("scenario_id") or affects.get("scenario_ids"))
-        variant_refs = _as_string_set(affects.get("variant_ref") or affects.get("variant_refs") or affects.get("variant_id") or affects.get("variant_ids"))
-        scenario_matches = not scenario_refs or scenario_id in scenario_refs
-        variant_matches = not variant_refs or variant_id in variant_refs
-        if scenario_matches and variant_matches and getattr(issue, "id", None):
-            matched.append(str(getattr(issue, "id")))
+        affects = getattr(issue, "affects", None)
+        if isinstance(affects, list):
+            if _affects_entries_match(affects, scenario_id, contexts):
+                matched.append(str(issue_id))
+        elif isinstance(affects, dict):
+            if _legacy_affects_match(affects, scenario_id, variant_id):
+                matched.append(str(issue_id))
     return matched
+
+
+def _affects_entries_match(affects: list[Any], scenario_id: str, contexts: list[MatcherContext]) -> bool:
+    for affect in affects:
+        if not isinstance(affect, dict):
+            continue
+        ref = affect.get("scenario_ref", "*")
+        if ref not in (None, "*", scenario_id):
+            continue
+        match_rule = affect.get("match_rule")
+        if not match_rule:
+            return True
+        if any(_safe_rule_evaluate(match_rule, ctx) for ctx in contexts):
+            return True
+    return False
+
+
+def _safe_rule_evaluate(rule: dict[str, Any], ctx: MatcherContext) -> bool:
+    try:
+        return evaluate(rule, ctx)
+    except EVALUATION_ERROR_TYPES:
+        return False
+
+
+def _legacy_affects_match(affects: dict[str, Any], scenario_id: str, variant_id: str) -> bool:
+    scenario_refs = _as_string_set(affects.get("scenario_ref") or affects.get("scenario_refs") or affects.get("scenario_id") or affects.get("scenario_ids"))
+    variant_refs = _as_string_set(affects.get("variant_ref") or affects.get("variant_refs") or affects.get("variant_id") or affects.get("variant_ids"))
+    scenario_matches = not scenario_refs or scenario_id in scenario_refs
+    variant_matches = not variant_refs or variant_id in variant_refs
+    return scenario_matches and variant_matches
 
 
 def _scope_predicates(scope: dict[str, Any] | None) -> list[QueryPredicate]:
@@ -535,16 +685,18 @@ def _sort_items(items: list[QueryResultItem], sort_specs: list[dict[str, Any]]) 
     return result
 
 
-def _sort_key(values: list[Any]) -> tuple[int, Any]:
+def _sort_key(values: list[Any]) -> tuple[int, float, str]:
+    # Rank separates numeric, text, and missing values so mixed-type fields
+    # (e.g. axis values 1080 and "4K") never compare float against str.
     value = next((item for item in values if item not in (None, "")), None)
     if value is None:
-        return (1, "")
+        return (2, 0.0, "")
     if isinstance(value, (int, float)):
-        return (0, value)
+        return (0, float(value), "")
     try:
-        return (0, float(value))
+        return (0, float(value), "")
     except (TypeError, ValueError):
-        return (0, str(value).lower())
+        return (1, 0.0, str(value).lower())
 
 
 def _as_string_set(value: Any) -> set[str]:

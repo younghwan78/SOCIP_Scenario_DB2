@@ -277,6 +277,8 @@ class _VariantMatrixSession:
         ]
 
     def query(self, model):
+        # Column queries (db.query(Model.col)) resolve to the owning class.
+        model = getattr(model, "class_", model)
         table = getattr(model, "__tablename__", "")
         if table == "projects":
             return _VariantMatrixQuery([self.project])

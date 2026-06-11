@@ -7,6 +7,7 @@ from scenario_db.matcher.context import MatcherContext
 
 # v2.2 §19 단축 키 → context prefix 매핑
 _SHORTHAND_PREFIXES = ("axis", "ip", "sw_feature", "sw_component", "scope")
+EVALUATION_ERROR_TYPES = (KeyError, TypeError, ValueError, IndexError, re.error)
 
 
 def evaluate(rule: dict, ctx: MatcherContext) -> bool:

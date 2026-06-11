@@ -306,6 +306,8 @@ class _ImportDb:
         ]
 
     def query(self, model):
+        # Column queries (db.query(Model.col)) resolve to the owning class.
+        model = getattr(model, "class_", model)
         if model is Project:
             return _Query([self.project])
         if model is IpCatalog:

@@ -177,7 +177,7 @@ curl "http://localhost:8000/api/v1/issues/iss-LLC-thrashing-0221"
 
 | 항목 | 이유 |
 |------|------|
-| `POST /admin/cache/refresh` | internal 운영 도구 — VPN 뒤에서만 노출 예정 |
+| `POST /admin/cache/refresh` | 구현됨 — 기본 비활성, `SCENARIO_DB_ADMIN_ENDPOINTS_ENABLED=true`(VPN 등 신뢰 네트워크)에서만 등록 |
 | `POST /variants/generate-yaml` | Week 4 YAML export |
 | `POST /scenarios/{sid}/variants` | Write API Phase |
 | `POST /scenarios/{sid}/variants/{vid}/review` | Gate automation Phase C |
