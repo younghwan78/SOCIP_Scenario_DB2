@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Text, func
+from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Index, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 
 from scenario_db.db.base import Base
@@ -17,6 +17,7 @@ class WriteBatch(Base):
             "status in ('staged', 'validated', 'validation_failed', 'diff_ready', 'applied')",
             name="ck_write_batches_status",
         ),
+        Index("idx_write_batches_updated_at", "updated_at"),
     )
 
     id                 = Column(Text, primary_key=True)

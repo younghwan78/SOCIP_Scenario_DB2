@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import CheckConstraint, Column, Computed, DateTime, ForeignKey, Integer, Text
+from sqlalchemy import CheckConstraint, Column, Computed, DateTime, ForeignKey, Index, Integer, Text
 from sqlalchemy.dialects.postgresql import JSONB
 
 from scenario_db.db.base import Base
@@ -28,6 +28,7 @@ class Evidence(Base):
             "kind in ('evidence.simulation', 'evidence.measurement')",
             name="ck_evidence_kind",
         ),
+        Index("idx_ev_scenario_variant", "scenario_ref", "variant_ref"),
     )
 
     id                  = Column(Text, primary_key=True)
