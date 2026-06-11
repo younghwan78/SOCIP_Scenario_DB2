@@ -150,13 +150,17 @@ def matched_issues(
     ctx = MatcherContext.from_variant(variant)
 
     t0 = time.perf_counter()
-    matched: list[IssueResponse] = match_issues_for_variant(ctx, cache.issues, scenario_id=scenario_id)
+    evaluation_errors: list[str] = []
+    matched: list[IssueResponse] = match_issues_for_variant(
+        ctx, cache.issues, scenario_id=scenario_id, evaluation_errors=evaluation_errors
+    )
     eval_ms = (time.perf_counter() - t0) * 1000
 
     return {
         "matched": [m.model_dump() for m in matched],
         "total": len(matched),
         "eval_time_ms": round(eval_ms, 3),
+        "evaluation_errors": evaluation_errors,
     }
 
 
