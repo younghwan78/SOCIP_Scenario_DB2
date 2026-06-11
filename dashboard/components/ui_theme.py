@@ -442,9 +442,7 @@ def _asset_data_uri(path: Path) -> str:
     return f"data:image/png;base64,{encoded}"
 
 
-def _inject_sidebar_toggle(*, sidebar_width: int, logo_src: str = "") -> None:
-    """Add a persistent sidebar toggle because themed headers can hide Streamlit's native affordance."""
-
+def _sidebar_toggle_script(*, sidebar_width: int, logo_src: str = "") -> str:
     toggle_script = """
 <script>
 (function () {
@@ -538,12 +536,17 @@ def _inject_sidebar_toggle(*, sidebar_width: int, logo_src: str = "") -> None:
       sidebar.style.setProperty("border-right", "1px solid #DED8CF", "important");
       sidebar.style.setProperty("background", "#F1EDE6", "important");
       sidebar.style.removeProperty("overflow");
+      sidebar.style.removeProperty("overflow-x");
+      sidebar.style.removeProperty("overflow-y");
       if (inner) {
         inner.style.setProperty("width", expandedWidth, "important");
         inner.style.setProperty("min-width", expandedWidth, "important");
         inner.style.setProperty("max-width", expandedWidth, "important");
         inner.style.setProperty("background", "#F1EDE6", "important");
         inner.style.removeProperty("padding-top");
+        inner.style.removeProperty("overflow");
+        inner.style.removeProperty("overflow-x");
+        inner.style.removeProperty("overflow-y");
       }
       if (brand) {
         brand.style.display = "flex";
@@ -619,6 +622,14 @@ def _inject_sidebar_toggle(*, sidebar_width: int, logo_src: str = "") -> None:
 })();
 </script>
 """.replace("__SIDEBAR_WIDTH__", f"{sidebar_width}px").replace("__SIDEBAR_LOGO_SRC__", logo_src)
+
+    return toggle_script
+
+
+def _inject_sidebar_toggle(*, sidebar_width: int, logo_src: str = "") -> None:
+    """Add a persistent sidebar toggle because themed headers can hide Streamlit's native affordance."""
+
+    toggle_script = _sidebar_toggle_script(sidebar_width=sidebar_width, logo_src=logo_src)
 
     components.html(
         toggle_script,
