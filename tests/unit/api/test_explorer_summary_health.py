@@ -34,6 +34,8 @@ class _Session:
         self.rows = rows
 
     def query(self, model):
+        # Column queries (db.query(Model.col)) resolve to the owning class.
+        model = getattr(model, "class_", model)
         return _Query(self.rows.get(model, []))
 
 

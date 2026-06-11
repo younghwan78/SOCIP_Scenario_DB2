@@ -26,6 +26,9 @@ def refresh_rule_cache(
     멀티 워커 운영 시에는 워커별로 호출이 필요하다.
     """
     cache.invalidate_all(db)
+    from scenario_db.query_engine.service import invalidate_facets_cache
+
+    invalidate_facets_cache()
     return {
         "loaded": cache.loaded,
         "issues": len(cache.issues),

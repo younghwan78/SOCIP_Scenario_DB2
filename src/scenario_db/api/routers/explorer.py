@@ -405,12 +405,15 @@ def _variant_axis_keys(
 ) -> set[str]:
     if not scenario_ids:
         return set()
-    query = db.query(ScenarioVariant).filter(ScenarioVariant.scenario_id.in_(scenario_ids))
+    # Column-only select: axis keys need design_conditions, not full rows.
+    query = db.query(ScenarioVariant.design_conditions).filter(
+        ScenarioVariant.scenario_id.in_(scenario_ids)
+    )
     if severities:
         query = query.filter(ScenarioVariant.severity.in_(severities))
     keys: set[str] = set()
-    for variant in query.all():
-        design = variant.design_conditions or {}
+    for row in query.all():
+        design = row.design_conditions or {}
         keys.update(str(key) for key in design)
     return keys
 
@@ -472,9 +475,9 @@ def _data_quality_issues(
     variants: list[ScenarioVariant],
 ) -> list[ImportHealthIssue]:
     issues: list[ImportHealthIssue] = []
-    soc_ids = {row.id for row in db.query(SocPlatform).all()}
-    ip_ids = {row.id for row in db.query(IpCatalog).all()}
-    sw_profile_ids = {row.id for row in db.query(SwProfile).all()}
+    soc_ids = {row.id for row in db.query(SocPlatform.id).all()}
+    ip_ids = {row.id for row in db.query(IpCatalog.id).all()}
+    sw_profile_ids = {row.id for row in db.query(SwProfile.id).all()}
     project_ids = {row.id for row in projects}
     variant_counts = Counter(variant.scenario_id for variant in variants)
 

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import time
 from collections import defaultdict
 from datetime import datetime, timezone
 from itertools import product
 from typing import Any
 
 from sqlalchemy.orm import Session
+
+from scenario_db.config import get_settings
 
 from scenario_db.api.schemas.query import (
     QueryAggregationBucket,
@@ -41,7 +44,7 @@ def query_variants(db: Session, request: QueryRequest) -> QueryResponse:
     if errors:
         raise QueryValidationError(errors)
 
-    items = _build_items(db)
+    items = _build_items(db, scope=request.scope)
     filtered = [
         item
         for item in items
@@ -63,7 +66,36 @@ def query_variants(db: Session, request: QueryRequest) -> QueryResponse:
     )
 
 
+# Facets respond from a short-TTL cache (review 4.2): the full-table item
+# build only reruns after the TTL or an explicit invalidation on write apply.
+# TTL 0 (default) disables caching entirely.
+_FACETS_CACHE: dict[str, Any] = {"value": None, "expires_at": 0.0}
+
+
+def _facets_cache_ttl() -> float:
+    try:
+        return float(get_settings().query_facets_cache_ttl_seconds)
+    except Exception:
+        return 0.0
+
+
+def invalidate_facets_cache() -> None:
+    _FACETS_CACHE["value"] = None
+    _FACETS_CACHE["expires_at"] = 0.0
+
+
 def build_facets(db: Session) -> QueryFacetsResponse:
+    ttl = _facets_cache_ttl()
+    if ttl > 0 and _FACETS_CACHE["value"] is not None and time.monotonic() < _FACETS_CACHE["expires_at"]:
+        return _FACETS_CACHE["value"]
+    response = _build_facets(db)
+    if ttl > 0:
+        _FACETS_CACHE["value"] = response
+        _FACETS_CACHE["expires_at"] = time.monotonic() + ttl
+    return response
+
+
+def _build_facets(db: Session) -> QueryFacetsResponse:
     items = _build_items(db)
     axis_keys: set[str] = set()
     kpi_keys: set[str] = set()
@@ -80,11 +112,8 @@ def build_facets(db: Session) -> QueryFacetsResponse:
     return QueryFacetsResponse(fields=field_definitions(axis_keys, kpi_keys, hints), operators=OPERATORS)
 
 
-def _build_items(db: Session) -> list[QueryResultItem]:
-    projects = _safe_all(db, Project)
-    scenarios = _safe_all(db, Scenario)
-    variants = _safe_all(db, ScenarioVariant)
-    evidence_rows = _safe_all(db, Evidence)
+def _build_items(db: Session, scope: dict[str, Any] | None = None) -> list[QueryResultItem]:
+    scenarios, projects, variants, evidence_rows = _load_scoped_rows(db, scope)
     issue_rows = _safe_all(db, Issue)
     ip_rows = _safe_all(db, IpCatalog)
 
@@ -129,6 +158,67 @@ def _build_items(db: Session) -> list[QueryResultItem]:
 def _safe_all(db: Session, model: Any) -> list[Any]:
     rows = db.query(model).all()
     return list(rows) if isinstance(rows, list) else []
+
+
+def _scope_id_values(scope: dict[str, Any] | None, *keys: str) -> list[str]:
+    values: list[str] = []
+    for key in keys:
+        value = (scope or {}).get(key)
+        if value in (None, "", []):
+            continue
+        items = value if isinstance(value, list) else [value]
+        values.extend(str(item) for item in items if item not in (None, ""))
+    return values
+
+
+def _load_scoped_rows(
+    db: Session,
+    scope: dict[str, Any] | None,
+) -> tuple[list[Any], list[Any], list[Any], list[Any]]:
+    """Load the four variant-item source tables, pre-filtered in SQL when the
+    request scope pins scenarios/projects (review 4.2). The Python-side scope
+    predicates still run afterwards, so this only narrows the working set."""
+    scenario_scope = _scope_id_values(scope, "scenario_id")
+    project_scope = _scope_id_values(scope, "project_ref", "project_id")
+
+    if not scenario_scope and not project_scope:
+        return (
+            _safe_all(db, Scenario),
+            _safe_all(db, Project),
+            _safe_all(db, ScenarioVariant),
+            _safe_all(db, Evidence),
+        )
+
+    scenario_query = db.query(Scenario)
+    if scenario_scope:
+        scenario_query = scenario_query.filter(Scenario.id.in_(scenario_scope))
+    if project_scope:
+        scenario_query = scenario_query.filter(Scenario.project_ref.in_(project_scope))
+    rows = scenario_query.all()
+    scenarios = list(rows) if isinstance(rows, list) else []
+
+    scenario_ids = {str(getattr(row, "id", "")) for row in scenarios if getattr(row, "id", None)}
+    project_refs = {
+        str(getattr(row, "project_ref", ""))
+        for row in scenarios
+        if getattr(row, "project_ref", None)
+    }
+    projects = (
+        list(db.query(Project).filter(Project.id.in_(project_refs)).all() or [])
+        if project_refs
+        else []
+    )
+    variants = (
+        list(db.query(ScenarioVariant).filter(ScenarioVariant.scenario_id.in_(scenario_ids)).all() or [])
+        if scenario_ids
+        else []
+    )
+    evidence_rows = (
+        list(db.query(Evidence).filter(Evidence.scenario_ref.in_(scenario_ids)).all() or [])
+        if scenario_ids
+        else []
+    )
+    return scenarios, projects, variants, evidence_rows
 
 
 def _resolved_variant(row_map: dict[str, Any], scenario_id: str, variant_id: str, raw_variant: Any) -> Any:

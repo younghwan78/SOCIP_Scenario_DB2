@@ -239,6 +239,11 @@ def apply_batch(
     db.commit()
     if rule_cache is not None:
         rule_cache.invalidate_all(db)
+    # Applied data feeds the query engine; drop the facets cache so the next
+    # /query/facets call rebuilds from fresh rows. Lazy import avoids a cycle.
+    from scenario_db.query_engine.service import invalidate_facets_cache
+
+    invalidate_facets_cache()
     return ApplyWriteResponse(batch_id=batch.id, status=batch.status, applied_refs=applied_refs)
 
 
@@ -887,10 +892,7 @@ def _validate_import_usecase_refs(
         issues.append(_issue("error", "import_project_ref_not_found", f"Project not found: {project_ref}", f"{path}.project_ref"))
 
     ip_refs = included.get("ip", set())
-    db_ip_refs = {
-        row.id
-        for row in db.query(IpCatalog).all()
-    }
+    db_ip_refs = {row.id for row in db.query(IpCatalog.id).all()}
     pipeline = doc.get("pipeline") or {}
     node_ids = {node.get("id") for node in pipeline.get("nodes") or [] if isinstance(node, dict)}
     buffer_ids = set((pipeline.get("buffers") or {}).keys())
@@ -1034,7 +1036,7 @@ def _validate_import_cdgm_profile_refs(
         )
 
     ip_refs = included.get("ip", set())
-    db_ip_refs = {row.id for row in db.query(IpCatalog).all()}
+    db_ip_refs = {row.id for row in db.query(IpCatalog.id).all()}
     for role_key, override in (doc.get("role_overrides") or {}).items():
         if not isinstance(override, dict):
             continue
@@ -1057,7 +1059,9 @@ def _existing_import_doc_signatures(db: Session, kind: str, ids: list[str]) -> d
         return {}
     id_set = set(ids)
     result: dict[str, str | None] = {}
-    for row in db.query(model).all():
+    # SQL-side narrowing; the id_set guard stays as a cheap safety net for
+    # sessions that do not evaluate the filter (unit-test fakes).
+    for row in db.query(model).filter(model.id.in_(id_set)).all():
         if row.id not in id_set:
             continue
         result[row.id] = _existing_row_signature(db, kind, row)

@@ -21,6 +21,9 @@ class _Query:
     def __init__(self, rows):
         self._rows = list(rows)
 
+    def filter(self, *criteria):
+        return self
+
     def filter_by(self, **kwargs):
         def matches(row):
             return all(getattr(row, key) == value for key, value in kwargs.items())
@@ -125,6 +128,9 @@ class _Db:
         )
 
     def query(self, model):
+        # Column queries (e.g. db.query(IpCatalog.id)) resolve to the owning
+        # model class; the fake rows expose the same attribute.
+        model = getattr(model, "class_", model)
         if model is Scenario:
             return _Query([self.scenario])
         if model is ScenarioVariant:
@@ -772,7 +778,7 @@ def test_validate_import_bundle_accepts_control_edge_without_buffer():
     original_query = db.query
 
     def query(model):
-        if model is IpCatalog:
+        if getattr(model, "class_", model) is IpCatalog:
             return _Query([db.ip, db.ip_isp, db.ip_csis, db.ip_cpu])
         return original_query(model)
 
