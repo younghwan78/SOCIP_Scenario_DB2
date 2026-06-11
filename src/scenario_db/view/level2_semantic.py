@@ -169,6 +169,8 @@ def _level2_node_spec(
         modules,
     )
     module_nodes = _level2_matching_modules(modules, block_name, functional_modules)
+    if not module_nodes and functional_modules:
+        module_nodes = _level2_pipeline_edge_modules(graph, node_id)
 
     if not functional_modules and not module_nodes:
         return (
@@ -277,6 +279,59 @@ def _level2_matching_modules(
     return matched
 
 
+def _level2_pipeline_edge_modules(graph: CanonicalScenarioGraph, node_id: str) -> list[dict[str, Any]]:
+    has_read = False
+    has_write = False
+    for edge in _level1_effective_edges(graph):
+        if _edge_flow_type(edge) != "M2M" or not edge.get("buffer"):
+            continue
+        if str(_edge_source(edge) or "") == node_id:
+            has_write = True
+        if str(_edge_target(edge) or "") == node_id:
+            has_read = True
+
+    modules: list[dict[str, Any]] = []
+    if has_read:
+        modules.append(
+            {
+                "name": f"{node_id}_RDMA",
+                "type": "DMA",
+                "direction": "read",
+                "role": "m2m_input",
+                "status": "derived_from_pipeline_edge",
+            }
+        )
+    if has_write:
+        modules.append(
+            {
+                "name": f"{node_id}_WDMA",
+                "type": "DMA",
+                "direction": "write",
+                "role": "m2m_output",
+                "status": "derived_from_pipeline_edge",
+            }
+        )
+    return modules
+
+
+def _level2_module_source(specs: list[Level2NodeSpec]) -> str:
+    sources: list[str] = []
+
+    def add(source: str) -> None:
+        if source not in sources:
+            sources.append(source)
+
+    for spec in specs:
+        hierarchy = getattr(spec.ip_row, "hierarchy", None) or {}
+        if hierarchy.get("submodules"):
+            add("ip_catalog.hierarchy.submodules")
+        if spec.properties.get("modules") or spec.properties.get("subblocks") or spec.properties.get("internal_edges"):
+            add("ip_catalog.capabilities.properties")
+        if any(module.get("status") == "derived_from_pipeline_edge" for module in spec.module_nodes):
+            add("scenario.pipeline.edges")
+    return " + ".join(sources or ["ip_catalog.capabilities.properties"])
+
+
 def _level2_module_response(
     graph: CanonicalScenarioGraph,
     expand: str,
@@ -320,7 +375,7 @@ def _level2_module_response(
             "expand": expand,
             "level2_available": True,
             "target_nodes": [spec.node_id for spec in specs],
-            "module_source": "ip_catalog.capabilities.properties",
+            "module_source": _level2_module_source(specs),
             "rendered_module_count": sum(len(spec.functional_ids) + len(spec.module_nodes) for spec in specs),
             "omitted_reasons": omitted_reasons,
         },

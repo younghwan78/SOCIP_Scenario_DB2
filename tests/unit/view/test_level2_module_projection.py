@@ -140,3 +140,70 @@ def test_level2_node_spec_uses_typed_spec_object():
     assert isinstance(spec, Level2NodeSpec)
     assert spec.node_id == "csispdp"
     assert spec.ip_ref == "ip-isp-s5e9965"
+
+
+def test_level2_hierarchy_only_ip_derives_io_modules_from_m2m_edges():
+    graph = CanonicalScenarioGraph(
+        scenario=SimpleNamespace(
+            id="uc-demo-import-recording",
+            project_ref="proj-demo-import",
+            metadata_={"name": "Demo Imported Camera Recording"},
+            pipeline={
+                "nodes": [
+                    {"id": "isp0", "role": "main", "ip_ref": "ip-isp-v12"},
+                    {"id": "mfc", "ip_ref": "ip-mfc-v14"},
+                    {"id": "dpu", "ip_ref": "ip-dpu-v9"},
+                ],
+                "edges": [
+                    {"from": "isp0", "to": "mfc", "type": "M2M", "buffer": "RECORD_BUF"},
+                    {"from": "isp0", "to": "dpu", "type": "M2M", "buffer": "PREVIEW_BUF"},
+                ],
+                "buffers": {
+                    "RECORD_BUF": {"format": "NV12"},
+                    "PREVIEW_BUF": {"format": "NV12"},
+                },
+            },
+            size_profile={},
+        ),
+        variant=SimpleNamespace(
+            id="FHD30-Imported",
+            severity="nominal",
+            design_conditions={},
+            size_overrides={},
+            routing_switch={},
+            topology_patch={},
+            node_configs={},
+            buffer_overrides={},
+            ip_requirements={},
+            sw_requirements={},
+            resolved=True,
+            inheritance_chain=["FHD30-Imported"],
+        ),
+        soc=SimpleNamespace(id="soc-exynos2500"),
+        ip_catalog={
+            "ip-isp-v12": SimpleNamespace(
+                category="camera",
+                capabilities={"properties": {}},
+                hierarchy={
+                    "type": "composite",
+                    "submodules": [
+                        {"ref": "sub-3aa-v4", "instance_id": "ISP.3AA0"},
+                        {"ref": "sub-tnr-v3", "instance_id": "ISP.TNR"},
+                    ],
+                },
+            ),
+            "ip-mfc-v14": SimpleNamespace(category="codec", capabilities={}, hierarchy={}),
+            "ip-dpu-v9": SimpleNamespace(category="display", capabilities={}, hierarchy={}),
+        },
+    )
+
+    view = service._project_drilldown(graph, "isp0")
+    nodes = _node_by_id(view)
+
+    assert view.metadata["level2_available"] is True
+    assert "scenario.pipeline.edges" in view.metadata["module_source"]
+    assert nodes["mod-isp0-isp0-wdma"].data.module_kind == "wdma"
+    assert nodes["mod-isp0-isp0-wdma"].data.module_direction == "output"
+    assert nodes["mod-isp0-isp0-wdma"].data.module_status == "derived_from_pipeline_edge"
+    assert any(edge.data.source == "mod-isp0-isp0-wdma" and edge.data.buffer_ref == "RECORD_BUF" for edge in view.edges)
+    assert any(edge.data.source == "mod-isp0-isp0-wdma" and edge.data.buffer_ref == "PREVIEW_BUF" for edge in view.edges)
