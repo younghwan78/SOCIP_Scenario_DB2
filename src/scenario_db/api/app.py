@@ -10,7 +10,7 @@ from sqlalchemy import create_engine
 
 from scenario_db.api.cache import RuleCache
 from scenario_db.api.exceptions import register_handlers
-from scenario_db.api.routers import capability, cdgm, decision, definition, evidence, exploration, explorer, query, runtime, simulation, write
+from scenario_db.api.routers import admin, capability, cdgm, decision, definition, evidence, exploration, explorer, query, runtime, simulation, write
 from scenario_db.api.routers.utility import health_router
 from scenario_db.api.routers import view as view_router
 from scenario_db.config import get_settings
@@ -75,7 +75,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
 
     # /api/v1/*
-    for r in [
+    routers = [
         capability.router,
         cdgm.router,
         definition.router,
@@ -88,7 +88,11 @@ def create_app() -> FastAPI:
         simulation.router,
         view_router.router,
         write.router,
-    ]:
+    ]
+    # Internal ops router stays off unless explicitly enabled (VPN-only tool).
+    if settings.admin_endpoints_enabled:
+        routers.append(admin.router)
+    for r in routers:
         app.include_router(r, prefix="/api/v1")
 
     return app
