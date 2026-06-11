@@ -4,6 +4,10 @@ from collections.abc import Iterable
 from typing import Any
 
 from scenario_db.db.repositories.scenario_graph import CanonicalScenarioGraph
+from scenario_db.graph_checks import (
+    edge_source as _edge_source,
+    edge_target as _edge_target,
+)
 from scenario_db.sim.models import IPWorkload
 
 
@@ -248,9 +252,3 @@ def _float_or_none(value: Any) -> float | None:
         return None
 
 
-def _edge_source(edge: dict[str, Any]) -> Any:
-    return edge.get("from") if edge.get("from") is not None else edge.get("source")
-
-
-def _edge_target(edge: dict[str, Any]) -> Any:
-    return edge.get("to") if edge.get("to") is not None else edge.get("target")

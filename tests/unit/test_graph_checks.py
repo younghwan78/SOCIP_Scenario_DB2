@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from scenario_db.graph_checks import find_data_flow_cycle
+from scenario_db.graph_checks import edge_matches, find_data_flow_cycle, normalize_edge
 
 
 def _nodes(*ids: str) -> list[dict]:
@@ -88,3 +88,42 @@ def test_cycle_in_disconnected_component_is_found():
 
     assert cycle is not None
     assert set(cycle) == {"x", "y"}
+
+
+def test_edge_matches_by_id_wins():
+    edge = {"id": "e1", "from": "a", "to": "b", "type": "OTF"}
+
+    assert edge_matches(edge, {"id": "e1", "from": "x", "to": "y"}) is True
+    assert edge_matches(edge, {"id": "e2", "from": "a", "to": "b"}) is True  # endpoint fallback
+
+
+def test_edge_matches_respects_type_and_buffer_qualifiers():
+    otf = {"from": "a", "to": "b", "type": "OTF"}
+    control = {"from": "a", "to": "b", "type": "control"}
+
+    spec_typed = {"from": "a", "to": "b", "type": "OTF"}
+    assert edge_matches(otf, spec_typed) is True
+    assert edge_matches(control, spec_typed) is False
+
+    spec_untyped = {"from": "a", "to": "b"}
+    assert edge_matches(otf, spec_untyped) is True
+    assert edge_matches(control, spec_untyped) is True
+
+    m2m = {"from": "a", "to": "b", "type": "M2M", "buffer": "BUF_A"}
+    assert edge_matches(m2m, {"from": "a", "to": "b", "buffer": "BUF_B"}) is False
+    assert edge_matches(m2m, {"from": "a", "to": "b", "buffer": "BUF_A"}) is True
+
+
+def test_edge_matches_supports_source_target_aliases():
+    edge = {"source": "a", "target": "b", "type": "OTF"}
+
+    assert edge_matches(edge, {"from": "a", "to": "b"}) is True
+
+
+def test_normalize_edge_aliases_source_target():
+    assert normalize_edge({"source": "a", "target": "b", "type": "OTF"}) == {
+        "from": "a",
+        "to": "b",
+        "type": "OTF",
+    }
+    assert normalize_edge("not-a-dict") == {}

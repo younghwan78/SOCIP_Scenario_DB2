@@ -13,6 +13,7 @@ from scenario_db.write.service import (
     validate_pipeline_patch,
     validate_variant_overlay,
     _document_signature,
+    _patched_pipeline,
 )
 
 
@@ -349,6 +350,44 @@ def test_validate_pipeline_patch_rejects_data_flow_cycle():
     )
     issues = validate_pipeline_patch(_Db(), normalized)
     assert any(issue.code == "pipeline_cycle" for issue in issues)
+
+
+def test_patched_pipeline_typed_remove_spec_keeps_parallel_edges():
+    """Regression: remove_edges with type must not delete parallel edges of
+    other types between the same node pair (canonical edge_matches semantics)."""
+    pipeline = {
+        "nodes": [{"id": "csis0"}, {"id": "isp0"}],
+        "edges": [
+            {"from": "csis0", "to": "isp0", "type": "OTF"},
+            {"from": "csis0", "to": "isp0", "type": "control"},
+        ],
+        "buffers": {},
+    }
+
+    patched = _patched_pipeline(
+        pipeline,
+        {"remove_edges": [{"from": "csis0", "to": "isp0", "type": "OTF"}]},
+    )
+
+    assert patched["edges"] == [{"from": "csis0", "to": "isp0", "type": "control"}]
+
+
+def test_patched_pipeline_untyped_remove_spec_removes_all_parallel_edges():
+    pipeline = {
+        "nodes": [{"id": "csis0"}, {"id": "isp0"}],
+        "edges": [
+            {"from": "csis0", "to": "isp0", "type": "OTF"},
+            {"from": "csis0", "to": "isp0", "type": "control"},
+        ],
+        "buffers": {},
+    }
+
+    patched = _patched_pipeline(
+        pipeline,
+        {"remove_edges": [{"from": "csis0", "to": "isp0"}]},
+    )
+
+    assert patched["edges"] == []
 
 
 def test_validate_pipeline_patch_allows_control_feedback_edge():

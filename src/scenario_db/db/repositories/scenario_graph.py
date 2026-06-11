@@ -11,6 +11,9 @@ from scenario_db.db.models.decision import GateRule, Issue, Review, Waiver
 from scenario_db.db.models.definition import Project, Scenario
 from scenario_db.db.models.evidence import Evidence
 from scenario_db.db.repositories.variant_resolution import ResolvedScenarioVariant, resolve_variant
+from scenario_db.graph_checks import edge_matches as _edge_matches
+from scenario_db.graph_checks import edge_source as _edge_source
+from scenario_db.graph_checks import edge_target as _edge_target
 
 
 @dataclass(slots=True)
@@ -312,25 +315,5 @@ def _edge_removed(edge: dict[str, Any], remove_specs: list[Any]) -> bool:
     return any(isinstance(spec, dict) and _edge_matches(edge, spec) for spec in remove_specs)
 
 
-def _edge_matches(edge: dict[str, Any], spec: dict[str, Any]) -> bool:
-    spec_id = spec.get("id")
-    if spec_id and spec_id == edge.get("id"):
-        return True
-    if _edge_source(edge) != _edge_source(spec) or _edge_target(edge) != _edge_target(spec):
-        return False
-    for field in ("type", "buffer"):
-        if spec.get(field) is not None and edge.get(field) != spec.get(field):
-            return False
-    return True
-
-
 def _edge_key(edge: dict[str, Any]) -> tuple[Any, Any, Any, Any]:
     return (edge.get("id"), _edge_source(edge), _edge_target(edge), edge.get("type"))
-
-
-def _edge_source(edge: dict[str, Any]) -> Any:
-    return edge.get("from") if edge.get("from") is not None else edge.get("source")
-
-
-def _edge_target(edge: dict[str, Any]) -> Any:
-    return edge.get("to") if edge.get("to") is not None else edge.get("target")

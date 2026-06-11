@@ -22,7 +22,11 @@ from scenario_db.api.schemas.explorer import (
 from scenario_db.db.models.capability import IpCatalog, SocPlatform, SwProfile
 from scenario_db.db.models.definition import Project, Scenario, ScenarioVariant
 from scenario_db.db.models.write import WriteBatch
-from scenario_db.graph_checks import find_data_flow_cycle
+from scenario_db.graph_checks import (
+    edge_source as _edge_source,
+    edge_target as _edge_target,
+    find_data_flow_cycle,
+)
 
 router = APIRouter(prefix="/explorer", tags=["explorer"])
 
@@ -741,11 +745,3 @@ def _count_matching_sw_profiles(db: Session, soc_ids: set[str]) -> int:
         for soc_id in soc_ids
     )
     return db.query(SwProfile).filter(or_(*conditions)).count()
-
-
-def _edge_source(edge: dict[str, Any]) -> Any:
-    return edge.get("from") if edge.get("from") is not None else edge.get("source")
-
-
-def _edge_target(edge: dict[str, Any]) -> Any:
-    return edge.get("to") if edge.get("to") is not None else edge.get("target")

@@ -25,7 +25,13 @@ from scenario_db.db.models.definition import Project, Scenario, ScenarioVariant
 from scenario_db.db.models.write import WriteBatch, WriteEvent
 from scenario_db.etl.mappers.capability import upsert_ip, upsert_soc, upsert_soc_cdgm_profile, upsert_soc_dvfs_table, upsert_sw_profile
 from scenario_db.etl.mappers.definition import upsert_project, upsert_usecase
-from scenario_db.graph_checks import find_data_flow_cycle
+from scenario_db.graph_checks import (
+    edge_matches as _edge_matches,
+    edge_source as _edge_source,
+    edge_target as _edge_target,
+    find_data_flow_cycle,
+    normalize_edge as _normalize_edge,
+)
 from scenario_db.models.capability.hw import IpCatalog as PydanticIpCatalog
 from scenario_db.models.capability.hw import SocCdgmProfile as PydanticSocCdgmProfile
 from scenario_db.models.capability.hw import SocDvfsTable as PydanticSocDvfsTable
@@ -1556,32 +1562,6 @@ def _edge_exists(edge: Any, base_edges: set[tuple[str | None, str | None, str | 
         if source == base_source and target == base_target:
             return True
     return False
-
-
-def _edge_matches(edge: dict[str, Any], spec: dict[str, Any]) -> bool:
-    spec_id = spec.get("id")
-    if spec_id and spec_id == edge.get("id"):
-        return True
-    return _edge_source(edge) == _edge_source(spec) and _edge_target(edge) == _edge_target(spec)
-
-
-def _edge_source(edge: dict[str, Any]) -> Any:
-    return edge.get("from") if edge.get("from") is not None else edge.get("source")
-
-
-def _edge_target(edge: dict[str, Any]) -> Any:
-    return edge.get("to") if edge.get("to") is not None else edge.get("target")
-
-
-def _normalize_edge(edge: Any) -> dict[str, Any]:
-    if not isinstance(edge, dict):
-        return {}
-    normalized = deepcopy(edge)
-    if "source" in normalized and "from" not in normalized:
-        normalized["from"] = normalized.pop("source")
-    if "target" in normalized and "to" not in normalized:
-        normalized["to"] = normalized.pop("target")
-    return normalized
 
 
 def _normalize_ref(item: Any) -> str:

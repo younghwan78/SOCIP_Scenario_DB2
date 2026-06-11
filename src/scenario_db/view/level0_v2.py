@@ -24,6 +24,10 @@ from scenario_db.api.schemas.view import (
     ViewHints,
 )
 from scenario_db.db.repositories.scenario_graph import CanonicalScenarioGraph
+from scenario_db.graph_checks import (
+    edge_source as _edge_source,
+    edge_target as _edge_target,
+)
 
 
 @dataclass(frozen=True)
@@ -587,14 +591,6 @@ def _topology_x(layer: str) -> int:
         "hw": 560,
         "memory": 800,
     }.get(layer, 560)
-
-
-def _edge_source(edge: dict[str, Any]) -> Any:
-    return edge.get("from") if edge.get("from") is not None else edge.get("source")
-
-
-def _edge_target(edge: dict[str, Any]) -> Any:
-    return edge.get("to") if edge.get("to") is not None else edge.get("target")
 
 
 def _buffer_node_id(buffer_ref: str) -> str:
