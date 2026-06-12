@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from sqlalchemy.orm import Session
 
 from scenario_db.db.models.evidence import Evidence
@@ -17,6 +19,8 @@ def upsert_simulation(raw: dict, sha256: str, session: Session) -> None:
     row.kind                = obj.kind
     row.scenario_ref        = str(obj.scenario_ref)
     row.variant_ref         = obj.variant_ref
+    row.project_ref         = str(obj.project_ref) if obj.project_ref else None
+    row.derived_from        = [str(d) for d in obj.derived_from] or None
     row.sw_baseline_ref     = str(obj.execution_context.sw_baseline_ref)
     row.sweep_job_id        = obj.sweep_context.sweep_job_id if obj.sweep_context else None
     row.execution_context   = obj.execution_context.model_dump(exclude_none=True)
@@ -60,12 +64,20 @@ def upsert_measurement(raw: dict, sha256: str, session: Session) -> None:
     row.kind                = obj.kind
     row.scenario_ref        = str(obj.scenario_ref)
     row.variant_ref         = obj.variant_ref
+    row.project_ref         = str(obj.project_ref) if obj.project_ref else None
+    row.measured_at         = datetime.fromisoformat(obj.measured_at) if obj.measured_at else None
+    row.derived_from        = [str(d) for d in obj.derived_from] or None
     row.sw_baseline_ref     = str(obj.execution_context.sw_baseline_ref)
     row.sweep_job_id        = obj.sweep_context.sweep_job_id if obj.sweep_context else None
     row.execution_context   = obj.execution_context.model_dump(exclude_none=True)
     row.sweep_context       = obj.sweep_context.model_dump(exclude_none=True) if obj.sweep_context else None
     row.aggregation         = obj.aggregation.model_dump(exclude_none=True)
     row.kpi                 = {k: _kpi_val(v) for k, v in obj.kpi.items()}
+    row.cpu_breakdown       = [b.model_dump(exclude_none=True) for b in obj.cpu_breakdown] or None
+    row.sw_task_timing      = [b.model_dump(exclude_none=True) for b in obj.sw_task_timing] or None
+    row.vdd_power           = obj.vdd_power or None
+    row.timeline_events     = list(obj.timeline_events) or None
+    row.artifacts           = [a.model_dump(exclude_none=True) for a in obj.artifacts] or None
     row.provenance          = obj.provenance.model_dump(exclude_none=True)
     row.yaml_sha256         = sha256
     session.add(row)

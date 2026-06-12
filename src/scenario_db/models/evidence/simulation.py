@@ -43,6 +43,9 @@ class SimulationEvidence(BaseScenarioModel):
     scenario_ref: DocumentId
     variant_ref: str                     # Variant.id is free-form, not a DocumentId
     project_ref: DocumentId | None = None
+    # Lineage: evidence ids this result was derived from (e.g. projection from
+    # another project's measurement evidence).
+    derived_from: list[DocumentId] = Field(default_factory=list)
     execution_context: ExecutionContext
     sweep_context: SweepContext | None = None
     resolution_result: ResolutionResult | None = None

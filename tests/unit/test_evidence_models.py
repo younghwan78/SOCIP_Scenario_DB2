@@ -460,3 +460,71 @@ def test_sim_evidence_accepts_timeline_events():
     assert obj.timeline_events[0].deadline_ms == 16.666667
     assert obj.timeline_events[0].critical is True
     assert obj.params_hash == "abc123"
+
+
+# ---------------------------------------------------------------------------
+# Measurement detail fields (contract v1: project_ref / measured_at / digests)
+# ---------------------------------------------------------------------------
+
+def test_meas_identity_and_lineage_fields():
+    obj = roundtrip(MeasurementEvidence, FIXTURES / "meas-camera-recording-UHD60-EVT0-sw123.yaml")
+    assert obj.project_ref == "proj-A-exynos2500"
+    assert obj.measured_at == "2026-04-19T14:30:00+09:00"
+    assert obj.derived_from == []
+    assert obj.execution_context.method == "measurement"
+
+
+def test_meas_cpu_breakdown_digest():
+    obj = roundtrip(MeasurementEvidence, FIXTURES / "meas-camera-recording-UHD60-EVT0-sw123.yaml")
+    clusters = {c.cluster: c for c in obj.cpu_breakdown}
+    assert set(clusters) == {"BIG", "MID", "LIT"}
+    big = clusters["BIG"]
+    assert isinstance(big.power_mw, MeasuredKpi)
+    assert big.power_mw.mean == 820.0
+    assert big.avg_freq_mhz == 2210.0
+    residency = {b.freq_mhz: b.ratio for b in big.freq_residency}
+    assert residency[2210.0] == 0.52
+    # flat float power is also allowed
+    assert clusters["MID"].power_mw == 310.0
+
+
+def test_meas_sw_task_timing_digest():
+    obj = roundtrip(MeasurementEvidence, FIXTURES / "meas-camera-recording-UHD60-EVT0-sw123.yaml")
+    tasks = {t.task: t for t in obj.sw_task_timing}
+    eis = tasks["eis_warp"]
+    assert eis.cluster == "BIG"
+    assert eis.p95_ms == 8.9
+    assert eis.samples == 5400
+
+
+def test_meas_vdd_power_and_artifacts():
+    obj = roundtrip(MeasurementEvidence, FIXTURES / "meas-camera-recording-UHD60-EVT0-sw123.yaml")
+    assert obj.vdd_power["VDD_CAM"]["mean_mw"] == 640.0
+    assert obj.timeline_events[0]["type"] == "frame_drop"
+    art = obj.artifacts[0]
+    assert art.type == "perfetto_trace"
+    assert art.storage == "fileshare"
+    assert art.sha256 == "cafebabe5678"
+
+
+def test_meas_measured_at_must_be_iso8601():
+    raw = load_yaml(FIXTURES / "meas-camera-recording-UHD60-EVT0-sw123.yaml")
+    raw["measured_at"] = "2026/04/19 14:30"
+    with pytest.raises(ValidationError, match="ISO 8601"):
+        MeasurementEvidence.model_validate(raw)
+
+
+def test_meas_execution_method_vocabulary_is_locked():
+    raw = load_yaml(FIXTURES / "meas-camera-recording-UHD60-EVT0-sw123.yaml")
+    raw["execution_context"]["method"] = "guesswork"
+    with pytest.raises(ValidationError):
+        MeasurementEvidence.model_validate(raw)
+
+
+def test_sim_derived_from_lineage():
+    raw = load_yaml(FIXTURES / "sim-camera-recording-UHD60-EVT0-sw123.yaml")
+    raw["derived_from"] = ["meas-uc-camera-recording-UHD60-HDR10-H265-EVT0-sw123-20260419"]
+    raw["execution_context"]["method"] = "projection"
+    obj = SimulationEvidence.model_validate(raw)
+    assert obj.derived_from[0].startswith("meas-")
+    assert obj.execution_context.method == "projection"
