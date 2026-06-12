@@ -48,7 +48,7 @@ class _Session:
     def __init__(self):
         self.queries: dict[str, list[_Query]] = {}
         self.projects = [
-            SimpleNamespace(id="proj-A", metadata_={"soc_ref": "soc-A"}, globals_={}),
+            SimpleNamespace(id="proj-A", metadata_={"soc_ref": "soc-A", "board_type": "evt0"}, globals_={}),
         ]
         self.scenarios = [
             SimpleNamespace(
@@ -92,6 +92,51 @@ def test_scenario_scope_prefilters_tables_in_sql():
     assert all(query.filters for query in session.queries["scenario_variants"])
     assert all(query.filters for query in session.queries["evidence"])
     assert all(query.filters for query in session.queries["projects"])
+
+
+def test_soc_board_variant_and_severity_scope_prefilter_in_sql():
+    session = _Session()
+
+    response = query_variants(
+        session,
+        QueryRequest(
+            scope={
+                "soc_ref": "soc-A",
+                "board_type": "evt0",
+                "variant_id": "UHD60",
+                "severity": "nominal",
+            }
+        ),
+    )
+
+    assert response.total == 1
+    assert session.queries["projects"][0].filters
+    assert session.queries["scenarios"][0].filters
+    assert all(query.filters for query in session.queries["scenario_variants"])
+    assert all(query.filters for query in session.queries["evidence"])
+
+
+def test_ip_catalog_load_is_limited_to_pipeline_ip_refs():
+    session = _Session()
+    session.scenarios[0].pipeline = {
+        "nodes": [{"id": "sensor", "ip_ref": "ip-sensor"}, {"id": "isp", "ip_ref": "ip-isp"}],
+        "edges": [],
+        "buffers": {},
+    }
+    session.variants[0].topology_patch = {
+        "add_nodes": [{"id": "task", "ip_ref": "ip-task"}],
+    }
+    session.ip_catalog = [
+        SimpleNamespace(id="ip-sensor", category="sensor"),
+        SimpleNamespace(id="ip-isp", category="ISP"),
+        SimpleNamespace(id="ip-task", category="task"),
+        SimpleNamespace(id="ip-unused", category="unused"),
+    ]
+
+    response = query_variants(session, QueryRequest(scope={"scenario_id": "uc-camera"}))
+
+    assert response.total == 1
+    assert session.queries["ip_catalog"][0].filters
 
 
 def test_unscoped_query_loads_tables_without_sql_filters():

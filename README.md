@@ -158,6 +158,26 @@ Base scenario view is available even when a scenario has no variants:
 Invoke-RestMethod "$api/scenarios/uc-demo-import-recording/view?level=0&mode=resource"
 ```
 
+Optional query/cache settings:
+
+```powershell
+$env:SCENARIO_DB_QUERY_FACETS_CACHE_TTL_SECONDS="60"
+```
+
+`/api/v1/query/facets` uses this short TTL cache when the value is greater than
+0. Write apply invalidates it automatically. If you load YAML directly through
+`python -m scenario_db.etl.loader`, either wait for the TTL or enable the
+internal admin endpoint in a trusted local/VPN environment and refresh caches:
+
+```powershell
+$env:SCENARIO_DB_ADMIN_ENDPOINTS_ENABLED="true"
+Invoke-RestMethod -Method Post "$api/admin/cache/refresh"
+```
+
+The admin endpoint refreshes the current API process. With multiple uvicorn
+workers, restart the API or refresh each worker through the operational entry
+point you expose.
+
 ## Write API
 
 The write targets are `scenario.variant_overlay`, `scenario.pipeline_patch`, and

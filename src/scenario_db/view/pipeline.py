@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 from scenario_db.db.repositories.scenario_graph import CanonicalScenarioGraph
+from scenario_db.graph_checks import edge_matches as _edge_matches
 from scenario_db.view.buffers import _buffer_detail_items, _size_text
 
 def _node_detail_items(
@@ -168,17 +169,5 @@ def _dma_count_for_node(graph: CanonicalScenarioGraph, node_id: str | None) -> i
     return max(1, len(memory_edges))
 
 
-
 def _task_edge_removed(edge: dict[str, Any], remove_specs: list[Any]) -> bool:
-    return any(isinstance(spec, dict) and _task_edge_matches(edge, spec) for spec in remove_specs)
-
-def _task_edge_matches(edge: dict[str, Any], spec: dict[str, Any]) -> bool:
-    spec_id = spec.get("id")
-    if spec_id and spec_id == edge.get("id"):
-        return True
-    if edge.get("from") != spec.get("from") or edge.get("to") != spec.get("to"):
-        return False
-    for field in ("type", "buffer"):
-        if spec.get(field) is not None and edge.get(field) is not None and edge.get(field) != spec.get(field):
-            return False
-    return True
+    return any(isinstance(spec, dict) and _edge_matches(edge, spec) for spec in remove_specs)

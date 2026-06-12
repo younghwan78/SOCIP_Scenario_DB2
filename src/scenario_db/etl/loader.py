@@ -25,6 +25,7 @@ from scenario_db.etl.mappers.decision import (
 )
 from scenario_db.etl.mappers.definition import upsert_project, upsert_usecase
 from scenario_db.etl.mappers.evidence import upsert_measurement, upsert_simulation
+from scenario_db.graph_checks import find_data_flow_cycle
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +107,7 @@ def load_yaml_dir(
             for path, raw, sha256 in by_kind.get(kind, []):
                 try:
                     with session.begin_nested():          # PostgreSQL SAVEPOINT
+                        _validate_raw_document(kind, raw)
                         MAPPER_REGISTRY[kind](raw, sha256, session)
                     success += 1
                 except Exception as exc:
@@ -123,6 +125,18 @@ def load_yaml_dir(
     total = sum(counts.values())
     logger.info("ETL complete — %d loaded, %d skipped", total, len(skipped))
     return counts
+
+
+def _validate_raw_document(kind: str, raw: dict) -> None:
+    if kind != "scenario.usecase":
+        return
+    pipeline = raw.get("pipeline") or {}
+    cycle = find_data_flow_cycle(pipeline.get("nodes") or [], pipeline.get("edges") or [])
+    if cycle:
+        raise ValueError(
+            "scenario.usecase pipeline has a data-flow cycle: "
+            f"{' -> '.join(cycle)}. Use type: control for feedback paths."
+        )
 
 
 def main(directory: str, *, scenario_project_collision_policy: str = "error") -> None:

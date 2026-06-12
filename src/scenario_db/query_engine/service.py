@@ -119,7 +119,7 @@ def _build_facets(db: Session) -> QueryFacetsResponse:
 def _build_items(db: Session, scope: dict[str, Any] | None = None) -> list[QueryResultItem]:
     scenarios, projects, variants, evidence_rows = _load_scoped_rows(db, scope)
     issue_rows = _safe_all(db, Issue)
-    ip_rows = _safe_all(db, IpCatalog)
+    ip_rows = _load_ip_rows(db, scenarios, variants)
 
     project_by_id = {str(getattr(project, "id", "")): project for project in projects}
     scenarios_by_id = {str(getattr(scenario, "id", "")): scenario for scenario in scenarios}
@@ -185,12 +185,16 @@ def _load_scoped_rows(
     scope: dict[str, Any] | None,
 ) -> tuple[list[Any], list[Any], list[Any], list[Any]]:
     """Load the four variant-item source tables, pre-filtered in SQL when the
-    request scope pins scenarios/projects (review 4.2). The Python-side scope
-    predicates still run afterwards, so this only narrows the working set."""
+    request scope pins projects/scenarios/variants (review 4.2). The Python-side
+    scope predicates still run afterwards, so this only narrows the working set."""
     scenario_scope = _scope_id_values(scope, "scenario_id")
     project_scope = _scope_id_values(scope, "project_ref", "project_id")
+    soc_scope = _scope_id_values(scope, "soc_ref", "soc_id")
+    board_scope = _scope_id_values(scope, "board_type")
+    variant_scope = _scope_id_values(scope, "variant_id")
+    severity_scope = _scope_id_values(scope, "severity")
 
-    if not scenario_scope and not project_scope:
+    if not any((scenario_scope, project_scope, soc_scope, board_scope, variant_scope, severity_scope)):
         return (
             _safe_all(db, Scenario),
             _safe_all(db, Project),
@@ -198,36 +202,159 @@ def _load_scoped_rows(
             _safe_all(db, Evidence),
         )
 
+    projects = (
+        _load_scoped_projects(db, project_scope, soc_scope, board_scope)
+        if project_scope or soc_scope or board_scope
+        else []
+    )
+    if (project_scope or soc_scope or board_scope) and not projects:
+        return [], [], [], []
+    project_refs = {
+        str(getattr(row, "id", ""))
+        for row in projects
+        if getattr(row, "id", None)
+    }
+
     scenario_query = db.query(Scenario)
     if scenario_scope:
         scenario_query = scenario_query.filter(Scenario.id.in_(scenario_scope))
-    if project_scope:
-        scenario_query = scenario_query.filter(Scenario.project_ref.in_(project_scope))
+    if project_refs:
+        scenario_query = scenario_query.filter(Scenario.project_ref.in_(project_refs))
     rows = scenario_query.all()
     scenarios = list(rows) if isinstance(rows, list) else []
 
     scenario_ids = {str(getattr(row, "id", "")) for row in scenarios if getattr(row, "id", None)}
-    project_refs = {
-        str(getattr(row, "project_ref", ""))
-        for row in scenarios
-        if getattr(row, "project_ref", None)
+    if not (project_scope or soc_scope or board_scope):
+        project_refs = {
+            str(getattr(row, "project_ref", ""))
+            for row in scenarios
+            if getattr(row, "project_ref", None)
+        }
+        projects = (
+            list(db.query(Project).filter(Project.id.in_(project_refs)).all() or [])
+            if project_refs
+            else []
+        )
+
+    variants = _load_scoped_variants(db, scenario_ids, variant_scope, severity_scope)
+    active_scenario_ids = {
+        str(getattr(row, "scenario_id", ""))
+        for row in variants
+        if getattr(row, "scenario_id", None)
     }
-    projects = (
-        list(db.query(Project).filter(Project.id.in_(project_refs)).all() or [])
-        if project_refs
-        else []
-    )
-    variants = (
-        list(db.query(ScenarioVariant).filter(ScenarioVariant.scenario_id.in_(scenario_ids)).all() or [])
-        if scenario_ids
-        else []
-    )
+    active_variant_ids = {
+        str(getattr(row, "id", ""))
+        for row in variants
+        if getattr(row, "id", None)
+    }
+    evidence_scenario_ids = active_scenario_ids or scenario_ids
     evidence_rows = (
-        list(db.query(Evidence).filter(Evidence.scenario_ref.in_(scenario_ids)).all() or [])
-        if scenario_ids
+        _load_scoped_evidence(db, evidence_scenario_ids, active_variant_ids if variant_scope else set())
+        if evidence_scenario_ids
         else []
     )
     return scenarios, projects, variants, evidence_rows
+
+
+def _load_scoped_projects(
+    db: Session,
+    project_scope: list[str],
+    soc_scope: list[str],
+    board_scope: list[str],
+) -> list[Any]:
+    query = db.query(Project)
+    if project_scope:
+        query = query.filter(Project.id.in_(project_scope))
+    if soc_scope:
+        query = query.filter(Project.metadata_["soc_ref"].astext.in_(soc_scope))
+    if board_scope:
+        query = query.filter(Project.metadata_["board_type"].astext.in_(board_scope))
+    rows = query.all()
+    return list(rows) if isinstance(rows, list) else []
+
+
+def _load_scoped_variants(
+    db: Session,
+    scenario_ids: set[str],
+    variant_scope: list[str],
+    severity_scope: list[str],
+) -> list[Any]:
+    if not scenario_ids:
+        return []
+    query = db.query(ScenarioVariant).filter(ScenarioVariant.scenario_id.in_(scenario_ids))
+    if variant_scope:
+        query = query.filter(ScenarioVariant.id.in_(variant_scope))
+    if severity_scope:
+        query = query.filter(ScenarioVariant.severity.in_(severity_scope))
+    rows = list(query.all() or [])
+    if variant_scope or severity_scope:
+        rows = _include_variant_parent_rows(db, rows)
+    return rows
+
+
+def _include_variant_parent_rows(db: Session, variants: list[Any]) -> list[Any]:
+    known: dict[tuple[str, str], Any] = {
+        (str(getattr(row, "scenario_id", "") or ""), str(getattr(row, "id", "") or "")): row
+        for row in variants
+        if getattr(row, "scenario_id", None) and getattr(row, "id", None)
+    }
+    requested: set[tuple[str, str]] = set()
+    while True:
+        needed = {
+            (scenario_id, str(getattr(row, "derived_from_variant", "") or ""))
+            for (scenario_id, _), row in known.items()
+            if getattr(row, "derived_from_variant", None)
+            and (scenario_id, str(getattr(row, "derived_from_variant"))) not in known
+            and (scenario_id, str(getattr(row, "derived_from_variant"))) not in requested
+        }
+        needed = {(scenario_id, variant_id) for scenario_id, variant_id in needed if variant_id}
+        if not needed:
+            break
+        requested.update(needed)
+        scenario_ids = {scenario_id for scenario_id, _ in needed}
+        variant_ids = {variant_id for _, variant_id in needed}
+        query = db.query(ScenarioVariant).filter(ScenarioVariant.scenario_id.in_(scenario_ids))
+        query = query.filter(ScenarioVariant.id.in_(variant_ids))
+        for row in list(query.all() or []):
+            key = (str(getattr(row, "scenario_id", "") or ""), str(getattr(row, "id", "") or ""))
+            if key[0] and key[1]:
+                known[key] = row
+    return list(known.values())
+
+
+def _load_scoped_evidence(
+    db: Session,
+    scenario_ids: set[str],
+    variant_ids: set[str],
+) -> list[Any]:
+    query = db.query(Evidence).filter(Evidence.scenario_ref.in_(scenario_ids))
+    if variant_ids:
+        query = query.filter(Evidence.variant_ref.in_(variant_ids))
+    rows = query.all()
+    return list(rows) if isinstance(rows, list) else []
+
+
+def _load_ip_rows(db: Session, scenarios: list[Any], variants: list[Any]) -> list[Any]:
+    refs = _ip_refs_from_sources(scenarios, variants)
+    if not refs:
+        return []
+    rows = db.query(IpCatalog).filter(IpCatalog.id.in_(refs)).all()
+    return list(rows) if isinstance(rows, list) else []
+
+
+def _ip_refs_from_sources(scenarios: list[Any], variants: list[Any]) -> list[str]:
+    refs: set[str] = set()
+    for scenario in scenarios:
+        pipeline = getattr(scenario, "pipeline", None) or {}
+        for node in pipeline.get("nodes") or []:
+            if isinstance(node, dict) and node.get("ip_ref"):
+                refs.add(str(node["ip_ref"]))
+    for variant in variants:
+        topology_patch = getattr(variant, "topology_patch", None) or {}
+        for node in topology_patch.get("add_nodes") or []:
+            if isinstance(node, dict) and node.get("ip_ref"):
+                refs.add(str(node["ip_ref"]))
+    return sorted(refs)
 
 
 def _resolved_variant(row_map: dict[str, Any], scenario_id: str, variant_id: str, raw_variant: Any) -> Any:
@@ -349,6 +476,7 @@ def _scope_predicates(scope: dict[str, Any] | None) -> list[QueryPredicate]:
         "board_type": "project.board_type",
         "scenario_id": "scenario.id",
         "variant_id": "variant.id",
+        "severity": "variant.severity",
         "category": "scenario.category",
         "domain": "scenario.domain",
     }
