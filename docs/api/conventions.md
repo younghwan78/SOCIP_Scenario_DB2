@@ -64,10 +64,10 @@ GET  /variants                                  ?project=&severity=&tag=
 ### Evidence (`/api/v1/`)
 ```
 GET  /evidence/summary     ?groupby=sw_version_hint,overall_feasibility
-GET  /evidence             ?scenario_ref=&variant_ref=&sw_version=&feasibility=
+GET  /evidence             ?scenario_ref=&variant_ref=&project_ref=&kind=&sw_version=&feasibility=
 GET  /evidence/{id}
-GET  /compare/evidence     ?variant=&sw1=&sw2=
-GET  /compare/variants     ?ref1={sid}::{vid}&ref2={sid}::{vid}
+GET  /compare/evidence     ?variant=&sw1=&sw2=&scenario_ref=&project_ref=&kind=
+GET  /compare/variants     ?ref1={sid}::{vid}&ref2={sid}::{vid}&project_ref=&kind=
 ```
 
 ### Decision (`/api/v1/`)

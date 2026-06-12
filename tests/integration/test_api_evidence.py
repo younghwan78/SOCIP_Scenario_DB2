@@ -92,3 +92,71 @@ def test_compare_variants(api_client: TestClient):
         },
     )
     assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Compare 선택 정책 — kind/scenario 필터 + measured_at 최신 우선
+# ---------------------------------------------------------------------------
+
+MEAS_EVIDENCE_ID = "meas-uc-camera-recording-UHD60-HDR10-H265-EVT0-sw123-20260419"
+
+
+def test_compare_evidence_kind_measurement_filter(api_client: TestClient):
+    """kind=measurement — sw1.2.3에는 측정이 있고 sw1.3.0에는 없다."""
+    resp = api_client.get(
+        "/api/v1/compare/evidence",
+        params={
+            "variant": VARIANT_REF,
+            "sw1": SW_VERSION,
+            "sw2": "sw-vendor-v1.3.0",
+            "kind": "evidence.measurement",
+        },
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data[SW_VERSION]["id"] == MEAS_EVIDENCE_ID
+    assert data[SW_VERSION]["kind"] == "evidence.measurement"
+    assert data["sw-vendor-v1.3.0"] is None
+
+
+def test_compare_evidence_kind_simulation_filter(api_client: TestClient):
+    resp = api_client.get(
+        "/api/v1/compare/evidence",
+        params={
+            "variant": VARIANT_REF,
+            "sw1": SW_VERSION,
+            "sw2": "sw-vendor-v1.3.0",
+            "kind": "evidence.simulation",
+        },
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data[SW_VERSION]["id"] == EVIDENCE_ID
+    assert data[SW_VERSION]["kind"] == "evidence.simulation"
+    assert data["sw-vendor-v1.3.0"]["kind"] == "evidence.simulation"
+
+
+def test_compare_evidence_prefers_latest_measured_at(api_client: TestClient):
+    """kind 미지정 시 measured_at 보유(측정) evidence가 NULL(sim)보다 우선한다."""
+    resp = api_client.get(
+        "/api/v1/compare/evidence",
+        params={"variant": VARIANT_REF, "sw1": SW_VERSION, "sw2": "sw-vendor-v1.3.0"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data[SW_VERSION]["id"] == MEAS_EVIDENCE_ID
+
+
+def test_compare_variants_uses_scenario_filter(api_client: TestClient):
+    """ref의 scenario_id가 필터로 적용된다 — 다른 scenario에 같은 variant id가 있어도 매칭 금지."""
+    wrong_ref = f"uc-no-such-scenario::{VARIANT_REF}"
+    right_ref = f"uc-camera-recording::{VARIANT_REF}"
+    resp = api_client.get(
+        "/api/v1/compare/variants",
+        params={"ref1": wrong_ref, "ref2": right_ref},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data[wrong_ref] is None
+    assert data[right_ref]["scenario_ref"] == "uc-camera-recording"
+    assert data[right_ref]["variant_ref"] == VARIANT_REF

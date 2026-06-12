@@ -156,8 +156,9 @@ uv run python -m scenario_db.etl.loader <fixtures-dir>
 - `GET /api/v1/evidence?kind=evidence.measurement&project_ref=...&scenario_ref=...&variant_ref=...`
 - `EvidenceResponse`에 `project_ref`, `measured_at`, `derived_from`,
   `cpu_breakdown`, `sw_task_timing`이 포함된다.
-- 알려진 한계: `/compare/evidence`, `/compare/variants`는 아직 kind/project/시각
-  기준 선택을 하지 않는다. 측정 데이터가 쌓이기 전에 수정 예정 (실행 순서 3단계).
+- `/compare/evidence`, `/compare/variants`는 `kind`, `project_ref` 필터를 받고,
+  후보가 여럿이면 `measured_at` 최신(NULL은 후순위, 동률이면 id 역순)을 선택한다.
+  `/compare/variants`는 ref의 scenario_id를 필터에 사용한다.
 
 ## 7. 예시 문서
 
