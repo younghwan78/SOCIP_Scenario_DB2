@@ -7,7 +7,13 @@ from dashboard.components.evidence_context import (
     category_label,
     default_silicon_rev,
     filter_scenarios_by_category,
+    filter_scenarios_by_measurement,
     filter_scenarios_by_text,
+    filter_variants_by_measurement,
+    measurement_coverage,
+    measurement_coverage_rows,
+    measurement_scenario_label,
+    measurement_variant_label,
     scenario_categories,
 )
 from dashboard.components.evidence_dashboard_contract import (
@@ -189,6 +195,9 @@ def test_evidence_dashboard_sidebar_keeps_scenario_search_control():
     assert "render_evidence_context_sidebar" in source
     assert '"Scenario Search"' in context_source
     assert "filter_scenarios_by_text" in context_source
+    assert '"Measurement Coverage"' in context_source
+    assert '"Only Scenarios With Measurement"' in context_source
+    assert "st.table(" in context_source
 
 
 def test_db_explorer_sidebar_uses_compact_context_labels():
@@ -216,6 +225,67 @@ def test_evidence_context_filters_scenarios_by_category_and_text():
     assert [item["id"] for item in filter_scenarios_by_category(scenarios, "voice_call")] == ["uc-audio-call"]
     assert [item["id"] for item in filter_scenarios_by_text(scenarios, "record")] == ["uc-camera-recording"]
     assert filter_scenarios_by_text(scenarios, "") == scenarios
+
+
+def test_evidence_context_filters_and_labels_measurement_coverage():
+    evidence = [
+        {
+            "id": "m1",
+            "project_ref": "proj-A",
+            "scenario_ref": "uc-camera-recording",
+            "variant_ref": "cam-rec-uhd30",
+            "measured_at": "2026-06-10T01:00:00Z",
+        },
+        {
+            "id": "m2",
+            "project_ref": "proj-A",
+            "scenario_ref": "uc-camera-recording",
+            "variant_ref": "cam-rec-uhd30",
+            "measured_at": "2026-06-10T02:00:00Z",
+        },
+        {
+            "id": "m3",
+            "project_ref": "proj-A",
+            "scenario_ref": "uc-video-call",
+            "variant_ref": "video-call-fhd",
+            "measured_at": None,
+        },
+        {
+            "id": "m4",
+            "project_ref": "proj-B",
+            "scenario_ref": "uc-audio",
+            "variant_ref": "audio-aac",
+            "measured_at": "2026-06-11T01:00:00Z",
+        },
+    ]
+    scenarios = [{"id": "uc-camera-recording", "name": "Camera Recording"}, {"id": "uc-audio", "name": "Audio"}]
+    variants = [{"id": "cam-rec-uhd30"}, {"id": "cam-rec-fhd30"}]
+
+    coverage = measurement_coverage(evidence, project_id="proj-A")
+
+    assert coverage.scenario_counts == {"uc-camera-recording": 2, "uc-video-call": 1}
+    assert coverage.variant_counts == {
+        "uc-camera-recording": {"cam-rec-uhd30": 2},
+        "uc-video-call": {"video-call-fhd": 1},
+    }
+    assert [item["id"] for item in filter_scenarios_by_measurement(scenarios, coverage, enabled=True)] == [
+        "uc-camera-recording"
+    ]
+    assert filter_scenarios_by_measurement(scenarios, coverage, enabled=False) == scenarios
+    assert [item["id"] for item in filter_variants_by_measurement(variants, coverage, "uc-camera-recording", enabled=True)] == [
+        "cam-rec-uhd30"
+    ]
+    assert measurement_scenario_label(scenarios[0], coverage) == "Camera Recording | meas 2"
+    assert measurement_variant_label(variants[0], coverage, "uc-camera-recording") == "cam-rec-uhd30 | meas 2"
+
+    rows = measurement_coverage_rows(evidence)
+    assert rows[0] == {
+        "project_ref": "proj-A",
+        "scenario_ref": "uc-camera-recording",
+        "variant_ref": "cam-rec-uhd30",
+        "count": 2,
+        "latest_measured_at": "2026-06-10T02:00:00Z",
+    }
 
 
 def test_evidence_context_default_silicon_rev_uses_soc_generation():

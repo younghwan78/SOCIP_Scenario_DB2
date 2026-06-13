@@ -88,8 +88,8 @@ def _toggle_run_panel() -> None:
 
 render_page_header(
     "Evidence Dashboard",
-    "Run scenario/variant simulation as a preview, save only confirmed evidence, and inspect KPI breakdowns.",
-    chips=("Preview first", "Confirm to save", "Power/BW/Timing"),
+    "Run calculations, inspect measurement imports, and compare projection estimates against measured evidence.",
+    chips=("Calculation", "Projection vs Measurement", "KPI Deltas"),
 )
 
 with st.sidebar:

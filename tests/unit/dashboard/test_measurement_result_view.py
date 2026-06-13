@@ -12,6 +12,7 @@ from dashboard.components.measurement_result_view import (
     kpi_p95,
     kpi_summary_rows,
     measurement_list_rows,
+    prediction_measurement_comparison_rows,
     provenance_summary,
     sw_task_rows,
     vdd_power_rows,
@@ -131,6 +132,36 @@ def test_measurement_list_rows():
     assert rows[0]["total_power_mw"] == 3850.0
 
 
+def test_prediction_measurement_comparison_rows_show_delta_vs_measurement():
+    measurement = _evidence()
+    prediction = {
+        "id": "proj-x",
+        "execution_context": {"method": "projection", "sw_baseline_ref": "sw-vendor-v1.2.3"},
+        "kpi": {
+            "total_power_mw": 4200.0,
+            "frame_latency_ms": 30.0,
+            "prediction_only": 1.0,
+        },
+    }
+
+    rows = {
+        row["metric"]: row
+        for row in prediction_measurement_comparison_rows(prediction=prediction, measurement=measurement)
+    }
+
+    assert list(rows) == ["total_power_mw", "frame_latency_ms"]
+    assert rows["total_power_mw"] == {
+        "metric": "total_power_mw",
+        "prediction": 4200.0,
+        "measurement_mean": 3850.0,
+        "measurement_p95": 4010.0,
+        "delta_vs_measurement": 350.0,
+        "delta_pct_vs_measurement": "9.091%",
+    }
+    assert rows["frame_latency_ms"]["delta_vs_measurement"] == 1.6
+    assert rows["frame_latency_ms"]["delta_pct_vs_measurement"] == "5.634%"
+
+
 def test_list_evidence_passes_kind_filter():
     captured: dict[str, Any] = {}
 
@@ -176,3 +207,24 @@ def test_evidence_panel_loader_passes_project_filter(monkeypatch):
     assert error is None
     assert items == [{"id": "meas-x"}]
     assert captured["project_ref"] == "proj-A-exynos2500"
+
+
+def test_unscoped_evidence_items_only_keeps_legacy_projectless_rows():
+    rows = evidence_results_panel._unscoped_evidence_items(
+        [
+            {"id": "legacy-none", "project_ref": None},
+            {"id": "legacy-empty", "project_ref": ""},
+            {"id": "project-scoped", "project_ref": "proj-A"},
+        ]
+    )
+
+    assert [row["id"] for row in rows] == ["legacy-none", "legacy-empty"]
+
+
+def test_measurement_panel_source_includes_prediction_comparison():
+    source = evidence_results_panel.__loader__.get_source(evidence_results_panel.__name__)
+
+    assert "Prediction vs Measurement" in source
+    assert "Compare with Prediction" in source
+    assert "legacy evidence without project_ref" in source
+    assert "prediction_measurement_comparison_rows" in source

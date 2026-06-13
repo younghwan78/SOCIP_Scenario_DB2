@@ -6,6 +6,7 @@ from typing import Any, Callable
 
 import streamlit as st
 
+from dashboard.components.evidence_api_client import KIND_MEASUREMENT, list_evidence
 from dashboard.components.simulation_readiness import render_simulation_readiness
 from dashboard.components.viewer_api_client import (
     ViewerApiError,
@@ -34,6 +35,12 @@ class EvidenceContext:
     method: str = "Calculation"
 
 
+@dataclass(frozen=True)
+class MeasurementCoverage:
+    scenario_counts: dict[str, int]
+    variant_counts: dict[str, dict[str, int]]
+
+
 def render_evidence_context_sidebar(
     *,
     default_api_base: str,
@@ -50,7 +57,7 @@ def render_evidence_context_sidebar(
         st.rerun()
 
     method = _select_method()
-    scenario_id, variant_id = _select_context(api_base)
+    scenario_id, variant_id = _select_context(api_base, method)
     if method == "Calculation":
         render_simulation_readiness(api_base, scenario_id, variant_id)
     return EvidenceContext(
@@ -81,6 +88,7 @@ def clear_evidence_context_caches() -> None:
     _load_project_options.clear()
     _load_scenario_options.clear()
     _load_variant_options.clear()
+    _load_measurement_items.clear()
 
 
 def default_silicon_rev(soc_id: str | None) -> str:
@@ -133,11 +141,27 @@ def _load_variant_options(base_url: str, scenario_id: str) -> tuple[list[dict], 
         return [], str(exc)
 
 
-def _select_context(api_base: str) -> tuple[str, str]:
+@st.cache_data(ttl=30)
+def _load_measurement_items(base_url: str) -> tuple[list[dict], str | None]:
+    try:
+        return list_evidence(base_url, kind=KIND_MEASUREMENT, limit=1000), None
+    except ViewerApiError as exc:
+        return [], str(exc)
+
+
+def _select_context(api_base: str, method: str) -> tuple[str, str]:
     soc_id = _select_soc(api_base)
     project_id = _select_project(api_base, soc_id)
-    scenario_id = _select_scenario(api_base, soc_id, project_id)
-    variant_id = _select_variant(api_base, scenario_id)
+    measurement_items: list[dict[str, Any]] = []
+    measurement_error: str | None = None
+    measurement_only = False
+    if method == "Measurement":
+        measurement_items, measurement_error = _load_measurement_items(api_base)
+        _render_measurement_coverage(measurement_items, measurement_error)
+        measurement_only = _select_measurement_only_filter(measurement_items, project_id)
+    coverage = measurement_coverage(measurement_items, project_id=project_id or None)
+    scenario_id = _select_scenario(api_base, soc_id, project_id, coverage=coverage, measurement_only=measurement_only)
+    variant_id = _select_variant(api_base, scenario_id, coverage=coverage, measurement_only=measurement_only)
     return scenario_id, variant_id
 
 
@@ -185,13 +209,25 @@ def _select_project(api_base: str, soc_id: str) -> str:
     return str(project_id)
 
 
-def _select_scenario(api_base: str, soc_id: str, project_id: str) -> str:
+def _select_scenario(
+    api_base: str,
+    soc_id: str,
+    project_id: str,
+    *,
+    coverage: MeasurementCoverage,
+    measurement_only: bool,
+) -> str:
     scenarios, scenario_error = _load_scenario_options(api_base, project_id or None, soc_id or None)
     if not scenarios:
         if scenario_error:
             st.error(f"Scenario list unavailable: {scenario_error}")
         else:
             st.error("No scenarios are available from the API.")
+        st.stop()
+
+    scenarios = filter_scenarios_by_measurement(scenarios, coverage, enabled=measurement_only)
+    if not scenarios:
+        st.error("No scenarios with measurement evidence are available for the selected project.")
         st.stop()
 
     categories = scenario_categories(scenarios)
@@ -219,8 +255,9 @@ def _select_scenario(api_base: str, soc_id: str, project_id: str) -> str:
         scenario_ids,
         key="evidence_scenario_id",
         on_change=_clear_context_after_scenario,
-        format_func=lambda value: compact_scenario_label(
-            next((item for item in filtered_scenarios if item.get("id") == value), {"id": value})
+        format_func=lambda value: measurement_scenario_label(
+            next((item for item in filtered_scenarios if item.get("id") == value), {"id": value}),
+            coverage,
         ),
     )
     scenario_id = st.session_state["evidence_scenario_id"]
@@ -228,13 +265,20 @@ def _select_scenario(api_base: str, soc_id: str, project_id: str) -> str:
     return str(scenario_id)
 
 
-def _select_variant(api_base: str, scenario_id: str) -> str:
+def _select_variant(
+    api_base: str,
+    scenario_id: str,
+    *,
+    coverage: MeasurementCoverage,
+    measurement_only: bool,
+) -> str:
     variants, variant_error = _load_variant_options(api_base, scenario_id)
+    variants = filter_variants_by_measurement(variants, coverage, scenario_id, enabled=measurement_only)
     if not variants:
         if variant_error:
             st.error(f"Variant list unavailable: {variant_error}")
         else:
-            st.error("No variants found for this scenario.")
+            st.error("No variants found for this scenario and measurement filter.")
         st.stop()
     variant_ids = [str(item.get("id")) for item in variants if item.get("id")]
     selected_variant = default_variant_id(variants, st.session_state.get("viewer_variant_id", "UHD60-HDR10-H265"))
@@ -244,7 +288,11 @@ def _select_variant(api_base: str, scenario_id: str) -> str:
         variant_ids,
         key="evidence_variant_id",
         on_change=_clear_context_after_variant,
-        format_func=lambda value: compact_variant_label(next((item for item in variants if item.get("id") == value), {"id": value})),
+        format_func=lambda value: measurement_variant_label(
+            next((item for item in variants if item.get("id") == value), {"id": value}),
+            coverage,
+            scenario_id,
+        ),
     )
     variant_id = st.session_state["evidence_variant_id"]
     st.session_state["viewer_variant_id"] = variant_id
@@ -360,6 +408,117 @@ def filter_scenarios_by_text(scenarios: list[dict[str, Any]], query: str | None)
         if needle in text:
             filtered.append(item)
     return filtered
+
+
+def measurement_coverage(items: list[dict[str, Any]], *, project_id: str | None = None) -> MeasurementCoverage:
+    scenario_counts: dict[str, int] = {}
+    variant_counts: dict[str, dict[str, int]] = {}
+    for item in items:
+        if project_id is not None and item.get("project_ref") != project_id:
+            continue
+        scenario_id = str(item.get("scenario_ref") or "")
+        variant_id = str(item.get("variant_ref") or "")
+        if not scenario_id:
+            continue
+        scenario_counts[scenario_id] = scenario_counts.get(scenario_id, 0) + 1
+        if variant_id:
+            per_scenario = variant_counts.setdefault(scenario_id, {})
+            per_scenario[variant_id] = per_scenario.get(variant_id, 0) + 1
+    return MeasurementCoverage(scenario_counts=scenario_counts, variant_counts=variant_counts)
+
+
+def measurement_coverage_rows(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for item in items:
+        scenario_id = str(item.get("scenario_ref") or "")
+        variant_id = str(item.get("variant_ref") or "")
+        if not scenario_id or not variant_id:
+            continue
+        project_ref = str(item.get("project_ref") or "(none)")
+        key = (project_ref, scenario_id, variant_id)
+        row = grouped.setdefault(
+            key,
+            {
+                "project_ref": project_ref,
+                "scenario_ref": scenario_id,
+                "variant_ref": variant_id,
+                "count": 0,
+                "latest_measured_at": None,
+            },
+        )
+        row["count"] += 1
+        measured_at = item.get("measured_at")
+        if isinstance(measured_at, str) and (row["latest_measured_at"] is None or measured_at > row["latest_measured_at"]):
+            row["latest_measured_at"] = measured_at
+    return sorted(grouped.values(), key=lambda row: (row["project_ref"], row["scenario_ref"], row["variant_ref"]))
+
+
+def filter_scenarios_by_measurement(
+    scenarios: list[dict[str, Any]],
+    coverage: MeasurementCoverage,
+    *,
+    enabled: bool,
+) -> list[dict[str, Any]]:
+    if not enabled:
+        return scenarios
+    return [item for item in scenarios if str(item.get("id") or "") in coverage.scenario_counts]
+
+
+def filter_variants_by_measurement(
+    variants: list[dict[str, Any]],
+    coverage: MeasurementCoverage,
+    scenario_id: str,
+    *,
+    enabled: bool,
+) -> list[dict[str, Any]]:
+    if not enabled:
+        return variants
+    measured_variants = coverage.variant_counts.get(scenario_id, {})
+    return [item for item in variants if str(item.get("id") or "") in measured_variants]
+
+
+def measurement_scenario_label(item: dict[str, Any], coverage: MeasurementCoverage) -> str:
+    label = compact_scenario_label(item)
+    count = coverage.scenario_counts.get(str(item.get("id") or ""), 0)
+    return f"{label} | meas {count}" if count else label
+
+
+def measurement_variant_label(item: dict[str, Any], coverage: MeasurementCoverage, scenario_id: str) -> str:
+    label = compact_variant_label(item)
+    count = coverage.variant_counts.get(scenario_id, {}).get(str(item.get("id") or ""), 0)
+    return f"{label} | meas {count}" if count else label
+
+
+def _render_measurement_coverage(items: list[dict[str, Any]], error: str | None) -> None:
+    if error:
+        st.caption(f"Measurement coverage unavailable: {error}")
+        return
+    rows = measurement_coverage_rows(items)
+    scenario_count = len({row["scenario_ref"] for row in rows})
+    variant_count = len(rows)
+    st.caption(f"Measurement coverage: {scenario_count} scenarios / {variant_count} variants")
+    with st.expander("Measurement Coverage", expanded=False):
+        if rows:
+            visible_rows = rows[:50]
+            st.table(visible_rows)
+            if len(rows) > len(visible_rows):
+                st.caption(f"Showing first {len(visible_rows)} of {len(rows)} measured variants.")
+        else:
+            st.info("No measurement evidence is stored yet.")
+
+
+def _select_measurement_only_filter(items: list[dict[str, Any]], project_id: str) -> bool:
+    if "evidence_measurement_only" not in st.session_state:
+        st.session_state["evidence_measurement_only"] = True
+    scoped_count = sum(1 for item in items if item.get("project_ref") == project_id)
+    enabled = st.toggle(
+        "Only Scenarios With Measurement",
+        key="evidence_measurement_only",
+        help="Limit scenario and variant lists to the selected project's measurement evidence.",
+    )
+    if enabled:
+        st.caption(f"Selected project measurement rows: {scoped_count}")
+    return bool(enabled)
 
 
 def _scenario_metadata(item: dict[str, Any]) -> dict[str, Any]:

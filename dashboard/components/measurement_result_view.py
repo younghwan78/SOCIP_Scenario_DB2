@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 MEASUREMENT_TABS = ("Overview", "Power", "CPU / Freq", "SW Timing", "Provenance")
+COMPARISON_METRIC_ORDER = ("total_power_mw", "peak_power_mw", "frame_latency_ms", "fps_effective")
 
 
 # --- scalar extraction -------------------------------------------------------
@@ -85,6 +86,34 @@ def kpi_summary_rows(evidence: dict[str, Any]) -> list[dict[str, Any]]:
     return rows
 
 
+def prediction_measurement_comparison_rows(
+    *,
+    prediction: dict[str, Any],
+    measurement: dict[str, Any],
+) -> list[dict[str, Any]]:
+    pred_kpi = prediction.get("kpi") if isinstance(prediction.get("kpi"), dict) else {}
+    meas_kpi = measurement.get("kpi") if isinstance(measurement.get("kpi"), dict) else {}
+    metrics = _ordered_overlap(pred_kpi, meas_kpi)
+    rows: list[dict[str, Any]] = []
+    for metric in metrics:
+        pred_value = kpi_mean(pred_kpi.get(metric))
+        meas_mean = kpi_mean(meas_kpi.get(metric))
+        if pred_value is None or meas_mean is None:
+            continue
+        delta = _rounded_number(pred_value - meas_mean)
+        rows.append(
+            {
+                "metric": metric,
+                "prediction": _rounded_number(pred_value),
+                "measurement_mean": _rounded_number(meas_mean),
+                "measurement_p95": _rounded_number(kpi_p95(meas_kpi.get(metric))),
+                "delta_vs_measurement": delta,
+                "delta_pct_vs_measurement": _delta_pct_label(delta, meas_mean),
+            }
+        )
+    return rows
+
+
 def cpu_cluster_rows(evidence: dict[str, Any]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for cluster in evidence.get("cpu_breakdown") or []:
@@ -101,6 +130,24 @@ def cpu_cluster_rows(evidence: dict[str, Any]) -> list[dict[str, Any]]:
             }
         )
     return rows
+
+
+def _ordered_overlap(pred_kpi: dict[str, Any], meas_kpi: dict[str, Any]) -> list[str]:
+    overlap = [key for key in pred_kpi if key in meas_kpi]
+    prioritized = [key for key in COMPARISON_METRIC_ORDER if key in overlap]
+    return prioritized + [key for key in overlap if key not in prioritized]
+
+
+def _rounded_number(value: Any) -> float | None:
+    if not isinstance(value, (int, float)):
+        return None
+    return round(float(value), 3)
+
+
+def _delta_pct_label(delta: float | None, baseline: float | None) -> str | None:
+    if delta is None or baseline in (None, 0):
+        return None
+    return f"{(delta / baseline) * 100:.3f}%"
 
 
 def freq_residency_rows(evidence: dict[str, Any]) -> list[dict[str, Any]]:

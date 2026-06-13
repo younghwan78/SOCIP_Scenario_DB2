@@ -23,6 +23,7 @@ from dashboard.components.evidence_compare import render_preview_saved_compariso
 from dashboard.components.evidence_result_view import render_result_breakdown
 from dashboard.components.measurement_result_view import (
     measurement_list_rows,
+    prediction_measurement_comparison_rows,
     render_measurement_result,
     sw_task_rows,
 )
@@ -58,19 +59,61 @@ def render_measurement_results_panel(
 ) -> None:
     """List + inspect measurement (or projection) evidence for the selection."""
     is_projection = method == "Projection"
-    kind = KIND_SIMULATION if is_projection else KIND_MEASUREMENT
     st.subheader("Projection Evidence" if is_projection else "Measurement Evidence")
 
-    items, error = _load_evidence_list(api_base, kind, scenario_id, variant_id, project_id)
-    if error:
-        st.error(error)
+    measurement_items, measurement_error = _load_evidence_list(
+        api_base,
+        KIND_MEASUREMENT,
+        scenario_id,
+        variant_id,
+        project_id,
+    )
+    prediction_items, prediction_error = _load_evidence_list(
+        api_base,
+        KIND_SIMULATION,
+        scenario_id,
+        variant_id,
+        project_id,
+    )
+    fallback_notes: list[str] = []
+    if project_id and not measurement_items and not measurement_error:
+        fallback_measurements, fallback_error = _load_evidence_list(
+            api_base,
+            KIND_MEASUREMENT,
+            scenario_id,
+            variant_id,
+            None,
+        )
+        if not fallback_error:
+            measurement_items = _unscoped_evidence_items(fallback_measurements)
+            if measurement_items:
+                fallback_notes.append("Using legacy evidence without project_ref for measurement rows.")
+    if project_id and not prediction_items and not prediction_error:
+        fallback_predictions, fallback_error = _load_evidence_list(
+            api_base,
+            KIND_SIMULATION,
+            scenario_id,
+            variant_id,
+            None,
+        )
+        if not fallback_error:
+            prediction_items = _unscoped_evidence_items(fallback_predictions)
+            if prediction_items:
+                fallback_notes.append("Using legacy evidence without project_ref for prediction rows.")
+    projection_items = [ev for ev in prediction_items if _evidence_method(ev) == "projection"]
+
+    items = projection_items if is_projection else measurement_items
+    active_error = prediction_error if is_projection else measurement_error
+    counterpart_error = measurement_error if is_projection else prediction_error
+    if active_error:
+        st.error(active_error)
         return
-    if is_projection:
-        items = [ev for ev in items if _evidence_method(ev) == "projection"]
     if not items:
         target = "projection" if is_projection else "measurement"
         st.info(f"No {target} evidence is stored for the selected scenario/variant.")
         return
+    for note in fallback_notes:
+        st.caption(note)
 
     rows = measurement_list_rows(items)
     render_copyable_dataframe(rows, key="evidence_meas_list", use_container_width=True, hide_index=True)
@@ -78,6 +121,14 @@ def render_measurement_results_panel(
     _ensure_choice("evidence_meas_selected_id", evidence_ids)
     selected_id = st.selectbox("Selected Evidence", evidence_ids, key="evidence_meas_selected_id")
     selected = next((item for item in items if item.get("id") == selected_id), items[0])
+
+    _render_prediction_measurement_comparison(
+        selected=selected,
+        is_projection=is_projection,
+        measurement_items=measurement_items,
+        prediction_items=prediction_items,
+        counterpart_error=counterpart_error,
+    )
 
     if is_projection:
         # projection is kind=simulation: reuse the sim breakdown, then surface the
@@ -99,6 +150,87 @@ def clear_evidence_results_cache() -> None:
 def _evidence_method(evidence: dict[str, Any]) -> str | None:
     ctx = evidence.get("execution_context")
     return ctx.get("method") if isinstance(ctx, dict) else None
+
+
+def _unscoped_evidence_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [item for item in items if item.get("project_ref") in (None, "")]
+
+
+def _render_prediction_measurement_comparison(
+    *,
+    selected: dict[str, Any],
+    is_projection: bool,
+    measurement_items: list[dict[str, Any]],
+    prediction_items: list[dict[str, Any]],
+    counterpart_error: str | None,
+) -> None:
+    st.markdown("**Prediction vs Measurement**")
+    st.caption("Delta is prediction minus measurement. Positive means the projection is higher than the measured mean.")
+    if counterpart_error:
+        st.warning(f"Comparison evidence unavailable: {counterpart_error}")
+        return
+
+    if is_projection:
+        prediction = selected
+        measurement = _select_counterpart(
+            "Compare with Measurement",
+            measurement_items,
+            key="evidence_compare_measurement_id",
+        )
+    else:
+        measurement = selected
+        prediction = _select_counterpart(
+            "Compare with Prediction",
+            prediction_items,
+            key="evidence_compare_prediction_id",
+        )
+    if prediction is None or measurement is None:
+        missing = "measurement" if is_projection else "prediction"
+        st.info(f"No {missing} evidence is available for comparison.")
+        return
+
+    st.caption(
+        f"Prediction: {prediction.get('id') or '-'} | Measurement: {measurement.get('id') or '-'}"
+    )
+    rows = prediction_measurement_comparison_rows(prediction=prediction, measurement=measurement)
+    if not rows:
+        st.info("No overlapping KPI keys between the selected prediction and measurement evidence.")
+        return
+
+    _render_comparison_metrics(rows)
+    render_copyable_dataframe(rows, key="evidence_prediction_measurement_compare", use_container_width=True, hide_index=True)
+
+
+def _select_counterpart(label: str, items: list[dict[str, Any]], *, key: str) -> dict[str, Any] | None:
+    ids = [str(item.get("id")) for item in items if item.get("id")]
+    if not ids:
+        return None
+    _ensure_choice(key, ids)
+    selected_id = st.selectbox(label, ids, key=key)
+    return next((item for item in items if str(item.get("id")) == selected_id), items[0])
+
+
+def _render_comparison_metrics(rows: list[dict[str, Any]]) -> None:
+    headline = [
+        row
+        for row in rows
+        if row.get("metric") in ("total_power_mw", "peak_power_mw", "frame_latency_ms", "fps_effective")
+    ]
+    if not headline:
+        headline = rows[:3]
+    cols = st.columns(min(4, len(headline)))
+    for col, row in zip(cols, headline[:4]):
+        delta = row.get("delta_vs_measurement")
+        delta_text = f"{delta:+g}" if isinstance(delta, (int, float)) else None
+        pct = row.get("delta_pct_vs_measurement")
+        if pct:
+            delta_text = f"{delta_text} ({pct})" if delta_text else str(pct)
+        value = row.get("prediction")
+        col.metric(
+            str(row.get("metric") or "metric"),
+            f"{value:g}" if isinstance(value, (int, float)) else "-",
+            delta_text,
+        )
 
 
 @st.cache_data(ttl=20)
