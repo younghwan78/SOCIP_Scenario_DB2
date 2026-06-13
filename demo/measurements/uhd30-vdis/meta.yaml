@@ -1,0 +1,89 @@
+# Measurement import meta — UHD30 rear + VDIS capture on Project A (demo).
+# Run:
+#   uv run python -m scenario_db.meas_import.cli \
+#     --meta demo/measurements/uhd30-vdis/meta.yaml \
+#     --out generated/measurements --strict
+#
+# The perfetto trace below is a placeholder path; without the trace file (or the
+# perfetto package) the importer emits a power-only digest with a warning.
+schema_version: "2.2"
+project_ref: proj-sm-s947b
+scenario_ref: uc-camera-recording
+variant_ref: cam-rec-r1-uhd30-vdis
+measured_at: "2026-06-10T15:20:00+09:00"
+
+execution_context:
+  silicon_rev: EVT1
+  sw_baseline_ref: sw-vendor-v1.2.3
+  thermal: room
+  ambient_temp_c: 25.0
+  power_state: discharging
+  method: measurement
+
+provenance:
+  device_id: "EVT1-ERD-SN-0042"
+  chamber_controlled: true
+  chamber_temp_c: 25.0
+  build_id: "UP1A.260601.001"
+  sw_baseline_ref: sw-vendor-v1.2.3
+  collection_method: "perfetto+power_monitor"
+  collection_tool_versions:
+    perfetto: "v47.0"
+  sample_count: 1
+  duration_per_sample_s: 180.0
+  confidence_level: 0.95
+
+# KPIs that the extractors do not produce (sourced from the recording app log).
+kpi:
+  frame_latency_ms: 28.4
+  fps_effective: 29.97
+
+aggregation_strategy: mean_over_capture
+
+power:
+  csv: power_monitor.csv
+  time_column: timestamp_ms
+  total_power_rails: [VDD_CAM, VDD_MIF, VDD_INT, VDD_NPU, VDD_BIG, VDD_MID, VDD_LIT]
+  rails:
+    VDD_CAM: {role: vdd}
+    VDD_MIF: {role: vdd}
+    VDD_INT: {role: vdd}
+    VDD_NPU: {role: vdd}
+    VDD_BIG: {role: cpu_cluster, cluster: BIG}
+    VDD_MID: {role: cpu_cluster, cluster: MID}
+    VDD_LIT: {role: cpu_cluster, cluster: LIT}
+
+perfetto:
+  trace: trace.pb
+  cpu_to_cluster:
+    0: LIT
+    1: LIT
+    2: LIT
+    3: LIT
+    4: MID
+    5: MID
+    6: MID
+    7: BIG
+  frame_slice_name: "Camera::ProcessFrame"
+  task_mapping:
+    - task: eis_warp
+      cluster: BIG
+      match: {process: "vendor.camera.provider", thread_re: "VDIS.*"}
+    - task: hal_request_thread
+      cluster: MID
+      match: {process: "vendor.camera.provider", thread: "HwBinder:cam"}
+    - task: encoder_input_feed
+      cluster: LIT
+      match: {process: "mediaserver", slice_re: "encodeFrame"}
+
+artifacts:
+  - type: perfetto_trace
+    storage: fileshare
+    path: "artifacts/proj-sm-s947b/uc-camera-recording/cam-rec-r1-uhd30-vdis/20260610-sw123/trace.pb"
+    source: trace.pb
+    mime: application/octet-stream
+  - type: power_monitor_csv
+    storage: fileshare
+    path: "artifacts/proj-sm-s947b/uc-camera-recording/cam-rec-r1-uhd30-vdis/20260610-sw123/power_monitor.csv"
+    source: power_monitor.csv
+    mime: text/csv
