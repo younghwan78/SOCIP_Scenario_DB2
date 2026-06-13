@@ -1,0 +1,149 @@
+# 첫 수동 measurement evidence — measurement contract (docs/measurement-evidence-contract.md) 검증용.
+# 값은 UHD30 rear single + VDIS 시나리오의 대표값 형태이며, 실측 도입 시 실제 측정치로 교체한다.
+id: meas-cam-rec-r1-uhd30-vdis-evt1-sw123-20260610
+schema_version: "2.2"
+kind: evidence.measurement
+
+scenario_ref: uc-camera-recording
+variant_ref: cam-rec-r1-uhd30-vdis
+project_ref: proj-sm-s947b
+measured_at: "2026-06-10T15:20:00+09:00"
+
+execution_context:
+  silicon_rev: EVT1
+  sw_baseline_ref: sw-vendor-v1.2.3
+  thermal: room
+  ambient_temp_c: 25.0
+  power_state: discharging
+  method: measurement
+
+provenance:
+  device_id: "EVT1-ERD-SN-0042"
+  chamber_controlled: true
+  chamber_temp_c: 25.0
+  build_id: "UP1A.260601.001"
+  sw_baseline_ref: sw-vendor-v1.2.3
+  collection_method: "perfetto+power_monitor"
+  collection_tool_versions:
+    perfetto: "v47.0"
+  sample_count: 5
+  duration_per_sample_s: 180.0
+  confidence_level: 0.95
+
+aggregation:
+  strategy: mean_with_ci_95
+
+kpi:
+  total_power_mw:
+    mean: 3850.0
+    p95: 4010.0
+    std: 72.0
+    ci_95: [3787.0, 3913.0]
+    n: 5
+  peak_power_mw:
+    mean: 4420.0
+    p95: 4560.0
+    n: 5
+  frame_latency_ms: 28.4
+  fps_effective: 29.97
+
+cpu_breakdown:
+  - cluster: BIG
+    power_mw:
+      mean: 410.0
+      p95: 520.0
+      std: 41.0
+      n: 5
+    avg_freq_mhz: 1920.0
+    util_pct: 31.2
+    freq_residency:
+      - {freq_mhz: 2900.0, ratio: 0.06}
+      - {freq_mhz: 2400.0, ratio: 0.21}
+      - {freq_mhz: 1920.0, ratio: 0.48}
+      - {freq_mhz: 1344.0, ratio: 0.25}
+  - cluster: MID
+    power_mw:
+      mean: 360.0
+      p95: 415.0
+      std: 28.0
+      n: 5
+    avg_freq_mhz: 1750.0
+    util_pct: 58.4
+    freq_residency:
+      - {freq_mhz: 2300.0, ratio: 0.12}
+      - {freq_mhz: 1750.0, ratio: 0.61}
+      - {freq_mhz: 1200.0, ratio: 0.27}
+  - cluster: LIT
+    power_mw:
+      mean: 185.0
+      p95: 210.0
+      std: 14.0
+      n: 5
+    avg_freq_mhz: 1500.0
+    util_pct: 67.9
+    freq_residency:
+      - {freq_mhz: 1850.0, ratio: 0.22}
+      - {freq_mhz: 1500.0, ratio: 0.55}
+      - {freq_mhz: 1050.0, ratio: 0.23}
+
+sw_task_timing:
+  - task: eis_warp
+    process: vendor.camera.provider
+    thread: VDISCore
+    cluster: BIG
+    mean_ms: 7.8
+    p50_ms: 7.4
+    p95_ms: 10.6
+    max_ms: 15.1
+    count_per_frame: 1.0
+    samples: 26800
+  - task: hal_request_thread
+    process: vendor.camera.provider
+    cluster: MID
+    mean_ms: 2.3
+    p50_ms: 2.1
+    p95_ms: 3.8
+    max_ms: 6.9
+    count_per_frame: 1.0
+    samples: 26800
+  - task: encoder_input_feed
+    process: mediaserver
+    cluster: LIT
+    mean_ms: 1.1
+    p50_ms: 1.0
+    p95_ms: 1.9
+    max_ms: 4.2
+    count_per_frame: 1.0
+    samples: 26800
+
+vdd_power:
+  VDD_CAM:
+    mean_mw: 980.0
+    p95_mw: 1080.0
+  VDD_CPU:
+    mean_mw: 955.0
+    p95_mw: 1120.0
+  VDD_MIF:
+    mean_mw: 620.0
+    p95_mw: 705.0
+  VDD_INT:
+    mean_mw: 410.0
+    p95_mw: 460.0
+
+timeline_events:
+  - {type: frame_drop, t_ms: 84210.0, count: 1}
+  - {type: thermal_step, t_ms: 152000.0, detail: "skin temp 39C, no throttle"}
+
+artifacts:
+  - type: perfetto_trace
+    storage: fileshare
+    path: "artifacts/proj-sm-s947b/uc-camera-recording/cam-rec-r1-uhd30-vdis/20260610-sw123/trace.pb"
+    sha256: "0d1f7a3c9b2e4d5f6a7b8c9d0e1f2a3b4c5d6e7f8091a2b3c4d5e6f708192a3b"
+    bytes: 612368384
+    mime: application/octet-stream
+  - type: power_monitor_csv
+    storage: fileshare
+    path: "artifacts/proj-sm-s947b/uc-camera-recording/cam-rec-r1-uhd30-vdis/20260610-sw123/power_monitor.csv"
+    sha256: "1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f00f"
+    bytes: 48230411
+    mime: text/csv

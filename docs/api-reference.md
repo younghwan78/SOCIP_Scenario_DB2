@@ -56,10 +56,10 @@ src/scenario_db/
 | GET | `/api/v1/scenarios/{sid}/variants/{vid}/matched-issues` | — | Matched Issues + eval_time_ms |
 | GET | `/api/v1/variants` | project, severity, tag, limit, offset, sort_by, sort_dir | 전체 Variant |
 | GET | `/api/v1/evidence/summary` | groupby | Evidence 집계 |
-| GET | `/api/v1/evidence` | scenario_ref, variant_ref, sw_version, feasibility, limit, offset, sort_by, sort_dir | Evidence 목록 |
+| GET | `/api/v1/evidence` | scenario_ref, variant_ref, project_ref, kind, sw_version, feasibility, limit, offset, sort_by, sort_dir | Evidence 목록 |
 | GET | `/api/v1/evidence/{id}` | — | Evidence 상세 |
-| GET | `/api/v1/compare/evidence` | variant, sw1, sw2 | SW 버전 KPI 비교 |
-| GET | `/api/v1/compare/variants` | ref1, ref2 | Variant 비교 |
+| GET | `/api/v1/compare/evidence` | variant, sw1, sw2, scenario_ref, project_ref, kind | SW 버전 KPI 비교 — 조건별 최신(measured_at desc, NULL 후순위) evidence 선택 |
+| GET | `/api/v1/compare/variants` | ref1, ref2, project_ref, kind | Variant 비교 — ref의 scenario_id로 필터, 최신 evidence 선택 |
 | GET | `/api/v1/issues` | limit, offset, sort_by\*, sort_dir\* | Issue 목록 (캐시 우선) |
 | GET | `/api/v1/issues/{id}` | — | Issue 상세 (캐시 우선) |
 | GET | `/api/v1/waivers` | expiring_within_days, limit, offset, sort_by, sort_dir | Waiver 목록 |

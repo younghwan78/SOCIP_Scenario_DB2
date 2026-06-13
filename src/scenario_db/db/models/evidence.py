@@ -36,6 +36,9 @@ class Evidence(Base):
     kind                = Column(Text, nullable=False)  # evidence.simulation | evidence.measurement
     scenario_ref        = Column(Text, ForeignKey("scenarios.id"), nullable=False)
     variant_ref         = Column(Text, nullable=False)
+    project_ref         = Column(Text, ForeignKey("projects.id"), index=True)
+    measured_at         = Column(DateTime(timezone=True), index=True)  # meas: 측정 시각, projection: 산출 시각
+    derived_from        = Column(JSONB)             # lineage: 원본 evidence id 목록
     sw_baseline_ref     = Column(Text, ForeignKey("sw_profiles.id"))
     sweep_job_id        = Column(Text, ForeignKey("sweep_jobs.id"))
     execution_context   = Column(JSONB, nullable=False)
@@ -49,13 +52,15 @@ class Evidence(Base):
     dma_breakdown       = Column(JSONB)             # sim only
     timing_breakdown    = Column(JSONB)             # sim only
     dvfs_breakdown      = Column(JSONB)             # sim only
-    timeline_events     = Column(JSONB)             # sim only
+    timeline_events     = Column(JSONB)             # sim + meas
     external_devices    = Column(JSONB)             # sim only
     topology_order      = Column(JSONB)             # sim only
-    vdd_power           = Column(JSONB)             # sim only
+    vdd_power           = Column(JSONB)             # sim + meas (rail별 전력)
     calculation_trace   = Column(JSONB)             # sim debug trace, optional
     params_hash         = Column(Text, index=True)  # sim cache key
     provenance          = Column(JSONB)             # meas only
+    cpu_breakdown       = Column(JSONB)             # meas: cluster별 power/freq residency digest
+    sw_task_timing      = Column(JSONB)             # meas: perfetto 기반 task별 수행시간 digest
     artifacts           = Column(JSONB)
     yaml_sha256         = Column(Text, nullable=False)
     # §22 Generated columns (PostgreSQL ≥12) — ::text 캐스트 + index=True

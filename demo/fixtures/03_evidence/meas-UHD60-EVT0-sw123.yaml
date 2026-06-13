@@ -4,6 +4,8 @@ kind: evidence.measurement
 
 scenario_ref: uc-camera-recording
 variant_ref: UHD60-HDR10-H265
+project_ref: proj-A-exynos2500
+measured_at: "2026-04-19T14:30:00+09:00"
 
 execution_context:
   silicon_rev: EVT0
@@ -11,6 +13,7 @@ execution_context:
   thermal: hot
   ambient_temp_c: 35.0
   power_state: charging
+  method: measurement
 
 provenance:
   device_id: "EVT0-S24-SN-1234"
@@ -53,3 +56,63 @@ kpi:
     ci_95: [2445.0, 2515.0]
     n: 10
   frame_latency_ms: 15.3
+
+cpu_breakdown:
+  - cluster: BIG
+    power_mw:
+      mean: 820.0
+      p95: 910.0
+      std: 38.0
+      n: 10
+    avg_freq_mhz: 2210.0
+    util_pct: 43.5
+    freq_residency:
+      - {freq_mhz: 2600.0, ratio: 0.18}
+      - {freq_mhz: 2210.0, ratio: 0.52, time_ms: 93600.0}
+      - {freq_mhz: 1700.0, ratio: 0.30}
+  - cluster: MID
+    power_mw: 310.0
+    avg_freq_mhz: 1850.0
+    util_pct: 61.0
+  - cluster: LIT
+    power_mw: 145.0
+    avg_freq_mhz: 1400.0
+    util_pct: 72.0
+
+sw_task_timing:
+  - task: eis_warp
+    process: vendor.camera.provider
+    thread: EISCore0
+    cluster: BIG
+    mean_ms: 6.4
+    p50_ms: 6.1
+    p95_ms: 8.9
+    max_ms: 12.3
+    count_per_frame: 1.0
+    samples: 5400
+  - task: hal_request_thread
+    process: vendor.camera.provider
+    cluster: MID
+    mean_ms: 2.1
+    p95_ms: 3.4
+    count_per_frame: 1.0
+    samples: 5400
+
+vdd_power:
+  VDD_CAM:
+    mean_mw: 640.0
+    p95_mw: 710.0
+  VDD_NPU:
+    mean_mw: 280.0
+    p95_mw: 350.0
+
+timeline_events:
+  - {type: frame_drop, t_ms: 61234.5, count: 2}
+
+artifacts:
+  - type: perfetto_trace
+    storage: fileshare
+    path: "artifacts/proj-A/uc-camera-recording/UHD60-HDR10-H265/20260419-sw123/trace.pb"
+    sha256: "cafebabe5678"
+    bytes: 734003200
+    mime: application/octet-stream

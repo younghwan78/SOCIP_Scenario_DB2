@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import Field
 
 from scenario_db.models.common import (
@@ -14,6 +16,9 @@ class ExecutionContext(BaseScenarioModel):
     silicon_rev: str
     sw_baseline_ref: DocumentId          # v2.2: FK → sw_profiles (not a plain string)
     thermal: str
+    # How the evidence values were produced. Distinguishes calculation-based
+    # simulation from cross-project projection and physical measurement.
+    method: Literal["measurement", "calculation", "projection"] | None = None
     ambient_temp_c: float | None = None
     power_state: str | None = None
     sw_runtime_overrides: dict[str, FeatureFlagValue] | None = None

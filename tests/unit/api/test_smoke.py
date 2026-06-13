@@ -324,8 +324,24 @@ def test_compare_evidence_200(client):
     assert r.status_code == 200
 
 
+def test_compare_evidence_with_selection_filters_200(client):
+    r = client.get(
+        "/api/v1/compare/evidence?variant=v1&sw1=sw-v1&sw2=sw-v2"
+        "&scenario_ref=s1&project_ref=p1&kind=evidence.measurement"
+    )
+    assert r.status_code == 200
+
+
 def test_compare_variants_200(client):
     r = client.get("/api/v1/compare/variants?ref1=s1::v1&ref2=s2::v2")
+    assert r.status_code == 200
+
+
+def test_compare_variants_with_selection_filters_200(client):
+    r = client.get(
+        "/api/v1/compare/variants?ref1=s1::v1&ref2=s2::v2"
+        "&project_ref=p1&kind=evidence.simulation"
+    )
     assert r.status_code == 200
 
 

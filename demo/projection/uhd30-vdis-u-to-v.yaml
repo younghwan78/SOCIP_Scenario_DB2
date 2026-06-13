@@ -1,0 +1,31 @@
+# Projection recipe — project V's UHD30+VDIS simulation using Project U's
+# calibration (U measurement vs U calculation) plus cluster capacity scaling.
+#
+# Run:
+#   uv run python -m scenario_db.projection.cli \
+#     --recipe demo/projection/uhd30-vdis-u-to-v.yaml \
+#     --out generated/projection --strict
+kind: projection.recipe
+
+sources:
+  u_measurement: u-meas.yaml
+  u_simulation: u-sim.yaml
+  v_simulation: v-sim.yaml
+
+target:
+  project_ref: proj-v-nextgen
+  scenario_ref: uc-camera-recording-v
+  variant_ref: cam-rec-uhd30-vdis
+  silicon_rev: PRE_SI
+  sw_baseline_ref: sw-vendor-v1.3.0
+
+# SW task time scaling (U -> V). Provide time_scale directly, or u/v capacities.
+cluster_scaling:
+  BIG: {u_capacity_mhz: 3000, v_capacity_mhz: 3750}   # -> time_scale 0.8
+  MID: {time_scale: 0.85}
+  LIT: {time_scale: 0.9}
+
+scale_ip_breakdown: true
+notes: >
+  V BIG cluster ~25% higher peak capacity than U; SW tasks assumed compute-bound.
+  HW power scaled by U's measured/calculated correction factor.
