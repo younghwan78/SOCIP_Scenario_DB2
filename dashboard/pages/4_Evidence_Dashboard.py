@@ -17,7 +17,11 @@ for path in (_root / "src", _root, _root / "dashboard"):
         sys.path.insert(0, str(path))
 
 from dashboard.components.evidence_context import default_silicon_rev, render_evidence_context_sidebar
-from dashboard.components.evidence_results_panel import clear_evidence_results_cache, render_evidence_results_panel
+from dashboard.components.evidence_results_panel import (
+    clear_evidence_results_cache,
+    render_evidence_results_panel,
+    render_measurement_results_panel,
+)
 from dashboard.components.evidence_run_panel import clear_evidence_run_caches, render_evidence_run_panel
 from dashboard.components.ui_theme import apply_app_theme, render_page_header
 
@@ -94,39 +98,50 @@ with st.sidebar:
         on_refresh=_clear_dashboard_caches,
     )
 
-run_visible = _run_panel_visible()
-toolbar_col, _spacer_col = st.columns([0.18, 0.82])
-with toolbar_col:
-    st.button(
-        "Hide Run Simulation" if run_visible else "Show Run Simulation",
-        key="evidence_run_panel_toggle",
-        on_click=_toggle_run_panel,
-        use_container_width=True,
-        help="Hide the run form to give Simulation Results the full dashboard width.",
-    )
+if context.method == "Calculation":
+    run_visible = _run_panel_visible()
+    toolbar_col, _spacer_col = st.columns([0.18, 0.82])
+    with toolbar_col:
+        st.button(
+            "Hide Run Simulation" if run_visible else "Show Run Simulation",
+            key="evidence_run_panel_toggle",
+            on_click=_toggle_run_panel,
+            use_container_width=True,
+            help="Hide the run form to give Simulation Results the full dashboard width.",
+        )
 
-if run_visible:
-    run_col, result_col = st.columns([0.9, 1.6], gap="large")
+    if run_visible:
+        run_col, result_col = st.columns([0.9, 1.6], gap="large")
 
-    with run_col:
-        render_evidence_run_panel(
+        with run_col:
+            render_evidence_run_panel(
+                api_base=context.api_base,
+                scenario_id=context.scenario_id,
+                variant_id=context.variant_id,
+                default_silicon_rev=default_silicon_rev(context.soc_id),
+                on_persisted=lambda _evidence_id: clear_evidence_results_cache(),
+            )
+
+        result_container = result_col
+    else:
+        st.caption("Run Simulation is hidden. Use Show Run Simulation to adjust inputs or run another preview.")
+        result_container = st.container()
+
+    with result_container:
+        render_evidence_results_panel(
             api_base=context.api_base,
             scenario_id=context.scenario_id,
             variant_id=context.variant_id,
-            default_silicon_rev=default_silicon_rev(context.soc_id),
-            on_persisted=lambda _evidence_id: clear_evidence_results_cache(),
+            soc_id=context.soc_id,
+            project_id=context.project_id,
         )
-
-    result_container = result_col
 else:
-    st.caption("Run Simulation is hidden. Use Show Run Simulation to adjust inputs or run another preview.")
-    result_container = st.container()
-
-with result_container:
-    render_evidence_results_panel(
+    # Measurement / Projection: no run form — these evidences are imported, not run here.
+    render_measurement_results_panel(
         api_base=context.api_base,
         scenario_id=context.scenario_id,
         variant_id=context.variant_id,
         soc_id=context.soc_id,
         project_id=context.project_id,
+        method=context.method,
     )

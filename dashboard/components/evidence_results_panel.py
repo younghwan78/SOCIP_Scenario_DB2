@@ -18,8 +18,14 @@ from dashboard.components.evidence_dashboard_contract import (
     VIEWER_LINK_LABEL_PREVIEW,
     VIEWER_LINK_LABEL_SAVED,
 )
+from dashboard.components.evidence_api_client import KIND_MEASUREMENT, KIND_SIMULATION, list_evidence
 from dashboard.components.evidence_compare import render_preview_saved_comparison
 from dashboard.components.evidence_result_view import render_result_breakdown
+from dashboard.components.measurement_result_view import (
+    measurement_list_rows,
+    render_measurement_result,
+    sw_task_rows,
+)
 from dashboard.components.simulation_api_client import list_simulation_results
 from dashboard.components.table_actions import render_copyable_dataframe
 from dashboard.components.viewer_api_client import ViewerApiError
@@ -41,8 +47,80 @@ def render_evidence_results_panel(
         _render_saved_results(api_base, scenario_id, variant_id, soc_id, project_id)
 
 
+def render_measurement_results_panel(
+    *,
+    api_base: str,
+    scenario_id: str,
+    variant_id: str,
+    soc_id: str | None,
+    project_id: str | None,
+    method: str,
+) -> None:
+    """List + inspect measurement (or projection) evidence for the selection."""
+    is_projection = method == "Projection"
+    kind = KIND_SIMULATION if is_projection else KIND_MEASUREMENT
+    st.subheader("Projection Evidence" if is_projection else "Measurement Evidence")
+
+    items, error = _load_evidence_list(api_base, kind, scenario_id, variant_id)
+    if error:
+        st.error(error)
+        return
+    if is_projection:
+        items = [ev for ev in items if _evidence_method(ev) == "projection"]
+    if not items:
+        target = "projection" if is_projection else "measurement"
+        st.info(f"No {target} evidence is stored for the selected scenario/variant.")
+        return
+
+    rows = measurement_list_rows(items)
+    render_copyable_dataframe(rows, key="evidence_meas_list", use_container_width=True, hide_index=True)
+    evidence_ids = [str(row["id"]) for row in rows if row.get("id")]
+    _ensure_choice("evidence_meas_selected_id", evidence_ids)
+    selected_id = st.selectbox("Selected Evidence", evidence_ids, key="evidence_meas_selected_id")
+    selected = next((item for item in items if item.get("id") == selected_id), items[0])
+
+    if is_projection:
+        # projection is kind=simulation: reuse the sim breakdown, then surface the
+        # measured-derived SW timing that the sim view does not render.
+        render_result_breakdown(selected, key_prefix="projection", api_base=api_base, project_ref=project_id, soc_ref=soc_id)
+        sw_rows = sw_task_rows(selected)
+        if sw_rows:
+            st.markdown("**SW task timing (projected from source measurement)**")
+            render_copyable_dataframe(sw_rows, key="evidence_proj_sw", use_container_width=True, hide_index=True)
+    else:
+        render_measurement_result(selected, key_prefix="meas")
+
+
 def clear_evidence_results_cache() -> None:
     _load_sim_results.clear()
+    _load_evidence_list.clear()
+
+
+def _evidence_method(evidence: dict[str, Any]) -> str | None:
+    ctx = evidence.get("execution_context")
+    return ctx.get("method") if isinstance(ctx, dict) else None
+
+
+@st.cache_data(ttl=20)
+def _load_evidence_list(
+    base_url: str,
+    kind: str,
+    scenario_id: str,
+    variant_id: str,
+) -> tuple[list[dict], str | None]:
+    try:
+        return (
+            list_evidence(
+                base_url,
+                kind=kind,
+                scenario_ref=scenario_id or None,
+                variant_ref=variant_id or None,
+                limit=100,
+            ),
+            None,
+        )
+    except ViewerApiError as exc:
+        return [], str(exc)
 
 
 @st.cache_data(ttl=20)

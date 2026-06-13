@@ -21,6 +21,9 @@ from dashboard.components.viewer_api_client import (
 )
 
 
+EVIDENCE_METHODS = ("Calculation", "Measurement", "Projection")
+
+
 @dataclass(frozen=True)
 class EvidenceContext:
     api_base: str
@@ -28,6 +31,7 @@ class EvidenceContext:
     project_id: str
     scenario_id: str
     variant_id: str
+    method: str = "Calculation"
 
 
 def render_evidence_context_sidebar(
@@ -37,7 +41,7 @@ def render_evidence_context_sidebar(
 ) -> EvidenceContext:
     """Render sidebar controls and return the selected simulation context."""
 
-    st.markdown("### Simulation Context")
+    st.markdown("### Evidence Context")
     api_base = st.text_input("API Base", value=default_api_base, key="evidence_api_base")
     if st.button("Refresh", use_container_width=True):
         clear_evidence_context_caches()
@@ -45,15 +49,31 @@ def render_evidence_context_sidebar(
             on_refresh()
         st.rerun()
 
+    method = _select_method()
     scenario_id, variant_id = _select_context(api_base)
-    render_simulation_readiness(api_base, scenario_id, variant_id)
+    if method == "Calculation":
+        render_simulation_readiness(api_base, scenario_id, variant_id)
     return EvidenceContext(
         api_base=api_base,
         soc_id=str(st.session_state.get("viewer_soc_id") or ""),
         project_id=str(st.session_state.get("viewer_project_id") or ""),
         scenario_id=scenario_id,
         variant_id=variant_id,
+        method=method,
     )
+
+
+def _select_method() -> str:
+    _ensure_choice("evidence_method", list(EVIDENCE_METHODS), preferred="Calculation")
+    st.pills(
+        "Evidence Method",
+        list(EVIDENCE_METHODS),
+        selection_mode="single",
+        key="evidence_method",
+        width="stretch",
+        help="Calculation = simulation runs · Measurement = silicon power/perfetto digests · Projection = cross-project estimates",
+    )
+    return str(st.session_state.get("evidence_method") or "Calculation")
 
 
 def clear_evidence_context_caches() -> None:
