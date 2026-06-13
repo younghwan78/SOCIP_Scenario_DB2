@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from dashboard.components.evidence_api_client import list_evidence
+from dashboard.components import evidence_results_panel
 from dashboard.components.measurement_result_view import (
     artifact_rows,
     cpu_cluster_rows,
@@ -151,3 +152,27 @@ def test_list_evidence_passes_kind_filter():
     assert captured["params"]["kind"] == "evidence.measurement"
     assert captured["params"]["scenario_ref"] == "uc-camera-recording"
     assert captured["params"]["sort_by"] == "measured_at"
+
+
+def test_evidence_panel_loader_passes_project_filter(monkeypatch):
+    captured: dict[str, Any] = {}
+
+    def fake_list_evidence(base_url, **kwargs):
+        captured["base_url"] = base_url
+        captured.update(kwargs)
+        return [{"id": "meas-x"}]
+
+    monkeypatch.setattr(evidence_results_panel, "list_evidence", fake_list_evidence)
+    evidence_results_panel._load_evidence_list.clear()
+    items, error = evidence_results_panel._load_evidence_list(
+        "http://api/v1",
+        "evidence.measurement",
+        "uc-camera-recording",
+        "cam-rec-r1-uhd30-vdis",
+        "proj-A-exynos2500",
+    )
+    evidence_results_panel._load_evidence_list.clear()
+
+    assert error is None
+    assert items == [{"id": "meas-x"}]
+    assert captured["project_ref"] == "proj-A-exynos2500"

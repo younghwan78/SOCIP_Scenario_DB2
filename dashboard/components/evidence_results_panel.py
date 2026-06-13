@@ -61,7 +61,7 @@ def render_measurement_results_panel(
     kind = KIND_SIMULATION if is_projection else KIND_MEASUREMENT
     st.subheader("Projection Evidence" if is_projection else "Measurement Evidence")
 
-    items, error = _load_evidence_list(api_base, kind, scenario_id, variant_id)
+    items, error = _load_evidence_list(api_base, kind, scenario_id, variant_id, project_id)
     if error:
         st.error(error)
         return
@@ -107,6 +107,7 @@ def _load_evidence_list(
     kind: str,
     scenario_id: str,
     variant_id: str,
+    project_id: str | None,
 ) -> tuple[list[dict], str | None]:
     try:
         return (
@@ -115,6 +116,7 @@ def _load_evidence_list(
                 kind=kind,
                 scenario_ref=scenario_id or None,
                 variant_ref=variant_id or None,
+                project_ref=project_id or None,
                 limit=100,
             ),
             None,
