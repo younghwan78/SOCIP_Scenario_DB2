@@ -93,6 +93,12 @@ def test_non_numeric_value_raises(tmp_path: Path):
         aggregate_power(csv, PowerSpec(csv="power.csv"))
 
 
+def test_short_row_raises_power_csv_error(tmp_path: Path):
+    csv = _write_csv(tmp_path, "timestamp_ms,VDD_CAM,VDD_BIG\n0,100\n")
+    with pytest.raises(PowerCsvError, match="malformed row"):
+        aggregate_power(csv, PowerSpec(csv="power.csv"))
+
+
 def test_skips_blank_and_empty_cells(tmp_path: Path):
     csv = _write_csv(
         tmp_path,

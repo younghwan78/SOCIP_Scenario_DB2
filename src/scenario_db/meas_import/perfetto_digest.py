@@ -32,15 +32,20 @@ class TraceQuery(Protocol):
 # Time-weighted CPU frequency residency: each cpufreq counter sample holds until
 # the next sample on the same track. ts/dur are nanoseconds in perfetto.
 SQL_FREQ_RESIDENCY = """
-SELECT cct.cpu AS cpu,
-       c.value AS freq_khz,
-       SUM(
-         COALESCE(LEAD(c.ts) OVER (PARTITION BY c.track_id ORDER BY c.ts), c.ts) - c.ts
-       ) AS dur_ns
-FROM counter c
-JOIN cpu_counter_track cct ON c.track_id = cct.id
-WHERE cct.name = 'cpufreq'
-GROUP BY cct.cpu, c.value
+WITH freq_spans AS (
+  SELECT cct.cpu AS cpu,
+         c.value AS freq_khz,
+         COALESCE(
+           LEAD(c.ts) OVER (PARTITION BY c.track_id ORDER BY c.ts),
+           c.ts
+         ) - c.ts AS dur_ns
+  FROM counter c
+  JOIN cpu_counter_track cct ON c.track_id = cct.id
+  WHERE cct.name = 'cpufreq'
+)
+SELECT cpu, freq_khz, SUM(dur_ns) AS dur_ns
+FROM freq_spans
+GROUP BY cpu, freq_khz
 """
 
 # Slice durations joined with the owning thread/process. dur is nanoseconds.

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sqlite3
+
 from scenario_db.meas_import.meta import PerfettoSpec
 from scenario_db.meas_import.perfetto_digest import (
     SQL_FRAME_COUNT,
@@ -52,6 +54,27 @@ def test_extract_freq_residency_normalises_per_cluster():
 def test_extract_freq_residency_ignores_unmapped_cpu():
     rows = [{"cpu": 99, "freq_khz": 1000000, "dur_ns": 50 * NS}]
     assert extract_freq_residency(rows, {0: "LIT"}) == {}
+
+
+def test_freq_residency_sql_executes_in_sqlite_shape():
+    con = sqlite3.connect(":memory:")
+    con.row_factory = sqlite3.Row
+    con.executescript(
+        """
+        CREATE TABLE counter(track_id INTEGER, ts INTEGER, value INTEGER);
+        CREATE TABLE cpu_counter_track(id INTEGER, cpu INTEGER, name TEXT);
+        INSERT INTO cpu_counter_track VALUES (1, 7, 'cpufreq');
+        INSERT INTO counter VALUES (1, 0, 1000000);
+        INSERT INTO counter VALUES (1, 10, 2000000);
+        INSERT INTO counter VALUES (1, 30, 1000000);
+        """
+    )
+
+    rows = [dict(row) for row in con.execute(SQL_FREQ_RESIDENCY)]
+
+    by_freq = {row["freq_khz"]: row["dur_ns"] for row in rows}
+    assert by_freq[1000000] == 10
+    assert by_freq[2000000] == 20
 
 
 def test_avg_freq_weighted():

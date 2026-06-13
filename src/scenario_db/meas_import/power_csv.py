@@ -51,6 +51,10 @@ def _read_columns(csv_path: Path, time_column: str) -> tuple[list[str], dict[str
         for lineno, row in enumerate(reader, start=2):
             if not row or all(c.strip() == "" for c in row):
                 continue
+            if len(row) < len(header):
+                raise PowerCsvError(
+                    f"malformed row at line {lineno}: expected {len(header)} columns, got {len(row)}"
+                )
             for name in rail_names:
                 cell = row[idx[name]].strip()
                 if cell == "":
