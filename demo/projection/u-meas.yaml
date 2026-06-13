@@ -1,0 +1,45 @@
+# Project U — measurement (same variant as u-sim). Calibration target:
+#   total_power_factor = 2200/2000 = 1.1 ; VDD_CPU = 1100/1000 = 1.1
+id: meas-uc-camera-recording-u-cam-rec-uhd30-vdis-EVT1-20260610
+schema_version: "2.2"
+kind: evidence.measurement
+scenario_ref: uc-camera-recording-u
+variant_ref: cam-rec-uhd30-vdis
+project_ref: proj-u-exynos
+measured_at: "2026-06-10T15:20:00+09:00"
+execution_context:
+  silicon_rev: EVT1
+  sw_baseline_ref: sw-vendor-v1.2.3
+  thermal: room
+  method: measurement
+provenance:
+  device_id: "U-EVT1-SN-0001"
+  collection_method: "perfetto+power_monitor"
+aggregation:
+  strategy: mean_with_ci_95
+kpi:
+  total_power_mw:
+    mean: 2200.0
+    p95: 2300.0
+    n: 5
+  frame_latency_ms: 33.0
+vdd_power:
+  VDD_CPU:
+    mean_mw: 1100.0
+  VDD_CAM:
+    mean_mw: 840.0
+sw_task_timing:
+  - task: eis_warp
+    cluster: BIG
+    mean_ms: 8.0
+    p50_ms: 7.5
+    p95_ms: 10.0
+    max_ms: 14.0
+    count_per_frame: 1.0
+    samples: 1500
+  - task: hal_request_thread
+    cluster: MID
+    mean_ms: 2.0
+    p95_ms: 3.0
+    count_per_frame: 1.0
+    samples: 1500

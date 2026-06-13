@@ -98,7 +98,13 @@ Task naming 규약:
 
 - `projection` evidence는 `derived_from`에 원본 measurement evidence id를 반드시 기록한다.
   lineage가 없는 projection은 review gate에서 신뢰할 수 없는 데이터로 취급해야 한다.
-- projection의 보정계수/산식은 추후 `calculation_trace`에 기록한다 (Phase 5 범위).
+- projection의 보정계수/산식은 `calculation_trace.projection`에 기록한다(보정 detail,
+  스케일된 항목, cluster_scaling, verify 시 error_report).
+- projected sim은 HW 전력(계산값 × 보정계수)과 SW 시간(타 과제 실측 × cluster scale)을
+  함께 담는다. 이를 위해 `evidence.simulation`에도 `sw_task_timing` 필드가 있다(native
+  계산 run은 비워 둠).
+- 생성/검증 도구와 recipe 작성은 `docs/projection-guide-ko.md`(`scenario_db.projection`)
+  참조.
 
 ## 4. Canonical Scenario Key 규약 (프로젝트 간 비교)
 

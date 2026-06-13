@@ -72,6 +72,9 @@ def test_upsert_simulation_persists_lineage_fields():
     raw["project_ref"] = "proj-A-exynos2500"
     raw["derived_from"] = ["meas-uc-camera-recording-UHD60-HDR10-H265-EVT0-sw123-20260419"]
     raw["execution_context"]["method"] = "projection"
+    raw["sw_task_timing"] = [
+        {"task": "eis_warp", "cluster": "BIG", "mean_ms": 6.4, "p95_ms": 8.0, "samples": 1500}
+    ]
 
     upsert_simulation(raw, "sha-sim-1", db)
 
@@ -79,3 +82,5 @@ def test_upsert_simulation_persists_lineage_fields():
     assert row.project_ref == "proj-A-exynos2500"
     assert row.derived_from == ["meas-uc-camera-recording-UHD60-HDR10-H265-EVT0-sw123-20260419"]
     assert row.execution_context["method"] == "projection"
+    assert row.sw_task_timing[0]["task"] == "eis_warp"
+    assert row.sw_task_timing[0]["p95_ms"] == 8.0
