@@ -52,7 +52,8 @@ class PowerSpec(BaseScenarioModel):
     format: Literal["wide", "rail_long"] = "wide"
     time_column: str = "timestamp_ms"  # wide: the dropped time column
     # rails to sum *per sample/run* before aggregating into total_power_mw.
-    # If empty: wide → no total; rail_long → sum of all rails.
+    # If empty: wide → no total; rail_long → sum all rails, requiring the same
+    # rail set in every run. Use an explicit stable subset when captures differ.
     total_power_rails: list[str] = Field(default_factory=list)
     # optional pre-summed total column (wide only); takes precedence.
     total_power_column: str | None = None

@@ -154,33 +154,47 @@ def aggregate_power_rail_long(
         has_v = spec.voltage_column in header
         has_i = spec.current_column in header
 
-        # rail -> metric -> [values across runs]; run_totals[run] -> summed mw
+        # rail -> metric -> [values across runs]; rail_power_by_run aligns
+        # cluster/total aggregation by run id, independent of CSV row order.
         rails: dict[str, dict[str, list[float]]] = {}
+        rail_power_by_run: dict[str, dict[str, float]] = {}
         rail_order: list[str] = []
-        run_totals: dict[str, float] = {}
-        subset = set(spec.total_power_rails)
+        run_order: list[str] = []
+        run_rails: dict[str, set[str]] = {}
         for lineno, row in enumerate(reader, start=2):
             rail = (row.get(spec.rail_column) or "").strip()
             run = (row.get(spec.run_column) or "").strip()
             if not rail or not run:
                 continue
             mw = _cell_float(row, spec.power_column, rail, lineno)
+            if run not in run_rails:
+                run_rails[run] = set()
+                run_order.append(run)
+            if rail in run_rails[run]:
+                raise PowerCsvError(
+                    f"duplicate rail_long row for run '{run}', rail '{rail}' at line {lineno}"
+                )
+            run_rails[run].add(rail)
             if rail not in rails:
                 rails[rail] = {"v": [], "ma": [], "mw": []}
+                rail_power_by_run[rail] = {}
                 rail_order.append(rail)
+            rail_power_by_run[rail][run] = mw
             rails[rail]["mw"].append(mw)
             if has_v:
                 rails[rail]["v"].append(_cell_float(row, spec.voltage_column, rail, lineno))
             if has_i:
                 rails[rail]["ma"].append(_cell_float(row, spec.current_column, rail, lineno))
-            if not subset or rail in subset:
-                run_totals[run] = run_totals.get(run, 0.0) + mw
 
     if not rail_order:
         raise PowerCsvError(f"rail_long CSV has no data rows: {csv_path}")
 
+    missing_meta_rails = sorted(set(spec.rails) - set(rail_order))
+    if missing_meta_rails:
+        raise PowerCsvError(f"rails in meta.rails not present in rail_long CSV: {missing_meta_rails}")
+
     digest = PowerDigest()
-    digest.sample_count = len(run_totals)
+    digest.sample_count = len(run_order)
 
     for rail in rail_order:
         mw_vals = rails[rail]["mw"]
@@ -200,23 +214,85 @@ def aggregate_power_rail_long(
         if role.role == "cpu_cluster" and rail in rails:
             cluster_rails.setdefault(role.cluster, []).append(rail)
     for cluster, members in cluster_rails.items():
-        per_run = _cluster_run_totals(rails, members)
+        per_run = _required_run_totals(
+            rail_power_by_run,
+            run_order,
+            members,
+            context=f"cluster '{cluster}'",
+        )
         if per_run:
             digest.cpu_cluster_power[cluster] = measured_kpi(per_run, confidence_level=confidence_level)
 
+    total_rails = list(dict.fromkeys(spec.total_power_rails))
+    if total_rails:
+        missing_total_rails = [rail for rail in total_rails if rail not in rail_power_by_run]
+        if missing_total_rails:
+            raise PowerCsvError(
+                f"total_power_rails not present in rail_long CSV: {missing_total_rails}"
+            )
+        run_totals = _required_run_totals(
+            rail_power_by_run,
+            run_order,
+            total_rails,
+            context="total_power_rails",
+        )
+    else:
+        _ensure_consistent_run_rail_sets(run_rails, run_order)
+        run_totals = [
+            sum(rail_power_by_run[rail][run] for rail in run_rails[run])
+            for run in run_order
+        ]
     if run_totals:
-        digest.total_power_mw = measured_kpi(list(run_totals.values()), confidence_level=confidence_level)
+        digest.total_power_mw = measured_kpi(run_totals, confidence_level=confidence_level)
 
     return digest
 
 
-def _cluster_run_totals(rails: dict[str, dict[str, list[float]]], members: list[str]) -> list[float]:
-    """Sum member-rail power per run position, returning the per-run totals."""
-    series = [rails[m]["mw"] for m in members if m in rails]
-    if not series:
-        return []
-    n = min(len(s) for s in series)
-    return [sum(s[i] for s in series) for i in range(n)]
+def _required_run_totals(
+    rail_power_by_run: dict[str, dict[str, float]],
+    run_order: list[str],
+    required_rails: list[str],
+    *,
+    context: str,
+) -> list[float]:
+    """Sum required rails per run, failing if any run lacks a member rail."""
+    missing_by_run: list[str] = []
+    for run in run_order:
+        missing = [rail for rail in required_rails if run not in rail_power_by_run.get(rail, {})]
+        if missing:
+            missing_by_run.append(f"run {run}: {', '.join(missing)}")
+    if missing_by_run:
+        raise PowerCsvError(
+            f"rail_long missing required rails for {context}: {'; '.join(missing_by_run)}"
+        )
+    return [
+        sum(rail_power_by_run[rail][run] for rail in required_rails)
+        for run in run_order
+    ]
+
+
+def _ensure_consistent_run_rail_sets(run_rails: dict[str, set[str]], run_order: list[str]) -> None:
+    """Require the same rail set per run when total_power_rails means all rails."""
+    if not run_order:
+        return
+    expected = set(run_rails[run_order[0]])
+    problems: list[str] = []
+    for run in run_order[1:]:
+        actual = run_rails[run]
+        missing = sorted(expected - actual)
+        added = sorted(actual - expected)
+        if missing or added:
+            parts = []
+            if missing:
+                parts.append(f"missing {', '.join(missing)}")
+            if added:
+                parts.append(f"added {', '.join(added)}")
+            problems.append(f"run {run}: {'; '.join(parts)}")
+    if problems:
+        raise PowerCsvError(
+            "rail_long rail set mismatch across runs; set total_power_rails "
+            f"to a stable subset or fix CSV: {'; '.join(problems)}"
+        )
 
 
 def _cell_float(row: dict, column: str, rail: str, lineno: int) -> float:

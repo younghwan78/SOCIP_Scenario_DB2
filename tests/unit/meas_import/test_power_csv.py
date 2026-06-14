@@ -161,6 +161,99 @@ def test_rail_long_total_subset_and_single_run(tmp_path: Path):
     assert "std_mw" not in digest.vdd_power["VDD_CAM"]     # n=1 -> no std
 
 
+def test_rail_long_cluster_sums_by_run_id_not_row_order(tmp_path: Path):
+    csv = _write_csv(
+        tmp_path,
+        "run,rail,voltage_v,current_ma,power_mw\n"
+        "1,VDD_A,0.60,10,10\n"
+        "2,VDD_A,0.60,20,20\n"
+        "2,VDD_B,0.70,200,200\n"
+        "1,VDD_B,0.70,100,100\n",
+    )
+    spec = PowerSpec(
+        csv="power.csv",
+        format="rail_long",
+        rails={
+            "VDD_A": {"role": "cpu_cluster", "cluster": "BIG"},
+            "VDD_B": {"role": "cpu_cluster", "cluster": "BIG"},
+        },
+    )
+    digest = aggregate_power_rail_long(csv, spec)
+
+    # run 1 = 10 + 100, run 2 = 20 + 200. Row order must not affect this.
+    assert digest.cpu_cluster_power["BIG"]["mean"] == 165.0
+    assert digest.cpu_cluster_power["BIG"]["p95"] == 214.5
+    assert digest.cpu_cluster_power["BIG"]["std"] == 55.0
+
+
+def test_rail_long_cluster_missing_member_run_raises(tmp_path: Path):
+    csv = _write_csv(
+        tmp_path,
+        "run,rail,voltage_v,current_ma,power_mw\n"
+        "1,VDD_A,0.60,10,10\n"
+        "2,VDD_A,0.60,20,20\n"
+        "1,VDD_B,0.70,100,100\n",
+    )
+    spec = PowerSpec(
+        csv="power.csv",
+        format="rail_long",
+        rails={
+            "VDD_A": {"role": "cpu_cluster", "cluster": "BIG"},
+            "VDD_B": {"role": "cpu_cluster", "cluster": "BIG"},
+        },
+    )
+    with pytest.raises(PowerCsvError, match="cluster 'BIG'.*run 2.*VDD_B"):
+        aggregate_power_rail_long(csv, spec)
+
+
+def test_rail_long_total_subset_missing_rail_raises(tmp_path: Path):
+    csv = _write_csv(tmp_path, "run,rail,voltage_v,current_ma,power_mw\n1,VDD_A,0.60,10,10\n")
+    spec = PowerSpec(csv="power.csv", format="rail_long", total_power_rails=["VDD_MISSING"])
+    with pytest.raises(PowerCsvError, match="total_power_rails.*VDD_MISSING"):
+        aggregate_power_rail_long(csv, spec)
+
+
+def test_rail_long_total_all_requires_consistent_run_rail_sets(tmp_path: Path):
+    csv = _write_csv(
+        tmp_path,
+        "run,rail,voltage_v,current_ma,power_mw\n"
+        "1,VDD_A,0.60,10,10\n"
+        "1,VDD_B,0.70,100,100\n"
+        "2,VDD_A,0.60,20,20\n",
+    )
+    spec = PowerSpec(csv="power.csv", format="rail_long")
+    with pytest.raises(PowerCsvError, match="rail set mismatch.*run 2.*VDD_B"):
+        aggregate_power_rail_long(csv, spec)
+
+
+def test_rail_long_extra_unmapped_rail_is_preserved_and_ignored_by_subset(tmp_path: Path):
+    csv = _write_csv(
+        tmp_path,
+        "run,rail,voltage_v,current_ma,power_mw\n"
+        "1,VDD_A,0.60,10,10\n"
+        "1,VDD_EXTRA,0.70,100,100\n"
+        "2,VDD_A,0.60,20,20\n"
+        "2,VDD_EXTRA,0.70,200,200\n",
+    )
+    spec = PowerSpec(csv="power.csv", format="rail_long", total_power_rails=["VDD_A"])
+    digest = aggregate_power_rail_long(csv, spec)
+
+    assert digest.total_power_mw["mean"] == 15.0
+    assert set(digest.vdd_power) == {"VDD_A", "VDD_EXTRA"}
+    assert digest.vdd_power["VDD_EXTRA"]["power_mw"] == 150.0
+
+
+def test_rail_long_missing_meta_rail_raises(tmp_path: Path):
+    csv = _write_csv(tmp_path, "run,rail,voltage_v,current_ma,power_mw\n1,VDD_A,0.60,10,10\n")
+    spec = PowerSpec(
+        csv="power.csv",
+        format="rail_long",
+        rails={"VDD_MISSING": {"role": "cpu_cluster", "cluster": "BIG"}},
+    )
+    with pytest.raises(PowerCsvError, match="meta.rails.*VDD_MISSING"):
+        aggregate_power_rail_long(csv, spec)
+
+
 def test_rail_long_missing_power_column_raises(tmp_path: Path):
     csv = _write_csv(tmp_path, "run,rail,voltage_v,current_ma\n1,VDD_CAM,0.6,100\n")
     with pytest.raises(PowerCsvError, match="power_mw"):

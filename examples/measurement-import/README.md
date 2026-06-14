@@ -84,7 +84,8 @@ CLI 가 **run 간(n=run 수)** 으로 자동 산출하는 것:
 | `cpu_breakdown[]` | `meta.power.rails` 로 매핑한 클러스터(BIG/MID/LIT)의 run 간 합 |
 | `artifacts[].sha256` | `artifacts[].source` 로컬 파일 해시 |
 
-> `total_power_rails: []` 면 전체 rail 합. 일부만 합산하려면 rail 명을 나열.
+> `total_power_rails: []` 면 전체 rail 합. 이때 run마다 rail set이 동일해야 합니다.
+> 측정 중 일부 rail이 빠지거나 추가될 수 있으면, 비교 가능한 rail만 `total_power_rails`에 명시하세요.
 > `meta.power.rails` 의 cpu_cluster 매핑은 **선택** — 지정 안 한 rail 은 `vdd_power` 테이블에만 남습니다.
 
 DB 적재:
@@ -151,5 +152,5 @@ uv run python -c "import os; from sqlalchemy import create_engine,text; e=create
 5. raw artifact(CSV 등)는 file-store 에 두고 YAML 에는 `path` + `sha256` 만.
 6. 같은 캠페인을 여러 번 측정하면 Path A(rail_long)로 자동 집계 → 휴먼 에러/재현성 우위.
 
-> 참고: 대시보드 측정 뷰(`vdd_power_rows`)는 현재 `mean_mw` 위주 표시입니다. mA/V 컬럼 노출은
-> 뷰어 측 별도 확장 항목(import 형식과는 독립).
+> 참고: 대시보드 측정 뷰(`vdd_power_rows`)는 `voltage_v`, `current_ma`, `power_mw`, `std_mw`
+> triplet과 legacy `mean_mw`/`p95_mw` 형식을 모두 표시합니다.
