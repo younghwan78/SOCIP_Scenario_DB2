@@ -47,7 +47,10 @@ kpi:
     std: 5.8
     ci_95: [667.9, 681.1]
     n: 3
-  frame_latency_ms: 28.4               # 스칼라 KPI 도 허용
+  # frame latency 는 프레임 단위 분포(n = 프레임 수, run 수와 다른 축). p95 로 jank 판단.
+  # 30fps 예산 = 33.3ms → mean 28.4 / p95 32.1 모두 예산 내. drop 은 timeline_events 로.
+  # (MeasuredKpi 는 mean/p95/std/ci_95/n 만; max 필드 없음)
+  frame_latency_ms: {mean: 28.4, p95: 32.1, n: 5400}
   fps_effective: 29.97
 
 # ── rail-level 측정 테이블 (핵심) ──────────────────────────────────────────────
@@ -74,17 +77,60 @@ vdd_power:
   SRB1S4_VDD2H_MEM_AP_L:       {voltage_v: 1.0027, current_ma: 57.90,  power_mw: 58.19,  std_mw: 0.50}
   B6S2_VDD_SRAM_L:             {voltage_v: 0.7217, current_ma: 48.73,  power_mw: 35.18,  std_mw: 0.30}
 
-# ── (선택) rail 을 논리 CPU 클러스터로 묶은 분해. power_mw 는 run 간 MeasuredKpi ──
+# ── CPU 클러스터 분해 = power(전력 측정) + freq/util(perfetto 분석) 병합 ───────────
+#   power_mw     : 전력 측정에서 (run 간 MeasuredKpi)
+#   freq_residency, avg_freq_mhz, util_pct : perfetto(별도 분석) 결과를 여기 기입
+#   freq_residency = 시간가중 점유율 {freq_mhz, ratio(합≈1), time_ms}
 cpu_breakdown:
-  - cluster: BIG     # CPUCL3
+  - cluster: BIG     # CPUCL3 — 이 시나리오선 거의 parked
     power_mw: {mean: 26.95, std: 0.23, ci_95: [26.7, 27.2], n: 3}
-  - cluster: MID     # CPUCL2 + CPUCL1(LF0/LF1)
+    avg_freq_mhz: 1000.0
+    util_pct: 8.4
+    freq_residency:
+      - {freq_mhz: 3300.0, ratio: 0.03, time_ms: 5400.0}
+      - {freq_mhz: 2400.0, ratio: 0.09, time_ms: 16200.0}
+      - {freq_mhz: 1100.0, ratio: 0.22, time_ms: 39600.0}
+      - {freq_mhz: 672.0,  ratio: 0.66, time_ms: 118800.0}
+  - cluster: MID     # CPUCL2 + CPUCL1(LF0/LF1) — 카메라/인코더 workhorse
     power_mw: {mean: 160.19, std: 1.38, ci_95: [158.6, 161.8], n: 3}
+    avg_freq_mhz: 1765.0
+    util_pct: 47.5
+    freq_residency:
+      - {freq_mhz: 2400.0, ratio: 0.18, time_ms: 32400.0}
+      - {freq_mhz: 1900.0, ratio: 0.46, time_ms: 82800.0}
+      - {freq_mhz: 1400.0, ratio: 0.27, time_ms: 48600.0}
+      - {freq_mhz: 900.0,  ratio: 0.09, time_ms: 16200.0}
   - cluster: LIT     # CPUCL0_DSU
     power_mw: {mean: 77.22, std: 0.66, ci_95: [76.5, 78.0], n: 3}
+    avg_freq_mhz: 1228.0
+    util_pct: 39.0
+    freq_residency:
+      - {freq_mhz: 1800.0, ratio: 0.12, time_ms: 21600.0}
+      - {freq_mhz: 1300.0, ratio: 0.55, time_ms: 99000.0}
+      - {freq_mhz: 900.0,  ratio: 0.33, time_ms: 59400.0}
+
+# ── SW task 타이밍 (perfetto 분석 결과) — 핵심 task만 논리명으로 ────────────────
+#   raw 스레드명이 아니라 논리 task명(eis_warp 등)으로 올려야 SW·프로젝트 간 비교 가능.
+#   count_per_frame = samples / frame_count (프레임당 호출 수)
+sw_task_timing:
+  - {task: eis_warp,            process: vendor.camera.provider, thread: VDISCore, cluster: MID, mean_ms: 7.8, p50_ms: 7.4, p95_ms: 10.6, max_ms: 15.1, samples: 5400, count_per_frame: 1.0}
+  - {task: hal_request_thread,  process: vendor.camera.provider, cluster: LIT, mean_ms: 2.3, p50_ms: 2.1, p95_ms: 3.8, max_ms: 6.9, samples: 5400, count_per_frame: 1.0}
+  - {task: encoder_input_feed,  process: mediaserver, cluster: LIT, mean_ms: 1.1, p50_ms: 1.0, p95_ms: 1.9, max_ms: 4.2, samples: 5400, count_per_frame: 1.0}
+
+# ── sparse 타임라인 이벤트 (frame drop / thermal 등) ──────────────────────────
+timeline_events:
+  - {type: frame_drop,   t_ms: 84210.0,  count: 1}
+  - {type: thermal_step, t_ms: 152000.0, detail: "skin 39C, no throttle"}
 
 # ── raw artifact 포인터: DB 에는 path + sha256 만 (Tier3 실파일은 file-store) ────
+# 주의: perfetto trace(.pb) 자체는 DB 미저장 — 아래 포인터로만 추적.
 artifacts:
+  - type: perfetto_trace
+    storage: fileshare
+    path: "artifacts/proj-sm-s947b/uc-camera-recording/cam-rec-r1-uhd30-vdis/20260614-pathb/trace.pb"
+    sha256: "0d1f7a3c9b2e4d5f6a7b8c9d0e1f2a3b4c5d6e7f8091a2b3c4d5e6f708192a3b"
+    bytes: 612368384
+    mime: application/octet-stream
   - type: power_monitor_csv
     storage: fileshare
     path: "artifacts/proj-sm-s947b/uc-camera-recording/cam-rec-r1-uhd30-vdis/20260614-pathb/rail_power_by_run.csv"

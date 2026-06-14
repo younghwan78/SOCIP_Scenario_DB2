@@ -113,6 +113,42 @@ uv run python -m scenario_db.etl.loader examples/measurement-import/path-b-canon
 
 ---
 
+## Perfetto-derived 데이터: 무엇을 올리고 무엇을 보여주나
+
+perfetto 추출은 **별도 분석 도구**에서 하고, 그 **결과(요약 다이제스트)만** canonical 에 기입합니다
+(Path B 예제가 power + perfetto-derived 를 한 evidence 에 합친 완성형). raw trace 는 DB 미저장 —
+`artifacts[]` 의 path+sha256 으로만 추적합니다.
+
+**무엇을 올리나 (계약)** — raw 슬라이스/스레드가 아니라 **고정 논리키**로 큐레이션해야 교차 비교됨:
+
+| canonical 필드 | 내용 | 키/단위 |
+|---|---|---|
+| `cpu_breakdown[].freq_residency` | 시간가중 주파수 점유율 `{freq_mhz, ratio(합≈1), time_ms}` | per-cluster |
+| `cpu_breakdown[].avg_freq_mhz` | 점유율 가중 평균 주파수 | per-cluster |
+| `cpu_breakdown[].util_pct` | 클러스터 사용률 | per-cluster % |
+| `sw_task_timing[]` | 핵심 task `{mean/p50/p95/max_ms, samples, count_per_frame}` | **논리 task명** (raw 스레드명 ❌) |
+| `kpi.frame_latency_ms` | 프레임 분포 `{mean, p95, n=프레임수}` | 예산(33.3ms@30fps) 대비 |
+| `timeline_events[]` | frame_drop / thermal_step 등 sparse 이벤트 | t_ms |
+
+**무엇을 보여주나** (대시보드 Measurement 뷰 — 대부분 이미 렌더):
+
+| 데이터 | 표현 | 답하는 질문 |
+|---|---|---|
+| freq_residency | 클러스터별 stacked bar (CPU/Freq 탭) | DVFS가 어디 머무나·throttle 거동 |
+| util_pct + avg_freq | 클러스터 health | 어느 클러스터 포화 |
+| sw_task_timing | task p95 막대 + per-frame 호출수 (SW Timing 탭) | 프레임당 병목 task |
+| frame_latency p95 | 예산선 대비 | 30fps 예산 초과·jank |
+| 동일 키 delta | meas↔sim / SW123↔SW130 | 정합·회귀 |
+
+예제 질의 (적재 후):
+
+```powershell
+# BIG 클러스터 최고주파 점유율 + eis_warp p95
+uv run python -c "import os,json; from sqlalchemy import create_engine,text; e=create_engine(os.environ['DATABASE_URL']); c=e.connect(); cb=c.execute(text(\"select cpu_breakdown from evidence where id='meas-example-pathb-uhd30-vdis-20260614'\")).scalar(); big=[x for x in cb if x['cluster']=='BIG'][0]; print('BIG top freq bin:', sorted(big['freq_residency'], key=lambda b:-b['ratio'])[0]); st=c.execute(text(\"select sw_task_timing from evidence where id='meas-example-pathb-uhd30-vdis-20260614'\")).scalar(); print('eis_warp p95_ms:', [t for t in st if t['task']=='eis_warp'][0]['p95_ms'])"
+```
+
+---
+
 ## 적재 검증 (DB 조회)
 
 ```powershell
