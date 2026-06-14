@@ -108,6 +108,23 @@ def test_vdd_power_rows():
     assert rows[0] == {"rail": "VDD_CAM", "mean_mw": 980.0, "p95_mw": 1080.0}
 
 
+def test_vdd_power_rows_triplet_shape():
+    ev = {
+        "vdd_power": {
+            "B5_6S1_VDD_CAM_L": {"voltage_v": 0.6077, "current_ma": 170.29, "power_mw": 103.46, "std_mw": 0.89},
+            "B6S2_VDD_SRAM_L": {"voltage_v": 0.7217, "current_ma": 48.73, "power_mw": 35.18, "std_mw": 0.30},
+        }
+    }
+    rows = {r["rail"]: r for r in vdd_power_rows(ev)}
+    cam = rows["B5_6S1_VDD_CAM_L"]
+    assert cam["voltage_v"] == 0.6077
+    assert cam["current_ma"] == 170.29
+    assert cam["mean_mw"] == 103.46
+    assert cam["std_mw"] == 0.89
+    # legacy-only p95 column is fully empty here -> dropped
+    assert "p95_mw" not in cam
+
+
 def test_artifact_rows_includes_legacy_raw_artifacts():
     ev = _evidence()
     ev["provenance"]["raw_artifacts"] = [{"type": "power_csv", "path": "p.csv", "sha256": "z"}]

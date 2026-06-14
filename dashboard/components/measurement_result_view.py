@@ -191,17 +191,35 @@ def sw_task_rows(evidence: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def vdd_power_rows(evidence: dict[str, Any]) -> list[dict[str, Any]]:
+    """Per-rail measurement rows.
+
+    Supports both the rail_long triplet shape ({voltage_v, current_ma,
+    power_mw, std_mw}) and the legacy power-only shape ({mean_mw, p95_mw}).
+    Columns that are entirely empty (e.g. voltage on a legacy digest) are
+    dropped so the table stays clean for either source.
+    """
     vdd = evidence.get("vdd_power") if isinstance(evidence.get("vdd_power"), dict) else {}
     rows: list[dict[str, Any]] = []
     for rail, entry in vdd.items():
         rows.append(
             {
                 "rail": rail,
+                "voltage_v": _rail_mw(entry, "voltage_v", "mean_v"),
+                "current_ma": _rail_mw(entry, "current_ma", "mean_ma"),
                 "mean_mw": _rail_mw(entry, "mean_mw", "power_mw", "power", "mean"),
+                "std_mw": _rail_mw(entry, "std_mw", "std"),
                 "p95_mw": _rail_mw(entry, "p95_mw", "p95"),
             }
         )
-    return rows
+    return _drop_empty_columns(rows, keep="rail")
+
+
+def _drop_empty_columns(rows: list[dict[str, Any]], *, keep: str) -> list[dict[str, Any]]:
+    if not rows:
+        return rows
+    cols = list(rows[0].keys())
+    keepers = [c for c in cols if c == keep or any(r.get(c) is not None for r in rows)]
+    return [{c: r.get(c) for c in keepers} for r in rows]
 
 
 def artifact_rows(evidence: dict[str, Any]) -> list[dict[str, Any]]:
@@ -303,8 +321,14 @@ def _render_power(st, evidence, render_table, *, key_prefix: str) -> None:
         render_table(clusters, key=f"{key_prefix}_cpu_tbl", use_container_width=True, hide_index=True)
     rails = vdd_power_rows(evidence)
     if rails:
-        st.markdown("**VDD rail power (mW)**")
-        _bar_with_p95(st, rails, x="rail", mean="mean_mw", p95="p95_mw", key=f"{key_prefix}_vdd")
+        has_current = any(r.get("current_ma") is not None for r in rails)
+        if has_current:
+            st.markdown("**VDD rail measurement (V / mA / mW)**")
+            _bar_with_p95(st, rails, x="rail", mean="current_ma", p95="_none_", key=f"{key_prefix}_vdd_ma")
+            st.caption("Bar = current (mA), the primary metric. Table also carries voltage (V) and power (mW).")
+        else:
+            st.markdown("**VDD rail power (mW)**")
+            _bar_with_p95(st, rails, x="rail", mean="mean_mw", p95="p95_mw", key=f"{key_prefix}_vdd")
         render_table(rails, key=f"{key_prefix}_vdd_tbl", use_container_width=True, hide_index=True)
     if not clusters and not rails:
         st.info("No cpu_breakdown / vdd_power digest in this measurement.")
