@@ -198,8 +198,11 @@ def aggregate_power_rail_long(
 
     digest = PowerDigest()
     digest.sample_count = len(run_order)
+    ignored_rails = {rail for rail, role in spec.rails.items() if role.role == "ignore"}
 
     for rail in rail_order:
+        if rail in ignored_rails:
+            continue
         mw_vals = rails[rail]["mw"]
         entry: dict = {"power_mw": _round(fmean(mw_vals))}
         if len(mw_vals) > 1:
@@ -243,9 +246,13 @@ def aggregate_power_rail_long(
             context="total_power_rails",
         )
     else:
-        _ensure_consistent_run_rail_sets(run_rails, run_order)
+        run_total_rails = {
+            run: rails_for_run - ignored_rails
+            for run, rails_for_run in run_rails.items()
+        }
+        _ensure_consistent_run_rail_sets(run_total_rails, run_order)
         run_totals = [
-            sum(rail_power_by_run[rail][run] for rail in run_rails[run])
+            sum(rail_power_by_run[rail][run] for rail in run_total_rails[run])
             for run in run_order
         ]
     if run_totals:

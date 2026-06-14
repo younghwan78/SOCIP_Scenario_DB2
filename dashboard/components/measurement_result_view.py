@@ -8,6 +8,7 @@ residency), sw_task_timing, vdd_power, and raw artifact pointers.
 from __future__ import annotations
 
 import colorsys
+import hashlib
 from collections import defaultdict
 from typing import Any
 
@@ -366,7 +367,10 @@ _DOMAIN_HUES: dict[str, float] = {
 
 def _domain_hue(domain: str) -> float:
     hue = _DOMAIN_HUES.get(domain)
-    return hue if hue is not None else (abs(hash(domain)) % 360) / 360.0
+    if hue is not None:
+        return hue
+    digest = hashlib.sha1(str(domain).encode("utf-8")).digest()
+    return (int.from_bytes(digest[:4], "big") % 360) / 360.0
 
 
 def _hsl_rgb(hue: float, light: float, sat: float = 0.62) -> str:

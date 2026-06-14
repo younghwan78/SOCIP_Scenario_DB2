@@ -367,6 +367,11 @@ def test_provenance_runtime_sw_state():
     assert obj.provenance.confidence_level == 0.95
 
 
+def test_provenance_confidence_level_must_be_probability():
+    with pytest.raises(ValidationError, match="confidence_level"):
+        Provenance(confidence_level=1.5)
+
+
 # ---------------------------------------------------------------------------
 # Extra fields forbidden
 # ---------------------------------------------------------------------------

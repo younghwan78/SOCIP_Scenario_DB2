@@ -82,6 +82,12 @@ class Provenance(BaseScenarioModel):
     confidence_level: float | None = None
     raw_artifacts: list[RawArtifact] = Field(default_factory=list)
 
+    @model_validator(mode="after")
+    def _validate_confidence_level(self) -> Provenance:
+        if self.confidence_level is not None and not 0.0 < self.confidence_level < 1.0:
+            raise ValueError("confidence_level must be in (0, 1)")
+        return self
+
 
 class MeasurementEvidence(BaseScenarioModel):
     id: DocumentId

@@ -159,7 +159,7 @@ uv run python -c "import os; from sqlalchemy import create_engine,text; e=create
 
 ```
 ('meas-example-patha-uhd30-vdis-20260614', '675.222', 3, 16)
-('meas-example-pathb-uhd30-vdis-20260614', '674.5',   3, 16)
+('meas-example-pathb-uhd30-vdis-20260614', '675.222', 3, 16)
 ```
 
 특정 rail 의 V/mA/mW 확인:

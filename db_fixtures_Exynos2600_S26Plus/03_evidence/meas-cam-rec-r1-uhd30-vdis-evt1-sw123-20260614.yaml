@@ -30,11 +30,12 @@ aggregation:
   strategy: mean_over_runs
 kpi:
   total_power_mw:
-    mean: 674.5
-    std: 5.8
+    mean: 675.222
+    p95: 681.833
+    std: 5.803
     ci_95:
-    - 667.9
-    - 681.1
+    - 668.656
+    - 681.789
     n: 3
   frame_latency_ms:
     mean: 28.4
@@ -44,99 +45,100 @@ kpi:
 vdd_power:
   B5S4_VDDMIF_AP_L:
     voltage_v: 0.5687
-    current_ma: 70.33
-    power_mw: 42.7
-    std_mw: 0.37
+    current_ma: 70.4
+    power_mw: 42.74
+    std_mw: 0.367
     domain: MIF
   B3_4_5S2_VDD_CPUCL3_BIG_L:
     voltage_v: 0.0132
-    current_ma: 30.5
-    power_mw: 26.95
-    std_mw: 0.23
+    current_ma: 30.531
+    power_mw: 26.976
+    std_mw: 0.232
     domain: CPU
   B3_4S3_VDD_CPUCL2_MID_HF_L:
     voltage_v: 0.0357
-    current_ma: 9.69
-    power_mw: 6.03
-    std_mw: 0.05
+    current_ma: 9.704
+    power_mw: 6.033
+    std_mw: 0.052
     domain: CPU
   B2S3_VDD_CPUCL1_MID_LF1_L:
     voltage_v: 0.4519
-    current_ma: 70.92
-    power_mw: 40.99
-    std_mw: 0.35
+    current_ma: 70.989
+    power_mw: 41.03
+    std_mw: 0.353
     domain: CPU
   B2S2_VDD_CPUCL1_MID_LF0_L:
     voltage_v: 0.5954
-    current_ma: 183.81
-    power_mw: 113.17
-    std_mw: 0.97
+    current_ma: 183.994
+    power_mw: 113.28
+    std_mw: 0.973
     domain: CPU
   B5_6S3_VDD_CPUCL0_DSU_L:
     voltage_v: 0.5866
-    current_ma: 129.64
-    power_mw: 77.22
-    std_mw: 0.66
+    current_ma: 129.766
+    power_mw: 77.301
+    std_mw: 0.664
     domain: CPU
   B4S4_VDD_INT_L:
     voltage_v: 0.6313
-    current_ma: 155.82
-    power_mw: 98.98
-    std_mw: 0.85
-    domain: INT
+    current_ma: 155.979
+    power_mw: 99.083
+    std_mw: 0.852
   B5_6S1_VDD_CAM_L:
     voltage_v: 0.6077
-    current_ma: 170.29
-    power_mw: 103.46
+    current_ma: 170.465
+    power_mw: 103.565
     std_mw: 0.89
   L1S3_VDD_ICPU_L:
     voltage_v: 0.7219
-    current_ma: 26.01
-    power_mw: 18.76
-    std_mw: 0.16
+    current_ma: 26.032
+    power_mw: 18.781
+    std_mw: 0.161
   B1_2_3_4S1_VDD_G3D0_0P725_L:
     voltage_v: 0.0111
-    current_ma: 7.05
-    power_mw: 2.29
+    current_ma: 7.058
+    power_mw: 2.293
     std_mw: 0.02
   B1_2_3E1_VDD_G3D1_0P725_L:
     voltage_v: 0.0112
-    current_ma: 6.1
-    power_mw: 1.85
-    std_mw: 0.02
+    current_ma: 6.107
+    power_mw: 1.851
+    std_mw: 0.016
   B6S4_VDDQ_DRAM_MEM_0P5_T:
     voltage_v: 0.428
-    current_ma: 17.61
-    power_mw: 7.58
-    std_mw: 0.07
+    current_ma: 17.624
+    power_mw: 7.592
+    std_mw: 0.065
+    domain: MEM
   L5M_VDD1_MEM_L:
     voltage_v: 1.8014
-    current_ma: 9.73
-    power_mw: 17.53
-    std_mw: 0.15
+    current_ma: 9.741
+    power_mw: 17.546
+    std_mw: 0.151
   SRB1S5_VDD2L_MEM_AP_L:
     voltage_v: 0.9108
-    current_ma: 25.96
-    power_mw: 23.67
-    std_mw: 0.2
+    current_ma: 25.986
+    power_mw: 23.693
+    std_mw: 0.204
   SRB1S4_VDD2H_MEM_AP_L:
     voltage_v: 1.0027
-    current_ma: 57.9
-    power_mw: 58.19
-    std_mw: 0.5
+    current_ma: 57.96
+    power_mw: 58.248
+    std_mw: 0.501
   B6S2_VDD_SRAM_L:
     voltage_v: 0.7217
-    current_ma: 48.73
-    power_mw: 35.18
-    std_mw: 0.3
+    current_ma: 48.781
+    power_mw: 35.212
+    std_mw: 0.303
 cpu_breakdown:
 - cluster: BIG
   power_mw:
-    mean: 26.95
-    std: 0.23
+    mean: 26.976
+    p95: 27.24
+    std: 0.232
     ci_95:
-    - 26.7
-    - 27.2
+    - 26.713
+    - 27.238
     n: 3
   avg_freq_mhz: 1000.0
   util_pct: 8.4
@@ -155,11 +157,12 @@ cpu_breakdown:
     time_ms: 118800.0
 - cluster: MID
   power_mw:
-    mean: 160.19
-    std: 1.38
+    mean: 160.343
+    p95: 161.913
+    std: 1.378
     ci_95:
-    - 158.6
-    - 161.8
+    - 158.784
+    - 161.902
     n: 3
   avg_freq_mhz: 1765.0
   util_pct: 47.5
@@ -178,11 +181,12 @@ cpu_breakdown:
     time_ms: 16200.0
 - cluster: LIT
   power_mw:
-    mean: 77.22
-    std: 0.66
+    mean: 77.301
+    p95: 78.058
+    std: 0.664
     ci_95:
-    - 76.5
-    - 78.0
+    - 76.55
+    - 78.053
     n: 3
   avg_freq_mhz: 1228.0
   util_pct: 39.0

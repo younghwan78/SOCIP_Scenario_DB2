@@ -220,6 +220,13 @@ def test_rail_bar_colors_same_domain_shares_family_distinct_shades():
     assert colors[2] not in (colors[0], colors[1])
 
 
+def test_unknown_domain_color_is_deterministic():
+    from dashboard.components.measurement_result_view import domain_colors
+
+    assert domain_colors(["PROJECT_SPECIFIC_DOMAIN"]) == domain_colors(["PROJECT_SPECIFIC_DOMAIN"])
+    assert domain_colors(["PROJECT_SPECIFIC_DOMAIN"]) == ["rgb(208,56,142)"]
+
+
 def test_frame_budget_status_within_and_exceeds():
     within = frame_budget_status({"kpi": {"frame_latency_ms": {"mean": 28.4, "p95": 32.1, "n": 5400}, "fps_effective": 29.97}})
     assert within["ok"] is True

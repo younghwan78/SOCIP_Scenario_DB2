@@ -243,6 +243,26 @@ def test_rail_long_extra_unmapped_rail_is_preserved_and_ignored_by_subset(tmp_pa
     assert digest.vdd_power["VDD_EXTRA"]["power_mw"] == 150.0
 
 
+def test_rail_long_ignore_role_excludes_rail_from_vdd_and_automatic_total(tmp_path: Path):
+    csv = _write_csv(
+        tmp_path,
+        "run,rail,voltage_v,current_ma,power_mw\n"
+        "1,VDD_A,1.00,10,10\n"
+        "1,VDD_NOISE,1.00,999,999\n"
+        "2,VDD_A,1.00,20,20\n"
+        "2,VDD_NOISE,1.00,999,999\n",
+    )
+    spec = PowerSpec(
+        csv="power.csv",
+        format="rail_long",
+        rails={"VDD_NOISE": {"role": "ignore"}},
+    )
+    digest = aggregate_power_rail_long(csv, spec)
+
+    assert set(digest.vdd_power) == {"VDD_A"}
+    assert digest.total_power_mw["mean"] == 15.0
+
+
 def test_rail_long_missing_meta_rail_raises(tmp_path: Path):
     csv = _write_csv(tmp_path, "run,rail,voltage_v,current_ma,power_mw\n1,VDD_A,0.60,10,10\n")
     spec = PowerSpec(

@@ -15,6 +15,14 @@ from scenario_db.models.evidence.measurement import MeasurementEvidence
 
 REPO = Path(__file__).resolve().parents[3]
 DEMO_META = REPO / "demo" / "measurements" / "uhd30-vdis" / "meta.yaml"
+PATH_A_META = REPO / "examples" / "measurement-import" / "path-a-capture" / "meta.yaml"
+PATH_B_CANONICAL = REPO / "examples" / "measurement-import" / "path-b-canonical" / "meas-example-canonical.yaml"
+EXYNOS2600_MEAS_FIXTURE = (
+    REPO
+    / "db_fixtures_Exynos2600_S26Plus"
+    / "03_evidence"
+    / "meas-cam-rec-r1-uhd30-vdis-evt1-sw123-20260614.yaml"
+)
 
 
 def _meta() -> MeasurementImportMeta:
@@ -128,6 +136,44 @@ def test_cli_skip_perfetto_drops_trace_lookup(tmp_path: Path):
     codes = {m["code"] for m in report["messages"]}
     assert "perfetto_trace_not_found" not in codes
     assert "perfetto_skipped" in codes
+
+
+def test_path_b_power_digest_matches_path_a_generated_output(tmp_path: Path):
+    out = tmp_path / "generated"
+    rc = main(["--meta", str(PATH_A_META), "--out", str(out), "--strict"])
+    assert rc == 0
+
+    path_a = yaml.safe_load((out / "03_evidence" / "meas-example-patha-uhd30-vdis-20260614.yaml").read_text(encoding="utf-8"))
+    path_b = yaml.safe_load(PATH_B_CANONICAL.read_text(encoding="utf-8"))
+
+    assert path_b["kpi"]["total_power_mw"] == path_a["kpi"]["total_power_mw"]
+    assert path_b["vdd_power"] == path_a["vdd_power"]
+    assert {
+        row["cluster"]: row["power_mw"]
+        for row in path_b["cpu_breakdown"]
+    } == {
+        row["cluster"]: row["power_mw"]
+        for row in path_a["cpu_breakdown"]
+    }
+
+
+def test_exynos2600_fixture_power_digest_matches_path_a_generated_output(tmp_path: Path):
+    out = tmp_path / "generated"
+    rc = main(["--meta", str(PATH_A_META), "--out", str(out), "--strict"])
+    assert rc == 0
+
+    path_a = yaml.safe_load((out / "03_evidence" / "meas-example-patha-uhd30-vdis-20260614.yaml").read_text(encoding="utf-8"))
+    fixture = yaml.safe_load(EXYNOS2600_MEAS_FIXTURE.read_text(encoding="utf-8"))
+
+    assert fixture["kpi"]["total_power_mw"] == path_a["kpi"]["total_power_mw"]
+    assert fixture["vdd_power"] == path_a["vdd_power"]
+    assert {
+        row["cluster"]: row["power_mw"]
+        for row in fixture["cpu_breakdown"]
+    } == {
+        row["cluster"]: row["power_mw"]
+        for row in path_a["cpu_breakdown"]
+    }
 
 
 def test_cli_missing_meta(tmp_path: Path):
