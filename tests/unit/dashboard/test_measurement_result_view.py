@@ -7,6 +7,7 @@ from dashboard.components import evidence_results_panel
 from dashboard.components.measurement_result_view import (
     artifact_rows,
     cpu_cluster_rows,
+    frame_budget_status,
     freq_residency_rows,
     kpi_mean,
     kpi_p95,
@@ -14,7 +15,10 @@ from dashboard.components.measurement_result_view import (
     measurement_list_rows,
     prediction_measurement_comparison_rows,
     provenance_summary,
+    rail_domain,
     sw_task_rows,
+    top_sw_task,
+    vdd_domain_rows,
     vdd_power_rows,
 )
 
@@ -125,6 +129,55 @@ def test_vdd_power_rows_triplet_shape():
     assert "p95_mw" not in cam
 
 
+def test_rail_domain_classifies_known_tokens():
+    assert rail_domain("B3_4_5S2_VDD_CPUCL3_BIG_L") == "CPU"
+    assert rail_domain("B5_6S3_VDD_CPUCL0_DSU_L") == "CPU"
+    assert rail_domain("L1S3_VDD_ICPU_L") == "ICPU"      # ICPU before CPU
+    assert rail_domain("B5_6S1_VDD_CAM_L") == "CAM"
+    assert rail_domain("B1_2_3_4S1_VDD_G3D0_0P725_L") == "GPU"
+    assert rail_domain("B6S4_VDDQ_DRAM_MEM_0P5_T") == "MEM"
+    assert rail_domain("B6S2_VDD_SRAM_L") == "MEM"
+    assert rail_domain("B5S4_VDDMIF_AP_L") == "MIF"
+    assert rail_domain("B4S4_VDD_INT_L") == "INT"
+    assert rail_domain("WEIRD_RAIL") == "OTHER"
+
+
+def test_vdd_domain_rows_aggregates_and_sorts():
+    ev = {
+        "vdd_power": {
+            "B3_4_5S2_VDD_CPUCL3_BIG_L": {"power_mw": 30.0},
+            "B5_6S3_VDD_CPUCL0_DSU_L": {"power_mw": 70.0},
+            "B5_6S1_VDD_CAM_L": {"power_mw": 103.0},
+        }
+    }
+    rows = vdd_domain_rows(ev)
+    assert rows[0] == {"domain": "CAM", "power_mw": 103.0}    # sorted desc
+    assert rows[1] == {"domain": "CPU", "power_mw": 100.0}    # 30+70 aggregated
+    assert {r["domain"] for r in rows} == {"CPU", "CAM"}
+
+
+def test_frame_budget_status_within_and_exceeds():
+    within = frame_budget_status({"kpi": {"frame_latency_ms": {"mean": 28.4, "p95": 32.1, "n": 5400}, "fps_effective": 29.97}})
+    assert within["ok"] is True
+    assert round(within["budget_ms"], 1) == 33.4
+    exceeds = frame_budget_status({"kpi": {"frame_latency_ms": {"mean": 30.0, "p95": 40.0, "n": 100}, "fps_effective": 30.0}})
+    assert exceeds["ok"] is False
+    assert frame_budget_status({"kpi": {}}) is None
+
+
+def test_top_sw_task_picks_highest_p95():
+    ev = {
+        "sw_task_timing": [
+            {"task": "a", "p95_ms": 3.8, "cluster": "LIT"},
+            {"task": "eis_warp", "p95_ms": 10.6, "cluster": "MID"},
+            {"task": "c", "mean_ms": 1.0},
+        ]
+    }
+    top = top_sw_task(ev)
+    assert top["task"] == "eis_warp"
+    assert top["p95_ms"] == 10.6
+
+
 def test_artifact_rows_includes_legacy_raw_artifacts():
     ev = _evidence()
     ev["provenance"]["raw_artifacts"] = [{"type": "power_csv", "path": "p.csv", "sha256": "z"}]
@@ -156,6 +209,7 @@ def test_prediction_measurement_comparison_rows_show_delta_vs_measurement():
         "execution_context": {"method": "projection", "sw_baseline_ref": "sw-vendor-v1.2.3"},
         "kpi": {
             "total_power_mw": 4200.0,
+            "total_power_ma": 1235.294,
             "frame_latency_ms": 30.0,
             "prediction_only": 1.0,
         },
@@ -174,9 +228,35 @@ def test_prediction_measurement_comparison_rows_show_delta_vs_measurement():
         "measurement_p95": 4010.0,
         "delta_vs_measurement": 350.0,
         "delta_pct_vs_measurement": "9.091%",
+        "prediction_current_ma": 1235.294,
+        "measurement_current_ma": 1132.353,
+        "delta_current_ma": 102.941,
+        "vbat_voltage_v": 4.0,
+        "pmic_efficiency": 0.85,
     }
     assert rows["frame_latency_ms"]["delta_vs_measurement"] == 1.6
     assert rows["frame_latency_ms"]["delta_pct_vs_measurement"] == "5.634%"
+
+
+def test_power_current_metric_rows_promote_ma_vbat_and_pmic():
+    rows = evidence_results_panel._power_current_metric_rows(
+        {
+            "metric": "total_power_mw",
+            "prediction_current_ma": 200.315,
+            "measurement_current_ma": 198.595,
+            "delta_current_ma": 1.72,
+            "vbat_voltage_v": 4.0,
+            "pmic_efficiency": 0.85,
+        }
+    )
+
+    assert rows == [
+        {"label": "Prediction Current", "value": "200.315 mA", "delta": "+1.72 mA vs measurement"},
+        {"label": "Measurement Current", "value": "198.595 mA", "delta": None},
+        {"label": "Delta Current", "value": "+1.72 mA", "delta": None},
+        {"label": "vBat", "value": "4 V", "delta": None},
+        {"label": "PMIC Efficiency", "value": "0.85", "delta": "mA = mW / (vBat x PMIC)"},
+    ]
 
 
 def test_list_evidence_passes_kind_filter():

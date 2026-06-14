@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from scenario_db.sim.constants import PMIC_EFFICIENCY_DEFAULT, VBAT_DEFAULT
+
 MEASUREMENT_TABS = ("Overview", "Power", "CPU / Freq", "SW Timing", "Provenance")
 COMPARISON_METRIC_ORDER = ("total_power_mw", "peak_power_mw", "frame_latency_ms", "fps_effective")
 
@@ -101,16 +103,17 @@ def prediction_measurement_comparison_rows(
         if pred_value is None or meas_mean is None:
             continue
         delta = _rounded_number(pred_value - meas_mean)
-        rows.append(
-            {
-                "metric": metric,
-                "prediction": _rounded_number(pred_value),
-                "measurement_mean": _rounded_number(meas_mean),
-                "measurement_p95": _rounded_number(kpi_p95(meas_kpi.get(metric))),
-                "delta_vs_measurement": delta,
-                "delta_pct_vs_measurement": _delta_pct_label(delta, meas_mean),
-            }
-        )
+        row = {
+            "metric": metric,
+            "prediction": _rounded_number(pred_value),
+            "measurement_mean": _rounded_number(meas_mean),
+            "measurement_p95": _rounded_number(kpi_p95(meas_kpi.get(metric))),
+            "delta_vs_measurement": delta,
+            "delta_pct_vs_measurement": _delta_pct_label(delta, meas_mean),
+        }
+        if metric == "total_power_mw":
+            row.update(_power_current_comparison(prediction, pred_kpi, meas_kpi, pred_value, meas_mean))
+        rows.append(row)
     return rows
 
 
@@ -142,6 +145,59 @@ def _rounded_number(value: Any) -> float | None:
     if not isinstance(value, (int, float)):
         return None
     return round(float(value), 3)
+
+
+def _power_current_comparison(
+    prediction: dict[str, Any],
+    pred_kpi: dict[str, Any],
+    meas_kpi: dict[str, Any],
+    pred_power_mw: float,
+    meas_power_mw: float,
+) -> dict[str, float]:
+    pred_current_ma = kpi_mean(pred_kpi.get("total_power_ma")) or kpi_mean(pred_kpi.get("power_ma"))
+    meas_current_ma = kpi_mean(meas_kpi.get("total_power_ma")) or kpi_mean(meas_kpi.get("power_ma"))
+    vbat, pmic_efficiency = _conversion_settings(prediction, pred_power_mw, pred_current_ma)
+    if pred_current_ma is None:
+        pred_current_ma = _mw_to_ma(pred_power_mw, vbat, pmic_efficiency)
+    if meas_current_ma is None:
+        meas_current_ma = _mw_to_ma(meas_power_mw, vbat, pmic_efficiency)
+
+    out: dict[str, float] = {}
+    if pred_current_ma is not None:
+        out["prediction_current_ma"] = _rounded_number(pred_current_ma)
+    if meas_current_ma is not None:
+        out["measurement_current_ma"] = _rounded_number(meas_current_ma)
+    if pred_current_ma is not None and meas_current_ma is not None:
+        out["delta_current_ma"] = _rounded_number(pred_current_ma - meas_current_ma)
+    out["vbat_voltage_v"] = _rounded_number(vbat)
+    out["pmic_efficiency"] = _rounded_number(pmic_efficiency)
+    return out
+
+
+def _conversion_settings(
+    prediction: dict[str, Any],
+    pred_power_mw: float,
+    pred_current_ma: float | None,
+) -> tuple[float, float]:
+    trace = prediction.get("calculation_trace") if isinstance(prediction.get("calculation_trace"), dict) else {}
+    kpi_trace = trace.get("kpi") if isinstance(trace.get("kpi"), dict) else {}
+    total_ma_trace = kpi_trace.get("total_power_ma") if isinstance(kpi_trace.get("total_power_ma"), dict) else {}
+    inputs = total_ma_trace.get("inputs") if isinstance(total_ma_trace.get("inputs"), dict) else {}
+
+    vbat = inputs.get("vbat")
+    pmic = inputs.get("pmic_efficiency")
+    vbat_value = float(vbat) if isinstance(vbat, (int, float)) and vbat > 0 else float(VBAT_DEFAULT)
+    if isinstance(pmic, (int, float)) and pmic > 0:
+        return vbat_value, float(pmic)
+    if pred_current_ma is not None and pred_current_ma > 0 and pred_power_mw > 0:
+        return vbat_value, pred_power_mw / pred_current_ma / vbat_value
+    return vbat_value, float(PMIC_EFFICIENCY_DEFAULT)
+
+
+def _mw_to_ma(power_mw: float, vbat: float, pmic_efficiency: float) -> float | None:
+    if vbat <= 0 or pmic_efficiency <= 0:
+        return None
+    return power_mw / vbat / pmic_efficiency
 
 
 def _delta_pct_label(delta: float | None, baseline: float | None) -> str | None:
@@ -220,6 +276,75 @@ def _drop_empty_columns(rows: list[dict[str, Any]], *, keep: str) -> list[dict[s
     cols = list(rows[0].keys())
     keepers = [c for c in cols if c == keep or any(r.get(c) is not None for r in rows)]
     return [{c: r.get(c) for c in keepers} for r in rows]
+
+
+# Rail-name -> power domain. Project rail names are arbitrary, so classify by
+# the well-known tokens they carry. Order matters (ICPU before CPU, etc.).
+_DOMAIN_TOKENS: tuple[tuple[str, str], ...] = (
+    ("ICPU", "ICPU"),
+    ("CPUCL", "CPU"),
+    ("G3D", "GPU"),
+    ("NPU", "NPU"),
+    ("CAM", "CAM"),
+    ("MIF", "MIF"),
+    ("DRAM", "MEM"),
+    ("SRAM", "MEM"),
+    ("MEM", "MEM"),
+    ("INT", "INT"),
+    ("DSU", "CPU"),
+)
+
+
+def rail_domain(rail: str) -> str:
+    """Classify a rail name into a coarse power domain for rollups."""
+    upper = str(rail).upper()
+    for token, domain in _DOMAIN_TOKENS:
+        if token in upper:
+            return domain
+    return "OTHER"
+
+
+def vdd_domain_rows(evidence: dict[str, Any]) -> list[dict[str, Any]]:
+    """Aggregate per-rail power into coarse domains, sorted by power desc."""
+    totals: dict[str, float] = {}
+    for row in vdd_power_rows(evidence):
+        mw = row.get("mean_mw")
+        if mw is None:
+            continue
+        totals[rail_domain(row["rail"])] = totals.get(rail_domain(row["rail"]), 0.0) + float(mw)
+    rows = [{"domain": d, "power_mw": round(v, 3)} for d, v in totals.items()]
+    rows.sort(key=lambda r: r["power_mw"], reverse=True)
+    return rows
+
+
+def frame_budget_status(evidence: dict[str, Any]) -> dict[str, Any] | None:
+    """Frame latency vs the fps budget (1000/fps ms). None if no frame latency."""
+    kpi = evidence.get("kpi") if isinstance(evidence.get("kpi"), dict) else {}
+    latency = kpi.get("frame_latency_ms")
+    p95 = kpi_p95(latency)
+    mean = kpi_mean(latency)
+    if p95 is None and mean is None:
+        return None
+    fps = kpi_mean(kpi.get("fps_effective")) or 30.0
+    budget_ms = round(1000.0 / fps, 2) if fps > 0 else None
+    ref = p95 if p95 is not None else mean
+    ok = (budget_ms is not None and ref is not None and ref <= budget_ms)
+    return {"fps": fps, "budget_ms": budget_ms, "p95_ms": p95, "mean_ms": mean, "ok": ok}
+
+
+def top_sw_task(evidence: dict[str, Any]) -> dict[str, Any] | None:
+    """The heaviest SW task by p95 (fallback mean), for the overview headline."""
+    best: dict[str, Any] | None = None
+    best_key = -1.0
+    for row in sw_task_rows(evidence):
+        key = row.get("p95_ms")
+        if key is None:
+            key = row.get("mean_ms")
+        if key is None:
+            continue
+        if float(key) > best_key:
+            best_key, best = float(key), row
+    return best
 
 
 def artifact_rows(evidence: dict[str, Any]) -> list[dict[str, Any]]:
@@ -301,6 +426,20 @@ def _render_overview(st, evidence: dict[str, Any]) -> None:
     if measured_at:
         st.caption(f"measured_at: {measured_at}")
 
+    status = frame_budget_status(evidence)
+    if status and status["budget_ms"] is not None:
+        ref = status["p95_ms"] if status["p95_ms"] is not None else status["mean_ms"]
+        label = "p95" if status["p95_ms"] is not None else "mean"
+        mark = "✅ within" if status["ok"] else "⚠️ exceeds"
+        st.caption(
+            f"Frame {label} {ref:g}ms vs {status['fps']:g}fps budget {status['budget_ms']:g}ms — {mark}"
+        )
+    top = top_sw_task(evidence)
+    if top:
+        cluster = f" ({top['cluster']})" if top.get("cluster") else ""
+        metric = top.get("p95_ms") if top.get("p95_ms") is not None else top.get("mean_ms")
+        st.caption(f"Top SW task: {top.get('task')}{cluster} · {metric:g}ms")
+
     rows = kpi_summary_rows(evidence)
     headline = [r for r in rows if r["metric"] in ("total_power_mw", "peak_power_mw", "frame_latency_ms", "fps_effective")]
     if headline:
@@ -314,22 +453,31 @@ def _render_overview(st, evidence: dict[str, Any]) -> None:
 
 
 def _render_power(st, evidence, render_table, *, key_prefix: str) -> None:
+    domains = vdd_domain_rows(evidence)
+    if domains:
+        st.markdown("**Power by domain (mW)** — where the power goes")
+        _bar_with_p95(st, domains, x="domain", mean="power_mw", p95="_none_", key=f"{key_prefix}_dom")
+
+    rails = vdd_power_rows(evidence)
+    if rails:
+        has_current = any(r.get("current_ma") is not None for r in rails)
+        sort_key = "current_ma" if has_current else "mean_mw"
+        rails = sorted(rails, key=lambda r: (r.get(sort_key) is not None, r.get(sort_key) or 0.0), reverse=True)
+        if has_current:
+            st.markdown("**Rails by current (mA)** — primary metric, sorted")
+            _bar_with_p95(st, rails, x="rail", mean="current_ma", p95="_none_", key=f"{key_prefix}_vdd_ma")
+            st.caption("Bar = current (mA). Table carries voltage (V, 인가 검증) and power (mW).")
+        else:
+            st.markdown("**Rails by power (mW)** — sorted")
+            _bar_with_p95(st, rails, x="rail", mean="mean_mw", p95="p95_mw", key=f"{key_prefix}_vdd")
+        render_table(rails, key=f"{key_prefix}_vdd_tbl", use_container_width=True, hide_index=True)
+
     clusters = cpu_cluster_rows(evidence)
     if clusters:
         st.markdown("**CPU cluster power (mW)**")
         _bar_with_p95(st, clusters, x="cluster", mean="power_mean_mw", p95="power_p95_mw", key=f"{key_prefix}_cpu")
         render_table(clusters, key=f"{key_prefix}_cpu_tbl", use_container_width=True, hide_index=True)
-    rails = vdd_power_rows(evidence)
-    if rails:
-        has_current = any(r.get("current_ma") is not None for r in rails)
-        if has_current:
-            st.markdown("**VDD rail measurement (V / mA / mW)**")
-            _bar_with_p95(st, rails, x="rail", mean="current_ma", p95="_none_", key=f"{key_prefix}_vdd_ma")
-            st.caption("Bar = current (mA), the primary metric. Table also carries voltage (V) and power (mW).")
-        else:
-            st.markdown("**VDD rail power (mW)**")
-            _bar_with_p95(st, rails, x="rail", mean="mean_mw", p95="p95_mw", key=f"{key_prefix}_vdd")
-        render_table(rails, key=f"{key_prefix}_vdd_tbl", use_container_width=True, hide_index=True)
+
     if not clusters and not rails:
         st.info("No cpu_breakdown / vdd_power digest in this measurement.")
 
@@ -339,6 +487,13 @@ def _render_cpu_freq(st, evidence, render_table, *, key_prefix: str) -> None:
     if not rows:
         st.info("No freq_residency digest in this measurement.")
         return
+    chips = [
+        f"{c['cluster']}: {c['avg_freq_mhz']:g}MHz avg · util {c['util_pct']:g}%"
+        for c in cpu_cluster_rows(evidence)
+        if c.get("avg_freq_mhz") is not None or c.get("util_pct") is not None
+    ]
+    if chips:
+        st.caption(" · ".join(chips))
     try:
         import plotly.express as px
 
@@ -362,6 +517,8 @@ def _render_sw_timing(st, evidence, render_table, *, key_prefix: str) -> None:
     if not rows:
         st.info("No sw_task_timing digest in this measurement.")
         return
+    rows = sorted(rows, key=lambda r: (r.get("p95_ms") is not None, r.get("p95_ms") or 0.0), reverse=True)
+    status = frame_budget_status(evidence)
     try:
         import plotly.express as px
 
@@ -371,12 +528,20 @@ def _render_sw_timing(st, evidence, render_table, *, key_prefix: str) -> None:
             y="task",
             orientation="h",
             color="cluster",
-            title="SW task time (p95, ms)",
+            title="SW task time (p95, ms) — sorted",
         )
-        fig.update_layout(height=max(240, 48 * len(rows)))
+        fig.update_layout(height=max(240, 48 * len(rows)), yaxis={"categoryorder": "total ascending"})
+        if status and status["budget_ms"] is not None:
+            fig.add_vline(
+                x=status["budget_ms"],
+                line_dash="dash",
+                line_color="#DC2626",
+                annotation_text=f"frame budget {status['budget_ms']:g}ms",
+            )
         st.plotly_chart(fig, use_container_width=True)
     except Exception:  # noqa: BLE001
         pass
+    st.caption("count_per_frame = 프레임당 호출 수. p95/max 로 병목·jank 판단.")
     render_table(rows, key=f"{key_prefix}_sw_tbl", use_container_width=True, hide_index=True)
 
 
