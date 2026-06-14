@@ -145,6 +145,7 @@ uv run python -c "import os; from sqlalchemy import create_engine,text; e=create
 
 1. `project_ref`/`scenario_ref`/`variant_ref` 를 실제 대상 ID 로 교체(반드시 사전 적재).
 2. `provenance.sample_count` = 반복 측정 횟수(보통 3, 특이 시나리오 1), `duration_per_sample_s` = 구간 길이.
+   - `confidence_level` 을 주면 CI 가 그 신뢰수준으로 계산되고(`0.90`/`0.99` 등) `ci_level` 에 기록됩니다. 비우거나 `0.95` 면 기존 95% 구간(키만 `ci_95`).
 3. rail CSV 는 과제별 rail 명/개수 그대로 — 고정 리스트 가정 금지. `power.rails` 의 클러스터 매핑만 과제에 맞게.
 4. 전압(V)은 인가 검증용으로 같이 적재. 전류(mA)가 주 지표.
 5. raw artifact(CSV 등)는 file-store 에 두고 YAML 에는 `path` + `sha256` 만.

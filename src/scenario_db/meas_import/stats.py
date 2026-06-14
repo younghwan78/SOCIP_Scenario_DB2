@@ -7,7 +7,22 @@ capture (e.g. power-monitor rows). We summarise it as the canonical
 from __future__ import annotations
 
 import math
-from statistics import fmean, pstdev
+from statistics import NormalDist, fmean, pstdev
+
+_DEFAULT_CONFIDENCE = 0.95
+
+
+def _ci_z(confidence_level: float | None) -> float:
+    """Two-sided z multiplier for a confidence level.
+
+    The 0.95 default keeps the historical 1.96 constant exactly (no value
+    drift); other levels use the inverse normal CDF.
+    """
+    if confidence_level is None or abs(confidence_level - _DEFAULT_CONFIDENCE) < 1e-9:
+        return 1.96
+    if not 0.0 < confidence_level < 1.0:
+        raise ValueError(f"confidence_level must be in (0, 1): {confidence_level}")
+    return NormalDist().inv_cdf((1.0 + confidence_level) / 2.0)
 
 
 def percentile(values: list[float], pct: float) -> float:
@@ -26,11 +41,14 @@ def percentile(values: list[float], pct: float) -> float:
     return float(ordered[low] * (1.0 - frac) + ordered[high] * frac)
 
 
-def measured_kpi(values: list[float], *, round_to: int = 3) -> dict:
+def measured_kpi(values: list[float], *, round_to: int = 3, confidence_level: float | None = None) -> dict:
     """Summarise a sample set into a MeasuredKpi-shaped dict.
 
-    std is the population standard deviation over the capture; ci_95 is the
+    std is the population standard deviation over the sample set; ci_95 is the
     normal-approximation confidence interval of the mean (only when n > 1).
+    ``confidence_level`` drives the interval width: None/0.95 keep the standard
+    95% interval; any other level (e.g. 0.90, 0.99) is honoured and recorded in
+    ``ci_level`` so the interval's meaning stays explicit.
     """
     if not values:
         raise ValueError("measured_kpi of empty sequence")
@@ -44,6 +62,8 @@ def measured_kpi(values: list[float], *, round_to: int = 3) -> dict:
         "n": n,
     }
     if n > 1 and std > 0.0:
-        half = 1.96 * std / math.sqrt(n)
+        half = _ci_z(confidence_level) * std / math.sqrt(n)
         out["ci_95"] = [round(mean - half, round_to), round(mean + half, round_to)]
+        if confidence_level is not None and abs(confidence_level - _DEFAULT_CONFIDENCE) > 1e-9:
+            out["ci_level"] = confidence_level
     return out

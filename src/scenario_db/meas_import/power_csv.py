@@ -80,7 +80,7 @@ def _per_sample_sum(columns: dict[str, list[float]], rails: list[str]) -> list[f
     return [sum(columns[r][i] for r in rails) for i in range(n)]
 
 
-def aggregate_power(csv_path: Path, spec: PowerSpec) -> PowerDigest:
+def aggregate_power(csv_path: Path, spec: PowerSpec, *, confidence_level: float | None = None) -> PowerDigest:
     rail_names, columns = _read_columns(csv_path, spec.time_column)
     digest = PowerDigest()
     digest.sample_count = max((len(v) for v in columns.values()), default=0)
@@ -89,7 +89,7 @@ def aggregate_power(csv_path: Path, spec: PowerSpec) -> PowerDigest:
         values = columns[rail]
         if not values:
             continue
-        digest.rail_kpi[rail] = measured_kpi(values)
+        digest.rail_kpi[rail] = measured_kpi(values, confidence_level=confidence_level)
 
     # role-based mapping
     cluster_columns: dict[str, list[list[float]]] = {}
@@ -112,7 +112,7 @@ def aggregate_power(csv_path: Path, spec: PowerSpec) -> PowerDigest:
         n = lengths.pop() if lengths else 0
         summed = [sum(col[i] for col in col_list) for i in range(n)]
         if summed:
-            digest.cpu_cluster_power[cluster] = measured_kpi(summed)
+            digest.cpu_cluster_power[cluster] = measured_kpi(summed, confidence_level=confidence_level)
 
     # total power
     if spec.total_power_column is not None:
@@ -120,11 +120,11 @@ def aggregate_power(csv_path: Path, spec: PowerSpec) -> PowerDigest:
             raise PowerCsvError(
                 f"total_power_column '{spec.total_power_column}' is not a CSV column"
             )
-        digest.total_power_mw = measured_kpi(columns[spec.total_power_column])
+        digest.total_power_mw = measured_kpi(columns[spec.total_power_column], confidence_level=confidence_level)
     elif spec.total_power_rails:
         summed = _per_sample_sum(columns, spec.total_power_rails)
         if summed:
-            digest.total_power_mw = measured_kpi(summed)
+            digest.total_power_mw = measured_kpi(summed, confidence_level=confidence_level)
 
     return digest
 
@@ -133,7 +133,9 @@ def _round(value: float, ndigits: int = 3) -> float:
     return round(value, ndigits)
 
 
-def aggregate_power_rail_long(csv_path: Path, spec: PowerSpec) -> PowerDigest:
+def aggregate_power_rail_long(
+    csv_path: Path, spec: PowerSpec, *, confidence_level: float | None = None
+) -> PowerDigest:
     """Aggregate a real bench export: one row per (run, rail) with V/mA/mW.
 
     Statistics are taken *across runs* (sample size n = number of runs), the
@@ -190,7 +192,7 @@ def aggregate_power_rail_long(csv_path: Path, spec: PowerSpec) -> PowerDigest:
         if rails[rail]["ma"]:
             entry["current_ma"] = _round(fmean(rails[rail]["ma"]))
         digest.vdd_power[rail] = entry
-        digest.rail_kpi[rail] = measured_kpi(mw_vals)
+        digest.rail_kpi[rail] = measured_kpi(mw_vals, confidence_level=confidence_level)
 
     # cpu_breakdown: rails mapped to a cluster are summed per run, across runs.
     cluster_rails: dict[str, list[str]] = {}
@@ -200,10 +202,10 @@ def aggregate_power_rail_long(csv_path: Path, spec: PowerSpec) -> PowerDigest:
     for cluster, members in cluster_rails.items():
         per_run = _cluster_run_totals(rails, members)
         if per_run:
-            digest.cpu_cluster_power[cluster] = measured_kpi(per_run)
+            digest.cpu_cluster_power[cluster] = measured_kpi(per_run, confidence_level=confidence_level)
 
     if run_totals:
-        digest.total_power_mw = measured_kpi(list(run_totals.values()))
+        digest.total_power_mw = measured_kpi(list(run_totals.values()), confidence_level=confidence_level)
 
     return digest
 

@@ -86,11 +86,12 @@ def run_import(args: argparse.Namespace, report: ImportReport) -> dict | None:
             report.error("power_csv_not_found", f"Power CSV not found: {csv_path}", str(csv_path))
         else:
             try:
+                cl = meta.provenance.confidence_level
                 if meta.power.format == "rail_long":
-                    power = aggregate_power_rail_long(csv_path, meta.power)
+                    power = aggregate_power_rail_long(csv_path, meta.power, confidence_level=cl)
                     unit = "runs"
                 else:
-                    power = aggregate_power(csv_path, meta.power)
+                    power = aggregate_power(csv_path, meta.power, confidence_level=cl)
                     unit = "samples"
                 report.info(
                     "power_aggregated",

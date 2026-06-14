@@ -21,7 +21,8 @@ class MeasuredKpi(BaseScenarioModel):
     mean: float
     p95: float | None = None
     std: float | None = None
-    ci_95: list[float] | None = None     # [lower, upper]
+    ci_95: list[float] | None = None     # [lower, upper]; interval at ci_level (default 0.95)
+    ci_level: float | None = None        # confidence level used for ci_95; None == 0.95 default
     n: int
 
 
