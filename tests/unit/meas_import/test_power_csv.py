@@ -254,6 +254,28 @@ def test_rail_long_missing_meta_rail_raises(tmp_path: Path):
         aggregate_power_rail_long(csv, spec)
 
 
+def test_rail_long_propagates_declared_domain(tmp_path: Path):
+    csv = _write_csv(
+        tmp_path,
+        "run,rail,voltage_v,current_ma,power_mw\n"
+        "1,VDD_CAM,0.60,100,60\n"
+        "1,VDD_BIG,0.55,40,22\n"
+        "1,VDD_MIF,0.50,30,15\n",
+    )
+    spec = PowerSpec(
+        csv="power.csv",
+        format="rail_long",
+        rails={
+            "VDD_BIG": {"role": "cpu_cluster", "cluster": "BIG", "domain": "CPU"},
+            "VDD_MIF": {"domain": "MIF"},        # role defaults to vdd
+        },
+    )
+    digest = aggregate_power_rail_long(csv, spec)
+    assert digest.vdd_power["VDD_BIG"]["domain"] == "CPU"
+    assert digest.vdd_power["VDD_MIF"]["domain"] == "MIF"
+    assert "domain" not in digest.vdd_power["VDD_CAM"]   # undeclared -> no domain
+
+
 def test_rail_long_missing_power_column_raises(tmp_path: Path):
     csv = _write_csv(tmp_path, "run,rail,voltage_v,current_ma\n1,VDD_CAM,0.6,100\n")
     with pytest.raises(PowerCsvError, match="power_mw"):

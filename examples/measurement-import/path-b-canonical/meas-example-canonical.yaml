@@ -59,14 +59,16 @@ kpi:
 #   current_ma : 주 지표 (mA)
 #   power_mw   : 전력 (mW)
 #   std_mw     : run 간 표준편차 (선택)
+#   domain     : 대시보드 롤업 분류 (선택, 부분 선언 OK — 미지정은 이름 휴리스틱)
 vdd_power:
-  B5S4_VDDMIF_AP_L:            {voltage_v: 0.5687, current_ma: 70.33,  power_mw: 42.70,  std_mw: 0.37}
-  B3_4_5S2_VDD_CPUCL3_BIG_L:   {voltage_v: 0.0132, current_ma: 30.50,  power_mw: 26.95,  std_mw: 0.23}
-  B3_4S3_VDD_CPUCL2_MID_HF_L:  {voltage_v: 0.0357, current_ma: 9.69,   power_mw: 6.03,   std_mw: 0.05}
-  B2S3_VDD_CPUCL1_MID_LF1_L:   {voltage_v: 0.4519, current_ma: 70.92,  power_mw: 40.99,  std_mw: 0.35}
-  B2S2_VDD_CPUCL1_MID_LF0_L:   {voltage_v: 0.5954, current_ma: 183.81, power_mw: 113.17, std_mw: 0.97}
-  B5_6S3_VDD_CPUCL0_DSU_L:     {voltage_v: 0.5866, current_ma: 129.64, power_mw: 77.22,  std_mw: 0.66}
-  B4S4_VDD_INT_L:              {voltage_v: 0.6313, current_ma: 155.82, power_mw: 98.98,  std_mw: 0.85}
+  B5S4_VDDMIF_AP_L:            {voltage_v: 0.5687, current_ma: 70.33,  power_mw: 42.70,  std_mw: 0.37, domain: MIF}
+  B3_4_5S2_VDD_CPUCL3_BIG_L:   {voltage_v: 0.0132, current_ma: 30.50,  power_mw: 26.95,  std_mw: 0.23, domain: CPU}
+  B3_4S3_VDD_CPUCL2_MID_HF_L:  {voltage_v: 0.0357, current_ma: 9.69,   power_mw: 6.03,   std_mw: 0.05, domain: CPU}
+  B2S3_VDD_CPUCL1_MID_LF1_L:   {voltage_v: 0.4519, current_ma: 70.92,  power_mw: 40.99,  std_mw: 0.35, domain: CPU}
+  B2S2_VDD_CPUCL1_MID_LF0_L:   {voltage_v: 0.5954, current_ma: 183.81, power_mw: 113.17, std_mw: 0.97, domain: CPU}
+  B5_6S3_VDD_CPUCL0_DSU_L:     {voltage_v: 0.5866, current_ma: 129.64, power_mw: 77.22,  std_mw: 0.66, domain: CPU}
+  B4S4_VDD_INT_L:              {voltage_v: 0.6313, current_ma: 155.82, power_mw: 98.98,  std_mw: 0.85, domain: INT}
+  # 아래 rail 들은 domain 미지정 → 대시보드가 이름 휴리스틱으로 분류 (CAM/MEM/GPU/ICPU)
   B5_6S1_VDD_CAM_L:            {voltage_v: 0.6077, current_ma: 170.29, power_mw: 103.46, std_mw: 0.89}
   L1S3_VDD_ICPU_L:             {voltage_v: 0.7219, current_ma: 26.01,  power_mw: 18.76,  std_mw: 0.16}
   B1_2_3_4S1_VDD_G3D0_0P725_L: {voltage_v: 0.0111, current_ma: 7.05,   power_mw: 2.29,   std_mw: 0.02}   # GPU gated

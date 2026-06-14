@@ -304,8 +304,21 @@ PROJECT_RAIL_DOMAINS: dict[str, dict[str, str]] = {}
 
 
 def resolve_domain_map(evidence: dict[str, Any]) -> dict[str, str] | None:
-    """Per-project rail->domain override for the evidence, if configured."""
-    return PROJECT_RAIL_DOMAINS.get(str(evidence.get("project_ref") or "")) or None
+    """Rail -> domain map for the evidence.
+
+    Priority: domain declared on the vdd_power entry (from meta.power.rails /
+    hand-written canonical) > per-project override > (per-rail) name heuristic.
+    Returns None when nothing is declared so callers fall back to the heuristic.
+    """
+    vdd = evidence.get("vdd_power") if isinstance(evidence.get("vdd_power"), dict) else {}
+    declared = {
+        rail: entry["domain"]
+        for rail, entry in vdd.items()
+        if isinstance(entry, dict) and isinstance(entry.get("domain"), str)
+    }
+    project = PROJECT_RAIL_DOMAINS.get(str(evidence.get("project_ref") or "")) or {}
+    merged = {**project, **declared}
+    return merged or None
 
 
 def rail_domain(rail: str, domain_map: dict[str, str] | None = None) -> str:

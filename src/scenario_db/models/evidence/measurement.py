@@ -100,7 +100,10 @@ class MeasurementEvidence(BaseScenarioModel):
     kpi: dict[str, float | int | MeasuredKpi] = Field(default_factory=dict)
     cpu_breakdown: list[MeasuredCpuCluster] = Field(default_factory=list)
     sw_task_timing: list[SwTaskTiming] = Field(default_factory=list)
-    vdd_power: dict[str, dict[str, float]] = Field(default_factory=dict)
+    # Per-rail digest: numeric metrics (voltage_v/current_ma/power_mw/std_mw/...)
+    # plus an optional "domain" string for dashboard rollups. Domain is partial:
+    # only rails the name heuristic gets wrong need declaring.
+    vdd_power: dict[str, dict[str, float | str]] = Field(default_factory=dict)
     timeline_events: list[dict[str, Any]] = Field(default_factory=list)
     artifacts: list[Artifact] = Field(default_factory=list)
 

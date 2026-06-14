@@ -59,13 +59,18 @@ power:
   # total_power_rails 비우면 전체 rail 합산(run별 rail set 동일 필요).
   # 측정 중 일부 rail이 빠지거나 추가되면 비교 가능한 rail 명만 나열.
   total_power_rails: []
-  # (선택) rail → CPU 클러스터 매핑: cpu_breakdown 으로 묶어 표시. 미지정 rail 은 vdd_power 에만.
+  # (선택) rail 매핑. cluster → cpu_breakdown 묶음, domain → 대시보드 "Current by domain" 롤업.
+  # domain 은 부분 선언이면 충분 — 이름 휴리스틱(CPUCL→CPU, CAM→CAM, MEM/DRAM/SRAM→MEM…)이
+  # 틀리거나 모호한 rail 만 적으면 됩니다. 미지정 rail 은 휴리스틱으로 분류됩니다.
   rails:
-    B3_4_5S2_VDD_CPUCL3_BIG_L:   {role: cpu_cluster, cluster: BIG}
-    B3_4S3_VDD_CPUCL2_MID_HF_L:  {role: cpu_cluster, cluster: MID}
-    B2S3_VDD_CPUCL1_MID_LF1_L:   {role: cpu_cluster, cluster: MID}
-    B2S2_VDD_CPUCL1_MID_LF0_L:   {role: cpu_cluster, cluster: MID}
-    B5_6S3_VDD_CPUCL0_DSU_L:     {role: cpu_cluster, cluster: LIT}
+    B3_4_5S2_VDD_CPUCL3_BIG_L:   {role: cpu_cluster, cluster: BIG, domain: CPU}
+    B3_4S3_VDD_CPUCL2_MID_HF_L:  {role: cpu_cluster, cluster: MID, domain: CPU}
+    B2S3_VDD_CPUCL1_MID_LF1_L:   {role: cpu_cluster, cluster: MID, domain: CPU}
+    B2S2_VDD_CPUCL1_MID_LF0_L:   {role: cpu_cluster, cluster: MID, domain: CPU}
+    B5_6S3_VDD_CPUCL0_DSU_L:     {role: cpu_cluster, cluster: LIT, domain: CPU}
+    # role 생략 시 vdd. domain 만 지정해 롤업 분류를 명시:
+    B5S4_VDDMIF_AP_L:            {domain: MIF}
+    B6S4_VDDQ_DRAM_MEM_0P5_T:    {domain: MEM}
 
 # ── raw artifact 포인터 (DB 에는 path + sha256 만, 실파일은 file-store) ──────────
 artifacts:

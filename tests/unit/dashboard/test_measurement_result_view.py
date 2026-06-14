@@ -168,6 +168,34 @@ def test_vdd_domain_rows_current_ma_source():
     assert rows[1] == {"domain": "CPU", "current_ma": 30.5}
 
 
+def test_resolve_domain_map_reads_declared_then_project():
+    from dashboard.components import measurement_result_view as mv
+
+    ev = {
+        "project_ref": "proj-x",
+        "vdd_power": {
+            "B3_4_5S2_VDD_CPUCL3_BIG_L": {"current_ma": 30.5, "domain": "CPU"},
+            "B5_6S1_VDD_CAM_L": {"current_ma": 170.3},          # no declared domain
+        },
+    }
+    # declared domain on the entry is picked up; undeclared rail is absent (heuristic later)
+    m = mv.resolve_domain_map(ev)
+    assert m["B3_4_5S2_VDD_CPUCL3_BIG_L"] == "CPU"
+    assert "B5_6S1_VDD_CAM_L" not in m
+
+    # per-project override fills rails that have no declared domain; declared still wins
+    mv.PROJECT_RAIL_DOMAINS["proj-x"] = {"B5_6S1_VDD_CAM_L": "CAM", "B3_4_5S2_VDD_CPUCL3_BIG_L": "WRONG"}
+    try:
+        m2 = mv.resolve_domain_map(ev)
+        assert m2["B5_6S1_VDD_CAM_L"] == "CAM"
+        assert m2["B3_4_5S2_VDD_CPUCL3_BIG_L"] == "CPU"   # declared wins over project
+    finally:
+        mv.PROJECT_RAIL_DOMAINS.pop("proj-x", None)
+
+    # nothing declared and no project override -> None (caller falls back to heuristic)
+    assert mv.resolve_domain_map({"vdd_power": {"R": {"current_ma": 1.0}}}) is None
+
+
 def test_rail_domain_override_map_wins():
     # token heuristic would say CPU, but the per-project map overrides to MEM
     assert rail_domain("B3_4_5S2_VDD_CPUCL3_BIG_L", {"B3_4_5S2_VDD_CPUCL3_BIG_L": "MEM"}) == "MEM"

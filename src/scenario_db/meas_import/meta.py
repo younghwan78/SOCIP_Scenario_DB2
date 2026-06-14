@@ -28,6 +28,9 @@ class RailRole(BaseScenarioModel):
     """Role of one power-monitor CSV column."""
     role: Literal["vdd", "cpu_cluster", "ignore"] = "vdd"
     cluster: str | None = None        # required when role == cpu_cluster
+    # Power domain for dashboard rollups (CPU/MEM/CAM/GPU/...). Optional: only
+    # declare rails the name heuristic gets wrong; the rest fall back to it.
+    domain: str | None = None
 
     @model_validator(mode="after")
     def _check_cluster(self) -> RailRole:

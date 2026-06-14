@@ -99,7 +99,10 @@ def aggregate_power(csv_path: Path, spec: PowerSpec, *, confidence_level: float 
         if role.role == "vdd":
             kpi = digest.rail_kpi.get(rail)
             if kpi is not None:
-                digest.vdd_power[rail] = {"mean_mw": kpi["mean"], "p95_mw": kpi["p95"]}
+                entry: dict = {"mean_mw": kpi["mean"], "p95_mw": kpi["p95"]}
+                if role.domain:
+                    entry["domain"] = role.domain
+                digest.vdd_power[rail] = entry
         elif role.role == "cpu_cluster":
             cluster_columns.setdefault(role.cluster, []).append(columns[rail])
 
@@ -205,6 +208,9 @@ def aggregate_power_rail_long(
             entry["voltage_v"] = _round(fmean(rails[rail]["v"]), 4)
         if rails[rail]["ma"]:
             entry["current_ma"] = _round(fmean(rails[rail]["ma"]))
+        role = spec.rails.get(rail)
+        if role is not None and role.domain:
+            entry["domain"] = role.domain
         digest.vdd_power[rail] = entry
         digest.rail_kpi[rail] = measured_kpi(mw_vals, confidence_level=confidence_level)
 

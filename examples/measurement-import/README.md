@@ -183,7 +183,8 @@ uv run python -c "import os; from sqlalchemy import create_engine,text; e=create
 1. `project_ref`/`scenario_ref`/`variant_ref` 를 실제 대상 ID 로 교체(반드시 사전 적재).
 2. `provenance.sample_count` = 반복 측정 횟수(보통 3, 특이 시나리오 1), `duration_per_sample_s` = 구간 길이.
    - `confidence_level` 을 주면 CI 가 그 신뢰수준으로 계산되고(`0.90`/`0.99` 등) `ci_level` 에 기록됩니다. 비우거나 `0.95` 면 기존 95% 구간(키만 `ci_95`).
-3. rail CSV 는 과제별 rail 명/개수 그대로 — 고정 리스트 가정 금지. `power.rails` 의 클러스터 매핑만 과제에 맞게.
+3. rail CSV 는 과제별 rail 명/개수 그대로 — 고정 리스트 가정 금지. `power.rails` 의 클러스터/`domain` 매핑만 과제에 맞게.
+   - **대시보드 "Current by domain" 롤업**은 rail 의 `domain` 으로 묶습니다. meta `power.rails.{rail}.domain`(→ canonical `vdd_power.{rail}.domain` 로 전파) 또는 Path B 에서 직접 기입. **부분 선언이면 충분** — 이름 휴리스틱(CPUCL→CPU, CAM→CAM, MEM/DRAM/SRAM→MEM…)이 틀리거나 모호한 rail 만 적으면 됩니다. 별도 설정 파일 불필요.
 4. 전압(V)은 인가 검증용으로 같이 적재. 전류(mA)가 주 지표.
 5. raw artifact(CSV 등)는 file-store 에 두고 YAML 에는 `path` + `sha256` 만.
 6. 같은 캠페인을 여러 번 측정하면 Path A(rail_long)로 자동 집계 → 휴먼 에러/재현성 우위.
