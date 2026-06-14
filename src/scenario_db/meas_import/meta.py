@@ -37,15 +37,32 @@ class RailRole(BaseScenarioModel):
 
 
 class PowerSpec(BaseScenarioModel):
-    """Power-monitor CSV input + how to aggregate it."""
+    """Power-monitor CSV input + how to aggregate it.
+
+    Two layouts are supported via ``format``:
+
+    - ``wide`` (default, legacy): one time column + one column per rail, each
+      value a power sample (mW). Aggregated over the rows of a single capture.
+    - ``rail_long``: real bench output. One row per (run, rail) with a
+      voltage/current/power triplet. Aggregated *across runs* (n = run count),
+      producing per-rail {voltage_v, current_ma, power_mw, std_mw} in vdd_power.
+      Rail names/count are arbitrary and project-specific.
+    """
     csv: str                          # path to the power CSV (relative to meta dir or absolute)
-    time_column: str = "timestamp_ms"
-    # rails to sum *per sample* before aggregating into the total_power_mw KPI.
-    # If empty, total_power_mw is not emitted from power data.
+    format: Literal["wide", "rail_long"] = "wide"
+    time_column: str = "timestamp_ms"  # wide: the dropped time column
+    # rails to sum *per sample/run* before aggregating into total_power_mw.
+    # If empty: wide → no total; rail_long → sum of all rails.
     total_power_rails: list[str] = Field(default_factory=list)
-    # optional pre-summed total column; takes precedence over total_power_rails.
+    # optional pre-summed total column (wide only); takes precedence.
     total_power_column: str | None = None
     rails: dict[str, RailRole] = Field(default_factory=dict)
+    # rail_long column names (override if the bench uses different headers).
+    run_column: str = "run"
+    rail_column: str = "rail"
+    voltage_column: str = "voltage_v"
+    current_column: str = "current_ma"
+    power_column: str = "power_mw"
 
 
 class TaskMatch(BaseScenarioModel):

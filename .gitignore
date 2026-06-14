@@ -41,6 +41,7 @@ output/
 runtime_logs/
 .runlogs/
 generated/
+examples/measurement-import/_generated/
 *.log
 *.tmp
 *.bak

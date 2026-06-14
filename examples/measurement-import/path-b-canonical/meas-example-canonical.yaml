@@ -1,0 +1,93 @@
+# =============================================================================
+# Path B · canonical evidence.measurement YAML  — DB 가 직접 적재하는 최종 형식
+# =============================================================================
+# Path A(meas_import rail_long)의 출력과 "동일한 스키마"입니다. 변환 도구를 쓰지 않고
+# 외부 측정 리포트의 통계치를 사람이 직접 옮겨 적을 때 이 형식을 손으로 작성합니다.
+#
+# 적재:  uv run python -m scenario_db.etl.loader examples/measurement-import/path-b-canonical
+# 스키마: src/scenario_db/models/evidence/measurement.py · docs/measurement-evidence-contract.md
+# -----------------------------------------------------------------------------
+
+id: meas-example-pathb-uhd30-vdis-20260614
+schema_version: "2.2"
+kind: evidence.measurement
+
+scenario_ref: uc-camera-recording
+variant_ref: cam-rec-r1-uhd30-vdis
+project_ref: proj-sm-s947b
+measured_at: "2026-06-14T15:30:00+09:00"
+
+execution_context:
+  silicon_rev: EVT1
+  sw_baseline_ref: sw-vendor-v1.2.3   # SSOT
+  thermal: room
+  ambient_temp_c: 25.0
+  power_state: discharging
+  method: measurement
+
+provenance:
+  device_id: "EVT1-ERD-SN-0042"
+  chamber_controlled: true
+  chamber_temp_c: 25.0
+  build_id: "UP1A.260601.001"
+  collection_method: "power_monitor"
+  collection_tool_versions:
+    power_monitor: "pm-tool-v3.1"
+  sample_count: 3                      # 반복 측정(run) 횟수. 특이 시나리오 1회면 1
+  duration_per_sample_s: 30.0          # run 당 구간 측정 길이(초)
+  confidence_level: 0.95
+
+aggregation:
+  strategy: mean_over_runs             # run 간 평균(n=run 수)
+
+# ── KPI: run 간 통계객체(MeasuredKpi). n = run 수 ──────────────────────────────
+kpi:
+  total_power_mw:                      # = Σ rail power_mw, run 간 집계
+    mean: 674.5
+    std: 5.8
+    ci_95: [667.9, 681.1]
+    n: 3
+  frame_latency_ms: 28.4               # 스칼라 KPI 도 허용
+  fps_effective: 29.97
+
+# ── rail-level 측정 테이블 (핵심) ──────────────────────────────────────────────
+# rail 명/개수는 과제마다 다름 → free-form dict. 각 rail 은 run 간 평균:
+#   voltage_v  : 인가 전압 검증용 (V)
+#   current_ma : 주 지표 (mA)
+#   power_mw   : 전력 (mW)
+#   std_mw     : run 간 표준편차 (선택)
+vdd_power:
+  B5S4_VDDMIF_AP_L:            {voltage_v: 0.5687, current_ma: 70.33,  power_mw: 42.70,  std_mw: 0.37}
+  B3_4_5S2_VDD_CPUCL3_BIG_L:   {voltage_v: 0.0132, current_ma: 30.50,  power_mw: 26.95,  std_mw: 0.23}
+  B3_4S3_VDD_CPUCL2_MID_HF_L:  {voltage_v: 0.0357, current_ma: 9.69,   power_mw: 6.03,   std_mw: 0.05}
+  B2S3_VDD_CPUCL1_MID_LF1_L:   {voltage_v: 0.4519, current_ma: 70.92,  power_mw: 40.99,  std_mw: 0.35}
+  B2S2_VDD_CPUCL1_MID_LF0_L:   {voltage_v: 0.5954, current_ma: 183.81, power_mw: 113.17, std_mw: 0.97}
+  B5_6S3_VDD_CPUCL0_DSU_L:     {voltage_v: 0.5866, current_ma: 129.64, power_mw: 77.22,  std_mw: 0.66}
+  B4S4_VDD_INT_L:              {voltage_v: 0.6313, current_ma: 155.82, power_mw: 98.98,  std_mw: 0.85}
+  B5_6S1_VDD_CAM_L:            {voltage_v: 0.6077, current_ma: 170.29, power_mw: 103.46, std_mw: 0.89}
+  L1S3_VDD_ICPU_L:             {voltage_v: 0.7219, current_ma: 26.01,  power_mw: 18.76,  std_mw: 0.16}
+  B1_2_3_4S1_VDD_G3D0_0P725_L: {voltage_v: 0.0111, current_ma: 7.05,   power_mw: 2.29,   std_mw: 0.02}   # GPU gated
+  B1_2_3E1_VDD_G3D1_0P725_L:   {voltage_v: 0.0112, current_ma: 6.10,   power_mw: 1.85,   std_mw: 0.02}   # GPU gated
+  B6S4_VDDQ_DRAM_MEM_0P5_T:    {voltage_v: 0.4280, current_ma: 17.61,  power_mw: 7.58,   std_mw: 0.07}
+  L5M_VDD1_MEM_L:              {voltage_v: 1.8014, current_ma: 9.73,   power_mw: 17.53,  std_mw: 0.15}
+  SRB1S5_VDD2L_MEM_AP_L:       {voltage_v: 0.9108, current_ma: 25.96,  power_mw: 23.67,  std_mw: 0.20}
+  SRB1S4_VDD2H_MEM_AP_L:       {voltage_v: 1.0027, current_ma: 57.90,  power_mw: 58.19,  std_mw: 0.50}
+  B6S2_VDD_SRAM_L:             {voltage_v: 0.7217, current_ma: 48.73,  power_mw: 35.18,  std_mw: 0.30}
+
+# ── (선택) rail 을 논리 CPU 클러스터로 묶은 분해. power_mw 는 run 간 MeasuredKpi ──
+cpu_breakdown:
+  - cluster: BIG     # CPUCL3
+    power_mw: {mean: 26.95, std: 0.23, ci_95: [26.7, 27.2], n: 3}
+  - cluster: MID     # CPUCL2 + CPUCL1(LF0/LF1)
+    power_mw: {mean: 160.19, std: 1.38, ci_95: [158.6, 161.8], n: 3}
+  - cluster: LIT     # CPUCL0_DSU
+    power_mw: {mean: 77.22, std: 0.66, ci_95: [76.5, 78.0], n: 3}
+
+# ── raw artifact 포인터: DB 에는 path + sha256 만 (Tier3 실파일은 file-store) ────
+artifacts:
+  - type: power_monitor_csv
+    storage: fileshare
+    path: "artifacts/proj-sm-s947b/uc-camera-recording/cam-rec-r1-uhd30-vdis/20260614-pathb/rail_power_by_run.csv"
+    sha256: "1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f00f"
+    bytes: 8120
+    mime: text/csv

@@ -21,7 +21,12 @@ from scenario_db.legacy_import.report import ImportReport
 from scenario_db.meas_import.assemble import assemble_evidence
 from scenario_db.meas_import.meta import MeasurementImportMeta
 from scenario_db.meas_import.perfetto_digest import PerfettoDigest, PerfettoTraceProcessor, extract_digest
-from scenario_db.meas_import.power_csv import PowerCsvError, PowerDigest, aggregate_power
+from scenario_db.meas_import.power_csv import (
+    PowerCsvError,
+    PowerDigest,
+    aggregate_power,
+    aggregate_power_rail_long,
+)
 from scenario_db.models.evidence.measurement import MeasurementEvidence
 
 
@@ -81,10 +86,15 @@ def run_import(args: argparse.Namespace, report: ImportReport) -> dict | None:
             report.error("power_csv_not_found", f"Power CSV not found: {csv_path}", str(csv_path))
         else:
             try:
-                power = aggregate_power(csv_path, meta.power)
+                if meta.power.format == "rail_long":
+                    power = aggregate_power_rail_long(csv_path, meta.power)
+                    unit = "runs"
+                else:
+                    power = aggregate_power(csv_path, meta.power)
+                    unit = "samples"
                 report.info(
                     "power_aggregated",
-                    f"Aggregated {power.sample_count} power samples across {len(power.rail_kpi)} rails.",
+                    f"Aggregated {power.sample_count} power {unit} across {len(power.rail_kpi)} rails.",
                     str(csv_path),
                 )
                 report.increment("power_rails", len(power.rail_kpi))

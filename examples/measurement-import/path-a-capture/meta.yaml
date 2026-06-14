@@ -1,0 +1,75 @@
+# =============================================================================
+# Path A · meta.yaml  — 실측 캡처를 canonical evidence 로 "자동 변환"하기 위한 사이드카
+# =============================================================================
+# 실측팀 산출물(rail별 V/mA/mW 측정 + N회 반복)을 정규 evidence 로 변환합니다.
+# 이 파일은 ① evidence 정적 메타(execution_context/provenance/kpi)와
+# ② raw→digest 변환 지시(power.rails 클러스터 매핑)를 담습니다.
+#
+# 변환 실행:
+#   uv run python -m scenario_db.meas_import.cli `
+#     --meta examples/measurement-import/path-a-capture/meta.yaml `
+#     --out  examples/measurement-import/_generated --strict
+#   → _generated/03_evidence/<id>.yaml 생성
+# -----------------------------------------------------------------------------
+
+schema_version: "2.2"
+id: meas-example-patha-uhd30-vdis-20260614
+
+# ── DB FK 참조 (이미 적재된 project / scenario / variant) ──────────────────────
+project_ref: proj-sm-s947b
+scenario_ref: uc-camera-recording
+variant_ref: cam-rec-r1-uhd30-vdis
+measured_at: "2026-06-14T11:00:00+09:00"
+
+execution_context:
+  silicon_rev: EVT1
+  sw_baseline_ref: sw-vendor-v1.2.3   # SSOT (provenance 에 중복 기재 안 함)
+  thermal: room
+  ambient_temp_c: 25.0
+  power_state: discharging
+  method: measurement                 # measurement import 강제
+
+provenance:
+  device_id: "EVT1-ERD-SN-0042"
+  chamber_controlled: true
+  chamber_temp_c: 25.0
+  build_id: "UP1A.260601.001"
+  collection_method: "power_monitor"
+  collection_tool_versions:
+    power_monitor: "pm-tool-v3.1"
+  sample_count: 3                      # ★ 반복 측정(run) 횟수 — 특이 시나리오는 1
+  duration_per_sample_s: 30.0          # ★ 한 run 의 구간 측정 길이(초)
+  confidence_level: 0.95
+
+# 추출기가 만들지 못하는 KPI 직접 주입 (앱 로그 등). total_power_mw 는 자동 산출.
+kpi:
+  frame_latency_ms: 28.4
+  fps_effective: 29.97
+
+aggregation_strategy: mean_over_runs
+
+# ── 실측 전력 입력 (rail_long: 한 행 = 한 run × 한 rail) ────────────────────────
+# CSV 헤더: run,rail,voltage_v,current_ma,power_mw
+#   - rail 명/개수는 과제마다 다름 → 고정 리스트 없이 CSV 가 정의 (free-form)
+#   - 통계는 run 간(n=run 수)으로 산출: vdd_power.{rail} = {voltage_v, current_ma, power_mw, std_mw}
+#   - total_power_mw = run 별 전체 rail 합 → run 간 평균/CI (n=run 수)
+power:
+  format: rail_long
+  csv: rail_power_by_run.csv
+  # total_power_rails 비우면 전체 rail 합산. 일부만 합산하려면 rail 명 나열.
+  total_power_rails: []
+  # (선택) rail → CPU 클러스터 매핑: cpu_breakdown 으로 묶어 표시. 미지정 rail 은 vdd_power 에만.
+  rails:
+    B3_4_5S2_VDD_CPUCL3_BIG_L:   {role: cpu_cluster, cluster: BIG}
+    B3_4S3_VDD_CPUCL2_MID_HF_L:  {role: cpu_cluster, cluster: MID}
+    B2S3_VDD_CPUCL1_MID_LF1_L:   {role: cpu_cluster, cluster: MID}
+    B2S2_VDD_CPUCL1_MID_LF0_L:   {role: cpu_cluster, cluster: MID}
+    B5_6S3_VDD_CPUCL0_DSU_L:     {role: cpu_cluster, cluster: LIT}
+
+# ── raw artifact 포인터 (DB 에는 path + sha256 만, 실파일은 file-store) ──────────
+artifacts:
+  - type: power_monitor_csv
+    storage: fileshare
+    source: rail_power_by_run.csv      # 로컬 파일 → sha256 자동 계산
+    path: "artifacts/proj-sm-s947b/uc-camera-recording/cam-rec-r1-uhd30-vdis/20260614-patha/rail_power_by_run.csv"
+    mime: text/csv
