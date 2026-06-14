@@ -211,26 +211,27 @@ def _select_counterpart(label: str, items: list[dict[str, Any]], *, key: str) ->
 
 
 def _render_comparison_metrics(rows: list[dict[str, Any]]) -> None:
+    # total_power_mw is folded into the Power conversion block below (mW + mA
+    # together), so it is intentionally excluded from the headline metrics.
     headline = [
         row
         for row in rows
-        if row.get("metric") in ("total_power_mw", "peak_power_mw", "frame_latency_ms", "fps_effective")
+        if row.get("metric") in ("peak_power_mw", "frame_latency_ms", "fps_effective")
     ]
-    if not headline:
-        headline = rows[:3]
-    cols = st.columns(min(4, len(headline)))
-    for col, row in zip(cols, headline[:4]):
-        delta = row.get("delta_vs_measurement")
-        delta_text = f"{delta:+g}" if isinstance(delta, (int, float)) else None
-        pct = row.get("delta_pct_vs_measurement")
-        if pct:
-            delta_text = f"{delta_text} ({pct})" if delta_text else str(pct)
-        value = row.get("prediction")
-        col.metric(
-            str(row.get("metric") or "metric"),
-            f"{value:g}" if isinstance(value, (int, float)) else "-",
-            delta_text,
-        )
+    if headline:
+        cols = st.columns(min(4, len(headline)))
+        for col, row in zip(cols, headline[:4]):
+            delta = row.get("delta_vs_measurement")
+            delta_text = f"{delta:+g}" if isinstance(delta, (int, float)) else None
+            pct = row.get("delta_pct_vs_measurement")
+            if pct:
+                delta_text = f"{delta_text} ({pct})" if delta_text else str(pct)
+            value = row.get("prediction")
+            col.metric(
+                str(row.get("metric") or "metric"),
+                f"{value:g}" if isinstance(value, (int, float)) else "-",
+                delta_text,
+            )
 
     power_row = next((row for row in rows if row.get("metric") == "total_power_mw"), None)
     conversion_rows = _power_current_metric_rows(power_row or {})
@@ -242,13 +243,32 @@ def _render_comparison_metrics(rows: list[dict[str, Any]]) -> None:
 
 
 def _power_current_metric_rows(row: dict[str, Any]) -> list[dict[str, str | None]]:
-    pred_ma = row.get("prediction_current_ma")
+    """Power (mW) + current (mA) for the total_power_mw comparison row.
+
+    Measurement leads (this is a measurement-centric view); prediction is the
+    secondary reference with its delta. Folds the standalone total_power_mw
+    headline into one block so power is not shown twice.
+    """
+    meas_mw = row.get("measurement_mean")
+    pred_mw = row.get("prediction")
+    delta_mw = row.get("delta_vs_measurement")
+    delta_pct = row.get("delta_pct_vs_measurement")
     meas_ma = row.get("measurement_current_ma")
+    pred_ma = row.get("prediction_current_ma")
     delta_ma = row.get("delta_current_ma")
     vbat_v = row.get("vbat_voltage_v")
     pmic_efficiency = row.get("pmic_efficiency")
 
     metrics: list[dict[str, str | None]] = []
+    if isinstance(meas_mw, (int, float)):
+        metrics.append({"label": "Measurement Power", "value": f"{meas_mw:g} mW", "delta": None})
+    if isinstance(meas_ma, (int, float)):
+        metrics.append({"label": "Measurement Current", "value": f"{meas_ma:g} mA", "delta": None})
+    if isinstance(pred_mw, (int, float)):
+        pred_delta = f"{delta_mw:+g} mW" if isinstance(delta_mw, (int, float)) else None
+        if pred_delta and delta_pct:
+            pred_delta = f"{pred_delta} ({delta_pct})"
+        metrics.append({"label": "Prediction Power", "value": f"{pred_mw:g} mW", "delta": pred_delta})
     if isinstance(pred_ma, (int, float)):
         metrics.append(
             {
@@ -257,10 +277,6 @@ def _power_current_metric_rows(row: dict[str, Any]) -> list[dict[str, str | None
                 "delta": f"{delta_ma:+g} mA vs measurement" if isinstance(delta_ma, (int, float)) else None,
             }
         )
-    if isinstance(meas_ma, (int, float)):
-        metrics.append({"label": "Measurement Current", "value": f"{meas_ma:g} mA", "delta": None})
-    if isinstance(delta_ma, (int, float)):
-        metrics.append({"label": "Delta Current", "value": f"{delta_ma:+g} mA", "delta": None})
     if isinstance(vbat_v, (int, float)):
         metrics.append({"label": "vBat", "value": f"{vbat_v:g} V", "delta": None})
     if isinstance(pmic_efficiency, (int, float)):

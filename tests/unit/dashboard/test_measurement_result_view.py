@@ -302,10 +302,14 @@ def test_prediction_measurement_comparison_rows_show_delta_vs_measurement():
     assert rows["frame_latency_ms"]["delta_pct_vs_measurement"] == "5.634%"
 
 
-def test_power_current_metric_rows_promote_ma_vbat_and_pmic():
+def test_power_current_metric_rows_measurement_first_with_power():
     rows = evidence_results_panel._power_current_metric_rows(
         {
             "metric": "total_power_mw",
+            "prediction": 700.0,
+            "measurement_mean": 680.0,
+            "delta_vs_measurement": 20.0,
+            "delta_pct_vs_measurement": "2.941%",
             "prediction_current_ma": 200.315,
             "measurement_current_ma": 198.595,
             "delta_current_ma": 1.72,
@@ -314,10 +318,12 @@ def test_power_current_metric_rows_promote_ma_vbat_and_pmic():
         }
     )
 
+    # measurement leads; total_power_mw (mW) folded in alongside current (mA)
     assert rows == [
-        {"label": "Prediction Current", "value": "200.315 mA", "delta": "+1.72 mA vs measurement"},
+        {"label": "Measurement Power", "value": "680 mW", "delta": None},
         {"label": "Measurement Current", "value": "198.595 mA", "delta": None},
-        {"label": "Delta Current", "value": "+1.72 mA", "delta": None},
+        {"label": "Prediction Power", "value": "700 mW", "delta": "+20 mW (2.941%)"},
+        {"label": "Prediction Current", "value": "200.315 mA", "delta": "+1.72 mA vs measurement"},
         {"label": "vBat", "value": "4 V", "delta": None},
         {"label": "PMIC Efficiency", "value": "0.85", "delta": "mA = mW / (vBat x PMIC)"},
     ]
