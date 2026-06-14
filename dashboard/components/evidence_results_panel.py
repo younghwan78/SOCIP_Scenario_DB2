@@ -232,6 +232,47 @@ def _render_comparison_metrics(rows: list[dict[str, Any]]) -> None:
             delta_text,
         )
 
+    power_row = next((row for row in rows if row.get("metric") == "total_power_mw"), None)
+    conversion_rows = _power_current_metric_rows(power_row or {})
+    if conversion_rows:
+        st.markdown("**Power conversion (mW to mA)**")
+        conversion_cols = st.columns(len(conversion_rows))
+        for col, item in zip(conversion_cols, conversion_rows):
+            col.metric(item["label"], item["value"], item.get("delta"))
+
+
+def _power_current_metric_rows(row: dict[str, Any]) -> list[dict[str, str | None]]:
+    pred_ma = row.get("prediction_current_ma")
+    meas_ma = row.get("measurement_current_ma")
+    delta_ma = row.get("delta_current_ma")
+    vbat_v = row.get("vbat_voltage_v")
+    pmic_efficiency = row.get("pmic_efficiency")
+
+    metrics: list[dict[str, str | None]] = []
+    if isinstance(pred_ma, (int, float)):
+        metrics.append(
+            {
+                "label": "Prediction Current",
+                "value": f"{pred_ma:g} mA",
+                "delta": f"{delta_ma:+g} mA vs measurement" if isinstance(delta_ma, (int, float)) else None,
+            }
+        )
+    if isinstance(meas_ma, (int, float)):
+        metrics.append({"label": "Measurement Current", "value": f"{meas_ma:g} mA", "delta": None})
+    if isinstance(delta_ma, (int, float)):
+        metrics.append({"label": "Delta Current", "value": f"{delta_ma:+g} mA", "delta": None})
+    if isinstance(vbat_v, (int, float)):
+        metrics.append({"label": "vBat", "value": f"{vbat_v:g} V", "delta": None})
+    if isinstance(pmic_efficiency, (int, float)):
+        metrics.append(
+            {
+                "label": "PMIC Efficiency",
+                "value": f"{pmic_efficiency:g}",
+                "delta": "mA = mW / (vBat x PMIC)",
+            }
+        )
+    return metrics
+
 
 @st.cache_data(ttl=20)
 def _load_evidence_list(
