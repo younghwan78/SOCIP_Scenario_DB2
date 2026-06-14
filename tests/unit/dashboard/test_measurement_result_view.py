@@ -156,6 +156,42 @@ def test_vdd_domain_rows_aggregates_and_sorts():
     assert {r["domain"] for r in rows} == {"CPU", "CAM"}
 
 
+def test_vdd_domain_rows_current_ma_source():
+    ev = {
+        "vdd_power": {
+            "B5_6S1_VDD_CAM_L": {"current_ma": 170.3, "power_mw": 103.0},
+            "B3_4_5S2_VDD_CPUCL3_BIG_L": {"current_ma": 30.5, "power_mw": 26.9},
+        }
+    }
+    rows = vdd_domain_rows(ev, source_key="current_ma", out_key="current_ma")
+    assert rows[0] == {"domain": "CAM", "current_ma": 170.3}
+    assert rows[1] == {"domain": "CPU", "current_ma": 30.5}
+
+
+def test_rail_domain_override_map_wins():
+    # token heuristic would say CPU, but the per-project map overrides to MEM
+    assert rail_domain("B3_4_5S2_VDD_CPUCL3_BIG_L", {"B3_4_5S2_VDD_CPUCL3_BIG_L": "MEM"}) == "MEM"
+    # rails not in the map fall back to the heuristic
+    assert rail_domain("B5_6S1_VDD_CAM_L", {"OTHER_RAIL": "MEM"}) == "CAM"
+
+
+def test_rail_bar_colors_same_domain_shares_family_distinct_shades():
+    from dashboard.components.measurement_result_view import rail_bar_colors
+
+    rows = [
+        {"rail": "B3_4_5S2_VDD_CPUCL3_BIG_L"},   # CPU
+        {"rail": "B5_6S3_VDD_CPUCL0_DSU_L"},     # CPU
+        {"rail": "B5_6S1_VDD_CAM_L"},            # CAM
+    ]
+    colors = rail_bar_colors(rows)
+    assert len(colors) == 3
+    assert all(c.startswith("rgb(") for c in colors)
+    # two CPU rails get distinct shades (different colours)
+    assert colors[0] != colors[1]
+    # CAM differs from CPU
+    assert colors[2] not in (colors[0], colors[1])
+
+
 def test_frame_budget_status_within_and_exceeds():
     within = frame_budget_status({"kpi": {"frame_latency_ms": {"mean": 28.4, "p95": 32.1, "n": 5400}, "fps_effective": 29.97}})
     assert within["ok"] is True

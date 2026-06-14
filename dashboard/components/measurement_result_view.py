@@ -7,6 +7,8 @@ residency), sw_task_timing, vdd_power, and raw artifact pointers.
 """
 from __future__ import annotations
 
+import colorsys
+from collections import defaultdict
 from typing import Any
 
 from scenario_db.sim.constants import PMIC_EFFICIENCY_DEFAULT, VBAT_DEFAULT
@@ -295,8 +297,25 @@ _DOMAIN_TOKENS: tuple[tuple[str, str], ...] = (
 )
 
 
-def rail_domain(rail: str) -> str:
-    """Classify a rail name into a coarse power domain for rollups."""
+# Per-project rail -> domain overrides. Rail names differ per project, so a
+# fixed token heuristic cannot be universal; populate this (or pass domain_map)
+# to override classification for a given project_ref. Heuristic is the fallback.
+PROJECT_RAIL_DOMAINS: dict[str, dict[str, str]] = {}
+
+
+def resolve_domain_map(evidence: dict[str, Any]) -> dict[str, str] | None:
+    """Per-project rail->domain override for the evidence, if configured."""
+    return PROJECT_RAIL_DOMAINS.get(str(evidence.get("project_ref") or "")) or None
+
+
+def rail_domain(rail: str, domain_map: dict[str, str] | None = None) -> str:
+    """Classify a rail name into a coarse power domain for rollups.
+
+    A per-project ``domain_map`` (rail -> domain) wins; otherwise fall back to
+    the token heuristic.
+    """
+    if domain_map and rail in domain_map:
+        return domain_map[rail]
     upper = str(rail).upper()
     for token, domain in _DOMAIN_TOKENS:
         if token in upper:
@@ -304,17 +323,62 @@ def rail_domain(rail: str) -> str:
     return "OTHER"
 
 
-def vdd_domain_rows(evidence: dict[str, Any]) -> list[dict[str, Any]]:
-    """Aggregate per-rail power into coarse domains, sorted by power desc."""
+def vdd_domain_rows(
+    evidence: dict[str, Any],
+    *,
+    source_key: str = "mean_mw",
+    out_key: str = "power_mw",
+    domain_map: dict[str, str] | None = None,
+) -> list[dict[str, Any]]:
+    """Aggregate a per-rail metric into coarse domains, sorted desc."""
     totals: dict[str, float] = {}
     for row in vdd_power_rows(evidence):
-        mw = row.get("mean_mw")
-        if mw is None:
+        value = row.get(source_key)
+        if value is None:
             continue
-        totals[rail_domain(row["rail"])] = totals.get(rail_domain(row["rail"]), 0.0) + float(mw)
-    rows = [{"domain": d, "power_mw": round(v, 3)} for d, v in totals.items()]
-    rows.sort(key=lambda r: r["power_mw"], reverse=True)
+        domain = rail_domain(row["rail"], domain_map)
+        totals[domain] = totals.get(domain, 0.0) + float(value)
+    rows = [{"domain": d, out_key: round(v, 3)} for d, v in totals.items()]
+    rows.sort(key=lambda r: r[out_key], reverse=True)
     return rows
+
+
+# Fixed hue (0..1) per known domain so a category keeps a stable colour family;
+# unknown domains hash to a hue. Within a category, lightness varies per rail.
+_DOMAIN_HUES: dict[str, float] = {
+    "CPU": 0.58, "MEM": 0.33, "CAM": 0.07, "GPU": 0.80,
+    "INT": 0.12, "MIF": 0.50, "ICPU": 0.63, "NPU": 0.92, "OTHER": 0.00,
+}
+
+
+def _domain_hue(domain: str) -> float:
+    hue = _DOMAIN_HUES.get(domain)
+    return hue if hue is not None else (abs(hash(domain)) % 360) / 360.0
+
+
+def _hsl_rgb(hue: float, light: float, sat: float = 0.62) -> str:
+    r, g, b = colorsys.hls_to_rgb(hue, light, sat)
+    return f"rgb({int(r * 255)},{int(g * 255)},{int(b * 255)})"
+
+
+def domain_colors(domains: list[str]) -> list[str]:
+    """One representative colour per domain (for the domain rollup bar)."""
+    return [_hsl_rgb(_domain_hue(d), 0.52) for d in domains]
+
+
+def rail_bar_colors(rows: list[dict[str, Any]], domain_map: dict[str, str] | None = None) -> list[str]:
+    """Colour per rail: same hue within a domain, distinct lightness per rail."""
+    groups: dict[str, list[int]] = defaultdict(list)
+    for i, row in enumerate(rows):
+        groups[rail_domain(row["rail"], domain_map)].append(i)
+    colors: list[str] = [""] * len(rows)
+    for domain, idxs in groups.items():
+        hue = _domain_hue(domain)
+        n = len(idxs)
+        for k, i in enumerate(idxs):
+            light = 0.40 + (0.34 * k / (n - 1) if n > 1 else 0.12)
+            colors[i] = _hsl_rgb(hue, light)
+    return colors
 
 
 def frame_budget_status(evidence: dict[str, Any]) -> dict[str, Any] | None:
@@ -453,24 +517,31 @@ def _render_overview(st, evidence: dict[str, Any]) -> None:
 
 
 def _render_power(st, evidence, render_table, *, key_prefix: str) -> None:
-    domains = vdd_domain_rows(evidence)
-    if domains:
-        st.markdown("**Power by domain (mW)** — where the power goes")
-        _bar_with_p95(st, domains, x="domain", mean="power_mw", p95="_none_", key=f"{key_prefix}_dom")
-
+    domain_map = resolve_domain_map(evidence)
     rails = vdd_power_rows(evidence)
+    has_current = any(r.get("current_ma") is not None for r in rails)
+    value_key = "current_ma" if has_current else "mean_mw"
+    unit = "mA" if has_current else "mW"
+
+    domains = vdd_domain_rows(evidence, source_key=value_key, out_key=value_key, domain_map=domain_map)
+    if domains:
+        st.markdown(f"**Current by domain ({unit})** — where the current goes" if has_current
+                    else f"**Power by domain ({unit})**")
+        _value_bar(
+            st, domains, x="domain", y=value_key,
+            colors=domain_colors([d["domain"] for d in domains]), key=f"{key_prefix}_dom",
+        )
+
     if rails:
-        has_current = any(r.get("current_ma") is not None for r in rails)
-        sort_key = "current_ma" if has_current else "mean_mw"
-        rails = sorted(rails, key=lambda r: (r.get(sort_key) is not None, r.get(sort_key) or 0.0), reverse=True)
-        if has_current:
-            st.markdown("**Rails by current (mA)** — primary metric, sorted")
-            _bar_with_p95(st, rails, x="rail", mean="current_ma", p95="_none_", key=f"{key_prefix}_vdd_ma")
-            st.caption("Bar = current (mA). Table carries voltage (V, 인가 검증) and power (mW).")
-        else:
-            st.markdown("**Rails by power (mW)** — sorted")
-            _bar_with_p95(st, rails, x="rail", mean="mean_mw", p95="p95_mw", key=f"{key_prefix}_vdd")
-        render_table(rails, key=f"{key_prefix}_vdd_tbl", use_container_width=True, hide_index=True)
+        rails = sorted(rails, key=lambda r: (r.get(value_key) is not None, r.get(value_key) or 0.0), reverse=True)
+        st.markdown(f"**Rails by current ({unit})** — sorted, coloured by domain" if has_current
+                    else f"**Rails by power ({unit})** — sorted")
+        _value_bar(
+            st, rails, x="rail", y=value_key,
+            colors=rail_bar_colors(rails, domain_map), key=f"{key_prefix}_vdd",
+        )
+        st.caption("같은 domain 은 같은 색 계열(명도만 다름). 전압(V)·전력(mW)은 표 참조.")
+        render_table(_rows_with_domain(rails, domain_map), key=f"{key_prefix}_vdd_tbl", use_container_width=True, hide_index=True)
 
     clusters = cpu_cluster_rows(evidence)
     if clusters:
@@ -478,8 +549,40 @@ def _render_power(st, evidence, render_table, *, key_prefix: str) -> None:
         _bar_with_p95(st, clusters, x="cluster", mean="power_mean_mw", p95="power_p95_mw", key=f"{key_prefix}_cpu")
         render_table(clusters, key=f"{key_prefix}_cpu_tbl", use_container_width=True, hide_index=True)
 
-    if not clusters and not rails:
-        st.info("No cpu_breakdown / vdd_power digest in this measurement.")
+    if not rails and not clusters:
+        st.info("No vdd_power / cpu_breakdown digest in this measurement.")
+
+
+def _rows_with_domain(rows: list[dict[str, Any]], domain_map: dict[str, str] | None) -> list[dict[str, Any]]:
+    """Insert a 'domain' column right after 'rail' so the table shows the mapping."""
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        new = {"rail": row.get("rail"), "domain": rail_domain(row["rail"], domain_map)}
+        new.update({k: v for k, v in row.items() if k != "rail"})
+        out.append(new)
+    return out
+
+
+def _value_bar(st, rows, *, x: str, y: str, colors: list[str], key: str) -> None:
+    """Bar with per-bar colours and the value printed above each bar."""
+    try:
+        import plotly.graph_objects as go
+
+        ys = [r.get(y) for r in rows]
+        fig = go.Figure(
+            go.Bar(
+                x=[r[x] for r in rows],
+                y=ys,
+                marker_color=colors,
+                text=[f"{v:.1f}" if isinstance(v, (int, float)) else "" for v in ys],
+                textposition="outside",
+                cliponaxis=False,
+            )
+        )
+        fig.update_layout(height=340, showlegend=False, margin={"t": 28, "b": 8})
+        st.plotly_chart(fig, use_container_width=True, key=key)
+    except Exception:  # noqa: BLE001 - chart is best-effort; table is the source of truth
+        pass
 
 
 def _render_cpu_freq(st, evidence, render_table, *, key_prefix: str) -> None:
