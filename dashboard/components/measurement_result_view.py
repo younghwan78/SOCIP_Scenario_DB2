@@ -581,17 +581,25 @@ def _rows_with_domain(rows: list[dict[str, Any]], domain_map: dict[str, str] | N
 
 
 def _value_bar(st, rows, *, x: str, y: str, colors: list[str], key: str) -> None:
-    """Bar with per-bar colours and the value printed above each bar."""
+    """Bar with per-bar colours; label shows the value and its share of total."""
     try:
         import plotly.graph_objects as go
 
         ys = [r.get(y) for r in rows]
+        total = sum(v for v in ys if isinstance(v, (int, float)))
+
+        def _label(v: Any) -> str:
+            if not isinstance(v, (int, float)):
+                return ""
+            pct = (v / total * 100.0) if total else 0.0
+            return f"{v:.1f} ({pct:.1f}%)"
+
         fig = go.Figure(
             go.Bar(
                 x=[r[x] for r in rows],
                 y=ys,
                 marker_color=colors,
-                text=[f"{v:.1f}" if isinstance(v, (int, float)) else "" for v in ys],
+                text=[_label(v) for v in ys],
                 textposition="outside",
                 cliponaxis=False,
             )
@@ -622,9 +630,11 @@ def _render_cpu_freq(st, evidence, render_table, *, key_prefix: str) -> None:
             x="cluster",
             y="ratio",
             color=[f"{r['freq_mhz']:g} MHz" for r in rows],
+            text=[f"{(r.get('ratio') or 0) * 100:.0f}%" for r in rows],
             labels={"color": "freq", "ratio": "residency"},
-            title="Frequency residency by cluster",
+            title="Frequency residency by cluster (% of time)",
         )
+        fig.update_traces(textposition="inside", insidetextanchor="middle")
         fig.update_layout(barmode="stack", height=360, legend_title_text="freq")
         st.plotly_chart(fig, use_container_width=True)
     except Exception:  # noqa: BLE001 - chart is best-effort; table is the source of truth
