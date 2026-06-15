@@ -367,3 +367,52 @@ def test_submodule_instance_id_must_be_uppercase():
         IpHierarchy(type="composite", submodules=[
             {"ref": "sub-3aa-v4", "instance_id": "isp.tnr"}   # lowercase → invalid InstanceId
         ])
+
+
+# ---------------------------------------------------------------------------
+# SoC compression mode catalog
+# ---------------------------------------------------------------------------
+
+def _soc_raw(**extra):
+    base = {
+        "id": "soc-test",
+        "schema_version": "2.2",
+        "kind": "soc",
+        "ips": [{"ref": "ip-isp-v12", "instance_count": 1}],
+    }
+    base.update(extra)
+    return base
+
+
+def test_soc_compression_modes_default_empty():
+    obj = SocPlatform.model_validate(_soc_raw())
+    assert obj.compression_modes == {}
+
+
+def test_soc_compression_modes_roundtrip():
+    obj = SocPlatform.model_validate(_soc_raw(compression_modes={
+        "COMP_YUV_LOSSY": {"compressor": "SBWC", "comp_ratio": 0.5},
+        "COMP_BAYER_LOSSLESS": {"compressor": "SBWC", "comp_ratio": 1.0},
+    }))
+    assert obj.compression_modes["COMP_YUV_LOSSY"].compressor == "SBWC"
+    assert obj.compression_modes["COMP_YUV_LOSSY"].comp_ratio == 0.5
+    assert obj.compression_modes["COMP_BAYER_LOSSLESS"].comp_ratio == 1.0
+
+
+@pytest.mark.parametrize("bad_ratio", [0.0, -0.1, 1.5])
+def test_compression_mode_rejects_out_of_range_ratio(bad_ratio):
+    with pytest.raises(ValidationError):
+        SocPlatform.model_validate(_soc_raw(compression_modes={
+            "COMP_YUV_LOSSY": {"compressor": "SBWC", "comp_ratio": bad_ratio},
+        }))
+
+
+def test_soc_fixture_declares_compression_modes():
+    """The shipped Exynos2600 SoC fixture carries the catalog."""
+    raw = load_yaml(
+        Path(__file__).resolve().parents[2]
+        / "db_fixtures_Exynos2600_S26Plus" / "00_hw" / "soc-exynos2600.yaml"
+    )
+    obj = SocPlatform.model_validate(raw)
+    assert obj.compression_modes["COMP_YUV_LOSSY"].comp_ratio == 0.5
+    assert obj.compression_modes["COMP_BAYER_LOSSLESS"].compressor == "SBWC"

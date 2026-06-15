@@ -4,6 +4,14 @@ kind: soc
 process_node: 3nm
 memory_type: LPDDR5X
 bus_protocol: AMBA/AXI
+# DMA compression catalog (SSOT for per-mode BW reduction). COMP_OFF is implicit
+# (ratio 1.0, no entry). DMA ports reference these names; comp_ratio is the
+# representative remaining-BW fraction applied by the bandwidth model.
+compression_modes:
+  COMP_BAYER_LOSSLESS: {compressor: SBWC, comp_ratio: 1.0}
+  COMP_BAYER_LOSSY:    {compressor: SBWC, comp_ratio: 0.5}
+  COMP_YUV_LOSSLESS:   {compressor: SBWC, comp_ratio: 1.0}
+  COMP_YUV_LOSSY:      {compressor: SBWC, comp_ratio: 0.5}
 ips:
 - ref: ip-sensor-rear-s5e9965
   instance_count: 1

@@ -21,6 +21,10 @@ def upsert_soc(raw: dict, sha256: str, session: Session) -> None:
     row.memory_type    = obj.memory_type
     row.bus_protocol   = obj.bus_protocol
     row.ips            = [e.model_dump(exclude_none=True) for e in obj.ips]
+    row.compression_modes = {
+        name: mode.model_dump(exclude_none=True)
+        for name, mode in obj.compression_modes.items()
+    }
     row.yaml_sha256    = sha256
     session.add(row)
 

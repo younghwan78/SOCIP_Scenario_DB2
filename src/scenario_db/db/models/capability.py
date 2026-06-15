@@ -15,6 +15,7 @@ class SocPlatform(Base):
     memory_type    = Column(Text)
     bus_protocol   = Column(Text)
     ips            = Column(JSONB)          # list[{ref, instance_count}]
+    compression_modes = Column(JSONB)       # {mode: {compressor, comp_ratio}}
     yaml_sha256    = Column(Text, nullable=False)
 
 

@@ -107,6 +107,29 @@ class IpEntry(BaseScenarioModel):
     instance_count: int = 1
 
 
+class CompressionMode(BaseScenarioModel):
+    """One declared DMA compression mode and its representative BW behaviour.
+
+    The mode key (e.g. COMP_YUV_LOSSY) names the content class + quality a DMA
+    port may select; COMP_OFF is implicit (no entry needed, ratio 1.0). Pixel
+    subsampling (420/422/444) is NOT encoded here — it lives in the buffer
+    format and is already captured by the bandwidth model's bpp factor.
+
+    comp_ratio is the only value the bandwidth model consumes: the fraction of
+    uncompressed BW that remains (1.0 = no reduction, 0.5 = half). compressor
+    records the providing HW block (SBWC / SAJC / ...) for display and grouping.
+    """
+    compressor: str
+    comp_ratio: float
+    note: str | None = None
+
+    @model_validator(mode="after")
+    def _validate_comp_ratio(self) -> CompressionMode:
+        if not 0.0 < self.comp_ratio <= 1.0:
+            raise ValueError("comp_ratio must be in (0, 1]")
+        return self
+
+
 class SocPlatform(BaseScenarioModel):
     id: DocumentId
     schema_version: SchemaVersion
@@ -115,6 +138,9 @@ class SocPlatform(BaseScenarioModel):
     ips: list[IpEntry] = Field(default_factory=list)
     memory_type: str | None = None
     bus_protocol: str | None = None
+    # mode name -> {compressor, comp_ratio}. SSOT for per-mode BW reduction;
+    # DMA ports reference these names in capabilities.properties.modules[].
+    compression_modes: dict[str, CompressionMode] = Field(default_factory=dict)
 
 
 class SocDvfsTableSource(BaseScenarioModel):
