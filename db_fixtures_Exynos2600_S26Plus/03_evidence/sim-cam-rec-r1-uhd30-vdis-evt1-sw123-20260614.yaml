@@ -1,0 +1,58 @@
+id: sim-cam-rec-r1-uhd30-vdis-evt1-sw123-20260614
+schema_version: '2.2'
+kind: evidence.simulation
+scenario_ref: uc-camera-recording
+variant_ref: cam-rec-r1-uhd30-vdis
+project_ref: proj-sm-s947b
+execution_context:
+  silicon_rev: EVT1
+  sw_baseline_ref: sw-vendor-v1.2.3
+  thermal: room
+  ambient_temp_c: 25.0
+  power_state: discharging
+  method: calculation
+run:
+  timestamp: '2026-06-14T15:30:00+09:00'
+  tool: scenariodb-sim
+  tool_version: 0.1.0
+  source: calculated
+aggregation:
+  strategy: single_run
+kpi:
+  total_power_mw: 681.0697728
+  total_power_ma: 200.31463905882356
+  core_power_mw: 183.4057728
+  bw_power_mw: 497.664
+  total_bw_mbs: 6220.8
+  hw_time_max_ms: 29.75
+  timeline_end_ms: 412.9044206666666
+  critical_path_ms: 412.9044206666666
+  critical_path_task_count: 15
+calculation_trace:
+  config:
+    include_timeline: true
+    timeline_frame_count: 4
+    debug_trace: true
+    vbat: 4.0
+    pmic_efficiency: 0.85
+  kpi:
+    total_power_mw:
+      formula: core_power_mw + bw_power_mw
+      inputs:
+        core_power_mw: 183.4057728
+        bw_power_mw: 497.664
+      result: 681.0697728
+    total_power_ma:
+      formula: total_power_mw / vbat / pmic_efficiency
+      inputs:
+        total_power_mw: 681.0697728
+        vbat: 4.0
+        pmic_efficiency: 0.85
+      result: 200.31463905882356
+    total_bw_mbs:
+      formula: sum(dma_bw_mbs)
+      result: 6220.8
+    hw_time_max_ms:
+      formula: max(ip_hw_time_ms)
+      result: 29.75
+  warnings: []

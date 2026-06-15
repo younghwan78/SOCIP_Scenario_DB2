@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import CheckConstraint, Column, Computed, DateTime, ForeignKey, Index, Integer, Text
+from sqlalchemy import ARRAY, CheckConstraint, Column, Computed, DateTime, ForeignKey, Index, Integer, Text
 from sqlalchemy.dialects.postgresql import JSONB
 
 from scenario_db.db.base import Base
@@ -54,7 +54,7 @@ class Evidence(Base):
     dvfs_breakdown      = Column(JSONB)             # sim only
     timeline_events     = Column(JSONB)             # sim + meas
     external_devices    = Column(JSONB)             # sim only
-    topology_order      = Column(JSONB)             # sim only
+    topology_order      = Column(ARRAY(Text))       # sim only
     vdd_power           = Column(JSONB)             # sim + meas (rail별 전력)
     calculation_trace   = Column(JSONB)             # sim debug trace, optional
     params_hash         = Column(Text, index=True)  # sim cache key
