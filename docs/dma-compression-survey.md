@@ -136,9 +136,9 @@ buffers:
 ## 7.5 구현 단계 (이 worktree)
 1. ✅ **스키마+카탈로그** (commit `2fcf082`): `CompressionMode` + `SocPlatform.compression_modes`(comp_ratio (0,1] 검증), ORM 컬럼 + alembic 0012 + 매퍼, soc fixture 카탈로그 4모드. 순수 additive.
 2. ✅ **해석/BW 통일** (commit `499c091`): `bw_calc.normalize_compression`/`resolve_comp_ratio`(override>catalog>1.0), `transfers`에서 `graph.soc` 카탈로그로 per-port/buffer ratio 해석, override가 카탈로그 모드를 덮을 때만 경고. `COMP_SBWC_*→COMP_YUV_*` fixture/golden 리네임. 912 단위 통과.
-3. ⬜ **검증**: write/service `buffer.compression ∈ 생산 DMA supported ∪ {OFF}` + comp_ratio (0,1] 범위.
-   - ⚠️ 선결: per-DMA `supported_compressions`가 ISP/MCSC만 있고 **DPU/MFC는 IP-top `supported_features.compression`에만** 선언됨. 검증 권위를 per-DMA로 두려면 DPU/MFC를 per-DMA로 이전 필요(어느 DMA 포트가 압축 지원하는지 = 도메인 정보).
-4. ⬜ **view/query 정렬**: `view/buffers._compression_for_buffer` 생산 IP 귀속 정정(현재 첫 IP의 첫 capability 반환), view의 `=="none"` → `normalize_compression` 재사용, 배지/필터 규약 반영.
+3. ✅ **검증** (commit `2651e7d`, A=관대): `_validate_pipeline_compression`가 `buffer.compression ∈ 생산 IP supported(per-DMA ∪ IP-top)` + comp_ratio (0,1] 검사. OFF 항상 허용, 귀속/선언 불가 시 skip. `_validate_candidate_pipeline`(pipeline-patch)에 배선.
+   - per-DMA 완전 이전(DPU/MFC를 per-DMA로)은 도메인 정보 필요 → 별도 보류(현재는 IP-top fallback으로 흡수).
+4. ✅ **view 정렬** (이번 커밋): `display_compression` 헬퍼로 off 철자(none/disable/COMP_OFF) → 화면 `COMP_OFF` 통일(미지정은 무표시), `normalize_compression` SSOT 재사용. `_compression_for_buffer`를 생산 IP 귀속으로 정정(잘못된 '카탈로그 첫 IP' 제거). golden 무변화(데이터가 이미 COMP_OFF 일관).
 
 ## 7.6 미해결/주의
 - 카탈로그 조회는 `CanonicalScenarioGraph`에 SoC 문서가 있어야 함 → 로더가 sim 시점에 SoC를 물려주는지 1단계에서 확인.

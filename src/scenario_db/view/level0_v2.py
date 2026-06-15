@@ -24,6 +24,7 @@ from scenario_db.api.schemas.view import (
     ViewHints,
 )
 from scenario_db.db.repositories.scenario_graph import CanonicalScenarioGraph
+from scenario_db.view.buffers import display_compression
 from scenario_db.graph_checks import (
     edge_source as _edge_source,
     edge_target as _edge_target,
@@ -619,7 +620,7 @@ def _memory_descriptor(graph: CanonicalScenarioGraph, buffer_ref: str) -> Memory
         stride_bytes=_as_int(spec.get("stride_bytes")),
         size_bytes=_as_int(spec.get("size_bytes")),
         alignment=spec.get("alignment"),
-        compression=None if spec.get("compression") == "none" else spec.get("compression"),
+        compression=display_compression(spec.get("compression")),
     )
 
 
@@ -659,7 +660,7 @@ def _buffer_detail_items(graph: CanonicalScenarioGraph, buffer_ref: str) -> list
         spec.get("format"),
         spec.get("size") or spec.get("size_ref"),
         f"{spec.get('bitdepth')}b" if spec.get("bitdepth") is not None else None,
-        spec.get("compression"),
+        display_compression(spec.get("compression")),
         spec.get("alignment"),
     ]
     summary = " / ".join(str(bit) for bit in bits if bit)
@@ -724,7 +725,7 @@ def _buffer_handoffs(
                 size_label=_buffer_size_label(graph, spec),
                 format=spec.get("format"),
                 bitdepth=_as_int(spec.get("bitdepth") or spec.get("bitwidth")),
-                compression=spec.get("compression"),
+                compression=display_compression(spec.get("compression")),
                 comp_ratio=_as_float(spec.get("comp_ratio") or spec.get("compression_ratio")),
                 llc_allocated=bool(placement and placement.llc_allocated),
                 llc_policy=placement.llc_policy if placement else None,
@@ -804,7 +805,7 @@ def _io_from_buffers(graph: CanonicalScenarioGraph, buffer_refs: list[str]) -> I
     return IoSummary(
         format=spec.get("format"),
         bitdepth=spec.get("bitdepth"),
-        compression=spec.get("compression"),
+        compression=display_compression(spec.get("compression")),
         size_label=str(spec.get("size") or spec.get("size_ref") or buffer_refs[0]),
     )
 
@@ -861,7 +862,7 @@ def _sensor_output(graph: CanonicalScenarioGraph, config: dict[str, Any]) -> IoS
         fps=design.get("fps") or design.get("target_fps"),
         format=output.get("format"),
         bitdepth=output.get("bitdepth") or output.get("bitwidth"),
-        compression=output.get("compression"),
+        compression=display_compression(output.get("compression")),
         size_label=f"{width}x{height}" if width and height else None,
     )
 

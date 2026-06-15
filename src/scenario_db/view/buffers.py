@@ -5,7 +5,22 @@ from typing import Any
 
 from scenario_db.api.schemas.view import MemoryDescriptor, MemoryPlacement
 from scenario_db.db.repositories.scenario_graph import CanonicalScenarioGraph
+from scenario_db.sim.bw_calc import normalize_compression
 from scenario_db.view.graph_utils import parse_size as _parse_size, resolution_to_size as _resolution_to_size
+
+_OFF_DISPLAY = "COMP_OFF"
+
+
+def display_compression(value: Any) -> str | None:
+    """Canonical compression label for views.
+
+    Unspecified compression stays None (no badge). Any 'off' spelling
+    (none/disable/off/COMP_OFF) renders uniformly as COMP_OFF; a real mode
+    passes through unchanged. Shares the off-detection SSOT with the sim layer.
+    """
+    if value is None:
+        return None
+    return value if normalize_compression(value) is not None else _OFF_DISPLAY
 
 def _reference_sizes(graph: CanonicalScenarioGraph) -> dict[str, str]:
     design = graph.variant.design_conditions or {}
@@ -47,7 +62,7 @@ def _buffer_memory_from_spec(
         height=height,
         fps=int(tokens.get("fps", "30")),
         alignment=spec.get("alignment"),
-        compression=None if spec.get("compression") == "none" else spec.get("compression"),
+        compression=display_compression(spec.get("compression")),
     )
 
 def _buffer_placement_from_spec(graph: CanonicalScenarioGraph, buffer_ref: str | None) -> MemoryPlacement | None:
@@ -85,7 +100,7 @@ def _buffer_detail_items(graph: CanonicalScenarioGraph, buffer_ref: str | None) 
             spec.get("format"),
             _size_text(spec.get("size_ref") or spec.get("size")),
             f"{spec.get('bitdepth')}b" if spec.get("bitdepth") is not None else None,
-            spec.get("compression"),
+            display_compression(spec.get("compression")),
             spec.get("alignment"),
         ]
         summary = " / ".join(str(bit) for bit in bits if bit)
@@ -133,7 +148,7 @@ def _memory_descriptor(graph: CanonicalScenarioGraph, buffer_ref: str) -> Memory
         height=height,
         fps=int(design.get("fps") or 30),
         alignment="64B",
-        compression=_compression_for_buffer(graph),
+        compression=_compression_for_buffer(graph, buffer_ref),
     )
 
 def _memory_placement(graph: CanonicalScenarioGraph, buffer_ref: str) -> MemoryPlacement:
@@ -177,9 +192,25 @@ def _format_for_buffer(buffer_ref: str) -> str:
         return "NV12"
     return "YUV"
 
-def _compression_for_buffer(graph: CanonicalScenarioGraph) -> str | None:
-    for ip_row in graph.ip_catalog.values():
-        compression = ((ip_row.capabilities or {}).get("supported_features") or {}).get("compression")
-        if compression:
-            return compression[0]
+def _compression_for_buffer(graph: CanonicalScenarioGraph, buffer_ref: str) -> str | None:
+    """Fallback compression for a buffer with no explicit spec.
+
+    Attribute to the buffer's *producing* IP (the edge source), not an arbitrary
+    catalog entry, and prefer a real (enabled) mode the producer supports.
+    Returns None when the producer is unknown or declares no compression.
+    """
+    for edge in getattr(graph, "pipeline_edges", None) or []:
+        if not isinstance(edge, dict) or str(edge.get("buffer") or "") != buffer_ref:
+            continue
+        source = edge.get("from") or edge.get("src") or edge.get("source")
+        node = graph.node_by_id(str(source)) if source else None
+        ip_row = graph.ip_catalog.get((node or {}).get("ip_ref")) if node else None
+        caps = (ip_row.capabilities if ip_row else None) or {}
+        modes = list((caps.get("supported_features") or {}).get("compression") or [])
+        for module in (caps.get("properties") or {}).get("modules") or []:
+            if isinstance(module, dict):
+                modes.extend(module.get("supported_compressions") or [])
+        for mode in modes:
+            if normalize_compression(mode) is not None:
+                return str(mode)
     return None
