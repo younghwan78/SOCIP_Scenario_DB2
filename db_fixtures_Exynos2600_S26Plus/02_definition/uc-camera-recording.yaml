@@ -219,11 +219,11 @@ pipeline:
     GDC_M_DPU_BUF:
       format: YUV420
       bitdepth: 8
-      compression: COMP_SBWC_LOSSLESS
+      compression: COMP_YUV_LOSSLESS
     GDC_O_MFC_BUF:
       format: YUV420
       bitdepth: 8
-      compression: COMP_SBWC_LOSSLESS
+      compression: COMP_YUV_LOSSLESS
 variants:
 - id: cam-rec-r1-fhd30-sdr
   severity: light

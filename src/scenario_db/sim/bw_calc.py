@@ -115,9 +115,50 @@ def effective_comp_ratio(spec: PortTransferSpec) -> float:
     return spec.comp_ratio if compression_enabled(spec.compression) else 1.0
 
 
+_COMPRESSION_OFF_TOKENS = {
+    "", "none", "no", "false", "off", "disable", "disabled", "comp_off", "comp_none",
+}
+
+
+def normalize_compression(compression: str | None) -> str | None:
+    """Canonical compression mode string, or None for any 'off' spelling.
+
+    Single source of truth for the scattered 'none'/'disable'/'off'/COMP_OFF
+    sentinels that previously diverged between sim and view layers.
+    """
+    text = str(compression or "").strip()
+    if text.lower() in _COMPRESSION_OFF_TOKENS:
+        return None
+    return text
+
+
 def compression_enabled(compression: str | None) -> bool:
-    normalized = str(compression or "").strip().lower()
-    return normalized not in {"", "none", "no", "false", "off", "disable", "disabled", "comp_off"}
+    return normalize_compression(compression) is not None
+
+
+def resolve_comp_ratio(
+    compression: str | None,
+    catalog: dict[str, float] | None = None,
+    *,
+    override: float | None = None,
+) -> float:
+    """Remaining-BW fraction for a compression mode (1.0 == no reduction).
+
+    Resolution order: OFF/unknown-disabled -> 1.0; explicit override (for
+    exploration) -> override; SoC catalog ratio for the mode -> that value;
+    otherwise 1.0. This centralises what previously lived ad hoc in
+    transfers/chain_templates/level0.
+    """
+    mode = normalize_compression(compression)
+    if mode is None:
+        return 1.0
+    if override is not None:
+        return float(override)
+    if catalog:
+        ratio = catalog.get(mode)
+        if ratio is not None:
+            return float(ratio)
+    return 1.0
 
 
 def _size_mp(width: int, height: int) -> float:

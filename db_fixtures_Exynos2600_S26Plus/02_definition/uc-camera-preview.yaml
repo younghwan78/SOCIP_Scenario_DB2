@@ -182,7 +182,7 @@ pipeline:
     GDC_M_DPU_BUF:
       format: YUV420
       bitdepth: 10
-      compression: COMP_SBWC_LOSSLESS
+      compression: COMP_YUV_LOSSLESS
       note: GDC_M crop/warp output → DPU (SBWC zero-copy)
 variants:
 - id: cam-prev-r1-30

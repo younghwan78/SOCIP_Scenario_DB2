@@ -154,3 +154,53 @@ def test_debug_trace_uses_bw_formula_from_bw_calc():
 
     assert trace["formula"] == bw_calc.BW_MBS_FORMULA
     assert trace["bw_formula"] == bw_calc.BW_MBS_FORMULA
+
+
+# ---------------------------------------------------------------------------
+# Compression mode resolution (catalog-driven comp_ratio)
+# ---------------------------------------------------------------------------
+
+from scenario_db.sim.bw_calc import (  # noqa: E402
+    compression_enabled,
+    normalize_compression,
+    resolve_comp_ratio,
+)
+from scenario_db.sim.transfers import compression_catalog  # noqa: E402
+
+
+@pytest.mark.parametrize("off", ["", "none", "OFF", "disable", "COMP_OFF", None])
+def test_normalize_compression_off_tokens(off):
+    assert normalize_compression(off) is None
+    assert compression_enabled(off) is False
+
+
+def test_normalize_compression_keeps_real_mode():
+    assert normalize_compression("COMP_YUV_LOSSY") == "COMP_YUV_LOSSY"
+    assert compression_enabled("COMP_YUV_LOSSY") is True
+
+
+def test_resolve_comp_ratio_off_is_one():
+    assert resolve_comp_ratio("COMP_OFF", {"COMP_YUV_LOSSY": 0.5}) == 1.0
+
+
+def test_resolve_comp_ratio_from_catalog():
+    catalog = {"COMP_YUV_LOSSY": 0.5, "COMP_BAYER_LOSSLESS": 1.0}
+    assert resolve_comp_ratio("COMP_YUV_LOSSY", catalog) == 0.5
+    assert resolve_comp_ratio("COMP_BAYER_LOSSLESS", catalog) == 1.0
+
+
+def test_resolve_comp_ratio_override_wins():
+    catalog = {"COMP_YUV_LOSSY": 0.5}
+    assert resolve_comp_ratio("COMP_YUV_LOSSY", catalog, override=0.42) == 0.42
+
+
+def test_resolve_comp_ratio_unknown_mode_falls_back_to_one():
+    assert resolve_comp_ratio("COMP_MYSTERY", {"COMP_YUV_LOSSY": 0.5}) == 1.0
+
+
+def test_compression_catalog_from_dict_and_object():
+    class _Soc:
+        compression_modes = {"COMP_YUV_LOSSY": {"compressor": "SBWC", "comp_ratio": 0.5}}
+
+    assert compression_catalog(_Soc()) == {"COMP_YUV_LOSSY": 0.5}
+    assert compression_catalog(None) == {}

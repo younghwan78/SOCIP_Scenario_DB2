@@ -793,7 +793,7 @@ variants:
     MFC_DPU_BUF:
       format: YUV420_SBWC
       bitdepth: 8
-      compression: COMP_SBWC_LOSSLESS
+      compression: COMP_YUV_LOSSLESS
 - id: vplay-local-hevc-uhd30-sbwcl-sdr
   severity: heavy
   design_conditions:
@@ -834,7 +834,7 @@ variants:
     MFC_DPU_BUF:
       format: YUV420_SBWCL
       bitdepth: 8
-      compression: COMP_SBWC_LOSSY
+      compression: COMP_YUV_LOSSY
 - id: vplay-local-hevc-fhd30-drm
   severity: light
   design_conditions:

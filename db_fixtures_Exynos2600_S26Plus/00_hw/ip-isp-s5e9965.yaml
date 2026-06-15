@@ -330,8 +330,8 @@ capabilities:
       max_bandwidth: 8192000000
       supported_compressions:
       - COMP_OFF
-      - COMP_SBWC_LOSSLESS
-      - COMP_SBWC_LOSSY
+      - COMP_YUV_LOSSLESS
+      - COMP_YUV_LOSSY
     - name: MCSC_WDMA_VIDEO
       type: DMA
       direction: write
@@ -339,8 +339,8 @@ capabilities:
       max_bandwidth: 8192000000
       supported_compressions:
       - COMP_OFF
-      - COMP_SBWC_LOSSLESS
-      - COMP_SBWC_LOSSY
+      - COMP_YUV_LOSSLESS
+      - COMP_YUV_LOSSY
     - name: MCSC_WDMA_CAPTURE
       type: DMA
       direction: write

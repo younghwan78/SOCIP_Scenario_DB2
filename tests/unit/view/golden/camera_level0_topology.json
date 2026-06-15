@@ -292,13 +292,13 @@
           "Route: gdc_m -> dpu",
           "Edge type: M2M",
           "Buffer: GDC_M_DPU_BUF",
-          "YUV420 / 8b / COMP_SBWC_LOSSLESS"
+          "YUV420 / 8b / COMP_YUV_LOSSLESS"
         ],
         "flow_type": "M2M",
         "id": "e-topo-11-src-buf",
         "memory": {
           "bitdepth": 8,
-          "compression": "COMP_SBWC_LOSSLESS",
+          "compression": "COMP_YUV_LOSSLESS",
           "format": "YUV420",
           "fps": 30,
           "height": 1080,
@@ -317,13 +317,13 @@
           "Route: gdc_m -> dpu",
           "Edge type: M2M",
           "Buffer: GDC_M_DPU_BUF",
-          "YUV420 / 8b / COMP_SBWC_LOSSLESS"
+          "YUV420 / 8b / COMP_YUV_LOSSLESS"
         ],
         "flow_type": "M2M",
         "id": "e-topo-11-buf-tgt",
         "memory": {
           "bitdepth": 8,
-          "compression": "COMP_SBWC_LOSSLESS",
+          "compression": "COMP_YUV_LOSSLESS",
           "format": "YUV420",
           "fps": 30,
           "height": 1080,
@@ -342,13 +342,13 @@
           "Route: gdc_o -> mfc_enc",
           "Edge type: M2M",
           "Buffer: GDC_O_MFC_BUF",
-          "YUV420 / 8b / COMP_SBWC_LOSSLESS"
+          "YUV420 / 8b / COMP_YUV_LOSSLESS"
         ],
         "flow_type": "M2M",
         "id": "e-topo-12-src-buf",
         "memory": {
           "bitdepth": 8,
-          "compression": "COMP_SBWC_LOSSLESS",
+          "compression": "COMP_YUV_LOSSLESS",
           "format": "YUV420",
           "fps": 30,
           "height": 1080,
@@ -367,13 +367,13 @@
           "Route: gdc_o -> mfc_enc",
           "Edge type: M2M",
           "Buffer: GDC_O_MFC_BUF",
-          "YUV420 / 8b / COMP_SBWC_LOSSLESS"
+          "YUV420 / 8b / COMP_YUV_LOSSLESS"
         ],
         "flow_type": "M2M",
         "id": "e-topo-12-buf-tgt",
         "memory": {
           "bitdepth": 8,
-          "compression": "COMP_SBWC_LOSSLESS",
+          "compression": "COMP_YUV_LOSSLESS",
           "format": "YUV420",
           "fps": 30,
           "height": 1080,
@@ -455,7 +455,7 @@
       {
         "bitdepth": 8,
         "buffer_ref": "GDC_M_DPU_BUF",
-        "compression": "COMP_SBWC_LOSSLESS",
+        "compression": "COMP_YUV_LOSSLESS",
         "consumer_node_ids": [
           "dpu"
         ],
@@ -468,7 +468,7 @@
       {
         "bitdepth": 8,
         "buffer_ref": "GDC_O_MFC_BUF",
-        "compression": "COMP_SBWC_LOSSLESS",
+        "compression": "COMP_YUV_LOSSLESS",
         "consumer_node_ids": [
           "mfc_enc"
         ],
@@ -779,7 +779,7 @@
         "node_id": "gdc_m",
         "output": {
           "bitdepth": 8,
-          "compression": "COMP_SBWC_LOSSLESS",
+          "compression": "COMP_YUV_LOSSLESS",
           "format": "YUV420",
           "size_label": "GDC_M_DPU_BUF"
         },
@@ -817,7 +817,7 @@
         "node_id": "gdc_o",
         "output": {
           "bitdepth": 8,
-          "compression": "COMP_SBWC_LOSSLESS",
+          "compression": "COMP_YUV_LOSSLESS",
           "format": "YUV420",
           "size_label": "GDC_O_MFC_BUF"
         },
@@ -840,7 +840,7 @@
         "flow": "OTF",
         "input": {
           "bitdepth": 8,
-          "compression": "COMP_SBWC_LOSSLESS",
+          "compression": "COMP_YUV_LOSSLESS",
           "format": "YUV420",
           "size_label": "GDC_M_DPU_BUF"
         },
@@ -867,7 +867,7 @@
         "flow": "none",
         "input": {
           "bitdepth": 8,
-          "compression": "COMP_SBWC_LOSSLESS",
+          "compression": "COMP_YUV_LOSSLESS",
           "format": "YUV420",
           "size_label": "GDC_O_MFC_BUF"
         },
@@ -1660,7 +1660,7 @@
         "collapsed_children_count": 0,
         "detail_items": [
           "Buffer: GDC_M_DPU_BUF",
-          "YUV420 / 8b / COMP_SBWC_LOSSLESS"
+          "YUV420 / 8b / COMP_YUV_LOSSLESS"
         ],
         "id": "buf-gdc-m-dpu-buf",
         "label": "Gdc M Dpu Buf",
@@ -1668,7 +1668,7 @@
         "matched_issues": [],
         "memory": {
           "bitdepth": 8,
-          "compression": "COMP_SBWC_LOSSLESS",
+          "compression": "COMP_YUV_LOSSLESS",
           "format": "YUV420",
           "fps": 30,
           "height": 1080,
@@ -1699,7 +1699,7 @@
         "collapsed_children_count": 0,
         "detail_items": [
           "Buffer: GDC_O_MFC_BUF",
-          "YUV420 / 8b / COMP_SBWC_LOSSLESS"
+          "YUV420 / 8b / COMP_YUV_LOSSLESS"
         ],
         "id": "buf-gdc-o-mfc-buf",
         "label": "Gdc O Mfc Buf",
@@ -1707,7 +1707,7 @@
         "matched_issues": [],
         "memory": {
           "bitdepth": 8,
-          "compression": "COMP_SBWC_LOSSLESS",
+          "compression": "COMP_YUV_LOSSLESS",
           "format": "YUV420",
           "fps": 30,
           "height": 1080,

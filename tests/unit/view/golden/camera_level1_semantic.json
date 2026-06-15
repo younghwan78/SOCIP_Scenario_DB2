@@ -220,14 +220,14 @@
         "detail_items": [
           "Route: gdc_m -> dpu",
           "Edge type: M2M",
-          "Buffer: YUV420 / 8b / COMP_SBWC_LOSSLESS"
+          "Buffer: YUV420 / 8b / COMP_YUV_LOSSLESS"
         ],
         "flow_type": "M2M",
         "id": "l1-sem-11",
         "label": "M2M / GDC_M_DPU_BUF",
         "memory": {
           "bitdepth": 8,
-          "compression": "COMP_SBWC_LOSSLESS",
+          "compression": "COMP_YUV_LOSSLESS",
           "format": "YUV420",
           "fps": 30
         },
@@ -247,14 +247,14 @@
         "detail_items": [
           "Route: gdc_o -> mfc_enc",
           "Edge type: M2M",
-          "Buffer: YUV420 / 8b / COMP_SBWC_LOSSLESS"
+          "Buffer: YUV420 / 8b / COMP_YUV_LOSSLESS"
         ],
         "flow_type": "M2M",
         "id": "l1-sem-12",
         "label": "M2M / GDC_O_MFC_BUF",
         "memory": {
           "bitdepth": 8,
-          "compression": "COMP_SBWC_LOSSLESS",
+          "compression": "COMP_YUV_LOSSLESS",
           "format": "YUV420",
           "fps": 30
         },

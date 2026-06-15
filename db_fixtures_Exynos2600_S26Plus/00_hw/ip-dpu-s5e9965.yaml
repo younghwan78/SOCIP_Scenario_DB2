@@ -31,8 +31,8 @@ capabilities:
     - HLG
     compression:
     - COMP_OFF
-    - COMP_SBWC_LOSSLESS
-    - COMP_SBWC_LOSSY
+    - COMP_YUV_LOSSLESS
+    - COMP_YUV_LOSSY
   properties:
     ip_group: DPU
     hierarchy_group: Display

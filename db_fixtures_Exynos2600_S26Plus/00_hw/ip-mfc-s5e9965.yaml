@@ -27,8 +27,8 @@ capabilities:
     - 10
     compression:
     - COMP_OFF
-    - COMP_SBWC_LOSSLESS
-    - COMP_SBWC_LOSSY
+    - COMP_YUV_LOSSLESS
+    - COMP_YUV_LOSSY
     hdr_formats:
     - SDR
     - HDR10

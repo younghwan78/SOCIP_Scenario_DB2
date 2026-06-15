@@ -10,7 +10,7 @@ from scenario_db.sim.external_devices import (
 from scenario_db.sim.models import IPWorkload, PortTransferSpec, SimulationInputs, SimulationRunConfig
 from scenario_db.sim.shape_propagation import propagate_shapes, validate_shape_propagation
 from scenario_db.sim.timeline_adapter import timeline_edges, timeline_tasks
-from scenario_db.sim.transfers import edge_port_transfers, port_transfers_for_node
+from scenario_db.sim.transfers import compression_catalog, edge_port_transfers, port_transfers_for_node
 from scenario_db.sim.workloads import build_workload_for_node, node_sim_block
 
 
@@ -28,6 +28,7 @@ def build_simulation_inputs(
     warnings: list[str] = []
     warnings.extend(validate_shape_propagation(graph, shapes))
     _append_missing_ip_catalog_warnings(graph, warnings)
+    comp_catalog = compression_catalog(graph.soc)
 
     for node in graph.pipeline_nodes:
         node_id = str(node.get("id") or "")
@@ -49,11 +50,18 @@ def build_simulation_inputs(
                 workload.hw_name,
                 node_sim_block(graph, workload.node_id),
                 shape=shapes.node(workload.node_id),
+                comp_catalog=comp_catalog,
+                warnings=warnings,
             )
         )
 
     if not transfers:
-        transfers.extend(edge_port_transfers(graph, {item.node_id: item for item in workloads}))
+        transfers.extend(edge_port_transfers(
+            graph,
+            {item.node_id: item for item in workloads},
+            comp_catalog=comp_catalog,
+            warnings=warnings,
+        ))
 
     sensor_modes = [
         (sensor_node, sensor_mode)

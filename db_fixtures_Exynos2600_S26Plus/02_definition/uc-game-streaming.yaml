@@ -77,7 +77,7 @@ pipeline:
     MFC_DPU_BUF:
       format: YUV420
       bitdepth: 8
-      compression: COMP_SBWC_LOSSLESS
+      compression: COMP_YUV_LOSSLESS
     MFC_GPU_BUF:
       format: YUV420
       bitdepth: 8
