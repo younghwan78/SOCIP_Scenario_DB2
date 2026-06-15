@@ -945,3 +945,77 @@ def test_import_bundle_diff_reports_only_changed_variants_updated():
     diff = build_import_bundle_diff(db, normalized)
 
     assert diff.impact["scenario_impacts"][0]["variants_updated"] == ["FHD30-Imported"]
+
+
+# ---------------------------------------------------------------------------
+# Buffer compression validation (Phase 3, lenient)
+# ---------------------------------------------------------------------------
+
+from scenario_db.write.service import _validate_pipeline_compression  # noqa: E402
+
+
+def _comp_pipeline(buffer: dict) -> dict:
+    # RECORD_BUF is produced by isp0 (ip-isp-v12) via the M2M edge.
+    return {
+        "nodes": [
+            {"id": "isp0", "ip_ref": "ip-isp-v12"},
+            {"id": "mfc", "ip_ref": "ip-mfc-v14"},
+        ],
+        "edges": [{"from": "isp0", "to": "mfc", "type": "M2M", "buffer": "RECORD_BUF"}],
+        "buffers": {"RECORD_BUF": buffer},
+    }
+
+
+def _isp_supports(db, *modes):
+    db.ip_isp.capabilities = {"supported_features": {"compression": list(modes)}}
+
+
+def test_pipeline_compression_accepts_supported_mode():
+    db = _Db()
+    _isp_supports(db, "COMP_YUV_LOSSY", "COMP_YUV_LOSSLESS")
+    issues = _validate_pipeline_compression(db, _comp_pipeline({"compression": "COMP_YUV_LOSSY"}))
+    assert issues == []
+
+
+def test_pipeline_compression_rejects_unsupported_mode():
+    db = _Db()
+    _isp_supports(db, "COMP_YUV_LOSSY")
+    issues = _validate_pipeline_compression(db, _comp_pipeline({"compression": "COMP_BAYER_LOSSY"}))
+    assert any(issue.code == "unsupported_buffer_compression" for issue in issues)
+
+
+def test_pipeline_compression_off_always_allowed():
+    db = _Db()
+    _isp_supports(db, "COMP_YUV_LOSSY")
+    issues = _validate_pipeline_compression(db, _comp_pipeline({"compression": "COMP_OFF"}))
+    assert issues == []
+
+
+def test_pipeline_compression_skips_when_producer_declares_nothing():
+    db = _Db()  # ip-isp-v12 capabilities default to {}
+    issues = _validate_pipeline_compression(db, _comp_pipeline({"compression": "COMP_YUV_LOSSY"}))
+    assert issues == []
+
+
+def test_pipeline_compression_uses_per_dma_modules():
+    db = _Db()
+    db.ip_isp.capabilities = {"properties": {"modules": [
+        {"name": "MCSC_WDMA", "type": "DMA", "supported_compressions": ["COMP_YUV_LOSSY"]},
+    ]}}
+    ok = _validate_pipeline_compression(db, _comp_pipeline({"compression": "COMP_YUV_LOSSY"}))
+    bad = _validate_pipeline_compression(db, _comp_pipeline({"compression": "COMP_BAYER_LOSSY"}))
+    assert ok == []
+    assert any(issue.code == "unsupported_buffer_compression" for issue in bad)
+
+
+def test_pipeline_compression_rejects_bad_comp_ratio():
+    db = _Db()
+    issues = _validate_pipeline_compression(db, _comp_pipeline({"compression": "COMP_OFF", "comp_ratio": 1.5}))
+    assert any(issue.code == "invalid_comp_ratio" for issue in issues)
+
+
+def test_pipeline_compression_accepts_valid_comp_ratio():
+    db = _Db()
+    _isp_supports(db, "COMP_YUV_LOSSY")
+    issues = _validate_pipeline_compression(db, _comp_pipeline({"compression": "COMP_YUV_LOSSY", "comp_ratio": 0.5}))
+    assert issues == []

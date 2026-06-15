@@ -32,6 +32,7 @@ from scenario_db.graph_checks import (
     find_data_flow_cycle,
     normalize_edge as _normalize_edge,
 )
+from scenario_db.sim.bw_calc import compression_enabled
 from scenario_db.models.capability.hw import IpCatalog as PydanticIpCatalog
 from scenario_db.models.capability.hw import SocCdgmProfile as PydanticSocCdgmProfile
 from scenario_db.models.capability.hw import SocDvfsTable as PydanticSocDvfsTable
@@ -774,6 +775,77 @@ def _validate_pipeline_patch_buffer_removes(
     return issues
 
 
+def _supported_compressions_for_ip(db: Session, ip_ref: str) -> set[str]:
+    """Union of an IP's declared compression modes (per-DMA + IP-top fallback).
+
+    Empty set means the IP declares nothing → callers treat it as 'cannot
+    validate' and skip (lenient). COMP_OFF is always allowed regardless.
+    """
+    row = db.query(IpCatalog).filter_by(id=ip_ref).one_or_none()
+    caps = (row.capabilities if row else None) or {}
+    supported: set[str] = set()
+    supported.update(str(v) for v in ((caps.get("supported_features") or {}).get("compression") or []))
+    for module in (caps.get("properties") or {}).get("modules") or []:
+        if isinstance(module, dict):
+            supported.update(str(v) for v in (module.get("supported_compressions") or []))
+    return supported
+
+
+def _validate_pipeline_compression(db: Session, pipeline: dict[str, Any]) -> list[ValidationIssue]:
+    """Buffer compression guardrails (lenient): comp_ratio range + capability.
+
+    comp_ratio must be in (0, 1]. A buffer's compression mode must be supported
+    by its producing IP; OFF is always allowed, and IPs / buffers we cannot
+    attribute (no edge, no declared support) are skipped rather than failed.
+    """
+    issues: list[ValidationIssue] = []
+    buffers = pipeline.get("buffers") or {}
+    if not isinstance(buffers, dict):
+        return issues
+    nodes = _nodes_from_pipeline(pipeline)
+    producer_ip: dict[str, str] = {}
+    for edge in pipeline.get("edges") or []:
+        if not isinstance(edge, dict) or not edge.get("buffer"):
+            continue
+        ip_ref = (nodes.get(_edge_source(edge)) or {}).get("ip_ref")
+        if ip_ref:
+            producer_ip.setdefault(str(edge["buffer"]), str(ip_ref))
+
+    supported_cache: dict[str, set[str]] = {}
+    for buffer_id, descriptor in buffers.items():
+        if not isinstance(descriptor, dict):
+            continue
+        comp_ratio = descriptor.get("comp_ratio")
+        if comp_ratio is not None:
+            try:
+                in_range = 0.0 < float(comp_ratio) <= 1.0
+            except (TypeError, ValueError):
+                in_range = False
+            if not in_range:
+                issues.append(_issue(
+                    "error", "invalid_comp_ratio",
+                    f"comp_ratio must be in (0, 1]: {buffer_id}={comp_ratio}",
+                    f"pipeline.buffers.{buffer_id}.comp_ratio",
+                ))
+        compression = descriptor.get("compression")
+        if not compression_enabled(compression):
+            continue
+        ip_ref = producer_ip.get(str(buffer_id))
+        if not ip_ref:
+            continue
+        if ip_ref not in supported_cache:
+            supported_cache[ip_ref] = _supported_compressions_for_ip(db, ip_ref)
+        supported = supported_cache[ip_ref]
+        if supported and str(compression) not in supported:
+            issues.append(_issue(
+                "error", "unsupported_buffer_compression",
+                f"Compression '{compression}' is not supported by producer {ip_ref}. "
+                f"Supported: {sorted(supported)}",
+                f"pipeline.buffers.{buffer_id}.compression",
+            ))
+    return issues
+
+
 def _validate_candidate_pipeline(db: Session, pipeline: dict[str, Any]) -> list[ValidationIssue]:
     issues: list[ValidationIssue] = []
     nodes = _nodes_from_pipeline(pipeline)
@@ -828,6 +900,7 @@ def _validate_candidate_pipeline(db: Session, pipeline: dict[str, Any]) -> list[
                 "pipeline.edges",
             )
         )
+    issues.extend(_validate_pipeline_compression(db, pipeline))
     return issues
 
 
