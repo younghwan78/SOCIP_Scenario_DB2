@@ -134,10 +134,11 @@ buffers:
 - `comp_ratio` override는 (0,1] 범위. 벗어나면 error, 명시 시 warning.
 
 ## 7.5 구현 단계 (이 worktree)
-1. **스키마+카탈로그**: `CompressionMode` 모델 + `SocPlatform.compression_modes`; per-DMA typed; soc/ip fixture를 새 규약으로 정리, IP 상단 stale 목록 제거.
-2. **해석/BW 통일**: `transfers.py`에서 mode→ratio 해석, `normalize_compression()` 단일화, chain_templates/shape_propagation/level0 재사용.
-3. **검증**: write/service 정합·범위 검사 + 테스트.
-4. **view/query 정렬**: `_compression_for_buffer` 생산 IP 귀속 정정, 배지/필터 새 규약 반영.
+1. ✅ **스키마+카탈로그** (commit `2fcf082`): `CompressionMode` + `SocPlatform.compression_modes`(comp_ratio (0,1] 검증), ORM 컬럼 + alembic 0012 + 매퍼, soc fixture 카탈로그 4모드. 순수 additive.
+2. ✅ **해석/BW 통일** (commit `499c091`): `bw_calc.normalize_compression`/`resolve_comp_ratio`(override>catalog>1.0), `transfers`에서 `graph.soc` 카탈로그로 per-port/buffer ratio 해석, override가 카탈로그 모드를 덮을 때만 경고. `COMP_SBWC_*→COMP_YUV_*` fixture/golden 리네임. 912 단위 통과.
+3. ⬜ **검증**: write/service `buffer.compression ∈ 생산 DMA supported ∪ {OFF}` + comp_ratio (0,1] 범위.
+   - ⚠️ 선결: per-DMA `supported_compressions`가 ISP/MCSC만 있고 **DPU/MFC는 IP-top `supported_features.compression`에만** 선언됨. 검증 권위를 per-DMA로 두려면 DPU/MFC를 per-DMA로 이전 필요(어느 DMA 포트가 압축 지원하는지 = 도메인 정보).
+4. ⬜ **view/query 정렬**: `view/buffers._compression_for_buffer` 생산 IP 귀속 정정(현재 첫 IP의 첫 capability 반환), view의 `=="none"` → `normalize_compression` 재사용, 배지/필터 규약 반영.
 
 ## 7.6 미해결/주의
 - 카탈로그 조회는 `CanonicalScenarioGraph`에 SoC 문서가 있어야 함 → 로더가 sim 시점에 SoC를 물려주는지 1단계에서 확인.
