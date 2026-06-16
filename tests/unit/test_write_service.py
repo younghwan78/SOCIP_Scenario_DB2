@@ -984,6 +984,49 @@ def test_pipeline_compression_rejects_unsupported_mode():
     assert any(issue.code == "unsupported_buffer_compression" for issue in issues)
 
 
+def test_variant_overlay_compression_rejects_unsupported_override_mode():
+    db = _Db()
+    _isp_supports(db, "COMP_YUV_LOSSY")
+
+    issues = validate_variant_overlay(
+        db,
+        normalize_payload(
+            _payload(
+                buffer_overrides={
+                    "RECORD_BUF": {
+                        "format": "YUV420",
+                        "compression": "COMP_BAYER_LOSSY",
+                    }
+                }
+            )
+        ),
+    )
+
+    assert any(issue.code == "unsupported_buffer_compression" for issue in issues)
+
+
+def test_variant_overlay_compression_rejects_bad_override_comp_ratio():
+    db = _Db()
+    _isp_supports(db, "COMP_YUV_LOSSY")
+
+    issues = validate_variant_overlay(
+        db,
+        normalize_payload(
+            _payload(
+                buffer_overrides={
+                    "RECORD_BUF": {
+                        "format": "YUV420",
+                        "compression": "COMP_YUV_LOSSY",
+                        "comp_ratio": 1.5,
+                    }
+                }
+            )
+        ),
+    )
+
+    assert any(issue.code == "invalid_comp_ratio" for issue in issues)
+
+
 def test_pipeline_compression_off_always_allowed():
     db = _Db()
     _isp_supports(db, "COMP_YUV_LOSSY")

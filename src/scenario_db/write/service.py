@@ -420,6 +420,9 @@ def validate_variant_overlay(db: Session, normalized: dict[str, Any]) -> list[Va
     known_config_nodes = base_node_ids | injected_nodes
     issues.extend(_validate_node_configs(db, variant.get("node_configs") or {}, base_nodes, known_config_nodes))
     issues.extend(_validate_buffer_overrides(variant.get("buffer_overrides") or {}, buffer_ids))
+    if not any(issue.severity == "error" for issue in issues):
+        candidate = _variant_pipeline_for_compression_validation(scenario.pipeline or {}, variant)
+        issues.extend(_validate_pipeline_compression(db, candidate, path_prefix="buffer_overrides"))
     return issues
 
 
@@ -791,7 +794,12 @@ def _supported_compressions_for_ip(db: Session, ip_ref: str) -> set[str]:
     return supported
 
 
-def _validate_pipeline_compression(db: Session, pipeline: dict[str, Any]) -> list[ValidationIssue]:
+def _validate_pipeline_compression(
+    db: Session,
+    pipeline: dict[str, Any],
+    *,
+    path_prefix: str = "pipeline.buffers",
+) -> list[ValidationIssue]:
     """Buffer compression guardrails (lenient): comp_ratio range + capability.
 
     comp_ratio must be in (0, 1]. A buffer's compression mode must be supported
@@ -825,7 +833,7 @@ def _validate_pipeline_compression(db: Session, pipeline: dict[str, Any]) -> lis
                 issues.append(_issue(
                     "error", "invalid_comp_ratio",
                     f"comp_ratio must be in (0, 1]: {buffer_id}={comp_ratio}",
-                    f"pipeline.buffers.{buffer_id}.comp_ratio",
+                    f"{path_prefix}.{buffer_id}.comp_ratio",
                 ))
         compression = descriptor.get("compression")
         if not compression_enabled(compression):
@@ -841,7 +849,7 @@ def _validate_pipeline_compression(db: Session, pipeline: dict[str, Any]) -> lis
                 "error", "unsupported_buffer_compression",
                 f"Compression '{compression}' is not supported by producer {ip_ref}. "
                 f"Supported: {sorted(supported)}",
-                f"pipeline.buffers.{buffer_id}.compression",
+                f"{path_prefix}.{buffer_id}.compression",
             ))
     return issues
 
@@ -1612,6 +1620,30 @@ def _validate_buffer_overrides(buffer_overrides: dict[str, Any], buffer_ids: set
                     )
                 )
     return issues
+
+
+def _variant_pipeline_for_compression_validation(base_pipeline: dict[str, Any], variant: dict[str, Any]) -> dict[str, Any]:
+    candidate = _patched_pipeline(base_pipeline, variant.get("topology_patch") or {})
+    buffers = deepcopy(candidate.get("buffers") or {})
+    for buffer_id, override in (variant.get("buffer_overrides") or {}).items():
+        if not isinstance(override, dict):
+            continue
+        base_descriptor = buffers.get(buffer_id)
+        if not isinstance(base_descriptor, dict):
+            continue
+        buffers[buffer_id] = _merge_dicts(base_descriptor, override)
+    candidate["buffers"] = buffers
+    return candidate
+
+
+def _merge_dicts(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    merged = deepcopy(base)
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _merge_dicts(merged[key], value)
+        else:
+            merged[key] = deepcopy(value)
+    return merged
 
 
 def _base_nodes(scenario: Scenario) -> dict[str, dict[str, Any]]:

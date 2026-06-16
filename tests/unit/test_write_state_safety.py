@@ -4,7 +4,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from sqlalchemy import CheckConstraint
+from sqlalchemy import ARRAY, CheckConstraint, Text
+from sqlalchemy.dialects.postgresql import JSONB
 
 from scenario_db.api.schemas.write import DiffPreviewResponse
 from scenario_db.db.models.evidence import Evidence
@@ -151,6 +152,15 @@ def test_write_and_evidence_models_declare_domain_constraints() -> None:
     assert "ck_evidence_kind" in _constraint_names(Evidence.__table__)
 
 
+def test_evidence_model_matches_postgres_evidence_column_types() -> None:
+    topology_order = Evidence.__table__.c.topology_order.type
+    calculation_trace = Evidence.__table__.c.calculation_trace.type
+
+    assert isinstance(topology_order, ARRAY)
+    assert isinstance(topology_order.item_type, Text)
+    assert isinstance(calculation_trace, JSONB)
+
+
 def test_alembic_migration_declares_domain_constraints() -> None:
     migration = (ROOT / "alembic" / "versions" / "0007_write_state_constraints.py").read_text(
         encoding="utf-8"
@@ -160,3 +170,14 @@ def test_alembic_migration_declares_domain_constraints() -> None:
     assert "ck_write_batches_status" in migration
     assert "ck_write_events_action" in migration
     assert "ck_evidence_kind" in migration
+
+
+def test_alembic_migration_aligns_evidence_schema_column_types() -> None:
+    migration = (ROOT / "alembic" / "versions" / "0012_align_evidence_schema_types.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "topology_order" in migration
+    assert "ARRAY(sa.Text())" in migration
+    assert "calculation_trace" in migration
+    assert "postgresql.JSONB" in migration
