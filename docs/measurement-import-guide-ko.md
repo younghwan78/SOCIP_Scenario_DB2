@@ -62,7 +62,7 @@ generated/measurements/
 생성 후 DB 적재는 contract 문서의 적재 경로(direct ETL)를 따른다:
 
 ```powershell
-uv run python -m scenario_db.etl.loader generated\measurements\03_evidence
+uv run python -m scenario_db.etl.loader generated\measurements\03_evidence --strict --report-json generated\measurements\etl-report.json
 ```
 
 ## 4. meta.yaml 작성

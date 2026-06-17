@@ -55,9 +55,9 @@ def engine(pg):
     command.upgrade(cfg, "head")
 
     with Session(eng) as session:
-        counts = load_yaml_dir(DEMO_FIXTURES, session)
-        loaded = sum(counts.values())
-        assert loaded > 0, f"ETL 로딩 실패: {counts}"
+        result = load_yaml_dir(DEMO_FIXTURES, session, validate=True, strict=True)
+        loaded = sum(result.counts.values())
+        assert loaded > 0, f"ETL 로딩 실패: {result.to_dict()}"
 
     yield eng
     eng.dispose()

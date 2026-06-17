@@ -103,14 +103,27 @@ def test_short_row_raises_power_csv_error(tmp_path: Path):
         aggregate_power(csv, PowerSpec(csv="power.csv"))
 
 
-def test_skips_blank_and_empty_cells(tmp_path: Path):
+def test_skips_blank_rows(tmp_path: Path):
     csv = _write_csv(
         tmp_path,
-        "timestamp_ms,VDD_CAM\n0,100\n\n2,\n3,200\n",
+        "timestamp_ms,VDD_CAM\n0,100\n\n3,200\n",
     )
     digest = aggregate_power(csv, PowerSpec(csv="power.csv"))
     # two numeric samples: 100, 200
     assert digest.rail_kpi["VDD_CAM"]["mean"] == 150.0
+
+
+def test_wide_csv_rejects_blank_cell_ragged_samples(tmp_path: Path):
+    csv = _write_csv(
+        tmp_path,
+        "timestamp_ms,VDD_CAM,VDD_BIG\n"
+        "0,100,40\n"
+        "1,,60\n",
+    )
+    spec = PowerSpec(csv="power.csv", rails={"VDD_CAM": {"role": "vdd"}, "VDD_BIG": {"role": "vdd"}})
+
+    with pytest.raises(PowerCsvError, match="blank value.*VDD_CAM.*line 3"):
+        aggregate_power(csv, spec)
 
 
 # --- rail_long (real bench: run x rail, V/mA/mW, aggregated across runs) ---

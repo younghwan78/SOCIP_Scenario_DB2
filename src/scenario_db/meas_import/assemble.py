@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from datetime import datetime
 from pathlib import Path
 
 from scenario_db.legacy_import.report import ImportReport
@@ -16,16 +17,28 @@ _SLUG_RE = re.compile(r"[^a-zA-Z0-9.]+")
 
 
 def generate_evidence_id(meta: MeasurementImportMeta) -> str:
-    date = meta.measured_at[:10].replace("-", "")
+    timestamp = _timestamp_suffix(meta.measured_at)
     scenario = _slug(meta.scenario_ref)
     variant = _slug(meta.variant_ref)
     rev = _slug(meta.execution_context.silicon_rev)
-    parts = ["meas", scenario, variant, rev, date]
+    parts = ["meas", scenario, variant, rev, timestamp]
     return "-".join(p for p in parts if p)
 
 
 def _slug(value: str) -> str:
     return _SLUG_RE.sub("-", value).strip("-")
+
+
+def _timestamp_suffix(value: str) -> str:
+    has_time = "T" in value or " " in value
+    normalized = value.replace("Z", "+00:00")
+    try:
+        dt = datetime.fromisoformat(normalized)
+    except ValueError:
+        return value[:10].replace("-", "")
+    if not has_time:
+        return dt.strftime("%Y%m%d")
+    return dt.strftime("%Y%m%dT%H%M%S")
 
 
 def _sha256(path: Path) -> str:

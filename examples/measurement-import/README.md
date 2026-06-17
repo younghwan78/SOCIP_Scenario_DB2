@@ -57,7 +57,7 @@ examples/measurement-import/
 └─ _generated/                  # Path A 변환 결과 (git 미추적)
 ```
 
-ETL 로더는 `DATABASE_URL` 을 직접 읽으므로(자동 `.env` 로드 아님) 적재 전 1회 설정:
+ETL 로더는 `SCENARIO_DB_DATABASE_URL`을 우선 사용하고, 없으면 `DATABASE_URL`을 사용한다. 적재 전 1회 설정:
 
 ```powershell
 $env:DATABASE_URL="postgresql+psycopg2://scenario_user:scenario_pass@localhost:15432/scenario_db"
@@ -91,7 +91,7 @@ CLI 가 **run 간(n=run 수)** 으로 자동 산출하는 것:
 DB 적재:
 
 ```powershell
-uv run python -m scenario_db.etl.loader examples/measurement-import/_generated
+uv run python -m scenario_db.etl.loader examples/measurement-import/_generated --strict --report-json examples/measurement-import/_generated/etl-report.json
 ```
 
 ---
@@ -108,7 +108,7 @@ uv run python -m scenario_db.etl.loader examples/measurement-import/_generated
 - `artifacts[]` 는 **path + sha256 만** DB 기록(Tier3 실파일은 file-store)
 
 ```powershell
-uv run python -m scenario_db.etl.loader examples/measurement-import/path-b-canonical
+uv run python -m scenario_db.etl.loader examples/measurement-import/path-b-canonical --strict --report-json examples/measurement-import/path-b-canonical/etl-report.json
 ```
 
 ---

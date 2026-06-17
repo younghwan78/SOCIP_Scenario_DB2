@@ -81,7 +81,7 @@ Windows 개발 환경:
 cd E:\50_Codex_Soc_Scenario_DB\implementation
 $env:DATABASE_URL="postgresql+psycopg2://scenario_user:scenario_pass@localhost:15432/scenario_db"
 uv run alembic upgrade head
-uv run python -m scenario_db.etl.loader generated\scenariodb
+uv run python -m scenario_db.etl.loader generated\scenariodb --strict --report-json generated\scenariodb\etl-report.json
 ```
 
 Ubuntu 사내 서버:
@@ -92,15 +92,15 @@ set -a
 source .env
 set +a
 uv run alembic upgrade head
-uv run python -m scenario_db.etl.loader /opt/scenariodb/data/generated/scenariodb
+uv run python -m scenario_db.etl.loader /opt/scenariodb/data/generated/scenariodb --strict --report-json /opt/scenariodb/data/generated/scenariodb/etl-report.json
 ```
 
 주의:
 
-- `etl.loader`는 현재 파일별 실패를 skip하고 계속 진행한다.
-- 사내 데이터 최초 이관에서는 반드시 import log를 확인해야 한다.
-- strict mode는 legacy importer에서 지원한다. `--strict`는 error 발생 시 non-zero로 종료하고,
-  `--fail-on-warning`을 함께 쓰면 warning도 이관 실패로 처리한다.
+- `etl.loader`는 기본적으로 파일별 실패를 report에 기록하고 계속 진행할 수 있다.
+- 사내 데이터 최초 이관에서는 `--strict`를 사용한다. 파일 skip 또는 post-load validation error가 있으면 rollback하고 non-zero로 종료한다.
+- `--report-json`은 loaded/skipped/validation 결과를 구조화해 남긴다.
+- loader는 `SCENARIO_DB_DATABASE_URL`을 우선 사용하고, 없으면 `DATABASE_URL`을 사용한다.
 
 ## 4. Legacy To Canonical Mapping
 
@@ -821,7 +821,7 @@ does not yet apply. Move that document to the direct ETL path or extend
 Direct ETL path for local fixtures or controlled reset loads:
 
 ```powershell
-uv run python -m scenario_db.etl.loader generated\scenariodb
+uv run python -m scenario_db.etl.loader generated\scenariodb --strict --report-json generated\scenariodb\etl-report.json
 ```
 
 Direct ETL bypasses Write API staging and should not be the default path for

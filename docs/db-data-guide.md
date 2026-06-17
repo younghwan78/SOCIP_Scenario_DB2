@@ -226,7 +226,7 @@ Architecture Query가 현재 지원하는 주요 field와 원천 데이터는 �
 cd E:\50_Codex_Soc_Scenario_DB\implementation
 $env:DATABASE_URL="postgresql+psycopg2://scenario_user:scenario_pass@localhost:15432/scenario_db"
 uv run alembic upgrade head
-uv run python -m scenario_db.etl.loader demo\fixtures
+uv run python -m scenario_db.etl.loader demo\fixtures --strict --report-json output\etl-report.json
 ```
 
 Exynos2600 fixture family:
@@ -341,6 +341,7 @@ Before applying real data, check this list.
 
 - Every YAML has `id`, `schema_version`, and supported `kind`.
 - ID prefix follows the canonical pattern, such as `soc-`, `dvfs-`, `ip-`, `sw-`, `proj-`, `uc-`, `sim-`, `meas-`, `iss-`, `rule-`.
+- Scenario IDs are global DB identities. Use project-qualified scenario IDs when the same logical usecase appears in multiple projects, and use `metadata.canonical_usecase` plus variant `design_conditions` for cross-project matching.
 - `soc.dvfs_table` uses unique `(soc_ref, dvfs_version)`; do not encode EVT as the DVFS version axis.
 - `project.metadata.soc_ref` exists in `soc_platforms`.
 - `project.metadata.sensor_module_ref` and `display_module_ref`, if present, exist in `ip_catalog`.

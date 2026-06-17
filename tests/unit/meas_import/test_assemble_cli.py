@@ -45,7 +45,7 @@ def _meta() -> MeasurementImportMeta:
 
 def test_generate_evidence_id():
     meta = _meta()
-    assert generate_evidence_id(meta) == "meas-uc-camera-recording-cam-rec-r1-uhd30-vdis-EVT1-20260610"
+    assert generate_evidence_id(meta) == "meas-uc-camera-recording-cam-rec-r1-uhd30-vdis-EVT1-20260610T152000"
 
 
 def test_assemble_merges_power_and_perfetto():
@@ -93,7 +93,7 @@ def test_cli_end_to_end_power_only(tmp_path: Path, capsys):
     rc = main(["--meta", str(DEMO_META), "--out", str(out)])
     assert rc == 0  # not strict, warning about missing trace is tolerated
 
-    evidence_path = out / "03_evidence" / "meas-uc-camera-recording-cam-rec-r1-uhd30-vdis-EVT1-20260610.yaml"
+    evidence_path = out / "03_evidence" / "meas-uc-camera-recording-cam-rec-r1-uhd30-vdis-EVT1-20260610T152000.yaml"
     assert evidence_path.exists()
     doc = yaml.safe_load(evidence_path.read_text(encoding="utf-8"))
 

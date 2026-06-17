@@ -116,7 +116,7 @@ Task naming 규약:
 
 ### 규약
 
-1. scenario id는 project-scoped로 작성한다. 예:
+1. scenario id는 DB 전체에서 유일하도록 project-qualified 값으로 작성한다. 예:
    - Project U: `uc-camera-recording-u`
    - Project V: `uc-camera-recording-v`
 2. 프로젝트 간 매칭 키는 `metadata.canonical_usecase`에 기록한다:
@@ -150,6 +150,15 @@ V 실측  : (실리콘 도착 후) project_ref=V + kind=measurement → projecte
 ```powershell
 uv run python -m scenario_db.etl.loader <fixtures-dir>
 ```
+
+실데이터 이관은 strict gate를 사용한다:
+
+```powershell
+uv run python -m scenario_db.etl.loader <fixtures-dir> --strict --report-json <fixtures-dir>\etl-report.json
+```
+
+measurement import가 `id`를 자동 생성할 때는 같은 날 재측정을 구분하기 위해 `measured_at`의 시각까지 포함한다.
+예: `meas-uc-camera-recording-cam-rec-r1-uhd30-vdis-EVT1-20260610T152000`.
 
 - Write API staging(`scenario.import_bundle`)은 아직 `evidence.*`를 지원하지 않는다.
   측정 적재가 다인원 루틴이 되는 시점에 확장한다 (Phase 4+ 결정 사항).

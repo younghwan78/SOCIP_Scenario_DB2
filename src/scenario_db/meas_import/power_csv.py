@@ -59,7 +59,10 @@ def _read_columns(csv_path: Path, time_column: str) -> tuple[list[str], dict[str
             for name in rail_names:
                 cell = row[idx[name]].strip()
                 if cell == "":
-                    continue
+                    raise PowerCsvError(
+                        f"blank value for rail '{name}' at line {lineno}; "
+                        "wide CSV rows must have a value for every rail"
+                    )
                 try:
                     columns[name].append(float(cell))
                 except ValueError as exc:

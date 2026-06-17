@@ -68,8 +68,8 @@ docker compose up -d postgres
 ```
 
 Set the database URL for the current PowerShell session, or keep the same value
-in a local `.env` file. Alembic and the API both read `DATABASE_URL`; Alembic
-also accepts `SCENARIO_DB_DATABASE_URL` with higher priority.
+in a local `.env` file. Alembic, the API, and ETL loader all accept
+`SCENARIO_DB_DATABASE_URL` with higher priority and fall back to `DATABASE_URL`.
 
 ```powershell
 $env:DATABASE_URL="postgresql+psycopg2://scenario_user:scenario_pass@localhost:15432/scenario_db"
@@ -84,7 +84,7 @@ uv run alembic upgrade head
 Load or reload demo fixtures:
 
 ```powershell
-uv run python -m scenario_db.etl.loader demo\fixtures
+uv run python -m scenario_db.etl.loader demo\fixtures --strict --report-json output\etl-report.json
 ```
 
 Reload fixtures after changing YAML. The API reads from PostgreSQL, not directly from YAML.

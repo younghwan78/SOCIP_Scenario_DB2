@@ -50,12 +50,10 @@ def main(argv: list[str] | None = None) -> int:
         reload_dir = args.reload_dir or args.catalog_root or args.mapping_yaml.parent
         _load_env_file(_root / ".env")
         _load_env_file(args.mapping_yaml.parent / ".env")
-        if "DATABASE_URL" not in os.environ:
-            raise SystemExit("DATABASE_URL is required for --reload-db")
-        engine = make_engine(os.environ["DATABASE_URL"])
+        engine = make_engine()
         with get_session(engine) as session:
-            counts = load_yaml_dir(Path(reload_dir), session)
-        loaded = ", ".join(f"{kind}={count}" for kind, count in counts.items() if count)
+            result = load_yaml_dir(Path(reload_dir), session, validate=True, strict=True)
+        loaded = ", ".join(f"{kind}={count}" for kind, count in result.counts.items() if count)
         print(f"reloaded: {Path(reload_dir)} ({loaded or 'no rows'})")
     return 0
 

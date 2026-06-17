@@ -46,7 +46,7 @@ $env:SCENARIO_DB_DATABASE_URL="postgresql+psycopg2://scenario_user:scenario_pass
 $env:DATABASE_URL="postgresql+psycopg2://scenario_user:scenario_pass@localhost:15432/scenario_db"
 uv sync --group dev --group dashboard --group sim
 uv run alembic upgrade head
-uv run python -m scenario_db.etl.loader demo\fixtures
+uv run python -m scenario_db.etl.loader demo\fixtures --strict --report-json output\etl-report.json
 uv run --group sim uvicorn scenario_db.api.app:app --host 127.0.0.1 --port 18000
 uv run --group dashboard --group sim streamlit run dashboard\Home.py --server.port 18502 --server.address 127.0.0.1
 uv run --group dev --group sim pytest tests\unit
