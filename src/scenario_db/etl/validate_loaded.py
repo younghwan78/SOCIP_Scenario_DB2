@@ -8,6 +8,11 @@ from scenario_db.db.models.capability import IpCatalog
 from scenario_db.db.models.decision import Issue, Review, Waiver
 from scenario_db.db.models.definition import Project, Scenario, ScenarioVariant
 from scenario_db.db.models.evidence import Evidence
+from scenario_db.integrity_checks import (
+    IntegrityIssue,
+    validate_scenario_identity_conventions,
+    validate_variant_overlay_integrity,
+)
 
 
 @dataclass(slots=True)
@@ -31,14 +36,12 @@ def validate_loaded_db(db: Session) -> ValidationReport:
     ips = db.query(IpCatalog).all()
 
     project_ids = {p.id for p in projects}
-    scenario_by_id = {s.id: s for s in scenarios}
-    scenario_ids = set(scenario_by_id)
+    scenario_ids = {s.id for s in scenarios}
     variant_keys = {
         (v.scenario_id, v.id)
         for v in variants
     }
-    ip_by_id = {ip.id: ip for ip in ips}
-    ip_ids = set(ip_by_id)
+    ip_ids = {ip.id for ip in ips}
     issue_ids = {i.id for i in db.query(Issue).all()}
     waiver_ids = {w.id for w in db.query(Waiver).all()}
     evidence_ids = {e.id for e in db.query(Evidence).all()}
@@ -60,56 +63,11 @@ def validate_loaded_db(db: Session) -> ValidationReport:
             report.errors.append(
                 f"Variant {variant.id} references missing scenario {variant.scenario_id}"
             )
-            continue
-        scenario = scenario_by_id[variant.scenario_id]
-        pipeline = scenario.pipeline or {}
-        base_nodes = {
-            str(node.get("id")): node
-            for node in (pipeline.get("nodes") or [])
-            if isinstance(node, dict) and node.get("id")
-        }
-        buffer_ids = set((pipeline.get("buffers") or {}).keys())
-        topology_patch = variant.topology_patch or {}
-        injected_nodes = {
-            str(node.get("id"))
-            for node in (topology_patch.get("add_nodes") or [])
-            if isinstance(node, dict) and node.get("id")
-        }
-        known_nodes = set(base_nodes) | injected_nodes
 
-        for node_id, config in (variant.node_configs or {}).items():
-            if node_id not in known_nodes:
-                report.errors.append(
-                    f"Variant {variant.scenario_id}/{variant.id} node_configs references missing node {node_id}"
-                )
-                continue
-            if not isinstance(config, dict):
-                report.errors.append(
-                    f"Variant {variant.scenario_id}/{variant.id} node_config {node_id} must be an object"
-                )
-                continue
-            selected_mode = config.get("selected_mode")
-            if selected_mode is None:
-                continue
-            node = base_nodes.get(str(node_id))
-            ip_ref = node.get("ip_ref") if isinstance(node, dict) else None
-            if not ip_ref:
-                report.errors.append(
-                    f"Variant {variant.scenario_id}/{variant.id} selected_mode requires an IP-backed node {node_id}"
-                )
-                continue
-            modes = _operating_mode_ids(ip_by_id.get(str(ip_ref)))
-            if modes and str(selected_mode) not in modes:
-                report.errors.append(
-                    f"Variant {variant.scenario_id}/{variant.id} selected_mode '{selected_mode}' "
-                    f"is not supported by {ip_ref}"
-                )
-
-        for buffer_id in (variant.buffer_overrides or {}):
-            if buffer_id not in buffer_ids:
-                report.errors.append(
-                    f"Variant {variant.scenario_id}/{variant.id} buffer_overrides references missing buffer {buffer_id}"
-                )
+    for issue in validate_scenario_identity_conventions(scenarios):
+        _append_integrity_issue(report, issue)
+    for issue in validate_variant_overlay_integrity(scenarios, variants, ips):
+        _append_integrity_issue(report, issue)
 
     for evidence in db.query(Evidence).all():
         if evidence.scenario_ref not in scenario_ids:
@@ -162,15 +120,8 @@ def validate_loaded_db(db: Session) -> ValidationReport:
     return report
 
 
-def _operating_mode_ids(ip: IpCatalog | None) -> set[str]:
-    if ip is None:
-        return set()
-    caps = ip.capabilities or {}
-    modes = caps.get("operating_modes") if isinstance(caps, dict) else None
-    result: set[str] = set()
-    for mode in modes or []:
-        if isinstance(mode, dict) and mode.get("id") is not None:
-            result.add(str(mode["id"]))
-        elif getattr(mode, "id", None) is not None:
-            result.add(str(mode.id))
-    return result
+def _append_integrity_issue(report: ValidationReport, issue: IntegrityIssue) -> None:
+    if issue.severity == "error":
+        report.errors.append(issue.message)
+    else:
+        report.warnings.append(issue.message)

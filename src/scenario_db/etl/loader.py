@@ -136,7 +136,7 @@ def load_yaml_dir(
     """
     디렉터리 내 모든 YAML을 kind 기준으로 적재.
     파일 단위 SAVEPOINT — 오류 파일은 skip, 나머지는 보존.
-    반환: {kind: 성공 건수}
+    반환: LoadResult(counts, skipped, validation)
     """
     if scenario_project_collision_policy not in {"error", "replace", "skip"}:
         raise ValueError("scenario_project_collision_policy must be one of: error, replace, skip")

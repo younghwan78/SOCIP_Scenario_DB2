@@ -27,6 +27,11 @@ from scenario_db.graph_checks import (
     edge_target as _edge_target,
     find_data_flow_cycle,
 )
+from scenario_db.integrity_checks import (
+    IntegrityIssue,
+    validate_scenario_identity_conventions,
+    validate_variant_overlay_integrity,
+)
 
 router = APIRouter(prefix="/explorer", tags=["explorer"])
 
@@ -476,7 +481,8 @@ def _data_quality_issues(
 ) -> list[ImportHealthIssue]:
     issues: list[ImportHealthIssue] = []
     soc_ids = {row.id for row in db.query(SocPlatform.id).all()}
-    ip_ids = {row.id for row in db.query(IpCatalog.id).all()}
+    ip_rows = db.query(IpCatalog).all()
+    ip_ids = {row.id for row in ip_rows}
     sw_profile_ids = {row.id for row in db.query(SwProfile.id).all()}
     project_ids = {row.id for row in projects}
     variant_counts = Counter(variant.scenario_id for variant in variants)
@@ -541,6 +547,10 @@ def _data_quality_issues(
             issues.append(_health_issue("error", "scenario_pipeline_cycle", f"Data-flow cycle detected: {' -> '.join(cycle)}", "scenario.usecase", scenario.id, "pipeline.edges", "OTF/vOTF/M2M edges must form a DAG. Use type: control for SW feedback paths."))
         if variant_counts[scenario.id] == 0:
             issues.append(_health_issue("warning", "scenario_without_variant", f"Scenario has no variants: {scenario.id}", "scenario.usecase", scenario.id, "variants", "Add at least one variant unless this is intentionally a base-only scenario."))
+    for issue in validate_scenario_identity_conventions(scenarios):
+        issues.append(_integrity_health_issue(issue))
+    for issue in validate_variant_overlay_integrity(scenarios, variants, ip_rows):
+        issues.append(_integrity_health_issue(issue))
     return issues
 
 
@@ -572,6 +582,18 @@ def _latest_import_batches(db: Session, limit: int = 5) -> list[ImportBatchSumma
             )
         )
     return result
+
+
+def _integrity_health_issue(issue: IntegrityIssue) -> ImportHealthIssue:
+    return ImportHealthIssue(
+        severity=issue.severity,
+        code=issue.code,
+        message=issue.message,
+        document_kind=issue.document_kind,
+        document_id=issue.document_id,
+        path=issue.path,
+        fix_hint=issue.fix_hint,
+    )
 
 
 def _check_ref(

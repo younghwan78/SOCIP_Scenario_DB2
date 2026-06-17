@@ -11,7 +11,7 @@ if str(_root / "src") not in sys.path:
 
 from scenario_db.db.base import make_engine  # noqa: E402
 from scenario_db.db.session import get_session  # noqa: E402
-from scenario_db.etl.loader import load_yaml_dir  # noqa: E402
+from scenario_db.etl.loader import LoaderValidationError, load_yaml_dir  # noqa: E402
 from scenario_db.sim.csv_import import apply_sim_import_mapping  # noqa: E402
 
 
@@ -50,9 +50,18 @@ def main(argv: list[str] | None = None) -> int:
         reload_dir = args.reload_dir or args.catalog_root or args.mapping_yaml.parent
         _load_env_file(_root / ".env")
         _load_env_file(args.mapping_yaml.parent / ".env")
+        if not (os.environ.get("SCENARIO_DB_DATABASE_URL") or os.environ.get("DATABASE_URL")):
+            print("SCENARIO_DB_DATABASE_URL or DATABASE_URL is required for --reload-db", file=sys.stderr)
+            return 1
         engine = make_engine()
-        with get_session(engine) as session:
-            result = load_yaml_dir(Path(reload_dir), session, validate=True, strict=True)
+        try:
+            with get_session(engine) as session:
+                result = load_yaml_dir(Path(reload_dir), session, validate=True, strict=True)
+        except LoaderValidationError as exc:
+            print("reload-db validation failed:", file=sys.stderr)
+            for message in exc.result.error_messages():
+                print(f"  {message}", file=sys.stderr)
+            return 1
         loaded = ", ".join(f"{kind}={count}" for kind, count in result.counts.items() if count)
         print(f"reloaded: {Path(reload_dir)} ({loaded or 'no rows'})")
     return 0

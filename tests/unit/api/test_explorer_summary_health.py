@@ -202,3 +202,101 @@ def test_import_health_reports_data_flow_cycle():
     assert len(cycle_issues) == 1
     assert cycle_issues[0].document_id == "uc-camera"
     assert "a" in cycle_issues[0].message and "b" in cycle_issues[0].message
+
+
+def test_import_health_reports_variant_overlay_integrity_issues():
+    scenario = _scenario({"category": ["camera"]})
+    scenario.pipeline = {
+        "nodes": [{"id": "isp", "ip_ref": "ip-isp-v1"}],
+        "edges": [],
+        "buffers": {"REC": {"format": "YUV420"}},
+    }
+    variant = ScenarioVariant(scenario_id="uc-camera", id="v1", severity="medium")
+    variant.node_configs = {
+        "missing-node": {},
+        "isp": {"selected_mode": "turbo"},
+    }
+    variant.buffer_overrides = {"MISSING_BUF": {"format": "P010"}}
+    ip = IpCatalog(
+        id="ip-isp-v1",
+        schema_version="2.2",
+        category="ISP",
+        hierarchy={},
+        capabilities={"operating_modes": [{"id": "normal"}]},
+        yaml_sha256="sha",
+    )
+    session = _Session(
+        {
+            Project: [_project({})],
+            Scenario: [scenario],
+            ScenarioVariant: [variant],
+            SocPlatform: [],
+            IpCatalog: [ip],
+            SwProfile: [],
+            WriteBatch: [],
+        }
+    )
+
+    response = import_health(
+        soc_ref=None,
+        board_type=None,
+        project_ref=None,
+        category=None,
+        domain=None,
+        scenario_id=None,
+        severity=None,
+        issue_severity=None,
+        code=None,
+        document_kind=None,
+        document_id=None,
+        limit=50,
+        db=session,
+    )
+
+    codes = {issue.code for issue in response.issues}
+    assert "unknown_node_config" in codes
+    assert "unsupported_selected_mode" in codes
+    assert "unknown_buffer_override" in codes
+
+
+def test_import_health_warns_for_unqualified_canonical_scenario_id():
+    scenario = _scenario(
+        {
+            "name": "Camera Recording",
+            "category": ["camera"],
+            "canonical_usecase": "camera-recording",
+        }
+    )
+    scenario.id = "uc-camera-recording"
+    variant = ScenarioVariant(scenario_id="uc-camera-recording", id="v1", severity="medium")
+    session = _Session(
+        {
+            Project: [_project({})],
+            Scenario: [scenario],
+            ScenarioVariant: [variant],
+            SocPlatform: [],
+            IpCatalog: [],
+            SwProfile: [],
+            WriteBatch: [],
+        }
+    )
+
+    response = import_health(
+        soc_ref=None,
+        board_type=None,
+        project_ref=None,
+        category=None,
+        domain=None,
+        scenario_id=None,
+        severity=None,
+        issue_severity=None,
+        code=["scenario_id_not_project_qualified"],
+        document_kind=None,
+        document_id=None,
+        limit=50,
+        db=session,
+    )
+
+    assert len(response.issues) == 1
+    assert response.issues[0].severity == "warning"
+    assert "project-qualified" in response.issues[0].message

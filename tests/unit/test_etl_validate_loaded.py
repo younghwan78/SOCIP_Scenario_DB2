@@ -79,3 +79,14 @@ def test_validate_loaded_db_allows_topology_patch_added_node_config():
     report = validate_loaded_db(db)
 
     assert report.errors == []
+
+
+def test_validate_loaded_db_warns_for_unqualified_canonical_scenario_id():
+    db = _Db()
+    db.scenario.id = "uc-camera"
+    db.scenario.metadata_ = {"canonical_usecase": "camera"}
+    db.variant.scenario_id = "uc-camera"
+
+    report = validate_loaded_db(db)
+
+    assert any("project-qualified" in item for item in report.warnings)

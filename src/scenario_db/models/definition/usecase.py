@@ -189,9 +189,9 @@ class UsecaseMetadata(BaseScenarioModel):
     name: str
     category: list[str] = Field(default_factory=list)
     domain: list[str] = Field(default_factory=list)
-    # Cross-project matching key. Scenario ids are project-scoped (the same id
-    # cannot belong to two projects), so projection/comparison across projects
-    # joins on this key + variant design_conditions instead of the id string.
+    # Cross-project matching key. Scenario ids are global DB identities, so
+    # projection/comparison across projects joins on this key + variant
+    # design_conditions instead of the id string.
     canonical_usecase: str | None = None
 
 
