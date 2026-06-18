@@ -32,6 +32,13 @@ from scenario_db.graph_checks import (
     find_data_flow_cycle,
     normalize_edge as _normalize_edge,
 )
+from scenario_db.integrity_checks import (
+    IntegrityIssue,
+    IpModeCatalog,
+    VariantOverlayTarget,
+    operating_mode_ids_from_capabilities,
+    validate_variant_overlay_targets,
+)
 from scenario_db.sim.bw_calc import compression_enabled
 from scenario_db.models.capability.hw import IpCatalog as PydanticIpCatalog
 from scenario_db.models.capability.hw import SocCdgmProfile as PydanticSocCdgmProfile
@@ -401,7 +408,6 @@ def validate_variant_overlay(db: Session, normalized: dict[str, Any]) -> list[Va
     base_nodes = _base_nodes(scenario)
     base_edges = _base_edges(scenario)
     base_node_ids = set(base_nodes)
-    buffer_ids = set(((scenario.pipeline or {}).get("buffers") or {}).keys())
 
     parent = variant.get("derived_from_variant")
     if parent and parent not in _variant_ids(db, scenario_ref):
@@ -415,11 +421,32 @@ def validate_variant_overlay(db: Session, normalized: dict[str, Any]) -> list[Va
         )
 
     issues.extend(_validate_routing_switch(variant.get("routing_switch") or {}, base_node_ids, base_edges))
-    injected_nodes, patch_issues = _validate_topology_patch(variant.get("topology_patch") or {}, base_edges)
+    _injected_nodes, patch_issues = _validate_topology_patch(variant.get("topology_patch") or {}, base_edges)
     issues.extend(patch_issues)
-    known_config_nodes = base_node_ids | injected_nodes
-    issues.extend(_validate_node_configs(db, variant.get("node_configs") or {}, base_nodes, known_config_nodes))
-    issues.extend(_validate_buffer_overrides(variant.get("buffer_overrides") or {}, buffer_ids))
+    # Variant overlay reference checks run through the shared integrity engine.
+    # Staging is interactive, so it stays strict: a selected_mode on an IP that
+    # declares no operating_modes is rejected (preserves historic Write API
+    # behavior; review B1).
+    target = VariantOverlayTarget(
+        scenario_id=scenario_ref,
+        variant_id=str(variant.get("id") or "staged"),
+        base_pipeline=scenario.pipeline or {},
+        node_configs=variant.get("node_configs") or {},
+        buffer_overrides=variant.get("buffer_overrides") or {},
+        topology_patch=variant.get("topology_patch") or {},
+        path_prefix="payload.variant",
+    )
+    issues.extend(
+        _write_issue_from_integrity(issue, path_prefix="payload.variant")
+        for issue in validate_variant_overlay_targets(
+            [target],
+            _ip_mode_catalog_from_nodes(db, base_nodes),
+            strict_undeclared_modes=True,
+        )
+    )
+    # Write API-specific rule the shared engine does not own (review B2):
+    # compression must live in the buffer descriptor, not in placement.
+    issues.extend(_validate_buffer_override_placement(variant.get("buffer_overrides") or {}))
     if not any(issue.severity == "error" for issue in issues):
         candidate = _variant_pipeline_for_compression_validation(scenario.pipeline or {}, variant)
         issues.extend(_validate_pipeline_compression(db, candidate, path_prefix="buffer_overrides"))
@@ -1569,45 +1596,39 @@ def _validate_topology_patch(
     return injected_nodes, issues
 
 
-def _validate_node_configs(
-    db: Session,
-    node_configs: dict[str, Any],
-    base_nodes: dict[str, dict[str, Any]],
-    known_config_nodes: set[str],
-) -> list[ValidationIssue]:
-    issues: list[ValidationIssue] = []
-    for node_id, config in node_configs.items():
-        if node_id not in known_config_nodes:
-            issues.append(_issue("error", "unknown_node_config", f"Unknown node config target: {node_id}", f"node_configs.{node_id}"))
-            continue
-        if not isinstance(config, dict):
-            issues.append(_issue("error", "node_config_invalid", f"Node config must be an object: {node_id}", f"node_configs.{node_id}"))
-            continue
-        selected_mode = config.get("selected_mode")
-        if selected_mode is None:
-            continue
-        ip_ref = base_nodes.get(node_id, {}).get("ip_ref")
-        if not ip_ref:
-            issues.append(_issue("error", "selected_mode_without_ip", f"selected_mode requires a base IP node: {node_id}", f"node_configs.{node_id}.selected_mode"))
-            continue
-        modes = _operating_mode_ids(db, ip_ref)
-        if selected_mode not in modes:
-            issues.append(
-                _issue(
-                    "error",
-                    "unsupported_selected_mode",
-                    f"Mode '{selected_mode}' is not supported by {ip_ref}. Supported: {sorted(modes)}",
-                    f"node_configs.{node_id}.selected_mode",
-                )
-            )
-    return issues
+def _write_issue_from_integrity(issue: IntegrityIssue, *, path_prefix: str = "") -> ValidationIssue:
+    """Adapt a shared IntegrityIssue to a Write API ValidationIssue.
+
+    The shared engine prefixes paths with the surface path_prefix; the Write
+    staging contract uses bare paths (e.g. ``node_configs.<id>``), so we strip
+    the prefix back off. Codes and severities are preserved verbatim.
+    """
+    path = issue.path
+    if path_prefix and path.startswith(path_prefix + "."):
+        path = path[len(path_prefix) + 1 :]
+    return _issue(issue.severity, issue.code, issue.message, path)
 
 
-def _validate_buffer_overrides(buffer_overrides: dict[str, Any], buffer_ids: set[str]) -> list[ValidationIssue]:
+def _ip_mode_catalog_from_nodes(db: Session, base_nodes: dict[str, dict[str, Any]]) -> IpModeCatalog:
+    """Operating-mode catalog for the IPs backing a scenario's base nodes."""
+    modes_by_ip_ref: dict[str, set[str]] = {}
+    for node in base_nodes.values():
+        ip_ref = node.get("ip_ref") if isinstance(node, dict) else None
+        if ip_ref:
+            ip_ref = str(ip_ref)
+            if ip_ref not in modes_by_ip_ref:
+                modes_by_ip_ref[ip_ref] = _operating_mode_ids(db, ip_ref)
+    return IpModeCatalog(modes_by_ip_ref)
+
+
+def _validate_buffer_override_placement(buffer_overrides: dict[str, Any]) -> list[ValidationIssue]:
+    """Write API-only rule: compression must not be nested under placement.
+
+    Existence of the buffer override target is checked by the shared integrity
+    engine; this keeps only the Write-specific placement guardrail (review B2).
+    """
     issues: list[ValidationIssue] = []
     for buffer_id, override in buffer_overrides.items():
-        if buffer_id not in buffer_ids:
-            issues.append(_issue("error", "unknown_buffer_override", f"Unknown buffer override target: {buffer_id}", f"buffer_overrides.{buffer_id}"))
         if isinstance(override, dict):
             placement = override.get("placement") or {}
             if "compression" in placement:

@@ -236,6 +236,45 @@ def test_validate_variant_overlay_rejects_compression_inside_placement():
     assert any(issue.code == "compression_in_placement" for issue in issues)
 
 
+def test_validate_variant_overlay_rejects_unknown_node_config_via_shared_integrity():
+    issues = validate_variant_overlay(
+        _Db(),
+        normalize_payload(_payload(node_configs={"missing": {}})),
+    )
+    assert any(issue.code == "unknown_node_config" for issue in issues)
+    assert any(issue.path == "node_configs.missing" for issue in issues)
+
+
+def test_validate_variant_overlay_rejects_unknown_buffer_override_via_shared_integrity():
+    issues = validate_variant_overlay(
+        _Db(),
+        normalize_payload(
+            _payload(node_configs={}, buffer_overrides={"MISSING": {"format": "P010"}})
+        ),
+    )
+    assert any(issue.code == "unknown_buffer_override" for issue in issues)
+    assert any(issue.path == "buffer_overrides.MISSING" for issue in issues)
+
+
+def test_validate_variant_overlay_strict_rejects_selected_mode_when_ip_declares_no_modes():
+    # ip-isp-v12 (node isp0) declares no operating_modes. Interactive staging is
+    # strict, so any selected_mode there is rejected (review B1 regression).
+    issues = validate_variant_overlay(
+        _Db(),
+        normalize_payload(
+            _payload(
+                node_configs={"isp0": {"selected_mode": "anything"}},
+                buffer_overrides={},
+            )
+        ),
+    )
+    assert any(
+        issue.code == "unsupported_selected_mode"
+        and issue.path == "node_configs.isp0.selected_mode"
+        for issue in issues
+    )
+
+
 def _pipeline_patch_payload(patch):
     return {"scenario_ref": "uc-camera-recording", "patch": patch}
 
