@@ -967,12 +967,30 @@ def _pipeline_patch_impact(db: Session, scenario_ref: str, candidate: dict[str, 
         for edge in topology_patch.get("remove_edges") or []:
             if not _edge_exists(edge, edge_set):
                 errors.append(f"topology_patch.remove_edges references removed edge '{edge}'")
-        for node_id in (variant.node_configs or {}):
-            if node_id not in known_variant_nodes:
-                errors.append(f"node_configs references removed node '{node_id}'")
-        for buffer_id in (variant.buffer_overrides or {}):
-            if buffer_id not in buffer_ids:
-                errors.append(f"buffer_overrides references removed buffer '{buffer_id}'")
+        overlay_target = VariantOverlayTarget(
+            scenario_id=scenario_ref,
+            variant_id=str(variant.id),
+            base_pipeline=candidate,
+            node_configs=variant.node_configs or {},
+            buffer_overrides=variant.buffer_overrides or {},
+            topology_patch=topology_patch,
+            path_prefix=f"variants.{variant.id}",
+        )
+        # Existence-only mapping (review B4): pipeline-patch impact must not turn
+        # selected_mode into a new blocking error on previously-valid patches, so
+        # check_selected_mode stays off and only the two existence codes map back
+        # to the historic impact messages.
+        for issue in validate_variant_overlay_targets(
+            [overlay_target], IpModeCatalog(), check_selected_mode=False
+        ):
+            if issue.code == "unknown_node_config":
+                errors.append(
+                    f"node_configs references removed node '{issue.path.rsplit('.', 1)[-1]}'"
+                )
+            elif issue.code == "unknown_buffer_override":
+                errors.append(
+                    f"buffer_overrides references removed buffer '{issue.path.rsplit('.', 1)[-1]}'"
+                )
         for edge in topology_patch.get("add_edges") or []:
             if not isinstance(edge, dict):
                 continue

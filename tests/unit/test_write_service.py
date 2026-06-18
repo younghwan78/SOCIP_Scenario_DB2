@@ -382,6 +382,31 @@ def test_validate_pipeline_patch_rejects_variant_overlay_breakage():
     assert any(issue.code == "variant_overlay_impact" for issue in issues)
 
 
+def test_validate_pipeline_patch_preserves_buffer_override_impact_message():
+    # B4: buffer_overrides impact runs through the shared engine but must keep the
+    # historic `variant_overlay_impact` code and message text. Remove the edge and
+    # the buffer together so the buffer drops cleanly from the candidate pipeline.
+    db = _Db()
+    db.variant.buffer_overrides = {"RECORD_BUF": {"format": "YUV420"}}
+    normalized = normalize_pipeline_patch_payload(
+        _pipeline_patch_payload(
+            {
+                "remove_edges": [
+                    {"from": "isp0", "to": "mfc", "type": "M2M", "buffer": "RECORD_BUF"}
+                ],
+                "remove_buffers": ["RECORD_BUF"],
+            }
+        )
+    )
+    issues = validate_pipeline_patch(db, normalized)
+    impact = [issue for issue in issues if issue.code == "variant_overlay_impact"]
+    assert impact
+    assert any(
+        "buffer_overrides references removed buffer 'RECORD_BUF'" in issue.message
+        for issue in impact
+    )
+
+
 def test_validate_pipeline_patch_rejects_data_flow_cycle():
     # Base pipeline is csis0 -> isp0 -> mfc; adding mfc -> csis0 closes a cycle.
     normalized = normalize_pipeline_patch_payload(
