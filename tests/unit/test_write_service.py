@@ -793,6 +793,64 @@ def test_validate_import_bundle_rejects_missing_edge_buffer():
     assert any(issue.code == "import_edge_buffer_not_found" for issue in issues)
 
 
+def test_validate_import_bundle_unknown_node_config_uses_fine_path():
+    # B3: import-bundle variant checks now run through the shared engine, so the
+    # path is node-granular instead of the legacy coarse `.node_configs`.
+    doc = _import_usecase_doc()
+    doc["variants"][0]["node_configs"] = {"ghost": {}}
+    normalized = normalize_import_bundle_payload({"documents": [doc]})
+
+    issues = validate_import_bundle(_Db(), normalized)
+
+    matched = [i for i in issues if i.code == "import_variant_node_config_not_found"]
+    assert matched
+    assert matched[0].path == "documents[0].variants[0].node_configs.ghost"
+
+
+def test_validate_import_bundle_rejects_non_object_node_config():
+    # B3 hardening: import-bundle did not validate node_config shape before.
+    doc = _import_usecase_doc()
+    doc["variants"][0]["node_configs"] = {"mfc": "not-a-dict"}
+    normalized = normalize_import_bundle_payload({"documents": [doc]})
+
+    issues = validate_import_bundle(_Db(), normalized)
+
+    assert any(issue.code == "import_variant_node_config_invalid" for issue in issues)
+
+
+def test_validate_import_bundle_rejects_unsupported_selected_mode():
+    # B3 hardening: import-bundle did not validate selected_mode before. mfc
+    # (ip-mfc-v14) declares modes {normal, high_throughput} via the DB fallback.
+    doc = _import_usecase_doc()
+    doc["variants"][0]["node_configs"] = {"mfc": {"selected_mode": "turbo"}}
+    normalized = normalize_import_bundle_payload({"documents": [doc]})
+
+    issues = validate_import_bundle(_Db(), normalized)
+
+    matched = [i for i in issues if i.code == "import_variant_selected_mode_unsupported"]
+    assert matched
+    assert matched[0].path == "documents[0].variants[0].node_configs.mfc.selected_mode"
+
+
+def test_validate_import_bundle_lenient_when_ip_modes_undeclared():
+    # Bulk/canonical path stays lenient: isp0 (ip-isp-v12) declares no modes, so
+    # selected_mode there is accepted (unlike strict interactive staging).
+    doc = _import_usecase_doc()
+    doc["variants"][0]["node_configs"] = {"isp0": {"selected_mode": "anything"}}
+    normalized = normalize_import_bundle_payload({"documents": [doc]})
+
+    issues = validate_import_bundle(_Db(), normalized)
+
+    assert not any(
+        issue.code
+        in {
+            "import_variant_selected_mode_unsupported",
+            "import_variant_selected_mode_without_ip",
+        }
+        for issue in issues
+    )
+
+
 def test_validate_import_bundle_rejects_votf_edge_without_buffer():
     doc = _import_usecase_doc()
     doc["pipeline"]["edges"].append({"from": "csis0", "to": "isp0", "type": "vOTF"})

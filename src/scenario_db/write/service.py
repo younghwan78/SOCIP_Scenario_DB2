@@ -486,6 +486,7 @@ def validate_import_bundle(db: Session, normalized: dict[str, Any]) -> list[Vali
     issues: list[ValidationIssue] = []
     docs = normalized["documents"]
     included = _included_import_refs(docs)
+    in_bundle_ip_modes = _in_bundle_ip_modes(docs)
     seen: set[tuple[str, str]] = set()
     seen_dvfs_versions: dict[tuple[str, int], str] = {}
 
@@ -514,7 +515,7 @@ def validate_import_bundle(db: Session, normalized: dict[str, Any]) -> list[Vali
         if kind == "soc.cdgm_profile":
             issues.extend(_validate_import_cdgm_profile_refs(db, doc, included, path))
         if kind == "scenario.usecase":
-            issues.extend(_validate_import_usecase_refs(db, doc, included, path))
+            issues.extend(_validate_import_usecase_refs(db, doc, included, path, in_bundle_ip_modes))
 
     report = normalized.get("import_report") or {}
     if report and report.get("ok") is False:
@@ -1004,11 +1005,58 @@ def _included_import_refs(docs: list[dict[str, Any]]) -> dict[str, set[str]]:
     return refs
 
 
+# Public import-bundle codes mapped from the shared integrity engine (review B3).
+# The first two preserve the historic codes; the last three are explicit new
+# rejections that import-bundle did not perform before (intentional hardening).
+IMPORT_INTEGRITY_CODE_MAP = {
+    "unknown_node_config": "import_variant_node_config_not_found",
+    "unknown_buffer_override": "import_variant_buffer_override_not_found",
+    "node_config_invalid": "import_variant_node_config_invalid",
+    "selected_mode_without_ip": "import_variant_selected_mode_without_ip",
+    "unsupported_selected_mode": "import_variant_selected_mode_unsupported",
+}
+
+
+def _import_issue_from_integrity(issue: IntegrityIssue) -> ValidationIssue:
+    return _issue(
+        issue.severity,
+        IMPORT_INTEGRITY_CODE_MAP.get(issue.code, f"import_{issue.code}"),
+        issue.message,
+        issue.path,
+    )
+
+
+def _in_bundle_ip_modes(docs: list[dict[str, Any]]) -> dict[str, set[str]]:
+    return {
+        str(doc["id"]): operating_mode_ids_from_capabilities(doc.get("capabilities") or {})
+        for doc in docs
+        if doc.get("kind") == "ip" and doc.get("id")
+    }
+
+
+def _ip_mode_catalog_for_import_doc(
+    db: Session,
+    pipeline: dict[str, Any],
+    in_bundle_ip_modes: dict[str, set[str]],
+) -> IpModeCatalog:
+    """Operating-mode catalog for one usecase doc: in-bundle IP docs first, then
+    a DB fallback for IPs already present in the catalog."""
+    modes_by_ip_ref: dict[str, set[str]] = dict(in_bundle_ip_modes)
+    for node in pipeline.get("nodes") or []:
+        if not isinstance(node, dict):
+            continue
+        ip_ref = node.get("ip_ref")
+        if ip_ref and str(ip_ref) not in modes_by_ip_ref:
+            modes_by_ip_ref[str(ip_ref)] = _operating_mode_ids(db, str(ip_ref))
+    return IpModeCatalog(modes_by_ip_ref)
+
+
 def _validate_import_usecase_refs(
     db: Session,
     doc: dict[str, Any],
     included: dict[str, set[str]],
     path: str,
+    in_bundle_ip_modes: dict[str, set[str]],
 ) -> list[ValidationIssue]:
     issues: list[ValidationIssue] = []
     project_ref = doc.get("project_ref")
@@ -1066,22 +1114,29 @@ def _validate_import_usecase_refs(
             )
         )
 
+    # Variant overlay reference checks run through the shared integrity engine
+    # (review B3). Import is a bulk/canonical path, so it stays lenient on
+    # undeclared IP modes (consistent with ETL). Unlike the legacy loop this also
+    # validates node_config object shape and selected_mode — an intentional
+    # hardening surfaced via explicit import_variant_* codes.
+    ip_mode_catalog = _ip_mode_catalog_for_import_doc(db, pipeline, in_bundle_ip_modes)
     for variant_idx, variant in enumerate(doc.get("variants") or []):
         if not isinstance(variant, dict):
             continue
         variant_path = f"{path}.variants[{variant_idx}]"
-        injected_nodes = {
-            node.get("id")
-            for node in ((variant.get("topology_patch") or {}).get("add_nodes") or [])
-            if isinstance(node, dict) and node.get("id")
-        }
-        known_nodes = node_ids | injected_nodes
-        for node_id in (variant.get("node_configs") or {}):
-            if node_id not in known_nodes:
-                issues.append(_issue("error", "import_variant_node_config_not_found", f"node_configs references missing node: {node_id}", f"{variant_path}.node_configs"))
-        for buffer_id in (variant.get("buffer_overrides") or {}):
-            if buffer_id not in buffer_ids:
-                issues.append(_issue("error", "import_variant_buffer_override_not_found", f"buffer_overrides references missing buffer: {buffer_id}", f"{variant_path}.buffer_overrides"))
+        target = VariantOverlayTarget(
+            scenario_id=str(doc.get("id") or ""),
+            variant_id=str(variant.get("id") or variant_idx),
+            base_pipeline=pipeline,
+            node_configs=variant.get("node_configs") or {},
+            buffer_overrides=variant.get("buffer_overrides") or {},
+            topology_patch=variant.get("topology_patch") or {},
+            path_prefix=variant_path,
+        )
+        issues.extend(
+            _import_issue_from_integrity(issue)
+            for issue in validate_variant_overlay_targets([target], ip_mode_catalog)
+        )
     return issues
 
 
