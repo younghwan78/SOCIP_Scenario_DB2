@@ -45,3 +45,15 @@ def test_github_actions_runs_quality_and_test_gates() -> None:
     assert "uv run pip-audit" in workflow
     assert "uv run pytest tests/unit" in workflow
     assert "uv run pytest tests/integration" in workflow
+
+
+def test_ubuntu_runbook_matches_mutation_auth_contract() -> None:
+    runbook = (ROOT / "README_ubuntu.md").read_text(encoding="utf-8")
+
+    assert "SCENARIO_DB_MUTATION_API_KEYS" in runbook
+    assert "SCENARIO_DB_MUTATION_AUTH_DISABLED=false" in runbook
+    assert "X-ScenarioDB-Key-Id" in runbook
+    assert "X-ScenarioDB-API-Key" in runbook
+    assert "uv sync --group dashboard --group sim" in runbook
+    assert "Authentication and authorization are not implemented yet." not in runbook
+    assert "actor identity is currently client-supplied" not in runbook

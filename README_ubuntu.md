@@ -107,7 +107,11 @@ SCENARIO_DB_CORS_ORIGINS=["http://localhost:18502","http://<server-hostname>"]
 SCENARIO_DB_LOG_LEVEL=INFO
 SCENARIO_DB_DB_POOL_SIZE=10
 SCENARIO_DB_DB_MAX_OVERFLOW=20
+SCENARIO_DB_MUTATION_API_KEYS='{"architect@example.com":"REPLACE_WITH_LONG_RANDOM_SECRET"}'
+SCENARIO_DB_MUTATION_AUTH_DISABLED=false
 SCENARIODB_API_BASE=http://127.0.0.1:18000/api/v1
+SCENARIODB_API_KEY_ID=architect@example.com
+SCENARIODB_API_KEY=REPLACE_WITH_LONG_RANDOM_SECRET
 ```
 
 Notes:
@@ -115,7 +119,11 @@ Notes:
 - `DATABASE_URL` is accepted by the app and Alembic.
 - `SCENARIO_DB_DATABASE_URL` can also be used and takes priority.
 - `SCENARIODB_API_BASE` is used by the Streamlit dashboard.
-- Replace `CHANGE_ME`.
+- `SCENARIO_DB_MUTATION_API_KEYS` maps server-controlled audit identities to
+  secrets. Keep `SCENARIODB_API_KEY_ID` and `SCENARIODB_API_KEY` aligned for
+  dashboard mutation requests.
+- Replace every `CHANGE_ME` and `REPLACE_WITH_LONG_RANDOM_SECRET` value.
+- Never enable `SCENARIO_DB_MUTATION_AUTH_DISABLED` on a shared host.
 - Keep `.env` readable only by the service account:
 
 ```bash
@@ -392,12 +400,16 @@ After deployment:
 ```bash
 api="http://127.0.0.1:18000/api/v1"
 payload="$(cat demo/write_payloads/variant_overlay_valid.json)"
-stage="$(curl -s -X POST "$api/write/staging" -H "Content-Type: application/json" -d "$payload")"
+mutation_headers=(
+  -H "X-ScenarioDB-Key-Id: $SCENARIODB_API_KEY_ID"
+  -H "X-ScenarioDB-API-Key: $SCENARIODB_API_KEY"
+)
+stage="$(curl -s -X POST "$api/write/staging" "${mutation_headers[@]}" -H "Content-Type: application/json" -d "$payload")"
 echo "$stage" | python3 -m json.tool
 batch_id="$(echo "$stage" | python3 -c 'import json,sys; print(json.load(sys.stdin)["batch_id"])')"
-curl -s -X POST "$api/write/staging/$batch_id/validate" | python3 -m json.tool
-curl -s -X POST "$api/write/staging/$batch_id/diff" | python3 -m json.tool
-curl -s -X POST "$api/write/staging/$batch_id/apply" | python3 -m json.tool
+curl -s -X POST "$api/write/staging/$batch_id/validate" "${mutation_headers[@]}" | python3 -m json.tool
+curl -s -X POST "$api/write/staging/$batch_id/diff" "${mutation_headers[@]}" | python3 -m json.tool
+curl -s -X POST "$api/write/staging/$batch_id/apply" "${mutation_headers[@]}" | python3 -m json.tool
 ```
 
 Check effective topology:
@@ -435,7 +447,7 @@ Then log out and back in as `scenariodb`.
 sudo -iu scenariodb
 cd /opt/scenariodb/implementation
 git pull --ff-only
-uv sync --group dashboard
+uv sync --group dashboard --group sim
 set -a
 source .env
 set +a
@@ -473,19 +485,21 @@ For production use, put backup under cron or the internal backup system.
 - Do not keep default DB or pgAdmin passwords.
 - Do not expose PostgreSQL to the full company network unless required.
 - Keep `.env` out of git and restrict file permissions.
+- Keep mutation authentication fail-closed and rotate API keys through the
+  approved secret-management process.
 - Run Alembic migrations before starting a newly pulled API version.
 - Reload fixtures only for demo/test systems. For real data, prefer Write API.
 - Watch `journalctl -u scenariodb-api` during first deployment and after schema changes.
 - Treat `routing_switch` and `topology_patch` as variant overlay data. They do not modify the base scenario topology.
 
-## Current Gaps Before Production Hardening
+## Remaining Production Gaps
 
 These are not blockers for internal prototype usage, but should be addressed
 before broader deployment:
 
-- Authentication and authorization are not implemented yet.
-- Write API audit records exist, but actor identity is currently client-supplied.
-- No role separation between read-only users and write users.
+- Mutation API-key authentication is service-local; SSO/OIDC integration and
+  role separation are not implemented yet.
+- Read APIs rely on reverse-proxy and network access controls.
 - No automatic DB backup job is included in the repo.
 - nginx TLS is not configured in this document.
 - Streamlit behind a subpath may need additional testing in the target network.
