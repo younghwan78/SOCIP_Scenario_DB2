@@ -490,6 +490,10 @@ psql "$DATABASE_URL" < /opt/scenariodb/backups/scenario_db_YYYYMMDD_HHMMSS.sql
 
 For production use, put backup under cron or the internal backup system.
 
+Before merging a release candidate into `main`, record the environment-specific
+SSO, network, database, capacity, artifact, and rollback checks in
+[`internal_docs/internal-staging-merge-checklist-ko.md`](internal_docs/internal-staging-merge-checklist-ko.md).
+
 ## Artifact Reconciliation
 
 Server-side simulation exports use atomic, generation-specific directories
