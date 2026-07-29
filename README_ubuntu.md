@@ -490,6 +490,31 @@ psql "$DATABASE_URL" < /opt/scenariodb/backups/scenario_db_YYYYMMDD_HHMMSS.sql
 
 For production use, put backup under cron or the internal backup system.
 
+## Artifact Reconciliation
+
+Server-side simulation exports use atomic, generation-specific directories
+under `SCENARIO_DB_REPORT_DIR`. The database stores relative paths, generation
+IDs, checksums, and artifact IDs rather than host absolute paths. Run the
+reconciler in dry-run mode after an unclean shutdown or as a scheduled check:
+
+```bash
+cd /opt/scenariodb/implementation
+sudo -u scenariodb /opt/scenariodb/implementation/.venv/bin/scenario-db-reconcile-artifacts
+```
+
+It reports missing files, checksum mismatches, orphan HTML, invalid metadata
+paths, and stale staging directories. Only stale staging directories can be
+automatically removed, and only with explicit apply mode:
+
+```bash
+sudo -u scenariodb /opt/scenariodb/implementation/.venv/bin/scenario-db-reconcile-artifacts \
+  --apply-stale-staging
+```
+
+Investigate missing/checksum/orphan findings before changing DB metadata or
+deleting report generations. Custom export directories are not covered by the
+configured report-root scan.
+
 ## Operational Notes
 
 - Do not keep default DB or pgAdmin passwords.

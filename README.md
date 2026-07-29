@@ -437,6 +437,25 @@ host. The default API-host directory is `output_simulation`; override it with
 `SCENARIO_DB_REPORT_DIR` or with a relative export request body such as
 `projectA`. Absolute custom export paths are rejected by default; enable
 `SCENARIO_DB_ALLOW_CUSTOM_REPORT_DIR=true` only for trusted local environments.
+Each server-side export is written into
+`{prefix}/{generation_id}/` through a staging directory and atomically
+published as one generation. Database metadata and API responses contain only
+report-root-relative paths plus `generation_id`/`artifact_id`; they do not leak
+the API host's absolute filesystem path. If the database commit fails, the new
+generation is removed. A process crash may still leave an orphan generation or
+staging directory, so operators should run the dry-run reconciler:
+
+```powershell
+uv run scenario-db-reconcile-artifacts
+
+# Removes only stale exporter staging directories. Missing, mismatched, and
+# orphan files remain report-only for manual review.
+uv run scenario-db-reconcile-artifacts --apply-stale-staging
+```
+
+The command exits nonzero while unresolved findings remain. Custom export
+directories are intentionally outside this configured-root reconciliation
+scope.
 The saved-evidence ZIP endpoint remains available for scripts:
 
 ```text

@@ -6,7 +6,9 @@ from scenario_db.reporting.exporter import (
     artifact_metadata,
     build_report_zip_bytes,
     build_report_context,
+    cleanup_artifact_generations,
     generate_report_bundle,
+    cleanup_report_bundle,
     resolve_report_output_dir,
     write_report_bundle,
 )
@@ -66,17 +68,57 @@ def test_write_report_bundle_creates_three_html_files_and_metadata(tmp_path: Pat
     paths = {artifact.type: artifact.path for artifact in written.artifacts}
     assert sorted(paths) == ["bw_chart", "simulation_report", "timing_chart"]
     assert paths["timing_chart"].name == "projectA-FHD30_Recording_timing_chart.html"
+    assert written.output_dir.name == written.generation_id
+    assert written.relative_output_dir == (
+        f"projectA-FHD30_Recording/{written.generation_id}"
+    )
+    assert not list(tmp_path.glob(".scenariodb-staging-*"))
     assert paths["bw_chart"].exists()
     assert paths["simulation_report"].read_text(encoding="utf-8").startswith("<!DOCTYPE html>")
 
     metadata = artifact_metadata(written)
     assert metadata[0]["storage"] == "local_file"
     assert metadata[0]["sha256"]
-    assert metadata[0]["path"] == str(paths[metadata[0]["type"]])
+    assert metadata[0]["path"] == (
+        f"projectA-FHD30_Recording/{written.generation_id}/"
+        f"{paths[metadata[0]['type']].name}"
+    )
+    assert metadata[0]["artifact_id"].startswith(f"{written.generation_id}:")
     assert metadata[0]["bytes"] > 0
     assert metadata[0]["mime"] == "text/html"
     assert metadata[0]["prefix"] == "projectA-FHD30_Recording"
     assert metadata[0]["created_at"]
+
+
+def test_cleanup_report_bundle_removes_only_its_generation(tmp_path: Path):
+    context = build_report_context(_evidence(), variant_name="FHD30 Recording")
+    first = write_report_bundle(_evidence(), context=context, output_dir=tmp_path)
+    second = write_report_bundle(_evidence(), context=context, output_dir=tmp_path)
+
+    cleanup_report_bundle(first)
+
+    assert not first.output_dir.exists()
+    assert second.output_dir.exists()
+
+
+def test_cleanup_artifact_generations_ignores_legacy_and_escaping_paths(
+    tmp_path: Path,
+):
+    context = build_report_context(_evidence(), variant_name="FHD30 Recording")
+    first = write_report_bundle(_evidence(), context=context, output_dir=tmp_path)
+    second = write_report_bundle(_evidence(), context=context, output_dir=tmp_path)
+    records = artifact_metadata(first)
+    records.extend(
+        [
+            {"path": str(tmp_path / "legacy.html")},
+            {"artifact_id": "escape:report", "path": "../escape/report.html"},
+        ]
+    )
+
+    cleanup_artifact_generations(tmp_path, records)
+
+    assert not first.output_dir.exists()
+    assert second.output_dir.exists()
 
 
 def test_resolve_report_output_dir_restricts_custom_paths_to_base(tmp_path: Path):

@@ -140,20 +140,25 @@ def test_export_simulation_result_artifacts_endpoint(monkeypatch):
 
     out_dir = Path("E:/reports").resolve()
 
-    def _fake_write(evidence, *, context, output_dir, overwrite):
+    def _fake_write(evidence, *, context, output_dir, storage_root, overwrite):
         assert evidence["id"] == "sim-1"
         assert context.project_ref == "projectA"
         assert context.variant_name == "FHD30 Recording"
         assert Path(output_dir) == out_dir
+        assert Path(storage_root) == out_dir
         assert overwrite is True
         return WrittenReportBundle(
             prefix="projectA-FHD30_Recording",
-            output_dir=out_dir,
+            output_dir=out_dir / "generation-1",
+            relative_output_dir="projectA-FHD30_Recording/generation-1",
+            generation_id="generation-1",
             artifacts=[
                 WrittenArtifact(
+                    artifact_id="generation-1:timing_chart",
                     type="timing_chart",
                     storage="local_file",
                     path=out_dir / "projectA-FHD30_Recording_timing_chart.html",
+                    relative_path="projectA-FHD30_Recording/generation-1/timing_chart.html",
                     sha256="sha-timing",
                     bytes=10,
                 )
@@ -174,7 +179,7 @@ def test_export_simulation_result_artifacts_endpoint(monkeypatch):
     monkeypatch.setattr(
         simulation_router,
         "artifact_metadata",
-        lambda bundle: [{"type": "timing_chart", "storage": "local_file", "path": str(out_dir / "projectA-FHD30_Recording_timing_chart.html"), "sha256": "sha-timing"}],
+        lambda bundle: [{"artifact_id": "generation-1:timing_chart", "type": "timing_chart", "storage": "local_file", "path": "projectA-FHD30_Recording/generation-1/timing_chart.html", "sha256": "sha-timing"}],
         raising=False,
     )
     monkeypatch.setattr(simulation_router, "update_simulation_artifacts", _fake_update, raising=False)
@@ -189,6 +194,9 @@ def test_export_simulation_result_artifacts_endpoint(monkeypatch):
     body = response.json()
     assert body["evidence_id"] == "sim-1"
     assert body["prefix"] == "projectA-FHD30_Recording"
+    assert body["generation_id"] == "generation-1"
+    assert body["output_dir"] == "projectA-FHD30_Recording/generation-1"
+    assert body["artifacts"][0]["path"] == "projectA-FHD30_Recording/generation-1/timing_chart.html"
     assert body["artifacts"][0]["bytes"] == 10
     assert updated_artifacts[0]["sha256"] == "sha-timing"
     db.commit.assert_called_once()
@@ -289,6 +297,68 @@ def test_export_simulation_result_existing_files_return_conflict(monkeypatch):
 
     assert response.status_code == 409
     db.commit.assert_not_called()
+
+
+def test_export_simulation_result_cleans_generation_when_db_commit_fails(
+    monkeypatch,
+    tmp_path: Path,
+):
+    app = create_app()
+    db = MagicMock()
+    db.commit.side_effect = RuntimeError("database unavailable")
+
+    def _override_db():
+        yield db
+
+    app.dependency_overrides[get_db] = _override_db
+
+    row = SimpleNamespace(
+        id="sim-1",
+        kind="evidence.simulation",
+        schema_version="2.2",
+        scenario_ref="uc-camera-recording",
+        variant_ref="FHD30-SDR-H265",
+        execution_context={},
+        run_info={},
+        aggregation={},
+        kpi={},
+        ip_breakdown=[],
+        dma_breakdown=[],
+        timing_breakdown=[],
+        dvfs_breakdown=[],
+        timeline_events=[],
+        external_devices=[],
+        topology_order=[],
+        vdd_power={},
+        artifacts=[],
+    )
+    generation_dir = tmp_path / "prefix" / "generation-1"
+    written = WrittenReportBundle(
+        prefix="prefix",
+        output_dir=generation_dir,
+        relative_output_dir="prefix/generation-1",
+        generation_id="generation-1",
+        artifacts=[],
+    )
+    cleaned: list[WrittenReportBundle] = []
+
+    monkeypatch.setattr(simulation_router, "get_evidence", lambda *args: row)
+    monkeypatch.setattr(
+        simulation_router,
+        "get_settings",
+        lambda: MagicMock(report_dir=str(tmp_path), allow_custom_report_dir=False),
+    )
+    monkeypatch.setattr(simulation_router, "write_report_bundle", lambda *args, **kwargs: written)
+    monkeypatch.setattr(simulation_router, "artifact_metadata", lambda bundle: [])
+    monkeypatch.setattr(simulation_router, "update_simulation_artifacts", lambda *args: row)
+    monkeypatch.setattr(simulation_router, "cleanup_report_bundle", cleaned.append)
+    client = TestClient(app, raise_server_exceptions=False)
+
+    response = client.post("/api/v1/simulation/results/sim-1/artifacts/export")
+
+    assert response.status_code == 500
+    db.rollback.assert_called_once()
+    assert cleaned == [written]
 
 
 def test_download_simulation_result_artifacts_zip_endpoint(monkeypatch):

@@ -64,6 +64,7 @@ class Aggregation(BaseScenarioModel):
 
 
 class Artifact(BaseScenarioModel):
+    artifact_id: str | None = None
     type: str
     storage: str
     path: str

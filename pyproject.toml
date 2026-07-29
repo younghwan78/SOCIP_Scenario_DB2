@@ -19,6 +19,9 @@ dependencies = [
     "uvicorn[standard]>=0.30",
 ]
 
+[project.scripts]
+scenario-db-reconcile-artifacts = "scenario_db.reporting.cli:main"
+
 [build-system]
 requires = ["uv_build>=0.11.2,<0.12.0"]
 build-backend = "uv_build"
@@ -98,9 +101,14 @@ files = [
     "src/scenario_db/api/deps.py",
     "src/scenario_db/api/pagination.py",
     "src/scenario_db/api/resource_limits.py",
+    "src/scenario_db/api/schemas/simulation.py",
     "src/scenario_db/api/schemas/write.py",
     "src/scenario_db/config.py",
     "src/scenario_db/query_engine/field_registry.py",
+    "src/scenario_db/reporting/cli.py",
+    "src/scenario_db/reporting/exporter.py",
+    "src/scenario_db/reporting/models.py",
+    "src/scenario_db/reporting/reconciliation.py",
     "src/scenario_db/sim/readiness.py",
     "src/scenario_db/sim/resource_limits.py",
 ]

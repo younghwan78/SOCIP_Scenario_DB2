@@ -36,9 +36,11 @@ class GeneratedReportBundle:
 
 @dataclass(frozen=True, slots=True)
 class WrittenArtifact:
+    artifact_id: str
     type: ArtifactKind
     storage: str
     path: Path
+    relative_path: str
     sha256: str
     bytes: int
     mime: str = "text/html"
@@ -51,4 +53,6 @@ class WrittenArtifact:
 class WrittenReportBundle:
     prefix: str
     output_dir: Path
+    relative_output_dir: str
+    generation_id: str
     artifacts: list[WrittenArtifact]
