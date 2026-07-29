@@ -109,6 +109,11 @@ SCENARIO_DB_DB_POOL_SIZE=10
 SCENARIO_DB_DB_MAX_OVERFLOW=20
 SCENARIO_DB_API_PRINCIPALS='{"architect@example.com":{"secret":"REPLACE_WITH_LONG_RANDOM_SECRET","roles":["writer"]},"operator@example.com":{"secret":"REPLACE_WITH_ANOTHER_LONG_RANDOM_SECRET","roles":["admin"]}}'
 SCENARIO_DB_MUTATION_AUTH_DISABLED=false
+SCENARIO_DB_SIMULATION_MAX_CONCURRENT_RUNS=2
+SCENARIO_DB_SIMULATION_MAX_TIMELINE_FRAMES=120
+SCENARIO_DB_EXPLORATION_MAX_CONCURRENT_REQUESTS=2
+SCENARIO_DB_EXPLORATION_MAX_REQUEST_BYTES=1000000
+SCENARIO_DB_EXPLORATION_MAX_CASES=500
 SCENARIODB_API_BASE=http://127.0.0.1:18000/api/v1
 SCENARIODB_API_KEY_ID=architect@example.com
 SCENARIODB_API_KEY=REPLACE_WITH_LONG_RANDOM_SECRET
@@ -127,6 +132,8 @@ Notes:
   `SCENARIODB_API_KEY` aligned with a dashboard principal.
 - Replace every `CHANGE_ME` and `REPLACE_WITH_LONG_RANDOM_SECRET` value.
 - Never enable `SCENARIO_DB_MUTATION_AUTH_DISABLED` on a shared host.
+- Concurrency limits are per API worker. Multiply them by the systemd/uvicorn
+  worker count when calculating deployment-wide CPU and memory capacity.
 - Keep `.env` readable only by the service account:
 
 ```bash

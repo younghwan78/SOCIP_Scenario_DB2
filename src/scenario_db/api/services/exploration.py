@@ -26,6 +26,7 @@ from scenario_db.api.schemas.exploration import (
 )
 from scenario_db.db.models.capability import IpCatalog, SocPlatform
 from scenario_db.db.models.definition import Project
+from scenario_db.config import get_settings
 from scenario_db.sim.exploration import (
     ExplorationRecipe,
     ExplorationSweep,
@@ -73,9 +74,17 @@ def compile_recipe_request(db: Session | None, request: ExplorationRecipeCompile
     return _recipe_compile_response(result)
 
 
-def compile_sweep_request(db: Session | None, request: ExplorationSweepCompileRequest) -> ExplorationSweepCompileResponse:
+def compile_sweep_request(
+    db: Session | None,
+    request: ExplorationSweepCompileRequest,
+    *,
+    max_cases: int | None = None,
+) -> ExplorationSweepCompileResponse:
     sweep = ExplorationSweep.model_validate(_payload_from_request(request.source_yaml, request.sweep, "sweep"))
-    result = compile_exploration_sweep(sweep)
+    result = compile_exploration_sweep(
+        sweep,
+        max_cases=max_cases or get_settings().exploration_max_cases,
+    )
     _apply_compile_context_warnings(result, db, request.db_project_ref)
     return _sweep_compile_response(result)
 
@@ -86,13 +95,26 @@ def compile_template_request(db: Session | None, request: ExplorationTemplateCom
     return _template_compile_response(result)
 
 
-def compile_template_sweep_request(db: Session | None, request: ExplorationTemplateSweepCompileRequest) -> ExplorationSweepCompileResponse:
-    result = compile_chain_template_sweep(_payload_from_request(request.source_yaml, request.sweep, "template_sweep"))
+def compile_template_sweep_request(
+    db: Session | None,
+    request: ExplorationTemplateSweepCompileRequest,
+    *,
+    max_cases: int | None = None,
+) -> ExplorationSweepCompileResponse:
+    result = compile_chain_template_sweep(
+        _payload_from_request(request.source_yaml, request.sweep, "template_sweep"),
+        max_cases=max_cases or get_settings().exploration_max_cases,
+    )
     _apply_compile_context_warnings(result, db, request.db_project_ref)
     return _sweep_compile_response(result)
 
 
-def preview_sweep_request(db: Session, request: ExplorationSweepPreviewRequest) -> ExplorationSweepPreviewResponse:
+def preview_sweep_request(
+    db: Session,
+    request: ExplorationSweepPreviewRequest,
+    *,
+    max_cases: int | None = None,
+) -> ExplorationSweepPreviewResponse:
     sweep = ExplorationSweep.model_validate(_payload_from_request(request.source_yaml, request.sweep, "sweep"))
     project = _load_context_project(db, request.db_project_ref or sweep.base_recipe.project_ref)
     soc = _load_context_soc(db, project, _soc_ref_from_sweep(sweep))
@@ -104,12 +126,18 @@ def preview_sweep_request(db: Session, request: ExplorationSweepPreviewRequest) 
         config=request.config,
         dvfs_tables=request.dvfs_tables,
         include_results=request.include_results,
+        max_cases=max_cases or get_settings().exploration_max_cases,
     )
     _apply_preview_context_warnings(preview, db, request.db_project_ref)
     return _preview_response(preview)
 
 
-def preview_template_sweep_request(db: Session, request: ExplorationTemplateSweepPreviewRequest) -> ExplorationSweepPreviewResponse:
+def preview_template_sweep_request(
+    db: Session,
+    request: ExplorationTemplateSweepPreviewRequest,
+    *,
+    max_cases: int | None = None,
+) -> ExplorationSweepPreviewResponse:
     sweep = _payload_from_request(request.source_yaml, request.sweep, "template_sweep")
     base_template = _base_template_payload(sweep)
     project = _load_context_project(db, request.db_project_ref or base_template.get("project_ref"))
@@ -122,6 +150,7 @@ def preview_template_sweep_request(db: Session, request: ExplorationTemplateSwee
         config=request.config,
         dvfs_tables=request.dvfs_tables,
         include_results=request.include_results,
+        max_cases=max_cases or get_settings().exploration_max_cases,
     )
     _apply_preview_context_warnings(preview, db, request.db_project_ref)
     return _preview_response(preview)

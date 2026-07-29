@@ -128,7 +128,7 @@ class SimulationRunConfig(BaseScenarioModel):
     h_blank_margin: float = 0.05
     dvfs_overrides: dict[str, int] = Field(default_factory=dict)
     include_timeline: bool = True
-    timeline_frame_count: int = 4
+    timeline_frame_count: int = Field(default=4, ge=1)
     timeline_frame_period_ms: float | None = None
     debug_trace: bool = False
     debug_trace_level: Literal["summary", "formula", "full"] = "formula"

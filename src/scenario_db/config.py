@@ -45,6 +45,17 @@ class Settings(BaseSettings):
     query_max_evidence_rows: int = Field(default=20_000, ge=1)
     query_max_issue_rows: int = Field(default=5_000, ge=1)
     query_facets_max_candidates: int = Field(default=10_000, ge=1)
+    # CPU/memory admission controls are per API worker. Deployment-wide limits
+    # additionally require sizing the worker count.
+    simulation_max_concurrent_runs: int = Field(default=2, ge=1)
+    simulation_max_timeline_frames: int = Field(default=120, ge=1)
+    simulation_max_workloads: int = Field(default=1_000, ge=1)
+    simulation_max_port_transfers: int = Field(default=5_000, ge=1)
+    simulation_max_timeline_tasks: int = Field(default=5_000, ge=1)
+    simulation_max_timeline_edges: int = Field(default=10_000, ge=1)
+    exploration_max_concurrent_requests: int = Field(default=2, ge=1)
+    exploration_max_request_bytes: int = Field(default=1_000_000, ge=1)
+    exploration_max_cases: int = Field(default=500, ge=1)
     # API authentication is deny-by-default. Prefer role-bearing principals:
     # {"architect@example.com":{"secret":"...","roles":["writer"]}}.
     api_principals: dict[str, ApiPrincipalSettings] = Field(default_factory=dict)

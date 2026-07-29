@@ -97,8 +97,10 @@ files = [
     "src/scenario_db/api/cache.py",
     "src/scenario_db/api/deps.py",
     "src/scenario_db/api/pagination.py",
+    "src/scenario_db/api/resource_limits.py",
     "src/scenario_db/api/schemas/write.py",
     "src/scenario_db/config.py",
     "src/scenario_db/query_engine/field_registry.py",
     "src/scenario_db/sim/readiness.py",
+    "src/scenario_db/sim/resource_limits.py",
 ]

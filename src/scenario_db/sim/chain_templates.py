@@ -7,6 +7,7 @@ from typing import Any
 
 from scenario_db.sim.bw_calc import compression_enabled
 from scenario_db.sim.exploration import ExplorationCompileResult, ExplorationSweepResult
+from scenario_db.sim.resource_limits import DEFAULT_MAX_SWEEP_CASES, enforce_sweep_case_limit
 
 
 DEFAULT_BUFFER_COLUMNS = ["x", "y", "width", "height", "format", "bitwidth", "compression", "comp_ratio"]
@@ -162,7 +163,11 @@ def compile_chain_template(payload: dict[str, Any]) -> ExplorationCompileResult:
     )
 
 
-def compile_chain_template_sweep(payload: dict[str, Any]) -> ExplorationSweepResult:
+def compile_chain_template_sweep(
+    payload: dict[str, Any],
+    *,
+    max_cases: int = DEFAULT_MAX_SWEEP_CASES,
+) -> ExplorationSweepResult:
     """Expand a versioned chain template sweep into scenario import documents."""
 
     if not isinstance(payload, dict):
@@ -176,6 +181,7 @@ def compile_chain_template_sweep(payload: dict[str, Any]) -> ExplorationSweepRes
     axes = payload.get("axes") or []
     if not isinstance(axes, list):
         raise ValueError("chain template sweep axes must be a list")
+    enforce_sweep_case_limit(axes, max_cases)
 
     templates = _expand_template_sweep(base_template, axes)
     compiled = [compile_chain_template(template) for template in templates]

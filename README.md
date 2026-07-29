@@ -133,6 +133,13 @@ fail closed with HTTP 503.
 `SCENARIO_DB_MUTATION_AUTH_DISABLED=true` is an explicit local-test bypass and
 must not be enabled in a shared or production environment.
 
+Simulation and Exploration endpoints also enforce per-worker admission and
+payload/expansion bounds. The defaults allow two concurrent simulation runs,
+two concurrent Exploration requests, 120 timeline frames, a 1 MB Exploration
+request, and 500 expanded sweep cases. Tune the
+`SCENARIO_DB_SIMULATION_MAX_*` and `SCENARIO_DB_EXPLORATION_MAX_*` settings
+against measured worker memory and CPU before changing the worker count.
+
 Configure dashboard-side credentials separately in the dashboard process:
 
 ```powershell

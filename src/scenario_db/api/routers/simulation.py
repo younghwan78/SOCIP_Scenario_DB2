@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from scenario_db.api.auth import ApiPrincipal, require_roles
 from scenario_db.api.deps import get_db
+from scenario_db.api.resource_limits import admission_slot, enforce_timeline_frame_limit
 from scenario_db.api.schemas.common import PagedResponse
 from scenario_db.api.schemas.evidence import EvidenceResponse
 from scenario_db.api.schemas.simulation import (
@@ -41,7 +42,13 @@ def run_simulation(
     db: Session = Depends(get_db),
     _principal: ApiPrincipal = Depends(require_roles("analyst", "writer", "admin")),
 ):
-    return run_simulation_request(db, request)
+    settings = get_settings()
+    enforce_timeline_frame_limit(
+        request.config.timeline_frame_count,
+        settings.simulation_max_timeline_frames,
+    )
+    with admission_slot("simulation", settings.simulation_max_concurrent_runs):
+        return run_simulation_request(db, request)
 
 
 @router.get("/readiness", response_model=SimulationReadinessResponse)

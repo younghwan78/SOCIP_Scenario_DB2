@@ -18,15 +18,17 @@ from scenario_db.db.repositories.evidence import (
 from scenario_db.db.repositories.scenario_graph import load_canonical_graph
 from scenario_db.models.evidence.common import ExecutionContext
 from scenario_db.sim.adapter import build_simulation_inputs
-from scenario_db.sim.models import DVFSTable
+from scenario_db.sim.models import DVFSTable, SimulationInputs
 from scenario_db.sim.readiness import check_simulation_readiness
 from scenario_db.sim.runner import build_simulation_evidence, params_hash, run_simulation
+from scenario_db.config import get_settings
 
 
 def run_simulation_request(db: Session, request: SimulateRequest) -> SimulateRunResponse:
     try:
         graph = load_canonical_graph(db, request.scenario_id, request.variant_id)
         inputs = build_simulation_inputs(graph, request.config)
+        _enforce_input_limits(inputs)
         dvfs_tables, execution_context = _resolve_dvfs_tables(db, graph, request)
     except LookupError as exc:
         raise NotFoundError(str(exc)) from exc
@@ -98,6 +100,33 @@ def run_simulation_request(db: Session, request: SimulateRequest) -> SimulateRun
         evidence=persisted_evidence_payload or _simulation_evidence_dict(evidence),
         persisted=request.persist,
     )
+
+
+def _enforce_input_limits(inputs: SimulationInputs) -> None:
+    settings = get_settings()
+    limits = (
+        ("workloads", len(getattr(inputs, "workloads", ())), settings.simulation_max_workloads),
+        (
+            "port transfers",
+            len(getattr(inputs, "port_transfers", ())),
+            settings.simulation_max_port_transfers,
+        ),
+        (
+            "timeline tasks",
+            len(getattr(inputs, "timeline_tasks", ())),
+            settings.simulation_max_timeline_tasks,
+        ),
+        (
+            "timeline edges",
+            len(getattr(inputs, "timeline_edges", ())),
+            settings.simulation_max_timeline_edges,
+        ),
+    )
+    for label, actual, maximum in limits:
+        if actual > maximum:
+            raise UnprocessableError(
+                f"Simulation has {actual} {label}; configured maximum is {maximum}"
+            )
 
 
 def _cached_simulation_response(cached, inputs, hash_value: str) -> SimulateRunResponse:

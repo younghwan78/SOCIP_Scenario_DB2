@@ -6,6 +6,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, model_validator
 
 from scenario_db.sim.bw_calc import compression_enabled
+from scenario_db.sim.resource_limits import DEFAULT_MAX_SWEEP_CASES, enforce_sweep_case_limit
 
 
 class ExplorationSource(BaseModel):
@@ -275,9 +276,14 @@ def compile_exploration_recipe(recipe: ExplorationRecipe) -> ExplorationCompileR
     )
 
 
-def compile_exploration_sweep(sweep: ExplorationSweep) -> ExplorationSweepResult:
+def compile_exploration_sweep(
+    sweep: ExplorationSweep,
+    *,
+    max_cases: int = DEFAULT_MAX_SWEEP_CASES,
+) -> ExplorationSweepResult:
     """Expand a recipe sweep into one or more canonical scenario documents."""
 
+    enforce_sweep_case_limit(sweep.axes, max_cases)
     recipes = _expand_sweep_recipes(sweep)
     compiled = [compile_exploration_recipe(recipe) for recipe in recipes]
     warnings = [warning for result in compiled for warning in result.warnings]

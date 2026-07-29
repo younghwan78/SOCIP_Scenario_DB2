@@ -82,3 +82,14 @@ def test_query_candidate_limits_must_be_positive(monkeypatch, tmp_path):
         Settings()
 
     assert "query_max_candidates" in str(exc_info.value)
+
+
+def test_execution_resource_limits_must_be_positive(monkeypatch, tmp_path):
+    monkeypatch.setenv("DATABASE_URL", "sqlite:///test-resource-limit.db")
+    monkeypatch.setenv("SCENARIO_DB_EXPLORATION_MAX_CASES", "0")
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(ValidationError) as exc_info:
+        Settings()
+
+    assert "exploration_max_cases" in str(exc_info.value)
