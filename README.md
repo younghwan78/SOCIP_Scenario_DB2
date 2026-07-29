@@ -110,7 +110,23 @@ The FastAPI ASGI entry point is `scenario_db.api.app:app`.
 
 ```powershell
 $env:DATABASE_URL="postgresql+psycopg2://scenario_user:scenario_pass@localhost:15432/scenario_db"
+$env:SCENARIO_DB_MUTATION_API_KEYS='{"architect@example.com":"replace-with-a-long-random-secret"}'
 uv run uvicorn scenario_db.api.app:app --host 127.0.0.1 --port 18000
+```
+
+Read endpoints remain available without credentials. Write staging, simulation
+execution/export/delete, and admin endpoints require both
+`X-ScenarioDB-Key-Id` and `X-ScenarioDB-API-Key`. The key ID becomes the
+server-controlled audit actor; a caller-supplied `actor` cannot override it.
+If no server keys are configured, mutation requests fail closed with HTTP 503.
+`SCENARIO_DB_MUTATION_AUTH_DISABLED=true` is an explicit local-test bypass and
+must not be enabled in a shared or production environment.
+
+Configure dashboard-side credentials separately in the dashboard process:
+
+```powershell
+$env:SCENARIODB_API_KEY_ID="architect@example.com"
+$env:SCENARIODB_API_KEY="replace-with-a-long-random-secret"
 ```
 
 If you want to launch FastAPI in a background PowerShell window, set the
@@ -197,12 +213,16 @@ Run a valid sample:
 
 ```powershell
 $api="http://127.0.0.1:18000/api/v1"
+$mutationHeaders = @{
+  "X-ScenarioDB-Key-Id" = "architect@example.com"
+  "X-ScenarioDB-API-Key" = "replace-with-a-long-random-secret"
+}
 $payload = Get-Content .\demo\write_payloads\variant_overlay_valid.json -Raw
-$stage = Invoke-RestMethod -Method Post -Uri "$api/write/staging" -ContentType "application/json" -Body $payload
+$stage = Invoke-RestMethod -Method Post -Uri "$api/write/staging" -Headers $mutationHeaders -ContentType "application/json" -Body $payload
 $batchId = $stage.batch_id
-Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/validate"
-Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/diff"
-Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/apply"
+Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/validate" -Headers $mutationHeaders
+Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/diff" -Headers $mutationHeaders
+Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/apply" -Headers $mutationHeaders
 ```
 
 Inspect the result:
@@ -216,12 +236,12 @@ Run a base pipeline patch sample:
 
 ```powershell
 $payload = Get-Content .\demo\write_payloads\pipeline_patch_valid.json -Raw
-$stage = Invoke-RestMethod -Method Post -Uri "$api/write/staging" -ContentType "application/json" -Body $payload
+$stage = Invoke-RestMethod -Method Post -Uri "$api/write/staging" -Headers $mutationHeaders -ContentType "application/json" -Body $payload
 $batchId = $stage.batch_id
-Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/validate"
-$diff = Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/diff"
+Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/validate" -Headers $mutationHeaders
+$diff = Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/diff" -Headers $mutationHeaders
 $diff.impact
-Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/apply"
+Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/apply" -Headers $mutationHeaders
 ```
 
 Pipeline patch diff includes an `impact` block that shows whether existing
@@ -397,6 +417,10 @@ Simulation API examples:
 
 ```powershell
 $api="http://127.0.0.1:18000/api/v1"
+$mutationHeaders = @{
+  "X-ScenarioDB-Key-Id" = "architect@example.com"
+  "X-ScenarioDB-API-Key" = "replace-with-a-long-random-secret"
+}
 
 $payload = @{
   scenario_id = "uc-camera-recording"
@@ -418,14 +442,14 @@ $payload = @{
   force = $false
 } | ConvertTo-Json -Depth 20
 
-$run = Invoke-RestMethod -Method Post -Uri "$api/simulation/run" -ContentType "application/json" -Body $payload
+$run = Invoke-RestMethod -Method Post -Uri "$api/simulation/run" -Headers $mutationHeaders -ContentType "application/json" -Body $payload
 $run.evidence_id
 $run.evidence.calculation_trace.kpi | ConvertTo-Json -Depth 20
 
 # Save only after reviewing the preview.
 $savePayload = $payload | ConvertFrom-Json
 $savePayload.persist = $true
-$saved = Invoke-RestMethod -Method Post -Uri "$api/simulation/run" -ContentType "application/json" -Body ($savePayload | ConvertTo-Json -Depth 20)
+$saved = Invoke-RestMethod -Method Post -Uri "$api/simulation/run" -Headers $mutationHeaders -ContentType "application/json" -Body ($savePayload | ConvertTo-Json -Depth 20)
 Invoke-RestMethod "$api/simulation/results/$($saved.evidence_id)" | ConvertTo-Json -Depth 20
 
 # Export legacy-style local HTML artifacts on the API host.
@@ -437,6 +461,7 @@ $exportPayload = @{
 } | ConvertTo-Json -Depth 5
 Invoke-RestMethod -Method Post `
   -Uri "$api/simulation/results/$($saved.evidence_id)/artifacts/export" `
+  -Headers $mutationHeaders `
   -ContentType "application/json" `
   -Body $exportPayload
 

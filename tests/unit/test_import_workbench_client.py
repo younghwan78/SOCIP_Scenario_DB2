@@ -26,7 +26,9 @@ class _Response:
         return self._payload
 
 
-def test_stage_import_bundle_posts_to_write_staging():
+def test_stage_import_bundle_posts_to_write_staging(monkeypatch):
+    monkeypatch.setenv("SCENARIODB_API_KEY_ID", "architect@example.com")
+    monkeypatch.setenv("SCENARIODB_API_KEY", "top-secret")
     calls = []
 
     def request(method, url, **kwargs):
@@ -39,6 +41,10 @@ def test_stage_import_bundle_posts_to_write_staging():
     assert calls[0][0] == "POST"
     assert calls[0][1] == "http://api/api/v1/write/staging"
     assert calls[0][2]["json"]["kind"] == "scenario.import_bundle"
+    assert calls[0][2]["headers"] == {
+        "X-ScenarioDB-Key-Id": "architect@example.com",
+        "X-ScenarioDB-API-Key": "top-secret",
+    }
 
 
 def test_build_soc_dvfs_table_bundle_request():

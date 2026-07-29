@@ -19,6 +19,7 @@ Run the API first:
 ```powershell
 cd E:\50_Codex_Soc_Scenario_DB\implementation
 $env:DATABASE_URL="postgresql+psycopg2://scenario_user:scenario_pass@localhost:15432/scenario_db"
+$env:SCENARIO_DB_MUTATION_API_KEYS='{"architect@example.com":"replace-with-a-long-random-secret"}'
 uv run uvicorn scenario_db.api.app:app --host 127.0.0.1 --port 18000
 ```
 
@@ -26,7 +27,17 @@ Set a local API base variable in another PowerShell:
 
 ```powershell
 $api="http://127.0.0.1:18000/api/v1"
+$mutationHeaders = @{
+  "X-ScenarioDB-Key-Id" = "architect@example.com"
+  "X-ScenarioDB-API-Key" = "replace-with-a-long-random-secret"
+}
+$PSDefaultParameterValues["Invoke-RestMethod:Headers"] = $mutationHeaders
 ```
+
+The API fails mutation requests closed when server keys are absent. The key ID
+is recorded as the audit actor, regardless of any `actor` field in the payload.
+The `PSDefaultParameterValues` entry above supplies credentials to every
+`Invoke-RestMethod` example in this PowerShell session.
 
 ## Happy Path
 

@@ -8,10 +8,15 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from scenario_db.api.auth import require_mutation_principal
 from scenario_db.api.cache import RuleCache
 from scenario_db.api.deps import get_db, get_rule_cache
 
-router = APIRouter(prefix="/admin", tags=["admin"])
+router = APIRouter(
+    prefix="/admin",
+    tags=["admin"],
+    dependencies=[Depends(require_mutation_principal)],
+)
 
 
 @router.post("/cache/refresh")

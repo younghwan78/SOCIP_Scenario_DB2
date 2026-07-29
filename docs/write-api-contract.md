@@ -70,6 +70,19 @@ belong in evidence or review records.
 | `POST /api/v1/write/staging/{batch_id}/diff` | Preview canonical changes before apply. |
 | `POST /api/v1/write/staging/{batch_id}/apply` | Apply a validated batch to canonical tables. |
 
+## Authentication and Audit Identity
+
+Every `/api/v1/write/*` request requires `X-ScenarioDB-Key-Id` and
+`X-ScenarioDB-API-Key`. Server credentials are configured with
+`SCENARIO_DB_MUTATION_API_KEYS` as a JSON object whose keys are audit
+identities and whose values are secrets. Missing configuration returns HTTP
+503; missing or invalid credentials return HTTP 401.
+
+For staging, the authenticated key ID is persisted as `actor`. The request
+payload keeps the optional `actor` field for wire compatibility, but the server
+always replaces it and therefore does not trust caller-supplied audit identity.
+`SCENARIO_DB_MUTATION_AUTH_DISABLED=true` exists only for explicit local tests.
+
 ## Variant Overlay Request Shape
 
 ```json

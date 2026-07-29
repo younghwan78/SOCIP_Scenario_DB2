@@ -5,6 +5,7 @@ from urllib.parse import urlencode
 
 import requests
 
+from dashboard.components.api_auth import mutation_auth_headers
 from dashboard.components.viewer_api_client import RequestFunc, ViewerApiError
 
 
@@ -136,6 +137,9 @@ def _request_no_content(
 ) -> None:
     requester = request_func or requests.request
     url = f"{api_base.rstrip('/')}{path}"
+    headers = _merged_headers(kwargs.get("headers"), mutation_auth_headers())
+    if headers:
+        kwargs["headers"] = headers
     try:
         response = requester(method, url, timeout=20, **kwargs)
     except requests.RequestException as exc:
@@ -157,6 +161,10 @@ def _request_json(
 ) -> dict[str, Any]:
     requester = request_func or requests.request
     url = f"{api_base.rstrip('/')}{path}"
+    if method.upper() in {"POST", "PUT", "PATCH", "DELETE"}:
+        headers = _merged_headers(kwargs.get("headers"), mutation_auth_headers())
+        if headers:
+            kwargs["headers"] = headers
     try:
         response = requester(method, url, timeout=20, **kwargs)
     except requests.RequestException as exc:
@@ -174,3 +182,9 @@ def _request_json(
     if not isinstance(result, dict):
         raise ViewerApiError("API response JSON root was not an object", status_code=status_code)
     return result
+
+
+def _merged_headers(existing: Any, required: dict[str, str]) -> dict[str, str]:
+    headers = dict(existing or {})
+    headers.update(required)
+    return headers

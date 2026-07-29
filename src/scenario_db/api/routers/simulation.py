@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Session
 
+from scenario_db.api.auth import MutationPrincipal, require_mutation_principal
 from scenario_db.api.deps import get_db
 from scenario_db.api.schemas.common import PagedResponse
 from scenario_db.api.schemas.evidence import EvidenceResponse
@@ -35,7 +36,11 @@ router = APIRouter(prefix="/simulation", tags=["simulation"])
 
 
 @router.post("/run", response_model=SimulateRunResponse)
-def run_simulation(request: SimulateRequest, db: Session = Depends(get_db)):
+def run_simulation(
+    request: SimulateRequest,
+    db: Session = Depends(get_db),
+    _principal: MutationPrincipal = Depends(require_mutation_principal),
+):
     return run_simulation_request(db, request)
 
 
@@ -81,6 +86,7 @@ def export_result_artifacts(
     evidence_id: str,
     request: SimulationArtifactExportRequest | None = None,
     db: Session = Depends(get_db),
+    _principal: MutationPrincipal = Depends(require_mutation_principal),
 ):
     request = request or SimulationArtifactExportRequest()
     row = get_evidence(db, evidence_id)
@@ -166,7 +172,11 @@ def download_result_artifacts_zip(
 
 
 @router.delete("/results/{evidence_id}", status_code=204)
-def delete_result(evidence_id: str, db: Session = Depends(get_db)):
+def delete_result(
+    evidence_id: str,
+    db: Session = Depends(get_db),
+    _principal: MutationPrincipal = Depends(require_mutation_principal),
+):
     deleted = delete_simulation_evidence(db, evidence_id)
     if not deleted:
         raise NoResultFound(f"Simulation evidence '{evidence_id}' not found")

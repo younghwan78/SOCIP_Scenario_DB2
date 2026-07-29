@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic.aliases import AliasChoices
 from pydantic_settings import BaseSettings
 
@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     # /query/facets response cache TTL in seconds. 0 disables the cache;
     # write apply invalidates it regardless of TTL.
     query_facets_cache_ttl_seconds: float = 0.0
+    # State-changing API calls are deny-by-default. Configure a JSON object of
+    # audit identity -> secret, for example {"architect@example.com": "secret"}.
+    mutation_api_keys: dict[str, SecretStr] = Field(default_factory=dict)
+    # Explicit local-development escape hatch. Never enable on a shared host.
+    mutation_auth_disabled: bool = False
 
     model_config = {"env_prefix": "SCENARIO_DB_", "env_file": ".env", "extra": "ignore"}
 

@@ -5,6 +5,7 @@ from typing import Any
 
 import requests
 
+from dashboard.components.api_auth import mutation_auth_headers
 from scenario_db.legacy_import.write_bundle import build_soc_cdgm_profile_bundle_request, build_soc_dvfs_table_bundle_request
 
 
@@ -155,6 +156,11 @@ def _request_json(
 ) -> dict[str, Any]:
     requester = request_func or requests.request
     url = f"{api_base.rstrip('/')}{path}"
+    if method.upper() in {"POST", "PUT", "PATCH", "DELETE"} or path.startswith("/write/"):
+        headers = dict(kwargs.get("headers") or {})
+        headers.update(mutation_auth_headers())
+        if headers:
+            kwargs["headers"] = headers
     try:
         response = requester(method, url, timeout=10, **kwargs)
     except requests.RequestException as exc:
