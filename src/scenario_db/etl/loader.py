@@ -159,7 +159,29 @@ def load_yaml_dir(
             sha256 = hashlib.sha256(path.read_bytes()).hexdigest()
             by_kind[kind].append((path, raw, sha256))
         elif kind:
-            logger.debug("no mapper for kind=%s (%s)", kind, path.name)
+            message = f"Unsupported YAML kind: {kind}"
+            logger.warning("%s (%s)", message, path.name)
+            skipped.append(
+                LoadIssue(
+                    str(path),
+                    str(kind),
+                    message,
+                    code="unsupported_kind",
+                )
+            )
+        else:
+            message = (
+                "YAML document root must be an object with a non-empty kind"
+            )
+            logger.warning("%s (%s)", message, path.name)
+            skipped.append(
+                LoadIssue(
+                    str(path),
+                    None,
+                    message,
+                    code="missing_kind",
+                )
+            )
 
     counts: dict[str, int] = {}
     validation = ValidationReport()

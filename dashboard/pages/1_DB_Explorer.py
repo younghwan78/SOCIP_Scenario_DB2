@@ -956,7 +956,7 @@ with tabs[0]:
     ]:
         with col:
             st.markdown(
-                f"""<div class="metric-card"><div class="metric-label">{label}</div><div class="metric-value">{totals.get(key, 0)}</div></div>""",
+                f"""<div class="metric-card"><div class="metric-label">{escape(label)}</div><div class="metric-value">{escape(str(totals.get(key, 0)))}</div></div>""",
                 unsafe_allow_html=True,
             )
     _render_distribution_cards(

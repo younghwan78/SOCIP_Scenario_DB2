@@ -88,6 +88,10 @@ uv run python -m scenario_db.etl.loader demo\fixtures --strict --report-json out
 ```
 
 Reload fixtures after changing YAML. The API reads from PostgreSQL, not directly from YAML.
+Strict ETL treats malformed YAML roots, missing `kind`, unsupported `kind`, mapper
+failures, and post-load validation errors as rollback conditions. Non-strict
+loads may commit supported files, but report every rejected file in `skipped`
+and set `ok=false`; unsupported contracts are never silently ignored.
 For a practical map of required and optional DB data, see
 [docs/db-data-guide.md](docs/db-data-guide.md).
 

@@ -139,3 +139,41 @@ def test_load_yaml_dir_non_strict_returns_validation_report(tmp_path, monkeypatc
 
     assert db.committed is True
     assert result.validation.warnings == ["Review rev-1 references missing evidence meas-1"]
+
+
+def test_load_yaml_dir_reports_unsupported_kind_in_non_strict_mode(tmp_path):
+    (tmp_path / "unknown.yaml").write_text(
+        "kind: scenario.future_contract\nid: future-1\n",
+        encoding="utf-8",
+    )
+    db = _Session()
+
+    result = loader.load_yaml_dir(tmp_path, db, strict=False)
+
+    assert db.committed is True
+    assert result.ok is False
+    assert [issue.code for issue in result.skipped] == ["unsupported_kind"]
+    assert result.skipped[0].kind == "scenario.future_contract"
+
+
+def test_load_yaml_dir_strict_rolls_back_on_unsupported_kind(tmp_path):
+    (tmp_path / "unknown.yaml").write_text(
+        "kind: scenario.future_contract\nid: future-1\n",
+        encoding="utf-8",
+    )
+    db = _Session()
+
+    with pytest.raises(loader.LoaderValidationError, match="Unsupported YAML kind"):
+        loader.load_yaml_dir(tmp_path, db, strict=True)
+
+    assert db.rolled_back is True
+    assert db.committed is False
+
+
+@pytest.mark.parametrize("contents", ["id: missing-kind\n", "- not\n- an\n- object\n"])
+def test_load_yaml_dir_reports_missing_kind_or_non_object_root(tmp_path, contents):
+    (tmp_path / "invalid-contract.yaml").write_text(contents, encoding="utf-8")
+
+    result = loader.load_yaml_dir(tmp_path, _Session(), strict=False)
+
+    assert [issue.code for issue in result.skipped] == ["missing_kind"]
