@@ -14,6 +14,8 @@ jobs:
       - run: uv sync --frozen --group dev --group dashboard --group sim
       - run: uv run ruff check .
       - run: uv run mypy
+      - run: uv export --frozen --no-dev --group dashboard --group sim --no-emit-project --quiet -o "${RUNNER_TEMP}/runtime-requirements.txt"
+      - run: uv run pip-audit -r "${RUNNER_TEMP}/runtime-requirements.txt" --progress-spinner off
       - run: uv run pytest tests/unit --cov=scenario_db --cov-report=term-missing
 
   integration:

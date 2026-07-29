@@ -13,6 +13,7 @@ def test_pyproject_declares_static_quality_gates() -> None:
     dev_dependencies = set(pyproject["dependency-groups"]["dev"])
     assert any(dependency.startswith("ruff") for dependency in dev_dependencies)
     assert any(dependency.startswith("mypy") for dependency in dev_dependencies)
+    assert any(dependency.startswith("pip-audit") for dependency in dev_dependencies)
     assert any(dependency.startswith("pre-commit") for dependency in dev_dependencies)
 
     assert pyproject["tool"]["ruff"]["line-length"] == 100
@@ -41,5 +42,6 @@ def test_github_actions_runs_quality_and_test_gates() -> None:
 
     assert "uv run ruff check ." in workflow
     assert "uv run mypy" in workflow
+    assert "uv run pip-audit" in workflow
     assert "uv run pytest tests/unit" in workflow
     assert "uv run pytest tests/integration" in workflow
