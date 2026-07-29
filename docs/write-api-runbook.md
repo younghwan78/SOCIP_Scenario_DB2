@@ -81,8 +81,13 @@ Preview diff:
 
 ```powershell
 $diff = Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/diff"
+$diff.target_revision
 $diff.changes | Format-Table field, change
 ```
+
+Review the returned `target_revision` together with the changes. If the target
+changes before apply, apply returns HTTP 409 and the batch returns to
+`validated`; fetch and review a new diff before retrying.
 
 Apply:
 

@@ -65,6 +65,7 @@ class DiffPreviewResponse(BaseModel):
     operation: Literal["create", "update"]
     changes: list[DiffEntry] = Field(default_factory=list)
     impact: dict[str, Any] | None = None
+    target_revision: str | None = None
 
 
 class ApplyWriteResponse(BaseModel):

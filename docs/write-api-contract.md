@@ -83,6 +83,21 @@ payload keeps the optional `actor` field for wire compatibility, but the server
 always replaces it and therefore does not trust caller-supplied audit identity.
 `SCENARIO_DB_MUTATION_AUTH_DISABLED=true` exists only for explicit local tests.
 
+## Reviewed Target Revision
+
+Every successful diff includes a SHA-256 `target_revision` derived from the
+complete reviewed diff. Apply acquires the canonical write serialization lock,
+locks existing target rows, reruns validation, and rebuilds the diff inside the
+same transaction. Apply proceeds only when the stored revision, stored diff,
+and current diff agree.
+
+If another batch or direct database operation changes the target after review,
+apply returns HTTP 409, clears the stale diff, and moves the batch back to
+`validated`. The caller must request a new diff and review it before retrying
+apply. PostgreSQL Write API diff/apply transactions are globally serialized;
+existing canonical rows are additionally locked so ETL or SQL updates cannot
+cross the final revision check.
+
 ## Variant Overlay Request Shape
 
 ```json

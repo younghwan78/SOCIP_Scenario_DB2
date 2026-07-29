@@ -9,6 +9,7 @@ from scenario_db.api import app as api_app
 from scenario_db.api.cache import RuleCache
 from scenario_db.api.routers import utility
 from scenario_db.api.routers import write as write_router
+from scenario_db.api.schemas.write import DiffPreviewResponse
 from scenario_db.write import service as write_service
 
 
@@ -120,6 +121,12 @@ class _FakeRuleCache:
 
 
 def test_apply_batch_invalidates_rule_cache_after_commit(monkeypatch) -> None:
+    reviewed_diff = DiffPreviewResponse(
+        batch_id="batch-1",
+        target_id="scenario-1::variant-1",
+        operation="update",
+    )
+    reviewed_diff.target_revision = write_service._diff_target_revision(reviewed_diff)
     batch = SimpleNamespace(
         id="batch-1",
         kind=write_service.VARIANT_OVERLAY_KIND,
@@ -128,7 +135,7 @@ def test_apply_batch_invalidates_rule_cache_after_commit(monkeypatch) -> None:
         validation_result={"valid": True, "issues": []},
         actor="tester",
         status="diff_ready",
-        diff_result={},
+        diff_result=reviewed_diff.model_dump(),
         applied_refs=None,
         updated_at=None,
     )
@@ -138,6 +145,21 @@ def test_apply_batch_invalidates_rule_cache_after_commit(monkeypatch) -> None:
         write_service,
         "_apply_variant_overlay",
         lambda db, payload: {"scenario_ref": "scenario-1", "variant_id": "variant-1"},
+    )
+    monkeypatch.setattr(
+        write_service,
+        "_validate_in_place",
+        lambda db, target_batch: {"valid": True, "issues": []},
+    )
+    monkeypatch.setattr(write_service, "_lock_write_targets", lambda db, kind, normalized: None)
+    monkeypatch.setattr(
+        write_service,
+        "build_write_diff",
+        lambda db, kind, normalized: DiffPreviewResponse(
+            batch_id="",
+            target_id="scenario-1::variant-1",
+            operation="update",
+        ),
     )
 
     response = write_service.apply_batch(session, "batch-1", rule_cache=cache)
