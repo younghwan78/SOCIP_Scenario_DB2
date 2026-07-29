@@ -41,3 +41,14 @@ def test_settings_parse_mutation_api_keys_as_secrets(monkeypatch, tmp_path):
     secret = settings.mutation_api_keys["architect@example.com"]
     assert secret.get_secret_value() == "top-secret"
     assert "top-secret" not in repr(settings)
+
+
+def test_query_candidate_limits_must_be_positive(monkeypatch, tmp_path):
+    monkeypatch.setenv("DATABASE_URL", "sqlite:///test-query-limit.db")
+    monkeypatch.setenv("SCENARIO_DB_QUERY_MAX_CANDIDATES", "0")
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(ValidationError) as exc_info:
+        Settings()
+
+    assert "query_max_candidates" in str(exc_info.value)

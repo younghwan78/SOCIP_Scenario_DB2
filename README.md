@@ -203,6 +203,13 @@ The admin endpoint refreshes the worker that handles the request. Other workers
 converge within `SCENARIO_DB_RULE_CACHE_TTL_SECONDS` and
 `SCENARIO_DB_QUERY_FACETS_CACHE_TTL_SECONDS`.
 
+Architecture Query pushes safe scalar identity/severity predicates into SQL,
+then builds inherited topology/evidence facts in a bounded Python working set.
+The production defaults are 5,000 variant candidates, 20,000 evidence rows,
+5,000 issues, and 10,000 facet candidates. Requests exceeding a bound fail with
+`candidate_limit_exceeded`; narrow the scope instead of increasing limits
+without measuring worker memory.
+
 ## Write API
 
 The write targets are `scenario.variant_overlay`, `scenario.pipeline_patch`, and

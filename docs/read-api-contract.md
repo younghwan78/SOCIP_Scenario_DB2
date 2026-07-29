@@ -258,6 +258,21 @@ type `number` in the query field registry. `count` is allowed for any supported
 field. Missing aggregation group values are serialized as JSON `null`; the
 literal string `"(none)"` remains distinct from a missing value.
 
+Top-level AND predicates for project ID, SoC, board type, scenario ID, variant
+ID, and severity are intersected and pushed into SQL before effective topology
+facts are built. Inherited axes, topology/buffer facts, negative predicates,
+and OR groups remain in the registered-field evaluator because pushing those
+down would change their semantics.
+
+The evaluator is intentionally bounded. If the SQL-prefiltered scenario,
+project, variant, evidence, issue, or facet candidate set exceeds its configured
+limit, the API returns `400 bad_request` with
+`candidate_limit_exceeded` instead of loading an unbounded working set. Narrow
+the request with `scope` or scalar identity predicates. Limits are configured
+with `SCENARIO_DB_QUERY_MAX_CANDIDATES`,
+`SCENARIO_DB_QUERY_MAX_EVIDENCE_ROWS`, `SCENARIO_DB_QUERY_MAX_ISSUE_ROWS`, and
+`SCENARIO_DB_QUERY_FACETS_MAX_CANDIDATES`; all must be positive.
+
 ## Error Contract
 
 All handled API errors should return:

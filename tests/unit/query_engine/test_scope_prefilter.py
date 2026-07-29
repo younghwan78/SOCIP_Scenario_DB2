@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from scenario_db.api.schemas.query import QueryRequest
+import pytest
+
+from scenario_db.api.schemas.query import QueryPredicate, QueryRequest
 from scenario_db.query_engine import service as qe_service
 from scenario_db.query_engine.service import (
+    QueryValidationError,
     build_facets,
     invalidate_facets_cache,
     query_variants,
@@ -15,13 +18,20 @@ class _Query:
     def __init__(self, rows):
         self._rows = rows
         self.filters: list[object] = []
+        self.all_calls = 0
+        self.count_calls = 0
 
     def filter(self, *criteria):
         self.filters.extend(criteria)
         return self
 
     def all(self):
+        self.all_calls += 1
         return list(self._rows)
+
+    def count(self):
+        self.count_calls += 1
+        return len(self._rows)
 
 
 def _variant(scenario_id: str, variant_id: str) -> SimpleNamespace:
@@ -139,14 +149,58 @@ def test_ip_catalog_load_is_limited_to_pipeline_ip_refs():
     assert session.queries["ip_catalog"][0].filters
 
 
-def test_unscoped_query_loads_tables_without_sql_filters():
+def test_unscoped_query_still_limits_variants_to_loaded_scenarios():
     session = _Session()
 
     response = query_variants(session, QueryRequest())
 
     assert response.total == 1
     assert not session.queries["scenarios"][0].filters
-    assert not session.queries["scenario_variants"][0].filters
+    assert session.queries["scenario_variants"][0].filters
+    assert session.queries["evidence"][0].filters
+
+
+def test_top_level_scalar_where_predicates_are_pushed_to_sql():
+    session = _Session()
+
+    response = query_variants(
+        session,
+        QueryRequest(
+            where=[
+                QueryPredicate(field="project.id", op="eq", value="proj-A"),
+                QueryPredicate(field="scenario.id", op="in", value=["uc-camera"]),
+                QueryPredicate(field="variant.id", op="eq", value="UHD60"),
+                QueryPredicate(field="variant.severity", op="eq", value="nominal"),
+            ]
+        ),
+    )
+
+    assert response.total == 1
+    assert session.queries["projects"][0].filters
+    assert session.queries["scenarios"][0].filters
+    assert all(query.filters for query in session.queries["scenario_variants"])
+    assert all(query.filters for query in session.queries["evidence"])
+
+
+def test_candidate_limit_fails_before_variant_rows_are_materialized(monkeypatch):
+    session = _Session()
+    session.variants.append(_variant("uc-camera", "FHD30"))
+    monkeypatch.setattr(
+        qe_service,
+        "get_settings",
+        lambda: SimpleNamespace(
+            query_max_candidates=1,
+            query_max_evidence_rows=20,
+            query_max_issue_rows=20,
+        ),
+    )
+
+    with pytest.raises(QueryValidationError, match="candidate_limit_exceeded"):
+        query_variants(session, QueryRequest())
+
+    variant_query = session.queries["scenario_variants"][0]
+    assert variant_query.count_calls == 1
+    assert variant_query.all_calls == 0
 
 
 def test_facets_cache_disabled_by_default():

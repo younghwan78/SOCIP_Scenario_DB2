@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from fastapi.testclient import TestClient
 
 from scenario_db.api.app import create_app
 from scenario_db.api.deps import get_db
+from scenario_db.query_engine import service as query_service
 from tests.unit.query_engine.test_architecture_query_service import _Session
 
 
@@ -233,3 +235,32 @@ def test_query_variants_endpoint_rejects_non_numeric_metric_fields() -> None:
     assert response.status_code == 400
     assert payload["error"] == "bad_request"
     assert "aggregation_field_type_mismatch" in " ".join(payload["detail"])
+
+
+def test_query_variants_endpoint_returns_400_when_candidate_bound_is_exceeded(
+    monkeypatch,
+) -> None:
+    app = create_app()
+    mock_session = _Session()
+    monkeypatch.setattr(
+        query_service,
+        "get_settings",
+        lambda: SimpleNamespace(
+            query_max_candidates=1,
+            query_max_evidence_rows=20,
+            query_max_issue_rows=20,
+        ),
+    )
+
+    def _override_db():
+        yield mock_session
+
+    app.dependency_overrides[get_db] = _override_db
+
+    with TestClient(app, raise_server_exceptions=False) as client:
+        response = client.post("/api/v1/query/variants", json={})
+
+    payload = response.json()
+    assert response.status_code == 400
+    assert payload["error"] == "bad_request"
+    assert "candidate_limit_exceeded" in " ".join(payload["detail"])

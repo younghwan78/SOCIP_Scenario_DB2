@@ -28,6 +28,13 @@ class Settings(BaseSettings):
     # Per-worker decision-rule cache maximum staleness. 0 refreshes on every
     # rule-dependent request; a small positive value bounds multi-worker drift.
     rule_cache_ttl_seconds: float = 5.0
+    # Architecture Query materializes effective topology facts in Python after
+    # SQL prefiltering. These bounds prevent an unscoped request from turning
+    # into an unbounded process-memory scan.
+    query_max_candidates: int = Field(default=5_000, ge=1)
+    query_max_evidence_rows: int = Field(default=20_000, ge=1)
+    query_max_issue_rows: int = Field(default=5_000, ge=1)
+    query_facets_max_candidates: int = Field(default=10_000, ge=1)
     # State-changing API calls are deny-by-default. Configure a JSON object of
     # audit identity -> secret, for example {"architect@example.com": "secret"}.
     mutation_api_keys: dict[str, SecretStr] = Field(default_factory=dict)
