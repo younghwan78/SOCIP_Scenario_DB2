@@ -194,7 +194,10 @@ def test_export_simulation_result_artifacts_endpoint(monkeypatch):
     db.commit.assert_called_once()
 
 
-def test_export_simulation_result_rejects_output_dir_outside_report_root(monkeypatch):
+def test_export_simulation_result_rejects_output_dir_outside_report_root(
+    monkeypatch,
+    tmp_path: Path,
+):
     app = create_app()
     db = MagicMock()
 
@@ -224,12 +227,18 @@ def test_export_simulation_result_rejects_output_dir_outside_report_root(monkeyp
         artifacts = []
 
     monkeypatch.setattr(simulation_router, "get_evidence", lambda db_arg, evidence_id: _Row())
-    monkeypatch.setattr(simulation_router, "get_settings", lambda: MagicMock(report_dir="output_simulation", allow_custom_report_dir=False))
+    report_root = tmp_path / "report-root"
+    outside_dir = tmp_path.parent / "outside-reports"
+    monkeypatch.setattr(
+        simulation_router,
+        "get_settings",
+        lambda: MagicMock(report_dir=str(report_root), allow_custom_report_dir=False),
+    )
     client = TestClient(app, raise_server_exceptions=False)
 
     response = client.post(
         "/api/v1/simulation/results/sim-1/artifacts/export",
-        json={"output_dir": "E:/outside-reports"},
+        json={"output_dir": str(outside_dir)},
     )
 
     assert response.status_code == 422
