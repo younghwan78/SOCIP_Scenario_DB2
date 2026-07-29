@@ -114,15 +114,22 @@ The FastAPI ASGI entry point is `scenario_db.api.app:app`.
 
 ```powershell
 $env:DATABASE_URL="postgresql+psycopg2://scenario_user:scenario_pass@localhost:15432/scenario_db"
-$env:SCENARIO_DB_MUTATION_API_KEYS='{"architect@example.com":"replace-with-a-long-random-secret"}'
+$env:SCENARIO_DB_API_PRINCIPALS='{"architect@example.com":{"secret":"replace-with-a-long-random-secret","roles":["writer"]}}'
 uv run uvicorn scenario_db.api.app:app --host 127.0.0.1 --port 18000
 ```
 
-Read endpoints remain available without credentials. Write staging, simulation
-execution/export/delete, and admin endpoints require both
+Read endpoints remain available without credentials and must be protected by
+the deployment network or reverse proxy. Protected endpoints require both
 `X-ScenarioDB-Key-Id` and `X-ScenarioDB-API-Key`. The key ID becomes the
 server-controlled audit actor; a caller-supplied `actor` cannot override it.
-If no server keys are configured, mutation requests fail closed with HTTP 503.
+Roles are enforced as follows: `analyst` can run simulations, `writer` can run
+simulations, use the Write API, and export artifacts, while `admin` can perform
+all protected operations including result deletion and admin cache refresh.
+`reader` is reserved for deployments that authenticate reads at the proxy.
+Configure principals with `SCENARIO_DB_API_PRINCIPALS`. The legacy
+`SCENARIO_DB_MUTATION_API_KEYS` setting remains migration-only and grants all
+protected-operation roles. If no server keys are configured, protected requests
+fail closed with HTTP 503.
 `SCENARIO_DB_MUTATION_AUTH_DISABLED=true` is an explicit local-test bypass and
 must not be enabled in a shared or production environment.
 

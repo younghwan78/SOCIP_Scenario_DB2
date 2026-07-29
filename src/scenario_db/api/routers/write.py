@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from scenario_db.api.auth import MutationPrincipal, require_mutation_principal
+from scenario_db.api.auth import ApiPrincipal, require_roles
 from scenario_db.api.cache import RuleCache
 from scenario_db.api.deps import get_db, get_rule_cache
 from scenario_db.api.schemas.write import (
@@ -25,7 +25,7 @@ from scenario_db.write.service import (
 router = APIRouter(
     prefix="/write",
     tags=["write"],
-    dependencies=[Depends(require_mutation_principal)],
+    dependencies=[Depends(require_roles("writer", "admin"))],
 )
 
 
@@ -33,7 +33,7 @@ router = APIRouter(
 def create_staging_batch(
     request: StageWriteRequest,
     db: Session = Depends(get_db),
-    principal: MutationPrincipal = Depends(require_mutation_principal),
+    principal: ApiPrincipal = Depends(require_roles("writer", "admin")),
 ):
     authenticated_request = request.model_copy(update={"actor": principal.subject})
     return stage_write(db, authenticated_request)

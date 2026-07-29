@@ -107,7 +107,7 @@ SCENARIO_DB_CORS_ORIGINS=["http://localhost:18502","http://<server-hostname>"]
 SCENARIO_DB_LOG_LEVEL=INFO
 SCENARIO_DB_DB_POOL_SIZE=10
 SCENARIO_DB_DB_MAX_OVERFLOW=20
-SCENARIO_DB_MUTATION_API_KEYS='{"architect@example.com":"REPLACE_WITH_LONG_RANDOM_SECRET"}'
+SCENARIO_DB_API_PRINCIPALS='{"architect@example.com":{"secret":"REPLACE_WITH_LONG_RANDOM_SECRET","roles":["writer"]},"operator@example.com":{"secret":"REPLACE_WITH_ANOTHER_LONG_RANDOM_SECRET","roles":["admin"]}}'
 SCENARIO_DB_MUTATION_AUTH_DISABLED=false
 SCENARIODB_API_BASE=http://127.0.0.1:18000/api/v1
 SCENARIODB_API_KEY_ID=architect@example.com
@@ -119,9 +119,12 @@ Notes:
 - `DATABASE_URL` is accepted by the app and Alembic.
 - `SCENARIO_DB_DATABASE_URL` can also be used and takes priority.
 - `SCENARIODB_API_BASE` is used by the Streamlit dashboard.
-- `SCENARIO_DB_MUTATION_API_KEYS` maps server-controlled audit identities to
-  secrets. Keep `SCENARIODB_API_KEY_ID` and `SCENARIODB_API_KEY` aligned for
-  dashboard mutation requests.
+- `SCENARIO_DB_API_PRINCIPALS` maps server-controlled audit identities to
+  secrets and roles. Use `analyst` for simulation execution, `writer` for
+  simulation/write/export, and `admin` for deletion and admin endpoints.
+  `SCENARIO_DB_MUTATION_API_KEYS` is a deprecated migration-only fallback that
+  grants every protected-operation role. Keep `SCENARIODB_API_KEY_ID` and
+  `SCENARIODB_API_KEY` aligned with a dashboard principal.
 - Replace every `CHANGE_ME` and `REPLACE_WITH_LONG_RANDOM_SECRET` value.
 - Never enable `SCENARIO_DB_MUTATION_AUTH_DISABLED` on a shared host.
 - Keep `.env` readable only by the service account:
@@ -497,8 +500,8 @@ For production use, put backup under cron or the internal backup system.
 These are not blockers for internal prototype usage, but should be addressed
 before broader deployment:
 
-- Mutation API-key authentication is service-local; SSO/OIDC integration and
-  role separation are not implemented yet.
+- API-key authentication and role enforcement are service-local; SSO/OIDC
+  integration is not implemented yet.
 - Read APIs rely on reverse-proxy and network access controls.
 - No automatic DB backup job is included in the repo.
 - nginx TLS is not configured in this document.

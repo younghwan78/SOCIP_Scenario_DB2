@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Session
 
-from scenario_db.api.auth import MutationPrincipal, require_mutation_principal
+from scenario_db.api.auth import ApiPrincipal, require_roles
 from scenario_db.api.deps import get_db
 from scenario_db.api.schemas.common import PagedResponse
 from scenario_db.api.schemas.evidence import EvidenceResponse
@@ -39,7 +39,7 @@ router = APIRouter(prefix="/simulation", tags=["simulation"])
 def run_simulation(
     request: SimulateRequest,
     db: Session = Depends(get_db),
-    _principal: MutationPrincipal = Depends(require_mutation_principal),
+    _principal: ApiPrincipal = Depends(require_roles("analyst", "writer", "admin")),
 ):
     return run_simulation_request(db, request)
 
@@ -86,7 +86,7 @@ def export_result_artifacts(
     evidence_id: str,
     request: SimulationArtifactExportRequest | None = None,
     db: Session = Depends(get_db),
-    _principal: MutationPrincipal = Depends(require_mutation_principal),
+    _principal: ApiPrincipal = Depends(require_roles("writer", "admin")),
 ):
     request = request or SimulationArtifactExportRequest()
     row = get_evidence(db, evidence_id)
@@ -175,7 +175,7 @@ def download_result_artifacts_zip(
 def delete_result(
     evidence_id: str,
     db: Session = Depends(get_db),
-    _principal: MutationPrincipal = Depends(require_mutation_principal),
+    _principal: ApiPrincipal = Depends(require_roles("admin")),
 ):
     deleted = delete_simulation_evidence(db, evidence_id)
     if not deleted:

@@ -19,7 +19,7 @@ Run the API first:
 ```powershell
 cd E:\50_Codex_Soc_Scenario_DB\implementation
 $env:DATABASE_URL="postgresql+psycopg2://scenario_user:scenario_pass@localhost:15432/scenario_db"
-$env:SCENARIO_DB_MUTATION_API_KEYS='{"architect@example.com":"replace-with-a-long-random-secret"}'
+$env:SCENARIO_DB_API_PRINCIPALS='{"architect@example.com":{"secret":"replace-with-a-long-random-secret","roles":["writer"]}}'
 uv run uvicorn scenario_db.api.app:app --host 127.0.0.1 --port 18000
 ```
 
@@ -34,8 +34,10 @@ $mutationHeaders = @{
 $PSDefaultParameterValues["Invoke-RestMethod:Headers"] = $mutationHeaders
 ```
 
-The API fails mutation requests closed when server keys are absent. The key ID
-is recorded as the audit actor, regardless of any `actor` field in the payload.
+The API fails protected requests closed when server principals are absent. This
+workflow requires a `writer` or `admin` principal. The key ID is recorded as the
+audit actor, regardless of any `actor` field in the payload. An authenticated
+principal with the wrong role receives HTTP 403.
 The `PSDefaultParameterValues` entry above supplies credentials to every
 `Invoke-RestMethod` example in this PowerShell session.
 

@@ -11,6 +11,8 @@ from scenario_db.exceptions import ScenarioDbError
 def _error_code_for_status(status_code: int) -> str:
     if status_code == 401:
         return "unauthorized"
+    if status_code == 403:
+        return "forbidden"
     if status_code == 400:
         return "bad_request"
     if status_code == 404:

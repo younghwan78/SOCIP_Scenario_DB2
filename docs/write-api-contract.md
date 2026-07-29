@@ -73,10 +73,15 @@ belong in evidence or review records.
 ## Authentication and Audit Identity
 
 Every `/api/v1/write/*` request requires `X-ScenarioDB-Key-Id` and
-`X-ScenarioDB-API-Key`. Server credentials are configured with
-`SCENARIO_DB_MUTATION_API_KEYS` as a JSON object whose keys are audit
-identities and whose values are secrets. Missing configuration returns HTTP
-503; missing or invalid credentials return HTTP 401.
+`X-ScenarioDB-API-Key`, plus either the `writer` or `admin` role. Server
+principals are configured with `SCENARIO_DB_API_PRINCIPALS`, for example
+`{"architect@example.com":{"secret":"...","roles":["writer"]}}`. Missing
+configuration returns HTTP 503; missing or invalid credentials return HTTP 401;
+an authenticated principal without a required role receives HTTP 403.
+
+`SCENARIO_DB_MUTATION_API_KEYS` is retained only as a migration path. Legacy
+entries receive all protected-operation roles and should be replaced with
+least-privilege principals before production rollout.
 
 For staging, the authenticated key ID is persisted as `actor`. The request
 payload keeps the optional `actor` field for wire compatibility, but the server
