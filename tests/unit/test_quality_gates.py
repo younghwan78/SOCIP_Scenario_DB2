@@ -17,9 +17,15 @@ def test_pyproject_declares_static_quality_gates() -> None:
 
     assert pyproject["tool"]["ruff"]["line-length"] == 100
     assert "F" in pyproject["tool"]["ruff"]["lint"]["select"]
+    assert "E9" in pyproject["tool"]["ruff"]["lint"]["select"]
+    assert "B904" in pyproject["tool"]["ruff"]["lint"]["select"]
     assert pyproject["tool"]["mypy"]["python_version"] == "3.11"
     assert pyproject["tool"]["mypy"]["warn_unused_ignores"] is True
-    assert pyproject["tool"]["coverage"]["report"]["fail_under"] >= 45
+    mypy_files = set(pyproject["tool"]["mypy"]["files"])
+    assert "src/scenario_db/api/auth.py" in mypy_files
+    assert "src/scenario_db/api/cache.py" in mypy_files
+    assert "src/scenario_db/api/deps.py" in mypy_files
+    assert pyproject["tool"]["coverage"]["report"]["fail_under"] >= 80
 
 
 def test_pre_commit_runs_ruff_and_mypy() -> None:

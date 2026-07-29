@@ -116,4 +116,3 @@ def test_staging_actor_is_derived_from_authenticated_principal(monkeypatch):
     assert result["batch_id"] == "batch-1"
     assert captured["db"] is db
     assert captured["request"].actor == "architect@example.com"
-

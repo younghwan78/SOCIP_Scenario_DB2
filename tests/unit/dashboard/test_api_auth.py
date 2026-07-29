@@ -28,4 +28,3 @@ def test_mutation_auth_headers_build_server_contract(monkeypatch):
         "X-ScenarioDB-Key-Id": "architect@example.com",
         "X-ScenarioDB-API-Key": "top-secret",
     }
-

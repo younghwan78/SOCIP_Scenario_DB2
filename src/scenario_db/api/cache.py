@@ -145,7 +145,7 @@ def variant_hash(
 
 # TODO Week 4: @lru_cache(maxsize=512) 추가
 def match_issues_for_variant(
-    ctx: "MatcherContext",  # type: ignore[name-defined]
+    ctx: "MatcherContext",
     issues: list[IssueResponse],
     scenario_id: str | None = None,
     evaluation_errors: list[str] | None = None,
