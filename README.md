@@ -483,6 +483,13 @@ confirmed evidence row exists without a requested trace, the API recomputes the
 same result and updates that evidence with `calculation_trace` when
 `persist=true`.
 
+The evidence ID is deterministic for the same scenario, variant, and parameter
+hash. Concurrent attempts to persist that ID converge on the transaction that
+wins the insert instead of returning a spurious conflict. A force rerun updates
+the computed evidence fields but preserves existing exported artifact metadata
+when the new run does not provide replacement artifacts; the persisted response
+also reports those retained artifacts.
+
 ## Viewer Check
 
 Use the default scenario and variant:

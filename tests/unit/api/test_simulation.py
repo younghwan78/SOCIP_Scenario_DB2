@@ -7,10 +7,11 @@ from zipfile import ZipFile
 import io
 
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import IntegrityError
 
 from scenario_db.api.app import create_app
 from scenario_db.api.deps import get_db
-from scenario_db.api.schemas.simulation import SimulateRequest
+from scenario_db.api.schemas.simulation import SimulateRequest, SimulateRunResponse
 from scenario_db.api.routers import simulation as simulation_router
 from scenario_db.db.models.capability import SocDvfsTable
 from scenario_db.models.evidence.common import ExecutionContext
@@ -444,6 +445,169 @@ def test_run_simulation_request_returns_response_on_cache_miss(monkeypatch):
     assert response.status == "completed"
     assert response.cached is False
     assert response.persisted is False
+
+
+def test_persist_race_converges_on_winning_simulation_evidence(monkeypatch):
+    db = MagicMock()
+    db.commit.side_effect = IntegrityError("INSERT evidence", {}, Exception("duplicate"))
+
+    inputs = SimpleNamespace(
+        scenario_id="scenario",
+        variant_id="variant",
+        project_ref="project",
+        warnings=["input warning"],
+    )
+    generated = SimpleNamespace(id="sim-scenario-variant-request-hash")
+    winner = SimpleNamespace(id=generated.id)
+    lookups = iter([None, winner])
+
+    monkeypatch.setattr(
+        "scenario_db.sim.service.load_canonical_graph",
+        lambda db_arg, scenario_id, variant_id: object(),
+    )
+    monkeypatch.setattr(
+        "scenario_db.sim.service.build_simulation_inputs",
+        lambda graph, config: inputs,
+    )
+    monkeypatch.setattr(
+        "scenario_db.sim.service._request_hash",
+        lambda *args, **kwargs: "request-hash",
+    )
+    monkeypatch.setattr(
+        "scenario_db.sim.service.get_simulation_evidence_by_params_hash",
+        lambda *args, **kwargs: next(lookups),
+    )
+    monkeypatch.setattr("scenario_db.sim.service.run_simulation", lambda *args, **kwargs: object())
+    monkeypatch.setattr(
+        "scenario_db.sim.service.build_simulation_evidence",
+        lambda *args, **kwargs: generated,
+    )
+    monkeypatch.setattr("scenario_db.sim.service.get_evidence", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        "scenario_db.sim.service.upsert_simulation_evidence",
+        lambda *args, **kwargs: None,
+    )
+
+    def _cached_response(row, response_inputs, hash_value):
+        assert row is winner
+        assert response_inputs is inputs
+        assert hash_value == "request-hash"
+        return SimulateRunResponse(
+            evidence_id=row.id,
+            status="completed",
+            cached=True,
+            params_hash=hash_value,
+            warnings=list(response_inputs.warnings),
+            kpi={},
+            persisted=True,
+        )
+
+    monkeypatch.setattr(
+        "scenario_db.sim.service._cached_simulation_response",
+        _cached_response,
+    )
+
+    response = run_simulation_request(
+        db,
+        SimulateRequest(
+            scenario_id="scenario",
+            variant_id="variant",
+            execution_context=ExecutionContext(
+                silicon_rev="EVT0",
+                sw_baseline_ref="sw-vendor-v1.2.3",
+                thermal="normal",
+            ),
+            persist=True,
+        ),
+    )
+
+    assert response.cached is True
+    assert response.evidence_id == generated.id
+    db.rollback.assert_called_once_with()
+
+
+def test_persisted_rerun_response_keeps_repository_artifacts(monkeypatch):
+    db = MagicMock()
+    inputs = SimpleNamespace(
+        scenario_id="scenario",
+        variant_id="variant",
+        project_ref="project",
+        warnings=[],
+    )
+    result = SimRunResult(
+        scenario_id="scenario",
+        variant_id="variant",
+        total_power_mw=999.0,
+        total_power_ma=0.0,
+        core_power_mw=999.0,
+        bw_power_mw=0.0,
+        bw_total_mbs=0.0,
+        hw_time_max_ms=0.0,
+        feasible=True,
+    )
+    generated = SimpleNamespace(
+        id="sim-scenario-variant-request-hash",
+        kpi={"total_power_mw": 999.0},
+    )
+    persisted_row = SimpleNamespace(
+        id=generated.id,
+        schema_version="2.2",
+        kind="evidence.simulation",
+        scenario_ref="scenario",
+        variant_ref="variant",
+        kpi=generated.kpi,
+        artifacts=[
+            {
+                "type": "simulation_report",
+                "storage": "file",
+                "path": "reports/result.html",
+            }
+        ],
+    )
+
+    monkeypatch.setattr(
+        "scenario_db.sim.service.load_canonical_graph",
+        lambda db_arg, scenario_id, variant_id: object(),
+    )
+    monkeypatch.setattr(
+        "scenario_db.sim.service.build_simulation_inputs",
+        lambda graph, config: inputs,
+    )
+    monkeypatch.setattr(
+        "scenario_db.sim.service._request_hash",
+        lambda *args, **kwargs: "request-hash",
+    )
+    monkeypatch.setattr("scenario_db.sim.service.run_simulation", lambda *args, **kwargs: result)
+    monkeypatch.setattr(
+        "scenario_db.sim.service.build_simulation_evidence",
+        lambda *args, **kwargs: generated,
+    )
+    monkeypatch.setattr(
+        "scenario_db.sim.service.get_evidence",
+        lambda *args, **kwargs: persisted_row,
+    )
+    monkeypatch.setattr(
+        "scenario_db.sim.service.upsert_simulation_evidence",
+        lambda *args, **kwargs: persisted_row,
+    )
+
+    response = run_simulation_request(
+        db,
+        SimulateRequest(
+            scenario_id="scenario",
+            variant_id="variant",
+            execution_context=ExecutionContext(
+                silicon_rev="EVT0",
+                sw_baseline_ref="sw-vendor-v1.2.3",
+                thermal="normal",
+            ),
+            persist=True,
+            force=True,
+        ),
+    )
+
+    assert response.persisted is True
+    assert response.evidence["artifacts"] == persisted_row.artifacts
 
 
 def test_run_simulation_request_loads_db_dvfs_table_and_marks_context(monkeypatch):

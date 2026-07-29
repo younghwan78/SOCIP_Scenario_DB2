@@ -35,6 +35,10 @@ Write audit data
 
 `Evidence`는 KPI, 최신 SW baseline, feasibility, simulation overlay를 만들기 위해 필요하다. `Decision`은 issue matching, gate result, waiver/review 추적을 위해 필요하다. `Write audit`은 사람이 직접 쓰는 데이터가 아니라 Write API가 자동으로 남기는 이력이다.
 
+동일 scenario/variant/parameter hash의 simulation evidence ID는 결정적이다.
+동시 persist는 먼저 commit된 row로 수렴하며, `force=true` 재실행 결과에
+새 artifact가 없더라도 기존 export artifact metadata는 보존된다.
+
 ## 2. Minimum Useful Dataset
 
 첫 real-data pilot의 최소 세트는 다음 순서가 좋다.
