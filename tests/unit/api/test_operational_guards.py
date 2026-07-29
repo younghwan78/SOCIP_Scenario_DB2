@@ -120,7 +120,16 @@ class _FakeRuleCache:
         self.events.append("invalidate")
 
 
-def test_apply_batch_invalidates_rule_cache_after_commit(monkeypatch) -> None:
+class _FailingRuleCache(_FakeRuleCache):
+    def invalidate_all(self, session) -> None:
+        self.events.append("invalidate_failed")
+        raise RuntimeError("cache reload failed")
+
+    def mark_stale(self, reason: str) -> None:
+        self.events.append(f"stale:{reason}")
+
+
+def _apply_ready_batch(monkeypatch, cache_factory):
     reviewed_diff = DiffPreviewResponse(
         batch_id="batch-1",
         target_id="scenario-1::variant-1",
@@ -140,7 +149,7 @@ def test_apply_batch_invalidates_rule_cache_after_commit(monkeypatch) -> None:
         updated_at=None,
     )
     session = _FakeSession(batch)
-    cache = _FakeRuleCache(session.events)
+    cache = cache_factory(session.events)
     monkeypatch.setattr(
         write_service,
         "_apply_variant_overlay",
@@ -162,7 +171,28 @@ def test_apply_batch_invalidates_rule_cache_after_commit(monkeypatch) -> None:
         ),
     )
 
-    response = write_service.apply_batch(session, "batch-1", rule_cache=cache)
+    return session, write_service.apply_batch(session, "batch-1", rule_cache=cache)
+
+
+def test_apply_batch_invalidates_rule_cache_after_commit(monkeypatch) -> None:
+    session, response = _apply_ready_batch(monkeypatch, _FakeRuleCache)
 
     assert response.status == "applied"
+    assert response.warnings == []
     assert session.events[-2:] == ["commit", "invalidate"]
+
+
+def test_post_commit_cache_failure_returns_applied_with_warning(monkeypatch, caplog) -> None:
+    with caplog.at_level(logging.ERROR, logger="scenario_db.write.service"):
+        session, response = _apply_ready_batch(monkeypatch, _FailingRuleCache)
+
+    assert response.status == "applied"
+    assert response.warnings == [
+        "canonical data committed; rule cache refresh deferred"
+    ]
+    assert "commit" in session.events
+    assert session.events[-2:] == [
+        "invalidate_failed",
+        "stale:Post-commit rule cache refresh failed",
+    ]
+    assert "committed, but RuleCache refresh failed" in caplog.text

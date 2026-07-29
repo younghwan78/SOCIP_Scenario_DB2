@@ -72,3 +72,4 @@ class ApplyWriteResponse(BaseModel):
     batch_id: str
     status: str
     applied_refs: dict[str, Any]
+    warnings: list[str] = Field(default_factory=list)

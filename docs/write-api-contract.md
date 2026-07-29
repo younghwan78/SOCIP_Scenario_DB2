@@ -98,6 +98,13 @@ apply. PostgreSQL Write API diff/apply transactions are globally serialized;
 existing canonical rows are additionally locked so ETL or SQL updates cannot
 cross the final revision check.
 
+Canonical mutation and cache refresh have different commit boundaries. Once
+the database transaction commits, apply returns `status=applied` even if the
+in-process cache refresh fails. In that case the response contains a generic
+`warnings` entry, the affected rule cache is marked stale so DB fallback or the
+next refresh is used, and the server logs the underlying exception. Clients
+must not retry the mutation as though the database transaction had failed.
+
 ## Variant Overlay Request Shape
 
 ```json

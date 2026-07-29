@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any
@@ -48,6 +49,8 @@ from scenario_db.models.capability.hw import SocPlatform as PydanticSocPlatform
 from scenario_db.models.capability.sw import SwProfile as PydanticSwProfile
 from scenario_db.models.definition.project import Project as PydanticProject
 from scenario_db.models.definition.usecase import Usecase as PydanticUsecase
+
+logger = logging.getLogger(__name__)
 
 VARIANT_OVERLAY_KIND = "scenario.variant_overlay"
 PIPELINE_PATCH_KIND = "scenario.pipeline_patch"
@@ -300,14 +303,35 @@ def apply_batch(
     _touch(batch)
     _record_event(db, batch.id, "apply", batch.actor, applied_refs)
     db.commit()
+    warnings: list[str] = []
     if rule_cache is not None:
-        rule_cache.invalidate_all(db)
+        try:
+            rule_cache.invalidate_all(db)
+        except Exception:
+            rule_cache.mark_stale("Post-commit rule cache refresh failed")
+            logger.exception(
+                "Write batch %s committed, but RuleCache refresh failed",
+                batch.id,
+            )
+            warnings.append("canonical data committed; rule cache refresh deferred")
     # Applied data feeds the query engine; drop the facets cache so the next
     # /query/facets call rebuilds from fresh rows. Lazy import avoids a cycle.
     from scenario_db.query_engine.service import invalidate_facets_cache
 
-    invalidate_facets_cache()
-    return ApplyWriteResponse(batch_id=batch.id, status=batch.status, applied_refs=applied_refs)
+    try:
+        invalidate_facets_cache()
+    except Exception:
+        logger.exception(
+            "Write batch %s committed, but query facets invalidation failed",
+            batch.id,
+        )
+        warnings.append("canonical data committed; query facets refresh deferred")
+    return ApplyWriteResponse(
+        batch_id=batch.id,
+        status=batch.status,
+        applied_refs=applied_refs,
+        warnings=warnings,
+    )
 
 
 def _diff_target_revision(diff: DiffPreviewResponse | dict[str, Any]) -> str:

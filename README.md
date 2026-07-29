@@ -178,21 +178,26 @@ Optional query/cache settings:
 
 ```powershell
 $env:SCENARIO_DB_QUERY_FACETS_CACHE_TTL_SECONDS="60"
+$env:SCENARIO_DB_RULE_CACHE_TTL_SECONDS="5"
 ```
 
 `/api/v1/query/facets` uses this short TTL cache when the value is greater than
-0. Write apply invalidates it automatically. If you load YAML directly through
-`python -m scenario_db.etl.loader`, either wait for the TTL or enable the
-internal admin endpoint in a trusted local/VPN environment and refresh caches:
+0. The decision rule cache refreshes on the first rule-dependent request after
+its TTL; `0` refreshes it on every such request. These TTLs bound cross-worker
+staleness because each worker refreshes independently. Write apply refreshes
+the current worker immediately. If you load YAML directly through
+`python -m scenario_db.etl.loader`, either wait for the TTLs or enable the
+internal admin endpoint in a trusted local/VPN environment and refresh the
+current worker:
 
 ```powershell
 $env:SCENARIO_DB_ADMIN_ENDPOINTS_ENABLED="true"
 Invoke-RestMethod -Method Post "$api/admin/cache/refresh"
 ```
 
-The admin endpoint refreshes the current API process. With multiple uvicorn
-workers, restart the API or refresh each worker through the operational entry
-point you expose.
+The admin endpoint refreshes the worker that handles the request. Other workers
+converge within `SCENARIO_DB_RULE_CACHE_TTL_SECONDS` and
+`SCENARIO_DB_QUERY_FACETS_CACHE_TTL_SECONDS`.
 
 ## Write API
 

@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     # /query/facets response cache TTL in seconds. 0 disables the cache;
     # write apply invalidates it regardless of TTL.
     query_facets_cache_ttl_seconds: float = 0.0
+    # Per-worker decision-rule cache maximum staleness. 0 refreshes on every
+    # rule-dependent request; a small positive value bounds multi-worker drift.
+    rule_cache_ttl_seconds: float = 5.0
     # State-changing API calls are deny-by-default. Configure a JSON object of
     # audit identity -> secret, for example {"architect@example.com": "secret"}.
     mutation_api_keys: dict[str, SecretStr] = Field(default_factory=dict)

@@ -3,9 +3,10 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import threading
 import time
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.orm import Session
 
@@ -24,6 +25,8 @@ class RuleCache:
     gate_rules: list[GateRuleResponse] = field(default_factory=list)
     loaded: bool = False
     load_error: str | None = None
+    loaded_at_monotonic: float = field(default_factory=time.monotonic)
+    _refresh_lock: Any = field(default_factory=threading.RLock, repr=False)
 
     @classmethod
     def load(cls, session: Session) -> "RuleCache":
@@ -64,19 +67,60 @@ class RuleCache:
         return cls(loaded=False)  # unreachable, but satisfies type checker
 
     def invalidate_issues(self, session: Session) -> None:
-        self.issues = [IssueResponse.model_validate(r) for r in session.query(Issue).all()]
-        self.loaded = True
+        with self._refresh_lock:
+            self.issues = [IssueResponse.model_validate(r) for r in session.query(Issue).all()]
+            self.loaded = True
+            self.load_error = None
+            self.loaded_at_monotonic = time.monotonic()
 
     def invalidate_gate_rules(self, session: Session) -> None:
-        self.gate_rules = [GateRuleResponse.model_validate(r) for r in session.query(GateRule).all()]
-        self.loaded = True
+        with self._refresh_lock:
+            self.gate_rules = [GateRuleResponse.model_validate(r) for r in session.query(GateRule).all()]
+            self.loaded = True
+            self.load_error = None
+            self.loaded_at_monotonic = time.monotonic()
 
     def invalidate_all(self, session: Session) -> None:
-        refreshed = type(self).load(session)
-        self.issues = refreshed.issues
-        self.gate_rules = refreshed.gate_rules
-        self.loaded = refreshed.loaded
-        self.load_error = refreshed.load_error
+        with self._refresh_lock:
+            refreshed = type(self).load(session)
+            self.issues = refreshed.issues
+            self.gate_rules = refreshed.gate_rules
+            self.loaded = refreshed.loaded
+            self.load_error = refreshed.load_error
+            self.loaded_at_monotonic = refreshed.loaded_at_monotonic
+
+    def refresh_if_stale(
+        self,
+        session: Session,
+        ttl_seconds: float,
+        *,
+        now: float | None = None,
+    ) -> None:
+        current = time.monotonic() if now is None else now
+        if not self._needs_refresh(ttl_seconds, current):
+            return
+        with self._refresh_lock:
+            current = time.monotonic() if now is None else now
+            if not self._needs_refresh(ttl_seconds, current):
+                return
+            refreshed = type(self).load(session)
+            self.issues = refreshed.issues
+            self.gate_rules = refreshed.gate_rules
+            self.loaded = True
+            self.load_error = None
+            self.loaded_at_monotonic = current
+
+    def mark_stale(self, reason: str = "Rule cache refresh required") -> None:
+        with self._refresh_lock:
+            self.loaded = False
+            self.load_error = reason
+
+    def _needs_refresh(self, ttl_seconds: float, now: float) -> bool:
+        return (
+            not self.loaded
+            or ttl_seconds <= 0
+            or now - self.loaded_at_monotonic >= ttl_seconds
+        )
 
 
 # ---------------------------------------------------------------------------
