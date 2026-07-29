@@ -40,6 +40,8 @@ def test_pre_commit_runs_ruff_and_mypy() -> None:
 def test_github_actions_runs_quality_and_test_gates() -> None:
     workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
 
+    assert "actions/checkout@v5.1.0" in workflow
+    assert "astral-sh/setup-uv@v8.3.2" in workflow
     assert "uv run ruff check ." in workflow
     assert "uv run mypy" in workflow
     assert "uv run pip-audit" in workflow
