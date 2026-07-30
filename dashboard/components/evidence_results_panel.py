@@ -24,6 +24,7 @@ from dashboard.components.evidence_result_view import render_result_breakdown
 from dashboard.components.measurement_result_view import (
     measurement_list_rows,
     prediction_measurement_comparison_rows,
+    prediction_measurement_comparison_report,
     render_measurement_result,
     sw_task_rows,
 )
@@ -165,7 +166,10 @@ def _render_prediction_measurement_comparison(
     counterpart_error: str | None,
 ) -> None:
     st.markdown("**Prediction vs Measurement**")
-    st.caption("Delta is prediction minus measurement. Positive means the projection is higher than the measured mean.")
+    st.caption(
+        "Delta is prediction minus the catalog-selected measurement statistic. "
+        "Coverage rows keep prediction-only and measurement-only metrics visible."
+    )
     if counterpart_error:
         st.warning(f"Comparison evidence unavailable: {counterpart_error}")
         return
@@ -192,13 +196,75 @@ def _render_prediction_measurement_comparison(
     st.caption(
         f"Prediction: {prediction.get('id') or '-'} | Measurement: {measurement.get('id') or '-'}"
     )
-    rows = prediction_measurement_comparison_rows(prediction=prediction, measurement=measurement)
-    if not rows:
-        st.info("No overlapping KPI keys between the selected prediction and measurement evidence.")
-        return
+    report = prediction_measurement_comparison_report(
+        prediction=prediction,
+        measurement=measurement,
+    )
+    _render_comparison_context(report["context"])
+    rows = prediction_measurement_comparison_rows(
+        prediction=prediction,
+        measurement=measurement,
+    )
+    if rows:
+        _render_comparison_metrics(rows)
+        render_copyable_dataframe(
+            rows,
+            key="evidence_prediction_measurement_compare",
+            use_container_width=True,
+            hide_index=True,
+        )
+    else:
+        st.info("No cataloged scenario KPI is available for headline comparison.")
 
-    _render_comparison_metrics(rows)
-    render_copyable_dataframe(rows, key="evidence_prediction_measurement_compare", use_container_width=True, hide_index=True)
+    _render_comparison_coverage(report)
+
+
+def _render_comparison_context(context: dict[str, Any]) -> None:
+    rows = context.get("rows") if isinstance(context.get("rows"), list) else []
+    blockers = context.get("blocking_mismatches") or []
+    if blockers:
+        st.error(
+            "Delta calculation is blocked by context mismatch: "
+            + ", ".join(str(field) for field in blockers)
+        )
+    advisory = [
+        row["field"]
+        for row in rows
+        if row.get("severity") == "advisory" and row.get("status") == "MISMATCH"
+    ]
+    if advisory:
+        st.warning("Advisory context mismatch: " + ", ".join(str(field) for field in advisory))
+    non_matches = [row for row in rows if row.get("status") != "MATCH"]
+    if non_matches:
+        render_copyable_dataframe(
+            non_matches,
+            key="evidence_prediction_measurement_context",
+            use_container_width=True,
+            hide_index=True,
+        )
+
+
+def _render_comparison_coverage(report: dict[str, Any]) -> None:
+    summary = report.get("summary") if isinstance(report.get("summary"), dict) else {}
+    counts = summary.get("status_counts") if isinstance(summary.get("status_counts"), dict) else {}
+    st.markdown("**Detailed metric coverage**")
+    cols = st.columns(4)
+    cols[0].metric("Matched", int(counts.get("MATCHED", 0)))
+    cols[1].metric("Prediction only", int(counts.get("PREDICTION_ONLY", 0)))
+    cols[2].metric("Measurement only", int(counts.get("MEASUREMENT_ONLY", 0)))
+    blocked = sum(
+        int(counts.get(status, 0))
+        for status in ("CONTEXT_MISMATCH", "UNIT_MISMATCH", "STATISTIC_MISSING")
+    )
+    cols[3].metric("Blocked / invalid", blocked)
+    rows = report.get("rows") if isinstance(report.get("rows"), list) else []
+    if rows:
+        render_copyable_dataframe(
+            rows,
+            key="evidence_prediction_measurement_coverage",
+            use_container_width=True,
+            hide_index=True,
+        )
 
 
 def _select_counterpart(label: str, items: list[dict[str, Any]], *, key: str) -> dict[str, Any] | None:
