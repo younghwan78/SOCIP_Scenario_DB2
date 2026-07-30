@@ -17,6 +17,9 @@ measurements/uhd30-vdis/
 
 측정팀이 채우는 것은 `meta.yaml`뿐이다. 나머지는 캡처 도구의 원본 산출물이다.
 
+Power/Perfetto 원본 없이 이미 집계된 값을 전달할 때는 `meta.yaml`의
+`metric_observations`만으로 canonical measurement YAML을 생성할 수도 있다.
+
 ## 2. 데이터 흐름
 
 ```mermaid
@@ -98,6 +101,23 @@ kpi:
 
 `total_power_mw`를 `kpi`에 직접 적으면 power CSV 집계값보다 우선한다.
 
+### 4.2.1 확장 metric observation
+
+Rail/DMA port/pipeline stage/SW task처럼 scope가 있는 상세 값은
+`metric_observations`에 기록한다. 허용 metric, scope, canonical unit는
+`src/scenario_db/models/evidence/metric_catalog.yaml`을 따른다.
+
+```yaml
+metric_observations:
+  - metric_id: sw.start_jitter
+    scope: {kind: task, ref: eis_warp}
+    unit: us
+    stats: {mean: 84, p95: 210, max: 620, n: 5400}
+```
+
+명시 observation과 power/Perfetto에서 파생된 observation의 identity가 같으면
+명시 observation이 우선한다. Identity는 `metric_id + scope.kind + scope.ref`다.
+
 ### 4.3 Power CSV 매핑 (`power`)
 
 CSV는 time 열 + rail별 전력(mW) 열로 구성된 waveform이다. 각 rail은 캡처 구간 전체에
@@ -122,6 +142,22 @@ power:
 - `role: cpu_cluster` → 같은 cluster의 rail을 **샘플별로 합산**한 뒤 MeasuredKpi로 집계해
   `cpu_breakdown[cluster].power_mw`에 들어간다.
 - `total_power_rails`는 지정 rail을 **샘플별 합산** 후 집계한다(통계적으로 올바른 방식).
+
+`format: rail_long`은 반복 측정별 rail voltage/current/power triplet을 받는다.
+
+```yaml
+power:
+  csv: power_monitor.csv
+  format: rail_long
+  run_column: run
+  rail_column: rail
+  voltage_column: voltage_v
+  current_column: current_ma
+  power_column: power_mw
+```
+
+Importer는 power KPI와 기존 `vdd_power` 외에도 rail별 `power.rail`,
+`power.rail_voltage`, `power.rail_current` observation을 생성한다.
 
 ### 4.4 Perfetto digest (`perfetto`)
 

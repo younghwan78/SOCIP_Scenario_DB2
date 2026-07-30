@@ -22,6 +22,7 @@ from pydantic import Field, model_validator
 from scenario_db.models.common import BaseScenarioModel
 from scenario_db.models.evidence.common import ExecutionContext
 from scenario_db.models.evidence.measurement import Provenance
+from scenario_db.models.evidence.metrics import MetricObservation
 
 
 class RailRole(BaseScenarioModel):
@@ -125,6 +126,7 @@ class MeasurementImportMeta(BaseScenarioModel):
     # Merged into the evidence kpi map; power-derived total_power_mw wins on clash
     # only when the meta does not set it explicitly.
     kpi: dict[str, float | int | dict] = Field(default_factory=dict)
+    metric_observations: list[MetricObservation] = Field(default_factory=list)
     power: PowerSpec | None = None
     perfetto: PerfettoSpec | None = None
     artifacts: list[ArtifactSpec] = Field(default_factory=list)
@@ -142,6 +144,14 @@ class MeasurementImportMeta(BaseScenarioModel):
 
     @model_validator(mode="after")
     def _need_some_input(self) -> MeasurementImportMeta:
-        if self.power is None and self.perfetto is None:
-            raise ValueError("meta must provide at least one of 'power' or 'perfetto'")
+        if (
+            self.power is None
+            and self.perfetto is None
+            and not self.kpi
+            and not self.metric_observations
+        ):
+            raise ValueError(
+                "meta must provide at least one of 'kpi', 'power', 'perfetto', "
+                "or 'metric_observations'"
+            )
         return self

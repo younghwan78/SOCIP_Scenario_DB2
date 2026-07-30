@@ -10,6 +10,7 @@ from pathlib import Path
 
 from scenario_db.legacy_import.report import ImportReport
 from scenario_db.meas_import.meta import MeasurementImportMeta
+from scenario_db.meas_import.observations import build_metric_observations
 from scenario_db.meas_import.perfetto_digest import PerfettoDigest
 from scenario_db.meas_import.power_csv import PowerDigest
 
@@ -132,6 +133,10 @@ def assemble_evidence(
 
     if power is not None and power.vdd_power:
         doc["vdd_power"] = power.vdd_power
+
+    observations = build_metric_observations(meta, power, perfetto, kpi=kpi)
+    if observations:
+        doc["metric_observations"] = observations
 
     artifacts = build_artifacts(meta, base_dir, report)
     if artifacts:
