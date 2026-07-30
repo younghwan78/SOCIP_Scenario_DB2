@@ -30,6 +30,31 @@ metric_id + scope.kind + scope.ref
 
 Duplicate identities in one evidence document are invalid.
 
+## Comparison semantics
+
+Prediction and measurement observations join on the identity above. The
+catalog's `compare_statistic` selects the measured statistic; a prediction
+`value` remains a scalar. Delta is always:
+
+```text
+prediction - measurement
+```
+
+Comparison rows use explicit coverage states instead of silently dropping
+unmatched data:
+
+- `MATCHED`
+- `PREDICTION_ONLY`
+- `MEASUREMENT_ONLY`
+- `UNIT_MISMATCH`
+- `STATISTIC_MISSING`
+- `CONTEXT_MISMATCH`
+
+Project/scenario/variant and SW baseline/thermal/power-state mismatches are
+blocking: values remain visible but delta is not calculated. Silicon revision
+and ambient temperature mismatches are advisory because pre-silicon projection
+is commonly checked against later silicon.
+
 ## Catalog
 
 The default catalog is

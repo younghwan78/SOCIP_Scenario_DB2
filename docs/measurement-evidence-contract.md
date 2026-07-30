@@ -174,6 +174,9 @@ measurement import가 `id`를 자동 생성할 때는 같은 날 재측정을 �
 - `/compare/evidence`, `/compare/variants`는 `kind`, `project_ref` 필터를 받고,
   후보가 여럿이면 `measured_at` 최신(NULL은 후순위, 동률이면 id 역순)을 선택한다.
   `/compare/variants`는 ref의 scenario_id를 필터에 사용한다.
+- `GET /api/v1/compare/prediction-measurement?prediction_id=...&measurement_id=...`
+  는 catalog metric을 scope identity로 join하고, context compatibility와 누락 metric을
+  포함한 canonical 비교 report를 반환한다.
 
 ## 7. 예시 문서
 
