@@ -94,6 +94,8 @@ loads may commit supported files, but report every rejected file in `skipped`
 and set `ok=false`; unsupported contracts are never silently ignored.
 For a practical map of required and optional DB data, see
 [docs/db-data-guide.md](docs/db-data-guide.md).
+For the camera prediction/measurement rollout workflow, see
+[docs/prediction-measurement-comparison-guide-ko.md](docs/prediction-measurement-comparison-guide-ko.md).
 
 Scenario IDs are global in the current schema. If two fixture sets contain the
 same scenario id under different projects, the default ETL policy rejects the
