@@ -42,6 +42,9 @@ def upsert_simulation(raw: dict, sha256: str, session: Session) -> None:
     row.topology_order      = list(obj.topology_order or []) or None
     row.vdd_power           = obj.vdd_power or {}
     row.sw_task_timing      = [b.model_dump(exclude_none=True) for b in obj.sw_task_timing] or None
+    row.metric_observations = [
+        item.model_dump(exclude_none=True) for item in obj.metric_observations
+    ] or None
     row.calculation_trace   = obj.calculation_trace
     row.params_hash         = obj.params_hash
     row.artifacts           = [a.model_dump(exclude_none=True) for a in obj.artifacts]
@@ -76,6 +79,9 @@ def upsert_measurement(raw: dict, sha256: str, session: Session) -> None:
     row.kpi                 = {k: _kpi_val(v) for k, v in obj.kpi.items()}
     row.cpu_breakdown       = [b.model_dump(exclude_none=True) for b in obj.cpu_breakdown] or None
     row.sw_task_timing      = [b.model_dump(exclude_none=True) for b in obj.sw_task_timing] or None
+    row.metric_observations = [
+        item.model_dump(exclude_none=True) for item in obj.metric_observations
+    ] or None
     row.vdd_power           = obj.vdd_power or None
     row.timeline_events     = list(obj.timeline_events) or None
     row.artifacts           = [a.model_dump(exclude_none=True) for a in obj.artifacts] or None

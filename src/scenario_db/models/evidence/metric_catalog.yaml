@@ -1,0 +1,103 @@
+version: "1.0"
+metrics:
+  power.total:
+    category: power
+    canonical_unit: mW
+    allowed_scopes: [scenario]
+    compare_statistic: mean
+    polarity: lower_is_better
+    kpi_key: total_power_mw
+  power.rail:
+    category: power
+    canonical_unit: mW
+    allowed_scopes: [rail]
+    compare_statistic: mean
+    polarity: lower_is_better
+  power.rail_voltage:
+    category: power
+    canonical_unit: V
+    allowed_scopes: [rail]
+    compare_statistic: mean
+    polarity: neutral
+  power.rail_current:
+    category: power
+    canonical_unit: mA
+    allowed_scopes: [rail]
+    compare_statistic: mean
+    polarity: lower_is_better
+  bandwidth.total:
+    category: bandwidth
+    canonical_unit: MB/s
+    allowed_scopes: [scenario]
+    compare_statistic: mean
+    polarity: neutral
+    kpi_key: total_bw_mbs
+  bandwidth.read:
+    category: bandwidth
+    canonical_unit: MB/s
+    allowed_scopes: [dma_port, ip]
+    compare_statistic: p95
+    polarity: neutral
+  bandwidth.write:
+    category: bandwidth
+    canonical_unit: MB/s
+    allowed_scopes: [dma_port, ip]
+    compare_statistic: p95
+    polarity: neutral
+  bandwidth.otf:
+    category: bandwidth
+    canonical_unit: MB/s
+    allowed_scopes: [dma_port, ip]
+    compare_statistic: p95
+    polarity: neutral
+  latency.frame:
+    category: latency
+    canonical_unit: ms
+    allowed_scopes: [scenario]
+    compare_statistic: p95
+    polarity: lower_is_better
+    kpi_key: frame_latency_ms
+  latency.stage:
+    category: latency
+    canonical_unit: ms
+    allowed_scopes: [pipeline_stage, ip]
+    compare_statistic: p95
+    polarity: lower_is_better
+  camera.fps:
+    category: camera
+    canonical_unit: fps
+    allowed_scopes: [scenario]
+    compare_statistic: mean
+    polarity: higher_is_better
+    kpi_key: fps_effective
+  camera.frame_drop:
+    category: camera
+    canonical_unit: count
+    allowed_scopes: [scenario]
+    compare_statistic: value
+    polarity: lower_is_better
+    kpi_key: frame_drop_count
+  sw.runtime:
+    category: sw_timing
+    canonical_unit: ms
+    allowed_scopes: [task, thread]
+    compare_statistic: p95
+    polarity: lower_is_better
+  sw.runtime_jitter:
+    category: sw_timing
+    canonical_unit: us
+    allowed_scopes: [task, thread]
+    compare_statistic: p95
+    polarity: lower_is_better
+  sw.start_jitter:
+    category: sw_timing
+    canonical_unit: us
+    allowed_scopes: [task, thread]
+    compare_statistic: p95
+    polarity: lower_is_better
+  sw.deadline_miss:
+    category: sw_timing
+    canonical_unit: count
+    allowed_scopes: [task, thread]
+    compare_statistic: value
+    polarity: lower_is_better
