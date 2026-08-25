@@ -73,7 +73,7 @@ flowchart TB
   WB -.->|적용 후 비활성화| VAR
 ```
 
-- **1번/2번 계층**이 먼저 채워져야 DB Explorer·Pipeline Viewer·Architecture Query가 의미 있는 값을 낸다 (`docs/db-data-guide.md` §1 참고).
+- **1번/2번 계층**이 먼저 채워져야 DB Explorer·Pipeline Viewer·Architecture Query가 의미 있는 값을 낸다 (`docs/guides/import/db-data-guide.md` §1 참고).
 - **3번 계층(`evidence`)**이 이번 문서의 핵심이다. 시뮬레이션과 실측이 **같은 테이블**에 들어간다.
 - `scenario_variants.id`는 `evidence.variant_ref`로 참조되지만 FK가 아니라 freeform 텍스트다. variant는 routing_switch/buffer_overrides 같은 JSONB 패치를 부모 variant에 누적 적용하는 파생 구조(`derived_from_variant`)라 엄격한 FK보다 유연한 참조가 맞다.
 

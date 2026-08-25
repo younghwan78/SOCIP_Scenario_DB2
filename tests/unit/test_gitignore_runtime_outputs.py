@@ -10,3 +10,7 @@ def test_runtime_logs_folder_is_ignored() -> None:
     gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
 
     assert "runtime_logs/" in gitignore.splitlines()
+    assert ".codex_run_logs/" in gitignore.splitlines()
+    assert ".runlogs/" in gitignore.splitlines()
+    assert ".runtime/" in gitignore.splitlines()
+    assert "logs/" in gitignore.splitlines()

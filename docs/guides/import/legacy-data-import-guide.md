@@ -6,7 +6,7 @@
 
 - 가능: ScenarioDB canonical YAML 형식의 데이터를 PostgreSQL에 적재하고 FastAPI/Viewer에서 확인.
 - 가능: sensor/display catalog를 `ip_catalog`의 `category: sensor`, `category: display`로 적재.
-- 아직 직접 불가: `E:\10_Codes\23_MMIP_Scenario_simulation2`의 legacy simulation YAML을 그대로 `etl.loader`에 넣는 것.
+- 아직 직접 불가: `<LEGACY_FIXTURE_ROOT>`의 legacy simulation YAML을 그대로 `etl.loader`에 넣는 것.
 - 필요 작업: legacy YAML을 canonical ScenarioDB YAML로 변환하는 importer/adapter.
 
 즉, DB/ETL/API/Viewer 기반은 준비되어 있지만, 기존 simulation YAML을 실제 DB 입력으로 쓰려면 변환 단계가 필요하다.
@@ -78,7 +78,7 @@ decision.review
 Windows 개발 환경:
 
 ```powershell
-cd E:\50_Codex_Soc_Scenario_DB\implementation
+cd <SCENARIODB_ROOT>
 $env:DATABASE_URL="postgresql+psycopg2://scenario_user:scenario_pass@localhost:15432/scenario_db"
 uv run alembic upgrade head
 uv run python -m scenario_db.etl.loader generated\scenariodb --strict --report-json generated\scenariodb\etl-report.json
@@ -642,11 +642,11 @@ models before DB load unless `--skip-generated-validation` is passed.
 Single scenario example:
 
 ```powershell
-cd E:\50_Codex_Soc_Scenario_DB\implementation
+cd <SCENARIODB_ROOT>
 uv run python -m scenario_db.legacy_import.cli `
-  --hw E:\10_Codes\23_MMIP_Scenario_simulation2\hw_config\projectA_hw.yaml `
-  --sensor E:\10_Codes\23_MMIP_Scenario_simulation2\hw_config\sensor_config.yaml `
-  --scenario E:\10_Codes\23_MMIP_Scenario_simulation2\scenario_config\projectA_FHD30_recording_scenario.yaml `
+  --hw "<LEGACY_FIXTURE_ROOT>\hw_config\projectA_hw.yaml" `
+  --sensor "<LEGACY_FIXTURE_ROOT>\hw_config\sensor_config.yaml" `
+  --scenario "<LEGACY_FIXTURE_ROOT>\scenario_config\projectA_FHD30_recording_scenario.yaml" `
   --display generated\display_config.yaml `
   --out generated\scenariodb `
   --project proj-projectA `
@@ -659,10 +659,10 @@ Directory import example:
 
 ```powershell
 uv run python -m scenario_db.legacy_import.cli `
-  --hw E:\10_Codes\23_MMIP_Scenario_simulation2\hw_config\projectA_hw.yaml `
-  --sensor E:\10_Codes\23_MMIP_Scenario_simulation2\hw_config\sensor_config.yaml `
+  --hw "<LEGACY_FIXTURE_ROOT>\hw_config\projectA_hw.yaml" `
+  --sensor "<LEGACY_FIXTURE_ROOT>\hw_config\sensor_config.yaml" `
   --display generated\display_config.yaml `
-  --scenario-dir E:\10_Codes\23_MMIP_Scenario_simulation2\scenario_config `
+  --scenario-dir "<LEGACY_FIXTURE_ROOT>\scenario_config" `
   --out generated\scenariodb `
   --project proj-projectA `
   --project-name "Project A" `
@@ -681,8 +681,8 @@ This creates one superset base scenario and one variant per input file:
 
 ```powershell
 uv run python -m scenario_db.legacy_import.cli `
-  --hw E:\10_Codes\23_MMIP_Scenario_simulation2\hw_config\projectA_hw.yaml `
-  --sensor E:\10_Codes\23_MMIP_Scenario_simulation2\hw_config\sensor_config.yaml `
+  --hw "<LEGACY_FIXTURE_ROOT>\hw_config\projectA_hw.yaml" `
+  --sensor "<LEGACY_FIXTURE_ROOT>\hw_config\sensor_config.yaml" `
   --scenario-group `
     E:\path\to\projectA_FHD30_recording_scenario.yaml `
     E:\path\to\projectA_FHD60_recording_scenario.yaml `
@@ -767,7 +767,7 @@ Variant grouping rule:
 - Different producer/consumer path: keep both paths in base and disable the unused path per variant.
 - SW task changes HW path: model the SW task and dependent HW nodes as optional branch nodes, then disable the missing branch in the variants that do not use it.
 
-See `docs/legacy-scenario-grouping-policy.md` for the detailed split-vs-variant
+See `docs/contracts/data/legacy-scenario-grouping-policy.md` for the detailed split-vs-variant
 rules.
 
 After generation, there are two load paths.

@@ -103,7 +103,7 @@ Task naming 규약:
 - projected sim은 HW 전력(계산값 × 보정계수)과 SW 시간(타 과제 실측 × cluster scale)을
   함께 담는다. 이를 위해 `evidence.simulation`에도 `sw_task_timing` 필드가 있다(native
   계산 run은 비워 둠).
-- 생성/검증 도구와 recipe 작성은 `docs/projection-guide-ko.md`(`scenario_db.projection`)
+- 생성/검증 도구와 recipe 작성은 `docs/guides/measurement/projection-guide-ko.md`(`scenario_db.projection`)
   참조.
 
 ## 4. Canonical Scenario Key 규약 (프로젝트 간 비교)

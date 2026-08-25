@@ -18,7 +18,7 @@
 서버 실행:
 
 ```powershell
-cd E:\50_Codex_Soc_Scenario_DB\implementation
+cd <SCENARIODB_ROOT>
 
 docker compose up -d postgres pgadmin
 
@@ -31,7 +31,7 @@ uv run uvicorn scenario_db.api.app:app --host 127.0.0.1 --port 18000
 Streamlit:
 
 ```powershell
-cd E:\50_Codex_Soc_Scenario_DB\implementation
+cd <SCENARIODB_ROOT>
 
 $env:DATABASE_URL="postgresql+psycopg2://scenario_user:scenario_pass@localhost:15432/scenario_db"
 $env:SCENARIODB_API_BASE="http://127.0.0.1:18000/api/v1"

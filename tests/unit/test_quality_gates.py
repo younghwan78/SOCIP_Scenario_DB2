@@ -50,7 +50,7 @@ def test_github_actions_runs_quality_and_test_gates() -> None:
 
 
 def test_ubuntu_runbook_matches_mutation_auth_contract() -> None:
-    runbook = (ROOT / "README_ubuntu.md").read_text(encoding="utf-8")
+    runbook = (ROOT / "docs" / "operations" / "deployment-ubuntu.md").read_text(encoding="utf-8")
 
     assert "SCENARIO_DB_MUTATION_API_KEYS" in runbook
     assert "SCENARIO_DB_MUTATION_AUTH_DISABLED=false" in runbook

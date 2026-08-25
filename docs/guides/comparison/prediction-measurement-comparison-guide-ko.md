@@ -165,7 +165,7 @@ canonical `meta.yaml`/measurement contract로 끝나야 한다. 비교 API가 ra
 저장소 root에서 아래 명령을 실행한다.
 
 ```powershell
-cd E:\50_Codex_Soc_Scenario_DB\implementation
+cd <SCENARIODB_ROOT>
 
 .\.venv\Scripts\python.exe -m scenario_db.meas_import.cli `
   --meta path\to\meta.yaml `
@@ -321,8 +321,8 @@ test도 추가로 수행한다.
 
 전체 contract는 다음 문서를 함께 참고한다.
 
-- `docs/metric-observation-contract.md`
-- `docs/measurement-evidence-contract.md`
-- `docs/measurement-import-guide-ko.md`
-- `docs/projection-guide-ko.md`
-- `internal_docs/measurement-comparison-design.md`
+- `docs/contracts/data/metric-observation-contract.md`
+- `docs/contracts/data/measurement-evidence-contract.md`
+- `docs/guides/measurement/measurement-import-guide-ko.md`
+- `docs/guides/measurement/projection-guide-ko.md`
+- `internal_docs/design_notes/measurement-comparison-design.md`

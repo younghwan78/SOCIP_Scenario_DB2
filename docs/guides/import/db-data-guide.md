@@ -227,7 +227,7 @@ Architecture Query가 현재 지원하는 주요 field와 원천 데이터는 �
 로컬 fixture, clean DB reload, controlled bulk load에 적합하다.
 
 ```powershell
-cd E:\50_Codex_Soc_Scenario_DB\implementation
+cd <SCENARIODB_ROOT>
 $env:DATABASE_URL="postgresql+psycopg2://scenario_user:scenario_pass@localhost:15432/scenario_db"
 uv run alembic upgrade head
 uv run python -m scenario_db.etl.loader demo\fixtures --strict --report-json output\etl-report.json

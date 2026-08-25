@@ -18,7 +18,10 @@ The current implementation focuses on these flows:
 ├── alembic/                  # PostgreSQL migrations
 ├── dashboard/                # Streamlit viewer
 ├── demo/fixtures/            # Demo YAML data set
-├── docs/                     # API, testing, deployment notes
+├── docs/                     # Current design, contracts, guides, operations
+├── internal_docs/            # Implementation history, investigations, checklists
+├── output/                   # Generated reports/artifacts (Git ignored)
+├── runtime_logs/             # Local service logs (Git ignored)
 ├── scripts/                  # Utility scripts
 ├── src/scenario_db/          # Python package
 │   ├── api/                  # FastAPI app, routers, response schemas
@@ -33,6 +36,13 @@ The current implementation focuses on these flows:
 └── tests/                    # Unit and integration tests
 ```
 
+## Documentation
+
+Start with [docs/README.md](docs/README.md). It separates current system design, contracts,
+guides, and operations from dated implementation records under
+[internal_docs/README.md](internal_docs/README.md). Generated reports and process logs are
+disposable outputs and do not belong in either documentation tree.
+
 ## Prerequisites
 
 - Python 3.11+
@@ -42,7 +52,7 @@ The current implementation focuses on these flows:
 All commands below assume PowerShell and this working directory:
 
 ```powershell
-cd E:\50_Codex_Soc_Scenario_DB\implementation
+cd <SCENARIODB_ROOT>
 ```
 
 ## Setup
@@ -93,9 +103,9 @@ failures, and post-load validation errors as rollback conditions. Non-strict
 loads may commit supported files, but report every rejected file in `skipped`
 and set `ok=false`; unsupported contracts are never silently ignored.
 For a practical map of required and optional DB data, see
-[docs/db-data-guide.md](docs/db-data-guide.md).
+[docs/guides/import/db-data-guide.md](docs/guides/import/db-data-guide.md).
 For the camera prediction/measurement rollout workflow, see
-[docs/prediction-measurement-comparison-guide-ko.md](docs/prediction-measurement-comparison-guide-ko.md).
+[docs/guides/comparison/prediction-measurement-comparison-guide-ko.md](docs/guides/comparison/prediction-measurement-comparison-guide-ko.md).
 
 Scenario IDs are global in the current schema. If two fixture sets contain the
 same scenario id under different projects, the default ETL policy rejects the
@@ -279,8 +289,8 @@ Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/apply" -Headers
 Pipeline patch diff includes an `impact` block that shows whether existing
 variant overlays would become stale after the base change.
 
-More examples are in [docs/write-api-runbook.md](docs/write-api-runbook.md).
-The write contract is in [docs/write-api-contract.md](docs/write-api-contract.md).
+More examples are in [docs/operations/write-api-runbook.md](docs/operations/write-api-runbook.md).
+The write contract is in [docs/contracts/api/write-api-contract.md](docs/contracts/api/write-api-contract.md).
 
 ## Import Workbench
 
@@ -325,7 +335,7 @@ without manually copying IDs.
 Start the API first. Then open a new PowerShell and run:
 
 ```powershell
-cd E:\50_Codex_Soc_Scenario_DB\implementation
+cd <SCENARIODB_ROOT>
 $env:SCENARIODB_API_BASE="http://127.0.0.1:18000/api/v1"
 uv run --group dashboard streamlit run dashboard\Home.py --server.port 18502 --server.address 127.0.0.1
 ```
@@ -604,7 +614,7 @@ Run a core module coverage baseline without changing the default test gate:
 uv run --group dev pytest tests\unit --cov=scenario_db --cov-report=term-missing
 ```
 
-The current read-side contract is documented in [docs/read-api-contract.md](docs/read-api-contract.md). Update that file and the related tests before changing Read API response shapes.
+The current read-side contract is documented in [docs/contracts/api/read-api-contract.md](docs/contracts/api/read-api-contract.md). Update that file and the related tests before changing Read API response shapes.
 
 Equivalent explicit virtual environment commands:
 

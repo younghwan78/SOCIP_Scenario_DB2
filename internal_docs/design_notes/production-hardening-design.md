@@ -93,5 +93,5 @@ coverage, dependency audit, build, and repository diff checks. GitHub branch
 protection requires the `quality` and `integration` checks before merge.
 
 사내 환경 검증과 최종 승인 기록은
-[사내 Staging 검증 및 Main Merge 체크리스트](internal-staging-merge-checklist-ko.md)를
+[사내 Staging 검증 및 Main Merge 체크리스트](../release_checklists/internal-staging-merge-checklist-ko.md)를
 사용한다.

@@ -2,7 +2,7 @@
 
 `scenario_db.meas_import`는 한 번의 측정 캡처(power monitor CSV + perfetto trace)와
 `meta.yaml` 사이드카를 입력받아 canonical `evidence.measurement` YAML을 생성한다.
-필드 의미와 3-tier 저장 정책은 `docs/measurement-evidence-contract.md`를 따른다.
+필드 의미와 3-tier 저장 정책은 `docs/contracts/data/measurement-evidence-contract.md`를 따른다.
 
 ## 1. 입력 구성
 
@@ -39,7 +39,7 @@ flowchart LR
 ## 3. 실행
 
 ```powershell
-cd E:\50_Codex_Soc_Scenario_DB\implementation
+cd <SCENARIODB_ROOT>
 uv run python -m scenario_db.meas_import.cli `
   --meta demo\measurements\uhd30-vdis\meta.yaml `
   --out generated\measurements `

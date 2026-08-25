@@ -27,7 +27,7 @@ def test_timeline_dependency_error_names_missing_package_and_install_command(mon
 
 
 def test_server_deployment_docs_require_sim_dependency_group():
-    ubuntu_readme = Path("README_ubuntu.md").read_text(encoding="utf-8")
+    ubuntu_readme = Path("docs/operations/deployment-ubuntu.md").read_text(encoding="utf-8")
 
     assert "uv sync --group sim" in ubuntu_readme
     assert "simulation_dependencies" in ubuntu_readme

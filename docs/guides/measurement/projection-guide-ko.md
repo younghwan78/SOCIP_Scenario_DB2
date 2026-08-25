@@ -2,7 +2,7 @@
 
 `scenario_db.projection`은 한 과제(U)의 **실측 vs 계산(sim) 보정 오차**를 산출해, 다른
 과제(V)의 계산 기반 sim을 측정값에 가까운 **예측(projection) evidence**로 변환한다.
-필드/lineage 규약은 `docs/measurement-evidence-contract.md` §3을 따른다.
+필드/lineage 규약은 `docs/contracts/data/measurement-evidence-contract.md` §3을 따른다.
 
 ## 1. 핵심 개념
 
@@ -48,7 +48,7 @@ U/V에서 동일해야 매칭된다(contract §2 task naming 규약).
 ## 4. 실행
 
 ```powershell
-cd E:\50_Codex_Soc_Scenario_DB\implementation
+cd <SCENARIODB_ROOT>
 uv run python -m scenario_db.projection.cli `
   --recipe demo\projection\uhd30-vdis-u-to-v.yaml `
   --out generated\projection `

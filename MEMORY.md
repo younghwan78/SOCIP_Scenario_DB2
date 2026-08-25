@@ -5,7 +5,7 @@ This file records repo-local implementation decisions and current state. It is n
 ## 2026-04-26 Viewer Direction
 
 - The viewer moved from Cytoscape-style rendering toward ELK.js/SVG because SoC block diagrams need readable orthogonal routing, hierarchy groups, and professional topology/detail diagrams.
-- The legacy reference project `E:\10_Codes\23_MMIP_Scenario_simulation2` remains read-only and is used as the visual behavior reference.
+- The separately supplied legacy fixture root remains read-only and is used only as a visual/behavior reference.
 - The current renderer lives in `dashboard/components/elk_viewer.py`.
 - The FastAPI view projection still returns `ViewResponse`; the Streamlit renderer adapts that response into an ELK graph.
 
@@ -60,7 +60,7 @@ uv run --group dev pytest tests\unit
 ## 2026-04-26 Read API Wrap-Up
 
 - Read API is considered ready to freeze for the current viewer/demo milestone.
-- The read-side contract is documented in `docs/read-api-contract.md`.
+- The read-side contract is documented in `docs/contracts/api/read-api-contract.md`.
 - Error responses are normalized as `{ "error": "...", "detail": ... }` for handled `HTTPException`, `NoResultFound`, `IntegrityError`, and request validation errors.
 - Runtime/view contract tests are concentrated in `tests/integration/test_runtime_view_e2e.py`.
 - Before changing Read API response shape, update the contract document and tests first.
@@ -120,7 +120,7 @@ uv run --group dev pytest tests\unit
 - SoC extensibility cleanup phase was implemented and committed locally after validating fixture quality/readiness rules:
   - `src/scenario_db/sim/fixture_contract.py`
   - `scripts/check_soc_sim_contract.py`
-  - `docs/soc-simulation-contract.md`
+  - `docs/contracts/simulation/soc-simulation-contract.md`
   - `tests/unit/sim/test_fixture_contract.py`
 - Exploration recipe and sweep foundations are now in place:
   - `src/scenario_db/sim/shape_propagation.py`
@@ -128,7 +128,7 @@ uv run --group dev pytest tests\unit
   - `src/scenario_db/sim/exploration_runner.py`
   - `scripts/compile_exploration_recipe.py`
   - `scripts/compile_exploration_sweep.py`
-  - `docs/exploration-simulation-workflow.md`
+  - `docs/design/exploration-simulation-workflow.md`
 - Shape propagation is opt-in through `sim.inherit_shape` / `sim.shape_propagation`. Existing production fixtures are not auto-mutated by this path.
 - Exploration recipes automatically enable inherited shape and support source shape, crop, scale, output format, port-level RDMA/WDMA/CIN/COUT, mapping provenance, and preview-only sweep comparison.
 - Exploration examples were added under `demo/exploration_fixtures`:
@@ -138,9 +138,9 @@ uv run --group dev pytest tests\unit
   - codec/display path
   - camera FPS/format sweep
   - camera scale/compression sweep
-- Korean usage guide is available at `docs/exploration-fixture-guide-ko.md`.
+- Korean usage guide is available at `docs/guides/exploration/exploration-fixture-guide-ko.md`.
 - Exploration API contract and endpoints were added:
-  - `docs/exploration-api-contract.md`
+  - `docs/contracts/api/exploration-api-contract.md`
   - `GET /api/v1/exploration/examples`
   - `GET /api/v1/exploration/examples/{example_id}`
   - `POST /api/v1/exploration/recipes/compile`
@@ -195,7 +195,7 @@ uv run --group dev pytest tests\unit
   - BW calculation and debug trace use the same effective compression-ratio logic.
   - `COMP_SBWC_LOSSLESS` with `comp_ratio: 0.5` remains the SBWC case for pyramid sweep outputs.
 - Documentation updated:
-  - `docs/exploration-fixture-guide-ko.md` documents Workbench operation, topology/port-flow debugging, candidate comparison behavior, and the new pyramid SBWC example.
+  - `docs/guides/exploration/exploration-fixture-guide-ko.md` documents Workbench operation, topology/port-flow debugging, candidate comparison behavior, and the new pyramid SBWC example.
   - `demo/exploration_fixtures/README.md` lists the new sweep example.
 - Latest verification before/after push:
   - `uv run pytest tests/unit/dashboard -q` -> `40 passed`
@@ -236,7 +236,7 @@ uv run --group dev pytest tests\unit
   - `demo/exploration_fixtures/templates/camera_recording_pyramid_v1.yaml`
   - Models HP2 recording-style chain with CSIS/PDP/BYRP/RGBP/YUVP/MLSC/MTNR/MSNR/MCSC/DPU/CODEC, multi-WDMA MLSC, multi-RDMA MTNR, and L0/L1/L2/L3/G4 pyramid buffers.
 - Added documentation and CLI:
-  - `docs/chain-template-contract-ko.md`
+  - `docs/contracts/data/chain-template-contract-ko.md`
   - `scripts/compile_chain_template.py`
   - `demo/exploration_fixtures/README.md` updated with template usage.
 - Verification:
@@ -261,7 +261,7 @@ uv run --group dev pytest tests\unit
   - `demo/exploration_fixtures/template_sweeps/camera_recording_pyramid_sbwc_template_sweep.yaml`
   - 4-case L0/L1 SBWC on/off sweep over the camera recording pyramid template.
 - Documentation updated:
-  - `docs/chain-template-contract-ko.md`
+  - `docs/contracts/data/chain-template-contract-ko.md`
   - `demo/exploration_fixtures/README.md`
 - Verification:
   - `uv run pytest tests/unit/sim/test_chain_templates.py tests/unit/sim/test_exploration_fixtures.py tests/unit/api/test_exploration.py tests/unit/dashboard/test_exploration_workbench.py -q` -> `42 passed`

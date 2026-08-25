@@ -17,7 +17,7 @@ The current write scope supports:
 Run the API first:
 
 ```powershell
-cd E:\50_Codex_Soc_Scenario_DB\implementation
+cd <SCENARIODB_ROOT>
 $env:DATABASE_URL="postgresql+psycopg2://scenario_user:scenario_pass@localhost:15432/scenario_db"
 $env:SCENARIO_DB_API_PRINCIPALS='{"architect@example.com":{"secret":"replace-with-a-long-random-secret","roles":["writer"]}}'
 uv run uvicorn scenario_db.api.app:app --host 127.0.0.1 --port 18000
