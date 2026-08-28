@@ -60,6 +60,9 @@ def list_issues(
     db: Session = Depends(get_db),
 ):
     """Issue 목록. 캐시 적재 성공 시 캐시 우선(sort 미지원), 실패 시 DB fallback."""
+    # 캐시 적중 여부와 무관하게 같은 입력은 같은 결과여야 한다:
+    # 잘못된 sort_by는 캐시 경로에서도 400.
+    sort_by = validate_sort_column(Issue, sort_by)
     if cache.loaded:
         items = cache.issues[offset: offset + limit]
         return PagedResponse(
@@ -69,7 +72,6 @@ def list_issues(
             offset=offset,
             has_next=(offset + limit) < len(cache.issues),
         )
-    sort_by = validate_sort_column(Issue, sort_by)
     q = apply_sort(db.query(Issue), Issue, sort_by, sort_dir)
     return PagedResponse.from_query(q, limit=limit, offset=offset)
 
@@ -134,6 +136,7 @@ def list_gate_rules(
     cache: RuleCache = Depends(get_rule_cache),
     db: Session = Depends(get_db),
 ):
+    sort_by = validate_sort_column(GateRule, sort_by)
     if cache.loaded:
         items = cache.gate_rules[offset: offset + limit]
         return PagedResponse(
@@ -143,6 +146,5 @@ def list_gate_rules(
             offset=offset,
             has_next=(offset + limit) < len(cache.gate_rules),
         )
-    sort_by = validate_sort_column(GateRule, sort_by)
     q = apply_sort(db.query(GateRule), GateRule, sort_by, sort_dir)
     return PagedResponse.from_query(q, limit=limit, offset=offset)

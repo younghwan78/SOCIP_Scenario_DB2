@@ -135,6 +135,8 @@ def normalize_evidence_observations(
                 ),
             )
 
+    is_simulation = str(evidence.get("kind") or "") == "evidence.simulation"
+    domain_power: dict[str, dict[str, float]] = {}
     for rail, entry in _mapping(evidence.get("vdd_power")).items():
         if not isinstance(entry, dict):
             entry = {"power_mw": entry}
@@ -155,6 +157,34 @@ def normalize_evidence_observations(
                     identities,
                     _from_legacy_value(metric_id, "rail", rail, unit, entry[key]),
                 )
+        # Rail names differ between sides (simulation uses logical VDD/domain
+        # names from the IP catalog, measurements use physical PMIC buck
+        # names), so power.rail rows rarely join. power.domain is the declared
+        # join key: measurements declare rail->domain explicitly; a simulation
+        # rail IS its domain unless it declares otherwise.
+        domain = entry.get("domain")
+        if domain is None and is_simulation:
+            domain = rail
+        if isinstance(domain, str) and domain and isinstance(power, dict) and "mean" in power:
+            acc = domain_power.setdefault(domain, {"mean": 0.0, "var": 0.0})
+            acc["mean"] += power["mean"]
+            if "std" in power:
+                acc["var"] += power["std"] ** 2
+
+    for domain, acc in sorted(domain_power.items()):
+        stats: dict[str, float | int] = {"mean": round(acc["mean"], 6)}
+        if acc["var"] > 0:
+            stats["std"] = round(acc["var"] ** 0.5, 6)
+        _append_if_new(
+            out,
+            identities,
+            {
+                "metric_id": "power.domain",
+                "scope": {"kind": "power_domain", "ref": domain},
+                "unit": "mW",
+                "stats": stats,
+            },
+        )
 
     for task in evidence.get("sw_task_timing") or []:
         if not isinstance(task, dict) or not task.get("task"):
@@ -340,8 +370,10 @@ def _generic_stats(value: dict[str, Any]) -> dict[str, float | int]:
 
 
 def _from_rail_power(entry: dict[str, Any]) -> dict[str, Any] | float | None:
+    # total_mw is the simulation runner's per-rail total (core_mw + bw_mw);
+    # without it every simulation rail is invisible to the comparison.
     mapping = {
-        "mean": _first_number(entry, ("mean_mw", "power_mw", "power", "mean")),
+        "mean": _first_number(entry, ("mean_mw", "power_mw", "total_mw", "power", "mean")),
         "p95": _first_number(entry, ("p95_mw", "p95")),
         "std": _first_number(entry, ("std_mw", "std")),
     }

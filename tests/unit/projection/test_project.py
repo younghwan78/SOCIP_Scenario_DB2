@@ -61,6 +61,28 @@ def test_project_power_passthrough_ip_when_disabled():
     assert out["trace"]["ip_breakdown"]["mode"] == "passthrough"
 
 
+def test_project_power_gated_rail_zero_factor_is_not_replaced_by_total():
+    """A rail measured at 0 mW (gated domain) yields a legitimate 0.0 factor;
+    it must scale the rail to 0, not fall through to the total factor."""
+    cal = compute_calibration(
+        {
+            "kpi": {"total_power_mw": 2000},
+            "vdd_power": {"VDD_NPU": {"mean_mw": 100.0}},
+        },
+        {
+            "kpi": {"total_power_mw": {"mean": 2200.0, "n": 3}},
+            "vdd_power": {"VDD_NPU": {"power_mw": 0.0}},
+        },
+    )
+    assert cal.rail_factors["VDD_NPU"] == 0.0
+
+    v_sim = {"vdd_power": {"VDD_NPU": {"mean_mw": 150.0}}}
+    out = project_power(v_sim, cal, scale_ip_breakdown=False)
+
+    assert out["vdd_power"]["VDD_NPU"]["mean_mw"] == 0.0
+    assert out["trace"]["scaled_rails"]["VDD_NPU"]["source"] == "rail"
+
+
 def test_project_sw_timing_scales_by_cluster():
     recipe = ProjectionRecipe.model_validate(
         {

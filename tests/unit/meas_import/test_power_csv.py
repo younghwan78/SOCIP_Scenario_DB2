@@ -196,7 +196,8 @@ def test_rail_long_cluster_sums_by_run_id_not_row_order(tmp_path: Path):
     # run 1 = 10 + 100, run 2 = 20 + 200. Row order must not affect this.
     assert digest.cpu_cluster_power["BIG"]["mean"] == 165.0
     assert digest.cpu_cluster_power["BIG"]["p95"] == 214.5
-    assert digest.cpu_cluster_power["BIG"]["std"] == 55.0
+    # Sample stdev (n=2): |a-b| / sqrt(2).
+    assert digest.cpu_cluster_power["BIG"]["std"] == 77.782
 
 
 def test_rail_long_cluster_missing_member_run_raises(tmp_path: Path):

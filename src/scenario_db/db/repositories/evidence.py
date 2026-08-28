@@ -119,6 +119,7 @@ def upsert_simulation_evidence(
     row.kind = evidence.kind
     row.scenario_ref = str(evidence.scenario_ref)
     row.variant_ref = evidence.variant_ref
+    row.project_ref = str(evidence.project_ref) if evidence.project_ref else None
     row.sw_baseline_ref = str(evidence.execution_context.sw_baseline_ref)
     row.sweep_job_id = evidence.sweep_context.sweep_job_id if evidence.sweep_context else None
     row.execution_context = evidence.execution_context.model_dump(exclude_none=True)

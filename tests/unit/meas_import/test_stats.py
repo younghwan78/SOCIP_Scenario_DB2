@@ -30,7 +30,8 @@ def test_measured_kpi_shape_and_values():
     assert kpi["mean"] == 110.0
     assert kpi["n"] == 3
     assert kpi["p95"] == pytest.approx(119.0)
-    assert kpi["std"] == pytest.approx(math.sqrt(200.0 / 3), abs=1e-3)
+    # Sample stdev (n-1 denominator), the correct estimator for repeated runs.
+    assert kpi["std"] == pytest.approx(10.0, abs=1e-3)
     lower, upper = kpi["ci_95"]
     assert lower < kpi["mean"] < upper
 
@@ -40,13 +41,25 @@ def test_measured_kpi_single_sample_has_no_ci():
     assert kpi == {"mean": 500.0, "p95": 500.0, "std": 0.0, "n": 1}
 
 
-def test_default_ci_uses_1_96_and_no_ci_level():
+def test_default_ci_uses_student_t_and_no_ci_level():
     values = [100.0, 110.0, 120.0]
     kpi = measured_kpi(values)
-    std = math.sqrt(200.0 / 3)
-    half = 1.96 * std / math.sqrt(3)
-    assert kpi["ci_95"] == [round(110.0 - half, 3), round(110.0 + half, 3)]
+    # n=3 -> dof=2 -> two-sided t(0.975) = 4.30265; the old z=1.96 constant
+    # understated a 3-run CI by ~2.2x.
+    half = 4.30265 * 10.0 / math.sqrt(3)
+    assert kpi["ci_95"][0] == pytest.approx(110.0 - half, abs=2e-3)
+    assert kpi["ci_95"][1] == pytest.approx(110.0 + half, abs=2e-3)
     assert "ci_level" not in kpi          # default level is implicit
+
+
+def test_t_multiplier_matches_reference_values():
+    from scenario_db.meas_import.stats import t_multiplier
+
+    assert t_multiplier(0.95, 2) == pytest.approx(4.30265, abs=1e-4)
+    assert t_multiplier(0.95, 1) == pytest.approx(12.7062, abs=1e-3)
+    assert t_multiplier(0.99, 4) == pytest.approx(4.60409, abs=1e-4)
+    # Large dof converges to the normal z multiplier.
+    assert t_multiplier(0.95, 10000) == pytest.approx(1.96, abs=1e-3)
 
 
 def test_explicit_0_95_matches_default():
