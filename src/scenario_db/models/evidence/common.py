@@ -44,6 +44,9 @@ class RunInfo(BaseScenarioModel):
     writer: str | None = None
     git_commit: str | None = None
     source: SourceType
+    # Which agreed sim.config_profile (id@version) supplied the run defaults —
+    # makes "which settings produced this number" answerable from evidence.
+    config_profile_ref: str | None = None
 
 
 class SweepAggregation(BaseScenarioModel):

@@ -175,6 +175,7 @@ def build_simulation_evidence(
     params_hash: str | None = None,
     evidence_id: str | None = None,
     timestamp: str | None = None,
+    config_profile_ref: str | None = None,
 ) -> SimulationEvidence:
     """Convert a run result into a persistable SimulationEvidence model."""
 
@@ -204,6 +205,7 @@ def build_simulation_evidence(
             tool="scenariodb-sim",
             tool_version="0.1.0",
             source="calculated",
+            config_profile_ref=config_profile_ref,
         ),
         aggregation=Aggregation(strategy="single_run"),
         kpi={

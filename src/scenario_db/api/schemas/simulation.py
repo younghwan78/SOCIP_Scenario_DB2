@@ -14,6 +14,9 @@ class SimulateRequest(BaseModel):
     variant_id: str
     execution_context: ExecutionContext
     config: SimulationRunConfig = Field(default_factory=SimulationRunConfig)
+    # Agreed per-project settings (sim.config_profile id). Profile values fill
+    # config fields the request did not set explicitly; explicit fields win.
+    config_profile_ref: str | None = None
     dvfs_tables: dict[str, DVFSTable] = Field(default_factory=dict)
     dvfs_table_ref: DocumentId | None = None
     soc_ref: DocumentId | None = None

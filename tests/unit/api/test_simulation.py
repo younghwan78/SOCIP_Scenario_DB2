@@ -782,7 +782,7 @@ def test_run_simulation_request_loads_db_dvfs_table_and_marks_context(monkeypatc
             feasible=True,
         )
 
-    def _evidence(result, *, execution_context, project_ref, params_hash):
+    def _evidence(result, *, execution_context, project_ref, params_hash, config_profile_ref=None):
         captured["execution_context"] = execution_context
         return _Evidence(execution_context)
 

@@ -2,8 +2,17 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from scenario_db.db.models.capability import IpCatalog, SocCdgmProfile, SocDvfsTable, SocPlatform, SwComponent, SwProfile
+from scenario_db.db.models.capability import (
+    IpCatalog,
+    SimConfigProfile,
+    SocCdgmProfile,
+    SocDvfsTable,
+    SocPlatform,
+    SwComponent,
+    SwProfile,
+)
 from scenario_db.models.capability.hw import IpCatalog as PydanticIp
+from scenario_db.models.capability.sim_config import SimConfigProfile as PydanticSimConfigProfile
 from scenario_db.models.capability.hw import SocCdgmProfile as PydanticSocCdgmProfile
 from scenario_db.models.capability.hw import SocDvfsTable as PydanticSocDvfsTable
 from scenario_db.models.capability.hw import SocPlatform as PydanticSoc
@@ -112,4 +121,23 @@ def upsert_sw_component(raw: dict, sha256: str, session: Session) -> None:
     row.feature_flags  = dict(obj.feature_flags) if obj.feature_flags else None
     row.capabilities   = obj.capabilities.model_dump(exclude_none=True) if obj.capabilities else None
     row.yaml_sha256    = sha256
+    session.add(row)
+
+
+def upsert_sim_config_profile(raw: dict, sha256: str, session: Session) -> None:
+    obj = PydanticSimConfigProfile.model_validate(raw)
+    row = session.get(SimConfigProfile, obj.id) or SimConfigProfile(id=obj.id)
+    if row.yaml_sha256 == sha256:
+        return
+    row.schema_version  = obj.schema_version
+    row.project_ref     = str(obj.project_ref) if obj.project_ref else None
+    row.soc_ref         = str(obj.soc_ref) if obj.soc_ref else None
+    row.version         = obj.version
+    row.status          = obj.status
+    row.approved_by     = obj.approved_by
+    row.description     = obj.description
+    row.run_config      = obj.run_config.model_dump(exclude_none=True)
+    row.rail_domain_map = dict(obj.rail_domain_map) or None
+    row.notes           = obj.notes
+    row.yaml_sha256     = sha256
     session.add(row)
