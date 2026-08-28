@@ -63,6 +63,7 @@ class SimulationArtifactExportRequest(BaseModel):
 
 
 class SimulationArtifactResponse(BaseModel):
+    artifact_id: str
     type: str
     storage: str
     path: str
@@ -78,4 +79,5 @@ class SimulationArtifactExportResponse(BaseModel):
     evidence_id: str
     prefix: str
     output_dir: str
+    generation_id: str
     artifacts: list[SimulationArtifactResponse] = Field(default_factory=list)

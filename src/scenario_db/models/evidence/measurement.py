@@ -12,6 +12,10 @@ from scenario_db.models.evidence.common import (
     ExecutionContext,
     SweepContext,
 )
+from scenario_db.models.evidence.metrics import (
+    MetricObservation,
+    validate_metric_observations,
+)
 
 _KPI_KEY_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
@@ -111,6 +115,7 @@ class MeasurementEvidence(BaseScenarioModel):
     # only rails the name heuristic gets wrong need declaring.
     vdd_power: dict[str, dict[str, float | str]] = Field(default_factory=dict)
     timeline_events: list[dict[str, Any]] = Field(default_factory=list)
+    metric_observations: list[MetricObservation] = Field(default_factory=list)
     artifacts: list[Artifact] = Field(default_factory=list)
 
     @model_validator(mode="after")
@@ -121,6 +126,7 @@ class MeasurementEvidence(BaseScenarioModel):
                     f"KPI key must be lowercase snake_case (e.g. total_power_mW). "
                     f"Got: '{key}'"
                 )
+        validate_metric_observations(self.metric_observations)
         return self
 
     @model_validator(mode="after")

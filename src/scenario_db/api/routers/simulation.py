@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import logging
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Session
 
+from scenario_db.api.auth import ApiPrincipal, require_roles
 from scenario_db.api.deps import get_db
+from scenario_db.api.resource_limits import admission_slot, enforce_timeline_frame_limit
 from scenario_db.api.schemas.common import PagedResponse
 from scenario_db.api.schemas.evidence import EvidenceResponse
 from scenario_db.api.schemas.simulation import (
@@ -26,17 +31,30 @@ from scenario_db.reporting.exporter import (
     artifact_metadata,
     build_report_context,
     build_report_zip_bytes,
+    cleanup_artifact_generations,
+    cleanup_report_bundle,
     resolve_report_output_dir,
     write_report_bundle,
 )
 from scenario_db.sim.service import check_simulation_readiness_request, run_simulation_request
 
 router = APIRouter(prefix="/simulation", tags=["simulation"])
+logger = logging.getLogger(__name__)
 
 
 @router.post("/run", response_model=SimulateRunResponse)
-def run_simulation(request: SimulateRequest, db: Session = Depends(get_db)):
-    return run_simulation_request(db, request)
+def run_simulation(
+    request: SimulateRequest,
+    db: Session = Depends(get_db),
+    _principal: ApiPrincipal = Depends(require_roles("analyst", "writer", "admin")),
+):
+    settings = get_settings()
+    enforce_timeline_frame_limit(
+        request.config.timeline_frame_count,
+        settings.simulation_max_timeline_frames,
+    )
+    with admission_slot("simulation", settings.simulation_max_concurrent_runs):
+        return run_simulation_request(db, request)
 
 
 @router.get("/readiness", response_model=SimulationReadinessResponse)
@@ -81,12 +99,18 @@ def export_result_artifacts(
     evidence_id: str,
     request: SimulationArtifactExportRequest | None = None,
     db: Session = Depends(get_db),
+    _principal: ApiPrincipal = Depends(require_roles("writer", "admin")),
 ):
     request = request or SimulationArtifactExportRequest()
     row = get_evidence(db, evidence_id)
     if row is None or row.kind != "evidence.simulation":
         raise NoResultFound(f"Simulation evidence '{evidence_id}' not found")
     evidence = _simulation_evidence_dict(row)
+    previous_artifacts = [
+        dict(item)
+        for item in (getattr(row, "artifacts", None) or [])
+        if isinstance(item, dict)
+    ]
     settings = get_settings()
     try:
         output_dir = resolve_report_output_dir(
@@ -104,27 +128,63 @@ def export_result_artifacts(
         soc_ref=request.soc_ref,
     )
     try:
-        written = write_report_bundle(evidence, context=context, output_dir=output_dir, overwrite=request.overwrite)
+        report_root = Path(settings.report_dir).expanduser().resolve()
+        storage_root = report_root if output_dir.is_relative_to(report_root) else output_dir
+        written = write_report_bundle(
+            evidence,
+            context=context,
+            output_dir=output_dir,
+            storage_root=storage_root,
+            overwrite=request.overwrite,
+        )
     except FileExistsError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except OSError as exc:
         raise HTTPException(status_code=500, detail=f"Report artifact export failed: {exc}") from exc
-    metadata = artifact_metadata(written)
-    updated = update_simulation_artifacts(db, evidence_id, metadata)
-    if updated is None:
-        raise NoResultFound(f"Simulation evidence '{evidence_id}' not found")
-    db.commit()
+    try:
+        metadata = artifact_metadata(written)
+        updated = update_simulation_artifacts(db, evidence_id, metadata)
+        if updated is None:
+            raise NoResultFound(f"Simulation evidence '{evidence_id}' not found")
+        db.commit()
+    except Exception:
+        db.rollback()
+        try:
+            cleanup_report_bundle(written)
+        except OSError:
+            logger.exception(
+                "Failed to clean artifact generation %s after database failure",
+                written.generation_id,
+            )
+        raise
+    try:
+        cleanup_artifact_generations(
+            report_root,
+            previous_artifacts,
+            replacement_types={
+                str(item.get("type"))
+                for item in metadata
+                if isinstance(item, dict)
+            },
+        )
+    except OSError:
+        logger.exception(
+            "Failed to clean superseded artifact generations for evidence %s",
+            evidence_id,
+        )
     return {
         "evidence_id": evidence_id,
         "prefix": written.prefix,
-        "output_dir": str(written.output_dir),
+        "output_dir": written.relative_output_dir,
+        "generation_id": written.generation_id,
         "artifacts": [
             {
+                "artifact_id": artifact.artifact_id,
                 "type": artifact.type,
                 "storage": artifact.storage,
-                "path": str(artifact.path),
+                "path": artifact.relative_path,
                 "sha256": artifact.sha256,
                 "bytes": artifact.bytes,
                 "mime": artifact.mime,
@@ -166,7 +226,11 @@ def download_result_artifacts_zip(
 
 
 @router.delete("/results/{evidence_id}", status_code=204)
-def delete_result(evidence_id: str, db: Session = Depends(get_db)):
+def delete_result(
+    evidence_id: str,
+    db: Session = Depends(get_db),
+    _principal: ApiPrincipal = Depends(require_roles("admin")),
+):
     deleted = delete_simulation_evidence(db, evidence_id)
     if not deleted:
         raise NoResultFound(f"Simulation evidence '{evidence_id}' not found")

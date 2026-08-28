@@ -5,6 +5,7 @@ import hashlib
 import io
 import json
 from collections.abc import Mapping, Sequence
+from html import escape
 from typing import Any
 
 import streamlit as st
@@ -46,7 +47,7 @@ def render_copy_table_button(
   <button id="{element_id}" style="
     border:1px solid #D1D5DB;border-radius:6px;background:#FFFFFF;color:#374151;
     padding:4px 10px;font-size:12px;line-height:18px;cursor:pointer;">
-    {label}
+    {escape(label)}
   </button>
   <span id="{element_id}-status" style="font-size:12px;color:#6B7280;"></span>
 </div>

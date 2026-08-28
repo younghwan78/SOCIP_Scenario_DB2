@@ -87,15 +87,15 @@ YAML boolean in some parsers.
 ## Compile Examples
 
 ```powershell
-uv run python scripts\compile_exploration_recipe.py demo\exploration_fixtures\recipes\camera_crop_scale_m2m.yaml --output .runlogs\camera_crop_scale_m2m.compiled.yaml --bundle-output .runlogs\camera_crop_scale_m2m.bundle.json
+uv run python scripts\compile_exploration_recipe.py demo\exploration_fixtures\recipes\camera_crop_scale_m2m.yaml --output output\exploration\camera_crop_scale_m2m.compiled.yaml --bundle-output output\exploration\camera_crop_scale_m2m.bundle.json
 
-uv run python scripts\compile_exploration_sweep.py demo\exploration_fixtures\sweeps\camera_fps_format_sweep.yaml --bundle-output .runlogs\camera_fps_format_sweep.bundle.json --cases-output .runlogs\camera_fps_format_sweep.cases.json
+uv run python scripts\compile_exploration_sweep.py demo\exploration_fixtures\sweeps\camera_fps_format_sweep.yaml --bundle-output output\exploration\camera_fps_format_sweep.bundle.json --cases-output output\exploration\camera_fps_format_sweep.cases.json
 
-uv run python scripts\compile_chain_template.py demo\exploration_fixtures\templates\camera_minimal_otf_v1.yaml --output .runlogs\camera_minimal_otf.compiled.yaml --bundle-output .runlogs\camera_minimal_otf.bundle.json --normalized-output .runlogs\camera_minimal_otf.normalized.yaml
+uv run python scripts\compile_chain_template.py demo\exploration_fixtures\templates\camera_minimal_otf_v1.yaml --output output\exploration\camera_minimal_otf.compiled.yaml --bundle-output output\exploration\camera_minimal_otf.bundle.json --normalized-output output\exploration\camera_minimal_otf.normalized.yaml
 
-uv run python scripts\compile_chain_template.py demo\exploration_fixtures\templates\camera_recording_pyramid_v1.yaml --output .runlogs\camera_recording_pyramid.compiled.yaml --bundle-output .runlogs\camera_recording_pyramid.bundle.json --normalized-output .runlogs\camera_recording_pyramid.normalized.yaml
+uv run python scripts\compile_chain_template.py demo\exploration_fixtures\templates\camera_recording_pyramid_v1.yaml --output output\exploration\camera_recording_pyramid.compiled.yaml --bundle-output output\exploration\camera_recording_pyramid.bundle.json --normalized-output output\exploration\camera_recording_pyramid.normalized.yaml
 
-uv run python scripts\compile_chain_template_sweep.py demo\exploration_fixtures\template_sweeps\camera_recording_pyramid_full_sbwc_template_sweep.yaml --bundle-output .runlogs\camera_recording_pyramid_full_sweep.bundle.json --cases-output .runlogs\camera_recording_pyramid_full_sweep.cases.json
+uv run python scripts\compile_chain_template_sweep.py demo\exploration_fixtures\template_sweeps\camera_recording_pyramid_full_sbwc_template_sweep.yaml --bundle-output output\exploration\camera_recording_pyramid_full_sweep.bundle.json --cases-output output\exploration\camera_recording_pyramid_full_sweep.cases.json
 ```
 
 The compiled bundles are preview/staging inputs. Persist only selected

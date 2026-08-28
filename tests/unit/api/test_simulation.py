@@ -7,10 +7,11 @@ from zipfile import ZipFile
 import io
 
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import IntegrityError
 
 from scenario_db.api.app import create_app
 from scenario_db.api.deps import get_db
-from scenario_db.api.schemas.simulation import SimulateRequest
+from scenario_db.api.schemas.simulation import SimulateRequest, SimulateRunResponse
 from scenario_db.api.routers import simulation as simulation_router
 from scenario_db.db.models.capability import SocDvfsTable
 from scenario_db.models.evidence.common import ExecutionContext
@@ -139,20 +140,25 @@ def test_export_simulation_result_artifacts_endpoint(monkeypatch):
 
     out_dir = Path("E:/reports").resolve()
 
-    def _fake_write(evidence, *, context, output_dir, overwrite):
+    def _fake_write(evidence, *, context, output_dir, storage_root, overwrite):
         assert evidence["id"] == "sim-1"
         assert context.project_ref == "projectA"
         assert context.variant_name == "FHD30 Recording"
         assert Path(output_dir) == out_dir
+        assert Path(storage_root) == out_dir
         assert overwrite is True
         return WrittenReportBundle(
             prefix="projectA-FHD30_Recording",
-            output_dir=out_dir,
+            output_dir=out_dir / "generation-1",
+            relative_output_dir="projectA-FHD30_Recording/generation-1",
+            generation_id="generation-1",
             artifacts=[
                 WrittenArtifact(
+                    artifact_id="generation-1:timing_chart",
                     type="timing_chart",
                     storage="local_file",
                     path=out_dir / "projectA-FHD30_Recording_timing_chart.html",
+                    relative_path="projectA-FHD30_Recording/generation-1/timing_chart.html",
                     sha256="sha-timing",
                     bytes=10,
                 )
@@ -173,7 +179,7 @@ def test_export_simulation_result_artifacts_endpoint(monkeypatch):
     monkeypatch.setattr(
         simulation_router,
         "artifact_metadata",
-        lambda bundle: [{"type": "timing_chart", "storage": "local_file", "path": str(out_dir / "projectA-FHD30_Recording_timing_chart.html"), "sha256": "sha-timing"}],
+        lambda bundle: [{"artifact_id": "generation-1:timing_chart", "type": "timing_chart", "storage": "local_file", "path": "projectA-FHD30_Recording/generation-1/timing_chart.html", "sha256": "sha-timing"}],
         raising=False,
     )
     monkeypatch.setattr(simulation_router, "update_simulation_artifacts", _fake_update, raising=False)
@@ -188,12 +194,18 @@ def test_export_simulation_result_artifacts_endpoint(monkeypatch):
     body = response.json()
     assert body["evidence_id"] == "sim-1"
     assert body["prefix"] == "projectA-FHD30_Recording"
+    assert body["generation_id"] == "generation-1"
+    assert body["output_dir"] == "projectA-FHD30_Recording/generation-1"
+    assert body["artifacts"][0]["path"] == "projectA-FHD30_Recording/generation-1/timing_chart.html"
     assert body["artifacts"][0]["bytes"] == 10
     assert updated_artifacts[0]["sha256"] == "sha-timing"
     db.commit.assert_called_once()
 
 
-def test_export_simulation_result_rejects_output_dir_outside_report_root(monkeypatch):
+def test_export_simulation_result_rejects_output_dir_outside_report_root(
+    monkeypatch,
+    tmp_path: Path,
+):
     app = create_app()
     db = MagicMock()
 
@@ -223,12 +235,18 @@ def test_export_simulation_result_rejects_output_dir_outside_report_root(monkeyp
         artifacts = []
 
     monkeypatch.setattr(simulation_router, "get_evidence", lambda db_arg, evidence_id: _Row())
-    monkeypatch.setattr(simulation_router, "get_settings", lambda: MagicMock(report_dir="output_simulation", allow_custom_report_dir=False))
+    report_root = tmp_path / "report-root"
+    outside_dir = tmp_path.parent / "outside-reports"
+    monkeypatch.setattr(
+        simulation_router,
+        "get_settings",
+        lambda: MagicMock(report_dir=str(report_root), allow_custom_report_dir=False),
+    )
     client = TestClient(app, raise_server_exceptions=False)
 
     response = client.post(
         "/api/v1/simulation/results/sim-1/artifacts/export",
-        json={"output_dir": "E:/outside-reports"},
+        json={"output_dir": str(outside_dir)},
     )
 
     assert response.status_code == 422
@@ -279,6 +297,68 @@ def test_export_simulation_result_existing_files_return_conflict(monkeypatch):
 
     assert response.status_code == 409
     db.commit.assert_not_called()
+
+
+def test_export_simulation_result_cleans_generation_when_db_commit_fails(
+    monkeypatch,
+    tmp_path: Path,
+):
+    app = create_app()
+    db = MagicMock()
+    db.commit.side_effect = RuntimeError("database unavailable")
+
+    def _override_db():
+        yield db
+
+    app.dependency_overrides[get_db] = _override_db
+
+    row = SimpleNamespace(
+        id="sim-1",
+        kind="evidence.simulation",
+        schema_version="2.2",
+        scenario_ref="uc-camera-recording",
+        variant_ref="FHD30-SDR-H265",
+        execution_context={},
+        run_info={},
+        aggregation={},
+        kpi={},
+        ip_breakdown=[],
+        dma_breakdown=[],
+        timing_breakdown=[],
+        dvfs_breakdown=[],
+        timeline_events=[],
+        external_devices=[],
+        topology_order=[],
+        vdd_power={},
+        artifacts=[],
+    )
+    generation_dir = tmp_path / "prefix" / "generation-1"
+    written = WrittenReportBundle(
+        prefix="prefix",
+        output_dir=generation_dir,
+        relative_output_dir="prefix/generation-1",
+        generation_id="generation-1",
+        artifacts=[],
+    )
+    cleaned: list[WrittenReportBundle] = []
+
+    monkeypatch.setattr(simulation_router, "get_evidence", lambda *args: row)
+    monkeypatch.setattr(
+        simulation_router,
+        "get_settings",
+        lambda: MagicMock(report_dir=str(tmp_path), allow_custom_report_dir=False),
+    )
+    monkeypatch.setattr(simulation_router, "write_report_bundle", lambda *args, **kwargs: written)
+    monkeypatch.setattr(simulation_router, "artifact_metadata", lambda bundle: [])
+    monkeypatch.setattr(simulation_router, "update_simulation_artifacts", lambda *args: row)
+    monkeypatch.setattr(simulation_router, "cleanup_report_bundle", cleaned.append)
+    client = TestClient(app, raise_server_exceptions=False)
+
+    response = client.post("/api/v1/simulation/results/sim-1/artifacts/export")
+
+    assert response.status_code == 500
+    db.rollback.assert_called_once()
+    assert cleaned == [written]
 
 
 def test_download_simulation_result_artifacts_zip_endpoint(monkeypatch):
@@ -444,6 +524,169 @@ def test_run_simulation_request_returns_response_on_cache_miss(monkeypatch):
     assert response.status == "completed"
     assert response.cached is False
     assert response.persisted is False
+
+
+def test_persist_race_converges_on_winning_simulation_evidence(monkeypatch):
+    db = MagicMock()
+    db.commit.side_effect = IntegrityError("INSERT evidence", {}, Exception("duplicate"))
+
+    inputs = SimpleNamespace(
+        scenario_id="scenario",
+        variant_id="variant",
+        project_ref="project",
+        warnings=["input warning"],
+    )
+    generated = SimpleNamespace(id="sim-scenario-variant-request-hash")
+    winner = SimpleNamespace(id=generated.id)
+    lookups = iter([None, winner])
+
+    monkeypatch.setattr(
+        "scenario_db.sim.service.load_canonical_graph",
+        lambda db_arg, scenario_id, variant_id: object(),
+    )
+    monkeypatch.setattr(
+        "scenario_db.sim.service.build_simulation_inputs",
+        lambda graph, config: inputs,
+    )
+    monkeypatch.setattr(
+        "scenario_db.sim.service._request_hash",
+        lambda *args, **kwargs: "request-hash",
+    )
+    monkeypatch.setattr(
+        "scenario_db.sim.service.get_simulation_evidence_by_params_hash",
+        lambda *args, **kwargs: next(lookups),
+    )
+    monkeypatch.setattr("scenario_db.sim.service.run_simulation", lambda *args, **kwargs: object())
+    monkeypatch.setattr(
+        "scenario_db.sim.service.build_simulation_evidence",
+        lambda *args, **kwargs: generated,
+    )
+    monkeypatch.setattr("scenario_db.sim.service.get_evidence", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        "scenario_db.sim.service.upsert_simulation_evidence",
+        lambda *args, **kwargs: None,
+    )
+
+    def _cached_response(row, response_inputs, hash_value):
+        assert row is winner
+        assert response_inputs is inputs
+        assert hash_value == "request-hash"
+        return SimulateRunResponse(
+            evidence_id=row.id,
+            status="completed",
+            cached=True,
+            params_hash=hash_value,
+            warnings=list(response_inputs.warnings),
+            kpi={},
+            persisted=True,
+        )
+
+    monkeypatch.setattr(
+        "scenario_db.sim.service._cached_simulation_response",
+        _cached_response,
+    )
+
+    response = run_simulation_request(
+        db,
+        SimulateRequest(
+            scenario_id="scenario",
+            variant_id="variant",
+            execution_context=ExecutionContext(
+                silicon_rev="EVT0",
+                sw_baseline_ref="sw-vendor-v1.2.3",
+                thermal="normal",
+            ),
+            persist=True,
+        ),
+    )
+
+    assert response.cached is True
+    assert response.evidence_id == generated.id
+    db.rollback.assert_called_once_with()
+
+
+def test_persisted_rerun_response_keeps_repository_artifacts(monkeypatch):
+    db = MagicMock()
+    inputs = SimpleNamespace(
+        scenario_id="scenario",
+        variant_id="variant",
+        project_ref="project",
+        warnings=[],
+    )
+    result = SimRunResult(
+        scenario_id="scenario",
+        variant_id="variant",
+        total_power_mw=999.0,
+        total_power_ma=0.0,
+        core_power_mw=999.0,
+        bw_power_mw=0.0,
+        bw_total_mbs=0.0,
+        hw_time_max_ms=0.0,
+        feasible=True,
+    )
+    generated = SimpleNamespace(
+        id="sim-scenario-variant-request-hash",
+        kpi={"total_power_mw": 999.0},
+    )
+    persisted_row = SimpleNamespace(
+        id=generated.id,
+        schema_version="2.2",
+        kind="evidence.simulation",
+        scenario_ref="scenario",
+        variant_ref="variant",
+        kpi=generated.kpi,
+        artifacts=[
+            {
+                "type": "simulation_report",
+                "storage": "file",
+                "path": "reports/result.html",
+            }
+        ],
+    )
+
+    monkeypatch.setattr(
+        "scenario_db.sim.service.load_canonical_graph",
+        lambda db_arg, scenario_id, variant_id: object(),
+    )
+    monkeypatch.setattr(
+        "scenario_db.sim.service.build_simulation_inputs",
+        lambda graph, config: inputs,
+    )
+    monkeypatch.setattr(
+        "scenario_db.sim.service._request_hash",
+        lambda *args, **kwargs: "request-hash",
+    )
+    monkeypatch.setattr("scenario_db.sim.service.run_simulation", lambda *args, **kwargs: result)
+    monkeypatch.setattr(
+        "scenario_db.sim.service.build_simulation_evidence",
+        lambda *args, **kwargs: generated,
+    )
+    monkeypatch.setattr(
+        "scenario_db.sim.service.get_evidence",
+        lambda *args, **kwargs: persisted_row,
+    )
+    monkeypatch.setattr(
+        "scenario_db.sim.service.upsert_simulation_evidence",
+        lambda *args, **kwargs: persisted_row,
+    )
+
+    response = run_simulation_request(
+        db,
+        SimulateRequest(
+            scenario_id="scenario",
+            variant_id="variant",
+            execution_context=ExecutionContext(
+                silicon_rev="EVT0",
+                sw_baseline_ref="sw-vendor-v1.2.3",
+                thermal="normal",
+            ),
+            persist=True,
+            force=True,
+        ),
+    )
+
+    assert response.persisted is True
+    assert response.evidence["artifacts"] == persisted_row.artifacts
 
 
 def test_run_simulation_request_loads_db_dvfs_table_and_marks_context(monkeypatch):

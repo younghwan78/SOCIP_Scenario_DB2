@@ -47,6 +47,7 @@ async def lifespan(app: FastAPI):
     app.state.engine = engine
     app.state.session_factory = make_session_factory(engine)
     app.state.rule_cache = RuleCache.load_with_retry(app.state.session_factory)
+    app.state.rule_cache_ttl_seconds = settings.rule_cache_ttl_seconds
     app.state.start_time = _time.time()
     yield
     engine.dispose()
@@ -65,7 +66,7 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
-        allow_methods=["GET", "POST"],
+        allow_methods=["GET", "POST", "DELETE"],
         allow_headers=["*"],
     )
 

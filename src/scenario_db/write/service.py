@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from scenario_db.api.cache import RuleCache
@@ -48,6 +50,8 @@ from scenario_db.models.capability.sw import SwProfile as PydanticSwProfile
 from scenario_db.models.definition.project import Project as PydanticProject
 from scenario_db.models.definition.usecase import Usecase as PydanticUsecase
 
+logger = logging.getLogger(__name__)
+
 VARIANT_OVERLAY_KIND = "scenario.variant_overlay"
 PIPELINE_PATCH_KIND = "scenario.pipeline_patch"
 IMPORT_BUNDLE_KIND = "scenario.import_bundle"
@@ -71,6 +75,9 @@ VALIDATE_ALLOWED_STATUSES = {
 }
 DIFF_ALLOWED_STATUSES = {WRITE_STATUS_VALIDATED, WRITE_STATUS_DIFF_READY}
 APPLY_ALLOWED_STATUSES = {WRITE_STATUS_DIFF_READY}
+# One transaction-level lock serializes canonical Write API applies. Target row
+# locks below also coordinate with direct SQL/ETL updates of existing rows.
+WRITE_APPLY_ADVISORY_LOCK_ID = 0x53434442
 
 VARIANT_FIELDS = [
     "severity",
@@ -211,24 +218,20 @@ def validate_batch(db: Session, batch_id: str) -> ValidateWriteResponse:
     )
 
 
-def _ensure_valid_or_revalidate(db: Session, batch: WriteBatch, action: str) -> None:
-    """Reuse the stored validation result or revalidate in place (no nested
-    commit). On failure the validation_failed state is persisted explicitly
-    before raising, matching the previous observable behavior."""
-    validation = batch.validation_result or _validate_in_place(db, batch)
-    if not validation.get("valid"):
-        db.commit()
-        raise ConflictError(f"Cannot {action} an invalid write batch")
-
-
 def diff_batch(db: Session, batch_id: str) -> DiffPreviewResponse:
     batch = get_batch_or_404(db, batch_id, for_update=True)
     _ensure_batch_status(batch, DIFF_ALLOWED_STATUSES, "diff")
-    _ensure_valid_or_revalidate(db, batch, "diff")
     normalized = batch.normalized_payload or normalize_write_payload(batch.kind, batch.raw_payload)
+    _acquire_write_serialization_lock(db)
+    _lock_write_targets(db, batch.kind, normalized)
+    validation = _validate_in_place(db, batch)
+    if not validation.get("valid"):
+        db.commit()
+        raise ConflictError("Cannot diff an invalid write batch")
 
     diff = build_write_diff(db, batch.kind, normalized)
     diff.batch_id = batch.id
+    diff.target_revision = _diff_target_revision(diff)
     batch.diff_result = diff.model_dump()
     batch.status = "diff_ready"
     _touch(batch)
@@ -245,8 +248,46 @@ def apply_batch(
 ) -> ApplyWriteResponse:
     batch = get_batch_or_404(db, batch_id, for_update=True)
     _ensure_batch_status(batch, APPLY_ALLOWED_STATUSES, "apply")
-    _ensure_valid_or_revalidate(db, batch, "apply")
     normalized = batch.normalized_payload or normalize_write_payload(batch.kind, batch.raw_payload)
+    stored_diff = batch.diff_result or {}
+    _acquire_write_serialization_lock(db)
+    _lock_write_targets(db, batch.kind, normalized)
+
+    # Validation is deliberately rerun under the same locks used by apply.
+    # A previously valid result is evidence of the old target state, not an
+    # authorization to mutate whatever happens to exist now.
+    validation = _validate_in_place(db, batch)
+    if not validation.get("valid"):
+        db.commit()
+        raise ConflictError("Cannot apply an invalid write batch")
+
+    fresh_diff = build_write_diff(db, batch.kind, normalized)
+    fresh_diff.batch_id = batch.id
+    fresh_revision = _diff_target_revision(fresh_diff)
+    fresh_diff.target_revision = fresh_revision
+    stored_revision = str(stored_diff.get("target_revision") or "")
+    if (
+        stored_revision != fresh_revision
+        or stored_revision != _diff_target_revision(stored_diff)
+    ):
+        batch.diff_result = None
+        batch.status = WRITE_STATUS_VALIDATED
+        _touch(batch)
+        _record_event(
+            db,
+            batch.id,
+            "diff",
+            batch.actor,
+            {
+                "stale": True,
+                "reviewed_target_revision": stored_revision or None,
+                "current_target_revision": fresh_revision,
+            },
+        )
+        db.commit()
+        raise ConflictError(
+            "Write target changed after diff review; request a new diff before apply"
+        )
 
     if batch.kind == VARIANT_OVERLAY_KIND:
         applied_refs = _apply_variant_overlay(db, normalized)
@@ -262,14 +303,108 @@ def apply_batch(
     _touch(batch)
     _record_event(db, batch.id, "apply", batch.actor, applied_refs)
     db.commit()
+    warnings: list[str] = []
     if rule_cache is not None:
-        rule_cache.invalidate_all(db)
+        try:
+            rule_cache.invalidate_all(db)
+        except Exception:
+            rule_cache.mark_stale("Post-commit rule cache refresh failed")
+            logger.exception(
+                "Write batch %s committed, but RuleCache refresh failed",
+                batch.id,
+            )
+            warnings.append("canonical data committed; rule cache refresh deferred")
     # Applied data feeds the query engine; drop the facets cache so the next
     # /query/facets call rebuilds from fresh rows. Lazy import avoids a cycle.
     from scenario_db.query_engine.service import invalidate_facets_cache
 
-    invalidate_facets_cache()
-    return ApplyWriteResponse(batch_id=batch.id, status=batch.status, applied_refs=applied_refs)
+    try:
+        invalidate_facets_cache()
+    except Exception:
+        logger.exception(
+            "Write batch %s committed, but query facets invalidation failed",
+            batch.id,
+        )
+        warnings.append("canonical data committed; query facets refresh deferred")
+    return ApplyWriteResponse(
+        batch_id=batch.id,
+        status=batch.status,
+        applied_refs=applied_refs,
+        warnings=warnings,
+    )
+
+
+def _diff_target_revision(diff: DiffPreviewResponse | dict[str, Any]) -> str:
+    payload = diff.model_dump() if isinstance(diff, DiffPreviewResponse) else deepcopy(diff)
+    payload.pop("target_revision", None)
+    raw = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+        default=str,
+    ).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _acquire_write_serialization_lock(db: Session) -> None:
+    """Serialize Write API diff/apply transactions on PostgreSQL.
+
+    SQLite and lightweight unit-test sessions intentionally skip the
+    PostgreSQL-specific advisory lock.
+    """
+
+    get_bind = getattr(db, "get_bind", None)
+    if get_bind is None:
+        return
+    bind = get_bind()
+    if bind.dialect.name != "postgresql":
+        return
+    db.execute(
+        text("SELECT pg_advisory_xact_lock(:lock_id)"),
+        {"lock_id": WRITE_APPLY_ADVISORY_LOCK_ID},
+    )
+
+
+def _lock_write_targets(db: Session, kind: str, normalized: dict[str, Any]) -> None:
+    """Lock existing canonical rows represented by a reviewed diff."""
+
+    if kind in {VARIANT_OVERLAY_KIND, PIPELINE_PATCH_KIND}:
+        scenario_ref = str(normalized["scenario_ref"])
+        (
+            db.query(Scenario)
+            .filter_by(id=scenario_ref)
+            .with_for_update()
+            .all()
+        )
+        (
+            db.query(ScenarioVariant)
+            .filter_by(scenario_id=scenario_ref)
+            .with_for_update()
+            .all()
+        )
+        return
+
+    if kind == IMPORT_BUNDLE_KIND:
+        scenario_ids: set[str] = set()
+        for document_kind, model in IMPORT_DB_MODEL_BY_KIND.items():
+            ids = {
+                str(document["id"])
+                for document in normalized["documents"]
+                if document.get("kind") == document_kind
+            }
+            if not ids:
+                continue
+            db.query(model).filter(model.id.in_(ids)).with_for_update().all()
+            if document_kind == "scenario.usecase":
+                scenario_ids.update(ids)
+        if scenario_ids:
+            (
+                db.query(ScenarioVariant)
+                .filter(ScenarioVariant.scenario_id.in_(scenario_ids))
+                .with_for_update()
+                .all()
+            )
 
 
 def _ensure_batch_status(batch: WriteBatch, allowed: set[str], action: str) -> None:

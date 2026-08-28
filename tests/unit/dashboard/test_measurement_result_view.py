@@ -13,7 +13,9 @@ from dashboard.components.measurement_result_view import (
     kpi_p95,
     kpi_summary_rows,
     measurement_list_rows,
+    metric_observation_rows,
     prediction_measurement_comparison_rows,
+    prediction_measurement_comparison_report,
     provenance_summary,
     rail_domain,
     sw_task_rows,
@@ -297,8 +299,11 @@ def test_prediction_measurement_comparison_rows_show_delta_vs_measurement():
         "prediction": 4200.0,
         "measurement_mean": 3850.0,
         "measurement_p95": 4010.0,
+        "measurement_statistic": "mean",
         "delta_vs_measurement": 350.0,
         "delta_pct_vs_measurement": "9.091%",
+        "status": "MATCHED",
+        "unit": "mW",
         "prediction_current_ma": 1235.294,
         "measurement_current_ma": 1132.353,
         "delta_current_ma": 102.941,
@@ -307,6 +312,74 @@ def test_prediction_measurement_comparison_rows_show_delta_vs_measurement():
     }
     assert rows["frame_latency_ms"]["delta_vs_measurement"] == 1.6
     assert rows["frame_latency_ms"]["delta_pct_vs_measurement"] == "5.634%"
+
+
+def test_prediction_measurement_report_keeps_missing_and_scoped_metrics():
+    prediction = {
+        "project_ref": "proj-x",
+        "scenario_ref": "uc-camera-x",
+        "variant_ref": "fhd30",
+        "execution_context": {
+            "silicon_rev": "EVT1",
+            "sw_baseline_ref": "sw-vendor-v1.2.3",
+            "thermal": "room",
+        },
+        "kpi": {"total_bw_mbs": 6200.0},
+        "metric_observations": [
+            {
+                "metric_id": "sw.start_jitter",
+                "scope": {"kind": "task", "ref": "eis_warp"},
+                "unit": "us",
+                "value": 200.0,
+            }
+        ],
+    }
+    measurement = {
+        "project_ref": "proj-x",
+        "scenario_ref": "uc-camera-x",
+        "variant_ref": "fhd30",
+        "execution_context": {
+            "silicon_rev": "EVT1",
+            "sw_baseline_ref": "sw-vendor-v1.2.3",
+            "thermal": "room",
+        },
+        "kpi": {"frame_latency_ms": {"mean": 28.4, "p95": 32.1, "n": 10}},
+    }
+
+    report = prediction_measurement_comparison_report(
+        prediction=prediction,
+        measurement=measurement,
+    )
+    rows = {
+        (row["metric_id"], row["scope_kind"], row["scope_ref"]): row
+        for row in report["rows"]
+    }
+
+    assert rows[("bandwidth.total", "scenario", "self")]["status"] == "PREDICTION_ONLY"
+    assert rows[("latency.frame", "scenario", "self")]["status"] == "MEASUREMENT_ONLY"
+    assert rows[("sw.start_jitter", "task", "eis_warp")]["status"] == "PREDICTION_ONLY"
+
+
+def test_metric_observation_rows_include_legacy_and_explicit_metrics():
+    evidence = _evidence()
+    evidence["metric_observations"] = [
+        {
+            "metric_id": "sw.start_jitter",
+            "scope": {"kind": "task", "ref": "eis_warp"},
+            "unit": "us",
+            "stats": {"mean": 84.0, "p95": 210.0, "n": 5400},
+        }
+    ]
+
+    rows = {
+        (row["metric_id"], row["scope_ref"]): row
+        for row in metric_observation_rows(evidence)
+    }
+
+    assert rows[("power.total", "self")]["mean"] == 3850.0
+    assert rows[("power.rail", "VDD_CAM")]["mean"] == 980.0
+    assert rows[("sw.runtime", "eis_warp")]["p95"] == 10.6
+    assert rows[("sw.start_jitter", "eis_warp")]["p95"] == 210.0
 
 
 def test_power_current_metric_rows_measurement_first_with_power():
@@ -400,5 +473,7 @@ def test_measurement_panel_source_includes_prediction_comparison():
 
     assert "Prediction vs Measurement" in source
     assert "Compare with Prediction" in source
+    assert "Detailed metric coverage" in source
+    assert "Delta calculation is blocked by context mismatch" in source
     assert "legacy evidence without project_ref" in source
     assert "prediction_measurement_comparison_rows" in source

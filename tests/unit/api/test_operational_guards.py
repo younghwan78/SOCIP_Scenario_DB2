@@ -9,6 +9,7 @@ from scenario_db.api import app as api_app
 from scenario_db.api.cache import RuleCache
 from scenario_db.api.routers import utility
 from scenario_db.api.routers import write as write_router
+from scenario_db.api.schemas.write import DiffPreviewResponse
 from scenario_db.write import service as write_service
 
 
@@ -119,7 +120,22 @@ class _FakeRuleCache:
         self.events.append("invalidate")
 
 
-def test_apply_batch_invalidates_rule_cache_after_commit(monkeypatch) -> None:
+class _FailingRuleCache(_FakeRuleCache):
+    def invalidate_all(self, session) -> None:
+        self.events.append("invalidate_failed")
+        raise RuntimeError("cache reload failed")
+
+    def mark_stale(self, reason: str) -> None:
+        self.events.append(f"stale:{reason}")
+
+
+def _apply_ready_batch(monkeypatch, cache_factory):
+    reviewed_diff = DiffPreviewResponse(
+        batch_id="batch-1",
+        target_id="scenario-1::variant-1",
+        operation="update",
+    )
+    reviewed_diff.target_revision = write_service._diff_target_revision(reviewed_diff)
     batch = SimpleNamespace(
         id="batch-1",
         kind=write_service.VARIANT_OVERLAY_KIND,
@@ -128,19 +144,55 @@ def test_apply_batch_invalidates_rule_cache_after_commit(monkeypatch) -> None:
         validation_result={"valid": True, "issues": []},
         actor="tester",
         status="diff_ready",
-        diff_result={},
+        diff_result=reviewed_diff.model_dump(),
         applied_refs=None,
         updated_at=None,
     )
     session = _FakeSession(batch)
-    cache = _FakeRuleCache(session.events)
+    cache = cache_factory(session.events)
     monkeypatch.setattr(
         write_service,
         "_apply_variant_overlay",
         lambda db, payload: {"scenario_ref": "scenario-1", "variant_id": "variant-1"},
     )
+    monkeypatch.setattr(
+        write_service,
+        "_validate_in_place",
+        lambda db, target_batch: {"valid": True, "issues": []},
+    )
+    monkeypatch.setattr(write_service, "_lock_write_targets", lambda db, kind, normalized: None)
+    monkeypatch.setattr(
+        write_service,
+        "build_write_diff",
+        lambda db, kind, normalized: DiffPreviewResponse(
+            batch_id="",
+            target_id="scenario-1::variant-1",
+            operation="update",
+        ),
+    )
 
-    response = write_service.apply_batch(session, "batch-1", rule_cache=cache)
+    return session, write_service.apply_batch(session, "batch-1", rule_cache=cache)
+
+
+def test_apply_batch_invalidates_rule_cache_after_commit(monkeypatch) -> None:
+    session, response = _apply_ready_batch(monkeypatch, _FakeRuleCache)
 
     assert response.status == "applied"
+    assert response.warnings == []
     assert session.events[-2:] == ["commit", "invalidate"]
+
+
+def test_post_commit_cache_failure_returns_applied_with_warning(monkeypatch, caplog) -> None:
+    with caplog.at_level(logging.ERROR, logger="scenario_db.write.service"):
+        session, response = _apply_ready_batch(monkeypatch, _FailingRuleCache)
+
+    assert response.status == "applied"
+    assert response.warnings == [
+        "canonical data committed; rule cache refresh deferred"
+    ]
+    assert "commit" in session.events
+    assert session.events[-2:] == [
+        "invalidate_failed",
+        "stale:Post-commit rule cache refresh failed",
+    ]
+    assert "committed, but RuleCache refresh failed" in caplog.text

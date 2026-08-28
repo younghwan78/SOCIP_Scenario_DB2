@@ -38,6 +38,7 @@ class EvidenceResponse(BaseModel):
     provenance: dict | None = None
     cpu_breakdown: list | None = None
     sw_task_timing: list | None = None
+    metric_observations: list | None = None
     artifacts: list | None = None
     sw_version_hint: str | None = None
 

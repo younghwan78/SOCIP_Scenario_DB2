@@ -7,7 +7,7 @@ import pytest
 from sqlalchemy import ARRAY, CheckConstraint, Text
 from sqlalchemy.dialects.postgresql import JSONB
 
-from scenario_db.api.schemas.write import DiffPreviewResponse
+from scenario_db.api.schemas.write import DiffEntry, DiffPreviewResponse
 from scenario_db.db.models.evidence import Evidence
 from scenario_db.exceptions import ConflictError
 from scenario_db.db.models.write import WriteBatch, WriteEvent
@@ -50,6 +50,12 @@ class _FakeSession:
 
 
 def _batch(status: str):
+    reviewed_diff = DiffPreviewResponse(
+        batch_id="batch-1",
+        target_id="scenario-1::variant-1",
+        operation="update",
+    )
+    reviewed_diff.target_revision = write_service._diff_target_revision(reviewed_diff)
     return SimpleNamespace(
         id="batch-1",
         kind=write_service.VARIANT_OVERLAY_KIND,
@@ -58,7 +64,7 @@ def _batch(status: str):
         validation_result={"valid": True, "issues": []},
         actor="tester",
         status=status,
-        diff_result={},
+        diff_result=reviewed_diff.model_dump(),
         applied_refs=None,
         updated_at=None,
     )
@@ -127,6 +133,7 @@ def test_state_transitions_fetch_batch_with_row_lock(monkeypatch) -> None:
         lambda kind, payload: {"scenario_ref": "scenario-1", "variant": {"id": "variant-1"}},
     )
     monkeypatch.setattr(write_service, "validate_write_payload", lambda db, kind, normalized: [])
+    monkeypatch.setattr(write_service, "_lock_write_targets", lambda db, kind, normalized: None)
 
     validate_session = _FakeSession(_batch("staged"))
     write_service.validate_batch(validate_session, "batch-1")
@@ -139,6 +146,50 @@ def test_state_transitions_fetch_batch_with_row_lock(monkeypatch) -> None:
     apply_session = _FakeSession(_batch("diff_ready"))
     write_service.apply_batch(apply_session, "batch-1")
     assert apply_session.locked is True
+
+
+def test_apply_rejects_target_changed_after_reviewed_diff(monkeypatch) -> None:
+    batch = _batch("diff_ready")
+    session = _FakeSession(batch)
+    applied = False
+
+    def _validate(db, target_batch):
+        target_batch.status = "validated"
+        return {"valid": True, "issues": []}
+
+    def _apply(db, normalized):
+        nonlocal applied
+        applied = True
+        return {}
+
+    monkeypatch.setattr(write_service, "_validate_in_place", _validate)
+    monkeypatch.setattr(write_service, "_lock_write_targets", lambda db, kind, normalized: None)
+    monkeypatch.setattr(
+        write_service,
+        "build_write_diff",
+        lambda db, kind, normalized: DiffPreviewResponse(
+            batch_id="",
+            target_id="scenario-1::variant-1",
+            operation="update",
+            changes=[
+                DiffEntry(
+                    field="severity",
+                    change="modify",
+                    before="changed-by-another-batch",
+                    after="medium",
+                )
+            ],
+        ),
+    )
+    monkeypatch.setattr(write_service, "_apply_variant_overlay", _apply)
+
+    with pytest.raises(ConflictError, match="changed after diff review"):
+        write_service.apply_batch(session, "batch-1")
+
+    assert applied is False
+    assert session.committed is True
+    assert batch.status == "validated"
+    assert batch.diff_result is None
 
 
 def _constraint_names(table) -> set[str]:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from scenario_db.api.schemas.evidence import EvidenceResponse
@@ -10,21 +11,24 @@ from scenario_db.exceptions import NotFoundError, UnprocessableError
 from scenario_db.api.schemas.simulation import SimulateRequest, SimulateRunResponse, SimulationReadinessResponse
 from scenario_db.db.models.capability import SocDvfsTable
 from scenario_db.db.repositories.evidence import (
+    get_evidence,
     get_simulation_evidence_by_params_hash,
     upsert_simulation_evidence,
 )
 from scenario_db.db.repositories.scenario_graph import load_canonical_graph
 from scenario_db.models.evidence.common import ExecutionContext
 from scenario_db.sim.adapter import build_simulation_inputs
-from scenario_db.sim.models import DVFSTable
+from scenario_db.sim.models import DVFSTable, SimulationInputs
 from scenario_db.sim.readiness import check_simulation_readiness
 from scenario_db.sim.runner import build_simulation_evidence, params_hash, run_simulation
+from scenario_db.config import get_settings
 
 
 def run_simulation_request(db: Session, request: SimulateRequest) -> SimulateRunResponse:
     try:
         graph = load_canonical_graph(db, request.scenario_id, request.variant_id)
         inputs = build_simulation_inputs(graph, request.config)
+        _enforce_input_limits(inputs)
         dvfs_tables, execution_context = _resolve_dvfs_tables(db, graph, request)
     except LookupError as exc:
         raise NotFoundError(str(exc)) from exc
@@ -49,17 +53,7 @@ def run_simulation_request(db: Session, request: SimulateRequest) -> SimulateRun
             and (not request.config.debug_trace or bool(cached.calculation_trace))
         )
         if cached is not None and cache_has_required_trace:
-            return SimulateRunResponse(
-                evidence_id=cached.id,
-                status="completed",
-                cached=True,
-                params_hash=hash_value,
-                warnings=list(inputs.warnings),
-                kpi=cached.kpi or {},
-                result=None,
-                evidence=EvidenceResponse.model_validate(cached).model_dump(mode="json"),
-                persisted=True,
-            )
+            return _cached_simulation_response(cached, inputs, hash_value)
 
     result = run_simulation(inputs, dvfs_tables=dvfs_tables)
     evidence = build_simulation_evidence(
@@ -68,9 +62,32 @@ def run_simulation_request(db: Session, request: SimulateRequest) -> SimulateRun
         project_ref=inputs.project_ref,
         params_hash=hash_value,
     )
+    persisted_evidence_payload: dict | None = None
     if request.persist:
-        upsert_simulation_evidence(db, evidence)
-        db.commit()
+        # Deterministic evidence ids make identical requests converge. Track
+        # whether this transaction intended an insert so only a primary-key
+        # insert race can be recovered; unrelated update constraint failures
+        # must still surface.
+        insert_intended = get_evidence(db, evidence.id) is None
+        try:
+            persisted_row = upsert_simulation_evidence(db, evidence)
+            db.commit()
+            persisted_evidence_payload = EvidenceResponse.model_validate(
+                persisted_row
+            ).model_dump(mode="json")
+        except IntegrityError:
+            db.rollback()
+            if not insert_intended:
+                raise
+            winner = get_simulation_evidence_by_params_hash(
+                db,
+                scenario_ref=request.scenario_id,
+                variant_ref=request.variant_id,
+                params_hash=hash_value,
+            )
+            if winner is None or winner.id != evidence.id:
+                raise
+            return _cached_simulation_response(winner, inputs, hash_value)
 
     return SimulateRunResponse(
         evidence_id=evidence.id,
@@ -80,8 +97,49 @@ def run_simulation_request(db: Session, request: SimulateRequest) -> SimulateRun
         warnings=result.warnings,
         kpi=evidence.kpi,
         result=result,
-        evidence=_simulation_evidence_dict(evidence),
+        evidence=persisted_evidence_payload or _simulation_evidence_dict(evidence),
         persisted=request.persist,
+    )
+
+
+def _enforce_input_limits(inputs: SimulationInputs) -> None:
+    settings = get_settings()
+    limits = (
+        ("workloads", len(getattr(inputs, "workloads", ())), settings.simulation_max_workloads),
+        (
+            "port transfers",
+            len(getattr(inputs, "port_transfers", ())),
+            settings.simulation_max_port_transfers,
+        ),
+        (
+            "timeline tasks",
+            len(getattr(inputs, "timeline_tasks", ())),
+            settings.simulation_max_timeline_tasks,
+        ),
+        (
+            "timeline edges",
+            len(getattr(inputs, "timeline_edges", ())),
+            settings.simulation_max_timeline_edges,
+        ),
+    )
+    for label, actual, maximum in limits:
+        if actual > maximum:
+            raise UnprocessableError(
+                f"Simulation has {actual} {label}; configured maximum is {maximum}"
+            )
+
+
+def _cached_simulation_response(cached, inputs, hash_value: str) -> SimulateRunResponse:
+    return SimulateRunResponse(
+        evidence_id=cached.id,
+        status="completed",
+        cached=True,
+        params_hash=hash_value,
+        warnings=list(inputs.warnings),
+        kpi=cached.kpi or {},
+        result=None,
+        evidence=EvidenceResponse.model_validate(cached).model_dump(mode="json"),
+        persisted=True,
     )
 
 

@@ -14,6 +14,10 @@ from scenario_db.models.evidence.common import (
     SweepContext,
 )
 from scenario_db.models.evidence.measurement import SwTaskTiming
+from scenario_db.models.evidence.metrics import (
+    MetricObservation,
+    validate_metric_observations,
+)
 from scenario_db.models.evidence.resolution import ResolutionResult
 from scenario_db.sim.models import (
     IPTimingResult,
@@ -64,6 +68,7 @@ class SimulationEvidence(BaseScenarioModel):
     # Projection evidence (method=projection) carries SW task timing derived from
     # another project's measurement; native calculation runs leave it empty.
     sw_task_timing: list[SwTaskTiming] = Field(default_factory=list)
+    metric_observations: list[MetricObservation] = Field(default_factory=list)
     params_hash: str | None = None
     calculation_trace: dict[str, Any] | None = None
     artifacts: list[Artifact] = Field(default_factory=list)
@@ -76,4 +81,5 @@ class SimulationEvidence(BaseScenarioModel):
                     f"KPI key must be lowercase snake_case (e.g. total_power_mW). "
                     f"Got: '{key}'"
                 )
+        validate_metric_observations(self.metric_observations)
         return self

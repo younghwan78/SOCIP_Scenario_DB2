@@ -8,6 +8,7 @@ from scenario_db.api.deps import get_db
 from scenario_db.api.pagination import apply_sort, validate_sort_column
 from scenario_db.api.schemas.common import PagedResponse
 from scenario_db.api.schemas.evidence import EvidenceResponse
+from scenario_db.comparison.evidence import compare_prediction_measurement
 from scenario_db.db.models.evidence import Evidence
 
 router = APIRouter(tags=["evidence"])
@@ -153,3 +154,26 @@ def compare_variants(
         ref1: _fetch(sid1, vid1),
         ref2: _fetch(sid2, vid2),
     }
+
+
+@router.get("/compare/prediction-measurement", response_model=dict)
+def compare_prediction_measurement_by_id(
+    prediction_id: str = Query(...),
+    measurement_id: str = Query(...),
+    db: Session = Depends(get_db),
+):
+    prediction = db.query(Evidence).filter_by(id=prediction_id).one_or_none()
+    if prediction is None:
+        raise HTTPException(status_code=404, detail=f"Prediction evidence '{prediction_id}' not found")
+    if prediction.kind != "evidence.simulation":
+        raise HTTPException(status_code=400, detail="prediction_id must reference evidence.simulation")
+
+    measurement = db.query(Evidence).filter_by(id=measurement_id).one_or_none()
+    if measurement is None:
+        raise HTTPException(status_code=404, detail=f"Measurement evidence '{measurement_id}' not found")
+    if measurement.kind != "evidence.measurement":
+        raise HTTPException(status_code=400, detail="measurement_id must reference evidence.measurement")
+
+    prediction_doc = EvidenceResponse.model_validate(prediction).model_dump()
+    measurement_doc = EvidenceResponse.model_validate(measurement).model_dump()
+    return compare_prediction_measurement(prediction_doc, measurement_doc)

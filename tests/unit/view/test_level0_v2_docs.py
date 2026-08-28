@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 def test_level0_v2_contract_is_documented_in_read_api_contract_and_readme():
-    read_contract = Path("docs/read-api-contract.md").read_text(encoding="utf-8")
+    read_contract = Path("docs/contracts/api/read-api-contract.md").read_text(encoding="utf-8")
     readme = Path("README.md").read_text(encoding="utf-8")
     resource_component = Path("dashboard/components/level0_resource_overview.py").read_text(encoding="utf-8")
 

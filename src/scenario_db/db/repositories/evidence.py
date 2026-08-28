@@ -113,7 +113,8 @@ def upsert_simulation_evidence(
     *,
     yaml_sha256: str | None = None,
 ) -> Evidence:
-    row = db.query(Evidence).filter_by(id=evidence.id).one_or_none() or Evidence(id=evidence.id)
+    existing_row = db.query(Evidence).filter_by(id=evidence.id).one_or_none()
+    row = existing_row or Evidence(id=evidence.id)
     row.schema_version = evidence.schema_version
     row.kind = evidence.kind
     row.scenario_ref = str(evidence.scenario_ref)
@@ -140,7 +141,15 @@ def upsert_simulation_evidence(
     row.vdd_power = evidence.vdd_power or {}
     row.calculation_trace = evidence.calculation_trace
     row.params_hash = evidence.params_hash
-    row.artifacts = [item.model_dump(exclude_none=True) for item in evidence.artifacts]
+    incoming_artifacts = [
+        item.model_dump(exclude_none=True)
+        for item in evidence.artifacts
+    ]
+    # Artifact export is a separate lifecycle step. A force rerun normally
+    # rebuilds evidence without artifacts and must not detach files that were
+    # already exported for the stable evidence id.
+    if incoming_artifacts or existing_row is None:
+        row.artifacts = incoming_artifacts
     row.yaml_sha256 = yaml_sha256 or _evidence_sha256(evidence)
     db.add(row)
     return row

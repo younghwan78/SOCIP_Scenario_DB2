@@ -65,9 +65,11 @@ class DiffPreviewResponse(BaseModel):
     operation: Literal["create", "update"]
     changes: list[DiffEntry] = Field(default_factory=list)
     impact: dict[str, Any] | None = None
+    target_revision: str | None = None
 
 
 class ApplyWriteResponse(BaseModel):
     batch_id: str
     status: str
     applied_refs: dict[str, Any]
+    warnings: list[str] = Field(default_factory=list)

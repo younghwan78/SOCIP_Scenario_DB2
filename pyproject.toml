@@ -13,11 +13,14 @@ dependencies = [
     "psycopg2-binary>=2.9.11",
     "plotly>=5.20",
     "pydantic>=2.13.2",
-    "pydantic-settings>=2.0",
+    "pydantic-settings>=2.14.2",
     "pyyaml>=6.0.3",
     "sqlalchemy>=2.0.49",
     "uvicorn[standard]>=0.30",
 ]
+
+[project.scripts]
+scenario-db-reconcile-artifacts = "scenario_db.reporting.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.11.2,<0.12.0"]
@@ -30,11 +33,12 @@ module-name = "scenario_db"
 dev = [
     "httpx>=0.27",
     "mypy>=2.1.0",
+    "pip-audit>=2.10.1",
     "pre-commit>=4.6.0",
     "pytest>=9.0.3",
     "pytest-cov>=5.0",
     "ruff>=0.15.15",
-    "testcontainers[postgresql]>=4.0",
+    "testcontainers>=4.14.2",
 ]
 notebook = [
     "jupyterlab>=4.0",
@@ -76,22 +80,35 @@ omit = [
 precision = 1
 show_missing = true
 skip_empty = true
-fail_under = 45
+fail_under = 80
 
 [tool.ruff]
 line-length = 100
 target-version = "py311"
 
 [tool.ruff.lint]
-select = ["F"]
-ignore = ["F401", "F402", "F541", "F841"]
+select = ["E4", "E7", "E9", "F", "B904"]
+ignore = ["E402", "E701", "E702", "F401", "F402", "F541", "F841"]
 
 [tool.mypy]
 python_version = "3.11"
 warn_unused_ignores = true
 ignore_missing_imports = true
 files = [
+    "dashboard/components/api_auth.py",
+    "src/scenario_db/api/auth.py",
+    "src/scenario_db/api/cache.py",
+    "src/scenario_db/api/deps.py",
     "src/scenario_db/api/pagination.py",
+    "src/scenario_db/api/resource_limits.py",
+    "src/scenario_db/api/schemas/simulation.py",
+    "src/scenario_db/api/schemas/write.py",
     "src/scenario_db/config.py",
+    "src/scenario_db/query_engine/field_registry.py",
+    "src/scenario_db/reporting/cli.py",
+    "src/scenario_db/reporting/exporter.py",
+    "src/scenario_db/reporting/models.py",
+    "src/scenario_db/reporting/reconciliation.py",
     "src/scenario_db/sim/readiness.py",
+    "src/scenario_db/sim/resource_limits.py",
 ]

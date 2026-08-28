@@ -12,9 +12,14 @@ import hashlib
 from collections import defaultdict
 from typing import Any
 
+from scenario_db.comparison.evidence import (
+    compare_prediction_measurement,
+    normalize_evidence_observations,
+)
+from scenario_db.models.evidence.metrics import load_default_metric_catalog
 from scenario_db.sim.constants import PMIC_EFFICIENCY_DEFAULT, VBAT_DEFAULT
 
-MEASUREMENT_TABS = ("Overview", "Power", "CPU / Freq", "SW Timing", "Provenance")
+MEASUREMENT_TABS = ("Overview", "Power", "CPU / Freq", "SW Timing", "Metrics", "Provenance")
 COMPARISON_METRIC_ORDER = ("total_power_mw", "peak_power_mw", "frame_latency_ms", "fps_effective")
 
 
@@ -96,28 +101,90 @@ def prediction_measurement_comparison_rows(
     prediction: dict[str, Any],
     measurement: dict[str, Any],
 ) -> list[dict[str, Any]]:
+    report = prediction_measurement_comparison_report(
+        prediction=prediction,
+        measurement=measurement,
+    )
     pred_kpi = prediction.get("kpi") if isinstance(prediction.get("kpi"), dict) else {}
     meas_kpi = measurement.get("kpi") if isinstance(measurement.get("kpi"), dict) else {}
-    metrics = _ordered_overlap(pred_kpi, meas_kpi)
+    catalog = load_default_metric_catalog()
     rows: list[dict[str, Any]] = []
-    for metric in metrics:
-        pred_value = kpi_mean(pred_kpi.get(metric))
-        meas_mean = kpi_mean(meas_kpi.get(metric))
-        if pred_value is None or meas_mean is None:
+    for detail in report["rows"]:
+        if detail.get("scope_kind") != "scenario":
             continue
-        delta = _rounded_number(pred_value - meas_mean)
+        definition = catalog.metrics.get(str(detail.get("metric_id") or ""))
+        metric = definition.kpi_key if definition else None
+        if not metric:
+            continue
+        pred_value = detail.get("prediction")
+        meas_value = detail.get("measurement")
         row = {
             "metric": metric,
             "prediction": _rounded_number(pred_value),
-            "measurement_mean": _rounded_number(meas_mean),
-            "measurement_p95": _rounded_number(kpi_p95(meas_kpi.get(metric))),
-            "delta_vs_measurement": delta,
-            "delta_pct_vs_measurement": _delta_pct_label(delta, meas_mean),
+            "measurement_mean": _rounded_number(meas_value),
+            "measurement_p95": _rounded_number(detail.get("measurement_p95")),
+            "measurement_statistic": detail.get("measurement_statistic"),
+            "delta_vs_measurement": _rounded_number(detail.get("delta")),
+            "delta_pct_vs_measurement": (
+                f"{detail['delta_pct']:.3f}%"
+                if isinstance(detail.get("delta_pct"), (int, float))
+                else None
+            ),
+            "status": detail.get("status"),
+            "unit": detail.get("unit"),
         }
-        if metric == "total_power_mw":
-            row.update(_power_current_comparison(prediction, pred_kpi, meas_kpi, pred_value, meas_mean))
+        if (
+            metric == "total_power_mw"
+            and isinstance(pred_value, (int, float))
+            and isinstance(meas_value, (int, float))
+        ):
+            row.update(
+                _power_current_comparison(
+                    prediction,
+                    pred_kpi,
+                    meas_kpi,
+                    float(pred_value),
+                    float(meas_value),
+                )
+            )
         rows.append(row)
-    return rows
+    by_metric = {row["metric"]: row for row in rows}
+    ordered = [by_metric[key] for key in COMPARISON_METRIC_ORDER if key in by_metric]
+    ordered.extend(row for row in rows if row["metric"] not in COMPARISON_METRIC_ORDER)
+    return ordered
+
+
+def prediction_measurement_comparison_report(
+    *,
+    prediction: dict[str, Any],
+    measurement: dict[str, Any],
+) -> dict[str, Any]:
+    return compare_prediction_measurement(prediction, measurement)
+
+
+def metric_observation_rows(evidence: dict[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for item in normalize_evidence_observations(evidence):
+        scope = item.get("scope") if isinstance(item.get("scope"), dict) else {}
+        stats = item.get("stats") if isinstance(item.get("stats"), dict) else {}
+        rows.append(
+            {
+                "metric_id": item.get("metric_id"),
+                "scope_kind": scope.get("kind"),
+                "scope_ref": scope.get("ref"),
+                "unit": item.get("unit"),
+                "value": item.get("value"),
+                "mean": stats.get("mean"),
+                "p50": stats.get("p50"),
+                "p95": stats.get("p95"),
+                "p99": stats.get("p99"),
+                "min": stats.get("min"),
+                "max": stats.get("max"),
+                "std": stats.get("std"),
+                "n": stats.get("n"),
+            }
+        )
+    return _drop_empty_columns(rows, keep="metric_id")
 
 
 def cpu_cluster_rows(evidence: dict[str, Any]) -> list[dict[str, Any]]:
@@ -136,12 +203,6 @@ def cpu_cluster_rows(evidence: dict[str, Any]) -> list[dict[str, Any]]:
             }
         )
     return rows
-
-
-def _ordered_overlap(pred_kpi: dict[str, Any], meas_kpi: dict[str, Any]) -> list[str]:
-    overlap = [key for key in pred_kpi if key in meas_kpi]
-    prioritized = [key for key in COMPARISON_METRIC_ORDER if key in overlap]
-    return prioritized + [key for key in overlap if key not in prioritized]
 
 
 def _rounded_number(value: Any) -> float | None:
@@ -201,12 +262,6 @@ def _mw_to_ma(power_mw: float, vbat: float, pmic_efficiency: float) -> float | N
     if vbat <= 0 or pmic_efficiency <= 0:
         return None
     return power_mw / vbat / pmic_efficiency
-
-
-def _delta_pct_label(delta: float | None, baseline: float | None) -> str | None:
-    if delta is None or baseline in (None, 0):
-        return None
-    return f"{(delta / baseline) * 100:.3f}%"
 
 
 def freq_residency_rows(evidence: dict[str, Any]) -> list[dict[str, Any]]:
@@ -495,6 +550,13 @@ def render_measurement_result(evidence: dict[str, Any], *, key_prefix: str = "me
     with tabs[3]:
         _render_sw_timing(st, evidence, render_copyable_dataframe, key_prefix=f"{key_prefix}_{evidence_id}")
     with tabs[4]:
+        _render_metric_observations(
+            st,
+            evidence,
+            render_copyable_dataframe,
+            key_prefix=f"{key_prefix}_{evidence_id}",
+        )
+    with tabs[5]:
         _render_provenance(st, evidence, render_copyable_dataframe, key_prefix=f"{key_prefix}_{evidence_id}")
 
 
@@ -673,6 +735,23 @@ def _render_sw_timing(st, evidence, render_table, *, key_prefix: str) -> None:
         pass
     st.caption("count_per_frame = 프레임당 호출 수. p95/max 로 병목·jank 판단.")
     render_table(rows, key=f"{key_prefix}_sw_tbl", use_container_width=True, hide_index=True)
+
+
+def _render_metric_observations(st, evidence, render_table, *, key_prefix: str) -> None:
+    rows = metric_observation_rows(evidence)
+    if not rows:
+        st.info("No canonical metric observations are available.")
+        return
+    st.caption(
+        "Canonical metrics include explicit observations and compatible legacy "
+        "KPI/detail fields."
+    )
+    render_table(
+        rows,
+        key=f"{key_prefix}_metric_observation_tbl",
+        use_container_width=True,
+        hide_index=True,
+    )
 
 
 def _render_provenance(st, evidence, render_table, *, key_prefix: str) -> None:

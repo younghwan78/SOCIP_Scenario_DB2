@@ -11,11 +11,22 @@ FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "evidence"
 
 
 class _Query:
+    def __init__(self, rows):
+        self.rows = rows
+        self.filters = {}
+
     def filter_by(self, **kwargs):
+        self.filters.update(kwargs)
         return self
 
     def one_or_none(self):
-        return None
+        matches = [
+            row
+            for row in self.rows.values()
+            if all(getattr(row, key) == value for key, value in self.filters.items())
+        ]
+        assert len(matches) <= 1
+        return matches[0] if matches else None
 
 
 class _Session:
@@ -23,7 +34,7 @@ class _Session:
         self.rows = {}
 
     def query(self, model):
-        return _Query()
+        return _Query(self.rows)
 
     def add(self, row):
         self.rows[row.id] = row
@@ -52,3 +63,22 @@ def test_upsert_simulation_evidence_stores_empty_topology_order_as_null_and_trac
 
     assert row.topology_order is None
     assert row.calculation_trace == raw["calculation_trace"]
+
+
+def test_upsert_simulation_evidence_preserves_exported_artifacts_on_rerun():
+    raw = _load("sim-camera-recording-UHD60-EVT0-sw123.yaml")
+    first_evidence = SimulationEvidence.model_validate(raw)
+    db = _Session()
+    first_row = upsert_simulation_evidence(db, first_evidence, yaml_sha256="sha-first")
+    exported_artifacts = list(first_row.artifacts)
+
+    rerun_raw = dict(raw)
+    rerun_raw["artifacts"] = []
+    rerun_raw["kpi"] = {**raw["kpi"], "total_power_mw": 999.0}
+    rerun_evidence = SimulationEvidence.model_validate(rerun_raw)
+
+    rerun_row = upsert_simulation_evidence(db, rerun_evidence, yaml_sha256="sha-rerun")
+
+    assert rerun_row is first_row
+    assert rerun_row.kpi["total_power_mw"] == 999.0
+    assert rerun_row.artifacts == exported_artifacts

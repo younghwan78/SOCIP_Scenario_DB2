@@ -922,11 +922,11 @@ with main_col:
         f"""
 <div class="compact-panel">
   <h4>Scenario Summary</h4>
-  <span class="meta-chip">Resolution {s.resolution}</span>
-  <span class="meta-chip">FPS {s.fps}</span>
-  <span class="meta-chip">Mode {mode_label}</span>
-  <span class="meta-chip">Nodes {graph_node_count}</span>
-  <span class="meta-chip">Edges {graph_edge_count}</span>
+  <span class="meta-chip">Resolution {escape(str(s.resolution))}</span>
+  <span class="meta-chip">FPS {escape(str(s.fps))}</span>
+  <span class="meta-chip">Mode {escape(str(mode_label))}</span>
+  <span class="meta-chip">Nodes {escape(str(graph_node_count))}</span>
+  <span class="meta-chip">Edges {escape(str(graph_edge_count))}</span>
 </div>
 """,
         unsafe_allow_html=True,
@@ -934,7 +934,7 @@ with main_col:
 
     if primary.risks:
         risk_html = "".join(
-            f'<span class="risk-chip">{risk.severity}: {risk.title}</span>'
+            f'<span class="risk-chip">{escape(str(risk.severity))}: {escape(str(risk.title))}</span>'
             for risk in primary.risks[:4]
         )
         st.markdown(

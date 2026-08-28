@@ -93,7 +93,21 @@ def validate_soc_sim_contract(
         )
         return _report("ambiguous", None, {}, issues)
 
-    assert soc is not None
+    if soc is None:
+        return _report(
+            "invalid",
+            None,
+            {},
+            [
+                *issues,
+                ContractIssue(
+                    "error",
+                    "INTERNAL_SOC_SELECTION_ERROR",
+                    "Internal fixture selection error: resolved SoC is missing",
+                    path="soc",
+                ),
+            ],
+        )
     soc_ip_refs = [str(item.get("ref")) for item in soc.get("ips") or [] if isinstance(item, dict) and item.get("ref")]
     seen_refs: set[str] = set()
     compute_refs: list[str] = []

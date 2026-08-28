@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from scenario_db.api.auth import ApiPrincipal, require_roles
 from scenario_db.api.cache import RuleCache
 from scenario_db.api.deps import get_db, get_rule_cache
 from scenario_db.api.schemas.write import (
@@ -21,12 +22,21 @@ from scenario_db.write.service import (
     validate_batch,
 )
 
-router = APIRouter(prefix="/write", tags=["write"])
+router = APIRouter(
+    prefix="/write",
+    tags=["write"],
+    dependencies=[Depends(require_roles("writer", "admin"))],
+)
 
 
 @router.post("/staging", response_model=StageWriteResponse)
-def create_staging_batch(request: StageWriteRequest, db: Session = Depends(get_db)):
-    return stage_write(db, request)
+def create_staging_batch(
+    request: StageWriteRequest,
+    db: Session = Depends(get_db),
+    principal: ApiPrincipal = Depends(require_roles("writer", "admin")),
+):
+    authenticated_request = request.model_copy(update={"actor": principal.subject})
+    return stage_write(db, authenticated_request)
 
 
 @router.get("/staging/{batch_id}", response_model=WriteBatchResponse)

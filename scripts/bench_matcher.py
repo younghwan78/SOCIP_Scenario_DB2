@@ -7,7 +7,7 @@ Matcher Runner 성능 벤치마크.
   - complexity: simple (eq only) | complex (all+any+nested)
   - 통계: p50 / p95 / p99 (1000회 반복)
 
-출력: docs/perf/week1_benchmark.md
+출력: output/benchmarks/matcher-runner.md
 """
 
 from __future__ import annotations
@@ -138,7 +138,7 @@ def main():
                 )
 
     # Markdown 출력
-    out_path = Path(__file__).parent.parent / "docs" / "perf" / "week1_benchmark.md"
+    out_path = Path(__file__).parent.parent / "output" / "benchmarks" / "matcher-runner.md"
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     header = (

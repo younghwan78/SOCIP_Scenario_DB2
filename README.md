@@ -18,7 +18,10 @@ The current implementation focuses on these flows:
 ├── alembic/                  # PostgreSQL migrations
 ├── dashboard/                # Streamlit viewer
 ├── demo/fixtures/            # Demo YAML data set
-├── docs/                     # API, testing, deployment notes
+├── docs/                     # Current design, contracts, guides, operations
+├── internal_docs/            # Implementation history, investigations, checklists
+├── output/                   # Generated reports/artifacts (Git ignored)
+├── runtime_logs/             # Local service logs (Git ignored)
 ├── scripts/                  # Utility scripts
 ├── src/scenario_db/          # Python package
 │   ├── api/                  # FastAPI app, routers, response schemas
@@ -33,6 +36,13 @@ The current implementation focuses on these flows:
 └── tests/                    # Unit and integration tests
 ```
 
+## Documentation
+
+Start with [docs/README.md](docs/README.md). It separates current system design, contracts,
+guides, and operations from dated implementation records under
+[internal_docs/README.md](internal_docs/README.md). Generated reports and process logs are
+disposable outputs and do not belong in either documentation tree.
+
 ## Prerequisites
 
 - Python 3.11+
@@ -42,7 +52,7 @@ The current implementation focuses on these flows:
 All commands below assume PowerShell and this working directory:
 
 ```powershell
-cd E:\50_Codex_Soc_Scenario_DB\implementation
+cd <SCENARIODB_ROOT>
 ```
 
 ## Setup
@@ -88,8 +98,14 @@ uv run python -m scenario_db.etl.loader demo\fixtures --strict --report-json out
 ```
 
 Reload fixtures after changing YAML. The API reads from PostgreSQL, not directly from YAML.
+Strict ETL treats malformed YAML roots, missing `kind`, unsupported `kind`, mapper
+failures, and post-load validation errors as rollback conditions. Non-strict
+loads may commit supported files, but report every rejected file in `skipped`
+and set `ok=false`; unsupported contracts are never silently ignored.
 For a practical map of required and optional DB data, see
-[docs/db-data-guide.md](docs/db-data-guide.md).
+[docs/guides/import/db-data-guide.md](docs/guides/import/db-data-guide.md).
+For the camera prediction/measurement rollout workflow, see
+[docs/guides/comparison/prediction-measurement-comparison-guide-ko.md](docs/guides/comparison/prediction-measurement-comparison-guide-ko.md).
 
 Scenario IDs are global in the current schema. If two fixture sets contain the
 same scenario id under different projects, the default ETL policy rejects the
@@ -110,7 +126,37 @@ The FastAPI ASGI entry point is `scenario_db.api.app:app`.
 
 ```powershell
 $env:DATABASE_URL="postgresql+psycopg2://scenario_user:scenario_pass@localhost:15432/scenario_db"
+$env:SCENARIO_DB_API_PRINCIPALS='{"architect@example.com":{"secret":"replace-with-a-long-random-secret","roles":["writer"]}}'
 uv run uvicorn scenario_db.api.app:app --host 127.0.0.1 --port 18000
+```
+
+Read endpoints remain available without credentials and must be protected by
+the deployment network or reverse proxy. Protected endpoints require both
+`X-ScenarioDB-Key-Id` and `X-ScenarioDB-API-Key`. The key ID becomes the
+server-controlled audit actor; a caller-supplied `actor` cannot override it.
+Roles are enforced as follows: `analyst` can run simulations, `writer` can run
+simulations, use the Write API, and export artifacts, while `admin` can perform
+all protected operations including result deletion and admin cache refresh.
+`reader` is reserved for deployments that authenticate reads at the proxy.
+Configure principals with `SCENARIO_DB_API_PRINCIPALS`. The legacy
+`SCENARIO_DB_MUTATION_API_KEYS` setting remains migration-only and grants all
+protected-operation roles. If no server keys are configured, protected requests
+fail closed with HTTP 503.
+`SCENARIO_DB_MUTATION_AUTH_DISABLED=true` is an explicit local-test bypass and
+must not be enabled in a shared or production environment.
+
+Simulation and Exploration endpoints also enforce per-worker admission and
+payload/expansion bounds. The defaults allow two concurrent simulation runs,
+two concurrent Exploration requests, 120 timeline frames, a 1 MB Exploration
+request, and 500 expanded sweep cases. Tune the
+`SCENARIO_DB_SIMULATION_MAX_*` and `SCENARIO_DB_EXPLORATION_MAX_*` settings
+against measured worker memory and CPU before changing the worker count.
+
+Configure dashboard-side credentials separately in the dashboard process:
+
+```powershell
+$env:SCENARIODB_API_KEY_ID="architect@example.com"
+$env:SCENARIODB_API_KEY="replace-with-a-long-random-secret"
 ```
 
 If you want to launch FastAPI in a background PowerShell window, set the
@@ -162,21 +208,33 @@ Optional query/cache settings:
 
 ```powershell
 $env:SCENARIO_DB_QUERY_FACETS_CACHE_TTL_SECONDS="60"
+$env:SCENARIO_DB_RULE_CACHE_TTL_SECONDS="5"
 ```
 
 `/api/v1/query/facets` uses this short TTL cache when the value is greater than
-0. Write apply invalidates it automatically. If you load YAML directly through
-`python -m scenario_db.etl.loader`, either wait for the TTL or enable the
-internal admin endpoint in a trusted local/VPN environment and refresh caches:
+0. The decision rule cache refreshes on the first rule-dependent request after
+its TTL; `0` refreshes it on every such request. These TTLs bound cross-worker
+staleness because each worker refreshes independently. Write apply refreshes
+the current worker immediately. If you load YAML directly through
+`python -m scenario_db.etl.loader`, either wait for the TTLs or enable the
+internal admin endpoint in a trusted local/VPN environment and refresh the
+current worker:
 
 ```powershell
 $env:SCENARIO_DB_ADMIN_ENDPOINTS_ENABLED="true"
 Invoke-RestMethod -Method Post "$api/admin/cache/refresh"
 ```
 
-The admin endpoint refreshes the current API process. With multiple uvicorn
-workers, restart the API or refresh each worker through the operational entry
-point you expose.
+The admin endpoint refreshes the worker that handles the request. Other workers
+converge within `SCENARIO_DB_RULE_CACHE_TTL_SECONDS` and
+`SCENARIO_DB_QUERY_FACETS_CACHE_TTL_SECONDS`.
+
+Architecture Query pushes safe scalar identity/severity predicates into SQL,
+then builds inherited topology/evidence facts in a bounded Python working set.
+The production defaults are 5,000 variant candidates, 20,000 evidence rows,
+5,000 issues, and 10,000 facet candidates. Requests exceeding a bound fail with
+`candidate_limit_exceeded`; narrow the scope instead of increasing limits
+without measuring worker memory.
 
 ## Write API
 
@@ -197,12 +255,16 @@ Run a valid sample:
 
 ```powershell
 $api="http://127.0.0.1:18000/api/v1"
+$mutationHeaders = @{
+  "X-ScenarioDB-Key-Id" = "architect@example.com"
+  "X-ScenarioDB-API-Key" = "replace-with-a-long-random-secret"
+}
 $payload = Get-Content .\demo\write_payloads\variant_overlay_valid.json -Raw
-$stage = Invoke-RestMethod -Method Post -Uri "$api/write/staging" -ContentType "application/json" -Body $payload
+$stage = Invoke-RestMethod -Method Post -Uri "$api/write/staging" -Headers $mutationHeaders -ContentType "application/json" -Body $payload
 $batchId = $stage.batch_id
-Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/validate"
-Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/diff"
-Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/apply"
+Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/validate" -Headers $mutationHeaders
+Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/diff" -Headers $mutationHeaders
+Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/apply" -Headers $mutationHeaders
 ```
 
 Inspect the result:
@@ -216,19 +278,19 @@ Run a base pipeline patch sample:
 
 ```powershell
 $payload = Get-Content .\demo\write_payloads\pipeline_patch_valid.json -Raw
-$stage = Invoke-RestMethod -Method Post -Uri "$api/write/staging" -ContentType "application/json" -Body $payload
+$stage = Invoke-RestMethod -Method Post -Uri "$api/write/staging" -Headers $mutationHeaders -ContentType "application/json" -Body $payload
 $batchId = $stage.batch_id
-Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/validate"
-$diff = Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/diff"
+Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/validate" -Headers $mutationHeaders
+$diff = Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/diff" -Headers $mutationHeaders
 $diff.impact
-Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/apply"
+Invoke-RestMethod -Method Post -Uri "$api/write/staging/$batchId/apply" -Headers $mutationHeaders
 ```
 
 Pipeline patch diff includes an `impact` block that shows whether existing
 variant overlays would become stale after the base change.
 
-More examples are in [docs/write-api-runbook.md](docs/write-api-runbook.md).
-The write contract is in [docs/write-api-contract.md](docs/write-api-contract.md).
+More examples are in [docs/operations/write-api-runbook.md](docs/operations/write-api-runbook.md).
+The write contract is in [docs/contracts/api/write-api-contract.md](docs/contracts/api/write-api-contract.md).
 
 ## Import Workbench
 
@@ -273,7 +335,7 @@ without manually copying IDs.
 Start the API first. Then open a new PowerShell and run:
 
 ```powershell
-cd E:\50_Codex_Soc_Scenario_DB\implementation
+cd <SCENARIODB_ROOT>
 $env:SCENARIODB_API_BASE="http://127.0.0.1:18000/api/v1"
 uv run --group dashboard streamlit run dashboard\Home.py --server.port 18502 --server.address 127.0.0.1
 ```
@@ -387,6 +449,25 @@ host. The default API-host directory is `output_simulation`; override it with
 `SCENARIO_DB_REPORT_DIR` or with a relative export request body such as
 `projectA`. Absolute custom export paths are rejected by default; enable
 `SCENARIO_DB_ALLOW_CUSTOM_REPORT_DIR=true` only for trusted local environments.
+Each server-side export is written into
+`{prefix}/{generation_id}/` through a staging directory and atomically
+published as one generation. Database metadata and API responses contain only
+report-root-relative paths plus `generation_id`/`artifact_id`; they do not leak
+the API host's absolute filesystem path. If the database commit fails, the new
+generation is removed. A process crash may still leave an orphan generation or
+staging directory, so operators should run the dry-run reconciler:
+
+```powershell
+uv run scenario-db-reconcile-artifacts
+
+# Removes only stale exporter staging directories. Missing, mismatched, and
+# orphan files remain report-only for manual review.
+uv run scenario-db-reconcile-artifacts --apply-stale-staging
+```
+
+The command exits nonzero while unresolved findings remain. Custom export
+directories are intentionally outside this configured-root reconciliation
+scope.
 The saved-evidence ZIP endpoint remains available for scripts:
 
 ```text
@@ -397,6 +478,10 @@ Simulation API examples:
 
 ```powershell
 $api="http://127.0.0.1:18000/api/v1"
+$mutationHeaders = @{
+  "X-ScenarioDB-Key-Id" = "architect@example.com"
+  "X-ScenarioDB-API-Key" = "replace-with-a-long-random-secret"
+}
 
 $payload = @{
   scenario_id = "uc-camera-recording"
@@ -418,14 +503,14 @@ $payload = @{
   force = $false
 } | ConvertTo-Json -Depth 20
 
-$run = Invoke-RestMethod -Method Post -Uri "$api/simulation/run" -ContentType "application/json" -Body $payload
+$run = Invoke-RestMethod -Method Post -Uri "$api/simulation/run" -Headers $mutationHeaders -ContentType "application/json" -Body $payload
 $run.evidence_id
 $run.evidence.calculation_trace.kpi | ConvertTo-Json -Depth 20
 
 # Save only after reviewing the preview.
 $savePayload = $payload | ConvertFrom-Json
 $savePayload.persist = $true
-$saved = Invoke-RestMethod -Method Post -Uri "$api/simulation/run" -ContentType "application/json" -Body ($savePayload | ConvertTo-Json -Depth 20)
+$saved = Invoke-RestMethod -Method Post -Uri "$api/simulation/run" -Headers $mutationHeaders -ContentType "application/json" -Body ($savePayload | ConvertTo-Json -Depth 20)
 Invoke-RestMethod "$api/simulation/results/$($saved.evidence_id)" | ConvertTo-Json -Depth 20
 
 # Export legacy-style local HTML artifacts on the API host.
@@ -437,6 +522,7 @@ $exportPayload = @{
 } | ConvertTo-Json -Depth 5
 Invoke-RestMethod -Method Post `
   -Uri "$api/simulation/results/$($saved.evidence_id)/artifacts/export" `
+  -Headers $mutationHeaders `
   -ContentType "application/json" `
   -Body $exportPayload
 
@@ -457,6 +543,13 @@ saving it to DB. Debug trace flags are also excluded from the hash; if a
 confirmed evidence row exists without a requested trace, the API recomputes the
 same result and updates that evidence with `calculation_trace` when
 `persist=true`.
+
+The evidence ID is deterministic for the same scenario, variant, and parameter
+hash. Concurrent attempts to persist that ID converge on the transaction that
+wins the insert instead of returning a spurious conflict. A force rerun updates
+the computed evidence fields but preserves existing exported artifact metadata
+when the new run does not provide replacement artifacts; the persisted response
+also reports those retained artifacts.
 
 ## Viewer Check
 
@@ -521,7 +614,7 @@ Run a core module coverage baseline without changing the default test gate:
 uv run --group dev pytest tests\unit --cov=scenario_db --cov-report=term-missing
 ```
 
-The current read-side contract is documented in [docs/read-api-contract.md](docs/read-api-contract.md). Update that file and the related tests before changing Read API response shapes.
+The current read-side contract is documented in [docs/contracts/api/read-api-contract.md](docs/contracts/api/read-api-contract.md). Update that file and the related tests before changing Read API response shapes.
 
 Equivalent explicit virtual environment commands:
 

@@ -160,3 +160,35 @@ def test_compare_variants_uses_scenario_filter(api_client: TestClient):
     assert data[wrong_ref] is None
     assert data[right_ref]["scenario_ref"] == "uc-camera-recording"
     assert data[right_ref]["variant_ref"] == VARIANT_REF
+
+
+def test_compare_prediction_measurement_by_id(api_client: TestClient):
+    resp = api_client.get(
+        "/api/v1/compare/prediction-measurement",
+        params={
+            "prediction_id": EVIDENCE_ID,
+            "measurement_id": MEAS_EVIDENCE_ID,
+        },
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["prediction_id"] == EVIDENCE_ID
+    assert data["measurement_id"] == MEAS_EVIDENCE_ID
+    assert data["summary"]["total"] >= 1
+    power = next(row for row in data["rows"] if row["metric_id"] == "power.total")
+    assert power["status"] == "MATCHED"
+    assert power["delta"] == 200.0
+
+
+def test_compare_prediction_measurement_rejects_reversed_kinds(api_client: TestClient):
+    resp = api_client.get(
+        "/api/v1/compare/prediction-measurement",
+        params={
+            "prediction_id": MEAS_EVIDENCE_ID,
+            "measurement_id": EVIDENCE_ID,
+        },
+    )
+
+    assert resp.status_code == 400
+    assert "prediction_id" in resp.json()["detail"]

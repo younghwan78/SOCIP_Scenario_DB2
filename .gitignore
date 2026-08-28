@@ -40,6 +40,9 @@ htmlcov/
 output/
 runtime_logs/
 .runlogs/
+.codex_run_logs/
+.runtime/
+logs/
 generated/
 examples/measurement-import/_generated/
 *.log

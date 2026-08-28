@@ -5,7 +5,7 @@
 # 외부 측정 리포트의 통계치를 사람이 직접 옮겨 적을 때 이 형식을 손으로 작성합니다.
 #
 # 적재:  uv run python -m scenario_db.etl.loader examples/measurement-import/path-b-canonical
-# 스키마: src/scenario_db/models/evidence/measurement.py · docs/measurement-evidence-contract.md
+# 스키마: src/scenario_db/models/evidence/measurement.py · docs/contracts/data/measurement-evidence-contract.md
 # -----------------------------------------------------------------------------
 
 id: meas-example-pathb-uhd30-vdis-20260614

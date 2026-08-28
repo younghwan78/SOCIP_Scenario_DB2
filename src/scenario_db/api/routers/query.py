@@ -12,7 +12,10 @@ router = APIRouter(prefix="/query", tags=["query"])
 
 @router.get("/facets", response_model=QueryFacetsResponse)
 def query_facets(db: Session = Depends(get_db)) -> QueryFacetsResponse:
-    return build_facets(db)
+    try:
+        return build_facets(db)
+    except QueryValidationError as exc:
+        raise HTTPException(status_code=400, detail=exc.errors) from exc
 
 
 @router.post("/variants", response_model=QueryResponse)

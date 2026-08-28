@@ -28,6 +28,14 @@ def _load(name: str) -> dict:
 def test_upsert_measurement_persists_detail_fields():
     db = _Session()
     raw = _load("meas-camera-recording-UHD60-EVT0-sw123.yaml")
+    raw["metric_observations"] = [
+        {
+            "metric_id": "sw.start_jitter",
+            "scope": {"kind": "task", "ref": "eis_warp"},
+            "unit": "us",
+            "stats": {"mean": 84.0, "p95": 210.0, "n": 5400},
+        }
+    ]
 
     upsert_measurement(raw, "sha-meas-1", db)
 
@@ -52,6 +60,7 @@ def test_upsert_measurement_persists_detail_fields():
     assert row.timeline_events[0]["type"] == "frame_drop"
     assert row.artifacts[0]["type"] == "perfetto_trace"
     assert row.provenance["device_id"] == "EVT0-S24-SN-1234"
+    assert row.metric_observations[0]["metric_id"] == "sw.start_jitter"
 
 
 def test_upsert_measurement_skips_identical_sha():
@@ -77,6 +86,14 @@ def test_upsert_simulation_persists_lineage_fields():
     raw["sw_task_timing"] = [
         {"task": "eis_warp", "cluster": "BIG", "mean_ms": 6.4, "p95_ms": 8.0, "samples": 1500}
     ]
+    raw["metric_observations"] = [
+        {
+            "metric_id": "sw.runtime",
+            "scope": {"kind": "task", "ref": "eis_warp"},
+            "unit": "ms",
+            "value": 8.0,
+        }
+    ]
 
     upsert_simulation(raw, "sha-sim-1", db)
 
@@ -88,3 +105,4 @@ def test_upsert_simulation_persists_lineage_fields():
     assert row.sw_task_timing[0]["p95_ms"] == 8.0
     assert row.topology_order is None
     assert row.calculation_trace == raw["calculation_trace"]
+    assert row.metric_observations[0]["scope"]["ref"] == "eis_warp"

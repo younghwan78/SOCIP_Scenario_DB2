@@ -12,6 +12,7 @@ from scenario_db.sim.adapter import build_simulation_inputs
 from scenario_db.sim.exploration import ExplorationSweep, compile_exploration_sweep
 from scenario_db.sim.chain_templates import compile_chain_template, compile_chain_template_sweep
 from scenario_db.sim.models import DVFSTable, SimRunResult, SimulationRunConfig
+from scenario_db.sim.resource_limits import DEFAULT_MAX_SWEEP_CASES
 from scenario_db.sim.runner import run_simulation
 
 
@@ -46,6 +47,7 @@ def run_exploration_sweep_preview(
     config: SimulationRunConfig | None = None,
     dvfs_tables: dict[str, DVFSTable] | None = None,
     include_results: bool = False,
+    max_cases: int = DEFAULT_MAX_SWEEP_CASES,
 ) -> SweepPreviewResult:
     """Compile and run a sweep as preview-only simulation results.
 
@@ -53,7 +55,7 @@ def run_exploration_sweep_preview(
     candidate should be promoted to a variant or saved as evidence later.
     """
 
-    compiled = compile_exploration_sweep(sweep)
+    compiled = compile_exploration_sweep(sweep, max_cases=max_cases)
     case_meta = {item["variant_id"]: item for item in compiled.cases}
     return run_import_bundle_preview(
         compiled.import_bundle,
@@ -108,8 +110,9 @@ def run_chain_template_sweep_preview(
     config: SimulationRunConfig | None = None,
     dvfs_tables: dict[str, DVFSTable] | None = None,
     include_results: bool = False,
+    max_cases: int = DEFAULT_MAX_SWEEP_CASES,
 ) -> SweepPreviewResult:
-    compiled = compile_chain_template_sweep(sweep)
+    compiled = compile_chain_template_sweep(sweep, max_cases=max_cases)
     case_meta = {item["variant_id"]: item for item in compiled.cases}
     return run_import_bundle_preview(
         compiled.import_bundle,

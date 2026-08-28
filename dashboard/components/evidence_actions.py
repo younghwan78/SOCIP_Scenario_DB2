@@ -5,6 +5,7 @@ import csv
 import io
 import json
 from collections.abc import Callable
+from html import escape
 from typing import Any
 
 import streamlit as st
@@ -87,8 +88,8 @@ def render_viewer_tab_link(
     )
     st.markdown(
         f"""
-<a class="viewer-tab-link" href="{href}" target="_blank" rel="noopener noreferrer">
-  {label}
+<a class="viewer-tab-link" href="{escape(href, quote=True)}" target="_blank" rel="noopener noreferrer">
+  {escape(label)}
 </a>
 """,
         unsafe_allow_html=True,

@@ -2,8 +2,8 @@
 measurements, then project a target project's simulation into a measurement-like
 estimate.
 
-Flow (see ``docs/projection-guide-ko.md`` and
-``docs/measurement-evidence-contract.md`` §3):
+Flow (see ``docs/guides/measurement/projection-guide-ko.md`` and
+``docs/contracts/data/measurement-evidence-contract.md`` §3):
 
     U sim (calculation) + U measurement  ->  Calibration (correction factors)
     Calibration + V sim (calculation)    ->  V projected evidence

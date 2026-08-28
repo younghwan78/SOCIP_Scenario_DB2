@@ -142,7 +142,9 @@ def test_report_preview_options_disable_inner_scroll_for_simulation_report():
     assert timing_options["scrolling"] is True
 
 
-def test_export_simulation_artifacts_client_posts_request_body():
+def test_export_simulation_artifacts_client_posts_request_body(monkeypatch):
+    monkeypatch.setenv("SCENARIODB_API_KEY_ID", "architect@example.com")
+    monkeypatch.setenv("SCENARIODB_API_KEY", "top-secret")
     calls = []
 
     class _Response:
@@ -169,6 +171,10 @@ def test_export_simulation_artifacts_client_posts_request_body():
     assert calls[0][0] == "POST"
     assert calls[0][1] == "http://api/api/v1/simulation/results/sim-1/artifacts/export"
     assert calls[0][2]["json"]["variant_name"] == "FHD30 Recording"
+    assert calls[0][2]["headers"] == {
+        "X-ScenarioDB-Key-Id": "architect@example.com",
+        "X-ScenarioDB-API-Key": "top-secret",
+    }
 
 
 def test_simulation_artifacts_zip_url_carries_report_context():

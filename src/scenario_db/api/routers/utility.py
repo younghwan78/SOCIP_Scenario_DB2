@@ -30,6 +30,10 @@ def readiness(request: Request):
     try:
         with request.app.state.session_factory() as s:
             s.execute(text("SELECT 1"))
+            cache.refresh_if_stale(
+                s,
+                getattr(request.app.state, "rule_cache_ttl_seconds", 5.0),
+            )
         db_ok = True
     except Exception as exc:
         logger.warning("Readiness database probe failed: %s", exc, exc_info=True)

@@ -13,3 +13,4 @@ for path in (ROOT, ROOT / "src"):
         sys.path.insert(0, str(path))
 
 os.environ.setdefault("DATABASE_URL", "sqlite:///test-scenariodb.db")
+os.environ.setdefault("SCENARIO_DB_MUTATION_AUTH_DISABLED", "true")
