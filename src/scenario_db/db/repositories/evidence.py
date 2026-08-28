@@ -119,6 +119,7 @@ def upsert_simulation_evidence(
     row.kind = evidence.kind
     row.scenario_ref = str(evidence.scenario_ref)
     row.variant_ref = evidence.variant_ref
+    row.project_ref = str(evidence.project_ref) if evidence.project_ref else None
     row.sw_baseline_ref = str(evidence.execution_context.sw_baseline_ref)
     row.sweep_job_id = evidence.sweep_context.sweep_job_id if evidence.sweep_context else None
     row.execution_context = evidence.execution_context.model_dump(exclude_none=True)
@@ -139,6 +140,7 @@ def upsert_simulation_evidence(
     row.external_devices = list(evidence.external_devices or [])
     row.topology_order = list(evidence.topology_order or []) or None
     row.vdd_power = evidence.vdd_power or {}
+    row.power_breakdown = evidence.power_breakdown or None
     row.calculation_trace = evidence.calculation_trace
     row.params_hash = evidence.params_hash
     incoming_artifacts = [

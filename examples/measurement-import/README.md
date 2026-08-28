@@ -49,6 +49,8 @@ flowchart LR
 
 ```
 examples/measurement-import/
+├─ bench-export/                # 벤치 원본 export 예제 (per-run wide 표 3개)
+│  └─ power_run{1,2,3}.txt      # 어댑터 입력 형식 명세 겸 fixture
 ├─ path-a-capture/
 │  ├─ meta.yaml                 # 캡처 메타 + rail_long 변환 지시
 │  └─ rail_power_by_run.csv     # run(3) × rail(16) = 48행, V/mA/mW
@@ -56,6 +58,26 @@ examples/measurement-import/
 │  └─ meas-example-canonical.yaml
 └─ _generated/                  # Path A 변환 결과 (git 미추적)
 ```
+
+**벤치 wide export → rail_long 변환 (Path A 앞단, turnkey):** 벤치가 뱉는
+per-run wide 표(rail 행 × Voltage/Current/Power 열)는 어댑터가 long CSV로 합친다.
+단독 실행 또는 `--bench-in`으로 Path A와 한 명령 통합:
+
+```powershell
+# 변환만
+uv run python -m scenario_db.meas_import.bench_adapter `
+  --in examples/measurement-import/bench-export --out rail_power_by_run.csv
+
+# 변환 + canonical 생성까지 한 번에
+uv run python -m scenario_db.meas_import.cli `
+  --meta examples/measurement-import/path-a-capture/meta.yaml `
+  --out  examples/measurement-import/_generated --strict `
+  --bench-in examples/measurement-import/bench-export
+```
+
+구분자(공백/콤마/탭)·헤더 표기·단위(`Voltage(mV)`, `Power[W]` 등)·run 규칙
+(파일당 1 run, 파일명 숫자 또는 정렬 순서 / 단일 파일 `run` 컬럼)은 파서가
+자동 흡수한다. 상세: `BENCH-ADAPTER.md`.
 
 ETL 로더는 `SCENARIO_DB_DATABASE_URL`을 우선 사용하고, 없으면 `DATABASE_URL`을 사용한다. 적재 전 1회 설정:
 

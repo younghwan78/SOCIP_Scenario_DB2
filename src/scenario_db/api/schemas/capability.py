@@ -29,6 +29,22 @@ class SocDvfsTableResponse(BaseModel):
     domain_schema_hash: str | None = None
 
 
+class SimConfigProfileResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    schema_version: str
+    project_ref: str | None = None
+    soc_ref: str | None = None
+    version: int
+    status: str
+    approved_by: str | None = None
+    description: str | None = None
+    run_config: dict = {}
+    rail_domain_map: dict | None = None
+    notes: str | None = None
+
+
 class SocCdgmProfileResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

@@ -65,6 +65,10 @@ class SimulationEvidence(BaseScenarioModel):
     external_devices: list[dict[str, Any]] = Field(default_factory=list)
     topology_order: list[str] = Field(default_factory=list)
     vdd_power: dict[str, dict[str, float]] = Field(default_factory=dict)
+    # Three-bucket power decomposition {model, ip, memory, cpu, total_mw}
+    # aligned with measurement axes (per-IP / MIF rail / cpu clusters); the
+    # producing power model's id+version is stamped in "model".
+    power_breakdown: dict[str, Any] | None = None
     # Projection evidence (method=projection) carries SW task timing derived from
     # another project's measurement; native calculation runs leave it empty.
     sw_task_timing: list[SwTaskTiming] = Field(default_factory=list)

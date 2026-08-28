@@ -22,7 +22,7 @@ DocumentId = Annotated[
         # Prefix is lowercase; suffix allows mixed-case for acronyms (e.g. iss-LLC-thrashing-0221)
         pattern=(
             r"^(soc|ip|sub|sw|hal|kernel|fw|conn|proj|uc|dvfs|cdgm|"
-            r"sim|meas|rev|waiver|iss|rule)-[a-zA-Z0-9][a-zA-Z0-9.\-]*$"
+            r"sim|simcfg|meas|rev|waiver|iss|rule)-[a-zA-Z0-9][a-zA-Z0-9.\-]*$"
         )
     ),
 ]

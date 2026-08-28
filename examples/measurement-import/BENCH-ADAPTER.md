@@ -1,7 +1,18 @@
-# 벤치 export → rail_long CSV 어댑터 (재개 앵커)
+# 벤치 export → rail_long CSV 어댑터
 
-이 문서는 **나중에(다른 worktree/세션/Codex에서) 이 작업을 재개**할 때 컨텍스트를 잃지 않도록
-레포에 박아둔 명세입니다. memory는 worktree마다 분리되므로 이 파일이 single source입니다.
+> **상태: 구현 완료 (2026-08-29)** — `src/scenario_db/meas_import/bench_adapter.py`.
+> 단독 CLI(`python -m scenario_db.meas_import.bench_adapter --in <dir|files> --out <csv>`)와
+> `meas_import.cli --bench-in <dir|files>`(변환+canonical 생성 원커맨드) 두 경로 제공.
+> 예제 입력: `bench-export/power_run{1,2,3}.txt` (path-a CSV와 값 동일 — 등가성 테스트로 고정).
+> 테스트: `tests/unit/meas_import/test_bench_adapter.py`.
+>
+> 아래 "확정 필요"였던 항목은 파서 유연성으로 흡수됨 — 구분자(공백/콤마/탭) 자동 감지,
+> 헤더 대소문자/괄호 표기 무관, 단위는 헤더 접미(`(mV)`/`[W]`/`_ma` 등)에서 읽고 V/mA/mW로
+> 정규화(기본값 V/mA/mW), run은 파일명 숫자 → 정렬 순서 폴백, 단일 파일 `run` 컬럼 지원.
+> **실제 벤치 파일 1개를 받으면 그대로 넣어 파싱되는지만 확인하면 된다** — 안 되면
+> `_COLUMN_KINDS`/`_UNIT_SCALES`에 표기 하나 추가로 끝나는 구조.
+
+이 문서는 원래 재개 앵커용 명세였습니다. 이력 보존을 위해 원문 유지:
 관련 memory(같은 경로일 때만 로드): `measurement-realdata-ingestion.md`.
 
 ## 목표 (한 줄)

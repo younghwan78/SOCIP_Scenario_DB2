@@ -86,9 +86,15 @@ def get_evidence(evidence_id: str, db: Session = Depends(get_db)):
 
 
 def _pick_latest(q) -> Evidence | None:
-    """비교용 evidence 선택 정책: measured_at 최신 우선(NULL은 후순위), 동률이면 id 역순."""
+    """비교용 evidence 선택 정책: measured_at(실측) → run_info.timestamp(시뮬) 최신 우선.
+
+    시뮬레이션 evidence는 measured_at이 항상 NULL이므로 run_info.timestamp를
+    2차 키로 써야 '최신'이 시간순이 된다(없으면 id 역순으로 퇴화하던 버그 수정).
+    ISO-8601 문자열은 사전순 정렬이 시간순과 일치한다.
+    """
     return q.order_by(
         Evidence.measured_at.desc().nulls_last(),
+        Evidence.run_info["timestamp"].astext.desc().nullslast(),
         Evidence.id.desc(),
     ).first()
 

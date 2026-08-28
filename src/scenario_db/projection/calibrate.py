@@ -14,7 +14,8 @@ from __future__ import annotations
 from scenario_db.projection.models import Calibration
 
 # priority order of keys used to pull a scalar power from a vdd_power rail entry.
-_RAIL_KEYS = ("mean_mw", "power_mw", "power", "mean")
+# total_mw is the simulation runner's per-rail total (core_mw + bw_mw).
+_RAIL_KEYS = ("mean_mw", "power_mw", "total_mw", "power", "mean")
 
 
 def kpi_scalar(value: object) -> float | None:

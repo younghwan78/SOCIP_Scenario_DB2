@@ -38,6 +38,8 @@ def build_metric_observations(
             definition.canonical_unit,
             kpi[definition.kpi_key],
         )
+        if observation is None:
+            continue
         _append_if_new(observations, identities, observation)
 
     if power is not None:
@@ -96,7 +98,7 @@ def build_metric_observations(
     return observations
 
 
-def _from_kpi(metric_id: str, unit: str, value: Any) -> dict:
+def _from_kpi(metric_id: str, unit: str, value: Any) -> dict | None:
     base = {
         "metric_id": metric_id,
         "scope": {"kind": "scenario", "ref": "self"},
@@ -106,7 +108,13 @@ def _from_kpi(metric_id: str, unit: str, value: Any) -> dict:
         stats = _stats_from_mapping(value)
         if stats:
             return {**base, "stats": stats}
+        # A dict KPI with no recognizable stat keys must not become
+        # {"value": None} — that fails MetricObservation validation with a
+        # raw traceback instead of a structured import report.
+        return None
     scalar = _number(value)
+    if scalar is None:
+        return None
     return {**base, "value": scalar}
 
 

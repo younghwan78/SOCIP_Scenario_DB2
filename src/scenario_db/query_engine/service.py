@@ -507,7 +507,14 @@ def _load_scoped_evidence(
     *,
     max_rows: int | None,
 ) -> list[Any]:
-    query = db.query(Evidence).filter(Evidence.scenario_ref.in_(scenario_ids))
+    # evidence.latest.* fields are simulation semantics (flat numeric kpi,
+    # run_info-ordered "latest"). Without the kind filter a measurement row —
+    # whose kpi values are stat dicts and whose run_info is absent — could be
+    # picked nondeterministically and silently break numeric comparisons.
+    query = db.query(Evidence).filter(
+        Evidence.scenario_ref.in_(scenario_ids),
+        Evidence.kind == "evidence.simulation",
+    )
     if variant_ids:
         query = query.filter(Evidence.variant_ref.in_(variant_ids))
     return _bounded_query_all(query, max_rows=max_rows, source="evidence")

@@ -95,3 +95,25 @@ class SwComponent(Base):
     feature_flags  = Column(JSONB)
     capabilities   = Column(JSONB)
     yaml_sha256    = Column(Text, nullable=False)
+
+
+class SimConfigProfile(Base):
+    """과제·SoC별 합의된 시뮬레이션 설정 (정합 iteration의 재현 단위)."""
+
+    __tablename__ = "sim_config_profiles"
+    __table_args__ = (
+        CheckConstraint("status in ('draft', 'approved')", name="ck_simcfg_status"),
+    )
+
+    id              = Column(Text, primary_key=True)
+    schema_version  = Column(Text, nullable=False)
+    project_ref     = Column(Text, ForeignKey("projects.id"), index=True)
+    soc_ref         = Column(Text, ForeignKey("soc_platforms.id"), index=True)
+    version         = Column(Integer, nullable=False, default=1)
+    status          = Column(Text, nullable=False, default="draft")
+    approved_by     = Column(Text)
+    description     = Column(Text)
+    run_config      = Column(JSONB, nullable=False)  # SimulationRunConfig 기본값 (None=미고정)
+    rail_domain_map = Column(JSONB)                  # 벤치 physical rail -> power domain
+    notes           = Column(Text)
+    yaml_sha256     = Column(Text, nullable=False)

@@ -8,6 +8,7 @@ from scenario_db.api.deps import get_db
 from scenario_db.api.pagination import apply_sort, validate_sort_column
 from scenario_db.api.schemas.capability import (
     IpCatalogResponse,
+    SimConfigProfileResponse,
     SocCdgmProfileResponse,
     SocDvfsTableResponse,
     SocPlatformResponse,
@@ -20,7 +21,15 @@ from scenario_db.api.validators import (
     validate_ip_category,
     validate_sw_component_category,
 )
-from scenario_db.db.models.capability import IpCatalog, SocCdgmProfile, SocDvfsTable, SocPlatform, SwComponent, SwProfile
+from scenario_db.db.models.capability import (
+    IpCatalog,
+    SimConfigProfile,
+    SocCdgmProfile,
+    SocDvfsTable,
+    SocPlatform,
+    SwComponent,
+    SwProfile,
+)
 
 router = APIRouter(tags=["capability"])
 
@@ -78,6 +87,42 @@ def get_soc_dvfs_table(table_id: str, db: Session = Depends(get_db)):
     row = db.query(SocDvfsTable).filter_by(id=table_id).one_or_none()
     if row is None:
         raise NoResultFound(f"SocDvfsTable '{table_id}' not found")
+    return row
+
+
+# ---------------------------------------------------------------------------
+# Sim Config Profiles — 과제별 합의 시뮬레이션 설정
+# ---------------------------------------------------------------------------
+
+@router.get("/sim-config-profiles", response_model=PagedResponse[SimConfigProfileResponse])
+def list_sim_config_profiles(
+    project_ref: str | None = Query(None),
+    soc_ref: str | None = Query(None),
+    status: str | None = Query(None, description="draft | approved"),
+    limit: int = Query(50, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    sort_by: str | None = Query(None),
+    sort_dir: str = Query("desc"),
+    db: Session = Depends(get_db),
+):
+    """과제·SoC별 합의된 run config 프로파일 (simulation --config_profile_ref 대상)."""
+    sort_by = validate_sort_column(SimConfigProfile, sort_by)
+    q = db.query(SimConfigProfile)
+    if project_ref is not None:
+        q = q.filter(SimConfigProfile.project_ref == project_ref)
+    if soc_ref is not None:
+        q = q.filter(SimConfigProfile.soc_ref == soc_ref)
+    if status is not None:
+        q = q.filter(SimConfigProfile.status == status)
+    q = apply_sort(q, SimConfigProfile, sort_by, sort_dir, default_col="version")
+    return PagedResponse.from_query(q, limit=limit, offset=offset)
+
+
+@router.get("/sim-config-profiles/{profile_id}", response_model=SimConfigProfileResponse)
+def get_sim_config_profile(profile_id: str, db: Session = Depends(get_db)):
+    row = db.query(SimConfigProfile).filter_by(id=profile_id).one_or_none()
+    if row is None:
+        raise NoResultFound(f"SimConfigProfile '{profile_id}' not found")
     return row
 
 

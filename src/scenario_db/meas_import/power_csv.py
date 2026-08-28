@@ -14,7 +14,7 @@ from __future__ import annotations
 import csv
 from dataclasses import dataclass, field
 from pathlib import Path
-from statistics import fmean, pstdev
+from statistics import fmean, stdev
 
 from scenario_db.meas_import.meta import PowerSpec
 from scenario_db.meas_import.stats import measured_kpi
@@ -209,7 +209,8 @@ def aggregate_power_rail_long(
         mw_vals = rails[rail]["mw"]
         entry: dict = {"power_mw": _round(fmean(mw_vals))}
         if len(mw_vals) > 1:
-            entry["std_mw"] = _round(pstdev(mw_vals))
+            # Sample stdev (n-1): runs are a sample of the capture population.
+            entry["std_mw"] = _round(stdev(mw_vals))
         if rails[rail]["v"]:
             entry["voltage_v"] = _round(fmean(rails[rail]["v"]), 4)
         if rails[rail]["ma"]:
