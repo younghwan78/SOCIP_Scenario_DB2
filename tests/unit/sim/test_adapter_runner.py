@@ -1099,3 +1099,52 @@ def _ip_catalog_from_yaml(path: Path) -> IpCatalog:
 
 def _read_yaml(path: Path) -> dict:
     return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def test_runner_uses_owning_node_fps_for_port_bandwidth():
+    """Mixed-rate pipelines: a port's traffic runs at its node's fps, not one
+    scenario-global fps (pre-fix every port used config.fps)."""
+    from scenario_db.sim.models import (
+        IPSimParams,
+        IPWorkload,
+        PortTransferSpec,
+        PortType,
+        SimulationInputs,
+    )
+
+    def _workload(node_id: str, fps: float) -> IPWorkload:
+        return IPWorkload(
+            node_id=node_id,
+            ip_ref=f"ip-{node_id}",
+            hw_name=node_id.upper(),
+            width=1920,
+            height=1080,
+            fps=fps,
+            sim_params=IPSimParams(hw_name=node_id.upper(), ppc=4, unit_power_mw_mp=10),
+        )
+
+    def _port(node_id: str) -> PortTransferSpec:
+        return PortTransferSpec(
+            node_id=node_id,
+            ip_ref=f"ip-{node_id}",
+            hw_name=node_id.upper(),
+            port="WDMA0",
+            port_type=PortType.DMA_WRITE,
+            width=1920,
+            height=1080,
+            format="YUV420",
+            bitwidth=8,
+        )
+
+    inputs = SimulationInputs(
+        scenario_id="uc-x",
+        variant_id="v1",
+        config=SimulationRunConfig(fps=30.0, include_timeline=False),
+        workloads=[_workload("isp0", 30.0), _workload("dpu0", 120.0)],
+        port_transfers=[_port("isp0"), _port("dpu0")],
+    )
+
+    result = run_simulation(inputs, dvfs_tables={})
+    bw = {item.node_id: item.bw_mbs for item in result.dma_breakdown}
+
+    assert bw["dpu0"] == pytest.approx(bw["isp0"] * 4.0)

@@ -35,6 +35,9 @@ def run_simulation(
     dvfs_tables = dvfs_tables or {}
     config = inputs.config
     effective_fps = float(config.fps or 30.0)
+    # Mixed-rate pipelines: each port's traffic runs at its owning node's fps
+    # (node sim-block override), falling back to the scenario fps.
+    fps_by_node = {workload.node_id: workload.fps for workload in inputs.workloads}
     resolved = DvfsResolver(dvfs_tables, asv_group=config.asv_group).resolve(
         inputs.workloads,
         dvfs_overrides=config.dvfs_overrides,
@@ -42,7 +45,7 @@ def run_simulation(
     dma_breakdown = [
         calc_port_bw(
             transfer,
-            fps=effective_fps,
+            fps=fps_by_node.get(transfer.node_id, effective_fps),
             bw_power_coeff=config.bw_power_coeff,
             vbat=config.vbat,
             pmic_efficiency=config.pmic_efficiency,

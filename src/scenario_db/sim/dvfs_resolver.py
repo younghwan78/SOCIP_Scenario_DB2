@@ -48,6 +48,18 @@ class DvfsResolver:
         if workload.clock_correction_mhz > required_clock:
             required_clock = workload.clock_correction_mhz
 
+        feasible = True
+        infeasible_reason: str | None = None
+        max_clock = params.max_clock_mhz or 0.0
+        if max_clock > 0 and required_clock > max_clock:
+            # Catches IPs without a DVFS table, which otherwise pass at any
+            # clock with the reference voltage.
+            feasible = False
+            infeasible_reason = (
+                f"required_clock {required_clock:.1f}MHz exceeds "
+                f"ip max_clock {max_clock:.1f}MHz"
+            )
+
         return ResolvedIPConfig(
             node_id=workload.node_id,
             ip_ref=workload.ip_ref,
@@ -72,6 +84,8 @@ class DvfsResolver:
             fps=workload.fps,
             active_power_mw=0.0,
             total_power_mw=0.0,
+            feasible=feasible,
+            infeasible_reason=infeasible_reason,
         )
 
     def _align_required_clock_by_dvfs_group(
@@ -153,10 +167,18 @@ class DvfsResolver:
             target_level = table.find_min_level_for_speed(max_set, asv_group=self.asv_group)
             if target_level is None:
                 continue
+            target_voltage = table.voltage_for(target_level, self.asv_group)
             for node_id in node_ids:
                 config = resolved[node_id]
                 config.set_clock_mhz = max(config.set_clock_mhz, max_set)
                 config.dvfs_level = target_level.level
+                # The raised level must carry the raised level's voltage;
+                # keeping the pre-alignment voltage under-volts (and therefore
+                # under-predicts power for) every node pulled up by the group.
+                if target_voltage > 0:
+                    config.required_voltage_mv = max(
+                        config.required_voltage_mv, target_voltage
+                    )
 
     def _align_voltage_by_vdd(self, resolved: dict[str, ResolvedIPConfig]) -> None:
         for _, node_ids in _group_by(resolved, "vdd").items():

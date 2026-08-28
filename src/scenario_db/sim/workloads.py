@@ -47,7 +47,7 @@ def build_workload_for_node(
         width=width,
         height=height,
         format=workload_format,
-        fps=fps,
+        fps=float(sim_block.get("fps") or fps),
         sw_margin=float(sim_block.get("sw_margin") or run_config.sw_margin),
         manual_clock_mhz=sim_block.get("manual_clock_mhz"),
         sim_params=sim_params,

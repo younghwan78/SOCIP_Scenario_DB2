@@ -1,6 +1,10 @@
 """Shared constants for ScenarioDB simulation calculations."""
 from __future__ import annotations
 
+# Bytes-per-pixel FACTOR relative to the sample container size: total
+# bytes/pixel = factor * (bitwidth / 8). Formats that pack samples into wider
+# containers (P010/P210: 10-bit in 16-bit) must be used with the container
+# bitwidth (16), not the sample depth — the factor already excludes bit depth.
 BPP_MAP: dict[str, float] = {
     "NV12": 1.5,
     "NV21": 1.5,
@@ -33,8 +37,11 @@ BPP_MAP: dict[str, float] = {
     "BAYER": 1.0,
     "BAYER_PACKED": 1.0,
     "BAYER_UNPACKED": 2.0,
-    "P010": 2.0,
-    "P210": 3.2,
+    # 4:2:0 / 4:2:2 chroma layouts in 16-bit containers: plane factor only
+    # (1.5 / 2.0); the old 2.0 / 3.2 values double-counted the container
+    # width once bitwidth=16 was applied on top.
+    "P010": 1.5,
+    "P210": 2.0,
     "STAT": 1.0,
 }
 
