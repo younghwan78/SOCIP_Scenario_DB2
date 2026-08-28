@@ -54,6 +54,7 @@ export class TimelineEngine {
 
   private isPanning = false
   private isBrushing = false
+  private brushMode = false
   private brushAnchorMs = 0
   private brushCursorMs = 0
   private brush: BrushRange | null = null
@@ -172,6 +173,10 @@ export class TimelineEngine {
     this.transform.startMs += deltaMs
     this.transform.endMs += deltaMs
     this.requestRender()
+  }
+
+  public setBrushMode(enabled: boolean): void {
+    this.brushMode = enabled
   }
 
   public clearSelection(): void {
@@ -566,7 +571,7 @@ export class TimelineEngine {
   private onMouseDown = (e: MouseEvent): void => {
     if (e.button !== 0 || !this.canvas) return
     const { x, y } = this.localPos(e)
-    if (e.shiftKey && x > HEADER_WIDTH) {
+    if ((e.shiftKey || this.brushMode) && x > HEADER_WIDTH) {
       this.isBrushing = true
       this.brushAnchorMs = this.xToTime(x)
       this.brushCursorMs = this.brushAnchorMs

@@ -109,6 +109,14 @@ document.getElementById('wb-fit')?.addEventListener('click', () => engine.fitAll
 document.getElementById('wb-zoom-in')?.addEventListener('click', () => engine.zoomBy(0.8))
 document.getElementById('wb-zoom-out')?.addEventListener('click', () => engine.zoomBy(1.25))
 
+const selectButton = document.getElementById('wb-select')
+let brushMode = false
+selectButton?.addEventListener('click', () => {
+  brushMode = !brushMode
+  engine.setBrushMode(brushMode)
+  selectButton.classList.toggle('wb-active', brushMode)
+})
+
 new ResizeObserver(() => engine.resize()).observe(canvasWrap)
 
 initBridge((args) => {
