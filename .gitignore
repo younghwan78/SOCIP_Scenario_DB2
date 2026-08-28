@@ -70,3 +70,6 @@ desktop.ini
 
 # Local agent/tooling state
 .claude/
+
+# Frontend toolchain
+node_modules/

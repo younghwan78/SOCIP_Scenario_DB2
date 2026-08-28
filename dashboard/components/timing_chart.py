@@ -98,16 +98,14 @@ def render_timing_summary(result: dict[str, Any]) -> None:
         cols[2].metric("Output Cadence Slack", "-")
 
 
+INTERACTIVE_RENDERER = "Interactive (beta)"
+PLOTLY_RENDERER = "Plotly"
+
+
 def render_timing_chart(result: dict[str, Any], *, key_prefix: str = "stored") -> None:
     events = timeline_events(result)
     if not events:
         st.info("No timeline events are available for chart rendering.")
-        return
-    try:
-        import plotly.graph_objects as go
-    except ImportError:
-        st.warning("Plotly is not installed in this environment. The timeline table is shown instead.")
-        render_copyable_dataframe(events, key=f"{key_prefix}_timing_chart_fallback", use_container_width=True, hide_index=True)
         return
 
     evidence_id = safe_filename(str(result.get("id") or "selected"))
@@ -138,6 +136,24 @@ def render_timing_chart(result: dict[str, Any], *, key_prefix: str = "stored") -
             event_order.get(id(event), 0),
         ),
     )
+    renderer = _select_renderer(key_prefix=key_prefix, evidence_id=evidence_id)
+    if renderer == INTERACTIVE_RENDERER:
+        _render_interactive_chart(
+            visible_events,
+            key=f"{key_prefix}_timing_workbench_{evidence_id}_{frame_choice}",
+            show_waits=show_waits,
+            show_deadlines=show_deadlines,
+            key_prefix=key_prefix,
+        )
+        return
+
+    try:
+        import plotly.graph_objects as go
+    except ImportError:
+        st.warning("Plotly is not installed in this environment. The timeline table is shown instead.")
+        render_copyable_dataframe(events, key=f"{key_prefix}_timing_chart_fallback", use_container_width=True, hide_index=True)
+        return
+
     include_frame = frame_choice == "All" and len(frame_values) > 1
     labels = [event_label(event, include_frame=include_frame) for event in visible_events]
     fig = go.Figure()
@@ -192,6 +208,54 @@ def render_timing_chart(result: dict[str, Any], *, key_prefix: str = "stored") -
     fig.update_yaxes(autorange="reversed")
     st.plotly_chart(fig, use_container_width=True, key=f"{key_prefix}_timing_chart_plot_{evidence_id}_{frame_choice}")
     render_timing_issue_tables(visible_events, key_prefix=key_prefix)
+
+
+def _select_renderer(*, key_prefix: str, evidence_id: str) -> str:
+    from dashboard.components.workbench import workbench_available
+
+    if not workbench_available():
+        return PLOTLY_RENDERER
+    return str(
+        st.radio(
+            "Renderer",
+            [INTERACTIVE_RENDERER, PLOTLY_RENDERER],
+            key=f"{key_prefix}_timing_chart_renderer_{evidence_id}",
+            horizontal=True,
+            label_visibility="collapsed",
+        )
+    )
+
+
+def _render_interactive_chart(
+    visible_events: list[dict[str, Any]],
+    *,
+    key: str,
+    show_waits: bool,
+    show_deadlines: bool,
+    key_prefix: str,
+) -> None:
+    from dashboard.components.workbench import render_workbench_timeline
+    from dashboard.components.workbench_data import filter_events_by_range
+
+    selection = render_workbench_timeline(
+        visible_events,
+        key=key,
+        show_waits=show_waits,
+        show_deadlines=show_deadlines,
+    )
+    table_events = visible_events
+    if selection and selection.get("range_start_ms") is not None and selection.get("range_end_ms") is not None:
+        table_events = filter_events_by_range(
+            visible_events,
+            float(selection["range_start_ms"]),
+            float(selection["range_end_ms"]),
+        )
+        st.caption(
+            "Tables filtered to selection "
+            f"{format_ms(selection['range_start_ms'])} - {format_ms(selection['range_end_ms'])} "
+            f"({len(table_events)} events). Press Esc in the chart to clear."
+        )
+    render_timing_issue_tables(table_events, key_prefix=key_prefix)
 
 
 def render_timing_chart_metrics(events: list[dict[str, Any]]) -> None:
