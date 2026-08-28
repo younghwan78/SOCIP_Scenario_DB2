@@ -186,6 +186,57 @@ def normalize_evidence_observations(
             },
         )
 
+    # power.cluster — measurement: cpu_breakdown rail rollup; prediction:
+    # power_breakdown.cpu.by_cluster (empty until the CPU model lands).
+    for cluster in evidence.get("cpu_breakdown") or []:
+        if not isinstance(cluster, dict) or not cluster.get("cluster"):
+            continue
+        power = cluster.get("power_mw")
+        stats = _generic_stats(power) if isinstance(power, dict) else None
+        value = _number(power)
+        if not stats and value is None:
+            continue
+        observation: dict[str, Any] = {
+            "metric_id": "power.cluster",
+            "scope": {"kind": "cluster", "ref": str(cluster["cluster"])},
+            "unit": "mW",
+        }
+        if stats:
+            observation["stats"] = stats
+        else:
+            observation["value"] = value
+        _append_if_new(out, identities, observation)
+
+    breakdown = _mapping(evidence.get("power_breakdown"))
+    for cluster_ref, power in _mapping(_mapping(breakdown.get("cpu")).get("by_cluster")).items():
+        value = _number(power)
+        if value is None:
+            continue
+        _append_if_new(
+            out,
+            identities,
+            _from_legacy_value("power.cluster", "cluster", str(cluster_ref), "mW", value),
+        )
+
+    # power.ip — prediction: per-IP core power, the primary calibration axis.
+    # Instances of the same IP (e.g. dual ISP) are summed: measured per-IP
+    # power is always the per-IP total.
+    ip_power: dict[str, float] = {}
+    for item in evidence.get("ip_breakdown") or []:
+        if not isinstance(item, dict) or not item.get("ip"):
+            continue
+        value = _number(item.get("power_mW") if "power_mW" in item else item.get("power_mw"))
+        if value is None:
+            continue
+        ref = str(item["ip"])
+        ip_power[ref] = ip_power.get(ref, 0.0) + value
+    for ref, value in sorted(ip_power.items()):
+        _append_if_new(
+            out,
+            identities,
+            _from_legacy_value("power.ip", "ip", ref, "mW", round(value, 6)),
+        )
+
     for task in evidence.get("sw_task_timing") or []:
         if not isinstance(task, dict) or not task.get("task"):
             continue

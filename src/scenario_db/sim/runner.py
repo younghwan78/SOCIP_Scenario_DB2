@@ -22,6 +22,7 @@ from scenario_db.sim.models import (
     SimulationInputs,
 )
 from scenario_db.sim.perf_calc import calc_processing_time_ms
+from scenario_db.sim.power_model import resolve_power_model
 from scenario_db.sim.timeline import build_timeline_events
 
 
@@ -34,11 +35,16 @@ def run_simulation(
 
     dvfs_tables = dvfs_tables or {}
     config = inputs.config
+    power_model = resolve_power_model(config.power_model)
     effective_fps = float(config.fps or 30.0)
     # Mixed-rate pipelines: each port's traffic runs at its owning node's fps
     # (node sim-block override), falling back to the scenario fps.
     fps_by_node = {workload.node_id: workload.fps for workload in inputs.workloads}
-    resolved = DvfsResolver(dvfs_tables, asv_group=config.asv_group).resolve(
+    resolved = DvfsResolver(
+        dvfs_tables,
+        asv_group=config.asv_group,
+        power_model=power_model,
+    ).resolve(
         inputs.workloads,
         dvfs_overrides=config.dvfs_overrides,
     )
@@ -49,6 +55,7 @@ def run_simulation(
             bw_power_coeff=config.bw_power_coeff,
             vbat=config.vbat,
             pmic_efficiency=config.pmic_efficiency,
+            power_model=power_model,
         )
         for transfer in inputs.port_transfers
     ]
@@ -148,7 +155,13 @@ def run_simulation(
         timeline_events=timeline_events,
         external_devices=inputs.external_devices,
         topology_order=inputs.topology_order,
-        vdd_power=_vdd_power(resolved, dma_breakdown),
+        vdd_power=_vdd_power(resolved, dma_breakdown, memory_rail=config.memory_rail),
+        power_breakdown=_power_breakdown(
+            resolved,
+            dma_breakdown,
+            memory_rail=config.memory_rail,
+            power_model=power_model,
+        ),
         warnings=warnings,
         calculation_trace=calculation_trace,
     )
@@ -220,6 +233,7 @@ def build_simulation_evidence(
         external_devices=result.external_devices,
         topology_order=result.topology_order,
         vdd_power=result.vdd_power,
+        power_breakdown=result.power_breakdown or None,
         params_hash=params_hash,
         calculation_trace=result.calculation_trace,
     )
@@ -254,7 +268,12 @@ def _with_calculated_durations(
 def _vdd_power(
     resolved: dict[str, object],
     dma_breakdown: list[PortBWResult],
+    *,
+    memory_rail: str,
 ) -> dict[str, dict[str, float]]:
+    """Per-rail power. BW-induced (DRAM/interconnect) power sits on the memory
+    rail — where a bench actually measures it — not on the initiating IP's
+    rail, so per-rail calibration factors compare like with like."""
     grouped: dict[str, dict[str, float]] = {}
     for item in resolved.values():
         vdd = getattr(item, "vdd", None)
@@ -262,19 +281,56 @@ def _vdd_power(
             continue
         bucket = grouped.setdefault(vdd, {"core_mw": 0.0, "bw_mw": 0.0, "total_mw": 0.0})
         bucket["core_mw"] += float(getattr(item, "total_power_mw", 0.0))
-    node_to_vdd = {
-        node_id: getattr(item, "vdd", None)
-        for node_id, item in resolved.items()
-    }
-    for dma in dma_breakdown:
-        vdd = node_to_vdd.get(dma.node_id)
-        if not vdd:
-            continue
-        bucket = grouped.setdefault(vdd, {"core_mw": 0.0, "bw_mw": 0.0, "total_mw": 0.0})
-        bucket["bw_mw"] += dma.bw_power_mw
+    bw_total = sum(dma.bw_power_mw for dma in dma_breakdown)
+    if bw_total > 0:
+        bucket = grouped.setdefault(
+            memory_rail, {"core_mw": 0.0, "bw_mw": 0.0, "total_mw": 0.0}
+        )
+        bucket["bw_mw"] += bw_total
     for bucket in grouped.values():
         bucket["total_mw"] = bucket["core_mw"] + bucket["bw_mw"]
     return grouped
+
+
+def _power_breakdown(
+    resolved: dict[str, object],
+    dma_breakdown: list[PortBWResult],
+    *,
+    memory_rail: str,
+    power_model,
+) -> dict:
+    """Three-bucket decomposition aligned with what a bench can measure:
+    per-IP core power, memory (BW-driven) power, and CPU/cluster power.
+    The cpu bucket is structural for now — SW tasks carry no compute model
+    yet — so comparison/calibration schemas stay stable when it lands."""
+    ip_by_rail: dict[str, float] = {}
+    ip_by_node: dict[str, float] = {}
+    for node_id, item in resolved.items():
+        power = float(getattr(item, "total_power_mw", 0.0))
+        ip_by_node[node_id] = round(power, 6)
+        vdd = getattr(item, "vdd", None)
+        if vdd:
+            ip_by_rail[vdd] = ip_by_rail.get(vdd, 0.0) + power
+    ip_total = sum(ip_by_node.values())
+    memory_total = sum(dma.bw_power_mw for dma in dma_breakdown)
+    total = ip_total + memory_total
+    return {
+        "model": {"id": power_model.model_id, "version": power_model.version},
+        "ip": {
+            "total_mw": round(ip_total, 6),
+            "by_rail": {rail: round(mw, 6) for rail, mw in sorted(ip_by_rail.items())},
+            "by_node": ip_by_node,
+        },
+        "memory": {
+            "total_mw": round(memory_total, 6),
+            "rail": memory_rail,
+        },
+        "cpu": {
+            "total_mw": 0.0,
+            "by_cluster": {},
+        },
+        "total_mw": round(total, 6),
+    }
 
 
 def _first_infeasible_reason(timing_breakdown: list[IPTimingResult]) -> str | None:

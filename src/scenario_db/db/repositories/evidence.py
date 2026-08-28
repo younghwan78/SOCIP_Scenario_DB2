@@ -140,6 +140,7 @@ def upsert_simulation_evidence(
     row.external_devices = list(evidence.external_devices or [])
     row.topology_order = list(evidence.topology_order or []) or None
     row.vdd_power = evidence.vdd_power or {}
+    row.power_breakdown = evidence.power_breakdown or None
     row.calculation_trace = evidence.calculation_trace
     row.params_hash = evidence.params_hash
     incoming_artifacts = [

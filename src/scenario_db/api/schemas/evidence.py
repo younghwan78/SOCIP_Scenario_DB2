@@ -33,6 +33,7 @@ class EvidenceResponse(BaseModel):
     external_devices: list | None = None
     topology_order: list | None = None
     vdd_power: dict | None = None
+    power_breakdown: dict | None = None
     calculation_trace: dict | None = None
     params_hash: str | None = None
     provenance: dict | None = None

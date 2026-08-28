@@ -4,7 +4,7 @@ from collections import defaultdict
 
 from scenario_db.sim.constants import REFERENCE_VOLTAGE_MV
 from scenario_db.sim.models import DVFSTable, IPWorkload, ResolvedIPConfig
-from scenario_db.sim.power_calc import calc_active_power_mw
+from scenario_db.sim.power_model import PowerModel, resolve_power_model
 
 
 class DvfsResolver:
@@ -15,9 +15,11 @@ class DvfsResolver:
         dvfs_tables: dict[str, DVFSTable],
         *,
         asv_group: int = 4,
+        power_model: PowerModel | None = None,
     ) -> None:
         self.dvfs_tables = dvfs_tables
         self.asv_group = asv_group
+        self.power_model = power_model or resolve_power_model(None)
 
     def resolve(
         self,
@@ -199,7 +201,7 @@ class DvfsResolver:
 
     def _recalculate_power(self, resolved: dict[str, ResolvedIPConfig]) -> None:
         for config in resolved.values():
-            active = calc_active_power_mw(
+            active = self.power_model.ip_active_power_mw(
                 unit_power_mw_mp=config.unit_power_mw_mp,
                 resolution_mp=config.input_resolution_mp,
                 voltage_mv=config.set_voltage_mv,

@@ -151,7 +151,7 @@ Foreign-key constraints:
 | **인덱스 컬럼** | `measured_at`, `params_hash` | DateTime / Text | `idx_ev_scenario_variant`, `params_hash`는 시뮬레이션 캐시 키 |
 | **승격 컬럼** | `overall_feasibility` | Text | 원래 `resolution_result` JSONB 안에 있었지만 "쿼리 최적화"를 위해 컬럼으로 끌어올림 — 코드 주석 그대로 |
 | **생성(generated) 컬럼** | `sw_version_hint`, `sweep_value_hint` | Text, `Computed("(execution_context->>'sw_baseline_ref')::text", persisted=True)` | JSONB 내부 키를 **PostgreSQL이 자동 동기화하는 컬럼**으로 승격 |
-| **JSONB — sim 전용** | `run_info`, `ip_breakdown`, `dma_breakdown`, `timing_breakdown`, `dvfs_breakdown`, `calculation_trace`, `topology_order`(ARRAY) | JSONB | IP/DMA 구성마다 모양이 다름 |
+| **JSONB — sim 전용** | `run_info`, `ip_breakdown`, `dma_breakdown`, `timing_breakdown`, `dvfs_breakdown`, `power_breakdown`(3-버킷: ip/memory/cpu + power model 스탬프), `calculation_trace`, `topology_order`(ARRAY) | JSONB | IP/DMA 구성마다 모양이 다름 |
 | **JSONB — meas 전용** | `provenance`, `cpu_breakdown`, `sw_task_timing` | JSONB | 측정 장비/디바이스마다 모양이 다름 |
 | **JSONB — sim+meas 공유** | `kpi`, `aggregation`, `vdd_power`, `timeline_events`, `artifacts`, `execution_context` | JSONB | 칩/시나리오마다 KPI 종류, rail 구성이 다름 |
 
