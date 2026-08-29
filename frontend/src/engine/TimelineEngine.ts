@@ -5,6 +5,8 @@
 import type { WorkbenchTheme } from '../theme'
 import { rangeStats } from './aggregate'
 import { sliceColor } from './colors'
+import type { FlowEdge } from './flows'
+import { buildFlowEdges, criticalFlowEdges, flowsForTask } from './flows'
 import type {
   PlacedEvent,
   RangeStats,
@@ -45,6 +47,8 @@ export class TimelineEngine {
   private tracks: TrackDefinition[] = []
   private options: WorkbenchOptions = { showWaits: true, showDeadlines: true, theme: 'light', frameIntervalMs: 33.333 }
   private dataFingerprint = ''
+  private flowEdges: FlowEdge[] = []
+  private showCriticalFlows = false
 
   private transform: ViewportTransform = { startMs: 0, endMs: 66.6, scale: 20, offsetY: 0 }
 
@@ -100,6 +104,7 @@ export class TimelineEngine {
     this.events = events ?? []
     this.options = options
     this.tracks = buildTracks(this.events)
+    this.flowEdges = buildFlowEdges(this.events)
     const fingerprint = this.fingerprint(this.events)
     const changed = fingerprint !== this.dataFingerprint
     this.dataFingerprint = fingerprint
@@ -179,6 +184,11 @@ export class TimelineEngine {
     this.brushMode = enabled
   }
 
+  public setShowCriticalFlows(enabled: boolean): void {
+    this.showCriticalFlows = enabled
+    this.requestRender()
+  }
+
   public clearSelection(): void {
     const hadAny = this.selectedTaskId !== null || this.brush !== null
     this.selectedTaskId = null
@@ -231,6 +241,7 @@ export class TimelineEngine {
 
     this.renderFrameBands(ctx, width, height)
     this.renderTracks(ctx, width, height)
+    this.renderFlows(ctx, width)
     this.renderBrush(ctx, height)
     this.renderTimeRuler(ctx, width)
     this.renderTrackHeaders(ctx, height)
@@ -416,6 +427,91 @@ export class TimelineEngine {
       }
     }
     ctx.stroke()
+    ctx.restore()
+  }
+
+  // Geometry of every visible slice in canvas coordinates, keyed by task_id.
+  private sliceGeometry(): Map<string, { x0: number; x1: number; yc: number }> {
+    const geometry = new Map<string, { x0: number; x1: number; yc: number }>()
+    let currentY = RULER_HEIGHT + this.transform.offsetY
+    for (const track of this.tracks) {
+      const trackH = this.trackHeight(track)
+      for (const placed of track.placed) {
+        const laneY = currentY + TRACK_PADDING_Y + placed.lane * LANE_HEIGHT + SLICE_PADDING_Y
+        const x0 = this.timeToX(eventStart(placed.event))
+        const x1 = Math.max(x0 + MIN_SLICE_WIDTH, this.timeToX(eventEnd(placed.event)))
+        geometry.set(String(placed.event.task_id), {
+          x0,
+          x1,
+          yc: laneY + (LANE_HEIGHT - SLICE_PADDING_Y * 2) / 2,
+        })
+      }
+      currentY += trackH + TRACK_GAP
+    }
+    return geometry
+  }
+
+  private renderFlows(ctx: CanvasRenderingContext2D, width: number): void {
+    const selectedFlows = this.selectedTaskId !== null ? flowsForTask(this.flowEdges, this.selectedTaskId) : []
+    const criticalFlows = this.showCriticalFlows ? criticalFlowEdges(this.flowEdges) : []
+    if (!selectedFlows.length && !criticalFlows.length) return
+
+    const geometry = this.sliceGeometry()
+    ctx.save()
+    ctx.beginPath()
+    ctx.rect(HEADER_WIDTH, RULER_HEIGHT, width - HEADER_WIDTH, 1e6)
+    ctx.clip()
+
+    const selectedKeys = new Set(selectedFlows.map((edge) => `${edge.fromId}>${edge.toId}`))
+    for (const edge of criticalFlows) {
+      if (selectedKeys.has(`${edge.fromId}>${edge.toId}`)) continue
+      this.renderFlowArrow(ctx, geometry, edge, this.theme.criticalBorder, 1.2, 0.55)
+    }
+    for (const edge of selectedFlows) {
+      const color = edge.toId === this.selectedTaskId ? this.theme.selectionBorder : this.theme.flowOut
+      this.renderFlowArrow(ctx, geometry, edge, color, 2, 0.95)
+    }
+    ctx.restore()
+  }
+
+  private renderFlowArrow(
+    ctx: CanvasRenderingContext2D,
+    geometry: Map<string, { x0: number; x1: number; yc: number }>,
+    edge: FlowEdge,
+    color: string,
+    lineWidth: number,
+    alpha: number,
+  ): void {
+    const from = geometry.get(edge.fromId)
+    const to = geometry.get(edge.toId)
+    if (!from || !to) return
+    const x0 = from.x1
+    const y0 = from.yc
+    const x1 = to.x0
+    const y1 = to.yc
+    const bend = Math.max(18, Math.min(70, Math.abs(x1 - x0) * 0.4))
+
+    ctx.save()
+    ctx.globalAlpha = alpha
+    ctx.strokeStyle = color
+    ctx.fillStyle = color
+    ctx.lineWidth = lineWidth
+    ctx.beginPath()
+    ctx.moveTo(x0, y0)
+    ctx.bezierCurveTo(x0 + bend, y0, x1 - bend, y1, x1, y1)
+    ctx.stroke()
+
+    // Arrowhead at the target slice start. The bezier's last control point is
+    // horizontally left of the target, so the curve always enters pointing
+    // right — a fixed right-pointing head is correct.
+    const headSize = 5 + lineWidth
+    ctx.translate(x1, y1)
+    ctx.beginPath()
+    ctx.moveTo(0, 0)
+    ctx.lineTo(-headSize, -headSize * 0.55)
+    ctx.lineTo(-headSize, headSize * 0.55)
+    ctx.closePath()
+    ctx.fill()
     ctx.restore()
   }
 

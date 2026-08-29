@@ -117,6 +117,14 @@ selectButton?.addEventListener('click', () => {
   selectButton.classList.toggle('wb-active', brushMode)
 })
 
+const flowsButton = document.getElementById('wb-flows')
+let showFlows = false
+flowsButton?.addEventListener('click', () => {
+  showFlows = !showFlows
+  engine.setShowCriticalFlows(showFlows)
+  flowsButton.classList.toggle('wb-active', showFlows)
+})
+
 new ResizeObserver(() => engine.resize()).observe(canvasWrap)
 
 initBridge((args) => {

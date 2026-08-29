@@ -18,6 +18,7 @@ export interface WorkbenchTheme {
   resourceWait: string
   brushFill: string
   brushBorder: string
+  flowOut: string
   hoverCursor: string
   cssVars: Record<string, string>
 }
@@ -45,6 +46,7 @@ export const LIGHT_THEME: WorkbenchTheme = {
   resourceWait: '#CBD5E1',
   brushFill: 'rgba(47, 111, 104, 0.12)',
   brushBorder: '#2F6F68',
+  flowOut: '#D97706',
   hoverCursor: 'rgba(17, 24, 39, 0.35)',
   cssVars: {
     '--wb-border': '#DED8CF',
@@ -76,6 +78,7 @@ export const DARK_THEME: WorkbenchTheme = {
   resourceWait: '#94A3B8',
   brushFill: 'rgba(94, 234, 212, 0.10)',
   brushBorder: '#5EEAD4',
+  flowOut: '#FDBA74',
   hoverCursor: 'rgba(255, 255, 255, 0.4)',
   cssVars: {
     '--wb-border': '#374151',
