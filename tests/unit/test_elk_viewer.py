@@ -495,3 +495,15 @@ def test_level2_html_uses_local_elk_runtime_and_readable_initial_view():
     assert "function initialGraphView()" in html
     assert "level2-module-detail" in html
     assert "readableLevel2View();" in html
+
+
+def test_static_runtime_variant_references_static_route_instead_of_inlining():
+    from dashboard.components.elk_viewer import STATIC_ELK_URL, _html
+
+    inline_html = _html({}, {}, "T", 100, inline_runtime=True)
+    static_html = _html({}, {}, "T", 100, inline_runtime=False)
+
+    assert f'<script src="{STATIC_ELK_URL}"></script>' in static_html
+    # The static variant must not carry the 1.6MB inlined library.
+    assert len(static_html) < 120_000
+    assert len(inline_html) > len(static_html)

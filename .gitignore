@@ -73,3 +73,6 @@ desktop.ini
 
 # Frontend toolchain
 node_modules/
+
+# Static copies synced from dashboard/assets at runtime
+dashboard/static/*.png

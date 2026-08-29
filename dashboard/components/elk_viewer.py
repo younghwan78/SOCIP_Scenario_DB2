@@ -137,9 +137,20 @@ def render_elk_view(
     canvas_height: int | None = None,
     title: str | None = None,
 ) -> None:
-    """Render a ViewResponse using ELK orthogonal routing."""
+    """Render a ViewResponse using ELK orthogonal routing.
+
+    The live embed references the ELK runtime through Streamlit static serving
+    when available, so the ~1.6MB library is fetched and cached once by the
+    browser instead of being inlined into every iframe on every rerun.
+    """
     height = canvas_height or int(view.metadata.get("canvas_h") or 900)
-    components.html(build_elk_view_html(view, canvas_height=height, title=title), height=height + 52, scrolling=False)
+    html_text = build_elk_view_html(
+        view,
+        canvas_height=height,
+        title=title,
+        inline_runtime=not _static_elk_available(),
+    )
+    components.html(html_text, height=height + 52, scrolling=False)
 
 
 def build_elk_view_html(
@@ -147,11 +158,17 @@ def build_elk_view_html(
     *,
     canvas_height: int | None = None,
     title: str | None = None,
+    inline_runtime: bool = True,
 ) -> str:
-    """Return standalone ELK/SVG HTML for Streamlit embedding or export."""
+    """Return standalone ELK/SVG HTML for Streamlit embedding or export.
+
+    ``inline_runtime=True`` (default) embeds the ELK library so the document is
+    self-contained — required for HTML export. Pass ``False`` to reference the
+    library via the Streamlit static route instead.
+    """
     graph, meta = build_elk_graph(view)
     height = canvas_height or int(view.metadata.get("canvas_h") or 900)
-    return _html(graph, meta, title or "ScenarioDB View", height)
+    return _html(graph, meta, title or "ScenarioDB View", height, inline_runtime=inline_runtime)
 
 
 def build_elk_graph(view: ViewResponse) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -1076,11 +1093,11 @@ def _view_meta(view: ViewResponse) -> dict[str, Any]:
     }
 
 
-def _html(graph: dict[str, Any], meta: dict[str, Any], title: str, height: int) -> str:
+def _html(graph: dict[str, Any], meta: dict[str, Any], title: str, height: int, *, inline_runtime: bool = True) -> str:
     graph_json = _safe_script_json(graph)
     meta_json = _safe_script_json(meta)
     safe_title = html.escape(title)
-    elk_runtime_script = _elk_runtime_script()
+    elk_runtime_script = _elk_runtime_script() if inline_runtime else f'<script src="{STATIC_ELK_URL}"></script>'
     return f"""<!doctype html>
 <html>
 <head>
@@ -1497,10 +1514,25 @@ def _safe_script_json(value: Any) -> str:
     )
 
 
+STATIC_ELK_URL = "/app/static/elk.bundled.js"
+_STATIC_ELK_PATH = Path(__file__).resolve().parents[1] / "static" / "elk.bundled.js"
+
+
+def _static_elk_available() -> bool:
+    """True when the browser can fetch the ELK runtime from the static route."""
+    if not _STATIC_ELK_PATH.is_file():
+        return False
+    try:
+        import streamlit as st
+
+        return bool(st.get_option("server.enableStaticServing"))
+    except Exception:
+        return False
+
+
 @lru_cache(maxsize=1)
 def _elk_runtime_script() -> str:
-    vendor_path = Path(__file__).resolve().parents[1] / "assets" / "vendor" / "elk.bundled.js"
     try:
-        return f"<script>\n{vendor_path.read_text(encoding='utf-8')}\n</script>"
+        return f"<script>\n{_STATIC_ELK_PATH.read_text(encoding='utf-8')}\n</script>"
     except OSError:
         return '<script src="https://cdn.jsdelivr.net/npm/elkjs@0.9.3/lib/elk.bundled.js"></script>'

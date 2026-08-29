@@ -1,0 +1,6 @@
+# Dashboard server configuration.
+# Static serving lets the ELK viewer reference dashboard/static/elk.bundled.js
+# by URL (browser-cached once) instead of inlining ~1.6MB into every embedded
+# view iframe on every rerun.
+[server]
+enableStaticServing = true
