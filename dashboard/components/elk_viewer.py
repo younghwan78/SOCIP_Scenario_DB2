@@ -1172,6 +1172,8 @@ def _edge_meta(edge: EdgeElement) -> dict[str, Any]:
     details.extend(data.detail_items)
     if data.latency_class:
         details.append(f"Latency: {data.latency_class}")
+    for pair in getattr(data, "port_pairs", None) or []:
+        details.append(f"Port: {pair.src} → {pair.dst}")
     if data.buffer_ref:
         details.append(f"Buffer: {data.buffer_ref}")
     if data.memory:
@@ -1209,19 +1211,32 @@ def _edge_descriptor_label(data: Any) -> str | None:
     "which buffer, what size, what format" reads directly off the diagram.
     """
 
+    pairs = getattr(data, "port_pairs", None) or []
     mem = data.memory
-    if not mem:
+    if not mem and not pairs:
         return None
-    bits = [
-        f"{mem.width}x{mem.height}" if mem.width and mem.height else None,
-        mem.format,
-        f"{mem.bitdepth}b" if mem.bitdepth else None,
-        mem.compression,
-    ]
+    bits = []
+    if mem:
+        bits = [
+            f"{mem.width}x{mem.height}" if mem.width and mem.height else None,
+            mem.format,
+            f"{mem.bitdepth}b" if mem.bitdepth else None,
+            mem.compression,
+        ]
     descriptor = " | ".join(str(bit) for bit in bits if bit)
-    if not descriptor:
+    # Port pairs are the strongest identity (which WDMA feeds which RDMA);
+    # when present they replace the buffer name, which stays in the tooltip.
+    if pairs:
+        head = f"{pairs[0].src}→{pairs[0].dst}"
+        if len(pairs) > 1:
+            head = f"{head} +{len(pairs) - 1}"
+    elif data.buffer_ref:
+        head = str(data.buffer_ref)
+    elif descriptor:
+        head = str(data.flow_type)
+    else:
         return None
-    label = f"{data.buffer_ref} | {descriptor}" if data.buffer_ref else f"{data.flow_type} | {descriptor}"
+    label = f"{head} | {descriptor}" if descriptor else head
     if data.sim_overlay and data.sim_overlay.bw_mbs is not None:
         label = f"{label} | {data.sim_overlay.bw_mbs:g}MB/s"
     return label

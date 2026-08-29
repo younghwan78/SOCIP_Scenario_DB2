@@ -527,6 +527,30 @@ def test_edge_without_memory_keeps_flow_type_label():
     assert meta["label"] == "OTF"
 
 
+def test_port_pairs_lead_the_edge_descriptor_label():
+    from scenario_db.api.schemas.view import EdgeData, MemoryDescriptor, ViewPortPair
+
+    from dashboard.components.elk_viewer import _edge_display_label, _edge_meta
+
+    edge = EdgeElement(
+        data=EdgeData(
+            id="e-pp",
+            source="csispdp",
+            target="n3aa",
+            flow_type="M2M",
+            buffer_ref="CSISPDP_3AA_BUF",
+            port_pairs=[ViewPortPair(src="CSISPDP_WDMA", dst="3AA_RDMA")],
+            memory=MemoryDescriptor(format="RAW_BAYER_16", bitdepth=12, width=4000, height=2250),
+        )
+    )
+
+    meta = _edge_meta(edge)
+    label = _edge_display_label(edge.data, meta)
+
+    assert label == "CSISPDP_WDMA→3AA_RDMA | 4000x2250 | RAW_BAYER_16 | 12b"
+    assert "Port: CSISPDP_WDMA → 3AA_RDMA" in meta["details"]
+
+
 def test_display_label_prefers_descriptor_over_backend_label():
     from scenario_db.api.schemas.view import EdgeData, MemoryDescriptor
 

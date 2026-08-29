@@ -206,6 +206,13 @@ class NodeElement(BaseModel):
     position: dict[str, float]
 
 
+class ViewPortPair(BaseModel):
+    """Producer/consumer port names carried by an edge (WDMA->RDMA, FIFO pair)."""
+
+    src: str
+    dst: str
+
+
 class EdgeData(BaseModel):
     id: str
     source: str
@@ -215,6 +222,7 @@ class EdgeData(BaseModel):
     buffer_ref: str | None = None
     producer: str | None = None
     consumer: str | None = None
+    port_pairs: list[ViewPortPair] = []
     memory: MemoryDescriptor | None = None
     placement: MemoryPlacement | None = None
     sim_overlay: EdgeSimOverlay | None = None

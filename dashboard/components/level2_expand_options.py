@@ -28,6 +28,8 @@ def build_level2_expand_options(level1_view: ViewResponse | None) -> list[Level2
         options.append(Level2ExpandOption("Video encode/decode (active codec blocks)", "video", "alias"))
     if any(_is_display_candidate(node) for node in candidates):
         options.append(Level2ExpandOption("Display output (active DPU blocks)", "display", "alias"))
+    if candidates:
+        options.append(Level2ExpandOption("All domains (full module view)", "all", "alias"))
 
     seen_values = {option.value for option in options}
     for node in candidates:
@@ -42,6 +44,10 @@ def build_level2_expand_options(level1_view: ViewResponse | None) -> list[Level2
 
 
 def default_level2_expand_value(options: list[Level2ExpandOption]) -> str:
+    # Prefer a focused target; the heavy "all domains" view stays opt-in.
+    for option in options:
+        if option.value not in (CUSTOM_EXPAND_OPTION.value, "all"):
+            return option.value
     for option in options:
         if option.value != CUSTOM_EXPAND_OPTION.value:
             return option.value

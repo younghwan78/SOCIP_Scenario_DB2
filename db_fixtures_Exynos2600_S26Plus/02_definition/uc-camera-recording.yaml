@@ -120,6 +120,9 @@ pipeline:
     to: mtnr
     type: M2M
     buffer: YUVSC_MTNR_BUF
+    port_pairs:
+    - src: YUVSC_WDMA
+      dst: MTNR_RDMA
   - from: mtnr
     to: msnr
     type: OTF
@@ -133,6 +136,9 @@ pipeline:
     to: n3aa
     type: M2M
     buffer: CSISPDP_3AA_BUF
+    port_pairs:
+    - src: CSISPDP_WDMA
+      dst: 3AA_RDMA
   - from: lme
     to: mtnr
     type: M2M
@@ -149,6 +155,9 @@ pipeline:
     to: gdc_m
     type: M2M
     buffer: MCSC_WDMA_PREV_BUF
+    port_pairs:
+    - src: MCSC_WDMA_PREV
+      dst: GDC_M_RDMA
   - from: mcsc
     to: eis
     type: M2M
@@ -161,6 +170,9 @@ pipeline:
     to: gdc_o
     type: M2M
     buffer: MCSC_WDMA_VIDEO_BUF
+    port_pairs:
+    - src: MCSC_WDMA_VIDEO
+      dst: GDC_O_RDMA
   - from: eis
     to: gdc_o
     type: M2M
@@ -169,10 +181,16 @@ pipeline:
     to: dpu
     type: M2M
     buffer: GDC_M_DPU_BUF
+    port_pairs:
+    - src: GDC_M_WDMA
+      dst: DPU_RDMA
   - from: gdc_o
     to: mfc_enc
     type: M2M
     buffer: GDC_O_MFC_BUF
+    port_pairs:
+    - src: GDC_O_WDMA
+      dst: MFC_RDMA
   - from: dpu
     to: panel
     type: OTF

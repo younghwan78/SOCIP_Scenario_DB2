@@ -10,6 +10,7 @@
         "flow_type": "OTF",
         "id": "l1-sem-0",
         "label": "OTF",
+        "port_pairs": [],
         "producer": "sensor_rear",
         "source": "ip-sensor-rear",
         "target": "ip-csispdp"
@@ -25,6 +26,7 @@
         "flow_type": "OTF",
         "id": "l1-sem-1",
         "label": "OTF",
+        "port_pairs": [],
         "producer": "csispdp",
         "source": "ip-csispdp",
         "target": "ip-byrp"
@@ -40,6 +42,7 @@
         "flow_type": "OTF",
         "id": "l1-sem-2",
         "label": "OTF",
+        "port_pairs": [],
         "producer": "byrp",
         "source": "ip-byrp",
         "target": "ip-rgbp"
@@ -55,6 +58,7 @@
         "flow_type": "OTF",
         "id": "l1-sem-3",
         "label": "OTF",
+        "port_pairs": [],
         "producer": "rgbp",
         "source": "ip-rgbp",
         "target": "ip-yuvsc"
@@ -84,6 +88,12 @@
           "llc_allocated": false,
           "llc_policy": "none"
         },
+        "port_pairs": [
+          {
+            "dst": "MTNR_RDMA",
+            "src": "YUVSC_WDMA"
+          }
+        ],
         "producer": "yuvsc",
         "source": "ip-yuvsc",
         "target": "ip-mtnr"
@@ -99,6 +109,7 @@
         "flow_type": "OTF",
         "id": "l1-sem-5",
         "label": "OTF",
+        "port_pairs": [],
         "producer": "mtnr",
         "source": "ip-mtnr",
         "target": "ip-msnr"
@@ -114,6 +125,7 @@
         "flow_type": "OTF",
         "id": "l1-sem-6",
         "label": "OTF",
+        "port_pairs": [],
         "producer": "msnr",
         "source": "ip-msnr",
         "target": "ip-yuvp"
@@ -129,6 +141,7 @@
         "flow_type": "OTF",
         "id": "l1-sem-7",
         "label": "OTF",
+        "port_pairs": [],
         "producer": "yuvp",
         "source": "ip-yuvp",
         "target": "ip-mcsc"
@@ -158,6 +171,12 @@
           "llc_allocated": false,
           "llc_policy": "none"
         },
+        "port_pairs": [
+          {
+            "dst": "3AA_RDMA",
+            "src": "CSISPDP_WDMA"
+          }
+        ],
         "producer": "csispdp",
         "source": "ip-csispdp",
         "target": "ip-n3aa"
@@ -187,6 +206,12 @@
           "llc_allocated": false,
           "llc_policy": "none"
         },
+        "port_pairs": [
+          {
+            "dst": "GDC_M_RDMA",
+            "src": "MCSC_WDMA_PREV"
+          }
+        ],
         "producer": "mcsc",
         "source": "ip-mcsc",
         "target": "ip-gdc-m"
@@ -216,6 +241,12 @@
           "llc_allocated": false,
           "llc_policy": "none"
         },
+        "port_pairs": [
+          {
+            "dst": "GDC_O_RDMA",
+            "src": "MCSC_WDMA_VIDEO"
+          }
+        ],
         "producer": "mcsc",
         "source": "ip-mcsc",
         "target": "ip-gdc-o"
@@ -245,6 +276,12 @@
           "llc_allocated": false,
           "llc_policy": "none"
         },
+        "port_pairs": [
+          {
+            "dst": "DPU_RDMA",
+            "src": "GDC_M_WDMA"
+          }
+        ],
         "producer": "gdc_m",
         "source": "ip-gdc-m",
         "target": "ip-dpu"
@@ -274,6 +311,12 @@
           "llc_allocated": false,
           "llc_policy": "none"
         },
+        "port_pairs": [
+          {
+            "dst": "MFC_RDMA",
+            "src": "GDC_O_WDMA"
+          }
+        ],
         "producer": "gdc_o",
         "source": "ip-gdc-o",
         "target": "ip-mfc-enc"
@@ -289,6 +332,7 @@
         "flow_type": "OTF",
         "id": "l1-sem-13",
         "label": "OTF",
+        "port_pairs": [],
         "producer": "dpu",
         "source": "ip-dpu",
         "target": "ip-panel"

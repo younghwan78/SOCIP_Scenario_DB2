@@ -23,6 +23,12 @@
           "llc_allocated": false,
           "llc_policy": "none"
         },
+        "port_pairs": [
+          {
+            "dst": "3AA_RDMA",
+            "src": "CSISPDP_WDMA"
+          }
+        ],
         "source": "mod-csispdp-csispdp-wdma",
         "target": "buf-csispdp-3aa-buf"
       }

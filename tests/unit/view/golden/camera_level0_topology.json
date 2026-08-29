@@ -8,6 +8,7 @@
         ],
         "flow_type": "OTF",
         "id": "e-topo-0",
+        "port_pairs": [],
         "source": "ip-sensor_rear",
         "target": "ip-csispdp"
       }
@@ -20,6 +21,7 @@
         ],
         "flow_type": "OTF",
         "id": "e-topo-1",
+        "port_pairs": [],
         "source": "ip-csispdp",
         "target": "ip-byrp"
       }
@@ -32,6 +34,7 @@
         ],
         "flow_type": "OTF",
         "id": "e-topo-2",
+        "port_pairs": [],
         "source": "ip-byrp",
         "target": "ip-rgbp"
       }
@@ -44,6 +47,7 @@
         ],
         "flow_type": "OTF",
         "id": "e-topo-3",
+        "port_pairs": [],
         "source": "ip-rgbp",
         "target": "ip-yuvsc"
       }
@@ -68,6 +72,12 @@
           "height": 1080,
           "width": 1920
         },
+        "port_pairs": [
+          {
+            "dst": "MTNR_RDMA",
+            "src": "YUVSC_WDMA"
+          }
+        ],
         "producer": "yuvsc",
         "source": "ip-yuvsc",
         "target": "buf-yuvsc-mtnr-buf"
@@ -93,6 +103,12 @@
           "height": 1080,
           "width": 1920
         },
+        "port_pairs": [
+          {
+            "dst": "MTNR_RDMA",
+            "src": "YUVSC_WDMA"
+          }
+        ],
         "producer": "yuvsc",
         "source": "buf-yuvsc-mtnr-buf",
         "target": "ip-mtnr"
@@ -106,6 +122,7 @@
         ],
         "flow_type": "OTF",
         "id": "e-topo-5",
+        "port_pairs": [],
         "source": "ip-mtnr",
         "target": "ip-msnr"
       }
@@ -118,6 +135,7 @@
         ],
         "flow_type": "OTF",
         "id": "e-topo-6",
+        "port_pairs": [],
         "source": "ip-msnr",
         "target": "ip-yuvp"
       }
@@ -130,6 +148,7 @@
         ],
         "flow_type": "OTF",
         "id": "e-topo-7",
+        "port_pairs": [],
         "source": "ip-yuvp",
         "target": "ip-mcsc"
       }
@@ -154,6 +173,12 @@
           "height": 1080,
           "width": 1920
         },
+        "port_pairs": [
+          {
+            "dst": "3AA_RDMA",
+            "src": "CSISPDP_WDMA"
+          }
+        ],
         "producer": "csispdp",
         "source": "ip-csispdp",
         "target": "buf-csispdp-3aa-buf"
@@ -179,6 +204,12 @@
           "height": 1080,
           "width": 1920
         },
+        "port_pairs": [
+          {
+            "dst": "3AA_RDMA",
+            "src": "CSISPDP_WDMA"
+          }
+        ],
         "producer": "csispdp",
         "source": "buf-csispdp-3aa-buf",
         "target": "ip-n3aa"
@@ -204,6 +235,12 @@
           "height": 1080,
           "width": 1920
         },
+        "port_pairs": [
+          {
+            "dst": "GDC_M_RDMA",
+            "src": "MCSC_WDMA_PREV"
+          }
+        ],
         "producer": "mcsc",
         "source": "ip-mcsc",
         "target": "buf-mcsc-wdma-prev-buf"
@@ -229,6 +266,12 @@
           "height": 1080,
           "width": 1920
         },
+        "port_pairs": [
+          {
+            "dst": "GDC_M_RDMA",
+            "src": "MCSC_WDMA_PREV"
+          }
+        ],
         "producer": "mcsc",
         "source": "buf-mcsc-wdma-prev-buf",
         "target": "ip-gdc_m"
@@ -254,6 +297,12 @@
           "height": 1080,
           "width": 1920
         },
+        "port_pairs": [
+          {
+            "dst": "GDC_O_RDMA",
+            "src": "MCSC_WDMA_VIDEO"
+          }
+        ],
         "producer": "mcsc",
         "source": "ip-mcsc",
         "target": "buf-mcsc-wdma-video-buf"
@@ -279,6 +328,12 @@
           "height": 1080,
           "width": 1920
         },
+        "port_pairs": [
+          {
+            "dst": "GDC_O_RDMA",
+            "src": "MCSC_WDMA_VIDEO"
+          }
+        ],
         "producer": "mcsc",
         "source": "buf-mcsc-wdma-video-buf",
         "target": "ip-gdc_o"
@@ -304,6 +359,12 @@
           "height": 1080,
           "width": 1920
         },
+        "port_pairs": [
+          {
+            "dst": "DPU_RDMA",
+            "src": "GDC_M_WDMA"
+          }
+        ],
         "producer": "gdc_m",
         "source": "ip-gdc_m",
         "target": "buf-gdc-m-dpu-buf"
@@ -329,6 +390,12 @@
           "height": 1080,
           "width": 1920
         },
+        "port_pairs": [
+          {
+            "dst": "DPU_RDMA",
+            "src": "GDC_M_WDMA"
+          }
+        ],
         "producer": "gdc_m",
         "source": "buf-gdc-m-dpu-buf",
         "target": "ip-dpu"
@@ -354,6 +421,12 @@
           "height": 1080,
           "width": 1920
         },
+        "port_pairs": [
+          {
+            "dst": "MFC_RDMA",
+            "src": "GDC_O_WDMA"
+          }
+        ],
         "producer": "gdc_o",
         "source": "ip-gdc_o",
         "target": "buf-gdc-o-mfc-buf"
@@ -379,6 +452,12 @@
           "height": 1080,
           "width": 1920
         },
+        "port_pairs": [
+          {
+            "dst": "MFC_RDMA",
+            "src": "GDC_O_WDMA"
+          }
+        ],
         "producer": "gdc_o",
         "source": "buf-gdc-o-mfc-buf",
         "target": "ip-mfc_enc"
@@ -392,6 +471,7 @@
         ],
         "flow_type": "OTF",
         "id": "e-topo-13",
+        "port_pairs": [],
         "source": "ip-dpu",
         "target": "ip-panel"
       }

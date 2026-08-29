@@ -34,6 +34,18 @@ class EdgeType(StrEnum):
     control = "control"
 
 
+class PortPair(BaseModel):
+    """Port-level wiring of one edge: producer port -> consumer port.
+
+    For M2M edges these are the WDMA/RDMA module names; for OTF edges the
+    FIFO port names. Optional — edges without pairs keep node-level wiring.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+    src: str = Field(min_length=1)
+    dst: str = Field(min_length=1)
+
+
 class PipelineEdge(BaseModel):
     # "from" is a Python keyword — use alias
     # populate_by_name=True: accepts both "from" (YAML) and "from_" (Python)
@@ -42,6 +54,7 @@ class PipelineEdge(BaseModel):
     to: str
     type: EdgeType
     buffer: str | None = None
+    port_pairs: list[PortPair] = Field(default_factory=list)
 
 
 class Pipeline(BaseScenarioModel):

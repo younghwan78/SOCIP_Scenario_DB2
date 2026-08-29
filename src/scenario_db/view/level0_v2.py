@@ -25,6 +25,7 @@ from scenario_db.api.schemas.view import (
 )
 from scenario_db.db.repositories.scenario_graph import CanonicalScenarioGraph
 from scenario_db.view.buffers import display_compression
+from scenario_db.view.graph_utils import edge_port_pairs as _edge_port_pairs
 from scenario_db.graph_checks import (
     edge_source as _edge_source,
     edge_target as _edge_target,
@@ -205,6 +206,7 @@ def _topology_edges(graph: CanonicalScenarioGraph, node_map: dict[str, str]) -> 
                         target=buffer_id,
                         flow_type=flow_type,
                         buffer_ref=buffer_ref,
+                        port_pairs=_edge_port_pairs(edge),
                         producer=str(_edge_source(edge) or ""),
                         consumer=str(_edge_target(edge) or ""),
                         memory=memory,
@@ -221,6 +223,7 @@ def _topology_edges(graph: CanonicalScenarioGraph, node_map: dict[str, str]) -> 
                         target=target,
                         flow_type=flow_type,
                         buffer_ref=buffer_ref,
+                        port_pairs=_edge_port_pairs(edge),
                         producer=str(_edge_source(edge) or ""),
                         consumer=str(_edge_target(edge) or ""),
                         memory=memory,
