@@ -15,7 +15,9 @@
           "bitdepth": 12,
           "compression": "COMP_BAYER_LOSSLESS",
           "format": "RAW_BAYER_16",
-          "fps": 30
+          "fps": 30,
+          "height": 3000,
+          "width": 4000
         },
         "placement": {
           "llc_allocated": false,
@@ -248,7 +250,9 @@
           "bitdepth": 12,
           "compression": "COMP_BAYER_LOSSLESS",
           "format": "RAW_BAYER_16",
-          "fps": 30
+          "fps": 30,
+          "height": 3000,
+          "width": 4000
         },
         "placement": {
           "llc_allocated": false,

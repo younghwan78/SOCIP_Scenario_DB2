@@ -21,12 +21,13 @@ LANE_BG_RGBA: dict[str, str] = {
     "memory":    "rgba(47,111,104,0.08)",
 }
 
-# Edge type colors
+# Edge type colors — aligned with the legacy view language:
+# OTF solid blue, vOTF solid teal, M2M dashed orange, SW/control dashed amber.
 EDGE_COLOR: dict[str, str] = {
-    "OTF":     "#4E6E81",   # muted steel
-    "vOTF":    "#3D8A82",   # muted teal
-    "M2M":     "#F97316",   # orange
-    "control": "#9B8EC4",   # gray-purple
+    "OTF":     "#2563EB",   # solid blue (legacy OTF)
+    "vOTF":    "#0D9488",   # solid teal
+    "M2M":     "#F97316",   # dashed orange
+    "control": "#CA8A04",   # dashed amber (SW hand-off)
     "risk":    "#EF4444",   # red
 }
 

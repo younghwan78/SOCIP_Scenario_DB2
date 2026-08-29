@@ -76,7 +76,9 @@
           "bitdepth": 10,
           "compression": "COMP_OFF",
           "format": "YUV422",
-          "fps": 30
+          "fps": 30,
+          "height": 1080,
+          "width": 1920
         },
         "placement": {
           "llc_allocated": false,
@@ -148,7 +150,9 @@
           "bitdepth": 12,
           "compression": "COMP_BAYER_LOSSLESS",
           "format": "RAW_BAYER_16",
-          "fps": 30
+          "fps": 30,
+          "height": 3000,
+          "width": 4000
         },
         "placement": {
           "llc_allocated": false,
@@ -175,7 +179,9 @@
           "bitdepth": 8,
           "compression": "COMP_OFF",
           "format": "YUV420",
-          "fps": 30
+          "fps": 30,
+          "height": 1080,
+          "width": 1920
         },
         "placement": {
           "llc_allocated": false,
@@ -202,7 +208,9 @@
           "bitdepth": 8,
           "compression": "COMP_OFF",
           "format": "YUV420",
-          "fps": 30
+          "fps": 30,
+          "height": 1080,
+          "width": 1920
         },
         "placement": {
           "llc_allocated": false,
@@ -229,7 +237,9 @@
           "bitdepth": 8,
           "compression": "COMP_YUV_LOSSLESS",
           "format": "YUV420",
-          "fps": 30
+          "fps": 30,
+          "height": 1080,
+          "width": 1920
         },
         "placement": {
           "llc_allocated": false,
@@ -256,7 +266,9 @@
           "bitdepth": 8,
           "compression": "COMP_YUV_LOSSLESS",
           "format": "YUV420",
-          "fps": 30
+          "fps": 30,
+          "height": 1080,
+          "width": 1920
         },
         "placement": {
           "llc_allocated": false,

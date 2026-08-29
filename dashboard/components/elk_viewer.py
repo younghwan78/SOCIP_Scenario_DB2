@@ -178,8 +178,114 @@ def build_elk_graph(view: ViewResponse) -> tuple[dict[str, Any], dict[str, Any]]
     """
     layout = str(view.metadata.get("layout") or "")
     if layout == "layered-lanes":
-        return _build_layered_architecture(view)
-    return _build_grouped_graph(view)
+        graph, meta = _build_layered_architecture(view)
+    else:
+        graph, meta = _build_grouped_graph(view)
+    _apply_io_size_subtitles(view, meta)
+    _dedupe_buffer_edge_labels(view, graph)
+    return graph, meta
+
+
+def _dedupe_buffer_edge_labels(view: ViewResponse, graph: dict[str, Any]) -> None:
+    """Collapse transfer descriptors on edges that touch a buffer node.
+
+    In views where buffers render as nodes (Level 0 topology), the buffer node
+    already carries the full memory descriptor; repeating it on both adjacent
+    edges is noise, so those edges fall back to their flow-type chip.
+    """
+
+    buffer_ids = {node.data.id for node in view.nodes if node.data.type == "buffer"}
+    if not buffer_ids:
+        return
+    flow_by_edge = {edge.data.id: edge.data for edge in view.edges}
+
+    def walk(container: dict[str, Any]) -> None:
+        for edge in container.get("edges", []):
+            data = flow_by_edge.get(edge.get("id"))
+            if not data:
+                continue
+            if data.source in buffer_ids or data.target in buffer_ids:
+                chip = "SW" if data.flow_type == "control" else data.flow_type
+                for label in edge.get("labels", []):
+                    label["text"] = chip
+                    label["width"] = max(38, len(chip) * 6 + 14)
+        for child in container.get("children", []):
+            walk(child)
+
+    walk(graph)
+
+
+def _apply_io_size_subtitles(view: ViewResponse, meta: dict[str, Any]) -> None:
+    """Annotate HW/SW leaf nodes with their IO size, legacy-view style.
+
+    Sizes seed from edge memory descriptors and from explicit scale
+    operations, then propagate along streaming (OTF/vOTF) edges — an OTF hop
+    keeps the size unless the consumer scales. Nodes whose input and output
+    sizes differ render as ``in→out``.
+    """
+
+    in_size: dict[str, tuple[int, int]] = {}
+    out_size: dict[str, tuple[int, int]] = {}
+
+    def parse(value: Any) -> tuple[int, int] | None:
+        parts = str(value or "").lower().replace(" ", "").split("x", 1)
+        if len(parts) != 2:
+            return None
+        try:
+            width, height = int(parts[0]), int(parts[1])
+        except ValueError:
+            return None
+        return (width, height) if width and height else None
+
+    for node in view.nodes:
+        op = node.data.active_operations
+        if op and op.scale:
+            scale_from = parse(op.scale_from)
+            scale_to = parse(op.scale_to)
+            if scale_from:
+                in_size[node.data.id] = scale_from
+            if scale_to:
+                out_size[node.data.id] = scale_to
+
+    for edge in view.edges:
+        mem = edge.data.memory
+        if mem and mem.width and mem.height:
+            size = (mem.width, mem.height)
+            out_size.setdefault(edge.data.source, size)
+            in_size.setdefault(edge.data.target, size)
+
+    streaming_edges = [edge.data for edge in view.edges if edge.data.flow_type in {"OTF", "vOTF"}]
+    for _ in range(max(1, len(view.nodes))):
+        changed = False
+        for data in streaming_edges:
+            source_out = out_size.get(data.source)
+            if source_out and data.target not in in_size:
+                in_size[data.target] = source_out
+                changed = True
+            if data.target in in_size and data.target not in out_size:
+                out_size[data.target] = in_size[data.target]
+                changed = True
+            target_in = in_size.get(data.target)
+            if target_in and data.source not in out_size:
+                out_size[data.source] = target_in
+                changed = True
+        if not changed:
+            break
+
+    for node in view.nodes:
+        node_id = node.data.id
+        node_meta = meta.get(node_id)
+        if not node_meta or node_meta.get("subtitle"):
+            continue
+        if node.data.type not in {"ip", "submodule", "sw", "dma_channel"}:
+            continue
+        into = in_size.get(node_id)
+        out = out_size.get(node_id)
+        if into and out and into != out:
+            node_meta["subtitle"] = f"{into[0]}x{into[1]}→{out[0]}x{out[1]}"
+        elif out or into:
+            size = out or into
+            node_meta["subtitle"] = f"{size[0]}x{size[1]}"
 
 
 def _build_layered_architecture(view: ViewResponse) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -1180,19 +1286,20 @@ def _html(graph: dict[str, Any], meta: dict[str, Any], title: str, height: int, 
     </div>
   </div>
   <svg id="svg"><defs>
-    <marker id="arrow-blue" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill="#4E6E81"/></marker>
-    <marker id="arrow-teal" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill="#2BB3AA"/></marker>
+    <marker id="arrow-blue" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill="#2563EB"/></marker>
+    <marker id="arrow-teal" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill="#0D9488"/></marker>
     <marker id="arrow-orange" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill="#F97316"/></marker>
+    <marker id="arrow-amber" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill="#CA8A04"/></marker>
     <marker id="arrow-gray" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill="#9B8EC4"/></marker>
     <marker id="arrow-red" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill="#EF4444"/></marker>
     <marker id="arrow-green" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill="#16A34A"/></marker>
     <marker id="arrow-sky" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill="#0EA5E9"/></marker>
   </defs><g id="main"></g></svg>
   <div class="elk-legend">
-    <span><svg width="38" height="8"><path d="M1 4 H35" stroke="#4E6E81" stroke-width="2"/><path d="M31 1 L37 4 L31 7" fill="#4E6E81"/></svg> OTF</span>
-    <span><svg width="38" height="8"><path d="M1 4 H35" stroke="#2BB3AA" stroke-width="2"/><path d="M31 1 L37 4 L31 7" fill="#2BB3AA"/></svg> vOTF</span>
-    <span><svg width="38" height="8"><path d="M1 4 H35" stroke="#F97316" stroke-width="2" stroke-dasharray="5 4"/><path d="M31 1 L37 4 L31 7" fill="#F97316"/></svg> M2M</span>
-    <span><svg width="38" height="8"><path d="M1 4 H35" stroke="#9B8EC4" stroke-width="2" stroke-dasharray="5 4"/><path d="M31 1 L37 4 L31 7" fill="#9B8EC4"/></svg> SW</span>
+    <span><svg width="38" height="8"><path d="M1 4 H35" stroke="#2563EB" stroke-width="2"/><path d="M31 1 L37 4 L31 7" fill="#2563EB"/></svg> OTF</span>
+    <span><svg width="38" height="8"><path d="M1 4 H35" stroke="#0D9488" stroke-width="2"/><path d="M31 1 L37 4 L31 7" fill="#0D9488"/></svg> vOTF</span>
+    <span><svg width="38" height="8"><path d="M1 4 H35" stroke="#F97316" stroke-width="2" stroke-dasharray="7 4"/><path d="M31 1 L37 4 L31 7" fill="#F97316"/></svg> M2M</span>
+    <span><svg width="38" height="8"><path d="M1 4 H35" stroke="#CA8A04" stroke-width="2" stroke-dasharray="5 4"/><path d="M31 1 L37 4 L31 7" fill="#CA8A04"/></svg> SW</span>
     <span><svg width="38" height="8"><path d="M1 4 H35" stroke="#16A34A" stroke-width="2"/><path d="M31 1 L37 4 L31 7" fill="#16A34A"/></svg> Sensor In</span>
     <span><svg width="38" height="8"><path d="M1 4 H35" stroke="#0EA5E9" stroke-width="2"/><path d="M31 1 L37 4 L31 7" fill="#0EA5E9"/></svg> Display Out</span>
     <span><svg width="38" height="8"><path d="M1 4 H35" stroke="#EF4444" stroke-width="2" stroke-dasharray="4 4"/><path d="M31 1 L37 4 L31 7" fill="#EF4444"/></svg> Risk</span>
@@ -1213,8 +1320,9 @@ const PAD = 36;
 const NP = {{}};
 
 function markerFor(color) {{
-  if (color === '#2BB3AA') return 'url(#arrow-teal)';
+  if (color === '#0D9488') return 'url(#arrow-teal)';
   if (color === '#F97316') return 'url(#arrow-orange)';
+  if (color === '#CA8A04') return 'url(#arrow-amber)';
   if (color === '#9B8EC4') return 'url(#arrow-gray)';
   if (color === '#EF4444') return 'url(#arrow-red)';
   if (color === '#16A34A') return 'url(#arrow-green)';

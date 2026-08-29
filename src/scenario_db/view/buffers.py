@@ -27,7 +27,7 @@ def _reference_sizes(graph: CanonicalScenarioGraph) -> dict[str, str]:
     size_profile = graph.scenario.size_profile or {}
     anchors = size_profile.get("anchors") or {}
     overrides = getattr(graph.variant, "size_overrides", None) or {}
-    sensor = anchors.get("sensor_full") or "4000x3000"
+    sensor = overrides.get("sensor_full") or anchors.get("sensor_full") or "4000x3000"
     record = overrides.get("record_out") or _resolution_to_size(design.get("resolution")) or anchors.get("record_out") or "1920x1080"
     preview = overrides.get("preview_out") or anchors.get("preview_out") or record
     fps = int(design.get("fps") or 30)
@@ -52,8 +52,7 @@ def _buffer_memory_from_spec(
     spec = _buffer_spec(graph, buffer_ref)
     if not spec:
         return _memory_descriptor(graph, buffer_ref)
-    size_ref = spec.get("size_ref")
-    width, height = _parse_size(tokens.get(str(size_ref), str(size_ref)))
+    width, height = _buffer_spec_size(graph, spec, tokens)
     return MemoryDescriptor(
         format=spec.get("format"),
         bitdepth=spec.get("bitdepth"),
@@ -64,6 +63,45 @@ def _buffer_memory_from_spec(
         alignment=spec.get("alignment"),
         compression=display_compression(spec.get("compression")),
     )
+
+
+def _buffer_spec_size(
+    graph: CanonicalScenarioGraph,
+    spec: dict[str, Any],
+    tokens: dict[str, str],
+) -> tuple[int | None, int | None]:
+    """Resolve a buffer's WxH: explicit size -> size_ref token -> explicit
+    width/height -> format-aware scenario anchors (RAW/Bayer buffers default
+    to the sensor size, everything else to the record/preview output).
+
+    The anchor fallback mirrors Level 0's table sizing so edge descriptors and
+    the resource overview agree even when fixtures omit size_ref.
+    """
+
+    if spec.get("size"):
+        width, height = _parse_size(str(spec["size"]))
+        if width and height:
+            return width, height
+    size_ref = spec.get("size_ref")
+    if size_ref:
+        width, height = _parse_size(tokens.get(str(size_ref), str(size_ref)))
+        if width and height:
+            return width, height
+    if spec.get("width") and spec.get("height"):
+        try:
+            return int(spec["width"]), int(spec["height"])
+        except (TypeError, ValueError):
+            pass
+    format_text = str(spec.get("format") or "").lower()
+    if "raw" in format_text or "bayer" in format_text:
+        keys = ("sensor_full", "record_out", "preview_out")
+    else:
+        keys = ("record_out", "preview_out", "sensor_full")
+    for key in keys:
+        width, height = _parse_size(tokens.get(key, ""))
+        if width and height:
+            return width, height
+    return None, None
 
 def _buffer_placement_from_spec(graph: CanonicalScenarioGraph, buffer_ref: str | None) -> MemoryPlacement | None:
     if not buffer_ref:

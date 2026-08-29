@@ -585,6 +585,120 @@ def test_scale_operation_subtitle_shows_size_transition():
     assert _node_meta(node)["subtitle"] == "4000x2252→1920x1080"
 
 
+def test_io_size_subtitles_seed_and_propagate_along_otf_chain():
+    from scenario_db.api.schemas.view import EdgeData, MemoryDescriptor, OperationSummary
+
+    from dashboard.components.elk_viewer import _apply_io_size_subtitles
+
+    view = ViewResponse(
+        level=1,
+        scenario_id="s",
+        variant_id="v",
+        summary=_summary(),
+        nodes=[
+            _node("csis", "CSIS", "ip", "hw", 0, 0),
+            _node(
+                "mlsc",
+                "MLSC",
+                "ip",
+                "hw",
+                0,
+                0,
+                active_operations=OperationSummary(scale=True, scale_from="4000x2252", scale_to="1920x1080"),
+            ),
+            _node("mfc", "MFC", "ip", "hw", 0, 0),
+            _node("buf", "BUF", "buffer", "memory", 0, 0),
+        ],
+        edges=[
+            EdgeElement(data=EdgeData(id="e1", source="csis", target="mlsc", flow_type="OTF")),
+            EdgeElement(
+                data=EdgeData(
+                    id="e2",
+                    source="mlsc",
+                    target="mfc",
+                    flow_type="M2M",
+                    memory=MemoryDescriptor(width=1920, height=1080),
+                )
+            ),
+        ],
+        metadata={},
+    )
+    meta = {
+        "csis": {"subtitle": ""},
+        "mlsc": {"subtitle": ""},
+        "mfc": {"subtitle": ""},
+        "buf": {"subtitle": ""},
+    }
+
+    _apply_io_size_subtitles(view, meta)
+
+    # MLSC declares the scale explicitly; CSIS inherits its input size back
+    # through the OTF hop; MFC takes the M2M buffer size.
+    assert meta["mlsc"]["subtitle"] == "4000x2252→1920x1080"
+    assert meta["csis"]["subtitle"] == "4000x2252"
+    assert meta["mfc"]["subtitle"] == "1920x1080"
+    assert meta["buf"]["subtitle"] == ""  # buffers keep their memory subtitle path
+
+
+def test_edges_touching_buffer_nodes_keep_flow_chip_only():
+    from scenario_db.api.schemas.view import EdgeData, MemoryDescriptor
+
+    from dashboard.components.elk_viewer import build_elk_graph
+
+    view = ViewResponse(
+        level=0,
+        scenario_id="s",
+        variant_id="v",
+        summary=_summary(),
+        nodes=[
+            _node("isp", "ISP", "ip", "hw", 0, 0),
+            _node("buf", "BUF", "buffer", "memory", 0, 200),
+            _node("mfc", "MFC", "ip", "hw", 0, 400),
+        ],
+        edges=[
+            EdgeElement(
+                data=EdgeData(
+                    id="e-in",
+                    source="isp",
+                    target="buf",
+                    flow_type="M2M",
+                    buffer_ref="BUF",
+                    memory=MemoryDescriptor(format="NV12", bitdepth=10, width=1920, height=1080),
+                )
+            ),
+        ],
+        metadata={},
+    )
+
+    graph, _meta = build_elk_graph(view)
+
+    def edge_labels(container):
+        for edge in container.get("edges", []):
+            for label in edge.get("labels", []):
+                yield label["text"]
+        for child in container.get("children", []):
+            yield from edge_labels(child)
+
+    assert list(edge_labels(graph)) == ["M2M"]
+
+
+def test_buffer_spec_size_falls_back_to_format_aware_anchor():
+    from types import SimpleNamespace
+
+    from scenario_db.view.buffers import _buffer_spec_size
+
+    graph = SimpleNamespace(scenario=SimpleNamespace(pipeline={}), variant=SimpleNamespace())
+    tokens = {"sensor_full": "4000x2250", "record_out": "1920x1080", "preview_out": "1920x1080"}
+
+    raw_spec = {"format": "RAW_BAYER_16", "size_ref": None}
+    yuv_spec = {"format": "YUV420", "size_ref": None}
+    explicit = {"format": "YUV420", "size": "640x480"}
+
+    assert _buffer_spec_size(graph, raw_spec, tokens) == (4000, 2250)
+    assert _buffer_spec_size(graph, yuv_spec, tokens) == (1920, 1080)
+    assert _buffer_spec_size(graph, explicit, tokens) == (640, 480)
+
+
 def test_static_runtime_variant_references_static_route_instead_of_inlining():
     from dashboard.components.elk_viewer import STATIC_ELK_URL, _html
 
