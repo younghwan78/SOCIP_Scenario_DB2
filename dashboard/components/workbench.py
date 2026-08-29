@@ -37,6 +37,7 @@ def render_workbench_timeline(
     show_waits: bool = True,
     show_deadlines: bool = True,
     theme: str = "light",
+    export_name: str = "timeline",
 ) -> dict[str, Any] | None:
     """Render the interactive timeline pane and return the normalized selection.
 
@@ -49,6 +50,7 @@ def render_workbench_timeline(
         show_waits=show_waits,
         show_deadlines=show_deadlines,
         theme=theme,
+        export_name=export_name,
     )
     component = _get_component()
     raw = component(key=key, default=None, **args)

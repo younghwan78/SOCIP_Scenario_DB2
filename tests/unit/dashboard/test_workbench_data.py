@@ -54,6 +54,12 @@ class TestBuildComponentArgs:
         args = build_component_args([], theme="neon")
         assert args["options"]["theme"] == "light"
 
+    def test_sanitizes_export_name(self):
+        args = build_component_args([], export_name="timeline evid/1:bad")
+        assert args["exportName"] == "timeline_evid_1_bad"
+        assert build_component_args([], export_name="///")["exportName"] == "___"
+        assert build_component_args([])["exportName"] == "timeline"
+
 
 class TestFilterEventsByRange:
     def test_keeps_intersecting_events_only(self):

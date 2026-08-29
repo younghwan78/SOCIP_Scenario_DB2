@@ -144,6 +144,7 @@ def render_timing_chart(result: dict[str, Any], *, key_prefix: str = "stored") -
             show_waits=show_waits,
             show_deadlines=show_deadlines,
             key_prefix=key_prefix,
+            export_name=f"timeline_{evidence_id}",
         )
         return
 
@@ -233,6 +234,7 @@ def _render_interactive_chart(
     show_waits: bool,
     show_deadlines: bool,
     key_prefix: str,
+    export_name: str = "timeline",
 ) -> None:
     from dashboard.components.workbench import render_workbench_timeline
     from dashboard.components.workbench_data import filter_events_by_range
@@ -242,6 +244,7 @@ def _render_interactive_chart(
         key=key,
         show_waits=show_waits,
         show_deadlines=show_deadlines,
+        export_name=export_name,
     )
     table_events = visible_events
     if selection and selection.get("range_start_ms") is not None and selection.get("range_end_ms") is not None:

@@ -64,10 +64,13 @@ def build_component_args(
     show_deadlines: bool = True,
     theme: str = "light",
     frame_interval_ms: float | None = None,
+    export_name: str = "timeline",
 ) -> dict[str, Any]:
     interval = frame_interval_ms if frame_interval_ms and frame_interval_ms > 0 else derive_frame_interval_ms(events)
+    safe_name = "".join(ch if ch.isalnum() or ch in ".-_" else "_" for ch in export_name)[:120] or "timeline"
     return {
         "events": [event for event in events if isinstance(event, dict)],
+        "exportName": safe_name,
         "options": {
             "showWaits": bool(show_waits),
             "showDeadlines": bool(show_deadlines),

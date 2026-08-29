@@ -125,6 +125,16 @@ flowsButton?.addEventListener('click', () => {
   flowsButton.classList.toggle('wb-active', showFlows)
 })
 
+let exportName = 'timeline'
+document.getElementById('wb-png')?.addEventListener('click', () => {
+  // The backing store is devicePixelRatio-scaled, so the PNG comes out at
+  // full rendering resolution.
+  const link = document.createElement('a')
+  link.href = canvas.toDataURL('image/png')
+  link.download = `${exportName}.png`
+  link.click()
+})
+
 const searchInput = document.getElementById('wb-search') as HTMLInputElement | null
 const searchCount = document.getElementById('wb-search-count')
 searchInput?.addEventListener('keydown', (evt) => {
@@ -157,6 +167,7 @@ initBridge((args) => {
     frameIntervalMs: Number(rawOptions.frameIntervalMs) > 0 ? Number(rawOptions.frameIntervalMs) : 33.333,
   }
   const events = (Array.isArray(args.events) ? args.events : []) as TimelineEvent[]
+  exportName = String(args.exportName || 'timeline')
   engine.setData(events, options)
 
   // Data change resets client selection; keep footer in sync.

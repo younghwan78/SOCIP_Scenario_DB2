@@ -1,6 +1,7 @@
 # Scenario Workbench — Interactive Analysis Surface
 
-Status: Phase 1 implemented (timeline pane), plus flow arrows from phase 2.
+Status: Phases 1 and 2 implemented (timeline pane with flow arrows, minimap,
+search jump, track collapse/pinning, per-track stats, PNG export).
 Remaining phases designed, not yet built.
 
 ## 1. Motivation
@@ -159,10 +160,12 @@ stay in Streamlit unchanged — only the chart area swaps.
 
 1. **Workbench skeleton + timeline pane** (done): engine port, bridge,
    brush selection (Select toggle or shift+drag), table linkage, tests.
-2. Timeline depth: `predecessors`-based flow arrows (**done** — click a slice
+2. **Timeline depth** (done): `predecessors`-based flow arrows (click a slice
    for its incoming/outgoing flows, Arrows toggle for the critical-path
-   chain); remaining: track pinning/collapse, minimap, search jump,
-   per-track stats.
+   chain), bottom minimap with a draggable viewport window, search jump
+   (Enter cycles matches with an n/m counter), track collapse (header click)
+   and pinning (pin icon floats tracks to the top), per-track event/busy
+   stats, and PNG export of the current view at full backing resolution.
 3. Diagram pane: port `elk_viewer` JS to TypeScript inside the workbench;
    node selection/highlight; **cross-probe** timeline <-> diagram through the
    shared store.
