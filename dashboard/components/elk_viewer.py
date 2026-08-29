@@ -558,7 +558,7 @@ def _manual_edges(
         if not source or not target:
             continue
         meta[data.id] = _edge_meta(edge)
-        label = data.label or ("SW" if data.flow_type == "control" else data.flow_type)
+        label = _edge_display_label(data, meta[data.id])
         pair = (data.source, data.target)
         parallel_counts[pair] += 1
         flow_key = data.flow_type if data.flow_type in {"M2M", "control", "OTF", "vOTF"} else "other"
@@ -766,16 +766,30 @@ def _elk_edges(edges: list[EdgeElement], meta: dict[str, Any]) -> list[dict[str,
     for edge in edges:
         data = edge.data
         meta[data.id] = _edge_meta(edge)
-        label = data.label or ("SW" if data.flow_type == "control" else data.flow_type)
+        label = _edge_display_label(data, meta[data.id])
         out.append(
             {
                 "id": data.id,
                 "sources": [data.source],
                 "targets": [data.target],
-                "labels": [{"text": label, "width": max(38, min(260, len(label) * 6 + 14)), "height": 18}],
+                "labels": [{"text": label, "width": max(38, min(300, len(label) * 6 + 14)), "height": 18}],
             }
         )
     return out
+
+
+def _edge_display_label(data: Any, edge_meta: dict[str, Any]) -> str:
+    """On-diagram edge text: the enriched transfer descriptor when available,
+    otherwise the backend label, with control edges shown as SW."""
+
+    descriptor = _edge_descriptor_label(data)
+    if descriptor:
+        return descriptor
+    if data.label:
+        return str(data.label)
+    if data.flow_type == "control":
+        return "SW"
+    return str(edge_meta.get("label") or data.flow_type)
 
 
 def _layer_order_edges(layer_group_ids: list[str], meta: dict[str, Any], *, prefix: str = "__layer_order") -> list[dict[str, Any]]:
@@ -876,7 +890,12 @@ def _node_meta(node: NodeElement) -> dict[str, Any]:
         if ops:
             details.append("Ops: " + ", ".join(ops))
             if not subtitle:
-                subtitle = " / ".join(op_labels)
+                # Legacy views showed the scale as an inline size transition
+                # (4000x2252→1920x1080) rather than the word "Scale".
+                if op.scale and op.scale_from and op.scale_to:
+                    subtitle = f"{op.scale_from}→{op.scale_to}"
+                else:
+                    subtitle = " / ".join(op_labels)
     if data.memory:
         mem = data.memory
         size_label = _format_size_bytes(mem.size_bytes)
@@ -993,7 +1012,7 @@ def _edge_meta(edge: EdgeElement) -> dict[str, Any]:
     edge_role = _edge_role(edge)
     return {
         "id": data.id,
-        "label": data.label or _sim_edge_label(data) or data.flow_type,
+        "label": _edge_descriptor_label(data) or data.label or _sim_edge_label(data) or data.flow_type,
         "type": "edge",
         "flow_type": data.flow_type,
         "edge_role": edge_role,
@@ -1001,6 +1020,32 @@ def _edge_meta(edge: EdgeElement) -> dict[str, Any]:
         "dash": data.flow_type in {"control", "risk", "M2M"},
         "details": details,
     }
+
+
+def _edge_descriptor_label(data: Any) -> str | None:
+    """Legacy-style transfer descriptor: ``BUF | WxH | FMT | 10b | COMP``.
+
+    The legacy task-topology view carried the full memory descriptor on every
+    M2M edge; rebuild it whenever the projection provides edge memory data so
+    "which buffer, what size, what format" reads directly off the diagram.
+    """
+
+    mem = data.memory
+    if not mem:
+        return None
+    bits = [
+        f"{mem.width}x{mem.height}" if mem.width and mem.height else None,
+        mem.format,
+        f"{mem.bitdepth}b" if mem.bitdepth else None,
+        mem.compression,
+    ]
+    descriptor = " | ".join(str(bit) for bit in bits if bit)
+    if not descriptor:
+        return None
+    label = f"{data.buffer_ref} | {descriptor}" if data.buffer_ref else f"{data.flow_type} | {descriptor}"
+    if data.sim_overlay and data.sim_overlay.bw_mbs is not None:
+        label = f"{label} | {data.sim_overlay.bw_mbs:g}MB/s"
+    return label
 
 
 def _sim_edge_label(data: Any) -> str | None:
@@ -1225,6 +1270,20 @@ function initialGraphView() {{
     readableLevel2View();
     return;
   }}
+  // Tall, narrow graphs (single-chain topologies) become unreadably small
+  // under fit-both; start at width-fit with a readable scale floor and let
+  // the user pan vertically. The Fit button still does a full fit.
+  const gw = Math.max(1, layoutGraph.width || 1);
+  const gh = Math.max(1, layoutGraph.height || 1);
+  const w = shell.clientWidth - PAD * 2;
+  const h = shell.clientHeight - PAD * 2;
+  if (gh > h * 1.15 && gh > gw) {{
+    scale = Math.max(0.62, Math.min(1.15, (w / gw) * 0.94));
+    tx = Math.max(0, (w - gw * scale) / 2);
+    ty = 16;
+    setTransform();
+    return;
+  }}
   fitGraph();
 }}
 
@@ -1341,16 +1400,34 @@ function drawLeaves(g, graph, ox=0, oy=0) {{
     const hasSubtitle = !!m.subtitle;
     drawLabel(ng, m.label || node.id, x, y + (hasSubtitle ? 6 : Math.max(0, (h - 42) / 2)), w, m.text || '#111827');
     if (hasSubtitle) {{
+      // Wrap long memory descriptors onto a second line (split on " / ")
+      // instead of truncating away the format/compression tail.
+      const full = String(m.subtitle || '');
+      const maxSubtitle = Math.max(34, Math.floor(w / 5.2));
+      let subLines = [full];
+      if (full.length > maxSubtitle && full.includes(' / ')) {{
+        const parts = full.split(' / ');
+        let first = parts.shift();
+        while (parts.length && (first + ' / ' + parts[0]).length <= maxSubtitle) {{
+          first = first + ' / ' + parts.shift();
+        }}
+        subLines = parts.length ? [first, parts.join(' / ')] : [first];
+      }}
+      subLines = subLines.map(line => line.length > maxSubtitle ? line.slice(0, maxSubtitle - 3) + '...' : line).slice(0, 2);
+      const baseY = y + h - (subLines.length > 1 ? 22 : 13);
       const subtitle = svgEl('text', {{
         x: x + w / 2,
-        y: y + h - 13,
+        y: baseY,
         'text-anchor':'middle',
         'font-size':8.5,
         'font-weight':700,
         fill:'#64748B'
       }});
-      const maxSubtitle = Math.max(34, Math.floor(w / 5.2));
-      subtitle.textContent = String(m.subtitle || '').length > maxSubtitle ? String(m.subtitle || '').slice(0, maxSubtitle - 3) + '...' : String(m.subtitle || '');
+      subLines.forEach((line, i) => {{
+        const tspan = svgEl('tspan', {{x: x + w / 2, dy: i === 0 ? 0 : 10}});
+        tspan.textContent = line;
+        subtitle.appendChild(tspan);
+      }});
       ng.appendChild(subtitle);
     }}
     if (m.warning) {{
@@ -1445,12 +1522,30 @@ function drawEdges(g, edges, defaultContainer='root') {{
       if (label.x === undefined || label.y === undefined) return;
       const lg = svgEl('g', {{class:'edge-label'}});
       const text = String(label.text || '');
-      const w = Math.max(30, Math.min(260, text.length * 6 + 12));
+      // Long transfer descriptors (BUF | WxH | FMT | bit | COMP) wrap into up
+      // to two lines split on the " | " separators instead of overflowing.
+      let lines = [text];
+      if (text.length > 34 && text.includes(' | ')) {{
+        const parts = text.split(' | ');
+        let first = parts.shift();
+        while (parts.length && (first + ' | ' + parts[0]).length <= Math.ceil(text.length / 2) + 4) {{
+          first = first + ' | ' + parts.shift();
+        }}
+        lines = parts.length ? [first, parts.join(' | ')] : [first];
+      }}
+      const longest = Math.max(...lines.map(l => l.length));
+      const w = Math.max(30, Math.min(300, longest * 5.6 + 14));
+      const lh = 12;
+      const boxH = lines.length * lh + 6;
       const x = label.x + ox;
       const y = label.y + oy;
-      lg.appendChild(svgEl('rect', {{x, y, width:w, height:18, rx:3, fill:'#FFFFFF', stroke:color, 'stroke-width':0.8, opacity:0.95}}));
+      lg.appendChild(svgEl('rect', {{x, y, width:w, height:boxH, rx:3, fill:'#FFFFFF', stroke:color, 'stroke-width':0.8, opacity:0.95}}));
       const te = svgEl('text', {{x:x + w/2, y:y + 12, 'text-anchor':'middle', 'font-size':9, 'font-weight':700, fill:color}});
-      te.textContent = text;
+      lines.forEach((line, i) => {{
+        const tspan = svgEl('tspan', {{x: x + w/2, dy: i === 0 ? 0 : lh}});
+        tspan.textContent = line;
+        te.appendChild(tspan);
+      }});
       lg.appendChild(te);
       g.appendChild(lg);
     }});

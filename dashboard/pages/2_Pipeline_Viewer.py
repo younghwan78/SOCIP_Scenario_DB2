@@ -650,12 +650,22 @@ with st.sidebar:
         variant_id_input = ""
         st.session_state["viewer_variant_id"] = variant_id_input
 
+    view_level_options = {
+        "SoC Overview (L0)": 0,
+        "IP Pipeline (L1)": 1,
+        "Module Detail (L2)": 2,
+    }
     view_level = st.radio(
         "View Level",
-        ["0 - Resource + Topology", "1 - IP Detail DAG", "2 - Drill-Down"],
+        list(view_level_options),
         index=0,
+        help=(
+            "SoC Overview: resource flow and topology across the whole scenario. "
+            "IP Pipeline: per-IP detail DAG with buffers and DMA paths. "
+            "Module Detail: drill into one IP's internal modules."
+        ),
     )
-    level = int(view_level.split(" ", 1)[0])
+    level = view_level_options[view_level]
     expand_label = ""
     expand_id = ""
     current_expand_context = f"{scenario_id_input}/{variant_id_input or 'BASE'}"
@@ -943,15 +953,17 @@ with main_col:
         )
 
     if level == 0:
-        render_level0_resource_overview(resource_view)
-
+        # Diagram-first: the topology is the page's main artifact, so it renders
+        # right under the summary; the resource/buffer tables follow below.
         st.markdown('<div class="section-card">', unsafe_allow_html=True)
         render_elk_view(
             topo_view,
-            canvas_height=1280,
+            canvas_height=980,
             title="Level 0 - Topology Overview",
         )
         st.markdown("</div>", unsafe_allow_html=True)
+
+        render_level0_resource_overview(resource_view)
     elif level == 1:
         st.markdown('<div class="section-card">', unsafe_allow_html=True)
         render_elk_view(

@@ -497,6 +497,94 @@ def test_level2_html_uses_local_elk_runtime_and_readable_initial_view():
     assert "readableLevel2View();" in html
 
 
+def test_m2m_edge_label_carries_full_transfer_descriptor():
+    from scenario_db.api.schemas.view import EdgeData, EdgeSimOverlay, MemoryDescriptor
+
+    from dashboard.components.elk_viewer import _edge_meta
+
+    edge = EdgeElement(
+        data=EdgeData(
+            id="e-csis-mfc",
+            source="csis",
+            target="mfc",
+            flow_type="M2M",
+            buffer_ref="CSIS_WDMA_BUF",
+            memory=MemoryDescriptor(format="BAYER_PACKED", bitdepth=12, width=4000, height=2252, compression="COMP"),
+            sim_overlay=EdgeSimOverlay(bw_mbs=420.5),
+        )
+    )
+
+    meta = _edge_meta(edge)
+
+    assert meta["label"] == "CSIS_WDMA_BUF | 4000x2252 | BAYER_PACKED | 12b | COMP | 420.5MB/s"
+
+
+def test_edge_without_memory_keeps_flow_type_label():
+    from dashboard.components.elk_viewer import _edge_meta
+
+    meta = _edge_meta(_edge("e-plain", "a", "b", "OTF"))
+
+    assert meta["label"] == "OTF"
+
+
+def test_display_label_prefers_descriptor_over_backend_label():
+    from scenario_db.api.schemas.view import EdgeData, MemoryDescriptor
+
+    from dashboard.components.elk_viewer import _edge_display_label, _edge_meta
+
+    edge = EdgeElement(
+        data=EdgeData(
+            id="e-mcsc-gdc",
+            source="mcsc",
+            target="gdc_m",
+            flow_type="M2M",
+            label="MEM / MCSC_WDMA_PREV_BUF",
+            buffer_ref="MCSC_WDMA_PREV_BUF",
+            memory=MemoryDescriptor(format="YUV420", bitdepth=8, width=4000, height=2250),
+        )
+    )
+
+    label = _edge_display_label(edge.data, _edge_meta(edge))
+
+    assert label == "MCSC_WDMA_PREV_BUF | 4000x2250 | YUV420 | 8b"
+
+
+def test_display_label_falls_back_to_backend_label_without_memory():
+    from scenario_db.api.schemas.view import EdgeData
+
+    from dashboard.components.elk_viewer import _edge_display_label, _edge_meta
+
+    edge = EdgeElement(
+        data=EdgeData(
+            id="e-plain2",
+            source="a",
+            target="b",
+            flow_type="M2M",
+            label="MEM / SOME_BUF",
+        )
+    )
+
+    assert _edge_display_label(edge.data, _edge_meta(edge)) == "MEM / SOME_BUF"
+
+
+def test_scale_operation_subtitle_shows_size_transition():
+    from scenario_db.api.schemas.view import OperationSummary
+
+    from dashboard.components.elk_viewer import _node_meta
+
+    node = _node(
+        "ip-mlsc",
+        "MLSC",
+        "ip",
+        "hw",
+        0,
+        0,
+        active_operations=OperationSummary(scale=True, scale_from="4000x2252", scale_to="1920x1080"),
+    )
+
+    assert _node_meta(node)["subtitle"] == "4000x2252→1920x1080"
+
+
 def test_static_runtime_variant_references_static_route_instead_of_inlining():
     from dashboard.components.elk_viewer import STATIC_ELK_URL, _html
 
