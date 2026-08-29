@@ -26,7 +26,12 @@
         "flow_type": "OTF",
         "id": "l1-sem-1",
         "label": "OTF",
-        "port_pairs": [],
+        "port_pairs": [
+          {
+            "dst": "CINFIFO",
+            "src": "COUTFIFO"
+          }
+        ],
         "producer": "csispdp",
         "source": "ip-csispdp",
         "target": "ip-byrp"
@@ -42,7 +47,12 @@
         "flow_type": "OTF",
         "id": "l1-sem-2",
         "label": "OTF",
-        "port_pairs": [],
+        "port_pairs": [
+          {
+            "dst": "CINFIFO",
+            "src": "COUTFIFO"
+          }
+        ],
         "producer": "byrp",
         "source": "ip-byrp",
         "target": "ip-rgbp"
@@ -58,7 +68,12 @@
         "flow_type": "OTF",
         "id": "l1-sem-3",
         "label": "OTF",
-        "port_pairs": [],
+        "port_pairs": [
+          {
+            "dst": "CINFIFO",
+            "src": "COUTFIFO"
+          }
+        ],
         "producer": "rgbp",
         "source": "ip-rgbp",
         "target": "ip-yuvsc"
@@ -109,7 +124,12 @@
         "flow_type": "OTF",
         "id": "l1-sem-5",
         "label": "OTF",
-        "port_pairs": [],
+        "port_pairs": [
+          {
+            "dst": "CINFIFO",
+            "src": "COUTFIFO"
+          }
+        ],
         "producer": "mtnr",
         "source": "ip-mtnr",
         "target": "ip-msnr"
@@ -125,7 +145,12 @@
         "flow_type": "OTF",
         "id": "l1-sem-6",
         "label": "OTF",
-        "port_pairs": [],
+        "port_pairs": [
+          {
+            "dst": "CINFIFO",
+            "src": "COUTFIFO"
+          }
+        ],
         "producer": "msnr",
         "source": "ip-msnr",
         "target": "ip-yuvp"
@@ -141,7 +166,12 @@
         "flow_type": "OTF",
         "id": "l1-sem-7",
         "label": "OTF",
-        "port_pairs": [],
+        "port_pairs": [
+          {
+            "dst": "CINFIFO",
+            "src": "COUTFIFO"
+          }
+        ],
         "producer": "yuvp",
         "source": "ip-yuvp",
         "target": "ip-mcsc"

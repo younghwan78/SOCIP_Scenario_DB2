@@ -110,12 +110,21 @@ pipeline:
   - from: csispdp
     to: byrp
     type: OTF
+    port_pairs:
+    - src: COUTFIFO
+      dst: CINFIFO
   - from: byrp
     to: rgbp
     type: OTF
+    port_pairs:
+    - src: COUTFIFO
+      dst: CINFIFO
   - from: rgbp
     to: yuvsc
     type: OTF
+    port_pairs:
+    - src: COUTFIFO
+      dst: CINFIFO
   - from: yuvsc
     to: mtnr
     type: M2M
@@ -126,12 +135,21 @@ pipeline:
   - from: mtnr
     to: msnr
     type: OTF
+    port_pairs:
+    - src: COUTFIFO
+      dst: CINFIFO
   - from: msnr
     to: yuvp
     type: OTF
+    port_pairs:
+    - src: COUTFIFO
+      dst: CINFIFO
   - from: yuvp
     to: mcsc
     type: OTF
+    port_pairs:
+    - src: COUTFIFO
+      dst: CINFIFO
   - from: csispdp
     to: n3aa
     type: M2M

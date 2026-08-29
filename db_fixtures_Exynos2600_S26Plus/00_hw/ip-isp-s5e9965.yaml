@@ -12,6 +12,9 @@ capabilities:
   - id: Capture_MF
   - id: Remosaic
   - id: HighSpeed
+  # CSIS/PDP front-end streaming modes referenced by variant node_configs.
+  - id: Normal
+  - id: VC_DT
   sim:
     hw_name: ISP
     source: legacy_project_info_csv
