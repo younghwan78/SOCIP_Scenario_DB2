@@ -46,6 +46,7 @@ export interface TrackDefinition {
   color: string
   laneCount: number
   placed: PlacedEvent[]
+  busyMs: number
 }
 
 export interface ViewportTransform {

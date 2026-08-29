@@ -52,6 +52,14 @@ describe('buildTracks', () => {
     expect(tracks.map((t) => t.category)).toEqual(['sync_source', 'hw_otf', 'hw_m2m', 'sw', 'sync_sink'])
   })
 
+  it('accumulates per-track busy time', () => {
+    const tracks = buildTracks([
+      event({ task_id: 'a#f0', task_type: 'dma', resource_id: 'DMA0', start_ms: 0, end_ms: 3.5 }),
+      event({ task_id: 'a#f1', task_type: 'dma', resource_id: 'DMA0', start_ms: 10, end_ms: 12 }),
+    ])
+    expect(tracks[0].busyMs).toBeCloseTo(5.5)
+  })
+
   it('groups SW tasks per resource', () => {
     const tracks = buildTracks([
       event({ task_id: 'sw_a#f0', task_type: 'sw', resource_id: 'CPU_BIG' }),

@@ -96,6 +96,7 @@ export function buildTracks(events: TimelineEvent[]): TrackDefinition[] {
   const tracks: TrackDefinition[] = []
   for (const seed of seeds.values()) {
     const { placed, laneCount } = assignLanes(seed.events)
+    const busyMs = seed.events.reduce((total, event) => total + Math.max(0, eventEnd(event) - eventStart(event)), 0)
     tracks.push({
       id: seed.id,
       title: seed.title,
@@ -103,6 +104,7 @@ export function buildTracks(events: TimelineEvent[]): TrackDefinition[] {
       color: seed.color,
       laneCount,
       placed,
+      busyMs,
     })
   }
 
