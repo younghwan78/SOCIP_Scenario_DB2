@@ -283,6 +283,9 @@ def _apply_io_size_subtitles(view: ViewResponse, meta: dict[str, Any]) -> None:
         out = out_size.get(node_id)
         if into and out and into != out:
             node_meta["subtitle"] = f"{into[0]}x{into[1]}→{out[0]}x{out[1]}"
+            op_badges = node_meta.setdefault("op_badges", [])
+            if "S" not in op_badges:
+                op_badges.append("S")
         elif out or into:
             size = out or into
             node_meta["subtitle"] = f"{size[0]}x{size[1]}"
@@ -1037,6 +1040,15 @@ def _node_meta(node: NodeElement) -> dict[str, Any]:
     if data.type == "sw" and not subtitle:
         subtitle = "<sw>"
     warning = data.warning or bool(data.sim_overlay and not data.sim_overlay.feasible)
+    op_badges: list[str] = []
+    if data.active_operations:
+        if data.active_operations.scale:
+            op_badges.append("S")
+        if data.active_operations.crop:
+            op_badges.append("C")
+        if data.active_operations.rotate is not None:
+            op_badges.append("R")
+    disabled = str(data.module_status or "").lower() in {"disabled", "off", "inactive", "unused"}
     return {
         "id": data.id,
         "label": data.label,
@@ -1046,6 +1058,8 @@ def _node_meta(node: NodeElement) -> dict[str, Any]:
         "stroke": style["stroke"],
         "text": style["text"],
         "badges": data.summary_badges[:4],
+        "op_badges": op_badges,
+        "disabled": disabled,
         "subtitle": subtitle,
         "details": details,
         "semantic_group": data.hierarchy_group,
@@ -1266,6 +1280,8 @@ def _html(graph: dict[str, Any], meta: dict[str, Any], title: str, height: int, 
   .tip {{ position:absolute; z-index:5; min-width:220px; max-width:360px; background:#0F172A; color:#E5E7EB; border-radius:9px; padding:9px 10px; font-size:11px; line-height:1.45; pointer-events:none; opacity:0; transform:translate(8px,8px); box-shadow:0 12px 28px rgba(15,23,42,.22); }}
   .tip b {{ color:#FFFFFF; font-size:12px; }}
   .tip .muted {{ color:#CBD5E1; }}
+  .tip .tip-close {{ position:absolute; top:4px; right:8px; cursor:pointer; font-size:15px; color:#94A3B8; line-height:1; }}
+  .tip .tip-close:hover {{ color:#FFFFFF; }}
   .error {{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#B91C1C; font-size:13px; padding:24px; text-align:center; }}
   svg {{ width:100%; height:100%; cursor:grab; }}
   svg.dragging {{ cursor:grabbing; }}
@@ -1285,7 +1301,7 @@ def _html(graph: dict[str, Any], meta: dict[str, Any], title: str, height: int, 
       <button id="zoomIn">+</button>
     </div>
   </div>
-  <svg id="svg"><defs>
+  <svg id="svg" tabindex="0"><defs>
     <marker id="arrow-blue" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill="#2563EB"/></marker>
     <marker id="arrow-teal" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill="#0D9488"/></marker>
     <marker id="arrow-orange" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill="#F97316"/></marker>
@@ -1400,17 +1416,55 @@ function zoomBy(factor) {{
   setTransform();
 }}
 
-function showTip(evt, id) {{
+let tipPinned = false;
+
+function tipHtml(id, pinned) {{
   const m = M[id] || {{}};
   const details = (m.details || []).map(d => `<div class="muted">${{esc(d)}}</div>`).join('');
   const badges = (m.badges || []).map(b => `<span class="muted">${{esc(b)}}</span>`).join(' ');
-  tip.innerHTML = `<b>${{esc(m.label || id)}}</b><div class="muted">${{esc(m.layer || m.flow_type || m.type || '')}}</div>${{details}}${{badges ? '<div>'+badges+'</div>' : ''}}`;
-  tip.style.left = `${{evt.clientX - shell.getBoundingClientRect().left + 10}}px`;
-  tip.style.top = `${{evt.clientY - shell.getBoundingClientRect().top + 10}}px`;
+  const close = pinned ? '<span class="tip-close" id="tipClose">&times;</span>' : '';
+  return `${{close}}<b>${{esc(m.label || id)}}</b><div class="muted">${{esc(m.layer || m.flow_type || m.type || '')}}</div>${{details}}${{badges ? '<div>'+badges+'</div>' : ''}}`;
+}}
+
+function placeTip(evt) {{
+  const rect = shell.getBoundingClientRect();
+  let left = evt.clientX - rect.left + 10;
+  let top = evt.clientY - rect.top + 10;
+  left = Math.min(left, rect.width - tip.offsetWidth - 12);
+  top = Math.min(top, rect.height - tip.offsetHeight - 12);
+  tip.style.left = `${{Math.max(4, left)}}px`;
+  tip.style.top = `${{Math.max(4, top)}}px`;
+}}
+
+function showTip(evt, id) {{
+  if (tipPinned) return;
+  tip.innerHTML = tipHtml(id, false);
   tip.style.opacity = 1;
+  placeTip(evt);
+}}
+
+// Click pins the tooltip so port/detail rows can be read and copied; a
+// second click elsewhere, the close button, or Escape releases it.
+function pinTip(evt, id) {{
+  if (dragDist > 3) return;
+  evt.stopPropagation();
+  tipPinned = true;
+  tip.innerHTML = tipHtml(id, true);
+  tip.style.opacity = 1;
+  tip.style.pointerEvents = 'auto';
+  placeTip(evt);
+  const closeBtn = document.getElementById('tipClose');
+  if (closeBtn) closeBtn.onclick = unpinTip;
+}}
+
+function unpinTip() {{
+  tipPinned = false;
+  tip.style.pointerEvents = 'none';
+  tip.style.opacity = 0;
 }}
 
 function hideTip() {{
+  if (tipPinned) return;
   tip.style.opacity = 0;
 }}
 
@@ -1482,6 +1536,7 @@ function drawLeaves(g, graph, ox=0, oy=0) {{
     const ng = svgEl('g', {{class:'node'}});
     const w = node.width || 140;
     const h = node.height || 54;
+    const isDisabled = !!m.disabled;
     if (m.type === 'buffer' || m.layer === 'memory') {{
       ng.appendChild(svgEl('rect', {{
         x, y, width:w, height:h, rx:18, ry:18,
@@ -1498,12 +1553,16 @@ function drawLeaves(g, graph, ox=0, oy=0) {{
         fill:'none', stroke:m.stroke || '#0F766E', 'stroke-width':1.2, opacity:0.35
       }}));
     }} else {{
-      ng.appendChild(svgEl('rect', {{
+      const rectAttrs = {{
         x, y, width:w, height:h, rx:8, ry:8,
-        fill:m.fill || '#FFFFFF', stroke:m.stroke || '#64748B',
+        fill:isDisabled ? '#EDEDED' : (m.fill || '#FFFFFF'),
+        stroke:isDisabled ? '#B0B0B0' : (m.stroke || '#64748B'),
         'stroke-width':m.warning ? 2.4 : 1.8,
         filter:'drop-shadow(0 2px 4px rgba(15,23,42,.08))'
-      }}));
+      }};
+      if (isDisabled) rectAttrs['stroke-dasharray'] = '4 2';
+      ng.appendChild(svgEl('rect', rectAttrs));
+      if (isDisabled) ng.setAttribute('opacity', '0.75');
     }}
     const hasSubtitle = !!m.subtitle;
     drawLabel(ng, m.label || node.id, x, y + (hasSubtitle ? 6 : Math.max(0, (h - 42) / 2)), w, m.text || '#111827');
@@ -1541,9 +1600,30 @@ function drawLeaves(g, graph, ox=0, oy=0) {{
     if (m.warning) {{
       ng.appendChild(svgEl('circle', {{cx: x + (node.width || 140) - 13, cy: y + 13, r: 6, fill:'#F97316'}}));
     }}
+    drawOpBadges(ng, m, x, y, w);
     ng.addEventListener('mousemove', evt => showTip(evt, node.id));
     ng.addEventListener('mouseleave', hideTip);
+    ng.addEventListener('click', evt => pinTip(evt, node.id));
+    ng.style.cursor = 'pointer';
     g.appendChild(ng);
+  }});
+}}
+
+// Legacy-style operation badges: small circles in the top-right corner
+// (S=scale orange, C=crop blue, R=rotate teal). Shifted left when the
+// warning dot occupies the corner.
+function drawOpBadges(ng, m, x, y, w) {{
+  const badges = m.op_badges || [];
+  if (!badges.length) return;
+  const colors = {{S:'#E65100', C:'#1565C0', R:'#0D9488'}};
+  let bx = x + w - (m.warning ? 28 : 10);
+  const by = y + 9;
+  badges.slice().reverse().forEach(b => {{
+    ng.appendChild(svgEl('circle', {{cx:bx, cy:by, r:6.5, fill:colors[b] || '#666', 'fill-opacity':'0.92', stroke:'#FFFFFF', 'stroke-width':1}}));
+    const t = svgEl('text', {{x:bx, y:by + 3, 'text-anchor':'middle', 'font-size':8, 'font-weight':700, fill:'#FFFFFF'}});
+    t.textContent = b;
+    ng.appendChild(t);
+    bx -= 15;
   }});
 }}
 
@@ -1581,18 +1661,26 @@ function drawNode(g, node, ox=0, oy=0) {{
     title.textContent = m.label || node.id;
     ng.appendChild(title);
   }} else {{
-    ng.appendChild(svgEl('rect', {{
+    const isDisabled = !!m.disabled;
+    const rectAttrs = {{
       x, y, width: node.width || 140, height: node.height || 54, rx: 8, ry: 8,
-      fill: m.fill || '#FFFFFF', stroke: m.stroke || '#64748B',
+      fill: isDisabled ? '#EDEDED' : (m.fill || '#FFFFFF'),
+      stroke: isDisabled ? '#B0B0B0' : (m.stroke || '#64748B'),
       'stroke-width': m.warning ? 2.4 : 1.8,
       filter: 'drop-shadow(0 2px 4px rgba(15,23,42,.08))'
-    }}));
+    }};
+    if (isDisabled) rectAttrs['stroke-dasharray'] = '4 2';
+    ng.appendChild(svgEl('rect', rectAttrs));
+    if (isDisabled) ng.setAttribute('opacity', '0.75');
     drawLabel(ng, m.label || node.id, x, y + Math.max(0, ((node.height || 54) - 42) / 2), node.width || 140, m.text || '#111827');
     if (m.warning) {{
       ng.appendChild(svgEl('circle', {{cx: x + (node.width || 140) - 13, cy: y + 13, r: 6, fill:'#F97316'}}));
     }}
+    drawOpBadges(ng, m, x, y, node.width || 140);
     ng.addEventListener('mousemove', evt => showTip(evt, node.id));
     ng.addEventListener('mouseleave', hideTip);
+    ng.addEventListener('click', evt => pinTip(evt, node.id));
+    ng.style.cursor = 'pointer';
   }}
 
   (node.children || []).forEach(child => drawNode(g, child, x, y));
@@ -1613,10 +1701,16 @@ function drawEdges(g, edges, defaultContainer='root') {{
     const cp = NP[edge.container || defaultContainer] || {{x:0, y:0}};
     const ox = cp.x;
     const oy = cp.y;
+    // Legacy stroke-weight hierarchy: streaming OTF paths render heaviest,
+    // memory hops medium, control hand-offs lightest.
+    const flowWidth = (m.flow_type === 'OTF' || m.flow_type === 'vOTF') ? 2.4
+      : m.flow_type === 'M2M' ? 2.0
+      : m.flow_type === 'risk' ? 1.8
+      : 1.6;
     (edge.sections || []).forEach(section => {{
       const p = svgEl('path', {{
         class:'edge', d: pathFromSection(section, ox, oy), fill:'none', stroke:color,
-        'stroke-width': m.flow_type === 'risk' ? 1.8 : 1.55,
+        'stroke-width': flowWidth,
         'stroke-linecap':'round', 'stroke-linejoin':'round',
         'marker-end': markerFor(color),
         opacity: m.flow_type === 'control' ? 0.72 : 0.9
@@ -1624,6 +1718,7 @@ function drawEdges(g, edges, defaultContainer='root') {{
       if (m.dash) p.setAttribute('stroke-dasharray', m.flow_type === 'M2M' ? '7 4' : '5 4');
       p.addEventListener('mousemove', evt => showTip(evt, edge.id));
       p.addEventListener('mouseleave', hideTip);
+      p.addEventListener('click', evt => pinTip(evt, edge.id));
       g.appendChild(p);
     }});
     (edge.labels || []).forEach(label => {{
@@ -1685,12 +1780,14 @@ document.getElementById('zoomIn').onclick = () => zoomBy(1.18);
 document.getElementById('fit').onclick = fitGraph;
 document.getElementById('reset').onclick = resetGraph;
 
-let dragging = false, sx = 0, sy = 0, startTx = 0, startTy = 0;
+let dragging = false, sx = 0, sy = 0, startTx = 0, startTy = 0, dragDist = 0;
 svg.addEventListener('mousedown', evt => {{
-  dragging = true; sx = evt.clientX; sy = evt.clientY; startTx = tx; startTy = ty; svg.classList.add('dragging');
+  dragging = true; dragDist = 0; sx = evt.clientX; sy = evt.clientY; startTx = tx; startTy = ty; svg.classList.add('dragging');
+  svg.focus();
 }});
 window.addEventListener('mousemove', evt => {{
   if (!dragging) return;
+  dragDist += 1;
   tx = startTx + (evt.clientX - sx);
   ty = startTy + (evt.clientY - sy);
   setTransform();
@@ -1700,6 +1797,20 @@ svg.addEventListener('wheel', evt => {{
   evt.preventDefault();
   zoomBy(evt.deltaY > 0 ? 0.92 : 1.08);
 }}, {{passive:false}});
+svg.addEventListener('click', evt => {{
+  if (dragDist <= 3 && !tip.contains(evt.target)) unpinTip();
+}});
+svg.addEventListener('keydown', evt => {{
+  const PAN_STEP = 60;
+  if (evt.key === 'ArrowLeft') tx += PAN_STEP;
+  else if (evt.key === 'ArrowRight') tx -= PAN_STEP;
+  else if (evt.key === 'ArrowUp') ty += PAN_STEP;
+  else if (evt.key === 'ArrowDown') ty -= PAN_STEP;
+  else if (evt.key === 'Escape') {{ unpinTip(); return; }}
+  else return;
+  evt.preventDefault();
+  setTransform();
+}});
 window.addEventListener('resize', fitGraph);
 mainRender();
 </script>

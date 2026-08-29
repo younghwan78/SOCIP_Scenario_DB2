@@ -640,6 +640,52 @@ def test_io_size_subtitles_seed_and_propagate_along_otf_chain():
     assert meta["buf"]["subtitle"] == ""  # buffers keep their memory subtitle path
 
 
+def test_node_meta_derives_op_badges_and_disabled_state():
+    from scenario_db.api.schemas.view import OperationSummary
+
+    from dashboard.components.elk_viewer import _node_meta
+
+    node = _node(
+        "ip-gdc",
+        "GDC",
+        "ip",
+        "hw",
+        0,
+        0,
+        active_operations=OperationSummary(scale=True, crop=True, scale_from="4000x2250", scale_to="1920x1080"),
+    )
+    disabled_mod = _node("mod-off", "OFF", "submodule", "hw", 0, 0, module_status="disabled")
+
+    assert _node_meta(node)["op_badges"] == ["S", "C"]
+    assert _node_meta(node)["disabled"] is False
+    assert _node_meta(disabled_mod)["disabled"] is True
+
+
+def test_derived_size_transition_adds_scale_badge():
+    from scenario_db.api.schemas.view import EdgeData, MemoryDescriptor
+
+    from dashboard.components.elk_viewer import _apply_io_size_subtitles
+
+    view = ViewResponse(
+        level=1,
+        scenario_id="s",
+        variant_id="v",
+        summary=_summary(),
+        nodes=[_node("scaler", "SCALER", "ip", "hw", 0, 0)],
+        edges=[
+            EdgeElement(data=EdgeData(id="e-in", source="src", target="scaler", flow_type="M2M", memory=MemoryDescriptor(width=4000, height=2250))),
+            EdgeElement(data=EdgeData(id="e-out", source="scaler", target="dst", flow_type="M2M", memory=MemoryDescriptor(width=1920, height=1080))),
+        ],
+        metadata={},
+    )
+    meta = {"scaler": {"subtitle": "", "op_badges": []}}
+
+    _apply_io_size_subtitles(view, meta)
+
+    assert meta["scaler"]["subtitle"] == "4000x2250→1920x1080"
+    assert meta["scaler"]["op_badges"] == ["S"]
+
+
 def test_edges_touching_buffer_nodes_keep_flow_chip_only():
     from scenario_db.api.schemas.view import EdgeData, MemoryDescriptor
 
