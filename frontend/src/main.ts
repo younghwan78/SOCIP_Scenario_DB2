@@ -125,6 +125,17 @@ flowsButton?.addEventListener('click', () => {
   flowsButton.classList.toggle('wb-active', showFlows)
 })
 
+const searchInput = document.getElementById('wb-search') as HTMLInputElement | null
+const searchCount = document.getElementById('wb-search-count')
+searchInput?.addEventListener('keydown', (evt) => {
+  if (evt.key !== 'Enter') return
+  evt.preventDefault()
+  const result = engine.searchJump(searchInput.value)
+  if (searchCount) {
+    searchCount.textContent = result.total ? `${result.index + 1}/${result.total}` : searchInput.value.trim() ? '0/0' : ''
+  }
+})
+
 new ResizeObserver(() => engine.resize()).observe(canvasWrap)
 
 initBridge((args) => {

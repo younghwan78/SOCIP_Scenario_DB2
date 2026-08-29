@@ -37,6 +37,17 @@
         border-color: var(--wb-primary, #2F6F68);
         color: #FFFFFF;
       }
+      #wb-search {
+        font: inherit; font-size: 12px;
+        width: 150px;
+        padding: 3px 8px;
+        border: 1px solid var(--wb-border, #DED8CF);
+        border-radius: 6px;
+        background: var(--wb-surface, #FFFFFF);
+        color: var(--wb-text, #111827);
+      }
+      #wb-search:focus { outline: none; border-color: var(--wb-primary, #2F6F68); }
+      #wb-search-count { font-size: 11px; color: var(--wb-muted, #98A2B3); min-width: 34px; }
       #wb-hint { margin-left: auto; font-size: 11px; color: var(--wb-muted, #98A2B3); }
       #wb-canvas-wrap {
         position: relative; flex: 1 1 auto; min-height: 0;
@@ -70,7 +81,7 @@
         font-family: Consolas, "JetBrains Mono", monospace;
       }
     </style>
-    <script type="module" crossorigin src="./assets/index-C-Y7qkdn.js"></script>
+    <script type="module" crossorigin src="./assets/index-dErn3Oh8.js"></script>
   </head>
   <body>
     <div id="workbench-root">
@@ -80,6 +91,8 @@
         <button id="wb-zoom-out" title="Zoom out (S)">-</button>
         <button id="wb-select" title="Toggle range-select drag mode (or shift+drag)">Select</button>
         <button id="wb-flows" title="Show dependency arrows along the critical path">Arrows</button>
+        <input id="wb-search" type="text" placeholder="Find task&hellip; (Enter)" title="Search tasks by id/hw/resource; Enter jumps to the next match" />
+        <span id="wb-search-count"></span>
         <span id="wb-hint">drag pan &middot; wheel zoom &middot; shift+drag select &middot; click slice = flows &middot; F fit &middot; Esc clear</span>
       </div>
       <div id="wb-canvas-wrap">

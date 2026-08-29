@@ -7,6 +7,7 @@ import { rangeStats } from './aggregate'
 import { sliceColor } from './colors'
 import type { FlowEdge } from './flows'
 import { buildFlowEdges, criticalFlowEdges, flowsForTask } from './flows'
+import { findMatches } from './search'
 import type {
   PlacedEvent,
   RangeStats,
@@ -20,6 +21,7 @@ import { buildTracks } from './tracks'
 
 const RULER_HEIGHT = 30
 const HEADER_WIDTH = 200
+const MINIMAP_HEIGHT = 34
 const LANE_HEIGHT = 26
 const TRACK_PADDING_Y = 5
 const TRACK_GAP = 4
@@ -59,6 +61,11 @@ export class TimelineEngine {
   private isPanning = false
   private isBrushing = false
   private brushMode = false
+  private isMinimapDragging = false
+  private dataMinMs = 0
+  private dataMaxMs = 66.6
+  private searchQuery = ''
+  private searchIndex = -1
   private brushAnchorMs = 0
   private brushCursorMs = 0
   private brush: BrushRange | null = null
@@ -134,7 +141,7 @@ export class TimelineEngine {
     for (const track of this.tracks) {
       height += this.trackHeight(track) + TRACK_GAP
     }
-    return height + 8
+    return height + MINIMAP_HEIGHT + 8
   }
 
   private trackHeight(track: TrackDefinition): number {
@@ -145,6 +152,8 @@ export class TimelineEngine {
     if (!this.events.length) {
       this.transform.startMs = 0
       this.transform.endMs = 66.6
+      this.dataMinMs = 0
+      this.dataMaxMs = 66.6
     } else {
       const minStart = Math.min(...this.events.map(eventStart))
       let maxEnd = Math.max(...this.events.map(eventEnd))
@@ -154,12 +163,61 @@ export class TimelineEngine {
         }
       }
       const paddingMs = Math.max(1, (maxEnd - minStart) * 0.05)
-      this.transform.startMs = Math.max(0, minStart - paddingMs)
-      this.transform.endMs = maxEnd + paddingMs
+      this.dataMinMs = Math.max(0, minStart - paddingMs)
+      this.dataMaxMs = maxEnd + paddingMs
+      this.transform.startMs = this.dataMinMs
+      this.transform.endMs = this.dataMaxMs
     }
     this.transform.offsetY = 0
     this.updateScale()
     this.requestRender()
+  }
+
+  /** Jump to the next event matching the query; returns match position info. */
+  public searchJump(query: string): { total: number; index: number } {
+    const matches = findMatches(this.events, query)
+    if (!matches.length) {
+      this.searchQuery = query
+      this.searchIndex = -1
+      return { total: 0, index: -1 }
+    }
+    this.searchIndex = query === this.searchQuery ? (this.searchIndex + 1) % matches.length : 0
+    this.searchQuery = query
+    const event = matches[this.searchIndex]
+
+    const start = eventStart(event)
+    const end = eventEnd(event)
+    const span = Math.max(2, (end - start) * 6)
+    const center = (start + end) / 2
+    this.transform.startMs = center - span / 2
+    this.transform.endMs = center + span / 2
+    this.updateScale()
+    this.scrollEventIntoView(event)
+
+    if (this.selectedTaskId !== event.task_id) {
+      this.selectedTaskId = event.task_id
+      this.onSelect?.(event.task_id)
+    }
+    this.requestRender()
+    return { total: matches.length, index: this.searchIndex }
+  }
+
+  private scrollEventIntoView(event: TimelineEvent): void {
+    if (!this.canvas) return
+    let currentY = 0
+    for (const track of this.tracks) {
+      const trackH = this.trackHeight(track)
+      const placed = track.placed.find((item) => item.event.task_id === event.task_id)
+      if (placed) {
+        const laneY = currentY + TRACK_PADDING_Y + placed.lane * LANE_HEIGHT
+        const viewH = this.canvas.getBoundingClientRect().height - RULER_HEIGHT - MINIMAP_HEIGHT
+        const target = -(laneY - viewH / 2 + LANE_HEIGHT / 2)
+        const minOffset = Math.min(0, viewH + RULER_HEIGHT - this.contentHeight())
+        this.transform.offsetY = Math.max(minOffset, Math.min(0, target))
+        return
+      }
+      currentY += trackH + TRACK_GAP
+    }
   }
 
   public zoomBy(factor: number, centerMs?: number): void {
@@ -246,8 +304,85 @@ export class TimelineEngine {
     this.renderTimeRuler(ctx, width)
     this.renderTrackHeaders(ctx, height)
     this.renderHoverCursor(ctx, height)
+    this.renderMinimap(ctx, width, height)
 
     ctx.restore()
+  }
+
+  // --- Minimap ---------------------------------------------------------------
+
+  private minimapTop(height: number): number {
+    return height - MINIMAP_HEIGHT
+  }
+
+  private minimapXFromMs(timeMs: number, width: number): number {
+    const span = Math.max(0.001, this.dataMaxMs - this.dataMinMs)
+    return HEADER_WIDTH + ((timeMs - this.dataMinMs) / span) * (width - HEADER_WIDTH)
+  }
+
+  private minimapMsFromX(x: number, width: number): number {
+    const span = Math.max(0.001, this.dataMaxMs - this.dataMinMs)
+    return this.dataMinMs + ((x - HEADER_WIDTH) / Math.max(1, width - HEADER_WIDTH)) * span
+  }
+
+  private renderMinimap(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+    const top = this.minimapTop(height)
+    ctx.fillStyle = this.theme.rulerBg
+    ctx.fillRect(0, top, width, MINIMAP_HEIGHT)
+    ctx.strokeStyle = this.theme.borderDefault
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.moveTo(0, top)
+    ctx.lineTo(width, top)
+    ctx.stroke()
+
+    ctx.fillStyle = this.theme.bgTrackHeader
+    ctx.fillRect(0, top, HEADER_WIDTH, MINIMAP_HEIGHT)
+    ctx.fillStyle = this.theme.textMuted
+    ctx.font = '9px "Segoe UI", sans-serif'
+    ctx.fillText('Overview', 12, top + MINIMAP_HEIGHT / 2 + 3)
+
+    // Every event compressed into the strip, rows by track position.
+    const trackCount = Math.max(1, this.tracks.length)
+    const rowH = Math.max(2, (MINIMAP_HEIGHT - 8) / trackCount)
+    let trackIndex = 0
+    for (const track of this.tracks) {
+      const y = top + 4 + trackIndex * rowH
+      for (const placed of track.placed) {
+        const x0 = this.minimapXFromMs(eventStart(placed.event), width)
+        const x1 = this.minimapXFromMs(eventEnd(placed.event), width)
+        ctx.fillStyle = sliceColor(placed.event)
+        ctx.globalAlpha = 0.85
+        ctx.fillRect(x0, y, Math.max(1.2, x1 - x0), Math.max(1.4, rowH - 1))
+      }
+      trackIndex += 1
+    }
+    ctx.globalAlpha = 1
+
+    // Current viewport window.
+    const vx0 = Math.max(HEADER_WIDTH, this.minimapXFromMs(this.transform.startMs, width))
+    const vx1 = Math.min(width, this.minimapXFromMs(this.transform.endMs, width))
+    ctx.fillStyle = this.theme.brushFill
+    ctx.fillRect(vx0, top + 1, Math.max(4, vx1 - vx0), MINIMAP_HEIGHT - 2)
+    ctx.strokeStyle = this.theme.brushBorder
+    ctx.lineWidth = 1.4
+    ctx.strokeRect(vx0, top + 1, Math.max(4, vx1 - vx0), MINIMAP_HEIGHT - 2)
+  }
+
+  private isInMinimap(x: number, y: number): boolean {
+    if (!this.canvas) return false
+    const height = this.canvas.getBoundingClientRect().height
+    return y >= this.minimapTop(height) && x > HEADER_WIDTH
+  }
+
+  private minimapJump(x: number): void {
+    if (!this.canvas) return
+    const width = this.canvas.getBoundingClientRect().width
+    const span = this.transform.endMs - this.transform.startMs
+    const center = this.minimapMsFromX(x, width)
+    this.transform.startMs = center - span / 2
+    this.transform.endMs = center + span / 2
+    this.requestRender()
   }
 
   private timeToX(timeMs: number): number {
@@ -632,7 +767,7 @@ export class TimelineEngine {
     ctx.setLineDash([2, 2])
     ctx.beginPath()
     ctx.moveTo(x, RULER_HEIGHT)
-    ctx.lineTo(x, height)
+    ctx.lineTo(x, height - MINIMAP_HEIGHT)
     ctx.stroke()
     ctx.setLineDash([])
   }
@@ -667,6 +802,11 @@ export class TimelineEngine {
   private onMouseDown = (e: MouseEvent): void => {
     if (e.button !== 0 || !this.canvas) return
     const { x, y } = this.localPos(e)
+    if (this.isInMinimap(x, y)) {
+      this.isMinimapDragging = true
+      this.minimapJump(x)
+      return
+    }
     if ((e.shiftKey || this.brushMode) && x > HEADER_WIDTH) {
       this.isBrushing = true
       this.brushAnchorMs = this.xToTime(x)
@@ -686,6 +826,11 @@ export class TimelineEngine {
   private onMouseMove = (e: MouseEvent): void => {
     if (!this.canvas) return
     const { x, y } = this.localPos(e)
+
+    if (this.isMinimapDragging) {
+      this.minimapJump(x)
+      return
+    }
 
     if (this.isBrushing) {
       this.brushCursorMs = this.xToTime(Math.max(HEADER_WIDTH, x))
@@ -720,6 +865,10 @@ export class TimelineEngine {
   }
 
   private onMouseUp = (e: MouseEvent): void => {
+    if (this.isMinimapDragging) {
+      this.isMinimapDragging = false
+      return
+    }
     if (this.isBrushing) {
       this.isBrushing = false
       const lo = Math.min(this.brushAnchorMs, this.brushCursorMs)
@@ -792,7 +941,7 @@ export class TimelineEngine {
   }
 
   private hitTest(x: number, y: number): { event: TimelineEvent; track: TrackDefinition } | null {
-    if (x < HEADER_WIDTH || y < RULER_HEIGHT) return null
+    if (x < HEADER_WIDTH || y < RULER_HEIGHT || this.isInMinimap(x, y)) return null
     let currentY = RULER_HEIGHT + this.transform.offsetY
     for (const track of this.tracks) {
       const trackH = this.trackHeight(track)
