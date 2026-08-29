@@ -1519,9 +1519,26 @@ function showTip(evt, id) {{
 
 // Click pins the tooltip so port/detail rows can be read and copied; a
 // second click elsewhere, the close button, or Escape releases it.
+function broadcastSelection(id) {{
+  const m = M[id] || {{}};
+  const selectSeq = Date.now();
+  try {{
+    // Same-origin top window; the graph selection bridge component forwards
+    // this into Streamlit so the Graph Inspector follows diagram clicks.
+    window.parent.postMessage({{
+      type: 'sdb-graph-select',
+      id: id,
+      kind: m.type === 'edge' ? 'edge' : 'node',
+      label: m.label || id,
+      seq: selectSeq
+    }}, '*');
+  }} catch (err) {{}}
+}}
+
 function pinTip(evt, id) {{
   if (dragDist > 3) return;
   evt.stopPropagation();
+  broadcastSelection(id);
   tipPinned = true;
   tip.innerHTML = tipHtml(id, true);
   tip.style.opacity = 1;

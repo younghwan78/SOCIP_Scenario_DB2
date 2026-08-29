@@ -19,6 +19,7 @@ for path in (_root / "src", _root, _root / "dashboard"):
         sys.path.insert(0, str(path))
 
 from dashboard.components.elk_viewer import render_elk_view
+from dashboard.components.graph_selection_bridge import read_graph_selection
 from dashboard.components.graph_inspector import (
     InspectorPanel,
     build_edge_inspector,
@@ -315,15 +316,54 @@ def _load_variant_options(base_url: str, scenario_id: str) -> tuple[list[dict], 
         return [], str(exc)
 
 
-def _render_detail_panel(view: ViewResponse) -> None:
+def _apply_graph_click(
+    selection: dict | None,
+    node_ids: set[str],
+    edge_ids: set[str],
+    key_suffix: str,
+) -> dict | None:
+    """Preselect the inspector Node/Edge choice from a diagram click.
+
+    Applies each click once (tracked by its seq) so the user can still change
+    the selectboxes manually afterwards. Returns the selection when it maps
+    into the current view, else None.
+    """
+
+    if not selection:
+        return None
+    if selection["kind"] == "edge":
+        if selection["id"] not in edge_ids:
+            return None
+        target_key = f"inspector_edge_{key_suffix}"
+    else:
+        if selection["id"] not in node_ids:
+            return None
+        target_key = f"inspector_node_{key_suffix}"
+    applied_marker = (selection["id"], selection["seq"])
+    if st.session_state.get("viewer_graph_click_applied") != applied_marker:
+        st.session_state[target_key] = selection["id"]
+        st.session_state["viewer_graph_click_applied"] = applied_marker
+    return selection
+
+
+def _render_detail_panel(view: ViewResponse, graph_click: dict | None = None) -> None:
     key_suffix = _state_key_suffix(
         f"{view.scenario_id}-{view.variant_id}-{view.level}-{view.mode or 'none'}-{view.metadata.get('expand') or 'none'}"
     )
     node_items = node_options(view)
     edge_items = edge_options(view)
+    applied_click = _apply_graph_click(
+        graph_click,
+        {item.id for item in node_items},
+        {item.id for item in edge_items},
+        key_suffix,
+    )
     st.markdown(inspector_heading_html(), unsafe_allow_html=True)
     overview_tab, node_tab, edge_tab = st.tabs(["Overview", "Node", "Edge"])
     with overview_tab:
+        if applied_click:
+            tab_name = "Edge" if applied_click["kind"] == "edge" else "Node"
+            st.caption(f"Diagram selection: {applied_click['label']} → {tab_name} tab")
         _render_inspector_panel(build_graph_overview(view))
     with node_tab:
         if node_items:
@@ -922,10 +962,12 @@ with st.sidebar:
             use_container_width=True,
         )
 
+graph_click_selection = read_graph_selection(key="viewer_graph_selection_bridge")
+
 main_col, detail_col = st.columns([5.6, 0.95], gap="small")
 
 with detail_col:
-    _render_detail_panel(inspector_view_source(level, primary, topo_view))
+    _render_detail_panel(inspector_view_source(level, primary, topo_view), graph_click_selection)
 
 with main_col:
     st.markdown(
