@@ -134,11 +134,15 @@ def _buffer_detail_items(graph: CanonicalScenarioGraph, buffer_ref: str | None) 
     if override:
         details.append("Buffer override: variant-specific")
     if spec:
+        comp_text = display_compression(spec.get("compression"))
+        comp_ratio = spec.get("comp_ratio") or spec.get("compression_ratio")
+        if comp_text and comp_ratio and normalize_compression(spec.get("compression")) is not None:
+            comp_text = f"{comp_text}({comp_ratio})"
         bits = [
             spec.get("format"),
             _size_text(spec.get("size_ref") or spec.get("size")),
             f"{spec.get('bitdepth')}b" if spec.get("bitdepth") is not None else None,
-            display_compression(spec.get("compression")),
+            comp_text,
             spec.get("alignment"),
         ]
         summary = " / ".join(str(bit) for bit in bits if bit)

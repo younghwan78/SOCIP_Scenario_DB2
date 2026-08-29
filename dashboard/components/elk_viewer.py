@@ -182,8 +182,67 @@ def build_elk_graph(view: ViewResponse) -> tuple[dict[str, Any], dict[str, Any]]
     else:
         graph, meta = _build_grouped_graph(view)
     _apply_io_size_subtitles(view, meta)
+    _apply_module_state_colors(view, meta)
     _dedupe_buffer_edge_labels(view, graph)
     return graph, meta
+
+
+# Legacy Level 2 module color language: DMA tint encodes the active
+# compression/LLC state so the memory strategy reads at a glance.
+MODULE_STATE_COLORS: dict[str, tuple[str, str]] = {
+    "comp_llc": ("#F8BBD0", "#C2185B"),  # pink — compression + LLC
+    "comp": ("#FFE0B2", "#E65100"),      # orange — compression only
+    "llc": ("#E1BEE7", "#7B1FA2"),       # purple — LLC only
+    "rdma": ("#D2E3FC", "#1967D2"),      # pastel blue — read DMA
+    "wdma": ("#FEEFC3", "#B06000"),      # pastel amber — write DMA
+    "cin": ("#CEEAD6", "#137333"),       # pastel green — input FIFO
+    "cout": ("#E8DAEF", "#7B1FA2"),      # pastel purple — output FIFO
+}
+
+_DMA_MODULE_KINDS = {"rdma", "wdma", "dma"}
+
+
+def _compression_active(value: Any) -> bool:
+    text = str(value or "").strip().upper()
+    return bool(text) and text not in {"COMP_OFF", "OFF", "NONE", "DISABLE", "DISABLED"}
+
+
+def _apply_module_state_colors(view: ViewResponse, meta: dict[str, Any]) -> None:
+    """Tint Level 2 I/O module nodes by their active memory strategy."""
+
+    comp_nodes: set[str] = set()
+    llc_nodes: set[str] = set()
+    for edge in view.edges:
+        endpoints = (edge.data.source, edge.data.target)
+        if edge.data.memory and _compression_active(edge.data.memory.compression):
+            comp_nodes.update(endpoints)
+        if edge.data.placement and edge.data.placement.llc_allocated:
+            llc_nodes.update(endpoints)
+
+    for node in view.nodes:
+        node_meta = meta.get(node.data.id)
+        kind = str(node.data.module_kind or "").lower()
+        if not node_meta or not kind:
+            continue
+        if kind in {"cin", "cout"}:
+            fill, stroke = MODULE_STATE_COLORS[kind]
+        elif kind in _DMA_MODULE_KINDS:
+            has_comp = node.data.id in comp_nodes
+            has_llc = node.data.id in llc_nodes
+            if has_comp and has_llc:
+                fill, stroke = MODULE_STATE_COLORS["comp_llc"]
+            elif has_comp:
+                fill, stroke = MODULE_STATE_COLORS["comp"]
+            elif has_llc:
+                fill, stroke = MODULE_STATE_COLORS["llc"]
+            elif kind == "rdma" or node.data.module_direction == "input":
+                fill, stroke = MODULE_STATE_COLORS["rdma"]
+            else:
+                fill, stroke = MODULE_STATE_COLORS["wdma"]
+        else:
+            continue
+        node_meta["fill"] = fill
+        node_meta["stroke"] = stroke
 
 
 def _dedupe_buffer_edge_labels(view: ViewResponse, graph: dict[str, Any]) -> None:

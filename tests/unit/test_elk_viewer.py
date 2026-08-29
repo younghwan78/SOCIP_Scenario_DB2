@@ -686,6 +686,55 @@ def test_derived_size_transition_adds_scale_badge():
     assert meta["scaler"]["op_badges"] == ["S"]
 
 
+def test_module_state_colors_encode_compression_and_llc():
+    from scenario_db.api.schemas.view import EdgeData, MemoryDescriptor, MemoryPlacement
+
+    from dashboard.components.elk_viewer import MODULE_STATE_COLORS, _apply_module_state_colors
+
+    view = ViewResponse(
+        level=2,
+        scenario_id="s",
+        variant_id="v",
+        summary=_summary(),
+        nodes=[
+            _node("wdma-comp", "WDMA", "submodule", "hw", 0, 0, module_kind="wdma", module_direction="output"),
+            _node("rdma-plain", "RDMA", "submodule", "hw", 0, 0, module_kind="rdma", module_direction="input"),
+            _node("wdma-both", "WDMA2", "submodule", "hw", 0, 0, module_kind="wdma", module_direction="output"),
+            _node("cin-mod", "CIN", "submodule", "hw", 0, 0, module_kind="cin"),
+        ],
+        edges=[
+            EdgeElement(
+                data=EdgeData(
+                    id="e1",
+                    source="wdma-comp",
+                    target="buf1",
+                    flow_type="M2M",
+                    memory=MemoryDescriptor(compression="COMP_SBWC_LOSSLESS"),
+                )
+            ),
+            EdgeElement(
+                data=EdgeData(
+                    id="e2",
+                    source="wdma-both",
+                    target="buf2",
+                    flow_type="M2M",
+                    memory=MemoryDescriptor(compression="COMP_SBWC_LOSSLESS"),
+                    placement=MemoryPlacement(llc_allocated=True, llc_policy="shared"),
+                )
+            ),
+        ],
+        metadata={},
+    )
+    meta = {node.data.id: {"fill": "#FFF", "stroke": "#000"} for node in view.nodes}
+
+    _apply_module_state_colors(view, meta)
+
+    assert meta["wdma-comp"]["fill"] == MODULE_STATE_COLORS["comp"][0]
+    assert meta["wdma-both"]["fill"] == MODULE_STATE_COLORS["comp_llc"][0]
+    assert meta["rdma-plain"]["fill"] == MODULE_STATE_COLORS["rdma"][0]
+    assert meta["cin-mod"]["fill"] == MODULE_STATE_COLORS["cin"][0]
+
+
 def test_edges_touching_buffer_nodes_keep_flow_chip_only():
     from scenario_db.api.schemas.view import EdgeData, MemoryDescriptor
 
