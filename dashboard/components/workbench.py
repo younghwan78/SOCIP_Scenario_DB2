@@ -40,6 +40,8 @@ def render_workbench_timeline(
     export_name: str = "timeline",
     graph: dict[str, Any] | None = None,
     drill_node: str | None = None,
+    baseline_events: list[dict[str, Any]] | None = None,
+    baseline_name: str | None = None,
 ) -> dict[str, Any] | None:
     """Render the interactive timeline pane and return the normalized selection.
 
@@ -61,6 +63,9 @@ def render_workbench_timeline(
         args["graph"] = graph
     if drill_node:
         args["drillNode"] = drill_node
+    if baseline_events:
+        args["baselineEvents"] = [event for event in baseline_events if isinstance(event, dict)]
+        args["baselineName"] = str(baseline_name or "baseline")
     component = _get_component()
     raw = component(key=key, default=None, **args)
     return normalize_selection(raw)

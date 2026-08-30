@@ -146,6 +146,14 @@ engine.onHover = (hit: HoverHit | null) => {
     `cadence_slack: ${formatMs(e.cadence_slack_ms)}`,
     `bottleneck: ${e.bottleneck_reason ?? '-'}`,
   ]
+  const baseline = engine.getBaselineFor(e.task_id)
+  if (baseline) {
+    const deltaStart = (e.start_ms ?? 0) - baseline.start
+    const currentDuration = (e.end_ms ?? e.start_ms ?? 0) - (e.start_ms ?? 0)
+    const deltaDuration = currentDuration - (baseline.end - baseline.start)
+    lines.push(`baseline: ${formatMs(baseline.start)} - ${formatMs(baseline.end)}`)
+    lines.push(`Δstart: ${deltaStart >= 0 ? '+' : ''}${deltaStart.toFixed(3)} ms · Δdur: ${deltaDuration >= 0 ? '+' : ''}${deltaDuration.toFixed(3)} ms`)
+  }
   tooltip.textContent = lines.join('\n')
   tooltip.style.display = 'block'
 
@@ -223,6 +231,15 @@ initBridge((args) => {
   const events = (Array.isArray(args.events) ? args.events : []) as TimelineEvent[]
   exportName = String(args.exportName || 'timeline')
   engine.setData(events, options)
+  const baselineEvents = (Array.isArray(args.baselineEvents) ? args.baselineEvents : null) as TimelineEvent[] | null
+  engine.setBaseline(baselineEvents)
+  const hint = document.getElementById('wb-hint')
+  if (hint) {
+    const baselineName = String(args.baselineName || '')
+    hint.textContent = baselineName
+      ? `A/B vs ${baselineName} (ghost bars = baseline)`
+      : 'drag pan · wheel zoom · shift+drag select · click slice = flows · F fit · Esc clear'
+  }
 
   const rawGraph = args.graph as DiagramGraph | undefined
   diagramGraph = rawGraph && Array.isArray(rawGraph.nodes) ? rawGraph : { nodes: [], edges: [] }

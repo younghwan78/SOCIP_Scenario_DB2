@@ -69,6 +69,7 @@ export class TimelineEngine {
   private collapsedTrackIds = new Set<string>()
   private pinnedTrackIds: string[] = []
   private highlightedTaskIds: Set<string> | null = null
+  private baselineByTask = new Map<string, { start: number; end: number }>()
   private brushAnchorMs = 0
   private brushCursorMs = 0
   private brush: BrushRange | null = null
@@ -245,6 +246,23 @@ export class TimelineEngine {
   public setHighlightedTaskIds(ids: Set<string> | null): void {
     this.highlightedTaskIds = ids && ids.size ? ids : null
     this.requestRender()
+  }
+
+  /** A/B overlay: baseline slices render as ghosts under matching tasks. */
+  public setBaseline(events: TimelineEvent[] | null): void {
+    this.baselineByTask.clear()
+    for (const event of events ?? []) {
+      this.baselineByTask.set(String(event.task_id), { start: eventStart(event), end: eventEnd(event) })
+    }
+    this.requestRender()
+  }
+
+  public getBaselineFor(taskId: string): { start: number; end: number } | null {
+    return this.baselineByTask.get(taskId) ?? null
+  }
+
+  public hasBaseline(): boolean {
+    return this.baselineByTask.size > 0
   }
 
   private scrollEventIntoView(event: TimelineEvent): void {
@@ -562,6 +580,28 @@ export class TimelineEngine {
         ctx.clip()
         const label = event.hw_name || event.task_id
         ctx.fillText(label, Math.max(HEADER_WIDTH + 2, x0 + 6), sliceY + sliceH / 2 + 4)
+        ctx.restore()
+      }
+    }
+
+    // Baseline ghost: a thin translucent bar along the slice bottom shows
+    // where this task ran in the comparison evidence.
+    const baseline = this.baselineByTask.get(event.task_id)
+    if (baseline) {
+      const bx0 = this.timeToX(baseline.start)
+      const bx1 = Math.max(bx0 + MIN_SLICE_WIDTH, this.timeToX(baseline.end))
+      if (bx1 >= HEADER_WIDTH && bx0 <= canvasWidth) {
+        const ghostY = sliceY + sliceH - 5
+        ctx.save()
+        ctx.globalAlpha = 0.55
+        ctx.fillStyle = '#64748B'
+        ctx.fillRect(Math.max(HEADER_WIDTH, bx0), ghostY, bx1 - Math.max(HEADER_WIDTH, bx0), 4)
+        ctx.globalAlpha = 0.9
+        ctx.strokeStyle = '#334155'
+        ctx.lineWidth = 1
+        ctx.setLineDash([3, 2])
+        ctx.strokeRect(Math.max(HEADER_WIDTH, bx0), ghostY, bx1 - Math.max(HEADER_WIDTH, bx0), 4)
+        ctx.setLineDash([])
         ctx.restore()
       }
     }

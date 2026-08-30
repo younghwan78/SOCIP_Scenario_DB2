@@ -282,6 +282,53 @@ def _fetch_view(
         return None
 
 
+def _select_baseline_evidence(result: dict[str, Any], api_base: str | None, *, key: str) -> str | None:
+    """A/B baseline picker: sibling evidence of the same scenario/variant."""
+
+    scenario_ref = str(result.get("scenario_ref") or "")
+    if not api_base or not scenario_ref:
+        return None
+    current_id = str(result.get("id") or "")
+    candidates = _list_sibling_evidence(api_base, scenario_ref, str(result.get("variant_ref") or ""))
+    options = ["None"] + [item for item in candidates if item != current_id]
+    if len(options) == 1:
+        return None
+    choice = st.selectbox(
+        "Compare (A/B baseline)",
+        options,
+        key=f"{key}_baseline_choice",
+        help="Overlay another evidence of this scenario/variant as ghost bars (e.g. prediction vs measurement).",
+    )
+    return None if choice == "None" else str(choice)
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def _list_sibling_evidence(api_base: str, scenario_ref: str, variant_ref: str) -> list[str]:
+    try:
+        from dashboard.components.evidence_api_client import list_evidence
+
+        items = list_evidence(api_base, scenario_ref=scenario_ref, variant_ref=variant_ref or None, limit=50)
+        return [str(item.get("id")) for item in items if item.get("id")]
+    except Exception:
+        return []
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _baseline_timeline_events(api_base: str | None, evidence_id: str) -> list[dict[str, Any]] | None:
+    if not api_base:
+        return None
+    import requests
+
+    try:
+        response = requests.get(f"{api_base.rstrip('/')}/evidence/{evidence_id}", timeout=10)
+        response.raise_for_status()
+        payload = response.json()
+        events = payload.get("timeline_events") or (payload.get("kpi") or {}).get("timeline_events")
+        return [event for event in events or [] if isinstance(event, dict)] or None
+    except Exception:
+        return None
+
+
 def _render_interactive_chart(
     result: dict[str, Any],
     visible_events: list[dict[str, Any]],
@@ -306,6 +353,9 @@ def _render_interactive_chart(
         drill_node = None
         graph = _topology_graph_for_result(result, api_base)
 
+    baseline_id = _select_baseline_evidence(result, api_base, key=key)
+    baseline_events = _baseline_timeline_events(api_base, baseline_id) if baseline_id else None
+
     selection = render_workbench_timeline(
         visible_events,
         key=key,
@@ -314,6 +364,8 @@ def _render_interactive_chart(
         export_name=export_name,
         graph=graph,
         drill_node=drill_node,
+        baseline_events=baseline_events,
+        baseline_name=baseline_id,
     )
 
     expand = (selection or {}).get("diagram_expand")
