@@ -1351,11 +1351,12 @@ def _html(graph: dict[str, Any], meta: dict[str, Any], title: str, height: int, 
   .elk-controls button {{ border:1px solid #CBD5E1; background:#FFFFFF; color:#334155; border-radius:7px; padding:5px 8px; font-weight:700; cursor:pointer; }}
   .elk-controls button:hover {{ background:#F8FAFC; }}
   .elk-legend {{ position:absolute; left:12px; bottom:10px; z-index:4; display:flex; align-items:center; gap:14px; font-size:11px; color:#64748B; background:rgba(255,255,255,.9); border:1px solid #E5E7EB; border-radius:8px; padding:6px 9px; }}
-  .tip {{ position:absolute; z-index:5; min-width:220px; max-width:360px; background:#0F172A; color:#E5E7EB; border-radius:9px; padding:9px 10px; font-size:11px; line-height:1.45; pointer-events:none; opacity:0; transform:translate(8px,8px); box-shadow:0 12px 28px rgba(15,23,42,.22); }}
-  .tip b {{ color:#FFFFFF; font-size:12px; }}
-  .tip .muted {{ color:#CBD5E1; }}
-  .tip .tip-close {{ position:absolute; top:4px; right:8px; cursor:pointer; font-size:15px; color:#94A3B8; line-height:1; }}
-  .tip .tip-close:hover {{ color:#FFFFFF; }}
+  /* Legacy html_view tooltip look: white card, subtle border, title rule. */
+  .tip {{ position:absolute; z-index:5; min-width:220px; max-width:480px; background:#fff; color:#333; border:1px solid #bbb; border-radius:8px; padding:12px 16px; font-size:12px; line-height:1.5; pointer-events:none; opacity:0; transform:translate(8px,8px); box-shadow:0 4px 20px rgba(0,0,0,.2); }}
+  .tip b {{ display:block; color:#222; font-size:14px; border-bottom:1px solid #eee; padding-bottom:6px; margin-bottom:8px; }}
+  .tip .muted {{ color:#666; }}
+  .tip .tip-close {{ position:absolute; top:6px; right:10px; cursor:pointer; font-size:16px; color:#999; line-height:1; }}
+  .tip .tip-close:hover {{ color:#333; }}
   .error {{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#B91C1C; font-size:13px; padding:24px; text-align:center; }}
   svg {{ width:100%; height:100%; cursor:grab; }}
   svg.dragging {{ cursor:grabbing; }}
