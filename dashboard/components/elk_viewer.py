@@ -1373,6 +1373,7 @@ def _html(graph: dict[str, Any], meta: dict[str, Any], title: str, height: int, 
       <button id="fit">Fit</button>
       <button id="reset">Reset</button>
       <button id="zoomIn">+</button>
+      <button id="exportSvg" title="Download the full diagram as an SVG file">SVG</button>
     </div>
   </div>
   <svg id="svg" tabindex="0"><defs>
@@ -1870,6 +1871,29 @@ document.getElementById('zoomOut').onclick = () => zoomBy(0.84);
 document.getElementById('zoomIn').onclick = () => zoomBy(1.18);
 document.getElementById('fit').onclick = fitGraph;
 document.getElementById('reset').onclick = resetGraph;
+document.getElementById('exportSvg').onclick = () => {{
+  if (!layoutGraph) return;
+  // Clone at identity transform so the export always contains the full
+  // graph regardless of the current pan/zoom.
+  const clone = svg.cloneNode(true);
+  const gw = Math.ceil((layoutGraph.width || 800) + PAD * 2);
+  const gh = Math.ceil((layoutGraph.height || 600) + PAD * 2);
+  clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  clone.setAttribute('width', String(gw));
+  clone.setAttribute('height', String(gh));
+  clone.setAttribute('viewBox', `0 0 ${{gw}} ${{gh}}`);
+  const cloneMain = clone.querySelector('#main');
+  if (cloneMain) cloneMain.setAttribute('transform', `translate(${{PAD}},${{PAD}}) scale(1)`);
+  clone.insertAdjacentHTML('afterbegin', '<rect width="100%" height="100%" fill="#FFFFFF"/>');
+  const text = new XMLSerializer().serializeToString(clone);
+  const blob = new Blob([text], {{type: 'image/svg+xml'}});
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  const title = (VIEW.scenario || 'view') + '_' + (VIEW.layout || 'diagram');
+  link.download = title.replace(/[^A-Za-z0-9._-]+/g, '_') + '.svg';
+  link.click();
+  URL.revokeObjectURL(link.href);
+}};
 
 let dragging = false, sx = 0, sy = 0, startTx = 0, startTy = 0, dragDist = 0;
 svg.addEventListener('mousedown', evt => {{
