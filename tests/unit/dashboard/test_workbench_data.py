@@ -126,7 +126,18 @@ class TestNormalizeSelection:
             "range_start_ms": 4.5,
             "range_end_ms": 9.0,
             "range_stats": {"eventCount": 3},
+            "diagram_expand": None,
         }
+
+    def test_normalizes_diagram_expand_request(self):
+        raw = {"selectedTaskId": None, "diagramExpand": {"node": "ip-isp0", "seq": 1234}}
+        normalized = normalize_selection(raw)
+        assert normalized is not None
+        assert normalized["diagram_expand"] == {"node": "ip-isp0", "seq": 1234}
+
+        back = normalize_selection({"diagramExpand": {"node": None, "seq": 99}})
+        assert back is not None
+        assert back["diagram_expand"] == {"node": None, "seq": 99}
 
     def test_half_open_range_is_dropped(self):
         raw = {"selectedTaskId": "isp", "rangeStartMs": 4.5, "rangeEndMs": None}

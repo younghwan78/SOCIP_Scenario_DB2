@@ -153,11 +153,20 @@ def normalize_selection(raw: Any) -> dict[str, Any] | None:
     if start is None or end is None:
         start = end = None
     stats = raw.get("rangeStats") if isinstance(raw.get("rangeStats"), dict) else None
-    if task_id is None and start is None:
+    expand = raw.get("diagramExpand") if isinstance(raw.get("diagramExpand"), dict) else None
+    diagram_expand = None
+    if expand is not None:
+        node = expand.get("node")
+        diagram_expand = {
+            "node": str(node) if node else None,
+            "seq": int(numeric(expand.get("seq")) or 0),
+        }
+    if task_id is None and start is None and diagram_expand is None:
         return None
     return {
         "selected_task_id": str(task_id) if task_id is not None else None,
         "range_start_ms": start,
         "range_end_ms": end,
         "range_stats": stats,
+        "diagram_expand": diagram_expand,
     }

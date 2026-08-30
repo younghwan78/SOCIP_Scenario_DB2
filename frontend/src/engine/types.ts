@@ -71,6 +71,11 @@ export interface SelectionState {
   rangeStats: RangeStats | null
 }
 
+export interface DiagramExpandRequest {
+  node: string | null
+  seq: number
+}
+
 export interface WorkbenchOptions {
   showWaits: boolean
   showDeadlines: boolean

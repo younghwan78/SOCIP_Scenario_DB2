@@ -139,13 +139,14 @@ def render_timing_chart(result: dict[str, Any], *, key_prefix: str = "stored", a
     renderer = _select_renderer(key_prefix=key_prefix, evidence_id=evidence_id)
     if renderer == INTERACTIVE_RENDERER:
         _render_interactive_chart(
+            result,
             visible_events,
             key=f"{key_prefix}_timing_workbench_{evidence_id}_{frame_choice}",
             show_waits=show_waits,
             show_deadlines=show_deadlines,
             key_prefix=key_prefix,
             export_name=f"timeline_{evidence_id}",
-            graph=_topology_graph_for_result(result, api_base),
+            api_base=api_base,
         )
         return
 
@@ -238,12 +239,34 @@ def _topology_graph_for_result(result: dict[str, Any], api_base: str | None) -> 
     if not api_base or not scenario_ref:
         return None
     variant_ref = str(result.get("variant_ref") or "")
-    view = _fetch_topology_view(api_base, scenario_ref, variant_ref)
+    view = _fetch_view(api_base, scenario_ref, variant_ref, {"level": 0, "mode": "topology"})
+    return build_graph_payload(view)
+
+
+def _drill_graph_for_result(result: dict[str, Any], api_base: str | None, drill_node: str) -> dict[str, Any] | None:
+    """Level 2 module graph for a semantic-zoom drill, or None when
+    unavailable (falls back to the topology)."""
+
+    from dashboard.components.workbench_data import build_graph_payload
+
+    scenario_ref = str(result.get("scenario_ref") or "")
+    if not api_base or not scenario_ref:
+        return None
+    variant_ref = str(result.get("variant_ref") or "")
+    expand = drill_node[3:] if drill_node.startswith("ip-") else drill_node
+    view = _fetch_view(api_base, scenario_ref, variant_ref, {"level": 2, "expand": expand})
+    if view and view.get("metadata", {}).get("level2_available") is False:
+        return None
     return build_graph_payload(view)
 
 
 @st.cache_data(ttl=30, show_spinner=False)
-def _fetch_topology_view(api_base: str, scenario_ref: str, variant_ref: str) -> dict[str, Any] | None:
+def _fetch_view(
+    api_base: str,
+    scenario_ref: str,
+    variant_ref: str,
+    params: dict[str, Any],
+) -> dict[str, Any] | None:
     import requests
 
     base = api_base.rstrip("/")
@@ -252,7 +275,7 @@ def _fetch_topology_view(api_base: str, scenario_ref: str, variant_ref: str) -> 
     else:
         url = f"{base}/scenarios/{scenario_ref}/view"
     try:
-        response = requests.get(url, params={"level": 0, "mode": "topology"}, timeout=10)
+        response = requests.get(url, params=params, timeout=10)
         response.raise_for_status()
         return response.json()
     except Exception:
@@ -260,6 +283,7 @@ def _fetch_topology_view(api_base: str, scenario_ref: str, variant_ref: str) -> 
 
 
 def _render_interactive_chart(
+    result: dict[str, Any],
     visible_events: list[dict[str, Any]],
     *,
     key: str,
@@ -267,10 +291,20 @@ def _render_interactive_chart(
     show_deadlines: bool,
     key_prefix: str,
     export_name: str = "timeline",
-    graph: dict[str, Any] | None = None,
+    api_base: str | None = None,
 ) -> None:
     from dashboard.components.workbench import render_workbench_timeline
     from dashboard.components.workbench_data import filter_events_by_range
+
+    # Semantic zoom: the drill target is owned by session state; the component
+    # requests changes through its return value (diagram_expand).
+    drill_state_key = f"{key}_diagram_drill"
+    drill_state = st.session_state.get(drill_state_key) or {}
+    drill_node = drill_state.get("node")
+    graph = _drill_graph_for_result(result, api_base, drill_node) if drill_node else None
+    if graph is None:
+        drill_node = None
+        graph = _topology_graph_for_result(result, api_base)
 
     selection = render_workbench_timeline(
         visible_events,
@@ -279,7 +313,13 @@ def _render_interactive_chart(
         show_deadlines=show_deadlines,
         export_name=export_name,
         graph=graph,
+        drill_node=drill_node,
     )
+
+    expand = (selection or {}).get("diagram_expand")
+    if expand and expand.get("seq") and expand["seq"] != drill_state.get("seq"):
+        st.session_state[drill_state_key] = {"node": expand.get("node"), "seq": expand["seq"]}
+        st.rerun()
     table_events = visible_events
     if selection and selection.get("range_start_ms") is not None and selection.get("range_end_ms") is not None:
         table_events = filter_events_by_range(

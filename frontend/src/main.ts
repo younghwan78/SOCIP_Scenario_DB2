@@ -5,7 +5,7 @@ import { eventsForDiagramNode, matchDiagramNode } from './diagram/mapping'
 import type { BrushRange, HoverHit } from './engine/TimelineEngine'
 import { TimelineEngine } from './engine/TimelineEngine'
 import { formatMs } from './engine/format'
-import type { SelectionState, TimelineEvent, WorkbenchOptions } from './engine/types'
+import type { DiagramExpandRequest, SelectionState, TimelineEvent, WorkbenchOptions } from './engine/types'
 import { themeByName } from './theme'
 
 const MIN_HEIGHT = 420
@@ -28,8 +28,10 @@ const selection: SelectionState = {
   rangeStats: null,
 }
 
+let diagramExpand: DiagramExpandRequest = { node: null, seq: 0 }
+
 function reportSelection(): void {
-  setComponentValue({ ...selection })
+  setComponentValue({ ...selection, diagramExpand: { ...diagramExpand } })
 }
 
 function describeSelection(): string {
@@ -69,7 +71,7 @@ function openDiagram(open: boolean): void {
   diagramToggle?.classList.toggle('wb-active', open)
   if (open && !diagramLoaded) {
     diagramLoaded = true
-    void diagramPane.setGraph(diagramGraph)
+    void diagramPane.setGraph(diagramGraph, drillNode)
   }
   engine.resize()
 }
@@ -81,6 +83,19 @@ diagramPane.onNodeClick = (node) => {
   engine.setHighlightedTaskIds(new Set(events.map((event) => event.task_id)))
   diagramPane.highlightNode(node.id)
   if (events.length) engine.jumpToEvent(events[0])
+}
+
+// Semantic zoom: double-click drills into the block's module detail
+// (fulfilled by Python on the next rerun); Back returns to the topology.
+let drillNode: string | null = null
+diagramPane.onNodeDblClick = (node) => {
+  if (drillNode || node.type === 'buffer') return
+  diagramExpand = { node: node.id, seq: Date.now() }
+  reportSelection()
+}
+diagramPane.onBack = () => {
+  diagramExpand = { node: null, seq: Date.now() }
+  reportSelection()
 }
 
 engine.onSelect = (taskId: string | null) => {
@@ -211,10 +226,15 @@ initBridge((args) => {
 
   const rawGraph = args.graph as DiagramGraph | undefined
   diagramGraph = rawGraph && Array.isArray(rawGraph.nodes) ? rawGraph : { nodes: [], edges: [] }
+  drillNode = typeof args.drillNode === 'string' && args.drillNode ? args.drillNode : null
+  if (drillNode) {
+    diagramExpand = { node: drillNode, seq: diagramExpand.seq }
+    if (!diagramOpen) openDiagram(true)
+  }
   if (diagramToggle) diagramToggle.hidden = !diagramGraph.nodes.length
   diagramPane.setTheme(themeByName(themeName))
   if (diagramLoaded) {
-    void diagramPane.setGraph(diagramGraph)
+    void diagramPane.setGraph(diagramGraph, drillNode)
   }
 
   // Data change resets client selection; keep footer in sync.

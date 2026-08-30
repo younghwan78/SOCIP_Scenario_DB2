@@ -58,6 +58,9 @@ export class DiagramPane {
   private theme: WorkbenchTheme
 
   public onNodeClick?: (node: DiagramNode) => void
+  public onNodeDblClick?: (node: DiagramNode) => void
+  public onBack?: () => void
+  private drillLabel: string | null = null
 
   constructor(container: HTMLElement, theme: WorkbenchTheme) {
     this.container = container
@@ -72,10 +75,12 @@ export class DiagramPane {
     return typeof window.ELK === 'function'
   }
 
-  public async setGraph(graph: DiagramGraph): Promise<void> {
+  public async setGraph(graph: DiagramGraph, drillLabel: string | null = null): Promise<void> {
     this.graph = graph
+    this.drillLabel = drillLabel
     this.container.innerHTML = ''
     this.nodeRects.clear()
+    this.renderHeader()
     if (!graph.nodes.length) {
       this.showMessage('No topology data for this evidence.')
       return
@@ -90,6 +95,27 @@ export class DiagramPane {
     } catch (err) {
       this.showMessage(`Diagram layout failed: ${err instanceof Error ? err.message : err}`)
     }
+  }
+
+  // Semantic-zoom breadcrumb: shows where we are and offers the way back.
+  private renderHeader(): void {
+    const header = document.createElement('div')
+    header.className = 'wb-diagram-header'
+    if (this.drillLabel) {
+      const back = document.createElement('button')
+      back.className = 'wb-diagram-back'
+      back.textContent = '← Topology'
+      back.addEventListener('click', () => this.onBack?.())
+      header.appendChild(back)
+      const crumb = document.createElement('span')
+      crumb.textContent = this.drillLabel
+      header.appendChild(crumb)
+    } else {
+      const hint = document.createElement('span')
+      hint.textContent = 'Topology · double-click a block for module detail'
+      header.appendChild(hint)
+    }
+    this.container.appendChild(header)
   }
 
   private showMessage(text: string): void {
@@ -196,6 +222,7 @@ export class DiagramPane {
 
       group.style.cursor = 'pointer'
       group.addEventListener('click', () => this.onNodeClick?.(data))
+      group.addEventListener('dblclick', () => this.onNodeDblClick?.(data))
       root.appendChild(group)
     }
 

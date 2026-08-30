@@ -39,6 +39,7 @@ def render_workbench_timeline(
     theme: str = "light",
     export_name: str = "timeline",
     graph: dict[str, Any] | None = None,
+    drill_node: str | None = None,
 ) -> dict[str, Any] | None:
     """Render the interactive timeline pane and return the normalized selection.
 
@@ -58,6 +59,8 @@ def render_workbench_timeline(
     )
     if graph:
         args["graph"] = graph
+    if drill_node:
+        args["drillNode"] = drill_node
     component = _get_component()
     raw = component(key=key, default=None, **args)
     return normalize_selection(raw)
