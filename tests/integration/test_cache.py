@@ -40,13 +40,13 @@ def test_match_issues_for_variant_uhd60_no_thermal(engine):
         cache = RuleCache.load(session)
         variant = (
             session.query(ScenarioVariant)
-            .filter_by(scenario_id="uc-camera-recording", id="UHD60-HDR10-H265")
+            .filter_by(scenario_id="uc-projecta-fhd30-recording", id="UHD60-HDR10-H265")
             .one_or_none()
         )
     assert variant is not None, "UHD60-HDR10-H265 variant가 DB에 없음"
 
     ctx = MatcherContext.from_variant(variant)
-    matched = match_issues_for_variant(ctx, cache.issues, scenario_id="uc-camera-recording")
+    matched = match_issues_for_variant(ctx, cache.issues, scenario_id="uc-projecta-fhd30-recording")
     assert isinstance(matched, list)
     # thermal 컨텍스트 없이는 all 조건 실패 → 미매칭
     matched_ids = [m.id for m in matched]
@@ -59,12 +59,12 @@ def test_match_issues_wrong_scenario_filtered(engine):
         cache = RuleCache.load(session)
         variant = (
             session.query(ScenarioVariant)
-            .filter_by(scenario_id="uc-camera-recording", id="UHD60-HDR10-H265")
+            .filter_by(scenario_id="uc-projecta-fhd30-recording", id="UHD60-HDR10-H265")
             .one_or_none()
         )
     assert variant is not None
 
     ctx = MatcherContext.from_variant(variant)
     matched = match_issues_for_variant(ctx, cache.issues, scenario_id="uc-other-scenario")
-    # scenario_ref=uc-camera-recording 이슈는 제외돼야 함
+    # scenario_ref=uc-projecta-fhd30-recording 이슈는 제외돼야 함
     assert all(m.id != "iss-LLC-thrashing-0221" for m in matched)

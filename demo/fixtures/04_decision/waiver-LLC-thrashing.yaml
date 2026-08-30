@@ -7,7 +7,7 @@ issue_ref: iss-LLC-thrashing-0221
 
 scope:
   variant_scope:
-    scenario_ref: uc-camera-recording
+    scenario_ref: uc-projecta-fhd30-recording
     match_rule:
       all:
         - { axis: resolution, op: eq, value: UHD }

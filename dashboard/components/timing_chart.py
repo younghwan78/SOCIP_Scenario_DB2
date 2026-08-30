@@ -98,16 +98,14 @@ def render_timing_summary(result: dict[str, Any]) -> None:
         cols[2].metric("Output Cadence Slack", "-")
 
 
-def render_timing_chart(result: dict[str, Any], *, key_prefix: str = "stored") -> None:
+INTERACTIVE_RENDERER = "Interactive (beta)"
+PLOTLY_RENDERER = "Plotly"
+
+
+def render_timing_chart(result: dict[str, Any], *, key_prefix: str = "stored", api_base: str | None = None) -> None:
     events = timeline_events(result)
     if not events:
         st.info("No timeline events are available for chart rendering.")
-        return
-    try:
-        import plotly.graph_objects as go
-    except ImportError:
-        st.warning("Plotly is not installed in this environment. The timeline table is shown instead.")
-        render_copyable_dataframe(events, key=f"{key_prefix}_timing_chart_fallback", use_container_width=True, hide_index=True)
         return
 
     evidence_id = safe_filename(str(result.get("id") or "selected"))
@@ -138,6 +136,27 @@ def render_timing_chart(result: dict[str, Any], *, key_prefix: str = "stored") -
             event_order.get(id(event), 0),
         ),
     )
+    renderer = _select_renderer(key_prefix=key_prefix, evidence_id=evidence_id)
+    if renderer == INTERACTIVE_RENDERER:
+        _render_interactive_chart(
+            result,
+            visible_events,
+            key=f"{key_prefix}_timing_workbench_{evidence_id}_{frame_choice}",
+            show_waits=show_waits,
+            show_deadlines=show_deadlines,
+            key_prefix=key_prefix,
+            export_name=f"timeline_{evidence_id}",
+            api_base=api_base,
+        )
+        return
+
+    try:
+        import plotly.graph_objects as go
+    except ImportError:
+        st.warning("Plotly is not installed in this environment. The timeline table is shown instead.")
+        render_copyable_dataframe(events, key=f"{key_prefix}_timing_chart_fallback", use_container_width=True, hide_index=True)
+        return
+
     include_frame = frame_choice == "All" and len(frame_values) > 1
     labels = [event_label(event, include_frame=include_frame) for event in visible_events]
     fig = go.Figure()
@@ -192,6 +211,180 @@ def render_timing_chart(result: dict[str, Any], *, key_prefix: str = "stored") -
     fig.update_yaxes(autorange="reversed")
     st.plotly_chart(fig, use_container_width=True, key=f"{key_prefix}_timing_chart_plot_{evidence_id}_{frame_choice}")
     render_timing_issue_tables(visible_events, key_prefix=key_prefix)
+
+
+def _select_renderer(*, key_prefix: str, evidence_id: str) -> str:
+    from dashboard.components.workbench import workbench_available
+
+    if not workbench_available():
+        return PLOTLY_RENDERER
+    return str(
+        st.radio(
+            "Renderer",
+            [INTERACTIVE_RENDERER, PLOTLY_RENDERER],
+            key=f"{key_prefix}_timing_chart_renderer_{evidence_id}",
+            horizontal=True,
+            label_visibility="collapsed",
+        )
+    )
+
+
+def _topology_graph_for_result(result: dict[str, Any], api_base: str | None) -> dict[str, Any] | None:
+    """Topology graph for the workbench diagram pane, or None when the
+    evidence lacks scenario refs or the view cannot be fetched."""
+
+    from dashboard.components.workbench_data import build_graph_payload
+
+    scenario_ref = str(result.get("scenario_ref") or "")
+    if not api_base or not scenario_ref:
+        return None
+    variant_ref = str(result.get("variant_ref") or "")
+    view = _fetch_view(api_base, scenario_ref, variant_ref, {"level": 0, "mode": "topology"})
+    return build_graph_payload(view)
+
+
+def _drill_graph_for_result(result: dict[str, Any], api_base: str | None, drill_node: str) -> dict[str, Any] | None:
+    """Level 2 module graph for a semantic-zoom drill, or None when
+    unavailable (falls back to the topology)."""
+
+    from dashboard.components.workbench_data import build_graph_payload
+
+    scenario_ref = str(result.get("scenario_ref") or "")
+    if not api_base or not scenario_ref:
+        return None
+    variant_ref = str(result.get("variant_ref") or "")
+    expand = drill_node[3:] if drill_node.startswith("ip-") else drill_node
+    view = _fetch_view(api_base, scenario_ref, variant_ref, {"level": 2, "expand": expand})
+    if view and view.get("metadata", {}).get("level2_available") is False:
+        return None
+    return build_graph_payload(view)
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def _fetch_view(
+    api_base: str,
+    scenario_ref: str,
+    variant_ref: str,
+    params: dict[str, Any],
+) -> dict[str, Any] | None:
+    import requests
+
+    base = api_base.rstrip("/")
+    if variant_ref:
+        url = f"{base}/scenarios/{scenario_ref}/variants/{variant_ref}/view"
+    else:
+        url = f"{base}/scenarios/{scenario_ref}/view"
+    try:
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        return response.json()
+    except Exception:
+        return None
+
+
+def _select_baseline_evidence(result: dict[str, Any], api_base: str | None, *, key: str) -> str | None:
+    """A/B baseline picker: sibling evidence of the same scenario/variant."""
+
+    scenario_ref = str(result.get("scenario_ref") or "")
+    if not api_base or not scenario_ref:
+        return None
+    current_id = str(result.get("id") or "")
+    candidates = _list_sibling_evidence(api_base, scenario_ref, str(result.get("variant_ref") or ""))
+    options = ["None"] + [item for item in candidates if item != current_id]
+    if len(options) == 1:
+        return None
+    choice = st.selectbox(
+        "Compare (A/B baseline)",
+        options,
+        key=f"{key}_baseline_choice",
+        help="Overlay another evidence of this scenario/variant as ghost bars (e.g. prediction vs measurement).",
+    )
+    return None if choice == "None" else str(choice)
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def _list_sibling_evidence(api_base: str, scenario_ref: str, variant_ref: str) -> list[str]:
+    try:
+        from dashboard.components.evidence_api_client import list_evidence
+
+        items = list_evidence(api_base, scenario_ref=scenario_ref, variant_ref=variant_ref or None, limit=50)
+        return [str(item.get("id")) for item in items if item.get("id")]
+    except Exception:
+        return []
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _baseline_timeline_events(api_base: str | None, evidence_id: str) -> list[dict[str, Any]] | None:
+    if not api_base:
+        return None
+    import requests
+
+    try:
+        response = requests.get(f"{api_base.rstrip('/')}/evidence/{evidence_id}", timeout=10)
+        response.raise_for_status()
+        payload = response.json()
+        events = payload.get("timeline_events") or (payload.get("kpi") or {}).get("timeline_events")
+        return [event for event in events or [] if isinstance(event, dict)] or None
+    except Exception:
+        return None
+
+
+def _render_interactive_chart(
+    result: dict[str, Any],
+    visible_events: list[dict[str, Any]],
+    *,
+    key: str,
+    show_waits: bool,
+    show_deadlines: bool,
+    key_prefix: str,
+    export_name: str = "timeline",
+    api_base: str | None = None,
+) -> None:
+    from dashboard.components.workbench import render_workbench_timeline
+    from dashboard.components.workbench_data import filter_events_by_range
+
+    # Semantic zoom: the drill target is owned by session state; the component
+    # requests changes through its return value (diagram_expand).
+    drill_state_key = f"{key}_diagram_drill"
+    drill_state = st.session_state.get(drill_state_key) or {}
+    drill_node = drill_state.get("node")
+    graph = _drill_graph_for_result(result, api_base, drill_node) if drill_node else None
+    if graph is None:
+        drill_node = None
+        graph = _topology_graph_for_result(result, api_base)
+
+    baseline_id = _select_baseline_evidence(result, api_base, key=key)
+    baseline_events = _baseline_timeline_events(api_base, baseline_id) if baseline_id else None
+
+    selection = render_workbench_timeline(
+        visible_events,
+        key=key,
+        show_waits=show_waits,
+        show_deadlines=show_deadlines,
+        export_name=export_name,
+        graph=graph,
+        drill_node=drill_node,
+        baseline_events=baseline_events,
+        baseline_name=baseline_id,
+    )
+
+    expand = (selection or {}).get("diagram_expand")
+    if expand and expand.get("seq") and expand["seq"] != drill_state.get("seq"):
+        st.session_state[drill_state_key] = {"node": expand.get("node"), "seq": expand["seq"]}
+        st.rerun()
+    table_events = visible_events
+    if selection and selection.get("range_start_ms") is not None and selection.get("range_end_ms") is not None:
+        table_events = filter_events_by_range(
+            visible_events,
+            float(selection["range_start_ms"]),
+            float(selection["range_end_ms"]),
+        )
+        st.caption(
+            "Tables filtered to selection "
+            f"{format_ms(selection['range_start_ms'])} - {format_ms(selection['range_end_ms'])} "
+            f"({len(table_events)} events). Press Esc in the chart to clear."
+        )
+    render_timing_issue_tables(table_events, key_prefix=key_prefix)
 
 
 def render_timing_chart_metrics(events: list[dict[str, Any]]) -> None:

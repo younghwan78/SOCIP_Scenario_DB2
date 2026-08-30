@@ -1,8 +1,8 @@
-id: meas-uc-camera-recording-UHD60-HDR10-H265-EVT0-sw123-20260419
+id: meas-uc-projecta-fhd30-recording-UHD60-HDR10-H265-EVT0-sw123-20260419
 schema_version: "2.2"
 kind: evidence.measurement
 
-scenario_ref: uc-camera-recording
+scenario_ref: uc-projecta-fhd30-recording
 variant_ref: UHD60-HDR10-H265
 project_ref: proj-A-exynos2500
 measured_at: "2026-04-19T14:30:00+09:00"
@@ -112,7 +112,7 @@ timeline_events:
 artifacts:
   - type: perfetto_trace
     storage: fileshare
-    path: "artifacts/proj-A/uc-camera-recording/UHD60-HDR10-H265/20260419-sw123/trace.pb"
+    path: "artifacts/proj-A/uc-projecta-fhd30-recording/UHD60-HDR10-H265/20260419-sw123/trace.pb"
     sha256: "cafebabe5678"
     bytes: 734003200
     mime: application/octet-stream

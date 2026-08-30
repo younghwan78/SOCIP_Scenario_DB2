@@ -34,6 +34,15 @@ capabilities:
     - COMP_YUV_LOSSLESS
     - COMP_YUV_LOSSY
   properties:
+    modules:
+    - name: DPU_RDMA
+      type: DMA
+      direction: read
+      role: layer_input
+      max_bandwidth: 8192000000
+      supported_compressions:
+      - COMP_OFF
+      - COMP_YUV_LOSSLESS
     ip_group: DPU
     hierarchy_group: Display
     subblocks:

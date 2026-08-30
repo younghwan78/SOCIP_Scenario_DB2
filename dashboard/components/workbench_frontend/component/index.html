@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Scenario Workbench</title>
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      html, body { width: 100%; height: 100%; overflow: hidden; }
+      body {
+        font-family: "Segoe UI", Inter, system-ui, sans-serif;
+        font-size: 13px;
+        background: transparent;
+      }
+      #workbench-root { display: flex; flex-direction: column; width: 100%; height: 100%; }
+      #wb-toolbar {
+        display: flex; align-items: center; gap: 8px;
+        padding: 6px 8px; flex: 0 0 auto;
+        border: 1px solid var(--wb-border, #DED8CF);
+        border-bottom: none;
+        border-radius: 8px 8px 0 0;
+        background: var(--wb-toolbar-bg, #F1EDE6);
+        color: var(--wb-text, #111827);
+      }
+      #wb-toolbar button {
+        font: inherit; font-size: 12px;
+        padding: 3px 10px;
+        border: 1px solid var(--wb-border, #DED8CF);
+        border-radius: 6px;
+        background: var(--wb-surface, #FFFFFF);
+        color: var(--wb-text, #111827);
+        cursor: pointer;
+      }
+      #wb-toolbar button:hover { border-color: var(--wb-primary, #2F6F68); color: var(--wb-primary, #2F6F68); }
+      #wb-toolbar button.wb-active {
+        background: var(--wb-primary, #2F6F68);
+        border-color: var(--wb-primary, #2F6F68);
+        color: #FFFFFF;
+      }
+      #wb-search {
+        font: inherit; font-size: 12px;
+        width: 150px;
+        padding: 3px 8px;
+        border: 1px solid var(--wb-border, #DED8CF);
+        border-radius: 6px;
+        background: var(--wb-surface, #FFFFFF);
+        color: var(--wb-text, #111827);
+      }
+      #wb-search:focus { outline: none; border-color: var(--wb-primary, #2F6F68); }
+      #wb-search-count { font-size: 11px; color: var(--wb-muted, #98A2B3); min-width: 34px; }
+      #wb-hint { margin-left: auto; font-size: 11px; color: var(--wb-muted, #98A2B3); }
+      #wb-body {
+        display: flex; flex: 1 1 auto; min-height: 0;
+        border: 1px solid var(--wb-border, #DED8CF);
+      }
+      #wb-canvas-wrap {
+        position: relative; flex: 1 1 auto; min-height: 0; min-width: 0;
+        overflow: hidden;
+      }
+      #wb-canvas { width: 100%; height: 100%; display: block; }
+      #wb-diagram {
+        flex: 0 0 300px; min-height: 0; overflow: auto; display: none;
+        border-left: 1px solid var(--wb-border, #DED8CF);
+        background: var(--wb-surface, #FFFFFF);
+        padding: 6px;
+      }
+      #wb-diagram.wb-open { display: block; }
+      .wb-diagram-svg { width: 100%; height: auto; }
+      .wb-diagram-message {
+        font-size: 11px; color: var(--wb-muted, #98A2B3);
+        padding: 12px 8px; text-align: center;
+      }
+      .wb-diagram-header {
+        display: flex; align-items: center; gap: 8px;
+        font-size: 10px; color: var(--wb-muted, #98A2B3);
+        padding: 2px 2px 6px 2px;
+      }
+      .wb-diagram-back {
+        font: inherit; font-size: 11px;
+        padding: 2px 8px;
+        border: 1px solid var(--wb-border, #DED8CF);
+        border-radius: 6px;
+        background: var(--wb-surface, #FFFFFF);
+        color: var(--wb-primary, #2F6F68);
+        cursor: pointer;
+      }
+      .wb-diagram-back:hover { border-color: var(--wb-primary, #2F6F68); }
+      #wb-footer {
+        flex: 0 0 auto; padding: 5px 10px;
+        border: 1px solid var(--wb-border, #DED8CF);
+        border-top: none;
+        border-radius: 0 0 8px 8px;
+        background: var(--wb-toolbar-bg, #F1EDE6);
+        color: var(--wb-muted, #667085);
+        font-size: 12px;
+        min-height: 27px;
+      }
+      #wb-footer .wb-stat { color: var(--wb-text, #111827); font-weight: 600; }
+      #wb-tooltip {
+        position: absolute; z-index: 10; display: none;
+        max-width: 340px;
+        padding: 8px 10px;
+        border: 1px solid var(--wb-border, #DED8CF);
+        border-radius: 8px;
+        background: var(--wb-surface, #FFFFFF);
+        color: var(--wb-text, #111827);
+        font-size: 11px; line-height: 1.5;
+        box-shadow: 0 4px 14px rgba(17, 24, 39, 0.14);
+        pointer-events: none;
+        white-space: pre;
+        font-family: Consolas, "JetBrains Mono", monospace;
+      }
+    </style>
+    <script type="module" crossorigin src="./assets/index-ClViV3_h.js"></script>
+  </head>
+  <body>
+    <div id="workbench-root">
+      <div id="wb-toolbar">
+        <button id="wb-fit" title="Fit all (F)">Fit</button>
+        <button id="wb-zoom-in" title="Zoom in (W)">+</button>
+        <button id="wb-zoom-out" title="Zoom out (S)">-</button>
+        <button id="wb-select" title="Toggle range-select drag mode (or shift+drag)">Select</button>
+        <button id="wb-flows" title="Show dependency arrows along the critical path">Arrows</button>
+        <button id="wb-png" title="Save the current timeline view as a PNG image">PNG</button>
+        <button id="wb-diagram-toggle" title="Show the pipeline topology beside the timeline (cross-probe)" hidden>Diagram</button>
+        <input id="wb-search" type="text" placeholder="Find task&hellip; (Enter)" title="Search tasks by id/hw/resource; Enter jumps to the next match" />
+        <span id="wb-search-count"></span>
+        <span id="wb-hint">drag pan &middot; wheel zoom &middot; shift+drag select &middot; click slice = flows &middot; F fit &middot; Esc clear</span>
+      </div>
+      <div id="wb-body">
+        <div id="wb-canvas-wrap">
+          <canvas id="wb-canvas"></canvas>
+          <div id="wb-tooltip"></div>
+        </div>
+        <div id="wb-diagram"></div>
+      </div>
+      <div id="wb-footer">No selection</div>
+    </div>
+    <script src="/app/static/elk.bundled.js"></script>
+  </body>
+</html>

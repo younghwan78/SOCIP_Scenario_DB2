@@ -6,7 +6,7 @@
         "detail_items": [
           "Route: csispdp -> n3aa",
           "Edge type: M2M",
-          "Buffer: RAW_BAYER_16 / 12b / COMP_BAYER_LOSSLESS"
+          "Buffer: RAW_BAYER_16 / sensor_full / 12b / COMP_BAYER_LOSSLESS"
         ],
         "flow_type": "M2M",
         "id": "l2e-0-mod-csispdp-csispdp-wdma-buf-csispdp-3aa-buf",
@@ -15,12 +15,20 @@
           "bitdepth": 12,
           "compression": "COMP_BAYER_LOSSLESS",
           "format": "RAW_BAYER_16",
-          "fps": 30
+          "fps": 30,
+          "height": 3000,
+          "width": 4000
         },
         "placement": {
           "llc_allocated": false,
           "llc_policy": "none"
         },
+        "port_pairs": [
+          {
+            "dst": "3AA_RDMA",
+            "src": "CSISPDP_WDMA"
+          }
+        ],
         "source": "mod-csispdp-csispdp-wdma",
         "target": "buf-csispdp-3aa-buf"
       }
@@ -35,7 +43,7 @@
     "level2_available": true,
     "module_source": "ip_catalog.capabilities.properties",
     "omitted_reasons": [],
-    "rendered_module_count": 2,
+    "rendered_module_count": 3,
     "target_nodes": [
       "csispdp"
     ],
@@ -102,7 +110,7 @@
           "Hierarchy: ISP",
           "IP block: CSIS/PDP",
           "Functional blocks: CSISPDP",
-          "I/O modules: CSISPDP_WDMA"
+          "I/O modules: CSISPDP_WDMA, CSISPDP_DS_WDMA"
         ],
         "hierarchy_group": "ISP",
         "id": "l2pkg-csispdp",
@@ -235,10 +243,62 @@
     },
     {
       "data": {
+        "capability_badges": [
+          "MaxBW:8.192GB/s",
+          "Comp:1"
+        ],
+        "collapsed_children_count": 0,
+        "detail_items": [
+          "Module: CSISPDP_DS_WDMA",
+          "Kind: wdma",
+          "Pipeline node: csispdp",
+          "Direction: output",
+          "Role: downscaled_raw_output",
+          "Max bandwidth: 8.192GB/s",
+          "Supported compression: COMP_BAYER_LOSSY"
+        ],
+        "hierarchy_group": "ISP",
+        "id": "mod-csispdp-csispdp-ds-wdma",
+        "ip_group": "CSIS/PDP",
+        "ip_ref": "ip-isp-s5e9965",
+        "label": "CSISPDP DS WDMA",
+        "layer": "hw",
+        "matched_issues": [],
+        "module_direction": "output",
+        "module_kind": "wdma",
+        "module_ref": "CSISPDP_DS_WDMA",
+        "module_status": "declared",
+        "parent": "l2pkg-csispdp",
+        "role_hw_name": "PDP",
+        "semantic_source": "level2-io-module",
+        "shared_resource": false,
+        "summary_badges": [
+          "WDMA",
+          "output"
+        ],
+        "type": "submodule",
+        "view_hints": {
+          "collapsed": false,
+          "emphasis": "normal",
+          "height": 64,
+          "lane": "hw",
+          "order": 2,
+          "stage": "processing",
+          "width": 185
+        },
+        "warning": false
+      },
+      "position": {
+        "x": 368.0,
+        "y": 320.0
+      }
+    },
+    {
+      "data": {
         "capability_badges": [],
         "collapsed_children_count": 0,
         "detail_items": [
-          "Buffer: RAW_BAYER_16 / 12b / COMP_BAYER_LOSSLESS"
+          "Buffer: RAW_BAYER_16 / sensor_full / 12b / COMP_BAYER_LOSSLESS"
         ],
         "id": "buf-csispdp-3aa-buf",
         "label": "Csispdp 3Aa Buf",
@@ -248,7 +308,9 @@
           "bitdepth": 12,
           "compression": "COMP_BAYER_LOSSLESS",
           "format": "RAW_BAYER_16",
-          "fps": 30
+          "fps": 30,
+          "height": 3000,
+          "width": 4000
         },
         "placement": {
           "llc_allocated": false,

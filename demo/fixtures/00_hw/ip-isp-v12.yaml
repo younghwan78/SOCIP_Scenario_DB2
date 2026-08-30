@@ -31,6 +31,96 @@ capabilities:
     bitdepth: [8, 10, 12]
     hdr_formats: [HDR10, HDR10plus, DolbyVision]
     compression: [SBWC_v4, AFBC_v2]
+  properties:
+    ip_group: ISP
+    subblocks:
+    - PDP
+    - PREP
+    - CSTAT
+    - BYRP
+    - RGBP
+    - MLSC
+    - MTNR0
+    - MTNR1
+    - MSNR
+    - YUVP
+    - MCSC
+    pipeline_description: 'OTF: PREP -> CSTAT, BYRP -> RGBP -> MLSC
+
+      M2M: CSIS => BYRP (COMP_RD0_RDMA), MLSC pyramid => MTNR0/MTNR1 via postIRTA
+
+      OTF: MTNR0/MTNR1 -> MSNR -> YUVP -> MCSC
+
+      '
+    modules:
+    - name: COMP_RD0_RDMA
+      type: DMA
+      direction: read
+      max_bandwidth: 8192000000
+      supported_compressions:
+      - SBWC_v4
+    - name: L0_WDMA
+      type: DMA
+      direction: write
+      role: pyramid_l0_output
+      max_bandwidth: 4096000000
+    - name: L1_WDMA
+      type: DMA
+      direction: write
+      role: pyramid_l1_output
+      max_bandwidth: 2048000000
+    - name: L2_WDMA
+      type: DMA
+      direction: write
+      role: pyramid_l2_output
+      max_bandwidth: 1024000000
+    - name: L3_WDMA
+      type: DMA
+      direction: write
+      role: pyramid_l3_output
+      max_bandwidth: 1024000000
+    - name: G4_WDMA
+      type: DMA
+      direction: write
+      role: pyramid_g4_output
+      max_bandwidth: 1024000000
+    - name: L0_RDMA
+      type: DMA
+      direction: read
+      role: pyramid_l0_input
+      max_bandwidth: 4096000000
+    - name: L1_RDMA
+      type: DMA
+      direction: read
+      role: pyramid_l1_input
+      max_bandwidth: 2048000000
+    - name: L2_RDMA
+      type: DMA
+      direction: read
+      role: pyramid_l2_input
+      max_bandwidth: 1024000000
+    - name: L3_RDMA
+      type: DMA
+      direction: read
+      role: pyramid_l3_input
+      max_bandwidth: 1024000000
+    - name: G4_RDMA
+      type: DMA
+      direction: read
+      role: pyramid_g4_input
+      max_bandwidth: 1024000000
+    - name: P0_WDMA
+      type: DMA
+      direction: write
+      role: record_output
+      max_bandwidth: 4096000000
+      supported_compressions:
+      - SBWC_v4
+    - name: P1_WDMA
+      type: DMA
+      direction: write
+      role: preview_output
+      max_bandwidth: 4096000000
   sim:
     hw_name: ISP
     source: legacy_project_info_csv

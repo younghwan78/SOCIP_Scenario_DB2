@@ -13,6 +13,17 @@ capabilities:
     - 8
     - 16
   properties:
+    modules:
+    - name: NPU_RDMA
+      type: DMA
+      direction: read
+      role: feature_input
+      max_bandwidth: 8192000000
+    - name: NPU_WDMA
+      type: DMA
+      direction: write
+      role: feature_output
+      max_bandwidth: 8192000000
     ip_group: NPU
     hierarchy_group: Compute
     use_cases:

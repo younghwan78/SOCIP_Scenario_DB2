@@ -16,7 +16,7 @@ for path in (_root / "src", _root, _root / "dashboard"):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
-from dashboard.components.ui_theme import apply_app_theme, render_page_header
+from dashboard.components.ui_theme import apply_app_theme, render_page_header, static_asset_url
 
 
 st.set_page_config(
@@ -116,8 +116,12 @@ def _asset_data_uri(asset_name: str) -> str:
     return f"data:image/png;base64,{encoded}"
 
 
+def _tile_logo_src(asset_name: str) -> str:
+    return static_asset_url(ASSET_DIR / asset_name) or _asset_data_uri(asset_name)
+
+
 def _home_card(title: str, description: str) -> str:
-    logo = _asset_data_uri(HOME_TILE_LOGOS[title])
+    logo = _tile_logo_src(HOME_TILE_LOGOS[title])
     return f"""
 <div class="home-tile">
   <div class="home-logo-panel">

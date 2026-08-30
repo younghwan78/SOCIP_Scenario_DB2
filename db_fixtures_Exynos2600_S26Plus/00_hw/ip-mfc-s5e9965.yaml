@@ -35,6 +35,20 @@ capabilities:
     - HDR10_PLUS
     - HLG
   properties:
+    modules:
+    - name: MFC_RDMA
+      type: DMA
+      direction: read
+      role: encode_input
+      max_bandwidth: 8192000000
+      supported_compressions:
+      - COMP_OFF
+      - COMP_YUV_LOSSLESS
+    - name: MFC_WDMA
+      type: DMA
+      direction: write
+      role: bitstream_output
+      max_bandwidth: 2048000000
     ip_group: MFC
     hierarchy_group: Codec
     codecs:

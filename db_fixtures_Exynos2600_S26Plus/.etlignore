@@ -1,0 +1,3 @@
+# Auxiliary files that are not ETL documents (no `kind`).
+# The measurement import mapping is consumed by the bench import adapter.
+sim_import_mapping.yaml

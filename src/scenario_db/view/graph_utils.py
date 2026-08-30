@@ -39,3 +39,20 @@ def resolution_to_size(resolution: Any) -> str | None:
         "8K": "7680x4320",
     }
     return mapping.get(str(resolution).upper())
+
+
+def edge_port_pairs(edge: dict) -> list[dict]:
+    """Normalized port pairs from a raw pipeline edge dict.
+
+    Returns [{"src": ..., "dst": ...}] entries suitable for the view schema;
+    malformed entries are dropped rather than failing the projection.
+    """
+    pairs: list[dict] = []
+    for pair in edge.get("port_pairs") or []:
+        if not isinstance(pair, dict):
+            continue
+        src = str(pair.get("src") or "").strip()
+        dst = str(pair.get("dst") or "").strip()
+        if src and dst:
+            pairs.append({"src": src, "dst": dst})
+    return pairs
