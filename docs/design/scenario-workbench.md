@@ -1,8 +1,10 @@
 # Scenario Workbench — Interactive Analysis Surface
 
-Status: Phases 1 and 2 implemented (timeline pane with flow arrows, minimap,
-search jump, track collapse/pinning, per-track stats, PNG export).
-Remaining phases designed, not yet built.
+Status: All five phases implemented — timeline pane (flow arrows, minimap,
+search jump, track collapse/pinning, per-track stats, PNG export), the
+diagram pane with two-way timeline<->topology cross-probing, semantic zoom
+(double-click drill to Level 2 module detail with a breadcrumb back), SVG
+export on the ELK views, and the A/B baseline overlay.
 
 ## 1. Motivation
 
@@ -166,12 +168,20 @@ stay in Streamlit unchanged — only the chart area swaps.
    (Enter cycles matches with an n/m counter), track collapse (header click)
    and pinning (pin icon floats tracks to the top), per-track event/busy
    stats, and PNG export of the current view at full backing resolution.
-3. Diagram pane: port `elk_viewer` JS to TypeScript inside the workbench;
-   node selection/highlight; **cross-probe** timeline <-> diagram through the
-   shared store.
-4. Semantic zoom: L0 block double-click expands L1/L2 in place; document-grade
-   SVG/PNG export.
-5. Compare mode: A/B evidence overlay (prediction vs measurement).
+3. **Diagram pane** (done): a compact ELK-layered topology pane beside the
+   timeline (ELK loaded from the Streamlit static route). Cross-probe both
+   ways — clicking a slice highlights the node it runs on; clicking a node
+   glows its events on the timeline and jumps to the first. The full-featured
+   diagram remains in the Pipeline Viewer; this pane is purpose-built for
+   reading time and structure together.
+4. **Semantic zoom + export** (done): double-clicking a topology block drills
+   into its Level 2 module detail in place (drill state owned by Streamlit
+   session state, requested through the component value), with a breadcrumb
+   back to the topology. ELK views gained an SVG export button; the timeline
+   exports PNG.
+5. **Compare mode** (done): an A/B baseline picker (sibling evidence of the
+   same scenario/variant) overlays the baseline as dashed ghost bars under
+   matching slices, with delta-start/delta-duration in the tooltip.
 
 ## 7. Verification
 
