@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 
-SCENARIO_ID = "uc-camera-recording"
+SCENARIO_ID = "uc-projecta-fhd30-recording"
 VARIANT_ID = "UHD60-HDR10-H265"
 DERIVED_VARIANT_ID = "UHD60-HDR10-sustained-10min"
 
@@ -25,8 +25,8 @@ def test_runtime_resolver_e2e(api_client):
     body = response.json()
     assert body["scenario_id"] == SCENARIO_ID
     assert body["variant_id"] == VARIANT_ID
-    assert "isp0" in body["ip_resolutions"]
-    assert body["ip_resolutions"]["isp0"]["status"] == "PASS"
+    assert "mlsc" in body["ip_resolutions"]
+    assert body["ip_resolutions"]["mlsc"]["status"] == "PASS"
 
 
 def test_runtime_resolver_uses_resolved_derived_variant(api_client):
@@ -108,13 +108,13 @@ def test_view_topology_projection_e2e(api_client):
 def test_view_drilldown_projection_e2e(api_client):
     response = api_client.get(
         f"/api/v1/scenarios/{SCENARIO_ID}/variants/{VARIANT_ID}/view",
-        params={"level": 2, "expand": "isp0"},
+        params={"level": 2, "expand": "mlsc"},
     )
 
     assert response.status_code == 200
     body = response.json()
     assert body["level"] == 2
-    assert body["metadata"]["expand"] == "isp0"
+    assert body["metadata"]["expand"] == "mlsc"
     assert body["metadata"]["layout"] == "level2-module-detail"
     assert body["metadata"]["level2_available"] is True
     assert any(node["data"]["module_kind"] == "functional" for node in body["nodes"])
@@ -174,10 +174,11 @@ def test_view_level2_camera_reference_projection_e2e(api_client):
     assert body["metadata"]["expand"] == "camera"
     assert body["metadata"]["layout"] == "level2-module-detail"
     assert body["metadata"]["level2_available"] is True
-    assert "l2pkg-isp0" in node_ids
+    assert "l2pkg-mlsc" in node_ids
     assert "l2cam-mlsc" not in node_ids
     assert any(node["data"]["module_kind"] == "functional" for node in body["nodes"])
-    assert body["metadata"]["omitted_reasons"]
+    # Every camera-path IP now declares modules/subblocks, so nothing is omitted.
+    assert body["metadata"]["omitted_reasons"] == []
 
 
 def test_view_level2_video_reference_projection_e2e(api_client):
@@ -189,10 +190,11 @@ def test_view_level2_video_reference_projection_e2e(api_client):
     assert response.status_code == 200
     body = response.json()
     assert body["metadata"]["expand"] == "video"
-    assert body["metadata"]["layout"] == "level2-unavailable"
-    assert body["metadata"]["level2_available"] is False
-    assert body["nodes"] == []
-    assert "module" in " ".join(body["metadata"]["required_data"]).lower()
+    # ip-mfc-v14 now declares MFC_RDMA/MFC_WDMA modules, so drill-down works.
+    assert body["metadata"]["layout"] == "level2-module-detail"
+    assert body["metadata"]["level2_available"] is True
+    node_ids = {node["data"]["id"] for node in body["nodes"]}
+    assert "l2pkg-mfc" in node_ids
 
 
 def test_view_level2_display_reference_projection_e2e(api_client):
@@ -204,6 +206,8 @@ def test_view_level2_display_reference_projection_e2e(api_client):
     assert response.status_code == 200
     body = response.json()
     assert body["metadata"]["expand"] == "display"
-    assert body["metadata"]["layout"] == "level2-unavailable"
-    assert body["metadata"]["level2_available"] is False
-    assert body["nodes"] == []
+    # ip-dpu-v9 now declares a DPU_RDMA module, so drill-down works.
+    assert body["metadata"]["layout"] == "level2-module-detail"
+    assert body["metadata"]["level2_available"] is True
+    node_ids = {node["data"]["id"] for node in body["nodes"]}
+    assert "l2pkg-dpu" in node_ids

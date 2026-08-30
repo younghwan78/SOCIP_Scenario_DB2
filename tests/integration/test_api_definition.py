@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 pytestmark = pytest.mark.integration
 
-SCENARIO_ID = "uc-camera-recording"
+SCENARIO_ID = "uc-projecta-fhd30-recording"
 VARIANT_ID = "UHD60-HDR10-H265"
 
 

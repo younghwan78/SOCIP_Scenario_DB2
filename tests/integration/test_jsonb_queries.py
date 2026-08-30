@@ -84,12 +84,12 @@ class TestDesignConditionsJsonb:
         assert results == []
 
     def test_ip_requirements_nested_jsonb(self, engine):
-        """ip_requirements JSONB 중첩 경로 — isp0.required_bitdepth."""
+        """ip_requirements JSONB 중첩 경로 — mlsc.required_bitdepth."""
         with Session(engine) as s:
             results = (
                 s.query(ScenarioVariant)
                 .filter(
-                    ScenarioVariant.ip_requirements["isp0"]["required_bitdepth"].astext == "10"
+                    ScenarioVariant.ip_requirements["mlsc"]["required_bitdepth"].astext == "10"
                 )
                 .all()
             )
@@ -294,7 +294,7 @@ class TestRawJsonbOperators:
         with Session(engine) as s:
             row = s.execute(
                 text(
-                    "SELECT ip_requirements #>> '{isp0,required_bitdepth}' AS bd "
+                    "SELECT ip_requirements #>> '{mlsc,required_bitdepth}' AS bd "
                     "FROM scenario_variants "
                     "WHERE id = 'UHD60-HDR10-H265'"
                 )

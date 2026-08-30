@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 pytestmark = pytest.mark.integration
 
-EVIDENCE_ID = "sim-uc-camera-recording-UHD60-HDR10-H265-EVT0-sw123-20260419"
+EVIDENCE_ID = "sim-uc-projecta-fhd30-recording-UHD60-HDR10-H265-EVT0-sw123-20260419"
 VARIANT_REF = "UHD60-HDR10-H265"
 SW_VERSION = "sw-vendor-v1.2.3"
 
@@ -87,8 +87,8 @@ def test_compare_variants(api_client: TestClient):
     resp = api_client.get(
         "/api/v1/compare/variants",
         params={
-            "ref1": f"uc-camera-recording::{VARIANT_REF}",
-            "ref2": "uc-camera-recording::8K120-HDR10plus-AV1-exploration",
+            "ref1": f"uc-projecta-fhd30-recording::{VARIANT_REF}",
+            "ref2": "uc-projecta-fhd30-recording::8K120-HDR10plus-AV1-exploration",
         },
     )
     assert resp.status_code == 200
@@ -98,7 +98,7 @@ def test_compare_variants(api_client: TestClient):
 # Compare 선택 정책 — kind/scenario 필터 + measured_at 최신 우선
 # ---------------------------------------------------------------------------
 
-MEAS_EVIDENCE_ID = "meas-uc-camera-recording-UHD60-HDR10-H265-EVT0-sw123-20260419"
+MEAS_EVIDENCE_ID = "meas-uc-projecta-fhd30-recording-UHD60-HDR10-H265-EVT0-sw123-20260419"
 
 
 def test_compare_evidence_kind_measurement_filter(api_client: TestClient):
@@ -150,7 +150,7 @@ def test_compare_evidence_prefers_latest_measured_at(api_client: TestClient):
 def test_compare_variants_uses_scenario_filter(api_client: TestClient):
     """ref의 scenario_id가 필터로 적용된다 — 다른 scenario에 같은 variant id가 있어도 매칭 금지."""
     wrong_ref = f"uc-no-such-scenario::{VARIANT_REF}"
-    right_ref = f"uc-camera-recording::{VARIANT_REF}"
+    right_ref = f"uc-projecta-fhd30-recording::{VARIANT_REF}"
     resp = api_client.get(
         "/api/v1/compare/variants",
         params={"ref1": wrong_ref, "ref2": right_ref},
@@ -158,7 +158,7 @@ def test_compare_variants_uses_scenario_filter(api_client: TestClient):
     assert resp.status_code == 200
     data = resp.json()
     assert data[wrong_ref] is None
-    assert data[right_ref]["scenario_ref"] == "uc-camera-recording"
+    assert data[right_ref]["scenario_ref"] == "uc-projecta-fhd30-recording"
     assert data[right_ref]["variant_ref"] == VARIANT_REF
 
 
