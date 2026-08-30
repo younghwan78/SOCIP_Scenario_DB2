@@ -49,12 +49,27 @@
       #wb-search:focus { outline: none; border-color: var(--wb-primary, #2F6F68); }
       #wb-search-count { font-size: 11px; color: var(--wb-muted, #98A2B3); min-width: 34px; }
       #wb-hint { margin-left: auto; font-size: 11px; color: var(--wb-muted, #98A2B3); }
-      #wb-canvas-wrap {
-        position: relative; flex: 1 1 auto; min-height: 0;
+      #wb-body {
+        display: flex; flex: 1 1 auto; min-height: 0;
         border: 1px solid var(--wb-border, #DED8CF);
+      }
+      #wb-canvas-wrap {
+        position: relative; flex: 1 1 auto; min-height: 0; min-width: 0;
         overflow: hidden;
       }
       #wb-canvas { width: 100%; height: 100%; display: block; }
+      #wb-diagram {
+        flex: 0 0 300px; min-height: 0; overflow: auto; display: none;
+        border-left: 1px solid var(--wb-border, #DED8CF);
+        background: var(--wb-surface, #FFFFFF);
+        padding: 6px;
+      }
+      #wb-diagram.wb-open { display: block; }
+      .wb-diagram-svg { width: 100%; height: auto; }
+      .wb-diagram-message {
+        font-size: 11px; color: var(--wb-muted, #98A2B3);
+        padding: 12px 8px; text-align: center;
+      }
       #wb-footer {
         flex: 0 0 auto; padding: 5px 10px;
         border: 1px solid var(--wb-border, #DED8CF);
@@ -91,16 +106,21 @@
         <button id="wb-select" title="Toggle range-select drag mode (or shift+drag)">Select</button>
         <button id="wb-flows" title="Show dependency arrows along the critical path">Arrows</button>
         <button id="wb-png" title="Save the current timeline view as a PNG image">PNG</button>
+        <button id="wb-diagram-toggle" title="Show the pipeline topology beside the timeline (cross-probe)" hidden>Diagram</button>
         <input id="wb-search" type="text" placeholder="Find task&hellip; (Enter)" title="Search tasks by id/hw/resource; Enter jumps to the next match" />
         <span id="wb-search-count"></span>
         <span id="wb-hint">drag pan &middot; wheel zoom &middot; shift+drag select &middot; click slice = flows &middot; F fit &middot; Esc clear</span>
       </div>
-      <div id="wb-canvas-wrap">
-        <canvas id="wb-canvas"></canvas>
-        <div id="wb-tooltip"></div>
+      <div id="wb-body">
+        <div id="wb-canvas-wrap">
+          <canvas id="wb-canvas"></canvas>
+          <div id="wb-tooltip"></div>
+        </div>
+        <div id="wb-diagram"></div>
       </div>
       <div id="wb-footer">No selection</div>
     </div>
+    <script src="/app/static/elk.bundled.js"></script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

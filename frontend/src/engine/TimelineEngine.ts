@@ -68,6 +68,7 @@ export class TimelineEngine {
   private searchIndex = -1
   private collapsedTrackIds = new Set<string>()
   private pinnedTrackIds: string[] = []
+  private highlightedTaskIds: Set<string> | null = null
   private brushAnchorMs = 0
   private brushCursorMs = 0
   private brush: BrushRange | null = null
@@ -214,8 +215,12 @@ export class TimelineEngine {
     }
     this.searchIndex = query === this.searchQuery ? (this.searchIndex + 1) % matches.length : 0
     this.searchQuery = query
-    const event = matches[this.searchIndex]
+    this.jumpToEvent(matches[this.searchIndex])
+    return { total: matches.length, index: this.searchIndex }
+  }
 
+  /** Center the viewport on an event and select it. */
+  public jumpToEvent(event: TimelineEvent): void {
     const start = eventStart(event)
     const end = eventEnd(event)
     const span = Math.max(2, (end - start) * 6)
@@ -230,7 +235,16 @@ export class TimelineEngine {
       this.onSelect?.(event.task_id)
     }
     this.requestRender()
-    return { total: matches.length, index: this.searchIndex }
+  }
+
+  public getEvents(): TimelineEvent[] {
+    return this.events
+  }
+
+  /** Cross-probe glow for the given task ids (null clears). */
+  public setHighlightedTaskIds(ids: Set<string> | null): void {
+    this.highlightedTaskIds = ids && ids.size ? ids : null
+    this.requestRender()
   }
 
   private scrollEventIntoView(event: TimelineEvent): void {
@@ -522,10 +536,17 @@ export class TimelineEngine {
       ctx.roundRect(x0, sliceY, sliceW, sliceH, 3)
       ctx.fill()
 
+      const isHighlighted = this.highlightedTaskIds?.has(event.task_id) ?? false
       if (isSelected) {
         ctx.strokeStyle = this.theme.selectionBorder
         ctx.lineWidth = 2.5
         ctx.stroke()
+      } else if (isHighlighted) {
+        ctx.strokeStyle = this.theme.selectionBorder
+        ctx.lineWidth = 2
+        ctx.setLineDash([4, 2])
+        ctx.stroke()
+        ctx.setLineDash([])
       } else if (event.critical) {
         ctx.strokeStyle = this.theme.criticalBorder
         ctx.lineWidth = 2

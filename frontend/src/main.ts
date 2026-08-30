@@ -1,4 +1,7 @@
 import { initBridge, setComponentValue, setFrameHeight } from './bridge/streamlitBridge'
+import { DiagramPane } from './diagram/DiagramPane'
+import type { DiagramGraph } from './diagram/mapping'
+import { eventsForDiagramNode, matchDiagramNode } from './diagram/mapping'
 import type { BrushRange, HoverHit } from './engine/TimelineEngine'
 import { TimelineEngine } from './engine/TimelineEngine'
 import { formatMs } from './engine/format'
@@ -52,10 +55,46 @@ function escapeHtml(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
 
+// --- Diagram pane (cross-probe) --------------------------------------------
+const diagramContainer = document.getElementById('wb-diagram') as HTMLDivElement
+const diagramToggle = document.getElementById('wb-diagram-toggle') as HTMLButtonElement | null
+const diagramPane = new DiagramPane(diagramContainer, themeByName(themeName))
+let diagramGraph: DiagramGraph = { nodes: [], edges: [] }
+let diagramOpen = false
+let diagramLoaded = false
+
+function openDiagram(open: boolean): void {
+  diagramOpen = open
+  diagramContainer.classList.toggle('wb-open', open)
+  diagramToggle?.classList.toggle('wb-active', open)
+  if (open && !diagramLoaded) {
+    diagramLoaded = true
+    void diagramPane.setGraph(diagramGraph)
+  }
+  engine.resize()
+}
+
+diagramToggle?.addEventListener('click', () => openDiagram(!diagramOpen))
+
+diagramPane.onNodeClick = (node) => {
+  const events = eventsForDiagramNode(engine.getEvents(), node.id, node.label)
+  engine.setHighlightedTaskIds(new Set(events.map((event) => event.task_id)))
+  diagramPane.highlightNode(node.id)
+  if (events.length) engine.jumpToEvent(events[0])
+}
+
 engine.onSelect = (taskId: string | null) => {
   selection.selectedTaskId = taskId
   footer.innerHTML = describeSelection()
   reportSelection()
+  // Timeline -> diagram probe: light up the node the slice runs on.
+  if (!taskId) {
+    diagramPane.highlightNode(null)
+    engine.setHighlightedTaskIds(null)
+  } else {
+    const event = engine.getEvents().find((item) => item.task_id === taskId)
+    diagramPane.highlightNode(event ? matchDiagramNode(diagramGraph.nodes, event) : null)
+  }
 }
 
 engine.onRange = (range: BrushRange | null) => {
@@ -169,6 +208,14 @@ initBridge((args) => {
   const events = (Array.isArray(args.events) ? args.events : []) as TimelineEvent[]
   exportName = String(args.exportName || 'timeline')
   engine.setData(events, options)
+
+  const rawGraph = args.graph as DiagramGraph | undefined
+  diagramGraph = rawGraph && Array.isArray(rawGraph.nodes) ? rawGraph : { nodes: [], edges: [] }
+  if (diagramToggle) diagramToggle.hidden = !diagramGraph.nodes.length
+  diagramPane.setTheme(themeByName(themeName))
+  if (diagramLoaded) {
+    void diagramPane.setGraph(diagramGraph)
+  }
 
   // Data change resets client selection; keep footer in sync.
   const current = engine.getSelection()

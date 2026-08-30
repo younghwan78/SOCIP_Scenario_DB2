@@ -38,8 +38,12 @@ def render_workbench_timeline(
     show_deadlines: bool = True,
     theme: str = "light",
     export_name: str = "timeline",
+    graph: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     """Render the interactive timeline pane and return the normalized selection.
+
+    ``graph`` (from :func:`workbench_data.build_graph_payload`) enables the
+    side diagram pane with timeline<->topology cross-probing.
 
     Returns ``None`` when nothing is selected; otherwise a dict with
     ``selected_task_id``, ``range_start_ms``, ``range_end_ms``, ``range_stats``.
@@ -52,6 +56,8 @@ def render_workbench_timeline(
         theme=theme,
         export_name=export_name,
     )
+    if graph:
+        args["graph"] = graph
     component = _get_component()
     raw = component(key=key, default=None, **args)
     return normalize_selection(raw)

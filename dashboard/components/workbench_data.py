@@ -80,6 +80,57 @@ def build_component_args(
     }
 
 
+_LAYOUT_NODE_TYPES = {"lane_bg", "lane_label", "stage_header"}
+
+
+def build_graph_payload(view: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Slim a ViewResponse payload into the workbench diagram-pane graph.
+
+    Keeps only what the pane renders: node id/label/type/layer and edge
+    endpoints with flow type. Returns None when there is nothing to draw.
+    """
+
+    if not isinstance(view, dict):
+        return None
+    nodes = []
+    for node in view.get("nodes") or []:
+        data = node.get("data") if isinstance(node, dict) else None
+        if not isinstance(data, dict):
+            continue
+        node_type = str(data.get("type") or "")
+        if node_type in _LAYOUT_NODE_TYPES:
+            continue
+        nodes.append(
+            {
+                "id": str(data.get("id") or ""),
+                "label": str(data.get("label") or data.get("id") or ""),
+                "type": node_type,
+                "layer": str(data.get("layer") or ""),
+            }
+        )
+    node_ids = {node["id"] for node in nodes}
+    edges = []
+    for index, edge in enumerate(view.get("edges") or []):
+        data = edge.get("data") if isinstance(edge, dict) else None
+        if not isinstance(data, dict):
+            continue
+        source = str(data.get("source") or "")
+        target = str(data.get("target") or "")
+        if source not in node_ids or target not in node_ids:
+            continue
+        edges.append(
+            {
+                "id": str(data.get("id") or f"g-{index}"),
+                "source": source,
+                "target": target,
+                "flow_type": str(data.get("flow_type") or "M2M"),
+            }
+        )
+    if not nodes:
+        return None
+    return {"nodes": nodes, "edges": edges}
+
+
 def filter_events_by_range(events: list[dict[str, Any]], start_ms: float, end_ms: float) -> list[dict[str, Any]]:
     """Events whose [start, end) interval intersects the selected range.
 

@@ -102,7 +102,7 @@ INTERACTIVE_RENDERER = "Interactive (beta)"
 PLOTLY_RENDERER = "Plotly"
 
 
-def render_timing_chart(result: dict[str, Any], *, key_prefix: str = "stored") -> None:
+def render_timing_chart(result: dict[str, Any], *, key_prefix: str = "stored", api_base: str | None = None) -> None:
     events = timeline_events(result)
     if not events:
         st.info("No timeline events are available for chart rendering.")
@@ -145,6 +145,7 @@ def render_timing_chart(result: dict[str, Any], *, key_prefix: str = "stored") -
             show_deadlines=show_deadlines,
             key_prefix=key_prefix,
             export_name=f"timeline_{evidence_id}",
+            graph=_topology_graph_for_result(result, api_base),
         )
         return
 
@@ -227,6 +228,37 @@ def _select_renderer(*, key_prefix: str, evidence_id: str) -> str:
     )
 
 
+def _topology_graph_for_result(result: dict[str, Any], api_base: str | None) -> dict[str, Any] | None:
+    """Topology graph for the workbench diagram pane, or None when the
+    evidence lacks scenario refs or the view cannot be fetched."""
+
+    from dashboard.components.workbench_data import build_graph_payload
+
+    scenario_ref = str(result.get("scenario_ref") or "")
+    if not api_base or not scenario_ref:
+        return None
+    variant_ref = str(result.get("variant_ref") or "")
+    view = _fetch_topology_view(api_base, scenario_ref, variant_ref)
+    return build_graph_payload(view)
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def _fetch_topology_view(api_base: str, scenario_ref: str, variant_ref: str) -> dict[str, Any] | None:
+    import requests
+
+    base = api_base.rstrip("/")
+    if variant_ref:
+        url = f"{base}/scenarios/{scenario_ref}/variants/{variant_ref}/view"
+    else:
+        url = f"{base}/scenarios/{scenario_ref}/view"
+    try:
+        response = requests.get(url, params={"level": 0, "mode": "topology"}, timeout=10)
+        response.raise_for_status()
+        return response.json()
+    except Exception:
+        return None
+
+
 def _render_interactive_chart(
     visible_events: list[dict[str, Any]],
     *,
@@ -235,6 +267,7 @@ def _render_interactive_chart(
     show_deadlines: bool,
     key_prefix: str,
     export_name: str = "timeline",
+    graph: dict[str, Any] | None = None,
 ) -> None:
     from dashboard.components.workbench import render_workbench_timeline
     from dashboard.components.workbench_data import filter_events_by_range
@@ -245,6 +278,7 @@ def _render_interactive_chart(
         show_waits=show_waits,
         show_deadlines=show_deadlines,
         export_name=export_name,
+        graph=graph,
     )
     table_events = visible_events
     if selection and selection.get("range_start_ms") is not None and selection.get("range_end_ms") is not None:

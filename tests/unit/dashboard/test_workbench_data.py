@@ -6,6 +6,7 @@ import pytest
 from dashboard.components.workbench_data import (
     DEFAULT_FRAME_INTERVAL_MS,
     build_component_args,
+    build_graph_payload,
     derive_frame_interval_ms,
     filter_events_by_range,
     normalize_selection,
@@ -59,6 +60,29 @@ class TestBuildComponentArgs:
         assert args["exportName"] == "timeline_evid_1_bad"
         assert build_component_args([], export_name="///")["exportName"] == "___"
         assert build_component_args([])["exportName"] == "timeline"
+
+
+class TestBuildGraphPayload:
+    VIEW = {
+        "nodes": [
+            {"data": {"id": "csis0", "label": "CSIS0", "type": "ip", "layer": "hw"}},
+            {"data": {"id": "buf-rec", "label": "Record Buf", "type": "buffer", "layer": "memory"}},
+            {"data": {"id": "lane-1", "label": "", "type": "lane_bg", "layer": "meta"}},
+        ],
+        "edges": [
+            {"data": {"id": "e1", "source": "csis0", "target": "buf-rec", "flow_type": "M2M"}},
+            {"data": {"id": "e2", "source": "csis0", "target": "ghost", "flow_type": "OTF"}},
+        ],
+    }
+
+    def test_slims_nodes_and_drops_layout_and_dangling(self):
+        graph = build_graph_payload(self.VIEW)
+        assert [node["id"] for node in graph["nodes"]] == ["csis0", "buf-rec"]
+        assert graph["edges"] == [{"id": "e1", "source": "csis0", "target": "buf-rec", "flow_type": "M2M"}]
+
+    def test_returns_none_for_empty_or_invalid(self):
+        assert build_graph_payload(None) is None
+        assert build_graph_payload({"nodes": []}) is None
 
 
 class TestFilterEventsByRange:
