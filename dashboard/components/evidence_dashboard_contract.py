@@ -75,6 +75,9 @@ def build_pipeline_viewer_url(
         "scenario_id": scenario_id,
         "variant_id": variant_id,
         "sim_evidence_id": evidence_id,
+        # Deep link straight into the Simulation Timing panel when the link
+        # carries a concrete evidence id.
+        "panel": "timing" if evidence_id else None,
     }
     clean = {key: value for key, value in query.items() if value not in (None, "")}
     return f"/Pipeline_Viewer?{urlencode(clean)}"

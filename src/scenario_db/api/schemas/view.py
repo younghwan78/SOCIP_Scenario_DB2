@@ -59,6 +59,12 @@ class SimOverlay(BaseModel):
     hw_time_ms: float | None = None
     feasible: bool = True
     evidence_id: str | None = None
+    # Frame-0 schedule window from evidence timeline_events; critical marks
+    # membership of the simulated critical path, bottleneck the OTF-group limiter.
+    start_ms: float | None = None
+    end_ms: float | None = None
+    critical: bool = False
+    bottleneck: bool = False
 
 
 class EdgeSimOverlay(BaseModel):
@@ -228,6 +234,9 @@ class EdgeData(BaseModel):
     sim_overlay: EdgeSimOverlay | None = None
     label: str | None = None
     detail_items: list[str] = []
+    # Both endpoints on the simulated critical path (set by the sim overlay).
+    # None (not False) by default so plain projections serialize unchanged.
+    critical: bool | None = None
 
 
 class EdgeElement(BaseModel):

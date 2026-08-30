@@ -24,12 +24,16 @@ def apply_simulation_overlay(view: ViewResponse, evidence) -> ViewResponse:
     evidence_id = getattr(evidence, "id", None)
     node_rows = _sim_node_rows(evidence)
     dma_rows = _sim_dma_rows(evidence)
+    schedule_rows = _sim_schedule_rows(evidence)
 
     for node in view.nodes:
         row = _match_node_sim_row(node.data, node_rows)
-        if not row:
+        schedule = _match_node_schedule(node.data, schedule_rows)
+        if not row and not schedule:
             continue
+        row = row or {}
         timing = row.get("_timing") or {}
+        schedule = schedule or {}
         node.data.sim_overlay = SimOverlay(
             required_clock_mhz=_num(row.get("required_clock_mhz")),
             set_clock_mhz=_num(row.get("set_clock_mhz")),
@@ -38,8 +42,14 @@ def apply_simulation_overlay(view: ViewResponse, evidence) -> ViewResponse:
             hw_time_ms=_num(timing.get("hw_time_ms")),
             feasible=bool(row.get("feasible", timing.get("feasible", True))),
             evidence_id=evidence_id,
+            start_ms=_num(schedule.get("start_ms")),
+            end_ms=_num(schedule.get("end_ms")),
+            critical=bool(schedule.get("critical")),
+            bottleneck=bool(schedule.get("bottleneck")),
         )
         _append_sim_node_text(node.data)
+
+    _mark_critical_edges(view)
 
     for edge in view.edges:
         rows = _match_edge_dma_rows(edge.data, dma_rows)
@@ -90,6 +100,61 @@ def _sim_dma_rows(evidence) -> list[dict[str, Any]]:
         for row in (getattr(evidence, "dma_breakdown", None) or [])
         if isinstance(row, dict)
     ]
+
+
+def _sim_schedule_rows(evidence) -> dict[str, dict[str, Any]]:
+    """Frame-0 schedule window per node from evidence timeline_events.
+
+    critical/bottleneck are ORed across frames so a node that only limits a
+    later frame still gets flagged.
+    """
+
+    rows: dict[str, dict[str, Any]] = {}
+    for event in getattr(evidence, "timeline_events", None) or []:
+        if not isinstance(event, dict):
+            continue
+        node_id = str(event.get("node_id") or "")
+        if not node_id:
+            continue
+        frame = _num(event.get("frame_index")) or 0.0
+        entry = rows.setdefault(node_id, {"critical": False, "bottleneck": False})
+        if frame == 0.0 and entry.get("start_ms") is None:
+            entry["start_ms"] = _num(event.get("start_ms"))
+            entry["end_ms"] = _num(event.get("end_ms"))
+        entry["critical"] = entry["critical"] or bool(event.get("critical"))
+        entry["bottleneck"] = entry["bottleneck"] or bool(event.get("bottleneck"))
+    return rows
+
+
+def _match_node_schedule(data: NodeData, rows: dict[str, dict[str, Any]]) -> dict[str, Any] | None:
+    node_text = f"{data.id} {data.label} {data.ip_ref or ''}".lower()
+    node_id = data.id.lower()
+    bare_id = node_id[3:] if node_id.startswith("ip-") else node_id
+    for key, entry in rows.items():
+        candidate = key.lower()
+        normalized = candidate.replace("_", "-")
+        if candidate in (node_id, bare_id) or normalized in (node_id, bare_id):
+            return entry
+    for key, entry in rows.items():
+        candidate = key.lower()
+        if candidate and candidate in node_text:
+            return entry
+    return None
+
+
+def _mark_critical_edges(view: ViewResponse) -> None:
+    """Flag edges whose both endpoints sit on the simulated critical path."""
+
+    critical_nodes = {
+        node.data.id
+        for node in view.nodes
+        if node.data.sim_overlay is not None and node.data.sim_overlay.critical
+    }
+    if not critical_nodes:
+        return
+    for edge in view.edges:
+        if edge.data.source in critical_nodes and edge.data.target in critical_nodes:
+            edge.data.critical = True
 
 
 def _match_node_sim_row(data: NodeData, rows: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -256,6 +321,10 @@ def _append_sim_node_text(data: NodeData) -> None:
         badges.append(f"{overlay.set_clock_mhz:.0f}MHz")
     if overlay.power_mw is not None:
         badges.append(f"{overlay.power_mw:.1f}mW")
+    if overlay.critical:
+        badges.append("CRIT")
+    elif overlay.bottleneck:
+        badges.append("BTLNK")
     for badge in badges:
         if badge not in data.summary_badges:
             data.summary_badges.append(badge)
@@ -292,6 +361,12 @@ def _sim_node_detail(overlay: SimOverlay) -> str | None:
         bits.append(f"{overlay.power_mw:.1f}mW")
     if overlay.hw_time_ms is not None:
         bits.append(f"{overlay.hw_time_ms:.2f}ms")
+    if overlay.start_ms is not None and overlay.end_ms is not None:
+        bits.append(f"t {overlay.start_ms:.2f}-{overlay.end_ms:.2f}ms")
+    if overlay.critical:
+        bits.append("critical path")
+    elif overlay.bottleneck:
+        bits.append("bottleneck")
     if not overlay.feasible:
         bits.append("infeasible")
     return "Sim: " + ", ".join(bits) if bits else None

@@ -31,6 +31,12 @@ from dashboard.components.graph_inspector import (
     node_options,
 )
 from dashboard.components.level0_resource_overview import render_level0_resource_overview
+from dashboard.components.viewer_timing_panel import (
+    list_saved_simulation_results,
+    render_viewer_timing_panel,
+    resolve_overlay_evidence_id,
+    saved_evidence_option_label,
+)
 from dashboard.components.level2_expand_options import (
     CUSTOM_EXPAND_OPTION,
     build_level2_expand_options,
@@ -791,10 +797,33 @@ with st.sidebar:
     st.session_state["viewer_sim_mode"] = sim_mode
     sim_evidence_id = ""
     if sim_mode == "specific":
-        sim_evidence_id = st.text_input(
-            "Simulation Evidence ID",
-            value=query_sim_evidence_id or st.session_state.get("viewer_sim_evidence_id", ""),
-        )
+        saved_results = list_saved_simulation_results(api_base, scenario_id_input, variant_id_input)
+        saved_ids = [str(item.get("id")) for item in saved_results if item.get("id")]
+        labels = {str(item.get("id")): saved_evidence_option_label(item) for item in saved_results}
+        preset_id = query_sim_evidence_id or st.session_state.get("viewer_sim_evidence_id", "")
+        custom_option = "Custom evidence id..."
+        if saved_ids:
+            options = [*saved_ids, custom_option]
+            default_index = saved_ids.index(preset_id) if preset_id in saved_ids else (
+                len(options) - 1 if preset_id else 0
+            )
+            choice = st.selectbox(
+                "Saved Simulation Evidence",
+                options,
+                index=default_index,
+                format_func=lambda value: labels.get(value, value),
+                help="Saved simulation evidence for this scenario/variant, newest first.",
+            )
+        else:
+            choice = custom_option
+            st.caption("No saved simulation evidence for this scenario/variant yet.")
+        if choice == custom_option:
+            sim_evidence_id = st.text_input(
+                "Simulation Evidence ID",
+                value=preset_id,
+            )
+        else:
+            sim_evidence_id = choice
         st.session_state["viewer_sim_evidence_id"] = sim_evidence_id
 
 overlay_evidence_id = sim_evidence_id if sim_mode == "specific" and sim_evidence_id else None
@@ -1027,3 +1056,25 @@ with main_col:
                 title=f"Level 2 - Drill Down ({title_expand})",
             )
         st.markdown("</div>", unsafe_allow_html=True)
+
+    # Simulation timing: the schedule behind the overlay numbers, rendered as
+    # the workbench timeline (with its own diagram cross-probe) right under
+    # the pipeline diagram. Deep links can open it via ?panel=timing.
+    timing_evidence_id = resolve_overlay_evidence_id(
+        api_base,
+        scenario_id_input,
+        variant_id_input,
+        sim_mode=sim_mode,
+        sim_evidence_id=overlay_evidence_id,
+    )
+    if timing_evidence_id:
+        render_viewer_timing_panel(
+            api_base=api_base,
+            evidence_id=timing_evidence_id,
+            expanded=st.query_params.get("panel") == "timing",
+        )
+    elif sim_mode != "none":
+        st.caption(
+            "Simulation Timing: no saved simulation evidence found for this "
+            "scenario/variant. Run and save one from the Evidence Dashboard."
+        )

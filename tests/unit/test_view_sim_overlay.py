@@ -168,3 +168,91 @@ def test_apply_simulation_overlay_does_not_attach_unmatched_dma_to_all_m2m_edges
     result = apply_simulation_overlay(view, evidence)
 
     assert result.edges[0].data.sim_overlay is None
+
+
+def _summary() -> ViewSummary:
+    return ViewSummary(
+        scenario_id="uc-camera-recording",
+        variant_id="cam-rec-r1-fhd30-vdis",
+        name="Camera",
+        subtitle="FHD30",
+        period_ms=33.3,
+        budget_ms=30.0,
+        resolution="1920x1080",
+        fps=30,
+        variant_label="FHD30",
+    )
+
+
+def _hw_node(node_id: str) -> NodeElement:
+    return NodeElement(
+        data=NodeData(id=node_id, label=node_id.upper(), type="ip", layer="hw"),
+        position={"x": 0, "y": 0},
+    )
+
+
+def test_apply_simulation_overlay_maps_timeline_schedule_and_critical_path():
+    view = ViewResponse(
+        level=1,
+        scenario_id="uc-camera-recording",
+        variant_id="cam-rec-r1-fhd30-vdis",
+        mode="architecture",
+        nodes=[_hw_node("ip-csispdp"), _hw_node("ip-mcsc"), _hw_node("ip-dpu")],
+        edges=[
+            EdgeElement(data=EdgeData(id="e-a", source="ip-csispdp", target="ip-mcsc", flow_type="OTF")),
+            EdgeElement(data=EdgeData(id="e-b", source="ip-mcsc", target="ip-dpu", flow_type="M2M")),
+        ],
+        summary=_summary(),
+    )
+    evidence = SimpleNamespace(
+        id="sim-test-03",
+        dvfs_breakdown=[],
+        timing_breakdown=[],
+        dma_breakdown=[],
+        timeline_events=[
+            {
+                "node_id": "csispdp",
+                "frame_index": 0,
+                "start_ms": 0.0,
+                "end_ms": 18.9,
+                "critical": True,
+                "bottleneck": True,
+            },
+            {
+                "node_id": "mcsc",
+                "frame_index": 0,
+                "start_ms": 18.9,
+                "end_ms": 26.4,
+                "critical": True,
+            },
+            # Later frame only marks flags; frame-0 window must stay authoritative.
+            {
+                "node_id": "mcsc",
+                "frame_index": 1,
+                "start_ms": 52.2,
+                "end_ms": 59.7,
+            },
+            {
+                "node_id": "dpu",
+                "frame_index": 0,
+                "start_ms": 26.4,
+                "end_ms": 29.7,
+            },
+        ],
+    )
+
+    result = apply_simulation_overlay(view, evidence)
+
+    csis = result.nodes[0].data
+    mcsc = result.nodes[1].data
+    dpu = result.nodes[2].data
+    assert csis.sim_overlay is not None and csis.sim_overlay.critical
+    assert csis.sim_overlay.bottleneck
+    assert "CRIT" in csis.summary_badges
+    assert mcsc.sim_overlay is not None
+    assert (mcsc.sim_overlay.start_ms, mcsc.sim_overlay.end_ms) == (18.9, 26.4)
+    assert any("t 18.90-26.40ms" in item for item in mcsc.detail_items)
+    assert dpu.sim_overlay is not None and not dpu.sim_overlay.critical
+    # Edge between two critical nodes is flagged; the one into dpu is not.
+    assert result.edges[0].data.critical is True
+    assert not result.edges[1].data.critical
