@@ -32,10 +32,13 @@ function classify(event: TimelineEvent): { id: string; title: string; category: 
   }
   const taskType = String(event.task_type ?? '').toLowerCase()
   if (taskType.includes('sw')) {
+    // One track per SW task, named by the task; the shared processor
+    // (resource_id, e.g. CPU_MID) rides along in parentheses.
     const res = String(event.resource_id || 'CPU')
+    const name = String(event.node_id || res)
     return {
-      id: `track_sw_${res}`,
-      title: `SW: ${res}`,
+      id: `track_sw_${name}`,
+      title: name === res ? `SW: ${res}` : `SW: ${name} (${res})`,
       category: 'sw',
       color: SW_COLOR_FAMILIES[timelineGroupIndex(res, res) % SW_COLOR_FAMILIES.length],
     }
@@ -48,16 +51,39 @@ function classify(event: TimelineEvent): { id: string; title: string; category: 
     return { id: `track_otf_${group}`, title: `OTF: ${group}`, category: 'hw_otf', color: family[0] }
   }
   if (taskType.includes('dma') || taskType.includes('m2m') || edgeType.includes('dma') || edgeType.includes('m2m')) {
-    const res = String(event.resource_id || event.node_id || 'DMA')
+    // Track per node (IP), colored by the shared resource so contention on
+    // the same engine still reads as one color family.
+    const res = String(event.resource_id || 'DMA')
+    const name = String(event.node_id || res)
     return {
-      id: `track_m2m_${res}`,
-      title: `M2M: ${res}`,
+      id: `track_m2m_${name}`,
+      title: name === res ? `M2M: ${res}` : `M2M: ${name} (${res})`,
       category: 'hw_m2m',
       color: M2M_COLOR_FAMILIES[timelineGroupIndex(res, res) % M2M_COLOR_FAMILIES.length],
     }
   }
-  const res = String(event.resource_id || event.node_id || 'HW')
-  return { id: `track_hw_${res}`, title: `HW: ${res}`, category: 'misc', color: DEFAULT_COLOR }
+  const res = String(event.resource_id || 'HW')
+  const name = String(event.node_id || res)
+  return {
+    id: `track_hw_${name}`,
+    title: name === res ? `HW: ${res}` : `HW: ${name} (${res})`,
+    category: 'misc',
+    color: DEFAULT_COLOR,
+  }
+}
+
+// OTF streaming groups keep one track, but the title names the chain of
+// pipeline nodes instead of the synthetic group id (otf-0, otf-1, ...).
+function otfTrackTitle(seed: TrackSeed): string {
+  const ordered = [...seed.events].sort((a, b) => eventStart(a) - eventStart(b))
+  const nodes: string[] = []
+  for (const event of ordered) {
+    const name = String(event.node_id ?? '')
+    if (name && !nodes.includes(name)) nodes.push(name)
+  }
+  if (!nodes.length) return seed.title
+  if (nodes.length <= 3) return `OTF: ${nodes.join(' > ')}`
+  return `OTF: ${nodes[0]} > ... > ${nodes[nodes.length - 1]} (${nodes.length} IPs)`
 }
 
 // Greedy interval-partitioning: earliest-start order, first lane whose last
@@ -99,7 +125,7 @@ export function buildTracks(events: TimelineEvent[]): TrackDefinition[] {
     const busyMs = seed.events.reduce((total, event) => total + Math.max(0, eventEnd(event) - eventStart(event)), 0)
     tracks.push({
       id: seed.id,
-      title: seed.title,
+      title: seed.category === 'hw_otf' ? otfTrackTitle(seed) : seed.title,
       category: seed.category,
       color: seed.color,
       laneCount,
