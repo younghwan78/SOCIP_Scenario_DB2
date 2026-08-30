@@ -86,7 +86,7 @@
         "detail_items": [
           "Route: yuvsc -> mtnr",
           "Edge type: M2M",
-          "Buffer: YUV422 / 10b / COMP_OFF"
+          "Buffer: YUV422 / record_out / 10b / COMP_OFF"
         ],
         "flow_type": "M2M",
         "id": "l1-sem-4",
@@ -126,8 +126,8 @@
         "label": "OTF",
         "port_pairs": [
           {
-            "dst": "CINFIFO",
-            "src": "COUTFIFO"
+            "dst": "L0_CINFIFO",
+            "src": "L0_COUTFIFO"
           }
         ],
         "producer": "mtnr",
@@ -184,7 +184,7 @@
         "detail_items": [
           "Route: csispdp -> n3aa",
           "Edge type: M2M",
-          "Buffer: RAW_BAYER_16 / 12b / COMP_BAYER_LOSSLESS"
+          "Buffer: RAW_BAYER_16 / sensor_full / 12b / COMP_BAYER_LOSSLESS"
         ],
         "flow_type": "M2M",
         "id": "l1-sem-8",
@@ -219,7 +219,7 @@
         "detail_items": [
           "Route: mcsc -> gdc_m",
           "Edge type: M2M",
-          "Buffer: YUV420 / 8b / COMP_OFF"
+          "Buffer: YUV420 / record_out / 8b / COMP_OFF"
         ],
         "flow_type": "M2M",
         "id": "l1-sem-9",
@@ -254,7 +254,7 @@
         "detail_items": [
           "Route: mcsc -> gdc_o",
           "Edge type: M2M",
-          "Buffer: YUV420 / 8b / COMP_OFF"
+          "Buffer: YUV420 / record_out / 8b / COMP_OFF"
         ],
         "flow_type": "M2M",
         "id": "l1-sem-10",
@@ -289,7 +289,7 @@
         "detail_items": [
           "Route: gdc_m -> dpu",
           "Edge type: M2M",
-          "Buffer: YUV420 / 8b / COMP_YUV_LOSSLESS"
+          "Buffer: YUV420 / record_out / 8b / COMP_YUV_LOSSLESS"
         ],
         "flow_type": "M2M",
         "id": "l1-sem-11",
@@ -324,7 +324,7 @@
         "detail_items": [
           "Route: gdc_o -> mfc_enc",
           "Edge type: M2M",
-          "Buffer: YUV420 / 8b / COMP_YUV_LOSSLESS"
+          "Buffer: YUV420 / record_out / 8b / COMP_YUV_LOSSLESS"
         ],
         "flow_type": "M2M",
         "id": "l1-sem-12",
@@ -1171,6 +1171,13 @@
     },
     {
       "data": {
+        "active_operations": {
+          "compose": false,
+          "crop": false,
+          "scale": true,
+          "scale_from": "4000x3000",
+          "scale_to": "1920x1080"
+        },
         "capability_badges": [
           "HW:YUVP",
           "DVFS:CAM"
@@ -1199,7 +1206,8 @@
         "summary_badges": [
           "ISP",
           "YUVSC",
-          "CAM"
+          "CAM",
+          "Scale"
         ],
         "type": "ip",
         "view_hints": {

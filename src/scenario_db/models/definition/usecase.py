@@ -25,6 +25,9 @@ class PipelineNode(BaseScenarioModel):
     ip_ref: DocumentId
     instance_index: int = 0
     role: str | None = None
+    # Explicit operation facts (crop/scale/rotate/...) consumed by the view
+    # projection's OperationSummary; shape mirrors variant node_configs.
+    operations: dict[str, Any] | None = None
 
 
 class EdgeType(StrEnum):

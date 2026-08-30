@@ -46,6 +46,10 @@ pipeline:
     ip_ref: ip-isp-s5e9965
     role: yuv_scaler
     instance_index: 0
+    operations:
+      scale: true
+      scale_from: 4000x3000
+      scale_to: 1920x1080
   - id: mtnr
     ip_ref: ip-isp-s5e9965
     role: temporal_nr
@@ -136,8 +140,8 @@ pipeline:
     to: msnr
     type: OTF
     port_pairs:
-    - src: COUTFIFO
-      dst: CINFIFO
+    - src: L0_COUTFIFO
+      dst: L0_CINFIFO
   - from: msnr
     to: yuvp
     type: OTF
@@ -161,14 +165,23 @@ pipeline:
     to: mtnr
     type: M2M
     buffer: LME_MTNR_BUF
+    port_pairs:
+    - src: LME_WDMA
+      dst: MTNR_MV_RDMA
   - from: csispdp
     to: npu
     type: M2M
     buffer: CSISPDP_NPU_BUF
+    port_pairs:
+    - src: CSISPDP_DS_WDMA
+      dst: NPU_RDMA
   - from: npu
     to: mtnr
     type: M2M
     buffer: NPU_MTNR_BUF
+    port_pairs:
+    - src: NPU_WDMA
+      dst: MTNR_AI_RDMA
   - from: mcsc
     to: gdc_m
     type: M2M
@@ -180,6 +193,9 @@ pipeline:
     to: eis
     type: M2M
     buffer: MCSC_WDMA_EIS_BUF
+    port_pairs:
+    - src: MCSC_WDMA_EIS
+      dst: EIS_SW_READ
   - from: eis
     to: gdc_m
     type: M2M
@@ -217,10 +233,12 @@ pipeline:
       format: RAW_BAYER_16
       bitdepth: 12
       compression: COMP_BAYER_LOSSLESS
+      size_ref: sensor_full
     YUVSC_MTNR_BUF:
       format: YUV422
       bitdepth: 10
       compression: COMP_OFF
+      size_ref: record_out
     LME_MTNR_BUF:
       format: MV
       compression: COMP_OFF
@@ -228,37 +246,46 @@ pipeline:
       format: RAW_BAYER_16
       bitdepth: 10
       compression: COMP_BAYER_LOSSY
+      size_ref: sensor_full
     NPU_MTNR_BUF:
       format: YUV422
       bitdepth: 10
       compression: COMP_OFF
+      size_ref: record_out
     MCSC_WDMA_PREV_BUF:
       format: YUV420
       bitdepth: 8
+      size_ref: record_out
       compression: COMP_OFF
     MCSC_WDMA_VIDEO_BUF:
       format: YUV420
       bitdepth: 8
+      size_ref: record_out
       compression: COMP_OFF
     MCSC_WDMA_EIS_BUF:
       format: YUV420
       bitdepth: 8
+      size_ref: record_out
       compression: COMP_OFF
     EIS_GDC_M_BUF:
       format: YUV420
       bitdepth: 8
+      size_ref: record_out
       compression: COMP_OFF
     EIS_GDC_O_BUF:
       format: YUV420
       bitdepth: 8
+      size_ref: record_out
       compression: COMP_OFF
     GDC_M_DPU_BUF:
       format: YUV420
       bitdepth: 8
+      size_ref: record_out
       compression: COMP_YUV_LOSSLESS
     GDC_O_MFC_BUF:
       format: YUV420
       bitdepth: 8
+      size_ref: record_out
       compression: COMP_YUV_LOSSLESS
 variants:
 - id: cam-rec-r1-fhd30-sdr
@@ -375,6 +402,13 @@ variants:
       to: gdc_m
     - from: mcsc
       to: gdc_o
+  node_configs:
+    gdc_m:
+      operations:
+        crop: true
+    gdc_o:
+      operations:
+        crop: true
 - id: cam-rec-r1-fhd30-supersteady
   severity: light
   design_conditions:
