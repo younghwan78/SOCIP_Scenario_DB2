@@ -31,3 +31,13 @@ capabilities:
         ppc: 4.0
         vdd: VDD_INT
         dvfs_group: INT
+  properties:
+    legacy_name: DPU
+    modules:
+    - name: DPU_RDMA
+      type: DMA
+      direction: read
+      role: layer_input
+      max_bandwidth: 4096000000
+      supported_compressions:
+      - SBWC_v4
