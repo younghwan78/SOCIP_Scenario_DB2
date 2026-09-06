@@ -42,7 +42,13 @@ def project_power(v_sim: dict, cal: Calibration, *, scale_ip_breakdown: bool) ->
     v_vdd = v_sim.get("vdd_power") or {}
     proj_vdd: dict = {}
     for rail, entry in v_vdd.items():
-        factor = cal.rail_factors.get(rail) or cal.total_power_factor
+        # A measured 0 mW rail (gated domain) yields a legitimate 0.0 factor;
+        # membership, not truthiness, decides the fallback to the total factor.
+        factor = (
+            cal.rail_factors[rail]
+            if rail in cal.rail_factors
+            else cal.total_power_factor
+        )
         if factor is None or not isinstance(entry, dict):
             proj_vdd[rail] = entry
             continue

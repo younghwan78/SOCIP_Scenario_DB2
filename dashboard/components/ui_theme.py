@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+import shutil
 from html import escape
 from pathlib import Path
 from typing import Iterable
@@ -12,12 +13,44 @@ import streamlit.components.v1 as components
 
 SCENARIODB_ASSET_DIR = Path(__file__).resolve().parents[1] / "assets"
 SCENARIODB_SIDEBAR_LOGO = SCENARIODB_ASSET_DIR / "ScenarioDB_sidebar logo.png"
+SCENARIODB_STATIC_DIR = Path(__file__).resolve().parents[1] / "static"
+
+
+def static_asset_url(asset_path: Path) -> str | None:
+    """Return a Streamlit static-serving URL for the asset, or None.
+
+    Large images embedded as base64 data URIs travel with every rerun of every
+    page; a static URL is fetched once and browser-cached. The source of truth
+    stays in ``dashboard/assets`` — a copy is synced into ``dashboard/static``
+    (gitignored) whenever it is missing or stale. Callers must keep the
+    data-URI path as fallback for setups without static serving.
+    """
+
+    if not asset_path.is_file():
+        return None
+    try:
+        if not st.get_option("server.enableStaticServing"):
+            return None
+    except Exception:
+        return None
+    safe_name = asset_path.name.replace(" ", "_").lower()
+    target = SCENARIODB_STATIC_DIR / safe_name
+    try:
+        source_stat = asset_path.stat()
+        if not target.is_file() or target.stat().st_size != source_stat.st_size or target.stat().st_mtime < source_stat.st_mtime:
+            SCENARIODB_STATIC_DIR.mkdir(exist_ok=True)
+            shutil.copyfile(asset_path, target)
+    except OSError:
+        return None
+    return f"/app/static/{safe_name}"
 
 
 def apply_app_theme(*, sidebar_width: int = 288) -> None:
     """Apply the ScenarioDB balanced engineering console visual theme."""
 
-    sidebar_logo_src = _asset_data_uri(SCENARIODB_SIDEBAR_LOGO) if SCENARIODB_SIDEBAR_LOGO.exists() else ""
+    sidebar_logo_src = static_asset_url(SCENARIODB_SIDEBAR_LOGO) or (
+        _asset_data_uri(SCENARIODB_SIDEBAR_LOGO) if SCENARIODB_SIDEBAR_LOGO.exists() else ""
+    )
 
     st.markdown(
         f"""

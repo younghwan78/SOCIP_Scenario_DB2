@@ -45,7 +45,7 @@ def _meta() -> MeasurementImportMeta:
 
 def test_generate_evidence_id():
     meta = _meta()
-    assert generate_evidence_id(meta) == "meas-uc-camera-recording-cam-rec-r1-uhd30-vdis-EVT1-20260610T152000"
+    assert generate_evidence_id(meta) == "meas-proj-sm-s947b-uc-camera-recording-cam-rec-r1-uhd30-vdis-EVT1-20260610T152000"
 
 
 def test_assemble_merges_power_and_perfetto():
@@ -98,6 +98,18 @@ def test_meta_kpi_total_power_wins_over_power_digest():
         item for item in doc["metric_observations"] if item["metric_id"] == "power.total"
     )
     assert total["value"] == 1234.0
+
+
+def test_malformed_kpi_dict_is_skipped_not_crashed():
+    """A dict KPI with no recognizable stat keys (e.g. {avg: ...}) must not
+    become an invalid observation that explodes as a raw ValidationError."""
+    meta = _meta()
+    meta.kpi["total_power_mw"] = {"avg": 100.0}
+    doc = assemble_evidence(meta, None, None, base_dir=Path("."), report=ImportReport())
+    ids = {item["metric_id"] for item in doc.get("metric_observations", [])}
+    assert "power.total" not in ids
+    # the well-formed scalar KPI still produces its observation
+    assert "latency.frame" in ids
 
 
 def test_explicit_observation_wins_over_derived_digest():
@@ -200,7 +212,7 @@ def test_cli_end_to_end_power_only(tmp_path: Path, capsys):
     rc = main(["--meta", str(DEMO_META), "--out", str(out)])
     assert rc == 0  # not strict, warning about missing trace is tolerated
 
-    evidence_path = out / "03_evidence" / "meas-uc-camera-recording-cam-rec-r1-uhd30-vdis-EVT1-20260610T152000.yaml"
+    evidence_path = out / "03_evidence" / "meas-proj-sm-s947b-uc-camera-recording-cam-rec-r1-uhd30-vdis-EVT1-20260610T152000.yaml"
     assert evidence_path.exists()
     doc = yaml.safe_load(evidence_path.read_text(encoding="utf-8"))
 

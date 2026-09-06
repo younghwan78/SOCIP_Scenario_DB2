@@ -56,6 +56,7 @@ class Evidence(Base):
     external_devices    = Column(JSONB)             # sim only
     topology_order      = Column(ARRAY(Text))       # sim only
     vdd_power           = Column(JSONB)             # sim + meas (rail별 전력)
+    power_breakdown     = Column(JSONB)             # sim: {model, ip, memory, cpu, total_mw} 3-버킷 분해
     calculation_trace   = Column(JSONB)             # sim debug trace, optional
     params_hash         = Column(Text, index=True)  # sim cache key
     provenance          = Column(JSONB)             # meas only

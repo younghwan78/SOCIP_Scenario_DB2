@@ -103,7 +103,7 @@ def test_dvfs_resolver_aligns_shared_vdd_voltage():
     assert resolved["mfc"].vdd_leader == "isp0"
 
 
-def test_manual_clock_shared_set_clock_preserves_required_voltage_lookup():
+def test_manual_clock_shared_set_clock_raises_group_required_voltage():
     resolver = DvfsResolver(
         {
             "CAM": DVFSTable(
@@ -156,6 +156,91 @@ def test_manual_clock_shared_set_clock_preserves_required_voltage_lookup():
     assert resolved["isp0"].required_clock_mhz == pytest.approx(600)
     assert resolved["isp0"].required_voltage_mv == pytest.approx(780)
     assert resolved["byrp"].required_clock_mhz < 133
-    assert resolved["byrp"].required_voltage_mv == pytest.approx(562.5)
+    # byrp is pulled up to the group's aligned level; its required voltage
+    # must follow that level (was 562.5 pre-fix — an under-volted phantom).
+    assert resolved["byrp"].required_voltage_mv == pytest.approx(780)
     assert resolved["byrp"].set_clock_mhz == pytest.approx(600)
     assert resolved["byrp"].set_voltage_mv == pytest.approx(780)
+
+
+def test_group_aligned_node_alone_on_its_rail_gets_aligned_voltage():
+    """A node pulled up by dvfs_group alignment but alone on its VDD rail must
+    carry the raised level's voltage — rail alignment cannot mask it."""
+    resolver = DvfsResolver(
+        {
+            "CAM": DVFSTable(
+                domain="CAM",
+                levels=[
+                    DVFSLevel(level=0, speed_mhz=600, voltages={4: 780}),
+                    DVFSLevel(level=1, speed_mhz=400, voltages={4: 700}),
+                    DVFSLevel(level=2, speed_mhz=133, voltages={4: 562.5}),
+                ],
+            ),
+        },
+        asv_group=4,
+    )
+    workloads = [
+        IPWorkload(
+            node_id="isp0",
+            ip_ref="ip-isp-v12",
+            hw_name="ISP",
+            width=1920,
+            height=1080,
+            fps=30,
+            manual_clock_mhz=600,
+            sim_params=IPSimParams(
+                hw_name="ISP",
+                ppc=4,
+                unit_power_mw_mp=10,
+                vdd="VDD_CAM",
+                dvfs_group="CAM",
+            ),
+        ),
+        IPWorkload(
+            node_id="byrp",
+            ip_ref="ip-isp-v12",
+            hw_name="BYRP",
+            width=1920,
+            height=1080,
+            fps=30,
+            sim_params=IPSimParams(
+                hw_name="BYRP",
+                ppc=4,
+                unit_power_mw_mp=10,
+                vdd="VDD_BYRP",  # own rail: no other node can mask the voltage
+                dvfs_group="CAM",
+            ),
+        ),
+    ]
+
+    resolved = resolver.resolve(workloads)
+
+    assert resolved["byrp"].set_clock_mhz == pytest.approx(600)
+    assert resolved["byrp"].dvfs_level == 0
+    # Pre-fix this stayed at 562.5 (level 2's voltage) while reporting level 0.
+    assert resolved["byrp"].set_voltage_mv == pytest.approx(780)
+
+
+def test_required_clock_above_ip_max_clock_is_infeasible_without_dvfs_table():
+    resolver = DvfsResolver({}, asv_group=4)
+    workloads = [
+        IPWorkload(
+            node_id="isp0",
+            ip_ref="ip-isp-v12",
+            hw_name="ISP",
+            width=7680,
+            height=4320,
+            fps=60,
+            sim_params=IPSimParams(
+                hw_name="ISP",
+                ppc=1,
+                unit_power_mw_mp=10,
+                max_clock_mhz=800,
+            ),
+        ),
+    ]
+
+    resolved = resolver.resolve(workloads)
+
+    assert resolved["isp0"].feasible is False
+    assert "max_clock" in (resolved["isp0"].infeasible_reason or "")

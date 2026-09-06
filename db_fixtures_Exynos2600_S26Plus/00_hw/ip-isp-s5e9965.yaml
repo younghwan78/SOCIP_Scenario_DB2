@@ -12,6 +12,9 @@ capabilities:
   - id: Capture_MF
   - id: Remosaic
   - id: HighSpeed
+  # CSIS/PDP front-end streaming modes referenced by variant node_configs.
+  - id: Normal
+  - id: VC_DT
   sim:
     hw_name: ISP
     source: legacy_project_info_csv
@@ -349,6 +352,55 @@ capabilities:
       supported_compressions:
       - COMP_OFF
       - COMP_BAYER_LOSSLESS
+    - name: MTNR_MV_RDMA
+      type: DMA
+      direction: read
+      role: motion_vector_input
+      max_bandwidth: 4096000000
+    - name: MTNR_AI_RDMA
+      type: DMA
+      direction: read
+      role: ai_denoise_input
+      max_bandwidth: 4096000000
+    - name: CSISPDP_DS_WDMA
+      type: DMA
+      direction: write
+      role: downscaled_raw_output
+      max_bandwidth: 8192000000
+      supported_compressions:
+      - COMP_BAYER_LOSSY
+    - name: GDC_M_RDMA
+      type: DMA
+      direction: read
+      role: preview_warp_input
+      max_bandwidth: 8192000000
+      supported_compressions:
+      - COMP_OFF
+      - COMP_YUV_LOSSLESS
+    - name: GDC_M_WDMA
+      type: DMA
+      direction: write
+      role: preview_warp_output
+      max_bandwidth: 8192000000
+      supported_compressions:
+      - COMP_OFF
+      - COMP_YUV_LOSSLESS
+    - name: GDC_O_RDMA
+      type: DMA
+      direction: read
+      role: video_warp_input
+      max_bandwidth: 8192000000
+      supported_compressions:
+      - COMP_OFF
+      - COMP_YUV_LOSSLESS
+    - name: GDC_O_WDMA
+      type: DMA
+      direction: write
+      role: video_warp_output
+      max_bandwidth: 8192000000
+      supported_compressions:
+      - COMP_OFF
+      - COMP_YUV_LOSSLESS
     internal_edges:
     - from: CSISPDP
       to: BYRP

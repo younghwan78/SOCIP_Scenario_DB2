@@ -31,6 +31,12 @@ capabilities:
     crop: true
     scale: true
   properties:
+    modules:
+    - name: LME_WDMA
+      type: DMA
+      direction: write
+      role: motion_vector_output
+      max_bandwidth: 2048000000
     ip_group: LME
     hierarchy_group: ISP
     description: Local Motion Estimation — video stabilization pre-processing

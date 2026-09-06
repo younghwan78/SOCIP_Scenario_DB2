@@ -53,6 +53,9 @@ _LEVEL2_ALIAS_GROUPS = {
     "encode": "video",
     "display": "display",
     "dpu": "display",
+    # Full-SoC module detail, matching the legacy Level 3 view.
+    "all": "all",
+    "full": "all",
 }
 
 _LEVEL2_REFERENCE_ALIASES = {

@@ -82,3 +82,17 @@ def test_upsert_simulation_evidence_preserves_exported_artifacts_on_rerun():
     assert rerun_row is first_row
     assert rerun_row.kpi["total_power_mw"] == 999.0
     assert rerun_row.artifacts == exported_artifacts
+
+
+def test_upsert_simulation_evidence_persists_project_ref():
+    """The API persist path must keep project_ref like the ETL mapper does;
+    losing it silently breaks every ?project_ref= filter and comparison."""
+    raw = _load("sim-camera-recording-UHD60-EVT0-sw123.yaml")
+    evidence = SimulationEvidence.model_validate(raw)
+    assert evidence.project_ref  # fixture must carry one for this test to mean anything
+
+    db = _Session()
+    row = upsert_simulation_evidence(db, evidence, yaml_sha256="sha-x")
+
+    assert row.project_ref == str(evidence.project_ref)
+    assert db.rows[evidence.id].project_ref == str(evidence.project_ref)

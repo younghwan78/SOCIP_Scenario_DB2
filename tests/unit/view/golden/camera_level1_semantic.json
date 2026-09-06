@@ -10,6 +10,7 @@
         "flow_type": "OTF",
         "id": "l1-sem-0",
         "label": "OTF",
+        "port_pairs": [],
         "producer": "sensor_rear",
         "source": "ip-sensor-rear",
         "target": "ip-csispdp"
@@ -25,6 +26,12 @@
         "flow_type": "OTF",
         "id": "l1-sem-1",
         "label": "OTF",
+        "port_pairs": [
+          {
+            "dst": "CINFIFO",
+            "src": "COUTFIFO"
+          }
+        ],
         "producer": "csispdp",
         "source": "ip-csispdp",
         "target": "ip-byrp"
@@ -40,6 +47,12 @@
         "flow_type": "OTF",
         "id": "l1-sem-2",
         "label": "OTF",
+        "port_pairs": [
+          {
+            "dst": "CINFIFO",
+            "src": "COUTFIFO"
+          }
+        ],
         "producer": "byrp",
         "source": "ip-byrp",
         "target": "ip-rgbp"
@@ -55,6 +68,12 @@
         "flow_type": "OTF",
         "id": "l1-sem-3",
         "label": "OTF",
+        "port_pairs": [
+          {
+            "dst": "CINFIFO",
+            "src": "COUTFIFO"
+          }
+        ],
         "producer": "rgbp",
         "source": "ip-rgbp",
         "target": "ip-yuvsc"
@@ -67,7 +86,7 @@
         "detail_items": [
           "Route: yuvsc -> mtnr",
           "Edge type: M2M",
-          "Buffer: YUV422 / 10b / COMP_OFF"
+          "Buffer: YUV422 / record_out / 10b / COMP_OFF"
         ],
         "flow_type": "M2M",
         "id": "l1-sem-4",
@@ -76,12 +95,20 @@
           "bitdepth": 10,
           "compression": "COMP_OFF",
           "format": "YUV422",
-          "fps": 30
+          "fps": 30,
+          "height": 1080,
+          "width": 1920
         },
         "placement": {
           "llc_allocated": false,
           "llc_policy": "none"
         },
+        "port_pairs": [
+          {
+            "dst": "MTNR_RDMA",
+            "src": "YUVSC_WDMA"
+          }
+        ],
         "producer": "yuvsc",
         "source": "ip-yuvsc",
         "target": "ip-mtnr"
@@ -97,6 +124,12 @@
         "flow_type": "OTF",
         "id": "l1-sem-5",
         "label": "OTF",
+        "port_pairs": [
+          {
+            "dst": "L0_CINFIFO",
+            "src": "L0_COUTFIFO"
+          }
+        ],
         "producer": "mtnr",
         "source": "ip-mtnr",
         "target": "ip-msnr"
@@ -112,6 +145,12 @@
         "flow_type": "OTF",
         "id": "l1-sem-6",
         "label": "OTF",
+        "port_pairs": [
+          {
+            "dst": "CINFIFO",
+            "src": "COUTFIFO"
+          }
+        ],
         "producer": "msnr",
         "source": "ip-msnr",
         "target": "ip-yuvp"
@@ -127,6 +166,12 @@
         "flow_type": "OTF",
         "id": "l1-sem-7",
         "label": "OTF",
+        "port_pairs": [
+          {
+            "dst": "CINFIFO",
+            "src": "COUTFIFO"
+          }
+        ],
         "producer": "yuvp",
         "source": "ip-yuvp",
         "target": "ip-mcsc"
@@ -139,7 +184,7 @@
         "detail_items": [
           "Route: csispdp -> n3aa",
           "Edge type: M2M",
-          "Buffer: RAW_BAYER_16 / 12b / COMP_BAYER_LOSSLESS"
+          "Buffer: RAW_BAYER_16 / sensor_full / 12b / COMP_BAYER_LOSSLESS"
         ],
         "flow_type": "M2M",
         "id": "l1-sem-8",
@@ -148,12 +193,20 @@
           "bitdepth": 12,
           "compression": "COMP_BAYER_LOSSLESS",
           "format": "RAW_BAYER_16",
-          "fps": 30
+          "fps": 30,
+          "height": 3000,
+          "width": 4000
         },
         "placement": {
           "llc_allocated": false,
           "llc_policy": "none"
         },
+        "port_pairs": [
+          {
+            "dst": "3AA_RDMA",
+            "src": "CSISPDP_WDMA"
+          }
+        ],
         "producer": "csispdp",
         "source": "ip-csispdp",
         "target": "ip-n3aa"
@@ -166,7 +219,7 @@
         "detail_items": [
           "Route: mcsc -> gdc_m",
           "Edge type: M2M",
-          "Buffer: YUV420 / 8b / COMP_OFF"
+          "Buffer: YUV420 / record_out / 8b / COMP_OFF"
         ],
         "flow_type": "M2M",
         "id": "l1-sem-9",
@@ -175,12 +228,20 @@
           "bitdepth": 8,
           "compression": "COMP_OFF",
           "format": "YUV420",
-          "fps": 30
+          "fps": 30,
+          "height": 1080,
+          "width": 1920
         },
         "placement": {
           "llc_allocated": false,
           "llc_policy": "none"
         },
+        "port_pairs": [
+          {
+            "dst": "GDC_M_RDMA",
+            "src": "MCSC_WDMA_PREV"
+          }
+        ],
         "producer": "mcsc",
         "source": "ip-mcsc",
         "target": "ip-gdc-m"
@@ -193,7 +254,7 @@
         "detail_items": [
           "Route: mcsc -> gdc_o",
           "Edge type: M2M",
-          "Buffer: YUV420 / 8b / COMP_OFF"
+          "Buffer: YUV420 / record_out / 8b / COMP_OFF"
         ],
         "flow_type": "M2M",
         "id": "l1-sem-10",
@@ -202,12 +263,20 @@
           "bitdepth": 8,
           "compression": "COMP_OFF",
           "format": "YUV420",
-          "fps": 30
+          "fps": 30,
+          "height": 1080,
+          "width": 1920
         },
         "placement": {
           "llc_allocated": false,
           "llc_policy": "none"
         },
+        "port_pairs": [
+          {
+            "dst": "GDC_O_RDMA",
+            "src": "MCSC_WDMA_VIDEO"
+          }
+        ],
         "producer": "mcsc",
         "source": "ip-mcsc",
         "target": "ip-gdc-o"
@@ -220,7 +289,7 @@
         "detail_items": [
           "Route: gdc_m -> dpu",
           "Edge type: M2M",
-          "Buffer: YUV420 / 8b / COMP_YUV_LOSSLESS"
+          "Buffer: YUV420 / record_out / 8b / COMP_YUV_LOSSLESS"
         ],
         "flow_type": "M2M",
         "id": "l1-sem-11",
@@ -229,12 +298,20 @@
           "bitdepth": 8,
           "compression": "COMP_YUV_LOSSLESS",
           "format": "YUV420",
-          "fps": 30
+          "fps": 30,
+          "height": 1080,
+          "width": 1920
         },
         "placement": {
           "llc_allocated": false,
           "llc_policy": "none"
         },
+        "port_pairs": [
+          {
+            "dst": "DPU_RDMA",
+            "src": "GDC_M_WDMA"
+          }
+        ],
         "producer": "gdc_m",
         "source": "ip-gdc-m",
         "target": "ip-dpu"
@@ -247,7 +324,7 @@
         "detail_items": [
           "Route: gdc_o -> mfc_enc",
           "Edge type: M2M",
-          "Buffer: YUV420 / 8b / COMP_YUV_LOSSLESS"
+          "Buffer: YUV420 / record_out / 8b / COMP_YUV_LOSSLESS"
         ],
         "flow_type": "M2M",
         "id": "l1-sem-12",
@@ -256,12 +333,20 @@
           "bitdepth": 8,
           "compression": "COMP_YUV_LOSSLESS",
           "format": "YUV420",
-          "fps": 30
+          "fps": 30,
+          "height": 1080,
+          "width": 1920
         },
         "placement": {
           "llc_allocated": false,
           "llc_policy": "none"
         },
+        "port_pairs": [
+          {
+            "dst": "MFC_RDMA",
+            "src": "GDC_O_WDMA"
+          }
+        ],
         "producer": "gdc_o",
         "source": "ip-gdc-o",
         "target": "ip-mfc-enc"
@@ -277,6 +362,7 @@
         "flow_type": "OTF",
         "id": "l1-sem-13",
         "label": "OTF",
+        "port_pairs": [],
         "producer": "dpu",
         "source": "ip-dpu",
         "target": "ip-panel"
@@ -1085,6 +1171,13 @@
     },
     {
       "data": {
+        "active_operations": {
+          "compose": false,
+          "crop": false,
+          "scale": true,
+          "scale_from": "4000x3000",
+          "scale_to": "1920x1080"
+        },
         "capability_badges": [
           "HW:YUVP",
           "DVFS:CAM"
@@ -1113,7 +1206,8 @@
         "summary_badges": [
           "ISP",
           "YUVSC",
-          "CAM"
+          "CAM",
+          "Scale"
         ],
         "type": "ip",
         "view_hints": {

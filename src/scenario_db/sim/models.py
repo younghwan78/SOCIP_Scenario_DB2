@@ -123,6 +123,12 @@ class SimulationRunConfig(BaseScenarioModel):
     fps: float | None = None
     sw_margin: float = SW_MARGIN_DEFAULT
     bw_power_coeff: float = 80.0
+    # Which registered power physics computes ip/memory power (sim/power_model.py).
+    power_model: str = "v1-vfps"
+    # Logical rail that carries BW-induced (DRAM/interconnect) power. Measured
+    # captures see that power on the MIF buck, never on the initiating IP's
+    # rail, so per-rail calibration needs the same attribution here.
+    memory_rail: str = "MIF"
     vbat: float = 4.0
     pmic_efficiency: float = 0.85
     h_blank_margin: float = 0.05
@@ -269,5 +275,6 @@ class SimRunResult(BaseScenarioModel):
     external_devices: list[dict[str, Any]] = Field(default_factory=list)
     topology_order: list[str] = Field(default_factory=list)
     vdd_power: dict[str, dict[str, float]] = Field(default_factory=dict)
+    power_breakdown: dict[str, Any] = Field(default_factory=dict)
     warnings: list[str] = Field(default_factory=list)
     calculation_trace: dict[str, Any] | None = None

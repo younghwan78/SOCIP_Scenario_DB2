@@ -137,9 +137,20 @@ def render_elk_view(
     canvas_height: int | None = None,
     title: str | None = None,
 ) -> None:
-    """Render a ViewResponse using ELK orthogonal routing."""
+    """Render a ViewResponse using ELK orthogonal routing.
+
+    The live embed references the ELK runtime through Streamlit static serving
+    when available, so the ~1.6MB library is fetched and cached once by the
+    browser instead of being inlined into every iframe on every rerun.
+    """
     height = canvas_height or int(view.metadata.get("canvas_h") or 900)
-    components.html(build_elk_view_html(view, canvas_height=height, title=title), height=height + 52, scrolling=False)
+    html_text = build_elk_view_html(
+        view,
+        canvas_height=height,
+        title=title,
+        inline_runtime=not _static_elk_available(),
+    )
+    components.html(html_text, height=height + 52, scrolling=False)
 
 
 def build_elk_view_html(
@@ -147,11 +158,17 @@ def build_elk_view_html(
     *,
     canvas_height: int | None = None,
     title: str | None = None,
+    inline_runtime: bool = True,
 ) -> str:
-    """Return standalone ELK/SVG HTML for Streamlit embedding or export."""
+    """Return standalone ELK/SVG HTML for Streamlit embedding or export.
+
+    ``inline_runtime=True`` (default) embeds the ELK library so the document is
+    self-contained — required for HTML export. Pass ``False`` to reference the
+    library via the Streamlit static route instead.
+    """
     graph, meta = build_elk_graph(view)
     height = canvas_height or int(view.metadata.get("canvas_h") or 900)
-    return _html(graph, meta, title or "ScenarioDB View", height)
+    return _html(graph, meta, title or "ScenarioDB View", height, inline_runtime=inline_runtime)
 
 
 def build_elk_graph(view: ViewResponse) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -161,8 +178,176 @@ def build_elk_graph(view: ViewResponse) -> tuple[dict[str, Any], dict[str, Any]]
     """
     layout = str(view.metadata.get("layout") or "")
     if layout == "layered-lanes":
-        return _build_layered_architecture(view)
-    return _build_grouped_graph(view)
+        graph, meta = _build_layered_architecture(view)
+    else:
+        graph, meta = _build_grouped_graph(view)
+    _apply_io_size_subtitles(view, meta)
+    _apply_module_state_colors(view, meta)
+    _dedupe_buffer_edge_labels(view, graph)
+    return graph, meta
+
+
+# Legacy Level 2 module color language: DMA tint encodes the active
+# compression/LLC state so the memory strategy reads at a glance.
+MODULE_STATE_COLORS: dict[str, tuple[str, str]] = {
+    "comp_llc": ("#F8BBD0", "#C2185B"),  # pink — compression + LLC
+    "comp": ("#FFE0B2", "#E65100"),      # orange — compression only
+    "llc": ("#E1BEE7", "#7B1FA2"),       # purple — LLC only
+    "rdma": ("#D2E3FC", "#1967D2"),      # pastel blue — read DMA
+    "wdma": ("#FEEFC3", "#B06000"),      # pastel amber — write DMA
+    "cin": ("#CEEAD6", "#137333"),       # pastel green — input FIFO
+    "cout": ("#E8DAEF", "#7B1FA2"),      # pastel purple — output FIFO
+}
+
+_DMA_MODULE_KINDS = {"rdma", "wdma", "dma"}
+
+
+def _compression_active(value: Any) -> bool:
+    text = str(value or "").strip().upper()
+    return bool(text) and text not in {"COMP_OFF", "OFF", "NONE", "DISABLE", "DISABLED"}
+
+
+def _apply_module_state_colors(view: ViewResponse, meta: dict[str, Any]) -> None:
+    """Tint Level 2 I/O module nodes by their active memory strategy."""
+
+    comp_nodes: set[str] = set()
+    llc_nodes: set[str] = set()
+    for edge in view.edges:
+        endpoints = (edge.data.source, edge.data.target)
+        if edge.data.memory and _compression_active(edge.data.memory.compression):
+            comp_nodes.update(endpoints)
+        if edge.data.placement and edge.data.placement.llc_allocated:
+            llc_nodes.update(endpoints)
+
+    for node in view.nodes:
+        node_meta = meta.get(node.data.id)
+        kind = str(node.data.module_kind or "").lower()
+        if not node_meta or not kind:
+            continue
+        if kind in {"cin", "cout"}:
+            fill, stroke = MODULE_STATE_COLORS[kind]
+        elif kind in _DMA_MODULE_KINDS:
+            has_comp = node.data.id in comp_nodes
+            has_llc = node.data.id in llc_nodes
+            if has_comp and has_llc:
+                fill, stroke = MODULE_STATE_COLORS["comp_llc"]
+            elif has_comp:
+                fill, stroke = MODULE_STATE_COLORS["comp"]
+            elif has_llc:
+                fill, stroke = MODULE_STATE_COLORS["llc"]
+            elif kind == "rdma" or node.data.module_direction == "input":
+                fill, stroke = MODULE_STATE_COLORS["rdma"]
+            else:
+                fill, stroke = MODULE_STATE_COLORS["wdma"]
+        else:
+            continue
+        node_meta["fill"] = fill
+        node_meta["stroke"] = stroke
+
+
+def _dedupe_buffer_edge_labels(view: ViewResponse, graph: dict[str, Any]) -> None:
+    """Collapse transfer descriptors on edges that touch a buffer node.
+
+    In views where buffers render as nodes (Level 0 topology), the buffer node
+    already carries the full memory descriptor; repeating it on both adjacent
+    edges is noise, so those edges fall back to their flow-type chip.
+    """
+
+    buffer_ids = {node.data.id for node in view.nodes if node.data.type == "buffer"}
+    if not buffer_ids:
+        return
+    flow_by_edge = {edge.data.id: edge.data for edge in view.edges}
+
+    def walk(container: dict[str, Any]) -> None:
+        for edge in container.get("edges", []):
+            data = flow_by_edge.get(edge.get("id"))
+            if not data:
+                continue
+            if data.source in buffer_ids or data.target in buffer_ids:
+                chip = "SW" if data.flow_type == "control" else data.flow_type
+                for label in edge.get("labels", []):
+                    label["text"] = chip
+                    label["width"] = max(38, len(chip) * 6 + 14)
+        for child in container.get("children", []):
+            walk(child)
+
+    walk(graph)
+
+
+def _apply_io_size_subtitles(view: ViewResponse, meta: dict[str, Any]) -> None:
+    """Annotate HW/SW leaf nodes with their IO size, legacy-view style.
+
+    Sizes seed from edge memory descriptors and from explicit scale
+    operations, then propagate along streaming (OTF/vOTF) edges — an OTF hop
+    keeps the size unless the consumer scales. Nodes whose input and output
+    sizes differ render as ``in→out``.
+    """
+
+    in_size: dict[str, tuple[int, int]] = {}
+    out_size: dict[str, tuple[int, int]] = {}
+
+    def parse(value: Any) -> tuple[int, int] | None:
+        parts = str(value or "").lower().replace(" ", "").split("x", 1)
+        if len(parts) != 2:
+            return None
+        try:
+            width, height = int(parts[0]), int(parts[1])
+        except ValueError:
+            return None
+        return (width, height) if width and height else None
+
+    for node in view.nodes:
+        op = node.data.active_operations
+        if op and op.scale:
+            scale_from = parse(op.scale_from)
+            scale_to = parse(op.scale_to)
+            if scale_from:
+                in_size[node.data.id] = scale_from
+            if scale_to:
+                out_size[node.data.id] = scale_to
+
+    for edge in view.edges:
+        mem = edge.data.memory
+        if mem and mem.width and mem.height:
+            size = (mem.width, mem.height)
+            out_size.setdefault(edge.data.source, size)
+            in_size.setdefault(edge.data.target, size)
+
+    streaming_edges = [edge.data for edge in view.edges if edge.data.flow_type in {"OTF", "vOTF"}]
+    for _ in range(max(1, len(view.nodes))):
+        changed = False
+        for data in streaming_edges:
+            source_out = out_size.get(data.source)
+            if source_out and data.target not in in_size:
+                in_size[data.target] = source_out
+                changed = True
+            if data.target in in_size and data.target not in out_size:
+                out_size[data.target] = in_size[data.target]
+                changed = True
+            target_in = in_size.get(data.target)
+            if target_in and data.source not in out_size:
+                out_size[data.source] = target_in
+                changed = True
+        if not changed:
+            break
+
+    for node in view.nodes:
+        node_id = node.data.id
+        node_meta = meta.get(node_id)
+        if not node_meta or node_meta.get("subtitle"):
+            continue
+        if node.data.type not in {"ip", "submodule", "sw", "dma_channel"}:
+            continue
+        into = in_size.get(node_id)
+        out = out_size.get(node_id)
+        if into and out and into != out:
+            node_meta["subtitle"] = f"{into[0]}x{into[1]}→{out[0]}x{out[1]}"
+            op_badges = node_meta.setdefault("op_badges", [])
+            if "S" not in op_badges:
+                op_badges.append("S")
+        elif out or into:
+            size = out or into
+            node_meta["subtitle"] = f"{size[0]}x{size[1]}"
 
 
 def _build_layered_architecture(view: ViewResponse) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -541,7 +726,7 @@ def _manual_edges(
         if not source or not target:
             continue
         meta[data.id] = _edge_meta(edge)
-        label = data.label or ("SW" if data.flow_type == "control" else data.flow_type)
+        label = _edge_display_label(data, meta[data.id])
         pair = (data.source, data.target)
         parallel_counts[pair] += 1
         flow_key = data.flow_type if data.flow_type in {"M2M", "control", "OTF", "vOTF"} else "other"
@@ -749,16 +934,30 @@ def _elk_edges(edges: list[EdgeElement], meta: dict[str, Any]) -> list[dict[str,
     for edge in edges:
         data = edge.data
         meta[data.id] = _edge_meta(edge)
-        label = data.label or ("SW" if data.flow_type == "control" else data.flow_type)
+        label = _edge_display_label(data, meta[data.id])
         out.append(
             {
                 "id": data.id,
                 "sources": [data.source],
                 "targets": [data.target],
-                "labels": [{"text": label, "width": max(38, min(260, len(label) * 6 + 14)), "height": 18}],
+                "labels": [{"text": label, "width": max(38, min(300, len(label) * 6 + 14)), "height": 18}],
             }
         )
     return out
+
+
+def _edge_display_label(data: Any, edge_meta: dict[str, Any]) -> str:
+    """On-diagram edge text: the enriched transfer descriptor when available,
+    otherwise the backend label, with control edges shown as SW."""
+
+    descriptor = _edge_descriptor_label(data)
+    if descriptor:
+        return descriptor
+    if data.label:
+        return str(data.label)
+    if data.flow_type == "control":
+        return "SW"
+    return str(edge_meta.get("label") or data.flow_type)
 
 
 def _layer_order_edges(layer_group_ids: list[str], meta: dict[str, Any], *, prefix: str = "__layer_order") -> list[dict[str, Any]]:
@@ -859,7 +1058,12 @@ def _node_meta(node: NodeElement) -> dict[str, Any]:
         if ops:
             details.append("Ops: " + ", ".join(ops))
             if not subtitle:
-                subtitle = " / ".join(op_labels)
+                # Legacy views showed the scale as an inline size transition
+                # (4000x2252→1920x1080) rather than the word "Scale".
+                if op.scale and op.scale_from and op.scale_to:
+                    subtitle = f"{op.scale_from}→{op.scale_to}"
+                else:
+                    subtitle = " / ".join(op_labels)
     if data.memory:
         mem = data.memory
         size_label = _format_size_bytes(mem.size_bytes)
@@ -895,6 +1099,15 @@ def _node_meta(node: NodeElement) -> dict[str, Any]:
     if data.type == "sw" and not subtitle:
         subtitle = "<sw>"
     warning = data.warning or bool(data.sim_overlay and not data.sim_overlay.feasible)
+    op_badges: list[str] = []
+    if data.active_operations:
+        if data.active_operations.scale:
+            op_badges.append("S")
+        if data.active_operations.crop:
+            op_badges.append("C")
+        if data.active_operations.rotate is not None:
+            op_badges.append("R")
+    disabled = str(data.module_status or "").lower() in {"disabled", "off", "inactive", "unused"}
     return {
         "id": data.id,
         "label": data.label,
@@ -904,6 +1117,8 @@ def _node_meta(node: NodeElement) -> dict[str, Any]:
         "stroke": style["stroke"],
         "text": style["text"],
         "badges": data.summary_badges[:4],
+        "op_badges": op_badges,
+        "disabled": disabled,
         "subtitle": subtitle,
         "details": details,
         "semantic_group": data.hierarchy_group,
@@ -957,6 +1172,8 @@ def _edge_meta(edge: EdgeElement) -> dict[str, Any]:
     details.extend(data.detail_items)
     if data.latency_class:
         details.append(f"Latency: {data.latency_class}")
+    for pair in getattr(data, "port_pairs", None) or []:
+        details.append(f"Port: {pair.src} → {pair.dst}")
     if data.buffer_ref:
         details.append(f"Buffer: {data.buffer_ref}")
     if data.memory:
@@ -976,7 +1193,7 @@ def _edge_meta(edge: EdgeElement) -> dict[str, Any]:
     edge_role = _edge_role(edge)
     return {
         "id": data.id,
-        "label": data.label or _sim_edge_label(data) or data.flow_type,
+        "label": _edge_descriptor_label(data) or data.label or _sim_edge_label(data) or data.flow_type,
         "type": "edge",
         "flow_type": data.flow_type,
         "edge_role": edge_role,
@@ -984,6 +1201,45 @@ def _edge_meta(edge: EdgeElement) -> dict[str, Any]:
         "dash": data.flow_type in {"control", "risk", "M2M"},
         "details": details,
     }
+
+
+def _edge_descriptor_label(data: Any) -> str | None:
+    """Legacy-style transfer descriptor: ``BUF | WxH | FMT | 10b | COMP``.
+
+    The legacy task-topology view carried the full memory descriptor on every
+    M2M edge; rebuild it whenever the projection provides edge memory data so
+    "which buffer, what size, what format" reads directly off the diagram.
+    """
+
+    pairs = getattr(data, "port_pairs", None) or []
+    mem = data.memory
+    if not mem and not pairs:
+        return None
+    bits = []
+    if mem:
+        bits = [
+            f"{mem.width}x{mem.height}" if mem.width and mem.height else None,
+            mem.format,
+            f"{mem.bitdepth}b" if mem.bitdepth else None,
+            mem.compression,
+        ]
+    descriptor = " | ".join(str(bit) for bit in bits if bit)
+    # Port pairs are the strongest identity (which WDMA feeds which RDMA);
+    # when present they replace the buffer name, which stays in the tooltip.
+    if pairs:
+        head = f"{pairs[0].src}→{pairs[0].dst}"
+        if len(pairs) > 1:
+            head = f"{head} +{len(pairs) - 1}"
+    elif data.buffer_ref:
+        head = str(data.buffer_ref)
+    elif descriptor:
+        head = str(data.flow_type)
+    else:
+        return None
+    label = f"{head} | {descriptor}" if descriptor else head
+    if data.sim_overlay and data.sim_overlay.bw_mbs is not None:
+        label = f"{label} | {data.sim_overlay.bw_mbs:g}MB/s"
+    return label
 
 
 def _sim_edge_label(data: Any) -> str | None:
@@ -1076,11 +1332,11 @@ def _view_meta(view: ViewResponse) -> dict[str, Any]:
     }
 
 
-def _html(graph: dict[str, Any], meta: dict[str, Any], title: str, height: int) -> str:
+def _html(graph: dict[str, Any], meta: dict[str, Any], title: str, height: int, *, inline_runtime: bool = True) -> str:
     graph_json = _safe_script_json(graph)
     meta_json = _safe_script_json(meta)
     safe_title = html.escape(title)
-    elk_runtime_script = _elk_runtime_script()
+    elk_runtime_script = _elk_runtime_script() if inline_runtime else f'<script src="{STATIC_ELK_URL}"></script>'
     return f"""<!doctype html>
 <html>
 <head>
@@ -1095,9 +1351,12 @@ def _html(graph: dict[str, Any], meta: dict[str, Any], title: str, height: int) 
   .elk-controls button {{ border:1px solid #CBD5E1; background:#FFFFFF; color:#334155; border-radius:7px; padding:5px 8px; font-weight:700; cursor:pointer; }}
   .elk-controls button:hover {{ background:#F8FAFC; }}
   .elk-legend {{ position:absolute; left:12px; bottom:10px; z-index:4; display:flex; align-items:center; gap:14px; font-size:11px; color:#64748B; background:rgba(255,255,255,.9); border:1px solid #E5E7EB; border-radius:8px; padding:6px 9px; }}
-  .tip {{ position:absolute; z-index:5; min-width:220px; max-width:360px; background:#0F172A; color:#E5E7EB; border-radius:9px; padding:9px 10px; font-size:11px; line-height:1.45; pointer-events:none; opacity:0; transform:translate(8px,8px); box-shadow:0 12px 28px rgba(15,23,42,.22); }}
-  .tip b {{ color:#FFFFFF; font-size:12px; }}
-  .tip .muted {{ color:#CBD5E1; }}
+  /* Legacy html_view tooltip look: white card, subtle border, title rule. */
+  .tip {{ position:absolute; z-index:5; min-width:220px; max-width:480px; background:#fff; color:#333; border:1px solid #bbb; border-radius:8px; padding:12px 16px; font-size:12px; line-height:1.5; pointer-events:none; opacity:0; transform:translate(8px,8px); box-shadow:0 4px 20px rgba(0,0,0,.2); }}
+  .tip b {{ display:block; color:#222; font-size:14px; border-bottom:1px solid #eee; padding-bottom:6px; margin-bottom:8px; }}
+  .tip .muted {{ color:#666; }}
+  .tip .tip-close {{ position:absolute; top:6px; right:10px; cursor:pointer; font-size:16px; color:#999; line-height:1; }}
+  .tip .tip-close:hover {{ color:#333; }}
   .error {{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#B91C1C; font-size:13px; padding:24px; text-align:center; }}
   svg {{ width:100%; height:100%; cursor:grab; }}
   svg.dragging {{ cursor:grabbing; }}
@@ -1115,22 +1374,24 @@ def _html(graph: dict[str, Any], meta: dict[str, Any], title: str, height: int) 
       <button id="fit">Fit</button>
       <button id="reset">Reset</button>
       <button id="zoomIn">+</button>
+      <button id="exportSvg" title="Download the full diagram as an SVG file">SVG</button>
     </div>
   </div>
-  <svg id="svg"><defs>
-    <marker id="arrow-blue" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill="#4E6E81"/></marker>
-    <marker id="arrow-teal" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill="#2BB3AA"/></marker>
+  <svg id="svg" tabindex="0"><defs>
+    <marker id="arrow-blue" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill="#2563EB"/></marker>
+    <marker id="arrow-teal" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill="#0D9488"/></marker>
     <marker id="arrow-orange" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill="#F97316"/></marker>
+    <marker id="arrow-amber" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill="#CA8A04"/></marker>
     <marker id="arrow-gray" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill="#9B8EC4"/></marker>
     <marker id="arrow-red" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill="#EF4444"/></marker>
     <marker id="arrow-green" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill="#16A34A"/></marker>
     <marker id="arrow-sky" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L8,3 z" fill="#0EA5E9"/></marker>
   </defs><g id="main"></g></svg>
   <div class="elk-legend">
-    <span><svg width="38" height="8"><path d="M1 4 H35" stroke="#4E6E81" stroke-width="2"/><path d="M31 1 L37 4 L31 7" fill="#4E6E81"/></svg> OTF</span>
-    <span><svg width="38" height="8"><path d="M1 4 H35" stroke="#2BB3AA" stroke-width="2"/><path d="M31 1 L37 4 L31 7" fill="#2BB3AA"/></svg> vOTF</span>
-    <span><svg width="38" height="8"><path d="M1 4 H35" stroke="#F97316" stroke-width="2" stroke-dasharray="5 4"/><path d="M31 1 L37 4 L31 7" fill="#F97316"/></svg> M2M</span>
-    <span><svg width="38" height="8"><path d="M1 4 H35" stroke="#9B8EC4" stroke-width="2" stroke-dasharray="5 4"/><path d="M31 1 L37 4 L31 7" fill="#9B8EC4"/></svg> SW</span>
+    <span><svg width="38" height="8"><path d="M1 4 H35" stroke="#2563EB" stroke-width="2"/><path d="M31 1 L37 4 L31 7" fill="#2563EB"/></svg> OTF</span>
+    <span><svg width="38" height="8"><path d="M1 4 H35" stroke="#0D9488" stroke-width="2"/><path d="M31 1 L37 4 L31 7" fill="#0D9488"/></svg> vOTF</span>
+    <span><svg width="38" height="8"><path d="M1 4 H35" stroke="#F97316" stroke-width="2" stroke-dasharray="7 4"/><path d="M31 1 L37 4 L31 7" fill="#F97316"/></svg> M2M</span>
+    <span><svg width="38" height="8"><path d="M1 4 H35" stroke="#CA8A04" stroke-width="2" stroke-dasharray="5 4"/><path d="M31 1 L37 4 L31 7" fill="#CA8A04"/></svg> SW</span>
     <span><svg width="38" height="8"><path d="M1 4 H35" stroke="#16A34A" stroke-width="2"/><path d="M31 1 L37 4 L31 7" fill="#16A34A"/></svg> Sensor In</span>
     <span><svg width="38" height="8"><path d="M1 4 H35" stroke="#0EA5E9" stroke-width="2"/><path d="M31 1 L37 4 L31 7" fill="#0EA5E9"/></svg> Display Out</span>
     <span><svg width="38" height="8"><path d="M1 4 H35" stroke="#EF4444" stroke-width="2" stroke-dasharray="4 4"/><path d="M31 1 L37 4 L31 7" fill="#EF4444"/></svg> Risk</span>
@@ -1151,8 +1412,9 @@ const PAD = 36;
 const NP = {{}};
 
 function markerFor(color) {{
-  if (color === '#2BB3AA') return 'url(#arrow-teal)';
+  if (color === '#0D9488') return 'url(#arrow-teal)';
   if (color === '#F97316') return 'url(#arrow-orange)';
+  if (color === '#CA8A04') return 'url(#arrow-amber)';
   if (color === '#9B8EC4') return 'url(#arrow-gray)';
   if (color === '#EF4444') return 'url(#arrow-red)';
   if (color === '#16A34A') return 'url(#arrow-green)';
@@ -1208,6 +1470,20 @@ function initialGraphView() {{
     readableLevel2View();
     return;
   }}
+  // Tall, narrow graphs (single-chain topologies) become unreadably small
+  // under fit-both; start at width-fit with a readable scale floor and let
+  // the user pan vertically. The Fit button still does a full fit.
+  const gw = Math.max(1, layoutGraph.width || 1);
+  const gh = Math.max(1, layoutGraph.height || 1);
+  const w = shell.clientWidth - PAD * 2;
+  const h = shell.clientHeight - PAD * 2;
+  if (gh > h * 1.15 && gh > gw) {{
+    scale = Math.max(0.62, Math.min(1.15, (w / gw) * 0.94));
+    tx = Math.max(0, (w - gw * scale) / 2);
+    ty = 16;
+    setTransform();
+    return;
+  }}
   fitGraph();
 }}
 
@@ -1216,17 +1492,72 @@ function zoomBy(factor) {{
   setTransform();
 }}
 
-function showTip(evt, id) {{
+let tipPinned = false;
+
+function tipHtml(id, pinned) {{
   const m = M[id] || {{}};
   const details = (m.details || []).map(d => `<div class="muted">${{esc(d)}}</div>`).join('');
   const badges = (m.badges || []).map(b => `<span class="muted">${{esc(b)}}</span>`).join(' ');
-  tip.innerHTML = `<b>${{esc(m.label || id)}}</b><div class="muted">${{esc(m.layer || m.flow_type || m.type || '')}}</div>${{details}}${{badges ? '<div>'+badges+'</div>' : ''}}`;
-  tip.style.left = `${{evt.clientX - shell.getBoundingClientRect().left + 10}}px`;
-  tip.style.top = `${{evt.clientY - shell.getBoundingClientRect().top + 10}}px`;
+  const close = pinned ? '<span class="tip-close" id="tipClose">&times;</span>' : '';
+  return `${{close}}<b>${{esc(m.label || id)}}</b><div class="muted">${{esc(m.layer || m.flow_type || m.type || '')}}</div>${{details}}${{badges ? '<div>'+badges+'</div>' : ''}}`;
+}}
+
+function placeTip(evt) {{
+  const rect = shell.getBoundingClientRect();
+  let left = evt.clientX - rect.left + 10;
+  let top = evt.clientY - rect.top + 10;
+  left = Math.min(left, rect.width - tip.offsetWidth - 12);
+  top = Math.min(top, rect.height - tip.offsetHeight - 12);
+  tip.style.left = `${{Math.max(4, left)}}px`;
+  tip.style.top = `${{Math.max(4, top)}}px`;
+}}
+
+function showTip(evt, id) {{
+  if (tipPinned) return;
+  tip.innerHTML = tipHtml(id, false);
   tip.style.opacity = 1;
+  placeTip(evt);
+}}
+
+// Click pins the tooltip so port/detail rows can be read and copied; a
+// second click elsewhere, the close button, or Escape releases it.
+function broadcastSelection(id) {{
+  const m = M[id] || {{}};
+  const selectSeq = Date.now();
+  try {{
+    // Same-origin top window; the graph selection bridge component forwards
+    // this into Streamlit so the Graph Inspector follows diagram clicks.
+    window.parent.postMessage({{
+      type: 'sdb-graph-select',
+      id: id,
+      kind: m.type === 'edge' ? 'edge' : 'node',
+      label: m.label || id,
+      seq: selectSeq
+    }}, '*');
+  }} catch (err) {{}}
+}}
+
+function pinTip(evt, id) {{
+  if (dragDist > 3) return;
+  evt.stopPropagation();
+  broadcastSelection(id);
+  tipPinned = true;
+  tip.innerHTML = tipHtml(id, true);
+  tip.style.opacity = 1;
+  tip.style.pointerEvents = 'auto';
+  placeTip(evt);
+  const closeBtn = document.getElementById('tipClose');
+  if (closeBtn) closeBtn.onclick = unpinTip;
+}}
+
+function unpinTip() {{
+  tipPinned = false;
+  tip.style.pointerEvents = 'none';
+  tip.style.opacity = 0;
 }}
 
 function hideTip() {{
+  if (tipPinned) return;
   tip.style.opacity = 0;
 }}
 
@@ -1298,6 +1629,7 @@ function drawLeaves(g, graph, ox=0, oy=0) {{
     const ng = svgEl('g', {{class:'node'}});
     const w = node.width || 140;
     const h = node.height || 54;
+    const isDisabled = !!m.disabled;
     if (m.type === 'buffer' || m.layer === 'memory') {{
       ng.appendChild(svgEl('rect', {{
         x, y, width:w, height:h, rx:18, ry:18,
@@ -1314,34 +1646,77 @@ function drawLeaves(g, graph, ox=0, oy=0) {{
         fill:'none', stroke:m.stroke || '#0F766E', 'stroke-width':1.2, opacity:0.35
       }}));
     }} else {{
-      ng.appendChild(svgEl('rect', {{
+      const rectAttrs = {{
         x, y, width:w, height:h, rx:8, ry:8,
-        fill:m.fill || '#FFFFFF', stroke:m.stroke || '#64748B',
+        fill:isDisabled ? '#EDEDED' : (m.fill || '#FFFFFF'),
+        stroke:isDisabled ? '#B0B0B0' : (m.stroke || '#64748B'),
         'stroke-width':m.warning ? 2.4 : 1.8,
         filter:'drop-shadow(0 2px 4px rgba(15,23,42,.08))'
-      }}));
+      }};
+      if (isDisabled) rectAttrs['stroke-dasharray'] = '4 2';
+      ng.appendChild(svgEl('rect', rectAttrs));
+      if (isDisabled) ng.setAttribute('opacity', '0.75');
     }}
     const hasSubtitle = !!m.subtitle;
     drawLabel(ng, m.label || node.id, x, y + (hasSubtitle ? 6 : Math.max(0, (h - 42) / 2)), w, m.text || '#111827');
     if (hasSubtitle) {{
+      // Wrap long memory descriptors onto a second line (split on " / ")
+      // instead of truncating away the format/compression tail.
+      const full = String(m.subtitle || '');
+      const maxSubtitle = Math.max(34, Math.floor(w / 5.2));
+      let subLines = [full];
+      if (full.length > maxSubtitle && full.includes(' / ')) {{
+        const parts = full.split(' / ');
+        let first = parts.shift();
+        while (parts.length && (first + ' / ' + parts[0]).length <= maxSubtitle) {{
+          first = first + ' / ' + parts.shift();
+        }}
+        subLines = parts.length ? [first, parts.join(' / ')] : [first];
+      }}
+      subLines = subLines.map(line => line.length > maxSubtitle ? line.slice(0, maxSubtitle - 3) + '...' : line).slice(0, 2);
+      const baseY = y + h - (subLines.length > 1 ? 22 : 13);
       const subtitle = svgEl('text', {{
         x: x + w / 2,
-        y: y + h - 13,
+        y: baseY,
         'text-anchor':'middle',
         'font-size':8.5,
         'font-weight':700,
         fill:'#64748B'
       }});
-      const maxSubtitle = Math.max(34, Math.floor(w / 5.2));
-      subtitle.textContent = String(m.subtitle || '').length > maxSubtitle ? String(m.subtitle || '').slice(0, maxSubtitle - 3) + '...' : String(m.subtitle || '');
+      subLines.forEach((line, i) => {{
+        const tspan = svgEl('tspan', {{x: x + w / 2, dy: i === 0 ? 0 : 10}});
+        tspan.textContent = line;
+        subtitle.appendChild(tspan);
+      }});
       ng.appendChild(subtitle);
     }}
     if (m.warning) {{
       ng.appendChild(svgEl('circle', {{cx: x + (node.width || 140) - 13, cy: y + 13, r: 6, fill:'#F97316'}}));
     }}
+    drawOpBadges(ng, m, x, y, w);
     ng.addEventListener('mousemove', evt => showTip(evt, node.id));
     ng.addEventListener('mouseleave', hideTip);
+    ng.addEventListener('click', evt => pinTip(evt, node.id));
+    ng.style.cursor = 'pointer';
     g.appendChild(ng);
+  }});
+}}
+
+// Legacy-style operation badges: small circles in the top-right corner
+// (S=scale orange, C=crop blue, R=rotate teal). Shifted left when the
+// warning dot occupies the corner.
+function drawOpBadges(ng, m, x, y, w) {{
+  const badges = m.op_badges || [];
+  if (!badges.length) return;
+  const colors = {{S:'#E65100', C:'#1565C0', R:'#0D9488'}};
+  let bx = x + w - (m.warning ? 28 : 10);
+  const by = y + 9;
+  badges.slice().reverse().forEach(b => {{
+    ng.appendChild(svgEl('circle', {{cx:bx, cy:by, r:6.5, fill:colors[b] || '#666', 'fill-opacity':'0.92', stroke:'#FFFFFF', 'stroke-width':1}}));
+    const t = svgEl('text', {{x:bx, y:by + 3, 'text-anchor':'middle', 'font-size':8, 'font-weight':700, fill:'#FFFFFF'}});
+    t.textContent = b;
+    ng.appendChild(t);
+    bx -= 15;
   }});
 }}
 
@@ -1379,18 +1754,26 @@ function drawNode(g, node, ox=0, oy=0) {{
     title.textContent = m.label || node.id;
     ng.appendChild(title);
   }} else {{
-    ng.appendChild(svgEl('rect', {{
+    const isDisabled = !!m.disabled;
+    const rectAttrs = {{
       x, y, width: node.width || 140, height: node.height || 54, rx: 8, ry: 8,
-      fill: m.fill || '#FFFFFF', stroke: m.stroke || '#64748B',
+      fill: isDisabled ? '#EDEDED' : (m.fill || '#FFFFFF'),
+      stroke: isDisabled ? '#B0B0B0' : (m.stroke || '#64748B'),
       'stroke-width': m.warning ? 2.4 : 1.8,
       filter: 'drop-shadow(0 2px 4px rgba(15,23,42,.08))'
-    }}));
+    }};
+    if (isDisabled) rectAttrs['stroke-dasharray'] = '4 2';
+    ng.appendChild(svgEl('rect', rectAttrs));
+    if (isDisabled) ng.setAttribute('opacity', '0.75');
     drawLabel(ng, m.label || node.id, x, y + Math.max(0, ((node.height || 54) - 42) / 2), node.width || 140, m.text || '#111827');
     if (m.warning) {{
       ng.appendChild(svgEl('circle', {{cx: x + (node.width || 140) - 13, cy: y + 13, r: 6, fill:'#F97316'}}));
     }}
+    drawOpBadges(ng, m, x, y, node.width || 140);
     ng.addEventListener('mousemove', evt => showTip(evt, node.id));
     ng.addEventListener('mouseleave', hideTip);
+    ng.addEventListener('click', evt => pinTip(evt, node.id));
+    ng.style.cursor = 'pointer';
   }}
 
   (node.children || []).forEach(child => drawNode(g, child, x, y));
@@ -1411,10 +1794,16 @@ function drawEdges(g, edges, defaultContainer='root') {{
     const cp = NP[edge.container || defaultContainer] || {{x:0, y:0}};
     const ox = cp.x;
     const oy = cp.y;
+    // Legacy stroke-weight hierarchy: streaming OTF paths render heaviest,
+    // memory hops medium, control hand-offs lightest.
+    const flowWidth = (m.flow_type === 'OTF' || m.flow_type === 'vOTF') ? 2.4
+      : m.flow_type === 'M2M' ? 2.0
+      : m.flow_type === 'risk' ? 1.8
+      : 1.6;
     (edge.sections || []).forEach(section => {{
       const p = svgEl('path', {{
         class:'edge', d: pathFromSection(section, ox, oy), fill:'none', stroke:color,
-        'stroke-width': m.flow_type === 'risk' ? 1.8 : 1.55,
+        'stroke-width': flowWidth,
         'stroke-linecap':'round', 'stroke-linejoin':'round',
         'marker-end': markerFor(color),
         opacity: m.flow_type === 'control' ? 0.72 : 0.9
@@ -1422,18 +1811,37 @@ function drawEdges(g, edges, defaultContainer='root') {{
       if (m.dash) p.setAttribute('stroke-dasharray', m.flow_type === 'M2M' ? '7 4' : '5 4');
       p.addEventListener('mousemove', evt => showTip(evt, edge.id));
       p.addEventListener('mouseleave', hideTip);
+      p.addEventListener('click', evt => pinTip(evt, edge.id));
       g.appendChild(p);
     }});
     (edge.labels || []).forEach(label => {{
       if (label.x === undefined || label.y === undefined) return;
       const lg = svgEl('g', {{class:'edge-label'}});
       const text = String(label.text || '');
-      const w = Math.max(30, Math.min(260, text.length * 6 + 12));
+      // Long transfer descriptors (BUF | WxH | FMT | bit | COMP) wrap into up
+      // to two lines split on the " | " separators instead of overflowing.
+      let lines = [text];
+      if (text.length > 34 && text.includes(' | ')) {{
+        const parts = text.split(' | ');
+        let first = parts.shift();
+        while (parts.length && (first + ' | ' + parts[0]).length <= Math.ceil(text.length / 2) + 4) {{
+          first = first + ' | ' + parts.shift();
+        }}
+        lines = parts.length ? [first, parts.join(' | ')] : [first];
+      }}
+      const longest = Math.max(...lines.map(l => l.length));
+      const w = Math.max(30, Math.min(300, longest * 5.6 + 14));
+      const lh = 12;
+      const boxH = lines.length * lh + 6;
       const x = label.x + ox;
       const y = label.y + oy;
-      lg.appendChild(svgEl('rect', {{x, y, width:w, height:18, rx:3, fill:'#FFFFFF', stroke:color, 'stroke-width':0.8, opacity:0.95}}));
+      lg.appendChild(svgEl('rect', {{x, y, width:w, height:boxH, rx:3, fill:'#FFFFFF', stroke:color, 'stroke-width':0.8, opacity:0.95}}));
       const te = svgEl('text', {{x:x + w/2, y:y + 12, 'text-anchor':'middle', 'font-size':9, 'font-weight':700, fill:color}});
-      te.textContent = text;
+      lines.forEach((line, i) => {{
+        const tspan = svgEl('tspan', {{x: x + w/2, dy: i === 0 ? 0 : lh}});
+        tspan.textContent = line;
+        te.appendChild(tspan);
+      }});
       lg.appendChild(te);
       g.appendChild(lg);
     }});
@@ -1464,13 +1872,38 @@ document.getElementById('zoomOut').onclick = () => zoomBy(0.84);
 document.getElementById('zoomIn').onclick = () => zoomBy(1.18);
 document.getElementById('fit').onclick = fitGraph;
 document.getElementById('reset').onclick = resetGraph;
+document.getElementById('exportSvg').onclick = () => {{
+  if (!layoutGraph) return;
+  // Clone at identity transform so the export always contains the full
+  // graph regardless of the current pan/zoom.
+  const clone = svg.cloneNode(true);
+  const gw = Math.ceil((layoutGraph.width || 800) + PAD * 2);
+  const gh = Math.ceil((layoutGraph.height || 600) + PAD * 2);
+  clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  clone.setAttribute('width', String(gw));
+  clone.setAttribute('height', String(gh));
+  clone.setAttribute('viewBox', `0 0 ${{gw}} ${{gh}}`);
+  const cloneMain = clone.querySelector('#main');
+  if (cloneMain) cloneMain.setAttribute('transform', `translate(${{PAD}},${{PAD}}) scale(1)`);
+  clone.insertAdjacentHTML('afterbegin', '<rect width="100%" height="100%" fill="#FFFFFF"/>');
+  const text = new XMLSerializer().serializeToString(clone);
+  const blob = new Blob([text], {{type: 'image/svg+xml'}});
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  const title = (VIEW.scenario || 'view') + '_' + (VIEW.layout || 'diagram');
+  link.download = title.replace(/[^A-Za-z0-9._-]+/g, '_') + '.svg';
+  link.click();
+  URL.revokeObjectURL(link.href);
+}};
 
-let dragging = false, sx = 0, sy = 0, startTx = 0, startTy = 0;
+let dragging = false, sx = 0, sy = 0, startTx = 0, startTy = 0, dragDist = 0;
 svg.addEventListener('mousedown', evt => {{
-  dragging = true; sx = evt.clientX; sy = evt.clientY; startTx = tx; startTy = ty; svg.classList.add('dragging');
+  dragging = true; dragDist = 0; sx = evt.clientX; sy = evt.clientY; startTx = tx; startTy = ty; svg.classList.add('dragging');
+  svg.focus();
 }});
 window.addEventListener('mousemove', evt => {{
   if (!dragging) return;
+  dragDist += 1;
   tx = startTx + (evt.clientX - sx);
   ty = startTy + (evt.clientY - sy);
   setTransform();
@@ -1480,6 +1913,20 @@ svg.addEventListener('wheel', evt => {{
   evt.preventDefault();
   zoomBy(evt.deltaY > 0 ? 0.92 : 1.08);
 }}, {{passive:false}});
+svg.addEventListener('click', evt => {{
+  if (dragDist <= 3 && !tip.contains(evt.target)) unpinTip();
+}});
+svg.addEventListener('keydown', evt => {{
+  const PAN_STEP = 60;
+  if (evt.key === 'ArrowLeft') tx += PAN_STEP;
+  else if (evt.key === 'ArrowRight') tx -= PAN_STEP;
+  else if (evt.key === 'ArrowUp') ty += PAN_STEP;
+  else if (evt.key === 'ArrowDown') ty -= PAN_STEP;
+  else if (evt.key === 'Escape') {{ unpinTip(); return; }}
+  else return;
+  evt.preventDefault();
+  setTransform();
+}});
 window.addEventListener('resize', fitGraph);
 mainRender();
 </script>
@@ -1497,10 +1944,25 @@ def _safe_script_json(value: Any) -> str:
     )
 
 
+STATIC_ELK_URL = "/app/static/elk.bundled.js"
+_STATIC_ELK_PATH = Path(__file__).resolve().parents[1] / "static" / "elk.bundled.js"
+
+
+def _static_elk_available() -> bool:
+    """True when the browser can fetch the ELK runtime from the static route."""
+    if not _STATIC_ELK_PATH.is_file():
+        return False
+    try:
+        import streamlit as st
+
+        return bool(st.get_option("server.enableStaticServing"))
+    except Exception:
+        return False
+
+
 @lru_cache(maxsize=1)
 def _elk_runtime_script() -> str:
-    vendor_path = Path(__file__).resolve().parents[1] / "assets" / "vendor" / "elk.bundled.js"
     try:
-        return f"<script>\n{vendor_path.read_text(encoding='utf-8')}\n</script>"
+        return f"<script>\n{_STATIC_ELK_PATH.read_text(encoding='utf-8')}\n</script>"
     except OSError:
         return '<script src="https://cdn.jsdelivr.net/npm/elkjs@0.9.3/lib/elk.bundled.js"></script>'

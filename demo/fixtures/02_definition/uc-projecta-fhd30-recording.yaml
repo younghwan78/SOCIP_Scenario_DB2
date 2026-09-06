@@ -1,24 +1,231 @@
-id: uc-camera-recording
+id: uc-projecta-fhd30-recording
 schema_version: "2.2"
 kind: scenario.usecase
 project_ref: proj-A-exynos2500
 
 metadata:
-  name: "Camera Recording Pipeline"
+  name: "Project A FHD30 Recording"
   category: [camera, codec]
   domain: [camera]
 
 pipeline:
   nodes:
-    - { id: csis0, ip_ref: ip-csis-v8, instance_index: 0 }
-    - { id: isp0,  ip_ref: ip-isp-v12, instance_index: 0, role: main }
-    - { id: mfc,   ip_ref: ip-mfc-v14 }
-    - { id: dpu,   ip_ref: ip-dpu-v9 }
-    - { id: llc,   ip_ref: ip-llc-v2 }
+    - id: sensor_rear
+      ip_ref: ip-sensor-hp2-projectA
+      role: sensor
+      instance_index: 0
+    - id: csis_link
+      ip_ref: ip-csis-v8
+      role: csis_link
+      instance_index: 0
+    - id: csis
+      ip_ref: ip-csis-v8
+      role: csis
+      instance_index: 0
+    - id: pdp
+      ip_ref: ip-isp-v12
+      role: pdp
+      instance_index: 0
+    - id: prep
+      ip_ref: ip-isp-v12
+      role: prep
+      instance_index: 0
+    - id: cstat
+      ip_ref: ip-isp-v12
+      role: cstat
+      instance_index: 0
+      operations:
+        crop: true
+        scale: true
+        scale_from: 4000x2252
+        scale_to: 1920x1080
+    - id: byrp
+      ip_ref: ip-isp-v12
+      role: byrp
+      instance_index: 0
+    - id: rgbp
+      ip_ref: ip-isp-v12
+      role: rgbp
+      instance_index: 0
+    - id: mlsc
+      ip_ref: ip-isp-v12
+      role: mlsc
+      instance_index: 0
+      operations:
+        scale: true
+        scale_from: 4000x2252
+        scale_to: 1920x1080
+    - id: post_irta
+      ip_ref: ip-cpu-mid-projectA
+      role: sw_task
+      instance_index: 0
+    - id: post_irta2
+      ip_ref: ip-cpu-mid-projectA
+      role: sw_task
+      instance_index: 0
+    - id: mtnr0
+      ip_ref: ip-isp-v12
+      role: mtnr0
+      instance_index: 0
+    - id: mtnr1
+      ip_ref: ip-isp-v12
+      role: mtnr1
+      instance_index: 0
+    - id: msnr
+      ip_ref: ip-isp-v12
+      role: msnr
+      instance_index: 0
+    - id: yuvp
+      ip_ref: ip-isp-v12
+      role: yuvp
+      instance_index: 0
+    - id: mcsc
+      ip_ref: ip-isp-v12
+      role: mcsc
+      instance_index: 0
+    - id: codec2
+      ip_ref: ip-cpu-mid-projectA
+      role: sw_task
+      instance_index: 0
+    - id: hw_composer
+      ip_ref: ip-cpu-mid-projectA
+      role: sw_task
+      instance_index: 0
+    - id: mfc
+      ip_ref: ip-mfc-v14
+      role: encoder
+      instance_index: 0
+    - id: dpu
+      ip_ref: ip-dpu-v9
+      role: display
+      instance_index: 0
+    - id: llc
+      ip_ref: ip-llc-v2
+      role: cache
+      instance_index: 0
+
   edges:
-    - { from: csis0, to: isp0, type: OTF }
-    - { from: isp0,  to: mfc,  type: M2M, buffer: "RECORD_BUF" }
-    - { from: isp0,  to: dpu,  type: M2M, buffer: "PREVIEW_BUF" }
+    - { from: sensor_rear, to: csis_link, type: OTF }
+    - from: csis_link
+      to: csis
+      type: OTF
+      port_pairs:
+        - { src: LINK, dst: NFI_DEC }
+    - from: csis
+      to: pdp
+      type: OTF
+      port_pairs:
+        - { src: IBUF, dst: REORDER }
+    - from: csis
+      to: prep
+      type: OTF
+      port_pairs:
+        - { src: COUTFIFO, dst: CINFIFO }
+    - from: csis
+      to: byrp
+      type: M2M
+      buffer: "RAW_BAYER_MAIN"
+      port_pairs:
+        - { src: CSIS_WDMA, dst: COMP_RD0_RDMA }
+    - from: prep
+      to: cstat
+      type: OTF
+      port_pairs:
+        - { src: COUTFIFO, dst: CINFIFO }
+    - from: byrp
+      to: rgbp
+      type: OTF
+      port_pairs:
+        - { src: COUTFIFO, dst: CINFIFO }
+    - from: rgbp
+      to: mlsc
+      type: OTF
+      port_pairs:
+        - { src: COUTFIFO, dst: CINFIFO }
+    # MLSC writes the L0..G4 pyramid to DRAM; postIRTA (SW) consumes it.
+    - from: mlsc
+      to: post_irta
+      type: M2M
+      buffer: "MLSC_L0_BUF"
+      port_pairs:
+        - { src: L0_WDMA, dst: IRTA_SW_READ }
+    - { from: post_irta, to: post_irta2, type: control }
+    - from: post_irta2
+      to: mtnr0
+      type: M2M
+      buffer: "MLSC_L0_BUF"
+      port_pairs:
+        - { src: IRTA_SW_WRITE, dst: L0_RDMA }
+    - from: post_irta2
+      to: mtnr1
+      type: M2M
+      buffer: "MLSC_L1_BUF"
+      port_pairs:
+        - { src: IRTA_SW_WRITE, dst: L1_RDMA }
+    - from: post_irta2
+      to: mtnr1
+      type: M2M
+      buffer: "MLSC_L2_BUF"
+      port_pairs:
+        - { src: IRTA_SW_WRITE, dst: L2_RDMA }
+    - from: post_irta2
+      to: mtnr1
+      type: M2M
+      buffer: "MLSC_L3_BUF"
+      port_pairs:
+        - { src: IRTA_SW_WRITE, dst: L3_RDMA }
+    - from: post_irta2
+      to: mtnr1
+      type: M2M
+      buffer: "MLSC_G4_BUF"
+      port_pairs:
+        - { src: IRTA_SW_WRITE, dst: G4_RDMA }
+    - from: mtnr0
+      to: msnr
+      type: OTF
+      port_pairs:
+        - { src: L0_COUTFIFO, dst: L0_CINFIFO }
+    - from: mtnr1
+      to: msnr
+      type: OTF
+      port_pairs:
+        - { src: L1_COUTFIFO, dst: L1_CINFIFO }
+        - { src: L2_COUTFIFO, dst: L2_CINFIFO }
+        - { src: L3_COUTFIFO, dst: L3_CINFIFO }
+        - { src: G4_COUTFIFO, dst: G4_CINFIFO }
+    - from: msnr
+      to: yuvp
+      type: OTF
+      port_pairs:
+        - { src: COUTFIFO, dst: CINFIFO }
+    - from: yuvp
+      to: mcsc
+      type: OTF
+      port_pairs:
+        - { src: COUTFIFO, dst: CINFIFO }
+    - from: mcsc
+      to: codec2
+      type: M2M
+      buffer: "RECORD_BUF"
+      port_pairs:
+        - { src: P0_WDMA, dst: CODEC2_SW_READ }
+    - from: codec2
+      to: mfc
+      type: control
+      port_pairs:
+        - { src: CODEC2_SW_WRITE, dst: MFC_RDMA }
+    - from: mcsc
+      to: hw_composer
+      type: M2M
+      buffer: "PREVIEW_BUF"
+      port_pairs:
+        - { src: P1_WDMA, dst: HWC_SW_READ }
+    - from: hw_composer
+      to: dpu
+      type: control
+      port_pairs:
+        - { src: HWC_SW_WRITE, dst: DPU_RDMA }
+
   buffers:
     RAW_BAYER_MAIN:
       label: RAW Bayer Buffer
@@ -28,6 +235,41 @@ pipeline:
       size_ref: sensor_full
       compression: SBWC_v4
       alignment: 256B
+    MLSC_L0_BUF:
+      label: MLSC Pyramid L0
+      format: YUV444
+      bitdepth: 14
+      planes: 1
+      size: 1920x1080
+      compression: none
+    MLSC_L1_BUF:
+      label: MLSC Pyramid L1
+      format: YUV444
+      bitdepth: 14
+      planes: 1
+      size: 960x540
+      compression: none
+    MLSC_L2_BUF:
+      label: MLSC Pyramid L2
+      format: YUV444
+      bitdepth: 14
+      planes: 1
+      size: 480x270
+      compression: none
+    MLSC_L3_BUF:
+      label: MLSC Pyramid L3
+      format: YUV444
+      bitdepth: 14
+      planes: 1
+      size: 240x135
+      compression: none
+    MLSC_G4_BUF:
+      label: MLSC Pyramid G4
+      format: YUV444
+      bitdepth: 14
+      planes: 1
+      size: 120x68
+      compression: none
     RECORD_BUF:
       label: Encoder Input Buffer
       format: YUV420
@@ -57,6 +299,7 @@ pipeline:
       size_ref: bitstream
       placement:
         llc_allocated: false
+
   architecture_graph:
     layout: layered-lanes
     layer_order: [app, framework, hal, kernel, hw, memory]
@@ -66,7 +309,7 @@ pipeline:
   task_graph:
     layout: vertical-topology
     nodes:
-      - { id: t_sensor, label: "t_sensor\n(Sensor)\n{sensor_full}@{fps}", layer: hw, ip_ref: ip-csis-v8, x: 520, y: 70, width: 150, height: 60 }
+      - { id: t_sensor, label: "t_sensor\n(Sensor)\n{sensor_full}@{fps}", layer: hw, ip_ref: ip-sensor-hp2-projectA, x: 520, y: 70, width: 150, height: 60 }
       - { id: t_csislink, label: "t_csislink\n(CSIS_LINK)\n{sensor_full}", layer: hw, ip_ref: ip-csis-v8, x: 520, y: 170 }
       - { id: t_csis, label: "t_csis\n(CSIS)\n{sensor_full}", layer: hw, ip_ref: ip-csis-v8, x: 520, y: 270 }
       - { id: t_pdp, label: "t_pdp\n(PDP)\n{sensor_full}", layer: hw, x: 300, y: 390 }
@@ -140,7 +383,7 @@ pipeline:
 
 size_profile:
   anchors:
-    sensor_full: "4000x3000"
+    sensor_full: "4000x2252"
     record_out:  "1920x1080"
     preview_out: "1920x1080"
 
@@ -152,6 +395,17 @@ design_axes:
   - { name: concurrency, enum: [single, with_preview, dual_cam] }
 
 variants:
+  # --- Legacy reference variant (FHD30 Recording) ---
+  - id: FHD30-recording
+    severity: light
+    design_conditions:
+      resolution: FHD
+      fps: 30
+      codec: "H.265"
+      hdr: SDR
+      concurrency: with_preview
+    tags: [legacy_reference]
+
   # --- Production variant (Strict) ---
   - id: UHD60-HDR10-H265
     severity: heavy
@@ -166,7 +420,7 @@ variants:
       preview_out: "1920x1080"
 
     ip_requirements:
-      isp0:
+      mlsc:
         required_throughput_mpps: 498
         required_bitdepth: 10
         required_features: [HDR10]
@@ -209,7 +463,7 @@ variants:
       concurrency: single
 
     ip_requirements:
-      isp0:
+      mlsc:
         required_throughput_mpps: 3981
       mfc:
         required_codec: AV1
@@ -222,7 +476,7 @@ variants:
     violation_policy:
       classification: exploration
       per_requirement:
-        isp0.required_throughput_mpps:
+        mlsc.required_throughput_mpps:
           action: WARN_AND_CAP
           cap_source: capability_max
           report_gap: true

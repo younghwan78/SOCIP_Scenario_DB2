@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from scenario_db.api.schemas.evidence import EvidenceResponse
 from scenario_db.exceptions import NotFoundError, UnprocessableError
 from scenario_db.api.schemas.simulation import SimulateRequest, SimulateRunResponse, SimulationReadinessResponse
-from scenario_db.db.models.capability import SocDvfsTable
+from scenario_db.db.models.capability import SimConfigProfile, SocDvfsTable
 from scenario_db.db.repositories.evidence import (
     get_evidence,
     get_simulation_evidence_by_params_hash,
@@ -18,13 +18,14 @@ from scenario_db.db.repositories.evidence import (
 from scenario_db.db.repositories.scenario_graph import load_canonical_graph
 from scenario_db.models.evidence.common import ExecutionContext
 from scenario_db.sim.adapter import build_simulation_inputs
-from scenario_db.sim.models import DVFSTable, SimulationInputs
+from scenario_db.sim.models import DVFSTable, SimulationInputs, SimulationRunConfig
 from scenario_db.sim.readiness import check_simulation_readiness
 from scenario_db.sim.runner import build_simulation_evidence, params_hash, run_simulation
 from scenario_db.config import get_settings
 
 
 def run_simulation_request(db: Session, request: SimulateRequest) -> SimulateRunResponse:
+    config_profile_stamp = _apply_config_profile(db, request)
     try:
         graph = load_canonical_graph(db, request.scenario_id, request.variant_id)
         inputs = build_simulation_inputs(graph, request.config)
@@ -61,6 +62,7 @@ def run_simulation_request(db: Session, request: SimulateRequest) -> SimulateRun
         execution_context=execution_context,
         project_ref=inputs.project_ref,
         params_hash=hash_value,
+        config_profile_ref=config_profile_stamp,
     )
     persisted_evidence_payload: dict | None = None
     if request.persist:
@@ -100,6 +102,35 @@ def run_simulation_request(db: Session, request: SimulateRequest) -> SimulateRun
         evidence=persisted_evidence_payload or _simulation_evidence_dict(evidence),
         persisted=request.persist,
     )
+
+
+def _apply_config_profile(db: Session, request: SimulateRequest) -> str | None:
+    """Merge an agreed sim.config_profile under the request's explicit config.
+
+    Precedence: request-explicit field > profile default > SimulationRunConfig
+    default. Returns the "id@version" stamp recorded on produced evidence.
+    (A cache hit returns the stored evidence unchanged: the cache is keyed by
+    the merged *values*, so an identical configuration reached without the
+    profile is the same physics.)
+    """
+    if not request.config_profile_ref:
+        return None
+    row = db.get(SimConfigProfile, request.config_profile_ref)
+    if row is None:
+        raise NotFoundError(f"sim.config_profile not found: {request.config_profile_ref}")
+    defaults = {
+        key: value
+        for key, value in dict(row.run_config or {}).items()
+        if value is not None
+    }
+    explicit = request.config.model_dump(exclude_unset=True)
+    try:
+        request.config = SimulationRunConfig(**{**defaults, **explicit})
+    except ValueError as exc:
+        raise UnprocessableError(
+            f"sim.config_profile '{row.id}' produced an invalid run config: {exc}"
+        ) from exc
+    return f"{row.id}@{row.version}"
 
 
 def _enforce_input_limits(inputs: SimulationInputs) -> None:

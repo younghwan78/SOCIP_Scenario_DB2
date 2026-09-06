@@ -43,7 +43,7 @@ from scenario_db.db.sql_matcher import (
 
 pytestmark = pytest.mark.integration
 
-SCENARIO_ID = "uc-camera-recording"
+SCENARIO_ID = "uc-projecta-fhd30-recording"
 VARIANT_UHD60 = "UHD60-HDR10-H265"
 ISSUE_LLC = "iss-LLC-thrashing-0221"
 
@@ -92,9 +92,9 @@ class TestAxisSqlExpressions:
             assert "H.26" in codec
 
     def test_nested_astext_ip_requirements(self, engine):
-        """ip_requirements #>> '{isp0, required_bitdepth}' — 중첩 경로."""
+        """ip_requirements #>> '{mlsc, required_bitdepth}' — 중첩 경로."""
         with Session(engine) as s:
-            expr = nested_astext(ScenarioVariant.ip_requirements, "isp0", "required_bitdepth")
+            expr = nested_astext(ScenarioVariant.ip_requirements, "mlsc", "required_bitdepth")
             rows = (
                 s.query(ScenarioVariant)
                 .filter(expr == "10")
@@ -102,7 +102,7 @@ class TestAxisSqlExpressions:
             )
         assert len(rows) >= 1
         for v in rows:
-            assert v.ip_requirements["isp0"]["required_bitdepth"] == 10
+            assert v.ip_requirements["mlsc"]["required_bitdepth"] == 10
 
     def test_ip_condition_eq(self, engine):
         """ip_condition_eq helper — ip_requirements 중첩 경로 동등 비교."""

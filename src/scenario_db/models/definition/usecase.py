@@ -25,6 +25,9 @@ class PipelineNode(BaseScenarioModel):
     ip_ref: DocumentId
     instance_index: int = 0
     role: str | None = None
+    # Explicit operation facts (crop/scale/rotate/...) consumed by the view
+    # projection's OperationSummary; shape mirrors variant node_configs.
+    operations: dict[str, Any] | None = None
 
 
 class EdgeType(StrEnum):
@@ -32,6 +35,18 @@ class EdgeType(StrEnum):
     vOTF = "vOTF"
     M2M = "M2M"
     control = "control"
+
+
+class PortPair(BaseModel):
+    """Port-level wiring of one edge: producer port -> consumer port.
+
+    For M2M edges these are the WDMA/RDMA module names; for OTF edges the
+    FIFO port names. Optional — edges without pairs keep node-level wiring.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+    src: str = Field(min_length=1)
+    dst: str = Field(min_length=1)
 
 
 class PipelineEdge(BaseModel):
@@ -42,6 +57,7 @@ class PipelineEdge(BaseModel):
     to: str
     type: EdgeType
     buffer: str | None = None
+    port_pairs: list[PortPair] = Field(default_factory=list)
 
 
 class Pipeline(BaseScenarioModel):

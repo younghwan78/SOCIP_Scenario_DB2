@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 pytestmark = pytest.mark.integration
 
-SCENARIO_ID = "uc-camera-recording"
+SCENARIO_ID = "uc-projecta-fhd30-recording"
 
 
 def _valid_payload(variant_id: str = "FHD30-SDR-H265-write-test") -> dict:
@@ -122,11 +122,15 @@ def test_applied_routing_switch_changes_runtime_graph_and_view(api_client: TestC
     }
     _stage_validate_apply(api_client, payload)
 
+    base = api_client.get(f"/api/v1/scenarios/{SCENARIO_ID}/variants/FHD30-recording/graph")
+    assert base.status_code == 200
+    base_body = base.json()
+
     graph = api_client.get(f"/api/v1/scenarios/{SCENARIO_ID}/variants/{variant_id}/graph")
     assert graph.status_code == 200
     graph_body = graph.json()
-    assert graph_body["node_count"] == 4
-    assert graph_body["edge_count"] == 2
+    assert graph_body["node_count"] == base_body["node_count"] - 1
+    assert graph_body["edge_count"] == base_body["edge_count"] - 1
     assert "ip-dpu-v9" not in graph_body["ip_refs"]
 
     view = api_client.get(
@@ -137,14 +141,14 @@ def test_applied_routing_switch_changes_runtime_graph_and_view(api_client: TestC
     node_ids = {node["data"]["id"] for node in view.json()["nodes"]}
     edge_pairs = {(edge["data"]["source"], edge["data"]["target"]) for edge in view.json()["edges"]}
     assert "ip-dpu" not in node_ids
-    assert ("ip-isp0", "ip-dpu") not in edge_pairs
+    assert ("ip-hw-composer", "ip-dpu") not in edge_pairs
 
 
 def test_applied_topology_patch_injects_sw_task_in_topology_view(api_client: TestClient):
     variant_id = "FHD30-sw-injection-write-test"
     payload = _valid_payload(variant_id)
     payload["payload"]["variant"]["topology_patch"] = {
-        "remove_edges": [{"from": "isp0", "to": "mfc"}],
+        "remove_edges": [{"from": "mcsc", "to": "codec2"}],
         "add_nodes": [
             {
                 "id": "sw_filter",
@@ -154,17 +158,21 @@ def test_applied_topology_patch_injects_sw_task_in_topology_view(api_client: Tes
             }
         ],
         "add_edges": [
-            {"from": "isp0", "to": "sw_filter", "type": "M2M", "buffer": "RECORD_BUF"},
-            {"from": "sw_filter", "to": "mfc", "type": "control"},
+            {"from": "mcsc", "to": "sw_filter", "type": "M2M", "buffer": "RECORD_BUF"},
+            {"from": "sw_filter", "to": "codec2", "type": "control"},
         ],
     }
     _stage_validate_apply(api_client, payload)
 
+    base = api_client.get(f"/api/v1/scenarios/{SCENARIO_ID}/variants/FHD30-recording/graph")
+    assert base.status_code == 200
+    base_body = base.json()
+
     graph = api_client.get(f"/api/v1/scenarios/{SCENARIO_ID}/variants/{variant_id}/graph")
     assert graph.status_code == 200
     graph_body = graph.json()
-    assert graph_body["node_count"] == 6
-    assert graph_body["edge_count"] == 4
+    assert graph_body["node_count"] == base_body["node_count"] + 1
+    assert graph_body["edge_count"] == base_body["edge_count"] + 1
 
     topology = api_client.get(
         f"/api/v1/scenarios/{SCENARIO_ID}/variants/{variant_id}/view",
@@ -177,15 +185,15 @@ def test_applied_topology_patch_injects_sw_task_in_topology_view(api_client: Tes
     edge_pairs = {(edge["data"]["source"], edge["data"]["target"]) for edge in body["edges"]}
     assert nodes["ip-sw_filter"]["type"] == "sw"
     assert nodes["ip-sw_filter"]["layer"] == "kernel"
-    assert ("ip-isp0", "ip-mfc") not in edge_pairs
-    assert ("ip-isp0", "buf-record-buf") in edge_pairs
-    assert ("ip-sw_filter", "ip-mfc") in edge_pairs
+    assert ("ip-mcsc", "ip-codec2") not in edge_pairs
+    assert ("ip-mcsc", "buf-record-buf") in edge_pairs
+    assert ("ip-sw_filter", "ip-codec2") in edge_pairs
 
 
 def test_variant_overlay_validation_rejects_unknown_base_route(api_client: TestClient):
     payload = _valid_payload("invalid-route-write-test")
     payload["payload"]["variant"]["routing_switch"] = {
-        "disabled_edges": [{"from": "isp0", "to": "npu0"}],
+        "disabled_edges": [{"from": "mcsc", "to": "npu0"}],
     }
     stage = api_client.post("/api/v1/write/staging", json=payload)
     assert stage.status_code == 200
@@ -208,7 +216,7 @@ def test_variant_overlay_validation_rejects_hw_topology_injection(api_client: Te
             {"id": "npu0", "node_type": "HW", "ip_ref": "ip-npu-v1"},
         ],
         "add_edges": [
-            {"from": "isp0", "to": "npu0", "type": "M2M"},
+            {"from": "mcsc", "to": "npu0", "type": "M2M"},
         ],
     }
     stage = api_client.post("/api/v1/write/staging", json=payload)
@@ -263,7 +271,7 @@ def test_pipeline_patch_stage_validate_diff_apply_updates_base_graph(api_client:
                 }
             },
             "add_edges": [
-                {"from": "isp0", "to": "llc", "type": "M2M", "buffer": "ANALYSIS_BUF"},
+                {"from": "mcsc", "to": "llc", "type": "M2M", "buffer": "ANALYSIS_BUF"},
             ],
         }
     )
@@ -301,7 +309,7 @@ def test_pipeline_patch_validation_rejects_unknown_edge_endpoint(api_client: Tes
         json=_pipeline_patch_payload(
             {
                 "add_edges": [
-                    {"from": "isp0", "to": "npu0", "type": "M2M", "buffer": "RECORD_BUF"},
+                    {"from": "mcsc", "to": "npu0", "type": "M2M", "buffer": "RECORD_BUF"},
                 ],
             }
         ),
@@ -320,7 +328,7 @@ def test_pipeline_patch_validation_rejects_otf_buffer_and_non_hw_endpoint(api_cl
         json=_pipeline_patch_payload(
             {
                 "add_edges": [
-                    {"from": "isp0", "to": "llc", "type": "OTF", "buffer": "RECORD_BUF"},
+                    {"from": "mcsc", "to": "llc", "type": "OTF", "buffer": "RECORD_BUF"},
                 ],
             }
         ),
@@ -345,7 +353,7 @@ def test_pipeline_patch_validation_reports_variant_overlay_impact(api_client: Te
         "/api/v1/write/staging",
         json=_pipeline_patch_payload(
             {
-                "remove_edges": [{"from": "isp0", "to": "dpu"}],
+                "remove_edges": [{"from": "mcsc", "to": "hw_composer"}],
                 "remove_buffers": ["PREVIEW_BUF"],
             }
         ),

@@ -19,6 +19,7 @@ from pydantic import ValidationError
 from scenario_db.legacy_import.read_legacy import read_yaml, write_yaml
 from scenario_db.legacy_import.report import ImportReport
 from scenario_db.meas_import.assemble import assemble_evidence
+from scenario_db.meas_import.bench_adapter import bench_files_to_rail_long, collect_bench_files
 from scenario_db.meas_import.meta import MeasurementImportMeta
 from scenario_db.meas_import.perfetto_digest import PerfettoDigest, PerfettoTraceProcessor, extract_digest
 from scenario_db.meas_import.power_csv import (
@@ -36,6 +37,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--meta", type=Path, required=True, help="meta.yaml describing the capture.")
     parser.add_argument("--out", type=Path, required=True, help="Output directory for generated YAML.")
+    parser.add_argument(
+        "--bench-in",
+        type=Path,
+        nargs="+",
+        default=None,
+        help=(
+            "Per-run wide bench export files (or a directory of them). They are "
+            "converted to the rail_long CSV named by meta.power.csv before "
+            "aggregation, making a raw bench capture a one-command import. "
+            "Requires power.format=rail_long."
+        ),
+    )
     parser.add_argument(
         "--skip-perfetto",
         action="store_true",
@@ -80,7 +93,30 @@ def run_import(args: argparse.Namespace, report: ImportReport) -> dict | None:
     base_dir = args.meta.parent
 
     power: PowerDigest | None = None
-    if meta.power is not None:
+    if args.bench_in and meta.power is None:
+        report.error(
+            "bench_requires_power_section",
+            "--bench-in was given but meta.yaml has no 'power' section.",
+            str(args.meta),
+        )
+    if meta.power is not None and args.bench_in:
+        if meta.power.format != "rail_long":
+            report.error(
+                "bench_requires_rail_long",
+                "--bench-in requires power.format=rail_long "
+                f"(meta declares '{meta.power.format}').",
+                str(args.meta),
+            )
+        else:
+            bench_paths: list[Path] = []
+            for target in args.bench_in:
+                bench_paths.extend(collect_bench_files(target))
+            bench_files_to_rail_long(
+                bench_paths,
+                _resolve(base_dir, meta.power.csv),
+                report=report,
+            )
+    if meta.power is not None and report.ok:
         csv_path = _resolve(base_dir, meta.power.csv)
         if not csv_path.exists():
             report.error("power_csv_not_found", f"Power CSV not found: {csv_path}", str(csv_path))

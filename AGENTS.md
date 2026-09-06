@@ -52,6 +52,27 @@ uv run --group dashboard --group sim streamlit run dashboard\Home.py --server.po
 uv run --group dev --group sim pytest tests\unit
 ```
 
+## Frontend Workspace
+
+- `frontend\` is a Vite + TypeScript workspace for the Scenario Workbench
+  Streamlit component (zero runtime npm deps).
+- Rebuild after frontend changes: `npm run build` from `frontend\` — the
+  built assets are committed under
+  `dashboard\components\workbench_frontend\component\`.
+- Frontend unit tests: `npm run test` (vitest) from `frontend\`.
+- The ELK viewer serves `dashboard\static\elk.bundled.js` through Streamlit
+  static serving (enabled in `.streamlit\config.toml`); keep it enabled.
+
+## ETL Notes
+
+- Auxiliary YAML that is not an ETL document (no `kind`) must be listed in
+  `<fixtures>\.etlignore` (glob per line) so `--strict` runs stay green.
+- `db_fixtures_Exynos2600_S26Plus` loads clean under `--strict`; keep it
+  that way when editing fixtures.
+- Pipeline edges support optional `port_pairs` (`- src: <WDMA/port>` /
+  `dst: <RDMA/port>`); they drive the WDMA→RDMA edge labels and Level 2
+  module-direct routing in the viewer.
+
 ## Viewer Defaults
 
 - Viewer selection should follow this hierarchy:

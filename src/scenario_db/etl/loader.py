@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import hashlib
 import json
 import logging
@@ -16,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from scenario_db.etl.mappers.capability import (
     upsert_ip,
+    upsert_sim_config_profile,
     upsert_soc,
     upsert_soc_cdgm_profile,
     upsert_soc_dvfs_table,
@@ -97,6 +99,7 @@ MAPPER_REGISTRY: dict[str, Mapper] = {
     "sw_profile":             upsert_sw_profile,
     "sw_component":           upsert_sw_component,
     "project":                upsert_project,
+    "sim.config_profile":     upsert_sim_config_profile,
     "scenario.usecase":       upsert_usecase,
     "evidence.simulation":    upsert_simulation,
     "evidence.measurement":   upsert_measurement,
@@ -115,6 +118,7 @@ LOAD_ORDER = [
     "sw_profile",
     "sw_component",
     "project",
+    "sim.config_profile",   # FK: project_ref / soc_ref
     "scenario.usecase",
     "evidence.simulation",
     "evidence.measurement",
@@ -219,11 +223,38 @@ def load_yaml_dir(
 
 
 def _iter_yaml_files(directory: Path) -> list[Path]:
+    ignore = _load_etlignore(directory)
     return sorted({
         path
         for pattern in ("*.yaml", "*.yml")
         for path in directory.rglob(pattern)
+        if not _is_ignored(path, directory, ignore)
     })
+
+
+def _load_etlignore(directory: Path) -> list[str]:
+    """Glob patterns from <directory>/.etlignore, one per line.
+
+    Fixture trees may carry auxiliary YAML that is not an ETL document (for
+    example measurement import mappings); listing them here keeps --strict
+    runs meaningful without hardcoding file names in the loader.
+    """
+    ignore_path = directory / ".etlignore"
+    if not ignore_path.is_file():
+        return []
+    patterns: list[str] = []
+    for line in ignore_path.read_text(encoding="utf-8").splitlines():
+        text = line.strip()
+        if text and not text.startswith("#"):
+            patterns.append(text)
+    return patterns
+
+
+def _is_ignored(path: Path, directory: Path, patterns: list[str]) -> bool:
+    if not patterns:
+        return False
+    relative = path.relative_to(directory).as_posix()
+    return any(fnmatch.fnmatch(relative, pattern) or fnmatch.fnmatch(path.name, pattern) for pattern in patterns)
 
 
 def _validate_raw_document(kind: str, raw: dict) -> None:

@@ -158,3 +158,131 @@ def test_explicit_observation_overrides_legacy_detail():
 
     assert len(observations) == 1
     assert observations[0]["value"] == 123.0
+
+
+def test_simulation_vdd_power_total_mw_produces_rail_observations():
+    """Runner-shaped rails ({core_mw, bw_mw, total_mw}) must be visible to the
+    comparison; before the fix every simulation rail was MEASUREMENT_ONLY."""
+    evidence = {
+        **_evidence("evidence.simulation"),
+        "vdd_power": {"VDD_CAM": {"core_mw": 80.0, "bw_mw": 20.0, "total_mw": 100.0}},
+    }
+
+    observations = {
+        (item["metric_id"], item["scope"]["kind"], item["scope"]["ref"]): item
+        for item in normalize_evidence_observations(evidence)
+    }
+
+    assert observations[("power.rail", "rail", "VDD_CAM")]["stats"]["mean"] == 100.0
+
+
+def test_power_domain_joins_simulation_rails_with_measured_buck_domains():
+    """Sim rails are logical domain names; measured PMIC bucks declare their
+    domain. power.domain is the declared join key between the two."""
+    prediction = {
+        **_evidence("evidence.simulation"),
+        "vdd_power": {"MIF": {"core_mw": 0.0, "bw_mw": 40.0, "total_mw": 40.0}},
+    }
+    measurement = {
+        **_evidence("evidence.measurement"),
+        "vdd_power": {
+            "B5S4_VDDMIF_AP_L": {"power_mw": 30.0, "std_mw": 3.0, "domain": "MIF"},
+            "B5S5_VDDMIF_CP_L": {"power_mw": 12.0, "std_mw": 4.0, "domain": "MIF"},
+        },
+    }
+
+    report = compare_prediction_measurement(prediction, measurement)
+    rows = {
+        (row["metric_id"], row["scope_kind"], row["scope_ref"]): row
+        for row in report["rows"]
+    }
+
+    domain_row = rows[("power.domain", "power_domain", "MIF")]
+    assert domain_row["status"] == "MATCHED"
+    assert domain_row["prediction"] == 40.0
+    assert domain_row["measurement"] == 42.0
+    # Physical buck names still do not join at power.rail level.
+    assert rows[("power.rail", "rail", "MIF")]["status"] == "PREDICTION_ONLY"
+    assert rows[("power.rail", "rail", "B5S4_VDDMIF_AP_L")]["status"] == "MEASUREMENT_ONLY"
+
+
+def test_measured_rails_without_domain_produce_no_domain_observations():
+    evidence = {
+        **_evidence("evidence.measurement"),
+        "vdd_power": {"BUCK1": {"power_mw": 10.0}},
+    }
+    ids = {item["metric_id"] for item in normalize_evidence_observations(evidence)}
+    assert "power.domain" not in ids
+
+
+def test_cpu_breakdown_produces_cluster_observations():
+    """Measured cpu_breakdown (the headline CPU digest) must be visible to
+    the comparison as power.cluster rows."""
+    measurement = {
+        **_evidence("evidence.measurement"),
+        "cpu_breakdown": [
+            {"cluster": "BIG", "power_mw": {"mean": 26.9, "p95": 27.2, "n": 3}},
+            {"cluster": "MID", "power_mw": 119.3},
+            {"cluster": "LIT"},  # no power -> skipped
+        ],
+    }
+
+    observations = {
+        (item["metric_id"], item["scope"]["ref"]): item
+        for item in normalize_evidence_observations(measurement)
+    }
+
+    assert observations[("power.cluster", "BIG")]["stats"]["mean"] == 26.9
+    assert observations[("power.cluster", "MID")]["value"] == 119.3
+    assert ("power.cluster", "LIT") not in observations
+
+
+def test_power_breakdown_cpu_clusters_produce_prediction_observations():
+    prediction = {
+        **_evidence("evidence.simulation"),
+        "power_breakdown": {
+            "model": {"id": "v1-vfps", "version": "1.0"},
+            "cpu": {"total_mw": 150.0, "by_cluster": {"BIG": 100.0, "MID": 50.0}},
+        },
+    }
+    observations = {
+        (item["metric_id"], item["scope"]["ref"]): item
+        for item in normalize_evidence_observations(prediction)
+    }
+    assert observations[("power.cluster", "BIG")]["value"] == 100.0
+    assert observations[("power.cluster", "MID")]["value"] == 50.0
+
+
+def test_ip_breakdown_sums_instances_into_power_ip_observations():
+    prediction = {
+        **_evidence("evidence.simulation"),
+        "ip_breakdown": [
+            {"ip": "ip-isp-v12", "instance_index": 0, "power_mW": 40.0},
+            {"ip": "ip-isp-v12", "instance_index": 1, "power_mW": 35.0},
+            {"ip": "ip-mfc-v9", "instance_index": 0, "power_mW": 20.0},
+        ],
+    }
+    observations = {
+        (item["metric_id"], item["scope"]["ref"]): item
+        for item in normalize_evidence_observations(prediction)
+    }
+    assert observations[("power.ip", "ip-isp-v12")]["value"] == 75.0
+    assert observations[("power.ip", "ip-mfc-v9")]["value"] == 20.0
+
+
+def test_cluster_rows_join_between_prediction_and_measurement():
+    prediction = {
+        **_evidence("evidence.simulation"),
+        "power_breakdown": {"cpu": {"total_mw": 100.0, "by_cluster": {"BIG": 100.0}}},
+    }
+    measurement = {
+        **_evidence("evidence.measurement"),
+        "cpu_breakdown": [{"cluster": "BIG", "power_mw": {"mean": 110.0, "n": 3}}],
+    }
+    report = compare_prediction_measurement(prediction, measurement)
+    rows = {
+        (row["metric_id"], row["scope_ref"]): row for row in report["rows"]
+    }
+    cluster_row = rows[("power.cluster", "BIG")]
+    assert cluster_row["status"] == "MATCHED"
+    assert cluster_row["delta"] == -10.0

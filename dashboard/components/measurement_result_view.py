@@ -320,7 +320,7 @@ def vdd_power_rows(evidence: dict[str, Any]) -> list[dict[str, Any]]:
                 "rail": rail,
                 "voltage_v": _rail_mw(entry, "voltage_v", "mean_v"),
                 "current_ma": _rail_mw(entry, "current_ma", "mean_ma"),
-                "mean_mw": _rail_mw(entry, "mean_mw", "power_mw", "power", "mean"),
+                "mean_mw": _rail_mw(entry, "mean_mw", "power_mw", "total_mw", "power", "mean"),
                 "std_mw": _rail_mw(entry, "std_mw", "std"),
                 "p95_mw": _rail_mw(entry, "p95_mw", "p95"),
             }

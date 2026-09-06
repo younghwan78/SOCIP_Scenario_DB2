@@ -17,6 +17,7 @@ from scenario_db.view.buffers import (
 )
 from scenario_db.view.elements import _e, _n
 from scenario_db.view.graph_utils import (
+    edge_port_pairs as _edge_port_pairs,
     edge_source as _edge_source,
     edge_target as _edge_target,
     safe_id as _safe_id,
@@ -124,6 +125,7 @@ def _project_semantic_level1(graph: CanonicalScenarioGraph) -> ViewResponse | No
                 buffer_ref=buffer_text,
                 producer=source,
                 consumer=target,
+                port_pairs=_edge_port_pairs(edge),
                 memory=_buffer_memory_from_spec(graph, buffer_text, tokens) if buffer_text else None,
                 placement=_buffer_placement_from_spec(graph, buffer_text) if buffer_text else None,
                 detail_items=_edge_detail_items(graph, edge, buffer_text),

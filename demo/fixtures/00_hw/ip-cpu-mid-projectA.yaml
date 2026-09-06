@@ -1,0 +1,30 @@
+id: ip-cpu-mid-projectA
+schema_version: "2.2"
+kind: ip
+category: cpu
+compatible_soc:
+  - soc-exynos2500
+
+hierarchy:
+  type: simple
+
+capabilities:
+  operating_modes:
+    - id: normal
+    - id: performance
+  sim:
+    hw_name: CPU_MID_Clustor
+    source: legacy_project_info_csv
+    source_project: A
+    modes:
+      Normal:
+        unit_power_mw_mp: 1.0
+        idc: 0.0
+        ppc: 4.0
+        vdd: VDD_CPUCL1
+        dvfs_group: CPU
+  properties:
+    role: sw_task_host
+    legacy_name: CPU_MID_Clustor
+    clusters:
+      - MID

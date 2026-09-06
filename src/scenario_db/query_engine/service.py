@@ -507,14 +507,17 @@ def _load_scoped_evidence(
     *,
     max_rows: int | None,
 ) -> list[Any]:
-    # Query facts and issue contexts do not consume timeline/trace/rail blobs.
-    # Raise on an accidental new access instead of hiding an N+1 lazy load.
+    # Preserve simulation-only latest semantics while avoiding unused detail
+    # blobs. Raise on accidental access rather than introducing lazy N+1 reads.
     query = db.query(Evidence).options(load_only(
         Evidence.id, Evidence.scenario_ref, Evidence.variant_ref,
         Evidence.run_info, Evidence.execution_context, Evidence.resolution_result,
         Evidence.kpi, Evidence.overall_feasibility, Evidence.sw_version_hint,
         Evidence.sw_baseline_ref, raiseload=True,
-    )).filter(Evidence.scenario_ref.in_(scenario_ids))
+    )).filter(
+        Evidence.scenario_ref.in_(scenario_ids),
+        Evidence.kind == "evidence.simulation",
+    )
     if variant_ids:
         query = query.filter(Evidence.variant_ref.in_(variant_ids))
     return _bounded_query_all(query, max_rows=max_rows, source="evidence")

@@ -8,6 +8,7 @@
         ],
         "flow_type": "OTF",
         "id": "e-topo-0",
+        "port_pairs": [],
         "source": "ip-sensor_rear",
         "target": "ip-csispdp"
       }
@@ -20,6 +21,7 @@
         ],
         "flow_type": "OTF",
         "id": "e-topo-1",
+        "port_pairs": [],
         "source": "ip-csispdp",
         "target": "ip-byrp"
       }
@@ -32,6 +34,7 @@
         ],
         "flow_type": "OTF",
         "id": "e-topo-2",
+        "port_pairs": [],
         "source": "ip-byrp",
         "target": "ip-rgbp"
       }
@@ -44,6 +47,7 @@
         ],
         "flow_type": "OTF",
         "id": "e-topo-3",
+        "port_pairs": [],
         "source": "ip-rgbp",
         "target": "ip-yuvsc"
       }
@@ -56,7 +60,7 @@
           "Route: yuvsc -> mtnr",
           "Edge type: M2M",
           "Buffer: YUVSC_MTNR_BUF",
-          "YUV422 / 10b / COMP_OFF"
+          "YUV422 / record_out / 10b / COMP_OFF"
         ],
         "flow_type": "M2M",
         "id": "e-topo-4-src-buf",
@@ -64,10 +68,14 @@
           "bitdepth": 10,
           "compression": "COMP_OFF",
           "format": "YUV422",
-          "fps": 30,
-          "height": 1080,
-          "width": 1920
+          "fps": 30
         },
+        "port_pairs": [
+          {
+            "dst": "MTNR_RDMA",
+            "src": "YUVSC_WDMA"
+          }
+        ],
         "producer": "yuvsc",
         "source": "ip-yuvsc",
         "target": "buf-yuvsc-mtnr-buf"
@@ -81,7 +89,7 @@
           "Route: yuvsc -> mtnr",
           "Edge type: M2M",
           "Buffer: YUVSC_MTNR_BUF",
-          "YUV422 / 10b / COMP_OFF"
+          "YUV422 / record_out / 10b / COMP_OFF"
         ],
         "flow_type": "M2M",
         "id": "e-topo-4-buf-tgt",
@@ -89,10 +97,14 @@
           "bitdepth": 10,
           "compression": "COMP_OFF",
           "format": "YUV422",
-          "fps": 30,
-          "height": 1080,
-          "width": 1920
+          "fps": 30
         },
+        "port_pairs": [
+          {
+            "dst": "MTNR_RDMA",
+            "src": "YUVSC_WDMA"
+          }
+        ],
         "producer": "yuvsc",
         "source": "buf-yuvsc-mtnr-buf",
         "target": "ip-mtnr"
@@ -106,6 +118,7 @@
         ],
         "flow_type": "OTF",
         "id": "e-topo-5",
+        "port_pairs": [],
         "source": "ip-mtnr",
         "target": "ip-msnr"
       }
@@ -118,6 +131,7 @@
         ],
         "flow_type": "OTF",
         "id": "e-topo-6",
+        "port_pairs": [],
         "source": "ip-msnr",
         "target": "ip-yuvp"
       }
@@ -130,6 +144,7 @@
         ],
         "flow_type": "OTF",
         "id": "e-topo-7",
+        "port_pairs": [],
         "source": "ip-yuvp",
         "target": "ip-mcsc"
       }
@@ -142,7 +157,7 @@
           "Route: csispdp -> n3aa",
           "Edge type: M2M",
           "Buffer: CSISPDP_3AA_BUF",
-          "RAW_BAYER_16 / 12b / COMP_BAYER_LOSSLESS"
+          "RAW_BAYER_16 / sensor_full / 12b / COMP_BAYER_LOSSLESS"
         ],
         "flow_type": "M2M",
         "id": "e-topo-8-src-buf",
@@ -150,10 +165,14 @@
           "bitdepth": 12,
           "compression": "COMP_BAYER_LOSSLESS",
           "format": "RAW_BAYER_16",
-          "fps": 30,
-          "height": 1080,
-          "width": 1920
+          "fps": 30
         },
+        "port_pairs": [
+          {
+            "dst": "3AA_RDMA",
+            "src": "CSISPDP_WDMA"
+          }
+        ],
         "producer": "csispdp",
         "source": "ip-csispdp",
         "target": "buf-csispdp-3aa-buf"
@@ -167,7 +186,7 @@
           "Route: csispdp -> n3aa",
           "Edge type: M2M",
           "Buffer: CSISPDP_3AA_BUF",
-          "RAW_BAYER_16 / 12b / COMP_BAYER_LOSSLESS"
+          "RAW_BAYER_16 / sensor_full / 12b / COMP_BAYER_LOSSLESS"
         ],
         "flow_type": "M2M",
         "id": "e-topo-8-buf-tgt",
@@ -175,10 +194,14 @@
           "bitdepth": 12,
           "compression": "COMP_BAYER_LOSSLESS",
           "format": "RAW_BAYER_16",
-          "fps": 30,
-          "height": 1080,
-          "width": 1920
+          "fps": 30
         },
+        "port_pairs": [
+          {
+            "dst": "3AA_RDMA",
+            "src": "CSISPDP_WDMA"
+          }
+        ],
         "producer": "csispdp",
         "source": "buf-csispdp-3aa-buf",
         "target": "ip-n3aa"
@@ -192,7 +215,7 @@
           "Route: mcsc -> gdc_m",
           "Edge type: M2M",
           "Buffer: MCSC_WDMA_PREV_BUF",
-          "YUV420 / 8b / COMP_OFF"
+          "YUV420 / record_out / 8b / COMP_OFF"
         ],
         "flow_type": "M2M",
         "id": "e-topo-9-src-buf",
@@ -200,10 +223,14 @@
           "bitdepth": 8,
           "compression": "COMP_OFF",
           "format": "YUV420",
-          "fps": 30,
-          "height": 1080,
-          "width": 1920
+          "fps": 30
         },
+        "port_pairs": [
+          {
+            "dst": "GDC_M_RDMA",
+            "src": "MCSC_WDMA_PREV"
+          }
+        ],
         "producer": "mcsc",
         "source": "ip-mcsc",
         "target": "buf-mcsc-wdma-prev-buf"
@@ -217,7 +244,7 @@
           "Route: mcsc -> gdc_m",
           "Edge type: M2M",
           "Buffer: MCSC_WDMA_PREV_BUF",
-          "YUV420 / 8b / COMP_OFF"
+          "YUV420 / record_out / 8b / COMP_OFF"
         ],
         "flow_type": "M2M",
         "id": "e-topo-9-buf-tgt",
@@ -225,10 +252,14 @@
           "bitdepth": 8,
           "compression": "COMP_OFF",
           "format": "YUV420",
-          "fps": 30,
-          "height": 1080,
-          "width": 1920
+          "fps": 30
         },
+        "port_pairs": [
+          {
+            "dst": "GDC_M_RDMA",
+            "src": "MCSC_WDMA_PREV"
+          }
+        ],
         "producer": "mcsc",
         "source": "buf-mcsc-wdma-prev-buf",
         "target": "ip-gdc_m"
@@ -242,7 +273,7 @@
           "Route: mcsc -> gdc_o",
           "Edge type: M2M",
           "Buffer: MCSC_WDMA_VIDEO_BUF",
-          "YUV420 / 8b / COMP_OFF"
+          "YUV420 / record_out / 8b / COMP_OFF"
         ],
         "flow_type": "M2M",
         "id": "e-topo-10-src-buf",
@@ -250,10 +281,14 @@
           "bitdepth": 8,
           "compression": "COMP_OFF",
           "format": "YUV420",
-          "fps": 30,
-          "height": 1080,
-          "width": 1920
+          "fps": 30
         },
+        "port_pairs": [
+          {
+            "dst": "GDC_O_RDMA",
+            "src": "MCSC_WDMA_VIDEO"
+          }
+        ],
         "producer": "mcsc",
         "source": "ip-mcsc",
         "target": "buf-mcsc-wdma-video-buf"
@@ -267,7 +302,7 @@
           "Route: mcsc -> gdc_o",
           "Edge type: M2M",
           "Buffer: MCSC_WDMA_VIDEO_BUF",
-          "YUV420 / 8b / COMP_OFF"
+          "YUV420 / record_out / 8b / COMP_OFF"
         ],
         "flow_type": "M2M",
         "id": "e-topo-10-buf-tgt",
@@ -275,10 +310,14 @@
           "bitdepth": 8,
           "compression": "COMP_OFF",
           "format": "YUV420",
-          "fps": 30,
-          "height": 1080,
-          "width": 1920
+          "fps": 30
         },
+        "port_pairs": [
+          {
+            "dst": "GDC_O_RDMA",
+            "src": "MCSC_WDMA_VIDEO"
+          }
+        ],
         "producer": "mcsc",
         "source": "buf-mcsc-wdma-video-buf",
         "target": "ip-gdc_o"
@@ -292,7 +331,7 @@
           "Route: gdc_m -> dpu",
           "Edge type: M2M",
           "Buffer: GDC_M_DPU_BUF",
-          "YUV420 / 8b / COMP_YUV_LOSSLESS"
+          "YUV420 / record_out / 8b / COMP_YUV_LOSSLESS"
         ],
         "flow_type": "M2M",
         "id": "e-topo-11-src-buf",
@@ -300,10 +339,14 @@
           "bitdepth": 8,
           "compression": "COMP_YUV_LOSSLESS",
           "format": "YUV420",
-          "fps": 30,
-          "height": 1080,
-          "width": 1920
+          "fps": 30
         },
+        "port_pairs": [
+          {
+            "dst": "DPU_RDMA",
+            "src": "GDC_M_WDMA"
+          }
+        ],
         "producer": "gdc_m",
         "source": "ip-gdc_m",
         "target": "buf-gdc-m-dpu-buf"
@@ -317,7 +360,7 @@
           "Route: gdc_m -> dpu",
           "Edge type: M2M",
           "Buffer: GDC_M_DPU_BUF",
-          "YUV420 / 8b / COMP_YUV_LOSSLESS"
+          "YUV420 / record_out / 8b / COMP_YUV_LOSSLESS"
         ],
         "flow_type": "M2M",
         "id": "e-topo-11-buf-tgt",
@@ -325,10 +368,14 @@
           "bitdepth": 8,
           "compression": "COMP_YUV_LOSSLESS",
           "format": "YUV420",
-          "fps": 30,
-          "height": 1080,
-          "width": 1920
+          "fps": 30
         },
+        "port_pairs": [
+          {
+            "dst": "DPU_RDMA",
+            "src": "GDC_M_WDMA"
+          }
+        ],
         "producer": "gdc_m",
         "source": "buf-gdc-m-dpu-buf",
         "target": "ip-dpu"
@@ -342,7 +389,7 @@
           "Route: gdc_o -> mfc_enc",
           "Edge type: M2M",
           "Buffer: GDC_O_MFC_BUF",
-          "YUV420 / 8b / COMP_YUV_LOSSLESS"
+          "YUV420 / record_out / 8b / COMP_YUV_LOSSLESS"
         ],
         "flow_type": "M2M",
         "id": "e-topo-12-src-buf",
@@ -350,10 +397,14 @@
           "bitdepth": 8,
           "compression": "COMP_YUV_LOSSLESS",
           "format": "YUV420",
-          "fps": 30,
-          "height": 1080,
-          "width": 1920
+          "fps": 30
         },
+        "port_pairs": [
+          {
+            "dst": "MFC_RDMA",
+            "src": "GDC_O_WDMA"
+          }
+        ],
         "producer": "gdc_o",
         "source": "ip-gdc_o",
         "target": "buf-gdc-o-mfc-buf"
@@ -367,7 +418,7 @@
           "Route: gdc_o -> mfc_enc",
           "Edge type: M2M",
           "Buffer: GDC_O_MFC_BUF",
-          "YUV420 / 8b / COMP_YUV_LOSSLESS"
+          "YUV420 / record_out / 8b / COMP_YUV_LOSSLESS"
         ],
         "flow_type": "M2M",
         "id": "e-topo-12-buf-tgt",
@@ -375,10 +426,14 @@
           "bitdepth": 8,
           "compression": "COMP_YUV_LOSSLESS",
           "format": "YUV420",
-          "fps": 30,
-          "height": 1080,
-          "width": 1920
+          "fps": 30
         },
+        "port_pairs": [
+          {
+            "dst": "MFC_RDMA",
+            "src": "GDC_O_WDMA"
+          }
+        ],
         "producer": "gdc_o",
         "source": "buf-gdc-o-mfc-buf",
         "target": "ip-mfc_enc"
@@ -392,6 +447,7 @@
         ],
         "flow_type": "OTF",
         "id": "e-topo-13",
+        "port_pairs": [],
         "source": "ip-dpu",
         "target": "ip-panel"
       }
@@ -410,7 +466,7 @@
         "format": "YUV422",
         "llc_allocated": false,
         "producer_node_id": "yuvsc",
-        "size_label": "1920x1080",
+        "size_label": "record_out",
         "subsystem": "camera"
       },
       {
@@ -423,7 +479,7 @@
         "format": "RAW_BAYER_16",
         "llc_allocated": false,
         "producer_node_id": "csispdp",
-        "size_label": "1920x1080",
+        "size_label": "sensor_full",
         "subsystem": "camera"
       },
       {
@@ -436,7 +492,7 @@
         "format": "YUV420",
         "llc_allocated": false,
         "producer_node_id": "mcsc",
-        "size_label": "1920x1080",
+        "size_label": "record_out",
         "subsystem": "camera"
       },
       {
@@ -449,7 +505,7 @@
         "format": "YUV420",
         "llc_allocated": false,
         "producer_node_id": "mcsc",
-        "size_label": "1920x1080",
+        "size_label": "record_out",
         "subsystem": "camera"
       },
       {
@@ -462,7 +518,7 @@
         "format": "YUV420",
         "llc_allocated": false,
         "producer_node_id": "gdc_m",
-        "size_label": "1920x1080",
+        "size_label": "record_out",
         "subsystem": "camera"
       },
       {
@@ -475,7 +531,7 @@
         "format": "YUV420",
         "llc_allocated": false,
         "producer_node_id": "gdc_o",
-        "size_label": "1920x1080",
+        "size_label": "record_out",
         "subsystem": "camera"
       }
     ],
@@ -547,7 +603,7 @@
           "bitdepth": 12,
           "compression": "COMP_BAYER_LOSSLESS",
           "format": "RAW_BAYER_16",
-          "size_label": "CSISPDP_3AA_BUF"
+          "size_label": "sensor_full"
         },
         "resource_domain": "soc_resource",
         "resource_kind": "camera",
@@ -569,7 +625,7 @@
           "bitdepth": 12,
           "compression": "COMP_BAYER_LOSSLESS",
           "format": "RAW_BAYER_16",
-          "size_label": "CSISPDP_3AA_BUF"
+          "size_label": "sensor_full"
         },
         "input_buffer_refs": [
           "CSISPDP_3AA_BUF"
@@ -644,7 +700,7 @@
           "bitdepth": 10,
           "compression": "COMP_OFF",
           "format": "YUV422",
-          "size_label": "YUVSC_MTNR_BUF"
+          "size_label": "record_out"
         },
         "resource_domain": "soc_resource",
         "resource_kind": "camera",
@@ -667,7 +723,7 @@
           "bitdepth": 10,
           "compression": "COMP_OFF",
           "format": "YUV422",
-          "size_label": "YUVSC_MTNR_BUF"
+          "size_label": "record_out"
         },
         "input_buffer_refs": [
           "YUVSC_MTNR_BUF"
@@ -743,7 +799,7 @@
           "bitdepth": 8,
           "compression": "COMP_OFF",
           "format": "YUV420",
-          "size_label": "MCSC_WDMA_PREV_BUF"
+          "size_label": "record_out"
         },
         "resource_domain": "soc_resource",
         "resource_kind": "camera",
@@ -770,7 +826,7 @@
           "bitdepth": 8,
           "compression": "COMP_OFF",
           "format": "YUV420",
-          "size_label": "MCSC_WDMA_PREV_BUF"
+          "size_label": "record_out"
         },
         "input_buffer_refs": [
           "MCSC_WDMA_PREV_BUF"
@@ -781,7 +837,7 @@
           "bitdepth": 8,
           "compression": "COMP_YUV_LOSSLESS",
           "format": "YUV420",
-          "size_label": "GDC_M_DPU_BUF"
+          "size_label": "record_out"
         },
         "resource_domain": "soc_resource",
         "resource_kind": "camera",
@@ -808,7 +864,7 @@
           "bitdepth": 8,
           "compression": "COMP_OFF",
           "format": "YUV420",
-          "size_label": "MCSC_WDMA_VIDEO_BUF"
+          "size_label": "record_out"
         },
         "input_buffer_refs": [
           "MCSC_WDMA_VIDEO_BUF"
@@ -819,7 +875,7 @@
           "bitdepth": 8,
           "compression": "COMP_YUV_LOSSLESS",
           "format": "YUV420",
-          "size_label": "GDC_O_MFC_BUF"
+          "size_label": "record_out"
         },
         "resource_domain": "soc_resource",
         "resource_kind": "camera",
@@ -842,7 +898,7 @@
           "bitdepth": 8,
           "compression": "COMP_YUV_LOSSLESS",
           "format": "YUV420",
-          "size_label": "GDC_M_DPU_BUF"
+          "size_label": "record_out"
         },
         "input_buffer_refs": [
           "GDC_M_DPU_BUF"
@@ -869,7 +925,7 @@
           "bitdepth": 8,
           "compression": "COMP_YUV_LOSSLESS",
           "format": "YUV420",
-          "size_label": "GDC_O_MFC_BUF"
+          "size_label": "record_out"
         },
         "input_buffer_refs": [
           "GDC_O_MFC_BUF"
@@ -1134,6 +1190,13 @@
     },
     {
       "data": {
+        "active_operations": {
+          "compose": false,
+          "crop": false,
+          "scale": true,
+          "scale_from": "4000x3000",
+          "scale_to": "1920x1080"
+        },
         "capability_badges": [
           "CAMERA",
           "M2M",
@@ -1151,7 +1214,8 @@
         "matched_issues": [],
         "shared_resource": false,
         "summary_badges": [
-          "camera"
+          "camera",
+          "Scale"
         ],
         "type": "ip",
         "view_hints": {
@@ -1504,7 +1568,7 @@
         "collapsed_children_count": 0,
         "detail_items": [
           "Buffer: YUVSC_MTNR_BUF",
-          "YUV422 / 10b / COMP_OFF"
+          "YUV422 / record_out / 10b / COMP_OFF"
         ],
         "id": "buf-yuvsc-mtnr-buf",
         "label": "Yuvsc Mtnr Buf",
@@ -1514,9 +1578,7 @@
           "bitdepth": 10,
           "compression": "COMP_OFF",
           "format": "YUV422",
-          "fps": 30,
-          "height": 1080,
-          "width": 1920
+          "fps": 30
         },
         "shared_resource": false,
         "summary_badges": [],
@@ -1543,7 +1605,7 @@
         "collapsed_children_count": 0,
         "detail_items": [
           "Buffer: CSISPDP_3AA_BUF",
-          "RAW_BAYER_16 / 12b / COMP_BAYER_LOSSLESS"
+          "RAW_BAYER_16 / sensor_full / 12b / COMP_BAYER_LOSSLESS"
         ],
         "id": "buf-csispdp-3aa-buf",
         "label": "Csispdp 3Aa Buf",
@@ -1553,9 +1615,7 @@
           "bitdepth": 12,
           "compression": "COMP_BAYER_LOSSLESS",
           "format": "RAW_BAYER_16",
-          "fps": 30,
-          "height": 1080,
-          "width": 1920
+          "fps": 30
         },
         "shared_resource": false,
         "summary_badges": [],
@@ -1582,7 +1642,7 @@
         "collapsed_children_count": 0,
         "detail_items": [
           "Buffer: MCSC_WDMA_PREV_BUF",
-          "YUV420 / 8b / COMP_OFF"
+          "YUV420 / record_out / 8b / COMP_OFF"
         ],
         "id": "buf-mcsc-wdma-prev-buf",
         "label": "Mcsc Wdma Prev Buf",
@@ -1592,9 +1652,7 @@
           "bitdepth": 8,
           "compression": "COMP_OFF",
           "format": "YUV420",
-          "fps": 30,
-          "height": 1080,
-          "width": 1920
+          "fps": 30
         },
         "shared_resource": false,
         "summary_badges": [],
@@ -1621,7 +1679,7 @@
         "collapsed_children_count": 0,
         "detail_items": [
           "Buffer: MCSC_WDMA_VIDEO_BUF",
-          "YUV420 / 8b / COMP_OFF"
+          "YUV420 / record_out / 8b / COMP_OFF"
         ],
         "id": "buf-mcsc-wdma-video-buf",
         "label": "Mcsc Wdma Video Buf",
@@ -1631,9 +1689,7 @@
           "bitdepth": 8,
           "compression": "COMP_OFF",
           "format": "YUV420",
-          "fps": 30,
-          "height": 1080,
-          "width": 1920
+          "fps": 30
         },
         "shared_resource": false,
         "summary_badges": [],
@@ -1660,7 +1716,7 @@
         "collapsed_children_count": 0,
         "detail_items": [
           "Buffer: GDC_M_DPU_BUF",
-          "YUV420 / 8b / COMP_YUV_LOSSLESS"
+          "YUV420 / record_out / 8b / COMP_YUV_LOSSLESS"
         ],
         "id": "buf-gdc-m-dpu-buf",
         "label": "Gdc M Dpu Buf",
@@ -1670,9 +1726,7 @@
           "bitdepth": 8,
           "compression": "COMP_YUV_LOSSLESS",
           "format": "YUV420",
-          "fps": 30,
-          "height": 1080,
-          "width": 1920
+          "fps": 30
         },
         "shared_resource": false,
         "summary_badges": [],
@@ -1699,7 +1753,7 @@
         "collapsed_children_count": 0,
         "detail_items": [
           "Buffer: GDC_O_MFC_BUF",
-          "YUV420 / 8b / COMP_YUV_LOSSLESS"
+          "YUV420 / record_out / 8b / COMP_YUV_LOSSLESS"
         ],
         "id": "buf-gdc-o-mfc-buf",
         "label": "Gdc O Mfc Buf",
@@ -1709,9 +1763,7 @@
           "bitdepth": 8,
           "compression": "COMP_YUV_LOSSLESS",
           "format": "YUV420",
-          "fps": 30,
-          "height": 1080,
-          "width": 1920
+          "fps": 30
         },
         "shared_resource": false,
         "summary_badges": [],

@@ -71,3 +71,11 @@ desktop.ini
 # Local agent/tooling state
 .claude/
 .playwright-cli/
+
+
+
+# Frontend toolchain
+node_modules/
+
+# Static copies synced from dashboard/assets at runtime
+dashboard/static/*.png

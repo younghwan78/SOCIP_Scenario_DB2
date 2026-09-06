@@ -84,7 +84,7 @@ def render_selected_result_breakdown(
         render_dma_bw(result, key_prefix=key_prefix)
     elif label == RESULT_BREAKDOWN_TABS[3]:
         render_timing_summary(result)
-        render_timing_chart(result, key_prefix=key_prefix)
+        render_timing_chart(result, key_prefix=key_prefix, api_base=api_base)
     elif label == RESULT_BREAKDOWN_TABS[4]:
         render_timing_table(result, key_prefix=key_prefix)
     elif label == RESULT_BREAKDOWN_TABS[5]:

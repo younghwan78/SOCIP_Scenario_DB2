@@ -15,6 +15,7 @@ from scenario_db.view.buffers import (
 )
 from scenario_db.view.elements import _e, _n
 from scenario_db.view.graph_utils import (
+    edge_port_pairs as _edge_port_pairs,
     edge_source as _edge_source,
     edge_target as _edge_target,
     safe_id as _safe_id,
@@ -131,6 +132,8 @@ def _level2_node_matches_alias(graph: CanonicalScenarioGraph, node: dict[str, An
     hierarchy = str(sem.get("hierarchy_group") or "")
     ip_group = str(sem.get("ip_group") or "")
     text = f"{node.get('id', '')} {node.get('role', '')} {node.get('ip_ref', '')}".lower()
+    if alias == "all":
+        return True
     if alias == "camera":
         return hierarchy == "ISP"
     if alias == "video":
@@ -533,6 +536,7 @@ def _level2_module_edges(
                 flow_type,
                 label=label or _level1_edge_label(flow_type, buffer_ref),
                 buffer_ref=buffer_ref,
+                port_pairs=_edge_port_pairs(edge or {}),
                 memory=_buffer_memory_from_spec(graph, buffer_ref, tokens) if buffer_ref else None,
                 placement=_buffer_placement_from_spec(graph, buffer_ref) if buffer_ref else None,
                 detail_items=_edge_detail_items(graph, edge or {}, buffer_ref),
@@ -556,11 +560,20 @@ def _level2_module_edges(
 
         flow_type = _edge_flow_type(edge)
         buffer_ref = str(edge.get("buffer")) if edge.get("buffer") else None
+        pairs = _edge_port_pairs(edge)
         if buffer_ref:
             buffer_id = ensure_buffer(buffer_ref, index)
             if source_spec:
+                source_endpoint = _level2_source_endpoint(source_spec, flow_type)
+                # Port pairs pin the edge to the named WDMA module when the
+                # module is actually declared for this node.
+                for pair in pairs:
+                    candidate = _level2_module_id(source_spec.node_id, pair["src"])
+                    if candidate in source_spec.write_ids:
+                        source_endpoint = candidate
+                        break
                 add_edge(
-                    _level2_source_endpoint(source_spec, flow_type),
+                    source_endpoint,
                     buffer_id,
                     flow_type,
                     edge=edge,
@@ -568,9 +581,15 @@ def _level2_module_edges(
                     label=f"{flow_type} write",
                 )
             if target_spec:
+                target_endpoint = _level2_target_endpoint(target_spec, flow_type)
+                for pair in pairs:
+                    candidate = _level2_module_id(target_spec.node_id, pair["dst"])
+                    if candidate in target_spec.read_ids:
+                        target_endpoint = candidate
+                        break
                 add_edge(
                     buffer_id,
-                    _level2_target_endpoint(target_spec, flow_type),
+                    target_endpoint,
                     flow_type,
                     edge=edge,
                     buffer_ref=buffer_ref,

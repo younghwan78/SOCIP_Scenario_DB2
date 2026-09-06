@@ -25,6 +25,31 @@ metrics:
     allowed_scopes: [rail]
     compare_statistic: mean
     polarity: lower_is_better
+  # Declared join key between simulation VDD rails and measured PMIC bucks:
+  # measurement rails carry an explicit `domain`, simulation rails default to
+  # their own (logical) rail name. Rolled up as the sum of member rail means.
+  power.domain:
+    category: power
+    canonical_unit: mW
+    allowed_scopes: [power_domain]
+    compare_statistic: mean
+    polarity: lower_is_better
+  # Per-CPU-cluster power: measurement side from cpu_breakdown (rail rollup),
+  # prediction side from power_breakdown.cpu.by_cluster once the CPU model lands.
+  power.cluster:
+    category: power
+    canonical_unit: mW
+    allowed_scopes: [cluster]
+    compare_statistic: mean
+    polarity: lower_is_better
+  # Per-IP power: prediction side from ip_breakdown — the primary
+  # calibration axis for the IP power model.
+  power.ip:
+    category: power
+    canonical_unit: mW
+    allowed_scopes: [ip]
+    compare_statistic: mean
+    polarity: lower_is_better
   bandwidth.total:
     category: bandwidth
     canonical_unit: MB/s

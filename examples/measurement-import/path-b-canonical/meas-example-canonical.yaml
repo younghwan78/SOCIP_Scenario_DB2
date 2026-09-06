@@ -45,8 +45,8 @@ kpi:
   total_power_mw:                      # = Σ rail power_mw, run 간 집계
     mean: 675.222
     p95: 681.833
-    std: 5.803
-    ci_95: [668.656, 681.789]
+    std: 7.107
+    ci_95: [657.568, 692.877]
     n: 3
   # frame latency 는 프레임 단위 분포(n = 프레임 수, run 수와 다른 축). p95 로 jank 판단.
   # 30fps 예산 = 33.3ms → mean 28.4 / p95 32.1 모두 예산 내. drop 은 timeline_events 로.
@@ -62,23 +62,23 @@ kpi:
 #   std_mw     : run 간 표준편차 (선택)
 #   domain     : 대시보드 롤업 분류 (선택, 부분 선언 OK — 미지정은 이름 휴리스틱)
 vdd_power:
-  B5S4_VDDMIF_AP_L:            {voltage_v: 0.5687, current_ma: 70.4,   power_mw: 42.74,  std_mw: 0.367, domain: MIF}
-  B3_4_5S2_VDD_CPUCL3_BIG_L:   {voltage_v: 0.0132, current_ma: 30.531, power_mw: 26.976, std_mw: 0.232, domain: CPU}
-  B3_4S3_VDD_CPUCL2_MID_HF_L:  {voltage_v: 0.0357, current_ma: 9.704,  power_mw: 6.033,  std_mw: 0.052, domain: CPU}
-  B2S3_VDD_CPUCL1_MID_LF1_L:   {voltage_v: 0.4519, current_ma: 70.989, power_mw: 41.03,  std_mw: 0.353, domain: CPU}
-  B2S2_VDD_CPUCL1_MID_LF0_L:   {voltage_v: 0.5954, current_ma: 183.994, power_mw: 113.28, std_mw: 0.973, domain: CPU}
-  B5_6S3_VDD_CPUCL0_DSU_L:     {voltage_v: 0.5866, current_ma: 129.766, power_mw: 77.301, std_mw: 0.664, domain: CPU}
-  B4S4_VDD_INT_L:              {voltage_v: 0.6313, current_ma: 155.979, power_mw: 99.083, std_mw: 0.852}
+  B5S4_VDDMIF_AP_L:            {voltage_v: 0.5687, current_ma: 70.4,   power_mw: 42.74,  std_mw: 0.45, domain: MIF}
+  B3_4_5S2_VDD_CPUCL3_BIG_L:   {voltage_v: 0.0132, current_ma: 30.531, power_mw: 26.976, std_mw: 0.284, domain: CPU}
+  B3_4S3_VDD_CPUCL2_MID_HF_L:  {voltage_v: 0.0357, current_ma: 9.704,  power_mw: 6.033,  std_mw: 0.063, domain: CPU}
+  B2S3_VDD_CPUCL1_MID_LF1_L:   {voltage_v: 0.4519, current_ma: 70.989, power_mw: 41.03,  std_mw: 0.432, domain: CPU}
+  B2S2_VDD_CPUCL1_MID_LF0_L:   {voltage_v: 0.5954, current_ma: 183.994, power_mw: 113.28, std_mw: 1.192, domain: CPU}
+  B5_6S3_VDD_CPUCL0_DSU_L:     {voltage_v: 0.5866, current_ma: 129.766, power_mw: 77.301, std_mw: 0.814, domain: CPU}
+  B4S4_VDD_INT_L:              {voltage_v: 0.6313, current_ma: 155.979, power_mw: 99.083, std_mw: 1.043}
   # 아래 rail 들은 domain 미지정 → 대시보드가 이름 휴리스틱으로 분류 (CAM/MEM/GPU/ICPU)
-  B5_6S1_VDD_CAM_L:            {voltage_v: 0.6077, current_ma: 170.465, power_mw: 103.565, std_mw: 0.89}
-  L1S3_VDD_ICPU_L:             {voltage_v: 0.7219, current_ma: 26.032,  power_mw: 18.781,  std_mw: 0.161}
-  B1_2_3_4S1_VDD_G3D0_0P725_L: {voltage_v: 0.0111, current_ma: 7.058,   power_mw: 2.293,   std_mw: 0.02}   # GPU gated
-  B1_2_3E1_VDD_G3D1_0P725_L:   {voltage_v: 0.0112, current_ma: 6.107,   power_mw: 1.851,   std_mw: 0.016}  # GPU gated
-  B6S4_VDDQ_DRAM_MEM_0P5_T:    {voltage_v: 0.4280, current_ma: 17.624,  power_mw: 7.592,   std_mw: 0.065, domain: MEM}
-  L5M_VDD1_MEM_L:              {voltage_v: 1.8014, current_ma: 9.741,   power_mw: 17.546,  std_mw: 0.151}
-  SRB1S5_VDD2L_MEM_AP_L:       {voltage_v: 0.9108, current_ma: 25.986,  power_mw: 23.693,  std_mw: 0.204}
-  SRB1S4_VDD2H_MEM_AP_L:       {voltage_v: 1.0027, current_ma: 57.96,   power_mw: 58.248,  std_mw: 0.501}
-  B6S2_VDD_SRAM_L:             {voltage_v: 0.7217, current_ma: 48.781,  power_mw: 35.212,  std_mw: 0.303}
+  B5_6S1_VDD_CAM_L:            {voltage_v: 0.6077, current_ma: 170.465, power_mw: 103.565, std_mw: 1.09}
+  L1S3_VDD_ICPU_L:             {voltage_v: 0.7219, current_ma: 26.032,  power_mw: 18.781,  std_mw: 0.198}
+  B1_2_3_4S1_VDD_G3D0_0P725_L: {voltage_v: 0.0111, current_ma: 7.058,   power_mw: 2.293,   std_mw: 0.024}   # GPU gated
+  B1_2_3E1_VDD_G3D1_0P725_L:   {voltage_v: 0.0112, current_ma: 6.107,   power_mw: 1.851,   std_mw: 0.019}  # GPU gated
+  B6S4_VDDQ_DRAM_MEM_0P5_T:    {voltage_v: 0.4280, current_ma: 17.624,  power_mw: 7.592,   std_mw: 0.08, domain: MEM}
+  L5M_VDD1_MEM_L:              {voltage_v: 1.8014, current_ma: 9.741,   power_mw: 17.546,  std_mw: 0.185}
+  SRB1S5_VDD2L_MEM_AP_L:       {voltage_v: 0.9108, current_ma: 25.986,  power_mw: 23.693,  std_mw: 0.249}
+  SRB1S4_VDD2H_MEM_AP_L:       {voltage_v: 1.0027, current_ma: 57.96,   power_mw: 58.248,  std_mw: 0.613}
+  B6S2_VDD_SRAM_L:             {voltage_v: 0.7217, current_ma: 48.781,  power_mw: 35.212,  std_mw: 0.371}
 
 # ── CPU 클러스터 분해 = power(전력 측정) + freq/util(perfetto 분석) 병합 ───────────
 #   power_mw     : 전력 측정에서 (run 간 MeasuredKpi)
@@ -86,7 +86,7 @@ vdd_power:
 #   freq_residency = 시간가중 점유율 {freq_mhz, ratio(합≈1), time_ms}
 cpu_breakdown:
   - cluster: BIG     # CPUCL3 — 이 시나리오선 거의 parked
-    power_mw: {mean: 26.976, p95: 27.24, std: 0.232, ci_95: [26.713, 27.238], n: 3}
+    power_mw: {mean: 26.976, p95: 27.24, std: 0.284, ci_95: [26.27, 27.681], n: 3}
     avg_freq_mhz: 1000.0
     util_pct: 8.4
     freq_residency:
@@ -95,7 +95,7 @@ cpu_breakdown:
       - {freq_mhz: 1100.0, ratio: 0.22, time_ms: 39600.0}
       - {freq_mhz: 672.0,  ratio: 0.66, time_ms: 118800.0}
   - cluster: MID     # CPUCL2 + CPUCL1(LF0/LF1) — 카메라/인코더 workhorse
-    power_mw: {mean: 160.343, p95: 161.913, std: 1.378, ci_95: [158.784, 161.902], n: 3}
+    power_mw: {mean: 160.343, p95: 161.913, std: 1.688, ci_95: [156.151, 164.535], n: 3}
     avg_freq_mhz: 1765.0
     util_pct: 47.5
     freq_residency:
@@ -104,7 +104,7 @@ cpu_breakdown:
       - {freq_mhz: 1400.0, ratio: 0.27, time_ms: 48600.0}
       - {freq_mhz: 900.0,  ratio: 0.09, time_ms: 16200.0}
   - cluster: LIT     # CPUCL0_DSU
-    power_mw: {mean: 77.301, p95: 78.058, std: 0.664, ci_95: [76.55, 78.053], n: 3}
+    power_mw: {mean: 77.301, p95: 78.058, std: 0.814, ci_95: [75.28, 79.322], n: 3}
     avg_freq_mhz: 1228.0
     util_pct: 39.0
     freq_residency:

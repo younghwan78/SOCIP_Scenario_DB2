@@ -19,10 +19,14 @@ _SLUG_RE = re.compile(r"[^a-zA-Z0-9.]+")
 
 def generate_evidence_id(meta: MeasurementImportMeta) -> str:
     timestamp = _timestamp_suffix(meta.measured_at)
+    # project_ref is part of the identity: without it, two projects measuring
+    # the same scenario/variant/rev at the same time collide and the ETL
+    # upsert silently overwrites one with the other.
+    project = _slug(meta.project_ref or "")
     scenario = _slug(meta.scenario_ref)
     variant = _slug(meta.variant_ref)
     rev = _slug(meta.execution_context.silicon_rev)
-    parts = ["meas", scenario, variant, rev, timestamp]
+    parts = ["meas", project, scenario, variant, rev, timestamp]
     return "-".join(p for p in parts if p)
 
 

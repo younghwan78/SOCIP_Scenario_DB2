@@ -1,8 +1,8 @@
-id: sim-uc-camera-recording-UHD60-HDR10-H265-EVT0-sw123-20260419
+id: sim-uc-projecta-fhd30-recording-UHD60-HDR10-H265-EVT0-sw123-20260419
 schema_version: "2.2"
 kind: evidence.simulation
 
-scenario_ref: uc-camera-recording
+scenario_ref: uc-projecta-fhd30-recording
 variant_ref: UHD60-HDR10-H265
 project_ref: proj-A-exynos2500
 

@@ -41,6 +41,7 @@ def upsert_simulation(raw: dict, sha256: str, session: Session) -> None:
     row.external_devices    = list(obj.external_devices or [])
     row.topology_order      = list(obj.topology_order or []) or None
     row.vdd_power           = obj.vdd_power or {}
+    row.power_breakdown     = obj.power_breakdown or None
     row.sw_task_timing      = [b.model_dump(exclude_none=True) for b in obj.sw_task_timing] or None
     row.metric_observations = [
         item.model_dump(exclude_none=True) for item in obj.metric_observations
