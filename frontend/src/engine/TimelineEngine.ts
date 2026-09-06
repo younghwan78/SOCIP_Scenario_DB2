@@ -578,7 +578,9 @@ export class TimelineEngine {
         ctx.beginPath()
         ctx.rect(Math.max(HEADER_WIDTH, x0 + 4), sliceY, sliceW - 8, sliceH)
         ctx.clip()
-        const label = event.hw_name || event.task_id
+        // Prefer the pipeline node (task) name; hw_name is the shared
+        // resource class (ISP/CPU/...) and stays in the tooltip.
+        const label = event.node_id || String(event.task_id ?? '').split('#f', 1)[0] || event.hw_name || ''
         ctx.fillText(label, Math.max(HEADER_WIDTH + 2, x0 + 6), sliceY + sliceH / 2 + 4)
         ctx.restore()
       }

@@ -67,4 +67,26 @@ describe('buildTracks', () => {
     ])
     expect(tracks.map((t) => t.title).sort()).toEqual(['SW: CPU_BIG', 'SW: CPU_LITTLE'])
   })
+
+  it('titles HW/SW tracks by node name, keeping the shared resource in parens', () => {
+    const tracks = buildTracks([
+      event({ task_id: 'n3aa#f0', node_id: 'n3aa', task_type: 'hw', resource_id: 'ISP' }),
+      event({ task_id: 'gdc_m#f0', node_id: 'gdc_m', task_type: 'hw', resource_id: 'ISP', start_ms: 2, end_ms: 3 }),
+      event({ task_id: 'eis#f0', node_id: 'eis', task_type: 'sw', resource_id: 'CPU_MID' }),
+    ])
+    const titles = tracks.map((t) => t.title).sort()
+    // Same resource (ISP) still means separate per-node tracks.
+    expect(titles).toEqual(['HW: gdc_m (ISP)', 'HW: n3aa (ISP)', 'SW: eis (CPU_MID)'])
+  })
+
+  it('titles OTF group tracks with the node chain instead of the group id', () => {
+    const tracks = buildTracks([
+      event({ task_id: 'sensor#f0', node_id: 'sensor_rear', otf_group_id: 'otf-0#f0', start_ms: 0, end_ms: 5 }),
+      event({ task_id: 'csispdp#f0', node_id: 'csispdp', otf_group_id: 'otf-0#f0', start_ms: 1, end_ms: 6 }),
+      event({ task_id: 'byrp#f0', node_id: 'byrp', otf_group_id: 'otf-0#f0', start_ms: 2, end_ms: 7 }),
+      event({ task_id: 'rgbp#f0', node_id: 'rgbp', otf_group_id: 'otf-0#f0', start_ms: 3, end_ms: 8 }),
+    ])
+    expect(tracks).toHaveLength(1)
+    expect(tracks[0].title).toBe('OTF: sensor_rear > ... > rgbp (4 IPs)')
+  })
 })
