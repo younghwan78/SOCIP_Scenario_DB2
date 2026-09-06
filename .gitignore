@@ -70,3 +70,4 @@ desktop.ini
 
 # Local agent/tooling state
 .claude/
+.playwright-cli/

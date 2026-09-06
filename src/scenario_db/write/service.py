@@ -624,6 +624,7 @@ def validate_import_bundle(db: Session, normalized: dict[str, Any]) -> list[Vali
     in_bundle_ip_modes = _in_bundle_ip_modes(docs)
     seen: set[tuple[str, str]] = set()
     seen_dvfs_versions: dict[tuple[str, int], str] = {}
+    db_ip_refs: set[str] | None = None
 
     for idx, doc in enumerate(docs):
         kind = doc.get("kind")
@@ -647,10 +648,12 @@ def validate_import_bundle(db: Session, normalized: dict[str, Any]) -> list[Vali
         if kind == "soc.dvfs_table":
             issues.extend(_validate_import_dvfs_table_refs(db, doc, included, path))
             issues.extend(_validate_import_dvfs_table_version_key(db, doc, seen_dvfs_versions, path))
+        if kind in {"soc.cdgm_profile", "scenario.usecase"} and db_ip_refs is None:
+            db_ip_refs = {row.id for row in db.query(IpCatalog.id).all()}
         if kind == "soc.cdgm_profile":
-            issues.extend(_validate_import_cdgm_profile_refs(db, doc, included, path))
+            issues.extend(_validate_import_cdgm_profile_refs(db, doc, included, path, db_ip_refs or set()))
         if kind == "scenario.usecase":
-            issues.extend(_validate_import_usecase_refs(db, doc, included, path, in_bundle_ip_modes))
+            issues.extend(_validate_import_usecase_refs(db, doc, included, path, in_bundle_ip_modes, db_ip_refs or set()))
 
     report = normalized.get("import_report") or {}
     if report and report.get("ok") is False:
@@ -788,6 +791,11 @@ def _apply_variant_overlay(db: Session, normalized: dict[str, Any]) -> dict[str,
         row = ScenarioVariant(scenario_id=scenario_ref, id=variant["id"])
 
     _apply_variant_fields(row, variant)
+    scenario = db.query(Scenario).filter_by(id=scenario_ref).one_or_none()
+    if scenario is None:
+        raise NotFoundError(f"Scenario not found: {scenario_ref}")
+    scenario.yaml_sha256 = "write:" + _document_sha256(normalized)
+    db.add(scenario)
     db.add(row)
     db.flush()
     return {
@@ -805,6 +813,7 @@ def _apply_pipeline_patch(db: Session, normalized: dict[str, Any]) -> dict[str, 
     before = scenario.pipeline or {}
     after = _patched_pipeline(before, normalized["patch"])
     scenario.pipeline = after
+    scenario.yaml_sha256 = "write:" + _document_sha256(normalized)
     db.add(scenario)
     db.flush()
     return {
@@ -1210,6 +1219,7 @@ def _validate_import_usecase_refs(
     included: dict[str, set[str]],
     path: str,
     in_bundle_ip_modes: dict[str, set[str]],
+    db_ip_refs: set[str],
 ) -> list[ValidationIssue]:
     issues: list[ValidationIssue] = []
     project_ref = doc.get("project_ref")
@@ -1217,7 +1227,6 @@ def _validate_import_usecase_refs(
         issues.append(_issue("error", "import_project_ref_not_found", f"Project not found: {project_ref}", f"{path}.project_ref"))
 
     ip_refs = included.get("ip", set())
-    db_ip_refs = {row.id for row in db.query(IpCatalog.id).all()}
     pipeline = doc.get("pipeline") or {}
     node_ids = {node.get("id") for node in pipeline.get("nodes") or [] if isinstance(node, dict)}
     buffer_ids = set((pipeline.get("buffers") or {}).keys())
@@ -1350,6 +1359,7 @@ def _validate_import_cdgm_profile_refs(
     doc: dict[str, Any],
     included: dict[str, set[str]],
     path: str,
+    db_ip_refs: set[str],
 ) -> list[ValidationIssue]:
     issues: list[ValidationIssue] = []
     soc_ref = doc.get("soc_ref")
@@ -1368,7 +1378,6 @@ def _validate_import_cdgm_profile_refs(
         )
 
     ip_refs = included.get("ip", set())
-    db_ip_refs = {row.id for row in db.query(IpCatalog.id).all()}
     for role_key, override in (doc.get("role_overrides") or {}).items():
         if not isinstance(override, dict):
             continue

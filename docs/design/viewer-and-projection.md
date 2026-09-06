@@ -25,6 +25,23 @@ variant to satisfy the UI.
 
 ## 2. Projection pipeline
 
+Evidence read optimization verified on 2026-09-06: the standard view service
+loads only the ten evidence columns needed by projection and rule contexts.
+Timeline, calculation trace, rail and other detail blobs are not loaded for every
+historical evidence row. An explicitly requested simulation overlay still loads
+its selected evidence through the existing detail path.
+
+`load_canonical_graph(..., include_evidence_details=False)` and the corresponding
+base loader opt into this projection. Other callers retain the full default.
+Deferred columns use SQLAlchemy `raiseload` so a future accidental access fails
+instead of silently issuing a per-row query. PostgreSQL regression tests compare
+the full and reduced view responses and ensure projection emits no extra SQL.
+
+Architecture Query similarly selects ten evidence columns used by facts and
+matching. Latest-evidence selection preserves its timestamp/ID tie policy with a
+single pass rather than sorting each group. Candidate limits and matching scope
+remain unchanged.
+
 1. The repository builds a `CanonicalScenarioGraph` from PostgreSQL rows.
 2. Variant inheritance, routing switches, topology patches, node configs, and buffer overrides
    form the effective graph.

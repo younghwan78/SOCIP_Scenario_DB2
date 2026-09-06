@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from itertools import product
 from typing import Any
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 
 from scenario_db.config import get_settings
 
@@ -507,7 +507,14 @@ def _load_scoped_evidence(
     *,
     max_rows: int | None,
 ) -> list[Any]:
-    query = db.query(Evidence).filter(Evidence.scenario_ref.in_(scenario_ids))
+    # Query facts and issue contexts do not consume timeline/trace/rail blobs.
+    # Raise on an accidental new access instead of hiding an N+1 lazy load.
+    query = db.query(Evidence).options(load_only(
+        Evidence.id, Evidence.scenario_ref, Evidence.variant_ref,
+        Evidence.run_info, Evidence.execution_context, Evidence.resolution_result,
+        Evidence.kpi, Evidence.overall_feasibility, Evidence.sw_version_hint,
+        Evidence.sw_baseline_ref, raiseload=True,
+    )).filter(Evidence.scenario_ref.in_(scenario_ids))
     if variant_ids:
         query = query.filter(Evidence.variant_ref.in_(variant_ids))
     return _bounded_query_all(query, max_rows=max_rows, source="evidence")
@@ -541,17 +548,18 @@ def _resolved_variant(row_map: dict[str, Any], scenario_id: str, variant_id: str
 
 
 def _latest_evidence_by_variant(evidence_rows: list[Any]) -> dict[tuple[str, str], Any]:
-    grouped: dict[tuple[str, str], list[Any]] = defaultdict(list)
+    latest: dict[tuple[str, str], Any] = {}
+    keys: dict[tuple[str, str], tuple[int, Any, str]] = {}
     for row in evidence_rows:
         scenario_id = str(getattr(row, "scenario_ref", "") or "")
         variant_id = str(getattr(row, "variant_ref", "") or "")
         if scenario_id and variant_id:
-            grouped[(scenario_id, variant_id)].append(row)
-    return {
-        key: sorted(rows, key=_evidence_sort_key, reverse=True)[0]
-        for key, rows in grouped.items()
-        if rows
-    }
+            key = (scenario_id, variant_id)
+            order = _evidence_sort_key(row)
+            if key not in keys or order > keys[key]:
+                latest[key] = row
+                keys[key] = order
+    return latest
 
 
 def _evidence_sort_key(row: Any) -> tuple[int, Any, str]:

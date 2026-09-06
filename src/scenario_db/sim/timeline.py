@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+from contextlib import ExitStack
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
@@ -232,20 +233,34 @@ def build_timeline_events(
             results = yield simpy.events.AllOf(env, external_ready)
             token_wait = sum(float(value or 0.0) for value in results.values())
 
-        base_start = float(env.now)
-        max_duration = max((_task_duration(run.task) for run in group_runs), default=0.0)
-        task_processes = []
-        for run in group_runs:
-            run.resource_id = _task_resource_id(run.task)
-            run.ready_ms = base_start
-            run.token_wait_ms = token_wait
-            run.otf_group_id = group_id
-            run.bottleneck = _task_duration(run.task) == max_duration
-            if run.bottleneck:
-                run.bottleneck_reason = "longest duration in OTF streaming group"
-            task_processes.append(env.process(run_otf_group_task(run, base_start, max_duration)))
-        if task_processes:
-            yield simpy.events.AllOf(env, task_processes)
+        ready_ms = float(env.now)
+        # One reservation per physical resource in a streaming group. Hold it
+        # for the group lifetime, including latency offsets. Sorted acquisition
+        # prevents two overlapping groups from acquiring resources in reverse.
+        resources = {
+            resource_id: _task_resource_capacity(run.task)
+            for run in group_runs
+            if (resource_id := _task_resource_id(run.task))
+        }
+        with ExitStack() as reservations:
+            for resource_id, capacity in sorted(resources.items()):
+                request = reservations.enter_context(compute_resource(resource_id, capacity).request())
+                yield request
+            base_start = float(env.now)
+            max_duration = max((_task_duration(run.task) for run in group_runs), default=0.0)
+            task_processes = []
+            for run in group_runs:
+                run.resource_id = _task_resource_id(run.task)
+                run.ready_ms = ready_ms
+                run.resource_wait_ms = base_start - ready_ms
+                run.token_wait_ms = token_wait
+                run.otf_group_id = group_id
+                run.bottleneck = _task_duration(run.task) == max_duration
+                if run.bottleneck:
+                    run.bottleneck_reason = "longest duration in OTF streaming group"
+                task_processes.append(env.process(run_otf_group_task(run, base_start, max_duration)))
+            if task_processes:
+                yield simpy.events.AllOf(env, task_processes)
 
     def run_otf_group_task(run: _TaskRun, base_start: float, group_duration: float):
         latency_offset = _task_latency_offset(run.task)

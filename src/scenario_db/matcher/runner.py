@@ -60,7 +60,7 @@ def _resolve_field(rule: dict, ctx: MatcherContext) -> Any:
     단축 포맷과 도트-경로 포맷 모두를 처리해 실제 값을 반환.
     """
     # 도트-경로 포맷: {"field": "axis.resolution", ...}
-    if "field" in rule:
+    if "field" in rule and "ip" not in rule:
         return ctx.get(rule["field"])
 
     # 단축 포맷: {"axis": "resolution", ...} / {"ip": "ISP.TNR", "field": "mode", ...}

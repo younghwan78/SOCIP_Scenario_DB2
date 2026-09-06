@@ -96,6 +96,19 @@ def create_app() -> FastAPI:
     for r in routers:
         app.include_router(r, prefix="/api/v1")
 
+    # Mount Web SPA if built in web/dist
+    from pathlib import Path
+    from fastapi.responses import FileResponse
+    from fastapi.staticfiles import StaticFiles
+
+    web_dist = Path(__file__).resolve().parents[3] / "web" / "dist"
+    if (web_dist / "assets").is_dir():
+        app.mount("/assets", StaticFiles(directory=str(web_dist / "assets")), name="spa_assets")
+
+        @app.get("/", include_in_schema=False)
+        def _serve_spa():
+            return FileResponse(web_dist / "index.html")
+
     return app
 
 

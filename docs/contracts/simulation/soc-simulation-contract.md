@@ -13,6 +13,33 @@ The two scopes intentionally differ. A SoC may contain unused draft IPs with
 borrowable simulation data, while an active scenario workload with missing `ppc`
 must still be blocked.
 
+## Timeline Resource Identity
+
+Verified against the scheduler and its capacity regression tests on 2026-09-06.
+
+The scenario adapter treats each HW pipeline/task node as a distinct resource by
+default. `hw_name` and `ip_ref` identify display/catalog information and do not
+imply that two nodes share one physical execution resource. This matters for
+composite ISP catalog entries used by several independent pipeline stages.
+
+To model shared hardware, give its nodes the same `resource_id` (the legacy
+`resource` key is also accepted). Use `resource_capacity` for capacity, defaulting
+to one. All declarations of the same resource should use the same capacity.
+SW task nodes have no implicit resource; provide one explicitly when modeling
+CPU contention.
+
+An OTF streaming group reserves each of its distinct resources once for the
+group lifetime, including latency offsets. Reservations are shared with ordinary
+tasks and other frames. A group acquires resources in sorted order and releases
+them on completion. This is a conservative group reservation model; it does not
+model a separate sub-frame hardware initiation interval.
+
+Changing from display-name resource aliases to node resources changes historical
+timeline/cadence values. Compare newly generated evidence under the same model;
+existing persisted evidence is not rewritten. The regression tests check resource
+capacity independently of the updated golden timing values. These checks do not
+replace calibration against real hardware.
+
 ## Compute IP Requirements
 
 Compute IPs are catalog entries used as HW workloads in simulation. Typical

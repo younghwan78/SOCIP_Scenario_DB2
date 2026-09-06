@@ -122,8 +122,8 @@ def _require_db(db) -> None:
 
 def _load_graph(db, scenario_id: str, variant_id: str | None) -> CanonicalScenarioGraph:
     if variant_id:
-        return load_canonical_graph(db, scenario_id, variant_id)
-    return load_base_canonical_graph(db, scenario_id)
+        return load_canonical_graph(db, scenario_id, variant_id, include_evidence_details=False)
+    return load_base_canonical_graph(db, scenario_id, include_evidence_details=False)
 
 
 def _level0_projection_deps() -> Level0ProjectionDeps:

@@ -31,6 +31,12 @@ class _MapperQuery:
         ]
         return before - len(self._db.variants)
 
+    def one_or_none(self):
+        rows = self._db.scenarios.values() if self._model is Scenario else self._db.variants
+        return next((row for row in rows if all(
+            getattr(row, key) == value for key, value in self._filters.items()
+        )), None)
+
 
 class _MapperSession:
     def __init__(self):
@@ -85,6 +91,31 @@ def _usecase_doc():
             }
         ],
     }
+
+
+@pytest.mark.parametrize("kind", ["pipeline", "variant"])
+def test_reimport_restores_original_document_after_write(kind):
+    from scenario_db.write.service import _apply_pipeline_patch, _apply_variant_overlay
+
+    db = _MapperSession()
+    doc = _usecase_doc()
+    upsert_usecase(doc, "sha-original", db)
+    if kind == "pipeline":
+        _apply_pipeline_patch(db, {"scenario_ref": doc["id"], "patch": {
+            "upsert_buffers": {"VIDEO_BUF": {"format": "P010"}}
+        }})
+        assert db.scenarios[doc["id"]].pipeline["buffers"]["VIDEO_BUF"]["format"] == "P010"
+    else:
+        _apply_variant_overlay(db, {"scenario_ref": doc["id"], "variant": {
+            "id": "FHD30", "design_conditions": {"fps": 60}
+        }})
+        assert db.variants[0].design_conditions["fps"] == 60
+    assert db.scenarios[doc["id"]].yaml_sha256 != "sha-original"
+    assert db.scenarios[doc["id"]].yaml_sha256 is not None
+    upsert_usecase(doc, "sha-original", db)
+    assert db.scenarios[doc["id"]].pipeline["buffers"]["VIDEO_BUF"]["format"] == "NV12"
+    assert db.variants[0].design_conditions["fps"] == 30
+    assert db.scenarios[doc["id"]].yaml_sha256 == "sha-original"
 
 
 def test_upsert_usecase_persists_pipeline_and_replaces_variants():

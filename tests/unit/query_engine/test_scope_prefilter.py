@@ -15,6 +15,9 @@ from scenario_db.query_engine.service import (
 
 
 class _Query:
+    def options(self, *options):
+        return self
+
     def __init__(self, rows):
         self._rows = rows
         self.filters: list[object] = []

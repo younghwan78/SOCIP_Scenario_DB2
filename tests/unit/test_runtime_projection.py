@@ -162,7 +162,9 @@ def test_topology_projection_contains_vertical_buffer_and_llc_metadata():
     assert any(node.data.id == "buf-record-buf" for node in view.nodes)
     buffer_node = next(node for node in view.nodes if node.data.id == "buf-record-buf")
     assert buffer_node.data.memory.format == "NV12"
-    assert buffer_node.data.placement.llc_allocated is True
+    # An IP-level capacity requirement does not declare this buffer's placement.
+    assert buffer_node.data.placement.llc_allocated is False
+    assert buffer_node.data.placement.expected_bw_reduction_gbps is None
     assert any(edge.data.buffer_ref == "RECORD_BUF" for edge in view.edges)
 
 

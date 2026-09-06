@@ -152,21 +152,12 @@ def _memory_descriptor(graph: CanonicalScenarioGraph, buffer_ref: str) -> Memory
     )
 
 def _memory_placement(graph: CanonicalScenarioGraph, buffer_ref: str) -> MemoryPlacement:
-    allocations = (graph.variant.ip_requirements or {}).get("llc", {}).get("required_allocations") or {}
-    owner = None
-    allocation_mb = None
-    for key, value in allocations.items():
-        owner = str(key)
-        allocation_mb = _parse_mb(value)
-        if str(key).lower() in buffer_ref.lower() or str(key).lower() in {"mfc", "isp.tnr"}:
-            break
-    return MemoryPlacement(
-        llc_allocated=bool(allocations),
-        llc_allocation_mb=allocation_mb,
-        llc_policy="dedicated" if allocations else "none",
-        allocation_owner=owner,
-        expected_bw_reduction_gbps=2.0 if allocations else None,
-    )
+    # IP requirements describe capacity requirements, not per-buffer placement.
+    # Only an authored placement is evidence that this buffer uses LLC.
+    spec = _buffer_spec(graph, buffer_ref)
+    if spec.get("placement"):
+        return MemoryPlacement(**spec["placement"])
+    return MemoryPlacement()
 
 def _buffer_label(buffer_ref: str) -> str:
     return str(buffer_ref).replace("_", " ").title()
