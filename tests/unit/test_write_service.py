@@ -690,6 +690,25 @@ def test_validate_import_bundle_accepts_canonical_usecase_doc():
     assert issues == []
 
 
+def test_import_validation_reads_ip_id_catalog_once_for_multiple_documents(monkeypatch):
+    db = _Db()
+    original_query = db.query
+    scans = []
+
+    def counted_query(model):
+        if model is IpCatalog.id:
+            scans.append(model)
+        return original_query(model)
+
+    monkeypatch.setattr(db, "query", counted_query)
+    first = _import_usecase_doc()
+    second = deepcopy(first)
+    second["id"] = "uc-second-import"
+    normalized = normalize_import_bundle_payload({"documents": [_import_sw_profile_doc(), first, second]})
+    assert validate_import_bundle(db, normalized) == []
+    assert len(scans) == 1
+
+
 def test_validate_import_bundle_accepts_soc_dvfs_table_doc():
     normalized = normalize_import_bundle_payload(
         {"documents": [_import_soc_doc(), _import_dvfs_table_doc()]}

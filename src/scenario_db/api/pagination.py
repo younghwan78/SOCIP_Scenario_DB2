@@ -33,9 +33,9 @@ def apply_sort(
         raise BadRequestError("sort_dir must be 'asc' or 'desc'")
 
     col_name = validate_sort_column(model, sort_by) or default_col
-    col = getattr(model, col_name, None)
-    if col is None:
-        col = getattr(model, default_col)
+    # Public keys are database column names, not declarative attribute names
+    # (metadata/globals are mapped as metadata_/globals_).
+    col = model.__table__.columns[col_name]
 
     direction = _SORT_DIRS[sort_dir]
     return query.order_by(direction(col))

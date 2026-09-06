@@ -342,6 +342,8 @@ def test_simulation_regression_smoke_keeps_reference_kpis_and_clocks_stable():
     assert demo_result.resolved["dpu"].required_clock_mhz == pytest.approx(18.296470588235298)
 
 
+# Timing references use node-level resources and OTF reservations (2026-09-05).
+# Capacity invariants below independently guard the corrected schedule.
 def test_exynos2600_camera_recording_vdis_golden_keeps_kpis_clocks_and_external_timing_stable():
     inputs = build_simulation_inputs(
         _exynos2600_generated_graph("uc-camera-recording", "cam-rec-r1-fhd30-vdis"),
@@ -353,7 +355,7 @@ def test_exynos2600_camera_recording_vdis_golden_keeps_kpis_clocks_and_external_
     assert result.total_power_mw == pytest.approx(170.2674432, rel=1e-6)
     assert result.bw_total_mbs == pytest.approx(1555.2, abs=1e-6)
     assert result.hw_time_max_ms == pytest.approx(29.75)
-    assert result.timeline_end_ms == pytest.approx(412.9044206666666, rel=1e-6)
+    assert result.timeline_end_ms == pytest.approx(248.75, rel=1e-6)
     assert result.total_power_ma == pytest.approx(50.07865976470589, rel=1e-6)
 
     sensor = next(item for item in result.external_devices if item["device_type"] == "sensor")
@@ -372,13 +374,13 @@ def test_exynos2600_camera_recording_vdis_golden_keeps_kpis_clocks_and_external_
 
     sink_events = [event for event in result.timeline_events if event.node_id == "panel"]
     assert len(sink_events) == 4
-    assert sink_events[-1].cadence_violation is True
-    assert sink_events[-1].cadence_avg_interval_ms == pytest.approx(69.41666666666666)
+    assert sink_events[-1].cadence_violation is False
+    assert sink_events[-1].cadence_avg_interval_ms == pytest.approx(33.333333333333336)
     trace = result.calculation_trace
     assert trace is not None
-    assert trace["timeline"]["summary"]["cadence_violation_count"] >= 1
+    assert trace["timeline"]["summary"]["cadence_violation_count"] == 0
     assert any(row["task_id"] == "panel#f3" for row in trace["timeline"]["cadence"])
-    assert any(row["bottleneck_reason"] == "output average cadence exceeds frame period" for row in trace["timeline"]["top_waits"])
+    assert not any(row["bottleneck_reason"] == "output average cadence exceeds frame period" for row in trace["timeline"]["top_waits"])
 
 
 def test_full_debug_trace_includes_timeline_event_rows():
@@ -404,14 +406,14 @@ def test_full_debug_trace_includes_timeline_event_rows():
                 "total_power_mw": 681.0697728,
                 "total_power_ma": 200.31463905882356,
                 "bw_total_mbs": 6220.8,
-                "timeline_end_ms": 412.9044206666666,
+                "timeline_end_ms": 248.75,
                 "sensor_mode": "wide_video_16_9_30",
                 "sensor_size": "4080x2296",
                 "sensor_v_valid_ms": 18.987754,
                 "csispdp_required_mhz": 285.2142857142857,
                 "otf0_set_clock_mhz": 285.2142857142857,
                 "lme_set_clock_mhz": 73.18588235294119,
-                "sink_cadence_avg_ms": 69.41666666666666,
+                "sink_cadence_avg_ms": 33.333333333333336,
             },
         ),
         (
@@ -420,14 +422,14 @@ def test_full_debug_trace_includes_timeline_event_rows():
                 "total_power_mw": 140.2002432,
                 "total_power_ma": 41.23536564705882,
                 "bw_total_mbs": 1244.16,
-                "timeline_end_ms": 420.083333,
+                "timeline_end_ms": 222.583333,
                 "sensor_mode": "wide_video_16_9_30",
                 "sensor_size": "3648x2052",
                 "sensor_v_valid_ms": 33.333333,
                 "csispdp_required_mhz": 1714.285714285714,
                 "otf0_set_clock_mhz": 1714.285714285714,
                 "lme_set_clock_mhz": None,
-                "sink_cadence_avg_ms": 89.25,
+                "sink_cadence_avg_ms": 33.333333333333336,
             },
         ),
     ],
@@ -461,7 +463,7 @@ def test_exynos2600_camera_recording_golden_matrix_keeps_key_paths_stable(varian
 
     sink_events = [event for event in result.timeline_events if event.node_id == "panel"]
     assert len(sink_events) == 4
-    assert sink_events[-1].cadence_violation is True
+    assert sink_events[-1].cadence_violation is False
     assert sink_events[-1].cadence_avg_interval_ms == pytest.approx(expected["sink_cadence_avg_ms"])
 
 
@@ -1099,6 +1101,26 @@ def _ip_catalog_from_yaml(path: Path) -> IpCatalog:
 
 def _read_yaml(path: Path) -> dict:
     return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize("variant_id", ["cam-rec-r1-fhd30-vdis", "cam-rec-r1-uhd30-vdis", "cam-rec-f1-fhd30"])
+def test_recording_schedule_respects_physical_resource_capacity(variant_id):
+    inputs = build_simulation_inputs(
+        _exynos2600_generated_graph("uc-camera-recording", variant_id),
+        SimulationRunConfig(include_timeline=True, timeline_frame_count=4),
+    )
+    result = run_simulation(inputs, dvfs_tables={})
+    reservations = {}
+    for event in result.timeline_events:
+        if not event.resource_id:
+            continue
+        key = (event.resource_id, event.otf_group_id or event.task_id)
+        start, end = reservations.get(key, (event.start_ms, event.end_ms))
+        reservations[key] = (min(start, event.start_ms), max(end, event.end_ms))
+    for resource in {key[0] for key in reservations}:
+        intervals = sorted(value for key, value in reservations.items() if key[0] == resource)
+        for previous, current in zip(intervals, intervals[1:]):
+            assert previous[1] <= current[0] + 1e-6, resource
 
 
 def test_runner_uses_owning_node_fps_for_port_bandwidth():

@@ -14,6 +14,7 @@ from scenario_db.api.schemas.view import (
     SimOverlay,
     ViewResponse,
 )
+from scenario_db.view.graph_utils import safe_id
 
 
 def apply_simulation_overlay(view: ViewResponse, evidence) -> ViewResponse:
@@ -34,7 +35,7 @@ def apply_simulation_overlay(view: ViewResponse, evidence) -> ViewResponse:
             required_clock_mhz=_num(row.get("required_clock_mhz")),
             set_clock_mhz=_num(row.get("set_clock_mhz")),
             set_voltage_mv=_num(row.get("set_voltage_mv")),
-            power_mw=_num(row.get("total_power_mw") or row.get("active_power_mw")),
+            power_mw=_num(row.get("total_power_mw") if row.get("total_power_mw") is not None else row.get("active_power_mw")),
             hw_time_ms=_num(timing.get("hw_time_ms")),
             feasible=bool(row.get("feasible", timing.get("feasible", True))),
             evidence_id=evidence_id,
@@ -93,19 +94,23 @@ def _sim_dma_rows(evidence) -> list[dict[str, Any]]:
 
 
 def _match_node_sim_row(data: NodeData, rows: list[dict[str, Any]]) -> dict[str, Any] | None:
-    node_text = f"{data.id} {data.label} {data.ip_ref or ''}".lower()
     for row in rows:
         node_id = str(row.get("node_id") or "").lower()
-        if node_id and (data.id.lower() == node_id or node_id in node_text):
+        if node_id and data.id.lower() == node_id:
             return row
-    for row in rows:
-        ip_ref = str(row.get("ip_ref") or "").lower()
-        if ip_ref and data.ip_ref and data.ip_ref.lower() == ip_ref:
-            return row
-    for row in rows:
-        hw_name = str(row.get("hw_name") or "").lower()
-        if hw_name and hw_name in node_text:
-            return row
+    # Level 1 uses this exact projection ID convention. Require uniqueness
+    # because normalization can collapse distinct authored identifiers.
+    projected = [row for row in rows if row.get("node_id")
+                 and data.id == f"ip-{safe_id(str(row['node_id']))}"]
+    if len(projected) == 1:
+        return projected[0]
+    # Legacy evidence without node identity may use an exact, unambiguous
+    # catalog/label match. Never attach another identified node's result.
+    for key, expected in (("ip_ref", data.ip_ref), ("hw_name", data.label)):
+        matches = [row for row in rows if not row.get("node_id") and expected
+                   and str(row.get(key) or "").lower() == expected.lower()]
+        if len(matches) == 1:
+            return matches[0]
     return None
 
 

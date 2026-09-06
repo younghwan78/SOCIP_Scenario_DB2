@@ -70,6 +70,9 @@ desktop.ini
 
 # Local agent/tooling state
 .claude/
+.playwright-cli/
+
+
 
 # Frontend toolchain
 node_modules/

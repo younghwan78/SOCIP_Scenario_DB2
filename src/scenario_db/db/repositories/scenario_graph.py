@@ -4,7 +4,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 
 from scenario_db.db.models.capability import IpCatalog, SocPlatform, SwProfile
 from scenario_db.db.models.decision import GateRule, Issue, Review, Waiver
@@ -92,6 +92,8 @@ def load_canonical_graph(
     db: Session,
     scenario_id: str,
     variant_id: str,
+    *,
+    include_evidence_details: bool = True,
 ) -> CanonicalScenarioGraph:
     scenario = db.query(Scenario).filter_by(id=scenario_id).one_or_none()
     if scenario is None:
@@ -101,12 +103,14 @@ def load_canonical_graph(
     if variant is None:
         raise LookupError(f"Variant not found: {scenario_id}/{variant_id}")
 
-    return _load_graph_with_variant(db, scenario, variant)
+    return _load_graph_with_variant(db, scenario, variant, include_evidence_details=include_evidence_details)
 
 
 def load_base_canonical_graph(
     db: Session,
     scenario_id: str,
+    *,
+    include_evidence_details: bool = True,
 ) -> CanonicalScenarioGraph:
     scenario = db.query(Scenario).filter_by(id=scenario_id).one_or_none()
     if scenario is None:
@@ -131,13 +135,15 @@ def load_base_canonical_graph(
         resolved=True,
         inheritance_chain=[],
     )
-    return _load_graph_with_variant(db, scenario, variant)
+    return _load_graph_with_variant(db, scenario, variant, include_evidence_details=include_evidence_details)
 
 
 def _load_graph_with_variant(
     db: Session,
     scenario: Scenario,
     variant: ResolvedScenarioVariant,
+    *,
+    include_evidence_details: bool = True,
 ) -> CanonicalScenarioGraph:
     project = db.query(Project).filter_by(id=scenario.project_ref).one_or_none()
     soc = None
@@ -168,11 +174,16 @@ def _load_graph_with_variant(
         for row in db.query(IpCatalog).filter(IpCatalog.id.in_(ip_refs)).all()
     } if ip_refs else {}
 
-    evidence = (
-        db.query(Evidence)
-        .filter_by(scenario_ref=scenario.id, variant_ref=variant.id)
-        .all()
-    )
+    evidence_query = db.query(Evidence).filter_by(scenario_ref=scenario.id, variant_ref=variant.id)
+    if not include_evidence_details:
+        evidence_query = evidence_query.options(load_only(
+            Evidence.id, Evidence.scenario_ref, Evidence.variant_ref,
+            Evidence.sw_baseline_ref, Evidence.execution_context,
+            Evidence.resolution_result, Evidence.overall_feasibility,
+            Evidence.kpi, Evidence.ip_breakdown, Evidence.run_info,
+            raiseload=True,
+        ))
+    evidence = evidence_query.all()
     sw_refs = {
         ev.sw_baseline_ref
         for ev in evidence

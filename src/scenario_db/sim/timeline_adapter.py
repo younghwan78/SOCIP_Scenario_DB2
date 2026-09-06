@@ -17,6 +17,11 @@ def timeline_tasks(graph: CanonicalScenarioGraph) -> list[dict[str, Any]]:
                 "hw_name": _label_hw_name(node),
                 "task_type": "sw" if str(node.get("layer") or "").lower() in {"app", "framework", "hal", "kernel"} else "hw",
                 "duration_ms": node.get("duration_ms") or node.get("manual_hw_time_ms") or 0.0,
+                "resource_id": node.get("resource_id") or node.get("resource") or (
+                    str(node["id"]) if str(node.get("layer") or "").lower()
+                    not in {"app", "framework", "hal", "kernel"} else None
+                ),
+                "resource_capacity": node.get("resource_capacity") or 1,
             }
             for node in nodes
             if node.get("id")
@@ -29,6 +34,8 @@ def timeline_tasks(graph: CanonicalScenarioGraph) -> list[dict[str, Any]]:
             "hw_name": _fallback_hw_name(str(node.get("ip_ref") or node.get("id"))),
             "task_type": "hw",
             "duration_ms": 0.0,
+            "resource_id": node.get("resource_id") or node.get("resource") or str(node["id"]),
+            "resource_capacity": node.get("resource_capacity") or 1,
         }
         for node in graph.pipeline_nodes
         if node.get("id")

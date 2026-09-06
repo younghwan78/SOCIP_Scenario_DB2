@@ -16,6 +16,9 @@ from scenario_db.query_engine.service import QueryValidationError, _build_aggreg
 
 
 class _Query:
+    def options(self, *options):
+        return self
+
     def __init__(self, rows: list[object]) -> None:
         self._rows = rows
         self.filters: list[object] = []
