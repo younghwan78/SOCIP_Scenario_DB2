@@ -49,3 +49,19 @@ model and does not replace real-hardware calibration.
 Current contracts are documented in `docs/guides/spa-navigation.md`,
 `docs/contracts/simulation/soc-simulation-contract.md` and
 `docs/design/viewer-and-projection.md`.
+
+## Integration validation
+
+Integrated `origin/main` at `448f7ad`, retaining its correlation features,
+Streamlit Workbench, fixture changes and simulation-only query semantics.
+Conflicts were resolved by combining those behaviors with the narrower evidence
+read and independent resource-capacity regression tests.
+
+- Integrated Python unit + PostgreSQL tests: 1,293 passed, combined coverage 85.79%.
+- CI-style unit-only check after the dependency security patch: 1,145 passed,
+  coverage 82.31% (required minimum 80%).
+- New SPA: locked npm install, 12 tests, lint and production build passed.
+- Existing Workbench: locked npm install, 34 tests and typecheck passed.
+- Frozen runtime dependency audit initially found three Tornado 6.5.7 advisories.
+  Updated only Tornado to 6.5.8; the repeated audit found no known vulnerabilities.
+- Ruff and configured mypy scope passed.
