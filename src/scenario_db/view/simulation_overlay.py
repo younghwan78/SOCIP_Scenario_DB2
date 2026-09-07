@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 import re
+import math
 from typing import Any
 
 from scenario_db.api.schemas.view import (
@@ -25,12 +26,16 @@ def apply_simulation_overlay(view: ViewResponse, evidence) -> ViewResponse:
     evidence_id = getattr(evidence, "id", None)
     node_rows = _sim_node_rows(evidence)
     dma_rows = _sim_dma_rows(evidence)
+    schedule_rows = _sim_schedule_rows(evidence)
 
     for node in view.nodes:
         row = _match_node_sim_row(node.data, node_rows)
-        if not row:
+        schedule = _match_node_schedule(node.data, schedule_rows)
+        if not row and not schedule:
             continue
+        row = row or {}
         timing = row.get("_timing") or {}
+        schedule = schedule or {}
         node.data.sim_overlay = SimOverlay(
             required_clock_mhz=_num(row.get("required_clock_mhz")),
             set_clock_mhz=_num(row.get("set_clock_mhz")),
@@ -39,8 +44,14 @@ def apply_simulation_overlay(view: ViewResponse, evidence) -> ViewResponse:
             hw_time_ms=_num(timing.get("hw_time_ms")),
             feasible=bool(row.get("feasible", timing.get("feasible", True))),
             evidence_id=evidence_id,
+            start_ms=_num(schedule.get("start_ms")),
+            end_ms=_num(schedule.get("end_ms")),
+            critical=bool(schedule.get("critical")),
+            bottleneck=bool(schedule.get("bottleneck")),
         )
         _append_sim_node_text(node.data)
+
+    _mark_critical_edges(view, getattr(evidence, "timeline_events", None) or [])
 
     for edge in view.edges:
         rows = _match_edge_dma_rows(edge.data, dma_rows)
@@ -93,17 +104,103 @@ def _sim_dma_rows(evidence) -> list[dict[str, Any]]:
     ]
 
 
+def _event_node_id(event: dict[str, Any]) -> str:
+    node_id = event.get("node_id")
+    if isinstance(node_id, str) and node_id:
+        return node_id
+    return re.sub(r"#f[0-9]+$", "", str(event.get("task_id") or ""))
+
+
+def _nonnegative_index(value: Any) -> int | None:
+    number = _num(value)
+    if isinstance(value, bool) or number is None or not math.isfinite(number) or number < 0 or not number.is_integer():
+        return None
+    return int(number)
+
+
+def _event_frame(event: dict[str, Any]) -> int | None:
+    if event.get("frame_index") is not None:
+        return _nonnegative_index(event["frame_index"])
+    suffix = re.search(r"#f([0-9]+)$", str(event.get("task_id") or ""))
+    return int(suffix[1]) if suffix else 0
+
+
+def _sim_schedule_rows(evidence) -> dict[str, dict[str, Any]]:
+    """Frame-0 window per node, with critical/bottleneck flags across frames."""
+    rows: dict[str, dict[str, Any]] = {}
+    for event in getattr(evidence, "timeline_events", None) or []:
+        if not isinstance(event, dict):
+            continue
+        node_id = _event_node_id(event)
+        if not node_id:
+            continue
+        entry = rows.setdefault(node_id, {"node_id": node_id, "critical": False, "bottleneck": False})
+        start, end = _num(event.get("start_ms")), _num(event.get("end_ms"))
+        if (_event_frame(event) == 0 and start is not None and end is not None
+                and math.isfinite(start) and math.isfinite(end) and end >= start):
+            entry["start_ms"] = min(start, entry.get("start_ms", start))
+            entry["end_ms"] = max(end, entry.get("end_ms", end))
+        entry["critical"] = entry["critical"] or bool(event.get("critical"))
+        entry["bottleneck"] = entry["bottleneck"] or bool(event.get("bottleneck"))
+    return rows
+
+
+def _match_node_schedule(data: NodeData, rows: dict[str, dict[str, Any]]) -> dict[str, Any] | None:
+    return _match_node_sim_row(data, [dict(entry, node_id=key) for key, entry in rows.items()])
+
+
+def _mark_critical_edges(view: ViewResponse, events: list[dict[str, Any]]) -> None:
+    """Only mark direct, same-frame, consecutive ranked predecessor links.
+
+    Missing legacy rank/predecessor metadata cannot prove an edge critical.
+    Resource dependencies across frames and unrelated critical nodes are not
+    pipeline dependencies and must not color a schematic edge.
+    """
+    by_task: dict[str, dict[str, Any]] = {}
+    duplicates: set[str] = set()
+    for event in events:
+        if not isinstance(event, dict) or not event.get("task_id"):
+            continue
+        task_id = str(event["task_id"])
+        if task_id in by_task:
+            duplicates.add(task_id)
+        by_task[task_id] = event
+    for task_id in duplicates:
+        by_task.pop(task_id)
+    identities = {node_id: {"node_id": node_id} for event in by_task.values() if (node_id := _event_node_id(event))}
+    view_ids: dict[str, list[str]] = defaultdict(list)
+    for node in view.nodes:
+        match = _match_node_schedule(node.data, identities)
+        if match:
+            view_ids[match["node_id"]].append(node.data.id)
+    pairs: set[tuple[str, str]] = set()
+    for target in by_task.values():
+        target_rank = _nonnegative_index(target.get("critical_path_rank"))
+        frame = _event_frame(target)
+        predecessors = target.get("predecessors")
+        if not target.get("critical") or target_rank is None or frame is None or not isinstance(predecessors, list):
+            continue
+        for predecessor in predecessors:
+            source = by_task.get(str(predecessor))
+            if source is None or not source.get("critical") or _event_frame(source) != frame:
+                continue
+            source_rank = _nonnegative_index(source.get("critical_path_rank"))
+            if source_rank is None or source_rank + 1 != target_rank:
+                continue
+            pairs.update((a, b) for a in view_ids[_event_node_id(source)] for b in view_ids[_event_node_id(target)] if a != b)
+    for edge in view.edges:
+        edge.data.critical = edge.data.flow_type != "risk" and (edge.data.source, edge.data.target) in pairs
+
+
 def _match_node_sim_row(data: NodeData, rows: list[dict[str, Any]]) -> dict[str, Any] | None:
-    for row in rows:
-        node_id = str(row.get("node_id") or "").lower()
-        if node_id and data.id.lower() == node_id:
-            return row
-    # Level 1 uses this exact projection ID convention. Require uniqueness
-    # because normalization can collapse distinct authored identifiers.
-    projected = [row for row in rows if row.get("node_id")
-                 and data.id == f"ip-{safe_id(str(row['node_id']))}"]
-    if len(projected) == 1:
-        return projected[0]
+    # Include exact IDs and the explicit Level 1 projection convention in the
+    # same uniqueness check. A normalization collision must not choose a row.
+    identified = [row for row in rows if row.get("node_id") and (
+        data.id.lower() == str(row["node_id"]).lower()
+        or data.id == f"ip-{safe_id(str(row['node_id']))}"
+    )]
+    if identified:
+        return identified[0] if len(identified) == 1 else None
     # Legacy evidence without node identity may use an exact, unambiguous
     # catalog/label match. Never attach another identified node's result.
     for key, expected in (("ip_ref", data.ip_ref), ("hw_name", data.label)):
@@ -261,6 +358,10 @@ def _append_sim_node_text(data: NodeData) -> None:
         badges.append(f"{overlay.set_clock_mhz:.0f}MHz")
     if overlay.power_mw is not None:
         badges.append(f"{overlay.power_mw:.1f}mW")
+    if overlay.critical:
+        badges.append("CRIT")
+    elif overlay.bottleneck:
+        badges.append("BTLNK")
     for badge in badges:
         if badge not in data.summary_badges:
             data.summary_badges.append(badge)
@@ -297,6 +398,12 @@ def _sim_node_detail(overlay: SimOverlay) -> str | None:
         bits.append(f"{overlay.power_mw:.1f}mW")
     if overlay.hw_time_ms is not None:
         bits.append(f"{overlay.hw_time_ms:.2f}ms")
+    if overlay.start_ms is not None and overlay.end_ms is not None:
+        bits.append(f"frame 0 t {overlay.start_ms:.2f}-{overlay.end_ms:.2f}ms")
+    if overlay.critical:
+        bits.append("critical path (any frame)")
+    elif overlay.bottleneck:
+        bits.append("bottleneck (any frame)")
     if not overlay.feasible:
         bits.append("infeasible")
     return "Sim: " + ", ".join(bits) if bits else None

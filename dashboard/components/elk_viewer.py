@@ -1132,6 +1132,8 @@ def _node_meta(node: NodeElement) -> dict[str, Any]:
         "port_ref": data.port_ref,
         "warning": warning,
         "severity": data.severity,
+        "critical": bool(data.sim_overlay and data.sim_overlay.critical),
+        "bottleneck": bool(data.sim_overlay and data.sim_overlay.bottleneck),
     }
 
 
@@ -1199,6 +1201,7 @@ def _edge_meta(edge: EdgeElement) -> dict[str, Any]:
         "edge_role": edge_role,
         "stroke": _edge_stroke(data.flow_type, edge_role),
         "dash": data.flow_type in {"control", "risk", "M2M"},
+        "critical": bool(getattr(data, "critical", False)),
         "details": details,
     }
 
@@ -1579,6 +1582,19 @@ function textLines(label, maxChars) {{
   }}).slice(0, 4);
 }}
 
+function simStroke(m, fallback) {{
+  // Simulated critical-path nodes outline red, OTF-group bottlenecks amber.
+  if (m.critical) return '#B91C1C';
+  if (m.bottleneck) return '#D97706';
+  return fallback;
+}}
+
+function simStrokeWidth(m, base) {{
+  if (m.critical) return 3.0;
+  if (m.bottleneck) return 2.6;
+  return m.warning ? 2.4 : base;
+}}
+
 function drawLabel(g, label, x, y, w, color, weight='700', size=11) {{
   const lines = textLines(label, Math.max(10, Math.floor(w / 7)));
   const text = svgEl('text', {{x: x + w / 2, y: y + 18 - ((lines.length - 1) * 6), 'text-anchor':'middle', 'font-size':size, 'font-weight':weight, fill:color}});
@@ -1633,8 +1649,8 @@ function drawLeaves(g, graph, ox=0, oy=0) {{
     if (m.type === 'buffer' || m.layer === 'memory') {{
       ng.appendChild(svgEl('rect', {{
         x, y, width:w, height:h, rx:18, ry:18,
-        fill:m.fill || '#ECFEFF', stroke:m.stroke || '#0F766E',
-        'stroke-width':m.warning ? 2.4 : 1.9,
+        fill:m.fill || '#ECFEFF', stroke:simStroke(m, m.stroke || '#0F766E'),
+        'stroke-width':simStrokeWidth(m, 1.9),
         filter:'drop-shadow(0 2px 4px rgba(15,23,42,.08))'
       }}));
       ng.appendChild(svgEl('path', {{
@@ -1649,8 +1665,8 @@ function drawLeaves(g, graph, ox=0, oy=0) {{
       const rectAttrs = {{
         x, y, width:w, height:h, rx:8, ry:8,
         fill:isDisabled ? '#EDEDED' : (m.fill || '#FFFFFF'),
-        stroke:isDisabled ? '#B0B0B0' : (m.stroke || '#64748B'),
-        'stroke-width':m.warning ? 2.4 : 1.8,
+        stroke:isDisabled ? '#B0B0B0' : simStroke(m, m.stroke || '#64748B'),
+        'stroke-width':simStrokeWidth(m, 1.8),
         filter:'drop-shadow(0 2px 4px rgba(15,23,42,.08))'
       }};
       if (isDisabled) rectAttrs['stroke-dasharray'] = '4 2';
@@ -1758,8 +1774,8 @@ function drawNode(g, node, ox=0, oy=0) {{
     const rectAttrs = {{
       x, y, width: node.width || 140, height: node.height || 54, rx: 8, ry: 8,
       fill: isDisabled ? '#EDEDED' : (m.fill || '#FFFFFF'),
-      stroke: isDisabled ? '#B0B0B0' : (m.stroke || '#64748B'),
-      'stroke-width': m.warning ? 2.4 : 1.8,
+      stroke: isDisabled ? '#B0B0B0' : simStroke(m, m.stroke || '#64748B'),
+      'stroke-width': simStrokeWidth(m, 1.8),
       filter: 'drop-shadow(0 2px 4px rgba(15,23,42,.08))'
     }};
     if (isDisabled) rectAttrs['stroke-dasharray'] = '4 2';
@@ -1801,6 +1817,15 @@ function drawEdges(g, edges, defaultContainer='root') {{
       : m.flow_type === 'risk' ? 1.8
       : 1.6;
     (edge.sections || []).forEach(section => {{
+      // Critical-path edges get a red halo behind the flow-colored stroke so
+      // the simulated bottleneck chain reads without hiding the edge type.
+      if (m.critical) {{
+        g.appendChild(svgEl('path', {{
+          class:'edge-critical', d: pathFromSection(section, ox, oy), fill:'none',
+          stroke:'#B91C1C', 'stroke-width': flowWidth + 3.4,
+          'stroke-linecap':'round', 'stroke-linejoin':'round', opacity: 0.28
+        }}));
+      }}
       const p = svgEl('path', {{
         class:'edge', d: pathFromSection(section, ox, oy), fill:'none', stroke:color,
         'stroke-width': flowWidth,

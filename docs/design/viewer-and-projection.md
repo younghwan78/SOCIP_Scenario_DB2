@@ -98,7 +98,36 @@ data when present and preserves a reference projection for compatible scenarios.
 Dashboard clients should remain thin: contract validation, identity checks, and mutations belong
 to backend services rather than Streamlit session state.
 
-## 6. Change checklist
+## 6. Saved simulation timing (verified 2026-09-07)
+
+Pipeline Viewer resolves `latest` once and requests every diagram and HTML export
+with the resulting explicit evidence ID. The timing panel uses
+`metadata.simulation_evidence_id` from the displayed view and validates the detail
+response's ID, kind, scenario and variant before rendering. Base-only scenarios
+do not search for another variant's simulation. Evidence Dashboard links with an
+evidence ID include `panel=timing` to expand this panel.
+
+The saved-result picker shows the 50 most recent runs. Older IDs can be entered
+manually. A failed request is an error with retry, not an empty-result response.
+Only successful list, detail and projection responses are cached. A projection
+failure never renders the sample fallback as real scenario data.
+
+Schedule overlays use exact, unambiguous node identity and the explicit Level 1
+`ip-<normalized node id>` convention. They do not match label substrings. A node's
+time window is the min start/max end of its valid frame-0 events; later frames can
+set critical/bottleneck flags but cannot replace that window.
+
+Red edges require a same-frame predecessor relationship between consecutive
+`critical_path_rank` events, both marked critical. Resource waits across frames,
+critical nodes on different paths, risk edges, and ambiguous identities do not
+prove a diagram edge critical. Legacy events without rank or predecessor metadata
+still appear in the timeline and can mark nodes, but do not produce red edges.
+
+Validation includes Streamlit AppTest for single-ID rendering and retry recovery,
+PostgreSQL/API coverage for a newer result appearing between diagram and detail
+loads, and scheduler-backed critical-edge regression cases.
+
+## 7. Change checklist
 
 For a view-contract change, update `api/schemas/view.py`, projector code, dashboard client and
 renderer, the Read API contract, focused unit tests, and golden JSON where intentionally changed.

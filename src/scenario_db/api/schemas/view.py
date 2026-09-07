@@ -59,6 +59,11 @@ class SimOverlay(BaseModel):
     hw_time_ms: float | None = None
     feasible: bool = True
     evidence_id: str | None = None
+    # Frame-0 schedule window; critical/bottleneck summarize all captured frames.
+    start_ms: float | None = None
+    end_ms: float | None = None
+    critical: bool = False
+    bottleneck: bool = False
 
 
 class EdgeSimOverlay(BaseModel):
@@ -228,6 +233,9 @@ class EdgeData(BaseModel):
     sim_overlay: EdgeSimOverlay | None = None
     label: str | None = None
     detail_items: list[str] = []
+    # Proven same-frame predecessor link with consecutive critical_path_rank.
+    # None on plain projections; False on overlays without a proven link.
+    critical: bool | None = None
 
 
 class EdgeElement(BaseModel):
