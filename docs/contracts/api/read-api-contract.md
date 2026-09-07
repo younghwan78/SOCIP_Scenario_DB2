@@ -140,6 +140,28 @@ the projection:
 - `buffer_override_count`
 - `sw_task_count`
 
+## Simulation Timing Overlay
+
+When a matching saved simulation is applied, `metadata.simulation_evidence_id`
+identifies the exact evidence used by the view. Consumers should fetch timing
+details by this ID instead of resolving `latest` a second time.
+
+Optional timing additions to `nodes[*].data.sim_overlay`:
+
+- `start_ms`, `end_ms`: finite frame-0 schedule bounds; null if unavailable.
+- `critical`, `bottleneck`: flags summarized across the evidence's frames.
+
+`edges[*].data.critical` is null for a plain projection. On a simulation overlay,
+it is true only for an unambiguously mapped direct predecessor edge in the same
+frame with consecutive critical-path ranks and critical flags on both events.
+Unrelated critical nodes, cross-frame resource dependencies, risk edges and
+legacy events without predecessor/rank metadata do not establish this marker.
+Node matching uses exact IDs or a unique explicit projection ID; label substring
+matching is not supported.
+
+This contract is covered by `tests/unit/test_view_sim_overlay.py` and
+`tests/integration/test_viewer_timing_contract.py`.
+
 ## Level 0 V2 View Contract
 
 Level 0 is split into two normal consumer modes:

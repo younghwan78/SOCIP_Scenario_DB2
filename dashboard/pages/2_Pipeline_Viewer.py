@@ -8,9 +8,10 @@ from __future__ import annotations
 import os
 import sys
 from html import escape
+from hashlib import sha256
 from pathlib import Path
+from urllib.parse import quote
 
-import requests
 import streamlit as st
 
 _root = Path(__file__).resolve().parents[2]
@@ -31,6 +32,14 @@ from dashboard.components.graph_inspector import (
     node_options,
 )
 from dashboard.components.level0_resource_overview import render_level0_resource_overview
+from dashboard.components.viewer_timing_panel import (
+    list_saved_simulation_results,
+    render_viewer_timing_panel,
+    resolve_overlay_evidence_id,
+    saved_evidence_option_label,
+    view_overlay_evidence_id,
+    clear_viewer_timing_caches,
+)
 from dashboard.components.level2_expand_options import (
     CUSTOM_EXPAND_OPTION,
     build_level2_expand_options,
@@ -50,6 +59,7 @@ from dashboard.components.view_html_export import (
 )
 from dashboard.components.viewer_api_client import (
     ViewerApiError,
+    _request_json,
     compact_project_label,
     compact_scenario_label,
     compact_soc_label,
@@ -239,15 +249,10 @@ apply_app_theme(sidebar_width=288)
 
 
 @st.cache_data(ttl=30)
-def _load_view(
-    base_url: str,
-    scenario_id: str,
-    variant_id: str | None,
-    level: int,
-    mode: str | None = None,
-    expand: str | None = None,
-    sim_mode: str = "none",
-    sim_evidence_id: str | None = None,
+def _load_view_success(
+    base_url: str, scenario_id: str, variant_id: str | None, level: int,
+    mode: str | None = None, expand: str | None = None,
+    sim_mode: str = "none", sim_evidence_id: str | None = None,
 ) -> tuple[ViewResponse, str]:
     params: dict[str, object] = {"level": level}
     if mode:
@@ -258,15 +263,27 @@ def _load_view(
         params["sim_evidence_id"] = sim_evidence_id
     elif sim_mode == "latest":
         params["sim"] = "latest"
+    path = f"/scenarios/{quote(scenario_id, safe='')}"
+    if variant_id:
+        path += f"/variants/{quote(variant_id, safe='')}"
+    response = _request_json("GET", base_url, path + "/view", params=params)
+    view = ViewResponse.model_validate(response)
+    if view.scenario_id != scenario_id or view.variant_id != (variant_id or "BASE") or view.level != level:
+        raise ViewerApiError("The API view does not match the requested scenario, variant and level")
+    if sim_evidence_id and view.metadata.get("simulation_evidence_id") != sim_evidence_id:
+        raise ViewerApiError("The API did not apply the requested simulation evidence")
+    return view, "api"
+
+
+def _load_view(
+    base_url: str, scenario_id: str, variant_id: str | None, level: int,
+    mode: str | None = None, expand: str | None = None,
+    sim_mode: str = "none", sim_evidence_id: str | None = None,
+) -> tuple[ViewResponse, str]:
+    # Errors are converted for the existing error UI outside the success cache.
     try:
-        if variant_id:
-            url = f"{base_url.rstrip('/')}/scenarios/{scenario_id}/variants/{variant_id}/view"
-        else:
-            url = f"{base_url.rstrip('/')}/scenarios/{scenario_id}/view"
-        response = requests.get(url, params=params, timeout=5)
-        response.raise_for_status()
-        return ViewResponse.model_validate(response.json()), "api"
-    except Exception as exc:
+        return _load_view_success(base_url, scenario_id, variant_id, level, mode, expand, sim_mode, sim_evidence_id)
+    except (ViewerApiError, ValueError) as exc:
         fallback = build_sample_level0()
         fallback.metadata["load_error"] = str(exc)
         return fallback, "sample-fallback"
@@ -597,7 +614,8 @@ with st.sidebar:
         _load_project_options.clear()
         _load_scenario_options.clear()
         _load_variant_options.clear()
-        _load_view.clear()
+        _load_view_success.clear()
+        clear_viewer_timing_caches()
         st.rerun()
 
     query_soc_id = query_params.get("soc_id")
@@ -776,7 +794,18 @@ with st.sidebar:
     st.markdown("**Simulation Overlay**")
     query_sim = query_params.get("sim")
     query_sim_evidence_id = query_params.get("sim_evidence_id")
-    previous_sim_mode = st.session_state.get("viewer_sim_mode") or ("specific" if query_sim_evidence_id else query_sim or "none")
+    overlay_context = f"{api_base}|{scenario_id_input}/{variant_id_input or 'BASE'}"
+    overlay_context_key = sha256(overlay_context.encode("utf-8")).hexdigest()
+    if st.session_state.get("viewer_sim_context") != overlay_context:
+        st.session_state["viewer_sim_context"] = overlay_context
+        st.session_state.pop("viewer_sim_evidence_id", None)
+        query_matches = (query_params.get("scenario_id") == scenario_id_input
+                         and query_params.get("variant_id") == variant_id_input)
+        query_sim_evidence_id = query_sim_evidence_id if query_matches else None
+        st.session_state["viewer_sim_mode"] = "specific" if query_sim_evidence_id else query_sim or "none"
+    if not variant_id_input:
+        st.session_state["viewer_sim_mode"] = "none"
+    previous_sim_mode = st.session_state.get("viewer_sim_mode") or "none"
     sim_options = {
         "none": "None",
         "latest": "Latest Evidence",
@@ -787,17 +816,69 @@ with st.sidebar:
         list(sim_options.keys()),
         index=list(sim_options.keys()).index(previous_sim_mode) if previous_sim_mode in sim_options else 0,
         format_func=lambda value: sim_options[value],
+        key=f"viewer_overlay_source_{overlay_context_key}",
+        disabled=not bool(variant_id_input),
     )
     st.session_state["viewer_sim_mode"] = sim_mode
     sim_evidence_id = ""
     if sim_mode == "specific":
-        sim_evidence_id = st.text_input(
-            "Simulation Evidence ID",
-            value=query_sim_evidence_id or st.session_state.get("viewer_sim_evidence_id", ""),
-        )
+        list_error = None
+        try:
+            saved_results = list_saved_simulation_results(api_base, scenario_id_input, variant_id_input)
+        except ViewerApiError as exc:
+            saved_results = []
+            list_error = str(exc)
+            st.error(f"Saved simulation list could not be loaded: {exc}")
+            if st.button("Retry saved simulation list"):
+                clear_viewer_timing_caches()
+                st.rerun()
+        saved_ids = [str(item.get("id")) for item in saved_results if item.get("id")]
+        labels = {str(item.get("id")): saved_evidence_option_label(item) for item in saved_results}
+        query_matches = (query_params.get("scenario_id") == scenario_id_input
+                         and query_params.get("variant_id") == variant_id_input)
+        preset_id = st.session_state.get("viewer_sim_evidence_id", "") or (query_sim_evidence_id if query_matches else "")
+        custom_option = "Custom evidence id..."
+        if saved_ids:
+            options = [*saved_ids, custom_option]
+            default_index = saved_ids.index(preset_id) if preset_id in saved_ids else (
+                len(options) - 1 if preset_id else 0
+            )
+            choice = st.selectbox(
+                "Saved Simulation Evidence",
+                options,
+                index=default_index,
+                format_func=lambda value: labels.get(value, value),
+                help="The 50 newest saved runs for this scenario/variant. Older IDs can be entered manually.",
+                key=f"viewer_saved_evidence_{overlay_context_key}",
+            )
+        else:
+            choice = custom_option
+            if not list_error:
+                st.caption("No saved simulation evidence for this scenario/variant yet.")
+        if choice == custom_option:
+            sim_evidence_id = st.text_input(
+                "Simulation Evidence ID",
+                value=preset_id,
+                key=f"viewer_custom_evidence_{overlay_context_key}",
+            )
+        else:
+            sim_evidence_id = choice
         st.session_state["viewer_sim_evidence_id"] = sim_evidence_id
 
-overlay_evidence_id = sim_evidence_id if sim_mode == "specific" and sim_evidence_id else None
+try:
+    overlay_evidence_id = resolve_overlay_evidence_id(
+        api_base, scenario_id_input, variant_id_input,
+        sim_mode=sim_mode, sim_evidence_id=sim_evidence_id,
+    )
+except ViewerApiError as exc:
+    st.error(f"Simulation overlay selection failed: {exc}")
+    if st.button("Retry simulation overlay"):
+        clear_viewer_timing_caches()
+        st.rerun()
+    st.stop()
+# Every diagram and export uses the same resolved ID. With no saved result,
+# leave overlays off rather than starting another independent latest lookup.
+view_sim_mode = "none"
 
 if level == 2 and not expand_id:
     st.info(
@@ -814,7 +895,7 @@ if level == 0:
         variant_id_input,
         0,
         "resource",
-        sim_mode=sim_mode,
+        sim_mode=view_sim_mode,
         sim_evidence_id=overlay_evidence_id,
     )
     topo_view, topo_source = _load_view(
@@ -823,7 +904,7 @@ if level == 0:
         variant_id_input,
         0,
         "topology",
-        sim_mode=sim_mode,
+        sim_mode=view_sim_mode,
         sim_evidence_id=overlay_evidence_id,
     )
     primary = resource_view
@@ -849,7 +930,7 @@ elif level == 1:
         scenario_id_input,
         variant_id_input,
         1,
-        sim_mode=sim_mode,
+        sim_mode=view_sim_mode,
         sim_evidence_id=overlay_evidence_id,
     )
     topo_view, topo_source = primary, arch_source
@@ -867,7 +948,7 @@ else:
         variant_id_input,
         2,
         expand=expand_id,
-        sim_mode=sim_mode,
+        sim_mode=view_sim_mode,
         sim_evidence_id=overlay_evidence_id,
     )
     topo_view, topo_source = primary, arch_source
@@ -941,7 +1022,7 @@ with st.sidebar:
                 include_raw_json=export_include_raw_json,
                 current_level=level,
                 current_expand_id=expand_id,
-                sim_mode=sim_mode,
+                sim_mode=view_sim_mode,
                 sim_evidence_id=overlay_evidence_id,
             )
             st.session_state["viewer_export_context"] = export_context
@@ -1027,3 +1108,25 @@ with main_col:
                 title=f"Level 2 - Drill Down ({title_expand})",
             )
         st.markdown("</div>", unsafe_allow_html=True)
+
+    # Simulation timing: the schedule behind the overlay numbers, rendered as
+    # the workbench timeline (with its own diagram cross-probe) right under
+    # the pipeline diagram. Deep links can open it via ?panel=timing.
+    try:
+        timing_evidence_id = view_overlay_evidence_id(primary, scenario_id_input, variant_id_input)
+    except ViewerApiError as exc:
+        st.error(str(exc))
+        st.stop()
+    if timing_evidence_id:
+        render_viewer_timing_panel(
+            api_base=api_base,
+            evidence_id=timing_evidence_id,
+            scenario_id=scenario_id_input,
+            variant_id=variant_id_input,
+            expanded=st.query_params.get("panel") == "timing",
+        )
+    elif sim_mode != "none":
+        st.caption(
+            "Simulation Timing: no saved simulation evidence found for this "
+            "scenario/variant. Run and save one from the Evidence Dashboard."
+        )

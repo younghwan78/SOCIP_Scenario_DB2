@@ -47,6 +47,7 @@ def test_pipeline_viewer_preview_url_has_no_evidence_overlay():
     assert query["scenario_id"] == ["uc-demo-import-recording"]
     assert query["variant_id"] == ["FHD30-Imported"]
     assert "sim_evidence_id" not in query
+    assert "panel" not in query
 
 
 def test_pipeline_viewer_saved_url_includes_evidence_overlay():
@@ -60,6 +61,7 @@ def test_pipeline_viewer_saved_url_includes_evidence_overlay():
     query = parse_qs(urlparse(url).query)
 
     assert query["sim_evidence_id"] == ["sim-123"]
+    assert query["panel"] == ["timing"]
 
 
 def test_required_evidence_dashboard_labels_are_contractually_present():
