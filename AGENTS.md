@@ -1,107 +1,46 @@
-# AGENTS.md
+# Scenario DB coding instructions
 
-## Project Context
+## Scope and sources
 
-This repository is the implementation root for `SOCIP Scenario DB`.
+- Run Git, Python, and backend commands from this directory (`implementation/`).
+- This system turns YAML scenarios into PostgreSQL data and serves FastAPI,
+  a React SPA (`web/`), and Streamlit/Workbench (`dashboard/`, `frontend/`).
+- Use current code, tests, and `docs/README.md` for behavior and contracts.
+  `internal_docs/README.md` indexes historical evidence; verify it before reuse.
+- Read `docs/reference/agent-domain-rules.md` before changing ETL fixtures,
+  viewer projections, or read APIs. Read only documentation relevant to the task.
 
-Primary goal:
+## Working boundaries
 
-- Convert authored YAML scenario data into a PostgreSQL-backed single source of truth.
-- Resolve scenario variants against HW/SW capability data.
-- Run review-gate checks before project reuse.
-- Serve viewer-ready projections through FastAPI.
-- Render Level 0/1/2 multimedia pipeline views in Streamlit with ELK.js/SVG.
-- Support board/form-factor scoped projects under the same SoC, such as
-  `ERD`, `SEP1`, and `SEP2`.
+- Inspect Git status before editing; preserve unrelated and uncommitted work.
+- Use `.\.venv\Scripts\python.exe -m ...` or `uv run ...`; never system Python.
+- Keep these reference repositories read-only:
+  `E:\10_Codes\32_Multimedia_ScenarioDB`, `E:\10_Codes\23_MMIP_Scenario_simulation2`.
+- Do not commit secrets, `.env`, `.venv`, logs, screenshots, caches, or database volumes.
+- Runtime API and viewer checks require PostgreSQL and a configured
+  `SCENARIO_DB_DATABASE_URL` or `DATABASE_URL`; do not substitute SQLite.
+- Simulation features require `networkx` and `simpy`; report missing dependencies.
+- Preserve board/project scoping and scenario/variant ownership of simulation evidence.
 
-## Working Rules
+## Validation
 
-- This file lives in the repository root. Run repo commands from this directory
-  unless a task explicitly targets parent-level planning documents.
-- Always run Python commands through the project virtual environment.
-- Preferred explicit form: `.\.venv\Scripts\python.exe -m ...`.
-- `uv run ...` is also acceptable from `implementation/` because it uses the project environment.
-- Do not commit `.venv`, `.env`, local logs, generated screenshots, cache folders, or PostgreSQL data volumes.
-- Keep old reference codebases read-only:
-  - `E:\10_Codes\32_Multimedia_ScenarioDB`
-  - `E:\10_Codes\23_MMIP_Scenario_simulation2`
-- Prefer fixture-backed tests before UI-only changes.
+- Run checks relevant to the changed behavior; add regression coverage for bug fixes.
+  Documentation-only changes need link/content checks, not the application test suite.
+- Backend: `uv run pytest <affected-test-path>`; use PostgreSQL integration tests
+  for persistence/query changes. Run Ruff and mypy when applicable.
+- `web/` (React SPA): run `npm test`, `npm run lint`, and `npm run build` there.
+- `frontend/` (Workbench): run `npm test` and `npm run build` there;
+  include rebuilt assets under `dashboard/components/workbench_frontend/component/`.
+- Preserve Streamlit static serving for `dashboard/static/elk.bundled.js`.
+- Fixture changes require strict ETL validation; reload ETL and restart the API
+  before checking affected viewer behavior.
+- Before reporting CI readiness, check `.github/workflows/ci.yml` for required
+  gates, including frozen dependency sync and runtime dependency audit.
+  Older testing documents may not reflect the current workflow.
 
-## Server Assumptions
+## Communication
 
-- Server startup must have a real database URL. Use `SCENARIO_DB_DATABASE_URL`
-  or `DATABASE_URL`; do not rely on an in-memory SQLite fallback.
-- PostgreSQL is the runtime database for API, Streamlit, query, and viewer checks.
-- `networkx` and `simpy` are required server dependencies for simulation-backed
-  features. Treat missing packages as an environment error, not as a degraded
-  mode that should be hidden from users.
-- Default local service ports are FastAPI `127.0.0.1:18000`, Streamlit
-  `127.0.0.1:18502`, PostgreSQL `127.0.0.1:15432`, and pgAdmin
-  `127.0.0.1:15050`.
-
-## Useful Commands
-
-```powershell
-$env:SCENARIO_DB_DATABASE_URL="postgresql+psycopg2://scenario_user:scenario_pass@localhost:15432/scenario_db"
-$env:DATABASE_URL="postgresql+psycopg2://scenario_user:scenario_pass@localhost:15432/scenario_db"
-uv sync --group dev --group dashboard --group sim
-uv run alembic upgrade head
-uv run python -m scenario_db.etl.loader demo\fixtures --strict --report-json output\etl-report.json
-uv run --group sim uvicorn scenario_db.api.app:app --host 127.0.0.1 --port 18000
-uv run --group dashboard --group sim streamlit run dashboard\Home.py --server.port 18502 --server.address 127.0.0.1
-uv run --group dev --group sim pytest tests\unit
-```
-
-## Frontend Workspace
-
-- `frontend\` is a Vite + TypeScript workspace for the Scenario Workbench
-  Streamlit component (zero runtime npm deps).
-- Rebuild after frontend changes: `npm run build` from `frontend\` — the
-  built assets are committed under
-  `dashboard\components\workbench_frontend\component\`.
-- Frontend unit tests: `npm run test` (vitest) from `frontend\`.
-- The ELK viewer serves `dashboard\static\elk.bundled.js` through Streamlit
-  static serving (enabled in `.streamlit\config.toml`); keep it enabled.
-
-## ETL Notes
-
-- Auxiliary YAML that is not an ETL document (no `kind`) must be listed in
-  `<fixtures>\.etlignore` (glob per line) so `--strict` runs stay green.
-- `db_fixtures_Exynos2600_S26Plus` loads clean under `--strict`; keep it
-  that way when editing fixtures.
-- Pipeline edges support optional `port_pairs` (`- src: <WDMA/port>` /
-  `dst: <RDMA/port>`); they drive the WDMA→RDMA edge labels and Level 2
-  module-direct routing in the viewer.
-
-## Viewer Defaults
-
-- Viewer selection should follow this hierarchy:
-  `SoC Platform -> Project / Board -> Scenario -> Variant -> View Level`.
-- Treat `Project` as the board/form-factor boundary. Store board-specific
-  conditions in project metadata, including `board_type`, `board_name`,
-  `sensor_module_ref`, `display_module_ref`, and `default_sw_profile_ref`.
-- Scenarios may have no variants. In that case, use the base scenario view
-  endpoint rather than forcing a dummy variant.
-- Level 0: architecture overview plus SW task topology view on one vertically scrollable page.
-- Level 0 modes are `architecture`, `topology`, and `resource`. Other modes
-  should fail validation instead of falling back silently.
-- Level 1: grouped IP detail DAG, aligned with the legacy ELK view style.
-- Level 2: selectable drill-down for `camera`, `video`, and `display`.
-- Keep memory descriptor and memory placement separate. Compression and LLC allocation are different concepts.
-- If viewer fixture YAML changes, reload ETL and restart the API.
-
-## Read API Notes
-
-- Use board-aware filters before adding ad-hoc dashboard filtering:
-  - `/projects?soc_ref=...&board_type=...`
-  - `/scenarios?project_ref=...&soc_ref=...&board_type=...`
-  - `/variants?scenario_id=...&project=...&soc_ref=...&board_type=...`
-- Variant view endpoint: `/scenarios/{scenario_id}/variants/{variant_id}/view`.
-- Base scenario view endpoint: `/scenarios/{scenario_id}/view`.
-- A requested `sim_evidence_id` must belong to the requested scenario and
-  variant. Do not overlay unrelated simulation evidence onto a view.
-- Variant matrix pagination should not change the reported design-axis keys;
-  compute axis keys from the full filtered result set, not only the current page.
-
-## Conversation
-- Let's think the instruction in English step by step, and then provide the final answer in Korean.
+- Answer in Korean. State changes, verification results, and remaining limitations.
+- For routine reversible choices, proceed within the requested scope.
+  Ask only when missing information materially changes correctness or scope.
+- Keep tool output focused; do not dump whole logs or repeat successful checks.
