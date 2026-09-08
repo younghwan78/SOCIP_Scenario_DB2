@@ -1,0 +1,62 @@
+# Scenario DB: project-local skill budget and exclusions.
+# Existing user-disabled skills are repeated to preserve them if arrays replace.
+# Keep React performance, web UI review, browser testing, and document tools.
+# Changes apply when opening a new trusted project session.
+
+[skills]
+# Bounds the initial catalog only; selected skill bodies load separately.
+max_context_tokens = 3000
+
+[[skills.config]]
+path = 'C:\Users\user\.codex\skills\andrej-karpathy-skill\SKILL.md'
+enabled = false
+
+[[skills.config]]
+path = 'C:\Users\user\.codex\skills\lsp-code-analysis\SKILL.md'
+enabled = false
+
+[[skills.config]]
+path = 'C:\Users\user\.agents\skills\deploy-to-vercel\SKILL.md'
+enabled = false
+
+[[skills.config]]
+path = 'C:\Users\user\.codex\skills\sora\SKILL.md'
+enabled = false
+
+[[skills.config]]
+path = 'C:\Users\user\.agents\skills\vercel-cli-with-tokens\SKILL.md'
+enabled = false
+
+[[skills.config]]
+path = 'C:\Users\user\.agents\skills\vercel-composition-patterns\SKILL.md'
+enabled = false
+
+[[skills.config]]
+path = 'C:\Users\user\.agents\skills\vercel-optimize\SKILL.md'
+enabled = false
+
+[[skills.config]]
+path = 'C:\Users\user\.agents\skills\vercel-react-native-skills\SKILL.md'
+enabled = false
+
+# Memory is enabled for Scenario DB sessions.
+[features]
+memories = true
+
+[memories]
+use_memories = true
+generate_memories = true
+
+# Disable unrelated plugin tools and skills only in this project.
+# Keep GitHub, OpenAI documentation, and browser dependencies available.
+[plugins."canva@openai-curated"]
+enabled = false
+
+[plugins."slack@openai-curated"]
+enabled = false
+
+[plugins."sites@openai-bundled"]
+enabled = false
+
+[plugins."template-creator@openai-primary-runtime"]
+enabled = false
