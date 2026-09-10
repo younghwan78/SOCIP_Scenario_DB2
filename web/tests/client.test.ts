@@ -5,14 +5,27 @@ afterEach(() => vi.unstubAllGlobals())
 const page = (items: unknown[], more = false) => ({ items, total: items.length, limit: 1000, offset: 0, has_next: more })
 const response = (body: unknown) => ({ ok: true, json: async () => body })
 
-it('unwraps all pages and normalizes real scenario metadata', async () => {
-  const fetch = vi.fn().mockResolvedValueOnce(response(page([{ id: 'a', project_ref: 'p', metadata_: { name: 'Camera', category: ['camera', 'codec'] } }], true)))
-    .mockResolvedValueOnce(response(page([{ id: 'b', project_ref: 'p', metadata_: {} }])))
+it('requests only one summary page and forwards server search, sort and cancellation', async () => {
+  const fetch = vi.fn().mockResolvedValue(response(page([{ id: 'a', name: 'Camera', category: ['camera'] }], true)))
   vi.stubGlobal('fetch', fetch)
-  const rows = await api.getScenarios({ soc_ref: 'soc-a' })
-  expect(rows.map(row => row.name)).toEqual(['Camera', 'b'])
-  expect(rows[0].category).toBe('camera, codec')
-  expect(fetch.mock.calls[1][0]).toContain('offset=1')
+  const controller = new AbortController()
+  const result = await api.getCatalog('scenarios', { soc_ref: 'soc-a', q: 'Camera', offset: 100, sort_by: 'name', sort_dir: 'desc' }, controller.signal)
+  expect(result.has_next).toBe(true)
+  expect(fetch).toHaveBeenCalledOnce()
+  const [url, options] = fetch.mock.calls[0]
+  expect(url).toContain('/catalog/scenarios?')
+  const params = new URL(url, 'http://test').searchParams
+  expect(Object.fromEntries(params)).toMatchObject({ limit: '100', offset: '100', q: 'Camera', soc_ref: 'soc-a', sort_by: 'name', sort_dir: 'desc' })
+  expect(options.signal).toBe(controller.signal)
+})
+
+it('resolves a selected ID without downloading preceding pages and retains ownership filters', async () => {
+  const fetch = vi.fn().mockResolvedValue(response(page([])))
+  vi.stubGlobal('fetch', fetch)
+  await api.getCatalog('variants', { id: 'v-last', scenario_id: 's', project_ref: 'p', soc_ref: 'soc', limit: 1 })
+  expect(fetch).toHaveBeenCalledOnce()
+  expect(Object.fromEntries(new URL(fetch.mock.calls[0][0], 'http://test').searchParams))
+    .toMatchObject({ id: 'v-last', scenario_id: 's', project_ref: 'p', soc_ref: 'soc', limit: '1', offset: '0' })
 })
 
 it('uses latest simulation endpoint with exact variant scope', async () => {

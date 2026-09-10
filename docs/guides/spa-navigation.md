@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Status | Current |
-| Last verified | 2026-09-06 |
+| Last verified | 2026-09-11 |
 | Scope | React SPA in `web/` |
 | Tests | `web/tests/urlState.test.ts`, `web/tests/client.test.ts` |
 
@@ -46,3 +46,16 @@ Unsupported tab, level and mode values fall back to the defaults. A variant
 without a scenario and an evidence without a scenario/variant are discarded.
 Base scenario pipeline views remain supported; the SPA does not invent a variant
 ID to run a simulation.
+
+## Searching large catalogs
+
+Hierarchy selectors and DB Explorer now load 100 summary records at a time.
+Use each selector's search input or previous/next controls to reach other pages.
+DB Explorer searches and sorts the full scoped catalog on the server, before
+pagination. Changing its filter or sort restarts from the first page.
+
+A selected scenario/variant remains selected while paging or searching. A saved
+URL can point to an item on any page: the SPA fetches that ID separately within
+the current SoC/project/scenario scope. An unavailable selection is shown as an
+error instead of selecting another item. Search text and page position are
+transient; the selected IDs remain in the URL.

@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from itertools import product
 from typing import Any
 
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, load_only
 
 from scenario_db.config import get_settings
@@ -25,7 +26,10 @@ from scenario_db.db.models.capability import IpCatalog
 from scenario_db.db.models.decision import Issue
 from scenario_db.db.models.definition import Project, Scenario, ScenarioVariant
 from scenario_db.db.models.evidence import Evidence
-from scenario_db.db.repositories.variant_resolution import resolve_variant_from_rows
+from scenario_db.db.repositories.variant_resolution import (
+    include_variant_parent_rows as _include_variant_parent_rows,
+    resolve_variant_from_rows,
+)
 from scenario_db.matcher.context import MatcherContext
 from scenario_db.matcher.context_builders import (
     build_evidence_matcher_context,
@@ -50,7 +54,7 @@ def query_variants(db: Session, request: QueryRequest) -> QueryResponse:
 
     items = _build_items(
         db,
-        scope=_pushdown_scope(predicates),
+        scope=_pushdown_scope(predicates + _group_pushdown_predicates(request.groups)),
         max_candidates=_int_setting("query_max_candidates", 5_000),
         max_evidence_rows=_int_setting("query_max_evidence_rows", 20_000),
         max_issue_rows=_int_setting("query_max_issue_rows", 5_000),
@@ -141,6 +145,8 @@ def _build_items(
         max_candidates=max_candidates,
         max_evidence_rows=max_evidence_rows,
     )
+    if not variants:
+        return []
     issue_rows = _safe_all(
         db,
         Issue,
@@ -248,6 +254,33 @@ def _scope_id_values(scope: dict[str, Any] | None, *keys: str) -> list[str]:
     return values
 
 
+def _group_pushdown_predicates(groups: list[QueryPredicateGroup]) -> list[QueryPredicate]:
+    """AND terms and same-field equality ORs can safely narrow the SQL scope."""
+    result: list[QueryPredicate] = []
+    for group in groups:
+        if group.join == "and":
+            result.extend(group.where)
+        elif group.where and len({p.field for p in group.where}) == 1:
+            if all(p.op in {"eq", "in"} for p in group.where):
+                values = [v for p in group.where for v in _expected_values(p.value)]
+                result.append(QueryPredicate(field=group.where[0].field, op="in", value=values))
+    return result
+
+
+def _sql_identity_scope(column: Any, values: list[str]) -> Any:
+    return func.lower(func.btrim(column)).in_(values)
+
+
+def _sql_severity_scope(values: list[str]) -> Any:
+    # A child with no severity inherits it; only the resolved evaluator can
+    # decide whether such a row matches. Never drop it before resolution.
+    return or_(
+        _sql_identity_scope(ScenarioVariant.severity, values),
+        and_(ScenarioVariant.derived_from_variant.is_not(None),
+             or_(ScenarioVariant.severity.is_(None), ScenarioVariant.severity == "")),
+    )
+
+
 def _pushdown_scope(predicates: list[QueryPredicate]) -> dict[str, Any]:
     """Extract semantics-preserving SQL filters from top-level AND predicates.
 
@@ -274,11 +307,11 @@ def _pushdown_scope(predicates: list[QueryPredicate]) -> dict[str, Any]:
             if isinstance(predicate.value, list)
             else [predicate.value]
         )
-        values = {
-            str(value)
-            for value in raw_values
-            if value not in (None, "")
-        }
+        # Keep the fact evaluator's case/whitespace normalization. Numeric,
+        # null and empty comparisons stay in Python (e.g. 01 == 1).
+        if any(not isinstance(_norm(value), str) or not _norm(value) for value in raw_values):
+            continue
+        values = {_norm(value) for value in raw_values}
         if not values:
             continue
         if key in allowed_by_key:
@@ -363,9 +396,16 @@ def _load_scoped_rows(
 
     scenario_query = db.query(Scenario)
     if scenario_scope:
-        scenario_query = scenario_query.filter(Scenario.id.in_(scenario_scope))
+        scenario_query = scenario_query.filter(_sql_identity_scope(Scenario.id, scenario_scope))
     if project_refs:
         scenario_query = scenario_query.filter(Scenario.project_ref.in_(project_refs))
+    if variant_scope or severity_scope:
+        candidates = select(ScenarioVariant.scenario_id).where(ScenarioVariant.scenario_id == Scenario.id)
+        if variant_scope:
+            candidates = candidates.filter(_sql_identity_scope(ScenarioVariant.id, variant_scope))
+        if severity_scope:
+            candidates = candidates.filter(_sql_severity_scope(severity_scope))
+        scenario_query = scenario_query.filter(candidates.exists())
     scenarios = _bounded_query_all(
         scenario_query,
         max_rows=max_candidates,
@@ -430,11 +470,11 @@ def _load_scoped_projects(
 ) -> list[Any]:
     query = db.query(Project)
     if project_scope:
-        query = query.filter(Project.id.in_(project_scope))
+        query = query.filter(_sql_identity_scope(Project.id, project_scope))
     if soc_scope:
-        query = query.filter(Project.metadata_["soc_ref"].astext.in_(soc_scope))
+        query = query.filter(_sql_identity_scope(Project.metadata_["soc_ref"].astext, soc_scope))
     if board_scope:
-        query = query.filter(Project.metadata_["board_type"].astext.in_(board_scope))
+        query = query.filter(_sql_identity_scope(Project.metadata_["board_type"].astext, board_scope))
     return _bounded_query_all(query, max_rows=max_rows, source="projects")
 
 
@@ -450,9 +490,9 @@ def _load_scoped_variants(
         return []
     query = db.query(ScenarioVariant).filter(ScenarioVariant.scenario_id.in_(scenario_ids))
     if variant_scope:
-        query = query.filter(ScenarioVariant.id.in_(variant_scope))
+        query = query.filter(_sql_identity_scope(ScenarioVariant.id, variant_scope))
     if severity_scope:
-        query = query.filter(ScenarioVariant.severity.in_(severity_scope))
+        query = query.filter(_sql_severity_scope(severity_scope))
     rows = _bounded_query_all(
         query,
         max_rows=max_candidates,
@@ -470,36 +510,6 @@ def _load_scoped_variants(
     return rows
 
 
-def _include_variant_parent_rows(db: Session, variants: list[Any]) -> list[Any]:
-    known: dict[tuple[str, str], Any] = {
-        (str(getattr(row, "scenario_id", "") or ""), str(getattr(row, "id", "") or "")): row
-        for row in variants
-        if getattr(row, "scenario_id", None) and getattr(row, "id", None)
-    }
-    requested: set[tuple[str, str]] = set()
-    while True:
-        needed = {
-            (scenario_id, str(getattr(row, "derived_from_variant", "") or ""))
-            for (scenario_id, _), row in known.items()
-            if getattr(row, "derived_from_variant", None)
-            and (scenario_id, str(getattr(row, "derived_from_variant"))) not in known
-            and (scenario_id, str(getattr(row, "derived_from_variant"))) not in requested
-        }
-        needed = {(scenario_id, variant_id) for scenario_id, variant_id in needed if variant_id}
-        if not needed:
-            break
-        requested.update(needed)
-        scenario_ids = {scenario_id for scenario_id, _ in needed}
-        variant_ids = {variant_id for _, variant_id in needed}
-        query = db.query(ScenarioVariant).filter(ScenarioVariant.scenario_id.in_(scenario_ids))
-        query = query.filter(ScenarioVariant.id.in_(variant_ids))
-        for row in list(query.all() or []):
-            key = (str(getattr(row, "scenario_id", "") or ""), str(getattr(row, "id", "") or ""))
-            if key[0] and key[1]:
-                known[key] = row
-    return list(known.values())
-
-
 def _load_scoped_evidence(
     db: Session,
     scenario_ids: set[str],
@@ -507,20 +517,28 @@ def _load_scoped_evidence(
     *,
     max_rows: int | None,
 ) -> list[Any]:
-    # Preserve simulation-only latest semantics while avoiding unused detail
-    # blobs. Raise on accidental access rather than introducing lazy N+1 reads.
-    query = db.query(Evidence).options(load_only(
-        Evidence.id, Evidence.scenario_ref, Evidence.variant_ref,
-        Evidence.run_info, Evidence.execution_context, Evidence.resolution_result,
-        Evidence.kpi, Evidence.overall_feasibility, Evidence.sw_version_hint,
-        Evidence.sw_baseline_ref, raiseload=True,
-    )).filter(
+    base = db.query(Evidence).filter(
         Evidence.scenario_ref.in_(scenario_ids),
         Evidence.kind == "evidence.simulation",
     )
     if variant_ids:
-        query = query.filter(Evidence.variant_ref.in_(variant_ids))
-    return _bounded_query_all(query, max_rows=max_rows, source="evidence")
+        base = base.filter(Evidence.variant_ref.in_(variant_ids))
+    # Scan only identity/order fields. Preserve tolerant timestamp parsing and
+    # the history guard; fetch KPI/context only for each variant's winner.
+    keys = _bounded_query_all(base.options(load_only(
+        Evidence.id, Evidence.scenario_ref, Evidence.variant_ref, Evidence.run_info,
+        raiseload=True,
+    )), max_rows=max_rows, source="evidence")
+    selected = {row.id for row in _latest_evidence_by_variant(keys).values()}
+    if not selected:
+        return []
+    query = base.filter(Evidence.id.in_(selected)).options(load_only(
+        Evidence.id, Evidence.scenario_ref, Evidence.variant_ref,
+        Evidence.run_info, Evidence.execution_context, Evidence.resolution_result,
+        Evidence.kpi, Evidence.overall_feasibility, Evidence.sw_version_hint,
+        Evidence.sw_baseline_ref, raiseload=True,
+    ))
+    return list(query.all())
 
 
 def _load_ip_rows(db: Session, scenarios: list[Any], variants: list[Any]) -> list[Any]:
