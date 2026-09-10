@@ -37,10 +37,16 @@ Deferred columns use SQLAlchemy `raiseload` so a future accidental access fails
 instead of silently issuing a per-row query. PostgreSQL regression tests compare
 the full and reduced view responses and ensure projection emits no extra SQL.
 
-Architecture Query similarly selects ten evidence columns used by facts and
-matching. Latest-evidence selection preserves its timestamp/ID tie policy with a
-single pass rather than sorting each group. Candidate limits and matching scope
-remain unchanged.
+Read optimization verified on 2026-09-11: Architecture Query first reads
+historical evidence identity/order fields, then loads the ten fact/matching
+columns only for the latest simulation per scenario/variant. Its timestamp/ID
+tie policy and history-size guard remain unchanged.
+
+Canonical graph resolution loads the requested variant and its ancestor chain,
+instead of every sibling variant in that scenario. Parent fetches use exact
+scenario/variant pairs. Missing-parent and cycle validation are retained. The
+graph's evidence set is unchanged because rule contexts may use historical
+rows; the Query-only latest reduction does not apply to graph evidence.
 
 1. The repository builds a `CanonicalScenarioGraph` from PostgreSQL rows.
 2. Variant inheritance, routing switches, topology patches, node configs, and buffer overrides

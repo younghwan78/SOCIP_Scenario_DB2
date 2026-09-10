@@ -4,6 +4,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
+from sqlalchemy import tuple_
 from sqlalchemy.orm import Session
 
 from scenario_db.db.models.definition import ScenarioVariant
@@ -49,13 +50,40 @@ class ResolvedScenarioVariant:
 
 
 def resolve_variant(db: Session, scenario_id: str, variant_id: str) -> ResolvedScenarioVariant | None:
-    rows = {
-        row.id: row
-        for row in db.query(ScenarioVariant).filter_by(scenario_id=scenario_id).all()
-    }
+    selected = db.query(ScenarioVariant).filter_by(scenario_id=scenario_id, id=variant_id).all()
+    rows = {row.id: row for row in include_variant_parent_rows(db, selected)}
     if variant_id not in rows:
         return None
     return resolve_variant_from_rows(rows, scenario_id, variant_id)
+
+
+def include_variant_parent_rows(db: Session, variants: list[Any]) -> list[Any]:
+    known: dict[tuple[str, str], Any] = {
+        (str(getattr(row, "scenario_id", "") or ""), str(getattr(row, "id", "") or "")): row
+        for row in variants
+        if getattr(row, "scenario_id", None) and getattr(row, "id", None)
+    }
+    requested: set[tuple[str, str]] = set()
+    while True:
+        needed = {
+            (scenario_id, str(getattr(row, "derived_from_variant", "") or ""))
+            for (scenario_id, _), row in known.items()
+            if getattr(row, "derived_from_variant", None)
+            and (scenario_id, str(getattr(row, "derived_from_variant"))) not in known
+            and (scenario_id, str(getattr(row, "derived_from_variant"))) not in requested
+        }
+        needed = {(scenario_id, variant_id) for scenario_id, variant_id in needed if variant_id}
+        if not needed:
+            break
+        requested.update(needed)
+        query = db.query(ScenarioVariant).filter(
+            tuple_(ScenarioVariant.scenario_id, ScenarioVariant.id).in_(needed)
+        )
+        for row in list(query.all() or []):
+            key = (str(getattr(row, "scenario_id", "") or ""), str(getattr(row, "id", "") or ""))
+            if key[0] and key[1]:
+                known[key] = row
+    return list(known.values())
 
 
 def resolve_variant_from_rows(

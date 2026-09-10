@@ -2,35 +2,27 @@ import React, { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Search, Play, ArrowUpDown } from 'lucide-react'
 import { api } from '../../api/client'
+import { useCatalogSearch } from '../../api/useCatalogSearch'
 import { useScenarioStore } from '../../store/scenarioStore'
 import { Badge } from '../common/Badge'
 import { Button } from '../common/Button'
 
 export const DbExplorer: React.FC = () => {
   const { socId, projectId, setScenarioId, setActiveTab } = useScenarioStore()
-  const [searchTerm, setSearchTerm] = useState('')
+  const { input: searchTerm, setInput: setSearchTerm, search } = useCatalogSearch()
+  const [page, setPage] = useState({ key: '', offset: 0 })
   const [sortField, setSortField] = useState<'id' | 'name' | 'category'>('id')
   const [sortAsc, setSortAsc] = useState(true)
 
-  const { data: scenarios = [], isLoading, error } = useQuery({
-    queryKey: ['explorerScenarios', socId, projectId],
-    queryFn: () => api.getScenarios({ soc_ref: socId || undefined, project_ref: projectId || undefined }),
+  const pageKey = JSON.stringify([socId, projectId, search, sortField, sortAsc])
+  const offset = page.key === pageKey ? page.offset : 0
+  const params = { soc_ref: socId || undefined, project_ref: projectId || undefined,
+    q: search, sort_by: sortField, sort_dir: sortAsc ? 'asc' as const : 'desc' as const, offset }
+  const { data, isLoading, isFetching, error } = useQuery({
+    queryKey: ['catalog', 'scenarios', params],
+    queryFn: ({ signal }) => api.getCatalog('scenarios', params, signal),
   })
-
-  const filteredScenarios = scenarios
-    .filter((s) => {
-      const q = searchTerm.toLowerCase()
-      return (
-        s.id.toLowerCase().includes(q) ||
-        s.name.toLowerCase().includes(q) ||
-        s.category.toLowerCase().includes(q)
-      )
-    })
-    .sort((a, b) => {
-      const valA = a[sortField] || ''
-      const valB = b[sortField] || ''
-      return sortAsc ? valA.localeCompare(valB) : valB.localeCompare(valA)
-    })
+  const filteredScenarios = data?.items ?? []
 
   const handleSort = (field: 'id' | 'name' | 'category') => {
     if (sortField === field) {
@@ -59,7 +51,9 @@ export const DbExplorer: React.FC = () => {
         </div>
 
         <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-          Total Scenarios: <b>{filteredScenarios.length}</b> / {scenarios.length}
+          <button disabled={!offset || isFetching} onClick={() => setPage({ key: pageKey, offset: Math.max(0, offset - 100) })}>Previous</button>
+          <span role="status" style={{ margin: '0 8px' }}>{data?.total ? offset + 1 : 0}–{offset + filteredScenarios.length} / {data?.total ?? 0}</span>
+          <button disabled={!data?.has_next || isFetching} onClick={() => setPage({ key: pageKey, offset: offset + 100 })}>Next</button>
         </div>
       </div>
 
@@ -116,7 +110,7 @@ export const DbExplorer: React.FC = () => {
                   <td style={{ padding: '10px 14px', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{sc.id}</td>
                   <td style={{ padding: '10px 14px', fontWeight: 700 }}>{sc.name}</td>
                   <td style={{ padding: '10px 14px' }}>
-                    <Badge variant="teal">{sc.category}</Badge>
+                    <Badge variant="teal">{sc.category.join(', ')}</Badge>
                   </td>
                   <td style={{ padding: '10px 14px', color: 'var(--text-secondary)' }}>{sc.soc_ref}</td>
                   <td style={{ padding: '10px 14px' }}>

@@ -280,11 +280,24 @@ type `number` in the query field registry. `count` is allowed for any supported
 field. Missing aggregation group values are serialized as JSON `null`; the
 literal string `"(none)"` remains distinct from a missing value.
 
-Top-level AND predicates for project ID, SoC, board type, scenario ID, variant
-ID, and severity are intersected and pushed into SQL before effective topology
-facts are built. Inherited axes, topology/buffer facts, negative predicates,
-and OR groups remain in the registered-field evaluator because pushing those
-down would change their semantics.
+Top-level and grouped AND predicates for project ID, SoC, board type, scenario
+ID, variant ID, and severity can narrow the SQL scope. Same-field equality OR
+groups can also narrow it by unioning their allowed values. Mixed-field ORs,
+inherited axes, topology/buffer facts and negative predicates stay in the fact
+evaluator. Text identity filters preserve case/space normalization; numeric,
+null and empty comparisons are evaluated in Python. A child with missing
+severity remains a candidate until its inherited severity is resolved.
+
+Variant/severity scope now constrains the scenario query with EXISTS before
+scenario rows and pipelines are materialized. Ancestor reads use exact
+(scenario_id, variant_id) pairs. Final predicates, sorting, total and aggregates
+still operate on the full filtered candidate set before pagination.
+
+Architecture Query reads historical evidence identity and run_info first, then
+loads KPI/context only for the latest simulation per scenario/variant. UTC
+parsing, invalid/missing timestamp fallback, ID ties and simulation-only selection
+are unchanged. The evidence-row guard still applies to the scanned history,
+not just to the number of selected winners.
 
 The evaluator is intentionally bounded. If the SQL-prefiltered scenario,
 project, variant, evidence, issue, or facet candidate set exceeds its configured
@@ -294,6 +307,35 @@ the request with `scope` or scalar identity predicates. Limits are configured
 with `SCENARIO_DB_QUERY_MAX_CANDIDATES`,
 `SCENARIO_DB_QUERY_MAX_EVIDENCE_ROWS`, `SCENARIO_DB_QUERY_MAX_ISSUE_ROWS`, and
 `SCENARIO_DB_QUERY_FACETS_MAX_CANDIDATES`; all must be positive.
+
+## Navigation catalog summaries
+
+`GET /api/v1/catalog/{kind}` is an additive, paged summary API used by the SPA.
+Supported kinds are `soc-platforms`, `projects`, `scenarios`, and `variants`.
+The existing resource list/detail endpoints retain their full response shapes.
+
+- Envelope: `items`, `total`, `limit`, `offset`, `has_next`.
+- Items: `id`, `name`, `category` (string array), and relevant ownership fields
+  `project_ref`, `soc_ref`, `board_type`, `scenario_id`. Absent fields are null.
+- Only display/identity expressions are selected in SQL. Pipeline, globals,
+  variant overlays and evidence detail are not loaded or serialized. Variant
+  catalog entries are identities, not resolved design-condition summaries.
+- `limit` defaults to 100 and is capped at 200; `offset` defaults to 0.
+- `q` searches ID/name and scenario category, case-insensitively. `%` and `_`
+  are literal search characters, not SQL wildcards.
+- `id` is an exact selected-item lookup and retains the same ownership filters.
+- Project/scenario/variant lists support `soc_ref` and `board_type` through the
+  owning project; `project_ref` narrows projects, scenarios or variants.
+- Variant lists require `scenario_id`. Missing scope returns 422.
+- `sort_by=id|name|category`, `sort_dir=asc|desc`; category is scenario-only.
+  Sorting is performed by PostgreSQL before paging, with ID as a stable tie
+  breaker. Category sorting follows its stored JSON text representation.
+- As with the existing offset API, concurrent additions/removals between page
+  requests do not constitute a snapshot. No selection is inferred from a page.
+
+The SPA fetches one page at a time, debounces search by 250ms and cancels stale
+requests. A selected ID outside the visible page is resolved separately in the
+same scope, so URL restoration does not require downloading earlier pages.
 
 ## Error Contract
 
