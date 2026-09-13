@@ -311,8 +311,8 @@ def _dma_traces(
                 "hw_name": spec.hw_name,
                 "port": spec.port,
                 "direction": result.direction,
-                "formula": BW_MBS_FORMULA,
-                "bw_formula": BW_MBS_FORMULA,
+                "formula": "bitrate_mbps / 8 * r_w_rate" if spec.bitrate_mbps is not None else BW_MBS_FORMULA,
+                "bw_formula": "bitrate_mbps / 8 * r_w_rate" if spec.bitrate_mbps is not None else BW_MBS_FORMULA,
                 "bw_power_formula": "bw_mbs * bw_power_coeff / 1000 * llc_weight",
                 "bw_power_ma_formula": "bw_power_mw / vbat / pmic_efficiency",
                 "inputs": {
@@ -321,6 +321,7 @@ def _dma_traces(
                     "fps": effective_fps,
                     "format": spec.format,
                     "bitwidth": spec.bitwidth,
+                    "bitrate_mbps": spec.bitrate_mbps,
                     "compression": spec.compression,
                     "comp_ratio": comp_ratio,
                     "r_w_rate": spec.r_w_rate,

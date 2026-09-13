@@ -38,6 +38,12 @@ class DvfsResolver:
         self._align_set_clock_by_dvfs_group(resolved)
         self._align_voltage_by_vdd(resolved)
         self._recalculate_power(resolved)
+        for workload in workloads:
+            config = resolved[workload.node_id]
+            maximum = workload.sim_params.max_clock_mhz
+            if maximum and max(config.required_clock_mhz, config.set_clock_mhz) > maximum:
+                config.feasible = False
+                config.infeasible_reason = f"resolved clock exceeds ip max_clock {maximum:g}MHz"
         return resolved
 
     def _initial_config(self, workload: IPWorkload) -> ResolvedIPConfig:
@@ -111,10 +117,9 @@ class DvfsResolver:
 
     def _apply_dvfs_tables(self, resolved: dict[str, ResolvedIPConfig]) -> None:
         for config in resolved.values():
-            if not config.dvfs_group:
-                continue
-            table = self.dvfs_tables.get(config.dvfs_group)
+            table = self.dvfs_tables.get(config.dvfs_group) if config.dvfs_group else None
             if table is None:
+                config.set_clock_mhz = config.required_clock_mhz
                 config.required_voltage_mv = REFERENCE_VOLTAGE_MV
                 continue
             level = table.find_min_level_for_speed(
@@ -164,9 +169,11 @@ class DvfsResolver:
     ) -> None:
         for group, node_ids in _group_by(resolved, "dvfs_group").items():
             table = self.dvfs_tables.get(group)
-            if table is None:
-                continue
             max_set = max(resolved[node_id].set_clock_mhz for node_id in node_ids)
+            if table is None:
+                for node_id in node_ids:
+                    resolved[node_id].set_clock_mhz = max_set
+                continue
             target_level = table.find_min_level_for_speed(max_set, asv_group=self.asv_group)
             if target_level is None:
                 continue

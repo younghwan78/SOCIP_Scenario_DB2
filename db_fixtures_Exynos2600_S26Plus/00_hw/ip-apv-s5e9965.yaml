@@ -51,5 +51,22 @@ capabilities:
     - V4L2_CID_MPEG_VIDEO_APV_BAND
     - V4L2_CID_MPEG_VIDEO_APV_TILE_WIDTH
     - V4L2_CID_MPEG_VIDEO_APV_TILE_HEIGHT
+    modules:
+    - name: APV_RDMA_FRAME
+      type: DMA
+      direction: read
+      naming: logical traffic endpoint; physical mapping unverified
+    - name: APV_WDMA_BITSTREAM
+      type: DMA
+      direction: write
+      naming: logical traffic endpoint; physical mapping unverified
+  sim:
+    hw_name: APV
+    ppc: 2
+    vdd: VDD_CODEC
+    dvfs_group: APV
+    source: assumed_capacity
+    source_note: Engineering assumption approved for fixture exploration; replace
+      with internal measurements. Core power unavailable; excluded.
 compatible_soc:
 - soc-exynos2600

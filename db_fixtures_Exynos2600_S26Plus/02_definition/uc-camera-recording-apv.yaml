@@ -11,155 +11,2234 @@ metadata:
 pipeline:
   nodes:
   - id: sensor_rear
-    ip_ref: ip-sensor-rear-s5e9965
+    ip_ref: ip-sensor-gng-s5e9965
+    role: sensor
+    instance_index: 0
+  - id: sensor_rear2
+    ip_ref: ip-sensor-3ld-s5e9965
+    role: sensor
+    instance_index: 0
+  - id: sensor_rear3
+    ip_ref: ip-sensor-imx564-ff-s5e9965
+    role: sensor
+    instance_index: 0
+  - id: sensor_front
+    ip_ref: ip-sensor-imx874-s5e9965
     role: sensor
     instance_index: 0
   - id: csis
-    ip_ref: ip-csis-s5e9965
+    ip_ref: ip-csis-is-v15-s5e9965
     role: csis
     instance_index: 0
-  - id: isp
-    ip_ref: ip-isp-s5e9965
-    role: isp
+  - id: pdp
+    ip_ref: ip-pdp-is-v15-s5e9965
+    role: pdp
     instance_index: 0
-  - id: lme
-    ip_ref: ip-lme-s5e9965
-    role: lme
+  - id: byrp
+    ip_ref: ip-byrp-is-v15-s5e9965
+    role: byrp
+    instance_index: 0
+  - id: rgbp
+    ip_ref: ip-rgbp-is-v15-s5e9965
+    role: rgbp
+    instance_index: 0
+  - id: yuvsc
+    ip_ref: ip-yuvsc-is-v15-s5e9965
+    role: yuvsc
+    instance_index: 0
+  - id: mlsc
+    ip_ref: ip-mlsc-is-v15-s5e9965
+    role: mlsc
+    instance_index: 0
+  - id: mtnr
+    ip_ref: ip-mtnr-is-v15-s5e9965
+    role: mtnr
+    instance_index: 0
+  - id: msnr
+    ip_ref: ip-msnr-is-v15-s5e9965
+    role: msnr
+    instance_index: 0
+  - id: yuvp
+    ip_ref: ip-yuvp-is-v15-s5e9965
+    role: yuvp
     instance_index: 0
   - id: mcsc
-    ip_ref: ip-mcsc-s5e9965
+    ip_ref: ip-mcsc-is-v15-s5e9965
     role: mcsc
     instance_index: 0
+  - id: lme
+    ip_ref: ip-lme-is-v15-s5e9965
+    role: lme
+    instance_index: 0
+  - id: vps_od
+    ip_ref: ip-vps-is-v15-s5e9965
+    role: object_detection
+    instance_index: 0
+  - id: vps_dof
+    ip_ref: ip-vps-is-v15-s5e9965
+    role: dense_optical_flow
+    instance_index: 0
+  - id: vps_seg
+    ip_ref: ip-vps-is-v15-s5e9965
+    role: segmentation
+    instance_index: 0
+  - id: post_crta
+    ip_ref: ip-cpu-s5e9965
+    role: sw_task
+    instance_index: 0
+  - id: pre_me_rta
+    ip_ref: ip-cpu-s5e9965
+    role: sw_task
+    instance_index: 0
+  - id: post_irta
+    ip_ref: ip-cpu-s5e9965
+    role: sw_task
+    instance_index: 0
+  - id: eis
+    ip_ref: ip-cpu-s5e9965
+    role: sw_task
+    instance_index: 0
+  - id: gdc_m
+    ip_ref: ip-gdc-is-v15-s5e9965
+    role: gdc
+    instance_index: 0
+  - id: gdc_o
+    ip_ref: ip-gdc-is-v15-s5e9965
+    role: gdc
+    instance_index: 1
   - id: apv_enc
     ip_ref: ip-apv-s5e9965
     role: encoder
+    instance_index: 0
+  - id: dpu
+    ip_ref: ip-dpu-s5e9965
+    role: display_controller
+    instance_index: 0
+  - id: panel
+    ip_ref: ip-display-panel-s5e9965
+    role: display_output
     instance_index: 0
   edges:
   - from: sensor_rear
     to: csis
     type: OTF
+  - from: sensor_rear2
+    to: csis
+    type: OTF
+  - from: sensor_rear3
+    to: csis
+    type: OTF
+  - from: sensor_front
+    to: csis
+    type: OTF
   - from: csis
-    to: isp
+    to: pdp
     type: OTF
-  - from: isp
-    to: lme
+    port_pairs:
+    - src: COUTFIFO
+      dst: CINFIFO
+  - from: pdp
+    to: byrp
     type: OTF
-  - from: lme
+    port_pairs:
+    - src: COUTFIFO
+      dst: CINFIFO
+  - from: byrp
+    to: rgbp
+    type: OTF
+    port_pairs:
+    - src: COUTFIFO
+      dst: CINFIFO
+  - from: rgbp
+    to: yuvsc
+    type: OTF
+    port_pairs:
+    - src: COUTFIFO
+      dst: CINFIFO
+  - from: yuvsc
+    to: mlsc
+    type: OTF
+    port_pairs:
+    - src: COUTFIFO
+      dst: CINFIFO
+  - from: mtnr
+    to: msnr
+    type: OTF
+    port_pairs:
+    - src: COUTFIFO
+      dst: CINFIFO
+  - from: msnr
+    to: yuvp
+    type: OTF
+    port_pairs:
+    - src: COUTFIFO
+      dst: CINFIFO
+  - from: yuvp
     to: mcsc
     type: OTF
+    port_pairs:
+    - src: COUTFIFO
+      dst: CINFIFO
+  - from: mlsc
+    to: mtnr
+    type: M2M
+    buffer: PYRAMID_L0
+    port_pairs:
+    - src: MLSC_W_GLPG0_Y
+      dst: MTNR0_RDMA_CUR_L0_Y
+  - from: mlsc
+    to: mtnr
+    type: M2M
+    buffer: PYRAMID_L1
+    port_pairs:
+    - src: MLSC_W_GLPG1_Y
+      dst: MTNR1_RDMA_CUR_L1_Y
+    - src: MLSC_W_GLPG1_U
+      dst: MTNR1_RDMA_CUR_L1_U
+    - src: MLSC_W_GLPG1_V
+      dst: MTNR1_RDMA_CUR_L1_V
+  - from: mlsc
+    to: mtnr
+    type: M2M
+    buffer: PYRAMID_L2
+    port_pairs:
+    - src: MLSC_W_GLPG2_Y
+      dst: MTNR1_RDMA_CUR_L2_Y
+    - src: MLSC_W_GLPG2_U
+      dst: MTNR1_RDMA_CUR_L2_U
+    - src: MLSC_W_GLPG2_V
+      dst: MTNR1_RDMA_CUR_L2_V
+  - from: mlsc
+    to: mtnr
+    type: M2M
+    buffer: PYRAMID_L3
+    port_pairs:
+    - src: MLSC_W_GLPG3_Y
+      dst: MTNR1_RDMA_CUR_L3_Y
+    - src: MLSC_W_GLPG3_U
+      dst: MTNR1_RDMA_CUR_L3_U
+    - src: MLSC_W_GLPG3_V
+      dst: MTNR1_RDMA_CUR_L3_V
+  - from: mlsc
+    to: mtnr
+    type: M2M
+    buffer: PYRAMID_L4
+    port_pairs:
+    - src: MLSC_W_GLPG4_Y
+      dst: MTNR1_RDMA_CUR_L4_Y
+    - src: MLSC_W_GLPG4_U
+      dst: MTNR1_RDMA_CUR_L4_U
+    - src: MLSC_W_GLPG4_V
+      dst: MTNR1_RDMA_CUR_L4_V
+  - from: mlsc
+    to: post_crta
+    type: control
+  - from: pdp
+    to: post_crta
+    type: control
+  - from: byrp
+    to: post_crta
+    type: control
+  - from: post_crta
+    to: pre_me_rta
+    type: control
+  - from: pre_me_rta
+    to: lme
+    type: control
+  - from: lme
+    to: post_irta
+    type: control
+  - from: post_irta
+    to: mtnr
+    type: control
+  - from: mlsc
+    to: lme
+    type: M2M
+    buffer: LME_INPUT
+    port_pairs:
+    - src: MLSC_W_LMEDS
+      dst: LME_RDMA_CACHE_IN_0
+  - from: mlsc
+    to: vps_od
+    type: M2M
+    buffer: OD_INPUT
+    port_pairs:
+    - src: MLSC_W_FDPIG
+      dst: VPS_RDMA
+  - from: pre_me_rta
+    to: vps_dof
+    type: control
+  - from: vps_dof
+    to: post_irta
+    type: control
+  - from: mlsc
+    to: vps_seg
+    type: control
+  - from: vps_seg
+    to: mtnr
+    type: control
   - from: mcsc
+    to: gdc_m
+    type: M2M
+    buffer: MCSC_PREVIEW
+    port_pairs:
+    - src: MCSC_WDMA_W0
+      dst: GDC_RDMA
+  - from: mcsc
+    to: gdc_o
+    type: M2M
+    buffer: MCSC_VIDEO
+    port_pairs:
+    - src: MCSC_WDMA_W1
+      dst: GDC_RDMA
+  - from: mcsc
+    to: eis
+    type: control
+  - from: eis
+    to: gdc_m
+    type: control
+  - from: eis
+    to: gdc_o
+    type: control
+  - from: gdc_m
+    to: dpu
+    type: M2M
+    buffer: GDC_PREVIEW
+    port_pairs:
+    - src: GDC_WDMA
+      dst: DPU_RDMA
+  - from: gdc_o
     to: apv_enc
     type: M2M
-    buffer: MCSC_APV_BUF
+    buffer: GDC_VIDEO
+    port_pairs:
+    - src: GDC_WDMA
+      dst: APV_RDMA_FRAME
+  - from: dpu
+    to: panel
+    type: OTF
+  - from: rgbp
+    to: yuvp
+    type: M2M
+    buffer: RGBP_DRC
+    port_pairs:
+    - src: RGBP_WDMA_DRC
+      dst: YUVP_RDMA_DRC0
+    - src: RGBP_WDMA_DRC
+      dst: YUVP_RDMA_DRC1
+  - from: mlsc
+    to: yuvp
+    type: M2M
+    buffer: MLSC_SVHIST
+    port_pairs:
+    - src: MLSC_W_SVHIST
+      dst: YUVP_RDMA_SVHIST
   buffers:
-    MCSC_APV_BUF:
-      format: YUV422
+    PYRAMID_L0:
+      size_ref: mlsc_out
+      format: Y
+      bitdepth: 12
+      compression: COMP_OFF
+      layer: 0
+    TNR_PREV_L0:
+      size_ref: mlsc_out
+      format: Y
+      bitdepth: 12
+      compression: COMP_OFF
+      history:
+        node_id: mtnr
+        frame_offset: -1
+        read_ports:
+        - MTNR0_RDMA_PREV_L0_Y
+        write_ports:
+        - MTNR0_WDMA_PREV_L0_Y
+        initialization: warm_start_steady_state
+    PYRAMID_L1:
+      size_ref: pyramid_l1
+      format: YUV444
+      bitdepth: 12
+      compression: COMP_OFF
+      layer: 1
+    TNR_PREV_L1:
+      size_ref: pyramid_l1
+      format: YUV444
+      bitdepth: 12
+      compression: COMP_OFF
+      history:
+        node_id: mtnr
+        frame_offset: -1
+        read_ports:
+        - MTNR1_RDMA_PREV_L1_Y
+        - MTNR1_RDMA_PREV_L1_U
+        - MTNR1_RDMA_PREV_L1_V
+        write_ports:
+        - MTNR1_WDMA_PREV_L1_Y
+        - MTNR1_WDMA_PREV_L1_U
+        - MTNR1_WDMA_PREV_L1_V
+        initialization: warm_start_steady_state
+    PYRAMID_L2:
+      size_ref: pyramid_l2
+      format: YUV444
+      bitdepth: 12
+      compression: COMP_OFF
+      layer: 2
+    TNR_PREV_L2:
+      size_ref: pyramid_l2
+      format: YUV444
+      bitdepth: 12
+      compression: COMP_OFF
+      history:
+        node_id: mtnr
+        frame_offset: -1
+        read_ports:
+        - MTNR1_RDMA_PREV_L2_Y
+        - MTNR1_RDMA_PREV_L2_U
+        - MTNR1_RDMA_PREV_L2_V
+        write_ports:
+        - MTNR1_WDMA_PREV_L2_Y
+        - MTNR1_WDMA_PREV_L2_U
+        - MTNR1_WDMA_PREV_L2_V
+        initialization: warm_start_steady_state
+    PYRAMID_L3:
+      size_ref: pyramid_l3
+      format: YUV444
+      bitdepth: 12
+      compression: COMP_OFF
+      layer: 3
+    TNR_PREV_L3:
+      size_ref: pyramid_l3
+      format: YUV444
+      bitdepth: 12
+      compression: COMP_OFF
+      history:
+        node_id: mtnr
+        frame_offset: -1
+        read_ports:
+        - MTNR1_RDMA_PREV_L3_Y
+        - MTNR1_RDMA_PREV_L3_U
+        - MTNR1_RDMA_PREV_L3_V
+        write_ports:
+        - MTNR1_WDMA_PREV_L3_Y
+        - MTNR1_WDMA_PREV_L3_U
+        - MTNR1_WDMA_PREV_L3_V
+        initialization: warm_start_steady_state
+    PYRAMID_L4:
+      size_ref: pyramid_l4
+      format: YUV444
+      bitdepth: 12
+      compression: COMP_OFF
+      layer: 4
+    TNR_PREV_L4:
+      size_ref: pyramid_l4
+      format: YUV444
+      bitdepth: 12
+      compression: COMP_OFF
+      history:
+        node_id: mtnr
+        frame_offset: -1
+        read_ports:
+        - MTNR1_RDMA_PREV_L4_Y
+        - MTNR1_RDMA_PREV_L4_U
+        - MTNR1_RDMA_PREV_L4_V
+        write_ports:
+        - MTNR1_WDMA_PREV_L4_Y
+        - MTNR1_WDMA_PREV_L4_U
+        - MTNR1_WDMA_PREV_L4_V
+        initialization: warm_start_steady_state
+    LME_INPUT:
+      size_ref: motion_estimation
+      format: Y
+      bitdepth: 8
+      compression: COMP_OFF
+      source_note: MLSC LMEDS Y image for motion estimation; 1008x756 remains an unverified
+        fixture assumption.
+    OD_INPUT:
+      size_ref: object_detection
+      format: RGB
+      bitdepth: 8
+      compression: COMP_OFF
+      size_status: assumed
+      source_note: 'User fixture estimate: FDPIG RGB 512x288, 8 bits per channel assumed.'
+    MCSC_PREVIEW:
+      size_ref: preview_out
+      format: YUV420
+      bitdepth: 8
+      compression: COMP_OFF
+    MCSC_VIDEO:
+      size_ref: record_out
+      format: YUV420
+      bitdepth: 8
+      compression: COMP_OFF
+    GDC_PREVIEW:
+      size_ref: preview_out
+      format: YUV420
+      bitdepth: 8
+      compression: COMP_OFF
+    GDC_VIDEO:
+      size_ref: record_out
+      format: YUV420
+      bitdepth: 8
+      compression: COMP_OFF
+    LME_PREV:
+      size_ref: motion_estimation
+      format: Y
+      bitdepth: 8
+      compression: COMP_OFF
+      history:
+        node_id: lme
+        frame_offset: -1
+        read_ports:
+        - LME_RDMA_CACHE_IN_1
+        write_ports: []
+        producer: previous MLSC_W_LMEDS output; current write already counted
+        initialization: warm_start_steady_state
+    BYRP_BAYER_DUMP:
+      size_ref: sensor_full
+      format: BAYER
       bitdepth: 10
       compression: COMP_OFF
+      source_note: Full-size video snapshot Bayer dump. Enable byrp.video_snapshot_enabled
+        to include traffic.
+      dma:
+        node_id: byrp
+        write_ports:
+        - BYRP_WDMA_BYR
+        activation_flag: video_snapshot_enabled
+    CAV_OUTPUT:
+      size_ref: cav
+      format: RGB
+      bitdepth: 8
+      compression: COMP_OFF
+      size_status: assumed
+      source_note: User-approved 320x180 RGB fixture size; 8 bits per channel and
+        activation require runtime confirmation.
+      dma:
+        node_id: mlsc
+        write_ports:
+        - MLSC_W_CAV
+        enabled: false
+    RGBP_HIST:
+      size_status: unknown
+      source_note: Kernel-declared output; size/format not yet characterized. Excluded
+        from bandwidth.
+      dma:
+        node_id: rgbp
+        write_ports:
+        - IS_LVN_RGBP0_HIST
+    RGBP_SAT:
+      size_status: unknown
+      source_note: Kernel-declared output; size/format not yet characterized. Excluded
+        from bandwidth.
+      dma:
+        node_id: rgbp
+        write_ports:
+        - RGBP_WDMA_SAT
+    RGBP_DRC:
+      size_status: unknown
+      source_note: DRC statistics input to YUVP; size/layout unknown, excluded from
+        bandwidth.
+    MLSC_SVHIST:
+      size_status: unknown
+      source_note: MLSC histogram input to YUVP per user. Exact YUVP physical port
+        mapping/size unknown.
+  architecture_graph:
+    is_version: 15
+    rt_chain:
+    - csis
+    - pdp
+    - byrp
+    - rgbp
+    - yuvsc
+    - mlsc
+    nrt_chain:
+    - mtnr
+    - msnr
+    - yuvp
+    - mcsc
+    rt_frame_sync: sensor_v_valid
+    nrt_entry: MLSC pyramid WDMA to MTNR RDMA (M2M)
+    provenance: kernel IS v15 + user-confirmed topology, 2026-09-13
+    assumptions:
+    - Pyramid dimensions use ceil(width/2^L), ceil(height/2^L); alignment/crop needs
+      runtime confirmation.
+    - Preview is FHD; LMEDS 1008x756, FDPIG RGB 512x288 and CAV RGB 320x180 are fixture
+      assumptions.
+    - MCSC channel assignment W0/W1 is logical policy; validate runtime port mapping.
+    - History DMA models warmed-up steady state; first-frame initialization is not
+      measured.
+    - SW timings are assumed wall time. preME includes LME; CPU active time/power
+      is not known.
+    - PDP/BYRP statistic and MV result sizes are uncharacterized; their DMA availability
+      is catalogued but their traffic is excluded from bandwidth totals.
+    - NRT L0 chroma auxiliary input and MTNR weight/segmentation buffers require runtime
+      format/size confirmation; not included in bandwidth totals.
+    - CPU_CAMERA serializes CPU-only stages; preME is a composite SW+LME interval
+      with unknown CPU duty.
+    - RGBP DRC/HIST/SAT and MLSC SVHIST sizes are unknown; excluded from BW. BYRP
+      Bayer snapshot and CAV are optional disabled outputs by default.
+    pyramid_base: mlsc_out
+    eis_chain: MCSC -> one EIS SW stage -> preview/video GDC instances
 variants:
 - id: cam-rec-apv-uhd30-422-sdr
   severity: heavy
   design_conditions:
     subscenario: UHD_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_UHD30
     sensor_place: rear
     resolution: UHD
     fps: 30
     hdr: SDR
+    codec_mfc: HEVC_ENC
+    dpu_layer_count: 3
+    is_version: 15
+    sw_timing_case: mean
+    sw_timing_source: assumed
+    sensor_board: m2s-GNG
+    mcsc_dma_channels: 2
+    sensor_input_fps: 30.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
     apv_chroma_format_idc: 1
     apv_chroma_format: '4:2:2'
     apv_band_idc: 0
     apv_enc_profile: 0
+    priority_recording: true
+    encoder_hw: APV
+    sensor_runtime_confirmation: true
+    record_bitrate_mbps: 1000.0
+    bitrate_source: assumed
+    writer_model: linear_bitrate_wall_time
+    storage_model: sustained_write_assumed
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - vps_dof
+    - vps_seg
+    - eis
+    - gdc_m
+    - gdc_o
   node_configs:
     apv_enc:
       selected_mode: Normal
+      codec: HEVC_ENC
+      sim:
+        width: 3840
+        height: 2160
+        inherit_shape: true
+        format: YUV422
       chroma_format_idc: 1
       band_idc: 0
       enc_profile: 0
+      memory_io:
+      - port: APV_WDMA_BITSTREAM
+        direction: write
+        bitrate_condition: record_bitrate_mbps
+    post_crta:
+      sw_timing:
+        min_ms: 0.1
+        mean_ms: 0.3
+        max_ms: 0.5
+        start_jitter_mean_ms: 1.0
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal
+          measurements.
+    pre_me_rta:
+      sw_timing:
+        min_ms: 2.5
+        mean_ms: 3.0
+        max_ms: 4.0
+        includes_hw_nodes:
+        - lme
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal
+          measurements.
+    post_irta:
+      sw_timing:
+        min_ms: 3.0
+        mean_ms: 4.0
+        max_ms: 5.6
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal
+          measurements.
+    eis:
+      sw_timing:
+        min_ms: 2.5
+        mean_ms: 3.0
+        max_ms: 6.0
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal
+          measurements.
+    yuvsc:
+      operations:
+        scale: false
+      bypass_downscale: true
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    mcsc:
+      operations:
+        crop: true
+        scale: true
+      active_output_ports:
+      - MCSC_WDMA_W0
+      - MCSC_WDMA_W1
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    byrp:
+      video_snapshot_enabled: false
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    vps_od:
+      selected_mode: Normal
+      function: object_detection
+      sim:
+        width: 512
+        height: 288
+        inherit_shape: true
+    lme:
+      selected_mode: Normal
+      sim:
+        width: 1008
+        height: 756
+        inherit_shape: true
+    sensor_rear:
+      selected_mode: cis_4sum_ln4_raw10_4080x2296_30fps_3993msps
+    csis:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    pdp:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    rgbp:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    mlsc:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    mtnr:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    msnr:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    yuvp:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    gdc_m:
+      sim:
+        width: 1920
+        height: 1080
+        inherit_shape: true
+      operations:
+        crop: true
+    gdc_o:
+      sim:
+        width: 3840
+        height: 2160
+        inherit_shape: true
+      operations:
+        crop: true
+    dpu:
+      sim:
+        width: 1920
+        height: 1080
+        inherit_shape: true
+    mpeg_writer:
+      sw_timing:
+        min_ms: 2
+        mean_ms: 4
+        max_ms: 8
+        value_source: assumed
+        source_note: Engineering assumption approved for fixture exploration; replace
+          with internal measurements.
+      sw_bitrate_scaling:
+        reference_bitrate_mbps: 1000
+      memory_io:
+      - port: CPU_BITSTREAM_READ
+        direction: read
+        bitrate_condition: record_bitrate_mbps
+      - port: CPU_BITSTREAM_WRITE
+        direction: write
+        bitrate_condition: record_bitrate_mbps
+      timeline_resource_id: CPU_WRITER
+      source_note: Engineering assumption approved for fixture exploration; replace
+        with internal measurements.
+    storage_write:
+      sw_timing:
+        min_ms: 4
+        mean_ms: 8
+        max_ms: 16
+        value_source: assumed
+        source_note: Engineering assumption approved for fixture exploration; replace
+          with internal measurements.
+      sw_bitrate_scaling:
+        reference_bitrate_mbps: 1000
+      timeline_resource_id: STORAGE_IO
+      memory_io:
+      - port: STORAGE_BITSTREAM_READ
+        direction: read
+        bitrate_condition: record_bitrate_mbps
+      source_note: I/O completion wall time, not CPU active execution; no UFS capacity
+        sign-off. Engineering assumption approved for fixture exploration; replace
+        with internal measurements.
+  topology_patch:
+    add_edges:
+    - from: mcsc
+      to: dpu
+      type: M2M
+      buffer: MCSC_PREVIEW
+      port_pairs:
+      - src: MCSC_WDMA_W0
+        dst: DPU_RDMA
+    - from: mcsc
+      to: apv_enc
+      type: M2M
+      buffer: MCSC_VIDEO
+      port_pairs:
+      - src: MCSC_WDMA_W1
+        dst: APV_RDMA_FRAME
+    - from: apv_enc
+      to: mpeg_writer
+      type: control
+    - from: mpeg_writer
+      to: storage_write
+      type: control
+    add_nodes:
+    - id: mpeg_writer
+      ip_ref: ip-cpu-s5e9965
+      role: sw_task
+      instance_index: 0
+    - id: storage_write
+      ip_ref: ip-cpu-s5e9965
+      role: sw_task
+      instance_index: 0
+  size_overrides:
+    sensor_full: 4080x2296
+    record_out: 3840x2160
+    preview_out: 1920x1080
+    pyramid_l0: 4080x2296
+    pyramid_l1: 2040x1148
+    pyramid_l2: 1020x574
+    pyramid_l3: 510x287
+    pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
+  buffer_overrides:
+    MCSC_VIDEO:
+      format: YUV422
+      bitdepth: 10
+    GDC_VIDEO:
+      format: YUV422
+      bitdepth: 10
+  tags:
+  - is-v15
+  - assumed-sw-timing
+  - uncalibrated-power
 - id: cam-rec-apv-uhd30-444-sdr
   severity: heavy
   design_conditions:
     subscenario: UHD_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_UHD30
     sensor_place: rear
     resolution: UHD
     fps: 30
     hdr: SDR
+    codec_mfc: HEVC_ENC
+    dpu_layer_count: 3
+    is_version: 15
+    sw_timing_case: mean
+    sw_timing_source: assumed
+    sensor_board: m2s-GNG
+    mcsc_dma_channels: 2
+    sensor_input_fps: 30.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
     apv_chroma_format_idc: 2
     apv_chroma_format: '4:4:4'
     apv_band_idc: 0
     apv_enc_profile: 1
+    priority_recording: true
+    encoder_hw: APV
+    sensor_runtime_confirmation: true
+    record_bitrate_mbps: 1500.0
+    bitrate_source: assumed
+    writer_model: linear_bitrate_wall_time
+    storage_model: sustained_write_assumed
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - vps_dof
+    - vps_seg
+    - eis
+    - gdc_m
+    - gdc_o
   node_configs:
     apv_enc:
       selected_mode: Normal
+      codec: HEVC_ENC
+      sim:
+        width: 3840
+        height: 2160
+        inherit_shape: true
+        format: YUV444
       chroma_format_idc: 2
       band_idc: 0
       enc_profile: 1
+      memory_io:
+      - port: APV_WDMA_BITSTREAM
+        direction: write
+        bitrate_condition: record_bitrate_mbps
+    post_crta:
+      sw_timing:
+        min_ms: 0.1
+        mean_ms: 0.3
+        max_ms: 0.5
+        start_jitter_mean_ms: 1.0
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal
+          measurements.
+    pre_me_rta:
+      sw_timing:
+        min_ms: 2.5
+        mean_ms: 3.0
+        max_ms: 4.0
+        includes_hw_nodes:
+        - lme
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal
+          measurements.
+    post_irta:
+      sw_timing:
+        min_ms: 3.0
+        mean_ms: 4.0
+        max_ms: 5.6
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal
+          measurements.
+    eis:
+      sw_timing:
+        min_ms: 2.5
+        mean_ms: 3.0
+        max_ms: 6.0
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal
+          measurements.
+    yuvsc:
+      operations:
+        scale: false
+      bypass_downscale: true
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    mcsc:
+      operations:
+        crop: true
+        scale: true
+      active_output_ports:
+      - MCSC_WDMA_W0
+      - MCSC_WDMA_W1
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    byrp:
+      video_snapshot_enabled: false
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    vps_od:
+      selected_mode: Normal
+      function: object_detection
+      sim:
+        width: 512
+        height: 288
+        inherit_shape: true
+    lme:
+      selected_mode: Normal
+      sim:
+        width: 1008
+        height: 756
+        inherit_shape: true
+    sensor_rear:
+      selected_mode: cis_4sum_ln4_raw10_4080x2296_30fps_3993msps
+    csis:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    pdp:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    rgbp:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    mlsc:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    mtnr:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    msnr:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    yuvp:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    gdc_m:
+      sim:
+        width: 1920
+        height: 1080
+        inherit_shape: true
+      operations:
+        crop: true
+    gdc_o:
+      sim:
+        width: 3840
+        height: 2160
+        inherit_shape: true
+      operations:
+        crop: true
+    dpu:
+      sim:
+        width: 1920
+        height: 1080
+        inherit_shape: true
+    mpeg_writer:
+      sw_timing:
+        min_ms: 2
+        mean_ms: 4
+        max_ms: 8
+        value_source: assumed
+        source_note: Engineering assumption approved for fixture exploration; replace
+          with internal measurements.
+      sw_bitrate_scaling:
+        reference_bitrate_mbps: 1000
+      memory_io:
+      - port: CPU_BITSTREAM_READ
+        direction: read
+        bitrate_condition: record_bitrate_mbps
+      - port: CPU_BITSTREAM_WRITE
+        direction: write
+        bitrate_condition: record_bitrate_mbps
+      timeline_resource_id: CPU_WRITER
+      source_note: Engineering assumption approved for fixture exploration; replace
+        with internal measurements.
+    storage_write:
+      sw_timing:
+        min_ms: 4
+        mean_ms: 8
+        max_ms: 16
+        value_source: assumed
+        source_note: Engineering assumption approved for fixture exploration; replace
+          with internal measurements.
+      sw_bitrate_scaling:
+        reference_bitrate_mbps: 1000
+      timeline_resource_id: STORAGE_IO
+      memory_io:
+      - port: STORAGE_BITSTREAM_READ
+        direction: read
+        bitrate_condition: record_bitrate_mbps
+      source_note: I/O completion wall time, not CPU active execution; no UFS capacity
+        sign-off. Engineering assumption approved for fixture exploration; replace
+        with internal measurements.
+  topology_patch:
+    add_edges:
+    - from: mcsc
+      to: dpu
+      type: M2M
+      buffer: MCSC_PREVIEW
+      port_pairs:
+      - src: MCSC_WDMA_W0
+        dst: DPU_RDMA
+    - from: mcsc
+      to: apv_enc
+      type: M2M
+      buffer: MCSC_VIDEO
+      port_pairs:
+      - src: MCSC_WDMA_W1
+        dst: APV_RDMA_FRAME
+    - from: apv_enc
+      to: mpeg_writer
+      type: control
+    - from: mpeg_writer
+      to: storage_write
+      type: control
+    add_nodes:
+    - id: mpeg_writer
+      ip_ref: ip-cpu-s5e9965
+      role: sw_task
+      instance_index: 0
+    - id: storage_write
+      ip_ref: ip-cpu-s5e9965
+      role: sw_task
+      instance_index: 0
+  size_overrides:
+    sensor_full: 4080x2296
+    record_out: 3840x2160
+    preview_out: 1920x1080
+    pyramid_l0: 4080x2296
+    pyramid_l1: 2040x1148
+    pyramid_l2: 1020x574
+    pyramid_l3: 510x287
+    pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   buffer_overrides:
-    MCSC_APV_BUF:
+    MCSC_VIDEO:
       format: YUV444
       bitdepth: 10
-      compression: COMP_OFF
+    GDC_VIDEO:
+      format: YUV444
+      bitdepth: 10
+  tags:
+  - is-v15
+  - assumed-sw-timing
+  - uncalibrated-power
 - id: cam-rec-apv-uhd30-422-hdr10
   severity: heavy
   design_conditions:
     subscenario: HDR10_UHD_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_UHD30
     sensor_place: rear
     resolution: UHD
     fps: 30
     hdr: HDR10
+    codec_mfc: HEVC_ENC
+    dpu_layer_count: 3
+    is_version: 15
+    sw_timing_case: mean
+    sw_timing_source: assumed
+    sensor_board: m2s-GNG
+    mcsc_dma_channels: 2
+    sensor_input_fps: 30.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
     apv_chroma_format_idc: 1
     apv_chroma_format: '4:2:2'
     apv_band_idc: 0
     apv_hdr10_plus_avail: false
     note: MaxCLL/MaxFALL 정적 메타데이터
+    priority_recording: true
+    encoder_hw: APV
+    sensor_runtime_confirmation: true
+    record_bitrate_mbps: 1000.0
+    bitrate_source: assumed
+    writer_model: linear_bitrate_wall_time
+    storage_model: sustained_write_assumed
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - vps_dof
+    - vps_seg
+    - eis
+    - gdc_m
+    - gdc_o
   node_configs:
     apv_enc:
       selected_mode: Normal
+      codec: HEVC_ENC
+      sim:
+        width: 3840
+        height: 2160
+        inherit_shape: true
+        format: YUV422
       chroma_format_idc: 1
       band_idc: 0
+      memory_io:
+      - port: APV_WDMA_BITSTREAM
+        direction: write
+        bitrate_condition: record_bitrate_mbps
+    post_crta:
+      sw_timing:
+        min_ms: 0.1
+        mean_ms: 0.3
+        max_ms: 0.5
+        start_jitter_mean_ms: 1.0
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal
+          measurements.
+    pre_me_rta:
+      sw_timing:
+        min_ms: 2.5
+        mean_ms: 3.0
+        max_ms: 4.0
+        includes_hw_nodes:
+        - lme
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal
+          measurements.
+    post_irta:
+      sw_timing:
+        min_ms: 3.0
+        mean_ms: 4.0
+        max_ms: 5.6
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal
+          measurements.
+    eis:
+      sw_timing:
+        min_ms: 2.5
+        mean_ms: 3.0
+        max_ms: 6.0
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal
+          measurements.
+    yuvsc:
+      operations:
+        scale: false
+      bypass_downscale: true
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    mcsc:
+      operations:
+        crop: true
+        scale: true
+      active_output_ports:
+      - MCSC_WDMA_W0
+      - MCSC_WDMA_W1
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    byrp:
+      video_snapshot_enabled: false
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    vps_od:
+      selected_mode: Normal
+      function: object_detection
+      sim:
+        width: 512
+        height: 288
+        inherit_shape: true
+    lme:
+      selected_mode: Normal
+      sim:
+        width: 1008
+        height: 756
+        inherit_shape: true
+    sensor_rear:
+      selected_mode: cis_4sum_ln4_raw10_4080x2296_30fps_3993msps
+    csis:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    pdp:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    rgbp:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    mlsc:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    mtnr:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    msnr:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    yuvp:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    gdc_m:
+      sim:
+        width: 1920
+        height: 1080
+        inherit_shape: true
+      operations:
+        crop: true
+    gdc_o:
+      sim:
+        width: 3840
+        height: 2160
+        inherit_shape: true
+      operations:
+        crop: true
+    dpu:
+      sim:
+        width: 1920
+        height: 1080
+        inherit_shape: true
+    mpeg_writer:
+      sw_timing:
+        min_ms: 2
+        mean_ms: 4
+        max_ms: 8
+        value_source: assumed
+        source_note: Engineering assumption approved for fixture exploration; replace
+          with internal measurements.
+      sw_bitrate_scaling:
+        reference_bitrate_mbps: 1000
+      memory_io:
+      - port: CPU_BITSTREAM_READ
+        direction: read
+        bitrate_condition: record_bitrate_mbps
+      - port: CPU_BITSTREAM_WRITE
+        direction: write
+        bitrate_condition: record_bitrate_mbps
+      timeline_resource_id: CPU_WRITER
+      source_note: Engineering assumption approved for fixture exploration; replace
+        with internal measurements.
+    storage_write:
+      sw_timing:
+        min_ms: 4
+        mean_ms: 8
+        max_ms: 16
+        value_source: assumed
+        source_note: Engineering assumption approved for fixture exploration; replace
+          with internal measurements.
+      sw_bitrate_scaling:
+        reference_bitrate_mbps: 1000
+      timeline_resource_id: STORAGE_IO
+      memory_io:
+      - port: STORAGE_BITSTREAM_READ
+        direction: read
+        bitrate_condition: record_bitrate_mbps
+      source_note: I/O completion wall time, not CPU active execution; no UFS capacity
+        sign-off. Engineering assumption approved for fixture exploration; replace
+        with internal measurements.
+  topology_patch:
+    add_edges:
+    - from: mcsc
+      to: dpu
+      type: M2M
+      buffer: MCSC_PREVIEW
+      port_pairs:
+      - src: MCSC_WDMA_W0
+        dst: DPU_RDMA
+    - from: mcsc
+      to: apv_enc
+      type: M2M
+      buffer: MCSC_VIDEO
+      port_pairs:
+      - src: MCSC_WDMA_W1
+        dst: APV_RDMA_FRAME
+    - from: apv_enc
+      to: mpeg_writer
+      type: control
+    - from: mpeg_writer
+      to: storage_write
+      type: control
+    add_nodes:
+    - id: mpeg_writer
+      ip_ref: ip-cpu-s5e9965
+      role: sw_task
+      instance_index: 0
+    - id: storage_write
+      ip_ref: ip-cpu-s5e9965
+      role: sw_task
+      instance_index: 0
+  size_overrides:
+    sensor_full: 4080x2296
+    record_out: 3840x2160
+    preview_out: 1920x1080
+    pyramid_l0: 4080x2296
+    pyramid_l1: 2040x1148
+    pyramid_l2: 1020x574
+    pyramid_l3: 510x287
+    pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
+  buffer_overrides:
+    MCSC_VIDEO:
+      format: YUV422
+      bitdepth: 10
+    GDC_VIDEO:
+      format: YUV422
+      bitdepth: 10
+  tags:
+  - is-v15
+  - assumed-sw-timing
+  - uncalibrated-power
 - id: cam-rec-apv-uhd30-422-hdr10plus
   severity: heavy
   design_conditions:
     subscenario: HDR10_UHD_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_UHD30
     sensor_place: rear
     resolution: UHD
     fps: 30
     hdr: HDR10_PLUS
+    codec_mfc: HEVC_ENC
+    dpu_layer_count: 3
+    is_version: 15
+    sw_timing_case: mean
+    sw_timing_source: assumed
+    sensor_board: m2s-GNG
+    mcsc_dma_channels: 2
+    sensor_input_fps: 30.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
     apv_chroma_format_idc: 1
     apv_chroma_format: '4:2:2'
     apv_hdr10_plus_avail: true
     note: 동적 메타데이터 포함 (d_display_info_1.hdr10_plus_avail=1)
+    priority_recording: true
+    encoder_hw: APV
+    sensor_runtime_confirmation: true
+    record_bitrate_mbps: 1000.0
+    bitrate_source: assumed
+    writer_model: linear_bitrate_wall_time
+    storage_model: sustained_write_assumed
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - vps_dof
+    - vps_seg
+    - eis
+    - gdc_m
+    - gdc_o
   node_configs:
     apv_enc:
       selected_mode: HighQuality
+      codec: HEVC_ENC
+      sim:
+        width: 3840
+        height: 2160
+        inherit_shape: true
+        format: YUV422
       chroma_format_idc: 1
+      memory_io:
+      - port: APV_WDMA_BITSTREAM
+        direction: write
+        bitrate_condition: record_bitrate_mbps
+    post_crta:
+      sw_timing:
+        min_ms: 0.1
+        mean_ms: 0.3
+        max_ms: 0.5
+        start_jitter_mean_ms: 1.0
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal
+          measurements.
+    pre_me_rta:
+      sw_timing:
+        min_ms: 2.5
+        mean_ms: 3.0
+        max_ms: 4.0
+        includes_hw_nodes:
+        - lme
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal
+          measurements.
+    post_irta:
+      sw_timing:
+        min_ms: 3.0
+        mean_ms: 4.0
+        max_ms: 5.6
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal
+          measurements.
+    eis:
+      sw_timing:
+        min_ms: 2.5
+        mean_ms: 3.0
+        max_ms: 6.0
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal
+          measurements.
+    yuvsc:
+      operations:
+        scale: false
+      bypass_downscale: true
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    mcsc:
+      operations:
+        crop: true
+        scale: true
+      active_output_ports:
+      - MCSC_WDMA_W0
+      - MCSC_WDMA_W1
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    byrp:
+      video_snapshot_enabled: false
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    vps_od:
+      selected_mode: Normal
+      function: object_detection
+      sim:
+        width: 512
+        height: 288
+        inherit_shape: true
+    lme:
+      selected_mode: Normal
+      sim:
+        width: 1008
+        height: 756
+        inherit_shape: true
+    sensor_rear:
+      selected_mode: cis_4sum_ln4_raw10_4080x2296_30fps_3993msps
+    csis:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    pdp:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    rgbp:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    mlsc:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    mtnr:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    msnr:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    yuvp:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    gdc_m:
+      sim:
+        width: 1920
+        height: 1080
+        inherit_shape: true
+      operations:
+        crop: true
+    gdc_o:
+      sim:
+        width: 3840
+        height: 2160
+        inherit_shape: true
+      operations:
+        crop: true
+    dpu:
+      sim:
+        width: 1920
+        height: 1080
+        inherit_shape: true
+    mpeg_writer:
+      sw_timing:
+        min_ms: 2
+        mean_ms: 4
+        max_ms: 8
+        value_source: assumed
+        source_note: Engineering assumption approved for fixture exploration; replace
+          with internal measurements.
+      sw_bitrate_scaling:
+        reference_bitrate_mbps: 1000
+      memory_io:
+      - port: CPU_BITSTREAM_READ
+        direction: read
+        bitrate_condition: record_bitrate_mbps
+      - port: CPU_BITSTREAM_WRITE
+        direction: write
+        bitrate_condition: record_bitrate_mbps
+      timeline_resource_id: CPU_WRITER
+      source_note: Engineering assumption approved for fixture exploration; replace
+        with internal measurements.
+    storage_write:
+      sw_timing:
+        min_ms: 4
+        mean_ms: 8
+        max_ms: 16
+        value_source: assumed
+        source_note: Engineering assumption approved for fixture exploration; replace
+          with internal measurements.
+      sw_bitrate_scaling:
+        reference_bitrate_mbps: 1000
+      timeline_resource_id: STORAGE_IO
+      memory_io:
+      - port: STORAGE_BITSTREAM_READ
+        direction: read
+        bitrate_condition: record_bitrate_mbps
+      source_note: I/O completion wall time, not CPU active execution; no UFS capacity
+        sign-off. Engineering assumption approved for fixture exploration; replace
+        with internal measurements.
+  topology_patch:
+    add_edges:
+    - from: mcsc
+      to: dpu
+      type: M2M
+      buffer: MCSC_PREVIEW
+      port_pairs:
+      - src: MCSC_WDMA_W0
+        dst: DPU_RDMA
+    - from: mcsc
+      to: apv_enc
+      type: M2M
+      buffer: MCSC_VIDEO
+      port_pairs:
+      - src: MCSC_WDMA_W1
+        dst: APV_RDMA_FRAME
+    - from: apv_enc
+      to: mpeg_writer
+      type: control
+    - from: mpeg_writer
+      to: storage_write
+      type: control
+    add_nodes:
+    - id: mpeg_writer
+      ip_ref: ip-cpu-s5e9965
+      role: sw_task
+      instance_index: 0
+    - id: storage_write
+      ip_ref: ip-cpu-s5e9965
+      role: sw_task
+      instance_index: 0
+  size_overrides:
+    sensor_full: 4080x2296
+    record_out: 3840x2160
+    preview_out: 1920x1080
+    pyramid_l0: 4080x2296
+    pyramid_l1: 2040x1148
+    pyramid_l2: 1020x574
+    pyramid_l3: 510x287
+    pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
+  buffer_overrides:
+    MCSC_VIDEO:
+      format: YUV422
+      bitdepth: 10
+    GDC_VIDEO:
+      format: YUV422
+      bitdepth: 10
+  tags:
+  - is-v15
+  - assumed-sw-timing
+  - uncalibrated-power
 - id: cam-rec-apv-uhd60-422-sdr
   severity: heavy
   design_conditions:
     subscenario: UHD_60FPS_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_UHD60
     sensor_place: rear
     resolution: UHD
     fps: 60
     hdr: SDR
+    dpu_layer_count: 3
+    is_version: 15
+    sw_timing_case: mean
+    sw_timing_source: assumed
+    sensor_board: m2s-GNG
+    mcsc_dma_channels: 2
+    sensor_input_fps: 60.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
     apv_chroma_format_idc: 1
     apv_chroma_format: '4:2:2'
+    priority_recording: true
+    encoder_hw: APV
+    sensor_runtime_confirmation: true
+    record_bitrate_mbps: 2000.0
+    bitrate_source: assumed
+    writer_model: linear_bitrate_wall_time
+    storage_model: sustained_write_assumed
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - vps_dof
+    - vps_seg
+    - eis
+    - gdc_m
+    - gdc_o
+  topology_patch:
+    add_edges:
+    - from: mcsc
+      to: dpu
+      type: M2M
+      buffer: MCSC_PREVIEW
+      port_pairs:
+      - src: MCSC_WDMA_W0
+        dst: DPU_RDMA
+    - from: mcsc
+      to: apv_enc
+      type: M2M
+      buffer: MCSC_VIDEO
+      port_pairs:
+      - src: MCSC_WDMA_W1
+        dst: APV_RDMA_FRAME
+    - from: apv_enc
+      to: mpeg_writer
+      type: control
+    - from: mpeg_writer
+      to: storage_write
+      type: control
+    add_nodes:
+    - id: mpeg_writer
+      ip_ref: ip-cpu-s5e9965
+      role: sw_task
+      instance_index: 0
+    - id: storage_write
+      ip_ref: ip-cpu-s5e9965
+      role: sw_task
+      instance_index: 0
+  size_overrides:
+    sensor_full: 4080x2296
+    record_out: 3840x2160
+    preview_out: 1920x1080
+    pyramid_l0: 4080x2296
+    pyramid_l1: 2040x1148
+    pyramid_l2: 1020x574
+    pyramid_l3: 510x287
+    pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   node_configs:
+    post_crta:
+      sw_timing:
+        min_ms: 0.1
+        mean_ms: 0.3
+        max_ms: 0.5
+        start_jitter_mean_ms: 1.0
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal
+          measurements.
+    pre_me_rta:
+      sw_timing:
+        min_ms: 2.5
+        mean_ms: 3.0
+        max_ms: 4.0
+        includes_hw_nodes:
+        - lme
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal
+          measurements.
+    post_irta:
+      sw_timing:
+        min_ms: 3.0
+        mean_ms: 4.0
+        max_ms: 5.6
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal
+          measurements.
+    eis:
+      sw_timing:
+        min_ms: 2.5
+        mean_ms: 3.0
+        max_ms: 6.0
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal
+          measurements.
+    yuvsc:
+      operations:
+        scale: false
+      bypass_downscale: true
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    mcsc:
+      operations:
+        crop: true
+        scale: true
+      active_output_ports:
+      - MCSC_WDMA_W0
+      - MCSC_WDMA_W1
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    byrp:
+      video_snapshot_enabled: false
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    vps_od:
+      selected_mode: Normal
+      function: object_detection
+      sim:
+        width: 512
+        height: 288
+        inherit_shape: true
+    lme:
+      selected_mode: Normal
+      sim:
+        width: 1008
+        height: 756
+        inherit_shape: true
+    sensor_rear:
+      selected_mode: cis_4sum_ln2_raw10_4080x2296_60fps_3993msps
+    csis:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    pdp:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    rgbp:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    mlsc:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    mtnr:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    msnr:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    yuvp:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    gdc_m:
+      sim:
+        width: 1920
+        height: 1080
+        inherit_shape: true
+      operations:
+        crop: true
+    gdc_o:
+      sim:
+        width: 3840
+        height: 2160
+        inherit_shape: true
+      operations:
+        crop: true
+    dpu:
+      sim:
+        width: 1920
+        height: 1080
+        inherit_shape: true
     apv_enc:
+      sim:
+        width: 3840
+        height: 2160
+        inherit_shape: true
+        format: YUV422
       selected_mode: Normal
       chroma_format_idc: 1
+      memory_io:
+      - port: APV_WDMA_BITSTREAM
+        direction: write
+        bitrate_condition: record_bitrate_mbps
+    mpeg_writer:
+      sw_timing:
+        min_ms: 2
+        mean_ms: 4
+        max_ms: 8
+        value_source: assumed
+        source_note: Engineering assumption approved for fixture exploration; replace
+          with internal measurements.
+      sw_bitrate_scaling:
+        reference_bitrate_mbps: 1000
+      memory_io:
+      - port: CPU_BITSTREAM_READ
+        direction: read
+        bitrate_condition: record_bitrate_mbps
+      - port: CPU_BITSTREAM_WRITE
+        direction: write
+        bitrate_condition: record_bitrate_mbps
+      timeline_resource_id: CPU_WRITER
+      source_note: Engineering assumption approved for fixture exploration; replace
+        with internal measurements.
+    storage_write:
+      sw_timing:
+        min_ms: 4
+        mean_ms: 8
+        max_ms: 16
+        value_source: assumed
+        source_note: Engineering assumption approved for fixture exploration; replace
+          with internal measurements.
+      sw_bitrate_scaling:
+        reference_bitrate_mbps: 1000
+      timeline_resource_id: STORAGE_IO
+      memory_io:
+      - port: STORAGE_BITSTREAM_READ
+        direction: read
+        bitrate_condition: record_bitrate_mbps
+      source_note: I/O completion wall time, not CPU active execution; no UFS capacity
+        sign-off. Engineering assumption approved for fixture exploration; replace
+        with internal measurements.
+  buffer_overrides:
+    MCSC_VIDEO:
+      format: YUV422
+      bitdepth: 10
+    GDC_VIDEO:
+      format: YUV422
+      bitdepth: 10
+  tags:
+  - is-v15
+  - assumed-sw-timing
+  - uncalibrated-power
 - id: cam-rec-apv-uhd60-422-hdr10
   severity: heavy
   design_conditions:
     subscenario: HDR10_UHD_60FPS_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_UHD60
     sensor_place: rear
     resolution: UHD
     fps: 60
     hdr: HDR10
+    dpu_layer_count: 3
+    is_version: 15
+    sw_timing_case: mean
+    sw_timing_source: assumed
+    sensor_board: m2s-GNG
+    mcsc_dma_channels: 2
+    sensor_input_fps: 60.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
     apv_chroma_format_idc: 1
     apv_chroma_format: '4:2:2'
+    priority_recording: true
+    encoder_hw: APV
+    sensor_runtime_confirmation: true
+    record_bitrate_mbps: 2000.0
+    bitrate_source: assumed
+    writer_model: linear_bitrate_wall_time
+    storage_model: sustained_write_assumed
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - vps_dof
+    - vps_seg
+    - eis
+    - gdc_m
+    - gdc_o
+  topology_patch:
+    add_edges:
+    - from: mcsc
+      to: dpu
+      type: M2M
+      buffer: MCSC_PREVIEW
+      port_pairs:
+      - src: MCSC_WDMA_W0
+        dst: DPU_RDMA
+    - from: mcsc
+      to: apv_enc
+      type: M2M
+      buffer: MCSC_VIDEO
+      port_pairs:
+      - src: MCSC_WDMA_W1
+        dst: APV_RDMA_FRAME
+    - from: apv_enc
+      to: mpeg_writer
+      type: control
+    - from: mpeg_writer
+      to: storage_write
+      type: control
+    add_nodes:
+    - id: mpeg_writer
+      ip_ref: ip-cpu-s5e9965
+      role: sw_task
+      instance_index: 0
+    - id: storage_write
+      ip_ref: ip-cpu-s5e9965
+      role: sw_task
+      instance_index: 0
+  size_overrides:
+    sensor_full: 4080x2296
+    record_out: 3840x2160
+    preview_out: 1920x1080
+    pyramid_l0: 4080x2296
+    pyramid_l1: 2040x1148
+    pyramid_l2: 1020x574
+    pyramid_l3: 510x287
+    pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   node_configs:
+    post_crta:
+      sw_timing:
+        min_ms: 0.1
+        mean_ms: 0.3
+        max_ms: 0.5
+        start_jitter_mean_ms: 1.0
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal
+          measurements.
+    pre_me_rta:
+      sw_timing:
+        min_ms: 2.5
+        mean_ms: 3.0
+        max_ms: 4.0
+        includes_hw_nodes:
+        - lme
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal
+          measurements.
+    post_irta:
+      sw_timing:
+        min_ms: 3.0
+        mean_ms: 4.0
+        max_ms: 5.6
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal
+          measurements.
+    eis:
+      sw_timing:
+        min_ms: 2.5
+        mean_ms: 3.0
+        max_ms: 6.0
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal
+          measurements.
+    yuvsc:
+      operations:
+        scale: false
+      bypass_downscale: true
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    mcsc:
+      operations:
+        crop: true
+        scale: true
+      active_output_ports:
+      - MCSC_WDMA_W0
+      - MCSC_WDMA_W1
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    byrp:
+      video_snapshot_enabled: false
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    vps_od:
+      selected_mode: Normal
+      function: object_detection
+      sim:
+        width: 512
+        height: 288
+        inherit_shape: true
+    lme:
+      selected_mode: Normal
+      sim:
+        width: 1008
+        height: 756
+        inherit_shape: true
+    sensor_rear:
+      selected_mode: cis_4sum_ln2_raw10_4080x2296_60fps_3993msps
+    csis:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    pdp:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    rgbp:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    mlsc:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    mtnr:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    msnr:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    yuvp:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    gdc_m:
+      sim:
+        width: 1920
+        height: 1080
+        inherit_shape: true
+      operations:
+        crop: true
+    gdc_o:
+      sim:
+        width: 3840
+        height: 2160
+        inherit_shape: true
+      operations:
+        crop: true
+    dpu:
+      sim:
+        width: 1920
+        height: 1080
+        inherit_shape: true
     apv_enc:
+      sim:
+        width: 3840
+        height: 2160
+        inherit_shape: true
+        format: YUV422
       selected_mode: Normal
       chroma_format_idc: 1
+      memory_io:
+      - port: APV_WDMA_BITSTREAM
+        direction: write
+        bitrate_condition: record_bitrate_mbps
+    mpeg_writer:
+      sw_timing:
+        min_ms: 2
+        mean_ms: 4
+        max_ms: 8
+        value_source: assumed
+        source_note: Engineering assumption approved for fixture exploration; replace
+          with internal measurements.
+      sw_bitrate_scaling:
+        reference_bitrate_mbps: 1000
+      memory_io:
+      - port: CPU_BITSTREAM_READ
+        direction: read
+        bitrate_condition: record_bitrate_mbps
+      - port: CPU_BITSTREAM_WRITE
+        direction: write
+        bitrate_condition: record_bitrate_mbps
+      timeline_resource_id: CPU_WRITER
+      source_note: Engineering assumption approved for fixture exploration; replace
+        with internal measurements.
+    storage_write:
+      sw_timing:
+        min_ms: 4
+        mean_ms: 8
+        max_ms: 16
+        value_source: assumed
+        source_note: Engineering assumption approved for fixture exploration; replace
+          with internal measurements.
+      sw_bitrate_scaling:
+        reference_bitrate_mbps: 1000
+      timeline_resource_id: STORAGE_IO
+      memory_io:
+      - port: STORAGE_BITSTREAM_READ
+        direction: read
+        bitrate_condition: record_bitrate_mbps
+      source_note: I/O completion wall time, not CPU active execution; no UFS capacity
+        sign-off. Engineering assumption approved for fixture exploration; replace
+        with internal measurements.
+  buffer_overrides:
+    MCSC_VIDEO:
+      format: YUV422
+      bitdepth: 10
+    GDC_VIDEO:
+      format: YUV422
+      bitdepth: 10
+  tags:
+  - is-v15
+  - assumed-sw-timing
+  - uncalibrated-power
 - id: cam-rec-apv-8k24-422-sdr
   severity: critical
   design_conditions:
@@ -169,12 +2248,269 @@ variants:
     resolution: 8K
     fps: 24
     hdr: SDR
+    codec_mfc: HEVC_ENC
+    dpu_layer_count: 2
+    is_version: 15
+    sw_timing_case: mean
+    sw_timing_source: assumed
+    sensor_board: m2s-GNG
+    mcsc_dma_channels: 2
     apv_chroma_format_idc: 1
     apv_chroma_format: '4:2:2'
+    priority_recording: true
+    encoder_hw: APV
+    sensor_runtime_confirmation: true
+    record_bitrate_mbps: 3000
+    bitrate_source: assumed
+    writer_model: linear_bitrate_wall_time
+    storage_model: sustained_write_assumed
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - vps_dof
+    - vps_seg
+    - eis
+    - gdc_m
+    - gdc_o
   node_configs:
     apv_enc:
       selected_mode: Normal
+      codec: HEVC_ENC
+      sim:
+        width: 7680
+        height: 4320
+        inherit_shape: true
+        format: YUV422
       chroma_format_idc: 1
+      memory_io:
+      - port: APV_WDMA_BITSTREAM
+        direction: write
+        bitrate_condition: record_bitrate_mbps
+    post_crta:
+      sw_timing:
+        min_ms: 0.1
+        mean_ms: 0.3
+        max_ms: 0.5
+        start_jitter_mean_ms: 1.0
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal
+          measurements.
+    pre_me_rta:
+      sw_timing:
+        min_ms: 2.5
+        mean_ms: 3.0
+        max_ms: 4.0
+        includes_hw_nodes:
+        - lme
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal
+          measurements.
+    post_irta:
+      sw_timing:
+        min_ms: 3.0
+        mean_ms: 4.0
+        max_ms: 5.6
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal
+          measurements.
+    eis:
+      sw_timing:
+        min_ms: 2.5
+        mean_ms: 3.0
+        max_ms: 6.0
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal
+          measurements.
+    yuvsc:
+      operations:
+        scale: false
+      bypass_downscale: true
+      sim:
+        width: 8000
+        height: 4500
+        inherit_shape: true
+    mcsc:
+      operations:
+        crop: true
+        scale: true
+      active_output_ports:
+      - MCSC_WDMA_W0
+      - MCSC_WDMA_W1
+      sim:
+        width: 8000
+        height: 4500
+        inherit_shape: true
+    byrp:
+      video_snapshot_enabled: false
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
+      sim:
+        width: 8000
+        height: 4500
+        inherit_shape: true
+    vps_od:
+      selected_mode: Normal
+      function: object_detection
+      sim:
+        width: 512
+        height: 288
+        inherit_shape: true
+    lme:
+      selected_mode: Normal
+      sim:
+        width: 1008
+        height: 756
+        inherit_shape: true
+    sensor_rear:
+      selected_mode: mode28
+    csis:
+      sim:
+        width: 8000
+        height: 4500
+        inherit_shape: true
+    pdp:
+      sim:
+        width: 8000
+        height: 4500
+        inherit_shape: true
+    rgbp:
+      sim:
+        width: 8000
+        height: 4500
+        inherit_shape: true
+    mlsc:
+      sim:
+        width: 8000
+        height: 4500
+        inherit_shape: true
+    mtnr:
+      sim:
+        width: 8000
+        height: 4500
+        inherit_shape: true
+    msnr:
+      sim:
+        width: 8000
+        height: 4500
+        inherit_shape: true
+    yuvp:
+      sim:
+        width: 8000
+        height: 4500
+        inherit_shape: true
+    gdc_m:
+      sim:
+        width: 1920
+        height: 1080
+        inherit_shape: true
+      operations:
+        crop: true
+    gdc_o:
+      sim:
+        width: 7680
+        height: 4320
+        inherit_shape: true
+      operations:
+        crop: true
+    dpu:
+      sim:
+        width: 1920
+        height: 1080
+        inherit_shape: true
+    mpeg_writer:
+      sw_timing:
+        min_ms: 2
+        mean_ms: 4
+        max_ms: 8
+        value_source: assumed
+        source_note: Engineering assumption approved for fixture exploration; replace
+          with internal measurements.
+      sw_bitrate_scaling:
+        reference_bitrate_mbps: 1000
+      memory_io:
+      - port: CPU_BITSTREAM_READ
+        direction: read
+        bitrate_condition: record_bitrate_mbps
+      - port: CPU_BITSTREAM_WRITE
+        direction: write
+        bitrate_condition: record_bitrate_mbps
+      timeline_resource_id: CPU_WRITER
+      source_note: Engineering assumption approved for fixture exploration; replace
+        with internal measurements.
+    storage_write:
+      sw_timing:
+        min_ms: 4
+        mean_ms: 8
+        max_ms: 16
+        value_source: assumed
+        source_note: Engineering assumption approved for fixture exploration; replace
+          with internal measurements.
+      sw_bitrate_scaling:
+        reference_bitrate_mbps: 1000
+      timeline_resource_id: STORAGE_IO
+      memory_io:
+      - port: STORAGE_BITSTREAM_READ
+        direction: read
+        bitrate_condition: record_bitrate_mbps
+      source_note: I/O completion wall time, not CPU active execution; no UFS capacity
+        sign-off. Engineering assumption approved for fixture exploration; replace
+        with internal measurements.
+  topology_patch:
+    add_edges:
+    - from: mcsc
+      to: dpu
+      type: M2M
+      buffer: MCSC_PREVIEW
+      port_pairs:
+      - src: MCSC_WDMA_W0
+        dst: DPU_RDMA
+    - from: mcsc
+      to: apv_enc
+      type: M2M
+      buffer: MCSC_VIDEO
+      port_pairs:
+      - src: MCSC_WDMA_W1
+        dst: APV_RDMA_FRAME
+    - from: apv_enc
+      to: mpeg_writer
+      type: control
+    - from: mpeg_writer
+      to: storage_write
+      type: control
+    add_nodes:
+    - id: mpeg_writer
+      ip_ref: ip-cpu-s5e9965
+      role: sw_task
+      instance_index: 0
+    - id: storage_write
+      ip_ref: ip-cpu-s5e9965
+      role: sw_task
+      instance_index: 0
+  size_overrides:
+    sensor_full: 8000x4500
+    record_out: 7680x4320
+    preview_out: 1920x1080
+    pyramid_l0: 8000x4500
+    pyramid_l1: 4000x2250
+    pyramid_l2: 2000x1125
+    pyramid_l3: 1000x563
+    pyramid_l4: 500x282
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 8000x4500
+  buffer_overrides:
+    MCSC_VIDEO:
+      format: YUV422
+      bitdepth: 10
+    GDC_VIDEO:
+      format: YUV422
+      bitdepth: 10
+  tags:
+  - is-v15
+  - assumed-sw-timing
+  - uncalibrated-power
 - id: cam-rec-apv-8k30-422-sdr
   severity: critical
   design_conditions:
@@ -184,33 +2520,575 @@ variants:
     resolution: 8K
     fps: 30
     hdr: SDR
+    dpu_layer_count: 2
+    is_version: 15
+    sw_timing_case: mean
+    sw_timing_source: assumed
+    sensor_board: m2s-GNG
+    mcsc_dma_channels: 2
+    priority_recording: true
+    verification_scope: priority_model_assumed
+    input_ratio: 7680:4620
+    sensor_input_fps: 30
+    sensor_input_source: kernel_mode_candidate
+    sensor_runtime_confirmation: true
+    record_bitrate_mbps: 3000
+    bitrate_source: assumed
+    writer_model: linear_bitrate_wall_time
+    storage_model: sustained_write_assumed
     apv_chroma_format_idc: 1
     apv_chroma_format: '4:2:2'
+    encoder_hw: APV
+    output_ratio: '16:9'
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - vps_dof
+    - vps_seg
+    - eis
+    - gdc_m
+    - gdc_o
+  topology_patch:
+    add_edges:
+    - from: mcsc
+      to: dpu
+      type: M2M
+      buffer: MCSC_PREVIEW
+      port_pairs:
+      - src: MCSC_WDMA_W0
+        dst: DPU_RDMA
+    - from: mcsc
+      to: apv_enc
+      type: M2M
+      buffer: MCSC_VIDEO
+      port_pairs:
+      - src: MCSC_WDMA_W1
+        dst: APV_RDMA_FRAME
+    - from: apv_enc
+      to: mpeg_writer
+      type: control
+    - from: mpeg_writer
+      to: storage_write
+      type: control
+    add_nodes:
+    - id: mpeg_writer
+      ip_ref: ip-cpu-s5e9965
+      role: sw_task
+      instance_index: 0
+    - id: storage_write
+      ip_ref: ip-cpu-s5e9965
+      role: sw_task
+      instance_index: 0
+  size_overrides:
+    sensor_full: 7680x4620
+    record_out: 7680x4320
+    preview_out: 1920x1080
+    pyramid_l0: 7680x4620
+    pyramid_l1: 3840x2310
+    pyramid_l2: 1920x1155
+    pyramid_l3: 960x578
+    pyramid_l4: 480x289
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 7680x4620
   node_configs:
+    post_crta:
+      sw_timing:
+        min_ms: 0.1
+        mean_ms: 0.3
+        max_ms: 0.5
+        start_jitter_mean_ms: 1.0
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal
+          measurements.
+    pre_me_rta:
+      sw_timing:
+        min_ms: 2.5
+        mean_ms: 3.0
+        max_ms: 4.0
+        includes_hw_nodes:
+        - lme
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal
+          measurements.
+    post_irta:
+      sw_timing:
+        min_ms: 3.0
+        mean_ms: 4.0
+        max_ms: 5.6
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal
+          measurements.
+    eis:
+      sw_timing:
+        min_ms: 2.5
+        mean_ms: 3.0
+        max_ms: 6.0
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal
+          measurements.
+    yuvsc:
+      operations:
+        scale: false
+      bypass_downscale: true
+      sim:
+        width: 7680
+        height: 4620
+        inherit_shape: true
+    mcsc:
+      operations:
+        crop: true
+        scale: true
+      active_output_ports:
+      - MCSC_WDMA_W0
+      - MCSC_WDMA_W1
+      sim:
+        width: 7680
+        height: 4620
+        inherit_shape: true
+    byrp:
+      video_snapshot_enabled: false
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
+      sim:
+        width: 7680
+        height: 4620
+        inherit_shape: true
+    vps_od:
+      selected_mode: Normal
+      function: object_detection
+      sim:
+        width: 512
+        height: 288
+        inherit_shape: true
+    lme:
+      selected_mode: Normal
+      sim:
+        width: 1008
+        height: 756
+        inherit_shape: true
+    sensor_rear:
+      selected_mode: user_raw10_7680x4620_30fps
+    csis:
+      sim:
+        width: 7680
+        height: 4620
+        inherit_shape: true
+    pdp:
+      sim:
+        width: 7680
+        height: 4620
+        inherit_shape: true
+    rgbp:
+      sim:
+        width: 7680
+        height: 4620
+        inherit_shape: true
+    mlsc:
+      sim:
+        width: 7680
+        height: 4620
+        inherit_shape: true
+    mtnr:
+      sim:
+        width: 7680
+        height: 4620
+        inherit_shape: true
+    msnr:
+      sim:
+        width: 7680
+        height: 4620
+        inherit_shape: true
+    yuvp:
+      sim:
+        width: 7680
+        height: 4620
+        inherit_shape: true
+    gdc_m:
+      sim:
+        width: 1920
+        height: 1080
+        inherit_shape: true
+      operations:
+        crop: true
+    gdc_o:
+      sim:
+        width: 7680
+        height: 4320
+        inherit_shape: true
+      operations:
+        crop: true
+    dpu:
+      sim:
+        width: 1920
+        height: 1080
+        inherit_shape: true
     apv_enc:
+      sim:
+        width: 7680
+        height: 4320
+        inherit_shape: true
+        format: YUV422
+      memory_io:
+      - port: APV_WDMA_BITSTREAM
+        direction: write
+        bitrate_condition: record_bitrate_mbps
       selected_mode: Normal
       chroma_format_idc: 1
+    mpeg_writer:
+      sw_timing:
+        min_ms: 2
+        mean_ms: 4
+        max_ms: 8
+        value_source: assumed
+        source_note: Engineering assumption approved for fixture exploration; replace
+          with internal measurements.
+      sw_bitrate_scaling:
+        reference_bitrate_mbps: 1000
+      memory_io:
+      - port: CPU_BITSTREAM_READ
+        direction: read
+        bitrate_condition: record_bitrate_mbps
+      - port: CPU_BITSTREAM_WRITE
+        direction: write
+        bitrate_condition: record_bitrate_mbps
+      timeline_resource_id: CPU_WRITER
+      source_note: Engineering assumption approved for fixture exploration; replace
+        with internal measurements.
+    storage_write:
+      sw_timing:
+        min_ms: 4
+        mean_ms: 8
+        max_ms: 16
+        value_source: assumed
+        source_note: Engineering assumption approved for fixture exploration; replace
+          with internal measurements.
+      sw_bitrate_scaling:
+        reference_bitrate_mbps: 1000
+      timeline_resource_id: STORAGE_IO
+      memory_io:
+      - port: STORAGE_BITSTREAM_READ
+        direction: read
+        bitrate_condition: record_bitrate_mbps
+      source_note: I/O completion wall time, not CPU active execution; no UFS capacity
+        sign-off. Engineering assumption approved for fixture exploration; replace
+        with internal measurements.
+  buffer_overrides:
+    MCSC_VIDEO:
+      format: YUV422
+      bitdepth: 10
+    GDC_VIDEO:
+      format: YUV422
+      bitdepth: 10
+  tags:
+  - is-v15
+  - assumed-sw-timing
+  - uncalibrated-power
 - id: cam-rec-apv-pro-uhd30-444
   severity: heavy
   design_conditions:
     subscenario: UHD_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_UHD30
     sensor_place: rear
-    is_scenario: IS_SCENARIO_PRO_VIDEO
     resolution: UHD
     fps: 30
     hdr: SDR
+    codec_mfc: HEVC_ENC
+    dpu_layer_count: 3
+    is_version: 15
+    sw_timing_case: mean
+    sw_timing_source: assumed
+    sensor_board: m2s-GNG
+    mcsc_dma_channels: 2
+    sensor_input_fps: 30.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
+    is_scenario: IS_SCENARIO_PRO_VIDEO
     apv_chroma_format_idc: 2
     apv_chroma_format: '4:4:4'
     apv_band_idc: 1
     apv_enc_profile: 1
+    priority_recording: true
+    encoder_hw: APV
+    sensor_runtime_confirmation: true
+    record_bitrate_mbps: 1875.0
+    bitrate_source: assumed
+    writer_model: linear_bitrate_wall_time
+    storage_model: sustained_write_assumed
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - vps_dof
+    - vps_seg
+    - eis
+    - gdc_m
+    - gdc_o
   node_configs:
     apv_enc:
       selected_mode: HighQuality
+      codec: HEVC_ENC
+      sim:
+        width: 3840
+        height: 2160
+        inherit_shape: true
+        format: YUV444
       chroma_format_idc: 2
       band_idc: 1
       enc_profile: 1
+      memory_io:
+      - port: APV_WDMA_BITSTREAM
+        direction: write
+        bitrate_condition: record_bitrate_mbps
+    post_crta:
+      sw_timing:
+        min_ms: 0.1
+        mean_ms: 0.3
+        max_ms: 0.5
+        start_jitter_mean_ms: 1.0
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal
+          measurements.
+    pre_me_rta:
+      sw_timing:
+        min_ms: 2.5
+        mean_ms: 3.0
+        max_ms: 4.0
+        includes_hw_nodes:
+        - lme
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal
+          measurements.
+    post_irta:
+      sw_timing:
+        min_ms: 3.0
+        mean_ms: 4.0
+        max_ms: 5.6
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal
+          measurements.
+    eis:
+      sw_timing:
+        min_ms: 2.5
+        mean_ms: 3.0
+        max_ms: 6.0
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal
+          measurements.
+    yuvsc:
+      operations:
+        scale: false
+      bypass_downscale: true
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    mcsc:
+      operations:
+        crop: true
+        scale: true
+      active_output_ports:
+      - MCSC_WDMA_W0
+      - MCSC_WDMA_W1
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    byrp:
+      video_snapshot_enabled: false
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    vps_od:
+      selected_mode: Normal
+      function: object_detection
+      sim:
+        width: 512
+        height: 288
+        inherit_shape: true
+    lme:
+      selected_mode: Normal
+      sim:
+        width: 1008
+        height: 756
+        inherit_shape: true
+    sensor_rear:
+      selected_mode: cis_4sum_ln4_raw10_4080x2296_30fps_3993msps
+    csis:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    pdp:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    rgbp:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    mlsc:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    mtnr:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    msnr:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    yuvp:
+      sim:
+        width: 4080
+        height: 2296
+        inherit_shape: true
+    gdc_m:
+      sim:
+        width: 1920
+        height: 1080
+        inherit_shape: true
+      operations:
+        crop: true
+    gdc_o:
+      sim:
+        width: 3840
+        height: 2160
+        inherit_shape: true
+      operations:
+        crop: true
+    dpu:
+      sim:
+        width: 1920
+        height: 1080
+        inherit_shape: true
+    mpeg_writer:
+      sw_timing:
+        min_ms: 2
+        mean_ms: 4
+        max_ms: 8
+        value_source: assumed
+        source_note: Engineering assumption approved for fixture exploration; replace
+          with internal measurements.
+      sw_bitrate_scaling:
+        reference_bitrate_mbps: 1000
+      memory_io:
+      - port: CPU_BITSTREAM_READ
+        direction: read
+        bitrate_condition: record_bitrate_mbps
+      - port: CPU_BITSTREAM_WRITE
+        direction: write
+        bitrate_condition: record_bitrate_mbps
+      timeline_resource_id: CPU_WRITER
+      source_note: Engineering assumption approved for fixture exploration; replace
+        with internal measurements.
+    storage_write:
+      sw_timing:
+        min_ms: 4
+        mean_ms: 8
+        max_ms: 16
+        value_source: assumed
+        source_note: Engineering assumption approved for fixture exploration; replace
+          with internal measurements.
+      sw_bitrate_scaling:
+        reference_bitrate_mbps: 1000
+      timeline_resource_id: STORAGE_IO
+      memory_io:
+      - port: STORAGE_BITSTREAM_READ
+        direction: read
+        bitrate_condition: record_bitrate_mbps
+      source_note: I/O completion wall time, not CPU active execution; no UFS capacity
+        sign-off. Engineering assumption approved for fixture exploration; replace
+        with internal measurements.
+  topology_patch:
+    add_edges:
+    - from: mcsc
+      to: dpu
+      type: M2M
+      buffer: MCSC_PREVIEW
+      port_pairs:
+      - src: MCSC_WDMA_W0
+        dst: DPU_RDMA
+    - from: mcsc
+      to: apv_enc
+      type: M2M
+      buffer: MCSC_VIDEO
+      port_pairs:
+      - src: MCSC_WDMA_W1
+        dst: APV_RDMA_FRAME
+    - from: apv_enc
+      to: mpeg_writer
+      type: control
+    - from: mpeg_writer
+      to: storage_write
+      type: control
+    add_nodes:
+    - id: mpeg_writer
+      ip_ref: ip-cpu-s5e9965
+      role: sw_task
+      instance_index: 0
+    - id: storage_write
+      ip_ref: ip-cpu-s5e9965
+      role: sw_task
+      instance_index: 0
+  size_overrides:
+    sensor_full: 4080x2296
+    record_out: 3840x2160
+    preview_out: 1920x1080
+    pyramid_l0: 4080x2296
+    pyramid_l1: 2040x1148
+    pyramid_l2: 1020x574
+    pyramid_l3: 510x287
+    pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   buffer_overrides:
-    MCSC_APV_BUF:
+    MCSC_VIDEO:
       format: YUV444
       bitdepth: 10
-      compression: COMP_OFF
+    GDC_VIDEO:
+      format: YUV444
+      bitdepth: 10
+  tags:
+  - is-v15
+  - assumed-sw-timing
+  - uncalibrated-power
+size_profile:
+  anchors:
+    sensor_full: 4080x2296
+    record_out: 1920x1080
+    preview_out: 1920x1080
+    motion_estimation: 1008x756
+    object_detection: 512x288
+    pyramid_l0: 4080x2296
+    pyramid_l1: 2040x1148
+    pyramid_l2: 1020x574
+    pyramid_l3: 510x287
+    pyramid_l4: 255x144
+    cav: 320x180
+    mlsc_out: 4080x2296
+    front_sensor_full: 4080x2296
+    front_record_out: 1920x1080
+    front_preview_out: 1920x1080
+    front_motion_estimation: 1008x756
+    front_object_detection: 512x288
+    front_pyramid_l0: 4080x2296
+    front_pyramid_l1: 2040x1148
+    front_pyramid_l2: 1020x574
+    front_pyramid_l3: 510x287
+    front_pyramid_l4: 255x144
+    front_cav: 320x180
+    front_mlsc_out: 4080x2296

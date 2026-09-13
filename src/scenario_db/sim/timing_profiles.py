@@ -14,6 +14,14 @@ def timing_profiles(graph: CanonicalScenarioGraph) -> dict[str, dict[str, Any]]:
         raw = config.get("sw_timing") if isinstance(config, dict) else None
         if node_id not in active or not raw:
             continue
+        rate_model = config.get("sw_bitrate_scaling")
+        if rate_model:
+            conditions = graph.variant.design_conditions or {}
+            bitrate = float(conditions[rate_model.get("condition", "record_bitrate_mbps")])
+            reference = float(rate_model["reference_bitrate_mbps"])
+            if bitrate <= 0 or reference <= 0:
+                raise ValueError(f"{node_id}: bitrate and reference must be positive")
+            raw = {**raw, **{key: float(raw[key]) * bitrate / reference for key in ("min_ms", "mean_ms", "max_ms")}}
         profile = SwTaskTiming.model_validate({"task": node_id, **raw}).model_dump(exclude_none=True)
         low, mean, high = (profile.get(k) for k in ("min_ms", "mean_ms", "max_ms"))
         if low is None or mean is None or high is None or not low <= mean <= high:

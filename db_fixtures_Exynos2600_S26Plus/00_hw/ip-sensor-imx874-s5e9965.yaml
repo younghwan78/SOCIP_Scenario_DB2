@@ -23,6 +23,7 @@ capabilities:
   - id: mode54
   - id: mode57
   - id: mode58
+  - id: dual_full_4000x3000_30fps
   properties:
     place: front
     sensor_name: IMX874
@@ -255,6 +256,23 @@ capabilities:
         sensor_lanes: 4
         dt_mode_index: 58
         source_line: 308
+      dual_full_4000x3000_30fps:
+        sensor_name: IMX874
+        sensor_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 12
+        sensor_mipi_speed: 2.692
+        sensor_phy_type: DPHY
+        sensor_lanes: 4
+        dt_mode_index: 10
+        source_line: 191
+        active_size:
+        - 4000
+        - 3000
+        source_note: DTS mode10 with full 4:3 ingress; downstream 16:9 MCSC crop assumed.
     provenance_status: kernel_declared
     selection_note: DTS capability is not proof of the shipped board or selected runtime
       sensor mode.
