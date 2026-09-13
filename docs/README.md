@@ -49,7 +49,7 @@
 - [Measurement Import Guide](guides/measurement/measurement-import-guide-ko.md)
 - [Projection Guide](guides/measurement/projection-guide-ko.md)
 - [Prediction/Measurement Comparison Guide](guides/comparison/prediction-measurement-comparison-guide-ko.md)
-- [SPA Navigation and Saved Evidence Links](guides/spa-navigation.md)
+- [Streamlit UI and Archived SPA](guides/streamlit-ui.md)
 
 ## Directory policy
 
