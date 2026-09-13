@@ -5,6 +5,7 @@ from typing import Any
 
 import streamlit as st
 
+from dashboard.components.measurement_result_view import sw_task_rows
 from dashboard.components.table_actions import render_copyable_dataframe, table_height
 
 
@@ -143,6 +144,16 @@ def render_timing_table(result: dict[str, Any], *, key_prefix: str) -> None:
         hide_index=True,
         height=table_height(rows if isinstance(rows, list) else []),
     )
+
+    sw_rows = sw_task_rows(result)
+    if sw_rows:
+        st.markdown("**SW task timing (ms)**")
+        if any(row.get("value_source") == "assumed" for row in sw_rows):
+            st.caption("Fixture assumptions are included. preME aggregate time already includes its listed hardware; CPU duty and power require separate measurements.")
+        render_copyable_dataframe(
+            sw_rows, key=f"{key_prefix}_sw_timing", use_container_width=True,
+            hide_index=True, height=table_height(sw_rows),
+        )
 
 
 def render_timeline_table(result: dict[str, Any], *, key_prefix: str) -> None:

@@ -477,3 +477,17 @@ def test_measurement_panel_source_includes_prediction_comparison():
     assert "Delta calculation is blocked by context mismatch" in source
     assert "legacy evidence without project_ref" in source
     assert "prediction_measurement_comparison_rows" in source
+
+
+def test_sw_task_rows_preserve_camera_assumptions_without_fabricating_percentiles():
+    rows = sw_task_rows({"sw_task_timing": [{
+        "task": "pre_me_rta", "min_ms": 2.5, "mean_ms": 3.0, "max_ms": 4.0,
+        "value_source": "assumed", "includes_hw_nodes": ["lme"],
+        "source_note": "user fixture", "start_jitter_mean_ms": 1.0,
+    }]})
+    row = rows[0]
+    assert (row["min_ms"], row["mean_ms"], row["max_ms"]) == (2.5, 3.0, 4.0)
+    assert row["value_source"] == "assumed"
+    assert row["includes_hw_nodes"] == "lme"
+    assert row["start_jitter_mean_ms"] == 1.0
+    assert row["p95_ms"] is None

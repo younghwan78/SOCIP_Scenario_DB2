@@ -293,6 +293,11 @@ def sw_task_rows(evidence: dict[str, Any]) -> list[dict[str, Any]]:
             {
                 "task": task.get("task"),
                 "cluster": task.get("cluster"),
+                "value_source": task.get("value_source"),
+                "source_note": task.get("source_note"),
+                "includes_hw_nodes": ", ".join(task.get("includes_hw_nodes") or []),
+                "start_jitter_mean_ms": task.get("start_jitter_mean_ms"),
+                "min_ms": task.get("min_ms"),
                 "mean_ms": task.get("mean_ms"),
                 "p50_ms": task.get("p50_ms"),
                 "p95_ms": task.get("p95_ms"),
