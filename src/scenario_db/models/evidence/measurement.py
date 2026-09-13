@@ -52,10 +52,15 @@ class SwTaskTiming(BaseScenarioModel):
     process: str | None = None
     thread: str | None = None
     cluster: str | None = None            # dominant execution cluster
-    mean_ms: float | None = None
+    min_ms: float | None = Field(default=None, ge=0)
+    mean_ms: float | None = Field(default=None, ge=0)
     p50_ms: float | None = None
     p95_ms: float | None = None
-    max_ms: float | None = None
+    max_ms: float | None = Field(default=None, ge=0)
+    start_jitter_mean_ms: float | None = Field(default=None, ge=0)
+    includes_hw_nodes: list[str] = Field(default_factory=list)
+    value_source: Literal["assumed", "measured", "projected"] | None = None
+    source_note: str | None = None
     count_per_frame: float | None = None
     samples: int | None = None
 

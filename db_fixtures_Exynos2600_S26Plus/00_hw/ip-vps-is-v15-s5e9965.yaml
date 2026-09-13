@@ -1,0 +1,40 @@
+id: ip-vps-is-v15-s5e9965
+schema_version: '2.2'
+kind: ip
+category: camera
+hierarchy:
+  type: simple
+capabilities:
+  operating_modes:
+  - id: Normal
+  properties:
+    ip_group: VPS
+    hierarchy_group: VPS
+    performance_status: missing
+    provenance_status: kernel_capability_user_topology
+    modules:
+    - name: VPS_RDMA
+      type: DMA
+      direction: read
+      naming: logical endpoint
+    - name: VPS_WDMA
+      type: DMA
+      direction: write
+      naming: logical endpoint
+    functions:
+    - object_detection
+    - dense_optical_flow
+    - segmentation
+    sources:
+    - path: post\vps\pablo-vps-interface.h
+      sha256: 80ad5c302fe1893b0e0f2ce2ef5ef5453186d32b2d8b28ee41194e41aa100385
+  sim:
+    hw_name: VPS
+    source: assumed_capacity
+    source_note: PPC is an exploration assumption, not a verified silicon capacity.
+      Power coefficient is unavailable and core power is excluded.
+    ppc: 1.0
+    vdd: VDD_CAM
+    dvfs_group: CAM
+compatible_soc:
+- soc-exynos2600

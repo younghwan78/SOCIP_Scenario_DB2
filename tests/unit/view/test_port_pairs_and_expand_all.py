@@ -21,15 +21,15 @@ GRAPH_ARGS = ("uc-camera-recording.yaml", "cam-rec-3rdparty-binning")
 def test_pipeline_edge_accepts_port_pairs():
     edge = PipelineEdge.model_validate(
         {
-            "from": "csispdp",
-            "to": "n3aa",
+            "from": "mlsc",
+            "to": "mtnr",
             "type": "M2M",
-            "buffer": "CSISPDP_3AA_BUF",
-            "port_pairs": [{"src": "CSISPDP_WDMA", "dst": "3AA_RDMA"}],
+            "buffer": "PYRAMID_L0",
+            "port_pairs": [{"src": "MLSC_W_GLPG0_Y", "dst": "MTNR0_RDMA_CUR_L0_Y"}],
         }
     )
-    assert edge.port_pairs[0].src == "CSISPDP_WDMA"
-    assert edge.port_pairs[0].dst == "3AA_RDMA"
+    assert edge.port_pairs[0].src == "MLSC_W_GLPG0_Y"
+    assert edge.port_pairs[0].dst == "MTNR0_RDMA_CUR_L0_Y"
 
 
 def test_edge_port_pairs_drops_malformed_entries():
@@ -45,17 +45,17 @@ def test_level1_projection_exposes_port_pairs():
         for edge in view.edges
         for pair in edge.data.port_pairs
     }
-    assert ("CSISPDP_WDMA", "3AA_RDMA") in pairs
-    assert ("MCSC_WDMA_PREV", "GDC_M_RDMA") in pairs
+    assert ("MLSC_W_GLPG0_Y", "MTNR0_RDMA_CUR_L0_Y") in pairs
+    assert ("MCSC_WDMA_W0", "DPU_RDMA") in pairs
 
 
 def test_level2_port_pair_routes_edge_to_declared_wdma_module():
-    view = golden.service._project_drilldown(golden._graph(*GRAPH_ARGS), "csispdp")
+    view = golden.service._project_drilldown(golden._graph(*GRAPH_ARGS), "mlsc")
 
-    write_edges = [edge for edge in view.edges if edge.data.buffer_ref == "CSISPDP_3AA_BUF"]
-    assert write_edges, "expected the CSISPDP write edge"
-    assert write_edges[0].data.source == "mod-csispdp-csispdp-wdma"
-    assert write_edges[0].data.port_pairs[0].src == "CSISPDP_WDMA"
+    write_edges = [edge for edge in view.edges if edge.data.buffer_ref == "PYRAMID_L0"]
+    assert write_edges, "expected the MLSC pyramid write edge"
+    assert write_edges[0].data.source == "mod-mlsc-mlsc-w-glpg0-y"
+    assert write_edges[0].data.port_pairs[0].src == "MLSC_W_GLPG0_Y"
 
 
 def test_expand_all_builds_full_module_view():

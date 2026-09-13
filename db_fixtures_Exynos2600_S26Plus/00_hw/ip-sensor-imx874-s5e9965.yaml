@@ -1,0 +1,262 @@
+id: ip-sensor-imx874-s5e9965
+schema_version: '2.2'
+kind: ip
+category: sensor
+hierarchy:
+  type: simple
+capabilities:
+  operating_modes:
+  - id: mode1
+  - id: mode2
+  - id: mode10
+  - id: mode11
+  - id: mode14
+  - id: mode15
+  - id: mode23
+  - id: mode25
+  - id: mode27
+  - id: mode29
+  - id: mode31
+  - id: mode32
+  - id: mode43
+  - id: mode45
+  - id: mode54
+  - id: mode57
+  - id: mode58
+  properties:
+    place: front
+    sensor_name: IMX874
+    active_size:
+    - 4000
+    - 3000
+    phy_type: DPHY
+    source:
+      path: \\wsl.localhost\Ubuntu\home\neokein\work\12_SM_S947B\exynos\device\erd\erd9965\arch\arm64\boot\dts\samsung\m2s\camera\module_imx874.dtsi
+      sha256: 74acb89d11a9e0da44ac271d381408346339a24507472d83a9ab0a36cb5abe86
+    modes:
+      mode1:
+        sensor_name: IMX874
+        sensor_size:
+        - 4000
+        - 3000
+        sensor_fps: 60.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.692
+        sensor_phy_type: DPHY
+        sensor_lanes: 4
+        dt_mode_index: 1
+        source_line: 140
+      mode2:
+        sensor_name: IMX874
+        sensor_size:
+        - 4000
+        - 3000
+        sensor_fps: 60.0
+        sensor_format: BAYER
+        sensor_bitwidth: 12
+        sensor_mipi_speed: 3.031
+        sensor_phy_type: DPHY
+        sensor_lanes: 4
+        dt_mode_index: 2
+        source_line: 179
+      mode10:
+        sensor_name: IMX874
+        sensor_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 12
+        sensor_mipi_speed: 2.692
+        sensor_phy_type: DPHY
+        sensor_lanes: 4
+        dt_mode_index: 10
+        source_line: 191
+      mode11:
+        sensor_name: IMX874
+        sensor_size:
+        - 4000
+        - 2252
+        sensor_fps: 60.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.692
+        sensor_phy_type: DPHY
+        sensor_lanes: 4
+        dt_mode_index: 11
+        source_line: 203
+      mode14:
+        sensor_name: IMX874
+        sensor_size:
+        - 4000
+        - 2252
+        sensor_fps: 60.0
+        sensor_format: BAYER
+        sensor_bitwidth: 12
+        sensor_mipi_speed: 2.692
+        sensor_phy_type: DPHY
+        sensor_lanes: 4
+        dt_mode_index: 14
+        source_line: 217
+      mode15:
+        sensor_name: IMX874
+        sensor_size:
+        - 2000
+        - 1500
+        sensor_fps: 120.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.692
+        sensor_phy_type: DPHY
+        sensor_lanes: 4
+        dt_mode_index: 15
+        source_line: 223
+      mode23:
+        sensor_name: IMX874
+        sensor_size:
+        - 3392
+        - 2544
+        sensor_fps: 60.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.692
+        sensor_phy_type: DPHY
+        sensor_lanes: 4
+        dt_mode_index: 23
+        source_line: 228
+      mode25:
+        sensor_name: IMX874
+        sensor_size:
+        - 3392
+        - 1908
+        sensor_fps: 60.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.692
+        sensor_phy_type: DPHY
+        sensor_lanes: 4
+        dt_mode_index: 25
+        source_line: 234
+      mode27:
+        sensor_name: IMX874
+        sensor_size:
+        - 1696
+        - 1272
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.692
+        sensor_phy_type: DPHY
+        sensor_lanes: 4
+        dt_mode_index: 27
+        source_line: 240
+      mode29:
+        sensor_name: IMX874
+        sensor_size:
+        - 1696
+        - 954
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.692
+        sensor_phy_type: DPHY
+        sensor_lanes: 4
+        dt_mode_index: 29
+        source_line: 245
+      mode31:
+        sensor_name: IMX874
+        sensor_size:
+        - 3056
+        - 2296
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.692
+        sensor_phy_type: DPHY
+        sensor_lanes: 4
+        dt_mode_index: 31
+        source_line: 250
+      mode32:
+        sensor_name: IMX874
+        sensor_size:
+        - 3056
+        - 2296
+        sensor_fps: 60.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.692
+        sensor_phy_type: DPHY
+        sensor_lanes: 4
+        dt_mode_index: 32
+        source_line: 256
+      mode43:
+        sensor_name: IMX874
+        sensor_size:
+        - 1528
+        - 1148
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.692
+        sensor_phy_type: DPHY
+        sensor_lanes: 4
+        dt_mode_index: 43
+        source_line: 270
+      mode45:
+        sensor_name: IMX874
+        sensor_size:
+        - 3056
+        - 1720
+        sensor_fps: 60.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.692
+        sensor_phy_type: DPHY
+        sensor_lanes: 4
+        dt_mode_index: 45
+        source_line: 276
+      mode54:
+        sensor_name: IMX874
+        sensor_size:
+        - 1528
+        - 860
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.692
+        sensor_phy_type: DPHY
+        sensor_lanes: 4
+        dt_mode_index: 54
+        source_line: 290
+      mode57:
+        sensor_name: IMX874
+        sensor_size:
+        - 2000
+        - 1124
+        sensor_fps: 120.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.692
+        sensor_phy_type: DPHY
+        sensor_lanes: 4
+        dt_mode_index: 57
+        source_line: 296
+      mode58:
+        sensor_name: IMX874
+        sensor_size:
+        - 2000
+        - 1500
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.692
+        sensor_phy_type: DPHY
+        sensor_lanes: 4
+        dt_mode_index: 58
+        source_line: 308
+    provenance_status: kernel_declared
+    selection_note: DTS capability is not proof of the shipped board or selected runtime
+      sensor mode.
+compatible_soc:
+- soc-exynos2600

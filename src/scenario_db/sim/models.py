@@ -100,6 +100,7 @@ class DVFSTable(BaseScenarioModel):
 
 class IPWorkload(BaseScenarioModel):
     node_id: str
+    instance_index: int = Field(default=0, ge=0)
     ip_ref: str | None = None
     hw_name: str
     mode: str = "Normal"
@@ -149,6 +150,7 @@ class SimulationInputs(BaseScenarioModel):
     port_transfers: list[PortTransferSpec] = Field(default_factory=list)
     timeline_tasks: list[dict] = Field(default_factory=list)
     timeline_edges: list[dict] = Field(default_factory=list)
+    sw_task_timing: list[dict[str, Any]] = Field(default_factory=list)
     external_devices: list[dict[str, Any]] = Field(default_factory=list)
     topology_order: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
@@ -156,6 +158,7 @@ class SimulationInputs(BaseScenarioModel):
 
 class ResolvedIPConfig(BaseScenarioModel):
     node_id: str
+    instance_index: int = Field(default=0, ge=0)
     ip_ref: str | None = None
     hw_name: str
     mode: str
@@ -272,6 +275,7 @@ class SimRunResult(BaseScenarioModel):
     dma_breakdown: list[PortBWResult] = Field(default_factory=list)
     timing_breakdown: list[IPTimingResult] = Field(default_factory=list)
     timeline_events: list[TimelineEvent] = Field(default_factory=list)
+    sw_task_timing: list[dict[str, Any]] = Field(default_factory=list)
     external_devices: list[dict[str, Any]] = Field(default_factory=list)
     topology_order: list[str] = Field(default_factory=list)
     vdd_power: dict[str, dict[str, float]] = Field(default_factory=dict)

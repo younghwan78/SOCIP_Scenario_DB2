@@ -137,6 +137,7 @@ def upsert_simulation_evidence(
     row.timing_breakdown = [item.model_dump(exclude_none=True) for item in evidence.timing_breakdown]
     row.dvfs_breakdown = [item.model_dump(exclude_none=True) for item in evidence.dvfs_breakdown]
     row.timeline_events = [item.model_dump(exclude_none=True) for item in evidence.timeline_events]
+    row.sw_task_timing = [item.model_dump(mode="json", exclude_none=True) for item in evidence.sw_task_timing] or None
     row.external_devices = list(evidence.external_devices or [])
     row.topology_order = list(evidence.topology_order or []) or None
     row.vdd_power = evidence.vdd_power or {}

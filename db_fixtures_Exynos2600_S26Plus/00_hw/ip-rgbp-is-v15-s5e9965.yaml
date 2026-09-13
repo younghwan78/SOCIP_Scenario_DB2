@@ -1,0 +1,68 @@
+id: ip-rgbp-is-v15-s5e9965
+schema_version: '2.2'
+kind: ip
+category: camera
+hierarchy:
+  type: simple
+rtl_version: IS v15
+capabilities:
+  operating_modes:
+  - id: Normal
+  - id: Recording
+  - id: HighSpeed
+  sim:
+    hw_name: RGBP
+    modes:
+      Normal:
+        unit_power_mw_mp: 3.728
+        idc: 0.0
+        ppc: 4.0
+        vdd: VDD_CAM
+        dvfs_group: CAM
+      tDMSC:
+        unit_power_mw_mp: 4.72
+        idc: 0.0
+        ppc: 4.0
+        vdd: VDD_CAM
+        dvfs_group: CAM
+    source: borrowed_legacy_model
+    source_note: 'Topology/DMA: kernel IS v15. Performance/power: legacy estimate;
+      not calibrated to IS v15.'
+  properties:
+    is_version: 15
+    ip_group: RGBP
+    hierarchy_group: ISP
+    modules:
+    - name: RGBP_RDMA_REP_B
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-rgbp-v15_0.c
+    - name: RGBP_RDMA_REP_G
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-rgbp-v15_0.c
+    - name: RGBP_RDMA_REP_R
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-rgbp-v15_0.c
+    - name: RGBP_WDMA_DRC
+      type: DMA
+      direction: write
+      source_file: hardware\api\pablo-hw-api-rgbp-v15_0.c
+    - name: RGBP_WDMA_SAT
+      type: DMA
+      direction: write
+      source_file: hardware\api\pablo-hw-api-rgbp-v15_0.c
+    - name: CINFIFO
+      type: FIFO
+      direction: read
+    - name: COUTFIFO
+      type: FIFO
+      direction: write
+    sources:
+    - path: \\wsl.localhost\Ubuntu\home\neokein\work\12_SM_S947B\exynos\external-modules\camera\camera\hardware\api\pablo-hw-api-rgbp-v15_0.c
+      sha256: 6d243d3d9ee7c0ba77554d3941698c4d1d3f820a787f17864cd772ff43f82c62
+    provenance_status: kernel_declared
+    performance_status: borrowed
+compatible_soc:
+- soc-exynos2600

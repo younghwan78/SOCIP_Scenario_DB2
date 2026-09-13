@@ -4,14 +4,19 @@ kind: soc
 process_node: 3nm
 memory_type: LPDDR5X
 bus_protocol: AMBA/AXI
-# DMA compression catalog (SSOT for per-mode BW reduction). COMP_OFF is implicit
-# (ratio 1.0, no entry). DMA ports reference these names; comp_ratio is the
-# representative remaining-BW fraction applied by the bandwidth model.
 compression_modes:
-  COMP_BAYER_LOSSLESS: {compressor: SBWC, comp_ratio: 1.0}
-  COMP_BAYER_LOSSY:    {compressor: SBWC, comp_ratio: 0.5}
-  COMP_YUV_LOSSLESS:   {compressor: SBWC, comp_ratio: 1.0}
-  COMP_YUV_LOSSY:      {compressor: SBWC, comp_ratio: 0.5}
+  COMP_BAYER_LOSSLESS:
+    compressor: SBWC
+    comp_ratio: 1.0
+  COMP_BAYER_LOSSY:
+    compressor: SBWC
+    comp_ratio: 0.5
+  COMP_YUV_LOSSLESS:
+    compressor: SBWC
+    comp_ratio: 1.0
+  COMP_YUV_LOSSY:
+    compressor: SBWC
+    comp_ratio: 0.5
 ips:
 - ref: ip-sensor-rear-s5e9965
   instance_count: 1
@@ -38,4 +43,42 @@ ips:
 - ref: ip-cpu-s5e9965
   instance_count: 1
 - ref: ip-display-panel-s5e9965
+  instance_count: 1
+- ref: ip-byrp-is-v15-s5e9965
+  instance_count: 1
+- ref: ip-csis-is-v15-s5e9965
+  instance_count: 1
+- ref: ip-gdc-is-v15-s5e9965
+  instance_count: 2
+- ref: ip-mcsc-is-v15-s5e9965
+  instance_count: 1
+- ref: ip-mlsc-is-v15-s5e9965
+  instance_count: 1
+- ref: ip-msnr-is-v15-s5e9965
+  instance_count: 1
+- ref: ip-mtnr-is-v15-s5e9965
+  instance_count: 1
+- ref: ip-pdp-is-v15-s5e9965
+  instance_count: 1
+- ref: ip-rgbp-is-v15-s5e9965
+  instance_count: 1
+- ref: ip-sensor-3ld-s5e9965
+  instance_count: 1
+- ref: ip-sensor-gng-s5e9965
+  instance_count: 1
+- ref: ip-sensor-hp2-s5e9965
+  instance_count: 1
+- ref: ip-sensor-imx564-ff-s5e9965
+  instance_count: 1
+- ref: ip-sensor-imx874-s5e9965
+  instance_count: 1
+- ref: ip-sensor-jn3-s5e9965
+  instance_count: 1
+- ref: ip-vps-is-v15-s5e9965
+  instance_count: 1
+- ref: ip-yuvp-is-v15-s5e9965
+  instance_count: 1
+- ref: ip-yuvsc-is-v15-s5e9965
+  instance_count: 1
+- ref: ip-lme-is-v15-s5e9965
   instance_count: 1

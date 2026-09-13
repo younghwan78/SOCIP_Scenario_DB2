@@ -434,6 +434,7 @@ def _from_rail_power(entry: dict[str, Any]) -> dict[str, Any] | float | None:
 
 def _timing_stats(task: dict[str, Any]) -> dict[str, float | int]:
     mapping = {
+        "min": task.get("min_ms"),
         "mean": task.get("mean_ms"),
         "p50": task.get("p50_ms"),
         "p95": task.get("p95_ms"),

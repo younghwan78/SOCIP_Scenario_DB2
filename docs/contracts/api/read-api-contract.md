@@ -383,3 +383,27 @@ Run read/view integration tests:
 ```powershell
 uv run --group dev pytest tests\integration\test_runtime_view_e2e.py
 ```
+
+## Camera SW timing profiles and history buffers
+
+The IS v15 fixture guide is [Camera Recording](../../../db_fixtures_Exynos2600_S26Plus/README.md).
+`node_configs.<node>.sw_timing` accepts `min_ms`, `mean_ms`, `max_ms`,
+`start_jitter_mean_ms`, `includes_hw_nodes`, `value_source` (`assumed`, `measured`,
+`projected`), and `source_note`. Active simulation profiles require a nonnegative,
+ordered min/mean/max interval. `design_conditions.sw_timing_case` selects the
+wall-time statistic; the mean start delay remains a release delay in all cases.
+Included hardware is collapsed into its enclosing timing stage and is not executed
+a second time. An aggregate stage is not a CPU duty-cycle measurement.
+
+Simulation evidence preserves these optional fields in `sw_task_timing` through
+persistence and result retrieval. Missing percentiles remain missing. An assumed
+SW profile marks the simulation as estimated and limits its resolution result to
+`exploration_only`; a passed clock candidate is not a hardware sign-off.
+
+`pipeline.buffers.<id>.history` records `node_id`, negative `frame_offset`,
+`read_ports`, `write_ports`, and initialization intent. The current recording model
+counts previous-frame DMA in steady state without introducing same-frame DAG
+self-cycles. Detailed inter-frame buffer hazards are not simulated. Explicit
+multi-plane port pairs split pixel planes, while a shared producer write is counted
+once per node/port/buffer even when multiple consumers read it. Viewer size references
+resolve arbitrary scenario anchors and variant size overrides, including pyramid layers.

@@ -90,3 +90,8 @@ input, select, textarea {
 input:focus, select:focus, textarea:focus {
   border-color: var(--brand-primary);
 }
+
+/* Keep evidence cards readable inside the scrolling dashboard. */
+.evidence-dashboard > * {
+  flex-shrink: 0;
+}

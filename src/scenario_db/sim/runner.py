@@ -5,6 +5,8 @@ import json
 from datetime import datetime, timezone
 
 from scenario_db.models.evidence.common import Aggregation, ExecutionContext, RunInfo
+from scenario_db.models.common import SourceType
+from scenario_db.models.evidence.measurement import SwTaskTiming
 from scenario_db.models.evidence.resolution import (
     OverallFeasibility,
     ResolutionResult,
@@ -153,6 +155,7 @@ def run_simulation(
         dma_breakdown=dma_breakdown,
         timing_breakdown=timing_breakdown,
         timeline_events=timeline_events,
+        sw_task_timing=inputs.sw_task_timing,
         external_devices=inputs.external_devices,
         topology_order=inputs.topology_order,
         vdd_power=_vdd_power(resolved, dma_breakdown, memory_rail=config.memory_rail),
@@ -184,6 +187,9 @@ def build_simulation_evidence(
         if result.feasible
         else OverallFeasibility.infeasible
     )
+    assumed = any(row.get("value_source") == "assumed" for row in result.sw_task_timing)
+    if result.feasible and assumed:
+        feasibility = OverallFeasibility.exploration_only
     critical_events = [event for event in result.timeline_events if event.critical]
     return SimulationEvidence(
         id=evidence_id or _evidence_id(result, params_hash),
@@ -204,7 +210,7 @@ def build_simulation_evidence(
             timestamp=timestamp or datetime.now(timezone.utc).isoformat(),
             tool="scenariodb-sim",
             tool_version="0.1.0",
-            source="calculated",
+            source=SourceType.estimated if assumed else SourceType.calculated,
             config_profile_ref=config_profile_ref,
         ),
         aggregation=Aggregation(strategy="single_run"),
@@ -222,7 +228,7 @@ def build_simulation_evidence(
         ip_breakdown=[
             IpBreakdown(
                 ip=resolved.ip_ref,
-                instance_index=0,
+                instance_index=resolved.instance_index,
                 power_mW=resolved.total_power_mw,
             )
             for resolved in result.resolved.values()
@@ -232,6 +238,7 @@ def build_simulation_evidence(
         timing_breakdown=result.timing_breakdown,
         dvfs_breakdown=list(result.resolved.values()),
         timeline_events=result.timeline_events,
+        sw_task_timing=[SwTaskTiming.model_validate(row) for row in result.sw_task_timing],
         external_devices=result.external_devices,
         topology_order=result.topology_order,
         vdd_power=result.vdd_power,

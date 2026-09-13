@@ -1,0 +1,1771 @@
+{
+  "level": 2,
+  "mode": "drilldown:mlsc",
+  "scenario_id": "uc-camera-recording",
+  "variant_id": "cam-rec-3rdparty-binning",
+  "nodes": [
+    {
+      "data": {
+        "id": "grp-l2-isp",
+        "label": "ISP",
+        "type": "submodule",
+        "layer": "meta",
+        "hierarchy_group": "ISP",
+        "semantic_source": "level1-semantic-group",
+        "summary_badges": [],
+        "capability_badges": [],
+        "shared_resource": false,
+        "matched_issues": [],
+        "detail_items": [],
+        "warning": false,
+        "collapsed_children_count": 0,
+        "view_hints": {
+          "order": 1,
+          "width": 420,
+          "height": 240,
+          "emphasis": "muted",
+          "collapsed": false
+        }
+      },
+      "position": {
+        "x": 220.0,
+        "y": 80.0
+      }
+    },
+    {
+      "data": {
+        "id": "l2pkg-mlsc",
+        "label": "MLSC",
+        "type": "submodule",
+        "layer": "meta",
+        "parent": "grp-l2-isp",
+        "ip_ref": "ip-mlsc-is-v15-s5e9965",
+        "hierarchy_group": "ISP",
+        "ip_group": "MLSC",
+        "semantic_source": "level2-ip-package",
+        "summary_badges": [],
+        "capability_badges": [],
+        "shared_resource": false,
+        "matched_issues": [],
+        "detail_items": [
+          "IP: ip-mlsc-is-v15-s5e9965",
+          "Hierarchy: ISP",
+          "IP block: MLSC",
+          "Functional blocks: MLSC",
+          "I/O modules: MLSC_R_CL, MLSC_R_UV, MLSC_R_Y, MLSC_W_CAV, MLSC_W_FDPIG, MLSC_W_GLPG0_Y, MLSC_W_GLPG1_U, MLSC_W_GLPG1_V, MLSC_W_GLPG1_Y, MLSC_W_GLPG2_U, MLSC_W_GLPG2_V, MLSC_W_GLPG2_Y, MLSC_W_GLPG3_U, MLSC_W_GLPG3_V, MLSC_W_GLPG3_Y, MLSC_W_GLPG4_U, MLSC_W_GLPG4_V, MLSC_W_GLPG4_Y, MLSC_W_LMEDS, MLSC_W_SVHIST, MLSC_W_YUV444_U, MLSC_W_YUV444_V, MLSC_W_YUV444_Y"
+        ],
+        "warning": false,
+        "collapsed_children_count": 0,
+        "view_hints": {
+          "lane": "hw",
+          "stage": "processing",
+          "order": 0,
+          "width": 360,
+          "height": 180,
+          "emphasis": "normal",
+          "collapsed": false
+        }
+      },
+      "position": {
+        "x": 220.0,
+        "y": 180.0
+      }
+    },
+    {
+      "data": {
+        "id": "mod-mlsc-mlsc",
+        "label": "MLSC",
+        "type": "submodule",
+        "layer": "hw",
+        "parent": "l2pkg-mlsc",
+        "ip_ref": "ip-mlsc-is-v15-s5e9965",
+        "hierarchy_group": "ISP",
+        "ip_group": "MLSC",
+        "semantic_source": "level2-functional-module",
+        "module_ref": "MLSC",
+        "module_kind": "functional",
+        "module_status": "declared",
+        "summary_badges": [
+          "ISP",
+          "MLSC",
+          "Module"
+        ],
+        "capability_badges": [],
+        "shared_resource": false,
+        "matched_issues": [],
+        "detail_items": [
+          "Functional module: MLSC",
+          "Pipeline node: mlsc",
+          "IP catalog: ip-mlsc-is-v15-s5e9965"
+        ],
+        "warning": false,
+        "collapsed_children_count": 0,
+        "view_hints": {
+          "lane": "hw",
+          "stage": "processing",
+          "order": 0,
+          "width": 165,
+          "height": 62,
+          "emphasis": "normal",
+          "collapsed": false
+        }
+      },
+      "position": {
+        "x": 240.0,
+        "y": 320.0
+      }
+    },
+    {
+      "data": {
+        "id": "mod-mlsc-mlsc-r-cl",
+        "label": "MLSC R CL",
+        "type": "submodule",
+        "layer": "hw",
+        "parent": "l2pkg-mlsc",
+        "ip_ref": "ip-mlsc-is-v15-s5e9965",
+        "hierarchy_group": "ISP",
+        "ip_group": "MLSC",
+        "semantic_source": "level2-io-module",
+        "module_ref": "MLSC_R_CL",
+        "module_kind": "rdma",
+        "module_direction": "input",
+        "module_status": "declared",
+        "summary_badges": [
+          "RDMA",
+          "input"
+        ],
+        "capability_badges": [],
+        "shared_resource": false,
+        "matched_issues": [],
+        "detail_items": [
+          "Module: MLSC_R_CL",
+          "Kind: rdma",
+          "Pipeline node: mlsc",
+          "Direction: input"
+        ],
+        "warning": false,
+        "collapsed_children_count": 0,
+        "view_hints": {
+          "lane": "hw",
+          "stage": "processing",
+          "order": 1,
+          "width": 185,
+          "height": 64,
+          "emphasis": "normal",
+          "collapsed": false
+        }
+      },
+      "position": {
+        "x": 304.0,
+        "y": 320.0
+      }
+    },
+    {
+      "data": {
+        "id": "mod-mlsc-mlsc-r-uv",
+        "label": "MLSC R UV",
+        "type": "submodule",
+        "layer": "hw",
+        "parent": "l2pkg-mlsc",
+        "ip_ref": "ip-mlsc-is-v15-s5e9965",
+        "hierarchy_group": "ISP",
+        "ip_group": "MLSC",
+        "semantic_source": "level2-io-module",
+        "module_ref": "MLSC_R_UV",
+        "module_kind": "rdma",
+        "module_direction": "input",
+        "module_status": "declared",
+        "summary_badges": [
+          "RDMA",
+          "input"
+        ],
+        "capability_badges": [],
+        "shared_resource": false,
+        "matched_issues": [],
+        "detail_items": [
+          "Module: MLSC_R_UV",
+          "Kind: rdma",
+          "Pipeline node: mlsc",
+          "Direction: input"
+        ],
+        "warning": false,
+        "collapsed_children_count": 0,
+        "view_hints": {
+          "lane": "hw",
+          "stage": "processing",
+          "order": 2,
+          "width": 185,
+          "height": 64,
+          "emphasis": "normal",
+          "collapsed": false
+        }
+      },
+      "position": {
+        "x": 368.0,
+        "y": 320.0
+      }
+    },
+    {
+      "data": {
+        "id": "mod-mlsc-mlsc-r-y",
+        "label": "MLSC R Y",
+        "type": "submodule",
+        "layer": "hw",
+        "parent": "l2pkg-mlsc",
+        "ip_ref": "ip-mlsc-is-v15-s5e9965",
+        "hierarchy_group": "ISP",
+        "ip_group": "MLSC",
+        "semantic_source": "level2-io-module",
+        "module_ref": "MLSC_R_Y",
+        "module_kind": "rdma",
+        "module_direction": "input",
+        "module_status": "declared",
+        "summary_badges": [
+          "RDMA",
+          "input"
+        ],
+        "capability_badges": [],
+        "shared_resource": false,
+        "matched_issues": [],
+        "detail_items": [
+          "Module: MLSC_R_Y",
+          "Kind: rdma",
+          "Pipeline node: mlsc",
+          "Direction: input"
+        ],
+        "warning": false,
+        "collapsed_children_count": 0,
+        "view_hints": {
+          "lane": "hw",
+          "stage": "processing",
+          "order": 3,
+          "width": 185,
+          "height": 64,
+          "emphasis": "normal",
+          "collapsed": false
+        }
+      },
+      "position": {
+        "x": 432.0,
+        "y": 320.0
+      }
+    },
+    {
+      "data": {
+        "id": "mod-mlsc-mlsc-w-cav",
+        "label": "MLSC W CAV",
+        "type": "submodule",
+        "layer": "hw",
+        "parent": "l2pkg-mlsc",
+        "ip_ref": "ip-mlsc-is-v15-s5e9965",
+        "hierarchy_group": "ISP",
+        "ip_group": "MLSC",
+        "semantic_source": "level2-io-module",
+        "module_ref": "MLSC_W_CAV",
+        "module_kind": "wdma",
+        "module_direction": "output",
+        "module_status": "declared",
+        "summary_badges": [
+          "WDMA",
+          "output"
+        ],
+        "capability_badges": [],
+        "shared_resource": false,
+        "matched_issues": [],
+        "detail_items": [
+          "Module: MLSC_W_CAV",
+          "Kind: wdma",
+          "Pipeline node: mlsc",
+          "Direction: output"
+        ],
+        "warning": false,
+        "collapsed_children_count": 0,
+        "view_hints": {
+          "lane": "hw",
+          "stage": "processing",
+          "order": 4,
+          "width": 185,
+          "height": 64,
+          "emphasis": "normal",
+          "collapsed": false
+        }
+      },
+      "position": {
+        "x": 496.0,
+        "y": 320.0
+      }
+    },
+    {
+      "data": {
+        "id": "mod-mlsc-mlsc-w-fdpig",
+        "label": "MLSC W FDPIG",
+        "type": "submodule",
+        "layer": "hw",
+        "parent": "l2pkg-mlsc",
+        "ip_ref": "ip-mlsc-is-v15-s5e9965",
+        "hierarchy_group": "ISP",
+        "ip_group": "MLSC",
+        "semantic_source": "level2-io-module",
+        "module_ref": "MLSC_W_FDPIG",
+        "module_kind": "wdma",
+        "module_direction": "output",
+        "module_status": "declared",
+        "summary_badges": [
+          "WDMA",
+          "output"
+        ],
+        "capability_badges": [],
+        "shared_resource": false,
+        "matched_issues": [],
+        "detail_items": [
+          "Module: MLSC_W_FDPIG",
+          "Kind: wdma",
+          "Pipeline node: mlsc",
+          "Direction: output"
+        ],
+        "warning": false,
+        "collapsed_children_count": 0,
+        "view_hints": {
+          "lane": "hw",
+          "stage": "processing",
+          "order": 5,
+          "width": 185,
+          "height": 64,
+          "emphasis": "normal",
+          "collapsed": false
+        }
+      },
+      "position": {
+        "x": 560.0,
+        "y": 320.0
+      }
+    },
+    {
+      "data": {
+        "id": "mod-mlsc-mlsc-w-glpg0-y",
+        "label": "MLSC W GLPG0 Y",
+        "type": "submodule",
+        "layer": "hw",
+        "parent": "l2pkg-mlsc",
+        "ip_ref": "ip-mlsc-is-v15-s5e9965",
+        "hierarchy_group": "ISP",
+        "ip_group": "MLSC",
+        "semantic_source": "level2-io-module",
+        "module_ref": "MLSC_W_GLPG0_Y",
+        "module_kind": "wdma",
+        "module_direction": "output",
+        "module_status": "declared",
+        "summary_badges": [
+          "WDMA",
+          "output"
+        ],
+        "capability_badges": [],
+        "shared_resource": false,
+        "matched_issues": [],
+        "detail_items": [
+          "Module: MLSC_W_GLPG0_Y",
+          "Kind: wdma",
+          "Pipeline node: mlsc",
+          "Direction: output"
+        ],
+        "warning": false,
+        "collapsed_children_count": 0,
+        "view_hints": {
+          "lane": "hw",
+          "stage": "processing",
+          "order": 6,
+          "width": 185,
+          "height": 64,
+          "emphasis": "normal",
+          "collapsed": false
+        }
+      },
+      "position": {
+        "x": 624.0,
+        "y": 320.0
+      }
+    },
+    {
+      "data": {
+        "id": "mod-mlsc-mlsc-w-glpg1-u",
+        "label": "MLSC W GLPG1 U",
+        "type": "submodule",
+        "layer": "hw",
+        "parent": "l2pkg-mlsc",
+        "ip_ref": "ip-mlsc-is-v15-s5e9965",
+        "hierarchy_group": "ISP",
+        "ip_group": "MLSC",
+        "semantic_source": "level2-io-module",
+        "module_ref": "MLSC_W_GLPG1_U",
+        "module_kind": "wdma",
+        "module_direction": "output",
+        "module_status": "declared",
+        "summary_badges": [
+          "WDMA",
+          "output"
+        ],
+        "capability_badges": [],
+        "shared_resource": false,
+        "matched_issues": [],
+        "detail_items": [
+          "Module: MLSC_W_GLPG1_U",
+          "Kind: wdma",
+          "Pipeline node: mlsc",
+          "Direction: output"
+        ],
+        "warning": false,
+        "collapsed_children_count": 0,
+        "view_hints": {
+          "lane": "hw",
+          "stage": "processing",
+          "order": 7,
+          "width": 185,
+          "height": 64,
+          "emphasis": "normal",
+          "collapsed": false
+        }
+      },
+      "position": {
+        "x": 688.0,
+        "y": 320.0
+      }
+    },
+    {
+      "data": {
+        "id": "mod-mlsc-mlsc-w-glpg1-v",
+        "label": "MLSC W GLPG1 V",
+        "type": "submodule",
+        "layer": "hw",
+        "parent": "l2pkg-mlsc",
+        "ip_ref": "ip-mlsc-is-v15-s5e9965",
+        "hierarchy_group": "ISP",
+        "ip_group": "MLSC",
+        "semantic_source": "level2-io-module",
+        "module_ref": "MLSC_W_GLPG1_V",
+        "module_kind": "wdma",
+        "module_direction": "output",
+        "module_status": "declared",
+        "summary_badges": [
+          "WDMA",
+          "output"
+        ],
+        "capability_badges": [],
+        "shared_resource": false,
+        "matched_issues": [],
+        "detail_items": [
+          "Module: MLSC_W_GLPG1_V",
+          "Kind: wdma",
+          "Pipeline node: mlsc",
+          "Direction: output"
+        ],
+        "warning": false,
+        "collapsed_children_count": 0,
+        "view_hints": {
+          "lane": "hw",
+          "stage": "processing",
+          "order": 8,
+          "width": 185,
+          "height": 64,
+          "emphasis": "normal",
+          "collapsed": false
+        }
+      },
+      "position": {
+        "x": 752.0,
+        "y": 320.0
+      }
+    },
+    {
+      "data": {
+        "id": "mod-mlsc-mlsc-w-glpg1-y",
+        "label": "MLSC W GLPG1 Y",
+        "type": "submodule",
+        "layer": "hw",
+        "parent": "l2pkg-mlsc",
+        "ip_ref": "ip-mlsc-is-v15-s5e9965",
+        "hierarchy_group": "ISP",
+        "ip_group": "MLSC",
+        "semantic_source": "level2-io-module",
+        "module_ref": "MLSC_W_GLPG1_Y",
+        "module_kind": "wdma",
+        "module_direction": "output",
+        "module_status": "declared",
+        "summary_badges": [
+          "WDMA",
+          "output"
+        ],
+        "capability_badges": [],
+        "shared_resource": false,
+        "matched_issues": [],
+        "detail_items": [
+          "Module: MLSC_W_GLPG1_Y",
+          "Kind: wdma",
+          "Pipeline node: mlsc",
+          "Direction: output"
+        ],
+        "warning": false,
+        "collapsed_children_count": 0,
+        "view_hints": {
+          "lane": "hw",
+          "stage": "processing",
+          "order": 9,
+          "width": 185,
+          "height": 64,
+          "emphasis": "normal",
+          "collapsed": false
+        }
+      },
+      "position": {
+        "x": 816.0,
+        "y": 320.0
+      }
+    },
+    {
+      "data": {
+        "id": "mod-mlsc-mlsc-w-glpg2-u",
+        "label": "MLSC W GLPG2 U",
+        "type": "submodule",
+        "layer": "hw",
+        "parent": "l2pkg-mlsc",
+        "ip_ref": "ip-mlsc-is-v15-s5e9965",
+        "hierarchy_group": "ISP",
+        "ip_group": "MLSC",
+        "semantic_source": "level2-io-module",
+        "module_ref": "MLSC_W_GLPG2_U",
+        "module_kind": "wdma",
+        "module_direction": "output",
+        "module_status": "declared",
+        "summary_badges": [
+          "WDMA",
+          "output"
+        ],
+        "capability_badges": [],
+        "shared_resource": false,
+        "matched_issues": [],
+        "detail_items": [
+          "Module: MLSC_W_GLPG2_U",
+          "Kind: wdma",
+          "Pipeline node: mlsc",
+          "Direction: output"
+        ],
+        "warning": false,
+        "collapsed_children_count": 0,
+        "view_hints": {
+          "lane": "hw",
+          "stage": "processing",
+          "order": 10,
+          "width": 185,
+          "height": 64,
+          "emphasis": "normal",
+          "collapsed": false
+        }
+      },
+      "position": {
+        "x": 880.0,
+        "y": 320.0
+      }
+    },
+    {
+      "data": {
+        "id": "mod-mlsc-mlsc-w-glpg2-v",
+        "label": "MLSC W GLPG2 V",
+        "type": "submodule",
+        "layer": "hw",
+        "parent": "l2pkg-mlsc",
+        "ip_ref": "ip-mlsc-is-v15-s5e9965",
+        "hierarchy_group": "ISP",
+        "ip_group": "MLSC",
+        "semantic_source": "level2-io-module",
+        "module_ref": "MLSC_W_GLPG2_V",
+        "module_kind": "wdma",
+        "module_direction": "output",
+        "module_status": "declared",
+        "summary_badges": [
+          "WDMA",
+          "output"
+        ],
+        "capability_badges": [],
+        "shared_resource": false,
+        "matched_issues": [],
+        "detail_items": [
+          "Module: MLSC_W_GLPG2_V",
+          "Kind: wdma",
+          "Pipeline node: mlsc",
+          "Direction: output"
+        ],
+        "warning": false,
+        "collapsed_children_count": 0,
+        "view_hints": {
+          "lane": "hw",
+          "stage": "processing",
+          "order": 11,
+          "width": 185,
+          "height": 64,
+          "emphasis": "normal",
+          "collapsed": false
+        }
+      },
+      "position": {
+        "x": 944.0,
+        "y": 320.0
+      }
+    },
+    {
+      "data": {
+        "id": "mod-mlsc-mlsc-w-glpg2-y",
+        "label": "MLSC W GLPG2 Y",
+        "type": "submodule",
+        "layer": "hw",
+        "parent": "l2pkg-mlsc",
+        "ip_ref": "ip-mlsc-is-v15-s5e9965",
+        "hierarchy_group": "ISP",
+        "ip_group": "MLSC",
+        "semantic_source": "level2-io-module",
+        "module_ref": "MLSC_W_GLPG2_Y",
+        "module_kind": "wdma",
+        "module_direction": "output",
+        "module_status": "declared",
+        "summary_badges": [
+          "WDMA",
+          "output"
+        ],
+        "capability_badges": [],
+        "shared_resource": false,
+        "matched_issues": [],
+        "detail_items": [
+          "Module: MLSC_W_GLPG2_Y",
+          "Kind: wdma",
+          "Pipeline node: mlsc",
+          "Direction: output"
+        ],
+        "warning": false,
+        "collapsed_children_count": 0,
+        "view_hints": {
+          "lane": "hw",
+          "stage": "processing",
+          "order": 12,
+          "width": 185,
+          "height": 64,
+          "emphasis": "normal",
+          "collapsed": false
+        }
+      },
+      "position": {
+        "x": 1008.0,
+        "y": 320.0
+      }
+    },
+    {
+      "data": {
+        "id": "mod-mlsc-mlsc-w-glpg3-u",
+        "label": "MLSC W GLPG3 U",
+        "type": "submodule",
+        "layer": "hw",
+        "parent": "l2pkg-mlsc",
+        "ip_ref": "ip-mlsc-is-v15-s5e9965",
+        "hierarchy_group": "ISP",
+        "ip_group": "MLSC",
+        "semantic_source": "level2-io-module",
+        "module_ref": "MLSC_W_GLPG3_U",
+        "module_kind": "wdma",
+        "module_direction": "output",
+        "module_status": "declared",
+        "summary_badges": [
+          "WDMA",
+          "output"
+        ],
+        "capability_badges": [],
+        "shared_resource": false,
+        "matched_issues": [],
+        "detail_items": [
+          "Module: MLSC_W_GLPG3_U",
+          "Kind: wdma",
+          "Pipeline node: mlsc",
+          "Direction: output"
+        ],
+        "warning": false,
+        "collapsed_children_count": 0,
+        "view_hints": {
+          "lane": "hw",
+          "stage": "processing",
+          "order": 13,
+          "width": 185,
+          "height": 64,
+          "emphasis": "normal",
+          "collapsed": false
+        }
+      },
+      "position": {
+        "x": 1072.0,
+        "y": 320.0
+      }
+    },
+    {
+      "data": {
+        "id": "mod-mlsc-mlsc-w-glpg3-v",
+        "label": "MLSC W GLPG3 V",
+        "type": "submodule",
+        "layer": "hw",
+        "parent": "l2pkg-mlsc",
+        "ip_ref": "ip-mlsc-is-v15-s5e9965",
+        "hierarchy_group": "ISP",
+        "ip_group": "MLSC",
+        "semantic_source": "level2-io-module",
+        "module_ref": "MLSC_W_GLPG3_V",
+        "module_kind": "wdma",
+        "module_direction": "output",
+        "module_status": "declared",
+        "summary_badges": [
+          "WDMA",
+          "output"
+        ],
+        "capability_badges": [],
+        "shared_resource": false,
+        "matched_issues": [],
+        "detail_items": [
+          "Module: MLSC_W_GLPG3_V",
+          "Kind: wdma",
+          "Pipeline node: mlsc",
+          "Direction: output"
+        ],
+        "warning": false,
+        "collapsed_children_count": 0,
+        "view_hints": {
+          "lane": "hw",
+          "stage": "processing",
+          "order": 14,
+          "width": 185,
+          "height": 64,
+          "emphasis": "normal",
+          "collapsed": false
+        }
+      },
+      "position": {
+        "x": 1136.0,
+        "y": 320.0
+      }
+    },
+    {
+      "data": {
+        "id": "mod-mlsc-mlsc-w-glpg3-y",
+        "label": "MLSC W GLPG3 Y",
+        "type": "submodule",
+        "layer": "hw",
+        "parent": "l2pkg-mlsc",
+        "ip_ref": "ip-mlsc-is-v15-s5e9965",
+        "hierarchy_group": "ISP",
+        "ip_group": "MLSC",
+        "semantic_source": "level2-io-module",
+        "module_ref": "MLSC_W_GLPG3_Y",
+        "module_kind": "wdma",
+        "module_direction": "output",
+        "module_status": "declared",
+        "summary_badges": [
+          "WDMA",
+          "output"
+        ],
+        "capability_badges": [],
+        "shared_resource": false,
+        "matched_issues": [],
+        "detail_items": [
+          "Module: MLSC_W_GLPG3_Y",
+          "Kind: wdma",
+          "Pipeline node: mlsc",
+          "Direction: output"
+        ],
+        "warning": false,
+        "collapsed_children_count": 0,
+        "view_hints": {
+          "lane": "hw",
+          "stage": "processing",
+          "order": 15,
+          "width": 185,
+          "height": 64,
+          "emphasis": "normal",
+          "collapsed": false
+        }
+      },
+      "position": {
+        "x": 1200.0,
+        "y": 320.0
+      }
+    },
+    {
+      "data": {
+        "id": "mod-mlsc-mlsc-w-glpg4-u",
+        "label": "MLSC W GLPG4 U",
+        "type": "submodule",
+        "layer": "hw",
+        "parent": "l2pkg-mlsc",
+        "ip_ref": "ip-mlsc-is-v15-s5e9965",
+        "hierarchy_group": "ISP",
+        "ip_group": "MLSC",
+        "semantic_source": "level2-io-module",
+        "module_ref": "MLSC_W_GLPG4_U",
+        "module_kind": "wdma",
+        "module_direction": "output",
+        "module_status": "declared",
+        "summary_badges": [
+          "WDMA",
+          "output"
+        ],
+        "capability_badges": [],
+        "shared_resource": false,
+        "matched_issues": [],
+        "detail_items": [
+          "Module: MLSC_W_GLPG4_U",
+          "Kind: wdma",
+          "Pipeline node: mlsc",
+          "Direction: output"
+        ],
+        "warning": false,
+        "collapsed_children_count": 0,
+        "view_hints": {
+          "lane": "hw",
+          "stage": "processing",
+          "order": 16,
+          "width": 185,
+          "height": 64,
+          "emphasis": "normal",
+          "collapsed": false
+        }
+      },
+      "position": {
+        "x": 1264.0,
+        "y": 320.0
+      }
+    },
+    {
+      "data": {
+        "id": "mod-mlsc-mlsc-w-glpg4-v",
+        "label": "MLSC W GLPG4 V",
+        "type": "submodule",
+        "layer": "hw",
+        "parent": "l2pkg-mlsc",
+        "ip_ref": "ip-mlsc-is-v15-s5e9965",
+        "hierarchy_group": "ISP",
+        "ip_group": "MLSC",
+        "semantic_source": "level2-io-module",
+        "module_ref": "MLSC_W_GLPG4_V",
+        "module_kind": "wdma",
+        "module_direction": "output",
+        "module_status": "declared",
+        "summary_badges": [
+          "WDMA",
+          "output"
+        ],
+        "capability_badges": [],
+        "shared_resource": false,
+        "matched_issues": [],
+        "detail_items": [
+          "Module: MLSC_W_GLPG4_V",
+          "Kind: wdma",
+          "Pipeline node: mlsc",
+          "Direction: output"
+        ],
+        "warning": false,
+        "collapsed_children_count": 0,
+        "view_hints": {
+          "lane": "hw",
+          "stage": "processing",
+          "order": 17,
+          "width": 185,
+          "height": 64,
+          "emphasis": "normal",
+          "collapsed": false
+        }
+      },
+      "position": {
+        "x": 1328.0,
+        "y": 320.0
+      }
+    },
+    {
+      "data": {
+        "id": "mod-mlsc-mlsc-w-glpg4-y",
+        "label": "MLSC W GLPG4 Y",
+        "type": "submodule",
+        "layer": "hw",
+        "parent": "l2pkg-mlsc",
+        "ip_ref": "ip-mlsc-is-v15-s5e9965",
+        "hierarchy_group": "ISP",
+        "ip_group": "MLSC",
+        "semantic_source": "level2-io-module",
+        "module_ref": "MLSC_W_GLPG4_Y",
+        "module_kind": "wdma",
+        "module_direction": "output",
+        "module_status": "declared",
+        "summary_badges": [
+          "WDMA",
+          "output"
+        ],
+        "capability_badges": [],
+        "shared_resource": false,
+        "matched_issues": [],
+        "detail_items": [
+          "Module: MLSC_W_GLPG4_Y",
+          "Kind: wdma",
+          "Pipeline node: mlsc",
+          "Direction: output"
+        ],
+        "warning": false,
+        "collapsed_children_count": 0,
+        "view_hints": {
+          "lane": "hw",
+          "stage": "processing",
+          "order": 18,
+          "width": 185,
+          "height": 64,
+          "emphasis": "normal",
+          "collapsed": false
+        }
+      },
+      "position": {
+        "x": 1392.0,
+        "y": 320.0
+      }
+    },
+    {
+      "data": {
+        "id": "mod-mlsc-mlsc-w-lmeds",
+        "label": "MLSC W LMEDS",
+        "type": "submodule",
+        "layer": "hw",
+        "parent": "l2pkg-mlsc",
+        "ip_ref": "ip-mlsc-is-v15-s5e9965",
+        "hierarchy_group": "ISP",
+        "ip_group": "MLSC",
+        "semantic_source": "level2-io-module",
+        "module_ref": "MLSC_W_LMEDS",
+        "module_kind": "wdma",
+        "module_direction": "output",
+        "module_status": "declared",
+        "summary_badges": [
+          "WDMA",
+          "output"
+        ],
+        "capability_badges": [],
+        "shared_resource": false,
+        "matched_issues": [],
+        "detail_items": [
+          "Module: MLSC_W_LMEDS",
+          "Kind: wdma",
+          "Pipeline node: mlsc",
+          "Direction: output"
+        ],
+        "warning": false,
+        "collapsed_children_count": 0,
+        "view_hints": {
+          "lane": "hw",
+          "stage": "processing",
+          "order": 19,
+          "width": 185,
+          "height": 64,
+          "emphasis": "normal",
+          "collapsed": false
+        }
+      },
+      "position": {
+        "x": 1456.0,
+        "y": 320.0
+      }
+    },
+    {
+      "data": {
+        "id": "mod-mlsc-mlsc-w-svhist",
+        "label": "MLSC W SVHIST",
+        "type": "submodule",
+        "layer": "hw",
+        "parent": "l2pkg-mlsc",
+        "ip_ref": "ip-mlsc-is-v15-s5e9965",
+        "hierarchy_group": "ISP",
+        "ip_group": "MLSC",
+        "semantic_source": "level2-io-module",
+        "module_ref": "MLSC_W_SVHIST",
+        "module_kind": "wdma",
+        "module_direction": "output",
+        "module_status": "declared",
+        "summary_badges": [
+          "WDMA",
+          "output"
+        ],
+        "capability_badges": [],
+        "shared_resource": false,
+        "matched_issues": [],
+        "detail_items": [
+          "Module: MLSC_W_SVHIST",
+          "Kind: wdma",
+          "Pipeline node: mlsc",
+          "Direction: output"
+        ],
+        "warning": false,
+        "collapsed_children_count": 0,
+        "view_hints": {
+          "lane": "hw",
+          "stage": "processing",
+          "order": 20,
+          "width": 185,
+          "height": 64,
+          "emphasis": "normal",
+          "collapsed": false
+        }
+      },
+      "position": {
+        "x": 1520.0,
+        "y": 320.0
+      }
+    },
+    {
+      "data": {
+        "id": "mod-mlsc-mlsc-w-yuv444-u",
+        "label": "MLSC W YUV444 U",
+        "type": "submodule",
+        "layer": "hw",
+        "parent": "l2pkg-mlsc",
+        "ip_ref": "ip-mlsc-is-v15-s5e9965",
+        "hierarchy_group": "ISP",
+        "ip_group": "MLSC",
+        "semantic_source": "level2-io-module",
+        "module_ref": "MLSC_W_YUV444_U",
+        "module_kind": "wdma",
+        "module_direction": "output",
+        "module_status": "declared",
+        "summary_badges": [
+          "WDMA",
+          "output"
+        ],
+        "capability_badges": [],
+        "shared_resource": false,
+        "matched_issues": [],
+        "detail_items": [
+          "Module: MLSC_W_YUV444_U",
+          "Kind: wdma",
+          "Pipeline node: mlsc",
+          "Direction: output"
+        ],
+        "warning": false,
+        "collapsed_children_count": 0,
+        "view_hints": {
+          "lane": "hw",
+          "stage": "processing",
+          "order": 21,
+          "width": 185,
+          "height": 64,
+          "emphasis": "normal",
+          "collapsed": false
+        }
+      },
+      "position": {
+        "x": 1584.0,
+        "y": 320.0
+      }
+    },
+    {
+      "data": {
+        "id": "mod-mlsc-mlsc-w-yuv444-v",
+        "label": "MLSC W YUV444 V",
+        "type": "submodule",
+        "layer": "hw",
+        "parent": "l2pkg-mlsc",
+        "ip_ref": "ip-mlsc-is-v15-s5e9965",
+        "hierarchy_group": "ISP",
+        "ip_group": "MLSC",
+        "semantic_source": "level2-io-module",
+        "module_ref": "MLSC_W_YUV444_V",
+        "module_kind": "wdma",
+        "module_direction": "output",
+        "module_status": "declared",
+        "summary_badges": [
+          "WDMA",
+          "output"
+        ],
+        "capability_badges": [],
+        "shared_resource": false,
+        "matched_issues": [],
+        "detail_items": [
+          "Module: MLSC_W_YUV444_V",
+          "Kind: wdma",
+          "Pipeline node: mlsc",
+          "Direction: output"
+        ],
+        "warning": false,
+        "collapsed_children_count": 0,
+        "view_hints": {
+          "lane": "hw",
+          "stage": "processing",
+          "order": 22,
+          "width": 185,
+          "height": 64,
+          "emphasis": "normal",
+          "collapsed": false
+        }
+      },
+      "position": {
+        "x": 1648.0,
+        "y": 320.0
+      }
+    },
+    {
+      "data": {
+        "id": "mod-mlsc-mlsc-w-yuv444-y",
+        "label": "MLSC W YUV444 Y",
+        "type": "submodule",
+        "layer": "hw",
+        "parent": "l2pkg-mlsc",
+        "ip_ref": "ip-mlsc-is-v15-s5e9965",
+        "hierarchy_group": "ISP",
+        "ip_group": "MLSC",
+        "semantic_source": "level2-io-module",
+        "module_ref": "MLSC_W_YUV444_Y",
+        "module_kind": "wdma",
+        "module_direction": "output",
+        "module_status": "declared",
+        "summary_badges": [
+          "WDMA",
+          "output"
+        ],
+        "capability_badges": [],
+        "shared_resource": false,
+        "matched_issues": [],
+        "detail_items": [
+          "Module: MLSC_W_YUV444_Y",
+          "Kind: wdma",
+          "Pipeline node: mlsc",
+          "Direction: output"
+        ],
+        "warning": false,
+        "collapsed_children_count": 0,
+        "view_hints": {
+          "lane": "hw",
+          "stage": "processing",
+          "order": 23,
+          "width": 185,
+          "height": 64,
+          "emphasis": "normal",
+          "collapsed": false
+        }
+      },
+      "position": {
+        "x": 1712.0,
+        "y": 320.0
+      }
+    },
+    {
+      "data": {
+        "id": "buf-pyramid-l0",
+        "label": "Pyramid L0",
+        "type": "buffer",
+        "layer": "memory",
+        "summary_badges": [],
+        "capability_badges": [],
+        "memory": {
+          "format": "Y",
+          "bitdepth": 12,
+          "width": 4080,
+          "height": 2296,
+          "fps": 30,
+          "compression": "COMP_OFF"
+        },
+        "placement": {
+          "llc_allocated": false,
+          "llc_policy": "none"
+        },
+        "shared_resource": false,
+        "matched_issues": [],
+        "detail_items": [
+          "Buffer: Y / pyramid_l0 / 12b / COMP_OFF"
+        ],
+        "warning": false,
+        "collapsed_children_count": 0,
+        "view_hints": {
+          "lane": "memory",
+          "stage": "processing",
+          "order": 9,
+          "width": 235,
+          "height": 68,
+          "emphasis": "normal",
+          "collapsed": false
+        }
+      },
+      "position": {
+        "x": 2160.0,
+        "y": 620.0
+      }
+    },
+    {
+      "data": {
+        "id": "buf-pyramid-l1",
+        "label": "Pyramid L1",
+        "type": "buffer",
+        "layer": "memory",
+        "summary_badges": [],
+        "capability_badges": [],
+        "memory": {
+          "format": "YUV444",
+          "bitdepth": 12,
+          "width": 2040,
+          "height": 1148,
+          "fps": 30,
+          "compression": "COMP_OFF"
+        },
+        "placement": {
+          "llc_allocated": false,
+          "llc_policy": "none"
+        },
+        "shared_resource": false,
+        "matched_issues": [],
+        "detail_items": [
+          "Buffer: YUV444 / pyramid_l1 / 12b / COMP_OFF"
+        ],
+        "warning": false,
+        "collapsed_children_count": 0,
+        "view_hints": {
+          "lane": "memory",
+          "stage": "processing",
+          "order": 10,
+          "width": 235,
+          "height": 68,
+          "emphasis": "normal",
+          "collapsed": false
+        }
+      },
+      "position": {
+        "x": 2340.0,
+        "y": 620.0
+      }
+    },
+    {
+      "data": {
+        "id": "buf-pyramid-l2",
+        "label": "Pyramid L2",
+        "type": "buffer",
+        "layer": "memory",
+        "summary_badges": [],
+        "capability_badges": [],
+        "memory": {
+          "format": "YUV444",
+          "bitdepth": 12,
+          "width": 1020,
+          "height": 574,
+          "fps": 30,
+          "compression": "COMP_OFF"
+        },
+        "placement": {
+          "llc_allocated": false,
+          "llc_policy": "none"
+        },
+        "shared_resource": false,
+        "matched_issues": [],
+        "detail_items": [
+          "Buffer: YUV444 / pyramid_l2 / 12b / COMP_OFF"
+        ],
+        "warning": false,
+        "collapsed_children_count": 0,
+        "view_hints": {
+          "lane": "memory",
+          "stage": "processing",
+          "order": 11,
+          "width": 235,
+          "height": 68,
+          "emphasis": "normal",
+          "collapsed": false
+        }
+      },
+      "position": {
+        "x": 2520.0,
+        "y": 620.0
+      }
+    },
+    {
+      "data": {
+        "id": "buf-pyramid-l3",
+        "label": "Pyramid L3",
+        "type": "buffer",
+        "layer": "memory",
+        "summary_badges": [],
+        "capability_badges": [],
+        "memory": {
+          "format": "YUV444",
+          "bitdepth": 12,
+          "width": 510,
+          "height": 287,
+          "fps": 30,
+          "compression": "COMP_OFF"
+        },
+        "placement": {
+          "llc_allocated": false,
+          "llc_policy": "none"
+        },
+        "shared_resource": false,
+        "matched_issues": [],
+        "detail_items": [
+          "Buffer: YUV444 / pyramid_l3 / 12b / COMP_OFF"
+        ],
+        "warning": false,
+        "collapsed_children_count": 0,
+        "view_hints": {
+          "lane": "memory",
+          "stage": "processing",
+          "order": 12,
+          "width": 235,
+          "height": 68,
+          "emphasis": "normal",
+          "collapsed": false
+        }
+      },
+      "position": {
+        "x": 2700.0,
+        "y": 620.0
+      }
+    },
+    {
+      "data": {
+        "id": "buf-pyramid-l4",
+        "label": "Pyramid L4",
+        "type": "buffer",
+        "layer": "memory",
+        "summary_badges": [],
+        "capability_badges": [],
+        "memory": {
+          "format": "YUV444",
+          "bitdepth": 12,
+          "width": 255,
+          "height": 144,
+          "fps": 30,
+          "compression": "COMP_OFF"
+        },
+        "placement": {
+          "llc_allocated": false,
+          "llc_policy": "none"
+        },
+        "shared_resource": false,
+        "matched_issues": [],
+        "detail_items": [
+          "Buffer: YUV444 / pyramid_l4 / 12b / COMP_OFF"
+        ],
+        "warning": false,
+        "collapsed_children_count": 0,
+        "view_hints": {
+          "lane": "memory",
+          "stage": "processing",
+          "order": 13,
+          "width": 235,
+          "height": 68,
+          "emphasis": "normal",
+          "collapsed": false
+        }
+      },
+      "position": {
+        "x": 2880.0,
+        "y": 620.0
+      }
+    },
+    {
+      "data": {
+        "id": "buf-lme-input",
+        "label": "Lme Input",
+        "type": "buffer",
+        "layer": "memory",
+        "summary_badges": [],
+        "capability_badges": [],
+        "memory": {
+          "format": "Y",
+          "bitdepth": 8,
+          "width": 1008,
+          "height": 756,
+          "fps": 30,
+          "compression": "COMP_OFF"
+        },
+        "placement": {
+          "llc_allocated": false,
+          "llc_policy": "none"
+        },
+        "shared_resource": false,
+        "matched_issues": [],
+        "detail_items": [
+          "Buffer: Y / motion_estimation / 8b / COMP_OFF"
+        ],
+        "warning": false,
+        "collapsed_children_count": 0,
+        "view_hints": {
+          "lane": "memory",
+          "stage": "processing",
+          "order": 21,
+          "width": 235,
+          "height": 68,
+          "emphasis": "normal",
+          "collapsed": false
+        }
+      },
+      "position": {
+        "x": 4320.0,
+        "y": 620.0
+      }
+    },
+    {
+      "data": {
+        "id": "buf-od-input",
+        "label": "Od Input",
+        "type": "buffer",
+        "layer": "memory",
+        "summary_badges": [],
+        "capability_badges": [],
+        "memory": {
+          "format": "YUV420",
+          "bitdepth": 8,
+          "width": 640,
+          "height": 480,
+          "fps": 30,
+          "compression": "COMP_OFF"
+        },
+        "placement": {
+          "llc_allocated": false,
+          "llc_policy": "none"
+        },
+        "shared_resource": false,
+        "matched_issues": [],
+        "detail_items": [
+          "Buffer: YUV420 / object_detection / 8b / COMP_OFF"
+        ],
+        "warning": false,
+        "collapsed_children_count": 0,
+        "view_hints": {
+          "lane": "memory",
+          "stage": "processing",
+          "order": 22,
+          "width": 235,
+          "height": 68,
+          "emphasis": "normal",
+          "collapsed": false
+        }
+      },
+      "position": {
+        "x": 4500.0,
+        "y": 620.0
+      }
+    }
+  ],
+  "edges": [
+    {
+      "data": {
+        "id": "l2e-0-mod-mlsc-mlsc-w-glpg0-y-buf-pyramid-l0",
+        "source": "mod-mlsc-mlsc-w-glpg0-y",
+        "target": "buf-pyramid-l0",
+        "flow_type": "M2M",
+        "buffer_ref": "PYRAMID_L0",
+        "port_pairs": [
+          {
+            "src": "MLSC_W_GLPG0_Y",
+            "dst": "MTNR0_RDMA_CUR_L0_Y"
+          }
+        ],
+        "memory": {
+          "format": "Y",
+          "bitdepth": 12,
+          "width": 4080,
+          "height": 2296,
+          "fps": 30,
+          "compression": "COMP_OFF"
+        },
+        "placement": {
+          "llc_allocated": false,
+          "llc_policy": "none"
+        },
+        "label": "M2M write",
+        "detail_items": [
+          "Route: mlsc -> mtnr",
+          "Edge type: M2M",
+          "Buffer: Y / pyramid_l0 / 12b / COMP_OFF"
+        ]
+      }
+    },
+    {
+      "data": {
+        "id": "l2e-1-mod-mlsc-mlsc-w-glpg1-y-buf-pyramid-l1",
+        "source": "mod-mlsc-mlsc-w-glpg1-y",
+        "target": "buf-pyramid-l1",
+        "flow_type": "M2M",
+        "buffer_ref": "PYRAMID_L1",
+        "port_pairs": [
+          {
+            "src": "MLSC_W_GLPG1_Y",
+            "dst": "MTNR1_RDMA_CUR_L1_Y"
+          },
+          {
+            "src": "MLSC_W_GLPG1_U",
+            "dst": "MTNR1_RDMA_CUR_L1_U"
+          },
+          {
+            "src": "MLSC_W_GLPG1_V",
+            "dst": "MTNR1_RDMA_CUR_L1_V"
+          }
+        ],
+        "memory": {
+          "format": "YUV444",
+          "bitdepth": 12,
+          "width": 2040,
+          "height": 1148,
+          "fps": 30,
+          "compression": "COMP_OFF"
+        },
+        "placement": {
+          "llc_allocated": false,
+          "llc_policy": "none"
+        },
+        "label": "M2M write",
+        "detail_items": [
+          "Route: mlsc -> mtnr",
+          "Edge type: M2M",
+          "Buffer: YUV444 / pyramid_l1 / 12b / COMP_OFF"
+        ]
+      }
+    },
+    {
+      "data": {
+        "id": "l2e-2-mod-mlsc-mlsc-w-glpg2-y-buf-pyramid-l2",
+        "source": "mod-mlsc-mlsc-w-glpg2-y",
+        "target": "buf-pyramid-l2",
+        "flow_type": "M2M",
+        "buffer_ref": "PYRAMID_L2",
+        "port_pairs": [
+          {
+            "src": "MLSC_W_GLPG2_Y",
+            "dst": "MTNR1_RDMA_CUR_L2_Y"
+          },
+          {
+            "src": "MLSC_W_GLPG2_U",
+            "dst": "MTNR1_RDMA_CUR_L2_U"
+          },
+          {
+            "src": "MLSC_W_GLPG2_V",
+            "dst": "MTNR1_RDMA_CUR_L2_V"
+          }
+        ],
+        "memory": {
+          "format": "YUV444",
+          "bitdepth": 12,
+          "width": 1020,
+          "height": 574,
+          "fps": 30,
+          "compression": "COMP_OFF"
+        },
+        "placement": {
+          "llc_allocated": false,
+          "llc_policy": "none"
+        },
+        "label": "M2M write",
+        "detail_items": [
+          "Route: mlsc -> mtnr",
+          "Edge type: M2M",
+          "Buffer: YUV444 / pyramid_l2 / 12b / COMP_OFF"
+        ]
+      }
+    },
+    {
+      "data": {
+        "id": "l2e-3-mod-mlsc-mlsc-w-glpg3-y-buf-pyramid-l3",
+        "source": "mod-mlsc-mlsc-w-glpg3-y",
+        "target": "buf-pyramid-l3",
+        "flow_type": "M2M",
+        "buffer_ref": "PYRAMID_L3",
+        "port_pairs": [
+          {
+            "src": "MLSC_W_GLPG3_Y",
+            "dst": "MTNR1_RDMA_CUR_L3_Y"
+          },
+          {
+            "src": "MLSC_W_GLPG3_U",
+            "dst": "MTNR1_RDMA_CUR_L3_U"
+          },
+          {
+            "src": "MLSC_W_GLPG3_V",
+            "dst": "MTNR1_RDMA_CUR_L3_V"
+          }
+        ],
+        "memory": {
+          "format": "YUV444",
+          "bitdepth": 12,
+          "width": 510,
+          "height": 287,
+          "fps": 30,
+          "compression": "COMP_OFF"
+        },
+        "placement": {
+          "llc_allocated": false,
+          "llc_policy": "none"
+        },
+        "label": "M2M write",
+        "detail_items": [
+          "Route: mlsc -> mtnr",
+          "Edge type: M2M",
+          "Buffer: YUV444 / pyramid_l3 / 12b / COMP_OFF"
+        ]
+      }
+    },
+    {
+      "data": {
+        "id": "l2e-4-mod-mlsc-mlsc-w-glpg4-y-buf-pyramid-l4",
+        "source": "mod-mlsc-mlsc-w-glpg4-y",
+        "target": "buf-pyramid-l4",
+        "flow_type": "M2M",
+        "buffer_ref": "PYRAMID_L4",
+        "port_pairs": [
+          {
+            "src": "MLSC_W_GLPG4_Y",
+            "dst": "MTNR1_RDMA_CUR_L4_Y"
+          },
+          {
+            "src": "MLSC_W_GLPG4_U",
+            "dst": "MTNR1_RDMA_CUR_L4_U"
+          },
+          {
+            "src": "MLSC_W_GLPG4_V",
+            "dst": "MTNR1_RDMA_CUR_L4_V"
+          }
+        ],
+        "memory": {
+          "format": "YUV444",
+          "bitdepth": 12,
+          "width": 255,
+          "height": 144,
+          "fps": 30,
+          "compression": "COMP_OFF"
+        },
+        "placement": {
+          "llc_allocated": false,
+          "llc_policy": "none"
+        },
+        "label": "M2M write",
+        "detail_items": [
+          "Route: mlsc -> mtnr",
+          "Edge type: M2M",
+          "Buffer: YUV444 / pyramid_l4 / 12b / COMP_OFF"
+        ]
+      }
+    },
+    {
+      "data": {
+        "id": "l2e-5-mod-mlsc-mlsc-w-lmeds-buf-lme-input",
+        "source": "mod-mlsc-mlsc-w-lmeds",
+        "target": "buf-lme-input",
+        "flow_type": "M2M",
+        "buffer_ref": "LME_INPUT",
+        "port_pairs": [
+          {
+            "src": "MLSC_W_LMEDS",
+            "dst": "LME_RDMA_CACHE_IN_0"
+          }
+        ],
+        "memory": {
+          "format": "Y",
+          "bitdepth": 8,
+          "width": 1008,
+          "height": 756,
+          "fps": 30,
+          "compression": "COMP_OFF"
+        },
+        "placement": {
+          "llc_allocated": false,
+          "llc_policy": "none"
+        },
+        "label": "M2M write",
+        "detail_items": [
+          "Route: mlsc -> lme",
+          "Edge type: M2M",
+          "Buffer: Y / motion_estimation / 8b / COMP_OFF"
+        ]
+      }
+    },
+    {
+      "data": {
+        "id": "l2e-6-mod-mlsc-mlsc-w-fdpig-buf-od-input",
+        "source": "mod-mlsc-mlsc-w-fdpig",
+        "target": "buf-od-input",
+        "flow_type": "M2M",
+        "buffer_ref": "OD_INPUT",
+        "port_pairs": [
+          {
+            "src": "MLSC_W_FDPIG",
+            "dst": "VPS_RDMA"
+          }
+        ],
+        "memory": {
+          "format": "YUV420",
+          "bitdepth": 8,
+          "width": 640,
+          "height": 480,
+          "fps": 30,
+          "compression": "COMP_OFF"
+        },
+        "placement": {
+          "llc_allocated": false,
+          "llc_policy": "none"
+        },
+        "label": "M2M write",
+        "detail_items": [
+          "Route: mlsc -> vps_od",
+          "Edge type: M2M",
+          "Buffer: YUV420 / object_detection / 8b / COMP_OFF"
+        ]
+      }
+    }
+  ],
+  "risks": [],
+  "summary": {
+    "scenario_id": "uc-camera-recording",
+    "variant_id": "cam-rec-3rdparty-binning",
+    "name": "Camera Recording",
+    "subtitle": "FHD 30fps",
+    "period_ms": 33.33,
+    "budget_ms": 30.0,
+    "resolution": "1920 x 1080",
+    "fps": 30,
+    "variant_label": "soc-exynos2600"
+  },
+  "metadata": {
+    "canvas_w": 1280,
+    "canvas_h": 1386,
+    "layout": "level2-module-detail",
+    "expand": "mlsc",
+    "level2_available": true,
+    "target_nodes": [
+      "mlsc"
+    ],
+    "module_source": "ip_catalog.capabilities.properties",
+    "rendered_module_count": 24,
+    "omitted_reasons": [],
+    "variant_overlay": {
+      "resolved": true,
+      "inheritance_chain": [
+        "cam-rec-3rdparty-binning"
+      ],
+      "disabled_nodes": [
+        "sensor_rear2",
+        "sensor_rear3",
+        "sensor_front",
+        "vps_dof",
+        "vps_seg",
+        "eis_preview",
+        "eis_video",
+        "gdc_m",
+        "gdc_o"
+      ],
+      "disabled_edge_count": 0,
+      "topology_patch": {
+        "add_nodes": 0,
+        "add_edges": 2,
+        "remove_edges": 1
+      },
+      "node_config_count": 22,
+      "buffer_override_count": 0,
+      "sw_task_count": 0
+    }
+  },
+  "overlays_available": [
+    "issues",
+    "review-gate",
+    "memory-path",
+    "llc-allocation",
+    "compression"
+  ]
+}

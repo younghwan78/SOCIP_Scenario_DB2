@@ -64,6 +64,7 @@ class DvfsResolver:
 
         return ResolvedIPConfig(
             node_id=workload.node_id,
+            instance_index=workload.instance_index,
             ip_ref=workload.ip_ref,
             hw_name=workload.hw_name,
             mode=workload.mode,

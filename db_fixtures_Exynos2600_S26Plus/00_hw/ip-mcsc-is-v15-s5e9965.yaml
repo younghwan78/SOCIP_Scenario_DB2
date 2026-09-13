@@ -1,0 +1,109 @@
+id: ip-mcsc-is-v15-s5e9965
+schema_version: '2.2'
+kind: ip
+category: camera
+hierarchy:
+  type: simple
+capabilities:
+  operating_modes:
+  - id: Normal
+  - id: SBWC
+  - id: HDR10P
+  sim:
+    hw_name: MCSC
+    source: borrowed_legacy_model
+    source_project: A
+    modes:
+      Normal:
+        unit_power_mw_mp: 1.5
+        idc: 0.0
+        ppc: 4.0
+        vdd: VDD_CAM
+        dvfs_group: CAM
+  supported_features:
+    bitdepth:
+    - 8
+    - 10
+    compression:
+    - COMP_OFF
+    - COMP_LOSSLESS
+    - COMP_LOSSY
+    crop: true
+    scale: true
+  properties:
+    ip_group: MCSC
+    hierarchy_group: ISP
+    max_size:
+    - 7680
+    - 4320
+    outputs:
+    - port: OUTPUT0
+      name: P0
+      role: preview
+      mcsc_index: 0
+    - port: OUTPUT1
+      name: P1
+      role: recording
+      mcsc_index: 1
+    - port: OUTPUT2
+      name: P2
+      role: capture
+      mcsc_index: 2
+    - port: OUTPUT3
+      name: P3
+      role: thumbnail
+      mcsc_index: 3
+    - port: HDR10P
+      name: HDR10Plus
+      role: hdr_metadata
+    sbwc_types:
+      COMP_OFF: 0
+      COMP_LOSSLESS: 1
+      COMP_LOSSY: 2
+    modules:
+    - name: MCSC_WDMA_W0
+      type: DMA
+      direction: write
+      supported_compressions:
+      - COMP_OFF
+      - COMP_YUV_LOSSLESS
+      - COMP_YUV_LOSSY
+    - name: MCSC_WDMA_W1
+      type: DMA
+      direction: write
+      supported_compressions:
+      - COMP_OFF
+      - COMP_YUV_LOSSLESS
+      - COMP_YUV_LOSSY
+    - name: MCSC_WDMA_W2
+      type: DMA
+      direction: write
+      supported_compressions:
+      - COMP_OFF
+      - COMP_YUV_LOSSLESS
+      - COMP_YUV_LOSSY
+    - name: MCSC_WDMA_W3
+      type: DMA
+      direction: write
+      supported_compressions:
+      - COMP_OFF
+      - COMP_YUV_LOSSLESS
+      - COMP_YUV_LOSSY
+    - name: MCSC_WDMA_W4
+      type: DMA
+      direction: write
+      supported_compressions:
+      - COMP_OFF
+      - COMP_YUV_LOSSLESS
+      - COMP_YUV_LOSSY
+    - name: CINFIFO
+      type: FIFO
+      direction: read
+    sources:
+    - path: hardware\api\pablo-hw-api-mcsc-v15_0.c
+      sha256: f94dc56f91437e463a366adb87be311beebab8da3f45aa7c9e6b61d255cdceb4
+    output_policy: FHD shares W0 for preview/video; different sizes use W0 preview
+      and W1 video. Port assignment is a fixture assumption.
+compatible_soc:
+- soc-exynos2600
+rtl_version: IS v15

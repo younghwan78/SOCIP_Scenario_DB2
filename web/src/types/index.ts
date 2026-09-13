@@ -128,6 +128,11 @@ export interface TimelineEvent {
 export interface SwTaskTiming {
   task: string
   cluster?: string
+  min_ms?: number
+  start_jitter_mean_ms?: number
+  includes_hw_nodes?: string[]
+  value_source?: 'assumed' | 'measured' | 'projected'
+  source_note?: string
   mean_ms?: number
   p50_ms?: number
   p95_ms?: number

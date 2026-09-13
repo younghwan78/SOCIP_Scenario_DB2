@@ -26,6 +26,8 @@ def build_workload_for_node(
         return None
 
     node_config = (graph.variant.node_configs or {}).get(node_id) or {}
+    if node.get("role") == "sw_task" and node_config.get("sw_timing"):
+        return None
     sim_block = node_config.get("sim") or {}
     mode = str(sim_block.get("mode") or node_config.get("selected_mode") or "Normal")
     role = str(node.get("role") or node_id)
@@ -41,6 +43,7 @@ def build_workload_for_node(
     workload_format = workload_format_for_node(graph, node_id, sim_block, shape=shape)
     return IPWorkload(
         node_id=node_id,
+        instance_index=int(node.get("instance_index") or 0),
         ip_ref=str(ip_ref),
         hw_name=sim_params.hw_name,
         mode=mode,
