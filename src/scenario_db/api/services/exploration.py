@@ -232,6 +232,7 @@ def _example_summary(path: Path, kind: ExampleKind) -> ExplorationExampleSummary
         id=f"{kind}:{path.stem}",
         type=kind,
         title=title,
+        soc_ref=_soc_ref_from_template_payload(base_recipe),
         fixture_id=fixture_id,
         path=_repo_relative_path(path),
         scenario_id=base_recipe.get("scenario_id"),

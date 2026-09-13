@@ -586,3 +586,10 @@ class _ExplorationDb:
         if model is IpCatalog:
             return _ExplorationQuery(self._ips)
         return _ExplorationQuery([])
+
+
+def test_example_summaries_expose_soc_for_runtime_filtering():
+    from scenario_db.api.services.exploration import list_exploration_examples
+    examples = list_exploration_examples().items
+    assert examples
+    assert all(item.soc_ref == "soc-exynos2500" for item in examples)

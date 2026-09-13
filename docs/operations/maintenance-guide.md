@@ -47,10 +47,20 @@ Do not mix unrelated formatting or historical-document cleanup into a behavior c
 Canonical fixture changes require strict ETL and usually API/view smoke tests.
 
 ```powershell
-uv run python -m scenario_db.etl.loader demo\fixtures `
+uv run python -m scenario_db.etl.loader db_fixtures_Exynos2600_S26Plus `
   --strict `
   --report-json output\etl\demo-report.json
 ```
+
+The runtime uses `db_fixtures_Exynos2600_S26Plus`; `demo/fixtures` remains an
+isolated test/demo seed. See the README for `scenario_db.etl.retire_demo` dry-run
+and archive/apply commands when an existing DB contains both families. The tool
+refuses cross-project dependencies. Its only legacy exception is the original
+A0 demo waiver (before commit `adaf960`), identified by ID, issue ID and original
+LF/CRLF YAML hash; it previously used the now-runtime camera scenario ID.
+Audit history and shared software remain available. A full PostgreSQL backup can
+be restored with `psql -f <backup.sql>` into a separate recovery database; the
+JSON archive also records every removed row. Never commit these backups.
 
 Keep project/board scope explicit. Do not copy real project IDs, company paths, measurement files,
 ACLs, or credentials into demo fixtures. When a viewer fixture changes, reload ETL and restart the
