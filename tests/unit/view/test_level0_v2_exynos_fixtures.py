@@ -73,17 +73,14 @@ def test_camera_recording_fixture_exposes_sensor_display_and_buffer_topology():
     topology_node_ids = {node.data.id for node in topology.nodes}
 
     assert overview.sensors[0].node_id == "sensor_rear"
-    assert overview.sensors[0].sensor_mode == "binning_4x4"
+    assert overview.sensors[0].sensor_mode == "cis_4sum_idcg_ln4_raw12_4080x2296_30fps_3993msps"
     assert overview.displays[0].layer_count == 3
-    assert "GDC_M_DPU_BUF" in _route_buffers(graph)
-    assert "buf-gdc-m-dpu-buf" in topology_node_ids
-    # Operation badges come only from explicit facts: n3aa declares none,
-    # while yuvsc now declares its sensor->record downscale in the fixture.
-    assert not any(node.data.active_operations for node in topology.nodes if node.data.id == "ip-n3aa")
+    assert "MCSC_PREVIEW" in _route_buffers(graph)
+    assert "buf-mcsc-preview" in topology_node_ids
     yuvsc_nodes = [node for node in topology.nodes if node.data.id == "ip-yuvsc"]
-    assert yuvsc_nodes and yuvsc_nodes[0].data.active_operations is not None
-    assert yuvsc_nodes[0].data.active_operations.scale is True
-    assert yuvsc_nodes[0].data.active_operations.scale_to == "1920x1080"
+    assert yuvsc_nodes and yuvsc_nodes[0].data.active_operations is None
+    mcsc_nodes = [node for node in topology.nodes if node.data.id == "ip-mcsc"]
+    assert mcsc_nodes[0].data.active_operations.scale is True
 
 
 def test_youtube_gpu_fallback_fixture_keeps_gpu_path_and_buffer_compression():

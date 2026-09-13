@@ -55,7 +55,7 @@ export const TimelineViewer: React.FC = () => {
   }, [selectedTaskId])
 
   const selectedEvent = evidenceData?.timeline_events?.find((e) => e.task_id === selectedTaskId) || null
-  const selectedSwTiming = evidenceData?.sw_task_timing?.find((t) => t.task === selectedEvent?.task_id || t.task === selectedEvent?.hw_name)
+  const selectedSwTiming = evidenceData?.sw_task_timing?.find((t) => t.task === selectedEvent?.node_id || t.task === selectedEvent?.task_id || t.task === selectedEvent?.task_id.replace(/#f\d+$/, '') || t.task === selectedEvent?.hw_name)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', overflow: 'hidden' }}>

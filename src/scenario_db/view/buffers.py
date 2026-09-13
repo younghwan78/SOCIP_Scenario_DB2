@@ -32,6 +32,7 @@ def _reference_sizes(graph: CanonicalScenarioGraph) -> dict[str, str]:
     preview = overrides.get("preview_out") or anchors.get("preview_out") or record
     fps = int(design.get("fps") or 30)
     return {
+        **{str(key): str(value) for key, value in {**anchors, **overrides}.items()},
         "sensor_full": str(sensor),
         "record_out": str(record),
         "preview_out": str(preview),

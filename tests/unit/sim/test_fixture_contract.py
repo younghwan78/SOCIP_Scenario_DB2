@@ -18,7 +18,7 @@ def test_exynos2600_fixture_contract_separates_compute_and_external_metadata():
     assert report["status"] == "warning"
     assert report["errors"] == []
     assert report["summary"]["compute_ip_count"] > 0
-    assert report["summary"]["external_ip_count"] == 3
+    assert report["summary"]["external_ip_count"] == 9  # existing three + six board sensor catalogs
     assert not _issues_for_code(report, "MISSING_PPC")
     assert _issues_for_code(report, "BORROWABLE_SIM_PARAMS")
     assert _issues_for_code(report, "SENSOR_VVALID_INPUTS_MISSING")

@@ -366,3 +366,13 @@ def test_timeline_marks_sink_cadence_violation_when_pipeline_throughput_is_slow(
     assert sink_events[-1].cadence_violation is True
     assert sink_events[-1].critical is True
     assert sink_events[-1].bottleneck_reason == "output average cadence exceeds frame period"
+
+
+def test_control_release_delay_does_not_consume_cpu_runtime():
+    events = build_timeline_events(
+        tasks=[{"id": "rt", "duration_ms": 2.0}, {"id": "sw", "task_type": "sw", "duration_ms": 0.3}],
+        edges=[{"from": "rt", "to": "sw", "type": "control", "latency_ms": 1.0}],
+    )
+    sw = next(event for event in events if event.node_id == "sw" or event.task_id == "sw")
+    assert sw.start_ms == pytest.approx(3.0)
+    assert sw.duration_ms == pytest.approx(0.3)

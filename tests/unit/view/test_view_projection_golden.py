@@ -116,6 +116,6 @@ def test_camera_level1_semantic_projection_matches_golden():
 def test_camera_level2_drilldown_projection_matches_golden():
     graph = _graph("uc-camera-recording.yaml", "cam-rec-3rdparty-binning")
 
-    view = service._project_drilldown(graph, "csispdp")
+    view = service._project_drilldown(graph, "mlsc")
 
-    _assert_matches_golden("camera_level2_csispdp.json", _payload(view))
+    _assert_matches_golden("camera_level2_mlsc.json", _payload(view))

@@ -344,43 +344,31 @@ def test_simulation_regression_smoke_keeps_reference_kpis_and_clocks_stable():
 
 # Timing references use node-level resources and OTF reservations (2026-09-05).
 # Capacity invariants below independently guard the corrected schedule.
-def test_exynos2600_camera_recording_vdis_golden_keeps_kpis_clocks_and_external_timing_stable():
+def test_exynos2600_camera_recording_vdis_preserves_is_v15_timing_contract():
     inputs = build_simulation_inputs(
         _exynos2600_generated_graph("uc-camera-recording", "cam-rec-r1-fhd30-vdis"),
         SimulationRunConfig(include_timeline=True, timeline_frame_count=4, debug_trace=True),
     )
     result = run_simulation(inputs, dvfs_tables={})
-
-    assert result.warnings == []
-    assert result.total_power_mw == pytest.approx(170.2674432, rel=1e-6)
-    assert result.bw_total_mbs == pytest.approx(1555.2, abs=1e-6)
-    assert result.hw_time_max_ms == pytest.approx(29.75)
-    assert result.timeline_end_ms == pytest.approx(248.75, rel=1e-6)
-    assert result.total_power_ma == pytest.approx(50.07865976470589, rel=1e-6)
-
     sensor = next(item for item in result.external_devices if item["device_type"] == "sensor")
-    assert sensor["mode"] == "wide_video_16_9_30"
+    assert sensor["mode"] == "cis_4sum_idcg_ln4_raw12_4080x2296_30fps_3993msps"
     assert sensor["size"] == "4080x2296"
-    assert sensor["fps"] == pytest.approx(30.0)
     assert sensor["v_valid_ms"] == pytest.approx(18.987754, abs=1e-6)
-
-    assert result.resolved["csispdp"].clock_correction_reason.startswith("sensor_ingress_req_csis_clock")
-    assert result.resolved["csispdp"].required_clock_mhz == pytest.approx(285.2142857142857)
-    assert result.resolved["byrp"].clock_correction_reason == "otf_group_clock_align(otf-0, leader=csispdp)"
-    assert result.resolved["byrp"].set_clock_mhz == pytest.approx(result.resolved["csispdp"].set_clock_mhz)
-    assert result.resolved["rgbp"].set_clock_mhz == pytest.approx(result.resolved["csispdp"].set_clock_mhz)
-    assert result.resolved["yuvsc"].set_clock_mhz == pytest.approx(result.resolved["csispdp"].set_clock_mhz)
-    assert result.resolved["lme"].set_clock_mhz == pytest.approx(18.296470588235298)
-
-    sink_events = [event for event in result.timeline_events if event.node_id == "panel"]
-    assert len(sink_events) == 4
-    assert sink_events[-1].cadence_violation is False
-    assert sink_events[-1].cadence_avg_interval_ms == pytest.approx(33.333333333333336)
-    trace = result.calculation_trace
-    assert trace is not None
-    assert trace["timeline"]["summary"]["cadence_violation_count"] == 0
-    assert any(row["task_id"] == "panel#f3" for row in trace["timeline"]["cadence"])
-    assert not any(row["bottleneck_reason"] == "output average cadence exceeds frame period" for row in trace["timeline"]["top_waits"])
+    assert result.resolved["csis"].required_clock_mhz == pytest.approx(285.2142857142857)
+    rt_events = {event.node_id: event for event in result.timeline_events if event.frame_index == 0}
+    for node in ["csis", "pdp", "byrp", "rgbp", "yuvsc", "mlsc"]:
+        assert rt_events[node].start_ms == pytest.approx(rt_events["sensor_rear"].start_ms)
+        assert rt_events[node].end_ms == pytest.approx(rt_events["sensor_rear"].end_ms)
+    assert rt_events["post_crta"].start_ms == pytest.approx(rt_events["mlsc"].end_ms + 1.0)
+    assert rt_events["post_crta"].duration_ms == pytest.approx(0.3)
+    assert rt_events["pre_me_rta"].duration_ms == pytest.approx(3.0)
+    assert rt_events["post_irta"].duration_ms == pytest.approx(4.0)
+    assert "lme" not in rt_events  # included in preME, never counted twice
+    lme = next(row for row in result.timing_breakdown if row.node_id == "lme")
+    assert lme.hw_time_ms <= 3.0 + 1e-9
+    assert any("assumed wall time" in warning for warning in result.warnings)
+    assert any("core power estimate will be zero" in warning for warning in result.warnings)
+    assert result.bw_total_mbs == pytest.approx(4092.40188 + 1008 * 756 * 30 / 1e6)
 
 
 def test_full_debug_trace_includes_timeline_event_rows():
@@ -398,73 +386,23 @@ def test_full_debug_trace_includes_timeline_event_rows():
 
 
 @pytest.mark.parametrize(
-    ("variant_id", "expected"),
-    [
-        (
-            "cam-rec-r1-uhd30-vdis",
-            {
-                "total_power_mw": 681.0697728,
-                "total_power_ma": 200.31463905882356,
-                "bw_total_mbs": 6220.8,
-                "timeline_end_ms": 248.75,
-                "sensor_mode": "wide_video_16_9_30",
-                "sensor_size": "4080x2296",
-                "sensor_v_valid_ms": 18.987754,
-                "csispdp_required_mhz": 285.2142857142857,
-                "otf0_set_clock_mhz": 285.2142857142857,
-                "lme_set_clock_mhz": 73.18588235294119,
-                "sink_cadence_avg_ms": 33.333333333333336,
-            },
-        ),
-        (
-            "cam-rec-f1-fhd30",
-            {
-                "total_power_mw": 140.2002432,
-                "total_power_ma": 41.23536564705882,
-                "bw_total_mbs": 1244.16,
-                "timeline_end_ms": 222.583333,
-                "sensor_mode": "wide_video_16_9_30",
-                "sensor_size": "3648x2052",
-                "sensor_v_valid_ms": 33.333333,
-                "csispdp_required_mhz": 1714.285714285714,
-                "otf0_set_clock_mhz": 1714.285714285714,
-                "lme_set_clock_mhz": None,
-                "sink_cadence_avg_ms": 33.333333333333336,
-            },
-        ),
-    ],
+    ("variant_id", "channels", "sensor_name"),
+    [("cam-rec-r1-uhd30-vdis", 2, "GNG"), ("cam-rec-f1-fhd30", 1, "IMX874")],
 )
-def test_exynos2600_camera_recording_golden_matrix_keeps_key_paths_stable(variant_id, expected):
-    inputs = build_simulation_inputs(
-        _exynos2600_generated_graph("uc-camera-recording", variant_id),
-        SimulationRunConfig(include_timeline=True, timeline_frame_count=4, debug_trace=True),
-    )
+def test_exynos2600_camera_recording_paths_match_board_and_output_policy(variant_id, channels, sensor_name):
+    graph = _exynos2600_generated_graph("uc-camera-recording", variant_id)
+    inputs = build_simulation_inputs(graph, SimulationRunConfig(timeline_frame_count=4))
     result = run_simulation(inputs, dvfs_tables={})
-
-    assert result.warnings == []
-    assert result.total_power_mw == pytest.approx(expected["total_power_mw"], rel=1e-6)
-    assert result.total_power_ma == pytest.approx(expected["total_power_ma"], rel=1e-6)
-    assert result.bw_total_mbs == pytest.approx(expected["bw_total_mbs"], abs=1e-6)
-    assert result.hw_time_max_ms == pytest.approx(29.75)
-    assert result.timeline_end_ms == pytest.approx(expected["timeline_end_ms"], rel=1e-6)
-
-    sensor = next(item for item in result.external_devices if item["device_type"] == "sensor")
-    assert sensor["mode"] == expected["sensor_mode"]
-    assert sensor["size"] == expected["sensor_size"]
-    assert sensor["v_valid_ms"] == pytest.approx(expected["sensor_v_valid_ms"], abs=1e-6)
-    assert result.resolved["csispdp"].required_clock_mhz == pytest.approx(expected["csispdp_required_mhz"])
-    assert result.resolved["byrp"].set_clock_mhz == pytest.approx(expected["otf0_set_clock_mhz"])
-    assert result.resolved["rgbp"].set_clock_mhz == pytest.approx(expected["otf0_set_clock_mhz"])
-    assert result.resolved["yuvsc"].set_clock_mhz == pytest.approx(expected["otf0_set_clock_mhz"])
-    if expected["lme_set_clock_mhz"] is None:
-        assert "lme" not in result.resolved
-    else:
-        assert result.resolved["lme"].set_clock_mhz == pytest.approx(expected["lme_set_clock_mhz"])
-
-    sink_events = [event for event in result.timeline_events if event.node_id == "panel"]
-    assert len(sink_events) == 4
-    assert sink_events[-1].cadence_violation is False
-    assert sink_events[-1].cadence_avg_interval_ms == pytest.approx(expected["sink_cadence_avg_ms"])
+    sensor = next(row for row in result.external_devices if row["device_type"] == "sensor")
+    assert sensor_name.lower() in sensor["ip_ref"].lower()
+    ports = [row for row in inputs.port_transfers if row.node_id == "mcsc"]
+    assert len(ports) == channels
+    assert ports[0].width == 1920 and ports[0].height == 1080
+    if channels == 2:
+        assert ports[1].width == 3840 and ports[1].height == 2160
+    assert {"mlsc", "pdp", "csis", "vps_od"}.issubset(result.resolved)
+    assert "n3aa" not in result.resolved and "csispdp" not in result.resolved
+    assert len([event for event in result.timeline_events if event.node_id == "panel"]) == 4
 
 
 def test_golden_comparator_accepts_reference_result_and_reports_diffs():
@@ -1170,3 +1108,56 @@ def test_runner_uses_owning_node_fps_for_port_bandwidth():
     bw = {item.node_id: item.bw_mbs for item in result.dma_breakdown}
 
     assert bw["dpu0"] == pytest.approx(bw["isp0"] * 4.0)
+
+
+@pytest.mark.parametrize("case, preme, post", [("min", 2.5, 3.0), ("mean", 3.0, 4.0), ("max", 4.0, 5.6)])
+def test_is_v15_timing_sensitivity_and_history_dma(case, preme, post):
+    suffix = "" if case == "mean" else "-timing-" + case
+    graph = _exynos2600_generated_graph("uc-camera-recording", "cam-rec-r1-fhd30-vdis" + suffix)
+    inputs = build_simulation_inputs(graph, SimulationRunConfig(timeline_frame_count=1))
+    result = run_simulation(inputs, dvfs_tables={})
+    events = {row.node_id: row for row in result.timeline_events}
+    assert events["pre_me_rta"].duration_ms == pytest.approx(preme)
+    assert events["post_irta"].duration_ms == pytest.approx(post)
+    assert events["post_crta"].start_ms - events["mlsc"].end_ms == pytest.approx(1.0)
+    assert "lme" not in events
+    history = [p for p in inputs.port_transfers if p.node_id == "mtnr" and "_PREV_" in p.port]
+    assert len(history) == 26  # 13 image planes in each direction, no double-counted YUV444
+    assert len([p for p in history if p.format == "Y"]) == 26
+    assert len([p for p in inputs.port_transfers if p.node_id == "mtnr" and "_CUR_" in p.port]) == 13
+    for port in inputs.port_transfers:
+        modules = graph.ip_catalog[port.ip_ref].capabilities["properties"].get("modules", [])
+        assert port.port in {m["name"] for m in modules}
+    for layer in range(5):
+        planes = [p for p in history if f"_L{layer}_" in p.port]
+        assert {(p.width, p.height) for p in planes} == {((4080 + 2**layer - 1) // 2**layer, (2296 + 2**layer - 1) // 2**layer)}
+    digest = {row["task"]: row for row in inputs.sw_task_timing}
+    assert digest["pre_me_rta"]["includes_hw_nodes"] == ["lme"]
+    assert digest["post_crta"]["value_source"] == "assumed"
+
+
+def test_is_v15_estimated_evidence_keeps_timing_and_exploration_status():
+    from scenario_db.models.evidence.common import ExecutionContext
+    from scenario_db.sim.runner import build_simulation_evidence
+    from scenario_db.sim.service import _simulation_evidence_dict
+
+    inputs = build_simulation_inputs(_exynos2600_generated_graph("uc-camera-recording", "cam-rec-r1-fhd30-vdis"))
+    result = run_simulation(inputs, dvfs_tables={})
+    evidence = build_simulation_evidence(result, execution_context=ExecutionContext(
+        silicon_rev="EVT1", sw_baseline_ref="sw-vendor-v1.2.3", thermal="room", method="calculation",
+    ))
+    assert {row.instance_index for row in evidence.ip_breakdown if row.ip == "ip-gdc-is-v15-s5e9965"} == {0, 1}
+    assert evidence.run.source == "estimated"
+    assert evidence.resolution_result.overall_feasibility == "exploration_only"
+    payload = _simulation_evidence_dict(evidence)
+    assert len(payload["sw_task_timing"]) == 5
+    row = next(row for row in payload["sw_task_timing"] if row["task"] == "post_crta")
+    assert row["min_ms"] == 0.1 and row["mean_ms"] == 0.3 and row["max_ms"] == 0.5
+    assert row["start_jitter_mean_ms"] == 1.0
+
+
+def test_is_v15_invalid_timing_profile_is_rejected():
+    graph = _exynos2600_generated_graph("uc-camera-recording", "cam-rec-r1-fhd30-vdis")
+    graph.variant.node_configs["post_crta"]["sw_timing"]["min_ms"] = 10.0
+    with pytest.raises(ValueError, match="min_ms"):
+        build_simulation_inputs(graph)

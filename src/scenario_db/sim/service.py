@@ -318,6 +318,7 @@ def _simulation_evidence_dict(evidence) -> dict:
         "timing_breakdown": [item.model_dump(mode="json", exclude_none=True) for item in evidence.timing_breakdown],
         "dvfs_breakdown": [item.model_dump(mode="json", exclude_none=True) for item in evidence.dvfs_breakdown],
         "timeline_events": [item.model_dump(mode="json", exclude_none=True) for item in evidence.timeline_events],
+        "sw_task_timing": [item.model_dump(mode="json", exclude_none=True) for item in evidence.sw_task_timing],
         "external_devices": list(evidence.external_devices or []),
         "topology_order": list(evidence.topology_order or []),
         "vdd_power": evidence.vdd_power or {},

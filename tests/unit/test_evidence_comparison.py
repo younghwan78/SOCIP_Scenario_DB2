@@ -286,3 +286,13 @@ def test_cluster_rows_join_between_prediction_and_measurement():
     cluster_row = rows[("power.cluster", "BIG")]
     assert cluster_row["status"] == "MATCHED"
     assert cluster_row["delta"] == -10.0
+
+
+def test_sw_timing_normalization_preserves_min_mean_max_without_inventing_p95():
+    evidence = {**_evidence("evidence.simulation"), "sw_task_timing": [
+        {"task": "post_crta", "min_ms": 0.1, "mean_ms": 0.3, "max_ms": 0.5, "value_source": "assumed"},
+    ]}
+    rows = normalize_evidence_observations(evidence)
+    row = next(item for item in rows if item["metric_id"] == "sw.runtime")
+    assert row["stats"] == {"min": 0.1, "mean": 0.3, "max": 0.5}
+    assert "p95" not in row["stats"]

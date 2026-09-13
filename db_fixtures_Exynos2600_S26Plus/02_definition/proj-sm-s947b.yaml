@@ -6,7 +6,7 @@ metadata:
   soc_ref: soc-exynos2600
   board_type: SM-S947B
   board_name: S26 Plus
-  sensor_module_ref: ip-sensor-rear-s5e9965
+  sensor_module_ref: ip-sensor-gng-s5e9965
   display_module_ref: ip-display-panel-s5e9965
   default_sw_profile_ref: sw-vendor-v1.2.3
 globals:

@@ -153,7 +153,10 @@ def build_timeline_events(
     def run_edge_transfer(edge: dict[str, Any]):
         token_id = _edge_token_resource(edge)
         duration = _edge_duration(edge)
-        if not token_id or duration <= 0:
+        if duration <= 0:
+            return 0.0
+        if not token_id:
+            yield env.timeout(duration)
             return 0.0
         start_wait = float(env.now)
         with token_resource(token_id, _edge_token_capacity(edge)).request() as request:

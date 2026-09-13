@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from scenario_db.db.repositories.scenario_graph import CanonicalScenarioGraph
 from scenario_db.sim.bw_calc import compression_enabled, normalize_compression, resolve_comp_ratio
@@ -32,6 +32,8 @@ def _resolve_port_comp_ratio(
     warnings: list[str] | None,
     where: str,
 ) -> float:
+    if raw_override is not None and not isinstance(raw_override, (int, float, str)):
+        raise ValueError(f"{where}: comp_ratio must be numeric")
     override = float(raw_override) if raw_override is not None else None
     if override is not None and warnings is not None and catalog and compression_enabled(compression):
         mode = normalize_compression(compression)
@@ -107,6 +109,44 @@ def _use_propagated_shape(sim_block: dict[str, Any]) -> bool:
     return bool(sim_block.get("inherit_shape") or sim_block.get("shape_propagation"))
 
 
+def _effective_buffer(graph: CanonicalScenarioGraph, buffer_id: str) -> dict[str, Any]:
+    base = (cast(dict[str, Any], graph.scenario.pipeline or {}).get("buffers") or {}).get(buffer_id) or {}
+    override = (graph.variant.buffer_overrides or {}).get(buffer_id) or {}
+    return {**base, **override}
+
+
+def _buffer_transfers(
+    graph: CanonicalScenarioGraph,
+    workload: IPWorkload,
+    buffer_id: str,
+    names: list[str],
+    direction: PortType,
+    comp_catalog: dict[str, float] | None,
+    warnings: list[str] | None,
+) -> list[PortTransferSpec]:
+    buffer = _effective_buffer(graph, buffer_id)
+    width, height = buffer_size(graph, buffer)
+    if width == 0 or height == 0:
+        width, height = design_size_for_graph(graph)
+    if width == 0 or height == 0:
+        return []
+    compression = str(buffer.get("compression") or "disable")
+    comp_ratio = _resolve_port_comp_ratio(
+        compression, buffer.get("comp_ratio"), comp_catalog, warnings, f"buffer.{buffer_id}"
+    )
+    fmt = buffer.get("format")
+    # A planar YUV444 buffer has three full-size single-component planes.
+    # Names remain physical driver DMA identifiers while BW counts each plane once.
+    if len(names) == 3 and str(fmt).upper() == "YUV444":
+        fmt = "Y"
+    return [PortTransferSpec(
+        node_id=workload.node_id, ip_ref=workload.ip_ref, hw_name=workload.hw_name,
+        port=name, port_type=direction, width=width, height=height,
+        format=fmt, bitwidth=int(buffer.get("bitdepth") or 8),
+        compression=compression, comp_ratio=comp_ratio,
+    ) for name in names]
+
+
 def edge_port_transfers(
     graph: CanonicalScenarioGraph,
     workloads: dict[str, IPWorkload],
@@ -114,60 +154,47 @@ def edge_port_transfers(
     comp_catalog: dict[str, float] | None = None,
     warnings: list[str] | None = None,
 ) -> list[PortTransferSpec]:
-    buffers = (graph.scenario.pipeline or {}).get("buffers") or {}
     specs: list[PortTransferSpec] = []
+    seen: set[tuple[str, str, str, str]] = set()
     for edge in graph.pipeline_edges:
         if edge_type(edge) != "M2M":
             continue
-        source = str(edge_source(edge) or "")
-        target = str(edge_target(edge) or "")
-        buffer = buffers.get(edge.get("buffer")) if edge.get("buffer") else {}
-        width, height = buffer_size(graph, buffer) if isinstance(buffer, dict) else (0, 0)
-        if width == 0 or height == 0:
-            width, height = design_size_for_graph(graph)
-        if width == 0 or height == 0:
+        source, target = str(edge_source(edge) or ""), str(edge_target(edge) or "")
+        buffer_id = str(edge.get("buffer") or "")
+        pairs = edge.get("port_pairs") or []
+        for node_id, direction, key, fallback in (
+            (source, PortType.DMA_WRITE, "src", f"{buffer_id or target}_WDMA"),
+            (target, PortType.DMA_READ, "dst", f"{buffer_id or source}_RDMA"),
+        ):
+            if node_id not in workloads:
+                continue
+            names = list(dict.fromkeys(str(pair[key]) for pair in pairs if pair.get(key))) or [fallback]
+            for spec in _buffer_transfers(graph, workloads[node_id], buffer_id, names, direction, comp_catalog, warnings):
+                identity = (node_id, spec.port, buffer_id, direction)
+                # Fan-out from the same MCSC buffer writes once, reads once per consumer.
+                if identity not in seen:
+                    seen.add(identity)
+                    specs.append(spec)
+    return specs
+
+
+def history_port_transfers(
+    graph: CanonicalScenarioGraph,
+    workloads: dict[str, IPWorkload],
+    comp_catalog: dict[str, float] | None = None,
+    warnings: list[str] | None = None,
+) -> list[PortTransferSpec]:
+    """Steady-state previous-frame traffic without a same-frame DAG self-cycle."""
+    specs = []
+    for buffer_id in (cast(dict[str, Any], graph.scenario.pipeline or {}).get("buffers") or {}):
+        history = _effective_buffer(graph, buffer_id).get("history") or {}
+        node_id = str(history.get("node_id") or "")
+        if node_id not in workloads:
             continue
-        bitwidth = int(buffer.get("bitdepth") or 8) if isinstance(buffer, dict) else 8
-        compression = str(buffer.get("compression") or "disable") if isinstance(buffer, dict) else "disable"
-        fmt = buffer.get("format") if isinstance(buffer, dict) else None
-        buffer_override = buffer.get("comp_ratio") if isinstance(buffer, dict) else None
-        comp_ratio = _resolve_port_comp_ratio(
-            compression, buffer_override, comp_catalog, warnings, f"buffer.{edge.get('buffer')}"
-        )
-        if source in workloads:
-            workload = workloads[source]
-            specs.append(
-                PortTransferSpec(
-                    node_id=source,
-                    ip_ref=workload.ip_ref,
-                    hw_name=workload.hw_name,
-                    port=f"{edge.get('buffer') or target}_WDMA",
-                    port_type=PortType.DMA_WRITE,
-                    width=width,
-                    height=height,
-                    format=fmt,
-                    bitwidth=bitwidth,
-                    compression=compression,
-                    comp_ratio=comp_ratio,
-                )
-            )
-        if target in workloads:
-            workload = workloads[target]
-            specs.append(
-                PortTransferSpec(
-                    node_id=target,
-                    ip_ref=workload.ip_ref,
-                    hw_name=workload.hw_name,
-                    port=f"{edge.get('buffer') or source}_RDMA",
-                    port_type=PortType.DMA_READ,
-                    width=width,
-                    height=height,
-                    format=fmt,
-                    bitwidth=bitwidth,
-                    compression=compression,
-                    comp_ratio=comp_ratio,
-                )
-            )
+        if history.get("frame_offset") != -1:
+            raise ValueError(f"{buffer_id}: history requires frame_offset=-1")
+        for key, direction in (("read_ports", PortType.DMA_READ), ("write_ports", PortType.DMA_WRITE)):
+            specs.extend(_buffer_transfers(graph, workloads[node_id], buffer_id, history.get(key) or [], direction, comp_catalog, warnings))
     return specs
 
 

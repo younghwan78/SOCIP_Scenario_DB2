@@ -53,7 +53,7 @@ export const TimelineInspector: React.FC<TimelineInspectorProps> = ({ event, swT
         {/* Task Title & Badges */}
         <div>
           <div style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text-primary)', wordBreak: 'break-all' }}>
-            {event.hw_name || event.task_id}
+            {event.node_id || event.task_id}
           </div>
           <div style={{ display: 'flex', gap: '6px', marginTop: '6px', flexWrap: 'wrap' }}>
             {event.task_type && <Badge variant={event.task_type === 'sw' ? 'purple' : 'teal'}>{event.task_type.toUpperCase()}</Badge>}
@@ -110,13 +110,18 @@ export const TimelineInspector: React.FC<TimelineInspectorProps> = ({ event, swT
         {swTiming && (
           <div style={{ background: 'var(--bg-surface-raised)', padding: '12px', borderRadius: 'var(--radius-sm)' }}>
             <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', marginBottom: '8px' }}>
-              PERFETTO STATISTICAL DIGEST
+              SW TIMING PROFILE
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '12px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>Mean / p50:</span>
-                <span style={{ fontFamily: 'var(--font-mono)' }}>{swTiming.mean_ms?.toFixed(2)} ms / {swTiming.p50_ms?.toFixed(2)} ms</span>
+                <span style={{ color: 'var(--text-secondary)' }}>Min / Mean / Max:</span>
+                <span style={{ fontFamily: 'var(--font-mono)' }}>{swTiming.min_ms?.toFixed(2) ?? '—'} / {swTiming.mean_ms?.toFixed(2) ?? '—'} / {swTiming.max_ms?.toFixed(2) ?? '—'} ms</span>
               </div>
+              <div title={swTiming.source_note}>
+                Source: {swTiming.value_source || 'Unspecified'}
+                {swTiming.includes_hw_nodes?.length ? ` · includes ${swTiming.includes_hw_nodes.join(', ')}` : ''}
+              </div>
+              <div>Mean start delay: {swTiming.start_jitter_mean_ms?.toFixed(2) ?? '—'} ms</div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-secondary)' }}>p95 / Max:</span>
                 <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--status-warning)' }}>

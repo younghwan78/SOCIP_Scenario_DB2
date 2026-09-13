@@ -105,17 +105,17 @@ def test_level2_unavailable_when_ip_has_no_module_declarations():
 def test_level2_expands_declared_modules_for_single_active_camera_node():
     graph = _graph("uc-camera-recording.yaml", "cam-rec-3rdparty-binning")
 
-    view = service._project_drilldown(graph, "csispdp")
+    view = service._project_drilldown(graph, "mlsc")
     nodes = _node_by_id(view)
 
     assert view.metadata["layout"] == "level2-module-detail"
     assert view.metadata["level2_available"] is True
-    assert nodes["l2pkg-csispdp"].data.hierarchy_group == "ISP"
-    assert nodes["mod-csispdp-csispdp"].data.model_dump()["module_kind"] == "functional"
-    assert nodes["mod-csispdp-csispdp-wdma"].data.model_dump()["module_kind"] == "wdma"
-    assert nodes["mod-csispdp-csispdp-wdma"].data.model_dump()["module_direction"] == "output"
-    assert nodes["buf-csispdp-3aa-buf"].data.memory.format == "RAW_BAYER_16"
-    assert any(edge.data.buffer_ref == "CSISPDP_3AA_BUF" for edge in view.edges)
+    assert nodes["l2pkg-mlsc"].data.hierarchy_group == "ISP"
+    assert nodes["mod-mlsc-mlsc"].data.model_dump()["module_kind"] == "functional"
+    assert nodes["mod-mlsc-mlsc-w-glpg0-y"].data.model_dump()["module_kind"] == "wdma"
+    assert nodes["mod-mlsc-mlsc-w-glpg0-y"].data.model_dump()["module_direction"] == "output"
+    assert nodes["buf-pyramid-l0"].data.memory.format == "Y"
+    assert any(edge.data.buffer_ref == "PYRAMID_L0" for edge in view.edges)
 
 
 def test_level2_camera_expand_uses_active_graph_not_hardcoded_reference_nodes():
@@ -126,20 +126,20 @@ def test_level2_camera_expand_uses_active_graph_not_hardcoded_reference_nodes():
 
     assert view.metadata["layout"] == "level2-module-detail"
     assert "l2cam-mlsc" not in node_ids
-    assert {"mod-csispdp-csispdp", "mod-byrp-byrp", "mod-yuvsc-yuvsc", "mod-mtnr-mtnr"} <= node_ids
-    assert {"buf-yuvsc-mtnr-buf", "buf-csispdp-3aa-buf"} <= node_ids
+    assert {"mod-mlsc-mlsc", "mod-byrp-byrp", "mod-yuvsc-yuvsc", "mod-mtnr-mtnr"} <= node_ids
+    assert {"buf-pyramid-l4", "buf-pyramid-l0"} <= node_ids
 
 
 def test_level2_node_spec_uses_typed_spec_object():
     graph = _graph("uc-camera-recording.yaml", "cam-rec-3rdparty-binning")
-    node = next(item for item in graph.pipeline_nodes if item["id"] == "csispdp")
+    node = next(item for item in graph.pipeline_nodes if item["id"] == "mlsc")
 
     spec, reason = _level2_node_spec(graph, node)
 
     assert reason == ""
     assert isinstance(spec, Level2NodeSpec)
-    assert spec.node_id == "csispdp"
-    assert spec.ip_ref == "ip-isp-s5e9965"
+    assert spec.node_id == "mlsc"
+    assert spec.ip_ref == "ip-mlsc-is-v15-s5e9965"
 
 
 def test_level2_hierarchy_only_ip_derives_io_modules_from_m2m_edges():

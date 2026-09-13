@@ -47,7 +47,7 @@ export const EvidenceDashboard: React.FC = () => {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', overflowY: 'auto', padding: '16px', gap: '16px' }}>
+    <div className="evidence-dashboard" style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', overflowY: 'auto', padding: '16px', gap: '16px' }}>
       {/* Top Banner with Run Simulation Form */}
       <Card
         title="Scenario Simulation & Evidence Manager"
@@ -91,6 +91,11 @@ export const EvidenceDashboard: React.FC = () => {
         <Button disabled={!latestEvidence || latestEvidence.isPreview} onClick={() => latestEvidence && setSimOverlay('specific', latestEvidence.id)}>Pin saved result in URL</Button>
         {simEvidenceId && <Button onClick={() => setSimOverlay('none')}>Return to latest simulation</Button>}
       </div>
+      {latestEvidence?.sw_task_timing?.some(row => row.value_source === 'assumed') && (
+        <Card title="Estimated result · assumed SW timing">
+          Timing values include fixture assumptions. Check the model coverage before using these power and clock results for hardware decisions.
+        </Card>
+      )}
       {/* KPI Metrics Summary Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
         <Card>
@@ -135,7 +140,7 @@ export const EvidenceDashboard: React.FC = () => {
         <Card>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', color: 'var(--status-success)' }}>
             <Activity size={16} />
-            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)' }}>FRAME LATENCY</span>
+            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)' }}>TIMELINE DURATION</span>
           </div>
           <div style={{ fontSize: '20px', fontWeight: 800, fontFamily: 'var(--font-mono)' }}>
             {kpi.timeline_end_ms != null ? `${Number(kpi.timeline_end_ms).toFixed(2)} ms` : '-'}
@@ -182,14 +187,17 @@ export const EvidenceDashboard: React.FC = () => {
       </Card>}
       {/* Tab 1: SW Task Timing */}
       {activeSubTab === 'sw_timing' && (
-        <Card title="Perfetto-extracted SW Task Timing Digest">
+        <Card title="SW Task Timing · measured and assumed" style={{ overflowX: 'auto' }}>
           {latestEvidence?.sw_task_timing && latestEvidence.sw_task_timing.length > 0 ? (
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-subtle)', color: 'var(--text-muted)' }}>
                   <th style={{ padding: '8px' }}>Task Name</th>
                   <th style={{ padding: '8px' }}>Cluster</th>
+                  <th style={{ padding: '8px' }}>Source / Included HW</th>
+                  <th style={{ padding: '8px' }}>Min (ms)</th>
                   <th style={{ padding: '8px' }}>Mean (ms)</th>
+                  <th style={{ padding: '8px' }}>Mean start delay (ms)</th>
                   <th style={{ padding: '8px' }}>p50 (ms)</th>
                   <th style={{ padding: '8px' }}>p95 (ms)</th>
                   <th style={{ padding: '8px' }}>Max (ms)</th>
@@ -203,7 +211,13 @@ export const EvidenceDashboard: React.FC = () => {
                     <td style={{ padding: '8px' }}>
                       <Badge variant="purple">{row.cluster || 'Unknown'}</Badge>
                     </td>
+                    <td style={{ padding: '8px' }} title={row.source_note}>
+                      {row.value_source || 'Unspecified'}
+                      {row.includes_hw_nodes?.length ? ` · includes ${row.includes_hw_nodes.join(', ')}` : ''}
+                    </td>
+                    <td style={{ padding: '8px', fontFamily: 'var(--font-mono)' }}>{row.min_ms?.toFixed(2) ?? '—'}</td>
                     <td style={{ padding: '8px', fontFamily: 'var(--font-mono)' }}>{row.mean_ms?.toFixed(2)}</td>
+                    <td style={{ padding: '8px', fontFamily: 'var(--font-mono)' }}>{row.start_jitter_mean_ms?.toFixed(2) ?? '—'}</td>
                     <td style={{ padding: '8px', fontFamily: 'var(--font-mono)' }}>{row.p50_ms?.toFixed(2)}</td>
                     <td style={{ padding: '8px', fontFamily: 'var(--font-mono)', fontWeight: 700, color: 'var(--status-warning)' }}>
                       {row.p95_ms?.toFixed(2)}

@@ -1,0 +1,90 @@
+id: ip-yuvp-is-v15-s5e9965
+schema_version: '2.2'
+kind: ip
+category: camera
+hierarchy:
+  type: simple
+rtl_version: IS v15
+capabilities:
+  operating_modes:
+  - id: Normal
+  - id: Recording
+  - id: HighSpeed
+  sim:
+    hw_name: YUVP
+    modes:
+      Normal:
+        unit_power_mw_mp: 0.352
+        idc: 0.0
+        ppc: 4.0
+        vdd: VDD_CAM
+        dvfs_group: CAM
+      FHD:
+        unit_power_mw_mp: 0.403
+        idc: 0.0
+        ppc: 4.0
+        vdd: VDD_CAM
+        dvfs_group: CAM
+      8K:
+        unit_power_mw_mp: 0.331
+        idc: 0.0
+        ppc: 4.0
+        vdd: VDD_CAM
+        dvfs_group: CAM
+    source: borrowed_legacy_model
+    source_note: 'Topology/DMA: kernel IS v15. Performance/power: legacy estimate;
+      not calibrated to IS v15.'
+  properties:
+    is_version: 15
+    ip_group: YUVP
+    hierarchy_group: ISP
+    modules:
+    - name: YUVP_RDMA_CLAHE
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-yuvp-v15_0.c
+    - name: YUVP_RDMA_DRC0
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-yuvp-v15_0.c
+    - name: YUVP_RDMA_DRC1
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-yuvp-v15_0.c
+    - name: YUVP_RDMA_PCC_HIST
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-yuvp-v15_0.c
+    - name: YUVP_RDMA_SEG
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-yuvp-v15_0.c
+    - name: YUVP_RDMA_U
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-yuvp-v15_0.c
+    - name: YUVP_RDMA_V
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-yuvp-v15_0.c
+    - name: YUVP_RDMA_Y
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-yuvp-v15_0.c
+    - name: YUVP_WDMA_PCC_HIST
+      type: DMA
+      direction: write
+      source_file: hardware\api\pablo-hw-api-yuvp-v15_0.c
+    - name: CINFIFO
+      type: FIFO
+      direction: read
+    - name: COUTFIFO
+      type: FIFO
+      direction: write
+    sources:
+    - path: \\wsl.localhost\Ubuntu\home\neokein\work\12_SM_S947B\exynos\external-modules\camera\camera\hardware\api\pablo-hw-api-yuvp-v15_0.c
+      sha256: 994be17b489015e93fb2dc93e9d84a704eb2c9bad71d0111fb09853bab170e09
+    provenance_status: kernel_declared
+    performance_status: borrowed
+compatible_soc:
+- soc-exynos2600

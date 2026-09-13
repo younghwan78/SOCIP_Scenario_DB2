@@ -1,0 +1,220 @@
+id: ip-sensor-jn3-s5e9965
+schema_version: '2.2'
+kind: ip
+category: sensor
+hierarchy:
+  type: simple
+capabilities:
+  operating_modes:
+  - id: mode0
+  - id: mode2
+  - id: mode4
+  - id: mode6
+  - id: mode9
+  - id: mode10
+  - id: mode12
+  - id: mode13
+  - id: mode14
+  - id: mode15
+  - id: mode18
+  - id: mode20
+  - id: mode25
+  - id: mode26
+  properties:
+    place: ultrawide
+    sensor_name: S5KJN3
+    active_size:
+    - 8160
+    - 6120
+    phy_type: CPHY
+    source:
+      path: \\wsl.localhost\Ubuntu\home\neokein\work\12_SM_S947B\exynos\device\erd\erd9965\arch\arm64\boot\dts\samsung\m2s\camera\module_jn3.dtsi
+      sha256: 020959224a12d83b6bfdfc0b4e6940d947cf01a35abd132231941fc4b26fd737
+    modes:
+      mode0:
+        sensor_name: S5KJN3
+        sensor_size:
+        - 4080
+        - 3060
+        sensor_fps: 60.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 3.468
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 0
+        source_line: 88
+      mode2:
+        sensor_name: S5KJN3
+        sensor_size:
+        - 4080
+        - 3060
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 12
+        sensor_mipi_speed: 3.468
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 2
+        source_line: 138
+      mode4:
+        sensor_name: S5KJN3
+        sensor_size:
+        - 4080
+        - 3060
+        sensor_fps: 60.0
+        sensor_format: BAYER
+        sensor_bitwidth: 12
+        sensor_mipi_speed: 3.468
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 4
+        source_line: 145
+      mode6:
+        sensor_name: S5KJN3
+        sensor_size:
+        - 4080
+        - 2296
+        sensor_fps: 120.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 3.468
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 6
+        source_line: 194
+      mode9:
+        sensor_name: S5KJN3
+        sensor_size:
+        - 4080
+        - 2296
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 12
+        sensor_mipi_speed: 3.468
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 9
+        source_line: 201
+      mode10:
+        sensor_name: S5KJN3
+        sensor_size:
+        - 4080
+        - 2296
+        sensor_fps: 60.0
+        sensor_format: BAYER
+        sensor_bitwidth: 12
+        sensor_mipi_speed: 3.468
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 10
+        source_line: 208
+      mode12:
+        sensor_name: S5KJN3
+        sensor_size:
+        - 3328
+        - 1872
+        sensor_fps: 120.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 3.468
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 12
+        source_line: 215
+      mode13:
+        sensor_name: S5KJN3
+        sensor_size:
+        - 4000
+        - 2252
+        sensor_fps: 120.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 3.468
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 13
+        source_line: 222
+      mode14:
+        sensor_name: S5KJN3
+        sensor_size:
+        - 2800
+        - 2100
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 3.468
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 14
+        source_line: 229
+      mode15:
+        sensor_name: S5KJN3
+        sensor_size:
+        - 8160
+        - 6120
+        sensor_fps: 24.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 3.468
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 15
+        source_line: 236
+      mode18:
+        sensor_name: S5KJN3
+        sensor_size:
+        - 5824
+        - 4368
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 12
+        sensor_mipi_speed: 3.468
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 18
+        source_line: 268
+      mode20:
+        sensor_name: S5KJN3
+        sensor_size:
+        - 8160
+        - 4592
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 3.468
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 20
+        source_line: 283
+      mode25:
+        sensor_name: S5KJN3
+        sensor_size:
+        - 2040
+        - 1148
+        sensor_fps: 240.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 1.862
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 25
+        source_line: 290
+      mode26:
+        sensor_name: S5KJN3
+        sensor_size:
+        - 2040
+        - 1530
+        sensor_fps: 120.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 1.862
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 26
+        source_line: 297
+    provenance_status: kernel_declared
+    selection_note: DTS capability is not proof of the shipped board or selected runtime
+      sensor mode.
+compatible_soc:
+- soc-exynos2600

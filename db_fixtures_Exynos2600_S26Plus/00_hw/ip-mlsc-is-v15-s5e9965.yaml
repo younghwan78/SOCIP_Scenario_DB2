@@ -1,0 +1,130 @@
+id: ip-mlsc-is-v15-s5e9965
+schema_version: '2.2'
+kind: ip
+category: camera
+hierarchy:
+  type: simple
+rtl_version: IS v15
+capabilities:
+  operating_modes:
+  - id: Normal
+  - id: Recording
+  - id: HighSpeed
+  sim:
+    hw_name: MLSC
+    source: assumed_capacity
+    source_note: PPC is an exploration assumption, not a verified silicon capacity.
+      Power coefficient is unavailable and core power is excluded.
+    ppc: 4.0
+    vdd: VDD_CAM
+    dvfs_group: CAM
+  properties:
+    is_version: 15
+    ip_group: MLSC
+    hierarchy_group: ISP
+    modules:
+    - name: MLSC_R_CL
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-mlsc-v15_0.c
+    - name: MLSC_R_UV
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-mlsc-v15_0.c
+    - name: MLSC_R_Y
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-mlsc-v15_0.c
+    - name: MLSC_W_CAV
+      type: DMA
+      direction: write
+      source_file: hardware\api\pablo-hw-api-mlsc-v15_0.c
+    - name: MLSC_W_FDPIG
+      type: DMA
+      direction: write
+      source_file: hardware\api\pablo-hw-api-mlsc-v15_0.c
+    - name: MLSC_W_GLPG0_Y
+      type: DMA
+      direction: write
+      source_file: hardware\api\pablo-hw-api-mlsc-v15_0.c
+    - name: MLSC_W_GLPG1_U
+      type: DMA
+      direction: write
+      source_file: hardware\api\pablo-hw-api-mlsc-v15_0.c
+    - name: MLSC_W_GLPG1_V
+      type: DMA
+      direction: write
+      source_file: hardware\api\pablo-hw-api-mlsc-v15_0.c
+    - name: MLSC_W_GLPG1_Y
+      type: DMA
+      direction: write
+      source_file: hardware\api\pablo-hw-api-mlsc-v15_0.c
+    - name: MLSC_W_GLPG2_U
+      type: DMA
+      direction: write
+      source_file: hardware\api\pablo-hw-api-mlsc-v15_0.c
+    - name: MLSC_W_GLPG2_V
+      type: DMA
+      direction: write
+      source_file: hardware\api\pablo-hw-api-mlsc-v15_0.c
+    - name: MLSC_W_GLPG2_Y
+      type: DMA
+      direction: write
+      source_file: hardware\api\pablo-hw-api-mlsc-v15_0.c
+    - name: MLSC_W_GLPG3_U
+      type: DMA
+      direction: write
+      source_file: hardware\api\pablo-hw-api-mlsc-v15_0.c
+    - name: MLSC_W_GLPG3_V
+      type: DMA
+      direction: write
+      source_file: hardware\api\pablo-hw-api-mlsc-v15_0.c
+    - name: MLSC_W_GLPG3_Y
+      type: DMA
+      direction: write
+      source_file: hardware\api\pablo-hw-api-mlsc-v15_0.c
+    - name: MLSC_W_GLPG4_U
+      type: DMA
+      direction: write
+      source_file: hardware\api\pablo-hw-api-mlsc-v15_0.c
+    - name: MLSC_W_GLPG4_V
+      type: DMA
+      direction: write
+      source_file: hardware\api\pablo-hw-api-mlsc-v15_0.c
+    - name: MLSC_W_GLPG4_Y
+      type: DMA
+      direction: write
+      source_file: hardware\api\pablo-hw-api-mlsc-v15_0.c
+    - name: MLSC_W_LMEDS
+      type: DMA
+      direction: write
+      source_file: hardware\api\pablo-hw-api-mlsc-v15_0.c
+    - name: MLSC_W_SVHIST
+      type: DMA
+      direction: write
+      source_file: hardware\api\pablo-hw-api-mlsc-v15_0.c
+    - name: MLSC_W_YUV444_U
+      type: DMA
+      direction: write
+      source_file: hardware\api\pablo-hw-api-mlsc-v15_0.c
+    - name: MLSC_W_YUV444_V
+      type: DMA
+      direction: write
+      source_file: hardware\api\pablo-hw-api-mlsc-v15_0.c
+    - name: MLSC_W_YUV444_Y
+      type: DMA
+      direction: write
+      source_file: hardware\api\pablo-hw-api-mlsc-v15_0.c
+    - name: CINFIFO
+      type: FIFO
+      direction: read
+    - name: COUTFIFO
+      type: FIFO
+      direction: write
+    sources:
+    - path: \\wsl.localhost\Ubuntu\home\neokein\work\12_SM_S947B\exynos\external-modules\camera\camera\hardware\api\pablo-hw-api-mlsc-v15_0.c
+      sha256: b717c95c0ba426b1e853bba1b9c73a4a81414d3e74ea135ee7e8e552649b9139
+    provenance_status: kernel_declared
+    performance_status: missing
+compatible_soc:
+- soc-exynos2600

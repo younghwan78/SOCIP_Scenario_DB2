@@ -202,7 +202,7 @@ def _exynos_ip_catalog() -> dict[str, SimpleNamespace]:
 
 def _exynos_fixture_graph() -> CanonicalScenarioGraph:
     raw = _load_yaml(FIXTURE_ROOT / "02_definition" / "uc-camera-recording.yaml")
-    variant = next(item for item in raw["variants"] if item["id"] == "cam-rec-3rdparty-binning")
+    variant = next(item for item in raw["variants"] if item["id"] == "cam-rec-r1-fhd30-vdis")
     return _exynos_fixture_graph_for(raw, variant)
 
 
@@ -289,7 +289,7 @@ def test_level1_exynos_fixture_keeps_display_panel_outside_isp_and_groups_gdc_se
     assert node_by_id["ip-panel"].data.hierarchy_group == "Display"
     assert node_by_id["ip-panel"].data.parent == "grp-display-panel"
     assert node_by_id["ip-gdc-m"].data.ip_group == "GDC"
-    assert node_by_id["ip-gdc-o"].data.parent == "grp-isp-gdc"
+    assert node_by_id["ip-gdc-o"].data.parent == "grp-gdc-gdc"
     assert node_by_id["ip-mfc-enc"].data.hierarchy_group == "CODEC"
 
 
