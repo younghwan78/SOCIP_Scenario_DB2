@@ -11,6 +11,7 @@ from scenario_db.sim.models import IPWorkload, PortTransferSpec, SimulationInput
 from scenario_db.sim.shape_propagation import propagate_shapes, validate_shape_propagation
 from scenario_db.sim.timeline_adapter import timeline_edges, timeline_tasks
 from scenario_db.sim.transfers import compression_catalog, edge_port_transfers, history_port_transfers, port_transfers_for_node, standalone_port_transfers
+from scenario_db.sim.stream_io import supplemental_transfers
 from scenario_db.sim.timing_profiles import timing_case, timing_profiles
 from scenario_db.sim.workloads import build_workload_for_node, node_sim_block
 
@@ -65,6 +66,7 @@ def build_simulation_inputs(
         ) if item.node_id not in explicit_nodes)
     transfers.extend(history_port_transfers(graph, {item.node_id: item for item in workloads}, comp_catalog, warnings))
     transfers.extend(standalone_port_transfers(graph, {item.node_id: item for item in workloads}, comp_catalog, warnings))
+    transfers.extend(supplemental_transfers(graph))
     for node_id, profile in timing_profiles(graph).items():
         if profile.get("value_source") == "assumed":
             warnings.append(f"{node_id}: assumed wall time; not a measured CPU active-time/power value.")

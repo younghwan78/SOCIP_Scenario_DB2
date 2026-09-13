@@ -149,11 +149,11 @@ def validate_variant_overlay_targets(
         buffer_ids = set((base_pipeline.get("buffers") or {}).keys())
         topology_patch = target.topology_patch or {}
         injected_nodes = {
-            str(node.get("id"))
+            str(node.get("id")): node
             for node in (topology_patch.get("add_nodes") or [])
             if isinstance(node, dict) and node.get("id")
         }
-        known_nodes = set(base_nodes) | injected_nodes
+        known_nodes = set(base_nodes) | set(injected_nodes)
         variant_ref = f"{target.scenario_id}/{target.variant_id}"
         document_id = target.document_id or target.scenario_id
         prefix = f"{target.path_prefix}." if target.path_prefix else ""
@@ -192,7 +192,7 @@ def validate_variant_overlay_targets(
             selected_mode = config.get("selected_mode")
             if selected_mode is None:
                 continue
-            node = base_nodes.get(node_id_text)
+            node = injected_nodes.get(node_id_text) or base_nodes.get(node_id_text)
             ip_ref = node.get("ip_ref") if isinstance(node, dict) else None
             selected_mode_path = f"{path}.selected_mode"
             if not ip_ref:
@@ -204,7 +204,7 @@ def validate_variant_overlay_targets(
                         document_kind=target.document_kind,
                         document_id=document_id,
                         path=selected_mode_path,
-                        fix_hint="Move selected_mode to a base pipeline node that has ip_ref.",
+                        fix_hint="Provide ip_ref on the base or added pipeline node.",
                     )
                 )
                 continue

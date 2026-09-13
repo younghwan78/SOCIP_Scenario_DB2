@@ -368,7 +368,7 @@ def test_exynos2600_camera_recording_vdis_preserves_is_v15_timing_contract():
     assert lme.hw_time_ms <= 3.0 + 1e-9
     assert any("assumed wall time" in warning for warning in result.warnings)
     assert any("core power estimate will be zero" in warning for warning in result.warnings)
-    assert result.bw_total_mbs == pytest.approx(4092.40188 + 1008 * 756 * 30 / 1e6 + (512 * 288 * 3 - 640 * 480 * 1.5) * 2 * 30 / 1e6)
+    assert result.bw_total_mbs == pytest.approx(4092.40188 + 1008 * 756 * 30 / 1e6 + (512 * 288 * 3 - 640 * 480 * 1.5) * 2 * 30 / 1e6 + 4 * 30 / 8)
 
 
 def test_full_debug_trace_includes_timeline_event_rows():
@@ -1150,7 +1150,7 @@ def test_is_v15_estimated_evidence_keeps_timing_and_exploration_status():
     assert evidence.run.source == "estimated"
     assert evidence.resolution_result.overall_feasibility == "exploration_only"
     payload = _simulation_evidence_dict(evidence)
-    assert len(payload["sw_task_timing"]) == 4
+    assert {row["task"] for row in payload["sw_task_timing"]} == {"post_crta", "pre_me_rta", "post_irta", "eis", "mpeg_writer", "storage_write"}
     row = next(row for row in payload["sw_task_timing"] if row["task"] == "post_crta")
     assert row["min_ms"] == 0.1 and row["mean_ms"] == 0.3 and row["max_ms"] == 0.5
     assert row["start_jitter_mean_ms"] == 1.0

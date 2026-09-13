@@ -40,6 +40,7 @@ class PortTransferSpec(BaseScenarioModel):
     hw_name: str
     port: str
     port_type: PortType
+    bitrate_mbps: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     width: int
     height: int
     format: str | None = None
@@ -194,6 +195,7 @@ class PortBWResult(BaseScenarioModel):
     hw_name: str
     port: str
     direction: Literal["read", "write", "otf"]
+    bitrate_mbps: float | None = None
     width: int | None = None
     height: int | None = None
     size_mp: float | None = None

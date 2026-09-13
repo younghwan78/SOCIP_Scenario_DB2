@@ -138,3 +138,11 @@ def test_variant_overlay_target_without_path_prefix_emits_bare_paths():
     )
 
     assert issues[0].path == "buffer_overrides.MISSING"
+
+
+def test_added_node_selected_mode_uses_its_ip_catalog():
+    target = _target(topology_patch={"add_nodes": [{"id": "front_lme", "ip_ref": "ip-lme"}]}, node_configs={"front_lme": {"selected_mode": "normal"}})
+    catalog = IpModeCatalog({"ip-lme": {"normal"}})
+    assert validate_variant_overlay_targets([target], catalog) == []
+    target.node_configs["front_lme"]["selected_mode"] = "invalid"
+    assert [i.code for i in validate_variant_overlay_targets([target], catalog)] == ["unsupported_selected_mode"]

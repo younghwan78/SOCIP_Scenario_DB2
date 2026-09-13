@@ -38,7 +38,7 @@ def timeline_tasks(graph: CanonicalScenarioGraph) -> list[dict[str, Any]]:
             "hw_name": _fallback_hw_name(str(node.get("ip_ref") or node.get("id"))),
             "task_type": "sw" if str(node.get("role")) == "sw_task" else "hw",
             "duration_ms": profiles.get(str(node["id"]), {}).get(f"{case}_ms", 0.0),
-            "resource_id": ("stage:" + str(node["id"]) if profiles.get(str(node["id"]), {}).get("includes_hw_nodes") else "CPU_CAMERA" if node.get("role") == "sw_task" else node.get("resource_id") or node.get("resource") or str(node["id"])),
+            "resource_id": (graph.variant.node_configs or {}).get(str(node["id"]), {}).get("timeline_resource_id") or ("stage:" + str(node["id"]) if profiles.get(str(node["id"]), {}).get("includes_hw_nodes") else "CPU_CAMERA" if node.get("role") == "sw_task" else node.get("resource_id") or node.get("resource") or str(node["id"])),
             "resource_capacity": node.get("resource_capacity") or 1,
         }
         for node in graph.pipeline_nodes

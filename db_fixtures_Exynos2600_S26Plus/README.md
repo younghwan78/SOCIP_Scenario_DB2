@@ -71,3 +71,25 @@ L0는 MLSC output size이며 L1–L4는 직전 layer의 가로·세로를 각각
 - YUVP: DRC0/DRC1 RDMA와 사용자 확인 SVHIST 논리 RDMA를 연결한다. SVHIST의 실제 kernel DMA/LVN 매핑은 미확인으로 표시한다. 통계 크기가 미확인인 버퍼는 `size_status: unknown`이며 화면에도 sensor/record 크기로 대체 표시하지 않는다.
 
 사내 값 입력 시 버퍼의 size_ref/format/bitdepth를 정의하고 size_status를 갱신한다. downstream consumer가 모델링되지 않은 보조 출력은 `pipeline.buffers.<id>.dma`에 node_id/write_ports/activation_flag 또는 enabled로 선언한다. CAV는 buffer_overrides에서 dma.enabled를 설정해 활성화할 수 있다.
+
+
+## Priority recording coverage (2026-09-13)
+
+- Rear-wide KPI: FHD30/60, UHD30/60, 8K30. 8K30 uses user-confirmed **7680x4620 RAW10 sensor input**, 7680x4320 video output. Its register/line timing remains borrowed and unverified.
+- Heavy: FHD120, FHD240, UHD120; FHD/UHD 30fps wide+front (`cam-rec-pip-*`, RCV SDR aliases); FHD/UHD 30fps portrait; all nine APV variants.
+- Dual uses separate logical front and wide IS v15 streams, separate pyramid/history buffers, shared physical-IP timeline resources and assumed CPU composition. Front ingress is DTS mode10 4000x3000@30; downstream 16:9 crop and shared RT scheduling require confirmation. This is a conservative contention model, not proof of two physical ISP chains.
+- Portrait uses VPS SEG 512x288 and CPU blend as an explicit placement assumption. SEG/OD share VPS; LME remains the motion estimator. CPU blend placement and its resolution-dependent times need measurements.
+- APV uses dedicated APV hardware (no MFC path), a logical frame RDMA and bitstream WDMA, followed by writer and storage completion tasks. Physical APV DMA names and PPC=2 are assumptions. Writer/storage are also included in the priority ordinary-recording paths.
+- Assumed bitrate: ordinary FHD 30 Mbps, UHD 80 Mbps, 8K 120 Mbps. APV UHD30 4:2:2 1000 Mbps, UHD60 2000 Mbps, 8K 3000 Mbps; 4:4:4 multiplies by 1.5 and high-quality band by 1.25. These are editable exploration inputs, not product specifications.
+- At 1000 Mbps, writer min/mean/max = 2/4/8 ms and storage completion = 4/8/16 ms, scaled linearly by bitrate. Storage time is I/O wall time, **not CPU active time**. Encoded memory traffic counts encode write, writer read/write and storage read; each is bitrate/8 MB/s. Image traffic retains pixel-based accounting.
+- Edit `design_conditions.record_bitrate_mbps`, `node_configs.*.sw_timing`, `sw_bitrate_scaling`, `memory_io`, and `timeline_resource_id`. The optional bitrate in DMA results distinguishes byte streams from image dimensions. CPU power is still uncharacterized; separate thread resources do not establish CPU core capacity.
+
+Reproduce explicit fixture assumptions and priority checks:
+
+```powershell
+.venv/Scripts/python.exe scripts/enrich_priority_recording.py
+.venv/Scripts/python.exe scripts/verify_priority_recording.py --write-evidence
+.venv/Scripts/python.exe -m scenario_db.etl.loader db_fixtures_Exynos2600_S26Plus --strict
+```
+
+`priority_recording_report.json` records all min/mean/max cases and all tested clocks, including **effective clocks after ingress/domain corrections**. The selected value is the lowest requested grid point meeting modeled storage/display cadence and a three-frame latency budget; it is not a measured DVFS or power optimum. Mean-case `sim-priority-*` evidence is generated even for failures, with failure reasons. FHD240 retains the requested 120fps sensor input and cannot pass a 240fps output check without a separately verified cadence mechanism. Existing generated `sim-is-v15-*-explored-*` KPI evidence is refreshed with storage completion and corrected no-table manual clocks. The priority report covers the additional heavy/APV cases; older non-explored evidence remains historical.

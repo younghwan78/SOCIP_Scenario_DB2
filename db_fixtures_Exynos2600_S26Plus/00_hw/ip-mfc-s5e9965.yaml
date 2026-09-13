@@ -49,6 +49,10 @@ capabilities:
       direction: write
       role: bitstream_output
       max_bandwidth: 2048000000
+    - name: MFC_WDMA_BITSTREAM
+      type: DMA
+      direction: write
+      naming: logical traffic endpoint; physical mapping unverified
     ip_group: MFC
     hierarchy_group: Codec
     codecs:

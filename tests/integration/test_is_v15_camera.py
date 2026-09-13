@@ -66,4 +66,7 @@ def test_is_v15_strict_load_timing_persistence_and_view(isolated_connection, api
         assert body["nodes"] and body["edges"]
     response = api_client.get(f"/api/v1/simulation/results/{evidence.id}")
     assert response.status_code == 200, response.text
-    assert len(response.json()["sw_task_timing"]) == 4
+    assert {row["task"] for row in response.json()["sw_task_timing"]} == {"post_crta", "pre_me_rta", "post_irta", "eis", "mpeg_writer", "storage_write"}
+    bitstream_ports = [row for row in response.json()["dma_breakdown"] if row.get("bitrate_mbps")]
+    assert len(bitstream_ports) == 4
+    assert all(row["bitrate_mbps"] == 30 for row in bitstream_ports)

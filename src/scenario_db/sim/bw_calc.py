@@ -26,13 +26,14 @@ def calc_port_bw(
     """Calculate DMA bandwidth and BW-induced power for one port."""
 
     direction = _direction(spec.port_type)
-    if direction == "otf" or spec.width <= 0 or spec.height <= 0:
+    if direction == "otf" or (spec.bitrate_mbps is None and (spec.width <= 0 or spec.height <= 0)):
         return PortBWResult(
             node_id=spec.node_id,
             ip_ref=spec.ip_ref,
             hw_name=spec.hw_name,
             port=spec.port,
             direction=direction,
+            bitrate_mbps=spec.bitrate_mbps,
             width=spec.width,
             height=spec.height,
             size_mp=_size_mp(spec.width, spec.height),
@@ -70,6 +71,7 @@ def calc_port_bw(
         hw_name=spec.hw_name,
         port=spec.port,
         direction=direction,
+        bitrate_mbps=spec.bitrate_mbps,
         width=spec.width,
         height=spec.height,
         size_mp=_size_mp(spec.width, spec.height),
@@ -95,6 +97,8 @@ def _bw_mbs(
     bpp: float,
     comp_ratio: float,
 ) -> float:
+    if spec.bitrate_mbps is not None:
+        return spec.bitrate_mbps / 8.0 * spec.r_w_rate
     return (
         comp_ratio
         * fps

@@ -1,8 +1,8 @@
-id: sim-is-v15-r1-fhd60-supersteady-explored-mean-20260913
+id: sim-priority-cam-rec-r1-uhd60-supersteady-mean-20260913
 schema_version: '2.2'
 kind: evidence.simulation
 scenario_ref: uc-camera-recording
-variant_ref: cam-rec-r1-fhd60-supersteady-explored-mean
+variant_ref: cam-rec-r1-uhd60-supersteady
 project_ref: proj-sm-s947b
 derived_from: []
 execution_context:
@@ -26,13 +26,13 @@ run:
 aggregation:
   strategy: single_run
 kpi:
-  total_power_mw: 907.0855027199991
-  total_power_ma: 266.7898537411762
-  core_power_mw: 247.62031871999997
-  bw_power_mw: 659.4651839999991
-  total_bw_mbs: 8243.314799999996
-  hw_time_max_ms: 14.874999999999998
-  timeline_end_ms: 156.8575466666667
+  total_power_mw: 1115.6160627199993
+  total_power_ma: 328.1223713882351
+  core_power_mw: 260.06191872
+  bw_power_mw: 855.5541439999993
+  total_bw_mbs: 10694.426800000003
+  hw_time_max_ms: 6.147540000000001
+  timeline_end_ms: 152.10814666666664
   critical_path_ms: 0.0
   critical_path_task_count: 0
 ip_breakdown:
@@ -94,7 +94,7 @@ ip_breakdown:
   submodules: []
 - ip: ip-mfc-s5e9965
   instance_index: 0
-  power_mW: 4.1472
+  power_mW: 16.5888
   submodules: []
 - ip: ip-dpu-s5e9965
   instance_index: 0
@@ -677,6 +677,42 @@ dma_breakdown:
   llc_weight: 1.0
   r_w_rate: 1.0
   llc_enabled: false
+- node_id: mcsc
+  ip_ref: ip-mcsc-is-v15-s5e9965
+  hw_name: MCSC
+  port: MCSC_WDMA_W1
+  direction: write
+  width: 3840
+  height: 2160
+  size_mp: 8.2944
+  bw_mbs: 746.496
+  bw_power_mw: 59.71968
+  bw_power_ma: 17.56461176470588
+  format: YUV420
+  bitwidth: 8
+  compression: COMP_OFF
+  comp_ratio: 1.0
+  llc_weight: 1.0
+  r_w_rate: 1.0
+  llc_enabled: false
+- node_id: gdc_o
+  ip_ref: ip-gdc-is-v15-s5e9965
+  hw_name: GDC
+  port: GDC_RDMA
+  direction: read
+  width: 3840
+  height: 2160
+  size_mp: 8.2944
+  bw_mbs: 746.496
+  bw_power_mw: 59.71968
+  bw_power_ma: 17.56461176470588
+  format: YUV420
+  bitwidth: 8
+  compression: COMP_OFF
+  comp_ratio: 1.0
+  llc_weight: 1.0
+  r_w_rate: 1.0
+  llc_enabled: false
 - node_id: gdc_m
   ip_ref: ip-gdc-is-v15-s5e9965
   hw_name: GDC
@@ -718,12 +754,12 @@ dma_breakdown:
   hw_name: GDC
   port: GDC_WDMA
   direction: write
-  width: 1920
-  height: 1080
-  size_mp: 2.0736
-  bw_mbs: 186.624
-  bw_power_mw: 14.92992
-  bw_power_ma: 4.39115294117647
+  width: 3840
+  height: 2160
+  size_mp: 8.2944
+  bw_mbs: 746.496
+  bw_power_mw: 59.71968
+  bw_power_ma: 17.56461176470588
   format: YUV420
   bitwidth: 8
   compression: COMP_OFF
@@ -736,30 +772,12 @@ dma_breakdown:
   hw_name: MFC
   port: MFC_RDMA
   direction: read
-  width: 1920
-  height: 1080
-  size_mp: 2.0736
-  bw_mbs: 186.624
-  bw_power_mw: 14.92992
-  bw_power_ma: 4.39115294117647
-  format: YUV420
-  bitwidth: 8
-  compression: COMP_OFF
-  comp_ratio: 1.0
-  llc_weight: 1.0
-  r_w_rate: 1.0
-  llc_enabled: false
-- node_id: gdc_o
-  ip_ref: ip-gdc-is-v15-s5e9965
-  hw_name: GDC
-  port: GDC_RDMA
-  direction: read
-  width: 1920
-  height: 1080
-  size_mp: 2.0736
-  bw_mbs: 186.624
-  bw_power_mw: 14.92992
-  bw_power_ma: 4.39115294117647
+  width: 3840
+  height: 2160
+  size_mp: 8.2944
+  bw_mbs: 746.496
+  bw_power_mw: 59.71968
+  bw_power_ma: 17.56461176470588
   format: YUV420
   bitwidth: 8
   compression: COMP_OFF
@@ -1258,13 +1276,13 @@ dma_breakdown:
   hw_name: MFC_ENC
   port: MFC_WDMA_BITSTREAM
   direction: write
-  bitrate_mbps: 30.0
+  bitrate_mbps: 80.0
   width: 0
   height: 0
   size_mp: 0.0
-  bw_mbs: 3.75
-  bw_power_mw: 0.3
-  bw_power_ma: 0.08823529411764706
+  bw_mbs: 10.0
+  bw_power_mw: 0.8
+  bw_power_ma: 0.23529411764705885
   format: BITSTREAM
   bitwidth: 8
   compression: disable
@@ -1277,13 +1295,13 @@ dma_breakdown:
   hw_name: MPEG_WRITER
   port: CPU_BITSTREAM_READ
   direction: read
-  bitrate_mbps: 30.0
+  bitrate_mbps: 80.0
   width: 0
   height: 0
   size_mp: 0.0
-  bw_mbs: 3.75
-  bw_power_mw: 0.3
-  bw_power_ma: 0.08823529411764706
+  bw_mbs: 10.0
+  bw_power_mw: 0.8
+  bw_power_ma: 0.23529411764705885
   format: BITSTREAM
   bitwidth: 8
   compression: disable
@@ -1296,13 +1314,13 @@ dma_breakdown:
   hw_name: MPEG_WRITER
   port: CPU_BITSTREAM_WRITE
   direction: write
-  bitrate_mbps: 30.0
+  bitrate_mbps: 80.0
   width: 0
   height: 0
   size_mp: 0.0
-  bw_mbs: 3.75
-  bw_power_mw: 0.3
-  bw_power_ma: 0.08823529411764706
+  bw_mbs: 10.0
+  bw_power_mw: 0.8
+  bw_power_ma: 0.23529411764705885
   format: BITSTREAM
   bitwidth: 8
   compression: disable
@@ -1315,13 +1333,13 @@ dma_breakdown:
   hw_name: STORAGE_WRITE
   port: STORAGE_BITSTREAM_READ
   direction: read
-  bitrate_mbps: 30.0
+  bitrate_mbps: 80.0
   width: 0
   height: 0
   size_mp: 0.0
-  bw_mbs: 3.75
-  bw_power_mw: 0.3
-  bw_power_ma: 0.08823529411764706
+  bw_mbs: 10.0
+  bw_power_mw: 0.8
+  bw_power_ma: 0.23529411764705885
   format: BITSTREAM
   bitwidth: 8
   compression: disable
@@ -1451,7 +1469,7 @@ timing_breakdown:
   ip_ref: ip-gdc-is-v15-s5e9965
   hw_name: GDC
   task_type: hw
-  hw_time_ms: 1.3608
+  hw_time_ms: 5.4432
   required_clock_mhz: 400.0
   set_clock_mhz: 400.0
   set_voltage_mv: 710.0
@@ -1460,18 +1478,18 @@ timing_breakdown:
   ip_ref: ip-mfc-s5e9965
   hw_name: MFC
   task_type: hw
-  hw_time_ms: 14.874999999999998
-  required_clock_mhz: 36.592941176470596
-  set_clock_mhz: 36.592941176470596
+  hw_time_ms: 5.4432
+  required_clock_mhz: 400.0
+  set_clock_mhz: 400.0
   set_voltage_mv: 710.0
   feasible: true
 - node_id: dpu
   ip_ref: ip-dpu-s5e9965
   hw_name: DPU
   task_type: hw
-  hw_time_ms: 14.874999999999998
-  required_clock_mhz: 36.592941176470596
-  set_clock_mhz: 36.592941176470596
+  hw_time_ms: 1.3608
+  required_clock_mhz: 146.37176470588238
+  set_clock_mhz: 400.0
   set_voltage_mv: 710.0
   feasible: true
 dvfs_breakdown:
@@ -1830,7 +1848,7 @@ dvfs_breakdown:
   hw_name: GDC
   mode: Normal
   required_clock_mhz: 400.0
-  base_required_clock_mhz: 36.592941176470596
+  base_required_clock_mhz: 146.37176470588238
   manual_clock_mhz: 400.0
   clock_correction_mhz: 0.0
   set_clock_mhz: 400.0
@@ -1838,12 +1856,12 @@ dvfs_breakdown:
   required_voltage_mv: 710.0
   set_voltage_mv: 710.0
   vdd: VDD_CAM
-  width: 1920
-  height: 1080
+  width: 3840
+  height: 2160
   format: YUV420
   unit_power_mw_mp: 0.0
   ppc: 4.0
-  input_resolution_mp: 2.0736
+  input_resolution_mp: 8.2944
   fps: 60.0
   active_power_mw: 0.0
   total_power_mw: 0.0
@@ -1855,24 +1873,25 @@ dvfs_breakdown:
   ip_ref: ip-mfc-s5e9965
   hw_name: MFC
   mode: Normal
-  required_clock_mhz: 36.592941176470596
-  base_required_clock_mhz: 36.592941176470596
+  required_clock_mhz: 400.0
+  base_required_clock_mhz: 146.37176470588238
+  manual_clock_mhz: 400.0
   clock_correction_mhz: 0.0
-  set_clock_mhz: 36.592941176470596
+  set_clock_mhz: 400.0
   dvfs_group: INT
   required_voltage_mv: 710.0
   set_voltage_mv: 710.0
   vdd: VDD_INT
-  width: 1920
-  height: 1080
+  width: 3840
+  height: 2160
   format: YUV420
   unit_power_mw_mp: 1.0
   ppc: 4.0
-  input_resolution_mp: 2.0736
+  input_resolution_mp: 8.2944
   fps: 60.0
-  active_power_mw: 4.1472
-  total_power_mw: 4.1472
-  total_power_ma: 1.2197647058823529
+  active_power_mw: 16.5888
+  total_power_mw: 16.5888
+  total_power_ma: 4.8790588235294114
   vdd_leader: dpu,mfc_enc
   feasible: true
 - node_id: dpu
@@ -1880,10 +1899,10 @@ dvfs_breakdown:
   ip_ref: ip-dpu-s5e9965
   hw_name: DPU
   mode: Normal
-  required_clock_mhz: 36.592941176470596
+  required_clock_mhz: 146.37176470588238
   base_required_clock_mhz: 36.592941176470596
   clock_correction_mhz: 0.0
-  set_clock_mhz: 36.592941176470596
+  set_clock_mhz: 400.0
   dvfs_group: INT
   required_voltage_mv: 710.0
   set_voltage_mv: 710.0
@@ -2254,37 +2273,19 @@ timeline_events:
   task_type: hw
   frame_index: 0
   resource_id: gdc_o
-  edge_type: control,M2M
+  edge_type: M2M,control
   bottleneck: false
   start_ms: 23.595080000000003
-  end_ms: 24.955880000000004
-  duration_ms: 1.3608000000000011
+  end_ms: 29.038280000000004
+  duration_ms: 5.443200000000001
   cadence_violation: false
   ready_ms: 23.595080000000003
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
   predecessors:
-  - eis#f0
   - mcsc#f0
-- task_id: mfc_enc#f0
-  node_id: mfc_enc
-  hw_name: MFC
-  task_type: hw
-  frame_index: 0
-  resource_id: mfc_enc
-  edge_type: M2M
-  bottleneck: false
-  start_ms: 24.955880000000004
-  end_ms: 39.83088
-  duration_ms: 14.874999999999996
-  cadence_violation: false
-  ready_ms: 24.955880000000004
-  resource_wait_ms: 0.0
-  token_wait_ms: 0.0
-  critical: false
-  predecessors:
-  - gdc_o#f0
+  - eis#f0
 - task_id: dpu#f0
   node_id: dpu
   hw_name: DPU
@@ -2300,13 +2301,13 @@ timeline_events:
   refresh_hz: 60.0
   scanout_ms: 16.666666666666668
   start_ms: 24.955880000000004
-  end_ms: 39.83088
-  duration_ms: 14.874999999999996
+  end_ms: 26.316680000000005
+  duration_ms: 1.3608000000000011
   deadline_ms: 16.666666666666668
-  slack_ms: -23.164213333333333
-  cadence_avg_interval_ms: 16.666666666666668
+  slack_ms: -9.650013333333337
+  cadence_avg_interval_ms: 16.66666666666667
   cadence_budget_ms: 16.666666666666668
-  cadence_slack_ms: 0.0
+  cadence_slack_ms: -3.552713678800501e-15
   cadence_violation: false
   ready_ms: 24.955880000000004
   resource_wait_ms: 0.0
@@ -2328,13 +2329,13 @@ timeline_events:
   refresh_hz: 60.0
   scanout_ms: 16.666666666666668
   start_ms: 24.955880000000004
-  end_ms: 39.83088
-  duration_ms: 14.874999999999996
+  end_ms: 26.316680000000005
+  duration_ms: 1.3608000000000011
   deadline_ms: 16.666666666666668
-  slack_ms: -23.164213333333333
-  cadence_avg_interval_ms: 16.666666666666668
+  slack_ms: -9.650013333333337
+  cadence_avg_interval_ms: 16.66666666666667
   cadence_budget_ms: 16.666666666666668
-  cadence_slack_ms: 0.0
+  cadence_slack_ms: -3.552713678800501e-15
   cadence_violation: false
   ready_ms: 24.955880000000004
   resource_wait_ms: 0.0
@@ -2342,6 +2343,24 @@ timeline_events:
   critical: false
   predecessors:
   - dpu#f0
+- task_id: mfc_enc#f0
+  node_id: mfc_enc
+  hw_name: MFC
+  task_type: hw
+  frame_index: 0
+  resource_id: mfc_enc
+  edge_type: M2M
+  bottleneck: false
+  start_ms: 29.038280000000004
+  end_ms: 34.481480000000005
+  duration_ms: 5.443200000000001
+  cadence_violation: false
+  ready_ms: 29.038280000000004
+  resource_wait_ms: 0.0
+  token_wait_ms: 0.0
+  critical: false
+  predecessors:
+  - gdc_o#f0
 - task_id: mpeg_writer#f0
   node_id: mpeg_writer
   hw_name: CPU
@@ -2350,11 +2369,11 @@ timeline_events:
   resource_id: CPU_WRITER
   edge_type: control
   bottleneck: false
-  start_ms: 39.83088
-  end_ms: 39.95088
-  duration_ms: 0.11999999999999744
+  start_ms: 34.481480000000005
+  end_ms: 34.801480000000005
+  duration_ms: 0.3200000000000003
   cadence_violation: false
-  ready_ms: 39.83088
+  ready_ms: 34.481480000000005
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -2368,14 +2387,14 @@ timeline_events:
   resource_id: STORAGE_IO
   edge_type: control
   bottleneck: false
-  start_ms: 39.95088
-  end_ms: 40.19088
-  duration_ms: 0.240000000000002
-  cadence_avg_interval_ms: 16.666666666666675
+  start_ms: 34.801480000000005
+  end_ms: 35.441480000000006
+  duration_ms: 0.6400000000000006
+  cadence_avg_interval_ms: 16.66666666666666
   cadence_budget_ms: 16.666666666666668
-  cadence_slack_ms: -7.105427357601002e-15
+  cadence_slack_ms: 7.105427357601002e-15
   cadence_violation: false
-  ready_ms: 39.95088
+  ready_ms: 34.801480000000005
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -2735,37 +2754,19 @@ timeline_events:
   task_type: hw
   frame_index: 1
   resource_id: gdc_o
-  edge_type: control,M2M
+  edge_type: M2M,control
   bottleneck: false
   start_ms: 40.261746666666674
-  end_ms: 41.62254666666667
-  duration_ms: 1.3607999999999976
+  end_ms: 45.70494666666667
+  duration_ms: 5.443199999999997
   cadence_violation: false
   ready_ms: 40.261746666666674
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
   predecessors:
-  - eis#f1
   - mcsc#f1
-- task_id: mfc_enc#f1
-  node_id: mfc_enc
-  hw_name: MFC
-  task_type: hw
-  frame_index: 1
-  resource_id: mfc_enc
-  edge_type: M2M
-  bottleneck: false
-  start_ms: 41.62254666666667
-  end_ms: 56.49754666666667
-  duration_ms: 14.875
-  cadence_violation: false
-  ready_ms: 41.62254666666667
-  resource_wait_ms: 0.0
-  token_wait_ms: 0.0
-  critical: false
-  predecessors:
-  - gdc_o#f1
+  - eis#f1
 - task_id: dpu#f1
   node_id: dpu
   hw_name: DPU
@@ -2781,14 +2782,14 @@ timeline_events:
   refresh_hz: 60.0
   scanout_ms: 16.666666666666668
   start_ms: 41.62254666666667
-  end_ms: 56.49754666666667
-  duration_ms: 14.875
+  end_ms: 42.98334666666667
+  duration_ms: 1.3607999999999976
   deadline_ms: 33.333333333333336
-  slack_ms: -23.164213333333336
-  cadence_interval_ms: 16.66666666666667
-  cadence_avg_interval_ms: 16.666666666666668
+  slack_ms: -9.650013333333334
+  cadence_interval_ms: 16.666666666666664
+  cadence_avg_interval_ms: 16.66666666666667
   cadence_budget_ms: 16.666666666666668
-  cadence_slack_ms: 0.0
+  cadence_slack_ms: -3.552713678800501e-15
   cadence_violation: false
   ready_ms: 41.62254666666667
   resource_wait_ms: 0.0
@@ -2810,14 +2811,14 @@ timeline_events:
   refresh_hz: 60.0
   scanout_ms: 16.666666666666668
   start_ms: 41.62254666666667
-  end_ms: 56.49754666666667
-  duration_ms: 14.875
+  end_ms: 42.98334666666667
+  duration_ms: 1.3607999999999976
   deadline_ms: 33.333333333333336
-  slack_ms: -23.164213333333336
-  cadence_interval_ms: 16.66666666666667
-  cadence_avg_interval_ms: 16.666666666666668
+  slack_ms: -9.650013333333334
+  cadence_interval_ms: 16.666666666666664
+  cadence_avg_interval_ms: 16.66666666666667
   cadence_budget_ms: 16.666666666666668
-  cadence_slack_ms: 0.0
+  cadence_slack_ms: -3.552713678800501e-15
   cadence_violation: false
   ready_ms: 41.62254666666667
   resource_wait_ms: 0.0
@@ -2825,6 +2826,24 @@ timeline_events:
   critical: false
   predecessors:
   - dpu#f1
+- task_id: mfc_enc#f1
+  node_id: mfc_enc
+  hw_name: MFC
+  task_type: hw
+  frame_index: 1
+  resource_id: mfc_enc
+  edge_type: M2M
+  bottleneck: false
+  start_ms: 45.70494666666667
+  end_ms: 51.14814666666667
+  duration_ms: 5.443199999999997
+  cadence_violation: false
+  ready_ms: 45.70494666666667
+  resource_wait_ms: 0.0
+  token_wait_ms: 0.0
+  critical: false
+  predecessors:
+  - gdc_o#f1
 - task_id: mpeg_writer#f1
   node_id: mpeg_writer
   hw_name: CPU
@@ -2833,11 +2852,11 @@ timeline_events:
   resource_id: CPU_WRITER
   edge_type: control
   bottleneck: false
-  start_ms: 56.49754666666667
-  end_ms: 56.61754666666667
-  duration_ms: 0.11999999999999744
+  start_ms: 51.14814666666667
+  end_ms: 51.46814666666667
+  duration_ms: 0.3200000000000003
   cadence_violation: false
-  ready_ms: 56.49754666666667
+  ready_ms: 51.14814666666667
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -2851,15 +2870,15 @@ timeline_events:
   resource_id: STORAGE_IO
   edge_type: control
   bottleneck: false
-  start_ms: 56.61754666666667
-  end_ms: 56.85754666666667
-  duration_ms: 0.240000000000002
-  cadence_interval_ms: 16.66666666666667
-  cadence_avg_interval_ms: 16.666666666666675
+  start_ms: 51.46814666666667
+  end_ms: 52.10814666666667
+  duration_ms: 0.6400000000000006
+  cadence_interval_ms: 16.666666666666664
+  cadence_avg_interval_ms: 16.66666666666666
   cadence_budget_ms: 16.666666666666668
-  cadence_slack_ms: -7.105427357601002e-15
+  cadence_slack_ms: 7.105427357601002e-15
   cadence_violation: false
-  ready_ms: 56.61754666666667
+  ready_ms: 51.46814666666667
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -3219,37 +3238,19 @@ timeline_events:
   task_type: hw
   frame_index: 2
   resource_id: gdc_o
-  edge_type: control,M2M
+  edge_type: M2M,control
   bottleneck: false
   start_ms: 56.92841333333333
-  end_ms: 58.28921333333333
-  duration_ms: 1.3607999999999976
+  end_ms: 62.37161333333333
+  duration_ms: 5.443199999999997
   cadence_violation: false
   ready_ms: 56.92841333333333
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
   predecessors:
-  - eis#f2
   - mcsc#f2
-- task_id: mfc_enc#f2
-  node_id: mfc_enc
-  hw_name: MFC
-  task_type: hw
-  frame_index: 2
-  resource_id: mfc_enc
-  edge_type: M2M
-  bottleneck: false
-  start_ms: 58.28921333333333
-  end_ms: 73.16421333333332
-  duration_ms: 14.874999999999993
-  cadence_violation: false
-  ready_ms: 58.28921333333333
-  resource_wait_ms: 0.0
-  token_wait_ms: 0.0
-  critical: false
-  predecessors:
-  - gdc_o#f2
+  - eis#f2
 - task_id: dpu#f2
   node_id: dpu
   hw_name: DPU
@@ -3265,14 +3266,14 @@ timeline_events:
   refresh_hz: 60.0
   scanout_ms: 16.666666666666668
   start_ms: 58.28921333333333
-  end_ms: 73.16421333333332
-  duration_ms: 14.874999999999993
+  end_ms: 59.65001333333333
+  duration_ms: 1.3607999999999976
   deadline_ms: 50.0
-  slack_ms: -23.164213333333322
-  cadence_interval_ms: 16.66666666666665
-  cadence_avg_interval_ms: 16.666666666666668
+  slack_ms: -9.650013333333327
+  cadence_interval_ms: 16.666666666666657
+  cadence_avg_interval_ms: 16.66666666666667
   cadence_budget_ms: 16.666666666666668
-  cadence_slack_ms: 0.0
+  cadence_slack_ms: -3.552713678800501e-15
   cadence_violation: false
   ready_ms: 58.28921333333333
   resource_wait_ms: 0.0
@@ -3294,14 +3295,14 @@ timeline_events:
   refresh_hz: 60.0
   scanout_ms: 16.666666666666668
   start_ms: 58.28921333333333
-  end_ms: 73.16421333333332
-  duration_ms: 14.874999999999993
+  end_ms: 59.65001333333333
+  duration_ms: 1.3607999999999976
   deadline_ms: 50.0
-  slack_ms: -23.164213333333322
-  cadence_interval_ms: 16.66666666666665
-  cadence_avg_interval_ms: 16.666666666666668
+  slack_ms: -9.650013333333327
+  cadence_interval_ms: 16.666666666666657
+  cadence_avg_interval_ms: 16.66666666666667
   cadence_budget_ms: 16.666666666666668
-  cadence_slack_ms: 0.0
+  cadence_slack_ms: -3.552713678800501e-15
   cadence_violation: false
   ready_ms: 58.28921333333333
   resource_wait_ms: 0.0
@@ -3309,6 +3310,24 @@ timeline_events:
   critical: false
   predecessors:
   - dpu#f2
+- task_id: mfc_enc#f2
+  node_id: mfc_enc
+  hw_name: MFC
+  task_type: hw
+  frame_index: 2
+  resource_id: mfc_enc
+  edge_type: M2M
+  bottleneck: false
+  start_ms: 62.37161333333333
+  end_ms: 67.81481333333333
+  duration_ms: 5.4432000000000045
+  cadence_violation: false
+  ready_ms: 62.37161333333333
+  resource_wait_ms: 0.0
+  token_wait_ms: 0.0
+  critical: false
+  predecessors:
+  - gdc_o#f2
 - task_id: mpeg_writer#f2
   node_id: mpeg_writer
   hw_name: CPU
@@ -3317,11 +3336,11 @@ timeline_events:
   resource_id: CPU_WRITER
   edge_type: control
   bottleneck: false
-  start_ms: 73.16421333333332
-  end_ms: 73.28421333333333
-  duration_ms: 0.12000000000000455
+  start_ms: 67.81481333333333
+  end_ms: 68.13481333333333
+  duration_ms: 0.3199999999999932
   cadence_violation: false
-  ready_ms: 73.16421333333332
+  ready_ms: 67.81481333333333
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -3335,15 +3354,15 @@ timeline_events:
   resource_id: STORAGE_IO
   edge_type: control
   bottleneck: false
-  start_ms: 73.28421333333333
-  end_ms: 73.52421333333332
-  duration_ms: 0.23999999999999488
-  cadence_interval_ms: 16.66666666666665
-  cadence_avg_interval_ms: 16.666666666666675
+  start_ms: 68.13481333333333
+  end_ms: 68.77481333333333
+  duration_ms: 0.6400000000000006
+  cadence_interval_ms: 16.666666666666657
+  cadence_avg_interval_ms: 16.66666666666666
   cadence_budget_ms: 16.666666666666668
-  cadence_slack_ms: -7.105427357601002e-15
+  cadence_slack_ms: 7.105427357601002e-15
   cadence_violation: false
-  ready_ms: 73.28421333333333
+  ready_ms: 68.13481333333333
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -3703,37 +3722,19 @@ timeline_events:
   task_type: hw
   frame_index: 3
   resource_id: gdc_o
-  edge_type: control,M2M
+  edge_type: M2M,control
   bottleneck: false
   start_ms: 73.59508000000001
-  end_ms: 74.95588000000001
-  duration_ms: 1.3607999999999976
+  end_ms: 79.03828000000001
+  duration_ms: 5.4432000000000045
   cadence_violation: false
   ready_ms: 73.59508000000001
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
   predecessors:
-  - eis#f3
   - mcsc#f3
-- task_id: mfc_enc#f3
-  node_id: mfc_enc
-  hw_name: MFC
-  task_type: hw
-  frame_index: 3
-  resource_id: mfc_enc
-  edge_type: M2M
-  bottleneck: false
-  start_ms: 74.95588000000001
-  end_ms: 89.83088000000001
-  duration_ms: 14.875
-  cadence_violation: false
-  ready_ms: 74.95588000000001
-  resource_wait_ms: 0.0
-  token_wait_ms: 0.0
-  critical: false
-  predecessors:
-  - gdc_o#f3
+  - eis#f3
 - task_id: dpu#f3
   node_id: dpu
   hw_name: DPU
@@ -3749,14 +3750,14 @@ timeline_events:
   refresh_hz: 60.0
   scanout_ms: 16.666666666666668
   start_ms: 74.95588000000001
-  end_ms: 89.83088000000001
-  duration_ms: 14.875
+  end_ms: 76.31668
+  duration_ms: 1.3607999999999976
   deadline_ms: 66.66666666666667
-  slack_ms: -23.164213333333336
-  cadence_interval_ms: 16.666666666666686
-  cadence_avg_interval_ms: 16.666666666666668
+  slack_ms: -9.650013333333334
+  cadence_interval_ms: 16.66666666666668
+  cadence_avg_interval_ms: 16.66666666666667
   cadence_budget_ms: 16.666666666666668
-  cadence_slack_ms: 0.0
+  cadence_slack_ms: -3.552713678800501e-15
   cadence_violation: false
   ready_ms: 74.95588000000001
   resource_wait_ms: 0.0
@@ -3778,14 +3779,14 @@ timeline_events:
   refresh_hz: 60.0
   scanout_ms: 16.666666666666668
   start_ms: 74.95588000000001
-  end_ms: 89.83088000000001
-  duration_ms: 14.875
+  end_ms: 76.31668
+  duration_ms: 1.3607999999999976
   deadline_ms: 66.66666666666667
-  slack_ms: -23.164213333333336
-  cadence_interval_ms: 16.666666666666686
-  cadence_avg_interval_ms: 16.666666666666668
+  slack_ms: -9.650013333333334
+  cadence_interval_ms: 16.66666666666668
+  cadence_avg_interval_ms: 16.66666666666667
   cadence_budget_ms: 16.666666666666668
-  cadence_slack_ms: 0.0
+  cadence_slack_ms: -3.552713678800501e-15
   cadence_violation: false
   ready_ms: 74.95588000000001
   resource_wait_ms: 0.0
@@ -3793,6 +3794,24 @@ timeline_events:
   critical: false
   predecessors:
   - dpu#f3
+- task_id: mfc_enc#f3
+  node_id: mfc_enc
+  hw_name: MFC
+  task_type: hw
+  frame_index: 3
+  resource_id: mfc_enc
+  edge_type: M2M
+  bottleneck: false
+  start_ms: 79.03828000000001
+  end_ms: 84.48148000000002
+  duration_ms: 5.4432000000000045
+  cadence_violation: false
+  ready_ms: 79.03828000000001
+  resource_wait_ms: 0.0
+  token_wait_ms: 0.0
+  critical: false
+  predecessors:
+  - gdc_o#f3
 - task_id: mpeg_writer#f3
   node_id: mpeg_writer
   hw_name: CPU
@@ -3801,11 +3820,11 @@ timeline_events:
   resource_id: CPU_WRITER
   edge_type: control
   bottleneck: false
-  start_ms: 89.83088000000001
-  end_ms: 89.95088000000001
-  duration_ms: 0.12000000000000455
+  start_ms: 84.48148000000002
+  end_ms: 84.80148000000001
+  duration_ms: 0.3199999999999932
   cadence_violation: false
-  ready_ms: 89.83088000000001
+  ready_ms: 84.48148000000002
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -3819,15 +3838,15 @@ timeline_events:
   resource_id: STORAGE_IO
   edge_type: control
   bottleneck: false
-  start_ms: 89.95088000000001
-  end_ms: 90.19088
-  duration_ms: 0.23999999999999488
+  start_ms: 84.80148000000001
+  end_ms: 85.44148000000001
+  duration_ms: 0.6400000000000006
   cadence_interval_ms: 16.666666666666686
-  cadence_avg_interval_ms: 16.666666666666675
+  cadence_avg_interval_ms: 16.66666666666666
   cadence_budget_ms: 16.666666666666668
-  cadence_slack_ms: -7.105427357601002e-15
+  cadence_slack_ms: 7.105427357601002e-15
   cadence_violation: false
-  ready_ms: 89.95088000000001
+  ready_ms: 84.80148000000001
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -4187,37 +4206,19 @@ timeline_events:
   task_type: hw
   frame_index: 4
   resource_id: gdc_o
-  edge_type: control,M2M
+  edge_type: M2M,control
   bottleneck: false
   start_ms: 90.26174666666668
-  end_ms: 91.62254666666668
-  duration_ms: 1.3607999999999976
+  end_ms: 95.70494666666669
+  duration_ms: 5.4432000000000045
   cadence_violation: false
   ready_ms: 90.26174666666668
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
   predecessors:
-  - eis#f4
   - mcsc#f4
-- task_id: mfc_enc#f4
-  node_id: mfc_enc
-  hw_name: MFC
-  task_type: hw
-  frame_index: 4
-  resource_id: mfc_enc
-  edge_type: M2M
-  bottleneck: false
-  start_ms: 91.62254666666668
-  end_ms: 106.49754666666668
-  duration_ms: 14.875
-  cadence_violation: false
-  ready_ms: 91.62254666666668
-  resource_wait_ms: 0.0
-  token_wait_ms: 0.0
-  critical: false
-  predecessors:
-  - gdc_o#f4
+  - eis#f4
 - task_id: dpu#f4
   node_id: dpu
   hw_name: DPU
@@ -4233,14 +4234,14 @@ timeline_events:
   refresh_hz: 60.0
   scanout_ms: 16.666666666666668
   start_ms: 91.62254666666668
-  end_ms: 106.49754666666668
-  duration_ms: 14.875
+  end_ms: 92.98334666666668
+  duration_ms: 1.3607999999999976
   deadline_ms: 83.33333333333334
-  slack_ms: -23.164213333333336
+  slack_ms: -9.650013333333334
   cadence_interval_ms: 16.66666666666667
-  cadence_avg_interval_ms: 16.666666666666668
+  cadence_avg_interval_ms: 16.66666666666667
   cadence_budget_ms: 16.666666666666668
-  cadence_slack_ms: 0.0
+  cadence_slack_ms: -3.552713678800501e-15
   cadence_violation: false
   ready_ms: 91.62254666666668
   resource_wait_ms: 0.0
@@ -4262,14 +4263,14 @@ timeline_events:
   refresh_hz: 60.0
   scanout_ms: 16.666666666666668
   start_ms: 91.62254666666668
-  end_ms: 106.49754666666668
-  duration_ms: 14.875
+  end_ms: 92.98334666666668
+  duration_ms: 1.3607999999999976
   deadline_ms: 83.33333333333334
-  slack_ms: -23.164213333333336
+  slack_ms: -9.650013333333334
   cadence_interval_ms: 16.66666666666667
-  cadence_avg_interval_ms: 16.666666666666668
+  cadence_avg_interval_ms: 16.66666666666667
   cadence_budget_ms: 16.666666666666668
-  cadence_slack_ms: 0.0
+  cadence_slack_ms: -3.552713678800501e-15
   cadence_violation: false
   ready_ms: 91.62254666666668
   resource_wait_ms: 0.0
@@ -4277,6 +4278,24 @@ timeline_events:
   critical: false
   predecessors:
   - dpu#f4
+- task_id: mfc_enc#f4
+  node_id: mfc_enc
+  hw_name: MFC
+  task_type: hw
+  frame_index: 4
+  resource_id: mfc_enc
+  edge_type: M2M
+  bottleneck: false
+  start_ms: 95.70494666666669
+  end_ms: 101.14814666666669
+  duration_ms: 5.4432000000000045
+  cadence_violation: false
+  ready_ms: 95.70494666666669
+  resource_wait_ms: 0.0
+  token_wait_ms: 0.0
+  critical: false
+  predecessors:
+  - gdc_o#f4
 - task_id: mpeg_writer#f4
   node_id: mpeg_writer
   hw_name: CPU
@@ -4285,11 +4304,11 @@ timeline_events:
   resource_id: CPU_WRITER
   edge_type: control
   bottleneck: false
-  start_ms: 106.49754666666668
-  end_ms: 106.61754666666668
-  duration_ms: 0.12000000000000455
+  start_ms: 101.14814666666669
+  end_ms: 101.46814666666668
+  duration_ms: 0.3199999999999932
   cadence_violation: false
-  ready_ms: 106.49754666666668
+  ready_ms: 101.14814666666669
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -4303,15 +4322,15 @@ timeline_events:
   resource_id: STORAGE_IO
   edge_type: control
   bottleneck: false
-  start_ms: 106.61754666666668
-  end_ms: 106.85754666666668
-  duration_ms: 0.23999999999999488
+  start_ms: 101.46814666666668
+  end_ms: 102.10814666666668
+  duration_ms: 0.6400000000000006
   cadence_interval_ms: 16.66666666666667
-  cadence_avg_interval_ms: 16.666666666666675
+  cadence_avg_interval_ms: 16.66666666666666
   cadence_budget_ms: 16.666666666666668
-  cadence_slack_ms: -7.105427357601002e-15
+  cadence_slack_ms: 7.105427357601002e-15
   cadence_violation: false
-  ready_ms: 106.61754666666668
+  ready_ms: 101.46814666666668
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -4671,37 +4690,19 @@ timeline_events:
   task_type: hw
   frame_index: 5
   resource_id: gdc_o
-  edge_type: control,M2M
+  edge_type: M2M,control
   bottleneck: false
   start_ms: 106.92841333333335
-  end_ms: 108.28921333333335
-  duration_ms: 1.3607999999999976
+  end_ms: 112.37161333333336
+  duration_ms: 5.4432000000000045
   cadence_violation: false
   ready_ms: 106.92841333333335
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
   predecessors:
-  - eis#f5
   - mcsc#f5
-- task_id: mfc_enc#f5
-  node_id: mfc_enc
-  hw_name: MFC
-  task_type: hw
-  frame_index: 5
-  resource_id: mfc_enc
-  edge_type: M2M
-  bottleneck: false
-  start_ms: 108.28921333333335
-  end_ms: 123.16421333333335
-  duration_ms: 14.875
-  cadence_violation: false
-  ready_ms: 108.28921333333335
-  resource_wait_ms: 0.0
-  token_wait_ms: 0.0
-  critical: false
-  predecessors:
-  - gdc_o#f5
+  - eis#f5
 - task_id: dpu#f5
   node_id: dpu
   hw_name: DPU
@@ -4717,14 +4718,14 @@ timeline_events:
   refresh_hz: 60.0
   scanout_ms: 16.666666666666668
   start_ms: 108.28921333333335
-  end_ms: 123.16421333333335
-  duration_ms: 14.875
+  end_ms: 109.65001333333335
+  duration_ms: 1.3607999999999976
   deadline_ms: 100.00000000000001
-  slack_ms: -23.164213333333336
+  slack_ms: -9.650013333333334
   cadence_interval_ms: 16.66666666666667
-  cadence_avg_interval_ms: 16.666666666666668
+  cadence_avg_interval_ms: 16.66666666666667
   cadence_budget_ms: 16.666666666666668
-  cadence_slack_ms: 0.0
+  cadence_slack_ms: -3.552713678800501e-15
   cadence_violation: false
   ready_ms: 108.28921333333335
   resource_wait_ms: 0.0
@@ -4746,14 +4747,14 @@ timeline_events:
   refresh_hz: 60.0
   scanout_ms: 16.666666666666668
   start_ms: 108.28921333333335
-  end_ms: 123.16421333333335
-  duration_ms: 14.875
+  end_ms: 109.65001333333335
+  duration_ms: 1.3607999999999976
   deadline_ms: 100.00000000000001
-  slack_ms: -23.164213333333336
+  slack_ms: -9.650013333333334
   cadence_interval_ms: 16.66666666666667
-  cadence_avg_interval_ms: 16.666666666666668
+  cadence_avg_interval_ms: 16.66666666666667
   cadence_budget_ms: 16.666666666666668
-  cadence_slack_ms: 0.0
+  cadence_slack_ms: -3.552713678800501e-15
   cadence_violation: false
   ready_ms: 108.28921333333335
   resource_wait_ms: 0.0
@@ -4761,6 +4762,24 @@ timeline_events:
   critical: false
   predecessors:
   - dpu#f5
+- task_id: mfc_enc#f5
+  node_id: mfc_enc
+  hw_name: MFC
+  task_type: hw
+  frame_index: 5
+  resource_id: mfc_enc
+  edge_type: M2M
+  bottleneck: false
+  start_ms: 112.37161333333336
+  end_ms: 117.81481333333336
+  duration_ms: 5.4432000000000045
+  cadence_violation: false
+  ready_ms: 112.37161333333336
+  resource_wait_ms: 0.0
+  token_wait_ms: 0.0
+  critical: false
+  predecessors:
+  - gdc_o#f5
 - task_id: mpeg_writer#f5
   node_id: mpeg_writer
   hw_name: CPU
@@ -4769,11 +4788,11 @@ timeline_events:
   resource_id: CPU_WRITER
   edge_type: control
   bottleneck: false
-  start_ms: 123.16421333333335
-  end_ms: 123.28421333333335
-  duration_ms: 0.12000000000000455
+  start_ms: 117.81481333333336
+  end_ms: 118.13481333333335
+  duration_ms: 0.3199999999999932
   cadence_violation: false
-  ready_ms: 123.16421333333335
+  ready_ms: 117.81481333333336
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -4787,15 +4806,15 @@ timeline_events:
   resource_id: STORAGE_IO
   edge_type: control
   bottleneck: false
-  start_ms: 123.28421333333335
-  end_ms: 123.52421333333335
-  duration_ms: 0.23999999999999488
+  start_ms: 118.13481333333335
+  end_ms: 118.77481333333336
+  duration_ms: 0.6400000000000006
   cadence_interval_ms: 16.66666666666667
-  cadence_avg_interval_ms: 16.666666666666675
+  cadence_avg_interval_ms: 16.66666666666666
   cadence_budget_ms: 16.666666666666668
-  cadence_slack_ms: -7.105427357601002e-15
+  cadence_slack_ms: 7.105427357601002e-15
   cadence_violation: false
-  ready_ms: 123.28421333333335
+  ready_ms: 118.13481333333335
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -5155,37 +5174,19 @@ timeline_events:
   task_type: hw
   frame_index: 6
   resource_id: gdc_o
-  edge_type: control,M2M
+  edge_type: M2M,control
   bottleneck: false
   start_ms: 123.59508000000001
-  end_ms: 124.95588000000001
-  duration_ms: 1.3607999999999976
+  end_ms: 129.03828000000001
+  duration_ms: 5.4432000000000045
   cadence_violation: false
   ready_ms: 123.59508000000001
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
   predecessors:
-  - eis#f6
   - mcsc#f6
-- task_id: mfc_enc#f6
-  node_id: mfc_enc
-  hw_name: MFC
-  task_type: hw
-  frame_index: 6
-  resource_id: mfc_enc
-  edge_type: M2M
-  bottleneck: false
-  start_ms: 124.95588000000001
-  end_ms: 139.83088
-  duration_ms: 14.875
-  cadence_violation: false
-  ready_ms: 124.95588000000001
-  resource_wait_ms: 0.0
-  token_wait_ms: 0.0
-  critical: false
-  predecessors:
-  - gdc_o#f6
+  - eis#f6
 - task_id: dpu#f6
   node_id: dpu
   hw_name: DPU
@@ -5201,14 +5202,14 @@ timeline_events:
   refresh_hz: 60.0
   scanout_ms: 16.666666666666668
   start_ms: 124.95588000000001
-  end_ms: 139.83088
-  duration_ms: 14.875
+  end_ms: 126.31668
+  duration_ms: 1.3607999999999976
   deadline_ms: 116.66666666666667
-  slack_ms: -23.164213333333336
+  slack_ms: -9.650013333333334
   cadence_interval_ms: 16.666666666666657
-  cadence_avg_interval_ms: 16.666666666666668
+  cadence_avg_interval_ms: 16.66666666666667
   cadence_budget_ms: 16.666666666666668
-  cadence_slack_ms: 0.0
+  cadence_slack_ms: -3.552713678800501e-15
   cadence_violation: false
   ready_ms: 124.95588000000001
   resource_wait_ms: 0.0
@@ -5230,14 +5231,14 @@ timeline_events:
   refresh_hz: 60.0
   scanout_ms: 16.666666666666668
   start_ms: 124.95588000000001
-  end_ms: 139.83088
-  duration_ms: 14.875
+  end_ms: 126.31668
+  duration_ms: 1.3607999999999976
   deadline_ms: 116.66666666666667
-  slack_ms: -23.164213333333336
+  slack_ms: -9.650013333333334
   cadence_interval_ms: 16.666666666666657
-  cadence_avg_interval_ms: 16.666666666666668
+  cadence_avg_interval_ms: 16.66666666666667
   cadence_budget_ms: 16.666666666666668
-  cadence_slack_ms: 0.0
+  cadence_slack_ms: -3.552713678800501e-15
   cadence_violation: false
   ready_ms: 124.95588000000001
   resource_wait_ms: 0.0
@@ -5245,6 +5246,24 @@ timeline_events:
   critical: false
   predecessors:
   - dpu#f6
+- task_id: mfc_enc#f6
+  node_id: mfc_enc
+  hw_name: MFC
+  task_type: hw
+  frame_index: 6
+  resource_id: mfc_enc
+  edge_type: M2M
+  bottleneck: false
+  start_ms: 129.03828000000001
+  end_ms: 134.48148
+  duration_ms: 5.44319999999999
+  cadence_violation: false
+  ready_ms: 129.03828000000001
+  resource_wait_ms: 0.0
+  token_wait_ms: 0.0
+  critical: false
+  predecessors:
+  - gdc_o#f6
 - task_id: mpeg_writer#f6
   node_id: mpeg_writer
   hw_name: CPU
@@ -5253,11 +5272,11 @@ timeline_events:
   resource_id: CPU_WRITER
   edge_type: control
   bottleneck: false
-  start_ms: 139.83088
-  end_ms: 139.95088
-  duration_ms: 0.12000000000000455
+  start_ms: 134.48148
+  end_ms: 134.80148
+  duration_ms: 0.3199999999999932
   cadence_violation: false
-  ready_ms: 139.83088
+  ready_ms: 134.48148
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -5271,15 +5290,15 @@ timeline_events:
   resource_id: STORAGE_IO
   edge_type: control
   bottleneck: false
-  start_ms: 139.95088
-  end_ms: 140.19088000000002
-  duration_ms: 0.2400000000000091
-  cadence_interval_ms: 16.66666666666667
-  cadence_avg_interval_ms: 16.666666666666675
+  start_ms: 134.80148
+  end_ms: 135.44147999999998
+  duration_ms: 0.6399999999999864
+  cadence_interval_ms: 16.66666666666663
+  cadence_avg_interval_ms: 16.66666666666666
   cadence_budget_ms: 16.666666666666668
-  cadence_slack_ms: -7.105427357601002e-15
+  cadence_slack_ms: 7.105427357601002e-15
   cadence_violation: false
-  ready_ms: 139.95088
+  ready_ms: 134.80148
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -5639,37 +5658,19 @@ timeline_events:
   task_type: hw
   frame_index: 7
   resource_id: gdc_o
-  edge_type: control,M2M
+  edge_type: M2M,control
   bottleneck: false
   start_ms: 140.26174666666668
-  end_ms: 141.6225466666667
-  duration_ms: 1.3608000000000118
+  end_ms: 145.70494666666667
+  duration_ms: 5.44319999999999
   cadence_violation: false
   ready_ms: 140.26174666666668
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
   predecessors:
-  - eis#f7
   - mcsc#f7
-- task_id: mfc_enc#f7
-  node_id: mfc_enc
-  hw_name: MFC
-  task_type: hw
-  frame_index: 7
-  resource_id: mfc_enc
-  edge_type: M2M
-  bottleneck: false
-  start_ms: 141.6225466666667
-  end_ms: 156.4975466666667
-  duration_ms: 14.875
-  cadence_violation: false
-  ready_ms: 141.6225466666667
-  resource_wait_ms: 0.0
-  token_wait_ms: 0.0
-  critical: false
-  predecessors:
-  - gdc_o#f7
+  - eis#f7
 - task_id: dpu#f7
   node_id: dpu
   hw_name: DPU
@@ -5685,14 +5686,14 @@ timeline_events:
   refresh_hz: 60.0
   scanout_ms: 16.666666666666668
   start_ms: 141.6225466666667
-  end_ms: 156.4975466666667
-  duration_ms: 14.875
+  end_ms: 142.9833466666667
+  duration_ms: 1.3608000000000118
   deadline_ms: 133.33333333333334
-  slack_ms: -23.16421333333335
-  cadence_interval_ms: 16.666666666666686
-  cadence_avg_interval_ms: 16.666666666666668
+  slack_ms: -9.650013333333362
+  cadence_interval_ms: 16.6666666666667
+  cadence_avg_interval_ms: 16.66666666666667
   cadence_budget_ms: 16.666666666666668
-  cadence_slack_ms: 0.0
+  cadence_slack_ms: -3.552713678800501e-15
   cadence_violation: false
   ready_ms: 141.6225466666667
   resource_wait_ms: 0.0
@@ -5714,14 +5715,14 @@ timeline_events:
   refresh_hz: 60.0
   scanout_ms: 16.666666666666668
   start_ms: 141.6225466666667
-  end_ms: 156.4975466666667
-  duration_ms: 14.875
+  end_ms: 142.9833466666667
+  duration_ms: 1.3608000000000118
   deadline_ms: 133.33333333333334
-  slack_ms: -23.16421333333335
-  cadence_interval_ms: 16.666666666666686
-  cadence_avg_interval_ms: 16.666666666666668
+  slack_ms: -9.650013333333362
+  cadence_interval_ms: 16.6666666666667
+  cadence_avg_interval_ms: 16.66666666666667
   cadence_budget_ms: 16.666666666666668
-  cadence_slack_ms: 0.0
+  cadence_slack_ms: -3.552713678800501e-15
   cadence_violation: false
   ready_ms: 141.6225466666667
   resource_wait_ms: 0.0
@@ -5729,6 +5730,24 @@ timeline_events:
   critical: false
   predecessors:
   - dpu#f7
+- task_id: mfc_enc#f7
+  node_id: mfc_enc
+  hw_name: MFC
+  task_type: hw
+  frame_index: 7
+  resource_id: mfc_enc
+  edge_type: M2M
+  bottleneck: false
+  start_ms: 145.70494666666667
+  end_ms: 151.14814666666666
+  duration_ms: 5.44319999999999
+  cadence_violation: false
+  ready_ms: 145.70494666666667
+  resource_wait_ms: 0.0
+  token_wait_ms: 0.0
+  critical: false
+  predecessors:
+  - gdc_o#f7
 - task_id: mpeg_writer#f7
   node_id: mpeg_writer
   hw_name: CPU
@@ -5737,11 +5756,11 @@ timeline_events:
   resource_id: CPU_WRITER
   edge_type: control
   bottleneck: false
-  start_ms: 156.4975466666667
-  end_ms: 156.6175466666667
-  duration_ms: 0.12000000000000455
+  start_ms: 151.14814666666666
+  end_ms: 151.46814666666666
+  duration_ms: 0.3199999999999932
   cadence_violation: false
-  ready_ms: 156.4975466666667
+  ready_ms: 151.14814666666666
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -5755,15 +5774,15 @@ timeline_events:
   resource_id: STORAGE_IO
   edge_type: control
   bottleneck: false
-  start_ms: 156.6175466666667
-  end_ms: 156.8575466666667
-  duration_ms: 0.2400000000000091
-  cadence_interval_ms: 16.666666666666686
-  cadence_avg_interval_ms: 16.666666666666675
+  start_ms: 151.46814666666666
+  end_ms: 152.10814666666664
+  duration_ms: 0.6399999999999864
+  cadence_interval_ms: 16.666666666666657
+  cadence_avg_interval_ms: 16.66666666666666
   cadence_budget_ms: 16.666666666666668
-  cadence_slack_ms: -7.105427357601002e-15
+  cadence_slack_ms: 7.105427357601002e-15
   cadence_violation: false
-  ready_ms: 156.6175466666667
+  ready_ms: 151.46814666666666
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -5830,22 +5849,22 @@ vdd_power:
     bw_mw: 0.0
     total_mw: 37.47072
   VDD_INT:
-    core_mw: 8.2944
+    core_mw: 20.735999999999997
     bw_mw: 0.0
-    total_mw: 8.2944
+    total_mw: 20.735999999999997
   MIF:
     core_mw: 0.0
-    bw_mw: 659.4651839999991
-    total_mw: 659.4651839999991
+    bw_mw: 855.5541439999993
+    total_mw: 855.5541439999993
 power_breakdown:
   model:
     id: v1-vfps
     version: '1.0'
   ip:
-    total_mw: 247.620319
+    total_mw: 260.061919
     by_rail:
       VDD_CAM: 201.855199
-      VDD_INT: 8.2944
+      VDD_INT: 20.736
       VDD_INTCAM: 37.47072
     by_node:
       csis: 3.934426
@@ -5862,15 +5881,15 @@ power_breakdown:
       vps_od: 0.0
       gdc_m: 0.0
       gdc_o: 0.0
-      mfc_enc: 4.1472
+      mfc_enc: 16.5888
       dpu: 4.1472
   memory:
-    total_mw: 659.465184
+    total_mw: 855.554144
     rail: MIF
   cpu:
     total_mw: 0.0
     by_cluster: {}
-  total_mw: 907.085503
+  total_mw: 1115.616063
 sw_task_timing:
 - task: post_crta
   min_ms: 0.1
@@ -5903,28 +5922,28 @@ sw_task_timing:
   value_source: assumed
   source_note: User-supplied fixture values, 2026-09-13; replace with internal measurements.
 - task: mpeg_writer
-  min_ms: 0.06
-  mean_ms: 0.12
-  max_ms: 0.24
+  min_ms: 0.16
+  mean_ms: 0.32
+  max_ms: 0.64
   includes_hw_nodes: []
   value_source: assumed
   source_note: Engineering assumption approved for fixture exploration; replace with
     internal measurements.
 - task: storage_write
-  min_ms: 0.12
-  mean_ms: 0.24
-  max_ms: 0.48
+  min_ms: 0.32
+  mean_ms: 0.64
+  max_ms: 1.28
   includes_hw_nodes: []
   value_source: assumed
   source_note: Engineering assumption approved for fixture exploration; replace with
     internal measurements.
 metric_observations: []
-params_hash: c4c3007b87a068ec
+params_hash: 2cc17ca6ed4d5f33
 calculation_trace:
   schema_version: '1.0'
   trace_level: formula
   scenario_id: uc-camera-recording
-  variant_id: cam-rec-r1-fhd60-supersteady
+  variant_id: cam-rec-r1-uhd60-supersteady
   config:
     asv_group: 4
     fps: 60.0
@@ -5941,25 +5960,25 @@ calculation_trace:
     total_power_mw:
       formula: core_power_mw + bw_power_mw
       inputs:
-        core_power_mw: 247.62031871999997
-        bw_power_mw: 659.4651839999991
-      result: 907.0855027199991
+        core_power_mw: 260.06191872
+        bw_power_mw: 855.5541439999993
+      result: 1115.6160627199993
     total_power_ma:
       formula: total_power_mw / vbat / pmic_efficiency
       inputs:
-        total_power_mw: 907.0855027199991
+        total_power_mw: 1115.6160627199993
         vbat: 4.0
         pmic_efficiency: 0.85
-      result: 266.7898537411762
+      result: 328.1223713882351
     total_bw_mbs:
       formula: sum(dma[].bw_mbs)
-      result: 8243.314799999996
+      result: 10694.426800000003
     hw_time_max_ms:
       formula: max(timing_breakdown[].hw_time_ms)
-      result: 14.874999999999998
+      result: 6.147540000000001
     timeline_end_ms:
       formula: max(timeline_events[].end_ms)
-      result: 156.8575466666667
+      result: 152.10814666666664
   ip:
   - node_id: csis
     ip_ref: ip-csis-is-v15-s5e9965
@@ -7083,10 +7102,10 @@ calculation_trace:
     hw_name: GDC
     mode: Normal
     shape:
-      width: 1920
-      height: 1080
-      pixels: 2073600
-      resolution_mp: 2.0736
+      width: 3840
+      height: 2160
+      pixels: 8294400
+      resolution_mp: 8.2944
       format: YUV420
       fps: 60.0
     provenance:
@@ -7100,7 +7119,7 @@ calculation_trace:
       formula: max(base_required, manual_clock_mhz, clock_correction_mhz), then align
         by DVFS domain
       inputs:
-        pixels: 2073600
+        pixels: 8294400
         fps: 60.0
         sw_margin: 0.15
         ppc: 4.0
@@ -7108,8 +7127,8 @@ calculation_trace:
         clock_correction_mhz: 0.0
         clock_correction_reason: null
       base_formula: pixels * fps / (1 - sw_margin) / ppc / 1e6
-      initial_required_mhz: 36.592941176470596
-      before_group_align_mhz: 36.592941176470596
+      initial_required_mhz: 146.37176470588238
+      before_group_align_mhz: 146.37176470588238
       manual_clock_mhz: 400.0
       after_manual_clock_mhz: 400.0
       clock_correction_mhz: 0.0
@@ -7145,7 +7164,7 @@ calculation_trace:
         confidence: null
       inputs:
         unit_power_mw_mp: 0.0
-        resolution_mp: 2.0736
+        resolution_mp: 8.2944
         set_voltage_mv: 710.0
         reference_voltage_mv: 710.0
         fps: 60.0
@@ -7157,11 +7176,11 @@ calculation_trace:
     timing:
       formula: pixels / (set_clock_mhz * 1e6 * ppc) * (1 + h_blank_margin) * 1000
       inputs:
-        pixels: 2073600
+        pixels: 8294400
         set_clock_mhz: 400.0
         ppc: 4.0
         h_blank_margin: 0.05
-      result_ms: 1.3608
+      result_ms: 5.4432
       feasible: true
       infeasible_reason: null
   - node_id: mfc_enc
@@ -7169,10 +7188,10 @@ calculation_trace:
     hw_name: MFC
     mode: Normal
     shape:
-      width: 1920
-      height: 1080
-      pixels: 2073600
-      resolution_mp: 2.0736
+      width: 3840
+      height: 2160
+      pixels: 8294400
+      resolution_mp: 8.2944
       format: YUV420
       fps: 60.0
     provenance:
@@ -7185,23 +7204,23 @@ calculation_trace:
       formula: max(base_required, manual_clock_mhz, clock_correction_mhz), then align
         by DVFS domain
       inputs:
-        pixels: 2073600
+        pixels: 8294400
         fps: 60.0
         sw_margin: 0.15
         ppc: 4.0
-        manual_clock_mhz: null
+        manual_clock_mhz: 400.0
         clock_correction_mhz: 0.0
         clock_correction_reason: null
       base_formula: pixels * fps / (1 - sw_margin) / ppc / 1e6
-      initial_required_mhz: 36.592941176470596
-      before_group_align_mhz: 36.592941176470596
-      manual_clock_mhz: null
-      after_manual_clock_mhz: 36.592941176470596
+      initial_required_mhz: 146.37176470588238
+      before_group_align_mhz: 146.37176470588238
+      manual_clock_mhz: 400.0
+      after_manual_clock_mhz: 400.0
       clock_correction_mhz: 0.0
       clock_correction_reason: null
       sensor_otf_clock_correction_mhz: 0.0
       sensor_otf_clock_correction_reason: null
-      after_group_align_mhz: 36.592941176470596
+      after_group_align_mhz: 400.0
     dvfs:
       dvfs_group: INT
       asv_group: 4
@@ -7212,9 +7231,9 @@ calculation_trace:
       set_voltage_rule: align to max required_voltage_mv in the shared VDD domain
       candidate_levels: []
       selected_level: null
-      selected_speed_mhz: 36.592941176470596
+      selected_speed_mhz: 400.0
       required_voltage_mv: 710.0
-      set_clock_mhz: 36.592941176470596
+      set_clock_mhz: 400.0
       set_voltage_mv: 710.0
       vdd: VDD_INT
       vdd_leader: dpu,mfc_enc
@@ -7230,7 +7249,7 @@ calculation_trace:
         confidence: null
       inputs:
         unit_power_mw_mp: 1.0
-        resolution_mp: 2.0736
+        resolution_mp: 8.2944
         set_voltage_mv: 710.0
         reference_voltage_mv: 710.0
         fps: 60.0
@@ -7238,15 +7257,15 @@ calculation_trace:
       intermediate:
         voltage_scale: 1.0
         fps_scale: 2.0
-      result_mw: 4.1472
+      result_mw: 16.5888
     timing:
       formula: pixels / (set_clock_mhz * 1e6 * ppc) * (1 + h_blank_margin) * 1000
       inputs:
-        pixels: 2073600
-        set_clock_mhz: 36.592941176470596
+        pixels: 8294400
+        set_clock_mhz: 400.0
         ppc: 4.0
         h_blank_margin: 0.05
-      result_ms: 14.874999999999998
+      result_ms: 5.4432
       feasible: true
       infeasible_reason: null
   - node_id: dpu
@@ -7281,12 +7300,12 @@ calculation_trace:
       initial_required_mhz: 36.592941176470596
       before_group_align_mhz: 36.592941176470596
       manual_clock_mhz: null
-      after_manual_clock_mhz: 36.592941176470596
+      after_manual_clock_mhz: 146.37176470588238
       clock_correction_mhz: 0.0
       clock_correction_reason: null
       sensor_otf_clock_correction_mhz: 0.0
       sensor_otf_clock_correction_reason: null
-      after_group_align_mhz: 36.592941176470596
+      after_group_align_mhz: 146.37176470588238
     dvfs:
       dvfs_group: INT
       asv_group: 4
@@ -7297,9 +7316,9 @@ calculation_trace:
       set_voltage_rule: align to max required_voltage_mv in the shared VDD domain
       candidate_levels: []
       selected_level: null
-      selected_speed_mhz: 36.592941176470596
+      selected_speed_mhz: 400.0
       required_voltage_mv: 710.0
-      set_clock_mhz: 36.592941176470596
+      set_clock_mhz: 400.0
       set_voltage_mv: 710.0
       vdd: VDD_INT
       vdd_leader: dpu,mfc_enc
@@ -7328,10 +7347,10 @@ calculation_trace:
       formula: pixels / (set_clock_mhz * 1e6 * ppc) * (1 + h_blank_margin) * 1000
       inputs:
         pixels: 2073600
-        set_clock_mhz: 36.592941176470596
+        set_clock_mhz: 400.0
         ppc: 4.0
         h_blank_margin: 0.05
-      result_ms: 14.874999999999998
+      result_ms: 1.3608
       feasible: true
       infeasible_reason: null
   dma:
@@ -8455,6 +8474,76 @@ calculation_trace:
       bw_mbs_worst: null
       bw_power_mw: 14.92992
       bw_power_ma: 4.39115294117647
+  - node_id: mcsc
+    ip_ref: ip-mcsc-is-v15-s5e9965
+    hw_name: MCSC
+    port: MCSC_WDMA_W1
+    direction: write
+    formula: comp_ratio * fps * width * height * (bitwidth / 8) * format_bpp_factor
+      * r_w_rate / 1e6
+    bw_formula: comp_ratio * fps * width * height * (bitwidth / 8) * format_bpp_factor
+      * r_w_rate / 1e6
+    bw_power_formula: bw_mbs * bw_power_coeff / 1000 * llc_weight
+    bw_power_ma_formula: bw_power_mw / vbat / pmic_efficiency
+    inputs:
+      width: 3840
+      height: 2160
+      fps: 60.0
+      format: YUV420
+      bitwidth: 8
+      bitrate_mbps: null
+      compression: COMP_OFF
+      comp_ratio: 1.0
+      r_w_rate: 1.0
+      llc_enabled: false
+      bw_power_coeff: 80.0
+      vbat: 4.0
+      pmic_efficiency: 0.85
+    intermediate:
+      format_bpp_factor: 1.5
+      llc_weight: 1.0
+      size_mp: 8.2944
+    result:
+      bw_mbs: 746.496
+      bw_mbs_best: null
+      bw_mbs_worst: null
+      bw_power_mw: 59.71968
+      bw_power_ma: 17.56461176470588
+  - node_id: gdc_o
+    ip_ref: ip-gdc-is-v15-s5e9965
+    hw_name: GDC
+    port: GDC_RDMA
+    direction: read
+    formula: comp_ratio * fps * width * height * (bitwidth / 8) * format_bpp_factor
+      * r_w_rate / 1e6
+    bw_formula: comp_ratio * fps * width * height * (bitwidth / 8) * format_bpp_factor
+      * r_w_rate / 1e6
+    bw_power_formula: bw_mbs * bw_power_coeff / 1000 * llc_weight
+    bw_power_ma_formula: bw_power_mw / vbat / pmic_efficiency
+    inputs:
+      width: 3840
+      height: 2160
+      fps: 60.0
+      format: YUV420
+      bitwidth: 8
+      bitrate_mbps: null
+      compression: COMP_OFF
+      comp_ratio: 1.0
+      r_w_rate: 1.0
+      llc_enabled: false
+      bw_power_coeff: 80.0
+      vbat: 4.0
+      pmic_efficiency: 0.85
+    intermediate:
+      format_bpp_factor: 1.5
+      llc_weight: 1.0
+      size_mp: 8.2944
+    result:
+      bw_mbs: 746.496
+      bw_mbs_best: null
+      bw_mbs_worst: null
+      bw_power_mw: 59.71968
+      bw_power_ma: 17.56461176470588
   - node_id: gdc_m
     ip_ref: ip-gdc-is-v15-s5e9965
     hw_name: GDC
@@ -8537,8 +8626,8 @@ calculation_trace:
     bw_power_formula: bw_mbs * bw_power_coeff / 1000 * llc_weight
     bw_power_ma_formula: bw_power_mw / vbat / pmic_efficiency
     inputs:
-      width: 1920
-      height: 1080
+      width: 3840
+      height: 2160
       fps: 60.0
       format: YUV420
       bitwidth: 8
@@ -8553,13 +8642,13 @@ calculation_trace:
     intermediate:
       format_bpp_factor: 1.5
       llc_weight: 1.0
-      size_mp: 2.0736
+      size_mp: 8.2944
     result:
-      bw_mbs: 186.624
+      bw_mbs: 746.496
       bw_mbs_best: null
       bw_mbs_worst: null
-      bw_power_mw: 14.92992
-      bw_power_ma: 4.39115294117647
+      bw_power_mw: 59.71968
+      bw_power_ma: 17.56461176470588
   - node_id: mfc_enc
     ip_ref: ip-mfc-s5e9965
     hw_name: MFC
@@ -8572,8 +8661,8 @@ calculation_trace:
     bw_power_formula: bw_mbs * bw_power_coeff / 1000 * llc_weight
     bw_power_ma_formula: bw_power_mw / vbat / pmic_efficiency
     inputs:
-      width: 1920
-      height: 1080
+      width: 3840
+      height: 2160
       fps: 60.0
       format: YUV420
       bitwidth: 8
@@ -8588,48 +8677,13 @@ calculation_trace:
     intermediate:
       format_bpp_factor: 1.5
       llc_weight: 1.0
-      size_mp: 2.0736
+      size_mp: 8.2944
     result:
-      bw_mbs: 186.624
+      bw_mbs: 746.496
       bw_mbs_best: null
       bw_mbs_worst: null
-      bw_power_mw: 14.92992
-      bw_power_ma: 4.39115294117647
-  - node_id: gdc_o
-    ip_ref: ip-gdc-is-v15-s5e9965
-    hw_name: GDC
-    port: GDC_RDMA
-    direction: read
-    formula: comp_ratio * fps * width * height * (bitwidth / 8) * format_bpp_factor
-      * r_w_rate / 1e6
-    bw_formula: comp_ratio * fps * width * height * (bitwidth / 8) * format_bpp_factor
-      * r_w_rate / 1e6
-    bw_power_formula: bw_mbs * bw_power_coeff / 1000 * llc_weight
-    bw_power_ma_formula: bw_power_mw / vbat / pmic_efficiency
-    inputs:
-      width: 1920
-      height: 1080
-      fps: 60.0
-      format: YUV420
-      bitwidth: 8
-      bitrate_mbps: null
-      compression: COMP_OFF
-      comp_ratio: 1.0
-      r_w_rate: 1.0
-      llc_enabled: false
-      bw_power_coeff: 80.0
-      vbat: 4.0
-      pmic_efficiency: 0.85
-    intermediate:
-      format_bpp_factor: 1.5
-      llc_weight: 1.0
-      size_mp: 2.0736
-    result:
-      bw_mbs: 186.624
-      bw_mbs_best: null
-      bw_mbs_worst: null
-      bw_power_mw: 14.92992
-      bw_power_ma: 4.39115294117647
+      bw_power_mw: 59.71968
+      bw_power_ma: 17.56461176470588
   - node_id: mtnr
     ip_ref: ip-mtnr-is-v15-s5e9965
     hw_name: MTNR
@@ -9590,7 +9644,7 @@ calculation_trace:
       fps: 60.0
       format: BITSTREAM
       bitwidth: 8
-      bitrate_mbps: 30.0
+      bitrate_mbps: 80.0
       compression: disable
       comp_ratio: 1.0
       r_w_rate: 1.0
@@ -9603,11 +9657,11 @@ calculation_trace:
       llc_weight: 1.0
       size_mp: 0.0
     result:
-      bw_mbs: 3.75
+      bw_mbs: 10.0
       bw_mbs_best: null
       bw_mbs_worst: null
-      bw_power_mw: 0.3
-      bw_power_ma: 0.08823529411764706
+      bw_power_mw: 0.8
+      bw_power_ma: 0.23529411764705885
   - node_id: mpeg_writer
     ip_ref: ip-cpu-s5e9965
     hw_name: MPEG_WRITER
@@ -9623,7 +9677,7 @@ calculation_trace:
       fps: 60.0
       format: BITSTREAM
       bitwidth: 8
-      bitrate_mbps: 30.0
+      bitrate_mbps: 80.0
       compression: disable
       comp_ratio: 1.0
       r_w_rate: 1.0
@@ -9636,11 +9690,11 @@ calculation_trace:
       llc_weight: 1.0
       size_mp: 0.0
     result:
-      bw_mbs: 3.75
+      bw_mbs: 10.0
       bw_mbs_best: null
       bw_mbs_worst: null
-      bw_power_mw: 0.3
-      bw_power_ma: 0.08823529411764706
+      bw_power_mw: 0.8
+      bw_power_ma: 0.23529411764705885
   - node_id: mpeg_writer
     ip_ref: ip-cpu-s5e9965
     hw_name: MPEG_WRITER
@@ -9656,7 +9710,7 @@ calculation_trace:
       fps: 60.0
       format: BITSTREAM
       bitwidth: 8
-      bitrate_mbps: 30.0
+      bitrate_mbps: 80.0
       compression: disable
       comp_ratio: 1.0
       r_w_rate: 1.0
@@ -9669,11 +9723,11 @@ calculation_trace:
       llc_weight: 1.0
       size_mp: 0.0
     result:
-      bw_mbs: 3.75
+      bw_mbs: 10.0
       bw_mbs_best: null
       bw_mbs_worst: null
-      bw_power_mw: 0.3
-      bw_power_ma: 0.08823529411764706
+      bw_power_mw: 0.8
+      bw_power_ma: 0.23529411764705885
   - node_id: storage_write
     ip_ref: ip-cpu-s5e9965
     hw_name: STORAGE_WRITE
@@ -9689,7 +9743,7 @@ calculation_trace:
       fps: 60.0
       format: BITSTREAM
       bitwidth: 8
-      bitrate_mbps: 30.0
+      bitrate_mbps: 80.0
       compression: disable
       comp_ratio: 1.0
       r_w_rate: 1.0
@@ -9702,11 +9756,11 @@ calculation_trace:
       llc_weight: 1.0
       size_mp: 0.0
     result:
-      bw_mbs: 3.75
+      bw_mbs: 10.0
       bw_mbs_best: null
       bw_mbs_worst: null
-      bw_power_mw: 0.3
-      bw_power_ma: 0.08823529411764706
+      bw_power_mw: 0.8
+      bw_power_ma: 0.23529411764705885
   external_devices:
   - device_type: sensor
     node_id: sensor_rear
@@ -10034,8 +10088,8 @@ calculation_trace:
       bottleneck_tasks:
       - dpu#f0
       start_ms: 24.955880000000004
-      end_ms: 39.83088
-      span_ms: 14.874999999999996
+      end_ms: 26.316680000000005
+      span_ms: 1.3608000000000011
     - group_id: otf-2#f1
       tasks:
       - dpu#f1
@@ -10043,8 +10097,8 @@ calculation_trace:
       bottleneck_tasks:
       - dpu#f1
       start_ms: 41.62254666666667
-      end_ms: 56.49754666666667
-      span_ms: 14.875
+      end_ms: 42.98334666666667
+      span_ms: 1.3607999999999976
     - group_id: otf-2#f2
       tasks:
       - dpu#f2
@@ -10052,8 +10106,8 @@ calculation_trace:
       bottleneck_tasks:
       - dpu#f2
       start_ms: 58.28921333333333
-      end_ms: 73.16421333333332
-      span_ms: 14.874999999999993
+      end_ms: 59.65001333333333
+      span_ms: 1.3607999999999976
     - group_id: otf-2#f3
       tasks:
       - dpu#f3
@@ -10061,8 +10115,8 @@ calculation_trace:
       bottleneck_tasks:
       - dpu#f3
       start_ms: 74.95588000000001
-      end_ms: 89.83088000000001
-      span_ms: 14.875
+      end_ms: 76.31668
+      span_ms: 1.3607999999999976
     - group_id: otf-2#f4
       tasks:
       - dpu#f4
@@ -10070,8 +10124,8 @@ calculation_trace:
       bottleneck_tasks:
       - dpu#f4
       start_ms: 91.62254666666668
-      end_ms: 106.49754666666668
-      span_ms: 14.875
+      end_ms: 92.98334666666668
+      span_ms: 1.3607999999999976
     - group_id: otf-2#f5
       tasks:
       - dpu#f5
@@ -10079,8 +10133,8 @@ calculation_trace:
       bottleneck_tasks:
       - dpu#f5
       start_ms: 108.28921333333335
-      end_ms: 123.16421333333335
-      span_ms: 14.875
+      end_ms: 109.65001333333335
+      span_ms: 1.3607999999999976
     - group_id: otf-2#f6
       tasks:
       - dpu#f6
@@ -10088,8 +10142,8 @@ calculation_trace:
       bottleneck_tasks:
       - dpu#f6
       start_ms: 124.95588000000001
-      end_ms: 139.83088
-      span_ms: 14.875
+      end_ms: 126.31668
+      span_ms: 1.3607999999999976
     - group_id: otf-2#f7
       tasks:
       - dpu#f7
@@ -10097,8 +10151,8 @@ calculation_trace:
       bottleneck_tasks:
       - dpu#f7
       start_ms: 141.6225466666667
-      end_ms: 156.4975466666667
-      span_ms: 14.875
+      end_ms: 142.9833466666667
+      span_ms: 1.3608000000000118
     critical_path: []
     top_waits:
     - task_id: dpu#f0
@@ -10110,17 +10164,17 @@ calculation_trace:
       edge_type: M2M
       otf_group_id: otf-2#f0
       start_ms: 24.955880000000004
-      end_ms: 39.83088
-      duration_ms: 14.874999999999996
+      end_ms: 26.316680000000005
+      duration_ms: 1.3608000000000011
       ready_ms: 24.955880000000004
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 16.666666666666668
-      slack_ms: -23.164213333333333
+      slack_ms: -9.650013333333337
       cadence_interval_ms: null
-      cadence_avg_interval_ms: 16.666666666666668
+      cadence_avg_interval_ms: 16.66666666666667
       cadence_budget_ms: 16.666666666666668
-      cadence_slack_ms: 0.0
+      cadence_slack_ms: -3.552713678800501e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -10137,17 +10191,17 @@ calculation_trace:
       edge_type: OTF
       otf_group_id: otf-2#f0
       start_ms: 24.955880000000004
-      end_ms: 39.83088
-      duration_ms: 14.874999999999996
+      end_ms: 26.316680000000005
+      duration_ms: 1.3608000000000011
       ready_ms: 24.955880000000004
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 16.666666666666668
-      slack_ms: -23.164213333333333
+      slack_ms: -9.650013333333337
       cadence_interval_ms: null
-      cadence_avg_interval_ms: 16.666666666666668
+      cadence_avg_interval_ms: 16.66666666666667
       cadence_budget_ms: 16.666666666666668
-      cadence_slack_ms: 0.0
+      cadence_slack_ms: -3.552713678800501e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -10164,17 +10218,17 @@ calculation_trace:
       edge_type: M2M
       otf_group_id: otf-2#f1
       start_ms: 41.62254666666667
-      end_ms: 56.49754666666667
-      duration_ms: 14.875
+      end_ms: 42.98334666666667
+      duration_ms: 1.3607999999999976
       ready_ms: 41.62254666666667
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 33.333333333333336
-      slack_ms: -23.164213333333336
-      cadence_interval_ms: 16.66666666666667
-      cadence_avg_interval_ms: 16.666666666666668
+      slack_ms: -9.650013333333334
+      cadence_interval_ms: 16.666666666666664
+      cadence_avg_interval_ms: 16.66666666666667
       cadence_budget_ms: 16.666666666666668
-      cadence_slack_ms: 0.0
+      cadence_slack_ms: -3.552713678800501e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -10191,17 +10245,17 @@ calculation_trace:
       edge_type: OTF
       otf_group_id: otf-2#f1
       start_ms: 41.62254666666667
-      end_ms: 56.49754666666667
-      duration_ms: 14.875
+      end_ms: 42.98334666666667
+      duration_ms: 1.3607999999999976
       ready_ms: 41.62254666666667
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 33.333333333333336
-      slack_ms: -23.164213333333336
-      cadence_interval_ms: 16.66666666666667
-      cadence_avg_interval_ms: 16.666666666666668
+      slack_ms: -9.650013333333334
+      cadence_interval_ms: 16.666666666666664
+      cadence_avg_interval_ms: 16.66666666666667
       cadence_budget_ms: 16.666666666666668
-      cadence_slack_ms: 0.0
+      cadence_slack_ms: -3.552713678800501e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -10218,17 +10272,17 @@ calculation_trace:
       edge_type: M2M
       otf_group_id: otf-2#f2
       start_ms: 58.28921333333333
-      end_ms: 73.16421333333332
-      duration_ms: 14.874999999999993
+      end_ms: 59.65001333333333
+      duration_ms: 1.3607999999999976
       ready_ms: 58.28921333333333
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 50.0
-      slack_ms: -23.164213333333322
-      cadence_interval_ms: 16.66666666666665
-      cadence_avg_interval_ms: 16.666666666666668
+      slack_ms: -9.650013333333327
+      cadence_interval_ms: 16.666666666666657
+      cadence_avg_interval_ms: 16.66666666666667
       cadence_budget_ms: 16.666666666666668
-      cadence_slack_ms: 0.0
+      cadence_slack_ms: -3.552713678800501e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -10245,17 +10299,17 @@ calculation_trace:
       edge_type: OTF
       otf_group_id: otf-2#f2
       start_ms: 58.28921333333333
-      end_ms: 73.16421333333332
-      duration_ms: 14.874999999999993
+      end_ms: 59.65001333333333
+      duration_ms: 1.3607999999999976
       ready_ms: 58.28921333333333
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 50.0
-      slack_ms: -23.164213333333322
-      cadence_interval_ms: 16.66666666666665
-      cadence_avg_interval_ms: 16.666666666666668
+      slack_ms: -9.650013333333327
+      cadence_interval_ms: 16.666666666666657
+      cadence_avg_interval_ms: 16.66666666666667
       cadence_budget_ms: 16.666666666666668
-      cadence_slack_ms: 0.0
+      cadence_slack_ms: -3.552713678800501e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -10272,17 +10326,17 @@ calculation_trace:
       edge_type: M2M
       otf_group_id: otf-2#f3
       start_ms: 74.95588000000001
-      end_ms: 89.83088000000001
-      duration_ms: 14.875
+      end_ms: 76.31668
+      duration_ms: 1.3607999999999976
       ready_ms: 74.95588000000001
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 66.66666666666667
-      slack_ms: -23.164213333333336
-      cadence_interval_ms: 16.666666666666686
-      cadence_avg_interval_ms: 16.666666666666668
+      slack_ms: -9.650013333333334
+      cadence_interval_ms: 16.66666666666668
+      cadence_avg_interval_ms: 16.66666666666667
       cadence_budget_ms: 16.666666666666668
-      cadence_slack_ms: 0.0
+      cadence_slack_ms: -3.552713678800501e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -10299,17 +10353,17 @@ calculation_trace:
       edge_type: OTF
       otf_group_id: otf-2#f3
       start_ms: 74.95588000000001
-      end_ms: 89.83088000000001
-      duration_ms: 14.875
+      end_ms: 76.31668
+      duration_ms: 1.3607999999999976
       ready_ms: 74.95588000000001
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 66.66666666666667
-      slack_ms: -23.164213333333336
-      cadence_interval_ms: 16.666666666666686
-      cadence_avg_interval_ms: 16.666666666666668
+      slack_ms: -9.650013333333334
+      cadence_interval_ms: 16.66666666666668
+      cadence_avg_interval_ms: 16.66666666666667
       cadence_budget_ms: 16.666666666666668
-      cadence_slack_ms: 0.0
+      cadence_slack_ms: -3.552713678800501e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -10326,17 +10380,17 @@ calculation_trace:
       edge_type: M2M
       otf_group_id: otf-2#f4
       start_ms: 91.62254666666668
-      end_ms: 106.49754666666668
-      duration_ms: 14.875
+      end_ms: 92.98334666666668
+      duration_ms: 1.3607999999999976
       ready_ms: 91.62254666666668
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 83.33333333333334
-      slack_ms: -23.164213333333336
+      slack_ms: -9.650013333333334
       cadence_interval_ms: 16.66666666666667
-      cadence_avg_interval_ms: 16.666666666666668
+      cadence_avg_interval_ms: 16.66666666666667
       cadence_budget_ms: 16.666666666666668
-      cadence_slack_ms: 0.0
+      cadence_slack_ms: -3.552713678800501e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -10353,17 +10407,17 @@ calculation_trace:
       edge_type: OTF
       otf_group_id: otf-2#f4
       start_ms: 91.62254666666668
-      end_ms: 106.49754666666668
-      duration_ms: 14.875
+      end_ms: 92.98334666666668
+      duration_ms: 1.3607999999999976
       ready_ms: 91.62254666666668
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 83.33333333333334
-      slack_ms: -23.164213333333336
+      slack_ms: -9.650013333333334
       cadence_interval_ms: 16.66666666666667
-      cadence_avg_interval_ms: 16.666666666666668
+      cadence_avg_interval_ms: 16.66666666666667
       cadence_budget_ms: 16.666666666666668
-      cadence_slack_ms: 0.0
+      cadence_slack_ms: -3.552713678800501e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -10408,17 +10462,17 @@ calculation_trace:
       edge_type: M2M
       otf_group_id: otf-2#f0
       start_ms: 24.955880000000004
-      end_ms: 39.83088
-      duration_ms: 14.874999999999996
+      end_ms: 26.316680000000005
+      duration_ms: 1.3608000000000011
       ready_ms: 24.955880000000004
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 16.666666666666668
-      slack_ms: -23.164213333333333
+      slack_ms: -9.650013333333337
       cadence_interval_ms: null
-      cadence_avg_interval_ms: 16.666666666666668
+      cadence_avg_interval_ms: 16.66666666666667
       cadence_budget_ms: 16.666666666666668
-      cadence_slack_ms: 0.0
+      cadence_slack_ms: -3.552713678800501e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -10435,17 +10489,17 @@ calculation_trace:
       edge_type: OTF
       otf_group_id: otf-2#f0
       start_ms: 24.955880000000004
-      end_ms: 39.83088
-      duration_ms: 14.874999999999996
+      end_ms: 26.316680000000005
+      duration_ms: 1.3608000000000011
       ready_ms: 24.955880000000004
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 16.666666666666668
-      slack_ms: -23.164213333333333
+      slack_ms: -9.650013333333337
       cadence_interval_ms: null
-      cadence_avg_interval_ms: 16.666666666666668
+      cadence_avg_interval_ms: 16.66666666666667
       cadence_budget_ms: 16.666666666666668
-      cadence_slack_ms: 0.0
+      cadence_slack_ms: -3.552713678800501e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -10461,18 +10515,18 @@ calculation_trace:
       resource_id: STORAGE_IO
       edge_type: control
       otf_group_id: null
-      start_ms: 39.95088
-      end_ms: 40.19088
-      duration_ms: 0.240000000000002
-      ready_ms: 39.95088
+      start_ms: 34.801480000000005
+      end_ms: 35.441480000000006
+      duration_ms: 0.6400000000000006
+      ready_ms: 34.801480000000005
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: null
       slack_ms: null
       cadence_interval_ms: null
-      cadence_avg_interval_ms: 16.666666666666675
+      cadence_avg_interval_ms: 16.66666666666666
       cadence_budget_ms: 16.666666666666668
-      cadence_slack_ms: -7.105427357601002e-15
+      cadence_slack_ms: 7.105427357601002e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -10516,17 +10570,17 @@ calculation_trace:
       edge_type: M2M
       otf_group_id: otf-2#f1
       start_ms: 41.62254666666667
-      end_ms: 56.49754666666667
-      duration_ms: 14.875
+      end_ms: 42.98334666666667
+      duration_ms: 1.3607999999999976
       ready_ms: 41.62254666666667
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 33.333333333333336
-      slack_ms: -23.164213333333336
-      cadence_interval_ms: 16.66666666666667
-      cadence_avg_interval_ms: 16.666666666666668
+      slack_ms: -9.650013333333334
+      cadence_interval_ms: 16.666666666666664
+      cadence_avg_interval_ms: 16.66666666666667
       cadence_budget_ms: 16.666666666666668
-      cadence_slack_ms: 0.0
+      cadence_slack_ms: -3.552713678800501e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -10543,17 +10597,17 @@ calculation_trace:
       edge_type: OTF
       otf_group_id: otf-2#f1
       start_ms: 41.62254666666667
-      end_ms: 56.49754666666667
-      duration_ms: 14.875
+      end_ms: 42.98334666666667
+      duration_ms: 1.3607999999999976
       ready_ms: 41.62254666666667
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 33.333333333333336
-      slack_ms: -23.164213333333336
-      cadence_interval_ms: 16.66666666666667
-      cadence_avg_interval_ms: 16.666666666666668
+      slack_ms: -9.650013333333334
+      cadence_interval_ms: 16.666666666666664
+      cadence_avg_interval_ms: 16.66666666666667
       cadence_budget_ms: 16.666666666666668
-      cadence_slack_ms: 0.0
+      cadence_slack_ms: -3.552713678800501e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -10569,18 +10623,18 @@ calculation_trace:
       resource_id: STORAGE_IO
       edge_type: control
       otf_group_id: null
-      start_ms: 56.61754666666667
-      end_ms: 56.85754666666667
-      duration_ms: 0.240000000000002
-      ready_ms: 56.61754666666667
+      start_ms: 51.46814666666667
+      end_ms: 52.10814666666667
+      duration_ms: 0.6400000000000006
+      ready_ms: 51.46814666666667
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: null
       slack_ms: null
-      cadence_interval_ms: 16.66666666666667
-      cadence_avg_interval_ms: 16.666666666666675
+      cadence_interval_ms: 16.666666666666664
+      cadence_avg_interval_ms: 16.66666666666666
       cadence_budget_ms: 16.666666666666668
-      cadence_slack_ms: -7.105427357601002e-15
+      cadence_slack_ms: 7.105427357601002e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -10624,17 +10678,17 @@ calculation_trace:
       edge_type: M2M
       otf_group_id: otf-2#f2
       start_ms: 58.28921333333333
-      end_ms: 73.16421333333332
-      duration_ms: 14.874999999999993
+      end_ms: 59.65001333333333
+      duration_ms: 1.3607999999999976
       ready_ms: 58.28921333333333
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 50.0
-      slack_ms: -23.164213333333322
-      cadence_interval_ms: 16.66666666666665
-      cadence_avg_interval_ms: 16.666666666666668
+      slack_ms: -9.650013333333327
+      cadence_interval_ms: 16.666666666666657
+      cadence_avg_interval_ms: 16.66666666666667
       cadence_budget_ms: 16.666666666666668
-      cadence_slack_ms: 0.0
+      cadence_slack_ms: -3.552713678800501e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -10651,17 +10705,17 @@ calculation_trace:
       edge_type: OTF
       otf_group_id: otf-2#f2
       start_ms: 58.28921333333333
-      end_ms: 73.16421333333332
-      duration_ms: 14.874999999999993
+      end_ms: 59.65001333333333
+      duration_ms: 1.3607999999999976
       ready_ms: 58.28921333333333
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 50.0
-      slack_ms: -23.164213333333322
-      cadence_interval_ms: 16.66666666666665
-      cadence_avg_interval_ms: 16.666666666666668
+      slack_ms: -9.650013333333327
+      cadence_interval_ms: 16.666666666666657
+      cadence_avg_interval_ms: 16.66666666666667
       cadence_budget_ms: 16.666666666666668
-      cadence_slack_ms: 0.0
+      cadence_slack_ms: -3.552713678800501e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -10677,18 +10731,18 @@ calculation_trace:
       resource_id: STORAGE_IO
       edge_type: control
       otf_group_id: null
-      start_ms: 73.28421333333333
-      end_ms: 73.52421333333332
-      duration_ms: 0.23999999999999488
-      ready_ms: 73.28421333333333
+      start_ms: 68.13481333333333
+      end_ms: 68.77481333333333
+      duration_ms: 0.6400000000000006
+      ready_ms: 68.13481333333333
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: null
       slack_ms: null
-      cadence_interval_ms: 16.66666666666665
-      cadence_avg_interval_ms: 16.666666666666675
+      cadence_interval_ms: 16.666666666666657
+      cadence_avg_interval_ms: 16.66666666666666
       cadence_budget_ms: 16.666666666666668
-      cadence_slack_ms: -7.105427357601002e-15
+      cadence_slack_ms: 7.105427357601002e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -10732,17 +10786,17 @@ calculation_trace:
       edge_type: M2M
       otf_group_id: otf-2#f3
       start_ms: 74.95588000000001
-      end_ms: 89.83088000000001
-      duration_ms: 14.875
+      end_ms: 76.31668
+      duration_ms: 1.3607999999999976
       ready_ms: 74.95588000000001
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 66.66666666666667
-      slack_ms: -23.164213333333336
-      cadence_interval_ms: 16.666666666666686
-      cadence_avg_interval_ms: 16.666666666666668
+      slack_ms: -9.650013333333334
+      cadence_interval_ms: 16.66666666666668
+      cadence_avg_interval_ms: 16.66666666666667
       cadence_budget_ms: 16.666666666666668
-      cadence_slack_ms: 0.0
+      cadence_slack_ms: -3.552713678800501e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -10759,17 +10813,17 @@ calculation_trace:
       edge_type: OTF
       otf_group_id: otf-2#f3
       start_ms: 74.95588000000001
-      end_ms: 89.83088000000001
-      duration_ms: 14.875
+      end_ms: 76.31668
+      duration_ms: 1.3607999999999976
       ready_ms: 74.95588000000001
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 66.66666666666667
-      slack_ms: -23.164213333333336
-      cadence_interval_ms: 16.666666666666686
-      cadence_avg_interval_ms: 16.666666666666668
+      slack_ms: -9.650013333333334
+      cadence_interval_ms: 16.66666666666668
+      cadence_avg_interval_ms: 16.66666666666667
       cadence_budget_ms: 16.666666666666668
-      cadence_slack_ms: 0.0
+      cadence_slack_ms: -3.552713678800501e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -10785,18 +10839,18 @@ calculation_trace:
       resource_id: STORAGE_IO
       edge_type: control
       otf_group_id: null
-      start_ms: 89.95088000000001
-      end_ms: 90.19088
-      duration_ms: 0.23999999999999488
-      ready_ms: 89.95088000000001
+      start_ms: 84.80148000000001
+      end_ms: 85.44148000000001
+      duration_ms: 0.6400000000000006
+      ready_ms: 84.80148000000001
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: null
       slack_ms: null
       cadence_interval_ms: 16.666666666666686
-      cadence_avg_interval_ms: 16.666666666666675
+      cadence_avg_interval_ms: 16.66666666666666
       cadence_budget_ms: 16.666666666666668
-      cadence_slack_ms: -7.105427357601002e-15
+      cadence_slack_ms: 7.105427357601002e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -10840,17 +10894,17 @@ calculation_trace:
       edge_type: M2M
       otf_group_id: otf-2#f4
       start_ms: 91.62254666666668
-      end_ms: 106.49754666666668
-      duration_ms: 14.875
+      end_ms: 92.98334666666668
+      duration_ms: 1.3607999999999976
       ready_ms: 91.62254666666668
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 83.33333333333334
-      slack_ms: -23.164213333333336
+      slack_ms: -9.650013333333334
       cadence_interval_ms: 16.66666666666667
-      cadence_avg_interval_ms: 16.666666666666668
+      cadence_avg_interval_ms: 16.66666666666667
       cadence_budget_ms: 16.666666666666668
-      cadence_slack_ms: 0.0
+      cadence_slack_ms: -3.552713678800501e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -10867,17 +10921,17 @@ calculation_trace:
       edge_type: OTF
       otf_group_id: otf-2#f4
       start_ms: 91.62254666666668
-      end_ms: 106.49754666666668
-      duration_ms: 14.875
+      end_ms: 92.98334666666668
+      duration_ms: 1.3607999999999976
       ready_ms: 91.62254666666668
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 83.33333333333334
-      slack_ms: -23.164213333333336
+      slack_ms: -9.650013333333334
       cadence_interval_ms: 16.66666666666667
-      cadence_avg_interval_ms: 16.666666666666668
+      cadence_avg_interval_ms: 16.66666666666667
       cadence_budget_ms: 16.666666666666668
-      cadence_slack_ms: 0.0
+      cadence_slack_ms: -3.552713678800501e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -10893,18 +10947,18 @@ calculation_trace:
       resource_id: STORAGE_IO
       edge_type: control
       otf_group_id: null
-      start_ms: 106.61754666666668
-      end_ms: 106.85754666666668
-      duration_ms: 0.23999999999999488
-      ready_ms: 106.61754666666668
+      start_ms: 101.46814666666668
+      end_ms: 102.10814666666668
+      duration_ms: 0.6400000000000006
+      ready_ms: 101.46814666666668
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: null
       slack_ms: null
       cadence_interval_ms: 16.66666666666667
-      cadence_avg_interval_ms: 16.666666666666675
+      cadence_avg_interval_ms: 16.66666666666666
       cadence_budget_ms: 16.666666666666668
-      cadence_slack_ms: -7.105427357601002e-15
+      cadence_slack_ms: 7.105427357601002e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -10948,17 +11002,17 @@ calculation_trace:
       edge_type: M2M
       otf_group_id: otf-2#f5
       start_ms: 108.28921333333335
-      end_ms: 123.16421333333335
-      duration_ms: 14.875
+      end_ms: 109.65001333333335
+      duration_ms: 1.3607999999999976
       ready_ms: 108.28921333333335
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 100.00000000000001
-      slack_ms: -23.164213333333336
+      slack_ms: -9.650013333333334
       cadence_interval_ms: 16.66666666666667
-      cadence_avg_interval_ms: 16.666666666666668
+      cadence_avg_interval_ms: 16.66666666666667
       cadence_budget_ms: 16.666666666666668
-      cadence_slack_ms: 0.0
+      cadence_slack_ms: -3.552713678800501e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -10975,17 +11029,17 @@ calculation_trace:
       edge_type: OTF
       otf_group_id: otf-2#f5
       start_ms: 108.28921333333335
-      end_ms: 123.16421333333335
-      duration_ms: 14.875
+      end_ms: 109.65001333333335
+      duration_ms: 1.3607999999999976
       ready_ms: 108.28921333333335
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 100.00000000000001
-      slack_ms: -23.164213333333336
+      slack_ms: -9.650013333333334
       cadence_interval_ms: 16.66666666666667
-      cadence_avg_interval_ms: 16.666666666666668
+      cadence_avg_interval_ms: 16.66666666666667
       cadence_budget_ms: 16.666666666666668
-      cadence_slack_ms: 0.0
+      cadence_slack_ms: -3.552713678800501e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -11001,18 +11055,18 @@ calculation_trace:
       resource_id: STORAGE_IO
       edge_type: control
       otf_group_id: null
-      start_ms: 123.28421333333335
-      end_ms: 123.52421333333335
-      duration_ms: 0.23999999999999488
-      ready_ms: 123.28421333333335
+      start_ms: 118.13481333333335
+      end_ms: 118.77481333333336
+      duration_ms: 0.6400000000000006
+      ready_ms: 118.13481333333335
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: null
       slack_ms: null
       cadence_interval_ms: 16.66666666666667
-      cadence_avg_interval_ms: 16.666666666666675
+      cadence_avg_interval_ms: 16.66666666666666
       cadence_budget_ms: 16.666666666666668
-      cadence_slack_ms: -7.105427357601002e-15
+      cadence_slack_ms: 7.105427357601002e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -11056,17 +11110,17 @@ calculation_trace:
       edge_type: M2M
       otf_group_id: otf-2#f6
       start_ms: 124.95588000000001
-      end_ms: 139.83088
-      duration_ms: 14.875
+      end_ms: 126.31668
+      duration_ms: 1.3607999999999976
       ready_ms: 124.95588000000001
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 116.66666666666667
-      slack_ms: -23.164213333333336
+      slack_ms: -9.650013333333334
       cadence_interval_ms: 16.666666666666657
-      cadence_avg_interval_ms: 16.666666666666668
+      cadence_avg_interval_ms: 16.66666666666667
       cadence_budget_ms: 16.666666666666668
-      cadence_slack_ms: 0.0
+      cadence_slack_ms: -3.552713678800501e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -11083,17 +11137,17 @@ calculation_trace:
       edge_type: OTF
       otf_group_id: otf-2#f6
       start_ms: 124.95588000000001
-      end_ms: 139.83088
-      duration_ms: 14.875
+      end_ms: 126.31668
+      duration_ms: 1.3607999999999976
       ready_ms: 124.95588000000001
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 116.66666666666667
-      slack_ms: -23.164213333333336
+      slack_ms: -9.650013333333334
       cadence_interval_ms: 16.666666666666657
-      cadence_avg_interval_ms: 16.666666666666668
+      cadence_avg_interval_ms: 16.66666666666667
       cadence_budget_ms: 16.666666666666668
-      cadence_slack_ms: 0.0
+      cadence_slack_ms: -3.552713678800501e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -11109,18 +11163,18 @@ calculation_trace:
       resource_id: STORAGE_IO
       edge_type: control
       otf_group_id: null
-      start_ms: 139.95088
-      end_ms: 140.19088000000002
-      duration_ms: 0.2400000000000091
-      ready_ms: 139.95088
+      start_ms: 134.80148
+      end_ms: 135.44147999999998
+      duration_ms: 0.6399999999999864
+      ready_ms: 134.80148
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: null
       slack_ms: null
-      cadence_interval_ms: 16.66666666666667
-      cadence_avg_interval_ms: 16.666666666666675
+      cadence_interval_ms: 16.66666666666663
+      cadence_avg_interval_ms: 16.66666666666666
       cadence_budget_ms: 16.666666666666668
-      cadence_slack_ms: -7.105427357601002e-15
+      cadence_slack_ms: 7.105427357601002e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -11164,17 +11218,17 @@ calculation_trace:
       edge_type: M2M
       otf_group_id: otf-2#f7
       start_ms: 141.6225466666667
-      end_ms: 156.4975466666667
-      duration_ms: 14.875
+      end_ms: 142.9833466666667
+      duration_ms: 1.3608000000000118
       ready_ms: 141.6225466666667
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 133.33333333333334
-      slack_ms: -23.16421333333335
-      cadence_interval_ms: 16.666666666666686
-      cadence_avg_interval_ms: 16.666666666666668
+      slack_ms: -9.650013333333362
+      cadence_interval_ms: 16.6666666666667
+      cadence_avg_interval_ms: 16.66666666666667
       cadence_budget_ms: 16.666666666666668
-      cadence_slack_ms: 0.0
+      cadence_slack_ms: -3.552713678800501e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -11191,17 +11245,17 @@ calculation_trace:
       edge_type: OTF
       otf_group_id: otf-2#f7
       start_ms: 141.6225466666667
-      end_ms: 156.4975466666667
-      duration_ms: 14.875
+      end_ms: 142.9833466666667
+      duration_ms: 1.3608000000000118
       ready_ms: 141.6225466666667
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 133.33333333333334
-      slack_ms: -23.16421333333335
-      cadence_interval_ms: 16.666666666666686
-      cadence_avg_interval_ms: 16.666666666666668
+      slack_ms: -9.650013333333362
+      cadence_interval_ms: 16.6666666666667
+      cadence_avg_interval_ms: 16.66666666666667
       cadence_budget_ms: 16.666666666666668
-      cadence_slack_ms: 0.0
+      cadence_slack_ms: -3.552713678800501e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -11217,18 +11271,18 @@ calculation_trace:
       resource_id: STORAGE_IO
       edge_type: control
       otf_group_id: null
-      start_ms: 156.6175466666667
-      end_ms: 156.8575466666667
-      duration_ms: 0.2400000000000091
-      ready_ms: 156.6175466666667
+      start_ms: 151.46814666666666
+      end_ms: 152.10814666666664
+      duration_ms: 0.6399999999999864
+      ready_ms: 151.46814666666666
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: null
       slack_ms: null
-      cadence_interval_ms: 16.666666666666686
-      cadence_avg_interval_ms: 16.666666666666675
+      cadence_interval_ms: 16.666666666666657
+      cadence_avg_interval_ms: 16.66666666666666
       cadence_budget_ms: 16.666666666666668
-      cadence_slack_ms: -7.105427357601002e-15
+      cadence_slack_ms: 7.105427357601002e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -11338,6 +11392,13 @@ calculation_trace:
       - src: MCSC_WDMA_W0
         dst: GDC_RDMA
     - from: mcsc
+      to: gdc_o
+      type: M2M
+      buffer: MCSC_VIDEO
+      port_pairs:
+      - src: MCSC_WDMA_W1
+        dst: GDC_RDMA
+    - from: mcsc
       to: eis
       type: control
     - from: eis
@@ -11379,13 +11440,6 @@ calculation_trace:
       port_pairs:
       - src: MLSC_W_SVHIST
         dst: YUVP_RDMA_SVHIST
-    - from: mcsc
-      to: gdc_o
-      type: M2M
-      buffer: MCSC_PREVIEW
-      port_pairs:
-      - src: MCSC_WDMA_W0
-        dst: GDC_RDMA
     - from: mfc_enc
       to: mpeg_writer
       type: control
@@ -11411,22 +11465,30 @@ calculation_trace:
   - 'eis: assumed wall time; not a measured CPU active-time/power value.'
   - 'mpeg_writer: assumed wall time; not a measured CPU active-time/power value.'
   - 'storage_write: assumed wall time; not a measured CPU active-time/power value.'
-  - Clock grid is an engineering assumption, not the silicon DVFS table.
-  - Selection minimizes requested camera clock on the tested grid; it is not a power
-    optimum.
-  - Sensor/RT stay synchronized; the selected clock must also satisfy sensor ingress.
-  - Eight-frame deterministic timing; min/max runtime cases keep mean start jitter
-    at 1ms.
-  - CPU active power and uncharacterized statistic/chroma/weight traffic are excluded.
-  - History is warmed-up steady state. Actual FIFO depth, arbitration, and jitter
-    tails are uncharacterized.
-  - Storage completion is included where present; no-table manual clocks are applied
-    to actual resolved clock.
-  exploration:
-    requested_clock_mhz: 400
+  priority_verification:
+    clock_mhz: 400
     accepted: true
-    max_frame_latency_ms: 40.19088
-    average_sink_interval_ms: 16.666667
-    latency_budget_ms: 50.0
-    cadence_ok: true
+    reasons: []
+    max_latency_ms: 35.4415
+    sink_interval_ms: 16.6667
+    sensor_fps:
+    - 60.0
+    effective_clock_mhz:
+      csis: 400.0
+      pdp: 400.0
+      byrp: 400.0
+      rgbp: 400.0
+      yuvsc: 400.0
+      mlsc: 400.0
+      mtnr: 400.0
+      msnr: 400.0
+      yuvp: 400.0
+      mcsc: 400.0
+      lme: 400.0
+      vps_od: 400.0
+      gdc_m: 400.0
+      gdc_o: 400.0
+      mfc_enc: 400.0
+      dpu: 400.0
+    bw_mbs: 10694.427
 artifacts: []

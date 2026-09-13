@@ -25,5 +25,38 @@ capabilities:
     - LITTLE
     - MID
     - BIG
+    modules:
+    - name: CPU_BITSTREAM_READ
+      type: DMA
+      direction: read
+      naming: logical traffic endpoint; physical mapping unverified
+    - name: CPU_BITSTREAM_WRITE
+      type: DMA
+      direction: write
+      naming: logical traffic endpoint; physical mapping unverified
+    - name: STORAGE_BITSTREAM_READ
+      type: DMA
+      direction: read
+      naming: logical traffic endpoint; physical mapping unverified
+    - name: CPU_IMAGE_READ
+      type: DMA
+      direction: read
+      naming: logical traffic endpoint; physical mapping unverified
+    - name: CPU_FRONT_READ
+      type: DMA
+      direction: read
+      naming: logical traffic endpoint; physical mapping unverified
+    - name: CPU_IMAGE_WRITE
+      type: DMA
+      direction: write
+      naming: logical traffic endpoint; physical mapping unverified
+    - name: CPU_MASK_READ
+      type: DMA
+      direction: read
+      naming: logical traffic endpoint; physical mapping unverified
+    - name: CPU_PREVIEW_WRITE
+      type: DMA
+      direction: write
+      naming: logical traffic endpoint; physical mapping unverified
 compatible_soc:
 - soc-exynos2600
