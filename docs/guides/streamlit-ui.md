@@ -14,3 +14,18 @@ Open [Dashboard](http://127.0.0.1:18502/), [Pipeline Viewer](http://127.0.0.1:18
 The existing `frontend/` Workbench, committed component assets, ELK viewer, timing integration and node labels remain. To rebuild the Workbench, run `npm ci`, `npm test`, and `npm run build` inside `frontend/`; include the output under `dashboard/components/workbench_frontend/component/`.
 
 This is a selective UI restoration, not a revert of all PR #5 changes. Query/pagination improvements, simulation correctness, API/write fixes, security lock updates, and IS v15 sensors/DMA/timing/evidence stay in main. The existing Evidence Dashboard Timing Table also shows camera SW min/mean/max, source, start delay and included hardware. Measurement comparison remains in the existing dashboard.
+
+
+## Camera review in DB Explorer
+
+The existing Streamlit cards, colors, filters and tables now include camera review guidance. Camera review panels appear only when Scenario Type is explicitly set to Camera; All retains the general DB overview and variant matrix:
+
+- **Overview** starts with basic recording KPI coverage (FHD30, FHD60, UHD30, UHD60, 8K30), followed by Slow motion, Portrait, Dual and Pro review cards. DB/import counts remain in a collapsed section. The project breakdown keeps coverage scoped to the current filters.
+- **Scenario Catalog** explains scenario purpose and stored severity grades. Expand the load detail to choose a grade and inspect an actual variant's conditions and workload factors.
+- **Variant Matrix** offers review-group and KPI selection before the table. The selected variant shows why to review it, resource considerations, timing assumptions and a scoped Pipeline Viewer link. The table follows the same group/KPI filters.
+
+Coverage counts only explicit `resolution` and `fps` conditions. Basic recording excludes special modes; combined modes can belong to several review groups. Preview/capture remain separate even when they share a `PRO_VIDEO` driver flag. Missing or partial results mean "unconfirmed in the current scope", not unsupported hardware. Registered variants do not establish KPI pass/fail.
+
+Severity remains the author-assigned value. Explorer does not have a common numeric threshold or grading rationale, so workload explanations must not be represented as the formula that produced a grade. GPU/NPU use is not inferred from Portrait alone: the registered processing source, including VPS/CPU assumptions, is shown. Pro mode alone does not establish that Histogram UI work is modeled.
+
+The guidance is implemented in `dashboard/components/camera_review.py` and `camera_review_view.py`; it does not modify fixture grades, ETL, or API contracts.
