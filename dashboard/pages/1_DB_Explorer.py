@@ -29,6 +29,15 @@ from dashboard.components.explorer_api_client import (  # noqa: E402
     viewer_link,
 )
 from dashboard.components.table_actions import render_copyable_dataframe  # noqa: E402
+from dashboard.components.camera_review import is_camera, scenario_intro  # noqa: E402
+from dashboard.components.camera_review_view import (  # noqa: E402
+    badge,
+    catalog_camera_summary,
+    render_camera_matrix,
+    render_camera_overview,
+    render_catalog_load_detail,
+    render_severity_guide,
+)
 from dashboard.components.viewer_api_client import (  # noqa: E402
     compact_project_label,
     compact_scenario_label,
@@ -733,6 +742,7 @@ def _render_explorer_filter_bar(
             category_choice = "__all__"
 
         catalog_items = _catalog_items_for_category(filter_catalog.get("items") or [], str(category_choice))
+        catalog_items.sort(key=lambda item: (0 if is_camera(item) and "recording" in str(item.get("scenario_id", "")).lower() else 1, str(item.get("scenario_name", ""))))
         domain_options = sorted({str(domain) for item in catalog_items for domain in (item.get("domain") or [])})
         scenario_options = [str(item.get("scenario_id")) for item in catalog_items if item.get("scenario_id")]
         scenario_label_by_id = {
@@ -753,7 +763,7 @@ def _render_explorer_filter_bar(
             with f2:
                 selected_domains = st.multiselect("Domain", domain_options, key="explorer_domain_filter")
             with f3:
-                selected_severities = st.multiselect("Variant Load", severity_options, key="explorer_severity_filter")
+                selected_severities = st.multiselect("Variant Load", severity_options, key="explorer_severity_filter", help="Stored variant load grade. See Scenario Catalog for criteria and workload factors.")
             inferred_domain = None
         else:
             st.session_state["explorer_domain_filter"] = []
@@ -761,7 +771,7 @@ def _render_explorer_filter_bar(
             with f1:
                 scenario_query = st.text_input("Scenario Search", key="explorer_scenario_search", placeholder="id or name")
             with f2:
-                selected_severities = st.multiselect("Variant Load", severity_options, key="explorer_severity_filter")
+                selected_severities = st.multiselect("Variant Load", severity_options, key="explorer_severity_filter", help="Stored variant load grade. See Scenario Catalog for criteria and workload factors.")
             selected_domains = []
             inferred_domain = domain_options[0] if domain_options else None
 
@@ -780,6 +790,12 @@ def _render_explorer_filter_bar(
             key="explorer_scenario_choice",
             format_func=lambda value: "All matching scenarios" if not value else scenario_label_by_id.get(value, value),
         )
+
+        chosen = next((item for item in catalog_items if item.get("scenario_id") == selected_scenario), None)
+        if chosen and is_camera(chosen):
+            st.caption(scenario_intro(chosen))
+        elif category_choice == "camera":
+            st.caption("기본 녹화 검토는 Camera Recording부터 시작하세요. Preview는 미리보기, Capture는 정지 촬영입니다.")
 
         selected_categories = None if category_choice == "__all__" else [str(category_choice)]
         selected_scenarios = [str(selected_scenario)] if selected_scenario else None
@@ -811,11 +827,11 @@ def _render_help() -> None:
         )
 
 
-def _render_catalog_cards(items: list[dict[str, Any]], limit: int = 12) -> None:
+def _render_catalog_cards(items: list[dict[str, Any]], variants: list[dict[str, Any]], limit: int = 12) -> None:
     cards: list[str] = []
     for item in items[:limit]:
         severity = item.get("severity_counts") or {}
-        severity_text = ", ".join(f"{key}:{value}" for key, value in severity.items()) if severity else "none"
+        severity_badges = "".join(badge(f"{key} {value}", key) for key, value in severity.items()) if severity else badge("unknown")
         categories = _unique_labels(item.get("category") or [])
         domain_only = _labels_not_in(item.get("domain") or [], categories)
         cards.append(
@@ -826,6 +842,7 @@ def _render_catalog_cards(items: list[dict[str, Any]], limit: int = 12) -> None:
     {escape(str(item.get("scenario_id")))} / {escape(str(item.get("project_id")))}
   </div>
   <div>{_tag_chips(categories, "category")}{_tag_chips(domain_only, "domain") if domain_only else ""}</div>
+  {catalog_camera_summary(item, variants)}
   <div class="catalog-mini-metrics">
     <div class="catalog-mini-metric"><div class="catalog-mini-label">Variants</div><div class="catalog-mini-value">{escape(str(item.get("variant_count")))}</div></div>
     <div class="catalog-mini-metric"><div class="catalog-mini-label">Nodes</div><div class="catalog-mini-value">{escape(str(item.get("node_count")))}</div></div>
@@ -833,7 +850,8 @@ def _render_catalog_cards(items: list[dict[str, Any]], limit: int = 12) -> None:
     <div class="catalog-mini-metric"><div class="catalog-mini-label">Buffers</div><div class="catalog-mini-value">{escape(str(item.get("buffer_count")))}</div></div>
   </div>
   <div class="catalog-card-kv">
-    severity_counts={escape(severity_text)}
+    <b>Variant Load</b> {severity_badges}<br>
+    <a href="{escape(viewer_link(item.get('viewer_query') or {}), quote=True)}" target="_self">Open Pipeline Viewer</a>
   </div>
 </div>
 """
@@ -938,55 +956,68 @@ if load_error:
 
 _render_help()
 
-catalog_items = catalog.get("items") or []
+catalog_items = sorted(
+    catalog.get("items") or [],
+    key=lambda item: (0 if is_camera(item) and "recording" in str(item.get("scenario_id", "")).lower() else 1, str(item.get("scenario_name", ""))),
+)
 matrix_items = matrix.get("items") or []
+camera_context = selected_categories == ["camera"]
+partial_results = len(matrix_items) < matrix.get("total", len(matrix_items)) or len(catalog_items) < catalog.get("total", len(catalog_items))
+if partial_results:
+    st.warning("Partial API results. Narrow the project or scenario filter before assessing coverage.")
 
 tabs = st.tabs(["Overview", "Scenario Catalog", "Variant Matrix", "Import Health"])
 
 with tabs[0]:
-    totals = summary.get("totals") or {}
-    c1, c2, c3, c4, c5, c6 = st.columns(6)
-    for col, label, key in [
-        (c1, "SoC", "soc"),
-        (c2, "Project", "project"),
-        (c3, "Scenario", "scenario"),
-        (c4, "Variant", "variant"),
-        (c5, "IP", "ip"),
-        (c6, "SW Profile", "sw_profile"),
-    ]:
-        with col:
-            st.markdown(
-                f"""<div class="metric-card"><div class="metric-label">{escape(label)}</div><div class="metric-value">{escape(str(totals.get(key, 0)))}</div></div>""",
-                unsafe_allow_html=True,
-            )
-    _render_distribution_cards(
-        [
-            ("Scenario Families", summary.get("category_counts") or [], "category"),
-            ("Variant Load Mix", summary.get("severity_counts") or [], "category"),
-            ("Board Coverage", summary.get("board_counts") or [], "domain"),
-        ]
-    )
-    st.markdown("**Latest Import Batches**")
-    _render_import_batch_cards(summary.get("latest_import_batches") or [])
-    with st.expander("Raw summary tables", expanded=False):
-        left, mid, right = st.columns(3)
-        with left:
-            _render_counts("Category Counts", summary.get("category_counts") or [])
-        with mid:
-            _render_counts("Variant Load Counts", summary.get("severity_counts") or [])
-        with right:
-            _render_counts("Board Counts", summary.get("board_counts") or [])
-        st.markdown("**Latest Import Batches**")
-        render_copyable_dataframe(
-            summary.get("latest_import_batches") or [],
-            key="explorer_latest_import_batches_overview",
-            hide_index=True,
-            use_container_width=True,
+    if camera_context:
+        render_camera_overview(matrix_items, catalog_items, partial=partial_results)
+    with st.expander("DB / Import summary", expanded=not camera_context):
+        totals = summary.get("totals") or {}
+        c1, c2, c3, c4, c5, c6 = st.columns(6)
+        for col, label, key in [
+            (c1, "SoC", "soc"),
+            (c2, "Project", "project"),
+            (c3, "Scenario", "scenario"),
+            (c4, "Variant", "variant"),
+            (c5, "IP", "ip"),
+            (c6, "SW Profile", "sw_profile"),
+        ]:
+            with col:
+                st.markdown(
+                    f"""<div class="metric-card"><div class="metric-label">{escape(label)}</div><div class="metric-value">{escape(str(totals.get(key, 0)))}</div></div>""",
+                    unsafe_allow_html=True,
+                )
+        _render_distribution_cards(
+            [
+                ("Scenario Families", summary.get("category_counts") or [], "category"),
+                ("Variant Load Mix", summary.get("severity_counts") or [], "category"),
+                ("Board Coverage", summary.get("board_counts") or [], "domain"),
+            ]
         )
+        st.markdown("**Latest Import Batches**")
+        _render_import_batch_cards(summary.get("latest_import_batches") or [])
+        with st.expander("Raw summary tables", expanded=False):
+            left, mid, right = st.columns(3)
+            with left:
+                _render_counts("Category Counts", summary.get("category_counts") or [])
+            with mid:
+                _render_counts("Variant Load Counts", summary.get("severity_counts") or [])
+            with right:
+                _render_counts("Board Counts", summary.get("board_counts") or [])
+            st.markdown("**Latest Import Batches**")
+            render_copyable_dataframe(
+                summary.get("latest_import_batches") or [],
+                key="explorer_latest_import_batches_overview",
+                hide_index=True,
+                use_container_width=True,
+            )
 
 with tabs[1]:
     st.markdown(f"**Scenario Catalog** - {len(catalog_items)} rows")
-    _render_catalog_cards(catalog_items)
+    render_severity_guide()
+    _render_catalog_cards(catalog_items, matrix_items)
+    if camera_context:
+        render_catalog_load_detail(matrix_items)
     render_copyable_dataframe(
         _catalog_table_rows(catalog_items),
         key="explorer_scenario_catalog",
@@ -1000,10 +1031,13 @@ with tabs[2]:
     axis_keys = matrix.get("axis_keys") or []
     st.markdown(f"**Variant Matrix** - {len(matrix_items)} rows")
     st.caption(
-        "Rows are variants. Row color follows severity. diff_profile highlights variant-level deltas such as routing, node config, and buffer overrides."
+        "검토 목적과 KPI로 조건을 좁힌 뒤 상세 설명을 확인하세요. 아래 표에서 전체 설정을 비교할 수 있습니다." if camera_context else "Rows are variants. Row color follows severity. diff_profile highlights variant-level configuration changes."
     )
-    _render_variant_matrix_summary(matrix_items)
-    matrix_rows = _matrix_table_rows(matrix_items, axis_keys)
+    visible_matrix_items = render_camera_matrix(matrix_items) if camera_context else matrix_items
+    with st.expander("Diff profile / Change score", expanded=not camera_context):
+        _render_variant_matrix_summary(visible_matrix_items)
+        st.caption("Change score counts configuration edits; it is not a workload score.")
+    matrix_rows = _matrix_table_rows(visible_matrix_items, axis_keys)
     matrix_df = pd.DataFrame(matrix_rows)
     styled_matrix = _style_variant_matrix(matrix_df) if not matrix_df.empty else matrix_df
     render_copyable_dataframe(
