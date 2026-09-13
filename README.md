@@ -91,11 +91,24 @@ Apply migrations:
 uv run alembic upgrade head
 ```
 
-Load or reload demo fixtures:
+Load or reload the runtime Exynos2600 fixtures:
 
 ```powershell
-uv run python -m scenario_db.etl.loader demo\fixtures --strict --report-json output\etl-report.json
+uv run python -m scenario_db.etl.loader db_fixtures_Exynos2600_S26Plus --strict --report-json output\etl-report.json
 ```
+
+Keep `demo/fixtures` for isolated tests and demonstrations; do not load it into the runtime DB.
+For an existing mixed DB, preview and then archive/remove the Exynos2500 scope:
+
+```powershell
+uv run python -m scenario_db.etl.retire_demo
+uv run python -m scenario_db.etl.retire_demo --apply --backup output/etl/exynos2500-retired.json
+```
+
+The command retains shared software, referenced IPs, and audit history. Take a PostgreSQL
+backup before applying if full database rollback is needed. Restart API and Streamlit afterward.
+Exploration examples are filtered by the selected SoC; demo starter templates are only
+shown in the demo SoC context. Fixture files and test seeding remain unchanged.
 
 Reload fixtures after changing YAML. The API reads from PostgreSQL, not directly from YAML.
 Strict ETL treats malformed YAML roots, missing `kind`, unsupported `kind`, mapper

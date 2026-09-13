@@ -1197,6 +1197,7 @@ with st.sidebar:
     examples, examples_error = _cached_examples(api_base)
     if examples_error:
         st.error(examples_error)
+    examples = [item for item in examples if not item.get("soc_ref") or item["soc_ref"] == selected_soc_id]
     example_ids = [str(item.get("id")) for item in examples if item.get("id")]
     example_map = {str(item.get("id")): item for item in examples if item.get("id")}
     if example_ids:
@@ -1223,14 +1224,15 @@ with st.sidebar:
     if uploaded_yaml is not None and st.button("Load uploaded YAML", use_container_width=True):
         if _load_uploaded_yaml(uploaded_yaml):
             st.rerun()
-    st.caption("Templates start from editable YAML and are not saved automatically.")
-    template_cols = st.columns(2)
-    if template_cols[0].button("New Single Design", use_container_width=True):
-        if _start_template_yaml("single"):
-            st.rerun()
-    if template_cols[1].button("New Batch Exploration", use_container_width=True):
-        if _start_template_yaml("batch"):
-            st.rerun()
+    if selected_soc_id == "soc-exynos2500":
+        st.caption("Templates start from editable YAML and are not saved automatically.")
+        template_cols = st.columns(2)
+        if template_cols[0].button("New Single Design", use_container_width=True):
+            if _start_template_yaml("single"):
+                st.rerun()
+        if template_cols[1].button("New Batch Exploration", use_container_width=True):
+            if _start_template_yaml("batch"):
+                st.rerun()
     if st.button("Clear YAML editor", use_container_width=True):
         _start_blank_yaml()
 

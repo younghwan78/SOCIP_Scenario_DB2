@@ -12,6 +12,7 @@ class ExplorationExampleSummary(BaseModel):
     id: str
     type: Literal["recipe", "sweep", "template", "template_sweep"]
     title: str
+    soc_ref: str | None = None
     fixture_id: str | None = None
     path: str
     scenario_id: str | None = None
