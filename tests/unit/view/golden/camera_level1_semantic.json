@@ -863,7 +863,8 @@
         "detail_items": [
           "Role: rgbp",
           "Hierarchy: ISP",
-          "IP block: RGBP"
+          "IP block: RGBP",
+          "Output buffers: RGBP_DRC"
         ],
         "warning": false,
         "collapsed_children_count": 0,
@@ -1270,7 +1271,8 @@
         "detail_items": [
           "Role: yuvp",
           "Hierarchy: ISP",
-          "IP block: YUVP"
+          "IP block: YUVP",
+          "Input buffers: RGBP_DRC, MLSC_SVHIST"
         ],
         "warning": false,
         "collapsed_children_count": 0,
@@ -1676,7 +1678,7 @@
         "detail_items": [
           "Route: mlsc -> mtnr",
           "Edge type: M2M",
-          "Buffer: Y / pyramid_l0 / 12b / COMP_OFF"
+          "Buffer: Y / mlsc_out / 12b / COMP_OFF"
         ]
       }
     },
@@ -2015,10 +2017,10 @@
           }
         ],
         "memory": {
-          "format": "YUV420",
+          "format": "RGB",
           "bitdepth": 8,
-          "width": 640,
-          "height": 480,
+          "width": 512,
+          "height": 288,
           "fps": 30,
           "compression": "COMP_OFF"
         },
@@ -2030,7 +2032,7 @@
         "detail_items": [
           "Route: mlsc -> vps_od",
           "Edge type: M2M",
-          "Buffer: YUV420 / object_detection / 8b / COMP_OFF"
+          "Buffer: RGB / object_detection / 8b / COMP_OFF"
         ]
       }
     },
@@ -2053,6 +2055,68 @@
     {
       "data": {
         "id": "l1-sem-24",
+        "source": "ip-rgbp",
+        "target": "ip-yuvp",
+        "flow_type": "M2M",
+        "buffer_ref": "RGBP_DRC",
+        "producer": "rgbp",
+        "consumer": "yuvp",
+        "port_pairs": [
+          {
+            "src": "RGBP_WDMA_DRC",
+            "dst": "YUVP_RDMA_DRC0"
+          },
+          {
+            "src": "RGBP_WDMA_DRC",
+            "dst": "YUVP_RDMA_DRC1"
+          }
+        ],
+        "memory": {
+          "fps": 30
+        },
+        "placement": {
+          "llc_allocated": false,
+          "llc_policy": "none"
+        },
+        "label": "M2M / RGBP_DRC",
+        "detail_items": [
+          "Route: rgbp -> yuvp",
+          "Edge type: M2M"
+        ]
+      }
+    },
+    {
+      "data": {
+        "id": "l1-sem-25",
+        "source": "ip-mlsc",
+        "target": "ip-yuvp",
+        "flow_type": "M2M",
+        "buffer_ref": "MLSC_SVHIST",
+        "producer": "mlsc",
+        "consumer": "yuvp",
+        "port_pairs": [
+          {
+            "src": "MLSC_W_SVHIST",
+            "dst": "YUVP_RDMA_SVHIST"
+          }
+        ],
+        "memory": {
+          "fps": 30
+        },
+        "placement": {
+          "llc_allocated": false,
+          "llc_policy": "none"
+        },
+        "label": "M2M / MLSC_SVHIST",
+        "detail_items": [
+          "Route: mlsc -> yuvp",
+          "Edge type: M2M"
+        ]
+      }
+    },
+    {
+      "data": {
+        "id": "l1-sem-26",
         "source": "ip-mcsc",
         "target": "ip-dpu",
         "flow_type": "M2M",
@@ -2087,7 +2151,7 @@
     },
     {
       "data": {
-        "id": "l1-sem-25",
+        "id": "l1-sem-27",
         "source": "ip-mcsc",
         "target": "ip-mfc-enc",
         "flow_type": "M2M",
@@ -2138,7 +2202,7 @@
     "canvas_h": 2656,
     "layout": "level1-semantic-ip-dag",
     "active_node_count": 19,
-    "active_edge_count": 26,
+    "active_edge_count": 28,
     "group_count": 23,
     "variant_overlay": {
       "resolved": true,
@@ -2151,8 +2215,7 @@
         "sensor_front",
         "vps_dof",
         "vps_seg",
-        "eis_preview",
-        "eis_video",
+        "eis",
         "gdc_m",
         "gdc_o"
       ],
@@ -2162,7 +2225,7 @@
         "add_edges": 2,
         "remove_edges": 1
       },
-      "node_config_count": 22,
+      "node_config_count": 21,
       "buffer_override_count": 0,
       "sw_task_count": 0
     }

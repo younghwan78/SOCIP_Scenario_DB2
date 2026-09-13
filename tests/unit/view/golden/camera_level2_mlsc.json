@@ -1173,7 +1173,7 @@
         "shared_resource": false,
         "matched_issues": [],
         "detail_items": [
-          "Buffer: Y / pyramid_l0 / 12b / COMP_OFF"
+          "Buffer: Y / mlsc_out / 12b / COMP_OFF"
         ],
         "warning": false,
         "collapsed_children_count": 0,
@@ -1411,10 +1411,10 @@
         "summary_badges": [],
         "capability_badges": [],
         "memory": {
-          "format": "YUV420",
+          "format": "RGB",
           "bitdepth": 8,
-          "width": 640,
-          "height": 480,
+          "width": 512,
+          "height": 288,
           "fps": 30,
           "compression": "COMP_OFF"
         },
@@ -1425,7 +1425,7 @@
         "shared_resource": false,
         "matched_issues": [],
         "detail_items": [
-          "Buffer: YUV420 / object_detection / 8b / COMP_OFF"
+          "Buffer: RGB / object_detection / 8b / COMP_OFF"
         ],
         "warning": false,
         "collapsed_children_count": 0,
@@ -1441,6 +1441,41 @@
       },
       "position": {
         "x": 4500.0,
+        "y": 620.0
+      }
+    },
+    {
+      "data": {
+        "id": "buf-mlsc-svhist",
+        "label": "Mlsc Svhist",
+        "type": "buffer",
+        "layer": "memory",
+        "summary_badges": [],
+        "capability_badges": [],
+        "memory": {
+          "fps": 30
+        },
+        "placement": {
+          "llc_allocated": false,
+          "llc_policy": "none"
+        },
+        "shared_resource": false,
+        "matched_issues": [],
+        "detail_items": [],
+        "warning": false,
+        "collapsed_children_count": 0,
+        "view_hints": {
+          "lane": "memory",
+          "stage": "processing",
+          "order": 25,
+          "width": 235,
+          "height": 68,
+          "emphasis": "normal",
+          "collapsed": false
+        }
+      },
+      "position": {
+        "x": 5040.0,
         "y": 620.0
       }
     }
@@ -1475,7 +1510,7 @@
         "detail_items": [
           "Route: mlsc -> mtnr",
           "Edge type: M2M",
-          "Buffer: Y / pyramid_l0 / 12b / COMP_OFF"
+          "Buffer: Y / mlsc_out / 12b / COMP_OFF"
         ]
       }
     },
@@ -1690,10 +1725,10 @@
           }
         ],
         "memory": {
-          "format": "YUV420",
+          "format": "RGB",
           "bitdepth": 8,
-          "width": 640,
-          "height": 480,
+          "width": 512,
+          "height": 288,
           "fps": 30,
           "compression": "COMP_OFF"
         },
@@ -1705,7 +1740,34 @@
         "detail_items": [
           "Route: mlsc -> vps_od",
           "Edge type: M2M",
-          "Buffer: YUV420 / object_detection / 8b / COMP_OFF"
+          "Buffer: RGB / object_detection / 8b / COMP_OFF"
+        ]
+      }
+    },
+    {
+      "data": {
+        "id": "l2e-7-mod-mlsc-mlsc-w-svhist-buf-mlsc-svhist",
+        "source": "mod-mlsc-mlsc-w-svhist",
+        "target": "buf-mlsc-svhist",
+        "flow_type": "M2M",
+        "buffer_ref": "MLSC_SVHIST",
+        "port_pairs": [
+          {
+            "src": "MLSC_W_SVHIST",
+            "dst": "YUVP_RDMA_SVHIST"
+          }
+        ],
+        "memory": {
+          "fps": 30
+        },
+        "placement": {
+          "llc_allocated": false,
+          "llc_policy": "none"
+        },
+        "label": "M2M write",
+        "detail_items": [
+          "Route: mlsc -> yuvp",
+          "Edge type: M2M"
         ]
       }
     }
@@ -1745,8 +1807,7 @@
         "sensor_front",
         "vps_dof",
         "vps_seg",
-        "eis_preview",
-        "eis_video",
+        "eis",
         "gdc_m",
         "gdc_o"
       ],
@@ -1756,7 +1817,7 @@
         "add_edges": 2,
         "remove_edges": 1
       },
-      "node_config_count": 22,
+      "node_config_count": 21,
       "buffer_override_count": 0,
       "sw_task_count": 0
     }

@@ -63,6 +63,7 @@ capabilities:
   - id: cis_fhd_ln1_raw10_2040x1148_240fps_3673msps
   - id: cis_fhd_ln1_raw10_2040x1148_480fps_3673msps
   - id: cis_fhd_ln1_raw10_2040x1532_120fps_2828msps
+  - id: user_raw10_2040x1148_120fps
   properties:
     place: rear
     sensor_name: S5KGNG
@@ -1127,6 +1128,28 @@ capabilities:
         sensor_sbwc: enable
         sbwc_source: assumed CSIS output policy retained from the existing recording
           fixture; not a CIS register fact
+      user_raw10_2040x1148_120fps:
+        sensor_name: S5KGNG
+        sensor_size:
+        - 2040
+        - 1148
+        sensor_fps: 120.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 3.673
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        sensor_pclk: 3532800000
+        sensor_line_length_pck: 8544
+        sensor_frame_length_lines: 3440
+        sensor_sbwc: enable
+        sbwc_source: assumed CSIS output policy retained from the existing recording
+          fixture; not a CIS register fact
+        value_source: user_confirmed
+        derived_from_mode: cis_fhd_ln1_raw10_2040x1148_240fps_3673msps
+        source_note: User specifies 2040x1148 RAW10 at 120fps. Line timing borrowed
+          from 240fps CIS mode; doubled frame length is an assumption, not a verified
+          setfile.
     provenance_status: kernel_declared
     selection_note: DTS capability is not proof of the shipped board or selected runtime
       sensor mode.

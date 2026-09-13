@@ -351,10 +351,10 @@ def test_exynos2600_camera_recording_vdis_preserves_is_v15_timing_contract():
     )
     result = run_simulation(inputs, dvfs_tables={})
     sensor = next(item for item in result.external_devices if item["device_type"] == "sensor")
-    assert sensor["mode"] == "cis_4sum_idcg_ln4_raw12_4080x2296_30fps_3993msps"
+    assert sensor["mode"] == "cis_4sum_ln4_raw10_4080x2296_30fps_3993msps"
     assert sensor["size"] == "4080x2296"
-    assert sensor["v_valid_ms"] == pytest.approx(18.987754, abs=1e-6)
-    assert result.resolved["csis"].required_clock_mhz == pytest.approx(285.2142857142857)
+    assert sensor["v_valid_ms"] == pytest.approx(15664 * 2296 * 1000 / 3532800000, abs=1e-6)
+    assert result.resolved["csis"].required_clock_mhz == pytest.approx(3.993 * (16 / 7) * 3 / (10 * 8) * 1000)
     rt_events = {event.node_id: event for event in result.timeline_events if event.frame_index == 0}
     for node in ["csis", "pdp", "byrp", "rgbp", "yuvsc", "mlsc"]:
         assert rt_events[node].start_ms == pytest.approx(rt_events["sensor_rear"].start_ms)
@@ -368,7 +368,7 @@ def test_exynos2600_camera_recording_vdis_preserves_is_v15_timing_contract():
     assert lme.hw_time_ms <= 3.0 + 1e-9
     assert any("assumed wall time" in warning for warning in result.warnings)
     assert any("core power estimate will be zero" in warning for warning in result.warnings)
-    assert result.bw_total_mbs == pytest.approx(4092.40188 + 1008 * 756 * 30 / 1e6)
+    assert result.bw_total_mbs == pytest.approx(4092.40188 + 1008 * 756 * 30 / 1e6 + (512 * 288 * 3 - 640 * 480 * 1.5) * 2 * 30 / 1e6)
 
 
 def test_full_debug_trace_includes_timeline_event_rows():
@@ -1150,7 +1150,7 @@ def test_is_v15_estimated_evidence_keeps_timing_and_exploration_status():
     assert evidence.run.source == "estimated"
     assert evidence.resolution_result.overall_feasibility == "exploration_only"
     payload = _simulation_evidence_dict(evidence)
-    assert len(payload["sw_task_timing"]) == 5
+    assert len(payload["sw_task_timing"]) == 4
     row = next(row for row in payload["sw_task_timing"] if row["task"] == "post_crta")
     assert row["min_ms"] == 0.1 and row["mean_ms"] == 0.3 and row["max_ms"] == 0.5
     assert row["start_jitter_mean_ms"] == 1.0
@@ -1161,3 +1161,47 @@ def test_is_v15_invalid_timing_profile_is_rejected():
     graph.variant.node_configs["post_crta"]["sw_timing"]["min_ms"] = 10.0
     with pytest.raises(ValueError, match="min_ms"):
         build_simulation_inputs(graph)
+
+
+@pytest.mark.parametrize("variant,size,fps", [
+    ("fhd30-vdis", (4080, 2296), 30), ("uhd30-vdis", (4080, 2296), 30),
+    ("fhd60-supersteady", (4080, 2296), 60), ("uhd60-supersteady", (4080, 2296), 60),
+    ("uhd120", (4080, 2296), 120), ("fhd120", (2040, 1148), 120), ("fhd240", (2040, 1148), 120),
+])
+def test_corrected_gng_raw10_recording_inputs(variant, size, fps):
+    graph = _exynos2600_generated_graph("uc-camera-recording", "cam-rec-r1-" + variant)
+    inputs = build_simulation_inputs(graph)
+    sensor = next(row for row in inputs.external_devices if row["node_id"] == "sensor_rear")
+    assert sensor["size"] == f"{size[0]}x{size[1]}"
+    assert sensor["fps"] == fps
+    assert sensor["bitwidth"] == 10
+    layer0 = next(p for p in inputs.port_transfers if p.port == "MLSC_W_GLPG0_Y")
+    assert (layer0.width, layer0.height) == size
+
+
+def test_single_eis_controls_both_gdc_instances():
+    graph = _exynos2600_generated_graph("uc-camera-recording", "cam-rec-r1-fhd30-vdis")
+    inputs = build_simulation_inputs(graph, SimulationRunConfig(timeline_frame_count=1))
+    result = run_simulation(inputs, dvfs_tables={})
+    events = {row.node_id: row for row in result.timeline_events}
+    assert "eis_preview" not in events and "eis_video" not in events
+    assert events["eis"].duration_ms == pytest.approx(3.0)
+    assert events["eis"].start_ms >= events["mcsc"].end_ms
+    assert all(events[n].start_ms >= events["eis"].end_ms for n in ("gdc_m", "gdc_o"))
+
+
+def test_auxiliary_dma_unknown_sizes_and_optional_outputs():
+    graph = _exynos2600_generated_graph("uc-camera-recording", "cam-rec-r1-fhd30-vdis")
+    inputs = build_simulation_inputs(graph)
+    assert not any(p.port in {"RGBP_WDMA_DRC", "YUVP_RDMA_DRC0", "YUVP_RDMA_SVHIST"} for p in inputs.port_transfers)
+    assert any("RGBP_DRC: DMA size/format unknown" in w for w in inputs.warnings)
+    assert not any(p.port == "BYRP_WDMA_BYR" for p in inputs.port_transfers)
+    graph.variant.node_configs["byrp"]["video_snapshot_enabled"] = True
+    graph.variant.buffer_overrides["CAV_OUTPUT"] = {"dma": {"node_id": "mlsc", "write_ports": ["MLSC_W_CAV"], "enabled": True}}
+    ports = build_simulation_inputs(graph).port_transfers
+    bayer = next(p for p in ports if p.port == "BYRP_WDMA_BYR")
+    assert (bayer.width, bayer.height, bayer.bitwidth) == (4080, 2296, 10)
+    cav = next(p for p in ports if p.port == "MLSC_W_CAV")
+    assert (cav.width, cav.height, cav.format) == (320, 180, "RGB")
+    od = next(p for p in ports if p.port == "MLSC_W_FDPIG")
+    assert (od.width, od.height, od.format) == (512, 288, "RGB")

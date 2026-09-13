@@ -38,11 +38,15 @@ capabilities:
     - name: MLSC_W_CAV
       type: DMA
       direction: write
-      source_file: hardware\api\pablo-hw-api-mlsc-v15_0.c
+      source_file: ischain/is-v15_0_0/is-subdev-mlsc.c
+      purpose: RGB CAV image; assumed 320x180
+      lvn: IS_LVN_MLSC0_CAV
     - name: MLSC_W_FDPIG
       type: DMA
       direction: write
-      source_file: hardware\api\pablo-hw-api-mlsc-v15_0.c
+      source_file: ischain/is-v15_0_0/is-subdev-mlsc.c
+      purpose: RGB OD image; assumed 512x288
+      lvn: IS_LVN_MLSC0_FDPIG
     - name: MLSC_W_GLPG0_Y
       type: DMA
       direction: write
@@ -98,11 +102,15 @@ capabilities:
     - name: MLSC_W_LMEDS
       type: DMA
       direction: write
-      source_file: hardware\api\pablo-hw-api-mlsc-v15_0.c
+      source_file: ischain/is-v15_0_0/is-subdev-mlsc.c
+      purpose: Y motion-estimation image
+      lvn: IS_LVN_MLSC0_LMEDS
     - name: MLSC_W_SVHIST
       type: DMA
       direction: write
-      source_file: hardware\api\pablo-hw-api-mlsc-v15_0.c
+      source_file: ischain/is-v15_0_0/is-subdev-mlsc.c
+      purpose: histogram statistics
+      lvn: IS_LVN_MLSC0_SVHIST
     - name: MLSC_W_YUV444_U
       type: DMA
       direction: write
@@ -124,6 +132,8 @@ capabilities:
     sources:
     - path: \\wsl.localhost\Ubuntu\home\neokein\work\12_SM_S947B\exynos\external-modules\camera\camera\hardware\api\pablo-hw-api-mlsc-v15_0.c
       sha256: b717c95c0ba426b1e853bba1b9c73a4a81414d3e74ea135ee7e8e552649b9139
+    - path: \\wsl.localhost\Ubuntu\home\neokein\work\12_SM_S947B\exynos\external-modules\camera\camera\ischain\is-v15_0_0\is-subdev-mlsc.c
+      sha256: b6b4bcf91e38d6bd3b2914afa74873bd029990bcbc2728e9739354438d8f74b8
     provenance_status: kernel_declared
     performance_status: missing
 compatible_soc:

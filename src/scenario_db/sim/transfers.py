@@ -112,7 +112,10 @@ def _use_propagated_shape(sim_block: dict[str, Any]) -> bool:
 def _effective_buffer(graph: CanonicalScenarioGraph, buffer_id: str) -> dict[str, Any]:
     base = (cast(dict[str, Any], graph.scenario.pipeline or {}).get("buffers") or {}).get(buffer_id) or {}
     override = (graph.variant.buffer_overrides or {}).get(buffer_id) or {}
-    return {**base, **override}
+    merged = {**base, **override}
+    if "dma" in override:
+        merged["dma"] = {**base.get("dma", {}), **override["dma"]}
+    return merged
 
 
 def _buffer_transfers(
@@ -125,6 +128,12 @@ def _buffer_transfers(
     warnings: list[str] | None,
 ) -> list[PortTransferSpec]:
     buffer = _effective_buffer(graph, buffer_id)
+    if buffer.get("size_status") == "unknown":
+        if warnings is not None and names:
+            message = f"{buffer_id}: DMA size/format unknown; excluded from bandwidth totals."
+            if message not in warnings:
+                warnings.append(message)
+        return []
     width, height = buffer_size(graph, buffer)
     if width == 0 or height == 0:
         width, height = design_size_for_graph(graph)
@@ -195,6 +204,28 @@ def history_port_transfers(
             raise ValueError(f"{buffer_id}: history requires frame_offset=-1")
         for key, direction in (("read_ports", PortType.DMA_READ), ("write_ports", PortType.DMA_WRITE)):
             specs.extend(_buffer_transfers(graph, workloads[node_id], buffer_id, history.get(key) or [], direction, comp_catalog, warnings))
+    return specs
+
+
+def standalone_port_transfers(
+    graph: CanonicalScenarioGraph,
+    workloads: dict[str, IPWorkload],
+    comp_catalog: dict[str, float] | None = None,
+    warnings: list[str] | None = None,
+) -> list[PortTransferSpec]:
+    """Declared auxiliary DMA with no modeled downstream consumer."""
+    specs = []
+    for buffer_id in (cast(dict[str, Any], graph.scenario.pipeline or {}).get("buffers") or {}):
+        endpoint = _effective_buffer(graph, buffer_id).get("dma") or {}
+        node_id = str(endpoint.get("node_id") or "")
+        if node_id not in workloads or not enabled(endpoint.get("enabled", True)):
+            continue
+        flag = endpoint.get("activation_flag")
+        config = (graph.variant.node_configs or {}).get(node_id) or {}
+        if flag and not enabled(config.get(flag, False)):
+            continue
+        for key, direction in (("read_ports", PortType.DMA_READ), ("write_ports", PortType.DMA_WRITE)):
+            specs.extend(_buffer_transfers(graph, workloads[node_id], buffer_id, endpoint.get(key) or [], direction, comp_catalog, warnings))
     return specs
 
 

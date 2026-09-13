@@ -636,6 +636,8 @@ def _memory_placement(graph: CanonicalScenarioGraph, buffer_ref: str) -> MemoryP
 
 
 def _buffer_size(graph: CanonicalScenarioGraph, spec: dict[str, Any]) -> tuple[int | None, int | None]:
+    if spec.get("size_status") == "unknown":
+        return None, None
     size_value = spec.get("size")
     if size_value:
         return _parse_output_size(size_value)
@@ -739,6 +741,8 @@ def _buffer_handoffs(
 
 
 def _buffer_size_label(graph: CanonicalScenarioGraph, spec: dict[str, Any]) -> str | None:
+    if spec.get("size_status") == "unknown":
+        return None
     if spec.get("size"):
         width, height = _parse_output_size(spec["size"])
         return f"{width}x{height}" if width and height else str(spec["size"])

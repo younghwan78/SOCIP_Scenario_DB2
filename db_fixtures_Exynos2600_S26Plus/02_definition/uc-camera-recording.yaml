@@ -94,11 +94,7 @@ pipeline:
     ip_ref: ip-cpu-s5e9965
     role: sw_task
     instance_index: 0
-  - id: eis_preview
-    ip_ref: ip-cpu-s5e9965
-    role: sw_task
-    instance_index: 0
-  - id: eis_video
+  - id: eis
     ip_ref: ip-cpu-s5e9965
     role: sw_task
     instance_index: 0
@@ -296,15 +292,12 @@ pipeline:
     - src: MCSC_WDMA_W1
       dst: GDC_RDMA
   - from: mcsc
-    to: eis_preview
+    to: eis
     type: control
-  - from: eis_preview
+  - from: eis
     to: gdc_m
     type: control
-  - from: mcsc
-    to: eis_video
-    type: control
-  - from: eis_video
+  - from: eis
     to: gdc_o
     type: control
   - from: gdc_m
@@ -324,15 +317,31 @@ pipeline:
   - from: dpu
     to: panel
     type: OTF
+  - from: rgbp
+    to: yuvp
+    type: M2M
+    buffer: RGBP_DRC
+    port_pairs:
+    - src: RGBP_WDMA_DRC
+      dst: YUVP_RDMA_DRC0
+    - src: RGBP_WDMA_DRC
+      dst: YUVP_RDMA_DRC1
+  - from: mlsc
+    to: yuvp
+    type: M2M
+    buffer: MLSC_SVHIST
+    port_pairs:
+    - src: MLSC_W_SVHIST
+      dst: YUVP_RDMA_SVHIST
   buffers:
     PYRAMID_L0:
-      size_ref: pyramid_l0
+      size_ref: mlsc_out
       format: Y
       bitdepth: 12
       compression: COMP_OFF
       layer: 0
     TNR_PREV_L0:
-      size_ref: pyramid_l0
+      size_ref: mlsc_out
       format: Y
       bitdepth: 12
       compression: COMP_OFF
@@ -441,11 +450,15 @@ pipeline:
       format: Y
       bitdepth: 8
       compression: COMP_OFF
+      source_note: MLSC LMEDS Y image for motion estimation; 1008x756 remains an unverified
+        fixture assumption.
     OD_INPUT:
       size_ref: object_detection
-      format: YUV420
+      format: RGB
       bitdepth: 8
       compression: COMP_OFF
+      size_status: assumed
+      source_note: 'User fixture estimate: FDPIG RGB 512x288, 8 bits per channel assumed.'
     MCSC_PREVIEW:
       size_ref: preview_out
       format: YUV420
@@ -479,6 +492,55 @@ pipeline:
         write_ports: []
         producer: previous MLSC_W_LMEDS output; current write already counted
         initialization: warm_start_steady_state
+    BYRP_BAYER_DUMP:
+      size_ref: sensor_full
+      format: BAYER
+      bitdepth: 10
+      compression: COMP_OFF
+      source_note: Full-size video snapshot Bayer dump. Enable byrp.video_snapshot_enabled
+        to include traffic.
+      dma:
+        node_id: byrp
+        write_ports:
+        - BYRP_WDMA_BYR
+        activation_flag: video_snapshot_enabled
+    CAV_OUTPUT:
+      size_ref: cav
+      format: RGB
+      bitdepth: 8
+      compression: COMP_OFF
+      size_status: assumed
+      source_note: User-approved 320x180 RGB fixture size; 8 bits per channel and
+        activation require runtime confirmation.
+      dma:
+        node_id: mlsc
+        write_ports:
+        - MLSC_W_CAV
+        enabled: false
+    RGBP_HIST:
+      size_status: unknown
+      source_note: Kernel-declared output; size/format not yet characterized. Excluded
+        from bandwidth.
+      dma:
+        node_id: rgbp
+        write_ports:
+        - IS_LVN_RGBP0_HIST
+    RGBP_SAT:
+      size_status: unknown
+      source_note: Kernel-declared output; size/format not yet characterized. Excluded
+        from bandwidth.
+      dma:
+        node_id: rgbp
+        write_ports:
+        - RGBP_WDMA_SAT
+    RGBP_DRC:
+      size_status: unknown
+      source_note: DRC statistics input to YUVP; size/layout unknown, excluded from
+        bandwidth.
+    MLSC_SVHIST:
+      size_status: unknown
+      source_note: MLSC histogram input to YUVP per user. Exact YUVP physical port
+        mapping/size unknown.
   architecture_graph:
     is_version: 15
     rt_chain:
@@ -499,7 +561,8 @@ pipeline:
     assumptions:
     - Pyramid dimensions use ceil(width/2^L), ceil(height/2^L); alignment/crop needs
       runtime confirmation.
-    - Preview is FHD; motion and OD input sizes are fixture assumptions.
+    - Preview is FHD; LMEDS 1008x756, FDPIG RGB 512x288 and CAV RGB 320x180 are fixture
+      assumptions.
     - MCSC channel assignment W0/W1 is logical policy; validate runtime port mapping.
     - History DMA models warmed-up steady state; first-frame initialization is not
       measured.
@@ -511,6 +574,10 @@ pipeline:
       format/size confirmation; not included in bandwidth totals.
     - CPU_CAMERA serializes CPU-only stages; preME is a composite SW+LME interval
       with unknown CPU duty.
+    - RGBP DRC/HIST/SAT and MLSC SVHIST sizes are unknown; excluded from BW. BYRP
+      Bayer snapshot and CAV are optional disabled outputs by default.
+    pyramid_base: mlsc_out
+    eis_chain: MCSC -> one EIS SW stage -> preview/video GDC instances
 variants:
 - id: cam-rec-r1-fhd30-sdr
   severity: light
@@ -528,8 +595,11 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 1
+    sensor_input_fps: 30.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
   routing_switch:
     disabled_nodes:
     - sensor_rear2
@@ -537,8 +607,7 @@ variants:
     - sensor_front
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   node_configs:
@@ -576,15 +645,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -612,8 +673,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 2296
@@ -622,8 +683,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -632,7 +693,7 @@ variants:
         height: 756
         inherit_shape: true
     sensor_rear:
-      selected_mode: cis_4sum_idcg_ln4_raw12_4080x2296_30fps_3993msps
+      selected_mode: cis_4sum_ln4_raw10_4080x2296_30fps_3993msps
     csis:
       sim:
         width: 4080
@@ -715,6 +776,9 @@ variants:
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   buffer_overrides: {}
   tags:
   - is-v15
@@ -734,8 +798,11 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 1
+    sensor_input_fps: 30.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
   routing_switch:
     disabled_nodes:
     - sensor_rear2
@@ -743,8 +810,7 @@ variants:
     - sensor_front
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   topology_patch:
@@ -775,6 +841,9 @@ variants:
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   node_configs:
     post_crta:
       sw_timing:
@@ -803,15 +872,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -839,8 +900,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 2296
@@ -849,8 +910,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -859,7 +920,7 @@ variants:
         height: 756
         inherit_shape: true
     sensor_rear:
-      selected_mode: cis_4sum_idcg_ln4_raw12_4080x2296_30fps_3993msps
+      selected_mode: cis_4sum_ln4_raw10_4080x2296_30fps_3993msps
     csis:
       sim:
         width: 4080
@@ -938,8 +999,11 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 1
+    sensor_input_fps: 30.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
   routing_switch:
     disabled_nodes:
     - sensor_rear2
@@ -975,15 +1039,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -1011,8 +1067,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 2296
@@ -1021,8 +1077,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -1031,7 +1087,7 @@ variants:
         height: 756
         inherit_shape: true
     sensor_rear:
-      selected_mode: cis_4sum_idcg_ln4_raw12_4080x2296_30fps_3993msps
+      selected_mode: cis_4sum_ln4_raw10_4080x2296_30fps_3993msps
     csis:
       sim:
         width: 4080
@@ -1112,6 +1168,9 @@ variants:
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   buffer_overrides: {}
   tags:
   - is-v15
@@ -1130,8 +1189,11 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 1
+    sensor_input_fps: 30.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
   routing_switch:
     disabled_nodes:
     - sensor_rear2
@@ -1167,15 +1229,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -1203,8 +1257,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 2296
@@ -1213,8 +1267,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -1223,7 +1277,7 @@ variants:
         height: 756
         inherit_shape: true
     sensor_rear:
-      selected_mode: cis_4sum_idcg_ln4_raw12_4080x2296_30fps_3993msps
+      selected_mode: cis_4sum_ln4_raw10_4080x2296_30fps_3993msps
     csis:
       sim:
         width: 4080
@@ -1304,6 +1358,9 @@ variants:
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   buffer_overrides: {}
   tags:
   - is-v15
@@ -1322,8 +1379,11 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 1
+    sensor_input_fps: 30.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
   routing_switch:
     disabled_nodes:
     - sensor_rear2
@@ -1331,8 +1391,7 @@ variants:
     - sensor_front
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   topology_patch:
@@ -1363,6 +1422,9 @@ variants:
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   node_configs:
     post_crta:
       sw_timing:
@@ -1391,15 +1453,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -1427,8 +1481,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 2296
@@ -1437,8 +1491,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -1447,7 +1501,7 @@ variants:
         height: 756
         inherit_shape: true
     sensor_rear:
-      selected_mode: cis_4sum_idcg_ln4_raw12_4080x2296_30fps_3993msps
+      selected_mode: cis_4sum_ln4_raw10_4080x2296_30fps_3993msps
     csis:
       sim:
         width: 4080
@@ -1526,8 +1580,11 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 1
+    sensor_input_fps: 30.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
   routing_switch:
     disabled_nodes:
     - sensor_rear2
@@ -1535,8 +1592,7 @@ variants:
     - sensor_front
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   buffer_overrides:
@@ -1580,6 +1636,9 @@ variants:
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   node_configs:
     post_crta:
       sw_timing:
@@ -1608,15 +1667,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -1644,8 +1695,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 2296
@@ -1654,8 +1705,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -1664,7 +1715,7 @@ variants:
         height: 756
         inherit_shape: true
     sensor_rear:
-      selected_mode: cis_4sum_idcg_ln4_raw12_4080x2296_30fps_3993msps
+      selected_mode: cis_4sum_ln4_raw10_4080x2296_30fps_3993msps
     csis:
       sim:
         width: 4080
@@ -1742,8 +1793,11 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 1
+    sensor_input_fps: 30.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
   routing_switch:
     disabled_nodes:
     - sensor_rear2
@@ -1779,15 +1833,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -1815,8 +1861,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 2296
@@ -1825,8 +1871,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -1835,7 +1881,7 @@ variants:
         height: 756
         inherit_shape: true
     sensor_rear:
-      selected_mode: cis_4sum_idcg_ln4_raw12_4080x2296_30fps_3993msps
+      selected_mode: cis_4sum_ln4_raw10_4080x2296_30fps_3993msps
     csis:
       sim:
         width: 4080
@@ -1929,6 +1975,9 @@ variants:
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   tags:
   - is-v15
   - assumed-sw-timing
@@ -1947,8 +1996,11 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 1
+    sensor_input_fps: 60.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
   routing_switch:
     disabled_nodes:
     - sensor_rear2
@@ -1956,8 +2008,7 @@ variants:
     - sensor_front
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   node_configs:
@@ -1995,15 +2046,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -2031,8 +2074,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 2296
@@ -2041,8 +2084,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -2051,7 +2094,7 @@ variants:
         height: 756
         inherit_shape: true
     sensor_rear:
-      selected_mode: cis_4sum_idcg_ln1_raw12_4080x2296_60fps_3993msps
+      selected_mode: cis_4sum_ln2_raw10_4080x2296_60fps_3993msps
     csis:
       sim:
         width: 4080
@@ -2134,6 +2177,9 @@ variants:
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   buffer_overrides: {}
   tags:
   - is-v15
@@ -2152,8 +2198,11 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 1
+    sensor_input_fps: 60.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
   routing_switch:
     disabled_nodes:
     - sensor_rear2
@@ -2189,15 +2238,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -2225,8 +2266,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 2296
@@ -2235,8 +2276,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -2245,7 +2286,7 @@ variants:
         height: 756
         inherit_shape: true
     sensor_rear:
-      selected_mode: cis_4sum_idcg_ln1_raw12_4080x2296_60fps_3993msps
+      selected_mode: cis_4sum_ln2_raw10_4080x2296_60fps_3993msps
     csis:
       sim:
         width: 4080
@@ -2326,6 +2367,9 @@ variants:
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   buffer_overrides: {}
   tags:
   - is-v15
@@ -2344,8 +2388,11 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 1
+    sensor_input_fps: 60.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
   routing_switch:
     disabled_nodes:
     - sensor_rear2
@@ -2353,8 +2400,7 @@ variants:
     - sensor_front
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   buffer_overrides:
@@ -2398,6 +2444,9 @@ variants:
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   node_configs:
     post_crta:
       sw_timing:
@@ -2426,15 +2475,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -2462,8 +2503,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 2296
@@ -2472,8 +2513,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -2482,7 +2523,7 @@ variants:
         height: 756
         inherit_shape: true
     sensor_rear:
-      selected_mode: cis_4sum_idcg_ln1_raw12_4080x2296_60fps_3993msps
+      selected_mode: cis_4sum_ln2_raw10_4080x2296_60fps_3993msps
     csis:
       sim:
         width: 4080
@@ -2559,8 +2600,11 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 1
+    sensor_input_fps: 120.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
   routing_switch:
     disabled_nodes:
     - sensor_rear2
@@ -2568,8 +2612,7 @@ variants:
     - sensor_front
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   node_configs:
@@ -2600,15 +2643,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -2636,8 +2671,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 2040
         height: 1148
@@ -2646,8 +2681,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -2656,7 +2691,10 @@ variants:
         height: 756
         inherit_shape: true
     sensor_rear:
-      selected_mode: mode44
+      selected_mode: user_raw10_2040x1148_120fps
+      source_note: User specifies 2040x1148 RAW10 at 120fps. Line timing borrowed
+        from 240fps CIS mode; doubled frame length is an assumption, not a verified
+        setfile.
     csis:
       sim:
         width: 2040
@@ -2744,6 +2782,9 @@ variants:
     pyramid_l2: 510x287
     pyramid_l3: 255x144
     pyramid_l4: 128x72
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 2040x1148
   buffer_overrides: {}
   tags:
   - is-v15
@@ -2762,8 +2803,13 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 1
+    sensor_input_fps: 120.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
+    sensor_cadence_policy: User-defined 120fps sensor input for FHD240 scenario; 240fps
+      output cadence requires separate runtime confirmation.
   routing_switch:
     disabled_nodes:
     - sensor_rear2
@@ -2771,8 +2817,7 @@ variants:
     - sensor_front
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   node_configs:
@@ -2803,15 +2848,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -2839,8 +2876,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 2040
         height: 1148
@@ -2849,8 +2886,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -2859,7 +2896,10 @@ variants:
         height: 756
         inherit_shape: true
     sensor_rear:
-      selected_mode: mode44
+      selected_mode: user_raw10_2040x1148_120fps
+      source_note: User specifies 2040x1148 RAW10 at 120fps. Line timing borrowed
+        from 240fps CIS mode; doubled frame length is an assumption, not a verified
+        setfile.
     csis:
       sim:
         width: 2040
@@ -2947,6 +2987,9 @@ variants:
     pyramid_l2: 510x287
     pyramid_l3: 255x144
     pyramid_l4: 128x72
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 2040x1148
   buffer_overrides: {}
   tags:
   - is-v15
@@ -2966,7 +3009,7 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 1
   routing_switch:
     disabled_nodes:
@@ -2975,8 +3018,7 @@ variants:
     - sensor_front
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   node_configs:
@@ -3007,15 +3049,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -3043,8 +3077,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 2040
         height: 1148
@@ -3053,8 +3087,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -3151,6 +3185,9 @@ variants:
     pyramid_l2: 510x287
     pyramid_l3: 255x144
     pyramid_l4: 128x72
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 2040x1148
   buffer_overrides: {}
   tags:
   - is-v15
@@ -3171,7 +3208,7 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 1
   routing_switch:
     disabled_nodes:
@@ -3180,8 +3217,7 @@ variants:
     - sensor_front
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   node_configs:
@@ -3212,15 +3248,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -3248,8 +3276,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 3060
@@ -3258,8 +3286,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -3361,6 +3389,9 @@ variants:
     pyramid_l2: 1020x765
     pyramid_l3: 510x383
     pyramid_l4: 255x192
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x3060
   buffer_overrides: {}
 - id: cam-rec-r1-qhd30-supersteady
   severity: light
@@ -3375,7 +3406,7 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 2
   routing_switch:
     disabled_nodes:
@@ -3412,15 +3443,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -3449,8 +3472,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 2296
@@ -3459,8 +3482,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -3539,6 +3562,9 @@ variants:
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   buffer_overrides: {}
   tags:
   - is-v15
@@ -3557,7 +3583,7 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 2
   routing_switch:
     disabled_nodes:
@@ -3594,15 +3620,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -3631,8 +3649,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 2296
@@ -3641,8 +3659,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -3734,6 +3752,9 @@ variants:
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   tags:
   - is-v15
   - assumed-sw-timing
@@ -3752,8 +3773,11 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 2
+    sensor_input_fps: 30.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
   routing_switch:
     disabled_nodes:
     - sensor_rear2
@@ -3761,8 +3785,7 @@ variants:
     - sensor_front
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   node_configs:
@@ -3800,15 +3823,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -3837,8 +3852,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 2296
@@ -3847,8 +3862,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -3857,7 +3872,7 @@ variants:
         height: 756
         inherit_shape: true
     sensor_rear:
-      selected_mode: cis_4sum_idcg_ln4_raw12_4080x2296_30fps_3993msps
+      selected_mode: cis_4sum_ln4_raw10_4080x2296_30fps_3993msps
     csis:
       sim:
         width: 4080
@@ -3937,6 +3952,9 @@ variants:
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   buffer_overrides: {}
   tags:
   - is-v15
@@ -3955,8 +3973,11 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 2
+    sensor_input_fps: 30.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
   routing_switch:
     disabled_nodes:
     - sensor_rear2
@@ -3992,15 +4013,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -4029,8 +4042,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 2296
@@ -4039,8 +4052,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -4049,7 +4062,7 @@ variants:
         height: 756
         inherit_shape: true
     sensor_rear:
-      selected_mode: cis_4sum_idcg_ln4_raw12_4080x2296_30fps_3993msps
+      selected_mode: cis_4sum_ln4_raw10_4080x2296_30fps_3993msps
     csis:
       sim:
         width: 4080
@@ -4119,6 +4132,9 @@ variants:
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   buffer_overrides: {}
   tags:
   - is-v15
@@ -4138,8 +4154,11 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 2
+    sensor_input_fps: 30.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
   routing_switch:
     disabled_nodes:
     - sensor_rear2
@@ -4157,6 +4176,9 @@ variants:
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   node_configs:
     post_crta:
       sw_timing:
@@ -4185,15 +4207,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -4222,8 +4236,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 2296
@@ -4232,8 +4246,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -4242,7 +4256,7 @@ variants:
         height: 756
         inherit_shape: true
     sensor_rear:
-      selected_mode: cis_4sum_idcg_ln4_raw12_4080x2296_30fps_3993msps
+      selected_mode: cis_4sum_ln4_raw10_4080x2296_30fps_3993msps
     csis:
       sim:
         width: 4080
@@ -4319,8 +4333,11 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 2
+    sensor_input_fps: 30.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
   routing_switch:
     disabled_nodes:
     - sensor_rear2
@@ -4328,8 +4345,7 @@ variants:
     - sensor_front
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   topology_patch:
@@ -4357,6 +4373,9 @@ variants:
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   node_configs:
     post_crta:
       sw_timing:
@@ -4385,15 +4404,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -4422,8 +4433,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 2296
@@ -4432,8 +4443,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -4442,7 +4453,7 @@ variants:
         height: 756
         inherit_shape: true
     sensor_rear:
-      selected_mode: cis_4sum_idcg_ln4_raw12_4080x2296_30fps_3993msps
+      selected_mode: cis_4sum_ln4_raw10_4080x2296_30fps_3993msps
     csis:
       sim:
         width: 4080
@@ -4520,8 +4531,11 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 2
+    sensor_input_fps: 30.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
   routing_switch:
     disabled_nodes:
     - sensor_rear2
@@ -4529,8 +4543,7 @@ variants:
     - sensor_front
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   buffer_overrides:
@@ -4571,6 +4584,9 @@ variants:
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   node_configs:
     post_crta:
       sw_timing:
@@ -4599,15 +4615,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -4636,8 +4644,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 2296
@@ -4646,8 +4654,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -4656,7 +4664,7 @@ variants:
         height: 756
         inherit_shape: true
     sensor_rear:
-      selected_mode: cis_4sum_idcg_ln4_raw12_4080x2296_30fps_3993msps
+      selected_mode: cis_4sum_ln4_raw10_4080x2296_30fps_3993msps
     csis:
       sim:
         width: 4080
@@ -4733,8 +4741,11 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 2
+    sensor_input_fps: 60.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
   routing_switch:
     disabled_nodes:
     - sensor_rear2
@@ -4742,8 +4753,7 @@ variants:
     - sensor_front
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   topology_patch:
@@ -4771,6 +4781,9 @@ variants:
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   node_configs:
     post_crta:
       sw_timing:
@@ -4799,15 +4812,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -4836,8 +4841,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 2296
@@ -4846,8 +4851,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -4856,7 +4861,7 @@ variants:
         height: 756
         inherit_shape: true
     sensor_rear:
-      selected_mode: cis_4sum_idcg_ln1_raw12_4080x2296_60fps_3993msps
+      selected_mode: cis_4sum_ln2_raw10_4080x2296_60fps_3993msps
     csis:
       sim:
         width: 4080
@@ -4934,8 +4939,11 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 2
+    sensor_input_fps: 60.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
   routing_switch:
     disabled_nodes:
     - sensor_rear2
@@ -4971,15 +4979,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -5008,8 +5008,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 2296
@@ -5018,8 +5018,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -5028,7 +5028,7 @@ variants:
         height: 756
         inherit_shape: true
     sensor_rear:
-      selected_mode: cis_4sum_idcg_ln1_raw12_4080x2296_60fps_3993msps
+      selected_mode: cis_4sum_ln2_raw10_4080x2296_60fps_3993msps
     csis:
       sim:
         width: 4080
@@ -5098,6 +5098,9 @@ variants:
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   buffer_overrides: {}
   tags:
   - is-v15
@@ -5116,8 +5119,11 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 2
+    sensor_input_fps: 60.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
   routing_switch:
     disabled_nodes:
     - sensor_rear2
@@ -5125,8 +5131,7 @@ variants:
     - sensor_front
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   node_configs:
@@ -5163,15 +5168,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -5200,8 +5197,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 2296
@@ -5210,8 +5207,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -5220,7 +5217,7 @@ variants:
         height: 756
         inherit_shape: true
     sensor_rear:
-      selected_mode: cis_4sum_idcg_ln1_raw12_4080x2296_60fps_3993msps
+      selected_mode: cis_4sum_ln2_raw10_4080x2296_60fps_3993msps
     csis:
       sim:
         width: 4080
@@ -5300,6 +5297,9 @@ variants:
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   buffer_overrides: {}
   tags:
   - is-v15
@@ -5318,8 +5318,11 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 2
+    sensor_input_fps: 60.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
   routing_switch:
     disabled_nodes:
     - sensor_rear2
@@ -5327,8 +5330,7 @@ variants:
     - sensor_front
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   buffer_overrides:
@@ -5369,6 +5371,9 @@ variants:
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   node_configs:
     post_crta:
       sw_timing:
@@ -5397,15 +5402,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -5434,8 +5431,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 2296
@@ -5444,8 +5441,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -5454,7 +5451,7 @@ variants:
         height: 756
         inherit_shape: true
     sensor_rear:
-      selected_mode: cis_4sum_idcg_ln1_raw12_4080x2296_60fps_3993msps
+      selected_mode: cis_4sum_ln2_raw10_4080x2296_60fps_3993msps
     csis:
       sim:
         width: 4080
@@ -5531,8 +5528,11 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 2
+    sensor_input_fps: 120.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
   routing_switch:
     disabled_nodes:
     - sensor_rear2
@@ -5540,8 +5540,7 @@ variants:
     - sensor_front
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   node_configs:
@@ -5572,15 +5571,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -5609,8 +5600,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 2296
@@ -5619,8 +5610,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -5629,7 +5620,7 @@ variants:
         height: 756
         inherit_shape: true
     sensor_rear:
-      selected_mode: mode11
+      selected_mode: cis_4sum_ln1_raw10_4080x2296_120fps_3993msps
     csis:
       sim:
         width: 4080
@@ -5714,6 +5705,9 @@ variants:
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   buffer_overrides: {}
   tags:
   - is-v15
@@ -5733,7 +5727,7 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 2
   routing_switch:
     disabled_nodes:
@@ -5742,8 +5736,7 @@ variants:
     - sensor_front
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   node_configs:
@@ -5781,15 +5774,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -5818,8 +5803,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 8000
         height: 4500
@@ -5828,8 +5813,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -5918,6 +5903,9 @@ variants:
     pyramid_l2: 2000x1125
     pyramid_l3: 1000x563
     pyramid_l4: 500x282
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 8000x4500
   buffer_overrides: {}
   tags:
   - is-v15
@@ -5936,7 +5924,7 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 2
   routing_switch:
     disabled_nodes:
@@ -5945,8 +5933,7 @@ variants:
     - sensor_front
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   node_configs:
@@ -5977,15 +5964,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -6014,8 +5993,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 8000
         height: 4500
@@ -6024,8 +6003,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -6119,6 +6098,9 @@ variants:
     pyramid_l2: 2000x1125
     pyramid_l3: 1000x563
     pyramid_l4: 500x282
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 8000x4500
   buffer_overrides: {}
   tags:
   - is-v15
@@ -6137,7 +6119,7 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 2
   routing_switch:
     disabled_nodes:
@@ -6146,8 +6128,7 @@ variants:
     - sensor_front
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   node_configs:
@@ -6184,15 +6165,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -6221,8 +6194,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 8000
         height: 4500
@@ -6231,8 +6204,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -6321,6 +6294,9 @@ variants:
     pyramid_l2: 2000x1125
     pyramid_l3: 1000x563
     pyramid_l4: 500x282
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 8000x4500
   buffer_overrides: {}
   tags:
   - is-v15
@@ -6339,7 +6315,7 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 2
   routing_switch:
     disabled_nodes:
@@ -6348,8 +6324,7 @@ variants:
     - sensor_front
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   topology_patch:
@@ -6377,6 +6352,9 @@ variants:
     pyramid_l2: 2000x1125
     pyramid_l3: 1000x563
     pyramid_l4: 500x282
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 8000x4500
   node_configs:
     post_crta:
       sw_timing:
@@ -6405,15 +6383,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -6442,8 +6412,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 8000
         height: 4500
@@ -6452,8 +6422,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -6540,7 +6510,7 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 2
   routing_switch:
     disabled_nodes:
@@ -6549,8 +6519,7 @@ variants:
     - sensor_front
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   node_configs:
@@ -6581,15 +6550,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -6618,8 +6579,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 8000
         height: 4500
@@ -6628,8 +6589,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -6723,6 +6684,9 @@ variants:
     pyramid_l2: 2000x1125
     pyramid_l3: 1000x563
     pyramid_l4: 500x282
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 8000x4500
   buffer_overrides: {}
   tags:
   - is-v15
@@ -6741,7 +6705,7 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 2
   routing_switch:
     disabled_nodes:
@@ -6750,8 +6714,7 @@ variants:
     - sensor_front
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   node_configs:
@@ -6788,15 +6751,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -6825,8 +6780,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 8000
         height: 4500
@@ -6835,8 +6790,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -6925,6 +6880,9 @@ variants:
     pyramid_l2: 2000x1125
     pyramid_l3: 1000x563
     pyramid_l4: 500x282
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 8000x4500
   buffer_overrides: {}
   tags:
   - is-v15
@@ -6943,16 +6901,18 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 1
+    sensor_input_fps: 30.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
   routing_switch:
     disabled_nodes:
     - sensor_rear2
     - sensor_rear3
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   topology_patch:
@@ -6983,6 +6943,9 @@ variants:
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   node_configs:
     post_crta:
       sw_timing:
@@ -7011,15 +6974,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -7047,8 +7002,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 2296
@@ -7057,8 +7012,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -7067,7 +7022,7 @@ variants:
         height: 756
         inherit_shape: true
     sensor_rear:
-      selected_mode: cis_4sum_idcg_ln4_raw12_4080x2296_30fps_3993msps
+      selected_mode: cis_4sum_ln4_raw10_4080x2296_30fps_3993msps
     sensor_front:
       selected_mode: mode58
     csis:
@@ -7147,16 +7102,18 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 2
+    sensor_input_fps: 30.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
   routing_switch:
     disabled_nodes:
     - sensor_rear2
     - sensor_rear3
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   topology_patch:
@@ -7184,6 +7141,9 @@ variants:
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   node_configs:
     post_crta:
       sw_timing:
@@ -7212,15 +7172,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -7249,8 +7201,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 2296
@@ -7259,8 +7211,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -7269,7 +7221,7 @@ variants:
         height: 756
         inherit_shape: true
     sensor_rear:
-      selected_mode: cis_4sum_idcg_ln4_raw12_4080x2296_30fps_3993msps
+      selected_mode: cis_4sum_ln4_raw10_4080x2296_30fps_3993msps
     sensor_front:
       selected_mode: mode10
     csis:
@@ -7348,16 +7300,18 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 1
+    sensor_input_fps: 30.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
   routing_switch:
     disabled_nodes:
     - sensor_rear2
     - sensor_rear3
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   buffer_overrides:
@@ -7401,6 +7355,9 @@ variants:
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   node_configs:
     post_crta:
       sw_timing:
@@ -7429,15 +7386,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -7465,8 +7414,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 2296
@@ -7475,8 +7424,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -7485,7 +7434,7 @@ variants:
         height: 756
         inherit_shape: true
     sensor_rear:
-      selected_mode: cis_4sum_idcg_ln4_raw12_4080x2296_30fps_3993msps
+      selected_mode: cis_4sum_ln4_raw10_4080x2296_30fps_3993msps
     sensor_front:
       selected_mode: mode58
     csis:
@@ -7563,16 +7512,18 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 2
+    sensor_input_fps: 30.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
   routing_switch:
     disabled_nodes:
     - sensor_rear2
     - sensor_rear3
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   buffer_overrides:
@@ -7613,6 +7564,9 @@ variants:
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   node_configs:
     post_crta:
       sw_timing:
@@ -7641,15 +7595,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -7678,8 +7624,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 2296
@@ -7688,8 +7634,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -7698,7 +7644,7 @@ variants:
         height: 756
         inherit_shape: true
     sensor_rear:
-      selected_mode: cis_4sum_idcg_ln4_raw12_4080x2296_30fps_3993msps
+      selected_mode: cis_4sum_ln4_raw10_4080x2296_30fps_3993msps
     sensor_front:
       selected_mode: mode10
     csis:
@@ -7776,16 +7722,18 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 1
+    sensor_input_fps: 30.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
   routing_switch:
     disabled_nodes:
     - sensor_rear3
     - sensor_front
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   topology_patch:
@@ -7816,6 +7764,9 @@ variants:
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   node_configs:
     post_crta:
       sw_timing:
@@ -7844,15 +7795,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -7880,8 +7823,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 2296
@@ -7890,8 +7833,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -7900,7 +7843,7 @@ variants:
         height: 756
         inherit_shape: true
     sensor_rear:
-      selected_mode: cis_4sum_idcg_ln4_raw12_4080x2296_30fps_3993msps
+      selected_mode: cis_4sum_ln4_raw10_4080x2296_30fps_3993msps
     sensor_rear2:
       selected_mode: mode6
     csis:
@@ -7980,16 +7923,18 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 1
+    sensor_input_fps: 60.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
   routing_switch:
     disabled_nodes:
     - sensor_rear3
     - sensor_front
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   topology_patch:
@@ -8020,6 +7965,9 @@ variants:
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   node_configs:
     post_crta:
       sw_timing:
@@ -8048,15 +7996,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -8084,8 +8024,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 2296
@@ -8094,8 +8034,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -8104,7 +8044,7 @@ variants:
         height: 756
         inherit_shape: true
     sensor_rear:
-      selected_mode: cis_4sum_idcg_ln1_raw12_4080x2296_60fps_3993msps
+      selected_mode: cis_4sum_ln2_raw10_4080x2296_60fps_3993msps
     sensor_rear2:
       selected_mode: mode9
     csis:
@@ -8184,17 +8124,19 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 2
     sensor_cadence_policy: requires_runtime_frame_skip_or_sensor_fps_confirmation
+    sensor_input_fps: 30.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
   routing_switch:
     disabled_nodes:
     - sensor_rear3
     - sensor_front
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   topology_patch:
@@ -8222,6 +8164,9 @@ variants:
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   node_configs:
     post_crta:
       sw_timing:
@@ -8250,15 +8195,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -8287,8 +8224,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 2296
@@ -8297,8 +8234,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -8307,7 +8244,7 @@ variants:
         height: 756
         inherit_shape: true
     sensor_rear:
-      selected_mode: cis_4sum_idcg_ln4_raw12_4080x2296_30fps_3993msps
+      selected_mode: cis_4sum_ln4_raw10_4080x2296_30fps_3993msps
     sensor_rear2:
       selected_mode: mode13
     csis:
@@ -8387,16 +8324,18 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 2
+    sensor_input_fps: 60.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
   routing_switch:
     disabled_nodes:
     - sensor_rear3
     - sensor_front
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   topology_patch:
@@ -8424,6 +8363,9 @@ variants:
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   node_configs:
     post_crta:
       sw_timing:
@@ -8452,15 +8394,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -8489,8 +8423,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 2296
@@ -8499,8 +8433,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -8509,7 +8443,7 @@ variants:
         height: 756
         inherit_shape: true
     sensor_rear:
-      selected_mode: cis_4sum_idcg_ln1_raw12_4080x2296_60fps_3993msps
+      selected_mode: cis_4sum_ln2_raw10_4080x2296_60fps_3993msps
     sensor_rear2:
       selected_mode: mode13
     csis:
@@ -8589,16 +8523,18 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 1
     sensor_cadence_policy: requires_runtime_frame_skip_or_sensor_fps_confirmation
+    sensor_input_fps: 30.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
   routing_switch:
     disabled_nodes:
     - sensor_front
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   topology_patch:
@@ -8629,6 +8565,9 @@ variants:
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   node_configs:
     post_crta:
       sw_timing:
@@ -8657,15 +8596,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -8693,8 +8624,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 2296
@@ -8703,8 +8634,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -8713,7 +8644,7 @@ variants:
         height: 756
         inherit_shape: true
     sensor_rear:
-      selected_mode: cis_4sum_idcg_ln4_raw12_4080x2296_30fps_3993msps
+      selected_mode: cis_4sum_ln4_raw10_4080x2296_30fps_3993msps
     sensor_rear2:
       selected_mode: mode6
     sensor_rear3:
@@ -8795,16 +8726,18 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 1
     sensor_cadence_policy: requires_runtime_frame_skip_or_sensor_fps_confirmation
+    sensor_input_fps: 60.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
   routing_switch:
     disabled_nodes:
     - sensor_front
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   topology_patch:
@@ -8835,6 +8768,9 @@ variants:
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   node_configs:
     post_crta:
       sw_timing:
@@ -8863,15 +8799,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -8899,8 +8827,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 2296
@@ -8909,8 +8837,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -8919,7 +8847,7 @@ variants:
         height: 756
         inherit_shape: true
     sensor_rear:
-      selected_mode: cis_4sum_idcg_ln1_raw12_4080x2296_60fps_3993msps
+      selected_mode: cis_4sum_ln2_raw10_4080x2296_60fps_3993msps
     sensor_rear2:
       selected_mode: mode9
     sensor_rear3:
@@ -9001,16 +8929,18 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 2
     sensor_cadence_policy: requires_runtime_frame_skip_or_sensor_fps_confirmation
+    sensor_input_fps: 30.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
   routing_switch:
     disabled_nodes:
     - sensor_front
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   topology_patch:
@@ -9038,6 +8968,9 @@ variants:
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   node_configs:
     post_crta:
       sw_timing:
@@ -9066,15 +8999,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -9103,8 +9028,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 2296
@@ -9113,8 +9038,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -9123,7 +9048,7 @@ variants:
         height: 756
         inherit_shape: true
     sensor_rear:
-      selected_mode: cis_4sum_idcg_ln4_raw12_4080x2296_30fps_3993msps
+      selected_mode: cis_4sum_ln4_raw10_4080x2296_30fps_3993msps
     sensor_rear2:
       selected_mode: mode13
     sensor_rear3:
@@ -9205,16 +9130,18 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 2
     sensor_cadence_policy: requires_runtime_frame_skip_or_sensor_fps_confirmation
+    sensor_input_fps: 60.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
   routing_switch:
     disabled_nodes:
     - sensor_front
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   topology_patch:
@@ -9242,6 +9169,9 @@ variants:
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   node_configs:
     post_crta:
       sw_timing:
@@ -9270,15 +9200,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -9307,8 +9229,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 2296
@@ -9317,8 +9239,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -9327,7 +9249,7 @@ variants:
         height: 756
         inherit_shape: true
     sensor_rear:
-      selected_mode: cis_4sum_idcg_ln1_raw12_4080x2296_60fps_3993msps
+      selected_mode: cis_4sum_ln2_raw10_4080x2296_60fps_3993msps
     sensor_rear2:
       selected_mode: mode13
     sensor_rear3:
@@ -9409,7 +9331,7 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 1
   routing_switch:
     disabled_nodes:
@@ -9418,8 +9340,7 @@ variants:
     - sensor_rear3
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   topology_patch:
@@ -9450,6 +9371,9 @@ variants:
     pyramid_l2: 500x375
     pyramid_l3: 250x188
     pyramid_l4: 125x94
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 2000x1500
   node_configs:
     post_crta:
       sw_timing:
@@ -9478,15 +9402,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -9514,8 +9430,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 2000
         height: 1500
@@ -9524,8 +9440,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -9611,7 +9527,7 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 1
   routing_switch:
     disabled_nodes:
@@ -9620,8 +9536,7 @@ variants:
     - sensor_rear3
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   topology_patch:
@@ -9652,6 +9567,9 @@ variants:
     pyramid_l2: 500x375
     pyramid_l3: 250x188
     pyramid_l4: 125x94
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 2000x1500
   node_configs:
     post_crta:
       sw_timing:
@@ -9680,15 +9598,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -9716,8 +9626,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 2000
         height: 1500
@@ -9726,8 +9636,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -9813,7 +9723,7 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 1
   routing_switch:
     disabled_nodes:
@@ -9822,8 +9732,7 @@ variants:
     - sensor_rear3
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   topology_patch:
@@ -9854,6 +9763,9 @@ variants:
     pyramid_l2: 848x477
     pyramid_l3: 424x239
     pyramid_l4: 212x120
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 3392x1908
   node_configs:
     post_crta:
       sw_timing:
@@ -9882,15 +9794,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -9918,8 +9822,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 3392
         height: 1908
@@ -9928,8 +9832,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -10015,7 +9919,7 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 1
   routing_switch:
     disabled_nodes:
@@ -10024,8 +9928,7 @@ variants:
     - sensor_rear3
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   node_configs:
@@ -10056,15 +9959,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -10092,8 +9987,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 2000
         height: 1124
@@ -10102,8 +9997,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -10200,6 +10095,9 @@ variants:
     pyramid_l2: 500x281
     pyramid_l3: 250x141
     pyramid_l4: 125x71
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 2000x1124
   buffer_overrides: {}
   tags:
   - is-v15
@@ -10217,7 +10115,7 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 2
   routing_switch:
     disabled_nodes:
@@ -10226,8 +10124,7 @@ variants:
     - sensor_rear3
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   topology_patch:
@@ -10255,6 +10152,9 @@ variants:
     pyramid_l2: 1000x750
     pyramid_l3: 500x375
     pyramid_l4: 250x188
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4000x3000
   node_configs:
     post_crta:
       sw_timing:
@@ -10283,15 +10183,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -10320,8 +10212,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4000
         height: 3000
@@ -10330,8 +10222,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -10416,7 +10308,7 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 2
   routing_switch:
     disabled_nodes:
@@ -10425,8 +10317,7 @@ variants:
     - sensor_rear3
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   topology_patch:
@@ -10454,6 +10345,9 @@ variants:
     pyramid_l2: 1000x750
     pyramid_l3: 500x375
     pyramid_l4: 250x188
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4000x3000
   node_configs:
     post_crta:
       sw_timing:
@@ -10482,15 +10376,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -10519,8 +10405,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4000
         height: 3000
@@ -10529,8 +10415,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -10616,7 +10502,7 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 2
   routing_switch:
     disabled_nodes:
@@ -10625,8 +10511,7 @@ variants:
     - sensor_rear3
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   topology_patch:
@@ -10654,6 +10539,9 @@ variants:
     pyramid_l2: 1000x563
     pyramid_l3: 500x282
     pyramid_l4: 250x141
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4000x2252
   node_configs:
     post_crta:
       sw_timing:
@@ -10682,15 +10570,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -10719,8 +10599,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4000
         height: 2252
@@ -10729,8 +10609,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -10815,7 +10695,7 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 1
   routing_switch:
     disabled_nodes:
@@ -10824,8 +10704,7 @@ variants:
     - sensor_rear3
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   node_configs:
@@ -10856,15 +10735,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -10892,8 +10763,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 2000
         height: 1124
@@ -10902,8 +10773,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -11000,6 +10871,9 @@ variants:
     pyramid_l2: 500x281
     pyramid_l3: 250x141
     pyramid_l4: 125x71
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 2000x1124
   buffer_overrides: {}
   tags:
   - is-v15
@@ -11018,16 +10892,18 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 1
+    sensor_input_fps: 30.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
   routing_switch:
     disabled_nodes:
     - sensor_rear2
     - sensor_rear3
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   topology_patch:
@@ -11058,6 +10934,9 @@ variants:
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   node_configs:
     post_crta:
       sw_timing:
@@ -11086,15 +10965,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -11122,8 +10993,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 2296
@@ -11132,8 +11003,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -11142,7 +11013,7 @@ variants:
         height: 756
         inherit_shape: true
     sensor_rear:
-      selected_mode: cis_4sum_idcg_ln4_raw12_4080x2296_30fps_3993msps
+      selected_mode: cis_4sum_ln4_raw10_4080x2296_30fps_3993msps
     sensor_front:
       selected_mode: mode58
     csis:
@@ -11222,16 +11093,18 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 2
+    sensor_input_fps: 30.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
   routing_switch:
     disabled_nodes:
     - sensor_rear2
     - sensor_rear3
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   topology_patch:
@@ -11259,6 +11132,9 @@ variants:
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   node_configs:
     post_crta:
       sw_timing:
@@ -11287,15 +11163,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -11324,8 +11192,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 2296
@@ -11334,8 +11202,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -11344,7 +11212,7 @@ variants:
         height: 756
         inherit_shape: true
     sensor_rear:
-      selected_mode: cis_4sum_idcg_ln4_raw12_4080x2296_30fps_3993msps
+      selected_mode: cis_4sum_ln4_raw10_4080x2296_30fps_3993msps
     sensor_front:
       selected_mode: mode10
     csis:
@@ -11423,8 +11291,11 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 1
+    sensor_input_fps: 30.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
   routing_switch:
     disabled_nodes:
     - sensor_rear2
@@ -11432,8 +11303,7 @@ variants:
     - sensor_front
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   topology_patch:
@@ -11464,6 +11334,9 @@ variants:
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   node_configs:
     post_crta:
       sw_timing:
@@ -11492,15 +11365,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -11528,8 +11393,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 2296
@@ -11538,8 +11403,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -11548,7 +11413,7 @@ variants:
         height: 756
         inherit_shape: true
     sensor_rear:
-      selected_mode: cis_4sum_idcg_ln4_raw12_4080x2296_30fps_3993msps
+      selected_mode: cis_4sum_ln4_raw10_4080x2296_30fps_3993msps
     csis:
       sim:
         width: 4080
@@ -11625,8 +11490,11 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 1
+    sensor_input_fps: 30.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
   routing_switch:
     disabled_nodes:
     - sensor_rear2
@@ -11634,8 +11502,7 @@ variants:
     - sensor_front
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   node_configs:
@@ -11666,15 +11533,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -11702,8 +11561,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 2296
@@ -11712,8 +11571,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -11722,7 +11581,7 @@ variants:
         height: 756
         inherit_shape: true
     sensor_rear:
-      selected_mode: cis_4sum_idcg_ln4_raw12_4080x2296_30fps_3993msps
+      selected_mode: cis_4sum_ln4_raw10_4080x2296_30fps_3993msps
     csis:
       sim:
         width: 4080
@@ -11810,6 +11669,9 @@ variants:
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   buffer_overrides: {}
   tags:
   - is-v15
@@ -11824,7 +11686,7 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 1
   routing_switch:
     disabled_nodes:
@@ -11833,8 +11695,7 @@ variants:
     - sensor_front
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   buffer_overrides:
@@ -11878,6 +11739,9 @@ variants:
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   node_configs:
     post_crta:
       sw_timing:
@@ -11906,15 +11770,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -11942,8 +11798,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 2296
@@ -11952,8 +11808,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -12035,7 +11891,7 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 1
   routing_switch:
     disabled_nodes:
@@ -12044,8 +11900,7 @@ variants:
     - sensor_front
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   topology_patch:
@@ -12076,6 +11931,9 @@ variants:
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   node_configs:
     post_crta:
       sw_timing:
@@ -12104,15 +11962,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -12140,8 +11990,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 2296
@@ -12150,8 +12000,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -12245,7 +12095,7 @@ variants:
     is_version: 15
     sw_timing_case: mean
     sw_timing_source: assumed
-    sensor_board: m2-GNG
+    sensor_board: m2s-GNG
     mcsc_dma_channels: 1
   routing_switch:
     disabled_nodes:
@@ -12254,8 +12104,7 @@ variants:
     - sensor_front
     - vps_dof
     - vps_seg
-    - eis_preview
-    - eis_video
+    - eis
     - gdc_m
     - gdc_o
   topology_patch:
@@ -12286,6 +12135,9 @@ variants:
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
   node_configs:
     post_crta:
       sw_timing:
@@ -12314,15 +12166,7 @@ variants:
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal
           measurements.
-    eis_preview:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal
-          measurements.
-    eis_video:
+    eis:
       sw_timing:
         min_ms: 2.5
         mean_ms: 3.0
@@ -12350,8 +12194,8 @@ variants:
         inherit_shape: true
     byrp:
       video_snapshot_enabled: false
-      stat_dma_note: BYRP_WDMA_BYR available for video snapshot; not charged every
-        recording frame.
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when
+        video_snapshot_enabled; OTF remains connected.
       sim:
         width: 4080
         height: 2296
@@ -12360,8 +12204,8 @@ variants:
       selected_mode: Normal
       function: object_detection
       sim:
-        width: 640
-        height: 480
+        width: 512
+        height: 288
         inherit_shape: true
     lme:
       selected_mode: Normal
@@ -12531,51 +12375,216 @@ variants:
   derived_from_variant: cam-rec-r1-fhd30-vdis
   design_conditions_override:
     sw_timing_case: mean
-    exploration_clock_mhz: 400
+    exploration_clock_mhz: 300
     assumed_latency_budget_frames: 3.0
   node_configs:
     csis:
       sim:
-        manual_clock_mhz: 400
+        manual_clock_mhz: 300
     pdp:
       sim:
-        manual_clock_mhz: 400
+        manual_clock_mhz: 300
     byrp:
       sim:
-        manual_clock_mhz: 400
+        manual_clock_mhz: 300
     rgbp:
       sim:
-        manual_clock_mhz: 400
+        manual_clock_mhz: 300
     yuvsc:
       sim:
-        manual_clock_mhz: 400
+        manual_clock_mhz: 300
     mlsc:
       sim:
-        manual_clock_mhz: 400
+        manual_clock_mhz: 300
     mtnr:
       sim:
-        manual_clock_mhz: 400
+        manual_clock_mhz: 300
     msnr:
       sim:
-        manual_clock_mhz: 400
+        manual_clock_mhz: 300
     yuvp:
       sim:
-        manual_clock_mhz: 400
+        manual_clock_mhz: 300
     mcsc:
       sim:
-        manual_clock_mhz: 400
+        manual_clock_mhz: 300
     lme:
       sim:
-        manual_clock_mhz: 400
+        manual_clock_mhz: 300
     vps_od:
       sim:
-        manual_clock_mhz: 400
+        manual_clock_mhz: 300
     gdc_m:
       sim:
-        manual_clock_mhz: 400
+        manual_clock_mhz: 300
     gdc_o:
       sim:
-        manual_clock_mhz: 400
+        manual_clock_mhz: 300
+  tags:
+  - is-v15
+  - exploration-only
+  - assumed-clock-grid
+  - uncalibrated-power
+- id: cam-rec-r1-fhd30-vdis-explored-max
+  severity: medium
+  derived_from_variant: cam-rec-r1-fhd30-vdis
+  design_conditions_override:
+    sw_timing_case: max
+    exploration_clock_mhz: 300
+    assumed_latency_budget_frames: 3.0
+  node_configs:
+    csis:
+      sim:
+        manual_clock_mhz: 300
+    pdp:
+      sim:
+        manual_clock_mhz: 300
+    byrp:
+      sim:
+        manual_clock_mhz: 300
+    rgbp:
+      sim:
+        manual_clock_mhz: 300
+    yuvsc:
+      sim:
+        manual_clock_mhz: 300
+    mlsc:
+      sim:
+        manual_clock_mhz: 300
+    mtnr:
+      sim:
+        manual_clock_mhz: 300
+    msnr:
+      sim:
+        manual_clock_mhz: 300
+    yuvp:
+      sim:
+        manual_clock_mhz: 300
+    mcsc:
+      sim:
+        manual_clock_mhz: 300
+    lme:
+      sim:
+        manual_clock_mhz: 300
+    vps_od:
+      sim:
+        manual_clock_mhz: 300
+    gdc_m:
+      sim:
+        manual_clock_mhz: 300
+    gdc_o:
+      sim:
+        manual_clock_mhz: 300
+  tags:
+  - is-v15
+  - exploration-only
+  - assumed-clock-grid
+  - uncalibrated-power
+- id: cam-rec-r1-fhd60-supersteady-explored-min
+  severity: medium
+  derived_from_variant: cam-rec-r1-fhd60-supersteady
+  design_conditions_override:
+    sw_timing_case: min
+    exploration_clock_mhz: 600
+    assumed_latency_budget_frames: 3.0
+  node_configs:
+    csis:
+      sim:
+        manual_clock_mhz: 600
+    pdp:
+      sim:
+        manual_clock_mhz: 600
+    byrp:
+      sim:
+        manual_clock_mhz: 600
+    rgbp:
+      sim:
+        manual_clock_mhz: 600
+    yuvsc:
+      sim:
+        manual_clock_mhz: 600
+    mlsc:
+      sim:
+        manual_clock_mhz: 600
+    mtnr:
+      sim:
+        manual_clock_mhz: 600
+    msnr:
+      sim:
+        manual_clock_mhz: 600
+    yuvp:
+      sim:
+        manual_clock_mhz: 600
+    mcsc:
+      sim:
+        manual_clock_mhz: 600
+    lme:
+      sim:
+        manual_clock_mhz: 600
+    vps_od:
+      sim:
+        manual_clock_mhz: 600
+    gdc_m:
+      sim:
+        manual_clock_mhz: 600
+    gdc_o:
+      sim:
+        manual_clock_mhz: 600
+  tags:
+  - is-v15
+  - exploration-only
+  - assumed-clock-grid
+  - uncalibrated-power
+- id: cam-rec-r1-fhd60-supersteady-explored-mean
+  severity: medium
+  derived_from_variant: cam-rec-r1-fhd60-supersteady
+  design_conditions_override:
+    sw_timing_case: mean
+    exploration_clock_mhz: 1000
+    assumed_latency_budget_frames: 3.0
+  node_configs:
+    csis:
+      sim:
+        manual_clock_mhz: 1000
+    pdp:
+      sim:
+        manual_clock_mhz: 1000
+    byrp:
+      sim:
+        manual_clock_mhz: 1000
+    rgbp:
+      sim:
+        manual_clock_mhz: 1000
+    yuvsc:
+      sim:
+        manual_clock_mhz: 1000
+    mlsc:
+      sim:
+        manual_clock_mhz: 1000
+    mtnr:
+      sim:
+        manual_clock_mhz: 1000
+    msnr:
+      sim:
+        manual_clock_mhz: 1000
+    yuvp:
+      sim:
+        manual_clock_mhz: 1000
+    mcsc:
+      sim:
+        manual_clock_mhz: 1000
+    lme:
+      sim:
+        manual_clock_mhz: 1000
+    vps_od:
+      sim:
+        manual_clock_mhz: 1000
+    gdc_m:
+      sim:
+        manual_clock_mhz: 1000
+    gdc_o:
+      sim:
+        manual_clock_mhz: 1000
   tags:
   - is-v15
   - exploration-only
@@ -12641,51 +12650,216 @@ variants:
   derived_from_variant: cam-rec-r1-uhd30-vdis
   design_conditions_override:
     sw_timing_case: mean
-    exploration_clock_mhz: 400
+    exploration_clock_mhz: 300
     assumed_latency_budget_frames: 3.0
   node_configs:
     csis:
       sim:
-        manual_clock_mhz: 400
+        manual_clock_mhz: 300
     pdp:
       sim:
-        manual_clock_mhz: 400
+        manual_clock_mhz: 300
     byrp:
       sim:
-        manual_clock_mhz: 400
+        manual_clock_mhz: 300
     rgbp:
       sim:
-        manual_clock_mhz: 400
+        manual_clock_mhz: 300
     yuvsc:
       sim:
-        manual_clock_mhz: 400
+        manual_clock_mhz: 300
     mlsc:
       sim:
-        manual_clock_mhz: 400
+        manual_clock_mhz: 300
     mtnr:
       sim:
-        manual_clock_mhz: 400
+        manual_clock_mhz: 300
     msnr:
       sim:
-        manual_clock_mhz: 400
+        manual_clock_mhz: 300
     yuvp:
       sim:
-        manual_clock_mhz: 400
+        manual_clock_mhz: 300
     mcsc:
       sim:
-        manual_clock_mhz: 400
+        manual_clock_mhz: 300
     lme:
       sim:
-        manual_clock_mhz: 400
+        manual_clock_mhz: 300
     vps_od:
       sim:
-        manual_clock_mhz: 400
+        manual_clock_mhz: 300
     gdc_m:
       sim:
-        manual_clock_mhz: 400
+        manual_clock_mhz: 300
     gdc_o:
       sim:
-        manual_clock_mhz: 400
+        manual_clock_mhz: 300
+  tags:
+  - is-v15
+  - exploration-only
+  - assumed-clock-grid
+  - uncalibrated-power
+- id: cam-rec-r1-uhd30-vdis-explored-max
+  severity: medium
+  derived_from_variant: cam-rec-r1-uhd30-vdis
+  design_conditions_override:
+    sw_timing_case: max
+    exploration_clock_mhz: 300
+    assumed_latency_budget_frames: 3.0
+  node_configs:
+    csis:
+      sim:
+        manual_clock_mhz: 300
+    pdp:
+      sim:
+        manual_clock_mhz: 300
+    byrp:
+      sim:
+        manual_clock_mhz: 300
+    rgbp:
+      sim:
+        manual_clock_mhz: 300
+    yuvsc:
+      sim:
+        manual_clock_mhz: 300
+    mlsc:
+      sim:
+        manual_clock_mhz: 300
+    mtnr:
+      sim:
+        manual_clock_mhz: 300
+    msnr:
+      sim:
+        manual_clock_mhz: 300
+    yuvp:
+      sim:
+        manual_clock_mhz: 300
+    mcsc:
+      sim:
+        manual_clock_mhz: 300
+    lme:
+      sim:
+        manual_clock_mhz: 300
+    vps_od:
+      sim:
+        manual_clock_mhz: 300
+    gdc_m:
+      sim:
+        manual_clock_mhz: 300
+    gdc_o:
+      sim:
+        manual_clock_mhz: 300
+  tags:
+  - is-v15
+  - exploration-only
+  - assumed-clock-grid
+  - uncalibrated-power
+- id: cam-rec-r1-uhd60-supersteady-explored-min
+  severity: medium
+  derived_from_variant: cam-rec-r1-uhd60-supersteady
+  design_conditions_override:
+    sw_timing_case: min
+    exploration_clock_mhz: 600
+    assumed_latency_budget_frames: 3.0
+  node_configs:
+    csis:
+      sim:
+        manual_clock_mhz: 600
+    pdp:
+      sim:
+        manual_clock_mhz: 600
+    byrp:
+      sim:
+        manual_clock_mhz: 600
+    rgbp:
+      sim:
+        manual_clock_mhz: 600
+    yuvsc:
+      sim:
+        manual_clock_mhz: 600
+    mlsc:
+      sim:
+        manual_clock_mhz: 600
+    mtnr:
+      sim:
+        manual_clock_mhz: 600
+    msnr:
+      sim:
+        manual_clock_mhz: 600
+    yuvp:
+      sim:
+        manual_clock_mhz: 600
+    mcsc:
+      sim:
+        manual_clock_mhz: 600
+    lme:
+      sim:
+        manual_clock_mhz: 600
+    vps_od:
+      sim:
+        manual_clock_mhz: 600
+    gdc_m:
+      sim:
+        manual_clock_mhz: 600
+    gdc_o:
+      sim:
+        manual_clock_mhz: 600
+  tags:
+  - is-v15
+  - exploration-only
+  - assumed-clock-grid
+  - uncalibrated-power
+- id: cam-rec-r1-uhd60-supersteady-explored-mean
+  severity: medium
+  derived_from_variant: cam-rec-r1-uhd60-supersteady
+  design_conditions_override:
+    sw_timing_case: mean
+    exploration_clock_mhz: 1000
+    assumed_latency_budget_frames: 3.0
+  node_configs:
+    csis:
+      sim:
+        manual_clock_mhz: 1000
+    pdp:
+      sim:
+        manual_clock_mhz: 1000
+    byrp:
+      sim:
+        manual_clock_mhz: 1000
+    rgbp:
+      sim:
+        manual_clock_mhz: 1000
+    yuvsc:
+      sim:
+        manual_clock_mhz: 1000
+    mlsc:
+      sim:
+        manual_clock_mhz: 1000
+    mtnr:
+      sim:
+        manual_clock_mhz: 1000
+    msnr:
+      sim:
+        manual_clock_mhz: 1000
+    yuvp:
+      sim:
+        manual_clock_mhz: 1000
+    mcsc:
+      sim:
+        manual_clock_mhz: 1000
+    lme:
+      sim:
+        manual_clock_mhz: 1000
+    vps_od:
+      sim:
+        manual_clock_mhz: 1000
+    gdc_m:
+      sim:
+        manual_clock_mhz: 1000
+    gdc_o:
+      sim:
+        manual_clock_mhz: 1000
   tags:
   - is-v15
   - exploration-only
@@ -12697,9 +12871,11 @@ size_profile:
     record_out: 1920x1080
     preview_out: 1920x1080
     motion_estimation: 1008x756
-    object_detection: 640x480
+    object_detection: 512x288
     pyramid_l0: 4080x2296
     pyramid_l1: 2040x1148
     pyramid_l2: 1020x574
     pyramid_l3: 510x287
     pyramid_l4: 255x144
+    cav: 320x180
+    mlsc_out: 4080x2296

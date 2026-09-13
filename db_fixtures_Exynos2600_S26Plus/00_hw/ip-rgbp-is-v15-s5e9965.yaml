@@ -48,20 +48,34 @@ capabilities:
     - name: RGBP_WDMA_DRC
       type: DMA
       direction: write
-      source_file: hardware\api\pablo-hw-api-rgbp-v15_0.c
+      source_file: ischain/is-v15_0_0/is-subdev-rgbp.c
+      purpose: DRC statistics
+      lvn: IS_LVN_RGBP0_DRC
     - name: RGBP_WDMA_SAT
       type: DMA
       direction: write
-      source_file: hardware\api\pablo-hw-api-rgbp-v15_0.c
+      source_file: ischain/is-v15_0_0/is-subdev-rgbp.c
+      purpose: downscaled image
+      lvn: IS_LVN_RGBP0_SAT
     - name: CINFIFO
       type: FIFO
       direction: read
     - name: COUTFIFO
       type: FIFO
       direction: write
+    - name: IS_LVN_RGBP0_HIST
+      type: DMA
+      direction: write
+      provenance_status: kernel_lvn
+      physical_mapping: unverified
+      purpose: histogram statistics
+      lvn: IS_LVN_RGBP0_HIST
+      source_file: ischain/is-v15_0_0/is-subdev-rgbp.c
     sources:
     - path: \\wsl.localhost\Ubuntu\home\neokein\work\12_SM_S947B\exynos\external-modules\camera\camera\hardware\api\pablo-hw-api-rgbp-v15_0.c
       sha256: 6d243d3d9ee7c0ba77554d3941698c4d1d3f820a787f17864cd772ff43f82c62
+    - path: \\wsl.localhost\Ubuntu\home\neokein\work\12_SM_S947B\exynos\external-modules\camera\camera\ischain\is-v15_0_0\is-subdev-rgbp.c
+      sha256: cdef580f91b3d5762ea91453f88e10b899d2fd5a9b642fb121e5ce95776dd208
     provenance_status: kernel_declared
     performance_status: borrowed
 compatible_soc:

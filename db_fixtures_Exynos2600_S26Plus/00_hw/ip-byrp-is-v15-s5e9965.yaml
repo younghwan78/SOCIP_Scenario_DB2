@@ -40,7 +40,9 @@ capabilities:
     - name: BYRP_WDMA_BYR
       type: DMA
       direction: write
-      source_file: hardware\api\pablo-hw-api-byrp-v15_0.c
+      source_file: ischain/is-v15_0_0/is-subdev-byrp.c
+      purpose: full-size Bayer dump
+      lvn: IS_LVN_BYRP0_BYR
     - name: BYRP_WDMA_CDAF
       type: DMA
       direction: write
@@ -70,6 +72,8 @@ capabilities:
     sources:
     - path: \\wsl.localhost\Ubuntu\home\neokein\work\12_SM_S947B\exynos\external-modules\camera\camera\hardware\api\pablo-hw-api-byrp-v15_0.c
       sha256: 832911735daac9633adcdac7cfe2feff3f93fd81ae3b48ff0cfdfdc57f9adbfa
+    - path: \\wsl.localhost\Ubuntu\home\neokein\work\12_SM_S947B\exynos\external-modules\camera\camera\ischain\is-v15_0_0\is-subdev-byrp.c
+      sha256: 82d8d859b9e9aecbe6d2d0d099709e8aa8bbaefa3d89e269a5a17f83ffe790ef
     provenance_status: kernel_declared
     performance_status: borrowed
 compatible_soc:
