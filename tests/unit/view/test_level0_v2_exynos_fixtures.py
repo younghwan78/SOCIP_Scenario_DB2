@@ -73,7 +73,7 @@ def test_camera_recording_fixture_exposes_sensor_display_and_buffer_topology():
     topology_node_ids = {node.data.id for node in topology.nodes}
 
     assert overview.sensors[0].node_id == "sensor_rear"
-    assert overview.sensors[0].sensor_mode == "cis_4sum_idcg_ln4_raw12_4080x2296_30fps_3993msps"
+    assert overview.sensors[0].sensor_mode == "cis_4sum_ln4_raw10_4080x2296_30fps_3993msps"
     assert overview.displays[0].layer_count == 3
     assert "MCSC_PREVIEW" in _route_buffers(graph)
     assert "buf-mcsc-preview" in topology_node_ids

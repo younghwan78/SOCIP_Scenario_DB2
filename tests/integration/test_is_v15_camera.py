@@ -66,4 +66,4 @@ def test_is_v15_strict_load_timing_persistence_and_view(isolated_connection, api
         assert body["nodes"] and body["edges"]
     response = api_client.get(f"/api/v1/simulation/results/{evidence.id}")
     assert response.status_code == 200, response.text
-    assert len(response.json()["sw_task_timing"]) == 5
+    assert len(response.json()["sw_task_timing"]) == 4

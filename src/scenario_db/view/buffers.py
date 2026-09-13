@@ -79,6 +79,8 @@ def _buffer_spec_size(
     the resource overview agree even when fixtures omit size_ref.
     """
 
+    if spec.get("size_status") == "unknown":
+        return None, None
     if spec.get("size"):
         width, height = _parse_size(str(spec["size"]))
         if width and height:

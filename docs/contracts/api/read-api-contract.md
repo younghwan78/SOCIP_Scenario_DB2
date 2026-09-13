@@ -407,3 +407,14 @@ self-cycles. Detailed inter-frame buffer hazards are not simulated. Explicit
 multi-plane port pairs split pixel planes, while a shared producer write is counted
 once per node/port/buffer even when multiple consumers read it. Viewer size references
 resolve arbitrary scenario anchors and variant size overrides, including pyramid layers.
+
+
+Auxiliary DMA with no modeled consumer can be declared at
+`pipeline.buffers.<id>.dma`: `node_id`, `read_ports`/`write_ports`, optional
+`enabled` (default true), and optional `activation_flag` naming a boolean in the
+node configuration. A buffer override can change `dma.enabled` without replacing
+the endpoint's node and port mapping. These endpoints add traffic independently
+of graph edges and history. For an uncharacterized buffer, `size_status: unknown`
+excludes transfers with an explicit warning and keeps viewer dimensions unknown;
+it must not fall back to recording resolution. Set the size reference, format,
+bitdepth and size status together when characterization becomes available.

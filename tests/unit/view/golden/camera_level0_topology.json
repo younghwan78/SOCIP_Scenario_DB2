@@ -162,12 +162,15 @@
         ],
         "capability_badges": [
           "CAMERA",
-          "OTF"
+          "M2M",
+          "OTF",
+          "BUF"
         ],
         "shared_resource": false,
         "matched_issues": [],
         "detail_items": [
-          "Role: rgbp"
+          "Role: rgbp",
+          "Buffers: RGBP_DRC"
         ],
         "warning": false,
         "collapsed_children_count": 0,
@@ -242,7 +245,7 @@
         "matched_issues": [],
         "detail_items": [
           "Role: mlsc",
-          "Buffers: PYRAMID_L0, PYRAMID_L1, PYRAMID_L2, PYRAMID_L3, PYRAMID_L4, LME_INPUT, OD_INPUT"
+          "Buffers: PYRAMID_L0, PYRAMID_L1, PYRAMID_L2, PYRAMID_L3, PYRAMID_L4, LME_INPUT, OD_INPUT, MLSC_SVHIST"
         ],
         "warning": false,
         "collapsed_children_count": 0,
@@ -722,7 +725,7 @@
         "matched_issues": [],
         "detail_items": [
           "Buffer: PYRAMID_L0",
-          "Y / pyramid_l0 / 12b / COMP_OFF"
+          "Y / mlsc_out / 12b / COMP_OFF"
         ],
         "warning": false,
         "collapsed_children_count": 0,
@@ -945,10 +948,10 @@
         "summary_badges": [],
         "capability_badges": [],
         "memory": {
-          "format": "YUV420",
+          "format": "RGB",
           "bitdepth": 8,
-          "width": 640,
-          "height": 480,
+          "width": 512,
+          "height": 288,
           "fps": 30,
           "compression": "COMP_OFF"
         },
@@ -956,7 +959,7 @@
         "matched_issues": [],
         "detail_items": [
           "Buffer: OD_INPUT",
-          "YUV420 / object_detection / 8b / COMP_OFF"
+          "RGB / object_detection / 8b / COMP_OFF"
         ],
         "warning": false,
         "collapsed_children_count": 0,
@@ -973,6 +976,72 @@
       "position": {
         "x": 800.0,
         "y": 813.0
+      }
+    },
+    {
+      "data": {
+        "id": "buf-rgbp-drc",
+        "label": "Rgbp Drc",
+        "type": "buffer",
+        "layer": "memory",
+        "summary_badges": [],
+        "capability_badges": [],
+        "memory": {
+          "fps": 30
+        },
+        "shared_resource": false,
+        "matched_issues": [],
+        "detail_items": [
+          "Buffer: RGBP_DRC"
+        ],
+        "warning": false,
+        "collapsed_children_count": 0,
+        "view_hints": {
+          "lane": "memory",
+          "stage": "processing",
+          "order": 24,
+          "width": 210,
+          "height": 60,
+          "emphasis": "normal",
+          "collapsed": false
+        }
+      },
+      "position": {
+        "x": 800.0,
+        "y": 1093.0
+      }
+    },
+    {
+      "data": {
+        "id": "buf-mlsc-svhist",
+        "label": "Mlsc Svhist",
+        "type": "buffer",
+        "layer": "memory",
+        "summary_badges": [],
+        "capability_badges": [],
+        "memory": {
+          "fps": 30
+        },
+        "shared_resource": false,
+        "matched_issues": [],
+        "detail_items": [
+          "Buffer: MLSC_SVHIST"
+        ],
+        "warning": false,
+        "collapsed_children_count": 0,
+        "view_hints": {
+          "lane": "memory",
+          "stage": "processing",
+          "order": 25,
+          "width": 210,
+          "height": 60,
+          "emphasis": "normal",
+          "collapsed": false
+        }
+      },
+      "position": {
+        "x": 800.0,
+        "y": 1205.0
       }
     },
     {
@@ -1002,7 +1071,7 @@
         "view_hints": {
           "lane": "memory",
           "stage": "processing",
-          "order": 24,
+          "order": 26,
           "width": 210,
           "height": 60,
           "emphasis": "normal",
@@ -1160,7 +1229,7 @@
           "Route: mlsc -> mtnr",
           "Edge type: M2M",
           "Buffer: PYRAMID_L0",
-          "Y / pyramid_l0 / 12b / COMP_OFF"
+          "Y / mlsc_out / 12b / COMP_OFF"
         ]
       }
     },
@@ -1191,7 +1260,7 @@
           "Route: mlsc -> mtnr",
           "Edge type: M2M",
           "Buffer: PYRAMID_L0",
-          "Y / pyramid_l0 / 12b / COMP_OFF"
+          "Y / mlsc_out / 12b / COMP_OFF"
         ]
       }
     },
@@ -1676,10 +1745,10 @@
           }
         ],
         "memory": {
-          "format": "YUV420",
+          "format": "RGB",
           "bitdepth": 8,
-          "width": 640,
-          "height": 480,
+          "width": 512,
+          "height": 288,
           "fps": 30,
           "compression": "COMP_OFF"
         },
@@ -1687,7 +1756,7 @@
           "Route: mlsc -> vps_od",
           "Edge type: M2M",
           "Buffer: OD_INPUT",
-          "YUV420 / object_detection / 8b / COMP_OFF"
+          "RGB / object_detection / 8b / COMP_OFF"
         ]
       }
     },
@@ -1707,10 +1776,10 @@
           }
         ],
         "memory": {
-          "format": "YUV420",
+          "format": "RGB",
           "bitdepth": 8,
-          "width": 640,
-          "height": 480,
+          "width": 512,
+          "height": 288,
           "fps": 30,
           "compression": "COMP_OFF"
         },
@@ -1718,7 +1787,7 @@
           "Route: mlsc -> vps_od",
           "Edge type: M2M",
           "Buffer: OD_INPUT",
-          "YUV420 / object_detection / 8b / COMP_OFF"
+          "RGB / object_detection / 8b / COMP_OFF"
         ]
       }
     },
@@ -1738,6 +1807,114 @@
     {
       "data": {
         "id": "e-topo-24-src-buf",
+        "source": "ip-rgbp",
+        "target": "buf-rgbp-drc",
+        "flow_type": "M2M",
+        "buffer_ref": "RGBP_DRC",
+        "producer": "rgbp",
+        "consumer": "yuvp",
+        "port_pairs": [
+          {
+            "src": "RGBP_WDMA_DRC",
+            "dst": "YUVP_RDMA_DRC0"
+          },
+          {
+            "src": "RGBP_WDMA_DRC",
+            "dst": "YUVP_RDMA_DRC1"
+          }
+        ],
+        "memory": {
+          "fps": 30
+        },
+        "detail_items": [
+          "Route: rgbp -> yuvp",
+          "Edge type: M2M",
+          "Buffer: RGBP_DRC"
+        ]
+      }
+    },
+    {
+      "data": {
+        "id": "e-topo-24-buf-tgt",
+        "source": "buf-rgbp-drc",
+        "target": "ip-yuvp",
+        "flow_type": "M2M",
+        "buffer_ref": "RGBP_DRC",
+        "producer": "rgbp",
+        "consumer": "yuvp",
+        "port_pairs": [
+          {
+            "src": "RGBP_WDMA_DRC",
+            "dst": "YUVP_RDMA_DRC0"
+          },
+          {
+            "src": "RGBP_WDMA_DRC",
+            "dst": "YUVP_RDMA_DRC1"
+          }
+        ],
+        "memory": {
+          "fps": 30
+        },
+        "detail_items": [
+          "Route: rgbp -> yuvp",
+          "Edge type: M2M",
+          "Buffer: RGBP_DRC"
+        ]
+      }
+    },
+    {
+      "data": {
+        "id": "e-topo-25-src-buf",
+        "source": "ip-mlsc",
+        "target": "buf-mlsc-svhist",
+        "flow_type": "M2M",
+        "buffer_ref": "MLSC_SVHIST",
+        "producer": "mlsc",
+        "consumer": "yuvp",
+        "port_pairs": [
+          {
+            "src": "MLSC_W_SVHIST",
+            "dst": "YUVP_RDMA_SVHIST"
+          }
+        ],
+        "memory": {
+          "fps": 30
+        },
+        "detail_items": [
+          "Route: mlsc -> yuvp",
+          "Edge type: M2M",
+          "Buffer: MLSC_SVHIST"
+        ]
+      }
+    },
+    {
+      "data": {
+        "id": "e-topo-25-buf-tgt",
+        "source": "buf-mlsc-svhist",
+        "target": "ip-yuvp",
+        "flow_type": "M2M",
+        "buffer_ref": "MLSC_SVHIST",
+        "producer": "mlsc",
+        "consumer": "yuvp",
+        "port_pairs": [
+          {
+            "src": "MLSC_W_SVHIST",
+            "dst": "YUVP_RDMA_SVHIST"
+          }
+        ],
+        "memory": {
+          "fps": 30
+        },
+        "detail_items": [
+          "Route: mlsc -> yuvp",
+          "Edge type: M2M",
+          "Buffer: MLSC_SVHIST"
+        ]
+      }
+    },
+    {
+      "data": {
+        "id": "e-topo-26-src-buf",
         "source": "ip-mcsc",
         "target": "buf-mcsc-preview",
         "flow_type": "M2M",
@@ -1768,7 +1945,7 @@
     },
     {
       "data": {
-        "id": "e-topo-24-buf-tgt",
+        "id": "e-topo-26-buf-tgt",
         "source": "buf-mcsc-preview",
         "target": "ip-dpu",
         "flow_type": "M2M",
@@ -1799,7 +1976,7 @@
     },
     {
       "data": {
-        "id": "e-topo-25-src-buf",
+        "id": "e-topo-27-src-buf",
         "source": "ip-mcsc",
         "target": "buf-mcsc-preview",
         "flow_type": "M2M",
@@ -1830,7 +2007,7 @@
     },
     {
       "data": {
-        "id": "e-topo-25-buf-tgt",
+        "id": "e-topo-27-buf-tgt",
         "source": "buf-mcsc-preview",
         "target": "ip-mfc_enc",
         "flow_type": "M2M",
@@ -1874,11 +2051,11 @@
   },
   "metadata": {
     "canvas_w": 1120,
-    "canvas_h": 2664,
+    "canvas_h": 2848,
     "layout": "level0-resource-topology",
     "active_node_count": 19,
-    "active_edge_count": 26,
-    "buffer_node_count": 8,
+    "active_edge_count": 28,
+    "buffer_node_count": 10,
     "variant_overlay": {
       "resolved": true,
       "inheritance_chain": [
@@ -1890,8 +2067,7 @@
         "sensor_front",
         "vps_dof",
         "vps_seg",
-        "eis_preview",
-        "eis_video",
+        "eis",
         "gdc_m",
         "gdc_o"
       ],
@@ -1901,7 +2077,7 @@
         "add_edges": 2,
         "remove_edges": 1
       },
-      "node_config_count": 22,
+      "node_config_count": 21,
       "buffer_override_count": 0,
       "sw_task_count": 0
     }
@@ -2005,16 +2181,24 @@
         "resource_kind": "camera",
         "subsystem": "camera",
         "role": "rgbp",
-        "flow": "OTF",
-        "buffer_refs": [],
+        "output": {
+          "size_label": "RGBP_DRC"
+        },
+        "flow": "mixed",
+        "buffer_refs": [
+          "RGBP_DRC"
+        ],
         "input_buffer_refs": [],
         "status": "active",
         "badges": [
           "CAMERA",
-          "OTF"
+          "M2M",
+          "OTF",
+          "BUF"
         ],
         "detail_items": [
-          "Role: rgbp"
+          "Role: rgbp",
+          "Buffers: RGBP_DRC"
         ]
       },
       {
@@ -2049,7 +2233,7 @@
           "format": "Y",
           "bitdepth": 12,
           "compression": "COMP_OFF",
-          "size_label": "pyramid_l0"
+          "size_label": "mlsc_out"
         },
         "flow": "mixed",
         "buffer_refs": [
@@ -2059,7 +2243,8 @@
           "PYRAMID_L3",
           "PYRAMID_L4",
           "LME_INPUT",
-          "OD_INPUT"
+          "OD_INPUT",
+          "MLSC_SVHIST"
         ],
         "input_buffer_refs": [],
         "status": "active",
@@ -2071,7 +2256,7 @@
         ],
         "detail_items": [
           "Role: mlsc",
-          "Buffers: PYRAMID_L0, PYRAMID_L1, PYRAMID_L2, PYRAMID_L3, PYRAMID_L4, LME_INPUT, OD_INPUT"
+          "Buffers: PYRAMID_L0, PYRAMID_L1, PYRAMID_L2, PYRAMID_L3, PYRAMID_L4, LME_INPUT, OD_INPUT, MLSC_SVHIST"
         ]
       },
       {
@@ -2083,7 +2268,7 @@
         "subsystem": "camera",
         "role": "object_detection",
         "input": {
-          "format": "YUV420",
+          "format": "RGB",
           "bitdepth": 8,
           "compression": "COMP_OFF",
           "size_label": "object_detection"
@@ -2201,7 +2386,7 @@
           "format": "Y",
           "bitdepth": 12,
           "compression": "COMP_OFF",
-          "size_label": "pyramid_l0"
+          "size_label": "mlsc_out"
         },
         "flow": "OTF",
         "buffer_refs": [],
@@ -2249,9 +2434,15 @@
         "resource_kind": "camera",
         "subsystem": "camera",
         "role": "yuvp",
+        "input": {
+          "size_label": "RGBP_DRC"
+        },
         "flow": "OTF",
         "buffer_refs": [],
-        "input_buffer_refs": [],
+        "input_buffer_refs": [
+          "RGBP_DRC",
+          "MLSC_SVHIST"
+        ],
         "status": "active",
         "badges": [
           "CAMERA",
@@ -2453,10 +2644,28 @@
         "consumer_node_ids": [
           "vps_od"
         ],
-        "size_label": "640x480",
-        "format": "YUV420",
+        "size_label": "512x288",
+        "format": "RGB",
         "bitdepth": 8,
         "compression": "COMP_OFF",
+        "llc_allocated": false
+      },
+      {
+        "buffer_ref": "RGBP_DRC",
+        "subsystem": "camera",
+        "producer_node_id": "rgbp",
+        "consumer_node_ids": [
+          "yuvp"
+        ],
+        "llc_allocated": false
+      },
+      {
+        "buffer_ref": "MLSC_SVHIST",
+        "subsystem": "camera",
+        "producer_node_id": "mlsc",
+        "consumer_node_ids": [
+          "yuvp"
+        ],
         "llc_allocated": false
       },
       {
@@ -2494,7 +2703,7 @@
     "sensors": [
       {
         "node_id": "sensor_rear",
-        "sensor_mode": "cis_4sum_idcg_ln4_raw12_4080x2296_30fps_3993msps",
+        "sensor_mode": "cis_4sum_ln4_raw10_4080x2296_30fps_3993msps",
         "module_ref": "ip-sensor-gng-s5e9965",
         "output": {
           "width": 4080,

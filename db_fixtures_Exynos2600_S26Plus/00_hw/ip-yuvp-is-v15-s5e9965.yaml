@@ -46,11 +46,15 @@ capabilities:
     - name: YUVP_RDMA_DRC0
       type: DMA
       direction: read
-      source_file: hardware\api\pablo-hw-api-yuvp-v15_0.c
+      source_file: ischain/is-v15_0_0/is-subdev-yuvp.c
+      purpose: DRC statistics input
+      lvn: IS_LVN_YUVP_DRC
     - name: YUVP_RDMA_DRC1
       type: DMA
       direction: read
-      source_file: hardware\api\pablo-hw-api-yuvp-v15_0.c
+      source_file: ischain/is-v15_0_0/is-subdev-yuvp.c
+      purpose: DRC statistics input
+      lvn: IS_LVN_YUVP_DRC
     - name: YUVP_RDMA_PCC_HIST
       type: DMA
       direction: read
@@ -81,9 +85,17 @@ capabilities:
     - name: COUTFIFO
       type: FIFO
       direction: write
+    - name: YUVP_RDMA_SVHIST
+      type: DMA
+      direction: read
+      provenance_status: user_confirmed_logical
+      physical_mapping: unverified
+      purpose: SVHIST input; user-confirmed logical endpoint, physical mapping unverified
     sources:
     - path: \\wsl.localhost\Ubuntu\home\neokein\work\12_SM_S947B\exynos\external-modules\camera\camera\hardware\api\pablo-hw-api-yuvp-v15_0.c
       sha256: 994be17b489015e93fb2dc93e9d84a704eb2c9bad71d0111fb09853bab170e09
+    - path: \\wsl.localhost\Ubuntu\home\neokein\work\12_SM_S947B\exynos\external-modules\camera\camera\ischain\is-v15_0_0\is-subdev-yuvp.c
+      sha256: c4b93900ea47f2d97af259aa8c308da6e9b9776e13b7be5925df20e371b18584
     provenance_status: kernel_declared
     performance_status: borrowed
 compatible_soc:

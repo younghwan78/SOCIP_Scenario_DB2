@@ -48,3 +48,13 @@ def test_vdis_pyramid_preserves_sensor_size_and_five_layers():
         memory = by_buffer[f"PYRAMID_L{layer}"].memory
         factor = 2 ** layer
         assert (memory.width, memory.height) == ((4080 + factor - 1) // factor, (2296 + factor - 1) // factor)
+
+
+def test_statistics_with_unknown_size_do_not_inherit_record_resolution():
+    from scenario_db.view.level0_v2 import _buffer_size
+    graph = golden._graph(*GRAPH_ARGS)
+    view = golden.service._project_semantic_level1(graph)
+    for name in ("RGBP_DRC", "MLSC_SVHIST"):
+        edge = next(e.data for e in view.edges if e.data.buffer_ref == name)
+        assert edge.memory.width is None and edge.memory.height is None
+        assert _buffer_size(graph, graph.scenario.pipeline["buffers"][name]) == (None, None)
