@@ -168,3 +168,24 @@ def preview_template_sweep(request: ExplorationTemplateSweepPreviewRequest, db: 
             return preview_template_sweep_request(db, request)
     except (ValidationError, ValueError) as exc:
         raise HTTPException(status_code=422, detail=validation_detail(exc)) from exc
+
+
+from scenario_db.sim.scenario_exploration import ScenarioExplorationRequest, preview_scenario
+from scenario_db.db.repositories.scenario_graph import load_canonical_graph
+
+
+@router.post('/scenarios/preview', dependencies=[Depends(require_roles('analyst', 'writer', 'admin'))])
+def preview_existing_scenario(request: ScenarioExplorationRequest, db: Session = Depends(get_db)):
+    try:
+        settings = get_settings()
+        enforce_request_size(request, settings.exploration_max_request_bytes)
+        enforce_timeline_frame_limit(request.config.timeline_frame_count, settings.simulation_max_timeline_frames)
+        with admission_slot('exploration', settings.exploration_max_concurrent_requests):
+            graph = load_canonical_graph(db, request.scenario_id, request.variant_id)
+            if request.config.timing_profile is not None:
+                raise ValueError('use simulation/run for verified measured-profile replay')
+            return preview_scenario(graph, request, max_cases=settings.exploration_max_cases)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=validation_detail(exc)) from exc

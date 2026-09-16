@@ -5,9 +5,9 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from scenario_db.db.models.capability import IpCatalog, SocPlatform
-from scenario_db.db.models.definition import Project, Scenario
+from scenario_db.db.models.definition import Project, Scenario, ScenarioVariant
 from scenario_db.db.repositories.scenario_graph import CanonicalScenarioGraph
-from scenario_db.db.repositories.variant_resolution import ResolvedScenarioVariant
+from scenario_db.db.repositories.variant_resolution import ResolvedScenarioVariant, resolve_variant_from_rows
 from scenario_db.sim.adapter import build_simulation_inputs
 from scenario_db.sim.exploration import ExplorationSweep, compile_exploration_sweep
 from scenario_db.sim.chain_templates import compile_chain_template, compile_chain_template_sweep
@@ -143,8 +143,9 @@ def run_import_bundle_preview(
     run_config = config or SimulationRunConfig(include_timeline=False)
     for doc in docs:
         scenario = _scenario_from_doc(doc)
+        rows = {v["id"]: ScenarioVariant(scenario_id=scenario.id, **v) for v in doc.get("variants") or []}
         for variant_doc in doc.get("variants") or []:
-            variant = _variant_from_doc(scenario.id, variant_doc)
+            variant = resolve_variant_from_rows(rows, scenario.id, variant_doc["id"])
             graph = CanonicalScenarioGraph(
                 scenario=scenario,
                 variant=variant,

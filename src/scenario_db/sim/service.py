@@ -31,6 +31,23 @@ def run_simulation_request(db: Session, request: SimulateRequest) -> SimulateRun
         inputs = build_simulation_inputs(graph, request.config)
         _enforce_input_limits(inputs)
         dvfs_tables, execution_context = _resolve_dvfs_tables(db, graph, request)
+        if request.config.timing_profile is not None:
+            profile = request.config.timing_profile
+            measured = get_evidence(db, profile.evidence_ref)
+            if measured is None or measured.kind != "evidence.measurement":
+                raise ValueError("timing profile source measurement must be loaded")
+            if measured.yaml_sha256 != profile.evidence_sha256:
+                raise ValueError("timing profile source hash mismatch")
+            if (measured.project_ref, measured.scenario_ref, measured.variant_ref) != (
+                    profile.project_ref, profile.scenario_ref, profile.variant_ref):
+                raise ValueError("timing profile source scope mismatch")
+            context = execution_context.model_dump(mode="json", exclude_none=True)
+            for key in ("silicon_rev", "sw_baseline_ref", "thermal", "power_state", "ambient_temp_c", "dvfs_table_ref", "dvfs_version", "sw_runtime_overrides"):
+                captured = profile.capture_context.get(key)
+                if (captured is None and key in {"silicon_rev", "sw_baseline_ref", "thermal"}) or captured != (measured.execution_context or {}).get(key) or captured != context.get(key):
+                    raise ValueError(f"timing profile capture context mismatch or missing: {key}")
+            if request.config.dvfs_overrides or request.dvfs_tables:
+                raise ValueError("measured timing replay does not support DVFS extrapolation")
     except LookupError as exc:
         raise NotFoundError(str(exc)) from exc
     except ValueError as exc:
@@ -312,6 +329,7 @@ def _simulation_evidence_dict(evidence) -> dict:
         ),
         "aggregation": evidence.aggregation.model_dump(mode="json", exclude_none=True),
         "kpi": dict(evidence.kpi),
+        "derived_from": [str(ref) for ref in evidence.derived_from],
         "run_info": evidence.run.model_dump(mode="json", exclude_none=True),
         "ip_breakdown": [item.model_dump(mode="json", exclude_none=True) for item in evidence.ip_breakdown],
         "dma_breakdown": [item.model_dump(mode="json", exclude_none=True) for item in evidence.dma_breakdown],

@@ -26,6 +26,8 @@ class Scenario(Base):
     pipeline       = Column(JSONB, nullable=False)
     size_profile   = Column(JSONB)
     design_axes    = Column(JSONB)
+    parametric_sweeps = Column(JSONB)
+    provenance = Column(JSONB)
     yaml_sha256    = Column(Text, nullable=False)
 
 

@@ -1,0 +1,40 @@
+# Synthetic example only; replace all values with your internal profiling capture.
+schema_version: '2.2'
+id: meas-profiling-example-r1
+project_ref: proj-sm-s947b
+scenario_ref: uc-camera-recording
+variant_ref: cam-rec-r1-fhd30-vdis
+measured_at: '2026-09-16T10:00:00+09:00'
+execution_context:
+  silicon_rev: EVT1
+  sw_baseline_ref: sw-vendor-v1.2.3
+  thermal: room
+  method: measurement
+provenance:
+  collection_method: synthetic-documentation-example
+sw_task_timing:
+  - task: eis
+    min_ms: 1.0
+    mean_ms: 2.0
+    max_ms: 3.0
+    samples: 100
+    value_source: measured
+profiling:
+  hw_task_timing:
+    - task: gdc
+      node_id: gdc
+      min_ms: 0.4
+      mean_ms: 0.5
+      max_ms: 0.7
+      samples: 100
+      runtime_basis: wall
+  sw_event_latency:
+    - edge_id: gdc_done_to_eis
+      predecessor_task: gdc
+      successor_task: eis
+      source_anchor: end
+      pairing: correlation_id
+      min_ms: 0.1
+      mean_ms: 0.2
+      max_ms: 0.3
+      samples: 100

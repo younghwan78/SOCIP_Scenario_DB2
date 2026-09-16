@@ -120,7 +120,11 @@ class IPWorkload(BaseScenarioModel):
         return max(0, self.width) * max(0, self.height)
 
 
+from scenario_db.models.evidence.profiling import MeasuredTimingProfile
+
+
 class SimulationRunConfig(BaseScenarioModel):
+    timing_profile: MeasuredTimingProfile | None = None
     asv_group: int = 4
     fps: float | None = None
     sw_margin: float = SW_MARGIN_DEFAULT
@@ -262,6 +266,7 @@ class TimelineEvent(BaseScenarioModel):
 
 
 class SimRunResult(BaseScenarioModel):
+    timing_profile: MeasuredTimingProfile | None = None
     scenario_id: str
     variant_id: str
     total_power_mw: float

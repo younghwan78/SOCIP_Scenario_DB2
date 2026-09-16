@@ -118,6 +118,12 @@ def sim_params_for_node(
             "mode-specific ppc and unit power may default to zero."
         )
     merged = {**sim, **mode_params, **role_params, **role_mode_params, **override_params, **override_mode_params}
+    caps = [float(m["max_clock_mhz"]) for m in (ip_row.capabilities or {}).get("operating_modes", [])
+            if str(m.get("id")) == str(mode) and m.get("max_clock_mhz") is not None]
+    if merged.get("max_clock_mhz") is not None:
+        caps.append(float(merged["max_clock_mhz"]))
+    if caps:
+        merged["max_clock_mhz"] = min(caps)
     hw_name = merged.get("hw_name") or merged.get("hw_name_in_sim") or fallback_hw_name(ip_row.id)
     ppc = float(merged.get("ppc") or 0.0)
     unit_power = float(merged.get("unit_power_mw_mp") or 0.0)

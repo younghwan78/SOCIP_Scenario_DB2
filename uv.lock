@@ -32,6 +32,11 @@ dependencies = [
     { name = "uvicorn", extra = ["standard"] },
 ]
 
+[package.optional-dependencies]
+profiling = [
+    { name = "perfetto" },
+]
+
 [package.dev-dependencies]
 dashboard = [
     { name = "plotly" },
@@ -69,6 +74,7 @@ sim = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.18.4" },
     { name = "fastapi", specifier = ">=0.115" },
+    { name = "perfetto", marker = "extra == 'profiling'", specifier = ">=0.58.2" },
     { name = "plotly", specifier = ">=5.20" },
     { name = "psycopg2-binary", specifier = ">=2.9.11" },
     { name = "pydantic", specifier = ">=2.13.2" },
@@ -77,6 +83,7 @@ requires-dist = [
     { name = "sqlalchemy", specifier = ">=2.0.49" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
 ]
+provides-extras = ["profiling"]
 
 [package.metadata.requires-dev]
 dashboard = [
@@ -2429,6 +2436,18 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/5a/82/42f767fc1c1143d6fd36efb827202a2d997a375e160a71eb2888a925aac1/pathspec-1.1.1.tar.gz", hash = "sha256:17db5ecd524104a120e173814c90367a96a98d07c45b2e10c2f3919fff91bf5a", size = 135180, upload-time = "2026-04-27T01:46:08.907Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f1/d9/7fb5aa316bc299258e68c73ba3bddbc499654a07f151cba08f6153988714/pathspec-1.1.1-py3-none-any.whl", hash = "sha256:a00ce642f577bf7f473932318056212bc4f8bfdf53128c78bbd5af0b9b20b189", size = 57328, upload-time = "2026-04-27T01:46:07.06Z" },
+]
+
+[[package]]
+name = "perfetto"
+version = "0.58.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "protobuf" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b9/42/faefb17f233dd2dfcc604c0ccec401fefa50513ac5ae97fd5e91f3d7335e/perfetto-0.58.2.tar.gz", hash = "sha256:54e0e8616dcd9fc1e087914d747370375aeb2f8dacf68ae7ead8c3c5e596a0c7", size = 326047, upload-time = "2026-08-24T22:25:54.288Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/47/ec/0763833e57af5cb135e7485e2d4c0ab15df78e36f4b81eb31446ea053ec5/perfetto-0.58.2-py3-none-any.whl", hash = "sha256:024d37db3e1938a0247311337daf419c7204af757fb303cdc1dca46fa8d83cfe", size = 344338, upload-time = "2026-08-24T22:25:52.752Z" },
 ]
 
 [[package]]

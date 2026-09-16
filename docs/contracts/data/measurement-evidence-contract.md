@@ -184,3 +184,12 @@ measurement import가 `id`를 자동 생성할 때는 같은 날 재측정을 �
 
 - `tests/unit/fixtures/evidence/meas-camera-recording-UHD60-EVT0-sw123.yaml`
 - `demo/fixtures/03_evidence/meas-UHD60-EVT0-sw123.yaml`
+
+
+## Profiling extension (2026-09-16)
+
+`hw_task_timing` stores per-task/node `min_ms`, `mean_ms`, `max_ms`, positive `samples`, and `runtime_basis` (wall/active). `sw_event_latency` stores event-pair statistics with `edge_id`, `predecessor_task`, `successor_task`, source/target anchors and pairing method. Both are typed, persisted JSONB fields exposed by EvidenceResponse. SW runtime retains the compatible `sw_task_timing` contract; the summary importer requires all three runtime statistics and sample count.
+
+Measured sequence events retain unique event instance/task_id, logical_task_id, node_id, task_type, integer start_ns/duration_ns, track_id, predecessor event IDs, and origin-relative chart times in ms. Timestamp order alone does not imply a dependency. Summary-only input creates no sequence. New profiling imports stamp provenance.import_fingerprint and require a new evidence ID for changes.
+
+See [profiling guide](../../guides/profiling-and-scenario-exploration.md) for input examples, limitations and profile revision/replay behavior.

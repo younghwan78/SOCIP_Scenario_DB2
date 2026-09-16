@@ -23,6 +23,21 @@ def build_simulation_inputs(
     """Convert an effective canonical graph into simulation-engine inputs."""
 
     run_config = config or SimulationRunConfig()
+    if run_config.timing_profile is not None:
+        from copy import deepcopy
+        from dataclasses import replace
+        variant = deepcopy(graph.variant)
+        variant.node_configs = variant.node_configs or {}
+        for node, stats in run_config.timing_profile.task_runtime.items():
+            node_config = variant.node_configs.get(node, {})
+            if node_config.get("sw_timing"):
+                previous = node_config["sw_timing"]
+                node_config["sw_timing"] = {**previous, **stats.model_dump(), "value_source": "measured"}
+                for stale in ("p50_ms", "p95_ms"):
+                    node_config["sw_timing"].pop(stale, None)
+                # Captured duration already includes the captured bitrate; do not rescale it again.
+                node_config.pop("sw_bitrate_scaling", None)
+        graph = replace(graph, variant=variant)
     fps = _fps(graph, run_config)
     shapes = propagate_shapes(graph)
     workloads: list[IPWorkload] = []
@@ -68,6 +83,8 @@ def build_simulation_inputs(
     transfers.extend(standalone_port_transfers(graph, {item.node_id: item for item in workloads}, comp_catalog, warnings))
     transfers.extend(supplemental_transfers(graph))
     for node_id, profile in timing_profiles(graph).items():
+        if profile.get("start_latency_ref"):
+            warnings.append(f"{node_id}: named event {profile['start_latency_ref']} is metadata only; select an explicitly mapped measured timing profile to apply its latency.")
         if profile.get("value_source") == "assumed":
             warnings.append(f"{node_id}: assumed wall time; not a measured CPU active-time/power value.")
     if (graph.variant.design_conditions or {}).get("sensor_support"):
@@ -83,7 +100,9 @@ def build_simulation_inputs(
     # clock bound: CPU/HW overlap inside that interval is not characterized.
     by_node = {item.node_id: item for item in workloads}
     for stage, profile in timing_profiles(graph).items():
-        budget = float(profile[f"{timing_case(graph)}_ms"])
+        selected_case = (run_config.timing_profile.statistic if run_config.timing_profile
+                         and stage in run_config.timing_profile.task_runtime else timing_case(graph))
+        budget = float(profile[f"{selected_case}_ms"])
         for node_id in profile.get("includes_hw_nodes", []):
             workload = by_node.get(node_id)
             if workload is None or workload.sim_params.ppc <= 0 or budget <= 0:
@@ -94,6 +113,19 @@ def build_simulation_inputs(
                 workload.clock_correction_reason = f"included_stage_budget({stage}, {budget:g}ms; lower bound)"
 
 
+    tasks, edges = timeline_tasks(graph), timeline_edges(graph)
+    sw_profiles = timing_profiles(graph)
+    if run_config.timing_profile is not None:
+        from scenario_db.sim.measured_timing import apply_measured_timing
+        tasks, edges = apply_measured_timing(graph, run_config.timing_profile, tasks, edges)
+        for node, stats in run_config.timing_profile.task_runtime.items():
+            if node in sw_profiles:
+                sw_profiles[node] = {**sw_profiles[node], **stats.model_dump(), "value_source": "measured",
+                                     "source_note": f"timing profile {run_config.timing_profile.profile_id}@{run_config.timing_profile.revision}"}
+                for stale in ("p50_ms", "p95_ms"):
+                    sw_profiles[node].pop(stale, None)
+        warnings.append("Measured timing profile applies at captured conditions only; wall time does not calibrate active power.")
+
     return SimulationInputs(
         scenario_id=graph.scenario_id,
         variant_id=graph.variant_id,
@@ -101,9 +133,9 @@ def build_simulation_inputs(
         config=run_config.model_copy(update={"fps": fps}),
         workloads=workloads,
         port_transfers=transfers,
-        timeline_tasks=timeline_tasks(graph),
-        timeline_edges=timeline_edges(graph),
-        sw_task_timing=list(timing_profiles(graph).values()),
+        timeline_tasks=tasks,
+        timeline_edges=edges,
+        sw_task_timing=list(sw_profiles.values()),
         external_devices=external_devices(graph),
         topology_order=[item.node_id for item in workloads],
         warnings=warnings,

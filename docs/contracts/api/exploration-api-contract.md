@@ -327,3 +327,12 @@ Exploration Workbench는 이 API를 다음 순서로 사용한다.
 4. 후보 비교가 필요하면 입력 종류에 맞는 preview endpoint를 호출한다.
 5. 후보별 상세 결과는 기존 Evidence Dashboard result viewer component를 재사용한다.
 6. 저장/promote는 별도 명시 동작으로 분리한다.
+
+
+## Existing scenario OFAT preview (2026-09-16)
+
+`POST /api/v1/exploration/scenarios/preview` requires analyst/writer/admin. Body: scenario_id, variant_id, project_ref, axes, optional config/dvfs_tables/include_results. Axes support `sw_margin` or `node_clock_mhz` with node_id and positive finite values. Resolved baseline is included first. Case count includes baseline and uses exploration_max_cases (default 500); request/concurrency/timeline limits also apply.
+
+Response has persisted=false, strategy=one_factor_at_a_time, baseline_case_id and cases. Cases include input_hash, metrics, delta_from_baseline, feasible, missing_power_domains and optimization_eligible. Partial power yields total_power_mw=null and known_power_mw separately. This endpoint does not save candidates or choose Pareto optima. Measured profile replay uses `/simulation/run` with source verification; this endpoint rejects timing_profile.
+
+See [profiling and exploration guide](../../guides/profiling-and-scenario-exploration.md).

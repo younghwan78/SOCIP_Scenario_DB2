@@ -62,6 +62,8 @@ class Evidence(Base):
     provenance          = Column(JSONB)             # meas only
     cpu_breakdown       = Column(JSONB)             # meas: cluster별 power/freq residency digest
     sw_task_timing      = Column(JSONB)             # meas: perfetto 기반 task별 수행시간 digest
+    hw_task_timing      = Column(JSONB)
+    sw_event_latency    = Column(JSONB)
     metric_observations = Column(JSONB)             # sim + meas: catalog-validated comparable metrics
     artifacts           = Column(JSONB)
     yaml_sha256         = Column(Text, nullable=False)

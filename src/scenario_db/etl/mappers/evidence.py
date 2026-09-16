@@ -59,6 +59,10 @@ def upsert_measurement(raw: dict, sha256: str, session: Session) -> None:
     if row.yaml_sha256 == sha256:
         return
 
+    if row.yaml_sha256 and (obj.provenance.import_fingerprint or
+                           (row.provenance or {}).get("import_fingerprint")):
+        raise ValueError("profiling evidence is immutable; use a new evidence id")
+
     # MeasuredKpi는 float/int와 MeasuredKpi 모델이 혼재 — 직렬화 처리
     def _kpi_val(v):
         if hasattr(v, "model_dump"):
@@ -78,6 +82,8 @@ def upsert_measurement(raw: dict, sha256: str, session: Session) -> None:
     row.sweep_context       = obj.sweep_context.model_dump(exclude_none=True) if obj.sweep_context else None
     row.aggregation         = obj.aggregation.model_dump(exclude_none=True)
     row.kpi                 = {k: _kpi_val(v) for k, v in obj.kpi.items()}
+    row.hw_task_timing      = [b.model_dump(exclude_none=True) for b in obj.hw_task_timing] or None
+    row.sw_event_latency    = [b.model_dump(exclude_none=True) for b in obj.sw_event_latency] or None
     row.cpu_breakdown       = [b.model_dump(exclude_none=True) for b in obj.cpu_breakdown] or None
     row.sw_task_timing      = [b.model_dump(exclude_none=True) for b in obj.sw_task_timing] or None
     row.metric_observations = [

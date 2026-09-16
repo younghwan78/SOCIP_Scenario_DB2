@@ -1532,6 +1532,8 @@ def _existing_row_to_import_doc(db: Session, kind: str, row: Any) -> dict[str, A
                 "pipeline": row.pipeline or {},
                 "size_profile": row.size_profile,
                 "design_axes": row.design_axes or [],
+                "parametric_sweeps": row.parametric_sweeps or [],
+                "provenance": row.provenance or {},
                 "variants": variants,
             }
         )

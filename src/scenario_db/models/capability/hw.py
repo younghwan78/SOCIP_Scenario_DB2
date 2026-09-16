@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import Field, model_validator
+from pydantic import ConfigDict, Field, model_validator
 
 from scenario_db.models.common import (
     BaseScenarioModel,
@@ -32,9 +32,30 @@ class SupportedFeatures(BaseScenarioModel):
     crop: bool | None = None
     scale: bool | None = None
     rotate: bool | None = None
+    csc: bool | None = None
+    sample_rates_khz: list[float] = Field(default_factory=list)
+
+
+class SourceModel(BaseScenarioModel):
+    """Lossless driver metadata, NOT an executable simulation model.
+
+    Source-specific tables stay in this envelope until a registered consumer
+    validates their units and semantics. Formulas are documentation only.
+    """
+    model_config = ConfigDict(extra="allow", allow_inf_nan=False)
+    source: str
+    reference: str | None = None
+    note: str | None = None
+    unit: str | None = None
+    formula: list[str] = Field(default_factory=list)
 
 
 class IpCapabilities(BaseScenarioModel):
+    bw_model: SourceModel | None = None
+    dvfs_model: SourceModel | None = None
+    power_model: SourceModel | None = None
+    perf_model: SourceModel | None = None
+    sw_task_model: SourceModel | None = None
     operating_modes: list[OperatingMode] = Field(default_factory=list)
     supported_features: SupportedFeatures | None = None
     sim: dict[str, Any] = Field(default_factory=dict)
@@ -131,6 +152,7 @@ class CompressionMode(BaseScenarioModel):
 
 
 class SocPlatform(BaseScenarioModel):
+    platform_model: SourceModel | None = None
     id: DocumentId
     schema_version: SchemaVersion
     kind: Literal["soc"]
