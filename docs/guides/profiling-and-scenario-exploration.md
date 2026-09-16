@@ -82,7 +82,7 @@ uv run python -m scenario_db.meas_import.timing_profile --evidence generated/pro
 
 profile은 scenario를 변경하지 않고 timeline duration/해당 edge delay를 대체한다. min/mean/max는 입력 사례 선택이며 전체 pipeline의 통계적 percentile 예측이 아니다. 동일 profile에 포함된 SW stage의 HW budget도 선택한 runtime에 맞게 계산한다. wall runtime을 CPU energy로 변환하지 않는다.
 
-run_info에 profile 내용과 revision을 저장하고, derived_from으로 측정 evidence를 연결한다. profile은 cache hash에 포함된다. 이전 revision을 다시 선택하면 rollback할 수 있다. 기본 profile pointer 자동 전환, 부분 patch UI, A/B frame 정렬은 후속 작업이다.
+run_info에 profile 내용과 revision을 저장하고, derived_from으로 측정 evidence를 연결한다. profile은 cache hash에 포함된다. 이전 revision을 다시 선택하면 rollback할 수 있다. 기본 profile pointer 자동 전환, 부분 patch UI, A/B frame 정렬은 후속 작업이다. 측정 profile 선택·다운로드 UI는 아래 후속 구현 절을 참조한다.
 
 ## 5. 기존 scenario에서 탐색
 
@@ -125,6 +125,23 @@ manifest는 파일 hash, shared/changed ID, 현행에만 존재하는 variant를
 - 사내 실제 .pftrace의 HW track/flow/correlation 매핑 인수, frame/stream/clock 품질 보고와 sample exclusion 사유.
 - MFC/MSCL/ABOX/UFS typed throughput, DPU/MFC bandwidth vote와 physical traffic 분리, platform MIF/INT DVFS 소비.
 - CPU active runtime·전압·계수 기반 energy와 전체 power coverage의 모든 기존 UI/비교 경로 적용.
-- measured profile 선택 UI, 승인·기본 pointer, partial update, A/B frame 정렬.
+- profile 승인·기본 pointer, partial update, A/B frame 정렬. 선택·다운로드 UI는 아래 후속 구현에서 지원한다.
 - OTF topology/port/SRAM 검증, LLC capacity/traffic, area 비용, Pareto/차기 SoC 투영.
 - MTNR/MFC 모드 불일치 해결 후 namespace 분리 staging 및 13 UC 전체 정식 승격.
+
+
+## UI에서 측정 profile 준비·실행 (2026-09-16 후속 구현)
+
+Evidence Dashboard의 Calculation 모드에서 scenario/variant를 선택하고 **Use measured timing profile**을 켠다.
+
+1. Stored measurement에서 해당 scope의 capture를 선택한다. HW/SW timing 표와 capture context를 확인한다.
+2. task → active node mapping을 편집하고 profile ID/revision, mean/min/max를 선택한다. node_id가 없는 SW task의 기본 mapping은 task 이름이며, 실제 node 이름과 다르면 사용자가 수정해야 한다.
+3. Prepare measured profile을 누르면 DB measurement hash와 resolved baseline에서 profile을 준비한다. 새로운 `POST /evidence/{id}/timing-profile` API는 DB를 변경하지 않는다.
+4. Download pinned profile로 보관하고 Run measured timing preview로 실행한다. 결과를 검토한 뒤 기존 Confirm & Save Evidence 흐름을 사용한다.
+5. 이전 revision으로 되돌릴 때 Profile YAML을 선택해 보관한 profile을 업로드한다. 다른 scenario/variant의 파일은 거부한다.
+
+새 API가 생성한 profile은 source_task_mapping과 baseline_sha256을 포함한다. 재실행 시 topology, size profile, resolved variant, project 설정, IP catalog, SoC metadata 변경을 검사한다. source task mapping이 있는 profile의 runtime/latency도 원본 측정값과 비교한다. 입력 YAML의 수치만 바꾸어 measured 값으로 재사용할 수 없다. 기존 CLI profile에 새 baseline hash가 없으면 이전 호환 동작을 유지하므로 DB 기반 준비 API 사용을 권장한다.
+
+Replay는 capture의 실행 context를 사용하며 일반 form의 기본 thermal/inline DVFS table을 섞지 않는다. FPS 외삽은 거부한다. active runtime은 wall duration으로 대체하지 않는다. min_ms 또는 samples가 없는 기존 measurement는 해당 task의 누락 필드를 보완한 새 capture revision이 필요하다.
+
+이 UI는 명시적 profile 선택과 파일 revision 복구를 제공한다. 중앙 profile registry, 승인 workflow, 자동 default pointer, 부분 patch는 여전히 후속 범위다.

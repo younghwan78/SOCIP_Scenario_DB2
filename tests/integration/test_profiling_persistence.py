@@ -68,6 +68,12 @@ def test_measured_profile_replay_and_exploration_api(engine, api_client):
                 profile = build_profile(MeasurementEvidence.model_validate(doc), evidence_sha256='b'*64,
                     profile_id='capture', revision=1, design_conditions=graph.variant.design_conditions, task_mapping={'eis':'eis'})
                 count = session.query(Evidence).count()
+            prepared = api_client.post(f"/api/v1/evidence/{doc['id']}/timing-profile", json=dict(
+                profile_id='from-db', revision=2, statistic='mean', task_mapping={'eis':'eis'}))
+            assert prepared.status_code == 200, prepared.text
+            assert len(prepared.json()['baseline_sha256']) == 64
+            from scenario_db.models.evidence.profiling import MeasuredTimingProfile
+            profile = MeasuredTimingProfile.model_validate(prepared.json())
             request = dict(scenario_id=meta.scenario_ref, variant_id=meta.variant_ref,
                            execution_context={**doc['execution_context'],'method':'calculation'},
                            config={'timing_profile':profile.model_dump(mode='json')})
@@ -75,8 +81,14 @@ def test_measured_profile_replay_and_exploration_api(engine, api_client):
             assert response.status_code == 200, response.text
             result = response.json()
             assert result['evidence']['derived_from'] == [doc['id']]
-            assert result['evidence']['run_info']['timing_profile']['revision'] == 1
+            assert result['evidence']['run_info']['timing_profile']['revision'] == 2
             assert next(t for t in result['result']['sw_task_timing'] if t['task']=='eis')['mean_ms'] == 2
+            request['config']['timing_profile']['task_runtime']['eis']['mean_ms'] = 2.5
+            assert api_client.post('/api/v1/simulation/run', json=request).status_code == 422
+            request['config']['timing_profile']['task_runtime']['eis']['mean_ms'] = 2
+            request['config']['timing_profile']['baseline_sha256'] = 'c'*64
+            assert api_client.post('/api/v1/simulation/run', json=request).status_code == 422
+            request['config']['timing_profile']['baseline_sha256'] = prepared.json()['baseline_sha256']
             request['config']['timing_profile']['evidence_sha256'] = 'c'*64
             assert api_client.post('/api/v1/simulation/run', json=request).status_code == 422
             preview = api_client.post('/api/v1/exploration/scenarios/preview', json=dict(

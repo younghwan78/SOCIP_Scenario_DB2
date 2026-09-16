@@ -13,15 +13,24 @@ from scenario_db.models.evidence.profiling import MeasuredTimingProfile, TimingS
 
 def build_profile(evidence: MeasurementEvidence, *, evidence_sha256: str, profile_id: str,
                   revision: int, design_conditions: dict, task_mapping: dict[str, str],
-                  statistic: str = "mean") -> MeasuredTimingProfile:
+                  statistic: str = "mean", baseline_sha256: str | None = None) -> MeasuredTimingProfile:
     if not evidence.project_ref:
         raise ValueError("timing profile requires project_ref")
+    known = {item.task for item in [*evidence.hw_task_timing, *evidence.sw_task_timing]}
+    known.update(task for edge in evidence.sw_event_latency for task in (edge.predecessor_task, edge.successor_task))
+    if set(task_mapping) - known:
+        raise ValueError('task mapping contains unknown measurement tasks')
     runtime = {}
     for item in [*evidence.hw_task_timing, *evidence.sw_task_timing]:
-        if getattr(item, 'value_source', None) not in (None, 'measured'):
-            raise ValueError('timing profile requires measured values')
         if item.task not in task_mapping:
             continue
+        if getattr(item, 'value_source', None) not in (None, 'measured'):
+            raise ValueError('timing profile requires measured values')
+        if getattr(item, 'runtime_basis', 'wall') != 'wall':
+            raise ValueError('active runtime cannot replace wall duration')
+        missing = [key for key in ('min_ms', 'mean_ms', 'max_ms', 'samples') if getattr(item, key) is None]
+        if missing:
+            raise ValueError(f"{item.task}: measurement is missing {', '.join(missing)}; import a complete capture revision")
         node = task_mapping[item.task]
         if node in runtime:
             raise ValueError(f"multiple runtime measurements mapped to {node}; use separate task nodes")
@@ -39,7 +48,7 @@ def build_profile(evidence: MeasurementEvidence, *, evidence_sha256: str, profil
         evidence_sha256=evidence_sha256, project_ref=str(evidence.project_ref),
         scenario_ref=str(evidence.scenario_ref), variant_ref=evidence.variant_ref,
         design_conditions=design_conditions, capture_context=evidence.execution_context.model_dump(mode="json", exclude_none=True),
-        statistic=statistic, task_runtime=runtime,
+        statistic=statistic, baseline_sha256=baseline_sha256, source_task_mapping=task_mapping, task_runtime=runtime,
         event_latency=latencies))
 
 

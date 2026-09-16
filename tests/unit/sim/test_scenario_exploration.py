@@ -30,3 +30,15 @@ def test_operating_mode_clock_cap_is_respected():
                           operating_modes=[dict(id='Normal',max_clock_mhz=400)]))
     params = sim_params_for_node(ip, {}, mode='Normal',node_id='n',role='r',warnings=[])
     assert params.max_clock_mhz == 400
+
+
+def test_measured_baseline_fingerprint_tracks_catalog_and_size_profile():
+    from scenario_db.sim.measured_timing import baseline_fingerprint
+    graph = _exynos2600_generated_graph('uc-camera-recording', 'cam-rec-r1-fhd30-vdis')
+    before = baseline_fingerprint(graph)
+    graph.scenario.size_profile = {'changed': True}
+    assert baseline_fingerprint(graph) != before
+    before = baseline_fingerprint(graph)
+    first = next(iter(graph.ip_catalog.values()))
+    first.capabilities = {**first.capabilities, 'model_revision': 'changed'}
+    assert baseline_fingerprint(graph) != before

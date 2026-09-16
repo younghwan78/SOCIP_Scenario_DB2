@@ -41,6 +41,15 @@ def run_simulation_request(db: Session, request: SimulateRequest) -> SimulateRun
             if (measured.project_ref, measured.scenario_ref, measured.variant_ref) != (
                     profile.project_ref, profile.scenario_ref, profile.variant_ref):
                 raise ValueError("timing profile source scope mismatch")
+            if profile.source_task_mapping:
+                from scenario_db.api.services.timing_profiles import measurement_from_row
+                from scenario_db.meas_import.timing_profile import build_profile
+                expected = build_profile(measurement_from_row(measured), evidence_sha256=measured.yaml_sha256,
+                    profile_id=profile.profile_id, revision=profile.revision, statistic=profile.statistic,
+                    design_conditions=profile.design_conditions, task_mapping=profile.source_task_mapping,
+                    baseline_sha256=profile.baseline_sha256)
+                if expected.task_runtime != profile.task_runtime or expected.event_latency != profile.event_latency:
+                    raise ValueError("timing profile values differ from source measurement")
             context = execution_context.model_dump(mode="json", exclude_none=True)
             for key in ("silicon_rev", "sw_baseline_ref", "thermal", "power_state", "ambient_temp_c", "dvfs_table_ref", "dvfs_version", "sw_runtime_overrides"):
                 captured = profile.capture_context.get(key)

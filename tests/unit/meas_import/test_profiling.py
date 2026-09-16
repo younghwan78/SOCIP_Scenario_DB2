@@ -111,3 +111,17 @@ def test_summary_import_has_no_fabricated_timeline(tmp_path):
     changed['sw_task_timing'][0]['mean_ms'] = 2.5
     local = tmp_path/'meta.yaml'; local.write_text(yaml.safe_dump(changed),encoding='utf-8')
     assert main(['--meta',str(local),'--out',str(tmp_path),'--strict']) == 1
+
+
+def test_latency_only_profile_keeps_explicit_pair_mapping():
+    from scenario_db.models.evidence.measurement import MeasurementEvidence
+    from scenario_db.meas_import.timing_profile import build_profile
+    evidence = MeasurementEvidence(id='meas-latency',schema_version='2.2',kind='evidence.measurement',
+        scenario_ref='uc-test',variant_ref='v',project_ref='proj-test',provenance={},
+        execution_context=dict(silicon_rev='EVT1',sw_baseline_ref='sw-test',thermal='room'),
+        aggregation=dict(strategy='mean'),sw_event_latency=[dict(edge_id='a-b',predecessor_task='a',
+        successor_task='b',min_ms=1,mean_ms=2,max_ms=3,samples=10,pairing='flow')])
+    profile = build_profile(evidence,evidence_sha256='a'*64,profile_id='latency',revision=1,
+                            design_conditions={},task_mapping={'a':'node-a','b':'node-b'})
+    assert profile.task_runtime == {}
+    assert profile.event_latency[0].predecessor_task == 'node-a'

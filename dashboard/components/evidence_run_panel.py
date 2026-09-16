@@ -18,14 +18,19 @@ def render_evidence_run_panel(
     default_silicon_rev: str,
     on_persisted: Callable[[str], None] | None = None,
 ) -> None:
-    sw_profiles, sw_error = _load_sw_profile_options(api_base)
-    payload = render_simulation_run_form(
-        scenario_id=scenario_id,
-        variant_id=variant_id,
-        default_silicon_rev=default_silicon_rev,
-        sw_profiles=sw_profiles,
-        sw_error=sw_error,
-    )
+    use_measured = st.checkbox("Use measured timing profile", key=f"use_measured:{scenario_id}:{variant_id}")
+    if use_measured:
+        from dashboard.components.measured_profile_form import render_measured_profile_form
+        payload = render_measured_profile_form(api_base=api_base, scenario_id=scenario_id, variant_id=variant_id)
+    else:
+        sw_profiles, sw_error = _load_sw_profile_options(api_base)
+        payload = render_simulation_run_form(
+            scenario_id=scenario_id,
+            variant_id=variant_id,
+            default_silicon_rev=default_silicon_rev,
+            sw_profiles=sw_profiles,
+            sw_error=sw_error,
+        )
     if not payload:
         return
 

@@ -193,3 +193,6 @@ measurement import가 `id`를 자동 생성할 때는 같은 날 재측정을 �
 Measured sequence events retain unique event instance/task_id, logical_task_id, node_id, task_type, integer start_ns/duration_ns, track_id, predecessor event IDs, and origin-relative chart times in ms. Timestamp order alone does not imply a dependency. Summary-only input creates no sequence. New profiling imports stamp provenance.import_fingerprint and require a new evidence ID for changes.
 
 See [profiling guide](../../guides/profiling-and-scenario-exploration.md) for input examples, limitations and profile revision/replay behavior.
+
+
+`POST /api/v1/evidence/{evidence_id}/timing-profile` (analyst/writer/admin) prepares a read-only MeasuredTimingProfile. Body requires profile_id and nonempty task_mapping; revision defaults to 1 and statistic to mean. The server resolves current scenario ownership/baseline and validates active tasks and latency anchors. Returned source_task_mapping allows simulation to compare overrides against the original measurement; baseline_sha256 rejects model drift. Incomplete statistics, unknown mappings, active-time to wall-time conversion, or wrong evidence kind yield 422. Missing evidence yields 404.

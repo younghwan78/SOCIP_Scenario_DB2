@@ -62,6 +62,8 @@ class MeasuredTimingProfile(BaseScenarioModel):
     variant_ref: str
     design_conditions: dict[str, object]
     capture_context: dict[str, object] = Field(default_factory=dict)
+    baseline_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     statistic: Literal["min", "mean", "max"] = "mean"
+    source_task_mapping: dict[str, str] = Field(default_factory=dict)
     task_runtime: dict[str, TimingStatistics] = Field(default_factory=dict)
     event_latency: list[SwEventLatency] = Field(default_factory=list)

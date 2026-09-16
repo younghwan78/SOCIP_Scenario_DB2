@@ -24,6 +24,12 @@ def build_simulation_inputs(
 
     run_config = config or SimulationRunConfig()
     if run_config.timing_profile is not None:
+        from scenario_db.sim.measured_timing import baseline_fingerprint
+        pinned = run_config.timing_profile.baseline_sha256
+        if pinned is not None and pinned != baseline_fingerprint(graph):
+            raise ValueError("timing profile baseline changed; rebuild and review the profile")
+        if run_config.fps is not None and run_config.fps != (graph.variant.design_conditions or {}).get("fps"):
+            raise ValueError("measured timing profile does not support FPS extrapolation")
         from copy import deepcopy
         from dataclasses import replace
         variant = deepcopy(graph.variant)

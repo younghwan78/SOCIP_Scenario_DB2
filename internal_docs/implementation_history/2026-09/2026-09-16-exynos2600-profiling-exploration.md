@@ -64,3 +64,37 @@
 ## 사용 문서
 
 `implementation/docs/guides/profiling-and-scenario-exploration.md`에 설치, migration, summary/trace meta, profile 생성과 API 적용, 탐색 API 및 제한을 기록했다. 실제 운영 DB migration, main merge, 원격 push는 수행하지 않았다.
+
+
+## 후속 실행 및 구현 기록 — 2026-09-16
+
+### 실행 중인 로컬 서비스
+
+- API: http://127.0.0.1:18000/docs (`/health/ready`: DB connected, simulation dependencies available)
+- UI: http://127.0.0.1:18502/ (Evidence Dashboard: `/Evidence_Dashboard`)
+- PostgreSQL: 127.0.0.1:15432, 기존 Docker volume 유지
+- pgAdmin: http://127.0.0.1:15050/
+- 기존 DB migration 0016 → 0017 적용. 시작 시 project 1/scenario 13/variant 212/evidence 40 확인.
+- API/UI는 hidden background process로 실행. runtime_logs/profiling-20260916에 로그와 PID 기록. 인증을 해제하지 않고 프로세스 전용 임시 analyst/writer key로 UI → API 실행 연결. 키를 파일/문서/Git에 저장하지 않음.
+
+### 추가 구현
+
+- `POST /evidence/{id}/timing-profile`: 저장된 measurement와 현재 resolved baseline에서 profile 준비, DB 무변경.
+- Evidence Dashboard의 Calculation → Use measured timing profile: capture 선택, 통계/context 확인, task mapping, revision/statistic 지정, profile 다운로드/업로드, preview 실행. 기존 confirm/save 흐름 재사용.
+- baseline fingerprint에 topology, size profile, resolved variant, project metadata/globals, IP catalog, SoC metadata 반영. 변경된 모델로 replay하려면 profile 재준비.
+- source_task_mapping이 포함된 profile의 runtime/latency가 원본 측정값과 다른 경우 거부.
+- FPS 외삽, active runtime을 wall duration으로 대체, 알 수 없는 task mapping 거부. latency-only profile의 명시적 event mapping도 지원.
+- UI replay는 capture 실행 context를 보존하고 일반 form 기본 thermal/inline DVFS를 섞지 않음.
+
+### 검증
+
+- 영향 범위 단위 테스트 450개 통과; 마지막 latency-only 회귀 포함 profiling 테스트 11개 통과.
+- PostgreSQL profile 준비/실행/값 변조 및 baseline hash 거부 통합 테스트 2개 통과.
+- Ruff 전체 및 저장소 설정 mypy 통과.
+- 실제 브라우저: Evidence Dashboard 렌더링, 기존 측정 capture 선택, profile 준비 API 호출 확인. 기존 측정 min_ms 누락 시 422로 거부됨(정상 동작). 완전한 capture 생성/실행은 격리 DB 통합 테스트로 검증.
+- 실제 브라우저: 일반 Run Preview 성공, preview-only/not saved 표시 확인. 데이터 저장 버튼은 누르지 않음.
+- 브라우저 첫 multipage 접속 시 Streamlit의 nested health/host-config 404 fallback 및 기존 iframe feature 경고 관찰; 최종 페이지 렌더링과 실제 API 실행 성공.
+
+### 남은 범위
+
+모드 불일치 23건, driver 모델 실행 consumer, CPU 전력, LLC/area/Pareto, 실제 사내 .pftrace 인수는 여전히 남아 있다. 기존 측정의 min_ms 누락은 추정값으로 채우지 않았다. UI에서 사용할 새 capture에는 min/mean/max와 samples를 제공해야 한다. 중앙 profile registry/승인/default pointer와 measured A/B frame alignment는 이번 변경에 포함되지 않는다.

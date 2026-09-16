@@ -34,3 +34,18 @@ def apply_measured_timing(graph: CanonicalScenarioGraph, profile: MeasuredTiming
         # Replaces the existing release delay; never adds the same measured wait twice.
         matches[0]['latency_ms'] = getattr(latency, f'{profile.statistic}_ms')
     return tasks, edges
+
+
+def baseline_fingerprint(graph: CanonicalScenarioGraph) -> str:
+    """Bind replay to effective topology, resolved variant and catalog contents."""
+    import hashlib
+    import json
+    from dataclasses import asdict
+    payload = dict(project_ref=graph.scenario.project_ref, scenario_id=graph.scenario_id,
+                   pipeline=graph.scenario.pipeline, size_profile=graph.scenario.size_profile, variant=asdict(graph.variant),
+                   project=dict(metadata=graph.project.metadata_, globals=graph.project.globals_) if graph.project else None,
+                   ips={key:dict(category=row.category, capabilities=row.capabilities)
+                        for key,row in sorted(graph.ip_catalog.items())},
+                   soc=dict(compression_modes=graph.soc.compression_modes,
+                            platform_model=graph.soc.platform_model) if graph.soc else None)
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(',', ':')).encode()).hexdigest()

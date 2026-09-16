@@ -183,3 +183,19 @@ def compare_prediction_measurement_by_id(
     prediction_doc = EvidenceResponse.model_validate(prediction).model_dump()
     measurement_doc = EvidenceResponse.model_validate(measurement).model_dump()
     return compare_prediction_measurement(prediction_doc, measurement_doc)
+
+
+from scenario_db.api.auth import require_roles
+from scenario_db.api.services.timing_profiles import TimingProfileRequest, prepare_timing_profile
+from scenario_db.models.evidence.profiling import MeasuredTimingProfile
+
+
+@router.post('/evidence/{evidence_id}/timing-profile', response_model=MeasuredTimingProfile,
+             dependencies=[Depends(require_roles('analyst', 'writer', 'admin'))])
+def timing_profile(evidence_id: str, request: TimingProfileRequest, db: Session = Depends(get_db)):
+    try:
+        return prepare_timing_profile(db, evidence_id, request)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
