@@ -78,3 +78,6 @@ Current documents should declare `Status`, `Last verified`, scope, and the sourc
 that pin the behavior. When a contract changes, update code, tests, and the linked document in
 the same change. Superseded implementation material moves to `internal_docs`; it is not left in
 `docs` with an ambiguous `Plan` or `Week N` title.
+
+
+- [Camera semantic profiling: MD import, DB fields and SW projection](guides/camera-semantic-profiling.md)

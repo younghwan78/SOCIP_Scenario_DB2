@@ -35,7 +35,8 @@ class SwEventLatency(TimingStatistics):
     successor_task: str
     source_anchor: Literal["start", "end"] = "end"
     target_anchor: Literal["start"] = "start"
-    pairing: Literal["flow", "correlation_id"]
+    latency_basis: Literal["observed_gap"] = "observed_gap"
+    pairing: Literal["flow", "correlation_id", "producer_defined"]
     value_source: Literal["measured"] = "measured"
 
 

@@ -196,3 +196,18 @@ See [profiling guide](../../guides/profiling-and-scenario-exploration.md) for in
 
 
 `POST /api/v1/evidence/{evidence_id}/timing-profile` (analyst/writer/admin) prepares a read-only MeasuredTimingProfile. Body requires profile_id and nonempty task_mapping; revision defaults to 1 and statistic to mean. The server resolves current scenario ownership/baseline and validates active tasks and latency anchors. Returned source_task_mapping allows simulation to compare overrides against the original measurement; baseline_sha256 rejects model drift. Incomplete statistics, unknown mappings, active-time to wall-time conversion, or wrong evidence kind yield 422. Missing evidence yields 404.
+
+## Curated camera semantic profiling (2026-09-17)
+
+`camera-profile-v1` is a producer input version; stored measurement evidence continues to use schema_version `2.2`. The additive camera fields are nullable for legacy rows:
+
+| Field | Stored type | Meaning |
+| --- | --- | --- |
+| execution_path_id | TEXT | Scope-local path identifier |
+| pipeline_model | JSONB | Typed logical tasks, explicit dependencies, execution_path and import-time model binding |
+| stage_timing | JSONB | RT/NRT group spans, validation_only |
+| profiling_metadata | JSONB | Producer version, scope description, workload, notes |
+
+`sw_task_timing` additionally supports timing_scope, includes_task_ids and sample_unit. `sw_event_latency.pairing` additionally accepts producer_defined; latency_basis is observed_gap. Camera evidence requires complete runtime min/mean/max/count and active task/edge references. No missing values are converted to zero. A measured camera summary cannot be applied as a legacy whole-runtime replay; use the separately pinned SW projection, which rejects HW/inclusive stage overrides.
+
+Import preview is read-only; commit checks a normalized content hash, canonical ownership, workload and registered SW baseline. Duplicate identical evidence is a no-op; changed content under the same ID conflicts. Detail and operational examples: [camera profiling guide](../../guides/camera-semantic-profiling.md).

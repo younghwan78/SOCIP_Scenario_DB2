@@ -184,6 +184,9 @@ def preview_existing_scenario(request: ScenarioExplorationRequest, db: Session =
             graph = load_canonical_graph(db, request.scenario_id, request.variant_id)
             if request.config.timing_profile is not None:
                 raise ValueError('use simulation/run for verified measured-profile replay')
+            if request.config.sw_timing_projection is not None:
+                from scenario_db.sim.sw_projection import verify_projection
+                verify_projection(db, graph, request.config.sw_timing_projection)
             return preview_scenario(graph, request, max_cases=settings.exploration_max_cases)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

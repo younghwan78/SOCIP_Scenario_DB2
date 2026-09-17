@@ -23,6 +23,8 @@ def build_simulation_inputs(
     """Convert an effective canonical graph into simulation-engine inputs."""
 
     run_config = config or SimulationRunConfig()
+    if run_config.timing_profile is not None and run_config.sw_timing_projection is not None:
+        raise ValueError("select measured replay or SW projection, not both")
     if run_config.timing_profile is not None:
         from scenario_db.sim.measured_timing import baseline_fingerprint
         pinned = run_config.timing_profile.baseline_sha256
@@ -131,6 +133,11 @@ def build_simulation_inputs(
                 for stale in ("p50_ms", "p95_ms"):
                     sw_profiles[node].pop(stale, None)
         warnings.append("Measured timing profile applies at captured conditions only; wall time does not calibrate active power.")
+
+    if run_config.sw_timing_projection is not None:
+        from scenario_db.sim.sw_projection import apply_projection
+        tasks, edges, sw_profiles = apply_projection(graph, run_config.sw_timing_projection, tasks, edges, sw_profiles)
+        warnings.append("Projected SW elapsed time and observed gaps are assumptions; CPU active power is not calibrated.")
 
     return SimulationInputs(
         scenario_id=graph.scenario_id,

@@ -145,3 +145,6 @@ Evidence Dashboard의 Calculation 모드에서 scenario/variant를 선택하고 
 Replay는 capture의 실행 context를 사용하며 일반 form의 기본 thermal/inline DVFS table을 섞지 않는다. FPS 외삽은 거부한다. active runtime은 wall duration으로 대체하지 않는다. min_ms 또는 samples가 없는 기존 measurement는 해당 task의 누락 필드를 보완한 새 capture revision이 필요하다.
 
 이 UI는 명시적 profile 선택과 파일 revision 복구를 제공한다. 중앙 profile registry, 승인 workflow, 자동 default pointer, 부분 patch는 여전히 후속 범위다.
+
+
+- [Camera semantic profiling: MD import, DB fields and SW projection](camera-semantic-profiling.md)

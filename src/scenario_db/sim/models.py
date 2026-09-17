@@ -7,6 +7,7 @@ from pydantic import Field, model_validator
 
 from scenario_db.models.common import BaseScenarioModel
 from scenario_db.sim.constants import SW_MARGIN_DEFAULT
+from scenario_db.sim.sw_projection import SwTimingProjection
 
 
 class PortType(StrEnum):
@@ -124,6 +125,7 @@ from scenario_db.models.evidence.profiling import MeasuredTimingProfile
 
 
 class SimulationRunConfig(BaseScenarioModel):
+    sw_timing_projection: SwTimingProjection | None = None
     timing_profile: MeasuredTimingProfile | None = None
     asv_group: int = 4
     fps: float | None = None
@@ -266,6 +268,7 @@ class TimelineEvent(BaseScenarioModel):
 
 
 class SimRunResult(BaseScenarioModel):
+    sw_timing_projection: SwTimingProjection | None = None
     timing_profile: MeasuredTimingProfile | None = None
     scenario_id: str
     variant_id: str

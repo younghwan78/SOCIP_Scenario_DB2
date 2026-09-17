@@ -17,6 +17,7 @@ from scenario_db.models.evidence.metrics import (
     validate_metric_observations,
 )
 
+from scenario_db.models.evidence.camera import CameraPipeline, ProfilingMetadata, StageTiming, validate_camera_evidence
 from scenario_db.models.evidence.profiling import HwTaskTiming, SwEventLatency
 
 _KPI_KEY_RE = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -52,6 +53,9 @@ class SwTaskTiming(BaseScenarioModel):
     """Per-task wall time digest extracted from perfetto sched/slice data."""
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
     task: str                             # logical task name, e.g. eis_warp, depth_npu
+    timing_scope: Literal["exclusive_sw", "inclusive_stage"] | None = None
+    includes_task_ids: list[str] = Field(default_factory=list)
+    sample_unit: Literal["invocation", "frame"] = "invocation"
     process: str | None = None
     thread: str | None = None
     cluster: str | None = None            # dominant execution cluster
@@ -121,6 +125,10 @@ class MeasurementEvidence(BaseScenarioModel):
     kind: Literal["evidence.measurement"]
     scenario_ref: DocumentId
     variant_ref: str
+    execution_path_id: str | None = None
+    pipeline_model: CameraPipeline | None = None
+    stage_timing: list[StageTiming] = Field(default_factory=list)
+    profiling_metadata: ProfilingMetadata | None = None
     project_ref: DocumentId | None = None
     measured_at: str | None = None       # ISO 8601, e.g. "2026-06-01T10:00:00+09:00"
     derived_from: list[DocumentId] = Field(default_factory=list)
@@ -141,6 +149,10 @@ class MeasurementEvidence(BaseScenarioModel):
     timeline_events: list[dict[str, Any]] = Field(default_factory=list)
     metric_observations: list[MetricObservation] = Field(default_factory=list)
     artifacts: list[Artifact] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _camera(self):
+        return validate_camera_evidence(self)
 
     @model_validator(mode="after")
     def _validate_kpi_keys(self) -> MeasurementEvidence:

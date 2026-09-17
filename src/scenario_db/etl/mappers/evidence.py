@@ -82,6 +82,10 @@ def upsert_measurement(raw: dict, sha256: str, session: Session) -> None:
     row.sweep_context       = obj.sweep_context.model_dump(exclude_none=True) if obj.sweep_context else None
     row.aggregation         = obj.aggregation.model_dump(exclude_none=True)
     row.kpi                 = {k: _kpi_val(v) for k, v in obj.kpi.items()}
+    row.execution_path_id = obj.execution_path_id
+    row.pipeline_model = obj.pipeline_model.model_dump(mode="json") if obj.pipeline_model else None
+    row.stage_timing = [item.model_dump(mode="json") for item in obj.stage_timing] or None
+    row.profiling_metadata = obj.profiling_metadata.model_dump(mode="json") if obj.profiling_metadata else None
     row.hw_task_timing      = [b.model_dump(exclude_none=True) for b in obj.hw_task_timing] or None
     row.sw_event_latency    = [b.model_dump(exclude_none=True) for b in obj.sw_event_latency] or None
     row.cpu_breakdown       = [b.model_dump(exclude_none=True) for b in obj.cpu_breakdown] or None

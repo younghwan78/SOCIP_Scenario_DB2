@@ -460,6 +460,7 @@ def test_run_simulation_request_returns_response_on_cache_miss(monkeypatch):
         warnings = []
 
     class _Evidence:
+        derived_from = []
         id = "sim-1"
         kpi = {"total_power_mw": 1.0}
         resolution_result = None
@@ -702,6 +703,7 @@ def test_run_simulation_request_loads_db_dvfs_table_and_marks_context(monkeypatc
         warnings = []
 
     class _Evidence:
+        derived_from = []
         def __init__(self, execution_context):
             self.id = "sim-1"
             self.kpi = {"total_power_mw": 1.0}

@@ -543,6 +543,9 @@ def render_measurement_result(evidence: dict[str, Any], *, key_prefix: str = "me
 
     from dashboard.components.table_actions import render_copyable_dataframe
 
+    if evidence.get("pipeline_model"):
+        from dashboard.components.camera_profiling import render_camera
+        render_camera(evidence)
     evidence_id = str(evidence.get("id") or "measurement")
     tabs = st.tabs(list(MEASUREMENT_TABS))
 

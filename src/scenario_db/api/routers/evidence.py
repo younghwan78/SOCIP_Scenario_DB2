@@ -50,6 +50,7 @@ def list_evidence(
     variant_ref: str | None = Query(None),
     project_ref: str | None = Query(None, description="project_ref 필터"),
     kind: str | None = Query(None, description="evidence.simulation | evidence.measurement"),
+    execution_path_id: str | None = Query(None),
     sw_version: str | None = Query(None, description="sw_version_hint 필터"),
     feasibility: str | None = Query(None, description="overall_feasibility 필터"),
     limit: int = Query(50, ge=1, le=1000),
@@ -69,6 +70,8 @@ def list_evidence(
         q = q.filter(Evidence.project_ref == project_ref)
     if kind is not None:
         q = q.filter(Evidence.kind == kind)
+    if execution_path_id is not None:
+        q = q.filter(Evidence.execution_path_id == execution_path_id)
     if sw_version is not None:
         q = q.filter(Evidence.sw_version_hint == sw_version)
     if feasibility is not None:

@@ -28,14 +28,21 @@ def run_simulation_request(db: Session, request: SimulateRequest) -> SimulateRun
     config_profile_stamp = _apply_config_profile(db, request)
     try:
         graph = load_canonical_graph(db, request.scenario_id, request.variant_id)
+        if request.config.sw_timing_projection is not None:
+            from scenario_db.sim.sw_projection import verify_projection
+            verify_projection(db, graph, request.config.sw_timing_projection)
         inputs = build_simulation_inputs(graph, request.config)
         _enforce_input_limits(inputs)
         dvfs_tables, execution_context = _resolve_dvfs_tables(db, graph, request)
+        if request.config.sw_timing_projection is not None:
+            execution_context = execution_context.model_copy(update={"method": "projection"})
         if request.config.timing_profile is not None:
             profile = request.config.timing_profile
             measured = get_evidence(db, profile.evidence_ref)
             if measured is None or measured.kind != "evidence.measurement":
                 raise ValueError("timing profile source measurement must be loaded")
+            if measured.pipeline_model is not None:
+                raise ValueError("curated camera evidence requires SW projection; HW timing is validation-only")
             if measured.yaml_sha256 != profile.evidence_sha256:
                 raise ValueError("timing profile source hash mismatch")
             if (measured.project_ref, measured.scenario_ref, measured.variant_ref) != (

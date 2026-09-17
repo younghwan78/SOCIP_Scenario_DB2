@@ -14,6 +14,8 @@ from scenario_db.models.evidence.profiling import MeasuredTimingProfile, TimingS
 def build_profile(evidence: MeasurementEvidence, *, evidence_sha256: str, profile_id: str,
                   revision: int, design_conditions: dict, task_mapping: dict[str, str],
                   statistic: str = "mean", baseline_sha256: str | None = None) -> MeasuredTimingProfile:
+    if evidence.pipeline_model is not None:
+        raise ValueError("curated camera evidence uses SW projection; HW measurements are validation-only")
     if not evidence.project_ref:
         raise ValueError("timing profile requires project_ref")
     known = {item.task for item in [*evidence.hw_task_timing, *evidence.sw_task_timing]}

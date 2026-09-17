@@ -65,6 +65,13 @@ def preview_scenario(graph, request: ScenarioExplorationRequest, *, max_cases=DE
                 for node in candidate.pipeline_nodes:
                     variant.node_configs = variant.node_configs or {}
                     variant.node_configs.setdefault(node['id'], {}).setdefault('sim', {})['sw_margin'] = value
+        if config.sw_timing_projection is not None:
+            from scenario_db.sim.measured_timing import baseline_fingerprint
+            if index == 0 and config.sw_timing_projection.target_model_fingerprint != baseline_fingerprint(graph):
+                raise ValueError("projection target baseline changed")
+            # Rebind only the bounded candidate derived from the verified baseline.
+            config.sw_timing_projection = config.sw_timing_projection.model_copy(update={
+                "target_model_fingerprint": baseline_fingerprint(candidate)})
         inputs = build_simulation_inputs(candidate, config)
         result = run_simulation(inputs, dvfs_tables=request.dvfs_tables)
         missing = sorted({w.node_id for w in inputs.workloads if w.sim_params.unit_power_mw_mp <= 0}
@@ -81,6 +88,8 @@ def preview_scenario(graph, request: ScenarioExplorationRequest, *, max_cases=DE
                           axis=axis.model_dump() if axis else None, value=value,
                           input_hash=hashlib.sha256(inputs.model_dump_json().encode()).hexdigest(),
                           feasible=result.feasible, missing_power_domains=missing,
+                          required_clocks_mhz={key: value.required_clock_mhz for key, value in result.resolved.items()},
+                          set_clocks_mhz={key: value.set_clock_mhz for key, value in result.resolved.items()},
                           optimization_eligible=result.feasible and not missing,
                           metrics=metrics, warnings=result.warnings,
                           result=result.model_dump(mode='json') if request.include_results else None))
