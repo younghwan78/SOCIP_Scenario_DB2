@@ -140,6 +140,8 @@ def run_simulation(
         calculation_trace["warnings"] = list(warnings)
 
     return SimRunResult(
+        sw_timing_projection=config.sw_timing_projection,
+        timing_profile=config.timing_profile,
         scenario_id=inputs.scenario_id,
         variant_id=inputs.variant_id,
         total_power_mw=total_power_mw,
@@ -187,7 +189,7 @@ def build_simulation_evidence(
         if result.feasible
         else OverallFeasibility.infeasible
     )
-    assumed = any(row.get("value_source") == "assumed" for row in result.sw_task_timing)
+    assumed = bool(result.sw_timing_projection) or any(row.get("value_source") == "assumed" for row in result.sw_task_timing)
     if result.feasible and assumed:
         feasibility = OverallFeasibility.exploration_only
     critical_events = [event for event in result.timeline_events if event.critical]
@@ -198,6 +200,8 @@ def build_simulation_evidence(
         scenario_ref=result.scenario_id,
         variant_ref=result.variant_id,
         project_ref=project_ref,
+        derived_from=([result.sw_timing_projection.source_evidence_ref] if result.sw_timing_projection else
+                      [result.timing_profile.evidence_ref] if result.timing_profile else []),
         execution_context=execution_context,
         resolution_result=ResolutionResult(
             overall_feasibility=feasibility,
@@ -212,6 +216,8 @@ def build_simulation_evidence(
             tool_version="0.1.0",
             source=SourceType.estimated if assumed else SourceType.calculated,
             config_profile_ref=config_profile_ref,
+            sw_timing_projection=result.sw_timing_projection.model_dump(mode="json") if result.sw_timing_projection else None,
+            timing_profile=result.timing_profile.model_dump(mode="json") if result.timing_profile else None,
         ),
         aggregation=Aggregation(strategy="single_run"),
         kpi={
@@ -263,7 +269,7 @@ def _with_calculated_durations(
     result = []
     for task in tasks:
         updated = dict(task)
-        if not float(updated.get("duration_ms") or 0.0):
+        if not updated.get("measured_duration") and not float(updated.get("duration_ms") or 0.0):
             updated["duration_ms"] = (
                 timing_by_node.get(str(updated.get("node_id")))
                 or timing_by_node.get(str(updated.get("id")))

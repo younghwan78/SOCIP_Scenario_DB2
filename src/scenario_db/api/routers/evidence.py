@@ -50,6 +50,7 @@ def list_evidence(
     variant_ref: str | None = Query(None),
     project_ref: str | None = Query(None, description="project_ref 필터"),
     kind: str | None = Query(None, description="evidence.simulation | evidence.measurement"),
+    execution_path_id: str | None = Query(None),
     sw_version: str | None = Query(None, description="sw_version_hint 필터"),
     feasibility: str | None = Query(None, description="overall_feasibility 필터"),
     limit: int = Query(50, ge=1, le=1000),
@@ -69,6 +70,8 @@ def list_evidence(
         q = q.filter(Evidence.project_ref == project_ref)
     if kind is not None:
         q = q.filter(Evidence.kind == kind)
+    if execution_path_id is not None:
+        q = q.filter(Evidence.execution_path_id == execution_path_id)
     if sw_version is not None:
         q = q.filter(Evidence.sw_version_hint == sw_version)
     if feasibility is not None:
@@ -183,3 +186,19 @@ def compare_prediction_measurement_by_id(
     prediction_doc = EvidenceResponse.model_validate(prediction).model_dump()
     measurement_doc = EvidenceResponse.model_validate(measurement).model_dump()
     return compare_prediction_measurement(prediction_doc, measurement_doc)
+
+
+from scenario_db.api.auth import require_roles
+from scenario_db.api.services.timing_profiles import TimingProfileRequest, prepare_timing_profile
+from scenario_db.models.evidence.profiling import MeasuredTimingProfile
+
+
+@router.post('/evidence/{evidence_id}/timing-profile', response_model=MeasuredTimingProfile,
+             dependencies=[Depends(require_roles('analyst', 'writer', 'admin'))])
+def timing_profile(evidence_id: str, request: TimingProfileRequest, db: Session = Depends(get_db)):
+    try:
+        return prepare_timing_profile(db, evidence_id, request)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc

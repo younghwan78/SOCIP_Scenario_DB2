@@ -95,6 +95,18 @@ def build_metric_observations(
                 _stats_observation("sw.runtime", "task", task_ref, "ms", stats),
             )
 
+    groups = [("sw.runtime", "task", "task", [t.model_dump(exclude_none=True) for t in meta.sw_task_timing])]
+    for name, metric, scope, ref in (("hw_task_timing", "hw.runtime", "task", "task"),
+                                     ("sw_event_latency", "sw.start_latency", "event_pair", "edge_id")):
+        values = list(getattr(perfetto, name, []) or [])
+        if meta.profiling:
+            values += [t.model_dump() for t in getattr(meta.profiling, name)]
+        groups.append((metric, scope, ref, values))
+    for metric, scope, ref, values in groups:
+        for item in values:
+            stats = _task_runtime_stats(item)
+            if stats:
+                _append_if_new(observations, identities, _stats_observation(metric, scope, item[ref], "ms", stats))
     return observations
 
 
@@ -130,7 +142,7 @@ def _stats_from_mapping(value: Any, *, metric: str | None = None) -> dict[str, f
         "p50": ("p50", "p50_ms"),
         "p95": ("p95", "p95_mw", "p95_ms"),
         "p99": ("p99",),
-        "min": ("min",),
+        "min": ("min", "min_ms"),
         "max": ("max", "max_ms"),
         "std": ("std", "std_mw"),
     }

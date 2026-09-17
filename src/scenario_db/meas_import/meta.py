@@ -21,7 +21,8 @@ from pydantic import Field, model_validator
 
 from scenario_db.models.common import BaseScenarioModel
 from scenario_db.models.evidence.common import ExecutionContext
-from scenario_db.models.evidence.measurement import Provenance
+from scenario_db.models.evidence.measurement import Provenance, SwTaskTiming
+from scenario_db.models.evidence.profiling import ProfilingSummary
 from scenario_db.models.evidence.metrics import MetricObservation
 
 
@@ -75,12 +76,20 @@ class TaskMatch(BaseScenarioModel):
     process_re: str | None = None     # regex on process name
     thread: str | None = None         # exact thread name
     thread_re: str | None = None      # regex on thread name
+    track: str | None = None
     slice_re: str | None = None       # regex on slice name
 
     @model_validator(mode="after")
     def _check_any(self) -> TaskMatch:
+        import re
+        for pattern in (self.process_re, self.thread_re, self.slice_re):
+            if pattern is not None:
+                try:
+                    re.compile(pattern)
+                except re.error as exc:
+                    raise ValueError(f"invalid mapping regex: {exc}") from exc
         if not any(
-            (self.process, self.process_re, self.thread, self.thread_re, self.slice_re)
+            (self.process, self.process_re, self.thread, self.thread_re, self.slice_re, self.track)
         ):
             raise ValueError("task match must specify at least one of process/thread/slice")
         return self
@@ -90,6 +99,15 @@ class TaskMapping(BaseScenarioModel):
     task: str                         # logical task name (e.g. eis_warp)
     match: TaskMatch
     cluster: str | None = None        # dominant execution cluster (annotation)
+    node_id: str | None = None
+    execution_kind: Literal["hw", "sw"] = "sw"
+
+
+class EventLatencyMapping(BaseScenarioModel):
+    edge_id: str
+    predecessor_task: str
+    successor_task: str
+    source_anchor: Literal["start", "end"] = "end"
 
 
 class PerfettoSpec(BaseScenarioModel):
@@ -97,9 +115,26 @@ class PerfettoSpec(BaseScenarioModel):
     trace: str                        # path to the trace (.pb / .pftrace)
     cpu_to_cluster: dict[int, str] = Field(default_factory=dict)
     task_mapping: list[TaskMapping] = Field(default_factory=list)
+    event_latency_mapping: list[EventLatencyMapping] = Field(default_factory=list)
+    include_sequence: bool = False
+    required: bool = False
     # frame counter slice name used to derive frame count (count_per_frame).
     frame_slice_name: str | None = None
     frame_count: int | None = None    # explicit frame count override
+
+
+    @model_validator(mode="after")
+    def unique_mapping(self) -> PerfettoSpec:
+        names = [m.task for m in self.task_mapping]
+        if len(names) != len(set(names)):
+            raise ValueError("task mapping names must be unique")
+        edges = [m.edge_id for m in self.event_latency_mapping]
+        if len(edges) != len(set(edges)):
+            raise ValueError("event latency edge ids must be unique")
+        for edge in self.event_latency_mapping:
+            if edge.predecessor_task not in names or edge.successor_task not in names:
+                raise ValueError("latency endpoints must be mapped tasks")
+        return self
 
 
 class ArtifactSpec(BaseScenarioModel):
@@ -129,7 +164,21 @@ class MeasurementImportMeta(BaseScenarioModel):
     metric_observations: list[MetricObservation] = Field(default_factory=list)
     power: PowerSpec | None = None
     perfetto: PerfettoSpec | None = None
+    profiling: ProfilingSummary | None = None
+    sw_task_timing: list[SwTaskTiming] = Field(default_factory=list)
     artifacts: list[ArtifactSpec] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _summary_statistics(self) -> MeasurementImportMeta:
+        if self.sw_task_timing:
+            from scenario_db.models.evidence.profiling import TimingStatistics
+            tasks = [t.task for t in self.sw_task_timing]
+            if len(tasks) != len(set(tasks)):
+                raise ValueError("summary SW task ids must be unique")
+            for item in self.sw_task_timing:
+                TimingStatistics.model_validate({key:getattr(item,key) for key in
+                                                 ("min_ms", "mean_ms", "max_ms", "samples")})
+        return self
 
     @model_validator(mode="after")
     def _force_measurement_method(self) -> MeasurementImportMeta:
@@ -149,6 +198,8 @@ class MeasurementImportMeta(BaseScenarioModel):
             and self.perfetto is None
             and not self.kpi
             and not self.metric_observations
+            and self.profiling is None
+            and not self.sw_task_timing
         ):
             raise ValueError(
                 "meta must provide at least one of 'kpi', 'power', 'perfetto', "

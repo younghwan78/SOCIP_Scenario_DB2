@@ -160,15 +160,22 @@ def run_import(args: argparse.Namespace, report: ImportReport) -> dict | None:
                     f"{len(perfetto.sw_task_timing)} task timings.",
                     str(trace_path),
                 )
+            except ValueError as exc:
+                report.error("perfetto_invalid", str(exc), str(trace_path))
             except RuntimeError as exc:
                 report.warning("perfetto_unavailable", str(exc), str(trace_path))
     elif meta.perfetto is not None and args.skip_perfetto:
         report.info("perfetto_skipped", "Perfetto digest skipped by --skip-perfetto.")
 
+    if meta.perfetto is not None and meta.perfetto.required and perfetto is None:
+        report.error("required_perfetto_missing", "Required profiling could not be extracted.")
     if not report.ok:
         return None
-
-    doc = assemble_evidence(meta, power, perfetto, base_dir=base_dir, report=report)
+    try:
+        doc = assemble_evidence(meta, power, perfetto, base_dir=base_dir, report=report)
+    except ValueError as exc:
+        report.error("conflicting_timing_input", str(exc))
+        return None
 
     if not args.skip_generated_validation:
         try:
@@ -188,9 +195,12 @@ def main(argv: list[str] | None = None) -> int:
     doc = run_import(args, report)
     if doc is not None:
         out_path = args.out / "03_evidence" / f"{doc['id']}.yaml"
-        write_yaml(out_path, doc)
-        report.increment("evidence_measurement")
-        report.info("evidence_emitted", f"Emitted measurement evidence: {out_path}", str(out_path))
+        if out_path.exists() and read_yaml(out_path) != doc:
+            report.error("evidence_revision_conflict", "Existing evidence differs; use a new evidence id.", str(out_path))
+        else:
+            write_yaml(out_path, doc)
+            report.increment("evidence_measurement")
+            report.info("evidence_emitted", f"Emitted measurement evidence: {out_path}", str(out_path))
 
     report_path = args.out / "meas_import_report.json"
     report_path.parent.mkdir(parents=True, exist_ok=True)
@@ -198,7 +208,7 @@ def main(argv: list[str] | None = None) -> int:
     print(json.dumps(report.to_dict(), indent=2))
 
     has_warning = any(m.level == "warning" for m in report.messages)
-    return 1 if args.strict and (not report.ok or (args.fail_on_warning and has_warning)) else 0
+    return 1 if not report.ok or (args.strict and args.fail_on_warning and has_warning) else 0
 
 
 def _fmt_validation(exc: ValidationError) -> str:

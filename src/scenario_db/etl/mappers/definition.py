@@ -56,6 +56,8 @@ def upsert_usecase(raw: dict, sha256: str, session: Session) -> None:
     row.metadata_ = obj.metadata.model_dump(exclude_none=True)
     row.pipeline = obj.pipeline.model_dump(by_alias=True, exclude_none=True)
     row.size_profile = obj.size_profile.model_dump(exclude_none=True) if obj.size_profile else None
+    row.provenance = obj.provenance
+    row.parametric_sweeps = [a.model_dump(exclude_none=True) for a in obj.parametric_sweeps]
     row.design_axes = [a.model_dump(exclude_none=True) for a in obj.design_axes]
     row.yaml_sha256 = sha256
     session.add(row)

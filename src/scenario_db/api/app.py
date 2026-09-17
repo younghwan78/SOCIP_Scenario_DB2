@@ -12,6 +12,7 @@ from scenario_db.api.cache import RuleCache
 from scenario_db.api.exceptions import register_handlers
 from scenario_db.api.routers import admin, capability, catalog, cdgm, decision, definition, evidence, exploration, explorer, query, runtime, simulation, write
 from scenario_db.api.routers.utility import health_router
+from scenario_db.api.routers import camera_profiling
 from scenario_db.api.routers import view as view_router
 from scenario_db.config import get_settings
 from scenario_db.db.session import make_session_factory
@@ -82,6 +83,7 @@ def create_app() -> FastAPI:
         cdgm.router,
         definition.router,
         evidence.router,
+        camera_profiling.router,
         decision.router,
         runtime.router,
         explorer.router,

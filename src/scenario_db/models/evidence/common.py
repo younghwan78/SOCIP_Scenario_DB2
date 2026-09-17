@@ -38,6 +38,8 @@ class SweepContext(BaseScenarioModel):
 
 
 class RunInfo(BaseScenarioModel):
+    sw_timing_projection: dict | None = None
+    timing_profile: dict | None = None
     timestamp: str                       # ISO 8601
     tool: str
     tool_version: str | None = None

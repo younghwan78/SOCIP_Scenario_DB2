@@ -46,6 +46,7 @@
 - [Legacy Fixture Import Guide](guides/import/legacy-data-import-guide.md)
 - [CDGM Import Guide](guides/import/cdgm-import-guide-ko.md)
 - [Exploration Fixture Guide](guides/exploration/exploration-fixture-guide-ko.md)
+- [실측 profiling과 기존 scenario 탐색](guides/profiling-and-scenario-exploration.md)
 - [Measurement Import Guide](guides/measurement/measurement-import-guide-ko.md)
 - [Projection Guide](guides/measurement/projection-guide-ko.md)
 - [Prediction/Measurement Comparison Guide](guides/comparison/prediction-measurement-comparison-guide-ko.md)
@@ -77,3 +78,6 @@ Current documents should declare `Status`, `Last verified`, scope, and the sourc
 that pin the behavior. When a contract changes, update code, tests, and the linked document in
 the same change. Superseded implementation material moves to `internal_docs`; it is not left in
 `docs` with an ambiguous `Plan` or `Week N` title.
+
+
+- [Camera semantic profiling: MD import, DB fields and SW projection](guides/camera-semantic-profiling.md)

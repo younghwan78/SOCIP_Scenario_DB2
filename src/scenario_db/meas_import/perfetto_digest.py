@@ -122,6 +122,8 @@ def _match_slice(row: dict[str, Any], match: TaskMatch) -> bool:
     proc = row.get("process_name") or ""
     thr = row.get("thread_name") or ""
     name = row.get("slice_name") or ""
+    if match.track is not None and row.get("track_name") != match.track:
+        return False
     if match.process is not None and proc != match.process:
         return False
     if match.process_re is not None and not re.search(match.process_re, proc):
@@ -143,6 +145,8 @@ def extract_sw_task_timing(
     """Roll up matched slice durations (ns) into per-task ms statistics."""
     out: list[dict] = []
     for mapping in spec.task_mapping:
+        if mapping.execution_kind != "sw":
+            continue
         durations_ms = [
             float(row["dur_ns"]) / NS_PER_MS
             for row in rows
@@ -152,10 +156,12 @@ def extract_sw_task_timing(
         if mapping.cluster:
             entry["cluster"] = mapping.cluster
         if durations_ms:
-            entry["mean_ms"] = round(sum(durations_ms) / len(durations_ms), 3)
-            entry["p50_ms"] = round(percentile(durations_ms, 50.0), 3)
-            entry["p95_ms"] = round(percentile(durations_ms, 95.0), 3)
-            entry["max_ms"] = round(max(durations_ms), 3)
+            entry["min_ms"] = min(durations_ms)
+            entry["value_source"] = "measured"
+            entry["mean_ms"] = sum(durations_ms) / len(durations_ms)
+            entry["p50_ms"] = percentile(durations_ms, 50.0)
+            entry["p95_ms"] = percentile(durations_ms, 95.0)
+            entry["max_ms"] = max(durations_ms)
             entry["samples"] = len(durations_ms)
             if frame_count and frame_count > 0:
                 entry["count_per_frame"] = round(len(durations_ms) / frame_count, 4)
@@ -171,6 +177,9 @@ class PerfettoDigest:
         self.cluster_avg_freq: dict[str, float] = {}
         self.sw_task_timing: list[dict] = []
         self.frame_count: int | None = None
+        self.hw_task_timing: list[dict] = []
+        self.sw_event_latency: list[dict] = []
+        self.timeline_events: list[dict] = []
 
 
 def extract_digest(tp: TraceQuery, spec: PerfettoSpec) -> PerfettoDigest:
@@ -193,10 +202,19 @@ def extract_digest(tp: TraceQuery, spec: PerfettoSpec) -> PerfettoDigest:
             frame_count = int(rows[0].get("frame_count") or 0) or None
     digest.frame_count = frame_count
 
-    if spec.task_mapping:
+    if spec.task_mapping and not (spec.include_sequence or spec.event_latency_mapping or any(m.execution_kind == "hw" for m in spec.task_mapping)):
         slice_rows = tp.query(SQL_THREAD_SLICES)
         digest.sw_task_timing = extract_sw_task_timing(slice_rows, spec, frame_count)
 
+    if spec.include_sequence or spec.event_latency_mapping or any(m.execution_kind == "hw" for m in spec.task_mapping):
+        from scenario_db.meas_import.sequence import extract_sequence
+        extract_sequence(tp, spec, digest)
+
+    if spec.required:
+        found = {r["task"] for r in [*digest.sw_task_timing, *digest.hw_task_timing] if r.get("samples")}
+        missing = {m.task for m in spec.task_mapping} - found
+        if missing:
+            raise ValueError(f"required task mappings have no samples: {sorted(missing)}")
     return digest
 
 

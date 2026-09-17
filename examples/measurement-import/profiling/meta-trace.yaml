@@ -1,0 +1,33 @@
+# Template: replace trace path, names, variant, context and node IDs with capture values.
+schema_version: '2.2'
+id: meas-profiling-trace-example-r1
+project_ref: proj-sm-s947b
+scenario_ref: uc-camera-recording
+variant_ref: cam-rec-r1-fhd30-vdis
+measured_at: '2026-09-16T10:00:00+09:00'
+execution_context:
+  silicon_rev: EVT1
+  sw_baseline_ref: sw-vendor-v1.2.3
+  thermal: room
+provenance:
+  collection_method: perfetto
+perfetto:
+  trace: capture.pftrace
+  required: true
+  include_sequence: true
+  task_mapping:
+    - task: gdc
+      node_id: gdc
+      execution_kind: hw
+      match:
+        slice_re: '^GDC_Run$'
+    - task: eis
+      node_id: eis
+      execution_kind: sw
+      match:
+        slice_re: '^EIS_Run$'
+  event_latency_mapping:
+    - edge_id: gdc_done_to_eis
+      predecessor_task: gdc
+      successor_task: eis
+      source_anchor: end

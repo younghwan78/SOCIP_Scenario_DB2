@@ -126,3 +126,15 @@ metrics:
     allowed_scopes: [task, thread]
     compare_statistic: value
     polarity: lower_is_better
+  hw.runtime:
+    category: hw_timing
+    canonical_unit: ms
+    allowed_scopes: [node, task]
+    compare_statistic: mean
+    polarity: lower_is_better
+  sw.start_latency:
+    category: sw_timing
+    canonical_unit: ms
+    allowed_scopes: [event_pair]
+    compare_statistic: mean
+    polarity: lower_is_better

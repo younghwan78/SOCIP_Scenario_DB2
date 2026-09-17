@@ -184,3 +184,30 @@ measurement import가 `id`를 자동 생성할 때는 같은 날 재측정을 �
 
 - `tests/unit/fixtures/evidence/meas-camera-recording-UHD60-EVT0-sw123.yaml`
 - `demo/fixtures/03_evidence/meas-UHD60-EVT0-sw123.yaml`
+
+
+## Profiling extension (2026-09-16)
+
+`hw_task_timing` stores per-task/node `min_ms`, `mean_ms`, `max_ms`, positive `samples`, and `runtime_basis` (wall/active). `sw_event_latency` stores event-pair statistics with `edge_id`, `predecessor_task`, `successor_task`, source/target anchors and pairing method. Both are typed, persisted JSONB fields exposed by EvidenceResponse. SW runtime retains the compatible `sw_task_timing` contract; the summary importer requires all three runtime statistics and sample count.
+
+Measured sequence events retain unique event instance/task_id, logical_task_id, node_id, task_type, integer start_ns/duration_ns, track_id, predecessor event IDs, and origin-relative chart times in ms. Timestamp order alone does not imply a dependency. Summary-only input creates no sequence. New profiling imports stamp provenance.import_fingerprint and require a new evidence ID for changes.
+
+See [profiling guide](../../guides/profiling-and-scenario-exploration.md) for input examples, limitations and profile revision/replay behavior.
+
+
+`POST /api/v1/evidence/{evidence_id}/timing-profile` (analyst/writer/admin) prepares a read-only MeasuredTimingProfile. Body requires profile_id and nonempty task_mapping; revision defaults to 1 and statistic to mean. The server resolves current scenario ownership/baseline and validates active tasks and latency anchors. Returned source_task_mapping allows simulation to compare overrides against the original measurement; baseline_sha256 rejects model drift. Incomplete statistics, unknown mappings, active-time to wall-time conversion, or wrong evidence kind yield 422. Missing evidence yields 404.
+
+## Curated camera semantic profiling (2026-09-17)
+
+`camera-profile-v1` is a producer input version; stored measurement evidence continues to use schema_version `2.2`. The additive camera fields are nullable for legacy rows:
+
+| Field | Stored type | Meaning |
+| --- | --- | --- |
+| execution_path_id | TEXT | Scope-local path identifier |
+| pipeline_model | JSONB | Typed logical tasks, explicit dependencies, execution_path and import-time model binding |
+| stage_timing | JSONB | RT/NRT group spans, validation_only |
+| profiling_metadata | JSONB | Producer version, scope description, workload, notes |
+
+`sw_task_timing` additionally supports timing_scope, includes_task_ids and sample_unit. `sw_event_latency.pairing` additionally accepts producer_defined; latency_basis is observed_gap. Camera evidence requires complete runtime min/mean/max/count and active task/edge references. No missing values are converted to zero. A measured camera summary cannot be applied as a legacy whole-runtime replay; use the separately pinned SW projection, which rejects HW/inclusive stage overrides.
+
+Import preview is read-only; commit checks a normalized content hash, canonical ownership, workload and registered SW baseline. Duplicate identical evidence is a no-op; changed content under the same ID conflicts. Detail and operational examples: [camera profiling guide](../../guides/camera-semantic-profiling.md).

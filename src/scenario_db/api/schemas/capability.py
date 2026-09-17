@@ -4,6 +4,8 @@ from pydantic import BaseModel, ConfigDict
 
 
 class SocPlatformResponse(BaseModel):
+    platform_model: dict | None = None
+    compression_modes: dict | None = None
     model_config = ConfigDict(from_attributes=True)
 
     id: str

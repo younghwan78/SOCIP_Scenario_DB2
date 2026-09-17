@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from datetime import datetime
 from pathlib import Path
@@ -132,8 +133,20 @@ def assemble_evidence(
     if cpu_breakdown:
         doc["cpu_breakdown"] = cpu_breakdown
 
-    if perfetto is not None and perfetto.sw_task_timing:
-        doc["sw_task_timing"] = perfetto.sw_task_timing
+    if meta.sw_task_timing:
+        doc["sw_task_timing"] = [t.model_dump(exclude_none=True) for t in meta.sw_task_timing]
+    if meta.profiling is not None:
+        for key in ("hw_task_timing", "sw_event_latency"):
+            values = getattr(meta.profiling, key)
+            if values:
+                doc[key] = [v.model_dump(exclude_none=True) for v in values]
+    if perfetto is not None:
+        for key in ("sw_task_timing", "hw_task_timing", "sw_event_latency", "timeline_events"):
+            values = getattr(perfetto, key)
+            if values:
+                if doc.get(key):
+                    raise ValueError(f"duplicate timing input: {key}")
+                doc[key] = values
 
     if power is not None and power.vdd_power:
         doc["vdd_power"] = power.vdd_power
@@ -143,6 +156,19 @@ def assemble_evidence(
         doc["metric_observations"] = observations
 
     artifacts = build_artifacts(meta, base_dir, report)
+    if meta.perfetto is not None and perfetto is not None:
+        trace = Path(meta.perfetto.trace)
+        if not trace.is_absolute():
+            trace = base_dir / trace
+        if trace.is_file() and not any(a.get("type") == "perfetto_trace" for a in artifacts):
+            artifacts.append(dict(type="perfetto_trace", storage="fileshare", path=meta.perfetto.trace,
+                                  sha256=_sha256(trace), bytes=trace.stat().st_size))
+    if meta.profiling or meta.sw_task_timing or (meta.perfetto and
+            (meta.perfetto.include_sequence or meta.perfetto.event_latency_mapping)):
+        fingerprint_input = dict(meta=meta.model_dump(mode="json"), artifacts=artifacts,
+                                 digest={k:doc.get(k) for k in ("sw_task_timing", "hw_task_timing", "sw_event_latency", "timeline_events")})
+        doc["provenance"]["import_fingerprint"] = hashlib.sha256(
+            json.dumps(fingerprint_input, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     if artifacts:
         doc["artifacts"] = artifacts
 

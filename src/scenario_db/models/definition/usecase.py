@@ -216,6 +216,7 @@ class UsecaseMetadata(BaseScenarioModel):
 # ---------------------------------------------------------------------------
 
 class Usecase(BaseScenarioModel):
+    provenance: dict[str, Any] = Field(default_factory=dict)
     id: DocumentId
     schema_version: SchemaVersion
     kind: Literal["scenario.usecase"]

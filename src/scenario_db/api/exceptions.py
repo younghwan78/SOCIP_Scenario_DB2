@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError, NoResultFound
 
@@ -73,7 +74,7 @@ async def _conflict_handler(request: Request, exc: IntegrityError) -> JSONRespon
 async def _validation_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
     return JSONResponse(
         status_code=422,
-        content={"error": "validation_error", "detail": exc.errors()},
+        content={"error": "validation_error", "detail": jsonable_encoder(exc.errors(), custom_encoder={Exception: str})},
     )
 
 

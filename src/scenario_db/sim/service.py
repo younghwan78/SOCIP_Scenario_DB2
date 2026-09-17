@@ -28,9 +28,42 @@ def run_simulation_request(db: Session, request: SimulateRequest) -> SimulateRun
     config_profile_stamp = _apply_config_profile(db, request)
     try:
         graph = load_canonical_graph(db, request.scenario_id, request.variant_id)
+        if request.config.sw_timing_projection is not None:
+            from scenario_db.sim.sw_projection import verify_projection
+            verify_projection(db, graph, request.config.sw_timing_projection)
         inputs = build_simulation_inputs(graph, request.config)
         _enforce_input_limits(inputs)
         dvfs_tables, execution_context = _resolve_dvfs_tables(db, graph, request)
+        if request.config.sw_timing_projection is not None:
+            execution_context = execution_context.model_copy(update={"method": "projection"})
+        if request.config.timing_profile is not None:
+            profile = request.config.timing_profile
+            measured = get_evidence(db, profile.evidence_ref)
+            if measured is None or measured.kind != "evidence.measurement":
+                raise ValueError("timing profile source measurement must be loaded")
+            if measured.pipeline_model is not None:
+                raise ValueError("curated camera evidence requires SW projection; HW timing is validation-only")
+            if measured.yaml_sha256 != profile.evidence_sha256:
+                raise ValueError("timing profile source hash mismatch")
+            if (measured.project_ref, measured.scenario_ref, measured.variant_ref) != (
+                    profile.project_ref, profile.scenario_ref, profile.variant_ref):
+                raise ValueError("timing profile source scope mismatch")
+            if profile.source_task_mapping:
+                from scenario_db.api.services.timing_profiles import measurement_from_row
+                from scenario_db.meas_import.timing_profile import build_profile
+                expected = build_profile(measurement_from_row(measured), evidence_sha256=measured.yaml_sha256,
+                    profile_id=profile.profile_id, revision=profile.revision, statistic=profile.statistic,
+                    design_conditions=profile.design_conditions, task_mapping=profile.source_task_mapping,
+                    baseline_sha256=profile.baseline_sha256)
+                if expected.task_runtime != profile.task_runtime or expected.event_latency != profile.event_latency:
+                    raise ValueError("timing profile values differ from source measurement")
+            context = execution_context.model_dump(mode="json", exclude_none=True)
+            for key in ("silicon_rev", "sw_baseline_ref", "thermal", "power_state", "ambient_temp_c", "dvfs_table_ref", "dvfs_version", "sw_runtime_overrides"):
+                captured = profile.capture_context.get(key)
+                if (captured is None and key in {"silicon_rev", "sw_baseline_ref", "thermal"}) or captured != (measured.execution_context or {}).get(key) or captured != context.get(key):
+                    raise ValueError(f"timing profile capture context mismatch or missing: {key}")
+            if request.config.dvfs_overrides or request.dvfs_tables:
+                raise ValueError("measured timing replay does not support DVFS extrapolation")
     except LookupError as exc:
         raise NotFoundError(str(exc)) from exc
     except ValueError as exc:
@@ -312,6 +345,7 @@ def _simulation_evidence_dict(evidence) -> dict:
         ),
         "aggregation": evidence.aggregation.model_dump(mode="json", exclude_none=True),
         "kpi": dict(evidence.kpi),
+        "derived_from": [str(ref) for ref in evidence.derived_from],
         "run_info": evidence.run.model_dump(mode="json", exclude_none=True),
         "ip_breakdown": [item.model_dump(mode="json", exclude_none=True) for item in evidence.ip_breakdown],
         "dma_breakdown": [item.model_dump(mode="json", exclude_none=True) for item in evidence.dma_breakdown],

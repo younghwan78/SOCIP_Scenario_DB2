@@ -39,6 +39,12 @@ class EvidenceResponse(BaseModel):
     provenance: dict | None = None
     cpu_breakdown: list | None = None
     sw_task_timing: list | None = None
+    execution_path_id: str | None = None
+    pipeline_model: dict | None = None
+    stage_timing: list | None = None
+    profiling_metadata: dict | None = None
+    hw_task_timing: list | None = None
+    sw_event_latency: list | None = None
     metric_observations: list | None = None
     artifacts: list | None = None
     sw_version_hint: str | None = None

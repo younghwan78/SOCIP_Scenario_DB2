@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any, Literal
 
-from pydantic import Field, model_validator
+from pydantic import ConfigDict, Field, model_validator
 
 from scenario_db.models.common import BaseScenarioModel, DocumentId, SchemaVersion
 from scenario_db.models.evidence.common import (
@@ -16,6 +16,9 @@ from scenario_db.models.evidence.metrics import (
     MetricObservation,
     validate_metric_observations,
 )
+
+from scenario_db.models.evidence.camera import CameraPipeline, ProfilingMetadata, StageTiming, validate_camera_evidence
+from scenario_db.models.evidence.profiling import HwTaskTiming, SwEventLatency
 
 _KPI_KEY_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
@@ -48,7 +51,11 @@ class MeasuredCpuCluster(BaseScenarioModel):
 
 class SwTaskTiming(BaseScenarioModel):
     """Per-task wall time digest extracted from perfetto sched/slice data."""
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
     task: str                             # logical task name, e.g. eis_warp, depth_npu
+    timing_scope: Literal["exclusive_sw", "inclusive_stage"] | None = None
+    includes_task_ids: list[str] = Field(default_factory=list)
+    sample_unit: Literal["invocation", "frame"] = "invocation"
     process: str | None = None
     thread: str | None = None
     cluster: str | None = None            # dominant execution cluster
@@ -62,7 +69,20 @@ class SwTaskTiming(BaseScenarioModel):
     value_source: Literal["assumed", "measured", "projected"] | None = None
     source_note: str | None = None
     count_per_frame: float | None = None
-    samples: int | None = None
+    samples: int | None = Field(default=None, gt=0)
+    start_latency_ref: str | None = None
+    start_latency_mean_ms: float | None = Field(default=None, ge=0)
+    rate_hz: float | None = Field(default=None, gt=0)
+    cpu_affinity: str | None = None
+
+    @model_validator(mode="after")
+    def ordered_runtime(self) -> SwTaskTiming:
+        values = [v for v in (self.min_ms, self.mean_ms, self.max_ms) if v is not None]
+        if values != sorted(values):
+            raise ValueError("SW timing requires min_ms <= mean_ms <= max_ms")
+        if self.start_latency_mean_ms is not None and not self.start_latency_ref:
+            raise ValueError("start latency requires an explicit predecessor event")
+        return self
 
 
 class RuntimeSwState(BaseScenarioModel):
@@ -78,6 +98,7 @@ class RawArtifact(BaseScenarioModel):
 
 
 class Provenance(BaseScenarioModel):
+    import_fingerprint: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     device_id: str | None = None
     chamber_controlled: bool | None = None
     chamber_temp_c: float | None = None
@@ -104,6 +125,10 @@ class MeasurementEvidence(BaseScenarioModel):
     kind: Literal["evidence.measurement"]
     scenario_ref: DocumentId
     variant_ref: str
+    execution_path_id: str | None = None
+    pipeline_model: CameraPipeline | None = None
+    stage_timing: list[StageTiming] = Field(default_factory=list)
+    profiling_metadata: ProfilingMetadata | None = None
     project_ref: DocumentId | None = None
     measured_at: str | None = None       # ISO 8601, e.g. "2026-06-01T10:00:00+09:00"
     derived_from: list[DocumentId] = Field(default_factory=list)
@@ -115,6 +140,8 @@ class MeasurementEvidence(BaseScenarioModel):
     kpi: dict[str, float | int | MeasuredKpi] = Field(default_factory=dict)
     cpu_breakdown: list[MeasuredCpuCluster] = Field(default_factory=list)
     sw_task_timing: list[SwTaskTiming] = Field(default_factory=list)
+    hw_task_timing: list[HwTaskTiming] = Field(default_factory=list)
+    sw_event_latency: list[SwEventLatency] = Field(default_factory=list)
     # Per-rail digest: numeric metrics (voltage_v/current_ma/power_mw/std_mw/...)
     # plus an optional "domain" string for dashboard rollups. Domain is partial:
     # only rails the name heuristic gets wrong need declaring.
@@ -122,6 +149,10 @@ class MeasurementEvidence(BaseScenarioModel):
     timeline_events: list[dict[str, Any]] = Field(default_factory=list)
     metric_observations: list[MetricObservation] = Field(default_factory=list)
     artifacts: list[Artifact] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _camera(self):
+        return validate_camera_evidence(self)
 
     @model_validator(mode="after")
     def _validate_kpi_keys(self) -> MeasurementEvidence:

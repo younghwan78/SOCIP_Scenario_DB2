@@ -543,6 +543,9 @@ def render_measurement_result(evidence: dict[str, Any], *, key_prefix: str = "me
 
     from dashboard.components.table_actions import render_copyable_dataframe
 
+    if evidence.get("pipeline_model"):
+        from dashboard.components.camera_profiling import render_camera
+        render_camera(evidence)
     evidence_id = str(evidence.get("id") or "measurement")
     tabs = st.tabs(list(MEASUREMENT_TABS))
 
@@ -710,6 +713,16 @@ def _render_cpu_freq(st, evidence, render_table, *, key_prefix: str) -> None:
 
 
 def _render_sw_timing(st, evidence, render_table, *, key_prefix: str) -> None:
+    for field, title in (("hw_task_timing", "HW runtime (ms)"), ("sw_event_latency", "SW event latency (ms)")):
+        if evidence.get(field):
+            st.markdown(f"**{title}**")
+            render_table(evidence[field], key=f"{key_prefix}_{field}", use_container_width=True, hide_index=True)
+    if evidence.get("timeline_events"):
+        from dashboard.components.timing_chart import render_timing_chart
+        st.markdown("**Measured HW/SW sequence**")
+        render_timing_chart(evidence, key_prefix=f"{key_prefix}_measured")
+    else:
+        st.caption("Sequence requires timestamped events; runtime summaries alone do not define task order.")
     rows = sw_task_rows(evidence)
     if not rows:
         st.info("No sw_task_timing digest in this measurement.")

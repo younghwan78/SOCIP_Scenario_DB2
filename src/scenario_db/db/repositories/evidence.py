@@ -131,6 +131,7 @@ def upsert_simulation_evidence(
     )
     row.aggregation = evidence.aggregation.model_dump(exclude_none=True)
     row.kpi = dict(evidence.kpi)
+    row.derived_from = [str(ref) for ref in evidence.derived_from] or None
     row.run_info = evidence.run.model_dump(exclude_none=True)
     row.ip_breakdown = [item.model_dump(exclude_none=True) for item in evidence.ip_breakdown]
     row.dma_breakdown = [item.model_dump(exclude_none=True) for item in evidence.dma_breakdown]
