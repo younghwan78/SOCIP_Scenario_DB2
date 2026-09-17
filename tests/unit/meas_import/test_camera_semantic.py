@@ -255,3 +255,25 @@ def test_conflicting_declared_sw_scope_and_invalid_yaml_fail():
         parse_markdown("```yaml camera-profile-v1\n- [broken\n```")
     with pytest.raises(ValueError):
         parse_markdown("```yaml camera-profile-v1\n? [a, b]\n: x\n```")
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("method", "projection"),
+        ("method", "calculation"),
+        ("method", None),
+        ("measured_at", None),
+        ("measured_at", "2026-09-17T10:00:00"),
+    ],
+)
+def test_canonical_upload_requires_measurement_context(field, value):
+    from scenario_db.api.routers.camera_profiling import CameraEvidenceRequest
+
+    raw = evidence().model_dump(mode="json")
+    if field == "method":
+        raw["execution_context"]["method"] = value
+    else:
+        raw[field] = value
+    with pytest.raises(ValueError, match="curated camera evidence requires"):
+        CameraEvidenceRequest.model_validate({"evidence": raw})

@@ -115,6 +115,12 @@ def validate_camera_evidence(evidence):
         return evidence
     if evidence.execution_path_id != model.execution_path.id or evidence.profiling_metadata is None:
         raise ValueError("camera path/metadata mismatch")
+    from datetime import datetime
+
+    if evidence.execution_context.method != "measurement":
+        raise ValueError("curated camera evidence requires method=measurement")
+    if not evidence.measured_at or datetime.fromisoformat(evidence.measured_at).utcoffset() is None:
+        raise ValueError("curated camera evidence requires measured_at with timezone")
     active = set(model.execution_path.enabled_task_ids)
     tasks = {t.task_id: t for t in model.tasks}
     for stat in evidence.sw_task_timing:

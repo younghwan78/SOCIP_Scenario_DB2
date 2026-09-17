@@ -41,6 +41,16 @@ def test_camera_import_roundtrip_projection_and_conflicts(engine, api_client):
             )
             assert preview.status_code == 200, preview.text
             prepared = preview.json()
+            invalid_capture = deepcopy(prepared["evidence"])
+            invalid_capture["execution_context"]["method"] = "projection"
+            invalid_capture["measured_at"] = None
+            for endpoint in ("preview", "commit"):
+                response = api_client.post(
+                    "/api/v1/profiling/import/" + endpoint,
+                    json={"evidence": invalid_capture, "expected_hash": prepared["sha256"]},
+                )
+                assert response.status_code == 422
+
             with Session(connection) as session:
                 assert session.query(Evidence).count() == before
             payload = {"markdown": markdown, "expected_hash": prepared["sha256"]}
