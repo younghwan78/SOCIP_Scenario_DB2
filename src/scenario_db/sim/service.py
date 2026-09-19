@@ -31,10 +31,12 @@ def run_simulation_request(db: Session, request: SimulateRequest) -> SimulateRun
         if request.config.sw_timing_projection is not None:
             from scenario_db.sim.sw_projection import verify_projection
             verify_projection(db, graph, request.config.sw_timing_projection)
+        from scenario_db.sim.sensor_projection import resolve_sensor_modes
+        graph = resolve_sensor_modes(db, graph, request.config)
         inputs = build_simulation_inputs(graph, request.config)
         _enforce_input_limits(inputs)
         dvfs_tables, execution_context = _resolve_dvfs_tables(db, graph, request)
-        if request.config.sw_timing_projection is not None:
+        if request.config.sw_timing_projection is not None or request.config.sensor_modes:
             execution_context = execution_context.model_copy(update={"method": "projection"})
         if request.config.timing_profile is not None:
             profile = request.config.timing_profile

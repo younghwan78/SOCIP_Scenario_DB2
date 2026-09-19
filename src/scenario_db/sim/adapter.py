@@ -23,6 +23,12 @@ def build_simulation_inputs(
     """Convert an effective canonical graph into simulation-engine inputs."""
 
     run_config = config or SimulationRunConfig()
+    for node_id, binding in run_config.sensor_modes.items():
+        resolved = ((graph.variant.node_configs or {}).get(node_id) or {}).get("resolved_sensor_mode", {})
+        if any(resolved.get("catalog_binding", {}).get(k) != v for k, v in binding.model_dump().items()):
+            raise ValueError("sensor mode bindings must be resolved against DB before simulation")
+    if run_config.sensor_modes and run_config.timing_profile is not None:
+        raise ValueError("sensor mode exploration cannot modify measured replay")
     if run_config.timing_profile is not None and run_config.sw_timing_projection is not None:
         raise ValueError("select measured replay or SW projection, not both")
     if run_config.timing_profile is not None:
@@ -89,6 +95,8 @@ def build_simulation_inputs(
     warnings: list[str] = []
     if calculated_driver_nodes:
         warnings.append("Driver BW/DVFS estimates are in calculation_trace.driver_models; endpoint values are not added to legacy DMA/power totals.")
+    if run_config.sensor_modes:
+        warnings.append("Pinned DT sensor selection applied; VC payload is in external_devices.transport, not aggregate DRAM BW. Target wiring compatibility and CIS readout remain unverified.")
     if run_config.sensor_readout:
         warnings.append("Sensor readout override predicts CSIS FS/FE duration; explicit exploration input, not measured timing.")
     for node_id, cfg in (graph.variant.node_configs or {}).items():

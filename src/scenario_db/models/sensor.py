@@ -63,3 +63,15 @@ class SensorBoardLineup(BaseScenarioModel):
     note: str = ""
     boards: dict[str, dict[str, Any]]
     provenance: dict[str, Any]
+
+
+class SensorModeBinding(BaseScenarioModel):
+    """Pinned DT source selection for a simulation sensor node."""
+    model_config = ConfigDict(extra="forbid")
+    catalog_ref: str
+    catalog_sha256: str
+    mode_label: str
+    lineup_ref: str
+    lineup_sha256: str
+    board_config: str
+    slot: str

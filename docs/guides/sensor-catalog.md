@@ -88,3 +88,38 @@ The Sensor Catalog page displays this report and exports JSON.
 - Payload utilization excludes packet overhead, blanking and burst scheduling. payload_within_capacity is a necessary payload check, not a guarantee of feasibility.
 - DRAM traffic remains unknown until routing, packing/stride, compression and vOTF are specified. This report does not change aggregate simulation bandwidth.
 - Transfer lower bounds are not VVALID. DT-to-CIS timing binding remains a pending priority task; the existing separate CIS calculator remains available.
+
+
+## Pinned scenario sensor binding
+
+The Sensor Catalog page now prepares a binding with **Scenario sensor binding**.
+Choose an installed source configuration/slot and provide the target scenario,
+variant and sensor node. Downloaded JSON is a fragment to merge into simulation
+`config`; it is not a complete simulation request.
+
+`POST /api/v1/sensors/projection/prepare` accepts `scenario_id`, `variant_id`,
+`node_id`, `catalog_ref`, full `mode_label`, `lineup_ref`, `board_config`, `slot`.
+It resolves the source and returns `config.sensor_modes`, projected external
+devices and warnings without writing DB. Each binding pins catalog and lineup
+hashes. `/simulation/run` revalidates those hashes and installation on every run.
+A changed source requires preparing a new binding.
+
+The first supported scope is a single-image mode on an active node of the same
+sensor, with the same sensor dimensions and bit depth as the existing pipeline.
+The scenario rate must be within the DT/max_fps cap and the payload must fit the
+source link. Payload is recomputed at scenario FPS. Existing crop, DMA packing,
+compression and output transforms remain the scenario's explicit policies.
+Changing dimensions/format requires an explicit pipeline update first. Multiple
+image/AEB/DCG cadence is rejected until its scheduling contract is known.
+
+The selected DT mode, source wiring rate, VC report and source snapshot are
+included in `external_devices`, simulation hashes and persisted evidence.
+Execution method is `projection`. This validates source-board installation, not
+electrical compatibility with a future target board. The original catalog,
+scenario and sensor IP are not mutated.
+
+Old CIS timing is cleared when a new DT mode is selected. Combining a DT binding
+with a CIS readout override on the same node is rejected until explicit verified
+DT-to-CIS mapping is implemented; measured replay also rejects DT bindings.
+`external_devices.transport` is CSIS payload, not DRAM traffic, and is not added
+to aggregate DMA/power totals. No VVALID is inferred from payload or FPS.

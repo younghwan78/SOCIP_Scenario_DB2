@@ -109,3 +109,39 @@ def select_sensor(request: Selection, db: Session = Depends(get_db)):
 def selections(project_ref: str, db: Session = Depends(get_db)):
     return {"items": [{k: getattr(r, k) for k in Selection.model_fields}
         for r in db.query(ProjectSensorSelection).filter_by(project_ref=project_ref).order_by(ProjectSensorSelection.slot)]}
+
+
+class PrepareProjection(BaseScenarioModel):
+    scenario_id: str
+    variant_id: str
+    node_id: str
+    catalog_ref: str
+    mode_label: str
+    lineup_ref: str
+    board_config: str
+    slot: str
+
+
+@router.post("/projection/prepare")
+def prepare_projection(request: PrepareProjection, db: Session = Depends(get_db)):
+    from scenario_db.db.repositories.scenario_graph import load_canonical_graph
+    from scenario_db.sim.sensor_projection import resolve_sensor_modes
+    from scenario_db.sim.adapter import build_simulation_inputs
+    from scenario_db.sim.models import SimulationRunConfig
+    cat = row_or_404(db, SensorCatalog, request.catalog_ref)
+    lineup = row_or_404(db, SensorBoardLineup, request.lineup_ref)
+    binding = {k: getattr(request, k) for k in (
+        "catalog_ref", "mode_label", "lineup_ref", "board_config", "slot")}
+    binding.update(catalog_sha256=cat.yaml_sha256, lineup_sha256=lineup.yaml_sha256)
+    config = SimulationRunConfig(sensor_modes={request.node_id: binding})
+    try:
+        graph = load_canonical_graph(db, request.scenario_id, request.variant_id)
+        resolved = resolve_sensor_modes(db, graph, config)
+        inputs = build_simulation_inputs(resolved, config)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {"scenario_id": request.scenario_id, "variant_id": request.variant_id,
+            "config": {"sensor_modes": {request.node_id: binding}},
+            "external_devices": inputs.external_devices, "warnings": inputs.warnings}

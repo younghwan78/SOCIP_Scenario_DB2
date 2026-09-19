@@ -65,7 +65,8 @@ def active_sensor_nodes(graph: CanonicalScenarioGraph) -> list[dict[str, Any]]:
 
 
 def selected_sensor_mode(graph: CanonicalScenarioGraph, node: dict[str, Any] | None = None) -> dict[str, Any] | None:
-    mode = _base_selected_sensor_mode(graph, node)
+    cfg = ((graph.variant.node_configs or {}).get(str(node.get("id")), {}) if node else {})
+    mode = cfg.get("resolved_sensor_mode") or _base_selected_sensor_mode(graph, node)
     override = ((graph.variant.node_configs or {}).get(str(node.get("id")), {}) if node else {}).get("sensor_readout")
     if mode is None or not override:
         return mode
@@ -217,6 +218,8 @@ def _sensor_device_info(
         "v_valid_ms": v_valid_ms,
         "csis_frame_window_ms": v_valid_ms,
         "timing_source": mode.get("timing_source"),
+        **({key: mode[key] for key in ("catalog_binding", "transport", "catalog_mode_snapshot")}
+           if mode.get("catalog_binding") else {}),
         "v_valid_source": _v_valid_source(mode),
         "pclk": mode.get("sensor_pclk"),
         "line_length_pck": mode.get("sensor_line_length_pck"),

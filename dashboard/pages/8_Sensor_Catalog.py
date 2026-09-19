@@ -76,6 +76,37 @@ try:
         st.json(transport)
     st.download_button("Download sensor transport report", json.dumps(transport, indent=2),
                        file_name=f"{selected}-{label}-transport.json", mime="application/json")
+    st.subheader("Scenario sensor binding")
+    st.caption("Prepare a pinned source-board selection for a compatible scenario sensor. Source wiring is an exploration assumption for the target project.")
+    lineups = _request_json("GET", base, "/sensors/lineups")["items"]
+    choices = []
+    for lineup in lineups:
+        for cfg in lineup.get("boards", {}).get(board, {}).get("configs", []):
+            for slot, sensors in cfg.get("lineup", {}).items():
+                sensors = [sensors] if isinstance(sensors, str) else sensors
+                if doc["sensor_name"] in sensors:
+                    choices.append((lineup["id"], cfg["config"], slot))
+    if choices:
+        with st.form("sensor_projection"):
+            source = st.selectbox("Installed source configuration / slot", choices,
+                                  format_func=lambda value: f"{value[1]} / {value[2]}")
+            target_scenario = st.text_input("Target scenario ID", "uc-camera-recording")
+            target_variant = st.text_input("Target variant ID", "cam-rec-r1-fhd30-vdis")
+            target_node = st.text_input("Target sensor node", "sensor_rear")
+            prepare = st.form_submit_button("Prepare sensor binding")
+        if prepare:
+            try:
+                prepared = _request_json("POST", base, "/sensors/projection/prepare", json={
+                    "scenario_id": target_scenario, "variant_id": target_variant, "node_id": target_node,
+                    "catalog_ref": selected, "mode_label": label, "lineup_ref": source[0],
+                    "board_config": source[1], "slot": source[2]})
+                st.json(prepared)
+                st.download_button("Download sensor binding config", json.dumps(prepared["config"], indent=2),
+                                   file_name="sensor-binding-config.json", mime="application/json")
+            except ViewerApiError as exc:
+                st.error(str(exc))
+    else:
+        st.info("This catalog is not installed in a source board configuration.")
     st.subheader("Reusable CIS timing")
     st.caption("CIS modes are separate from DT modes. A matching size/FPS does not establish equivalence. Readout predicts the CSIS frame window; it is not an observed FS/FE measurement.")
     profiles = _request_json("GET", base, "/sensors/timing-profiles", params={"sensor_name": doc["sensor_name"]})["items"]

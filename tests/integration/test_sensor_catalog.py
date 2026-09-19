@@ -113,11 +113,11 @@ def test_reuse_across_projects_and_strict_rollback(imported, api_client, tmp_pat
     assert api_client.get("/api/v1/sensors/selections", params={"project_ref": "proj-next-sensor-reuse"}).json()["items"][0]["catalog_ref"] == "sensor-gng-m2s"
 
 
-def test_sensor_page(imported, api_client, monkeypatch):
+def test_sensor_page(imported, api_client, monkeypatch, binding_request):
     from streamlit.testing.v1 import AppTest
     import dashboard.components.simulation_api_client as client
     def request(method, base, path, **kwargs):
-        response = api_client.request(method, "/api/v1" + path, params=kwargs.get("params"))
+        response = api_client.request(method, "/api/v1" + path, params=kwargs.get("params"), json=kwargs.get("json"))
         response.raise_for_status()
         return response.json()
     monkeypatch.setattr(client, "_request_json", request)
@@ -134,6 +134,10 @@ def test_sensor_page(imported, api_client, monkeypatch):
     assert any("cadence is unresolved" in warning.value for warning in app.warning)
     assert any("AEB · NFI" in option for option in app.selectbox[2].options)
     assert any("max 60 fps" in option for option in app.selectbox[2].options)
+    app.selectbox[2].select(binding_request["mode_label"]).run()
+    app.button[0].click().run()
+    assert not app.exception
+    assert not app.error
 
 
 def test_sensor_transport_api(imported, api_client):
@@ -150,3 +154,89 @@ def test_sensor_transport_api(imported, api_client):
     assert r.json()["csis_payload_bytes_s"] is None
     assert api_client.get(base + "mode999/transport").status_code == 404
     assert api_client.get(base.replace("sensor-gng-m2s", "sensor-missing") + "mode0/transport").status_code == 404
+
+
+@pytest.fixture
+def binding_request(imported):
+    from scenario_db.db.repositories.scenario_graph import load_canonical_graph
+    from scenario_db.sim.external_devices import selected_sensor_mode
+    with Session(imported) as db:
+        graph = load_canonical_graph(db, "uc-camera-recording", "cam-rec-r1-fhd30-vdis")
+        node = next(n for n in graph.pipeline_nodes if n["id"] == "sensor_rear")
+        base = selected_sensor_mode(graph, node)
+        catalog = db.get(SensorCatalog, "sensor-gng-m2s")
+        label = next(k for k, m in catalog.document["modes"].items()
+                     if m["decoded"]["size"] == base["sensor_size"] and m["decoded"]["ex_mode"] == "EX_NONE")
+    return {"scenario_id": graph.scenario_id, "variant_id": graph.variant_id,
+            "node_id": "sensor_rear", "catalog_ref": "sensor-gng-m2s", "mode_label": label,
+            "lineup_ref": "board-lineup-s5e9965", "board_config": "s5e9965.m2s_camera", "slot": "rear_wide"}
+
+
+def test_sensor_binding_projection_and_rejection(imported, api_client, binding_request):
+    from copy import deepcopy
+    from scenario_db.db.repositories.scenario_graph import load_canonical_graph
+    from scenario_db.sim.sensor_projection import resolve_sensor_modes
+    from scenario_db.sim.adapter import build_simulation_inputs
+    from scenario_db.sim.models import SimulationRunConfig
+    from scenario_db.sim.runner import params_hash, run_simulation
+    r = api_client.post("/api/v1/sensors/projection/prepare", json=binding_request)
+    assert r.status_code == 200, r.text
+    config = SimulationRunConfig(**r.json()["config"], include_timeline=False)
+    with Session(imported) as db:
+        graph = load_canonical_graph(db, binding_request["scenario_id"], binding_request["variant_id"])
+        original = deepcopy(graph.variant.node_configs)
+        baseline = build_simulation_inputs(graph)
+        with pytest.raises(ValueError, match="resolved against DB"):
+            build_simulation_inputs(graph, config)
+        resolved = resolve_sensor_modes(db, graph, config)
+        inputs = build_simulation_inputs(resolved, config)
+        device = next(d for d in inputs.external_devices if d["node_id"] == "sensor_rear")
+        assert device["mode"] == binding_request["mode_label"]
+        assert device["catalog_binding"]["catalog_sha256"]
+        assert device["transport"]["assumed_fps"] == 30
+        assert device["v_valid_ms"] is None
+        assert graph.variant.node_configs == original
+        assert params_hash(inputs) != params_hash(baseline)
+        assert run_simulation(inputs).external_devices == inputs.external_devices
+        for field, value, message in [
+            ("catalog_sha256", "stale", "hash changed"),
+            ("board_config", "missing", "not installed"),
+            ("mode_label", "mode999", "unknown full"),
+            ("mode_label", "mode0_aeb_nfi", "cadence"),
+        ]:
+            broken = config.model_copy(deep=True)
+            setattr(broken.sensor_modes["sensor_rear"], field, value)
+            with pytest.raises(ValueError, match=message):
+                resolve_sensor_modes(db, graph, broken)
+        fast = config.model_copy(update={"fps": 10000})
+        with pytest.raises(ValueError, match="FPS exceeds"):
+            resolve_sensor_modes(db, graph, fast)
+        wrong = config.model_copy(deep=True)
+        wrong.sensor_modes["cpu"] = wrong.sensor_modes.pop("sensor_rear")
+        with pytest.raises(ValueError, match="active sensor"):
+            resolve_sensor_modes(db, graph, wrong)
+    bad = {**binding_request, "slot": "front"}
+    assert api_client.post("/api/v1/sensors/projection/prepare", json=bad).status_code == 422
+
+
+def test_sensor_binding_persists_through_simulation_api(imported, api_client, binding_request):
+    prepared = api_client.post("/api/v1/sensors/projection/prepare", json=binding_request).json()
+    from scenario_db.db.models.capability import SwProfile
+    with Session(imported) as db:
+        sw_id = db.query(SwProfile).first().id
+    payload = {"scenario_id": binding_request["scenario_id"], "variant_id": binding_request["variant_id"],
+               "execution_context": {"silicon_rev": "EVT1", "sw_baseline_ref": sw_id, "thermal": "nominal"},
+               "config": {**prepared["config"], "include_timeline": False}, "persist": True}
+    r = api_client.post("/api/v1/simulation/run", json=payload)
+    assert r.status_code == 200, r.text
+    device = next(d for d in r.json()["result"]["external_devices"] if d["node_id"] == "sensor_rear")
+    assert device["catalog_binding"]["mode_label"] == binding_request["mode_label"]
+
+    assert r.json()["persisted"]
+    from scenario_db.db.models.evidence import Evidence
+    with Session(imported) as db:
+        stored = db.get(Evidence, r.json()["evidence_id"])
+        assert stored.execution_context["method"] == "projection"
+        assert next(d for d in stored.external_devices if d["node_id"] == "sensor_rear")["catalog_binding"] == device["catalog_binding"]
+    payload["config"]["sensor_modes"]["sensor_rear"]["catalog_sha256"] = "stale"
+    assert api_client.post("/api/v1/simulation/run", json=payload).status_code == 422
