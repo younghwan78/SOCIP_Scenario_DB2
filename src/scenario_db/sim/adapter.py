@@ -83,11 +83,16 @@ def build_simulation_inputs(
     shapes = propagate_shapes(graph)
     workloads: list[IPWorkload] = []
     transfers: list[PortTransferSpec] = []
+    from scenario_db.sim.driver_models import evaluate_graph
+    driver_report = evaluate_graph(graph, run_config.driver_model_overrides)
+    calculated_driver_nodes = {r["node_id"] for r in driver_report["rows"] if r["status"] in {"calculated", "partial", "infeasible"}}
     warnings: list[str] = []
+    if calculated_driver_nodes:
+        warnings.append("Driver BW/DVFS estimates are in calculation_trace.driver_models; endpoint values are not added to legacy DMA/power totals.")
     if run_config.sensor_readout:
         warnings.append("Sensor readout override predicts CSIS FS/FE duration; explicit exploration input, not measured timing.")
     for node_id, cfg in (graph.variant.node_configs or {}).items():
-        if node_id not in inactive and (cfg.get("bw_kb_s") or cfg.get("model_ref")):
+        if node_id not in inactive and node_id not in calculated_driver_nodes and (cfg.get("bw_kb_s") or cfg.get("model_ref")):
             warnings.append(f"{node_id}: imported driver BW/DVFS model metadata is reference-only; simulation does not evaluate model_ref formulas.")
     warnings.extend(validate_shape_propagation(graph, shapes))
     _append_missing_ip_catalog_warnings(graph, warnings)
@@ -181,6 +186,7 @@ def build_simulation_inputs(
         warnings.append("Projected SW elapsed time and observed gaps are assumptions; CPU active power is not calibrated.")
 
     return SimulationInputs(
+        driver_model_report=driver_report if driver_report["rows"] else None,
         scenario_id=graph.scenario_id,
         variant_id=graph.variant_id,
         project_ref=getattr(graph.scenario, "project_ref", None),

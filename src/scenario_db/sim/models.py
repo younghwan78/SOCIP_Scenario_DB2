@@ -7,6 +7,7 @@ from pydantic import Field, model_validator
 
 from scenario_db.models.common import BaseScenarioModel
 from scenario_db.models.sensor import SensorTiming
+from scenario_db.sim.driver_models import DriverInput
 from scenario_db.sim.constants import SW_MARGIN_DEFAULT
 from scenario_db.sim.sw_projection import SwTimingProjection
 
@@ -126,6 +127,7 @@ from scenario_db.models.evidence.profiling import MeasuredTimingProfile
 
 
 class SimulationRunConfig(BaseScenarioModel):
+    driver_model_overrides: dict[str, DriverInput] = Field(default_factory=dict)
     sensor_readout: dict[str, SensorTiming] = Field(default_factory=dict)
     sw_timing_projection: SwTimingProjection | None = None
     timing_profile: MeasuredTimingProfile | None = None
@@ -151,6 +153,7 @@ class SimulationRunConfig(BaseScenarioModel):
 
 
 class SimulationInputs(BaseScenarioModel):
+    driver_model_report: dict[str, Any] | None = None
     scenario_id: str
     variant_id: str
     project_ref: str | None = None

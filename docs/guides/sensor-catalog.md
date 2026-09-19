@@ -70,3 +70,5 @@ Merge this fragment into the simulation request `config`. The actual profile exp
 Eight noncamera scenarios (74 variants) now contain producer BW/DVFS/provenance and assumed SW timing. UFS/ABOX/M2M scaler replace CPU placeholders. Existing executable camera models and versioned IPs remain intact. Disabled nodes are removed from simulation inputs; a node with explicit SW timing does not also create a pixel HW workload.
 
 `model_ref` and source `bw_model`/`dvfs_model` formulas remain reference metadata, not executable code. Existing readiness checks identify missing PPC/power models and adapter warnings identify unevaluated source formulas. Import success is not a calibrated noncamera power/clock prediction. Typed audio/byte-domain execution models require separate validated unit/model contracts; DPU BTS votes must not be substituted for surface traffic.
+
+The next calculation stage is now available in [Driver Models](driver-models.md): UFS/ABOX/MSCL/DPU have versioned typed endpoint calculations, with explicit aggregation and power limits.
