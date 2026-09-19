@@ -9,6 +9,8 @@ capabilities:
   - id: Normal
   - id: LowPower
   - id: VRR
+  - id: Hibernation
+  - id: Writeback
   sim:
     hw_name: DPU
     source: legacy_project_info_csv
@@ -90,5 +92,56 @@ capabilities:
           - pre-compositing required to reduce layer count
           composer: G2D or MCSC M2M path
           output_format: RGBA8888
+  bw_model:
+    source: kernel_driver
+    reference: 'exynos/soc-series/common/drivers/dpu/exynos_drm_bts.c: __get_bts_margin
+      / __get_resol_clock_internal / dpu_bts_calc_dpp_bw'
+    unit: KB/s
+    formula:
+    - 'margin        = 1100 + (12000*dsc_slice_count + 20000) / xres   # x1000 fixed
+      point'
+    - resol_clk_khz = xres * yres * max(fps, 60) * margin / 1e6
+    - layer_bw      = h_scale_ratio * v_scale_ratio * bpp/8 * resol_clk_khz
+    - '                * (dst_w / xres  if fps <= 60 else 1)'
+    - read_bw       = sum(layer_bw) + (resol_clk_khz if rcd_en) + bus_overhead + customer_bw
+    - write_bw      = writeback layer_bw
+    - total_bw      = read_bw + write_bw
+    notes:
+    - scale ratios are >= 1 only for downscale (upscale does not add read BW).
+    - Rotation replaces layer_bw with src_w * rot_read_line * bpp/8 * 1e6 / tx_allow_ns
+      when that is larger; rot_read_line is 32 lines uncompressed.
+    - fps below 60 is clamped to 60 (DISP_REFRESH_RATE), so a 30 Hz panel votes 60
+      Hz BW.
+    params:
+      ppc: 2
+      ppc_rotator: 8
+      ppc_scaler: 4
+      ppc_scaler_comp: 3.2
+      delay_comp_lines: 4
+      delay_scaler_lines: 3
+      inner_width_byte: 32
+      inner_util_pct: 70
+      bus_width_byte: 32
+      rot_util_pct: 60
+      disp_factor_pct: 100
+      disp_refresh_rate_floor_hz: 60
+      vote_overlap_bw: true
+      dsc_slice_count:
+        value: 2
+        value_source: assumed
+        note: The panel driver is not in this release; slice_count drives the BTS
+          margin term. 2 slices assumed for the 1440x3120 mode.
+    disp_dfs_lv_khz:
+    - 800000
+    - 663000
+    - 533000
+    - 468000
+    - 400000
+    - 332000
+    - 267000
+    - 200000
+    - 89000
+    disp_freq_formula: max_disp_freq = max over DECONs of resol_clk / effective_ppc,
+      clamped to disp_dfs_lv_khz
 compatible_soc:
 - soc-exynos2600

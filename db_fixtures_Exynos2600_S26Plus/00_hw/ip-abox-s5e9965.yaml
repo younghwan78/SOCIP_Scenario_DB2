@@ -1,0 +1,121 @@
+id: ip-abox-s5e9965
+schema_version: '2.2'
+kind: ip
+category: audio
+capabilities:
+  operating_modes:
+  - id: Normal
+  - id: Offload
+  - id: LowPower
+  - id: VTS_AlwaysOn
+  properties:
+    ip_group: ABOX
+    hierarchy_group: Audio
+    rtl_version: ABOX (Audio Box) + AUDSP (HiFi5)
+    role: 'Offloaded audio path: DMA, mixing, SRC, post-processing and codec offload on ABOX firmware.'
+    cores:
+      abox_cores: 3
+      abox_core_type: CA32
+      audsp:
+        present: true
+        type: HiFi5
+        role: audio DSP for solutions (offload decode, effects, always-on)
+    dma:
+      rdma_count: 16
+      wdma_count: 16
+      note: rdma = playback (DRAM -> ABOX), wdma = capture/loopback (ABOX -> DRAM).
+    interfaces:
+      uaif_count: 7
+      dsif: true
+      uaif_max_div: 512
+      pcmc_rates_hz:
+      - 76800000
+      - 49152000
+      - 73728000
+    vts:
+      present: true
+      role: always-on voice trigger; runs while the AP is asleep
+    modules:
+    - name: ABOX_RDMA
+      type: DMA
+      direction: read
+      provenance_status: logical_endpoint
+      note: one of 16 playback channels
+    - name: ABOX_WDMA
+      type: DMA
+      direction: write
+      provenance_status: logical_endpoint
+      note: one of 16 capture channels
+    - name: ABOX_SRAM
+      type: DMA
+      direction: read
+      provenance_status: logical_endpoint
+      note: on-chip SRAM working set; does not reach MIF
+    - name: ABOX_IPC
+      type: DMA
+      direction: read
+      provenance_status: logical_endpoint
+      note: mailbox/IPC with the AP; negligible traffic
+    kernel_config:
+    - CONFIG_SND_SOC_SAMSUNG_ABOX
+    sources:
+    - path: exynos/soc-series/t-android16/arch/arm64/boot/dts/exynos/s5e9965-audio.dtsi
+      sha256: d852836a14d3bdd8f3073f09b21da873ac70e9523ff0cc4c2805e10969944bcb
+    driver_review: S5E9965 platform (non-camera) driver review 2026-09-16
+    provenance_status: kernel_declared
+    correction: 'This IP did not exist in the fixture set: uc-audio-* and uc-voice-call modeled every audio node as ip-cpu-s5e9965,
+      which both hid the ABOX/AUDSP power domain and charged offloaded playback to the CPU.'
+  supported_features:
+    bitdepth:
+    - 16
+    - 24
+    - 32
+    sample_rates_khz:
+    - 8
+    - 16
+    - 44.1
+    - 48
+    - 96
+    - 192
+    - 384
+  dvfs_model:
+    source: kernel_dt
+    reference: 'exynos/soc-series/t-android16/arch/arm64/boot/dts/exynos/s5e9965-audio.dtsi: samsung,pm-qos-aud; exynos/soc-series/t-android16/arch/arm64/boot/dts/exynos/s5e9965-devfreq.dtsi:
+      devfreq_aud'
+    aud_qos_levels_khz:
+    - 1500000
+    - 1200000
+    - 935000
+    - 800000
+    - 663000
+    - 533000
+    - 400000
+    - 332000
+    - 200000
+    stable_min_khz: 200000
+    note: ABOX requests one of the pm-qos-aud levels depending on how many streams and solutions are active. Screen-off offload
+      playback sits near the bottom of the list.
+  bw_model:
+    source: derived
+    unit: KB/s
+    formula:
+    - stream_bw = sample_rate_hz * channels * bytes_per_sample * streams / 1024
+    - total = sum over active RDMA (playback) and WDMA (capture) channels
+    note: Audio traffic is small (48 kHz stereo 24-bit is ~281 KB/s) but it runs continuously and keeps MIF out of its deepest
+      state, which is what matters for screen-off power. Offloaded streams work out of ABOX SRAM and only refill periodically,
+      so their average MIF traffic is lower than the stream rate.
+  power_model:
+    source: unavailable
+    note: No ABOX power coefficient in the kernel. Model AUD-domain power from the pm-qos-aud operating point plus measurement;
+      the useful output today is which domain stays on, not an absolute mW.
+  sim:
+    hw_name: ABOX
+    source: kernel_dt_model
+    source_note: Topology and AUD operating points from the S5E9965 DT. Power coefficient unavailable.
+    vdd: VDD_AUD
+    dvfs_group: AUD
+    devfreq_domain: DEVFREQ_AUD
+hierarchy:
+  type: simple
+compatible_soc:
+- soc-exynos2600

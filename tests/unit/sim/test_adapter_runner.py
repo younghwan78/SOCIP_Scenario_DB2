@@ -453,7 +453,8 @@ def test_adapter_excludes_external_sensor_and_panel_from_compute_workloads():
     inputs = build_simulation_inputs(graph, SimulationRunConfig(include_timeline=False))
 
     assert {item.node_id for item in inputs.workloads} == {"isp0", "mfc"}
-    assert not any("sensor_front" in warning for warning in inputs.warnings)
+    assert not any("sensor_front" in warning and "ppc" in warning for warning in inputs.warnings)
+    assert any("sensor_front" in warning and "VVALID" in warning for warning in inputs.warnings)
     assert not any("panel" in warning for warning in inputs.warnings)
 
 
@@ -592,8 +593,8 @@ def test_adapter_records_external_devices_and_prefers_sensor_place():
     assert devices["sensor_front"]["catalog_size"] == "3648x2736"
     assert devices["sensor_front"]["active_size"] == "3648x2052"
     assert devices["sensor_front"]["active_size_source"] == "derived_16_9_crop_from_catalog_width"
-    assert devices["sensor_front"]["v_valid_ms"] == pytest.approx(1000.0 / 60.0)
-    assert devices["sensor_front"]["v_valid_source"] == "frame_period_fallback_no_vblank"
+    assert devices["sensor_front"]["v_valid_ms"] is None  # FPS alone does not determine readout.
+    assert devices["sensor_front"]["v_valid_source"] is None
     assert devices["panel"]["size"] == "3088x1440"
 
 

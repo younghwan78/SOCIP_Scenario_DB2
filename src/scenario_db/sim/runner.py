@@ -139,6 +139,9 @@ def run_simulation(
         )
         calculation_trace["warnings"] = list(warnings)
 
+    if inputs.driver_model_report is not None:
+        calculation_trace = {**(calculation_trace or {}), "driver_models": inputs.driver_model_report}
+
     return SimRunResult(
         sw_timing_projection=config.sw_timing_projection,
         timing_profile=config.timing_profile,

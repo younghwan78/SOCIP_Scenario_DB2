@@ -91,7 +91,12 @@ class LoaderValidationError(RuntimeError):
         super().__init__("; ".join(messages) if messages else "ETL validation failed")
 
 # kind → mapper 함수
+from scenario_db.etl.mappers.sensor import upsert_sensor_catalog, upsert_sensor_timing, upsert_sensor_lineup
+
 MAPPER_REGISTRY: dict[str, Mapper] = {
+    "sensor.catalog": upsert_sensor_catalog,
+    "sensor.timing_profile": upsert_sensor_timing,
+    "sensor.board_lineup": upsert_sensor_lineup,
     "soc":                    upsert_soc,
     "soc.dvfs_table":         upsert_soc_dvfs_table,
     "soc.cdgm_profile":       upsert_soc_cdgm_profile,
@@ -111,6 +116,9 @@ MAPPER_REGISTRY: dict[str, Mapper] = {
 
 # FK 의존 순서
 LOAD_ORDER = [
+    "sensor.catalog",
+    "sensor.timing_profile",
+    "sensor.board_lineup",
     "soc",
     "soc.dvfs_table",
     "soc.cdgm_profile",

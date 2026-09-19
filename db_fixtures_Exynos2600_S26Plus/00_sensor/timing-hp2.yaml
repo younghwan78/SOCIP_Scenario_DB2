@@ -1,0 +1,990 @@
+id: sensortiming-s5khp2-setb-19p2
+schema_version: '2.2'
+kind: sensor.timing_profile
+sensor_name: S5KHP2
+revision: setB-19p2-import-20260920
+modes:
+  cis_4080x3060_60fps_vpd:
+    active_width: 4080
+    active_height: 3060
+    pixel_clock_hz: 1760000000
+    line_length_pck: 9152
+    frame_length_lines: 3204
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 55977
+      basis: CIS indexed setfile
+      mode_index: 0
+      nominal_fps: 60
+      bits_per_pixel: 10
+      symbol: sensor_hp2_mode_info_B_19p2_4080x3060_60fps_vpd
+      mode_name: A-01 SENSOR_HP2_4080X3060_60FPS_VPD
+  cis_4080x3060_15fps_vpd_ln4:
+    active_width: 4080
+    active_height: 3060
+    pixel_clock_hz: 1760000000
+    line_length_pck: 36608
+    frame_length_lines: 3204
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 55998
+      basis: CIS indexed setfile
+      mode_index: 1
+      nominal_fps: 15
+      bits_per_pixel: 10
+      symbol: sensor_hp2_mode_info_B_19p2_4080x3060_15fps_vpd_ln4
+      mode_name: A-02 SENSOR_HP2_4080X3060_15FPS_VPD_LN4
+  cis_4000x3000_60fps_vpd:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 1760000000
+    line_length_pck: 9152
+    frame_length_lines: 3204
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56019
+      basis: CIS indexed setfile
+      mode_index: 2
+      nominal_fps: 60
+      bits_per_pixel: 10
+      symbol: sensor_hp2_mode_info_B_19p2_4000x3000_60fps_vpd
+      mode_name: A-03 SENSOR_HP2_4000X3000_60FPS_VPD
+  cis_4000x3000_15fps_vpd_ln4:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 1760000000
+    line_length_pck: 36608
+    frame_length_lines: 3204
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56040
+      basis: CIS indexed setfile
+      mode_index: 3
+      nominal_fps: 15
+      bits_per_pixel: 10
+      symbol: sensor_hp2_mode_info_B_19p2_4000x3000_15fps_vpd_ln4
+      mode_name: A-04 SENSOR_HP2_4000X3000_15FPS_VPD_LN4
+  cis_4000x3000_60fps:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 1760000000
+    line_length_pck: 4840
+    frame_length_lines: 6060
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56061
+      basis: CIS indexed setfile
+      mode_index: 4
+      nominal_fps: 60
+      bits_per_pixel: 10
+      symbol: sensor_hp2_mode_info_B_19p2_4000x3000_60fps
+      mode_name: A-05 SENSOR_HP2_4000X3000_60FPS
+  cis_4000x3000_60fps_12bit:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 1760000000
+    line_length_pck: 4840
+    frame_length_lines: 6060
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56082
+      basis: CIS indexed setfile
+      mode_index: 5
+      nominal_fps: 60
+      bits_per_pixel: 12
+      symbol: sensor_hp2_mode_info_B_19p2_4000x3000_60fps_12bit
+      mode_name: A-06 SENSOR_HP2_4000X3000_60FPS_12BIT
+  cis_4000x3000_60fps_12bit_idcg:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 1760000000
+    line_length_pck: 9232
+    frame_length_lines: 3176
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56103
+      basis: CIS indexed setfile
+      mode_index: 6
+      nominal_fps: 60
+      bits_per_pixel: 12
+      symbol: sensor_hp2_mode_info_B_19p2_4000x3000_60fps_12bit_idcg
+      mode_name: A-07 SENSOR_HP2_4000X3000_60FPS_12BIT_IDCG
+  cis_4000x2252_60fps_12bit:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 1760000000
+    line_length_pck: 6440
+    frame_length_lines: 4554
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56124
+      basis: CIS indexed setfile
+      mode_index: 7
+      nominal_fps: 60
+      bits_per_pixel: 12
+      symbol: sensor_hp2_mode_info_B_19p2_4000x2252_60fps_12bit
+      mode_name: A-08 SENSOR_HP2_4000X2252_60FPS_12BIT
+  cis_4000x2252_60fps_12bit_ln2:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 1760000000
+    line_length_pck: 9152
+    frame_length_lines: 3204
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56145
+      basis: CIS indexed setfile
+      mode_index: 8
+      nominal_fps: 60
+      bits_per_pixel: 12
+      symbol: sensor_hp2_mode_info_B_19p2_4000x2252_60fps_12bit_ln2
+      mode_name: A-09 SENSOR_HP2_4000X2252_60FPS_12BIT_LN2
+  cis_4000x2252_30fps_12bit_ln4:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 1760000000
+    line_length_pck: 18304
+    frame_length_lines: 3204
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56166
+      basis: CIS indexed setfile
+      mode_index: 9
+      nominal_fps: 30
+      bits_per_pixel: 12
+      symbol: sensor_hp2_mode_info_B_19p2_4000x2252_30fps_12bit_ln4
+      mode_name: A-10 SENSOR_HP2_4000X2252_30FPS_12BIT_LN4
+  cis_4000x2252_60fps_12bit_idcg:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 1760000000
+    line_length_pck: 9232
+    frame_length_lines: 3176
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56187
+      basis: CIS indexed setfile
+      mode_index: 10
+      nominal_fps: 60
+      bits_per_pixel: 12
+      symbol: sensor_hp2_mode_info_B_19p2_4000x2252_60fps_12bit_idcg
+      mode_name: A-11 SENSOR_HP2_4000X2252_60FPS_12BIT_IDCG
+  cis_4000x2252_60fps:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 1760000000
+    line_length_pck: 6440
+    frame_length_lines: 4554
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56208
+      basis: CIS indexed setfile
+      mode_index: 11
+      nominal_fps: 60
+      bits_per_pixel: 10
+      symbol: sensor_hp2_mode_info_B_19p2_4000x2252_60fps
+      mode_name: A-12 SENSOR_HP2_4000X2252_60FPS
+  cis_3328x1872_120fps:
+    active_width: 3328
+    active_height: 1872
+    pixel_clock_hz: 1760000000
+    line_length_pck: 4840
+    frame_length_lines: 3030
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56229
+      basis: CIS indexed setfile
+      mode_index: 12
+      nominal_fps: 120
+      bits_per_pixel: 10
+      symbol: sensor_hp2_mode_info_B_19p2_3328x1872_120fps
+      mode_name: A-13 SENSOR_HP2_3328X1872_120FPS
+  cis_2800x2100_30fps:
+    active_width: 2800
+    active_height: 2100
+    pixel_clock_hz: 1760000000
+    line_length_pck: 19016
+    frame_length_lines: 3084
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56250
+      basis: CIS indexed setfile
+      mode_index: 13
+      nominal_fps: 30
+      bits_per_pixel: 10
+      symbol: sensor_hp2_mode_info_B_19p2_2800x2100_30fps
+      mode_name: A-14 SENSOR_HP2_2800X2100_30FPS
+  cis_4000x3000_30fps_12bit_ln4:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 1760000000
+    line_length_pck: 18304
+    frame_length_lines: 3204
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56271
+      basis: CIS indexed setfile
+      mode_index: 14
+      nominal_fps: 30
+      bits_per_pixel: 12
+      symbol: sensor_hp2_mode_info_B_19p2_4000x3000_30fps_12bit_ln4
+      mode_name: A-15 SENSOR_HP2_4000X3000_30FPS_12BIT_LN4
+  cis_4080x3060_60fps_12bit_vpd:
+    active_width: 4080
+    active_height: 3060
+    pixel_clock_hz: 1760000000
+    line_length_pck: 9152
+    frame_length_lines: 3204
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56292
+      basis: CIS indexed setfile
+      mode_index: 15
+      nominal_fps: 60
+      bits_per_pixel: 12
+      symbol: sensor_hp2_mode_info_B_19p2_4080x3060_60fps_12bit_vpd
+      mode_name: A-16 SENSOR_HP2_4080X3060_60FPS_12BIT_VPD
+  cis_4080x3060_15fps_12bit_vpd_ln4:
+    active_width: 4080
+    active_height: 3060
+    pixel_clock_hz: 1760000000
+    line_length_pck: 36608
+    frame_length_lines: 3204
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56313
+      basis: CIS indexed setfile
+      mode_index: 16
+      nominal_fps: 15
+      bits_per_pixel: 12
+      symbol: sensor_hp2_mode_info_B_19p2_4080x3060_15fps_12bit_vpd_ln4
+      mode_name: A-17 SENSOR_HP2_4080X3060_15FPS_12BIT_VPD_LN4
+  cis_4000x3000_60fps_12bit_ln2:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 1760000000
+    line_length_pck: 9152
+    frame_length_lines: 3204
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56334
+      basis: CIS indexed setfile
+      mode_index: 17
+      nominal_fps: 60
+      bits_per_pixel: 12
+      symbol: sensor_hp2_mode_info_B_19p2_4000x3000_60fps_12bit_ln2
+      mode_name: A-18 SENSOR_HP2_4000X3000_60FPS_12BIT_LN2
+  cis_4000x2252_120fps:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 1760000000
+    line_length_pck: 4840
+    frame_length_lines: 3030
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56355
+      basis: CIS indexed setfile
+      mode_index: 18
+      nominal_fps: 120
+      bits_per_pixel: 10
+      symbol: sensor_hp2_mode_info_B_19p2_4000x2252_120fps
+      mode_name: A-19 SENSOR_HP2_4000X2252_120FPS
+  cis_4000x3000_60fps_12bit_idcg_vpd:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 1760000000
+    line_length_pck: 9232
+    frame_length_lines: 3176
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56376
+      basis: CIS indexed setfile
+      mode_index: 19
+      nominal_fps: 60
+      bits_per_pixel: 12
+      symbol: sensor_hp2_mode_info_B_19p2_4000x3000_60fps_12bit_idcg_vpd
+      mode_name: A-20 SENSOR_HP2_4000X3000_60FPS_12BIT_IDCG_VPD
+  cis_4000x3000_60fps_12bit_idcg_hcg_af:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 1760000000
+    line_length_pck: 9232
+    frame_length_lines: 3176
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56397
+      basis: CIS indexed setfile
+      mode_index: 20
+      nominal_fps: 60
+      bits_per_pixel: 12
+      symbol: sensor_hp2_mode_info_B_19p2_4000x3000_60fps_12bit_idcg_hcg_af
+      mode_name: A-21 SENSOR_HP2_4000X3000_60FPS_12BIT_IDCG_HCG_AF
+  cis_4000x2252_60fps_12bit_idcg_hcg_af:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 1760000000
+    line_length_pck: 9232
+    frame_length_lines: 3176
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56418
+      basis: CIS indexed setfile
+      mode_index: 21
+      nominal_fps: 60
+      bits_per_pixel: 12
+      symbol: sensor_hp2_mode_info_B_19p2_4000x2252_60fps_12bit_idcg_hcg_af
+      mode_name: A-22 SENSOR_HP2_4000X2252_60FPS_12BIT_IDCG_HCG_AF
+  cis_4080x3060_30fps_ln2_vpd:
+    active_width: 4080
+    active_height: 3060
+    pixel_clock_hz: 1760000000
+    line_length_pck: 18304
+    frame_length_lines: 3204
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56439
+      basis: CIS indexed setfile
+      mode_index: 22
+      nominal_fps: 30
+      bits_per_pixel: 10
+      symbol: sensor_hp2_mode_info_B_19p2_4080x3060_30fps_ln2_vpd
+      mode_name: A-23 SENSOR_HP2_4080X3060_30FPS_LN2_VPD
+  cis_4000x3000_30fps_ln2_vpd:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 1760000000
+    line_length_pck: 18304
+    frame_length_lines: 3204
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56460
+      basis: CIS indexed setfile
+      mode_index: 23
+      nominal_fps: 30
+      bits_per_pixel: 10
+      symbol: sensor_hp2_mode_info_B_19p2_4000x3000_30fps_ln2_vpd
+      mode_name: A-24 SENSOR_HP2_4000X3000_30FPS_LN2_VPD
+  cis_4080x3060_60fps:
+    active_width: 4080
+    active_height: 3060
+    pixel_clock_hz: 1760000000
+    line_length_pck: 4840
+    frame_length_lines: 6060
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56481
+      basis: CIS indexed setfile
+      mode_index: 24
+      nominal_fps: 60
+      bits_per_pixel: 10
+      symbol: sensor_hp2_mode_info_B_19p2_4080x3060_60fps
+      mode_name: A-25 SENSOR_HP2_4080X3060_60FPS
+  cis_4080x2296_12bit_idcg:
+    active_width: 4080
+    active_height: 2296
+    pixel_clock_hz: 1760000000
+    line_length_pck: 9232
+    frame_length_lines: 3176
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56502
+      basis: CIS indexed setfile
+      mode_index: 25
+      bits_per_pixel: 12
+      symbol: sensor_hp2_mode_info_B_19p2_4080x2296_12bit_idcg
+      mode_name: A-26 SENSOR_HP2_4080X2296_12BIT_IDCG
+  cis_8160x6120_30fps_4sum:
+    active_width: 8160
+    active_height: 6120
+    pixel_clock_hz: 1760000000
+    line_length_pck: 9152
+    frame_length_lines: 6410
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56523
+      basis: CIS indexed setfile
+      mode_index: 26
+      nominal_fps: 30
+      bits_per_pixel: 10
+      symbol: sensor_hp2_mode_info_B_19p2_8160x6120_30fps_4sum
+      mode_name: B-01 SENSOR_HP2_8160X6120_30FPS_4SUM
+  cis_8160x6120_15fps_4sum_12bit_dsg:
+    active_width: 8160
+    active_height: 6120
+    pixel_clock_hz: 1760000000
+    line_length_pck: 18304
+    frame_length_lines: 6404
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56544
+      basis: CIS indexed setfile
+      mode_index: 27
+      nominal_fps: 15
+      bits_per_pixel: 12
+      symbol: sensor_hp2_mode_info_B_19p2_8160x6120_15fps_4sum_12bit_dsg
+      mode_name: B-03 SENSOR_HP2_8160X6120_15FPS_4SUM_12BIT_DSG
+  cis_8000x4500_30fps_4sum:
+    active_width: 8000
+    active_height: 4500
+    pixel_clock_hz: 1760000000
+    line_length_pck: 9152
+    frame_length_lines: 6410
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56565
+      basis: CIS indexed setfile
+      mode_index: 28
+      nominal_fps: 30
+      bits_per_pixel: 10
+      symbol: sensor_hp2_mode_info_B_19p2_8000x4500_30fps_4sum
+      mode_name: B-04 SENSOR_HP2_8000X4500_30FPS_4SUM
+  cis_8000x4500_30fps_4sum_mpc:
+    active_width: 8000
+    active_height: 4500
+    pixel_clock_hz: 1760000000
+    line_length_pck: 9264
+    frame_length_lines: 6332
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56586
+      basis: CIS indexed setfile
+      mode_index: 29
+      nominal_fps: 30
+      bits_per_pixel: 10
+      symbol: sensor_hp2_mode_info_B_19p2_8000x4500_30fps_4sum_mpc
+      mode_name: B-05 SENSOR_HP2_8000X4500_30FPS_4SUM_MPC
+  cis_4000x3000_30fps_4sum_bds_vpd:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 1760000000
+    line_length_pck: 9152
+    frame_length_lines: 6410
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56607
+      basis: CIS indexed setfile
+      mode_index: 30
+      nominal_fps: 30
+      bits_per_pixel: 10
+      symbol: sensor_hp2_mode_info_B_19p2_4000x3000_30fps_4sum_bds_vpd
+      mode_name: B-06 SENSOR_HP2_4000X3000_30FPS_4SUM_BDS_VPD
+  cis_4000x3000_30fps_4sum_12bit_bds:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 1760000000
+    line_length_pck: 9152
+    frame_length_lines: 6410
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56626
+      basis: CIS indexed setfile
+      mode_index: 31
+      nominal_fps: 30
+      bits_per_pixel: 12
+      symbol: sensor_hp2_mode_info_B_19p2_4000x3000_30fps_4sum_12bit_bds
+      mode_name: B-07 SENSOR_HP2_4000X3000_30FPS_4SUM_12BIT_BDS
+  cis_4000x2252_60fps_4sum_12bit_bds:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 1760000000
+    line_length_pck: 9152
+    frame_length_lines: 3204
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56645
+      basis: CIS indexed setfile
+      mode_index: 32
+      nominal_fps: 60
+      bits_per_pixel: 12
+      symbol: sensor_hp2_mode_info_B_19p2_4000x2252_60fps_4sum_12bit_bds
+      mode_name: B-08 SENSOR_HP2_4000X2252_60FPS_4SUM_12BIT_BDS
+  cis_8160x6120_30fps_4sum_12bit:
+    active_width: 8160
+    active_height: 6120
+    pixel_clock_hz: 1760000000
+    line_length_pck: 9152
+    frame_length_lines: 6410
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56664
+      basis: CIS indexed setfile
+      mode_index: 33
+      nominal_fps: 30
+      bits_per_pixel: 12
+      symbol: sensor_hp2_mode_info_B_19p2_8160x6120_30fps_4sum_12bit
+      mode_name: B-09 SENSOR_HP2_8160X6120_30FPS_4SUM_12BIT
+  cis_4000x3000_60fps_4sum_vpd:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 1760000000
+    line_length_pck: 9152
+    frame_length_lines: 3204
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56685
+      basis: CIS indexed setfile
+      mode_index: 34
+      nominal_fps: 60
+      bits_per_pixel: 10
+      symbol: sensor_hp2_mode_info_B_19p2_4000x3000_60fps_4sum_vpd
+      mode_name: B-10 SENSOR_HP2_4000X3000_60FPS_4SUM_VPD
+  cis_4000x3000_60fps_4sum_12bit:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 1760000000
+    line_length_pck: 9152
+    frame_length_lines: 3204
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56707
+      basis: CIS indexed setfile
+      mode_index: 35
+      nominal_fps: 60
+      bits_per_pixel: 12
+      symbol: sensor_hp2_mode_info_B_19p2_4000x3000_60fps_4sum_12bit
+      mode_name: B-11 SENSOR_HP2_4000X3000_60FPS_4SUM_12BIT
+  cis_4000x2252_60fps_4sum_12bit:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 1760000000
+    line_length_pck: 9152
+    frame_length_lines: 3204
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56729
+      basis: CIS indexed setfile
+      mode_index: 36
+      nominal_fps: 60
+      bits_per_pixel: 12
+      symbol: sensor_hp2_mode_info_B_19p2_4000x2252_60fps_4sum_12bit
+      mode_name: B-12 SENSOR_HP2_4000X2252_60FPS_4SUM_12BIT
+  cis_4000x3000_60fps_4sum:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 1760000000
+    line_length_pck: 9152
+    frame_length_lines: 3204
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56751
+      basis: CIS indexed setfile
+      mode_index: 37
+      nominal_fps: 60
+      bits_per_pixel: 10
+      symbol: sensor_hp2_mode_info_B_19p2_4000x3000_60fps_4sum
+      mode_name: B-13 SENSOR_HP2_4000X3000_60FPS_4SUM
+  cis_4000x3000_30fps_4sum_12bit_dsg:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 1760000000
+    line_length_pck: 18304
+    frame_length_lines: 3202
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56773
+      basis: CIS indexed setfile
+      mode_index: 38
+      nominal_fps: 30
+      bits_per_pixel: 12
+      symbol: sensor_hp2_mode_info_B_19p2_4000x3000_30fps_4sum_12bit_dsg
+      mode_name: B-14 SENSOR_HP2_4000X3000_30FPS_4SUM_12BIT_DSG
+  cis_4000x2252_30fps_4sum_12bit_dsg:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 1760000000
+    line_length_pck: 18304
+    frame_length_lines: 3202
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56795
+      basis: CIS indexed setfile
+      mode_index: 39
+      nominal_fps: 30
+      bits_per_pixel: 12
+      symbol: sensor_hp2_mode_info_B_19p2_4000x2252_30fps_4sum_12bit_dsg
+      mode_name: B-15 SENSOR_HP2_4000X2252_30FPS_4SUM_12BIT_DSG
+  cis_4000x2252_60fps_4sum:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 1760000000
+    line_length_pck: 9152
+    frame_length_lines: 3204
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56817
+      basis: CIS indexed setfile
+      mode_index: 40
+      nominal_fps: 60
+      bits_per_pixel: 10
+      symbol: sensor_hp2_mode_info_B_19p2_4000x2252_60fps_4sum
+      mode_name: B-16 SENSOR_HP2_4000X2252_60FPS_4SUM
+  cis_5660x4242_43fps_4sum:
+    active_width: 5660
+    active_height: 4242
+    pixel_clock_hz: 1760000000
+    line_length_pck: 9152
+    frame_length_lines: 4472
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56839
+      basis: CIS indexed setfile
+      mode_index: 41
+      nominal_fps: 43
+      bits_per_pixel: 10
+      symbol: sensor_hp2_mode_info_B_19p2_5660x4242_43fps_4sum
+      mode_name: B-17 SENSOR_HP2_5660X4242_43FPS_4SUM
+  cis_5660x4242_31fps_4sum_bds:
+    active_width: 5660
+    active_height: 4242
+    pixel_clock_hz: 1760000000
+    line_length_pck: 9152
+    frame_length_lines: 6202
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56860
+      basis: CIS indexed setfile
+      mode_index: 42
+      nominal_fps: 31
+      bits_per_pixel: 10
+      symbol: sensor_hp2_mode_info_B_19p2_5660x4242_31fps_4sum_bds
+      mode_name: B-18 SENSOR_HP2_5660X4242_31FPS_4SUM_BDS
+  cis_5660x4242_7fps_4sum_ln4:
+    active_width: 5660
+    active_height: 4242
+    pixel_clock_hz: 1760000000
+    line_length_pck: 18304
+    frame_length_lines: 12820
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56879
+      basis: CIS indexed setfile
+      mode_index: 43
+      nominal_fps: 7
+      bits_per_pixel: 10
+      symbol: sensor_hp2_mode_info_B_19p2_5660x4242_7fps_4sum_ln4
+      mode_name: B-19 SENSOR_HP2_5660X4242_7FPS_4SUM_LN4
+  cis_5660x4242_7fps_4sum_ln4_bds:
+    active_width: 5660
+    active_height: 4242
+    pixel_clock_hz: 1760000000
+    line_length_pck: 18304
+    frame_length_lines: 12820
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56900
+      basis: CIS indexed setfile
+      mode_index: 44
+      nominal_fps: 7
+      bits_per_pixel: 10
+      symbol: sensor_hp2_mode_info_B_19p2_5660x4242_7fps_4sum_ln4_bds
+      mode_name: B-20 SENSOR_HP2_5660X4242_7FPS_4SUM_LN4_BDS
+  cis_4080x3060_60fps_4sum:
+    active_width: 4080
+    active_height: 3060
+    pixel_clock_hz: 1760000000
+    line_length_pck: 8968
+    frame_length_lines: 3270
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56919
+      basis: CIS indexed setfile
+      mode_index: 45
+      nominal_fps: 60
+      bits_per_pixel: 10
+      symbol: sensor_hp2_mode_info_B_19p2_4080x3060_60fps_4sum
+      mode_name: B-21 SENSOR_HP2_4080X3060_60FPS_4SUM
+  cis_4080x3060_60fps_4sum_12bit:
+    active_width: 4080
+    active_height: 3060
+    pixel_clock_hz: 1760000000
+    line_length_pck: 8968
+    frame_length_lines: 3270
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56941
+      basis: CIS indexed setfile
+      mode_index: 46
+      nominal_fps: 60
+      bits_per_pixel: 12
+      symbol: sensor_hp2_mode_info_B_19p2_4080x3060_60fps_4sum_12bit
+      mode_name: B-22 SENSOR_HP2_4080X3060_60FPS_4SUM_12BIT
+  cis_5824x4368_30fps_4sum_12bit:
+    active_width: 5824
+    active_height: 4368
+    pixel_clock_hz: 1760000000
+    line_length_pck: 9152
+    frame_length_lines: 6410
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56963
+      basis: CIS indexed setfile
+      mode_index: 47
+      nominal_fps: 30
+      bits_per_pixel: 12
+      symbol: sensor_hp2_mode_info_B_19p2_5824x4368_30fps_4sum_12bit
+      mode_name: B-23 SENSOR_HP2_5824X4368_30FPS_4SUM_12BIT
+  cis_16320x12240_11fps_full:
+    active_width: 16320
+    active_height: 12240
+    pixel_clock_hz: 1760000000
+    line_length_pck: 12096
+    frame_length_lines: 13226
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 57071
+      basis: CIS indexed setfile
+      mode_index: 48
+      nominal_fps: 11
+      bits_per_pixel: 10
+      symbol: sensor_hp2_mode_info_B_19p2_16320x12240_11fps_full
+      mode_name: C-01 SENSOR_HP2_16320X12240_11FPS_FULL
+  cis_2000x1124_240fps:
+    active_width: 2000
+    active_height: 1124
+    pixel_clock_hz: 1760000000
+    line_length_pck: 5664
+    frame_length_lines: 1294
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 57179
+      basis: CIS indexed setfile
+      mode_index: 49
+      nominal_fps: 240
+      bits_per_pixel: 10
+      symbol: sensor_hp2_mode_info_B_19p2_2000x1124_240fps
+      mode_name: D-01 SENSOR_HP2_2000X1124_240FPS
+  cis_2000x1124_480fps:
+    active_width: 2000
+    active_height: 1124
+    pixel_clock_hz: 1760000000
+    line_length_pck: 2848
+    frame_length_lines: 1286
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 57200
+      basis: CIS indexed setfile
+      mode_index: 50
+      nominal_fps: 480
+      bits_per_pixel: 10
+      symbol: sensor_hp2_mode_info_B_19p2_2000x1124_480fps
+      mode_name: D-02 SENSOR_HP2_2000X1124_480FPS
+  cis_2040x1532_120fps:
+    active_width: 2040
+    active_height: 1532
+    pixel_clock_hz: 1760000000
+    line_length_pck: 5744
+    frame_length_lines: 2552
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 57219
+      basis: CIS indexed setfile
+      mode_index: 51
+      nominal_fps: 120
+      bits_per_pixel: 10
+      symbol: sensor_hp2_mode_info_B_19p2_2040x1532_120fps
+      mode_name: D-03 SENSOR_HP2_2040X1532_120FPS
+  cis_960x540_30fps:
+    active_width: 960
+    active_height: 540
+    pixel_clock_hz: 1760000000
+    line_length_pck: 5664
+    frame_length_lines: 10356
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 57240
+      basis: CIS indexed setfile
+      mode_index: 52
+      nominal_fps: 30
+      bits_per_pixel: 10
+      symbol: sensor_hp2_mode_info_B_19p2_960x540_30fps
+      mode_name: D-04 SENSOR_HP2_960X540_30FPS
+  cis_8000x6000_30fps_4sum:
+    active_width: 8000
+    active_height: 6000
+    pixel_clock_hz: 1760000000
+    line_length_pck: 9152
+    frame_length_lines: 6410
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 56984
+      basis: CIS indexed setfile
+      mode_index: 53
+      nominal_fps: 30
+      bits_per_pixel: 10
+      symbol: sensor_hp2_mode_info_B_19p2_8000x6000_30fps_4sum
+      mode_name: B-24 SENSOR_HP2_8000X6000_30FPS_4SUM
+  cis_4080x3060_60fps_4sum_vpd:
+    active_width: 4080
+    active_height: 3060
+    pixel_clock_hz: 1760000000
+    line_length_pck: 8968
+    frame_length_lines: 3270
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 57005
+      basis: CIS indexed setfile
+      mode_index: 54
+      nominal_fps: 60
+      bits_per_pixel: 10
+      symbol: sensor_hp2_mode_info_B_19p2_4080x3060_60fps_4sum_vpd
+      mode_name: B-25 SENSOR_HP2_4080X3060_60FPS_4SUM_VPD
+  cis_4000x2252_60fps_4sum_12bit_vpd:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 1760000000
+    line_length_pck: 9152
+    frame_length_lines: 3204
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 57027
+      basis: CIS indexed setfile
+      mode_index: 55
+      nominal_fps: 60
+      bits_per_pixel: 12
+      symbol: sensor_hp2_mode_info_B_19p2_4000x2252_60fps_4sum_12bit_vpd
+      mode_name: B-26 SENSOR_HP2_4000X2252_60FPS_4SUM_12BIT_VPD
+  cis_4000x3000_60fps_4sum_12bit_vpd:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 1760000000
+    line_length_pck: 9152
+    frame_length_lines: 3204
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 57049
+      basis: CIS indexed setfile
+      mode_index: 56
+      nominal_fps: 60
+      bits_per_pixel: 12
+      symbol: sensor_hp2_mode_info_B_19p2_4000x3000_60fps_4sum_12bit_vpd
+      mode_name: B-27 SENSOR_HP2_4000X3000_60FPS_4SUM_12BIT_VPD
+  cis_4000x2252_60fps_full_12bit_vpd:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 1760000000
+    line_length_pck: 8688
+    frame_length_lines: 3374
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 57092
+      basis: CIS indexed setfile
+      mode_index: 57
+      nominal_fps: 60
+      bits_per_pixel: 12
+      symbol: sensor_hp2_mode_info_B_19p2_4000x2252_60fps_full_12bit_vpd
+      mode_name: C-02 SENSOR_HP2_4000X2252_60FPS_FULL_12BIT_VPD
+  cis_4000x3000_60fps_full_12bit_vpd:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 1760000000
+    line_length_pck: 8688
+    frame_length_lines: 3374
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 57114
+      basis: CIS indexed setfile
+      mode_index: 58
+      nominal_fps: 60
+      bits_per_pixel: 12
+      symbol: sensor_hp2_mode_info_B_19p2_4000x3000_60fps_full_12bit_vpd
+      mode_name: C-03 SENSOR_HP2_4000X3000_60FPS_FULL_12BIT_VPD
+  cis_4000x2252_30fps_full_12bit_vpd_ln2:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 1760000000
+    line_length_pck: 13728
+    frame_length_lines: 4272
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 57136
+      basis: CIS indexed setfile
+      mode_index: 59
+      nominal_fps: 30
+      bits_per_pixel: 12
+      symbol: sensor_hp2_mode_info_B_19p2_4000x2252_30fps_full_12bit_vpd_ln2
+      mode_name: C-04 SENSOR_HP2_4000X2252_30FPS_FULL_12BIT_VPD_LN2
+  cis_5824x4368_30fps_full_12bit:
+    active_width: 5824
+    active_height: 4368
+    pixel_clock_hz: 1760000000
+    line_length_pck: 12096
+    frame_length_lines: 4848
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+      sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+      line: 57158
+      basis: CIS indexed setfile
+      mode_index: 60
+      nominal_fps: 30
+      bits_per_pixel: 12
+      symbol: sensor_hp2_mode_info_B_19p2_5824x4368_30fps_full_12bit
+      mode_name: C-05 SENSOR_HP2_5824X4368_30FPS_FULL_12BIT
+provenance:
+  selection: setB, 19.2 MHz, basic indexed mode; no runtime seamless switch
+  setfile:
+    path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+    sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+  driver:
+    path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2.c
+    sha256: 54259c8e4c6f548b04c445acbf7c2d430ad15a658492f7eae5c2d8d6bcb7b92b
+  mode_table: sensor_hp2_mode_infos_B_19p2

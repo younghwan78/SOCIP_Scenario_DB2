@@ -12,7 +12,7 @@ metadata:
 pipeline:
   nodes:
   - id: storage
-    ip_ref: ip-cpu-s5e9965
+    ip_ref: ip-ufs-s5e9965
     role: source
     instance_index: 0
   - id: sw_decoder
@@ -20,20 +20,24 @@ pipeline:
     role: audio_decode
     instance_index: 0
   - id: dsp_offload
-    ip_ref: ip-cpu-s5e9965
+    ip_ref: ip-abox-s5e9965
     role: dsp_offload
     instance_index: 0
   - id: audio_hal
-    ip_ref: ip-cpu-s5e9965
+    ip_ref: ip-abox-s5e9965
     role: audio_hal
     instance_index: 0
   - id: speaker
-    ip_ref: ip-cpu-s5e9965
+    ip_ref: ip-abox-s5e9965
     role: audio_output
     instance_index: 0
   - id: bt_codec
-    ip_ref: ip-cpu-s5e9965
+    ip_ref: ip-abox-s5e9965
     role: bt_output
+    instance_index: 0
+  - id: abox
+    ip_ref: ip-abox-s5e9965
+    role: audio_offload
     instance_index: 0
   edges:
   - from: storage
@@ -74,6 +78,11 @@ variants:
     screen_on: true
     offload: false
     output: speaker
+    panel_resolution: 1440x3120
+    panel_fps_hz: 60
+    sw_timing_source: assumed
+    bitrate_mbps: 0.32
+    bitrate_value_source: assumed
   routing_switch:
     disabled_nodes:
     - dsp_offload
@@ -85,6 +94,53 @@ variants:
       to: audio_hal
     - from: audio_hal
       to: bt_codec
+  node_configs:
+    storage:
+      sim:
+        bitrate_mbps: 0.32
+      bw_kb_s:
+        read: 40
+      model_ref: ip-ufs-s5e9965.capabilities.bw_model
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 1
+        capture_streams: 0
+        offload: false
+        output: speaker
+      bw_kb_s:
+        read: 188
+        write: 0
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: AUD operating point is not derivable from design_conditions; lowest level assumed for offload, a mid level for
+          the CPU-fed path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
+    audio_hal:
+      executes_on: ip-abox-s5e9965
+    speaker:
+      executes_on: ip-abox-s5e9965
+    bt_codec:
+      executes_on: ip-abox-s5e9965
+    dsp_offload:
+      executes_on: ip-abox-s5e9965
+    sw_decoder:
+      sw_timing:
+        min_ms: 1.5
+        mean_ms: 3.0
+        max_ms: 6.0
+        start_latency_ref: bitstream_available
+        start_latency_mean_ms: 0.5
+        rate_hz: 30.0
+        cpu_affinity: CPUCL1
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
 - id: audio-mp3-screen-off-offload
   severity: light
   design_conditions:
@@ -94,6 +150,11 @@ variants:
     offload: true
     output: speaker
     note: 화면 꺼진 상태 HW offload 재생 (저전력)
+    panel_resolution: 1440x3120
+    panel_fps_hz: 60
+    sw_timing_source: assumed
+    bitrate_mbps: 0.32
+    bitrate_value_source: assumed
   routing_switch:
     disabled_nodes:
     - sw_decoder
@@ -105,6 +166,44 @@ variants:
       to: audio_hal
     - from: audio_hal
       to: bt_codec
+  node_configs:
+    storage:
+      sim:
+        bitrate_mbps: 0.32
+      bw_kb_s:
+        read: 40
+      model_ref: ip-ufs-s5e9965.capabilities.bw_model
+    abox:
+      selected_mode: Offload
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 1
+        capture_streams: 0
+        offload: true
+        output: speaker
+      bw_kb_s:
+        read: 188
+        write: 0
+      dvfs:
+        aud_freq_khz: 200000
+        value_source: assumed
+        note: AUD operating point is not derivable from design_conditions; lowest level assumed for offload, a mid level for
+          the CPU-fed path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
+    audio_hal:
+      executes_on: ip-abox-s5e9965
+    speaker:
+      executes_on: ip-abox-s5e9965
+    bt_codec:
+      executes_on: ip-abox-s5e9965
+    dsp_offload:
+      executes_on: ip-abox-s5e9965
+    sw_decoder:
+      sim:
+        active: false
+      note: offloaded to ABOX / MFC; no CPU decode
 - id: audio-flac-hires-screen-off
   severity: light
   design_conditions:
@@ -114,6 +213,9 @@ variants:
     screen_on: false
     offload: false
     output: speaker
+    panel_resolution: 1440x3120
+    panel_fps_hz: 60
+    sw_timing_source: assumed
   routing_switch:
     disabled_nodes:
     - dsp_offload
@@ -130,6 +232,51 @@ variants:
       format: AUDIO_PCM
       bitdepth: 24
       compression: COMP_OFF
+  node_configs:
+    storage:
+      sim:
+        bitrate_mbps: null
+      note: no bitrate in design_conditions; set bitrate_mbps or bitrate_kbps to model this traffic
+    abox:
+      selected_mode: Offload
+      sim:
+        sample_rate_khz: 192.0
+        bit_depth: 24
+        channels: 2
+        playback_streams: 1
+        capture_streams: 0
+        offload: true
+        output: speaker
+      bw_kb_s:
+        read: 1125
+        write: 0
+      dvfs:
+        aud_freq_khz: 200000
+        value_source: assumed
+        note: AUD operating point is not derivable from design_conditions; lowest level assumed for offload, a mid level for
+          the CPU-fed path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
+    audio_hal:
+      executes_on: ip-abox-s5e9965
+    speaker:
+      executes_on: ip-abox-s5e9965
+    bt_codec:
+      executes_on: ip-abox-s5e9965
+    dsp_offload:
+      executes_on: ip-abox-s5e9965
+    sw_decoder:
+      sw_timing:
+        min_ms: 1.5
+        mean_ms: 3.0
+        max_ms: 6.0
+        start_latency_ref: bitstream_available
+        start_latency_mean_ms: 0.5
+        rate_hz: 30.0
+        cpu_affinity: CPUCL1
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
 - id: audio-aac-bt-screen-on
   severity: light
   design_conditions:
@@ -137,6 +284,9 @@ variants:
     output: Bluetooth
     screen_on: true
     codec_bt: aptX_HD
+    panel_resolution: 1440x3120
+    panel_fps_hz: 60
+    sw_timing_source: assumed
   routing_switch:
     disabled_nodes:
     - dsp_offload
@@ -148,3 +298,52 @@ variants:
       to: audio_hal
     - from: audio_hal
       to: speaker
+  node_configs:
+    storage:
+      sim:
+        bitrate_mbps: null
+      note: no bitrate in design_conditions; set bitrate_mbps or bitrate_kbps to model this traffic
+    abox:
+      selected_mode: Offload
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 1
+        capture_streams: 0
+        offload: true
+        output: Bluetooth
+      bw_kb_s:
+        read: 188
+        write: 0
+      dvfs:
+        aud_freq_khz: 200000
+        value_source: assumed
+        note: AUD operating point is not derivable from design_conditions; lowest level assumed for offload, a mid level for
+          the CPU-fed path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
+    audio_hal:
+      executes_on: ip-abox-s5e9965
+    speaker:
+      executes_on: ip-abox-s5e9965
+    bt_codec:
+      executes_on: ip-abox-s5e9965
+    dsp_offload:
+      executes_on: ip-abox-s5e9965
+    sw_decoder:
+      sw_timing:
+        min_ms: 1.5
+        mean_ms: 3.0
+        max_ms: 6.0
+        start_latency_ref: bitstream_available
+        start_latency_mean_ms: 0.5
+        rate_hz: 30.0
+        cpu_affinity: CPUCL1
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
+provenance:
+  platform_review: S5E9965 platform (non-camera) driver review 2026-09-16
+  note: Node ip_refs, per-variant sim shapes, bw_kb_s, dvfs steps and sw_timing are generated by tools/build_platform_fixture.py
+    from the S5E9965 DT/drivers. Variant ids and design_conditions are hand-maintained inputs.

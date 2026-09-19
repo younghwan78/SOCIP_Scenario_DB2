@@ -58,5 +58,64 @@ capabilities:
       type: DMA
       direction: write
       naming: logical traffic endpoint; physical mapping unverified
+  power_model:
+    source: kernel_dt
+    reference: 'exynos/soc-series/t-android16/arch/arm64/boot/dts/exynos/s5e9965-cpu.dtsi:
+      power-data/energy-table; exynos/soc-series/t-android16/arch/arm64/boot/dts/exynos/s5e9965-profiler.dtsi:
+      exynos-cpu-profiler'
+    unit: uW per MHz per V^2 (Linux EM convention)
+    formula:
+    - 'per-task CPU energy:'
+    - '  util          = task_cycles / (freq_khz * 1000)          # from sw_timing
+      exec time'
+    - '  dynamic_mw    = dynamic_power_coefficient * freq_mhz * volt^2 * util / 1000'
+    - '  static_mw     = profiler_static_coeff * volt * f(temp)'
+    - '  task_energy_uJ= dynamic_mw * exec_time_ms'
+    - capacity(freq)  = capacity_dmips_mhz * freq_mhz, normalized to 1024 at the fastest
+      core
+    energy_tables:
+      table@0_default:
+        mips:
+        - 933
+        - 933
+        - 933
+        - 1091
+        dynamic_coeff:
+        - 341
+        - 368
+        - 430
+        - 1107
+      table@1_alt:
+        mips:
+        - 1363
+        - 1363
+        - 1363
+        - 1902
+        dynamic_coeff:
+        - 341
+        - 368
+        - 430
+        - 1107
+    note: 'Two coefficient sets exist and disagree: the scheduler energy model ([341,
+      368, 430, 1107]) and the profiler ([449, 449, 505, 1127]). The EM set drives
+      task placement; the profiler set drives the power estimator. Use the profiler
+      set for power reporting and say which one a number came from. Voltage per operating
+      point comes from ECT/ASV, absent in this source release.'
+  sw_task_model:
+    source: fixture_convention
+    note: SW tasks in a use-case pipeline carry `sw_timing` (min/mean/max exec ms
+      plus start latency from a named preceding event) and `cpu_affinity`/`cpu_util_pct`.
+      CPU power for a task = power_model applied at the cluster and frequency the
+      task ran on, integrated over exec time x rate (fps or period).
+    fields:
+    - sw_timing.min_ms
+    - sw_timing.mean_ms
+    - sw_timing.max_ms
+    - sw_timing.start_latency_ref
+    - sw_timing.start_latency_mean_ms
+    - cpu_affinity
+    - cpu_util_pct
+    - rate_hz
+    - value_source
 compatible_soc:
 - soc-exynos2600

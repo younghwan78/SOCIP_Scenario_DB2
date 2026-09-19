@@ -15,11 +15,14 @@ def test_exynos2600_fixture_contract_separates_compute_and_external_metadata():
 
     report = validate_soc_sim_contract(docs, soc_id="soc-exynos2600")
 
-    assert report["status"] == "warning"
-    assert report["errors"] == []
+    # Newly imported driver-only IPs must not appear ready with invented PPC.
+    assert report["status"] == "blocked"
+    assert {e["ip_ref"] for e in report["errors"]} == {
+        "ip-abox-s5e9965", "ip-ufs-s5e9965", "ip-m2m-scaler-s5e9965"}
+    assert {e["code"] for e in report["errors"]} == {"MISSING_PPC"}
     assert report["summary"]["compute_ip_count"] > 0
     assert report["summary"]["external_ip_count"] == 9  # existing three + six board sensor catalogs
-    assert not _issues_for_code(report, "MISSING_PPC")
+    assert len(_issues_for_code(report, "MISSING_PPC")) == 3
     assert _issues_for_code(report, "BORROWABLE_SIM_PARAMS")
     assert _issues_for_code(report, "SENSOR_VVALID_INPUTS_MISSING")
 

@@ -222,9 +222,6 @@ def _calc_v_valid_ms(mode: dict[str, Any]) -> float | None:
     size = _size_tuple(mode.get("active_size") or mode.get("sensor_size") or mode.get("size"))
     if line_length and pclk and size:
         return (line_length * 1000.0 / pclk) * size[1]
-    fps = _float_or_none(mode.get("sensor_fps") or mode.get("fps"))
-    if fps and fps > 0:
-        return 1000.0 / fps
     return None
 
 

@@ -16,16 +16,20 @@ pipeline:
     role: modem
     instance_index: 0
   - id: audio_hal
-    ip_ref: ip-cpu-s5e9965
+    ip_ref: ip-abox-s5e9965
     role: audio_hal
     instance_index: 0
   - id: speaker
-    ip_ref: ip-cpu-s5e9965
+    ip_ref: ip-abox-s5e9965
     role: earpiece
     instance_index: 0
   - id: mic
-    ip_ref: ip-cpu-s5e9965
+    ip_ref: ip-abox-s5e9965
     role: microphone
+    instance_index: 0
+  - id: abox
+    ip_ref: ip-abox-s5e9965
+    role: audio_offload
     instance_index: 0
   edges:
   - from: modem
@@ -48,13 +52,143 @@ variants:
     call_type: VoLTE
     camera_active: false
     dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VT
+    panel_resolution: 1440x3120
+    panel_fps_hz: 60
+    sw_timing_source: assumed
+  node_configs:
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 1
+        playback_streams: 1
+        capture_streams: 1
+        offload: false
+        output: speaker
+      bw_kb_s:
+        read: 94
+        write: 94
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: AUD operating point is not derivable from design_conditions; lowest level assumed for offload, a mid level for
+          the CPU-fed path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
+    audio_hal:
+      executes_on: ip-abox-s5e9965
+    speaker:
+      executes_on: ip-abox-s5e9965
+    mic:
+      executes_on: ip-abox-s5e9965
+    modem:
+      sw_timing:
+        min_ms: 0.2
+        mean_ms: 0.4
+        max_ms: 1.0
+        start_latency_ref: modem_irq
+        start_latency_mean_ms: 0.0
+        rate_hz: 50.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
 - id: voice-call-vowifi
   severity: light
   design_conditions:
     call_type: VoWiFi
     camera_active: false
+    panel_resolution: 1440x3120
+    panel_fps_hz: 60
+    sw_timing_source: assumed
+  node_configs:
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 1
+        playback_streams: 1
+        capture_streams: 1
+        offload: false
+        output: speaker
+      bw_kb_s:
+        read: 94
+        write: 94
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: AUD operating point is not derivable from design_conditions; lowest level assumed for offload, a mid level for
+          the CPU-fed path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
+    audio_hal:
+      executes_on: ip-abox-s5e9965
+    speaker:
+      executes_on: ip-abox-s5e9965
+    mic:
+      executes_on: ip-abox-s5e9965
+    modem:
+      sw_timing:
+        min_ms: 0.2
+        mean_ms: 0.4
+        max_ms: 1.0
+        start_latency_ref: modem_irq
+        start_latency_mean_ms: 0.0
+        rate_hz: 50.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
 - id: voice-call-vonr
   severity: light
   design_conditions:
     call_type: VoNR
     camera_active: false
+    panel_resolution: 1440x3120
+    panel_fps_hz: 60
+    sw_timing_source: assumed
+  node_configs:
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 1
+        playback_streams: 1
+        capture_streams: 1
+        offload: false
+        output: speaker
+      bw_kb_s:
+        read: 94
+        write: 94
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: AUD operating point is not derivable from design_conditions; lowest level assumed for offload, a mid level for
+          the CPU-fed path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
+    audio_hal:
+      executes_on: ip-abox-s5e9965
+    speaker:
+      executes_on: ip-abox-s5e9965
+    mic:
+      executes_on: ip-abox-s5e9965
+    modem:
+      sw_timing:
+        min_ms: 0.2
+        mean_ms: 0.4
+        max_ms: 1.0
+        start_latency_ref: modem_irq
+        start_latency_mean_ms: 0.0
+        rate_hz: 50.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
+provenance:
+  platform_review: S5E9965 platform (non-camera) driver review 2026-09-16
+  note: Node ip_refs, per-variant sim shapes, bw_kb_s, dvfs steps and sw_timing are generated by tools/build_platform_fixture.py
+    from the S5E9965 DT/drivers. Variant ids and design_conditions are hand-maintained inputs.

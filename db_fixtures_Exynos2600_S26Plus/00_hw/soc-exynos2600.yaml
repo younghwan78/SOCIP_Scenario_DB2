@@ -82,3 +82,9 @@ ips:
   instance_count: 1
 - ref: ip-lme-is-v15-s5e9965
   instance_count: 1
+- ref: ip-abox-s5e9965
+  instance_count: 1
+- ref: ip-m2m-scaler-s5e9965
+  instance_count: 1
+- ref: ip-ufs-s5e9965
+  instance_count: 1

@@ -23,6 +23,12 @@ def build_simulation_inputs(
     """Convert an effective canonical graph into simulation-engine inputs."""
 
     run_config = config or SimulationRunConfig()
+    for node_id, binding in run_config.sensor_modes.items():
+        resolved = ((graph.variant.node_configs or {}).get(node_id) or {}).get("resolved_sensor_mode", {})
+        if any(resolved.get("catalog_binding", {}).get(k) != v for k, v in binding.model_dump().items()):
+            raise ValueError("sensor mode bindings must be resolved against DB before simulation")
+    if run_config.sensor_modes and run_config.timing_profile is not None:
+        raise ValueError("sensor mode exploration cannot modify measured replay")
     if run_config.timing_profile is not None and run_config.sw_timing_projection is not None:
         raise ValueError("select measured replay or SW projection, not both")
     if run_config.timing_profile is not None:
@@ -46,13 +52,61 @@ def build_simulation_inputs(
                 # Captured duration already includes the captured bitrate; do not rescale it again.
                 node_config.pop("sw_bitrate_scaling", None)
         graph = replace(graph, variant=variant)
+    if run_config.sensor_readout:
+        if run_config.timing_profile is not None:
+            raise ValueError("sensor readout exploration cannot modify measured replay")
+        from copy import deepcopy
+        from dataclasses import replace
+        variant = deepcopy(graph.variant)
+        variant.node_configs = variant.node_configs or {}
+        graph = replace(graph, variant=variant)
+        active = {str(n["id"]): n for n in active_sensor_nodes(graph)}
+        for node_id, timing in run_config.sensor_readout.items():
+            if node_id not in active:
+                raise ValueError(f"{node_id}: readout requires an active sensor node")
+            mode = selected_sensor_mode(graph, active[node_id]) or {}
+            if list(mode.get("sensor_size") or []) != [timing.active_width, timing.active_height]:
+                raise ValueError(f"{node_id}: readout dimensions differ from selected sensor mode")
+            variant.node_configs.setdefault(node_id, {})["sensor_readout"] = timing.model_dump()
+    inactive = {node for node, cfg in (graph.variant.node_configs or {}).items()
+                if (cfg.get("sim") or {}).get("active") is False}
+    if inactive:
+        from copy import deepcopy
+        from dataclasses import replace
+        from scenario_db.sim.graph_edges import edge_source, edge_target
+        scenario = deepcopy(graph.scenario)
+        pipeline = deepcopy(scenario.pipeline)
+        pipeline["nodes"] = [n for n in graph.pipeline_nodes if n["id"] not in inactive]
+        pipeline["edges"] = [e for e in graph.pipeline_edges if edge_source(e) not in inactive and edge_target(e) not in inactive]
+        if pipeline.get("task_graph"):
+            pipeline["task_graph"]["nodes"] = [n for n in pipeline["task_graph"].get("nodes", []) if n["id"] not in inactive]
+            pipeline["task_graph"]["edges"] = [e for e in pipeline["task_graph"].get("edges", []) if edge_source(e) not in inactive and edge_target(e) not in inactive]
+        scenario.pipeline = pipeline
+        variant = deepcopy(graph.variant)
+        variant.topology_patch = None
+        graph = replace(graph, scenario=scenario, variant=variant)
     fps = _fps(graph, run_config)
     shapes = propagate_shapes(graph)
     workloads: list[IPWorkload] = []
     transfers: list[PortTransferSpec] = []
+    from scenario_db.sim.driver_models import evaluate_graph
+    driver_report = evaluate_graph(graph, run_config.driver_model_overrides)
+    calculated_driver_nodes = {r["node_id"] for r in driver_report["rows"] if r["status"] in {"calculated", "partial", "infeasible"}}
     warnings: list[str] = []
+    if calculated_driver_nodes:
+        warnings.append("Driver BW/DVFS estimates are in calculation_trace.driver_models; endpoint values are not added to legacy DMA/power totals.")
+    if run_config.sensor_modes:
+        warnings.append("Pinned DT sensor selection applied; VC payload is in external_devices.transport, not aggregate DRAM BW. Target wiring compatibility is unverified; readout is applied only when a reviewed DT/CIS binding exists.")
+    if run_config.sensor_readout:
+        warnings.append("Sensor readout override predicts CSIS FS/FE duration; explicit exploration input, not measured timing.")
+    for node_id, cfg in (graph.variant.node_configs or {}).items():
+        if node_id not in inactive and node_id not in calculated_driver_nodes and (cfg.get("bw_kb_s") or cfg.get("model_ref")):
+            warnings.append(f"{node_id}: imported driver BW/DVFS model metadata is reference-only; simulation does not evaluate model_ref formulas.")
     warnings.extend(validate_shape_propagation(graph, shapes))
     _append_missing_ip_catalog_warnings(graph, warnings)
+    for device in external_devices(graph):
+        if device.get("device_type") == "sensor" and device.get("v_valid_ms") is None:
+            warnings.append(f"{device['node_id']}: sensor VVALID/CSIS frame window is unknown; provide CIS pixel clock and line timing. FPS is not a readout measurement.")
     comp_catalog = compression_catalog(graph.soc)
 
     for node in graph.pipeline_nodes:
@@ -140,6 +194,7 @@ def build_simulation_inputs(
         warnings.append("Projected SW elapsed time and observed gaps are assumptions; CPU active power is not calibrated.")
 
     return SimulationInputs(
+        driver_model_report=driver_report if driver_report["rows"] else None,
         scenario_id=graph.scenario_id,
         variant_id=graph.variant_id,
         project_ref=getattr(graph.scenario, "project_ref", None),

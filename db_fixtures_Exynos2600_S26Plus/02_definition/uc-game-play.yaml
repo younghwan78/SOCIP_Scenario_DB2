@@ -24,7 +24,7 @@ pipeline:
     role: npu
     instance_index: 0
   - id: m2m_scaler
-    ip_ref: ip-cpu-s5e9965
+    ip_ref: ip-m2m-scaler-s5e9965
     role: m2m_scaler
     instance_index: 0
   - id: dpu
@@ -95,6 +95,9 @@ variants:
     npu_used: false
     dpu_layer_count: 5
     dpu_composer: DPU_DIRECT
+    panel_resolution: 1440x3120
+    source_resolution: 1920x1080
+    sw_timing_source: assumed
   routing_switch:
     disabled_nodes:
     - npu
@@ -110,9 +113,105 @@ variants:
       to: dpu
   node_configs:
     gpu:
-      selected_mode: performance
+      selected_mode: Normal
+      sim:
+        width: 1920
+        height: 1080
+        fps: 60
+        workload: render
+      bw_kb_s:
+        note: GPU traffic is not kernel-declared; see ip-gpu bw_model
+        composition_write: 0
+      model_ref: ip-gpu-s5e9965.capabilities.dvfs_model / power_model
     panel:
       selected_mode: 60hz
+      sim:
+        refresh_hz: 60
+        screen_on: true
+    dpu:
+      selected_mode: Normal
+      sim:
+        panel_width: 1440
+        panel_height: 3120
+        refresh_hz: 60
+        composer: DPU_DIRECT
+        layers:
+        - name: rendered_frame
+          src:
+          - 1920
+          - 1080
+          bpp: 32
+          dst:
+          - 1440
+          - 3120
+        - name: ui0
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui1
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui2
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui3
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+      resol_clk_khz: 304611
+      bw_kb_s:
+        bts_read_vote: 6498368
+        surface_traffic: 1012500
+        write: 0
+      bw_note: bts_read_vote is what the driver votes to BTS (worst case, each layer charged at full-frame rate); surface_traffic
+        is the bytes actually fetched. Use the vote for MIF/INT frequency, the traffic for energy.
+      model_ref: ip-dpu-s5e9965.capabilities.bw_model
+    m2m_scaler:
+      sim:
+        active: false
+    npu:
+      sim:
+        active: false
+        width: 1920
+        height: 1080
+        fps: 0
+      dvfs: null
+      dvfs_note: null
+    cpu:
+      sw_timing:
+        min_ms: 2.0
+        mean_ms: 4.0
+        max_ms: 8.0
+        start_latency_ref: frame_start
+        start_latency_mean_ms: 0.0
+        rate_hz: 60.0
+        cpu_affinity: CPUCL3
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
 - id: game-fhd-90fps-sdr
   severity: light
   design_conditions:
@@ -123,6 +222,9 @@ variants:
     npu_used: false
     dpu_layer_count: 5
     dpu_composer: DPU_DIRECT
+    panel_resolution: 1440x3120
+    source_resolution: 1920x1080
+    sw_timing_source: assumed
   routing_switch:
     disabled_nodes:
     - npu
@@ -138,9 +240,105 @@ variants:
       to: dpu
   node_configs:
     gpu:
-      selected_mode: performance
+      selected_mode: Normal
+      sim:
+        width: 1920
+        height: 1080
+        fps: 90
+        workload: render
+      bw_kb_s:
+        note: GPU traffic is not kernel-declared; see ip-gpu bw_model
+        composition_write: 0
+      model_ref: ip-gpu-s5e9965.capabilities.dvfs_model / power_model
     panel:
-      selected_mode: 90hz
+      selected_mode: 120hz
+      sim:
+        refresh_hz: 90
+        screen_on: true
+    dpu:
+      selected_mode: VRR
+      sim:
+        panel_width: 1440
+        panel_height: 3120
+        refresh_hz: 90
+        composer: DPU_DIRECT
+        layers:
+        - name: rendered_frame
+          src:
+          - 1920
+          - 1080
+          bpp: 32
+          dst:
+          - 1440
+          - 3120
+        - name: ui0
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui1
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui2
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui3
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+      resol_clk_khz: 456917
+      bw_kb_s:
+        bts_read_vote: 9747563
+        surface_traffic: 1518750
+        write: 0
+      bw_note: bts_read_vote is what the driver votes to BTS (worst case, each layer charged at full-frame rate); surface_traffic
+        is the bytes actually fetched. Use the vote for MIF/INT frequency, the traffic for energy.
+      model_ref: ip-dpu-s5e9965.capabilities.bw_model
+    m2m_scaler:
+      sim:
+        active: false
+    npu:
+      sim:
+        active: false
+        width: 1920
+        height: 1080
+        fps: 0
+      dvfs: null
+      dvfs_note: null
+    cpu:
+      sw_timing:
+        min_ms: 2.0
+        mean_ms: 4.0
+        max_ms: 8.0
+        start_latency_ref: frame_start
+        start_latency_mean_ms: 0.0
+        rate_hz: 90.0
+        cpu_affinity: CPUCL3
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
 - id: game-fhd-120fps-sdr
   severity: light
   design_conditions:
@@ -152,6 +350,9 @@ variants:
     note: 고주사율 게임 (GTS 타겟 120Hz)
     dpu_layer_count: 5
     dpu_composer: DPU_DIRECT
+    panel_resolution: 1440x3120
+    source_resolution: 1920x1080
+    sw_timing_source: assumed
   routing_switch:
     disabled_nodes:
     - npu
@@ -167,9 +368,105 @@ variants:
       to: dpu
   node_configs:
     gpu:
-      selected_mode: performance
+      selected_mode: Normal
+      sim:
+        width: 1920
+        height: 1080
+        fps: 120
+        workload: render
+      bw_kb_s:
+        note: GPU traffic is not kernel-declared; see ip-gpu bw_model
+        composition_write: 0
+      model_ref: ip-gpu-s5e9965.capabilities.dvfs_model / power_model
     panel:
       selected_mode: 120hz
+      sim:
+        refresh_hz: 120
+        screen_on: true
+    dpu:
+      selected_mode: VRR
+      sim:
+        panel_width: 1440
+        panel_height: 3120
+        refresh_hz: 120
+        composer: DPU_DIRECT
+        layers:
+        - name: rendered_frame
+          src:
+          - 1920
+          - 1080
+          bpp: 32
+          dst:
+          - 1440
+          - 3120
+        - name: ui0
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui1
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui2
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui3
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+      resol_clk_khz: 609223
+      bw_kb_s:
+        bts_read_vote: 12996757
+        surface_traffic: 2025000
+        write: 0
+      bw_note: bts_read_vote is what the driver votes to BTS (worst case, each layer charged at full-frame rate); surface_traffic
+        is the bytes actually fetched. Use the vote for MIF/INT frequency, the traffic for energy.
+      model_ref: ip-dpu-s5e9965.capabilities.bw_model
+    m2m_scaler:
+      sim:
+        active: false
+    npu:
+      sim:
+        active: false
+        width: 1920
+        height: 1080
+        fps: 0
+      dvfs: null
+      dvfs_note: null
+    cpu:
+      sw_timing:
+        min_ms: 2.0
+        mean_ms: 4.0
+        max_ms: 8.0
+        start_latency_ref: frame_start
+        start_latency_mean_ms: 0.0
+        rate_hz: 120.0
+        cpu_affinity: CPUCL3
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
 - id: game-uhd-60fps-sdr
   severity: heavy
   design_conditions:
@@ -180,6 +477,9 @@ variants:
     npu_used: false
     dpu_layer_count: 5
     dpu_composer: DPU_DIRECT
+    panel_resolution: 1440x3120
+    source_resolution: 3840x2160
+    sw_timing_source: assumed
   routing_switch:
     disabled_nodes:
     - npu
@@ -195,9 +495,105 @@ variants:
       to: dpu
   node_configs:
     gpu:
-      selected_mode: performance
+      selected_mode: Normal
+      sim:
+        width: 3840
+        height: 2160
+        fps: 60
+        workload: render
+      bw_kb_s:
+        note: GPU traffic is not kernel-declared; see ip-gpu bw_model
+        composition_write: 0
+      model_ref: ip-gpu-s5e9965.capabilities.dvfs_model / power_model
     panel:
       selected_mode: 60hz
+      sim:
+        refresh_hz: 60
+        screen_on: true
+    dpu:
+      selected_mode: Normal
+      sim:
+        panel_width: 1440
+        panel_height: 3120
+        refresh_hz: 60
+        composer: DPU_DIRECT
+        layers:
+        - name: rendered_frame
+          src:
+          - 3840
+          - 2160
+          bpp: 32
+          dst:
+          - 1440
+          - 3120
+        - name: ui0
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui1
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui2
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui3
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+      resol_clk_khz: 304611
+      bw_kb_s:
+        bts_read_vote: 8122960
+        surface_traffic: 2470500
+        write: 0
+      bw_note: bts_read_vote is what the driver votes to BTS (worst case, each layer charged at full-frame rate); surface_traffic
+        is the bytes actually fetched. Use the vote for MIF/INT frequency, the traffic for energy.
+      model_ref: ip-dpu-s5e9965.capabilities.bw_model
+    m2m_scaler:
+      sim:
+        active: false
+    npu:
+      sim:
+        active: false
+        width: 3840
+        height: 2160
+        fps: 0
+      dvfs: null
+      dvfs_note: null
+    cpu:
+      sw_timing:
+        min_ms: 2.0
+        mean_ms: 4.0
+        max_ms: 8.0
+        start_latency_ref: frame_start
+        start_latency_mean_ms: 0.0
+        rate_hz: 60.0
+        cpu_affinity: CPUCL3
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
 - id: game-fhd-60fps-npu-ai
   severity: light
   design_conditions:
@@ -209,6 +605,10 @@ variants:
     note: AI 게임 가속 / SR (NPU 슈퍼 해상도)
     dpu_layer_count: 5
     dpu_composer: DPU_DIRECT
+    panel_resolution: 1440x3120
+    panel_fps_hz: 60
+    source_resolution: 1920x1080
+    sw_timing_source: assumed
   routing_switch:
     disabled_nodes:
     - m2m_scaler
@@ -221,11 +621,110 @@ variants:
       to: dpu
   node_configs:
     gpu:
-      selected_mode: balanced
+      selected_mode: Normal
+      sim:
+        width: 1920
+        height: 1080
+        fps: 60
+        workload: render
+      bw_kb_s:
+        note: GPU traffic is not kernel-declared; see ip-gpu bw_model
+        composition_write: 0
+      model_ref: ip-gpu-s5e9965.capabilities.dvfs_model / power_model
     npu:
       selected_mode: Normal
+      sim:
+        active: true
+        width: 1920
+        height: 1080
+        fps: 60
+      dvfs:
+        freq_core_khz: 664000
+        freq_npucon_khz: 533000
+        freq_mif_khz: 1716000
+        freq_int_khz: 350000
+      dvfs_note: mid DVFS step assumed; NPU load is not derivable from design_conditions.
     panel:
       selected_mode: 60hz
+      sim:
+        refresh_hz: 60
+        screen_on: true
+    dpu:
+      selected_mode: Normal
+      sim:
+        panel_width: 1440
+        panel_height: 3120
+        refresh_hz: 60
+        composer: DPU_DIRECT
+        layers:
+        - name: rendered_frame
+          src:
+          - 1920
+          - 1080
+          bpp: 32
+          dst:
+          - 1440
+          - 3120
+        - name: ui0
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui1
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui2
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui3
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+      resol_clk_khz: 304611
+      bw_kb_s:
+        bts_read_vote: 6498368
+        surface_traffic: 1012500
+        write: 0
+      bw_note: bts_read_vote is what the driver votes to BTS (worst case, each layer charged at full-frame rate); surface_traffic
+        is the bytes actually fetched. Use the vote for MIF/INT frequency, the traffic for energy.
+      model_ref: ip-dpu-s5e9965.capabilities.bw_model
+    m2m_scaler:
+      sim:
+        active: false
+    cpu:
+      sw_timing:
+        min_ms: 2.0
+        mean_ms: 4.0
+        max_ms: 8.0
+        start_latency_ref: frame_start
+        start_latency_mean_ms: 0.0
+        rate_hz: 60.0
+        cpu_affinity: CPUCL3
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
 - id: game-fhd-120fps-hdr10
   severity: medium
   design_conditions:
@@ -237,6 +736,9 @@ variants:
     npu_used: false
     dpu_layer_count: 5
     dpu_composer: DPU_DIRECT
+    panel_resolution: 1440x3120
+    source_resolution: 1920x1080
+    sw_timing_source: assumed
   routing_switch:
     disabled_nodes:
     - npu
@@ -252,9 +754,105 @@ variants:
       to: dpu
   node_configs:
     gpu:
-      selected_mode: performance
+      selected_mode: Normal
+      sim:
+        width: 1920
+        height: 1080
+        fps: 120
+        workload: render
+      bw_kb_s:
+        note: GPU traffic is not kernel-declared; see ip-gpu bw_model
+        composition_write: 0
+      model_ref: ip-gpu-s5e9965.capabilities.dvfs_model / power_model
     panel:
       selected_mode: 120hz
+      sim:
+        refresh_hz: 120
+        screen_on: true
+    dpu:
+      selected_mode: VRR
+      sim:
+        panel_width: 1440
+        panel_height: 3120
+        refresh_hz: 120
+        composer: DPU_DIRECT
+        layers:
+        - name: rendered_frame
+          src:
+          - 1920
+          - 1080
+          bpp: 32
+          dst:
+          - 1440
+          - 3120
+        - name: ui0
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui1
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui2
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui3
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+      resol_clk_khz: 609223
+      bw_kb_s:
+        bts_read_vote: 12996757
+        surface_traffic: 2025000
+        write: 0
+      bw_note: bts_read_vote is what the driver votes to BTS (worst case, each layer charged at full-frame rate); surface_traffic
+        is the bytes actually fetched. Use the vote for MIF/INT frequency, the traffic for energy.
+      model_ref: ip-dpu-s5e9965.capabilities.bw_model
+    m2m_scaler:
+      sim:
+        active: false
+    npu:
+      sim:
+        active: false
+        width: 1920
+        height: 1080
+        fps: 0
+      dvfs: null
+      dvfs_note: null
+    cpu:
+      sw_timing:
+        min_ms: 2.0
+        mean_ms: 4.0
+        max_ms: 8.0
+        start_latency_ref: frame_start
+        start_latency_mean_ms: 0.0
+        rate_hz: 120.0
+        cpu_affinity: CPUCL3
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
   buffer_overrides:
     GPU_DPU_BUF:
       format: RGBA1010102
@@ -271,6 +869,9 @@ variants:
     dpu_layer_count: 5
     dpu_composer: M2M_SCALER_FALLBACK
     note: GPU QHD 렌더 → M2M 스케일러 QHD→UHD 업스케일 → DPU (GPU 부하 절감)
+    panel_resolution: 1440x3120
+    source_resolution: 2560x1440
+    sw_timing_source: assumed
   routing_switch:
     disabled_nodes:
     - npu
@@ -283,9 +884,125 @@ variants:
       to: dpu
   node_configs:
     gpu:
-      selected_mode: balanced
+      selected_mode: Normal
+      sim:
+        width: 2560
+        height: 1440
+        fps: 60
+        workload: render
+      bw_kb_s:
+        note: GPU traffic is not kernel-declared; see ip-gpu bw_model
+        composition_write: 0
+      model_ref: ip-gpu-s5e9965.capabilities.dvfs_model / power_model
     panel:
       selected_mode: 60hz
+      sim:
+        refresh_hz: 60
+        screen_on: true
+    dpu:
+      selected_mode: Normal
+      sim:
+        panel_width: 1440
+        panel_height: 3120
+        refresh_hz: 60
+        composer: M2M_SCALER_FALLBACK
+        layers:
+        - name: m2m_scaled_rendered_frame
+          src:
+          - 2560
+          - 1440
+          bpp: 32
+          dst:
+          - 1440
+          - 3120
+        - name: ui0
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui1
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui2
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui3
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+      resol_clk_khz: 304611
+      bw_kb_s:
+        bts_read_vote: 7039899
+        surface_traffic: 1390500
+        write: 0
+      bw_note: bts_read_vote is what the driver votes to BTS (worst case, each layer charged at full-frame rate); surface_traffic
+        is the bytes actually fetched. Use the vote for MIF/INT frequency, the traffic for energy.
+      model_ref: ip-dpu-s5e9965.capabilities.bw_model
+    m2m_scaler:
+      selected_mode: Normal
+      sim:
+        src:
+        - 2560
+        - 1440
+        dst:
+        - 1440
+        - 3120
+        fps: 60
+        src_bpp: 12
+        dst_bpp: 32
+        ppc: 4.89
+        ppc_row: YUV420
+      required_freq_khz: 55126
+      dvfs:
+        freq_mif_khz: 0
+        freq_int_khz: 133000
+        freq_mscl_khz: 88000
+      bw_kb_s:
+        read: 324000
+        write: 1053000
+      model_ref: ip-m2m-scaler-s5e9965.capabilities.perf_model / bw_model
+    npu:
+      sim:
+        active: false
+        width: 2560
+        height: 1440
+        fps: 0
+      dvfs: null
+      dvfs_note: null
+    cpu:
+      sw_timing:
+        min_ms: 2.0
+        mean_ms: 4.0
+        max_ms: 8.0
+        start_latency_ref: frame_start
+        start_latency_mean_ms: 0.0
+        rate_hz: 60.0
+        cpu_affinity: CPUCL3
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
   buffer_overrides:
     GPU_M2M_BUF:
       format: RGBA8888
@@ -302,6 +1019,12 @@ variants:
     dpu_layer_count: 13
     dpu_composer: GPU_FALLBACK
     note: 게임+시스템UI+인앱브라우저+알림 레이어 합산 >12 → SurfaceFlinger GPU fallback
+    panel_resolution: 1440x3120
+    source_resolution: 1920x1080
+    sw_timing_source: assumed
+    design_review: GPU fallback is asserted at 13 layers, but S5E9965 has 16 DPP channels and max_win = 16, so the DPU can
+      compose this directly. The real limits are >16 layers, or more than 8 layers needing scale/CSC (only the odd DPPs are
+      VG). Confirm the intended trigger and either raise the layer count or state the other reason.
   routing_switch:
     disabled_nodes:
     - npu
@@ -317,6 +1040,84 @@ variants:
       to: dpu
   node_configs:
     gpu:
-      selected_mode: performance
+      selected_mode: Normal
+      sim:
+        width: 1920
+        height: 1080
+        fps: 60
+        workload: render
+        input_layers: 13
+      bw_kb_s:
+        note: GPU traffic is not kernel-declared; see ip-gpu bw_model
+        composition_write: 1053000
+      model_ref: ip-gpu-s5e9965.capabilities.dvfs_model / power_model
+      sw_timing:
+        min_ms: 1.0
+        mean_ms: 2.0
+        max_ms: 4.0
+        start_latency_ref: layers_ready
+        start_latency_mean_ms: 0.5
+        rate_hz: 60.0
+        cpu_affinity: CPUCL2
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
     panel:
       selected_mode: 60hz
+      sim:
+        refresh_hz: 60
+        screen_on: true
+    dpu:
+      selected_mode: Normal
+      sim:
+        panel_width: 1440
+        panel_height: 3120
+        refresh_hz: 60
+        composer: GPU_FALLBACK
+        layers:
+        - name: gpu_composed
+          src:
+          - 1440
+          - 3120
+          dst:
+          - 1440
+          - 3120
+          bpp: 32
+          note: single RGBA8888 surface produced by SurfaceFlinger
+      resol_clk_khz: 304611
+      bw_kb_s:
+        bts_read_vote: 1218444
+        surface_traffic: 1053000
+        write: 0
+      bw_note: bts_read_vote is what the driver votes to BTS (worst case, each layer charged at full-frame rate); surface_traffic
+        is the bytes actually fetched. Use the vote for MIF/INT frequency, the traffic for energy.
+      model_ref: ip-dpu-s5e9965.capabilities.bw_model
+    m2m_scaler:
+      sim:
+        active: false
+    npu:
+      sim:
+        active: false
+        width: 1920
+        height: 1080
+        fps: 0
+      dvfs: null
+      dvfs_note: null
+    cpu:
+      sw_timing:
+        min_ms: 2.0
+        mean_ms: 4.0
+        max_ms: 8.0
+        start_latency_ref: frame_start
+        start_latency_mean_ms: 0.0
+        rate_hz: 60.0
+        cpu_affinity: CPUCL3
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
+provenance:
+  platform_review: S5E9965 platform (non-camera) driver review 2026-09-16
+  note: Node ip_refs, per-variant sim shapes, bw_kb_s, dvfs steps and sw_timing are generated by tools/build_platform_fixture.py
+    from the S5E9965 DT/drivers. Variant ids and design_conditions are hand-maintained inputs.

@@ -32,3 +32,5 @@ __all__ = [
     "WriteBatch",
     "WriteEvent",
 ]
+
+from scenario_db.db.models.sensor import SensorCatalog, SensorTimingProfile, SensorBoardLineup, ProjectSensorSelection

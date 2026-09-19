@@ -1,0 +1,168 @@
+id: sensor-imx854-erd9965
+schema_version: '2.2'
+kind: sensor.catalog
+board: erd9965
+sensor_name: IMX854
+position: 6
+position_role: rear_tele2
+module_properties:
+  sensor_id: 138
+  sensor_id_name: SENSOR_NAME_IMX854
+  position: 6
+  id: 3
+  rom_id: 6
+  rom_cal_index: 0
+  rom_dualcal_id: 6
+  rom_dualcal_index: 0
+  mclk_ch: 4
+  mclk_freq: 19200
+  max_framerate: 240
+  bitwidth: 10
+  active_width: 8160
+  active_height: 6144
+  margin_left: 0
+  margin_right: 0
+  margin_top: 0
+  margin_bottom: 0
+  sensor_i2c_ch: 7
+  sensor_maker: SONY
+  sensor_name: IMX854
+  status: okay
+csis_wiring:
+  node: is_sensor3@270B0000
+  csi_ch: 3
+  use_cphy: 1
+  scenario: SENSOR_SCENARIO_NORMAL
+  status: okay
+  phy: CPHY
+mode_count: 1
+mode_summary:
+  sizes:
+    4080x3060: 1
+  ex_modes:
+    EX_NONE: 1
+  fps:
+  - 60
+  max_mipi_link_mbps: 19097
+modes:
+  mode0:
+    timing_binding:
+      profile_ref: sensortiming-imx854-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4080x3060_60fps_10bit
+      mode_index: 0
+      mode_sha256: 7886f3bb85d2e45f6c9c1eb4f7a88fab973e8353a849ca2ce01e5f779401c3cd
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx854-setA-19p2.h
+          sha256: 22e33e3688f8f3608c5f59893d2658bc8afd9e9d19abd7f0bf1e526cbc896b63
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx854.c
+          sha256: b8d28865e4f1f85076f3475f97f8c058af95839ad169460fcb7ffc89cefb8c90
+        mode_table: sensor_imx854_mode_infos_A_19p2
+    dt:
+      common:
+      - '4080'
+      - '3060'
+      - '60'
+      - '0'
+      - '0'
+      - CSI_DATA_LANES_3
+      - '2785'
+      - CSI_MODE_VC_ONLY
+      - LRTE_ENABLE
+      - PD_MOD3
+      - EX_NONE
+      source_line: 108
+    decoded:
+      size:
+      - 4080
+      - 3060
+      fps: 60
+      settle: 0
+      mode_index: 0
+      lanes: 3
+      lanes_enum: CSI_DATA_LANES_3
+      mipi_speed_mbps: 2785
+      interleave_mode: CSI_MODE_VC_ONLY
+      interleave_mode_value: 2
+      lrte: LRTE_ENABLE
+      lrte_value: 1
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 4080
+          - 3060
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc1:
+          map: 2
+          size:
+          - 0
+          - 0
+          hwformat: HW_FORMAT_UNKNOWN
+          hwformat_value: 0
+          hwformat_base: HW_FORMAT_UNKNOWN
+          bits_per_pixel: null
+          data: DATA_NONE
+          data_class: none
+        vc2:
+          map: 1
+          size:
+          - 4080
+          - 765
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+        vc3:
+          map: 3
+          size:
+          - 0
+          - 0
+          hwformat: HW_FORMAT_UNKNOWN
+          hwformat_value: 0
+          hwformat_base: HW_FORMAT_UNKNOWN
+          bits_per_pixel: null
+          data: DATA_NONE
+          data_class: none
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 19097
+      phy: CPHY
+      vc_count_by_class:
+        image: 1
+        none: 2
+        pd_horizontal: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 19507500
+      csis_input_mbps: 9363.6
+      link_utilization_pct: 49.0
+      payload_note: one or more VCs had no decodable bpp; payload is a lower bound
+provenance:
+  source:
+    path: exynos/device/erd/erd9965/arch/arm64/boot/dts/erd/camera/module_imx854.dtsi
+    sha256: 94b69fae7c995e70599950f3879bd9a9694528a84eb4cb26fae0b6f56b21abce
+  bindings:
+    path: exynos/soc-series/common/include/dt-bindings/camera/exynos_is_dt.h
+    sha256: 7d3822ddcfe9c4aa10595d46ec7b97cb0815a6d9a879fceff6d8ebd58108c6dc
+  parser_reference: 'exynos/external-modules/camera/camera/is-dt.c: is_cis_modes_parse_dt / is_cis_modes_dma_parse_dt'
+  review: S5E9965 board camera DT sensor catalog 2026-09-17
+  provenance_status: kernel_declared

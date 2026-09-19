@@ -26,7 +26,7 @@ def build_workload_for_node(
         return None
 
     node_config = (graph.variant.node_configs or {}).get(node_id) or {}
-    if node.get("role") == "sw_task" and node_config.get("sw_timing"):
+    if node_config.get("sw_timing"):
         return None
     sim_block = node_config.get("sim") or {}
     mode = str(sim_block.get("mode") or node_config.get("selected_mode") or "Normal")
