@@ -85,3 +85,14 @@ def test_numeric_source_parser_never_executes_expressions():
     assert number("14872.0") == 14872
     with pytest.raises(ValueError): number("unknown_clock()")
     with pytest.raises(ValueError): number("10 / 2")
+
+
+@pytest.mark.parametrize("bits", [8, None])
+def test_cis_declared_bit_depth_must_match_dt(bits):
+    catalog = yaml.safe_load((ROOT / "m2s/sensor-hp2.yaml").read_text(encoding="utf-8"))
+    profile = yaml.safe_load((ROOT / "timing-hp2.yaml").read_text(encoding="utf-8"))
+    mode = catalog["modes"]["mode0"]
+    image = next(v for group in mode["vc"].values() for v in group.values() if v.get("data_class") == "image")
+    image["bits_per_pixel"] = bits
+    with pytest.raises(ValueError, match="bit depth"):
+        resolve_timing_binding(catalog, mode, profile)

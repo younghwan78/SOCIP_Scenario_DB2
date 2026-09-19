@@ -308,3 +308,20 @@ def test_other_sensor_timings_and_profile_sort_metadata(imported, api_client):
     special = api_client.get("/api/v1/sensors/catalogs/sensor-imx874-m2s/modes/mode10/timing").json()
     assert special["valid_time_ms"] is None
     assert "runtime readout" in special["binding_reason"]
+
+
+def test_dt_bit_depth_drift_strict_rollback(imported, tmp_path):
+    from copy import deepcopy
+    import yaml
+    from scenario_db.etl.loader import LoaderValidationError
+    with Session(imported) as db:
+        row = db.get(SensorCatalog, "sensor-hp2-m2s")
+        original = row.yaml_sha256
+        doc = deepcopy(row.document)
+        image = next(v for channels in doc["modes"]["mode0"]["vc"].values()
+                     for v in channels.values() if v.get("data_class") == "image")
+        image["bits_per_pixel"] = 8
+        (tmp_path / "catalog.yaml").write_text(yaml.safe_dump(doc), encoding="utf-8")
+        with pytest.raises(LoaderValidationError, match="bit depth"):
+            load_yaml_dir(tmp_path, db, validate=True, strict=True)
+        assert db.get(SensorCatalog, row.id).yaml_sha256 == original

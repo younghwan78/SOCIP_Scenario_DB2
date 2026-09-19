@@ -34,6 +34,9 @@ def resolve_timing_binding(catalog, mode, profile):
               if v.get("data_class") == "image"]
     if len(images) != 1:
         raise ValueError("timing binding requires a single image readout")
+    cis_bits = timing["source"].get("bits_per_pixel")
+    if cis_bits is not None and images[0].get("bits_per_pixel") != cis_bits:
+        raise ValueError("DT image bit depth differs from CIS timing mode")
     return {**deepcopy(timing), "source": {**timing["source"],
             "timing_profile_id": profile["id"], "revision": profile["revision"],
             "mode_label": binding.mode_label, "mode_sha256": binding.mode_sha256,
