@@ -29,6 +29,20 @@ def validate_loaded_db(db: Session) -> ValidationReport:
     """Semantic validation after YAML has been loaded into PostgreSQL."""
 
     report = ValidationReport()
+    from scenario_db.db.models.sensor import SensorCatalog, SensorBoardLineup
+    catalog_keys = {(c.board, c.sensor_name) for c in db.query(SensorCatalog).all()}
+    for lineup in db.query(SensorBoardLineup).all():
+        for board, body in lineup.document["boards"].items():
+            configs = body.get("configs", [])
+            names = [c.get("config") for c in configs]
+            if not all(names) or len(names) != len(set(names)):
+                report.errors.append(f"{lineup.id}/{board}: duplicate or empty configuration")
+            for config in configs:
+                for sensors in config.get("lineup", {}).values():
+                    for sensor in (sensors if isinstance(sensors, list) else [sensors]):
+                        if (board, sensor) not in catalog_keys:
+                            report.errors.append(f"{lineup.id}/{board}: missing sensor catalog {sensor}")
+
 
     projects = db.query(Project).all()
     scenarios = db.query(Scenario).all()

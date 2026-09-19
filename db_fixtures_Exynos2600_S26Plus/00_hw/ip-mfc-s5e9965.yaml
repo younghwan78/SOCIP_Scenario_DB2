@@ -10,6 +10,7 @@ capabilities:
   - id: LowPower
   - id: LowLatency
   - id: OTF
+  - id: Secure
   sim:
     hw_name: MFC
     source: legacy_project_info_csv
@@ -110,5 +111,302 @@ capabilities:
       MFC_FMT_ENC: 256
     sbwc_support: true
     secure_mode: true
+  bw_model:
+    source: kernel_driver
+    reference: 'exynos/soc-series/common/drivers/mfc/base/mfc_qos.c: __mfc_qos_get_bw_per_second'
+    unit: KB/s
+    table_unit: KB per UHD frame (32400 macroblocks)
+    formula:
+    - mb    = ceil(w/16) * ceil(h/16) * fps,  clamped to 32400 * 120
+    - bw_x  = table[codec].x * mb / 32400            for x in (peak, read, write)
+    - 'add   = ((rgb_bpp - 12) / 8) * w * h * fps / 1024   # RGB source only, rgb_bpp
+      > 12'
+    - bw_x += add
+    mb_count_per_uhd_frame: 32400
+    max_fps_per_uhd_frame: 120
+    table_select: sbwc table when ctx->is_sbwc or is_sbwc_lossy, else the plain table
+    tables:
+      non_sbwc:
+        H264_ENC:
+          peak: 45456
+          read: 56112
+          write: 11170
+        HEVC_ENC:
+          peak: 46756
+          read: 52766
+          write: 9763
+        HEVC_ENC_10BIT:
+          peak: 53865
+          read: 64753
+          write: 12556
+        VP8_ENC:
+          peak: 64000
+          read: 67318
+          write: 22518
+        VP9_ENC:
+          peak: 72326
+          read: 59726
+          write: 16530
+        VP9_ENC_10BIT:
+          peak: 149085
+          read: 114928
+          write: 31419
+        MPEG4_ENC:
+          peak: 44647
+          read: 55324
+          write: 9531
+        H264_DEC:
+          peak: 32605
+          read: 34381
+          write: 21263
+        HEVC_DEC:
+          peak: 29973
+          read: 28851
+          write: 17538
+        HEVC_DEC_10BIT:
+          peak: 52859
+          read: 46245
+          write: 31351
+        VP8_DEC:
+          peak: 28672
+          read: 30468
+          write: 22324
+        VP9_DEC:
+          peak: 18351
+          read: 18947
+          write: 16877
+        VP9_DEC_10BIT:
+          peak: 42384
+          read: 34452
+          write: 31766
+        AV1_DEC:
+          peak: 23787
+          read: 19570
+          write: 15856
+        AV1_DEC_10BIT:
+          peak: 41407
+          read: 35490
+          write: 29699
+        MPEG4_DEC:
+          peak: 31540
+          read: 25368
+          write: 15770
+      sbwc:
+        H264_ENC:
+          peak: 31622
+          read: 32183
+          write: 7065
+        HEVC_ENC:
+          peak: 24044
+          read: 27526
+          write: 5888
+        HEVC_ENC_10BIT:
+          peak: 32666
+          read: 37594
+          write: 8841
+        VP8_ENC:
+          peak: 32666
+          read: 37594
+          write: 8841
+        VP9_ENC:
+          peak: 23276
+          read: 26884
+          write: 8702
+        VP9_ENC_10BIT:
+          peak: 42302
+          read: 41116
+          write: 14052
+        MPEG4_ENC:
+          peak: 32666
+          read: 37594
+          write: 8841
+        H264_DEC:
+          peak: 23757
+          read: 18603
+          write: 13620
+        HEVC_DEC:
+          peak: 15309
+          read: 15387
+          write: 10279
+        HEVC_DEC_10BIT:
+          peak: 20808
+          read: 20602
+          write: 14868
+        VP8_DEC:
+          peak: 17203
+          read: 18281
+          write: 13394
+        VP9_DEC:
+          peak: 11121
+          read: 9691
+          write: 8999
+        VP9_DEC_10BIT:
+          peak: 17787
+          read: 15582
+          write: 14413
+        MPEG4_DEC:
+          peak: 18924
+          read: 15221
+          write: 9462
+  dvfs_model:
+    source: kernel_dt
+    reference: 'exynos/soc-series/t-android16/arch/arm64/boot/dts/exynos/s5e9965-video.dtsi:
+      mfc_default_qos_table / mfc_encoder_qos_table'
+    formula:
+    - weighted_mb = mb * 1000 / weight(codec, planes, bitdepth, 422, bframe, tiles,
+      ...)
+    - pick the highest step whose thrd_mb <= total weighted_mb across contexts
+    - -> freq_mfc_khz (MFC devfreq), freq_int_khz (INT), freq_mif_khz (MIF), bts_scen
+    mfc_freqs_khz:
+    - 160000
+    - 234000
+    - 267000
+    - 332000
+    - 400000
+    - 467000
+    - 533000
+    - 664000
+    - 800000
+    max_mb: 5711867
+    max_hw_mb: 3888000
+    dynamic_weight: true
+    qos_weight_pct:
+      h264_hevc: 100
+      vp8_vp9: 100
+      av1: 70
+      other_codec: 25
+      3plane: 80
+      10bit: 75
+      '422': 70
+      bframe: 50
+      num_of_tile: 75
+      gpb: 50
+      num_of_ref: 60
+      mbaff: 60
+      super64_bframe: 60
+    weight_note: weight is applied as weight = weight * 100 / qos_weight_<x>, so a
+      lower percentage means more load.
+    default_qos_table:
+    - thrd_mb: 0
+      freq_mfc_khz: 400000
+      freq_int_khz: 133000
+      freq_mif_khz: 676000
+      time_fw_us: 1187
+      bts_scen: default
+    - thrd_mb: 800000
+      freq_mfc_khz: 234000
+      freq_int_khz: 133000
+      freq_mif_khz: 676000
+      time_fw_us: 1104
+      bts_scen: default
+    - thrd_mb: 1250000
+      freq_mfc_khz: 332000
+      freq_int_khz: 133000
+      freq_mif_khz: 676000
+      time_fw_us: 779
+      bts_scen: default
+    - thrd_mb: 2000000
+      freq_mfc_khz: 332000
+      freq_int_khz: 133000
+      freq_mif_khz: 845000
+      time_fw_us: 716
+      bts_scen: default
+    - thrd_mb: 2100000
+      freq_mfc_khz: 467000
+      freq_int_khz: 332000
+      freq_mif_khz: 1014000
+      time_fw_us: 543
+      bts_scen: default
+    - thrd_mb: 2650000
+      freq_mfc_khz: 533000
+      freq_int_khz: 400000
+      freq_mif_khz: 845000
+      time_fw_us: 549
+      bts_scen: default
+    - thrd_mb: 3100000
+      freq_mfc_khz: 663000
+      freq_int_khz: 332000
+      freq_mif_khz: 1014000
+      time_fw_us: 497
+      bts_scen: default
+    - thrd_mb: 3800000
+      freq_mfc_khz: 663000
+      freq_int_khz: 467000
+      freq_mif_khz: 1352000
+      time_fw_us: 392
+      bts_scen: mfc_8k_dec30
+    - thrd_mb: 4400000
+      freq_mfc_khz: 800000
+      freq_int_khz: 467000
+      freq_mif_khz: 1352000
+      time_fw_us: 382
+      bts_scen: mfc_8k_dec30
+    - thrd_mb: 5000000
+      freq_mfc_khz: 800000
+      freq_int_khz: 663000
+      freq_mif_khz: 2028000
+      time_fw_us: 301
+      bts_scen: mfc_8k_dec30
+    - thrd_mb: 5400000
+      freq_mfc_khz: 800000
+      freq_int_khz: 800000
+      freq_mif_khz: 5333000
+      time_fw_us: 235
+      bts_scen: mfc_8k_dec30
+    encoder_qos_table:
+    - thrd_mb: 0
+      freq_mfc_khz: 160000
+      freq_int_khz: 133000
+      freq_mif_khz: 676000
+      time_fw_us: 1496
+      bts_scen: default
+    - thrd_mb: 800000
+      freq_mfc_khz: 234000
+      freq_int_khz: 200000
+      freq_mif_khz: 845000
+      time_fw_us: 920
+      bts_scen: default
+    - thrd_mb: 1250000
+      freq_mfc_khz: 267000
+      freq_int_khz: 332000
+      freq_mif_khz: 1014000
+      time_fw_us: 699
+      bts_scen: default
+    - thrd_mb: 1700000
+      freq_mfc_khz: 332000
+      freq_int_khz: 332000
+      freq_mif_khz: 1352000
+      time_fw_us: 540
+      bts_scen: default
+    - thrd_mb: 2200000
+      freq_mfc_khz: 400000
+      freq_int_khz: 400000
+      freq_mif_khz: 1539000
+      time_fw_us: 486
+      bts_scen: default
+    - thrd_mb: 2500000
+      freq_mfc_khz: 467000
+      freq_int_khz: 467000
+      freq_mif_khz: 1539000
+      time_fw_us: 444
+      bts_scen: default
+    - thrd_mb: 2900000
+      freq_mfc_khz: 533000
+      freq_int_khz: 533000
+      freq_mif_khz: 2028000
+      time_fw_us: 385
+      bts_scen: default
+    - thrd_mb: 3300000
+      freq_mfc_khz: 663000
+      freq_int_khz: 663000
+      freq_mif_khz: 2028000
+      time_fw_us: 344
+      bts_scen: default
+    - thrd_mb: 4000000
+      freq_mfc_khz: 800000
+      freq_int_khz: 800000
+      freq_mif_khz: 5333000
+      time_fw_us: 258
+      bts_scen: mfc_8k_dec30
 compatible_soc:
 - soc-exynos2600

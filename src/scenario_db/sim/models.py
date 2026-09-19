@@ -6,6 +6,7 @@ from typing import Any, Literal
 from pydantic import Field, model_validator
 
 from scenario_db.models.common import BaseScenarioModel
+from scenario_db.models.sensor import SensorTiming
 from scenario_db.sim.constants import SW_MARGIN_DEFAULT
 from scenario_db.sim.sw_projection import SwTimingProjection
 
@@ -125,6 +126,7 @@ from scenario_db.models.evidence.profiling import MeasuredTimingProfile
 
 
 class SimulationRunConfig(BaseScenarioModel):
+    sensor_readout: dict[str, SensorTiming] = Field(default_factory=dict)
     sw_timing_projection: SwTimingProjection | None = None
     timing_profile: MeasuredTimingProfile | None = None
     asv_group: int = 4

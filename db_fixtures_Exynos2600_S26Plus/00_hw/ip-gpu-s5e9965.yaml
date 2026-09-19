@@ -10,6 +10,10 @@ capabilities:
   - id: balanced
   - id: powersave
   - id: game_boost
+  - id: Normal
+  - id: cl_boost
+  - id: gpu_vf
+  - id: ifpo
   supported_features:
     bitdepth:
     - 8
@@ -27,5 +31,121 @@ capabilities:
     supports_vulkan: true
     supports_opengl_es: '3.2'
     gpu_composer: true
+  bw_model:
+    source: not_modeled
+    note: GPU traffic is workload-dependent and the kernel does not declare a per-frame
+      BW table. Use measured MIF counters, or the mif_min_lock floor as a lower bound.
+  dvfs_model:
+    source: kernel_dt
+    reference: 'exynos/soc-series/t-android16/arch/arm64/boot/dts/exynos/s5e9965-sgpu.dtsi:
+      sgpu freq_table / mif_min_lock / mo_scenario'
+    freq_table_khz:
+    - 226000
+    - 262000
+    - 298000
+    - 356000
+    - 408000
+    - 461000
+    - 509000
+    - 557000
+    - 605000
+    - 629000
+    - 653000
+    - 692000
+    - 730000
+    - 764000
+    - 797000
+    - 836000
+    - 874000
+    - 903000
+    - 940000
+    - 980000
+    min_freq_khz: 226000
+    max_freq_khz: 980000
+    highspeed_freq_khz: 461000
+    highspeed_load_pct: 99
+    cl_boost_freq_khz: 980000
+    cl_boost_dsu_freq_khz: 1632000
+    gpu_vf_table_khz:
+    - 120000
+    gpu_vf_run_freq_khz: 240000
+    max_threshold_pct:
+      base: 80
+      '262000': 90
+      '298000': 91
+      '356000': 89
+      '408000': 90
+      '461000': 91
+      '509000': 92
+      '557000': 92
+      '605000': 92
+      '629000': 94
+      '653000': 94
+      '692000': 93
+      '730000': 93
+      '764000': 94
+      '797000': 90
+      '836000': 88
+      '874000': 96
+      '903000': 93
+      '940000': 96
+      '980000': 91
+    min_threshold_pct:
+      base: 0
+      '262000': 75
+      '298000': 71
+      '356000': 69
+      '408000': 75
+      '461000': 76
+      '509000': 72
+      '557000': 72
+      '605000': 72
+      '629000': 74
+      '653000': 74
+      '692000': 73
+      '730000': 73
+      '764000': 74
+      '797000': 70
+      '836000': 68
+      '874000': 76
+      '903000': 76
+      '940000': 79
+      '980000': 78
+    mif_min_lock_khz:
+      base: 676000
+      '356000': 1352000
+      '461000': 1539000
+      '509000': 2028000
+      '605000': 2730000
+      '797000': 3172000
+      '836000': 4205000
+      '903000': 4780000
+      '980000': 5333000
+    mif_cl_boost_min_lock_khz:
+      base: 421000
+      '461000': 1014000
+      '509000': 1352000
+      '730000': 1539000
+      '797000': 1716000
+      '874000': 5333000
+    mo_scenario: default 461000:g3d_performance
+    note: 'mif_min_lock is a floor, not a BW estimate: a GPU frequency step forces
+      at least that MIF operating point regardless of measured traffic. Take max(mif_min_lock,
+      bw-derived MIF) when combining with the SoC memory model.'
+  power_model:
+    source: kernel_dt
+    reference: 'exynos/soc-series/t-android16/arch/arm64/boot/dts/exynos/s5e9965-sgpu.dtsi:
+      gpu_power_coeff / ect-coeff-index; exynos/soc-series/t-android16/arch/arm64/boot/dts/exynos/s5e9965-profiler.dtsi:
+      exynos-gpu-profiler'
+    formula:
+    - dynamic_mw = power_coefficient * freq_mhz * volt^2 * util   (profiler convention)
+    - static_mw  = static_power_coefficient * volt * f(temperature)
+    gpu_power_coeff: 625
+    profiler_dynamic_coeff: 13360
+    profiler_static_coeff: 400
+    ect_coeff_index: 4
+    note: 'Two coefficients exist: gpu_power_coeff (thermal/IPA cooling device) and
+      the profiler power-coefficient. They are not the same scale; pick one convention
+      and keep it. Voltage comes from ECT/ASV, which is not in this source release.'
 compatible_soc:
 - soc-exynos2600

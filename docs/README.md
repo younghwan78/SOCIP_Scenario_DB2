@@ -81,3 +81,5 @@ the same change. Superseded implementation material moves to `internal_docs`; it
 
 
 - [Camera semantic profiling: MD import, DB fields and SW projection](guides/camera-semantic-profiling.md)
+
+- [Reusable sensor catalog and valid time](guides/sensor-catalog.md) — board catalogs, CIS timing, CLI/API/UI and cross-project reuse.

@@ -68,5 +68,102 @@ capabilities:
     source: assumed_capacity
     source_note: Engineering assumption approved for fixture exploration; replace
       with internal measurements. Core power unavailable; excluded.
+  bw_model:
+    source: kernel_dt
+    reference: 'exynos/soc-series/t-android16/arch/arm64/boot/dts/exynos/s5e9965-video.dtsi:
+      apv bw_enc / bw_dec (same KB-per-UHD-frame convention as MFC)'
+    unit: KB/s
+    table_unit: KB per UHD frame (32400 macroblocks)
+    formula:
+    - bw_x = table[dir].x * ceil(w/16) * ceil(h/16) * fps / 32400
+    tables:
+      non_sbwc:
+        ENC:
+          peak: 45456
+          read: 56112
+          write: 11170
+        DEC:
+          peak: 32605
+          read: 34381
+          write: 21263
+      sbwc:
+        ENC:
+          peak: 31622
+          read: 32183
+          write: 7065
+        DEC:
+          peak: 23757
+          read: 18603
+          write: 13620
+    note: The APV DT reuses the MFC H.264 numbers for its BW table, so these are a
+      placeholder in the kernel too. 4:4:4 and 10/12-bit traffic is not reflected;
+      scale by the source format when it matters.
+  dvfs_model:
+    source: kernel_dt
+    reference: 'exynos/soc-series/t-android16/arch/arm64/boot/dts/exynos/s5e9965-video.dtsi:
+      apv_default_qos_table / apv_encoder_qos_table'
+    default_qos_table:
+    - thrd_mb: 0
+      freq_m2m_khz: 160000
+      freq_int_khz: 200000
+      freq_mif_khz: 676000
+      time_fw_us: 185
+    - thrd_mb: 500000
+      freq_m2m_khz: 267000
+      freq_int_khz: 332000
+      freq_mif_khz: 676000
+      time_fw_us: 134
+    - thrd_mb: 1000000
+      freq_m2m_khz: 400000
+      freq_int_khz: 467000
+      freq_mif_khz: 676000
+      time_fw_us: 108
+    - thrd_mb: 1600000
+      freq_m2m_khz: 533000
+      freq_int_khz: 533000
+      freq_mif_khz: 1014000
+      time_fw_us: 79
+    - thrd_mb: 2200000
+      freq_m2m_khz: 663000
+      freq_int_khz: 663000
+      freq_mif_khz: 1014000
+      time_fw_us: 70
+    - thrd_mb: 2600000
+      freq_m2m_khz: 800000
+      freq_int_khz: 800000
+      freq_mif_khz: 4205000
+      time_fw_us: 38
+    encoder_qos_table:
+    - thrd_mb: 0
+      freq_m2m_khz: 89000
+      freq_int_khz: 133000
+      freq_mif_khz: 676000
+      time_fw_us: 616
+    - thrd_mb: 500000
+      freq_m2m_khz: 160000
+      freq_int_khz: 200000
+      freq_mif_khz: 676000
+      time_fw_us: 429
+    - thrd_mb: 1000000
+      freq_m2m_khz: 267000
+      freq_int_khz: 332000
+      freq_mif_khz: 676000
+      time_fw_us: 311
+    - thrd_mb: 1600000
+      freq_m2m_khz: 400000
+      freq_int_khz: 467000
+      freq_mif_khz: 1352000
+      time_fw_us: 178
+    - thrd_mb: 2200000
+      freq_m2m_khz: 533000
+      freq_int_khz: 533000
+      freq_mif_khz: 1539000
+      time_fw_us: 135
+    - thrd_mb: 2600000
+      freq_m2m_khz: 800000
+      freq_int_khz: 800000
+      freq_mif_khz: 4205000
+      time_fw_us: 81
+    note: APV runs on the M2M clock domain; freq_m2m_khz is that operating point.
 compatible_soc:
 - soc-exynos2600

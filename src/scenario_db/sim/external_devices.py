@@ -65,6 +65,22 @@ def active_sensor_nodes(graph: CanonicalScenarioGraph) -> list[dict[str, Any]]:
 
 
 def selected_sensor_mode(graph: CanonicalScenarioGraph, node: dict[str, Any] | None = None) -> dict[str, Any] | None:
+    mode = _base_selected_sensor_mode(graph, node)
+    override = ((graph.variant.node_configs or {}).get(str(node.get("id")), {}) if node else {}).get("sensor_readout")
+    if mode is None or not override:
+        return mode
+    from scenario_db.sim.sensor_timing import calculate_sensor_timing
+    timing = calculate_sensor_timing(override)
+    return {**mode,
+        "sensor_pclk": override["pixel_clock_hz"],
+        "sensor_line_length_pck": override["line_length_pck"],
+        "sensor_frame_length_lines": override["frame_length_lines"],
+        "sensor_fps": timing["effective_fps"], "v_valid_ms": timing["valid_time_ms"],
+        "timing_source": override["source"],
+    }
+
+
+def _base_selected_sensor_mode(graph: CanonicalScenarioGraph, node: dict[str, Any] | None = None) -> dict[str, Any] | None:
     row = _selected_sensor_row(graph, node)
     if row is None:
         return None
@@ -199,6 +215,8 @@ def _sensor_device_info(
         "bitwidth": mode.get("sensor_bitwidth"),
         "fps": mode.get("sensor_fps") or _variant_fps(graph),
         "v_valid_ms": v_valid_ms,
+        "csis_frame_window_ms": v_valid_ms,
+        "timing_source": mode.get("timing_source"),
         "v_valid_source": _v_valid_source(mode),
         "pclk": mode.get("sensor_pclk"),
         "line_length_pck": mode.get("sensor_line_length_pck"),
@@ -380,9 +398,6 @@ def _calc_v_valid_ms(mode: dict[str, Any]) -> float | None:
     height = _size_tuple(size)[1] if _size_tuple(size) else None
     if height and pclk and line_length:
         return round(line_length * 1000.0 / pclk * height, 6)
-    sensor_fps = _float_or_none(mode.get("sensor_fps"))
-    if sensor_fps and sensor_fps > 0:
-        return round(1000.0 / sensor_fps, 6)
     return None
 
 
@@ -391,8 +406,6 @@ def _v_valid_source(mode: dict[str, Any]) -> str | None:
         return "explicit_v_valid_ms"
     if mode.get("sensor_pclk") and mode.get("sensor_line_length_pck"):
         return "sensor_line_length_pck * 1000 / sensor_pclk * height"
-    if mode.get("sensor_fps"):
-        return "frame_period_fallback_no_vblank"
     return None
 
 

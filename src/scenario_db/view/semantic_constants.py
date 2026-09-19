@@ -13,6 +13,9 @@ _LEVEL1_HIERARCHY_ORDER = {
     "Display": 7,
     "CPU/SW": 8,
     "Memory": 9,
+    "Audio": 10,
+    "Storage": 11,
+    "M2M": 12,
     "Other": 99,
 }
 
@@ -39,6 +42,9 @@ _LEVEL1_IP_GROUP_ORDER = {
     "DPU": 170,
     "Panel": 180,
     "CPU/SW": 190,
+    "ABOX": 200,
+    "UFS": 210,
+    "MSCL": 220,
 }
 
 _LEVEL2_ALIAS_GROUPS = {

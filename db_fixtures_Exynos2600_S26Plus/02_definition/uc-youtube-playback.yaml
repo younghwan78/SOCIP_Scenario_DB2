@@ -28,7 +28,7 @@ pipeline:
     role: composer
     instance_index: 0
   - id: m2m_scaler
-    ip_ref: ip-cpu-s5e9965
+    ip_ref: ip-m2m-scaler-s5e9965
     role: m2m_scaler
     instance_index: 0
   - id: dpu
@@ -104,6 +104,12 @@ variants:
     hdr: SDR
     dpu_layer_count: 4
     dpu_composer: DPU_DIRECT
+    panel_resolution: 1440x3120
+    panel_fps_hz: 60
+    source_resolution: 1920x1080
+    sw_timing_source: assumed
+    bitrate_mbps: 10
+    bitrate_value_source: assumed
   routing_switch:
     disabled_nodes:
     - gpu
@@ -121,6 +127,119 @@ variants:
     mfc_dec:
       selected_mode: Normal
       codec: H264_DEC
+      sim:
+        width: 1920
+        height: 1080
+        fps: 30
+        bitdepth: 8
+        sbwc: false
+      bw_kb_s:
+        peak: 246349
+        read: 259768
+        write: 160654
+      dvfs:
+        weighted_mb: 244800
+        freq_mfc_khz: 400000
+        freq_int_khz: 133000
+        freq_mif_khz: 676000
+        time_fw_us: 1187
+        bts_scen: default
+      model_ref: ip-mfc-s5e9965.capabilities.bw_model / dvfs_model
+    dpu:
+      selected_mode: Normal
+      sim:
+        panel_width: 1440
+        panel_height: 3120
+        refresh_hz: 60
+        composer: DPU_DIRECT
+        layers:
+        - name: video
+          src:
+          - 1920
+          - 1080
+          bpp: 12
+          dst:
+          - 1440
+          - 3120
+        - name: ui0
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui1
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui2
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+      resol_clk_khz: 304611
+      bw_kb_s:
+        bts_read_vote: 4264554
+        surface_traffic: 577125
+        write: 0
+      bw_note: bts_read_vote is what the driver votes to BTS (worst case, each layer charged at full-frame rate); surface_traffic
+        is the bytes actually fetched. Use the vote for MIF/INT frequency, the traffic for energy.
+      model_ref: ip-dpu-s5e9965.capabilities.bw_model
+    panel:
+      selected_mode: 60hz
+      sim:
+        refresh_hz: 60
+        screen_on: true
+    m2m_scaler:
+      sim:
+        active: false
+    gpu:
+      sim:
+        active: false
+    network:
+      sim:
+        bitrate_mbps: 10
+      bw_kb_s:
+        write: 1250
+      model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      sw_timing:
+        min_ms: 0.5
+        mean_ms: 1.0
+        max_ms: 3.0
+        start_latency_ref: packet_arrival
+        start_latency_mean_ms: 0.0
+        rate_hz: 30.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
+      bw_note: Link traffic landing in DRAM through the modem/WiFi driver. It is not an IP DMA port; charge it to MIF but
+        not to a codec or display IP.
+    sw_demux:
+      sw_timing:
+        min_ms: 0.3
+        mean_ms: 0.6
+        max_ms: 1.2
+        start_latency_ref: bitstream_available
+        start_latency_mean_ms: 0.5
+        rate_hz: 30.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
 - id: yt-1080p60-h264-sdr
   severity: medium
   design_conditions:
@@ -130,6 +249,12 @@ variants:
     hdr: SDR
     dpu_layer_count: 4
     dpu_composer: DPU_DIRECT
+    panel_resolution: 1440x3120
+    panel_fps_hz: 60
+    source_resolution: 1920x1080
+    sw_timing_source: assumed
+    bitrate_mbps: 16
+    bitrate_value_source: assumed
   routing_switch:
     disabled_nodes:
     - gpu
@@ -147,6 +272,119 @@ variants:
     mfc_dec:
       selected_mode: Normal
       codec: H264_DEC
+      sim:
+        width: 1920
+        height: 1080
+        fps: 60
+        bitdepth: 8
+        sbwc: false
+      bw_kb_s:
+        peak: 492698
+        read: 519535
+        write: 321308
+      dvfs:
+        weighted_mb: 489600
+        freq_mfc_khz: 400000
+        freq_int_khz: 133000
+        freq_mif_khz: 676000
+        time_fw_us: 1187
+        bts_scen: default
+      model_ref: ip-mfc-s5e9965.capabilities.bw_model / dvfs_model
+    dpu:
+      selected_mode: Normal
+      sim:
+        panel_width: 1440
+        panel_height: 3120
+        refresh_hz: 60
+        composer: DPU_DIRECT
+        layers:
+        - name: video
+          src:
+          - 1920
+          - 1080
+          bpp: 12
+          dst:
+          - 1440
+          - 3120
+        - name: ui0
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui1
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui2
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+      resol_clk_khz: 304611
+      bw_kb_s:
+        bts_read_vote: 4264554
+        surface_traffic: 577125
+        write: 0
+      bw_note: bts_read_vote is what the driver votes to BTS (worst case, each layer charged at full-frame rate); surface_traffic
+        is the bytes actually fetched. Use the vote for MIF/INT frequency, the traffic for energy.
+      model_ref: ip-dpu-s5e9965.capabilities.bw_model
+    panel:
+      selected_mode: 60hz
+      sim:
+        refresh_hz: 60
+        screen_on: true
+    m2m_scaler:
+      sim:
+        active: false
+    gpu:
+      sim:
+        active: false
+    network:
+      sim:
+        bitrate_mbps: 16
+      bw_kb_s:
+        write: 2000
+      model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      sw_timing:
+        min_ms: 0.5
+        mean_ms: 1.0
+        max_ms: 3.0
+        start_latency_ref: packet_arrival
+        start_latency_mean_ms: 0.0
+        rate_hz: 60.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
+      bw_note: Link traffic landing in DRAM through the modem/WiFi driver. It is not an IP DMA port; charge it to MIF but
+        not to a codec or display IP.
+    sw_demux:
+      sw_timing:
+        min_ms: 0.3
+        mean_ms: 0.6
+        max_ms: 1.2
+        start_latency_ref: bitstream_available
+        start_latency_mean_ms: 0.5
+        rate_hz: 60.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
 - id: yt-1080p30-vp9-sdr
   severity: light
   design_conditions:
@@ -156,6 +394,12 @@ variants:
     hdr: SDR
     dpu_layer_count: 4
     dpu_composer: DPU_DIRECT
+    panel_resolution: 1440x3120
+    panel_fps_hz: 60
+    source_resolution: 1920x1080
+    sw_timing_source: assumed
+    bitrate_mbps: 10
+    bitrate_value_source: assumed
   routing_switch:
     disabled_nodes:
     - gpu
@@ -173,6 +417,119 @@ variants:
     mfc_dec:
       selected_mode: Normal
       codec: VP9_DEC
+      sim:
+        width: 1920
+        height: 1080
+        fps: 30
+        bitdepth: 8
+        sbwc: false
+      bw_kb_s:
+        peak: 138652
+        read: 143155
+        write: 127515
+      dvfs:
+        weighted_mb: 244800
+        freq_mfc_khz: 400000
+        freq_int_khz: 133000
+        freq_mif_khz: 676000
+        time_fw_us: 1187
+        bts_scen: default
+      model_ref: ip-mfc-s5e9965.capabilities.bw_model / dvfs_model
+    dpu:
+      selected_mode: Normal
+      sim:
+        panel_width: 1440
+        panel_height: 3120
+        refresh_hz: 60
+        composer: DPU_DIRECT
+        layers:
+        - name: video
+          src:
+          - 1920
+          - 1080
+          bpp: 12
+          dst:
+          - 1440
+          - 3120
+        - name: ui0
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui1
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui2
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+      resol_clk_khz: 304611
+      bw_kb_s:
+        bts_read_vote: 4264554
+        surface_traffic: 577125
+        write: 0
+      bw_note: bts_read_vote is what the driver votes to BTS (worst case, each layer charged at full-frame rate); surface_traffic
+        is the bytes actually fetched. Use the vote for MIF/INT frequency, the traffic for energy.
+      model_ref: ip-dpu-s5e9965.capabilities.bw_model
+    panel:
+      selected_mode: 60hz
+      sim:
+        refresh_hz: 60
+        screen_on: true
+    m2m_scaler:
+      sim:
+        active: false
+    gpu:
+      sim:
+        active: false
+    network:
+      sim:
+        bitrate_mbps: 10
+      bw_kb_s:
+        write: 1250
+      model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      sw_timing:
+        min_ms: 0.5
+        mean_ms: 1.0
+        max_ms: 3.0
+        start_latency_ref: packet_arrival
+        start_latency_mean_ms: 0.0
+        rate_hz: 30.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
+      bw_note: Link traffic landing in DRAM through the modem/WiFi driver. It is not an IP DMA port; charge it to MIF but
+        not to a codec or display IP.
+    sw_demux:
+      sw_timing:
+        min_ms: 0.3
+        mean_ms: 0.6
+        max_ms: 1.2
+        start_latency_ref: bitstream_available
+        start_latency_mean_ms: 0.5
+        rate_hz: 30.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
 - id: yt-1080p60-vp9-hdr10
   severity: medium
   design_conditions:
@@ -184,6 +541,12 @@ variants:
     bit_depth: 10
     dpu_layer_count: 4
     dpu_composer: DPU_DIRECT
+    panel_resolution: 1440x3120
+    panel_fps_hz: 60
+    source_resolution: 1920x1080
+    sw_timing_source: assumed
+    bitrate_mbps: 16
+    bitrate_value_source: assumed
   routing_switch:
     disabled_nodes:
     - gpu
@@ -201,6 +564,119 @@ variants:
     mfc_dec:
       selected_mode: Normal
       codec: VP9_DEC
+      sim:
+        width: 1920
+        height: 1080
+        fps: 60
+        bitdepth: 10
+        sbwc: false
+      bw_kb_s:
+        peak: 640469
+        read: 520608
+        write: 480020
+      dvfs:
+        weighted_mb: 652800
+        freq_mfc_khz: 400000
+        freq_int_khz: 133000
+        freq_mif_khz: 676000
+        time_fw_us: 1187
+        bts_scen: default
+      model_ref: ip-mfc-s5e9965.capabilities.bw_model / dvfs_model
+    dpu:
+      selected_mode: Normal
+      sim:
+        panel_width: 1440
+        panel_height: 3120
+        refresh_hz: 60
+        composer: DPU_DIRECT
+        layers:
+        - name: video
+          src:
+          - 1920
+          - 1080
+          bpp: 15
+          dst:
+          - 1440
+          - 3120
+        - name: ui0
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui1
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui2
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+      resol_clk_khz: 304611
+      bw_kb_s:
+        bts_read_vote: 4416860
+        surface_traffic: 622688
+        write: 0
+      bw_note: bts_read_vote is what the driver votes to BTS (worst case, each layer charged at full-frame rate); surface_traffic
+        is the bytes actually fetched. Use the vote for MIF/INT frequency, the traffic for energy.
+      model_ref: ip-dpu-s5e9965.capabilities.bw_model
+    panel:
+      selected_mode: 60hz
+      sim:
+        refresh_hz: 60
+        screen_on: true
+    m2m_scaler:
+      sim:
+        active: false
+    gpu:
+      sim:
+        active: false
+    network:
+      sim:
+        bitrate_mbps: 16
+      bw_kb_s:
+        write: 2000
+      model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      sw_timing:
+        min_ms: 0.5
+        mean_ms: 1.0
+        max_ms: 3.0
+        start_latency_ref: packet_arrival
+        start_latency_mean_ms: 0.0
+        rate_hz: 60.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
+      bw_note: Link traffic landing in DRAM through the modem/WiFi driver. It is not an IP DMA port; charge it to MIF but
+        not to a codec or display IP.
+    sw_demux:
+      sw_timing:
+        min_ms: 0.3
+        mean_ms: 0.6
+        max_ms: 1.2
+        start_latency_ref: bitstream_available
+        start_latency_mean_ms: 0.5
+        rate_hz: 60.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
   buffer_overrides:
     MFC_DPU_BUF:
       format: YUV420_10BIT
@@ -217,6 +693,12 @@ variants:
     bit_depth: 10
     dpu_layer_count: 4
     dpu_composer: DPU_DIRECT
+    panel_resolution: 1440x3120
+    panel_fps_hz: 60
+    source_resolution: 3840x2160
+    sw_timing_source: assumed
+    bitrate_mbps: 35
+    bitrate_value_source: assumed
   routing_switch:
     disabled_nodes:
     - gpu
@@ -234,6 +716,119 @@ variants:
     mfc_dec:
       selected_mode: Normal
       codec: VP9_DEC
+      sim:
+        width: 3840
+        height: 2160
+        fps: 30
+        bitdepth: 10
+        sbwc: false
+      bw_kb_s:
+        peak: 1271520
+        read: 1033560
+        write: 952980
+      dvfs:
+        weighted_mb: 1296000
+        freq_mfc_khz: 332000
+        freq_int_khz: 133000
+        freq_mif_khz: 676000
+        time_fw_us: 779
+        bts_scen: default
+      model_ref: ip-mfc-s5e9965.capabilities.bw_model / dvfs_model
+    dpu:
+      selected_mode: Normal
+      sim:
+        panel_width: 1440
+        panel_height: 3120
+        refresh_hz: 60
+        composer: DPU_DIRECT
+        layers:
+        - name: video
+          src:
+          - 3840
+          - 2160
+          bpp: 15
+          dst:
+          - 1440
+          - 3120
+        - name: ui0
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui1
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui2
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+      resol_clk_khz: 304611
+      bw_kb_s:
+        bts_read_vote: 5178387
+        surface_traffic: 1306125
+        write: 0
+      bw_note: bts_read_vote is what the driver votes to BTS (worst case, each layer charged at full-frame rate); surface_traffic
+        is the bytes actually fetched. Use the vote for MIF/INT frequency, the traffic for energy.
+      model_ref: ip-dpu-s5e9965.capabilities.bw_model
+    panel:
+      selected_mode: 60hz
+      sim:
+        refresh_hz: 60
+        screen_on: true
+    m2m_scaler:
+      sim:
+        active: false
+    gpu:
+      sim:
+        active: false
+    network:
+      sim:
+        bitrate_mbps: 35
+      bw_kb_s:
+        write: 4375
+      model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      sw_timing:
+        min_ms: 0.5
+        mean_ms: 1.0
+        max_ms: 3.0
+        start_latency_ref: packet_arrival
+        start_latency_mean_ms: 0.0
+        rate_hz: 30.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
+      bw_note: Link traffic landing in DRAM through the modem/WiFi driver. It is not an IP DMA port; charge it to MIF but
+        not to a codec or display IP.
+    sw_demux:
+      sw_timing:
+        min_ms: 0.3
+        mean_ms: 0.6
+        max_ms: 1.2
+        start_latency_ref: bitstream_available
+        start_latency_mean_ms: 0.5
+        rate_hz: 30.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
   buffer_overrides:
     MFC_DPU_BUF:
       format: YUV420_10BIT
@@ -250,6 +845,12 @@ variants:
     bit_depth: 10
     dpu_layer_count: 4
     dpu_composer: DPU_DIRECT
+    panel_resolution: 1440x3120
+    panel_fps_hz: 60
+    source_resolution: 3840x2160
+    sw_timing_source: assumed
+    bitrate_mbps: 60
+    bitrate_value_source: assumed
   routing_switch:
     disabled_nodes:
     - gpu
@@ -267,6 +868,119 @@ variants:
     mfc_dec:
       selected_mode: Normal
       codec: VP9_DEC
+      sim:
+        width: 3840
+        height: 2160
+        fps: 60
+        bitdepth: 10
+        sbwc: false
+      bw_kb_s:
+        peak: 2543040
+        read: 2067120
+        write: 1905960
+      dvfs:
+        weighted_mb: 2592000
+        freq_mfc_khz: 467000
+        freq_int_khz: 332000
+        freq_mif_khz: 1014000
+        time_fw_us: 543
+        bts_scen: default
+      model_ref: ip-mfc-s5e9965.capabilities.bw_model / dvfs_model
+    dpu:
+      selected_mode: Normal
+      sim:
+        panel_width: 1440
+        panel_height: 3120
+        refresh_hz: 60
+        composer: DPU_DIRECT
+        layers:
+        - name: video
+          src:
+          - 3840
+          - 2160
+          bpp: 15
+          dst:
+          - 1440
+          - 3120
+        - name: ui0
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui1
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui2
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+      resol_clk_khz: 304611
+      bw_kb_s:
+        bts_read_vote: 5178387
+        surface_traffic: 1306125
+        write: 0
+      bw_note: bts_read_vote is what the driver votes to BTS (worst case, each layer charged at full-frame rate); surface_traffic
+        is the bytes actually fetched. Use the vote for MIF/INT frequency, the traffic for energy.
+      model_ref: ip-dpu-s5e9965.capabilities.bw_model
+    panel:
+      selected_mode: 60hz
+      sim:
+        refresh_hz: 60
+        screen_on: true
+    m2m_scaler:
+      sim:
+        active: false
+    gpu:
+      sim:
+        active: false
+    network:
+      sim:
+        bitrate_mbps: 60
+      bw_kb_s:
+        write: 7500
+      model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      sw_timing:
+        min_ms: 0.5
+        mean_ms: 1.0
+        max_ms: 3.0
+        start_latency_ref: packet_arrival
+        start_latency_mean_ms: 0.0
+        rate_hz: 60.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
+      bw_note: Link traffic landing in DRAM through the modem/WiFi driver. It is not an IP DMA port; charge it to MIF but
+        not to a codec or display IP.
+    sw_demux:
+      sw_timing:
+        min_ms: 0.3
+        mean_ms: 0.6
+        max_ms: 1.2
+        start_latency_ref: bitstream_available
+        start_latency_mean_ms: 0.5
+        rate_hz: 60.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
   buffer_overrides:
     MFC_DPU_BUF:
       format: YUV420_10BIT
@@ -281,6 +995,12 @@ variants:
     hdr: SDR
     dpu_layer_count: 4
     dpu_composer: DPU_DIRECT
+    panel_resolution: 1440x3120
+    panel_fps_hz: 60
+    source_resolution: 1920x1080
+    sw_timing_source: assumed
+    bitrate_mbps: 10
+    bitrate_value_source: assumed
   routing_switch:
     disabled_nodes:
     - gpu
@@ -298,6 +1018,119 @@ variants:
     mfc_dec:
       selected_mode: Normal
       codec: AV1_DEC
+      sim:
+        width: 1920
+        height: 1080
+        fps: 30
+        bitdepth: 8
+        sbwc: false
+      bw_kb_s:
+        peak: 179724
+        read: 147862
+        write: 119801
+      dvfs:
+        weighted_mb: 349714
+        freq_mfc_khz: 400000
+        freq_int_khz: 133000
+        freq_mif_khz: 676000
+        time_fw_us: 1187
+        bts_scen: default
+      model_ref: ip-mfc-s5e9965.capabilities.bw_model / dvfs_model
+    dpu:
+      selected_mode: Normal
+      sim:
+        panel_width: 1440
+        panel_height: 3120
+        refresh_hz: 60
+        composer: DPU_DIRECT
+        layers:
+        - name: video
+          src:
+          - 1920
+          - 1080
+          bpp: 12
+          dst:
+          - 1440
+          - 3120
+        - name: ui0
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui1
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui2
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+      resol_clk_khz: 304611
+      bw_kb_s:
+        bts_read_vote: 4264554
+        surface_traffic: 577125
+        write: 0
+      bw_note: bts_read_vote is what the driver votes to BTS (worst case, each layer charged at full-frame rate); surface_traffic
+        is the bytes actually fetched. Use the vote for MIF/INT frequency, the traffic for energy.
+      model_ref: ip-dpu-s5e9965.capabilities.bw_model
+    panel:
+      selected_mode: 60hz
+      sim:
+        refresh_hz: 60
+        screen_on: true
+    m2m_scaler:
+      sim:
+        active: false
+    gpu:
+      sim:
+        active: false
+    network:
+      sim:
+        bitrate_mbps: 10
+      bw_kb_s:
+        write: 1250
+      model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      sw_timing:
+        min_ms: 0.5
+        mean_ms: 1.0
+        max_ms: 3.0
+        start_latency_ref: packet_arrival
+        start_latency_mean_ms: 0.0
+        rate_hz: 30.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
+      bw_note: Link traffic landing in DRAM through the modem/WiFi driver. It is not an IP DMA port; charge it to MIF but
+        not to a codec or display IP.
+    sw_demux:
+      sw_timing:
+        min_ms: 0.3
+        mean_ms: 0.6
+        max_ms: 1.2
+        start_latency_ref: bitstream_available
+        start_latency_mean_ms: 0.5
+        rate_hz: 30.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
 - id: yt-4k30-av1-sdr
   severity: heavy
   design_conditions:
@@ -307,6 +1140,12 @@ variants:
     hdr: SDR
     dpu_layer_count: 4
     dpu_composer: DPU_DIRECT
+    panel_resolution: 1440x3120
+    panel_fps_hz: 60
+    source_resolution: 3840x2160
+    sw_timing_source: assumed
+    bitrate_mbps: 35
+    bitrate_value_source: assumed
   routing_switch:
     disabled_nodes:
     - gpu
@@ -324,6 +1163,119 @@ variants:
     mfc_dec:
       selected_mode: Normal
       codec: AV1_DEC
+      sim:
+        width: 3840
+        height: 2160
+        fps: 30
+        bitdepth: 8
+        sbwc: false
+      bw_kb_s:
+        peak: 713610
+        read: 587100
+        write: 475680
+      dvfs:
+        weighted_mb: 1388571
+        freq_mfc_khz: 332000
+        freq_int_khz: 133000
+        freq_mif_khz: 676000
+        time_fw_us: 779
+        bts_scen: default
+      model_ref: ip-mfc-s5e9965.capabilities.bw_model / dvfs_model
+    dpu:
+      selected_mode: Normal
+      sim:
+        panel_width: 1440
+        panel_height: 3120
+        refresh_hz: 60
+        composer: DPU_DIRECT
+        layers:
+        - name: video
+          src:
+          - 3840
+          - 2160
+          bpp: 12
+          dst:
+          - 1440
+          - 3120
+        - name: ui0
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui1
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui2
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+      resol_clk_khz: 304611
+      bw_kb_s:
+        bts_read_vote: 4873776
+        surface_traffic: 1123875
+        write: 0
+      bw_note: bts_read_vote is what the driver votes to BTS (worst case, each layer charged at full-frame rate); surface_traffic
+        is the bytes actually fetched. Use the vote for MIF/INT frequency, the traffic for energy.
+      model_ref: ip-dpu-s5e9965.capabilities.bw_model
+    panel:
+      selected_mode: 60hz
+      sim:
+        refresh_hz: 60
+        screen_on: true
+    m2m_scaler:
+      sim:
+        active: false
+    gpu:
+      sim:
+        active: false
+    network:
+      sim:
+        bitrate_mbps: 35
+      bw_kb_s:
+        write: 4375
+      model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      sw_timing:
+        min_ms: 0.5
+        mean_ms: 1.0
+        max_ms: 3.0
+        start_latency_ref: packet_arrival
+        start_latency_mean_ms: 0.0
+        rate_hz: 30.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
+      bw_note: Link traffic landing in DRAM through the modem/WiFi driver. It is not an IP DMA port; charge it to MIF but
+        not to a codec or display IP.
+    sw_demux:
+      sw_timing:
+        min_ms: 0.3
+        mean_ms: 0.6
+        max_ms: 1.2
+        start_latency_ref: bitstream_available
+        start_latency_mean_ms: 0.5
+        rate_hz: 30.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
 - id: yt-4k30-av1-hdr10
   severity: heavy
   design_conditions:
@@ -335,6 +1287,12 @@ variants:
     bit_depth: 10
     dpu_layer_count: 4
     dpu_composer: DPU_DIRECT
+    panel_resolution: 1440x3120
+    panel_fps_hz: 60
+    source_resolution: 3840x2160
+    sw_timing_source: assumed
+    bitrate_mbps: 35
+    bitrate_value_source: assumed
   routing_switch:
     disabled_nodes:
     - gpu
@@ -352,6 +1310,119 @@ variants:
     mfc_dec:
       selected_mode: Normal
       codec: AV1_DEC
+      sim:
+        width: 3840
+        height: 2160
+        fps: 30
+        bitdepth: 10
+        sbwc: false
+      bw_kb_s:
+        peak: 1242210
+        read: 1064700
+        write: 890970
+      dvfs:
+        weighted_mb: 1851429
+        freq_mfc_khz: 332000
+        freq_int_khz: 133000
+        freq_mif_khz: 676000
+        time_fw_us: 779
+        bts_scen: default
+      model_ref: ip-mfc-s5e9965.capabilities.bw_model / dvfs_model
+    dpu:
+      selected_mode: Normal
+      sim:
+        panel_width: 1440
+        panel_height: 3120
+        refresh_hz: 60
+        composer: DPU_DIRECT
+        layers:
+        - name: video
+          src:
+          - 3840
+          - 2160
+          bpp: 15
+          dst:
+          - 1440
+          - 3120
+        - name: ui0
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui1
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui2
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+      resol_clk_khz: 304611
+      bw_kb_s:
+        bts_read_vote: 5178387
+        surface_traffic: 1306125
+        write: 0
+      bw_note: bts_read_vote is what the driver votes to BTS (worst case, each layer charged at full-frame rate); surface_traffic
+        is the bytes actually fetched. Use the vote for MIF/INT frequency, the traffic for energy.
+      model_ref: ip-dpu-s5e9965.capabilities.bw_model
+    panel:
+      selected_mode: 60hz
+      sim:
+        refresh_hz: 60
+        screen_on: true
+    m2m_scaler:
+      sim:
+        active: false
+    gpu:
+      sim:
+        active: false
+    network:
+      sim:
+        bitrate_mbps: 35
+      bw_kb_s:
+        write: 4375
+      model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      sw_timing:
+        min_ms: 0.5
+        mean_ms: 1.0
+        max_ms: 3.0
+        start_latency_ref: packet_arrival
+        start_latency_mean_ms: 0.0
+        rate_hz: 30.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
+      bw_note: Link traffic landing in DRAM through the modem/WiFi driver. It is not an IP DMA port; charge it to MIF but
+        not to a codec or display IP.
+    sw_demux:
+      sw_timing:
+        min_ms: 0.3
+        mean_ms: 0.6
+        max_ms: 1.2
+        start_latency_ref: bitstream_available
+        start_latency_mean_ms: 0.5
+        rate_hz: 30.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
   buffer_overrides:
     MFC_DPU_BUF:
       format: YUV420_10BIT
@@ -368,6 +1439,12 @@ variants:
     bit_depth: 10
     dpu_layer_count: 4
     dpu_composer: DPU_DIRECT
+    panel_resolution: 1440x3120
+    panel_fps_hz: 60
+    source_resolution: 3840x2160
+    sw_timing_source: assumed
+    bitrate_mbps: 60
+    bitrate_value_source: assumed
   routing_switch:
     disabled_nodes:
     - gpu
@@ -385,6 +1462,119 @@ variants:
     mfc_dec:
       selected_mode: Normal
       codec: AV1_DEC
+      sim:
+        width: 3840
+        height: 2160
+        fps: 60
+        bitdepth: 10
+        sbwc: false
+      bw_kb_s:
+        peak: 2484420
+        read: 2129400
+        write: 1781940
+      dvfs:
+        weighted_mb: 3702857
+        freq_mfc_khz: 663000
+        freq_int_khz: 332000
+        freq_mif_khz: 1014000
+        time_fw_us: 497
+        bts_scen: default
+      model_ref: ip-mfc-s5e9965.capabilities.bw_model / dvfs_model
+    dpu:
+      selected_mode: Normal
+      sim:
+        panel_width: 1440
+        panel_height: 3120
+        refresh_hz: 60
+        composer: DPU_DIRECT
+        layers:
+        - name: video
+          src:
+          - 3840
+          - 2160
+          bpp: 15
+          dst:
+          - 1440
+          - 3120
+        - name: ui0
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui1
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui2
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+      resol_clk_khz: 304611
+      bw_kb_s:
+        bts_read_vote: 5178387
+        surface_traffic: 1306125
+        write: 0
+      bw_note: bts_read_vote is what the driver votes to BTS (worst case, each layer charged at full-frame rate); surface_traffic
+        is the bytes actually fetched. Use the vote for MIF/INT frequency, the traffic for energy.
+      model_ref: ip-dpu-s5e9965.capabilities.bw_model
+    panel:
+      selected_mode: 60hz
+      sim:
+        refresh_hz: 60
+        screen_on: true
+    m2m_scaler:
+      sim:
+        active: false
+    gpu:
+      sim:
+        active: false
+    network:
+      sim:
+        bitrate_mbps: 60
+      bw_kb_s:
+        write: 7500
+      model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      sw_timing:
+        min_ms: 0.5
+        mean_ms: 1.0
+        max_ms: 3.0
+        start_latency_ref: packet_arrival
+        start_latency_mean_ms: 0.0
+        rate_hz: 60.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
+      bw_note: Link traffic landing in DRAM through the modem/WiFi driver. It is not an IP DMA port; charge it to MIF but
+        not to a codec or display IP.
+    sw_demux:
+      sw_timing:
+        min_ms: 0.3
+        mean_ms: 0.6
+        max_ms: 1.2
+        start_latency_ref: bitstream_available
+        start_latency_mean_ms: 0.5
+        rate_hz: 60.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
   buffer_overrides:
     MFC_DPU_BUF:
       format: YUV420_10BIT
@@ -399,6 +1589,12 @@ variants:
     screen_on: false
     audio: true
     note: 화면 꺼진 YouTube 백그라운드 재생
+    panel_resolution: 1440x3120
+    panel_fps_hz: 60
+    source_resolution: 1920x1080
+    sw_timing_source: assumed
+    bitrate_mbps: 10
+    bitrate_value_source: assumed
   routing_switch:
     disabled_nodes:
     - dpu
@@ -420,8 +1616,79 @@ variants:
       to: dpu
   node_configs:
     mfc_dec:
-      selected_mode: LowPower
+      selected_mode: Normal
       codec: H264_DEC
+      sim:
+        width: 1920
+        height: 1080
+        fps: 30
+        bitdepth: 8
+        sbwc: false
+      bw_kb_s:
+        peak: 246349
+        read: 259768
+        write: 160654
+      dvfs:
+        weighted_mb: 244800
+        freq_mfc_khz: 400000
+        freq_int_khz: 133000
+        freq_mif_khz: 676000
+        time_fw_us: 1187
+        bts_scen: default
+      model_ref: ip-mfc-s5e9965.capabilities.bw_model / dvfs_model
+    dpu:
+      selected_mode: Hibernation
+      sim:
+        active: false
+      bw_kb_s:
+        bts_read_vote: 0
+        surface_traffic: 0
+        write: 0
+      model_ref: ip-dpu-s5e9965.capabilities.bw_model
+    panel:
+      selected_mode: 1hz_lpm
+      sim:
+        refresh_hz: 1
+        screen_on: false
+    m2m_scaler:
+      sim:
+        active: false
+    gpu:
+      sim:
+        active: false
+    network:
+      sim:
+        bitrate_mbps: 10
+      bw_kb_s:
+        write: 1250
+      model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      sw_timing:
+        min_ms: 0.5
+        mean_ms: 1.0
+        max_ms: 3.0
+        start_latency_ref: packet_arrival
+        start_latency_mean_ms: 0.0
+        rate_hz: 30.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
+      bw_note: Link traffic landing in DRAM through the modem/WiFi driver. It is not an IP DMA port; charge it to MIF but
+        not to a codec or display IP.
+    sw_demux:
+      sw_timing:
+        min_ms: 0.3
+        mean_ms: 0.6
+        max_ms: 1.2
+        start_latency_ref: bitstream_available
+        start_latency_mean_ms: 0.5
+        rate_hz: 30.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
 - id: yt-1080p30-av1-gpu-overlay
   severity: light
   design_conditions:
@@ -432,6 +1699,15 @@ variants:
     dpu_layer_count: 14
     dpu_composer: GPU_FALLBACK
     note: 영상+광고 배너+댓글 패널+시스템UI 레이어 합산 >12 → GPU fallback
+    panel_resolution: 1440x3120
+    panel_fps_hz: 60
+    source_resolution: 1920x1080
+    sw_timing_source: assumed
+    design_review: GPU fallback is asserted at 14 layers, but S5E9965 has 16 DPP channels and max_win = 16, so the DPU can
+      compose this directly. The real limits are >16 layers, or more than 8 layers needing scale/CSC (only the odd DPPs are
+      VG). Confirm the intended trigger and either raise the layer count or state the other reason.
+    bitrate_mbps: 10
+    bitrate_value_source: assumed
   routing_switch:
     disabled_nodes:
     - m2m_scaler
@@ -446,6 +1722,114 @@ variants:
     mfc_dec:
       selected_mode: Normal
       codec: AV1_DEC
+      sim:
+        width: 1920
+        height: 1080
+        fps: 30
+        bitdepth: 8
+        sbwc: false
+      bw_kb_s:
+        peak: 179724
+        read: 147862
+        write: 119801
+      dvfs:
+        weighted_mb: 349714
+        freq_mfc_khz: 400000
+        freq_int_khz: 133000
+        freq_mif_khz: 676000
+        time_fw_us: 1187
+        bts_scen: default
+      model_ref: ip-mfc-s5e9965.capabilities.bw_model / dvfs_model
+    dpu:
+      selected_mode: Normal
+      sim:
+        panel_width: 1440
+        panel_height: 3120
+        refresh_hz: 60
+        composer: GPU_FALLBACK
+        layers:
+        - name: gpu_composed
+          src:
+          - 1440
+          - 3120
+          dst:
+          - 1440
+          - 3120
+          bpp: 32
+          note: single RGBA8888 surface produced by SurfaceFlinger
+      resol_clk_khz: 304611
+      bw_kb_s:
+        bts_read_vote: 1218444
+        surface_traffic: 1053000
+        write: 0
+      bw_note: bts_read_vote is what the driver votes to BTS (worst case, each layer charged at full-frame rate); surface_traffic
+        is the bytes actually fetched. Use the vote for MIF/INT frequency, the traffic for energy.
+      model_ref: ip-dpu-s5e9965.capabilities.bw_model
+    panel:
+      selected_mode: 60hz
+      sim:
+        refresh_hz: 60
+        screen_on: true
+    m2m_scaler:
+      sim:
+        active: false
+    gpu:
+      selected_mode: Normal
+      sim:
+        width: 1920
+        height: 1080
+        fps: 30
+        workload: composition
+        input_layers: 14
+      bw_kb_s:
+        note: GPU traffic is not kernel-declared; see ip-gpu bw_model
+        composition_write: 1053000
+      model_ref: ip-gpu-s5e9965.capabilities.dvfs_model / power_model
+      sw_timing:
+        min_ms: 1.0
+        mean_ms: 2.0
+        max_ms: 4.0
+        start_latency_ref: layers_ready
+        start_latency_mean_ms: 0.5
+        rate_hz: 60.0
+        cpu_affinity: CPUCL2
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
+    network:
+      sim:
+        bitrate_mbps: 10
+      bw_kb_s:
+        write: 1250
+      model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      sw_timing:
+        min_ms: 0.5
+        mean_ms: 1.0
+        max_ms: 3.0
+        start_latency_ref: packet_arrival
+        start_latency_mean_ms: 0.0
+        rate_hz: 30.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
+      bw_note: Link traffic landing in DRAM through the modem/WiFi driver. It is not an IP DMA port; charge it to MIF but
+        not to a codec or display IP.
+    sw_demux:
+      sw_timing:
+        min_ms: 0.3
+        mean_ms: 0.6
+        max_ms: 1.2
+        start_latency_ref: bitstream_available
+        start_latency_mean_ms: 0.5
+        rate_hz: 30.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
 - id: yt-4k30-av1-m2m-scale
   severity: heavy
   design_conditions:
@@ -456,6 +1840,12 @@ variants:
     dpu_layer_count: 4
     dpu_composer: M2M_SCALER_FALLBACK
     note: 4K 디코드 → M2M 스케일러 → 패널 해상도(3088×1440) 맞춤 후 DPU
+    panel_resolution: 1440x3120
+    panel_fps_hz: 60
+    source_resolution: 3840x2160
+    sw_timing_source: assumed
+    bitrate_mbps: 35
+    bitrate_value_source: assumed
   routing_switch:
     disabled_nodes:
     - gpu
@@ -470,6 +1860,139 @@ variants:
     mfc_dec:
       selected_mode: Normal
       codec: AV1_DEC
+      sim:
+        width: 3840
+        height: 2160
+        fps: 30
+        bitdepth: 8
+        sbwc: false
+      bw_kb_s:
+        peak: 713610
+        read: 587100
+        write: 475680
+      dvfs:
+        weighted_mb: 1388571
+        freq_mfc_khz: 332000
+        freq_int_khz: 133000
+        freq_mif_khz: 676000
+        time_fw_us: 779
+        bts_scen: default
+      model_ref: ip-mfc-s5e9965.capabilities.bw_model / dvfs_model
+    dpu:
+      selected_mode: Normal
+      sim:
+        panel_width: 1440
+        panel_height: 3120
+        refresh_hz: 60
+        composer: M2M_SCALER_FALLBACK
+        layers:
+        - name: m2m_scaled_video
+          src:
+          - 3840
+          - 2160
+          bpp: 32
+          dst:
+          - 1440
+          - 3120
+        - name: ui0
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui1
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui2
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+      resol_clk_khz: 304611
+      bw_kb_s:
+        bts_read_vote: 6904516
+        surface_traffic: 2338875
+        write: 0
+      bw_note: bts_read_vote is what the driver votes to BTS (worst case, each layer charged at full-frame rate); surface_traffic
+        is the bytes actually fetched. Use the vote for MIF/INT frequency, the traffic for energy.
+      model_ref: ip-dpu-s5e9965.capabilities.bw_model
+    panel:
+      selected_mode: 60hz
+      sim:
+        refresh_hz: 60
+        screen_on: true
+    m2m_scaler:
+      selected_mode: Normal
+      sim:
+        src:
+        - 3840
+        - 2160
+        dst:
+        - 1440
+        - 3120
+        fps: 30
+        src_bpp: 12
+        dst_bpp: 32
+        ppc: 4.89
+        ppc_row: YUV420
+      required_freq_khz: 50886
+      dvfs:
+        freq_mif_khz: 0
+        freq_int_khz: 133000
+        freq_mscl_khz: 88000
+      bw_kb_s:
+        read: 364500
+        write: 526500
+      model_ref: ip-m2m-scaler-s5e9965.capabilities.perf_model / bw_model
+    gpu:
+      sim:
+        active: false
+    network:
+      sim:
+        bitrate_mbps: 35
+      bw_kb_s:
+        write: 4375
+      model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      sw_timing:
+        min_ms: 0.5
+        mean_ms: 1.0
+        max_ms: 3.0
+        start_latency_ref: packet_arrival
+        start_latency_mean_ms: 0.0
+        rate_hz: 30.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
+      bw_note: Link traffic landing in DRAM through the modem/WiFi driver. It is not an IP DMA port; charge it to MIF but
+        not to a codec or display IP.
+    sw_demux:
+      sw_timing:
+        min_ms: 0.3
+        mean_ms: 0.6
+        max_ms: 1.2
+        start_latency_ref: bitstream_available
+        start_latency_mean_ms: 0.5
+        rate_hz: 30.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
   buffer_overrides:
     MFC_M2M_BUF:
       format: YUV420
@@ -479,3 +2002,7 @@ variants:
       format: RGBA8888
       bitdepth: 8
       compression: COMP_OFF
+provenance:
+  platform_review: S5E9965 platform (non-camera) driver review 2026-09-16
+  note: Node ip_refs, per-variant sim shapes, bw_kb_s, dvfs steps and sw_timing are generated by tools/build_platform_fixture.py
+    from the S5E9965 DT/drivers. Variant ids and design_conditions are hand-maintained inputs.

@@ -10,6 +10,7 @@ capabilities:
   - id: 90hz
   - id: 120hz
   - id: 1hz_lpm
+  - id: 30hz
   supported_features:
     bitdepth:
     - 8
@@ -36,5 +37,10 @@ capabilities:
     - 120
     peak_brightness_nit: 2600
     color_gamut: Display-P3
+  power_model:
+    source: unavailable
+    note: Panel/DDI power is not in the kernel tree (no panel driver in this release).
+      Panel self-emission power must come from measurement; only the DPU/DSIM side
+      is modeled.
 compatible_soc:
 - soc-exynos2600

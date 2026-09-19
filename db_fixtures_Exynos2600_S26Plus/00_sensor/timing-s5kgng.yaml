@@ -1,0 +1,480 @@
+id: sensortiming-s5kgng-seta-19p2
+schema_version: '2.2'
+kind: sensor.timing_profile
+sensor_name: S5KGNG
+revision: setA-19p2-import-20260920
+modes:
+  cis_4sum_ln1_raw10_4080x3060_120fps_3993msps:
+    active_width: 4080
+    active_height: 3060
+    pixel_clock_hz: 3532800000
+    line_length_pck: 8880
+    frame_length_lines: 3312
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 50568
+      basis: CIS setfile
+  cis_4sum_ln2_raw10_4080x3060_60fps_3993msps:
+    active_width: 4080
+    active_height: 3060
+    pixel_clock_hz: 3532800000
+    line_length_pck: 9064
+    frame_length_lines: 6496
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 50589
+      basis: CIS setfile
+  cis_4sum_ln4_raw10_4080x3060_30fps_3993msps:
+    active_width: 4080
+    active_height: 3060
+    pixel_clock_hz: 3532800000
+    line_length_pck: 15664
+    frame_length_lines: 7516
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 50610
+      basis: CIS setfile
+  cis_4sum_idcg_ln1_raw12_4080x3060_60fps_3993msps:
+    active_width: 4080
+    active_height: 3060
+    pixel_clock_hz: 3532800000
+    line_length_pck: 15664
+    frame_length_lines: 3756
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 50631
+      basis: CIS setfile
+  cis_4sum_idcg_ln2_raw12_4080x3060_30fps_3993msps:
+    active_width: 4080
+    active_height: 3060
+    pixel_clock_hz: 3532800000
+    line_length_pck: 20240
+    frame_length_lines: 5818
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 50652
+      basis: CIS setfile
+  cis_4sum_idcg_ln4_raw12_4080x3060_30fps_3993msps:
+    active_width: 4080
+    active_height: 3060
+    pixel_clock_hz: 3532800000
+    line_length_pck: 29216
+    frame_length_lines: 4030
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 50673
+      basis: CIS setfile
+  cis_4sum_idcg_dsg_ln1_raw14_4080x3060_60fps_3993msps:
+    active_width: 4080
+    active_height: 3060
+    pixel_clock_hz: 3532800000
+    line_length_pck: 15664
+    frame_length_lines: 3756
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 50694
+      basis: CIS setfile
+  cis_4sum_idcg_dsg_ln2_raw14_4080x3060_30fps_3993msps:
+    active_width: 4080
+    active_height: 3060
+    pixel_clock_hz: 3532800000
+    line_length_pck: 20240
+    frame_length_lines: 5818
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 50715
+      basis: CIS setfile
+  cis_4sum_idcg_dsg_ln4_raw14_4080x3060_30fps_3993msps:
+    active_width: 4080
+    active_height: 3060
+    pixel_clock_hz: 3532800000
+    line_length_pck: 29216
+    frame_length_lines: 4030
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 50736
+      basis: CIS setfile
+  cis_4sum_ln1_raw10_2800x2100_30fps_3993msps:
+    active_width: 2800
+    active_height: 2100
+    pixel_clock_hz: 3532800000
+    line_length_pck: 8880
+    frame_length_lines: 13260
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 50757
+      basis: CIS setfile
+  cis_4sum_ln4_raw12_4080x3060_30fps_3993msps:
+    active_width: 4080
+    active_height: 3060
+    pixel_clock_hz: 3532800000
+    line_length_pck: 15664
+    frame_length_lines: 7516
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 50778
+      basis: CIS setfile
+  cis_4sum_ln1_raw10_4080x2296_120fps_3993msps:
+    active_width: 4080
+    active_height: 2296
+    pixel_clock_hz: 3532800000
+    line_length_pck: 8880
+    frame_length_lines: 3312
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 50799
+      basis: CIS setfile
+  cis_4sum_ln2_raw10_4080x2296_60fps_3993msps:
+    active_width: 4080
+    active_height: 2296
+    pixel_clock_hz: 3532800000
+    line_length_pck: 9064
+    frame_length_lines: 6496
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 50820
+      basis: CIS setfile
+  cis_4sum_ln4_raw10_4080x2296_30fps_3993msps:
+    active_width: 4080
+    active_height: 2296
+    pixel_clock_hz: 3532800000
+    line_length_pck: 15664
+    frame_length_lines: 7516
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 50841
+      basis: CIS setfile
+  cis_4sum_idcg_ln1_raw12_4080x2296_60fps_3993msps:
+    active_width: 4080
+    active_height: 2296
+    pixel_clock_hz: 3532800000
+    line_length_pck: 15664
+    frame_length_lines: 3756
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 50862
+      basis: CIS setfile
+  cis_4sum_idcg_ln2_raw12_4080x2296_60fps_3993msps:
+    active_width: 4080
+    active_height: 2296
+    pixel_clock_hz: 3532800000
+    line_length_pck: 20240
+    frame_length_lines: 2908
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 50883
+      basis: CIS setfile
+  cis_4sum_idcg_ln4_raw12_4080x2296_30fps_3993msps:
+    active_width: 4080
+    active_height: 2296
+    pixel_clock_hz: 3532800000
+    line_length_pck: 29216
+    frame_length_lines: 4030
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 50904
+      basis: CIS setfile
+  cis_4sum_idcg_dsg_ln1_raw14_4080x2296_60fps_3993msps:
+    active_width: 4080
+    active_height: 2296
+    pixel_clock_hz: 3532800000
+    line_length_pck: 15664
+    frame_length_lines: 3756
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 50925
+      basis: CIS setfile
+  cis_4sum_idcg_dsg_ln2_raw14_4080x2296_60fps_3993msps:
+    active_width: 4080
+    active_height: 2296
+    pixel_clock_hz: 3532800000
+    line_length_pck: 20240
+    frame_length_lines: 2908
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 50946
+      basis: CIS setfile
+  cis_4sum_idcg_dsg_ln4_raw14_4080x2296_30fps_3993msps:
+    active_width: 4080
+    active_height: 2296
+    pixel_clock_hz: 3532800000
+    line_length_pck: 29216
+    frame_length_lines: 4030
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 50967
+      basis: CIS setfile
+  cis_4sum_ln1_raw10_3328x1872_120fps_3993msps:
+    active_width: 3328
+    active_height: 1872
+    pixel_clock_hz: 3532800000
+    line_length_pck: 8880
+    frame_length_lines: 3312
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 50988
+      basis: CIS setfile
+  cis_4sum_ln4_raw12_4080x2296_30fps_3993msps:
+    active_width: 4080
+    active_height: 2296
+    pixel_clock_hz: 3532800000
+    line_length_pck: 15664
+    frame_length_lines: 7516
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 51009
+      basis: CIS setfile
+  cis_full_ln1_raw10_8160x6120_30fps_3993msps:
+    active_width: 8160
+    active_height: 6120
+    pixel_clock_hz: 3532800000
+    line_length_pck: 17856
+    frame_length_lines: 6592
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 51030
+      basis: CIS setfile
+  cis_full_ln2_raw10_8160x6120_20fps_3993msps:
+    active_width: 8160
+    active_height: 6120
+    pixel_clock_hz: 3532800000
+    line_length_pck: 22128
+    frame_length_lines: 7980
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 51051
+      basis: CIS setfile
+  cis_full_dsg_ln1_raw12_8160x6120_20fps_3993msps:
+    active_width: 8160
+    active_height: 6120
+    pixel_clock_hz: 3532800000
+    line_length_pck: 23232
+    frame_length_lines: 7600
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 51072
+      basis: CIS setfile
+  cis_full_ln2_raw12_8160x6120_20fps_3993msps:
+    active_width: 8160
+    active_height: 6120
+    pixel_clock_hz: 3532800000
+    line_length_pck: 22128
+    frame_length_lines: 7980
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 51093
+      basis: CIS setfile
+  cis_full_ln1_raw10_5824x4368_30fps_3993msps:
+    active_width: 5824
+    active_height: 4368
+    pixel_clock_hz: 3532800000
+    line_length_pck: 17856
+    frame_length_lines: 6592
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 51114
+      basis: CIS setfile
+  cis_full_ln1_raw12_5824x4368_30fps_3993msps:
+    active_width: 5824
+    active_height: 4368
+    pixel_clock_hz: 3532800000
+    line_length_pck: 17856
+    frame_length_lines: 6592
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 51135
+      basis: CIS setfile
+  cis_full_ln1_raw10_8000x4500_30fps_2969msps:
+    active_width: 8000
+    active_height: 4500
+    pixel_clock_hz: 3532800000
+    line_length_pck: 17856
+    frame_length_lines: 6592
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 51156
+      basis: CIS setfile
+  cis_full_ln2_raw10_8000x4500_30fps_2969msps:
+    active_width: 8000
+    active_height: 4500
+    pixel_clock_hz: 3532800000
+    line_length_pck: 22128
+    frame_length_lines: 5320
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 51177
+      basis: CIS setfile
+  cis_full_dsg_ln1_raw12_8000x4500_30fps_2969msps:
+    active_width: 8000
+    active_height: 4500
+    pixel_clock_hz: 3532800000
+    line_length_pck: 23232
+    frame_length_lines: 5068
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 51198
+      basis: CIS setfile
+  cis_full_ln2_raw12_8000x4500_30fps_2969msps:
+    active_width: 8000
+    active_height: 4500
+    pixel_clock_hz: 3532800000
+    line_length_pck: 22128
+    frame_length_lines: 5320
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 51219
+      basis: CIS setfile
+  cis_full_ln1_raw10_4080x3060_60fps_3993msps:
+    active_width: 4080
+    active_height: 3060
+    pixel_clock_hz: 3532800000
+    line_length_pck: 17600
+    frame_length_lines: 3328
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 51240
+      basis: CIS setfile
+  cis_full_ln2_raw10_4080x3060_30fps_3993msps:
+    active_width: 4080
+    active_height: 3060
+    pixel_clock_hz: 3532800000
+    line_length_pck: 22128
+    frame_length_lines: 5320
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 51262
+      basis: CIS setfile
+  cis_full_dsg_ln1_raw12_4080x3060_30fps_3993msps:
+    active_width: 4080
+    active_height: 3060
+    pixel_clock_hz: 3532800000
+    line_length_pck: 23232
+    frame_length_lines: 5068
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 51284
+      basis: CIS setfile
+  cis_full_dsg_ln2_raw12_4080x3060_30fps_3993msps:
+    active_width: 4080
+    active_height: 3060
+    pixel_clock_hz: 3532800000
+    line_length_pck: 34496
+    frame_length_lines: 3412
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 51306
+      basis: CIS setfile
+  cis_full_ln1_raw12_4080x3060_60fps_3993msps:
+    active_width: 4080
+    active_height: 3060
+    pixel_clock_hz: 3532800000
+    line_length_pck: 17600
+    frame_length_lines: 3328
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 51328
+      basis: CIS setfile
+  cis_full_ln2_raw12_4080x3060_30fps_3993msps:
+    active_width: 4080
+    active_height: 3060
+    pixel_clock_hz: 3532800000
+    line_length_pck: 22128
+    frame_length_lines: 5320
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 51350
+      basis: CIS setfile
+  cis_full_ln1_raw10_4080x2296_60fps_3993msps:
+    active_width: 4080
+    active_height: 2296
+    pixel_clock_hz: 3532800000
+    line_length_pck: 17600
+    frame_length_lines: 3344
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 51372
+      basis: CIS setfile
+  cis_full_ln2_raw10_4080x2296_60fps_3993msps:
+    active_width: 4080
+    active_height: 2296
+    pixel_clock_hz: 3532800000
+    line_length_pck: 22128
+    frame_length_lines: 2660
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 51394
+      basis: CIS setfile
+  cis_full_dsg_ln1_raw12_4080x2296_60fps_3993msps:
+    active_width: 4080
+    active_height: 2296
+    pixel_clock_hz: 3532800000
+    line_length_pck: 23232
+    frame_length_lines: 2534
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 51416
+      basis: CIS setfile
+  cis_full_dsg_ln2_raw12_4080x2296_30fps_3993msps:
+    active_width: 4080
+    active_height: 2296
+    pixel_clock_hz: 3532800000
+    line_length_pck: 34496
+    frame_length_lines: 3412
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 51438
+      basis: CIS setfile
+  cis_full_ln1_raw12_4080x2296_60fps_3993msps:
+    active_width: 4080
+    active_height: 2296
+    pixel_clock_hz: 3532800000
+    line_length_pck: 17600
+    frame_length_lines: 3344
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 51460
+      basis: CIS setfile
+  cis_full_ln2_raw12_4080x2296_60fps_3993msps:
+    active_width: 4080
+    active_height: 2296
+    pixel_clock_hz: 3532800000
+    line_length_pck: 22128
+    frame_length_lines: 2660
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 51482
+      basis: CIS setfile
+  cis_fhd_ln1_raw10_2040x1148_240fps_3673msps:
+    active_width: 2040
+    active_height: 1148
+    pixel_clock_hz: 3532800000
+    line_length_pck: 8544
+    frame_length_lines: 1720
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 51504
+      basis: CIS setfile
+  cis_fhd_ln1_raw10_2040x1148_480fps_3673msps:
+    active_width: 2040
+    active_height: 1148
+    pixel_clock_hz: 3532800000
+    line_length_pck: 5104
+    frame_length_lines: 1440
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 51525
+      basis: CIS setfile
+  cis_fhd_ln1_raw10_2040x1532_120fps_2828msps:
+    active_width: 2040
+    active_height: 1532
+    pixel_clock_hz: 3532800000
+    line_length_pck: 8544
+    frame_length_lines: 3440
+    source:
+      path: sensor\module_framework\cis\is-cis-gng-setA-19p2.h
+      line: 51546
+      basis: CIS setfile
+provenance:
+  source_ip_ref: ip-sensor-gng-s5e9965
+  note: CIS mode labels retained without automatic DT mode equivalence. Reusable across
+    projects; preserve revision when selecting.

@@ -1,0 +1,2541 @@
+id: sensor-jn3-m2s
+schema_version: '2.2'
+kind: sensor.catalog
+board: m2s
+sensor_name: S5KJN3
+position: 4
+position_role: rear_ultrawide
+module_properties:
+  sensor_id: 83
+  sensor_id_name: SENSOR_NAME_S5KJN3
+  position: 4
+  id: 4
+  rom_id: 2
+  rom_cal_index: 0
+  rom_dualcal_id: 2
+  rom_dualcal_index: 0
+  mclk_ch: 0
+  mclk_freq: 19200
+  max_framerate: 480
+  bitwidth: 10
+  active_width: 8160
+  active_height: 6120
+  margin_left: 0
+  margin_right: 0
+  margin_top: 0
+  margin_bottom: 0
+  sensor_i2c_ch: 2
+  sensor_maker: SLSI
+  sensor_name: S5KJN3
+  status: okay
+csis_wiring:
+  node: is_sensor4@270C0000
+  csi_ch: 3
+  use_cphy: 1
+  scenario: SENSOR_SCENARIO_NORMAL
+  status: okay
+  phy: CPHY
+mode_count: 30
+mode_summary:
+  sizes:
+    4080x3060: 13
+    8160x6120: 6
+    4080x2296: 3
+    5824x4368: 2
+    3328x1872: 1
+    4000x2252: 1
+    2800x2100: 1
+    8160x4592: 1
+    2040x1148: 1
+    2040x1530: 1
+  ex_modes:
+    EX_NONE: 16
+    EX_AI_REMOSAIC: 6
+    EX_AEB: 4
+    EX_LN: 2
+    EX_PHY_TUNE: 1
+    EX_DCG: 1
+  fps:
+  - 24
+  - 30
+  - 60
+  - 120
+  - 240
+  max_mipi_link_mbps: 23780
+modes:
+  mode0:
+    dt:
+      common:
+      - '4080'
+      - '3060'
+      - '60'
+      - '0'
+      - '0'
+      - CSI_DATA_LANES_3
+      - '3468'
+      - CSI_MODE_VC_DT
+      - LRTE_DISABLE
+      - PD_MOD3
+      source_line: 88
+    decoded:
+      size:
+      - 4080
+      - 3060
+      fps: 60
+      settle: 0
+      mode_index: 0
+      lanes: 3
+      lanes_enum: CSI_DATA_LANES_3
+      mipi_speed_mbps: 3468
+      interleave_mode: CSI_MODE_VC_DT
+      interleave_mode_value: 3
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+      ex_mode_source: default (common has 10 cells, driver leaves cfg->ex_mode at 0)
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 4080
+          - 3060
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 2
+          size:
+          - 4080
+          - 382
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 23780
+      phy: CPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 17554200
+      csis_input_mbps: 8426.0
+      link_utilization_pct: 35.4
+  mode0_aeb:
+    dt:
+      common:
+      - '4080'
+      - '3060'
+      - '60'
+      - '0'
+      - '0'
+      - CSI_DATA_LANES_3
+      - '3468'
+      - CSI_MODE_VC_DT
+      - LRTE_DISABLE
+      - PD_MOD3
+      - EX_AEB
+      source_line: 95
+    decoded:
+      size:
+      - 4080
+      - 3060
+      fps: 60
+      settle: 0
+      mode_index: 0
+      lanes: 3
+      lanes_enum: CSI_DATA_LANES_3
+      mipi_speed_mbps: 3468
+      interleave_mode: CSI_MODE_VC_DT
+      interleave_mode_value: 3
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_AEB
+      ex_mode_value: 8
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 4080
+          - 3060
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc1:
+          map: 1
+          size:
+          - 4080
+          - 3060
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 2
+          size:
+          - 4080
+          - 382
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+        vc3:
+          map: 3
+          size:
+          - 4080
+          - 382
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+      max_fps: 60
+    derived:
+      mipi_link_mbps: 23780
+      phy: CPHY
+      vc_count_by_class:
+        image: 2
+        pd_horizontal: 2
+      image_vc_count: 2
+      csis_input_bytes_per_frame: 35108400
+      csis_input_mbps: 16852.0
+      link_utilization_pct: 70.9
+      csis_input_mbps_per_exposure: 9361.2
+  mode0_nfi:
+    dt:
+      common:
+      - '4080'
+      - '3060'
+      - '60'
+      - '0'
+      - '0'
+      - CSI_DATA_LANES_3
+      - '3468'
+      - CSI_MODE_VC_DT
+      - LRTE_DISABLE
+      - PD_MOD3
+      source_line: 104
+    decoded:
+      size:
+      - 4080
+      - 3060
+      fps: 60
+      settle: 0
+      mode_index: 0
+      lanes: 3
+      lanes_enum: CSI_DATA_LANES_3
+      mipi_speed_mbps: 3468
+      interleave_mode: CSI_MODE_VC_DT
+      interleave_mode_value: 3
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+      ex_mode_source: default (common has 10 cells, driver leaves cfg->ex_mode at 0)
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 4080
+          - 3060
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 2
+          size:
+          - 4080
+          - 382
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+        vc4:
+          map: 0
+          size:
+          - 4080
+          - 4
+          hwformat: HW_FORMAT_EMBEDDED_8BIT_POTF
+          hwformat_value: 530
+          hwformat_base: HW_FORMAT_EMBEDDED_8BIT
+          bits_per_pixel: 8
+          format_flags:
+          - POTF
+          data: DATA_EMB
+          data_class: embedded
+    option:
+      votf: 0
+      fid_loc:
+      - 0
+      - 27
+      - 0
+      - 77
+      ex_mode_extra: EX_EXTRA_NFI
+      ex_mode_extra_value: 2
+    derived:
+      mipi_link_mbps: 23780
+      phy: CPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+        embedded: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 17570520
+      csis_input_mbps: 8433.8
+      link_utilization_pct: 35.5
+  mode0_nfi_aeb:
+    dt:
+      common:
+      - '4080'
+      - '3060'
+      - '60'
+      - '0'
+      - '0'
+      - CSI_DATA_LANES_3
+      - '3468'
+      - CSI_MODE_VC_DT
+      - LRTE_DISABLE
+      - PD_MOD3
+      - EX_AEB
+      source_line: 112
+    decoded:
+      size:
+      - 4080
+      - 3060
+      fps: 60
+      settle: 0
+      mode_index: 0
+      lanes: 3
+      lanes_enum: CSI_DATA_LANES_3
+      mipi_speed_mbps: 3468
+      interleave_mode: CSI_MODE_VC_DT
+      interleave_mode_value: 3
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_AEB
+      ex_mode_value: 8
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 4080
+          - 3060
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc1:
+          map: 1
+          size:
+          - 4080
+          - 3060
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 2
+          size:
+          - 4080
+          - 382
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+        vc3:
+          map: 3
+          size:
+          - 4080
+          - 382
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+        vc4:
+          map: 0
+          size:
+          - 4080
+          - 4
+          hwformat: HW_FORMAT_EMBEDDED_8BIT_POTF
+          hwformat_value: 530
+          hwformat_base: HW_FORMAT_EMBEDDED_8BIT
+          bits_per_pixel: 8
+          format_flags:
+          - POTF
+          data: DATA_EMB
+          data_class: embedded
+        vc5:
+          map: 1
+          size:
+          - 4080
+          - 4
+          hwformat: HW_FORMAT_EMBEDDED_8BIT_POTF
+          hwformat_value: 530
+          hwformat_base: HW_FORMAT_EMBEDDED_8BIT
+          bits_per_pixel: 8
+          format_flags:
+          - POTF
+          data: DATA_EMB
+          data_class: embedded
+    option:
+      votf: 0
+      max_fps: 60
+      fid_loc:
+      - 0
+      - 27
+      - 0
+      - 77
+      ex_mode_extra: EX_EXTRA_NFI
+      ex_mode_extra_value: 2
+    derived:
+      mipi_link_mbps: 23780
+      phy: CPHY
+      vc_count_by_class:
+        image: 2
+        pd_horizontal: 2
+        embedded: 2
+      image_vc_count: 2
+      csis_input_bytes_per_frame: 35141040
+      csis_input_mbps: 16867.7
+      link_utilization_pct: 70.9
+      csis_input_mbps_per_exposure: 9376.8
+  mode0_phy_tune:
+    dt:
+      common:
+      - '4080'
+      - '3060'
+      - '60'
+      - '0'
+      - '0'
+      - CSI_DATA_LANES_3
+      - '3468'
+      - CSI_MODE_VC_DT
+      - LRTE_DISABLE
+      - PD_NONE
+      - EX_PHY_TUNE
+      source_line: 123
+    decoded:
+      size:
+      - 4080
+      - 3060
+      fps: 60
+      settle: 0
+      mode_index: 0
+      lanes: 3
+      lanes_enum: CSI_DATA_LANES_3
+      mipi_speed_mbps: 3468
+      interleave_mode: CSI_MODE_VC_DT
+      interleave_mode_value: 3
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_NONE
+      pd_mode_value: 5
+      ex_mode: EX_PHY_TUNE
+      ex_mode_value: 99
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 4080
+          - 3060
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 2
+          size:
+          - 4080
+          - 382
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 23780
+      phy: CPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 17554200
+      csis_input_mbps: 8426.0
+      link_utilization_pct: 35.4
+  mode1_nfi:
+    dt:
+      common:
+      - '4080'
+      - '3060'
+      - '30'
+      - '0'
+      - '1'
+      - CSI_DATA_LANES_3
+      - '3468'
+      - CSI_MODE_VC_DT
+      - LRTE_DISABLE
+      - PD_MOD3
+      - EX_LN
+      source_line: 130
+    decoded:
+      size:
+      - 4080
+      - 3060
+      fps: 30
+      settle: 0
+      mode_index: 1
+      lanes: 3
+      lanes_enum: CSI_DATA_LANES_3
+      mipi_speed_mbps: 3468
+      interleave_mode: CSI_MODE_VC_DT
+      interleave_mode_value: 3
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_LN
+      ex_mode_value: 17
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 4080
+          - 3060
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 2
+          size:
+          - 4080
+          - 382
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+        vc4:
+          map: 0
+          size:
+          - 4080
+          - 4
+          hwformat: HW_FORMAT_EMBEDDED_8BIT_POTF
+          hwformat_value: 530
+          hwformat_base: HW_FORMAT_EMBEDDED_8BIT
+          bits_per_pixel: 8
+          format_flags:
+          - POTF
+          data: DATA_EMB
+          data_class: embedded
+    option:
+      votf: 0
+      fid_loc:
+      - 0
+      - 27
+      - 0
+      - 77
+      ex_mode_extra: EX_EXTRA_NFI
+      ex_mode_extra_value: 2
+    derived:
+      mipi_link_mbps: 23780
+      phy: CPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+        embedded: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 17570520
+      csis_input_mbps: 4216.9
+      link_utilization_pct: 17.7
+  mode2:
+    dt:
+      common:
+      - '4080'
+      - '3060'
+      - '30'
+      - '0'
+      - '2'
+      - CSI_DATA_LANES_3
+      - '3468'
+      - CSI_MODE_VC_DT
+      - LRTE_DISABLE
+      - PD_MOD3
+      - EX_LN
+      source_line: 138
+    decoded:
+      size:
+      - 4080
+      - 3060
+      fps: 30
+      settle: 0
+      mode_index: 2
+      lanes: 3
+      lanes_enum: CSI_DATA_LANES_3
+      mipi_speed_mbps: 3468
+      interleave_mode: CSI_MODE_VC_DT
+      interleave_mode_value: 3
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_LN
+      ex_mode_value: 17
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 4080
+          - 3060
+          hwformat: HW_FORMAT_RAW12
+          hwformat_value: 44
+          hwformat_base: HW_FORMAT_RAW12
+          bits_per_pixel: 12
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 2
+          size:
+          - 4080
+          - 382
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 23780
+      phy: CPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 20675400
+      csis_input_mbps: 4962.1
+      link_utilization_pct: 20.9
+  mode4:
+    dt:
+      common:
+      - '4080'
+      - '3060'
+      - '60'
+      - '0'
+      - '4'
+      - CSI_DATA_LANES_3
+      - '3468'
+      - CSI_MODE_VC_DT
+      - LRTE_DISABLE
+      - PD_MOD3
+      source_line: 145
+    decoded:
+      size:
+      - 4080
+      - 3060
+      fps: 60
+      settle: 0
+      mode_index: 4
+      lanes: 3
+      lanes_enum: CSI_DATA_LANES_3
+      mipi_speed_mbps: 3468
+      interleave_mode: CSI_MODE_VC_DT
+      interleave_mode_value: 3
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+      ex_mode_source: default (common has 10 cells, driver leaves cfg->ex_mode at 0)
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 4080
+          - 3060
+          hwformat: HW_FORMAT_RAW12
+          hwformat_value: 44
+          hwformat_base: HW_FORMAT_RAW12
+          bits_per_pixel: 12
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 2
+          size:
+          - 4080
+          - 382
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 23780
+      phy: CPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 20675400
+      csis_input_mbps: 9924.2
+      link_utilization_pct: 41.7
+  mode4_aeb:
+    dt:
+      common:
+      - '4080'
+      - '3060'
+      - '60'
+      - '0'
+      - '4'
+      - CSI_DATA_LANES_3
+      - '3468'
+      - CSI_MODE_VC_DT
+      - LRTE_DISABLE
+      - PD_MOD3
+      - EX_AEB
+      source_line: 152
+    decoded:
+      size:
+      - 4080
+      - 3060
+      fps: 60
+      settle: 0
+      mode_index: 4
+      lanes: 3
+      lanes_enum: CSI_DATA_LANES_3
+      mipi_speed_mbps: 3468
+      interleave_mode: CSI_MODE_VC_DT
+      interleave_mode_value: 3
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_AEB
+      ex_mode_value: 8
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 4080
+          - 3060
+          hwformat: HW_FORMAT_RAW12
+          hwformat_value: 44
+          hwformat_base: HW_FORMAT_RAW12
+          bits_per_pixel: 12
+          data: DATA_IMG
+          data_class: image
+        vc1:
+          map: 1
+          size:
+          - 4080
+          - 3060
+          hwformat: HW_FORMAT_RAW12
+          hwformat_value: 44
+          hwformat_base: HW_FORMAT_RAW12
+          bits_per_pixel: 12
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 2
+          size:
+          - 4080
+          - 382
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+        vc3:
+          map: 3
+          size:
+          - 4080
+          - 382
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+      max_fps: 60
+    derived:
+      mipi_link_mbps: 23780
+      phy: CPHY
+      vc_count_by_class:
+        image: 2
+        pd_horizontal: 2
+      image_vc_count: 2
+      csis_input_bytes_per_frame: 41350800
+      csis_input_mbps: 19848.4
+      link_utilization_pct: 83.5
+      csis_input_mbps_per_exposure: 10859.3
+  mode4_nfi:
+    dt:
+      common:
+      - '4080'
+      - '3060'
+      - '60'
+      - '0'
+      - '4'
+      - CSI_DATA_LANES_3
+      - '3468'
+      - CSI_MODE_VC_DT
+      - LRTE_DISABLE
+      - PD_MOD3
+      source_line: 161
+    decoded:
+      size:
+      - 4080
+      - 3060
+      fps: 60
+      settle: 0
+      mode_index: 4
+      lanes: 3
+      lanes_enum: CSI_DATA_LANES_3
+      mipi_speed_mbps: 3468
+      interleave_mode: CSI_MODE_VC_DT
+      interleave_mode_value: 3
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+      ex_mode_source: default (common has 10 cells, driver leaves cfg->ex_mode at 0)
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 4080
+          - 3060
+          hwformat: HW_FORMAT_RAW12
+          hwformat_value: 44
+          hwformat_base: HW_FORMAT_RAW12
+          bits_per_pixel: 12
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 2
+          size:
+          - 4080
+          - 382
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+        vc4:
+          map: 0
+          size:
+          - 4080
+          - 4
+          hwformat: HW_FORMAT_EMBEDDED_8BIT_POTF
+          hwformat_value: 530
+          hwformat_base: HW_FORMAT_EMBEDDED_8BIT
+          bits_per_pixel: 8
+          format_flags:
+          - POTF
+          data: DATA_EMB
+          data_class: embedded
+    option:
+      votf: 0
+      fid_loc:
+      - 0
+      - 27
+      - 0
+      - 77
+      ex_mode_extra: EX_EXTRA_NFI
+      ex_mode_extra_value: 2
+    derived:
+      mipi_link_mbps: 23780
+      phy: CPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+        embedded: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 20691720
+      csis_input_mbps: 9932.0
+      link_utilization_pct: 41.8
+  mode4_nfi_aeb:
+    dt:
+      common:
+      - '4080'
+      - '3060'
+      - '60'
+      - '0'
+      - '4'
+      - CSI_DATA_LANES_3
+      - '3468'
+      - CSI_MODE_VC_DT
+      - LRTE_DISABLE
+      - PD_MOD3
+      - EX_AEB
+      source_line: 169
+    decoded:
+      size:
+      - 4080
+      - 3060
+      fps: 60
+      settle: 0
+      mode_index: 4
+      lanes: 3
+      lanes_enum: CSI_DATA_LANES_3
+      mipi_speed_mbps: 3468
+      interleave_mode: CSI_MODE_VC_DT
+      interleave_mode_value: 3
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_AEB
+      ex_mode_value: 8
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 4080
+          - 3060
+          hwformat: HW_FORMAT_RAW12
+          hwformat_value: 44
+          hwformat_base: HW_FORMAT_RAW12
+          bits_per_pixel: 12
+          data: DATA_IMG
+          data_class: image
+        vc1:
+          map: 1
+          size:
+          - 4080
+          - 3060
+          hwformat: HW_FORMAT_RAW12
+          hwformat_value: 44
+          hwformat_base: HW_FORMAT_RAW12
+          bits_per_pixel: 12
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 2
+          size:
+          - 4080
+          - 382
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+        vc3:
+          map: 3
+          size:
+          - 4080
+          - 382
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+        vc4:
+          map: 0
+          size:
+          - 4080
+          - 4
+          hwformat: HW_FORMAT_EMBEDDED_8BIT_POTF
+          hwformat_value: 530
+          hwformat_base: HW_FORMAT_EMBEDDED_8BIT
+          bits_per_pixel: 8
+          format_flags:
+          - POTF
+          data: DATA_EMB
+          data_class: embedded
+        vc5:
+          map: 1
+          size:
+          - 4080
+          - 4
+          hwformat: HW_FORMAT_EMBEDDED_8BIT_POTF
+          hwformat_value: 530
+          hwformat_base: HW_FORMAT_EMBEDDED_8BIT
+          bits_per_pixel: 8
+          format_flags:
+          - POTF
+          data: DATA_EMB
+          data_class: embedded
+    option:
+      votf: 0
+      max_fps: 60
+      fid_loc:
+      - 0
+      - 27
+      - 0
+      - 77
+      ex_mode_extra: EX_EXTRA_NFI
+      ex_mode_extra_value: 2
+    derived:
+      mipi_link_mbps: 23780
+      phy: CPHY
+      vc_count_by_class:
+        image: 2
+        pd_horizontal: 2
+        embedded: 2
+      image_vc_count: 2
+      csis_input_bytes_per_frame: 41383440
+      csis_input_mbps: 19864.1
+      link_utilization_pct: 83.5
+      csis_input_mbps_per_exposure: 10875.0
+  mode4_dcg:
+    dt:
+      common:
+      - '4080'
+      - '3060'
+      - '60'
+      - '0'
+      - '4'
+      - CSI_DATA_LANES_3
+      - '3468'
+      - CSI_MODE_VC_DT
+      - LRTE_DISABLE
+      - PD_MOD3
+      - EX_DCG
+      source_line: 180
+    decoded:
+      size:
+      - 4080
+      - 3060
+      fps: 60
+      settle: 0
+      mode_index: 4
+      lanes: 3
+      lanes_enum: CSI_DATA_LANES_3
+      mipi_speed_mbps: 3468
+      interleave_mode: CSI_MODE_VC_DT
+      interleave_mode_value: 3
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_DCG
+      ex_mode_value: 16
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 4080
+          - 3060
+          hwformat: HW_FORMAT_RAW12
+          hwformat_value: 44
+          hwformat_base: HW_FORMAT_RAW12
+          bits_per_pixel: 12
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 2
+          size:
+          - 4080
+          - 382
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 23780
+      phy: CPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 20675400
+      csis_input_mbps: 9924.2
+      link_utilization_pct: 41.7
+  mode5_video:
+    dt:
+      common:
+      - '4080'
+      - '3060'
+      - '30'
+      - '0'
+      - '5'
+      - CSI_DATA_LANES_3
+      - '3468'
+      - CSI_MODE_VC_DT
+      - LRTE_DISABLE
+      - PD_MOD3
+      source_line: 187
+    decoded:
+      size:
+      - 4080
+      - 3060
+      fps: 30
+      settle: 0
+      mode_index: 5
+      lanes: 3
+      lanes_enum: CSI_DATA_LANES_3
+      mipi_speed_mbps: 3468
+      interleave_mode: CSI_MODE_VC_DT
+      interleave_mode_value: 3
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+      ex_mode_source: default (common has 10 cells, driver leaves cfg->ex_mode at 0)
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 4080
+          - 3060
+          hwformat: HW_FORMAT_RAW12
+          hwformat_value: 44
+          hwformat_base: HW_FORMAT_RAW12
+          bits_per_pixel: 12
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 2
+          size:
+          - 4080
+          - 382
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+      ex_mode_extra: EX_EXTRA_VIDEO
+      ex_mode_extra_value: 1
+    derived:
+      mipi_link_mbps: 23780
+      phy: CPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 20675400
+      csis_input_mbps: 4962.1
+      link_utilization_pct: 20.9
+  mode6:
+    dt:
+      common:
+      - '4080'
+      - '2296'
+      - '120'
+      - '0'
+      - '6'
+      - CSI_DATA_LANES_3
+      - '3468'
+      - CSI_MODE_VC_DT
+      - LRTE_DISABLE
+      - PD_MOD3
+      source_line: 194
+    decoded:
+      size:
+      - 4080
+      - 2296
+      fps: 120
+      settle: 0
+      mode_index: 6
+      lanes: 3
+      lanes_enum: CSI_DATA_LANES_3
+      mipi_speed_mbps: 3468
+      interleave_mode: CSI_MODE_VC_DT
+      interleave_mode_value: 3
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+      ex_mode_source: default (common has 10 cells, driver leaves cfg->ex_mode at 0)
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 4080
+          - 2296
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 2
+          size:
+          - 4080
+          - 286
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 23780
+      phy: CPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 13168200
+      csis_input_mbps: 12641.5
+      link_utilization_pct: 53.2
+  mode9:
+    dt:
+      common:
+      - '4080'
+      - '2296'
+      - '30'
+      - '0'
+      - '9'
+      - CSI_DATA_LANES_3
+      - '3468'
+      - CSI_MODE_VC_DT
+      - LRTE_DISABLE
+      - PD_MOD3
+      source_line: 201
+    decoded:
+      size:
+      - 4080
+      - 2296
+      fps: 30
+      settle: 0
+      mode_index: 9
+      lanes: 3
+      lanes_enum: CSI_DATA_LANES_3
+      mipi_speed_mbps: 3468
+      interleave_mode: CSI_MODE_VC_DT
+      interleave_mode_value: 3
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+      ex_mode_source: default (common has 10 cells, driver leaves cfg->ex_mode at 0)
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 4080
+          - 2296
+          hwformat: HW_FORMAT_RAW12
+          hwformat_value: 44
+          hwformat_base: HW_FORMAT_RAW12
+          bits_per_pixel: 12
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 2
+          size:
+          - 4080
+          - 286
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 23780
+      phy: CPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 15510120
+      csis_input_mbps: 3722.4
+      link_utilization_pct: 15.7
+  mode10:
+    dt:
+      common:
+      - '4080'
+      - '2296'
+      - '60'
+      - '0'
+      - '10'
+      - CSI_DATA_LANES_3
+      - '3468'
+      - CSI_MODE_VC_DT
+      - LRTE_DISABLE
+      - PD_MOD3
+      source_line: 208
+    decoded:
+      size:
+      - 4080
+      - 2296
+      fps: 60
+      settle: 0
+      mode_index: 10
+      lanes: 3
+      lanes_enum: CSI_DATA_LANES_3
+      mipi_speed_mbps: 3468
+      interleave_mode: CSI_MODE_VC_DT
+      interleave_mode_value: 3
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+      ex_mode_source: default (common has 10 cells, driver leaves cfg->ex_mode at 0)
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 4080
+          - 2296
+          hwformat: HW_FORMAT_RAW12
+          hwformat_value: 44
+          hwformat_base: HW_FORMAT_RAW12
+          bits_per_pixel: 12
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 2
+          size:
+          - 4080
+          - 286
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 23780
+      phy: CPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 15510120
+      csis_input_mbps: 7444.9
+      link_utilization_pct: 31.3
+  mode12:
+    dt:
+      common:
+      - '3328'
+      - '1872'
+      - '120'
+      - '0'
+      - '12'
+      - CSI_DATA_LANES_3
+      - '3468'
+      - CSI_MODE_VC_DT
+      - LRTE_DISABLE
+      - PD_MOD3
+      source_line: 215
+    decoded:
+      size:
+      - 3328
+      - 1872
+      fps: 120
+      settle: 0
+      mode_index: 12
+      lanes: 3
+      lanes_enum: CSI_DATA_LANES_3
+      mipi_speed_mbps: 3468
+      interleave_mode: CSI_MODE_VC_DT
+      interleave_mode_value: 3
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+      ex_mode_source: default (common has 10 cells, driver leaves cfg->ex_mode at 0)
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 3328
+          - 1872
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 2
+          size:
+          - 3328
+          - 234
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 23780
+      phy: CPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 8760960
+      csis_input_mbps: 8410.5
+      link_utilization_pct: 35.4
+  mode13:
+    dt:
+      common:
+      - '4000'
+      - '2252'
+      - '120'
+      - '0'
+      - '13'
+      - CSI_DATA_LANES_3
+      - '3468'
+      - CSI_MODE_VC_DT
+      - LRTE_DISABLE
+      - PD_MOD3
+      source_line: 222
+    decoded:
+      size:
+      - 4000
+      - 2252
+      fps: 120
+      settle: 0
+      mode_index: 13
+      lanes: 3
+      lanes_enum: CSI_DATA_LANES_3
+      mipi_speed_mbps: 3468
+      interleave_mode: CSI_MODE_VC_DT
+      interleave_mode_value: 3
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+      ex_mode_source: default (common has 10 cells, driver leaves cfg->ex_mode at 0)
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 4000
+          - 2252
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 2
+          size:
+          - 4000
+          - 280
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 23780
+      phy: CPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 12660000
+      csis_input_mbps: 12153.6
+      link_utilization_pct: 51.1
+  mode14:
+    dt:
+      common:
+      - '2800'
+      - '2100'
+      - '30'
+      - '0'
+      - '14'
+      - CSI_DATA_LANES_3
+      - '3468'
+      - CSI_MODE_VC_DT
+      - LRTE_DISABLE
+      - PD_MOD3
+      source_line: 229
+    decoded:
+      size:
+      - 2800
+      - 2100
+      fps: 30
+      settle: 0
+      mode_index: 14
+      lanes: 3
+      lanes_enum: CSI_DATA_LANES_3
+      mipi_speed_mbps: 3468
+      interleave_mode: CSI_MODE_VC_DT
+      interleave_mode_value: 3
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+      ex_mode_source: default (common has 10 cells, driver leaves cfg->ex_mode at 0)
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 2800
+          - 2100
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 2
+          size:
+          - 2800
+          - 262
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 23780
+      phy: CPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 8267000
+      csis_input_mbps: 1984.1
+      link_utilization_pct: 8.3
+  mode15:
+    dt:
+      common:
+      - '8160'
+      - '6120'
+      - '24'
+      - '0'
+      - '15'
+      - CSI_DATA_LANES_3
+      - '3468'
+      - CSI_MODE_VC_DT
+      - LRTE_DISABLE
+      - PD_MOD3
+      source_line: 236
+    decoded:
+      size:
+      - 8160
+      - 6120
+      fps: 24
+      settle: 0
+      mode_index: 15
+      lanes: 3
+      lanes_enum: CSI_DATA_LANES_3
+      mipi_speed_mbps: 3468
+      interleave_mode: CSI_MODE_VC_DT
+      interleave_mode_value: 3
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+      ex_mode_source: default (common has 10 cells, driver leaves cfg->ex_mode at 0)
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 8160
+          - 6120
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 2
+          size:
+          - 4080
+          - 764
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+      special_mode: 2
+      hw_bns: 4
+    derived:
+      mipi_link_mbps: 23780
+      phy: CPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 66320400
+      csis_input_mbps: 12733.5
+      link_utilization_pct: 53.5
+  mode15_nfi:
+    dt:
+      common:
+      - '8160'
+      - '6120'
+      - '24'
+      - '0'
+      - '15'
+      - CSI_DATA_LANES_3
+      - '3468'
+      - CSI_MODE_VC_DT
+      - LRTE_DISABLE
+      - PD_MOD3
+      source_line: 243
+    decoded:
+      size:
+      - 8160
+      - 6120
+      fps: 24
+      settle: 0
+      mode_index: 15
+      lanes: 3
+      lanes_enum: CSI_DATA_LANES_3
+      mipi_speed_mbps: 3468
+      interleave_mode: CSI_MODE_VC_DT
+      interleave_mode_value: 3
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+      ex_mode_source: default (common has 10 cells, driver leaves cfg->ex_mode at 0)
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 8160
+          - 6120
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 2
+          size:
+          - 4080
+          - 764
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+        vc4:
+          map: 0
+          size:
+          - 8160
+          - 4
+          hwformat: HW_FORMAT_EMBEDDED_8BIT_POTF
+          hwformat_value: 530
+          hwformat_base: HW_FORMAT_EMBEDDED_8BIT
+          bits_per_pixel: 8
+          format_flags:
+          - POTF
+          data: DATA_EMB
+          data_class: embedded
+    option:
+      votf: 0
+      special_mode: 2
+      hw_bns: 4
+      fid_loc:
+      - 0
+      - 27
+      - 0
+      - 77
+      ex_mode_extra: EX_EXTRA_NFI
+      ex_mode_extra_value: 2
+    derived:
+      mipi_link_mbps: 23780
+      phy: CPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+        embedded: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 66353040
+      csis_input_mbps: 12739.8
+      link_utilization_pct: 53.6
+  mode15_ai_remosaic:
+    dt:
+      common:
+      - '8160'
+      - '6120'
+      - '24'
+      - '0'
+      - '15'
+      - CSI_DATA_LANES_3
+      - '3468'
+      - CSI_MODE_VC_DT
+      - LRTE_DISABLE
+      - PD_MOD3
+      - EX_AI_REMOSAIC
+      source_line: 252
+    decoded:
+      size:
+      - 8160
+      - 6120
+      fps: 24
+      settle: 0
+      mode_index: 15
+      lanes: 3
+      lanes_enum: CSI_DATA_LANES_3
+      mipi_speed_mbps: 3468
+      interleave_mode: CSI_MODE_VC_DT
+      interleave_mode_value: 3
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_AI_REMOSAIC
+      ex_mode_value: 14
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 8160
+          - 6120
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 2
+          size:
+          - 4080
+          - 764
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+      special_mode: 2
+      mcb_mode: 0
+    derived:
+      mipi_link_mbps: 23780
+      phy: CPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 66320400
+      csis_input_mbps: 12733.5
+      link_utilization_pct: 53.5
+  mode15_nfi_ai_remosaic:
+    dt:
+      common:
+      - '8160'
+      - '6120'
+      - '24'
+      - '0'
+      - '15'
+      - CSI_DATA_LANES_3
+      - '3468'
+      - CSI_MODE_VC_DT
+      - LRTE_DISABLE
+      - PD_MOD3
+      - EX_AI_REMOSAIC
+      source_line: 259
+    decoded:
+      size:
+      - 8160
+      - 6120
+      fps: 24
+      settle: 0
+      mode_index: 15
+      lanes: 3
+      lanes_enum: CSI_DATA_LANES_3
+      mipi_speed_mbps: 3468
+      interleave_mode: CSI_MODE_VC_DT
+      interleave_mode_value: 3
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_AI_REMOSAIC
+      ex_mode_value: 14
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 8160
+          - 6120
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 2
+          size:
+          - 4080
+          - 764
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+        vc4:
+          map: 0
+          size:
+          - 8160
+          - 4
+          hwformat: HW_FORMAT_EMBEDDED_8BIT_POTF
+          hwformat_value: 530
+          hwformat_base: HW_FORMAT_EMBEDDED_8BIT
+          bits_per_pixel: 8
+          format_flags:
+          - POTF
+          data: DATA_EMB
+          data_class: embedded
+    option:
+      votf: 0
+      special_mode: 2
+      mcb_mode: 0
+      fid_loc:
+      - 0
+      - 27
+      - 0
+      - 77
+      ex_mode_extra: EX_EXTRA_NFI
+      ex_mode_extra_value: 2
+    derived:
+      mipi_link_mbps: 23780
+      phy: CPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+        embedded: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 66353040
+      csis_input_mbps: 12739.8
+      link_utilization_pct: 53.6
+  mode18:
+    dt:
+      common:
+      - '5824'
+      - '4368'
+      - '30'
+      - '0'
+      - '18'
+      - CSI_DATA_LANES_3
+      - '3468'
+      - CSI_MODE_VC_DT
+      - LRTE_DISABLE
+      - PD_MOD3
+      - EX_AI_REMOSAIC
+      source_line: 268
+    decoded:
+      size:
+      - 5824
+      - 4368
+      fps: 30
+      settle: 0
+      mode_index: 18
+      lanes: 3
+      lanes_enum: CSI_DATA_LANES_3
+      mipi_speed_mbps: 3468
+      interleave_mode: CSI_MODE_VC_DT
+      interleave_mode_value: 3
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_AI_REMOSAIC
+      ex_mode_value: 14
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 5824
+          - 4368
+          hwformat: HW_FORMAT_RAW12
+          hwformat_value: 44
+          hwformat_base: HW_FORMAT_RAW12
+          bits_per_pixel: 12
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 2
+          size:
+          - 2912
+          - 546
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+      binning: 1000
+    derived:
+      mipi_link_mbps: 23780
+      phy: CPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 40146288
+      csis_input_mbps: 9635.1
+      link_utilization_pct: 40.5
+  mode18_nfi_ai_remosaic:
+    dt:
+      common:
+      - '5824'
+      - '4368'
+      - '30'
+      - '0'
+      - '18'
+      - CSI_DATA_LANES_3
+      - '3468'
+      - CSI_MODE_VC_DT
+      - LRTE_DISABLE
+      - PD_MOD3
+      - EX_AI_REMOSAIC
+      source_line: 275
+    decoded:
+      size:
+      - 5824
+      - 4368
+      fps: 30
+      settle: 0
+      mode_index: 18
+      lanes: 3
+      lanes_enum: CSI_DATA_LANES_3
+      mipi_speed_mbps: 3468
+      interleave_mode: CSI_MODE_VC_DT
+      interleave_mode_value: 3
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_AI_REMOSAIC
+      ex_mode_value: 14
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 5824
+          - 4368
+          hwformat: HW_FORMAT_RAW12
+          hwformat_value: 44
+          hwformat_base: HW_FORMAT_RAW12
+          bits_per_pixel: 12
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 2
+          size:
+          - 2912
+          - 546
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+        vc4:
+          map: 0
+          size:
+          - 5824
+          - 4
+          hwformat: HW_FORMAT_EMBEDDED_8BIT_POTF
+          hwformat_value: 530
+          hwformat_base: HW_FORMAT_EMBEDDED_8BIT
+          bits_per_pixel: 8
+          format_flags:
+          - POTF
+          data: DATA_EMB
+          data_class: embedded
+    option:
+      votf: 0
+      binning: 1000
+      fid_loc:
+      - 0
+      - 27
+      - 0
+      - 77
+      ex_mode_extra: EX_EXTRA_NFI
+      ex_mode_extra_value: 2
+    derived:
+      mipi_link_mbps: 23780
+      phy: CPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+        embedded: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 40169584
+      csis_input_mbps: 9640.7
+      link_utilization_pct: 40.5
+  mode20:
+    dt:
+      common:
+      - '8160'
+      - '4592'
+      - '30'
+      - '0'
+      - '20'
+      - CSI_DATA_LANES_3
+      - '3468'
+      - CSI_MODE_VC_DT
+      - LRTE_DISABLE
+      - PD_MOD3
+      source_line: 283
+    decoded:
+      size:
+      - 8160
+      - 4592
+      fps: 30
+      settle: 0
+      mode_index: 20
+      lanes: 3
+      lanes_enum: CSI_DATA_LANES_3
+      mipi_speed_mbps: 3468
+      interleave_mode: CSI_MODE_VC_DT
+      interleave_mode_value: 3
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+      ex_mode_source: default (common has 10 cells, driver leaves cfg->ex_mode at 0)
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 8160
+          - 4592
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 2
+          size:
+          - 4080
+          - 574
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 23780
+      phy: CPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 49765800
+      csis_input_mbps: 11943.8
+      link_utilization_pct: 50.2
+  mode25:
+    dt:
+      common:
+      - '2040'
+      - '1148'
+      - '240'
+      - '0'
+      - '25'
+      - CSI_DATA_LANES_3
+      - '1862'
+      - CSI_MODE_VC_DT
+      - LRTE_DISABLE
+      - PD_MOD3
+      source_line: 290
+    decoded:
+      size:
+      - 2040
+      - 1148
+      fps: 240
+      settle: 0
+      mode_index: 25
+      lanes: 3
+      lanes_enum: CSI_DATA_LANES_3
+      mipi_speed_mbps: 1862
+      interleave_mode: CSI_MODE_VC_DT
+      interleave_mode_value: 3
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+      ex_mode_source: default (common has 10 cells, driver leaves cfg->ex_mode at 0)
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 2040
+          - 1148
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 2
+          size:
+          - 2032
+          - 142
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 12768
+      phy: CPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 3288080
+      csis_input_mbps: 6313.1
+      link_utilization_pct: 49.4
+  mode26:
+    dt:
+      common:
+      - '2040'
+      - '1530'
+      - '120'
+      - '0'
+      - '26'
+      - CSI_DATA_LANES_3
+      - '1862'
+      - CSI_MODE_VC_DT
+      - LRTE_DISABLE
+      - PD_MOD3
+      source_line: 297
+    decoded:
+      size:
+      - 2040
+      - 1530
+      fps: 120
+      settle: 0
+      mode_index: 26
+      lanes: 3
+      lanes_enum: CSI_DATA_LANES_3
+      mipi_speed_mbps: 1862
+      interleave_mode: CSI_MODE_VC_DT
+      interleave_mode_value: 3
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+      ex_mode_source: default (common has 10 cells, driver leaves cfg->ex_mode at 0)
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 2040
+          - 1530
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 2
+          size:
+          - 2032
+          - 190
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+      special_mode: 1
+    derived:
+      mipi_link_mbps: 12768
+      phy: CPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 4384100
+      csis_input_mbps: 4208.7
+      link_utilization_pct: 33.0
+  mode27_ai_remosaic:
+    dt:
+      common:
+      - '8160'
+      - '6120'
+      - '30'
+      - '0'
+      - '27'
+      - CSI_DATA_LANES_3
+      - '3468'
+      - CSI_MODE_VC_DT
+      - LRTE_DISABLE
+      - PD_MOD3
+      - EX_AI_REMOSAIC
+      source_line: 304
+    decoded:
+      size:
+      - 8160
+      - 6120
+      fps: 30
+      settle: 0
+      mode_index: 27
+      lanes: 3
+      lanes_enum: CSI_DATA_LANES_3
+      mipi_speed_mbps: 3468
+      interleave_mode: CSI_MODE_VC_DT
+      interleave_mode_value: 3
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_AI_REMOSAIC
+      ex_mode_value: 14
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 8160
+          - 6120
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 2
+          size:
+          - 4080
+          - 764
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+      special_mode: 2
+      mcb_mode: 0
+    derived:
+      mipi_link_mbps: 23780
+      phy: CPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 66320400
+      csis_input_mbps: 15916.9
+      link_utilization_pct: 66.9
+  mode27_nfi_ai_remosaic:
+    dt:
+      common:
+      - '8160'
+      - '6120'
+      - '30'
+      - '0'
+      - '27'
+      - CSI_DATA_LANES_3
+      - '3468'
+      - CSI_MODE_VC_DT
+      - LRTE_DISABLE
+      - PD_MOD3
+      - EX_AI_REMOSAIC
+      source_line: 311
+    decoded:
+      size:
+      - 8160
+      - 6120
+      fps: 30
+      settle: 0
+      mode_index: 27
+      lanes: 3
+      lanes_enum: CSI_DATA_LANES_3
+      mipi_speed_mbps: 3468
+      interleave_mode: CSI_MODE_VC_DT
+      interleave_mode_value: 3
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_AI_REMOSAIC
+      ex_mode_value: 14
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 8160
+          - 6120
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 2
+          size:
+          - 4080
+          - 764
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+        vc4:
+          map: 0
+          size:
+          - 8160
+          - 4
+          hwformat: HW_FORMAT_EMBEDDED_8BIT_POTF
+          hwformat_value: 530
+          hwformat_base: HW_FORMAT_EMBEDDED_8BIT
+          bits_per_pixel: 8
+          format_flags:
+          - POTF
+          data: DATA_EMB
+          data_class: embedded
+    option:
+      votf: 0
+      special_mode: 2
+      mcb_mode: 0
+      fid_loc:
+      - 0
+      - 27
+      - 0
+      - 77
+      ex_mode_extra: EX_EXTRA_NFI
+      ex_mode_extra_value: 2
+    derived:
+      mipi_link_mbps: 23780
+      phy: CPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+        embedded: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 66353040
+      csis_input_mbps: 15924.7
+      link_utilization_pct: 67.0
+provenance:
+  source:
+    path: exynos/device/erd/erd9965/arch/arm64/boot/dts/samsung/m2s/camera/module_jn3.dtsi
+    sha256: 020959224a12d83b6bfdfc0b4e6940d947cf01a35abd132231941fc4b26fd737
+  bindings:
+    path: exynos/soc-series/common/include/dt-bindings/camera/exynos_is_dt.h
+    sha256: 7d3822ddcfe9c4aa10595d46ec7b97cb0815a6d9a879fceff6d8ebd58108c6dc
+  parser_reference: 'exynos/external-modules/camera/camera/is-dt.c: is_cis_modes_parse_dt / is_cis_modes_dma_parse_dt'
+  review: S5E9965 board camera DT sensor catalog 2026-09-17
+  provenance_status: kernel_declared

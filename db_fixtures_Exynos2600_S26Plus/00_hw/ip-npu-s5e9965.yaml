@@ -8,6 +8,7 @@ capabilities:
   operating_modes:
   - id: Normal
   - id: LowPower
+  - id: Performance
   supported_features:
     bitdepth:
     - 8
@@ -32,5 +33,97 @@ capabilities:
     - scene_detection
     - super_resolution
     - game_sr
+  bw_model:
+    source: not_modeled
+    note: Per-network traffic depends on the model graph and is not kernel-declared.
+      Use the MIF floor from dvfs_table as a lower bound, or measured counters.
+  dvfs_model:
+    source: kernel_dt
+    reference: 'exynos/soc-series/t-android16/arch/arm64/boot/dts/exynos/s5e9965-npu.dtsi:
+      samsung,npudvfs-table / samsung,npunode-freq'
+    dvfs_table:
+    - freq_core_khz: 1200000
+      freq_npucon_khz: 935000
+      freq_mif_khz: 3738000
+      freq_int_khz: 664000
+    - freq_core_khz: 1200000
+      freq_npucon_khz: 800000
+      freq_mif_khz: 3172000
+      freq_int_khz: 533000
+    - freq_core_khz: 1066000
+      freq_npucon_khz: 800000
+      freq_mif_khz: 2730000
+      freq_int_khz: 400000
+    - freq_core_khz: 935000
+      freq_npucon_khz: 664000
+      freq_mif_khz: 2288000
+      freq_int_khz: 400000
+    - freq_core_khz: 800000
+      freq_npucon_khz: 533000
+      freq_mif_khz: 2028000
+      freq_int_khz: 350000
+    - freq_core_khz: 664000
+      freq_npucon_khz: 533000
+      freq_mif_khz: 1716000
+      freq_int_khz: 350000
+    - freq_core_khz: 664000
+      freq_npucon_khz: 332000
+      freq_mif_khz: 1539000
+      freq_int_khz: 267000
+    - freq_core_khz: 533000
+      freq_npucon_khz: 267000
+      freq_mif_khz: 1352000
+      freq_int_khz: 267000
+    - freq_core_khz: 533000
+      freq_npucon_khz: 267000
+      freq_mif_khz: 1014000
+      freq_int_khz: 200000
+    - freq_core_khz: 533000
+      freq_npucon_khz: 267000
+      freq_mif_khz: 845000
+      freq_int_khz: 200000
+    - freq_core_khz: 533000
+      freq_npucon_khz: 267000
+      freq_mif_khz: 676000
+      freq_int_khz: 133000
+    node_freq_table:
+    - dnc_khz: 934000
+      npu0_khz: 1401000
+      npu1_khz: 1200000
+    - dnc_khz: 934000
+      npu0_khz: 1344000
+      npu1_khz: 1200000
+    - dnc_khz: 934000
+      npu0_khz: 1305000
+      npu1_khz: 1200000
+    - dnc_khz: 934000
+      npu0_khz: 1248000
+      npu1_khz: 1200000
+    - dnc_khz: 934000
+      npu0_khz: 1209000
+      npu1_khz: 1066000
+    - dnc_khz: 934000
+      npu0_khz: 1066000
+      npu1_khz: 1066000
+    - dnc_khz: 800000
+      npu0_khz: 934000
+      npu1_khz: 934000
+    - dnc_khz: 663000
+      npu0_khz: 800000
+      npu1_khz: 800000
+    - dnc_khz: 533000
+      npu0_khz: 663000
+      npu1_khz: 663000
+    - dnc_khz: 332000
+      npu0_khz: 533000
+      npu1_khz: 467000
+    - dnc_khz: 234000
+      npu0_khz: 332000
+      npu1_khz: 332000
+    - dnc_khz: 234000
+      npu0_khz: 234000
+      npu1_khz: 332000
+    note: Each NPU DVFS step pins MIF and INT too, so an NPU-using scenario has a
+      MIF floor independent of its own traffic.
 compatible_soc:
 - soc-exynos2600

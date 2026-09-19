@@ -102,6 +102,9 @@ def _active_level1_ip_nodes(level1_view: ViewResponse | None) -> list[NodeElemen
             continue
         if not data.id.startswith("ip-"):
             continue
+        # Imported driver catalogs have no Level 2 module graph yet.
+        if data.ip_group in {"ABOX", "UFS", "MSCL"}:
+            continue
         if data.layer in {"memory", "meta"}:
             continue
         if data.layer == "external" and not _is_level2_external_hw_candidate(node):
@@ -124,7 +127,7 @@ def _is_camera_candidate(node: NodeElement) -> bool:
 def _is_video_candidate(node: NodeElement) -> bool:
     data = node.data
     text = _node_text(node)
-    return data.hierarchy_group == "CODEC" or data.ip_group in {"MFC", "APV"} or "mfc" in text or "codec" in text
+    return data.hierarchy_group == "CODEC" or data.ip_group in {"MFC", "APV"} or "mfc" in text
 
 
 def _is_display_candidate(node: NodeElement) -> bool:
