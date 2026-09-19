@@ -55,3 +55,33 @@ def test_hash_is_independent_of_yaml_layout():
     _, profile = docs()
     timing = next(iter(profile["modes"].values()))
     assert timing_mode_hash(timing) == timing_mode_hash(yaml.safe_load(yaml.safe_dump(timing)))
+
+
+def test_all_sensor_bindings_resolve_and_cover_registered_sensors():
+    profiles = {}
+    for path in ROOT.glob("timing*.yaml"):
+        profile = yaml.safe_load(path.read_text(encoding="utf-8"))
+        profiles[profile["id"]] = profile
+    sensors = set()
+    count = 0
+    for path in ROOT.glob("*/sensor-*.yaml"):
+        catalog = yaml.safe_load(path.read_text(encoding="utf-8"))
+        for mode in catalog["modes"].values():
+            if mode.get("timing_binding"):
+                timing = resolve_timing_binding(catalog, mode, profiles[mode["timing_binding"]["profile_ref"]])
+                assert calculate_sensor_timing(timing)["valid_time_ms"] > 0
+                sensors.add(catalog["sensor_name"])
+                count += 1
+    assert len(profiles) == 14
+    assert sum(len(p["modes"]) for p in profiles.values()) == 433
+    assert len(sensors) == 13
+    assert count == 220
+
+
+def test_numeric_source_parser_never_executes_expressions():
+    from scripts.import_sensor_cis_timings import number
+    assert number("201590000 * 4ULL") == 806360000
+    assert number("0x1720") == 5920
+    assert number("14872.0") == 14872
+    with pytest.raises(ValueError): number("unknown_clock()")
+    with pytest.raises(ValueError): number("10 / 2")

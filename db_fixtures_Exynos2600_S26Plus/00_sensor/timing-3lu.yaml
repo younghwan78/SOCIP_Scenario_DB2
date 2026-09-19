@@ -1,0 +1,319 @@
+id: sensortiming-s5k3lu-seta-19p2
+schema_version: '2.2'
+kind: sensor.timing_profile
+sensor_name: S5K3LU
+revision: setA-19p2-import-20260920
+modes:
+  cis_4000x3000_60fps_10bit:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 840000000
+    line_length_pck: 4464
+    frame_length_lines: 3136
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3lu-setA-19p2.h
+      sha256: a697f11f5b40e550f63e45425b367b251357a375ce070b215dcb024d4babd8b6
+      line: 9775
+      basis: CIS indexed setfile
+      mode_index: 0
+      nominal_fps: 60
+      bits_per_pixel: 10
+      symbol: sensor_3lu_mode_info_A_4000x3000_60fps_10bit
+      mode_name: A-01-A 4000x3000_60fps_10bit
+  cis_3392x2544_60fps_10bit:
+    active_width: 3392
+    active_height: 2544
+    pixel_clock_hz: 840000000
+    line_length_pck: 4464
+    frame_length_lines: 3136
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3lu-setA-19p2.h
+      sha256: a697f11f5b40e550f63e45425b367b251357a375ce070b215dcb024d4babd8b6
+      line: 9795
+      basis: CIS indexed setfile
+      mode_index: 1
+      nominal_fps: 60
+      bits_per_pixel: 10
+      symbol: sensor_3lu_mode_info_A_3392x2544_60fps_10bit
+      mode_name: A-01-B 3392x2544_60fps_10bit
+  cis_3392x1908_60fps_10bit:
+    active_width: 3392
+    active_height: 1908
+    pixel_clock_hz: 840000000
+    line_length_pck: 4464
+    frame_length_lines: 3136
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3lu-setA-19p2.h
+      sha256: a697f11f5b40e550f63e45425b367b251357a375ce070b215dcb024d4babd8b6
+      line: 9814
+      basis: CIS indexed setfile
+      mode_index: 2
+      nominal_fps: 60
+      bits_per_pixel: 10
+      symbol: sensor_3lu_mode_info_A_3392x1908_60fps_10bit
+      mode_name: A-01-C 3392x1908_60fps_10bit
+  cis_4000x3000_30fps_adc11:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 840000000
+    line_length_pck: 5884
+    frame_length_lines: 4742
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3lu-setA-19p2.h
+      sha256: a697f11f5b40e550f63e45425b367b251357a375ce070b215dcb024d4babd8b6
+      line: 9834
+      basis: CIS indexed setfile
+      mode_index: 3
+      nominal_fps: 30
+      bits_per_pixel: 12
+      symbol: sensor_3lu_mode_info_A_4000x3000_30fps_ADC11
+      mode_name: A-04-A 4000x3000_30fps_ADC11
+  cis_4000x2252_60fps_10bit:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 840000000
+    line_length_pck: 4464
+    frame_length_lines: 3136
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3lu-setA-19p2.h
+      sha256: a697f11f5b40e550f63e45425b367b251357a375ce070b215dcb024d4babd8b6
+      line: 9854
+      basis: CIS indexed setfile
+      mode_index: 4
+      nominal_fps: 60
+      bits_per_pixel: 10
+      symbol: sensor_3lu_mode_info_A_4000x2252_60fps_10bit
+      mode_name: A-09-A 4000x2252_60fps_10bit
+  cis_4000x2252_60fps_adc11:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 840000000
+    line_length_pck: 5884
+    frame_length_lines: 2378
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3lu-setA-19p2.h
+      sha256: a697f11f5b40e550f63e45425b367b251357a375ce070b215dcb024d4babd8b6
+      line: 9874
+      basis: CIS indexed setfile
+      mode_index: 5
+      nominal_fps: 60
+      bits_per_pixel: 12
+      symbol: sensor_3lu_mode_info_A_4000x2252_60fps_ADC11
+      mode_name: A-12 4000x2252_60fps_ADC11
+  cis_2000x1124_120fps_10bit:
+    active_width: 2000
+    active_height: 1124
+    pixel_clock_hz: 840000000
+    line_length_pck: 4380
+    frame_length_lines: 1598
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3lu-setA-19p2.h
+      sha256: a697f11f5b40e550f63e45425b367b251357a375ce070b215dcb024d4babd8b6
+      line: 9894
+      basis: CIS indexed setfile
+      mode_index: 6
+      nominal_fps: 120
+      bits_per_pixel: 10
+      symbol: sensor_3lu_mode_info_A_2000x1124_120fps_10bit
+      mode_name: B-01 2000x1124_120fps_10bit
+  cis_2000x1500_120fps_fast_ae:
+    active_width: 2000
+    active_height: 1500
+    pixel_clock_hz: 840000000
+    line_length_pck: 2740
+    frame_length_lines: 2554
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3lu-setA-19p2.h
+      sha256: a697f11f5b40e550f63e45425b367b251357a375ce070b215dcb024d4babd8b6
+      line: 9914
+      basis: CIS indexed setfile
+      mode_index: 7
+      nominal_fps: 120
+      bits_per_pixel: 10
+      symbol: sensor_3lu_mode_info_A_2000x1500_120fps_Fast_AE
+      mode_name: C-02 2000x1500_120fps_Fast_AE
+  cis_1696x1272_30fps_10bit:
+    active_width: 1696
+    active_height: 1272
+    pixel_clock_hz: 840000000
+    line_length_pck: 4380
+    frame_length_lines: 6392
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3lu-setA-19p2.h
+      sha256: a697f11f5b40e550f63e45425b367b251357a375ce070b215dcb024d4babd8b6
+      line: 9934
+      basis: CIS indexed setfile
+      mode_index: 8
+      nominal_fps: 30
+      bits_per_pixel: 10
+      symbol: sensor_3lu_mode_info_A_1696x1272_30fps_10bit
+      mode_name: C-04-B 1696x1272_30fps_10bit
+  cis_1696x954_30fps_10bit:
+    active_width: 1696
+    active_height: 954
+    pixel_clock_hz: 840000000
+    line_length_pck: 4380
+    frame_length_lines: 6392
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3lu-setA-19p2.h
+      sha256: a697f11f5b40e550f63e45425b367b251357a375ce070b215dcb024d4babd8b6
+      line: 9954
+      basis: CIS indexed setfile
+      mode_index: 9
+      nominal_fps: 30
+      bits_per_pixel: 10
+      symbol: sensor_3lu_mode_info_A_1696x954_30fps_10bit
+      mode_name: C-04-C 1696x954_30fps_10bit
+  cis_4000x3000_30fps_dsg:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 840000000
+    line_length_pck: 4464
+    frame_length_lines: 6272
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3lu-setA-19p2.h
+      sha256: a697f11f5b40e550f63e45425b367b251357a375ce070b215dcb024d4babd8b6
+      line: 9974
+      basis: CIS indexed setfile
+      mode_index: 10
+      nominal_fps: 30
+      bits_per_pixel: 12
+      symbol: sensor_3lu_mode_info_A_4000x3000_30fps_DSG
+      mode_name: SENSOR_3LU_4000X3000_30FPS_DSG
+  cis_4000x3000_30fps_12bit_ln2:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 840000000
+    line_length_pck: 8740
+    frame_length_lines: 3203
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3lu-setA-19p2.h
+      sha256: a697f11f5b40e550f63e45425b367b251357a375ce070b215dcb024d4babd8b6
+      line: 9993
+      basis: CIS indexed setfile
+      mode_index: 11
+      nominal_fps: 30
+      bits_per_pixel: 12
+      symbol: sensor_3lu_mode_info_A_4000x3000_30fps_12bit_ln2
+      mode_name: SENSOR_3LU_4000X3000_30FPS_12BIT_LN2
+  cis_4000x3000_60fps_aeb:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 840000000
+    line_length_pck: 4464
+    frame_length_lines: 3136
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3lu-setA-19p2.h
+      sha256: a697f11f5b40e550f63e45425b367b251357a375ce070b215dcb024d4babd8b6
+      line: 10012
+      basis: CIS indexed setfile
+      mode_index: 12
+      nominal_fps: 60
+      bits_per_pixel: 10
+      symbol: sensor_3lu_mode_info_A_4000x3000_60fps_AEB
+      mode_name: SENSOR_3LU_4000X3000_60FPS_AEB
+  cis_4000x3000_15fps_10bit_ln4:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 840000000
+    line_length_pck: 10928
+    frame_length_lines: 5124
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3lu-setA-19p2.h
+      sha256: a697f11f5b40e550f63e45425b367b251357a375ce070b215dcb024d4babd8b6
+      line: 10032
+      basis: CIS indexed setfile
+      mode_index: 13
+      nominal_fps: 15
+      bits_per_pixel: 10
+      symbol: sensor_3lu_mode_info_A_4000x3000_15fps_10bit_ln4
+      mode_name: SENSOR_3LU_4000X3000_15FPS_10BIT_LN4
+  cis_4000x2252_30fps_dsg:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 840000000
+    line_length_pck: 4464
+    frame_length_lines: 6272
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3lu-setA-19p2.h
+      sha256: a697f11f5b40e550f63e45425b367b251357a375ce070b215dcb024d4babd8b6
+      line: 10051
+      basis: CIS indexed setfile
+      mode_index: 14
+      nominal_fps: 30
+      bits_per_pixel: 12
+      symbol: sensor_3lu_mode_info_A_4000x2252_30fps_DSG
+      mode_name: SENSOR_3LU_4000X2252_30FPS_DSG
+  cis_4000x2252_30fps_12bit_ln2:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 840000000
+    line_length_pck: 8740
+    frame_length_lines: 3203
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3lu-setA-19p2.h
+      sha256: a697f11f5b40e550f63e45425b367b251357a375ce070b215dcb024d4babd8b6
+      line: 10070
+      basis: CIS indexed setfile
+      mode_index: 15
+      nominal_fps: 30
+      bits_per_pixel: 12
+      symbol: sensor_3lu_mode_info_A_4000x2252_30fps_12bit_ln2
+      mode_name: SENSOR_3LU_4000X2252_30FPS_12BIT_LN2
+  cis_4000x2252_15fps_10bit_ln4:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 840000000
+    line_length_pck: 10928
+    frame_length_lines: 5124
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3lu-setA-19p2.h
+      sha256: a697f11f5b40e550f63e45425b367b251357a375ce070b215dcb024d4babd8b6
+      line: 10089
+      basis: CIS indexed setfile
+      mode_index: 16
+      nominal_fps: 15
+      bits_per_pixel: 10
+      symbol: sensor_3lu_mode_info_A_4000x2252_15fps_10bit_ln4
+      mode_name: SENSOR_3LU_4000X2252_15FPS_10BIT_LN4
+  cis_4000x2252_30fps_10bit_ln2:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 840000000
+    line_length_pck: 8740
+    frame_length_lines: 3203
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3lu-setA-19p2.h
+      sha256: a697f11f5b40e550f63e45425b367b251357a375ce070b215dcb024d4babd8b6
+      line: 10108
+      basis: CIS indexed setfile
+      mode_index: 17
+      nominal_fps: 30
+      bits_per_pixel: 10
+      symbol: sensor_3lu_mode_info_A_4000x2252_30fps_10bit_ln2
+      mode_name: SENSOR_3LU_4000X2252_30FPS_10BIT_LN2
+  cis_4000x2252_60fps_aeb:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 840000000
+    line_length_pck: 4464
+    frame_length_lines: 3136
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3lu-setA-19p2.h
+      sha256: a697f11f5b40e550f63e45425b367b251357a375ce070b215dcb024d4babd8b6
+      line: 10127
+      basis: CIS indexed setfile
+      mode_index: 18
+      nominal_fps: 60
+      bits_per_pixel: 10
+      symbol: sensor_3lu_mode_info_A_4000x2252_60fps_AEB
+      mode_name: SENSOR_3LU_4000X2252_60FPS_AEB
+provenance:
+  selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+  setfile:
+    path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3lu-setA-19p2.h
+    sha256: a697f11f5b40e550f63e45425b367b251357a375ce070b215dcb024d4babd8b6
+  driver:
+    path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3lu.c
+    sha256: f0f4022b823e58d29f7b8207f0039985b7d20fdf23c6985eb9f98ab082ea7df7
+  mode_table: sensor_3lu_mode_infos_A_19p2

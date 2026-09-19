@@ -9,6 +9,7 @@ for path in (root, root / "src"):
     if str(path) not in sys.path: sys.path.insert(0, str(path))
 from dashboard.components.simulation_api_client import _request_json
 from dashboard.components.viewer_api_client import ViewerApiError
+from dashboard.components.sensor_mode_order import ordered_dt_modes, ordered_cis_modes
 
 def format_dt_mode(mode_id, mode):
     """Describe the source DT mode while retaining its stable lookup ID."""
@@ -56,8 +57,9 @@ try:
     ids = [x["id"] for x in items if x["board"] == board]
     selected = st.selectbox("Sensor catalog", ids)
     doc = _request_json("GET", base, f"/sensors/catalogs/{selected}")["document"]
+    st.caption("Mode order: 16:9 · 30 → 60 → 120 → 240 fps → other rates, then other aspect ratios. FPS caps are included.")
     label = st.selectbox(
-        "Full DT mode", list(doc["modes"]),
+        "Full DT mode", ordered_dt_modes(doc["modes"]),
         format_func=lambda mode_id: format_dt_mode(mode_id, doc["modes"][mode_id]),
     )
     result = _request_json("GET", base, f"/sensors/catalogs/{selected}/modes/{label}/timing")
@@ -116,9 +118,11 @@ try:
     st.caption("CIS modes are separate from DT modes. A matching size/FPS does not establish equivalence. Readout predicts the CSIS frame window; it is not an observed FS/FE measurement.")
     profiles = _request_json("GET", base, "/sensors/timing-profiles", params={"sensor_name": doc["sensor_name"]})["items"]
     if profiles:
-        profile_id = st.selectbox("Timing profile", [x["id"] for x in profiles])
+        profile_ids = [x["id"] for x in profiles]
+        preferred = doc["modes"][label].get("timing_binding", {}).get("profile_ref")
+        profile_id = st.selectbox("Timing profile", profile_ids, index=profile_ids.index(preferred) if preferred in profile_ids else 0)
         profile = next(x for x in profiles if x["id"] == profile_id)
-        mode = st.selectbox("CIS mode", profile["modes"])
+        mode = st.selectbox("CIS mode", ordered_cis_modes(profile))
         timing = _request_json("GET", base, f"/sensors/timing-profiles/{profile_id}/modes/{mode}")
         a,b,c = st.columns(3)
         a.metric("VVALID / CSIS window (ms)", f"{timing['valid_time_ms']:.6f}")

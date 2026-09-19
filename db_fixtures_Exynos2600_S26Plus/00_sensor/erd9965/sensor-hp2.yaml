@@ -66,6 +66,22 @@ mode_summary:
   max_mipi_link_mbps: 25453
 modes:
   mode0:
+    timing_binding:
+      profile_ref: sensortiming-s5khp2-setb-19p2
+      profile_revision: setB-19p2-import-20260920
+      mode_label: cis_4080x3060_60fps_vpd
+      mode_index: 0
+      mode_sha256: ce022f4fdc022b232293a2b5f78f18481d7509a0dab84181c076777575b54c87
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setB, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+          sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2.c
+          sha256: 54259c8e4c6f548b04c445acbf7c2d430ad15a658492f7eae5c2d8d6bcb7b92b
+        mode_table: sensor_hp2_mode_infos_B_19p2
     dt:
       common:
       - '4080'
@@ -164,6 +180,7 @@ modes:
       link_utilization_pct: 36.8
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode0_nfi:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4080'
@@ -270,6 +287,7 @@ modes:
       csis_input_mbps: 9361.4
       link_utilization_pct: 36.8
   mode0_ai_af:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4080'
@@ -383,6 +401,7 @@ modes:
       link_utilization_pct: 40.4
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode1:
+    timing_binding_note: DT/indexed CIS dimensions differ; no resolution-only fallback.
     dt:
       common:
       - '4000'
@@ -481,6 +500,7 @@ modes:
       link_utilization_pct: 35.4
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode1_aeb:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4000'
@@ -622,6 +642,7 @@ modes:
       csis_input_mbps_per_exposure: 10809.6
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode1_nfi:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4000'
@@ -729,6 +750,7 @@ modes:
       csis_input_mbps: 9008.6
       link_utilization_pct: 35.4
   mode1_ai_af:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4000'
@@ -842,6 +864,22 @@ modes:
       link_utilization_pct: 38.9
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode2:
+    timing_binding:
+      profile_ref: sensortiming-s5khp2-setb-19p2
+      profile_revision: setB-19p2-import-20260920
+      mode_label: cis_4000x3000_60fps_vpd
+      mode_index: 2
+      mode_sha256: f9890089e85b0340ef1c68595b281476bf6b28a5a40192c61f1ebe272dc9922b
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setB, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+          sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2.c
+          sha256: 54259c8e4c6f548b04c445acbf7c2d430ad15a658492f7eae5c2d8d6bcb7b92b
+        mode_table: sensor_hp2_mode_infos_B_19p2
     dt:
       common:
       - '4000'
@@ -939,6 +977,7 @@ modes:
       link_utilization_pct: 31.8
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode2_nfi:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4000'
@@ -1046,6 +1085,7 @@ modes:
       link_utilization_pct: 31.8
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode3:
+    timing_binding_note: DT image VC/bit depth differs from indexed CIS mode.
     dt:
       common:
       - '4000'
@@ -1143,6 +1183,7 @@ modes:
       link_utilization_pct: 37.5
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode3_aeb:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4000'
@@ -1279,6 +1320,7 @@ modes:
       csis_input_mbps_per_exposure: 10444.8
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode4:
+    timing_binding_note: DT/indexed CIS dimensions differ; no resolution-only fallback.
     dt:
       common:
       - '4000'
@@ -1376,6 +1418,7 @@ modes:
       link_utilization_pct: 28.1
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode5:
+    timing_binding_note: DT/indexed CIS dimensions differ; no resolution-only fallback.
     dt:
       common:
       - '4000'
@@ -1473,6 +1516,7 @@ modes:
       link_utilization_pct: 23.9
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode6:
+    timing_binding_note: DT/indexed CIS dimensions differ; no resolution-only fallback.
     dt:
       common:
       - '3328'
@@ -1568,6 +1612,7 @@ modes:
       link_utilization_pct: 33.0
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode7:
+    timing_binding_note: DT/indexed CIS dimensions differ; no resolution-only fallback.
     dt:
       common:
       - '2800'
@@ -1663,6 +1708,7 @@ modes:
       link_utilization_pct: 7.8
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode8:
+    timing_binding_note: DT/indexed CIS dimensions differ; no resolution-only fallback.
     dt:
       common:
       - '4080'
@@ -1761,6 +1807,7 @@ modes:
       link_utilization_pct: 42.6
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode9:
+    timing_binding_note: DT image VC/bit depth differs from indexed CIS mode.
     dt:
       common:
       - '4000'
@@ -1856,6 +1903,7 @@ modes:
       link_utilization_pct: 47.8
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode10:
+    timing_binding_note: DT/indexed CIS dimensions differ; no resolution-only fallback.
     dt:
       common:
       - '8160'
@@ -1953,6 +2001,7 @@ modes:
       link_utilization_pct: 62.5
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode10_ai_remosaic:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '8160'
@@ -2049,6 +2098,7 @@ modes:
       link_utilization_pct: 62.5
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode10_nfi:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '8160'
@@ -2173,6 +2223,7 @@ modes:
       csis_input_mbps_per_exposure: 15920.8
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode10_nfi_ai_remosaic:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '8160'
@@ -2284,6 +2335,7 @@ modes:
         csis_input_mbps_per_exposure.'
       csis_input_mbps_per_exposure: 15920.8
   mode11:
+    timing_binding_note: DT/indexed CIS dimensions differ; no resolution-only fallback.
     dt:
       common:
       - '8160'
@@ -2380,6 +2432,7 @@ modes:
       link_utilization_pct: 37.2
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode12:
+    timing_binding_note: DT/indexed CIS dimensions differ; no resolution-only fallback.
     dt:
       common:
       - '8000'
@@ -2475,6 +2528,7 @@ modes:
       link_utilization_pct: 58.5
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode13:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '8000'
@@ -2574,6 +2628,7 @@ modes:
         frame rate, or rely on blanking/compression the DT does not express.
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode14:
+    timing_binding_note: DT image VC/bit depth differs from indexed CIS mode.
     dt:
       common:
       - '4000'
@@ -2672,6 +2727,7 @@ modes:
       link_utilization_pct: 17.7
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode15:
+    timing_binding_note: DT/indexed CIS dimensions differ; no resolution-only fallback.
     dt:
       common:
       - '4000'
@@ -2767,6 +2823,7 @@ modes:
       link_utilization_pct: 18.7
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode16:
+    timing_binding_note: DT/indexed CIS dimensions differ; no resolution-only fallback.
     dt:
       common:
       - '4000'
@@ -2862,6 +2919,7 @@ modes:
       link_utilization_pct: 14.1
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode17:
+    timing_binding_note: DT/indexed CIS dimensions differ; no resolution-only fallback.
     dt:
       common:
       - '8160'
@@ -2957,6 +3015,7 @@ modes:
       link_utilization_pct: 74.3
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode18:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4000'
@@ -3055,6 +3114,7 @@ modes:
       link_utilization_pct: 35.4
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode18_ai_remosaic:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4000'
@@ -3154,6 +3214,7 @@ modes:
       link_utilization_pct: 35.4
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode18_nfi:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4000'
@@ -3261,6 +3322,7 @@ modes:
       csis_input_mbps: 9008.6
       link_utilization_pct: 35.4
   mode18_nfi_ai_remosaic:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4000'
@@ -3369,6 +3431,7 @@ modes:
       csis_input_mbps: 9008.6
       link_utilization_pct: 35.4
   mode21:
+    timing_binding_note: DT/indexed CIS dimensions differ; no resolution-only fallback.
     dt:
       common:
       - '16320'
@@ -3463,6 +3526,7 @@ modes:
       link_utilization_pct: 86.3
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode21_ai_remosaic:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '16320'
@@ -3556,6 +3620,7 @@ modes:
       link_utilization_pct: 86.3
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode22:
+    timing_binding_note: DT/indexed CIS dimensions differ; no resolution-only fallback.
     dt:
       common:
       - '2000'
@@ -3651,6 +3716,7 @@ modes:
       link_utilization_pct: 48.9
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode23:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '2000'
@@ -3747,6 +3813,7 @@ modes:
       link_utilization_pct: 55.1
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode24:
+    timing_binding_note: DT/indexed CIS dimensions differ; no resolution-only fallback.
     dt:
       common:
       - '2040'
@@ -3843,6 +3910,7 @@ modes:
       link_utilization_pct: 33.9
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode34_nfi:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '5824'

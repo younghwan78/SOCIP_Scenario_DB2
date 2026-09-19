@@ -64,6 +64,22 @@ mode_summary:
   max_mipi_link_mbps: 23780
 modes:
   mode0:
+    timing_binding:
+      profile_ref: sensortiming-s5kjn3-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4sum_4080x3060_60fps
+      mode_index: 0
+      mode_sha256: a577d76eed8293f70faf4860d589ba832870a71e1dea38f1f9548187acba0bad
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-jn3-setA-19p2.h
+          sha256: 4da9726384bacd759eb998e2fb5af0721511f96262f0cc96b1ead08d87840669
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-jn3.c
+          sha256: bbf10664f260a4a98d5aeab0e6c934e1f0eaf2d183425679842ecb3aace14ce6
+        mode_table: sensor_jn3_mode_infos_A_19p2
     dt:
       common:
       - '4080'
@@ -135,6 +151,7 @@ modes:
       csis_input_mbps: 8426.0
       link_utilization_pct: 35.4
   mode0_aeb:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4080'
@@ -232,6 +249,7 @@ modes:
       link_utilization_pct: 70.9
       csis_input_mbps_per_exposure: 9361.2
   mode0_nfi:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4080'
@@ -324,6 +342,7 @@ modes:
       csis_input_mbps: 8433.8
       link_utilization_pct: 35.5
   mode0_nfi_aeb:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4080'
@@ -455,6 +474,7 @@ modes:
       link_utilization_pct: 70.9
       csis_input_mbps_per_exposure: 9376.8
   mode0_phy_tune:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4080'
@@ -526,6 +546,7 @@ modes:
       csis_input_mbps: 8426.0
       link_utilization_pct: 35.4
   mode1_nfi:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4080'
@@ -618,6 +639,7 @@ modes:
       csis_input_mbps: 4216.9
       link_utilization_pct: 17.7
   mode2:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4080'
@@ -689,6 +711,22 @@ modes:
       csis_input_mbps: 4962.1
       link_utilization_pct: 20.9
   mode4:
+    timing_binding:
+      profile_ref: sensortiming-s5kjn3-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4sum_4080x3060_60fps_12bit_dsg
+      mode_index: 4
+      mode_sha256: 9e72b7fdbdd5a4db3e3421fa7ae57c2594ec4c4b2c19abe47bfadf41cdff3c99
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-jn3-setA-19p2.h
+          sha256: 4da9726384bacd759eb998e2fb5af0721511f96262f0cc96b1ead08d87840669
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-jn3.c
+          sha256: bbf10664f260a4a98d5aeab0e6c934e1f0eaf2d183425679842ecb3aace14ce6
+        mode_table: sensor_jn3_mode_infos_A_19p2
     dt:
       common:
       - '4080'
@@ -760,6 +798,7 @@ modes:
       csis_input_mbps: 9924.2
       link_utilization_pct: 41.7
   mode4_aeb:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4080'
@@ -857,6 +896,7 @@ modes:
       link_utilization_pct: 83.5
       csis_input_mbps_per_exposure: 10859.3
   mode4_nfi:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4080'
@@ -949,6 +989,7 @@ modes:
       csis_input_mbps: 9932.0
       link_utilization_pct: 41.8
   mode4_nfi_aeb:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4080'
@@ -1080,6 +1121,7 @@ modes:
       link_utilization_pct: 83.5
       csis_input_mbps_per_exposure: 10875.0
   mode4_dcg:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4080'
@@ -1151,6 +1193,7 @@ modes:
       csis_input_mbps: 9924.2
       link_utilization_pct: 41.7
   mode5_video:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4080'
@@ -1224,6 +1267,22 @@ modes:
       csis_input_mbps: 4962.1
       link_utilization_pct: 20.9
   mode6:
+    timing_binding:
+      profile_ref: sensortiming-s5kjn3-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4sum_4080x2296_120fps
+      mode_index: 6
+      mode_sha256: b2da1ab0d94a5ad3db765a12f93b2597caf6b2b048264004f3842ce231e79fe9
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-jn3-setA-19p2.h
+          sha256: 4da9726384bacd759eb998e2fb5af0721511f96262f0cc96b1ead08d87840669
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-jn3.c
+          sha256: bbf10664f260a4a98d5aeab0e6c934e1f0eaf2d183425679842ecb3aace14ce6
+        mode_table: sensor_jn3_mode_infos_A_19p2
     dt:
       common:
       - '4080'
@@ -1295,6 +1354,22 @@ modes:
       csis_input_mbps: 12641.5
       link_utilization_pct: 53.2
   mode9:
+    timing_binding:
+      profile_ref: sensortiming-s5kjn3-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4sum_4080x2296_30fps_12bit_idcg
+      mode_index: 9
+      mode_sha256: f4a3b85dfdae36112309dfc5cae0a50f230aadb54f0b7acac3cd252fdea9cdd4
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-jn3-setA-19p2.h
+          sha256: 4da9726384bacd759eb998e2fb5af0721511f96262f0cc96b1ead08d87840669
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-jn3.c
+          sha256: bbf10664f260a4a98d5aeab0e6c934e1f0eaf2d183425679842ecb3aace14ce6
+        mode_table: sensor_jn3_mode_infos_A_19p2
     dt:
       common:
       - '4080'
@@ -1366,6 +1441,22 @@ modes:
       csis_input_mbps: 3722.4
       link_utilization_pct: 15.7
   mode10:
+    timing_binding:
+      profile_ref: sensortiming-s5kjn3-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4sum_4080x2296_60fps_12bit_dsg
+      mode_index: 10
+      mode_sha256: d1544ce3285313f3e27f0ca1c836ca7d42ddeb3025918c76a3d8eb056500934e
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-jn3-setA-19p2.h
+          sha256: 4da9726384bacd759eb998e2fb5af0721511f96262f0cc96b1ead08d87840669
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-jn3.c
+          sha256: bbf10664f260a4a98d5aeab0e6c934e1f0eaf2d183425679842ecb3aace14ce6
+        mode_table: sensor_jn3_mode_infos_A_19p2
     dt:
       common:
       - '4080'
@@ -1437,6 +1528,22 @@ modes:
       csis_input_mbps: 7444.9
       link_utilization_pct: 31.3
   mode12:
+    timing_binding:
+      profile_ref: sensortiming-s5kjn3-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4sum_3328x1872_120fps
+      mode_index: 12
+      mode_sha256: 20c27fe7d991ef5921e405085964915983991dbca298b4d31d612d9dc1325c4d
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-jn3-setA-19p2.h
+          sha256: 4da9726384bacd759eb998e2fb5af0721511f96262f0cc96b1ead08d87840669
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-jn3.c
+          sha256: bbf10664f260a4a98d5aeab0e6c934e1f0eaf2d183425679842ecb3aace14ce6
+        mode_table: sensor_jn3_mode_infos_A_19p2
     dt:
       common:
       - '3328'
@@ -1508,6 +1615,22 @@ modes:
       csis_input_mbps: 8410.5
       link_utilization_pct: 35.4
   mode13:
+    timing_binding:
+      profile_ref: sensortiming-s5kjn3-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4sum_4000x2252_120fps
+      mode_index: 13
+      mode_sha256: d8450b3f2a848161851339f1648cbc5dff5b6b38b7aa16c547b23651e10d4a47
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-jn3-setA-19p2.h
+          sha256: 4da9726384bacd759eb998e2fb5af0721511f96262f0cc96b1ead08d87840669
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-jn3.c
+          sha256: bbf10664f260a4a98d5aeab0e6c934e1f0eaf2d183425679842ecb3aace14ce6
+        mode_table: sensor_jn3_mode_infos_A_19p2
     dt:
       common:
       - '4000'
@@ -1579,6 +1702,22 @@ modes:
       csis_input_mbps: 12153.6
       link_utilization_pct: 51.1
   mode14:
+    timing_binding:
+      profile_ref: sensortiming-s5kjn3-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4sum_2800x2100_30fps
+      mode_index: 14
+      mode_sha256: 646429e412dad73420be542d43069f90b172f8b7e0605bbd89535bab1e2dedd5
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-jn3-setA-19p2.h
+          sha256: 4da9726384bacd759eb998e2fb5af0721511f96262f0cc96b1ead08d87840669
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-jn3.c
+          sha256: bbf10664f260a4a98d5aeab0e6c934e1f0eaf2d183425679842ecb3aace14ce6
+        mode_table: sensor_jn3_mode_infos_A_19p2
     dt:
       common:
       - '2800'
@@ -1650,6 +1789,22 @@ modes:
       csis_input_mbps: 1984.1
       link_utilization_pct: 8.3
   mode15:
+    timing_binding:
+      profile_ref: sensortiming-s5kjn3-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_full_8160x6120_24fps
+      mode_index: 15
+      mode_sha256: dd6d30769f6710fc5109ebab93810533ff13e1a856e00cbffe5311f4ed0ccdbc
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-jn3-setA-19p2.h
+          sha256: 4da9726384bacd759eb998e2fb5af0721511f96262f0cc96b1ead08d87840669
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-jn3.c
+          sha256: bbf10664f260a4a98d5aeab0e6c934e1f0eaf2d183425679842ecb3aace14ce6
+        mode_table: sensor_jn3_mode_infos_A_19p2
     dt:
       common:
       - '8160'
@@ -1723,6 +1878,7 @@ modes:
       csis_input_mbps: 12733.5
       link_utilization_pct: 53.5
   mode15_nfi:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '8160'
@@ -1817,6 +1973,7 @@ modes:
       csis_input_mbps: 12739.8
       link_utilization_pct: 53.6
   mode15_ai_remosaic:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '8160'
@@ -1890,6 +2047,7 @@ modes:
       csis_input_mbps: 12733.5
       link_utilization_pct: 53.5
   mode15_nfi_ai_remosaic:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '8160'
@@ -1984,6 +2142,7 @@ modes:
       csis_input_mbps: 12739.8
       link_utilization_pct: 53.6
   mode18:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '5824'
@@ -2056,6 +2215,7 @@ modes:
       csis_input_mbps: 9635.1
       link_utilization_pct: 40.5
   mode18_nfi_ai_remosaic:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '5824'
@@ -2149,6 +2309,22 @@ modes:
       csis_input_mbps: 9640.7
       link_utilization_pct: 40.5
   mode20:
+    timing_binding:
+      profile_ref: sensortiming-s5kjn3-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_full_8160x4592_30fps
+      mode_index: 20
+      mode_sha256: 1eff620c65d796af1aa6628bcdd7eab7c36e59b5cbc7756fd89bd3194ff15caa
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-jn3-setA-19p2.h
+          sha256: 4da9726384bacd759eb998e2fb5af0721511f96262f0cc96b1ead08d87840669
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-jn3.c
+          sha256: bbf10664f260a4a98d5aeab0e6c934e1f0eaf2d183425679842ecb3aace14ce6
+        mode_table: sensor_jn3_mode_infos_A_19p2
     dt:
       common:
       - '8160'
@@ -2220,6 +2396,22 @@ modes:
       csis_input_mbps: 11943.8
       link_utilization_pct: 50.2
   mode25:
+    timing_binding:
+      profile_ref: sensortiming-s5kjn3-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4sum_2040x1148_240fps
+      mode_index: 25
+      mode_sha256: 568326bc79d5cd00482bbab43cae5261fc0d01bb2ef50098e3adddf7ef9506f4
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-jn3-setA-19p2.h
+          sha256: 4da9726384bacd759eb998e2fb5af0721511f96262f0cc96b1ead08d87840669
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-jn3.c
+          sha256: bbf10664f260a4a98d5aeab0e6c934e1f0eaf2d183425679842ecb3aace14ce6
+        mode_table: sensor_jn3_mode_infos_A_19p2
     dt:
       common:
       - '2040'
@@ -2291,6 +2483,22 @@ modes:
       csis_input_mbps: 6313.1
       link_utilization_pct: 49.4
   mode26:
+    timing_binding:
+      profile_ref: sensortiming-s5kjn3-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4sum_2040x1530_120fps
+      mode_index: 26
+      mode_sha256: 1fa666cc1b83a4a938a972ecf008303fe1909038949f4cc76712534c7a1ec475
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-jn3-setA-19p2.h
+          sha256: 4da9726384bacd759eb998e2fb5af0721511f96262f0cc96b1ead08d87840669
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-jn3.c
+          sha256: bbf10664f260a4a98d5aeab0e6c934e1f0eaf2d183425679842ecb3aace14ce6
+        mode_table: sensor_jn3_mode_infos_A_19p2
     dt:
       common:
       - '2040'
@@ -2363,6 +2571,7 @@ modes:
       csis_input_mbps: 4208.7
       link_utilization_pct: 33.0
   mode27_ai_remosaic:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '8160'
@@ -2436,6 +2645,7 @@ modes:
       csis_input_mbps: 15916.9
       link_utilization_pct: 66.9
   mode27_nfi_ai_remosaic:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '8160'

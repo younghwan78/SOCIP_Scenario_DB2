@@ -46,6 +46,22 @@ mode_summary:
   max_mipi_link_mbps: 19097
 modes:
   mode0:
+    timing_binding:
+      profile_ref: sensortiming-imx854-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4080x3060_60fps_10bit
+      mode_index: 0
+      mode_sha256: 7886f3bb85d2e45f6c9c1eb4f7a88fab973e8353a849ca2ce01e5f779401c3cd
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx854-setA-19p2.h
+          sha256: 22e33e3688f8f3608c5f59893d2658bc8afd9e9d19abd7f0bf1e526cbc896b63
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx854.c
+          sha256: b8d28865e4f1f85076f3475f97f8c058af95839ad169460fcb7ffc89cefb8c90
+        mode_table: sensor_imx854_mode_infos_A_19p2
     dt:
       common:
       - '4080'

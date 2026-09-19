@@ -56,6 +56,22 @@ mode_summary:
   max_mipi_link_mbps: 26564
 modes:
   mode1:
+    timing_binding:
+      profile_ref: sensortiming-imx955-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4080x3060_120
+      mode_index: 1
+      mode_sha256: 2e9caa5115d5a16859ad45f8e0f12a71e412e12dd6a19a33dcafa89b4505eaf2
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+          sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955.c
+          sha256: 833de457d5d736e49403907d5e932fcaaa4bbb269ed12d85dec5671117c270e8
+        mode_table: sensor_imx955_mode_infos_A_19p2
     dt:
       common:
       - '4080'
@@ -127,6 +143,7 @@ modes:
       csis_input_mbps: 18722.3
       link_utilization_pct: 70.5
   mode1_aeb:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4080'
@@ -227,6 +244,22 @@ modes:
         csis_input_mbps_per_exposure.'
       csis_input_mbps_per_exposure: 22462.8
   mode3:
+    timing_binding:
+      profile_ref: sensortiming-imx955-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_dcg_4080x3060_60_pdlg
+      mode_index: 3
+      mode_sha256: 2d8077d07c375ec826cb79f4912d6123e58c08e92c564f8f9b5b1baa31eb829c
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+          sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955.c
+          sha256: 833de457d5d736e49403907d5e932fcaaa4bbb269ed12d85dec5671117c270e8
+        mode_table: sensor_imx955_mode_infos_A_19p2
     dt:
       common:
       - '4080'
@@ -298,6 +331,7 @@ modes:
       csis_input_mbps: 10859.3
       link_utilization_pct: 40.9
   mode3_aeb:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4080'
@@ -395,6 +429,22 @@ modes:
       link_utilization_pct: 81.8
       csis_input_mbps_per_exposure: 12729.6
   mode9:
+    timing_binding:
+      profile_ref: sensortiming-imx955-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_8160x6120_30
+      mode_index: 9
+      mode_sha256: c0cde0c66c6157d82f5d2efbbb82cf37f0061c54548a5ac0903af8e5fce4fb94
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+          sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955.c
+          sha256: 833de457d5d736e49403907d5e932fcaaa4bbb269ed12d85dec5671117c270e8
+        mode_table: sensor_imx955_mode_infos_A_19p2
     dt:
       common:
       - '8160'
@@ -468,6 +518,7 @@ modes:
       csis_input_mbps: 18727.2
       link_utilization_pct: 70.5
   mode9_ai_remosaic:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '8160'
@@ -541,6 +592,22 @@ modes:
       csis_input_mbps: 18727.2
       link_utilization_pct: 70.5
   mode17:
+    timing_binding:
+      profile_ref: sensortiming-imx955-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_2800x2100_30
+      mode_index: 17
+      mode_sha256: e6740dcef7acb1ad1c8c5e8e579e8c4c6e645953ae6f9f55468cc0b77bdb9bf7
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+          sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955.c
+          sha256: 833de457d5d736e49403907d5e932fcaaa4bbb269ed12d85dec5671117c270e8
+        mode_table: sensor_imx955_mode_infos_A_19p2
     dt:
       common:
       - '2800'
@@ -612,6 +679,22 @@ modes:
       csis_input_mbps: 2204.2
       link_utilization_pct: 8.3
   mode18:
+    timing_binding:
+      profile_ref: sensortiming-imx955-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4080x2296_120
+      mode_index: 18
+      mode_sha256: de6c9d90a9ca942857917e04d668bb35feac952915ee09f875cac6f9625a7d21
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+          sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955.c
+          sha256: 833de457d5d736e49403907d5e932fcaaa4bbb269ed12d85dec5671117c270e8
+        mode_table: sensor_imx955_mode_infos_A_19p2
     dt:
       common:
       - '4080'
@@ -683,6 +766,7 @@ modes:
       csis_input_mbps: 14051.5
       link_utilization_pct: 52.9
   mode18_aeb:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4080'
@@ -783,6 +867,22 @@ modes:
         csis_input_mbps_per_exposure.'
       csis_input_mbps_per_exposure: 16861.8
   mode21:
+    timing_binding:
+      profile_ref: sensortiming-imx955-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_dcg_4080x2296_60_pdlg
+      mode_index: 21
+      mode_sha256: 818a760cdbaefd3765bc6a9e218b4d1cfbbfae1e26cbb69d7ddaea04f79d584e
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+          sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955.c
+          sha256: 833de457d5d736e49403907d5e932fcaaa4bbb269ed12d85dec5671117c270e8
+        mode_table: sensor_imx955_mode_infos_A_19p2
     dt:
       common:
       - '4080'
@@ -854,6 +954,7 @@ modes:
       csis_input_mbps: 8149.9
       link_utilization_pct: 30.7
   mode21_aeb:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4080'
@@ -951,6 +1052,22 @@ modes:
       link_utilization_pct: 61.4
       csis_input_mbps_per_exposure: 9555.0
   mode26:
+    timing_binding:
+      profile_ref: sensortiming-imx955-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_3328x1872_120
+      mode_index: 26
+      mode_sha256: 91ee763750e37b65a2bcd00917e237bffaacbb8bdae51abdbe9f32ce651478c9
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+          sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955.c
+          sha256: 833de457d5d736e49403907d5e932fcaaa4bbb269ed12d85dec5671117c270e8
+        mode_table: sensor_imx955_mode_infos_A_19p2
     dt:
       common:
       - '3328'
@@ -1022,6 +1139,22 @@ modes:
       csis_input_mbps: 9345.0
       link_utilization_pct: 35.2
   mode38:
+    timing_binding:
+      profile_ref: sensortiming-imx955-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_2000x1124_240
+      mode_index: 38
+      mode_sha256: 297a31f1a175f28d5855e801936a683f0884eb98eafa005c8614a5933183535a
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+          sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955.c
+          sha256: 833de457d5d736e49403907d5e932fcaaa4bbb269ed12d85dec5671117c270e8
+        mode_table: sensor_imx955_mode_infos_A_19p2
     dt:
       common:
       - '2000'
@@ -1093,6 +1226,22 @@ modes:
       csis_input_mbps: 6739.2
       link_utilization_pct: 35.3
   mode40:
+    timing_binding:
+      profile_ref: sensortiming-imx955-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_2040x1532_120
+      mode_index: 40
+      mode_sha256: 3018da30937a0e5bd56aa19bbadbe8b1d593337befd61e50f786dd06ffaff54c
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+          sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955.c
+          sha256: 833de457d5d736e49403907d5e932fcaaa4bbb269ed12d85dec5671117c270e8
+        mode_table: sensor_imx955_mode_infos_A_19p2
     dt:
       common:
       - '2040'

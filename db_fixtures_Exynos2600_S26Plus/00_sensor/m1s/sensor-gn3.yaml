@@ -69,6 +69,23 @@ mode_summary:
   max_mipi_link_mbps: 22731
 modes:
   mode0:
+    timing_binding:
+      profile_ref: sensortiming-s5kgn3-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_8160x6120_27fps
+      mode_index: 0
+      mode_sha256: a6894bc9333df738304d60cc81ea47704bee8b24df6eb83dd4f4e18fa5f97528
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch; default
+          setA selection, alternate setB is not selected
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gn3-setA-19p2.h
+          sha256: d3dc15199e454f0cc85bf797beab76ba4af36687187ac9e64cb1e7755faacbb9
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gn3.c
+          sha256: 1c282544dcaa30d485bc4c7e465ca518b889870832a61ff7c2312ce66df9851c
+        mode_table: sensor_gn3_mode_infos_A_19p2
     dt:
       common:
       - '8160'
@@ -142,6 +159,7 @@ modes:
       csis_input_mbps: 14325.2
       link_utilization_pct: 68.6
   mode0_ai_remosaic:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '8160'
@@ -215,6 +233,7 @@ modes:
       csis_input_mbps: 14325.2
       link_utilization_pct: 68.6
   mode0_nfi:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '8160'
@@ -311,6 +330,7 @@ modes:
       csis_input_mbps: 14332.3
       link_utilization_pct: 68.6
   mode0_nfi_ai_remosaic:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '8160'
@@ -407,6 +427,23 @@ modes:
       csis_input_mbps: 14332.3
       link_utilization_pct: 68.6
   mode1:
+    timing_binding:
+      profile_ref: sensortiming-s5kgn3-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_7680x4320_30fps
+      mode_index: 1
+      mode_sha256: 67d409c5b59fe7646937c65aa33d8c004a856aed96556e69c2e70e702fb452f5
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch; default
+          setA selection, alternate setB is not selected
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gn3-setA-19p2.h
+          sha256: d3dc15199e454f0cc85bf797beab76ba4af36687187ac9e64cb1e7755faacbb9
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gn3.c
+          sha256: 1c282544dcaa30d485bc4c7e465ca518b889870832a61ff7c2312ce66df9851c
+        mode_table: sensor_gn3_mode_infos_A_19p2
     dt:
       common:
       - '7680'
@@ -478,6 +515,23 @@ modes:
       csis_input_mbps: 10575.4
       link_utilization_pct: 59.7
   mode5:
+    timing_binding:
+      profile_ref: sensortiming-s5kgn3-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4080x3060_60fps_r10
+      mode_index: 5
+      mode_sha256: 73039b2dc6166259403895ff674755cc323210dba400cf618917c402b164dfb6
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch; default
+          setA selection, alternate setB is not selected
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gn3-setA-19p2.h
+          sha256: d3dc15199e454f0cc85bf797beab76ba4af36687187ac9e64cb1e7755faacbb9
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gn3.c
+          sha256: 1c282544dcaa30d485bc4c7e465ca518b889870832a61ff7c2312ce66df9851c
+        mode_table: sensor_gn3_mode_infos_A_19p2
     dt:
       common:
       - '4080'
@@ -549,6 +603,7 @@ modes:
       csis_input_mbps: 9361.2
       link_utilization_pct: 41.2
   mode5_nfi:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4080'
@@ -644,6 +699,7 @@ modes:
       csis_input_mbps: 9369.0
       link_utilization_pct: 41.2
   mode5_secure:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4080'
@@ -715,6 +771,7 @@ modes:
       csis_input_mbps: 9361.2
       link_utilization_pct: 41.2
   mode5_aeb:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4080'
@@ -812,6 +869,7 @@ modes:
       link_utilization_pct: 82.4
       csis_input_mbps_per_exposure: 11231.4
   mode5_phy_tune:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4080'
@@ -883,6 +941,23 @@ modes:
       csis_input_mbps: 9361.2
       link_utilization_pct: 41.2
   mode6:
+    timing_binding:
+      profile_ref: sensortiming-s5kgn3-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4080x3060_60fps_idcg_r12
+      mode_index: 4
+      mode_sha256: ecd081d70619f257715df052815e009f4439536d511c01f53efd3aa0e4b9f49f
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch; default
+          setA selection, alternate setB is not selected
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gn3-setA-19p2.h
+          sha256: d3dc15199e454f0cc85bf797beab76ba4af36687187ac9e64cb1e7755faacbb9
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gn3.c
+          sha256: 1c282544dcaa30d485bc4c7e465ca518b889870832a61ff7c2312ce66df9851c
+        mode_table: sensor_gn3_mode_infos_A_19p2
     dt:
       common:
       - '4080'
@@ -954,6 +1029,7 @@ modes:
       csis_input_mbps: 10859.3
       link_utilization_pct: 47.8
   mode6_nfi:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4080'
@@ -1049,6 +1125,7 @@ modes:
       csis_input_mbps: 10867.2
       link_utilization_pct: 47.8
   mode6_aeb:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4080'
@@ -1146,6 +1223,7 @@ modes:
       link_utilization_pct: 95.5
       csis_input_mbps_per_exposure: 12729.6
   mode6_dcg:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4080'
@@ -1217,6 +1295,23 @@ modes:
       csis_input_mbps: 10859.3
       link_utilization_pct: 47.8
   mode8:
+    timing_binding:
+      profile_ref: sensortiming-s5kgn3-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4080x2720_60fps_r10
+      mode_index: 8
+      mode_sha256: 4359ba0843892126f2e38836d518d1e54b8d4944daa9e94e570fbec82bb55ea5
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch; default
+          setA selection, alternate setB is not selected
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gn3-setA-19p2.h
+          sha256: d3dc15199e454f0cc85bf797beab76ba4af36687187ac9e64cb1e7755faacbb9
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gn3.c
+          sha256: 1c282544dcaa30d485bc4c7e465ca518b889870832a61ff7c2312ce66df9851c
+        mode_table: sensor_gn3_mode_infos_A_19p2
     dt:
       common:
       - '4080'
@@ -1288,6 +1383,7 @@ modes:
       csis_input_mbps: 8323.2
       link_utilization_pct: 36.6
   mode8_aeb:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4080'
@@ -1384,6 +1480,23 @@ modes:
       link_utilization_pct: 73.2
       csis_input_mbps_per_exposure: 9987.8
   mode9:
+    timing_binding:
+      profile_ref: sensortiming-s5kgn3-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4080x2720_60fps_idcg_r12
+      mode_index: 7
+      mode_sha256: 447a3c2b902cc292e177c1105e3ed4fe11166667e7ee5b6ddf1aa1ff8920947b
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch; default
+          setA selection, alternate setB is not selected
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gn3-setA-19p2.h
+          sha256: d3dc15199e454f0cc85bf797beab76ba4af36687187ac9e64cb1e7755faacbb9
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gn3.c
+          sha256: 1c282544dcaa30d485bc4c7e465ca518b889870832a61ff7c2312ce66df9851c
+        mode_table: sensor_gn3_mode_infos_A_19p2
     dt:
       common:
       - '4080'
@@ -1455,6 +1568,7 @@ modes:
       csis_input_mbps: 9654.9
       link_utilization_pct: 42.5
   mode9_aeb:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4080'
@@ -1551,6 +1665,23 @@ modes:
       link_utilization_pct: 84.9
       csis_input_mbps_per_exposure: 11319.6
   mode11:
+    timing_binding:
+      profile_ref: sensortiming-s5kgn3-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4080x2296_60fps_r10
+      mode_index: 11
+      mode_sha256: 4b38e1f3f9db66369b61f0cfc254581479b41ddb24e8f4ae0c51cc7c63f09ae7
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch; default
+          setA selection, alternate setB is not selected
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gn3-setA-19p2.h
+          sha256: d3dc15199e454f0cc85bf797beab76ba4af36687187ac9e64cb1e7755faacbb9
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gn3.c
+          sha256: 1c282544dcaa30d485bc4c7e465ca518b889870832a61ff7c2312ce66df9851c
+        mode_table: sensor_gn3_mode_infos_A_19p2
     dt:
       common:
       - '4080'
@@ -1622,6 +1753,7 @@ modes:
       csis_input_mbps: 7025.8
       link_utilization_pct: 30.9
   mode11_aeb:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4080'
@@ -1718,6 +1850,23 @@ modes:
       link_utilization_pct: 61.8
       csis_input_mbps_per_exposure: 8430.9
   mode12:
+    timing_binding:
+      profile_ref: sensortiming-s5kgn3-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4080x2296_60fps_idcg_r12
+      mode_index: 10
+      mode_sha256: 457cbfb1842bf475ef92e03a1e9dd22fef900d64cfe36e485e05c92f4e70b4f2
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch; default
+          setA selection, alternate setB is not selected
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gn3-setA-19p2.h
+          sha256: d3dc15199e454f0cc85bf797beab76ba4af36687187ac9e64cb1e7755faacbb9
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gn3.c
+          sha256: 1c282544dcaa30d485bc4c7e465ca518b889870832a61ff7c2312ce66df9851c
+        mode_table: sensor_gn3_mode_infos_A_19p2
     dt:
       common:
       - '4080'
@@ -1789,6 +1938,7 @@ modes:
       csis_input_mbps: 8149.9
       link_utilization_pct: 35.9
   mode12_aeb:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4080'
@@ -1885,6 +2035,23 @@ modes:
       link_utilization_pct: 71.7
       csis_input_mbps_per_exposure: 9555.0
   mode13:
+    timing_binding:
+      profile_ref: sensortiming-s5kgn3-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4080x2296_120fps_r10
+      mode_index: 13
+      mode_sha256: 8f20e622ffb63d7946050b6e20f3c703b1cc5ca7a6fc54b2919063f7165ee02d
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch; default
+          setA selection, alternate setB is not selected
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gn3-setA-19p2.h
+          sha256: d3dc15199e454f0cc85bf797beab76ba4af36687187ac9e64cb1e7755faacbb9
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gn3.c
+          sha256: 1c282544dcaa30d485bc4c7e465ca518b889870832a61ff7c2312ce66df9851c
+        mode_table: sensor_gn3_mode_infos_A_19p2
     dt:
       common:
       - '4080'
@@ -1956,6 +2123,23 @@ modes:
       csis_input_mbps: 14051.5
       link_utilization_pct: 61.8
   mode14:
+    timing_binding:
+      profile_ref: sensortiming-s5kgn3-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_3840x2160_60fps_idcg_r12
+      mode_index: 15
+      mode_sha256: ddc8abcecf62ff7c3d1f1fefa3c2679999dd37c9e203457034f8a5e4fb098574
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch; default
+          setA selection, alternate setB is not selected
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gn3-setA-19p2.h
+          sha256: d3dc15199e454f0cc85bf797beab76ba4af36687187ac9e64cb1e7755faacbb9
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gn3.c
+          sha256: 1c282544dcaa30d485bc4c7e465ca518b889870832a61ff7c2312ce66df9851c
+        mode_table: sensor_gn3_mode_infos_A_19p2
     dt:
       common:
       - '3840'
@@ -2027,6 +2211,23 @@ modes:
       csis_input_mbps: 7216.1
       link_utilization_pct: 31.7
   mode16:
+    timing_binding:
+      profile_ref: sensortiming-s5kgn3-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_3328x1872_120fps
+      mode_index: 16
+      mode_sha256: fe3a11150085ff980d4381fffc89348a63a3420a13b0f23995831ae5de630616
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch; default
+          setA selection, alternate setB is not selected
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gn3-setA-19p2.h
+          sha256: d3dc15199e454f0cc85bf797beab76ba4af36687187ac9e64cb1e7755faacbb9
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gn3.c
+          sha256: 1c282544dcaa30d485bc4c7e465ca518b889870832a61ff7c2312ce66df9851c
+        mode_table: sensor_gn3_mode_infos_A_19p2
     dt:
       common:
       - '3328'
@@ -2098,6 +2299,23 @@ modes:
       csis_input_mbps: 9345.0
       link_utilization_pct: 44.7
   mode17:
+    timing_binding:
+      profile_ref: sensortiming-s5kgn3-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_2800x2100_30fps_r12
+      mode_index: 17
+      mode_sha256: b185476be61ef9220b2137fdfaee887e875e623e4d751c58a3c25e9214199d2f
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch; default
+          setA selection, alternate setB is not selected
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gn3-setA-19p2.h
+          sha256: d3dc15199e454f0cc85bf797beab76ba4af36687187ac9e64cb1e7755faacbb9
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gn3.c
+          sha256: 1c282544dcaa30d485bc4c7e465ca518b889870832a61ff7c2312ce66df9851c
+        mode_table: sensor_gn3_mode_infos_A_19p2
     dt:
       common:
       - '2800'
@@ -2169,6 +2387,23 @@ modes:
       csis_input_mbps: 2557.0
       link_utilization_pct: 12.2
   mode18:
+    timing_binding:
+      profile_ref: sensortiming-s5kgn3-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_2800x2100_30fps
+      mode_index: 18
+      mode_sha256: 3f84f46808d84bf135c6a1e8faaeb8e6b4d63a9bef688f5e73e33175798c75d7
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch; default
+          setA selection, alternate setB is not selected
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gn3-setA-19p2.h
+          sha256: d3dc15199e454f0cc85bf797beab76ba4af36687187ac9e64cb1e7755faacbb9
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gn3.c
+          sha256: 1c282544dcaa30d485bc4c7e465ca518b889870832a61ff7c2312ce66df9851c
+        mode_table: sensor_gn3_mode_infos_A_19p2
     dt:
       common:
       - '2800'
@@ -2240,6 +2475,23 @@ modes:
       csis_input_mbps: 2204.2
       link_utilization_pct: 10.6
   mode19:
+    timing_binding:
+      profile_ref: sensortiming-s5kgn3-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_2040x1532_120fps
+      mode_index: 19
+      mode_sha256: 1f2f3ba6c011821ec9115192b619c974e6080ddd3a53831f50a46d4ab0f5a2cc
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch; default
+          setA selection, alternate setB is not selected
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gn3-setA-19p2.h
+          sha256: d3dc15199e454f0cc85bf797beab76ba4af36687187ac9e64cb1e7755faacbb9
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gn3.c
+          sha256: 1c282544dcaa30d485bc4c7e465ca518b889870832a61ff7c2312ce66df9851c
+        mode_table: sensor_gn3_mode_infos_A_19p2
     dt:
       common:
       - '2040'
@@ -2298,6 +2550,23 @@ modes:
       csis_input_mbps: 3750.3
       link_utilization_pct: 21.2
   mode20:
+    timing_binding:
+      profile_ref: sensortiming-s5kgn3-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_2040x1148_240fps
+      mode_index: 20
+      mode_sha256: ed52fbedc5f9f3c12704234fd707fa47911e4a284d03eaa5c449dd20654ca6f0
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch; default
+          setA selection, alternate setB is not selected
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gn3-setA-19p2.h
+          sha256: d3dc15199e454f0cc85bf797beab76ba4af36687187ac9e64cb1e7755faacbb9
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gn3.c
+          sha256: 1c282544dcaa30d485bc4c7e465ca518b889870832a61ff7c2312ce66df9851c
+        mode_table: sensor_gn3_mode_infos_A_19p2
     dt:
       common:
       - '2040'
@@ -2369,6 +2638,7 @@ modes:
       csis_input_mbps: 7015.4
       link_utilization_pct: 39.6
   mode21:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '2040'
@@ -2445,6 +2715,23 @@ modes:
       csis_input_mbps: 11249.0
       link_utilization_pct: 63.5
   mode22:
+    timing_binding:
+      profile_ref: sensortiming-s5kgn3-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_2040x1532_30fps
+      mode_index: 22
+      mode_sha256: 50833802caae3b79149ed5ab2152f041e1d8a4a1db15b2b5dbbc735442eb761b
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch; default
+          setA selection, alternate setB is not selected
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gn3-setA-19p2.h
+          sha256: d3dc15199e454f0cc85bf797beab76ba4af36687187ac9e64cb1e7755faacbb9
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gn3.c
+          sha256: 1c282544dcaa30d485bc4c7e465ca518b889870832a61ff7c2312ce66df9851c
+        mode_table: sensor_gn3_mode_infos_A_19p2
     dt:
       common:
       - '2040'
@@ -2516,6 +2803,23 @@ modes:
       csis_input_mbps: 1170.5
       link_utilization_pct: 6.6
   mode23:
+    timing_binding:
+      profile_ref: sensortiming-s5kgn3-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_2040x1148_30fps
+      mode_index: 23
+      mode_sha256: b8837420038079d0dc631532953e3f8e3154bcb3ab98887c5efa7f612c682ecd
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch; default
+          setA selection, alternate setB is not selected
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gn3-setA-19p2.h
+          sha256: d3dc15199e454f0cc85bf797beab76ba4af36687187ac9e64cb1e7755faacbb9
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gn3.c
+          sha256: 1c282544dcaa30d485bc4c7e465ca518b889870832a61ff7c2312ce66df9851c
+        mode_table: sensor_gn3_mode_infos_A_19p2
     dt:
       common:
       - '2040'
@@ -2587,6 +2891,7 @@ modes:
       csis_input_mbps: 876.9
       link_utilization_pct: 4.9
   mode32_ln:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4080'
@@ -2658,6 +2963,7 @@ modes:
       csis_input_mbps: 4056.5
       link_utilization_pct: 17.8
   mode36:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4080'
@@ -2730,6 +3036,7 @@ modes:
       csis_input_mbps: 4680.6
       link_utilization_pct: 20.6
   mode37:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4080'
@@ -2802,6 +3109,7 @@ modes:
       csis_input_mbps: 5429.7
       link_utilization_pct: 23.9
   mode38:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4080'
@@ -2874,6 +3182,7 @@ modes:
       csis_input_mbps: 8149.9
       link_utilization_pct: 35.9
   mode39:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '3840'
@@ -2946,6 +3255,7 @@ modes:
       csis_input_mbps: 7216.1
       link_utilization_pct: 31.7
   mode41:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4080'
@@ -3018,6 +3328,23 @@ modes:
       csis_input_mbps: 7025.8
       link_utilization_pct: 30.9
   mode42:
+    timing_binding:
+      profile_ref: sensortiming-s5kgn3-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_5824x4368_30fps_r10
+      mode_index: 42
+      mode_sha256: e410036a67087755b8c5443baadf25696f571b068f582a77c7cf6e57d922f74b
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch; default
+          setA selection, alternate setB is not selected
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gn3-setA-19p2.h
+          sha256: d3dc15199e454f0cc85bf797beab76ba4af36687187ac9e64cb1e7755faacbb9
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gn3.c
+          sha256: 1c282544dcaa30d485bc4c7e465ca518b889870832a61ff7c2312ce66df9851c
+        mode_table: sensor_gn3_mode_infos_A_19p2
     dt:
       common:
       - '5824'
@@ -3091,6 +3418,7 @@ modes:
       csis_input_mbps: 8108.8
       link_utilization_pct: 35.7
   mode43:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '5824'

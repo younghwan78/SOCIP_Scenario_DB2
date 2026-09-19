@@ -58,6 +58,22 @@ mode_summary:
   max_mipi_link_mbps: 23170
 modes:
   mode0:
+    timing_binding:
+      profile_ref: sensortiming-imx564-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4000x3000_86fps_10bit
+      mode_index: 0
+      mode_sha256: 0ebf58081586ac64448756b75ea1453b96a51e87e3b495724f9f142fad9c4053
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setA-19p2.h
+          sha256: bf0656846c0ed5df366f7ff837b7bb19520666d2743cc8d86fc40a4c72fa84ef
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564.c
+          sha256: a145165bcdf50c2c06f209952fc4695bb7d179b3c11c85d51513cc2b6404f80c
+        mode_table: sensor_imx564_mode_infos_A_19p2
     dt:
       common:
       - '4000'
@@ -153,6 +169,7 @@ modes:
       link_utilization_pct: 47.1
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode0_aeb:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4000'
@@ -250,6 +267,22 @@ modes:
       link_utilization_pct: 94.3
       csis_input_mbps_per_exposure: 10800.0
   mode1:
+    timing_binding:
+      profile_ref: sensortiming-imx564-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4000x3000_53fps_12bit_adc11
+      mode_index: 2
+      mode_sha256: 74deb0f78c90b2e129ef9f00cb7e3fd2fe3f6a58cff2a629f6cb5ad5040f9ff2
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setA-19p2.h
+          sha256: bf0656846c0ed5df366f7ff837b7bb19520666d2743cc8d86fc40a4c72fa84ef
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564.c
+          sha256: a145165bcdf50c2c06f209952fc4695bb7d179b3c11c85d51513cc2b6404f80c
+        mode_table: sensor_imx564_mode_infos_A_19p2
     dt:
       common:
       - '4000'
@@ -345,6 +378,22 @@ modes:
       link_utilization_pct: 48.3
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode2:
+    timing_binding:
+      profile_ref: sensortiming-imx564-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4000x2252_114fps_10bit
+      mode_index: 5
+      mode_sha256: 4ac6f5e91a8aceafb4e904652392bbcfd121c6f24083859afb88059ed929f228
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setA-19p2.h
+          sha256: bf0656846c0ed5df366f7ff837b7bb19520666d2743cc8d86fc40a4c72fa84ef
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564.c
+          sha256: a145165bcdf50c2c06f209952fc4695bb7d179b3c11c85d51513cc2b6404f80c
+        mode_table: sensor_imx564_mode_infos_A_19p2
     dt:
       common:
       - '4000'
@@ -442,6 +491,22 @@ modes:
       link_utilization_pct: 67.2
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode3:
+    timing_binding:
+      profile_ref: sensortiming-imx564-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4000x2252_69fps_12bit_adc11
+      mode_index: 7
+      mode_sha256: 787b9e956ead741877170fdfa20ddd5f3a311cf93ad3edb0d555fae0b3d5ca1f
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setA-19p2.h
+          sha256: bf0656846c0ed5df366f7ff837b7bb19520666d2743cc8d86fc40a4c72fa84ef
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564.c
+          sha256: a145165bcdf50c2c06f209952fc4695bb7d179b3c11c85d51513cc2b6404f80c
+        mode_table: sensor_imx564_mode_infos_A_19p2
     dt:
       common:
       - '4000'
@@ -537,6 +602,22 @@ modes:
       link_utilization_pct: 47.2
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode4:
+    timing_binding:
+      profile_ref: sensortiming-imx564-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_2000x1124_527fps
+      mode_index: 10
+      mode_sha256: e1c0335331721820020200e62b9aa6eb17da6ae6347e67db0e9b14b54d38f994
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setA-19p2.h
+          sha256: bf0656846c0ed5df366f7ff837b7bb19520666d2743cc8d86fc40a4c72fa84ef
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564.c
+          sha256: a145165bcdf50c2c06f209952fc4695bb7d179b3c11c85d51513cc2b6404f80c
+        mode_table: sensor_imx564_mode_infos_A_19p2
     dt:
       common:
       - '2000'
@@ -632,6 +713,22 @@ modes:
       link_utilization_pct: 72.3
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode5:
+    timing_binding:
+      profile_ref: sensortiming-imx564-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_2000x1500_157fps
+      mode_index: 11
+      mode_sha256: 6b672f08f32e3c4f2ba584fa495d08f09eff122f23ca42a63f267d8754f5e68f
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setA-19p2.h
+          sha256: bf0656846c0ed5df366f7ff837b7bb19520666d2743cc8d86fc40a4c72fa84ef
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564.c
+          sha256: a145165bcdf50c2c06f209952fc4695bb7d179b3c11c85d51513cc2b6404f80c
+        mode_table: sensor_imx564_mode_infos_A_19p2
     dt:
       common:
       - '2000'
@@ -728,6 +825,22 @@ modes:
       link_utilization_pct: 60.7
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode6:
+    timing_binding:
+      profile_ref: sensortiming-imx564-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_2800x2100_86fps
+      mode_index: 12
+      mode_sha256: bdf053f08066388e089d266ddd08a5d4df88927d3cf9c0725d5bb7f4fd90efb1
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setA-19p2.h
+          sha256: bf0656846c0ed5df366f7ff837b7bb19520666d2743cc8d86fc40a4c72fa84ef
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564.c
+          sha256: a145165bcdf50c2c06f209952fc4695bb7d179b3c11c85d51513cc2b6404f80c
+        mode_table: sensor_imx564_mode_infos_A_19p2
     dt:
       common:
       - '2800'
@@ -825,6 +938,22 @@ modes:
       link_utilization_pct: 33.1
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode7:
+    timing_binding:
+      profile_ref: sensortiming-imx564-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4000x2252_141fps_10bit
+      mode_index: 13
+      mode_sha256: 9db319f76d9401ffbae481c7559f77bdcb6b0af37535d12686851d2a1f714f37
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setA-19p2.h
+          sha256: bf0656846c0ed5df366f7ff837b7bb19520666d2743cc8d86fc40a4c72fa84ef
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564.c
+          sha256: a145165bcdf50c2c06f209952fc4695bb7d179b3c11c85d51513cc2b6404f80c
+        mode_table: sensor_imx564_mode_infos_A_19p2
     dt:
       common:
       - '4000'

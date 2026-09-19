@@ -61,7 +61,10 @@ def timing_profiles(sensor_name: str | None = None, db: Session = Depends(get_db
     q = db.query(SensorTimingProfile)
     if sensor_name: q = q.filter_by(sensor_name=sensor_name)
     return {"items": [{"id": r.id, "sensor_name": r.sensor_name,
-        "revision": r.document["revision"], "modes": list(r.document["modes"]), "sha256": r.yaml_sha256}
+        "revision": r.document["revision"], "modes": list(r.document["modes"]), "sha256": r.yaml_sha256,
+        "mode_summaries": {label: {"size": [mode["active_width"], mode["active_height"]],
+            "fps": mode["source"].get("nominal_fps") or mode["pixel_clock_hz"] / mode["line_length_pck"] / mode["frame_length_lines"]}
+            for label, mode in r.document["modes"].items()}}
         for r in q.order_by(SensorTimingProfile.id)]}
 
 @router.get("/timing-profiles/{profile_id}/modes/{mode_label}")

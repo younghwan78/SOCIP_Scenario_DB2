@@ -1,0 +1,563 @@
+id: sensortiming-imx564-setb-19p2
+schema_version: '2.2'
+kind: sensor.timing_profile
+sensor_name: IMX564
+revision: setB-19p2-import-20260920
+modes:
+  cis_4000x3000_51fps_12bit_dsg:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 2926933334
+    line_length_pck: 9136
+    frame_length_lines: 6205
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setB-19p2.h
+      sha256: c4d657b500ae1c28cdf3e0b6acebb8dc3bd40c67d4935c9b5529b84b67269cde
+      line: 4459
+      basis: CIS indexed setfile
+      mode_index: 0
+      nominal_fps: 51
+      bits_per_pixel: 12
+      symbol: sensor_imx564_mode_info_B_19p2_4000x3000_51fps_12bit_dsg
+      mode_name: 79_A02_A06_DSG_HDR_RAW12_AM3 IMX564_4000X3000_51FPS_12BIT_DSG
+  cis_4000x3000_60fps_12bit_dsg:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 2926933334
+    line_length_pck: 7760
+    frame_length_lines: 6204
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setB-19p2.h
+      sha256: c4d657b500ae1c28cdf3e0b6acebb8dc3bd40c67d4935c9b5529b84b67269cde
+      line: 4480
+      basis: CIS indexed setfile
+      mode_index: 1
+      nominal_fps: 60
+      bits_per_pixel: 12
+      symbol: sensor_imx564_mode_info_B_19p2_4000x3000_60fps_12bit_dsg
+      mode_name: 100_A02_A06_DSG_HDR_RAW12_AM3 IMX564_4000X3000_60FPS_12BIT_DSG
+  cis_full_4000x3000_86fps_10bit:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 2926933334
+    line_length_pck: 10816
+    frame_length_lines: 3116
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setB-19p2.h
+      sha256: c4d657b500ae1c28cdf3e0b6acebb8dc3bd40c67d4935c9b5529b84b67269cde
+      line: 4500
+      basis: CIS indexed setfile
+      mode_index: 2
+      nominal_fps: 86
+      bits_per_pixel: 10
+      symbol: sensor_imx564_mode_info_B_19p2_full_4000x3000_86fps_10bit
+      mode_name: 78_A03_A01_Full_RAW10_AM3 IMX564_FULL_4000X3000_86FPS_10BIT
+  cis_full_4000x3000_86fps_12bit:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 2926933334
+    line_length_pck: 10816
+    frame_length_lines: 3116
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setB-19p2.h
+      sha256: c4d657b500ae1c28cdf3e0b6acebb8dc3bd40c67d4935c9b5529b84b67269cde
+      line: 4521
+      basis: CIS indexed setfile
+      mode_index: 3
+      nominal_fps: 86
+      bits_per_pixel: 12
+      symbol: sensor_imx564_mode_info_B_19p2_full_4000x3000_86fps_12bit
+      mode_name: 116_A03_A01_Full_RAW12_AM3_Pseudo IMX564_FULL_4000X3000_86FPS_12BIT
+  cis_full_4000x3000_43fps_10bit:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 2926933334
+    line_length_pck: 10816
+    frame_length_lines: 6232
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setB-19p2.h
+      sha256: c4d657b500ae1c28cdf3e0b6acebb8dc3bd40c67d4935c9b5529b84b67269cde
+      line: 4542
+      basis: CIS indexed setfile
+      mode_index: 4
+      nominal_fps: 43
+      bits_per_pixel: 10
+      symbol: sensor_imx564_mode_info_B_19p2_full_4000x3000_43fps_10bit
+      mode_name: 66_A03-1_Full_HDR_15FPS_RAW10_AM3 IMX564_FULL_4000X3000_43FPS_10BIT
+  cis_full_4000x3000_53fps_12bit_lnfast:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 2926933334
+    line_length_pck: 17680
+    frame_length_lines: 3116
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setB-19p2.h
+      sha256: c4d657b500ae1c28cdf3e0b6acebb8dc3bd40c67d4935c9b5529b84b67269cde
+      line: 4562
+      basis: CIS indexed setfile
+      mode_index: 5
+      nominal_fps: 53
+      bits_per_pixel: 12
+      symbol: sensor_imx564_mode_info_B_19p2_full_4000x3000_53fps_12bit_lnfast
+      mode_name: 67_A04_A07_Full_LNFAST_RAW12_AM3 IMX564_FULL_4000X3000_53FPS_12BIT_LNFAST
+  cis_full_4000x3000_53fps_10bit_lnfast:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 2926933334
+    line_length_pck: 17680
+    frame_length_lines: 3116
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setB-19p2.h
+      sha256: c4d657b500ae1c28cdf3e0b6acebb8dc3bd40c67d4935c9b5529b84b67269cde
+      line: 4583
+      basis: CIS indexed setfile
+      mode_index: 6
+      nominal_fps: 53
+      bits_per_pixel: 10
+      symbol: sensor_imx564_mode_info_B_19p2_full_4000x3000_53fps_10bit_lnfast
+      mode_name: 68_A04-2_Full_LNFAST_RAW10_AM3 IMX564_FULL_4000X3000_53FPS_10BIT_LNFAST
+  cis_full_4000x3000_30fps_10bit_ln4:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 2926933334
+    line_length_pck: 30944
+    frame_length_lines: 3116
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setB-19p2.h
+      sha256: c4d657b500ae1c28cdf3e0b6acebb8dc3bd40c67d4935c9b5529b84b67269cde
+      line: 4604
+      basis: CIS indexed setfile
+      mode_index: 7
+      nominal_fps: 30
+      bits_per_pixel: 10
+      symbol: sensor_imx564_mode_info_B_19p2_full_4000x3000_30fps_10bit_ln4
+      mode_name: 69_A05_A08_Full_LN4_15FPS_RAW10_AM3 IMX564_FULL_4000X3000_30FPS_10BIT_LN4
+  cis_full_4000x3000_30fps_12bit_ln4:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 2926933334
+    line_length_pck: 30944
+    frame_length_lines: 3116
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setB-19p2.h
+      sha256: c4d657b500ae1c28cdf3e0b6acebb8dc3bd40c67d4935c9b5529b84b67269cde
+      line: 4625
+      basis: CIS indexed setfile
+      mode_index: 8
+      nominal_fps: 30
+      bits_per_pixel: 12
+      symbol: sensor_imx564_mode_info_B_19p2_full_4000x3000_30fps_12bit_ln4
+      mode_name: 117_A05_A08_Full_LN4_15FPS_RAW12_AM3_Pseudo IMX564_FULL_4000X3000_30FPS_12BIT_LN4
+  cis_4000x3000_25fps_12bit_dsg:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 2926933334
+    line_length_pck: 9136
+    frame_length_lines: 12412
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setB-19p2.h
+      sha256: c4d657b500ae1c28cdf3e0b6acebb8dc3bd40c67d4935c9b5529b84b67269cde
+      line: 4646
+      basis: CIS indexed setfile
+      mode_index: 9
+      nominal_fps: 25
+      bits_per_pixel: 12
+      symbol: sensor_imx564_mode_info_B_19p2_4000x3000_25fps_12bit_dsg
+      mode_name: 80_A06-02_DSG_HDR_2EXP_15fps_RAW12_AM3 IMX564_4000X3000_25FPS_12BIT_DSG
+  cis_full_4000x3000_26fps_12bit_lnfast:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 2926933334
+    line_length_pck: 17680
+    frame_length_lines: 6233
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setB-19p2.h
+      sha256: c4d657b500ae1c28cdf3e0b6acebb8dc3bd40c67d4935c9b5529b84b67269cde
+      line: 4666
+      basis: CIS indexed setfile
+      mode_index: 10
+      nominal_fps: 26
+      bits_per_pixel: 12
+      symbol: sensor_imx564_mode_info_B_19p2_full_4000x3000_26fps_12bit_lnfast
+      mode_name: 70_A07_Full_LNFAST_15FPS_RAW12_AM3 IMX564_FULL_4000X3000_26FPS_12BIT_LNFAST
+  cis_full_4000x3000_15fps_10bit_ln4:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 2926933334
+    line_length_pck: 30944
+    frame_length_lines: 6235
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setB-19p2.h
+      sha256: c4d657b500ae1c28cdf3e0b6acebb8dc3bd40c67d4935c9b5529b84b67269cde
+      line: 4686
+      basis: CIS indexed setfile
+      mode_index: 11
+      nominal_fps: 15
+      bits_per_pixel: 10
+      symbol: sensor_imx564_mode_info_B_19p2_full_4000x3000_15fps_10bit_ln4
+      mode_name: 71_A08_Full_LN4_7.5FPS_RAW10_AM3 IMX564_FULL_4000X3000_15FPS_10BIT_LN4
+  cis_4k_3328x1872_141fps_10bit:
+    active_width: 3328
+    active_height: 1872
+    pixel_clock_hz: 2926933334
+    line_length_pck: 8704
+    frame_length_lines: 2372
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setB-19p2.h
+      sha256: c4d657b500ae1c28cdf3e0b6acebb8dc3bd40c67d4935c9b5529b84b67269cde
+      line: 4706
+      basis: CIS indexed setfile
+      mode_index: 12
+      nominal_fps: 141
+      bits_per_pixel: 10
+      symbol: sensor_imx564_mode_info_B_19p2_4k_3328x1872_141fps_10bit
+      mode_name: 106_A09_A11_4K_120FPS_RAW10_AM2 IMX564_4K_3328X1872_141FPS_10BIT
+  cis_4k_4000x2252_141fps_10bit:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 2926933334
+    line_length_pck: 8704
+    frame_length_lines: 2372
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setB-19p2.h
+      sha256: c4d657b500ae1c28cdf3e0b6acebb8dc3bd40c67d4935c9b5529b84b67269cde
+      line: 4726
+      basis: CIS indexed setfile
+      mode_index: 13
+      nominal_fps: 141
+      bits_per_pixel: 10
+      symbol: sensor_imx564_mode_info_B_19p2_4k_4000x2252_141fps_10bit
+      mode_name: 82_A09_A11_4K_120FPS_RAW10_AM2 IMX564_4K_4000X2252_141FPS_10BIT
+  cis_4k_4000x2252_114fps_10bit:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 2926933334
+    line_length_pck: 10816
+    frame_length_lines: 2372
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setB-19p2.h
+      sha256: c4d657b500ae1c28cdf3e0b6acebb8dc3bd40c67d4935c9b5529b84b67269cde
+      line: 4746
+      basis: CIS indexed setfile
+      mode_index: 14
+      nominal_fps: 114
+      bits_per_pixel: 10
+      symbol: sensor_imx564_mode_info_B_19p2_4k_4000x2252_114fps_10bit
+      mode_name: 72_A09_A11_4K_RAW10_AM3 IMX564_4K_4000X2252_114FPS_10BIT
+  cis_4k_4000x2252_67fps_12bit_dsg:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 2926933334
+    line_length_pck: 9136
+    frame_length_lines: 4716
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setB-19p2.h
+      sha256: c4d657b500ae1c28cdf3e0b6acebb8dc3bd40c67d4935c9b5529b84b67269cde
+      line: 4767
+      basis: CIS indexed setfile
+      mode_index: 15
+      nominal_fps: 67
+      bits_per_pixel: 12
+      symbol: sensor_imx564_mode_info_B_19p2_4k_4000x2252_67fps_12bit_dsg
+      mode_name: 73_A10_DSG_4K_RAW12_AM3 IMX564_4K_4000X2252_67FPS_12BIT_DSG
+  cis_4k_4000x2252_57fps_10bit:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 2926933334
+    line_length_pck: 10816
+    frame_length_lines: 4744
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setB-19p2.h
+      sha256: c4d657b500ae1c28cdf3e0b6acebb8dc3bd40c67d4935c9b5529b84b67269cde
+      line: 4788
+      basis: CIS indexed setfile
+      mode_index: 16
+      nominal_fps: 57
+      bits_per_pixel: 10
+      symbol: sensor_imx564_mode_info_B_19p2_4k_4000x2252_57fps_10bit
+      mode_name: 74_A11_4K_15FPS_RAW10_AM3 IMX564_4K_4000X2252_57FPS_10BIT
+  cis_4k_4000x2252_69fps_12bit_lnfast:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 2926933334
+    line_length_pck: 17680
+    frame_length_lines: 2372
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setB-19p2.h
+      sha256: c4d657b500ae1c28cdf3e0b6acebb8dc3bd40c67d4935c9b5529b84b67269cde
+      line: 4808
+      basis: CIS indexed setfile
+      mode_index: 17
+      nominal_fps: 69
+      bits_per_pixel: 12
+      symbol: sensor_imx564_mode_info_B_19p2_4k_4000x2252_69fps_12bit_lnfast
+      mode_name: 75_A12_4K_LNFAST_RAW12_AM3 IMX564_4K_4000X2252_69FPS_12BIT_LNFAST
+  cis_4k_4000x2252_69fps_10bit_lnfast:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 2926933334
+    line_length_pck: 17680
+    frame_length_lines: 2372
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setB-19p2.h
+      sha256: c4d657b500ae1c28cdf3e0b6acebb8dc3bd40c67d4935c9b5529b84b67269cde
+      line: 4829
+      basis: CIS indexed setfile
+      mode_index: 18
+      nominal_fps: 69
+      bits_per_pixel: 10
+      symbol: sensor_imx564_mode_info_B_19p2_4k_4000x2252_69fps_10bit_lnfast
+      mode_name: 76_A12-1_4K_LNFAST_RAW10_AM3 IMX564_4K_4000X2252_69FPS_10BIT_LNFAST
+  cis_4k_4000x2252_39fps_10bit_ln4:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 2926933334
+    line_length_pck: 30944
+    frame_length_lines: 2372
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setB-19p2.h
+      sha256: c4d657b500ae1c28cdf3e0b6acebb8dc3bd40c67d4935c9b5529b84b67269cde
+      line: 4850
+      basis: CIS indexed setfile
+      mode_index: 19
+      nominal_fps: 39
+      bits_per_pixel: 10
+      symbol: sensor_imx564_mode_info_B_19p2_4k_4000x2252_39fps_10bit_ln4
+      mode_name: 77_A13_4K_LN4_RAW10_AM3 IMX564_4K_4000X2252_39FPS_10BIT_LN4
+  cis_4k_4000x2252_39fps_12bit_ln4:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 2926933334
+    line_length_pck: 30944
+    frame_length_lines: 2372
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setB-19p2.h
+      sha256: c4d657b500ae1c28cdf3e0b6acebb8dc3bd40c67d4935c9b5529b84b67269cde
+      line: 4871
+      basis: CIS indexed setfile
+      mode_index: 20
+      nominal_fps: 39
+      bits_per_pixel: 12
+      symbol: sensor_imx564_mode_info_B_19p2_4k_4000x2252_39fps_12bit_ln4
+      mode_name: 119_A13_4K_LN4_RAW12_AM3_Pseudo IMX564_4K_4000X2252_39FPS_12BIT_LN4
+  cis_2800x2100_86fps_10bit:
+    active_width: 2800
+    active_height: 2100
+    pixel_clock_hz: 2926933334
+    line_length_pck: 10816
+    frame_length_lines: 3116
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setB-19p2.h
+      sha256: c4d657b500ae1c28cdf3e0b6acebb8dc3bd40c67d4935c9b5529b84b67269cde
+      line: 4892
+      basis: CIS indexed setfile
+      mode_index: 21
+      nominal_fps: 86
+      bits_per_pixel: 10
+      symbol: sensor_imx564_mode_info_B_19p2_2800x2100_86fps_10bit
+      mode_name: 65_A14_RAW10_AM3 IMX564_2800X2100_86FPS_10BIT
+  cis_2800x2100_86fps_12bit:
+    active_width: 2800
+    active_height: 2100
+    pixel_clock_hz: 2926933334
+    line_length_pck: 10816
+    frame_length_lines: 3116
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setB-19p2.h
+      sha256: c4d657b500ae1c28cdf3e0b6acebb8dc3bd40c67d4935c9b5529b84b67269cde
+      line: 4912
+      basis: CIS indexed setfile
+      mode_index: 22
+      nominal_fps: 86
+      bits_per_pixel: 12
+      symbol: sensor_imx564_mode_info_B_19p2_2800x2100_86fps_12bit
+      mode_name: 118_A14_RAW12_AM3_Pseudo IMX564_2800X2100_86FPS_12BIT
+  cis_3840x2160_114fps_10bit:
+    active_width: 3840
+    active_height: 2160
+    pixel_clock_hz: 2926933334
+    line_length_pck: 10816
+    frame_length_lines: 2372
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setB-19p2.h
+      sha256: c4d657b500ae1c28cdf3e0b6acebb8dc3bd40c67d4935c9b5529b84b67269cde
+      line: 4932
+      basis: CIS indexed setfile
+      mode_index: 23
+      nominal_fps: 114
+      bits_per_pixel: 10
+      symbol: sensor_imx564_mode_info_B_19p2_3840x2160_114fps_10bit
+      mode_name: 85_A15_A17_4KCrop_RAW10_AM3 IMX564_3840X2160_114FPS_10BIT
+  cis_3840x2160_67fps_12bit_dsg:
+    active_width: 3840
+    active_height: 2160
+    pixel_clock_hz: 2926933334
+    line_length_pck: 9136
+    frame_length_lines: 4716
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setB-19p2.h
+      sha256: c4d657b500ae1c28cdf3e0b6acebb8dc3bd40c67d4935c9b5529b84b67269cde
+      line: 4952
+      basis: CIS indexed setfile
+      mode_index: 24
+      nominal_fps: 67
+      bits_per_pixel: 12
+      symbol: sensor_imx564_mode_info_B_19p2_3840x2160_67fps_12bit_dsg
+      mode_name: 88_A16_DSG_4KCrop_RAW12_AM3 IMX564_3840X2160_67FPS_12BIT_DSG
+  cis_3840x2160_69fps_12bit_lnfast:
+    active_width: 3840
+    active_height: 2160
+    pixel_clock_hz: 2926933334
+    line_length_pck: 17680
+    frame_length_lines: 2372
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setB-19p2.h
+      sha256: c4d657b500ae1c28cdf3e0b6acebb8dc3bd40c67d4935c9b5529b84b67269cde
+      line: 4972
+      basis: CIS indexed setfile
+      mode_index: 25
+      nominal_fps: 69
+      bits_per_pixel: 12
+      symbol: sensor_imx564_mode_info_B_19p2_3840x2160_69fps_12bit_lnfast
+      mode_name: 91_A17_4KCrop_LNFAST_RAW12_AM3 IMX564_3840X2160_69FPS_12BIT_LNFAST
+  cis_3840x2160_69fps_10bit_lnfast:
+    active_width: 3840
+    active_height: 2160
+    pixel_clock_hz: 2926933334
+    line_length_pck: 17680
+    frame_length_lines: 2372
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setB-19p2.h
+      sha256: c4d657b500ae1c28cdf3e0b6acebb8dc3bd40c67d4935c9b5529b84b67269cde
+      line: 4992
+      basis: CIS indexed setfile
+      mode_index: 26
+      nominal_fps: 69
+      bits_per_pixel: 10
+      symbol: sensor_imx564_mode_info_B_19p2_3840x2160_69fps_10bit_lnfast
+      mode_name: 94_A17-1_4KCrop_LNFAST_RAW10_AM3 IMX564_3840X2160_69FPS_10BIT_LNFAST
+  cis_3840x2160_39fps_10bit_ln4:
+    active_width: 3840
+    active_height: 2160
+    pixel_clock_hz: 2926933334
+    line_length_pck: 30944
+    frame_length_lines: 2372
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setB-19p2.h
+      sha256: c4d657b500ae1c28cdf3e0b6acebb8dc3bd40c67d4935c9b5529b84b67269cde
+      line: 5012
+      basis: CIS indexed setfile
+      mode_index: 27
+      nominal_fps: 39
+      bits_per_pixel: 10
+      symbol: sensor_imx564_mode_info_B_19p2_3840x2160_39fps_10bit_ln4
+      mode_name: 97_A18_4KCrop_LN4_RAW10_AM3 IMX564_3840X2160_39FPS_10BIT_LN4
+  cis_2800x2100_51fps_12bit_dsg:
+    active_width: 2800
+    active_height: 2100
+    pixel_clock_hz: 2926933334
+    line_length_pck: 9136
+    frame_length_lines: 6205
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setB-19p2.h
+      sha256: c4d657b500ae1c28cdf3e0b6acebb8dc3bd40c67d4935c9b5529b84b67269cde
+      line: 5032
+      basis: CIS indexed setfile
+      mode_index: 28
+      nominal_fps: 51
+      bits_per_pixel: 12
+      symbol: sensor_imx564_mode_info_B_19p2_2800x2100_51fps_12bit_dsg
+      mode_name: 109_A19_DSG_HDR_RAW12_AM3 IMX564_2800X2100_51FPS_12BIT_DSG
+  cis_2880x1620_92fps_12bit_dsg:
+    active_width: 2880
+    active_height: 1620
+    pixel_clock_hz: 2926933334
+    line_length_pck: 9136
+    frame_length_lines: 3452
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setB-19p2.h
+      sha256: c4d657b500ae1c28cdf3e0b6acebb8dc3bd40c67d4935c9b5529b84b67269cde
+      line: 5052
+      basis: CIS indexed setfile
+      mode_index: 29
+      nominal_fps: 92
+      bits_per_pixel: 12
+      symbol: sensor_imx564_mode_info_B_19p2_2880x1620_92fps_12bit_dsg
+      mode_name: 115_A20_DSG_HDR_30FPS_RAW12_AM3 IMX564_2880X1620_92FPS_12BIT_DSG
+  cis_fhd_2000x1124_527fps_10bit:
+    active_width: 2000
+    active_height: 1124
+    pixel_clock_hz: 2926933334
+    line_length_pck: 4560
+    frame_length_lines: 1216
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setB-19p2.h
+      sha256: c4d657b500ae1c28cdf3e0b6acebb8dc3bd40c67d4935c9b5529b84b67269cde
+      line: 5072
+      basis: CIS indexed setfile
+      mode_index: 30
+      nominal_fps: 527
+      bits_per_pixel: 10
+      symbol: sensor_imx564_mode_info_B_19p2_fhd_2000x1124_527fps_10bit
+      mode_name: 38_B01_FullHD_480FPS_RAW10_AM3 IMX564_FHD_2000X1124_527FPS_10BIT
+  cis_2000x1500_157fps_10bit:
+    active_width: 2000
+    active_height: 1500
+    pixel_clock_hz: 2926933334
+    line_length_pck: 11584
+    frame_length_lines: 1600
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setB-19p2.h
+      sha256: c4d657b500ae1c28cdf3e0b6acebb8dc3bd40c67d4935c9b5529b84b67269cde
+      line: 5092
+      basis: CIS indexed setfile
+      mode_index: 31
+      nominal_fps: 157
+      bits_per_pixel: 10
+      symbol: sensor_imx564_mode_info_B_19p2_2000x1500_157fps_10bit
+      mode_name: 37_B02_120FPS_RAW10_AM4 IMX564_2000X1500_157FPS_10BIT
+  cis_960x540_157fps_10bit:
+    active_width: 960
+    active_height: 540
+    pixel_clock_hz: 2926933334
+    line_length_pck: 11584
+    frame_length_lines: 1600
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setB-19p2.h
+      sha256: c4d657b500ae1c28cdf3e0b6acebb8dc3bd40c67d4935c9b5529b84b67269cde
+      line: 5112
+      basis: CIS indexed setfile
+      mode_index: 32
+      nominal_fps: 157
+      bits_per_pixel: 10
+      symbol: sensor_imx564_mode_info_B_19p2_960x540_157fps_10bit
+      mode_name: 104_B03_30FPS_RAW10_AM4 IMX564_960X540_157FPS_10BIT
+  cis_1408x792_302fps_10bit:
+    active_width: 1408
+    active_height: 792
+    pixel_clock_hz: 2926933334
+    line_length_pck: 10816
+    frame_length_lines: 896
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setB-19p2.h
+      sha256: c4d657b500ae1c28cdf3e0b6acebb8dc3bd40c67d4935c9b5529b84b67269cde
+      line: 5132
+      basis: CIS indexed setfile
+      mode_index: 33
+      nominal_fps: 302
+      bits_per_pixel: 10
+      symbol: sensor_imx564_mode_info_B_19p2_1408x792_302fps_10bit
+      mode_name: 112_B04_30FPS_RAW10_AM3 IMX564_1408X792_302FPS_10BIT
+provenance:
+  selection: setB, 19.2 MHz, basic indexed mode; no runtime seamless switch; FF setB/setC
+    readout inputs verified identical by index
+  setfile:
+    path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setB-19p2.h
+    sha256: c4d657b500ae1c28cdf3e0b6acebb8dc3bd40c67d4935c9b5529b84b67269cde
+  driver:
+    path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564.c
+    sha256: a145165bcdf50c2c06f209952fc4695bb7d179b3c11c85d51513cc2b6404f80c
+  mode_table: sensor_imx564_mode_infos_B_19p2
+  equivalent_setC:
+    path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx564-setC-19p2.h
+    sha256: 8d14df996440426fe297c9eeb36f13a21e4dbff3caf81229bd392fdd2761f0cc

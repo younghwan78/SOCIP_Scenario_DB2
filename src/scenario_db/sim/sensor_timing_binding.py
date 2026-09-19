@@ -60,4 +60,4 @@ def catalog_timing(db, catalog_row, mode_label):
     timing["source"].update(catalog_id=catalog_row.id, catalog_sha256=catalog_row.yaml_sha256, dt_mode_label=mode_label)
     return {**calculate_sensor_timing(timing), "binding_status": "verified_mode_index",
             "nominal_dt_fps": mode["decoded"].get("fps"), "inputs": timing,
-            "binding_note": "SetA 19.2 MHz basic readout; runtime seamless/low-noise transitions require a new explicit selection."}
+            "binding_note": mode["timing_binding"]["source"].get("selection", "Reviewed basic setfile readout; runtime transitions require explicit selection.")}

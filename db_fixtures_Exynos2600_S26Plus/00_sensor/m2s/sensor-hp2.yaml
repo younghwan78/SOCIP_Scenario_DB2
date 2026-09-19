@@ -69,6 +69,22 @@ mode_summary:
   max_mipi_link_mbps: 25453
 modes:
   mode0:
+    timing_binding:
+      profile_ref: sensortiming-s5khp2-setb-19p2
+      profile_revision: setB-19p2-import-20260920
+      mode_label: cis_4080x3060_60fps_vpd
+      mode_index: 0
+      mode_sha256: ce022f4fdc022b232293a2b5f78f18481d7509a0dab84181c076777575b54c87
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setB, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+          sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2.c
+          sha256: 54259c8e4c6f548b04c445acbf7c2d430ad15a658492f7eae5c2d8d6bcb7b92b
+        mode_table: sensor_hp2_mode_infos_B_19p2
     dt:
       common:
       - '4080'
@@ -154,6 +170,7 @@ modes:
       csis_input_mbps: 9357.5
       link_utilization_pct: 36.8
   mode0_nfi:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4080'
@@ -260,6 +277,7 @@ modes:
       csis_input_mbps: 9361.4
       link_utilization_pct: 36.8
   mode1_nfi:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4080'
@@ -366,6 +384,22 @@ modes:
       csis_input_mbps: 2340.4
       link_utilization_pct: 9.2
   mode2:
+    timing_binding:
+      profile_ref: sensortiming-s5khp2-setb-19p2
+      profile_revision: setB-19p2-import-20260920
+      mode_label: cis_4000x3000_60fps_vpd
+      mode_index: 2
+      mode_sha256: f9890089e85b0340ef1c68595b281476bf6b28a5a40192c61f1ebe272dc9922b
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setB, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+          sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2.c
+          sha256: 54259c8e4c6f548b04c445acbf7c2d430ad15a658492f7eae5c2d8d6bcb7b92b
+        mode_table: sensor_hp2_mode_infos_B_19p2
     dt:
       common:
       - '4000'
@@ -451,6 +485,7 @@ modes:
       csis_input_mbps: 9004.8
       link_utilization_pct: 35.4
   mode2_nfi:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4000'
@@ -557,6 +592,7 @@ modes:
       csis_input_mbps: 9008.6
       link_utilization_pct: 35.4
   mode2_aeb:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4000'
@@ -686,6 +722,7 @@ modes:
       link_utilization_pct: 70.8
       csis_input_mbps_per_exposure: 10809.6
   mode2_aeb_nfi:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4000'
@@ -849,6 +886,7 @@ modes:
       link_utilization_pct: 70.8
       csis_input_mbps_per_exposure: 10825.0
   mode2_phy_tune:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4000'
@@ -934,6 +972,7 @@ modes:
       csis_input_mbps: 9004.8
       link_utilization_pct: 35.4
   mode4_video:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4000'
@@ -1007,6 +1046,22 @@ modes:
       csis_input_mbps: 8102.4
       link_utilization_pct: 31.8
   mode10:
+    timing_binding:
+      profile_ref: sensortiming-s5khp2-setb-19p2
+      profile_revision: setB-19p2-import-20260920
+      mode_label: cis_4000x2252_60fps_12bit_idcg
+      mode_index: 10
+      mode_sha256: 2638c07b5d91a4e43dc27794df431023aa3419c85c38d240018d2834553bec76
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setB, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+          sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2.c
+          sha256: 54259c8e4c6f548b04c445acbf7c2d430ad15a658492f7eae5c2d8d6bcb7b92b
+        mode_table: sensor_hp2_mode_infos_B_19p2
     dt:
       common:
       - '4000'
@@ -1078,6 +1133,22 @@ modes:
       csis_input_mbps: 7162.6
       link_utilization_pct: 28.1
   mode11:
+    timing_binding:
+      profile_ref: sensortiming-s5khp2-setb-19p2
+      profile_revision: setB-19p2-import-20260920
+      mode_label: cis_4000x2252_60fps
+      mode_index: 11
+      mode_sha256: 436b3fadb56c2728429d7756c1a1165c79e254a27849b016cf1d7dbf2106f0ff
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setB, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+          sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2.c
+          sha256: 54259c8e4c6f548b04c445acbf7c2d430ad15a658492f7eae5c2d8d6bcb7b92b
+        mode_table: sensor_hp2_mode_infos_B_19p2
     dt:
       common:
       - '4000'
@@ -1149,6 +1220,22 @@ modes:
       csis_input_mbps: 6081.6
       link_utilization_pct: 23.9
   mode12:
+    timing_binding:
+      profile_ref: sensortiming-s5khp2-setb-19p2
+      profile_revision: setB-19p2-import-20260920
+      mode_label: cis_3328x1872_120fps
+      mode_index: 12
+      mode_sha256: 02478334e7ed60acca770ec6cc4bd44a59cf8cdfbe338f066ca627c3c3b0f186
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setB, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+          sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2.c
+          sha256: 54259c8e4c6f548b04c445acbf7c2d430ad15a658492f7eae5c2d8d6bcb7b92b
+        mode_table: sensor_hp2_mode_infos_B_19p2
     dt:
       common:
       - '3328'
@@ -1220,6 +1307,22 @@ modes:
       csis_input_mbps: 8410.5
       link_utilization_pct: 33.0
   mode13:
+    timing_binding:
+      profile_ref: sensortiming-s5khp2-setb-19p2
+      profile_revision: setB-19p2-import-20260920
+      mode_label: cis_2800x2100_30fps
+      mode_index: 13
+      mode_sha256: eab27ad388eaa09f121608f7ec1b5059164ae9b5fd354f481301a8a2890e0ac8
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setB, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+          sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2.c
+          sha256: 54259c8e4c6f548b04c445acbf7c2d430ad15a658492f7eae5c2d8d6bcb7b92b
+        mode_table: sensor_hp2_mode_infos_B_19p2
     dt:
       common:
       - '2800'
@@ -1291,6 +1394,7 @@ modes:
       csis_input_mbps: 1984.1
       link_utilization_pct: 7.8
   mode14:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4000'
@@ -1362,6 +1466,22 @@ modes:
       csis_input_mbps: 4771.2
       link_utilization_pct: 18.7
   mode15:
+    timing_binding:
+      profile_ref: sensortiming-s5khp2-setb-19p2
+      profile_revision: setB-19p2-import-20260920
+      mode_label: cis_4080x3060_60fps_12bit_vpd
+      mode_index: 15
+      mode_sha256: d3f273ae3268202a2c89c1b4062028ad0159132a4c6b69bf052a3d13e7efe0f7
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setB, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+          sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2.c
+          sha256: 54259c8e4c6f548b04c445acbf7c2d430ad15a658492f7eae5c2d8d6bcb7b92b
+        mode_table: sensor_hp2_mode_infos_B_19p2
     dt:
       common:
       - '4080'
@@ -1447,6 +1567,7 @@ modes:
       csis_input_mbps: 10855.7
       link_utilization_pct: 42.6
   mode15_nfi:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4080'
@@ -1553,6 +1674,7 @@ modes:
       csis_input_mbps: 10863.5
       link_utilization_pct: 42.7
   mode15_aeb:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4080'
@@ -1682,6 +1804,7 @@ modes:
       link_utilization_pct: 85.3
       csis_input_mbps_per_exposure: 12722.3
   mode15_aeb_nfi:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4080'
@@ -1845,6 +1968,22 @@ modes:
       link_utilization_pct: 85.4
       csis_input_mbps_per_exposure: 12737.9
   mode18:
+    timing_binding:
+      profile_ref: sensortiming-s5khp2-setb-19p2
+      profile_revision: setB-19p2-import-20260920
+      mode_label: cis_4000x2252_120fps
+      mode_index: 18
+      mode_sha256: a52c5c162cd7f7f1e2483df51d0c3cbdb40847735eb7d9e504dd0922a6f5cffc
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setB, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+          sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2.c
+          sha256: 54259c8e4c6f548b04c445acbf7c2d430ad15a658492f7eae5c2d8d6bcb7b92b
+        mode_table: sensor_hp2_mode_infos_B_19p2
     dt:
       common:
       - '4000'
@@ -1916,6 +2055,22 @@ modes:
       csis_input_mbps: 12163.2
       link_utilization_pct: 47.8
   mode20:
+    timing_binding:
+      profile_ref: sensortiming-s5khp2-setb-19p2
+      profile_revision: setB-19p2-import-20260920
+      mode_label: cis_4000x3000_60fps_12bit_idcg_hcg_af
+      mode_index: 20
+      mode_sha256: b1de63afab46840384f85cbee32a35cdc8c5cf9924685c387e29bd90d587e9d3
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setB, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+          sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2.c
+          sha256: 54259c8e4c6f548b04c445acbf7c2d430ad15a658492f7eae5c2d8d6bcb7b92b
+        mode_table: sensor_hp2_mode_infos_B_19p2
     dt:
       common:
       - '4000'
@@ -1987,6 +2142,7 @@ modes:
       csis_input_mbps: 9542.4
       link_utilization_pct: 37.5
   mode20_nfi:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4000'
@@ -2079,6 +2235,7 @@ modes:
       csis_input_mbps: 9546.2
       link_utilization_pct: 37.5
   mode20_aeb:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4000'
@@ -2178,6 +2335,7 @@ modes:
       link_utilization_pct: 75.0
       csis_input_mbps_per_exposure: 10444.8
   mode20_aeb_nfi:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4000'
@@ -2311,6 +2469,7 @@ modes:
       link_utilization_pct: 75.0
       csis_input_mbps_per_exposure: 10460.2
   mode20_dcg:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4000'
@@ -2382,6 +2541,22 @@ modes:
       csis_input_mbps: 9542.4
       link_utilization_pct: 37.5
   mode26:
+    timing_binding:
+      profile_ref: sensortiming-s5khp2-setb-19p2
+      profile_revision: setB-19p2-import-20260920
+      mode_label: cis_8160x6120_30fps_4sum
+      mode_index: 26
+      mode_sha256: 30dda7d84cc66f5721c46b23a6b72ab5d5116ac86c06039a3d5d307768eeec45
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setB, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+          sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2.c
+          sha256: 54259c8e4c6f548b04c445acbf7c2d430ad15a658492f7eae5c2d8d6bcb7b92b
+        mode_table: sensor_hp2_mode_infos_B_19p2
     dt:
       common:
       - '8160'
@@ -2454,6 +2629,7 @@ modes:
       csis_input_mbps: 15916.9
       link_utilization_pct: 62.5
   mode26_ai_remosaic:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '8160'
@@ -2527,6 +2703,7 @@ modes:
       csis_input_mbps: 15916.9
       link_utilization_pct: 62.5
   mode26_nfi_bns:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '8160'
@@ -2621,6 +2798,7 @@ modes:
       csis_input_mbps: 15920.8
       link_utilization_pct: 62.5
   mode26_nfi_ai_remosaic:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '8160'
@@ -2715,6 +2893,22 @@ modes:
       csis_input_mbps: 15920.8
       link_utilization_pct: 62.5
   mode27:
+    timing_binding:
+      profile_ref: sensortiming-s5khp2-setb-19p2
+      profile_revision: setB-19p2-import-20260920
+      mode_label: cis_8160x6120_15fps_4sum_12bit_dsg
+      mode_index: 27
+      mode_sha256: a807c187a661ba427d8bc502705e05c135948a10d659551ce607a2887f337eed
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setB, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+          sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2.c
+          sha256: 54259c8e4c6f548b04c445acbf7c2d430ad15a658492f7eae5c2d8d6bcb7b92b
+        mode_table: sensor_hp2_mode_infos_B_19p2
     dt:
       common:
       - '8160'
@@ -2787,6 +2981,22 @@ modes:
       csis_input_mbps: 9456.6
       link_utilization_pct: 37.2
   mode28:
+    timing_binding:
+      profile_ref: sensortiming-s5khp2-setb-19p2
+      profile_revision: setB-19p2-import-20260920
+      mode_label: cis_8000x4500_30fps_4sum
+      mode_index: 28
+      mode_sha256: 26f70c737fbf8d487cf4e502ede26365e7aa1ec2d5f0e9ad107121027ee75ab8
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setB, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+          sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2.c
+          sha256: 54259c8e4c6f548b04c445acbf7c2d430ad15a658492f7eae5c2d8d6bcb7b92b
+        mode_table: sensor_hp2_mode_infos_B_19p2
     dt:
       common:
       - '8000'
@@ -2858,6 +3068,7 @@ modes:
       csis_input_mbps: 11476.8
       link_utilization_pct: 58.5
   mode34:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4000'
@@ -2944,6 +3155,7 @@ modes:
       csis_input_mbps: 9004.8
       link_utilization_pct: 35.4
   mode34_ai_remosaic:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4000'
@@ -3031,6 +3243,7 @@ modes:
       csis_input_mbps: 9004.8
       link_utilization_pct: 35.4
   mode34_nfi:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4000'
@@ -3138,6 +3351,7 @@ modes:
       csis_input_mbps: 9008.6
       link_utilization_pct: 35.4
   mode34_nfi_ai_remosaic:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4000'
@@ -3246,6 +3460,7 @@ modes:
       csis_input_mbps: 9008.6
       link_utilization_pct: 35.4
   mode45_nfi_tcc:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4080'
@@ -3338,6 +3553,7 @@ modes:
       csis_input_mbps: 8429.9
       link_utilization_pct: 33.1
   mode46_nfi_tcc:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4080'
@@ -3430,6 +3646,22 @@ modes:
       csis_input_mbps: 9928.1
       link_utilization_pct: 39.0
   mode48:
+    timing_binding:
+      profile_ref: sensortiming-s5khp2-setb-19p2
+      profile_revision: setB-19p2-import-20260920
+      mode_label: cis_16320x12240_11fps_full
+      mode_index: 48
+      mode_sha256: dc3beda860bc1fbc2b2ca38cdab849198015de1c77c3271ece002765f266297c
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setB, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+          sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2.c
+          sha256: 54259c8e4c6f548b04c445acbf7c2d430ad15a658492f7eae5c2d8d6bcb7b92b
+        mode_table: sensor_hp2_mode_infos_B_19p2
     dt:
       common:
       - '16320'
@@ -3488,6 +3720,7 @@ modes:
       csis_input_mbps: 21973.2
       link_utilization_pct: 86.3
   mode48_ai_remosaic:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '16320'
@@ -3546,6 +3779,22 @@ modes:
       csis_input_mbps: 21973.2
       link_utilization_pct: 86.3
   mode49:
+    timing_binding:
+      profile_ref: sensortiming-s5khp2-setb-19p2
+      profile_revision: setB-19p2-import-20260920
+      mode_label: cis_2000x1124_240fps
+      mode_index: 49
+      mode_sha256: 55ba846e56721c7a91585a67104426258de5c70017ef6c31295cfa5a15b12a6b
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setB, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+          sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2.c
+          sha256: 54259c8e4c6f548b04c445acbf7c2d430ad15a658492f7eae5c2d8d6bcb7b92b
+        mode_table: sensor_hp2_mode_infos_B_19p2
     dt:
       common:
       - '2000'
@@ -3617,6 +3866,7 @@ modes:
       csis_input_mbps: 6076.8
       link_utilization_pct: 48.9
   mode50:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '2000'
@@ -3691,6 +3941,22 @@ modes:
       csis_input_mbps: 10805.8
       link_utilization_pct: 55.1
   mode51:
+    timing_binding:
+      profile_ref: sensortiming-s5khp2-setb-19p2
+      profile_revision: setB-19p2-import-20260920
+      mode_label: cis_2040x1532_120fps
+      mode_index: 51
+      mode_sha256: 7af989b6ab8cc17eab617778b14400105315bb2cd42ed529bfa7fe300ab48007
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setB, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2-setB-19p2.h
+          sha256: 566b827042bd02719325947c81602c2286cf67e2d568c315e832ba1e10bed1f5
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-hp2.c
+          sha256: 54259c8e4c6f548b04c445acbf7c2d430ad15a658492f7eae5c2d8d6bcb7b92b
+        mode_table: sensor_hp2_mode_infos_B_19p2
     dt:
       common:
       - '2040'
@@ -3763,6 +4029,7 @@ modes:
       csis_input_mbps: 4210.6
       link_utilization_pct: 33.9
   mode47:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '5824'
@@ -3835,6 +4102,7 @@ modes:
       csis_input_mbps: 9636.9
       link_utilization_pct: 37.9
   mode47_nfi:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '5824'
@@ -3928,6 +4196,7 @@ modes:
       csis_input_mbps: 9639.7
       link_utilization_pct: 37.9
   mode60_hexadeca_crop:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '5824'
@@ -3987,6 +4256,7 @@ modes:
       csis_input_mbps: 9158.1
       link_utilization_pct: 36.0
   mode60_hexadeca_crop_nfi:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '5824'

@@ -59,6 +59,22 @@ mode_summary:
   max_mipi_link_mbps: 10344
 modes:
   mode0:
+    timing_binding:
+      profile_ref: sensortiming-s5k3lu-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4000x3000_60fps_10bit
+      mode_index: 0
+      mode_sha256: 586003e28a354cedd9ca230eb8bf5408a8df2773131042c28f7ca6cf5ebd2d85
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3lu-setA-19p2.h
+          sha256: a697f11f5b40e550f63e45425b367b251357a375ce070b215dcb024d4babd8b6
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3lu.c
+          sha256: f0f4022b823e58d29f7b8207f0039985b7d20fdf23c6985eb9f98ab082ea7df7
+        mode_table: sensor_3lu_mode_infos_A_19p2
     dt:
       common:
       - '4000'
@@ -144,6 +160,7 @@ modes:
       csis_input_mbps: 8142.2
       link_utilization_pct: 78.7
   mode0_secure:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4000'
@@ -229,6 +246,7 @@ modes:
       csis_input_mbps: 8142.2
       link_utilization_pct: 78.7
   mode0_aeb:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4000'
@@ -356,6 +374,7 @@ modes:
         csis_input_mbps_per_exposure.'
       csis_input_mbps_per_exposure: 9084.5
   mode0_pd_raw:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4000'
@@ -441,6 +460,7 @@ modes:
       csis_input_mbps: 8142.2
       link_utilization_pct: 78.7
   mode0_livefocus_aeb:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4000'
@@ -568,6 +588,7 @@ modes:
         csis_input_mbps_per_exposure.'
       csis_input_mbps_per_exposure: 9084.5
   mode0_phy_tune:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4000'
@@ -653,6 +674,22 @@ modes:
       csis_input_mbps: 4071.1
       link_utilization_pct: 39.4
   mode1:
+    timing_binding:
+      profile_ref: sensortiming-s5k3lu-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_3392x2544_60fps_10bit
+      mode_index: 1
+      mode_sha256: fe16f681771e2be252a0d6083036411337d4e43c89e9f59fd4f278e439144616
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3lu-setA-19p2.h
+          sha256: a697f11f5b40e550f63e45425b367b251357a375ce070b215dcb024d4babd8b6
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3lu.c
+          sha256: f0f4022b823e58d29f7b8207f0039985b7d20fdf23c6985eb9f98ab082ea7df7
+        mode_table: sensor_3lu_mode_infos_A_19p2
     dt:
       common:
       - '3392'
@@ -738,6 +775,22 @@ modes:
       csis_input_mbps: 5854.0
       link_utilization_pct: 78.6
   mode2:
+    timing_binding:
+      profile_ref: sensortiming-s5k3lu-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_3392x1908_60fps_10bit
+      mode_index: 2
+      mode_sha256: 30de4f160bded80cb196b05de61b66188495a4d35c2757f7b84c135ceeb0b4b8
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3lu-setA-19p2.h
+          sha256: a697f11f5b40e550f63e45425b367b251357a375ce070b215dcb024d4babd8b6
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3lu.c
+          sha256: f0f4022b823e58d29f7b8207f0039985b7d20fdf23c6985eb9f98ab082ea7df7
+        mode_table: sensor_3lu_mode_infos_A_19p2
     dt:
       common:
       - '3392'
@@ -823,6 +876,22 @@ modes:
       csis_input_mbps: 4393.6
       link_utilization_pct: 59.0
   mode3:
+    timing_binding:
+      profile_ref: sensortiming-s5k3lu-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4000x3000_30fps_adc11
+      mode_index: 3
+      mode_sha256: 97623b56fb20b2cadf21773bf436da681278c5dd02bec2539da05a333301e6e3
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3lu-setA-19p2.h
+          sha256: a697f11f5b40e550f63e45425b367b251357a375ce070b215dcb024d4babd8b6
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3lu.c
+          sha256: f0f4022b823e58d29f7b8207f0039985b7d20fdf23c6985eb9f98ab082ea7df7
+        mode_table: sensor_3lu_mode_infos_A_19p2
     dt:
       common:
       - '4000'
@@ -908,6 +977,22 @@ modes:
       csis_input_mbps: 4791.1
       link_utilization_pct: 46.3
   mode4:
+    timing_binding:
+      profile_ref: sensortiming-s5k3lu-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4000x2252_60fps_10bit
+      mode_index: 4
+      mode_sha256: cc851943953ca71aad8371e2272af8a88b81f7bf18900077838e79ce36e61309
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3lu-setA-19p2.h
+          sha256: a697f11f5b40e550f63e45425b367b251357a375ce070b215dcb024d4babd8b6
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3lu.c
+          sha256: f0f4022b823e58d29f7b8207f0039985b7d20fdf23c6985eb9f98ab082ea7df7
+        mode_table: sensor_3lu_mode_infos_A_19p2
     dt:
       common:
       - '4000'
@@ -993,6 +1078,7 @@ modes:
       csis_input_mbps: 6121.4
       link_utilization_pct: 59.2
   mode4_aeb:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4000'
@@ -1120,6 +1206,7 @@ modes:
         csis_input_mbps_per_exposure.'
       csis_input_mbps_per_exposure: 6838.1
   mode4_pd_raw:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4000'
@@ -1205,6 +1292,7 @@ modes:
       csis_input_mbps: 6121.4
       link_utilization_pct: 59.2
   mode4_livefocus_aeb:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4000'
@@ -1332,6 +1420,22 @@ modes:
         csis_input_mbps_per_exposure.'
       csis_input_mbps_per_exposure: 6838.1
   mode5:
+    timing_binding:
+      profile_ref: sensortiming-s5k3lu-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4000x2252_60fps_adc11
+      mode_index: 5
+      mode_sha256: d34fa4aeabe8a41ae29829e80b93d286f158c645285c0dc73d5de9202b0e0687
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3lu-setA-19p2.h
+          sha256: a697f11f5b40e550f63e45425b367b251357a375ce070b215dcb024d4babd8b6
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3lu.c
+          sha256: f0f4022b823e58d29f7b8207f0039985b7d20fdf23c6985eb9f98ab082ea7df7
+        mode_table: sensor_3lu_mode_infos_A_19p2
     dt:
       common:
       - '4000'
@@ -1417,6 +1521,22 @@ modes:
       csis_input_mbps: 7198.6
       link_utilization_pct: 69.6
   mode6:
+    timing_binding:
+      profile_ref: sensortiming-s5k3lu-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_2000x1124_120fps_10bit
+      mode_index: 6
+      mode_sha256: a262ecae32f47346670c89bbae0c20f21adbe442382ce9eb58ee615d931707de
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3lu-setA-19p2.h
+          sha256: a697f11f5b40e550f63e45425b367b251357a375ce070b215dcb024d4babd8b6
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3lu.c
+          sha256: f0f4022b823e58d29f7b8207f0039985b7d20fdf23c6985eb9f98ab082ea7df7
+        mode_table: sensor_3lu_mode_infos_A_19p2
     dt:
       common:
       - '2000'
@@ -1502,6 +1622,22 @@ modes:
       csis_input_mbps: 3075.8
       link_utilization_pct: 48.5
   mode7:
+    timing_binding:
+      profile_ref: sensortiming-s5k3lu-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_2000x1500_120fps_fast_ae
+      mode_index: 7
+      mode_sha256: 7f56d152ec3d7a8dadcc7029f223b167705b7178ae7cf242997ed0c503dfa7b2
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3lu-setA-19p2.h
+          sha256: a697f11f5b40e550f63e45425b367b251357a375ce070b215dcb024d4babd8b6
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3lu.c
+          sha256: f0f4022b823e58d29f7b8207f0039985b7d20fdf23c6985eb9f98ab082ea7df7
+        mode_table: sensor_3lu_mode_infos_A_19p2
     dt:
       common:
       - '2000'
@@ -1574,6 +1710,22 @@ modes:
       csis_input_mbps: 3615.4
       link_utilization_pct: 42.7
   mode8:
+    timing_binding:
+      profile_ref: sensortiming-s5k3lu-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_1696x1272_30fps_10bit
+      mode_index: 8
+      mode_sha256: ced6bc8afdb686a3209fe7c67d38a24a3094844a66ed0eb125c2f5f03555667b
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3lu-setA-19p2.h
+          sha256: a697f11f5b40e550f63e45425b367b251357a375ce070b215dcb024d4babd8b6
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3lu.c
+          sha256: f0f4022b823e58d29f7b8207f0039985b7d20fdf23c6985eb9f98ab082ea7df7
+        mode_table: sensor_3lu_mode_infos_A_19p2
     dt:
       common:
       - '1696'
@@ -1659,6 +1811,22 @@ modes:
       csis_input_mbps: 735.4
       link_utilization_pct: 15.4
   mode9:
+    timing_binding:
+      profile_ref: sensortiming-s5k3lu-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_1696x954_30fps_10bit
+      mode_index: 9
+      mode_sha256: e8a7023b0ce7360e70a933d7080270afc7ef53f66471b673c2fa72fd8d683ee7
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3lu-setA-19p2.h
+          sha256: a697f11f5b40e550f63e45425b367b251357a375ce070b215dcb024d4babd8b6
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3lu.c
+          sha256: f0f4022b823e58d29f7b8207f0039985b7d20fdf23c6985eb9f98ab082ea7df7
+        mode_table: sensor_3lu_mode_infos_A_19p2
     dt:
       common:
       - '1696'

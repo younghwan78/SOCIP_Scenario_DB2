@@ -55,6 +55,22 @@ mode_summary:
   max_mipi_link_mbps: 9572
 modes:
   mode0:
+    timing_binding:
+      profile_ref: sensortiming-s5k3j1-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_3648x2736_30fps
+      mode_index: 0
+      mode_sha256: eb4cd1e1d76d34af24eaa7fb047658e6835fb8f7d75908744da01c4fafa8f1f0
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1-setA-19p2.h
+          sha256: 07f9e894861da8002e239982a511b1cc72dcdd9840ea78fdb2158bdc47bc469b
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1.c
+          sha256: 9cc0f072d3cdedbff0657cd87f2352d7122e395da52a9ca5f8642f18ce7ef657
+        mode_table: sensor_3j1_mode_infos_A_19p2
     dt:
       common:
       - '3648'
@@ -147,6 +163,22 @@ modes:
       link_utilization_pct: 37.7
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode1:
+    timing_binding:
+      profile_ref: sensortiming-s5k3j1-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_3968x2232_30fps
+      mode_index: 1
+      mode_sha256: 62c85a60f0d9610c2b9ddea93e965cd99ac153806e8ae9cb5145e4ce2b403706
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1-setA-19p2.h
+          sha256: 07f9e894861da8002e239982a511b1cc72dcdd9840ea78fdb2158bdc47bc469b
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1.c
+          sha256: 9cc0f072d3cdedbff0657cd87f2352d7122e395da52a9ca5f8642f18ce7ef657
+        mode_table: sensor_3j1_mode_infos_A_19p2
     dt:
       common:
       - '3968'
@@ -239,6 +271,22 @@ modes:
       link_utilization_pct: 33.5
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode2:
+    timing_binding:
+      profile_ref: sensortiming-s5k3j1-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_3968x2232_60fps
+      mode_index: 2
+      mode_sha256: b87fe01547832cdf2d2b83a5a18029e15f86246df26729306865c92e22e6a738
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1-setA-19p2.h
+          sha256: 07f9e894861da8002e239982a511b1cc72dcdd9840ea78fdb2158bdc47bc469b
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1.c
+          sha256: 9cc0f072d3cdedbff0657cd87f2352d7122e395da52a9ca5f8642f18ce7ef657
+        mode_table: sensor_3j1_mode_infos_A_19p2
     dt:
       common:
       - '3968'
@@ -331,6 +379,22 @@ modes:
       link_utilization_pct: 55.5
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode3:
+    timing_binding:
+      profile_ref: sensortiming-s5k3j1-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_1984x1120_120fps
+      mode_index: 3
+      mode_sha256: 633bbf429d8d3f9278552466287a2adf0bb2529fb933d324445b41c6b37020dd
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1-setA-19p2.h
+          sha256: 07f9e894861da8002e239982a511b1cc72dcdd9840ea78fdb2158bdc47bc469b
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1.c
+          sha256: 9cc0f072d3cdedbff0657cd87f2352d7122e395da52a9ca5f8642f18ce7ef657
+        mode_table: sensor_3j1_mode_infos_A_19p2
     dt:
       common:
       - '1984'
@@ -423,6 +487,22 @@ modes:
       link_utilization_pct: 33.6
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode4:
+    timing_binding:
+      profile_ref: sensortiming-s5k3j1-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_1824x1368_30fps
+      mode_index: 4
+      mode_sha256: 19e06f92869a012c692dd3ee404c7060a65c19a6217a7eb8ae709d576986cfe7
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1-setA-19p2.h
+          sha256: 07f9e894861da8002e239982a511b1cc72dcdd9840ea78fdb2158bdc47bc469b
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1.c
+          sha256: 9cc0f072d3cdedbff0657cd87f2352d7122e395da52a9ca5f8642f18ce7ef657
+        mode_table: sensor_3j1_mode_infos_A_19p2
     dt:
       common:
       - '1824'
@@ -515,6 +595,22 @@ modes:
       link_utilization_pct: 9.4
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode5:
+    timing_binding:
+      profile_ref: sensortiming-s5k3j1-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_1984x1120_30fps
+      mode_index: 5
+      mode_sha256: 759887b94e68a89e744059c8a124cbcf90ec787a87af4b4d9d0d21e11d3f138f
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1-setA-19p2.h
+          sha256: 07f9e894861da8002e239982a511b1cc72dcdd9840ea78fdb2158bdc47bc469b
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1.c
+          sha256: 9cc0f072d3cdedbff0657cd87f2352d7122e395da52a9ca5f8642f18ce7ef657
+        mode_table: sensor_3j1_mode_infos_A_19p2
     dt:
       common:
       - '1984'
@@ -607,6 +703,22 @@ modes:
       link_utilization_pct: 8.4
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode6:
+    timing_binding:
+      profile_ref: sensortiming-s5k3j1-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_912x684_120fps
+      mode_index: 6
+      mode_sha256: 7188f207cfd4e7d1805ea9341da52815b94ed9f19d9f664acba41da69b5d4230
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1-setA-19p2.h
+          sha256: 07f9e894861da8002e239982a511b1cc72dcdd9840ea78fdb2158bdc47bc469b
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1.c
+          sha256: 9cc0f072d3cdedbff0657cd87f2352d7122e395da52a9ca5f8642f18ce7ef657
+        mode_table: sensor_3j1_mode_infos_A_19p2
     dt:
       common:
       - '912'
@@ -700,6 +812,22 @@ modes:
       link_utilization_pct: 9.4
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode7:
+    timing_binding:
+      profile_ref: sensortiming-s5k3j1-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_3280x2268_30fps
+      mode_index: 7
+      mode_sha256: 64c06eb571ee53a5dd31109c2c20d67072208e3e422d0376b2ebe9aeb0c109b8
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1-setA-19p2.h
+          sha256: 07f9e894861da8002e239982a511b1cc72dcdd9840ea78fdb2158bdc47bc469b
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1.c
+          sha256: 9cc0f072d3cdedbff0657cd87f2352d7122e395da52a9ca5f8642f18ce7ef657
+        mode_table: sensor_3j1_mode_infos_A_19p2
     dt:
       common:
       - '3280'
@@ -792,6 +920,22 @@ modes:
       link_utilization_pct: 28.1
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode8:
+    timing_binding:
+      profile_ref: sensortiming-s5k3j1-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_1520x1136_30fps
+      mode_index: 8
+      mode_sha256: 38f25313aacc821028b1f46d1db8ea69956c6d7d0ebe4579f8f3fcadca495d1c
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1-setA-19p2.h
+          sha256: 07f9e894861da8002e239982a511b1cc72dcdd9840ea78fdb2158bdc47bc469b
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1.c
+          sha256: 9cc0f072d3cdedbff0657cd87f2352d7122e395da52a9ca5f8642f18ce7ef657
+        mode_table: sensor_3j1_mode_infos_A_19p2
     dt:
       common:
       - '1520'
@@ -884,6 +1028,22 @@ modes:
       link_utilization_pct: 6.5
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode9:
+    timing_binding:
+      profile_ref: sensortiming-s5k3j1-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_1640x924_30fps
+      mode_index: 9
+      mode_sha256: 5809ee00d177ca2c3c820fbcd2a8860b299e4b53fef16be660a362e64b1bfc72
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1-setA-19p2.h
+          sha256: 07f9e894861da8002e239982a511b1cc72dcdd9840ea78fdb2158bdc47bc469b
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1.c
+          sha256: 9cc0f072d3cdedbff0657cd87f2352d7122e395da52a9ca5f8642f18ce7ef657
+        mode_table: sensor_3j1_mode_infos_A_19p2
     dt:
       common:
       - '1640'
@@ -976,6 +1136,7 @@ modes:
       link_utilization_pct: 5.7
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode10:
+    timing_binding_note: DT mode index is absent from the reviewed CIS table.
     dt:
       common:
       - '3648'
@@ -1068,6 +1229,7 @@ modes:
       link_utilization_pct: 75.5
       payload_note: one or more VCs had no decodable bpp; payload is a lower bound
   mode0_secure:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '3648'

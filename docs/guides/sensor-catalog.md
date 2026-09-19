@@ -32,7 +32,7 @@ vertical_blank_ms = frame_period_ms - valid_time_ms
 
 The calculator rejects nonfinite/nonpositive timing inputs and readout longer than the frame. DT FPS/MIPI rate alone returns `missing_timing`; simulator display and clock correction no longer substitute frame period for VVALID. DT `vvalid_time`/`req_vvalid_time` are preserved as metadata but not automatically interpreted without validated units and semantics.
 
-The supplied GNG profile contains 47 CIS modes. Example `cis_4sum_ln1_raw10_4080x3060_120fps_3993msps`: 3,532,800,000 Hz, 8,880 clocks/line, 3,312 frame lines, 3,060 image lines gives **7.691576 ms VVALID**. Twenty basic GNG DT modes now have reviewed mode-index bindings to these CIS modes. The other 429 remain unbound. Matching dimensions/FPS is insufficient to identify LN/DCG/AEB behavior.
+The supplied GNG profile contains 47 CIS modes. Example `cis_4sum_ln1_raw10_4080x3060_120fps_3993msps`: 3,532,800,000 Hz, 8,880 clocks/line, 3,312 frame lines, 3,060 image lines gives **7.691576 ms VVALID**. Twenty basic GNG DT modes now have reviewed mode-index bindings to these CIS modes. Additional sensors now have reviewed basic-mode bindings as described below. Matching dimensions/FPS is insufficient to identify LN/DCG/AEB behavior.
 
 ## API and UI
 
@@ -131,7 +131,7 @@ These follow the driver dispatch `cfg.mode -> mode_infos[index]`, not a
 resolution/FPS search. The source assumptions are setA at 19.2 MHz, non-mirror,
 and no runtime seamless transition. Source file paths, hashes and line references
 are retained. AEB/DCG, NFI, LN and remosaic suffixes remain unmapped pending
-an explicit runtime sequence contract. Other sensors still need CIS profiles.
+an explicit runtime sequence contract. Other sensor profiles and basic-mode coverage are described below.
 
 Each `modes.<full_label>.timing_binding` contains the profile ID/revision, CIS
 mode label, DT mode index, canonical timing-input SHA256 and source evidence.
@@ -163,6 +163,46 @@ Reproduce the source review/import enrichment with:
 
 The script checks all 47 imported timing entries against setA, verifies both DT
 source hashes, adds only basic full labels, and reads the source tree without
-changing it. The remaining 429 DT modes are still unbound.
+changing it. Extended modes remain unbound unless their runtime readout sequence has been reviewed.
 
 Timeline events retain the exact readout in `v_valid_ms`. Existing OTF group reservation bars can be longer when downstream processing dominates; their full reservation duration is not a new sensor readout measurement.
+
+
+## Other sensors and recording-oriented mode order
+
+The catalog now has **14 reusable timing profiles / 433 CIS modes**, with
+**220 bound DT modes out of 449** across all 13 sensor identities. New families
+include HP2, JN3, IMX874, IMX564, 3LD, GN3, 3LU, 3K1, IMX955, IMX854,
+IMX754 and 3J1. The original DT fields are preserved.
+
+For m2s, basic bindings are HP2 15, JN3 12, IMX874 16, IMX564-FF 17,
+3LD 10 and GNG 10. HP2 uses setB; the other new families use the reviewed
+setA default, except IMX564 FF. IMX564 non-FF uses setA. FF uses a setB
+profile whose mode-index readout parameters were verified identical to setC;
+the corresponding source hashes are preserved. Alternate revisions and runtime
+seamless/extended mode choices still require a reviewed selection.
+
+229 modes remain unresolved: extended readout, DT/CIS dimension or bit-depth
+mismatch, or an index absent from the reviewed table. In particular, bare
+IMX874 mode10 carries an extended option and is not silently treated as basic.
+The orphan IMX955 remains searchable and calculable but cannot be bound as an
+installed source-board sensor.
+
+Reproduce the additional profiles and mappings (source tree is read-only):
+
+```powershell
+.\.venv\Scripts\python.exe scripts/import_sensor_cis_timings.py --source-root <kernel-workspace-root>
+```
+
+The script parses explicit mode table order and literal clock expressions; it
+never executes source code and refuses unsupported numeric/table syntax.
+Each mapping checks dimensions, image VC count, bit depth, DT source hash and
+MCLK. An existing differing mapping requires review rather than replacement.
+
+DT and CIS selectors use **16:9 first, then 30 / 60 / 120 / 240 fps / other
+rates**, followed by other aspect ratios. Near-16:9 dimensions (within 1%) such
+as 4080×2296 and 4000×2252 are included. DT positive max_fps caps participate
+in sorting; CIS nominal FPS is used when declared, otherwise calculated frame
+rate is grouped within 1% of a standard rate. Within a rate, larger resolutions
+come first. IDs and API lookup keys are unchanged. The CIS profile selector
+prefers the profile referenced by the selected DT binding.

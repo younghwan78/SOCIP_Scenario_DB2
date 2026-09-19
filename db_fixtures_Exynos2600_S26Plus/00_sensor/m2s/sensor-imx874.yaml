@@ -66,6 +66,22 @@ mode_summary:
   max_mipi_link_mbps: 12124
 modes:
   mode1:
+    timing_binding:
+      profile_ref: sensortiming-imx874-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4000x3000_60fps_10bit
+      mode_index: 1
+      mode_sha256: 44fadc794a9d8939d751ae127194673ff777fcc6ced1e1055f9288876e6deb4d
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+          sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874.c
+          sha256: 76f3f672532ac0710531e2c69ab34aa0f6a0f37310a24413aaf614cd997a3ae5
+        mode_table: sensor_imx874_mode_infos_A_19p2
     dt:
       common:
       - '4000'
@@ -137,6 +153,7 @@ modes:
       csis_input_mbps: 9000.0
       link_utilization_pct: 83.6
   mode1_secure:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4000'
@@ -208,6 +225,7 @@ modes:
       csis_input_mbps: 9000.0
       link_utilization_pct: 83.6
   mode1_aeb:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4000'
@@ -308,6 +326,7 @@ modes:
         csis_input_mbps_per_exposure.'
       csis_input_mbps_per_exposure: 10800.0
   mode1_pd_raw:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4000'
@@ -377,6 +396,7 @@ modes:
       csis_input_mbps: 9000.0
       link_utilization_pct: 83.6
   mode1_livefocus_aeb:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4000'
@@ -477,6 +497,7 @@ modes:
         csis_input_mbps_per_exposure.'
       csis_input_mbps_per_exposure: 10800.0
   mode1_phy_tune:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4000'
@@ -548,6 +569,22 @@ modes:
       csis_input_mbps: 9000.0
       link_utilization_pct: 83.6
   mode2:
+    timing_binding:
+      profile_ref: sensortiming-imx874-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4000x3000_60fps_12bit
+      mode_index: 2
+      mode_sha256: 968fc0aacb747f659bbbcdf5bcb59f8ef4a81b6d235b30f145d35d4d98bba9f7
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+          sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874.c
+          sha256: 76f3f672532ac0710531e2c69ab34aa0f6a0f37310a24413aaf614cd997a3ae5
+        mode_table: sensor_imx874_mode_infos_A_19p2
     dt:
       common:
       - '4000'
@@ -619,6 +656,7 @@ modes:
       csis_input_mbps: 10440.0
       link_utilization_pct: 86.1
   mode3_ln:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4000'
@@ -690,6 +728,7 @@ modes:
       csis_input_mbps: 3600.0
       link_utilization_pct: 33.4
   mode10:
+    timing_binding_note: "Extended/suffix mode: runtime readout sequence needs review."
     dt:
       common:
       - '4000'
@@ -763,6 +802,7 @@ modes:
       csis_input_mbps: 5220.0
       link_utilization_pct: 48.5
   mode10_dcg:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4000'
@@ -834,6 +874,22 @@ modes:
       csis_input_mbps: 5220.0
       link_utilization_pct: 48.5
   mode11:
+    timing_binding:
+      profile_ref: sensortiming-imx874-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4000x2252_60fps_10bit
+      mode_index: 11
+      mode_sha256: 35fcdcbcbbd0d69e396f70f38703339e267867984dede43bca4eba6c2af4d08d
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+          sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874.c
+          sha256: 76f3f672532ac0710531e2c69ab34aa0f6a0f37310a24413aaf614cd997a3ae5
+        mode_table: sensor_imx874_mode_infos_A_19p2
     dt:
       common:
       - '4000'
@@ -905,6 +961,7 @@ modes:
       csis_input_mbps: 6756.0
       link_utilization_pct: 62.7
   mode11_aeb:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '4000'
@@ -1005,6 +1062,22 @@ modes:
         csis_input_mbps_per_exposure.'
       csis_input_mbps_per_exposure: 8107.2
   mode14:
+    timing_binding:
+      profile_ref: sensortiming-imx874-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4000x2252_60fps_12bit_ad11
+      mode_index: 14
+      mode_sha256: d8bd97c738f4aa05679c36631ed54cf5be38f6d831b2a84990d8b75d5707d06d
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+          sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874.c
+          sha256: 76f3f672532ac0710531e2c69ab34aa0f6a0f37310a24413aaf614cd997a3ae5
+        mode_table: sensor_imx874_mode_infos_A_19p2
     dt:
       common:
       - '4000'
@@ -1076,6 +1149,22 @@ modes:
       csis_input_mbps: 7837.0
       link_utilization_pct: 72.8
   mode15:
+    timing_binding:
+      profile_ref: sensortiming-imx874-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_2000x1500_120fps_10bit
+      mode_index: 15
+      mode_sha256: 13fa80ccea639d7fbc81385847dd00abc6b2fed21e29750e9a5fdbefd1335c49
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+          sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874.c
+          sha256: 76f3f672532ac0710531e2c69ab34aa0f6a0f37310a24413aaf614cd997a3ae5
+        mode_table: sensor_imx874_mode_infos_A_19p2
     dt:
       common:
       - '2000'
@@ -1134,6 +1223,22 @@ modes:
       csis_input_mbps: 3600.0
       link_utilization_pct: 33.4
   mode23:
+    timing_binding:
+      profile_ref: sensortiming-imx874-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_3392x2544_60fps_10bit
+      mode_index: 23
+      mode_sha256: 679cff1805b795a83de95fa97321f668e19cd04fe346d9a151471b3eaa951134
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+          sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874.c
+          sha256: 76f3f672532ac0710531e2c69ab34aa0f6a0f37310a24413aaf614cd997a3ae5
+        mode_table: sensor_imx874_mode_infos_A_19p2
     dt:
       common:
       - '3392'
@@ -1205,6 +1310,22 @@ modes:
       csis_input_mbps: 6471.9
       link_utilization_pct: 60.1
   mode25:
+    timing_binding:
+      profile_ref: sensortiming-imx874-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_3392x1908_60fps_10bit
+      mode_index: 25
+      mode_sha256: 0e0caa01922d50c7e41529b707fd0fbd35218a638b16e7f0619a5933ab3f998e
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+          sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874.c
+          sha256: 76f3f672532ac0710531e2c69ab34aa0f6a0f37310a24413aaf614cd997a3ae5
+        mode_table: sensor_imx874_mode_infos_A_19p2
     dt:
       common:
       - '3392'
@@ -1276,6 +1397,22 @@ modes:
       csis_input_mbps: 4854.0
       link_utilization_pct: 45.1
   mode27:
+    timing_binding:
+      profile_ref: sensortiming-imx874-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_1696x1272_30fps_10bit
+      mode_index: 27
+      mode_sha256: 00aa2f2e9164bdbc6dbe887e255134942bd137edba889b9bd6e76216b75656a0
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+          sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874.c
+          sha256: 76f3f672532ac0710531e2c69ab34aa0f6a0f37310a24413aaf614cd997a3ae5
+        mode_table: sensor_imx874_mode_infos_A_19p2
     dt:
       common:
       - '1696'
@@ -1333,6 +1470,22 @@ modes:
       csis_input_mbps: 647.2
       link_utilization_pct: 6.0
   mode29:
+    timing_binding:
+      profile_ref: sensortiming-imx874-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_1696x954_30fps_10bit
+      mode_index: 29
+      mode_sha256: 040a67763918a3e1a832c48e517a56942a94ca4659df2c22dc5cb0c0bab6339f
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+          sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874.c
+          sha256: 76f3f672532ac0710531e2c69ab34aa0f6a0f37310a24413aaf614cd997a3ae5
+        mode_table: sensor_imx874_mode_infos_A_19p2
     dt:
       common:
       - '1696'
@@ -1390,6 +1543,22 @@ modes:
       csis_input_mbps: 485.4
       link_utilization_pct: 4.5
   mode31:
+    timing_binding:
+      profile_ref: sensortiming-imx874-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_3056x2296_30fps_10bit
+      mode_index: 31
+      mode_sha256: 2064679a092b9a40b19d02b0068108587804af36c94c763cadd5161f5d381eda
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+          sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874.c
+          sha256: 76f3f672532ac0710531e2c69ab34aa0f6a0f37310a24413aaf614cd997a3ae5
+        mode_table: sensor_imx874_mode_infos_A_19p2
     dt:
       common:
       - '3056'
@@ -1461,6 +1630,22 @@ modes:
       csis_input_mbps: 2631.2
       link_utilization_pct: 24.4
   mode32:
+    timing_binding:
+      profile_ref: sensortiming-imx874-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_3056x2296_60fps_10bit
+      mode_index: 32
+      mode_sha256: d938055861b996fc7d54982ba710ab926fdade3af069b0fa3018eb4be56c83a2
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+          sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874.c
+          sha256: 76f3f672532ac0710531e2c69ab34aa0f6a0f37310a24413aaf614cd997a3ae5
+        mode_table: sensor_imx874_mode_infos_A_19p2
     dt:
       common:
       - '3056'
@@ -1532,6 +1717,7 @@ modes:
       csis_input_mbps: 5262.4
       link_utilization_pct: 48.9
   mode32_aeb:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '3056'
@@ -1629,6 +1815,22 @@ modes:
       link_utilization_pct: 97.7
       csis_input_mbps_per_exposure: 6314.9
   mode43:
+    timing_binding:
+      profile_ref: sensortiming-imx874-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_1528x1148_30fps_10bit_c02
+      mode_index: 43
+      mode_sha256: 140801dfd459ab91d6248c7ea38ac408bc3d434216752399bd27d24dae60d7da
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+          sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874.c
+          sha256: 76f3f672532ac0710531e2c69ab34aa0f6a0f37310a24413aaf614cd997a3ae5
+        mode_table: sensor_imx874_mode_infos_A_19p2
     dt:
       common:
       - '1528'
@@ -1700,6 +1902,22 @@ modes:
       csis_input_mbps: 657.8
       link_utilization_pct: 6.1
   mode45:
+    timing_binding:
+      profile_ref: sensortiming-imx874-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_3056x1720_60fps_10bit
+      mode_index: 45
+      mode_sha256: 09e431ae3909d2a6dcd3c276fa568dc836f323f8d4f48a406c41be060d9319f6
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+          sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874.c
+          sha256: 76f3f672532ac0710531e2c69ab34aa0f6a0f37310a24413aaf614cd997a3ae5
+        mode_table: sensor_imx874_mode_infos_A_19p2
     dt:
       common:
       - '3056'
@@ -1771,6 +1989,7 @@ modes:
       csis_input_mbps: 3942.2
       link_utilization_pct: 36.6
   mode45_aeb:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '3056'
@@ -1868,6 +2087,22 @@ modes:
       link_utilization_pct: 73.2
       csis_input_mbps_per_exposure: 4730.7
   mode54:
+    timing_binding:
+      profile_ref: sensortiming-imx874-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_1528x860_30fps_10bit
+      mode_index: 54
+      mode_sha256: c24e7b8ede04314d7f0fc539a0bffa41cc6881022513ffb018c04738373c3caa
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+          sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874.c
+          sha256: 76f3f672532ac0710531e2c69ab34aa0f6a0f37310a24413aaf614cd997a3ae5
+        mode_table: sensor_imx874_mode_infos_A_19p2
     dt:
       common:
       - '1528'
@@ -1939,6 +2174,22 @@ modes:
       csis_input_mbps: 492.8
       link_utilization_pct: 4.6
   mode57:
+    timing_binding:
+      profile_ref: sensortiming-imx874-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_2000x1124_120fps_10bit
+      mode_index: 57
+      mode_sha256: 545c83a056ec160faaa0e5ce47e1bddd41f0c753e1d121558bf83f04c32d2dfc
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+          sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874.c
+          sha256: 76f3f672532ac0710531e2c69ab34aa0f6a0f37310a24413aaf614cd997a3ae5
+        mode_table: sensor_imx874_mode_infos_A_19p2
     dt:
       common:
       - '2000'
@@ -2010,6 +2261,7 @@ modes:
       csis_input_mbps: 3372.0
       link_utilization_pct: 31.3
   mode57_vt:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
     dt:
       common:
       - '2000'
@@ -2081,6 +2333,22 @@ modes:
       csis_input_mbps: 843.0
       link_utilization_pct: 7.8
   mode58:
+    timing_binding:
+      profile_ref: sensortiming-imx874-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_2000x1500_30fps_10bit
+      mode_index: 58
+      mode_sha256: f7037205fcb853d3f471c5f928a208441f9023ea31cf3d60114c7997004491f9
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+          sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874.c
+          sha256: 76f3f672532ac0710531e2c69ab34aa0f6a0f37310a24413aaf614cd997a3ae5
+        mode_table: sensor_imx874_mode_infos_A_19p2
     dt:
       common:
       - '2000'

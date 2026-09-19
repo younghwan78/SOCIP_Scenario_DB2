@@ -15,7 +15,7 @@ def imported(engine):
         result = load_yaml_dir(FIXTURES, db, validate=True, strict=True)
         assert result.ok
         assert result.counts["sensor.catalog"] == 20
-        assert result.counts["sensor.timing_profile"] == 1
+        assert result.counts["sensor.timing_profile"] == 14
         assert db.scalar(select(func.count()).select_from(ScenarioVariant).where(ScenarioVariant.scenario_id == "uc-camera-recording")) == 75
         catalogs = db.query(SensorCatalog).all()
         assert sum(len(x.document["modes"]) for x in catalogs) == 449
@@ -286,3 +286,25 @@ def test_timing_profile_drift_strict_rollback(imported, tmp_path):
         with pytest.raises(LoaderValidationError, match="inputs changed"):
             load_yaml_dir(tmp_path, db, validate=True, strict=True)
         assert db.get(SensorTimingProfile, row.id).yaml_sha256 == original
+
+
+def test_other_sensor_timings_and_profile_sort_metadata(imported, api_client):
+    expected = {
+        "sensor-hp2-m2s": 15, "sensor-jn3-m2s": 12, "sensor-imx874-m2s": 16,
+        "sensor-imx564-ff-m2s": 17, "sensor-3ld-m2s": 10,
+    }
+    for catalog_id, count in expected.items():
+        document = api_client.get(f"/api/v1/sensors/catalogs/{catalog_id}").json()["document"]
+        labels = [label for label, mode in document["modes"].items() if mode.get("timing_binding")]
+        assert len(labels) == count
+        for label in labels:
+            result = api_client.get(f"/api/v1/sensors/catalogs/{catalog_id}/modes/{label}/timing")
+            assert result.status_code == 200
+            assert result.json()["valid_time_ms"] > 0
+    items = api_client.get("/api/v1/sensors/timing-profiles", params={"sensor_name": "IMX564"}).json()["items"]
+    assert len(items) == 2
+    for profile in items:
+        assert set(profile["modes"]) == set(profile["mode_summaries"])
+    special = api_client.get("/api/v1/sensors/catalogs/sensor-imx874-m2s/modes/mode10/timing").json()
+    assert special["valid_time_ms"] is None
+    assert "runtime readout" in special["binding_reason"]

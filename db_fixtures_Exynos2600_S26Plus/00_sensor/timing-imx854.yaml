@@ -1,0 +1,31 @@
+id: sensortiming-imx854-seta-19p2
+schema_version: '2.2'
+kind: sensor.timing_profile
+sensor_name: IMX854
+revision: setA-19p2-import-20260920
+modes:
+  cis_4080x3060_60fps_10bit:
+    active_width: 4080
+    active_height: 3060
+    pixel_clock_hz: 1689600000
+    line_length_pck: 7120
+    frame_length_lines: 3954
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx854-setA-19p2.h
+      sha256: 22e33e3688f8f3608c5f59893d2658bc8afd9e9d19abd7f0bf1e526cbc896b63
+      line: 3491
+      basis: CIS indexed setfile
+      mode_index: 0
+      nominal_fps: 60
+      bits_per_pixel: 10
+      symbol: sensor_imx854_mode_info_A_19p2_4080x3060_60fps_10bit
+      mode_name: SENSOR_IMX854_4080X3060_60FPS_10BIT
+provenance:
+  selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+  setfile:
+    path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx854-setA-19p2.h
+    sha256: 22e33e3688f8f3608c5f59893d2658bc8afd9e9d19abd7f0bf1e526cbc896b63
+  driver:
+    path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx854.c
+    sha256: b8d28865e4f1f85076f3475f97f8c058af95839ad169460fcb7ffc89cefb8c90
+  mode_table: sensor_imx854_mode_infos_A_19p2
