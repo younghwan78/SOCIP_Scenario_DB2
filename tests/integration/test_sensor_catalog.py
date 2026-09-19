@@ -131,5 +131,22 @@ def test_sensor_page(imported, api_client, monkeypatch):
     app.selectbox[2].select("mode0_aeb_nfi").run()
     assert not app.exception
     assert app.selectbox[2].value == "mode0_aeb_nfi"
+    assert any("cadence is unresolved" in warning.value for warning in app.warning)
     assert any("AEB · NFI" in option for option in app.selectbox[2].options)
     assert any("max 60 fps" in option for option in app.selectbox[2].options)
+
+
+def test_sensor_transport_api(imported, api_client):
+    base = "/api/v1/sensors/catalogs/sensor-gng-m2s/modes/"
+    r = api_client.get(base + "mode0/transport")
+    assert r.status_code == 200
+    report = r.json()
+    assert report["board"] == "m2s"
+    assert report["catalog_sha256"]
+    assert report["csis_payload_bytes_s"] == 17554200 * 120
+    assert report["dram_write_bytes_s"] is None
+    r = api_client.get(base + "mode0_aeb_nfi/transport")
+    assert r.json()["status"] == "cadence_unresolved"
+    assert r.json()["csis_payload_bytes_s"] is None
+    assert api_client.get(base + "mode999/transport").status_code == 404
+    assert api_client.get(base.replace("sensor-gng-m2s", "sensor-missing") + "mode0/transport").status_code == 404

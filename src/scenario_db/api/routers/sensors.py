@@ -10,6 +10,8 @@ from scenario_db.models.common import BaseScenarioModel
 from scenario_db.models.sensor import SensorTiming
 from scenario_db.sim.sensor_timing import calculate_sensor_timing, catalog_mode_timing
 
+from scenario_db.sim.sensor_transport import calculate_sensor_transport
+
 router = APIRouter(prefix="/sensors", tags=["sensors"])
 
 
@@ -40,6 +42,18 @@ def mode_timing(catalog_id: str, mode_label: str, db: Session = Depends(get_db))
     mode = r.document["modes"].get(mode_label)
     if mode is None: raise HTTPException(404, "Unknown full mode label")
     return {"catalog_id": r.id, "mode_label": mode_label, **catalog_mode_timing(mode)}
+
+@router.get("/catalogs/{catalog_id}/modes/{mode_label}/transport")
+def mode_transport(catalog_id: str, mode_label: str, db: Session = Depends(get_db)):
+    row = row_or_404(db, SensorCatalog, catalog_id)
+    mode = row.document["modes"].get(mode_label)
+    if mode is None:
+        raise HTTPException(404, "Unknown full mode label")
+    return {"catalog_id": row.id, "board": row.board, "mode_label": mode_label,
+            "catalog_sha256": row.yaml_sha256,
+            "inputs": {"mode": mode, "csis_wiring": row.document["csis_wiring"]},
+            **calculate_sensor_transport(mode, row.document["csis_wiring"])}
+
 
 @router.get("/timing-profiles")
 def timing_profiles(sensor_name: str | None = None, db: Session = Depends(get_db)):

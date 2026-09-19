@@ -64,6 +64,18 @@ try:
     st.json(result)
     with st.expander("DT mode / VC / wiring"):
         st.json({"mode": doc["modes"][label], "wiring": doc["csis_wiring"]})
+    st.subheader("VC payload / Link budget")
+    transport = _request_json("GET", base, f"/sensors/catalogs/{selected}/modes/{label}/transport")
+    st.write({key: transport[key] for key in (
+        "status", "assumed_fps", "link_capacity_mbps", "csis_payload_bytes_s",
+        "payload_link_utilization_pct", "link_status", "dram_status")})
+    if transport["status"] == "cadence_unresolved":
+        st.warning("Multiple image VC cadence is unresolved. The nominal VC sum is not confirmed traffic.")
+    st.dataframe(transport["vc_rows"], hide_index=True)
+    with st.expander("Transport assumptions and source"):
+        st.json(transport)
+    st.download_button("Download sensor transport report", json.dumps(transport, indent=2),
+                       file_name=f"{selected}-{label}-transport.json", mime="application/json")
     st.subheader("Reusable CIS timing")
     st.caption("CIS modes are separate from DT modes. A matching size/FPS does not establish equivalence. Readout predicts the CSIS frame window; it is not an observed FS/FE measurement.")
     profiles = _request_json("GET", base, "/sensors/timing-profiles", params={"sensor_name": doc["sensor_name"]})["items"]

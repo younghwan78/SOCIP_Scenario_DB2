@@ -72,3 +72,19 @@ Eight noncamera scenarios (74 variants) now contain producer BW/DVFS/provenance 
 `model_ref` and source `bw_model`/`dvfs_model` formulas remain reference metadata, not executable code. Existing readiness checks identify missing PPC/power models and adapter warnings identify unevaluated source formulas. Import success is not a calibrated noncamera power/clock prediction. Typed audio/byte-domain execution models require separate validated unit/model contracts; DPU BTS votes must not be substituted for surface traffic.
 
 The next calculation stage is now available in [Driver Models](driver-models.md): UFS/ABOX/MSCL/DPU have versioned typed endpoint calculations, with explicit aggregation and power limits.
+
+
+## DT transport report
+
+`GET /api/v1/sensors/catalogs/{id}/modes/{full_label}/transport` provides
+`sensor-transport-v1`, the board/catalog hash, input snapshot and per-route VC rows.
+The Sensor Catalog page displays this report and exports JSON.
+
+- Packed payload = width × height × bits_per_pixel / 8. Empty DATA_NONE routes are ignored.
+- Identical incoming map/format/size declarations routed to multiple DMA outputs count once on the wire. Conflicting declarations return missing_input.
+- Link capacity follows the imported producer's `is-hw-dvfs.c get_mbps`: lanes × rate × 16/7 for CPHY, lanes × rate for DPHY. The analytical result retains fractional Mbps instead of the driver's integer truncation.
+- The rate assumption is DT fps capped by a positive option.max_fps when present. This is a declared operating point, not measured cadence.
+- Single-image reports assume every unique VC repeats at that rate. Multiple image VC, AEB and DCG return cadence_unresolved: all_vcs_at_assumed_fps_bytes_s is diagnostic only and csis_payload_bytes_s stays null.
+- Payload utilization excludes packet overhead, blanking and burst scheduling. payload_within_capacity is a necessary payload check, not a guarantee of feasibility.
+- DRAM traffic remains unknown until routing, packing/stride, compression and vOTF are specified. This report does not change aggregate simulation bandwidth.
+- Transfer lower bounds are not VVALID. DT-to-CIS timing binding remains a pending priority task; the existing separate CIS calculator remains available.
