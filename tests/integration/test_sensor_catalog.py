@@ -127,3 +127,9 @@ def test_sensor_page(imported, api_client, monkeypatch):
     app.selectbox[1].select("sensor-gng-m2s").run()
     assert not app.exception
     assert len(app.metric) == 3
+    assert "mode0 · 4080 × 3060 · 120 fps · RAW10 · Normal" in app.selectbox[2].options
+    app.selectbox[2].select("mode0_aeb_nfi").run()
+    assert not app.exception
+    assert app.selectbox[2].value == "mode0_aeb_nfi"
+    assert any("AEB · NFI" in option for option in app.selectbox[2].options)
+    assert any("max 60 fps" in option for option in app.selectbox[2].options)
