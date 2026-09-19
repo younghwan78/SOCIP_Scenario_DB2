@@ -194,7 +194,8 @@ def test_sensor_binding_projection_and_rejection(imported, api_client, binding_r
         assert device["mode"] == binding_request["mode_label"]
         assert device["catalog_binding"]["catalog_sha256"]
         assert device["transport"]["assumed_fps"] == 30
-        assert device["v_valid_ms"] is None
+        assert device["v_valid_ms"] > 0
+        assert device["timing_source"]["dt_mode_label"] == binding_request["mode_label"]
         assert graph.variant.node_configs == original
         assert params_hash(inputs) != params_hash(baseline)
         assert run_simulation(inputs).external_devices == inputs.external_devices
@@ -240,3 +241,48 @@ def test_sensor_binding_persists_through_simulation_api(imported, api_client, bi
         assert next(d for d in stored.external_devices if d["node_id"] == "sensor_rear")["catalog_binding"] == device["catalog_binding"]
     payload["config"]["sensor_modes"]["sensor_rear"]["catalog_sha256"] = "stale"
     assert api_client.post("/api/v1/simulation/run", json=payload).status_code == 422
+
+
+def test_bound_catalog_timing_and_simulation_duration(imported, api_client, binding_request):
+    r = api_client.get("/api/v1/sensors/catalogs/sensor-gng-m2s/modes/mode0/timing")
+    assert r.status_code == 200
+    assert r.json()["valid_time_ms"] == pytest.approx(7.6915760869565215)
+    assert r.json()["binding_status"] == "verified_mode_index"
+    assert r.json()["source"]["mode_label"] == "cis_4sum_ln1_raw10_4080x3060_120fps_3993msps"
+    assert api_client.get("/api/v1/sensors/catalogs/sensor-gng-m2s/modes/mode0_nfi/timing").json()["binding_status"] == "unmapped"
+    from scenario_db.db.repositories.scenario_graph import load_canonical_graph
+    from scenario_db.sim.sensor_projection import resolve_sensor_modes
+    from scenario_db.sim.adapter import build_simulation_inputs
+    from scenario_db.sim.models import SimulationRunConfig
+    from scenario_db.sim.runner import run_simulation
+    prepared = api_client.post("/api/v1/sensors/projection/prepare", json=binding_request).json()
+    config = SimulationRunConfig(**prepared["config"])
+    with Session(imported) as db:
+        graph = load_canonical_graph(db, binding_request["scenario_id"], binding_request["variant_id"])
+        inputs = build_simulation_inputs(resolve_sensor_modes(db, graph, config), config)
+        device = next(d for d in inputs.external_devices if d["node_id"] == "sensor_rear")
+        assert device["fps"] == 30  # Retain scenario cadence, not the setfile's maximum FPS.
+        result = run_simulation(inputs)
+        events = [e for e in result.timeline_events if e.node_id == "sensor_rear"]
+        assert events
+        assert events[0].v_valid_ms == pytest.approx(device["v_valid_ms"])
+        source = next(t for t in inputs.timeline_tasks if t["id"] == "sensor_rear")
+        assert source["source_valid_ms"] == pytest.approx(device["v_valid_ms"])
+        # OTF group reservations can outlast readout when downstream HW is slower.
+        assert events[0].end_ms - events[0].start_ms >= device["v_valid_ms"]
+
+
+def test_timing_profile_drift_strict_rollback(imported, tmp_path):
+    from copy import deepcopy
+    import yaml
+    from scenario_db.etl.loader import LoaderValidationError
+    with Session(imported) as db:
+        row = db.get(SensorTimingProfile, "sensortiming-s5kgng-seta-19p2")
+        original = row.yaml_sha256
+        doc = deepcopy(row.document)
+        label = "cis_4sum_ln1_raw10_4080x3060_120fps_3993msps"
+        doc["modes"][label]["line_length_pck"] += 8
+        (tmp_path / "profile.yaml").write_text(yaml.safe_dump(doc), encoding="utf-8")
+        with pytest.raises(LoaderValidationError, match="inputs changed"):
+            load_yaml_dir(tmp_path, db, validate=True, strict=True)
+        assert db.get(SensorTimingProfile, row.id).yaml_sha256 == original

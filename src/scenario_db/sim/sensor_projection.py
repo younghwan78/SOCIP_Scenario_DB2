@@ -76,6 +76,19 @@ def resolve_sensor_modes(db, graph, config):
         # A new DT selection must never inherit unrelated CIS timing from the old mode.
         for field in ("v_valid_ms", "sensor_pclk", "sensor_line_length_pck", "sensor_frame_length_lines", "timing_source"):
             projected.pop(field, None)
+        from scenario_db.sim.sensor_timing_binding import catalog_timing
+        timing_result = catalog_timing(db, catalog, binding.mode_label)
+        if timing_result["status"] == "invalid_binding":
+            raise ValueError(timing_result["binding_reason"])
+        if timing_result["status"] == "calculated":
+            if timing_result["valid_time_ms"] > 1000 / fps:
+                raise ValueError("sensor readout exceeds scenario frame period")
+            timing = timing_result["inputs"]
+            projected.update(v_valid_ms=timing_result["valid_time_ms"],
+                             sensor_pclk=timing["pixel_clock_hz"],
+                             sensor_line_length_pck=timing["line_length_pck"],
+                             sensor_frame_length_lines=timing["frame_length_lines"],
+                             timing_source=timing["source"])
         cfg = variant.node_configs.setdefault(node_id, {})
         cfg.pop("sensor_readout", None)
         cfg["resolved_sensor_mode"] = projected

@@ -61,6 +61,31 @@ mode_summary:
   max_mipi_link_mbps: 27380
 modes:
   mode0:
+    timing_binding:
+      profile_ref: sensortiming-s5kgng-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4sum_ln1_raw10_4080x3060_120fps_3993msps
+      mode_index: 0
+      mode_sha256: 6077280d930fd1cb721da97516bb70ecff0fa295e17132fa2d3704596d997685
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, non-mirror basic mode; no runtime seamless transition
+        mode_table:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gng-setA-19p2.h
+          sha256: 94b045ee87e7a81376417cf2d6dca0ee09ae34b427ee3473f38ad76e468cba62
+          line: 51567
+        cis_driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gng.c
+          sha256: 4d02eeb2dce8d569252ee2ff61f15e91b3e529bf6195a76a787c87954f4798a9
+          line: 654
+        mode_dispatch:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/is-device-sensor-peri.c
+          sha256: 1ddfdcd14460a4031a13966271f52a39fc951744fb8453903b3b6e5cd9260b59
+          line: 2433
+        dt_parser:
+          path: exynos/external-modules/camera/camera/is-dt.c
+          sha256: 439bf36c4526cc14ff3465c0a3c4d9a17eb55acd0f578adb3000393363d3743f
+          line: 1263
     dt:
       common:
       - '4080'
@@ -620,6 +645,31 @@ modes:
       csis_input_mbps: 4216.9
       link_utilization_pct: 15.4
   mode3:
+    timing_binding:
+      profile_ref: sensortiming-s5kgng-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4sum_idcg_ln1_raw12_4080x3060_60fps_3993msps
+      mode_index: 3
+      mode_sha256: 6cb8e73b27aba73414c8505c85464ceb4ad0bee797e7a717c0a2109d5c734aa5
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, non-mirror basic mode; no runtime seamless transition
+        mode_table:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gng-setA-19p2.h
+          sha256: 94b045ee87e7a81376417cf2d6dca0ee09ae34b427ee3473f38ad76e468cba62
+          line: 51567
+        cis_driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gng.c
+          sha256: 4d02eeb2dce8d569252ee2ff61f15e91b3e529bf6195a76a787c87954f4798a9
+          line: 654
+        mode_dispatch:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/is-device-sensor-peri.c
+          sha256: 1ddfdcd14460a4031a13966271f52a39fc951744fb8453903b3b6e5cd9260b59
+          line: 2433
+        dt_parser:
+          path: exynos/external-modules/camera/camera/is-dt.c
+          sha256: 439bf36c4526cc14ff3465c0a3c4d9a17eb55acd0f578adb3000393363d3743f
+          line: 1263
     dt:
       common:
       - '4080'
@@ -1153,6 +1203,31 @@ modes:
       csis_input_mbps: 4962.1
       link_utilization_pct: 18.1
   mode11:
+    timing_binding:
+      profile_ref: sensortiming-s5kgng-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4sum_ln1_raw10_4080x2296_120fps_3993msps
+      mode_index: 11
+      mode_sha256: 063b03eefc4947393853171b4be92a7dd1b171a41e79a564bb477195ecfbf360
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, non-mirror basic mode; no runtime seamless transition
+        mode_table:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gng-setA-19p2.h
+          sha256: 94b045ee87e7a81376417cf2d6dca0ee09ae34b427ee3473f38ad76e468cba62
+          line: 51567
+        cis_driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gng.c
+          sha256: 4d02eeb2dce8d569252ee2ff61f15e91b3e529bf6195a76a787c87954f4798a9
+          line: 654
+        mode_dispatch:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/is-device-sensor-peri.c
+          sha256: 1ddfdcd14460a4031a13966271f52a39fc951744fb8453903b3b6e5cd9260b59
+          line: 2433
+        dt_parser:
+          path: exynos/external-modules/camera/camera/is-dt.c
+          sha256: 439bf36c4526cc14ff3465c0a3c4d9a17eb55acd0f578adb3000393363d3743f
+          line: 1263
     dt:
       common:
       - '4080'
@@ -1320,6 +1395,31 @@ modes:
       link_utilization_pct: 92.3
       csis_input_mbps_per_exposure: 14041.7
   mode14:
+    timing_binding:
+      profile_ref: sensortiming-s5kgng-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4sum_idcg_ln1_raw12_4080x2296_60fps_3993msps
+      mode_index: 14
+      mode_sha256: 866653c09cd2dbc49d8677efbc75a56074b826f53f845d793e3a884c874ee692
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, non-mirror basic mode; no runtime seamless transition
+        mode_table:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gng-setA-19p2.h
+          sha256: 94b045ee87e7a81376417cf2d6dca0ee09ae34b427ee3473f38ad76e468cba62
+          line: 51567
+        cis_driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gng.c
+          sha256: 4d02eeb2dce8d569252ee2ff61f15e91b3e529bf6195a76a787c87954f4798a9
+          line: 654
+        mode_dispatch:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/is-device-sensor-peri.c
+          sha256: 1ddfdcd14460a4031a13966271f52a39fc951744fb8453903b3b6e5cd9260b59
+          line: 2433
+        dt_parser:
+          path: exynos/external-modules/camera/camera/is-dt.c
+          sha256: 439bf36c4526cc14ff3465c0a3c4d9a17eb55acd0f578adb3000393363d3743f
+          line: 1263
     dt:
       common:
       - '4080'
@@ -1487,6 +1587,31 @@ modes:
       link_utilization_pct: 54.4
       csis_input_mbps_per_exposure: 8145.0
   mode20:
+    timing_binding:
+      profile_ref: sensortiming-s5kgng-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4sum_ln1_raw10_3328x1872_120fps_3993msps
+      mode_index: 20
+      mode_sha256: d9af9550232b1142a31db7d78ec1f462bd741cd487fdd427731c5f2b183c70e8
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, non-mirror basic mode; no runtime seamless transition
+        mode_table:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gng-setA-19p2.h
+          sha256: 94b045ee87e7a81376417cf2d6dca0ee09ae34b427ee3473f38ad76e468cba62
+          line: 51567
+        cis_driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gng.c
+          sha256: 4d02eeb2dce8d569252ee2ff61f15e91b3e529bf6195a76a787c87954f4798a9
+          line: 654
+        mode_dispatch:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/is-device-sensor-peri.c
+          sha256: 1ddfdcd14460a4031a13966271f52a39fc951744fb8453903b3b6e5cd9260b59
+          line: 2433
+        dt_parser:
+          path: exynos/external-modules/camera/camera/is-dt.c
+          sha256: 439bf36c4526cc14ff3465c0a3c4d9a17eb55acd0f578adb3000393363d3743f
+          line: 1263
     dt:
       common:
       - '3328'
@@ -1558,6 +1683,31 @@ modes:
       csis_input_mbps: 8410.5
       link_utilization_pct: 30.7
   mode22:
+    timing_binding:
+      profile_ref: sensortiming-s5kgng-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_full_ln1_raw10_8160x6120_30fps_3993msps
+      mode_index: 22
+      mode_sha256: 2461e08242d79d40863f5b6f1f8cbbeab2db8af5b4344954a817f5a26020d1b0
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, non-mirror basic mode; no runtime seamless transition
+        mode_table:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gng-setA-19p2.h
+          sha256: 94b045ee87e7a81376417cf2d6dca0ee09ae34b427ee3473f38ad76e468cba62
+          line: 51567
+        cis_driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gng.c
+          sha256: 4d02eeb2dce8d569252ee2ff61f15e91b3e529bf6195a76a787c87954f4798a9
+          line: 654
+        mode_dispatch:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/is-device-sensor-peri.c
+          sha256: 1ddfdcd14460a4031a13966271f52a39fc951744fb8453903b3b6e5cd9260b59
+          line: 2433
+        dt_parser:
+          path: exynos/external-modules/camera/camera/is-dt.c
+          sha256: 439bf36c4526cc14ff3465c0a3c4d9a17eb55acd0f578adb3000393363d3743f
+          line: 1263
     dt:
       common:
       - '8160'
@@ -2223,6 +2373,31 @@ modes:
       csis_input_mbps: 9637.9
       link_utilization_pct: 35.2
   mode28:
+    timing_binding:
+      profile_ref: sensortiming-s5kgng-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_full_ln1_raw10_8000x4500_30fps_2969msps
+      mode_index: 28
+      mode_sha256: 86f7aaa93545facb25f7896d1721202752bf5b8c21d80d410db9a6a0e3d9457e
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, non-mirror basic mode; no runtime seamless transition
+        mode_table:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gng-setA-19p2.h
+          sha256: 94b045ee87e7a81376417cf2d6dca0ee09ae34b427ee3473f38ad76e468cba62
+          line: 51567
+        cis_driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gng.c
+          sha256: 4d02eeb2dce8d569252ee2ff61f15e91b3e529bf6195a76a787c87954f4798a9
+          line: 654
+        mode_dispatch:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/is-device-sensor-peri.c
+          sha256: 1ddfdcd14460a4031a13966271f52a39fc951744fb8453903b3b6e5cd9260b59
+          line: 2433
+        dt_parser:
+          path: exynos/external-modules/camera/camera/is-dt.c
+          sha256: 439bf36c4526cc14ff3465c0a3c4d9a17eb55acd0f578adb3000393363d3743f
+          line: 1263
     dt:
       common:
       - '8000'
@@ -2367,6 +2542,31 @@ modes:
       csis_input_mbps: 11474.4
       link_utilization_pct: 56.4
   mode44:
+    timing_binding:
+      profile_ref: sensortiming-s5kgng-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_fhd_ln1_raw10_2040x1148_240fps_3673msps
+      mode_index: 44
+      mode_sha256: 874036bdbca591490061311f562541c22f787b92b95e8670653f4979239a3b32
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, non-mirror basic mode; no runtime seamless transition
+        mode_table:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gng-setA-19p2.h
+          sha256: 94b045ee87e7a81376417cf2d6dca0ee09ae34b427ee3473f38ad76e468cba62
+          line: 51567
+        cis_driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gng.c
+          sha256: 4d02eeb2dce8d569252ee2ff61f15e91b3e529bf6195a76a787c87954f4798a9
+          line: 654
+        mode_dispatch:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/is-device-sensor-peri.c
+          sha256: 1ddfdcd14460a4031a13966271f52a39fc951744fb8453903b3b6e5cd9260b59
+          line: 2433
+        dt_parser:
+          path: exynos/external-modules/camera/camera/is-dt.c
+          sha256: 439bf36c4526cc14ff3465c0a3c4d9a17eb55acd0f578adb3000393363d3743f
+          line: 1263
     dt:
       common:
       - '2040'
@@ -2438,6 +2638,31 @@ modes:
       csis_input_mbps: 7015.4
       link_utilization_pct: 27.9
   mode45:
+    timing_binding:
+      profile_ref: sensortiming-s5kgng-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_fhd_ln1_raw10_2040x1148_480fps_3673msps
+      mode_index: 45
+      mode_sha256: cea18dfbf81c1bb0006e6291af95005d2b5c09323f9b28f7e3e1e44dfe3ec481
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, non-mirror basic mode; no runtime seamless transition
+        mode_table:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gng-setA-19p2.h
+          sha256: 94b045ee87e7a81376417cf2d6dca0ee09ae34b427ee3473f38ad76e468cba62
+          line: 51567
+        cis_driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gng.c
+          sha256: 4d02eeb2dce8d569252ee2ff61f15e91b3e529bf6195a76a787c87954f4798a9
+          line: 654
+        mode_dispatch:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/is-device-sensor-peri.c
+          sha256: 1ddfdcd14460a4031a13966271f52a39fc951744fb8453903b3b6e5cd9260b59
+          line: 2433
+        dt_parser:
+          path: exynos/external-modules/camera/camera/is-dt.c
+          sha256: 439bf36c4526cc14ff3465c0a3c4d9a17eb55acd0f578adb3000393363d3743f
+          line: 1263
     dt:
       common:
       - '2040'
@@ -2495,6 +2720,31 @@ modes:
       csis_input_mbps: 11241.2
       link_utilization_pct: 44.6
   mode46:
+    timing_binding:
+      profile_ref: sensortiming-s5kgng-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_fhd_ln1_raw10_2040x1532_120fps_2828msps
+      mode_index: 46
+      mode_sha256: c83a044d7677e694056ad1b27c7e5373bf7e4a38e72186d0a7e01d26a9b28bf1
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, non-mirror basic mode; no runtime seamless transition
+        mode_table:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gng-setA-19p2.h
+          sha256: 94b045ee87e7a81376417cf2d6dca0ee09ae34b427ee3473f38ad76e468cba62
+          line: 51567
+        cis_driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-gng.c
+          sha256: 4d02eeb2dce8d569252ee2ff61f15e91b3e529bf6195a76a787c87954f4798a9
+          line: 654
+        mode_dispatch:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/is-device-sensor-peri.c
+          sha256: 1ddfdcd14460a4031a13966271f52a39fc951744fb8453903b3b6e5cd9260b59
+          line: 2433
+        dt_parser:
+          path: exynos/external-modules/camera/camera/is-dt.c
+          sha256: 439bf36c4526cc14ff3465c0a3c4d9a17eb55acd0f578adb3000393363d3743f
+          line: 1263
     dt:
       common:
       - '2040'

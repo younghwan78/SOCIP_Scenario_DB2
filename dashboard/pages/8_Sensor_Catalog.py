@@ -61,6 +61,11 @@ try:
         format_func=lambda mode_id: format_dt_mode(mode_id, doc["modes"][mode_id]),
     )
     result = _request_json("GET", base, f"/sensors/catalogs/{selected}/modes/{label}/timing")
+    if result.get("valid_time_ms") is not None:
+        st.success(f"Calculated Valid Time / CSIS window: {result['valid_time_ms']:.6f} ms")
+        st.caption(f"CIS mode: {result.get('source', {}).get('mode_label', 'inline timing')}")
+    else:
+        st.info(result.get("binding_reason", "Readout timing inputs are missing."))
     st.json(result)
     with st.expander("DT mode / VC / wiring"):
         st.json({"mode": doc["modes"][label], "wiring": doc["csis_wiring"]})

@@ -30,6 +30,13 @@ def validate_loaded_db(db: Session) -> ValidationReport:
 
     report = ValidationReport()
     from scenario_db.db.models.sensor import SensorCatalog, SensorBoardLineup
+    from scenario_db.sim.sensor_timing_binding import catalog_timing
+    for catalog in db.query(SensorCatalog).all():
+        for label, mode in catalog.document["modes"].items():
+            if mode.get("timing_binding"):
+                timing = catalog_timing(db, catalog, label)
+                if timing["status"] != "calculated":
+                    report.errors.append(f"{catalog.id}/{label}: {timing['binding_reason']}")
     catalog_keys = {(c.board, c.sensor_name) for c in db.query(SensorCatalog).all()}
     for lineup in db.query(SensorBoardLineup).all():
         for board, body in lineup.document["boards"].items():

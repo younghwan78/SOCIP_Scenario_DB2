@@ -96,7 +96,7 @@ def build_simulation_inputs(
     if calculated_driver_nodes:
         warnings.append("Driver BW/DVFS estimates are in calculation_trace.driver_models; endpoint values are not added to legacy DMA/power totals.")
     if run_config.sensor_modes:
-        warnings.append("Pinned DT sensor selection applied; VC payload is in external_devices.transport, not aggregate DRAM BW. Target wiring compatibility and CIS readout remain unverified.")
+        warnings.append("Pinned DT sensor selection applied; VC payload is in external_devices.transport, not aggregate DRAM BW. Target wiring compatibility is unverified; readout is applied only when a reviewed DT/CIS binding exists.")
     if run_config.sensor_readout:
         warnings.append("Sensor readout override predicts CSIS FS/FE duration; explicit exploration input, not measured timing.")
     for node_id, cfg in (graph.variant.node_configs or {}).items():

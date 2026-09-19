@@ -32,7 +32,7 @@ vertical_blank_ms = frame_period_ms - valid_time_ms
 
 The calculator rejects nonfinite/nonpositive timing inputs and readout longer than the frame. DT FPS/MIPI rate alone returns `missing_timing`; simulator display and clock correction no longer substitute frame period for VVALID. DT `vvalid_time`/`req_vvalid_time` are preserved as metadata but not automatically interpreted without validated units and semantics.
 
-The supplied GNG profile contains 47 CIS modes. Example `cis_4sum_ln1_raw10_4080x3060_120fps_3993msps`: 3,532,800,000 Hz, 8,880 clocks/line, 3,312 frame lines, 3,060 image lines gives **7.691576 ms VVALID**. The 449 DT catalog modes are not automatically mapped to these 47 CIS modes. Matching dimensions/FPS is insufficient to identify LN/DCG/AEB behavior.
+The supplied GNG profile contains 47 CIS modes. Example `cis_4sum_ln1_raw10_4080x3060_120fps_3993msps`: 3,532,800,000 Hz, 8,880 clocks/line, 3,312 frame lines, 3,060 image lines gives **7.691576 ms VVALID**. Twenty basic GNG DT modes now have reviewed mode-index bindings to these CIS modes. The other 429 remain unbound. Matching dimensions/FPS is insufficient to identify LN/DCG/AEB behavior.
 
 ## API and UI
 
@@ -46,7 +46,7 @@ The supplied GNG profile contains 47 CIS modes. Example `cis_4sum_ln1_raw10_4080
 - `POST /api/v1/sensors/selections`: writer/admin selection of an installed sensor; project, catalog, lineup, slot and board configuration must exist.
 - `GET /api/v1/sensors/selections?project_ref=...`
 
-The **Sensor Catalog** Streamlit page shows DT mode/VC/wiring, missing timing inputs and separate CIS profile calculations. It exports a simulation config fragment:
+The **Sensor Catalog** Streamlit page shows DT mode/VC/wiring, calculated timing for bound modes, missing mapping reasons and separate CIS profile calculations. It exports a simulation config fragment:
 
 ```json
 {
@@ -87,7 +87,7 @@ The Sensor Catalog page displays this report and exports JSON.
 - Single-image reports assume every unique VC repeats at that rate. Multiple image VC, AEB and DCG return cadence_unresolved: all_vcs_at_assumed_fps_bytes_s is diagnostic only and csis_payload_bytes_s stays null.
 - Payload utilization excludes packet overhead, blanking and burst scheduling. payload_within_capacity is a necessary payload check, not a guarantee of feasibility.
 - DRAM traffic remains unknown until routing, packing/stride, compression and vOTF are specified. This report does not change aggregate simulation bandwidth.
-- Transfer lower bounds are not VVALID. DT-to-CIS timing binding remains a pending priority task; the existing separate CIS calculator remains available.
+- Transfer lower bounds are not VVALID. Reviewed basic GNG DT-to-CIS bindings provide Valid Time separately; the independent CIS calculator also remains available.
 
 
 ## Pinned scenario sensor binding
@@ -118,8 +118,51 @@ Execution method is `projection`. This validates source-board installation, not
 electrical compatibility with a future target board. The original catalog,
 scenario and sensor IP are not mutated.
 
-Old CIS timing is cleared when a new DT mode is selected. Combining a DT binding
-with a CIS readout override on the same node is rejected until explicit verified
-DT-to-CIS mapping is implemented; measured replay also rejects DT bindings.
+Old CIS timing is cleared when a new DT mode is selected, then a reviewed timing binding is applied when present. A manual CIS readout override on the same bound node is rejected; measured replay also rejects DT bindings.
 `external_devices.transport` is CSIS payload, not DRAM traffic, and is not added
 to aggregate DMA/power totals. No VVALID is inferred from payload or FPS.
+
+
+## Reviewed DT-to-CIS timing bindings
+
+GNG m1s/m2s now include 20 basic DT mode bindings (10 per board): mode0,
+mode3, mode11, mode14, mode20, mode22, mode28, mode44, mode45 and mode46.
+These follow the driver dispatch `cfg.mode -> mode_infos[index]`, not a
+resolution/FPS search. The source assumptions are setA at 19.2 MHz, non-mirror,
+and no runtime seamless transition. Source file paths, hashes and line references
+are retained. AEB/DCG, NFI, LN and remosaic suffixes remain unmapped pending
+an explicit runtime sequence contract. Other sensors still need CIS profiles.
+
+Each `modes.<full_label>.timing_binding` contains the profile ID/revision, CIS
+mode label, DT mode index, canonical timing-input SHA256 and source evidence.
+Strict ETL validates profile identity, revision, timing hash, mode index and
+readout dimensions; a profile-only update that invalidates a binding rolls back.
+No additional table or migration is required: catalog JSONB holds the reference,
+and reusable timing inputs remain in the independent timing profile.
+
+The existing `/catalogs/{id}/modes/{label}/timing` API now returns calculated
+VVALID and resolved inputs for bound modes. `binding_status` distinguishes
+verified_mode_index, unmapped and invalid. Sensor Catalog displays the calculated
+window above the DT details. A changed/missing profile gives invalid_binding,
+not a stale cached value.
+
+Simulation sensor bindings apply this calculated readout automatically, clear
+unrelated old timing and retain the scenario FPS. Thus a 120fps setfile can supply
+its line/readout time to a 30fps exploration without forcing 120fps release cadence.
+The sensor valid window must fit the scenario period. This assumes fixed line
+readout and adjusted frame blanking, not a runtime switch to another LN mode.
+The timing source/profile hash participates in simulation evidence and input hash.
+An additional manual sensor_readout on the same bound node is still rejected to
+avoid overriding the verified mapping. No transport traffic is added to DRAM totals.
+
+Reproduce the source review/import enrichment with:
+
+```powershell
+.\.venv\Scripts\python.exe scripts/bind_gng_cis_timing.py --source-root <kernel-workspace-root>
+```
+
+The script checks all 47 imported timing entries against setA, verifies both DT
+source hashes, adds only basic full labels, and reads the source tree without
+changing it. The remaining 429 DT modes are still unbound.
+
+Timeline events retain the exact readout in `v_valid_ms`. Existing OTF group reservation bars can be longer when downstream processing dominates; their full reservation duration is not a new sensor readout measurement.

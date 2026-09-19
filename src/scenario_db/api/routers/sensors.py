@@ -41,7 +41,8 @@ def mode_timing(catalog_id: str, mode_label: str, db: Session = Depends(get_db))
     r = row_or_404(db, SensorCatalog, catalog_id)
     mode = r.document["modes"].get(mode_label)
     if mode is None: raise HTTPException(404, "Unknown full mode label")
-    return {"catalog_id": r.id, "mode_label": mode_label, **catalog_mode_timing(mode)}
+    from scenario_db.sim.sensor_timing_binding import catalog_timing
+    return {"catalog_id": r.id, "mode_label": mode_label, **catalog_timing(db, r, mode_label)}
 
 @router.get("/catalogs/{catalog_id}/modes/{mode_label}/transport")
 def mode_transport(catalog_id: str, mode_label: str, db: Session = Depends(get_db)):

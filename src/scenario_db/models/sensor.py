@@ -29,6 +29,16 @@ class SensorTimingProfile(BaseScenarioModel):
     modes: dict[str, SensorTiming] = Field(min_length=1)
     provenance: dict[str, Any] = Field(default_factory=dict)
 
+class SensorTimingBinding(BaseScenarioModel):
+    model_config = ConfigDict(extra="forbid")
+    profile_ref: str = Field(pattern=r"^sensortiming-[A-Za-z0-9.-]+$")
+    profile_revision: str = Field(min_length=1)
+    mode_label: str = Field(min_length=1)
+    mode_index: int = Field(ge=0)
+    mode_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    source: dict[str, Any] = Field(min_length=1)
+
+
 class SensorCatalog(BaseScenarioModel):
     id: str = Field(pattern=r"^sensor-[A-Za-z0-9.-]+$")
     schema_version: SchemaVersion
@@ -53,6 +63,10 @@ class SensorCatalog(BaseScenarioModel):
                 raise ValueError("each full mode label requires decoded metadata")
             if "timing" in mode:
                 SensorTiming.model_validate(mode["timing"])
+            if "timing_binding" in mode:
+                SensorTimingBinding.model_validate(mode["timing_binding"])
+                if "timing" in mode:
+                    raise ValueError("select inline timing or a timing binding, not both")
         return self
 
 class SensorBoardLineup(BaseScenarioModel):
