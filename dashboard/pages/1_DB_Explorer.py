@@ -30,6 +30,13 @@ from dashboard.components.explorer_api_client import (  # noqa: E402
 )
 from dashboard.components.table_actions import render_copyable_dataframe  # noqa: E402
 from dashboard.components.camera_review import is_camera, scenario_intro  # noqa: E402
+from dashboard.components.category_review import scenario_purpose  # noqa: E402
+from dashboard.components.category_review_view import (  # noqa: E402
+    catalog_category_summary,
+    render_category_matrix,
+    render_category_overview,
+    render_project_context,
+)
 from dashboard.components.camera_review_view import (  # noqa: E402
     badge,
     catalog_camera_summary,
@@ -794,6 +801,8 @@ def _render_explorer_filter_bar(
         chosen = next((item for item in catalog_items if item.get("scenario_id") == selected_scenario), None)
         if chosen and is_camera(chosen):
             st.caption(scenario_intro(chosen))
+        elif chosen:
+            st.caption(scenario_purpose(chosen))
         elif category_choice == "camera":
             st.caption("기본 녹화 검토는 Camera Recording부터 시작하세요. Preview는 미리보기, Capture는 정지 촬영입니다.")
 
@@ -843,6 +852,7 @@ def _render_catalog_cards(items: list[dict[str, Any]], variants: list[dict[str, 
   </div>
   <div>{_tag_chips(categories, "category")}{_tag_chips(domain_only, "domain") if domain_only else ""}</div>
   {catalog_camera_summary(item, variants)}
+  {catalog_category_summary(item)}
   <div class="catalog-mini-metrics">
     <div class="catalog-mini-metric"><div class="catalog-mini-label">Variants</div><div class="catalog-mini-value">{escape(str(item.get("variant_count")))}</div></div>
     <div class="catalog-mini-metric"><div class="catalog-mini-label">Nodes</div><div class="catalog-mini-value">{escape(str(item.get("node_count")))}</div></div>
@@ -961,6 +971,7 @@ catalog_items = sorted(
     key=lambda item: (0 if is_camera(item) and "recording" in str(item.get("scenario_id", "")).lower() else 1, str(item.get("scenario_name", ""))),
 )
 matrix_items = matrix.get("items") or []
+render_project_context(catalog_items + matrix_items, selected_soc)
 camera_context = selected_categories == ["camera"]
 partial_results = len(matrix_items) < matrix.get("total", len(matrix_items)) or len(catalog_items) < catalog.get("total", len(catalog_items))
 if partial_results:
@@ -971,6 +982,8 @@ tabs = st.tabs(["Overview", "Scenario Catalog", "Variant Matrix", "Import Health
 with tabs[0]:
     if camera_context:
         render_camera_overview(matrix_items, catalog_items, partial=partial_results)
+    else:
+        render_category_overview(matrix_items, catalog_items, partial=partial_results, categories=selected_categories)
     with st.expander("DB / Import summary", expanded=not camera_context):
         totals = summary.get("totals") or {}
         c1, c2, c3, c4, c5, c6 = st.columns(6)
@@ -1034,6 +1047,8 @@ with tabs[2]:
         "검토 목적과 KPI로 조건을 좁힌 뒤 상세 설명을 확인하세요. 아래 표에서 전체 설정을 비교할 수 있습니다." if camera_context else "Rows are variants. Row color follows severity. diff_profile highlights variant-level configuration changes."
     )
     visible_matrix_items = render_camera_matrix(matrix_items) if camera_context else matrix_items
+    if not camera_context:
+        render_category_matrix(matrix_items)
     with st.expander("Diff profile / Change score", expanded=not camera_context):
         _render_variant_matrix_summary(visible_matrix_items)
         st.caption("Change score counts configuration edits; it is not a workload score.")
