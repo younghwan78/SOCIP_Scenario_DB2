@@ -29,7 +29,7 @@ def test_db_explorer_hides_domain_picker_when_scenario_type_implies_domain() -> 
     source = _source()
 
     assert "len(domain_options) > 1" in source
-    assert "Inferred Domain" in source
+    assert 'st.session_state["explorer_domain_filter"] = []' in source
     assert "explorer_domain_filter" in source
 
 
