@@ -41,14 +41,15 @@ def reference_dialog(api_base: str, kind: str, reference: str, project: str) -> 
         st.caption(f"분류: {data.get('category') or '미등록'} · RTL: {data.get('rtl_version') or '미등록'}")
         sections = [("지원 기능 / 모드 / 사양", data.get("capabilities")),
                     ("IP 구성", data.get("hierarchy")), ("호환 SoC", data.get("compatible_soc"))]
-    for label, value in sections:
-        st.markdown(f"**{label}**")
-        if value is None or value == {} or value == []:
-            st.caption("등록 정보 없음")
-        else:
-            st.json(value, expanded=2)
-    with st.expander("전체 원본"):
-        st.json(data)
+    with st.container(height=480, border=False):
+        for label, value in sections:
+            st.markdown(f"**{label}**")
+            if value is None or value == {} or value == []:
+                st.caption("등록 정보 없음")
+            else:
+                st.json(value, expanded=1)
+        with st.expander("전체 원본"):
+            st.json(data)
 
 
 def render_catalog_references(api_base: str, items: list[dict[str, Any]]) -> None:
