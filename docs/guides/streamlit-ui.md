@@ -57,3 +57,20 @@ Exynos2600 컨텍스트에는 **M1S = Galaxy26, M2S = GalaxyS26+**를 안내하�
 구현은 `dashboard/components/category_review.py`, `category_review_view.py`이며
 `tests/unit/dashboard/test_category_review.py`에서 현재 비카메라 fixture의 설명 범위,
 프로젝트별 선택, 빈 조건, 부분 결과와 SoC 범위를 검증합니다. DB/ETL/API 계약은 변경하지 않습니다.
+
+## Compact browsing and reference details
+
+- Browse Scenarios는 **Scenario Type**을 기본으로 표시하고 검색·Scenario·Domain·Load는
+  **추가 필터**에 접어 둡니다. 적용 중인 추가 조건은 접힌 상태에서도 칩으로 표시합니다.
+- Scenario Catalog의 **Sensor / Display / SW profile 상세 보기**에서 과제·시나리오를
+  선택하고 해당 상세 버튼을 누르면 팝업이 열립니다. 기본 IP의 capabilities/지원 모드,
+  호환 SoC 또는 SW 구성요소·버전·기능 설정을 기존 상세 API에서 조회합니다.
+  참조가 없으면 버튼이 비활성화되며 조회는 클릭할 때만 수행합니다.
+  이 참조는 프로젝트 기본값이며 variant별 실제 선택을 대신하지 않습니다.
+- Variant Matrix는 **Key conditions** 비교를 먼저 보여줍니다. 동일 과제·시나리오의
+  현재 표시 결과에서 ID 정렬상 첫 variant를 기준으로, 다른 값과 누락된 조건을 노란색
+  **Δ**로 표시합니다. 기준 ID와 차이 개수를 명시하며 바뀐 조건을 먼저 표시합니다.
+  기존 7개 요약 제한 없이 전체 조건을 비교하고, false·null·미등록을 구분합니다.
+  필터 변경 시 기준 variant도 바뀔 수 있습니다. 색상은 부하나 변경의 좋고 나쁨을 뜻하지 않습니다.
+- 상세 안내와 Camera KPI 필터, Diff profile 요약, 전체 원본 Matrix는 각각 접이식 영역에
+  보존합니다. 노드·버퍼 구성 변경 강조는 `diff_profile`과 `change_score`에만 적용합니다.

@@ -30,6 +30,9 @@ from dashboard.components.explorer_api_client import (  # noqa: E402
 )
 from dashboard.components.table_actions import render_copyable_dataframe  # noqa: E402
 from dashboard.components.camera_review import is_camera, scenario_intro  # noqa: E402
+from dashboard.components.explorer_details import (  # noqa: E402
+    render_catalog_references, render_condition_comparison,
+)
 from dashboard.components.category_review import scenario_purpose  # noqa: E402
 from dashboard.components.category_review_view import (  # noqa: E402
     catalog_category_summary,
@@ -564,6 +567,7 @@ def _matrix_table_rows(items: list[dict[str, Any]], axis_keys: list[str]) -> lis
         row = {
             "soc_ref": item.get("soc_ref"),
             "board_type": item.get("board_type"),
+            "project_id": item.get("project_id"),
             "scenario_id": item.get("scenario_id"),
             "variant_id": item.get("variant_id"),
             "category": ", ".join(item.get("category") or []),
@@ -592,7 +596,7 @@ def _style_variant_matrix(df: pd.DataFrame) -> pd.io.formats.style.Styler:
         styles = [row_style for _ in row]
         if str(row.get("diff_profile") or "base") != "base":
             for idx, column in enumerate(row.index):
-                if column in {"diff_profile", "change_score", "key_conditions"}:
+                if column in {"diff_profile", "change_score"}:
                     styles[idx] = "background-color: #E8F1EF; color: #174D47; font-weight: 800;"
         return styles
 
@@ -733,10 +737,6 @@ def _render_explorer_filter_bar(
 
     with st.container(border=True):
         st.markdown('<div class="explorer-filter-title">Browse Scenarios</div>', unsafe_allow_html=True)
-        st.markdown(
-            '<div class="explorer-filter-help">Pick a scenario family by icon first, then narrow by text, domain, or variant load.</div>',
-            unsafe_allow_html=True,
-        )
         category_choice = st.pills(
             "Scenario Type",
             category_choices,
@@ -763,57 +763,58 @@ def _render_explorer_filter_bar(
             if item.get("scenario_id")
         }
 
-        if len(domain_options) > 1:
-            f1, f2, f3 = st.columns([1.15, 1.0, 1.0])
-            with f1:
-                scenario_query = st.text_input("Scenario Search", key="explorer_scenario_search", placeholder="id or name")
-            with f2:
-                selected_domains = st.multiselect("Domain", domain_options, key="explorer_domain_filter")
-            with f3:
-                selected_severities = st.multiselect("Variant Load", severity_options, key="explorer_severity_filter", help="Stored variant load grade. See Scenario Catalog for criteria and workload factors.")
-            inferred_domain = None
-        else:
-            st.session_state["explorer_domain_filter"] = []
-            f1, f2 = st.columns([1.15, 1.0])
-            with f1:
-                scenario_query = st.text_input("Scenario Search", key="explorer_scenario_search", placeholder="id or name")
-            with f2:
-                selected_severities = st.multiselect("Variant Load", severity_options, key="explorer_severity_filter", help="Stored variant load grade. See Scenario Catalog for criteria and workload factors.")
-            selected_domains = []
-            inferred_domain = domain_options[0] if domain_options else None
+        with st.expander("추가 필터 · 검색 / Scenario / Domain / Load", expanded=False):
+            st.session_state["explorer_domain_filter"] = [
+                value for value in st.session_state.get("explorer_domain_filter", []) if value in domain_options
+            ]
+            if len(domain_options) > 1:
+                f1, f2, f3 = st.columns([1.15, 1.0, 1.0])
+                with f1:
+                    scenario_query = st.text_input("Scenario Search", key="explorer_scenario_search", placeholder="id or name")
+                with f2:
+                    selected_domains = st.multiselect("Domain", domain_options, key="explorer_domain_filter")
+                with f3:
+                    selected_severities = st.multiselect("Variant Load", severity_options, key="explorer_severity_filter", help="Stored variant load grade. See Scenario Catalog for criteria and workload factors.")
+            else:
+                st.session_state["explorer_domain_filter"] = []
+                f1, f2 = st.columns([1.15, 1.0])
+                with f1:
+                    scenario_query = st.text_input("Scenario Search", key="explorer_scenario_search", placeholder="id or name")
+                with f2:
+                    selected_severities = st.multiselect("Variant Load", severity_options, key="explorer_severity_filter", help="Stored variant load grade. See Scenario Catalog for criteria and workload factors.")
+                selected_domains = []
 
-        filtered_scenarios = [
-            scenario_id
-            for scenario_id in scenario_options
-            if not scenario_query
-            or scenario_query.lower() in scenario_id.lower()
-            or scenario_query.lower() in scenario_label_by_id.get(scenario_id, "").lower()
-        ]
-        scenario_choices = [""] + filtered_scenarios
-        _ensure_state_choice("explorer_scenario_choice", scenario_choices, "")
-        selected_scenario = st.selectbox(
-            "Scenario",
-            scenario_choices,
-            key="explorer_scenario_choice",
-            format_func=lambda value: "All matching scenarios" if not value else scenario_label_by_id.get(value, value),
-        )
+            filtered_scenarios = [
+                scenario_id
+                for scenario_id in scenario_options
+                if not scenario_query
+                or scenario_query.lower() in scenario_id.lower()
+                or scenario_query.lower() in scenario_label_by_id.get(scenario_id, "").lower()
+            ]
+            scenario_choices = [""] + filtered_scenarios
+            _ensure_state_choice("explorer_scenario_choice", scenario_choices, "")
+            selected_scenario = st.selectbox(
+                "Scenario",
+                scenario_choices,
+                key="explorer_scenario_choice",
+                format_func=lambda value: "All matching scenarios" if not value else scenario_label_by_id.get(value, value),
+            )
 
-        chosen = next((item for item in catalog_items if item.get("scenario_id") == selected_scenario), None)
-        if chosen and is_camera(chosen):
-            st.caption(scenario_intro(chosen))
-        elif chosen:
-            st.caption(scenario_purpose(chosen))
-        elif category_choice == "camera":
-            st.caption("기본 녹화 검토는 Camera Recording부터 시작하세요. Preview는 미리보기, Capture는 정지 촬영입니다.")
+            chosen = next((item for item in catalog_items if item.get("scenario_id") == selected_scenario), None)
+            if chosen and is_camera(chosen):
+                st.caption(scenario_intro(chosen))
+            elif chosen:
+                st.caption(scenario_purpose(chosen))
+            elif category_choice == "camera":
+                st.caption("기본 녹화 검토는 Camera Recording부터 시작하세요. Preview는 미리보기, Capture는 정지 촬영입니다.")
 
         selected_categories = None if category_choice == "__all__" else [str(category_choice)]
         selected_scenarios = [str(selected_scenario)] if selected_scenario else None
         _render_active_filters(
             [
-                ("type", "all" if not selected_categories else selected_categories[0]),
                 ("scenario", selected_scenario),
                 ("domain", ", ".join(selected_domains)),
-                ("Inferred Domain", inferred_domain),
+                ("검색", scenario_query),
                 ("load", ", ".join(selected_severities)),
             ]
         )
@@ -1027,6 +1028,7 @@ with tabs[0]:
 
 with tabs[1]:
     st.markdown(f"**Scenario Catalog** - {len(catalog_items)} rows")
+    render_catalog_references(api_base, catalog_items)
     render_severity_guide()
     _render_catalog_cards(catalog_items, matrix_items)
     if camera_context:
@@ -1044,26 +1046,29 @@ with tabs[2]:
     axis_keys = matrix.get("axis_keys") or []
     st.markdown(f"**Variant Matrix** - {len(matrix_items)} rows")
     st.caption(
-        "검토 목적과 KPI로 조건을 좁힌 뒤 상세 설명을 확인하세요. 아래 표에서 전체 설정을 비교할 수 있습니다." if camera_context else "Rows are variants. Row color follows severity. diff_profile highlights variant-level configuration changes."
+        "조건 차이를 먼저 비교하세요. 상세 안내와 전체 원본 표는 아래 접이식 영역에서 확인할 수 있습니다."
     )
-    visible_matrix_items = render_camera_matrix(matrix_items) if camera_context else matrix_items
-    if not camera_context:
-        render_category_matrix(matrix_items)
-    with st.expander("Diff profile / Change score", expanded=not camera_context):
+    with st.expander("Variant 상세 안내 / Camera KPI 필터", expanded=False):
+        visible_matrix_items = render_camera_matrix(matrix_items) if camera_context else matrix_items
+        if not camera_context:
+            render_category_matrix(matrix_items)
+    render_condition_comparison(visible_matrix_items)
+    with st.expander("Diff profile / Change score", expanded=False):
         _render_variant_matrix_summary(visible_matrix_items)
         st.caption("Change score counts configuration edits; it is not a workload score.")
-    matrix_rows = _matrix_table_rows(visible_matrix_items, axis_keys)
-    matrix_df = pd.DataFrame(matrix_rows)
-    styled_matrix = _style_variant_matrix(matrix_df) if not matrix_df.empty else matrix_df
-    render_copyable_dataframe(
-        styled_matrix,
-        key="explorer_variant_matrix",
-        copy_data=matrix_df,
-        hide_index=True,
-        use_container_width=True,
-        height=650,
-        column_config=_link_column_config(),
-    )
+    with st.expander("전체 Variant Matrix / 원본 조건 표", expanded=False):
+        matrix_rows = _matrix_table_rows(visible_matrix_items, axis_keys)
+        matrix_df = pd.DataFrame(matrix_rows)
+        styled_matrix = _style_variant_matrix(matrix_df) if not matrix_df.empty else matrix_df
+        render_copyable_dataframe(
+            styled_matrix,
+            key="explorer_variant_matrix",
+            copy_data=matrix_df,
+            hide_index=True,
+            use_container_width=True,
+            height=650,
+            column_config=_link_column_config(),
+        )
 
 with tabs[3]:
     health_items = health.get("issues") or []

@@ -125,6 +125,9 @@ def test_full_explorer_page_renders_and_keeps_non_camera_navigation(monkeypatch)
     page = Path(__file__).resolve().parents[3] / "dashboard/pages/1_DB_Explorer.py"
     app = AppTest.from_file(str(page)).run(timeout=20)
     assert not app.exception
+    filters = next(element for element in app.expander if element.label.startswith("추가 필터"))
+    assert not filters.proto.expanded
+    assert any("Key conditions" in element.value for element in app.markdown)
     assert not any("Camera 검토 현황" in element.value for element in app.markdown)
     assert not any(str(element.key).startswith("camera_matrix_") for element in app.selectbox)
     for category, visible in [("camera", True), ("__all__", False), ("camera", True), ("video_playback", False)]:
