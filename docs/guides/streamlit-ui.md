@@ -13,6 +13,41 @@ Open [Dashboard](http://127.0.0.1:18502/), [Pipeline Viewer](http://127.0.0.1:18
 
 The existing `frontend/` Workbench, committed component assets, ELK viewer, timing integration and node labels remain. To rebuild the Workbench, run `npm ci`, `npm test`, and `npm run build` inside `frontend/`; include the output under `dashboard/components/workbench_frontend/component/`.
 
+## L0 UHD30 Timing pilot
+
+Pilot 구조도와 timing은 내부 세로 스크롤 없이 전체 Y 범위를 표시한다.
+양쪽 패널은 마우스가 위치한 패널에서 휠로 확대/축소한다. 구조도 빈 공간을
+드래그하면 이동하며 구조도 `전체` 또는 공통 `Fit`으로 전체 범위로 돌아온다.
+확대 중에는 일부 노드가 화면 밖에 있을 수 있다. 구조도 연결선은 블록 외곽 통로로
+우회하고 timing flow는 slice 내부를 가리지 않는다. Pilot 컴포넌트 높이는 940px이다.
+Timing 행 높이는 가용 높이에 맞춰 축소되며 X축 확대/이동은 유지한다.
+구조도는 SW를 왼쪽 1/3, HW를 중앙에 놓고 buffer를 RT–NRT 사이와 NRT 출력 이후에 배치한다.
+IP/SW/buffer 클릭 또는 Enter/Space로 API의 상세 속성 팝업을 열고 Escape로 닫는다.
+Memory descriptor와 placement는 별도 속성으로 유지하며 sim_overlay는 해당 simulation evidence 정보이다.
+
+`uc-camera-recording / cam-rec-r1-uhd30-vdis`의 L0는 구조도 / Timing / 나란히 보기를
+상단 Workbench 한 컴포넌트로 제공한다. Graph Inspector는 접이식으로 이동한다.
+Timing 닫기는 구조도를 전체 폭으로 넓히며, 나란히 버튼으로 복원한다. 경계선을 드래그하거나
+키보드 좌우 화살표로 폭을 바꿀 수 있다. 좁은 화면은 위아래로 배치한다.
+
+Timing 데이터에서 동일 project/scenario/variant의 저장된 semantic trace 또는 선택된 simulation을
+고른다. Trace fixture는 합성값이라는 표시를 유지한다. r3 fixture를 import하는 절차는
+[fixture 가이드](../../examples/measurement-import/camera/uhd30-eis/README.md)를 따른다.
+화면의 trace는 DB에 저장된 bounded preview(기본 100ms, r3의 경우 56 events/3 frame)이며
+전체 15초 trace가 아니다. 출력 간격과 frame latency도 이 시간창의 완료 이벤트에서 산출한다.
+GDC 출력은 encode/storage 완료를 뜻하지 않는다. 미대응 frame은 창 경계 포함 건수이며 drop 판정이 아니다.
+
+Frame 선택은 해당 frame과 flow를 강조한다. 선택 frame만 체크와 Track 필터로 표시 범위를 줄인다.
+구조도 클릭은 관련 Timing 이벤트를 강조하며 자동 이동하지 않는다. 선택에 맞춤을 누르면 이동한다.
+Timing 클릭은 대응 canonical node를 선택한다. 관측 전용 CRTA는 잘못된 노드에 연결하지 않는다.
+OTF flow는 선언된 start-to-start anchor를 사용한다. 색은 task별로 고정하고 시간 격자는 확대에 따라 변한다.
+
+보기·패널 폭·frame·필터·선택·시간축은 evidence별 브라우저 local storage에 저장한다.
+L1/L2에서는 pilot을 숨기고 기존 상세 화면을 사용하며 L0 복귀 시 상태를 복원한다.
+저장소를 사용할 수 없는 브라우저는 현재 컴포넌트가 유지되는 동안만 상태를 보존한다.
+다른 variant에는 기존 Viewer를 유지한다. 이 pilot은 기존 Workbench의 L0 topology를 사용하며,
+module drill-down은 sidebar의 L1/L2로 수행한다.
+
 This is a selective UI restoration, not a revert of all PR #5 changes. Query/pagination improvements, simulation correctness, API/write fixes, security lock updates, and IS v15 sensors/DMA/timing/evidence stay in main. The existing Evidence Dashboard Timing Table also shows camera SW min/mean/max, source, start delay and included hardware. Measurement comparison remains in the existing dashboard.
 
 

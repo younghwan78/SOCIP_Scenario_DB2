@@ -38,6 +38,10 @@ export function timelineGroupIndex(value: string | null, fallback: string): numb
 }
 
 export function sliceColor(event: TimelineEvent): string {
+  if (event.track_name) {
+    const palette = ['#688ec1', '#b075a9', '#609e87', '#be885d', '#8882bc', '#589bab', '#a08d58']
+    return palette[timelineGroupIndex(null, event.logical_task_id || event.node_id || event.track_name) % palette.length]
+  }
   const constraint = event.constraint_type
   if (constraint === 'source') return SOURCE_COLOR
   const taskType = String(event.task_type ?? '').toLowerCase()

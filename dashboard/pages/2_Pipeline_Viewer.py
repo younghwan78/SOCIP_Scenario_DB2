@@ -1045,25 +1045,31 @@ with st.sidebar:
 
 graph_click_selection = read_graph_selection(key="viewer_graph_selection_bridge")
 
-main_col, detail_col = st.columns([5.6, 0.95], gap="small")
+is_timing_pilot = level == 0 and scenario_id_input == "uc-camera-recording" and variant_id_input == "cam-rec-r1-uhd30-vdis"
+if is_timing_pilot:
+    main_col = st.container()
+    detail_col = st.expander("구조 상세 / Graph Inspector", expanded=False)
+else:
+    main_col, detail_col = st.columns([5.6, 0.95], gap="small")
 
 with detail_col:
     _render_detail_panel(inspector_view_source(level, primary, topo_view), graph_click_selection)
 
 with main_col:
-    st.markdown(
-        f"""
-<div class="compact-panel">
-  <h4>Scenario Summary</h4>
-  <span class="meta-chip">Resolution {escape(str(s.resolution))}</span>
-  <span class="meta-chip">FPS {escape(str(s.fps))}</span>
-  <span class="meta-chip">Mode {escape(str(mode_label))}</span>
-  <span class="meta-chip">Nodes {escape(str(graph_node_count))}</span>
-  <span class="meta-chip">Edges {escape(str(graph_edge_count))}</span>
-</div>
-""",
-        unsafe_allow_html=True,
-    )
+    if not is_timing_pilot:
+        st.markdown(
+            f"""
+    <div class="compact-panel">
+      <h4>Scenario Summary</h4>
+      <span class="meta-chip">Resolution {escape(str(s.resolution))}</span>
+      <span class="meta-chip">FPS {escape(str(s.fps))}</span>
+      <span class="meta-chip">Mode {escape(str(mode_label))}</span>
+      <span class="meta-chip">Nodes {escape(str(graph_node_count))}</span>
+      <span class="meta-chip">Edges {escape(str(graph_edge_count))}</span>
+    </div>
+    """,
+            unsafe_allow_html=True,
+        )
 
     if primary.risks:
         risk_html = "".join(
@@ -1079,11 +1085,13 @@ with main_col:
         # Diagram-first: the topology is the page's main artifact, so it renders
         # right under the summary; the resource/buffer tables follow below.
         st.markdown('<div class="section-card">', unsafe_allow_html=True)
-        render_elk_view(
-            topo_view,
-            canvas_height=980,
-            title="Level 0 - Topology Overview",
-        )
+        from dashboard.components.viewer_pilot import PILOT_VARIANT, render_pilot
+        pilot_rendered = False
+        if scenario_id_input == "uc-camera-recording" and variant_id_input == PILOT_VARIANT:
+            pilot_rendered = render_pilot(api_base=api_base, view=topo_view,
+                                          simulation_id=overlay_evidence_id)
+        if not pilot_rendered:
+            render_elk_view(topo_view, canvas_height=980, title="Level 0 - Topology Overview")
         st.markdown("</div>", unsafe_allow_html=True)
 
         render_level0_resource_overview(resource_view)
@@ -1117,7 +1125,7 @@ with main_col:
     except ViewerApiError as exc:
         st.error(str(exc))
         st.stop()
-    if timing_evidence_id:
+    if timing_evidence_id and not (level == 0 and variant_id_input == "cam-rec-r1-uhd30-vdis"):
         render_viewer_timing_panel(
             api_base=api_base,
             evidence_id=timing_evidence_id,
@@ -1125,7 +1133,7 @@ with main_col:
             variant_id=variant_id_input,
             expanded=st.query_params.get("panel") == "timing",
         )
-    elif sim_mode != "none":
+    elif sim_mode != "none" and not is_timing_pilot:
         st.caption(
             "Simulation Timing: no saved simulation evidence found for this "
             "scenario/variant. Run and save one from the Evidence Dashboard."

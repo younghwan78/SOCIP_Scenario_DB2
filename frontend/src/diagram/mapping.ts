@@ -5,6 +5,8 @@
 import type { TimelineEvent } from '../engine/types'
 
 export interface DiagramNode {
+  properties?: Record<string, unknown>
+  color?: string
   id: string
   label: string
   type: string
@@ -20,6 +22,8 @@ export interface DiagramEdge {
 }
 
 export interface DiagramGraph {
+  pilotLayout?: boolean
+  interactionHint?: string
   nodes: DiagramNode[]
   edges: DiagramEdge[]
 }
@@ -32,6 +36,7 @@ export function normalizeNodeKey(value: unknown): string {
 
 /** Candidate keys an event can match a diagram node by, strongest first. */
 export function eventNodeKeys(event: TimelineEvent): string[] {
+  if (event.observation_only) return []
   const keys = [event.node_id, event.resource_id, event.hw_name]
     .map(normalizeNodeKey)
     .filter((key) => key.length > 0)

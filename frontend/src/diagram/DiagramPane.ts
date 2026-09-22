@@ -7,6 +7,7 @@
 // side by side with a shared selection.
 import type { WorkbenchTheme } from '../theme'
 import type { DiagramGraph, DiagramNode } from './mapping'
+import { pilotLayout } from './pilotLayout'
 
 declare global {
   interface Window {
@@ -56,6 +57,8 @@ export class DiagramPane {
   private nodeRects = new Map<string, SVGRectElement>()
   private highlightedId: string | null = null
   private theme: WorkbenchTheme
+  private svg: SVGSVGElement | null = null
+  private fullBox = {x:0,y:0,width:1,height:1}
 
   public onNodeClick?: (node: DiagramNode) => void
   public onNodeDblClick?: (node: DiagramNode) => void
@@ -85,6 +88,10 @@ export class DiagramPane {
       this.showMessage('No topology data for this evidence.')
       return
     }
+    if (graph.pilotLayout) {
+      this.renderLayout(pilotLayout(graph))
+      return
+    }
     if (!this.available()) {
       this.showMessage('Diagram runtime unavailable (elk.bundled.js not served).')
       return
@@ -112,10 +119,31 @@ export class DiagramPane {
       header.appendChild(crumb)
     } else {
       const hint = document.createElement('span')
-      hint.textContent = 'Topology · double-click a block for module detail'
+      hint.textContent = this.graph.interactionHint || 'Topology · double-click a block for module detail'
       header.appendChild(hint)
     }
+    if (this.graph.pilotLayout) {
+      for (const [label, factor] of [['−',1.25],['+',0.8],['전체',0]] as const) {
+        const button=document.createElement('button')
+        button.textContent=label; button.type='button'
+        button.setAttribute('aria-label', factor===0 ? '구조도 전체 맞춤' : factor<1 ? '구조도 확대' : '구조도 축소')
+        button.onclick=()=>factor===0 ? this.fit() : this.zoom(factor)
+        header.append(button)
+      }
+    }
     this.container.appendChild(header)
+  }
+
+  public fit(): void {
+    if (this.svg) this.svg.setAttribute('viewBox', `${this.fullBox.x} ${this.fullBox.y} ${this.fullBox.width} ${this.fullBox.height}`)
+  }
+
+  private zoom(factor:number, anchor?:DOMPoint): void {
+    if (!this.svg) return
+    const v=this.svg.viewBox.baseVal
+    const width=Math.max(this.fullBox.width/8,Math.min(this.fullBox.width*1.5,v.width*factor))
+    const ratio=width/v.width, p=anchor || new DOMPoint(v.x+v.width/2,v.y+v.height/2)
+    this.svg.setAttribute('viewBox',`${p.x-(p.x-v.x)*ratio} ${p.y-(p.y-v.y)*ratio} ${width} ${v.height*ratio}`)
   }
 
   private showMessage(text: string): void {
@@ -154,10 +182,43 @@ export class DiagramPane {
     const svg = document.createElementNS(SVG_NS, 'svg')
     svg.setAttribute('viewBox', `0 0 ${width} ${height}`)
     svg.setAttribute('class', 'wb-diagram-svg')
+    this.svg=svg; this.fullBox={x:0,y:0,width,height}
+    if (this.graph.pilotLayout) {
+      svg.style.touchAction='none'
+      svg.addEventListener('wheel', e=>{
+        e.preventDefault()
+        const matrix=svg.getScreenCTM()
+        if(matrix) this.zoom(e.deltaY>0?1.18:0.85,new DOMPoint(e.clientX,e.clientY).matrixTransform(matrix.inverse()))
+      },{passive:false})
+      let drag: {x:number;y:number;box:{x:number;y:number;width:number;height:number};scaleX:number;scaleY:number} | null=null
+      svg.addEventListener('pointerdown',e=>{
+        if(e.button!==0 || (e.target as Element).closest('.wb-diagram-node')) return
+        const v=svg.viewBox.baseVal, m=svg.getScreenCTM()
+        if(!m) return
+        drag={x:e.clientX,y:e.clientY,box:{x:v.x,y:v.y,width:v.width,height:v.height},scaleX:m.a,scaleY:m.d}
+        svg.setPointerCapture(e.pointerId);svg.style.cursor='grabbing'
+      })
+      svg.addEventListener('pointermove',e=>{
+        if(!drag) return
+        const {box}=drag
+        svg.setAttribute('viewBox',`${box.x-(e.clientX-drag.x)/drag.scaleX} ${box.y-(e.clientY-drag.y)/drag.scaleY} ${box.width} ${box.height}`)
+      })
+      const stop=()=>{drag=null;svg.style.cursor='grab'}
+      svg.addEventListener('pointerup',stop);svg.addEventListener('pointercancel',stop)
+      svg.style.cursor='grab'
+    }
 
     const root = document.createElementNS(SVG_NS, 'g')
     root.setAttribute('transform', 'translate(12,12)')
     svg.appendChild(root)
+    if (this.graph.pilotLayout) {
+      for (const [x, y, text] of [[240, 15, 'SW'], [360, 15, 'HW'], [40, 110, 'RT · OTF'], [500, 238, 'RT → NRT buffers'], [40, 450, 'NRT · OTF'], [500, 518, 'NRT output buffers']] as const) {
+        const label = document.createElementNS(SVG_NS, 'text')
+        label.setAttribute('x', String(x)); label.setAttribute('y', String(y*1.16))
+        label.setAttribute('fill', '#607d8b'); label.setAttribute('font-size', '11')
+        label.textContent = text; root.appendChild(label)
+      }
+    }
 
     const edgeById = new Map(this.graph.edges.map((edge) => [edge.id, edge]))
     for (const edge of layout.edges ?? []) {
@@ -166,6 +227,7 @@ export class DiagramPane {
       for (const section of edge.sections ?? []) {
         const points = [section.startPoint, ...(section.bendPoints ?? []), section.endPoint]
         const path = document.createElementNS(SVG_NS, 'path')
+        path.setAttribute('data-edge-id', edge.id)
         path.setAttribute('d', points.map((p, i) => `${i ? 'L' : 'M'}${p.x},${p.y}`).join(' '))
         path.setAttribute('fill', 'none')
         path.setAttribute('stroke', color)
@@ -197,6 +259,12 @@ export class DiagramPane {
       const [fill, stroke] = NODE_FILLS[data.type] ?? NODE_FILLS.default
       const group = document.createElementNS(SVG_NS, 'g')
       group.setAttribute('class', 'wb-diagram-node')
+      group.setAttribute('data-node-id', data.id)
+      group.setAttribute('role', 'button')
+      group.setAttribute('tabindex', '0')
+      group.setAttribute('aria-label', data.label)
+      const select = () => { this.onNodeClick?.(data); if (this.graph.pilotLayout) this.showDetails(data, group) }
+      group.addEventListener('keydown', (e) => {if (e.key === 'Enter' || e.key === ' ') {e.preventDefault(); select()}})
 
       const rect = document.createElementNS(SVG_NS, 'rect')
       rect.setAttribute('x', String(child.x ?? 0))
@@ -204,7 +272,7 @@ export class DiagramPane {
       rect.setAttribute('width', String(child.width ?? 84))
       rect.setAttribute('height', String(child.height ?? 34))
       rect.setAttribute('rx', data.type === 'buffer' ? '13' : '7')
-      rect.setAttribute('fill', fill)
+      rect.setAttribute('fill', data.color ? `color-mix(in srgb, ${data.color} 19%, white)` : fill)
       rect.setAttribute('stroke', stroke)
       rect.setAttribute('stroke-width', '1.5')
       group.appendChild(rect)
@@ -221,7 +289,7 @@ export class DiagramPane {
       group.appendChild(label)
 
       group.style.cursor = 'pointer'
-      group.addEventListener('click', () => this.onNodeClick?.(data))
+      group.addEventListener('click', select)
       group.addEventListener('dblclick', () => this.onNodeDblClick?.(data))
       root.appendChild(group)
     }
@@ -233,6 +301,29 @@ export class DiagramPane {
   public highlightNode(nodeId: string | null): void {
     this.highlightedId = nodeId
     this.applyHighlight()
+  }
+
+  private showDetails(node: DiagramNode, anchor: SVGElement): void {
+    this.container.querySelector('.wb-node-details')?.remove()
+    const panel = document.createElement('section')
+    panel.className = 'wb-node-details'; panel.setAttribute('role', 'dialog')
+    panel.setAttribute('aria-label', `${node.label} 상세 속성`)
+    const close = document.createElement('button'); close.textContent = '닫기 ×'
+    const dismiss = () => {panel.remove(); anchor.focus()}
+    close.onclick = dismiss
+    panel.addEventListener('keydown', e => {if (e.key === 'Escape') dismiss()})
+    const title = document.createElement('strong'); title.textContent = node.label
+    panel.append(close, title)
+    const list = document.createElement('dl')
+    const properties = node.properties || {id:node.id, type:node.type, layer:node.layer}
+    for (const [key, value] of Object.entries(properties)) {
+      if (value == null || value === '' || (Array.isArray(value) && !value.length) || key === 'view_hints') continue
+      const term = document.createElement('dt'); term.textContent = key
+      const detail = document.createElement('dd')
+      detail.textContent = typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)
+      list.append(term, detail)
+    }
+    panel.append(list); this.container.append(panel); close.focus()
   }
 
   private applyHighlight(): void {

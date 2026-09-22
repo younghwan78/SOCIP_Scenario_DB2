@@ -5,7 +5,7 @@ export function findMatches(events: TimelineEvent[], query: string): TimelineEve
   const needle = query.trim().toLowerCase()
   if (!needle) return []
   return events.filter((event) => {
-    const haystack = `${event.task_id} ${event.hw_name ?? ''} ${event.node_id ?? ''} ${event.resource_id ?? ''}`.toLowerCase()
+    const haystack = `${event.task_id} ${event.display_name ?? ''} ${event.logical_task_id ?? ''} ${event.hw_name ?? ''} ${event.node_id ?? ''} ${event.resource_id ?? ''}`.toLowerCase()
     return haystack.includes(needle)
   })
 }

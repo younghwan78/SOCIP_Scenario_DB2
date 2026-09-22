@@ -9,6 +9,65 @@ from scenario_db.etl.loader import load_yaml_dir
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def test_uhd30_trace_fixture_import_and_exploration(engine, api_client):
+    from scenario_db.meas_import.camera import assemble_camera, parse_markdown
+    from scenario_db.meas_import.camera_trace import attach_trace
+
+    bundle_dir = ROOT / "examples/measurement-import/camera/uhd30-eis"
+    evidence = assemble_camera(parse_markdown(
+        (bundle_dir / "scenario-statistics.md").read_text(encoding="utf-8")
+    ))
+    attach_trace(evidence, bundle_dir / "uhd30-eis-15s.pftrace")
+    with engine.connect() as connection:
+        tx = connection.begin()
+        previous = api_client.app.dependency_overrides[get_db]
+
+        def test_db():
+            with Session(connection, join_transaction_mode="create_savepoint") as session:
+                yield session
+
+        api_client.app.dependency_overrides[get_db] = test_db
+        try:
+            with Session(connection, join_transaction_mode="create_savepoint") as session:
+                assert load_yaml_dir(ROOT / "db_fixtures_Exynos2600_S26Plus", session,
+                                     strict=True, validate=True).ok
+            payload = {"evidence": evidence.model_dump(mode="json", exclude_none=True)}
+            preview = api_client.post("/api/v1/profiling/import/preview", json=payload)
+            assert preview.status_code == 200, preview.text
+            saved = api_client.post("/api/v1/profiling/import/commit", json={
+                **payload, "expected_hash": preview.json()["sha256"]})
+            assert saved.status_code == 200, saved.text
+            got = api_client.get(f"/api/v1/evidence/{evidence.id}").json()
+            assert len(got["timeline_events"]) == 56
+            assert len(got["sw_task_timing"]) == 5
+            assert len(got["hw_task_timing"]) == 14
+            selection = dict(source_evidence_ref=str(evidence.id),
+                             target_project_ref=str(evidence.project_ref),
+                             target_scenario_ref=str(evidence.scenario_ref),
+                             target_variant_ref=str(evidence.variant_ref),
+                             target_path_id="uhd30-eis-lme", task_mapping={"eis": "eis"},
+                             assumption_notes="Synthetic Exynos2600 fixture verification")
+            for statistic, expected in [("min", 3.136), ("mean", 3.2), ("max", 3.264)]:
+                projection = api_client.post("/api/v1/profiling/sw-projection/prepare",
+                                             json={**selection, "statistic": statistic})
+                assert projection.status_code == 200, projection.text
+                explored = api_client.post("/api/v1/exploration/scenarios/preview", json=dict(
+                    project_ref=str(evidence.project_ref), scenario_id=str(evidence.scenario_ref),
+                    variant_id=str(evidence.variant_ref),
+                    config=dict(sw_timing_projection=projection.json(), include_timeline=True,
+                                timeline_frame_count=2),
+                    axes=[dict(target="node_clock_mhz", node_id="gdc_m", values=[300, 400])]))
+                assert explored.status_code == 200, explored.text
+                assert len(explored.json()["cases"]) == 3
+                assert projection.json()["task_runtime"]["eis"][statistic + "_ms"] == pytest.approx(expected)
+            rejected = api_client.post("/api/v1/profiling/sw-projection/prepare", json={
+                **selection, "task_mapping": {"crta_3a": "post_crta"}})
+            assert rejected.status_code == 422
+        finally:
+            api_client.app.dependency_overrides[get_db] = previous
+            tx.rollback()
+
+
 def without_nulls(value):
     if isinstance(value, dict):
         return {k: without_nulls(v) for k, v in value.items() if v is not None}

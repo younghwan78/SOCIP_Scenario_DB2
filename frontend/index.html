@@ -5,6 +5,37 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Scenario Workbench</title>
     <style>
+      [hidden] { display: none !important; }
+      #pilot-controls { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:10px; background:#f1f3f4; border:1px solid #dadce0; color:#263238; }
+      #pilot-controls button, #pilot-controls select { font:inherit; padding:5px 9px; border:1px solid #bdc1c6; border-radius:4px; background:white; color:#263238; cursor:pointer; }
+      #pilot-controls button.wb-active { background:#d2e3fc; border-color:#5c85bb; }
+      #pilot-controls label { display:flex; align-items:center; gap:4px; }
+      #pilot-metrics { flex-basis:100%; font-size:12px; color:#455a64; }
+      .pilot #wb-toolbar { flex-wrap:wrap; background:#f8f9fa; border-radius:0; }
+      .pilot #wb-hint { display:none; }
+      .pilot #wb-diagram-toggle { display:none; }
+      .pilot #wb-diagram { order:0; flex:0 0 40%; border-left:0; border-right:1px solid #dadce0; padding:10px; }
+      .pilot #wb-canvas-wrap { order:2; }
+      #pilot-splitter { order:1; width:7px; flex:0 0 7px; cursor:col-resize; background:#e8eaed; touch-action:none; }
+      #pilot-splitter:hover, #pilot-splitter:focus { background:#8ab4f8; }
+      #wb-body[data-view="diagram"] #wb-diagram { flex:1 1 100% !important; }
+      #wb-body:not([data-view="split"]) #pilot-splitter { display:none; }
+      .pilot #wb-diagram { overflow:hidden; position:relative; min-width:0; }
+      .pilot #wb-diagram.wb-open { display:flex; flex-direction:column; }
+      .pilot .wb-diagram-header { gap:6px; flex-wrap:wrap; flex-shrink:0; }
+      .pilot .wb-diagram-header span { flex:1; }
+      .pilot .wb-diagram-header button { border:1px solid #bdc1c6; border-radius:4px; background:#fff; padding:3px 7px; color:#263238; cursor:pointer; }
+      .pilot .wb-diagram-svg { min-width:0; min-height:0; flex:1; height:100%; width:100%; }
+      .wb-node-details { position:absolute; z-index:10; inset:35px 8px auto 8px; max-height:80%; overflow:auto; padding:12px; border:1px solid #8ab4f8; border-radius:8px; background:#fff; color:#263238; box-shadow:0 4px 18px #0003; font-size:12px; }
+      .wb-node-details button { float:right; padding:3px 8px; }
+      .wb-node-details pre { white-space:pre-wrap; overflow-wrap:anywhere; margin:8px 0; font:11px monospace; }
+      .wb-node-details dt { font-weight:600; margin-top:6px; }
+      .wb-node-details dd { overflow-wrap:anywhere; white-space:pre-wrap; }
+      @media(max-width:800px) {
+        .pilot #wb-body[data-view="split"] { flex-direction:column; }
+        .pilot #wb-diagram { flex:0 0 38% !important; }
+        .pilot #pilot-splitter { display:none; }
+      }
       * { box-sizing: border-box; margin: 0; padding: 0; }
       html, body { width: 100%; height: 100%; overflow: hidden; }
       body {
