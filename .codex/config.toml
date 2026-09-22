@@ -60,3 +60,6 @@ enabled = false
 
 [plugins."template-creator@openai-primary-runtime"]
 enabled = false
+
+[windows]
+sandbox = "elevated"
