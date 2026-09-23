@@ -146,3 +146,52 @@ def test_compare_page_multi_mode_from_variants_query(monkeypatch):
     assert app.session_state["compare_mode"] == "다중 (N개)"
     assert app.session_state["compare_multi"] == ["uhd30-sdr", "uhd30-vdis", "fhd30-sdr"]
     assert [tab.label for tab in app.tabs] == ["조건 matrix", "DMA 전송 matrix", "Evidence KPI matrix"]
+
+
+def test_short_labels_strip_shared_prefix_and_stay_unique():
+    from dashboard.components.compare_views import common_prefix, short_labels
+
+    ids = ["cam-rec-r1-uhd30-sdr", "cam-rec-r1-uhd30-vdis", "cam-rec-r1-uhd60-sdr"]
+    assert short_labels(ids) == {"cam-rec-r1-uhd30-sdr": "uhd30-sdr", "cam-rec-r1-uhd30-vdis": "uhd30-vdis",
+                                 "cam-rec-r1-uhd60-sdr": "uhd60-sdr"}
+    assert common_prefix(ids) == "cam-rec-r1-"
+    assert short_labels(["a-x", "a-x-y"]) == {"a-x": "x", "a-x-y": "x-y"}
+
+
+def test_condition_matrix_is_column_per_variant_with_highlights():
+    from dashboard.components.compare_views import condition_matrix
+    from dashboard.components.variant_compare import differing_keys
+
+    selected = [
+        {"variant_id": "rec-uhd30-sdr", "design_conditions": {"fps": 30, "stabilization": 0}},
+        {"variant_id": "rec-uhd30-vdis", "design_conditions": {"fps": 30, "stabilization": "SWVDIS"}},
+        {"variant_id": "rec-uhd60-sdr", "design_conditions": {"fps": 60, "stabilization": 0}},
+    ]
+    keys, _ = differing_keys(selected)
+    rows, highlight = condition_matrix(selected, "rec-uhd30-sdr", keys)
+    assert [row["조건"] for row in rows] == ["Δ vs 기준", "비교 대상", "load", "fps", "stabilization"]
+    assert list(rows[0])[1:] == ["uhd30-sdr", "uhd30-vdis", "uhd60-sdr"]
+    assert rows[3]["uhd60-sdr"] == "60" and (3, "uhd60-sdr") in highlight
+    assert (4, "uhd30-vdis") in highlight and (3, "uhd30-sdr") not in highlight
+
+
+def test_kpi_matrix_wide_formats_delta_against_reference():
+    from dashboard.components.compare_views import kpi_matrix_wide
+
+    rows = kpi_matrix_wide({"v-a": {"kind": "evidence.simulation", "kpi": {"total_power_mw": 100}},
+                            "v-b": {"kind": "evidence.measurement", "id": "meas", "kpi": {"total_power_mw": 110}},
+                            "v-c": None}, "v-a")
+    assert rows[0] == {"KPI": "evidence 출처", "a": "calculated", "b": "measured", "c": "없음"}
+    assert rows[1] == {"KPI": "Total power (mW)", "a": "100.0", "b": "110.0 (+10.0%)", "c": "—"}
+
+
+def test_condition_matrix_header_rows_show_zero_delta_and_short_parent():
+    from dashboard.components.compare_views import condition_matrix
+
+    selected = [
+        {"variant_id": "rec-a", "design_conditions": {"fps": 30}},
+        {"variant_id": "rec-b", "design_conditions": {"fps": 60}},
+    ]
+    rows, _ = condition_matrix(selected, "rec-a", ["fps"])
+    assert rows[0] == {"조건": "Δ vs 기준", "a": "0", "b": "1"}
+    assert rows[1] == {"조건": "비교 대상", "a": "★ 기준", "b": "a"}

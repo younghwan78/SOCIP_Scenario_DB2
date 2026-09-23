@@ -34,11 +34,14 @@ from dashboard.components.compare_views import (  # noqa: E402
     domain_chart_rows,
     evidence_kind_label,
     evidence_option_label,
+    common_prefix,
+    condition_matrix,
     dma_matrix,
-    kpi_matrix,
+    kpi_matrix_wide,
     kpi_side_by_side,
     pm_rows,
     rails_without_domain,
+    short_labels,
     unit_diff,
 )
 from dashboard.components.pipeline_tables import dma_rows  # noqa: E402
@@ -47,9 +50,7 @@ from dashboard.components.variant_compare import (  # noqa: E402
     condition_diff,
     differing_keys,
     medoid_variant_id,
-    pivot_rows,
 )
-from dashboard.components.variant_compare import _style_pivot as style_pivot  # noqa: E402
 from dashboard.components.viewer_api_client import (  # noqa: E402
     ViewerApiError,
     _request_json,
@@ -146,17 +147,32 @@ def render_multi_compare(api_base: str, scenario_id: str, selected: list[dict[st
     ids = [item["variant_id"] for item in selected]
     reference = ids[0]
     st.markdown(f"**{len(ids)}개 variant 비교** · 기준 `{reference}`")
+    labels = short_labels(ids)
+    prefix = common_prefix(ids)
+    if prefix:
+        st.caption(f"열 이름은 공통 prefix `{prefix}`를 생략했습니다. 첫 열이 기준입니다.")
     tab_cond, tab_struct, tab_kpi = st.tabs(["조건 matrix", "DMA 전송 matrix", "Evidence KPI matrix"])
+    variant_columns = {labels[vid]: st.column_config.TextColumn(labels[vid], help=vid) for vid in ids}
     with tab_cond:
         keys, constant = differing_keys(selected)
-        rows, changed = pivot_rows(selected, reference, keys)
-        order = {vid: index for index, vid in enumerate(ids)}
-        paired = sorted(zip(rows, changed), key=lambda pair: order.get(pair[0]["variant"], 99))
-        rows, changed = [p[0] for p in paired], [p[1] for p in paired]
-        st.dataframe(style_pivot(pd.DataFrame(rows), changed), hide_index=True, use_container_width=True,
-                     height=min(40 + 35 * len(rows), 420))
+        rows, highlight = condition_matrix(selected, reference, keys)
+        df = pd.DataFrame(rows).set_index("조건")
+        header_count = 3
+
+        def _cell_style(frame: pd.DataFrame) -> pd.DataFrame:
+            styles = pd.DataFrame("", index=frame.index, columns=frame.columns)
+            for row_index, column in highlight:
+                styles.iloc[row_index, frame.columns.get_loc(column)] = "background-color:#FEF3C7;color:#78350F;font-weight:700"
+            for row_index in range(min(header_count, len(frame))):
+                styles.iloc[row_index, :] = styles.iloc[row_index, :].where(styles.iloc[row_index, :] != "", "background-color:#F3F4F6;color:#374151")
+            return styles
+
+        st.dataframe(df.style.apply(_cell_style, axis=None), use_container_width=True,
+                     height=min(40 + 35 * len(df), 720), column_config=variant_columns)
         if constant:
-            st.caption(f"공통 조건 {len(constant)}개는 생략했습니다.")
+            with st.expander(f"공통 조건 {len(constant)}개 (모든 variant 동일)"):
+                st.markdown(" ".join(f"`{key}={value}`" for key, value in constant.items()))
+        st.caption("노란 셀 = 기준(파생 variant는 부모)과 다른 값 · — = 미등록 · 열 머리에 마우스를 올리면 전체 variant id가 보입니다.")
     with tab_struct:
         only_diff = st.toggle("variant 간 다른 전송만", value=True, key="compare_multi_dma_diff")
         try:
@@ -166,30 +182,28 @@ def render_multi_compare(api_base: str, scenario_id: str, selected: list[dict[st
             rows_by_variant = {}
         matrix = dma_matrix(rows_by_variant, only_different=only_diff) if rows_by_variant else []
         if matrix:
-            st.dataframe(pd.DataFrame(matrix), hide_index=True, use_container_width=True,
-                         height=min(40 + 35 * len(matrix), 560))
+            dma_df = pd.DataFrame(matrix).rename(columns=labels).set_index("transfer")
+            st.dataframe(dma_df, use_container_width=True, height=min(40 + 35 * len(dma_df), 640),
+                         column_config=variant_columns)
         else:
             st.success("선택한 variant들의 M2M 전송이 동일합니다.")
-        st.caption("셀 = size · format · compression, — = 해당 variant에 없는 전송.")
+        st.caption("행 = Producer → Buffer → Consumer, 셀 = size · format · compression, — = 해당 variant에 없는 전송.")
     with tab_kpi:
         chosen: dict[str, dict[str, Any] | None] = {}
-        sources = []
         for vid in ids:
             try:
-                ev = _default_evidence(_evidence(api_base, scenario_id, vid))
+                chosen[vid] = _default_evidence(_evidence(api_base, scenario_id, vid))
             except ViewerApiError:
-                ev = None
-            chosen[vid] = ev
-            sources.append({"variant": vid, "evidence": str(ev["id"]) if ev else "없음",
-                            "source": evidence_kind_label(ev) if ev else "-"})
-        kpi = kpi_matrix(chosen, reference)
-        if kpi:
-            st.dataframe(pd.DataFrame(kpi), hide_index=True, use_container_width=True)
+                chosen[vid] = None
+        kpi = kpi_matrix_wide(chosen, reference)
+        if len(kpi) > 1:
+            st.dataframe(pd.DataFrame(kpi).set_index("KPI"), use_container_width=True, column_config=variant_columns)
         else:
             st.info("비교 가능한 KPI가 있는 evidence가 없습니다.")
-        with st.expander("사용한 evidence (measured → calculated → synthetic 순으로 자동 선택)"):
-            st.dataframe(pd.DataFrame(sources), hide_index=True, use_container_width=True)
-        if len({row["source"] for row in sources if row["source"] != "-"}) > 1:
+        with st.expander("사용한 evidence id (measured → calculated → synthetic 순 자동 선택)"):
+            st.dataframe(pd.DataFrame([{"variant": vid, "evidence": str(ev["id"]) if ev else "없음"} for vid, ev in chosen.items()]),
+                         hide_index=True, use_container_width=True)
+        if len({evidence_kind_label(ev) for ev in chosen.values() if ev}) > 1:
             st.warning("variant마다 evidence 출처가 다릅니다. 차이에 모델 오차가 섞일 수 있습니다.")
 
 

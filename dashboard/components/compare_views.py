@@ -193,3 +193,89 @@ def dma_matrix(rows_by_variant: Mapping[str, Iterable[Mapping[str, Any]]], *, on
         producer, buffer, consumer = key
         out.append({"transfer": f"{producer} → {buffer} → {consumer}", **dict(zip(variants, values))})
     return out
+
+
+# ---------------------------------------------------------------------------
+# Column-per-variant layouts (N-way compare): rows = attributes, columns = variants
+# ---------------------------------------------------------------------------
+
+def short_labels(variant_ids: list[str]) -> dict[str, str]:
+    """Strip the shared hyphen-token prefix so variant columns stay narrow."""
+    if len(variant_ids) < 2:
+        return {vid: vid for vid in variant_ids}
+    tokens = [vid.split("-") for vid in variant_ids]
+    common = 0
+    for parts in zip(*tokens):
+        if len(set(parts)) != 1:
+            break
+        common += 1
+    common = min(common, min(len(t) for t in tokens) - 1)
+    labels = {vid: "-".join(parts[common:]) or vid for vid, parts in zip(variant_ids, tokens)}
+    if len(set(labels.values())) != len(labels):
+        return {vid: vid for vid in variant_ids}
+    return labels
+
+
+def common_prefix(variant_ids: list[str]) -> str:
+    labels = short_labels(variant_ids)
+    first = variant_ids[0] if variant_ids else ""
+    short = labels.get(first, first)
+    return first[: len(first) - len(short)] if short != first else ""
+
+
+def condition_matrix(
+    selected: list[Mapping[str, Any]],
+    reference: str,
+    keys: list[str],
+) -> tuple[list[dict[str, Any]], set[tuple[int, str]]]:
+    """Condition rows × variant columns; returns highlighted (row index, column) cells."""
+    from dashboard.components.variant_compare import pivot_rows
+
+    ids = [str(item.get("variant_id")) for item in selected]
+    labels = short_labels(ids)
+    rows_by_variant, changed_by_variant = {}, {}
+    pivot, changed = pivot_rows(selected, reference, keys)
+    for row, diff in zip(pivot, changed):
+        rows_by_variant[row["variant"]] = row
+        changed_by_variant[row["variant"]] = set(diff)
+    header_rows = [("Δ vs 기준", "Δ"), ("비교 대상", "vs"), ("load", "load")]
+    out: list[dict[str, Any]] = []
+    highlight: set[tuple[int, str]] = set()
+    def header_value(vid: str, field: str) -> str:
+        value = rows_by_variant[vid].get(field)
+        if field == "vs":
+            return "★ 기준" if vid == reference else labels.get(str(value), str(value or ""))
+        return "" if value is None else str(value)
+
+    for title, field in header_rows:
+        out.append({"조건": title, **{labels[vid]: header_value(vid, field) for vid in ids}})
+    for key in keys + ["assumed"]:
+        row = {"조건": key}
+        for vid in ids:
+            row[labels[vid]] = rows_by_variant[vid].get(key, "")
+            if key in changed_by_variant[vid]:
+                highlight.add((len(out), labels[vid]))
+        if key == "assumed" and not any(row[labels[vid]] for vid in ids):
+            continue
+        out.append(row)
+    return out, highlight
+
+
+def kpi_matrix_wide(evidence_by_variant: Mapping[str, Mapping[str, Any] | None], reference: str) -> list[dict[str, Any]]:
+    """KPI rows × variant columns; each cell is 'value (Δ% vs reference)'."""
+    ids = list(evidence_by_variant)
+    labels = short_labels(ids)
+    out = [{"KPI": "evidence 출처", **{labels[vid]: evidence_kind_label(ev) if ev else "없음"
+                                      for vid, ev in evidence_by_variant.items()}}]
+    for row in kpi_matrix(evidence_by_variant, reference):
+        wide = {"KPI": row["KPI"]}
+        for vid in ids:
+            value, pct = row.get(vid), row.get(f"Δ% {vid}")
+            if value is None:
+                wide[labels[vid]] = "—"
+            elif vid == reference or pct is None:
+                wide[labels[vid]] = f"{value:,.1f}"
+            else:
+                wide[labels[vid]] = f"{value:,.1f} ({pct:+.1f}%)"
+        out.append(wide)
+    return out
