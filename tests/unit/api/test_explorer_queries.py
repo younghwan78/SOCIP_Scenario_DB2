@@ -306,3 +306,42 @@ def test_variant_matrix_axis_keys_are_based_on_filtered_result_not_current_page(
     assert [item.variant_id for item in response.items] == ["v-fps"]
     assert response.total == 2
     assert response.axis_keys == ["fps", "codec"]
+
+
+def test_variant_matrix_resolves_derived_variant_conditions_against_parent():
+    session = _VariantMatrixSession()
+    parent = session.variants[0]
+    parent.derived_from_variant = None
+    session.variants[1] = SimpleNamespace(
+        scenario_id="uc-camera",
+        id="v-fps-explored",
+        severity="medium",
+        design_conditions=None,
+        design_conditions_override={"exploration_clock_mhz": 400},
+        routing_switch={},
+        buffer_overrides={},
+        node_configs={},
+        tags=[],
+        derived_from_variant="v-fps",
+    )
+
+    response = variant_matrix(
+        soc_ref=None,
+        board_type=None,
+        project_ref=None,
+        category=None,
+        domain=None,
+        scenario_id=None,
+        severity=None,
+        limit=10,
+        offset=0,
+        db=session,
+    )
+
+    derived = next(item for item in response.items if item.variant_id == "v-fps-explored")
+    assert derived.design_conditions == {"fps": 30, "exploration_clock_mhz": 400}
+    assert derived.derived_from_variant == "v-fps"
+    assert derived.own_condition_keys == ["exploration_clock_mhz"]
+    assert "exploration_clock_mhz" in response.axis_keys
+    base = next(item for item in response.items if item.variant_id == "v-fps")
+    assert base.derived_from_variant is None and base.own_condition_keys == []

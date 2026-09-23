@@ -19,7 +19,9 @@ for path in (_root / "src", _root, _root / "dashboard"):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
+from dashboard.components.app_context import adopt_query_context, current_context, publish_query, render_context_bar
 from dashboard.components.elk_viewer import render_elk_view
+from dashboard.components.pipeline_tables import render_pipeline_tables
 from dashboard.components.graph_selection_bridge import read_graph_selection
 from dashboard.components.graph_inspector import (
     InspectorPanel,
@@ -618,10 +620,11 @@ with st.sidebar:
         clear_viewer_timing_caches()
         st.rerun()
 
-    query_soc_id = query_params.get("soc_id")
-    query_project_id = query_params.get("project_id")
-    query_scenario_id = query_params.get("scenario_id")
-    query_variant_id = query_params.get("variant_id")
+    adopt_query_context(query_params, st.session_state, page="viewer")
+    query_soc_id = None
+    query_project_id = None
+    query_scenario_id = None
+    query_variant_id = None
 
     socs, soc_error = _load_soc_options(api_base)
     if socs:
@@ -701,6 +704,7 @@ with st.sidebar:
             ),
         )
         st.session_state["viewer_variant_id"] = variant_id_input
+        publish_query(query_params, current_context(st.session_state), page="viewer", state=st.session_state)
     else:
         if variant_error:
             st.caption(f"Variant list unavailable: {variant_error}")
@@ -966,6 +970,8 @@ graph_node_count = len(topo_view.nodes) if level == 0 else len(primary.nodes)
 graph_edge_count = len(topo_view.edges) if level == 0 else len(primary.edges)
 mode_label = "resource + topology" if level == 0 else str(primary.mode)
 
+render_context_bar(st.session_state, active="Pipeline")
+
 st.markdown(
     f"""
 <div class="viewer-header">
@@ -1116,6 +1122,18 @@ with main_col:
                 title=f"Level 2 - Drill Down ({title_expand})",
             )
         st.markdown("</div>", unsafe_allow_html=True)
+
+    # Architecture attribute tables (DMA ports, buffer size/format/bit/SBWC,
+    # scale/crop/rotate). L0 reads the L1 projection so the tables stay detailed.
+    with st.expander("DMA · Buffer · Transform 표", expanded=True):
+        if level == 2:
+            table_view, table_source = primary, arch_source
+        else:
+            table_view, table_source = _load_view(api_base, scenario_id_input, variant_id_input, 1, sim_mode="none")
+        if table_source != "api":
+            st.caption("L1 view를 불러오지 못해 표를 표시하지 않습니다.")
+        else:
+            render_pipeline_tables(table_view, key_prefix=f"viewer_tables_{scenario_id_input}_{variant_id_input}")
 
     # Simulation timing: the schedule behind the overlay numbers, rendered as
     # the workbench timeline (with its own diagram cross-probe) right under

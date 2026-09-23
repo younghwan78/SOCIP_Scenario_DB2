@@ -22,7 +22,7 @@ const footer = document.getElementById('wb-footer') as HTMLDivElement
 let themeName = 'light'
 let pilot = false
 let pilotKey = ''
-let pilotView = 'split'
+let pilotView = 'diagram'
 let pilotEvents: TimelineEvent[] = []
 let pilotOptions: WorkbenchOptions
 let selectedFrame = ''
@@ -306,7 +306,7 @@ function savePilot(): void {
     width: diagramContainer.style.flexBasis})) } catch { /* storage may be disabled */ }
 }
 function setPilotView(view: string): void {
-  pilotView = ['split','diagram','timing'].includes(view) ? view : 'split'
+  pilotView = ['split','diagram','timing'].includes(view) ? view : 'diagram'
   document.getElementById('wb-body')!.dataset.view = pilotView
   openDiagram(pilotView !== 'timing')
   canvasWrap.hidden = pilotView === 'diagram'
@@ -364,7 +364,7 @@ function configurePilot(args: Record<string, unknown>, events: TimelineEvent[], 
     splitter.onkeydown = e => {if(e.key==='ArrowLeft'||e.key==='ArrowRight') {e.preventDefault();width(parseFloat(diagramContainer.style.flexBasis||'40')+(e.key==='ArrowLeft'?-5:5))}}
   }
   if (key !== pilotKey) {
-    pilotKey=key; selectedFrame=''; onlyFrame=false; selectedGroup=''; pilotView='split'
+    pilotKey=key; selectedFrame=''; onlyFrame=false; selectedGroup=''; pilotView='diagram'
     const frame=document.getElementById('pilot-frame') as HTMLSelectElement
     frame.replaceChildren(new Option('전체',''),... [...new Set(events.map(e=>e.frame_index).filter(f=>f!==undefined))].sort((a,b)=>a!-b!).map(f=>new Option(`f${String(f).padStart(4,'0')}`,String(f))))
     let saved: Record<string, any> = {}
@@ -374,7 +374,7 @@ function configurePilot(args: Record<string, unknown>, events: TimelineEvent[], 
     ;(document.getElementById('pilot-only') as HTMLInputElement).checked=onlyFrame
     ;(document.getElementById('pilot-group') as HTMLSelectElement).value=selectedGroup
     diagramContainer.style.flexBasis=saved.width||'40%'
-    filterPilot(); setPilotView(saved.view||'split')
+    filterPilot(); setPilotView(saved.view||'diagram')
     if(saved.viewport) engine.restoreViewport(saved.viewport)
     selection.selectedTaskId=saved.task||null
     const selected=events.find(e=>e.task_id===selection.selectedTaskId)

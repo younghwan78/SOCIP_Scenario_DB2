@@ -22,6 +22,7 @@ from scenario_db.api.schemas.explorer import (
 from scenario_db.db.models.capability import IpCatalog, SocPlatform, SwProfile
 from scenario_db.db.models.definition import Project, Scenario, ScenarioVariant
 from scenario_db.db.models.write import WriteBatch
+from scenario_db.db.repositories.variant_resolution import include_variant_parent_rows, resolve_variant_from_rows
 from scenario_db.graph_checks import (
     edge_source as _edge_source,
     edge_target as _edge_target,
@@ -197,6 +198,12 @@ def variant_matrix(
     )
     project_by_id = {project.id: project for project in projects}
     scenario_by_id = {scenario.id: scenario for scenario in scenarios}
+    # Derived variants (derived_from_variant) store only their overrides; resolve
+    # them against the parent chain so the matrix compares effective conditions.
+    rows_by_scenario: dict[str, dict[str, Any]] = {}
+    if any(getattr(row, "derived_from_variant", None) for row in variants):
+        for row in include_variant_parent_rows(db, list(variants)):
+            rows_by_scenario.setdefault(str(row.scenario_id), {})[str(row.id)] = row
     items: list[VariantMatrixItem] = []
     for variant in sorted(variants, key=lambda row: (row.scenario_id, row.id)):
         scenario = scenario_by_id.get(variant.scenario_id)
@@ -207,8 +214,18 @@ def variant_matrix(
         project = project_by_id.get(scenario.project_ref)
         if project is None:
             continue
-        design = variant.design_conditions or {}
-        routing = variant.routing_switch or {}
+        effective: Any = variant
+        own_keys = sorted((variant.design_conditions or {}).keys())
+        parent_id = getattr(variant, "derived_from_variant", None)
+        if parent_id:
+            try:
+                effective = resolve_variant_from_rows(rows_by_scenario.get(str(variant.scenario_id), {}), variant.scenario_id, variant.id)
+            except (LookupError, ValueError):
+                effective = variant
+            own_keys = sorted({*(variant.design_conditions or {}), *(getattr(variant, "design_conditions_override", None) or {})})
+        design = effective.design_conditions or {}
+        axis_keys.update(str(key) for key in design)
+        routing = effective.routing_switch or {}
         disabled_nodes = [str(item) for item in routing.get("disabled_nodes") or []]
         pipeline_node_count = len((scenario.pipeline or {}).get("nodes") or [])
         items.append(
@@ -227,9 +244,11 @@ def variant_matrix(
                 enabled_nodes=max(pipeline_node_count - len(disabled_nodes), 0),
                 disabled_nodes=disabled_nodes,
                 disabled_edges=len(routing.get("disabled_edges") or []),
-                buffer_override_count=len(variant.buffer_overrides or {}),
-                node_config_count=len(variant.node_configs or {}),
-                tags=variant.tags or [],
+                buffer_override_count=len(effective.buffer_overrides or {}),
+                node_config_count=len(effective.node_configs or {}),
+                tags=effective.tags or [],
+                derived_from_variant=parent_id,
+                own_condition_keys=own_keys if parent_id else [],
                 viewer_query=_viewer_query(project, scenario.id, variant.id),
             )
         )

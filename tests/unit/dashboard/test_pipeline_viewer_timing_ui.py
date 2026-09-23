@@ -77,9 +77,12 @@ def test_full_viewer_pins_one_latest_evidence_across_diagrams_and_timing(monkeyp
     assert not app.exception
     assert not app.error
     assert len([path for path, _ in calls if path == "/simulation/results"]) == 1
-    views = [params for path, params in calls if path.endswith("/view")]
+    all_views = [params for path, params in calls if path.endswith("/view")]
+    views = [params for params in all_views if params.get("level") == 0]
     assert len(views) == 2
     assert {params.get("sim_evidence_id") for params in views} == {"sim-1"}
+    # DMA/Buffer tables read one plain L1 projection without simulation overlay.
+    assert [params for params in all_views if params.get("level") == 1] == [{"level": 1}]
     assert all("sim" not in params for params in views)
     assert any(path == "/simulation/results/sim-1" for path, _ in calls)
     assert any(caption.value == "timing evidence: sim-1" for caption in app.caption)
