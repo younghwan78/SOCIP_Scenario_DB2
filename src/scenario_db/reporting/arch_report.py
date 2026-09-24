@@ -52,7 +52,7 @@ def build_snapshot(
             "variant_id": v["variant_id"], "scenario_id": v["scenario_id"], "fps": v["fps"],
             "spec_ok": v["spec_ok"], "reasons": compact_reasons(v["spec_reasons"]), "eis_on": v["eis_on"],
             "prediction_id": (pred or {}).get("id"), "selection_rule": (pred or {}).get("selection_rule"),
-            "power": chosen.get("power") or {k: rec.get(k) for k in ("total_mw", "cpu_mw", "hw_mw", "bw_mw")},
+            "power": chosen.get("power") or {k: rec.get(k) for k in ("total_mw", "cpu_mw", "hw_mw", "bw_mw", "bw_ip_mw", "bw_cpu_mw")},
             "bw_mbs": chosen.get("bw_mbs", rec.get("bw_mbs")),
             "baseline_bw_mbs": (v.get("baseline") or {}).get("bw_mbs"),
             "baseline_total_mw": (v.get("baseline") or {}).get("total_mw"),
@@ -173,7 +173,7 @@ def _ctx(c: dict[str, Any]) -> dict[str, Any]:
 
 
 # ------------------------------------------------------------------- HTML
-C = {"cpu": "#0072B2", "hw": "#009E73", "bw": "#E69F00", "total": "#4A5160", "ink": "#23262E", "mute": "#7A7468",
+C = {"cpu": "#0072B2", "bwcpu": "#56B4E9", "hw": "#009E73", "bw": "#E69F00", "total": "#4A5160", "ink": "#23262E", "mute": "#7A7468",
      "line": "#E4DED3", "ok": "#2F6F68", "fail": "#9B1C1C"}
 
 
@@ -269,14 +269,14 @@ def _spec(s: dict[str, Any]) -> str:
 
 def _scenarios(rows: list[dict[str, Any]]) -> str:
     h = ("<div class='scroll'><table><tr><th>Scenario</th><th>fps</th><th>EIS</th><th>판정</th><th>Total mW</th>"
-         "<th>CPU</th><th>HW</th><th>BW</th><th>BW MB/s</th><th>range mW (min–max)</th><th>Compression</th><th>DVFS level</th><th>검증</th></tr>")
+         "<th>CPU</th><th>IP</th><th>BW IP</th><th>BW CPU</th><th>BW MB/s</th><th>range mW (min–max)</th><th>Compression</th><th>DVFS level</th><th>검증</th></tr>")
     for r in rows:
         p, d = r["power"], r["distribution"]["total_mw"]
         ver = r.get("verified") or {}
         h += (f"<tr><td>{escape(_short(r['variant_id']))}</td><td class=n>{_f(r['fps'],0)}</td><td>{'ON' if r['eis_on'] else '—'}</td>"
               f"<td class={'ok' if r['spec_ok'] else 'fail'}>{'OK' if r['spec_ok'] else 'FAIL'}</td>"
               f"<td class=n><b>{_f(p.get('total_mw'))}</b></td><td class=n>{_f(p.get('cpu_mw'))}</td><td class=n>{_f(p.get('hw_mw'))}</td>"
-              f"<td class=n>{_f(p.get('bw_mw'))}</td><td class=n>{_f(r['bw_mbs'],0)}</td><td class=n>{_f(d.get('min'),0)}–{_f(d.get('max'),0)}</td>"
+              f"<td class=n>{_f(p.get('bw_ip_mw', p.get('bw_mw')))}</td><td class=n>{_f(p.get('bw_cpu_mw'))}</td><td class=n>{_f(r['bw_mbs'],0)}</td><td class=n>{_f(d.get('min'),0)}–{_f(d.get('max'),0)}</td>"
               f"<td>{len(r['compression'])} buf{' <span class=warn>lossy</span>' if r.get('lossy') and r['compression'] else ''}</td>"
               f"<td>{escape(', '.join(f'{k}:L{v}' for k, v in sorted(r['dvfs'].items())))}</td>"
               f"<td>{'✓ ' + _f(ver.get('delta_pct'), 2) + '%' if ver.get('ok') else ('✗' if ver else '—')}</td></tr>")
@@ -342,12 +342,13 @@ def _boxes(rows: list[dict[str, Any]]) -> str:
     rows = [r for r in rows if r["spec_ok"]]
     out = "<p class='meta'>spec 만족 scenario만 표시 (미달은 ②). 막대 = min–max, 상자 = p25–p75, 굵은 선 = median</p>"
     for key, label, unit in (("total_mw", "Total power", "mW"), ("cpu_mw", "CPU (SW)", "mW"), ("hw_mw", "IP (HW core)", "mW"),
-                             ("bw_mw", "BW power", "mW"), ("bw_mbs", "BW", "MB/s")):
+                             ("bw_ip_mw", "BW · IP DMA", "mW"), ("bw_cpu_mw", "BW · CPU DMA", "mW"),
+                             ("bw_mbs", "BW", "MB/s")):
         out += f"<h3 style='font-size:13px;margin:12px 0 4px'>{label} ({unit}) — box = 조합 × SW 통계 · ◆ = 등록 예측</h3>" + _box_svg(rows, key)
     return out
 
 
-_KEY_COLOR = {"total_mw": "total", "cpu_mw": "cpu", "hw_mw": "hw", "bw_mw": "bw", "bw_mbs": "bw"}
+_KEY_COLOR = {"total_mw": "total", "cpu_mw": "cpu", "hw_mw": "hw", "bw_mw": "bw", "bw_ip_mw": "bw", "bw_cpu_mw": "bwcpu", "bw_mbs": "bw"}
 
 
 def _box_svg(rows: list[dict[str, Any]], key: str) -> str:
@@ -387,19 +388,29 @@ def _split(rows: list[dict[str, Any]]) -> str:
     hi = max((r["power"]["total_mw"] for r in ok), default=1) * 1.05
     k = (W - lw - 120) / hi
     H = len(ok) * rh + 8
-    g = [f"<div class='lg'><span><i style='background:{C['cpu']}'></i>CPU (SW)</span><span><i style='background:{C['hw']}'></i>IP (HW core)</span><span><i style='background:{C['bw']}'></i>BW</span></div>",
+    g = [f"<div class='lg'><span><i style='background:{C['cpu']}'></i>CPU (SW)</span><span><i style='background:{C['bwcpu']}'></i>BW · CPU DMA</span>"
+         f"<span><i style='background:{C['hw']}'></i>IP (HW core)</span><span><i style='background:{C['bw']}'></i>BW · IP DMA</span></div>",
          f"<div class='scroll'><svg width='{W}' height='{H}'>"]
     for i, r in enumerate(ok):
         p, y, x = r["power"], i * rh + 4, float(lw)
         g.append(f"<text x='{lw-6}' y='{y+11}' font-size='11' text-anchor='end'>{escape(_short(r['variant_id']))}</text>")
-        for comp in ("cpu", "hw", "bw"):
-            w = (p.get(f"{comp}_mw") or 0) * k
-            g.append(f"<rect x='{x:.1f}' y='{y+1}' width='{max(0,w):.1f}' height='12' fill='{C[comp]}'/>")
+        parts = _parts(p)
+        for key, val in parts:
+            w = val * k
+            g.append(f"<rect x='{x:.1f}' y='{y+1}' width='{max(0,w):.1f}' height='12' fill='{C[key]}'/>")
             x += w
         t = p["total_mw"]
-        g.append(f"<text x='{x+4:.1f}' y='{y+11}' font-size='10' fill='{C['mute']}'>{t:,.0f} mW · CPU {100*p['cpu_mw']/t:.0f}% · HW {100*p['hw_mw']/t:.0f}% · BW {100*p['bw_mw']/t:.0f}%</text>")
+        share = " · ".join(f"{lbl} {100*v/t:.0f}%" for lbl, v in zip(("CPU", "BW-CPU", "IP", "BW-IP"), [v for _, v in parts], strict=True))
+        g.append(f"<text x='{x+4:.1f}' y='{y+11}' font-size='10' fill='{C['mute']}'>{t:,.0f} mW · {share}</text>")
     g.append("</svg></div>")
     return "".join(g)
+
+
+def _parts(p: dict[str, Any]) -> list[tuple[str, float]]:
+    """CPU, CPU DMA, IP core, IP DMA (engine rev 1 predictions: all BW as IP DMA)."""
+    bw_ip = p.get("bw_ip_mw", p.get("bw_mw")) or 0.0
+    return [("cpu", p.get("cpu_mw") or 0.0), ("bwcpu", p.get("bw_cpu_mw") or 0.0),
+            ("hw", p.get("hw_mw") or 0.0), ("bw", bw_ip)]
 
 
 def _compression(rows: list[dict[str, Any]], scen: list[dict[str, Any]]) -> str:

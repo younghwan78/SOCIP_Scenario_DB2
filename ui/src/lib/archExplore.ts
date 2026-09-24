@@ -4,11 +4,15 @@ import { API_BASE, ApiError } from './api'
 import { fetchAdmitted, type Statistic } from './timingBudget'
 
 export interface Quant { min: number; p25: number; median: number; p75: number; max: number }
-export type DistKey = 'total_mw' | 'cpu_mw' | 'hw_mw' | 'bw_mw' | 'bw_mbs'
+/** Distribution keys always present (engine rev 1+); the BW IP/CPU keys exist from rev 2. */
+export type Dist = Record<'total_mw' | 'cpu_mw' | 'hw_mw' | 'bw_mw' | 'bw_mbs', Quant> & Partial<Record<DistKey, Quant>>
+export type DistKey = 'total_mw' | 'cpu_mw' | 'hw_mw' | 'bw_mw' | 'bw_ip_mw' | 'bw_cpu_mw' | 'bw_mbs' | 'bw_ip_mbs' | 'bw_cpu_mbs'
 export interface Verified { ok: boolean; delta_pct: number; sim_total_mw: number; analytic_total_mw: number; sim_verdict: string }
 export interface ExpCase {
   key: string; statistic: Statistic; runtime_scale: number; compression: string[]; dvfs: Record<string, number>; dvfs_raise: number
   total_mw: number; cpu_mw: number; hw_mw: number; bw_mw: number; bw_mbs: number; lossy: boolean; assumed_ratio: boolean
+  // engine rev 2+: BW split into IP DMA (HW nodes) and CPU DMA (SW tasks)
+  bw_ip_mw?: number; bw_cpu_mw?: number; bw_ip_mbs?: number; bw_cpu_mbs?: number
   verdict: string; eligible: boolean; verified?: Verified
 }
 export interface BufferRow {
@@ -30,7 +34,7 @@ export interface SliceRow {
 export interface VariantResult {
   scenario_id: string; variant_id: string; fps: number; period_ms: number; eis_on: boolean; mfc_dual: boolean
   spec_ok: boolean; spec_reasons: string[]; counts: { cases: number; eligible: number; sw_slices: number; compression_sets: number; dvfs_sets: number }
-  distribution: Record<DistKey, Quant>; baseline: ExpCase; recommended: ExpCase | null; alternatives: ExpCase[]
+  distribution: Dist; baseline: ExpCase; recommended: ExpCase | null; alternatives: ExpCase[]
   slices: SliceRow[]; buffers: BufferRow[]; domains: DomainRow[]
   axis_spread: Record<'sw_statistic' | 'sw_growth' | 'compression' | 'dvfs_headroom', { min: number; max: number; range: number }>
   sw_margin: SwMargin; coverage?: { zero_power_ips: string[]; hw_power_modeled: boolean; cpu_power_modeled: boolean }
@@ -42,11 +46,11 @@ export interface RunMeta {
   summary: { variants: number; errors: number; spec_ok: number; cases: number; eligible_cases: number; verified: number; recommended_power_mw: [number, number] | null }
 }
 export interface RunDetail extends RunMeta { spec: Record<string, unknown>; variants: VariantResult[]; errors: { variant_id: string; error: string }[] }
-export interface Power { total_mw: number; cpu_mw: number; hw_mw: number; bw_mw: number }
+export interface Power { total_mw: number; cpu_mw: number; hw_mw: number; bw_mw: number; bw_ip_mw?: number; bw_cpu_mw?: number }
 export interface BoardRow {
   id: string; scenario_id: string; variant_id: string; status: string; run_id: string; run_title: string | null; run_created_at: string | null
   case_key: string; selection_rule: string; selected_by: string; reason: string | null; created_at: string | null
-  fps: number; power: Power; bw_mbs: number; distribution: Record<DistKey, Quant> | null; compression: string[]; dvfs: Record<string, number>
+  fps: number; power: Power; bw_mbs: number; distribution: Dist | null; compression: string[]; dvfs: Record<string, number>
   verdict: string; eligible_cases: number; alternatives: number; verified: Verified | null; statistic: Statistic; runtime_scale: number
   previous: { id: string; total_mw: number; delta_mw: number } | null
 }
@@ -54,7 +58,7 @@ export interface HistoryRow { id: string; status: string; run_id: string; select
 export interface Factor { category: string; item: string; delta_mw: number; detail: string }
 export interface Attribution {
   old_total_mw: number; new_total_mw: number; delta_mw: number; delta_pct: number | null
-  components: { cpu_mw: number; hw_mw: number; bw_mw: number }; by_category: Record<string, number>; factors: Factor[]
+  components: { cpu_mw: number; hw_mw: number; bw_mw: number; bw_ip_mw?: number; bw_cpu_mw?: number }; by_category: Record<string, number>; factors: Factor[]
   residual_mw: number; context_changes: { item: string; old: unknown; new: unknown }[]
 }
 export interface ReportMeta {
@@ -125,8 +129,21 @@ export const archApi = {
 
 // ---------------------------------------------------------------- helpers
 // Power components: blue / green / orange (Okabe-Ito — separable incl. color-vision deficiency)
-export const PCOL = { cpu: '#0072B2', hw: '#009E73', bw: '#E69F00', total: '#4A5160' } as const
-export const METRIC_COLOR: Record<DistKey, string> = { total_mw: PCOL.total, cpu_mw: PCOL.cpu, hw_mw: PCOL.hw, bw_mw: PCOL.bw, bw_mbs: PCOL.bw }
+export const PCOL = { cpu: '#0072B2', bwcpu: '#56B4E9', hw: '#009E73', bw: '#E69F00', total: '#4A5160' } as const
+export const METRIC_COLOR: Record<DistKey, string> = {
+  total_mw: PCOL.total, cpu_mw: PCOL.cpu, hw_mw: PCOL.hw, bw_mw: PCOL.bw, bw_ip_mw: PCOL.bw, bw_cpu_mw: PCOL.bwcpu,
+  bw_mbs: PCOL.bw, bw_ip_mbs: PCOL.bw, bw_cpu_mbs: PCOL.bwcpu,
+}
+
+/** Stack order CPU → CPU DMA → IP core → IP DMA (runs from engine rev 1 have only total BW → shown as IP DMA). */
+export function powerParts(p: Power): { key: 'cpu' | 'bwcpu' | 'hw' | 'bw'; label: string; mw: number }[] {
+  const cpuBw = p.bw_cpu_mw ?? 0
+  const ipBw = p.bw_ip_mw ?? p.bw_mw - cpuBw
+  return [
+    { key: 'cpu', label: 'CPU (SW)', mw: p.cpu_mw }, { key: 'bwcpu', label: 'BW · CPU DMA', mw: cpuBw },
+    { key: 'hw', label: 'IP (HW core)', mw: p.hw_mw }, { key: 'bw', label: 'BW · IP DMA', mw: ipBw },
+  ]
+}
 export const short = (v: string) => v.replace(/^cam-rec-/, '').replace(/^cam-prev-/, 'prev-')
 export const levels = (d: Record<string, number> | undefined) => Object.entries(d ?? {}).sort().map(([k, v]) => `${k}:L${v}`).join(' ')
 

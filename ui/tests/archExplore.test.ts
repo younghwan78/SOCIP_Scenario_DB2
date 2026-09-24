@@ -44,3 +44,13 @@ it('routes the new pages and posts promotion requests', async () => {
   expect(url).toContain('/arch/predictions/promote')
   expect(JSON.parse(init.body)).toEqual({ run_id: 'EXP-1', variant_ids: ['v1'], case_key: 'k', reason: 'why' })
 })
+
+it('splits power into CPU / CPU DMA / IP / IP DMA (rev-1 rows: all BW as IP DMA)', async () => {
+  const { powerParts } = await import('../src/lib/archExplore')
+  const v2 = powerParts({ total_mw: 674.3, cpu_mw: 310.7, hw_mw: 126.9, bw_mw: 236.7, bw_ip_mw: 234.3, bw_cpu_mw: 2.4 })
+  expect(v2.map((q) => q.key)).toEqual(['cpu', 'bwcpu', 'hw', 'bw'])
+  expect(v2.reduce((s, q) => s + q.mw, 0)).toBeCloseTo(674.3, 1)
+  const v1 = powerParts({ total_mw: 674.3, cpu_mw: 310.7, hw_mw: 126.9, bw_mw: 236.7 })
+  expect(v1[1].mw).toBe(0)
+  expect(v1[3].mw).toBeCloseTo(236.7)
+})

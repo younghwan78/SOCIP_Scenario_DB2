@@ -4,7 +4,7 @@ import { useAsync } from '../lib/route'
 import { fmt } from '../lib/timingBudget'
 import { archApi, levels, short, type BoardRow, type HistoryRow } from '../lib/archExplore'
 import { Card } from '../components/TimingCharts'
-import { RangeBoxes, SplitBar, SplitLegend, Waterfall } from '../components/ArchCharts'
+import { CompositionBars, RangeBoxes, SplitBar, SplitLegend, Waterfall } from '../components/ArchCharts'
 import { DataTable, type Column } from '../components/DataTable'
 
 export function PredictionsPage({ ctx }: { ctx: Ctx }) {
@@ -22,7 +22,8 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
     { key: 'tot', label: 'Power mW', width: 160, align: 'right', firstDir: -1, sort: (r) => r.power.total_mw, render: (r) => <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><SplitBar p={r.power} width={70} /><b className="mono">{fmt(r.power.total_mw, 1)}</b></span> },
     { key: 'cpu', label: 'CPU', width: 62, align: 'right', firstDir: -1, sort: (r) => r.power.cpu_mw, render: (r) => fmt(r.power.cpu_mw, 0) },
     { key: 'hw', label: 'HW', width: 62, align: 'right', firstDir: -1, sort: (r) => r.power.hw_mw, render: (r) => fmt(r.power.hw_mw, 0) },
-    { key: 'bwp', label: 'BW', width: 62, align: 'right', firstDir: -1, sort: (r) => r.power.bw_mw, render: (r) => fmt(r.power.bw_mw, 0) },
+    { key: 'bwip', label: 'IP DMA', width: 70, align: 'right', firstDir: -1, sort: (r) => r.power.bw_ip_mw ?? r.power.bw_mw, render: (r) => fmt(r.power.bw_ip_mw ?? r.power.bw_mw, 0) },
+    { key: 'bwcpu', label: 'CPU DMA', width: 74, align: 'right', firstDir: -1, sort: (r) => r.power.bw_cpu_mw ?? -1, render: (r) => fmt(r.power.bw_cpu_mw, 1) },
     { key: 'bw', label: 'BW MB/s', width: 84, align: 'right', firstDir: -1, sort: (r) => r.bw_mbs, render: (r) => fmt(r.bw_mbs, 0) },
     { key: 'd', label: 'Δ 직전', width: 90, align: 'right', firstDir: -1, sort: (r) => Math.abs(r.previous?.delta_mw ?? 0), render: (r) => r.previous ? <span className="mono" style={{ color: r.previous.delta_mw > 0 ? 'var(--del-text)' : 'var(--primary-strong)' }}>{r.previous.delta_mw >= 0 ? '+' : ''}{fmt(r.previous.delta_mw, 1)}</span> : <span className="faint">첫 등록</span> },
     { key: 'range', label: 'range mW', width: 100, align: 'right', firstDir: -1, sort: (r) => (r.distribution ? r.distribution.total_mw.max - r.distribution.total_mw.min : 0), render: (r) => r.distribution ? <span className="mono">{fmt(r.distribution.total_mw.min, 0)}–{fmt(r.distribution.total_mw.max, 0)}</span> : '—' },
@@ -65,8 +66,11 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
             </div>
           </Card>
           <Card id="pr-range" title="등록 예측 vs 탐색 range" note="◆ 등록 · ○ 직전 등록 · box = 조합 × SW 통계" defaultWide>
-            <RangeBoxes unit="mW" selected={ctx.params.v} onPick={choose} split
-              rows={rows.map((r) => ({ id: r.variant_id, label: short(r.variant_id), dist: r.distribution?.total_mw, ok: true, marker: r.power.total_mw, base: r.previous?.total_mw ?? null, parts: r.power }))} />
+            <RangeBoxes unit="mW" selected={ctx.params.v} onPick={choose}
+              rows={rows.map((r) => ({ id: r.variant_id, label: short(r.variant_id), dist: r.distribution?.total_mw, ok: true, marker: r.power.total_mw, base: r.previous?.total_mw ?? null }))} />
+          </Card>
+          <Card id="pr-comp" title="등록 예측 Power 구성" note="CPU · CPU DMA · IP · IP DMA (mW)" defaultWide>
+            <CompositionBars selected={ctx.params.v} onPick={choose} rows={rows.map((r) => ({ id: r.variant_id, label: short(r.variant_id), p: r.power }))} />
           </Card>
         </div>
       </>}
@@ -87,7 +91,7 @@ function ChangeCard({ row }: { row: BoardRow }) {
         <Waterfall a={a} />
         <div style={{ display: 'grid', gap: 8, alignContent: 'start', fontSize: 13 }}>
           <div><span className="mono" style={{ fontSize: 20, fontWeight: 600, color: a.delta_mw > 0 ? 'var(--del-text)' : 'var(--primary-strong)' }}>{a.delta_mw >= 0 ? '+' : ''}{fmt(a.delta_mw, 1)} mW</span> <span className="faint">({fmt(a.delta_pct, 1)}%)</span></div>
-          <div className="faint">CPU {fmt(a.components.cpu_mw, 1)} · HW {fmt(a.components.hw_mw, 1)} · BW {fmt(a.components.bw_mw, 1)} mW</div>
+          <div className="faint">CPU {fmt(a.components.cpu_mw, 1)} · IP {fmt(a.components.hw_mw, 1)} · BW {fmt(a.components.bw_mw, 1)}{a.components.bw_ip_mw !== undefined ? ` (IP DMA ${fmt(a.components.bw_ip_mw, 1)} · CPU DMA ${fmt(a.components.bw_cpu_mw, 1)})` : ''} mW</div>
           <table className="tb-mini-table"><thead><tr><th>원인</th><th>ΔmW</th></tr></thead>
             <tbody>{Object.entries(a.by_category).map(([k, v]) => <tr key={k}><td>{k}</td><td className="mono">{v >= 0 ? '+' : ''}{fmt(v, 1)}</td></tr>)}</tbody></table>
           <table className="tb-mini-table"><thead><tr><th>입력 변경</th><th>이전 → 현재</th></tr></thead>

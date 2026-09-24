@@ -1,15 +1,15 @@
 import { useWidth } from './Charts'
 import { fmt, niceMax } from '../lib/timingBudget'
-import { CAT_COLOR, PCOL, waterfall, type Attribution, type BufferRow, type DomainRow, type Power, type Quant } from '../lib/archExplore'
+import { CAT_COLOR, PCOL, powerParts, waterfall, type Attribution, type BufferRow, type DomainRow, type Power, type Quant } from '../lib/archExplore'
 
 // ---------------------------------------------------------------- range boxes (one row per scenario, no overlap)
-export interface RangeRow { id: string; label: string; dist: Quant | null | undefined; marker?: number | null; base?: number | null; ok: boolean; parts?: Power | null }
-/** One row per scenario (no overlap). split=true adds the CPU/HW/BW composition of the marker case under the box. */
-export function RangeBoxes({ rows, unit, onPick, selected, color = PCOL.total, split = false }: {
-  rows: RangeRow[]; unit: string; onPick?: (id: string) => void; selected?: string; color?: string; split?: boolean
+export interface RangeRow { id: string; label: string; dist: Quant | null | undefined; marker?: number | null; base?: number | null; ok: boolean }
+/** One row per scenario (no overlap): distribution box + recommended ◆ + baseline ○ on one value axis. */
+export function RangeBoxes({ rows, unit, onPick, selected, color = PCOL.total }: {
+  rows: RangeRow[]; unit: string; onPick?: (id: string) => void; selected?: string; color?: string
 }) {
   const [ref, w] = useWidth<HTMLDivElement>(700)
-  const labelW = 170, valW = 118, rh = split ? 28 : 20
+  const labelW = 170, valW = 118, rh = 20
   const plotW = Math.max(160, w - labelW - valW - 12)
   const hi = niceMax(Math.max(1, ...rows.flatMap((r) => [r.dist?.max ?? 0, r.marker ?? 0, r.base ?? 0])))
   const k = plotW / hi
@@ -21,23 +21,16 @@ export function RangeBoxes({ rows, unit, onPick, selected, color = PCOL.total, s
           <text x={labelW + t * k} y={rows.length * rh + 16} fontSize={10} fill="#8A8274" textAnchor="middle">{fmt(t, 0)}</text></g>)}
         {rows.map((r, i) => {
           const y = i * rh + 2, d = r.dist, col = r.ok ? color : '#9B1C1C'
-          const p = r.parts
-          const cw = p ? p.cpu_mw * k : 0, hw = p ? p.hw_mw * k : 0, bw = p ? p.bw_mw * k : 0
           return (
             <g key={r.id} transform={`translate(0,${y})`} style={{ cursor: onPick ? 'pointer' : undefined }} onClick={() => onPick?.(r.id)}>
               <rect x={0} y={0} width={labelW + plotW + valW} height={rh - 2} fill={selected === r.id ? '#F3EFE8' : 'transparent'} />
-              <title>{`${r.label}${d ? ` · min ${fmt(d.min, 0)} · p25 ${fmt(d.p25, 0)} · med ${fmt(d.median, 0)} · p75 ${fmt(d.p75, 0)} · max ${fmt(d.max, 0)} ${unit}` : ''}${r.marker != null ? ` · 추천 ${fmt(r.marker, 1)}` : ''}${r.base != null ? ` · baseline ${fmt(r.base, 1)}` : ''}${p ? ` · CPU ${fmt(p.cpu_mw, 1)} / IP ${fmt(p.hw_mw, 1)} / BW ${fmt(p.bw_mw, 1)} mW` : ''}`}</title>
+              <title>{`${r.label}${d ? ` · min ${fmt(d.min, 0)} · p25 ${fmt(d.p25, 0)} · med ${fmt(d.median, 0)} · p75 ${fmt(d.p75, 0)} · max ${fmt(d.max, 0)} ${unit}` : ''}${r.marker != null ? ` · 추천 ${fmt(r.marker, 1)}` : ''}${r.base != null ? ` · baseline ${fmt(r.base, 1)}` : ''}`}</title>
               <text x={labelW - 6} y={13} fontSize={11} textAnchor="end" fill="#3B3F4A" className="mono">{r.label.length > 26 ? `${r.label.slice(0, 25)}…` : r.label}</text>
               {d && <>
                 <line x1={labelW + d.min * k} x2={labelW + d.max * k} y1={9} y2={9} stroke={col} />
                 <rect x={labelW + d.p25 * k} y={3} width={Math.max(1.5, (d.p75 - d.p25) * k)} height={12} fill={col} fillOpacity={0.18} stroke={col} />
                 <line x1={labelW + d.median * k} x2={labelW + d.median * k} y1={3} y2={15} stroke={col} strokeWidth={2} />
               </>}
-              {split && p && <g aria-label="CPU/IP/BW">
-                <rect x={labelW} y={18} width={cw} height={6} fill={PCOL.cpu} />
-                <rect x={labelW + cw} y={18} width={hw} height={6} fill={PCOL.hw} />
-                <rect x={labelW + cw + hw} y={18} width={bw} height={6} fill={PCOL.bw} />
-              </g>}
               {r.base != null && <circle cx={labelW + r.base * k} cy={9} r={4} fill="#FFFFFF" stroke="#3B3F4A" />}
               {r.marker != null && <path d={`M${labelW + r.marker * k},2 l5,7 l-5,7 l-5,-7z`} fill="#CC3311" stroke="#FFFFFF" strokeWidth={0.8} />}
               <text x={labelW + plotW + 8} y={13} fontSize={11} fill="#6B6458" className="mono">{d ? `${fmt(d.min, 0)}–${fmt(d.max, 0)}` : '—'}</text>
@@ -49,33 +42,62 @@ export function RangeBoxes({ rows, unit, onPick, selected, color = PCOL.total, s
         <span className="legend-item"><svg width={24} height={12}><line x1={0} x2={24} y1={6} y2={6} stroke={color} /><rect x={6} y={1} width={12} height={10} fill={color} fillOpacity={0.18} stroke={color} /></svg>조합 × SW 통계 분포 (min·p25·median·p75·max)</span>
         <span className="legend-item"><svg width={12} height={14}><path d="M6,0 l5,7 l-5,7 l-5,-7z" fill="#CC3311" /></svg>최저 power 추천</span>
         <span className="legend-item"><svg width={12} height={12}><circle cx={6} cy={6} r={4} fill="#fff" stroke="#3B3F4A" /></svg>baseline (변경 없음)</span>
-        {split && <>
-          <span className="legend-item"><span style={{ width: 10, height: 10, background: PCOL.cpu }} />CPU (SW)</span>
-          <span className="legend-item"><span style={{ width: 10, height: 10, background: PCOL.hw }} />IP (HW core)</span>
-          <span className="legend-item"><span style={{ width: 10, height: 10, background: PCOL.bw }} />BW (DMA)</span>
-          <span className="faint">← 추천 조합 구성</span></>}
         <span className="legend-item"><span style={{ width: 10, height: 10, background: '#9B1C1C' }} />spec 미달</span>
       </div>
     </div>
   )
 }
 
-// ---------------------------------------------------------------- CPU/HW/BW split
+// ---------------------------------------------------------------- CPU / CPU DMA / IP / IP DMA split
 export function SplitBar({ p, width = 90, height = 10, max }: { p: Power; width?: number; height?: number; max?: number }) {
   const t = Math.max(max ?? p.total_mw, 1e-9)
-  const cw = (p.cpu_mw / t) * width, hw = (p.hw_mw / t) * width, bw = (p.bw_mw / t) * width
+  let x = 0
+  const parts = powerParts(p)
   return (
-    <svg width={width} height={height} aria-label="CPU/HW/BW"><title>{`CPU ${fmt(p.cpu_mw, 1)} · HW ${fmt(p.hw_mw, 1)} · BW ${fmt(p.bw_mw, 1)} mW`}</title>
+    <svg width={width} height={height} aria-label="CPU/IP/BW"><title>{parts.map((q) => `${q.label} ${fmt(q.mw, 1)}`).join(' · ') + ' mW'}</title>
       <rect width={width} height={height} fill="#F3EFE8" />
-      <rect x={0} width={cw} height={height} fill={PCOL.cpu} /><rect x={cw} width={hw} height={height} fill={PCOL.hw} /><rect x={cw + hw} width={bw} height={height} fill={PCOL.bw} />
+      {parts.map((q) => { const w = (q.mw / t) * width; const el = <rect key={q.key} x={x} width={Math.max(0, w)} height={height} fill={PCOL[q.key]} />; x += w; return el })}
     </svg>
   )
 }
 
 export function SplitLegend() {
-  return <div className="legend-row"><span className="legend-item"><span style={{ width: 10, height: 10, background: PCOL.cpu }} />CPU (SW)</span>
-    <span className="legend-item"><span style={{ width: 10, height: 10, background: PCOL.hw }} />IP (HW core)</span>
-    <span className="legend-item"><span style={{ width: 10, height: 10, background: PCOL.bw }} />BW (DMA)</span></div>
+  return <div className="legend-row">{powerParts({ total_mw: 0, cpu_mw: 0, hw_mw: 0, bw_mw: 0 }).map((q) =>
+    <span key={q.key} className="legend-item"><span style={{ width: 10, height: 10, background: PCOL[q.key] }} />{q.label}</span>)}</div>
+}
+
+/** Absolute stacked bars of the recommended / registered case (separate from the range boxes). */
+export function CompositionBars({ rows, onPick, selected }: { rows: { id: string; label: string; p: Power | null | undefined }[]; onPick?: (id: string) => void; selected?: string }) {
+  const [ref, w] = useWidth<HTMLDivElement>(700)
+  const labelW = 170, valW = 250, rh = 20
+  const plotW = Math.max(160, w - labelW - valW - 12)
+  const hi = niceMax(Math.max(1, ...rows.map((r) => r.p?.total_mw ?? 0)))
+  const k = plotW / hi
+  return (
+    <div ref={ref} style={{ width: '100%' }}>
+      <SplitLegend />
+      <svg width={labelW + plotW + valW} height={rows.length * rh + 22} role="img" aria-label="power composition">
+        {[0, 0.25, 0.5, 0.75, 1].map((t) => <g key={t}><line x1={labelW + t * hi * k} x2={labelW + t * hi * k} y1={0} y2={rows.length * rh + 4} stroke="#EFEAE1" />
+          <text x={labelW + t * hi * k} y={rows.length * rh + 16} fontSize={10} fill="#8A8274" textAnchor="middle">{fmt(t * hi, 0)}</text></g>)}
+        {rows.map((r, i) => {
+          const p = r.p
+          let x = labelW
+          const parts = p ? powerParts(p) : []
+          return (
+            <g key={r.id} transform={`translate(0,${i * rh + 2})`} style={{ cursor: onPick ? 'pointer' : undefined }} onClick={() => onPick?.(r.id)}>
+              <rect x={0} y={0} width={labelW + plotW + valW} height={rh - 2} fill={selected === r.id ? '#F3EFE8' : 'transparent'} />
+              <title>{p ? `${r.label} · ${parts.map((q) => `${q.label} ${fmt(q.mw, 1)}`).join(' · ')} · total ${fmt(p.total_mw, 1)} mW` : r.label}</title>
+              <text x={labelW - 6} y={13} fontSize={11} textAnchor="end" fill="#3B3F4A" className="mono">{r.label.length > 26 ? `${r.label.slice(0, 25)}…` : r.label}</text>
+              {parts.map((q) => { const wq = Math.max(0, q.mw * k); const el = <rect key={q.key} x={x} y={3} width={wq} height={12} fill={PCOL[q.key]} />; x += wq; return el })}
+              {p && <text x={labelW + plotW + 8} y={13} fontSize={11} fill="#3B3F4A" className="mono">
+                {fmt(p.total_mw, 0)} mW <tspan fill="#8A8274">· {parts.map((q) => { const v = (100 * q.mw) / Math.max(p.total_mw, 1e-9); return fmt(v, v > 0 && v < 1 ? 1 : 0) }).join('/')} %</tspan></text>}
+            </g>
+          )
+        })}
+      </svg>
+      <div className="faint" style={{ fontSize: 11 }}>% = CPU / CPU DMA / IP / IP DMA 비중</div>
+    </div>
+  )
 }
 
 // ---------------------------------------------------------------- range cause per axis

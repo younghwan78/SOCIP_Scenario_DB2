@@ -7,10 +7,10 @@ import {
   type DistKey, type ExpCase, type RunDetail, type RunOptions, type VariantResult,
 } from '../lib/archExplore'
 import { Card } from '../components/TimingCharts'
-import { AxisSpread, BufferSavings, DomainLevels, RangeBoxes, SplitBar, SplitLegend } from '../components/ArchCharts'
+import { AxisSpread, BufferSavings, CompositionBars, DomainLevels, RangeBoxes, SplitBar, SplitLegend } from '../components/ArchCharts'
 import { DataTable, type Column } from '../components/DataTable'
 
-const METRICS: [DistKey, string, string][] = [['total_mw', 'Total', 'mW'], ['cpu_mw', 'CPU', 'mW'], ['hw_mw', 'IP', 'mW'], ['bw_mw', 'BW power', 'mW'], ['bw_mbs', 'BW', 'MB/s']]
+const METRICS: [DistKey, string, string][] = [['total_mw', 'Total', 'mW'], ['cpu_mw', 'CPU', 'mW'], ['bw_cpu_mw', 'CPU DMA', 'mW'], ['hw_mw', 'IP', 'mW'], ['bw_ip_mw', 'IP DMA', 'mW'], ['bw_mbs', 'BW MB/s', 'MB/s']]
 const SCALES = [1.0, 1.1, 1.2, 1.3, 1.5]
 
 export function ExplorePage({ ctx }: { ctx: Ctx }) {
@@ -117,7 +117,7 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
   const [busy, setBusy] = useState(false)
   const sel = run.variants.find((v) => v.variant_id === ctx.params.v)
   const rows = run.variants.filter((v) => filter === 'all' || (filter === 'ok') === v.spec_ok)
-  const ranked = order === 'name' ? rows : [...rows].sort((a, b) => (a.recommended?.[metric] ?? a.distribution[metric].median) - (b.recommended?.[metric] ?? b.distribution[metric].median))
+  const ranked = order === 'name' ? rows : [...rows].sort((a, b) => (a.recommended?.[metric] ?? a.distribution[metric]?.median ?? 0) - (b.recommended?.[metric] ?? b.distribution[metric]?.median ?? 0))
   const s = run.summary
   const sample = (run.dvfs_table_ref ?? '').includes('sample')
   const choose = (vid: string) => ctx.navigate(undefined, { v: vid === ctx.params.v ? undefined : vid }, true)
@@ -143,7 +143,8 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
     { key: 'tot', label: '추천 mW', width: 160, align: 'right', firstDir: -1, sort: (r) => r.recommended?.total_mw ?? -1, render: (r) => r.recommended ? <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><SplitBar p={r.recommended} width={70} /><b className="mono">{fmt(r.recommended.total_mw, 1)}</b></span> : '—' },
     { key: 'cpu', label: 'CPU', width: 64, align: 'right', firstDir: -1, sort: (r) => r.recommended?.cpu_mw ?? -1, render: (r) => fmt(r.recommended?.cpu_mw, 0) },
     { key: 'hw', label: 'HW', width: 64, align: 'right', firstDir: -1, sort: (r) => r.recommended?.hw_mw ?? -1, render: (r) => fmt(r.recommended?.hw_mw, 0) },
-    { key: 'bwp', label: 'BW', width: 64, align: 'right', firstDir: -1, sort: (r) => r.recommended?.bw_mw ?? -1, render: (r) => fmt(r.recommended?.bw_mw, 0) },
+    { key: 'bwip', label: 'IP DMA', width: 70, align: 'right', firstDir: -1, sort: (r) => r.recommended?.bw_ip_mw ?? r.recommended?.bw_mw ?? -1, render: (r) => fmt(r.recommended?.bw_ip_mw ?? r.recommended?.bw_mw, 0) },
+    { key: 'bwcpu', label: 'CPU DMA', width: 74, align: 'right', firstDir: -1, sort: (r) => r.recommended?.bw_cpu_mw ?? -1, render: (r) => fmt(r.recommended?.bw_cpu_mw, 1) },
     { key: 'bw', label: 'BW MB/s', width: 84, align: 'right', firstDir: -1, sort: (r) => r.recommended?.bw_mbs ?? -1, render: (r) => fmt(r.recommended?.bw_mbs, 0) },
     { key: 'save', label: 'baseline 대비', width: 108, align: 'right', firstDir: 1, sort: (r) => (r.recommended ? r.recommended.total_mw - r.baseline.total_mw : 0), render: (r) => r.recommended ? <span className="mono" style={{ color: 'var(--primary-strong)' }}>{fmt(r.recommended.total_mw - r.baseline.total_mw, 1)}</span> : '—' },
     { key: 'range', label: 'range mW', width: 104, align: 'right', firstDir: -1, sort: (r) => r.distribution.total_mw.max - r.distribution.total_mw.min, render: (r) => <span className="mono">{fmt(r.distribution.total_mw.min, 0)}–{fmt(r.distribution.total_mw.max, 0)}</span> },
@@ -175,9 +176,12 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
           <div className="seg sm">{(['ok', 'fail', 'all'] as const).map((f) => <button key={f} className={filter === f ? 'on' : ''} onClick={() => setFilter(f)}>{f === 'all' ? '전체' : f === 'ok' ? `만족 ${s.spec_ok}` : `미달 ${s.variants - s.spec_ok}`}</button>)}</div>
           <div className="seg sm">{(['power', 'name'] as const).map((f) => <button key={f} className={order === f ? 'on' : ''} onClick={() => setOrder(f)}>{f === 'power' ? '추천값 순' : '이름 순'}</button>)}</div></>}>
         <RangeBoxes unit={METRICS.find((m) => m[0] === metric)?.[2] ?? ''} selected={ctx.params.v} onPick={choose}
-          color={METRIC_COLOR[metric]} split={metric === 'total_mw'}
+          color={METRIC_COLOR[metric]}
           rows={ranked.map((v) => ({ id: v.variant_id, label: short(v.variant_id), dist: v.distribution[metric], ok: v.spec_ok,
-            marker: v.recommended ? v.recommended[metric] : null, base: v.baseline[metric], parts: v.recommended }))} />
+            marker: v.recommended?.[metric] ?? null, base: v.baseline[metric] ?? null }))} />
+      </Card>
+      <Card id="ax-comp-bars" title="추천 조합 Power 구성" note="CPU · CPU DMA · IP · IP DMA (mW) · range 카드와 같은 순서" defaultWide>
+        <CompositionBars selected={ctx.params.v} onPick={choose} rows={ranked.map((v) => ({ id: v.variant_id, label: short(v.variant_id), p: v.recommended }))} />
       </Card>
       <Card id="ax-table" title="Variant 표" note="header 클릭 = 정렬 · 행 클릭 = 조합 상세" defaultWide minHeight={260}>
         <SplitLegend />
@@ -209,7 +213,7 @@ function VariantDetail({ v, run }: { v: VariantResult; run: RunDetail }) {
     <Card id="ax-cases" title={`${short(v.variant_id)} — 추천 · 대안 조합`} note={`${v.counts.cases.toLocaleString()} 조합 · eligible ${v.counts.eligible.toLocaleString()} · ${fmt(v.fps, 0)} fps${v.eis_on ? ' · EIS' : ''}`} defaultWide>
       {!v.spec_ok && <div className="err" style={{ fontSize: 12 }}>{v.spec_reasons.slice(0, 3).map((x) => <div key={x}>{x}</div>)}</div>}
       <table className="tb-mini-table" style={{ width: '100%' }}>
-        <thead><tr><th /><th>순위</th><th>Total mW</th><th>CPU / IP / BW</th><th>BW MB/s</th><th>Δ 추천 대비</th><th>SW</th><th>Compression</th><th>DVFS</th></tr></thead>
+        <thead><tr><th /><th>순위</th><th>Total mW</th><th title="CPU / CPU DMA / IP / IP DMA">CPU / CPU DMA / IP / IP DMA</th><th>BW MB/s</th><th>Δ 추천 대비</th><th>SW</th><th>Compression</th><th>DVFS</th></tr></thead>
         <tbody>{cands.map(({ rank, c }) => {
           const d = rec ? caseDelta(c, rec) : null
           return (
@@ -217,7 +221,7 @@ function VariantDetail({ v, run }: { v: VariantResult; run: RunDetail }) {
               <td><input type="radio" checked={pick === c.key} onChange={() => setPick(c.key)} aria-label={`${rank} 선택`} /></td>
               <td>{rank}{c.lossy && c.compression.length ? <span className="badge v-warn" style={{ marginLeft: 4 }}>lossy</span> : null}{c.assumed_ratio && c.compression.length ? <span className="badge v-warn" style={{ marginLeft: 4 }} title="catalog에 없는 ratio 사용">가정</span> : null}</td>
               <td className="mono"><b>{fmt(c.total_mw, 1)}</b></td>
-              <td><span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><SplitBar p={c} width={80} /><span className="mono faint">{fmt(c.cpu_mw, 0)}/{fmt(c.hw_mw, 0)}/{fmt(c.bw_mw, 0)}</span></span></td>
+              <td><span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><SplitBar p={c} width={80} /><span className="mono faint">{fmt(c.cpu_mw, 0)}/{fmt(c.bw_cpu_mw, 0)}/{fmt(c.hw_mw, 0)}/{fmt(c.bw_ip_mw ?? c.bw_mw, 0)}</span></span></td>
               <td className="mono">{fmt(c.bw_mbs, 0)}</td>
               <td className="mono" style={{ color: d && d.total > 0 ? 'var(--del-text)' : undefined }}>{d ? `${d.total >= 0 ? '+' : ''}${fmt(d.total, 1)}` : '—'}</td>
               <td className="mono faint">{c.statistic} ×{c.runtime_scale}</td>

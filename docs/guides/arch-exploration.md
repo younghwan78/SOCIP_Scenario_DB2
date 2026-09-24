@@ -33,6 +33,11 @@ v3 제안(2026-09-24)의 구현 내용이다. Stage timing budget([timing-budget
 - **SW timing margin** = (P − SW(runtime+latency) − IP overhead − HW@set clock) / P. NRT와 Post-NRT 중 최솟값이다.
   - 권고 규칙: spec 미달, 단일 task > 50%, latency > 30%, clock_up, max–mean 편차, SW 증가 허용치.
 
+- **Power 구성** (engine rev 2): CPU(SW) + CPU DMA(SW task DMA, 예: mpeg_writer/storage_write) + IP core + IP DMA.
+  - 분포(`distribution`)와 case에 `bw_ip_mw`/`bw_cpu_mw`/`bw_ip_mbs`/`bw_cpu_mbs`를 추가했습니다. compression Δ도 port 소유 node 기준으로 IP/CPU로 나눕니다.
+  - rev 1 run·예측은 BW 전체를 IP DMA로 표시하고, 변경 원인에서는 합산 "DMA traffic" 1개 항목으로만 비교합니다.
+- **UI 표현**: range 카드(box = 조합 분포, ◆ 추천, ○ baseline)와 구성 카드(추천 조합의 CPU/CPU DMA/IP/IP DMA 절대값 막대)를 분리했습니다.
+
 ## 2. 예측 등록 (current / superseded)
 
 - `POST /arch/predictions/promote {run_id, variant_ids?, case_key?, reason?}`

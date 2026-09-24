@@ -171,3 +171,31 @@ def test_report_snapshot_and_html(uhd30):
     html = render_html("Report", snap)
     assert html.count("<section") == 10 and "<svg" in html and "SAMPLE" in html
     assert len(html_sha256(html)) == 64
+
+
+def test_bw_split_ip_vs_cpu_dma(uhd30):
+    for case in [uhd30["recommended"], uhd30["baseline"], *uhd30["alternatives"]]:
+        assert case["bw_ip_mw"] + case["bw_cpu_mw"] == pytest.approx(case["bw_mw"], abs=0.02)
+        assert case["bw_ip_mbs"] + case["bw_cpu_mbs"] == pytest.approx(case["bw_mbs"], abs=0.02)
+    base = uhd30["baseline"]
+    assert base["bw_cpu_mbs"] > 0  # mpeg_writer / storage_write DMA
+    # compressing ISP buffers only changes IP DMA
+    rec = uhd30["recommended"]
+    assert rec["bw_cpu_mw"] == pytest.approx(base["bw_cpu_mw"], abs=1e-6)
+    assert rec["bw_ip_mw"] < base["bw_ip_mw"]
+    for key in ("bw_ip_mw", "bw_cpu_mw", "bw_ip_mbs", "bw_cpu_mbs"):
+        assert key in uhd30["distribution"]
+    p = ax.prediction_payload(uhd30["objective_slice"], rec, uhd30["buffers"])
+    assert p["power"]["bw_ip_mw"] + p["power"]["bw_cpu_mw"] == pytest.approx(p["power"]["bw_mw"], abs=0.01)
+
+
+def test_attribution_splits_dma_traffic_ip_vs_cpu(graph_factory, dvfs, uhd30):
+    uhd60 = ax.explore_variant(graph_factory("cam-rec-r1-uhd60-sdr"), ax.ArchExplorationSpec(), dvfs_tables=dvfs)
+    a, b = _payload(uhd30, uhd30["baseline"]), _payload(uhd60, uhd60["baseline"])
+    r = attribute(a, b)
+    items = {f["item"] for f in r["factors"] if f["category"] == "DMA traffic"}
+    assert "IP DMA" in items and abs(r["residual_mw"]) < 0.01
+    # rev-1 payload (no split) -> single combined factor, no fake IP/CPU swap
+    legacy = {k: v for k, v in a.items() if not k.startswith(("base_bw_ip", "base_bw_cpu"))}
+    r2 = attribute(legacy, b)
+    assert {f["item"] for f in r2["factors"] if f["category"] == "DMA traffic"} <= {"uncompressed traffic"}

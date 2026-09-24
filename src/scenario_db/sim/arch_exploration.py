@@ -43,7 +43,9 @@ from scenario_db.sim.timing_budget import (
 )
 from scenario_db.sim.transfers import compression_catalog
 
-ENGINE_REV = "arch-exploration/1"
+ENGINE_REV = "arch-exploration/2"
+# Power = CPU(SW) + IP core + BW; BW = IP DMA (HW nodes) + CPU DMA (SW tasks, e.g. mpeg_writer)
+DIST_KEYS = ("total_mw", "cpu_mw", "hw_mw", "bw_mw", "bw_ip_mw", "bw_cpu_mw", "bw_mbs", "bw_ip_mbs", "bw_cpu_mbs")
 V_REF_MV = 710.0
 DEFAULT_RATIO = {"LOSSY": 0.5}
 _BAYER_RE = re.compile(r"BAYER|RAW|BGGR|RGGB|GRBG|GBRG|PDAF", re.I)
@@ -142,7 +144,10 @@ def explore_variant(
             slices.append(_slice(analyze_timing_budget(graph, opts, config=config, dvfs_tables=tables), stat, scale))
     obj_slice = next(s for s in slices if s["statistic"] == obj.statistic and s["runtime_scale"] == obj.runtime_scale)
 
-    buffers = compression_candidates(graph, axes.compression, config) if axes.compression.enabled else []
+    sw_nodes = set(obj_slice["sw_nodes"]) | {
+        str(n.get("id")) for n in graph.pipeline_nodes if str(n.get("role") or "") in ("sw_task", "sw")
+    }
+    buffers = compression_candidates(graph, axes.compression, config, sw_nodes) if axes.compression.enabled else []
     active = [b for b in buffers if b["selectable"]][: axes.compression.max_buffers]
     explored = {b["buffer"] for b in active}
     for b in buffers:
@@ -161,7 +166,7 @@ def explore_variant(
         )
 
     comp_sets = _subset_sums(active)
-    dist: dict[str, list[float]] = {k: [] for k in ("total_mw", "cpu_mw", "hw_mw", "bw_mw", "bw_mbs")}
+    dist: dict[str, list[float]] = {k: [] for k in DIST_KEYS}
     eligible_count = 0
     cases_obj: list[dict[str, Any]] = []
     for s in slices:
@@ -264,6 +269,7 @@ def _slice(report: dict[str, Any], stat: str, scale: float) -> dict[str, Any]:
         "cpu_by_task": report["power"]["cpu_by_task"],
         "zero_power_ips": report["power"].get("zero_power_ips", []),
         "bw": {k: report["bw"][k] for k in ("total_mbs", "hw_mbs", "sw_mbs")},
+        "sw_nodes": sorted(report["bw"].get("sw_by_task", {})),
         "stages": {
             k: {f: st[k][f] for f in ("sw_ms", "budget_ms", "hw_ms", "overhead_ms", "feasible", "fill_pct")}
             | {"sw_items": [i for i in st[k]["sw_items"] if i.get("critical") is not False]}
@@ -353,8 +359,11 @@ def _dma(graph, config: SimulationRunConfig) -> dict[tuple[str, str, str], tuple
     return out
 
 
-def compression_candidates(graph, axis: CompressionAxis, config: SimulationRunConfig) -> list[dict[str, Any]]:
-    """Per-buffer BW/power delta when that buffer alone is compressed."""
+def compression_candidates(
+    graph, axis: CompressionAxis, config: SimulationRunConfig, sw_nodes: set[str] | None = None
+) -> list[dict[str, Any]]:
+    """Per-buffer BW/power delta when that buffer alone is compressed (split IP DMA / CPU DMA)."""
+    sw = sw_nodes or set()
     catalog = compression_catalog(graph.soc)
     buffers = (graph.scenario.pipeline or {}).get("buffers") or {}
     node_map = _buffer_nodes(graph)
@@ -403,10 +412,16 @@ def compression_candidates(graph, axis: CompressionAxis, config: SimulationRunCo
         raw = sum(base.get(k, (0.0, 0.0))[0] for k in ports)
         d_bw = sum(comp[k][0] for k in comp) - sum(v[0] for v in base.values())
         d_pw = sum(comp[k][1] for k in comp) - sum(v[1] for v in base.values())
+        keys = set(comp) | set(base)
+
+        def _part(cpu: bool, i: int) -> float:
+            return sum(comp.get(k, (0.0, 0.0))[i] - base.get(k, (0.0, 0.0))[i] for k in keys if (k[0] in sw) == cpu)
         row |= {
             "mode": mode, "comp_ratio": ratio, "ratio_source": src, "lossy": lossy,
             "ports": [f"{n}.{p}" for n, p, _ in ports], "raw_mbs": round(raw, 2),
             "delta_mbs": round(d_bw, 3), "delta_mw": round(d_pw, 4),
+            "delta_ip_mbs": round(_part(False, 0), 3), "delta_ip_mw": round(_part(False, 1), 4),
+            "delta_cpu_mbs": round(_part(True, 0), 3), "delta_cpu_mw": round(_part(True, 1), 4),
         }
         reason = None
         if support == "unsupported" and not axis.include_unsupported:
@@ -418,14 +433,17 @@ def compression_candidates(graph, axis: CompressionAxis, config: SimulationRunCo
     return out
 
 
+_DELTA_KEYS = ("delta_mw", "delta_mbs", "delta_ip_mw", "delta_ip_mbs", "delta_cpu_mw", "delta_cpu_mbs")
+
+
 def _subset_sums(active: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    sets: list[dict[str, Any]] = [{"buffers": (), "delta_mw": 0.0, "delta_mbs": 0.0, "lossy": False, "assumed": False}]
+    zero = {k: 0.0 for k in _DELTA_KEYS}
+    sets: list[dict[str, Any]] = [{"buffers": (), **zero, "lossy": False, "assumed": False}]
     for b in active:
         sets += [
             {
                 "buffers": s["buffers"] + (b["buffer"],),
-                "delta_mw": s["delta_mw"] + b["delta_mw"],
-                "delta_mbs": s["delta_mbs"] + b["delta_mbs"],
+                **{k: s[k] + b.get(k, 0.0) for k in _DELTA_KEYS},
                 "lossy": s["lossy"] or b["lossy"],
                 "assumed": s["assumed"] or b["ratio_source"] == "assumed",
             }
@@ -483,7 +501,7 @@ def _dvfs_sets(domains: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 # ------------------------------------------------------------------- cases
 def _case(s: dict[str, Any], cset: dict[str, Any], dset: dict[str, Any]) -> dict[str, Any]:
-    p = s["power"]
+    p, b = s["power"], s["bw"]
     hw = p["hw_mw"] + dset["delta_mw"]
     bw = p["bw_mw"] + cset["delta_mw"]
     total = p["cpu_mw"] + hw + bw
@@ -496,7 +514,9 @@ def _case(s: dict[str, Any], cset: dict[str, Any], dset: dict[str, Any]) -> dict
         "key": key, "statistic": s["statistic"], "runtime_scale": s["runtime_scale"],
         "compression": list(cset["buffers"]), "dvfs": dict(dset["levels"]), "dvfs_raise": dset["raises"],
         "total_mw": total, "cpu_mw": p["cpu_mw"], "hw_mw": hw, "bw_mw": bw,
-        "bw_mbs": s["bw"]["total_mbs"] + cset["delta_mbs"],
+        "bw_mbs": b["total_mbs"] + cset["delta_mbs"],
+        "bw_ip_mw": p["bw_hw_mw"] + cset["delta_ip_mw"], "bw_cpu_mw": p["bw_sw_mw"] + cset["delta_cpu_mw"],
+        "bw_ip_mbs": b["hw_mbs"] + cset["delta_ip_mbs"], "bw_cpu_mbs": b["sw_mbs"] + cset["delta_cpu_mbs"],
         "lossy": cset["lossy"], "assumed_ratio": cset["assumed"],
         "verdict": s["verdict"]["status"],
     }
@@ -534,7 +554,7 @@ def _public_case(c: dict[str, Any] | None) -> dict[str, Any] | None:
     if c is None:
         return None
     out = dict(c)
-    for k in ("total_mw", "cpu_mw", "hw_mw", "bw_mw", "bw_mbs"):
+    for k in DIST_KEYS:
         out[k] = round(out[k], 2)
     return out
 
@@ -728,8 +748,11 @@ def prediction_payload(s: dict[str, Any], case: dict[str, Any], buffers: list[di
     return {
         "fps": s["fps"], "period_ms": s["period_ms"], "statistic": case["statistic"],
         "runtime_scale": case["runtime_scale"], "eis_on": s["eis_on"],
-        "power": {k: round(case[k], 3) for k in ("total_mw", "cpu_mw", "hw_mw", "bw_mw")},
-        "bw_mbs": round(case["bw_mbs"], 2), "base_bw_mbs": s["bw"]["total_mbs"], "base_bw_mw": s["power"]["bw_mw"],
+        "power": {k: round(case[k], 3) for k in ("total_mw", "cpu_mw", "hw_mw", "bw_mw", "bw_ip_mw", "bw_cpu_mw")},
+        "bw_mbs": round(case["bw_mbs"], 2), "bw_ip_mbs": round(case["bw_ip_mbs"], 2), "bw_cpu_mbs": round(case["bw_cpu_mbs"], 2),
+        "base_bw_mbs": s["bw"]["total_mbs"], "base_bw_mw": s["power"]["bw_mw"],
+        "base_bw_ip_mw": s["power"]["bw_hw_mw"], "base_bw_cpu_mw": s["power"]["bw_sw_mw"],
+        "base_bw_ip_mbs": s["bw"]["hw_mbs"], "base_bw_cpu_mbs": s["bw"]["sw_mbs"],
         "cpu_by_task": s["cpu_by_task"], "ips": ips, "buffers": bufs,
         "compression": sorted(comp), "dvfs": dom_level, "verdict": s["verdict"]["status"],
         "intervals": s["intervals"], "latency": s["latency"],

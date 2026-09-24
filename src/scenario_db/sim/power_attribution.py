@@ -71,8 +71,13 @@ def attribute(old: dict[str, Any], new: dict[str, Any]) -> dict[str, Any]:
     add("IP workload", "(unlisted)", hw_other)
 
     # BW (DMA): traffic before compression + compression per buffer
-    add("DMA traffic", "uncompressed traffic", float(new.get("base_bw_mw", 0.0)) - float(old.get("base_bw_mw", 0.0)),
-        f"{old.get('base_bw_mbs', 0):.0f}→{new.get('base_bw_mbs', 0):.0f} MB/s (size/fps/topology)")
+    if "base_bw_ip_mw" in old and "base_bw_ip_mw" in new:
+        for who, label in (("ip", "IP DMA"), ("cpu", "CPU(SW) DMA")):
+            add("DMA traffic", label, float(new[f"base_bw_{who}_mw"]) - float(old[f"base_bw_{who}_mw"]),
+                f"{old[f'base_bw_{who}_mbs']:.0f}→{new[f'base_bw_{who}_mbs']:.0f} MB/s uncompressed (size/fps/topology)")
+    else:  # a prediction from engine rev 1 has no IP/CPU DMA split
+        add("DMA traffic", "uncompressed traffic", float(new.get("base_bw_mw", 0.0)) - float(old.get("base_bw_mw", 0.0)),
+            f"{old.get('base_bw_mbs', 0):.0f}→{new.get('base_bw_mbs', 0):.0f} MB/s (size/fps/topology)")
     b0 = {b["buffer"]: b for b in old.get("buffers") or []}
     b1 = {b["buffer"]: b for b in new.get("buffers") or []}
     for buf in sorted(set(b0) | set(b1)):
@@ -94,6 +99,9 @@ def attribute(old: dict[str, Any], new: dict[str, Any]) -> dict[str, Any]:
         "delta_pct": round(100 * total / old["power"]["total_mw"], 2) if old["power"]["total_mw"] else None,
         "components": {
             k: round(new["power"][k] - old["power"][k], 3) for k in ("cpu_mw", "hw_mw", "bw_mw")
+        } | {
+            k: round(new["power"].get(k, 0.0) - old["power"].get(k, 0.0), 3)
+            for k in ("bw_ip_mw", "bw_cpu_mw") if k in new["power"] and k in old["power"]
         },
         "by_category": {k: round(v, 3) for k, v in sorted(by_cat.items(), key=lambda x: -abs(x[1]))},
         "factors": sorted(factors, key=lambda f: -abs(f["delta_mw"])),
