@@ -10,7 +10,7 @@ import { LANE_LABEL, LANE_ORDER, laneOf, chains, type Lane, type PipelineModel }
 import type { StageTiming } from './cadence'
 import type { ScenarioDef } from './api'
 
-export const SEQ = { laneLabelW: 96, headerH: 44, nodeW: 118, nodeH: 36, swH: 36, gapY: 8, colGap: 42, lanePad: 12 }
+export const SEQ = { laneLabelW: 96, headerH: 44, nodeW: 118, nodeH: 36, swH: 36, gapY: 12, colGap: 42, lanePad: 12 }
 
 export interface SeqOptions {
   showSw: boolean
@@ -115,13 +115,21 @@ export function sequenceLayout(view: ViewResponse, opts: SeqOptions): Layout {
       const ip = opts.model?.byPid.get(pid)
       const t = opts.timing?.get(pid)
       const kind: GNode['kind'] = n.type === 'sw' ? 'sw' : isExternal(n) ? 'external' : 'ip'
-      let sub = ''
-      if (t) sub = `+${fmt(t.offset)} · ${fmt(t.dur)}ms`
-      else if (ip?.sw?.mean !== undefined) sub = `${fmt(ip.sw.mean)}ms (${ip.sw.min ?? '?'}–${ip.sw.max ?? '?'})`
-      const sub2 = ip && kind !== 'sw' ? (ip.inSize ? ip.inSize : '') : ip?.sw?.source ? `sw ${ip.sw.source}` : ''
+      // IP: size (in → out) + DMA badges; SW: defined / traced execution time. Timing detail lives in the tooltip.
+      let sub = '', sub2: string | undefined
+      if (kind === 'sw') {
+        sub = t ? `${fmt(t.dur)}ms` : ip?.sw?.mean !== undefined ? `${fmt(ip.sw.mean)}ms (${ip.sw.min ?? '?'}–${ip.sw.max ?? '?'})` : ''
+        sub2 = ip?.sw?.source ? `sw ${ip.sw.source}` : undefined
+      } else if (ip) {
+        const outs = ip.outSizes.filter((o) => o !== ip.inSize)
+        sub = ip.inSize || (outs[0] ?? '')
+        sub2 = ip.inSize && outs.length ? `→ ${outs[0]}${outs.length > 1 ? ` +${outs.length - 1}` : ''}` : undefined
+      }
       nodes.push({
         id: n.id, label: n.label, kind, group: null, width: nodeW, height: SEQ.nodeH, pipelineId: pid, data: n,
         sub: sub || sub2, sub2: sub ? sub2 : undefined,
+        rdma: kind === 'ip' && ip && (ip.rdma.used || ip.rdma.total) ? ip.rdma : undefined,
+        wdma: kind === 'ip' && ip && (ip.wdma.used || ip.wdma.total) ? ip.wdma : undefined,
         x: x0 + Number(c) * colW, y: ly.y + (ly.h - stackH) / 2 + i * (SEQ.nodeH + SEQ.gapY),
       })
     })

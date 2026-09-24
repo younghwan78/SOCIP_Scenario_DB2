@@ -162,7 +162,7 @@ export function TimelineView({ timeline, selectedSlice, highlightNode, showFlows
         <rect x={LABEL_W} y={0} width={width - LABEL_W} height={HEAD} fill="#fff" />
         <line x1={0} y1={HEAD - 0.5} x2={width} y2={HEAD - 0.5} stroke="var(--line)" />
         <text x={10} y={22} fontSize={10.5} fill="var(--faint)" fontFamily="var(--mono)">{`${t0.toFixed(1)}–${t1.toFixed(1)} ms`}</text>
-        <svg x={LABEL_W} y={0} width={plotW + 10} height={HEAD} overflow="hidden">
+        <svg x={LABEL_W} y={0} width={plotW + 10} height={HEAD} overflow="hidden" onClick={() => { if (!suppress.current) onSelect(null); suppress.current = false }}>
           <g transform={`translate(${-LABEL_W} 0)`}>
             {ticks.map((t) => (
               <g key={t}>
@@ -179,7 +179,7 @@ export function TimelineView({ timeline, selectedSlice, highlightNode, showFlows
           </g>
         </svg>
       </svg>
-      <div className="tl-body" ref={bodyRef}>
+      <div className="tl-body" ref={bodyRef} onClick={(e) => { if (e.target === e.currentTarget) { if (suppress.current) { suppress.current = false; return } onSelect(null) } }}>
         <svg width={width} height={rows.height} role="img" aria-label="Timeline" style={{ display: 'block' }}
           onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
           onClickCapture={(e) => { if (suppress.current) { suppress.current = false; e.stopPropagation() } }}

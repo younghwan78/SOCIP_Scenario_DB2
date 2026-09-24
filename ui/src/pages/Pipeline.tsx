@@ -13,6 +13,7 @@ import { GraphView } from '../components/GraphView'
 import { TimelineView } from '../components/TimelineView'
 import { IpInternalView } from '../components/IpInternalView'
 import { CadenceView } from '../components/CadenceView'
+import { BufferTooltip, IpTooltip } from '../components/NodeTooltip'
 import { DataTable, type Column } from '../components/DataTable'
 import { useWidth } from '../components/Charts'
 import { rememberRecent } from '../components/Picker'
@@ -69,7 +70,10 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
   useEffect(() => { setSelected(null); setSlice(null); setTraceId('') }, [scenario, variant])
 
   const view = viewQ.data
-  const model = useMemo(() => (view ? buildModel(view, scnQ.data, varQ.data) : null), [view, scnQ.data, varQ.data])
+  const ipRefs = useMemo(() => [...new Set((view?.nodes ?? []).map((n) => n.data).filter((n) => n.type === 'ip' && n.ip_ref).map((n) => String(n.ip_ref)))].sort(), [view])
+  const catQ = useAsync(() => Promise.all(ipRefs.map((r) => api.ipCatalog(r).then((c) => [r, c] as const).catch(() => null)))
+    .then((l) => new Map(l.filter((x): x is readonly [string, NonNullable<typeof x>[1]] => !!x))), [ipRefs.join(',')])
+  const model = useMemo(() => (view ? buildModel(view, scnQ.data, varQ.data, catQ.data) : null), [view, scnQ.data, varQ.data, catQ.data])
 
   // ---- timing evidence
   const traces = useMemo(() => (evidenceQ.data?.items ?? []).filter((e) => (e.timeline_events ?? []).length > 3).sort((a, b) => rankTrace(b) - rankTrace(a)), [evidenceQ.data])
@@ -125,7 +129,8 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
 
   const selectSlice = (s: Slice | null) => {
     setSlice(s)
-    if (s?.nodeId) {
+    if (!s) { setSelected(null); return }
+    if (s.nodeId) {
       const ip = model?.byPid.get(pipelineIdOf(s.nodeId.replace(/^stage:/, '')))
       setSelected(ip ? ip.viewId : null)
     }
@@ -147,6 +152,7 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
       <span className="legend-item"><svg width="20" height="6"><line x1="0" y1="3" x2="20" y2="3" stroke="#F97316" strokeWidth="2" strokeDasharray="5 3" /></svg>M2M</span>
       <span className="legend-item"><svg width="20" height="6"><line x1="0" y1="3" x2="20" y2="3" stroke="#A16207" strokeWidth="1.6" strokeDasharray="2 3" /></svg>SW trigger</span>
       <span className="legend-item"><span className="sw-ip" />IP</span>
+      <span className="legend-item" title="IP 우상단 원 = 사용 중 RDMA(파랑)/WDMA(주황) 채널 수 · 흰 원 = 0 · catalog 전체 수와 port 목록은 hover"><svg width="30" height="12"><circle cx="6" cy="6" r="5.5" fill="#2563EB" /><circle cx="22" cy="6" r="5.5" fill="#F97316" /></svg>RDMA / WDMA 사용</span>
       {lens === 'dma' && <><span className="legend-item"><span className="sw-buf" />Buffer</span>
         <span className="legend-item"><span className="sw-buf" style={{ background: '#EEF2FF', borderColor: '#4F46E5' }} />history</span>
         <span className="legend-item"><span className="sw-buf" style={{ background: '#FFF7E6', borderColor: '#B45309', borderStyle: 'dashed' }} />stat</span></>}
@@ -184,6 +190,11 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
     { key: 'flags', label: 'Config', width: 260, title: (i) => i.flags.map(([k, v]) => `${k}=${v}`).join(' · '), render: (i) => <span className="faint">{i.flags.map(([k, v]) => `${k}=${v}`).join(' · ')}</span> },
   ]
   const onIpRow = (i: IpModel) => selectNode(i.viewId)
+  const nodeTip = (id: string) => {
+    if (id.startsWith('buf:')) { const b = model?.buffers.find((x) => `buf:${x.name}` === id); return b ? <BufferTooltip b={b} /> : null }
+    const ip = model?.byPid.get(pipelineIdOf(id))
+    return ip ? <IpTooltip ip={ip} timing={timing?.get(ip.pid)} /> : null
+  }
   const st: StageTiming | undefined = selectedPid ? timing?.get(selectedPid) : undefined
 
   return (
@@ -221,7 +232,7 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
             {viewQ.error && <div className="err" style={{ margin: 12 }}>{viewQ.error}</div>}
             {lens === 'dma' && layoutErr && <div className="err" style={{ margin: 12 }}>Layout 실패: {layoutErr}</div>}
             {lens !== 'ip' && (viewQ.loading || (!layout && !layoutErr && !viewQ.error)) && <div className="empty">Layout 계산 중…</div>}
-            {lens !== 'ip' && layout && !viewQ.error && <GraphView layout={layout} selected={selected} related={related} onSelect={selectNode} showOps={false}
+            {lens !== 'ip' && layout && !viewQ.error && <GraphView layout={layout} selected={selected} related={related} onSelect={selectNode} showOps={false} tooltip={nodeTip}
               onToggleGroup={(g) => setCollapsed((c) => { const s = new Set(c); if (s.has(g)) s.delete(g); else s.add(g); return s })} />}
             {lens === 'ip' && model && <IpInternalView model={model} selectedPid={selectedPid} onSelect={selectNode} />}
           </div>

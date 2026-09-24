@@ -1,7 +1,7 @@
 // Pipeline model = Level-1 view + scenario definition (buffers, history/stat DMA)
 // + resolved variant (node_configs, size_overrides). Feeds the Sequence,
 // DMA·Memory and IP-internal lenses. Never invents sizes: unknown stays null.
-import type { BufferDef, Dict, ScenarioDef, VariantDetail, ViewEdgeData, ViewNodeData, ViewResponse } from './api'
+import type { BufferDef, Dict, IpCatalog, ScenarioDef, VariantDetail, ViewEdgeData, ViewNodeData, ViewResponse } from './api'
 import { frameMb, isExternal, pipelineIdOf } from './graph'
 
 export type Lane = 'sensor' | 'rt' | 'sw' | 'nrt' | 'm2m' | 'codec' | 'display' | 'other'
@@ -54,9 +54,23 @@ export interface Port {
   mb?: number | null
   enabled: boolean
   note?: string
+  /** catalog channel not used in this variant */
+  unused?: boolean
 }
 
 export interface SwTiming { min?: number; mean?: number; max?: number; source?: string }
+
+/** One DMA/FIFO channel from the IP catalog (or used but not catalogued). */
+export interface DmaChannel {
+  name: string
+  dir: 'in' | 'out'
+  kind: 'DMA' | 'FIFO'
+  status: 'used' | 'off' | 'unused'
+  purpose?: string
+  buffer?: string
+  peer?: string
+  catalogued: boolean
+}
 
 export interface IpModel {
   viewId: string
@@ -72,6 +86,11 @@ export interface IpModel {
   flags: [string, string][]
   sw?: SwTiming
   ports: Port[]
+  /** every DMA/FIFO channel of the IP (catalog ∪ used) with use status */
+  channels: DmaChannel[]
+  rdma: { used: number; total: number | null }
+  wdma: { used: number; total: number | null }
+  modes?: string[]
 }
 
 export type BufferKind = 'data' | 'stat' | 'history' | 'optional'
@@ -140,7 +159,7 @@ function bufSize(def: BufferDef | undefined, scn?: ScenarioDef | null, variant?:
 
 const isStatName = (n: string) => /HIST|SAT|DRC|STAT|_MV\b|RESULT/i.test(n)
 
-export function buildModel(view: ViewResponse, scn?: ScenarioDef | null, variant?: VariantDetail | null): PipelineModel {
+export function buildModel(view: ViewResponse, scn?: ScenarioDef | null, variant?: VariantDetail | null, catalogs?: Map<string, IpCatalog>): PipelineModel {
   const ch = chains(scn)
   const units = view.nodes.map((n) => n.data).filter((n) => n.type === 'ip' || n.type === 'sw')
   const label = new Map(units.map((n) => [n.id, n.label]))
@@ -249,12 +268,38 @@ export function buildModel(view: ViewResponse, scn?: ScenarioDef | null, variant
     const inEdge = edges.find((e) => e.target === n.id && e.flow_type === 'M2M' && e.memory?.width)
     const inSize = sim.width && sim.height ? sizeText(sim.width, sim.height) : inEdge ? sizeText(inEdge.memory!.width, inEdge.memory!.height) : ''
     const outSizes = [...new Set(edges.filter((e) => e.source === n.id && e.flow_type === 'M2M' && e.memory?.width).map((e) => sizeText(e.memory!.width, e.memory!.height)))]
+    const cat = n.type === 'ip' ? catalogs?.get(String(n.ip_ref ?? '')) : undefined
+    const channels = channelsOf(ports, cat)
+    const count = (dir: 'in' | 'out') => ({
+      used: channels.filter((c) => c.kind === 'DMA' && c.dir === dir && c.status === 'used').length,
+      total: cat ? channels.filter((c) => c.kind === 'DMA' && c.dir === dir).length : null,
+    })
     return {
       viewId: n.id, pid, label: n.label, lane: laneOf(n, ch), type: n.type, ipRef: String(n.ip_ref ?? ''), inSize, outSizes,
       ops: opsOf(n.active_operations, cfg), mode: cfg?.selected_mode ? String(cfg.selected_mode) : undefined, flags: flagsOf(cfg), sw: swTimingOf(cfg), ports,
+      channels, rdma: count('in'), wdma: count('out'), modes: cat?.capabilities?.operating_modes?.map((m) => m.id),
     }
   })
   return { ips, byPid: new Map(ips.map((i) => [i.pid, i])), buffers, fps: vfps, totalMBs: +total.toFixed(1), unknownBuffers: unknown }
+}
+
+/** Catalog modules ∪ used ports → channel list with used / off (optional disabled) / unused. */
+export function channelsOf(ports: Port[], cat?: IpCatalog): DmaChannel[] {
+  const out = new Map<string, DmaChannel>()
+  for (const m of cat?.capabilities?.properties?.modules ?? []) {
+    const kind = m.type === 'FIFO' || /FIFO$/.test(m.name) ? 'FIFO' : 'DMA'
+    out.set(m.name, { name: m.name, dir: m.direction === 'read' ? 'in' : 'out', kind, status: 'unused', purpose: m.purpose, catalogued: true })
+  }
+  for (const p of ports) {
+    if (p.via === 'ctrl') continue
+    const kind: DmaChannel['kind'] = p.via === 'OTF' ? 'FIFO' : 'DMA'
+    if (kind === 'FIFO' && !out.has(p.port) && /^OTF /.test(p.port)) continue
+    const cur = out.get(p.port) ?? { name: p.port, dir: p.dir, kind, status: 'unused' as const, catalogued: false }
+    const status: DmaChannel['status'] = p.enabled ? 'used' : cur.status === 'used' ? 'used' : 'off'
+    out.set(p.port, { ...cur, status, buffer: cur.buffer ?? p.buffer, peer: cur.peer ? `${cur.peer}, ${p.peer ?? ''}` : p.peer })
+  }
+  const rank = { used: 0, off: 1, unused: 2 }
+  return [...out.values()].sort((a, b) => (a.dir === b.dir ? 0 : a.dir === 'in' ? -1 : 1) || rank[a.status] - rank[b.status] || a.name.localeCompare(b.name))
 }
 
 /** DMA traffic per IP (WDMA + RDMA engines, MB/s) — for stacked comparisons. */

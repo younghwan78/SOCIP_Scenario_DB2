@@ -58,6 +58,9 @@ export function groupPorts(ports: Port[]): Port[] {
 export function IpDiagram({ ip }: { ip: IpModel }) {
   const ins = groupPorts(ip.ports.filter((p) => p.dir === 'in'))
   const outs = groupPorts(ip.ports.filter((p) => p.dir === 'out'))
+  const usedNames = new Set(ip.ports.map((p) => p.port))
+  const spare = (dir: 'in' | 'out') => ip.channels.filter((c) => c.dir === dir && !usedNames.has(c.name) && c.status !== 'used')
+  const spareIn = spare('in'), spareOut = spare('out')
   const order = (v: Via) => ['OTF', 'DMA', 'history', 'stat', 'ctrl', 'optional'].indexOf(v)
   ins.sort((a, b) => order(a.via) - order(b.via)); outs.sort((a, b) => order(a.via) - order(b.via))
   const coreLines: [string, string][] = [
@@ -68,7 +71,8 @@ export function IpDiagram({ ip }: { ip: IpModel }) {
   ]
   const stages = ['IN', ...ip.ops, 'OUT']
   const rows = Math.max(ins.length, outs.length, Math.ceil((coreLines.length * 16 + stages.length * 30 + 40) / (ROW + GAP)), 2)
-  const H = TOP + rows * (ROW + GAP) + 10
+  const SP = 17, spareTop = TOP + rows * (ROW + GAP) + 18
+  const H = spareTop + Math.max(spareIn.length, spareOut.length) * SP + (spareIn.length || spareOut.length ? 8 : -8)
   const cx = PW + COL_GAP, ox = cx + CW + COL_GAP
   const W = ox + PW + 10
   const coreH = rows * (ROW + GAP) - GAP
@@ -107,11 +111,21 @@ export function IpDiagram({ ip }: { ip: IpModel }) {
           <PortBox p={p} x={ox} y={y} inSize={ip.inSize} /></g>
       })}
       {!outs.length && <text x={ox + 10} y={TOP + 20} fontSize={11} fill="var(--faint)">출력 port 정보 없음</text>}
+      {([[spareIn, 0], [spareOut, ox]] as const).map(([list, x0]) => list.length > 0 && <g key={x0}>
+        <text x={x0} y={spareTop - 5} fontSize={10.5} fontWeight={700} fill="var(--faint)">미사용 {x0 ? 'WDMA/FIFO out' : 'RDMA/FIFO in'} · {list.length} (catalog)</text>
+        {list.map((c, i) => <g key={c.name} opacity={0.75}>
+          <rect x={x0} y={spareTop + i * SP} width={PW} height={SP - 3} rx={4} fill="#FAFAFA" stroke="#C4C4C8" strokeDasharray="3 3" />
+          <text x={x0 + 7} y={spareTop + i * SP + 10.5} fontSize={9.5} fontFamily="var(--mono)" fill="#71717A">{c.name}</text>
+          <text x={x0 + PW - 6} y={spareTop + i * SP + 10.5} fontSize={8.5} textAnchor="end" fill="#A1A1AA">{c.status === 'off' ? 'off' : c.kind === 'FIFO' ? 'FIFO' : '미사용'}</text>
+          <title>{[c.name, c.purpose, c.status].filter(Boolean).join('\n')}</title>
+        </g>)}
+      </g>)}
     </svg>
   )
 }
 
 const portCols: Column<Port>[] = [
+  { key: 'use', label: '상태', width: 64, sort: (p) => (p.unused ? 2 : p.enabled ? 0 : 1), render: (p) => (p.unused ? <span className="badge buf-optional">미사용</span> : p.enabled ? <span className="badge buf-data">사용</span> : <span className="badge buf-stat">off</span>) },
   { key: 'dir', label: 'Dir', width: 52, sort: (p) => p.dir, render: (p) => (p.dir === 'in' ? 'IN' : 'OUT') },
   { key: 'via', label: 'Path', width: 76, sort: (p) => p.via, render: (p) => <span style={{ color: VIA_STYLE[p.via].stroke, fontWeight: 600 }}>{VIA_STYLE[p.via].label}</span> },
   { key: 'port', label: 'Port', width: 210, sort: (p) => p.port, title: (p) => p.port, render: (p) => <span className="mono">{p.port}</span> },
@@ -137,7 +151,7 @@ export function IpInternalView({ model, selectedPid, onSelect }: { model: Pipeli
             {(k === 0 || list[k - 1].lane !== i.lane) && <span className="ipv-lane">{LANE_LABEL[i.lane]}</span>}
             <span className="nm">{i.label}</span>
             <span className="io mono">{i.inSize || '—'}{i.outSizes.length ? ` → ${i.outSizes.join(' / ')}` : ''}</span>
-            <span className="io">{i.ports.filter((p) => p.dir === 'in' && p.via !== 'ctrl').length} in · {i.ports.filter((p) => p.dir === 'out' && p.via !== 'ctrl').length} out{i.ops.length ? ` · ${i.ops.join(', ')}` : ''}</span>
+            <span className="io">RDMA {i.rdma.used}{i.rdma.total !== null ? `/${i.rdma.total}` : ''} · WDMA {i.wdma.used}{i.wdma.total !== null ? `/${i.wdma.total}` : ''}{i.ops.length ? ` · ${i.ops.join(', ')}` : ''}</span>
           </button>
         ))}
       </div>
@@ -145,10 +159,12 @@ export function IpInternalView({ model, selectedPid, onSelect }: { model: Pipeli
         {ip ? <>
           <div className="ipv-legend">
             {(Object.keys(VIA_STYLE) as Via[]).map((v) => <span key={v} className="legend-item"><svg width="18" height="8"><rect x="1" y="1" width="16" height="6" rx="2" fill={VIA_STYLE[v].fill} stroke={VIA_STYLE[v].stroke} strokeDasharray={VIA_STYLE[v].dash} /></svg>{VIA_STYLE[v].label}</span>)}
-            <span className="faint">↓/↑ = 입력(처리 크기) 대비 출력 scale</span>
+            <span className="faint">↓/↑ = 입력(처리 크기) 대비 출력 scale · 회색 점선 = IP catalog에 있으나 이 variant에서 미사용</span>
+            <span className="grow" /><b className="mono" style={{ fontSize: 11 }}>RDMA {ip.rdma.used}{ip.rdma.total !== null ? `/${ip.rdma.total}` : ''} · WDMA {ip.wdma.used}{ip.wdma.total !== null ? `/${ip.wdma.total}` : ''} 사용</b>
           </div>
           <div className="ipv-svg"><IpDiagram ip={ip} /></div>
-          <div className="ipv-table"><DataTable id="ip.ports" columns={portCols} rows={ip.ports} rowKey={(p) => `${p.dir}|${p.port}|${p.buffer ?? ''}|${p.peer ?? ''}`} /></div>
+          <div className="ipv-table"><DataTable id="ip.ports" columns={portCols} rows={[...ip.ports, ...ip.channels.filter((c) => c.status !== 'used' && !ip.ports.some((p) => p.port === c.name))
+            .map((c): Port => ({ port: c.name, dir: c.dir, via: c.kind === 'FIFO' ? 'OTF' : 'DMA', enabled: false, unused: c.status === 'unused', peer: c.status === 'off' ? 'disabled' : '—', note: c.purpose }))]} rowKey={(p) => `${p.dir}|${p.port}|${p.buffer ?? ''}|${p.peer ?? ''}`} /></div>
         </> : <div className="empty">IP 정보가 없습니다.</div>}
       </div>
     </div>

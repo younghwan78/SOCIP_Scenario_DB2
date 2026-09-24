@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { edgePath, type Layout, type Placed } from '../lib/graph'
 
 const EDGE_STYLE = {
@@ -19,6 +19,20 @@ interface Props {
   onSelect: (id: string | null) => void
   onToggleGroup: (groupId: string) => void
   showOps: boolean
+  /** rich hover card for a node id (replaces the native SVG title) */
+  tooltip?: (id: string) => ReactNode
+}
+
+/** Small numbered circles: RDMA (blue) / WDMA (orange) channels in use; hollow when the IP has none in use. */
+function DmaBadges({ n }: { n: Placed }) {
+  const items = [n.wdma && { k: 'W', v: n.wdma, c: '#F97316' }, n.rdma && { k: 'R', v: n.rdma, c: '#2563EB' }].filter(Boolean) as { k: string; v: { used: number; total: number | null }; c: string }[]
+  return <>{items.map((b, i) => {
+    const cx = n.x + n.width - 6 - i * 15, cy = n.y + 1
+    return <g key={b.k} pointerEvents="none">
+      <circle cx={cx} cy={cy} r={6.5} fill={b.v.used ? b.c : '#fff'} stroke={b.c} strokeWidth={1.2} />
+      <text x={cx} y={cy + 3} textAnchor="middle" fontSize={b.v.used > 9 ? 7.5 : 8.5} fontWeight={700} fill={b.v.used ? '#fff' : b.c} fontFamily="var(--mono)">{b.v.used}</text>
+    </g>
+  })}</>
 }
 
 interface View { x: number; y: number; s: number }
@@ -53,7 +67,8 @@ export function fitView(layout: Layout, w: number, h: number, mode: 'all' | 'wid
  * SVG pipeline canvas with viewport pan/zoom (Figma-style):
  * wheel / trackpad = scroll, Ctrl(⌘)+wheel or pinch = zoom at cursor, drag = pan, double-click = fit.
  */
-export function GraphView({ layout, selected, related, onSelect, onToggleGroup, showOps }: Props) {
+export function GraphView({ layout, selected, related, onSelect, onToggleGroup, showOps, tooltip }: Props) {
+  const [hover, setHover] = useState<{ id: string; x: number; y: number } | null>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ w: 600, h: 400 })
   const [view, setView] = useState<View>({ x: 0, y: 0, s: 1 })
@@ -194,7 +209,9 @@ export function GraphView({ layout, selected, related, onSelect, onToggleGroup, 
         {layout.nodes.map((n) => {
           const on = !dim || related.has(n.id)
           const isSel = selected === n.id
-          const common = { opacity: on ? 1 : 0.3, className: 'node', onClick: (ev: React.MouseEvent) => { ev.stopPropagation(); if (n.kind === 'group') onToggleGroup(n.id); else onSelect(n.id) } }
+          const common = { opacity: on ? 1 : 0.3, className: 'node', onClick: (ev: React.MouseEvent) => { ev.stopPropagation(); if (n.kind === 'group') onToggleGroup(n.id); else onSelect(n.id) },
+            onMouseMove: tooltip && n.kind !== 'group' ? (ev: React.MouseEvent) => { const r = wrapRef.current!.getBoundingClientRect(); setHover({ id: n.id, x: ev.clientX - r.left, y: ev.clientY - r.top }) } : undefined,
+            onMouseLeave: tooltip ? () => setHover(null) : undefined }
           if (n.kind === 'buffer') {
             return (
               <g key={n.id} {...common}>
@@ -204,7 +221,7 @@ export function GraphView({ layout, selected, related, onSelect, onToggleGroup, 
                 <text x={n.x + 6} y={n.y + 12} fontSize={10} fontWeight={700} fill="var(--buf-text)" fontFamily="var(--mono)">{n.label}</text>
                 <text x={n.x + 6} y={n.y + 24} fontSize={9} fill="var(--buf-text)" fontFamily="var(--mono)">{n.sub}</text>
                 {n.sub2 && <text x={n.x + 6} y={n.y + 35} fontSize={9} fill="var(--buf-text)" fontFamily="var(--mono)" opacity={0.8}>{n.sub2}</text>}
-                <title>{`${n.bufferRef}\n${n.sub ?? ''}\n${n.sub2 ?? ''}`}</title>
+                {!tooltip && <title>{`${n.bufferRef}\n${n.sub ?? ''}\n${n.sub2 ?? ''}`}</title>}
               </g>
             )
           }
@@ -225,7 +242,8 @@ export function GraphView({ layout, selected, related, onSelect, onToggleGroup, 
               </> : <text x={n.x + n.width / 2} y={n.y + n.height / 2 + 4} textAnchor="middle" fontSize={n.kind === 'sw' ? 10.5 : 11.5} fontWeight={600} fill={style.text}>{n.label}</text>}
               {n.kind === 'external' && <text x={n.x + n.width - 4} y={n.y - 3} textAnchor="end" fontSize={8.5} fontWeight={700} fill="var(--ext-line)">EXT</text>}
               {ops && <text x={n.x + n.width / 2} y={n.y + n.height + 11} textAnchor="middle" fontSize={9.5} fill="#9A4A12">{ops}</text>}
-              <title>{[n.data?.ip_ref ?? n.label, n.sub, n.sub2].filter(Boolean).join('\n')}</title>
+              <DmaBadges n={n} />
+              {!tooltip && <title>{[n.data?.ip_ref ?? n.label, n.sub, n.sub2].filter(Boolean).join('\n')}</title>}
             </g>
           )
         })}
@@ -234,6 +252,13 @@ export function GraphView({ layout, selected, related, onSelect, onToggleGroup, 
             stroke="#FFFFFF" strokeWidth={3} onClick={(e) => { e.stopPropagation(); onToggleGroup(g.id) }}>▾ {g.label} · {g.count}</text>
         ))}
       </svg>
+      {tooltip && hover && !drag.current?.moved && (() => {
+        const body = tooltip(hover.id)
+        if (!body) return null
+        const left = hover.x + 16 + 340 > size.w ? Math.max(4, hover.x - 356) : hover.x + 16
+        const top = Math.min(hover.y + 12, Math.max(4, size.h - 40))
+        return <div className="gtip" style={{ left, top, maxHeight: size.h - top - 8 }}>{body}</div>
+      })()}
       <div className="canvas-ctl" onPointerDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
         <button className="btn" onClick={() => zoomAt(1 / 1.25)} aria-label="축소" title="축소 (Ctrl+wheel)">－</button>
         <button className="btn mono" onClick={() => zoomAt(1 / view.s)} title="100%로">{Math.round(view.s * 100)}%</button>

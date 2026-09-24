@@ -332,3 +332,18 @@ tr.row-off td { color: var(--disabled); }
 tr.sec-row td { background: #fff; cursor: default; }
 .sec-h { font-size: 12px; font-weight: 700; letter-spacing: .06em; color: var(--muted); }
 th.ref-col { background: var(--primary-soft) !important; color: var(--primary-strong) !important; }
+
+/* Graph hover card */
+.gtip { position: absolute; z-index: 20; width: 340px; overflow: auto; pointer-events: none; background: #fff; border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 8px 24px rgba(31,36,48,.18); padding: 10px 12px; font-size: 12px; color: var(--text-2); }
+.gtip h4 { margin: 0; font-size: 13.5px; display: flex; gap: 8px; align-items: baseline; }
+.gtip h4 .sub { font-size: 11px; font-weight: 400; color: var(--muted); font-family: var(--mono); }
+.gtip .tt-sec { margin-top: 7px; padding-top: 6px; border-top: 1px dashed var(--line-soft); }
+.gtip .tt-sec > b { display: block; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); margin-bottom: 3px; }
+.gtip .tt-kv { display: grid; grid-template-columns: 84px 1fr; gap: 1px 8px; }
+.gtip .tt-kv > span:nth-child(odd) { color: var(--muted); }
+.gtip .tt-port { display: grid; grid-template-columns: 12px 1fr auto; gap: 4px; align-items: baseline; font-family: var(--mono); font-size: 10.5px; line-height: 1.45; }
+.gtip .tt-port .d { width: 8px; height: 8px; border-radius: 4px; display: inline-block; }
+.gtip .tt-port .m { color: var(--muted); font-size: 10px; text-align: right; }
+.gtip .tt-off { color: var(--disabled); }
+.gtip .tt-chips { display: flex; flex-wrap: wrap; gap: 3px; }
+.gtip .tt-chips span { font-family: var(--mono); font-size: 9.5px; padding: 1px 5px; border-radius: 4px; background: #F4F4F5; color: #71717A; }

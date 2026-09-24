@@ -50,7 +50,8 @@ describe('sequence lens', () => {
     expect(x('ip-eis')).toBeGreaterThan(x('ip-mcsc'))
     expect(x('ip-gdc-o')).toBeGreaterThan(x('ip-eis'))
     expect(L.bands!.map((b) => b.label)).toContain('RT → NRT hand-off')
-    expect(L.nodes.find((n) => n.id === 'ip-mtnr')!.sub).toMatch(/^\+18\.8/)
+    expect(L.nodes.find((n) => n.id === 'ip-mtnr')!.sub).toBe('4080×2296')
+    expect(L.nodes.find((n) => n.id === 'ip-mcsc')!.sub).toMatch(/1920×1080/)
   })
 })
 
@@ -64,6 +65,16 @@ describe('pipeline model', () => {
     expect(m.buffers.find((b) => b.name === 'RGBP_DRC')!.kind).toBe('stat')
     expect(m.byPid.get('mcsc')!.outSizes).toEqual(['1920×1080', '3840×2160'])
     expect([...trafficByIp(m).keys()]).toContain('MTNR')
+    expect(m.byPid.get('mlsc')!.wdma.used).toBeGreaterThan(10)
+    expect(m.byPid.get('mlsc')!.wdma.total).toBeNull()
+  })
+  it('catalog channels: used / unused / off', () => {
+    const cat = new Map([['ip-mcsc-is-v15-s5e9965', { id: 'ip-mcsc-is-v15-s5e9965', capabilities: { properties: { modules: [
+      { name: 'MCSC_WDMA_W0', type: 'DMA', direction: 'write' }, { name: 'MCSC_WDMA_W1', type: 'DMA', direction: 'write' }, { name: 'MCSC_WDMA_W2', type: 'DMA', direction: 'write' }, { name: 'CINFIFO', type: 'FIFO', direction: 'read' }] } } }]])
+    const mc = buildModel(V, null, null, cat).byPid.get('mcsc')!
+    expect(mc.wdma).toEqual({ used: 2, total: 3 })
+    expect(mc.channels.find((c) => c.name === 'MCSC_WDMA_W2')!.status).toBe('unused')
+    expect(mc.channels.find((c) => c.name === 'CINFIFO')!.status).toBe('used')
   })
 })
 

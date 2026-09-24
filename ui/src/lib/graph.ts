@@ -16,6 +16,8 @@ export interface GNode {
   sub?: string            // secondary line (buffer size/format …)
   sub2?: string           // tertiary line (timing …)
   tone?: 'stat' | 'history' | 'optional' | 'warn'
+  rdma?: { used: number; total: number | null }
+  wdma?: { used: number; total: number | null }
   pipelineId?: string     // canonical pipeline node id (mcsc, gdc_o …) for timing linkage
   data?: ViewNodeData
   memory?: Dict | null
@@ -111,9 +113,12 @@ export function buildGraph(view: ViewResponse, collapsed: ReadonlySet<string> = 
     if (kind === 'sw' && hiddenKinds.has('sw')) continue
     alias.set(n.id, n.id)
     const ipm = model?.byPid.get(pipelineIdOf(n.id))
-    const io = ipm && kind === 'ip' && !hiddenKinds.has('buffer') ? [ipm.inSize, ipm.outSizes.filter((o) => o !== ipm.inSize).join(' / ')].filter(Boolean).join(' → ') : ''
+    const outs = ipm ? ipm.outSizes.filter((o) => o !== ipm.inSize) : []
+    const io = ipm && kind === 'ip' && !hiddenKinds.has('buffer') ? [ipm.inSize, outs.length ? `${outs[0]}${outs.length > 1 ? ` +${outs.length - 1}` : ''}` : ''].filter(Boolean).join(' → ') : ''
     nodes.set(n.id, {
       sub: io || undefined,
+      rdma: ipm && kind === 'ip' && (ipm.rdma.used || ipm.rdma.total) ? ipm.rdma : undefined,
+      wdma: ipm && kind === 'ip' && (ipm.wdma.used || ipm.wdma.total) ? ipm.wdma : undefined,
       id: n.id, label: n.label.replace(/ /g, '_').replace(/_(ENC|REAR)$/, (m) => ' ' + m.slice(1)).replace(/_/g, ' '),
       kind, group, width: kind === 'sw' ? 108 : kind === 'external' ? 128 : io ? 150 : 108, height: kind === 'sw' ? 24 : kind === 'external' ? 32 : io ? 34 : 28,
       pipelineId: pipelineIdOf(n.id), data: n,

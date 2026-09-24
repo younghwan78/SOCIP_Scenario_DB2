@@ -136,6 +136,14 @@ export interface VariantDetail {
   tags?: string[] | null
 }
 
+export interface IpModule { name: string; type?: string; direction?: string; purpose?: string; lvn?: string; source_file?: string }
+export interface IpCatalog {
+  id: string
+  category?: string | null
+  rtl_version?: string | null
+  capabilities?: { operating_modes?: { id: string }[]; properties?: { modules?: IpModule[]; ip_group?: string }; sim?: Dict } | null
+}
+
 export class ApiError extends Error {
   constructor(message: string, readonly status?: number) { super(message) }
 }
@@ -175,6 +183,7 @@ export const api = {
   view: (scenarioId: string, variantId: string, level = 1) => getJson<ViewResponse>(`/scenarios/${enc(scenarioId)}/variants/${enc(variantId)}/view`, { level }),
   scenario: (scenarioId: string) => getJson<ScenarioDef>(`/scenarios/${enc(scenarioId)}`),
   variant: (scenarioId: string, variantId: string) => getJson<VariantDetail>(`/scenarios/${enc(scenarioId)}/variants/${enc(variantId)}`),
+  ipCatalog: (ipId: string) => getJson<IpCatalog>(`/ip-catalogs/${enc(ipId)}`),
   evidenceList: (scenarioId: string, variantId: string) => getJson<Paged<Evidence>>('/evidence', { scenario_ref: scenarioId, variant_ref: variantId, limit: 200 }),
   evidence: (id: string) => getJson<Evidence>(`/evidence/${enc(id)}`),
   predMeas: (predictionId: string, measurementId: string) => getJson<{ rows: Dict[]; summary: Dict; context: Dict }>('/compare/prediction-measurement', { prediction_id: predictionId, measurement_id: measurementId }),
