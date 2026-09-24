@@ -8,17 +8,20 @@ import { ExplorerPage } from './pages/Explorer'
 import { MatrixPage } from './pages/Matrix'
 import { PipelinePage } from './pages/Pipeline'
 import { ComparePage } from './pages/Compare'
+import { TimingBudgetPage } from './pages/TimingBudget'
+import { TimingFleetPage } from './pages/TimingFleet'
 import { PREFERRED_REFERENCE } from './lib/defaults'
 
 const NAV: { title: string; items: ({ page: Page; label: string; icon: string } | { href: string; label: string; icon: string })[] }[] = [
   { title: 'Browse', items: [{ page: 'explorer', label: 'DB Explorer', icon: 'explorer' }, { page: 'matrix', label: '전체 Variant Matrix', icon: 'matrix' }] },
   { title: 'Analyze', items: [{ page: 'pipeline', label: 'Pipeline', icon: 'pipeline' }, { page: 'compare', label: 'Variant Compare', icon: 'compare' }] },
+  { title: 'Predict', items: [{ page: 'timing', label: 'Timing Budget', icon: 'pipeline' }, { page: 'timing-fleet', label: 'Timing Budget · 전체', icon: 'matrix' }] },
   { title: 'Streamlit (기존)', items: [
     { href: 'http://localhost:18502/Evidence_Dashboard', label: 'Evidence · 예측/실측', icon: 'external' },
     { href: 'http://localhost:18502/Import_Workbench', label: 'Import · Sensor · Driver', icon: 'external' }] },
 ]
 
-const TITLES: Record<Page, string> = { explorer: 'DB Explorer', matrix: 'DB Explorer', pipeline: 'Pipeline', compare: 'Variant Compare' }
+const TITLES: Record<Page, string> = { explorer: 'DB Explorer', matrix: 'DB Explorer', pipeline: 'Pipeline', compare: 'Variant Compare', timing: 'Timing Budget', 'timing-fleet': 'Timing Budget · 전체' }
 
 export interface Ctx {
   catalog: CatalogItem[]
@@ -107,7 +110,7 @@ export default function App() {
             {socLabel && <><span>{socLabel}</span><span className="sep">›</span></>}
             {scenarioItem?.board_type && <><span>{scenarioItem.board_type}</span><span className="sep">›</span></>}
             <span style={{ color: 'var(--text)', fontWeight: 600 }}>{scenarioItem?.scenario_name ?? scenario}</span>
-            {route.page === 'pipeline' && variant && <><span className="sep">›</span>
+            {(route.page === 'pipeline' || route.page === 'timing') && variant && <><span className="sep">›</span>
               <button className="crumb-variant" onClick={() => setPicker('open')}>{variant}<Icon name="chevron" size={12} /></button></>}
           </div>
           <span className="grow" />
@@ -126,9 +129,11 @@ export default function App() {
         {!catalogQ.error && route.page === 'matrix' && <MatrixPage ctx={ctx} />}
         {!catalogQ.error && route.page === 'pipeline' && <PipelinePage key={`${scenario}:${variant}`} ctx={ctx} />}
         {!catalogQ.error && route.page === 'compare' && <ComparePage ctx={ctx} />}
+        {!catalogQ.error && route.page === 'timing' && <TimingBudgetPage key={`${scenario}:${variant}`} ctx={ctx} />}
+        {!catalogQ.error && route.page === 'timing-fleet' && <TimingFleetPage key={scenario} ctx={ctx} />}
       </div>
       <Picker open={picker !== null} onClose={() => setPicker(null)} catalog={catalog} scenarioId={scenario}
-        onPick={(s, v) => navigate(picker === 'compare' ? 'compare' : route.page === 'compare' ? 'compare' : 'pipeline',
+        onPick={(s, v) => navigate(picker === 'compare' ? 'compare' : route.page === 'compare' ? 'compare' : route.page === 'timing' ? 'timing' : 'pipeline',
           picker === 'compare' || route.page === 'compare' ? { scenario: s, variants: addComparison(scenario, route.params.variants ?? variant, s, v) } : { scenario: s, variant: v })}
         onAddCompare={(s, v) => navigate('compare', { scenario: s, variants: addComparison(scenario, route.params.variants ?? variant, s, v) })} />
     </div>

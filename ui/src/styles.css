@@ -347,3 +347,19 @@ th.ref-col { background: var(--primary-soft) !important; color: var(--primary-st
 .gtip .tt-off { color: var(--disabled); }
 .gtip .tt-chips { display: flex; flex-wrap: wrap; gap: 3px; }
 .gtip .tt-chips span { font-family: var(--mono); font-size: 9.5px; padding: 1px 5px; border-radius: 4px; background: #F4F4F5; color: #71717A; }
+
+/* Timing Budget pages */
+.tb-page { gap: 12px; }
+.tb-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+.tb-kpi { padding: 10px 12px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.tb-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
+.tb-card { display: flex; flex-direction: column; resize: vertical; overflow: auto; min-width: 0; }
+.tb-card.wide { grid-column: 1 / -1; }
+.tb-card-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line-soft); position: sticky; top: 0; background: var(--surface); z-index: 1; }
+.tb-card-head h2 { margin: 0; font-size: 15px; font-weight: 600; white-space: nowrap; }
+.tb-note { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.tb-card-body { padding: 12px 14px; min-width: 0; overflow-x: hidden; }
+.tb-mini { padding: 2px 8px; font-size: 12px; }
+.tb-rank-row { display: flex; align-items: center; gap: 8px; border: 0; background: transparent; padding: 3px 0; font-size: 12px; color: var(--text); cursor: pointer; text-align: left; border-bottom: 1px solid var(--line-soft); }
+.tb-rank-row:hover { background: var(--surface-soft); }
+@media (max-width: 1100px) { .tb-grid { grid-template-columns: minmax(0, 1fr); } }

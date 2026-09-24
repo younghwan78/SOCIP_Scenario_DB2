@@ -47,7 +47,6 @@
 - [CDGM Import Guide](guides/import/cdgm-import-guide-ko.md)
 - [Exploration Fixture Guide](guides/exploration/exploration-fixture-guide-ko.md)
 - [실측 profiling과 기존 scenario 탐색](guides/profiling-and-scenario-exploration.md)
-- [SW timing margin (rule of thumb 25% 대체)](guides/sw-timing-margin.md)
 - [Measurement Import Guide](guides/measurement/measurement-import-guide-ko.md)
 - [Projection Guide](guides/measurement/projection-guide-ko.md)
 - [Prediction/Measurement Comparison Guide](guides/comparison/prediction-measurement-comparison-guide-ko.md)
@@ -86,3 +85,5 @@ the same change. Superseded implementation material moves to `internal_docs`; it
 - [Reusable sensor catalog and valid time](guides/sensor-catalog.md) — board catalogs, CIS timing, CLI/API/UI and cross-project reuse.
 
 - [Noncamera driver BW/DVFS models](guides/driver-models.md) — typed endpoint calculations and exploration.
+
+- [Stage timing budget (SW margin 예측)](guides/timing-budget.md) — RT 25% rule, NRT/EIS SW 예산, DVFS level, 간격 판정, Power/BW. 검증: [2026-09-25](reviews/2026-09-25-timing-budget-verification.md)
