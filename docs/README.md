@@ -47,6 +47,7 @@
 - [CDGM Import Guide](guides/import/cdgm-import-guide-ko.md)
 - [Exploration Fixture Guide](guides/exploration/exploration-fixture-guide-ko.md)
 - [실측 profiling과 기존 scenario 탐색](guides/profiling-and-scenario-exploration.md)
+- [SW timing margin (rule of thumb 25% 대체)](guides/sw-timing-margin.md)
 - [Measurement Import Guide](guides/measurement/measurement-import-guide-ko.md)
 - [Projection Guide](guides/measurement/projection-guide-ko.md)
 - [Prediction/Measurement Comparison Guide](guides/comparison/prediction-measurement-comparison-guide-ko.md)

@@ -18,6 +18,9 @@ from scenario_db.api.schemas.simulation import (
     SimulationArtifactExportRequest,
     SimulationArtifactExportResponse,
     SimulationReadinessResponse,
+    API_MAX_SW_MARGIN_SAMPLES,
+    SwMarginRequest,
+    SwMarginResponse,
 )
 from scenario_db.config import get_settings
 from scenario_db.db.repositories.evidence import (
@@ -36,7 +39,11 @@ from scenario_db.reporting.exporter import (
     resolve_report_output_dir,
     write_report_bundle,
 )
-from scenario_db.sim.service import check_simulation_readiness_request, run_simulation_request
+from scenario_db.sim.service import (
+    analyze_sw_margin_request,
+    check_simulation_readiness_request,
+    run_simulation_request,
+)
 
 router = APIRouter(prefix="/simulation", tags=["simulation"])
 logger = logging.getLogger(__name__)
@@ -55,6 +62,24 @@ def run_simulation(
     )
     with admission_slot("simulation", settings.simulation_max_concurrent_runs):
         return run_simulation_request(db, request)
+
+
+@router.post("/sw-margin", response_model=SwMarginResponse)
+def sw_margin(
+    request: SwMarginRequest,
+    db: Session = Depends(get_db),
+    _principal: ApiPrincipal = Depends(require_roles("analyst", "writer", "admin")),
+):
+    """Timing-aware SW margin (read-only): required margin vs rule of thumb, growth headroom."""
+    settings = get_settings()
+    enforce_timeline_frame_limit(request.options.constraints.frames, settings.simulation_max_timeline_frames)
+    if request.options.monte_carlo_samples > API_MAX_SW_MARGIN_SAMPLES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"monte_carlo_samples is limited to {API_MAX_SW_MARGIN_SAMPLES} via the API; use the CLI for more",
+        )
+    with admission_slot("simulation", settings.simulation_max_concurrent_runs):
+        return analyze_sw_margin_request(db, request)
 
 
 @router.get("/readiness", response_model=SimulationReadinessResponse)

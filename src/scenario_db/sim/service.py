@@ -8,7 +8,13 @@ from sqlalchemy.orm import Session
 
 from scenario_db.api.schemas.evidence import EvidenceResponse
 from scenario_db.exceptions import NotFoundError, UnprocessableError
-from scenario_db.api.schemas.simulation import SimulateRequest, SimulateRunResponse, SimulationReadinessResponse
+from scenario_db.api.schemas.simulation import (
+    SimulateRequest,
+    SimulateRunResponse,
+    SimulationReadinessResponse,
+    SwMarginRequest,
+    SwMarginResponse,
+)
 from scenario_db.db.models.capability import SimConfigProfile, SocDvfsTable
 from scenario_db.db.repositories.evidence import (
     get_evidence,
@@ -276,6 +282,47 @@ def _graph_soc_ref(graph) -> str | None:
     metadata = getattr(project, "metadata_", None) or {}
     globals_ = getattr(project, "globals_", None) or {}
     return metadata.get("soc_ref") or globals_.get("soc_ref")
+
+
+def analyze_sw_margin_request(db: Session, request: SwMarginRequest) -> SwMarginResponse:
+    """Read-only SW timing-margin analysis; never persists evidence."""
+    from scenario_db.sim.sw_margin import analyze_sw_margin
+
+    shim = SimulateRequest(
+        scenario_id=request.scenario_id,
+        variant_id=request.variant_id,
+        execution_context=ExecutionContext(silicon_rev="analysis", sw_baseline_ref="sw-margin-analysis", thermal="n/a"),
+        config=request.config,
+        config_profile_ref=request.config_profile_ref,
+        dvfs_tables=request.dvfs_tables,
+        dvfs_table_ref=request.dvfs_table_ref,
+        soc_ref=request.soc_ref,
+        dvfs_version=request.dvfs_version,
+    )
+    profile_stamp = _apply_config_profile(db, shim)
+    try:
+        graph = load_canonical_graph(db, request.scenario_id, request.variant_id)
+        if shim.config.sw_timing_projection is not None:
+            from scenario_db.sim.sw_projection import verify_projection
+            verify_projection(db, graph, shim.config.sw_timing_projection)
+        if shim.config.timing_profile is not None:
+            raise ValueError("measured timing replay is not supported; use sw_timing_projection")
+        from scenario_db.sim.sensor_projection import resolve_sensor_modes
+        graph = resolve_sensor_modes(db, graph, shim.config)
+        _enforce_input_limits(build_simulation_inputs(graph, shim.config))
+        dvfs_tables, context = _resolve_dvfs_tables(db, graph, shim)
+        report = analyze_sw_margin(graph, request.options, config=shim.config, dvfs_tables=dvfs_tables)
+    except LookupError as exc:
+        raise NotFoundError(str(exc)) from exc
+    except ValueError as exc:
+        raise UnprocessableError(str(exc)) from exc
+    return SwMarginResponse(
+        scenario_id=request.scenario_id,
+        variant_id=request.variant_id,
+        config_profile_ref=profile_stamp,
+        dvfs_table_ref=context.dvfs_table_ref,
+        report=report,
+    )
 
 
 def check_simulation_readiness_request(

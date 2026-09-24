@@ -279,6 +279,11 @@ def _with_calculated_durations(
                 or timing_by_hw.get(str(updated.get("hw_name")))
                 or 0.0
             )
+        # Serialized per-frame SW overhead (driver setup / IRQ completion) keeps
+        # the IP occupied around its HW run; used by SW timing-margin analysis.
+        overhead = float(updated.get("serial_overhead_ms") or 0.0)
+        if overhead > 0:
+            updated["duration_ms"] = float(updated.get("duration_ms") or 0.0) + overhead
         result.append(updated)
     return result
 
