@@ -85,3 +85,7 @@ the same change. Superseded implementation material moves to `internal_docs`; it
 - [Reusable sensor catalog and valid time](guides/sensor-catalog.md) — board catalogs, CIS timing, CLI/API/UI and cross-project reuse.
 
 - [Noncamera driver BW/DVFS models](guides/driver-models.md) — typed endpoint calculations and exploration.
+
+- [Stage timing budget (SW margin 예측)](guides/timing-budget.md) — RT 25% rule, NRT/EIS SW 예산, DVFS level, 간격 판정, Power/BW. 검증: [2026-09-25](reviews/2026-09-25-timing-budget-verification.md)
+
+- [Architecture exploration → 예측 현황 → 변경 원인 → 검토 보고서](guides/arch-exploration.md) — 조합 탐색(SW·DVFS·compression), 최저 power 추천·재시뮬레이션 검증, LMDI 변경 원인, DB 보고서. 검증: [2026-09-25](reviews/2026-09-25-arch-exploration-verification.md)

@@ -347,3 +347,39 @@ th.ref-col { background: var(--primary-soft) !important; color: var(--primary-st
 .gtip .tt-off { color: var(--disabled); }
 .gtip .tt-chips { display: flex; flex-wrap: wrap; gap: 3px; }
 .gtip .tt-chips span { font-family: var(--mono); font-size: 9.5px; padding: 1px 5px; border-radius: 4px; background: #F4F4F5; color: #71717A; }
+
+/* Timing Budget pages */
+.tb-page { gap: 12px; }
+.tb-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+.tb-kpi { padding: 10px 12px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.tb-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
+.tb-card { display: flex; flex-direction: column; resize: vertical; overflow: auto; min-width: 0; }
+.tb-card.wide { grid-column: 1 / -1; }
+.tb-card-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line-soft); position: sticky; top: 0; background: var(--surface); z-index: 1; }
+.tb-card-head h2 { margin: 0; font-size: 15px; font-weight: 600; white-space: nowrap; }
+.tb-note { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.tb-card-body { padding: 12px 14px; min-width: 0; overflow-x: hidden; }
+.tb-mini { padding: 2px 8px; font-size: 12px; }
+.tb-rank-row { display: flex; align-items: center; gap: 8px; border: 0; background: transparent; padding: 3px 0; font-size: 12px; color: var(--text); cursor: pointer; text-align: left; border-bottom: 1px solid var(--line-soft); }
+.tb-rank-row:hover { background: var(--surface-soft); }
+/* 1 column only when the page content itself is narrow (container, not viewport); the width toggle is then meaningless -> hidden */
+.tb-page { container-type: inline-size; }
+@container (max-width: 760px) { .tb-grid { grid-template-columns: minmax(0, 1fr); } .tb-card .wide-toggle { display: none; } }
+
+/* ---------- architecture exploration / predictions / reports ---------- */
+.ax-form { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(0, 2fr); gap: 18px; }
+.ax-scen { display: grid; gap: 6px; max-height: 260px; overflow: auto; border: 1px solid var(--line-soft); border-radius: 6px; padding: 8px 10px; }
+.ax-scen > div { display: flex; flex-direction: column; gap: 2px; }
+.ax-label { font-size: 12px; color: var(--text-2); min-width: 110px; font-weight: 600; }
+.ax-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ax-check { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; cursor: pointer; }
+.tb-mini-table { border-collapse: collapse; font-size: 12px; }
+.tb-mini-table th { text-align: left; font-weight: 600; color: var(--text-2); padding: 4px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.tb-mini-table td { padding: 4px 6px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
+.tb-mini-table tr.selected td { background: var(--surface-soft); }
+.rpt-frame { width: 100%; border: 0; height: calc(100vh - 170px); min-height: 480px; background: #fff; display: block; }
+@media (max-width: 1100px) { .ax-form { grid-template-columns: 1fr; } }
+.table-scroll tr.selected > td, .table-x tr.selected > td { background: #F3EFE8; }
+/* tables inside cards: all rows, page scroll only; horizontal scroll only when columns overflow */
+.table-x { overflow-x: auto; overflow-y: visible; }
+.ax-dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; vertical-align: 0; }
