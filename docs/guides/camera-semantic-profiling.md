@@ -33,7 +33,7 @@ Streamlit `Camera Profiling` → `Import / Review`에서 MD를 올리고 Preview
 
 ## 선택적 semantic trace
 
-MD에 `semantic_trace: semantic.pftrace`를 추가하고 같은 bundle 디렉터리에 파일을 둔다. 이 초기 producer 규격은 trace slice 이름이 logical task_id와 정확히 같아야 한다. 다른 naming은 사내 generator를 맞추거나 추후 명시적인 mapping adapter를 추가해야 한다.
+MD에 `semantic_trace: semantic.pftrace`를 추가하고 같은 bundle 디렉터리에 파일을 둔다. 기본 규격은 slice 이름이 logical task_id와 정확히 같다. Scenario track의 `~EIS fxxxx` 같은 이름은 task별 `trace_slice_name`과 `trace_track_name`으로 매핑할 수 있다. [15초 UHD30 EIS fixture와 확장 방법](../../examples/measurement-import/camera/uhd30-eis/README.md)을 참조한다. `observation_only: true`인 SW는 canonical node 없이 저장·표시할 수 있으나 projection에서는 거부한다.
 
 ```powershell
 uv run python -m scenario_db.meas_import.camera --markdown capture/scenario-statistics.md --out generated/camera/evidence.yaml --trace-window-start-ms 0 --trace-window-ms 100

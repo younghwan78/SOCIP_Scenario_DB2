@@ -90,7 +90,7 @@ def build_projection(evidence, source_hash, graph, selection):
     runtime = {}
     for source, target in selection.task_mapping.items():
         task = tasks.get(source)
-        if task is None or task.kind != "sw" or task.timing_scope != "exclusive_sw":
+        if task is None or task.observation_only or task.kind != "sw" or task.timing_scope != "exclusive_sw":
             raise ValueError(
                 "only exclusive SW runtime can be projected; HW/stage is validation-only"
             )

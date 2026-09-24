@@ -80,6 +80,8 @@ class VariantMatrixItem(BaseModel):
     buffer_override_count: int = 0
     node_config_count: int = 0
     tags: list[str] = Field(default_factory=list)
+    derived_from_variant: str | None = None
+    own_condition_keys: list[str] = Field(default_factory=list)
     viewer_query: dict[str, str] = Field(default_factory=dict)
 
 

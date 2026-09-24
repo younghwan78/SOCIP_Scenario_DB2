@@ -4,7 +4,7 @@
 
 - Run Git, Python, and backend commands from this directory (`implementation/`).
 - This system turns YAML scenarios into PostgreSQL data and serves FastAPI,
-  a React SPA (`web/`), and Streamlit/Workbench (`dashboard/`, `frontend/`).
+  a React SPA (`ui/`), and Streamlit/Workbench (`dashboard/`, `frontend/`).
 - Use current code, tests, and `docs/README.md` for behavior and contracts.
   `internal_docs/README.md` indexes historical evidence; verify it before reuse.
 - Read `docs/reference/agent-domain-rules.md` before changing ETL fixtures,
@@ -28,7 +28,8 @@
   Documentation-only changes need link/content checks, not the application test suite.
 - Backend: `uv run pytest <affected-test-path>`; use PostgreSQL integration tests
   for persistence/query changes. Run Ruff and mypy when applicable.
-- `web/` (React SPA): run `npm test`, `npm run lint`, and `npm run build` there.
+- `ui/` (React SPA): run `npm test`, `npm run typecheck`, `npm run build`, and `npm audit` there.
+- `web/` (Workbench CI wrapper): run `npm test`, `npm run lint`, and `npm run build` there.
 - `frontend/` (Workbench): run `npm test` and `npm run build` there;
   include rebuilt assets under `dashboard/components/workbench_frontend/component/`.
 - Preserve Streamlit static serving for `dashboard/static/elk.bundled.js`.

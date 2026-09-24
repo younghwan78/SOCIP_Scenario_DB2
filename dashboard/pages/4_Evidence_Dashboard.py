@@ -16,6 +16,7 @@ for path in (_root / "src", _root, _root / "dashboard"):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
+from dashboard.components.app_context import render_context_bar
 from dashboard.components.evidence_context import default_silicon_rev, render_evidence_context_sidebar
 from dashboard.components.evidence_results_panel import (
     clear_evidence_results_cache,
@@ -97,6 +98,8 @@ with st.sidebar:
         default_api_base=os.environ.get("SCENARIODB_API_BASE", "http://127.0.0.1:18000/api/v1"),
         on_refresh=_clear_dashboard_caches,
     )
+
+render_context_bar(st.session_state, active="Evidence")
 
 if context.method == "Calculation":
     run_visible = _run_panel_visible()

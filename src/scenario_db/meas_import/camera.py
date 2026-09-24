@@ -208,6 +208,8 @@ def bind_graph(evidence, graph):
     for task in model.tasks:
         if task.task_id not in model.execution_path.enabled_task_ids:
             continue
+        if task.observation_only:
+            continue
         if not task.node_refs or set(task.node_refs) - nodes.keys():
             raise ValueError(f"{task.task_id}: missing/unknown active node_refs")
         for ref in task.node_refs:

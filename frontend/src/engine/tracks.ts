@@ -24,6 +24,7 @@ interface TrackSeed {
 }
 
 function classify(event: TimelineEvent): { id: string; title: string; category: TrackCategory; color: string } {
+  if (event.track_name) return {id: event.track_name, title: event.track_name.replace('Scenario / ', ''), category: 'misc', color: '#688ec1'}
   if (event.constraint_type === 'source') {
     return { id: 'track_source', title: 'Sensor In', category: 'sync_source', color: SOURCE_COLOR }
   }
@@ -135,6 +136,9 @@ export function buildTracks(events: TimelineEvent[]): TrackDefinition[] {
   }
 
   tracks.sort((a, b) => {
+    const order = ['SW / HAL_RT', 'SW / ICPU', 'SW / CAM_DRIVER', 'SENSOR / SENSOR', 'RT / CSI', 'RT / PDP', 'RT / BYRP', 'RT / RGBP', 'RT / YUVSC', 'RT / MLSC', 'NRT / MTNR', 'NRT / MSNR', 'NRT / YUVP', 'NRT / MCSC', 'M2M / LME', 'M2M / GDC_M', 'M2M / GDC_O', 'M2M / VPS']
+    const rank = (title: string) => order.includes(title) ? order.indexOf(title) : 100
+    if (rank(a.title) !== rank(b.title)) return rank(a.title) - rank(b.title)
     if (CATEGORY_ORDER[a.category] !== CATEGORY_ORDER[b.category]) {
       return CATEGORY_ORDER[a.category] - CATEGORY_ORDER[b.category]
     }

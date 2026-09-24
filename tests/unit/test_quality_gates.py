@@ -42,11 +42,12 @@ def test_github_actions_runs_quality_and_test_gates() -> None:
 
     assert "actions/checkout@v5.1.0" in workflow
     assert "astral-sh/setup-uv@v8.3.2" in workflow
-    assert "uv run ruff check ." in workflow
-    assert "uv run mypy" in workflow
-    assert "uv run pip-audit" in workflow
-    assert "uv run pytest tests/unit" in workflow
-    assert "uv run pytest tests/integration" in workflow
+    assert "uv sync --frozen --group dev --group dashboard --group sim --extra profiling" in workflow
+    assert "uv run --extra profiling ruff check ." in workflow
+    assert "uv run --extra profiling mypy" in workflow
+    assert "uv run --extra profiling pip-audit" in workflow
+    assert "uv run --extra profiling pytest tests/unit" in workflow
+    assert "uv run --extra profiling pytest tests/integration" in workflow
 
 
 def test_ubuntu_runbook_matches_mutation_auth_contract() -> None:

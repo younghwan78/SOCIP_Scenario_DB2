@@ -6,7 +6,7 @@ import type { WorkbenchTheme } from '../theme'
 import { rangeStats } from './aggregate'
 import { sliceColor } from './colors'
 import type { FlowEdge } from './flows'
-import { buildFlowEdges, criticalFlowEdges, flowsForTask } from './flows'
+import { buildFlowEdges, criticalFlowEdges, flowsForTask, connectedFlows } from './flows'
 import { findMatches } from './search'
 import type {
   PlacedEvent,
@@ -140,10 +140,22 @@ export class TimelineEngine {
     return { selectedTaskId: this.selectedTaskId, brush: this.brush }
   }
 
+  public viewport(): {startMs: number; endMs: number; offsetY: number} {
+    return {startMs: this.transform.startMs, endMs: this.transform.endMs, offsetY: this.transform.offsetY}
+  }
+  public selectTask(id: string | null): void {
+    this.selectedTaskId = id
+    this.onSelect?.(id); this.requestRender()
+  }
+  public restoreViewport(v: {startMs: number; endMs: number; offsetY: number}): void {
+    if (![v.startMs, v.endMs, v.offsetY].every(Number.isFinite) || v.endMs <= v.startMs) return
+    Object.assign(this.transform, v); if (this.options.pilot) this.transform.offsetY = 0; this.updateScale(); this.requestRender()
+  }
+
   public contentHeight(): number {
     let height = RULER_HEIGHT
     for (const track of this.orderedTracks()) {
-      height += this.trackHeight(track) + TRACK_GAP
+      height += this.trackHeight(track) + this.trackGap
     }
     return height + MINIMAP_HEIGHT + 8
   }
@@ -157,9 +169,21 @@ export class TimelineEngine {
     return [...pinned, ...rest]
   }
 
+  private get verticalScale(): number {
+    if (!this.options.pilot || !this.canvas) return 1
+    const available = this.canvas.getBoundingClientRect().height - RULER_HEIGHT - MINIMAP_HEIGHT - 8
+    const natural = this.tracks.reduce((sum, track) => sum +
+      (this.collapsedTrackIds.has(track.id) ? 1 : track.laneCount) * LANE_HEIGHT + 2 * TRACK_PADDING_Y + TRACK_GAP, 0)
+    return Math.min(1, Math.max(0, available) / Math.max(1, natural))
+  }
+  private get laneHeight(): number { return LANE_HEIGHT * this.verticalScale }
+  private get trackPadding(): number { return TRACK_PADDING_Y * this.verticalScale }
+  private get trackGap(): number { return TRACK_GAP * this.verticalScale }
+  private get slicePadding(): number { return SLICE_PADDING_Y * this.verticalScale }
+
   private trackHeight(track: TrackDefinition): number {
     const lanes = this.collapsedTrackIds.has(track.id) ? 1 : track.laneCount
-    return lanes * LANE_HEIGHT + TRACK_PADDING_Y * 2
+    return lanes * this.laneHeight + this.trackPadding * 2
   }
 
   public toggleTrackCollapsed(trackId: string): void {
@@ -273,14 +297,14 @@ export class TimelineEngine {
       const collapsed = this.collapsedTrackIds.has(track.id)
       const placed = track.placed.find((item) => item.event.task_id === event.task_id)
       if (placed) {
-        const laneY = currentY + TRACK_PADDING_Y + (collapsed ? 0 : placed.lane) * LANE_HEIGHT
+        const laneY = currentY + this.trackPadding + (collapsed ? 0 : placed.lane) * this.laneHeight
         const viewH = this.canvas.getBoundingClientRect().height - RULER_HEIGHT - MINIMAP_HEIGHT
-        const target = -(laneY - viewH / 2 + LANE_HEIGHT / 2)
+        const target = -(laneY - viewH / 2 + this.laneHeight / 2)
         const minOffset = Math.min(0, viewH + RULER_HEIGHT - this.contentHeight())
-        this.transform.offsetY = Math.max(minOffset, Math.min(0, target))
+        this.transform.offsetY = this.options.pilot ? 0 : Math.max(minOffset, Math.min(0, target))
         return
       }
-      currentY += trackH + TRACK_GAP
+      currentY += trackH + this.trackGap
     }
   }
 
@@ -362,6 +386,14 @@ export class TimelineEngine {
     ctx.fillRect(0, 0, width, height)
 
     this.renderFrameBands(ctx, width, height)
+    if (this.options.pilot) {
+      const step = Math.pow(10, Math.floor(Math.log10(80 / this.transform.scale)))
+      ctx.strokeStyle = this.theme.borderSubtle
+      ctx.lineWidth = .6
+      for (let t = Math.ceil(this.transform.startMs / step) * step; t < this.transform.endMs; t += step) {
+        const x = this.timeToX(t); ctx.beginPath(); ctx.moveTo(x, RULER_HEIGHT); ctx.lineTo(x, height - MINIMAP_HEIGHT); ctx.stroke()
+      }
+    }
     this.renderTracks(ctx, width, height)
     this.renderFlows(ctx, width)
     this.renderBrush(ctx, height)
@@ -508,7 +540,7 @@ export class TimelineEngine {
           this.renderSlice(ctx, placed, currentY, width, collapsed)
         }
       }
-      currentY += trackH + TRACK_GAP
+      currentY += trackH + this.trackGap
     }
   }
 
@@ -521,8 +553,8 @@ export class TimelineEngine {
   ): void {
     const event = placed.event
     const lane = collapsed ? 0 : placed.lane
-    const sliceY = trackY + TRACK_PADDING_Y + lane * LANE_HEIGHT + SLICE_PADDING_Y
-    const sliceH = LANE_HEIGHT - SLICE_PADDING_Y * 2
+    const sliceY = trackY + this.trackPadding + lane * this.laneHeight + this.slicePadding
+    const sliceH = this.laneHeight - this.slicePadding * 2
 
     const startMs = eventStart(event)
     const endMs = eventEnd(event)
@@ -550,9 +582,11 @@ export class TimelineEngine {
     if (x1 >= HEADER_WIDTH) {
       const isSelected = this.selectedTaskId !== null && this.selectedTaskId === event.task_id
       ctx.fillStyle = sliceColor(event)
+      ctx.globalAlpha = this.options.pilot && this.highlightedTaskIds && !this.highlightedTaskIds.has(event.task_id) ? .3 : 1
       ctx.beginPath()
       ctx.roundRect(x0, sliceY, sliceW, sliceH, 3)
       ctx.fill()
+      ctx.globalAlpha = 1
 
       const isHighlighted = this.highlightedTaskIds?.has(event.task_id) ?? false
       if (isSelected) {
@@ -580,7 +614,7 @@ export class TimelineEngine {
         ctx.clip()
         // Prefer the pipeline node (task) name; hw_name is the shared
         // resource class (ISP/CPU/...) and stays in the tooltip.
-        const label = event.node_id || String(event.task_id ?? '').split('#f', 1)[0] || event.hw_name || ''
+        const label = event.display_name || event.node_id || String(event.task_id ?? '').split('#f', 1)[0] || event.hw_name || ''
         ctx.fillText(label, Math.max(HEADER_WIDTH + 2, x0 + 6), sliceY + sliceH / 2 + 4)
         ctx.restore()
       }
@@ -672,23 +706,23 @@ export class TimelineEngine {
       const trackH = this.trackHeight(track)
       const collapsed = this.collapsedTrackIds.has(track.id)
       for (const placed of track.placed) {
-        const laneY = currentY + TRACK_PADDING_Y + (collapsed ? 0 : placed.lane) * LANE_HEIGHT + SLICE_PADDING_Y
+        const laneY = currentY + this.trackPadding + (collapsed ? 0 : placed.lane) * this.laneHeight + this.slicePadding
         const x0 = this.timeToX(eventStart(placed.event))
         const x1 = Math.max(x0 + MIN_SLICE_WIDTH, this.timeToX(eventEnd(placed.event)))
         geometry.set(String(placed.event.task_id), {
           x0,
           x1,
-          yc: laneY + (LANE_HEIGHT - SLICE_PADDING_Y * 2) / 2,
+          yc: laneY + (this.laneHeight - this.slicePadding * 2) / 2,
         })
       }
-      currentY += trackH + TRACK_GAP
+      currentY += trackH + this.trackGap
     }
     return geometry
   }
 
   private renderFlows(ctx: CanvasRenderingContext2D, width: number): void {
-    const selectedFlows = this.selectedTaskId !== null ? flowsForTask(this.flowEdges, this.selectedTaskId) : []
-    const criticalFlows = this.showCriticalFlows ? criticalFlowEdges(this.flowEdges) : []
+    const selectedFlows = this.selectedTaskId !== null ? (this.options.pilot ? connectedFlows : flowsForTask)(this.flowEdges, this.selectedTaskId) : []
+    const criticalFlows = this.showCriticalFlows ? (this.options.pilot ? this.flowEdges : criticalFlowEdges(this.flowEdges)) : []
     if (!selectedFlows.length && !criticalFlows.length) return
 
     const geometry = this.sliceGeometry()
@@ -696,6 +730,14 @@ export class TimelineEngine {
     ctx.beginPath()
     ctx.rect(HEADER_WIDTH, RULER_HEIGHT, width - HEADER_WIDTH, 1e6)
     ctx.clip()
+    if (this.options.pilot) {
+      // Keep flow strokes outside every slice, including dimmed neighbouring frames.
+      ctx.beginPath()
+      ctx.rect(HEADER_WIDTH, RULER_HEIGHT, width - HEADER_WIDTH, 1e6)
+      const half=(this.laneHeight-this.slicePadding*2)/2
+      for (const g of geometry.values()) ctx.rect(g.x0, g.yc-half, Math.max(MIN_SLICE_WIDTH,g.x1-g.x0), half*2)
+      ctx.clip('evenodd')
+    }
 
     const selectedKeys = new Set(selectedFlows.map((edge) => `${edge.fromId}>${edge.toId}`))
     for (const edge of criticalFlows) {
@@ -720,7 +762,7 @@ export class TimelineEngine {
     const from = geometry.get(edge.fromId)
     const to = geometry.get(edge.toId)
     if (!from || !to) return
-    const x0 = from.x1
+    const x0 = edge.sourceAnchor === 'start' ? from.x0 : from.x1
     const y0 = from.yc
     const x1 = to.x0
     const y1 = to.yc
@@ -887,7 +929,7 @@ export class TimelineEngine {
         ctx.lineTo(pinX, midY + 6)
         ctx.stroke()
       }
-      currentY += trackH + TRACK_GAP
+      currentY += trackH + this.trackGap
     }
   }
 
@@ -900,7 +942,7 @@ export class TimelineEngine {
       if (y >= currentY && y <= currentY + trackH) {
         return { track, zone: x >= HEADER_WIDTH - 26 ? 'pin' : 'collapse' }
       }
-      currentY += trackH + TRACK_GAP
+      currentY += trackH + this.trackGap
     }
     return null
   }
@@ -995,7 +1037,7 @@ export class TimelineEngine {
       this.transform.endMs = this.transform.startMs + span
       const viewH = this.canvas.getBoundingClientRect().height
       const minOffset = Math.min(0, viewH - this.contentHeight())
-      this.transform.offsetY = Math.max(minOffset, Math.min(0, this.dragStartOffsetY + deltaY))
+      this.transform.offsetY = this.options.pilot ? 0 : Math.max(minOffset, Math.min(0, this.dragStartOffsetY + deltaY))
       this.requestRender()
       return
     }
@@ -1104,7 +1146,7 @@ export class TimelineEngine {
       const trackH = this.trackHeight(track)
       const collapsed = this.collapsedTrackIds.has(track.id)
       if (y >= currentY && y <= currentY + trackH) {
-        const lane = Math.floor((y - currentY - TRACK_PADDING_Y) / LANE_HEIGHT)
+        const lane = Math.floor((y - currentY - this.trackPadding) / this.laneHeight)
         for (const placed of track.placed) {
           if (!collapsed && placed.lane !== lane) continue
           const x0 = this.timeToX(eventStart(placed.event))
@@ -1115,7 +1157,7 @@ export class TimelineEngine {
         }
         return null
       }
-      currentY += trackH + TRACK_GAP
+      currentY += trackH + this.trackGap
     }
     return null
   }

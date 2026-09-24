@@ -3,6 +3,7 @@
 import type { TimelineEvent } from './types'
 
 export interface FlowEdge {
+  sourceAnchor?: 'start' | 'end'
   fromId: string
   toId: string
   critical: boolean
@@ -20,6 +21,7 @@ export function buildFlowEdges(events: TimelineEvent[]): FlowEdge[] {
       const from = byId.get(String(predecessor))
       if (!from) continue
       edges.push({
+        ...(event.predecessor_anchors?.[String(predecessor)] ? {sourceAnchor: event.predecessor_anchors[String(predecessor)]} : {}),
         fromId: String(from.task_id),
         toId: String(event.task_id),
         critical: Boolean(from.critical) && Boolean(event.critical),
@@ -37,4 +39,17 @@ export function flowsForTask(edges: FlowEdge[], taskId: string): FlowEdge[] {
 /** Edges whose both endpoints are on the critical path. */
 export function criticalFlowEdges(edges: FlowEdge[]): FlowEdge[] {
   return edges.filter((edge) => edge.critical)
+}
+
+export function connectedFlows(edges: FlowEdge[], taskId: string): FlowEdge[] {
+  const reached = new Set([taskId])
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const e of edges) if (reached.has(e.fromId) || reached.has(e.toId)) {
+      if (!reached.has(e.fromId) || !reached.has(e.toId)) changed = true
+      reached.add(e.fromId); reached.add(e.toId)
+    }
+  }
+  return edges.filter(e => reached.has(e.fromId) && reached.has(e.toId))
 }

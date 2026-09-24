@@ -6,6 +6,7 @@ from typing import Any, Callable
 
 import streamlit as st
 
+from dashboard.components.app_context import adopt_query_context, current_context, publish_query
 from dashboard.components.evidence_api_client import KIND_MEASUREMENT, list_evidence
 from dashboard.components.simulation_readiness import render_simulation_readiness
 from dashboard.components.viewer_api_client import (
@@ -49,6 +50,18 @@ def render_evidence_context_sidebar(
     """Render sidebar controls and return the selected simulation context."""
 
     st.markdown("### Evidence Context")
+    adopt_query_context(
+        st.query_params,
+        st.session_state,
+        page="evidence",
+        reset_keys=(
+            "evidence_soc_id",
+            "evidence_project_id",
+            "evidence_scenario_category",
+            "evidence_scenario_id",
+            "evidence_variant_id",
+        ),
+    )
     api_base = st.text_input("API Base", value=default_api_base, key="evidence_api_base")
     if st.button("Refresh", use_container_width=True):
         clear_evidence_context_caches()
@@ -60,6 +73,7 @@ def render_evidence_context_sidebar(
     scenario_id, variant_id = _select_context(api_base, method)
     if method == "Calculation":
         render_simulation_readiness(api_base, scenario_id, variant_id)
+    publish_query(st.query_params, current_context(st.session_state), page="evidence", state=st.session_state)
     return EvidenceContext(
         api_base=api_base,
         soc_id=str(st.session_state.get("viewer_soc_id") or ""),

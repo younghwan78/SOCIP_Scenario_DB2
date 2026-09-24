@@ -211,3 +211,13 @@ See [profiling guide](../../guides/profiling-and-scenario-exploration.md) for in
 `sw_task_timing` additionally supports timing_scope, includes_task_ids and sample_unit. `sw_event_latency.pairing` additionally accepts producer_defined; latency_basis is observed_gap. Camera evidence requires complete runtime min/mean/max/count and active task/edge references. No missing values are converted to zero. A measured camera summary cannot be applied as a legacy whole-runtime replay; use the separately pinned SW projection, which rejects HW/inclusive stage overrides.
 
 Import preview is read-only; commit checks a normalized content hash, canonical ownership, workload and registered SW baseline. Duplicate identical evidence is a no-op; changed content under the same ID conflicts. Detail and operational examples: [camera profiling guide](../../guides/camera-semantic-profiling.md).
+
+Scenario trace mapping extension (2026-09-21): each pipeline task may declare both
+`trace_slice_name` and `trace_track_name`. They match an exact track and an exact slice
+prefix followed by ` f<decimal frame id>`. Without these fields, legacy exact task IDs
+remain supported. `observation_only: true` permits unmapped SW observations with empty
+node_refs; these are retained for review and rejected by SW projection. Canonically
+mapped tasks retain existing graph validation. Timeline previews preserve
+source_slice_name, resource_name, frame_index when present, and observation_only.
+The trace aggregator reports ignored/incomplete slices and never infers latency from
+frame IDs. See the [synthetic UHD30 bundle](../../../examples/measurement-import/camera/uhd30-eis/README.md).

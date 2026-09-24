@@ -14,11 +14,18 @@ class CameraTask(BaseScenarioModel):
     kind: Literal["sensor", "sw", "hw", "group"]
     stage: Literal["sensor", "rt", "sw_m2m", "nrt", "eis", "gdc"]
     node_refs: list[str] = Field(default_factory=list)
+    observation_only: bool = Field(default=False, exclude_if=lambda value: not value)
+    trace_slice_name: str | None = None
+    trace_track_name: str | None = None
     timing_scope: Literal["exclusive_sw", "hw_execution", "inclusive_stage"] | None = None
     includes_task_ids: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def scope(self):
+        if (self.trace_slice_name is None) != (self.trace_track_name is None):
+            raise ValueError("trace mapping requires both slice and track names")
+        if self.observation_only and (self.kind != "sw" or self.node_refs):
+            raise ValueError("observation-only task must be unmapped SW")
         if self.timing_scope == "exclusive_sw" and (self.kind != "sw" or self.includes_task_ids):
             raise ValueError("exclusive_sw must be SW without included tasks")
         if self.timing_scope == "hw_execution" and self.kind != "hw":

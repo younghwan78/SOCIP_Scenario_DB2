@@ -1,4 +1,9 @@
 export interface TimelineEvent {
+  display_name?: string
+  track_name?: string
+  logical_task_id?: string
+  observation_only?: boolean
+  predecessor_anchors?: Record<string, 'start' | 'end'>
   task_id: string
   node_id?: string
   hw_name?: string
@@ -77,6 +82,7 @@ export interface DiagramExpandRequest {
 }
 
 export interface WorkbenchOptions {
+  pilot?: boolean
   showWaits: boolean
   showDeadlines: boolean
   theme: 'light' | 'dark'

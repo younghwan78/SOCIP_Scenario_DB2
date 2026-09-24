@@ -1,8 +1,9 @@
-"""Bounded semantic trace preview. Exact logical slice names; no timing aggregation."""
+"""Bounded semantic trace preview with explicit mappings; no timing aggregation."""
 
 from __future__ import annotations
 import hashlib
 import math
+import re
 from pathlib import Path
 
 from scenario_db.meas_import.camera import stamp
@@ -32,8 +33,12 @@ def sequence_preview(tp, model, *, start_ms=0, window_ms=100, limit=2000):
     tasks = {
         t.task_id: t for t in model.tasks if t.task_id in model.execution_path.enabled_task_ids
     }
+    from scenario_db.meas_import.camera_scenario_trace import logical_name
+
+    rows = [{**r, "source_slice_name": r["slice_name"],
+             "slice_name": logical_name(r, model.tasks)} for r in rows]
     disabled = {t.task_id for t in model.execution_path.disabled_tasks}
-    if any(r["slice_name"] in disabled for r in rows):
+    if any(r["slice_name"] in disabled or r["source_slice_name"] in disabled for r in rows):
         raise ValueError("trace includes disabled task in selected path")
     events = {}
     for row in rows:
@@ -57,9 +62,15 @@ def sequence_preview(tp, model, *, start_ms=0, window_ms=100, limit=2000):
             time_origin_ns=origin,
             predecessors=[],
             value_source="measured",
+            source_slice_name=row["source_slice_name"],
+            resource_name=row.get("track_name"),
+            observation_only=task.observation_only,
         )
+        frame = re.search(r" f([0-9]+)$", row["source_slice_name"])
+        if frame:
+            events[sid]["frame_index"] = int(frame[1])
     if not events:
-        raise ValueError("no logical task slices matched; producer must use task_id as slice name")
+        raise ValueError("no logical task slices matched; check task IDs or configured trace mapping")
     allowed = {(e.source_task_id, e.target_task_id) for e in model.edges}
     ids = ",".join(str(i) for i in events)
     flows = tp.query(

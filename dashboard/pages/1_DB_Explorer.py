@@ -31,7 +31,7 @@ from dashboard.components.explorer_api_client import (  # noqa: E402
 from dashboard.components.table_actions import render_copyable_dataframe  # noqa: E402
 from dashboard.components.camera_review import is_camera, scenario_intro  # noqa: E402
 from dashboard.components.explorer_details import (  # noqa: E402
-    render_catalog_references, render_condition_comparison,
+    render_catalog_references,
 )
 from dashboard.components.category_review import scenario_purpose  # noqa: E402
 from dashboard.components.category_review_view import (  # noqa: E402
@@ -56,6 +56,19 @@ from dashboard.components.viewer_api_client import (  # noqa: E402
     list_soc_platforms,
 )
 from dashboard.components.ui_theme import apply_app_theme  # noqa: E402
+from dashboard.components.app_context import (  # noqa: E402
+    adopt_query_context,
+    current_context,
+    page_url,
+    render_context_bar,
+    set_context,
+)
+from dashboard.components.variant_compare import render_variant_pivot  # noqa: E402
+
+
+def _explorer_page_url(path: str, owner: tuple[str, str], variant_a: str, variant_b: str | None, **extra: str) -> str:
+    context = {**current_context(st.session_state), "project_id": owner[0], "scenario_id": owner[1], "variant_id": variant_a}
+    return escape(page_url(path, context, variant_b=variant_b, **extra), quote=True)
 
 
 st.set_page_config(
@@ -690,7 +703,15 @@ def _render_distribution_cards(sections: list[tuple[str, list[dict[str, Any]], s
 
 def _render_import_batch_cards(rows: list[dict[str, Any]], limit: int = 3) -> None:
     cards: list[str] = []
-    for row in rows[:limit]:
+    seen: set[tuple[str, ...]] = set()
+    unique_rows = []
+    for row in rows:
+        signature = tuple(str(row.get(key) or "") for key in ("status", "target_id", "actor", "validation_valid", "validation_issue_count"))
+        if signature in seen:
+            continue
+        seen.add(signature)
+        unique_rows.append(row)
+    for row in unique_rows[:limit]:
         status = str(row.get("status") or "unknown")
         target = str(row.get("target_id") or "")
         short_target = target if len(target) <= 92 else target[:89] + "..."
@@ -702,7 +723,7 @@ def _render_import_batch_cards(rows: list[dict[str, Any]], limit: int = 3) -> No
   <div class="import-batch-title">{escape(status)}</div>
   <div class="import-batch-meta">
     target: {escape(short_target or "-")}<br>
-    actor: {escape(str(row.get("actor") or "-"))}<br>
+    actor: {escape(str(row.get("actor") or "-"))} · {escape(str(row.get("created_at") or "")[:16].replace("T", " "))}<br>
     validation: {escape(validation)} / issues {issue_count}
   </div>
 </div>
@@ -899,11 +920,14 @@ with st.sidebar:
         _load_explorer.clear()
         st.rerun()
 
+    adopt_query_context(st.query_params, st.session_state, page="explorer")
+    shared_context = current_context(st.session_state)
     socs, soc_error = _load_soc_options(api_base)
     soc_ids = [""] + [str(item.get("id")) for item in socs if item.get("id")]
     selected_soc = st.selectbox(
         "SoC",
         soc_ids,
+        index=soc_ids.index(shared_context["soc_id"]) if shared_context["soc_id"] in soc_ids else 0,
         format_func=lambda soc_id: "All SoCs" if not soc_id else compact_soc_label(next((item for item in socs if item.get("id") == soc_id), {"id": soc_id})),
     )
     if soc_error:
@@ -918,11 +942,16 @@ with st.sidebar:
     selected_project = st.selectbox(
         "Project / Board",
         project_ids,
+        index=project_ids.index(shared_context["project_id"]) if shared_context["project_id"] in project_ids else 0,
         format_func=lambda project_id: "All Projects" if not project_id else compact_project_label(next((item for item in projects if item.get("id") == project_id), {"id": project_id})),
     )
     if project_error:
         st.caption(f"Project list unavailable: {project_error}")
 
+    if selected_soc:
+        set_context(st.session_state, soc_id=selected_soc)
+    if selected_project:
+        set_context(st.session_state, project_id=selected_project)
     base_filters = {
         "soc_ref": selected_soc or None,
         "board_type": board_type or None,
@@ -936,14 +965,12 @@ st.markdown(
     """
 <div class="explorer-header">
   <span class="explorer-title">DB Explorer</span>
-  <span class="meta-chip">overview</span>
-  <span class="meta-chip">scenario catalog</span>
-  <span class="meta-chip">variant matrix</span>
-  <span class="meta-chip">import health</span>
 </div>
 """,
     unsafe_allow_html=True,
 )
+
+render_context_bar(st.session_state, active="DB Explorer")
 
 selected_categories, selected_domains, selected_scenarios, selected_severities = _render_explorer_filter_bar(
     filter_summary,
@@ -1030,7 +1057,7 @@ with tabs[1]:
     st.markdown(f"**Scenario Catalog** - {len(catalog_items)} rows")
     render_catalog_references(api_base, catalog_items)
     render_severity_guide()
-    _render_catalog_cards(catalog_items, matrix_items)
+    _render_catalog_cards(catalog_items, matrix_items, limit=max(len(catalog_items), 12))
     if camera_context:
         render_catalog_load_detail(matrix_items)
     render_copyable_dataframe(
@@ -1052,7 +1079,7 @@ with tabs[2]:
         visible_matrix_items = render_camera_matrix(matrix_items) if camera_context else matrix_items
         if not camera_context:
             render_category_matrix(matrix_items)
-    render_condition_comparison(visible_matrix_items)
+    render_variant_pivot(visible_matrix_items, key_prefix="explorer_variant_pivot", page_url_for=_explorer_page_url)
     with st.expander("Diff profile / Change score", expanded=False):
         _render_variant_matrix_summary(visible_matrix_items)
         st.caption("Change score counts configuration edits; it is not a workload score.")

@@ -6,6 +6,24 @@ on:
     branches: [main]
 
 jobs:
+  react-ui:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui
+    steps:
+      - uses: actions/checkout@v5.1.0
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - run: npm ci
+      - run: npm audit --audit-level=moderate
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
   web:
     runs-on: ubuntu-latest
     defaults:
@@ -28,17 +46,17 @@ jobs:
     steps:
       - uses: actions/checkout@v5.1.0
       - uses: astral-sh/setup-uv@v8.3.2
-      - run: uv sync --frozen --group dev --group dashboard --group sim
-      - run: uv run ruff check .
-      - run: uv run mypy
-      - run: uv export --frozen --no-dev --group dashboard --group sim --no-emit-project --quiet -o "${RUNNER_TEMP}/runtime-requirements.txt"
-      - run: uv run pip-audit -r "${RUNNER_TEMP}/runtime-requirements.txt" --progress-spinner off
-      - run: uv run pytest tests/unit --cov=scenario_db --cov-report=term-missing
+      - run: uv sync --frozen --group dev --group dashboard --group sim --extra profiling
+      - run: uv run --extra profiling ruff check .
+      - run: uv run --extra profiling mypy
+      - run: uv export --frozen --no-dev --group dashboard --group sim --extra profiling --no-emit-project --quiet -o "${RUNNER_TEMP}/runtime-requirements.txt"
+      - run: uv run --extra profiling pip-audit -r "${RUNNER_TEMP}/runtime-requirements.txt" --progress-spinner off
+      - run: uv run --extra profiling pytest tests/unit --cov=scenario_db --cov-report=term-missing
 
   integration:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5.1.0
       - uses: astral-sh/setup-uv@v8.3.2
-      - run: uv sync --frozen --group dev --group dashboard --group sim
-      - run: uv run pytest tests/integration -q
+      - run: uv sync --frozen --group dev --group dashboard --group sim --extra profiling
+      - run: uv run --extra profiling pytest tests/integration -q

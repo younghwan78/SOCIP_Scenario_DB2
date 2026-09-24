@@ -19,7 +19,9 @@ for path in (_root / "src", _root, _root / "dashboard"):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
+from dashboard.components.app_context import adopt_query_context, current_context, publish_query, render_context_bar
 from dashboard.components.elk_viewer import render_elk_view
+from dashboard.components.pipeline_tables import render_pipeline_tables
 from dashboard.components.graph_selection_bridge import read_graph_selection
 from dashboard.components.graph_inspector import (
     InspectorPanel,
@@ -618,10 +620,11 @@ with st.sidebar:
         clear_viewer_timing_caches()
         st.rerun()
 
-    query_soc_id = query_params.get("soc_id")
-    query_project_id = query_params.get("project_id")
-    query_scenario_id = query_params.get("scenario_id")
-    query_variant_id = query_params.get("variant_id")
+    adopt_query_context(query_params, st.session_state, page="viewer")
+    query_soc_id = None
+    query_project_id = None
+    query_scenario_id = None
+    query_variant_id = None
 
     socs, soc_error = _load_soc_options(api_base)
     if socs:
@@ -701,6 +704,7 @@ with st.sidebar:
             ),
         )
         st.session_state["viewer_variant_id"] = variant_id_input
+        publish_query(query_params, current_context(st.session_state), page="viewer", state=st.session_state)
     else:
         if variant_error:
             st.caption(f"Variant list unavailable: {variant_error}")
@@ -966,6 +970,8 @@ graph_node_count = len(topo_view.nodes) if level == 0 else len(primary.nodes)
 graph_edge_count = len(topo_view.edges) if level == 0 else len(primary.edges)
 mode_label = "resource + topology" if level == 0 else str(primary.mode)
 
+render_context_bar(st.session_state, active="Pipeline")
+
 st.markdown(
     f"""
 <div class="viewer-header">
@@ -1045,25 +1051,31 @@ with st.sidebar:
 
 graph_click_selection = read_graph_selection(key="viewer_graph_selection_bridge")
 
-main_col, detail_col = st.columns([5.6, 0.95], gap="small")
+is_timing_pilot = level == 0 and scenario_id_input == "uc-camera-recording" and variant_id_input == "cam-rec-r1-uhd30-vdis"
+if is_timing_pilot:
+    main_col = st.container()
+    detail_col = st.expander("구조 상세 / Graph Inspector", expanded=False)
+else:
+    main_col, detail_col = st.columns([5.6, 0.95], gap="small")
 
 with detail_col:
     _render_detail_panel(inspector_view_source(level, primary, topo_view), graph_click_selection)
 
 with main_col:
-    st.markdown(
-        f"""
-<div class="compact-panel">
-  <h4>Scenario Summary</h4>
-  <span class="meta-chip">Resolution {escape(str(s.resolution))}</span>
-  <span class="meta-chip">FPS {escape(str(s.fps))}</span>
-  <span class="meta-chip">Mode {escape(str(mode_label))}</span>
-  <span class="meta-chip">Nodes {escape(str(graph_node_count))}</span>
-  <span class="meta-chip">Edges {escape(str(graph_edge_count))}</span>
-</div>
-""",
-        unsafe_allow_html=True,
-    )
+    if not is_timing_pilot:
+        st.markdown(
+            f"""
+    <div class="compact-panel">
+      <h4>Scenario Summary</h4>
+      <span class="meta-chip">Resolution {escape(str(s.resolution))}</span>
+      <span class="meta-chip">FPS {escape(str(s.fps))}</span>
+      <span class="meta-chip">Mode {escape(str(mode_label))}</span>
+      <span class="meta-chip">Nodes {escape(str(graph_node_count))}</span>
+      <span class="meta-chip">Edges {escape(str(graph_edge_count))}</span>
+    </div>
+    """,
+            unsafe_allow_html=True,
+        )
 
     if primary.risks:
         risk_html = "".join(
@@ -1079,11 +1091,13 @@ with main_col:
         # Diagram-first: the topology is the page's main artifact, so it renders
         # right under the summary; the resource/buffer tables follow below.
         st.markdown('<div class="section-card">', unsafe_allow_html=True)
-        render_elk_view(
-            topo_view,
-            canvas_height=980,
-            title="Level 0 - Topology Overview",
-        )
+        from dashboard.components.viewer_pilot import PILOT_VARIANT, render_pilot
+        pilot_rendered = False
+        if scenario_id_input == "uc-camera-recording" and variant_id_input == PILOT_VARIANT:
+            pilot_rendered = render_pilot(api_base=api_base, view=topo_view,
+                                          simulation_id=overlay_evidence_id)
+        if not pilot_rendered:
+            render_elk_view(topo_view, canvas_height=980, title="Level 0 - Topology Overview")
         st.markdown("</div>", unsafe_allow_html=True)
 
         render_level0_resource_overview(resource_view)
@@ -1109,6 +1123,18 @@ with main_col:
             )
         st.markdown("</div>", unsafe_allow_html=True)
 
+    # Architecture attribute tables (DMA ports, buffer size/format/bit/SBWC,
+    # scale/crop/rotate). L0 reads the L1 projection so the tables stay detailed.
+    with st.expander("DMA · Buffer · Transform 표", expanded=True):
+        if level == 2:
+            table_view, table_source = primary, arch_source
+        else:
+            table_view, table_source = _load_view(api_base, scenario_id_input, variant_id_input, 1, sim_mode="none")
+        if table_source != "api":
+            st.caption("L1 view를 불러오지 못해 표를 표시하지 않습니다.")
+        else:
+            render_pipeline_tables(table_view, key_prefix=f"viewer_tables_{scenario_id_input}_{variant_id_input}")
+
     # Simulation timing: the schedule behind the overlay numbers, rendered as
     # the workbench timeline (with its own diagram cross-probe) right under
     # the pipeline diagram. Deep links can open it via ?panel=timing.
@@ -1117,7 +1143,7 @@ with main_col:
     except ViewerApiError as exc:
         st.error(str(exc))
         st.stop()
-    if timing_evidence_id:
+    if timing_evidence_id and not (level == 0 and variant_id_input == "cam-rec-r1-uhd30-vdis"):
         render_viewer_timing_panel(
             api_base=api_base,
             evidence_id=timing_evidence_id,
@@ -1125,7 +1151,7 @@ with main_col:
             variant_id=variant_id_input,
             expanded=st.query_params.get("panel") == "timing",
         )
-    elif sim_mode != "none":
+    elif sim_mode != "none" and not is_timing_pilot:
         st.caption(
             "Simulation Timing: no saved simulation evidence found for this "
             "scenario/variant. Run and save one from the Evidence Dashboard."
