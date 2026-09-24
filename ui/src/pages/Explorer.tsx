@@ -129,12 +129,12 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
             <div className="desc-box">
               <p>{scenarioPurpose(selected.scenario_id)}</p>
               {isCamera && rows.length > 0 && <div className="facet-row"><span className="faint" style={{ fontSize: 12 }}>구성</span>
-                {modeBreakdown(rows.filter((r) => !r.derived_from_variant)).map(({ mode, count }) => <span key={mode} className="focus">{mode === 'kpi' ? 'Video recording · 기본 KPI' : MODE_LABEL[mode]} {count}</span>)}
-                {derivedCount > 0 && <span className="focus">파생(explored/timing) {derivedCount}</span>}</div>}
+                {modeBreakdown(rows.filter((r) => !r.derived_from_variant)).map(({ mode, count }) => <span key={mode} className="focus">{mode === 'kpi' ? 'Video recording · 기본 KPI' : MODE_LABEL[mode]} <span className="cnt">({count})</span></span>)}
+                {derivedCount > 0 && <span className="focus">파생(explored/timing) <span className="cnt">({derivedCount})</span></span>}</div>}
               {isCamera && <div className="facet-row"><span className="faint" style={{ fontSize: 12 }}>검토 초점</span>
                 {(() => { const f = focusFor(rows); return <>{f.slice(0, 6).map((x) => <span key={x} className="focus">{x}</span>)}{f.length > 6 && <span className="faint" style={{ fontSize: 12 }} title={f.slice(6).join(' · ')}>+{f.length - 6}</span>}</> })()}</div>}
               <div className="facet-row"><span className="faint" style={{ fontSize: 12 }}>Load</span>
-                {Object.entries(selected.severity_counts).map(([k, v]) => <span key={k} className={`badge load-${k}`}>{k} {v}</span>)}
+                {Object.entries(selected.severity_counts).map(([k, v]) => <span key={k} className={`badge load-${k}`}>{k} <span className="cnt">({v})</span></span>)}
                 <span className="faint" style={{ fontSize: 12 }}>· 작성자가 저장한 부하 등급이며 KPI 통과 여부가 아닙니다</span></div>
             </div>
             <div className="facet-row">
@@ -143,9 +143,9 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
                 rows.filter((r) => !r.derived_from_variant).forEach((r) => { const v = facetValue(k, r.design_conditions); if (v) counts.set(v, (counts.get(v) ?? 0) + 1) })
                 return (
                   <span key={k} style={{ display: 'inline-flex', gap: 4, alignItems: 'center', marginRight: 14 }}>
-                    <span className="faint" style={{ fontSize: 12, marginRight: 2 }}>{FACET_LABEL[k]}</span>
+                    <span className="faint" style={{ fontSize: 12, marginRight: 4 }}>{FACET_LABEL[k]}</span>
                     {[...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([v, n]) => (
-                      <button key={v} className={`facet ${facets[k]?.has(v) ? 'on' : ''}`} onClick={() => toggleFacet(k, v)}>{v} {n}</button>
+                      <button key={v} className={`facet ${facets[k]?.has(v) ? 'on' : ''}`} onClick={() => toggleFacet(k, v)}>{v} <span className="cnt">({n})</span></button>
                     ))}
                   </span>
                 )

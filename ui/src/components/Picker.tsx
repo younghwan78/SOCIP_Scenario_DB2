@@ -128,17 +128,17 @@ export function Picker({ open, onClose, catalog, scenarioId, onPick, onAddCompar
               <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--primary-strong)', marginRight: 2 }}>KPI</span>
               {KPI_SET.map((k) => {
                 const n = count((r) => recordingMode(r) === 'kpi' && kpiLabel(r.design_conditions) === k)
-                return <button key={k} className={`facet ${facet.kpi.has(k) ? 'on' : ''}`} disabled={!n} onClick={() => toggle('kpi', k)}>{k} {n || ''}</button>
+                return <button key={k} className={`facet ${facet.kpi.has(k) ? 'on' : ''}`} disabled={!n} onClick={() => toggle('kpi', k)}>{k}{n ? <> <span className="cnt">({n})</span></> : ''}</button>
               })}
             </span>
             {(['pro', 'slow', 'portrait', 'none'] as Mode[]).map((m) => {
               const n = count((r) => recordingMode(r) === m)
-              return <button key={m} className={`facet ${facet.mode.has(m) ? 'on' : ''}`} disabled={!n} onClick={() => toggle('mode', m)}>{MODE_LABEL[m]} {n || ''}</button>
+              return <button key={m} className={`facet ${facet.mode.has(m) ? 'on' : ''}`} disabled={!n} onClick={() => toggle('mode', m)}>{MODE_LABEL[m]}{n ? <> <span className="cnt">({n})</span></> : ''}</button>
             })}
           </div>
           <div className="facet-row">
             <span className="facet-label">Stab</span>
-            {stabValues.map((s) => <button key={s} className={`facet ${facet.stab.has(s) ? 'on' : ''}`} onClick={() => toggle('stab', s)}>{s} {count((r) => stabOf(r.design_conditions) === s)}</button>)}
+            {stabValues.map((s) => <button key={s} className={`facet ${facet.stab.has(s) ? 'on' : ''}`} onClick={() => toggle('stab', s)}>{s} <span className="cnt">({count((r) => stabOf(r.design_conditions) === s)})</span></button>)}
             {hdrValues.length > 0 && <span className="facet-label" style={{ width: 34, marginLeft: 12 }}>HDR</span>}
             {hdrValues.map((h) => <button key={h} className={`facet ${facet.hdr.has(h) ? 'on' : ''}`} onClick={() => toggle('hdr', h)}>{h}</button>)}
           </div>
@@ -146,7 +146,7 @@ export function Picker({ open, onClose, catalog, scenarioId, onPick, onAddCompar
             <span className="facet-label">Camera</span>
             {(Object.keys(CAMERA_LABEL) as Camera[]).map((c) => {
               const n = count((r) => cameraOf(r.design_conditions) === c)
-              return <button key={c} className={`facet ${facet.cam.has(c) ? 'on' : ''}`} disabled={!n} title={n ? '' : 'sensor 역할 매핑이 필요합니다'} onClick={() => toggle('cam', c)}>{CAMERA_LABEL[c]} {n || ''}</button>
+              return <button key={c} className={`facet ${facet.cam.has(c) ? 'on' : ''}`} disabled={!n} title={n ? '' : 'sensor 역할 매핑이 필요합니다'} onClick={() => toggle('cam', c)}>{CAMERA_LABEL[c]}{n ? <> <span className="cnt">({n})</span></> : ''}</button>
             })}
           </div>
         </div>
