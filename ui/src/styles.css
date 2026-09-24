@@ -363,3 +363,18 @@ th.ref-col { background: var(--primary-soft) !important; color: var(--primary-st
 .tb-rank-row { display: flex; align-items: center; gap: 8px; border: 0; background: transparent; padding: 3px 0; font-size: 12px; color: var(--text); cursor: pointer; text-align: left; border-bottom: 1px solid var(--line-soft); }
 .tb-rank-row:hover { background: var(--surface-soft); }
 @media (max-width: 1100px) { .tb-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------- architecture exploration / predictions / reports ---------- */
+.ax-form { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(0, 2fr); gap: 18px; }
+.ax-scen { display: grid; gap: 6px; max-height: 260px; overflow: auto; border: 1px solid var(--line-soft); border-radius: 6px; padding: 8px 10px; }
+.ax-scen > div { display: flex; flex-direction: column; gap: 2px; }
+.ax-label { font-size: 12px; color: var(--text-2); min-width: 110px; font-weight: 600; }
+.ax-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ax-check { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; cursor: pointer; }
+.tb-mini-table { border-collapse: collapse; font-size: 12px; }
+.tb-mini-table th { text-align: left; font-weight: 600; color: var(--text-2); padding: 4px 6px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.tb-mini-table td { padding: 4px 6px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
+.tb-mini-table tr.selected td { background: var(--surface-soft); }
+.rpt-frame { width: 100%; border: 0; height: calc(100vh - 170px); min-height: 480px; background: #fff; display: block; }
+@media (max-width: 1100px) { .ax-form { grid-template-columns: 1fr; } }
+.table-scroll tr.selected > td { background: #F3EFE8; }
