@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
@@ -220,8 +220,8 @@ def variant_matrix(
         if parent_id:
             try:
                 effective = resolve_variant_from_rows(rows_by_scenario.get(str(variant.scenario_id), {}), variant.scenario_id, variant.id)
-            except (LookupError, ValueError):
-                effective = variant
+            except (LookupError, ValueError) as exc:
+                raise HTTPException(status_code=422, detail=f"Invalid variant inheritance: {variant.scenario_id}/{variant.id}") from exc
             own_keys = sorted({*(variant.design_conditions or {}), *(getattr(variant, "design_conditions_override", None) or {})})
         design = effective.design_conditions or {}
         axis_keys.update(str(key) for key in design)
@@ -429,16 +429,28 @@ def _variant_axis_keys(
 ) -> set[str]:
     if not scenario_ids:
         return set()
-    # Column-only select: axis keys need design_conditions, not full rows.
-    query = db.query(ScenarioVariant.design_conditions).filter(
+    # Resolve key inheritance across the full filtered result, independent of
+    # pagination. Keep this a narrow read: no node/buffer configuration payloads.
+    query = db.query(
+        ScenarioVariant.scenario_id, ScenarioVariant.id, ScenarioVariant.severity,
+        ScenarioVariant.derived_from_variant, ScenarioVariant.design_conditions,
+        ScenarioVariant.design_conditions_override,
+    ).filter(
         ScenarioVariant.scenario_id.in_(scenario_ids)
     )
-    if severities:
-        query = query.filter(ScenarioVariant.severity.in_(severities))
+    rows = query.all()
+    by_id = {(row.scenario_id, row.id): row for row in rows}
     keys: set[str] = set()
-    for row in query.all():
-        design = row.design_conditions or {}
-        keys.update(str(key) for key in design)
+    for row in rows:
+        if severities and row.severity not in severities:
+            continue
+        seen = set()
+        current = row
+        while current is not None and (current.scenario_id, current.id) not in seen:
+            seen.add((current.scenario_id, current.id))
+            keys.update(str(key) for key in (current.design_conditions or {}))
+            keys.update(str(key) for key in (getattr(current, "design_conditions_override", None) or {}))
+            current = by_id.get((current.scenario_id, getattr(current, "derived_from_variant", None)))
     return keys
 
 

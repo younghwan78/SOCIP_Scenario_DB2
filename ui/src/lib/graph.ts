@@ -149,7 +149,7 @@ export function buildGraph(view: ViewResponse, collapsed: ReadonlySet<string> = 
       const bid = `buf:${e.buffer_ref}`
       if (!nodes.has(bid)) {
         const b = model?.buffers.find((x) => x.name === e.buffer_ref)
-        const rate = b && b.mbFrame !== null ? `${b.mbFrame} MB/f${b.wMBs !== null ? ` · ${((b.wMBs ?? 0) + (b.rMBs ?? 0)).toFixed(0)} MB/s` : ''}` : b?.kind === 'stat' ? 'stat · size 미정' : ''
+        const rate = b && b.mbFrame !== null ? `${b.mbFrame.toFixed(2)} MB/f${b.wMBs !== null ? ` · ${((b.wMBs ?? 0) + (b.rMBs ?? 0)).toFixed(0)} MB/s` : ''}` : b?.kind === 'stat' ? 'stat · size 미정' : ''
         nodes.set(bid, { id: bid, label: shortBuffer(e.buffer_ref), kind: 'buffer', group: null, width: 140, height: rate ? 40 : 30,
           sub: memoryText(e.memory) || (b?.kind === 'stat' ? 'stat' : ''), sub2: rate || undefined, tone: b?.kind === 'stat' ? 'stat' : undefined, memory: e.memory, bufferRef: e.buffer_ref })
       }
@@ -171,7 +171,7 @@ export function buildGraph(view: ViewResponse, collapsed: ReadonlySet<string> = 
       const mem = { width: b.width, height: b.height, format: b.format, bitdepth: b.bit, compression: b.comp }
       nodes.set(bid, { id: bid, label: shortBuffer(b.name), kind: 'buffer', group: null, width: 140, height: 40, bufferRef: b.name, memory: mem,
         sub: memoryText(mem) || (b.kind === 'stat' ? 'stat · size 미정' : ''),
-        sub2: b.kind === 'history' ? `history f-1${b.mbFrame !== null ? ` · ${b.mbFrame} MB/f` : ''}` : b.kind === 'optional' ? 'optional · off' : b.mbFrame !== null ? `${b.mbFrame} MB/f` : 'stat',
+        sub2: b.kind === 'history' ? `history f-1${b.mbFrame !== null ? ` · ${b.mbFrame.toFixed(2)} MB/f` : ''}` : b.kind === 'optional' ? 'optional · off' : b.mbFrame !== null ? `${b.mbFrame.toFixed(2)} MB/f` : 'stat',
         tone: b.kind })
       if (b.kind === 'history') {
         if (b.wPorts.length) push({ id: `${bid}:hw`, source: owner, target: bid, kind: 'M2M', ports: b.wPorts.join(', ') })
@@ -323,17 +323,23 @@ export function edgePath(points: { x: number; y: number }[]): string {
 
 export interface DmaRow { buffer: string; producer: string; consumer: string; ports: string; size: string; format: string; bit: string; compression: string; mb: number | null }
 
-const PLANE: Record<string, number> = { Y: 1, BAYER: 1, RAW_BAYER: 1, YUV420: 1.5, YUV422: 2, YUV444: 3, RGB: 3, RGBA8888: 4, RGBA1010102: 4 }
+const PLANE: Record<string, number> = { Y: 1, BAYER: 1, RAW_BAYER: 1, YUV420: 1.5, NV12: 1.5, NV21: 1.5, YUV422: 2, YUV444: 3, RGB: 3, RGB888: 3, P010: 1.5, P210: 2 }
 
 export function frameMb(mem: Dict | null | undefined): number | null {
   if (!mem) return null
-  if (typeof mem.size_bytes === 'number') return +(mem.size_bytes / 1048576).toFixed(2)
+  if (typeof mem.size_bytes === 'number' && Number.isFinite(mem.size_bytes) && mem.size_bytes >= 0) return mem.size_bytes / 1e6
+  // Compression/padding cannot be recovered from dimensions alone.
+  if (mem.compression && !['COMP_OFF', 'NONE', 'OFF'].includes(String(mem.compression).toUpperCase())) return null
+  if (mem.stride_bytes || mem.alignment) return null
   const w = Number(mem.width), h = Number(mem.height)
   const fmt = String(mem.format ?? '').toUpperCase()
   const f = PLANE[fmt]
-  if (!w || !h || !f) return null
-  const bytes = fmt.startsWith('RGBA') ? 4 * w * h : w * h * f * (Number(mem.bitdepth ?? 8) > 8 ? 2 : 1)
-  return +(bytes / 1048576).toFixed(2)
+  const raw = /^RAW(8|10|12|14|16)$/.exec(fmt)
+  const depth = Number(mem.bitdepth ?? 8)
+  const bpp = /^RGBA(8888|1010102)$/.test(fmt) ? 4 : raw ? Number(raw[1]) / 8 : f * (fmt === 'P010' || fmt === 'P210' ? 2 : depth / 8)
+  if (![w, h, bpp].every((n) => Number.isFinite(n) && n > 0)) return null
+  // Keep precision until display/aggregation; labels use decimal MB, not MiB.
+  return w * h * bpp / 1e6
 }
 
 export function dmaRows(view: ViewResponse): DmaRow[] {

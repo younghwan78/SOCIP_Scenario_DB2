@@ -57,8 +57,12 @@ describe('layout', () => {
 
 describe('dma table', () => {
   it('computes frame size estimates', () => {
-    expect(frameMb({ width: 1920, height: 1080, format: 'YUV420', bitdepth: 8 })).toBe(2.97)
-    expect(frameMb({ width: 2040, height: 1148, format: 'YUV444', bitdepth: 12 })).toBe(13.4)
+    expect(frameMb({ width: 1920, height: 1080, format: 'YUV420', bitdepth: 8 })).toBeCloseTo(3.1104)
+    expect(frameMb({ width: 2040, height: 1148, format: 'YUV444', bitdepth: 12 })).toBeCloseTo(10.53864)
+    expect(frameMb({ width: 4000, height: 3000, format: 'RAW10', bitdepth: 10 })).toBe(15)
+    expect(frameMb({ width: 1920, height: 1080, format: 'P010', bitdepth: 10 })).toBeCloseTo(6.2208)
+    expect(frameMb({ width: 1920, height: 1080, format: 'YUV420', compression: 'SBWC' })).toBeNull()
+    expect(frameMb({ size_bytes: 1000000, compression: 'SBWC' })).toBe(1)
     expect(frameMb({ format: 'BITSTREAM' })).toBeNull()
     const rows = dmaRows(v)
     expect(rows.find((r) => r.buffer === 'PYRAMID_L1')?.ports).toContain('MLSC_W_GLPG1_Y → MTNR1_RDMA_CUR_L1_Y')

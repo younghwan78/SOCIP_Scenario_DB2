@@ -203,7 +203,7 @@ export function buildModel(view: ViewResponse, scn?: ScenarioDef | null, variant
     const node = def.history?.node_id ?? def.dma?.node_id
     if (!node || !active.has(node)) continue
     const sz = bufSize(def, scn, variant)
-    const mem = sz ? { width: sz.w, height: sz.h, format: def.format, bitdepth: def.bitdepth } : null
+    const mem = sz ? { width: sz.w, height: sz.h, format: def.format, bitdepth: def.bitdepth, compression: def.compression } : null
     const mb = frameMb(mem)
     const cfg = cfgs[node] as Dict | undefined
     let enabled = true

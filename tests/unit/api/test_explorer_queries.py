@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+import pytest
+from fastapi import HTTPException
 
 from scenario_db.api.routers.explorer import (
     _count_matching_ips,
@@ -276,7 +278,7 @@ class _VariantMatrixSession:
             ),
         ]
 
-    def query(self, model):
+    def query(self, model, *columns):
         # Column queries (db.query(Model.col)) resolve to the owning class.
         model = getattr(model, "class_", model)
         table = getattr(model, "__tablename__", "")
@@ -345,3 +347,12 @@ def test_variant_matrix_resolves_derived_variant_conditions_against_parent():
     assert "exploration_clock_mhz" in response.axis_keys
     base = next(item for item in response.items if item.variant_id == "v-fps")
     assert base.derived_from_variant is None and base.own_condition_keys == []
+
+
+def test_variant_matrix_does_not_present_broken_inheritance_as_effective_conditions():
+    session = _VariantMatrixSession()
+    session.variants[0].derived_from_variant = "missing-parent"
+    with pytest.raises(HTTPException) as error:
+        variant_matrix(soc_ref=None, board_type=None, project_ref=None, category=None,
+                       domain=None, scenario_id=None, severity=None, limit=10, offset=0, db=session)
+    assert error.value.status_code == 422

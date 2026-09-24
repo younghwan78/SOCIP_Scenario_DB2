@@ -49,20 +49,21 @@ interface Item { id: string; section: string; label: ReactNode; sortLabel: strin
 const num = (s: string | null): number | null => { if (s === null) return null; const m = s.replace(/,/g, '').match(/-?\d+(\.\d+)?/); return m ? Number(m[0]) : null }
 
 export function ComparePage({ ctx }: { ctx: Ctx }) {
-  const ids = (ctx.params.variants ?? ctx.variant).split(',').filter(Boolean)
+  const ids = [...new Set((ctx.params.variants ?? ctx.variant).split(',').filter(Boolean))]
   const scenarioItem = ctx.catalog.find((c) => c.scenario_id === ctx.scenario)
   const variantsQ = useAsync(() => api.variants(ctx.scenario), [ctx.scenario])
   const scnQ = useAsync(() => api.scenario(ctx.scenario).catch(() => null), [ctx.scenario])
   const key = ids.join(',')
-  const viewsQ = useAsync(() => Promise.all(ids.map((v) => api.view(ctx.scenario, v, 1).catch(() => undefined))), [ctx.scenario, key])
-  const detailsQ = useAsync(() => Promise.all(ids.map((v) => api.variant(ctx.scenario, v).catch(() => null))), [ctx.scenario, key])
-  const evQ = useAsync(() => Promise.all(ids.map((v) => api.evidenceList(ctx.scenario, v).then((r) => r.items).catch(() => [] as Evidence[]))), [ctx.scenario, key])
+  const viewsQ = useAsync(() => Promise.all(ids.map((v) => api.view(ctx.scenario, v, 1))), [ctx.scenario, key])
+  const detailsQ = useAsync(() => Promise.all(ids.map((v) => api.variant(ctx.scenario, v))), [ctx.scenario, key])
+  const evQ = useAsync(() => Promise.all(ids.map((v) => api.evidenceList(ctx.scenario, v, ctx.project).then((r) => r.items))), [ctx.scenario, key, ctx.project])
   const [onlyDiff, setOnlyDiff] = useState(true)
   const [orient, setOrient] = usePref<'items' | 'variants'>('compare.orient', 'items')
   const [show, setShow] = usePref<'both' | 'table' | 'plot'>('compare.show', 'both')
 
   const rows = useMemo(() => toRows(scenarioItem, variantsQ.data?.items ?? []), [scenarioItem, variantsQ.data])
-  const selected = ids.map((id) => rows.find((r) => r.variant_id === id)).filter((r): r is VariantRow => !!r)
+  const selected = ids.map((id): VariantRow => rows.find((r) => r.variant_id === id) ?? { project_id: ctx.project, scenario_id: ctx.scenario, variant_id: id, design_conditions: {} })
+  const missing = variantsQ.data ? ids.filter((id) => !rows.some((r) => r.variant_id === id)) : []
   const labels = shortLabels(ids)
   const { varying, constant } = useMemo(() => varyingKeys(selected), [selected])
   const condKeys = onlyDiff ? varying : [...varying, ...Object.keys(constant)]
@@ -206,6 +207,8 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
       </div>} main={<>
       {ids.length < 2 && <div className="empty panel fit">비교하려면 variant를 2개 이상 추가하세요. DB Explorer에서 행을 선택하거나 Ctrl K → Shift+Enter로 추가할 수 있습니다.</div>}
       {variantsQ.error && <div className="err">{variantsQ.error}</div>}
+      {missing.length > 0 && <div className="err">이 scenario에 없는 variant: {missing.join(', ')}</div>}
+      {[viewsQ.error, detailsQ.error, evQ.error].filter(Boolean).map((error, i) => <div className="err" key={i}>{error}</div>)}
       {show !== 'plot' && table}
       {show !== 'table' && plots}
       </>}
@@ -213,6 +216,7 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
         <div className="panel-head"><h2>예측 vs 실측 · {ids[pmTarget.i]}</h2>
           <span className={`badge src-${evidenceSource(pmTarget.meas!)}`}>{evidenceSource(pmTarget.meas!)}</span>
           <span className="muted" style={{ fontSize: 12 }}>{pmTarget.sim!.id} ↔ {pmTarget.meas!.id}</span></div>
+        {pmQ.error && <div className="err">{pmQ.error}</div>}
         {pmQ.data && <div className="table-scroll">
           <table className="grid"><thead><tr><th>metric</th><th>scope</th><th>unit</th><th style={{ textAlign: 'right' }}>예측</th><th style={{ textAlign: 'right' }}>실측</th><th style={{ textAlign: 'right' }}>Δ%</th><th>status</th></tr></thead>
             <tbody>{(pmQ.data.rows as Dict[]).filter((r) => String(r.metric_id).startsWith('power.domain') || String(r.metric_id).includes('total') || r.status === 'MATCHED').slice(0, 40).map((r, i) => (

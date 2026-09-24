@@ -95,7 +95,7 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
         <span className="muted" style={{ fontSize: 13, marginRight: 4 }}>Scenario type <span className="faint" style={{ fontSize: 11 }}>(scenario 수)</span></span>
         <button className={`tpill ${type === 'all' ? 'on' : ''}`} onClick={() => ctx.navigate(undefined, { type: 'all' })} title={`${ctx.catalog.length} scenarios · ${totalVariants} variants`}><Icon name="all" />전체 <span className="cnt">({ctx.catalog.length})</span></button>
         {CATEGORY_ORDER.filter((c) => byType.get(c)).map((c) => (
-          <button key={c} className={`tpill ${type === c ? 'on' : ''}`} onClick={() => ctx.navigate(undefined, { type: c, scenario: undefined })} title={`${byType.get(c)} scenarios · ${variantsByType.get(c) ?? 0} variants`}>
+          <button key={c} className={`tpill ${type === c ? 'on' : ''}`} onClick={() => ctx.navigate(undefined, { type: c, scenario: ctx.catalog.find((s) => primaryCategory(s.category) === c)?.scenario_id, variant: undefined })} title={`${byType.get(c)} scenarios · ${variantsByType.get(c) ?? 0} variants`}>
             <Icon name={c} />{CATEGORY_LABEL[c]} <span className="cnt">({byType.get(c)})</span></button>
         ))}
       </div>} main={

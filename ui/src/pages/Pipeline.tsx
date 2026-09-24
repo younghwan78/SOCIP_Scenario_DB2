@@ -40,8 +40,8 @@ function rankTrace(e: Evidence): number {
 
 export function PipelinePage({ ctx }: { ctx: Ctx }) {
   const { scenario, variant } = ctx
-  const viewQ = useAsync(() => (variant ? api.view(scenario, variant, 1) : Promise.reject(new Error('variant를 선택하세요 (Ctrl K)'))), [scenario, variant])
-  const evidenceQ = useAsync(() => (variant ? api.evidenceList(scenario, variant) : Promise.resolve({ items: [], total: 0 })), [scenario, variant])
+  const viewQ = useAsync(() => api.view(scenario, variant, 1), [scenario, variant])
+  const evidenceQ = useAsync(() => (variant ? api.evidenceList(scenario, variant, ctx.project) : Promise.resolve({ items: [], total: 0 })), [scenario, variant, ctx.project])
   const scnQ = useAsync(() => api.scenario(scenario).catch(() => null), [scenario])
   const varQ = useAsync(() => (variant ? api.variant(scenario, variant).catch(() => null) : Promise.resolve(null)), [scenario, variant])
   const [lens, setLensState] = useState<Lens>(legacyLens(ctx.params.lens))
@@ -171,7 +171,7 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
     { key: 'fmt', label: 'Format', width: 80, sort: (b) => b.format || null, render: (b) => b.format || '—' },
     { key: 'bit', label: 'Bit', width: 48, sort: (b) => Number(b.bit) || null, render: (b) => b.bit || '—' },
     { key: 'comp', label: 'Comp', width: 88, sort: (b) => b.comp || null, render: (b) => b.comp || '—' },
-    { key: 'mb', label: 'MB/f', width: 66, align: 'right', sort: (b) => b.mbFrame, render: (b) => <span className="mono">{b.mbFrame ?? '—'}</span> },
+    { key: 'mb', label: 'MB/f', width: 66, align: 'right', sort: (b) => b.mbFrame, render: (b) => <span className="mono">{b.mbFrame?.toFixed(2) ?? '—'}</span> },
     { key: 'w', label: 'W MB/s', width: 74, align: 'right', sort: (b) => b.wMBs, render: (b) => <span className="mono">{b.wMBs ?? '—'}</span> },
     { key: 'r', label: 'R MB/s', width: 74, align: 'right', sort: (b) => b.rMBs, render: (b) => <span className="mono">{b.rMBs ?? '—'}</span> },
     { key: 'note', label: 'Note', width: 280, title: (b) => b.note, render: (b) => <span className="faint">{b.enabled ? '' : '[off] '}{b.note}</span> },
@@ -256,6 +256,7 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
               <label className="muted" style={{ fontSize: 12, display: 'flex', gap: 5, whiteSpace: 'nowrap' }}><input type="checkbox" checked={showFlows} onChange={(e) => setShowFlows(e.target.checked)} />Flow</label></>}
           </div>
           <div className="pane-body">
+            {evidenceQ.error && <div className="err">{evidenceQ.error}</div>}
             {evidenceQ.loading && <div className="empty">Evidence 불러오는 중…</div>}
             {!evidenceQ.loading && !timeline && <div className="empty">이 variant에는 timeline event가 있는 evidence가 없습니다. Camera Profiling에서 trace를 import하거나 simulation을 저장하세요.</div>}
             {timeline && tview === 'trace' && <TimelineView timeline={timeline} selectedSlice={slice?.id ?? null} colorBy={colorBy}
@@ -291,7 +292,7 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
               <div className="kv"><span>WDMA</span><span className="mono">{selectedBuf.wPorts.join(', ') || '—'}</span></div>
               <div className="kv"><span>RDMA</span><span className="mono">{selectedBuf.rPorts.join(', ') || '—'}</span></div>
               <div className="kv"><span>Size / fmt</span><span className="mono">{memoryText({ width: selectedBuf.width, height: selectedBuf.height, format: selectedBuf.format, bitdepth: selectedBuf.bit, compression: selectedBuf.comp }) || '미정'}</span></div>
-              <div className="kv"><span>MB/f · W / R MB/s</span><span className="mono">{selectedBuf.mbFrame ?? '—'} · {selectedBuf.wMBs ?? '—'} / {selectedBuf.rMBs ?? '—'}</span></div>
+              <div className="kv"><span>MB/f · W / R MB/s</span><span className="mono">{selectedBuf.mbFrame?.toFixed(2) ?? '—'} · {selectedBuf.wMBs ?? '—'} / {selectedBuf.rMBs ?? '—'}</span></div>
               {selectedBuf.note && <div className="faint" style={{ fontSize: 12, marginTop: 6 }}>{selectedBuf.note}</div>}
             </> : selectedIp ? <>
               <div className="kv"><span>Lane</span><span>{LANE_LABEL[selectedIp.lane]}</span></div>

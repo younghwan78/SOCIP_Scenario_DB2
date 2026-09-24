@@ -65,7 +65,7 @@ export function BufferTooltip({ b }: { b: BufferRow }): ReactNode {
         <span>Producer</span><span>{b.producer} <span className="mono faint">{b.wPorts.join(', ')}</span></span>
         <span>Consumer</span><span>{b.consumers.join(', ') || '—'} <span className="mono faint">{b.rPorts.join(', ')}</span></span>
         <span>Size / fmt</span><span className="mono">{memoryText({ width: b.width, height: b.height, format: b.format, bitdepth: b.bit, compression: b.comp }) || '미정'}</span>
-        <span>MB / frame</span><span className="mono">{b.mbFrame ?? '—'}</span>
+        <span>MB / frame</span><span className="mono">{b.mbFrame?.toFixed(2) ?? '—'}</span>
         <span>W / R MB/s</span><span className="mono">{b.wMBs ?? '—'} / {b.rMBs ?? '—'}{b.fps ? ` @${b.fps}fps` : ''}</span>
       </div>
       {b.note && <div className="tt-sec faint" style={{ fontSize: 11 }}>{b.note}</div>}

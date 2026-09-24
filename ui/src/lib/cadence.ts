@@ -24,17 +24,31 @@ export function boxStats(values: number[]): BoxStats | null {
 
 const sensorLike = (s: Slice) => (s.nodeId ?? '').startsWith('sensor') || s.group === 'SENSOR'
 
-/** Frame origin = sensor readout start of the frame (fallback: earliest slice of the frame). */
+/** Only observed sensor starts qualify as sensor origins. */
 export function frameOrigins(tl: Timeline): Map<number, number> {
   const out = new Map<number, number>()
-  const fallback = new Map<number, number>()
   for (const s of tl.slices) {
     if (s.frame === null) continue
-    fallback.set(s.frame, Math.min(fallback.get(s.frame) ?? Infinity, s.start))
     if (sensorLike(s)) out.set(s.frame, Math.min(out.get(s.frame) ?? Infinity, s.start))
   }
-  for (const [f, t] of fallback) if (!out.has(f)) out.set(f, t)
   return out
+}
+
+/** Follow explicit predecessors; matching frame numbers alone are not causality. */
+function sensorStart(tl: Timeline, pid: string, frame: number, end: number): number | undefined {
+  const byId = new Map(tl.slices.map((s) => [s.id, s]))
+  const seen = new Set<string>()
+  const queue = tl.slices.filter((s) => s.frame === frame && s.nodeId && pipelineIdOf(s.nodeId.replace(/^stage:/, '')) === pid && s.end === end).map((s) => s.id)
+  const starts: number[] = []
+  while (queue.length) {
+    const id = queue.pop()!
+    if (seen.has(id)) continue
+    seen.add(id)
+    const s = byId.get(id)
+    if (s && sensorLike(s) && s.frame === frame) starts.push(s.start)
+    for (const flow of tl.flows) if (flow.to === id) queue.push(flow.from)
+  }
+  return starts.length ? Math.min(...starts) : undefined
 }
 
 export interface StageTiming { pid: string; offset: number; dur: number; durMin: number; durMax: number; n: number }
@@ -77,7 +91,7 @@ export function streamsOf(tl: Timeline, view?: ViewResponse): Stream[] {
   const lastEnd = (pid: string) => {
     const m = new Map<number, number>()
     for (const s of byPid.get(pid) ?? []) m.set(s.frame!, Math.max(m.get(s.frame!) ?? -Infinity, s.end))
-    return [...m.entries()].sort((a, b) => a[0] - b[0]).map(([frame, t]) => ({ frame, t }))
+    return [...m.entries()].map(([frame, t]) => ({ frame, t })).sort((a, b) => a.t - b.t)
   }
   const firstPid = (re: RegExp) => [...byPid.keys()].find((p) => re.test(p)) ?? null
   const out: Stream[] = []
@@ -111,11 +125,13 @@ export interface CadenceResult {
 /** Interval analysis vs target period (1000/fps). Batch = bimodal (bursts of short intervals + long gaps). */
 export function analyse(tl: Timeline, view: ViewResponse | undefined, fps: number | null): { period: number | null; results: CadenceResult[]; inFlight: number } {
   const period = fps ? 1000 / fps : null
-  const origin = frameOrigins(tl)
   const results = streamsOf(tl, view).map((stream) => {
     const t = stream.times
     const intervals = t.slice(1).map((x, i) => x.t - t[i].t)
-    const latencies = stream.kind === 'input' ? [] : t.map((x) => x.t - (origin.get(x.frame) ?? x.t)).filter((x) => x > 0)
+    const latencies = stream.kind === 'input' ? [] : t.flatMap((x) => {
+      const start = sensorStart(tl, stream.pid, x.frame, x.t)
+      return start === undefined || x.t < start ? [] : [x.t - start]
+    })
     const box = boxStats(intervals)
     const span = t.length > 1 ? t[t.length - 1].t - t[0].t : 0
     const fpsAchieved = span > 0 ? ((t.length - 1) / span) * 1000 : null

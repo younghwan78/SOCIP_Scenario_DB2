@@ -29,6 +29,12 @@ def test_adopt_query_is_tracked_per_page():
     assert adopt_query_context(query, state, page="evidence")
 
 
+def test_partial_scenario_link_clears_previous_variant():
+    state = {"viewer_project_id": "p", "viewer_scenario_id": "s1", "viewer_variant_id": "old"}
+    adopt_query_context({"scenario_id": "s2"}, state, page="viewer")
+    assert current_context(state) == {"soc_id": "", "project_id": "p", "scenario_id": "s2", "variant_id": ""}
+
+
 def test_set_context_clears_downstream_on_upstream_change():
     state = {"viewer_scenario_id": "s1", "viewer_variant_id": "v1"}
     set_context(state, scenario_id="s2")

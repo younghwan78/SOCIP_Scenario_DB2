@@ -1,21 +1,26 @@
 # ScenarioDB UI (React)
 
-React 18 + Vite + TypeScript front-end for the Scenario DB FastAPI (`/api/v1`). Replaces the Streamlit explorer/viewer/compare pages; Streamlit remains for Evidence and Import.
+React 18 + Vite + TypeScript front-end for the Scenario DB FastAPI (`/api/v1`). Provides Explorer, Pipeline and Compare alongside the existing Streamlit pages. Streamlit remains available for Evidence and Import.
 
 ## Run
+
+Use Node.js 24 (matching CI) and a configured PostgreSQL API.
 
 ```bash
 # 1) API (repo root)
 uv run uvicorn scenario_db.api.app:app --host 127.0.0.1 --port 18000
 # 2) UI
 cd ui
-npm install
+npm ci
 npm run dev          # http://localhost:3000  (/api → http://127.0.0.1:18000)
 ```
 
 - API target override: `SCENARIODB_API_TARGET=http://host:port npm run dev`
 - Static build: `npm run build` → `dist/` (set `VITE_SCENARIODB_API_BASE` if the API is not served under `/api/v1` on the same origin)
-- Checks: `npm run typecheck`, `npm test` (vitest)
+- Checks: `npm run typecheck`, `npm test` (vitest), `npm run build`, `npm audit`
+- CI checks this application in `react-ui`; `web` checks the existing Workbench.
+- DMA sizes use decimal MB and the declared sample bit depth (P010/P210 use 16-bit containers). Compressed/aligned buffers without an explicit byte size are excluded from the traffic estimate. This is a partial model estimate, not measured DRAM traffic.
+- Timing preserves the recorded durations and frame IDs. Sensor-to-output latency requires an explicit predecessor path to a sensor; unlinked frame numbers do not establish latency.
 
 ## Pages (hash routes, shareable)
 

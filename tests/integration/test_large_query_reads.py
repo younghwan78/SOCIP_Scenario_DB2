@@ -173,3 +173,18 @@ def test_canonical_graph_loads_only_selected_variant_and_ancestors(catalog_db, e
     catalog_db.flush()
     with pytest.raises(ValueError, match="Circular variant inheritance"):
         resolve_variant(catalog_db, "perf-000", "child-only")
+
+
+def test_matrix_axes_include_overrides_and_filtered_ancestors_on_every_page(catalog_db, catalog_client):
+    child = catalog_db.query(ScenarioVariant).filter_by(scenario_id="perf-000", id="child-only").one()
+    child.severity = "medium"
+    child.design_conditions_override = {"clock_mhz": 400}
+    catalog_db.add(ScenarioVariant(scenario_id="perf-000", id="aaa-first", severity="medium", design_conditions={"codec": "H265"}))
+    catalog_db.flush()
+    params = {"project_ref": "perf-project", "scenario_id": "perf-000", "severity": "medium", "limit": 1}
+    pages = [catalog_client.get("/api/v1/explorer/variant-matrix", params={**params, "offset": i}) for i in range(2)]
+    assert all(page.status_code == 200 for page in pages)
+    first, second = [page.json() for page in pages]
+    assert first["axis_keys"] == second["axis_keys"]
+    assert set(first["axis_keys"]) == {"fps", "clock_mhz", "codec"}
+    assert second["items"][0]["design_conditions"] == {"fps": 60, "clock_mhz": 400}

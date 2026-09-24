@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { api, type CatalogItem, type ResolvedVariant, type VariantRow } from '../lib/api'
 import { CAMERA_LABEL, KPI_SET, MODE_LABEL, cameraOf, kpiLabel, recordingMode, stabOf, summaryText, type Camera, type Mode } from '../lib/conditions'
 import { Icon } from './Icons'
+import { useAsync } from '../lib/route'
 
 const PIN_KEY = 'sdb.pinned'
 const RECENT_KEY = 'sdb.recent'
@@ -47,7 +48,6 @@ export function matches(row: VariantRow, f: Facet, query: string): boolean {
 
 export function Picker({ open, onClose, catalog, scenarioId, onPick, onAddCompare }: Props) {
   const [scenario, setScenario] = useState(scenarioId ?? 'uc-camera-recording')
-  const [variants, setVariants] = useState<ResolvedVariant[]>([])
   const [query, setQuery] = useState('')
   const [facet, setFacet] = useState<Facet>(emptyFacet)
   const [showDerived, setShowDerived] = useState(false)
@@ -56,15 +56,10 @@ export function Picker({ open, onClose, catalog, scenarioId, onPick, onAddCompar
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { if (open) { setScenario(scenarioId ?? scenario); setTimeout(() => inputRef.current?.focus(), 0) } }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (!open || !scenario) return
-    let alive = true
-    api.variants(scenario).then((r) => { if (alive) setVariants(r.items) }).catch(() => { if (alive) setVariants([]) })
-    return () => { alive = false }
-  }, [open, scenario])
+  const variantsQ = useAsync(() => open && scenario ? api.variants(scenario) : Promise.resolve({ items: [], total: 0 }), [open, scenario])
 
   const scenarioItem = catalog.find((c) => c.scenario_id === scenario)
-  const rows = useMemo(() => toRows(scenarioItem, variants), [scenarioItem, variants])
+  const rows = useMemo(() => toRows(scenarioItem, variantsQ.data?.items ?? []), [scenarioItem, variantsQ.data])
   const derivedCount = rows.filter((r) => r.derived_from_variant).length
   const results = useMemo(() => rows.filter((r) => (showDerived || !r.derived_from_variant) && matches(r, facet, query))
     .sort((a, b) => a.variant_id.localeCompare(b.variant_id)), [rows, facet, query, showDerived])
@@ -151,6 +146,8 @@ export function Picker({ open, onClose, catalog, scenarioId, onPick, onAddCompar
           </div>
         </div>
         <div style={{ overflowY: 'auto', flexGrow: 1 }}>
+          {variantsQ.loading && <div className="empty">불러오는 중…</div>}
+          {variantsQ.error && <div className="err">{variantsQ.error}</div>}
           {quick.length > 0 && <div className="section-label">PINNED · 최근</div>}
           {quick.map((r, i) => <Row key={`q-${r.variant_id}`} r={r} active={i === active} pinned={pins.includes(`${scenario}::${r.variant_id}`)} onPin={pinToggle} onPick={pick} />)}
           <div className="section-label">

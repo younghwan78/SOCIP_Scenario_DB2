@@ -28,7 +28,7 @@ function trackOf(e: TimelineEvent): { group: string; name: string } {
   const parts = String(e.resource_name ?? '').split('/').map((s) => s.trim()).filter(Boolean)
   if (parts.length >= 3) return { group: parts[1].toUpperCase(), name: parts.slice(2).join(' / ') }
   const group = groupForNode(e.node_id, e.task_type, e.resource_id)
-  const raw = e.hw_name ?? e.resource_id ?? e.node_id ?? e.task_id
+  const raw = e.node_id ?? e.hw_name ?? e.resource_id ?? e.logical_task_id ?? e.task_id
   return { group, name: String(raw).replace(/^stage:/, '').toUpperCase() }
 }
 
@@ -39,13 +39,15 @@ function sliceLabel(e: TimelineEvent): string {
 
 export function buildTimeline(events: TimelineEvent[], opts: { maxFrames?: number } = {}): Timeline {
   const maxFrames = opts.maxFrames ?? 3
-  const kept = events.filter((e) => Number.isFinite(e.start_ms) && Number.isFinite(e.end_ms) && (e.frame_index == null || e.frame_index < maxFrames))
+  const valid = events.filter((e) => Number.isFinite(e.start_ms) && Number.isFinite(e.end_ms) && e.end_ms >= e.start_ms)
+  const framesToKeep = new Set([...new Set(valid.flatMap((e) => e.frame_index == null ? [] : [e.frame_index]))].sort((a, b) => a - b).slice(0, maxFrames))
+  const kept = valid.filter((e) => e.frame_index == null || framesToKeep.has(e.frame_index))
   const trackMap = new Map<string, Track>()
   const slices: Slice[] = kept.map((e) => {
     const t = trackOf(e)
     const id = `${t.group}/${t.name}`
     if (!trackMap.has(id)) trackMap.set(id, { id, group: t.group, name: t.name })
-    return { id: e.task_id, track: id, group: t.group, start: e.start_ms, end: Math.max(e.end_ms, e.start_ms + 0.05),
+    return { id: e.task_id, track: id, group: t.group, start: e.start_ms, end: e.end_ms,
       label: sliceLabel(e), frame: e.frame_index ?? null, nodeId: e.node_id ?? null, kind: String(e.task_type ?? '') }
   })
   const ids = new Set(slices.map((s) => s.id))
@@ -59,8 +61,8 @@ export function buildTimeline(events: TimelineEvent[], opts: { maxFrames?: numbe
   // Tracks keep first-seen order inside a group (pipeline order in traces).
   const order = (g: string) => { const i = GROUP_ORDER.indexOf(g); return i < 0 ? 50 : i }
   const groups = [...groupsMap.entries()].sort((a, b) => order(a[0]) - order(b[0])).map(([name, tracks]) => ({ name, tracks }))
-  const start = Math.min(0, ...slices.map((s) => s.start))
-  const end = Math.max(1, ...slices.map((s) => s.end))
+  const start = slices.length ? Math.min(...slices.map((s) => s.start)) : 0
+  const end = Math.max(start + 1, ...slices.map((s) => s.end))
   const frames = [...new Set(slices.map((s) => s.frame).filter((f): f is number => f !== null))].sort((a, b) => a - b)
   return { groups, slices, flows, start, end, frames }
 }

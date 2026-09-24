@@ -119,6 +119,17 @@ def test_compare_page_defaults_b_to_nearest_variant(monkeypatch):
     assert app.session_state["compare_b"] in {"uhd30-vdis", "fhd30-sdr"}
 
 
+def test_compare_swap_updates_widgets_without_streamlit_exception(monkeypatch):
+    _install(monkeypatch)
+    app = AppTest.from_file(str(PAGE), default_timeout=20)
+    app.query_params.update({"scenario_id": "uc-rec", "variant_id": "uhd30-vdis", "variant_b": "uhd30-sdr"})
+    app.run()
+    next(button for button in app.button if button.label == "A ↔ B 교체").click().run()
+    assert not app.exception, app.exception
+    assert app.session_state["compare_a"] == "uhd30-sdr"
+    assert app.session_state["compare_b"] == "uhd30-vdis"
+
+
 def test_rails_without_domain_sorted_by_power():
     from dashboard.components.compare_views import rails_without_domain
 

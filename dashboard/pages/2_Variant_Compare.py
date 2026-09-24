@@ -129,6 +129,13 @@ def _as_items(variants: list[dict[str, Any]]) -> list[dict[str, Any]]:
             for item in variants if item.get("id")]
 
 
+def _swap_variants() -> None:
+    # Callbacks run before widget construction, when these keys may be changed.
+    a, b = st.session_state["compare_a"], st.session_state["compare_b"]
+    st.session_state["compare_a"], st.session_state["compare_b"] = b, a
+    st.session_state["compare_b_pref"] = a
+
+
 def _styled(df: pd.DataFrame):
     if df.empty or "status" not in df:
         return df
@@ -249,10 +256,7 @@ with st.sidebar:
         from dashboard.components.variant_compare import condition_distance
         default_b = min(others, key=lambda vid: (condition_distance(by_id[vid], by_id.get(variant_a, {})), vid)) if others else ""
     variant_b = _pick("Variant B", others, default_b, "compare_b")
-    if st.button("A ↔ B 교체", use_container_width=True, disabled=not (variant_a and variant_b)):
-        st.session_state["compare_a"], st.session_state["compare_b"] = variant_b, variant_a
-        st.session_state["compare_b_pref"] = variant_a
-        st.rerun()
+    st.button("A ↔ B 교체", use_container_width=True, disabled=not (variant_a and variant_b), on_click=_swap_variants)
     st.divider()
     mode = st.radio("비교 모드", ["A/B", "다중 (N개)"], key="compare_mode", horizontal=True,
                     help="A/B는 구조·예측/실측까지 상세 비교, 다중은 최대 8개 variant의 조건·DMA·KPI를 한 표로 비교합니다.")

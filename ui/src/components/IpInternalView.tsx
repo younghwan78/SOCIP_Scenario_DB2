@@ -31,7 +31,7 @@ function PortBox({ p, x, y, inSize }: { p: Port; x: number; y: number; inSize?: 
       <text x={x + 8} y={y + 15} fontSize={11} fontWeight={700} fontFamily="var(--mono)" fill="#1F2430">{p.port.length > 30 ? p.port.slice(0, 29) + '…' : p.port}</text>
       <text x={x + PW - 8} y={y + 15} fontSize={9} textAnchor="end" fill={st.stroke} fontWeight={700}>{st.label}{r ? ` ${r}` : ''}</text>
       <text x={x + 8} y={y + 29} fontSize={9.5} fontFamily="var(--mono)" fill="#3B3F4A">{(l2 || p.peer || '').slice(0, 42)}</text>
-      <text x={x + 8} y={y + 40} fontSize={9} fill="var(--muted)">{p.dir === 'in' ? '← ' : '→ '}{p.peer ?? ''}{p.mb ? ` · ${p.mb} MB/f` : ''}{p.enabled ? '' : ' · disabled'}</text>
+      <text x={x + 8} y={y + 40} fontSize={9} fill="var(--muted)">{p.dir === 'in' ? '← ' : '→ '}{p.peer ?? ''}{p.mb ? ` · ${p.mb.toFixed(2)} MB/f` : ''}{p.enabled ? '' : ' · disabled'}</text>
       <title>{[p.port, p.buffer, l2, p.peer, p.note].filter(Boolean).join('\n')}</title>
     </g>
   )
@@ -135,7 +135,7 @@ const portCols: Column<Port>[] = [
   { key: 'fmt', label: 'Format', width: 86, sort: (p) => p.format ?? null, render: (p) => p.format || '—' },
   { key: 'bit', label: 'Bit', width: 50, sort: (p) => Number(p.bit) || null, render: (p) => p.bit || '—' },
   { key: 'comp', label: 'Comp', width: 90, sort: (p) => p.comp ?? null, render: (p) => p.comp || '—' },
-  { key: 'mb', label: 'MB/f', width: 70, align: 'right', sort: (p) => p.mb ?? null, render: (p) => <span className="mono">{p.mb ?? '—'}</span> },
+  { key: 'mb', label: 'MB/f', width: 70, align: 'right', sort: (p) => p.mb ?? null, render: (p) => <span className="mono">{p.mb?.toFixed(2) ?? '—'}</span> },
   { key: 'note', label: 'Note', width: 260, title: (p) => p.note, render: (p) => <span className="faint">{p.note ?? ''}</span> },
 ]
 

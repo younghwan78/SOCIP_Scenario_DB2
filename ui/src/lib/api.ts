@@ -154,37 +154,50 @@ function qs(params: Record<string, string | number | undefined | null>): string 
   return '?' + entries.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`).join('&')
 }
 
-const cache = new Map<string, Promise<unknown>>()
+const cache = new Map<string, { promise: Promise<unknown>; expires: number }>()
 
 export async function getJson<T>(path: string, params: Record<string, string | number | undefined | null> = {}, useCache = true): Promise<T> {
   const url = `${API_BASE}${path}${qs(params)}`
-  if (useCache && cache.has(url)) return cache.get(url) as Promise<T>
+  const cached = cache.get(url)
+  if (useCache && cached && cached.expires > Date.now()) return cached.promise as Promise<T>
   const promise = fetch(url).then(async (res) => {
     if (!res.ok) throw new ApiError(`${res.status} ${res.statusText} — ${path}`, res.status)
     return res.json() as Promise<T>
   })
   if (useCache) {
-    cache.set(url, promise)
-    promise.catch(() => cache.delete(url))
+    if (cache.size >= 100) cache.delete(cache.keys().next().value!)
+    cache.set(url, { promise, expires: Date.now() + 60000 })
+    promise.catch(() => { if (cache.get(url)?.promise === promise) cache.delete(url) })
   }
   return promise
 }
 
 const enc = encodeURIComponent
 
+async function allPages<T, P extends Paged<T> = Paged<T>>(path: string, params: Record<string, string | number | undefined> = {}, limit = 500): Promise<P> {
+  const first = await getJson<P>(path, { ...params, limit, offset: 0 })
+  const items = [...first.items]
+  while (items.length < first.total) {
+    const page = await getJson<P>(path, { ...params, limit, offset: items.length })
+    if (!page.items.length) throw new ApiError(`목록이 변경되었습니다. 새로고침하세요 — ${path}`)
+    items.push(...page.items)
+  }
+  return { ...first, items }
+}
+
 export const api = {
   health: () => getJson<Dict>('/explorer/summary', {}, false),
   summary: (projectRef?: string) => getJson<Dict>('/explorer/summary', { project_ref: projectRef }),
-  catalog: (projectRef?: string) => getJson<{ items: CatalogItem[]; total: number }>('/explorer/scenario-catalog', { project_ref: projectRef, limit: 1000 }),
-  matrix: (projectRef?: string) => getJson<{ items: VariantRow[]; total: number; axis_keys: string[] }>('/explorer/variant-matrix', { project_ref: projectRef, limit: 5000 }),
+  catalog: (projectRef?: string) => allPages<CatalogItem>('/explorer/scenario-catalog', { project_ref: projectRef }),
+  matrix: (projectRef?: string) => allPages<VariantRow, Paged<VariantRow> & { axis_keys: string[] }>('/explorer/variant-matrix', { project_ref: projectRef }, 1000),
   projects: () => getJson<Paged<{ id: string; metadata_?: Dict }>>('/projects', { limit: 500 }),
   socs: () => getJson<Paged<{ id: string }>>('/soc-platforms', { limit: 500 }),
-  variants: (scenarioId: string) => getJson<Paged<ResolvedVariant>>(`/scenarios/${enc(scenarioId)}/variants`, { limit: 1000 }),
-  view: (scenarioId: string, variantId: string, level = 1) => getJson<ViewResponse>(`/scenarios/${enc(scenarioId)}/variants/${enc(variantId)}/view`, { level }),
+  variants: (scenarioId: string) => allPages<ResolvedVariant>(`/scenarios/${enc(scenarioId)}/variants`),
+  view: (scenarioId: string, variantId: string, level = 1) => getJson<ViewResponse>(variantId ? `/scenarios/${enc(scenarioId)}/variants/${enc(variantId)}/view` : `/scenarios/${enc(scenarioId)}/view`, { level }),
   scenario: (scenarioId: string) => getJson<ScenarioDef>(`/scenarios/${enc(scenarioId)}`),
   variant: (scenarioId: string, variantId: string) => getJson<VariantDetail>(`/scenarios/${enc(scenarioId)}/variants/${enc(variantId)}`),
   ipCatalog: (ipId: string) => getJson<IpCatalog>(`/ip-catalogs/${enc(ipId)}`),
-  evidenceList: (scenarioId: string, variantId: string) => getJson<Paged<Evidence>>('/evidence', { scenario_ref: scenarioId, variant_ref: variantId, limit: 200 }),
+  evidenceList: (scenarioId: string, variantId: string, projectRef?: string) => allPages<Evidence>('/evidence', { scenario_ref: scenarioId, variant_ref: variantId, project_ref: projectRef }, 200),
   evidence: (id: string) => getJson<Evidence>(`/evidence/${enc(id)}`),
   predMeas: (predictionId: string, measurementId: string) => getJson<{ rows: Dict[]; summary: Dict; context: Dict }>('/compare/prediction-measurement', { prediction_id: predictionId, measurement_id: measurementId }),
 }

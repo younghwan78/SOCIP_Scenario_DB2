@@ -26,6 +26,12 @@ export const CONTEXT_KEYS = ['project', 'scenario', 'variant'] as const
 
 export type NavTarget = { page?: Page; params?: Record<string, string | undefined> }
 
+/** A comparison belongs to one scenario; repeated picks must not duplicate columns. */
+export function addComparison(currentScenario: string, currentIds: string, scenario: string, variant: string): string {
+  const ids = currentScenario === scenario ? currentIds.split(',').filter(Boolean) : []
+  return [...new Set([...ids, variant])].join(',')
+}
+
 export function useRoute(): [Route, (next: NavTarget, replace?: boolean) => void] {
   const [route, setRoute] = useState<Route>(() => parseHash(window.location.hash))
   useEffect(() => {
@@ -54,14 +60,16 @@ export function useRoute(): [Route, (next: NavTarget, replace?: boolean) => void
 }
 
 export function useAsync<T>(fn: () => Promise<T>, deps: unknown[]): { data: T | undefined; error: string | undefined; loading: boolean } {
-  const [state, setState] = useState<{ data: T | undefined; error: string | undefined; loading: boolean }>({ data: undefined, error: undefined, loading: true })
+  const pending = { data: undefined, error: undefined, loading: true }
+  const [state, setState] = useState<{ data: T | undefined; error: string | undefined; loading: boolean; deps: unknown[] }>({ ...pending, deps })
   useEffect(() => {
     let alive = true
-    setState((s) => ({ ...s, loading: true, error: undefined }))
-    fn().then((data) => { if (alive) setState({ data, error: undefined, loading: false }) })
-      .catch((e: unknown) => { if (alive) setState({ data: undefined, error: e instanceof Error ? e.message : String(e), loading: false }) })
+    setState({ ...pending, deps })
+    fn().then((data) => { if (alive) setState({ data, error: undefined, loading: false, deps }) })
+      .catch((e: unknown) => { if (alive) setState({ data: undefined, error: e instanceof Error ? e.message : String(e), loading: false, deps }) })
     return () => { alive = false }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps)
-  return state
+  // Hide the old result during the render before the new effect runs as well.
+  return deps.length === state.deps.length && deps.every((v, i) => Object.is(v, state.deps[i])) ? state : pending
 }

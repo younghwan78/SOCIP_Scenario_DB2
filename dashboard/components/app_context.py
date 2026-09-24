@@ -60,9 +60,7 @@ def adopt_query_context(
     if state.get(marker) == signature:
         return False
     state[marker] = signature
-    for field, value in zip(_ORDER, signature):
-        if value:
-            state[CONTEXT_FIELDS[field]] = value
+    set_context(state, **{field: value for field, value in zip(_ORDER, signature) if value})
     for key in reset_keys:
         state.pop(key, None)
     return True

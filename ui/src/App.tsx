@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, type CatalogItem } from './lib/api'
-import { useAsync, useRoute, type Page } from './lib/route'
+import { addComparison, useAsync, useRoute, type Page } from './lib/route'
 import { Icon } from './components/Icons'
 import { Resizer, usePref, useResizable } from './components/Layout'
 import { Picker } from './components/Picker'
@@ -37,10 +37,11 @@ export default function App() {
   const [sideOpen, setSideOpen] = usePref('sidebar.open', true)
   const catalogQ = useAsync(() => api.catalog(), [])
   const catalog = catalogQ.data?.items ?? []
-  const project = route.params.project ?? catalog[0]?.project_id ?? ''
-  const scenario = route.params.scenario ?? 'uc-camera-recording'
+  const scopedCatalog = route.params.project ? catalog.filter((c) => c.project_id === route.params.project) : catalog
+  const scenario = route.params.scenario ?? scopedCatalog.find((c) => c.scenario_id === 'uc-camera-recording')?.scenario_id ?? scopedCatalog[0]?.scenario_id ?? ''
   const scenarioItem = catalog.find((c) => c.scenario_id === scenario)
-  const variant = route.params.variant ?? PREFERRED_REFERENCE[scenario] ?? scenarioItem?.default_variant_id ?? ''
+  const project = scenarioItem?.project_id ?? route.params.project ?? ''
+  const variant = route.params.variant ?? (scenarioItem?.variant_count ? PREFERRED_REFERENCE[scenario] ?? scenarioItem.default_variant_id ?? '' : '')
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -51,7 +52,15 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [setSideOpen])
 
-  const navigate: Ctx['navigate'] = (page, params = {}, replace = false) => nav({ page, params }, replace)
+  const navigate: Ctx['navigate'] = (page, params = {}, replace = false) => {
+    const next = { ...params }
+    if (next.scenario && next.scenario !== scenario) {
+      next.project = catalog.find((c) => c.scenario_id === next.scenario)?.project_id
+      if (!('variant' in next)) next.variant = undefined
+      if (!('variants' in next)) next.variants = undefined
+    }
+    nav({ page, params: next }, replace)
+  }
   const ctx: Ctx = { catalog, project, scenario, variant, params: route.params, navigate, openPicker: (m = 'open') => setPicker(m) }
   const link = (page: Page) => {
     const p = new URLSearchParams(Object.entries({ project, scenario, variant }).filter(([, v]) => v))
@@ -113,15 +122,15 @@ export default function App() {
           </button>
         </header>
         {catalogQ.error && <div className="page"><div className="err">API에 연결할 수 없습니다: {catalogQ.error}<br />FastAPI(:18000)를 실행하고 <span className="mono">npm run dev</span>의 /api 프록시를 확인하세요.</div></div>}
-        {!catalogQ.error && route.page === 'explorer' && <ExplorerPage ctx={ctx} />}
+        {!catalogQ.error && route.page === 'explorer' && <ExplorerPage key={`${scenario}:${route.params.type ?? ''}`} ctx={ctx} />}
         {!catalogQ.error && route.page === 'matrix' && <MatrixPage ctx={ctx} />}
-        {!catalogQ.error && route.page === 'pipeline' && <PipelinePage ctx={ctx} />}
+        {!catalogQ.error && route.page === 'pipeline' && <PipelinePage key={`${scenario}:${variant}`} ctx={ctx} />}
         {!catalogQ.error && route.page === 'compare' && <ComparePage ctx={ctx} />}
       </div>
       <Picker open={picker !== null} onClose={() => setPicker(null)} catalog={catalog} scenarioId={scenario}
         onPick={(s, v) => navigate(picker === 'compare' ? 'compare' : route.page === 'compare' ? 'compare' : 'pipeline',
-          picker === 'compare' || route.page === 'compare' ? { scenario: s, variants: [...(route.params.variants ?? '').split(',').filter(Boolean), v].join(',') } : { scenario: s, variant: v })}
-        onAddCompare={(s, v) => navigate('compare', { scenario: s, variants: [...(route.params.variants ?? variant).split(',').filter(Boolean), v].join(',') })} />
+          picker === 'compare' || route.page === 'compare' ? { scenario: s, variants: addComparison(scenario, route.params.variants ?? variant, s, v) } : { scenario: s, variant: v })}
+        onAddCompare={(s, v) => navigate('compare', { scenario: s, variants: addComparison(scenario, route.params.variants ?? variant, s, v) })} />
     </div>
   )
 }
