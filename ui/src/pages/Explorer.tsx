@@ -84,8 +84,8 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
       title: (r) => c.get(r.design_conditions),
       cellClass: (r) => (r.variant_id !== reference && c.keys.some((k) => diffOf(r).has(k)) ? 'chg' : ''),
       render: (r) => c.get(r.design_conditions) })),
-    { key: 'load', label: 'Load', width: 84, sort: (r) => (r.severity ? SEVERITY_RANK[r.severity] ?? 0 : null), render: (r) => r.severity && <span className={`badge load-${r.severity}`}>{r.severity}</span> },
-    { key: 'delta', label: 'Δ 기준', width: 72, align: 'right', headTitle: '기준(파생은 부모)과 다른 조건 수 · 클릭 정렬', sort: (r) => (r.variant_id === reference ? 0 : diffOf(r).size), render: (r) => <span className="mono">{r.variant_id === reference ? 0 : diffOf(r).size}</span> },
+    { key: 'load', label: 'Load', width: 84, firstDir: -1, sort: (r) => (r.severity ? SEVERITY_RANK[r.severity] ?? 0 : null), render: (r) => r.severity && <span className={`badge load-${r.severity}`}>{r.severity}</span> },
+    { key: 'delta', label: 'Δ 기준', width: 72, align: 'right', firstDir: -1, headTitle: '기준(파생은 부모)과 다른 조건 수 · 클릭 정렬', sort: (r) => (r.variant_id === reference ? 0 : diffOf(r).size), render: (r) => <span className="mono">{r.variant_id === reference ? 0 : diffOf(r).size}</span> },
     { key: 'open', label: '', width: 76, render: (r) => <a href="#" onClick={(e) => { e.preventDefault(); ctx.navigate('pipeline', { scenario: r.scenario_id, variant: r.variant_id }) }}>Pipeline</a> },
   ]
 

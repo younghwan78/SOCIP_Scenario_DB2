@@ -17,6 +17,8 @@ export interface Column<T> {
   align?: 'left' | 'right' | 'center'
   /** value used for sorting; omit → column not sortable */
   sort?: (row: T) => SortValue
+  /** first click direction (-1 = descending first, e.g. Load / numbers) */
+  firstDir?: 1 | -1
   render: (row: T) => ReactNode
   cellClass?: (row: T) => string
   title?: (row: T) => string | undefined
@@ -80,12 +82,14 @@ export function DataTable<T>({ id, columns, rows, groups, rowKey, rowClass, onRo
   const widthOf = (c: Column<T>) => Math.max(c.minWidth ?? 48, widths[c.key] ?? c.width ?? 140)
   const total = columns.reduce((s, c) => s + widthOf(c), 0)
   const sortCol = columns.find((c) => c.key === sort?.key && c.sort)
-  const order = (list: T[]) => sortRows(list, sortCol?.sort, sort?.dir ?? 1, pinTop)
+  // pinned rows (reference) only while no explicit sort is active
+  const order = (list: T[]) => sortRows(list, sortCol?.sort, sort?.dir ?? 1, sortCol ? undefined : pinTop)
   const sortedRows = useMemo(() => (rows ? order(rows) : []), [rows, sortCol, sort?.dir]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const onHead = (c: Column<T>) => {
     if (!c.sort) return
-    setSort((s) => (s?.key !== c.key ? { key: c.key, dir: 1 } : s.dir === 1 ? { key: c.key, dir: -1 } : null))
+    const first = c.firstDir ?? 1
+    setSort((s) => (s?.key !== c.key ? { key: c.key, dir: first } : s.dir === first ? { key: c.key, dir: (-first) as 1 | -1 } : null))
   }
   const startResize = (e: React.PointerEvent, c: Column<T>) => {
     e.preventDefault(); e.stopPropagation()
@@ -129,7 +133,7 @@ export function DataTable<T>({ id, columns, rows, groups, rowKey, rowClass, onRo
               const active = sortCol?.key === c.key
               return (
                 <th key={c.key} className={`${c.sort ? 'sortable' : ''} ${active ? 'sorted' : ''} ${c.sticky ? 'rowhead' : ''} ${c.headClass ?? ''}`}
-                  style={c.align ? { textAlign: c.align } : undefined} onClick={() => onHead(c)} title={c.headTitle ?? (c.sort ? '클릭: 오름 → 내림 → 해제' : undefined)}
+                  style={c.align ? { textAlign: c.align } : undefined} onClick={() => onHead(c)} title={c.headTitle ?? (c.sort ? (c.firstDir === -1 ? '클릭: 내림 → 오름 → 해제' : '클릭: 오름 → 내림 → 해제') : undefined)}
                   aria-sort={active ? (sort!.dir === 1 ? 'ascending' : 'descending') : undefined}>
                   <span className="th-in">
                     <span className="th-label">{c.label}</span>

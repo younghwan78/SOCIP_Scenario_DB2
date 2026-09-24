@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { usePref } from '../components/Layout'
 import type { Ctx } from '../App'
 import { api, type VariantRow } from '../lib/api'
 import { useAsync } from '../lib/route'
@@ -18,6 +19,7 @@ export function MatrixPage({ ctx }: { ctx: Ctx }) {
   const [search, setSearch] = useState('')
   const [load, setLoad] = useState('')
   const [picked, setPicked] = useState<Set<string>>(new Set())
+  const [grouped, setGrouped] = usePref('matrix.grouped', true)
 
   const groups = useMemo(() => {
     const m = new Map<string, VariantRow[]>()
@@ -48,11 +50,13 @@ export function MatrixPage({ ctx }: { ctx: Ctx }) {
       title: (r) => matrixColumns(r.design_conditions)[c],
       cellClass: (r) => { const ref = refs.get(r.scenario_id); return ref && r.variant_id !== ref.id && matrixColumns(r.design_conditions)[c] !== ref.cols[c] ? 'chg' : '' },
       render: (r) => matrixColumns(r.design_conditions)[c] })),
-    { key: 'load', label: 'Load', width: 84, sort: (r) => (r.severity ? SEVERITY_RANK[r.severity] ?? 0 : null), render: (r) => r.severity && <span className={`badge load-${r.severity}`}>{r.severity}</span> },
+    { key: 'load', label: 'Load', width: 84, firstDir: -1, sort: (r) => (r.severity ? SEVERITY_RANK[r.severity] ?? 0 : null), render: (r) => r.severity && <span className={`badge load-${r.severity}`}>{r.severity}</span> },
   ]
+  const flatRows = groups.flatMap(([, rows]) => rows.filter(match))
+  const flatCols: Column<VariantRow>[] = [columns[0], { key: 'scenario', label: 'Scenario', width: 170, sort: (r) => r.scenario_name ?? r.scenario_id, title: (r) => r.scenario_id, render: (r) => r.scenario_name ?? r.scenario_id }, ...columns.slice(1)]
   const tableGroups: RowGroup<VariantRow>[] = groups.map(([sid, rows]) => {
     const shown = rows.filter(match)
-    const isOpen = open.has(sid) || !!search
+    const isOpen = open.has(sid) || !!search || !!load
     const name = rows[0]?.scenario_name ?? sid
     return { id: sid, open: isOpen, onToggle: () => toggle(sid), rows: shown, header: (
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
@@ -73,17 +77,23 @@ export function MatrixPage({ ctx }: { ctx: Ctx }) {
         <select value={load} onChange={(e) => setLoad(e.target.value)} aria-label="Load">
           <option value="">Load: 전체</option>{['light', 'medium', 'heavy', 'critical'].map((l) => <option key={l} value={l}>{l}</option>)}
         </select>
-        <button className="btn" onClick={() => setOpen(new Set(groups.map(([g]) => g)))}>모두 펼치기</button>
-        <button className="btn" onClick={() => setOpen(new Set())}>모두 접기</button>
+        <div className="seg sm" role="group" aria-label="묶음">
+          <button className={grouped ? 'on' : ''} onClick={() => setGrouped(true)} title="scenario별 그룹 · 정렬은 그룹 안에서">Scenario별</button>
+          <button className={!grouped ? 'on' : ''} onClick={() => setGrouped(false)} title="전체 variant를 한 표로 · 정렬이 전체에 적용">전체 한 표</button>
+        </div>
+        {grouped && <><button className="btn" onClick={() => setOpen(new Set(groups.map(([g]) => g)))}>모두 펼치기</button>
+        <button className="btn" onClick={() => setOpen(new Set())}>모두 접기</button></>}
       </div>} main={<>
       {q.error && <div className="err">{q.error}</div>}
       <div className="panel table-scroll" style={{ flexGrow: 1 }}>
-        <DataTable id="matrix" columns={columns} groups={tableGroups} rowKey={(r) => `${r.scenario_id}::${r.variant_id}`}
+        {grouped ? <DataTable id="matrix" columns={columns} groups={tableGroups.filter((g) => g.rows.length || (!search && !load))} rowKey={(r) => `${r.scenario_id}::${r.variant_id}`}
           rowClass={(r) => (r.variant_id === refs.get(r.scenario_id)?.id ? 'sel' : '')} pinTop={(r) => r.variant_id === refs.get(r.scenario_id)?.id} />
+          : <DataTable id="matrix.flat" columns={flatCols} rows={flatRows} rowKey={(r) => `${r.scenario_id}::${r.variant_id}`}
+            rowClass={(r) => (r.variant_id === refs.get(r.scenario_id)?.id ? 'sel' : '')} />}
         {q.loading && <div className="empty">불러오는 중…</div>}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12, flexShrink: 0 }} className="muted">
-        <span>헤더 클릭 = 그룹 안 정렬 · 헤더 경계 drag = 폭 · 노란 셀 = scenario 안 대표 variant(음영 행)와 다른 값 · — = 해당 없음/미등록 · 열은 scenario 공통 축으로 정규화</span>
+        <span>{grouped ? '헤더 클릭 = 각 scenario 그룹 안에서 정렬 (전체 정렬은 “전체 한 표”)' : '헤더 클릭 = 전체 정렬'} · 헤더 경계 drag = 폭 · 노란 셀 = scenario 안 대표 variant(음영 행)와 다른 값 · — = 해당 없음/미등록 · 열은 scenario 공통 축으로 정규화</span>
         <span className="grow" />
         {picked.size > 0 && pickedScenarios.size > 1 && <span>비교는 같은 scenario 안에서만 가능합니다</span>}
         <button className="btn primary" disabled={picked.size < 2 || pickedScenarios.size !== 1}
