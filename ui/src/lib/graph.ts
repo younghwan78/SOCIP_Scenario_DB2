@@ -1,6 +1,7 @@
 // View (Level 1 projection) → hierarchical graph with explicit buffer nodes,
 // laid out by ELK layered with orthogonal edge routing.
 import type { Dict, ViewResponse, ViewNodeData, ViewEdgeData } from './api'
+import type { PipelineModel } from './model'
 
 export type NodeKind = 'ip' | 'sw' | 'buffer' | 'external' | 'group'
 export type EdgeKind = 'OTF' | 'M2M' | 'control'
@@ -13,6 +14,8 @@ export interface GNode {
   width: number
   height: number
   sub?: string            // secondary line (buffer size/format …)
+  sub2?: string           // tertiary line (timing …)
+  tone?: 'stat' | 'history' | 'optional' | 'warn'
   pipelineId?: string     // canonical pipeline node id (mcsc, gdc_o …) for timing linkage
   data?: ViewNodeData
   memory?: Dict | null
@@ -26,6 +29,8 @@ export interface GEdge {
   kind: EdgeKind
   label?: string
   ports?: string
+  count?: number
+  faint?: boolean
 }
 
 export interface GGroup { id: string; label: string; count: number }
@@ -90,7 +95,7 @@ export function memoryText(mem: Dict | null | undefined): string {
 
 const shortBuffer = (ref: string) => ref.replace(/^PYRAMID_/, 'PYR ').replace(/_INPUT$/, '_IN').replace(/_PREVIEW$/, '_PRV').replace(/_VIDEO$/, '_VID')
 
-export function buildGraph(view: ViewResponse, collapsed: ReadonlySet<string> = new Set(), hiddenKinds: ReadonlySet<string> = new Set()): Graph {
+export function buildGraph(view: ViewResponse, collapsed: ReadonlySet<string> = new Set(), hiddenKinds: ReadonlySet<string> = new Set(), model?: PipelineModel | null): Graph {
   const all = view.nodes.map((n) => n.data)
   const byId = new Map(all.map((n) => [n.id, n]))
   const units = all.filter((n) => n.type === 'ip' || n.type === 'sw')
@@ -105,9 +110,12 @@ export function buildGraph(view: ViewResponse, collapsed: ReadonlySet<string> = 
     const kind: NodeKind = n.type === 'sw' ? 'sw' : isExternal(n) ? 'external' : 'ip'
     if (kind === 'sw' && hiddenKinds.has('sw')) continue
     alias.set(n.id, n.id)
+    const ipm = model?.byPid.get(pipelineIdOf(n.id))
+    const io = ipm && kind === 'ip' && !hiddenKinds.has('buffer') ? [ipm.inSize, ipm.outSizes.filter((o) => o !== ipm.inSize).join(' / ')].filter(Boolean).join(' → ') : ''
     nodes.set(n.id, {
+      sub: io || undefined,
       id: n.id, label: n.label.replace(/ /g, '_').replace(/_(ENC|REAR)$/, (m) => ' ' + m.slice(1)).replace(/_/g, ' '),
-      kind, group, width: kind === 'sw' ? 108 : kind === 'external' ? 128 : 108, height: kind === 'sw' ? 24 : kind === 'external' ? 32 : 28,
+      kind, group, width: kind === 'sw' ? 108 : kind === 'external' ? 128 : io ? 150 : 108, height: kind === 'sw' ? 24 : kind === 'external' ? 32 : io ? 34 : 28,
       pipelineId: pipelineIdOf(n.id), data: n,
     })
   }
@@ -135,13 +143,35 @@ export function buildGraph(view: ViewResponse, collapsed: ReadonlySet<string> = 
     if (kind === 'M2M' && e.buffer_ref && !hiddenKinds.has('buffer')) {
       const bid = `buf:${e.buffer_ref}`
       if (!nodes.has(bid)) {
-        nodes.set(bid, { id: bid, label: shortBuffer(e.buffer_ref), kind: 'buffer', group: null, width: 128, height: 30,
-          sub: memoryText(e.memory), memory: e.memory, bufferRef: e.buffer_ref })
+        const b = model?.buffers.find((x) => x.name === e.buffer_ref)
+        const rate = b && b.mbFrame !== null ? `${b.mbFrame} MB/f${b.wMBs !== null ? ` · ${((b.wMBs ?? 0) + (b.rMBs ?? 0)).toFixed(0)} MB/s` : ''}` : b?.kind === 'stat' ? 'stat · size 미정' : ''
+        nodes.set(bid, { id: bid, label: shortBuffer(e.buffer_ref), kind: 'buffer', group: null, width: 140, height: rate ? 40 : 30,
+          sub: memoryText(e.memory) || (b?.kind === 'stat' ? 'stat' : ''), sub2: rate || undefined, tone: b?.kind === 'stat' ? 'stat' : undefined, memory: e.memory, bufferRef: e.buffer_ref })
       }
       push({ id: `${e.id}:w`, source: src, target: bid, kind, ports })
       push({ id: `${e.id}:r`, source: bid, target: dst, kind, ports })
     } else {
       push({ id: e.id, source: src, target: dst, kind, label: kind === 'M2M' ? e.buffer_ref ?? undefined : undefined, ports })
+    }
+  }
+  // history (prev-frame) and catalogued stat / optional DMA buffers from the definition
+  if (model && !hiddenKinds.has('buffer')) {
+    const byPidId = new Map([...nodes.values()].filter((n) => n.pipelineId).map((n) => [n.pipelineId!, n.id]))
+    for (const b of model.buffers) {
+      if (b.kind === 'data' || nodes.has(`buf:${b.name}`)) continue
+      if (view.edges.some((e) => e.data.buffer_ref === b.name)) continue
+      const owner = byPidId.get(b.producerPid)
+      if (!owner) continue
+      const bid = `buf:${b.name}`
+      const mem = { width: b.width, height: b.height, format: b.format, bitdepth: b.bit, compression: b.comp }
+      nodes.set(bid, { id: bid, label: shortBuffer(b.name), kind: 'buffer', group: null, width: 140, height: 40, bufferRef: b.name, memory: mem,
+        sub: memoryText(mem) || (b.kind === 'stat' ? 'stat · size 미정' : ''),
+        sub2: b.kind === 'history' ? `history f-1${b.mbFrame !== null ? ` · ${b.mbFrame} MB/f` : ''}` : b.kind === 'optional' ? 'optional · off' : b.mbFrame !== null ? `${b.mbFrame} MB/f` : 'stat',
+        tone: b.kind })
+      if (b.kind === 'history') {
+        if (b.wPorts.length) push({ id: `${bid}:hw`, source: owner, target: bid, kind: 'M2M', ports: b.wPorts.join(', ') })
+        push({ id: `${bid}:hr`, source: bid, target: owner, kind: 'M2M', ports: b.rPorts.join(', ') })
+      } else push({ id: `${bid}:w`, source: owner, target: bid, kind: 'M2M', ports: b.wPorts.join(', ') })
     }
   }
   const groups = [...groupCount.entries()].map(([id, count]) => ({ id, label: GROUP_LABEL[id] ?? id.replace(/^g:/, ''), count }))
@@ -155,7 +185,9 @@ export function buildGraph(view: ViewResponse, collapsed: ReadonlySet<string> = 
 export interface Placed extends GNode { x: number; y: number }
 export interface PlacedGroup extends GGroup { x: number; y: number; width: number; height: number }
 export interface PlacedEdge extends GEdge { points: { x: number; y: number }[] }
-export interface Layout { nodes: Placed[]; groups: PlacedGroup[]; edges: PlacedEdge[]; width: number; height: number }
+export interface LaneBand { id: string; label: string; y: number; height: number }
+export interface PhaseBand { x: number; width: number; label: string; tone: number; sub?: string }
+export interface Layout { nodes: Placed[]; groups: PlacedGroup[]; edges: PlacedEdge[]; width: number; height: number; lanes?: LaneBand[]; bands?: PhaseBand[]; headerH?: number; laneLabelW?: number }
 
 interface ElkNode { id: string; x?: number; y?: number; width?: number; height?: number; children?: ElkNode[]; edges?: ElkEdge[]; layoutOptions?: Record<string, string>; labels?: { text: string }[] }
 interface ElkEdge { id: string; sources: string[]; targets: string[]; sections?: { startPoint: { x: number; y: number }; endPoint: { x: number; y: number }; bendPoints?: { x: number; y: number }[] }[]; container?: string }

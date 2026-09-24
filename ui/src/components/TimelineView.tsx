@@ -11,7 +11,10 @@ interface Props {
   highlightNode: string | null
   showFlows: boolean
   onSelect: (s: Slice | null) => void
+  colorBy?: 'group' | 'frame'
 }
+
+export const FRAME_COLORS = ['#F4A76E', '#7DB9E8', '#9AD08F', '#D7A6E8', '#F2D16B', '#86D3C7']
 
 function niceStep(span: number): number {
   const raw = span / 8
@@ -23,7 +26,7 @@ function niceStep(span: number): number {
  * Perfetto-style track view. Ruler stays fixed, tracks scroll vertically.
  * wheel = vertical scroll · Ctrl+wheel = zoom at cursor · Shift+wheel / drag = horizontal pan · W/S/A/D.
  */
-export function TimelineView({ timeline, selectedSlice, highlightNode, showFlows, onSelect }: Props) {
+export function TimelineView({ timeline, selectedSlice, highlightNode, showFlows, onSelect, colorBy = 'group' }: Props) {
   const defaultRange = useCallback((): [number, number] => [timeline.start, Math.min(timeline.end, timeline.start + 100)], [timeline])
   const [range, setRange] = useState<[number, number]>(defaultRange)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
@@ -169,8 +172,8 @@ export function TimelineView({ timeline, selectedSlice, highlightNode, showFlows
             ))}
             {flags.map(({ frame, t }) => (
               <g key={frame}>
-                <path d={`M${x(t)} 2 h24 l-5 5 l5 5 h-24z`} fill="var(--primary)" />
-                <text x={x(t) + 3} y={11} fontSize={9} fill="#fff" fontWeight={700}>f{frame}</text>
+                <path d={`M${x(t)} 2 h24 l-5 5 l5 5 h-24z`} fill={colorBy === 'frame' ? FRAME_COLORS[frame % FRAME_COLORS.length] : 'var(--primary)'} stroke={colorBy === 'frame' ? '#6B6558' : undefined} strokeWidth={0.6} />
+                <text x={x(t) + 3} y={11} fontSize={9} fill={colorBy === 'frame' ? '#1F2430' : '#fff'} fontWeight={700}>f{frame}</text>
               </g>
             ))}
           </g>
@@ -212,7 +215,7 @@ export function TimelineView({ timeline, selectedSlice, highlightNode, showFlows
               const dimmed = (selectedSlice !== null || highlightNode !== null) && !hot
               return (
                 <g key={s.id} style={{ cursor: 'pointer' }} opacity={dimmed ? 0.45 : 1} onClick={(e) => { e.stopPropagation(); onSelect(s) }}>
-                  <rect x={sx} y={y + 3} width={w} height={ROW - 6} rx={2} fill={sliceColor(s.group)}
+                  <rect x={sx} y={y + 3} width={w} height={ROW - 6} rx={2} fill={colorBy === 'frame' && s.frame !== null ? FRAME_COLORS[s.frame % FRAME_COLORS.length] : sliceColor(s.group)}
                     stroke={isSel ? '#174D47' : hot ? '#2F6F68' : 'rgba(0,0,0,0.08)'} strokeWidth={isSel ? 2.2 : hot ? 1.4 : 1} />
                   {w > 40 && <text x={Math.max(sx, LABEL_W) + 4} y={y + 15} fontSize={10} fill="#2B2F38" fontFamily="var(--mono)">{s.label}{s.frame !== null ? ` f${s.frame}` : ''}</text>}
                   <title>{`${s.label} · f${s.frame ?? '-'}\n${s.start.toFixed(3)} – ${s.end.toFixed(3)} ms (${(s.end - s.start).toFixed(3)} ms)`}</title>

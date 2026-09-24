@@ -7,6 +7,9 @@ import { CATEGORY_LABEL, CATEGORY_ORDER, focusFor, modeBreakdown, primaryCategor
 import { toRows } from '../components/Picker'
 import { PageLayout, Resizer, useResizable } from '../components/Layout'
 import { Icon } from '../components/Icons'
+import { DataTable, type Column } from '../components/DataTable'
+import { SEVERITY_RANK, preferredReference, resFpsKey } from '../lib/defaults'
+import type { VariantRow } from '../lib/api'
 
 type FacetKey = 'resolution' | 'fps' | 'stab' | 'hdr' | 'camera'
 const FACET_LABEL: Record<FacetKey, string> = { resolution: 'Res', fps: 'fps', stab: 'Stab', hdr: 'HDR', camera: 'Camera' }
@@ -25,6 +28,12 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
     ctx.catalog.forEach((c) => { const k = primaryCategory(c.category); m.set(k, (m.get(k) ?? 0) + 1) })
     return m
   }, [ctx.catalog])
+  const variantsByType = useMemo(() => {
+    const m = new Map<string, number>()
+    ctx.catalog.forEach((c) => { const k = primaryCategory(c.category); m.set(k, (m.get(k) ?? 0) + c.variant_count) })
+    return m
+  }, [ctx.catalog])
+  const totalVariants = ctx.catalog.reduce((s, c) => s + c.variant_count, 0)
   const scenarios = ctx.catalog.filter((c) => type === 'all' || primaryCategory(c.category) === type)
     .sort((a, b) => (a.scenario_id === 'uc-camera-recording' ? -1 : b.scenario_id === 'uc-camera-recording' ? 1 : a.scenario_name.localeCompare(b.scenario_name)))
   const selected = scenarios.find((s) => s.scenario_id === ctx.scenario) ?? scenarios[0]
@@ -39,14 +48,14 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
   const [refChoice, setRefChoice] = useState<Record<string, string>>({})
   const [search, setSearch] = useState('')
   const medoid = useMemo(() => medoidId(rows), [rows])
-  const reference = (selected && refChoice[selected.scenario_id]) || medoid
+  const reference = (selected && refChoice[selected.scenario_id]) || preferredReference(selected?.scenario_id, rows.map((r) => r.variant_id), medoid)
   const refRow = byId.get(reference)
 
   const facetKeys = (['resolution', 'fps', 'stab', 'hdr', 'camera'] as FacetKey[]).filter((k) => rows.some((r) => facetValue(k, r.design_conditions) !== null))
   const visible = rows.filter((r) => (showDerived || !r.derived_from_variant)
     && facetKeys.every((k) => !facets[k]?.size || facets[k]!.has(facetValue(k, r.design_conditions) ?? ''))
     && (!search || search.toLowerCase().split(/\s+/).every((t) => `${r.variant_id} ${Object.values(r.design_conditions).join(' ')}`.toLowerCase().includes(t))))
-    .sort((a, b) => (a.variant_id === reference ? -1 : b.variant_id === reference ? 1 : a.variant_id.localeCompare(b.variant_id)))
+    .sort((a, b) => a.variant_id.localeCompare(b.variant_id))
   const derivedCount = rows.filter((r) => r.derived_from_variant).length
   const toggleFacet = (k: FacetKey, v: string) => setFacets((f) => { const s = new Set(f[k] ?? []); if (s.has(v)) s.delete(v); else s.add(v); return { ...f, [k]: s } })
   const togglePick = (v: string) => setPicked((p) => { const s = new Set(p); if (s.has(v)) s.delete(v); else s.add(v); return s })
@@ -61,26 +70,45 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
     { key: 'mode', label: 'Mode', get: (dc) => [dc.extend_mode && dc.extend_mode !== 'EX_NONE' ? String(dc.extend_mode).replace('EX_', '') : null, dc.subscenario].filter(Boolean).join(' · ') || MISSING, keys: ['extend_mode', 'subscenario'] },
   ]
 
+  const diffOf = (r: VariantRow) => new Set(changedKeys(r, refRow, byId))
+  const columns: Column<VariantRow>[] = [
+    { key: 'pick', label: '', width: 34, minWidth: 30, render: (r) => <input type="checkbox" aria-label={`${r.variant_id} 선택`} checked={picked.has(r.variant_id)} onChange={() => togglePick(r.variant_id)} onClick={(e) => e.stopPropagation()} /> },
+    { key: 'variant', label: 'Variant', width: 290, sticky: true, sort: (r) => r.variant_id, title: (r) => r.variant_id, render: (r) => {
+      const isRef = r.variant_id === reference
+      return <span className="mono" style={{ fontWeight: isRef ? 600 : 400 }}>{r.variant_id}
+        {isRef && <span className="badge" style={{ background: 'var(--primary)', color: '#fff', marginLeft: 6 }}>기준</span>}
+        {r.derived_from_variant && <span className="faint" style={{ marginLeft: 6, fontSize: 11 }}>← {r.derived_from_variant}</span>}</span>
+    } },
+    ...COLS.map((c): Column<VariantRow> => ({ key: c.key, label: c.label, width: c.key === 'codec' ? 190 : c.key === 'mode' ? 170 : 130,
+      sort: c.key === 'rf' ? (r) => resFpsKey(r.design_conditions) : (r) => { const v = c.get(r.design_conditions); return v === MISSING ? null : v },
+      title: (r) => c.get(r.design_conditions),
+      cellClass: (r) => (r.variant_id !== reference && c.keys.some((k) => diffOf(r).has(k)) ? 'chg' : ''),
+      render: (r) => c.get(r.design_conditions) })),
+    { key: 'load', label: 'Load', width: 84, sort: (r) => (r.severity ? SEVERITY_RANK[r.severity] ?? 0 : null), render: (r) => r.severity && <span className={`badge load-${r.severity}`}>{r.severity}</span> },
+    { key: 'delta', label: 'Δ 기준', width: 72, align: 'right', headTitle: '기준(파생은 부모)과 다른 조건 수 · 클릭 정렬', sort: (r) => (r.variant_id === reference ? 0 : diffOf(r).size), render: (r) => <span className="mono">{r.variant_id === reference ? 0 : diffOf(r).size}</span> },
+    { key: 'open', label: '', width: 76, render: (r) => <a href="#" onClick={(e) => { e.preventDefault(); ctx.navigate('pipeline', { scenario: r.scenario_id, variant: r.variant_id }) }}>Pipeline</a> },
+  ]
+
   return (
     <PageLayout id="explorer" top={
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <span className="muted" style={{ fontSize: 13, marginRight: 4 }}>Scenario type</span>
-        <button className={`tpill ${type === 'all' ? 'on' : ''}`} onClick={() => ctx.navigate(undefined, { type: 'all' })}><Icon name="all" />전체 <b>{ctx.catalog.length}</b></button>
+        <span className="muted" style={{ fontSize: 13, marginRight: 4 }}>Scenario type <span className="faint" style={{ fontSize: 11 }}>(scenario 수)</span></span>
+        <button className={`tpill ${type === 'all' ? 'on' : ''}`} onClick={() => ctx.navigate(undefined, { type: 'all' })} title={`${ctx.catalog.length} scenarios · ${totalVariants} variants`}><Icon name="all" />전체 <span className="cnt">({ctx.catalog.length})</span></button>
         {CATEGORY_ORDER.filter((c) => byType.get(c)).map((c) => (
-          <button key={c} className={`tpill ${type === c ? 'on' : ''}`} onClick={() => ctx.navigate(undefined, { type: c, scenario: undefined })}>
-            <Icon name={c} />{CATEGORY_LABEL[c]} <b>{byType.get(c)}</b></button>
+          <button key={c} className={`tpill ${type === c ? 'on' : ''}`} onClick={() => ctx.navigate(undefined, { type: c, scenario: undefined })} title={`${byType.get(c)} scenarios · ${variantsByType.get(c) ?? 0} variants`}>
+            <Icon name={c} />{CATEGORY_LABEL[c]} <span className="cnt">({byType.get(c)})</span></button>
         ))}
       </div>} main={
       <div className="explorer">
         <section className="panel scn-list" aria-label="Scenario 목록" style={{ width: listW.size }}>
-          <div className="panel-head"><span className="muted" style={{ fontSize: 12, fontWeight: 600 }}>{(CATEGORY_LABEL[type] ?? '전체').toUpperCase()} · {scenarios.length} scenarios</span></div>
+          <div className="panel-head"><span className="muted" style={{ fontSize: 12, fontWeight: 600 }}>{(CATEGORY_LABEL[type] ?? '전체').toUpperCase()} · scenario ({scenarios.length}) · variant ({scenarios.reduce((n, s) => n + s.variant_count, 0)})</span></div>
           <div style={{ overflowY: 'auto' }}>
             {scenarios.map((s) => (
               <button key={s.scenario_id} className={`scn-item ${s.scenario_id === selected?.scenario_id ? 'on' : ''}`}
                 onClick={() => { ctx.navigate(undefined, { scenario: s.scenario_id, variant: undefined }); setFacets({}); setPicked(new Set()) }}>
-                <span className="nm">{s.scenario_name}</span>
+                <span className="nm">{s.scenario_name} <span className="cnt" title="variant 수">({s.variant_count})</span></span>
                 <span className="ds">{scenarioPurpose(s.scenario_id).split(/[·:]/)[1]?.trim().slice(0, 42) ?? ''}</span>
-                <span className="ct">{s.variant_count} variants · {s.node_count} nodes · {s.buffer_count} buffers</span>
+                <span className="ct">variant {s.variant_count} · node {s.node_count} · buffer {s.buffer_count}</span>
               </button>
             ))}
           </div>
@@ -94,7 +122,7 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
               <span className="grow" />
               <label className="muted" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>기준
                 <select value={reference} onChange={(e) => setRefChoice((r) => ({ ...r, [selected.scenario_id]: e.target.value }))}>
-                  {rows.filter((r) => !r.derived_from_variant).map((r) => <option key={r.variant_id} value={r.variant_id}>{r.variant_id}{r.variant_id === medoid ? ' (대표·자동)' : ''}</option>)}
+                  {rows.filter((r) => !r.derived_from_variant).map((r) => <option key={r.variant_id} value={r.variant_id}>{r.variant_id}{selected && preferredReference(selected.scenario_id, [r.variant_id], '') === r.variant_id ? ' (기본 기준)' : r.variant_id === medoid ? ' (대표·자동)' : ''}</option>)}
                 </select>
               </label>
             </div>
@@ -127,33 +155,14 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
           </div>}
           <div className="table-scroll" style={{ flexGrow: 1 }}>
             {variantsQ.error && <div className="err" style={{ margin: 12 }}>{variantsQ.error}</div>}
-            <table className="grid">
-              <thead><tr><th style={{ width: 28 }} aria-label="선택" /><th>Variant</th>{COLS.map((c) => <th key={c.key}>{c.label}</th>)}<th>Load</th><th style={{ textAlign: 'right' }}>Δ 기준</th><th /></tr></thead>
-              <tbody>
-                {visible.map((r) => {
-                  const diff = new Set(changedKeys(r, refRow, byId))
-                  const isRef = r.variant_id === reference
-                  return (
-                    <tr key={r.variant_id} className={isRef ? 'sel' : ''}>
-                      <td><input type="checkbox" aria-label={`${r.variant_id} 선택`} checked={picked.has(r.variant_id)} onChange={() => togglePick(r.variant_id)} /></td>
-                      <td className="mono" style={{ fontWeight: isRef ? 600 : 400 }}>{r.variant_id}
-                        {isRef && <span className="badge" style={{ background: 'var(--primary)', color: '#fff', marginLeft: 6 }}>기준</span>}
-                        {r.derived_from_variant && <span className="faint" style={{ marginLeft: 6, fontSize: 11 }}>← {r.derived_from_variant}</span>}</td>
-                      {COLS.map((c) => <td key={c.key} className={c.keys.some((k) => diff.has(k)) ? 'chg' : ''}>{c.get(r.design_conditions)}</td>)}
-                      <td>{r.severity && <span className={`badge load-${r.severity}`}>{r.severity}</span>}</td>
-                      <td className="mono" style={{ textAlign: 'right' }}>{isRef ? 0 : diff.size}</td>
-                      <td><a href="#" onClick={(e) => { e.preventDefault(); ctx.navigate('pipeline', { scenario: r.scenario_id, variant: r.variant_id }) }}>Pipeline</a></td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+            <DataTable id="explorer.variants" columns={columns} rows={visible} rowKey={(r) => r.variant_id}
+              rowClass={(r) => (r.variant_id === reference ? 'sel' : '')} pinTop={(r) => r.variant_id === reference} />
             {!variantsQ.loading && !visible.length && <div className="empty">조건에 맞는 variant가 없습니다.</div>}
             {variantsQ.loading && <div className="empty">불러오는 중…</div>}
           </div>
           <div className="footer-bar">
             <span style={{ fontSize: 13 }}><b>{picked.size}개</b> 선택됨</span>
-            <span className="faint" style={{ fontSize: 12 }}>{rows.length}개 중 {visible.length}개 표시 · 노란 셀 = 기준(파생은 부모)과 다른 조건</span>
+            <span className="faint" style={{ fontSize: 12 }}>{rows.length}개 중 {visible.length}개 표시 · 노란 셀 = 기준(파생은 부모)과 다른 조건 · 헤더 클릭 정렬 · 헤더 경계 drag 폭 조절</span>
             {derivedCount > 0 && <label className="muted" style={{ fontSize: 12, display: 'flex', gap: 6 }}><input type="checkbox" checked={showDerived} onChange={(e) => setShowDerived(e.target.checked)} />파생 {derivedCount}개 표시</label>}
             <span className="grow" />
             <button className="btn" disabled={!picked.size} onClick={() => ctx.navigate('pipeline', { scenario: selected?.scenario_id, variant: [...picked][0] })}>Pipeline 열기</button>

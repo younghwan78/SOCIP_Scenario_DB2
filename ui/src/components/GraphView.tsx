@@ -7,6 +7,7 @@ const EDGE_STYLE = {
   control: { stroke: 'var(--control)', dash: '2 3', marker: 'm-ctl', width: 1.3 },
 } as const
 
+const BAND_TONE = ['#F8D9BF', '#F3E3B3', '#F4C7A6', '#E2D6EE', '#CFE5DF', '#E5E1DA']
 const MIN_SCALE = 0.25
 const MAX_SCALE = 3
 const PAD = 16
@@ -162,6 +163,21 @@ export function GraphView({ layout, selected, related, onSelect, onToggleGroup, 
             </marker>
           ))}
         </defs>
+        {layout.lanes?.map((l, i) => (
+          <g key={`lane:${l.id}`}>
+            <rect x={0} y={l.y} width={layout.width} height={l.height} fill={i % 2 ? 'rgba(243,239,232,.55)' : 'rgba(255,255,255,.7)'} />
+            <line x1={0} y1={l.y + l.height} x2={layout.width} y2={l.y + l.height} stroke="#E8E1D6" />
+            <text x={10} y={l.y + l.height / 2 + 4} fontSize={11} fontWeight={700} fill="var(--muted)">{l.label}</text>
+          </g>
+        ))}
+        {layout.bands?.map((b, i) => (
+          <g key={`band:${i}`}>
+            <rect x={b.x} y={layout.headerH ?? 0} width={b.width - 8} height={layout.height - (layout.headerH ?? 0) - 8} fill={BAND_TONE[b.tone % BAND_TONE.length]} opacity={0.22} rx={6} />
+            <rect x={b.x} y={4} width={b.width - 8} height={(layout.headerH ?? 40) - 10} rx={6} fill={BAND_TONE[b.tone % BAND_TONE.length]} opacity={0.9} />
+            <text x={b.x + 8} y={19} fontSize={b.width < 150 ? 10 : 11} fontWeight={700} fill="#2B2F38">{b.width < 120 ? b.label.replace(' · sensor V-sync (OTF)', ' (OTF)').replace(' hand-off', '') : b.label}</text>
+            {b.sub && <text x={b.x + 8} y={32} fontSize={9.5} fill="#4A4F5A" fontFamily="var(--mono)">{b.sub}</text>}
+          </g>
+        ))}
         {layout.groups.map((g) => (
           <rect key={g.id} x={g.x} y={g.y} width={g.width} height={g.height} rx={8} fill="rgba(255,255,255,0.65)" stroke={g.id === 'g:sw' ? '#D6C49A' : '#E6D3BC'} />
         ))}
@@ -169,7 +185,11 @@ export function GraphView({ layout, selected, related, onSelect, onToggleGroup, 
           const st = EDGE_STYLE[e.kind]
           const on = !dim || (related.has(e.source) && related.has(e.target))
           return <path key={e.id} d={edgePath(e.points)} fill="none" stroke={st.stroke} strokeWidth={on && dim ? st.width + 0.8 : st.width}
-            strokeDasharray={st.dash} markerEnd={`url(#${st.marker})`} opacity={on ? 1 : 0.18}><title>{e.ports || e.kind}</title></path>
+            strokeDasharray={st.dash} markerEnd={`url(#${st.marker})`} opacity={on ? (e.faint && !(dim && on) ? 0.4 : 1) : 0.18}><title>{e.ports || e.kind}</title></path>
+        })}
+        {edges.filter((e) => e.label && e.points.length > 1).map((e) => {
+          const p = e.points[Math.floor(e.points.length / 2)], q = e.points[Math.floor(e.points.length / 2) - 1] ?? p
+          return <text key={`l:${e.id}`} x={(p.x + q.x) / 2 + 3} y={(p.y + q.y) / 2 - 3} fontSize={9} fontWeight={700} fill="var(--m2m)" style={{ paintOrder: 'stroke' }} stroke="#fff" strokeWidth={3}>{e.label}</text>
         })}
         {layout.nodes.map((n) => {
           const on = !dim || related.has(n.id)
@@ -178,10 +198,13 @@ export function GraphView({ layout, selected, related, onSelect, onToggleGroup, 
           if (n.kind === 'buffer') {
             return (
               <g key={n.id} {...common}>
-                <rect x={n.x} y={n.y} width={n.width} height={n.height} rx={5} fill="var(--buf-fill)" stroke={isSel ? 'var(--primary-strong)' : 'var(--buf-line)'} strokeWidth={isSel ? 2.4 : 1.1} />
+                <rect x={n.x} y={n.y} width={n.width} height={n.height} rx={5} fill={n.tone === 'stat' ? '#FFF7E6' : n.tone === 'history' ? '#EEF2FF' : n.tone === 'optional' ? '#F4F4F5' : 'var(--buf-fill)'}
+                  stroke={isSel ? 'var(--primary-strong)' : n.tone === 'stat' ? '#B45309' : n.tone === 'history' ? '#4F46E5' : n.tone === 'optional' ? '#A1A1AA' : 'var(--buf-line)'} strokeWidth={isSel ? 2.4 : 1.1}
+                  strokeDasharray={n.tone === 'stat' || n.tone === 'optional' ? '4 3' : undefined} />
                 <text x={n.x + 6} y={n.y + 12} fontSize={10} fontWeight={700} fill="var(--buf-text)" fontFamily="var(--mono)">{n.label}</text>
                 <text x={n.x + 6} y={n.y + 24} fontSize={9} fill="var(--buf-text)" fontFamily="var(--mono)">{n.sub}</text>
-                <title>{`${n.bufferRef}\n${n.sub ?? ''}`}</title>
+                {n.sub2 && <text x={n.x + 6} y={n.y + 35} fontSize={9} fill="var(--buf-text)" fontFamily="var(--mono)" opacity={0.8}>{n.sub2}</text>}
+                <title>{`${n.bufferRef}\n${n.sub ?? ''}\n${n.sub2 ?? ''}`}</title>
               </g>
             )
           }
@@ -195,10 +218,14 @@ export function GraphView({ layout, selected, related, onSelect, onToggleGroup, 
               <rect x={n.x} y={n.y} width={n.width} height={n.height} rx={style.rx} fill={style.fill}
                 stroke={isSel ? 'var(--primary-strong)' : style.stroke} strokeWidth={isSel ? 2.6 : n.kind === 'external' ? 1.6 : 1.2} strokeDasharray={n.kind === 'group' ? '4 3' : undefined} />
               {n.kind === 'external' && <rect x={n.x + 4} y={n.y + 4} width={n.width - 8} height={n.height - 8} rx={12} fill="none" stroke="var(--ext-line)" strokeWidth={0.8} strokeDasharray="2 2" />}
-              <text x={n.x + n.width / 2} y={n.y + n.height / 2 + 4} textAnchor="middle" fontSize={n.kind === 'sw' ? 10.5 : 11.5} fontWeight={600} fill={style.text}>{n.label}</text>
+              {n.sub && n.height >= 32 ? <>
+                <text x={n.x + n.width / 2} y={n.y + 13} textAnchor="middle" fontSize={n.kind === 'sw' ? 10.5 : 11} fontWeight={600} fill={style.text}>{n.label}</text>
+                <text x={n.x + n.width / 2} y={n.y + 24} textAnchor="middle" fontSize={9} fill={style.text} fontFamily="var(--mono)" opacity={0.85}>{n.sub}</text>
+                {n.sub2 && <text x={n.x + n.width / 2} y={n.y + 33.5} textAnchor="middle" fontSize={8.5} fill={style.text} fontFamily="var(--mono)" opacity={0.65}>{n.sub2}</text>}
+              </> : <text x={n.x + n.width / 2} y={n.y + n.height / 2 + 4} textAnchor="middle" fontSize={n.kind === 'sw' ? 10.5 : 11.5} fontWeight={600} fill={style.text}>{n.label}</text>}
               {n.kind === 'external' && <text x={n.x + n.width - 4} y={n.y - 3} textAnchor="end" fontSize={8.5} fontWeight={700} fill="var(--ext-line)">EXT</text>}
               {ops && <text x={n.x + n.width / 2} y={n.y + n.height + 11} textAnchor="middle" fontSize={9.5} fill="#9A4A12">{ops}</text>}
-              <title>{n.data?.ip_ref ?? n.label}</title>
+              <title>{[n.data?.ip_ref ?? n.label, n.sub, n.sub2].filter(Boolean).join('\n')}</title>
             </g>
           )
         })}

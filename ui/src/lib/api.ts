@@ -106,6 +106,36 @@ export interface TimelineEvent {
   critical?: boolean
 }
 
+export interface BufferDef {
+  size_ref?: string
+  format?: string
+  bitdepth?: number
+  compression?: string
+  layer?: number
+  size_status?: string
+  source_note?: string
+  history?: { node_id: string; frame_offset?: number; read_ports?: string[]; write_ports?: string[]; producer?: string; initialization?: string }
+  dma?: { node_id: string; write_ports?: string[]; read_ports?: string[]; enabled?: boolean; activation_flag?: string }
+}
+
+export interface ScenarioDef {
+  id: string
+  metadata_?: Dict
+  pipeline: { nodes?: { id: string; ip_ref?: string; role?: string }[]; buffers?: Record<string, BufferDef>; architecture_graph?: Dict }
+  size_profile?: { anchors?: Record<string, string> } | null
+}
+
+export interface VariantDetail {
+  id: string
+  scenario_id: string
+  design_conditions?: Dict | null
+  size_overrides?: Record<string, string> | null
+  node_configs?: Record<string, Dict> | null
+  routing_switch?: { disabled_nodes?: string[] } | null
+  buffer_overrides?: Record<string, Dict> | null
+  tags?: string[] | null
+}
+
 export class ApiError extends Error {
   constructor(message: string, readonly status?: number) { super(message) }
 }
@@ -143,6 +173,8 @@ export const api = {
   socs: () => getJson<Paged<{ id: string }>>('/soc-platforms', { limit: 500 }),
   variants: (scenarioId: string) => getJson<Paged<ResolvedVariant>>(`/scenarios/${enc(scenarioId)}/variants`, { limit: 1000 }),
   view: (scenarioId: string, variantId: string, level = 1) => getJson<ViewResponse>(`/scenarios/${enc(scenarioId)}/variants/${enc(variantId)}/view`, { level }),
+  scenario: (scenarioId: string) => getJson<ScenarioDef>(`/scenarios/${enc(scenarioId)}`),
+  variant: (scenarioId: string, variantId: string) => getJson<VariantDetail>(`/scenarios/${enc(scenarioId)}/variants/${enc(variantId)}`),
   evidenceList: (scenarioId: string, variantId: string) => getJson<Paged<Evidence>>('/evidence', { scenario_ref: scenarioId, variant_ref: variantId, limit: 200 }),
   evidence: (id: string) => getJson<Evidence>(`/evidence/${enc(id)}`),
   predMeas: (predictionId: string, measurementId: string) => getJson<{ rows: Dict[]; summary: Dict; context: Dict }>('/compare/prediction-measurement', { prediction_id: predictionId, measurement_id: measurementId }),

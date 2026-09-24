@@ -8,6 +8,7 @@ import { ExplorerPage } from './pages/Explorer'
 import { MatrixPage } from './pages/Matrix'
 import { PipelinePage } from './pages/Pipeline'
 import { ComparePage } from './pages/Compare'
+import { PREFERRED_REFERENCE } from './lib/defaults'
 
 const NAV: { title: string; items: ({ page: Page; label: string; icon: string } | { href: string; label: string; icon: string })[] }[] = [
   { title: 'Browse', items: [{ page: 'explorer', label: 'DB Explorer', icon: 'explorer' }, { page: 'matrix', label: '전체 Variant Matrix', icon: 'matrix' }] },
@@ -39,7 +40,7 @@ export default function App() {
   const project = route.params.project ?? catalog[0]?.project_id ?? ''
   const scenario = route.params.scenario ?? 'uc-camera-recording'
   const scenarioItem = catalog.find((c) => c.scenario_id === scenario)
-  const variant = route.params.variant ?? scenarioItem?.default_variant_id ?? ''
+  const variant = route.params.variant ?? PREFERRED_REFERENCE[scenario] ?? scenarioItem?.default_variant_id ?? ''
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
