@@ -18,6 +18,7 @@
 | P2 | severity 필터와 pagination을 사용하면 파생 variant의 상속/override 축이 현재 페이지에 따라 달라짐 | 전체 필터 결과와 부모 체인의 조건 키를 좁은 열 조회로 계산. 깨진 상속은 422 오류로 표시 |
 | P2 | Streamlit A/B 교체 버튼이 이미 생성된 widget session key를 수정하여 예외 발생 | widget 생성 전 실행되는 callback으로 교체, AppTest 클릭 회귀 테스트 추가 |
 | P2 | scenario만 지정한 Streamlit 링크에서 이전 variant가 남음 | 상위 context 변경 시 하위 context 초기화 |
+| P1 | 새 Perfetto 통합 테스트가 CI에서 `ModuleNotFoundError`로 실패함 | quality/integration의 sync와 run, 런타임 보안 감사에 profiling extra를 일관되게 적용 |
 
 ## 검증
 
