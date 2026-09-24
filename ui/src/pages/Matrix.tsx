@@ -4,6 +4,7 @@ import { api, type VariantRow } from '../lib/api'
 import { useAsync } from '../lib/route'
 import { matrixColumns, medoidId } from '../lib/conditions'
 import { scenarioPurpose } from '../lib/guides'
+import { PageLayout } from '../components/Layout'
 import { Icon } from '../components/Icons'
 
 const COLS = ['Res · fps', 'Mode · Format', 'Output · HDR', 'Stab', 'Camera', 'Codec · Rate', 'Screen']
@@ -31,7 +32,7 @@ export function MatrixPage({ ctx }: { ctx: Ctx }) {
   const total = q.data?.items.length ?? 0
 
   return (
-    <div className="page">
+    <PageLayout id="matrix" top={
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <h2 style={{ margin: 0, fontSize: 16 }}>전체 Variant Matrix</h2>
         <span className="muted" style={{ fontSize: 13 }}>{groups.length} scenarios · {total} variants · scenario별 묶음, 공통 열 기준</span>
@@ -42,7 +43,7 @@ export function MatrixPage({ ctx }: { ctx: Ctx }) {
         </select>
         <button className="btn" onClick={() => setOpen(new Set(groups.map(([g]) => g)))}>모두 펼치기</button>
         <button className="btn" onClick={() => setOpen(new Set())}>모두 접기</button>
-      </div>
+      </div>} main={<>
       {q.error && <div className="err">{q.error}</div>}
       <div className="panel table-scroll" style={{ flexGrow: 1 }}>
         <table className="grid">
@@ -83,13 +84,13 @@ export function MatrixPage({ ctx }: { ctx: Ctx }) {
         </table>
         {q.loading && <div className="empty">불러오는 중…</div>}
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12 }} className="muted">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12, flexShrink: 0 }} className="muted">
         <span>노란 셀 = scenario 안 대표 variant(음영 행)와 다른 값 · — = 해당 없음/미등록 · 열은 scenario 공통 축으로 정규화</span>
         <span className="grow" />
         {picked.size > 0 && pickedScenarios.size > 1 && <span>비교는 같은 scenario 안에서만 가능합니다</span>}
         <button className="btn primary" disabled={picked.size < 2 || pickedScenarios.size !== 1}
           onClick={() => ctx.navigate('compare', { scenario: [...pickedScenarios][0], variants: [...picked].map((k) => k.split('::')[1]).join(',') })}>선택 {picked.size}개 비교</button>
       </div>
-    </div>
+      </>} />
   )
 }

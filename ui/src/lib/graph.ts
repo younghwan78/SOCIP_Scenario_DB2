@@ -107,7 +107,7 @@ export function buildGraph(view: ViewResponse, collapsed: ReadonlySet<string> = 
     alias.set(n.id, n.id)
     nodes.set(n.id, {
       id: n.id, label: n.label.replace(/ /g, '_').replace(/_(ENC|REAR)$/, (m) => ' ' + m.slice(1)).replace(/_/g, ' '),
-      kind, group, width: kind === 'sw' ? 132 : kind === 'external' ? 136 : 118, height: kind === 'sw' ? 26 : kind === 'external' ? 32 : 28,
+      kind, group, width: kind === 'sw' ? 108 : kind === 'external' ? 128 : 108, height: kind === 'sw' ? 24 : kind === 'external' ? 32 : 28,
       pipelineId: pipelineIdOf(n.id), data: n,
     })
   }
@@ -135,7 +135,7 @@ export function buildGraph(view: ViewResponse, collapsed: ReadonlySet<string> = 
     if (kind === 'M2M' && e.buffer_ref && !hiddenKinds.has('buffer')) {
       const bid = `buf:${e.buffer_ref}`
       if (!nodes.has(bid)) {
-        nodes.set(bid, { id: bid, label: shortBuffer(e.buffer_ref), kind: 'buffer', group: null, width: 150, height: 32,
+        nodes.set(bid, { id: bid, label: shortBuffer(e.buffer_ref), kind: 'buffer', group: null, width: 128, height: 30,
           sub: memoryText(e.memory), memory: e.memory, bufferRef: e.buffer_ref })
       }
       push({ id: `${e.id}:w`, source: src, target: bid, kind, ports })
@@ -160,7 +160,33 @@ export interface Layout { nodes: Placed[]; groups: PlacedGroup[]; edges: PlacedE
 interface ElkNode { id: string; x?: number; y?: number; width?: number; height?: number; children?: ElkNode[]; edges?: ElkEdge[]; layoutOptions?: Record<string, string>; labels?: { text: string }[] }
 interface ElkEdge { id: string; sources: string[]; targets: string[]; sections?: { startPoint: { x: number; y: number }; endPoint: { x: number; y: number }; bendPoints?: { x: number; y: number }[] }[]; container?: string }
 
-export function toElk(graph: Graph): ElkNode {
+export interface ElkOptions { stackColumns?: number }
+
+/**
+ * Buffers written by the same producer all land in one ELK layer, which makes the
+ * graph very wide (MLSC → 9 buffers). Stack them into `stackColumns` columns with
+ * invisible ordering edges so the pipeline stays tall and narrow (split view).
+ */
+function stackingEdges(graph: Graph, cols: number): ElkEdge[] {
+  if (cols <= 0) return []
+  const byProducer = new Map<string, string[]>()
+  for (const e of graph.edges) {
+    if (!e.target.startsWith('buf:')) continue
+    const list = byProducer.get(e.source) ?? []
+    if (!list.includes(e.target)) list.push(e.target)
+    byProducer.set(e.source, list)
+  }
+  const out: ElkEdge[] = []
+  for (const [p, bufs] of byProducer) {
+    if (bufs.length <= cols) continue
+    bufs.forEach((b, i) => {
+      if (i + cols < bufs.length) out.push({ id: `inv:${p}:${i}`, sources: [b], targets: [bufs[i + cols]] })
+    })
+  }
+  return out
+}
+
+export function toElk(graph: Graph, opts: ElkOptions = {}): ElkNode {
   const byGroup = new Map<string, GNode[]>()
   const root: ElkNode[] = []
   for (const n of graph.nodes) {
@@ -193,7 +219,7 @@ export function toElk(graph: Graph): ElkNode {
       'elk.padding': '[top=16,left=16,bottom=16,right=16]',
     },
     children: root,
-    edges: graph.edges.map((e) => ({ id: e.id, sources: [e.source], targets: [e.target] })),
+    edges: [...graph.edges.map((e) => ({ id: e.id, sources: [e.source], targets: [e.target] })), ...stackingEdges(graph, opts.stackColumns ?? 0)],
   }
 }
 
@@ -244,9 +270,9 @@ export function fromElk(graph: Graph, laid: ElkNode): Layout {
   return { nodes, groups, edges, width: laid.width ?? 800, height: laid.height ?? 600 }
 }
 
-export async function layoutGraph(graph: Graph): Promise<Layout> {
+export async function layoutGraph(graph: Graph, opts: ElkOptions = {}): Promise<Layout> {
   const engine = await elk()
-  const laid = await engine.layout(toElk(graph))
+  const laid = await engine.layout(toElk(graph, opts))
   return fromElk(graph, laid)
 }
 

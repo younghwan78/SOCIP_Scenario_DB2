@@ -2,11 +2,20 @@ import { useEffect, useState } from 'react'
 import { api, type CatalogItem } from './lib/api'
 import { useAsync, useRoute, type Page } from './lib/route'
 import { Icon } from './components/Icons'
+import { Resizer, usePref, useResizable } from './components/Layout'
 import { Picker } from './components/Picker'
 import { ExplorerPage } from './pages/Explorer'
 import { MatrixPage } from './pages/Matrix'
 import { PipelinePage } from './pages/Pipeline'
 import { ComparePage } from './pages/Compare'
+
+const NAV: { title: string; items: ({ page: Page; label: string; icon: string } | { href: string; label: string; icon: string })[] }[] = [
+  { title: 'Browse', items: [{ page: 'explorer', label: 'DB Explorer', icon: 'explorer' }, { page: 'matrix', label: '전체 Variant Matrix', icon: 'matrix' }] },
+  { title: 'Analyze', items: [{ page: 'pipeline', label: 'Pipeline', icon: 'pipeline' }, { page: 'compare', label: 'Variant Compare', icon: 'compare' }] },
+  { title: 'Streamlit (기존)', items: [
+    { href: 'http://localhost:18502/Evidence_Dashboard', label: 'Evidence · 예측/실측', icon: 'external' },
+    { href: 'http://localhost:18502/Import_Workbench', label: 'Import · Sensor · Driver', icon: 'external' }] },
+]
 
 const TITLES: Record<Page, string> = { explorer: 'DB Explorer', matrix: 'DB Explorer', pipeline: 'Pipeline', compare: 'Variant Compare' }
 
@@ -23,6 +32,8 @@ export interface Ctx {
 export default function App() {
   const [route, nav] = useRoute()
   const [picker, setPicker] = useState<null | 'open' | 'compare'>(null)
+  const side = useResizable('sidebar.w', 224, 168, 360)
+  const [sideOpen, setSideOpen] = usePref('sidebar.open', true)
   const catalogQ = useAsync(() => api.catalog(), [])
   const catalog = catalogQ.data?.items ?? []
   const project = route.params.project ?? catalog[0]?.project_id ?? ''
@@ -33,10 +44,11 @@ export default function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setPicker('open') }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') { e.preventDefault(); setSideOpen((o) => !o) }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [setSideOpen])
 
   const navigate: Ctx['navigate'] = (page, params = {}, replace = false) => nav({ page, params }, replace)
   const ctx: Ctx = { catalog, project, scenario, variant, params: route.params, navigate, openPicker: (m = 'open') => setPicker(m) }
@@ -48,25 +60,35 @@ export default function App() {
 
   return (
     <div className="app">
-      <nav className="sidebar" aria-label="주 메뉴">
-        <div className="brand"><span style={{ color: 'var(--primary)' }}><Icon name="db" size={22} /></span>ScenarioDB</div>
-        <div className="nav-group"><h6>Browse</h6>
-          <a className={`nav-item ${route.page === 'explorer' ? 'active' : ''}`} href={link('explorer')}>DB Explorer</a>
-          <a className={`nav-item ${route.page === 'matrix' ? 'active' : ''}`} href={link('matrix')}>전체 Variant Matrix</a>
+      <nav className={`sidebar ${sideOpen ? '' : 'rail'}`} aria-label="주 메뉴" style={sideOpen ? { width: side.size } : undefined}>
+        <div className="brand">
+          <span style={{ color: 'var(--primary)', display: 'flex' }}><Icon name="db" size={22} /></span>
+          {sideOpen && <span className="brand-name">ScenarioDB</span>}
         </div>
-        <div className="nav-group"><h6>Analyze</h6>
-          <a className={`nav-item ${route.page === 'pipeline' ? 'active' : ''}`} href={link('pipeline')}>Pipeline</a>
-          <a className={`nav-item ${route.page === 'compare' ? 'active' : ''}`} href={link('compare')}>Variant Compare</a>
-        </div>
-        <div className="nav-group"><h6>Streamlit (기존)</h6>
-          <a className="nav-item" href="http://localhost:18502/Evidence_Dashboard" target="_blank" rel="noreferrer">Evidence · 예측/실측</a>
-          <a className="nav-item" href="http://localhost:18502/Import_Workbench" target="_blank" rel="noreferrer">Import · Sensor · Driver</a>
-        </div>
-        <div className="nav-status">
+        {NAV.map((g) => (
+          <div key={g.title} className="nav-group">
+            {sideOpen ? <h6>{g.title}</h6> : <div className="nav-sep" />}
+            {g.items.map((it) => {
+              const active = 'page' in it && route.page === it.page
+              const href = 'page' in it ? link(it.page) : it.href
+              return (
+                <a key={it.label} className={`nav-item ${active ? 'active' : ''}`} href={href} title={sideOpen ? undefined : it.label}
+                  {...('href' in it ? { target: '_blank', rel: 'noreferrer' } : {})}>
+                  <Icon name={it.icon} size={17} />{sideOpen && <span className="nav-label">{it.label}</span>}
+                </a>
+              )
+            })}
+          </div>
+        ))}
+        <div className="nav-status" title={catalogQ.error ? 'API 연결 실패' : 'API 연결됨'}>
           <span className={`dot ${catalogQ.error ? 'err' : ''}`} />
-          <span>{catalogQ.error ? 'API 연결 실패' : catalogQ.loading ? 'API 연결 중…' : 'API 연결됨'}</span>
+          {sideOpen && <span>{catalogQ.error ? 'API 연결 실패' : catalogQ.loading ? 'API 연결 중…' : 'API 연결됨'}</span>}
         </div>
+        <button className="nav-collapse" onClick={() => setSideOpen((o) => !o)} title={`${sideOpen ? '사이드바 접기' : '사이드바 펼치기'} (Ctrl+B)`} aria-label={sideOpen ? '사이드바 접기' : '사이드바 펼치기'}>
+          <Icon name="sidebar" size={16} />{sideOpen && <span>접기</span>}
+        </button>
       </nav>
+      {sideOpen && <Resizer axis="x" label="사이드바 폭" {...side.bind} onReset={side.reset} className="side-resizer" />}
       <div className="main">
         <header className="topbar">
           <h1>{TITLES[route.page]}</h1>

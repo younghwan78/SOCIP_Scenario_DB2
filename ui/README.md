@@ -6,7 +6,7 @@ React 18 + Vite + TypeScript front-end for the Scenario DB FastAPI (`/api/v1`). 
 
 ```bash
 # 1) API (repo root)
-uv run uvicorn scenario_db.api.app:app --host 127.0.0.1 --port 18000
+uvicorn scenario_db.api.app:app --port 18000
 # 2) UI
 cd ui
 npm install

@@ -64,3 +64,18 @@ describe('dma table', () => {
     expect(rows.find((r) => r.buffer === 'PYRAMID_L1')?.ports).toContain('MLSC_W_GLPG1_Y → MTNR1_RDMA_CUR_L1_Y')
   })
 })
+
+describe('fitView', () => {
+  it('keeps labels readable on wide graphs and centres on the sensor', async () => {
+    const { fitView } = await import('../src/components/GraphView')
+    const layout = await layoutGraph(buildGraph(v), { stackColumns: 3 })
+    const f = fitView(layout, 500, 700, 'width')
+    expect(f.s).toBeCloseTo(0.75)
+    const sensor = layout.nodes.find((n) => n.kind === 'external')!
+    const centre = f.x + 500 / f.s / 2
+    expect(Math.abs(centre - (sensor.x + sensor.width / 2))).toBeLessThan(500 / f.s / 2)
+    const all = fitView(layout, 500, 700, 'all')
+    expect(layout.width * all.s).toBeLessThanOrEqual(500)
+    expect(layout.height * all.s).toBeLessThanOrEqual(700)
+  })
+})

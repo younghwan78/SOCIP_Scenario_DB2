@@ -5,6 +5,7 @@ import { useAsync } from '../lib/route'
 import { CAMERA_LABEL, MISSING, MODE_LABEL, cameraOf, changedKeys, medoidId, stabOf, valueText } from '../lib/conditions'
 import { CATEGORY_LABEL, CATEGORY_ORDER, focusFor, modeBreakdown, primaryCategory, scenarioPurpose } from '../lib/guides'
 import { toRows } from '../components/Picker'
+import { PageLayout, Resizer, useResizable } from '../components/Layout'
 import { Icon } from '../components/Icons'
 
 type FacetKey = 'resolution' | 'fps' | 'stab' | 'hdr' | 'camera'
@@ -31,6 +32,7 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
   const rows = useMemo(() => toRows(selected, variantsQ.data?.items ?? []), [selected, variantsQ.data])
   const byId = useMemo(() => new Map(rows.map((r) => [r.variant_id, r])), [rows])
 
+  const listW = useResizable('explorer.list.w', 260, 180, 480)
   const [facets, setFacets] = useState<Partial<Record<FacetKey, Set<string>>>>({})
   const [showDerived, setShowDerived] = useState(false)
   const [picked, setPicked] = useState<Set<string>>(new Set())
@@ -60,7 +62,7 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
   ]
 
   return (
-    <div className="page">
+    <PageLayout id="explorer" top={
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <span className="muted" style={{ fontSize: 13, marginRight: 4 }}>Scenario type</span>
         <button className={`tpill ${type === 'all' ? 'on' : ''}`} onClick={() => ctx.navigate(undefined, { type: 'all' })}><Icon name="all" />전체 <b>{ctx.catalog.length}</b></button>
@@ -68,10 +70,9 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
           <button key={c} className={`tpill ${type === c ? 'on' : ''}`} onClick={() => ctx.navigate(undefined, { type: c, scenario: undefined })}>
             <Icon name={c} />{CATEGORY_LABEL[c]} <b>{byType.get(c)}</b></button>
         ))}
-      </div>
-
+      </div>} main={
       <div className="explorer">
-        <section className="panel scn-list" aria-label="Scenario 목록">
+        <section className="panel scn-list" aria-label="Scenario 목록" style={{ width: listW.size }}>
           <div className="panel-head"><span className="muted" style={{ fontSize: 12, fontWeight: 600 }}>{(CATEGORY_LABEL[type] ?? '전체').toUpperCase()} · {scenarios.length} scenarios</span></div>
           <div style={{ overflowY: 'auto' }}>
             {scenarios.map((s) => (
@@ -84,7 +85,7 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
             ))}
           </div>
         </section>
-
+        <Resizer axis="x" label="Scenario 목록 폭" {...listW.bind} onReset={listW.reset} />
         <section className="panel" aria-label="Variant 목록" style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           {selected && <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '14px 16px', borderBottom: '1px solid var(--line-soft)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -160,7 +161,6 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
               기준 + 선택 {picked.size}개 비교</button>
           </div>
         </section>
-      </div>
-    </div>
+      </div>} />
   )
 }

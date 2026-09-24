@@ -5,6 +5,7 @@ import { useAsync } from '../lib/route'
 import { MISSING, evidenceSource, shortLabels, valueText, varyingKeys } from '../lib/conditions'
 import { memoryText } from '../lib/graph'
 import { toRows } from '../components/Picker'
+import { PageLayout } from '../components/Layout'
 
 const KPI_FIELDS: [string, string, string][] = [
   ['Total power', 'total_power_mw', 'mW'], ['Core power', 'core_power_mw', 'mW'], ['BW power', 'bw_power_mw', 'mW'],
@@ -62,7 +63,7 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
 
   const colCount = ids.length + 1
   return (
-    <div className="page">
+    <PageLayout id="compare" top={
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <span className="muted" style={{ fontSize: 13 }}>비교 대상</span>
         {ids.map((id, i) => (
@@ -76,8 +77,8 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
         <button className="btn" onClick={() => ctx.openPicker('compare')}>+ variant 추가 (Ctrl K)</button>
         <span className="grow" />
         <label className="muted" style={{ fontSize: 13, display: 'flex', gap: 6 }}><input type="checkbox" checked={onlyDiff} onChange={(e) => setOnlyDiff(e.target.checked)} />다른 행만</label>
-      </div>
-      {ids.length < 2 && <div className="empty panel">비교하려면 variant를 2개 이상 추가하세요. DB Explorer에서 행을 선택하거나 Ctrl K → Shift+Enter로 추가할 수 있습니다.</div>}
+      </div>} main={<>
+      {ids.length < 2 && <div className="empty panel fit">비교하려면 variant를 2개 이상 추가하세요. DB Explorer에서 행을 선택하거나 Ctrl K → Shift+Enter로 추가할 수 있습니다.</div>}
       {variantsQ.error && <div className="err">{variantsQ.error}</div>}
       <div className="panel table-scroll">
         <table className="grid compare-grid">
@@ -114,11 +115,13 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
           </tbody>
         </table>
       </div>
-      {pmTarget && <section className="panel">
+
+      </>}
+      bottomTabs={pmTarget ? [{ id: 'pm', label: <>예측 vs 실측 <span className="tab-note">{ids[pmTarget.i]}</span></>, content: <>
         <div className="panel-head"><h2>예측 vs 실측 · {ids[pmTarget.i]}</h2>
           <span className={`badge src-${evidenceSource(pmTarget.meas!)}`}>{evidenceSource(pmTarget.meas!)}</span>
           <span className="muted" style={{ fontSize: 12 }}>{pmTarget.sim!.id} ↔ {pmTarget.meas!.id}</span></div>
-        {pmQ.data && <div className="table-scroll" style={{ maxHeight: 360 }}>
+        {pmQ.data && <div className="table-scroll">
           <table className="grid"><thead><tr><th>metric</th><th>scope</th><th>unit</th><th style={{ textAlign: 'right' }}>예측</th><th style={{ textAlign: 'right' }}>실측</th><th style={{ textAlign: 'right' }}>Δ%</th><th>status</th></tr></thead>
             <tbody>{(pmQ.data.rows as Dict[]).filter((r) => String(r.metric_id).startsWith('power.domain') || String(r.metric_id).includes('total') || r.status === 'MATCHED').slice(0, 40).map((r, i) => (
               <tr key={i}><td className="mono">{String(r.metric_id)}</td><td>{String(r.scope_ref ?? '')}</td><td>{String(r.unit ?? '')}</td>
@@ -127,7 +130,6 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
                 <td className="mono" style={{ textAlign: 'right' }}>{typeof r.delta_pct === 'number' ? r.delta_pct.toFixed(1) : '—'}</td>
                 <td className="faint">{String(r.status)}</td></tr>))}</tbody></table>
         </div>}
-      </section>}
-    </div>
+      </> }] : undefined} />
   )
 }
