@@ -362,7 +362,9 @@ th.ref-col { background: var(--primary-soft) !important; color: var(--primary-st
 .tb-mini { padding: 2px 8px; font-size: 12px; }
 .tb-rank-row { display: flex; align-items: center; gap: 8px; border: 0; background: transparent; padding: 3px 0; font-size: 12px; color: var(--text); cursor: pointer; text-align: left; border-bottom: 1px solid var(--line-soft); }
 .tb-rank-row:hover { background: var(--surface-soft); }
-@media (max-width: 1100px) { .tb-grid { grid-template-columns: minmax(0, 1fr); } }
+/* 1 column only when the page content itself is narrow (container, not viewport); the width toggle is then meaningless -> hidden */
+.tb-page { container-type: inline-size; }
+@container (max-width: 760px) { .tb-grid { grid-template-columns: minmax(0, 1fr); } .tb-card .wide-toggle { display: none; } }
 
 /* ---------- architecture exploration / predictions / reports ---------- */
 .ax-form { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(0, 2fr); gap: 18px; }
@@ -377,5 +379,7 @@ th.ref-col { background: var(--primary-soft) !important; color: var(--primary-st
 .tb-mini-table tr.selected td { background: var(--surface-soft); }
 .rpt-frame { width: 100%; border: 0; height: calc(100vh - 170px); min-height: 480px; background: #fff; display: block; }
 @media (max-width: 1100px) { .ax-form { grid-template-columns: 1fr; } }
-.table-scroll tr.selected > td { background: #F3EFE8; }
+.table-scroll tr.selected > td, .table-x tr.selected > td { background: #F3EFE8; }
+/* tables inside cards: all rows, page scroll only; horizontal scroll only when columns overflow */
+.table-x { overflow-x: auto; overflow-y: visible; }
 .ax-dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; vertical-align: 0; }

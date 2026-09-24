@@ -72,11 +72,11 @@ def attribute(old: dict[str, Any], new: dict[str, Any]) -> dict[str, Any]:
 
     # BW (DMA): traffic before compression + compression per buffer
     if "base_bw_ip_mw" in old and "base_bw_ip_mw" in new:
-        for who, label in (("ip", "IP DMA"), ("cpu", "CPU(SW) DMA")):
-            add("DMA traffic", label, float(new[f"base_bw_{who}_mw"]) - float(old[f"base_bw_{who}_mw"]),
+        for who, label in (("ip", "IP BW"), ("cpu", "CPU BW")):
+            add("BW traffic", label, float(new[f"base_bw_{who}_mw"]) - float(old[f"base_bw_{who}_mw"]),
                 f"{old[f'base_bw_{who}_mbs']:.0f}→{new[f'base_bw_{who}_mbs']:.0f} MB/s uncompressed (size/fps/topology)")
-    else:  # a prediction from engine rev 1 has no IP/CPU DMA split
-        add("DMA traffic", "uncompressed traffic", float(new.get("base_bw_mw", 0.0)) - float(old.get("base_bw_mw", 0.0)),
+    else:  # a prediction from engine rev 1 has no IP/CPU BW split
+        add("BW traffic", "uncompressed traffic", float(new.get("base_bw_mw", 0.0)) - float(old.get("base_bw_mw", 0.0)),
             f"{old.get('base_bw_mbs', 0):.0f}→{new.get('base_bw_mbs', 0):.0f} MB/s (size/fps/topology)")
     b0 = {b["buffer"]: b for b in old.get("buffers") or []}
     b1 = {b["buffer"]: b for b in new.get("buffers") or []}
@@ -113,7 +113,7 @@ def attribute(old: dict[str, Any], new: dict[str, Any]) -> dict[str, Any]:
 def context_changes(old: dict[str, Any], new: dict[str, Any]) -> list[dict[str, Any]]:
     out = []
     for key, label in (("fps", "fps"), ("statistic", "SW 통계"), ("runtime_scale", "SW 증가율"),
-                       ("eis_on", "EIS"), ("base_bw_mbs", "DMA traffic (MB/s)")):
+                       ("eis_on", "EIS"), ("base_bw_mbs", "BW traffic (MB/s)")):
         if old.get(key) != new.get(key):
             out.append({"item": label, "old": old.get(key), "new": new.get(key)})
     c0, c1 = set(old.get("compression") or []), set(new.get("compression") or [])

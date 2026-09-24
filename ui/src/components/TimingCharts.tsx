@@ -19,7 +19,7 @@ export function Card({ id, title, note, children, actions, defaultWide = false, 
         {note && <span className="faint tb-note">{note}</span>}
         <span className="grow" />
         {actions}
-        <button className="btn tb-mini" onClick={() => setWide((w) => !w)} title={wide ? '반폭으로' : '전체 폭으로'} aria-label={wide ? '반폭으로' : '전체 폭으로'}>{wide ? '⇤⇥' : '⇔'}</button>
+        <button className="btn tb-mini wide-toggle" onClick={() => setWide((w) => !w)} title={wide ? '반폭으로' : '전체 폭으로'} aria-label={wide ? '반폭으로' : '전체 폭으로'}>{wide ? '⇤⇥' : '⇔'}</button>
       </div>
       <div className="tb-card-body">{children}</div>
     </section>

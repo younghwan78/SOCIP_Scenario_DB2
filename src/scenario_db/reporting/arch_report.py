@@ -269,7 +269,7 @@ def _spec(s: dict[str, Any]) -> str:
 
 def _scenarios(rows: list[dict[str, Any]]) -> str:
     h = ("<div class='scroll'><table><tr><th>Scenario</th><th>fps</th><th>EIS</th><th>판정</th><th>Total mW</th>"
-         "<th>CPU</th><th>IP</th><th>BW IP</th><th>BW CPU</th><th>BW MB/s</th><th>range mW (min–max)</th><th>Compression</th><th>DVFS level</th><th>검증</th></tr>")
+         "<th>CPU</th><th>IP</th><th>IP BW</th><th>CPU BW</th><th>BW MB/s</th><th>range mW (min–max)</th><th>Compression</th><th>DVFS level</th><th>검증</th></tr>")
     for r in rows:
         p, d = r["power"], r["distribution"]["total_mw"]
         ver = r.get("verified") or {}
@@ -342,7 +342,7 @@ def _boxes(rows: list[dict[str, Any]]) -> str:
     rows = [r for r in rows if r["spec_ok"]]
     out = "<p class='meta'>spec 만족 scenario만 표시 (미달은 ②). 막대 = min–max, 상자 = p25–p75, 굵은 선 = median</p>"
     for key, label, unit in (("total_mw", "Total power", "mW"), ("cpu_mw", "CPU (SW)", "mW"), ("hw_mw", "IP (HW core)", "mW"),
-                             ("bw_ip_mw", "BW · IP DMA", "mW"), ("bw_cpu_mw", "BW · CPU DMA", "mW"),
+                             ("bw_ip_mw", "IP BW", "mW"), ("bw_cpu_mw", "CPU BW", "mW"),
                              ("bw_mbs", "BW", "MB/s")):
         out += f"<h3 style='font-size:13px;margin:12px 0 4px'>{label} ({unit}) — box = 조합 × SW 통계 · ◆ = 등록 예측</h3>" + _box_svg(rows, key)
     return out
@@ -388,8 +388,8 @@ def _split(rows: list[dict[str, Any]]) -> str:
     hi = max((r["power"]["total_mw"] for r in ok), default=1) * 1.05
     k = (W - lw - 120) / hi
     H = len(ok) * rh + 8
-    g = [f"<div class='lg'><span><i style='background:{C['cpu']}'></i>CPU (SW)</span><span><i style='background:{C['bwcpu']}'></i>BW · CPU DMA</span>"
-         f"<span><i style='background:{C['hw']}'></i>IP (HW core)</span><span><i style='background:{C['bw']}'></i>BW · IP DMA</span></div>",
+    g = [f"<div class='lg'><span><i style='background:{C['cpu']}'></i>CPU (SW)</span><span><i style='background:{C['bwcpu']}'></i>CPU BW</span>"
+         f"<span><i style='background:{C['hw']}'></i>IP (HW core)</span><span><i style='background:{C['bw']}'></i>IP BW</span></div>",
          f"<div class='scroll'><svg width='{W}' height='{H}'>"]
     for i, r in enumerate(ok):
         p, y, x = r["power"], i * rh + 4, float(lw)
@@ -400,14 +400,14 @@ def _split(rows: list[dict[str, Any]]) -> str:
             g.append(f"<rect x='{x:.1f}' y='{y+1}' width='{max(0,w):.1f}' height='12' fill='{C[key]}'/>")
             x += w
         t = p["total_mw"]
-        share = " · ".join(f"{lbl} {100*v/t:.0f}%" for lbl, v in zip(("CPU", "BW-CPU", "IP", "BW-IP"), [v for _, v in parts], strict=True))
+        share = " · ".join(f"{lbl} {100*v/t:.0f}%" for lbl, v in zip(("CPU", "CPU BW", "IP", "IP BW"), [v for _, v in parts], strict=True))
         g.append(f"<text x='{x+4:.1f}' y='{y+11}' font-size='10' fill='{C['mute']}'>{t:,.0f} mW · {share}</text>")
     g.append("</svg></div>")
     return "".join(g)
 
 
 def _parts(p: dict[str, Any]) -> list[tuple[str, float]]:
-    """CPU, CPU DMA, IP core, IP DMA (engine rev 1 predictions: all BW as IP DMA)."""
+    """CPU, CPU BW, IP core, IP BW (engine rev 1 predictions: all BW as IP BW)."""
     bw_ip = p.get("bw_ip_mw", p.get("bw_mw")) or 0.0
     return [("cpu", p.get("cpu_mw") or 0.0), ("bwcpu", p.get("bw_cpu_mw") or 0.0),
             ("hw", p.get("hw_mw") or 0.0), ("bw", bw_ip)]

@@ -48,7 +48,7 @@ export function RangeBoxes({ rows, unit, onPick, selected, color = PCOL.total }:
   )
 }
 
-// ---------------------------------------------------------------- CPU / CPU DMA / IP / IP DMA split
+// ---------------------------------------------------------------- CPU / CPU BW / IP / IP BW split
 export function SplitBar({ p, width = 90, height = 10, max }: { p: Power; width?: number; height?: number; max?: number }) {
   const t = Math.max(max ?? p.total_mw, 1e-9)
   let x = 0
@@ -95,7 +95,7 @@ export function CompositionBars({ rows, onPick, selected }: { rows: { id: string
           )
         })}
       </svg>
-      <div className="faint" style={{ fontSize: 11 }}>% = CPU / CPU DMA / IP / IP DMA 비중</div>
+      <div className="faint" style={{ fontSize: 11 }}>% = CPU / CPU BW / IP / IP BW 비중</div>
     </div>
   )
 }

@@ -11,7 +11,7 @@ export interface Verified { ok: boolean; delta_pct: number; sim_total_mw: number
 export interface ExpCase {
   key: string; statistic: Statistic; runtime_scale: number; compression: string[]; dvfs: Record<string, number>; dvfs_raise: number
   total_mw: number; cpu_mw: number; hw_mw: number; bw_mw: number; bw_mbs: number; lossy: boolean; assumed_ratio: boolean
-  // engine rev 2+: BW split into IP DMA (HW nodes) and CPU DMA (SW tasks)
+  // engine rev 2+: BW split into IP BW (HW nodes) and CPU BW (SW tasks)
   bw_ip_mw?: number; bw_cpu_mw?: number; bw_ip_mbs?: number; bw_cpu_mbs?: number
   verdict: string; eligible: boolean; verified?: Verified
 }
@@ -135,13 +135,13 @@ export const METRIC_COLOR: Record<DistKey, string> = {
   bw_mbs: PCOL.bw, bw_ip_mbs: PCOL.bw, bw_cpu_mbs: PCOL.bwcpu,
 }
 
-/** Stack order CPU → CPU DMA → IP core → IP DMA (runs from engine rev 1 have only total BW → shown as IP DMA). */
+/** Stack order CPU → CPU BW → IP core → IP BW (runs from engine rev 1 have only total BW → shown as IP BW). */
 export function powerParts(p: Power): { key: 'cpu' | 'bwcpu' | 'hw' | 'bw'; label: string; mw: number }[] {
   const cpuBw = p.bw_cpu_mw ?? 0
   const ipBw = p.bw_ip_mw ?? p.bw_mw - cpuBw
   return [
-    { key: 'cpu', label: 'CPU (SW)', mw: p.cpu_mw }, { key: 'bwcpu', label: 'BW · CPU DMA', mw: cpuBw },
-    { key: 'hw', label: 'IP (HW core)', mw: p.hw_mw }, { key: 'bw', label: 'BW · IP DMA', mw: ipBw },
+    { key: 'cpu', label: 'CPU (SW)', mw: p.cpu_mw }, { key: 'bwcpu', label: 'CPU BW', mw: cpuBw },
+    { key: 'hw', label: 'IP (HW core)', mw: p.hw_mw }, { key: 'bw', label: 'IP BW', mw: ipBw },
   ]
 }
 export const short = (v: string) => v.replace(/^cam-rec-/, '').replace(/^cam-prev-/, 'prev-')
@@ -166,5 +166,5 @@ export function waterfall(a: Attribution, n = 10): { label: string; start: numbe
 export const CAT_COLOR: Record<string, string> = {
   'SW runtime': '#0072B2', 'SW task 추가': '#0072B2', 'SW task 제거': '#0072B2',
   'IP workload': '#009E73', 'IP 추가': '#009E73', 'IP 제거': '#009E73', 'IP DVFS 전압': '#56B4E9',
-  'DMA traffic': '#E69F00', Compression: '#D55E00', 기타: '#9A9387',
+  'BW traffic': '#E69F00', Compression: '#D55E00', 기타: '#9A9387',
 }
