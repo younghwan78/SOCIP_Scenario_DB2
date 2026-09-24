@@ -124,7 +124,9 @@ export const archApi = {
 }
 
 // ---------------------------------------------------------------- helpers
-export const PCOL = { cpu: '#B7791F', hw: '#2F6F68', bw: '#C2410C' } as const
+// Power components: blue / green / orange (Okabe-Ito — separable incl. color-vision deficiency)
+export const PCOL = { cpu: '#0072B2', hw: '#009E73', bw: '#E69F00', total: '#4A5160' } as const
+export const METRIC_COLOR: Record<DistKey, string> = { total_mw: PCOL.total, cpu_mw: PCOL.cpu, hw_mw: PCOL.hw, bw_mw: PCOL.bw, bw_mbs: PCOL.bw }
 export const short = (v: string) => v.replace(/^cam-rec-/, '').replace(/^cam-prev-/, 'prev-')
 export const levels = (d: Record<string, number> | undefined) => Object.entries(d ?? {}).sort().map(([k, v]) => `${k}:L${v}`).join(' ')
 
@@ -145,7 +147,7 @@ export function waterfall(a: Attribution, n = 10): { label: string; start: numbe
 }
 
 export const CAT_COLOR: Record<string, string> = {
-  'SW runtime': '#B7791F', 'SW task 추가': '#B7791F', 'SW task 제거': '#B7791F',
-  'IP workload': '#2F6F68', 'IP 추가': '#2F6F68', 'IP 제거': '#2F6F68', 'IP DVFS 전압': '#4C5E8C',
-  'DMA traffic': '#C2410C', Compression: '#EA8A4E', 기타: '#9A9387',
+  'SW runtime': '#0072B2', 'SW task 추가': '#0072B2', 'SW task 제거': '#0072B2',
+  'IP workload': '#009E73', 'IP 추가': '#009E73', 'IP 제거': '#009E73', 'IP DVFS 전압': '#56B4E9',
+  'DMA traffic': '#E69F00', Compression: '#D55E00', 기타: '#9A9387',
 }

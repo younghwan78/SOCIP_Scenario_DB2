@@ -378,3 +378,4 @@ th.ref-col { background: var(--primary-soft) !important; color: var(--primary-st
 .rpt-frame { width: 100%; border: 0; height: calc(100vh - 170px); min-height: 480px; background: #fff; display: block; }
 @media (max-width: 1100px) { .ax-form { grid-template-columns: 1fr; } }
 .table-scroll tr.selected > td { background: #F3EFE8; }
+.ax-dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; vertical-align: 0; }

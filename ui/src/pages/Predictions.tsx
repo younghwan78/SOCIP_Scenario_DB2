@@ -65,8 +65,8 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
             </div>
           </Card>
           <Card id="pr-range" title="등록 예측 vs 탐색 range" note="◆ 등록 · ○ 직전 등록 · box = 조합 × SW 통계" defaultWide>
-            <RangeBoxes unit="mW" selected={ctx.params.v} onPick={choose}
-              rows={rows.map((r) => ({ id: r.variant_id, label: short(r.variant_id), dist: r.distribution?.total_mw, ok: true, marker: r.power.total_mw, base: r.previous?.total_mw ?? null }))} />
+            <RangeBoxes unit="mW" selected={ctx.params.v} onPick={choose} split
+              rows={rows.map((r) => ({ id: r.variant_id, label: short(r.variant_id), dist: r.distribution?.total_mw, ok: true, marker: r.power.total_mw, base: r.previous?.total_mw ?? null, parts: r.power }))} />
           </Card>
         </div>
       </>}

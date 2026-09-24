@@ -173,7 +173,7 @@ def _ctx(c: dict[str, Any]) -> dict[str, Any]:
 
 
 # ------------------------------------------------------------------- HTML
-C = {"cpu": "#B7791F", "hw": "#2F6F68", "bw": "#C2410C", "ink": "#23262E", "mute": "#7A7468",
+C = {"cpu": "#0072B2", "hw": "#009E73", "bw": "#E69F00", "total": "#4A5160", "ink": "#23262E", "mute": "#7A7468",
      "line": "#E4DED3", "ok": "#2F6F68", "fail": "#9B1C1C"}
 
 
@@ -341,10 +341,13 @@ def _fail_margins(rows: list[dict[str, Any]]) -> str:
 def _boxes(rows: list[dict[str, Any]]) -> str:
     rows = [r for r in rows if r["spec_ok"]]
     out = "<p class='meta'>spec 만족 scenario만 표시 (미달은 ②). 막대 = min–max, 상자 = p25–p75, 굵은 선 = median</p>"
-    for key, label, unit in (("total_mw", "Total power", "mW"), ("cpu_mw", "CPU (SW)", "mW"), ("hw_mw", "HW IP", "mW"),
+    for key, label, unit in (("total_mw", "Total power", "mW"), ("cpu_mw", "CPU (SW)", "mW"), ("hw_mw", "IP (HW core)", "mW"),
                              ("bw_mw", "BW power", "mW"), ("bw_mbs", "BW", "MB/s")):
         out += f"<h3 style='font-size:13px;margin:12px 0 4px'>{label} ({unit}) — box = 조합 × SW 통계 · ◆ = 등록 예측</h3>" + _box_svg(rows, key)
     return out
+
+
+_KEY_COLOR = {"total_mw": "total", "cpu_mw": "cpu", "hw_mw": "hw", "bw_mw": "bw", "bw_mbs": "bw"}
 
 
 def _box_svg(rows: list[dict[str, Any]], key: str) -> str:
@@ -365,14 +368,14 @@ def _box_svg(rows: list[dict[str, Any]], key: str) -> str:
         g.append(f"<text x='{lw-6}' y='{y+11}' font-size='11' text-anchor='end' fill='{C['ink']}'>{escape(_short(r['variant_id']))}</text>")
         if not d:
             continue
-        col = C["hw"] if r["spec_ok"] else C["fail"]
+        col = C[_KEY_COLOR[key]] if r["spec_ok"] else C["fail"]
         g.append(f"<line x1='{lw+d['min']*k:.1f}' x2='{lw+d['max']*k:.1f}' y1='{y+7}' y2='{y+7}' stroke='{col}'/>")
         g.append(f"<rect x='{lw+d['p25']*k:.1f}' y='{y+1}' width='{max(1,(d['p75']-d['p25'])*k):.1f}' height='12' fill='{col}' fill-opacity='.25' stroke='{col}'/>")
         g.append(f"<line x1='{lw+d['median']*k:.1f}' x2='{lw+d['median']*k:.1f}' y1='{y+1}' y2='{y+13}' stroke='{col}' stroke-width='2'/>")
         mk = r["bw_mbs"] if key == "bw_mbs" else r["power"].get(key)
         if mk is not None:
             x = lw + mk * k
-            g.append(f"<path d='M{x:.1f},{y} l5,7 l-5,7 l-5,-7z' fill='{C['bw']}'/>")
+            g.append(f"<path d='M{x:.1f},{y} l5,7 l-5,7 l-5,-7z' fill='#CC3311' stroke='#fff' stroke-width='.8'/>")
         g.append(f"<text x='{W-66}' y='{y+11}' font-size='10' fill='{C['mute']}'>{d['min']:,.0f}–{d['max']:,.0f}</text>")
     g.append("</svg>")
     return "<div class='scroll'>" + "".join(g) + "</div>"
@@ -384,7 +387,7 @@ def _split(rows: list[dict[str, Any]]) -> str:
     hi = max((r["power"]["total_mw"] for r in ok), default=1) * 1.05
     k = (W - lw - 120) / hi
     H = len(ok) * rh + 8
-    g = [f"<div class='lg'><span><i style='background:{C['cpu']}'></i>CPU (SW)</span><span><i style='background:{C['hw']}'></i>HW IP</span><span><i style='background:{C['bw']}'></i>BW</span></div>",
+    g = [f"<div class='lg'><span><i style='background:{C['cpu']}'></i>CPU (SW)</span><span><i style='background:{C['hw']}'></i>IP (HW core)</span><span><i style='background:{C['bw']}'></i>BW</span></div>",
          f"<div class='scroll'><svg width='{W}' height='{H}'>"]
     for i, r in enumerate(ok):
         p, y, x = r["power"], i * rh + 4, float(lw)

@@ -3,14 +3,14 @@ import type { Ctx } from '../App'
 import { useAsync } from '../lib/route'
 import { fmt, type Statistic } from '../lib/timingBudget'
 import {
-  DEFAULT_RUN, archApi, caseCount, caseDelta, levels, runBody, short,
+  DEFAULT_RUN, METRIC_COLOR, archApi, caseCount, caseDelta, levels, runBody, short,
   type DistKey, type ExpCase, type RunDetail, type RunOptions, type VariantResult,
 } from '../lib/archExplore'
 import { Card } from '../components/TimingCharts'
 import { AxisSpread, BufferSavings, DomainLevels, RangeBoxes, SplitBar, SplitLegend } from '../components/ArchCharts'
 import { DataTable, type Column } from '../components/DataTable'
 
-const METRICS: [DistKey, string, string][] = [['total_mw', 'Total', 'mW'], ['cpu_mw', 'CPU', 'mW'], ['hw_mw', 'HW', 'mW'], ['bw_mw', 'BW power', 'mW'], ['bw_mbs', 'BW', 'MB/s']]
+const METRICS: [DistKey, string, string][] = [['total_mw', 'Total', 'mW'], ['cpu_mw', 'CPU', 'mW'], ['hw_mw', 'IP', 'mW'], ['bw_mw', 'BW power', 'mW'], ['bw_mbs', 'BW', 'MB/s']]
 const SCALES = [1.0, 1.1, 1.2, 1.3, 1.5]
 
 export function ExplorePage({ ctx }: { ctx: Ctx }) {
@@ -171,12 +171,13 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
       {sel && <VariantDetail key={sel.variant_id} v={sel} run={run} />}
       <Card id="ax-range" title="Scenario별 Power · BW range" note="행 클릭 = 조합 상세" defaultWide
         actions={<>
-          <div className="seg sm">{METRICS.map(([k, l]) => <button key={k} className={metric === k ? 'on' : ''} onClick={() => setMetric(k)}>{l}</button>)}</div>
+          <div className="seg sm">{METRICS.map(([k, l]) => <button key={k} className={metric === k ? 'on' : ''} onClick={() => setMetric(k)}><span className="ax-dot" style={{ background: METRIC_COLOR[k] }} />{l}</button>)}</div>
           <div className="seg sm">{(['ok', 'fail', 'all'] as const).map((f) => <button key={f} className={filter === f ? 'on' : ''} onClick={() => setFilter(f)}>{f === 'all' ? '전체' : f === 'ok' ? `만족 ${s.spec_ok}` : `미달 ${s.variants - s.spec_ok}`}</button>)}</div>
           <div className="seg sm">{(['power', 'name'] as const).map((f) => <button key={f} className={order === f ? 'on' : ''} onClick={() => setOrder(f)}>{f === 'power' ? '추천값 순' : '이름 순'}</button>)}</div></>}>
         <RangeBoxes unit={METRICS.find((m) => m[0] === metric)?.[2] ?? ''} selected={ctx.params.v} onPick={choose}
+          color={METRIC_COLOR[metric]} split={metric === 'total_mw'}
           rows={ranked.map((v) => ({ id: v.variant_id, label: short(v.variant_id), dist: v.distribution[metric], ok: v.spec_ok,
-            marker: v.recommended ? v.recommended[metric] : null, base: v.baseline[metric] }))} />
+            marker: v.recommended ? v.recommended[metric] : null, base: v.baseline[metric], parts: v.recommended }))} />
       </Card>
       <Card id="ax-table" title="Variant 표" note="header 클릭 = 정렬 · 행 클릭 = 조합 상세" defaultWide minHeight={260}>
         <SplitLegend />
@@ -208,7 +209,7 @@ function VariantDetail({ v, run }: { v: VariantResult; run: RunDetail }) {
     <Card id="ax-cases" title={`${short(v.variant_id)} — 추천 · 대안 조합`} note={`${v.counts.cases.toLocaleString()} 조합 · eligible ${v.counts.eligible.toLocaleString()} · ${fmt(v.fps, 0)} fps${v.eis_on ? ' · EIS' : ''}`} defaultWide>
       {!v.spec_ok && <div className="err" style={{ fontSize: 12 }}>{v.spec_reasons.slice(0, 3).map((x) => <div key={x}>{x}</div>)}</div>}
       <table className="tb-mini-table" style={{ width: '100%' }}>
-        <thead><tr><th /><th>순위</th><th>Total mW</th><th>CPU / HW / BW</th><th>BW MB/s</th><th>Δ 추천 대비</th><th>SW</th><th>Compression</th><th>DVFS</th></tr></thead>
+        <thead><tr><th /><th>순위</th><th>Total mW</th><th>CPU / IP / BW</th><th>BW MB/s</th><th>Δ 추천 대비</th><th>SW</th><th>Compression</th><th>DVFS</th></tr></thead>
         <tbody>{cands.map(({ rank, c }) => {
           const d = rec ? caseDelta(c, rec) : null
           return (
