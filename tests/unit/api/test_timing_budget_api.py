@@ -1,5 +1,20 @@
 from __future__ import annotations
 
+import pytest
+
+from scenario_db.sim.timing_budget import CpuPowerConfig, TimingBudgetOptions
+
+
+@pytest.mark.parametrize("values", [[], [1], [-1, 1, 1, 1], [float("inf")] * 4])
+def test_cpu_coefficients_are_validated(values):
+    with pytest.raises(ValueError):
+        CpuPowerConfig(coeff_uw_per_mhz_v2=values)
+
+
+def test_whatif_scales_cannot_bypass_growth_bounds():
+    with pytest.raises(ValueError):
+        TimingBudgetOptions(whatif_scales=[11])
+
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock

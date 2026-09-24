@@ -35,8 +35,8 @@ MODEL_LIMITS = [
 
 def build_snapshot(
     run: dict[str, Any],
-    predictions: dict[str, dict[str, Any]],
-    changes: dict[str, dict[str, Any]],
+    predictions: dict[tuple[str, str], dict[str, Any]],
+    changes: dict[tuple[str, str], dict[str, Any]],
 ) -> dict[str, Any]:
     """run: exploration run row as dict; predictions: variant -> current prediction row dict;
     changes: variant -> attribution vs the superseded prediction."""
@@ -45,7 +45,7 @@ def build_snapshot(
     sample_dvfs = bool(run.get("dvfs_table_ref") and "sample" in str(run["dvfs_table_ref"]))
     rows = []
     for v in variants:
-        pred = predictions.get(v["variant_id"])
+        pred = predictions.get((v["scenario_id"], v["variant_id"]))
         chosen = (pred or {}).get("metrics") or {}
         rec = v.get("recommended") or {}
         rows.append({
@@ -58,18 +58,22 @@ def build_snapshot(
             "baseline_total_mw": (v.get("baseline") or {}).get("total_mw"),
             "compression": chosen.get("compression", rec.get("compression", [])),
             "dvfs": chosen.get("dvfs", rec.get("dvfs", {})),
-            "distribution": v["distribution"], "verified": rec.get("verified"),
-            "lossy": rec.get("lossy"), "assumed_ratio": rec.get("assumed_ratio"),
+            "distribution": v["distribution"], "verified": chosen.get("verified") if pred else rec.get("verified"),
+            "lossy": (chosen.get("lossy", any(b.get("lossy") for b in v.get("buffers", [])
+                        if b["buffer"] in chosen.get("compression", []))) if pred else rec.get("lossy")),
+            "assumed_ratio": (chosen.get("assumed_ratio", any(b.get("ratio_source") == "assumed"
+                                for b in v.get("buffers", []) if b["buffer"] in chosen.get("compression", [])))
+                              if pred else rec.get("assumed_ratio")),
         })
 
     clocks = []
     for v in variants:
-        pred = predictions.get(v["variant_id"])
+        pred = predictions.get((v["scenario_id"], v["variant_id"]))
         ips = ((pred or {}).get("metrics") or {}).get("ips") or (v.get("objective_slice") or {}).get("ips") or []
         req = {ip["node"]: ip.get("required_clock_mhz") for ip in (v.get("objective_slice") or {}).get("ips") or []}
         for ip in ips:
             clocks.append({
-                "variant_id": v["variant_id"], "node": ip["node"], "stage": ip["stage"],
+                "scenario_id": v["scenario_id"], "variant_id": v["variant_id"], "node": ip["node"], "stage": ip["stage"],
                 "dvfs_group": ip["dvfs_group"], "required_mhz": req.get(ip["node"]),
                 "set_mhz": ip["set_clock_mhz"], "level": ip["dvfs_level"], "voltage_mv": ip["voltage_mv"],
                 "headroom_pct": round(100 * (ip["set_clock_mhz"] / req[ip["node"]] - 1), 1)
@@ -78,12 +82,12 @@ def build_snapshot(
 
     domains = []
     for v in variants:
-        levels = ((predictions.get(v["variant_id"]) or {}).get("metrics") or {}).get("dvfs") \
+        levels = ((predictions.get((v["scenario_id"], v["variant_id"])) or {}).get("metrics") or {}).get("dvfs") \
             or (v.get("recommended") or {}).get("dvfs") or {}
         for d in (v.get("objective_slice") or {}).get("domains") or v.get("domains") or []:
             lvl = levels.get(d["domain"], d["base_level"])
             opt = next((o for o in d["options"] if o["level"] == lvl), d["options"][0])
-            driver = max((c for c in clocks if c["variant_id"] == v["variant_id"] and c["dvfs_group"] == d["domain"]
+            driver = max((c for c in clocks if c["scenario_id"] == v["scenario_id"] and c["variant_id"] == v["variant_id"] and c["dvfs_group"] == d["domain"]
                           and c["required_mhz"]), key=lambda c: c["required_mhz"], default=None)
             domains.append({"variant_id": v["variant_id"], "spec_ok": v["spec_ok"], "domain": d["domain"],
                             "level": lvl, "speed_mhz": opt["speed_mhz"], "voltage_mv": opt["voltage_mv"],
@@ -91,15 +95,15 @@ def build_snapshot(
                             "headroom_pct": round(100 * (opt["speed_mhz"] / d["max_required_mhz"] - 1), 1)
                             if d["max_required_mhz"] else None})
 
-    comp: dict[str, dict[str, Any]] = {}
+    comp: dict[tuple[str, str], dict[str, Any]] = {}
     for v in variants:
-        chosen = set((predictions.get(v["variant_id"]) or {}).get("metrics", {}).get("compression")
-                     or (v.get("recommended") or {}).get("compression") or [])
+        pred = predictions.get((v["scenario_id"], v["variant_id"]))
+        chosen = set(pred["metrics"].get("compression", []) if pred else (v.get("recommended") or {}).get("compression", []))
         for b in v.get("buffers") or []:
             if "delta_mbs" not in b:
                 continue
-            c = comp.setdefault(b["buffer"], {
-                "buffer": b["buffer"], "mode": b.get("mode"), "ratio": b.get("comp_ratio"),
+            c = comp.setdefault((v["scenario_id"], b["buffer"]), {
+                "scenario_id": v["scenario_id"], "buffer": b["buffer"], "mode": b.get("mode"), "ratio": b.get("comp_ratio"),
                 "ratio_source": b.get("ratio_source"), "support": b.get("support"), "lossy": b.get("lossy"),
                 "variants": 0, "selected": 0, "delta_mbs": 0.0, "delta_mw": 0.0,
                 "selected_delta_mbs": 0.0, "selected_delta_mw": 0.0,
@@ -128,8 +132,8 @@ def build_snapshot(
     margins.sort(key=lambda r: (r["margin_pct"], -r["sw_share_pct"]))
 
     history = []
-    for vid, ch in changes.items():
-        history.append({"variant_id": vid, "delta_mw": ch["delta_mw"], "delta_pct": ch["delta_pct"],
+    for (sid, vid), ch in changes.items():
+        history.append({"scenario_id": sid, "variant_id": vid, "delta_mw": ch["delta_mw"], "delta_pct": ch["delta_pct"],
                         "by_category": ch["by_category"], "top": ch["factors"][:4],
                         "context": [_ctx(c) for c in ch["context_changes"] if c["item"] != "exploration_run_ref"]})
 
@@ -190,7 +194,8 @@ def render_html(title: str, snap: dict[str, Any]) -> str:
         _sec(2, _spec(s)),
         _sec(3, _scenarios(snap["scenarios"])),
         _sec(4, _domains(snap.get("domains") or []) + "<details><summary>IP별 상세 (필요 → 설정 MHz)</summary>"
-             + _clocks([c for c in snap["clocks"] if c["variant_id"] in {r["variant_id"] for r in snap["scenarios"] if r["spec_ok"]}])
+             + _clocks([c for c in snap["clocks"] if (c["scenario_id"], c["variant_id"]) in
+                        {(r["scenario_id"], r["variant_id"]) for r in snap["scenarios"] if r["spec_ok"]}])
              + "</details>"),
         _sec(5, _boxes(snap["scenarios"])),
         _sec(6, _split(snap["scenarios"])),

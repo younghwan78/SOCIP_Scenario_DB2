@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from scenario_db.api.auth import ApiPrincipal, require_roles
 from scenario_db.api.deps import get_db
-from scenario_db.api.resource_limits import admission_slot, enforce_timeline_frame_limit
+from scenario_db.api.resource_limits import admission_slot, enforce_request_size, enforce_timeline_frame_limit
 from scenario_db.api.schemas.timing_budget import (
     TimingBudgetFleetRequest,
     TimingBudgetFleetResponse,
@@ -29,6 +29,7 @@ def timing_budget_variant(
 ):
     """RT 25% rule, NRT/GDC SW-derived budgets, output cadence, power and BW (read-only)."""
     settings = get_settings()
+    enforce_request_size(request, settings.exploration_max_request_bytes)
     enforce_timeline_frame_limit(request.options.frames, settings.simulation_max_timeline_frames)
     with admission_slot("simulation", settings.simulation_max_concurrent_runs):
         return analyze_timing_budget_request(db, request)
@@ -42,6 +43,7 @@ def timing_budget_fleet(
 ):
     """Per-variant summary rows for one scenario (read-only)."""
     settings = get_settings()
+    enforce_request_size(request, settings.exploration_max_request_bytes)
     enforce_timeline_frame_limit(request.options.frames, settings.simulation_max_timeline_frames)
     with admission_slot("simulation", settings.simulation_max_concurrent_runs):
         return analyze_timing_budget_fleet(db, request)

@@ -163,7 +163,7 @@ def test_report_snapshot_and_html(uhd30):
            "summary": {"variants": 1}}
     pred = {"id": "PRED-1", "selection_rule": "auto:min-power",
             "metrics": _payload(uhd30, uhd30["recommended"])}
-    snap = build_snapshot(run, {UHD30: pred}, {})
+    snap = build_snapshot(run, {(uhd30["scenario_id"], UHD30): pred}, {})
     assert snap["spec_summary"]["spec_ok"] == 1 and snap["overview"]["sample_dvfs"]
     assert snap["scenarios"][0]["power"]["total_mw"] == pytest.approx(uhd30["recommended"]["total_mw"], abs=0.01)
     assert snap["sw_margin_top5"][0]["variant_id"] == UHD30
@@ -199,3 +199,63 @@ def test_attribution_splits_dma_traffic_ip_vs_cpu(graph_factory, dvfs, uhd30):
     legacy = {k: v for k, v in a.items() if not k.startswith(("base_bw_ip", "base_bw_cpu"))}
     r2 = attribute(legacy, b)
     assert {f["item"] for f in r2["factors"] if f["category"] == "BW traffic"} <= {"uncompressed traffic"}
+
+
+def test_report_keeps_selected_uncompressed_case_and_verification(uhd30):
+    run = {"id": "r", "title": "r", "scenario_type": "camera", "variants": [uhd30], "spec": {}}
+    pred = {"id": "p", "metrics": _payload(uhd30, uhd30["baseline"])}
+    snap = build_snapshot(run, {(uhd30["scenario_id"], UHD30): pred}, {})
+    assert snap["scenarios"][0]["compression"] == []
+    assert snap["scenarios"][0]["verified"] is None
+    assert not snap["scenarios"][0]["lossy"] and not snap["scenarios"][0]["assumed_ratio"]
+    assert all(b["selected"] == 0 for b in snap["compression"])
+
+
+def test_sw_overhead_is_subtracted_once(uhd30):
+    from copy import deepcopy
+    obj = deepcopy(uhd30["objective_slice"])
+    obj["stages"]["nrt"]["overhead_ms"] = 2
+    obj["stages"]["nrt"]["sw_ms"] += 2
+    result = ax.sw_margin([obj], obj, ax.ExplorationObjective())
+    row = next(s for s in result["stages"] if s["stage"] == "nrt")
+    assert row["slack_ms"] == pytest.approx(obj["period_ms"] - row["sw_ms"] - row["hw_ms"], abs=0.001)
+
+
+def test_failed_resimulation_cannot_report_spec_ok(graph_factory, dvfs, monkeypatch):
+    monkeypatch.setattr(ax, "_verify", lambda *args: {"ok": False})
+    spec = ax.ArchExplorationSpec(axes={"statistics": ["max"], "runtime_scales": [1], "compression": {"enabled": False}})
+    result = ax.explore_variant(graph_factory(UHD30), spec, dvfs_tables=dvfs)
+    assert not result["spec_ok"] and "verification" in result["spec_reasons"][0]
+
+
+def test_supported_lossless_mode_survives_no_lossy_constraint(graph_factory, dvfs):
+    spec = ax.ArchExplorationSpec(
+        axes={"statistics": ["max"], "runtime_scales": [1], "compression": {
+            "modes": ["lossy", "lossless"], "ratio_overrides": {"COMP_YUV_LOSSLESS": 0.75, "COMP_BAYER_LOSSLESS": 0.75}}},
+        constraints={"allow_lossy": False},
+    )
+    result = ax.explore_variant(graph_factory(UHD30), spec, dvfs_tables=dvfs)
+    assert result["recommended"]["compression"] and not result["recommended"]["lossy"]
+
+
+def test_input_hash_changes_with_ip_model(graph_factory):
+    from copy import deepcopy
+    graph = deepcopy(graph_factory(UHD30))
+    spec, config = ax.ArchExplorationSpec(), ax.SimulationRunConfig()
+    before = ax.input_hash(graph, spec, config, {})
+    ip = next(ip for ip in graph.ip_catalog.values() if (ip.capabilities.get("sim") or {}).get("modes"))
+    mode = next(iter(ip.capabilities["sim"]["modes"].values()))
+    mode["unit_power_mw_mp"] = float(mode.get("unit_power_mw_mp", 0)) + 100
+    assert ax.input_hash(graph, spec, config, {}) != before
+
+
+def test_sw_dma_uses_adapter_resolved_fps(monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+    transfer = SimpleNamespace(node_id="writer", port="read", port_type=SimpleNamespace(value="RDMA"))
+    monkeypatch.setattr(ax, "build_simulation_inputs", lambda *a: SimpleNamespace(
+        config=SimpleNamespace(fps=60), workloads=[], port_transfers=[transfer]))
+    calc = MagicMock(return_value=SimpleNamespace(bw_mbs=10, bw_power_mw=1))
+    monkeypatch.setattr(ax, "calc_port_bw", calc)
+    ax._dma(None, ax.SimulationRunConfig())
+    assert calc.call_args.kwargs["fps"] == 60

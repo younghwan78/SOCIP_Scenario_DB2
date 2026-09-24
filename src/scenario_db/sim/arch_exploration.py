@@ -43,7 +43,7 @@ from scenario_db.sim.timing_budget import (
 )
 from scenario_db.sim.transfers import compression_catalog
 
-ENGINE_REV = "arch-exploration/2"
+ENGINE_REV = "arch-exploration/3"
 # Power = CPU(SW) + IP core + BW; BW = IP DMA (HW nodes) + CPU DMA (SW tasks, e.g. mpeg_writer)
 DIST_KEYS = ("total_mw", "cpu_mw", "hw_mw", "bw_mw", "bw_ip_mw", "bw_cpu_mw", "bw_mbs", "bw_ip_mbs", "bw_cpu_mbs")
 V_REF_MV = 710.0
@@ -116,7 +116,7 @@ class ArchExplorationSpec(BaseScenarioModel):
     objective: ExplorationObjective = Field(default_factory=ExplorationObjective)
     timing: TimingBudgetOptions = Field(default_factory=TimingBudgetOptions)
     top_n: int = Field(default=5, ge=1, le=20)
-    max_cases_per_variant: int = Field(default=200_000, ge=1)
+    max_cases_per_variant: int = Field(default=200_000, ge=1, le=200_000)
     verify: bool = True
 
 
@@ -147,7 +147,10 @@ def explore_variant(
     sw_nodes = set(obj_slice["sw_nodes"]) | {
         str(n.get("id")) for n in graph.pipeline_nodes if str(n.get("role") or "") in ("sw_task", "sw")
     }
-    buffers = compression_candidates(graph, axes.compression, config, sw_nodes) if axes.compression.enabled else []
+    comp_axis = axes.compression
+    if not spec.constraints.allow_lossy:
+        comp_axis = comp_axis.model_copy(update={"modes": [m for m in comp_axis.modes if m != "lossy"]})
+    buffers = compression_candidates(graph, comp_axis, config, sw_nodes) if comp_axis.enabled else []
     active = [b for b in buffers if b["selectable"]][: axes.compression.max_buffers]
     explored = {b["buffer"] for b in active}
     for b in buffers:
@@ -159,7 +162,8 @@ def explore_variant(
 
     n_comp = 2 ** len(active)
     n_dvfs = math.prod(len(d["options"]) for d in obj_slice["domains"]) if obj_slice["domains"] else 1
-    if len(slices) * n_comp * n_dvfs > spec.max_cases_per_variant:
+    total_cases = n_comp * sum(math.prod(len(d["options"]) for d in s["domains"]) for s in slices)
+    if total_cases > spec.max_cases_per_variant:
         raise ValueError(
             f"exploration exceeds {spec.max_cases_per_variant} cases "
             f"({len(slices)} SW x {n_comp} compression x {n_dvfs} DVFS); reduce axes"
@@ -189,6 +193,8 @@ def explore_variant(
     ok_obj, obj_reasons = _slice_ok(obj_slice, spec.constraints)
     if recommended is not None and spec.verify:
         recommended["verified"] = _verify(graph, spec, config, tables, recommended, buffers)
+        if not recommended["verified"]["ok"]:
+            obj_reasons.append("recommended case failed re-simulation verification")
 
     summary = {
         "engine_rev": ENGINE_REV,
@@ -199,8 +205,8 @@ def explore_variant(
         "period_ms": obj_slice["period_ms"],
         "eis_on": obj_slice["eis_on"],
         "mfc_dual": obj_slice["mfc_dual"],
-        "spec_ok": recommended is not None,
-        "spec_reasons": [] if recommended is not None else (obj_reasons or ["no eligible combination"]),
+        "spec_ok": recommended is not None and not obj_reasons,
+        "spec_reasons": obj_reasons or ([] if recommended is not None else ["no eligible combination"]),
         "objective": obj.model_dump(),
         "counts": {
             "cases": len(dist["total_mw"]),
@@ -346,7 +352,7 @@ def _support(graph, nodes: set[str]) -> tuple[str, dict[str, list[str]]]:
 
 def _dma(graph, config: SimulationRunConfig) -> dict[tuple[str, str, str], tuple[float, float]]:
     inputs = build_simulation_inputs(graph, config)
-    fps = float(config.fps or 30.0)
+    fps = float(inputs.config.fps or 30.0)
     fps_by_node = {w.node_id: w.fps for w in inputs.workloads}
     model = resolve_power_model(config.power_model)
     out: dict[tuple[str, str, str], tuple[float, float]] = {}
@@ -390,6 +396,12 @@ def compression_candidates(
         best = None
         for m in axis.modes:
             mode = f"COMP_{fam}_{m.upper()}"
+            if not axis.include_unsupported and any(
+                mode not in {normalize_compression(v) for v in modes}
+                and f"COMP_{m.upper()}" not in {str(v).upper() for v in modes}
+                for modes in listed.values()
+            ):
+                continue
             if mode in axis.ratio_overrides:
                 ratio, src = axis.ratio_overrides[mode], "override"
             elif mode in catalog and catalog[mode] < 1.0:
@@ -627,7 +639,8 @@ def sw_margin(slices, obj_slice, obj) -> dict[str, Any]:
         st = obj_slice["stages"].get(sid)
         if not st or (st["sw_ms"] <= 0 and sid == "post"):
             continue
-        slack = P - st["sw_ms"] - st["overhead_ms"] - st["hw_ms"]
+        # sw_ms already includes the serialized per-IP overhead.
+        slack = P - st["sw_ms"] - st["hw_ms"]
         items = [i for i in st["sw_items"] if i.get("kind") == "sw"]
         top = max(items, key=lambda i: i["runtime_ms"] + i["latency_ms"], default=None)
         lat = sum(i["latency_ms"] for i in items)
@@ -647,7 +660,7 @@ def sw_margin(slices, obj_slice, obj) -> dict[str, Any]:
                for s in slices if worst and s["runtime_scale"] == obj.runtime_scale}
     spread = (max(by_stat.values()) - min(by_stat.values())) if by_stat else 0.0
     out = {
-        "definition": "(P - SW - overhead - HW@set clock)/P for NRT and Post-NRT, objective statistic",
+        "definition": "(P - SW including overhead - HW@set clock)/P for NRT and Post-NRT, objective statistic",
         "stages": rows,
         "worst": worst,
         "growth_tolerance": (max(passing) if passing else None),
@@ -755,6 +768,7 @@ def prediction_payload(s: dict[str, Any], case: dict[str, Any], buffers: list[di
         "base_bw_ip_mbs": s["bw"]["hw_mbs"], "base_bw_cpu_mbs": s["bw"]["sw_mbs"],
         "cpu_by_task": s["cpu_by_task"], "ips": ips, "buffers": bufs,
         "compression": sorted(comp), "dvfs": dom_level, "verdict": s["verdict"]["status"],
+        "lossy": case["lossy"], "assumed_ratio": case["assumed_ratio"],
         "intervals": s["intervals"], "latency": s["latency"],
         "stages": {k: {f: v for f, v in st.items() if f != "sw_items"} for k, st in s["stages"].items()},
     }
@@ -767,6 +781,9 @@ def input_hash(graph, spec, config, tables) -> str:
         "pipeline": graph.scenario.pipeline, "variant_doc": _variant_doc(graph.variant),
         "spec": spec.model_dump(mode="json"), "config": config.model_dump(mode="json"),
         "dvfs": {k: t.model_dump(mode="json") for k, t in sorted(tables.items())},
+        "simulation_inputs": build_simulation_inputs(graph, config).model_dump(mode="json"),
+        "ip_capabilities": {key: row.capabilities for key, row in sorted(graph.ip_catalog.items())},
+        "soc_catalog": getattr(graph.soc, "compression_modes", None),
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()
 

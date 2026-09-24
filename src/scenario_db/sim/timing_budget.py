@@ -87,8 +87,14 @@ class CpuPowerConfig(BaseScenarioModel):
     cluster: int = Field(default=1, ge=0, le=3)
     freq_mhz: float = Field(default=2000.0, gt=0)
     volt_v: float = Field(default=0.80, gt=0)
-    coeff_uw_per_mhz_v2: list[float] = Field(default_factory=lambda: list(PROFILER_COEFF))
+    coeff_uw_per_mhz_v2: list[float] = Field(default_factory=lambda: list(PROFILER_COEFF), min_length=4, max_length=4)
     source: str = "ip-cpu-s5e9965 profiler coefficients; cluster/freq/volt assumed"
+
+    @model_validator(mode="after")
+    def _valid_power(self) -> CpuPowerConfig:
+        if any(not math.isfinite(v) or v <= 0 for v in [self.freq_mhz, self.volt_v, *self.coeff_uw_per_mhz_v2]):
+            raise ValueError("CPU power parameters must be finite and positive")
+        return self
 
     def power_mw(self, busy_ms: float, period_ms: float) -> float:
         util = busy_ms / period_ms if period_ms > 0 else 0.0
@@ -123,8 +129,8 @@ class TimingBudgetOptions(BaseScenarioModel):
 
     @model_validator(mode="after")
     def _scales(self) -> TimingBudgetOptions:
-        if any(not math.isfinite(v) or v < 0 for v in self.whatif_scales):
-            raise ValueError("whatif_scales must be finite and non-negative")
+        if any(not math.isfinite(v) or v < 0 or v > 10 for v in self.whatif_scales):
+            raise ValueError("whatif_scales must be finite and in [0, 10]")
         return self
 
 

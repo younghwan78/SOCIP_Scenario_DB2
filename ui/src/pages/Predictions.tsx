@@ -11,7 +11,7 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
   const all = ctx.params.all === '1'
   const q = useAsync(() => archApi.board(all ? undefined : ctx.scenario), [ctx.scenario, all])
   const rows = q.data?.rows ?? []
-  const sel = rows.find((r) => r.variant_id === ctx.params.v)
+  const sel = rows.find((r) => r.id === ctx.params.v)
   const choose = (vid: string) => ctx.navigate(undefined, { v: vid === ctx.params.v ? undefined : vid }, true)
   const changed = rows.filter((r) => r.previous)
   const tot = rows.map((r) => r.power.total_mw)
@@ -61,16 +61,16 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
           <Card id="pr-table" title="예측 현황 (current)" note="header 클릭 = 정렬 · 행 클릭 = 변경 원인" defaultWide minHeight={260}>
             <SplitLegend />
             <div className="table-x">
-              <DataTable id="arch.board" columns={cols} rows={rows} rowKey={(r) => r.id} onRowClick={(r) => choose(r.variant_id)} defaultSort={{ key: 'tot', dir: -1 }}
-                rowClass={(r) => (r.variant_id === ctx.params.v ? 'selected' : '')} />
+              <DataTable id="arch.board" columns={cols} rows={rows} rowKey={(r) => r.id} onRowClick={(r) => choose(r.id)} defaultSort={{ key: 'tot', dir: -1 }}
+                rowClass={(r) => (r.id === ctx.params.v ? 'selected' : '')} />
             </div>
           </Card>
           <Card id="pr-range" title="등록 예측 vs 탐색 range" note="◆ 등록 · ○ 직전 등록 · box = 조합 × SW 통계" defaultWide>
             <RangeBoxes unit="mW" selected={ctx.params.v} onPick={choose}
-              rows={rows.map((r) => ({ id: r.variant_id, label: short(r.variant_id), dist: r.distribution?.total_mw, ok: true, marker: r.power.total_mw, base: r.previous?.total_mw ?? null }))} />
+              rows={rows.map((r) => ({ id: r.id, label: short(r.variant_id), dist: r.distribution?.total_mw, ok: true, marker: r.power.total_mw, base: r.previous?.total_mw ?? null }))} />
           </Card>
           <Card id="pr-comp" title="등록 예측 Power 구성" note="CPU · CPU BW · IP · IP BW (mW)" defaultWide>
-            <CompositionBars selected={ctx.params.v} onPick={choose} rows={rows.map((r) => ({ id: r.variant_id, label: short(r.variant_id), p: r.power }))} />
+            <CompositionBars selected={ctx.params.v} onPick={choose} rows={rows.map((r) => ({ id: r.id, label: short(r.variant_id), p: r.power }))} />
           </Card>
         </div>
       </>}

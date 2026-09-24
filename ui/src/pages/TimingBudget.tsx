@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { Ctx } from '../App'
 import { useAsync } from '../lib/route'
 import { fmt, timingApi, verdictChip, type EisMode, type Statistic, type TimingReport } from '../lib/timingBudget'
@@ -15,7 +15,8 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
 
   const q = useAsync(() => (variant ? timingApi.variant(scenario, variant, { statistic, eis, runtime_scale: scale }) : Promise.reject(new Error('variant를 선택하세요 (Ctrl K)'))), [scenario, variant, statistic, eis, scale])
   // what-if (24 sims) starts after the main report so the page never holds two simulation slots at once
-  const mainReady = !!q.data || !!q.error
+  const [mainReady, setMainReady] = useState(false)
+  useEffect(() => { if (q.data) setMainReady(true) }, [q.data])
   const wq = useAsync(() => (variant && mainReady ? timingApi.variant(scenario, variant, { statistic: 'max', eis: 'auto', runtime_scale: 1, include_whatif: true }) : Promise.resolve(null)), [scenario, variant, mainReady])
   const r = q.data?.report
   const whatif = wq.data?.report.whatif ?? []

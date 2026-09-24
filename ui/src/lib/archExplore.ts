@@ -113,9 +113,9 @@ export const archApi = {
   runs: () => send<RunMeta[]>('GET', '/arch/exploration/runs'),
   run: (id: string) => send<RunDetail>('GET', `/arch/exploration/runs/${encodeURIComponent(id)}`),
   createRun: (body: ReturnType<typeof runBody>) => send<RunDetail>('POST', '/arch/exploration/runs', body),
-  promote: (runId: string, variantIds?: string[], caseKey?: string, reason?: string) =>
+  promote: (runId: string, variantIds?: string[], caseKey?: string, reason?: string, scenarioId?: string) =>
     send<{ promoted: { id: string; variant_id: string; total_mw: number }[]; skipped: { variant_id: string; reason: string }[] }>(
-      'POST', '/arch/predictions/promote', { run_id: runId, variant_ids: variantIds, case_key: caseKey, reason }),
+      'POST', '/arch/predictions/promote', { run_id: runId, variant_ids: variantIds, case_key: caseKey, reason, scenario_id: scenarioId }),
   board: (scenarioId?: string) => send<{ rows: BoardRow[] }>('GET', `/arch/predictions/board${q({ scenario_id: scenarioId })}`),
   history: (scenarioId: string, variantId: string) => send<HistoryRow[]>('GET', `/arch/predictions/history${q({ scenario_id: scenarioId, variant_id: variantId })}`),
   compare: (p: { old_id?: string; new_id?: string; scenario_id?: string; variant_id?: string }) =>
@@ -168,3 +168,6 @@ export const CAT_COLOR: Record<string, string> = {
   'IP workload': '#009E73', 'IP 추가': '#009E73', 'IP 제거': '#009E73', 'IP DVFS 전압': '#56B4E9',
   'BW traffic': '#E69F00', Compression: '#D55E00', 기타: '#9A9387',
 }
+
+/** Variant ids are only unique within a scenario. */
+export const variantKey = (v: { scenario_id: string; variant_id: string }): string => JSON.stringify([v.scenario_id, v.variant_id])

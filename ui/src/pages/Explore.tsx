@@ -3,7 +3,7 @@ import type { Ctx } from '../App'
 import { useAsync } from '../lib/route'
 import { fmt, type Statistic } from '../lib/timingBudget'
 import {
-  DEFAULT_RUN, METRIC_COLOR, archApi, caseCount, caseDelta, levels, runBody, short,
+  DEFAULT_RUN, METRIC_COLOR, archApi, caseCount, caseDelta, levels, runBody, short, variantKey,
   type DistKey, type ExpCase, type RunDetail, type RunOptions, type VariantResult,
 } from '../lib/archExplore'
 import { Card } from '../components/TimingCharts'
@@ -115,7 +115,7 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
   const [order, setOrder] = useState<'power' | 'name'>('power')
   const [msg, setMsg] = useState<string>()
   const [busy, setBusy] = useState(false)
-  const sel = run.variants.find((v) => v.variant_id === ctx.params.v)
+  const sel = run.variants.find((v) => variantKey(v) === ctx.params.v)
   const rows = run.variants.filter((v) => filter === 'all' || (filter === 'ok') === v.spec_ok)
   const ranked = order === 'name' ? rows : [...rows].sort((a, b) => (a.recommended?.[metric] ?? a.distribution[metric]?.median ?? 0) - (b.recommended?.[metric] ?? b.distribution[metric]?.median ?? 0))
   const s = run.summary
@@ -169,7 +169,7 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
     </div>
     {run.errors.length > 0 && <div className="err">{run.errors.length}개 variant 계산 실패: {run.errors.slice(0, 3).map((e) => e.variant_id).join(', ')}</div>}
     <div className="tb-grid">
-      {sel && <VariantDetail key={sel.variant_id} v={sel} run={run} />}
+      {sel && <VariantDetail key={variantKey(sel)} v={sel} run={run} />}
       <Card id="ax-range" title="Scenario별 Power · BW range" note="행 클릭 = 조합 상세" defaultWide
         actions={<>
           <div className="seg sm">{METRICS.map(([k, l]) => <button key={k} className={metric === k ? 'on' : ''} onClick={() => setMetric(k)}><span className="ax-dot" style={{ background: METRIC_COLOR[k] }} />{l}</button>)}</div>
@@ -177,17 +177,17 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
           <div className="seg sm">{(['power', 'name'] as const).map((f) => <button key={f} className={order === f ? 'on' : ''} onClick={() => setOrder(f)}>{f === 'power' ? '추천값 순' : '이름 순'}</button>)}</div></>}>
         <RangeBoxes unit={METRICS.find((m) => m[0] === metric)?.[2] ?? ''} selected={ctx.params.v} onPick={choose}
           color={METRIC_COLOR[metric]}
-          rows={ranked.map((v) => ({ id: v.variant_id, label: short(v.variant_id), dist: v.distribution[metric], ok: v.spec_ok,
+          rows={ranked.map((v) => ({ id: variantKey(v), label: short(v.variant_id), dist: v.distribution[metric], ok: v.spec_ok,
             marker: v.recommended?.[metric] ?? null, base: v.baseline[metric] ?? null }))} />
       </Card>
       <Card id="ax-comp-bars" title="추천 조합 Power 구성" note="CPU · CPU BW · IP · IP BW (mW) · range 카드와 같은 순서" defaultWide>
-        <CompositionBars selected={ctx.params.v} onPick={choose} rows={ranked.map((v) => ({ id: v.variant_id, label: short(v.variant_id), p: v.recommended }))} />
+        <CompositionBars selected={ctx.params.v} onPick={choose} rows={ranked.map((v) => ({ id: variantKey(v), label: short(v.variant_id), p: v.recommended }))} />
       </Card>
       <Card id="ax-table" title="Variant 표" note="header 클릭 = 정렬 · 행 클릭 = 조합 상세" defaultWide minHeight={260}>
         <SplitLegend />
         <div className="table-x">
-          <DataTable id="arch.variants" columns={cols} rows={rows} rowKey={(r) => r.variant_id} onRowClick={(r) => choose(r.variant_id)} defaultSort={{ key: 'tot', dir: -1 }}
-            rowClass={(r) => (r.variant_id === ctx.params.v ? 'selected' : '')} />
+          <DataTable id="arch.variants" columns={cols} rows={rows} rowKey={variantKey} onRowClick={(r) => choose(variantKey(r))} defaultSort={{ key: 'tot', dir: -1 }}
+            rowClass={(r) => (variantKey(r) === ctx.params.v ? 'selected' : '')} />
         </div>
       </Card>
     </div>
@@ -204,7 +204,7 @@ function VariantDetail({ v, run }: { v: VariantResult; run: RunDetail }) {
   const promote = async () => {
     const chosen = pick && pick !== rec?.key ? pick : undefined
     try {
-      const r = await archApi.promote(run.id, [v.variant_id], chosen, reason || undefined)
+      const r = await archApi.promote(run.id, [v.variant_id], chosen, reason || undefined, v.scenario_id)
       setMsg(r.promoted.length ? `등록: ${r.promoted[0].id} (${fmt(r.promoted[0].total_mw, 1)} mW)` : `건너뜀: ${r.skipped[0]?.reason}`)
     } catch (e) { setMsg(e instanceof Error ? e.message : String(e)) }
   }

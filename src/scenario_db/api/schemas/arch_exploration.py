@@ -28,6 +28,7 @@ class ArchExplorationRunRequest(_DvfsSelection):
 
 class PromoteRequest(BaseModel):
     run_id: str
+    scenario_id: str | None = None
     variant_ids: list[str] | None = Field(default=None, max_length=500)
     case_key: str | None = None  # non-default choice for exactly one variant
     reason: str | None = Field(default=None, max_length=500)

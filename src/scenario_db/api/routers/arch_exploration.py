@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from scenario_db.api.auth import ApiPrincipal, require_roles
 from scenario_db.api.deps import get_db
-from scenario_db.api.resource_limits import admission_slot, enforce_timeline_frame_limit
+from scenario_db.api.resource_limits import admission_slot, enforce_request_size, enforce_timeline_frame_limit
 from scenario_db.api.schemas.arch_exploration import (
     ArchExplorationRunRequest,
     ArchReportRequest,
@@ -28,6 +28,7 @@ def create_run(
 ):
     """SW statistic x growth (simulated) x DVFS headroom x compression (analytic) per variant; persisted."""
     settings = get_settings()
+    enforce_request_size(request, settings.exploration_max_request_bytes)
     enforce_timeline_frame_limit(request.spec.timing.frames, settings.simulation_max_timeline_frames)
     with admission_slot("simulation", settings.simulation_max_concurrent_runs):
         return svc.run_exploration(db, request, principal.subject)

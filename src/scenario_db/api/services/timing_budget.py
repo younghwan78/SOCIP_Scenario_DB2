@@ -49,6 +49,8 @@ def _shim(request, variant_id: str) -> SimulateRequest:
 
 def _load(db: Session, shim: SimulateRequest, use_default_dvfs: bool):
     graph = load_canonical_graph(db, shim.scenario_id, shim.variant_id)
+    if shim.soc_ref and _graph_soc_ref(graph) and str(shim.soc_ref) != str(_graph_soc_ref(graph)):
+        raise ValueError("soc_ref does not match the scenario project")
     if shim.config.sw_timing_projection is not None:
         from scenario_db.sim.sw_projection import verify_projection
 
@@ -106,17 +108,20 @@ def analyze_timing_budget_fleet(
     ids = request.variant_ids
     if ids is None:
         rows = (
-            db.query(ScenarioVariant.id)
+            db.query(ScenarioVariant.id, ScenarioVariant.derived_from_variant)
             .filter_by(scenario_id=request.scenario_id)
             .order_by(ScenarioVariant.id)
             .all()
         )
-        ids = [r[0] for r in rows]
+        ids = [r[0] for r in rows if request.include_derived or not r[1]]
         if not ids:
             raise NotFoundError(f"scenario has no variants: {request.scenario_id}")
         if not request.include_derived:
             ids = [i for i in ids if not any(m in i for m in DERIVED_VARIANT_MARKERS)]
     options = request.options.model_copy(update={"include_whatif": False})
+    ids = list(dict.fromkeys(ids))
+    if len(ids) > 200:
+        raise UnprocessableError("fleet scope exceeds 200 variants; select a bounded subset")
     out, errors, ref, profile = [], [], None, None
     for variant_id in ids:
         shim = _shim(request, variant_id)

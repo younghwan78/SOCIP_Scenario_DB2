@@ -6,6 +6,7 @@ import hashlib
 import json
 from datetime import UTC, datetime
 from typing import Any
+from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
@@ -57,11 +58,15 @@ def _scenarios(db: Session, request: ArchExplorationRunRequest) -> list[Scenario
         rows = [r for r in rows if cat in [c.lower() for c in _as_list((r.metadata_ or {}).get("category"))]]
     if not rows:
         raise NotFoundError("no scenario matches the exploration scope")
+    if len({r.project_ref for r in rows}) != 1:
+        raise UnprocessableError("one exploration run must belong to one project; narrow the scope")
     return rows
 
 
 def _variant_ids(db: Session, scenario_id: str, request: ArchExplorationRunRequest) -> list[str]:
-    ids = [r[0] for r in db.query(ScenarioVariant.id).filter_by(scenario_id=scenario_id).order_by(ScenarioVariant.id).all()]
+    rows = db.query(ScenarioVariant.id, ScenarioVariant.derived_from_variant).filter_by(
+        scenario_id=scenario_id).order_by(ScenarioVariant.id).all()
+    ids = [r[0] for r in rows if request.include_derived or not r[1]]
     if not request.include_derived:
         ids = [i for i in ids if not any(m in i for m in DERIVED_VARIANT_MARKERS)]
     if request.variant_ids is not None:
@@ -81,7 +86,10 @@ def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str |
     errors: list[dict[str, Any]] = []
     soc_ref = request.soc_ref
     dvfs_ref: str | None = None
+    remaining_cases = 2_000_000
     for scenario, variant_id in plan:
+        if remaining_cases <= 0:
+            raise UnprocessableError("exploration exceeds 2000000 total cases; narrow the scope")
         tb = TimingBudgetRequest(
             scenario_id=scenario.id, variant_id=variant_id, config=request.config,
             config_profile_ref=request.config_profile_ref, dvfs_tables=request.dvfs_tables,
@@ -92,12 +100,16 @@ def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str |
         _apply_config_profile(db, shim)
         try:
             graph, tables, ref = _load(db, shim, request.use_default_dvfs)
-            summary = explore_variant(graph, request.spec, config=shim.config, dvfs_tables=tables)
+            bounded_spec = request.spec.model_copy(update={
+                "max_cases_per_variant": min(request.spec.max_cases_per_variant, remaining_cases),
+            })
+            summary = explore_variant(graph, bounded_spec, config=shim.config, dvfs_tables=tables)
         except (LookupError, ValueError) as exc:
             errors.append({"scenario_id": scenario.id, "variant_id": variant_id, "error": str(exc)[:300]})
             continue
         soc_ref = soc_ref or _graph_soc_ref(graph)
         dvfs_ref = dvfs_ref or ref
+        remaining_cases -= summary["counts"]["cases"]
         summary["dvfs_table_ref"] = ref
         variants.append(summary)
     if not variants:
@@ -115,7 +127,7 @@ def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str |
     counts["recommended_power_mw"] = [min(rec), max(rec)] if rec else None
     ihash = hashlib.sha256(json.dumps(sorted(v["input_hash"] for v in variants)).encode()).hexdigest()
     row = ArchExplorationRun(
-        id=f"EXP-{_stamp()}-{ihash[:6]}",
+        id=f"EXP-{uuid4().hex}",
         title=request.title or f"{scenario_type} exploration",
         scenario_type=scenario_type,
         project_ref=request.project_ref or scenarios[0].project_ref,
@@ -172,14 +184,26 @@ def _pred_dict(p: Prediction, *, metrics: bool = True) -> dict[str, Any]:
 
 def promote(db: Session, request: PromoteRequest, user: str | None = None) -> dict[str, Any]:
     run = get_run(db, request.run_id)
-    by_variant = {v["variant_id"]: v for v in run.variants}
-    targets = request.variant_ids or [v for v, s in by_variant.items() if s["spec_ok"]]
+    summaries = [v for v in run.variants if request.scenario_id is None or v["scenario_id"] == request.scenario_id]
+    if request.variant_ids is not None and request.scenario_id is None:
+        for vid in request.variant_ids:
+            if sum(v["variant_id"] == vid for v in summaries) > 1:
+                raise UnprocessableError("ambiguous variant_id; specify scenario_id")
+    targets = [v for v in summaries if (v["variant_id"] in request.variant_ids
+               if request.variant_ids is not None else v["spec_ok"])]
+    # Lock the stable variant row, including the first promotion when no prediction exists.
+    # Acquire all locks in canonical order to avoid deadlocks between overlapping requests.
+    for summary in sorted(targets, key=lambda v: (v["scenario_id"], v["variant_id"])):
+        variant = db.query(ScenarioVariant).filter_by(
+            scenario_id=summary["scenario_id"], id=summary["variant_id"]).with_for_update().one_or_none()
+        if variant is None:
+            raise UnprocessableError("explored variant no longer exists")
     promoted, skipped = [], []
-    for vid in targets:
-        summary = by_variant.get(vid)
-        if summary is None:
+    for vid in dict.fromkeys(request.variant_ids or []):
+        if not any(v["variant_id"] == vid for v in targets):
             skipped.append({"variant_id": vid, "reason": "variant not in run"})
-            continue
+    for summary in targets:
+        vid = summary["variant_id"]
         case, rule = find_case(summary, request.case_key)
         if case is None:
             skipped.append({"variant_id": vid, "reason": "no eligible case" if request.case_key is None else "case_key not found"})
@@ -188,6 +212,8 @@ def promote(db: Session, request: PromoteRequest, user: str | None = None) -> di
             raise UnprocessableError("a non-default case needs a reason")
         if rule != "auto:min-power" and not case.get("eligible", True):
             raise UnprocessableError("selected case is not eligible (spec)")
+        if case.get("verified") and not case["verified"]["ok"]:
+            raise UnprocessableError("selected case failed re-simulation verification")
         metrics = prediction_payload(summary["objective_slice"], case, summary["buffers"])
         metrics |= {"dvfs_table_ref": summary.get("dvfs_table_ref"), "exploration_run_ref": run.id,
                     "design_conditions": summary.get("design_conditions"),
@@ -199,7 +225,7 @@ def promote(db: Session, request: PromoteRequest, user: str | None = None) -> di
             prev.status = "superseded"
             db.flush()
         pred = Prediction(
-            id=f"PRED-{_stamp()}-{hashlib.sha1(vid.encode()).hexdigest()[:6]}",
+            id=f"PRED-{uuid4().hex}",
             scenario_ref=summary["scenario_id"], variant_ref=vid, project_ref=run.project_ref,
             status="current", exploration_run_ref=run.id, case_key=case["key"], selection_rule=rule,
             selected_by="auto" if rule == "auto:min-power" else "user", selected_by_user=user,
@@ -276,6 +302,8 @@ def compare(db: Session, *, old_id: str | None = None, new_id: str | None = None
     old = db.get(Prediction, old_ref)
     if old is None:
         raise NotFoundError(f"prediction not found: {old_ref}")
+    if (old.scenario_ref, old.variant_ref) != (new.scenario_ref, new.variant_ref):
+        raise UnprocessableError("predictions must belong to the same scenario and variant")
     return {"old": _pred_dict(old, metrics=False), "new": _pred_dict(new, metrics=False),
             "attribution": attribute(old.metrics, new.metrics)}
 
@@ -284,23 +312,23 @@ def compare(db: Session, *, old_id: str | None = None, new_id: str | None = None
 def create_report(db: Session, request: ArchReportRequest, user: str | None = None) -> dict[str, Any]:
     run = get_run(db, request.run_id)
     vids = [(v["scenario_id"], v["variant_id"]) for v in run.variants]
-    preds: dict[str, dict[str, Any]] = {}
-    changes: dict[str, dict[str, Any]] = {}
+    preds: dict[tuple[str, str], dict[str, Any]] = {}
+    changes: dict[tuple[str, str], dict[str, Any]] = {}
     for sid, vid in vids:
         cur = db.query(Prediction).filter_by(scenario_ref=sid, variant_ref=vid, status="current").one_or_none()
         if cur is None or cur.exploration_run_ref != run.id:
             continue  # the report states predictions registered from this run only
-        preds[vid] = _pred_dict(cur)
+        preds[(sid, vid)] = _pred_dict(cur)
         if cur.supersedes_ref:
             old = db.get(Prediction, cur.supersedes_ref)
             if old is not None:
-                changes[vid] = attribute(old.metrics, cur.metrics)
+                changes[(sid, vid)] = attribute(old.metrics, cur.metrics)
     run_dict = run_detail(run) | {"created_at": run.created_at}
     snapshot = build_snapshot(run_dict, preds, changes)
     title = request.title or f"{run.soc_ref or ''} {run.scenario_type} Architecture 검토".strip()
     html = render_html(title, snapshot)
     row = ArchReport(
-        id=f"RPT-{_stamp()}", title=title, status=request.status, target_soc_ref=run.soc_ref,
+        id=f"RPT-{uuid4().hex}", title=title, status=request.status, target_soc_ref=run.soc_ref,
         project_ref=run.project_ref, scenario_type=run.scenario_type, exploration_run_refs=[run.id],
         dvfs_table_ref=run.dvfs_table_ref, engine_rev=run.engine_rev, snapshot=snapshot,
         rendered_html=html, html_sha256=html_sha256(html), generated_by=user, generated_at=_now(),
