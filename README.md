@@ -7,9 +7,26 @@ The current implementation focuses on these flows:
 - YAML fixture ETL into PostgreSQL.
 - Canonical scenario resolver and review gate engine.
 - FastAPI read endpoints for scenario, runtime, and viewer data.
+- React Explorer, Variant Matrix, Pipeline, and N-way Compare.
 - Streamlit + ELK/SVG pipeline viewer with Level 0/1/2 projections.
 - Write API staging flow for variant overlays and base pipeline patches.
 - Scenario/variant simulation for BW, power, timing, and persisted evidence overlays.
+- Measurement and Perfetto trace import for prediction/measurement review.
+- Stage timing budget (RT 25% rule, NRT/EIS SW budgets, DVFS level, output interval check).
+- Architecture exploration: SW/DVFS/compression combinations, promoted predictions,
+  power-change attribution, and DB-stored architecture review reports.
+
+## Local Services
+
+| Service | Address | Entry point |
+| --- | --- | --- |
+| PostgreSQL 16 | `127.0.0.1:15432` | Docker Compose `postgres` service |
+| FastAPI | [API docs](http://127.0.0.1:18000/docs) | `scenario_db.api.app:app` |
+| React UI | [Explorer](http://127.0.0.1:3000/#/explorer) | `ui/` |
+| Streamlit | [Dashboard](http://127.0.0.1:18502) | `dashboard/Home.py` |
+
+Start the database, API, and then the UI. Use separate terminals for foreground
+servers. React proxies `/api` to FastAPI; both UIs read PostgreSQL through the API.
 
 ## Repository Layout
 
@@ -17,7 +34,11 @@ The current implementation focuses on these flows:
 .
 ├── alembic/                  # PostgreSQL migrations
 ├── dashboard/                # Streamlit viewer
+├── db_fixtures_Exynos2600_S26Plus/ # Runtime Exynos2600/S26 Plus fixtures
 ├── demo/fixtures/            # Demo YAML data set
+├── ui/                       # React/Vite/TypeScript application
+├── frontend/                 # Embedded Scenario Workbench source
+├── web/                      # Workbench CI wrapper; not the React app
 ├── docs/                     # Current design, contracts, guides, operations
 ├── internal_docs/            # Implementation history, investigations, checklists
 ├── output/                   # Generated reports/artifacts (Git ignored)
@@ -48,11 +69,12 @@ disposable outputs and do not belong in either documentation tree.
 - Python 3.11+
 - Docker Desktop, for local PostgreSQL and integration tests
 - `uv`
+- Node.js 24 and npm, matching the frontend CI jobs
 
 All commands below assume PowerShell and this working directory:
 
 ```powershell
-cd <SCENARIODB_ROOT>
+cd <SCENARIODB_ROOT>  # the implementation/ Git repository, not its parent
 ```
 
 ## Setup
@@ -60,8 +82,26 @@ cd <SCENARIODB_ROOT>
 Install dependencies into the project virtual environment:
 
 ```powershell
-uv sync --group dev --group dashboard
+uv sync --frozen --group dev --group dashboard --group sim --extra profiling
 ```
+
+The `sim` group supplies `networkx` and `simpy`, required by API readiness.
+The `profiling` extra supplies Perfetto for camera trace import and its tests.
+Subsequent commands use `uv run --no-sync` to preserve this complete environment.
+Repeat the sync after changing `pyproject.toml` or `uv.lock`.
+
+Keep an existing `.env`, or create a local one without overwriting it:
+
+```powershell
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+```
+
+Replace the template API secrets before using protected operations. Read-only
+React browsing does not require a mutation API key. Do not commit local secrets.
+The React Timing Budget and Architecture pages call protected POST endpoints
+(`analyst`/`writer`) but do not send API keys; on a single-user local machine set
+`SCENARIO_DB_MUTATION_AUTH_DISABLED=true` in `.env` (see [Run API](#run-api)),
+otherwise those pages fail with HTTP 503/401.
 
 If you prefer explicit `.venv` execution, the project-local Python is:
 
@@ -74,7 +114,8 @@ If you prefer explicit `.venv` execution, the project-local Python is:
 Start PostgreSQL:
 
 ```powershell
-docker compose up -d postgres
+docker compose up -d --wait postgres
+docker compose ps
 ```
 
 Set the database URL for the current PowerShell session, or keep the same value
@@ -88,21 +129,23 @@ $env:DATABASE_URL="postgresql+psycopg2://scenario_user:scenario_pass@localhost:1
 Apply migrations:
 
 ```powershell
-uv run alembic upgrade head
+uv run --no-sync alembic upgrade head
 ```
 
-Load or reload the runtime Exynos2600 fixtures:
+The existing `pgdata` volume is retained. Starting a populated database does not
+require reloading fixtures. For a new database or intentional YAML updates, load
+the runtime Exynos2600 fixtures:
 
 ```powershell
-uv run python -m scenario_db.etl.loader db_fixtures_Exynos2600_S26Plus --strict --report-json output\etl-report.json
+uv run --no-sync python -m scenario_db.etl.loader db_fixtures_Exynos2600_S26Plus --strict --report-json output\etl-report.json
 ```
 
 Keep `demo/fixtures` for isolated tests and demonstrations; do not load it into the runtime DB.
 For an existing mixed DB, preview and then archive/remove the Exynos2500 scope:
 
 ```powershell
-uv run python -m scenario_db.etl.retire_demo
-uv run python -m scenario_db.etl.retire_demo --apply --backup output/etl/exynos2500-retired.json
+uv run --no-sync python -m scenario_db.etl.retire_demo
+uv run --no-sync python -m scenario_db.etl.retire_demo --apply --backup output/etl/exynos2500-retired.json
 ```
 
 The command retains shared software, referenced IPs, and audit history. Take a PostgreSQL
@@ -127,7 +170,7 @@ Load into a clean database when switching fixture families, or make replacement
 explicit:
 
 ```powershell
-uv run python -m scenario_db.etl.loader db_fixtures_Exynos2600_S26Plus --replace-scenario-project-collisions
+uv run --no-sync python -m scenario_db.etl.loader db_fixtures_Exynos2600_S26Plus --replace-scenario-project-collisions
 ```
 
 Use `--skip-scenario-project-collisions` only when you intentionally want to
@@ -140,7 +183,7 @@ The FastAPI ASGI entry point is `scenario_db.api.app:app`.
 ```powershell
 $env:DATABASE_URL="postgresql+psycopg2://scenario_user:scenario_pass@localhost:15432/scenario_db"
 $env:SCENARIO_DB_API_PRINCIPALS='{"architect@example.com":{"secret":"replace-with-a-long-random-secret","roles":["writer"]}}'
-uv run uvicorn scenario_db.api.app:app --host 127.0.0.1 --port 18000
+uv run --no-sync uvicorn scenario_db.api.app:app --host 127.0.0.1 --port 18000
 ```
 
 Read endpoints remain available without credentials and must be protected by
@@ -175,7 +218,7 @@ $env:SCENARIODB_API_KEY="replace-with-a-long-random-secret"
 If you want to launch FastAPI in a background PowerShell window, set the
 environment variable in the parent shell and let `Start-Process` inherit it.
 Avoid building a double-quoted command such as
-`"$env:DATABASE_URL='...'; uv run ..."` because PowerShell expands
+`"$env:DATABASE_URL='...'; uv run --no-sync ..."` because PowerShell expands
 `$env:DATABASE_URL` before the child process starts.
 
 ```powershell
@@ -184,7 +227,7 @@ Start-Process powershell.exe -WindowStyle Hidden -ArgumentList @(
   "-NoProfile",
   "-ExecutionPolicy", "Bypass",
   "-Command",
-  "uv run uvicorn scenario_db.api.app:app --host 127.0.0.1 --port 18000"
+  "uv run --no-sync uvicorn scenario_db.api.app:app --host 127.0.0.1 --port 18000"
 )
 ```
 
@@ -197,8 +240,12 @@ http://127.0.0.1:18000/docs
 Quick API smoke check from another PowerShell:
 
 ```powershell
-Invoke-RestMethod "http://127.0.0.1:18000/api/v1/scenarios/uc-camera-recording/variants/UHD60-HDR10-H265/view?level=0&mode=resource"
-Invoke-RestMethod "http://127.0.0.1:18000/api/v1/scenarios/uc-camera-recording/variants/UHD60-HDR10-H265/view?level=0&mode=topology"
+Invoke-RestMethod "http://127.0.0.1:18000/health/live"
+Invoke-RestMethod "http://127.0.0.1:18000/health/ready"
+Invoke-RestMethod "http://127.0.0.1:18000/api/v1/explorer/scenario-catalog?limit=100"
+Invoke-RestMethod "http://127.0.0.1:18000/api/v1/explorer/variant-matrix?limit=1000"
+Invoke-RestMethod "http://127.0.0.1:18000/api/v1/scenarios/uc-camera-recording/variants/cam-rec-f1-fhd30/view?level=0&mode=resource"
+Invoke-RestMethod "http://127.0.0.1:18000/api/v1/scenarios/uc-camera-recording/variants/cam-rec-f1-fhd30/view?level=0&mode=topology"
 ```
 
 Board-aware Read API filters:
@@ -206,15 +253,15 @@ Board-aware Read API filters:
 ```powershell
 $api="http://127.0.0.1:18000/api/v1"
 Invoke-RestMethod "$api/soc-platforms?limit=100"
-Invoke-RestMethod "$api/projects?soc_ref=soc-exynos2500&board_type=ERD"
-Invoke-RestMethod "$api/scenarios?project_ref=proj-demo-import"
-Invoke-RestMethod "$api/variants?scenario_id=uc-demo-import-recording"
+Invoke-RestMethod "$api/projects?soc_ref=soc-exynos2600&board_type=SM-S947B"
+Invoke-RestMethod "$api/scenarios?project_ref=proj-sm-s947b"
+Invoke-RestMethod "$api/variants?scenario_id=uc-camera-recording"
 ```
 
 Base scenario view is available even when a scenario has no variants:
 
 ```powershell
-Invoke-RestMethod "$api/scenarios/uc-demo-import-recording/view?level=0&mode=resource"
+Invoke-RestMethod "$api/scenarios/uc-camera-recording/view?level=0&mode=resource"
 ```
 
 Optional query/cache settings:
@@ -326,7 +373,7 @@ http://127.0.0.1:18502/Import_Workbench
 CLI equivalent for building the bundle:
 
 ```powershell
-uv run python -m scenario_db.legacy_import.write_bundle `
+uv run --no-sync python -m scenario_db.legacy_import.write_bundle `
   --generated demo\generated\scenariodb `
   --out demo\generated\scenariodb\import_bundle.json `
   --actor legacy-importer `
@@ -343,14 +390,65 @@ scenarios/variants. The link passes `soc_id`, `project_id`, `scenario_id`, and
 `variant_id` query parameters to the Viewer so imported data can be inspected
 without manually copying IDs.
 
-## Run Viewer
+## Run React UI
+
+Start the API first, then open another PowerShell:
+
+```powershell
+cd <SCENARIODB_ROOT>\ui
+npm ci
+npm run dev -- --host 127.0.0.1 --port 3000 --strictPort
+```
+
+Open [http://127.0.0.1:3000](http://127.0.0.1:3000).
+
+| Route | Content |
+| --- | --- |
+| `#/explorer` | Scenarios, variant conditions, filters, and links to Pipeline/Compare |
+| `#/matrix` | Variant condition matrix across scenarios |
+| `#/pipeline` | Pipeline graph, DMA/IP details, sequence, and timing views |
+| `#/compare` | N-way comparison of variants within one scenario and their evidence |
+| `#/timing` | Stage timing budget of one variant: slot budget, IP clock/DVFS level, power/BW, pipeline, intervals, SW-growth what-if |
+| `#/timing-fleet` | Timing budget of every variant in a scenario (clock-factor ranking, sortable table) |
+| `#/predictions` | Current (promoted) power/BW prediction per variant, change vs. previous and its cause |
+| `#/explore` | Architecture exploration runs: power range per combination, lowest-power recommendation, promotion |
+| `#/reports` | Architecture review reports stored in the DB (view, publish, regenerate, HTML export) |
+
+Routes carry shareable `project`, `scenario`, and `variant` context. `Ctrl+K`
+opens the variant picker; Enter opens a variant, Shift+Enter adds it to Compare.
+Streamlit remains available for evidence, import, recipe/sweep exploration, and write workflows.
+Timing Budget and Architecture pages need migration `0020` (`alembic upgrade head`) and
+the local auth setting above. See [timing-budget](docs/guides/timing-budget.md) and
+[arch-exploration](docs/guides/arch-exploration.md) guides.
+The `web/` directory only wraps the embedded Workbench CI; it is not this React UI.
+
+Vite proxies `/api` to `http://127.0.0.1:18000`. Set a different target before
+starting Vite if needed:
+
+```powershell
+$env:SCENARIODB_API_TARGET = 'http://127.0.0.1:18000'
+npm run dev -- --host 127.0.0.1 --port 3000 --strictPort
+```
+
+`npm run build` produces `ui/dist/`; FastAPI does not automatically serve it.
+Serve the build separately and proxy `/api` to FastAPI, or set
+`VITE_SCENARIODB_API_BASE` at build time and configure API CORS for the UI origin.
+For a local build preview, stop the dev server and run
+`npm run preview -- --host 127.0.0.1 --strictPort` on port 3000.
+
+DMA totals are partial model estimates, not measured DRAM traffic. Compressed or
+aligned buffers without explicit byte sizes are excluded. Sensor-to-output
+latency requires an explicit predecessor path to a sensor.
+See [ui/README.md](ui/README.md) for detailed controls and model behavior.
+
+## Run Streamlit Viewer
 
 Start the API first. Then open a new PowerShell and run:
 
 ```powershell
 cd <SCENARIODB_ROOT>
 $env:SCENARIODB_API_BASE="http://127.0.0.1:18000/api/v1"
-uv run --group dashboard streamlit run dashboard\Home.py --server.port 18502 --server.address 127.0.0.1
+uv run --no-sync streamlit run dashboard\Home.py --server.port 18502 --server.address 127.0.0.1
 ```
 
 Background launch follows the same rule: set the environment variable in the
@@ -362,7 +460,7 @@ Start-Process powershell.exe -WindowStyle Hidden -ArgumentList @(
   "-NoProfile",
   "-ExecutionPolicy", "Bypass",
   "-Command",
-  "uv run --group dashboard streamlit run dashboard\Home.py --server.port 18502 --server.address 127.0.0.1 --server.headless true"
+  "uv run --no-sync streamlit run dashboard\Home.py --server.port 18502 --server.address 127.0.0.1 --server.headless true"
 )
 ```
 
@@ -374,7 +472,8 @@ http://127.0.0.1:18502/Pipeline_Viewer
 
 The home page also links to `Pipeline Viewer` and `Import Workbench`.
 
-If `streamlit` is not found, run `uv sync --group dashboard` and retry.
+If `streamlit` is not found, repeat the full dependency sync in Setup and retry.
+See the [Streamlit guide](docs/guides/streamlit-ui.md) for the other dashboard pages.
 
 The Viewer selector is hierarchical:
 
@@ -471,11 +570,11 @@ generation is removed. A process crash may still leave an orphan generation or
 staging directory, so operators should run the dry-run reconciler:
 
 ```powershell
-uv run scenario-db-reconcile-artifacts
+uv run --no-sync scenario-db-reconcile-artifacts
 
 # Removes only stale exporter staging directories. Missing, mismatched, and
 # orphan files remain report-only for manual review.
-uv run scenario-db-reconcile-artifacts --apply-stale-staging
+uv run --no-sync scenario-db-reconcile-artifacts --apply-stale-staging
 ```
 
 The command exits nonzero while unresolved findings remain. Custom export
@@ -566,11 +665,11 @@ also reports those retained artifacts.
 
 ## Viewer Check
 
-Use the default scenario and variant:
+Example runtime scenario and variant (other variants are available in Explorer):
 
 ```text
 Scenario: uc-camera-recording
-Variant:  UHD60-HDR10-H265
+Variant:  cam-rec-f1-fhd30
 ```
 
 Check these views:
@@ -589,42 +688,95 @@ Important viewer notes:
   remains available for legacy callers.
 - If fixture YAML changes, reload ETL and restart the API.
 
+## Stop and Troubleshoot
+
+- Stop foreground API/UI servers with `Ctrl+C` in their terminals.
+- `docker compose stop postgres` stops PostgreSQL while preserving its data volume.
+- Inspect `Get-NetTCPConnection -State Listen` when a port is occupied;
+  `--strictPort` prevents Vite silently starting on another port.
+- If `/health/ready` fails, check the DB URL, migrations, and full dependency sync.
+  Readiness verifies the database, rule cache, and simulation dependencies.
+- If the React proxy fails, check API port 18000 and `SCENARIODB_API_TARGET`.
+  Restart Vite after changing its environment.
+- If the catalog is empty, verify the selected database and runtime fixture import.
+
+For background services, set the repository as `Start-Process -WorkingDirectory`,
+use `-WindowStyle Hidden`, redirect logs into `runtime_logs/`, and record the PID
+returned by `-PassThru` for targeted shutdown.
+
 ## Test
+
+Run the full dependency sync from Setup first. Integration tests require
+Docker/PostgreSQL testcontainers; do not substitute SQLite. CI runs four jobs:
+`quality`, `integration`, `react-ui`, and `web`.
+
+Static checks and the runtime dependency audit, from the repository root:
+
+```powershell
+uv run --no-sync ruff check .
+uv run --no-sync mypy
+uv export --frozen --no-dev --group dashboard --group sim --extra profiling --no-emit-project --quiet -o "$env:TEMP/scenariodb-runtime-requirements.txt"
+uv run --no-sync pip-audit -r "$env:TEMP/scenariodb-runtime-requirements.txt" --progress-spinner off
+```
+
+React checks, from `ui/`:
+
+```powershell
+npm ci
+npm run typecheck
+npm test
+npm run build
+npm audit --audit-level=moderate
+```
+
+Existing Workbench checks, from `web/`:
+
+```powershell
+npm ci
+npm run lint
+npm test
+npm run build
+```
+
+Changes to `frontend/` must include rebuilt assets under
+`dashboard/components/workbench_frontend/component/`. See
+[the CI workflow](.github/workflows/ci.yml) for the exact gates.
 
 Run all unit tests:
 
 ```powershell
-uv run --group dev pytest tests\unit
+uv run --no-sync pytest tests\unit
 ```
 
 Run focused viewer/model tests:
 
 ```powershell
-uv run --group dev pytest tests\unit\test_definition_models.py tests\unit\test_elk_viewer.py tests\unit\test_runtime_projection.py tests\unit\test_viewer_api_client.py
+uv run --no-sync pytest tests\unit\test_definition_models.py tests\unit\test_elk_viewer.py tests\unit\test_runtime_projection.py tests\unit\test_viewer_api_client.py
 ```
 
 Run integration tests only when Docker/PostgreSQL test containers are available:
 
 ```powershell
-uv run --group dev pytest tests\integration
+uv run --no-sync pytest tests\integration
 ```
 
 Run Write API focused tests:
 
 ```powershell
-uv run --group dev pytest tests\unit\test_write_service.py tests\integration\test_write_api.py
+uv run --no-sync pytest tests\unit\test_write_service.py tests\integration\test_write_api.py
 ```
 
 Run simulation focused tests:
 
 ```powershell
-uv run --group dev --group sim pytest tests\unit\sim tests\unit\api\test_simulation.py
+uv run --no-sync pytest tests\unit\sim tests\unit\api\test_simulation.py
+uv run --no-sync pytest tests\unit\sim\test_timing_budget.py tests\unit\sim\test_arch_exploration.py tests\unit\api\test_timing_budget_api.py tests\unit\api\test_arch_exploration_api.py
 ```
 
-Run a core module coverage baseline without changing the default test gate:
+Run the full unit-test coverage gate (minimum 80%):
 
 ```powershell
-uv run --group dev pytest tests\unit --cov=scenario_db --cov-report=term-missing
+uv run --no-sync pytest tests\unit --cov=scenario_db --cov-report=term-missing
 ```
 
 The current read-side contract is documented in [docs/contracts/api/read-api-contract.md](docs/contracts/api/read-api-contract.md). Update that file and the related tests before changing Read API response shapes.
@@ -636,9 +788,12 @@ Equivalent explicit virtual environment commands:
 .\.venv\Scripts\python.exe -m pytest tests\unit\test_definition_models.py tests\unit\test_elk_viewer.py tests\unit\test_runtime_projection.py
 ```
 
-## Current Demo Coverage
+## Current Runtime Coverage
 
-- Camera recording UHD60 HDR10 H.265 scenario.
+- Exynos2600/S26 Plus camera, audio, video, display, and other fixture-backed scenarios.
+- React Explorer, cross-scenario Variant Matrix, Pipeline, and within-scenario Compare.
+- React Timing Budget, combination exploration, prediction board, and review reports
+  (sample DVFS table: MIF from CSV, other domains synthetic).
 - Level 0 Scenario Resource Overview with active IP/resource rows, buffer handoffs, endpoint details, and subsystem metric summary.
 - Level 0 active topology overview with explicit buffer handoff nodes.
 - Level 1 grouped IP detail DAG.
