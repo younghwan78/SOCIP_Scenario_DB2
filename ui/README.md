@@ -6,7 +6,7 @@ React 18 + Vite + TypeScript front-end for the Scenario DB FastAPI (`/api/v1`). 
 
 ```bash
 # 1) API (repo root)
-uvicorn scenario_db.api.app:app --port 18000
+uv run uvicorn scenario_db.api.app:app --host 127.0.0.1 --port 18000
 # 2) UI
 cd ui
 npm install
@@ -28,7 +28,16 @@ npm run dev          # http://localhost:3000  (/api → http://127.0.0.1:18000)
 
 `Ctrl K`: variant picker (Mode = KPI/Pro Video/Slow motion/Portrait/None, Camera = rear wide/tele/UW/front/dual; Enter = open, Shift+Enter = add to compare, ★ = pin).
 
-## Layout
+## Screen layout
+
+- Sidebar: drag the edge to resize, `Ctrl+B` collapses to an icon rail
+- Every page = top (toolbar/filters, ▴ collapse, drag to resize) · main · bottom tabs (`Ctrl+J`, drag to resize)
+- Pipeline: `나란히 | Pipeline | Timing`, drag the divider between Pipeline and Timing
+  - Graph: wheel = scroll, Ctrl+wheel/pinch = zoom at cursor, drag = pan, double-click empty area = fit all; 폭 / 전체 buttons
+  - Timing: wheel = tracks scroll, Ctrl+wheel = zoom at cursor, drag or Shift+wheel = pan, W/S/A/D
+- Sizes and modes persist per browser (localStorage)
+
+## Source layout
 
 - `src/lib/` — api client, condition normalization, graph build/ELK layout, timeline model, routing
 - `src/components/` — GraphView, TimelineView, Picker
