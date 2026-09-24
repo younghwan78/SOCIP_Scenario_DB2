@@ -54,8 +54,20 @@ export interface FleetRow {
 }
 export interface TimingOptions { statistic: Statistic; eis: EisMode; runtime_scale: number; include_whatif?: boolean }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+/** fetch with retry on 429: the API admits only N concurrent simulations per worker (non-blocking). */
+export async function fetchAdmitted(url: string, init: RequestInit, retries = 6): Promise<Response> {
+  for (let i = 0; ; i++) {
+    const res = await fetch(url, init)
+    if (res.status !== 429 || i >= retries) return res
+    const after = Number(res.headers?.get?.('Retry-After') ?? 1)
+    await sleep(Math.min(4000, (Number.isFinite(after) && after > 0 ? after * 1000 : 1000) * (0.5 + 0.25 * i) + Math.random() * 200))
+  }
+}
+
 async function postJson<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  const res = await fetchAdmitted(`${API_BASE}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
   if (!res.ok) {
     let detail = ''
     try { const j = await res.json() as { detail?: unknown }; detail = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail ?? j) } catch { /* not json */ }

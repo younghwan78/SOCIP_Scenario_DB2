@@ -46,3 +46,15 @@ it('posts timing-budget requests with options and surfaces API errors', async ()
   expect(JSON.parse(init.body)).toEqual({ scenario_id: 'uc', variant_id: 'v1', options: { statistic: 'mean', eis: 'off', runtime_scale: 1.2 } })
   await expect(timingApi.fleet('uc', { statistic: 'max', eis: 'auto', runtime_scale: 1 })).rejects.toThrow(/unknown timeline task/)
 })
+
+it('retries 429 (simulation admission slot) and then succeeds', async () => {
+  vi.useFakeTimers()
+  const busy = { ok: false, status: 429, statusText: 'Too Many Requests', headers: { get: () => '1' }, json: async () => ({ detail: 'simulation concurrency limit reached' }) }
+  const fetcher = vi.fn().mockResolvedValueOnce(busy).mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ report: {} }) })
+  vi.stubGlobal('fetch', fetcher)
+  const p = timingApi.variant('uc', 'v1', { statistic: 'max', eis: 'auto', runtime_scale: 1 })
+  await vi.runAllTimersAsync()
+  await expect(p).resolves.toEqual({ report: {} })
+  expect(fetcher).toHaveBeenCalledTimes(2)
+  vi.useRealTimers()
+})

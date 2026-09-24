@@ -1,7 +1,7 @@
 // Architecture exploration → predictions (current/superseded) → review reports.
 // Backend: /arch/exploration/runs, /arch/predictions/*, /arch/reports (src/scenario_db/api/routers/arch_exploration.py)
 import { API_BASE, ApiError } from './api'
-import type { Statistic } from './timingBudget'
+import { fetchAdmitted, type Statistic } from './timingBudget'
 
 export interface Quant { min: number; p25: number; median: number; p75: number; max: number }
 export type DistKey = 'total_mw' | 'cpu_mw' | 'hw_mw' | 'bw_mw' | 'bw_mbs'
@@ -95,7 +95,7 @@ export function caseCount(o: RunOptions, domains = 3): number {
 }
 
 async function send<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, { method, headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined })
+  const res = await fetchAdmitted(`${API_BASE}${path}`, { method, headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined })
   if (!res.ok) {
     let detail = ''
     try { const j = await res.json() as { detail?: unknown }; detail = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail ?? j) } catch { /* not json */ }

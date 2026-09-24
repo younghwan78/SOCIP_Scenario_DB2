@@ -14,7 +14,9 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
   const set = (k: string, v: string | undefined) => ctx.navigate(undefined, { [k]: v }, true)
 
   const q = useAsync(() => (variant ? timingApi.variant(scenario, variant, { statistic, eis, runtime_scale: scale }) : Promise.reject(new Error('variant를 선택하세요 (Ctrl K)'))), [scenario, variant, statistic, eis, scale])
-  const wq = useAsync(() => (variant ? timingApi.variant(scenario, variant, { statistic: 'max', eis: 'auto', runtime_scale: 1, include_whatif: true }) : Promise.resolve(null)), [scenario, variant])
+  // what-if (24 sims) starts after the main report so the page never holds two simulation slots at once
+  const mainReady = !!q.data || !!q.error
+  const wq = useAsync(() => (variant && mainReady ? timingApi.variant(scenario, variant, { statistic: 'max', eis: 'auto', runtime_scale: 1, include_whatif: true }) : Promise.resolve(null)), [scenario, variant, mainReady])
   const r = q.data?.report
   const whatif = wq.data?.report.whatif ?? []
 
