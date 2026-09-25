@@ -93,3 +93,18 @@ Reproduce explicit fixture assumptions and priority checks:
 ```
 
 `priority_recording_report.json` records all min/mean/max cases and all tested clocks, including **effective clocks after ingress/domain corrections**. The selected value is the lowest requested grid point meeting modeled storage/display cadence and a three-frame latency budget; it is not a measured DVFS or power optimum. Mean-case `sim-priority-*` evidence is generated even for failures, with failure reasons. FHD240 retains the requested 120fps sensor input and cannot pass a 240fps output check without a separately verified cadence mechanism. Existing generated `sim-is-v15-*-explored-*` KPI evidence is refreshed with storage completion and corrected no-table manual clocks. The priority report covers the additional heavy/APV cases; older non-explored evidence remains historical.
+
+
+## Rear recording evidence gap fill (2026-09-25)
+
+`scripts/generate_rear_recording_evidence.py --write`가 `uc-camera-recording`의 base variant 중 effective `sensor_place: rear`인 35개에 대해 비어 있는 evidence만 채운다. derived variant(`*-explored-*`, `*-timing-*`)와 front/dual/triple/RCV는 제외한다. 결과 목록은 `rear_recording_gapfill_report.json`.
+
+| 추가 | 개수 | 내용 |
+| --- | ---: | --- |
+| `sim-rear-<variant>-mean-20260925` | 26 | 기존 simulation evidence가 없던 variant. SW timing `mean`, clock 후보 300–1000 MHz 중 cadence·3-frame latency를 만족하는 최저값 (전부 300 MHz). estimated/exploration_only |
+| `meas-synth-<variant>-evt1-20260925` | 33 | measurement가 없던 variant의 **합성(SYNTHETIC) 측정값 — silicon 데이터 아님** |
+
+- 합성 측정: 기준 capture `meas-cam-rec-r1-uhd30-vdis-…`의 rail을 구분별로 rescale — IP rail은 해당 variant sim의 core power 비, BW(MIF·DRAM) rail은 sim BW power 비, CPU rail은 SW task 부하(Σmean × fps) 비(0.6–2.5× clamp), 기타 rail은 거의 고정. rail별 ±4 %, SW task ±25 % 결정적(variant id hash) 변동을 준다.
+- 표시: `provenance.collection_method: synthetic_fixture`, `device_id: SYNTHETIC`, `derived_from`에 기준 capture와 sim id를 넣는다. 예측 ↔ 실측 화면은 `합성` badge를 달고 "실제 측정만" filter를 제공하며, Home의 최대 |Δ|는 실제 측정만으로 계산한다.
+- `cam-rec-r1-fhd480`, `cam-rec-r1-fhd960-ssm`: sim은 추가했지만 cadence/latency를 만족하는 clock 후보가 없어 `feasible: false`. 합성 측정은 만들지 않는다.
+- 합성 측정의 예측 오차는 모델 검증 근거가 아니다. 실제 capture를 import하면 같은 variant의 `meas-synth-*` 파일을 삭제한다.

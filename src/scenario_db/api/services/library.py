@@ -6,6 +6,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from scenario_db.api.services.calibration import is_synthetic
 from scenario_db.db.models.definition import ScenarioVariant
 from scenario_db.db.models.evidence import Evidence
 
@@ -62,5 +63,6 @@ def sw_timing(db: Session, *, scenario_id: str | None = None) -> dict[str, Any]:
         for t in m.sw_task_timing or []:
             if isinstance(t, dict) and t.get("task"):
                 measured.append({"evidence_id": m.id, "scenario_id": m.scenario_ref, "variant_id": m.variant_ref,
+                                 "synthetic": is_synthetic(m.provenance), "count": t.get("samples", t.get("count")),
                                  **{k: t.get(k) for k in ("task", "mean_ms", "p95_ms", "max_ms", "count") if k in t}})
     return {"tasks": sorted(rows, key=lambda r: (r["scenario_id"], r["task"])), "measured": measured}

@@ -24,15 +24,17 @@ export function PipelineTunnel({ domain, paused, speed = 0.22 }: { domain: Domai
     let W = 1200, H = 800, cx = 0, cy = 0
     const resize = () => {
       dirty = true
-      const r = cv.getBoundingClientRect()
+      // Measure the container, not the canvas: if the stylesheet is missing the canvas would
+      // otherwise size itself from its own backing store and grow without bound.
+      const r = (cv.parentElement ?? cv).getBoundingClientRect()
       const dpr = Math.min(2, window.devicePixelRatio || 1)
-      W = Math.max(320, r.width); H = Math.max(240, r.height)
+      W = Math.min(4096, Math.max(320, r.width)); H = Math.min(4096, Math.max(240, r.height))
       cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr)
       g.setTransform(dpr, 0, 0, dpr, 0, 0)
       cx = W * 0.62; cy = H * 0.48
     }
     resize()
-    const ro = new ResizeObserver(resize); ro.observe(cv)
+    const ro = new ResizeObserver(resize); ro.observe(cv.parentElement ?? cv)
     const A = Math.min(220, W * 0.18)
     const path = (z: number) => ({ x: A * Math.sin(TAU * 2 * z / LOOP), y: A * 0.5 * Math.sin(TAU * 3 * z / LOOP + 1.3) })
     const stageAt = (z: number) => Math.floor((((z % LOOP) + LOOP) % LOOP) / GAP)
@@ -111,7 +113,7 @@ export function PipelineTunnel({ domain, paused, speed = 0.22 }: { domain: Domai
       while (gi < gates.length) { drawGate(gates[gi].st, gates[gi].d, labelled.has(gates[gi].st)); gi++ }
       g.globalAlpha = 1
       const next = ST.map((st, i) => ({ st, d: rel(i * GAP + GAP * 0.55) })).filter((o) => o.d > 40).sort((a, b) => a.d - b.d)[0]
-      if (next && W > 700) {
+      if (next && W > 900) { // narrower: the HUD would cover the intro card
         const x = W - 320, y = 64 // top-right under the controls; bottom is the stats row
         g.fillStyle = 'rgba(11,17,22,0.72)'; g.strokeStyle = 'rgba(255,255,255,0.12)'; g.lineWidth = 1
         g.beginPath(); if (g.roundRect) g.roundRect(x, y, 300, 122, 12); else g.rect(x, y, 300, 122); g.fill(); g.stroke()

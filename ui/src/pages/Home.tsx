@@ -19,7 +19,9 @@ export function HomePage({ ctx }: { ctx: Ctx }) {
   const variants = ctx.catalog.reduce((s, c) => s + c.variant_count, 0)
   const run = runs.data?.[0]
   const report = reports.data?.[0]
-  const worst = (meas.data ?? []).map((m) => m.current_prediction?.delta_pct ?? m.simulation?.delta_pct).filter((x): x is number => x !== null && x !== undefined)
+  const realMeas = (meas.data ?? []).filter((m) => !m.synthetic)
+  const synth = (meas.data ?? []).length - realMeas.length
+  const worst = realMeas.map((m) => m.current_prediction?.delta_pct ?? m.simulation?.delta_pct).filter((x): x is number => x !== null && x !== undefined)
   return (
     <div className="home">
       <PipelineTunnel domain={domain} paused={paused} />
@@ -43,7 +45,8 @@ export function HomePage({ ctx }: { ctx: Ctx }) {
           <span>최근 탐색 run</span><b className="txt">{run ? `${run.title} · ${run.summary.spec_ok}/${run.summary.variants} 만족` : '없음'}</b></a>
         <a className="home-stat wide" href={report ? `#/reports?report=${encodeURIComponent(report.id)}` : '#/reports'}>
           <span>최근 검토 보고서</span><b className="txt">{report ? report.scenario_type : '없음'}</b></a>
-        <a className="home-stat" href="#/calibration"><span>예측 ↔ 실측</span><b>{meas.data ? `${meas.data.length}건` : '—'}</b>
+        <a className="home-stat" href="#/calibration"><span>예측 ↔ 실측</span><b>{meas.data ? `${realMeas.length}건` : '—'}</b>
+          {synth > 0 && <em className="dim-em">+ 합성 {synth}</em>}
           {worst.length > 0 && <em>최대 |Δ| {Math.max(...worst.map(Math.abs)).toFixed(1)}%</em>}</a>
       </section>
     </div>

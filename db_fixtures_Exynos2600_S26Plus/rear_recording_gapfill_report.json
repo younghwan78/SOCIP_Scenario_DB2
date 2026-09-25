@@ -1,0 +1,392 @@
+[
+  {
+    "variant": "cam-rec-r1-fhd30-sdr",
+    "had": [],
+    "added": [
+      "sim-rear-cam-rec-r1-fhd30-sdr-mean-20260925",
+      "meas-synth-cam-rec-r1-fhd30-sdr-evt1-20260925"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 519.503
+  },
+  {
+    "variant": "cam-rec-r1-fhd30-ois",
+    "had": [],
+    "added": [
+      "sim-rear-cam-rec-r1-fhd30-ois-mean-20260925",
+      "meas-synth-cam-rec-r1-fhd30-ois-evt1-20260925"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 515.927
+  },
+  {
+    "variant": "cam-rec-r1-fhd30-vdis",
+    "had": [
+      "simulation"
+    ],
+    "added": [
+      "meas-synth-cam-rec-r1-fhd30-vdis-evt1-20260925"
+    ],
+    "synthetic_total_mw": 630.244
+  },
+  {
+    "variant": "cam-rec-r1-fhd30-supersteady",
+    "had": [],
+    "added": [
+      "sim-rear-cam-rec-r1-fhd30-supersteady-mean-20260925",
+      "meas-synth-cam-rec-r1-fhd30-supersteady-evt1-20260925"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 558.536
+  },
+  {
+    "variant": "cam-rec-r1-fhd30-recursive",
+    "had": [],
+    "added": [
+      "sim-rear-cam-rec-r1-fhd30-recursive-mean-20260925",
+      "meas-synth-cam-rec-r1-fhd30-recursive-evt1-20260925"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 524.835
+  },
+  {
+    "variant": "cam-rec-r1-fhd30-hdr10",
+    "had": [],
+    "added": [
+      "sim-rear-cam-rec-r1-fhd30-hdr10-mean-20260925",
+      "meas-synth-cam-rec-r1-fhd30-hdr10-evt1-20260925"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 527.074
+  },
+  {
+    "variant": "cam-rec-r1-fhd30-hdr10-supersteady",
+    "had": [],
+    "added": [
+      "sim-rear-cam-rec-r1-fhd30-hdr10-supersteady-mean-20260925",
+      "meas-synth-cam-rec-r1-fhd30-hdr10-supersteady-evt1-20260925"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 561.542
+  },
+  {
+    "variant": "cam-rec-r1-fhd60-sdr",
+    "had": [],
+    "added": [
+      "sim-rear-cam-rec-r1-fhd60-sdr-mean-20260925",
+      "meas-synth-cam-rec-r1-fhd60-sdr-evt1-20260925"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 862.147
+  },
+  {
+    "variant": "cam-rec-r1-fhd60-supersteady",
+    "had": [
+      "simulation"
+    ],
+    "added": [
+      "meas-synth-cam-rec-r1-fhd60-supersteady-evt1-20260925"
+    ],
+    "synthetic_total_mw": 1080.208
+  },
+  {
+    "variant": "cam-rec-r1-fhd60-hdr10",
+    "had": [],
+    "added": [
+      "sim-rear-cam-rec-r1-fhd60-hdr10-mean-20260925",
+      "meas-synth-cam-rec-r1-fhd60-hdr10-evt1-20260925"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 885.196
+  },
+  {
+    "variant": "cam-rec-r1-fhd120",
+    "had": [
+      "simulation"
+    ],
+    "added": [
+      "meas-synth-cam-rec-r1-fhd120-evt1-20260925"
+    ],
+    "synthetic_total_mw": 1020.762
+  },
+  {
+    "variant": "cam-rec-r1-fhd240",
+    "had": [
+      "simulation"
+    ],
+    "added": [
+      "meas-synth-cam-rec-r1-fhd240-evt1-20260925"
+    ],
+    "synthetic_total_mw": 1442.895
+  },
+  {
+    "variant": "cam-rec-r1-fhd480",
+    "had": [],
+    "added": [
+      "sim-rear-cam-rec-r1-fhd480-mean-20260925"
+    ],
+    "sim_clock_mhz": null,
+    "sim_check": {
+      "max_frame_latency_ms": 25.290495,
+      "average_sink_interval_ms": 4.257143,
+      "cadence_ok": false
+    },
+    "skipped_measurement": "simulation infeasible (cadence/latency)"
+  },
+  {
+    "variant": "cam-rec-r1-fhd960-ssm",
+    "had": [],
+    "added": [
+      "sim-rear-cam-rec-r1-fhd960-ssm-mean-20260925"
+    ],
+    "sim_clock_mhz": null,
+    "sim_check": {
+      "max_frame_latency_ms": 61.745362,
+      "average_sink_interval_ms": 8.333333,
+      "cadence_ok": false
+    },
+    "skipped_measurement": "simulation infeasible (cadence/latency)"
+  },
+  {
+    "variant": "cam-rec-r1-qhd30-supersteady",
+    "had": [],
+    "added": [
+      "sim-rear-cam-rec-r1-qhd30-supersteady-mean-20260925",
+      "meas-synth-cam-rec-r1-qhd30-supersteady-evt1-20260925"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 557.329
+  },
+  {
+    "variant": "cam-rec-r1-qhd30-hdr10-supersteady",
+    "had": [],
+    "added": [
+      "sim-rear-cam-rec-r1-qhd30-hdr10-supersteady-mean-20260925",
+      "meas-synth-cam-rec-r1-qhd30-hdr10-supersteady-evt1-20260925"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 571.048
+  },
+  {
+    "variant": "cam-rec-r1-uhd30-sdr",
+    "had": [],
+    "added": [
+      "sim-rear-cam-rec-r1-uhd30-sdr-mean-20260925",
+      "meas-synth-cam-rec-r1-uhd30-sdr-evt1-20260925"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 548.678
+  },
+  {
+    "variant": "cam-rec-r1-uhd30-supersteady",
+    "had": [],
+    "added": [
+      "sim-rear-cam-rec-r1-uhd30-supersteady-mean-20260925",
+      "meas-synth-cam-rec-r1-uhd30-supersteady-evt1-20260925"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 593.485
+  },
+  {
+    "variant": "cam-rec-r1-uhd30-vdis",
+    "had": [
+      "measurement",
+      "simulation"
+    ],
+    "added": []
+  },
+  {
+    "variant": "cam-rec-r1-uhd30-recursive",
+    "had": [],
+    "added": [
+      "sim-rear-cam-rec-r1-uhd30-recursive-mean-20260925",
+      "meas-synth-cam-rec-r1-uhd30-recursive-evt1-20260925"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 552.13
+  },
+  {
+    "variant": "cam-rec-r1-uhd30-hdr10",
+    "had": [],
+    "added": [
+      "sim-rear-cam-rec-r1-uhd30-hdr10-mean-20260925",
+      "meas-synth-cam-rec-r1-uhd30-hdr10-evt1-20260925"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 559.243
+  },
+  {
+    "variant": "cam-rec-r1-uhd60-sdr",
+    "had": [],
+    "added": [
+      "sim-rear-cam-rec-r1-uhd60-sdr-mean-20260925",
+      "meas-synth-cam-rec-r1-uhd60-sdr-evt1-20260925"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 913.063
+  },
+  {
+    "variant": "cam-rec-r1-uhd60-supersteady",
+    "had": [
+      "simulation"
+    ],
+    "added": [
+      "meas-synth-cam-rec-r1-uhd60-supersteady-evt1-20260925"
+    ],
+    "synthetic_total_mw": 1171.526
+  },
+  {
+    "variant": "cam-rec-r1-uhd60-psm",
+    "had": [],
+    "added": [
+      "sim-rear-cam-rec-r1-uhd60-psm-mean-20260925",
+      "meas-synth-cam-rec-r1-uhd60-psm-evt1-20260925"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 901.655
+  },
+  {
+    "variant": "cam-rec-r1-uhd60-hdr10",
+    "had": [],
+    "added": [
+      "sim-rear-cam-rec-r1-uhd60-hdr10-mean-20260925",
+      "meas-synth-cam-rec-r1-uhd60-hdr10-evt1-20260925"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 928.269
+  },
+  {
+    "variant": "cam-rec-r1-uhd120",
+    "had": [
+      "simulation"
+    ],
+    "added": [
+      "meas-synth-cam-rec-r1-uhd120-evt1-20260925"
+    ],
+    "synthetic_total_mw": 1966.474
+  },
+  {
+    "variant": "cam-rec-r1-8k24-sdr",
+    "had": [],
+    "added": [
+      "sim-rear-cam-rec-r1-8k24-sdr-mean-20260925",
+      "meas-synth-cam-rec-r1-8k24-sdr-evt1-20260925"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 1189.236
+  },
+  {
+    "variant": "cam-rec-r1-8k24-hf",
+    "had": [],
+    "added": [
+      "sim-rear-cam-rec-r1-8k24-hf-mean-20260925",
+      "meas-synth-cam-rec-r1-8k24-hf-evt1-20260925"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 1202.454
+  },
+  {
+    "variant": "cam-rec-r1-8k24-psm",
+    "had": [],
+    "added": [
+      "sim-rear-cam-rec-r1-8k24-psm-mean-20260925",
+      "meas-synth-cam-rec-r1-8k24-psm-evt1-20260925"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 1160.011
+  },
+  {
+    "variant": "cam-rec-r1-8k30-sdr",
+    "had": [
+      "simulation"
+    ],
+    "added": [
+      "meas-synth-cam-rec-r1-8k30-sdr-evt1-20260925"
+    ],
+    "synthetic_total_mw": 1517.258
+  },
+  {
+    "variant": "cam-rec-r1-8k30-hf",
+    "had": [],
+    "added": [
+      "sim-rear-cam-rec-r1-8k30-hf-mean-20260925",
+      "meas-synth-cam-rec-r1-8k30-hf-evt1-20260925"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 1446.183
+  },
+  {
+    "variant": "cam-rec-r1-8k30-psm",
+    "had": [],
+    "added": [
+      "sim-rear-cam-rec-r1-8k30-psm-mean-20260925",
+      "meas-synth-cam-rec-r1-8k30-psm-evt1-20260925"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 1366.264
+  },
+  {
+    "variant": "cam-rec-3rdparty-fhd30",
+    "had": [],
+    "added": [
+      "sim-rear-cam-rec-3rdparty-fhd30-mean-20260925",
+      "meas-synth-cam-rec-3rdparty-fhd30-evt1-20260925"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 524.19
+  },
+  {
+    "variant": "cam-rec-3rdparty-binning",
+    "had": [],
+    "added": [
+      "sim-rear-cam-rec-3rdparty-binning-mean-20260925",
+      "meas-synth-cam-rec-3rdparty-binning-evt1-20260925"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 520.332
+  },
+  {
+    "variant": "cam-rec-r1-fhd30-portrait",
+    "had": [
+      "simulation"
+    ],
+    "added": [
+      "meas-synth-cam-rec-r1-fhd30-portrait-evt1-20260925"
+    ],
+    "synthetic_total_mw": 639.713
+  },
+  {
+    "variant": "cam-rec-r1-uhd30-portrait",
+    "had": [
+      "simulation"
+    ],
+    "added": [
+      "meas-synth-cam-rec-r1-uhd30-portrait-evt1-20260925"
+    ],
+    "synthetic_total_mw": 700.299
+  }
+]

@@ -26,6 +26,12 @@ Rail → 구분 (`comparison/calibration.py`)
 - Simulation 열: `power_breakdown`이 있는 evidence만 split 비교, 날짜 suffix로 구분 (`Sim MM-DD`). KPI tile·목록은 최신 sim.
 - 최신 simulation은 `measured_at` 기준이며 시각이 없는 evidence는 뒤로 둔다. project가 없는 실측은 소유 scenario의 project를 사용하며 다른 project의 rail map은 사용하지 않는다.
 
+### 합성(SYNTHETIC) 측정 fixture
+
+- `provenance.collection_method: synthetic_fixture` 또는 `device_id: SYNTHETIC`이면 API가 `synthetic: true`를 돌려준다.
+- 목록에 `합성` badge, 상단 filter `합성 포함 | 실제 측정만` (param `real=1`), 상세에 경고 배너와 source(`derived_from`).
+- 생성: `scripts/generate_rear_recording_evidence.py` (rear Camera Recording gap fill, fixture README 참고).
+
 ## Library (`#/library`)
 
 | 탭 | Source | 비고 |
