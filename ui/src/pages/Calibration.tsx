@@ -93,7 +93,7 @@ function Detail({ d, ctx }: { d: MeasDetail; ctx: Ctx }) {
       <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
         <a className="btn" href={`#/timing?scenario=${encodeURIComponent(d.scenario_id)}&variant=${encodeURIComponent(d.variant_id)}`}>Timing Budget →</a>
         <a className="btn" href={`#/library?tab=sw&scenario=${encodeURIComponent(d.scenario_id)}`}>SW timing 가정 →</a>
-        <button className="btn" onClick={() => ctx.navigate('predictions', { scenario: d.scenario_id, v: d.variant_id })}>예측 현황 →</button>
+        <button className="btn" onClick={() => ctx.navigate('predictions', { scenario: d.scenario_id, v: cur?.id })}>예측 현황 →</button>
       </div>
     </Card>
   </>

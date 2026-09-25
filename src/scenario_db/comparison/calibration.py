@@ -16,7 +16,8 @@ import re
 from typing import Any
 
 CATEGORIES = ("cpu", "ip", "bw", "other")
-_DOMAIN_TO_CATEGORY = {"CPU": "cpu", "MIF": "bw", "MEM": "bw", "DRAM": "bw"}
+_DOMAIN_TO_CATEGORY = {"CPU": "cpu", "MIF": "bw", "MEM": "bw", "DRAM": "bw",
+                       **dict.fromkeys(("GPU", "G3D", "SRAM", "ICPU", "NPU", "DNC", "AUD", "MODEM", "CP"), "other")}
 _RULES: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("other", re.compile(r"G3D|GPU|SRAM|ICPU|NPU|DNC|AUD|MODEM|_CP_", re.I)),
     ("cpu", re.compile(r"CPUCL|_DSU|VDD_CPU", re.I)),
