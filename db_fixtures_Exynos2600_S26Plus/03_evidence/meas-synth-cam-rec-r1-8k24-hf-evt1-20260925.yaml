@@ -40,7 +40,7 @@ kpi:
   frame_latency_ms:
     mean: 104.87
     p95: 122.4
-    n: 4320
+    n: 2160
   fps_effective: 23.98
 vdd_power:
   B5S4_VDDMIF_AP_L:
@@ -144,7 +144,7 @@ sw_task_timing:
   p50_ms: 0.295
   p95_ms: 0.419
   max_ms: 0.628
-  samples: 4320
+  samples: 2160
   count_per_frame: 1.0
   value_source: assumed
   source_note: SYNTHETIC fixture — not silicon data. Reference rails rescaled by this
@@ -155,7 +155,7 @@ sw_task_timing:
   p50_ms: 2.949
   p95_ms: 4.19
   max_ms: 4.649
-  samples: 4320
+  samples: 2160
   count_per_frame: 1.0
   value_source: assumed
   source_note: SYNTHETIC fixture — not silicon data. Reference rails rescaled by this
@@ -166,7 +166,7 @@ sw_task_timing:
   p50_ms: 3.429
   p95_ms: 4.873
   max_ms: 6.78
-  samples: 4320
+  samples: 2160
   count_per_frame: 1.0
   value_source: assumed
   source_note: SYNTHETIC fixture — not silicon data. Reference rails rescaled by this

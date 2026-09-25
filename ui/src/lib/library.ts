@@ -12,7 +12,7 @@ export interface SwTaskRow {
   scenario_id: string; task: string; variants: number; min_ms: number[] | null; mean_ms: number[] | null; max_ms: number[] | null
   latency_ms: number[] | null; source: string[]; bitrate_scaled: boolean
 }
-export interface SwMeasured { evidence_id: string; scenario_id: string; variant_id: string; task: string; mean_ms?: number; p95_ms?: number; max_ms?: number; count?: number }
+export interface SwMeasured { evidence_id: string; scenario_id: string; variant_id: string; task: string; synthetic?: boolean; mean_ms?: number; p95_ms?: number; max_ms?: number; count?: number }
 
 async function catalogPages<T>(path: string): Promise<Paged<T>> {
   const items: T[] = []
