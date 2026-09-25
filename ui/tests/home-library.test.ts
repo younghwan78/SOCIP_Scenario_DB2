@@ -97,3 +97,23 @@ describe('ip topology', () => {
     expect(pos.get('mtnr')!.x).toBeGreaterThan(pos.get('byrp')!.x)
   })
 })
+
+describe('ip topology pre/post-NRT split', () => {
+  it('puts RTA/LME before NRT and EIS/GDC after, with an M2M scaler slot', async () => {
+    const { topoLayout } = await import('../src/lib/topology')
+    const ip = (pid: string, lane: string, type = 'ip', ipRef = '') => ({ pid, viewId: pid, label: pid.toUpperCase(), lane, type, ipRef, rdma: { used: 0, total: null }, wdma: { used: 0, total: null } })
+    const ips = [ip('mlsc', 'rt'), ip('pre_me_rta', 'sw', 'sw'), ip('lme', 'm2m'), ip('mtnr', 'nrt'), ip('mcsc', 'nrt'), ip('eis', 'sw', 'sw'), ip('gdc_m', 'm2m')]
+    const links = [['mlsc', 'lme'], ['lme', 'pre_me_rta'], ['pre_me_rta', 'mtnr'], ['mlsc', 'mtnr'], ['mtnr', 'mcsc'], ['mcsc', 'eis'], ['eis', 'gdc_m'], ['mcsc', 'gdc_m']].map(([from, to]) => ({ from, to, kind: 'M2M' }))
+    const lay = topoLayout({ ips, links } as never)
+    const at = new Map(lay.nodes.map((n) => [n.ip.pid, `${n.column}/${n.section}`]))
+    expect(at.get('pre_me_rta')).toBe('pre/sw')
+    expect(at.get('lme')).toBe('pre/m2m')
+    expect(at.get('eis')).toBe('post/sw')
+    expect(at.get('gdc_m')).toBe('post/m2m')
+    expect(lay.columns.map((c) => c.id)).toEqual(['rt', 'pre', 'nrt', 'post'])
+    expect(lay.ghosts.map((g) => g.label)).toEqual(['M2M SCALER'])
+    const withScaler = topoLayout({ ips: [...ips, ip('m2msc', 'm2m', 'ip', 'ip-m2m-scaler-s5e9965')], links } as never)
+    expect(withScaler.ghosts).toHaveLength(0)
+    expect(withScaler.nodes.find((n) => n.ip.pid === 'm2msc')?.column).toBe('post')
+  })
+})

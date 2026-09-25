@@ -16,6 +16,12 @@ def measurements(scenario_id: str | None = None, db: Session = Depends(get_db)):
     return cal.list_measurements(db, scenario_id=scenario_id)
 
 
+@router.get("/calibration/coverage-summary")
+def coverage_summary(db: Session = Depends(get_db)):
+    """Per-scenario count of variants with simulation / real / synthetic measurement / current prediction (Home)."""
+    return cal.coverage_summary(db)
+
+
 @router.get("/calibration/coverage")
 def coverage(scenario_id: str, db: Session = Depends(get_db)):
     """Per-variant evidence coverage: simulation / real + synthetic measurement counts and current prediction."""
