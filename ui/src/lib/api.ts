@@ -141,7 +141,7 @@ export interface IpCatalog {
   id: string
   category?: string | null
   rtl_version?: string | null
-  capabilities?: { operating_modes?: { id: string }[]; properties?: { modules?: IpModule[]; ip_group?: string }; sim?: Dict } | null
+  capabilities?: { operating_modes?: { id: string }[]; properties?: { modules?: IpModule[]; ip_group?: string; hierarchy_group?: string; blk?: string; block?: string }; sim?: Dict } | null
 }
 
 export class ApiError extends Error {

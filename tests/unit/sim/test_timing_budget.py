@@ -141,6 +141,11 @@ def test_dvfs_levels_are_reported(graph_factory, dvfs):
     assert mtnr["dvfs_level"] is not None and mtnr["set_clock_mhz"] >= mtnr["required_clock_mhz"]
     assert mtnr["voltage_mv"] > 0
     assert r["dvfs"]["applied"] is True
+    # rule clock carries its own level; a group without a table is flagged instead of a level
+    assert mtnr["rule_dvfs_level"] is not None and mtnr["dvfs_table"] is True
+    for ip in r["ips"]:
+        if not ip["dvfs_table"]:
+            assert ip["dvfs_level"] is None
 
 
 def test_power_and_bw_split(graph_factory):

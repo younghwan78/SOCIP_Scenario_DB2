@@ -32,6 +32,11 @@ def test_calibration_scope_recency_and_constant_query_count(engine):
                             vdd_power={'ODD': {'power_mw': 10}}, yaml_sha256='test',
                             sw_task_timing=[{'task': 'sw', 'mean_ms': 2}]))
         db.flush()
+        synthetic = db.get(Evidence, f'{sid}-measurement2')
+        synthetic.provenance = {'collection_method': 'synthetic_fixture', 'device_id': 'SYNTHETIC'}
+        db.flush()
+        assert cal.coverage(db, sid)['v'] == {
+            'simulation': 2, 'measurement': 1, 'synthetic': 1, 'current_prediction': None}
         queries = []
         def counted(*args):
             queries.append(args[2])
@@ -52,4 +57,5 @@ def test_calibration_scope_recency_and_constant_query_count(engine):
         sw = library.sw_timing(db, scenario_id=sid)
         assert sw['tasks'][0]['mean_ms'] == [2, 2]
         assert len(sw['measured']) == 2
+        assert sum(t['synthetic'] for t in sw['measured']) == 1
         db.rollback()

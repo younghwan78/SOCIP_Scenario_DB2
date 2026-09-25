@@ -407,7 +407,7 @@ Open [http://127.0.0.1:3000](http://127.0.0.1:3000).
 | `#/` | Home (brand click): pipeline fly-through (generic stages · Camera / Video / Display), SSO placeholder, current status links |
 | `#/explorer` | Scenarios, variant conditions, filters, and links to Pipeline/Compare |
 | `#/matrix` | Variant condition matrix across scenarios |
-| `#/pipeline` | Pipeline graph, DMA/IP details, sequence, and timing views |
+| `#/pipeline` | Pipeline graph, DMA/IP details, sequence, and timing views; `IP 내부` lens = all-IP connection map (lane columns, colour = voltage domain or BLK) + selected IP ports |
 | `#/compare` | N-way comparison of variants within one scenario and their evidence |
 | `#/timing` | Stage timing budget of one variant: slot budget, IP clock/DVFS level, power/BW, pipeline, intervals, SW-growth what-if |
 | `#/timing-fleet` | Timing budget of every variant in a scenario (clock-factor ranking, sortable table) |

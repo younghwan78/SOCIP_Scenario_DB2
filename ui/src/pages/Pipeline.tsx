@@ -26,7 +26,7 @@ type TimingView = 'trace' | 'cadence'
 const LENS: { id: Lens; label: string; hint: string }[] = [
   { id: 'sequence', label: 'Sequence · HW/SW 순서', hint: 'Sensor → Panel/Storage 실행 순서. 같은 열 = OTF streaming(같은 시점), 다음 열 = M2M 또는 SW hand-off. RT 이후 어떤 SW가 NRT를 열고, NRT 이후 어떤 SW가 출력단을 여는지 확인. 노드: +frame 기준 시작 · 소요(ms) / 처리 크기' },
   { id: 'dma', label: 'DMA · Memory', hint: 'Buffer 중심: IP WDMA → Buffer → RDMA. W×H · format · bit · 압축 · MB/frame · MB/s, IP 입력→출력 크기, history(f-1) · stat · optional DMA 포함. 상세 값은 하단 DMA 표' },
-  { id: 'ip', label: 'IP 내부', hint: 'IP 하나의 OTF in / RDMA / history read → Core(처리 크기, crop·scale·mode) → OTF out / WDMA / stat 출력. 입력 대비 출력 scale 비율 표시' },
+  { id: 'ip', label: 'IP 내부', hint: '위: 전체 IP 연결 구조 (lane × 연결 순서, 색 = Voltage domain 또는 BLK). IP 클릭 → 아래: OTF in / RDMA / history read → Core(처리 크기, crop·scale·mode) → OTF out / WDMA / stat 출력과 port 전체 표' },
 ]
 const legacyLens = (l?: string): Lens => (l === 'topology' ? 'sequence' : l === 'transform' ? 'ip' : l === 'dma' || l === 'ip' || l === 'sequence' ? l : 'sequence')
 const OUT_NODES = /^(panel|dpu|mfc|apv)/
@@ -201,10 +201,10 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
     <PageLayout id="pipeline"
       top={<>
       <div className="toolbar">
-        <div className="seg" role="group" aria-label="화면 구성">
+        {lens !== 'ip' && <div className="seg" role="group" aria-label="화면 구성">
           {([['split', '나란히'], ['graph', 'Pipeline'], ['timing', 'Timing']] as [Mode, string][]).map(([k, l]) =>
             <button key={k} className={mode === k ? 'on' : ''} onClick={() => setMode(k)}>{l}</button>)}
-        </div>
+        </div>}
         <div className="seg" role="group" aria-label="보기 관점">
           {LENS.map((l) => <button key={l.id} className={lens === l.id ? 'on' : ''} onClick={() => setLens(l.id)} title={l.hint}>{l.label}</button>)}
         </div>
@@ -223,18 +223,18 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
         ))}
       </div>}
       </>}
-      main={
+      main={lens === 'ip' ? (model ? <IpInternalView model={model} selectedPid={selectedPid} onSelect={selectNode} />
+        : <div className="empty">{viewQ.error ?? '불러오는 중…'}</div>) :
       <div className="workspace" ref={workRef}>
         {mode !== 'timing' && <section className="panel pane" style={{ flex: mode === 'split' ? `0 0 ${split}%` : '1 1 auto' }}>
-          <div className="pane-head"><h2>{lens === 'ip' ? 'IP 내부' : lens === 'dma' ? 'DMA · Memory' : 'Sequence'}</h2>
+          <div className="pane-head"><h2>{lens === 'dma' ? 'DMA · Memory' : 'Sequence'}</h2>
             {lens === 'sequence' && trace && <span className="faint" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>timing: {evidenceSource(trace)}</span>}{legend}</div>
           <div className="pane-body" ref={paneRef}>
             {viewQ.error && <div className="err" style={{ margin: 12 }}>{viewQ.error}</div>}
             {lens === 'dma' && layoutErr && <div className="err" style={{ margin: 12 }}>Layout 실패: {layoutErr}</div>}
-            {lens !== 'ip' && (viewQ.loading || (!layout && !layoutErr && !viewQ.error)) && <div className="empty">Layout 계산 중…</div>}
-            {lens !== 'ip' && layout && !viewQ.error && <GraphView layout={layout} selected={selected} related={related} onSelect={selectNode} showOps={false} tooltip={nodeTip}
+            {(viewQ.loading || (!layout && !layoutErr && !viewQ.error)) && <div className="empty">Layout 계산 중…</div>}
+            {layout && !viewQ.error && <GraphView layout={layout} selected={selected} related={related} onSelect={selectNode} showOps={false} tooltip={nodeTip}
               onToggleGroup={(g) => setCollapsed((c) => { const s = new Set(c); if (s.has(g)) s.delete(g); else s.add(g); return s })} />}
-            {lens === 'ip' && model && <IpInternalView model={model} selectedPid={selectedPid} onSelect={selectNode} />}
           </div>
         </section>}
         {mode === 'split' && <Resizer axis="x" label="Pipeline | Timing 폭" onStart={() => { splitBase.current = split }} onResize={onSplit} onReset={() => setSplit(50)} />}
@@ -266,7 +266,7 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
         </section>}
       </div>
       }
-      bottomTabs={[
+      bottomTabs={lens === 'ip' ? undefined : [
         { id: 'sel', label: <>선택 상세{selectedIp ? <span className="tab-note"> · {selectedIp.label}</span> : selectedBuf ? <span className="tab-note"> · {selectedBuf.name}</span> : slice ? <span className="tab-note"> · {slice.label}</span> : null}</>, content: (
         <div className="sel-grid">
           <div>

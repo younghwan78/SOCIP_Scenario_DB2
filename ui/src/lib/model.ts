@@ -91,7 +91,15 @@ export interface IpModel {
   rdma: { used: number; total: number | null }
   wdma: { used: number; total: number | null }
   modes?: string[]
+  /** BLK from catalog properties.blk/block; falls back to hierarchy_group (blkSource says which) */
+  blk?: string
+  blkSource?: 'blk' | 'hierarchy_group'
+  /** voltage rail / DVFS group from catalog sim (selected mode first) */
+  vdd?: string
+  dvfsGroup?: string
 }
+
+export interface IpLink { from: string; to: string; kind: 'OTF' | 'M2M' | 'ctrl'; buffer?: string; mbs?: number | null }
 
 export type BufferKind = 'data' | 'stat' | 'history' | 'optional'
 export interface BufferRow {
@@ -119,6 +127,8 @@ export interface BufferRow {
 export interface PipelineModel {
   ips: IpModel[]
   byPid: Map<string, IpModel>
+  /** IP-to-IP connections (pid level, one per edge) for the topology overview */
+  links: IpLink[]
   buffers: BufferRow[]
   fps: number | null
   /** total DMA traffic (W+R, MB/s) over characterised buffers */
@@ -278,9 +288,33 @@ export function buildModel(view: ViewResponse, scn?: ScenarioDef | null, variant
       viewId: n.id, pid, label: n.label, lane: laneOf(n, ch), type: n.type, ipRef: String(n.ip_ref ?? ''), inSize, outSizes,
       ops: opsOf(n.active_operations, cfg), mode: cfg?.selected_mode ? String(cfg.selected_mode) : undefined, flags: flagsOf(cfg), sw: swTimingOf(cfg), ports,
       channels, rdma: count('in'), wdma: count('out'), modes: cat?.capabilities?.operating_modes?.map((m) => m.id),
+      ...domainOf(cat, cfg),
     }
   })
-  return { ips, byPid: new Map(ips.map((i) => [i.pid, i])), buffers, fps: vfps, totalMBs: +total.toFixed(1), unknownBuffers: unknown }
+  const links: IpLink[] = edges.filter((e) => e.flow_type !== 'risk' && active.has(pipelineIdOf(e.source)) && active.has(pipelineIdOf(e.target)))
+    .map((e) => {
+      const kind: IpLink['kind'] = e.flow_type === 'control' ? 'ctrl' : e.flow_type === 'M2M' ? 'M2M' : 'OTF'
+      const b = e.buffer_ref ? bufMap.get(e.buffer_ref) : undefined
+      return { from: pipelineIdOf(e.source), to: pipelineIdOf(e.target), kind, buffer: e.buffer_ref ?? undefined, mbs: b && b.consumers.length ? (b.rMBs ?? 0) / b.consumers.length : null }
+    })
+  return { ips, byPid: new Map(ips.map((i) => [i.pid, i])), links, buffers, fps: vfps, totalMBs: +total.toFixed(1), unknownBuffers: unknown }
+}
+
+/** BLK / voltage rail / DVFS group from the IP catalog. The selected mode's sim entry wins. */
+export function domainOf(cat?: IpCatalog, cfg?: Dict): Pick<IpModel, 'blk' | 'blkSource' | 'vdd' | 'dvfsGroup'> {
+  const caps = cat?.capabilities
+  if (!caps) return {}
+  const props = caps.properties ?? {}
+  const sim = (caps.sim ?? {}) as Dict
+  const modes = (sim.modes ?? {}) as Record<string, Dict>
+  const sel = cfg?.selected_mode ? modes[String(cfg.selected_mode)] : undefined
+  const first = Object.values(modes).find((m) => m && typeof m === 'object')
+  const pick = (k: string) => {
+    for (const src of [sel, sim, first]) if (src && typeof src[k] === 'string' && src[k]) return String(src[k])
+    return undefined
+  }
+  const blk = props.blk ?? props.block
+  return { blk: blk ?? props.hierarchy_group, blkSource: blk ? 'blk' : props.hierarchy_group ? 'hierarchy_group' : undefined, vdd: pick('vdd'), dvfsGroup: pick('dvfs_group') }
 }
 
 /** Catalog modules ∪ used ports → channel list with used / off (optional disabled) / unused. */

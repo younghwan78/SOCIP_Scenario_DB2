@@ -67,3 +67,33 @@ describe('new routes', () => {
     expect(parseHash(formatHash({ page: 'library', params: { tab: 'dvfs' } })).params.tab).toBe('dvfs')
   })
 })
+
+describe('timing clock text', () => {
+  it('shows DVFS levels on both sides, or why there is none', async () => {
+    const { clockText } = await import('../src/lib/timingBudget')
+    expect(clockText({ rule_clock_mhz: 342.3, set_clock_mhz: 400, rule_dvfs_level: 4, dvfs_level: 4, dvfs_table: true, dvfs_group: 'CAM' })).toBe('342 (Lv4) → 400 MHz (Lv4)')
+    expect(clockText({ rule_clock_mhz: 342.3, set_clock_mhz: 342.3, rule_dvfs_level: null, dvfs_level: null, dvfs_table: false, dvfs_group: 'CSIS' })).toBe('342 → 342 MHz (Lv — · CSIS 표 없음)')
+  })
+})
+
+describe('ip topology', () => {
+  it('keeps an empty topology SVG valid', async () => {
+    const { topoLayout } = await import('../src/lib/topology')
+    const lay = topoLayout({ ips: [], links: [] } as never)
+    expect(lay.width).toBeGreaterThan(0)
+    expect(lay.height).toBeGreaterThan(0)
+  })
+  it('ranks by longest path and lays lanes out as columns', async () => {
+    const { ranks, topoLayout } = await import('../src/lib/topology')
+    const r = ranks(['a', 'b', 'c'], [{ from: 'a', to: 'b', kind: 'OTF' }, { from: 'b', to: 'c', kind: 'M2M' }, { from: 'a', to: 'c', kind: 'M2M' }, { from: 'c', to: 'a', kind: 'ctrl' }])
+    expect(r.get('c')).toBeGreaterThan(r.get('b')!)
+    const ip = (pid: string, lane: string) => ({ pid, viewId: pid, label: pid.toUpperCase(), lane, type: 'ip', ipRef: '', inSize: '', outSizes: [], ops: [], flags: [], ports: [], channels: [], rdma: { used: 0, total: null }, wdma: { used: 0, total: null } })
+    const m = { ips: [ip('csis', 'rt'), ip('byrp', 'rt'), ip('mtnr', 'nrt')], links: [{ from: 'csis', to: 'byrp', kind: 'OTF' }, { from: 'byrp', to: 'mtnr', kind: 'M2M' }] }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const lay = topoLayout(m as any)
+    const pos = new Map(lay.nodes.map((n) => [n.ip.pid, n]))
+    expect(pos.get('csis')!.x).toBe(pos.get('byrp')!.x)
+    expect(pos.get('byrp')!.y).toBeGreaterThan(pos.get('csis')!.y)
+    expect(pos.get('mtnr')!.x).toBeGreaterThan(pos.get('byrp')!.x)
+  })
+})

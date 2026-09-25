@@ -29,6 +29,7 @@ stage 사이는 memory(M2M)이므로 pipeline으로 동작한다. 각 stage가 1
 - 여러 stream이 같은 IP를 공유하면 `m_k = 1 − (1−m)/k`.
 - **MFC dual core**: UHD 이상이면(`mfc_dual=auto`) MFC/MFD가 절반씩 병렬 처리한다. 폭 ½ → clock ½, frame 시간은 같고 power는 × cores.
 - DVFS: required 이상인 최소 level을 쓰고 DVFS domain 정렬을 반영한다. power는 `(V/710 mV)²`로 scale.
+- 보고서 IP 행: `rule_clock_mhz`/`rule_dvfs_level`(25% rule) → `set_clock_mhz`/`dvfs_level`. DVFS group에 table이 없으면 `dvfs_table: false`, level은 null (예: CSIS) — UI는 `Lv — · CSIS 표 없음`.
 - 기본 DVFS는 해당 SoC의 최신 `SocDvfsTable`이다. 요청의 `dvfs_tables`/`dvfs_table_ref`로 override할 수 있다.
 
 ## 3. 판정
@@ -62,6 +63,7 @@ stage 사이는 memory(M2M)이므로 pipeline으로 동작한다. 각 stage가 1
 - CPU power: `coeff[cluster] × f × V² × util` (Linux EM). coeff는 ip-cpu-s5e9965 profiler 값 `[449, 449, 505, 1127] µW/MHz/V²`. cluster/freq/volt는 **가정값**이다.
 - HW power: IP `unit_power × (V/710)² × cores`. `unit_power=0`인 IP는 `zero_power_ips`로 보고한다.
 - BW: HW DMA와 SW DMA(`mpeg_writer`, `storage_write` 등)를 분리한다. BW power는 MIF `bw_power_coeff`를 사용한다.
+- UI ⑥: Power = Total / CPU / HW IP core / BW(MIF), BW = Total / CPU / HW IP core, 각 Total 대비 비중. ② timeline의 DPU(preview)·MFC(video) lane 아래 눈금은 연속 frame 출력 완료 간격(end→end, 목표 period ± tolerance 이탈 시 빨강).
 
 ## 6. 실행
 

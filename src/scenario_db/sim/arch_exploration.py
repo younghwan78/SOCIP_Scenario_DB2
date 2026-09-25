@@ -201,6 +201,7 @@ def explore_variant(
         "scenario_id": graph.scenario.id,
         "variant_id": graph.variant.id,
         "design_conditions": _jsonable(getattr(graph.variant, "design_conditions", None) or {}),
+        "severity": getattr(graph.variant, "severity", None),
         "fps": obj_slice["fps"],
         "period_ms": obj_slice["period_ms"],
         "eis_on": obj_slice["eis_on"],

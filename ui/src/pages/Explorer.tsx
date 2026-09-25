@@ -10,6 +10,7 @@ import { Icon } from '../components/Icons'
 import { DataTable, type Column } from '../components/DataTable'
 import { SEVERITY_RANK, preferredReference, resFpsKey } from '../lib/defaults'
 import type { VariantRow } from '../lib/api'
+import { calibrationApi, type Coverage } from '../lib/calibration'
 
 type FacetKey = 'resolution' | 'fps' | 'stab' | 'hdr' | 'camera'
 const FACET_LABEL: Record<FacetKey, string> = { resolution: 'Res', fps: 'fps', stab: 'Stab', hdr: 'HDR', camera: 'Camera' }
@@ -39,6 +40,9 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
   const selected = scenarios.find((s) => s.scenario_id === ctx.scenario) ?? scenarios[0]
   const variantsQ = useAsync(() => (selected ? api.variants(selected.scenario_id) : Promise.resolve({ items: [], total: 0 })), [selected?.scenario_id])
   const rows = useMemo(() => toRows(selected, variantsQ.data?.items ?? []), [selected, variantsQ.data])
+  // evidence coverage is optional: an older API without /calibration/coverage just hides the columns' content
+  const covQ = useAsync(() => (selected ? calibrationApi.coverage(selected.scenario_id).catch(() => null) : Promise.resolve(null)), [selected?.scenario_id])
+  const cov = (v: string): Coverage | undefined => covQ.data?.[v]
   const byId = useMemo(() => new Map(rows.map((r) => [r.variant_id, r])), [rows])
 
   const listW = useResizable('explorer.list.w', 260, 180, 480)
@@ -79,6 +83,18 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
         {isRef && <span className="badge" style={{ background: 'var(--primary)', color: '#fff', marginLeft: 6 }}>기준</span>}
         {r.derived_from_variant && <span className="faint" style={{ marginLeft: 6, fontSize: 11 }}>← {r.derived_from_variant}</span>}</span>
     } },
+    { key: 'pred', label: '예측', width: 96, firstDir: -1, headTitle: 'Simulation evidence 수 · 등록(current) 예측 여부', sort: (r) => { const c = cov(r.variant_id); return c ? c.simulation + (c.current_prediction ? 100 : 0) : 0 },
+      render: (r) => { const c = cov(r.variant_id); if (!covQ.data) return null
+        return c && (c.simulation || c.current_prediction) ? <span className="cov">
+          {c.simulation > 0 && <span className="badge cov-sim" title={`simulation evidence ${c.simulation}건`}>sim {c.simulation}</span>}
+          {c.current_prediction && <span className="badge cov-pred" title={`등록 예측 ${c.current_prediction.id}${c.current_prediction.total_mw ? ` · ${c.current_prediction.total_mw.toFixed(0)} mW` : ''}`}>등록</span>}</span>
+          : <span className="faint">—</span> } },
+    { key: 'meas', label: '실측', width: 84, firstDir: -1, headTitle: '측정 evidence 수 (합성 fixture 별도 표시)', sort: (r) => { const c = cov(r.variant_id); return c ? c.measurement * 10 + c.synthetic : 0 },
+      render: (r) => { const c = cov(r.variant_id); if (!covQ.data) return null
+        return c && (c.measurement || c.synthetic) ? <a className="cov" href={`#/calibration?scenario=${encodeURIComponent(r.scenario_id)}`} onClick={(e) => e.stopPropagation()}>
+          {c.measurement > 0 && <span className="badge cov-meas" title={`실제 측정 ${c.measurement}건`}>실측 {c.measurement}</span>}
+          {c.synthetic > 0 && <span className="badge v-warn" title="합성 fixture — silicon 측정 아님">합성</span>}</a>
+          : <span className="faint">—</span> } },
     ...COLS.map((c): Column<VariantRow> => ({ key: c.key, label: c.label, width: c.key === 'codec' ? 190 : c.key === 'mode' ? 170 : 130,
       sort: c.key === 'rf' ? (r) => resFpsKey(r.design_conditions) : (r) => { const v = c.get(r.design_conditions); return v === MISSING ? null : v },
       title: (r) => c.get(r.design_conditions),
@@ -142,8 +158,8 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
                 const counts = new Map<string, number>()
                 rows.filter((r) => !r.derived_from_variant).forEach((r) => { const v = facetValue(k, r.design_conditions); if (v) counts.set(v, (counts.get(v) ?? 0) + 1) })
                 return (
-                  <span key={k} style={{ display: 'inline-flex', gap: 4, alignItems: 'center', marginRight: 14 }}>
-                    <span className="faint" style={{ fontSize: 12, marginRight: 4 }}>{FACET_LABEL[k]}</span>
+                  <span key={k} className={`facet-group fg-${k}`} role="group" aria-label={`${FACET_LABEL[k]} filter`}>
+                    <span className="fg-label">{FACET_LABEL[k]}</span>
                     {[...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([v, n]) => (
                       <button key={v} className={`facet ${facets[k]?.has(v) ? 'on' : ''}`} onClick={() => toggleFacet(k, v)}>{v} <span className="cnt">({n})</span></button>
                     ))}
@@ -162,6 +178,8 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
           </div>
           <div className="footer-bar">
             <span style={{ fontSize: 13 }}><b>{picked.size}개</b> 선택됨</span>
+            {covQ.data && (() => { const base = rows.filter((r) => !r.derived_from_variant); const p = base.filter((r) => (cov(r.variant_id)?.simulation ?? 0) > 0 || cov(r.variant_id)?.current_prediction).length; const m = base.filter((r) => (cov(r.variant_id)?.measurement ?? 0) > 0).length
+              return <span style={{ fontSize: 12, whiteSpace: 'nowrap' }} title="파생 제외 기본 variant 기준">예측 <b>{p}</b>/{base.length} · 실측 <b>{m}</b>/{base.length}</span> })()}
             <span className="faint" style={{ fontSize: 12 }}>{rows.length}개 중 {visible.length}개 표시 · 노란 셀 = 기준(파생은 부모)과 다른 조건 · 헤더 클릭 정렬 · 헤더 경계 drag 폭 조절</span>
             {derivedCount > 0 && <label className="muted" style={{ fontSize: 12, display: 'flex', gap: 6 }}><input type="checkbox" checked={showDerived} onChange={(e) => setShowDerived(e.target.checked)} />파생 {derivedCount}개 표시</label>}
             <span className="grow" />

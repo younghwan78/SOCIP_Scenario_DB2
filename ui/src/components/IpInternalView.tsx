@@ -1,5 +1,7 @@
 import { useMemo } from 'react'
-import { LANE_LABEL, LANE_ORDER, parseSize, type IpModel, type PipelineModel, type Port, type Via } from '../lib/model'
+import { LANE_LABEL, parseSize, type IpLink, type IpModel, type PipelineModel, type Port, type Via } from '../lib/model'
+import { TOPO, colorMap, linkPath, topoLayout } from '../lib/topology'
+import { usePref } from './Layout'
 import { DataTable, type Column } from './DataTable'
 
 const VIA_STYLE: Record<Via, { stroke: string; fill: string; dash?: string; label: string }> = {
@@ -139,34 +141,108 @@ const portCols: Column<Port>[] = [
   { key: 'note', label: 'Note', width: 260, title: (p) => p.note, render: (p) => <span className="faint">{p.note ?? ''}</span> },
 ]
 
-export function IpInternalView({ model, selectedPid, onSelect }: { model: PipelineModel; selectedPid: string | null; onSelect: (viewId: string) => void }) {
-  const list = useMemo(() => [...model.ips].filter((i) => i.type !== 'sw')
-    .sort((a, b) => LANE_ORDER.indexOf(a.lane) - LANE_ORDER.indexOf(b.lane)), [model])
-  const ip = list.find((i) => i.pid === selectedPid) ?? list.find((i) => i.lane === 'rt' && i.ports.some((p) => p.via === 'DMA')) ?? list[0]
+type ColorKey = 'vdd' | 'blk'
+const LINK_STYLE: Record<IpLink['kind'], { stroke: string; dash?: string; label: string }> = {
+  OTF: { stroke: '#2563EB', label: 'OTF' },
+  M2M: { stroke: '#F97316', label: 'M2M (DMA · memory)' },
+  ctrl: { stroke: '#A16207', dash: '3 3', label: 'SW control' },
+}
+
+/** All IPs and how they connect. Fill = voltage domain or BLK (translucent), click = details below. */
+export function IpTopology({ model, selectedPid, onSelect, colorBy }: { model: PipelineModel; selectedPid: string | null; onSelect: (viewId: string) => void; colorBy: ColorKey }) {
+  const lay = useMemo(() => topoLayout(model), [model])
+  const colors = useMemo(() => colorMap(model.ips.map((i) => (colorBy === 'vdd' ? i.vdd : i.blk))), [model, colorBy])
+  const pos = new Map(lay.nodes.map((n) => [n.ip.pid, n]))
+  const { W, H } = TOPO
   return (
-    <div className="ipv">
-      <div className="ipv-list">
-        {list.map((i, k) => (
-          <button key={i.pid} className={`ipv-item ${i.pid === ip?.pid ? 'on' : ''}`} onClick={() => onSelect(i.viewId)}>
-            {(k === 0 || list[k - 1].lane !== i.lane) && <span className="ipv-lane">{LANE_LABEL[i.lane]}</span>}
-            <span className="nm">{i.label}</span>
-            <span className="io mono">{i.inSize || '—'}{i.outSizes.length ? ` → ${i.outSizes.join(' / ')}` : ''}</span>
-            <span className="io">RDMA {i.rdma.used}{i.rdma.total !== null ? `/${i.rdma.total}` : ''} · WDMA {i.wdma.used}{i.wdma.total !== null ? `/${i.wdma.total}` : ''}{i.ops.length ? ` · ${i.ops.join(', ')}` : ''}</span>
-          </button>
-        ))}
-      </div>
-      <div className="ipv-main">
-        {ip ? <>
-          <div className="ipv-legend">
-            {(Object.keys(VIA_STYLE) as Via[]).map((v) => <span key={v} className="legend-item"><svg width="18" height="8"><rect x="1" y="1" width="16" height="6" rx="2" fill={VIA_STYLE[v].fill} stroke={VIA_STYLE[v].stroke} strokeDasharray={VIA_STYLE[v].dash} /></svg>{VIA_STYLE[v].label}</span>)}
-            <span className="faint">↓/↑ = 입력(처리 크기) 대비 출력 scale · 회색 점선 = IP catalog에 있으나 이 variant에서 미사용</span>
-            <span className="grow" /><b className="mono" style={{ fontSize: 11 }}>RDMA {ip.rdma.used}{ip.rdma.total !== null ? `/${ip.rdma.total}` : ''} · WDMA {ip.wdma.used}{ip.wdma.total !== null ? `/${ip.wdma.total}` : ''} 사용</b>
+    <svg className="ipt-svg" viewBox={`0 0 ${lay.width} ${lay.height}`} width={lay.width} height={lay.height} role="group" aria-label="IP 연결 구조">
+      <defs>{(Object.keys(LINK_STYLE) as IpLink['kind'][]).map((k) => (
+        <marker key={k} id={`ipt-${k}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill={LINK_STYLE[k].stroke} /></marker>))}</defs>
+      {lay.lanes.map((l) => <g key={l.lane}>
+        <rect x={l.x - 8} y={4} width={l.w + 16} height={lay.height - 8} rx={8} fill="#F6F3EE" opacity={0.7} />
+        <text x={l.x} y={20} fontSize={11} fontWeight={700} fill="var(--muted)">{LANE_LABEL[l.lane]}</text>
+      </g>)}
+      {lay.links.map((e, i) => {
+        const a = pos.get(e.from), b = pos.get(e.to)
+        if (!a || !b || e.from === e.to) return null
+        const st = LINK_STYLE[e.kind]
+        const hot = selectedPid !== null && (e.from === selectedPid || e.to === selectedPid)
+        return <path key={i} d={linkPath(a, b)} fill="none" stroke={st.stroke} strokeDasharray={st.dash} strokeWidth={hot ? 2.4 : e.kind === 'M2M' ? 1.6 : 1.3}
+          opacity={selectedPid === null || hot ? 0.9 : 0.22} markerEnd={`url(#ipt-${e.kind})`}>
+          <title>{`${model.byPid.get(e.from)?.label ?? e.from} → ${model.byPid.get(e.to)?.label ?? e.to} · ${st.label}${e.buffer ? ` · ${e.buffer}` : ''}${e.mbs ? ` · ${e.mbs.toFixed(0)} MB/s` : ''}`}</title></path>
+      })}
+      {lay.nodes.map(({ ip, x, y }) => {
+        const key = colorBy === 'vdd' ? ip.vdd : ip.blk
+        const c = key ? colors.get(key) ?? '#9A9387' : '#9A9387'
+        const on = ip.pid === selectedPid
+        return <g key={ip.pid} className="ipt-node" onClick={() => onSelect(ip.viewId)} role="button" tabIndex={0} aria-label={ip.label} aria-pressed={on}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(ip.viewId) } }}>
+          <rect x={x} y={y} width={W} height={H} rx={7} fill={c} fillOpacity={ip.type === 'sw' ? 0.08 : 0.2} stroke={on ? '#1F2430' : c}
+            strokeWidth={on ? 2.2 : 1.2} strokeDasharray={ip.type === 'sw' ? '4 3' : undefined} />
+          <text x={x + 8} y={y + 17} fontSize={12} fontWeight={700} fill="#1F2430">{ip.label.length > 14 ? ip.label.slice(0, 13) + '…' : ip.label}</text>
+          <text x={x + 8} y={y + 31} fontSize={9.5} fontFamily="var(--mono)" fill="#3B3F4A">{[ip.blk, ip.vdd?.replace(/^VDD_/, '')].filter(Boolean).join(' · ') || (ip.type === 'sw' ? 'CPU task' : '—')}</text>
+          <text x={x + 8} y={y + 43} fontSize={9} fill="var(--muted)">{ip.type === 'sw' ? (ip.sw?.mean !== undefined ? `${ip.sw.mean} ms` : '') : `R${ip.rdma.used} · W${ip.wdma.used}${ip.inSize ? ` · ${ip.inSize}` : ''}`}</text>
+          <title>{[ip.label, ip.ipRef, ip.blk ? `BLK ${ip.blk}${ip.blkSource === 'hierarchy_group' ? ' (hierarchy_group)' : ''}` : 'BLK —', `VDD ${ip.vdd ?? '—'} · DVFS ${ip.dvfsGroup ?? '—'}`].join('\n')}</title>
+        </g>
+      })}
+    </svg>
+  )
+}
+
+function Legend({ model, colorBy }: { model: PipelineModel; colorBy: ColorKey }) {
+  const colors = colorMap(model.ips.map((i) => (colorBy === 'vdd' ? i.vdd : i.blk)))
+  const missing = model.ips.filter((i) => i.type !== 'sw' && !(colorBy === 'vdd' ? i.vdd : i.blk)).length
+  return <div className="ipv-legend">
+    {[...colors].map(([k, c]) => <span key={k} className="legend-item"><span className="ipt-swatch" style={{ background: c + '33', borderColor: c }} />{k}</span>)}
+    {missing > 0 && <span className="legend-item"><span className="ipt-swatch" style={{ background: '#9A938733', borderColor: '#9A9387' }} />미정 ({missing})</span>}
+    <span className="vsep" />
+    {(Object.keys(LINK_STYLE) as IpLink['kind'][]).map((k) => <span key={k} className="legend-item"><svg width="22" height="8"><line x1="1" y1="4" x2="21" y2="4" stroke={LINK_STYLE[k].stroke} strokeWidth="2" strokeDasharray={LINK_STYLE[k].dash} /></svg>{LINK_STYLE[k].label}</span>)}
+    <span className="legend-item"><span className="ipt-swatch" style={{ borderStyle: 'dashed' }} />SW task</span>
+  </div>
+}
+
+export function IpInternalView({ model, selectedPid, onSelect }: { model: PipelineModel; selectedPid: string | null; onSelect: (viewId: string) => void }) {
+  const [colorBy, setColorBy] = usePref<ColorKey>('pipeline.ipt.color', 'vdd')
+  const hw = useMemo(() => model.ips.filter((i) => i.type !== 'sw'), [model])
+  const ip = model.ips.find((i) => i.pid === selectedPid) ?? hw.find((i) => i.lane === 'rt' && i.ports.some((p) => p.via === 'DMA')) ?? hw[0]
+  const blkNote = hw.some((i) => i.blkSource === 'hierarchy_group')
+  const rows = ip ? [...ip.ports, ...ip.channels.filter((c) => c.status !== 'used' && !ip.ports.some((p) => p.port === c.name))
+    .map((c): Port => ({ port: c.name, dir: c.dir, via: c.kind === 'FIFO' ? 'OTF' : 'DMA', enabled: false, unused: c.status === 'unused', peer: c.status === 'off' ? 'disabled' : '—', note: c.purpose }))] : []
+  const inputs = ip ? [...new Set(model.links.filter((l) => l.to === ip.pid).map((l) => model.byPid.get(l.from)?.label ?? l.from))] : []
+  const outputs = ip ? [...new Set(model.links.filter((l) => l.from === ip.pid).map((l) => model.byPid.get(l.to)?.label ?? l.to))] : []
+  return (
+    <div className="ipv-page">
+      <section className="panel">
+        <div className="pane-head"><h2>IP 연결 구조</h2>
+          <span className="faint" style={{ fontSize: 12 }}>행 = lane · 열 = 연결 순서 · IP 클릭 = 아래 상세</span>
+          <span className="grow" />
+          <div className="seg sm" role="group" aria-label="색 기준">
+            <button className={colorBy === 'vdd' ? 'on' : ''} onClick={() => setColorBy('vdd')}>Voltage domain</button>
+            <button className={colorBy === 'blk' ? 'on' : ''} onClick={() => setColorBy('blk')}>BLK</button>
           </div>
-          <div className="ipv-svg"><IpDiagram ip={ip} /></div>
-          <div className="ipv-table"><DataTable id="ip.ports" columns={portCols} rows={[...ip.ports, ...ip.channels.filter((c) => c.status !== 'used' && !ip.ports.some((p) => p.port === c.name))
-            .map((c): Port => ({ port: c.name, dir: c.dir, via: c.kind === 'FIFO' ? 'OTF' : 'DMA', enabled: false, unused: c.status === 'unused', peer: c.status === 'off' ? 'disabled' : '—', note: c.purpose }))]} rowKey={(p) => `${p.dir}|${p.port}|${p.buffer ?? ''}|${p.peer ?? ''}`} /></div>
-        </> : <div className="empty">IP 정보가 없습니다.</div>}
-      </div>
+        </div>
+        <Legend model={model} colorBy={colorBy} />
+        <div className="ipt-wrap"><IpTopology model={model} selectedPid={ip?.pid ?? null} onSelect={onSelect} colorBy={colorBy} /></div>
+        {blkNote && colorBy === 'blk' && <div className="faint" style={{ fontSize: 11, padding: '0 14px 10px' }}>BLK: IP catalog에 `properties.blk`가 없어 `hierarchy_group`(ISP · Codec · Display …)으로 표시합니다. 실제 BLK 이름은 catalog에 추가하면 반영됩니다.</div>}
+      </section>
+      {ip ? <section className="panel">
+        <div className="pane-head" style={{ flexWrap: 'wrap' }}><h2>{ip.label}</h2>
+          <span className="mono faint" style={{ fontSize: 11 }}>{ip.ipRef.replace(/^ip-/, '')}</span>
+          <span className="chip">BLK {ip.blk ?? '—'}{ip.blkSource === 'hierarchy_group' ? '*' : ''}</span>
+          <span className="chip">{ip.vdd ?? 'VDD —'}</span>
+          <span className="chip">DVFS {ip.dvfsGroup ?? '—'}</span>
+          <span className="chip">{LANE_LABEL[ip.lane]}</span>
+          <span className="faint" style={{ fontSize: 12 }}>← {inputs.join(', ') || '—'} · → {outputs.join(', ') || '—'}</span>
+          <span className="grow" />
+          {ip.type !== 'sw' && <b className="mono" style={{ fontSize: 11 }}>RDMA {ip.rdma.used}{ip.rdma.total !== null ? `/${ip.rdma.total}` : ''} · WDMA {ip.wdma.used}{ip.wdma.total !== null ? `/${ip.wdma.total}` : ''} 사용</b>}
+        </div>
+        <div className="ipv-legend">
+          {(Object.keys(VIA_STYLE) as Via[]).map((v) => <span key={v} className="legend-item"><svg width="18" height="8"><rect x="1" y="1" width="16" height="6" rx="2" fill={VIA_STYLE[v].fill} stroke={VIA_STYLE[v].stroke} strokeDasharray={VIA_STYLE[v].dash} /></svg>{VIA_STYLE[v].label}</span>)}
+          <span className="faint">↓/↑ = 입력(처리 크기) 대비 출력 scale · 회색 점선 = IP catalog에 있으나 이 variant에서 미사용</span>
+        </div>
+        <div className="ipv-svg"><IpDiagram ip={ip} /></div>
+        <div className="ipv-table"><DataTable id="ip.ports" columns={portCols} rows={rows} rowKey={(p) => `${p.dir}|${p.port}|${p.buffer ?? ''}|${p.peer ?? ''}`} /></div>
+      </section> : <div className="empty">IP 정보가 없습니다.</div>}
     </div>
   )
 }
