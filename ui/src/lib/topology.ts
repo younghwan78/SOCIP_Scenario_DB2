@@ -38,7 +38,7 @@ export function topoLayout(model: PipelineModel): TopoLayout {
     lanes.push({ lane, x, w: TOPO.W })
     depth = Math.max(depth, inLane.length)
   }
-  const width = TOPO.LEFT * 2 + lanes.length * (TOPO.W + TOPO.COL) - TOPO.COL
+  const width = Math.max(TOPO.W, TOPO.LEFT * 2 + lanes.length * (TOPO.W + TOPO.COL) - TOPO.COL)
   return { nodes, lanes, links: model.links, width, height: TOPO.TOP + depth * (TOPO.H + TOPO.ROW) - TOPO.ROW + 30 }
 }
 

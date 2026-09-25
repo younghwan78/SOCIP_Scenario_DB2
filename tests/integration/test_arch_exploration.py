@@ -84,6 +84,20 @@ def test_promote_duplicate_variant_names_preserves_scenarios_and_report(engine, 
         assert svc.report_detail(svc.get_report(db, report["id"]))["snapshot"] == report["snapshot"]
 
 
+def test_report_classification_uses_run_snapshot_after_catalog_edit(engine, stored_run):
+    rid, ids = stored_run
+    with Session(engine) as db:
+        run = db.get(ArchExplorationRun, rid)
+        variants = deepcopy(run.variants)
+        variants[0]['design_conditions'] = {'resolution': 'FHD', 'codec_mfc': 'H264'}
+        run.variants = variants
+        db.get(ScenarioVariant, (ids[0], 'shared')).design_conditions = {'resolution': 'UHD', 'codec_mfc': 'APV'}
+        db.commit()
+        report = svc.create_report(db, ArchReportRequest(run_id=rid))
+        cls = report['snapshot']['scenarios'][0]['cls']
+        assert cls['resolution'] == 'FHD' and cls['codec'] == 'H264'
+
+
 def test_ambiguous_or_unrelated_prediction_selection_rejected(engine, stored_run):
     rid, ids = stored_run
     with Session(engine) as db:

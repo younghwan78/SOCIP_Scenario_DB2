@@ -39,12 +39,10 @@ def build_snapshot(
     run: dict[str, Any],
     predictions: dict[tuple[str, str], dict[str, Any]],
     changes: dict[tuple[str, str], dict[str, Any]],
-    conditions: dict[tuple[str, str], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """run: exploration run row as dict; predictions: variant -> current prediction row dict;
-    changes: variant -> attribution vs the superseded prediction;
-    conditions: variant -> {"design_conditions": resolved dict, "severity": str} for the category opinions."""
-    conditions = conditions or {}
+    changes: variant -> attribution vs the superseded prediction.
+    Classification uses the run's frozen conditions, never the mutable catalog."""
     variants = [v for v in run["variants"] if v.get("variant_id")]
     ok = [v for v in variants if v["spec_ok"]]
     sample_dvfs = bool(run.get("dvfs_table_ref") and "sample" in str(run["dvfs_table_ref"]))
@@ -53,10 +51,9 @@ def build_snapshot(
         pred = predictions.get((v["scenario_id"], v["variant_id"]))
         chosen = (pred or {}).get("metrics") or {}
         rec = v.get("recommended") or {}
-        cond = conditions.get((v["scenario_id"], v["variant_id"])) or {}
         worst = (v.get("sw_margin") or {}).get("worst") or {}
         rows.append({
-            "cls": classify(v["variant_id"], v["scenario_id"], v["fps"], v["eis_on"], cond.get("design_conditions"), cond.get("severity")),
+            "cls": classify(v["variant_id"], v["scenario_id"], v["fps"], v["eis_on"], v.get("design_conditions"), v.get("severity")),
             "sw_margin_pct": worst.get("margin_pct"), "sw_stage": worst.get("stage"), "sw_bottleneck": worst.get("bottleneck"),
             "variant_id": v["variant_id"], "scenario_id": v["scenario_id"], "fps": v["fps"],
             "spec_ok": v["spec_ok"], "reasons": compact_reasons(v["spec_reasons"]), "eis_on": v["eis_on"],
@@ -98,7 +95,7 @@ def build_snapshot(
             opt = next((o for o in d["options"] if o["level"] == lvl), d["options"][0])
             driver = max((c for c in clocks if c["scenario_id"] == v["scenario_id"] and c["variant_id"] == v["variant_id"] and c["dvfs_group"] == d["domain"]
                           and c["required_mhz"]), key=lambda c: c["required_mhz"], default=None)
-            domains.append({"variant_id": v["variant_id"], "spec_ok": v["spec_ok"], "domain": d["domain"],
+            domains.append({"scenario_id": v["scenario_id"], "variant_id": v["variant_id"], "spec_ok": v["spec_ok"], "domain": d["domain"],
                             "level": lvl, "speed_mhz": opt["speed_mhz"], "voltage_mv": opt["voltage_mv"],
                             "required_mhz": d["max_required_mhz"], "driver": driver["node"] if driver else None,
                             "headroom_pct": round(100 * (opt["speed_mhz"] / d["max_required_mhz"] - 1), 1)
@@ -289,7 +286,7 @@ def _opinions(blocks: list[dict[str, Any]]) -> str:
     if not blocks:
         return "<p class='meta'>분류 정보 없음 (이전 형식 snapshot) — 보고서를 재생성하면 표시됩니다.</p>"
     h = ("<p class='meta'>분류: 30 fps(해상도 × EIS × codec) · 60 fps · 고속(≥100 fps) · Heavy(Pro/Portrait/Dual/Triple). "
-         "의견은 이 snapshot의 등록 예측 수치에서 규칙으로 생성 — 실측 근거가 아님.</p>")
+         "의견은 이 snapshot의 예측 수치 (등록 또는 추천)에서 규칙으로 생성 — 실측 근거가 아님.</p>")
     for b in blocks:
         rng = b.get("power_range_mw")
         sh = b.get("share_pct") or {}

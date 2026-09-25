@@ -155,7 +155,7 @@ export function IpTopology({ model, selectedPid, onSelect, colorBy }: { model: P
   const pos = new Map(lay.nodes.map((n) => [n.ip.pid, n]))
   const { W, H } = TOPO
   return (
-    <svg className="ipt-svg" viewBox={`0 0 ${lay.width} ${lay.height}`} width={lay.width} height={lay.height} role="img" aria-label="IP 연결 구조">
+    <svg className="ipt-svg" viewBox={`0 0 ${lay.width} ${lay.height}`} width={lay.width} height={lay.height} role="group" aria-label="IP 연결 구조">
       <defs>{(Object.keys(LINK_STYLE) as IpLink['kind'][]).map((k) => (
         <marker key={k} id={`ipt-${k}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill={LINK_STYLE[k].stroke} /></marker>))}</defs>
       {lay.lanes.map((l) => <g key={l.lane}>
@@ -175,7 +175,7 @@ export function IpTopology({ model, selectedPid, onSelect, colorBy }: { model: P
         const key = colorBy === 'vdd' ? ip.vdd : ip.blk
         const c = key ? colors.get(key) ?? '#9A9387' : '#9A9387'
         const on = ip.pid === selectedPid
-        return <g key={ip.pid} className="ipt-node" onClick={() => onSelect(ip.viewId)} role="button" tabIndex={0} aria-pressed={on}
+        return <g key={ip.pid} className="ipt-node" onClick={() => onSelect(ip.viewId)} role="button" tabIndex={0} aria-label={ip.label} aria-pressed={on}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(ip.viewId) } }}>
           <rect x={x} y={y} width={W} height={H} rx={7} fill={c} fillOpacity={ip.type === 'sw' ? 0.08 : 0.2} stroke={on ? '#1F2430' : c}
             strokeWidth={on ? 2.2 : 1.2} strokeDasharray={ip.type === 'sw' ? '4 3' : undefined} />

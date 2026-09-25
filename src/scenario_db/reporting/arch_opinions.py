@@ -31,7 +31,8 @@ def classify(variant_id: str, scenario_id: str, fps: float | None, eis_on: bool 
     if not res:
         m = _RES_RE.search(variant_id)
         res = m.group(1).upper() if m else "해상도 미정"
-    codec = "APV" if "apv" in scenario_id.lower() or "apv" in str(dc.get("codec_mfc") or "").lower() else "HEVC"
+    recording = "camera-recording" in scenario_id.lower() or variant_id.startswith("cam-rec-")
+    codec = str(dc.get("codec_mfc") or ("APV" if "apv" in scenario_id.lower() else "HEVC" if recording else "미정")).upper()
     mode = str(dc.get("camera_mode") or "")
     heavy_kind = None
     hm = _HEAVY_ID.search(variant_id)
@@ -44,7 +45,9 @@ def classify(variant_id: str, scenario_id: str, fps: float | None, eis_on: bool 
     elif hm and hm.group(1).lower() == "pro":
         heavy_kind = "Pro"
     f = float(fps or dc.get("fps") or 0)
-    if f >= 100:
+    if not recording:
+        cat = "other"
+    elif f >= 100:
         cat = "highspeed"
     elif heavy_kind:
         cat = "heavy"
@@ -62,24 +65,26 @@ def _share(p: dict[str, Any]) -> dict[str, float]:
     t = p.get("total_mw") or 0.0
     if not t:
         return {}
-    bw = (p.get("bw_ip_mw", p.get("bw_mw")) or 0.0) + (p.get("bw_cpu_mw") or 0.0)
+    bw = p.get("bw_mw")
+    if bw is None:
+        bw = (p.get("bw_ip_mw") or 0.0) + (p.get("bw_cpu_mw") or 0.0)
     return {"CPU": 100 * (p.get("cpu_mw") or 0.0) / t, "IP core": 100 * (p.get("hw_mw") or 0.0) / t, "BW": 100 * bw / t}
 
 
 def _pair_delta(rows: list[dict[str, Any]], axis: str, a: Any, b: Any, keys: tuple[str, ...]) -> list[tuple[str, float, float]]:
-    """(label, mean ΔmW, mean Δ%) for rows that differ only in `axis` (b - a)."""
+    """Grouped mean differences, not a controlled estimate of the axis's effect."""
     groups: dict[tuple, dict[Any, list[float]]] = {}
     for r in rows:
         t = r["power"].get("total_mw")
         if t is None:
             continue
-        k = tuple(r["cls"][x] for x in keys)
+        k = (r["cls"]["fps"], *(r["cls"][x] for x in keys))
         groups.setdefault(k, {}).setdefault(r["cls"][axis], []).append(t)
     out = []
     for k, by in groups.items():
         if a in by and b in by:
             va, vb = statistics.mean(by[a]), statistics.mean(by[b])
-            label = " ".join(("EIS on" if x else "EIS off") if isinstance(x, bool) else str(x) for x in k)
+            label = " ".join(("EIS on" if x else "EIS off") if isinstance(x, bool) else str(x) for x in k[1:]) + f" ({k[0]:g} fps)"
             out.append((label, vb - va, 100 * (vb - va) / va if va else 0.0))
     return out
 
@@ -95,7 +100,7 @@ def _res_matrix(rows: list[dict[str, Any]]) -> list[tuple[str, list[tuple[str, l
         if t is None:
             continue
         c = r["cls"]
-        key = ("EIS on" if c["eis"] else "EIS off") + (" · APV" if c["codec"] == "APV" else "")
+        key = ("EIS on" if c["eis"] else "EIS off") + f" · {c['codec']} · {c['fps']:g} fps"
         m.setdefault(c["resolution"], {}).setdefault(key, []).append(t)
     order = sorted(m, key=lambda k: _RES_ORDER.index(k) if k in _RES_ORDER else 99)
     return [(res, sorted(m[res].items())) for res in order]
@@ -120,8 +125,8 @@ def build_opinions(rows: list[dict[str, Any]], domains: list[dict[str, Any]]) ->
         ops: list[str] = []
         ops.append(f"{len(rs)}개 variant 중 spec 만족 {len(ok)}개" + (f", 미달 {len(rs) - len(ok)}개" if len(ok) < len(rs) else "") + ".")
         if tot:
-            ops.append(f"등록 예측 Total {_f(min(tot))}–{_f(max(tot))} mW (중앙 {_f(statistics.median(tot))} mW), BW {_f(min(bws))}–{_f(max(bws))} MB/s." if bws
-                       else f"등록 예측 Total {_f(min(tot))}–{_f(max(tot))} mW.")
+            ops.append(f"예측 Total (등록 또는 추천) {_f(min(tot))}–{_f(max(tot))} mW (중앙 {_f(statistics.median(tot))} mW), BW {_f(min(bws))}–{_f(max(bws))} MB/s." if bws
+                       else f"예측 Total (등록 또는 추천) {_f(min(tot))}–{_f(max(tot))} mW.")
         if avg_share:
             top = max(avg_share, key=lambda k: avg_share[k])
             hint = {"BW": "compression 확대와 MIF/DRAM 경로 절감이 가장 큰 lever", "CPU": "SW task(EIS·RTA 등) 최적화 또는 CPU 배치가 우선",
@@ -133,13 +138,13 @@ def build_opinions(rows: list[dict[str, Any]], domains: list[dict[str, Any]]) ->
         if cat == "fps30":
             eis = _pair_delta(ok, "eis", False, True, ("resolution", "codec"))
             if eis:
-                ops.append("EIS on 영향 (같은 해상도·codec 평균): " + ", ".join(f"{k} {d:+.0f} mW ({p:+.1f}%)" for k, d, p in eis)
-                           + " — EIS SW와 GDC 경로 추가분.")
+                ops.append("EIS on/off 그룹 평균 차이 (같은 fps·해상도·codec): " + ", ".join(f"{k} {d:+.0f} mW ({p:+.1f}%)" for k, d, p in eis)
+                           + " — 센서·HDR·선택 clock 등은 통제하지 않았으므로 EIS 단독 영향이 아님.")
             else:
                 ops.append("EIS on/off 쌍이 같은 해상도·codec에 없어 EIS 영향은 비교 불가.")
             apv = _pair_delta(ok, "codec", "HEVC", "APV", ("resolution", "eis"))
             if apv:
-                ops.append("APV vs HEVC (같은 해상도·EIS): " + ", ".join(f"{k} {d:+.0f} mW ({p:+.1f}%)" for k, d, p in apv) + ".")
+                ops.append("APV vs HEVC 그룹 평균 (같은 fps·해상도·EIS): " + ", ".join(f"{k} {d:+.0f} mW ({p:+.1f}%)" for k, d, p in apv) + " — 기타 조건 미통제, codec 단독 영향이 아님.")
             elif any(r["cls"]["codec"] == "APV" for r in rs):
                 ops.append("APV variant가 run에 있으나 같은 조건의 HEVC 쌍이 없어 codec 영향은 비교 불가.")
             else:
@@ -177,8 +182,8 @@ def build_opinions(rows: list[dict[str, Any]], domains: list[dict[str, Any]]) ->
             ops.append(f"SW timing margin 최소 {w['sw_margin_pct']:.1f}% ({w['variant_id'].replace('cam-rec-', '')}, {str(w.get('sw_stage') or '').upper()}"
                        + (f", 병목 {w['sw_bottleneck']}" if w.get("sw_bottleneck") else "") + ")"
                        + (" → SW 증가 여유 부족, 차기 SW 성장 시 clock 상향 필요." if w["sw_margin_pct"] < 10 else "."))
-        ids = {r["variant_id"] for r in ok}
-        dom = [d for d in domains if d["variant_id"] in ids and d.get("headroom_pct") is not None]
+        ids = {(r["scenario_id"], r["variant_id"]) for r in ok}
+        dom = [d for d in domains if (d.get("scenario_id"), d["variant_id"]) in ids and d.get("headroom_pct") is not None]
         if dom:
             d = min(dom, key=lambda x: x["headroom_pct"])
             ops.append(f"DVFS headroom 최소: {d['domain']} L{d['level']} {_f(d['speed_mhz'])} MHz, 필요 {_f(d['required_mhz'])} MHz (+{d['headroom_pct']:.0f}%, driver {d.get('driver') or '-'}).")

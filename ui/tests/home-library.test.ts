@@ -77,6 +77,12 @@ describe('timing clock text', () => {
 })
 
 describe('ip topology', () => {
+  it('keeps an empty topology SVG valid', async () => {
+    const { topoLayout } = await import('../src/lib/topology')
+    const lay = topoLayout({ ips: [], links: [] } as never)
+    expect(lay.width).toBeGreaterThan(0)
+    expect(lay.height).toBeGreaterThan(0)
+  })
   it('ranks by longest path and lays lanes out as columns', async () => {
     const { ranks, topoLayout } = await import('../src/lib/topology')
     const r = ranks(['a', 'b', 'c'], [{ from: 'a', to: 'b', kind: 'OTF' }, { from: 'b', to: 'c', kind: 'M2M' }, { from: 'a', to: 'c', kind: 'M2M' }, { from: 'c', to: 'a', kind: 'ctrl' }])
