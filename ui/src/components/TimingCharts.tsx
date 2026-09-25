@@ -95,7 +95,7 @@ function Legend({ color, label, border }: { color: string; label: string; border
 }
 
 // ---------------------------------------------------------------- ⑤ clocks
-export function ClockChart({ ips }: { ips: IpRow[] }) {
+export function ClockChart({ ips, dvfsApplied = true }: { ips: IpRow[]; dvfsApplied?: boolean }) {
   const [ref, w] = useWidth<HTMLDivElement>(600)
   const rows = ips.filter((i) => i.set_clock_mhz > 0)
   const max = niceMax(Math.max(...rows.map((i) => Math.max(i.set_clock_mhz, i.rule_clock_mhz ?? 0))))
@@ -119,7 +119,7 @@ export function ClockChart({ ips }: { ips: IpRow[] }) {
               {ip.required_clock_mhz < ip.set_clock_mhz - 0.5 && <line x1={(ip.required_clock_mhz / max) * barW} x2={(ip.required_clock_mhz / max) * barW} y1={9} y2={20} stroke="#1F2430" strokeWidth={1.5}><title>required {fmt(ip.required_clock_mhz)} MHz</title></line>}
             </svg>
             <span className="mono" style={{ width: valW, flexShrink: 0, fontSize: 12, color: up ? '#C2410C' : 'var(--text-2)' }}>
-              {clockText(ip)}{ip.dvfs_table !== false ? <span className="faint"> · {fmt(ip.voltage_mv, 0)} mV</span> : null}
+              {dvfsApplied ? clockText(ip) : `${fmt(ip.rule_clock_mhz, 0)} → ${fmt(ip.set_clock_mhz, 0)} MHz`}{dvfsApplied && ip.dvfs_table !== false ? <span className="faint"> · {fmt(ip.voltage_mv, 0)} mV</span> : null}
             </span>
           </div>
         )
@@ -128,6 +128,7 @@ export function ClockChart({ ips }: { ips: IpRow[] }) {
         <Legend color="#DED8CF" label="25% rule" /><Legend color="#2F6F68" label="Timing budget" /><Legend color="#C2410C" label="rule 대비 상승" />
         <span className="legend-item"><span style={{ width: 2, height: 10, background: '#1F2430' }} />required (DVFS level 선택 전)</span>
         <span className="faint" style={{ fontSize: 11 }}>×2 = MFC+MFD 병렬 · ⇄2 = 2 stream 공유</span>
+        {!dvfsApplied && <span className="badge v-warn" title="DB에 이 SoC의 DVFS table이 없어 level·전압을 정할 수 없습니다 (clock은 필요값 그대로, 전압 기본값)">DVFS table 미연결 — level 없음</span>}
       </div>
     </div>
   )
@@ -161,7 +162,7 @@ export function PowerBw({ report }: { report: TimingReport }) {
       <div className="faint" style={{ fontSize: 12 }}>BW (MB/s · Total 대비 비중)</div>
       <div className="tb-tiles">
         <Tile label="Total BW" value={`${fmt(bw.total_mbs, 0)} MB/s`} note={`${fmt(bw.total_mbs / 1000, 2)} GB/s · DMA W+R`} strong />
-        <Tile label="CPU BW" value={`${fmt(bw.sw_mbs, 0)} MB/s`} share={pct(bw.sw_mbs, bw.total_mbs)} note="SW task memory 접근" color={SW_COLOR} />
+        <Tile label="CPU BW" value={`${fmt(bw.sw_mbs, 0)} MB/s`} share={pct(bw.sw_mbs, bw.total_mbs)} note={`memory_io 선언 task만: ${Object.keys(bw.sw_by_task).join(', ') || '없음'} · EIS·3A·RTA DRAM 접근 미모델`} color={SW_COLOR} />
         <Tile label="HW IP core BW" value={`${fmt(bw.hw_mbs, 0)} MB/s`} share={pct(bw.hw_mbs, bw.total_mbs)} note="IP DMA (RDMA + WDMA)" color={STAGE_COLOR.nrt} />
       </div>
       <div>

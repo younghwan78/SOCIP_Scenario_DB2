@@ -68,7 +68,7 @@ function Body({ r, whatif, whatLoading, current }: { r: TimingReport; ctx: Ctx; 
     {r.verdict.reasons.length > 0 && <div className="err" style={{ fontSize: 13 }}>{r.verdict.reasons.slice(0, 4).map((x) => <div key={x}>{x}</div>)}</div>}
     <div className="tb-grid">
       <Card id="slot" title="① 1 frame 예산 — stage별 slot" note="stage는 memory로 pipeline · 각 stage가 1 frame 안에 끝나야 함" defaultWide><SlotBudget report={r} /></Card>
-      <Card id="clock" title="⑤ IP별 필요 clock · DVFS level" note="RT·Output 25% rule, NRT·Post는 SW 반영 예산 · domain 정렬 반영"><ClockChart ips={r.ips} /></Card>
+      <Card id="clock" title="⑤ IP별 필요 clock · DVFS level" note="RT·Output 25% rule, NRT·Post는 SW 반영 예산 · domain 정렬 반영"><ClockChart ips={r.ips} dvfsApplied={r.dvfs.applied} /></Card>
       <Card id="power" title="⑥ 예상 Power · BW" note="CPU(SW) / HW(IP별) / BW(HW·SW) 비중"><PowerBw report={r} /></Card>
       <Card id="gantt" title="② Pipeline timeline" note={`${r.timeline.length ? Math.max(...r.timeline.map((t) => t.frame)) + 1 : 0} frames · 명도 = frame`} defaultWide><Gantt report={r} /></Card>
       <Card id="interval" title="③ 출력 frame 간격 · pipeline latency" note="합격 기준 = 간격 · latency는 참고"><Intervals report={r} /></Card>
