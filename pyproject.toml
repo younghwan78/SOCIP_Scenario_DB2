@@ -117,6 +117,7 @@ files = [
     "src/scenario_db/sim/readiness.py",
     "src/scenario_db/sim/arch_exploration.py",
     "src/scenario_db/sim/power_attribution.py",
+    "src/scenario_db/comparison/calibration.py",
     "src/scenario_db/reporting/arch_report.py",
     "src/scenario_db/sim/resource_limits.py",
 ]

@@ -404,6 +404,7 @@ Open [http://127.0.0.1:3000](http://127.0.0.1:3000).
 
 | Route | Content |
 | --- | --- |
+| `#/` | Home (brand click): pipeline fly-through (generic stages · Camera / Video / Display), SSO placeholder, current status links |
 | `#/explorer` | Scenarios, variant conditions, filters, and links to Pipeline/Compare |
 | `#/matrix` | Variant condition matrix across scenarios |
 | `#/pipeline` | Pipeline graph, DMA/IP details, sequence, and timing views |
@@ -413,13 +414,18 @@ Open [http://127.0.0.1:3000](http://127.0.0.1:3000).
 | `#/predictions` | Current (promoted) power/BW prediction per variant, change vs. previous and its cause |
 | `#/explore` | Architecture exploration runs: power range per combination, lowest-power recommendation, promotion |
 | `#/reports` | Architecture review reports stored in the DB (view, publish, regenerate, HTML export) |
+| `#/calibration` | 예측 ↔ 실측: measured rails split into CPU / IP / BW(MIF·DRAM) / 기타, compared with the current prediction and simulation evidence; SW task 실측 |
+| `#/library` | Input sources: IP catalog, DVFS tables, compression modes, sensor catalog/timing, SW timing assumptions (range across variants) + measured SW tasks |
+| `#/settings` | 설정 · 기존 도구: Streamlit page → React replacement map and links, API status, reset screen preferences |
 
 Routes carry shareable `project`, `scenario`, and `variant` context. `Ctrl+K`
 opens the variant picker; Enter opens a variant, Shift+Enter adds it to Compare.
-Streamlit remains available for evidence, import, recipe/sweep exploration, and write workflows.
+Streamlit remains available for import, recipe/sweep exploration, and write workflows; its pages are listed
+under 설정 › 기존 도구 with their React replacement (retired once all are replaced).
 Timing Budget and Architecture pages need migration `0020` (`alembic upgrade head`) and
 the local auth setting above. See [timing-budget](docs/guides/timing-budget.md) and
-[arch-exploration](docs/guides/arch-exploration.md) guides.
+[arch-exploration](docs/guides/arch-exploration.md) and
+[calibration-library](docs/guides/calibration-library.md) guides.
 The `web/` directory only wraps the embedded Workbench CI; it is not this React UI.
 
 Vite proxies `/api` to `http://127.0.0.1:18000`. Set a different target before

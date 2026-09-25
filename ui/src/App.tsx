@@ -13,19 +13,33 @@ import { TimingFleetPage } from './pages/TimingFleet'
 import { ExplorePage } from './pages/Explore'
 import { PredictionsPage } from './pages/Predictions'
 import { ReportsPage } from './pages/Reports'
+import { HomePage } from './pages/Home'
+import { CalibrationPage } from './pages/Calibration'
+import { LibraryPage } from './pages/Library'
+import { SettingsPage } from './pages/Settings'
 import { PREFERRED_REFERENCE } from './lib/defaults'
 
-const NAV: { title: string; items: ({ page: Page; label: string; icon: string } | { href: string; label: string; icon: string })[] }[] = [
-  { title: 'Browse', items: [{ page: 'explorer', label: 'DB Explorer', icon: 'explorer' }, { page: 'matrix', label: '전체 Variant Matrix', icon: 'matrix' }] },
-  { title: 'Analyze', items: [{ page: 'pipeline', label: 'Pipeline', icon: 'pipeline' }, { page: 'compare', label: 'Variant Compare', icon: 'compare' }] },
-  { title: 'Predict', items: [{ page: 'timing', label: 'Timing Budget', icon: 'pipeline' }, { page: 'timing-fleet', label: 'Timing Budget · 전체', icon: 'matrix' }] },
-  { title: 'Architecture', items: [{ page: 'predictions', label: '예측 현황', icon: 'matrix' }, { page: 'explore', label: '조합 탐색', icon: 'compare' }, { page: 'reports', label: '검토 보고서', icon: 'explorer' }] },
-  { title: 'Streamlit (기존)', items: [
-    { href: 'http://localhost:18502/Evidence_Dashboard', label: 'Evidence · 예측/실측', icon: 'external' },
-    { href: 'http://localhost:18502/Import_Workbench', label: 'Import · Sensor · Driver', icon: 'external' }] },
+type NavItem = { page: Page; label: string; icon: string; also?: Page[] }
+// Workflow order: 탐색 → 예측 → Architecture → Library. Home = brand link; legacy Streamlit lives in 설정.
+const NAV: { title: string; items: NavItem[] }[] = [
+  { title: '탐색', items: [
+    { page: 'explorer', label: 'Scenario', icon: 'explorer', also: ['matrix'] },
+    { page: 'pipeline', label: 'Pipeline', icon: 'pipeline' },
+    { page: 'compare', label: 'Compare', icon: 'compare' }] },
+  { title: '예측', items: [
+    { page: 'timing', label: 'Timing Budget', icon: 'timer', also: ['timing-fleet'] },
+    { page: 'predictions', label: '예측 현황', icon: 'bars' },
+    { page: 'calibration', label: '예측 ↔ 실측', icon: 'trend' }] },
+  { title: 'Architecture', items: [
+    { page: 'explore', label: '조합 탐색', icon: 'probe' },
+    { page: 'reports', label: '검토 보고서', icon: 'report' }] },
+  { title: 'Library', items: [{ page: 'library', label: 'IP · DVFS · SW', icon: 'library' }] },
 ]
 
-const TITLES: Record<Page, string> = { explorer: 'DB Explorer', matrix: 'DB Explorer', pipeline: 'Pipeline', compare: 'Variant Compare', timing: 'Timing Budget', 'timing-fleet': 'Timing Budget · 전체', explore: '조합 탐색', predictions: '예측 현황', reports: 'Architecture 검토 보고서' }
+const TITLES: Record<Page, string> = {
+  home: 'Home', explorer: 'Scenario', matrix: 'Scenario', pipeline: 'Pipeline', compare: 'Compare', timing: 'Timing Budget', 'timing-fleet': 'Timing Budget',
+  explore: '조합 탐색', predictions: '예측 현황', reports: 'Architecture 검토 보고서', calibration: '예측 ↔ 실측', library: 'Library', settings: '설정',
+}
 
 export interface Ctx {
   catalog: CatalogItem[]
@@ -78,25 +92,29 @@ export default function App() {
   return (
     <div className="app">
       <nav className={`sidebar ${sideOpen ? '' : 'rail'}`} aria-label="주 메뉴" style={sideOpen ? { width: side.size } : undefined}>
-        <div className="brand">
-          <span style={{ color: 'var(--primary)', display: 'flex' }}><Icon name="db" size={22} /></span>
+        <a className="brand" href="#/" title="Home" aria-label="ScenarioDB Home" aria-current={route.page === 'home' ? 'page' : undefined}>
+          <span className="brand-icon"><Icon name="db" size={22} /></span>
           {sideOpen && <span className="brand-name">ScenarioDB</span>}
-        </div>
+        </a>
         {NAV.map((g) => (
           <div key={g.title} className="nav-group">
             {sideOpen ? <h6>{g.title}</h6> : <div className="nav-sep" />}
             {g.items.map((it) => {
-              const active = 'page' in it && route.page === it.page
-              const href = 'page' in it ? link(it.page) : it.href
+              const active = route.page === it.page || !!it.also?.includes(route.page)
               return (
-                <a key={it.label} className={`nav-item ${active ? 'active' : ''}`} href={href} title={sideOpen ? undefined : it.label}
-                  {...('href' in it ? { target: '_blank', rel: 'noreferrer' } : {})}>
+                <a key={it.label} className={`nav-item ${active ? 'active' : ''}`} href={link(it.page)} title={sideOpen ? undefined : it.label}
+                  aria-current={active ? 'page' : undefined}>
                   <Icon name={it.icon} size={17} />{sideOpen && <span className="nav-label">{it.label}</span>}
                 </a>
               )
             })}
           </div>
         ))}
+        <div className="nav-bottom">
+        <a className={`nav-item nav-quiet ${route.page === 'settings' ? 'active' : ''}`} href={link('settings')} title={sideOpen ? undefined : '설정 · 기존 도구'}
+          aria-current={route.page === 'settings' ? 'page' : undefined}>
+          <Icon name="settings" size={17} />{sideOpen && <span className="nav-label">설정 · 기존 도구</span>}
+        </a>
         <div className="nav-status" title={catalogQ.error ? 'API 연결 실패' : 'API 연결됨'}>
           <span className={`dot ${catalogQ.error ? 'err' : ''}`} />
           {sideOpen && <span>{catalogQ.error ? 'API 연결 실패' : catalogQ.loading ? 'API 연결 중…' : 'API 연결됨'}</span>}
@@ -104,10 +122,11 @@ export default function App() {
         <button className="nav-collapse" onClick={() => setSideOpen((o) => !o)} title={`${sideOpen ? '사이드바 접기' : '사이드바 펼치기'} (Ctrl+B)`} aria-label={sideOpen ? '사이드바 접기' : '사이드바 펼치기'}>
           <Icon name="sidebar" size={16} />{sideOpen && <span>접기</span>}
         </button>
+        </div>
       </nav>
       {sideOpen && <Resizer axis="x" label="사이드바 폭" {...side.bind} onReset={side.reset} className="side-resizer" />}
       <div className="main">
-        <header className="topbar">
+        {route.page !== 'home' && <header className="topbar">
           <h1>{TITLES[route.page]}</h1>
           <span className="vsep" />
           <div className="crumbs">
@@ -124,11 +143,17 @@ export default function App() {
               <a className={route.page === 'matrix' ? 'on' : ''} href={link('matrix')}>전체 Matrix</a>
             </div>
           )}
+          {(route.page === 'timing' || route.page === 'timing-fleet') && (
+            <div className="seg" role="group" aria-label="보기">
+              <a className={route.page === 'timing' ? 'on' : ''} href={link('timing')}>Variant</a>
+              <a className={route.page === 'timing-fleet' ? 'on' : ''} href={link('timing-fleet')}>전체 scenario</a>
+            </div>
+          )}
           <button className="find-btn" onClick={() => setPicker('open')}>
             <Icon name="search" size={15} /><span style={{ flexGrow: 1, textAlign: 'left' }}>Variant 찾기</span><span className="kbd">Ctrl K</span>
           </button>
-        </header>
-        {catalogQ.error && <div className="page"><div className="err">API에 연결할 수 없습니다: {catalogQ.error}<br />FastAPI(:18000)를 실행하고 <span className="mono">npm run dev</span>의 /api 프록시를 확인하세요.</div></div>}
+        </header>}
+        {catalogQ.error && route.page !== 'home' && route.page !== 'settings' && <div className="page"><div className="err">API에 연결할 수 없습니다: {catalogQ.error}<br />FastAPI(:18000)를 실행하고 <span className="mono">npm run dev</span>의 /api 프록시를 확인하세요.</div></div>}
         {!catalogQ.error && route.page === 'explorer' && <ExplorerPage key={`${scenario}:${route.params.type ?? ''}`} ctx={ctx} />}
         {!catalogQ.error && route.page === 'matrix' && <MatrixPage ctx={ctx} />}
         {!catalogQ.error && route.page === 'pipeline' && <PipelinePage key={`${scenario}:${variant}`} ctx={ctx} />}
@@ -138,6 +163,10 @@ export default function App() {
         {!catalogQ.error && route.page === 'explore' && <ExplorePage ctx={ctx} />}
         {!catalogQ.error && route.page === 'predictions' && <PredictionsPage key={scenario} ctx={ctx} />}
         {!catalogQ.error && route.page === 'reports' && <ReportsPage ctx={ctx} />}
+        {route.page === 'home' && <HomePage key={scenario} ctx={ctx} />}
+        {!catalogQ.error && route.page === 'calibration' && <CalibrationPage key={scenario} ctx={ctx} />}
+        {!catalogQ.error && route.page === 'library' && <LibraryPage ctx={ctx} />}
+        {route.page === 'settings' && <SettingsPage />}
       </div>
       <Picker open={picker !== null} onClose={() => setPicker(null)} catalog={catalog} scenarioId={scenario}
         onPick={(s, v) => navigate(picker === 'compare' ? 'compare' : route.page === 'compare' ? 'compare' : route.page === 'timing' ? 'timing' : 'pipeline',
