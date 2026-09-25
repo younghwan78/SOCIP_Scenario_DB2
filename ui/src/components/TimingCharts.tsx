@@ -2,7 +2,7 @@ import { useMemo, type ReactNode } from 'react'
 import { useWidth } from './Charts'
 import { usePref } from './Layout'
 import {
-  LAT_COLOR, OVH_COLOR, STAGE_COLOR, SW_COLOR, fmt, niceMax, stageSegments,
+  LAT_COLOR, OVH_COLOR, STAGE_COLOR, SW_COLOR, clockText, fmt, niceMax, stageSegments,
   type FleetRow, type IpRow, type StageRow, type TimelineRow, type TimingReport, type WhatIfRow,
 } from '../lib/timingBudget'
 
@@ -99,7 +99,7 @@ export function ClockChart({ ips }: { ips: IpRow[] }) {
   const [ref, w] = useWidth<HTMLDivElement>(600)
   const rows = ips.filter((i) => i.set_clock_mhz > 0)
   const max = niceMax(Math.max(...rows.map((i) => Math.max(i.set_clock_mhz, i.rule_clock_mhz ?? 0))))
-  const labelW = 132, valW = 190
+  const labelW = 132, valW = 300
   const barW = Math.max(120, w - labelW - valW - 16)
   return (
     <div ref={ref} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -119,7 +119,7 @@ export function ClockChart({ ips }: { ips: IpRow[] }) {
               {ip.required_clock_mhz < ip.set_clock_mhz - 0.5 && <line x1={(ip.required_clock_mhz / max) * barW} x2={(ip.required_clock_mhz / max) * barW} y1={9} y2={20} stroke="#1F2430" strokeWidth={1.5}><title>required {fmt(ip.required_clock_mhz)} MHz</title></line>}
             </svg>
             <span className="mono" style={{ width: valW, flexShrink: 0, fontSize: 12, color: up ? '#C2410C' : 'var(--text-2)' }}>
-              {fmt(ip.rule_clock_mhz, 0)} → {fmt(ip.set_clock_mhz, 0)} MHz{ip.dvfs_level !== null ? ` · L${ip.dvfs_level} ${fmt(ip.voltage_mv, 0)}mV` : ''}
+              {clockText(ip)}{ip.dvfs_table !== false ? <span className="faint"> · {fmt(ip.voltage_mv, 0)} mV</span> : null}
             </span>
           </div>
         )
@@ -139,22 +139,30 @@ export function PowerBw({ report }: { report: TimingReport }) {
   const p = report.power, bw = report.bw
   const barW = Math.max(200, w - 8)
   const parts = [
-    { key: 'CPU (SW)', v: p.cpu_mw, c: SW_COLOR },
+    { key: 'CPU', v: p.cpu_mw, c: SW_COLOR },
     { key: 'HW IP core', v: p.hw_mw, c: STAGE_COLOR.rt },
-    { key: 'BW · MIF', v: p.bw_mw, c: STAGE_COLOR.nrt },
+    { key: 'BW (MIF)', v: p.bw_mw, c: STAGE_COLOR.nrt },
   ]
   const ipRows = Object.entries(p.hw_by_ip).filter(([, v]) => v > 0)
   const cpuRows = Object.entries(p.cpu_by_task).filter(([, v]) => v > 0)
   const bwRows = [...Object.entries(bw.hw_by_ip).map(([k, v]) => ({ k, v, sw: false })), ...Object.entries(bw.sw_by_task).map(([k, v]) => ({ k, v, sw: true }))].sort((a, b) => b.v - a.v)
   const bwMax = niceMax(Math.max(1, ...bwRows.map((r) => r.v)))
   const pMax = niceMax(Math.max(1, ...ipRows.map(([, v]) => v), ...cpuRows.map(([, v]) => v)))
+  const pct = (v: number, t: number) => (t > 0 ? `${fmt((v / t) * 100, 1)}%` : '—')
   return (
     <div ref={ref} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8 }}>
-        <Tile label="Total" value={`${fmt(p.total_mw)} mW`} note={`CPU ${fmt(p.share_pct.cpu, 0)}% · HW ${fmt(p.share_pct.hw, 0)}% · BW ${fmt(p.share_pct.bw, 0)}%`} />
-        <Tile label="CPU (SW)" value={`${fmt(p.cpu_mw)} mW`} note={`${fmt(p.cpu_busy_ms, 1)} ms/frame · CL${p.cpu_model.cluster} ${p.cpu_model.freq_mhz} MHz ${p.cpu_model.volt_v} V`} />
-        <Tile label="HW IP core" value={`${fmt(p.hw_mw)} mW`} note={p.zero_power_ips.length ? `unit_power=0: ${p.zero_power_ips.join(', ')}` : '전 IP 계수 있음'} />
-        <Tile label="DMA BW" value={`${fmt(bw.total_mbs / 1000, 2)} GB/s`} note={`HW ${fmt(bw.share_pct.hw, 1)}% · SW ${fmt(bw.share_pct.sw, 1)}% · MIF ${fmt(p.bw_mw)} mW`} />
+      <div className="faint" style={{ fontSize: 12 }}>Power (mW · Total 대비 비중)</div>
+      <div className="tb-tiles">
+        <Tile label="Total power" value={`${fmt(p.total_mw)} mW`} note="CPU + HW IP core + BW(MIF)" strong />
+        <Tile label="CPU power" value={`${fmt(p.cpu_mw)} mW`} share={pct(p.cpu_mw, p.total_mw)} note={`${fmt(p.cpu_busy_ms, 1)} ms/frame · CL${p.cpu_model.cluster} ${p.cpu_model.freq_mhz} MHz ${p.cpu_model.volt_v} V`} color={SW_COLOR} />
+        <Tile label="HW IP core power" value={`${fmt(p.hw_mw)} mW`} share={pct(p.hw_mw, p.total_mw)} note={p.zero_power_ips.length ? `unit_power=0: ${p.zero_power_ips.join(', ')}` : '전 IP 계수 있음'} color={STAGE_COLOR.rt} />
+        <Tile label="BW (MIF) power" value={`${fmt(p.bw_mw)} mW`} share={pct(p.bw_mw, p.total_mw)} note={`HW ${fmt(p.bw_hw_mw, 0)} · CPU ${fmt(p.bw_sw_mw, 0)} mW`} color={STAGE_COLOR.nrt} />
+      </div>
+      <div className="faint" style={{ fontSize: 12 }}>BW (MB/s · Total 대비 비중)</div>
+      <div className="tb-tiles">
+        <Tile label="Total BW" value={`${fmt(bw.total_mbs, 0)} MB/s`} note={`${fmt(bw.total_mbs / 1000, 2)} GB/s · DMA W+R`} strong />
+        <Tile label="CPU BW" value={`${fmt(bw.sw_mbs, 0)} MB/s`} share={pct(bw.sw_mbs, bw.total_mbs)} note="SW task memory 접근" color={SW_COLOR} />
+        <Tile label="HW IP core BW" value={`${fmt(bw.hw_mbs, 0)} MB/s`} share={pct(bw.hw_mbs, bw.total_mbs)} note="IP DMA (RDMA + WDMA)" color={STAGE_COLOR.nrt} />
       </div>
       <div>
         <div className="faint" style={{ fontSize: 12, marginBottom: 4 }}>전력 구성 (mW, 비중)</div>
@@ -162,6 +170,14 @@ export function PowerBw({ report }: { report: TimingReport }) {
           {(() => { let x = 0; return parts.map((s) => { const wpx = (s.v / Math.max(p.total_mw, 1e-9)) * barW; const g = (
             <g key={s.key}><title>{`${s.key} ${fmt(s.v)} mW`}</title><rect x={x} y={0} width={Math.max(0, wpx)} height={26} fill={s.c} stroke="#FFFFFF" />
               {wpx > 90 && <text x={x + wpx / 2} y={17} textAnchor="middle" fontSize={11} fill="#FFFFFF">{s.key} {fmt(s.v, 0)} ({fmt((s.v / p.total_mw) * 100, 0)}%)</text>}</g>); x += wpx; return g }) })()}
+        </svg>
+      </div>
+      <div>
+        <div className="faint" style={{ fontSize: 12, marginBottom: 4 }}>BW 구성 (MB/s, 비중)</div>
+        <svg width={barW} height={26} role="img" aria-label="BW 구성">
+          {(() => { let x = 0; return [{ key: 'HW IP core', v: bw.hw_mbs, c: STAGE_COLOR.nrt }, { key: 'CPU', v: bw.sw_mbs, c: SW_COLOR }].map((s) => { const wpx = (s.v / Math.max(bw.total_mbs, 1e-9)) * barW; const g = (
+            <g key={s.key}><title>{`${s.key} ${fmt(s.v, 0)} MB/s`}</title><rect x={x} y={0} width={Math.max(0, wpx)} height={26} fill={s.c} stroke="#FFFFFF" />
+              {wpx > 90 && <text x={x + wpx / 2} y={17} textAnchor="middle" fontSize={11} fill="#FFFFFF">{s.key} {fmt(s.v, 0)} ({fmt((s.v / bw.total_mbs) * 100, 0)}%)</text>}</g>); x += wpx; return g }) })()}
         </svg>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 16 }}>
@@ -174,11 +190,11 @@ export function PowerBw({ report }: { report: TimingReport }) {
   )
 }
 
-function Tile({ label, value, note }: { label: string; value: string; note: string }) {
+function Tile({ label, value, note, share, color, strong }: { label: string; value: string; note: string; share?: string; color?: string; strong?: boolean }) {
   return (
-    <div style={{ background: 'var(--surface-soft)', border: '1px solid var(--line-soft)', borderRadius: 6, padding: '8px 10px', minWidth: 0 }}>
+    <div className="tb-tile" style={{ borderLeft: color ? `4px solid ${color}` : undefined, background: strong ? 'var(--surface)' : undefined }}>
       <div className="faint" style={{ fontSize: 11 }}>{label}</div>
-      <div className="mono" style={{ fontSize: 17, fontWeight: 600 }}>{value}</div>
+      <div><span className="mono" style={{ fontSize: 17, fontWeight: 600 }}>{value}</span>{share && <span className="badge" style={{ marginLeft: 6 }}>{share}</span>}</div>
       <div className="faint" style={{ fontSize: 11, lineHeight: 1.35, overflowWrap: 'anywhere' }} title={note}>{note}</div>
     </div>
   )
@@ -250,12 +266,22 @@ export function Gantt({ report }: { report: TimingReport }) {
     return { ...l, bars }
   }).filter((l) => l.bars.length), [rows])
   const ticks = Array.from({ length: Math.floor(end / P) + 1 }, (_, i) => i * P)
+  // Output lanes get an extra strip for frame-to-frame interval marks (end → end of consecutive frames).
+  const OUT = new Set(['dpu', 'enc'])
+  const tol = Math.max(0.01, P * (report.intervals.tolerance || 0.001))
+  const laneH = (id: string) => (OUT.has(id) ? 38 : 24)
+  const laneY: number[] = []
+  let acc = 16
+  for (const l of lanes) { laneY.push(acc); acc += laneH(l.id) }
+  const H = acc + 6
   return (
     <div ref={ref}>
-      <svg width={labelW + plotW} height={lanes.length * 24 + 22} role="img" aria-label="pipeline timeline">
-        {ticks.map((t, i) => <g key={i}><line x1={labelW + t * k} x2={labelW + t * k} y1={14} y2={lanes.length * 24 + 18} stroke="#C9C1B4" strokeDasharray="2 3" /><text x={labelW + t * k + 2} y={10} fontSize={10} fill="#8A8274">f{i} {fmt(t, 0)}ms</text></g>)}
-        {lanes.map((l, li) => (
-          <g key={l.id} transform={`translate(0, ${16 + li * 24})`}>
+      <svg width={labelW + plotW} height={H} role="img" aria-label="pipeline timeline">
+        {ticks.map((t, i) => <g key={i}><line x1={labelW + t * k} x2={labelW + t * k} y1={14} y2={H - 4} stroke="#C9C1B4" strokeDasharray="2 3" /><text x={labelW + t * k + 2} y={10} fontSize={10} fill="#8A8274">f{i} {fmt(t, 0)}ms</text></g>)}
+        {lanes.map((l, li) => {
+          const outs = OUT.has(l.id) ? [...l.bars].sort((a, b) => a.end_ms - b.end_ms) : []
+          return (
+          <g key={l.id} transform={`translate(0, ${laneY[li]})`}>
             <text x={labelW - 6} y={14} textAnchor="end" fontSize={11} fill="#3B3F4A">{l.name}</text>
             <rect x={labelW} y={1} width={plotW} height={20} fill="#FBFAF7" />
             {l.bars.map((b, i) => {
@@ -269,9 +295,21 @@ export function Gantt({ report }: { report: TimingReport }) {
                 </g>
               )
             })}
+            {outs.slice(1).map((b, i) => {
+              const a = outs[i], dt = b.end_ms - a.end_ms, x1 = labelW + a.end_ms * k, x2 = labelW + b.end_ms * k
+              const bad = Math.abs(dt - P) > tol
+              const c = bad ? '#B42318' : '#5B6B73'
+              return <g key={`iv${i}`}>
+                <title>{`${l.name} f${a.frame} → f${b.frame} 출력 간격 ${fmt(dt, 3)} ms (목표 ${fmt(P, 3)} ms)`}</title>
+                <line x1={x1} x2={x2} y1={28} y2={28} stroke={c} strokeWidth={1} />
+                <line x1={x1} x2={x1} y1={24} y2={32} stroke={c} /><line x1={x2} x2={x2} y1={24} y2={32} stroke={c} />
+                {x2 - x1 > 34 && <text x={(x1 + x2) / 2} y={36} textAnchor="middle" fontSize={9.5} fill={c} fontFamily="var(--mono)">{fmt(dt, 2)}</text>}
+              </g>
+            })}
           </g>
-        ))}
+        )})}
       </svg>
+      <div className="faint" style={{ fontSize: 11 }}>DPU(preview) · MFC(video) 아래 눈금 = 연속 frame 출력 완료 간격(ms, end→end) · 빨강 = 목표 {fmt(P, 2)} ms ±{fmt((report.intervals.tolerance || 0) * 100, 1)}% 이탈</div>
     </div>
   )
 }

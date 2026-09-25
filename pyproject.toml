@@ -100,6 +100,7 @@ python_version = "3.11"
 warn_unused_ignores = true
 ignore_missing_imports = true
 files = [
+    "src/scenario_db/reporting/arch_opinions.py",
     "dashboard/components/api_auth.py",
     "src/scenario_db/api/auth.py",
     "src/scenario_db/api/cache.py",

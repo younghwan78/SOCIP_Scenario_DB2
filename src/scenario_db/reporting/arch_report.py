@@ -7,6 +7,8 @@ import re
 from html import escape
 from typing import Any
 
+from scenario_db.reporting.arch_opinions import build_opinions, classify
+
 _CLOCK_RE = re.compile(r"^(\w+): required_clock ([\d.]+)MHz exceeds max DVFS speed ([\d.]+)MHz$")
 
 
@@ -37,9 +39,12 @@ def build_snapshot(
     run: dict[str, Any],
     predictions: dict[tuple[str, str], dict[str, Any]],
     changes: dict[tuple[str, str], dict[str, Any]],
+    conditions: dict[tuple[str, str], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """run: exploration run row as dict; predictions: variant -> current prediction row dict;
-    changes: variant -> attribution vs the superseded prediction."""
+    changes: variant -> attribution vs the superseded prediction;
+    conditions: variant -> {"design_conditions": resolved dict, "severity": str} for the category opinions."""
+    conditions = conditions or {}
     variants = [v for v in run["variants"] if v.get("variant_id")]
     ok = [v for v in variants if v["spec_ok"]]
     sample_dvfs = bool(run.get("dvfs_table_ref") and "sample" in str(run["dvfs_table_ref"]))
@@ -48,7 +53,11 @@ def build_snapshot(
         pred = predictions.get((v["scenario_id"], v["variant_id"]))
         chosen = (pred or {}).get("metrics") or {}
         rec = v.get("recommended") or {}
+        cond = conditions.get((v["scenario_id"], v["variant_id"])) or {}
+        worst = (v.get("sw_margin") or {}).get("worst") or {}
         rows.append({
+            "cls": classify(v["variant_id"], v["scenario_id"], v["fps"], v["eis_on"], cond.get("design_conditions"), cond.get("severity")),
+            "sw_margin_pct": worst.get("margin_pct"), "sw_stage": worst.get("stage"), "sw_bottleneck": worst.get("bottleneck"),
             "variant_id": v["variant_id"], "scenario_id": v["scenario_id"], "fps": v["fps"],
             "spec_ok": v["spec_ok"], "reasons": compact_reasons(v["spec_reasons"]), "eis_on": v["eis_on"],
             "prediction_id": (pred or {}).get("id"), "selection_rule": (pred or {}).get("selection_rule"),
@@ -154,6 +163,7 @@ def build_snapshot(
             "errors": run.get("errors") or [],
             "power_range_mw": [round(min(totals), 1), round(max(totals), 1)] if totals else None,
         },
+        "opinions": build_opinions(rows, domains),
         "scenarios": rows,
         "clocks": clocks,
         "compression": comp_rows,
@@ -192,17 +202,18 @@ def render_html(title: str, snap: dict[str, Any]) -> str:
         "<nav>" + "".join(f"<a href='#s{i}'>{t}</a>" for i, t in enumerate(SECTIONS, 1)) + "</nav><main>",
         _sec(1, _overview(o)),
         _sec(2, _spec(s)),
-        _sec(3, _scenarios(snap["scenarios"])),
-        _sec(4, _domains(snap.get("domains") or []) + "<details><summary>IP별 상세 (필요 → 설정 MHz)</summary>"
+        _sec(3, _opinions(snap.get("opinions") or [])),
+        _sec(4, _scenarios(snap["scenarios"])),
+        _sec(5, _domains(snap.get("domains") or []) + "<details><summary>IP별 상세 (필요 → 설정 MHz)</summary>"
              + _clocks([c for c in snap["clocks"] if (c["scenario_id"], c["variant_id"]) in
                         {(r["scenario_id"], r["variant_id"]) for r in snap["scenarios"] if r["spec_ok"]}])
              + "</details>"),
-        _sec(5, _boxes(snap["scenarios"])),
-        _sec(6, _split(snap["scenarios"])),
-        _sec(7, _compression(snap["compression"], snap["scenarios"])),
-        _sec(8, _margins(snap["sw_margin_top5"]) + _fail_margins(snap.get("sw_margin_fail") or [])),
-        _sec(9, _history(snap["history"])),
-        _sec(10, _appendix(snap["appendix"])),
+        _sec(6, _boxes(snap["scenarios"])),
+        _sec(7, _split(snap["scenarios"])),
+        _sec(8, _compression(snap["compression"], snap["scenarios"])),
+        _sec(9, _margins(snap["sw_margin_top5"]) + _fail_margins(snap.get("sw_margin_fail") or [])),
+        _sec(10, _history(snap["history"])),
+        _sec(11, _appendix(snap["appendix"])),
         "</main></body></html>",
     ]
     return "".join(parts)
@@ -212,7 +223,7 @@ def html_sha256(html: str) -> str:
     return hashlib.sha256(html.encode("utf-8")).hexdigest()
 
 
-SECTIONS = ["개요", "Spec 만족", "Scenario 요약", "IP 필요 clock", "Power·BW 분포", "CPU/IP/BW",
+SECTIONS = ["개요", "Spec 만족", "분류별 검토 의견", "Scenario 요약", "IP 필요 clock", "Power·BW 분포", "CPU/IP/BW",
             "Compression 절감", "SW margin Top5", "변경 이력", "부록"]
 
 _CSS = """
@@ -227,11 +238,13 @@ td.n{text-align:right;font-variant-numeric:tabular-nums}.ok{color:#2F6F68}.fail{
 .kpis{display:flex;gap:10px;flex-wrap:wrap}.kpi{border:1px solid #E4DED3;border-radius:6px;padding:8px 12px;min-width:150px}
 .kpi b{font-size:20px;display:block}.scroll{overflow-x:auto}.lg span{display:inline-block;margin-right:12px}.lg i{display:inline-block;width:10px;height:10px;margin-right:4px}
 ul{margin:4px 0 0 18px;padding:0}svg text{font-family:inherit}
+.op{border-top:1px solid #EFEAE1;padding:10px 0}.op:first-of-type{border-top:0}.op h3{font-size:13px;margin:0 0 6px}
+.op li{margin:2px 0}.bar{display:flex;height:8px;border-radius:4px;overflow:hidden;background:#EFEAE1;max-width:420px;margin:4px 0 6px}.bar i{display:block;height:100%}
 """
 
 
 def _sec(i: int, body: str) -> str:
-    return f"<section id='s{i}'><h2>{['①','②','③','④','⑤','⑥','⑦','⑧','⑨','⑩'][i-1]} {SECTIONS[i-1]}</h2>{body}</section>"
+    return f"<section id='s{i}'><h2>{'①②③④⑤⑥⑦⑧⑨⑩⑪⑫'[i-1]} {SECTIONS[i-1]}</h2>{body}</section>"
 
 
 def _f(v: Any, d: int = 1) -> str:
@@ -270,6 +283,24 @@ def _spec(s: dict[str, Any]) -> str:
     if s["errors"]:
         k += f"<p class='fail'>계산 실패 {len(s['errors'])}: " + escape(", ".join(e["variant_id"] for e in s["errors"][:8])) + "</p>"
     return k
+
+
+def _opinions(blocks: list[dict[str, Any]]) -> str:
+    if not blocks:
+        return "<p class='meta'>분류 정보 없음 (이전 형식 snapshot) — 보고서를 재생성하면 표시됩니다.</p>"
+    h = ("<p class='meta'>분류: 30 fps(해상도 × EIS × codec) · 60 fps · 고속(≥100 fps) · Heavy(Pro/Portrait/Dual/Triple). "
+         "의견은 이 snapshot의 등록 예측 수치에서 규칙으로 생성 — 실측 근거가 아님.</p>")
+    for b in blocks:
+        rng = b.get("power_range_mw")
+        sh = b.get("share_pct") or {}
+        h += (f"<div class='op'><h3>{escape(b['title'])} <span class=meta>· {escape(b['scope'])} · "
+              f"spec {b['spec_ok']}/{b['count']}{f' · {rng[0]:,.0f}–{rng[1]:,.0f} mW' if rng else ''}</span></h3>")
+        if sh:
+            h += ("<div class='bar'>" + "".join(f"<i style='width:{v:.1f}%;background:{C[c]}' title='{k} {v:.0f}%'></i>"
+                  for (k, v), c in zip(sh.items(), ("cpu", "hw", "bw"), strict=False)) + "</div>")
+        h += "<ul>" + "".join(f"<li>{escape(o)}</li>" for o in b["opinions"]) + "</ul>"
+        h += f"<details><summary>variant {len(b['variants'])}</summary><span class=meta>{escape(', '.join(_short(v) for v in b['variants']))}</span></details></div>"
+    return h
 
 
 def _scenarios(rows: list[dict[str, Any]]) -> str:

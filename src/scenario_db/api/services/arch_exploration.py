@@ -324,7 +324,7 @@ def create_report(db: Session, request: ArchReportRequest, user: str | None = No
             if old is not None:
                 changes[(sid, vid)] = attribute(old.metrics, cur.metrics)
     run_dict = run_detail(run) | {"created_at": run.created_at}
-    snapshot = build_snapshot(run_dict, preds, changes)
+    snapshot = build_snapshot(run_dict, preds, changes, _conditions(db, vids))
     title = request.title or f"{run.soc_ref or ''} {run.scenario_type} Architecture 검토".strip()
     html = render_html(title, snapshot)
     row = ArchReport(
@@ -336,6 +336,25 @@ def create_report(db: Session, request: ArchReportRequest, user: str | None = No
     db.add(row)
     db.commit()
     return report_detail(row)
+
+
+def _conditions(db: Session, vids: list[tuple[str, str]]) -> dict[tuple[str, str], dict[str, Any]]:
+    """Resolved design_conditions (parent first, then own + override) and severity, for report categories."""
+    out: dict[tuple[str, str], dict[str, Any]] = {}
+    for sid in {s for s, _ in vids}:
+        rows = {r.id: r for r in db.query(ScenarioVariant).filter(ScenarioVariant.scenario_id == sid).all()}
+
+        def dc(vid: str, depth: int = 0) -> dict[str, Any]:
+            r = rows.get(vid)
+            if r is None or depth > 8:
+                return {}
+            base = dc(r.derived_from_variant, depth + 1) if r.derived_from_variant else {}
+            return {**base, **(r.design_conditions or {}), **(r.design_conditions_override or {})}
+
+        for s_, vid in vids:
+            if s_ == sid and vid in rows:
+                out[(sid, vid)] = {"design_conditions": dc(vid), "severity": rows[vid].severity}
+    return out
 
 
 def _report_meta(r: ArchReport) -> dict[str, Any]:

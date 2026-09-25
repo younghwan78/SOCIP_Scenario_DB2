@@ -24,7 +24,9 @@ export interface MeasDetail {
   sw_tasks: { task: string; mean_ms?: number; p95_ms?: number; max_ms?: number; min_ms?: number; count?: number; thread?: string; cluster?: string }[]
 }
 
+export interface Coverage { simulation: number; measurement: number; synthetic: number; current_prediction: { id: string; total_mw: number | null } | null }
 export const calibrationApi = {
+  coverage: (scenarioId: string) => getJson<Record<string, Coverage>>('/calibration/coverage', { scenario_id: scenarioId }, false),
   measurements: (scenarioId?: string) => getJson<MeasRow[]>('/calibration/measurements', { scenario_id: scenarioId }, false),
   detail: (id: string) => getJson<MeasDetail>(`/calibration/measurements/${encodeURIComponent(id)}`, {}, false),
 }

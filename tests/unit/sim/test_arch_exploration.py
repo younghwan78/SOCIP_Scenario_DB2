@@ -169,7 +169,8 @@ def test_report_snapshot_and_html(uhd30):
     assert snap["sw_margin_top5"][0]["variant_id"] == UHD30
     assert any(c["buffer"] == "MCSC_VIDEO" and c["selected"] == 1 for c in snap["compression"])
     html = render_html("Report", snap)
-    assert html.count("<section") == 10 and "<svg" in html and "SAMPLE" in html
+    assert html.count("<section") == 11 and "<svg" in html and "SAMPLE" in html
+    assert snap["opinions"][0]["category"] == "fps30" and "분류별 검토 의견" in html
     assert len(html_sha256(html)) == 64
 
 

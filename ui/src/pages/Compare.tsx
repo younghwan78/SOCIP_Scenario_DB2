@@ -156,7 +156,8 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
   const makeRef = (id: string) => ctx.navigate(undefined, { variants: [id, ...ids.filter((x) => x !== id)].join(',') })
 
   const table = (
-    <div className="panel table-scroll" style={show === 'table' ? { flex: '1 1 auto', minHeight: 160 } : { flex: '0 0 auto', maxHeight: '56vh', minHeight: 200 }}>
+    // full height: every row visible, the page (pl-main) is the only vertical scroller
+    <div className="panel table-x fit cmp-table">
       {orient === 'items'
         ? <DataTable id={`compare.items.${ids.length}`} columns={itemCols} groups={groups} rowKey={(it) => it.id} />
         : <DataTable id="compare.variants" columns={varCols} rows={vrows} rowKey={(r) => r.id} rowClass={(r) => (r.i === 0 ? 'sel' : '')} />}
@@ -197,7 +198,7 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
         <button className="btn" onClick={() => ctx.openPicker('compare')}>+ variant 추가 (Ctrl K)</button>
         <span className="grow" />
         <div className="seg sm" role="group" aria-label="표시">
-          {([['both', '표 + Plot'], ['table', '표'], ['plot', 'Plot']] as const).map(([k, l]) => <button key={k} className={show === k ? 'on' : ''} onClick={() => setShow(k)}>{l}</button>)}
+          {([['both', 'Plot + 표'], ['table', '표'], ['plot', 'Plot']] as const).map(([k, l]) => <button key={k} className={show === k ? 'on' : ''} onClick={() => setShow(k)}>{l}</button>)}
         </div>
         <div className="seg sm" role="group" aria-label="표 방향">
           <button className={orient === 'items' ? 'on' : ''} onClick={() => setOrient('items')} title="행 = 항목, 열 = variant">항목 × Variant</button>
@@ -209,8 +210,8 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
       {variantsQ.error && <div className="err">{variantsQ.error}</div>}
       {missing.length > 0 && <div className="err">이 scenario에 없는 variant: {missing.join(', ')}</div>}
       {[viewsQ.error, detailsQ.error, evQ.error].filter(Boolean).map((error, i) => <div className="err" key={i}>{error}</div>)}
-      {show !== 'plot' && table}
       {show !== 'table' && plots}
+      {show !== 'plot' && table}
       </>}
       bottomTabs={pmTarget ? [{ id: 'pm', label: <>예측 vs 실측 <span className="tab-note">{ids[pmTarget.i]}</span></>, content: <>
         <div className="panel-head"><h2>예측 vs 실측 · {ids[pmTarget.i]}</h2>

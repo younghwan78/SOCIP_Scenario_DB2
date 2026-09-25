@@ -14,6 +14,7 @@ export interface StageRow {
 export interface IpRow {
   node: string; hw_name: string; stage: StageId; dvfs_group: string | null; cores: number; shared_streams: number
   rule_clock_mhz: number | null; required_clock_mhz: number; set_clock_mhz: number; dvfs_level: number | null; voltage_mv: number
+  rule_dvfs_level?: number | null; dvfs_table?: boolean
   hw_ms: number | null; power_mw: number; feasible: boolean; infeasible_reason: string | null; clock_reason: string | null
 }
 export interface IntervalSeries { node: string | null; values: number[]; max_ms: number | null; min_ms: number | null; ok: boolean | null }
@@ -135,4 +136,12 @@ export function niceMax(v: number): number {
   const p = 10 ** Math.floor(Math.log10(v))
   const n = v / p
   return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * p
+}
+
+/** '342 (Lv2) → 400 MHz (Lv4)'; a DVFS group without a table reads 'Lv —' with the reason. */
+export function clockText(ip: Pick<IpRow, 'rule_clock_mhz' | 'set_clock_mhz' | 'dvfs_level' | 'rule_dvfs_level' | 'dvfs_table' | 'dvfs_group'>): string {
+  const lv = (l: number | null | undefined) => (l === null || l === undefined ? 'Lv —' : `Lv${l}`)
+  const noTable = ip.dvfs_table === false
+  const rule = ip.rule_clock_mhz === null ? '—' : noTable ? fmt(ip.rule_clock_mhz, 0) : `${fmt(ip.rule_clock_mhz, 0)} (${lv(ip.rule_dvfs_level)})`
+  return `${rule} → ${fmt(ip.set_clock_mhz, 0)} MHz (${noTable ? `Lv — · ${ip.dvfs_group ?? '?'} 표 없음` : lv(ip.dvfs_level)})`
 }

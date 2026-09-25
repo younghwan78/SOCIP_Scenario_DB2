@@ -29,7 +29,7 @@ npm run dev          # http://localhost:3000  (/api → http://127.0.0.1:18000)
 | `#/` | Home — brand click. Canvas 2D pipeline fly-through (generic stage roles, IP names only as examples; Camera / Video / Display), SSO placeholder, status links. Honors `prefers-reduced-motion`, pauses on hidden tab |
 | `#/explorer` | Scenario type pills → scenario list (description) → variant table vs. reference (medoid / parent), facets, select → Pipeline / Compare |
 | `#/matrix` | All-scenario variant matrix, grouped by scenario, normalized columns |
-| `#/pipeline` | ELK orthogonal graph (buffers as separate nodes, IP groups, external sensor/panel), lens Topology / DMA / Transform, concurrent subsystems, Perfetto-style timing linked to graph, DMA table |
+| `#/pipeline` | ELK orthogonal graph (buffers as separate nodes, IP groups, external sensor/panel), lens Sequence / DMA / IP 내부 (IP connection map coloured by voltage domain or BLK → click for ports, page scroll only), concurrent subsystems, Perfetto-style timing linked to graph, DMA table |
 | `#/compare` | N-way compare, column per variant: conditions, DMA transfers, KPI Δ%, prediction vs. measurement |
 | `#/timing` · `#/timing-fleet` | Stage timing budget of one variant / all variants of a scenario |
 | `#/predictions` | Current power/BW prediction per variant, change vs. previous and cause |

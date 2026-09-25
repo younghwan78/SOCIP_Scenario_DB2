@@ -67,14 +67,19 @@ v3 제안(2026-09-24)의 구현 내용이다. Stage timing budget([timing-budget
 - 구성:
   1. 개요
   2. spec 만족 수와 미달 원인
-  3. scenario 요약
-  4. DVFS domain level (scenario별) + IP 상세
-  5. Power·BW box plot
-  6. CPU/HW/BW 분리
-  7. Compression 절감
-  8. SW margin Top 5 + 권고, spec 미달 목록
-  9. 변경 이력 (attribution)
-  10. 부록
+  3. 분류별 검토 의견 (`reporting/arch_opinions.py`)
+     - 분류: 30 fps(해상도 × EIS on/off × HEVC/APV) · 60 fps(FHD/UHD) · 고속(≥100 fps: FHD120/240, UHD120 …) · Heavy(Pro/Portrait/Dual·PIP·RCV/Triple). 우선순위 고속 → Heavy → fps.
+     - 분류 입력: variant의 resolved `design_conditions`(파생은 부모 병합)와 `severity`(기존 과제 부하 등급). 해상도가 없으면 variant id에서 추출.
+     - 의견: spec 만족 수, power/BW 범위, 평균 CPU·IP core·BW 비중과 우선 lever, 해상도별 EIS off/on 평균, 같은 조건 쌍의 EIS·codec(APV−HEVC) 차이, 미달 원인(원인별 묶음), 최소 SW margin·DVFS headroom. 모두 snapshot 수치의 규칙 기반 문장이며 실측 근거가 아니다.
+     - 이전 형식 snapshot에는 이 절이 비어 있다 → 보고서 재생성.
+  4. scenario 요약
+  5. DVFS domain level (scenario별) + IP 상세
+  6. Power·BW box plot
+  7. CPU/HW/BW 분리
+  8. Compression 절감
+  9. SW margin Top 5 + 권고, spec 미달 목록
+  10. 변경 이력 (attribution)
+  11. 부록
 
 ## 5. DB
 

@@ -54,6 +54,24 @@ def _pred_split(power: dict[str, Any]) -> dict[str, float]:
             "bw": float(power.get("bw_mw") or 0.0)}
 
 
+def coverage(db: Session, scenario_id: str) -> dict[str, dict[str, Any]]:
+    """Per variant: simulation evidence count, real / synthetic measurement count, current prediction."""
+    out: dict[str, dict[str, Any]] = {}
+
+    def row(v: str) -> dict[str, Any]:
+        return out.setdefault(v, {"simulation": 0, "measurement": 0, "synthetic": 0, "current_prediction": None})
+
+    for kind, variant, prov in (db.query(Evidence.kind, Evidence.variant_ref, Evidence.provenance)
+                                .filter(Evidence.scenario_ref == scenario_id).all()):
+        if kind == "evidence.simulation":
+            row(variant)["simulation"] += 1
+        elif kind == "evidence.measurement":
+            row(variant)["synthetic" if is_synthetic(prov) else "measurement"] += 1
+    for p in db.query(Prediction).filter_by(scenario_ref=scenario_id, status="current").all():
+        row(p.variant_ref)["current_prediction"] = {"id": p.id, "total_mw": (p.metrics or {}).get("power", {}).get("total_mw")}
+    return out
+
+
 def list_measurements(db: Session, *, scenario_id: str | None = None) -> list[dict[str, Any]]:
     q = db.query(Evidence).filter(Evidence.kind == "evidence.measurement")
     if scenario_id:

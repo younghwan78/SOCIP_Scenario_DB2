@@ -16,6 +16,12 @@ def measurements(scenario_id: str | None = None, db: Session = Depends(get_db)):
     return cal.list_measurements(db, scenario_id=scenario_id)
 
 
+@router.get("/calibration/coverage")
+def coverage(scenario_id: str, db: Session = Depends(get_db)):
+    """Per-variant evidence coverage: simulation / real + synthetic measurement counts and current prediction."""
+    return cal.coverage(db, scenario_id)
+
+
 @router.get("/calibration/measurements/{measurement_id}")
 def measurement(measurement_id: str, db: Session = Depends(get_db)):
     """Measured rails grouped as CPU / IP / BW / other and compared with each prediction."""

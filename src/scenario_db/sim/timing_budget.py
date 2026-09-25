@@ -610,6 +610,9 @@ def _report(graph, options, plan, rule_run, run, dvfs_tables) -> dict[str, Any]:
                 "required_clock_mhz": round(res.required_clock_mhz, 1),
                 "set_clock_mhz": round(res.set_clock_mhz, 1),
                 "dvfs_level": res.dvfs_level,
+                "rule_dvfs_level": rule.resolved[node].dvfs_level if node in rule.resolved else None,
+                # False when the IP's DVFS group has no table (level cannot be named, voltage is the default)
+                "dvfs_table": bool(res.dvfs_group) and res.dvfs_group in dvfs_tables,
                 "voltage_mv": round(res.set_voltage_mv, 2),
                 "hw_ms": round(timing[node].hw_time_ms, 3) if node in timing else None,
                 "power_mw": round(res.total_power_mw * cores, 3),
