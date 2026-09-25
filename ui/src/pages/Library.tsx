@@ -144,7 +144,7 @@ function SwTab({ ctx }: { ctx: Ctx }) {
     <Card id="lib-sw-meas" title={`SW task 실측 (${q.data?.measured.length ?? 0})`} note="measurement evidence (Perfetto)" defaultWide>
       {q.data?.measured.length ? <table className="tb-mini-table" style={{ width: '100%' }}>
         <thead><tr><th>task</th><th>variant</th><th>mean ms</th><th>p95 ms</th><th>max ms</th><th>evidence</th></tr></thead>
-        <tbody>{q.data.measured.map((m) => <tr key={`${m.evidence_id}:${m.task}`}><td className="mono">{m.task}</td><td className="faint">{m.variant_id}</td><td className="mono">{fmt(m.mean_ms, 2)}</td><td className="mono">{fmt(m.p95_ms, 2)}</td><td className="mono">{fmt(m.max_ms, 2)}</td><td><a href={`#/calibration?m=${encodeURIComponent(m.evidence_id)}&all=1`}>{m.evidence_id.slice(0, 24)}…</a></td></tr>)}</tbody>
+        <tbody>{q.data.measured.map((m) => <tr key={`${m.evidence_id}:${m.task}`}><td className="mono">{m.task}{m.synthetic && <span className="badge v-warn" title="합성 fixture — 실제 측정 아님">합성</span>}</td><td className="faint">{m.variant_id}</td><td className="mono">{fmt(m.mean_ms, 2)}</td><td className="mono">{fmt(m.p95_ms, 2)}</td><td className="mono">{fmt(m.max_ms, 2)}</td><td><a href={`#/calibration?m=${encodeURIComponent(m.evidence_id)}&all=1`}>{m.evidence_id.slice(0, 24)}…</a></td></tr>)}</tbody>
       </table> : <div className="empty">실측 SW task 없음</div>}
     </Card>
   </div>

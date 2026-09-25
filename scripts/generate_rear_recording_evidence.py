@@ -28,6 +28,7 @@ import math
 import re
 import sys
 from copy import deepcopy
+from datetime import datetime, timezone
 from pathlib import Path
 
 import yaml
@@ -151,11 +152,22 @@ def sim_numbers(doc: dict) -> dict:
 
 
 def find_sim(vid: str) -> dict | None:
+    candidates = []
     for p in sorted(EVIDENCE.glob("sim-*.yaml"), reverse=True):
         h = _header(p)
         if h.get("scenario_ref") == SCENARIO and h.get("variant_ref") == vid:
-            return read(p)
-    return None
+            candidates.append(read(p))
+    def timestamp(doc):
+        raw = (doc.get("run_info") or {}).get("timestamp")
+        dt = datetime.fromisoformat(raw) if raw else datetime.min.replace(tzinfo=timezone.utc)
+        return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+    return max(candidates, key=lambda doc: (timestamp(doc), doc["id"])) if candidates else None
+
+
+def simulation_failed(sim: dict) -> bool:
+    trace = sim.get("calculation_trace") or {}
+    check = trace.get("rear_gapfill_verification") or trace.get("priority_verification") or {}
+    return (sim.get("resolution_result") or {}).get("overall_feasibility") == "infeasible" or check.get("accepted") is False
 
 
 def synth_measurement(raw: dict, vid: str, graph, sim: dict, ref: dict, ref_sim: dict) -> dict:
@@ -194,7 +206,7 @@ def synth_measurement(raw: dict, vid: str, graph, sim: dict, ref: dict, ref_sim:
         mean = t["mean_ms"] * f
         mx = max(float(t.get("max_ms") or mean * 2), mean * 1.2) * jitter(vid + t["task"] + "max", 0.1) * 1.15
         tasks.append({"task": t["task"], "timing_scope": "exclusive_sw", "mean_ms": round(mean, 3), "p50_ms": round(mean * 0.95, 3),
-                      "p95_ms": round(min(mx, mean * 1.35), 3), "max_ms": round(mx, 3), "samples": int(fps * 180),
+                      "p95_ms": round(min(mx, mean * 1.35), 3), "max_ms": round(mx, 3), "samples": int(fps * 90),
                       "count_per_frame": 1.0, "value_source": "assumed", "source_note": SYNTH_NOTE})
     cpu_rails = {n: r for n, r in out_rails.items() if rail_category(n, None, r.get("domain")) == "cpu"}
     clusters = {"BIG": r"CPUCL3|BIG", "MID": r"CPUCL1|CPUCL2|MID", "LIT": r"CPUCL0|DSU"}
@@ -213,7 +225,7 @@ def synth_measurement(raw: dict, vid: str, graph, sim: dict, ref: dict, ref_sim:
         "kpi": {"total_power_mw": {"mean": round(total, 3), "p95": round(total + 0.93 * std, 3), "std": round(std, 3),
                                    "ci_95": [round(total - half, 3), round(total + half, 3)], "n": 3},
                 "frame_latency_ms": {"mean": round(lat * jitter(vid + "lat", 0.05) * 1.08, 2),
-                                     "p95": round(lat * 1.22, 2), "n": int(fps * 180)},
+                                     "p95": round(lat * 1.22, 2), "n": int(fps * 90)},
                 "fps_effective": round(fps * 0.999, 2)},
         "vdd_power": out_rails, "cpu_breakdown": cpu_breakdown, "sw_task_timing": tasks,
         "timeline_events": [{"type": "note", "detail": SYNTH_NOTE}],
@@ -251,7 +263,7 @@ def main() -> int:
                 row["added"].append(sim["id"])
                 if args.write:
                     (EVIDENCE / f"{sim['id']}.yaml").write_text(yaml.safe_dump(sim, sort_keys=False, allow_unicode=True), encoding="utf-8")
-            if "measurement" not in kinds and row.get("sim_check") is not None:
+            if "measurement" not in kinds and sim is not None and simulation_failed(sim):
                 # No accepted clock candidate: the device cannot sustain this config in the model,
                 # so a rescaled "measurement" would be meaningless.
                 row["skipped_measurement"] = "simulation infeasible (cadence/latency)"
@@ -271,7 +283,7 @@ def main() -> int:
         print(json.dumps(row, ensure_ascii=False), flush=True)
     if args.write:
         (FIXTURE / "rear_recording_gapfill_report.json").write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
-    return 0
+    return 1 if any("error" in row for row in report) else 0
 
 
 load_catalog.cache = {}  # type: ignore[attr-defined]

@@ -12,13 +12,22 @@ export interface SwTaskRow {
   scenario_id: string; task: string; variants: number; min_ms: number[] | null; mean_ms: number[] | null; max_ms: number[] | null
   latency_ms: number[] | null; source: string[]; bitrate_scaled: boolean
 }
-export interface SwMeasured { evidence_id: string; scenario_id: string; variant_id: string; task: string; mean_ms?: number; p95_ms?: number; max_ms?: number; count?: number }
+export interface SwMeasured { evidence_id: string; scenario_id: string; variant_id: string; task: string; synthetic?: boolean; mean_ms?: number; p95_ms?: number; max_ms?: number; count?: number }
+
+async function catalogPages<T>(path: string): Promise<Paged<T>> {
+  const items: T[] = []
+  for (;;) {
+    const page = await getJson<Paged<T>>(path, { limit: 500, offset: items.length })
+    items.push(...page.items)
+    if (items.length >= page.total || !page.items.length) return { items, total: page.total }
+  }
+}
 
 export const libraryApi = {
-  ips: () => getJson<Paged<IpRow>>('/ip-catalogs', { limit: 500 }),
-  dvfs: () => getJson<Paged<DvfsTable>>('/soc-dvfs-tables', { limit: 100 }),
-  socs: () => getJson<Paged<SocRow>>('/soc-platforms', { limit: 100 }),
-  sensors: () => getJson<{ items: SensorCatalogRow[]; total: number }>('/sensors/catalogs'),
+  ips: () => catalogPages<IpRow>('/ip-catalogs'),
+  dvfs: () => catalogPages<DvfsTable>('/soc-dvfs-tables'),
+  socs: () => catalogPages<SocRow>('/soc-platforms'),
+  sensors: () => catalogPages<SensorCatalogRow>('/sensors/catalogs'),
   sensorTiming: () => getJson<{ items: SensorTimingRow[] }>('/sensors/timing-profiles'),
   swTiming: (scenarioId?: string) => getJson<{ tasks: SwTaskRow[]; measured: SwMeasured[] }>('/library/sw-timing', { scenario_id: scenarioId }),
 }

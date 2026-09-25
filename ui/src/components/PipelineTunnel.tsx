@@ -15,11 +15,15 @@ export function PipelineTunnel({ domain, paused, speed = 0.22 }: { domain: Domai
     const cv = ref.current
     const g = cv?.getContext('2d')
     if (!cv || !g) return
-    const reduce = !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    const motion = window.matchMedia('(prefers-reduced-motion: reduce)')
+    let reduce = motion.matches, dirty = true
+    const motionChanged = () => { reduce = motion.matches; dirty = true }
+    motion.addEventListener('change', motionChanged)
     const ST = DOMAINS[domain]
     const GAP = 460, N = ST.length, LOOP = GAP * N, F = 560, R = 250, VIEW = 3600
     let W = 1200, H = 800, cx = 0, cy = 0
     const resize = () => {
+      dirty = true
       // Measure the container, not the canvas: if the stylesheet is missing the canvas would
       // otherwise size itself from its own backing store and grow without bound.
       const r = (cv.parentElement ?? cv).getBoundingClientRect()
@@ -123,14 +127,15 @@ export function PipelineTunnel({ domain, paused, speed = 0.22 }: { domain: Domai
     const loop = (now: number) => {
       raf = requestAnimationFrame(loop)
       const dt = Math.min(50, now - last); last = now
-      if (!pausedRef.current && !reduce && !document.hidden) {
+      const animate = !pausedRef.current && !reduce && !document.hidden
+      if (animate) {
         cam = (cam + dt * speed * 3) % LOOP
         for (const p of P) { p.z = (p.z + dt * speed * 3 * (1 + p.s)) % LOOP; p.a += dt * 0.0002 }
       }
-      draw()
+      if (!document.hidden && (animate || dirty)) { draw(); dirty = false }
     }
     raf = requestAnimationFrame(loop)
-    return () => { cancelAnimationFrame(raf); ro.disconnect() }
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); motion.removeEventListener('change', motionChanged) }
   }, [domain, speed])
 
   return <canvas ref={ref} className="tunnel-canvas" role="img"

@@ -16,7 +16,7 @@ export function CalibrationPage({ ctx }: { ctx: Ctx }) {
   const list = useAsync(() => calibrationApi.measurements(all ? undefined : ctx.scenario), [ctx.scenario, all])
   const synthCount = (list.data ?? []).filter((r) => r.synthetic).length
   const rows = (list.data ?? []).filter((r) => !realOnly || !r.synthetic)
-  const selId = ctx.params.m ?? rows[0]?.id
+  const selId = rows.find((r) => r.id === ctx.params.m)?.id ?? rows[0]?.id
   const detail = useAsync(() => (selId ? calibrationApi.detail(selId) : Promise.resolve(null)), [selId])
   const cols: Column<MeasRow>[] = [
     { key: 'v', label: 'Variant', width: 280, sticky: true, sort: (r) => r.variant_id, render: (r) => <span className="mono">{short(r.variant_id)}{r.synthetic && <span className="badge v-warn" style={{ marginLeft: 6 }} title="생성된 fixture — silicon 측정 아님">합성</span>}</span> },
@@ -100,7 +100,7 @@ function Detail({ d, ctx }: { d: MeasDetail; ctx: Ctx }) {
       <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
         <a className="btn" href={`#/timing?scenario=${encodeURIComponent(d.scenario_id)}&variant=${encodeURIComponent(d.variant_id)}`}>Timing Budget →</a>
         <a className="btn" href={`#/library?tab=sw&scenario=${encodeURIComponent(d.scenario_id)}`}>SW timing 가정 →</a>
-        <button className="btn" onClick={() => ctx.navigate('predictions', { scenario: d.scenario_id, v: d.variant_id })}>예측 현황 →</button>
+        <button className="btn" onClick={() => ctx.navigate('predictions', { scenario: d.scenario_id, v: cur?.id })}>예측 현황 →</button>
       </div>
     </Card>
   </>

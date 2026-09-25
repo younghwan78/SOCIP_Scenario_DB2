@@ -40,7 +40,7 @@ kpi:
   frame_latency_ms:
     mean: 24.23
     p95: 27.77
-    n: 21600
+    n: 10800
   fps_effective: 119.88
 vdd_power:
   B5S4_VDDMIF_AP_L:
@@ -144,7 +144,7 @@ sw_task_timing:
   p50_ms: 0.365
   p95_ms: 0.518
   max_ms: 0.588
-  samples: 21600
+  samples: 10800
   count_per_frame: 1.0
   value_source: assumed
   source_note: SYNTHETIC fixture — not silicon data. Reference rails rescaled by this
@@ -155,7 +155,7 @@ sw_task_timing:
   p50_ms: 3.272
   p95_ms: 4.65
   max_ms: 5.064
-  samples: 21600
+  samples: 10800
   count_per_frame: 1.0
   value_source: assumed
   source_note: SYNTHETIC fixture — not silicon data. Reference rails rescaled by this
@@ -166,7 +166,7 @@ sw_task_timing:
   p50_ms: 5.072
   p95_ms: 7.208
   max_ms: 7.867
-  samples: 21600
+  samples: 10800
   count_per_frame: 1.0
   value_source: assumed
   source_note: SYNTHETIC fixture — not silicon data. Reference rails rescaled by this
@@ -177,7 +177,7 @@ sw_task_timing:
   p50_ms: 4.6
   p95_ms: 6.537
   max_ms: 8.932
-  samples: 21600
+  samples: 10800
   count_per_frame: 1.0
   value_source: assumed
   source_note: SYNTHETIC fixture — not silicon data. Reference rails rescaled by this
@@ -188,7 +188,7 @@ sw_task_timing:
   p50_ms: 9.799
   p95_ms: 13.925
   max_ms: 16.997
-  samples: 21600
+  samples: 10800
   count_per_frame: 1.0
   value_source: assumed
   source_note: SYNTHETIC fixture — not silicon data. Reference rails rescaled by this

@@ -16,7 +16,7 @@ Rail → 구분 (`comparison/calibration.py`)
 
 | 우선순위 | 근거 |
 |---|---|
-| 1 | project의 최신 SimConfigProfile `rail_domain_map` (CPU→cpu, MIF/MEM/DRAM→bw, 그 외→ip) |
+| 1 | project의 최신 SimConfigProfile `rail_domain_map` (CPU→cpu, MIF/MEM/DRAM→bw, GPU/NPU/SRAM/ICPU 등→other, 그 외→ip) |
 | 2 | `vdd_power[rail].domain` hint |
 | 3 | 이름 규칙 (순서: 기타 `G3D·GPU·SRAM·ICPU·NPU·AUD·MODEM` → cpu `CPUCL·DSU·VDD_CPU` → bw `MIF·VDD2H/2L·VDDQ·MEM·DRAM` → ip `CAM·INT·MFC·DPU·ISP·MM`) |
 
@@ -25,6 +25,7 @@ Rail → 구분 (`comparison/calibration.py`)
 - 예측값 0 mW(예: CPU를 모델링하지 않은 sim)는 −100 %가 아니라 `미모델`로 표시.
 - 표시 기준: |Δ| ≤10 % 녹색, ≤25 % 주황, 그 외 빨강. 표준편차는 rail별 std의 RSS.
 - Simulation 열: `power_breakdown`이 있는 evidence만 split 비교, 날짜 suffix로 구분 (`Sim MM-DD`). KPI tile·목록은 최신 sim.
+- 최신 simulation은 `measured_at` 기준이며 시각이 없는 evidence는 뒤로 둔다. project가 없는 실측은 소유 scenario의 project를 사용하며 다른 project의 rail map은 사용하지 않는다.
 
 ### 합성(SYNTHETIC) 측정 fixture
 
