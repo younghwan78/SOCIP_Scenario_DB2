@@ -81,3 +81,11 @@ def test_compare_split_zero_prediction_is_unmodeled():
     rows = {r["category"]: r for r in compare_split({"cpu": 0.0, "ip": 130.0, "bw": 429.0}, {"cpu": 265.0, "ip": 203.0, "bw": 150.0})}
     assert rows["cpu"]["prediction_mw"] is None and rows["cpu"]["delta_pct"] is None
     assert rows["ip"]["delta_pct"] is not None
+
+
+def test_synthetic_flag_from_provenance():
+    from scenario_db.api.services.calibration import is_synthetic
+    assert is_synthetic({"collection_method": "synthetic_fixture"})
+    assert is_synthetic({"device_id": "SYNTHETIC"})
+    assert not is_synthetic({"collection_method": "power_monitor", "device_id": "EVT1-ERD-SN-0042"})
+    assert not is_synthetic(None)

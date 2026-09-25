@@ -5,7 +5,7 @@ export type Category = 'cpu' | 'ip' | 'bw' | 'other'
 export interface Total { mean: number | null; std: number | null; p95: number | null; ci_95: number[] | null; n: number | null }
 export interface MeasRow {
   id: string; scenario_id: string; variant_id: string; project_ref: string | null; measured_at: string | null
-  silicon_rev: string | null; sw_baseline_ref: string | null; thermal: string | null; total: Total; fps: number | null; rails: number
+  silicon_rev: string | null; sw_baseline_ref: string | null; thermal: string | null; total: Total; fps: number | null; rails: number; synthetic?: boolean
   current_prediction: { id: string; total_mw: number; delta_pct: number | null } | null
   simulation: { id: string; total_mw: number | null; delta_pct: number | null; count: number } | null
 }
@@ -17,7 +17,7 @@ export interface PredictionCmp {
 }
 export interface MeasDetail {
   id: string; scenario_id: string; variant_id: string; project_ref: string | null; measured_at: string | null
-  context: Record<string, string | number | null>; total: Total; fps: number | null
+  context: Record<string, string | number | null>; total: Total; fps: number | null; synthetic?: boolean; derived_from?: string[]
   frame_latency: { mean?: number; p95?: number } | null
   measured: { categories: Record<Category, number>; category_std: Record<Category, number>; rail_total_mw: number; rails: Rail[] }
   rail_domain_map_ref: string | null; unexplained_mw: number | null; predictions: PredictionCmp[]

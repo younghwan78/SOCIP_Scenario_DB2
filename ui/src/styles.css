@@ -425,6 +425,7 @@ th.ref-col { background: var(--primary-soft) !important; color: var(--primary-st
 .home-stat b { font-size: 20px; font-family: var(--mono); }
 .home-stat b.txt { font-size: 13px; font-family: var(--font); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .home-stat em { font-style: normal; font-size: 12px; color: #E6A23C; }
+.home-stat em.dim-em { color: #9FB0B6; }
 .home-stat.wide { grid-column: span 2; }
 @media (min-width: 1100px) { .home-stats { grid-template-columns: 1fr 1fr 1.6fr 1.6fr 1fr; } .home-stat.wide { grid-column: auto; } }
 @media (max-width: 720px) { .home-stat.wide { grid-column: auto; } .home-controls { top: auto; bottom: 200px; } }

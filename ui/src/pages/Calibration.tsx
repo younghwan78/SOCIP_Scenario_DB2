@@ -12,12 +12,14 @@ const pctText = (v: number | null | undefined) => (v === null || v === undefined
 
 export function CalibrationPage({ ctx }: { ctx: Ctx }) {
   const all = ctx.params.all === '1'
+  const realOnly = ctx.params.real === '1'
   const list = useAsync(() => calibrationApi.measurements(all ? undefined : ctx.scenario), [ctx.scenario, all])
-  const rows = list.data ?? []
+  const synthCount = (list.data ?? []).filter((r) => r.synthetic).length
+  const rows = (list.data ?? []).filter((r) => !realOnly || !r.synthetic)
   const selId = ctx.params.m ?? rows[0]?.id
   const detail = useAsync(() => (selId ? calibrationApi.detail(selId) : Promise.resolve(null)), [selId])
   const cols: Column<MeasRow>[] = [
-    { key: 'v', label: 'Variant', width: 220, sticky: true, sort: (r) => r.variant_id, render: (r) => <span className="mono">{short(r.variant_id)}</span> },
+    { key: 'v', label: 'Variant', width: 280, sticky: true, sort: (r) => r.variant_id, render: (r) => <span className="mono">{short(r.variant_id)}{r.synthetic && <span className="badge v-warn" style={{ marginLeft: 6 }} title="생성된 fixture — silicon 측정 아님">합성</span>}</span> },
     { key: 'at', label: '측정', width: 130, firstDir: -1, sort: (r) => r.measured_at ?? '', render: (r) => <span className="mono faint">{r.measured_at?.slice(0, 10) ?? '—'}</span> },
     { key: 'ctx', label: 'Silicon · SW', width: 190, sort: (r) => `${r.silicon_rev}${r.sw_baseline_ref}`, render: (r) => <span className="faint">{r.silicon_rev ?? '—'} · {r.sw_baseline_ref ?? '—'}</span> },
     { key: 'meas', label: '실측 mW', width: 110, align: 'right', firstDir: -1, sort: (r) => r.total.mean ?? -1, render: (r) => <span className="mono">{fmt(r.total.mean, 1)}{r.total.std ? <span className="faint"> ±{fmt(r.total.std, 1)}</span> : null}</span> },
@@ -32,10 +34,14 @@ export function CalibrationPage({ ctx }: { ctx: Ctx }) {
           <button className={!all ? 'on' : ''} onClick={() => ctx.navigate(undefined, { all: undefined, m: undefined }, true)}>현재 scenario</button>
           <button className={all ? 'on' : ''} onClick={() => ctx.navigate(undefined, { all: '1', m: undefined }, true)}>전체</button>
         </div>
+        {synthCount > 0 && <div className="seg sm" role="group" aria-label="합성 fixture">
+          <button className={!realOnly ? 'on' : ''} onClick={() => ctx.navigate(undefined, { real: undefined, m: undefined }, true)}>합성 포함 ({synthCount})</button>
+          <button className={realOnly ? 'on' : ''} onClick={() => ctx.navigate(undefined, { real: '1', m: undefined }, true)}>실제 측정만</button>
+        </div>}
         <span className="faint" style={{ fontSize: 12 }}>실측 rail을 CPU · IP · BW(MIF·DRAM) · 기타로 묶어 예측과 비교합니다. |Δ| ≤10% 녹색 · ≤25% 주황 · 그 이상 빨강</span>
       </div>
       {list.error && <div className="err">{list.error}</div>}
-      {list.data && !rows.length && <div className="empty">실측 evidence가 없습니다. 측정 결과를 import하면 여기에 나타납니다.</div>}
+      {list.data && !rows.length && <div className="empty">{realOnly && synthCount ? '실제 측정 evidence가 없습니다 (합성 fixture만 있음).' : '실측 evidence가 없습니다. 측정 결과를 import하면 여기에 나타납니다.'}</div>}
       {rows.length > 0 && <div className="tb-grid">
         <Card id="cal-list" title="실측 evidence" note="행 클릭 = 상세" defaultWide minHeight={140}>
           <div className="table-x">
@@ -62,6 +68,7 @@ function Detail({ d, ctx }: { d: MeasDetail; ctx: Ctx }) {
     ['fps · latency', `${fmt(d.fps, 2)}`, d.frame_latency ? `latency mean ${fmt(d.frame_latency.mean, 1)} / p95 ${fmt(d.frame_latency.p95, 1)} ms` : '', ''],
   ]
   return <>
+    {d.synthetic && <div className="lib-note warn" style={{ gridColumn: '1 / -1' }}>합성 fixture — silicon 측정이 아닙니다. 기준 capture를 이 variant의 simulation(IP core · BW)과 SW 부하(CPU)로 rescale한 값이라 예측 오차는 모델 검증 근거가 되지 않습니다{d.derived_from?.length ? ` (source: ${d.derived_from.join(', ')})` : ''}.</div>}
     <section className="tb-kpis" style={{ gridColumn: '1 / -1' }} aria-label="요약">
       {kpis.map(([l, v, n, cls]) => (
         <div key={l} className="panel tb-kpi"><div className="faint" style={{ fontSize: 12 }}>{l}</div>

@@ -25,6 +25,12 @@ Rail → 구분 (`comparison/calibration.py`)
 - 표시 기준: |Δ| ≤10 % 녹색, ≤25 % 주황, 그 외 빨강. 표준편차는 rail별 std의 RSS.
 - Simulation 열: `power_breakdown`이 있는 evidence만 split 비교, 날짜 suffix로 구분 (`Sim MM-DD`). KPI tile·목록은 최신 sim.
 
+### 합성(SYNTHETIC) 측정 fixture
+
+- `provenance.collection_method: synthetic_fixture` 또는 `device_id: SYNTHETIC`이면 API가 `synthetic: true`를 돌려준다.
+- 목록에 `합성` badge, 상단 filter `합성 포함 | 실제 측정만` (param `real=1`), 상세에 경고 배너와 source(`derived_from`).
+- 생성: `scripts/generate_rear_recording_evidence.py` (rear Camera Recording gap fill, fixture README 참고).
+
 ## Library (`#/library`)
 
 | 탭 | Source | 비고 |

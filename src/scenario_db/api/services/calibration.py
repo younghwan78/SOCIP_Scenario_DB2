@@ -22,6 +22,12 @@ def _total(kpi: dict[str, Any] | None) -> dict[str, Any]:
     return {"mean": None, "std": None, "p95": None, "ci_95": None, "n": None}
 
 
+def is_synthetic(provenance: dict[str, Any] | None) -> bool:
+    """Generated fixture, not a silicon capture (see scripts/generate_rear_recording_evidence.py)."""
+    p = provenance or {}
+    return str(p.get("collection_method") or "").startswith("synthetic") or p.get("device_id") == "SYNTHETIC"
+
+
 def _rail_map(db: Session, project_ref: str | None) -> tuple[dict[str, str], str | None]:
     q = db.query(SimConfigProfile)
     if project_ref:
@@ -65,7 +71,7 @@ def list_measurements(db: Session, *, scenario_id: str | None = None) -> list[di
             "measured_at": m.measured_at.isoformat() if m.measured_at else None,
             "silicon_rev": ctx.get("silicon_rev"), "sw_baseline_ref": m.sw_baseline_ref, "thermal": ctx.get("thermal"),
             "total": total, "fps": (m.kpi or {}).get("fps_effective"),
-            "rails": len(m.vdd_power or {}),
+            "rails": len(m.vdd_power or {}), "synthetic": is_synthetic(m.provenance),
             "current_prediction": {"id": cur.id, "total_mw": cur_total, "delta_pct": pct(cur_total, total["mean"])} if cur else None,
             "simulation": {"id": sims[-1].id, "total_mw": sim_total, "delta_pct": pct(sim_total, total["mean"]), "count": len(sims)} if sims else None,
         })
@@ -112,6 +118,7 @@ def measurement_detail(db: Session, measurement_id: str) -> dict[str, Any]:
         "id": m.id, "scenario_id": m.scenario_ref, "variant_id": m.variant_ref, "project_ref": m.project_ref,
         "measured_at": m.measured_at.isoformat() if m.measured_at else None,
         "context": {k: ctx.get(k) for k in ("silicon_rev", "thermal", "power_state", "ambient_temp_c", "sw_baseline_ref")},
+        "synthetic": is_synthetic(m.provenance), "derived_from": list(m.derived_from or []),
         "total": total, "fps": (m.kpi or {}).get("fps_effective"), "frame_latency": (m.kpi or {}).get("frame_latency_ms"),
         "measured": split, "rail_domain_map_ref": profile_ref,
         "unexplained_mw": None if total["mean"] is None else round(float(total["mean"]) - split["rail_total_mw"], 3),
