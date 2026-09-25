@@ -26,7 +26,8 @@ def test_calibration_scope_recency_and_constant_query_count(engine):
         for suffix, kind, year in [('z-old', 'simulation', 2024), ('a-new', 'simulation', 2026),
                                    ('measurement1', 'measurement', 2026), ('measurement2', 'measurement', 2026)]:
             db.add(Evidence(id=f'{sid}-{suffix}', scenario_ref=sid, variant_ref='v', schema_version='1.0.0',
-                            kind=f'evidence.{kind}', measured_at=datetime(year, 1, 1, tzinfo=timezone.utc),
+                            kind=f'evidence.{kind}', measured_at=datetime(year, 1, 1, tzinfo=timezone.utc) if kind == 'measurement' else None,
+                            run_info={'timestamp': f'{year}-01-01T00:00:00Z'} if kind == 'simulation' else None,
                             execution_context={}, aggregation={}, kpi={'total_power_mw': 10},
                             vdd_power={'ODD': {'power_mw': 10}}, yaml_sha256='test',
                             sw_task_timing=[{'task': 'sw', 'mean_ms': 2}]))

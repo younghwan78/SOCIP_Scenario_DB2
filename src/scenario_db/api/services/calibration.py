@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -35,10 +36,20 @@ def _rail_map(db: Session, project_ref: str | None) -> tuple[dict[str, str], str
     return dict(row.rail_domain_map or {}), str(row.id)
 
 
+def _sim_order(ev: Evidence) -> tuple[datetime, str]:
+    timestamp = ev.measured_at or (ev.run_info or {}).get("timestamp")
+    try:
+        dt = datetime.fromisoformat(timestamp) if isinstance(timestamp, str) else timestamp
+        dt = dt.replace(tzinfo=timezone.utc) if dt is not None and dt.tzinfo is None else dt
+    except ValueError:
+        dt = None
+    return dt or datetime.min.replace(tzinfo=timezone.utc), str(ev.id)
+
+
 def _sim_evidence(db: Session, scenario: str, variant: str) -> list[Evidence]:
-    return (db.query(Evidence)
+    return sorted(db.query(Evidence)
             .filter(Evidence.kind == "evidence.simulation", Evidence.scenario_ref == scenario, Evidence.variant_ref == variant)
-            .order_by(Evidence.measured_at.asc().nullsfirst(), Evidence.id).all())
+            .all(), key=_sim_order)
 
 
 def _current(db: Session, scenario: str, variant: str) -> Prediction | None:
@@ -63,6 +74,8 @@ def list_measurements(db: Session, *, scenario_id: str | None = None) -> list[di
     for ev in db.query(Evidence).filter(Evidence.kind == "evidence.simulation", Evidence.scenario_ref.in_(scenario_ids)).order_by(
         Evidence.measured_at.asc().nullsfirst(), Evidence.id).all():
         simulations.setdefault((ev.scenario_ref, ev.variant_ref), []).append(ev)
+    for sims in simulations.values():
+        sims.sort(key=_sim_order)
     out = []
     for m in measurements:
         total = _total(m.kpi)
