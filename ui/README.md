@@ -26,10 +26,19 @@ npm run dev          # http://localhost:3000  (/api → http://127.0.0.1:18000)
 
 | Route | Content |
 |---|---|
+| `#/` | Home — brand click. Canvas 2D pipeline fly-through (generic stage roles, IP names only as examples; Camera / Video / Display), SSO placeholder, status links. Honors `prefers-reduced-motion`, pauses on hidden tab |
 | `#/explorer` | Scenario type pills → scenario list (description) → variant table vs. reference (medoid / parent), facets, select → Pipeline / Compare |
 | `#/matrix` | All-scenario variant matrix, grouped by scenario, normalized columns |
 | `#/pipeline` | ELK orthogonal graph (buffers as separate nodes, IP groups, external sensor/panel), lens Topology / DMA / Transform, concurrent subsystems, Perfetto-style timing linked to graph, DMA table |
 | `#/compare` | N-way compare, column per variant: conditions, DMA transfers, KPI Δ%, prediction vs. measurement |
+| `#/timing` · `#/timing-fleet` | Stage timing budget of one variant / all variants of a scenario |
+| `#/predictions` | Current power/BW prediction per variant, change vs. previous and cause |
+| `#/explore` · `#/reports` | Architecture exploration runs · review reports |
+| `#/calibration` | 예측 ↔ 실측: CPU / IP / BW(MIF·DRAM) / 기타 split of measured rails vs. current prediction and simulation evidence, rail table, SW task 실측 |
+| `#/library` | Tabs `ip` · `dvfs` · `comp` · `sensor` · `sw` (param `tab`): input catalogs and their source/assumed status |
+| `#/settings` | 설정 · 기존 도구 (Streamlit links, base `VITE_STREAMLIT_BASE`), API status, reset `sdb.*` preferences |
+
+Sidebar groups: 탐색 · 예측 · Architecture · Library; 설정 at the bottom. Sidebar colors are `--sd-*` tokens in `styles.css` (map to the company design system later).
 
 `Ctrl K`: variant picker (Mode = KPI/Pro Video/Slow motion/Portrait/None, Camera = rear wide/tele/UW/front/dual; Enter = open, Shift+Enter = add to compare, ★ = pin).
 
@@ -45,6 +54,6 @@ npm run dev          # http://localhost:3000  (/api → http://127.0.0.1:18000)
 ## Source layout
 
 - `src/lib/` — api client, condition normalization, graph build/ELK layout, timeline model, routing
-- `src/components/` — GraphView, TimelineView, Picker
-- `src/pages/` — Explorer, Matrix, Pipeline, Compare
-- `tests/` — vitest (conditions, graph orthogonality, timeline/route)
+- `src/components/` — GraphView, TimelineView, Picker, DataTable, PipelineTunnel
+- `src/pages/` — Home, Explorer, Matrix, Pipeline, Compare, TimingBudget, Predictions, Explore, Reports, Calibration, Library, Settings
+- `tests/` — vitest (conditions, graph orthogonality, timeline/route, timing budget, arch pages, home/library/calibration helpers)

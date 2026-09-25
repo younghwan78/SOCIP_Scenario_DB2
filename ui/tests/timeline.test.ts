@@ -34,6 +34,7 @@ describe('route', () => {
     const r = parseHash('#/compare?scenario=uc-camera-recording&variants=a,b')
     expect(r).toEqual({ page: 'compare', params: { scenario: 'uc-camera-recording', variants: 'a,b' } })
     expect(formatHash(r)).toBe('#/compare?scenario=uc-camera-recording&variants=a%2Cb')
-    expect(parseHash('#/unknown').page).toBe('explorer')
+    expect(parseHash('#/unknown').page).toBe('home')
+    expect(parseHash('').page).toBe('home')
   })
 })

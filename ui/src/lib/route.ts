@@ -1,15 +1,16 @@
 // Hash router with shareable query context: #/pipeline?project=…&scenario=…&variant=…
 import { useCallback, useEffect, useState } from 'react'
 
-export type Page = 'explorer' | 'matrix' | 'pipeline' | 'compare' | 'timing' | 'timing-fleet' | 'explore' | 'predictions' | 'reports'
+export type Page = 'home' | 'explorer' | 'matrix' | 'pipeline' | 'compare' | 'timing' | 'timing-fleet' | 'explore' | 'predictions' | 'reports' | 'calibration' | 'library' | 'settings'
 export interface Route { page: Page; params: Record<string, string> }
 
-const PAGES: Page[] = ['explorer', 'matrix', 'pipeline', 'compare', 'timing', 'timing-fleet', 'explore', 'predictions', 'reports']
+const PAGES: Page[] = ['home', 'explorer', 'matrix', 'pipeline', 'compare', 'timing', 'timing-fleet', 'explore', 'predictions', 'reports', 'calibration', 'library', 'settings']
 
 export function parseHash(hash: string): Route {
   const raw = hash.replace(/^#\/?/, '')
   const [path, query = ''] = raw.split('?')
-  const page = (PAGES as string[]).includes(path) ? (path as Page) : 'explorer'
+  // '#/' (brand link) and unknown paths land on Home
+  const page = (PAGES as string[]).includes(path) ? (path as Page) : 'home'
   const params: Record<string, string> = {}
   new URLSearchParams(query).forEach((v, k) => { params[k] = v })
   return { page, params }
