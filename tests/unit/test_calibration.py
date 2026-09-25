@@ -37,6 +37,8 @@ def test_rail_rules(rail, cat):
 def test_profile_map_and_domain_hint_win():
     assert rail_category("B4S4_VDD_INT_L", {"B4S4_VDD_INT_L": "MIF"}) == "bw"
     assert rail_category("ODD_RAIL", None, "CPU") == "cpu"
+    assert rail_category("B1_VDD_GPU", None, "GPU") == "other"
+    assert rail_category("ODD_RAIL", {"ODD_RAIL": "NPU"}) == "other"
 
 
 def test_measured_split_sums_and_orders():

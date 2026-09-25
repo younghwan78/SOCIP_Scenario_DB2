@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from scenario_db.comparison.calibration import CATEGORIES, compare_split, measured_split, pct
 from scenario_db.db.models.capability import SimConfigProfile
+from scenario_db.db.models.definition import Scenario
 from scenario_db.db.models.evidence import Evidence
 from scenario_db.db.models.exploration import Prediction
 from scenario_db.exceptions import NotFoundError
@@ -29,10 +30,12 @@ def is_synthetic(provenance: dict[str, Any] | None) -> bool:
 
 
 def _rail_map(db: Session, project_ref: str | None) -> tuple[dict[str, str], str | None]:
+    if not project_ref:
+        return {}, None
     q = db.query(SimConfigProfile)
     if project_ref:
         q = q.filter(SimConfigProfile.project_ref == project_ref)
-    row = q.order_by(SimConfigProfile.version.desc()).first()
+    row = q.order_by(SimConfigProfile.version.desc(), SimConfigProfile.id).first()
     if row is None:
         return {}, None
     return dict(row.rail_domain_map or {}), str(row.id)
@@ -41,7 +44,7 @@ def _rail_map(db: Session, project_ref: str | None) -> tuple[dict[str, str], str
 def _sim_evidence(db: Session, scenario: str, variant: str) -> list[Evidence]:
     return (db.query(Evidence)
             .filter(Evidence.kind == "evidence.simulation", Evidence.scenario_ref == scenario, Evidence.variant_ref == variant)
-            .order_by(Evidence.id).all())
+            .order_by(Evidence.measured_at.asc().nullsfirst(), Evidence.id).all())
 
 
 def _current(db: Session, scenario: str, variant: str) -> Prediction | None:
@@ -58,11 +61,19 @@ def list_measurements(db: Session, *, scenario_id: str | None = None) -> list[di
     q = db.query(Evidence).filter(Evidence.kind == "evidence.measurement")
     if scenario_id:
         q = q.filter(Evidence.scenario_ref == scenario_id)
+    measurements = q.order_by(Evidence.measured_at.desc().nullslast(), Evidence.id).all()
+    scenario_ids = {m.scenario_ref for m in measurements}
+    current = {(p.scenario_ref, p.variant_ref): p for p in db.query(Prediction).filter(
+        Prediction.status == "current", Prediction.scenario_ref.in_(scenario_ids)).all()}
+    simulations: dict[tuple[str, str], list[Evidence]] = {}
+    for ev in db.query(Evidence).filter(Evidence.kind == "evidence.simulation", Evidence.scenario_ref.in_(scenario_ids)).order_by(
+        Evidence.measured_at.asc().nullsfirst(), Evidence.id).all():
+        simulations.setdefault((ev.scenario_ref, ev.variant_ref), []).append(ev)
     out = []
-    for m in q.order_by(Evidence.measured_at.desc().nullslast(), Evidence.id).all():
+    for m in measurements:
         total = _total(m.kpi)
-        cur = _current(db, m.scenario_ref, m.variant_ref)
-        sims = _sim_evidence(db, m.scenario_ref, m.variant_ref)
+        cur = current.get((m.scenario_ref, m.variant_ref))
+        sims = simulations.get((m.scenario_ref, m.variant_ref), [])
         sim_total = _total(sims[-1].kpi)["mean"] if sims else None
         cur_total = cur.metrics["power"]["total_mw"] if cur else None
         ctx = m.execution_context or {}
@@ -82,7 +93,9 @@ def measurement_detail(db: Session, measurement_id: str) -> dict[str, Any]:
     m = db.get(Evidence, measurement_id)
     if m is None or m.kind != "evidence.measurement":
         raise NotFoundError(f"measurement evidence not found: {measurement_id}")
-    rail_map, profile_ref = _rail_map(db, m.project_ref)
+    scenario = db.get(Scenario, m.scenario_ref)
+    project_ref = m.project_ref or (scenario.project_ref if scenario is not None else None)
+    rail_map, profile_ref = _rail_map(db, project_ref)
     split = measured_split(m.vdd_power, rail_map)
     total = _total(m.kpi)
     meas_cat = split["categories"]

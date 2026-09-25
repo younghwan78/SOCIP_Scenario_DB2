@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { DOMAINS, domainFor } from '../src/lib/tunnel'
 import { errClass } from '../src/lib/calibration'
-import { ipSummary, range } from '../src/lib/library'
+import { ipSummary, libraryApi, range } from '../src/lib/library'
 import { formatHash, parseHash } from '../src/lib/route'
 
 describe('tunnel stages', () => {
@@ -34,6 +34,15 @@ describe('calibration', () => {
 })
 
 describe('library', () => {
+  it('loads catalog pages beyond the first page', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ id: 'a' }], total: 2 })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ id: 'b' }], total: 2 })))
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      expect((await libraryApi.ips()).items.map((r) => r.id)).toEqual(['a', 'b'])
+      expect(String(fetchMock.mock.calls[1][0])).toContain('offset=1')
+    } finally { vi.unstubAllGlobals() }
+  })
   it('summarises IP capabilities', () => {
     const s = ipSummary({ id: 'ip-x', category: 'ISP', capabilities: {
       sim: { hw_name: 'X', vdd: 'VDD_CAM', dvfs_group: 'CAM', source: 'datasheet' },
