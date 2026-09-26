@@ -6,7 +6,7 @@ from scenario_db.sim.fixture_contract import load_fixture_documents, validate_so
 
 
 ROOT = Path(__file__).resolve().parents[3]
-EXYNOS2600_FIXTURE = ROOT / "db_fixtures_Exynos2600_S26Plus"
+EXYNOS2600_FIXTURE = ROOT / "db_Exynos2600_SM-S947B"
 EXYNOS2500_FIXTURE = ROOT / "demo" / "generated" / "scenariodb"
 
 

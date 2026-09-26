@@ -111,7 +111,7 @@ run_info에 profile 내용과 revision을 저장하고, derived_from으로 측�
 원본과 현행 fixture 비교:
 
 ```powershell
-uv run python scripts/review_fixture_snapshot.py --source <reference-directory> --current db_fixtures_Exynos2600_S26Plus --out <manifest.json>
+uv run python scripts/review_fixture_snapshot.py --source <reference-directory> --current db_Exynos2600_SM-S947B --out <manifest.json>
 ```
 
 manifest는 파일 hash, shared/changed ID, 현행에만 존재하는 variant를 기록한다. source와 current에는 쓰지 않는다.

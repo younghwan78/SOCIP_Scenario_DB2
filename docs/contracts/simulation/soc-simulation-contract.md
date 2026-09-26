@@ -119,7 +119,7 @@ SoC data. Simulation result/debug trace should expose the source.
 Use the fixture validator before adding or changing a SoC package:
 
 ```powershell
-uv run python scripts\check_soc_sim_contract.py db_fixtures_Exynos2600_S26Plus --soc-id soc-exynos2600
+uv run python scripts\check_soc_sim_contract.py db_Exynos2600_SM-S947B --soc-id soc-exynos2600
 uv run python scripts\check_soc_sim_contract.py demo\generated\scenariodb --soc-id soc-exynos2500
 ```
 

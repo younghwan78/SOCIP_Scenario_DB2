@@ -99,6 +99,9 @@ class RawArtifact(BaseScenarioModel):
 
 class Provenance(BaseScenarioModel):
     import_fingerprint: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    # Correction counter of one measurement (same id). Fingerprinted (SW timing / profiling)
+    # evidence can only be replaced by a document with a higher revision.
+    revision: int | None = Field(default=None, ge=1)
     device_id: str | None = None
     chamber_controlled: bool | None = None
     chamber_temp_c: float | None = None

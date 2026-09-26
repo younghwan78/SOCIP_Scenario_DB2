@@ -1,6 +1,6 @@
 # Exynos2700 SM-S957B scope (2026-09-27): rear camera recording KPI set only
 # (dual wide+front pip-fhd30 / pip-uhd30 excluded).
-# Exynos2600 (sm-s947b / db_fixtures_Exynos2600_S26Plus) stays complete; this overlay only
+# Exynos2600 (sm-s947b / db_Exynos2600_SM-S947B) stays complete; this overlay only
 # narrows what the Exynos2700 project emits.
 #   variants.keep : emitted variants, in this order (16 rear KPI + 3 exploration). Every other
 #                   inherited 2600 variant stays an `extends` template only.

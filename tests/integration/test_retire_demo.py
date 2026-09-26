@@ -13,7 +13,7 @@ def test_retire_demo_preserves_runtime_and_is_idempotent(engine, tmp_path):
     # Roll back this test so the shared demo integration fixture stays unchanged.
     with engine.connect() as connection, connection.begin() as transaction:
         with Session(bind=connection, join_transaction_mode="create_savepoint") as db:
-            result = load_yaml_dir(Path("db_fixtures_Exynos2600_S26Plus"), db, validate=True, strict=True)
+            result = load_yaml_dir(Path("db_Exynos2600_SM-S947B"), db, validate=True, strict=True)
             assert result.ok
             camera = db.get(Scenario, "uc-camera-recording").pipeline
             counts = retire_demo(db)
@@ -38,7 +38,7 @@ def test_retirement_refuses_cross_project_dependencies(engine):
     from scenario_db.db.models import Waiver
     with engine.connect() as connection, connection.begin() as transaction:
         with Session(bind=connection, join_transaction_mode="create_savepoint") as db:
-            load_yaml_dir(Path("db_fixtures_Exynos2600_S26Plus"), db, validate=True, strict=True)
+            load_yaml_dir(Path("db_Exynos2600_SM-S947B"), db, validate=True, strict=True)
             waiver = db.get(Waiver, "waiver-LLC-thrashing-UHD60-EVT0-20260417")
             waiver.scope = {"variant_scope": {"scenario_ref": "uc-camera-recording"}}
             db.flush()

@@ -6,6 +6,8 @@ Layout::
       platforms/<platform>/platform.yaml     kind: authoring.platform
       platforms/<platform>/docs/**           root platform: canonical HW/sensor/SW docs (verbatim)
       platforms/<platform>/patches/<id>.yaml child platform: deep-merge patch per (renamed) doc id
+                                             (platform.yaml: rename, rename_exclude, rename_suffix,
+                                              remove_docs)
       projects/<project>/project.yaml        kind: authoring.project
       projects/<project>/docs/**             project-scoped docs (sim.config_profile ...)
       projects/<project>/scenarios/<uc-id>/  scenario sources (root) or overlay.yaml (child)
@@ -165,6 +167,13 @@ def load_platform(authoring_root: Path, platform_id: str, _stack: tuple = ()) ->
     keep = spec.get("rename_exclude") or []   # e.g. ["00_sensor/*"]: shared, ids unchanged
     renamable = [d.id for d in parent_docs if d.id and not any(fnmatch.fnmatch(d.rel, g) for g in keep)]
     id_map = build_id_map(renamable, rules)
+    # Docs whose ids carry no SoC token (sensor catalogs / timing profiles) get a suffix so the
+    # child platform owns its own copy instead of sharing (and overwriting) the parent rows.
+    for scope in spec.get("rename_suffix") or []:
+        globs, suffix = scope.get("paths") or [], str(scope["suffix"])
+        for d in parent_docs:
+            if d.id and d.id not in id_map and any(fnmatch.fnmatch(d.rel, g) for g in globs):
+                id_map[d.id] = d.id + suffix
     removed = set(spec.get("remove_docs") or [])
     docs: list[Doc] = []
     for d in parent_docs:

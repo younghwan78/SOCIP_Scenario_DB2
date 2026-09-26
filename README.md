@@ -34,7 +34,7 @@ servers. React proxies `/api` to FastAPI; both UIs read PostgreSQL through the A
 .
 ├── alembic/                  # PostgreSQL migrations
 ├── dashboard/                # Streamlit viewer
-├── db_fixtures_Exynos2600_S26Plus/ # Runtime Exynos2600/S26 Plus fixtures
+├── db_Exynos2600_SM-S947B/ # Runtime Exynos2600/S26 Plus fixtures
 ├── demo/fixtures/            # Demo YAML data set
 ├── ui/                       # React/Vite/TypeScript application
 ├── frontend/                 # Embedded Scenario Workbench source
@@ -137,7 +137,7 @@ require reloading fixtures. For a new database or intentional YAML updates, load
 the runtime Exynos2600 fixtures:
 
 ```powershell
-uv run --no-sync python -m scenario_db.etl.loader db_fixtures_Exynos2600_S26Plus --strict --report-json output\etl-report.json
+uv run --no-sync python -m scenario_db.etl.loader db_Exynos2600_SM-S947B --strict --report-json output\etl-report.json
 ```
 
 Keep `demo/fixtures` for isolated tests and demonstrations; do not load it into the runtime DB.
@@ -170,7 +170,7 @@ Load into a clean database when switching fixture families, or make replacement
 explicit:
 
 ```powershell
-uv run --no-sync python -m scenario_db.etl.loader db_fixtures_Exynos2600_S26Plus --replace-scenario-project-collisions
+uv run --no-sync python -m scenario_db.etl.loader db_Exynos2600_SM-S947B --replace-scenario-project-collisions
 ```
 
 Use `--skip-scenario-project-collisions` only when you intentionally want to

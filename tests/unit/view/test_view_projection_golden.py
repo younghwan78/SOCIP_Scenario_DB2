@@ -11,7 +11,7 @@ from scenario_db.db.repositories.scenario_graph import CanonicalScenarioGraph
 from scenario_db.view import service
 
 
-FIXTURE_ROOT = Path("db_fixtures_Exynos2600_S26Plus")
+FIXTURE_ROOT = Path("db_Exynos2600_SM-S947B")
 GOLDEN_ROOT = Path("tests/unit/view/golden")
 
 

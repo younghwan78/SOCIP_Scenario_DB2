@@ -1,0 +1,3 @@
+# Measurement import inputs (meta.yaml has no `kind`); scripts/import_measurements.py turns them
+# into 03_evidence/*.yaml, which the ETL loads.
+measurements/*

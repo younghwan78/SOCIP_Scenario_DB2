@@ -165,6 +165,6 @@ def run(root, fixtures):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--source-root", type=Path, required=True)
-    parser.add_argument("--fixtures", type=Path, default=Path("db_fixtures_Exynos2600_S26Plus/00_sensor"))
+    parser.add_argument("--fixtures", type=Path, default=Path("db_Exynos2600_SM-S947B/00_sensor"))
     args = parser.parse_args()
     run(args.source_root, args.fixtures)

@@ -1,4 +1,4 @@
 kind: authoring.platform
 id: exynos2600
 soc_id: soc-exynos2600
-description: Decompiled from db_fixtures_Exynos2600_S26Plus. docs/ holds canonical HW, sensor and SW catalog files.
+description: Decompiled from db_Exynos2600_SM-S947B. docs/ holds canonical HW, sensor and SW catalog files.

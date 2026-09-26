@@ -20,7 +20,7 @@ from scenario_db.view import service
 from scenario_db.api.schemas.view import NodeData, NodeElement, ViewResponse, ViewSummary
 
 
-FIXTURE_ROOT = Path("db_fixtures_Exynos2600_S26Plus")
+FIXTURE_ROOT = Path("db_Exynos2600_SM-S947B")
 
 
 def _summary() -> ViewSummary:

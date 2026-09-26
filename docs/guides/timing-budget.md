@@ -74,7 +74,7 @@ cd ui && npm run dev   # http://localhost:5173/#/timing?scenario=uc-camera-recor
 
 # fixture fleet 보고서 (DB 불필요)
 uv run python scripts/timing_budget_report.py --statistic max \
-  --dvfs-table db_fixtures_Exynos2600_S26Plus/00_hw/dvfs-exynos2600-sample-v0.yaml --out output/timing-budget
+  --dvfs-table db_Exynos2600_SM-S947B/00_hw/dvfs-exynos2600-sample-v0.yaml --out output/timing-budget
 ```
 
 ## 7. 가정과 한계

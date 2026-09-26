@@ -47,12 +47,12 @@ Do not mix unrelated formatting or historical-document cleanup into a behavior c
 Canonical fixture changes require strict ETL and usually API/view smoke tests.
 
 ```powershell
-uv run python -m scenario_db.etl.loader db_fixtures_Exynos2600_S26Plus `
+uv run python -m scenario_db.etl.loader db_Exynos2600_SM-S947B `
   --strict `
   --report-json output\etl\demo-report.json
 ```
 
-The runtime uses `db_fixtures_Exynos2600_S26Plus`; `demo/fixtures` remains an
+The runtime uses `db_Exynos2600_SM-S947B`; `demo/fixtures` remains an
 isolated test/demo seed. See the README for `scenario_db.etl.retire_demo` dry-run
 and archive/apply commands when an existing DB contains both families. The tool
 refuses cross-project dependencies. Its only legacy exception is the original

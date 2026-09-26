@@ -195,8 +195,16 @@ def main(argv: list[str] | None = None) -> int:
     doc = run_import(args, report)
     if doc is not None:
         out_path = args.out / "03_evidence" / f"{doc['id']}.yaml"
-        if out_path.exists() and read_yaml(out_path) != doc:
-            report.error("evidence_revision_conflict", "Existing evidence differs; use a new evidence id.", str(out_path))
+        existing = read_yaml(out_path) if out_path.exists() else None
+        if existing is not None and existing != doc and _revision(doc) <= _revision(existing):
+            report.error(
+                "evidence_revision_conflict",
+                f"Existing evidence differs at revision {_revision(existing)}; bump provenance.revision "
+                "in meta.yaml to replace it, or use a new evidence id.",
+                str(out_path),
+            )
+        elif existing == doc:
+            report.info("evidence_unchanged", f"Evidence already up to date: {out_path}", str(out_path))
         else:
             write_yaml(out_path, doc)
             report.increment("evidence_measurement")
@@ -209,6 +217,10 @@ def main(argv: list[str] | None = None) -> int:
 
     has_warning = any(m.level == "warning" for m in report.messages)
     return 1 if not report.ok or (args.strict and args.fail_on_warning and has_warning) else 0
+
+
+def _revision(doc: dict) -> int:
+    return int(((doc or {}).get("provenance") or {}).get("revision") or 1)
 
 
 def _fmt_validation(exc: ValidationError) -> str:

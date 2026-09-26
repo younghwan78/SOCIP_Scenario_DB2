@@ -5,7 +5,7 @@ HW time left after their SW runtime + latency; outputs must keep 1000/fps.
 
 Run from implementation/:
   uv run python scripts/timing_budget_report.py --statistic max \
-      --dvfs-table db_fixtures_Exynos2600_S26Plus/00_hw/dvfs-exynos2600-sample-v0.yaml
+      --dvfs-table db_Exynos2600_SM-S947B/00_hw/dvfs-exynos2600-sample-v0.yaml
 """
 
 from __future__ import annotations

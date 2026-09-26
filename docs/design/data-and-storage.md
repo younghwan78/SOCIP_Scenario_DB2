@@ -1,7 +1,7 @@
 # PostgreSQL + JSONB 하이브리드 DB 설계 — Exynos2600 실측/시뮬레이션 예제
 
 > 대상: ScenarioDB가 PostgreSQL 위에 어떤 원칙으로 테이블을 나누고, YAML 데이터가 실제로 어떻게 채워지며, "구조화 컬럼 + JSONB"의 하이브리드 구조가 어떤 확장성/질의 이점을 주는지 `Exynos2600 S26+` fixture의 카메라 녹화(UHD30+VDIS) 시나리오 — 시뮬레이션 evidence와 실측 evidence가 같은 테이블에 공존하는 실제 사례로 설명한다.
-> 코드 기준: `src/scenario_db/db/models/*.py`, `src/scenario_db/etl/`, `src/scenario_db/query_engine/`, `db_fixtures_Exynos2600_S26Plus/`.
+> 코드 기준: `src/scenario_db/db/models/*.py`, `src/scenario_db/etl/`, `src/scenario_db/query_engine/`, `db_Exynos2600_SM-S947B/`.
 
 ## 0. 한 줄 요약
 
@@ -163,7 +163,7 @@ Foreign-key constraints:
 
 ```mermaid
 sequenceDiagram
-    participant FS as YAML 디렉터리<br/>(db_fixtures_*/**.yaml)
+    participant FS as YAML 디렉터리<br/>(db_*/**.yaml)
     participant L as etl/loader.py<br/>load_yaml_dir()
     participant P as pydantic 모델<br/>(scenario_db.models.*)
     participant M as etl/mappers/*.py<br/>upsert_*()
@@ -196,7 +196,7 @@ sequenceDiagram
 
 ## 6. Worked Example — Exynos2600 카메라 녹화 UHD30 + VDIS
 
-`db_fixtures_Exynos2600_S26Plus/`에서 시뮬레이션과 실측이 **동시에 존재**하는 실제 시나리오:
+`db_Exynos2600_SM-S947B/`에서 시뮬레이션과 실측이 **동시에 존재**하는 실제 시나리오:
 
 - `scenario_ref = uc-camera-recording` (`02_definition/uc-camera-recording.yaml`)
 - `variant_ref = cam-rec-r1-uhd30-vdis` — UHD 30fps, rear 단일 센서, SW-VDIS 활성, severity `heavy`

@@ -236,7 +236,7 @@ uv run python -m scenario_db.etl.loader demo\fixtures --strict --report-json out
 Exynos2600 fixture family:
 
 ```powershell
-uv run python -m scenario_db.etl.loader db_fixtures_Exynos2600_S26Plus --replace-scenario-project-collisions
+uv run python -m scenario_db.etl.loader db_Exynos2600_SM-S947B --replace-scenario-project-collisions
 ```
 
 Direct ETL supports the broadest canonical YAML set, including `sw_component`, `evidence.*`, and `decision.*`. It does not create Write API audit history.
@@ -334,7 +334,7 @@ simulation result를 evidence로 저장하려면 API request에 `persist=true`�
 | Path | Purpose |
 | --- | --- |
 | `demo/fixtures` | small golden canonical dataset |
-| `db_fixtures_Exynos2600_S26Plus` | broader Exynos2600/S26Plus fixture family |
+| `db_Exynos2600_SM-S947B` | broader Exynos2600/S26Plus fixture family |
 | `demo/generated/scenariodb` | generated canonical importer output smoke data |
 | `demo/write_payloads` | Write API staging sample payloads |
 | `demo/exploration_fixtures` | Exploration Workbench recipe/sweep/template examples |

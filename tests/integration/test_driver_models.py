@@ -8,7 +8,7 @@ from scenario_db.sim.models import SimulationRunConfig
 from scenario_db.sim.runner import run_simulation, params_hash
 from scenario_db.sim.driver_models import evaluate_graph
 
-FIXTURES = Path(__file__).parents[2] / "db_fixtures_Exynos2600_S26Plus"
+FIXTURES = Path(__file__).parents[2] / "db_Exynos2600_SM-S947B"
 
 
 @pytest.fixture(scope="module")

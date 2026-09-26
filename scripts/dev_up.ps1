@@ -1,13 +1,14 @@
 <#
 .SYNOPSIS
-  Start PostgreSQL (docker), migrate, load fixtures (Exynos2600 + authoring projects), start API and UI.
+  Start PostgreSQL (docker), migrate, load db_Exynos2600_SM-S947B + derived project DB folders (authoring sync, measurement import), start API and UI.
 
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File scripts\dev_up.ps1
   powershell -ExecutionPolicy Bypass -File scripts\dev_up.ps1 -SkipLoad -Streamlit
 #>
 param(
-    [string[]]$AuthoringProjects = @("sm-s957b"),   # derived projects compiled from authoring/ and loaded after 2600
+    # derived authoring project -> its DB folder (compiled 00~02 + measurements -> 03_evidence), loaded after 2600
+    [hashtable]$AuthoringProjects = @{ "sm-s957b" = "db_Exynos2700_SM-S957B" },
     [switch]$SkipLoad,
     [switch]$NoUi,
     [switch]$Streamlit
@@ -46,14 +47,18 @@ if (-not $SkipLoad) {
     Run uv @("run", "python", "-m", "scenario_db.etl.retire", "--spec", "authoring\retired.yaml",
              "--apply", "--backup", "output\etl\retire-backup-$stamp.json")
 
-    Step "ETL: db_fixtures_Exynos2600_S26Plus"
-    Run uv @("run", "python", "-m", "scenario_db.etl.loader", "db_fixtures_Exynos2600_S26Plus",
+    Step "ETL: db_Exynos2600_SM-S947B"
+    Run uv @("run", "python", "-m", "scenario_db.etl.loader", "db_Exynos2600_SM-S947B",
              "--strict", "--report-json", "output\etl\etl-exynos2600.json")
-    foreach ($p in $AuthoringProjects) {
-        Step "Authoring compile + ETL: $p"
-        $out = "output\authoring\$p"
-        Run uv @("run", "python", "-m", "scenario_db.authoring", "sync", $p, "--fixture", $out, "--to", "fixture", "--prune")
-        Run uv @("run", "python", "-m", "scenario_db.etl.loader", $out,
+    foreach ($p in $AuthoringProjects.Keys) {
+        $db = $AuthoringProjects[$p]
+        Step "Authoring sync -> $db ($p)"
+        Run uv @("run", "python", "-m", "scenario_db.authoring", "sync", $p, "--fixture", $db, "--to", "fixture", "--prune")
+        if (Test-Path "$db\measurements") {
+            Step "Measurement import -> $db\03_evidence"
+            Run uv @("run", "python", "scripts\import_measurements.py", $db, "--strict")
+        }
+        Run uv @("run", "python", "-m", "scenario_db.etl.loader", $db,
                  "--strict", "--report-json", "output\etl\etl-$p.json")
     }
 }

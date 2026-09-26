@@ -12,7 +12,7 @@
     {
       "level": "info",
       "code": "canonical_fixture",
-      "source": "db_fixtures_Exynos2600_S26Plus",
+      "source": "db_Exynos2600_SM-S947B",
       "message": "IS v15 camera canonical definitions. Estimated evidence and simulation profiles are loaded separately by strict ETL."
     }
   ]

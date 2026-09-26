@@ -411,7 +411,7 @@ def test_soc_fixture_declares_compression_modes():
     """The shipped Exynos2600 SoC fixture carries the catalog."""
     raw = load_yaml(
         Path(__file__).resolve().parents[2]
-        / "db_fixtures_Exynos2600_S26Plus" / "00_hw" / "soc-exynos2600.yaml"
+        / "db_Exynos2600_SM-S947B" / "00_hw" / "soc-exynos2600.yaml"
     )
     obj = SocPlatform.model_validate(raw)
     assert obj.compression_modes["COMP_YUV_LOSSY"].comp_ratio == 0.5

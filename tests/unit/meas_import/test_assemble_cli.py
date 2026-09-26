@@ -19,7 +19,7 @@ PATH_A_META = REPO / "examples" / "measurement-import" / "path-a-capture" / "met
 PATH_B_CANONICAL = REPO / "examples" / "measurement-import" / "path-b-canonical" / "meas-example-canonical.yaml"
 EXYNOS2600_MEAS_FIXTURE = (
     REPO
-    / "db_fixtures_Exynos2600_S26Plus"
+    / "db_Exynos2600_SM-S947B"
     / "03_evidence"
     / "meas-cam-rec-r1-uhd30-vdis-evt1-sw123-20260614.yaml"
 )
