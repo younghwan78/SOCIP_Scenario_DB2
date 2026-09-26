@@ -6,7 +6,7 @@ const BAYER = ['#E0584B', '#5BC26B', '#5BC26B', '#4F86E8']
 const TAU = Math.PI * 2
 
 /** Canvas 2D perspective fly-through of a generic multimedia pipeline (no WebGL / no library). */
-export function PipelineTunnel({ domain, paused, speed = 0.22 }: { domain: Domain; paused: boolean; speed?: number }) {
+export function PipelineTunnel({ domain, paused, speed = 0.176 }: { domain: Domain; paused: boolean; speed?: number }) {
   const ref = useRef<HTMLCanvasElement>(null)
   const pausedRef = useRef(paused)
   pausedRef.current = paused
@@ -36,9 +36,13 @@ export function PipelineTunnel({ domain, paused, speed = 0.22 }: { domain: Domai
     resize()
     const ro = new ResizeObserver(resize); ro.observe(cv.parentElement ?? cv)
     const A = Math.min(220, W * 0.18)
-    const path = (z: number) => ({ x: A * Math.sin(TAU * 2 * z / LOOP), y: A * 0.5 * Math.sin(TAU * 3 * z / LOOP + 1.3) })
+    // Same curvature and particle density for every domain: the camera loop (15 stages) is the reference,
+    // shorter loops get proportionally fewer path cycles / particles so the flight feels equally fast.
+    const REF = GAP * 15
+    const cx1 = Math.max(1, Math.round((2 * LOOP) / REF)), cy1 = Math.max(1, Math.round((3 * LOOP) / REF))
+    const path = (z: number) => ({ x: A * Math.sin(TAU * cx1 * z / LOOP), y: A * 0.5 * Math.sin(TAU * cy1 * z / LOOP + 1.3) })
     const stageAt = (z: number) => Math.floor((((z % LOOP) + LOOP) % LOOP) / GAP)
-    const P = Array.from({ length: 320 }, (_, i) => ({ z: Math.random() * LOOP, a: Math.random() * TAU, r: 30 + Math.random() * 150, s: 0.25 + Math.random() * 0.35, q: i % 4 }))
+    const P = Array.from({ length: Math.max(96, Math.round((320 * LOOP) / REF)) }, (_, i) => ({ z: Math.random() * LOOP, a: Math.random() * TAU, r: 30 + Math.random() * 150, s: 0.25 + Math.random() * 0.35, q: i % 4 }))
     let cam = 0, last = performance.now(), raf = 0
     const rel = (z: number) => ((((z - cam) % LOOP) + LOOP) % LOOP)
     const pr = (x: number, y: number, d: number) => { const c = path(cam); return { x: cx + (x - c.x) * F / d, y: cy + (y - c.y) * F / d, k: F / d } }

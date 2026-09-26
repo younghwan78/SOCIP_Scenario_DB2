@@ -37,6 +37,8 @@ def test_calibration_scope_recency_and_constant_query_count(engine):
         db.flush()
         assert cal.coverage(db, sid)['v'] == {
             'simulation': 2, 'measurement': 1, 'synthetic': 1, 'current_prediction': None}
+        assert cal.coverage_summary(db)[sid] == {
+            'simulation': 1, 'measurement': 1, 'synthetic': 1, 'current_prediction': 0}
         queries = []
         def counted(*args):
             queries.append(args[2])

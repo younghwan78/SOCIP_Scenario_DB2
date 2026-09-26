@@ -86,6 +86,23 @@ def coverage(db: Session, scenario_id: str) -> dict[str, dict[str, Any]]:
     return out
 
 
+def coverage_summary(db: Session) -> dict[str, dict[str, int]]:
+    """Per scenario: distinct variants with simulation / real measurement / synthetic measurement / current prediction."""
+    sets: dict[str, dict[str, set[str]]] = {}
+
+    def bucket(scenario: str) -> dict[str, set[str]]:
+        return sets.setdefault(scenario, {"simulation": set(), "measurement": set(), "synthetic": set(), "current_prediction": set()})
+
+    for kind, scenario, variant, prov in db.query(Evidence.kind, Evidence.scenario_ref, Evidence.variant_ref, Evidence.provenance).all():
+        if kind == "evidence.simulation":
+            bucket(scenario)["simulation"].add(variant)
+        elif kind == "evidence.measurement":
+            bucket(scenario)["synthetic" if is_synthetic(prov) else "measurement"].add(variant)
+    for scenario, variant in db.query(Prediction.scenario_ref, Prediction.variant_ref).filter(Prediction.status == "current").all():
+        bucket(scenario)["current_prediction"].add(variant)
+    return {k: {n: len(v) for n, v in b.items()} for k, b in sets.items()}
+
+
 def list_measurements(db: Session, *, scenario_id: str | None = None) -> list[dict[str, Any]]:
     q = db.query(Evidence).filter(Evidence.kind == "evidence.measurement")
     if scenario_id:

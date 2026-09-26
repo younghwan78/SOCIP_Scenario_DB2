@@ -158,9 +158,21 @@ export function IpTopology({ model, selectedPid, onSelect, colorBy }: { model: P
     <svg className="ipt-svg" viewBox={`0 0 ${lay.width} ${lay.height}`} width={lay.width} height={lay.height} role="group" aria-label="IP 연결 구조">
       <defs>{(Object.keys(LINK_STYLE) as IpLink['kind'][]).map((k) => (
         <marker key={k} id={`ipt-${k}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill={LINK_STYLE[k].stroke} /></marker>))}</defs>
-      {lay.lanes.map((l) => <g key={l.lane}>
-        <rect x={l.x - 8} y={4} width={l.w + 16} height={lay.height - 8} rx={8} fill="#F6F3EE" opacity={0.7} />
-        <text x={l.x} y={20} fontSize={11} fontWeight={700} fill="var(--muted)">{LANE_LABEL[l.lane]}</text>
+      {lay.columns.map((c) => <g key={c.id}>
+        <rect x={c.x - 8} y={4} width={c.w + 16} height={lay.height - 8} rx={8} fill="#F6F3EE" opacity={0.7} />
+        <text x={c.x} y={20} fontSize={11} fontWeight={700} fill="var(--muted)">{c.label}</text>
+        {c.sections.filter((s) => s.id !== 'main').map((s) => <g key={s.id}>
+          <rect x={c.x - 5} y={s.y - 2} width={c.w + 10} height={s.h + 8} rx={6} fill={s.id === 'sw' ? '#FBF3E2' : '#EAF1F6'}
+            stroke={s.id === 'sw' ? '#E6CFA0' : '#C6D6E3'} strokeDasharray="3 3" />
+          <text x={c.x + 2} y={s.y + 11} fontSize={10} fontWeight={700} fill={s.id === 'sw' ? '#8A5A12' : '#2F5673'}>{s.label}</text>
+        </g>)}
+      </g>)}
+      {lay.ghosts.map((g) => <g key={g.label} opacity={0.75}>
+        <rect x={g.x} y={g.y} width={W} height={H} rx={7} fill="#FFFFFF" stroke="#9FB3C2" strokeDasharray="4 3" />
+        <text x={g.x + 8} y={g.y + 17} fontSize={12} fontWeight={700} fill="#6B7C88">{g.label}</text>
+        <text x={g.x + 8} y={g.y + 31} fontSize={9} fill="#8A97A0">이 variant 미사용</text>
+        <text x={g.x + 8} y={g.y + 43} fontSize={9} fill="#8A97A0">scaler 경로 scenario 자리</text>
+        <title>{g.note}</title>
       </g>)}
       {lay.links.map((e, i) => {
         const a = pos.get(e.from), b = pos.get(e.to)
@@ -214,7 +226,7 @@ export function IpInternalView({ model, selectedPid, onSelect }: { model: Pipeli
     <div className="ipv-page">
       <section className="panel">
         <div className="pane-head"><h2>IP 연결 구조</h2>
-          <span className="faint" style={{ fontSize: 12 }}>행 = lane · 열 = 연결 순서 · IP 클릭 = 아래 상세</span>
+          <span className="faint" style={{ fontSize: 12 }}>열 = 데이터 경로 (Pre/Post-NRT = CPU SW · M2M accel) · 열 안 = 연결 순서 · IP 클릭 = 아래 상세</span>
           <span className="grow" />
           <div className="seg sm" role="group" aria-label="색 기준">
             <button className={colorBy === 'vdd' ? 'on' : ''} onClick={() => setColorBy('vdd')}>Voltage domain</button>

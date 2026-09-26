@@ -26,7 +26,7 @@ type TimingView = 'trace' | 'cadence'
 const LENS: { id: Lens; label: string; hint: string }[] = [
   { id: 'sequence', label: 'Sequence · HW/SW 순서', hint: 'Sensor → Panel/Storage 실행 순서. 같은 열 = OTF streaming(같은 시점), 다음 열 = M2M 또는 SW hand-off. RT 이후 어떤 SW가 NRT를 열고, NRT 이후 어떤 SW가 출력단을 여는지 확인. 노드: +frame 기준 시작 · 소요(ms) / 처리 크기' },
   { id: 'dma', label: 'DMA · Memory', hint: 'Buffer 중심: IP WDMA → Buffer → RDMA. W×H · format · bit · 압축 · MB/frame · MB/s, IP 입력→출력 크기, history(f-1) · stat · optional DMA 포함. 상세 값은 하단 DMA 표' },
-  { id: 'ip', label: 'IP 내부', hint: '위: 전체 IP 연결 구조 (lane × 연결 순서, 색 = Voltage domain 또는 BLK). IP 클릭 → 아래: OTF in / RDMA / history read → Core(처리 크기, crop·scale·mode) → OTF out / WDMA / stat 출력과 port 전체 표' },
+  { id: 'ip', label: 'IP 내부', hint: '위: 전체 IP 연결 구조 (Sensor → RT → Pre-NRT(CPU SW · M2M) → NRT → Post-NRT(CPU SW · M2M) → Codec → Display, 색 = Voltage domain 또는 BLK). IP 클릭 → 아래: OTF in / RDMA / history read → Core(처리 크기, crop·scale·mode) → OTF out / WDMA / stat 출력과 port 전체 표' },
 ]
 const legacyLens = (l?: string): Lens => (l === 'topology' ? 'sequence' : l === 'transform' ? 'ip' : l === 'dma' || l === 'ip' || l === 'sequence' ? l : 'sequence')
 const OUT_NODES = /^(panel|dpu|mfc|apv)/
