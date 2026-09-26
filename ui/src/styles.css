@@ -461,9 +461,9 @@ th.ref-col { background: var(--primary-soft) !important; color: var(--primary-st
 .ax-dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; vertical-align: 0; }
 
 /* Home — pipeline tunnel */
-.home { position: relative; flex-grow: 1; min-height: 0; overflow: auto; container-type: inline-size; background: #0B1116; color: #E8EEF0; }
+.home { position: relative; display: flex; flex-direction: column; gap: 24px; flex-grow: 1; min-height: 0; overflow: auto; container-type: inline-size; background: #0B1116; color: #E8EEF0; }
 .tunnel-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-.home-card { position: absolute; left: clamp(20px, 5vw, 64px); top: clamp(20px, 8vh, 72px); width: min(400px, calc(100% - 40px)); display: flex; flex-direction: column; gap: 14px; padding: 22px 24px; border-radius: 14px; background: rgba(11,17,22,.72); border: 1px solid rgba(127,214,200,.22); backdrop-filter: blur(6px); }
+.home-card { position: relative; flex-shrink: 0; margin: 80px clamp(20px, 5vw, 64px) 0; width: min(400px, calc(100% - 40px)); display: flex; flex-direction: column; gap: 14px; padding: 22px 24px; border-radius: 14px; background: rgba(11,17,22,.72); border: 1px solid rgba(127,214,200,.22); backdrop-filter: blur(6px); }
 .home-card h2 { margin: 0; font-size: clamp(24px, 3vw, 32px); line-height: 1.25; font-weight: 700; }
 .home-card p { margin: 0; font-size: 14px; line-height: 1.6; color: #B7C3C8; }
 .home-kicker { font-family: var(--mono); font-size: 12px; letter-spacing: .12em; color: #7FD6C8; }
@@ -477,7 +477,7 @@ th.ref-col { background: var(--primary-soft) !important; color: var(--primary-st
 .home-seg button.on { background: #2BB3A3; color: #06201D; }
 .home-pill { height: 30px; padding: 0 12px; border-radius: 15px; border: 1px solid rgba(255,255,255,.22); background: rgba(11,17,22,.7); color: #E8EEF0; font-size: 12px; cursor: pointer; }
 .home-pill:hover { border-color: #7FD6C8; }
-.home-dock { position: absolute; left: clamp(20px, 4vw, 56px); right: clamp(20px, 4vw, 56px); bottom: 20px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.home-dock { position: relative; flex-shrink: 0; margin: auto clamp(20px, 4vw, 56px) 20px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .hd-wide { grid-column: 1 / -1; overflow-x: auto; }
 .hd-block { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 12px 14px; border-radius: 10px; background: rgba(11,17,22,.78); border: 1px solid rgba(255,255,255,.14); color: #E8EEF0; text-decoration: none; }
 a.hd-block:hover { border-color: #7FD6C8; color: #E8EEF0; }
