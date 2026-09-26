@@ -517,7 +517,7 @@ a.hd-row:hover span { color: #E8EEF0; }
 /* 과제 (project) selector in the top bar */
 .proj-select { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; margin-right: 12px; }
 .proj-select select { font: inherit; font-weight: 600; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--text); max-width: 320px; }
-.hd-matrix tr.proj-row { cursor: pointer; }
+
 .hd-matrix tr.proj-row:hover td { background: rgba(43, 179, 163, 0.12); }
 .hd-matrix tr.proj-row.on td:first-child { box-shadow: inset 3px 0 0 #2BB3A3; }
 /* Compare: analysis summary */
@@ -527,3 +527,5 @@ a.hd-row:hover span { color: #E8EEF0; }
 .cmp-insight .row { display: flex; justify-content: space-between; gap: 8px; padding: 1px 0; }
 .cmp-insight .up { color: #C0392B; } .cmp-insight .down { color: #1E8449; }
 .cmp-chip-proj { font-size: 10.5px; padding: 0 5px; border-radius: 4px; background: var(--line); color: var(--text); }
+.hd-matrix .proj-open { border: 0; padding: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; }
+.hd-matrix .proj-open:focus-visible { outline: 2px solid #7FD6C8; outline-offset: 3px; }

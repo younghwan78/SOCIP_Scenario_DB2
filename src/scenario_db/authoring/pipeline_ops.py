@@ -95,10 +95,6 @@ def apply_overlay(sources: dict, overlay: dict) -> dict:
         base_wo, variants = apply_pipeline_ops(base_wo, variants, overlay["pipeline"])
     vops = overlay.get("variants") or {}
     remove = set(vops.get("remove") or [])
-    dangling = [v["id"] for v in variants if v.get("extends") in remove and v["id"] not in remove]
-    if dangling:
-        raise AuthoringError(f"variants.remove leaves children without parent: {dangling} "
-                             "(re-point them with variants.patch.<id>.extends or remove them too)")
     variants = [v for v in variants if v["id"] not in remove]
     by_id = {v["id"]: i for i, v in enumerate(variants)}
     for vid, patch in (vops.get("patch") or {}).items():
@@ -106,17 +102,19 @@ def apply_overlay(sources: dict, overlay: dict) -> dict:
             raise AuthoringError(f"variants.patch: unknown variant '{vid}'")
         variants[by_id[vid]] = deep_merge(variants[by_id[vid]], patch)
     variants.extend(copy.deepcopy(vops.get("add") or []))
+    dangling = [v["id"] for v in variants if v.get("extends") in remove]
+    if dangling:
+        raise AuthoringError(f"variants.remove leaves children without parent: {dangling} "
+                             "(re-point them with variants.patch.<id>.extends or remove them too)")
     if vops.get("keep") is not None:
         keep = list(vops["keep"])
         unknown = [vid for vid in keep if vid not in {v["id"] for v in variants}]
         if unknown or len(set(keep)) != len(keep):
             raise AuthoringError(f"variants.keep: unknown or duplicate variant ids {unknown or keep}")
         out["keep"] = keep
-    base = {}
-    for k in sources["base"]:
-        base[k] = variants_ref if k == "variants" else base_wo.get(k)
-    for k, v in base_wo.items():
-        base.setdefault(k, v)
+    base = dict(base_wo)
+    if "variants" in sources["base"]:
+        base["variants"] = variants_ref
     out["base"] = base
     out["variants"] = variants
     out["sizes"] = deep_merge(out.get("sizes") or {}, overlay.get("sizes") or {})

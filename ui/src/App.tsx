@@ -73,7 +73,7 @@ export default function App() {
   const scopedCatalog = useMemo(() => catalog.filter((c) => c.project_id === project), [catalog, project])
   const scenario = route.params.scenario ?? defaultScenario(scopedCatalog)?.scenario_id ?? ''
   const scenarioItem = catalog.find((c) => c.scenario_id === scenario)
-  const variant = route.params.variant ?? (scenarioItem?.variant_count ? PREFERRED_REFERENCE[canonicalOf(scenarioItem)] ?? scenarioItem.default_variant_id ?? '' : '')
+  const variant = route.params.variant ?? (scenarioItem?.variant_count ? scenarioItem.default_variant_id ?? PREFERRED_REFERENCE[canonicalOf(scenarioItem)] ?? '' : '')
   useEffect(() => { if (project && project !== lastProject && known(project)) setLastProject(project) }, [project]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -94,14 +94,15 @@ export default function App() {
     }
     nav({ page, params: next }, replace)
   }
-  /** Switch 과제: keep the same use case (canonical scenario) and variant id when the new project has them. */
+  /** Switch 과제: keep the use case and select the target project's known default variant. */
   const setProject = (pid: string) => {
     if (!pid) return
     if (pid === project) { if (route.page === 'home') nav({ page: 'explorer', params: { project: pid } }); return }
     setLastProject(pid)
     const target = counterpart(catalog, scenarioItem, pid) ?? defaultScenario(catalog.filter((c) => c.project_id === pid))
-    const same = !!target && !!scenarioItem && canonicalOf(target) === canonicalOf(scenarioItem)
-    nav({ page: route.page === 'home' ? 'explorer' : route.page, params: { project: pid, scenario: target?.scenario_id, variant: same ? route.params.variant : undefined, variants: undefined } })
+    // A counterpart shares its use case, not necessarily its variant set.
+    // Use the target catalog's known default; a source-only variant would 404.
+    nav({ page: route.page === 'home' ? 'explorer' : route.page, params: { project: pid, scenario: target?.scenario_id, variant: target?.default_variant_id ?? undefined, variants: undefined } })
   }
   const ctx: Ctx = { catalog: scopedCatalog, allCatalog: catalog, projects, setProject, project, scenario, variant, params: route.params, navigate, openPicker: (m = 'open') => setPicker(m) }
   const currentItems = route.page === 'compare' ? compareItems(route.params, scenario, variant) : variant ? [{ scenario, variant }] : []

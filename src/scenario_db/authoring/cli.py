@@ -67,6 +67,9 @@ def check_against(root: Path, key: str, fixture: Path) -> list[str]:
 def sync_to_fixture(root: Path, key: str, fixture: Path, *, prune: bool = False,
                     dry_run: bool = False) -> dict[str, list[str]]:
     report = compile_project(root, key)
+    validation = validate_documents(report["documents"])
+    if validation["errors"]:
+        raise AuthoringError("compiled documents invalid: " + "; ".join(validation["errors"][:10]))
     result: dict[str, list[str]] = {"added": [], "updated": [], "unchanged": [], "removed": []}
     changed = []
     produced = set()
@@ -161,8 +164,10 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(stats, indent=2, ensure_ascii=False))
             return 0
         if args.cmd == "compile":
-            report = compile_project(args.root, args.project, args.out)
+            report = compile_project(args.root, args.project)
             summary = _summary(report, validate_documents(report["documents"]))
+            if not summary["errors"]:
+                write_docs(report["documents"], args.out)
             text = json.dumps(summary, indent=2, ensure_ascii=False)
             if args.report_json:
                 args.report_json.parent.mkdir(parents=True, exist_ok=True)

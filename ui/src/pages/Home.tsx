@@ -68,16 +68,15 @@ export function HomePage({ ctx }: { ctx: Ctx }) {
 
       <section className="home-dock" aria-label="현황">
         <div className="hd-block hd-wide">
-          <h3>과제 × Scenario type <span>scenario · variant · 행을 눌러 과제 선택</span></h3>
+          <h3>과제 × Scenario type <span>scenario · variant · 과제명을 눌러 선택</span></h3>
           <table className="hd-matrix">
             <thead><tr><th>SoC · 과제</th>
               {matrix.cats.map((c) => <th key={c} style={{ '--cat': CATEGORY_COLOR[c] ?? CATEGORY_COLOR.other } as CSSProperties}>
                 <a href={`#/explorer?type=${c}&project=${encodeURIComponent(ctx.project)}`}><i />{CATEGORY_LABEL[c] ?? c}</a></th>)}
               <th>합계</th></tr></thead>
             <tbody>{matrix.projects.map(([pid, p]) => (
-              <tr key={pid} className={`proj-row ${pid === ctx.project ? 'on' : ''}`} onClick={() => ctx.setProject(pid)} title="이 과제로 Scenario 열기"
-                tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') ctx.setProject(pid) }}>
-                <td><b>{p.soc}</b> · {projLabel(pid)}</td>
+              <tr key={pid} className={`proj-row ${pid === ctx.project ? 'on' : ''}`}>
+                <td><button type="button" className="proj-open" onClick={() => ctx.setProject(pid)} title="이 과제로 Scenario 열기"><b>{p.soc}</b> · {projLabel(pid)}</button></td>
                 {matrix.cats.map((c) => { const cell = p.cells.get(c); return <td key={c} className="n">{cell ? <>{cell.sc} · <span>{cell.v}</span></> : '—'}</td> })}
                 <td className="n"><b>{p.sc} · {p.v}</b></td></tr>))}
             </tbody>

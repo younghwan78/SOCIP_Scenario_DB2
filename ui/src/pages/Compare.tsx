@@ -208,7 +208,7 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
   })
   const sign = (x: number) => `${x >= 0 ? '+' : ''}${x.toFixed(1)}`
   const analysis = ids.length > 1 && (
-    <section className="panel" style={{ padding: 10 }}>
+    <section className="panel fit" style={{ padding: 10 }}>
       <div className="panel-head" style={{ padding: '0 0 8px' }}><h2>분석 요약 · 기준 대비</h2>
         <span className="muted" style={{ fontSize: 12 }}>★ {itemLbl[0]?.full}</span><span className="grow" />
         <div className="seg sm" role="group" aria-label="KPI 출처">
@@ -227,9 +227,9 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
               <div className="row faint"><span>변경: 조건 {f.changed.conditions} · IP {f.changed.ips} · size {f.changed.sizes}</span><span>KPI {kpiOf(f.index).source ?? '없음'}</span></div>
               {f.kpi.filter((k) => /power|bw/i.test(k.label)).map((k) => (
                 <div key={k.label} className="row"><span>{k.label}</span>
-                  <span className={`mono ${k.pct > 0.05 ? 'up' : k.pct < -0.05 ? 'down' : ''}`}>{k.value.toFixed(1)} {k.unit} ({sign(k.pct)}%)</span></div>))}
+                  <span className={`mono ${(k.pct ?? 0) > 0.05 ? 'up' : (k.pct ?? 0) < -0.05 ? 'down' : ''}`}>{k.value.toFixed(1)} {k.unit} ({k.pct === null ? '기준 0 · 비율 미정' : `${sign(k.pct)}%`})</span></div>))}
               {f.dmaTotal && <div className="row"><span>DMA 모델 합계</span>
-                <span className={`mono ${f.dmaTotal.pct > 0.05 ? 'up' : f.dmaTotal.pct < -0.05 ? 'down' : ''}`}>{f.dmaTotal.value.toFixed(0)} MB/s ({sign(f.dmaTotal.pct)}%)</span></div>}
+                <span className={`mono ${(f.dmaTotal.pct ?? 0) > 0.05 ? 'up' : (f.dmaTotal.pct ?? 0) < -0.05 ? 'down' : ''}`}>{f.dmaTotal.value.toFixed(0)} MB/s ({f.dmaTotal.pct === null ? '기준 0 · 비율 미정' : `${sign(f.dmaTotal.pct)}%`})</span></div>}
               {f.topIp.length > 0 && <div className="faint" style={{ marginTop: 4 }}>DMA Δ 상위: {f.topIp.map((t) => `${t.ip} ${sign(t.delta)}`).join(' · ')} MB/s</div>}
               {st?.status === 'running' && <div className="faint">예측 계산 중…</div>}
               {st?.status === 'error' && <div className="err" style={{ margin: '4px 0 0' }}>{st.error}</div>}

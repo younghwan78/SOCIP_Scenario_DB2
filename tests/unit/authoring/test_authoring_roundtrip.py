@@ -311,3 +311,59 @@ def test_fixture_with_knob_variants_decompiles_and_recompiles(child_root: Path, 
     decompile_fixture(out, child_root, "rt-platform", "rt")
     assert knobs_dst.exists()
     assert check_against(child_root, "rt", out) == []
+
+@pytest.mark.parametrize('command', ['compile', 'sync'])
+def test_invalid_compilation_preserves_existing_output(tmp_path, monkeypatch, command):
+    from scenario_db.authoring import cli
+    from scenario_db.authoring.tree import Doc
+
+    out = tmp_path / 'out'
+    target = out / '00_hw' / 'invalid.yaml'
+    target.parent.mkdir(parents=True)
+    target.write_text('unchanged', encoding='utf-8')
+    report = {'project': 'p', 'platform': 'p', 'scenarios': {}, 'impact': {}, 'measurements': {},
+              'documents': [Doc(rel='00_hw/invalid.yaml', data={'kind': 'ip', 'id': 'invalid'})]}
+    monkeypatch.setattr(cli, 'compile_project', lambda *args: report)
+    if command == 'compile':
+        assert cli.main(['compile', 'p', '--out', str(out)]) == 1
+    else:
+        with pytest.raises(AuthoringError, match='invalid'):
+            cli.sync_to_fixture(tmp_path, 'p', out, prune=True)
+    assert target.read_text(encoding='utf-8') == 'unchanged'
+
+
+@pytest.mark.parametrize('invalid', ['missing', 'empty', 'inherited'])
+def test_decompile_rejects_invalid_source_or_inherited_target_before_removing_files(tmp_path, invalid):
+    from scenario_db.authoring.tree import decompile_fixture
+
+    root = tmp_path / 'authoring'
+    target = root / 'platforms' / 'p' / 'docs' / 'important.yaml'
+    target.parent.mkdir(parents=True)
+    target.write_text('keep', encoding='utf-8')
+    source = tmp_path / 'fixture'
+    if invalid != 'missing':
+        source.mkdir()
+    if invalid == 'inherited':
+        yamlio.dump(target.parent.parent / 'platform.yaml', {'extends': 'parent'})
+    with pytest.raises(AuthoringError):
+        decompile_fixture(source, root, 'p', 'project')
+    assert target.read_text(encoding='utf-8') == 'keep'
+
+
+def test_overlay_can_reparent_a_child_before_removing_its_old_parent():
+    from scenario_db.authoring.pipeline_ops import apply_overlay
+    sources = {'base': {'id': 's', 'metadata': {'old': True}, 'variants': []}, 'variants': [
+        {'id': 'a'}, {'id': 'b'}, {'id': 'c', 'extends': 'a'}]}
+    result = apply_overlay(sources, {'scenario_patch': {'$unset': ['metadata']},
+                                    'variants': {'remove': ['a'], 'patch': {'c': {'extends': 'b'}}}})
+    assert expand_variants(result['variants']) == [{'id': 'b'}, {'id': 'c'}]
+    assert 'metadata' not in result['base']
+
+
+def test_duplicate_output_paths_are_rejected_before_writing(tmp_path):
+    from scenario_db.authoring.tree import Doc, write_docs
+    target = tmp_path / 'doc.yaml'
+    target.write_text('keep', encoding='utf-8')
+    with pytest.raises(AuthoringError, match='duplicate'):
+        write_docs([Doc('doc.yaml', data={'a': 1}), Doc('doc.yaml', data={'a': 2})], tmp_path)
+    assert target.read_text(encoding='utf-8') == 'keep'

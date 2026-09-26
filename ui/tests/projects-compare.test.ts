@@ -81,3 +81,10 @@ describe('HW / size diff and insights', () => {
     expect(f[0].changed).toEqual({ conditions: 3, ips: 1, sizes: 1 })
   })
 })
+
+it('does not report a zero baseline as zero percent change', () => {
+  const result = insights({ n: 2, kpi: [{ label: 'power', unit: 'mW', values: [0, 10] }],
+    dma: [0, 20], traffic: [], changedConditions: [], ipMaps: [], sizeMaps: [] })
+  expect(result[0].kpi[0].pct).toBeNull()
+  expect(result[0].dmaTotal?.pct).toBeNull()
+})

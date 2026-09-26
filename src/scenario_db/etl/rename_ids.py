@@ -29,6 +29,7 @@ from sqlalchemy.orm import Session
 import scenario_db.db.models  # noqa: F401
 from scenario_db.db.base import Base, make_engine
 from scenario_db.etl.validate_loaded import validate_loaded_db
+from scenario_db.etl.reference_validation import validate_foreign_keys
 
 
 def load_map(path: Path) -> dict[str, str]:
@@ -87,6 +88,8 @@ def plan_renames(db: Session, mapping: dict[str, str]) -> dict[str, list[dict[st
         for row in rows:
             changes = {}
             for col, val in row.items():
+                if table.c[col].computed is not None:
+                    continue
                 new = rewrite(val, mapping)
                 if new != val:
                     changes[col] = new
@@ -100,6 +103,10 @@ def plan_renames(db: Session, mapping: dict[str, str]) -> dict[str, list[dict[st
             new_pk = tuple(changes.get(c, row[c]) for c in pk_cols)
             entries.append({"pk": dict(zip(pk_cols, old_pk)), "changes": changes,
                             "merge": new_pk != old_pk and new_pk in existing, "row": row})
+        destinations = [tuple(e["changes"].get(c, e["pk"][c]) for c in pk_cols)
+                        for e in entries if not e["merge"]]
+        if len(destinations) != len(set(destinations)):
+            raise ValueError(f"ambiguous rename collision in {table.name}; resolve duplicate targets first")
         if entries:
             plan[table.name] = entries
     return plan
@@ -117,6 +124,7 @@ def apply_renames(db: Session, plan: dict[str, list[dict[str, Any]]]) -> None:
             else:
                 db.execute(update(table).where(where).values(**e["changes"]))
     db.execute(text("SET LOCAL session_replication_role = origin"))
+    validate_foreign_keys(db)
 
 
 def main() -> None:
