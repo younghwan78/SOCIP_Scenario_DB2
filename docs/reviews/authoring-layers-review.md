@@ -13,13 +13,13 @@
 | P1 | etl/rename_ids.py | generated column까지 UPDATE에 포함하면 PostgreSQL이 이관을 거부함. generated column 제외 |
 | P2 | 같은 파일 plan_renames | 여러 source가 없는 동일 target으로 수렴하면 적용 중 PK 충돌. 계획 단계에서 명시적으로 거부 |
 | P1 | etl/rename_ids.py, retire.py | FK trigger를 끈 후 복구해도 기존 orphan은 재검증되지 않음. 모든 선언된 FK를 확인하고 오류 시 transaction rollback |
-| P2 | ui/src/App.tsx | 서로 다른 variant 집합의 project 전환에서 source-only variant 또는 고정 preferred ID를 사용해 404. 대상 catalog의 실제 default 사용 |
+| P2 | ui/src/App.tsx | 서로 다른 variant 집합의 project 전환에서 source-only variant 또는 고정 preferred ID를 사용해 404. 대상 catalog의 실제 default 사용; 탐색 form과 이전 과제의 run/type 선택도 초기화 |
 | P2 | ui/src/lib/compare.ts | 기준 0인 KPI/DMA를 변화 0%로 표시. 비율 미정 표시 |
 | P2 | ui/src/pages/Compare.tsx | flex 축소로 분석 요약과 출처 경고가 20px 정도로 잘림. 콘텐츠 높이를 유지 |
 | P2 | ui/src/pages/Home.tsx | 프로젝트 선택이 table row로만 노출됨. 이름을 native button으로 제공해 키보드·보조기기 동작 보장 |
 
 검증:
-- React 79개, typecheck/build 및 API/브라우저 프로젝트 전환 회귀.
+- React 80개, typecheck/build 및 API/브라우저 프로젝트 전환 회귀.
 - PostgreSQL maintenance 회귀 4개: runtime evidence/derived column 보존, 멱등성, FK orphan 거부/rollback, variant별 retirement, 계획 충돌 거부.
 - 별도 PostgreSQL: 이전 main fixture 로딩 → ID 변경 → retirement → 최신 strict ETL. 기존 evidence 92건 보존, 오류/경고 0.
 - Exynos2600 13 scenarios / 212 variants (camera recording 75), Exynos2700 1 scenario / 19 variants.

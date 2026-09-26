@@ -102,7 +102,9 @@ export default function App() {
     const target = counterpart(catalog, scenarioItem, pid) ?? defaultScenario(catalog.filter((c) => c.project_id === pid))
     // A counterpart shares its use case, not necessarily its variant set.
     // Use the target catalog's known default; a source-only variant would 404.
-    nav({ page: route.page === 'home' ? 'explorer' : route.page, params: { project: pid, scenario: target?.scenario_id, variant: target?.default_variant_id ?? undefined, variants: undefined } })
+    nav({ page: route.page === 'home' ? 'explorer' : route.page, params: { project: pid, scenario: target?.scenario_id,
+      variant: target?.default_variant_id ?? undefined, variants: undefined, type: undefined,
+      run: undefined, report: undefined, m: undefined, v: undefined } })
   }
   const ctx: Ctx = { catalog: scopedCatalog, allCatalog: catalog, projects, setProject, project, scenario, variant, params: route.params, navigate, openPicker: (m = 'open') => setPicker(m) }
   const currentItems = route.page === 'compare' ? compareItems(route.params, scenario, variant) : variant ? [{ scenario, variant }] : []
@@ -191,7 +193,7 @@ export default function App() {
         {!catalogQ.error && route.page === 'compare' && <ComparePage ctx={ctx} />}
         {!catalogQ.error && route.page === 'timing' && <TimingBudgetPage key={`${scenario}:${variant}`} ctx={ctx} />}
         {!catalogQ.error && route.page === 'timing-fleet' && <TimingFleetPage key={scenario} ctx={ctx} />}
-        {!catalogQ.error && route.page === 'explore' && <ExplorePage ctx={ctx} />}
+        {!catalogQ.error && route.page === 'explore' && <ExplorePage key={project} ctx={ctx} />}
         {!catalogQ.error && route.page === 'predictions' && <PredictionsPage key={scenario} ctx={ctx} />}
         {!catalogQ.error && route.page === 'reports' && <ReportsPage ctx={ctx} />}
         {route.page === 'home' && <HomePage key={scenario} ctx={ctx} />}
