@@ -18,6 +18,8 @@
 | P2 | ui/src/pages/Compare.tsx | flex 축소로 분석 요약과 출처 경고가 20px 정도로 잘림. 콘텐츠 높이를 유지 |
 | P2 | ui/src/pages/Home.tsx | 프로젝트 선택이 table row로만 노출됨. 이름을 native button으로 제공해 키보드·보조기기 동작 보장 |
 
+| P1 | dashboard/pages/9_Driver_Models.py, tests/integration | ID 변경 후 기본 scenario와 runtime fixture 기반 통합 테스트가 옛 ID를 사용해 404/CI 실패. 새 ID 및 noncamera 분류 접두사로 정합성 회복 |
+
 검증:
 - React 80개, typecheck/build 및 API/브라우저 프로젝트 전환 회귀.
 - PostgreSQL maintenance 회귀 4개: runtime evidence/derived column 보존, 멱등성, FK orphan 거부/rollback, variant별 retirement, 계획 충돌 거부.
