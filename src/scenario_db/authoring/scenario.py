@@ -378,6 +378,19 @@ def apply_sw_measurements(variants: list[dict], measured: dict, table: dict | No
     return stats
 
 
+def select_scope(variants: list[dict], keep: list[str] | None) -> list[dict]:
+    """Overlay ``variants.keep``: emit only these (in that order). The others were
+    expanded as ``extends`` templates only; a kept runtime-derived variant must keep its parent."""
+    if keep is None:
+        return variants
+    by_id = {v["id"]: v for v in variants}
+    out = [by_id[vid] for vid in keep]
+    orphans = [v["id"] for v in out if v.get("derived_from_variant") and v["derived_from_variant"] not in keep]
+    if orphans:
+        raise AuthoringError(f"variants.keep drops the derived_from_variant parent of {orphans}")
+    return out
+
+
 def compile_usecase(sources: dict[str, Any]) -> dict:
     base = copy.deepcopy(sources["base"])
     variants = expand_variants(sources["variants"])
@@ -388,6 +401,7 @@ def compile_usecase(sources: dict[str, Any]) -> dict:
         apply_derived_anchors(base, v, sizes.get("derived") or {})
         apply_size_bindings(base, v, sizes.get("bindings") or {})
     apply_sw_timing(variants, sources.get("sw_timing") or {}, variant_parents(sources["variants"]))
+    variants = select_scope(variants, sources.get("keep"))
     doc = {}
     for k, val in base.items():
         doc[k] = variants if k == "variants" else val

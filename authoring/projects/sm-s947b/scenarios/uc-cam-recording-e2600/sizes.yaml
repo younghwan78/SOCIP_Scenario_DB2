@@ -20,7 +20,6 @@ bindings:
   gdc_m: preview_out
   gdc_o: record_out
   dpu: preview_out
-  vps_seg: object_detection
   front_csis: front_sensor_full
   front_pdp: front_sensor_full
   front_byrp: front_sensor_full
@@ -33,7 +32,7 @@ bindings:
   front_mcsc: front_sensor_full
   front_lme: motion_estimation
   front_vps_od: object_detection
-  apv_enc: record_out
+  vps_seg: object_detection
 alternatives:
   yuvsc:
   - pyramid_l0
@@ -73,8 +72,6 @@ alternatives:
   - front_preview_out
   dpu:
   - front_preview_out
-  vps_seg:
-  - front_object_detection
   front_csis:
   - front_pyramid_l0
   - front_mlsc_out
@@ -108,5 +105,7 @@ alternatives:
   front_lme:
   - front_motion_estimation
   front_vps_od:
+  - front_object_detection
+  vps_seg:
   - front_object_detection
 derived: {}

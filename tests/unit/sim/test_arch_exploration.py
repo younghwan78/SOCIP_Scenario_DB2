@@ -16,7 +16,6 @@ from scenario_db.reporting.arch_report import build_snapshot, html_sha256, rende
 from scenario_db.sim import arch_exploration as ax  # noqa: E402
 from scenario_db.sim.models import DVFSTable  # noqa: E402
 from scenario_db.sim.power_attribution import attribute  # noqa: E402
-from tests.unit.fixture_paths import ARCHIVE  # noqa: E402
 
 DVFS_PATH = FIXTURE / "00_hw" / "dvfs-exynos2600-sample-v0.yaml"
 UHD30 = "cam-rec-r1-uhd30-vdis"
@@ -29,7 +28,7 @@ def graph_factory():
         d = read(path)
         catalog[d["id"]] = IpCatalog(id=d["id"], schema_version=d["schema_version"], category=d["category"],
                                      hierarchy=d["hierarchy"], capabilities=d["capabilities"], yaml_sha256="fixture")
-    raw = read(ARCHIVE / "uc-cam-recording-e2600.orig.yaml")
+    raw = read(FIXTURE / "02_definition" / "uc-cam-recording-e2600.yaml")
     return lambda variant: graph_from_fixture(raw, variant, catalog)
 
 

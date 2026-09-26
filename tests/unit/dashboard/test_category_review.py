@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from tests.unit.fixture_paths import all_scenario_files
 from copy import deepcopy
 from pathlib import Path
 
@@ -26,7 +25,7 @@ def item(project="project-a", **conditions):
 
 def test_all_current_non_camera_fixtures_have_guidance_and_condition_help():
     seen = set()
-    for path in all_scenario_files():
+    for path in (ROOT / "db_fixtures_Exynos2600_S26Plus/02_definition").glob("uc-*.yaml"):
         doc = yaml.safe_load(path.read_text(encoding="utf-8"))
         category = doc["metadata"]["category"]
         if "camera" in category:

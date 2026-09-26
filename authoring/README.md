@@ -4,9 +4,11 @@
 
 ```
 platforms/exynos2600/        root platform: canonical HW / sensor / SW docs
-projects/sm-s947b/           root project (Exynos2600 reference): uc-cam-recording-e2600, 18 KPI variants
+platforms/exynos2700/        extends exynos2600: s5e9965 -> s5e9975 rename + patches/
+projects/sm-s947b/           root project (Exynos2600 reference): 13 scenarios, == db_fixtures_Exynos2600_S26Plus
+projects/sm-s957b/           extends sm-s947b on exynos2700 (SM-S957B): rear camera recording only
+                             (uc-cam-recording-e2700, overlay variants.keep = 16 rear KPI + 3 exploration; dual pip excluded)
 examples/exynos2800-pipeline-change/   hypothetical pipeline-change example (tested, not loaded)
-archive/2026-09-27-scope-reduction/    out-of-scope scenarios / variants / evidence (not loaded)
 id-renames.yaml              id history -> python -m scenario_db.etl.rename_ids
-retired.yaml                 DB rows to remove -> python -m scenario_db.etl.retire
+retired.yaml                 stale DB rows to remove (never Exynos2600) -> python -m scenario_db.etl.retire
 ```

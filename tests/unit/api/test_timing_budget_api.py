@@ -31,7 +31,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
 from verify_is_v15_camera import FIXTURE, graph_from_fixture, read  # noqa: E402
 
 from scenario_db.db.models.capability import IpCatalog  # noqa: E402
-from tests.unit.fixture_paths import ARCHIVE  # noqa: E402
 
 
 def _client(monkeypatch, name, fake):
@@ -106,7 +105,7 @@ def test_service_runs_read_only_with_default_dvfs_lookup(monkeypatch):
             yaml_sha256="fixture",
         )
     graph = graph_from_fixture(
-        read(ARCHIVE / "uc-cam-recording-e2600.orig.yaml"),
+        read(FIXTURE / "02_definition" / "uc-cam-recording-e2600.yaml"),
         "cam-rec-r1-uhd30-vdis",
         catalog,
     )

@@ -14,7 +14,6 @@ from verify_is_v15_camera import FIXTURE, graph_from_fixture, read  # noqa: E402
 from scenario_db.db.models.capability import IpCatalog  # noqa: E402
 from scenario_db.sim import timing_budget as tb  # noqa: E402
 from scenario_db.sim.models import DVFSTable  # noqa: E402
-from tests.unit.fixture_paths import ARCHIVE  # noqa: E402
 
 DVFS_PATH = FIXTURE / "00_hw" / "dvfs-exynos2600-sample-v0.yaml"
 
@@ -32,7 +31,7 @@ def graph_factory():
             capabilities=d["capabilities"],
             yaml_sha256="fixture",
         )
-    raw = read(ARCHIVE / "uc-cam-recording-e2600.orig.yaml")
+    raw = read(FIXTURE / "02_definition" / "uc-cam-recording-e2600.yaml")
     return lambda variant: graph_from_fixture(raw, variant, catalog)
 
 

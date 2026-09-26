@@ -43,9 +43,8 @@ def test_generation_error_returns_failure(generator, monkeypatch):
 
 
 def test_committed_synthetic_measurements_have_provenance_and_valid_totals(generator):
-    # 33 generated; 9 remain in the fixture after the 2026-09-27 scope reduction (rest archived)
     paths = list(generator.EVIDENCE.glob('meas-synth-*-20260925.yaml'))
-    assert len(paths) == 9
+    assert len(paths) == 33
     for path in paths:
         doc = yaml.load(path.read_text(encoding='utf-8'), Loader=yaml.CSafeLoader)
         generator.MeasurementEvidence.model_validate(doc)

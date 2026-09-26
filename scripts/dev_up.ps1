@@ -7,7 +7,7 @@
   powershell -ExecutionPolicy Bypass -File scripts\dev_up.ps1 -SkipLoad -Streamlit
 #>
 param(
-    [string[]]$AuthoringProjects = @(),   # derived authoring projects compiled + loaded after 2600 (e.g. "sm-s957b")
+    [string[]]$AuthoringProjects = @("sm-s957b"),   # derived projects compiled from authoring/ and loaded after 2600
     [switch]$SkipLoad,
     [switch]$NoUi,
     [switch]$Streamlit
@@ -38,13 +38,13 @@ Run uv @("run", "alembic", "upgrade", "head")
 
 if (-not $SkipLoad) {
     $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
-    Step "Retire out-of-scope rows (authoring/retired.yaml; no-op when nothing matches)"
-    Run uv @("run", "python", "-m", "scenario_db.etl.retire", "--spec", "authoring\retired.yaml",
-             "--apply", "--backup", "output\etl\retire-backup-$stamp.json")
-
     Step "Rename legacy ids in the runtime DB (authoring/id-renames.yaml; no-op when nothing matches)"
     Run uv @("run", "python", "-m", "scenario_db.etl.rename_ids", "--map", "authoring\id-renames.yaml",
              "--apply", "--backup", "output\etl\rename-backup-$stamp.json")
+
+    Step "Retire out-of-scope rows (authoring/retired.yaml, current ids; no-op when nothing matches)"
+    Run uv @("run", "python", "-m", "scenario_db.etl.retire", "--spec", "authoring\retired.yaml",
+             "--apply", "--backup", "output\etl\retire-backup-$stamp.json")
 
     Step "ETL: db_fixtures_Exynos2600_S26Plus"
     Run uv @("run", "python", "-m", "scenario_db.etl.loader", "db_fixtures_Exynos2600_S26Plus",

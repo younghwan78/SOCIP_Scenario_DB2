@@ -48,19 +48,37 @@ def load_map(path: Path) -> dict[str, str]:
     return out
 
 
+# Values under these keys are cross-project join keys, not id references. An old scenario id
+# can coincide with one (e.g. uc-game-play), so they are never rewritten.
+PROTECTED_KEYS = frozenset({"canonical_usecase"})
+# ETL skips a scenario whose stored source hash matches the fixture, so a scenario row edited here
+# gets a marker hash (column is NOT NULL) and is reloaded (and re-validated) from the fixture on the
+# next ETL. Other tables keep their hash: evidence/sensor hashes are provenance for runtime rows.
+HASH_COLUMN = "yaml_sha256"
+STALE_HASH = "stale:rename_ids"
+
+
 def rewrite(value: Any, mapping: dict[str, str]) -> Any:
     if isinstance(value, str):
         return mapping.get(value, value)
     if isinstance(value, list):
         return [rewrite(v, mapping) for v in value]
     if isinstance(value, dict):
-        return {mapping.get(k, k) if isinstance(k, str) else k: rewrite(v, mapping) for k, v in value.items()}
+        return {mapping.get(k, k) if isinstance(k, str) else k: v if k in PROTECTED_KEYS else rewrite(v, mapping)
+                for k, v in value.items()}
     return value
+
+
+def _canonical_corrupted(row: dict[str, Any], targets: set[str]) -> bool:
+    """canonical_usecase rewritten to a scenario id by an earlier rename (before PROTECTED_KEYS)."""
+    meta = row.get("metadata")
+    return isinstance(meta, dict) and meta.get("canonical_usecase") in targets
 
 
 def plan_renames(db: Session, mapping: dict[str, str]) -> dict[str, list[dict[str, Any]]]:
     """Per table: [{pk: old pk values, changes: {column: new value}, merge: bool}]."""
     plan: dict[str, list[dict[str, Any]]] = {}
+    targets = set(mapping.values())
     for table in Base.metadata.sorted_tables:
         pk_cols = [c.name for c in table.primary_key]
         rows = [dict(r) for r in db.execute(select(table)).mappings()]
@@ -72,8 +90,12 @@ def plan_renames(db: Session, mapping: dict[str, str]) -> dict[str, list[dict[st
                 new = rewrite(val, mapping)
                 if new != val:
                     changes[col] = new
+            if table.name == "scenarios" and row.get(HASH_COLUMN) != STALE_HASH and _canonical_corrupted(row, targets):
+                changes.setdefault("metadata", row["metadata"])   # repaired by the next ETL reload
             if not changes:
                 continue
+            if table.name == "scenarios":
+                changes[HASH_COLUMN] = STALE_HASH
             old_pk = tuple(row[c] for c in pk_cols)
             new_pk = tuple(changes.get(c, row[c]) for c in pk_cols)
             entries.append({"pk": dict(zip(pk_cols, old_pk)), "changes": changes,

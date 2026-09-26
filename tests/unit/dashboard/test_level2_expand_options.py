@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from tests.unit.fixture_paths import scenario_path
 from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
@@ -195,7 +194,7 @@ def test_exynos2600_audio_fixture_does_not_reuse_stale_camera_custom_expand():
 
 
 def _exynos2600_graph(scenario_file: str, variant_id: str) -> CanonicalScenarioGraph:
-    raw = _load_yaml(scenario_path(scenario_file, variant_id))
+    raw = _load_yaml(FIXTURE_ROOT / "02_definition" / scenario_file)
     variant = _resolve_variant(raw, variant_id)
     return CanonicalScenarioGraph(
         scenario=SimpleNamespace(

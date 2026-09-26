@@ -64,7 +64,7 @@ def test_exynos2600_compiled_documents_validate():
     assert report["impact"] == {}
 
 
-# --- Exynos2700: inherit + rename + measurement slots -----------------------
+# --- Exynos2700 scope + derived-project mechanics -------------------------
 
 CHILD = "t2600x"
 CHILD_UC = "uc-cam-recording-e2600x"
@@ -96,15 +96,76 @@ def _child_recording(root: Path) -> dict:
     return _docs(compile_project(root, CHILD))[CHILD_UC]
 
 
-def test_exynos2600_scope_is_the_camera_recording_kpi_set():
-    rec = _docs(compile_project(AUTHORING, "sm-s947b"))["uc-cam-recording-e2600"]
+E2700_KPI = [
+    "cam-rec-r1-fhd30-vdis", "cam-rec-r1-fhd60-supersteady", "cam-rec-r1-uhd30-vdis", "cam-rec-r1-uhd60-psm",
+    "cam-rec-r1-8k30-psm", "cam-rec-r1-fhd120", "cam-rec-r1-fhd240", "cam-rec-r1-uhd120",
+    "cam-rec-r1-fhd30-portrait", "cam-rec-r1-uhd30-portrait",
+    "cam-rec-apv-uhd30-422-sdr", "cam-rec-apv-uhd60-422-sdr", "cam-rec-r1-uhd30-pro", "cam-rec-r1-uhd60-pro",
+    "cam-rec-r1-uhd120-pro", "cam-rec-apv-uhd120-422-sdr",
+]
+E2700_EXPLORATION = ["cam-rec-r1-uhd30-vdis-bcrop", "cam-rec-r1-uhd30-vdis-bcrop-l0skip", "cam-rec-r1-fhd30-vdis-bcrop"]
+
+
+def _scenario_ids(report: dict) -> list[str]:
+    return sorted(d.data["id"] for d in report["documents"]
+                  if isinstance(d.data, dict) and d.data.get("kind") == "scenario.usecase")
+
+
+def test_exynos2600_reference_stays_complete():
+    """Regression: the Exynos2700 scope reduction must not shrink the Exynos2600 reference."""
+    report = compile_project(AUTHORING, "sm-s947b")
+    assert len(_scenario_ids(report)) == 13
+    assert "uc-cam-recording-apv-e2600" in _scenario_ids(report)
+    rec = _docs(report)["uc-cam-recording-e2600"]
     ids = {v["id"] for v in rec["variants"]}
-    assert len(ids) == 18
-    assert {"cam-rec-apv-uhd120-422-sdr", "cam-rec-r1-uhd60-pro", "cam-rec-pip-uhd30"} <= ids
+    assert len(ids) == 75
+    assert {"cam-rec-r1-uhd30-sdr", "cam-rec-f1-fhd30", "cam-rec-3rdparty-fhd30"} <= ids
+    assert not ids & {"cam-rec-r1-uhd30-pro", "cam-rec-apv-uhd120-422-sdr"}   # 2700-only KPI variants
+
+
+def test_e2700_is_the_rear_camera_recording_kpi_set():
+    report = compile_project(AUTHORING, "sm-s957b")
+    docs = _docs(report)
+    assert validate_documents(report["documents"])["errors"] == []
+    assert report["impact"] == {}
+    assert _scenario_ids(report) == ["uc-cam-recording-e2700"]
+    assert "soc-exynos2700" in docs and docs["proj-sm-s957b"]["metadata"]["soc_ref"] == "soc-exynos2700"
+    assert not [i for i in docs if i.startswith("ip-") and "s5e9965" in i]
+    assert "ip-mfc-s5e9975" in docs and "sensor-gng-m2s" in docs   # rename_exclude keeps sensor DT ids
+    rec = docs["uc-cam-recording-e2700"]
+    assert rec["project_ref"] == "proj-sm-s957b"
+    assert rec["metadata"]["canonical_usecase"] == "uc-cam-recording"
+    assert [v["id"] for v in rec["variants"]] == E2700_KPI + E2700_EXPLORATION
+    assert not [v for v in rec["variants"] if v["id"].startswith("cam-rec-pip-")]   # dual wide+front: out of rear scope
+    assert all(n["ip_ref"].endswith("s5e9975") for n in rec["pipeline"]["nodes"])
     apv = _variant(rec, "cam-rec-apv-uhd30-422-sdr")
     assert "mfc_enc" in apv["routing_switch"]["disabled_nodes"]
-    assert any(n["id"] == "apv_enc" for n in apv["topology_patch"]["add_nodes"])
-    assert "pro_scope" in _variant(rec, "cam-rec-r1-uhd30-pro")["node_configs"]
+    assert any(n["id"] == "apv_enc" and n["ip_ref"] == "ip-apv-s5e9975" for n in apv["topology_patch"]["add_nodes"])
+    assert "mfc_enc" not in apv["node_configs"] and "apv_enc" in apv["node_configs"]
+    pro = _variant(rec, "cam-rec-r1-uhd30-pro")
+    assert pro["node_configs"]["pro_scope"]["sw_timing"]["value_source"] == "assumed"
+    # KPI variants inherit the 2600 values unchanged (only ids renamed)
+    base = _docs(compile_project(AUTHORING, "sm-s947b"))["uc-cam-recording-e2600"]
+    assert (_variant(rec, "cam-rec-r1-uhd30-vdis")["node_configs"]["mtnr"]
+            == _variant(base, "cam-rec-r1-uhd30-vdis")["node_configs"]["mtnr"])
+    assert report["measurements"]["uc-cam-recording-e2700"]["pending"] > 0
+
+
+def test_overlay_keep_rejects_unknown_variants(scratch_root: Path):
+    _write_child(scratch_root, {"variants": {"keep": ["cam-rec-r1-uhd30-vdis", "no-such-variant"]}})
+    with pytest.raises(AuthoringError, match="variants.keep"):
+        compile_project(scratch_root, CHILD)
+
+
+def test_overlay_keep_uses_dropped_variants_as_templates(scratch_root: Path):
+    _write_child(scratch_root, {"variants": {
+        "keep": ["x-uhd30"],
+        "add": [{"id": "x-uhd30", "extends": "cam-rec-r1-uhd30-sdr", "tags": ["x"]}],
+    }})
+    rec = _child_recording(scratch_root)
+    assert [v["id"] for v in rec["variants"]] == ["x-uhd30"]
+    base = _variant(_docs(compile_project(AUTHORING, "sm-s947b"))["uc-cam-recording-e2600"], "cam-rec-r1-uhd30-sdr")
+    assert _variant(rec, "x-uhd30")["node_configs"] == base["node_configs"]
 
 
 def test_derived_project_inherits_with_renamed_ids(child_root: Path):
@@ -115,7 +176,7 @@ def test_derived_project_inherits_with_renamed_ids(child_root: Path):
     rec = docs[CHILD_UC]
     assert rec["project_ref"] == "proj-t2600x"
     assert rec["metadata"]["canonical_usecase"] == "uc-cam-recording"
-    assert len(rec["variants"]) == 18 + 2
+    assert len(rec["variants"]) == 75 + 2
     assert "simcfg-proj-t2600x-v1" in docs
 
 
@@ -134,7 +195,7 @@ def test_sw_timing_measurement_overrides_only_the_selected_scope(child_root: Pat
 
 def test_worksheet_creates_slots_once(child_root: Path):
     written = write_worksheet(child_root, CHILD)
-    assert [p.parent.name for p in written] == ["uc-cam-recording-e2600"]
+    assert "uc-cam-recording-e2600" in [p.parent.name for p in written]
     assert write_worksheet(child_root, CHILD) == []
     assert compile_project(child_root, CHILD)["measurements"][CHILD_UC]["pending"] > 0
 
@@ -229,10 +290,11 @@ def test_sync_to_fixture_is_idempotent(tmp_path: Path):
     from scenario_db.authoring.cli import sync_to_fixture
 
     out = tmp_path / "fixture"
-    first = sync_to_fixture(AUTHORING, "sm-s947b", out)
-    assert first["added"] and not first["updated"]
-    second = sync_to_fixture(AUTHORING, "sm-s947b", out)
-    assert not second["added"] and not second["updated"]
+    for key in ("sm-s947b", "sm-s957b"):
+        first = sync_to_fixture(AUTHORING, key, out / key)
+        assert first["added"] and not first["updated"]
+        second = sync_to_fixture(AUTHORING, key, out / key)
+        assert not second["added"] and not second["updated"]
     assert sync_to_fixture(AUTHORING, "sm-s947b", FIXTURE, dry_run=True)["updated"] == []
 
 

@@ -12,7 +12,6 @@ from scenario_db.sim.bw_calc import calc_port_bw  # noqa: E402
 from scenario_db.sim.models import PortTransferSpec, PortType, SimulationRunConfig  # noqa: E402
 from scenario_db.sim.runner import run_simulation  # noqa: E402
 from scenario_db.sim.timing_profiles import timing_profiles  # noqa: E402
-from tests.unit.fixture_paths import scenario_path  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -22,7 +21,7 @@ def graph_factory():
         d = read(path)
         catalog[d["id"]] = IpCatalog(id=d["id"], schema_version=d["schema_version"], category=d["category"], hierarchy=d["hierarchy"], capabilities=d["capabilities"], yaml_sha256="fixture")
     def build(id, scenario="uc-cam-recording-e2600"):
-        return graph_from_fixture(read(scenario_path(scenario + ".yaml", id)), id, catalog)
+        return graph_from_fixture(read(FIXTURE / "02_definition" / (scenario + ".yaml")), id, catalog)
     return build
 
 

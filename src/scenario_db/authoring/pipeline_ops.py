@@ -17,6 +17,8 @@
       remove: [variant ids]
       patch: {variant id: {...}}                    # deep-merge on the compact entry
       add: [{id: ..., extends: ..., ...}]
+      keep: [variant ids]    # scope: only these reach the compiled output (in this order);
+                             # every other variant stays a template for `extends`
     sizes: {bindings: {...}, derived: {...}}        # deep-merge on sizes.yaml
     sw_timing: {tasks: {...}}                       # deep-merge on sw_timing.yaml
     knobs: {params: {...}, knobs: {...}}            # deep-merge on knobs.yaml
@@ -104,6 +106,12 @@ def apply_overlay(sources: dict, overlay: dict) -> dict:
             raise AuthoringError(f"variants.patch: unknown variant '{vid}'")
         variants[by_id[vid]] = deep_merge(variants[by_id[vid]], patch)
     variants.extend(copy.deepcopy(vops.get("add") or []))
+    if vops.get("keep") is not None:
+        keep = list(vops["keep"])
+        unknown = [vid for vid in keep if vid not in {v["id"] for v in variants}]
+        if unknown or len(set(keep)) != len(keep):
+            raise AuthoringError(f"variants.keep: unknown or duplicate variant ids {unknown or keep}")
+        out["keep"] = keep
     base = {}
     for k in sources["base"]:
         base[k] = variants_ref if k == "variants" else base_wo.get(k)
