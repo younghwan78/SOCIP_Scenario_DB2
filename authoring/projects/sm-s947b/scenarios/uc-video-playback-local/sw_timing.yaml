@@ -1,6 +1,34 @@
 # SW task timing table. `variants: '*'` = every variant not listed in another
 # group and not in absent_in. Measured overrides go in the project's
 # sw_timing.measured.yaml, not here.
+known_variants:
+- vplay-local-h264-fhd30-sdr
+- vplay-local-h264-fhd60-sdr
+- vplay-local-hevc-fhd30-sdr
+- vplay-local-hevc-fhd30-hdr10
+- vplay-local-hevc-uhd30-sdr
+- vplay-local-hevc-uhd30-hdr10
+- vplay-local-hevc-uhd60-hdr10
+- vplay-local-hevc-uhd30-hdr10plus
+- vplay-local-vp9-fhd30-sdr
+- vplay-local-vp9-uhd30-hdr10
+- vplay-local-vp9-uhd60-hdr10
+- vplay-local-av1-fhd30-sdr
+- vplay-local-av1-uhd30-sdr
+- vplay-local-av1-uhd30-hdr10
+- vplay-local-av1-uhd60-hdr10
+- vplay-local-apv-uhd30-422-sdr
+- vplay-local-apv-uhd30-422-hdr10
+- vplay-local-hevc-uhd30-sbwc-sdr
+- vplay-local-hevc-uhd30-sbwcl-sdr
+- vplay-local-hevc-fhd30-drm
+- vplay-local-hevc-uhd30-drm
+- vplay-local-h264-fhd30-panel120hz
+- vplay-local-hevc-uhd60-panel60hz
+- vplay-local-hevc-fhd-background
+- vplay-local-hevc-fhd-gpu-heavy-overlay
+- vplay-local-hevc-uhd30-gpu-pip
+- vplay-local-apv-uhd30-422-m2m-scale
 tasks:
   drm_dec:
     groups:

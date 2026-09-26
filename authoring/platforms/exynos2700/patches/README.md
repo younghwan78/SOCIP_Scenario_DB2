@@ -4,7 +4,7 @@ One file per **renamed** document id: `patches/<doc id>.yaml`, deep-merged onto 
 from exynos2600. Lists are replaced whole; `$unset: [key]` removes a key.
 
 ```yaml
-# patches/ip-mfc-exynos2700.yaml  (example — not active)
+# patches/ip-mfc-s5e9975.yaml  (example — not active)
 capabilities:
   sim:
     source: exynos2700_arch_rev1

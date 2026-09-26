@@ -1,6 +1,11 @@
 # SW task timing table. `variants: '*'` = every variant not listed in another
 # group and not in absent_in. Measured overrides go in the project's
 # sw_timing.measured.yaml, not here.
+known_variants:
+- audio-mp3-screen-on
+- audio-mp3-screen-off-offload
+- audio-flac-hires-screen-off
+- audio-aac-bt-screen-on
 tasks:
   sw_decoder:
     groups:

@@ -72,13 +72,14 @@ def test_e2700_inherits_all_scenarios_with_renamed_ids():
     assert validate_documents(report["documents"])["errors"] == []
     assert "soc-exynos2700" in docs and "proj-e2700-ref" in docs
     assert not [i for i in docs if i.startswith("ip-") and "s5e9965" in i]
+    assert "ip-mfc-s5e9975" in docs and "dvfs-exynos2700-sample-v0" in docs
     assert docs["proj-e2700-ref"]["metadata"]["soc_ref"] == "soc-exynos2700"
     assert docs["simcfg-proj-e2700-ref-v1"]["status"] == "draft"
     rec = docs["uc-camera-recording-e2700"]
     assert rec["project_ref"] == "proj-e2700-ref"
     assert rec["metadata"]["canonical_usecase"] == "uc-camera-recording"
-    assert len(rec["variants"]) == 75
-    assert all(n["ip_ref"].endswith("exynos2700") for n in rec["pipeline"]["nodes"])
+    assert len(rec["variants"]) == 75 + 3   # inherited + exploration variants (overlay)
+    assert all(n["ip_ref"].endswith("s5e9975") for n in rec["pipeline"]["nodes"])
     # shared sensor DT catalogs keep their ids (rename_exclude)
     assert "sensor-gng-m2s" in docs
     # pending measurement slots are reported, baseline kept
@@ -143,3 +144,80 @@ def test_pipeline_change_without_prune_fails_with_impact_list(scratch_root: Path
     yamlio.dump(overlay_path, overlay)
     with pytest.raises(AuthoringError, match="node_configs.msnr"):
         compile_project(scratch_root, "e2800-concept")
+
+
+# --- architecture knobs (crop strategy / EIS margin / pyramid L0) -----------
+
+def _e2700_recording(root: Path) -> dict:
+    return _docs(compile_project(root, "e2700-ref"))["uc-camera-recording-e2700"]
+
+
+def test_byrp_bcrop_shrinks_the_chain_to_the_eis_window():
+    rec = _e2700_recording(AUTHORING)
+    base = _variant(rec, "cam-rec-r1-uhd30-vdis")
+    bcrop = _variant(rec, "cam-rec-r1-uhd30-vdis-bcrop")
+    # baseline (mcsc_crop): full sensor through the chain, untouched
+    assert "bcrop_out" not in base["size_overrides"]
+    assert base["node_configs"]["mtnr"]["sim"]["width"] == 4080
+    # bcrop: 4080x2296 * 115/125 -> 3753.6 (align 16) x 2112.3 (align 2)
+    so = bcrop["size_overrides"]
+    assert so["bcrop_out"] == "3760x2114" == so["mlsc_out"] == so["pyramid_l0"]
+    assert so["pyramid_l1"] == "1880x1057" and so["pyramid_l4"] == "235x133"
+    sims = {n: (bcrop["node_configs"][n]["sim"]["width"], bcrop["node_configs"][n]["sim"]["height"])
+            for n in ("byrp", "rgbp", "mtnr", "mcsc")}
+    assert sims == {"byrp": (4080, 2296), "rgbp": (3760, 2114), "mtnr": (3760, 2114), "mcsc": (3760, 2114)}
+    assert bcrop["node_configs"]["byrp"]["operations"]["crop"] is True
+    assert bcrop["node_configs"]["mcsc"]["operations"] == {"crop": False, "scale": True}
+    conds = bcrop["design_conditions"]
+    assert (conds["crop_strategy"], conds["eis_margin_pct"], conds["sensor_margin_pct"]) == ("byrp_bcrop", 15, 25)
+    # new variants inherit their parent's SW task set (no front/dual tasks leak in)
+    tasks = lambda v: sorted(k for k, c in v["node_configs"].items() if "sw_timing" in c)  # noqa: E731
+    assert tasks(bcrop) == tasks(base)
+
+
+def test_pyramid_l0_skip_removes_only_the_l0_level():
+    rec = _e2700_recording(AUTHORING)
+    v = _variant(rec, "cam-rec-r1-uhd30-vdis-bcrop-l0skip")
+    assert v["topology_patch"]["remove_edges"] == [{"from": "mlsc", "to": "mtnr", "buffer": "PYRAMID_L0"}]
+    fhd = _variant(rec, "cam-rec-r1-fhd30-vdis-bcrop")   # parent's remove_edges kept, nothing appended
+    assert {"from": "mlsc", "to": "mtnr", "buffer": "PYRAMID_L0"} not in fhd["topology_patch"]["remove_edges"]
+
+
+def test_bcrop_without_eis_keeps_full_sensor_fov(scratch_root: Path):
+    overlay_path = scratch_root / "projects/e2700-ref/scenarios/uc-camera-recording/overlay.yaml"
+    overlay = yamlio.load(overlay_path)
+    overlay["variants"]["add"].append({"id": "sdr-bcrop", "extends": "cam-rec-r1-uhd30-sdr",
+                                       "design_conditions": {"crop_strategy": "byrp_bcrop"}})
+    yamlio.dump(overlay_path, overlay)
+    v = _variant(_e2700_recording(scratch_root), "sdr-bcrop")
+    assert "eis" in v["routing_switch"]["disabled_nodes"]
+    assert v["size_overrides"]["bcrop_out"] == "4080x2296"
+    assert v["design_conditions"]["eis_margin_pct"] == 25
+
+
+# --- bidirectional transition -----------------------------------------------
+
+def test_sync_to_fixture_is_idempotent(tmp_path: Path):
+    from scenario_db.authoring.cli import sync_to_fixture
+
+    out = tmp_path / "fixture2700"
+    first = sync_to_fixture(AUTHORING, "e2700-ref", out)
+    assert first["added"] and not first["updated"]
+    second = sync_to_fixture(AUTHORING, "e2700-ref", out)
+    assert not second["added"] and not second["updated"]
+    assert sync_to_fixture(AUTHORING, "sm-s947b", FIXTURE, dry_run=True)["updated"] == []
+
+
+def test_fixture_with_knob_variants_decompiles_and_recompiles(scratch_root: Path, tmp_path: Path):
+    from scenario_db.authoring.cli import sync_to_fixture
+    from scenario_db.authoring.tree import decompile_fixture
+
+    out = tmp_path / "fixture2700"
+    sync_to_fixture(scratch_root, "e2700-ref", out)
+    knobs_src = scratch_root / "projects/sm-s947b/scenarios/uc-camera-recording/knobs.yaml"
+    knobs_dst = scratch_root / "projects/rt2700/scenarios/uc-camera-recording-e2700/knobs.yaml"
+    knobs_dst.parent.mkdir(parents=True)
+    shutil.copyfile(knobs_src, knobs_dst)
+    decompile_fixture(out, scratch_root, "rt2700-platform", "rt2700")
+    assert knobs_dst.exists()                      # hand-authored file survives decompile
+    assert check_against(scratch_root, "rt2700", out) == []

@@ -4,6 +4,12 @@
   compile   <project key>  --out DIR [--root authoring]
   check     <project key>  --against <fixture_dir> [--root authoring]
   worksheet <project key>  [--root authoring]   write sw_timing.measured.yaml slots
+  sync      <project key>  --fixture DIR --to fixture|authoring [--prune] [--dry-run]
+
+Transition (both directions supported):
+  fixture edited by generators  -> sync --to authoring  (root projects only; keeps hand-authored
+                                   knobs.yaml / overlay.yaml / measured files and reviewed bindings)
+  authoring edited              -> sync --to fixture    (writes only semantically changed files)
 """
 
 from __future__ import annotations
@@ -16,7 +22,7 @@ from pathlib import Path
 from scenario_db.authoring import yamlio
 from scenario_db.authoring.patch import diff_paths
 from scenario_db.authoring.scenario import AuthoringError
-from scenario_db.authoring.tree import compile_project, decompile_fixture, load_project
+from scenario_db.authoring.tree import compile_project, decompile_fixture, load_project, write_docs
 from scenario_db.authoring.validate import validate_documents
 
 AUTHORED_TOPS = ("00_hw", "00_sensor", "01_sw", "02_definition")
@@ -56,6 +62,40 @@ def check_against(root: Path, key: str, fixture: Path) -> list[str]:
             problems.append(f"{rel}: content differs")
     problems.extend(f"extra in compiled output: {rel}" for rel in compiled)
     return problems
+
+
+def sync_to_fixture(root: Path, key: str, fixture: Path, *, prune: bool = False,
+                    dry_run: bool = False) -> dict[str, list[str]]:
+    report = compile_project(root, key)
+    result: dict[str, list[str]] = {"added": [], "updated": [], "unchanged": [], "removed": []}
+    changed = []
+    produced = set()
+    for d in report["documents"]:
+        produced.add(d.rel)
+        target = fixture / d.rel
+        if not target.exists():
+            result["added"].append(d.rel)
+            changed.append(d)
+            continue
+        if d.raw is not None:
+            same = target.read_bytes() == d.raw
+        elif target.suffix in (".yaml", ".yml"):
+            same = not diff_paths(yamlio.load(target), d.data)
+        else:
+            same = False
+        (result["unchanged"] if same else result["updated"]).append(d.rel)
+        if not same:
+            changed.append(d)
+    if prune:
+        for path in sorted(fixture.rglob("*.yaml")):
+            rel = path.relative_to(fixture).as_posix()
+            if rel.split("/")[0] in AUTHORED_TOPS and rel not in produced:
+                result["removed"].append(rel)
+                if not dry_run:
+                    path.unlink()
+    if not dry_run:
+        write_docs(changed, fixture)
+    return result
 
 
 def write_worksheet(root: Path, key: str) -> list[Path]:
@@ -108,6 +148,12 @@ def main(argv: list[str] | None = None) -> int:
     k.add_argument("--against", type=Path, required=True)
     w = sub.add_parser("worksheet")
     w.add_argument("project")
+    y = sub.add_parser("sync")
+    y.add_argument("project")
+    y.add_argument("--fixture", type=Path, required=True)
+    y.add_argument("--to", choices=("fixture", "authoring"), required=True)
+    y.add_argument("--prune", action="store_true", help="--to fixture: delete 00-02 YAML not produced")
+    y.add_argument("--dry-run", action="store_true")
     args = ap.parse_args(argv)
     try:
         if args.cmd == "decompile":
@@ -129,6 +175,26 @@ def main(argv: list[str] | None = None) -> int:
                 print(p)
             print(f"{len(problems)} difference(s)")
             return 1 if problems else 0
+        if args.cmd == "sync":
+            if args.to == "fixture":
+                res = sync_to_fixture(args.root, args.project, args.fixture, prune=args.prune,
+                                      dry_run=args.dry_run)
+                print(json.dumps({k: (v if k != "unchanged" else len(v)) for k, v in res.items()},
+                                 indent=2, ensure_ascii=False))
+                return 0
+            spec = yamlio.load(args.root / "projects" / args.project / "project.yaml")
+            if spec.get("extends"):
+                raise AuthoringError(f"project '{args.project}' extends '{spec['extends']}': only root "
+                                     "projects can be decompiled; edit its overlay/patch files instead")
+            if args.dry_run:
+                problems = check_against(args.root, args.project, args.fixture)
+                print("\n".join(problems[:200]) + f"\n{len(problems)} difference(s)")
+                return 0
+            stats = decompile_fixture(args.fixture, args.root, spec["platform"], args.project)
+            print(json.dumps({"platform_docs": stats["platform_docs"], "project_docs": stats["project_docs"],
+                              "scenarios": len(stats["scenarios"]), "not_authored": len(stats["skipped"]),
+                              "stale_scenarios": stats["stale_scenarios"]}, indent=2, ensure_ascii=False))
+            return 0
         if args.cmd == "worksheet":
             for written in write_worksheet(args.root, args.project):
                 print(written)

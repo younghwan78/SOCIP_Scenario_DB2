@@ -1,6 +1,15 @@
 # SW task timing table. `variants: '*'` = every variant not listed in another
 # group and not in absent_in. Measured overrides go in the project's
 # sw_timing.measured.yaml, not here.
+known_variants:
+- game-fhd-60fps-sdr
+- game-fhd-90fps-sdr
+- game-fhd-120fps-sdr
+- game-uhd-60fps-sdr
+- game-fhd-60fps-npu-ai
+- game-fhd-120fps-hdr10
+- game-fhd-60fps-m2m-upscale
+- game-fhd-60fps-gpu-heavy-overlay
 tasks:
   cpu:
     groups:

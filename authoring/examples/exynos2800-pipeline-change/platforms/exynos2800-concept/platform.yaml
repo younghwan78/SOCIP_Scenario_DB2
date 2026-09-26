@@ -6,6 +6,8 @@ extends: exynos2700
 soc_id: soc-exynos2800c
 description: Concept platform for the pipeline-change example (MTNR+MSNR -> NR v2).
 rename:
+- from: s5e9975
+  to: exynos2800c
 - from: exynos2700
   to: exynos2800c
 rename_exclude:

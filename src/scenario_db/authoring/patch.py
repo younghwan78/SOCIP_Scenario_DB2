@@ -5,6 +5,8 @@ Semantics
 * dict + dict  -> recursive merge
 * anything else -> patch value replaces base value (lists are replaced whole)
 * ``$unset: [k1, k2]`` inside a patch dict removes those keys from the base
+* ``$append: {key: [items]}`` appends items to a base list (skipping items
+  already present), e.g. one more ``topology_patch.remove_edges`` entry
 """
 
 from __future__ import annotations
@@ -13,6 +15,7 @@ import copy
 from typing import Any
 
 UNSET = "$unset"
+APPEND = "$append"
 
 
 def deep_merge(base: Any, patch: Any) -> Any:
@@ -21,8 +24,12 @@ def deep_merge(base: Any, patch: Any) -> Any:
     out = copy.deepcopy(base)
     for key in patch.get(UNSET, []) or []:
         out.pop(key, None)
+    for key, items in (patch.get(APPEND) or {}).items():
+        current = list(out.get(key) or [])
+        current.extend(copy.deepcopy(i) for i in items if i not in current)
+        out[key] = current
     for key, value in patch.items():
-        if key == UNSET:
+        if key in (UNSET, APPEND):
             continue
         if key in out and isinstance(out[key], dict) and isinstance(value, dict):
             out[key] = deep_merge(out[key], value)

@@ -19,6 +19,7 @@
       add: [{id: ..., extends: ..., ...}]
     sizes: {bindings: {...}, derived: {...}}        # deep-merge on sizes.yaml
     sw_timing: {tasks: {...}}                       # deep-merge on sw_timing.yaml
+    knobs: {params: {...}, knobs: {...}}            # deep-merge on knobs.yaml
     prune_missing_nodes: false   # true: drop variant refs to removed nodes (reported)
 """
 
@@ -28,7 +29,7 @@ import copy
 from typing import Any
 
 from scenario_db.authoring.patch import deep_merge
-from scenario_db.authoring.scenario import AuthoringError
+from scenario_db.authoring.errors import AuthoringError
 
 
 def _rename_exact(value: Any, mapping: dict[str, str]) -> Any:
@@ -112,6 +113,7 @@ def apply_overlay(sources: dict, overlay: dict) -> dict:
     out["variants"] = variants
     out["sizes"] = deep_merge(out.get("sizes") or {}, overlay.get("sizes") or {})
     out["sw_timing"] = deep_merge(out.get("sw_timing") or {}, overlay.get("sw_timing") or {})
+    out["knobs"] = deep_merge(out.get("knobs") or {}, overlay.get("knobs") or {})
     return out
 
 

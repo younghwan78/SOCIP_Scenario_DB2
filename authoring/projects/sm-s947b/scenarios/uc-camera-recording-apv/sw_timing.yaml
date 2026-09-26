@@ -1,6 +1,16 @@
 # SW task timing table. `variants: '*'` = every variant not listed in another
 # group and not in absent_in. Measured overrides go in the project's
 # sw_timing.measured.yaml, not here.
+known_variants:
+- cam-rec-apv-uhd30-422-sdr
+- cam-rec-apv-uhd30-444-sdr
+- cam-rec-apv-uhd30-422-hdr10
+- cam-rec-apv-uhd30-422-hdr10plus
+- cam-rec-apv-uhd60-422-sdr
+- cam-rec-apv-uhd60-422-hdr10
+- cam-rec-apv-8k24-422-sdr
+- cam-rec-apv-8k30-422-sdr
+- cam-rec-apv-pro-uhd30-444
 tasks:
   post_crta:
     groups:

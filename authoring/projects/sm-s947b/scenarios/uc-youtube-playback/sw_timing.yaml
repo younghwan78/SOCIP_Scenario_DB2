@@ -1,6 +1,20 @@
 # SW task timing table. `variants: '*'` = every variant not listed in another
 # group and not in absent_in. Measured overrides go in the project's
 # sw_timing.measured.yaml, not here.
+known_variants:
+- yt-1080p30-h264-sdr
+- yt-1080p60-h264-sdr
+- yt-1080p30-vp9-sdr
+- yt-1080p60-vp9-hdr10
+- yt-4k30-vp9-hdr10
+- yt-4k60-vp9-hdr10
+- yt-1080p30-av1-sdr
+- yt-4k30-av1-sdr
+- yt-4k30-av1-hdr10
+- yt-4k60-av1-hdr10
+- yt-1080p-audio-bg
+- yt-1080p30-av1-gpu-overlay
+- yt-4k30-av1-m2m-scale
 tasks:
   network:
     groups:

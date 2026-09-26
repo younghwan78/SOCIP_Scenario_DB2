@@ -26,7 +26,9 @@ from scenario_db.authoring.patch import deep_merge
 from scenario_db.authoring.pipeline_ops import apply_overlay, prune_or_report_missing_nodes
 from scenario_db.authoring.rename import apply_rules, build_id_map, rename_value
 from scenario_db.authoring.scenario import (
+    GENERATED_FILES,
     AuthoringError,
+    variant_parents,
     apply_sw_measurements,
     compile_usecase,
     decompile_usecase,
@@ -72,8 +74,8 @@ def decompile_fixture(fixture_dir: Path, authoring_root: Path, platform_id: str,
                       project_key: str) -> dict[str, Any]:
     pdir = authoring_root / "platforms" / platform_id
     jdir = authoring_root / "projects" / project_key
-    for stale in (pdir / "docs", jdir / "docs", jdir / "scenarios"):
-        if stale.exists():   # decompile owns these generated trees (root platform/project only)
+    for stale in (pdir / "docs", jdir / "docs"):
+        if stale.exists():   # decompile owns these verbatim copies (root platform/project only)
             shutil.rmtree(stale)
     stats: dict[str, Any] = {"platform_docs": 0, "project_docs": 0, "scenarios": {}, "skipped": []}
     soc_id = None
@@ -108,6 +110,13 @@ def decompile_fixture(fixture_dir: Path, authoring_root: Path, platform_id: str,
             stats["skipped"].append(rel)
     if project_doc is None:
         raise AuthoringError(f"no kind: project document in {fixture_dir}")
+    sdir = jdir / "scenarios"
+    stats["stale_scenarios"] = []
+    if sdir.exists():   # scenarios gone from the fixture: drop generated files, keep hand-authored ones
+        for d in sorted(p for p in sdir.iterdir() if p.is_dir() and p.name not in stats["scenarios"]):
+            for name in GENERATED_FILES:
+                (d / name).unlink(missing_ok=True)
+            stats["stale_scenarios"].append(d.name)
     yamlio.dump(pdir / "platform.yaml", {
         "kind": "authoring.platform", "id": platform_id, "soc_id": soc_id,
         "description": f"Decompiled from {fixture_dir.name}. docs/ holds canonical HW, sensor and SW catalog files.",
@@ -292,8 +301,9 @@ def compile_project(authoring_root: Path, key: str, out_dir: Path | None = None)
         if impact:
             report["impact"][uc] = impact
         if uc in bundle.measured:
-            report["measurements"][uc] = apply_sw_measurements(doc.get("variants") or [], bundle.measured[uc],
-                                                                   src.get("sw_timing"))
+            report["measurements"][uc] = apply_sw_measurements(
+                doc.get("variants") or [], bundle.measured[uc], src.get("sw_timing"),
+                variant_parents(src["variants"]))
         report["scenarios"][uc] = {"variants": len(doc.get("variants") or [])}
         outputs.append(Doc(rel=f"02_definition/{uc}.yaml", data=doc))
     if out_dir is not None:

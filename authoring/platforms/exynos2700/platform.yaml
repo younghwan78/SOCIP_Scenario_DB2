@@ -12,7 +12,7 @@ soc_id: soc-exynos2700
 description: Exynos2700 baseline = Exynos2600 pipeline. Replace inherited values with 2700 data via patches/.
 rename:
 - from: s5e9965
-  to: exynos2700      # TODO: replace with the 2700 product tag once fixed (e.g. s5eXXXX)
+  to: s5e9975         # Exynos2700 product tag
 - from: exynos2600
   to: exynos2700
 rename_exclude:

@@ -1,6 +1,13 @@
 # SW task timing table. `variants: '*'` = every variant not listed in another
 # group and not in absent_in. Measured overrides go in the project's
 # sw_timing.measured.yaml, not here.
+known_variants:
+- game-stream-fhd60-h264
+- game-stream-fhd60-hevc
+- game-stream-fhd60-hevc-low-latency
+- game-stream-uhd60-hevc
+- game-stream-fhd60-hevc-gpu-overlay
+- game-stream-fhd60-hevc-m2m-scale
 tasks:
   network:
     groups:

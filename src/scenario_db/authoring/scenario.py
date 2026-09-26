@@ -23,15 +23,13 @@ from pathlib import Path
 from typing import Any
 
 from scenario_db.authoring import yamlio
+from scenario_db.authoring.errors import AuthoringError
+from scenario_db.authoring.knobs import apply_knobs, knob_bound_nodes
 from scenario_db.authoring.patch import deep_merge, make_patch
 
 INCLUDE = "$include"
 EXTENDS = "extends"
 ALL = "*"
-
-
-class AuthoringError(ValueError):
-    pass
 
 
 # ---------------------------------------------------------------------------
@@ -97,15 +95,23 @@ def _extract_sw_timing(variants: list[dict]) -> dict:
         if absent:
             task_entry["absent_in"] = absent
         tasks[task] = task_entry
-    return {"tasks": tasks}
+    return {"known_variants": all_ids, "tasks": tasks}
 
 
-def _extract_sizes(doc: dict, variants: list[dict]) -> dict:
+def _extract_sizes(doc: dict, variants: list[dict], knobs: dict | None = None,
+                   previous: dict | None = None) -> dict:
+    """Infer node->anchor bindings. Rows a knob overwrites are skipped (and stripped);
+    a binding already chosen in ``previous`` (human-reviewed sizes.yaml) wins when still valid."""
     per_node: "OrderedDict[str, list[tuple[dict, dict]]]" = OrderedDict()
     for v in variants:
         if v.get("derived_from_variant"):
             continue  # runtime-derived variants inherit sizes from their parent
+        knob_nodes = knob_bound_nodes(knobs or {}, v)
         for node, cfg in (v.get("node_configs") or {}).items():
+            if node in knob_nodes and isinstance(cfg, dict) and isinstance(cfg.get("sim"), dict):
+                cfg["sim"].pop("width", None)
+                cfg["sim"].pop("height", None)
+                continue
             if isinstance(cfg, dict) and isinstance(cfg.get("sim"), dict):
                 per_node.setdefault(node, []).append((v, cfg["sim"]))
     bindings: dict[str, str] = {}
@@ -121,9 +127,12 @@ def _extract_sizes(doc: dict, variants: list[dict]) -> dict:
             if not candidates:
                 break
         if candidates:
-            bindings[node] = candidates[0]
-            if len(candidates) > 1:
-                alternatives[node] = candidates[1:]
+            prev = ((previous or {}).get("bindings") or {}).get(node)
+            chosen = prev if prev in candidates else candidates[0]
+            bindings[node] = chosen
+            rest = [c for c in candidates if c != chosen]
+            if rest:
+                alternatives[node] = rest
     for node in bindings:
         for _, sim in per_node[node]:
             sim.pop("width", None)
@@ -131,7 +140,7 @@ def _extract_sizes(doc: dict, variants: list[dict]) -> dict:
     out: dict[str, Any] = {"bindings": bindings}
     if alternatives:
         out["alternatives"] = alternatives
-    out["derived"] = {}
+    out["derived"] = dict((previous or {}).get("derived") or {})
     return out
 
 
@@ -155,11 +164,18 @@ def _compact_variants(variants: list[dict]) -> list[dict]:
     return out
 
 
+GENERATED_FILES = ("scenario.yaml", "variants.yaml", "sizes.yaml", "sw_timing.yaml")
+
+
 def decompile_usecase(doc: dict, out_dir: Path) -> dict[str, int]:
+    """Write generated sources; hand-authored files (knobs.yaml, overlay.yaml,
+    sw_timing.measured.yaml) are kept, and reviewed size bindings are preserved."""
     doc = copy.deepcopy(doc)
     variants = doc.get("variants") or []
+    knobs = yamlio.load(out_dir / "knobs.yaml") if (out_dir / "knobs.yaml").exists() else None
+    previous = yamlio.load(out_dir / "sizes.yaml") if (out_dir / "sizes.yaml").exists() else None
     sw_timing = _extract_sw_timing(variants)
-    sizes = _extract_sizes(doc, variants)
+    sizes = _extract_sizes(doc, variants, knobs, previous)
     compact = _compact_variants(variants)
     base = {}
     for k, v in doc.items():
@@ -197,7 +213,13 @@ def load_scenario_sources(src_dir: Path) -> dict[str, Any]:
         variants = variants_ref
     sizes = yamlio.load(src_dir / "sizes.yaml") if (src_dir / "sizes.yaml").exists() else {}
     sw = yamlio.load(src_dir / "sw_timing.yaml") if (src_dir / "sw_timing.yaml").exists() else {}
-    return {"base": base, "variants": variants, "sizes": sizes or {}, "sw_timing": sw or {}}
+    knobs = yamlio.load(src_dir / "knobs.yaml") if (src_dir / "knobs.yaml").exists() else {}
+    return {"base": base, "variants": variants, "sizes": sizes or {}, "sw_timing": sw or {},
+            "knobs": knobs or {}}
+
+
+def variant_parents(entries: list[dict]) -> dict[str, str | None]:
+    return {e["id"]: e.get(EXTENDS) for e in entries}
 
 
 def expand_variants(entries: list[dict]) -> list[dict]:
@@ -272,32 +294,56 @@ def select_variants(spec: Any, all_ids: list[str], variants: list[dict] | None =
     return ids
 
 
-def sw_timing_group_targets(table: dict, ids: list[str]) -> dict[tuple[str, str], list[str]]:
-    """(task, group id) -> variant ids the group applies to."""
+def sw_timing_group_targets(table: dict, ids: list[str],
+                            parents: dict[str, str | None] | None = None) -> dict[tuple[str, str], list[str]]:
+    """(task, group id) -> variant ids the group applies to.
+
+    Variants unknown to the table (added later, e.g. by an overlay) inherit the
+    membership of their ``extends`` parent; unknown root variants fall into '*'.
+    """
     out: dict[tuple[str, str], list[str]] = {}
-    known = set(ids)
+    known_list = table.get("known_variants")
+    known = set(known_list) if known_list is not None else set(ids)
+    parents = parents or {}
     for task, spec in (table.get("tasks") or {}).items():
         absent = set(spec.get("absent_in") or [])
-        explicit = {vid for g in spec.get("groups", []) if g.get("variants") != ALL for vid in g["variants"]}
+        member: dict[str, str | None] = {}
+        star = None
         for g in spec.get("groups", []):
             if g.get("variants") == ALL:
-                targets = [i for i in ids if i not in absent and i not in explicit]
+                star = g["id"]
             else:
-                targets = [i for i in g["variants"] if i in known]
-            out[(task, g["id"])] = targets
+                for vid in g["variants"]:
+                    member[vid] = g["id"]
+
+        def group_of(vid: str, depth: int = 0) -> str | None:
+            if vid in known or depth > 32:
+                if vid in absent:
+                    return None
+                return member.get(vid, star)
+            parent = parents.get(vid)
+            return group_of(parent, depth + 1) if parent else star
+
+        for g in spec.get("groups", []):
+            out[(task, g["id"])] = []
+        for vid in ids:
+            gid = group_of(vid)
+            if gid is not None:
+                out[(task, gid)].append(vid)
     return out
 
 
-def apply_sw_timing(variants: list[dict], table: dict) -> None:
+def apply_sw_timing(variants: list[dict], table: dict, parents: dict[str, str | None] | None = None) -> None:
     by_id = {v["id"]: v for v in variants}
     groups = {(t, g["id"]): g for t, spec in (table.get("tasks") or {}).items() for g in spec.get("groups", [])}
-    for (task, gid), targets in sw_timing_group_targets(table, list(by_id)).items():
+    for (task, gid), targets in sw_timing_group_targets(table, list(by_id), parents).items():
         for vid in targets:
             cfgs = by_id[vid].setdefault("node_configs", {})
             cfgs.setdefault(task, {})["sw_timing"] = copy.deepcopy(groups[(task, gid)]["timing"])
 
 
-def apply_sw_measurements(variants: list[dict], measured: dict, table: dict | None = None) -> dict[str, int]:
+def apply_sw_measurements(variants: list[dict], measured: dict, table: dict | None = None,
+                          parents: dict[str, str | None] | None = None) -> dict[str, int]:
     """Apply ``sw_timing.measured.yaml`` entries (in order; later entries win).
 
     Scope: ``group`` (a sw_timing.yaml group id) and/or ``variants`` (list or '*')
@@ -307,7 +353,7 @@ def apply_sw_measurements(variants: list[dict], measured: dict, table: dict | No
     stats = {"applied": 0, "pending": 0}
     ids = [v["id"] for v in variants]
     by_id = {v["id"]: v for v in variants}
-    group_targets = sw_timing_group_targets(table or {}, ids)
+    group_targets = sw_timing_group_targets(table or {}, ids, parents)
     for entry in (measured or {}).get("entries") or []:
         if entry.get("timing") is None:
             stats["pending"] += 1
@@ -336,10 +382,12 @@ def compile_usecase(sources: dict[str, Any]) -> dict:
     base = copy.deepcopy(sources["base"])
     variants = expand_variants(sources["variants"])
     sizes = sources.get("sizes") or {}
+    base_anchors = dict(((base.get("size_profile") or {}).get("anchors") or {}))
     for v in variants:
+        apply_knobs(base_anchors, v, sources.get("knobs") or {})
         apply_derived_anchors(base, v, sizes.get("derived") or {})
         apply_size_bindings(base, v, sizes.get("bindings") or {})
-    apply_sw_timing(variants, sources.get("sw_timing") or {})
+    apply_sw_timing(variants, sources.get("sw_timing") or {}, variant_parents(sources["variants"]))
     doc = {}
     for k, val in base.items():
         doc[k] = variants if k == "variants" else val

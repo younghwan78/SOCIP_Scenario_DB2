@@ -1,0 +1,57 @@
+# Architecture knobs for camera recording (hand-authored; decompile keeps this file).
+# A variant selects a value with design_conditions.<condition_key>; absent = default.
+# Defaults reproduce the Exynos2600 fixture exactly (full-size chain, MCSC crop+scale, L0..L4).
+params:
+  sensor_margin_pct: 25      # FOV margin baked into the sensor mode (legacy EIS assumption)
+  eis_margin_pct: 25         # EIS off -> crop keeps the whole sensor FOV
+param_rules:
+- when_node_enabled: eis     # EIS active (eis not in routing_switch.disabled_nodes)
+  set:
+    eis_margin_pct: 15       # variable EIS
+knobs:
+  crop_strategy:
+    condition_key: crop_strategy
+    default: mcsc_crop
+    values:
+      # Sensor full size through the chain; MCSC crops the EIS window and scales (baseline).
+      mcsc_crop: {}
+      # BYRP bayer crop (bcrop) to the EIS window; RGBP..MCSC run on the cropped size.
+      byrp_bcrop:
+        derived:
+          bcrop_out:
+            from: sensor_full
+            scale: (100 + eis_margin_pct) / (100 + sensor_margin_pct)
+            align_x: 16
+            align_y: 2
+            clamp_to: sensor_full
+          mlsc_out: {from: bcrop_out}
+          pyramid_l0: {from: bcrop_out}
+          pyramid_l1: {from: pyramid_l0, scale: 0.5, round: ceil}
+          pyramid_l2: {from: pyramid_l1, scale: 0.5, round: ceil}
+          pyramid_l3: {from: pyramid_l2, scale: 0.5, round: ceil}
+          pyramid_l4: {from: pyramid_l3, scale: 0.5, round: ceil}
+        bindings:               # BYRP keeps sensor_full (input rate); downstream on bcrop_out
+          rgbp: bcrop_out
+          yuvsc: bcrop_out
+          mlsc: bcrop_out
+          mtnr: bcrop_out
+          msnr: bcrop_out
+          yuvp: bcrop_out
+          mcsc: bcrop_out
+        variant_patch:
+          node_configs:
+            byrp:
+              operations: {crop: true}
+            mcsc:
+              operations: {crop: false, scale: true}
+  pyramid_l0:
+    condition_key: pyramid_l0
+    default: use              # L0..L4 all used
+    values:
+      use: {}
+      skip:                   # low power: drop the full-res L0 level (MLSC GLPG0 -> MTNR0)
+        variant_patch:
+          topology_patch:
+            $append:
+              remove_edges:
+              - {from: mlsc, to: mtnr, buffer: PYRAMID_L0}

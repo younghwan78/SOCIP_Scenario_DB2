@@ -4,7 +4,7 @@
 
 | Layer | File | Change |
 | --- | --- | --- |
-| Platform | `platforms/exynos2800-concept/platform.yaml` | extends `exynos2700`, id rename `exynos2700 → exynos2800c` |
+| Platform | `platforms/exynos2800-concept/platform.yaml` | extends `exynos2700`, id rename `s5e9975 / exynos2700 → exynos2800c` |
 | Platform | `platforms/exynos2800-concept/docs/00_hw/ip-nr-v2-exynos2800c.yaml` | new IP (placeholder values) |
 | Project | `projects/e2800-concept/project.yaml` | extends `e2700-ref`, only camera recording |
 | Scenario | `projects/e2800-concept/scenarios/uc-camera-recording-e2700/overlay.yaml` | remove `msnr`, re-bind `mtnr`, new edge |

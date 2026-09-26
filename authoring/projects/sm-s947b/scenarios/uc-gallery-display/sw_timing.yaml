@@ -1,6 +1,17 @@
 # SW task timing table. `variants: '*'` = every variant not listed in another
 # group and not in absent_in. Measured overrides go in the project's
 # sw_timing.measured.yaml, not here.
+known_variants:
+- disp-gallery-fhd-sdr-60hz
+- disp-gallery-fhd-sdr-120hz
+- disp-gallery-uhd-hdr10-60hz
+- disp-gallery-fhd-hdr10plus-60hz
+- disp-gallery-fhd-hlg-60hz
+- disp-gallery-fhd-sdr-gpu-heavy
+- disp-gallery-fhd-sdr-gpu-filter
+- disp-gallery-uhd-hdr10-gpu-fallback
+- disp-gallery-yuv422-m2m-scale
+- disp-gallery-fhd-sdr-m2m-prescale
 tasks:
   gpu:
     groups:
