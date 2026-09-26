@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from tests.unit.fixture_paths import scenario_path
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -29,7 +30,7 @@ def _ip_catalog() -> dict[str, SimpleNamespace]:
 
 
 def _scenario_graph(file_name: str, variant_id: str) -> CanonicalScenarioGraph:
-    raw = _load_yaml(FIXTURE_ROOT / "02_definition" / file_name)
+    raw = _load_yaml(scenario_path(file_name, variant_id))
     variant = next(item for item in raw["variants"] if item["id"] == variant_id)
     scenario = SimpleNamespace(
         id=raw["id"],

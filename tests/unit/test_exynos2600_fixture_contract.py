@@ -11,35 +11,29 @@ FIXTURE_ROOT = Path(__file__).resolve().parents[2] / "db_fixtures_Exynos2600_S26
 EVIDENCE_ROOT = FIXTURE_ROOT / "03_evidence"
 
 
-def test_exynos2600_camera_recording_and_apv_scenarios_are_both_present():
+KPI_SET = {
+    "cam-rec-r1-fhd30-vdis", "cam-rec-r1-fhd60-supersteady", "cam-rec-r1-uhd30-vdis", "cam-rec-r1-uhd60-psm",
+    "cam-rec-r1-8k30-psm", "cam-rec-r1-fhd120", "cam-rec-r1-fhd240", "cam-rec-r1-uhd120",
+    "cam-rec-r1-uhd30-pro", "cam-rec-r1-uhd60-pro", "cam-rec-r1-uhd120-pro",
+    "cam-rec-r1-fhd30-portrait", "cam-rec-r1-uhd30-portrait", "cam-rec-pip-fhd30", "cam-rec-pip-uhd30",
+    "cam-rec-apv-uhd30-422-sdr", "cam-rec-apv-uhd60-422-sdr", "cam-rec-apv-uhd120-422-sdr",
+}
+
+
+def test_exynos2600_fixture_is_the_camera_recording_kpi_set():
     definition_dir = FIXTURE_ROOT / "02_definition"
+    assert sorted(p.name for p in definition_dir.glob("*.yaml")) == ["proj-sm-s947b.yaml", "uc-cam-recording-e2600.yaml"]
     recording = _read_yaml(definition_dir / "uc-cam-recording-e2600.yaml")
-    apv = _read_yaml(definition_dir / "uc-cam-recording-apv-e2600.yaml")
-
-    assert recording["id"] == "uc-cam-recording-e2600"
     assert recording["project_ref"] == "proj-sm-s947b"
-    assert recording["metadata"]["name"] == "Camera Recording"
-    assert apv["id"] == "uc-cam-recording-apv-e2600"
-    assert apv["project_ref"] == "proj-sm-s947b"
-    assert apv["metadata"]["name"] == "Camera Recording APV"
+    assert recording["metadata"]["canonical_usecase"] == "uc-cam-recording"
+    assert {v["id"] for v in recording["variants"]} == KPI_SET
 
 
-def test_exynos2600_recording_fixture_keeps_expected_fhd30_variant():
-    recording = _read_yaml(FIXTURE_ROOT / "02_definition" / "uc-cam-recording-e2600.yaml")
-    variant_ids = {item["id"] for item in recording.get("variants") or []}
-
-    assert "cam-rec-f1-fhd30" in variant_ids
-    assert "cam-rec-f1-fhd30-recursive" in variant_ids
-    assert "cam-rec-r1-fhd30-vdis" in variant_ids
-    assert "cam-rec-r1-uhd30-vdis" in variant_ids
-
-
-def test_exynos2600_apv_recording_fixture_keeps_expected_uhd30_variant():
-    apv = _read_yaml(FIXTURE_ROOT / "02_definition" / "uc-cam-recording-apv-e2600.yaml")
-    variant_ids = {item["id"] for item in apv.get("variants") or []}
-
-    assert "cam-rec-apv-uhd30-422-sdr" in variant_ids
-    assert "cam-rec-apv-uhd30-444-sdr" in variant_ids
+def test_exynos2600_evidence_only_references_kpi_variants():
+    for path in EVIDENCE_ROOT.glob("*.yaml"):
+        doc = _read_yaml(path)
+        assert doc["scenario_ref"] == "uc-cam-recording-e2600", path.name
+        assert doc["variant_ref"] in KPI_SET, path.name
 
 
 def test_exynos2600_uhd30_vdis_fixture_has_prediction_measurement_pair():

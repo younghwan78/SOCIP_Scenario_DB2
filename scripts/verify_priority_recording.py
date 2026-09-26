@@ -51,7 +51,7 @@ def main():
         d = read(path)
         catalog[d["id"]] = IpCatalog(id=d["id"], schema_version=d["schema_version"], category=d["category"], hierarchy=d["hierarchy"], capabilities=d["capabilities"], yaml_sha256="fixture")
     report = {"assumptions": ["No measurements: camera/APV capacity, CPU placement, bitrate and storage times are assumptions.", "Clock selection is conditional timing feasibility, not measured power optimization.", "Mean release jitter stays 1ms in all timing cases; no tail distribution was supplied.", "Shared camera HW reservations are conservative; dual RT multiplexing requires runtime confirmation.", "CPU active power, stats with unknown size, thermal throttling and storage burst/queue limits are uncharacterized."], "verified_graphs": [], "exploration": []}
-    for scenario in ["uc-cam-recording-e2600", "uc-cam-recording-apv-e2600"]:
+    for scenario in ["uc-cam-recording-e2600"]:  # APV merged into camera recording (2026-09-27)
         raw = read(FIXTURE / "02_definition" / (scenario + ".yaml"))
         Usecase.model_validate(raw)
         for v in raw["variants"]:

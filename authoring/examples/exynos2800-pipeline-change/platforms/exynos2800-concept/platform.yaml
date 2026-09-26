@@ -1,15 +1,53 @@
-# HYPOTHETICAL example (not real Exynos2800 data): shows how a pipeline-structure change
-# is expressed on top of the exynos2700 platform. Concept: MTNR + MSNR merged into one NR IP.
-kind: authoring.platform
-id: exynos2800-concept
-extends: exynos2700
-soc_id: soc-exynos2800c
+# =============================================================================
+# platform.yaml — derived platform (HYPOTHETICAL example, NOT real Exynos2800 data)
+#
+# A platform = HW / sensor / SW catalog docs (ip-*, soc-*, dvfs-*, sensor-*, sw-*).
+# A derived platform starts from its parent's docs and only records the delta.
+#
+# Directory layout
+#   platforms/<id>/platform.yaml            this file                         REQUIRED
+#   platforms/<id>/docs/<rel path>.yaml     new or fully replaced docs        optional
+#   platforms/<id>/patches/<doc id>.yaml    deep-merge patch on a doc         optional
+#                                           (after rename: use the NEW id)
+#
+# Processing order (compile)
+#   1. load parent docs            (extends, recursively)
+#   2. rename ids                  (rename rules; rename_exclude paths untouched)
+#   3. drop docs                   (remove_docs, parent ids)
+#   4. add / replace docs          (docs/)
+#   5. patch docs                  (patches/, dict merge, lists replaced, $unset / $append)
+#
+# Keys
+#   kind            REQUIRED  always authoring.platform
+#   id              REQUIRED  == directory name; referenced by project.yaml `platform:`
+#   extends         optional  parent platform id. Omit only for a ROOT platform, whose
+#                             docs/ then holds the full catalog (e.g. exynos2600)
+#   soc_id          REQUIRED* the soc-* doc id after rename (*informational, checked in review)
+#   description     optional  free text
+#   rename          REQUIRED for a derived platform with a new SoC tag; otherwise optional.
+#                   Ordered substring rules applied to every inherited doc id and to every
+#                   string that equals an id (or id + ".path") in all docs.
+#   rename_exclude  optional  globs on doc paths kept as-is (shared docs, same id as parent)
+#   remove_docs     optional  PARENT doc ids to drop (IPs that no longer exist)
+# =============================================================================
+kind: authoring.platform                      # REQUIRED
+id: exynos2800-concept                        # REQUIRED
+extends: exynos2600                           # optional (derived platform)
+soc_id: soc-exynos2800c                       # REQUIRED* soc-exynos2600 -> soc-exynos2800c by rename
 description: Concept platform for the pipeline-change example (MTNR+MSNR -> NR v2).
-rename:
-- from: s5e9975
+rename:                                       # REQUIRED here (new SoC tag)
+- from: s5e9965                               #   ip-mtnr-is-v15-s5e9965 -> ip-mtnr-is-v15-exynos2800c
   to: exynos2800c
-- from: exynos2700
+- from: exynos2600                            #   soc-exynos2600 / dvfs-exynos2600-* -> ...-exynos2800c
   to: exynos2800c
-rename_exclude:
-- 00_sensor/*
-remove_docs: []   # ip-msnr is kept: variant-injected front paths still use it
+rename_exclude:                               # optional
+- 00_sensor/*                                 #   sensor DT catalogs are shared with the parent
+remove_docs: []                               # optional
+#   Example: drop MSNR from the catalog (only if no variant still references it)
+#   remove_docs: [ip-msnr-is-v15-s5e9965]
+#
+# Patch example (file: patches/ip-mfc-exynos2800c.yaml — note the renamed id)
+#   capabilities:
+#     sim:
+#       modes:
+#         Normal: {ppc: 8.0, unit_power_mw_mp: 0.8}

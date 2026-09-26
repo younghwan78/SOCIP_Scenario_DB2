@@ -9,7 +9,8 @@ text columns and exact string values (or dict keys) inside JSON columns.
         --backup output/etl/rename-backup.json
 
 Rows whose new primary key already exists (fixture already reloaded with the new
-ids) are dropped in favour of the existing row. Idempotent: a second run finds
+ids, or two scenarios merged into one) are dropped in favour of the existing row.
+Run the fixture ETL (--strict) afterwards; it is the validation gate. Idempotent: a second run finds
 nothing to change. FK triggers are disabled for the transaction
 (``session_replication_role = replica``), which needs a superuser role — the
 docker-compose ``scenario_user`` is one.
@@ -31,12 +32,20 @@ from scenario_db.etl.validate_loaded import validate_loaded_db
 
 
 def load_map(path: Path) -> dict[str, str]:
+    """old -> final id. Chains (a->b, b->c) collapse to a->c, b->c; cycles are rejected."""
     doc = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    mapping = {str(k): str(v) for k, v in (doc.get("renames") or {}).items() if k != v}
-    loops = set(mapping) & set(mapping.values())
-    if loops:
-        raise ValueError(f"rename map is not one-step (old ids reused as new ids): {sorted(loops)}")
-    return mapping
+    raw = {str(k): str(v) for k, v in (doc.get("renames") or {}).items() if k != v}
+    out: dict[str, str] = {}
+    for key in raw:
+        seen = [key]
+        cur = raw[key]
+        while cur in raw:
+            if cur in seen:
+                raise ValueError(f"rename map has a cycle: {' -> '.join(seen + [cur])}")
+            seen.append(cur)
+            cur = raw[cur]
+        out[key] = cur
+    return out
 
 
 def rewrite(value: Any, mapping: dict[str, str]) -> Any:
@@ -107,9 +116,10 @@ def main() -> None:
                 json.dump({"map": mapping, "rows": {n: [e["row"] for e in rows] for n, rows in plan.items()}},
                           stream, default=str, indent=2, ensure_ascii=False)
             apply_renames(db, plan)
+            # Merged scenarios are only consistent again after the fixture reload (ETL --strict
+            # validates then), so post-rename findings are reported, not fatal.
             report = validate_loaded_db(db)
-            if not report.ok:
-                raise ValueError("rename failed validation: " + "; ".join(report.errors[:10]))
+            summary["post_rename_validation"] = {"ok": report.ok, "errors": report.errors[:10]}
     print(json.dumps({"applied": bool(args.apply and plan), "tables": summary}, indent=2, ensure_ascii=False))
 
 

@@ -20,6 +20,7 @@ from scenario_db.sim.golden import compare_golden_result
 from scenario_db.sim.readiness import check_simulation_readiness
 from scenario_db.sim.models import DVFSLevel, DVFSTable, SimulationRunConfig
 from scenario_db.sim.runner import build_simulation_evidence, params_hash, run_simulation
+from tests.unit.fixture_paths import scenario_path  # noqa: E402
 
 
 def test_adapter_runner_builds_evidence_from_canonical_graph():
@@ -972,7 +973,7 @@ def _demo_generated_graph(scenario_id: str, variant_id: str) -> CanonicalScenari
 def _exynos2600_generated_graph(scenario_id: str, variant_id: str) -> CanonicalScenarioGraph:
     root = Path(__file__).resolve().parents[3]
     fixture_root = root / "db_fixtures_Exynos2600_S26Plus"
-    scenario_raw = _read_yaml(fixture_root / "02_definition" / f"{scenario_id}.yaml")
+    scenario_raw = _read_yaml(scenario_path(f"{scenario_id}.yaml", variant_id))
     scenario = Scenario(
         id=scenario_raw["id"],
         schema_version=str(scenario_raw["schema_version"]),

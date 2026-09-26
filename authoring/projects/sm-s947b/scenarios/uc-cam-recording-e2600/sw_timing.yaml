@@ -2,82 +2,53 @@
 # group and not in absent_in. Measured overrides go in the project's
 # sw_timing.measured.yaml, not here.
 known_variants:
-- cam-rec-r1-fhd30-sdr
-- cam-rec-r1-fhd30-ois
 - cam-rec-r1-fhd30-vdis
-- cam-rec-r1-fhd30-supersteady
-- cam-rec-r1-fhd30-recursive
-- cam-rec-r1-fhd30-hdr10
-- cam-rec-r1-fhd30-hdr10-supersteady
-- cam-rec-r1-fhd60-sdr
 - cam-rec-r1-fhd60-supersteady
-- cam-rec-r1-fhd60-hdr10
+- cam-rec-r1-uhd30-vdis
+- cam-rec-r1-uhd60-psm
+- cam-rec-r1-8k30-psm
 - cam-rec-r1-fhd120
 - cam-rec-r1-fhd240
-- cam-rec-r1-fhd480
-- cam-rec-r1-fhd960-ssm
-- cam-rec-r1-qhd30-supersteady
-- cam-rec-r1-qhd30-hdr10-supersteady
-- cam-rec-r1-uhd30-sdr
-- cam-rec-r1-uhd30-supersteady
-- cam-rec-r1-uhd30-vdis
-- cam-rec-r1-uhd30-recursive
-- cam-rec-r1-uhd30-hdr10
-- cam-rec-r1-uhd60-sdr
-- cam-rec-r1-uhd60-supersteady
-- cam-rec-r1-uhd60-psm
-- cam-rec-r1-uhd60-hdr10
 - cam-rec-r1-uhd120
-- cam-rec-r1-8k24-sdr
-- cam-rec-r1-8k24-hf
-- cam-rec-r1-8k24-psm
-- cam-rec-r1-8k30-sdr
-- cam-rec-r1-8k30-hf
-- cam-rec-r1-8k30-psm
-- cam-rec-rcv-fhd30-sdr
-- cam-rec-rcv-uhd30-sdr
-- cam-rec-rcv-fhd30-hdr10
-- cam-rec-rcv-uhd30-hdr10
-- cam-rec-rdual-fhd30
-- cam-rec-rdual-fhd60
-- cam-rec-rdual-uhd30
-- cam-rec-rdual-uhd60
-- cam-rec-rtriple-fhd30
-- cam-rec-rtriple-fhd60
-- cam-rec-rtriple-uhd30
-- cam-rec-rtriple-uhd60
-- cam-rec-f1-fhd30
-- cam-rec-f1-fhd30-recursive
-- cam-rec-f1-fhd60
-- cam-rec-f1-fhd120
-- cam-rec-f1-uhd30
-- cam-rec-f1-uhd30-recursive
-- cam-rec-f1-uhd60
-- cam-rec-f1-uhd120
-- cam-rec-pip-fhd30
-- cam-rec-pip-uhd30
-- cam-rec-3rdparty-fhd30
-- cam-rec-3rdparty-binning
-- cam-rec-3rdparty-hdr10
-- cam-rec-3rdparty-hlg
-- cam-rec-iq-eval
-- cam-rec-r1-fhd30-vdis-timing-min
-- cam-rec-r1-fhd30-vdis-timing-max
-- cam-rec-r1-uhd30-vdis-timing-min
-- cam-rec-r1-uhd30-vdis-timing-max
 - cam-rec-r1-fhd30-portrait
 - cam-rec-r1-uhd30-portrait
-- cam-rec-r1-fhd30-vdis-explored-min
-- cam-rec-r1-fhd30-vdis-explored-mean
-- cam-rec-r1-fhd30-vdis-explored-max
-- cam-rec-r1-fhd60-supersteady-explored-min
-- cam-rec-r1-fhd60-supersteady-explored-mean
-- cam-rec-r1-uhd30-vdis-explored-min
-- cam-rec-r1-uhd30-vdis-explored-mean
-- cam-rec-r1-uhd30-vdis-explored-max
-- cam-rec-r1-uhd60-supersteady-explored-min
-- cam-rec-r1-uhd60-supersteady-explored-mean
+- cam-rec-pip-fhd30
+- cam-rec-pip-uhd30
+- cam-rec-apv-uhd30-422-sdr
+- cam-rec-apv-uhd60-422-sdr
+- cam-rec-r1-uhd30-pro
+- cam-rec-r1-uhd60-pro
+- cam-rec-r1-uhd120-pro
+- cam-rec-apv-uhd120-422-sdr
 tasks:
+  mpeg_writer:
+    groups:
+    - id: mpeg_writer-a
+      variants: '*'
+      timing:
+        min_ms: 2
+        mean_ms: 4
+        max_ms: 8
+        value_source: assumed
+        source_note: Engineering assumption approved for fixture exploration; replace with internal measurements.
+    absent_in:
+    - cam-rec-r1-uhd60-psm
+    - cam-rec-r1-8k30-psm
+    - cam-rec-r1-uhd60-pro
+  storage_write:
+    groups:
+    - id: storage_write-a
+      variants: '*'
+      timing:
+        min_ms: 4
+        mean_ms: 8
+        max_ms: 16
+        value_source: assumed
+        source_note: Engineering assumption approved for fixture exploration; replace with internal measurements.
+    absent_in:
+    - cam-rec-r1-uhd60-psm
+    - cam-rec-r1-8k30-psm
+    - cam-rec-r1-uhd60-pro
   post_crta:
     groups:
     - id: post_crta-a
@@ -89,21 +60,6 @@ tasks:
         start_jitter_mean_ms: 1.0
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal measurements.
-    absent_in:
-    - cam-rec-r1-fhd30-vdis-timing-min
-    - cam-rec-r1-fhd30-vdis-timing-max
-    - cam-rec-r1-uhd30-vdis-timing-min
-    - cam-rec-r1-uhd30-vdis-timing-max
-    - cam-rec-r1-fhd30-vdis-explored-min
-    - cam-rec-r1-fhd30-vdis-explored-mean
-    - cam-rec-r1-fhd30-vdis-explored-max
-    - cam-rec-r1-fhd60-supersteady-explored-min
-    - cam-rec-r1-fhd60-supersteady-explored-mean
-    - cam-rec-r1-uhd30-vdis-explored-min
-    - cam-rec-r1-uhd30-vdis-explored-mean
-    - cam-rec-r1-uhd30-vdis-explored-max
-    - cam-rec-r1-uhd60-supersteady-explored-min
-    - cam-rec-r1-uhd60-supersteady-explored-mean
   pre_me_rta:
     groups:
     - id: pre_me_rta-a
@@ -116,21 +72,6 @@ tasks:
         - lme
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal measurements.
-    absent_in:
-    - cam-rec-r1-fhd30-vdis-timing-min
-    - cam-rec-r1-fhd30-vdis-timing-max
-    - cam-rec-r1-uhd30-vdis-timing-min
-    - cam-rec-r1-uhd30-vdis-timing-max
-    - cam-rec-r1-fhd30-vdis-explored-min
-    - cam-rec-r1-fhd30-vdis-explored-mean
-    - cam-rec-r1-fhd30-vdis-explored-max
-    - cam-rec-r1-fhd60-supersteady-explored-min
-    - cam-rec-r1-fhd60-supersteady-explored-mean
-    - cam-rec-r1-uhd30-vdis-explored-min
-    - cam-rec-r1-uhd30-vdis-explored-mean
-    - cam-rec-r1-uhd30-vdis-explored-max
-    - cam-rec-r1-uhd60-supersteady-explored-min
-    - cam-rec-r1-uhd60-supersteady-explored-mean
   post_irta:
     groups:
     - id: post_irta-a
@@ -141,21 +82,6 @@ tasks:
         max_ms: 5.6
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal measurements.
-    absent_in:
-    - cam-rec-r1-fhd30-vdis-timing-min
-    - cam-rec-r1-fhd30-vdis-timing-max
-    - cam-rec-r1-uhd30-vdis-timing-min
-    - cam-rec-r1-uhd30-vdis-timing-max
-    - cam-rec-r1-fhd30-vdis-explored-min
-    - cam-rec-r1-fhd30-vdis-explored-mean
-    - cam-rec-r1-fhd30-vdis-explored-max
-    - cam-rec-r1-fhd60-supersteady-explored-min
-    - cam-rec-r1-fhd60-supersteady-explored-mean
-    - cam-rec-r1-uhd30-vdis-explored-min
-    - cam-rec-r1-uhd30-vdis-explored-mean
-    - cam-rec-r1-uhd30-vdis-explored-max
-    - cam-rec-r1-uhd60-supersteady-explored-min
-    - cam-rec-r1-uhd60-supersteady-explored-mean
   eis:
     groups:
     - id: eis-a
@@ -166,496 +92,6 @@ tasks:
         max_ms: 6.0
         value_source: assumed
         source_note: User-supplied fixture values, 2026-09-13; replace with internal measurements.
-    absent_in:
-    - cam-rec-r1-fhd30-vdis-timing-min
-    - cam-rec-r1-fhd30-vdis-timing-max
-    - cam-rec-r1-uhd30-vdis-timing-min
-    - cam-rec-r1-uhd30-vdis-timing-max
-    - cam-rec-r1-fhd30-vdis-explored-min
-    - cam-rec-r1-fhd30-vdis-explored-mean
-    - cam-rec-r1-fhd30-vdis-explored-max
-    - cam-rec-r1-fhd60-supersteady-explored-min
-    - cam-rec-r1-fhd60-supersteady-explored-mean
-    - cam-rec-r1-uhd30-vdis-explored-min
-    - cam-rec-r1-uhd30-vdis-explored-mean
-    - cam-rec-r1-uhd30-vdis-explored-max
-    - cam-rec-r1-uhd60-supersteady-explored-min
-    - cam-rec-r1-uhd60-supersteady-explored-mean
-  mpeg_writer:
-    groups:
-    - id: mpeg_writer-a
-      variants: '*'
-      timing:
-        min_ms: 2
-        mean_ms: 4
-        max_ms: 8
-        value_source: assumed
-        source_note: Engineering assumption approved for fixture exploration; replace with internal measurements.
-    absent_in:
-    - cam-rec-r1-fhd30-sdr
-    - cam-rec-r1-fhd30-ois
-    - cam-rec-r1-fhd30-supersteady
-    - cam-rec-r1-fhd30-recursive
-    - cam-rec-r1-fhd30-hdr10
-    - cam-rec-r1-fhd30-hdr10-supersteady
-    - cam-rec-r1-fhd60-sdr
-    - cam-rec-r1-fhd60-hdr10
-    - cam-rec-r1-fhd480
-    - cam-rec-r1-fhd960-ssm
-    - cam-rec-r1-qhd30-supersteady
-    - cam-rec-r1-qhd30-hdr10-supersteady
-    - cam-rec-r1-uhd30-sdr
-    - cam-rec-r1-uhd30-supersteady
-    - cam-rec-r1-uhd30-recursive
-    - cam-rec-r1-uhd30-hdr10
-    - cam-rec-r1-uhd60-sdr
-    - cam-rec-r1-uhd60-psm
-    - cam-rec-r1-uhd60-hdr10
-    - cam-rec-r1-8k24-sdr
-    - cam-rec-r1-8k24-hf
-    - cam-rec-r1-8k24-psm
-    - cam-rec-r1-8k30-hf
-    - cam-rec-r1-8k30-psm
-    - cam-rec-rcv-fhd30-hdr10
-    - cam-rec-rcv-uhd30-hdr10
-    - cam-rec-rdual-fhd30
-    - cam-rec-rdual-fhd60
-    - cam-rec-rdual-uhd30
-    - cam-rec-rdual-uhd60
-    - cam-rec-rtriple-fhd30
-    - cam-rec-rtriple-fhd60
-    - cam-rec-rtriple-uhd30
-    - cam-rec-rtriple-uhd60
-    - cam-rec-f1-fhd30
-    - cam-rec-f1-fhd30-recursive
-    - cam-rec-f1-fhd60
-    - cam-rec-f1-fhd120
-    - cam-rec-f1-uhd30
-    - cam-rec-f1-uhd30-recursive
-    - cam-rec-f1-uhd60
-    - cam-rec-f1-uhd120
-    - cam-rec-3rdparty-fhd30
-    - cam-rec-3rdparty-binning
-    - cam-rec-3rdparty-hdr10
-    - cam-rec-3rdparty-hlg
-    - cam-rec-iq-eval
-    - cam-rec-r1-fhd30-vdis-timing-min
-    - cam-rec-r1-fhd30-vdis-timing-max
-    - cam-rec-r1-uhd30-vdis-timing-min
-    - cam-rec-r1-uhd30-vdis-timing-max
-    - cam-rec-r1-fhd30-vdis-explored-min
-    - cam-rec-r1-fhd30-vdis-explored-mean
-    - cam-rec-r1-fhd30-vdis-explored-max
-    - cam-rec-r1-fhd60-supersteady-explored-min
-    - cam-rec-r1-fhd60-supersteady-explored-mean
-    - cam-rec-r1-uhd30-vdis-explored-min
-    - cam-rec-r1-uhd30-vdis-explored-mean
-    - cam-rec-r1-uhd30-vdis-explored-max
-    - cam-rec-r1-uhd60-supersteady-explored-min
-    - cam-rec-r1-uhd60-supersteady-explored-mean
-  storage_write:
-    groups:
-    - id: storage_write-a
-      variants: '*'
-      timing:
-        min_ms: 4
-        mean_ms: 8
-        max_ms: 16
-        value_source: assumed
-        source_note: Engineering assumption approved for fixture exploration; replace with internal measurements.
-    absent_in:
-    - cam-rec-r1-fhd30-sdr
-    - cam-rec-r1-fhd30-ois
-    - cam-rec-r1-fhd30-supersteady
-    - cam-rec-r1-fhd30-recursive
-    - cam-rec-r1-fhd30-hdr10
-    - cam-rec-r1-fhd30-hdr10-supersteady
-    - cam-rec-r1-fhd60-sdr
-    - cam-rec-r1-fhd60-hdr10
-    - cam-rec-r1-fhd480
-    - cam-rec-r1-fhd960-ssm
-    - cam-rec-r1-qhd30-supersteady
-    - cam-rec-r1-qhd30-hdr10-supersteady
-    - cam-rec-r1-uhd30-sdr
-    - cam-rec-r1-uhd30-supersteady
-    - cam-rec-r1-uhd30-recursive
-    - cam-rec-r1-uhd30-hdr10
-    - cam-rec-r1-uhd60-sdr
-    - cam-rec-r1-uhd60-psm
-    - cam-rec-r1-uhd60-hdr10
-    - cam-rec-r1-8k24-sdr
-    - cam-rec-r1-8k24-hf
-    - cam-rec-r1-8k24-psm
-    - cam-rec-r1-8k30-hf
-    - cam-rec-r1-8k30-psm
-    - cam-rec-rcv-fhd30-hdr10
-    - cam-rec-rcv-uhd30-hdr10
-    - cam-rec-rdual-fhd30
-    - cam-rec-rdual-fhd60
-    - cam-rec-rdual-uhd30
-    - cam-rec-rdual-uhd60
-    - cam-rec-rtriple-fhd30
-    - cam-rec-rtriple-fhd60
-    - cam-rec-rtriple-uhd30
-    - cam-rec-rtriple-uhd60
-    - cam-rec-f1-fhd30
-    - cam-rec-f1-fhd30-recursive
-    - cam-rec-f1-fhd60
-    - cam-rec-f1-fhd120
-    - cam-rec-f1-uhd30
-    - cam-rec-f1-uhd30-recursive
-    - cam-rec-f1-uhd60
-    - cam-rec-f1-uhd120
-    - cam-rec-3rdparty-fhd30
-    - cam-rec-3rdparty-binning
-    - cam-rec-3rdparty-hdr10
-    - cam-rec-3rdparty-hlg
-    - cam-rec-iq-eval
-    - cam-rec-r1-fhd30-vdis-timing-min
-    - cam-rec-r1-fhd30-vdis-timing-max
-    - cam-rec-r1-uhd30-vdis-timing-min
-    - cam-rec-r1-uhd30-vdis-timing-max
-    - cam-rec-r1-fhd30-vdis-explored-min
-    - cam-rec-r1-fhd30-vdis-explored-mean
-    - cam-rec-r1-fhd30-vdis-explored-max
-    - cam-rec-r1-fhd60-supersteady-explored-min
-    - cam-rec-r1-fhd60-supersteady-explored-mean
-    - cam-rec-r1-uhd30-vdis-explored-min
-    - cam-rec-r1-uhd30-vdis-explored-mean
-    - cam-rec-r1-uhd30-vdis-explored-max
-    - cam-rec-r1-uhd60-supersteady-explored-min
-    - cam-rec-r1-uhd60-supersteady-explored-mean
-  front_post_crta:
-    groups:
-    - id: front_post_crta-a
-      variants: '*'
-      timing:
-        min_ms: 0.1
-        mean_ms: 0.3
-        max_ms: 0.5
-        start_jitter_mean_ms: 1.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal measurements.
-    absent_in:
-    - cam-rec-r1-fhd30-sdr
-    - cam-rec-r1-fhd30-ois
-    - cam-rec-r1-fhd30-vdis
-    - cam-rec-r1-fhd30-supersteady
-    - cam-rec-r1-fhd30-recursive
-    - cam-rec-r1-fhd30-hdr10
-    - cam-rec-r1-fhd30-hdr10-supersteady
-    - cam-rec-r1-fhd60-sdr
-    - cam-rec-r1-fhd60-supersteady
-    - cam-rec-r1-fhd60-hdr10
-    - cam-rec-r1-fhd120
-    - cam-rec-r1-fhd240
-    - cam-rec-r1-fhd480
-    - cam-rec-r1-fhd960-ssm
-    - cam-rec-r1-qhd30-supersteady
-    - cam-rec-r1-qhd30-hdr10-supersteady
-    - cam-rec-r1-uhd30-sdr
-    - cam-rec-r1-uhd30-supersteady
-    - cam-rec-r1-uhd30-vdis
-    - cam-rec-r1-uhd30-recursive
-    - cam-rec-r1-uhd30-hdr10
-    - cam-rec-r1-uhd60-sdr
-    - cam-rec-r1-uhd60-supersteady
-    - cam-rec-r1-uhd60-psm
-    - cam-rec-r1-uhd60-hdr10
-    - cam-rec-r1-uhd120
-    - cam-rec-r1-8k24-sdr
-    - cam-rec-r1-8k24-hf
-    - cam-rec-r1-8k24-psm
-    - cam-rec-r1-8k30-sdr
-    - cam-rec-r1-8k30-hf
-    - cam-rec-r1-8k30-psm
-    - cam-rec-rcv-fhd30-hdr10
-    - cam-rec-rcv-uhd30-hdr10
-    - cam-rec-rdual-fhd30
-    - cam-rec-rdual-fhd60
-    - cam-rec-rdual-uhd30
-    - cam-rec-rdual-uhd60
-    - cam-rec-rtriple-fhd30
-    - cam-rec-rtriple-fhd60
-    - cam-rec-rtriple-uhd30
-    - cam-rec-rtriple-uhd60
-    - cam-rec-f1-fhd30
-    - cam-rec-f1-fhd30-recursive
-    - cam-rec-f1-fhd60
-    - cam-rec-f1-fhd120
-    - cam-rec-f1-uhd30
-    - cam-rec-f1-uhd30-recursive
-    - cam-rec-f1-uhd60
-    - cam-rec-f1-uhd120
-    - cam-rec-3rdparty-fhd30
-    - cam-rec-3rdparty-binning
-    - cam-rec-3rdparty-hdr10
-    - cam-rec-3rdparty-hlg
-    - cam-rec-iq-eval
-    - cam-rec-r1-fhd30-vdis-timing-min
-    - cam-rec-r1-fhd30-vdis-timing-max
-    - cam-rec-r1-uhd30-vdis-timing-min
-    - cam-rec-r1-uhd30-vdis-timing-max
-    - cam-rec-r1-fhd30-portrait
-    - cam-rec-r1-uhd30-portrait
-    - cam-rec-r1-fhd30-vdis-explored-min
-    - cam-rec-r1-fhd30-vdis-explored-mean
-    - cam-rec-r1-fhd30-vdis-explored-max
-    - cam-rec-r1-fhd60-supersteady-explored-min
-    - cam-rec-r1-fhd60-supersteady-explored-mean
-    - cam-rec-r1-uhd30-vdis-explored-min
-    - cam-rec-r1-uhd30-vdis-explored-mean
-    - cam-rec-r1-uhd30-vdis-explored-max
-    - cam-rec-r1-uhd60-supersteady-explored-min
-    - cam-rec-r1-uhd60-supersteady-explored-mean
-  front_pre_me_rta:
-    groups:
-    - id: front_pre_me_rta-a
-      variants: '*'
-      timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 4.0
-        includes_hw_nodes:
-        - front_lme
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal measurements.
-    absent_in:
-    - cam-rec-r1-fhd30-sdr
-    - cam-rec-r1-fhd30-ois
-    - cam-rec-r1-fhd30-vdis
-    - cam-rec-r1-fhd30-supersteady
-    - cam-rec-r1-fhd30-recursive
-    - cam-rec-r1-fhd30-hdr10
-    - cam-rec-r1-fhd30-hdr10-supersteady
-    - cam-rec-r1-fhd60-sdr
-    - cam-rec-r1-fhd60-supersteady
-    - cam-rec-r1-fhd60-hdr10
-    - cam-rec-r1-fhd120
-    - cam-rec-r1-fhd240
-    - cam-rec-r1-fhd480
-    - cam-rec-r1-fhd960-ssm
-    - cam-rec-r1-qhd30-supersteady
-    - cam-rec-r1-qhd30-hdr10-supersteady
-    - cam-rec-r1-uhd30-sdr
-    - cam-rec-r1-uhd30-supersteady
-    - cam-rec-r1-uhd30-vdis
-    - cam-rec-r1-uhd30-recursive
-    - cam-rec-r1-uhd30-hdr10
-    - cam-rec-r1-uhd60-sdr
-    - cam-rec-r1-uhd60-supersteady
-    - cam-rec-r1-uhd60-psm
-    - cam-rec-r1-uhd60-hdr10
-    - cam-rec-r1-uhd120
-    - cam-rec-r1-8k24-sdr
-    - cam-rec-r1-8k24-hf
-    - cam-rec-r1-8k24-psm
-    - cam-rec-r1-8k30-sdr
-    - cam-rec-r1-8k30-hf
-    - cam-rec-r1-8k30-psm
-    - cam-rec-rcv-fhd30-hdr10
-    - cam-rec-rcv-uhd30-hdr10
-    - cam-rec-rdual-fhd30
-    - cam-rec-rdual-fhd60
-    - cam-rec-rdual-uhd30
-    - cam-rec-rdual-uhd60
-    - cam-rec-rtriple-fhd30
-    - cam-rec-rtriple-fhd60
-    - cam-rec-rtriple-uhd30
-    - cam-rec-rtriple-uhd60
-    - cam-rec-f1-fhd30
-    - cam-rec-f1-fhd30-recursive
-    - cam-rec-f1-fhd60
-    - cam-rec-f1-fhd120
-    - cam-rec-f1-uhd30
-    - cam-rec-f1-uhd30-recursive
-    - cam-rec-f1-uhd60
-    - cam-rec-f1-uhd120
-    - cam-rec-3rdparty-fhd30
-    - cam-rec-3rdparty-binning
-    - cam-rec-3rdparty-hdr10
-    - cam-rec-3rdparty-hlg
-    - cam-rec-iq-eval
-    - cam-rec-r1-fhd30-vdis-timing-min
-    - cam-rec-r1-fhd30-vdis-timing-max
-    - cam-rec-r1-uhd30-vdis-timing-min
-    - cam-rec-r1-uhd30-vdis-timing-max
-    - cam-rec-r1-fhd30-portrait
-    - cam-rec-r1-uhd30-portrait
-    - cam-rec-r1-fhd30-vdis-explored-min
-    - cam-rec-r1-fhd30-vdis-explored-mean
-    - cam-rec-r1-fhd30-vdis-explored-max
-    - cam-rec-r1-fhd60-supersteady-explored-min
-    - cam-rec-r1-fhd60-supersteady-explored-mean
-    - cam-rec-r1-uhd30-vdis-explored-min
-    - cam-rec-r1-uhd30-vdis-explored-mean
-    - cam-rec-r1-uhd30-vdis-explored-max
-    - cam-rec-r1-uhd60-supersteady-explored-min
-    - cam-rec-r1-uhd60-supersteady-explored-mean
-  front_post_irta:
-    groups:
-    - id: front_post_irta-a
-      variants: '*'
-      timing:
-        min_ms: 3.0
-        mean_ms: 4.0
-        max_ms: 5.6
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal measurements.
-    absent_in:
-    - cam-rec-r1-fhd30-sdr
-    - cam-rec-r1-fhd30-ois
-    - cam-rec-r1-fhd30-vdis
-    - cam-rec-r1-fhd30-supersteady
-    - cam-rec-r1-fhd30-recursive
-    - cam-rec-r1-fhd30-hdr10
-    - cam-rec-r1-fhd30-hdr10-supersteady
-    - cam-rec-r1-fhd60-sdr
-    - cam-rec-r1-fhd60-supersteady
-    - cam-rec-r1-fhd60-hdr10
-    - cam-rec-r1-fhd120
-    - cam-rec-r1-fhd240
-    - cam-rec-r1-fhd480
-    - cam-rec-r1-fhd960-ssm
-    - cam-rec-r1-qhd30-supersteady
-    - cam-rec-r1-qhd30-hdr10-supersteady
-    - cam-rec-r1-uhd30-sdr
-    - cam-rec-r1-uhd30-supersteady
-    - cam-rec-r1-uhd30-vdis
-    - cam-rec-r1-uhd30-recursive
-    - cam-rec-r1-uhd30-hdr10
-    - cam-rec-r1-uhd60-sdr
-    - cam-rec-r1-uhd60-supersteady
-    - cam-rec-r1-uhd60-psm
-    - cam-rec-r1-uhd60-hdr10
-    - cam-rec-r1-uhd120
-    - cam-rec-r1-8k24-sdr
-    - cam-rec-r1-8k24-hf
-    - cam-rec-r1-8k24-psm
-    - cam-rec-r1-8k30-sdr
-    - cam-rec-r1-8k30-hf
-    - cam-rec-r1-8k30-psm
-    - cam-rec-rcv-fhd30-hdr10
-    - cam-rec-rcv-uhd30-hdr10
-    - cam-rec-rdual-fhd30
-    - cam-rec-rdual-fhd60
-    - cam-rec-rdual-uhd30
-    - cam-rec-rdual-uhd60
-    - cam-rec-rtriple-fhd30
-    - cam-rec-rtriple-fhd60
-    - cam-rec-rtriple-uhd30
-    - cam-rec-rtriple-uhd60
-    - cam-rec-f1-fhd30
-    - cam-rec-f1-fhd30-recursive
-    - cam-rec-f1-fhd60
-    - cam-rec-f1-fhd120
-    - cam-rec-f1-uhd30
-    - cam-rec-f1-uhd30-recursive
-    - cam-rec-f1-uhd60
-    - cam-rec-f1-uhd120
-    - cam-rec-3rdparty-fhd30
-    - cam-rec-3rdparty-binning
-    - cam-rec-3rdparty-hdr10
-    - cam-rec-3rdparty-hlg
-    - cam-rec-iq-eval
-    - cam-rec-r1-fhd30-vdis-timing-min
-    - cam-rec-r1-fhd30-vdis-timing-max
-    - cam-rec-r1-uhd30-vdis-timing-min
-    - cam-rec-r1-uhd30-vdis-timing-max
-    - cam-rec-r1-fhd30-portrait
-    - cam-rec-r1-uhd30-portrait
-    - cam-rec-r1-fhd30-vdis-explored-min
-    - cam-rec-r1-fhd30-vdis-explored-mean
-    - cam-rec-r1-fhd30-vdis-explored-max
-    - cam-rec-r1-fhd60-supersteady-explored-min
-    - cam-rec-r1-fhd60-supersteady-explored-mean
-    - cam-rec-r1-uhd30-vdis-explored-min
-    - cam-rec-r1-uhd30-vdis-explored-mean
-    - cam-rec-r1-uhd30-vdis-explored-max
-    - cam-rec-r1-uhd60-supersteady-explored-min
-    - cam-rec-r1-uhd60-supersteady-explored-mean
-  dual_compose:
-    groups:
-    - id: dual_compose-a
-      variants: '*'
-      timing:
-        min_ms: 1.5
-        mean_ms: 3
-        max_ms: 6
-        value_source: assumed
-        source_note: Engineering assumption approved for fixture exploration; replace with internal measurements.
-    absent_in:
-    - cam-rec-r1-fhd30-sdr
-    - cam-rec-r1-fhd30-ois
-    - cam-rec-r1-fhd30-vdis
-    - cam-rec-r1-fhd30-supersteady
-    - cam-rec-r1-fhd30-recursive
-    - cam-rec-r1-fhd30-hdr10
-    - cam-rec-r1-fhd30-hdr10-supersteady
-    - cam-rec-r1-fhd60-sdr
-    - cam-rec-r1-fhd60-supersteady
-    - cam-rec-r1-fhd60-hdr10
-    - cam-rec-r1-fhd120
-    - cam-rec-r1-fhd240
-    - cam-rec-r1-fhd480
-    - cam-rec-r1-fhd960-ssm
-    - cam-rec-r1-qhd30-supersteady
-    - cam-rec-r1-qhd30-hdr10-supersteady
-    - cam-rec-r1-uhd30-sdr
-    - cam-rec-r1-uhd30-supersteady
-    - cam-rec-r1-uhd30-vdis
-    - cam-rec-r1-uhd30-recursive
-    - cam-rec-r1-uhd30-hdr10
-    - cam-rec-r1-uhd60-sdr
-    - cam-rec-r1-uhd60-supersteady
-    - cam-rec-r1-uhd60-psm
-    - cam-rec-r1-uhd60-hdr10
-    - cam-rec-r1-uhd120
-    - cam-rec-r1-8k24-sdr
-    - cam-rec-r1-8k24-hf
-    - cam-rec-r1-8k24-psm
-    - cam-rec-r1-8k30-sdr
-    - cam-rec-r1-8k30-hf
-    - cam-rec-r1-8k30-psm
-    - cam-rec-rcv-fhd30-hdr10
-    - cam-rec-rcv-uhd30-hdr10
-    - cam-rec-rdual-fhd30
-    - cam-rec-rdual-fhd60
-    - cam-rec-rdual-uhd30
-    - cam-rec-rdual-uhd60
-    - cam-rec-rtriple-fhd30
-    - cam-rec-rtriple-fhd60
-    - cam-rec-rtriple-uhd30
-    - cam-rec-rtriple-uhd60
-    - cam-rec-f1-fhd30
-    - cam-rec-f1-fhd30-recursive
-    - cam-rec-f1-fhd60
-    - cam-rec-f1-fhd120
-    - cam-rec-f1-uhd30
-    - cam-rec-f1-uhd30-recursive
-    - cam-rec-f1-uhd60
-    - cam-rec-f1-uhd120
-    - cam-rec-3rdparty-fhd30
-    - cam-rec-3rdparty-binning
-    - cam-rec-3rdparty-hdr10
-    - cam-rec-3rdparty-hlg
-    - cam-rec-iq-eval
-    - cam-rec-r1-fhd30-vdis-timing-min
-    - cam-rec-r1-fhd30-vdis-timing-max
-    - cam-rec-r1-uhd30-vdis-timing-min
-    - cam-rec-r1-uhd30-vdis-timing-max
-    - cam-rec-r1-fhd30-portrait
-    - cam-rec-r1-uhd30-portrait
-    - cam-rec-r1-fhd30-vdis-explored-min
-    - cam-rec-r1-fhd30-vdis-explored-mean
-    - cam-rec-r1-fhd30-vdis-explored-max
-    - cam-rec-r1-fhd60-supersteady-explored-min
-    - cam-rec-r1-fhd60-supersteady-explored-mean
-    - cam-rec-r1-uhd30-vdis-explored-min
-    - cam-rec-r1-uhd30-vdis-explored-mean
-    - cam-rec-r1-uhd30-vdis-explored-max
-    - cam-rec-r1-uhd60-supersteady-explored-min
-    - cam-rec-r1-uhd60-supersteady-explored-mean
   portrait_blend:
     groups:
     - id: portrait_blend-a
@@ -676,76 +112,156 @@ tasks:
         value_source: assumed
         source_note: Engineering assumption approved for fixture exploration; replace with internal measurements.
     absent_in:
-    - cam-rec-r1-fhd30-sdr
-    - cam-rec-r1-fhd30-ois
     - cam-rec-r1-fhd30-vdis
-    - cam-rec-r1-fhd30-supersteady
-    - cam-rec-r1-fhd30-recursive
-    - cam-rec-r1-fhd30-hdr10
-    - cam-rec-r1-fhd30-hdr10-supersteady
-    - cam-rec-r1-fhd60-sdr
     - cam-rec-r1-fhd60-supersteady
-    - cam-rec-r1-fhd60-hdr10
+    - cam-rec-r1-uhd30-vdis
+    - cam-rec-r1-uhd60-psm
+    - cam-rec-r1-8k30-psm
     - cam-rec-r1-fhd120
     - cam-rec-r1-fhd240
-    - cam-rec-r1-fhd480
-    - cam-rec-r1-fhd960-ssm
-    - cam-rec-r1-qhd30-supersteady
-    - cam-rec-r1-qhd30-hdr10-supersteady
-    - cam-rec-r1-uhd30-sdr
-    - cam-rec-r1-uhd30-supersteady
-    - cam-rec-r1-uhd30-vdis
-    - cam-rec-r1-uhd30-recursive
-    - cam-rec-r1-uhd30-hdr10
-    - cam-rec-r1-uhd60-sdr
-    - cam-rec-r1-uhd60-supersteady
-    - cam-rec-r1-uhd60-psm
-    - cam-rec-r1-uhd60-hdr10
     - cam-rec-r1-uhd120
-    - cam-rec-r1-8k24-sdr
-    - cam-rec-r1-8k24-hf
-    - cam-rec-r1-8k24-psm
-    - cam-rec-r1-8k30-sdr
-    - cam-rec-r1-8k30-hf
-    - cam-rec-r1-8k30-psm
-    - cam-rec-rcv-fhd30-sdr
-    - cam-rec-rcv-uhd30-sdr
-    - cam-rec-rcv-fhd30-hdr10
-    - cam-rec-rcv-uhd30-hdr10
-    - cam-rec-rdual-fhd30
-    - cam-rec-rdual-fhd60
-    - cam-rec-rdual-uhd30
-    - cam-rec-rdual-uhd60
-    - cam-rec-rtriple-fhd30
-    - cam-rec-rtriple-fhd60
-    - cam-rec-rtriple-uhd30
-    - cam-rec-rtriple-uhd60
-    - cam-rec-f1-fhd30
-    - cam-rec-f1-fhd30-recursive
-    - cam-rec-f1-fhd60
-    - cam-rec-f1-fhd120
-    - cam-rec-f1-uhd30
-    - cam-rec-f1-uhd30-recursive
-    - cam-rec-f1-uhd60
-    - cam-rec-f1-uhd120
     - cam-rec-pip-fhd30
     - cam-rec-pip-uhd30
-    - cam-rec-3rdparty-fhd30
-    - cam-rec-3rdparty-binning
-    - cam-rec-3rdparty-hdr10
-    - cam-rec-3rdparty-hlg
-    - cam-rec-iq-eval
-    - cam-rec-r1-fhd30-vdis-timing-min
-    - cam-rec-r1-fhd30-vdis-timing-max
-    - cam-rec-r1-uhd30-vdis-timing-min
-    - cam-rec-r1-uhd30-vdis-timing-max
-    - cam-rec-r1-fhd30-vdis-explored-min
-    - cam-rec-r1-fhd30-vdis-explored-mean
-    - cam-rec-r1-fhd30-vdis-explored-max
-    - cam-rec-r1-fhd60-supersteady-explored-min
-    - cam-rec-r1-fhd60-supersteady-explored-mean
-    - cam-rec-r1-uhd30-vdis-explored-min
-    - cam-rec-r1-uhd30-vdis-explored-mean
-    - cam-rec-r1-uhd30-vdis-explored-max
-    - cam-rec-r1-uhd60-supersteady-explored-min
-    - cam-rec-r1-uhd60-supersteady-explored-mean
+    - cam-rec-apv-uhd30-422-sdr
+    - cam-rec-apv-uhd60-422-sdr
+    - cam-rec-r1-uhd30-pro
+    - cam-rec-r1-uhd60-pro
+    - cam-rec-r1-uhd120-pro
+    - cam-rec-apv-uhd120-422-sdr
+  front_post_crta:
+    groups:
+    - id: front_post_crta-a
+      variants: '*'
+      timing:
+        min_ms: 0.1
+        mean_ms: 0.3
+        max_ms: 0.5
+        start_jitter_mean_ms: 1.0
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal measurements.
+    absent_in:
+    - cam-rec-r1-fhd30-vdis
+    - cam-rec-r1-fhd60-supersteady
+    - cam-rec-r1-uhd30-vdis
+    - cam-rec-r1-uhd60-psm
+    - cam-rec-r1-8k30-psm
+    - cam-rec-r1-fhd120
+    - cam-rec-r1-fhd240
+    - cam-rec-r1-uhd120
+    - cam-rec-r1-fhd30-portrait
+    - cam-rec-r1-uhd30-portrait
+    - cam-rec-apv-uhd30-422-sdr
+    - cam-rec-apv-uhd60-422-sdr
+    - cam-rec-r1-uhd30-pro
+    - cam-rec-r1-uhd60-pro
+    - cam-rec-r1-uhd120-pro
+    - cam-rec-apv-uhd120-422-sdr
+  front_pre_me_rta:
+    groups:
+    - id: front_pre_me_rta-a
+      variants: '*'
+      timing:
+        min_ms: 2.5
+        mean_ms: 3.0
+        max_ms: 4.0
+        includes_hw_nodes:
+        - front_lme
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal measurements.
+    absent_in:
+    - cam-rec-r1-fhd30-vdis
+    - cam-rec-r1-fhd60-supersteady
+    - cam-rec-r1-uhd30-vdis
+    - cam-rec-r1-uhd60-psm
+    - cam-rec-r1-8k30-psm
+    - cam-rec-r1-fhd120
+    - cam-rec-r1-fhd240
+    - cam-rec-r1-uhd120
+    - cam-rec-r1-fhd30-portrait
+    - cam-rec-r1-uhd30-portrait
+    - cam-rec-apv-uhd30-422-sdr
+    - cam-rec-apv-uhd60-422-sdr
+    - cam-rec-r1-uhd30-pro
+    - cam-rec-r1-uhd60-pro
+    - cam-rec-r1-uhd120-pro
+    - cam-rec-apv-uhd120-422-sdr
+  front_post_irta:
+    groups:
+    - id: front_post_irta-a
+      variants: '*'
+      timing:
+        min_ms: 3.0
+        mean_ms: 4.0
+        max_ms: 5.6
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal measurements.
+    absent_in:
+    - cam-rec-r1-fhd30-vdis
+    - cam-rec-r1-fhd60-supersteady
+    - cam-rec-r1-uhd30-vdis
+    - cam-rec-r1-uhd60-psm
+    - cam-rec-r1-8k30-psm
+    - cam-rec-r1-fhd120
+    - cam-rec-r1-fhd240
+    - cam-rec-r1-uhd120
+    - cam-rec-r1-fhd30-portrait
+    - cam-rec-r1-uhd30-portrait
+    - cam-rec-apv-uhd30-422-sdr
+    - cam-rec-apv-uhd60-422-sdr
+    - cam-rec-r1-uhd30-pro
+    - cam-rec-r1-uhd60-pro
+    - cam-rec-r1-uhd120-pro
+    - cam-rec-apv-uhd120-422-sdr
+  dual_compose:
+    groups:
+    - id: dual_compose-a
+      variants: '*'
+      timing:
+        min_ms: 1.5
+        mean_ms: 3
+        max_ms: 6
+        value_source: assumed
+        source_note: Engineering assumption approved for fixture exploration; replace with internal measurements.
+    absent_in:
+    - cam-rec-r1-fhd30-vdis
+    - cam-rec-r1-fhd60-supersteady
+    - cam-rec-r1-uhd30-vdis
+    - cam-rec-r1-uhd60-psm
+    - cam-rec-r1-8k30-psm
+    - cam-rec-r1-fhd120
+    - cam-rec-r1-fhd240
+    - cam-rec-r1-uhd120
+    - cam-rec-r1-fhd30-portrait
+    - cam-rec-r1-uhd30-portrait
+    - cam-rec-apv-uhd30-422-sdr
+    - cam-rec-apv-uhd60-422-sdr
+    - cam-rec-r1-uhd30-pro
+    - cam-rec-r1-uhd60-pro
+    - cam-rec-r1-uhd120-pro
+    - cam-rec-apv-uhd120-422-sdr
+  pro_scope:
+    groups:
+    - id: pro_scope-a
+      variants: '*'
+      timing:
+        min_ms: 2.0
+        mean_ms: 3.0
+        max_ms: 4.5
+        value_source: assumed
+        source_note: Assumed 2026-09-27 (scope reduction); replace with internal measurement.
+    absent_in:
+    - cam-rec-r1-fhd30-vdis
+    - cam-rec-r1-fhd60-supersteady
+    - cam-rec-r1-uhd30-vdis
+    - cam-rec-r1-uhd60-psm
+    - cam-rec-r1-8k30-psm
+    - cam-rec-r1-fhd120
+    - cam-rec-r1-fhd240
+    - cam-rec-r1-uhd120
+    - cam-rec-r1-fhd30-portrait
+    - cam-rec-r1-uhd30-portrait
+    - cam-rec-pip-fhd30
+    - cam-rec-pip-uhd30
+    - cam-rec-apv-uhd30-422-sdr
+    - cam-rec-apv-uhd60-422-sdr
+    - cam-rec-apv-uhd120-422-sdr

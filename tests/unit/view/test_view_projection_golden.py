@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from tests.unit.fixture_paths import scenario_path
 import json
 from copy import deepcopy
 from pathlib import Path
@@ -57,7 +58,7 @@ def _catalog() -> dict[str, SimpleNamespace]:
 
 
 def _graph(scenario_file: str, variant_id: str) -> CanonicalScenarioGraph:
-    raw = _load_yaml(FIXTURE_ROOT / "02_definition" / scenario_file)
+    raw = _load_yaml(scenario_path(scenario_file, variant_id))
     variant = _resolve_variant(raw, variant_id)
     return CanonicalScenarioGraph(
         scenario=SimpleNamespace(

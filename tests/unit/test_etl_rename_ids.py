@@ -23,15 +23,18 @@ def test_rewrite_replaces_exact_values_and_dict_keys_only():
     assert out["per_scenario"] == {"uc-cam-recording-e2600": [1, "uc-cam-recording-e2600"]}
 
 
-def test_repository_rename_map_is_one_step_and_covers_every_fixture_scenario():
+def test_repository_rename_map_resolves_to_current_ids():
     mapping = load_map(REPO / "authoring" / "id-renames.yaml")
     assert mapping["uc-camera-recording"] == "uc-cam-recording-e2600"
-    assert mapping["proj-e2700-ref"] == "proj-sm-s957b"
-    assert all(v.endswith(("-e2600", "-e2700")) for k, v in mapping.items() if k.startswith("uc-"))
+    # APV was merged into camera recording (2026-09-27)
+    assert mapping["uc-camera-recording-apv"] == "uc-cam-recording-e2600"
+    assert mapping["uc-cam-recording-apv-e2600"] == "uc-cam-recording-e2600"
 
 
-def test_load_map_rejects_chained_renames(tmp_path: Path):
+def test_load_map_collapses_chains_and_rejects_cycles(tmp_path: Path):
     p = tmp_path / "m.yaml"
     p.write_text("renames:\n  a: b\n  b: c\n", encoding="utf-8")
-    with pytest.raises(ValueError, match="one-step"):
+    assert load_map(p) == {"a": "c", "b": "c"}
+    p.write_text("renames:\n  a: b\n  b: a\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="cycle"):
         load_map(p)

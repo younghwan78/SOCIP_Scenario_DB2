@@ -33,3 +33,5 @@ renames:
   uc-gallery-display-e2700: uc-disp-gallery-e2700
   uc-game-play-e2700: uc-game-play-e2700
   uc-game-streaming-e2700: uc-game-streaming-e2700
+  # 2026-09-27: APV merged into camera recording (kept APV variants move scenario)
+  uc-cam-recording-apv-e2600: uc-cam-recording-e2600

@@ -4,10 +4,10 @@
 
 | Layer | File | Change |
 | --- | --- | --- |
-| Platform | `platforms/exynos2800-concept/platform.yaml` | extends `exynos2700`, id rename `s5e9975 / exynos2700 → exynos2800c` |
+| Platform | `platforms/exynos2800-concept/platform.yaml` | extends `exynos2600`, id rename `s5e9965 / exynos2600 → exynos2800c` |
 | Platform | `platforms/exynos2800-concept/docs/00_hw/ip-nr-v2-exynos2800c.yaml` | new IP (placeholder values) |
-| Project | `projects/e2800-concept/project.yaml` | extends `sm-s957b`, only camera recording |
-| Scenario | `projects/e2800-concept/scenarios/uc-cam-recording-e2700/overlay.yaml` | remove `msnr`, re-bind `mtnr`, new edge |
+| Project | `projects/e2800-concept/project.yaml` | extends `sm-s947b`, only camera recording |
+| Scenario | `projects/e2800-concept/scenarios/uc-cam-recording-e2600/overlay.yaml` | remove `msnr`, re-bind `mtnr`, new edge |
 
 Everything else (SW task graph, sw_timing, sensor sizes, 75 variants) is inherited.
 The compile report's `impact` lists every variant reference that the structural change invalidated.
