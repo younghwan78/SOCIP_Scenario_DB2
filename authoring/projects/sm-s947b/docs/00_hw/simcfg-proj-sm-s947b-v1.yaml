@@ -1,0 +1,30 @@
+# 과제 합의 시뮬레이션 설정 프로파일 — 정합 iteration의 재현 단위.
+# 시뮬레이션 요청에 config_profile_ref: simcfg-proj-sm-s947b-v1 을 주면
+# 아래 run_config가 기본값이 되고, 요청이 명시한 필드는 그대로 우선한다.
+# 생성된 evidence에는 run.config_profile_ref = "simcfg-proj-sm-s947b-v1@1" 이 찍힌다.
+id: simcfg-proj-sm-s947b-v1
+schema_version: "1.0"
+kind: sim.config_profile
+project_ref: proj-sm-s947b
+soc_ref: soc-exynos2600
+version: 1
+status: approved
+approved_by: system-engineering
+description: "S26+ (SM-S947B) EVT1 정합 기준 설정 — 2026-06 실측 캠페인 합의값"
+run_config:
+  asv_group: 4
+  sw_margin: 0.15
+  bw_power_coeff: 80.0
+  vbat: 4.0
+  pmic_efficiency: 0.85
+  h_blank_margin: 0.05
+  power_model: v1-vfps
+  memory_rail: MIF
+# 벤치 physical rail -> power domain (실측 evidence의 domain 선언과 동일 규약)
+rail_domain_map:
+  B5S4_VDDMIF_AP_L: MIF
+  B3_4_5S2_VDD_CPUCL3_BIG_L: CPU
+  B3_4S3_VDD_CPUCL2_MID_HF_L: CPU
+  B2S3_VDD_CPUCL1_MID_LF1_L: CPU
+  B2S2_VDD_CPUCL1_MID_LF0_L: CPU
+  B5_6S3_VDD_CPUCL0_DSU_L: CPU

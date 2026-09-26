@@ -1,0 +1,320 @@
+# Compact variants: root entries are complete; `extends: <id>` entries are a
+# deep-merge patch over that variant (`$unset: [keys]` removes keys).
+# node sim width/height come from sizes.yaml; sw_timing from sw_timing.yaml.
+- id: cam-prev-r1-30
+  severity: light
+  design_conditions:
+    subscenario: STILL_PREVIEW
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_PHOTO
+    sensor_place: rear
+    camera_mode: single
+    fps: 30
+    hdr: SDR
+    stabilization: false
+    extend_mode: EX_NONE
+    super_night: false
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+  node_configs:
+    csispdp:
+      selected_mode: Normal
+    mtnr:
+      selected_mode: Preview
+- id: cam-prev-r1-60
+  extends: cam-prev-r1-30
+  severity: medium
+  design_conditions:
+    $unset:
+    - stabilization
+    - super_night
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_PHOTO_60
+    fps: 60
+  node_configs:
+    $unset:
+    - mtnr
+    sensor_rear:
+      selected_mode: binning_4x4
+- id: cam-prev-r1-full-res
+  extends: cam-prev-r1-60
+  severity: light
+  design_conditions:
+    $unset:
+    - camera_mode
+    - hdr
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_PHOTO_FULL
+    fps: 30
+    note: remosaic 캡처 직전 sensor full-size 프리뷰
+  node_configs:
+    $unset:
+    - csispdp
+    sensor_rear:
+      selected_mode: binning_2x2
+- id: cam-prev-r1-remosaic
+  extends: cam-prev-r1-full-res
+  design_conditions:
+    $unset:
+    - note
+    subscenario: STILL_REMOSAIC_PREVIEW
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_REMOSAIC_PHOTO
+    extend_mode: EX_SEAMLESS_TETRA
+    is_scenario: IS_SCENARIO_FULL_SIZE
+  node_configs:
+    sensor_rear:
+      selected_mode: full_remosaic
+    mtnr:
+      selected_mode: Remosaic
+- id: cam-prev-r1-ai-remosaic
+  extends: cam-prev-r1-remosaic
+  design_conditions:
+    $unset:
+    - dvfs_sn
+    - is_scenario
+    extend_mode: EX_AI_REMOSAIC
+    npu_used: true
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+  node_configs:
+    npu:
+      selected_mode: Normal
+- id: cam-prev-r1-night
+  extends: cam-prev-r1-full-res
+  $unset:
+  - node_configs
+  design_conditions:
+    $unset:
+    - dvfs_sn
+    - note
+    subscenario: STILL_SUPER_NIGHT_PREVIEW
+    extend_mode: EX_NIGHT
+    super_night: true
+- id: cam-prev-r1-night-max
+  extends: cam-prev-r1-night
+  design_conditions:
+    super_night: max
+- id: cam-prev-r1-crop-zoom
+  extends: cam-prev-r1-full-res
+  design_conditions:
+    $unset:
+    - dvfs_sn
+    - note
+    extend_mode: EX_CROP_ZOOM
+    freeform_sensor_crop: true
+  node_configs:
+    $unset:
+    - sensor_rear
+    csispdp:
+      freeform_crop: true
+- id: cam-prev-r1-dcg
+  extends: cam-prev-r1-full-res
+  $unset:
+  - node_configs
+  design_conditions:
+    $unset:
+    - dvfs_sn
+    - note
+    extend_mode: EX_DCG
+- id: cam-prev-r1-ln
+  extends: cam-prev-r1-dcg
+  design_conditions:
+    extend_mode: EX_LN
+- id: cam-prev-r1-3dhdr
+  extends: cam-prev-r1-dcg
+  design_conditions:
+    extend_mode: EX_3DHDR
+  node_configs:
+    csispdp:
+      selected_mode: VC_DT
+- id: cam-prev-r1-portrait
+  severity: light
+  design_conditions:
+    subscenario: STILL_PORTRAIT_PREVIEW
+    camera_mode: dual_sync
+    fps: 30
+    extend_mode: EX_LIVEFOCUS
+    face_detect: FACEDETECT_MODE_FULL
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear3
+    - sensor_front
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear3
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+- id: cam-prev-r1-expert-raw
+  extends: cam-prev-r1-dcg
+  design_conditions:
+    subscenario: STILL_EXPERT_RAW_PREVIEW
+    extend_mode: EX_PDAF_OFF
+- id: cam-prev-r1-pro
+  extends: cam-prev-r1-dcg
+  design_conditions:
+    $unset:
+    - extend_mode
+    subscenario: STILL_PREVIEW_PRO_MODE
+    is_scenario: IS_SCENARIO_PRO_VIDEO
+- id: cam-prev-f1-30
+  extends: cam-prev-r1-dcg
+  design_conditions:
+    $unset:
+    - extend_mode
+    dvfs_sn: IS_DVFS_SN_FRONT_SINGLE_PHOTO
+    sensor_place: front
+    camera_mode: single
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear
+    - sensor_rear2
+    - sensor_rear3
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear
+      to: csispdp
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+- id: cam-prev-f1-60
+  extends: cam-prev-f1-30
+  severity: medium
+  design_conditions:
+    $unset:
+    - camera_mode
+    dvfs_sn: IS_DVFS_SN_FRONT_SINGLE_PHOTO_60
+    fps: 60
+- id: cam-prev-f1-full-res
+  extends: cam-prev-f1-30
+  design_conditions:
+    $unset:
+    - camera_mode
+    dvfs_sn: IS_DVFS_SN_FRONT_SINGLE_PHOTO_FULL
+  node_configs:
+    sensor_front:
+      selected_mode: full_res
+- id: cam-prev-rdual-30
+  extends: cam-prev-r1-portrait
+  design_conditions:
+    $unset:
+    - extend_mode
+    - face_detect
+    subscenario: STILL_PREVIEW
+    dvfs_sn: IS_DVFS_SN_REAR_DUAL_PHOTO
+    sensor_places: rear,rear2
+- id: cam-prev-rdual-60
+  extends: cam-prev-rdual-30
+  severity: medium
+  design_conditions:
+    $unset:
+    - sensor_places
+    dvfs_sn: IS_DVFS_SN_REAR_DUAL_PHOTO_60
+    fps: 60
+- id: cam-prev-rtriple-30
+  extends: cam-prev-rdual-30
+  design_conditions:
+    dvfs_sn: IS_DVFS_SN_TRIPLE_PHOTO
+    camera_mode: triple
+    sensor_places: rear,rear2,rear3
+  routing_switch:
+    disabled_nodes:
+    - sensor_front
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m
+- id: cam-prev-rtriple-60
+  extends: cam-prev-rtriple-30
+  severity: medium
+  design_conditions:
+    $unset:
+    - sensor_places
+    dvfs_sn: IS_DVFS_SN_TRIPLE_PHOTO_60
+    fps: 60
+- id: cam-prev-pip-dual
+  severity: light
+  design_conditions:
+    subscenario: STILL_3RD_PARTY_PREVIEW
+    dvfs_sn: IS_DVFS_SN_PIP_DUAL_PHOTO
+    camera_mode: dual_async
+    fps: 30
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - npu
+    - eis
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_rear3
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+    - from: mcsc
+      to: eis
+    - from: eis
+      to: gdc_m

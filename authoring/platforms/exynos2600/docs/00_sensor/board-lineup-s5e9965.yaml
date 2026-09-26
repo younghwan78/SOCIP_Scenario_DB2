@@ -1,0 +1,580 @@
+id: board-lineup-s5e9965
+schema_version: '2.2'
+kind: sensor.board_lineup
+soc: s5e9965
+note: 'Every board configuration the S5E9965 tree ships and the sensor it wires to each position. A module DT is board-specific:
+  the same sensor can declare a different mode set on a different board, so catalogs are keyed by (board, sensor).'
+boards:
+  erd9965:
+    name: ERD9965 reference board
+    camera_dtsi_dir: exynos/device/erd/erd9965/arch/arm64/boot/dts/erd/camera
+    configs:
+    - config: s5e9965-erd9965-camera
+      source:
+        path: exynos/device/erd/erd9965/arch/arm64/boot/dts/erd/camera/s5e9965-erd9965-camera.dtsi
+        sha256: e0915c975f85a101551588df4176ad5f5137de559ab2d30967ee190f8e211eed
+      lineup:
+        rear_wide: S5KHP2
+        front: S5K3J1
+        rear_tele: IMX754
+        rear_ultrawide: IMX564
+        rear_tele2: IMX854
+      modules:
+      - module_hp2.dtsi
+      - module_imx754.dtsi
+      - module_imx854.dtsi
+      - module_imx564.dtsi
+      - module_3j1.dtsi
+      csis_channels:
+        0:
+          node: is_sensor0@27080000
+          csi_ch: 1
+          use_cphy: 1
+          scenario: SENSOR_SCENARIO_NORMAL
+          status: okay
+          phy: CPHY
+        1:
+          node: is_sensor1@27090000
+          csi_ch: 4
+          use_cphy: 0
+          scenario: SENSOR_SCENARIO_NORMAL
+          status: okay
+          phy: DPHY
+          also_declared_by: is_sensor5@270D0000
+        2:
+          node: is_sensor2@270A0000
+          csi_ch: 2
+          use_cphy: 1
+          scenario: SENSOR_SCENARIO_NORMAL
+          status: okay
+          phy: CPHY
+        3:
+          node: is_sensor3@270B0000
+          csi_ch: 3
+          use_cphy: 1
+          scenario: SENSOR_SCENARIO_NORMAL
+          status: okay
+          phy: CPHY
+        4:
+          node: is_sensor4@270C0000
+          csi_ch: 0
+          use_cphy: 1
+          scenario: SENSOR_SCENARIO_NORMAL
+          status: okay
+          phy: CPHY
+    sensors:
+      S5K3J1:
+        file: erd9965/sensor-3j1.yaml
+        module_dtsi: module_3j1.dtsi
+        position_role: front
+        mode_count: 12
+        max_mipi_link_mbps: 9572
+        used_by_config:
+        - s5e9965-erd9965-camera
+      S5KHP2:
+        file: erd9965/sensor-hp2.yaml
+        module_dtsi: module_hp2.dtsi
+        position_role: rear_wide
+        mode_count: 38
+        max_mipi_link_mbps: 25453
+        used_by_config:
+        - s5e9965-erd9965-camera
+      IMX564:
+        file: erd9965/sensor-imx564.yaml
+        module_dtsi: module_imx564.dtsi
+        position_role: rear_ultrawide
+        mode_count: 9
+        max_mipi_link_mbps: 23170
+        used_by_config:
+        - s5e9965-erd9965-camera
+      IMX754:
+        file: erd9965/sensor-imx754.yaml
+        module_dtsi: module_imx754.dtsi
+        position_role: rear_tele
+        mode_count: 9
+        max_mipi_link_mbps: 13035
+        used_by_config:
+        - s5e9965-erd9965-camera
+      IMX854:
+        file: erd9965/sensor-imx854.yaml
+        module_dtsi: module_imx854.dtsi
+        position_role: rear_tele2
+        mode_count: 1
+        max_mipi_link_mbps: 19097
+        used_by_config:
+        - s5e9965-erd9965-camera
+    total_modes: 69
+  m1s:
+    name: Galaxy S26 (m1s)
+    camera_dtsi_dir: exynos/device/erd/erd9965/arch/arm64/boot/dts/samsung/m1s/camera
+    configs:
+    - config: s5e9965.m1s_camera
+      source:
+        path: exynos/device/erd/erd9965/arch/arm64/boot/dts/samsung/m1s/camera/s5e9965.m1s_camera.dtsi
+        sha256: 0b476dd1e6710fcb06cf40f606d93afef9e58d2019d15860b52811ee4102da25
+      lineup:
+        rear_wide: S5KGN3
+        front: IMX874
+        rear_tele: S5K3K1
+        rear_ultrawide: IMX564
+      modules:
+      - module_gn3.dtsi
+      - module_3k1.dtsi
+      - module_imx564_ff.dtsi
+      - module_imx874.dtsi
+      csis_channels:
+        0:
+          node: is_sensor0@27080000
+          csi_ch: 1
+          use_cphy: 1
+          scramble: 0
+          scenario: SENSOR_SCENARIO_NORMAL
+          status: okay
+          phy: CPHY
+        1:
+          node: is_sensor1@27090000
+          csi_ch: 0
+          use_cphy: 0
+          scramble: 0
+          scenario: SENSOR_SCENARIO_NORMAL
+          status: okay
+          phy: DPHY
+        2:
+          node: is_sensor2@270A0000
+          csi_ch: 2
+          use_cphy: 0
+          scenario: SENSOR_SCENARIO_NORMAL
+          status: okay
+          phy: DPHY
+        3:
+          node: is_sensor3@270B0000
+          csi_ch: 4
+          scenario: SENSOR_SCENARIO_NORMAL
+          status: okay
+        4:
+          node: is_sensor4@270C0000
+          csi_ch: 3
+          use_cphy: 1
+          scenario: SENSOR_SCENARIO_NORMAL
+          status: okay
+          phy: CPHY
+        5:
+          node: is_sensor5@270D0000
+          csi_ch: 5
+          scenario: SENSOR_SCENARIO_NORMAL
+          status: disabled
+    - config: s5e9965.m1s_camera_00
+      source:
+        path: exynos/device/erd/erd9965/arch/arm64/boot/dts/samsung/m1s/camera/s5e9965.m1s_camera_00.dtsi
+        sha256: cd7433c61a1bf75870e94a90013a113ecb8ff40f81cbb9944a3699e386bc5fda
+      lineup:
+        rear_wide: S5KGN3
+        front:
+        - S5K3LU
+        - IMX874
+        rear_tele: S5K3K1
+        rear_ultrawide: IMX564
+      modules:
+      - module_gn3.dtsi
+      - module_3k1.dtsi
+      - module_imx564_ff.dtsi
+      - module_3lu.dtsi
+      csis_channels:
+        0:
+          node: is_sensor0@27080000
+          csi_ch: 1
+          use_cphy: 1
+          scramble: 1
+          scenario: SENSOR_SCENARIO_NORMAL
+          status: okay
+          phy: CPHY
+        1:
+          node: is_sensor1@27090000
+          csi_ch: 0
+          use_cphy: 0
+          scramble: 0
+          scenario: SENSOR_SCENARIO_NORMAL
+          status: okay
+          phy: DPHY
+        2:
+          node: is_sensor2@270A0000
+          csi_ch: 2
+          use_cphy: 0
+          scenario: SENSOR_SCENARIO_NORMAL
+          status: okay
+          phy: DPHY
+        3:
+          node: is_sensor3@270B0000
+          csi_ch: 4
+          scenario: SENSOR_SCENARIO_NORMAL
+          status: okay
+        4:
+          node: is_sensor4@270C0000
+          csi_ch: 3
+          use_cphy: 1
+          scenario: SENSOR_SCENARIO_NORMAL
+          status: okay
+          phy: CPHY
+        5:
+          node: is_sensor5@270D0000
+          csi_ch: 5
+          scenario: SENSOR_SCENARIO_NORMAL
+          status: disabled
+    - config: s5e9965.m1s_camera_09
+      source:
+        path: exynos/device/erd/erd9965/arch/arm64/boot/dts/samsung/m1s/camera/s5e9965.m1s_camera_09.dtsi
+        sha256: d67d291e7d51cc22d8d8456135d0e75c3c33697ad22112b724afa65dc39612b3
+      lineup:
+        rear_wide: S5KGNG
+        front: IMX874
+        rear_tele: S5K3LD
+        rear_ultrawide: S5KJN3
+      modules:
+      - module_gng.dtsi
+      - module_3ld.dtsi
+      - module_jn3.dtsi
+      - module_imx874.dtsi
+      csis_channels:
+        0:
+          node: is_sensor0@27080000
+          csi_ch: 1
+          use_cphy: 1
+          scramble: 0
+          scenario: SENSOR_SCENARIO_NORMAL
+          status: okay
+          phy: CPHY
+        1:
+          node: is_sensor1@27090000
+          csi_ch: 0
+          use_cphy: 0
+          scramble: 0
+          scenario: SENSOR_SCENARIO_NORMAL
+          status: okay
+          phy: DPHY
+        2:
+          node: is_sensor2@270A0000
+          csi_ch: 2
+          use_cphy: 0
+          scenario: SENSOR_SCENARIO_NORMAL
+          status: okay
+          phy: DPHY
+        3:
+          node: is_sensor3@270B0000
+          csi_ch: 4
+          scenario: SENSOR_SCENARIO_NORMAL
+          status: okay
+        4:
+          node: is_sensor4@270C0000
+          csi_ch: 3
+          use_cphy: 1
+          scenario: SENSOR_SCENARIO_NORMAL
+          status: okay
+          phy: CPHY
+        5:
+          node: is_sensor5@270D0000
+          csi_ch: 5
+          scenario: SENSOR_SCENARIO_NORMAL
+          status: disabled
+    - config: s5e9965.m1s_camera_17
+      source:
+        path: exynos/device/erd/erd9965/arch/arm64/boot/dts/samsung/m1s/camera/s5e9965.m1s_camera_17.dtsi
+        sha256: 2f065b56be55569caede95152b66dd71d8431adeab59ac7f6ca98314cf1cfc55
+      lineup:
+        rear_wide: S5KGNG
+        front: IMX874
+        rear_tele: S5K3LD
+        rear_ultrawide: IMX564
+      modules:
+      - module_gng.dtsi
+      - module_3ld.dtsi
+      - module_imx564_ff.dtsi
+      - module_imx874.dtsi
+      csis_channels:
+        0:
+          node: is_sensor0@27080000
+          csi_ch: 1
+          use_cphy: 1
+          scramble: 0
+          scenario: SENSOR_SCENARIO_NORMAL
+          status: okay
+          phy: CPHY
+        1:
+          node: is_sensor1@27090000
+          csi_ch: 0
+          use_cphy: 0
+          scramble: 0
+          scenario: SENSOR_SCENARIO_NORMAL
+          status: okay
+          phy: DPHY
+        2:
+          node: is_sensor2@270A0000
+          csi_ch: 2
+          use_cphy: 0
+          scenario: SENSOR_SCENARIO_NORMAL
+          status: okay
+          phy: DPHY
+        3:
+          node: is_sensor3@270B0000
+          csi_ch: 4
+          scenario: SENSOR_SCENARIO_NORMAL
+          status: okay
+        4:
+          node: is_sensor4@270C0000
+          csi_ch: 3
+          use_cphy: 1
+          scenario: SENSOR_SCENARIO_NORMAL
+          status: okay
+          phy: CPHY
+        5:
+          node: is_sensor5@270D0000
+          csi_ch: 5
+          scenario: SENSOR_SCENARIO_NORMAL
+          status: disabled
+    sensors:
+      S5K3K1:
+        file: m1s/sensor-3k1.yaml
+        module_dtsi: module_3k1.dtsi
+        position_role: rear_tele
+        mode_count: 11
+        max_mipi_link_mbps: 9212
+        used_by_config:
+        - s5e9965.m1s_camera
+        - s5e9965.m1s_camera_00
+      S5K3LD:
+        file: m1s/sensor-3ld.yaml
+        module_dtsi: module_3ld.dtsi
+        position_role: rear_tele
+        mode_count: 17
+        max_mipi_link_mbps: 12336
+        used_by_config:
+        - s5e9965.m1s_camera_09
+        - s5e9965.m1s_camera_17
+      S5K3LU:
+        file: m1s/sensor-3lu.yaml
+        module_dtsi: module_3lu.dtsi
+        position_role: front
+        mode_count: 18
+        max_mipi_link_mbps: 10344
+        used_by_config:
+        - s5e9965.m1s_camera_00
+      S5KGN3:
+        file: m1s/sensor-gn3.yaml
+        module_dtsi: module_gn3.dtsi
+        position_role: rear_wide
+        mode_count: 40
+        max_mipi_link_mbps: 22731
+        used_by_config:
+        - s5e9965.m1s_camera
+        - s5e9965.m1s_camera_00
+      S5KGNG:
+        file: m1s/sensor-gng.yaml
+        module_dtsi: module_gng.dtsi
+        position_role: rear_wide
+        mode_count: 30
+        max_mipi_link_mbps: 27380
+        used_by_config:
+        - s5e9965.m1s_camera_09
+        - s5e9965.m1s_camera_17
+      IMX564:
+        file: m1s/sensor-imx564-ff.yaml
+        module_dtsi: module_imx564_ff.dtsi
+        position_role: rear_ultrawide
+        mode_count: 21
+        max_mipi_link_mbps: 23170
+        used_by_config:
+        - s5e9965.m1s_camera
+        - s5e9965.m1s_camera_00
+        - s5e9965.m1s_camera_17
+      IMX874:
+        file: m1s/sensor-imx874.yaml
+        module_dtsi: module_imx874.dtsi
+        position_role: front
+        mode_count: 28
+        max_mipi_link_mbps: 12124
+        used_by_config:
+        - s5e9965.m1s_camera
+        - s5e9965.m1s_camera_09
+        - s5e9965.m1s_camera_17
+      IMX955:
+        file: m1s/sensor-imx955.yaml
+        module_dtsi: module_imx955.dtsi
+        position_role: rear_wide
+        mode_count: 14
+        max_mipi_link_mbps: 26564
+        used_by_config: []
+        orphan: module DT exists but no board config includes it
+      S5KJN3:
+        file: m1s/sensor-jn3.yaml
+        module_dtsi: module_jn3.dtsi
+        position_role: rear_ultrawide
+        mode_count: 30
+        max_mipi_link_mbps: 23780
+        used_by_config:
+        - s5e9965.m1s_camera_09
+    total_modes: 209
+    orphan_modules:
+    - module_imx955.dtsi
+  m2s:
+    name: Galaxy S26+ (m2s), SM-S947B
+    camera_dtsi_dir: exynos/device/erd/erd9965/arch/arm64/boot/dts/samsung/m2s/camera
+    configs:
+    - config: s5e9965.m2s_camera
+      source:
+        path: exynos/device/erd/erd9965/arch/arm64/boot/dts/samsung/m2s/camera/s5e9965.m2s_camera.dtsi
+        sha256: 5dafc9c73942e9ad4f9ed06b32ad2b81f7b055aa69fd2ba87ac9244eabfaa023
+      lineup:
+        rear_wide: S5KGNG
+        front: IMX874
+        rear_tele: S5K3LD
+        rear_ultrawide: IMX564
+      modules:
+      - module_gng.dtsi
+      - module_3ld.dtsi
+      - module_imx564_ff.dtsi
+      - module_imx874.dtsi
+      csis_channels:
+        0:
+          node: is_sensor0@27080000
+          csi_ch: 1
+          use_cphy: 1
+          scramble: 0
+          scenario: SENSOR_SCENARIO_NORMAL
+          status: okay
+          phy: CPHY
+        1:
+          node: is_sensor1@27090000
+          csi_ch: 0
+          use_cphy: 0
+          scramble: 0
+          scenario: SENSOR_SCENARIO_NORMAL
+          status: okay
+          phy: DPHY
+        2:
+          node: is_sensor2@270A0000
+          csi_ch: 2
+          use_cphy: 0
+          scenario: SENSOR_SCENARIO_NORMAL
+          status: okay
+          phy: DPHY
+        3:
+          node: is_sensor3@270B0000
+          csi_ch: 4
+          scenario: SENSOR_SCENARIO_NORMAL
+          status: okay
+        4:
+          node: is_sensor4@270C0000
+          csi_ch: 3
+          use_cphy: 1
+          scenario: SENSOR_SCENARIO_NORMAL
+          status: okay
+          phy: CPHY
+        5:
+          node: is_sensor5@270D0000
+          csi_ch: 5
+          scenario: SENSOR_SCENARIO_NORMAL
+          status: disabled
+    - config: s5e9965.m2s_camera_02
+      source:
+        path: exynos/device/erd/erd9965/arch/arm64/boot/dts/samsung/m2s/camera/s5e9965.m2s_camera_02.dtsi
+        sha256: 1510cad3777b9fb19d0b580b21238ac629dbd95d63a0826b83c7b49087348cea
+      lineup:
+        rear_wide: S5KHP2
+        front: IMX874
+        rear_ultrawide: S5KJN3
+      modules:
+      - module_hp2.dtsi
+      - module_jn3.dtsi
+      - module_imx874.dtsi
+      csis_channels:
+        0:
+          node: is_sensor0@27080000
+          csi_ch: 1
+          use_cphy: 1
+          scramble: 0
+          scenario: SENSOR_SCENARIO_NORMAL
+          status: okay
+          phy: CPHY
+        1:
+          node: is_sensor1@27090000
+          csi_ch: 0
+          use_cphy: 0
+          scramble: 0
+          scenario: SENSOR_SCENARIO_NORMAL
+          status: okay
+          phy: DPHY
+        2:
+          node: is_sensor2@270A0000
+          csi_ch: 2
+          scenario: SENSOR_SCENARIO_NORMAL
+          status: okay
+        3:
+          node: is_sensor3@270B0000
+          csi_ch: 4
+          scenario: SENSOR_SCENARIO_NORMAL
+          status: okay
+        4:
+          node: is_sensor4@270C0000
+          csi_ch: 3
+          use_cphy: 1
+          scenario: SENSOR_SCENARIO_NORMAL
+          status: okay
+          phy: CPHY
+        5:
+          node: is_sensor5@270D0000
+          csi_ch: 5
+          scenario: SENSOR_SCENARIO_NORMAL
+          status: disabled
+    sensors:
+      S5K3LD:
+        file: m2s/sensor-3ld.yaml
+        module_dtsi: module_3ld.dtsi
+        position_role: rear_tele
+        mode_count: 17
+        max_mipi_link_mbps: 12336
+        used_by_config:
+        - s5e9965.m2s_camera
+      S5KGNG:
+        file: m2s/sensor-gng.yaml
+        module_dtsi: module_gng.dtsi
+        position_role: rear_wide
+        mode_count: 30
+        max_mipi_link_mbps: 27380
+        used_by_config:
+        - s5e9965.m2s_camera
+      S5KHP2:
+        file: m2s/sensor-hp2.yaml
+        module_dtsi: module_hp2.dtsi
+        position_role: rear_wide
+        mode_count: 45
+        max_mipi_link_mbps: 25453
+        used_by_config:
+        - s5e9965.m2s_camera_02
+      IMX564:
+        file: m2s/sensor-imx564-ff.yaml
+        module_dtsi: module_imx564_ff.dtsi
+        position_role: rear_ultrawide
+        mode_count: 21
+        max_mipi_link_mbps: 23170
+        used_by_config:
+        - s5e9965.m2s_camera
+      IMX874:
+        file: m2s/sensor-imx874.yaml
+        module_dtsi: module_imx874.dtsi
+        position_role: front
+        mode_count: 28
+        max_mipi_link_mbps: 12124
+        used_by_config:
+        - s5e9965.m2s_camera
+        - s5e9965.m2s_camera_02
+      S5KJN3:
+        file: m2s/sensor-jn3.yaml
+        module_dtsi: module_jn3.dtsi
+        position_role: rear_ultrawide
+        mode_count: 30
+        max_mipi_link_mbps: 23780
+        used_by_config:
+        - s5e9965.m2s_camera_02
+    total_modes: 171
+provenance:
+  review: S5E9965 board camera DT sensor catalog 2026-09-17
+  provenance_status: kernel_declared

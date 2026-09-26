@@ -237,7 +237,7 @@ with st.sidebar:
         project_id = _pick("Project / Board", [str(i["id"]) for i in projects if i.get("id")], ctx["project_id"], "compare_project",
                            lambda v: compact_project_label(next((i for i in projects if i.get("id") == v), {"id": v})))
         scenarios = _scenarios(api_base, project_id)
-        scenario_id = _pick("Scenario", [str(i["id"]) for i in scenarios if i.get("id")], ctx["scenario_id"] or "uc-camera-recording",
+        scenario_id = _pick("Scenario", [str(i["id"]) for i in scenarios if i.get("id")], ctx["scenario_id"] or "uc-cam-recording-e2600",
                             "compare_scenario",
                             lambda v: compact_scenario_label(next((i for i in scenarios if i.get("id") == v), {"id": v})))
         variants = _variants(api_base, scenario_id) if scenario_id else []

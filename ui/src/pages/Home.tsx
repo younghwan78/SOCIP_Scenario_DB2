@@ -9,8 +9,7 @@ import { DOMAIN_LABEL, domainFor, type Domain } from '../lib/tunnel'
 import { PipelineTunnel } from '../components/PipelineTunnel'
 
 const quiet = <T,>(p: Promise<T>): Promise<T | null> => p.catch(() => null)
-const socLabel = (s?: string | null) => (s ?? '').replace(/^soc-/, '').replace(/^exynos/i, 'Exynos') || 'SoC 미정'
-const projLabel = (p: string) => p.replace(/^proj-/, '').toUpperCase()
+import { projLabel, socLabel } from '../lib/projects'
 
 export function HomePage({ ctx }: { ctx: Ctx }) {
   const item = ctx.catalog.find((c) => c.scenario_id === ctx.scenario)
@@ -27,7 +26,7 @@ export function HomePage({ ctx }: { ctx: Ctx }) {
   // project (SoC 과제) × scenario type → scenario / variant counts
   const matrix = useMemo(() => {
     const projects = new Map<string, { soc: string; cells: Map<string, { sc: number; v: number }>; sc: number; v: number }>()
-    for (const c of ctx.catalog) {
+    for (const c of ctx.allCatalog) {
       const p = projects.get(c.project_id) ?? { soc: socLabel(c.soc_ref), cells: new Map(), sc: 0, v: 0 }
       const cat = primaryCategory(c.category)
       const cell = p.cells.get(cat) ?? { sc: 0, v: 0 }
@@ -38,9 +37,9 @@ export function HomePage({ ctx }: { ctx: Ctx }) {
     const cats = (CATEGORY_ORDER as readonly string[]).filter((k) => [...projects.values()].some((p) => p.cells.has(k)))
     const extra = [...new Set([...projects.values()].flatMap((p) => [...p.cells.keys()]))].filter((k) => !cats.includes(k))
     return { projects: [...projects.entries()], cats: [...cats, ...extra] }
-  }, [ctx.catalog])
+  }, [ctx.allCatalog])
 
-  const variants = ctx.catalog.reduce((s, c) => s + c.variant_count, 0)
+  const variants = ctx.allCatalog.reduce((s, c) => s + c.variant_count, 0)
   const sum = (k: 'simulation' | 'measurement' | 'synthetic' | 'current_prediction') => Object.values(cov.data ?? {}).reduce((s, r) => s + (r[k] ?? 0), 0)
   const run = runs.data?.[0]
   const report = reports.data?.[0]
@@ -69,14 +68,15 @@ export function HomePage({ ctx }: { ctx: Ctx }) {
 
       <section className="home-dock" aria-label="현황">
         <div className="hd-block hd-wide">
-          <h3>과제 × Scenario type <span>scenario · variant</span></h3>
+          <h3>과제 × Scenario type <span>scenario · variant · 과제명을 눌러 선택</span></h3>
           <table className="hd-matrix">
             <thead><tr><th>SoC · 과제</th>
               {matrix.cats.map((c) => <th key={c} style={{ '--cat': CATEGORY_COLOR[c] ?? CATEGORY_COLOR.other } as CSSProperties}>
-                <a href={`#/explorer?type=${c}`}><i />{CATEGORY_LABEL[c] ?? c}</a></th>)}
+                <a href={`#/explorer?type=${c}&project=${encodeURIComponent(ctx.project)}`}><i />{CATEGORY_LABEL[c] ?? c}</a></th>)}
               <th>합계</th></tr></thead>
             <tbody>{matrix.projects.map(([pid, p]) => (
-              <tr key={pid}><td><b>{p.soc}</b> · {projLabel(pid)}</td>
+              <tr key={pid} className={`proj-row ${pid === ctx.project ? 'on' : ''}`}>
+                <td><button type="button" className="proj-open" onClick={() => ctx.setProject(pid)} title="이 과제로 Scenario 열기"><b>{p.soc}</b> · {projLabel(pid)}</button></td>
                 {matrix.cats.map((c) => { const cell = p.cells.get(c); return <td key={c} className="n">{cell ? <>{cell.sc} · <span>{cell.v}</span></> : '—'}</td> })}
                 <td className="n"><b>{p.sc} · {p.v}</b></td></tr>))}
             </tbody>

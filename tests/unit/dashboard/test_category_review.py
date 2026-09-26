@@ -7,7 +7,7 @@ import yaml
 from streamlit.testing.v1 import AppTest
 
 from dashboard.components.category_review import (
-    CONDITION_HELP, SCENARIO_PURPOSES, condition_rows, guide_keys, scenario_purpose,
+    CONDITION_HELP, SCENARIO_PURPOSES, canonical_usecase, condition_rows, guide_keys, scenario_purpose,
 )
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -30,12 +30,12 @@ def test_all_current_non_camera_fixtures_have_guidance_and_condition_help():
         category = doc["metadata"]["category"]
         if "camera" in category:
             continue
-        seen.add(doc["id"])
+        seen.add(canonical_usecase(doc["id"]))
         for variant in doc["variants"]:
             row = {**item(), "scenario_id": doc["id"], "category": category,
                    "design_conditions": variant.get("design_conditions") or {}}
             assert guide_keys(row), path
-            assert scenario_purpose(row) == SCENARIO_PURPOSES[doc["id"]]
+            assert scenario_purpose(row) == SCENARIO_PURPOSES[canonical_usecase(doc["id"])]
             assert set(row["design_conditions"]) <= CONDITION_HELP.keys(), path
     assert seen == SCENARIO_PURPOSES.keys()
 

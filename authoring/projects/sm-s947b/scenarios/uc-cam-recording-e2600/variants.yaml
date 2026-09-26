@@ -1,0 +1,2047 @@
+# Compact variants: root entries are complete; `extends: <id>` entries are a
+# deep-merge patch over that variant (`$unset: [keys]` removes keys).
+# node sim width/height come from sizes.yaml; sw_timing from sw_timing.yaml.
+- id: cam-rec-r1-fhd30-sdr
+  severity: light
+  design_conditions:
+    subscenario: FHD_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_FHD30
+    sensor_place: rear
+    resolution: FHD
+    fps: 30
+    hdr: SDR
+    stabilization: false
+    codec_mfc: HEVC_ENC
+    audio: true
+    dpu_layer_count: 3
+    is_version: 15
+    sw_timing_case: mean
+    sw_timing_source: assumed
+    sensor_board: m2s-GNG
+    mcsc_dma_channels: 1
+    sensor_input_fps: 30.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - vps_dof
+    - vps_seg
+    - eis
+    - gdc_m
+    - gdc_o
+  node_configs:
+    mfc_enc:
+      selected_mode: Normal
+      codec: HEVC_ENC
+      sim:
+        inherit_shape: true
+    yuvsc:
+      operations:
+        scale: false
+      bypass_downscale: true
+      sim:
+        inherit_shape: true
+    mcsc:
+      operations:
+        crop: true
+        scale: true
+      active_output_ports:
+      - MCSC_WDMA_W0
+      sim:
+        inherit_shape: true
+    byrp:
+      video_snapshot_enabled: false
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when video_snapshot_enabled; OTF remains connected.
+      sim:
+        inherit_shape: true
+    vps_od:
+      selected_mode: Normal
+      function: object_detection
+      sim:
+        inherit_shape: true
+    lme:
+      selected_mode: Normal
+      sim:
+        inherit_shape: true
+    sensor_rear:
+      selected_mode: cis_4sum_ln4_raw10_4080x2296_30fps_3993msps
+    csis:
+      sim:
+        inherit_shape: true
+    pdp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    mlsc:
+      sim:
+        inherit_shape: true
+    mtnr:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    gdc_m:
+      sim:
+        inherit_shape: true
+      operations:
+        crop: true
+    gdc_o:
+      sim:
+        inherit_shape: true
+      operations:
+        crop: true
+    dpu:
+      sim:
+        inherit_shape: true
+  topology_patch:
+    add_edges:
+    - from: mcsc
+      to: dpu
+      type: M2M
+      buffer: MCSC_PREVIEW
+      port_pairs:
+      - src: MCSC_WDMA_W0
+        dst: DPU_RDMA
+    - from: mcsc
+      to: mfc_enc
+      type: M2M
+      buffer: MCSC_PREVIEW
+      port_pairs:
+      - src: MCSC_WDMA_W0
+        dst: MFC_RDMA
+    remove_edges:
+    - from: mcsc
+      to: gdc_o
+  size_overrides:
+    sensor_full: 4080x2296
+    record_out: 1920x1080
+    preview_out: 1920x1080
+    pyramid_l0: 4080x2296
+    pyramid_l1: 2040x1148
+    pyramid_l2: 1020x574
+    pyramid_l3: 510x287
+    pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
+  buffer_overrides: {}
+  tags:
+  - is-v15
+  - assumed-sw-timing
+  - uncalibrated-power
+- id: cam-rec-r1-fhd30-ois
+  extends: cam-rec-r1-fhd30-sdr
+  design_conditions:
+    $unset:
+    - codec_mfc
+    - audio
+    stabilization: OIS
+  node_configs:
+    mfc_enc:
+      $unset:
+      - selected_mode
+      - codec
+- id: cam-rec-r1-fhd30-vdis
+  extends: cam-rec-r1-fhd30-ois
+  design_conditions:
+    $unset:
+    - hdr
+    is_scenario: IS_SCENARIO_SWVDIS
+    stabilization: SWVDIS
+    priority_recording: true
+    verification_scope: priority_model_assumed
+    input_ratio: '16:9'
+    record_bitrate_mbps: 30
+    bitrate_source: assumed
+    writer_model: linear_bitrate_wall_time
+    storage_model: sustained_write_assumed
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - vps_dof
+    - vps_seg
+  node_configs:
+    mfc_enc:
+      memory_io:
+      - port: MFC_WDMA_BITSTREAM
+        direction: write
+        bitrate_condition: record_bitrate_mbps
+    mpeg_writer:
+      sw_bitrate_scaling:
+        reference_bitrate_mbps: 1000
+      memory_io:
+      - port: CPU_BITSTREAM_READ
+        direction: read
+        bitrate_condition: record_bitrate_mbps
+      - port: CPU_BITSTREAM_WRITE
+        direction: write
+        bitrate_condition: record_bitrate_mbps
+      timeline_resource_id: CPU_WRITER
+      source_note: Engineering assumption approved for fixture exploration; replace with internal measurements.
+    storage_write:
+      sw_bitrate_scaling:
+        reference_bitrate_mbps: 1000
+      timeline_resource_id: STORAGE_IO
+      memory_io:
+      - port: STORAGE_BITSTREAM_READ
+        direction: read
+        bitrate_condition: record_bitrate_mbps
+      source_note: I/O completion wall time, not CPU active execution; no UFS capacity sign-off. Engineering assumption approved
+        for fixture exploration; replace with internal measurements.
+  topology_patch:
+    add_edges:
+    - from: mcsc
+      to: gdc_o
+      type: M2M
+      buffer: MCSC_PREVIEW
+      port_pairs:
+      - src: MCSC_WDMA_W0
+        dst: GDC_RDMA
+    - from: mfc_enc
+      to: mpeg_writer
+      type: control
+    - from: mpeg_writer
+      to: storage_write
+      type: control
+    add_nodes:
+    - id: mpeg_writer
+      ip_ref: ip-cpu-s5e9965
+      role: sw_task
+      instance_index: 0
+    - id: storage_write
+      ip_ref: ip-cpu-s5e9965
+      role: sw_task
+      instance_index: 0
+- id: cam-rec-r1-fhd30-supersteady
+  extends: cam-rec-r1-fhd30-ois
+  design_conditions:
+    $unset:
+    - hdr
+    subscenario: SUPER_STEADY_FHD_30FPS_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_FHD30_SUPERSTEADY
+    stabilization: SuperSteady
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - vps_dof
+    - vps_seg
+  topology_patch:
+    add_edges:
+    - from: mcsc
+      to: gdc_o
+      type: M2M
+      buffer: MCSC_PREVIEW
+      port_pairs:
+      - src: MCSC_WDMA_W0
+        dst: GDC_RDMA
+- id: cam-rec-r1-fhd30-recursive
+  extends: cam-rec-r1-fhd30-ois
+  design_conditions:
+    $unset:
+    - hdr
+    - stabilization
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_FHD30_RECURSIVE
+    note: preview→recording 전환 직후 DVFS tick 유예 구간
+- id: cam-rec-r1-fhd30-hdr10
+  extends: cam-rec-r1-fhd30-ois
+  severity: medium
+  design_conditions:
+    subscenario: HDR10_FHD_VIDEO
+    hdr: HDR10
+    stabilization: false
+  buffer_overrides:
+    MCSC_PREVIEW:
+      bitdepth: 10
+      format: YUV420
+    MCSC_VIDEO:
+      bitdepth: 10
+      format: YUV420
+    GDC_PREVIEW:
+      bitdepth: 10
+      format: YUV420
+    GDC_VIDEO:
+      bitdepth: 10
+      format: YUV420
+- id: cam-rec-r1-fhd30-hdr10-supersteady
+  extends: cam-rec-r1-fhd30-supersteady
+  severity: medium
+  design_conditions:
+    subscenario: SUPER_STEADY_HDR10_FHD_VIDEO
+    hdr: HDR10
+  buffer_overrides:
+    MCSC_PREVIEW:
+      bitdepth: 10
+      format: YUV420
+    MCSC_VIDEO:
+      bitdepth: 10
+      format: YUV420
+    GDC_PREVIEW:
+      bitdepth: 10
+      format: YUV420
+    GDC_VIDEO:
+      bitdepth: 10
+      format: YUV420
+- id: cam-rec-r1-fhd60-sdr
+  extends: cam-rec-r1-fhd30-sdr
+  severity: medium
+  design_conditions:
+    $unset:
+    - stabilization
+    - audio
+    subscenario: FHD_60FPS_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_FHD60
+    fps: 60
+    sensor_input_fps: 60.0
+  node_configs:
+    sensor_rear:
+      selected_mode: cis_4sum_ln2_raw10_4080x2296_60fps_3993msps
+- id: cam-rec-r1-fhd60-supersteady
+  extends: cam-rec-r1-fhd30-vdis
+  severity: medium
+  design_conditions:
+    $unset:
+    - is_scenario
+    subscenario: FHD_60FPS_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_FHD60_SUPERSTEADY
+    fps: 60
+    stabilization: SuperSteady
+    sensor_input_fps: 60.0
+  node_configs:
+    sensor_rear:
+      selected_mode: cis_4sum_ln2_raw10_4080x2296_60fps_3993msps
+- id: cam-rec-r1-fhd60-hdr10
+  extends: cam-rec-r1-fhd30-hdr10
+  design_conditions:
+    $unset:
+    - stabilization
+    subscenario: HDR10_FHD_60FPS_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_FHD60
+    fps: 60
+    sensor_input_fps: 60.0
+  node_configs:
+    sensor_rear:
+      selected_mode: cis_4sum_ln2_raw10_4080x2296_60fps_3993msps
+- id: cam-rec-r1-fhd120
+  extends: cam-rec-r1-fhd60-supersteady
+  severity: heavy
+  design_conditions:
+    $unset:
+    - stabilization
+    subscenario: HIGH_SPEED_FHD_120_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_FHD120
+    fps: 120
+    sensor_mode: high_speed
+    sensor_input_fps: 120.0
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - vps_dof
+    - vps_seg
+    - eis
+    - gdc_m
+    - gdc_o
+  node_configs:
+    sensor_rear:
+      selected_mode: user_raw10_2040x1148_120fps
+      source_note: User specifies 2040x1148 RAW10 at 120fps. Line timing borrowed from 240fps CIS mode; doubled frame length
+        is an assumption, not a verified setfile.
+  topology_patch:
+    add_edges:
+    - from: mcsc
+      to: dpu
+      type: M2M
+      buffer: MCSC_PREVIEW
+      port_pairs:
+      - src: MCSC_WDMA_W0
+        dst: DPU_RDMA
+    - from: mcsc
+      to: mfc_enc
+      type: M2M
+      buffer: MCSC_PREVIEW
+      port_pairs:
+      - src: MCSC_WDMA_W0
+        dst: MFC_RDMA
+    - from: mfc_enc
+      to: mpeg_writer
+      type: control
+    - from: mpeg_writer
+      to: storage_write
+      type: control
+  size_overrides:
+    sensor_full: 2040x1148
+    pyramid_l0: 2040x1148
+    pyramid_l1: 1020x574
+    pyramid_l2: 510x287
+    pyramid_l3: 255x144
+    pyramid_l4: 128x72
+    mlsc_out: 2040x1148
+- id: cam-rec-r1-fhd240
+  extends: cam-rec-r1-fhd120
+  severity: critical
+  design_conditions:
+    subscenario: HIGH_SPEED_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_FHD240
+    fps: 240
+    sensor_cadence_policy: User-defined 120fps sensor input for FHD240 scenario; 240fps output cadence requires separate runtime
+      confirmation.
+- id: cam-rec-r1-fhd480
+  extends: cam-rec-r1-fhd30-recursive
+  severity: critical
+  design_conditions:
+    $unset:
+    - note
+    - sensor_input_fps
+    - sensor_bitwidth
+    - sensor_input_source
+    subscenario: HIGH_SPEED_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_FHD480
+    fps: 480
+    extend_mode: EX_DUALFPS_480
+    sensor_mode: high_speed
+    dpu_layer_count: 1
+  node_configs:
+    sensor_rear:
+      selected_mode: mode45
+  size_overrides:
+    sensor_full: 2040x1148
+    pyramid_l0: 2040x1148
+    pyramid_l1: 1020x574
+    pyramid_l2: 510x287
+    pyramid_l3: 255x144
+    pyramid_l4: 128x72
+    mlsc_out: 2040x1148
+- id: cam-rec-r1-fhd960-ssm
+  extends: cam-rec-r1-fhd480
+  design_conditions:
+    $unset:
+    - sensor_mode
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_SSM
+    fps: 960
+    extend_mode: EX_DUALFPS_960
+    is_scenario: IS_SCENARIO_HIGH_SPEED_DUALFPS
+    sensor_support: unverified_requested_size_or_fps
+  node_configs:
+    sensor_rear:
+      selected_mode: mode0
+  tags:
+  - requires-sensor-verification
+  - is-v15
+  - assumed-sw-timing
+  - uncalibrated-power
+  size_overrides:
+    sensor_full: 4080x3060
+    pyramid_l0: 4080x3060
+    pyramid_l1: 2040x1530
+    pyramid_l2: 1020x765
+    pyramid_l3: 510x383
+    pyramid_l4: 255x192
+    mlsc_out: 4080x3060
+- id: cam-rec-r1-qhd30-supersteady
+  extends: cam-rec-r1-fhd30-supersteady
+  design_conditions:
+    $unset:
+    - sensor_input_fps
+    - sensor_bitwidth
+    - sensor_input_source
+    subscenario: SUPER_STEADY_QHD_30FPS_VIDEO
+    resolution: QHD
+    mcsc_dma_channels: 2
+  node_configs:
+    mcsc:
+      active_output_ports:
+      - MCSC_WDMA_W0
+      - MCSC_WDMA_W1
+    sensor_rear:
+      selected_mode: cis_4sum_idcg_ln4_raw12_4080x2296_30fps_3993msps
+  topology_patch:
+    $unset:
+    - add_edges
+    - remove_edges
+  size_overrides:
+    record_out: 2560x1440
+- id: cam-rec-r1-qhd30-hdr10-supersteady
+  extends: cam-rec-r1-qhd30-supersteady
+  severity: medium
+  design_conditions:
+    $unset:
+    - dvfs_sn
+    subscenario: SUPER_STEADY_HDR10_QHD_VIDEO
+    hdr: HDR10
+  buffer_overrides:
+    MCSC_PREVIEW:
+      bitdepth: 10
+      format: YUV420
+    MCSC_VIDEO:
+      bitdepth: 10
+      format: YUV420
+    GDC_PREVIEW:
+      bitdepth: 10
+      format: YUV420
+    GDC_VIDEO:
+      bitdepth: 10
+      format: YUV420
+- id: cam-rec-r1-uhd30-sdr
+  extends: cam-rec-r1-fhd30-sdr
+  severity: heavy
+  design_conditions:
+    $unset:
+    - stabilization
+    - audio
+    subscenario: UHD_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_UHD30
+    resolution: UHD
+    mcsc_dma_channels: 2
+  node_configs:
+    mcsc:
+      active_output_ports:
+      - MCSC_WDMA_W0
+      - MCSC_WDMA_W1
+  topology_patch:
+    $unset:
+    - remove_edges
+    add_edges:
+    - from: mcsc
+      to: dpu
+      type: M2M
+      buffer: MCSC_PREVIEW
+      port_pairs:
+      - src: MCSC_WDMA_W0
+        dst: DPU_RDMA
+    - from: mcsc
+      to: mfc_enc
+      type: M2M
+      buffer: MCSC_VIDEO
+      port_pairs:
+      - src: MCSC_WDMA_W1
+        dst: MFC_RDMA
+  size_overrides:
+    record_out: 3840x2160
+- id: cam-rec-r1-uhd30-supersteady
+  extends: cam-rec-r1-fhd30-supersteady
+  severity: heavy
+  design_conditions:
+    subscenario: UHD_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_UHD30_SUPERSTEADY
+    resolution: UHD
+    mcsc_dma_channels: 2
+  node_configs:
+    mcsc:
+      active_output_ports:
+      - MCSC_WDMA_W0
+      - MCSC_WDMA_W1
+  topology_patch:
+    $unset:
+    - add_edges
+    - remove_edges
+  size_overrides:
+    record_out: 3840x2160
+- id: cam-rec-r1-uhd30-vdis
+  extends: cam-rec-r1-fhd30-vdis
+  severity: heavy
+  design_conditions:
+    subscenario: UHD_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_UHD30
+    resolution: UHD
+    mcsc_dma_channels: 2
+    record_bitrate_mbps: 80
+  topology_patch:
+    $unset:
+    - remove_edges
+    add_edges:
+    - from: mfc_enc
+      to: mpeg_writer
+      type: control
+    - from: mpeg_writer
+      to: storage_write
+      type: control
+  size_overrides:
+    record_out: 3840x2160
+  node_configs:
+    mcsc:
+      active_output_ports:
+      - MCSC_WDMA_W0
+      - MCSC_WDMA_W1
+- id: cam-rec-r1-uhd30-recursive
+  extends: cam-rec-r1-uhd30-sdr
+  design_conditions:
+    $unset:
+    - hdr
+    - codec_mfc
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_UHD30_RECURSIVE
+  node_configs:
+    mfc_enc:
+      $unset:
+      - selected_mode
+      - codec
+- id: cam-rec-r1-uhd30-hdr10
+  extends: cam-rec-r1-uhd30-recursive
+  design_conditions:
+    subscenario: HDR10_UHD_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_UHD30
+    hdr: HDR10
+  buffer_overrides:
+    MCSC_PREVIEW:
+      bitdepth: 10
+      format: YUV420
+    MCSC_VIDEO:
+      bitdepth: 10
+      format: YUV420
+    GDC_PREVIEW:
+      bitdepth: 10
+      format: YUV420
+    GDC_VIDEO:
+      bitdepth: 10
+      format: YUV420
+- id: cam-rec-r1-uhd60-sdr
+  extends: cam-rec-r1-uhd30-recursive
+  design_conditions:
+    subscenario: UHD_60FPS_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_UHD60
+    fps: 60
+    hdr: SDR
+    sensor_input_fps: 60.0
+  node_configs:
+    sensor_rear:
+      selected_mode: cis_4sum_ln2_raw10_4080x2296_60fps_3993msps
+- id: cam-rec-r1-uhd60-supersteady
+  extends: cam-rec-r1-uhd30-vdis
+  design_conditions:
+    $unset:
+    - is_scenario
+    subscenario: UHD_60FPS_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_UHD60_SUPERSTEADY
+    fps: 60
+    stabilization: SuperSteady
+    sensor_input_fps: 60.0
+  node_configs:
+    sensor_rear:
+      selected_mode: cis_4sum_ln2_raw10_4080x2296_60fps_3993msps
+- id: cam-rec-r1-uhd60-psm
+  extends: cam-rec-r1-uhd60-sdr
+  design_conditions:
+    $unset:
+    - hdr
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_UHD60_PSM
+    power_saving_mode: true
+  node_configs:
+    mfc_enc:
+      selected_mode: LowPower
+- id: cam-rec-r1-uhd60-hdr10
+  extends: cam-rec-r1-uhd30-hdr10
+  design_conditions:
+    subscenario: HDR10_UHD_60FPS_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_UHD60
+    fps: 60
+    sensor_input_fps: 60.0
+  node_configs:
+    sensor_rear:
+      selected_mode: cis_4sum_ln2_raw10_4080x2296_60fps_3993msps
+- id: cam-rec-r1-uhd120
+  extends: cam-rec-r1-uhd60-supersteady
+  design_conditions:
+    $unset:
+    - stabilization
+    subscenario: HIGH_SPEED_UHD_120_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_UHD120
+    fps: 120
+    sensor_mode: high_speed
+    sensor_input_fps: 120.0
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - vps_dof
+    - vps_seg
+    - eis
+    - gdc_m
+    - gdc_o
+  node_configs:
+    sensor_rear:
+      selected_mode: cis_4sum_ln1_raw10_4080x2296_120fps_3993msps
+  topology_patch:
+    add_edges:
+    - from: mcsc
+      to: dpu
+      type: M2M
+      buffer: MCSC_PREVIEW
+      port_pairs:
+      - src: MCSC_WDMA_W0
+        dst: DPU_RDMA
+    - from: mcsc
+      to: mfc_enc
+      type: M2M
+      buffer: MCSC_VIDEO
+      port_pairs:
+      - src: MCSC_WDMA_W1
+        dst: MFC_RDMA
+    - from: mfc_enc
+      to: mpeg_writer
+      type: control
+    - from: mpeg_writer
+      to: storage_write
+      type: control
+- id: cam-rec-r1-8k24-sdr
+  extends: cam-rec-r1-uhd30-sdr
+  severity: critical
+  design_conditions:
+    $unset:
+    - sensor_input_fps
+    - sensor_bitwidth
+    - sensor_input_source
+    subscenario: 8K_30FPS_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_8K24
+    resolution: 8K
+    fps: 24
+    dpu_layer_count: 2
+  node_configs:
+    sensor_rear:
+      selected_mode: mode28
+  size_overrides:
+    sensor_full: 8000x4500
+    record_out: 7680x4320
+    pyramid_l0: 8000x4500
+    pyramid_l1: 4000x2250
+    pyramid_l2: 2000x1125
+    pyramid_l3: 1000x563
+    pyramid_l4: 500x282
+    mlsc_out: 8000x4500
+- id: cam-rec-r1-8k24-hf
+  extends: cam-rec-r1-8k24-sdr
+  design_conditions:
+    $unset:
+    - hdr
+    - codec_mfc
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_8K24_HF
+    isp_features: HF
+  node_configs:
+    mfc_enc:
+      $unset:
+      - selected_mode
+      - codec
+- id: cam-rec-r1-8k24-psm
+  extends: cam-rec-r1-8k24-hf
+  design_conditions:
+    $unset:
+    - isp_features
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_8K24_PSM
+    power_saving_mode: true
+  node_configs:
+    mfc_enc:
+      selected_mode: LowPower
+- id: cam-rec-r1-8k30-sdr
+  extends: cam-rec-r1-uhd120
+  severity: critical
+  design_conditions:
+    $unset:
+    - sensor_mode
+    - sensor_bitwidth
+    subscenario: 8K_30FPS_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_8K30
+    resolution: 8K
+    fps: 30
+    hdr: SDR
+    dpu_layer_count: 2
+    input_ratio: 7680:4620
+    sensor_input_fps: 30
+    sensor_runtime_confirmation: true
+    record_bitrate_mbps: 120
+    output_ratio: '16:9'
+  size_overrides:
+    sensor_full: 7680x4620
+    record_out: 7680x4320
+    pyramid_l0: 7680x4620
+    pyramid_l1: 3840x2310
+    pyramid_l2: 1920x1155
+    pyramid_l3: 960x578
+    pyramid_l4: 480x289
+    mlsc_out: 7680x4620
+  node_configs:
+    sensor_rear:
+      selected_mode: user_raw10_7680x4620_30fps
+- id: cam-rec-r1-8k30-hf
+  extends: cam-rec-r1-8k24-hf
+  design_conditions:
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_8K30_HF
+    fps: 30
+    input_ratio: 7680:4620
+    output_ratio: '16:9'
+  node_configs:
+    sensor_rear:
+      selected_mode: user_raw10_7680x4620_30fps
+  size_overrides:
+    sensor_full: 7680x4620
+    pyramid_l0: 7680x4620
+    pyramid_l1: 3840x2310
+    pyramid_l2: 1920x1155
+    pyramid_l3: 960x578
+    pyramid_l4: 480x289
+    mlsc_out: 7680x4620
+- id: cam-rec-r1-8k30-psm
+  extends: cam-rec-r1-8k30-hf
+  design_conditions:
+    $unset:
+    - isp_features
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_8K30_PSM
+    power_saving_mode: true
+  node_configs:
+    mfc_enc:
+      selected_mode: LowPower
+- id: cam-rec-rcv-fhd30-sdr
+  extends: cam-rec-r1-fhd30-vdis
+  design_conditions:
+    $unset:
+    - is_scenario
+    - verification_scope
+    - input_ratio
+    sensor_place: rear_and_front
+    hdr: SDR
+    stabilization: false
+    codec_mfc: HEVC_ENC
+    audio: true
+    camera_mode: dual_async
+    stream_model: wide_plus_front_shared_hw
+    composition_source: assumed_CPU_PIP
+    sensor_runtime_confirmation: true
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - vps_dof
+    - vps_seg
+    - eis
+    - gdc_m
+    - gdc_o
+  node_configs:
+    mfc_enc:
+      selected_mode: Normal
+      codec: HEVC_ENC
+      memory_io:
+      - port: MFC_WDMA_BITSTREAM
+        direction: write
+        bitrate_condition: record_bitrate_mbps
+      - port: MFC_RDMA
+        direction: read
+        width: 1920
+        height: 1080
+        format: YUV420
+        bitwidth: 8
+    post_crta:
+      timeline_resource_id: CPU_CAMERA
+    pre_me_rta:
+      timeline_resource_id: STAGE_LME
+    post_irta:
+      timeline_resource_id: CPU_CAMERA
+    yuvsc:
+      timeline_resource_id: yuvsc
+    mcsc:
+      timeline_resource_id: mcsc
+      memory_io:
+      - port: MCSC_WDMA_W0
+        direction: write
+        width: 1920
+        height: 1080
+        format: YUV420
+        bitwidth: 8
+    byrp:
+      timeline_resource_id: byrp
+    vps_od:
+      timeline_resource_id: vps_od
+    lme:
+      timeline_resource_id: lme
+    csis:
+      timeline_resource_id: csis
+    pdp:
+      timeline_resource_id: pdp
+    rgbp:
+      timeline_resource_id: rgbp
+    mlsc:
+      timeline_resource_id: mlsc
+    mtnr:
+      timeline_resource_id: mtnr
+    msnr:
+      timeline_resource_id: msnr
+    yuvp:
+      timeline_resource_id: yuvp
+    dpu:
+      memory_io:
+      - port: DPU_RDMA
+        direction: read
+        width: 1920
+        height: 1080
+        format: YUV420
+        bitwidth: 8
+    front_csis:
+      sim:
+        inherit_shape: true
+      timeline_resource_id: csis
+    front_pdp:
+      sim:
+        inherit_shape: true
+      timeline_resource_id: pdp
+    front_byrp:
+      video_snapshot_enabled: false
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when video_snapshot_enabled; OTF remains connected.
+      sim:
+        inherit_shape: true
+      timeline_resource_id: byrp
+    front_rgbp:
+      sim:
+        inherit_shape: true
+      timeline_resource_id: rgbp
+    front_yuvsc:
+      operations:
+        scale: false
+      bypass_downscale: true
+      sim:
+        inherit_shape: true
+      timeline_resource_id: yuvsc
+    front_mlsc:
+      sim:
+        inherit_shape: true
+      timeline_resource_id: mlsc
+    front_mtnr:
+      sim:
+        inherit_shape: true
+      timeline_resource_id: mtnr
+    front_msnr:
+      sim:
+        inherit_shape: true
+      timeline_resource_id: msnr
+    front_yuvp:
+      sim:
+        inherit_shape: true
+      timeline_resource_id: yuvp
+    front_mcsc:
+      operations:
+        crop: true
+        scale: true
+      active_output_ports:
+      - MCSC_WDMA_W0
+      sim:
+        inherit_shape: true
+      timeline_resource_id: mcsc
+      memory_io:
+      - port: MCSC_WDMA_W0
+        direction: write
+        width: 1920
+        height: 1080
+        format: YUV420
+        bitwidth: 8
+    front_lme:
+      selected_mode: Normal
+      sim:
+        inherit_shape: true
+      timeline_resource_id: lme
+    front_vps_od:
+      selected_mode: Normal
+      function: front_object_detection
+      sim:
+        inherit_shape: true
+      timeline_resource_id: vps_od
+    front_post_crta:
+      timeline_resource_id: CPU_CAMERA
+    front_pre_me_rta:
+      timeline_resource_id: STAGE_LME
+    front_post_irta:
+      timeline_resource_id: CPU_CAMERA
+    sensor_front:
+      selected_mode: dual_full_4000x3000_30fps
+      source_note: 4000x3000 30fps DTS candidate; 16:9 crop is assumed.
+    dual_compose:
+      source_note: Engineering assumption approved for fixture exploration; replace with internal measurements.
+      memory_io:
+      - port: CPU_IMAGE_READ
+        direction: read
+        width: 1920
+        height: 1080
+        format: YUV420
+        bitwidth: 8
+      - port: CPU_FRONT_READ
+        direction: read
+        width: 1920
+        height: 1080
+        format: YUV420
+        bitwidth: 8
+      - port: CPU_IMAGE_WRITE
+        direction: write
+        width: 1920
+        height: 1080
+        format: YUV420
+        bitwidth: 8
+  topology_patch:
+    add_edges:
+    - from: front_csis
+      to: front_pdp
+      type: OTF
+      port_pairs:
+      - src: COUTFIFO
+        dst: CINFIFO
+    - from: front_pdp
+      to: front_byrp
+      type: OTF
+      port_pairs:
+      - src: COUTFIFO
+        dst: CINFIFO
+    - from: front_byrp
+      to: front_rgbp
+      type: OTF
+      port_pairs:
+      - src: COUTFIFO
+        dst: CINFIFO
+    - from: front_rgbp
+      to: front_yuvsc
+      type: OTF
+      port_pairs:
+      - src: COUTFIFO
+        dst: CINFIFO
+    - from: front_yuvsc
+      to: front_mlsc
+      type: OTF
+      port_pairs:
+      - src: COUTFIFO
+        dst: CINFIFO
+    - from: front_mtnr
+      to: front_msnr
+      type: OTF
+      port_pairs:
+      - src: COUTFIFO
+        dst: CINFIFO
+    - from: front_msnr
+      to: front_yuvp
+      type: OTF
+      port_pairs:
+      - src: COUTFIFO
+        dst: CINFIFO
+    - from: front_yuvp
+      to: front_mcsc
+      type: OTF
+      port_pairs:
+      - src: COUTFIFO
+        dst: CINFIFO
+    - from: front_mlsc
+      to: front_mtnr
+      type: M2M
+      buffer: FRONT_PYRAMID_L0
+      port_pairs:
+      - src: MLSC_W_GLPG0_Y
+        dst: MTNR0_RDMA_CUR_L0_Y
+    - from: front_mlsc
+      to: front_mtnr
+      type: M2M
+      buffer: FRONT_PYRAMID_L1
+      port_pairs:
+      - src: MLSC_W_GLPG1_Y
+        dst: MTNR1_RDMA_CUR_L1_Y
+      - src: MLSC_W_GLPG1_U
+        dst: MTNR1_RDMA_CUR_L1_U
+      - src: MLSC_W_GLPG1_V
+        dst: MTNR1_RDMA_CUR_L1_V
+    - from: front_mlsc
+      to: front_mtnr
+      type: M2M
+      buffer: FRONT_PYRAMID_L2
+      port_pairs:
+      - src: MLSC_W_GLPG2_Y
+        dst: MTNR1_RDMA_CUR_L2_Y
+      - src: MLSC_W_GLPG2_U
+        dst: MTNR1_RDMA_CUR_L2_U
+      - src: MLSC_W_GLPG2_V
+        dst: MTNR1_RDMA_CUR_L2_V
+    - from: front_mlsc
+      to: front_mtnr
+      type: M2M
+      buffer: FRONT_PYRAMID_L3
+      port_pairs:
+      - src: MLSC_W_GLPG3_Y
+        dst: MTNR1_RDMA_CUR_L3_Y
+      - src: MLSC_W_GLPG3_U
+        dst: MTNR1_RDMA_CUR_L3_U
+      - src: MLSC_W_GLPG3_V
+        dst: MTNR1_RDMA_CUR_L3_V
+    - from: front_mlsc
+      to: front_mtnr
+      type: M2M
+      buffer: FRONT_PYRAMID_L4
+      port_pairs:
+      - src: MLSC_W_GLPG4_Y
+        dst: MTNR1_RDMA_CUR_L4_Y
+      - src: MLSC_W_GLPG4_U
+        dst: MTNR1_RDMA_CUR_L4_U
+      - src: MLSC_W_GLPG4_V
+        dst: MTNR1_RDMA_CUR_L4_V
+    - from: front_mlsc
+      to: front_post_crta
+      type: control
+    - from: front_pdp
+      to: front_post_crta
+      type: control
+    - from: front_byrp
+      to: front_post_crta
+      type: control
+    - from: front_post_crta
+      to: front_pre_me_rta
+      type: control
+    - from: front_pre_me_rta
+      to: front_lme
+      type: control
+    - from: front_lme
+      to: front_post_irta
+      type: control
+    - from: front_post_irta
+      to: front_mtnr
+      type: control
+    - from: front_mlsc
+      to: front_lme
+      type: M2M
+      buffer: FRONT_LME_INPUT
+      port_pairs:
+      - src: MLSC_W_LMEDS
+        dst: LME_RDMA_CACHE_IN_0
+    - from: front_mlsc
+      to: front_vps_od
+      type: M2M
+      buffer: FRONT_OD_INPUT
+      port_pairs:
+      - src: MLSC_W_FDPIG
+        dst: VPS_RDMA
+    - from: front_rgbp
+      to: front_yuvp
+      type: M2M
+      buffer: FRONT_RGBP_DRC
+      port_pairs:
+      - src: RGBP_WDMA_DRC
+        dst: YUVP_RDMA_DRC0
+      - src: RGBP_WDMA_DRC
+        dst: YUVP_RDMA_DRC1
+    - from: front_mlsc
+      to: front_yuvp
+      type: M2M
+      buffer: FRONT_MLSC_SVHIST
+      port_pairs:
+      - src: MLSC_W_SVHIST
+        dst: YUVP_RDMA_SVHIST
+    - from: sensor_front
+      to: front_csis
+      type: OTF
+    - from: mcsc
+      to: dual_compose
+      type: control
+    - from: front_mcsc
+      to: dual_compose
+      type: control
+    - from: dual_compose
+      to: mfc_enc
+      type: control
+    - from: dual_compose
+      to: dpu
+      type: control
+    - from: mfc_enc
+      to: mpeg_writer
+      type: control
+    - from: mpeg_writer
+      to: storage_write
+      type: control
+    remove_edges:
+    - from: mcsc
+      to: gdc_o
+    - from: sensor_front
+      to: csis
+    - from: gdc_m
+      to: dpu
+    - from: gdc_o
+      to: mfc_enc
+    add_nodes:
+    - id: front_csis
+      ip_ref: ip-csis-is-v15-s5e9965
+      role: front_csis
+      instance_index: 0
+    - id: front_pdp
+      ip_ref: ip-pdp-is-v15-s5e9965
+      role: front_pdp
+      instance_index: 0
+    - id: front_byrp
+      ip_ref: ip-byrp-is-v15-s5e9965
+      role: front_byrp
+      instance_index: 0
+    - id: front_rgbp
+      ip_ref: ip-rgbp-is-v15-s5e9965
+      role: front_rgbp
+      instance_index: 0
+    - id: front_yuvsc
+      ip_ref: ip-yuvsc-is-v15-s5e9965
+      role: front_yuvsc
+      instance_index: 0
+    - id: front_mlsc
+      ip_ref: ip-mlsc-is-v15-s5e9965
+      role: front_mlsc
+      instance_index: 0
+    - id: front_mtnr
+      ip_ref: ip-mtnr-is-v15-s5e9965
+      role: front_mtnr
+      instance_index: 0
+    - id: front_msnr
+      ip_ref: ip-msnr-is-v15-s5e9965
+      role: front_msnr
+      instance_index: 0
+    - id: front_yuvp
+      ip_ref: ip-yuvp-is-v15-s5e9965
+      role: front_yuvp
+      instance_index: 0
+    - id: front_mcsc
+      ip_ref: ip-mcsc-is-v15-s5e9965
+      role: front_mcsc
+      instance_index: 0
+    - id: front_lme
+      ip_ref: ip-lme-is-v15-s5e9965
+      role: front_lme
+      instance_index: 0
+    - id: front_vps_od
+      ip_ref: ip-vps-is-v15-s5e9965
+      role: front_object_detection
+      instance_index: 0
+    - id: front_post_crta
+      ip_ref: ip-cpu-s5e9965
+      role: sw_task
+      instance_index: 0
+    - id: front_pre_me_rta
+      ip_ref: ip-cpu-s5e9965
+      role: sw_task
+      instance_index: 0
+    - id: front_post_irta
+      ip_ref: ip-cpu-s5e9965
+      role: sw_task
+      instance_index: 0
+    - id: dual_compose
+      ip_ref: ip-cpu-s5e9965
+      role: sw_task
+      instance_index: 0
+    - id: mpeg_writer
+      ip_ref: ip-cpu-s5e9965
+      role: sw_task
+      instance_index: 0
+    - id: storage_write
+      ip_ref: ip-cpu-s5e9965
+      role: sw_task
+      instance_index: 0
+  size_overrides:
+    front_sensor_full: 4000x3000
+    front_record_out: 1920x1080
+    front_preview_out: 1920x1080
+    front_pyramid_l0: 4000x3000
+    front_pyramid_l1: 2000x1500
+    front_pyramid_l2: 1000x750
+    front_pyramid_l3: 500x375
+    front_pyramid_l4: 250x188
+    front_object_detection: 512x288
+    front_cav: 320x180
+    front_mlsc_out: 4000x3000
+- id: cam-rec-rcv-uhd30-sdr
+  extends: cam-rec-rcv-fhd30-sdr
+  severity: heavy
+  design_conditions:
+    $unset:
+    - stabilization
+    - audio
+    subscenario: UHD_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_UHD30
+    resolution: UHD
+    record_bitrate_mbps: 80
+  node_configs:
+    mfc_enc:
+      memory_io:
+      - port: MFC_WDMA_BITSTREAM
+        direction: write
+        bitrate_condition: record_bitrate_mbps
+      - port: MFC_RDMA
+        direction: read
+        width: 3840
+        height: 2160
+        format: YUV420
+        bitwidth: 8
+    mcsc:
+      memory_io:
+      - port: MCSC_WDMA_W0
+        direction: write
+        width: 3840
+        height: 2160
+        format: YUV420
+        bitwidth: 8
+    front_mcsc:
+      memory_io:
+      - port: MCSC_WDMA_W0
+        direction: write
+        width: 3840
+        height: 2160
+        format: YUV420
+        bitwidth: 8
+    dual_compose:
+      memory_io:
+      - port: CPU_IMAGE_READ
+        direction: read
+        width: 3840
+        height: 2160
+        format: YUV420
+        bitwidth: 8
+      - port: CPU_FRONT_READ
+        direction: read
+        width: 3840
+        height: 2160
+        format: YUV420
+        bitwidth: 8
+      - port: CPU_IMAGE_WRITE
+        direction: write
+        width: 3840
+        height: 2160
+        format: YUV420
+        bitwidth: 8
+      - port: CPU_PREVIEW_WRITE
+        direction: write
+        width: 1920
+        height: 1080
+        format: YUV420
+        bitwidth: 8
+  topology_patch:
+    remove_edges:
+    - from: sensor_front
+      to: csis
+    - from: gdc_m
+      to: dpu
+    - from: gdc_o
+      to: mfc_enc
+  size_overrides:
+    record_out: 3840x2160
+    front_record_out: 3840x2160
+- id: cam-rec-rcv-fhd30-hdr10
+  extends: cam-rec-r1-fhd30-hdr10
+  design_conditions:
+    $unset:
+    - dvfs_sn
+    - stabilization
+    subscenario: HDR10_RCV_FHD_VIDEO
+    sensor_place: rear_and_front
+    dpu_layer_count: 4
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - vps_dof
+    - vps_seg
+    - eis
+    - gdc_m
+    - gdc_o
+  node_configs:
+    sensor_front:
+      selected_mode: mode58
+- id: cam-rec-rcv-uhd30-hdr10
+  extends: cam-rec-r1-uhd30-hdr10
+  design_conditions:
+    $unset:
+    - dvfs_sn
+    subscenario: HDR10_RCV_UHD_VIDEO
+    sensor_place: rear_and_front
+    dpu_layer_count: 4
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - vps_dof
+    - vps_seg
+    - eis
+    - gdc_m
+    - gdc_o
+  node_configs:
+    sensor_front:
+      selected_mode: mode10
+- id: cam-rec-rdual-fhd30
+  extends: cam-rec-r1-fhd30-recursive
+  design_conditions:
+    $unset:
+    - sensor_place
+    - note
+    dvfs_sn: IS_DVFS_SN_REAR_DUAL_VIDEO_FHD30
+    camera_mode: dual_sync
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear3
+    - sensor_front
+    - vps_dof
+    - vps_seg
+    - eis
+    - gdc_m
+    - gdc_o
+  node_configs:
+    sensor_rear2:
+      selected_mode: mode6
+  tags:
+  - is-v15
+  - assumed-sw-timing
+  - uncalibrated-power
+  - requires-multi-sensor-routing-verification
+- id: cam-rec-rdual-fhd60
+  extends: cam-rec-rdual-fhd30
+  severity: medium
+  design_conditions:
+    subscenario: FHD_60FPS_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_DUAL_VIDEO_FHD60
+    fps: 60
+    sensor_input_fps: 60.0
+  node_configs:
+    sensor_rear:
+      selected_mode: cis_4sum_ln2_raw10_4080x2296_60fps_3993msps
+    sensor_rear2:
+      selected_mode: mode9
+- id: cam-rec-rdual-uhd30
+  extends: cam-rec-r1-uhd30-recursive
+  design_conditions:
+    $unset:
+    - sensor_place
+    dvfs_sn: IS_DVFS_SN_REAR_DUAL_VIDEO_UHD30
+    camera_mode: dual_sync
+    sensor_cadence_policy: requires_runtime_frame_skip_or_sensor_fps_confirmation
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear3
+    - sensor_front
+    - vps_dof
+    - vps_seg
+    - eis
+    - gdc_m
+    - gdc_o
+  node_configs:
+    sensor_rear2:
+      selected_mode: mode13
+  tags:
+  - is-v15
+  - assumed-sw-timing
+  - uncalibrated-power
+  - requires-multi-sensor-routing-verification
+- id: cam-rec-rdual-uhd60
+  extends: cam-rec-rdual-uhd30
+  design_conditions:
+    $unset:
+    - sensor_cadence_policy
+    subscenario: UHD_60FPS_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_DUAL_VIDEO_UHD60
+    fps: 60
+    sensor_input_fps: 60.0
+  node_configs:
+    sensor_rear:
+      selected_mode: cis_4sum_ln2_raw10_4080x2296_60fps_3993msps
+- id: cam-rec-rtriple-fhd30
+  extends: cam-rec-rdual-fhd30
+  design_conditions:
+    dvfs_sn: IS_DVFS_SN_TRIPLE_VIDEO_FHD30
+    camera_mode: triple
+    sensor_cadence_policy: requires_runtime_frame_skip_or_sensor_fps_confirmation
+  routing_switch:
+    disabled_nodes:
+    - sensor_front
+    - vps_dof
+    - vps_seg
+    - eis
+    - gdc_m
+    - gdc_o
+  node_configs:
+    sensor_rear3:
+      selected_mode: mode28
+- id: cam-rec-rtriple-fhd60
+  extends: cam-rec-rdual-fhd60
+  design_conditions:
+    dvfs_sn: IS_DVFS_SN_TRIPLE_VIDEO_FHD60
+    camera_mode: triple
+    sensor_cadence_policy: requires_runtime_frame_skip_or_sensor_fps_confirmation
+  routing_switch:
+    disabled_nodes:
+    - sensor_front
+    - vps_dof
+    - vps_seg
+    - eis
+    - gdc_m
+    - gdc_o
+  node_configs:
+    sensor_rear3:
+      selected_mode: mode24
+- id: cam-rec-rtriple-uhd30
+  extends: cam-rec-rdual-uhd30
+  design_conditions:
+    dvfs_sn: IS_DVFS_SN_TRIPLE_VIDEO_UHD30
+    camera_mode: triple
+  routing_switch:
+    disabled_nodes:
+    - sensor_front
+    - vps_dof
+    - vps_seg
+    - eis
+    - gdc_m
+    - gdc_o
+  node_configs:
+    sensor_rear3:
+      selected_mode: mode5
+- id: cam-rec-rtriple-uhd60
+  extends: cam-rec-rtriple-uhd30
+  design_conditions:
+    subscenario: UHD_60FPS_VIDEO
+    dvfs_sn: IS_DVFS_SN_TRIPLE_VIDEO_UHD60
+    fps: 60
+    sensor_input_fps: 60.0
+  node_configs:
+    sensor_rear:
+      selected_mode: cis_4sum_ln2_raw10_4080x2296_60fps_3993msps
+    sensor_rear3:
+      selected_mode: mode24
+- id: cam-rec-f1-fhd30
+  extends: cam-rec-r1-fhd30-recursive
+  design_conditions:
+    $unset:
+    - note
+    - sensor_input_fps
+    - sensor_bitwidth
+    - sensor_input_source
+    dvfs_sn: IS_DVFS_SN_FRONT_SINGLE_VIDEO_FHD30
+    sensor_place: front
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear
+    - sensor_rear2
+    - sensor_rear3
+    - vps_dof
+    - vps_seg
+    - eis
+    - gdc_m
+    - gdc_o
+  size_overrides:
+    sensor_full: 2000x1500
+    pyramid_l0: 2000x1500
+    pyramid_l1: 1000x750
+    pyramid_l2: 500x375
+    pyramid_l3: 250x188
+    pyramid_l4: 125x94
+    mlsc_out: 2000x1500
+  node_configs:
+    $unset:
+    - sensor_rear
+    sensor_front:
+      selected_mode: mode58
+- id: cam-rec-f1-fhd30-recursive
+  extends: cam-rec-f1-fhd30
+  design_conditions:
+    dvfs_sn: IS_DVFS_SN_FRONT_SINGLE_VIDEO_FHD30_RECURSIVE
+- id: cam-rec-f1-fhd60
+  extends: cam-rec-f1-fhd30
+  severity: medium
+  design_conditions:
+    subscenario: FHD_60FPS_VIDEO
+    dvfs_sn: IS_DVFS_SN_FRONT_SINGLE_VIDEO_FHD60
+    fps: 60
+  size_overrides:
+    sensor_full: 3392x1908
+    pyramid_l0: 3392x1908
+    pyramid_l1: 1696x954
+    pyramid_l2: 848x477
+    pyramid_l3: 424x239
+    pyramid_l4: 212x120
+    mlsc_out: 3392x1908
+  node_configs:
+    sensor_front:
+      selected_mode: mode25
+- id: cam-rec-f1-fhd120
+  extends: cam-rec-f1-fhd30
+  severity: heavy
+  design_conditions:
+    subscenario: HIGH_SPEED_FHD_120_VIDEO
+    dvfs_sn: IS_DVFS_SN_FRONT_SINGLE_VIDEO_FHD120
+    fps: 120
+  node_configs:
+    sensor_front:
+      selected_mode: mode57
+  size_overrides:
+    sensor_full: 2000x1124
+    pyramid_l0: 2000x1124
+    pyramid_l1: 1000x562
+    pyramid_l2: 500x281
+    pyramid_l3: 250x141
+    pyramid_l4: 125x71
+    mlsc_out: 2000x1124
+- id: cam-rec-f1-uhd30
+  extends: cam-rec-r1-uhd30-recursive
+  design_conditions:
+    $unset:
+    - sensor_input_fps
+    - sensor_bitwidth
+    - sensor_input_source
+    dvfs_sn: IS_DVFS_SN_FRONT_SINGLE_VIDEO_UHD30
+    sensor_place: front
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear
+    - sensor_rear2
+    - sensor_rear3
+    - vps_dof
+    - vps_seg
+    - eis
+    - gdc_m
+    - gdc_o
+  size_overrides:
+    sensor_full: 4000x3000
+    pyramid_l0: 4000x3000
+    pyramid_l1: 2000x1500
+    pyramid_l2: 1000x750
+    pyramid_l3: 500x375
+    pyramid_l4: 250x188
+    mlsc_out: 4000x3000
+  node_configs:
+    $unset:
+    - sensor_rear
+    sensor_front:
+      selected_mode: mode10
+- id: cam-rec-f1-uhd30-recursive
+  extends: cam-rec-f1-uhd30
+  design_conditions:
+    $unset:
+    - subscenario
+    dvfs_sn: IS_DVFS_SN_FRONT_SINGLE_VIDEO_UHD30_RECURSIVE
+- id: cam-rec-f1-uhd60
+  extends: cam-rec-f1-uhd30
+  design_conditions:
+    subscenario: UHD_60FPS_VIDEO
+    dvfs_sn: IS_DVFS_SN_FRONT_SINGLE_VIDEO_UHD60
+    fps: 60
+  size_overrides:
+    sensor_full: 4000x2252
+    pyramid_l0: 4000x2252
+    pyramid_l1: 2000x1126
+    pyramid_l2: 1000x563
+    pyramid_l3: 500x282
+    pyramid_l4: 250x141
+    mlsc_out: 4000x2252
+  node_configs:
+    sensor_front:
+      selected_mode: mode11
+- id: cam-rec-f1-uhd120
+  extends: cam-rec-f1-fhd120
+  design_conditions:
+    $unset:
+    - resolution
+    subscenario: HIGH_SPEED_UHD_120_VIDEO
+    dvfs_sn: IS_DVFS_SN_FRONT_SINGLE_VIDEO_UHD120
+- id: cam-rec-pip-fhd30
+  extends: cam-rec-rcv-fhd30-sdr
+- id: cam-rec-pip-uhd30
+  extends: cam-rec-rcv-uhd30-sdr
+- id: cam-rec-3rdparty-fhd30
+  extends: cam-rec-r1-fhd30-ois
+  design_conditions:
+    $unset:
+    - hdr
+    - stabilization
+    subscenario: 3RD_PARTY_VIDEO
+- id: cam-rec-3rdparty-binning
+  extends: cam-rec-3rdparty-fhd30
+  design_conditions:
+    $unset:
+    - dvfs_sn
+    subscenario: 3RD_PARTY_BINNING_VIDEO
+    sensor_binning: true
+- id: cam-rec-3rdparty-hdr10
+  extends: cam-rec-r1-fhd60-hdr10
+  design_conditions:
+    $unset:
+    - dvfs_sn
+    - sensor_place
+    - resolution
+    - fps
+    - sensor_input_fps
+    - sensor_bitwidth
+    - sensor_input_source
+    subscenario: 3RD_PARTY_HDR10_VIDEO
+  node_configs:
+    sensor_rear:
+      selected_mode: cis_4sum_idcg_ln4_raw12_4080x2296_30fps_3993msps
+- id: cam-rec-3rdparty-hlg
+  extends: cam-rec-3rdparty-hdr10
+  design_conditions:
+    subscenario: 3RD_PARTY_HLG_VIDEO
+    hdr: HLG
+- id: cam-rec-iq-eval
+  extends: cam-rec-3rdparty-hdr10
+  severity: light
+  design_conditions:
+    $unset:
+    - hdr
+    subscenario: IQ_EVAL_VIDEO
+    dpu_layer_count: 2
+  buffer_overrides:
+    $unset:
+    - MCSC_PREVIEW
+    - MCSC_VIDEO
+    - GDC_PREVIEW
+    - GDC_VIDEO
+- id: cam-rec-r1-fhd30-vdis-timing-min
+  severity: medium
+  derived_from_variant: cam-rec-r1-fhd30-vdis
+  design_conditions_override:
+    sw_timing_case: min
+  tags:
+  - is-v15
+  - sw-timing-sensitivity
+  - assumed-sw-timing
+- id: cam-rec-r1-fhd30-vdis-timing-max
+  extends: cam-rec-r1-fhd30-vdis-timing-min
+  design_conditions_override:
+    sw_timing_case: max
+- id: cam-rec-r1-uhd30-vdis-timing-min
+  extends: cam-rec-r1-fhd30-vdis-timing-min
+  derived_from_variant: cam-rec-r1-uhd30-vdis
+- id: cam-rec-r1-uhd30-vdis-timing-max
+  extends: cam-rec-r1-fhd30-vdis-timing-max
+  derived_from_variant: cam-rec-r1-uhd30-vdis
+- id: cam-rec-r1-fhd30-portrait
+  extends: cam-rec-r1-fhd30-vdis
+  design_conditions:
+    $unset:
+    - is_scenario
+    - verification_scope
+    - input_ratio
+    hdr: SDR
+    stabilization: false
+    codec_mfc: HEVC_ENC
+    audio: true
+    portrait: true
+    portrait_hw_source: assumed_VPS_SEG_CPU_bokeh
+    sensor_runtime_confirmation: true
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - vps_dof
+    - eis
+    - gdc_m
+    - gdc_o
+  node_configs:
+    mfc_enc:
+      selected_mode: Normal
+      codec: HEVC_ENC
+      memory_io:
+      - port: MFC_WDMA_BITSTREAM
+        direction: write
+        bitrate_condition: record_bitrate_mbps
+      - port: MFC_RDMA
+        direction: read
+        width: 1920
+        height: 1080
+        format: YUV420
+        bitwidth: 8
+    mcsc:
+      memory_io:
+      - port: MCSC_WDMA_W0
+        direction: write
+        width: 1920
+        height: 1080
+        format: YUV420
+        bitwidth: 8
+    vps_od:
+      timeline_resource_id: VPS
+    dpu:
+      memory_io:
+      - port: DPU_RDMA
+        direction: read
+        width: 1920
+        height: 1080
+        format: YUV420
+        bitwidth: 8
+    vps_seg:
+      sim:
+        inherit_shape: true
+      timeline_resource_id: VPS
+      source_note: Engineering assumption approved for fixture exploration; replace with internal measurements.
+      memory_io:
+      - port: VPS_WDMA
+        direction: write
+        width: 512
+        height: 288
+        format: Y
+        bitwidth: 8
+    portrait_blend:
+      memory_io:
+      - port: CPU_MASK_READ
+        direction: read
+        width: 512
+        height: 288
+        format: Y
+        bitwidth: 8
+      - port: CPU_IMAGE_READ
+        direction: read
+        width: 1920
+        height: 1080
+        format: YUV420
+        bitwidth: 8
+      - port: CPU_IMAGE_WRITE
+        direction: write
+        width: 1920
+        height: 1080
+        format: YUV420
+        bitwidth: 8
+  topology_patch:
+    add_edges:
+    - from: mlsc
+      to: vps_seg
+      type: M2M
+      buffer: OD_INPUT
+      port_pairs:
+      - src: MLSC_W_FDPIG
+        dst: VPS_RDMA
+    - from: vps_seg
+      to: portrait_blend
+      type: control
+    - from: mcsc
+      to: portrait_blend
+      type: control
+    - from: portrait_blend
+      to: mfc_enc
+      type: control
+    - from: portrait_blend
+      to: dpu
+      type: control
+    - from: mfc_enc
+      to: mpeg_writer
+      type: control
+    - from: mpeg_writer
+      to: storage_write
+      type: control
+    remove_edges:
+    - from: mcsc
+      to: gdc_o
+    - from: mlsc
+      to: vps_seg
+    - from: vps_seg
+      to: mtnr
+    - from: gdc_m
+      to: dpu
+    - from: gdc_o
+      to: mfc_enc
+    add_nodes:
+    - id: portrait_blend
+      ip_ref: ip-cpu-s5e9965
+      role: sw_task
+      instance_index: 0
+    - id: mpeg_writer
+      ip_ref: ip-cpu-s5e9965
+      role: sw_task
+      instance_index: 0
+    - id: storage_write
+      ip_ref: ip-cpu-s5e9965
+      role: sw_task
+      instance_index: 0
+- id: cam-rec-r1-uhd30-portrait
+  extends: cam-rec-r1-fhd30-portrait
+  severity: heavy
+  design_conditions:
+    $unset:
+    - stabilization
+    - audio
+    subscenario: UHD_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_UHD30
+    resolution: UHD
+    record_bitrate_mbps: 80
+  node_configs:
+    mfc_enc:
+      memory_io:
+      - port: MFC_WDMA_BITSTREAM
+        direction: write
+        bitrate_condition: record_bitrate_mbps
+      - port: MFC_RDMA
+        direction: read
+        width: 3840
+        height: 2160
+        format: YUV420
+        bitwidth: 8
+    mcsc:
+      memory_io:
+      - port: MCSC_WDMA_W0
+        direction: write
+        width: 3840
+        height: 2160
+        format: YUV420
+        bitwidth: 8
+    portrait_blend:
+      memory_io:
+      - port: CPU_MASK_READ
+        direction: read
+        width: 512
+        height: 288
+        format: Y
+        bitwidth: 8
+      - port: CPU_IMAGE_READ
+        direction: read
+        width: 3840
+        height: 2160
+        format: YUV420
+        bitwidth: 8
+      - port: CPU_IMAGE_WRITE
+        direction: write
+        width: 3840
+        height: 2160
+        format: YUV420
+        bitwidth: 8
+      - port: CPU_PREVIEW_WRITE
+        direction: write
+        width: 1920
+        height: 1080
+        format: YUV420
+        bitwidth: 8
+  topology_patch:
+    remove_edges:
+    - from: mlsc
+      to: vps_seg
+    - from: vps_seg
+      to: mtnr
+    - from: gdc_m
+      to: dpu
+    - from: gdc_o
+      to: mfc_enc
+  size_overrides:
+    record_out: 3840x2160
+- id: cam-rec-r1-fhd30-vdis-explored-min
+  extends: cam-rec-r1-fhd30-vdis-timing-min
+  design_conditions_override:
+    exploration_clock_mhz: 300
+    assumed_latency_budget_frames: 3.0
+  node_configs:
+    csis:
+      sim:
+        manual_clock_mhz: 300
+    pdp:
+      sim:
+        manual_clock_mhz: 300
+    byrp:
+      sim:
+        manual_clock_mhz: 300
+    rgbp:
+      sim:
+        manual_clock_mhz: 300
+    yuvsc:
+      sim:
+        manual_clock_mhz: 300
+    mlsc:
+      sim:
+        manual_clock_mhz: 300
+    mtnr:
+      sim:
+        manual_clock_mhz: 300
+    msnr:
+      sim:
+        manual_clock_mhz: 300
+    yuvp:
+      sim:
+        manual_clock_mhz: 300
+    mcsc:
+      sim:
+        manual_clock_mhz: 300
+    lme:
+      sim:
+        manual_clock_mhz: 300
+    vps_od:
+      sim:
+        manual_clock_mhz: 300
+    gdc_m:
+      sim:
+        manual_clock_mhz: 300
+    gdc_o:
+      sim:
+        manual_clock_mhz: 300
+  tags:
+  - is-v15
+  - exploration-only
+  - assumed-clock-grid
+  - uncalibrated-power
+- id: cam-rec-r1-fhd30-vdis-explored-mean
+  extends: cam-rec-r1-fhd30-vdis-explored-min
+  design_conditions_override:
+    sw_timing_case: mean
+- id: cam-rec-r1-fhd30-vdis-explored-max
+  extends: cam-rec-r1-fhd30-vdis-explored-min
+  design_conditions_override:
+    sw_timing_case: max
+- id: cam-rec-r1-fhd60-supersteady-explored-min
+  extends: cam-rec-r1-fhd30-vdis-explored-min
+  derived_from_variant: cam-rec-r1-fhd60-supersteady
+- id: cam-rec-r1-fhd60-supersteady-explored-mean
+  extends: cam-rec-r1-fhd60-supersteady-explored-min
+  design_conditions_override:
+    sw_timing_case: mean
+    exploration_clock_mhz: 400
+  node_configs:
+    csis:
+      sim:
+        manual_clock_mhz: 400
+    pdp:
+      sim:
+        manual_clock_mhz: 400
+    byrp:
+      sim:
+        manual_clock_mhz: 400
+    rgbp:
+      sim:
+        manual_clock_mhz: 400
+    yuvsc:
+      sim:
+        manual_clock_mhz: 400
+    mlsc:
+      sim:
+        manual_clock_mhz: 400
+    mtnr:
+      sim:
+        manual_clock_mhz: 400
+    msnr:
+      sim:
+        manual_clock_mhz: 400
+    yuvp:
+      sim:
+        manual_clock_mhz: 400
+    mcsc:
+      sim:
+        manual_clock_mhz: 400
+    lme:
+      sim:
+        manual_clock_mhz: 400
+    vps_od:
+      sim:
+        manual_clock_mhz: 400
+    gdc_m:
+      sim:
+        manual_clock_mhz: 400
+    gdc_o:
+      sim:
+        manual_clock_mhz: 400
+- id: cam-rec-r1-uhd30-vdis-explored-min
+  extends: cam-rec-r1-fhd30-vdis-explored-min
+  derived_from_variant: cam-rec-r1-uhd30-vdis
+- id: cam-rec-r1-uhd30-vdis-explored-mean
+  extends: cam-rec-r1-fhd30-vdis-explored-mean
+  derived_from_variant: cam-rec-r1-uhd30-vdis
+- id: cam-rec-r1-uhd30-vdis-explored-max
+  extends: cam-rec-r1-fhd30-vdis-explored-max
+  derived_from_variant: cam-rec-r1-uhd30-vdis
+- id: cam-rec-r1-uhd60-supersteady-explored-min
+  extends: cam-rec-r1-fhd30-vdis-explored-min
+  derived_from_variant: cam-rec-r1-uhd60-supersteady
+- id: cam-rec-r1-uhd60-supersteady-explored-mean
+  extends: cam-rec-r1-fhd60-supersteady-explored-mean
+  derived_from_variant: cam-rec-r1-uhd60-supersteady

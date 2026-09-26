@@ -21,7 +21,7 @@ st.caption(
 base = st.sidebar.text_input(
     "API Base", os.environ.get("SCENARIODB_API_BASE", "http://127.0.0.1:18000/api/v1")
 )
-scenario = st.text_input("Scenario ID", "uc-game-play")
+scenario = st.text_input("Scenario ID", "uc-game-play-e2600")
 variant = st.text_input("Variant ID", "game-fhd-60fps-m2m-upscale")
 try:
     report = _request_json(

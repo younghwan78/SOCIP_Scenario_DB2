@@ -90,7 +90,7 @@ def _node_by_id(view):
 
 
 def test_level2_unavailable_when_ip_has_no_module_declarations():
-    graph = _graph("uc-game-play.yaml", "game-fhd-60fps-npu-ai")
+    graph = _graph("uc-game-play-e2600.yaml", "game-fhd-60fps-npu-ai")
 
     view = service._project_drilldown(graph, "gpu")
 
@@ -103,7 +103,7 @@ def test_level2_unavailable_when_ip_has_no_module_declarations():
 
 
 def test_level2_expands_declared_modules_for_single_active_camera_node():
-    graph = _graph("uc-camera-recording.yaml", "cam-rec-3rdparty-binning")
+    graph = _graph("uc-cam-recording-e2600.yaml", "cam-rec-3rdparty-binning")
 
     view = service._project_drilldown(graph, "mlsc")
     nodes = _node_by_id(view)
@@ -119,7 +119,7 @@ def test_level2_expands_declared_modules_for_single_active_camera_node():
 
 
 def test_level2_camera_expand_uses_active_graph_not_hardcoded_reference_nodes():
-    graph = _graph("uc-camera-recording.yaml", "cam-rec-3rdparty-binning")
+    graph = _graph("uc-cam-recording-e2600.yaml", "cam-rec-3rdparty-binning")
 
     view = service._project_drilldown(graph, "camera")
     node_ids = {node.data.id for node in view.nodes}
@@ -131,7 +131,7 @@ def test_level2_camera_expand_uses_active_graph_not_hardcoded_reference_nodes():
 
 
 def test_level2_node_spec_uses_typed_spec_object():
-    graph = _graph("uc-camera-recording.yaml", "cam-rec-3rdparty-binning")
+    graph = _graph("uc-cam-recording-e2600.yaml", "cam-rec-3rdparty-binning")
     node = next(item for item in graph.pipeline_nodes if item["id"] == "mlsc")
 
     spec, reason = _level2_node_spec(graph, node)

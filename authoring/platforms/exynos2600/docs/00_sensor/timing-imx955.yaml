@@ -1,0 +1,631 @@
+id: sensortiming-imx955-seta-19p2
+schema_version: '2.2'
+kind: sensor.timing_profile
+sensor_name: IMX955
+revision: setA-19p2-import-20260920
+modes:
+  cis_8192x6144_30:
+    active_width: 8192
+    active_height: 6144
+    pixel_clock_hz: 2698971429
+    line_length_pck: 10960
+    frame_length_lines: 8208
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+      sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+      line: 6958
+      basis: CIS indexed setfile
+      mode_index: 0
+      nominal_fps: 30
+      bits_per_pixel: 10
+      symbol: sensor_imx955_mode_info_A_19p2_8192x6144_30
+      mode_name: B-00_8192x6144_30
+  cis_4080x3060_120:
+    active_width: 4080
+    active_height: 3060
+    pixel_clock_hz: 2698971429
+    line_length_pck: 6880
+    frame_length_lines: 3268
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+      sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+      line: 6977
+      basis: CIS indexed setfile
+      mode_index: 1
+      bits_per_pixel: 10
+      symbol: sensor_imx955_mode_info_A_19p2_4080x3060_120
+      mode_name: A-01_4080x3060_120
+  cis_ln4_4080x3060_30:
+    active_width: 4080
+    active_height: 3060
+    pixel_clock_hz: 2698971429
+    line_length_pck: 17984
+    frame_length_lines: 5000
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+      sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+      line: 6996
+      basis: CIS indexed setfile
+      mode_index: 2
+      bits_per_pixel: 10
+      symbol: sensor_imx955_mode_info_A_19p2_LN4_4080x3060_30
+      mode_name: A-03_LN4_4080x3060_30
+  cis_dcg_4080x3060_60_pdlg:
+    active_width: 4080
+    active_height: 3060
+    pixel_clock_hz: 2698971429
+    line_length_pck: 10112
+    frame_length_lines: 4448
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+      sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+      line: 7015
+      basis: CIS indexed setfile
+      mode_index: 3
+      bits_per_pixel: 12
+      symbol: sensor_imx955_mode_info_A_19p2_DCG_4080x3060_60_pdlg
+      mode_name: A-04_DCG_4080x3060_60_pdlg
+  cis_dcg_ln4_4080x3060_30_pdlg:
+    active_width: 4080
+    active_height: 3060
+    pixel_clock_hz: 2698971429
+    line_length_pck: 17984
+    frame_length_lines: 5000
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+      sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+      line: 7034
+      basis: CIS indexed setfile
+      mode_index: 4
+      bits_per_pixel: 12
+      symbol: sensor_imx955_mode_info_A_19p2_DCG_LN4_4080x3060_30_pdlg
+      mode_name: A-06_DCG+LN4_4080x3060_30_pdlg
+  cis_dcg_dsg_full_drange_4080x3060_60_pdlg:
+    active_width: 4080
+    active_height: 3060
+    pixel_clock_hz: 2698971429
+    line_length_pck: 10672
+    frame_length_lines: 4212
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+      sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+      line: 7053
+      basis: CIS indexed setfile
+      mode_index: 5
+      bits_per_pixel: 10
+      symbol: sensor_imx955_mode_info_A_19p2_DCG_DSG_Full_Drange_4080x3060_60_pdlg
+      mode_name: A-07_DCG+DSG_Full-Drange_4080x3060_60_pdlg
+  cis_dcg_dsg_ln2_full_drange_4080x3060_60_pdlg:
+    active_width: 4080
+    active_height: 3060
+    pixel_clock_hz: 2698971429
+    line_length_pck: 13344
+    frame_length_lines: 3368
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+      sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+      line: 7072
+      basis: CIS indexed setfile
+      mode_index: 6
+      bits_per_pixel: 10
+      symbol: sensor_imx955_mode_info_A_19p2_DCG_DSG_LN2_Full_Drange_4080x3060_60_pdlg
+      mode_name: A-08_DCG+DSG+LN2_Full-Drange_4080x3060_60_pdlg
+  cis_dcg_dsg_ln4_full_drange_4080x3060_30_pdlg:
+    active_width: 4080
+    active_height: 3060
+    pixel_clock_hz: 2698971429
+    line_length_pck: 18688
+    frame_length_lines: 4812
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+      sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+      line: 7091
+      basis: CIS indexed setfile
+      mode_index: 7
+      bits_per_pixel: 10
+      symbol: sensor_imx955_mode_info_A_19p2_DCG_DSG_LN4_Full_Drange_4080x3060_30_pdlg
+      mode_name: A-09_DCG+DSG+LN4_Full-Drange_4080x3060_30_pdlg
+  cis_dcg_dsg_ln4_full_drange_4080x2296_60_pdlg:
+    active_width: 4080
+    active_height: 2296
+    pixel_clock_hz: 2698971429
+    line_length_pck: 18688
+    frame_length_lines: 2404
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+      sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+      line: 7110
+      basis: CIS indexed setfile
+      mode_index: 8
+      bits_per_pixel: 10
+      symbol: sensor_imx955_mode_info_A_19p2_DCG_DSG_LN4_Full_Drange_4080x2296_60_pdlg
+      mode_name: A-29_DCG+DSG+LN4_Full-Drange_4080x2296_60_pdlg
+  cis_8160x6120_30:
+    active_width: 8160
+    active_height: 6120
+    pixel_clock_hz: 2698971429
+    line_length_pck: 12256
+    frame_length_lines: 7340
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+      sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+      line: 7129
+      basis: CIS indexed setfile
+      mode_index: 9
+      bits_per_pixel: 10
+      symbol: sensor_imx955_mode_info_A_19p2_8160x6120_30
+      mode_name: B-01_8160x6120_30
+  cis_dsg_8000x4500_30_pdlg:
+    active_width: 8000
+    active_height: 4500
+    pixel_clock_hz: 2698971429
+    line_length_pck: 18400
+    frame_length_lines: 4888
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+      sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+      line: 7148
+      basis: CIS indexed setfile
+      mode_index: 10
+      bits_per_pixel: 12
+      symbol: sensor_imx955_mode_info_A_19p2_DSG_8000x4500_30_pdlg
+      mode_name: B-14_DSG_8000x4500_30_pdlg
+  cis_roi_dsg_ln2_4080x3060_30_pdlg:
+    active_width: 4080
+    active_height: 3060
+    pixel_clock_hz: 2698971429
+    line_length_pck: 24176
+    frame_length_lines: 3720
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+      sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+      line: 7167
+      basis: CIS indexed setfile
+      mode_index: 11
+      bits_per_pixel: 12
+      symbol: sensor_imx955_mode_info_A_19p2_ROI_DSG_LN2_4080x3060_30_pdlg
+      mode_name: B-25-ROI_DSG+LN2_4080x3060_30_pdlg
+  cis_raw_dcg_dsg_4080x3060_60_pdhg:
+    active_width: 4080
+    active_height: 3060
+    pixel_clock_hz: 2698971429
+    line_length_pck: 15808
+    frame_length_lines: 3204
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+      sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+      line: 7186
+      basis: CIS indexed setfile
+      mode_index: 12
+      bits_per_pixel: 10
+      symbol: sensor_imx955_mode_info_A_19p2_RAW_DCG_DSG_4080x3060_60_pdhg
+      mode_name: A-07-RAW_DCG+DSG_4080x3060_60_pdhg
+  cis_mode1_full_raw_16320x6120_30:
+    active_width: 16320
+    active_height: 6120
+    pixel_clock_hz: 2698971429
+    line_length_pck: 21216
+    frame_length_lines: 6390
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+      sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+      line: 7205
+      basis: CIS indexed setfile
+      mode_index: 13
+      bits_per_pixel: 10
+      symbol: sensor_imx955_mode_info_A_19p2_Mode1_Full_RAW_16320x6120_30
+      mode_name: D-00_Mode1_Full-RAW_16320x6120_30
+  cis_raw_8160x6120_30:
+    active_width: 8160
+    active_height: 6120
+    pixel_clock_hz: 2698971429
+    line_length_pck: 12256
+    frame_length_lines: 7340
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+      sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+      line: 7224
+      basis: CIS indexed setfile
+      mode_index: 14
+      bits_per_pixel: 10
+      symbol: sensor_imx955_mode_info_A_19p2_RAW_8160x6120_30
+      mode_name: B-01_RAW_8160x6120_30
+  cis_ln2_4080x3060_60:
+    active_width: 4080
+    active_height: 3060
+    pixel_clock_hz: 2698971429
+    line_length_pck: 9824
+    frame_length_lines: 4576
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+      sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+      line: 7243
+      basis: CIS indexed setfile
+      mode_index: 15
+      bits_per_pixel: 10
+      symbol: sensor_imx955_mode_info_A_19p2_LN2_4080x3060_60
+      mode_name: A-02_LN2_4080x3060_60
+  cis_dcg_ln2_4080x3060_60_pdlg:
+    active_width: 4080
+    active_height: 3060
+    pixel_clock_hz: 2698971429
+    line_length_pck: 12784
+    frame_length_lines: 3516
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+      sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+      line: 7262
+      basis: CIS indexed setfile
+      mode_index: 16
+      bits_per_pixel: 12
+      symbol: sensor_imx955_mode_info_A_19p2_DCG_LN2_4080x3060_60_pdlg
+      mode_name: A-05_DCG+LN2_4080x3060_60_pdlg
+  cis_2800x2100_30:
+    active_width: 2800
+    active_height: 2100
+    pixel_clock_hz: 2698971429
+    line_length_pck: 6880
+    frame_length_lines: 13076
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+      sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+      line: 7281
+      basis: CIS indexed setfile
+      mode_index: 17
+      bits_per_pixel: 10
+      symbol: sensor_imx955_mode_info_A_19p2_2800x2100_30
+      mode_name: A-10_2800x2100_30
+  cis_4080x2296_120:
+    active_width: 4080
+    active_height: 2296
+    pixel_clock_hz: 2698971429
+    line_length_pck: 6880
+    frame_length_lines: 3268
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+      sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+      line: 7300
+      basis: CIS indexed setfile
+      mode_index: 18
+      bits_per_pixel: 10
+      symbol: sensor_imx955_mode_info_A_19p2_4080x2296_120
+      mode_name: A-21_4080x2296_120
+  cis_ln2_4080x2296_60:
+    active_width: 4080
+    active_height: 2296
+    pixel_clock_hz: 2698971429
+    line_length_pck: 9824
+    frame_length_lines: 4576
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+      sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+      line: 7319
+      basis: CIS indexed setfile
+      mode_index: 19
+      bits_per_pixel: 10
+      symbol: sensor_imx955_mode_info_A_19p2_LN2_4080x2296_60
+      mode_name: A-22_LN2_4080x2296_60
+  cis_ln4_4080x2296_30:
+    active_width: 4080
+    active_height: 2296
+    pixel_clock_hz: 2698971429
+    line_length_pck: 17984
+    frame_length_lines: 5000
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+      sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+      line: 7338
+      basis: CIS indexed setfile
+      mode_index: 20
+      bits_per_pixel: 10
+      symbol: sensor_imx955_mode_info_A_19p2_LN4_4080x2296_30
+      mode_name: A-23_LN4_4080x2296_30
+  cis_dcg_4080x2296_60_pdlg:
+    active_width: 4080
+    active_height: 2296
+    pixel_clock_hz: 2698971429
+    line_length_pck: 10112
+    frame_length_lines: 4448
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+      sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+      line: 7357
+      basis: CIS indexed setfile
+      mode_index: 21
+      bits_per_pixel: 12
+      symbol: sensor_imx955_mode_info_A_19p2_DCG_4080x2296_60_pdlg
+      mode_name: A-24_DCG_4080x2296_60_pdlg
+  cis_dcg_ln2_4080x2296_60_pdlg:
+    active_width: 4080
+    active_height: 2296
+    pixel_clock_hz: 2698971429
+    line_length_pck: 12784
+    frame_length_lines: 3516
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+      sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+      line: 7376
+      basis: CIS indexed setfile
+      mode_index: 22
+      bits_per_pixel: 12
+      symbol: sensor_imx955_mode_info_A_19p2_DCG_LN2_4080x2296_60_pdlg
+      mode_name: A-25_DCG+LN2_4080x2296_60_pdlg
+  cis_dcg_ln4_4080x2296_30_pdlg:
+    active_width: 4080
+    active_height: 2296
+    pixel_clock_hz: 2698971429
+    line_length_pck: 17984
+    frame_length_lines: 5000
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+      sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+      line: 7395
+      basis: CIS indexed setfile
+      mode_index: 23
+      bits_per_pixel: 12
+      symbol: sensor_imx955_mode_info_A_19p2_DCG_LN4_4080x2296_30_pdlg
+      mode_name: A-26_DCG+LN4_4080x2296_30_pdlg
+  cis_dcg_dsg_full_drange_4080x2296_60_pdlg:
+    active_width: 4080
+    active_height: 2296
+    pixel_clock_hz: 2698971429
+    line_length_pck: 10672
+    frame_length_lines: 4212
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+      sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+      line: 7414
+      basis: CIS indexed setfile
+      mode_index: 24
+      bits_per_pixel: 10
+      symbol: sensor_imx955_mode_info_A_19p2_DCG_DSG_Full_Drange_4080x2296_60_pdlg
+      mode_name: A-27_DCG+DSG_Full-Drange_4080x2296_60_pdlg
+  cis_dcg_dsg_ln2_full_drange_4080x2296_60_pdlg:
+    active_width: 4080
+    active_height: 2296
+    pixel_clock_hz: 2698971429
+    line_length_pck: 13344
+    frame_length_lines: 3368
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+      sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+      line: 7433
+      basis: CIS indexed setfile
+      mode_index: 25
+      bits_per_pixel: 10
+      symbol: sensor_imx955_mode_info_A_19p2_DCG_DSG_LN2_Full_Drange_4080x2296_60_pdlg
+      mode_name: A-28_DCG+DSG+LN2_Full-Drange_4080x2296_60_pdlg
+  cis_3328x1872_120:
+    active_width: 3328
+    active_height: 1872
+    pixel_clock_hz: 2698971429
+    line_length_pck: 6880
+    frame_length_lines: 3268
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+      sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+      line: 7452
+      basis: CIS indexed setfile
+      mode_index: 26
+      bits_per_pixel: 10
+      symbol: sensor_imx955_mode_info_A_19p2_3328x1872_120
+      mode_name: A-30_3328x1872_120
+  cis_ln2_8160x6120_20:
+    active_width: 8160
+    active_height: 6120
+    pixel_clock_hz: 2698971429
+    line_length_pck: 18688
+    frame_length_lines: 7220
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+      sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+      line: 7471
+      basis: CIS indexed setfile
+      mode_index: 27
+      bits_per_pixel: 10
+      symbol: sensor_imx955_mode_info_A_19p2_LN2_8160x6120_20
+      mode_name: B-02_LN2_8160x6120_20
+  cis_dsg_8160x6120_20_pdlg:
+    active_width: 8160
+    active_height: 6120
+    pixel_clock_hz: 2698971429
+    line_length_pck: 18400
+    frame_length_lines: 7334
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+      sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+      line: 7490
+      basis: CIS indexed setfile
+      mode_index: 28
+      bits_per_pixel: 12
+      symbol: sensor_imx955_mode_info_A_19p2_DSG_8160x6120_20_pdlg
+      mode_name: B-04_DSG_8160x6120_20_pdlg
+  cis_8000x4500_30:
+    active_width: 8000
+    active_height: 4500
+    pixel_clock_hz: 2698971429
+    line_length_pck: 12256
+    frame_length_lines: 7340
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+      sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+      line: 7509
+      basis: CIS indexed setfile
+      mode_index: 29
+      bits_per_pixel: 10
+      symbol: sensor_imx955_mode_info_A_19p2_8000x4500_30
+      mode_name: B-11_8000x4500_30
+  cis_ln2_8000x4500_30:
+    active_width: 8000
+    active_height: 4500
+    pixel_clock_hz: 2698971429
+    line_length_pck: 18688
+    frame_length_lines: 4814
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+      sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+      line: 7528
+      basis: CIS indexed setfile
+      mode_index: 30
+      bits_per_pixel: 10
+      symbol: sensor_imx955_mode_info_A_19p2_LN2_8000x4500_30
+      mode_name: B-12_LN2_8000x4500_30
+  cis_roi_4080x3060_60:
+    active_width: 4080
+    active_height: 3060
+    pixel_clock_hz: 2698971429
+    line_length_pck: 10960
+    frame_length_lines: 4104
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+      sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+      line: 7547
+      basis: CIS indexed setfile
+      mode_index: 31
+      bits_per_pixel: 10
+      symbol: sensor_imx955_mode_info_A_19p2_ROI_4080x3060_60
+      mode_name: B-21_ROI_4080x3060_60
+  cis_roi_ln2_4080x3060_30:
+    active_width: 4080
+    active_height: 3060
+    pixel_clock_hz: 2698971429
+    line_length_pck: 18688
+    frame_length_lines: 4814
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+      sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+      line: 7566
+      basis: CIS indexed setfile
+      mode_index: 32
+      bits_per_pixel: 10
+      symbol: sensor_imx955_mode_info_A_19p2_ROI_LN2_4080x3060_30
+      mode_name: B-22_ROI_LN2_4080x3060_30
+  cis_roi_dsg_4080x3060_30_pdlg:
+    active_width: 4080
+    active_height: 3060
+    pixel_clock_hz: 2698971429
+    line_length_pck: 18400
+    frame_length_lines: 4888
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+      sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+      line: 7585
+      basis: CIS indexed setfile
+      mode_index: 33
+      bits_per_pixel: 12
+      symbol: sensor_imx955_mode_info_A_19p2_ROI_DSG_4080x3060_30_pdlg
+      mode_name: B-24_ROI_DSG_4080x3060_30_pdlg
+  cis_roi_4080x2296_60:
+    active_width: 4080
+    active_height: 2296
+    pixel_clock_hz: 2698971429
+    line_length_pck: 10960
+    frame_length_lines: 4104
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+      sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+      line: 7604
+      basis: CIS indexed setfile
+      mode_index: 34
+      bits_per_pixel: 10
+      symbol: sensor_imx955_mode_info_A_19p2_ROI_4080x2296_60
+      mode_name: B-31_ROI_4080x2296_60
+  cis_roi_ln2_4080x2296_58:
+    active_width: 4080
+    active_height: 2296
+    pixel_clock_hz: 2698971429
+    line_length_pck: 18688
+    frame_length_lines: 2480
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+      sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+      line: 7623
+      basis: CIS indexed setfile
+      mode_index: 35
+      bits_per_pixel: 10
+      symbol: sensor_imx955_mode_info_A_19p2_ROI_LN2_4080x2296_58
+      mode_name: B-32_ROI_LN2_4080x2296_58
+  cis_roi_hfr_dsg_4080x2296_60_pdlg:
+    active_width: 4080
+    active_height: 2296
+    pixel_clock_hz: 2698971429
+    line_length_pck: 18272
+    frame_length_lines: 2460
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+      sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+      line: 7642
+      basis: CIS indexed setfile
+      mode_index: 36
+      bits_per_pixel: 12
+      symbol: sensor_imx955_mode_info_A_19p2_ROI_HFR_DSG_4080x2296_60_pdlg
+      mode_name: B-34_ROI_HFR+DSG_4080x2296_60_pdlg
+  cis_roi_dsg_ln2_4080x2296_30_pdlg:
+    active_width: 4080
+    active_height: 2296
+    pixel_clock_hz: 2698971429
+    line_length_pck: 24176
+    frame_length_lines: 3720
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+      sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+      line: 7661
+      basis: CIS indexed setfile
+      mode_index: 37
+      bits_per_pixel: 12
+      symbol: sensor_imx955_mode_info_A_19p2_ROI_DSG_LN2_4080x2296_30_pdlg
+      mode_name: B-35_ROI_DSG+LN2_4080x2296_30_pdlg
+  cis_2000x1124_240:
+    active_width: 2000
+    active_height: 1124
+    pixel_clock_hz: 2698971429
+    line_length_pck: 5760
+    frame_length_lines: 1952
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+      sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+      line: 7680
+      basis: CIS indexed setfile
+      mode_index: 38
+      bits_per_pixel: 10
+      symbol: sensor_imx955_mode_info_A_19p2_2000x1124_240
+      mode_name: C-01_2000x1124_240
+  cis_2000x1124_480_wopdaf:
+    active_width: 2000
+    active_height: 1124
+    pixel_clock_hz: 2698971429
+    line_length_pck: 4384
+    frame_length_lines: 1280
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+      sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+      line: 7699
+      basis: CIS indexed setfile
+      mode_index: 39
+      bits_per_pixel: 10
+      symbol: sensor_imx955_mode_info_A_19p2_2000x1124_480_woPDAF
+      mode_name: C-02_2000x1124_480_woPDAF
+  cis_2040x1532_120:
+    active_width: 2040
+    active_height: 1532
+    pixel_clock_hz: 2698971429
+    line_length_pck: 5760
+    frame_length_lines: 3904
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+      sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+      line: 7718
+      basis: CIS indexed setfile
+      mode_index: 40
+      bits_per_pixel: 10
+      symbol: sensor_imx955_mode_info_A_19p2_2040x1532_120
+      mode_name: C-03_2040x1532_120
+provenance:
+  selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+  setfile:
+    path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955-setA-19p2.h
+    sha256: 3e5d39d1dee813be6c449e42bb20c416b86ff09ddcb4e1999f012294359d8fb3
+  driver:
+    path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx955.c
+    sha256: 833de457d5d736e49403907d5e932fcaaa4bbb269ed12d85dec5671117c270e8
+  mode_table: sensor_imx955_mode_infos_A_19p2

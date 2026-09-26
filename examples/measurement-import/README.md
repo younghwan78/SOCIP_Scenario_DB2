@@ -41,7 +41,7 @@ flowchart LR
 | 적합 | run별 rail 측정 raw 보유 | 외부 리포트 요약만 보유 |
 | 산출물 | `evidence.measurement` YAML (동일 스키마) | `evidence.measurement` YAML (동일 스키마) |
 
-대상 참조(main DB 적재됨): `project=proj-sm-s947b`, `scenario=uc-camera-recording`, `variant=cam-rec-r1-uhd30-vdis`.
+대상 참조(main DB 적재됨): `project=proj-sm-s947b`, `scenario=uc-cam-recording-e2600`, `variant=cam-rec-r1-uhd30-vdis`.
 
 ---
 

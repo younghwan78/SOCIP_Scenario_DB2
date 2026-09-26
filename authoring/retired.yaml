@@ -1,0 +1,109 @@
+# Rows to remove from runtime DBs so they match the authoring scope. Fixtures/authoring are the source;
+# this only cleans rows left by earlier loads (current ids). scripts/dev_up.ps1 applies it after rename, before ETL:
+#   python -m scenario_db.etl.retire --apply --backup <json>
+# Scope rule: Exynos2600 (sm-s947b) is the complete reference fixture and must never appear here.
+# Exynos2700 (sm-s957b) emits only uc-cam-recording-e2700 (overlay variants.keep).
+kind: authoring.retirements
+retire:
+- date: '2026-09-27'
+  reason: Exynos2700 (SM-S957B) scope = rear camera recording KPI set (uc-cam-recording-e2700). Rows from the earlier full
+    2700 load are removed; Exynos2600 is NOT retired.
+  scenarios:
+  - uc-aud-mp3-playback-e2700
+  - uc-aud-streaming-e2700
+  - uc-call-video-e2700
+  - uc-call-voice-e2700
+  - uc-cam-capture-e2700
+  - uc-cam-preview-e2700
+  - uc-cam-recording-apv-e2700
+  - uc-disp-gallery-e2700
+  - uc-game-play-e2700
+  - uc-game-streaming-e2700
+  - uc-vid-playback-local-e2700
+  - uc-vid-youtube-e2700
+  variants:
+    uc-cam-recording-e2700:
+    - cam-rec-r1-fhd30-sdr
+    - cam-rec-r1-fhd30-ois
+    - cam-rec-r1-fhd30-supersteady
+    - cam-rec-r1-fhd30-recursive
+    - cam-rec-r1-fhd30-hdr10
+    - cam-rec-r1-fhd30-hdr10-supersteady
+    - cam-rec-r1-fhd60-sdr
+    - cam-rec-r1-fhd60-hdr10
+    - cam-rec-r1-fhd480
+    - cam-rec-r1-fhd960-ssm
+    - cam-rec-r1-qhd30-supersteady
+    - cam-rec-r1-qhd30-hdr10-supersteady
+    - cam-rec-r1-uhd30-sdr
+    - cam-rec-r1-uhd30-supersteady
+    - cam-rec-r1-uhd30-recursive
+    - cam-rec-r1-uhd30-hdr10
+    - cam-rec-r1-uhd60-sdr
+    - cam-rec-r1-uhd60-supersteady
+    - cam-rec-r1-uhd60-hdr10
+    - cam-rec-r1-8k24-sdr
+    - cam-rec-r1-8k24-hf
+    - cam-rec-r1-8k24-psm
+    - cam-rec-r1-8k30-sdr
+    - cam-rec-r1-8k30-hf
+    - cam-rec-rcv-fhd30-sdr
+    - cam-rec-rcv-uhd30-sdr
+    - cam-rec-rcv-fhd30-hdr10
+    - cam-rec-rcv-uhd30-hdr10
+    - cam-rec-rdual-fhd30
+    - cam-rec-rdual-fhd60
+    - cam-rec-rdual-uhd30
+    - cam-rec-rdual-uhd60
+    - cam-rec-rtriple-fhd30
+    - cam-rec-rtriple-fhd60
+    - cam-rec-rtriple-uhd30
+    - cam-rec-rtriple-uhd60
+    - cam-rec-f1-fhd30
+    - cam-rec-f1-fhd30-recursive
+    - cam-rec-f1-fhd60
+    - cam-rec-f1-fhd120
+    - cam-rec-f1-uhd30
+    - cam-rec-f1-uhd30-recursive
+    - cam-rec-f1-uhd60
+    - cam-rec-f1-uhd120
+    - cam-rec-pip-fhd30
+    - cam-rec-pip-uhd30
+    - cam-rec-3rdparty-fhd30
+    - cam-rec-3rdparty-binning
+    - cam-rec-3rdparty-hdr10
+    - cam-rec-3rdparty-hlg
+    - cam-rec-iq-eval
+    - cam-rec-r1-fhd30-vdis-timing-min
+    - cam-rec-r1-fhd30-vdis-timing-max
+    - cam-rec-r1-uhd30-vdis-timing-min
+    - cam-rec-r1-uhd30-vdis-timing-max
+    - cam-rec-r1-fhd30-vdis-explored-min
+    - cam-rec-r1-fhd30-vdis-explored-mean
+    - cam-rec-r1-fhd30-vdis-explored-max
+    - cam-rec-r1-fhd60-supersteady-explored-min
+    - cam-rec-r1-fhd60-supersteady-explored-mean
+    - cam-rec-r1-uhd30-vdis-explored-min
+    - cam-rec-r1-uhd30-vdis-explored-mean
+    - cam-rec-r1-uhd30-vdis-explored-max
+    - cam-rec-r1-uhd60-supersteady-explored-min
+    - cam-rec-r1-uhd60-supersteady-explored-mean
+- date: '2026-09-27'
+  reason: 'Undo of the withdrawn 131b5f6 2600 reduction: APV variants that rename_ids moved under the 2600 camera-recording
+    scenario and the 2700-only KPI variants (Pro video, APV UHD120) it loaded there. The restored uc-cam-recording-apv-e2600
+    fixture reloads the APV rows under their own scenario.'
+  variants:
+    uc-cam-recording-e2600:
+    - cam-rec-apv-uhd30-422-sdr
+    - cam-rec-apv-uhd30-444-sdr
+    - cam-rec-apv-uhd30-422-hdr10
+    - cam-rec-apv-uhd30-422-hdr10plus
+    - cam-rec-apv-uhd60-422-sdr
+    - cam-rec-apv-uhd60-422-hdr10
+    - cam-rec-apv-8k24-422-sdr
+    - cam-rec-apv-8k30-422-sdr
+    - cam-rec-apv-pro-uhd30-444
+    - cam-rec-apv-uhd120-422-sdr
+    - cam-rec-r1-uhd120-pro
+    - cam-rec-r1-uhd30-pro
+    - cam-rec-r1-uhd60-pro

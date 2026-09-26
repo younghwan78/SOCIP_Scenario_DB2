@@ -1,7 +1,7 @@
 id: sim-priority-cam-rec-apv-uhd60-422-hdr10-mean-20260913
 schema_version: '2.2'
 kind: evidence.simulation
-scenario_ref: uc-camera-recording-apv
+scenario_ref: uc-cam-recording-apv-e2600
 variant_ref: cam-rec-apv-uhd60-422-hdr10
 project_ref: proj-sm-s947b
 derived_from: []
@@ -5314,7 +5314,7 @@ params_hash: ad8d644e642d49f6
 calculation_trace:
   schema_version: '1.0'
   trace_level: formula
-  scenario_id: uc-camera-recording-apv
+  scenario_id: uc-cam-recording-apv-e2600
   variant_id: cam-rec-apv-uhd60-422-hdr10
   config:
     asv_group: 4

@@ -1,0 +1,290 @@
+id: ip-sensor-hp2-s5e9965
+schema_version: '2.2'
+kind: ip
+category: sensor
+hierarchy:
+  type: simple
+capabilities:
+  operating_modes:
+  - id: mode0
+  - id: mode2
+  - id: mode10
+  - id: mode11
+  - id: mode12
+  - id: mode13
+  - id: mode14
+  - id: mode15
+  - id: mode18
+  - id: mode20
+  - id: mode26
+  - id: mode27
+  - id: mode28
+  - id: mode34
+  - id: mode48
+  - id: mode49
+  - id: mode50
+  - id: mode51
+  - id: mode47
+  properties:
+    place: rear
+    sensor_name: S5KHP2
+    active_size:
+    - 16320
+    - 12240
+    phy_type: CPHY
+    source:
+      path: \\wsl.localhost\Ubuntu\home\neokein\work\12_SM_S947B\exynos\device\erd\erd9965\arch\arm64\boot\dts\samsung\m2s\camera\module_hp2.dtsi
+      sha256: 9fd6e40fb298458492874bf8b4a1081abcc4a63b35c9a14b41779d4754bfecca
+    modes:
+      mode0:
+        sensor_name: S5KHP2
+        sensor_size:
+        - 4080
+        - 3060
+        sensor_fps: 60.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 3.712
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 0
+        source_line: 80
+      mode2:
+        sensor_name: S5KHP2
+        sensor_size:
+        - 4000
+        - 3000
+        sensor_fps: 60.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 3.712
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 2
+        source_line: 103
+      mode10:
+        sensor_name: S5KHP2
+        sensor_size:
+        - 4000
+        - 2252
+        sensor_fps: 60.0
+        sensor_format: BAYER
+        sensor_bitwidth: 12
+        sensor_mipi_speed: 3.712
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 10
+        source_line: 161
+      mode11:
+        sensor_name: S5KHP2
+        sensor_size:
+        - 4000
+        - 2252
+        sensor_fps: 60.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 3.712
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 11
+        source_line: 167
+      mode12:
+        sensor_name: S5KHP2
+        sensor_size:
+        - 3328
+        - 1872
+        sensor_fps: 120.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 3.712
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 12
+        source_line: 173
+      mode13:
+        sensor_name: S5KHP2
+        sensor_size:
+        - 2800
+        - 2100
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 3.712
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 13
+        source_line: 179
+      mode14:
+        sensor_name: S5KHP2
+        sensor_size:
+        - 4000
+        - 3000
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 12
+        sensor_mipi_speed: 3.712
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 14
+        source_line: 185
+      mode15:
+        sensor_name: S5KHP2
+        sensor_size:
+        - 4080
+        - 3060
+        sensor_fps: 60.0
+        sensor_format: BAYER
+        sensor_bitwidth: 12
+        sensor_mipi_speed: 3.712
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 15
+        source_line: 191
+      mode18:
+        sensor_name: S5KHP2
+        sensor_size:
+        - 4000
+        - 2252
+        sensor_fps: 120.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 3.712
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 18
+        source_line: 236
+      mode20:
+        sensor_name: S5KHP2
+        sensor_size:
+        - 4000
+        - 3000
+        sensor_fps: 60.0
+        sensor_format: BAYER
+        sensor_bitwidth: 12
+        sensor_mipi_speed: 3.712
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 20
+        source_line: 242
+      mode26:
+        sensor_name: S5KHP2
+        sensor_size:
+        - 8160
+        - 6120
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 3.712
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 26
+        source_line: 287
+      mode27:
+        sensor_name: S5KHP2
+        sensor_size:
+        - 8160
+        - 6120
+        sensor_fps: 15.0
+        sensor_format: BAYER
+        sensor_bitwidth: 12
+        sensor_mipi_speed: 3.712
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 27
+        source_line: 315
+      mode28:
+        sensor_name: S5KHP2
+        sensor_size:
+        - 8000
+        - 4500
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.86
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 28
+        source_line: 321
+      mode34:
+        sensor_name: S5KHP2
+        sensor_size:
+        - 4000
+        - 3000
+        sensor_fps: 60.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 3.712
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 34
+        source_line: 327
+      mode48:
+        sensor_name: S5KHP2
+        sensor_size:
+        - 16320
+        - 12240
+        sensor_fps: 11.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 3.712
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 48
+        source_line: 372
+      mode49:
+        sensor_name: S5KHP2
+        sensor_size:
+        - 2000
+        - 1124
+        sensor_fps: 240.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 1.811
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 49
+        source_line: 382
+      mode50:
+        sensor_name: S5KHP2
+        sensor_size:
+        - 2000
+        - 1124
+        sensor_fps: 480.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.86
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 50
+        source_line: 388
+      mode51:
+        sensor_name: S5KHP2
+        sensor_size:
+        - 2040
+        - 1532
+        sensor_fps: 120.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 1.811
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 51
+        source_line: 394
+      mode47:
+        sensor_name: S5KHP2
+        sensor_size:
+        - 5824
+        - 4368
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 12
+        sensor_mipi_speed: 3.712
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 47
+        source_line: 400
+    provenance_status: kernel_declared
+    selection_note: DTS capability is not proof of the shipped board or selected runtime
+      sensor mode.
+compatible_soc:
+- soc-exynos2600

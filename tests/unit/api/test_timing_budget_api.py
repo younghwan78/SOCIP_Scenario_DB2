@@ -105,7 +105,7 @@ def test_service_runs_read_only_with_default_dvfs_lookup(monkeypatch):
             yaml_sha256="fixture",
         )
     graph = graph_from_fixture(
-        read(FIXTURE / "02_definition" / "uc-camera-recording.yaml"),
+        read(FIXTURE / "02_definition" / "uc-cam-recording-e2600.yaml"),
         "cam-rec-r1-uhd30-vdis",
         catalog,
     )
@@ -114,7 +114,7 @@ def test_service_runs_read_only_with_default_dvfs_lookup(monkeypatch):
     db = MagicMock()
     res = service.analyze_timing_budget_request(
         db,
-        TimingBudgetRequest(scenario_id="uc-camera-recording", variant_id="cam-rec-r1-uhd30-vdis"),
+        TimingBudgetRequest(scenario_id="uc-cam-recording-e2600", variant_id="cam-rec-r1-uhd30-vdis"),
     )
     assert res.report["verdict"]["status"] in {"ok", "clock_up", "fail"}
     assert res.dvfs_table_ref is None

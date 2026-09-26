@@ -1,0 +1,7 @@
+# Node -> size anchor bindings. Bound nodes get sim.width/height from the
+# variant's resolved anchors (size_profile.anchors + size_overrides).
+# `alternatives` lists other anchors that matched in every variant (review!).
+# `derived` anchors are computed per variant, e.g.
+#   eis_in: {from: record_out, scale: 1.15, align: 16}
+bindings: {}
+derived: {}

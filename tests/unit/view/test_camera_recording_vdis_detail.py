@@ -12,7 +12,7 @@ import test_view_projection_golden as golden  # noqa: E402
 
 pytestmark = pytest.mark.unit
 
-GRAPH_ARGS = ("uc-camera-recording.yaml", "cam-rec-r1-fhd30-vdis")
+GRAPH_ARGS = ("uc-cam-recording-e2600.yaml", "cam-rec-r1-fhd30-vdis")
 
 
 def _level1_view():

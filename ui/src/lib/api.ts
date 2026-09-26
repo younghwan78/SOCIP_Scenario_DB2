@@ -19,6 +19,10 @@ export interface CatalogItem {
   default_variant_id?: string | null
   soc_ref?: string | null
   board_type?: string | null
+  board_name?: string | null
+  project_name?: string | null
+  canonical_usecase?: string | null
+  default_sw_profile_ref?: string | null
 }
 
 export interface VariantRow {
@@ -172,6 +176,25 @@ export async function getJson<T>(path: string, params: Record<string, string | n
   return promise
 }
 
+export async function postJson<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  if (!res.ok) {
+    let detail = ''
+    try { const j = await res.json() as Dict; detail = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail ?? j).slice(0, 300) } catch { /* not JSON */ }
+    throw new ApiError(`${res.status} ${res.statusText} — ${path}${detail ? `: ${detail}` : ''}`, res.status)
+  }
+  return res.json() as Promise<T>
+}
+
+export interface SimRunRequest {
+  scenario_id: string
+  variant_id: string
+  config_profile_ref?: string | null
+  execution_context: { silicon_rev: string; sw_baseline_ref: string; thermal: string; method?: string }
+  persist?: boolean
+}
+export interface SimRunResponse { evidence_id: string; kpi: Dict; warnings?: string[]; persisted?: boolean }
+
 const enc = encodeURIComponent
 
 async function allPages<T, P extends Paged<T> = Paged<T>>(path: string, params: Record<string, string | number | undefined> = {}, limit = 500): Promise<P> {
@@ -199,5 +222,7 @@ export const api = {
   ipCatalog: (ipId: string) => getJson<IpCatalog>(`/ip-catalogs/${enc(ipId)}`),
   evidenceList: (scenarioId: string, variantId: string, projectRef?: string) => allPages<Evidence>('/evidence', { scenario_ref: scenarioId, variant_ref: variantId, project_ref: projectRef }, 200),
   evidence: (id: string) => getJson<Evidence>(`/evidence/${enc(id)}`),
+  simConfigs: (projectRef: string) => getJson<Paged<{ id: string; status?: string; version?: number }>>('/sim-config-profiles', { project_ref: projectRef, limit: 50 }),
+  simulate: (req: SimRunRequest) => postJson<SimRunResponse>('/simulation/run', { persist: false, ...req }),
   predMeas: (predictionId: string, measurementId: string) => getJson<{ rows: Dict[]; summary: Dict; context: Dict }>('/compare/prediction-measurement', { prediction_id: predictionId, measurement_id: measurementId }),
 }

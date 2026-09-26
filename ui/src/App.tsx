@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api, type CatalogItem } from './lib/api'
-import { addComparison, useAsync, useRoute, type Page } from './lib/route'
+import { useAsync, useRoute, type Page } from './lib/route'
 import { Icon } from './components/Icons'
 import { Resizer, usePref, useResizable } from './components/Layout'
 import { Picker } from './components/Picker'
@@ -18,6 +18,7 @@ import { CalibrationPage } from './pages/Calibration'
 import { LibraryPage } from './pages/Library'
 import { SettingsPage } from './pages/Settings'
 import { PREFERRED_REFERENCE } from './lib/defaults'
+import { addItem, canonicalOf, compareItems, counterpart, defaultScenario, formatItems, projectText, projectsOf, type ProjectInfo } from './lib/projects'
 
 type NavItem = { page: Page; label: string; icon: string; also?: Page[] }
 // Workflow order: 탐색 → 예측 → Architecture → Library. Home = brand link; legacy Streamlit lives in 설정.
@@ -42,7 +43,12 @@ const TITLES: Record<Page, string> = {
 }
 
 export interface Ctx {
+  /** scenarios of the selected project (과제) */
   catalog: CatalogItem[]
+  /** every project's scenarios (cross-project pages: Home, Compare, Picker) */
+  allCatalog: CatalogItem[]
+  projects: ProjectInfo[]
+  setProject: (projectId: string) => void
   project: string
   scenario: string
   variant: string
@@ -57,12 +63,18 @@ export default function App() {
   const side = useResizable('sidebar.w', 224, 168, 360)
   const [sideOpen, setSideOpen] = usePref('sidebar.open', true)
   const catalogQ = useAsync(() => api.catalog(), [])
-  const catalog = catalogQ.data?.items ?? []
-  const scopedCatalog = route.params.project ? catalog.filter((c) => c.project_id === route.params.project) : catalog
-  const scenario = route.params.scenario ?? scopedCatalog.find((c) => c.scenario_id === 'uc-camera-recording')?.scenario_id ?? scopedCatalog[0]?.scenario_id ?? ''
+  const catalog = useMemo(() => catalogQ.data?.items ?? [], [catalogQ.data])
+  const projects = useMemo(() => projectsOf(catalog), [catalog])
+  const [lastProject, setLastProject] = usePref('project', '')
+  const known = (p?: string) => (p && projects.some((x) => x.id === p) ? p : undefined)
+  const routeItem = route.params.scenario ? catalog.find((c) => c.scenario_id === route.params.scenario) : undefined
+  // scenario in the URL decides the project; otherwise ?project=, then the last choice, then the first project
+  const project = routeItem?.project_id ?? known(route.params.project) ?? known(lastProject) ?? projects[0]?.id ?? route.params.project ?? ''
+  const scopedCatalog = useMemo(() => catalog.filter((c) => c.project_id === project), [catalog, project])
+  const scenario = route.params.scenario ?? defaultScenario(scopedCatalog)?.scenario_id ?? ''
   const scenarioItem = catalog.find((c) => c.scenario_id === scenario)
-  const project = scenarioItem?.project_id ?? route.params.project ?? ''
-  const variant = route.params.variant ?? (scenarioItem?.variant_count ? PREFERRED_REFERENCE[scenario] ?? scenarioItem.default_variant_id ?? '' : '')
+  const variant = route.params.variant ?? (scenarioItem?.variant_count ? scenarioItem.default_variant_id ?? PREFERRED_REFERENCE[canonicalOf(scenarioItem)] ?? '' : '')
+  useEffect(() => { if (project && project !== lastProject && known(project)) setLastProject(project) }, [project]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -82,12 +94,25 @@ export default function App() {
     }
     nav({ page, params: next }, replace)
   }
-  const ctx: Ctx = { catalog, project, scenario, variant, params: route.params, navigate, openPicker: (m = 'open') => setPicker(m) }
+  /** Switch 과제: keep the use case and select the target project's known default variant. */
+  const setProject = (pid: string) => {
+    if (!pid) return
+    if (pid === project) { if (route.page === 'home') nav({ page: 'explorer', params: { project: pid } }); return }
+    setLastProject(pid)
+    const target = counterpart(catalog, scenarioItem, pid) ?? defaultScenario(catalog.filter((c) => c.project_id === pid))
+    // A counterpart shares its use case, not necessarily its variant set.
+    // Use the target catalog's known default; a source-only variant would 404.
+    nav({ page: route.page === 'home' ? 'explorer' : route.page, params: { project: pid, scenario: target?.scenario_id,
+      variant: target?.default_variant_id ?? undefined, variants: undefined, type: undefined,
+      run: undefined, report: undefined, m: undefined, v: undefined } })
+  }
+  const ctx: Ctx = { catalog: scopedCatalog, allCatalog: catalog, projects, setProject, project, scenario, variant, params: route.params, navigate, openPicker: (m = 'open') => setPicker(m) }
+  const currentItems = route.page === 'compare' ? compareItems(route.params, scenario, variant) : variant ? [{ scenario, variant }] : []
+  const toCompare = (s: string, v: string) => navigate('compare', { items: formatItems(addItem(currentItems, { scenario: s, variant: v })), variants: undefined })
   const link = (page: Page) => {
     const p = new URLSearchParams(Object.entries({ project, scenario, variant }).filter(([, v]) => v))
     return `#/${page}?${p.toString()}`
   }
-  const socLabel = scenarioItem?.soc_ref?.replace(/^soc-/, '').replace(/^exynos/i, 'Exynos') ?? ''
 
   return (
     <div className="app">
@@ -129,10 +154,18 @@ export default function App() {
         {route.page !== 'home' && <header className="topbar">
           <h1>{TITLES[route.page]}</h1>
           <span className="vsep" />
+          {projects.length > 0 && route.page !== 'compare' && (
+            <label className="proj-select" title="과제 (SoC · board) 선택">
+              <span className="faint">과제</span>
+              <select aria-label="과제 선택" value={project} onChange={(e) => setProject(e.target.value)}>
+                {projects.map((p) => <option key={p.id} value={p.id}>{projectText(p)} ({p.scenarios} · {p.variants})</option>)}
+              </select>
+            </label>
+          )}
           <div className="crumbs">
-            {socLabel && <><span>{socLabel}</span><span className="sep">›</span></>}
-            {scenarioItem?.board_type && <><span>{scenarioItem.board_type}</span><span className="sep">›</span></>}
-            <span style={{ color: 'var(--text)', fontWeight: 600 }}>{scenarioItem?.scenario_name ?? scenario}</span>
+            {route.page === 'compare'
+              ? <span style={{ color: 'var(--text)', fontWeight: 600 }}>{currentItems.length}개 비교 · 과제 {new Set(currentItems.map((i) => catalog.find((c) => c.scenario_id === i.scenario)?.project_id)).size}개</span>
+              : <span style={{ color: 'var(--text)', fontWeight: 600 }}>{scenarioItem?.scenario_name ?? scenario}</span>}
             {(route.page === 'pipeline' || route.page === 'timing') && variant && <><span className="sep">›</span>
               <button className="crumb-variant" onClick={() => setPicker('open')}>{variant}<Icon name="chevron" size={12} /></button></>}
           </div>
@@ -155,12 +188,12 @@ export default function App() {
         </header>}
         {catalogQ.error && route.page !== 'home' && route.page !== 'settings' && <div className="page"><div className="err">API에 연결할 수 없습니다: {catalogQ.error}<br />FastAPI(:18000)를 실행하고 <span className="mono">npm run dev</span>의 /api 프록시를 확인하세요.</div></div>}
         {!catalogQ.error && route.page === 'explorer' && <ExplorerPage key={`${scenario}:${route.params.type ?? ''}`} ctx={ctx} />}
-        {!catalogQ.error && route.page === 'matrix' && <MatrixPage ctx={ctx} />}
+        {!catalogQ.error && route.page === 'matrix' && <MatrixPage key={project} ctx={ctx} />}
         {!catalogQ.error && route.page === 'pipeline' && <PipelinePage key={`${scenario}:${variant}`} ctx={ctx} />}
         {!catalogQ.error && route.page === 'compare' && <ComparePage ctx={ctx} />}
         {!catalogQ.error && route.page === 'timing' && <TimingBudgetPage key={`${scenario}:${variant}`} ctx={ctx} />}
         {!catalogQ.error && route.page === 'timing-fleet' && <TimingFleetPage key={scenario} ctx={ctx} />}
-        {!catalogQ.error && route.page === 'explore' && <ExplorePage ctx={ctx} />}
+        {!catalogQ.error && route.page === 'explore' && <ExplorePage key={project} ctx={ctx} />}
         {!catalogQ.error && route.page === 'predictions' && <PredictionsPage key={scenario} ctx={ctx} />}
         {!catalogQ.error && route.page === 'reports' && <ReportsPage ctx={ctx} />}
         {route.page === 'home' && <HomePage key={scenario} ctx={ctx} />}
@@ -168,10 +201,10 @@ export default function App() {
         {!catalogQ.error && route.page === 'library' && <LibraryPage ctx={ctx} />}
         {route.page === 'settings' && <SettingsPage />}
       </div>
-      <Picker open={picker !== null} onClose={() => setPicker(null)} catalog={catalog} scenarioId={scenario}
-        onPick={(s, v) => navigate(picker === 'compare' ? 'compare' : route.page === 'compare' ? 'compare' : route.page === 'timing' ? 'timing' : 'pipeline',
-          picker === 'compare' || route.page === 'compare' ? { scenario: s, variants: addComparison(scenario, route.params.variants ?? variant, s, v) } : { scenario: s, variant: v })}
-        onAddCompare={(s, v) => navigate('compare', { scenario: s, variants: addComparison(scenario, route.params.variants ?? variant, s, v) })} />
+      <Picker open={picker !== null} onClose={() => setPicker(null)} catalog={catalog} projects={projects} scenarioId={scenario}
+        onPick={(s, v) => (picker === 'compare' || route.page === 'compare' ? toCompare(s, v)
+          : navigate(route.page === 'timing' ? 'timing' : 'pipeline', { scenario: s, variant: v }))}
+        onAddCompare={toCompare} />
     </div>
   )
 }

@@ -1,0 +1,42 @@
+# Compact variants: root entries are complete; `extends: <id>` entries are a
+# deep-merge patch over that variant (`$unset: [keys]` removes keys).
+# node sim width/height come from sizes.yaml; sw_timing from sw_timing.yaml.
+- id: vcall-fhd30-rear
+  severity: light
+  design_conditions:
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VT
+    sensor_place: rear
+    sensor_scenario: SENSOR_SCENARIO_NORMAL
+    resolution: FHD
+    fps: 30
+  routing_switch:
+    disabled_nodes:
+    - sensor_front
+    disabled_edges:
+    - from: sensor_front
+      to: csis
+  node_configs:
+    mfc_enc:
+      selected_mode: Normal
+      codec: H264_ENC
+    mfc_dec:
+      selected_mode: Normal
+      codec: H264_DEC
+- id: vcall-fhd30-front
+  extends: vcall-fhd30-rear
+  design_conditions:
+    dvfs_sn: IS_DVFS_SN_FRONT_SINGLE_VT
+    sensor_place: front
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear
+    disabled_edges:
+    - from: sensor_rear
+      to: csis
+- id: vcall-fhd30-front-lowlight
+  extends: vcall-fhd30-front
+  design_conditions:
+    $unset:
+    - sensor_scenario
+    extend_mode: EX_LN
+    note: 저조도 화상 통화 (Low Noise 모드)

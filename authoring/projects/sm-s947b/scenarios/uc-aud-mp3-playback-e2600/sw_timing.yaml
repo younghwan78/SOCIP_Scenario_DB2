@@ -1,0 +1,27 @@
+# SW task timing table. `variants: '*'` = every variant not listed in another
+# group and not in absent_in. Measured overrides go in the project's
+# sw_timing.measured.yaml, not here.
+known_variants:
+- audio-mp3-screen-on
+- audio-mp3-screen-off-offload
+- audio-flac-hires-screen-off
+- audio-aac-bt-screen-on
+tasks:
+  sw_decoder:
+    groups:
+    - id: sw_decoder-a
+      variants: '*'
+      timing:
+        min_ms: 1.5
+        mean_ms: 3.0
+        max_ms: 6.0
+        start_latency_ref: bitstream_available
+        start_latency_mean_ms: 0.5
+        rate_hz: 30.0
+        cpu_affinity: CPUCL1
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
+    absent_in:
+    - audio-mp3-screen-off-offload

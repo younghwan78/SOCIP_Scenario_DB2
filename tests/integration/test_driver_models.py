@@ -41,7 +41,7 @@ def driver_client(api_client, imported):
 
 
 def test_report_api_and_exploration(imported, driver_client):
-    query = {"scenario_id": "uc-game-play", "variant_id": "game-fhd-60fps-m2m-upscale"}
+    query = {"scenario_id": "uc-game-play-e2600", "variant_id": "game-fhd-60fps-m2m-upscale"}
     response = driver_client.get("/api/v1/driver-models", params=query)
     assert response.status_code == 200, response.text
     rows = response.json()["rows"]
@@ -72,7 +72,7 @@ def test_report_api_and_exploration(imported, driver_client):
 
 def test_report_persists_in_simulation_trace_and_changes_hash(imported):
     with Session(imported, join_transaction_mode="create_savepoint") as db:
-        graph = load_canonical_graph(db, "uc-audio-mp3-playback", "audio-mp3-screen-on")
+        graph = load_canonical_graph(db, "uc-aud-mp3-playback-e2600", "audio-mp3-screen-on")
         inputs = build_simulation_inputs(graph, SimulationRunConfig(include_timeline=False))
         result = run_simulation(inputs)
         assert result.calculation_trace["driver_models"]["rows"]
@@ -117,10 +117,10 @@ def test_all_noncamera_driver_coverage(imported):
         variants = [
             v
             for v in db.query(ScenarioVariant)
-            if "camera" not in v.scenario_id
-            and v.scenario_id != "uc-video-call"
+            if "uc-cam-" not in v.scenario_id
+            and v.scenario_id != "uc-call-video-e2600"
             and v.scenario_id.startswith(
-                ("uc-audio", "uc-game", "uc-gallery", "uc-youtube", "uc-voice", "uc-video-playback")
+                ("uc-aud-", "uc-game-", "uc-disp-", "uc-vid-", "uc-call-voice-")
             )
         ]
         assert len(variants) == 74
@@ -143,7 +143,7 @@ def test_calculation_trace_db_roundtrip(imported):
     from scenario_db.etl.mappers.evidence import upsert_simulation
 
     with Session(imported, join_transaction_mode="create_savepoint") as db:
-        graph = load_canonical_graph(db, "uc-game-play", "game-fhd-60fps-m2m-upscale")
+        graph = load_canonical_graph(db, "uc-game-play-e2600", "game-fhd-60fps-m2m-upscale")
         inputs = build_simulation_inputs(graph, SimulationRunConfig(include_timeline=False))
         result = run_simulation(inputs)
         evidence = build_simulation_evidence(

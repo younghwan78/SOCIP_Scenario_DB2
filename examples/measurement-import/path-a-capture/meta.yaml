@@ -17,7 +17,7 @@ id: meas-example-patha-uhd30-vdis-20260614
 
 # ── DB FK 참조 (이미 적재된 project / scenario / variant) ──────────────────────
 project_ref: proj-sm-s947b
-scenario_ref: uc-camera-recording
+scenario_ref: uc-cam-recording-e2600
 variant_ref: cam-rec-r1-uhd30-vdis
 measured_at: "2026-06-14T11:00:00+09:00"
 

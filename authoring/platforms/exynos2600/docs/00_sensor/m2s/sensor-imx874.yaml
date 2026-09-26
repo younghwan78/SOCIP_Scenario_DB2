@@ -1,0 +1,2431 @@
+id: sensor-imx874-m2s
+schema_version: '2.2'
+kind: sensor.catalog
+board: m2s
+sensor_name: IMX874
+position: 1
+position_role: front
+module_properties:
+  sensor_id: 134
+  sensor_id_name: SENSOR_NAME_IMX874
+  position: 1
+  id: 1
+  rom_id: 1
+  rom_cal_index: 0
+  mclk_ch: 3
+  mclk_freq: 19200
+  max_framerate: 240
+  bitwidth: 10
+  active_width: 4000
+  active_height: 3000
+  margin_left: 0
+  margin_right: 0
+  margin_top: 0
+  margin_bottom: 0
+  sensor_i2c_ch: 4
+  sensor_maker: SONY
+  sensor_name: IMX874
+  status: okay
+csis_wiring:
+  node: is_sensor1@27090000
+  csi_ch: 0
+  use_cphy: 0
+  scramble: 0
+  scenario: SENSOR_SCENARIO_NORMAL
+  status: okay
+  phy: DPHY
+mode_count: 28
+mode_summary:
+  sizes:
+    4000x3000: 10
+    4000x2252: 3
+    3056x2296: 3
+    2000x1500: 2
+    3056x1720: 2
+    2000x1124: 2
+    3392x2544: 1
+    3392x1908: 1
+    1696x1272: 1
+    1696x954: 1
+    1528x1148: 1
+    1528x860: 1
+  ex_modes:
+    EX_NONE: 18
+    EX_AEB: 4
+    EX_PDAF_OFF: 1
+    EX_LIVEFOCUS: 1
+    EX_LIVE_FOCUS_AEB: 1
+    EX_PHY_TUNE: 1
+    EX_LN: 1
+    EX_DCG: 1
+  fps:
+  - 24
+  - 30
+  - 60
+  - 120
+  max_mipi_link_mbps: 12124
+modes:
+  mode1:
+    timing_binding:
+      profile_ref: sensortiming-imx874-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4000x3000_60fps_10bit
+      mode_index: 1
+      mode_sha256: 44fadc794a9d8939d751ae127194673ff777fcc6ced1e1055f9288876e6deb4d
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+          sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874.c
+          sha256: 76f3f672532ac0710531e2c69ab34aa0f6a0f37310a24413aaf614cd997a3ae5
+        mode_table: sensor_imx874_mode_infos_A_19p2
+    dt:
+      common:
+      - '4000'
+      - '3000'
+      - '60'
+      - '0'
+      - '1'
+      - CSI_DATA_LANES_4
+      - '2692'
+      - CSI_MODE_VC_ONLY
+      - LRTE_ENABLE
+      - PD_MOD3
+      source_line: 140
+    decoded:
+      size:
+      - 4000
+      - 3000
+      fps: 60
+      settle: 0
+      mode_index: 1
+      lanes: 4
+      lanes_enum: CSI_DATA_LANES_4
+      mipi_speed_mbps: 2692
+      interleave_mode: CSI_MODE_VC_ONLY
+      interleave_mode_value: 2
+      lrte: LRTE_ENABLE
+      lrte_value: 1
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+      ex_mode_source: default (common has 10 cells, driver leaves cfg->ex_mode at 0)
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 4000
+          - 3000
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 1
+          size:
+          - 4000
+          - 750
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 10768
+      phy: DPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 18750000
+      csis_input_mbps: 9000.0
+      link_utilization_pct: 83.6
+  mode1_secure:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
+    dt:
+      common:
+      - '4000'
+      - '3000'
+      - '60'
+      - '0'
+      - '1'
+      - CSI_DATA_LANES_4
+      - '2692'
+      - CSI_MODE_VC_ONLY
+      - LRTE_ENABLE
+      - PD_NONE
+      - EX_PDAF_OFF
+      source_line: 146
+    decoded:
+      size:
+      - 4000
+      - 3000
+      fps: 60
+      settle: 0
+      mode_index: 1
+      lanes: 4
+      lanes_enum: CSI_DATA_LANES_4
+      mipi_speed_mbps: 2692
+      interleave_mode: CSI_MODE_VC_ONLY
+      interleave_mode_value: 2
+      lrte: LRTE_ENABLE
+      lrte_value: 1
+      pd_mode: PD_NONE
+      pd_mode_value: 5
+      ex_mode: EX_PDAF_OFF
+      ex_mode_value: 5
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 4000
+          - 3000
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 1
+          size:
+          - 4000
+          - 750
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 10768
+      phy: DPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 18750000
+      csis_input_mbps: 9000.0
+      link_utilization_pct: 83.6
+  mode1_aeb:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
+    dt:
+      common:
+      - '4000'
+      - '3000'
+      - '60'
+      - '0'
+      - '1'
+      - CSI_DATA_LANES_4
+      - '2692'
+      - CSI_MODE_VC_ONLY
+      - LRTE_ENABLE
+      - PD_MOD3
+      - EX_AEB
+      source_line: 152
+    decoded:
+      size:
+      - 4000
+      - 3000
+      fps: 60
+      settle: 0
+      mode_index: 1
+      lanes: 4
+      lanes_enum: CSI_DATA_LANES_4
+      mipi_speed_mbps: 2692
+      interleave_mode: CSI_MODE_VC_ONLY
+      interleave_mode_value: 2
+      lrte: LRTE_ENABLE
+      lrte_value: 1
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_AEB
+      ex_mode_value: 8
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 4000
+          - 3000
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc1:
+          map: 2
+          size:
+          - 4000
+          - 3000
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 1
+          size:
+          - 4000
+          - 750
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+        vc3:
+          map: 3
+          size:
+          - 4000
+          - 750
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+      max_fps: 60
+    derived:
+      mipi_link_mbps: 10768
+      phy: DPHY
+      vc_count_by_class:
+        image: 2
+        pd_horizontal: 2
+      image_vc_count: 2
+      csis_input_bytes_per_frame: 37500000
+      csis_input_mbps: 18000.0
+      link_utilization_pct: 167.2
+      link_overcommit: 'declared VC payload exceeds the MIPI link rate. This mode declares more than one image VC (AEB/DCG
+        bracketing): the exposures are time-multiplexed, so summing every image VC at the DT frame rate double-counts. See
+        csis_input_mbps_per_exposure.'
+      csis_input_mbps_per_exposure: 10800.0
+  mode1_pd_raw:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
+    dt:
+      common:
+      - '4000'
+      - '3000'
+      - '60'
+      - '0'
+      - '1'
+      - CSI_DATA_LANES_4
+      - '2692'
+      - CSI_MODE_VC_ONLY
+      - LRTE_ENABLE
+      - PD_MOD3
+      - EX_LIVEFOCUS
+      source_line: 160
+    decoded:
+      size:
+      - 4000
+      - 3000
+      fps: 60
+      settle: 0
+      mode_index: 1
+      lanes: 4
+      lanes_enum: CSI_DATA_LANES_4
+      mipi_speed_mbps: 2692
+      interleave_mode: CSI_MODE_VC_ONLY
+      interleave_mode_value: 2
+      lrte: LRTE_ENABLE
+      lrte_value: 1
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_LIVEFOCUS
+      ex_mode_value: 2
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 4000
+          - 3000
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 1
+          size:
+          - 4000
+          - 750
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    derived:
+      mipi_link_mbps: 10768
+      phy: DPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 18750000
+      csis_input_mbps: 9000.0
+      link_utilization_pct: 83.6
+  mode1_livefocus_aeb:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
+    dt:
+      common:
+      - '4000'
+      - '3000'
+      - '60'
+      - '0'
+      - '1'
+      - CSI_DATA_LANES_4
+      - '2692'
+      - CSI_MODE_VC_ONLY
+      - LRTE_ENABLE
+      - PD_MOD3
+      - EX_LIVE_FOCUS_AEB
+      source_line: 165
+    decoded:
+      size:
+      - 4000
+      - 3000
+      fps: 60
+      settle: 0
+      mode_index: 1
+      lanes: 4
+      lanes_enum: CSI_DATA_LANES_4
+      mipi_speed_mbps: 2692
+      interleave_mode: CSI_MODE_VC_ONLY
+      interleave_mode_value: 2
+      lrte: LRTE_ENABLE
+      lrte_value: 1
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_LIVE_FOCUS_AEB
+      ex_mode_value: 15
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 4000
+          - 3000
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc1:
+          map: 2
+          size:
+          - 4000
+          - 3000
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 1
+          size:
+          - 4000
+          - 750
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+        vc3:
+          map: 3
+          size:
+          - 4000
+          - 750
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+      max_fps: 60
+    derived:
+      mipi_link_mbps: 10768
+      phy: DPHY
+      vc_count_by_class:
+        image: 2
+        pd_horizontal: 2
+      image_vc_count: 2
+      csis_input_bytes_per_frame: 37500000
+      csis_input_mbps: 18000.0
+      link_utilization_pct: 167.2
+      link_overcommit: 'declared VC payload exceeds the MIPI link rate. This mode declares more than one image VC (AEB/DCG
+        bracketing): the exposures are time-multiplexed, so summing every image VC at the DT frame rate double-counts. See
+        csis_input_mbps_per_exposure.'
+      csis_input_mbps_per_exposure: 10800.0
+  mode1_phy_tune:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
+    dt:
+      common:
+      - '4000'
+      - '3000'
+      - '60'
+      - '0'
+      - '1'
+      - CSI_DATA_LANES_4
+      - '2692'
+      - CSI_MODE_VC_ONLY
+      - LRTE_ENABLE
+      - PD_NONE
+      - EX_PHY_TUNE
+      source_line: 173
+    decoded:
+      size:
+      - 4000
+      - 3000
+      fps: 60
+      settle: 0
+      mode_index: 1
+      lanes: 4
+      lanes_enum: CSI_DATA_LANES_4
+      mipi_speed_mbps: 2692
+      interleave_mode: CSI_MODE_VC_ONLY
+      interleave_mode_value: 2
+      lrte: LRTE_ENABLE
+      lrte_value: 1
+      pd_mode: PD_NONE
+      pd_mode_value: 5
+      ex_mode: EX_PHY_TUNE
+      ex_mode_value: 99
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 4000
+          - 3000
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 1
+          size:
+          - 4000
+          - 750
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 10768
+      phy: DPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 18750000
+      csis_input_mbps: 9000.0
+      link_utilization_pct: 83.6
+  mode2:
+    timing_binding:
+      profile_ref: sensortiming-imx874-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4000x3000_60fps_12bit
+      mode_index: 2
+      mode_sha256: 968fc0aacb747f659bbbcdf5bcb59f8ef4a81b6d235b30f145d35d4d98bba9f7
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+          sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874.c
+          sha256: 76f3f672532ac0710531e2c69ab34aa0f6a0f37310a24413aaf614cd997a3ae5
+        mode_table: sensor_imx874_mode_infos_A_19p2
+    dt:
+      common:
+      - '4000'
+      - '3000'
+      - '60'
+      - '0'
+      - '2'
+      - CSI_DATA_LANES_4
+      - '3031'
+      - CSI_MODE_VC_ONLY
+      - LRTE_ENABLE
+      - PD_MOD3
+      source_line: 179
+    decoded:
+      size:
+      - 4000
+      - 3000
+      fps: 60
+      settle: 0
+      mode_index: 2
+      lanes: 4
+      lanes_enum: CSI_DATA_LANES_4
+      mipi_speed_mbps: 3031
+      interleave_mode: CSI_MODE_VC_ONLY
+      interleave_mode_value: 2
+      lrte: LRTE_ENABLE
+      lrte_value: 1
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+      ex_mode_source: default (common has 10 cells, driver leaves cfg->ex_mode at 0)
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 4000
+          - 3000
+          hwformat: HW_FORMAT_RAW12
+          hwformat_value: 44
+          hwformat_base: HW_FORMAT_RAW12
+          bits_per_pixel: 12
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 1
+          size:
+          - 4000
+          - 750
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 12124
+      phy: DPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 21750000
+      csis_input_mbps: 10440.0
+      link_utilization_pct: 86.1
+  mode3_ln:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
+    dt:
+      common:
+      - '4000'
+      - '3000'
+      - '24'
+      - '0'
+      - '3'
+      - CSI_DATA_LANES_4
+      - '2692'
+      - CSI_MODE_VC_ONLY
+      - LRTE_ENABLE
+      - PD_MOD3
+      - EX_LN
+      source_line: 185
+    decoded:
+      size:
+      - 4000
+      - 3000
+      fps: 24
+      settle: 0
+      mode_index: 3
+      lanes: 4
+      lanes_enum: CSI_DATA_LANES_4
+      mipi_speed_mbps: 2692
+      interleave_mode: CSI_MODE_VC_ONLY
+      interleave_mode_value: 2
+      lrte: LRTE_ENABLE
+      lrte_value: 1
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_LN
+      ex_mode_value: 17
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 4000
+          - 3000
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 1
+          size:
+          - 4000
+          - 750
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 10768
+      phy: DPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 18750000
+      csis_input_mbps: 3600.0
+      link_utilization_pct: 33.4
+  mode10:
+    timing_binding_note: "Extended/suffix mode: runtime readout sequence needs review."
+    dt:
+      common:
+      - '4000'
+      - '3000'
+      - '30'
+      - '0'
+      - '10'
+      - CSI_DATA_LANES_4
+      - '2692'
+      - CSI_MODE_VC_ONLY
+      - LRTE_ENABLE
+      - PD_MOD3
+      source_line: 191
+    decoded:
+      size:
+      - 4000
+      - 3000
+      fps: 30
+      settle: 0
+      mode_index: 10
+      lanes: 4
+      lanes_enum: CSI_DATA_LANES_4
+      mipi_speed_mbps: 2692
+      interleave_mode: CSI_MODE_VC_ONLY
+      interleave_mode_value: 2
+      lrte: LRTE_ENABLE
+      lrte_value: 1
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+      ex_mode_source: default (common has 10 cells, driver leaves cfg->ex_mode at 0)
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 4000
+          - 3000
+          hwformat: HW_FORMAT_RAW12
+          hwformat_value: 44
+          hwformat_base: HW_FORMAT_RAW12
+          bits_per_pixel: 12
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 1
+          size:
+          - 4000
+          - 750
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+      ex_mode_extra: EX_EXTRA_VIDEO
+      ex_mode_extra_value: 1
+    derived:
+      mipi_link_mbps: 10768
+      phy: DPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 21750000
+      csis_input_mbps: 5220.0
+      link_utilization_pct: 48.5
+  mode10_dcg:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
+    dt:
+      common:
+      - '4000'
+      - '3000'
+      - '30'
+      - '0'
+      - '10'
+      - CSI_DATA_LANES_4
+      - '2692'
+      - CSI_MODE_VC_ONLY
+      - LRTE_ENABLE
+      - PD_MOD3
+      - EX_DCG
+      source_line: 197
+    decoded:
+      size:
+      - 4000
+      - 3000
+      fps: 30
+      settle: 0
+      mode_index: 10
+      lanes: 4
+      lanes_enum: CSI_DATA_LANES_4
+      mipi_speed_mbps: 2692
+      interleave_mode: CSI_MODE_VC_ONLY
+      interleave_mode_value: 2
+      lrte: LRTE_ENABLE
+      lrte_value: 1
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_DCG
+      ex_mode_value: 16
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 4000
+          - 3000
+          hwformat: HW_FORMAT_RAW12
+          hwformat_value: 44
+          hwformat_base: HW_FORMAT_RAW12
+          bits_per_pixel: 12
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 1
+          size:
+          - 4000
+          - 750
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 10768
+      phy: DPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 21750000
+      csis_input_mbps: 5220.0
+      link_utilization_pct: 48.5
+  mode11:
+    timing_binding:
+      profile_ref: sensortiming-imx874-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4000x2252_60fps_10bit
+      mode_index: 11
+      mode_sha256: 35fcdcbcbbd0d69e396f70f38703339e267867984dede43bca4eba6c2af4d08d
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+          sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874.c
+          sha256: 76f3f672532ac0710531e2c69ab34aa0f6a0f37310a24413aaf614cd997a3ae5
+        mode_table: sensor_imx874_mode_infos_A_19p2
+    dt:
+      common:
+      - '4000'
+      - '2252'
+      - '60'
+      - '0'
+      - '11'
+      - CSI_DATA_LANES_4
+      - '2692'
+      - CSI_MODE_VC_ONLY
+      - LRTE_ENABLE
+      - PD_MOD3
+      source_line: 203
+    decoded:
+      size:
+      - 4000
+      - 2252
+      fps: 60
+      settle: 0
+      mode_index: 11
+      lanes: 4
+      lanes_enum: CSI_DATA_LANES_4
+      mipi_speed_mbps: 2692
+      interleave_mode: CSI_MODE_VC_ONLY
+      interleave_mode_value: 2
+      lrte: LRTE_ENABLE
+      lrte_value: 1
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+      ex_mode_source: default (common has 10 cells, driver leaves cfg->ex_mode at 0)
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 4000
+          - 2252
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 1
+          size:
+          - 4000
+          - 563
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 10768
+      phy: DPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 14075000
+      csis_input_mbps: 6756.0
+      link_utilization_pct: 62.7
+  mode11_aeb:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
+    dt:
+      common:
+      - '4000'
+      - '2252'
+      - '60'
+      - '0'
+      - '11'
+      - CSI_DATA_LANES_4
+      - '2692'
+      - CSI_MODE_VC_ONLY
+      - LRTE_ENABLE
+      - PD_MOD3
+      - EX_AEB
+      source_line: 209
+    decoded:
+      size:
+      - 4000
+      - 2252
+      fps: 60
+      settle: 0
+      mode_index: 11
+      lanes: 4
+      lanes_enum: CSI_DATA_LANES_4
+      mipi_speed_mbps: 2692
+      interleave_mode: CSI_MODE_VC_ONLY
+      interleave_mode_value: 2
+      lrte: LRTE_ENABLE
+      lrte_value: 1
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_AEB
+      ex_mode_value: 8
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 4000
+          - 2252
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc1:
+          map: 2
+          size:
+          - 4000
+          - 2252
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 1
+          size:
+          - 4000
+          - 563
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+        vc3:
+          map: 3
+          size:
+          - 4000
+          - 563
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+      max_fps: 60
+    derived:
+      mipi_link_mbps: 10768
+      phy: DPHY
+      vc_count_by_class:
+        image: 2
+        pd_horizontal: 2
+      image_vc_count: 2
+      csis_input_bytes_per_frame: 28150000
+      csis_input_mbps: 13512.0
+      link_utilization_pct: 125.5
+      link_overcommit: 'declared VC payload exceeds the MIPI link rate. This mode declares more than one image VC (AEB/DCG
+        bracketing): the exposures are time-multiplexed, so summing every image VC at the DT frame rate double-counts. See
+        csis_input_mbps_per_exposure.'
+      csis_input_mbps_per_exposure: 8107.2
+  mode14:
+    timing_binding:
+      profile_ref: sensortiming-imx874-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_4000x2252_60fps_12bit_ad11
+      mode_index: 14
+      mode_sha256: d8bd97c738f4aa05679c36631ed54cf5be38f6d831b2a84990d8b75d5707d06d
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+          sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874.c
+          sha256: 76f3f672532ac0710531e2c69ab34aa0f6a0f37310a24413aaf614cd997a3ae5
+        mode_table: sensor_imx874_mode_infos_A_19p2
+    dt:
+      common:
+      - '4000'
+      - '2252'
+      - '60'
+      - '0'
+      - '14'
+      - CSI_DATA_LANES_4
+      - '2692'
+      - CSI_MODE_VC_ONLY
+      - LRTE_ENABLE
+      - PD_MOD3
+      source_line: 217
+    decoded:
+      size:
+      - 4000
+      - 2252
+      fps: 60
+      settle: 0
+      mode_index: 14
+      lanes: 4
+      lanes_enum: CSI_DATA_LANES_4
+      mipi_speed_mbps: 2692
+      interleave_mode: CSI_MODE_VC_ONLY
+      interleave_mode_value: 2
+      lrte: LRTE_ENABLE
+      lrte_value: 1
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+      ex_mode_source: default (common has 10 cells, driver leaves cfg->ex_mode at 0)
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 4000
+          - 2252
+          hwformat: HW_FORMAT_RAW12
+          hwformat_value: 44
+          hwformat_base: HW_FORMAT_RAW12
+          bits_per_pixel: 12
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 1
+          size:
+          - 4000
+          - 563
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 10768
+      phy: DPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 16327000
+      csis_input_mbps: 7837.0
+      link_utilization_pct: 72.8
+  mode15:
+    timing_binding:
+      profile_ref: sensortiming-imx874-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_2000x1500_120fps_10bit
+      mode_index: 15
+      mode_sha256: 13fa80ccea639d7fbc81385847dd00abc6b2fed21e29750e9a5fdbefd1335c49
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+          sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874.c
+          sha256: 76f3f672532ac0710531e2c69ab34aa0f6a0f37310a24413aaf614cd997a3ae5
+        mode_table: sensor_imx874_mode_infos_A_19p2
+    dt:
+      common:
+      - '2000'
+      - '1500'
+      - '120'
+      - '0'
+      - '15'
+      - CSI_DATA_LANES_4
+      - '2692'
+      - CSI_MODE_VC_ONLY
+      - LRTE_ENABLE
+      - PD_NONE
+      source_line: 223
+    decoded:
+      size:
+      - 2000
+      - 1500
+      fps: 120
+      settle: 0
+      mode_index: 15
+      lanes: 4
+      lanes_enum: CSI_DATA_LANES_4
+      mipi_speed_mbps: 2692
+      interleave_mode: CSI_MODE_VC_ONLY
+      interleave_mode_value: 2
+      lrte: LRTE_ENABLE
+      lrte_value: 1
+      pd_mode: PD_NONE
+      pd_mode_value: 5
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+      ex_mode_source: default (common has 10 cells, driver leaves cfg->ex_mode at 0)
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 2000
+          - 1500
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+    option:
+      votf: 0
+      special_mode: 1
+    derived:
+      mipi_link_mbps: 10768
+      phy: DPHY
+      vc_count_by_class:
+        image: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 3750000
+      csis_input_mbps: 3600.0
+      link_utilization_pct: 33.4
+  mode23:
+    timing_binding:
+      profile_ref: sensortiming-imx874-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_3392x2544_60fps_10bit
+      mode_index: 23
+      mode_sha256: 679cff1805b795a83de95fa97321f668e19cd04fe346d9a151471b3eaa951134
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+          sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874.c
+          sha256: 76f3f672532ac0710531e2c69ab34aa0f6a0f37310a24413aaf614cd997a3ae5
+        mode_table: sensor_imx874_mode_infos_A_19p2
+    dt:
+      common:
+      - '3392'
+      - '2544'
+      - '60'
+      - '0'
+      - '23'
+      - CSI_DATA_LANES_4
+      - '2692'
+      - CSI_MODE_VC_DT
+      - LRTE_ENABLE
+      - PD_MOD3
+      source_line: 228
+    decoded:
+      size:
+      - 3392
+      - 2544
+      fps: 60
+      settle: 0
+      mode_index: 23
+      lanes: 4
+      lanes_enum: CSI_DATA_LANES_4
+      mipi_speed_mbps: 2692
+      interleave_mode: CSI_MODE_VC_DT
+      interleave_mode_value: 3
+      lrte: LRTE_ENABLE
+      lrte_value: 1
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+      ex_mode_source: default (common has 10 cells, driver leaves cfg->ex_mode at 0)
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 3392
+          - 2544
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 1
+          size:
+          - 3392
+          - 636
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 10768
+      phy: DPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 13483200
+      csis_input_mbps: 6471.9
+      link_utilization_pct: 60.1
+  mode25:
+    timing_binding:
+      profile_ref: sensortiming-imx874-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_3392x1908_60fps_10bit
+      mode_index: 25
+      mode_sha256: 0e0caa01922d50c7e41529b707fd0fbd35218a638b16e7f0619a5933ab3f998e
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+          sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874.c
+          sha256: 76f3f672532ac0710531e2c69ab34aa0f6a0f37310a24413aaf614cd997a3ae5
+        mode_table: sensor_imx874_mode_infos_A_19p2
+    dt:
+      common:
+      - '3392'
+      - '1908'
+      - '60'
+      - '0'
+      - '25'
+      - CSI_DATA_LANES_4
+      - '2692'
+      - CSI_MODE_VC_DT
+      - LRTE_ENABLE
+      - PD_MOD3
+      source_line: 234
+    decoded:
+      size:
+      - 3392
+      - 1908
+      fps: 60
+      settle: 0
+      mode_index: 25
+      lanes: 4
+      lanes_enum: CSI_DATA_LANES_4
+      mipi_speed_mbps: 2692
+      interleave_mode: CSI_MODE_VC_DT
+      interleave_mode_value: 3
+      lrte: LRTE_ENABLE
+      lrte_value: 1
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+      ex_mode_source: default (common has 10 cells, driver leaves cfg->ex_mode at 0)
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 3392
+          - 1908
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 1
+          size:
+          - 3392
+          - 477
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 10768
+      phy: DPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 10112400
+      csis_input_mbps: 4854.0
+      link_utilization_pct: 45.1
+  mode27:
+    timing_binding:
+      profile_ref: sensortiming-imx874-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_1696x1272_30fps_10bit
+      mode_index: 27
+      mode_sha256: 00aa2f2e9164bdbc6dbe887e255134942bd137edba889b9bd6e76216b75656a0
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+          sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874.c
+          sha256: 76f3f672532ac0710531e2c69ab34aa0f6a0f37310a24413aaf614cd997a3ae5
+        mode_table: sensor_imx874_mode_infos_A_19p2
+    dt:
+      common:
+      - '1696'
+      - '1272'
+      - '30'
+      - '0'
+      - '27'
+      - CSI_DATA_LANES_4
+      - '2692'
+      - CSI_MODE_VC_DT
+      - LRTE_ENABLE
+      - PD_NONE
+      source_line: 240
+    decoded:
+      size:
+      - 1696
+      - 1272
+      fps: 30
+      settle: 0
+      mode_index: 27
+      lanes: 4
+      lanes_enum: CSI_DATA_LANES_4
+      mipi_speed_mbps: 2692
+      interleave_mode: CSI_MODE_VC_DT
+      interleave_mode_value: 3
+      lrte: LRTE_ENABLE
+      lrte_value: 1
+      pd_mode: PD_NONE
+      pd_mode_value: 5
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+      ex_mode_source: default (common has 10 cells, driver leaves cfg->ex_mode at 0)
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 1696
+          - 1272
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 10768
+      phy: DPHY
+      vc_count_by_class:
+        image: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 2696640
+      csis_input_mbps: 647.2
+      link_utilization_pct: 6.0
+  mode29:
+    timing_binding:
+      profile_ref: sensortiming-imx874-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_1696x954_30fps_10bit
+      mode_index: 29
+      mode_sha256: 040a67763918a3e1a832c48e517a56942a94ca4659df2c22dc5cb0c0bab6339f
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+          sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874.c
+          sha256: 76f3f672532ac0710531e2c69ab34aa0f6a0f37310a24413aaf614cd997a3ae5
+        mode_table: sensor_imx874_mode_infos_A_19p2
+    dt:
+      common:
+      - '1696'
+      - '954'
+      - '30'
+      - '0'
+      - '29'
+      - CSI_DATA_LANES_4
+      - '2692'
+      - CSI_MODE_VC_DT
+      - LRTE_ENABLE
+      - PD_NONE
+      source_line: 245
+    decoded:
+      size:
+      - 1696
+      - 954
+      fps: 30
+      settle: 0
+      mode_index: 29
+      lanes: 4
+      lanes_enum: CSI_DATA_LANES_4
+      mipi_speed_mbps: 2692
+      interleave_mode: CSI_MODE_VC_DT
+      interleave_mode_value: 3
+      lrte: LRTE_ENABLE
+      lrte_value: 1
+      pd_mode: PD_NONE
+      pd_mode_value: 5
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+      ex_mode_source: default (common has 10 cells, driver leaves cfg->ex_mode at 0)
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 1696
+          - 954
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 10768
+      phy: DPHY
+      vc_count_by_class:
+        image: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 2022480
+      csis_input_mbps: 485.4
+      link_utilization_pct: 4.5
+  mode31:
+    timing_binding:
+      profile_ref: sensortiming-imx874-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_3056x2296_30fps_10bit
+      mode_index: 31
+      mode_sha256: 2064679a092b9a40b19d02b0068108587804af36c94c763cadd5161f5d381eda
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+          sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874.c
+          sha256: 76f3f672532ac0710531e2c69ab34aa0f6a0f37310a24413aaf614cd997a3ae5
+        mode_table: sensor_imx874_mode_infos_A_19p2
+    dt:
+      common:
+      - '3056'
+      - '2296'
+      - '30'
+      - '0'
+      - '31'
+      - CSI_DATA_LANES_4
+      - '2692'
+      - CSI_MODE_VC_DT
+      - LRTE_ENABLE
+      - PD_MOD3
+      source_line: 250
+    decoded:
+      size:
+      - 3056
+      - 2296
+      fps: 30
+      settle: 0
+      mode_index: 31
+      lanes: 4
+      lanes_enum: CSI_DATA_LANES_4
+      mipi_speed_mbps: 2692
+      interleave_mode: CSI_MODE_VC_DT
+      interleave_mode_value: 3
+      lrte: LRTE_ENABLE
+      lrte_value: 1
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+      ex_mode_source: default (common has 10 cells, driver leaves cfg->ex_mode at 0)
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 3056
+          - 2296
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 1
+          size:
+          - 3056
+          - 574
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 10768
+      phy: DPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 10963400
+      csis_input_mbps: 2631.2
+      link_utilization_pct: 24.4
+  mode32:
+    timing_binding:
+      profile_ref: sensortiming-imx874-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_3056x2296_60fps_10bit
+      mode_index: 32
+      mode_sha256: d938055861b996fc7d54982ba710ab926fdade3af069b0fa3018eb4be56c83a2
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+          sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874.c
+          sha256: 76f3f672532ac0710531e2c69ab34aa0f6a0f37310a24413aaf614cd997a3ae5
+        mode_table: sensor_imx874_mode_infos_A_19p2
+    dt:
+      common:
+      - '3056'
+      - '2296'
+      - '60'
+      - '0'
+      - '32'
+      - CSI_DATA_LANES_4
+      - '2692'
+      - CSI_MODE_VC_ONLY
+      - LRTE_ENABLE
+      - PD_MOD3
+      source_line: 256
+    decoded:
+      size:
+      - 3056
+      - 2296
+      fps: 60
+      settle: 0
+      mode_index: 32
+      lanes: 4
+      lanes_enum: CSI_DATA_LANES_4
+      mipi_speed_mbps: 2692
+      interleave_mode: CSI_MODE_VC_ONLY
+      interleave_mode_value: 2
+      lrte: LRTE_ENABLE
+      lrte_value: 1
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+      ex_mode_source: default (common has 10 cells, driver leaves cfg->ex_mode at 0)
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 3056
+          - 2296
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 1
+          size:
+          - 3056
+          - 574
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 10768
+      phy: DPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 10963400
+      csis_input_mbps: 5262.4
+      link_utilization_pct: 48.9
+  mode32_aeb:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
+    dt:
+      common:
+      - '3056'
+      - '2296'
+      - '60'
+      - '0'
+      - '32'
+      - CSI_DATA_LANES_4
+      - '2692'
+      - CSI_MODE_VC_ONLY
+      - LRTE_ENABLE
+      - PD_MOD3
+      - EX_AEB
+      source_line: 262
+    decoded:
+      size:
+      - 3056
+      - 2296
+      fps: 60
+      settle: 0
+      mode_index: 32
+      lanes: 4
+      lanes_enum: CSI_DATA_LANES_4
+      mipi_speed_mbps: 2692
+      interleave_mode: CSI_MODE_VC_ONLY
+      interleave_mode_value: 2
+      lrte: LRTE_ENABLE
+      lrte_value: 1
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_AEB
+      ex_mode_value: 8
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 3056
+          - 2296
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc1:
+          map: 2
+          size:
+          - 3056
+          - 2296
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 1
+          size:
+          - 3056
+          - 574
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+        vc3:
+          map: 3
+          size:
+          - 3056
+          - 574
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+      max_fps: 60
+    derived:
+      mipi_link_mbps: 10768
+      phy: DPHY
+      vc_count_by_class:
+        image: 2
+        pd_horizontal: 2
+      image_vc_count: 2
+      csis_input_bytes_per_frame: 21926800
+      csis_input_mbps: 10524.9
+      link_utilization_pct: 97.7
+      csis_input_mbps_per_exposure: 6314.9
+  mode43:
+    timing_binding:
+      profile_ref: sensortiming-imx874-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_1528x1148_30fps_10bit_c02
+      mode_index: 43
+      mode_sha256: 140801dfd459ab91d6248c7ea38ac408bc3d434216752399bd27d24dae60d7da
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+          sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874.c
+          sha256: 76f3f672532ac0710531e2c69ab34aa0f6a0f37310a24413aaf614cd997a3ae5
+        mode_table: sensor_imx874_mode_infos_A_19p2
+    dt:
+      common:
+      - '1528'
+      - '1148'
+      - '30'
+      - '0'
+      - '43'
+      - CSI_DATA_LANES_4
+      - '2692'
+      - CSI_MODE_VC_ONLY
+      - LRTE_ENABLE
+      - PD_NONE
+      source_line: 270
+    decoded:
+      size:
+      - 1528
+      - 1148
+      fps: 30
+      settle: 0
+      mode_index: 43
+      lanes: 4
+      lanes_enum: CSI_DATA_LANES_4
+      mipi_speed_mbps: 2692
+      interleave_mode: CSI_MODE_VC_ONLY
+      interleave_mode_value: 2
+      lrte: LRTE_ENABLE
+      lrte_value: 1
+      pd_mode: PD_NONE
+      pd_mode_value: 5
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+      ex_mode_source: default (common has 10 cells, driver leaves cfg->ex_mode at 0)
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 1528
+          - 1148
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 1
+          size:
+          - 1528
+          - 287
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 10768
+      phy: DPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 2740850
+      csis_input_mbps: 657.8
+      link_utilization_pct: 6.1
+  mode45:
+    timing_binding:
+      profile_ref: sensortiming-imx874-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_3056x1720_60fps_10bit
+      mode_index: 45
+      mode_sha256: 09e431ae3909d2a6dcd3c276fa568dc836f323f8d4f48a406c41be060d9319f6
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+          sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874.c
+          sha256: 76f3f672532ac0710531e2c69ab34aa0f6a0f37310a24413aaf614cd997a3ae5
+        mode_table: sensor_imx874_mode_infos_A_19p2
+    dt:
+      common:
+      - '3056'
+      - '1720'
+      - '60'
+      - '0'
+      - '45'
+      - CSI_DATA_LANES_4
+      - '2692'
+      - CSI_MODE_VC_ONLY
+      - LRTE_ENABLE
+      - PD_MOD3
+      source_line: 276
+    decoded:
+      size:
+      - 3056
+      - 1720
+      fps: 60
+      settle: 0
+      mode_index: 45
+      lanes: 4
+      lanes_enum: CSI_DATA_LANES_4
+      mipi_speed_mbps: 2692
+      interleave_mode: CSI_MODE_VC_ONLY
+      interleave_mode_value: 2
+      lrte: LRTE_ENABLE
+      lrte_value: 1
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+      ex_mode_source: default (common has 10 cells, driver leaves cfg->ex_mode at 0)
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 3056
+          - 1720
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 1
+          size:
+          - 3056
+          - 430
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 10768
+      phy: DPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 8213000
+      csis_input_mbps: 3942.2
+      link_utilization_pct: 36.6
+  mode45_aeb:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
+    dt:
+      common:
+      - '3056'
+      - '1720'
+      - '60'
+      - '0'
+      - '45'
+      - CSI_DATA_LANES_4
+      - '2692'
+      - CSI_MODE_VC_ONLY
+      - LRTE_ENABLE
+      - PD_MOD3
+      - EX_AEB
+      source_line: 282
+    decoded:
+      size:
+      - 3056
+      - 1720
+      fps: 60
+      settle: 0
+      mode_index: 45
+      lanes: 4
+      lanes_enum: CSI_DATA_LANES_4
+      mipi_speed_mbps: 2692
+      interleave_mode: CSI_MODE_VC_ONLY
+      interleave_mode_value: 2
+      lrte: LRTE_ENABLE
+      lrte_value: 1
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_AEB
+      ex_mode_value: 8
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 3056
+          - 1720
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc1:
+          map: 2
+          size:
+          - 3056
+          - 1720
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 1
+          size:
+          - 3056
+          - 430
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+        vc3:
+          map: 3
+          size:
+          - 3056
+          - 430
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+      max_fps: 60
+    derived:
+      mipi_link_mbps: 10768
+      phy: DPHY
+      vc_count_by_class:
+        image: 2
+        pd_horizontal: 2
+      image_vc_count: 2
+      csis_input_bytes_per_frame: 16426000
+      csis_input_mbps: 7884.5
+      link_utilization_pct: 73.2
+      csis_input_mbps_per_exposure: 4730.7
+  mode54:
+    timing_binding:
+      profile_ref: sensortiming-imx874-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_1528x860_30fps_10bit
+      mode_index: 54
+      mode_sha256: c24e7b8ede04314d7f0fc539a0bffa41cc6881022513ffb018c04738373c3caa
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+          sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874.c
+          sha256: 76f3f672532ac0710531e2c69ab34aa0f6a0f37310a24413aaf614cd997a3ae5
+        mode_table: sensor_imx874_mode_infos_A_19p2
+    dt:
+      common:
+      - '1528'
+      - '860'
+      - '30'
+      - '0'
+      - '54'
+      - CSI_DATA_LANES_4
+      - '2692'
+      - CSI_MODE_VC_ONLY
+      - LRTE_ENABLE
+      - PD_NONE
+      source_line: 290
+    decoded:
+      size:
+      - 1528
+      - 860
+      fps: 30
+      settle: 0
+      mode_index: 54
+      lanes: 4
+      lanes_enum: CSI_DATA_LANES_4
+      mipi_speed_mbps: 2692
+      interleave_mode: CSI_MODE_VC_ONLY
+      interleave_mode_value: 2
+      lrte: LRTE_ENABLE
+      lrte_value: 1
+      pd_mode: PD_NONE
+      pd_mode_value: 5
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+      ex_mode_source: default (common has 10 cells, driver leaves cfg->ex_mode at 0)
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 1528
+          - 860
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 1
+          size:
+          - 1528
+          - 215
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 10768
+      phy: DPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 2053250
+      csis_input_mbps: 492.8
+      link_utilization_pct: 4.6
+  mode57:
+    timing_binding:
+      profile_ref: sensortiming-imx874-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_2000x1124_120fps_10bit
+      mode_index: 57
+      mode_sha256: 545c83a056ec160faaa0e5ce47e1bddd41f0c753e1d121558bf83f04c32d2dfc
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+          sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874.c
+          sha256: 76f3f672532ac0710531e2c69ab34aa0f6a0f37310a24413aaf614cd997a3ae5
+        mode_table: sensor_imx874_mode_infos_A_19p2
+    dt:
+      common:
+      - '2000'
+      - '1124'
+      - '120'
+      - '0'
+      - '57'
+      - CSI_DATA_LANES_4
+      - '2692'
+      - CSI_MODE_VC_DT
+      - LRTE_ENABLE
+      - PD_MOD3
+      source_line: 296
+    decoded:
+      size:
+      - 2000
+      - 1124
+      fps: 120
+      settle: 0
+      mode_index: 57
+      lanes: 4
+      lanes_enum: CSI_DATA_LANES_4
+      mipi_speed_mbps: 2692
+      interleave_mode: CSI_MODE_VC_DT
+      interleave_mode_value: 3
+      lrte: LRTE_ENABLE
+      lrte_value: 1
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+      ex_mode_source: default (common has 10 cells, driver leaves cfg->ex_mode at 0)
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 2000
+          - 1124
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 1
+          size:
+          - 2000
+          - 281
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 10768
+      phy: DPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 3512500
+      csis_input_mbps: 3372.0
+      link_utilization_pct: 31.3
+  mode57_vt:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
+    dt:
+      common:
+      - '2000'
+      - '1124'
+      - '30'
+      - '0'
+      - '57'
+      - CSI_DATA_LANES_4
+      - '2692'
+      - CSI_MODE_VC_DT
+      - LRTE_ENABLE
+      - PD_MOD3
+      source_line: 302
+    decoded:
+      size:
+      - 2000
+      - 1124
+      fps: 30
+      settle: 0
+      mode_index: 57
+      lanes: 4
+      lanes_enum: CSI_DATA_LANES_4
+      mipi_speed_mbps: 2692
+      interleave_mode: CSI_MODE_VC_DT
+      interleave_mode_value: 3
+      lrte: LRTE_ENABLE
+      lrte_value: 1
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+      ex_mode_source: default (common has 10 cells, driver leaves cfg->ex_mode at 0)
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 2000
+          - 1124
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 1
+          size:
+          - 2000
+          - 281
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 10768
+      phy: DPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 3512500
+      csis_input_mbps: 843.0
+      link_utilization_pct: 7.8
+  mode58:
+    timing_binding:
+      profile_ref: sensortiming-imx874-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_2000x1500_30fps_10bit
+      mode_index: 58
+      mode_sha256: f7037205fcb853d3f471c5f928a208441f9023ea31cf3d60114c7997004491f9
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+          sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874.c
+          sha256: 76f3f672532ac0710531e2c69ab34aa0f6a0f37310a24413aaf614cd997a3ae5
+        mode_table: sensor_imx874_mode_infos_A_19p2
+    dt:
+      common:
+      - '2000'
+      - '1500'
+      - '30'
+      - '0'
+      - '58'
+      - CSI_DATA_LANES_4
+      - '2692'
+      - CSI_MODE_VC_ONLY
+      - LRTE_ENABLE
+      - PD_MOD3
+      source_line: 308
+    decoded:
+      size:
+      - 2000
+      - 1500
+      fps: 30
+      settle: 0
+      mode_index: 58
+      lanes: 4
+      lanes_enum: CSI_DATA_LANES_4
+      mipi_speed_mbps: 2692
+      interleave_mode: CSI_MODE_VC_ONLY
+      interleave_mode_value: 2
+      lrte: LRTE_ENABLE
+      lrte_value: 1
+      pd_mode: PD_MOD3
+      pd_mode_value: 3
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+      ex_mode_source: default (common has 10 cells, driver leaves cfg->ex_mode at 0)
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 2000
+          - 1500
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc2:
+          map: 1
+          size:
+          - 2000
+          - 375
+          hwformat: HW_FORMAT_RAW10_POTF
+          hwformat_value: 555
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          format_flags:
+          - POTF
+          data: DATA_HPD
+          data_class: pd_horizontal
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 10768
+      phy: DPHY
+      vc_count_by_class:
+        image: 1
+        pd_horizontal: 1
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 4687500
+      csis_input_mbps: 1125.0
+      link_utilization_pct: 10.4
+provenance:
+  source:
+    path: exynos/device/erd/erd9965/arch/arm64/boot/dts/samsung/m2s/camera/module_imx874.dtsi
+    sha256: 74acb89d11a9e0da44ac271d381408346339a24507472d83a9ab0a36cb5abe86
+  bindings:
+    path: exynos/soc-series/common/include/dt-bindings/camera/exynos_is_dt.h
+    sha256: 7d3822ddcfe9c4aa10595d46ec7b97cb0815a6d9a879fceff6d8ebd58108c6dc
+  parser_reference: 'exynos/external-modules/camera/camera/is-dt.c: is_cis_modes_parse_dt / is_cis_modes_dma_parse_dt'
+  review: S5E9965 board camera DT sensor catalog 2026-09-17
+  provenance_status: kernel_declared

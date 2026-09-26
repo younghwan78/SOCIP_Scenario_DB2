@@ -1,7 +1,7 @@
 id: sim-priority-cam-rec-r1-uhd60-supersteady-mean-20260913
 schema_version: '2.2'
 kind: evidence.simulation
-scenario_ref: uc-camera-recording
+scenario_ref: uc-cam-recording-e2600
 variant_ref: cam-rec-r1-uhd60-supersteady
 project_ref: proj-sm-s947b
 derived_from: []
@@ -5942,7 +5942,7 @@ params_hash: 2cc17ca6ed4d5f33
 calculation_trace:
   schema_version: '1.0'
   trace_level: formula
-  scenario_id: uc-camera-recording
+  scenario_id: uc-cam-recording-e2600
   variant_id: cam-rec-r1-uhd60-supersteady
   config:
     asv_group: 4

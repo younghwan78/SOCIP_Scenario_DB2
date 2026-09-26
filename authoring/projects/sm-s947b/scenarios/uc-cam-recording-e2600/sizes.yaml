@@ -1,0 +1,111 @@
+# Node -> size anchor bindings. Bound nodes get sim.width/height from the
+# variant's resolved anchors (size_profile.anchors + size_overrides).
+# `alternatives` lists other anchors that matched in every variant (review!).
+# `derived` anchors are computed per variant, e.g.
+#   eis_in: {from: record_out, scale: 1.15, align: 16}
+bindings:
+  mfc_enc: record_out
+  yuvsc: sensor_full
+  mcsc: sensor_full
+  byrp: sensor_full
+  vps_od: object_detection
+  lme: motion_estimation
+  csis: sensor_full
+  pdp: sensor_full
+  rgbp: sensor_full
+  mlsc: sensor_full
+  mtnr: sensor_full
+  msnr: sensor_full
+  yuvp: sensor_full
+  gdc_m: preview_out
+  gdc_o: record_out
+  dpu: preview_out
+  front_csis: front_sensor_full
+  front_pdp: front_sensor_full
+  front_byrp: front_sensor_full
+  front_rgbp: front_sensor_full
+  front_yuvsc: front_sensor_full
+  front_mlsc: front_sensor_full
+  front_mtnr: front_sensor_full
+  front_msnr: front_sensor_full
+  front_yuvp: front_sensor_full
+  front_mcsc: front_sensor_full
+  front_lme: motion_estimation
+  front_vps_od: object_detection
+  vps_seg: object_detection
+alternatives:
+  yuvsc:
+  - pyramid_l0
+  - mlsc_out
+  mcsc:
+  - pyramid_l0
+  - mlsc_out
+  byrp:
+  - pyramid_l0
+  - mlsc_out
+  vps_od:
+  - front_object_detection
+  lme:
+  - front_motion_estimation
+  csis:
+  - pyramid_l0
+  - mlsc_out
+  pdp:
+  - pyramid_l0
+  - mlsc_out
+  rgbp:
+  - pyramid_l0
+  - mlsc_out
+  mlsc:
+  - pyramid_l0
+  - mlsc_out
+  mtnr:
+  - pyramid_l0
+  - mlsc_out
+  msnr:
+  - pyramid_l0
+  - mlsc_out
+  yuvp:
+  - pyramid_l0
+  - mlsc_out
+  gdc_m:
+  - front_preview_out
+  dpu:
+  - front_preview_out
+  front_csis:
+  - front_pyramid_l0
+  - front_mlsc_out
+  front_pdp:
+  - front_pyramid_l0
+  - front_mlsc_out
+  front_byrp:
+  - front_pyramid_l0
+  - front_mlsc_out
+  front_rgbp:
+  - front_pyramid_l0
+  - front_mlsc_out
+  front_yuvsc:
+  - front_pyramid_l0
+  - front_mlsc_out
+  front_mlsc:
+  - front_pyramid_l0
+  - front_mlsc_out
+  front_mtnr:
+  - front_pyramid_l0
+  - front_mlsc_out
+  front_msnr:
+  - front_pyramid_l0
+  - front_mlsc_out
+  front_yuvp:
+  - front_pyramid_l0
+  - front_mlsc_out
+  front_mcsc:
+  - front_pyramid_l0
+  - front_mlsc_out
+  front_lme:
+  - front_motion_estimation
+  front_vps_od:
+  - front_object_detection
+  vps_seg:
+  - front_object_detection
+derived: {}

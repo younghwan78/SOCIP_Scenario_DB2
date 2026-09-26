@@ -3,6 +3,7 @@ import { api, type CatalogItem, type ResolvedVariant, type VariantRow } from '..
 import { CAMERA_LABEL, KPI_SET, MODE_LABEL, cameraOf, kpiLabel, recordingMode, stabOf, summaryText, type Camera, type Mode } from '../lib/conditions'
 import { Icon } from './Icons'
 import { useAsync } from '../lib/route'
+import { canonicalOf, projectText, type ProjectInfo } from '../lib/projects'
 
 const PIN_KEY = 'sdb.pinned'
 const RECENT_KEY = 'sdb.recent'
@@ -24,7 +25,9 @@ export function toRows(scenario: CatalogItem | undefined, variants: ResolvedVari
 interface Props {
   open: boolean
   onClose: () => void
+  /** all projects' scenarios; the picker has its own 과제 facet */
   catalog: CatalogItem[]
+  projects?: ProjectInfo[]
   scenarioId?: string
   onPick: (scenario: string, variant: string) => void
   onAddCompare?: (scenario: string, variant: string) => void
@@ -46,8 +49,10 @@ export function matches(row: VariantRow, f: Facet, query: string): boolean {
   return query.toLowerCase().split(/\s+/).filter(Boolean).every((t) => hay.includes(t))
 }
 
-export function Picker({ open, onClose, catalog, scenarioId, onPick, onAddCompare }: Props) {
-  const [scenario, setScenario] = useState(scenarioId ?? 'uc-camera-recording')
+export function Picker({ open, onClose, catalog: allCatalog, projects = [], scenarioId, onPick, onAddCompare }: Props) {
+  const [scenario, setScenario] = useState(scenarioId ?? '')
+  const [projectId, setProjectId] = useState(() => allCatalog.find((c) => c.scenario_id === scenarioId)?.project_id ?? '')
+  const catalog = projectId ? allCatalog.filter((c) => c.project_id === projectId) : allCatalog
   const [query, setQuery] = useState('')
   const [facet, setFacet] = useState<Facet>(emptyFacet)
   const [showDerived, setShowDerived] = useState(false)
@@ -55,7 +60,21 @@ export function Picker({ open, onClose, catalog, scenarioId, onPick, onAddCompar
   const [pins, setPins] = useState<string[]>(() => load(PIN_KEY))
   const inputRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => { if (open) { setScenario(scenarioId ?? scenario); setTimeout(() => inputRef.current?.focus(), 0) } }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!open) return
+    const s = scenarioId ?? scenario
+    setScenario(s)
+    setProjectId(allCatalog.find((c) => c.scenario_id === s)?.project_id ?? projectId)
+    setTimeout(() => inputRef.current?.focus(), 0)
+  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+  const switchProject = (pid: string) => {
+    const cur = allCatalog.find((c) => c.scenario_id === scenario)
+    const inP = allCatalog.filter((c) => c.project_id === pid)
+    const next = (cur && inP.find((c) => canonicalOf(c) === canonicalOf(cur))) ?? inP[0]
+    setProjectId(pid)
+    if (next) setScenario(next.scenario_id)
+    setFacet(emptyFacet())
+  }
   const variantsQ = useAsync(() => open && scenario ? api.variants(scenario) : Promise.resolve({ items: [], total: 0 }), [open, scenario])
 
   const scenarioItem = catalog.find((c) => c.scenario_id === scenario)
@@ -107,6 +126,10 @@ export function Picker({ open, onClose, catalog, scenarioId, onPick, onAddCompar
           <button className="btn" onClick={onClose} aria-label="닫기"><Icon name="close" /></button>
         </div>
         <div className="dialog-facets">
+          {projects.length > 1 && <div className="facet-row">
+            <span className="facet-label">과제</span>
+            {projects.map((p) => <button key={p.id} className={`facet ${p.id === projectId ? 'on' : ''}`} onClick={() => switchProject(p.id)}>{projectText(p)}</button>)}
+          </div>}
           <div className="facet-row">
             <span className="facet-label">Scenario</span>
             {catalog.filter((c) => c.category.includes('camera') || c.scenario_id === scenario).map((c) => (

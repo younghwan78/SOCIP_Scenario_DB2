@@ -6,7 +6,7 @@ Not internal silicon data. Replace identifiers, conditions and statistics. Unlis
 format_version: camera-profile-v1
 id: meas-camera-semantic-example-r1
 project_ref: proj-sm-s947b
-scenario_ref: uc-camera-recording
+scenario_ref: uc-cam-recording-e2600
 variant_ref: cam-rec-r1-fhd30-vdis
 measured_at: '2026-09-17T10:00:00+09:00'
 execution_context:

@@ -1,0 +1,33 @@
+# =============================================================================
+# project.yaml — derived project (HYPOTHETICAL example)
+#
+# Keys
+#   kind             REQUIRED  authoring.project
+#   key              REQUIRED  == directory name (used by the CLI: compile <key>)
+#   platform         REQUIRED  platform id; must equal the parent's platform or directly extend it
+#   extends          optional  parent project key (omit for a root project with its own scenarios)
+#   rename           optional  substring rules for project / profile / scenario ids
+#                              (convention: proj-<board>, uc-<domain>-<use case>-e<SoC>)
+#   document_patch   optional  deep-merge on the project doc (board_type, board_name, name ...)
+#   scenarios        optional  include: '*' | [parent scenario ids]; exclude: [...]
+#
+# Per-scenario deltas: scenarios/<PARENT scenario id>/overlay.yaml, sw_timing.measured.yaml
+# Project-scoped doc patches: patches/<doc id>.yaml (e.g. simcfg-proj-...-v1.yaml)
+# =============================================================================
+kind: authoring.project
+key: e2800-concept
+platform: exynos2800-concept
+extends: sm-s947b
+rename:
+- from: proj-sm-s947b
+  to: proj-e2800-concept
+- from: -e2600
+  to: -e2800c
+document_patch:
+  metadata:
+    name: Exynos2800 concept (pipeline-change example)
+    board_type: E2800-CONCEPT
+    board_name: Exynos2800 concept
+scenarios:
+  include:
+  - uc-cam-recording-e2600

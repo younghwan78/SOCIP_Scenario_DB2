@@ -1,0 +1,4 @@
+# Inherited from simcfg-proj-sm-s947b-v1 (S26+ EVT1 calibration). Not calibrated for 2700 yet.
+status: draft
+approved_by: null
+description: Exynos2700 초기 설정 — S26+ EVT1 합의값 상속, 2700 실측 후 갱신 필요

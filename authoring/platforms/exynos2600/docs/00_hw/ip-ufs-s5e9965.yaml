@@ -1,0 +1,58 @@
+id: ip-ufs-s5e9965
+schema_version: '2.2'
+kind: ip
+category: storage
+capabilities:
+  operating_modes:
+  - id: Normal
+  - id: GearScaled
+  - id: Hibern8
+  properties:
+    ip_group: UFS
+    hierarchy_group: Storage
+    rtl_version: Exynos UFS host (samsung,exynos-ufs)
+    role: Storage source/sink for local playback and recording.
+    gear: 5
+    lanes: 2
+    lanes_value_source: dt
+    gear_max_frequency_hz: 332000000
+    gear_scale: true
+    theoretical_peak_mb_s: 2320
+    theoretical_peak_note: HS-Gear rate x lane count, line-coding included. Real sustained throughput is well below this and
+      is what a scenario should use.
+    modules:
+    - name: UFS_READ
+      type: DMA
+      direction: read
+      provenance_status: logical_endpoint
+      note: file read into DRAM
+    - name: UFS_WRITE
+      type: DMA
+      direction: write
+      provenance_status: logical_endpoint
+      note: recording/bitstream writeback
+    sources:
+    - path: exynos/soc-series/t-android16/arch/arm64/boot/dts/exynos/s5e9965-ufs.dtsi
+      sha256: 7e8b19768de725292aedcc41aaf62d86670fb9a313b7dd95c76d8d8efa643adb
+    driver_review: S5E9965 platform (non-camera) driver review 2026-09-16
+    provenance_status: kernel_declared
+    correction: 'This IP did not exist in the fixture set: `storage` nodes pointed at ip-cpu-s5e9965, so file I/O traffic
+      was charged to the CPU.'
+  bw_model:
+    source: derived
+    unit: KB/s
+    formula:
+    - 'bw = bitrate_mbps * 1000 / 8   # container bitrate -> KB/s'
+    - 'the same bytes cross MIF twice: UFS -> DRAM, then DRAM -> consumer'
+    note: Storage traffic is bitrate-bound, not resolution-bound; use the variant's bitrate.
+  sim:
+    hw_name: UFS
+    source: kernel_dt_model
+    source_note: Gear/lane configuration from the S5E9965 DT. Host controller power coefficient unavailable.
+    vdd: VDD_INT
+    dvfs_group: INT
+    devfreq_domain: DEVFREQ_INT
+hierarchy:
+  type: simple
+compatible_soc:
+- soc-exynos2600

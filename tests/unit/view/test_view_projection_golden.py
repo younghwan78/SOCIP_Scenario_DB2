@@ -97,7 +97,7 @@ def _assert_matches_golden(name: str, payload: dict) -> None:
 
 
 def test_camera_level0_topology_projection_matches_golden():
-    graph = _graph("uc-camera-recording.yaml", "cam-rec-3rdparty-binning")
+    graph = _graph("uc-cam-recording-e2600.yaml", "cam-rec-3rdparty-binning")
 
     view = service._project_level0_topology_v2(graph, level=0)
 
@@ -105,7 +105,7 @@ def test_camera_level0_topology_projection_matches_golden():
 
 
 def test_camera_level1_semantic_projection_matches_golden():
-    graph = _graph("uc-camera-recording.yaml", "cam-rec-3rdparty-binning")
+    graph = _graph("uc-cam-recording-e2600.yaml", "cam-rec-3rdparty-binning")
 
     view = service._project_semantic_level1(graph)
 
@@ -114,7 +114,7 @@ def test_camera_level1_semantic_projection_matches_golden():
 
 
 def test_camera_level2_drilldown_projection_matches_golden():
-    graph = _graph("uc-camera-recording.yaml", "cam-rec-3rdparty-binning")
+    graph = _graph("uc-cam-recording-e2600.yaml", "cam-rec-3rdparty-binning")
 
     view = service._project_drilldown(graph, "mlsc")
 

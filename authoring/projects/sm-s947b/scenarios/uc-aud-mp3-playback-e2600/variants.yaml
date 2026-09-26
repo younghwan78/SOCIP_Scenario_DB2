@@ -1,0 +1,155 @@
+# Compact variants: root entries are complete; `extends: <id>` entries are a
+# deep-merge patch over that variant (`$unset: [keys]` removes keys).
+# node sim width/height come from sizes.yaml; sw_timing from sw_timing.yaml.
+- id: audio-mp3-screen-on
+  severity: light
+  design_conditions:
+    format: MP3
+    bitrate_kbps: 320
+    screen_on: true
+    offload: false
+    output: speaker
+    panel_resolution: 1440x3120
+    panel_fps_hz: 60
+    sw_timing_source: assumed
+    bitrate_mbps: 0.32
+    bitrate_value_source: assumed
+  routing_switch:
+    disabled_nodes:
+    - dsp_offload
+    - bt_codec
+    disabled_edges:
+    - from: storage
+      to: dsp_offload
+    - from: dsp_offload
+      to: audio_hal
+    - from: audio_hal
+      to: bt_codec
+  node_configs:
+    storage:
+      sim:
+        bitrate_mbps: 0.32
+      bw_kb_s:
+        read: 40
+      model_ref: ip-ufs-s5e9965.capabilities.bw_model
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 1
+        capture_streams: 0
+        offload: false
+        output: speaker
+      bw_kb_s:
+        read: 188
+        write: 0
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: AUD operating point is not derivable from design_conditions; lowest level assumed for offload, a mid level for
+          the CPU-fed path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
+    audio_hal:
+      executes_on: ip-abox-s5e9965
+    speaker:
+      executes_on: ip-abox-s5e9965
+    bt_codec:
+      executes_on: ip-abox-s5e9965
+    dsp_offload:
+      executes_on: ip-abox-s5e9965
+- id: audio-mp3-screen-off-offload
+  extends: audio-mp3-screen-on
+  design_conditions:
+    screen_on: false
+    offload: true
+    note: 화면 꺼진 상태 HW offload 재생 (저전력)
+  routing_switch:
+    disabled_nodes:
+    - sw_decoder
+    - bt_codec
+    disabled_edges:
+    - from: storage
+      to: sw_decoder
+    - from: sw_decoder
+      to: audio_hal
+    - from: audio_hal
+      to: bt_codec
+  node_configs:
+    abox:
+      selected_mode: Offload
+      sim:
+        offload: true
+      dvfs:
+        aud_freq_khz: 200000
+    sw_decoder:
+      sim:
+        active: false
+      note: offloaded to ABOX / MFC; no CPU decode
+- id: audio-flac-hires-screen-off
+  extends: audio-mp3-screen-on
+  design_conditions:
+    $unset:
+    - bitrate_kbps
+    - bitrate_mbps
+    - bitrate_value_source
+    format: FLAC
+    sample_rate_khz: 192
+    bit_depth: 24
+    screen_on: false
+  buffer_overrides:
+    AUDIO_ES_BUF:
+      format: AUDIO_PCM
+      bitdepth: 24
+      compression: COMP_OFF
+  node_configs:
+    storage:
+      $unset:
+      - bw_kb_s
+      - model_ref
+      sim:
+        bitrate_mbps: null
+      note: no bitrate in design_conditions; set bitrate_mbps or bitrate_kbps to model this traffic
+    abox:
+      selected_mode: Offload
+      sim:
+        sample_rate_khz: 192.0
+        bit_depth: 24
+        offload: true
+      bw_kb_s:
+        read: 1125
+      dvfs:
+        aud_freq_khz: 200000
+- id: audio-aac-bt-screen-on
+  extends: audio-flac-hires-screen-off
+  $unset:
+  - buffer_overrides
+  design_conditions:
+    $unset:
+    - sample_rate_khz
+    - bit_depth
+    - offload
+    format: AAC
+    output: Bluetooth
+    screen_on: true
+    codec_bt: aptX_HD
+  routing_switch:
+    disabled_nodes:
+    - dsp_offload
+    - speaker
+    disabled_edges:
+    - from: storage
+      to: dsp_offload
+    - from: dsp_offload
+      to: audio_hal
+    - from: audio_hal
+      to: speaker
+  node_configs:
+    abox:
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        output: Bluetooth
+      bw_kb_s:
+        read: 188

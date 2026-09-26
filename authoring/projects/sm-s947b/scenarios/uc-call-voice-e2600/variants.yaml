@@ -1,0 +1,48 @@
+# Compact variants: root entries are complete; `extends: <id>` entries are a
+# deep-merge patch over that variant (`$unset: [keys]` removes keys).
+# node sim width/height come from sizes.yaml; sw_timing from sw_timing.yaml.
+- id: voice-call-volte
+  severity: light
+  design_conditions:
+    call_type: VoLTE
+    camera_active: false
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VT
+    panel_resolution: 1440x3120
+    panel_fps_hz: 60
+    sw_timing_source: assumed
+  node_configs:
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 1
+        playback_streams: 1
+        capture_streams: 1
+        offload: false
+        output: speaker
+      bw_kb_s:
+        read: 94
+        write: 94
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: AUD operating point is not derivable from design_conditions; lowest level assumed for offload, a mid level for
+          the CPU-fed path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
+    audio_hal:
+      executes_on: ip-abox-s5e9965
+    speaker:
+      executes_on: ip-abox-s5e9965
+    mic:
+      executes_on: ip-abox-s5e9965
+- id: voice-call-vowifi
+  extends: voice-call-volte
+  design_conditions:
+    $unset:
+    - dvfs_sn
+    call_type: VoWiFi
+- id: voice-call-vonr
+  extends: voice-call-vowifi
+  design_conditions:
+    call_type: VoNR

@@ -1,0 +1,39 @@
+# SW task timing table. `variants: '*'` = every variant not listed in another
+# group and not in absent_in. Measured overrides go in the project's
+# sw_timing.measured.yaml, not here.
+known_variants:
+- disp-gallery-fhd-sdr-60hz
+- disp-gallery-fhd-sdr-120hz
+- disp-gallery-uhd-hdr10-60hz
+- disp-gallery-fhd-hdr10plus-60hz
+- disp-gallery-fhd-hlg-60hz
+- disp-gallery-fhd-sdr-gpu-heavy
+- disp-gallery-fhd-sdr-gpu-filter
+- disp-gallery-uhd-hdr10-gpu-fallback
+- disp-gallery-yuv422-m2m-scale
+- disp-gallery-fhd-sdr-m2m-prescale
+tasks:
+  gpu:
+    groups:
+    - id: gpu-a
+      variants: '*'
+      timing:
+        min_ms: 1.0
+        mean_ms: 2.0
+        max_ms: 4.0
+        start_latency_ref: layers_ready
+        start_latency_mean_ms: 0.5
+        rate_hz: 60.0
+        cpu_affinity: CPUCL2
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
+    absent_in:
+    - disp-gallery-fhd-sdr-60hz
+    - disp-gallery-fhd-sdr-120hz
+    - disp-gallery-uhd-hdr10-60hz
+    - disp-gallery-fhd-hdr10plus-60hz
+    - disp-gallery-fhd-hlg-60hz
+    - disp-gallery-yuv422-m2m-scale
+    - disp-gallery-fhd-sdr-m2m-prescale

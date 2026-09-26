@@ -1,0 +1,112 @@
+# =============================================================================
+# ip-nr-v2-exynos2800c.yaml — HYPOTHETICAL IP catalog entry (example, NOT real 2800 data)
+# Concept: temporal NR (MTNR) + spatial NR (MSNR) merged into one IP "NR v2".
+# Values are copied from IS v15 MTNR as placeholders.
+#
+# Where this file lives
+#   platforms/<platform>/docs/00_hw/<id>.yaml      new or fully replaced canonical docs of a platform
+#   (a *changed* inherited IP goes to platforms/<platform>/patches/<id>.yaml instead — only the delta)
+#
+# Rules
+#   R1  file name == id + ".yaml"; id pattern ip-<name>[-<variant>]-<soc tag>  (DocumentId: ^ip-[a-zA-Z0-9][a-zA-Z0-9.-]*$)
+#   R2  the soc tag must match the platform rename target (here: exynos2800c) so references stay consistent
+#   R3  every port used by scenario edges (pipeline.edges[].port_pairs src/dst) should be listed in
+#       capabilities.properties.modules — the viewer derives DMA channels and BW per port from it
+#   R4  a node uses this IP through pipeline.nodes[].ip_ref (overlay: pipeline.set_nodes.<node>.ip_ref)
+#   R5  a node's node_configs.<node>.selected_mode must be one of capabilities.operating_modes[].id
+#   R6  mark unverified numbers: sim.source / source_note, properties.performance_status
+#   R7  add the id to the SoC doc (soc-*.yaml: ips[].ref) when the IP is part of the SoC inventory
+#
+# REQUIRED  (schema IpCatalog)          OPTIONAL
+#   id, schema_version, kind: ip          rtl_version, compatible_soc
+#   category, hierarchy.type              capabilities.* (all sub-keys) — but the simulator needs
+#   capabilities (may be {})              capabilities.sim.modes.<mode> (ppc, unit_power_mw_mp, vdd, dvfs_group)
+# =============================================================================
+id: ip-nr-v2-exynos2800c          # REQUIRED  R1, R2
+schema_version: '2.2'             # REQUIRED  fixed
+kind: ip                          # REQUIRED  fixed
+category: camera                  # REQUIRED  camera | codec | display | cpu | gpu | npu | audio | storage ...
+hierarchy:                        # REQUIRED
+  type: simple                    #   simple = one block; composite IPs list sub-blocks elsewhere
+rtl_version: NR v2 (concept)      # optional  free text, shown in Library
+capabilities:                     # REQUIRED (content optional)
+  operating_modes:                # optional  R5 — ids referenced by node_configs.<node>.selected_mode
+  - id: Normal
+  - id: Recording
+  - id: HighSpeed
+  sim:                            # optional for the catalog, REQUIRED for power/throughput simulation
+    hw_name: NR_V2                #   label in simulation reports
+    modes:
+      Normal:                     #   one entry per operating mode used in simulation
+        ppc: 4.0                  #   pixels per clock  -> required clock = pixel rate / ppc
+        unit_power_mw_mp: 1.0     #   dynamic power per Mpixel/s (0 = not modelled -> warning)
+        idc: 0.0                  #   static current contribution
+        vdd: VDD_INTCAM           #   power rail (must exist in the DVFS table)
+        dvfs_group: INTCAM        #   DVFS domain (must exist in the DVFS table)
+    source: borrowed_legacy_model # R6  where the numbers come from
+    source_note: Placeholder copied from IS v15 MTNR; replace with NR v2 architecture data.
+  properties:                     # optional  free-form facts used by viewer / sim
+    ip_group: NR                  #   Level-1 grouping in the viewer
+    hierarchy_group: ISP          #   Level-0 grouping (ISP, Codec, Display, ...)
+    performance_status: borrowed  # R6  borrowed | estimated | calibrated
+    provenance_status: hypothetical
+    history:                      #   temporal reference (previous frame) DMA — drives history BW
+      layers: [0, 1, 2, 3, 4]
+      frame_offset: -1
+      initialization: first frame has no previous frame; steady-state history traffic requires warm-up
+    modules:                      # R3  DMA / FIFO ports (name, type DMA|FIFO, direction read|write)
+    - {name: MTNR1_RDMA_CUR_L1_U, type: DMA, direction: read}
+    - {name: MTNR1_RDMA_CUR_L1_V, type: DMA, direction: read}
+    - {name: MTNR1_RDMA_CUR_L1_Y, type: DMA, direction: read}
+    - {name: MTNR1_RDMA_CUR_L2_U, type: DMA, direction: read}
+    - {name: MTNR1_RDMA_CUR_L2_V, type: DMA, direction: read}
+    - {name: MTNR1_RDMA_CUR_L2_Y, type: DMA, direction: read}
+    - {name: MTNR1_RDMA_CUR_L3_U, type: DMA, direction: read}
+    - {name: MTNR1_RDMA_CUR_L3_V, type: DMA, direction: read}
+    - {name: MTNR1_RDMA_CUR_L3_Y, type: DMA, direction: read}
+    - {name: MTNR1_RDMA_CUR_L4_U, type: DMA, direction: read}
+    - {name: MTNR1_RDMA_CUR_L4_V, type: DMA, direction: read}
+    - {name: MTNR1_RDMA_CUR_L4_Y, type: DMA, direction: read}
+    - {name: MTNR1_RDMA_MV_GEOMATCH, type: DMA, direction: read}
+    - {name: MTNR1_RDMA_PREV_L1_U, type: DMA, direction: read}
+    - {name: MTNR1_RDMA_PREV_L1_V, type: DMA, direction: read}
+    - {name: MTNR1_RDMA_PREV_L1_WGT, type: DMA, direction: read}
+    - {name: MTNR1_RDMA_PREV_L1_Y, type: DMA, direction: read}
+    - {name: MTNR1_RDMA_PREV_L2_U, type: DMA, direction: read}
+    - {name: MTNR1_RDMA_PREV_L2_V, type: DMA, direction: read}
+    - {name: MTNR1_RDMA_PREV_L2_Y, type: DMA, direction: read}
+    - {name: MTNR1_RDMA_PREV_L3_U, type: DMA, direction: read}
+    - {name: MTNR1_RDMA_PREV_L3_V, type: DMA, direction: read}
+    - {name: MTNR1_RDMA_PREV_L3_Y, type: DMA, direction: read}
+    - {name: MTNR1_RDMA_PREV_L4_U, type: DMA, direction: read}
+    - {name: MTNR1_RDMA_PREV_L4_V, type: DMA, direction: read}
+    - {name: MTNR1_RDMA_PREV_L4_Y, type: DMA, direction: read}
+    - {name: MTNR1_RDMA_SEG_L1, type: DMA, direction: read}
+    - {name: MTNR1_RDMA_SEG_L2, type: DMA, direction: read}
+    - {name: MTNR1_RDMA_SEG_L3, type: DMA, direction: read}
+    - {name: MTNR1_RDMA_SEG_L4, type: DMA, direction: read}
+    - {name: MTNR1_WDMA_PREV_L1_U, type: DMA, direction: write}
+    - {name: MTNR1_WDMA_PREV_L1_V, type: DMA, direction: write}
+    - {name: MTNR1_WDMA_PREV_L1_WGT, type: DMA, direction: write}
+    - {name: MTNR1_WDMA_PREV_L1_Y, type: DMA, direction: write}
+    - {name: MTNR1_WDMA_PREV_L2_U, type: DMA, direction: write}
+    - {name: MTNR1_WDMA_PREV_L2_V, type: DMA, direction: write}
+    - {name: MTNR1_WDMA_PREV_L2_Y, type: DMA, direction: write}
+    - {name: MTNR1_WDMA_PREV_L3_U, type: DMA, direction: write}
+    - {name: MTNR1_WDMA_PREV_L3_V, type: DMA, direction: write}
+    - {name: MTNR1_WDMA_PREV_L3_Y, type: DMA, direction: write}
+    - {name: MTNR1_WDMA_PREV_L4_U, type: DMA, direction: write}
+    - {name: MTNR1_WDMA_PREV_L4_V, type: DMA, direction: write}
+    - {name: MTNR1_WDMA_PREV_L4_Y, type: DMA, direction: write}
+    - {name: MTNR0_RDMA_CUR_L0_Y, type: DMA, direction: read}
+    - {name: MTNR0_RDMA_MV_GEOMATCH, type: DMA, direction: read}
+    - {name: MTNR0_RDMA_PREV_L0_WGT, type: DMA, direction: read}
+    - {name: MTNR0_RDMA_PREV_L0_Y, type: DMA, direction: read}
+    - {name: MTNR0_RDMA_PREV_L0_Y_1, type: DMA, direction: read}
+    - {name: MTNR0_RDMA_SEG_L0, type: DMA, direction: read}
+    - {name: MTNR0_WDMA_PREV_L0_WGT, type: DMA, direction: write}
+    - {name: MTNR0_WDMA_PREV_L0_Y, type: DMA, direction: write}
+    - {name: CINFIFO, type: FIFO, direction: read}
+    - {name: COUTFIFO, type: FIFO, direction: write}
+compatible_soc:                   # optional  SoCs this IP is valid for (R2)
+- soc-exynos2800c

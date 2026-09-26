@@ -28,7 +28,7 @@ def graph_factory():
         d = read(path)
         catalog[d["id"]] = IpCatalog(id=d["id"], schema_version=d["schema_version"], category=d["category"],
                                      hierarchy=d["hierarchy"], capabilities=d["capabilities"], yaml_sha256="fixture")
-    raw = read(FIXTURE / "02_definition" / "uc-camera-recording.yaml")
+    raw = read(FIXTURE / "02_definition" / "uc-cam-recording-e2600.yaml")
     return lambda variant: graph_from_fixture(raw, variant, catalog)
 
 

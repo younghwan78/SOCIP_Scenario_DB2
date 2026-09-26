@@ -15,7 +15,7 @@ from scenario_db.view.graph_utils import edge_port_pairs  # noqa: E402
 
 pytestmark = pytest.mark.unit
 
-GRAPH_ARGS = ("uc-camera-recording.yaml", "cam-rec-3rdparty-binning")
+GRAPH_ARGS = ("uc-cam-recording-e2600.yaml", "cam-rec-3rdparty-binning")
 
 
 def test_pipeline_edge_accepts_port_pairs():

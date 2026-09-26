@@ -1,0 +1,27 @@
+# SW task timing table. `variants: '*'` = every variant not listed in another
+# group and not in absent_in. Measured overrides go in the project's
+# sw_timing.measured.yaml, not here.
+known_variants:
+- cam-prev-r1-30
+- cam-prev-r1-60
+- cam-prev-r1-full-res
+- cam-prev-r1-remosaic
+- cam-prev-r1-ai-remosaic
+- cam-prev-r1-night
+- cam-prev-r1-night-max
+- cam-prev-r1-crop-zoom
+- cam-prev-r1-dcg
+- cam-prev-r1-ln
+- cam-prev-r1-3dhdr
+- cam-prev-r1-portrait
+- cam-prev-r1-expert-raw
+- cam-prev-r1-pro
+- cam-prev-f1-30
+- cam-prev-f1-60
+- cam-prev-f1-full-res
+- cam-prev-rdual-30
+- cam-prev-rdual-60
+- cam-prev-rtriple-30
+- cam-prev-rtriple-60
+- cam-prev-pip-dual
+tasks: {}

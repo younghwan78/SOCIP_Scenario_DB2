@@ -1,0 +1,332 @@
+# Compact variants: root entries are complete; `extends: <id>` entries are a
+# deep-merge patch over that variant (`$unset: [keys]` removes keys).
+# node sim width/height come from sizes.yaml; sw_timing from sw_timing.yaml.
+- id: cam-rec-apv-uhd30-422-sdr
+  severity: heavy
+  design_conditions:
+    subscenario: UHD_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_UHD30
+    sensor_place: rear
+    resolution: UHD
+    fps: 30
+    hdr: SDR
+    codec_mfc: HEVC_ENC
+    dpu_layer_count: 3
+    is_version: 15
+    sw_timing_case: mean
+    sw_timing_source: assumed
+    sensor_board: m2s-GNG
+    mcsc_dma_channels: 2
+    sensor_input_fps: 30.0
+    sensor_bitwidth: 10
+    sensor_input_source: user_confirmed
+    apv_chroma_format_idc: 1
+    apv_chroma_format: '4:2:2'
+    apv_band_idc: 0
+    apv_enc_profile: 0
+    priority_recording: true
+    encoder_hw: APV
+    sensor_runtime_confirmation: true
+    record_bitrate_mbps: 1000.0
+    bitrate_source: assumed
+    writer_model: linear_bitrate_wall_time
+    storage_model: sustained_write_assumed
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_rear3
+    - sensor_front
+    - vps_dof
+    - vps_seg
+    - eis
+    - gdc_m
+    - gdc_o
+  node_configs:
+    apv_enc:
+      selected_mode: Normal
+      codec: HEVC_ENC
+      sim:
+        inherit_shape: true
+        format: YUV422
+      chroma_format_idc: 1
+      band_idc: 0
+      enc_profile: 0
+      memory_io:
+      - port: APV_WDMA_BITSTREAM
+        direction: write
+        bitrate_condition: record_bitrate_mbps
+    yuvsc:
+      operations:
+        scale: false
+      bypass_downscale: true
+      sim:
+        inherit_shape: true
+    mcsc:
+      operations:
+        crop: true
+        scale: true
+      active_output_ports:
+      - MCSC_WDMA_W0
+      - MCSC_WDMA_W1
+      sim:
+        inherit_shape: true
+    byrp:
+      video_snapshot_enabled: false
+      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when video_snapshot_enabled; OTF remains connected.
+      sim:
+        inherit_shape: true
+    vps_od:
+      selected_mode: Normal
+      function: object_detection
+      sim:
+        inherit_shape: true
+    lme:
+      selected_mode: Normal
+      sim:
+        inherit_shape: true
+    sensor_rear:
+      selected_mode: cis_4sum_ln4_raw10_4080x2296_30fps_3993msps
+    csis:
+      sim:
+        inherit_shape: true
+    pdp:
+      sim:
+        inherit_shape: true
+    rgbp:
+      sim:
+        inherit_shape: true
+    mlsc:
+      sim:
+        inherit_shape: true
+    mtnr:
+      sim:
+        inherit_shape: true
+    msnr:
+      sim:
+        inherit_shape: true
+    yuvp:
+      sim:
+        inherit_shape: true
+    gdc_m:
+      sim:
+        inherit_shape: true
+      operations:
+        crop: true
+    gdc_o:
+      sim:
+        inherit_shape: true
+      operations:
+        crop: true
+    dpu:
+      sim:
+        inherit_shape: true
+    mpeg_writer:
+      sw_bitrate_scaling:
+        reference_bitrate_mbps: 1000
+      memory_io:
+      - port: CPU_BITSTREAM_READ
+        direction: read
+        bitrate_condition: record_bitrate_mbps
+      - port: CPU_BITSTREAM_WRITE
+        direction: write
+        bitrate_condition: record_bitrate_mbps
+      timeline_resource_id: CPU_WRITER
+      source_note: Engineering assumption approved for fixture exploration; replace with internal measurements.
+    storage_write:
+      sw_bitrate_scaling:
+        reference_bitrate_mbps: 1000
+      timeline_resource_id: STORAGE_IO
+      memory_io:
+      - port: STORAGE_BITSTREAM_READ
+        direction: read
+        bitrate_condition: record_bitrate_mbps
+      source_note: I/O completion wall time, not CPU active execution; no UFS capacity sign-off. Engineering assumption approved
+        for fixture exploration; replace with internal measurements.
+  topology_patch:
+    add_edges:
+    - from: mcsc
+      to: dpu
+      type: M2M
+      buffer: MCSC_PREVIEW
+      port_pairs:
+      - src: MCSC_WDMA_W0
+        dst: DPU_RDMA
+    - from: mcsc
+      to: apv_enc
+      type: M2M
+      buffer: MCSC_VIDEO
+      port_pairs:
+      - src: MCSC_WDMA_W1
+        dst: APV_RDMA_FRAME
+    - from: apv_enc
+      to: mpeg_writer
+      type: control
+    - from: mpeg_writer
+      to: storage_write
+      type: control
+    add_nodes:
+    - id: mpeg_writer
+      ip_ref: ip-cpu-s5e9965
+      role: sw_task
+      instance_index: 0
+    - id: storage_write
+      ip_ref: ip-cpu-s5e9965
+      role: sw_task
+      instance_index: 0
+  size_overrides:
+    sensor_full: 4080x2296
+    record_out: 3840x2160
+    preview_out: 1920x1080
+    pyramid_l0: 4080x2296
+    pyramid_l1: 2040x1148
+    pyramid_l2: 1020x574
+    pyramid_l3: 510x287
+    pyramid_l4: 255x144
+    object_detection: 512x288
+    cav: 320x180
+    mlsc_out: 4080x2296
+  buffer_overrides:
+    MCSC_VIDEO:
+      format: YUV422
+      bitdepth: 10
+    GDC_VIDEO:
+      format: YUV422
+      bitdepth: 10
+  tags:
+  - is-v15
+  - assumed-sw-timing
+  - uncalibrated-power
+- id: cam-rec-apv-uhd30-444-sdr
+  extends: cam-rec-apv-uhd30-422-sdr
+  design_conditions:
+    apv_chroma_format_idc: 2
+    apv_chroma_format: '4:4:4'
+    apv_enc_profile: 1
+    record_bitrate_mbps: 1500.0
+  node_configs:
+    apv_enc:
+      sim:
+        format: YUV444
+      chroma_format_idc: 2
+      enc_profile: 1
+  buffer_overrides:
+    MCSC_VIDEO:
+      format: YUV444
+    GDC_VIDEO:
+      format: YUV444
+- id: cam-rec-apv-uhd30-422-hdr10
+  extends: cam-rec-apv-uhd30-422-sdr
+  design_conditions:
+    $unset:
+    - apv_enc_profile
+    subscenario: HDR10_UHD_VIDEO
+    hdr: HDR10
+    apv_hdr10_plus_avail: false
+    note: MaxCLL/MaxFALL 정적 메타데이터
+  node_configs:
+    apv_enc:
+      $unset:
+      - enc_profile
+- id: cam-rec-apv-uhd30-422-hdr10plus
+  extends: cam-rec-apv-uhd30-422-hdr10
+  design_conditions:
+    $unset:
+    - apv_band_idc
+    hdr: HDR10_PLUS
+    apv_hdr10_plus_avail: true
+    note: 동적 메타데이터 포함 (d_display_info_1.hdr10_plus_avail=1)
+  node_configs:
+    apv_enc:
+      $unset:
+      - band_idc
+      selected_mode: HighQuality
+- id: cam-rec-apv-uhd60-422-sdr
+  extends: cam-rec-apv-uhd30-422-sdr
+  design_conditions:
+    $unset:
+    - codec_mfc
+    - apv_band_idc
+    - apv_enc_profile
+    subscenario: UHD_60FPS_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_UHD60
+    fps: 60
+    sensor_input_fps: 60.0
+    record_bitrate_mbps: 2000.0
+  node_configs:
+    sensor_rear:
+      selected_mode: cis_4sum_ln2_raw10_4080x2296_60fps_3993msps
+    apv_enc:
+      $unset:
+      - codec
+      - band_idc
+      - enc_profile
+- id: cam-rec-apv-uhd60-422-hdr10
+  extends: cam-rec-apv-uhd60-422-sdr
+  design_conditions:
+    subscenario: HDR10_UHD_60FPS_VIDEO
+    hdr: HDR10
+- id: cam-rec-apv-8k24-422-sdr
+  extends: cam-rec-apv-uhd60-422-sdr
+  severity: critical
+  design_conditions:
+    $unset:
+    - sensor_input_fps
+    - sensor_bitwidth
+    - sensor_input_source
+    subscenario: 8K_30FPS_VIDEO
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_8K24
+    resolution: 8K
+    fps: 24
+    codec_mfc: HEVC_ENC
+    dpu_layer_count: 2
+    record_bitrate_mbps: 3000
+  node_configs:
+    apv_enc:
+      codec: HEVC_ENC
+    sensor_rear:
+      selected_mode: mode28
+  size_overrides:
+    sensor_full: 8000x4500
+    record_out: 7680x4320
+    pyramid_l0: 8000x4500
+    pyramid_l1: 4000x2250
+    pyramid_l2: 2000x1125
+    pyramid_l3: 1000x563
+    pyramid_l4: 500x282
+    mlsc_out: 8000x4500
+- id: cam-rec-apv-8k30-422-sdr
+  extends: cam-rec-apv-8k24-422-sdr
+  design_conditions:
+    $unset:
+    - codec_mfc
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_8K30
+    fps: 30
+    verification_scope: priority_model_assumed
+    input_ratio: 7680:4620
+    sensor_input_fps: 30
+    sensor_input_source: kernel_mode_candidate
+    output_ratio: '16:9'
+  size_overrides:
+    sensor_full: 7680x4620
+    pyramid_l0: 7680x4620
+    pyramid_l1: 3840x2310
+    pyramid_l2: 1920x1155
+    pyramid_l3: 960x578
+    pyramid_l4: 480x289
+    mlsc_out: 7680x4620
+  node_configs:
+    sensor_rear:
+      selected_mode: user_raw10_7680x4620_30fps
+    apv_enc:
+      $unset:
+      - codec
+- id: cam-rec-apv-pro-uhd30-444
+  extends: cam-rec-apv-uhd30-444-sdr
+  design_conditions:
+    is_scenario: IS_SCENARIO_PRO_VIDEO
+    apv_band_idc: 1
+    record_bitrate_mbps: 1875.0
+  node_configs:
+    apv_enc:
+      selected_mode: HighQuality
+      band_idc: 1

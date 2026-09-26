@@ -201,7 +201,7 @@ def _exynos_ip_catalog() -> dict[str, SimpleNamespace]:
 
 
 def _exynos_fixture_graph() -> CanonicalScenarioGraph:
-    raw = _load_yaml(FIXTURE_ROOT / "02_definition" / "uc-camera-recording.yaml")
+    raw = _load_yaml(FIXTURE_ROOT / "02_definition" / "uc-cam-recording-e2600.yaml")
     variant = next(item for item in raw["variants"] if item["id"] == "cam-rec-r1-fhd30-vdis")
     return _exynos_fixture_graph_for(raw, variant)
 
@@ -417,7 +417,7 @@ def test_level1_exynos_non_camera_fixtures_use_known_semantic_groups():
 
     for scenario_path in sorted((FIXTURE_ROOT / "02_definition").glob("uc-*.yaml")):
         raw = _load_yaml(scenario_path)
-        if "camera" in str(raw.get("id") or ""):
+        if str(raw.get("id") or "").startswith(("uc-cam-", "uc-camera")):
             continue
         for variant in raw.get("variants") or []:
             view = service._project_semantic_level1(_exynos_fixture_graph_for(raw, variant))

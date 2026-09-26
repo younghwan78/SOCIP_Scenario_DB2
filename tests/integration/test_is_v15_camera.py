@@ -37,7 +37,7 @@ def isolated_connection(engine, api_client):
 
 
 def test_is_v15_strict_load_timing_persistence_and_view(isolated_connection, api_client):
-    scenario_id, variant_id = "uc-camera-recording", "cam-rec-r1-fhd30-vdis"
+    scenario_id, variant_id = "uc-cam-recording-e2600", "cam-rec-r1-fhd30-vdis"
     with Session(isolated_connection, join_transaction_mode="create_savepoint") as db:
         loaded = load_yaml_dir(FIXTURE, db, strict=True, validate=True)
         assert loaded.ok, loaded.to_dict()

@@ -115,7 +115,7 @@ def generate(directory: Path):
     path.write_bytes(trace.SerializeToString())
     template = dict(
         format_version="camera-profile-v1", id="meas-synthetic-uhd30-eis-15s-r3",
-        project_ref="proj-sm-s947b", scenario_ref="uc-camera-recording",
+        project_ref="proj-sm-s947b", scenario_ref="uc-cam-recording-e2600",
         variant_ref="cam-rec-r1-uhd30-vdis", measured_at="2026-09-21T00:00:00+09:00",
         execution_context=dict(silicon_rev="EVT1", sw_baseline_ref="sw-vendor-v1.2.3", thermal="room"),
         generator_version="synthetic-scenario-trace-3",

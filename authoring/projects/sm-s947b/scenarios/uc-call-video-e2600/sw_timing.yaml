@@ -1,0 +1,8 @@
+# SW task timing table. `variants: '*'` = every variant not listed in another
+# group and not in absent_in. Measured overrides go in the project's
+# sw_timing.measured.yaml, not here.
+known_variants:
+- vcall-fhd30-rear
+- vcall-fhd30-front
+- vcall-fhd30-front-lowlight
+tasks: {}

@@ -8,7 +8,7 @@ from tests.unit.sim.test_adapter_runner import _exynos2600_generated_graph
 
 
 def test_resolved_baseline_stable_and_preview_readonly():
-    graph = _exynos2600_generated_graph('uc-camera-recording', 'cam-rec-r1-fhd30-vdis')
+    graph = _exynos2600_generated_graph('uc-cam-recording-e2600', 'cam-rec-r1-fhd30-vdis')
     before = deepcopy(graph.variant.node_configs)
     req = ScenarioExplorationRequest(scenario_id=graph.scenario_id, variant_id=graph.variant_id,
         project_ref=graph.scenario.project_ref, axes=[dict(target='sw_margin',values=[1.1,1.3])])
@@ -34,7 +34,7 @@ def test_operating_mode_clock_cap_is_respected():
 
 def test_measured_baseline_fingerprint_tracks_catalog_and_size_profile():
     from scenario_db.sim.measured_timing import baseline_fingerprint
-    graph = _exynos2600_generated_graph('uc-camera-recording', 'cam-rec-r1-fhd30-vdis')
+    graph = _exynos2600_generated_graph('uc-cam-recording-e2600', 'cam-rec-r1-fhd30-vdis')
     before = baseline_fingerprint(graph)
     graph.scenario.size_profile = {'changed': True}
     assert baseline_fingerprint(graph) != before

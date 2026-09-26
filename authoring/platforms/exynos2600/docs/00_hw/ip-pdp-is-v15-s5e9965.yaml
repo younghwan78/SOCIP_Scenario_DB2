@@ -1,0 +1,47 @@
+id: ip-pdp-is-v15-s5e9965
+schema_version: '2.2'
+kind: ip
+category: camera
+hierarchy:
+  type: simple
+rtl_version: IS v15
+capabilities:
+  operating_modes:
+  - id: Normal
+  - id: Recording
+  - id: HighSpeed
+  sim:
+    hw_name: PDP
+    modes:
+      Normal:
+        unit_power_mw_mp: 0.17
+        idc: 0.0
+        ppc: 8.0
+        vdd: VDD_CAM
+        dvfs_group: CSIS
+    source: borrowed_legacy_model
+    source_note: 'Topology/DMA: kernel IS v15. Performance/power: legacy estimate;
+      not calibrated to IS v15.'
+  properties:
+    is_version: 15
+    ip_group: PDP
+    hierarchy_group: ISP
+    modules:
+    - name: CINFIFO
+      type: FIFO
+      direction: read
+    - name: COUTFIFO
+      type: FIFO
+      direction: write
+    - name: PDP_PD_STAT_WDMA
+      type: DMA
+      direction: write
+      naming: logical PD-stat endpoint; user supplied
+      source_file: hardware/sfr/pablo-sfr-pdp-v15_0.h
+    sources:
+    - path: hardware\sfr\pablo-sfr-pdp-v15_0.h
+      sha256: 853318cb7c98ed41f7209ae9efaf654a2c59d2191623f766e105d6e714c38c74
+    provenance_status: kernel_declared
+    performance_status: borrowed
+compatible_soc:
+- soc-exynos2600

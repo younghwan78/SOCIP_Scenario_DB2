@@ -1,0 +1,440 @@
+# Exynos2700 SM-S957B scope (2026-09-27): rear camera recording KPI set only
+# (dual wide+front pip-fhd30 / pip-uhd30 excluded).
+# Exynos2600 (sm-s947b / db_fixtures_Exynos2600_S26Plus) stays complete; this overlay only
+# narrows what the Exynos2700 project emits.
+#   variants.keep : emitted variants, in this order (16 rear KPI + 3 exploration). Every other
+#                   inherited 2600 variant stays an `extends` template only.
+#   variants.add  : bcrop / L0-skip exploration variants (knobs: projects/sm-s947b/.../knobs.yaml)
+#                   + KPI variants that do not exist in 2600:
+#                     APV UHD30/60/120 (apv_enc injected, mfc_enc disabled; UHD120 bitrate assumed)
+#                     Pro video UHD30/60/120 (extra CPU task pro_scope; timing assumed)
+kind: authoring.scenario_overlay
+variants:
+  keep:
+  - cam-rec-r1-fhd30-vdis
+  - cam-rec-r1-fhd60-supersteady
+  - cam-rec-r1-uhd30-vdis
+  - cam-rec-r1-uhd60-psm
+  - cam-rec-r1-8k30-psm
+  - cam-rec-r1-fhd120
+  - cam-rec-r1-fhd240
+  - cam-rec-r1-uhd120
+  - cam-rec-r1-fhd30-portrait
+  - cam-rec-r1-uhd30-portrait
+  - cam-rec-apv-uhd30-422-sdr
+  - cam-rec-apv-uhd60-422-sdr
+  - cam-rec-r1-uhd30-pro
+  - cam-rec-r1-uhd60-pro
+  - cam-rec-r1-uhd120-pro
+  - cam-rec-apv-uhd120-422-sdr
+  - cam-rec-r1-uhd30-vdis-bcrop
+  - cam-rec-r1-uhd30-vdis-bcrop-l0skip
+  - cam-rec-r1-fhd30-vdis-bcrop
+  add:
+  - id: cam-rec-r1-uhd30-vdis-bcrop
+    extends: cam-rec-r1-uhd30-vdis
+    design_conditions:
+      crop_strategy: byrp_bcrop
+    $append:
+      tags:
+      - exploration-only
+      - arch-knob
+  - id: cam-rec-r1-uhd30-vdis-bcrop-l0skip
+    extends: cam-rec-r1-uhd30-vdis-bcrop
+    design_conditions:
+      pyramid_l0: skip
+  - id: cam-rec-r1-fhd30-vdis-bcrop
+    extends: cam-rec-r1-fhd30-vdis
+    design_conditions:
+      crop_strategy: byrp_bcrop
+    $append:
+      tags:
+      - exploration-only
+      - arch-knob
+  - id: cam-rec-apv-uhd30-422-sdr
+    extends: cam-rec-r1-uhd30-vdis
+    design_conditions:
+      $unset:
+      - stabilization
+      - is_scenario
+      - verification_scope
+      - input_ratio
+      hdr: SDR
+      codec_mfc: HEVC_ENC
+      apv_chroma_format_idc: 1
+      apv_chroma_format: '4:2:2'
+      apv_band_idc: 0
+      apv_enc_profile: 0
+      encoder_hw: APV
+      sensor_runtime_confirmation: true
+      record_bitrate_mbps: 1000.0
+    routing_switch:
+      disabled_nodes:
+      - sensor_rear2
+      - sensor_rear3
+      - sensor_front
+      - vps_dof
+      - vps_seg
+      - eis
+      - gdc_m
+      - gdc_o
+      - mfc_enc
+    node_configs:
+      $unset:
+      - mfc_enc
+      apv_enc:
+        selected_mode: Normal
+        codec: HEVC_ENC
+        sim:
+          inherit_shape: true
+          format: YUV422
+          width: 3840
+          height: 2160
+        chroma_format_idc: 1
+        band_idc: 0
+        enc_profile: 0
+        memory_io:
+        - port: APV_WDMA_BITSTREAM
+          direction: write
+          bitrate_condition: record_bitrate_mbps
+    topology_patch:
+      add_edges:
+      - from: mcsc
+        to: dpu
+        type: M2M
+        buffer: MCSC_PREVIEW
+        port_pairs:
+        - src: MCSC_WDMA_W0
+          dst: DPU_RDMA
+      - from: mcsc
+        to: apv_enc
+        type: M2M
+        buffer: MCSC_VIDEO
+        port_pairs:
+        - src: MCSC_WDMA_W1
+          dst: APV_RDMA_FRAME
+      - from: apv_enc
+        to: mpeg_writer
+        type: control
+      - from: mpeg_writer
+        to: storage_write
+        type: control
+      add_nodes:
+      - id: mpeg_writer
+        ip_ref: ip-cpu-s5e9965
+        role: sw_task
+        instance_index: 0
+      - id: storage_write
+        ip_ref: ip-cpu-s5e9965
+        role: sw_task
+        instance_index: 0
+      - id: apv_enc
+        ip_ref: ip-apv-s5e9965
+        role: encoder
+        instance_index: 0
+    buffer_overrides:
+      MCSC_VIDEO:
+        format: YUV422
+        bitdepth: 10
+      GDC_VIDEO:
+        format: YUV422
+        bitdepth: 10
+  - id: cam-rec-apv-uhd60-422-sdr
+    extends: cam-rec-r1-uhd60-supersteady
+    design_conditions:
+      $unset:
+      - stabilization
+      - verification_scope
+      - input_ratio
+      dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_UHD60
+      hdr: SDR
+      apv_chroma_format_idc: 1
+      apv_chroma_format: '4:2:2'
+      encoder_hw: APV
+      sensor_runtime_confirmation: true
+      record_bitrate_mbps: 2000.0
+    routing_switch:
+      disabled_nodes:
+      - sensor_rear2
+      - sensor_rear3
+      - sensor_front
+      - vps_dof
+      - vps_seg
+      - eis
+      - gdc_m
+      - gdc_o
+      - mfc_enc
+    node_configs:
+      $unset:
+      - mfc_enc
+      apv_enc:
+        selected_mode: Normal
+        sim:
+          inherit_shape: true
+          format: YUV422
+          width: 3840
+          height: 2160
+        chroma_format_idc: 1
+        memory_io:
+        - port: APV_WDMA_BITSTREAM
+          direction: write
+          bitrate_condition: record_bitrate_mbps
+    topology_patch:
+      add_edges:
+      - from: mcsc
+        to: dpu
+        type: M2M
+        buffer: MCSC_PREVIEW
+        port_pairs:
+        - src: MCSC_WDMA_W0
+          dst: DPU_RDMA
+      - from: mcsc
+        to: apv_enc
+        type: M2M
+        buffer: MCSC_VIDEO
+        port_pairs:
+        - src: MCSC_WDMA_W1
+          dst: APV_RDMA_FRAME
+      - from: apv_enc
+        to: mpeg_writer
+        type: control
+      - from: mpeg_writer
+        to: storage_write
+        type: control
+      add_nodes:
+      - id: mpeg_writer
+        ip_ref: ip-cpu-s5e9965
+        role: sw_task
+        instance_index: 0
+      - id: storage_write
+        ip_ref: ip-cpu-s5e9965
+        role: sw_task
+        instance_index: 0
+      - id: apv_enc
+        ip_ref: ip-apv-s5e9965
+        role: encoder
+        instance_index: 0
+    buffer_overrides:
+      MCSC_VIDEO:
+        format: YUV422
+        bitdepth: 10
+      GDC_VIDEO:
+        format: YUV422
+        bitdepth: 10
+  - id: cam-rec-r1-uhd30-pro
+    extends: cam-rec-r1-uhd30-vdis
+    design_conditions:
+      camera_mode: pro_video
+      pro_video_overlay: histogram+equalizer
+      pro_video_source: assumed
+    node_configs:
+      pro_scope:
+        sw_timing:
+          min_ms: 2.0
+          mean_ms: 3.0
+          max_ms: 4.5
+          value_source: assumed
+          source_note: Assumed 2026-09-27 (scope reduction); replace with internal measurement.
+    topology_patch:
+      add_edges:
+      - from: mfc_enc
+        to: mpeg_writer
+        type: control
+      - from: mpeg_writer
+        to: storage_write
+        type: control
+      - from: mcsc
+        to: pro_scope
+        type: control
+      add_nodes:
+      - id: mpeg_writer
+        ip_ref: ip-cpu-s5e9965
+        role: sw_task
+        instance_index: 0
+      - id: storage_write
+        ip_ref: ip-cpu-s5e9965
+        role: sw_task
+        instance_index: 0
+      - id: pro_scope
+        ip_ref: ip-cpu-s5e9965
+        role: sw_task
+        instance_index: 0
+    tags:
+    - is-v15
+    - assumed-sw-timing
+    - uncalibrated-power
+    - pro-video
+  - id: cam-rec-r1-uhd60-pro
+    extends: cam-rec-r1-uhd60-psm
+    design_conditions:
+      camera_mode: pro_video
+      pro_video_overlay: histogram+equalizer
+      pro_video_source: assumed
+    node_configs:
+      pro_scope:
+        sw_timing:
+          min_ms: 2.0
+          mean_ms: 3.0
+          max_ms: 4.5
+          value_source: assumed
+          source_note: Assumed 2026-09-27 (scope reduction); replace with internal measurement.
+    topology_patch:
+      add_edges:
+      - from: mcsc
+        to: dpu
+        type: M2M
+        buffer: MCSC_PREVIEW
+        port_pairs:
+        - src: MCSC_WDMA_W0
+          dst: DPU_RDMA
+      - from: mcsc
+        to: mfc_enc
+        type: M2M
+        buffer: MCSC_VIDEO
+        port_pairs:
+        - src: MCSC_WDMA_W1
+          dst: MFC_RDMA
+      - from: mcsc
+        to: pro_scope
+        type: control
+      add_nodes:
+      - id: pro_scope
+        ip_ref: ip-cpu-s5e9965
+        role: sw_task
+        instance_index: 0
+    tags:
+    - is-v15
+    - assumed-sw-timing
+    - uncalibrated-power
+    - pro-video
+  - id: cam-rec-r1-uhd120-pro
+    extends: cam-rec-r1-uhd120
+    design_conditions:
+      camera_mode: pro_video
+      pro_video_overlay: histogram+equalizer
+      pro_video_source: assumed
+    node_configs:
+      pro_scope:
+        sw_timing:
+          min_ms: 2.0
+          mean_ms: 3.0
+          max_ms: 4.5
+          value_source: assumed
+          source_note: Assumed 2026-09-27 (scope reduction); replace with internal measurement.
+    topology_patch:
+      add_edges:
+      - from: mcsc
+        to: dpu
+        type: M2M
+        buffer: MCSC_PREVIEW
+        port_pairs:
+        - src: MCSC_WDMA_W0
+          dst: DPU_RDMA
+      - from: mcsc
+        to: mfc_enc
+        type: M2M
+        buffer: MCSC_VIDEO
+        port_pairs:
+        - src: MCSC_WDMA_W1
+          dst: MFC_RDMA
+      - from: mfc_enc
+        to: mpeg_writer
+        type: control
+      - from: mpeg_writer
+        to: storage_write
+        type: control
+      - from: mcsc
+        to: pro_scope
+        type: control
+      add_nodes:
+      - id: mpeg_writer
+        ip_ref: ip-cpu-s5e9965
+        role: sw_task
+        instance_index: 0
+      - id: storage_write
+        ip_ref: ip-cpu-s5e9965
+        role: sw_task
+        instance_index: 0
+      - id: pro_scope
+        ip_ref: ip-cpu-s5e9965
+        role: sw_task
+        instance_index: 0
+    tags:
+    - is-v15
+    - assumed-sw-timing
+    - uncalibrated-power
+    - pro-video
+  - id: cam-rec-apv-uhd120-422-sdr
+    extends: cam-rec-r1-uhd120
+    design_conditions:
+      record_bitrate_mbps: 4000.0
+      hdr: SDR
+      apv_chroma_format_idc: 1
+      apv_chroma_format: '4:2:2'
+      encoder_hw: APV
+    routing_switch:
+      disabled_nodes:
+      - sensor_rear2
+      - sensor_rear3
+      - sensor_front
+      - vps_dof
+      - vps_seg
+      - eis
+      - gdc_m
+      - gdc_o
+      - mfc_enc
+    node_configs:
+      $unset:
+      - mfc_enc
+      apv_enc:
+        selected_mode: Normal
+        sim:
+          inherit_shape: true
+          format: YUV422
+          width: 3840
+          height: 2160
+        chroma_format_idc: 1
+        memory_io:
+        - port: APV_WDMA_BITSTREAM
+          direction: write
+          bitrate_condition: record_bitrate_mbps
+    topology_patch:
+      add_edges:
+      - from: mcsc
+        to: dpu
+        type: M2M
+        buffer: MCSC_PREVIEW
+        port_pairs:
+        - src: MCSC_WDMA_W0
+          dst: DPU_RDMA
+      - from: mcsc
+        to: apv_enc
+        type: M2M
+        buffer: MCSC_VIDEO
+        port_pairs:
+        - src: MCSC_WDMA_W1
+          dst: APV_RDMA_FRAME
+      - from: apv_enc
+        to: mpeg_writer
+        type: control
+      - from: mpeg_writer
+        to: storage_write
+        type: control
+      add_nodes:
+      - id: mpeg_writer
+        ip_ref: ip-cpu-s5e9965
+        role: sw_task
+        instance_index: 0
+      - id: storage_write
+        ip_ref: ip-cpu-s5e9965
+        role: sw_task
+        instance_index: 0
+      - id: apv_enc
+        ip_ref: ip-apv-s5e9965
+        role: encoder
+        instance_index: 0
+    tags:
+    - is-v15
+    - assumed-sw-timing
+    - uncalibrated-power
+    - apv

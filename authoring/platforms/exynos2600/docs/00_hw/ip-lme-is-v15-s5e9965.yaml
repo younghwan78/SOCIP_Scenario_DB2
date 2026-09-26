@@ -1,0 +1,66 @@
+id: ip-lme-is-v15-s5e9965
+schema_version: '2.2'
+kind: ip
+category: camera
+hierarchy:
+  type: simple
+capabilities:
+  sim:
+    hw_name: LME
+    source_note: Estimated from GDC-level camera processing defaults until project-specific
+      LME unit power is provided.
+    modes:
+      Normal:
+        unit_power_mw_mp: 1.5
+        idc: 0.0
+        ppc: 4.0
+        vdd: VDD_CAM
+        dvfs_group: CAM
+      SuperSteady:
+        unit_power_mw_mp: 1.5
+        idc: 0.0
+        ppc: 4.0
+        vdd: VDD_CAM
+        dvfs_group: CAM
+    source: borrowed_legacy_model
+  operating_modes:
+  - id: Normal
+  - id: SuperSteady
+  supported_features:
+    bitdepth:
+    - 8
+    - 10
+    crop: true
+    scale: true
+  properties:
+    modules:
+    - name: LME_RDMA_CACHE_IN_0
+      type: DMA
+      direction: read
+    - name: LME_RDMA_CACHE_IN_1
+      type: DMA
+      direction: read
+    - name: LME_RDMA_MBMV_IN
+      type: DMA
+      direction: read
+    - name: LME_WDMA_MBMV_OUT
+      type: DMA
+      direction: write
+    - name: LME_WDMA_MV_OUT
+      type: DMA
+      direction: write
+    - name: LME_WDMA_SAD_OUT
+      type: DMA
+      direction: write
+    ip_group: LME
+    hierarchy_group: ISP
+    description: Local Motion Estimation — video stabilization pre-processing
+    max_size:
+    - 7680
+    - 4320
+    chain_id: ID_LME_0
+    sources:
+    - path: post\lme\pablo-hw-api-lme-v15_0_0.c
+      sha256: 92facb6dcfc4bbdb5bee5910a551b9794a1630bbdb109209368d571592fc2f40
+compatible_soc:
+- soc-exynos2600

@@ -1,0 +1,36 @@
+id: ip-gdc-is-v15-s5e9965
+schema_version: '2.2'
+kind: ip
+category: camera
+hierarchy:
+  type: simple
+capabilities:
+  operating_modes:
+  - id: Normal
+  properties:
+    ip_group: GDC
+    hierarchy_group: GDC
+    performance_status: missing
+    provenance_status: kernel_capability_user_topology
+    modules:
+    - name: GDC_RDMA
+      type: DMA
+      direction: read
+      naming: logical endpoint
+    - name: GDC_WDMA
+      type: DMA
+      direction: write
+      naming: logical endpoint
+    sources:
+    - path: post\gdc\pablo-hw-api-gdc-v1500.c
+      sha256: 93c2fff3fa091975f677199ec5286b5478e5a5935b4c61f4c2f2f83a0e7bec31
+  sim:
+    hw_name: GDC
+    source: assumed_capacity
+    source_note: PPC is an exploration assumption, not a verified silicon capacity.
+      Power coefficient is unavailable and core power is excluded.
+    ppc: 4.0
+    vdd: VDD_CAM
+    dvfs_group: CAM
+compatible_soc:
+- soc-exynos2600
