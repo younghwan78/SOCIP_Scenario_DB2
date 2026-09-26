@@ -7,7 +7,7 @@ canonical v2.2 YAML을 만든다. 사용법: [docs/guides/import/authoring-layer
 platforms/exynos2600/        root: canonical HW/sensor/SW docs (docs/)
 platforms/exynos2700/        extends exynos2600: s5e9965 -> s5e9975 rename + patches/
 projects/sm-s947b/           root project (S26+) + 13 scenarios (decompiled, == fixture)
-projects/e2700-ref/          extends sm-s947b on exynos2700 (S5E9975): measured SW timing slots,
+projects/sm-s957b/           extends sm-s947b on exynos2700 (S5E9975), SM-S957B: measured SW timing slots,
                              bcrop / L0-skip exploration variants
 examples/exynos2800-pipeline-change/   hypothetical pipeline-change example (tested)
 ```

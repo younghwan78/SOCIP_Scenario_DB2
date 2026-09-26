@@ -13,8 +13,22 @@ export interface ProjectInfo {
 export const socLabel = (s?: string | null) => (s ?? '').replace(/^soc-/, '').replace(/^exynos/i, 'Exynos') || 'SoC 미정'
 export const projLabel = (p: string) => p.replace(/^proj-/, '').toUpperCase()
 
-/** Cross-project join key: metadata.canonical_usecase, else the scenario id. */
-export const canonicalOf = (c: Pick<CatalogItem, 'scenario_id' | 'canonical_usecase'>): string => c.canonical_usecase || c.scenario_id
+/** Pre-2026-09-26 scenario ids → unified canonical use case (uc-<domain>-<use case>). */
+export const LEGACY_CANONICAL: Record<string, string> = {
+  'uc-camera-recording': 'uc-cam-recording', 'uc-camera-recording-apv': 'uc-cam-recording-apv', 'uc-camera-preview': 'uc-cam-preview',
+  'uc-camera-capture': 'uc-cam-capture', 'uc-video-playback-local': 'uc-vid-playback-local', 'uc-youtube-playback': 'uc-vid-youtube',
+  'uc-video-call': 'uc-call-video', 'uc-voice-call': 'uc-call-voice', 'uc-audio-mp3-playback': 'uc-aud-mp3-playback',
+  'uc-audio-streaming': 'uc-aud-streaming', 'uc-gallery-display': 'uc-disp-gallery',
+}
+
+/** Canonical use case of any scenario id: drop the SoC suffix (-e2600, -e2800c) and map legacy names. */
+export function canonicalKey(id: string | undefined | null): string {
+  const base = String(id ?? '').replace(/-e\d{4}[a-z]*$/, '')
+  return LEGACY_CANONICAL[base] ?? base
+}
+
+/** Cross-project join key: metadata.canonical_usecase, else derived from the scenario id. */
+export const canonicalOf = (c: Pick<CatalogItem, 'scenario_id' | 'canonical_usecase'>): string => canonicalKey(c.canonical_usecase || c.scenario_id)
 
 export function projectsOf(catalog: CatalogItem[]): ProjectInfo[] {
   const m = new Map<string, ProjectInfo>()
@@ -44,7 +58,7 @@ export function counterpart(catalog: CatalogItem[], from: CatalogItem | undefine
   return inProject.find((c) => canonicalOf(c) === canonicalOf(from)) ?? inProject.find((c) => c.scenario_name === from.scenario_name)
 }
 
-export const DEFAULT_CANONICAL = 'uc-camera-recording'
+export const DEFAULT_CANONICAL = 'uc-cam-recording'
 
 /** Default scenario inside a project: camera recording if present, else the first. */
 export function defaultScenario(scoped: CatalogItem[]): CatalogItem | undefined {

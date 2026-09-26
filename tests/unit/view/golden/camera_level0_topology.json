@@ -1,7 +1,7 @@
 {
   "level": 0,
   "mode": "topology",
-  "scenario_id": "uc-camera-recording",
+  "scenario_id": "uc-cam-recording-e2600",
   "variant_id": "cam-rec-3rdparty-binning",
   "nodes": [
     {
@@ -2039,7 +2039,7 @@
   ],
   "risks": [],
   "summary": {
-    "scenario_id": "uc-camera-recording",
+    "scenario_id": "uc-cam-recording-e2600",
     "variant_id": "cam-rec-3rdparty-binning",
     "name": "Camera Recording",
     "subtitle": "FHD 30fps",

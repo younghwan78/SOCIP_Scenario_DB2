@@ -44,7 +44,7 @@ from scenario_db.sim.adapter import build_simulation_inputs  # noqa: E402
 from scenario_db.sim.models import SimulationRunConfig  # noqa: E402
 from scenario_db.sim.runner import build_simulation_evidence, params_hash, run_simulation  # noqa: E402
 
-SCENARIO = "uc-camera-recording"
+SCENARIO = "uc-cam-recording-e2600"
 EVIDENCE = FIXTURE / "03_evidence"
 REF_MEAS = "meas-cam-rec-r1-uhd30-vdis-evt1-sw123-20260614"
 REF_SIM = "sim-priority-cam-rec-r1-uhd30-vdis-mean-20260913"

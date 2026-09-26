@@ -66,7 +66,7 @@ def _route_buffers(graph: CanonicalScenarioGraph) -> set[str]:
 
 
 def test_camera_recording_fixture_exposes_sensor_display_and_buffer_topology():
-    graph = _scenario_graph("uc-camera-recording.yaml", "cam-rec-3rdparty-binning")
+    graph = _scenario_graph("uc-cam-recording-e2600.yaml", "cam-rec-3rdparty-binning")
 
     overview = build_resource_overview(graph)
     topology = project_level0_topology_view(graph)
@@ -84,7 +84,7 @@ def test_camera_recording_fixture_exposes_sensor_display_and_buffer_topology():
 
 
 def test_youtube_gpu_fallback_fixture_keeps_gpu_path_and_buffer_compression():
-    graph = _scenario_graph("uc-youtube-playback.yaml", "yt-1080p30-av1-gpu-overlay")
+    graph = _scenario_graph("uc-vid-youtube-e2600.yaml", "yt-1080p30-av1-gpu-overlay")
 
     overview = build_resource_overview(graph)
     topology = project_level0_topology_view(graph)
@@ -99,7 +99,7 @@ def test_youtube_gpu_fallback_fixture_keeps_gpu_path_and_buffer_compression():
 
 
 def test_game_npu_fixture_uses_npu_route_and_hides_disabled_direct_gpu_dpu_route():
-    graph = _scenario_graph("uc-game-play.yaml", "game-fhd-60fps-npu-ai")
+    graph = _scenario_graph("uc-game-play-e2600.yaml", "game-fhd-60fps-npu-ai")
 
     overview = build_resource_overview(graph)
     topology = project_level0_topology_view(graph)
@@ -113,7 +113,7 @@ def test_game_npu_fixture_uses_npu_route_and_hides_disabled_direct_gpu_dpu_route
 
 
 def test_audio_streaming_fixture_stays_audio_focused_without_camera_resources():
-    graph = _scenario_graph("uc-audio-streaming.yaml", "audio-stream-aac-screen-on")
+    graph = _scenario_graph("uc-aud-streaming-e2600.yaml", "audio-stream-aac-screen-on")
 
     overview = build_resource_overview(graph)
     topology = project_level0_topology_view(graph)

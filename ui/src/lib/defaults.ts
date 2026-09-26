@@ -1,13 +1,14 @@
 // Review defaults agreed with the architecture team.
 import type { Dict } from './api'
+import { canonicalKey } from './projects'
 
 /** Scenario → reference ("기준") variant. Camera recording baseline = Rear(wide) UHD30 with EIS (SW VDIS). */
 export const PREFERRED_REFERENCE: Record<string, string> = {
-  'uc-camera-recording': 'cam-rec-r1-uhd30-vdis',
+  'uc-cam-recording': 'cam-rec-r1-uhd30-vdis',
 }
 
 export function preferredReference(scenarioId: string | undefined, available: Iterable<string>, fallback: string): string {
-  const want = scenarioId ? PREFERRED_REFERENCE[scenarioId] : undefined
+  const want = scenarioId ? PREFERRED_REFERENCE[canonicalKey(scenarioId)] : undefined
   if (want) for (const v of available) if (v === want) return want
   return fallback
 }

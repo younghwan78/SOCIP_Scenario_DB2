@@ -106,7 +106,7 @@ def write_worksheet(root: Path, key: str) -> list[Path]:
         tasks = (src.get("sw_timing") or {}).get("tasks") or {}
         if not tasks:
             continue
-        parent_uc = (src["base"].get("metadata") or {}).get("canonical_usecase") or uc
+        parent_uc = bundle.origins.get(uc, uc)   # authoring dir = parent scenario id
         target = root / "projects" / key / "scenarios" / parent_uc / "sw_timing.measured.yaml"
         if target.exists():
             continue

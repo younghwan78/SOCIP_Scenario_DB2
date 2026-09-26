@@ -52,7 +52,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("--scenario", default="02_definition/uc-camera-recording.yaml")
+    parser.add_argument("--scenario", default="02_definition/uc-cam-recording-e2600.yaml")
     parser.add_argument("--variants", nargs="*")
     parser.add_argument("--statistic", default="max", choices=["min", "mean", "max"])
     parser.add_argument("--runtime-scale", type=float, default=1.0)

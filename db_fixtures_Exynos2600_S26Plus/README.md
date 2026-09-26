@@ -12,7 +12,7 @@ LME와 VPS OD를 별도 M2M 노드로 구성하고 DOF/SEG는 기본 비활성�
 
 ## 교체할 SW 가정값
 
-단위는 ms이며 **실측 데이터가 아니다**. `02_definition/uc-camera-recording.yaml`의 variant `node_configs.<node>.sw_timing`에서 수정한다.
+단위는 ms이며 **실측 데이터가 아니다**. `02_definition/uc-cam-recording-e2600.yaml`의 variant `node_configs.<node>.sw_timing`에서 수정한다.
 
 | Node | min | mean | max | 비고 |
 | --- | ---: | ---: | ---: | --- |
@@ -97,7 +97,7 @@ Reproduce explicit fixture assumptions and priority checks:
 
 ## Rear recording evidence gap fill (2026-09-25)
 
-`scripts/generate_rear_recording_evidence.py --write`가 `uc-camera-recording`의 base variant 중 effective `sensor_place: rear`인 35개에 대해 비어 있는 evidence만 채운다. derived variant(`*-explored-*`, `*-timing-*`)와 front/dual/triple/RCV는 제외한다. 결과 목록은 `rear_recording_gapfill_report.json`.
+`scripts/generate_rear_recording_evidence.py --write`가 `uc-cam-recording-e2600`의 base variant 중 effective `sensor_place: rear`인 35개에 대해 비어 있는 evidence만 채운다. derived variant(`*-explored-*`, `*-timing-*`)와 front/dual/triple/RCV는 제외한다. 결과 목록은 `rear_recording_gapfill_report.json`.
 
 | 추가 | 개수 | 내용 |
 | --- | ---: | --- |

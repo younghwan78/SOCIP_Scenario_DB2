@@ -16,7 +16,7 @@ const COLS = ['Res · fps', 'Mode · Format', 'Output · HDR', 'Stab', 'Camera',
 
 export function MatrixPage({ ctx }: { ctx: Ctx }) {
   const q = useAsync(() => api.matrix(ctx.project || undefined), [ctx.project])
-  const [open, setOpen] = useState<Set<string>>(() => new Set(ctx.catalog.filter((c) => ['uc-camera-recording', 'uc-camera-preview', 'uc-camera-capture'].includes(canonicalOf(c))).map((c) => c.scenario_id)))
+  const [open, setOpen] = useState<Set<string>>(() => new Set(ctx.catalog.filter((c) => ['uc-cam-recording', 'uc-cam-preview', 'uc-cam-capture'].includes(canonicalOf(c))).map((c) => c.scenario_id)))
   const [search, setSearch] = useState('')
   const [load, setLoad] = useState('')
   const [picked, setPicked] = useState<Set<string>>(new Set())

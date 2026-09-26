@@ -20,7 +20,7 @@ def graph_factory():
     for path in (FIXTURE / "00_hw").glob("ip-*.yaml"):
         d = read(path)
         catalog[d["id"]] = IpCatalog(id=d["id"], schema_version=d["schema_version"], category=d["category"], hierarchy=d["hierarchy"], capabilities=d["capabilities"], yaml_sha256="fixture")
-    def build(id, scenario="uc-camera-recording"):
+    def build(id, scenario="uc-cam-recording-e2600"):
         return graph_from_fixture(read(FIXTURE / "02_definition" / (scenario + ".yaml")), id, catalog)
     return build
 
@@ -33,7 +33,7 @@ def test_bitstream_bandwidth_is_bitrate_not_image_pixels_or_fps():
 
 
 def test_apv_uses_dedicated_hw_and_writer_scales_with_bitrate(graph_factory):
-    graph = graph_factory("cam-rec-apv-uhd30-422-sdr", "uc-camera-recording-apv")
+    graph = graph_factory("cam-rec-apv-uhd30-422-sdr", "uc-cam-recording-apv-e2600")
     assert all("mfc" not in n["ip_ref"] for n in graph.pipeline_nodes)
     first = timing_profiles(graph)["mpeg_writer"]["mean_ms"]
     graph.variant.design_conditions["record_bitrate_mbps"] *= 2

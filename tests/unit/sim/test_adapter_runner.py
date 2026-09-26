@@ -346,7 +346,7 @@ def test_simulation_regression_smoke_keeps_reference_kpis_and_clocks_stable():
 # Capacity invariants below independently guard the corrected schedule.
 def test_exynos2600_camera_recording_vdis_preserves_is_v15_timing_contract():
     inputs = build_simulation_inputs(
-        _exynos2600_generated_graph("uc-camera-recording", "cam-rec-r1-fhd30-vdis"),
+        _exynos2600_generated_graph("uc-cam-recording-e2600", "cam-rec-r1-fhd30-vdis"),
         SimulationRunConfig(include_timeline=True, timeline_frame_count=4, debug_trace=True),
     )
     result = run_simulation(inputs, dvfs_tables={})
@@ -373,7 +373,7 @@ def test_exynos2600_camera_recording_vdis_preserves_is_v15_timing_contract():
 
 def test_full_debug_trace_includes_timeline_event_rows():
     inputs = build_simulation_inputs(
-        _exynos2600_generated_graph("uc-camera-recording", "cam-rec-r1-fhd30-vdis"),
+        _exynos2600_generated_graph("uc-cam-recording-e2600", "cam-rec-r1-fhd30-vdis"),
         SimulationRunConfig(include_timeline=True, timeline_frame_count=2, debug_trace=True, debug_trace_level="full"),
     )
     result = run_simulation(inputs, dvfs_tables={})
@@ -390,7 +390,7 @@ def test_full_debug_trace_includes_timeline_event_rows():
     [("cam-rec-r1-uhd30-vdis", 2, "GNG"), ("cam-rec-f1-fhd30", 1, "IMX874")],
 )
 def test_exynos2600_camera_recording_paths_match_board_and_output_policy(variant_id, channels, sensor_name):
-    graph = _exynos2600_generated_graph("uc-camera-recording", variant_id)
+    graph = _exynos2600_generated_graph("uc-cam-recording-e2600", variant_id)
     inputs = build_simulation_inputs(graph, SimulationRunConfig(timeline_frame_count=4))
     result = run_simulation(inputs, dvfs_tables={})
     sensor = next(row for row in result.external_devices if row["device_type"] == "sensor")
@@ -1045,7 +1045,7 @@ def _read_yaml(path: Path) -> dict:
 @pytest.mark.parametrize("variant_id", ["cam-rec-r1-fhd30-vdis", "cam-rec-r1-uhd30-vdis", "cam-rec-f1-fhd30"])
 def test_recording_schedule_respects_physical_resource_capacity(variant_id):
     inputs = build_simulation_inputs(
-        _exynos2600_generated_graph("uc-camera-recording", variant_id),
+        _exynos2600_generated_graph("uc-cam-recording-e2600", variant_id),
         SimulationRunConfig(include_timeline=True, timeline_frame_count=4),
     )
     result = run_simulation(inputs, dvfs_tables={})
@@ -1114,7 +1114,7 @@ def test_runner_uses_owning_node_fps_for_port_bandwidth():
 @pytest.mark.parametrize("case, preme, post", [("min", 2.5, 3.0), ("mean", 3.0, 4.0), ("max", 4.0, 5.6)])
 def test_is_v15_timing_sensitivity_and_history_dma(case, preme, post):
     suffix = "" if case == "mean" else "-timing-" + case
-    graph = _exynos2600_generated_graph("uc-camera-recording", "cam-rec-r1-fhd30-vdis" + suffix)
+    graph = _exynos2600_generated_graph("uc-cam-recording-e2600", "cam-rec-r1-fhd30-vdis" + suffix)
     inputs = build_simulation_inputs(graph, SimulationRunConfig(timeline_frame_count=1))
     result = run_simulation(inputs, dvfs_tables={})
     events = {row.node_id: row for row in result.timeline_events}
@@ -1142,7 +1142,7 @@ def test_is_v15_estimated_evidence_keeps_timing_and_exploration_status():
     from scenario_db.sim.runner import build_simulation_evidence
     from scenario_db.sim.service import _simulation_evidence_dict
 
-    inputs = build_simulation_inputs(_exynos2600_generated_graph("uc-camera-recording", "cam-rec-r1-fhd30-vdis"))
+    inputs = build_simulation_inputs(_exynos2600_generated_graph("uc-cam-recording-e2600", "cam-rec-r1-fhd30-vdis"))
     result = run_simulation(inputs, dvfs_tables={})
     evidence = build_simulation_evidence(result, execution_context=ExecutionContext(
         silicon_rev="EVT1", sw_baseline_ref="sw-vendor-v1.2.3", thermal="room", method="calculation",
@@ -1158,7 +1158,7 @@ def test_is_v15_estimated_evidence_keeps_timing_and_exploration_status():
 
 
 def test_is_v15_invalid_timing_profile_is_rejected():
-    graph = _exynos2600_generated_graph("uc-camera-recording", "cam-rec-r1-fhd30-vdis")
+    graph = _exynos2600_generated_graph("uc-cam-recording-e2600", "cam-rec-r1-fhd30-vdis")
     graph.variant.node_configs["post_crta"]["sw_timing"]["min_ms"] = 10.0
     with pytest.raises(ValueError, match="min_ms"):
         build_simulation_inputs(graph)
@@ -1170,7 +1170,7 @@ def test_is_v15_invalid_timing_profile_is_rejected():
     ("uhd120", (4080, 2296), 120), ("fhd120", (2040, 1148), 120), ("fhd240", (2040, 1148), 120),
 ])
 def test_corrected_gng_raw10_recording_inputs(variant, size, fps):
-    graph = _exynos2600_generated_graph("uc-camera-recording", "cam-rec-r1-" + variant)
+    graph = _exynos2600_generated_graph("uc-cam-recording-e2600", "cam-rec-r1-" + variant)
     inputs = build_simulation_inputs(graph)
     sensor = next(row for row in inputs.external_devices if row["node_id"] == "sensor_rear")
     assert sensor["size"] == f"{size[0]}x{size[1]}"
@@ -1181,7 +1181,7 @@ def test_corrected_gng_raw10_recording_inputs(variant, size, fps):
 
 
 def test_single_eis_controls_both_gdc_instances():
-    graph = _exynos2600_generated_graph("uc-camera-recording", "cam-rec-r1-fhd30-vdis")
+    graph = _exynos2600_generated_graph("uc-cam-recording-e2600", "cam-rec-r1-fhd30-vdis")
     inputs = build_simulation_inputs(graph, SimulationRunConfig(timeline_frame_count=1))
     result = run_simulation(inputs, dvfs_tables={})
     events = {row.node_id: row for row in result.timeline_events}
@@ -1192,7 +1192,7 @@ def test_single_eis_controls_both_gdc_instances():
 
 
 def test_auxiliary_dma_unknown_sizes_and_optional_outputs():
-    graph = _exynos2600_generated_graph("uc-camera-recording", "cam-rec-r1-fhd30-vdis")
+    graph = _exynos2600_generated_graph("uc-cam-recording-e2600", "cam-rec-r1-fhd30-vdis")
     inputs = build_simulation_inputs(graph)
     assert not any(p.port in {"RGBP_WDMA_DRC", "YUVP_RDMA_DRC0", "YUVP_RDMA_SVHIST"} for p in inputs.port_transfers)
     assert any("RGBP_DRC: DMA size/format unknown" in w for w in inputs.warnings)

@@ -50,7 +50,7 @@ export function matches(row: VariantRow, f: Facet, query: string): boolean {
 }
 
 export function Picker({ open, onClose, catalog: allCatalog, projects = [], scenarioId, onPick, onAddCompare }: Props) {
-  const [scenario, setScenario] = useState(scenarioId ?? 'uc-camera-recording')
+  const [scenario, setScenario] = useState(scenarioId ?? '')
   const [projectId, setProjectId] = useState(() => allCatalog.find((c) => c.scenario_id === scenarioId)?.project_id ?? '')
   const catalog = projectId ? allCatalog.filter((c) => c.project_id === projectId) : allCatalog
   const [query, setQuery] = useState('')

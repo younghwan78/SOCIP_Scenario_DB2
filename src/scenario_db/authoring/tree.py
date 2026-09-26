@@ -64,6 +64,7 @@ class Bundle:
     measured: dict[str, dict] = field(default_factory=dict)
     overlays: dict[str, dict] = field(default_factory=dict)
     report: dict[str, Any] = field(default_factory=dict)
+    origins: dict[str, str] = field(default_factory=dict)   # child uc id -> parent uc id (authoring dir name)
 
 
 # ---------------------------------------------------------------------------
@@ -256,6 +257,7 @@ def load_project(authoring_root: Path, key: str, _stack: tuple = ()) -> Bundle:
     scenarios: dict[str, dict] = {}
     overlays: dict[str, dict] = {}
     measured: dict[str, dict] = {}
+    origins: dict[str, str] = {}
     sdir = jdir / "scenarios"
     for uc, src in parent.scenarios.items():
         if uc in exclude or (include != "*" and uc not in include):
@@ -269,6 +271,7 @@ def load_project(authoring_root: Path, key: str, _stack: tuple = ()) -> Bundle:
             new = apply_overlay(new, rename_value(overlay, id_map))
             overlays[new["base"]["id"]] = overlay
         scenarios[new["base"]["id"]] = new
+        origins[new["base"]["id"]] = uc
         if (odir / "sw_timing.measured.yaml").exists():
             measured[new["base"]["id"]] = yamlio.load(odir / "sw_timing.measured.yaml") or {}
     if sdir.exists():   # brand-new scenarios in the child project
@@ -279,7 +282,7 @@ def load_project(authoring_root: Path, key: str, _stack: tuple = ()) -> Bundle:
                 if (sd / "sw_timing.measured.yaml").exists():
                     measured[src["base"]["id"]] = yamlio.load(sd / "sw_timing.measured.yaml") or {}
     return Bundle(spec["platform"], platform_docs, platform_map, key, project, docs, scenarios, measured,
-                  overlays, {"id_map": id_map})
+                  overlays, {"id_map": id_map}, origins)
 
 
 # ---------------------------------------------------------------------------

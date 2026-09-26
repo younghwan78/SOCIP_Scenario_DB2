@@ -134,7 +134,7 @@ def test_exynos2600_fixture_binding_and_min_mean_max_exploration():
 
     evidence = assemble_camera(parse_markdown(
         (BUNDLE / "scenario-statistics.md").read_text(encoding="utf-8")))
-    graph = _exynos2600_generated_graph("uc-camera-recording", "cam-rec-r1-uhd30-vdis")
+    graph = _exynos2600_generated_graph("uc-cam-recording-e2600", "cam-rec-r1-uhd30-vdis")
     bind_graph(evidence, graph)
     for statistic in ("min", "mean", "max"):
         selection = SwProjectionSelection(

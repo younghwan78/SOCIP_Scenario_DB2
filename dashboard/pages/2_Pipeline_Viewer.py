@@ -669,7 +669,7 @@ with st.sidebar:
     scenarios, scenario_scope, scenario_error = _load_scenario_options(api_base, project_id_input or None, soc_id_input or None)
     if scenarios:
         scenario_ids = [str(item.get("id")) for item in scenarios if item.get("id")]
-        previous_scenario = query_scenario_id or st.session_state.get("viewer_scenario_id", "uc-camera-recording")
+        previous_scenario = query_scenario_id or st.session_state.get("viewer_scenario_id", "uc-cam-recording-e2600")
         scenario_index = scenario_ids.index(previous_scenario) if previous_scenario in scenario_ids else 0
         scenario_id_input = st.selectbox(
             "Scenario",
@@ -1051,7 +1051,7 @@ with st.sidebar:
 
 graph_click_selection = read_graph_selection(key="viewer_graph_selection_bridge")
 
-is_timing_pilot = level == 0 and scenario_id_input == "uc-camera-recording" and variant_id_input == "cam-rec-r1-uhd30-vdis"
+is_timing_pilot = level == 0 and str(scenario_id_input or "").startswith("uc-cam-recording-e") and variant_id_input == "cam-rec-r1-uhd30-vdis"
 if is_timing_pilot:
     main_col = st.container()
     detail_col = st.expander("구조 상세 / Graph Inspector", expanded=False)
@@ -1093,7 +1093,7 @@ with main_col:
         st.markdown('<div class="section-card">', unsafe_allow_html=True)
         from dashboard.components.viewer_pilot import PILOT_VARIANT, render_pilot
         pilot_rendered = False
-        if scenario_id_input == "uc-camera-recording" and variant_id_input == PILOT_VARIANT:
+        if str(scenario_id_input or "").startswith("uc-cam-recording-e") and variant_id_input == PILOT_VARIANT:
             pilot_rendered = render_pilot(api_base=api_base, view=topo_view,
                                           simulation_id=overlay_evidence_id)
         if not pilot_rendered:

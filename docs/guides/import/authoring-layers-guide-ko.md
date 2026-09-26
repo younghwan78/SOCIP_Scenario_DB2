@@ -33,30 +33,34 @@ Compile 순서(variant별): `extends` 전개 → knob → derived anchor → siz
 
 ```powershell
 uv run python -m scenario_db.authoring sync sm-s947b --fixture db_fixtures_Exynos2600_S26Plus --to authoring
-uv run python -m scenario_db.authoring sync e2700-ref --fixture db_fixtures_Exynos2700_Ref --to fixture
+uv run python -m scenario_db.authoring sync sm-s957b --fixture db_fixtures_Exynos2700_SM-S957B --to fixture
 ```
 `03_evidence`, `.etlignore`, report JSON 등 00~02 밖의 파일은 어느 방향에서도 건드리지 않는다.
 `--to fixture`로 다시 쓴 파일은 주석이 없어지고 `GENERATED` 헤더가 붙는다.
 
-## Exynos2700 (e2700-ref) — 동일 pipeline, 실측 입력
+## Exynos2700 SM-S957B (sm-s957b) — 동일 pipeline, 실측 입력
 
 1. ID: `platforms/exynos2700/platform.yaml` rename — IP `s5e9965 → s5e9975`, SoC/DVFS `exynos2600 → exynos2700`.
 2. HW delta: `platforms/exynos2700/patches/<ip id>.yaml` (clock, PPC, DMA, power 계수).
-3. SW 실측: `projects/e2700-ref/scenarios/<uc>/sw_timing.measured.yaml`의 `timing: null` 슬롯을 채운다.
+3. SW 실측: `projects/sm-s957b/scenarios/<uc>/sw_timing.measured.yaml`의 `timing: null` 슬롯을 채운다.
    - `group`은 상속된 `sw_timing.yaml`의 group id, `when: {resolution: UHD}`로 범위 축소, 뒤 항목 우선.
    - 비어 있는 슬롯은 baseline(2600 값)을 유지하고 compile report에 `pending`으로 집계된다.
-4. Calibration: `projects/e2700-ref/patches/simcfg-proj-e2700-ref-v1.yaml` (현재 `status: draft`).
+4. Calibration: `projects/sm-s957b/patches/simcfg-proj-sm-s957b-v1.yaml` (현재 `status: draft`).
 5. 측정 evidence(Perfetto/전력)는 기존 [Measurement Import Guide](../measurement/measurement-import-guide-ko.md) 경로를 사용.
 
 ```powershell
-uv run python -m scenario_db.authoring worksheet e2700-ref          # 측정 슬롯 생성(기존 파일 보존)
-uv run python -m scenario_db.authoring compile e2700-ref --out output/authoring/e2700 --report-json output/authoring/e2700.json
-uv run python -m scenario_db.etl.loader output/authoring/e2700 --strict
+uv run python -m scenario_db.authoring worksheet sm-s957b          # 측정 슬롯 생성(기존 파일 보존)
+uv run python -m scenario_db.authoring compile sm-s957b --out output/authoring/sm-s957b --report-json output/authoring/sm-s957b.json
+uv run python -m scenario_db.etl.loader output/authoring/sm-s957b --strict
 ```
 
-ID 규칙: IP/SoC/DVFS는 rename 규칙, 시나리오는 `-e2700` suffix, `metadata.canonical_usecase`에
-원래 시나리오 id가 기록되어 2600↔2700 비교 join key로 쓰인다. `00_sensor/`는 `rename_exclude`로
-공유(동일 id, 동일 내용)된다.
+ID 규칙
+- scenario: `uc-<domain>-<use case>-e<SoC>` (예: `uc-cam-recording-e2600`, `uc-cam-recording-e2700`).
+  domain 약어는 `cam`, `vid`, `aud`, `disp`, `call`, `game`.
+- `metadata.canonical_usecase` = SoC suffix를 뺀 id (`uc-cam-recording`). 과제 간 비교와 UI의 과제 전환은 이 값으로 매칭한다.
+- project: `proj-<board>` (`proj-sm-s947b`, `proj-sm-s957b`). IP/SoC/DVFS는 platform rename 규칙을 따른다.
+- `00_sensor/`는 `rename_exclude`로 공유(동일 id, 동일 내용).
+- 변경 이력은 `authoring/id-renames.yaml`. 기존 runtime DB는 `python -m scenario_db.etl.rename_ids`로 이관한다(아래).
 
 ## Exynos2800 — pipeline 구조 변경
 
@@ -70,7 +74,7 @@ ID 규칙: IP/SoC/DVFS는 rename 규칙, 시나리오는 `-e2700` suffix, `metad
 
 ## Architecture knobs — crop 방식 / EIS margin / pyramid L0
 
-`projects/sm-s947b/scenarios/uc-camera-recording/knobs.yaml`. variant가 `design_conditions`로 값을 고르며,
+`projects/sm-s947b/scenarios/uc-cam-recording-e2600/knobs.yaml`. variant가 `design_conditions`로 값을 고르며,
 지정하지 않으면 default가 적용된다. default는 2600 fixture와 동일하다.
 
 | Knob | 값 | 효과 |
@@ -84,7 +88,7 @@ ID 규칙: IP/SoC/DVFS는 rename 규칙, 시나리오는 `-e2700` suffix, `metad
   EIS node가 활성이면 15, 비활성이면 25(crop 없음). variant `design_conditions`에서 개별 override 가능.
 - non-default를 고른 variant에는 적용된 params가 `design_conditions`에 기록된다.
 - 예 (4080x2296, EIS 15%): `bcrop_out` = 3760x2114 → 체인 pixel 수 약 −15%, pyramid L1 = 1880x1057.
-- 2700 탐색 variant: `projects/e2700-ref/scenarios/uc-camera-recording/overlay.yaml`
+- 2700 탐색 variant: `projects/sm-s957b/scenarios/uc-cam-recording-e2600/overlay.yaml`
   (`*-bcrop`, `*-bcrop-l0skip`).
 - 한계: L0 skip은 DMA edge만 제거한다. MTNR0 블록 비활성화, reference frame L0 traffic은 아직 모델에 없다.
   front camera 경로(`front_*` anchor)는 knob 적용 대상이 아니다.

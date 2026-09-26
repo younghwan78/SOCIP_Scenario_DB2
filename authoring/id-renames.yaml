@@ -1,0 +1,35 @@
+# Scenario / project id history (old -> new). Used by
+#   python -m scenario_db.etl.rename_ids --map authoring/id-renames.yaml
+# to migrate a runtime DB in place (keeps runtime-only rows: predictions, runs, reports).
+# Convention: uc-<domain>-<use case>-e<SoC>; metadata.canonical_usecase = id without the SoC suffix.
+kind: authoring.id_renames
+renames:
+  # 2026-09-26: unified ids (domain abbreviation + SoC suffix)
+  proj-e2700-ref: proj-sm-s957b
+  simcfg-proj-e2700-ref-v1: simcfg-proj-sm-s957b-v1
+  uc-camera-recording: uc-cam-recording-e2600
+  uc-camera-recording-apv: uc-cam-recording-apv-e2600
+  uc-camera-preview: uc-cam-preview-e2600
+  uc-camera-capture: uc-cam-capture-e2600
+  uc-video-playback-local: uc-vid-playback-local-e2600
+  uc-youtube-playback: uc-vid-youtube-e2600
+  uc-video-call: uc-call-video-e2600
+  uc-voice-call: uc-call-voice-e2600
+  uc-audio-mp3-playback: uc-aud-mp3-playback-e2600
+  uc-audio-streaming: uc-aud-streaming-e2600
+  uc-gallery-display: uc-disp-gallery-e2600
+  uc-game-play: uc-game-play-e2600
+  uc-game-streaming: uc-game-streaming-e2600
+  uc-camera-recording-e2700: uc-cam-recording-e2700
+  uc-camera-recording-apv-e2700: uc-cam-recording-apv-e2700
+  uc-camera-preview-e2700: uc-cam-preview-e2700
+  uc-camera-capture-e2700: uc-cam-capture-e2700
+  uc-video-playback-local-e2700: uc-vid-playback-local-e2700
+  uc-youtube-playback-e2700: uc-vid-youtube-e2700
+  uc-video-call-e2700: uc-call-video-e2700
+  uc-voice-call-e2700: uc-call-voice-e2700
+  uc-audio-mp3-playback-e2700: uc-aud-mp3-playback-e2700
+  uc-audio-streaming-e2700: uc-aud-streaming-e2700
+  uc-gallery-display-e2700: uc-disp-gallery-e2700
+  uc-game-play-e2700: uc-game-play-e2700
+  uc-game-streaming-e2700: uc-game-streaming-e2700

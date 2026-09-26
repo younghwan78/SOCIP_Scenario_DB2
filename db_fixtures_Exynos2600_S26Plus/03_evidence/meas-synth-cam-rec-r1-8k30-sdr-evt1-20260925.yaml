@@ -4,7 +4,7 @@
 id: meas-synth-cam-rec-r1-8k30-sdr-evt1-20260925
 schema_version: '2.2'
 kind: evidence.measurement
-scenario_ref: uc-camera-recording
+scenario_ref: uc-cam-recording-e2600
 variant_ref: cam-rec-r1-8k30-sdr
 project_ref: proj-sm-s947b
 measured_at: '2026-09-25T10:00:00+09:00'

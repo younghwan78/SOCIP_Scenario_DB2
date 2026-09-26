@@ -263,7 +263,7 @@ def _select_scenario(
         filtered_scenarios = category_scenarios
 
     scenario_ids = [str(item.get("id")) for item in filtered_scenarios if item.get("id")]
-    _ensure_choice("evidence_scenario_id", scenario_ids, preferred=st.session_state.get("viewer_scenario_id", "uc-camera-recording"))
+    _ensure_choice("evidence_scenario_id", scenario_ids, preferred=st.session_state.get("viewer_scenario_id", "uc-cam-recording-e2600"))
     st.selectbox(
         "Scenario",
         scenario_ids,

@@ -4,7 +4,7 @@
 format_version: camera-profile-v1
 id: meas-synthetic-uhd30-eis-15s-r3
 project_ref: proj-sm-s947b
-scenario_ref: uc-camera-recording
+scenario_ref: uc-cam-recording-e2600
 variant_ref: cam-rec-r1-uhd30-vdis
 measured_at: '2026-09-21T00:00:00+09:00'
 execution_context:

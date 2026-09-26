@@ -1,7 +1,7 @@
 id: sim-rear-cam-rec-r1-fhd60-hdr10-mean-20260925
 schema_version: '2.2'
 kind: evidence.simulation
-scenario_ref: uc-camera-recording
+scenario_ref: uc-cam-recording-e2600
 variant_ref: cam-rec-r1-fhd60-hdr10
 project_ref: proj-sm-s947b
 derived_from: []
@@ -4927,7 +4927,7 @@ params_hash: 7db67cc5b20d9470
 calculation_trace:
   schema_version: '1.0'
   trace_level: formula
-  scenario_id: uc-camera-recording
+  scenario_id: uc-cam-recording-e2600
   variant_id: cam-rec-r1-fhd60-hdr10
   config:
     asv_group: 4
@@ -9925,7 +9925,7 @@ calculation_trace:
   - 'post_irta: assumed wall time; not a measured CPU active-time/power value.'
   driver_models:
     version: noncamera-driver-v1
-    scenario_id: uc-camera-recording
+    scenario_id: uc-cam-recording-e2600
     variant_id: cam-rec-r1-fhd60-hdr10
     design_conditions:
       subscenario: HDR10_FHD_60FPS_VIDEO

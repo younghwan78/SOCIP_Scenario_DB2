@@ -100,7 +100,7 @@ def test_level2_expand_options_include_only_aliases_present_in_active_graph():
 
 
 def test_exynos2600_display_fixture_offers_display_target_even_when_dpu_is_external_layer():
-    graph = _exynos2600_graph("uc-gallery-display.yaml", "disp-gallery-fhd-hdr10plus-60hz")
+    graph = _exynos2600_graph("uc-disp-gallery-e2600.yaml", "disp-gallery-fhd-hdr10plus-60hz")
     level1 = service._project_semantic_level1(graph)
 
     options = build_level2_expand_options(level1)
@@ -172,7 +172,7 @@ def test_level2_request_uses_selected_node_instead_of_stale_custom_text():
 
 
 def test_exynos2600_audio_fixture_does_not_reuse_stale_camera_custom_expand():
-    graph = _exynos2600_graph("uc-audio-mp3-playback.yaml", "audio-aac-bt-screen-on")
+    graph = _exynos2600_graph("uc-aud-mp3-playback-e2600.yaml", "audio-aac-bt-screen-on")
     level1 = service._project_semantic_level1(graph)
     options = build_level2_expand_options(level1)
     current_context = "uc-audio-mp3-playback/audio-aac-bt-screen-on"

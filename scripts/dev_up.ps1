@@ -7,7 +7,7 @@
   powershell -ExecutionPolicy Bypass -File scripts\dev_up.ps1 -SkipLoad -Streamlit
 #>
 param(
-    [string[]]$AuthoringProjects = @("e2700-ref"),   # compiled from authoring/ and loaded after 2600
+    [string[]]$AuthoringProjects = @("sm-s957b"),   # compiled from authoring/ and loaded after 2600
     [switch]$SkipLoad,
     [switch]$NoUi,
     [switch]$Streamlit
@@ -37,6 +37,11 @@ Step "Alembic migration"
 Run uv @("run", "alembic", "upgrade", "head")
 
 if (-not $SkipLoad) {
+    Step "Rename legacy ids in the runtime DB (authoring/id-renames.yaml; no-op when nothing matches)"
+    $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
+    Run uv @("run", "python", "-m", "scenario_db.etl.rename_ids", "--map", "authoring\id-renames.yaml",
+             "--apply", "--backup", "output\etl\rename-backup-$stamp.json")
+
     Step "ETL: db_fixtures_Exynos2600_S26Plus"
     Run uv @("run", "python", "-m", "scenario_db.etl.loader", "db_fixtures_Exynos2600_S26Plus",
              "--strict", "--report-json", "output\etl\etl-exynos2600.json")

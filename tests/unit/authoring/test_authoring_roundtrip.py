@@ -67,32 +67,32 @@ def test_exynos2600_compiled_documents_validate():
 # --- Exynos2700: inherit + rename + measurement slots -----------------------
 
 def test_e2700_inherits_all_scenarios_with_renamed_ids():
-    report = compile_project(AUTHORING, "e2700-ref")
+    report = compile_project(AUTHORING, "sm-s957b")
     docs = _docs(report)
     assert validate_documents(report["documents"])["errors"] == []
-    assert "soc-exynos2700" in docs and "proj-e2700-ref" in docs
+    assert "soc-exynos2700" in docs and "proj-sm-s957b" in docs
     assert not [i for i in docs if i.startswith("ip-") and "s5e9965" in i]
     assert "ip-mfc-s5e9975" in docs and "dvfs-exynos2700-sample-v0" in docs
-    assert docs["proj-e2700-ref"]["metadata"]["soc_ref"] == "soc-exynos2700"
-    assert docs["simcfg-proj-e2700-ref-v1"]["status"] == "draft"
-    rec = docs["uc-camera-recording-e2700"]
-    assert rec["project_ref"] == "proj-e2700-ref"
-    assert rec["metadata"]["canonical_usecase"] == "uc-camera-recording"
+    assert docs["proj-sm-s957b"]["metadata"]["soc_ref"] == "soc-exynos2700"
+    assert docs["simcfg-proj-sm-s957b-v1"]["status"] == "draft"
+    rec = docs["uc-cam-recording-e2700"]
+    assert rec["project_ref"] == "proj-sm-s957b"
+    assert rec["metadata"]["canonical_usecase"] == "uc-cam-recording"
     assert len(rec["variants"]) == 75 + 3   # inherited + exploration variants (overlay)
     assert all(n["ip_ref"].endswith("s5e9975") for n in rec["pipeline"]["nodes"])
     # shared sensor DT catalogs keep their ids (rename_exclude)
     assert "sensor-gng-m2s" in docs
     # pending measurement slots are reported, baseline kept
-    assert report["measurements"]["uc-camera-recording-e2700"]["pending"] > 0
+    assert report["measurements"]["uc-cam-recording-e2700"]["pending"] > 0
 
 
 def test_sw_timing_measurement_overrides_only_the_selected_scope(scratch_root: Path):
-    target = scratch_root / "projects/e2700-ref/scenarios/uc-camera-recording/sw_timing.measured.yaml"
+    target = scratch_root / "projects/sm-s957b/scenarios/uc-cam-recording-e2600/sw_timing.measured.yaml"
     yamlio.dump(target, {"entries": [{
         "task": "post_crta", "group": "post_crta-a", "when": {"resolution": "UHD"},
         "timing": {"mean_ms": 0.42, "value_source": "measured", "source_note": "perfetto test"},
     }]})
-    rec = _docs(compile_project(scratch_root, "e2700-ref"))["uc-camera-recording-e2700"]
+    rec = _docs(compile_project(scratch_root, "sm-s957b"))["uc-cam-recording-e2700"]
     uhd = _variant(rec, "cam-rec-r1-uhd30-sdr")["node_configs"]["post_crta"]["sw_timing"]
     fhd = _variant(rec, "cam-rec-r1-fhd30-sdr")["node_configs"]["post_crta"]["sw_timing"]
     assert uhd["mean_ms"] == 0.42 and uhd["value_source"] == "measured" and uhd["max_ms"] == 0.5
@@ -100,17 +100,17 @@ def test_sw_timing_measurement_overrides_only_the_selected_scope(scratch_root: P
 
 
 def test_worksheet_does_not_overwrite_existing_slots(scratch_root: Path):
-    assert write_worksheet(scratch_root, "e2700-ref") == []
+    assert write_worksheet(scratch_root, "sm-s957b") == []
 
 
 def test_derived_anchor_drives_bound_node_sizes(scratch_root: Path):
     """EIS-margin style rule: eis_in = record_out * 1.25 (16-aligned) feeding MSNR."""
-    overlay = scratch_root / "projects/e2700-ref/scenarios/uc-camera-recording/overlay.yaml"
+    overlay = scratch_root / "projects/sm-s957b/scenarios/uc-cam-recording-e2600/overlay.yaml"
     yamlio.dump(overlay, {"sizes": {
         "derived": {"eis_in": {"from": "record_out", "scale": 1.25, "align": 16}},
         "bindings": {"msnr": "eis_in"},
     }})
-    rec = _docs(compile_project(scratch_root, "e2700-ref"))["uc-camera-recording-e2700"]
+    rec = _docs(compile_project(scratch_root, "sm-s957b"))["uc-cam-recording-e2700"]
     v = _variant(rec, "cam-rec-r1-fhd30-sdr")
     assert v["size_overrides"]["eis_in"] == "2400x1360"
     assert (v["node_configs"]["msnr"]["sim"]["width"], v["node_configs"]["msnr"]["sim"]["height"]) == (2400, 1360)
@@ -125,12 +125,12 @@ def test_pipeline_change_example(scratch_root: Path):
         shutil.copytree(EXAMPLE_2800 / sub, scratch_root / sub, dirs_exist_ok=True)
     report = compile_project(scratch_root, "e2800-concept")
     assert validate_documents(report["documents"])["errors"] == []
-    rec = _docs(report)["uc-camera-recording-e2800c"]
+    rec = _docs(report)["uc-cam-recording-e2800c"]
     nodes = {n["id"]: n for n in rec["pipeline"]["nodes"]}
     assert "msnr" not in nodes
     assert nodes["mtnr"]["ip_ref"] == "ip-nr-v2-exynos2800c"
     assert any(e["from"] == "mtnr" and e["to"] == "yuvp" for e in rec["pipeline"]["edges"])
-    impact = report["impact"]["uc-camera-recording-e2800c"]
+    impact = report["impact"]["uc-cam-recording-e2800c"]
     assert impact and all("msnr" in line for line in impact)
     assert all("msnr" not in (v.get("node_configs") or {}) for v in rec["variants"])
 
@@ -138,7 +138,7 @@ def test_pipeline_change_example(scratch_root: Path):
 def test_pipeline_change_without_prune_fails_with_impact_list(scratch_root: Path):
     for sub in ("platforms", "projects"):
         shutil.copytree(EXAMPLE_2800 / sub, scratch_root / sub, dirs_exist_ok=True)
-    overlay_path = scratch_root / "projects/e2800-concept/scenarios/uc-camera-recording-e2700/overlay.yaml"
+    overlay_path = scratch_root / "projects/e2800-concept/scenarios/uc-cam-recording-e2700/overlay.yaml"
     overlay = yamlio.load(overlay_path)
     overlay["prune_missing_nodes"] = False
     yamlio.dump(overlay_path, overlay)
@@ -149,7 +149,7 @@ def test_pipeline_change_without_prune_fails_with_impact_list(scratch_root: Path
 # --- architecture knobs (crop strategy / EIS margin / pyramid L0) -----------
 
 def _e2700_recording(root: Path) -> dict:
-    return _docs(compile_project(root, "e2700-ref"))["uc-camera-recording-e2700"]
+    return _docs(compile_project(root, "sm-s957b"))["uc-cam-recording-e2700"]
 
 
 def test_byrp_bcrop_shrinks_the_chain_to_the_eis_window():
@@ -184,7 +184,7 @@ def test_pyramid_l0_skip_removes_only_the_l0_level():
 
 
 def test_bcrop_without_eis_keeps_full_sensor_fov(scratch_root: Path):
-    overlay_path = scratch_root / "projects/e2700-ref/scenarios/uc-camera-recording/overlay.yaml"
+    overlay_path = scratch_root / "projects/sm-s957b/scenarios/uc-cam-recording-e2600/overlay.yaml"
     overlay = yamlio.load(overlay_path)
     overlay["variants"]["add"].append({"id": "sdr-bcrop", "extends": "cam-rec-r1-uhd30-sdr",
                                        "design_conditions": {"crop_strategy": "byrp_bcrop"}})
@@ -201,9 +201,9 @@ def test_sync_to_fixture_is_idempotent(tmp_path: Path):
     from scenario_db.authoring.cli import sync_to_fixture
 
     out = tmp_path / "fixture2700"
-    first = sync_to_fixture(AUTHORING, "e2700-ref", out)
+    first = sync_to_fixture(AUTHORING, "sm-s957b", out)
     assert first["added"] and not first["updated"]
-    second = sync_to_fixture(AUTHORING, "e2700-ref", out)
+    second = sync_to_fixture(AUTHORING, "sm-s957b", out)
     assert not second["added"] and not second["updated"]
     assert sync_to_fixture(AUTHORING, "sm-s947b", FIXTURE, dry_run=True)["updated"] == []
 
@@ -213,9 +213,9 @@ def test_fixture_with_knob_variants_decompiles_and_recompiles(scratch_root: Path
     from scenario_db.authoring.tree import decompile_fixture
 
     out = tmp_path / "fixture2700"
-    sync_to_fixture(scratch_root, "e2700-ref", out)
-    knobs_src = scratch_root / "projects/sm-s947b/scenarios/uc-camera-recording/knobs.yaml"
-    knobs_dst = scratch_root / "projects/rt2700/scenarios/uc-camera-recording-e2700/knobs.yaml"
+    sync_to_fixture(scratch_root, "sm-s957b", out)
+    knobs_src = scratch_root / "projects/sm-s947b/scenarios/uc-cam-recording-e2600/knobs.yaml"
+    knobs_dst = scratch_root / "projects/rt2700/scenarios/uc-cam-recording-e2700/knobs.yaml"
     knobs_dst.parent.mkdir(parents=True)
     shutil.copyfile(knobs_src, knobs_dst)
     decompile_fixture(out, scratch_root, "rt2700-platform", "rt2700")

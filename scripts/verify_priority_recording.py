@@ -51,7 +51,7 @@ def main():
         d = read(path)
         catalog[d["id"]] = IpCatalog(id=d["id"], schema_version=d["schema_version"], category=d["category"], hierarchy=d["hierarchy"], capabilities=d["capabilities"], yaml_sha256="fixture")
     report = {"assumptions": ["No measurements: camera/APV capacity, CPU placement, bitrate and storage times are assumptions.", "Clock selection is conditional timing feasibility, not measured power optimization.", "Mean release jitter stays 1ms in all timing cases; no tail distribution was supplied.", "Shared camera HW reservations are conservative; dual RT multiplexing requires runtime confirmation.", "CPU active power, stats with unknown size, thermal throttling and storage burst/queue limits are uncharacterized."], "verified_graphs": [], "exploration": []}
-    for scenario in ["uc-camera-recording", "uc-camera-recording-apv"]:
+    for scenario in ["uc-cam-recording-e2600", "uc-cam-recording-apv-e2600"]:
         raw = read(FIXTURE / "02_definition" / (scenario + ".yaml"))
         Usecase.model_validate(raw)
         for v in raw["variants"]:
@@ -62,7 +62,7 @@ def main():
                 names = {m["name"] for m in catalog[port.ip_ref].capabilities.get("properties", {}).get("modules", [])}
                 assert port.port in names, (v["id"], port.node_id, port.port)
             report["verified_graphs"].append(v["id"])
-        targets = PRIORITY + ["cam-rec-pip-fhd30", "cam-rec-pip-uhd30", "cam-rec-r1-fhd30-portrait", "cam-rec-r1-uhd30-portrait"] if scenario == "uc-camera-recording" else [v["id"] for v in raw["variants"]]
+        targets = PRIORITY + ["cam-rec-pip-fhd30", "cam-rec-pip-uhd30", "cam-rec-r1-fhd30-portrait", "cam-rec-r1-uhd30-portrait"] if scenario == "uc-cam-recording-e2600" else [v["id"] for v in raw["variants"]]
         for id in targets:
             for case in ["min", "mean", "max"]:
                 candidates = []

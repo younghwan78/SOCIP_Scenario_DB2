@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import view from './fixtures/view-uhd30-vdis.json'
 import type { CatalogItem, VariantDetail, ViewResponse } from '../src/lib/api'
-import { addItem, canonicalOf, compareItems, counterpart, defaultScenario, formatItems, parseItems, projectTag, projectsOf } from '../src/lib/projects'
+import { addItem, canonicalKey, canonicalOf, compareItems, counterpart, defaultScenario, formatItems, parseItems, projectTag, projectsOf } from '../src/lib/projects'
 import { insights, ipShort, itemLabels, nodeIps, nodeSizes, pixels } from '../src/lib/compare'
 
 const cat = (project: string, soc: string, board: string, scenario: string, name: string, canonical?: string, variants = 10): CatalogItem => ({
@@ -9,40 +9,42 @@ const cat = (project: string, soc: string, board: string, scenario: string, name
   category: ['camera'], domain: [], variant_count: variants, severity_counts: {}, node_count: 0, edge_count: 0, buffer_count: 0,
 })
 const CATALOG: CatalogItem[] = [
-  cat('proj-e2700-ref', 'soc-exynos2700', 'E2700-REF', 'uc-camera-recording-e2700', 'Camera Recording', 'uc-camera-recording', 78),
-  cat('proj-e2700-ref', 'soc-exynos2700', 'E2700-REF', 'uc-camera-preview-e2700', 'Camera Preview', 'uc-camera-preview'),
-  cat('proj-sm-s947b', 'soc-exynos2600', 'SM-S947B', 'uc-camera-preview', 'Camera Preview', 'uc-camera-preview'),
-  cat('proj-sm-s947b', 'soc-exynos2600', 'SM-S947B', 'uc-camera-recording', 'Camera Recording', 'uc-camera-recording', 75),
+  cat('proj-sm-s957b', 'soc-exynos2700', 'SM-S957B', 'uc-cam-recording-e2700', 'Camera Recording', 'uc-cam-recording', 78),
+  cat('proj-sm-s957b', 'soc-exynos2700', 'SM-S957B', 'uc-cam-preview-e2700', 'Camera Preview', 'uc-cam-preview'),
+  cat('proj-sm-s947b', 'soc-exynos2600', 'SM-S947B', 'uc-cam-preview-e2600', 'Camera Preview', 'uc-cam-preview'),
+  cat('proj-sm-s947b', 'soc-exynos2600', 'SM-S947B', 'uc-cam-recording-e2600', 'Camera Recording', 'uc-cam-recording', 75),
 ]
 
 describe('project scoping', () => {
   it('lists projects ordered by SoC with counts', () => {
     const p = projectsOf(CATALOG)
-    expect(p.map((x) => x.id)).toEqual(['proj-sm-s947b', 'proj-e2700-ref'])
-    expect(p[1]).toMatchObject({ soc: 'Exynos2700', board: 'E2700-REF', scenarios: 2, variants: 88 })
+    expect(p.map((x) => x.id)).toEqual(['proj-sm-s947b', 'proj-sm-s957b'])
+    expect(p[1]).toMatchObject({ soc: 'Exynos2700', board: 'SM-S957B', scenarios: 2, variants: 88 })
     expect(projectTag(p[1], p)).toBe('2700')
   })
   it('maps a scenario to the same use case in another project', () => {
-    expect(counterpart(CATALOG, CATALOG[3], 'proj-e2700-ref')?.scenario_id).toBe('uc-camera-recording-e2700')
+    expect(counterpart(CATALOG, CATALOG[3], 'proj-sm-s957b')?.scenario_id).toBe('uc-cam-recording-e2700')
     expect(canonicalOf({ scenario_id: 'uc-x', canonical_usecase: null })).toBe('uc-x')
-    expect(defaultScenario(CATALOG.filter((c) => c.project_id === 'proj-e2700-ref'))?.scenario_id).toBe('uc-camera-recording-e2700')
+    expect(canonicalOf({ scenario_id: 'uc-cam-preview-e2800c', canonical_usecase: null })).toBe('uc-cam-preview')
+    expect(canonicalKey('uc-camera-recording')).toBe('uc-cam-recording')
+    expect(defaultScenario(CATALOG.filter((c) => c.project_id === 'proj-sm-s957b'))?.scenario_id).toBe('uc-cam-recording-e2700')
   })
 })
 
 describe('comparison items', () => {
   it('round-trips, dedupes and accepts legacy variants=', () => {
-    const items = parseItems('uc-camera-recording~cam-rec-r1-uhd30-vdis,uc-camera-recording-e2700~cam-rec-r1-uhd30-vdis-bcrop,uc-camera-recording~cam-rec-r1-uhd30-vdis,bad')
+    const items = parseItems('uc-cam-recording-e2600~cam-rec-r1-uhd30-vdis,uc-cam-recording-e2700~cam-rec-r1-uhd30-vdis-bcrop,uc-cam-recording-e2600~cam-rec-r1-uhd30-vdis,bad')
     expect(items).toHaveLength(2)
     expect(parseItems(formatItems(items))).toEqual(items)
     expect(compareItems({ variants: 'a,b,a' }, 'uc-s', 'x')).toEqual([{ scenario: 'uc-s', variant: 'a' }, { scenario: 'uc-s', variant: 'b' }])
     expect(addItem(items, items[0])).toBe(items)
-    expect(addItem(items, { scenario: 'uc-camera-preview', variant: 'v' })).toHaveLength(3)
+    expect(addItem(items, { scenario: 'uc-cam-preview-e2600', variant: 'v' })).toHaveLength(3)
   })
   it('labels carry a project tag / scenario only when they differ', () => {
     const p = projectsOf(CATALOG)
-    const same = itemLabels([{ scenario: 'uc-camera-recording', variant: 'cam-rec-r1-uhd30-vdis' }, { scenario: 'uc-camera-recording', variant: 'cam-rec-r1-fhd30-vdis' }], CATALOG, p)
+    const same = itemLabels([{ scenario: 'uc-cam-recording-e2600', variant: 'cam-rec-r1-uhd30-vdis' }, { scenario: 'uc-cam-recording-e2600', variant: 'cam-rec-r1-fhd30-vdis' }], CATALOG, p)
     expect(same.map((l) => l.short)).toEqual(['uhd30-vdis', 'fhd30-vdis'])
-    const cross = itemLabels([{ scenario: 'uc-camera-recording', variant: 'cam-rec-r1-uhd30-vdis' }, { scenario: 'uc-camera-recording-e2700', variant: 'cam-rec-r1-uhd30-vdis-bcrop' }, { scenario: 'uc-camera-preview', variant: 'p1' }], CATALOG, p)
+    const cross = itemLabels([{ scenario: 'uc-cam-recording-e2600', variant: 'cam-rec-r1-uhd30-vdis' }, { scenario: 'uc-cam-recording-e2700', variant: 'cam-rec-r1-uhd30-vdis-bcrop' }, { scenario: 'uc-cam-preview-e2600', variant: 'p1' }], CATALOG, p)
     expect(cross[1].short).toBe('2700 · Camera Recording · cam-rec-r1-uhd30-vdis-bcrop')
     expect(cross[0].full).toContain('Exynos2600 SM-S947B')
   })

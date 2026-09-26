@@ -97,7 +97,7 @@ try:
         with st.form("sensor_projection"):
             source = st.selectbox("Installed source configuration / slot", choices,
                                   format_func=lambda value: f"{value[1]} / {value[2]}")
-            target_scenario = st.text_input("Target scenario ID", "uc-camera-recording")
+            target_scenario = st.text_input("Target scenario ID", "uc-cam-recording-e2600")
             target_variant = st.text_input("Target variant ID", "cam-rec-r1-fhd30-vdis")
             target_node = st.text_input("Target sensor node", "sensor_rear")
             prepare = st.form_submit_button("Prepare sensor binding")

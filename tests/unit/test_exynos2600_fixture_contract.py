@@ -13,19 +13,19 @@ EVIDENCE_ROOT = FIXTURE_ROOT / "03_evidence"
 
 def test_exynos2600_camera_recording_and_apv_scenarios_are_both_present():
     definition_dir = FIXTURE_ROOT / "02_definition"
-    recording = _read_yaml(definition_dir / "uc-camera-recording.yaml")
-    apv = _read_yaml(definition_dir / "uc-camera-recording-apv.yaml")
+    recording = _read_yaml(definition_dir / "uc-cam-recording-e2600.yaml")
+    apv = _read_yaml(definition_dir / "uc-cam-recording-apv-e2600.yaml")
 
-    assert recording["id"] == "uc-camera-recording"
+    assert recording["id"] == "uc-cam-recording-e2600"
     assert recording["project_ref"] == "proj-sm-s947b"
     assert recording["metadata"]["name"] == "Camera Recording"
-    assert apv["id"] == "uc-camera-recording-apv"
+    assert apv["id"] == "uc-cam-recording-apv-e2600"
     assert apv["project_ref"] == "proj-sm-s947b"
     assert apv["metadata"]["name"] == "Camera Recording APV"
 
 
 def test_exynos2600_recording_fixture_keeps_expected_fhd30_variant():
-    recording = _read_yaml(FIXTURE_ROOT / "02_definition" / "uc-camera-recording.yaml")
+    recording = _read_yaml(FIXTURE_ROOT / "02_definition" / "uc-cam-recording-e2600.yaml")
     variant_ids = {item["id"] for item in recording.get("variants") or []}
 
     assert "cam-rec-f1-fhd30" in variant_ids
@@ -35,7 +35,7 @@ def test_exynos2600_recording_fixture_keeps_expected_fhd30_variant():
 
 
 def test_exynos2600_apv_recording_fixture_keeps_expected_uhd30_variant():
-    apv = _read_yaml(FIXTURE_ROOT / "02_definition" / "uc-camera-recording-apv.yaml")
+    apv = _read_yaml(FIXTURE_ROOT / "02_definition" / "uc-cam-recording-apv-e2600.yaml")
     variant_ids = {item["id"] for item in apv.get("variants") or []}
 
     assert "cam-rec-apv-uhd30-422-sdr" in variant_ids
@@ -48,7 +48,7 @@ def test_exynos2600_uhd30_vdis_fixture_has_prediction_measurement_pair():
 
     assert measurement["kind"] == "evidence.measurement"
     assert simulation["kind"] == "evidence.simulation"
-    assert simulation["scenario_ref"] == measurement["scenario_ref"] == "uc-camera-recording"
+    assert simulation["scenario_ref"] == measurement["scenario_ref"] == "uc-cam-recording-e2600"
     assert simulation["variant_ref"] == measurement["variant_ref"] == "cam-rec-r1-uhd30-vdis"
     assert simulation["project_ref"] == measurement["project_ref"] == "proj-sm-s947b"
     assert simulation["execution_context"]["method"] == "calculation"

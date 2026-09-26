@@ -2,9 +2,9 @@
 kind: authoring.project
 key: e2800-concept
 platform: exynos2800-concept
-extends: e2700-ref
+extends: sm-s957b
 rename:
-- from: proj-e2700-ref
+- from: proj-sm-s957b
   to: proj-e2800-concept
 - from: -e2700
   to: -e2800c
@@ -15,4 +15,4 @@ document_patch:
     board_name: Exynos2800 concept
 scenarios:
   include:
-  - uc-camera-recording-e2700
+  - uc-cam-recording-e2700

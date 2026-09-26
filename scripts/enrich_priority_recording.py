@@ -69,7 +69,7 @@ def sync_import_bundle():
 
 
 def main():
-    path = ROOT / "02_definition/uc-camera-recording.yaml"
+    path = ROOT / "02_definition/uc-cam-recording-e2600.yaml"
     raw = read(path)
     sensor_path = ROOT / "00_hw/ip-sensor-gng-s5e9965.yaml"
     sensor = read(sensor_path)
@@ -214,7 +214,7 @@ def main():
     raw["variants"] = list(variants.values())
     write(path, raw)
     # APV inherits the corrected single-camera processing path, not MFC hardware.
-    path = ROOT / "02_definition/uc-camera-recording-apv.yaml"
+    path = ROOT / "02_definition/uc-cam-recording-apv-e2600.yaml"
     apv = read(path)
     old_variants = deepcopy(apv["variants"])
     apv["pipeline"] = remap(deepcopy(raw["pipeline"]), {"mfc_enc": "apv_enc", "ip-mfc-s5e9965": "ip-apv-s5e9965", "MFC_RDMA": "APV_RDMA_FRAME"})

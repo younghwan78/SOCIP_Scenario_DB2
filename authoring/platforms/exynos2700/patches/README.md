@@ -14,5 +14,5 @@ capabilities:
         unit_power_mw_mp: 0.9 # measured / calibrated value
 ```
 
-`python -m scenario_db.authoring compile e2700-ref --out <dir>` prints the effective result;
+`python -m scenario_db.authoring compile sm-s957b --out <dir>` prints the effective result;
 `check`-style diffs vs the parent are visible in the generated files.
