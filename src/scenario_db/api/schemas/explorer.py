@@ -42,6 +42,8 @@ class ScenarioCatalogItem(BaseModel):
     project_name: str | None = None
     scenario_id: str
     scenario_name: str
+    # Cross-project join key (metadata.canonical_usecase, falls back to scenario_id).
+    canonical_usecase: str | None = None
     category: list[str] = Field(default_factory=list)
     domain: list[str] = Field(default_factory=list)
     variant_count: int

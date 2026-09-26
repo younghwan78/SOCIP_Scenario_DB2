@@ -513,3 +513,17 @@ a.hd-row:hover span { color: #E8EEF0; }
 /* Timing budget ⑥ tiles */
 .tb-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 8px; }
 .tb-tile { background: var(--surface-soft); border: 1px solid var(--line-soft); border-radius: 6px; padding: 8px 10px; min-width: 0; }
+
+/* 과제 (project) selector in the top bar */
+.proj-select { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; margin-right: 12px; }
+.proj-select select { font: inherit; font-weight: 600; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--text); max-width: 320px; }
+.hd-matrix tr.proj-row { cursor: pointer; }
+.hd-matrix tr.proj-row:hover td { background: rgba(43, 179, 163, 0.12); }
+.hd-matrix tr.proj-row.on td:first-child { box-shadow: inset 3px 0 0 #2BB3A3; }
+/* Compare: analysis summary */
+.cmp-insights { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+.cmp-insight { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: #fff; font-size: 12.5px; }
+.cmp-insight h4 { margin: 0 0 6px; font-size: 13px; display: flex; gap: 6px; align-items: center; }
+.cmp-insight .row { display: flex; justify-content: space-between; gap: 8px; padding: 1px 0; }
+.cmp-insight .up { color: #C0392B; } .cmp-insight .down { color: #1E8449; }
+.cmp-chip-proj { font-size: 10.5px; padding: 0 5px; border-radius: 4px; background: var(--line); color: var(--text); }

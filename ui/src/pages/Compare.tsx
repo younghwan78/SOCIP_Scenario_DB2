@@ -1,8 +1,10 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import type { Ctx } from '../App'
-import { api, type Dict, type Evidence, type VariantRow, type ViewResponse } from '../lib/api'
+import { api, type Dict, type Evidence, type ScenarioDef, type SimRunResponse, type VariantRow, type ViewResponse } from '../lib/api'
 import { useAsync } from '../lib/route'
-import { MISSING, evidenceSource, shortLabels, valueText, varyingKeys } from '../lib/conditions'
+import { MISSING, evidenceSource, valueText, varyingKeys } from '../lib/conditions'
+import { compareItems, formatItems, type CompareItem } from '../lib/projects'
+import { insights, itemLabels, nodeIps, nodeSizes, pixels, type Insight } from '../lib/compare'
 import { memoryText } from '../lib/graph'
 import { buildModel, trafficByIp, type PipelineModel } from '../lib/model'
 import { buildTimeline } from '../lib/timeline'
@@ -48,30 +50,43 @@ interface Item { id: string; section: string; label: ReactNode; sortLabel: strin
 
 const num = (s: string | null): number | null => { if (s === null) return null; const m = s.replace(/,/g, '').match(/-?\d+(\.\d+)?/); return m ? Number(m[0]) : null }
 
+type SimState = { status: 'running' } | { status: 'done'; res: SimRunResponse } | { status: 'error'; error: string }
+
 export function ComparePage({ ctx }: { ctx: Ctx }) {
-  const ids = [...new Set((ctx.params.variants ?? ctx.variant).split(',').filter(Boolean))]
-  const scenarioItem = ctx.catalog.find((c) => c.scenario_id === ctx.scenario)
-  const variantsQ = useAsync(() => api.variants(ctx.scenario), [ctx.scenario])
-  const scnQ = useAsync(() => api.scenario(ctx.scenario).catch(() => null), [ctx.scenario])
+  const cItems: CompareItem[] = compareItems(ctx.params, ctx.scenario, ctx.variant)
+  const ids = cItems.map((it) => `${it.scenario}~${it.variant}`)
   const key = ids.join(',')
-  const viewsQ = useAsync(() => Promise.all(ids.map((v) => api.view(ctx.scenario, v, 1))), [ctx.scenario, key])
-  const detailsQ = useAsync(() => Promise.all(ids.map((v) => api.variant(ctx.scenario, v))), [ctx.scenario, key])
-  const evQ = useAsync(() => Promise.all(ids.map((v) => api.evidenceList(ctx.scenario, v, ctx.project).then((r) => r.items))), [ctx.scenario, key, ctx.project])
+  const catOf = (s: string) => ctx.allCatalog.find((c) => c.scenario_id === s)
+  const scnIds = [...new Set(cItems.map((it) => it.scenario))]
+  const scnKey = scnIds.join(',')
+  const variantsQ = useAsync(() => Promise.all(scnIds.map((s) => api.variants(s).then((r) => [s, r.items] as const))), [scnKey])
+  const scnQ = useAsync(() => Promise.all(scnIds.map((s) => api.scenario(s).catch(() => null).then((d) => [s, d] as const))), [scnKey])
+  const scnDef = (s: string): ScenarioDef | null | undefined => scnQ.data?.find(([k]) => k === s)?.[1]
+  const viewsQ = useAsync(() => Promise.all(cItems.map((it) => api.view(it.scenario, it.variant, 1))), [key])
+  const detailsQ = useAsync(() => Promise.all(cItems.map((it) => api.variant(it.scenario, it.variant))), [key])
+  const evQ = useAsync(() => Promise.all(cItems.map((it) => api.evidenceList(it.scenario, it.variant, catOf(it.scenario)?.project_id).then((r) => r.items))), [key, ctx.allCatalog.length])
   const [onlyDiff, setOnlyDiff] = useState(true)
   const [orient, setOrient] = usePref<'items' | 'variants'>('compare.orient', 'items')
   const [show, setShow] = usePref<'both' | 'table' | 'plot'>('compare.show', 'both')
+  const [sims, setSims] = useState<Record<string, SimState>>({})
+  // evidence: measured/registered KPI first (mixed sources) · sim: every column from the same simulation model
+  const [kpiMode, setKpiMode] = usePref<'evidence' | 'sim'>('compare.kpi', 'evidence')
 
-  const rows = useMemo(() => toRows(scenarioItem, variantsQ.data?.items ?? []), [scenarioItem, variantsQ.data])
-  const selected = ids.map((id): VariantRow => rows.find((r) => r.variant_id === id) ?? { project_id: ctx.project, scenario_id: ctx.scenario, variant_id: id, design_conditions: {} })
-  const missing = variantsQ.data ? ids.filter((id) => !rows.some((r) => r.variant_id === id)) : []
-  const labels = shortLabels(ids)
+  const rows = useMemo(() => new Map((variantsQ.data ?? []).map(([s, items]) => [s, toRows(catOf(s), items)])), [variantsQ.data, ctx.allCatalog]) // eslint-disable-line react-hooks/exhaustive-deps
+  const selected = cItems.map((it): VariantRow => rows.get(it.scenario)?.find((r) => r.variant_id === it.variant)
+    ?? { project_id: catOf(it.scenario)?.project_id ?? '', scenario_id: it.scenario, variant_id: it.variant, design_conditions: {} })
+  const missing = variantsQ.data ? cItems.filter((it) => !rows.get(it.scenario)?.some((r) => r.variant_id === it.variant)).map((it) => `${it.scenario} · ${it.variant}`) : []
+  const itemLbl = itemLabels(cItems, ctx.allCatalog, ctx.projects)
+  const labels: Record<string, string> = Object.fromEntries(itemLbl.map((l) => [l.key, l.short]))
   const { varying, constant } = useMemo(() => varyingKeys(selected), [selected])
   const condKeys = onlyDiff ? varying : [...varying, ...Object.keys(constant)]
   const trans = (viewsQ.data ?? []).map((v) => transfers(v))
   const transKeys = [...new Set(trans.flatMap((t) => [...t.keys()]))].sort()
   const shownTrans = transKeys.filter((k) => !onlyDiff || new Set(trans.map((t) => t.get(k) ?? MISSING)).size > 1)
   const evidence = (evQ.data ?? []).map((items) => pickEvidence(items))
-  const models: (PipelineModel | null)[] = useMemo(() => (viewsQ.data ?? []).map((v, i) => (v ? buildModel(v, scnQ.data, detailsQ.data?.[i]) : null)), [viewsQ.data, scnQ.data, detailsQ.data])
+  const models: (PipelineModel | null)[] = useMemo(() => (viewsQ.data ?? []).map((v, i) => (v ? buildModel(v, scnDef(cItems[i].scenario), detailsQ.data?.[i]) : null)), [viewsQ.data, scnQ.data, detailsQ.data]) // eslint-disable-line react-hooks/exhaustive-deps
+  const ipMaps = (viewsQ.data ?? []).map((v) => nodeIps(v))
+  const sizeMaps = (detailsQ.data ?? []).map((d) => nodeSizes(d))
   const cadences = useMemo(() => (evQ.data ?? []).map((items, i) => {
     const t = pickTrace(items)
     if (!t) return null
@@ -79,6 +94,32 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
     const fps = models[i]?.fps ?? null
     return { trace: t, fps, ...analyse(tl, viewsQ.data?.[i], fps) }
   }), [evQ.data, models, viewsQ.data])
+  /** KPI source per item: evidence KPI, else an on-demand (not persisted) simulation result. */
+  const kpiOf = (i: number): { kpi: Dict | null | undefined; source: string | null } => {
+    const e = kpiMode === 'evidence' ? evidence[i] : undefined
+    if (e) return { kpi: e.kpi, source: evidenceSource(e) }
+    const st = sims[ids[i]]
+    return st?.status === 'done' ? { kpi: st.res.kpi, source: 'calculated · 즉석' } : { kpi: undefined, source: null }
+  }
+  const runSim = async (targets: number[]) => {
+    for (const i of targets) {
+      const it = cItems[i]
+      const cat = catOf(it.scenario)
+      setSims((m) => ({ ...m, [ids[i]]: { status: 'running' } }))
+      try {
+        const cfg = cat ? (await api.simConfigs(cat.project_id).catch(() => null))?.items?.[0]?.id : undefined
+        const res = await api.simulate({
+          scenario_id: it.scenario, variant_id: it.variant, config_profile_ref: cfg ?? null,
+          execution_context: { silicon_rev: 'EVT1', sw_baseline_ref: cat?.default_sw_profile_ref ?? 'sw-vendor-v1.2.3', thermal: 'nominal', method: 'calculation' },
+        })
+        setSims((m) => ({ ...m, [ids[i]]: { status: 'done', res } }))
+      } catch (e) {
+        setSims((m) => ({ ...m, [ids[i]]: { status: 'error', error: e instanceof Error ? e.message : String(e) } }))
+      }
+    }
+  }
+  const noKpi = ids.map((_, i) => i).filter((i) => evQ.data && (kpiMode === 'sim' || !evidence[i]) && sims[ids[i]]?.status !== 'done' && sims[ids[i]]?.status !== 'running')
+  const mixed = kpiMode === 'evidence' && new Set(ids.map((_, i) => kpiOf(i).source).filter(Boolean)).size > 1
   const stream = (i: number, id: string): CadenceResult | undefined => cadences[i]?.results.find((r) => r.stream.id === id)
 
   // ---------------- items (rows of the transposed table)
@@ -101,22 +142,27 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
     add('perf', `${sid}-lat`, `${label} latency mean (ms)`, `${label} latency`, ids.map((_, i) => { const b = stream(i, sid)?.latBox; return b ? b.mean.toFixed(1) : null }), 'none')
   }
   add('perf', 'trace', 'timing source', 'timing source', cadences.map((c) => (c ? `${evidenceSource(c.trace)} · ${new Set((c.trace.timeline_events ?? []).map((x) => x.frame_index)).size}f` : null)), 'none')
+  const nodeKeys = (maps: Map<string, string>[]) => [...new Set(maps.flatMap((m) => [...m.keys()]))].sort()
+  nodeKeys(ipMaps).filter((k) => !onlyDiff || new Set(ipMaps.map((m) => m.get(k) ?? MISSING)).size > 1)
+    .forEach((k) => add('hw', `ip:${k}`, <span className="mono">{k}</span>, k, ipMaps.map((m) => m.get(k) ?? null), 'set'))
+  nodeKeys(sizeMaps).filter((k) => !onlyDiff || new Set(sizeMaps.map((m) => m.get(k) ?? MISSING)).size > 1)
+    .forEach((k) => add('size', `sz:${k}`, <span className="mono">{k}</span>, k, sizeMaps.map((m) => m.get(k) ?? null), 'ref', sizeMaps.map((m) => pixels(m.get(k)))))
   shownTrans.forEach((k) => add('dma', k, <span className="mono" style={{ fontSize: 12 }}>{k}</span>, k, trans.map((t) => t.get(k) ?? null), 'set'))
-  add('kpi', 'src', 'evidence 출처', 'evidence', evidence.map((e) => (e ? evidenceSource(e) : null)), 'none')
-  const kpiRows = KPI_FIELDS.map(([label, field, unit]) => ({ label, unit, field, values: evidence.map((e) => kpiNumber(e?.kpi?.[field])) })).filter((r) => r.values.some((v) => v !== null))
+  add('kpi', 'src', 'KPI 출처', 'KPI 출처', ids.map((_, i) => kpiOf(i).source), 'none')
+  const kpiRows = KPI_FIELDS.map(([label, field, unit]) => ({ label, unit, field, values: ids.map((_, i) => kpiNumber(kpiOf(i).kpi?.[field])) })).filter((r) => r.values.some((v) => v !== null))
   kpiRows.forEach((r) => add('kpi', r.field, `${r.label} (${r.unit})`, r.label, r.values.map((v, i) => {
     if (v === null) return null
     const b = r.values[0]
     return i > 0 && b ? `${v.toFixed(1)} (${v >= b ? '+' : ''}${(((v - b) / b) * 100).toFixed(1)}%)` : v.toFixed(1)
   }), 'none', r.values))
 
-  const SECTIONS: [string, string][] = [['cond', '조건 · 기준과 다른 값 강조'], ['perf', 'Timing · DMA 요약 (trace / 모델 계산)'], ['dma', 'DMA 전송 · 파랑 = 기준에 없음, 빨강 = 기준에만 있음'], ['kpi', 'KPI · 값 (기준 대비 Δ%) · evidence 출처']]
+  const SECTIONS: [string, string][] = [['cond', '조건 · 기준과 다른 값 강조'], ['hw', 'HW 구성 · node → IP (과제 태그 제외)'], ['size', '처리 크기 · node sim size'], ['perf', 'Timing · DMA 요약 (trace / 모델 계산)'], ['dma', 'DMA 전송 · 파랑 = 기준에 없음, 빨강 = 기준에만 있음'], ['kpi', 'KPI · 값 (기준 대비 Δ%) · evidence 출처']]
   const groups: RowGroup<Item>[] = SECTIONS.map(([s, title]) => ({ id: s, header: <span className="sec-h">{title}</span>, rows: items.filter((it) => it.section === s), className: 'sec-row' }))
     .filter((g) => g.rows.length)
   const itemCols: Column<Item>[] = [
     { key: 'item', label: '항목', width: 280, sticky: true, sort: (it) => it.sortLabel, title: (it) => it.sortLabel, render: (it) => <span className="muted">{it.label}</span> },
     ...ids.map((id, i): Column<Item> => ({
-      key: `v:${id}`, label: <span className="mono" title={id}>{labels[id]}{i === 0 ? ' ★' : ''}</span>, width: 170, headClass: i === 0 ? 'ref-col' : '',
+      key: `v:${id}`, label: <span className="mono" title={itemLbl[i]?.full}>{labels[id]}{i === 0 ? ' ★' : ''}</span>, width: 170, headClass: i === 0 ? 'ref-col' : '',
       sort: (it): SortValue => it.nums[i] ?? it.values[i], title: (it) => it.values[i] ?? '', cellClass: (it) => `mono ${it.cls[i]}`,
       render: (it) => it.values[i] ?? <span className="dim">—</span>,
     })),
@@ -127,7 +173,7 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
   const vrows: VRow[] = ids.map((id, i) => ({ id, i }))
   const perKeys = items.filter((it) => it.section !== 'dma')
   const varCols: Column<VRow>[] = [
-    { key: 'variant', label: 'Variant', width: 250, sticky: true, sort: (r) => r.id, render: (r) => <span className="mono">{r.id}{r.i === 0 ? ' ★' : ''}</span> },
+    { key: 'variant', label: 'Variant', width: 250, sticky: true, sort: (r) => r.id, render: (r) => <span className="mono" title={itemLbl[r.i]?.full}>{labels[r.id]}{r.i === 0 ? ' ★' : ''}</span> },
     ...perKeys.map((it): Column<VRow> => ({ key: it.id, label: it.sortLabel, width: 130, headTitle: it.sortLabel, sort: (r) => it.nums[r.i] ?? it.values[r.i],
       title: (r) => it.values[r.i] ?? '', cellClass: (r) => `mono ${it.cls[r.i]}`, render: (r) => it.values[r.i] ?? <span className="dim">—</span> })),
   ]
@@ -152,8 +198,46 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
   const pmTarget = (evQ.data ?? []).map((items, i) => ({ i, sim: items.find((e) => e.kind === 'evidence.simulation' && e.kpi), meas: items.find((e) => e.kind === 'evidence.measurement' && e.kpi && e.vdd_power) })).find((x) => x.sim && x.meas)
   const pmQ = useAsync(() => (pmTarget ? api.predMeas(pmTarget.sim!.id, pmTarget.meas!.id) : Promise.resolve(null)), [pmTarget?.sim?.id, pmTarget?.meas?.id])
 
-  const remove = (id: string) => ctx.navigate(undefined, { variants: ids.filter((x) => x !== id).join(',') })
-  const makeRef = (id: string) => ctx.navigate(undefined, { variants: [id, ...ids.filter((x) => x !== id)].join(',') })
+  const setItems = (next: CompareItem[]) => ctx.navigate(undefined, { items: formatItems(next), variants: undefined })
+  const remove = (i: number) => setItems(cItems.filter((_, n) => n !== i))
+  const makeRef = (i: number) => setItems([cItems[i], ...cItems.filter((_, n) => n !== i)])
+  const condDiff = selected.map((r) => varying.filter((k) => valueText(r.design_conditions[k]) !== valueText(selected[0]?.design_conditions[k])).length)
+  const found: Insight[] = insights({
+    n: ids.length, kpi: kpiRows, dma: models.map((m) => (m ? m.totalMBs : null)),
+    traffic: models.map((m) => (m ? trafficByIp(m) : null)), changedConditions: condDiff, ipMaps, sizeMaps,
+  })
+  const sign = (x: number) => `${x >= 0 ? '+' : ''}${x.toFixed(1)}`
+  const analysis = ids.length > 1 && (
+    <section className="panel" style={{ padding: 10 }}>
+      <div className="panel-head" style={{ padding: '0 0 8px' }}><h2>분석 요약 · 기준 대비</h2>
+        <span className="muted" style={{ fontSize: 12 }}>★ {itemLbl[0]?.full}</span><span className="grow" />
+        <div className="seg sm" role="group" aria-label="KPI 출처">
+          <button className={kpiMode === 'evidence' ? 'on' : ''} onClick={() => setKpiMode('evidence')} title="실측/등록 evidence 우선, 없으면 즉석 예측">Evidence 우선</button>
+          <button className={kpiMode === 'sim' ? 'on' : ''} onClick={() => setKpiMode('sim')} title="모든 항목을 같은 simulation 모델로 계산 (공정 비교)">Simulation 통일</button>
+        </div>
+        {noKpi.length > 0 && <button className="btn primary" onClick={() => runSim(noKpi)} title="simulation으로 KPI 계산 (DB에 저장하지 않음)">{kpiMode === 'sim' ? `${noKpi.length}개 예측 실행` : `KPI 없는 ${noKpi.length}개 예측 실행`}</button>}
+      </div>
+      {mixed && <div className="faint" style={{ fontSize: 12, margin: '0 0 8px' }}>⚠ KPI 출처가 섞여 있습니다 (실측 vs 계산). 설계 대안 비교는 “Simulation 통일”을 권장합니다.</div>}
+      <div className="cmp-insights">
+        {found.map((f) => {
+          const st = sims[ids[f.index]]
+          return (
+            <div key={ids[f.index]} className="cmp-insight" style={{ borderLeft: `4px solid ${color(f.index)}` }}>
+              <h4 title={itemLbl[f.index]?.full}><span className="mono">{labels[ids[f.index]]}</span></h4>
+              <div className="row faint"><span>변경: 조건 {f.changed.conditions} · IP {f.changed.ips} · size {f.changed.sizes}</span><span>KPI {kpiOf(f.index).source ?? '없음'}</span></div>
+              {f.kpi.filter((k) => /power|bw/i.test(k.label)).map((k) => (
+                <div key={k.label} className="row"><span>{k.label}</span>
+                  <span className={`mono ${k.pct > 0.05 ? 'up' : k.pct < -0.05 ? 'down' : ''}`}>{k.value.toFixed(1)} {k.unit} ({sign(k.pct)}%)</span></div>))}
+              {f.dmaTotal && <div className="row"><span>DMA 모델 합계</span>
+                <span className={`mono ${f.dmaTotal.pct > 0.05 ? 'up' : f.dmaTotal.pct < -0.05 ? 'down' : ''}`}>{f.dmaTotal.value.toFixed(0)} MB/s ({sign(f.dmaTotal.pct)}%)</span></div>}
+              {f.topIp.length > 0 && <div className="faint" style={{ marginTop: 4 }}>DMA Δ 상위: {f.topIp.map((t) => `${t.ip} ${sign(t.delta)}`).join(' · ')} MB/s</div>}
+              {st?.status === 'running' && <div className="faint">예측 계산 중…</div>}
+              {st?.status === 'error' && <div className="err" style={{ margin: '4px 0 0' }}>{st.error}</div>}
+            </div>)
+        })}
+      </div>
+    </section>
+  )
 
   const table = (
     // full height: every row visible, the page (pl-main) is the only vertical scroller
@@ -166,13 +250,13 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
   )
   const plots = (
     <div className="plot-grid">
-      <section className="panel plot-card"><h3>KPI · 기준(점선) 대비 <span className="faint">evidence KPI</span></h3>
+      <section className="panel plot-card"><h3>KPI · 기준(점선) 대비 <span className="faint">evidence KPI · 없으면 즉석 예측</span></h3>
         {kpiRows.length ? kpiRows.map((r) => (
           <div key={r.field} className="kpi-mini"><div className="faint" style={{ fontSize: 11.5 }}>{r.label} ({r.unit})</div>
             <Bars unit={r.unit} base={r.values[0]} labelW={150} data={ids.map((id, i) => {
               const v = r.values[i], b = r.values[0]
               return { id, label: labels[id], value: v, color: color(i), note: i > 0 && v !== null && b ? `(${v >= b ? '+' : ''}${(((v - b) / b) * 100).toFixed(1)}%)` : undefined }
-            })} /></div>)) : <div className="empty">KPI evidence 없음</div>}
+            })} /></div>)) : <div className="empty">KPI evidence 없음 — 분석 요약의 “예측 실행”으로 계산</div>}
       </section>
       <section className="panel plot-card"><h3>DMA traffic by IP (W+R MB/s) <span className="faint">view memory × fps · stat/size 미정 제외</span></h3>
         <StackedBars unit="MB/s" rows={dmaStack} labelW={150} /></section>
@@ -188,14 +272,14 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <span className="muted" style={{ fontSize: 13 }}>비교 대상</span>
         {ids.map((id, i) => (
-          <span key={id} className="mono" style={{ fontSize: 12, padding: '5px 8px', borderRadius: 6, display: 'inline-flex', gap: 6, alignItems: 'center',
+          <span key={id} className="mono" title={itemLbl[i]?.full} style={{ fontSize: 12, padding: '5px 8px', borderRadius: 6, display: 'inline-flex', gap: 6, alignItems: 'center',
             background: i === 0 ? 'var(--primary)' : '#fff', color: i === 0 ? '#fff' : 'var(--text)', border: i === 0 ? 0 : '1px solid var(--line)', borderLeft: `4px solid ${color(i)}` }}>
-            {id}{i === 0 ? ' · 기준' : <>
-              <button className="btn" style={{ padding: '0 5px', fontSize: 11 }} onClick={() => makeRef(id)} title="기준으로">★</button>
-              <button className="btn" style={{ padding: '0 5px', fontSize: 11 }} onClick={() => remove(id)} aria-label={`${id} 제거`}>×</button></>}
+            {labels[id]}{i === 0 ? ' · 기준' : <>
+              <button className="btn" style={{ padding: '0 5px', fontSize: 11 }} onClick={() => makeRef(i)} title="기준으로">★</button>
+              <button className="btn" style={{ padding: '0 5px', fontSize: 11 }} onClick={() => remove(i)} aria-label={`${labels[id]} 제거`}>×</button></>}
           </span>
         ))}
-        <button className="btn" onClick={() => ctx.openPicker('compare')}>+ variant 추가 (Ctrl K)</button>
+        <button className="btn" onClick={() => ctx.openPicker('compare')} title="과제 · scenario · variant 선택 (여러 과제/scenario 혼합 가능)">+ 항목 추가 (Ctrl K)</button>
         <span className="grow" />
         <div className="seg sm" role="group" aria-label="표시">
           {([['both', 'Plot + 표'], ['table', '표'], ['plot', 'Plot']] as const).map(([k, l]) => <button key={k} className={show === k ? 'on' : ''} onClick={() => setShow(k)}>{l}</button>)}
@@ -206,15 +290,16 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
         </div>
         <label className="muted" style={{ fontSize: 13, display: 'flex', gap: 6 }}><input type="checkbox" checked={onlyDiff} onChange={(e) => setOnlyDiff(e.target.checked)} />다른 행만</label>
       </div>} main={<>
-      {ids.length < 2 && <div className="empty panel fit">비교하려면 variant를 2개 이상 추가하세요. DB Explorer에서 행을 선택하거나 Ctrl K → Shift+Enter로 추가할 수 있습니다.</div>}
+      {ids.length < 2 && <div className="empty panel fit">비교하려면 2개 이상 추가하세요. 과제 · scenario가 달라도 됩니다 — Ctrl K에서 과제/scenario를 바꾼 뒤 Shift+Enter, 또는 Scenario Matrix에서 여러 행 선택.</div>}
       {variantsQ.error && <div className="err">{variantsQ.error}</div>}
-      {missing.length > 0 && <div className="err">이 scenario에 없는 variant: {missing.join(', ')}</div>}
+      {missing.length > 0 && <div className="err">DB에 없는 항목: {missing.join(', ')}</div>}
+      {analysis}
       {[viewsQ.error, detailsQ.error, evQ.error].filter(Boolean).map((error, i) => <div className="err" key={i}>{error}</div>)}
       {show !== 'table' && plots}
       {show !== 'plot' && table}
       </>}
-      bottomTabs={pmTarget ? [{ id: 'pm', label: <>예측 vs 실측 <span className="tab-note">{ids[pmTarget.i]}</span></>, content: <>
-        <div className="panel-head"><h2>예측 vs 실측 · {ids[pmTarget.i]}</h2>
+      bottomTabs={pmTarget ? [{ id: 'pm', label: <>예측 vs 실측 <span className="tab-note">{labels[ids[pmTarget.i]]}</span></>, content: <>
+        <div className="panel-head"><h2>예측 vs 실측 · {itemLbl[pmTarget.i]?.full}</h2>
           <span className={`badge src-${evidenceSource(pmTarget.meas!)}`}>{evidenceSource(pmTarget.meas!)}</span>
           <span className="muted" style={{ fontSize: 12 }}>{pmTarget.sim!.id} ↔ {pmTarget.meas!.id}</span></div>
         {pmQ.error && <div className="err">{pmQ.error}</div>}

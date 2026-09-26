@@ -10,12 +10,13 @@ import { Icon } from '../components/Icons'
 import { DataTable, type Column, type RowGroup } from '../components/DataTable'
 import { SEVERITY_RANK, resFpsKey } from '../lib/defaults'
 import { MISSING } from '../lib/conditions'
+import { canonicalOf, formatItems } from '../lib/projects'
 
 const COLS = ['Res · fps', 'Mode · Format', 'Output · HDR', 'Stab', 'Camera', 'Codec · Rate', 'Screen']
 
 export function MatrixPage({ ctx }: { ctx: Ctx }) {
-  const q = useAsync(() => api.matrix(), [])
-  const [open, setOpen] = useState<Set<string>>(new Set(['uc-camera-recording', 'uc-camera-preview', 'uc-camera-capture']))
+  const q = useAsync(() => api.matrix(ctx.project || undefined), [ctx.project])
+  const [open, setOpen] = useState<Set<string>>(() => new Set(ctx.catalog.filter((c) => ['uc-camera-recording', 'uc-camera-preview', 'uc-camera-capture'].includes(canonicalOf(c))).map((c) => c.scenario_id)))
   const [search, setSearch] = useState('')
   const [load, setLoad] = useState('')
   const [picked, setPicked] = useState<Set<string>>(new Set())
@@ -95,9 +96,9 @@ export function MatrixPage({ ctx }: { ctx: Ctx }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 12, flexShrink: 0 }} className="muted">
         <span>{grouped ? '헤더 클릭 = 각 scenario 그룹 안에서 정렬 (전체 정렬은 “전체 한 표”)' : '헤더 클릭 = 전체 정렬'} · 헤더 경계 drag = 폭 · 노란 셀 = scenario 안 대표 variant(음영 행)와 다른 값 · — = 해당 없음/미등록 · 열은 scenario 공통 축으로 정규화</span>
         <span className="grow" />
-        {picked.size > 0 && pickedScenarios.size > 1 && <span>비교는 같은 scenario 안에서만 가능합니다</span>}
-        <button className="btn primary" disabled={picked.size < 2 || pickedScenarios.size !== 1}
-          onClick={() => ctx.navigate('compare', { scenario: [...pickedScenarios][0], variants: [...picked].map((k) => k.split('::')[1]).join(',') })}>선택 {picked.size}개 비교</button>
+        {picked.size > 0 && pickedScenarios.size > 1 && <span>scenario {pickedScenarios.size}개에 걸친 비교</span>}
+        <button className="btn primary" disabled={picked.size < 2}
+          onClick={() => ctx.navigate('compare', { items: formatItems([...picked].map((k) => { const [scenario, variant] = k.split('::'); return { scenario, variant } })), variants: undefined })}>선택 {picked.size}개 비교</button>
       </div>
       </>} />
   )

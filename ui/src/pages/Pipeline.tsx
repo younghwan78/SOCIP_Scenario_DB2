@@ -213,7 +213,7 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
         <span className="grow" />
         {view && <><span className="chip">{view.summary.subtitle}</span><span className="chip">period {view.summary.period_ms} ms</span>
           {model && <span className="chip" title={`특성화된 buffer W+R 합계 · size 미정 ${model.unknownBuffers}개 제외`}>DMA {model.totalMBs.toFixed(0)} MB/s</span>}</>}
-        <button className="btn" onClick={() => ctx.navigate('compare', { scenario, variants: variant })}>Compare에 추가</button>
+        <button className="btn" onClick={() => ctx.navigate('compare', { items: `${scenario}~${variant}`, variants: undefined })}>Compare에 추가</button>
       </div>
       <div className="lens-hint"><b>{LENS.find((l) => l.id === lens)?.label}</b> {LENS.find((l) => l.id === lens)?.hint}</div>
       {graph && lens === 'dma' && mode !== 'timing' && <div className="facet-row">

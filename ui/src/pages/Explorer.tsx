@@ -11,6 +11,7 @@ import { DataTable, type Column } from '../components/DataTable'
 import { SEVERITY_RANK, preferredReference, resFpsKey } from '../lib/defaults'
 import type { VariantRow } from '../lib/api'
 import { calibrationApi, type Coverage } from '../lib/calibration'
+import { canonicalOf } from '../lib/projects'
 
 type FacetKey = 'resolution' | 'fps' | 'stab' | 'hdr' | 'camera'
 const FACET_LABEL: Record<FacetKey, string> = { resolution: 'Res', fps: 'fps', stab: 'Stab', hdr: 'HDR', camera: 'Camera' }
@@ -40,7 +41,7 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
   const totalVariants = ctx.catalog.reduce((s, c) => s + c.variant_count, 0)
   const scenarios = ctx.catalog.filter((c) => type === 'all' || primaryCategory(c.category) === type)
     .sort((a, b) => catRank(a.category) - catRank(b.category)
-      || (a.scenario_id === 'uc-camera-recording' ? -1 : b.scenario_id === 'uc-camera-recording' ? 1 : a.scenario_name.localeCompare(b.scenario_name)))
+      || (canonicalOf(a) === 'uc-camera-recording' ? -1 : canonicalOf(b) === 'uc-camera-recording' ? 1 : a.scenario_name.localeCompare(b.scenario_name)))
   const selected = scenarios.find((s) => s.scenario_id === ctx.scenario) ?? scenarios[0]
   const variantsQ = useAsync(() => (selected ? api.variants(selected.scenario_id) : Promise.resolve({ items: [], total: 0 })), [selected?.scenario_id])
   const rows = useMemo(() => toRows(selected, variantsQ.data?.items ?? []), [selected, variantsQ.data])
@@ -56,7 +57,7 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
   const [refChoice, setRefChoice] = useState<Record<string, string>>({})
   const [search, setSearch] = useState('')
   const medoid = useMemo(() => medoidId(rows), [rows])
-  const reference = (selected && refChoice[selected.scenario_id]) || preferredReference(selected?.scenario_id, rows.map((r) => r.variant_id), medoid)
+  const reference = (selected && refChoice[selected.scenario_id]) || preferredReference(selected ? canonicalOf(selected) : undefined, rows.map((r) => r.variant_id), medoid)
   const refRow = byId.get(reference)
 
   const facetKeys = (['resolution', 'fps', 'stab', 'hdr', 'camera'] as FacetKey[]).filter((k) => rows.some((r) => facetValue(k, r.design_conditions) !== null))
