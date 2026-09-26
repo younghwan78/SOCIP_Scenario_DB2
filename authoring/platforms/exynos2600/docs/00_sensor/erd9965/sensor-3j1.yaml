@@ -1,0 +1,1333 @@
+id: sensor-3j1-erd9965
+schema_version: '2.2'
+kind: sensor.catalog
+board: erd9965
+sensor_name: S5K3J1
+position: 1
+position_role: front
+module_properties:
+  sensor_id: 38
+  sensor_id_name: SENSOR_NAME_S5K3J1
+  position: 1
+  id: 1
+  rom_id: 1
+  rom_cal_index: 0
+  mclk_ch: 0
+  mclk_freq: 19200
+  max_framerate: 120
+  bitwidth: 10
+  active_width: 3968
+  active_height: 2736
+  margin_left: 0
+  margin_right: 0
+  margin_top: 0
+  margin_bottom: 0
+  sensor_i2c_ch: 6
+  sensor_maker: SLSI
+  sensor_name: S5K3J1
+  status: okay
+csis_wiring:
+  node: is_sensor1@27090000
+  csi_ch: 4
+  use_cphy: 0
+  scenario: SENSOR_SCENARIO_NORMAL
+  status: okay
+  phy: DPHY
+  also_declared_by: is_sensor5@270D0000
+mode_count: 12
+mode_summary:
+  sizes:
+    3648x2736: 3
+    3968x2232: 2
+    1984x1120: 2
+    1824x1368: 1
+    912x684: 1
+    3280x2268: 1
+    1520x1136: 1
+    1640x924: 1
+  ex_modes:
+    EX_NONE: 11
+    EX_PDAF_OFF: 1
+  fps:
+  - 30
+  - 60
+  - 120
+  max_mipi_link_mbps: 9572
+modes:
+  mode0:
+    timing_binding:
+      profile_ref: sensortiming-s5k3j1-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_3648x2736_30fps
+      mode_index: 0
+      mode_sha256: eb4cd1e1d76d34af24eaa7fb047658e6835fb8f7d75908744da01c4fafa8f1f0
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1-setA-19p2.h
+          sha256: 07f9e894861da8002e239982a511b1cc72dcdd9840ea78fdb2158bdc47bc469b
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1.c
+          sha256: 9cc0f072d3cdedbff0657cd87f2352d7122e395da52a9ca5f8642f18ce7ef657
+        mode_table: sensor_3j1_mode_infos_A_19p2
+    dt:
+      common:
+      - '3648'
+      - '2736'
+      - '30'
+      - '0'
+      - '0'
+      - CSI_DATA_LANES_4
+      - '1984'
+      - CSI_MODE_VC_ONLY
+      - LRTE_DISABLE
+      - PD_NONE
+      - EX_NONE
+      source_line: 91
+    decoded:
+      size:
+      - 3648
+      - 2736
+      fps: 30
+      settle: 0
+      mode_index: 0
+      lanes: 4
+      lanes_enum: CSI_DATA_LANES_4
+      mipi_speed_mbps: 1984
+      interleave_mode: CSI_MODE_VC_ONLY
+      interleave_mode_value: 2
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_NONE
+      pd_mode_value: 5
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 3648
+          - 2736
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc1:
+          map: 1
+          size:
+          - 0
+          - 0
+          hwformat: HW_FORMAT_UNKNOWN
+          hwformat_value: 0
+          hwformat_base: HW_FORMAT_UNKNOWN
+          bits_per_pixel: null
+          data: DATA_NONE
+          data_class: none
+        vc2:
+          map: 2
+          size:
+          - 0
+          - 0
+          hwformat: HW_FORMAT_UNKNOWN
+          hwformat_value: 0
+          hwformat_base: HW_FORMAT_UNKNOWN
+          bits_per_pixel: null
+          data: DATA_NONE
+          data_class: none
+        vc3:
+          map: 3
+          size:
+          - 0
+          - 0
+          hwformat: HW_FORMAT_UNKNOWN
+          hwformat_value: 0
+          hwformat_base: HW_FORMAT_UNKNOWN
+          bits_per_pixel: null
+          data: DATA_NONE
+          data_class: none
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 7936
+      phy: DPHY
+      vc_count_by_class:
+        image: 1
+        none: 3
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 12476160
+      csis_input_mbps: 2994.3
+      link_utilization_pct: 37.7
+      payload_note: one or more VCs had no decodable bpp; payload is a lower bound
+  mode1:
+    timing_binding:
+      profile_ref: sensortiming-s5k3j1-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_3968x2232_30fps
+      mode_index: 1
+      mode_sha256: 62c85a60f0d9610c2b9ddea93e965cd99ac153806e8ae9cb5145e4ce2b403706
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1-setA-19p2.h
+          sha256: 07f9e894861da8002e239982a511b1cc72dcdd9840ea78fdb2158bdc47bc469b
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1.c
+          sha256: 9cc0f072d3cdedbff0657cd87f2352d7122e395da52a9ca5f8642f18ce7ef657
+        mode_table: sensor_3j1_mode_infos_A_19p2
+    dt:
+      common:
+      - '3968'
+      - '2232'
+      - '30'
+      - '0'
+      - '1'
+      - CSI_DATA_LANES_4
+      - '1984'
+      - CSI_MODE_VC_ONLY
+      - LRTE_DISABLE
+      - PD_NONE
+      - EX_NONE
+      source_line: 99
+    decoded:
+      size:
+      - 3968
+      - 2232
+      fps: 30
+      settle: 0
+      mode_index: 1
+      lanes: 4
+      lanes_enum: CSI_DATA_LANES_4
+      mipi_speed_mbps: 1984
+      interleave_mode: CSI_MODE_VC_ONLY
+      interleave_mode_value: 2
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_NONE
+      pd_mode_value: 5
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 3968
+          - 2232
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc1:
+          map: 1
+          size:
+          - 0
+          - 0
+          hwformat: HW_FORMAT_UNKNOWN
+          hwformat_value: 0
+          hwformat_base: HW_FORMAT_UNKNOWN
+          bits_per_pixel: null
+          data: DATA_NONE
+          data_class: none
+        vc2:
+          map: 2
+          size:
+          - 0
+          - 0
+          hwformat: HW_FORMAT_UNKNOWN
+          hwformat_value: 0
+          hwformat_base: HW_FORMAT_UNKNOWN
+          bits_per_pixel: null
+          data: DATA_NONE
+          data_class: none
+        vc3:
+          map: 3
+          size:
+          - 0
+          - 0
+          hwformat: HW_FORMAT_UNKNOWN
+          hwformat_value: 0
+          hwformat_base: HW_FORMAT_UNKNOWN
+          bits_per_pixel: null
+          data: DATA_NONE
+          data_class: none
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 7936
+      phy: DPHY
+      vc_count_by_class:
+        image: 1
+        none: 3
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 11070720
+      csis_input_mbps: 2657.0
+      link_utilization_pct: 33.5
+      payload_note: one or more VCs had no decodable bpp; payload is a lower bound
+  mode2:
+    timing_binding:
+      profile_ref: sensortiming-s5k3j1-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_3968x2232_60fps
+      mode_index: 2
+      mode_sha256: b87fe01547832cdf2d2b83a5a18029e15f86246df26729306865c92e22e6a738
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1-setA-19p2.h
+          sha256: 07f9e894861da8002e239982a511b1cc72dcdd9840ea78fdb2158bdc47bc469b
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1.c
+          sha256: 9cc0f072d3cdedbff0657cd87f2352d7122e395da52a9ca5f8642f18ce7ef657
+        mode_table: sensor_3j1_mode_infos_A_19p2
+    dt:
+      common:
+      - '3968'
+      - '2232'
+      - '60'
+      - '0'
+      - '2'
+      - CSI_DATA_LANES_4
+      - '2393'
+      - CSI_MODE_VC_ONLY
+      - LRTE_DISABLE
+      - PD_NONE
+      - EX_NONE
+      source_line: 107
+    decoded:
+      size:
+      - 3968
+      - 2232
+      fps: 60
+      settle: 0
+      mode_index: 2
+      lanes: 4
+      lanes_enum: CSI_DATA_LANES_4
+      mipi_speed_mbps: 2393
+      interleave_mode: CSI_MODE_VC_ONLY
+      interleave_mode_value: 2
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_NONE
+      pd_mode_value: 5
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 3968
+          - 2232
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc1:
+          map: 1
+          size:
+          - 0
+          - 0
+          hwformat: HW_FORMAT_UNKNOWN
+          hwformat_value: 0
+          hwformat_base: HW_FORMAT_UNKNOWN
+          bits_per_pixel: null
+          data: DATA_NONE
+          data_class: none
+        vc2:
+          map: 2
+          size:
+          - 0
+          - 0
+          hwformat: HW_FORMAT_UNKNOWN
+          hwformat_value: 0
+          hwformat_base: HW_FORMAT_UNKNOWN
+          bits_per_pixel: null
+          data: DATA_NONE
+          data_class: none
+        vc3:
+          map: 3
+          size:
+          - 0
+          - 0
+          hwformat: HW_FORMAT_UNKNOWN
+          hwformat_value: 0
+          hwformat_base: HW_FORMAT_UNKNOWN
+          bits_per_pixel: null
+          data: DATA_NONE
+          data_class: none
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 9572
+      phy: DPHY
+      vc_count_by_class:
+        image: 1
+        none: 3
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 11070720
+      csis_input_mbps: 5313.9
+      link_utilization_pct: 55.5
+      payload_note: one or more VCs had no decodable bpp; payload is a lower bound
+  mode3:
+    timing_binding:
+      profile_ref: sensortiming-s5k3j1-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_1984x1120_120fps
+      mode_index: 3
+      mode_sha256: 633bbf429d8d3f9278552466287a2adf0bb2529fb933d324445b41c6b37020dd
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1-setA-19p2.h
+          sha256: 07f9e894861da8002e239982a511b1cc72dcdd9840ea78fdb2158bdc47bc469b
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1.c
+          sha256: 9cc0f072d3cdedbff0657cd87f2352d7122e395da52a9ca5f8642f18ce7ef657
+        mode_table: sensor_3j1_mode_infos_A_19p2
+    dt:
+      common:
+      - '1984'
+      - '1120'
+      - '120'
+      - '0'
+      - '3'
+      - CSI_DATA_LANES_4
+      - '1984'
+      - CSI_MODE_VC_ONLY
+      - LRTE_DISABLE
+      - PD_NONE
+      - EX_NONE
+      source_line: 115
+    decoded:
+      size:
+      - 1984
+      - 1120
+      fps: 120
+      settle: 0
+      mode_index: 3
+      lanes: 4
+      lanes_enum: CSI_DATA_LANES_4
+      mipi_speed_mbps: 1984
+      interleave_mode: CSI_MODE_VC_ONLY
+      interleave_mode_value: 2
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_NONE
+      pd_mode_value: 5
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 1984
+          - 1120
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc1:
+          map: 1
+          size:
+          - 0
+          - 0
+          hwformat: HW_FORMAT_UNKNOWN
+          hwformat_value: 0
+          hwformat_base: HW_FORMAT_UNKNOWN
+          bits_per_pixel: null
+          data: DATA_NONE
+          data_class: none
+        vc2:
+          map: 2
+          size:
+          - 0
+          - 0
+          hwformat: HW_FORMAT_UNKNOWN
+          hwformat_value: 0
+          hwformat_base: HW_FORMAT_UNKNOWN
+          bits_per_pixel: null
+          data: DATA_NONE
+          data_class: none
+        vc3:
+          map: 3
+          size:
+          - 0
+          - 0
+          hwformat: HW_FORMAT_UNKNOWN
+          hwformat_value: 0
+          hwformat_base: HW_FORMAT_UNKNOWN
+          bits_per_pixel: null
+          data: DATA_NONE
+          data_class: none
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 7936
+      phy: DPHY
+      vc_count_by_class:
+        image: 1
+        none: 3
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 2777600
+      csis_input_mbps: 2666.5
+      link_utilization_pct: 33.6
+      payload_note: one or more VCs had no decodable bpp; payload is a lower bound
+  mode4:
+    timing_binding:
+      profile_ref: sensortiming-s5k3j1-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_1824x1368_30fps
+      mode_index: 4
+      mode_sha256: 19e06f92869a012c692dd3ee404c7060a65c19a6217a7eb8ae709d576986cfe7
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1-setA-19p2.h
+          sha256: 07f9e894861da8002e239982a511b1cc72dcdd9840ea78fdb2158bdc47bc469b
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1.c
+          sha256: 9cc0f072d3cdedbff0657cd87f2352d7122e395da52a9ca5f8642f18ce7ef657
+        mode_table: sensor_3j1_mode_infos_A_19p2
+    dt:
+      common:
+      - '1824'
+      - '1368'
+      - '30'
+      - '0'
+      - '4'
+      - CSI_DATA_LANES_4
+      - '1984'
+      - CSI_MODE_VC_ONLY
+      - LRTE_DISABLE
+      - PD_NONE
+      - EX_NONE
+      source_line: 123
+    decoded:
+      size:
+      - 1824
+      - 1368
+      fps: 30
+      settle: 0
+      mode_index: 4
+      lanes: 4
+      lanes_enum: CSI_DATA_LANES_4
+      mipi_speed_mbps: 1984
+      interleave_mode: CSI_MODE_VC_ONLY
+      interleave_mode_value: 2
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_NONE
+      pd_mode_value: 5
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 1824
+          - 1368
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc1:
+          map: 1
+          size:
+          - 0
+          - 0
+          hwformat: HW_FORMAT_UNKNOWN
+          hwformat_value: 0
+          hwformat_base: HW_FORMAT_UNKNOWN
+          bits_per_pixel: null
+          data: DATA_NONE
+          data_class: none
+        vc2:
+          map: 2
+          size:
+          - 0
+          - 0
+          hwformat: HW_FORMAT_UNKNOWN
+          hwformat_value: 0
+          hwformat_base: HW_FORMAT_UNKNOWN
+          bits_per_pixel: null
+          data: DATA_NONE
+          data_class: none
+        vc3:
+          map: 3
+          size:
+          - 0
+          - 0
+          hwformat: HW_FORMAT_UNKNOWN
+          hwformat_value: 0
+          hwformat_base: HW_FORMAT_UNKNOWN
+          bits_per_pixel: null
+          data: DATA_NONE
+          data_class: none
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 7936
+      phy: DPHY
+      vc_count_by_class:
+        image: 1
+        none: 3
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 3119040
+      csis_input_mbps: 748.6
+      link_utilization_pct: 9.4
+      payload_note: one or more VCs had no decodable bpp; payload is a lower bound
+  mode5:
+    timing_binding:
+      profile_ref: sensortiming-s5k3j1-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_1984x1120_30fps
+      mode_index: 5
+      mode_sha256: 759887b94e68a89e744059c8a124cbcf90ec787a87af4b4d9d0d21e11d3f138f
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1-setA-19p2.h
+          sha256: 07f9e894861da8002e239982a511b1cc72dcdd9840ea78fdb2158bdc47bc469b
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1.c
+          sha256: 9cc0f072d3cdedbff0657cd87f2352d7122e395da52a9ca5f8642f18ce7ef657
+        mode_table: sensor_3j1_mode_infos_A_19p2
+    dt:
+      common:
+      - '1984'
+      - '1120'
+      - '30'
+      - '0'
+      - '5'
+      - CSI_DATA_LANES_4
+      - '1984'
+      - CSI_MODE_VC_ONLY
+      - LRTE_DISABLE
+      - PD_NONE
+      - EX_NONE
+      source_line: 131
+    decoded:
+      size:
+      - 1984
+      - 1120
+      fps: 30
+      settle: 0
+      mode_index: 5
+      lanes: 4
+      lanes_enum: CSI_DATA_LANES_4
+      mipi_speed_mbps: 1984
+      interleave_mode: CSI_MODE_VC_ONLY
+      interleave_mode_value: 2
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_NONE
+      pd_mode_value: 5
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 1984
+          - 1120
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc1:
+          map: 1
+          size:
+          - 0
+          - 0
+          hwformat: HW_FORMAT_UNKNOWN
+          hwformat_value: 0
+          hwformat_base: HW_FORMAT_UNKNOWN
+          bits_per_pixel: null
+          data: DATA_NONE
+          data_class: none
+        vc2:
+          map: 2
+          size:
+          - 0
+          - 0
+          hwformat: HW_FORMAT_UNKNOWN
+          hwformat_value: 0
+          hwformat_base: HW_FORMAT_UNKNOWN
+          bits_per_pixel: null
+          data: DATA_NONE
+          data_class: none
+        vc3:
+          map: 3
+          size:
+          - 0
+          - 0
+          hwformat: HW_FORMAT_UNKNOWN
+          hwformat_value: 0
+          hwformat_base: HW_FORMAT_UNKNOWN
+          bits_per_pixel: null
+          data: DATA_NONE
+          data_class: none
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 7936
+      phy: DPHY
+      vc_count_by_class:
+        image: 1
+        none: 3
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 2777600
+      csis_input_mbps: 666.6
+      link_utilization_pct: 8.4
+      payload_note: one or more VCs had no decodable bpp; payload is a lower bound
+  mode6:
+    timing_binding:
+      profile_ref: sensortiming-s5k3j1-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_912x684_120fps
+      mode_index: 6
+      mode_sha256: 7188f207cfd4e7d1805ea9341da52815b94ed9f19d9f664acba41da69b5d4230
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1-setA-19p2.h
+          sha256: 07f9e894861da8002e239982a511b1cc72dcdd9840ea78fdb2158bdc47bc469b
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1.c
+          sha256: 9cc0f072d3cdedbff0657cd87f2352d7122e395da52a9ca5f8642f18ce7ef657
+        mode_table: sensor_3j1_mode_infos_A_19p2
+    dt:
+      common:
+      - '912'
+      - '684'
+      - '120'
+      - '0'
+      - '6'
+      - CSI_DATA_LANES_4
+      - '1984'
+      - CSI_MODE_VC_ONLY
+      - LRTE_DISABLE
+      - PD_NONE
+      - EX_NONE
+      source_line: 139
+    decoded:
+      size:
+      - 912
+      - 684
+      fps: 120
+      settle: 0
+      mode_index: 6
+      lanes: 4
+      lanes_enum: CSI_DATA_LANES_4
+      mipi_speed_mbps: 1984
+      interleave_mode: CSI_MODE_VC_ONLY
+      interleave_mode_value: 2
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_NONE
+      pd_mode_value: 5
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 912
+          - 684
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc1:
+          map: 1
+          size:
+          - 0
+          - 0
+          hwformat: HW_FORMAT_UNKNOWN
+          hwformat_value: 0
+          hwformat_base: HW_FORMAT_UNKNOWN
+          bits_per_pixel: null
+          data: DATA_NONE
+          data_class: none
+        vc2:
+          map: 2
+          size:
+          - 0
+          - 0
+          hwformat: HW_FORMAT_UNKNOWN
+          hwformat_value: 0
+          hwformat_base: HW_FORMAT_UNKNOWN
+          bits_per_pixel: null
+          data: DATA_NONE
+          data_class: none
+        vc3:
+          map: 3
+          size:
+          - 0
+          - 0
+          hwformat: HW_FORMAT_UNKNOWN
+          hwformat_value: 0
+          hwformat_base: HW_FORMAT_UNKNOWN
+          bits_per_pixel: null
+          data: DATA_NONE
+          data_class: none
+    option:
+      votf: 0
+      special_mode: 1
+    derived:
+      mipi_link_mbps: 7936
+      phy: DPHY
+      vc_count_by_class:
+        image: 1
+        none: 3
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 779760
+      csis_input_mbps: 748.6
+      link_utilization_pct: 9.4
+      payload_note: one or more VCs had no decodable bpp; payload is a lower bound
+  mode7:
+    timing_binding:
+      profile_ref: sensortiming-s5k3j1-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_3280x2268_30fps
+      mode_index: 7
+      mode_sha256: 64c06eb571ee53a5dd31109c2c20d67072208e3e422d0376b2ebe9aeb0c109b8
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1-setA-19p2.h
+          sha256: 07f9e894861da8002e239982a511b1cc72dcdd9840ea78fdb2158bdc47bc469b
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1.c
+          sha256: 9cc0f072d3cdedbff0657cd87f2352d7122e395da52a9ca5f8642f18ce7ef657
+        mode_table: sensor_3j1_mode_infos_A_19p2
+    dt:
+      common:
+      - '3280'
+      - '2268'
+      - '30'
+      - '0'
+      - '7'
+      - CSI_DATA_LANES_4
+      - '1984'
+      - CSI_MODE_VC_ONLY
+      - LRTE_DISABLE
+      - PD_NONE
+      - EX_NONE
+      source_line: 147
+    decoded:
+      size:
+      - 3280
+      - 2268
+      fps: 30
+      settle: 0
+      mode_index: 7
+      lanes: 4
+      lanes_enum: CSI_DATA_LANES_4
+      mipi_speed_mbps: 1984
+      interleave_mode: CSI_MODE_VC_ONLY
+      interleave_mode_value: 2
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_NONE
+      pd_mode_value: 5
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 3280
+          - 2268
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc1:
+          map: 1
+          size:
+          - 0
+          - 0
+          hwformat: HW_FORMAT_UNKNOWN
+          hwformat_value: 0
+          hwformat_base: HW_FORMAT_UNKNOWN
+          bits_per_pixel: null
+          data: DATA_NONE
+          data_class: none
+        vc2:
+          map: 2
+          size:
+          - 0
+          - 0
+          hwformat: HW_FORMAT_UNKNOWN
+          hwformat_value: 0
+          hwformat_base: HW_FORMAT_UNKNOWN
+          bits_per_pixel: null
+          data: DATA_NONE
+          data_class: none
+        vc3:
+          map: 3
+          size:
+          - 0
+          - 0
+          hwformat: HW_FORMAT_UNKNOWN
+          hwformat_value: 0
+          hwformat_base: HW_FORMAT_UNKNOWN
+          bits_per_pixel: null
+          data: DATA_NONE
+          data_class: none
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 7936
+      phy: DPHY
+      vc_count_by_class:
+        image: 1
+        none: 3
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 9298800
+      csis_input_mbps: 2231.7
+      link_utilization_pct: 28.1
+      payload_note: one or more VCs had no decodable bpp; payload is a lower bound
+  mode8:
+    timing_binding:
+      profile_ref: sensortiming-s5k3j1-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_1520x1136_30fps
+      mode_index: 8
+      mode_sha256: 38f25313aacc821028b1f46d1db8ea69956c6d7d0ebe4579f8f3fcadca495d1c
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1-setA-19p2.h
+          sha256: 07f9e894861da8002e239982a511b1cc72dcdd9840ea78fdb2158bdc47bc469b
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1.c
+          sha256: 9cc0f072d3cdedbff0657cd87f2352d7122e395da52a9ca5f8642f18ce7ef657
+        mode_table: sensor_3j1_mode_infos_A_19p2
+    dt:
+      common:
+      - '1520'
+      - '1136'
+      - '30'
+      - '0'
+      - '8'
+      - CSI_DATA_LANES_4
+      - '1984'
+      - CSI_MODE_VC_ONLY
+      - LRTE_DISABLE
+      - PD_NONE
+      - EX_NONE
+      source_line: 155
+    decoded:
+      size:
+      - 1520
+      - 1136
+      fps: 30
+      settle: 0
+      mode_index: 8
+      lanes: 4
+      lanes_enum: CSI_DATA_LANES_4
+      mipi_speed_mbps: 1984
+      interleave_mode: CSI_MODE_VC_ONLY
+      interleave_mode_value: 2
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_NONE
+      pd_mode_value: 5
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 1520
+          - 1136
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc1:
+          map: 1
+          size:
+          - 0
+          - 0
+          hwformat: HW_FORMAT_UNKNOWN
+          hwformat_value: 0
+          hwformat_base: HW_FORMAT_UNKNOWN
+          bits_per_pixel: null
+          data: DATA_NONE
+          data_class: none
+        vc2:
+          map: 2
+          size:
+          - 0
+          - 0
+          hwformat: HW_FORMAT_UNKNOWN
+          hwformat_value: 0
+          hwformat_base: HW_FORMAT_UNKNOWN
+          bits_per_pixel: null
+          data: DATA_NONE
+          data_class: none
+        vc3:
+          map: 3
+          size:
+          - 0
+          - 0
+          hwformat: HW_FORMAT_UNKNOWN
+          hwformat_value: 0
+          hwformat_base: HW_FORMAT_UNKNOWN
+          bits_per_pixel: null
+          data: DATA_NONE
+          data_class: none
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 7936
+      phy: DPHY
+      vc_count_by_class:
+        image: 1
+        none: 3
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 2158400
+      csis_input_mbps: 518.0
+      link_utilization_pct: 6.5
+      payload_note: one or more VCs had no decodable bpp; payload is a lower bound
+  mode9:
+    timing_binding:
+      profile_ref: sensortiming-s5k3j1-seta-19p2
+      profile_revision: setA-19p2-import-20260920
+      mode_label: cis_1640x924_30fps
+      mode_index: 9
+      mode_sha256: 5809ee00d177ca2c3c820fbcd2a8860b299e4b53fef16be660a362e64b1bfc72
+      source:
+        basis: DT cfg.mode -> CIS mode_infos[index]
+        selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+        setfile:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1-setA-19p2.h
+          sha256: 07f9e894861da8002e239982a511b1cc72dcdd9840ea78fdb2158bdc47bc469b
+        driver:
+          path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1.c
+          sha256: 9cc0f072d3cdedbff0657cd87f2352d7122e395da52a9ca5f8642f18ce7ef657
+        mode_table: sensor_3j1_mode_infos_A_19p2
+    dt:
+      common:
+      - '1640'
+      - '924'
+      - '30'
+      - '0'
+      - '9'
+      - CSI_DATA_LANES_4
+      - '1984'
+      - CSI_MODE_VC_ONLY
+      - LRTE_DISABLE
+      - PD_NONE
+      - EX_NONE
+      source_line: 163
+    decoded:
+      size:
+      - 1640
+      - 924
+      fps: 30
+      settle: 0
+      mode_index: 9
+      lanes: 4
+      lanes_enum: CSI_DATA_LANES_4
+      mipi_speed_mbps: 1984
+      interleave_mode: CSI_MODE_VC_ONLY
+      interleave_mode_value: 2
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_NONE
+      pd_mode_value: 5
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 1640
+          - 924
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc1:
+          map: 1
+          size:
+          - 0
+          - 0
+          hwformat: HW_FORMAT_UNKNOWN
+          hwformat_value: 0
+          hwformat_base: HW_FORMAT_UNKNOWN
+          bits_per_pixel: null
+          data: DATA_NONE
+          data_class: none
+        vc2:
+          map: 2
+          size:
+          - 0
+          - 0
+          hwformat: HW_FORMAT_UNKNOWN
+          hwformat_value: 0
+          hwformat_base: HW_FORMAT_UNKNOWN
+          bits_per_pixel: null
+          data: DATA_NONE
+          data_class: none
+        vc3:
+          map: 3
+          size:
+          - 0
+          - 0
+          hwformat: HW_FORMAT_UNKNOWN
+          hwformat_value: 0
+          hwformat_base: HW_FORMAT_UNKNOWN
+          bits_per_pixel: null
+          data: DATA_NONE
+          data_class: none
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 7936
+      phy: DPHY
+      vc_count_by_class:
+        image: 1
+        none: 3
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 1894200
+      csis_input_mbps: 454.6
+      link_utilization_pct: 5.7
+      payload_note: one or more VCs had no decodable bpp; payload is a lower bound
+  mode10:
+    timing_binding_note: DT mode index is absent from the reviewed CIS table.
+    dt:
+      common:
+      - '3648'
+      - '2736'
+      - '60'
+      - '0'
+      - '10'
+      - CSI_DATA_LANES_4
+      - '1984'
+      - CSI_MODE_VC_ONLY
+      - LRTE_DISABLE
+      - PD_NONE
+      - EX_NONE
+      source_line: 171
+    decoded:
+      size:
+      - 3648
+      - 2736
+      fps: 60
+      settle: 0
+      mode_index: 10
+      lanes: 4
+      lanes_enum: CSI_DATA_LANES_4
+      mipi_speed_mbps: 1984
+      interleave_mode: CSI_MODE_VC_ONLY
+      interleave_mode_value: 2
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_NONE
+      pd_mode_value: 5
+      ex_mode: EX_NONE
+      ex_mode_value: 0
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 3648
+          - 2736
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc1:
+          map: 1
+          size:
+          - 0
+          - 0
+          hwformat: HW_FORMAT_UNKNOWN
+          hwformat_value: 0
+          hwformat_base: HW_FORMAT_UNKNOWN
+          bits_per_pixel: null
+          data: DATA_NONE
+          data_class: none
+        vc2:
+          map: 2
+          size:
+          - 0
+          - 0
+          hwformat: HW_FORMAT_UNKNOWN
+          hwformat_value: 0
+          hwformat_base: HW_FORMAT_UNKNOWN
+          bits_per_pixel: null
+          data: DATA_NONE
+          data_class: none
+        vc3:
+          map: 3
+          size:
+          - 0
+          - 0
+          hwformat: HW_FORMAT_UNKNOWN
+          hwformat_value: 0
+          hwformat_base: HW_FORMAT_UNKNOWN
+          bits_per_pixel: null
+          data: DATA_NONE
+          data_class: none
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 7936
+      phy: DPHY
+      vc_count_by_class:
+        image: 1
+        none: 3
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 12476160
+      csis_input_mbps: 5988.6
+      link_utilization_pct: 75.5
+      payload_note: one or more VCs had no decodable bpp; payload is a lower bound
+  mode0_secure:
+    timing_binding_note: 'Extended/suffix mode: runtime readout sequence needs review.'
+    dt:
+      common:
+      - '3648'
+      - '2736'
+      - '30'
+      - '0'
+      - '0'
+      - CSI_DATA_LANES_4
+      - '1984'
+      - CSI_MODE_VC_ONLY
+      - LRTE_DISABLE
+      - PD_NONE
+      - EX_PDAF_OFF
+      source_line: 180
+    decoded:
+      size:
+      - 3648
+      - 2736
+      fps: 30
+      settle: 0
+      mode_index: 0
+      lanes: 4
+      lanes_enum: CSI_DATA_LANES_4
+      mipi_speed_mbps: 1984
+      interleave_mode: CSI_MODE_VC_ONLY
+      interleave_mode_value: 2
+      lrte: LRTE_DISABLE
+      lrte_value: 0
+      pd_mode: PD_NONE
+      pd_mode_value: 5
+      ex_mode: EX_PDAF_OFF
+      ex_mode_value: 5
+    vc:
+      dma0:
+        vc0:
+          map: 0
+          size:
+          - 3648
+          - 2736
+          hwformat: HW_FORMAT_RAW10
+          hwformat_value: 43
+          hwformat_base: HW_FORMAT_RAW10
+          bits_per_pixel: 10
+          data: DATA_IMG
+          data_class: image
+        vc1:
+          map: 1
+          size:
+          - 0
+          - 0
+          hwformat: HW_FORMAT_UNKNOWN
+          hwformat_value: 0
+          hwformat_base: HW_FORMAT_UNKNOWN
+          bits_per_pixel: null
+          data: DATA_NONE
+          data_class: none
+        vc2:
+          map: 2
+          size:
+          - 0
+          - 0
+          hwformat: HW_FORMAT_UNKNOWN
+          hwformat_value: 0
+          hwformat_base: HW_FORMAT_UNKNOWN
+          bits_per_pixel: null
+          data: DATA_NONE
+          data_class: none
+        vc3:
+          map: 3
+          size:
+          - 0
+          - 0
+          hwformat: HW_FORMAT_UNKNOWN
+          hwformat_value: 0
+          hwformat_base: HW_FORMAT_UNKNOWN
+          bits_per_pixel: null
+          data: DATA_NONE
+          data_class: none
+    option:
+      votf: 0
+    derived:
+      mipi_link_mbps: 7936
+      phy: DPHY
+      vc_count_by_class:
+        image: 1
+        none: 3
+      image_vc_count: 1
+      csis_input_bytes_per_frame: 12476160
+      csis_input_mbps: 2994.3
+      link_utilization_pct: 37.7
+      payload_note: one or more VCs had no decodable bpp; payload is a lower bound
+provenance:
+  source:
+    path: exynos/device/erd/erd9965/arch/arm64/boot/dts/erd/camera/module_3j1.dtsi
+    sha256: b14691c5fd67211bd365b33398eb4dc560045e741ff61515a08f1bca9c13ecb4
+  bindings:
+    path: exynos/soc-series/common/include/dt-bindings/camera/exynos_is_dt.h
+    sha256: 7d3822ddcfe9c4aa10595d46ec7b97cb0815a6d9a879fceff6d8ebd58108c6dc
+  parser_reference: 'exynos/external-modules/camera/camera/is-dt.c: is_cis_modes_parse_dt / is_cis_modes_dma_parse_dt'
+  review: S5E9965 board camera DT sensor catalog 2026-09-17
+  provenance_status: kernel_declared

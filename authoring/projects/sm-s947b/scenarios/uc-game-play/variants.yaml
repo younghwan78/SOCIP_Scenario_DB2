@@ -1,0 +1,411 @@
+# Compact variants: root entries are complete; `extends: <id>` entries are a
+# deep-merge patch over that variant (`$unset: [keys]` removes keys).
+# node sim width/height come from sizes.yaml; sw_timing from sw_timing.yaml.
+- id: game-fhd-60fps-sdr
+  severity: light
+  design_conditions:
+    resolution: FHD
+    target_fps: 60
+    hdr: SDR
+    gpu_governor: performance
+    panel_fps_hz: 60
+    npu_used: false
+    dpu_layer_count: 5
+    dpu_composer: DPU_DIRECT
+    panel_resolution: 1440x3120
+    source_resolution: 1920x1080
+    sw_timing_source: assumed
+  routing_switch:
+    disabled_nodes:
+    - npu
+    - m2m_scaler
+    disabled_edges:
+    - from: gpu
+      to: npu
+    - from: npu
+      to: dpu
+    - from: gpu
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    gpu:
+      selected_mode: Normal
+      sim:
+        width: 1920
+        height: 1080
+        fps: 60
+        workload: render
+      bw_kb_s:
+        note: GPU traffic is not kernel-declared; see ip-gpu bw_model
+        composition_write: 0
+      model_ref: ip-gpu-s5e9965.capabilities.dvfs_model / power_model
+    panel:
+      selected_mode: 60hz
+      sim:
+        refresh_hz: 60
+        screen_on: true
+    dpu:
+      selected_mode: Normal
+      sim:
+        panel_width: 1440
+        panel_height: 3120
+        refresh_hz: 60
+        composer: DPU_DIRECT
+        layers:
+        - name: rendered_frame
+          src:
+          - 1920
+          - 1080
+          bpp: 32
+          dst:
+          - 1440
+          - 3120
+        - name: ui0
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui1
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui2
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui3
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+      resol_clk_khz: 304611
+      bw_kb_s:
+        bts_read_vote: 6498368
+        surface_traffic: 1012500
+        write: 0
+      bw_note: bts_read_vote is what the driver votes to BTS (worst case, each layer charged at full-frame rate); surface_traffic
+        is the bytes actually fetched. Use the vote for MIF/INT frequency, the traffic for energy.
+      model_ref: ip-dpu-s5e9965.capabilities.bw_model
+    m2m_scaler:
+      sim:
+        active: false
+    npu:
+      sim:
+        active: false
+        width: 1920
+        height: 1080
+        fps: 0
+      dvfs: null
+      dvfs_note: null
+- id: game-fhd-90fps-sdr
+  extends: game-fhd-60fps-sdr
+  design_conditions:
+    $unset:
+    - gpu_governor
+    target_fps: 90
+    panel_fps_hz: 90
+  node_configs:
+    gpu:
+      sim:
+        fps: 90
+    panel:
+      selected_mode: 120hz
+      sim:
+        refresh_hz: 90
+    dpu:
+      selected_mode: VRR
+      sim:
+        refresh_hz: 90
+      resol_clk_khz: 456917
+      bw_kb_s:
+        bts_read_vote: 9747563
+        surface_traffic: 1518750
+- id: game-fhd-120fps-sdr
+  extends: game-fhd-90fps-sdr
+  design_conditions:
+    target_fps: 120
+    panel_fps_hz: 120
+    note: 고주사율 게임 (GTS 타겟 120Hz)
+  node_configs:
+    gpu:
+      sim:
+        fps: 120
+    panel:
+      sim:
+        refresh_hz: 120
+    dpu:
+      sim:
+        refresh_hz: 120
+      resol_clk_khz: 609223
+      bw_kb_s:
+        bts_read_vote: 12996757
+        surface_traffic: 2025000
+- id: game-uhd-60fps-sdr
+  extends: game-fhd-60fps-sdr
+  severity: heavy
+  design_conditions:
+    $unset:
+    - gpu_governor
+    resolution: UHD
+    source_resolution: 3840x2160
+  node_configs:
+    gpu:
+      sim:
+        width: 3840
+        height: 2160
+    dpu:
+      sim:
+        layers:
+        - name: rendered_frame
+          src:
+          - 3840
+          - 2160
+          bpp: 32
+          dst:
+          - 1440
+          - 3120
+        - name: ui0
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui1
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui2
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui3
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+      bw_kb_s:
+        bts_read_vote: 8122960
+        surface_traffic: 2470500
+    npu:
+      sim:
+        width: 3840
+        height: 2160
+- id: game-fhd-60fps-npu-ai
+  extends: game-fhd-60fps-sdr
+  design_conditions:
+    npu_used: true
+    note: AI 게임 가속 / SR (NPU 슈퍼 해상도)
+  routing_switch:
+    disabled_nodes:
+    - m2m_scaler
+    disabled_edges:
+    - from: gpu
+      to: dpu
+    - from: gpu
+      to: m2m_scaler
+    - from: m2m_scaler
+      to: dpu
+  node_configs:
+    npu:
+      selected_mode: Normal
+      sim:
+        active: true
+        fps: 60
+      dvfs:
+        freq_core_khz: 664000
+        freq_npucon_khz: 533000
+        freq_mif_khz: 1716000
+        freq_int_khz: 350000
+      dvfs_note: mid DVFS step assumed; NPU load is not derivable from design_conditions.
+- id: game-fhd-120fps-hdr10
+  extends: game-fhd-120fps-sdr
+  severity: medium
+  design_conditions:
+    $unset:
+    - note
+    hdr: HDR10
+    hdr_dpu: HDR_HDR10
+  buffer_overrides:
+    GPU_DPU_BUF:
+      format: RGBA1010102
+      bitdepth: 10
+      compression: COMP_OFF
+- id: game-fhd-60fps-m2m-upscale
+  extends: game-fhd-60fps-sdr
+  design_conditions:
+    $unset:
+    - resolution
+    - gpu_governor
+    render_resolution: QHD
+    dpu_composer: M2M_SCALER_FALLBACK
+    note: GPU QHD 렌더 → M2M 스케일러 QHD→UHD 업스케일 → DPU (GPU 부하 절감)
+    source_resolution: 2560x1440
+  routing_switch:
+    disabled_nodes:
+    - npu
+    disabled_edges:
+    - from: gpu
+      to: npu
+    - from: npu
+      to: dpu
+    - from: gpu
+      to: dpu
+  node_configs:
+    gpu:
+      sim:
+        width: 2560
+        height: 1440
+    dpu:
+      sim:
+        composer: M2M_SCALER_FALLBACK
+        layers:
+        - name: m2m_scaled_rendered_frame
+          src:
+          - 2560
+          - 1440
+          bpp: 32
+          dst:
+          - 1440
+          - 3120
+        - name: ui0
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui1
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui2
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+        - name: ui3
+          src:
+          - 1440
+          - 390
+          dst:
+          - 1440
+          - 390
+          bpp: 32
+          value_source: assumed
+      bw_kb_s:
+        bts_read_vote: 7039899
+        surface_traffic: 1390500
+    m2m_scaler:
+      selected_mode: Normal
+      sim:
+        $unset:
+        - active
+        src:
+        - 2560
+        - 1440
+        dst:
+        - 1440
+        - 3120
+        fps: 60
+        src_bpp: 12
+        dst_bpp: 32
+        ppc: 4.89
+        ppc_row: YUV420
+      required_freq_khz: 55126
+      dvfs:
+        freq_mif_khz: 0
+        freq_int_khz: 133000
+        freq_mscl_khz: 88000
+      bw_kb_s:
+        read: 324000
+        write: 1053000
+      model_ref: ip-m2m-scaler-s5e9965.capabilities.perf_model / bw_model
+    npu:
+      sim:
+        width: 2560
+        height: 1440
+  buffer_overrides:
+    GPU_M2M_BUF:
+      format: RGBA8888
+      bitdepth: 8
+      compression: COMP_OFF
+- id: game-fhd-60fps-gpu-heavy-overlay
+  extends: game-fhd-60fps-sdr
+  design_conditions:
+    $unset:
+    - gpu_governor
+    dpu_layer_count: 13
+    dpu_composer: GPU_FALLBACK
+    note: 게임+시스템UI+인앱브라우저+알림 레이어 합산 >12 → SurfaceFlinger GPU fallback
+    design_review: GPU fallback is asserted at 13 layers, but S5E9965 has 16 DPP channels and max_win = 16, so the DPU can
+      compose this directly. The real limits are >16 layers, or more than 8 layers needing scale/CSC (only the odd DPPs are
+      VG). Confirm the intended trigger and either raise the layer count or state the other reason.
+  node_configs:
+    gpu:
+      sim:
+        input_layers: 13
+      bw_kb_s:
+        composition_write: 1053000
+    dpu:
+      sim:
+        composer: GPU_FALLBACK
+        layers:
+        - name: gpu_composed
+          src:
+          - 1440
+          - 3120
+          dst:
+          - 1440
+          - 3120
+          bpp: 32
+          note: single RGBA8888 surface produced by SurfaceFlinger
+      bw_kb_s:
+        bts_read_vote: 1218444
+        surface_traffic: 1053000

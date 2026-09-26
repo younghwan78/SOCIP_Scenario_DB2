@@ -1,0 +1,58 @@
+# SW task timing table. `variants: '*'` = every variant not listed in another
+# group and not in absent_in. Measured overrides go in the project's
+# sw_timing.measured.yaml, not here.
+tasks:
+  network:
+    groups:
+    - id: network-a
+      variants: '*'
+      timing:
+        min_ms: 0.5
+        mean_ms: 1.0
+        max_ms: 3.0
+        start_latency_ref: packet_arrival
+        start_latency_mean_ms: 0.0
+        rate_hz: 60.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
+  sw_demux:
+    groups:
+    - id: sw_demux-a
+      variants: '*'
+      timing:
+        min_ms: 0.3
+        mean_ms: 0.6
+        max_ms: 1.2
+        start_latency_ref: bitstream_available
+        start_latency_mean_ms: 0.5
+        rate_hz: 60.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
+  gpu:
+    groups:
+    - id: gpu-a
+      variants: '*'
+      timing:
+        min_ms: 1.0
+        mean_ms: 2.0
+        max_ms: 4.0
+        start_latency_ref: layers_ready
+        start_latency_mean_ms: 0.5
+        rate_hz: 60.0
+        cpu_affinity: CPUCL2
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
+    absent_in:
+    - game-stream-fhd60-h264
+    - game-stream-fhd60-hevc
+    - game-stream-fhd60-hevc-low-latency
+    - game-stream-uhd60-hevc
+    - game-stream-fhd60-hevc-m2m-scale

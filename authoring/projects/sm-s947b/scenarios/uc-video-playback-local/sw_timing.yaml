@@ -1,0 +1,81 @@
+# SW task timing table. `variants: '*'` = every variant not listed in another
+# group and not in absent_in. Measured overrides go in the project's
+# sw_timing.measured.yaml, not here.
+tasks:
+  drm_dec:
+    groups:
+    - id: drm_dec-a
+      variants: '*'
+      timing:
+        min_ms: 0.4
+        mean_ms: 0.8
+        max_ms: 1.6
+        start_latency_ref: bitstream_available
+        start_latency_mean_ms: 0.3
+        rate_hz: 30.0
+        cpu_affinity: CPUCL1
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
+    - id: drm_dec-b
+      variants:
+      - vplay-local-h264-fhd60-sdr
+      - vplay-local-hevc-uhd60-hdr10
+      - vplay-local-vp9-uhd60-hdr10
+      - vplay-local-av1-uhd60-hdr10
+      - vplay-local-hevc-uhd60-panel60hz
+      timing:
+        min_ms: 0.4
+        mean_ms: 0.8
+        max_ms: 1.6
+        start_latency_ref: bitstream_available
+        start_latency_mean_ms: 0.3
+        rate_hz: 60.0
+        cpu_affinity: CPUCL1
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
+  gpu:
+    groups:
+    - id: gpu-a
+      variants: '*'
+      timing:
+        min_ms: 1.0
+        mean_ms: 2.0
+        max_ms: 4.0
+        start_latency_ref: layers_ready
+        start_latency_mean_ms: 0.5
+        rate_hz: 60.0
+        cpu_affinity: CPUCL2
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
+    absent_in:
+    - vplay-local-h264-fhd30-sdr
+    - vplay-local-h264-fhd60-sdr
+    - vplay-local-hevc-fhd30-sdr
+    - vplay-local-hevc-fhd30-hdr10
+    - vplay-local-hevc-uhd30-sdr
+    - vplay-local-hevc-uhd30-hdr10
+    - vplay-local-hevc-uhd60-hdr10
+    - vplay-local-hevc-uhd30-hdr10plus
+    - vplay-local-vp9-fhd30-sdr
+    - vplay-local-vp9-uhd30-hdr10
+    - vplay-local-vp9-uhd60-hdr10
+    - vplay-local-av1-fhd30-sdr
+    - vplay-local-av1-uhd30-sdr
+    - vplay-local-av1-uhd30-hdr10
+    - vplay-local-av1-uhd60-hdr10
+    - vplay-local-apv-uhd30-422-sdr
+    - vplay-local-apv-uhd30-422-hdr10
+    - vplay-local-hevc-uhd30-sbwc-sdr
+    - vplay-local-hevc-uhd30-sbwcl-sdr
+    - vplay-local-hevc-fhd30-drm
+    - vplay-local-hevc-uhd30-drm
+    - vplay-local-h264-fhd30-panel120hz
+    - vplay-local-hevc-uhd60-panel60hz
+    - vplay-local-hevc-fhd-background
+    - vplay-local-apv-uhd30-422-m2m-scale

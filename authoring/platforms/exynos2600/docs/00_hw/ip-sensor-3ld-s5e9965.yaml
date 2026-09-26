@@ -1,0 +1,164 @@
+id: ip-sensor-3ld-s5e9965
+schema_version: '2.2'
+kind: ip
+category: sensor
+hierarchy:
+  type: simple
+capabilities:
+  operating_modes:
+  - id: mode0
+  - id: mode1
+  - id: mode6
+  - id: mode7
+  - id: mode8
+  - id: mode9
+  - id: mode11
+  - id: mode12
+  - id: mode13
+  - id: mode14
+  properties:
+    place: tele
+    sensor_name: S5K3LD
+    active_size:
+    - 4000
+    - 3000
+    phy_type: DPHY
+    source:
+      path: \\wsl.localhost\Ubuntu\home\neokein\work\12_SM_S947B\exynos\device\erd\erd9965\arch\arm64\boot\dts\samsung\m2s\camera\module_3ld.dtsi
+      sha256: 40ee55efbe63a2a0e6128e0db46b2f70ac632650f26b8af0996e54f765f33973
+    modes:
+      mode0:
+        sensor_name: S5K3LD
+        sensor_size:
+        - 3648
+        - 2736
+        sensor_fps: 60.0
+        sensor_format: BAYER
+        sensor_bitwidth: 12
+        sensor_mipi_speed: 3.084
+        sensor_phy_type: DPHY
+        sensor_lanes: 4
+        dt_mode_index: 0
+        source_line: 95
+      mode1:
+        sensor_name: S5K3LD
+        sensor_size:
+        - 3648
+        - 2736
+        sensor_fps: 60.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 3.084
+        sensor_phy_type: DPHY
+        sensor_lanes: 4
+        dt_mode_index: 1
+        source_line: 111
+      mode6:
+        sensor_name: S5K3LD
+        sensor_size:
+        - 3648
+        - 2736
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 12
+        sensor_mipi_speed: 3.084
+        sensor_phy_type: DPHY
+        sensor_lanes: 4
+        dt_mode_index: 6
+        source_line: 141
+      mode7:
+        sensor_name: S5K3LD
+        sensor_size:
+        - 2000
+        - 1126
+        sensor_fps: 120.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 3.084
+        sensor_phy_type: DPHY
+        sensor_lanes: 4
+        dt_mode_index: 7
+        source_line: 155
+      mode8:
+        sensor_name: S5K3LD
+        sensor_size:
+        - 2000
+        - 1126
+        sensor_fps: 240.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 3.084
+        sensor_phy_type: DPHY
+        sensor_lanes: 4
+        dt_mode_index: 8
+        source_line: 162
+      mode9:
+        sensor_name: S5K3LD
+        sensor_size:
+        - 3648
+        - 2052
+        sensor_fps: 60.0
+        sensor_format: BAYER
+        sensor_bitwidth: 12
+        sensor_mipi_speed: 3.084
+        sensor_phy_type: DPHY
+        sensor_lanes: 4
+        dt_mode_index: 9
+        source_line: 168
+      mode11:
+        sensor_name: S5K3LD
+        sensor_size:
+        - 1824
+        - 1368
+        sensor_fps: 30.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 3.084
+        sensor_phy_type: DPHY
+        sensor_lanes: 4
+        dt_mode_index: 11
+        source_line: 184
+      mode12:
+        sensor_name: S5K3LD
+        sensor_size:
+        - 1824
+        - 1368
+        sensor_fps: 120.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 3.084
+        sensor_phy_type: DPHY
+        sensor_lanes: 4
+        dt_mode_index: 12
+        source_line: 190
+      mode13:
+        sensor_name: S5K3LD
+        sensor_size:
+        - 4000
+        - 3000
+        sensor_fps: 60.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 3.084
+        sensor_phy_type: DPHY
+        sensor_lanes: 4
+        dt_mode_index: 13
+        source_line: 196
+      mode14:
+        sensor_name: S5K3LD
+        sensor_size:
+        - 3648
+        - 2052
+        sensor_fps: 60.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 3.084
+        sensor_phy_type: DPHY
+        sensor_lanes: 4
+        dt_mode_index: 14
+        source_line: 203
+    provenance_status: kernel_declared
+    selection_note: DTS capability is not proof of the shipped board or selected runtime
+      sensor mode.
+compatible_soc:
+- soc-exynos2600

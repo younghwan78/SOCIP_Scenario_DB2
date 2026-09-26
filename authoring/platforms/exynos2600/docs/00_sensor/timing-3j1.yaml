@@ -1,0 +1,175 @@
+id: sensortiming-s5k3j1-seta-19p2
+schema_version: '2.2'
+kind: sensor.timing_profile
+sensor_name: S5K3J1
+revision: setA-19p2-import-20260920
+modes:
+  cis_3648x2736_30fps:
+    active_width: 3648
+    active_height: 2736
+    pixel_clock_hz: 806360000
+    line_length_pck: 9384
+    frame_length_lines: 2864
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1-setA-19p2.h
+      sha256: 07f9e894861da8002e239982a511b1cc72dcdd9840ea78fdb2158bdc47bc469b
+      line: 1346
+      basis: CIS indexed setfile
+      mode_index: 0
+      nominal_fps: 30
+      bits_per_pixel: 10
+      symbol: sensor_3j1_mode_info_A_19p2_3648x2736_30fps
+      mode_name: SENSOR_3J1_3648x2736_30FPS
+  cis_3968x2232_30fps:
+    active_width: 3968
+    active_height: 2232
+    pixel_clock_hz: 806360000
+    line_length_pck: 11328
+    frame_length_lines: 2372
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1-setA-19p2.h
+      sha256: 07f9e894861da8002e239982a511b1cc72dcdd9840ea78fdb2158bdc47bc469b
+      line: 1363
+      basis: CIS indexed setfile
+      mode_index: 1
+      nominal_fps: 30
+      bits_per_pixel: 10
+      symbol: sensor_3j1_mode_info_A_19p2_3968x2232_30fps
+      mode_name: SENSOR_3J1_3968x2232_30FPS
+  cis_3968x2232_60fps:
+    active_width: 3968
+    active_height: 2232
+    pixel_clock_hz: 822840000
+    line_length_pck: 5744
+    frame_length_lines: 2387
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1-setA-19p2.h
+      sha256: 07f9e894861da8002e239982a511b1cc72dcdd9840ea78fdb2158bdc47bc469b
+      line: 1431
+      basis: CIS indexed setfile
+      mode_index: 2
+      nominal_fps: 60
+      bits_per_pixel: 10
+      symbol: sensor_3j1_mode_info_A_19p2_3968x2232_60fps
+      mode_name: SENSOR_3J1_3968x2232_60FPS
+  cis_1984x1120_120fps:
+    active_width: 1984
+    active_height: 1120
+    pixel_clock_hz: 808200000
+    line_length_pck: 5480
+    frame_length_lines: 1222
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1-setA-19p2.h
+      sha256: 07f9e894861da8002e239982a511b1cc72dcdd9840ea78fdb2158bdc47bc469b
+      line: 1397
+      basis: CIS indexed setfile
+      mode_index: 3
+      nominal_fps: 120
+      bits_per_pixel: 10
+      symbol: sensor_3j1_mode_info_A_19p2_1984x1120_120fps
+      mode_name: SENSOR_3J1_1984x1120_120FPS
+  cis_1824x1368_30fps:
+    active_width: 1824
+    active_height: 1368
+    pixel_clock_hz: 808200000
+    line_length_pck: 18752
+    frame_length_lines: 1431
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1-setA-19p2.h
+      sha256: 07f9e894861da8002e239982a511b1cc72dcdd9840ea78fdb2158bdc47bc469b
+      line: 1380
+      basis: CIS indexed setfile
+      mode_index: 4
+      nominal_fps: 30
+      bits_per_pixel: 10
+      symbol: sensor_3j1_mode_info_A_19p2_1824x1368_30fps
+      mode_name: SENSOR_3J1_1824x1368_30FPS
+  cis_1984x1120_30fps:
+    active_width: 1984
+    active_height: 1120
+    pixel_clock_hz: 808200000
+    line_length_pck: 5480
+    frame_length_lines: 4916
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1-setA-19p2.h
+      sha256: 07f9e894861da8002e239982a511b1cc72dcdd9840ea78fdb2158bdc47bc469b
+      line: 1448
+      basis: CIS indexed setfile
+      mode_index: 5
+      nominal_fps: 30
+      bits_per_pixel: 10
+      symbol: sensor_3j1_mode_info_A_19p2_1984x1120_30fps
+      mode_name: SENSOR_3J1_1984x1120_30FPS
+  cis_912x684_120fps:
+    active_width: 912
+    active_height: 684
+    pixel_clock_hz: 808200000
+    line_length_pck: 8984
+    frame_length_lines: 746
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1-setA-19p2.h
+      sha256: 07f9e894861da8002e239982a511b1cc72dcdd9840ea78fdb2158bdc47bc469b
+      line: 1414
+      basis: CIS indexed setfile
+      mode_index: 6
+      nominal_fps: 120
+      bits_per_pixel: 10
+      symbol: sensor_3j1_mode_info_A_19p2_912x684_120fps
+      mode_name: SENSOR_3J1_912x684_120FPS
+  cis_3280x2268_30fps:
+    active_width: 3280
+    active_height: 2268
+    pixel_clock_hz: 806360000
+    line_length_pck: 9384
+    frame_length_lines: 2864
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1-setA-19p2.h
+      sha256: 07f9e894861da8002e239982a511b1cc72dcdd9840ea78fdb2158bdc47bc469b
+      line: 1465
+      basis: CIS indexed setfile
+      mode_index: 7
+      nominal_fps: 30
+      bits_per_pixel: 10
+      symbol: sensor_3j1_mode_info_A_19p2_3280x2268_30fps
+      mode_name: SENSOR_3J1_3280x2268_30FPS
+  cis_1520x1136_30fps:
+    active_width: 1520
+    active_height: 1136
+    pixel_clock_hz: 808200000
+    line_length_pck: 5480
+    frame_length_lines: 4916
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1-setA-19p2.h
+      sha256: 07f9e894861da8002e239982a511b1cc72dcdd9840ea78fdb2158bdc47bc469b
+      line: 1482
+      basis: CIS indexed setfile
+      mode_index: 8
+      nominal_fps: 30
+      bits_per_pixel: 10
+      symbol: sensor_3j1_mode_info_A_19p2_1520x1136_30fps
+      mode_name: SENSOR_3J1_1520x1136_30FPS
+  cis_1640x924_30fps:
+    active_width: 1640
+    active_height: 924
+    pixel_clock_hz: 808200000
+    line_length_pck: 5480
+    frame_length_lines: 4916
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1-setA-19p2.h
+      sha256: 07f9e894861da8002e239982a511b1cc72dcdd9840ea78fdb2158bdc47bc469b
+      line: 1499
+      basis: CIS indexed setfile
+      mode_index: 9
+      nominal_fps: 30
+      bits_per_pixel: 10
+      symbol: sensor_3j1_mode_info_A_19p2_1640x924_30fps
+      mode_name: SENSOR_3J1_1640x924_30FPS
+provenance:
+  selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+  setfile:
+    path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1-setA-19p2.h
+    sha256: 07f9e894861da8002e239982a511b1cc72dcdd9840ea78fdb2158bdc47bc469b
+  driver:
+    path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-3j1.c
+    sha256: 9cc0f072d3cdedbff0657cd87f2352d7122e395da52a9ca5f8642f18ce7ef657
+  mode_table: sensor_3j1_mode_infos_A_19p2

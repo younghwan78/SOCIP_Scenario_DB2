@@ -1,0 +1,136 @@
+id: ip-m2m-scaler-s5e9965
+schema_version: '2.2'
+kind: ip
+category: display
+capabilities:
+  operating_modes:
+  - id: Normal
+  - id: Rotated
+  - id: SBWC
+  properties:
+    ip_group: MSCL
+    hierarchy_group: M2M
+    rtl_version: Exynos M2M scaler (samsung,exynos5-scaler)
+    role: Memory-to-memory scale / CSC / rotate / format convert. The DPU falls back here for YUV422-444 sources, out-of-range
+      scale ratios and layer pre-composition.
+    votf_targets:
+    - drmdecon0
+    votf_note: vOTF to DECON0 lets MSCL feed the display without a DRAM round trip.
+    modules:
+    - name: MSCL_RDMA
+      type: DMA
+      direction: read
+      provenance_status: logical_endpoint
+    - name: MSCL_WDMA
+      type: DMA
+      direction: write
+      provenance_status: logical_endpoint
+    - name: MSCL_VOTF_OUT
+      type: DMA
+      direction: write
+      provenance_status: logical_endpoint
+      consumer: DPU DECON0
+      note: vOTF, no DRAM traffic
+    kernel_config:
+    - CONFIG_VIDEO_EXYNOS_SCALER
+    sources:
+    - path: exynos/soc-series/t-android16/arch/arm64/boot/dts/exynos/s5e9965-scaler.dtsi
+      sha256: d17351ed97ad406b6b527c95a46f779635101c8619a6c3c46bda0c99916b47df
+    driver_review: S5E9965 platform (non-camera) driver review 2026-09-16
+    provenance_status: kernel_declared
+    correction: 'This IP did not exist in the fixture set: every `m2m_scaler` node pointed at ip-cpu-s5e9965, so M2M fallback
+      traffic and clock were invisible.'
+  supported_features:
+    bitdepth:
+    - 8
+    - 10
+    compression:
+    - COMP_OFF
+    - COMP_SBWC_LOSSLESS
+    - COMP_SBWC_LOSSY
+    scale: true
+    crop: true
+    rotate: true
+    csc: true
+  perf_model:
+    source: kernel_dt
+    reference: 'exynos/soc-series/t-android16/arch/arm64/boot/dts/exynos/s5e9965-scaler.dtsi: mscl_ppc_table / mscl_qos_table
+      / mscl_bw_ref'
+    formula:
+    - pixels       = max(src_w*src_h, dst_w*dst_h)
+    - cycles       = pixels / ppc(bpp, rotated)
+    - req_freq_khz = cycles * fps / 1000
+    - pick the lowest mscl_qos_table row whose freq_mscl_khz >= req_freq_khz
+    ppc_table:
+    - bpp: 12
+      format: YUV420
+      ppc: 4.89
+      ppc_rotated: 4.88
+    - bpp: 16
+      format: YUV422
+      ppc: 3.51
+      ppc_rotated: 3.47
+    - bpp: 24
+      format: P010
+      ppc: 3.09
+      ppc_rotated: 3.01
+    - bpp: 32
+      format: RGB/R210
+      ppc: 2.54
+      ppc_rotated: 2.27
+    - bpp: 32
+      format: RGB/R210_alt
+      ppc: 1.84
+      ppc_rotated: 1.83
+    - bpp: 100
+      format: SBWC
+      ppc: 4.8
+      ppc_rotated: 4.79
+    qos_table:
+    - freq_mif_khz: 0
+      freq_int_khz: 800000
+      freq_mscl_khz: 800000
+    - freq_mif_khz: 0
+      freq_int_khz: 664000
+      freq_mscl_khz: 664000
+    - freq_mif_khz: 0
+      freq_int_khz: 533000
+      freq_mscl_khz: 533000
+    - freq_mif_khz: 0
+      freq_int_khz: 400000
+      freq_mscl_khz: 400000
+    - freq_mif_khz: 0
+      freq_int_khz: 350000
+      freq_mscl_khz: 332000
+    - freq_mif_khz: 0
+      freq_int_khz: 267000
+      freq_mscl_khz: 267000
+    - freq_mif_khz: 0
+      freq_int_khz: 200000
+      freq_mscl_khz: 160000
+    - freq_mif_khz: 0
+      freq_int_khz: 133000
+      freq_mscl_khz: 88000
+    mif_ref_khz: 676000
+    bw_ref_kb_s: 6075000
+    bw_ref_note: 'mscl_bw_ref/mscl_mif_ref is the driver''s reference operating point: 6,075,000 KB/s of MSCL traffic is what
+      justifies a 676 MHz MIF vote. Scale linearly for the actual traffic.'
+  bw_model:
+    source: derived
+    unit: KB/s
+    formula:
+    - read_bw  = src_w * src_h * src_bpp/8 * fps / 1024
+    - write_bw = dst_w * dst_h * dst_bpp/8 * fps / 1024   (0 when the output is vOTF)
+    - compressed sources scale by soc.compression_modes[...].comp_ratio
+    note: MSCL has no per-frame BW table in the DT; traffic is the plain surface size.
+  sim:
+    hw_name: MSCL
+    source: kernel_dt_model
+    source_note: PPC table and operating points are S5E9965 DT values. Core power coefficient unavailable.
+    vdd: VDD_INT
+    dvfs_group: INT
+    devfreq_domain: DEVFREQ_INT
+hierarchy:
+  type: simple
+compatible_soc:
+- soc-exynos2600

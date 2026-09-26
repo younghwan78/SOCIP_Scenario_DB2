@@ -1,0 +1,64 @@
+id: sw-vendor-v1.2.3
+schema_version: "2.2"
+kind: sw_profile
+
+metadata:
+  baseline_family: vendor
+  version: "1.2.3"
+  release_date: "2026-03-15"
+  release_type: production
+  compatible_soc:
+    - soc-exynos2600
+  git_branch: "release/thetis-sm-s947b-v1.2.3"
+  git_commit_sha: "exynos2600-demo"
+
+components:
+  hal:
+    - domain: camera
+      ref: hal-cam-v4.5
+    - domain: codec
+      ref: hal-codec-v3.1
+    - domain: display
+      ref: hal-disp-v2.7
+    - domain: audio
+      ref: hal-audio-v2.0
+  kernel:
+    ref: kernel-6.12-android16
+    config_deltas:
+      - "CONFIG_EXYNOS_CAM_LLC=y"
+      - "CONFIG_EXYNOS_THETIS_BOARD_SM_S947B=y"
+  firmware:
+    - target: isp
+      ref: fw-isp-0x60
+    - target: npu
+      ref: fw-npu-0x31
+    - target: mfc
+      ref: fw-mfc-0x18
+
+feature_flags:
+  camera_zsl: enabled
+  camera_ois_hw: enabled
+  camera_super_hdr: enabled
+  camera_eis_sw_task: enabled
+  camera_npu_solution: enabled
+  LLC_dynamic_allocation: enabled
+  LLC_per_ip_partition: enabled
+  ddr_governor: performance
+  TNR_early_abort: enabled
+  DNS_adaptive_strength: enabled
+  ISP_bypass_for_preview: disabled
+  MFC_hwae: enabled
+  MFC_b_frame: enabled
+  APV_recording: enabled
+  DPU_write_back_cache: disabled
+  DPU_compositing_mode: layered
+  audio_low_latency_path: enabled
+  preview_buffer_count: 8
+  capture_buffer_count: 4
+
+compatibility:
+  min_compatible_version: "v1.2.0"
+  breaking_changes:
+    - area: camera.llc_policy
+      description: "LLC allocation policy uses per-IP partitioning on Thetis SM-S947B."
+      regression_risk: medium

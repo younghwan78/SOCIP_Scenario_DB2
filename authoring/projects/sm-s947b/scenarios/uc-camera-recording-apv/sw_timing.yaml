@@ -1,0 +1,67 @@
+# SW task timing table. `variants: '*'` = every variant not listed in another
+# group and not in absent_in. Measured overrides go in the project's
+# sw_timing.measured.yaml, not here.
+tasks:
+  post_crta:
+    groups:
+    - id: post_crta-a
+      variants: '*'
+      timing:
+        min_ms: 0.1
+        mean_ms: 0.3
+        max_ms: 0.5
+        start_jitter_mean_ms: 1.0
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal measurements.
+  pre_me_rta:
+    groups:
+    - id: pre_me_rta-a
+      variants: '*'
+      timing:
+        min_ms: 2.5
+        mean_ms: 3.0
+        max_ms: 4.0
+        includes_hw_nodes:
+        - lme
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal measurements.
+  post_irta:
+    groups:
+    - id: post_irta-a
+      variants: '*'
+      timing:
+        min_ms: 3.0
+        mean_ms: 4.0
+        max_ms: 5.6
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal measurements.
+  eis:
+    groups:
+    - id: eis-a
+      variants: '*'
+      timing:
+        min_ms: 2.5
+        mean_ms: 3.0
+        max_ms: 6.0
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal measurements.
+  mpeg_writer:
+    groups:
+    - id: mpeg_writer-a
+      variants: '*'
+      timing:
+        min_ms: 2
+        mean_ms: 4
+        max_ms: 8
+        value_source: assumed
+        source_note: Engineering assumption approved for fixture exploration; replace with internal measurements.
+  storage_write:
+    groups:
+    - id: storage_write-a
+      variants: '*'
+      timing:
+        min_ms: 4
+        mean_ms: 8
+        max_ms: 16
+        value_source: assumed
+        source_note: Engineering assumption approved for fixture exploration; replace with internal measurements.

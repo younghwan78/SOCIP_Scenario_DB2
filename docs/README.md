@@ -45,6 +45,7 @@
 - [DB Data Guide](guides/import/db-data-guide.md)
 - [Legacy Fixture Import Guide](guides/import/legacy-data-import-guide.md)
 - [CDGM Import Guide](guides/import/cdgm-import-guide-ko.md)
+- [Layered Authoring Guide (platform/project 상속, 2700/2800 적용)](guides/import/authoring-layers-guide-ko.md)
 - [Exploration Fixture Guide](guides/exploration/exploration-fixture-guide-ko.md)
 - [실측 profiling과 기존 scenario 탐색](guides/profiling-and-scenario-exploration.md)
 - [Measurement Import Guide](guides/measurement/measurement-import-guide-ko.md)

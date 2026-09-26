@@ -1,0 +1,91 @@
+# Compact variants: root entries are complete; `extends: <id>` entries are a
+# deep-merge patch over that variant (`$unset: [keys]` removes keys).
+# node sim width/height come from sizes.yaml; sw_timing from sw_timing.yaml.
+- id: audio-stream-aac-screen-on
+  severity: light
+  design_conditions:
+    format: AAC_LC
+    bitrate_kbps: 320
+    screen_on: true
+    output: speaker
+    panel_resolution: 1440x3120
+    panel_fps_hz: 60
+    sw_timing_source: assumed
+    bitrate_mbps: 0.32
+    bitrate_value_source: assumed
+  routing_switch:
+    disabled_nodes:
+    - bt_codec
+    disabled_edges:
+    - from: audio_hal
+      to: bt_codec
+  node_configs:
+    network:
+      sim:
+        bitrate_mbps: 0.32
+      bw_kb_s:
+        write: 40
+      model_ref: ip-cpu-s5e9965.capabilities.sw_task_model
+      bw_note: Link traffic landing in DRAM through the modem/WiFi driver. It is not an IP DMA port; charge it to MIF but
+        not to a codec or display IP.
+    abox:
+      selected_mode: Normal
+      sim:
+        sample_rate_khz: 48.0
+        bit_depth: 16
+        channels: 2
+        playback_streams: 1
+        capture_streams: 0
+        offload: false
+        output: speaker
+      bw_kb_s:
+        read: 188
+        write: 0
+      dvfs:
+        aud_freq_khz: 400000
+        value_source: assumed
+        note: AUD operating point is not derivable from design_conditions; lowest level assumed for offload, a mid level for
+          the CPU-fed path.
+      model_ref: ip-abox-s5e9965.capabilities.bw_model / dvfs_model
+    audio_hal:
+      executes_on: ip-abox-s5e9965
+    speaker:
+      executes_on: ip-abox-s5e9965
+    bt_codec:
+      executes_on: ip-abox-s5e9965
+- id: audio-stream-aac-screen-off
+  extends: audio-stream-aac-screen-on
+  design_conditions:
+    screen_on: false
+  node_configs:
+    abox:
+      selected_mode: Offload
+      sim:
+        offload: true
+      dvfs:
+        aud_freq_khz: 200000
+- id: audio-stream-bt-screen-off
+  extends: audio-stream-aac-screen-off
+  design_conditions:
+    $unset:
+    - bitrate_kbps
+    - bitrate_mbps
+    - bitrate_value_source
+    output: Bluetooth
+  routing_switch:
+    disabled_nodes:
+    - speaker
+    disabled_edges:
+    - from: audio_hal
+      to: speaker
+  node_configs:
+    network:
+      $unset:
+      - bw_kb_s
+      - model_ref
+      sim:
+        bitrate_mbps: null
+      note: no bitrate in design_conditions; set bitrate_mbps or bitrate_kbps to model this traffic
+    abox:
+      sim:
+        output: Bluetooth

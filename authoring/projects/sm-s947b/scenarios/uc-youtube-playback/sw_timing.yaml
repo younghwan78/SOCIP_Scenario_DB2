@@ -1,0 +1,101 @@
+# SW task timing table. `variants: '*'` = every variant not listed in another
+# group and not in absent_in. Measured overrides go in the project's
+# sw_timing.measured.yaml, not here.
+tasks:
+  network:
+    groups:
+    - id: network-a
+      variants: '*'
+      timing:
+        min_ms: 0.5
+        mean_ms: 1.0
+        max_ms: 3.0
+        start_latency_ref: packet_arrival
+        start_latency_mean_ms: 0.0
+        rate_hz: 30.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
+    - id: network-b
+      variants:
+      - yt-1080p60-h264-sdr
+      - yt-1080p60-vp9-hdr10
+      - yt-4k60-vp9-hdr10
+      - yt-4k60-av1-hdr10
+      timing:
+        min_ms: 0.5
+        mean_ms: 1.0
+        max_ms: 3.0
+        start_latency_ref: packet_arrival
+        start_latency_mean_ms: 0.0
+        rate_hz: 60.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
+  sw_demux:
+    groups:
+    - id: sw_demux-a
+      variants: '*'
+      timing:
+        min_ms: 0.3
+        mean_ms: 0.6
+        max_ms: 1.2
+        start_latency_ref: bitstream_available
+        start_latency_mean_ms: 0.5
+        rate_hz: 30.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
+    - id: sw_demux-b
+      variants:
+      - yt-1080p60-h264-sdr
+      - yt-1080p60-vp9-hdr10
+      - yt-4k60-vp9-hdr10
+      - yt-4k60-av1-hdr10
+      timing:
+        min_ms: 0.3
+        mean_ms: 0.6
+        max_ms: 1.2
+        start_latency_ref: bitstream_available
+        start_latency_mean_ms: 0.5
+        rate_hz: 60.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
+  gpu:
+    groups:
+    - id: gpu-a
+      variants: '*'
+      timing:
+        min_ms: 1.0
+        mean_ms: 2.0
+        max_ms: 4.0
+        start_latency_ref: layers_ready
+        start_latency_mean_ms: 0.5
+        rate_hz: 60.0
+        cpu_affinity: CPUCL2
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.
+    absent_in:
+    - yt-1080p30-h264-sdr
+    - yt-1080p60-h264-sdr
+    - yt-1080p30-vp9-sdr
+    - yt-1080p60-vp9-hdr10
+    - yt-4k30-vp9-hdr10
+    - yt-4k60-vp9-hdr10
+    - yt-1080p30-av1-sdr
+    - yt-4k30-av1-sdr
+    - yt-4k30-av1-hdr10
+    - yt-4k60-av1-hdr10
+    - yt-1080p-audio-bg
+    - yt-4k30-av1-m2m-scale

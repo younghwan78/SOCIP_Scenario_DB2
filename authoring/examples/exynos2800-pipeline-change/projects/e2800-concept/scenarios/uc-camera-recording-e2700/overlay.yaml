@@ -1,0 +1,18 @@
+# Pipeline change: rear MTNR -> MSNR -> YUVP becomes NR(v2) -> YUVP.
+# The directory name is the PARENT scenario id; ids below are already in the child namespace.
+kind: authoring.scenario_overlay
+pipeline:
+  remove_nodes: [msnr]                 # drops mtnr->msnr and msnr->yuvp edges
+  set_nodes:
+    mtnr:
+      ip_ref: ip-nr-v2-exynos2800c     # re-bind the logical NR stage to the new IP
+  add_edges:
+  - from: mtnr
+    to: yuvp
+    type: OTF
+    port_pairs:
+    - src: COUTFIFO
+      dst: CINFIFO
+# Variants still configure `msnr` (node_configs / disabled_nodes). true = drop and report them
+# in the compile report ("impact"); false = fail with the list (review before accepting).
+prune_missing_nodes: true

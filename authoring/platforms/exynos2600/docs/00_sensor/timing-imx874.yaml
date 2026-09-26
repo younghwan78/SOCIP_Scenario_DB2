@@ -1,0 +1,1471 @@
+id: sensortiming-imx874-seta-19p2
+schema_version: '2.2'
+kind: sensor.timing_profile
+sensor_name: IMX874
+revision: setA-19p2-import-20260920
+modes:
+  cis_4000x3000_30fps_10bit:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 1664000000
+    line_length_pck: 8896
+    frame_length_lines: 6213
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 10591
+      basis: CIS indexed setfile
+      mode_index: 0
+      nominal_fps: 30
+      bits_per_pixel: 10
+      symbol: sensor_imx874_mode_info_A_19p2_4000x3000_30fps_10bit
+      mode_name: A01_Full_4000x3000_r10_30
+  cis_4000x3000_60fps_10bit:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 1664000000
+    line_length_pck: 8896
+    frame_length_lines: 3106
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 10609
+      basis: CIS indexed setfile
+      mode_index: 1
+      nominal_fps: 60
+      bits_per_pixel: 10
+      symbol: sensor_imx874_mode_info_A_19p2_4000x3000_60fps_10bit
+      mode_name: A01_Full_4000x3000_r10_60
+  cis_4000x3000_60fps_12bit:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 1664000000
+    line_length_pck: 8896
+    frame_length_lines: 3106
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 10628
+      basis: CIS indexed setfile
+      mode_index: 2
+      nominal_fps: 60
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_4000x3000_60fps_12bit
+      mode_name: A01_Full_4000x3000_r12_60
+  cis_4000x3000_24fps_10bit_ln4:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 1664000000
+    line_length_pck: 22296
+    frame_length_lines: 3100
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 10646
+      basis: CIS indexed setfile
+      mode_index: 3
+      nominal_fps: 24
+      bits_per_pixel: 10
+      symbol: sensor_imx874_mode_info_A_19p2_4000x3000_24fps_10bit_ln4
+      mode_name: A03_Full_LN4_4000x3000_r10_24
+  cis_4000x3000_30fps_12bit_dsg_pdhg:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 1664000000
+    line_length_pck: 12360
+    frame_length_lines: 4475
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 10682
+      basis: CIS indexed setfile
+      mode_index: 4
+      nominal_fps: 30
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_4000x3000_30fps_12bit_dsg_pdhg
+      mode_name: A04_Full_DSG_4000x3000_r12_30_pdhg
+  cis_4000x3000_30fps_12bit_dsg_pdlg:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 1664000000
+    line_length_pck: 11704
+    frame_length_lines: 4705
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 10700
+      basis: CIS indexed setfile
+      mode_index: 5
+      nominal_fps: 30
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_4000x3000_30fps_12bit_dsg_pdlg
+      mode_name: A04_Full_DSG_4000x3000_r12_30_pdlg
+  cis_4000x3000_24fps_12bit_dsg_ln2_pdhg:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 1664000000
+    line_length_pck: 19216
+    frame_length_lines: 3603
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 10718
+      basis: CIS indexed setfile
+      mode_index: 6
+      nominal_fps: 24
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_4000x3000_24fps_12bit_dsg_ln2_pdhg
+      mode_name: A05_Full_DSG_LN2_4000x3000_r12_24_pdhg
+  cis_4000x3000_24fps_12bit_dsg_ln2_pdlg:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 1664000000
+    line_length_pck: 17328
+    frame_length_lines: 3980
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 10736
+      basis: CIS indexed setfile
+      mode_index: 7
+      nominal_fps: 24
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_4000x3000_24fps_12bit_dsg_ln2_pdlg
+      mode_name: A05_Full_DSG_LN2_4000x3000_r12_24_pdlg
+  cis_4000x3000_15fps_12bit_dsg_ln4_pdhg:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 1664000000
+    line_length_pck: 28160
+    frame_length_lines: 3926
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 10754
+      basis: CIS indexed setfile
+      mode_index: 8
+      nominal_fps: 15
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_4000x3000_15fps_12bit_dsg_ln4_pdhg
+      mode_name: A06_Full_DSG_LN4_4000x3000_r12_15_pdhg
+  cis_4000x3000_15fps_12bit_dsg_ln4_pdlg:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 1664000000
+    line_length_pck: 25888
+    frame_length_lines: 4280
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 10772
+      basis: CIS indexed setfile
+      mode_index: 9
+      nominal_fps: 15
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_4000x3000_15fps_12bit_dsg_ln4_pdlg
+      mode_name: A06_Full_DSG_LN4_4000x3000_r12_15_pdlg
+  cis_4000x3000_30fps_12bit_ad11:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 1664000000
+    line_length_pck: 11856
+    frame_length_lines: 4671
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 10790
+      basis: CIS indexed setfile
+      mode_index: 10
+      nominal_fps: 30
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_4000x3000_30fps_12bit_AD11
+      mode_name: A07_Full_AD11_4000x3000_r12_30
+  cis_4000x2252_60fps_10bit:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 1664000000
+    line_length_pck: 8896
+    frame_length_lines: 3106
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 10808
+      basis: CIS indexed setfile
+      mode_index: 11
+      nominal_fps: 60
+      bits_per_pixel: 10
+      symbol: sensor_imx874_mode_info_A_19p2_4000x2252_60fps_10bit
+      mode_name: A21_Full_4000x2252_r10_60
+  cis_4000x2252_60fps_12bit:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 1664000000
+    line_length_pck: 10680
+    frame_length_lines: 2580
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 10826
+      basis: CIS indexed setfile
+      mode_index: 12
+      nominal_fps: 60
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_4000x2252_60fps_12bit
+      mode_name: A21_Full_4000x2252_r12_60
+  cis_4000x2252_30fps_10bit_ln4:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 1664000000
+    line_length_pck: 22296
+    frame_length_lines: 2480
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 10844
+      basis: CIS indexed setfile
+      mode_index: 13
+      nominal_fps: 30
+      bits_per_pixel: 10
+      symbol: sensor_imx874_mode_info_A_19p2_4000x2252_30fps_10bit_ln4
+      mode_name: A23_Full_LN4_4000x2252_r10_30
+  cis_4000x2252_60fps_12bit_ad11:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 1664000000
+    line_length_pck: 11856
+    frame_length_lines: 2335
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 10862
+      basis: CIS indexed setfile
+      mode_index: 14
+      nominal_fps: 60
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_4000x2252_60fps_12bit_AD11
+      mode_name: A27_Full_AD11_4000x2252_r12_60
+  cis_2000x1500_120fps_10bit:
+    active_width: 2000
+    active_height: 1500
+    pixel_clock_hz: 1664000000
+    line_length_pck: 4136
+    frame_length_lines: 3332
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 10880
+      basis: CIS indexed setfile
+      mode_index: 15
+      nominal_fps: 120
+      bits_per_pixel: 10
+      symbol: sensor_imx874_mode_info_A_19p2_2000x1500_120fps_10bit
+      mode_name: C01_V2H2_2000x1500_r10_120
+  cis_4000x2252_30fps_12bit_dsg_pdhg:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 1664000000
+    line_length_pck: 12360
+    frame_length_lines: 4475
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 10898
+      basis: CIS indexed setfile
+      mode_index: 16
+      nominal_fps: 30
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_4000x2252_30fps_12bit_dsg_pdhg
+      mode_name: A24_Full_DSG_4000x2252_r12_30_pdhg
+  cis_4000x2252_60fps_12bit_dsg_pdlg:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 1664000000
+    line_length_pck: 11704
+    frame_length_lines: 2352
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 10916
+      basis: CIS indexed setfile
+      mode_index: 17
+      nominal_fps: 60
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_4000x2252_60fps_12bit_dsg_pdlg
+      mode_name: A24_Full_DSG_4000x2252_r12_60_pdlg
+  cis_4000x2252_30fps_12bit_dsg_ln2_pdhg:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 1664000000
+    line_length_pck: 19216
+    frame_length_lines: 2882
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 10934
+      basis: CIS indexed setfile
+      mode_index: 18
+      nominal_fps: 30
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_4000x2252_30fps_12bit_dsg_ln2_pdhg
+      mode_name: A25_Full_DSG_LN2_4000x2252_r12_30_pdhg
+  cis_4000x2252_30fps_12bit_dsg_ln2_pdlg:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 1664000000
+    line_length_pck: 17328
+    frame_length_lines: 3184
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 10952
+      basis: CIS indexed setfile
+      mode_index: 19
+      nominal_fps: 30
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_4000x2252_30fps_12bit_dsg_ln2_pdlg
+      mode_name: A25_Full_DSG_LN2_4000x2252_r12_30_pdlg
+  cis_4000x2252_24fps_12bit_dsg_ln4_pdhg:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 1664000000
+    line_length_pck: 28160
+    frame_length_lines: 2453
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 10970
+      basis: CIS indexed setfile
+      mode_index: 20
+      nominal_fps: 24
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_4000x2252_24fps_12bit_dsg_ln4_pdhg
+      mode_name: A26_Full_DSG_LN4_4000x2252_r12_24_pdhg
+  cis_4000x2252_24fps_12bit_dsg_ln4_pdlg:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 1664000000
+    line_length_pck: 25888
+    frame_length_lines: 2675
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 10988
+      basis: CIS indexed setfile
+      mode_index: 21
+      nominal_fps: 24
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_4000x2252_24fps_12bit_dsg_ln4_pdlg
+      mode_name: A26_Full_DSG_LN4_4000x2252_r12_24_pdlg
+  cis_4000x2252_30fps_10bit_ln4_pdnoln:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 1664000000
+    line_length_pck: 20776
+    frame_length_lines: 2666
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11006
+      basis: CIS indexed setfile
+      mode_index: 22
+      nominal_fps: 30
+      bits_per_pixel: 10
+      symbol: sensor_imx874_mode_info_A_19p2_4000x2252_30fps_10bit_ln4_pdnoln
+      mode_name: A23_Full_LN4_4000x2252_r10_30_pdnoln
+  cis_3392x2544_60fps_10bit:
+    active_width: 3392
+    active_height: 2544
+    pixel_clock_hz: 1664000000
+    line_length_pck: 8896
+    frame_length_lines: 3106
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11042
+      basis: CIS indexed setfile
+      mode_index: 23
+      nominal_fps: 60
+      bits_per_pixel: 10
+      symbol: sensor_imx874_mode_info_A_19p2_3392x2544_60fps_10bit
+      mode_name: A01_Full_3392x2544_r10_60
+  cis_3392x2544_60fps_12bit:
+    active_width: 3392
+    active_height: 2544
+    pixel_clock_hz: 1664000000
+    line_length_pck: 8896
+    frame_length_lines: 3106
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11060
+      basis: CIS indexed setfile
+      mode_index: 24
+      nominal_fps: 60
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_3392x2544_60fps_12bit
+      mode_name: A01_Full_3392x2544_r12_60
+  cis_3392x1908_60fps_10bit:
+    active_width: 3392
+    active_height: 1908
+    pixel_clock_hz: 1664000000
+    line_length_pck: 8896
+    frame_length_lines: 3106
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11240
+      basis: CIS indexed setfile
+      mode_index: 25
+      nominal_fps: 60
+      bits_per_pixel: 10
+      symbol: sensor_imx874_mode_info_A_19p2_3392x1908_60fps_10bit
+      mode_name: A21_Full_3392x1908_r10_60
+  cis_3392x1908_60fps_12bit:
+    active_width: 3392
+    active_height: 1908
+    pixel_clock_hz: 1664000000
+    line_length_pck: 10680
+    frame_length_lines: 2580
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11258
+      basis: CIS indexed setfile
+      mode_index: 26
+      nominal_fps: 60
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_3392x1908_60fps_12bit
+      mode_name: A21_Full_3392x1908_r12_60
+  cis_1696x1272_30fps_10bit:
+    active_width: 1696
+    active_height: 1272
+    pixel_clock_hz: 1664000000
+    line_length_pck: 4136
+    frame_length_lines: 13332
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11438
+      basis: CIS indexed setfile
+      mode_index: 27
+      nominal_fps: 30
+      bits_per_pixel: 10
+      symbol: sensor_imx874_mode_info_A_19p2_1696x1272_30fps_10bit
+      mode_name: C01_V2H2_1696x1272_r10_30
+  cis_2000x1124_30fps_10bit:
+    active_width: 2000
+    active_height: 1124
+    pixel_clock_hz: 1664000000
+    line_length_pck: 4136
+    frame_length_lines: 13332
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11456
+      basis: CIS indexed setfile
+      mode_index: 28
+      nominal_fps: 30
+      bits_per_pixel: 10
+      symbol: sensor_imx874_mode_info_A_19p2_2000x1124_30fps_10bit
+      mode_name: C01_V2H2_2000x1124_r10_30
+  cis_1696x954_30fps_10bit:
+    active_width: 1696
+    active_height: 954
+    pixel_clock_hz: 1664000000
+    line_length_pck: 4136
+    frame_length_lines: 13332
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11474
+      basis: CIS indexed setfile
+      mode_index: 29
+      nominal_fps: 30
+      bits_per_pixel: 10
+      symbol: sensor_imx874_mode_info_A_19p2_1696x954_30fps_10bit
+      mode_name: C01_V2H2_1696x954_r10_30
+  cis_4000x2252_30fps_12bit_ln4_pdnoln:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 1664000000
+    line_length_pck: 20776
+    frame_length_lines: 2666
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11582
+      basis: CIS indexed setfile
+      mode_index: 30
+      nominal_fps: 30
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_4000x2252_30fps_12bit_ln4_pdnoln
+      mode_name: A23_Full_LN4_4000x2252_r12_30_pdnoln
+  cis_3056x2296_30fps_10bit:
+    active_width: 3056
+    active_height: 2296
+    pixel_clock_hz: 1664000000
+    line_length_pck: 8896
+    frame_length_lines: 6213
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11744
+      basis: CIS indexed setfile
+      mode_index: 31
+      nominal_fps: 30
+      bits_per_pixel: 10
+      symbol: sensor_imx874_mode_info_A_19p2_3056x2296_30fps_10bit
+      mode_name: A01_Full_3056x2296_r10_30
+  cis_3056x2296_60fps_10bit:
+    active_width: 3056
+    active_height: 2296
+    pixel_clock_hz: 1664000000
+    line_length_pck: 8896
+    frame_length_lines: 3106
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11762
+      basis: CIS indexed setfile
+      mode_index: 32
+      nominal_fps: 60
+      bits_per_pixel: 10
+      symbol: sensor_imx874_mode_info_A_19p2_3056x2296_60fps_10bit
+      mode_name: A01_Full_3056x2296_r10_60
+  cis_3056x2296_60fps_12bit:
+    active_width: 3056
+    active_height: 2296
+    pixel_clock_hz: 1664000000
+    line_length_pck: 8896
+    frame_length_lines: 3106
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11781
+      basis: CIS indexed setfile
+      mode_index: 33
+      nominal_fps: 60
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_3056x2296_60fps_12bit
+      mode_name: A01_Full_3056x2296_r12_60
+  cis_3056x2296_30fps_12bit_ln2:
+    active_width: 3056
+    active_height: 2296
+    pixel_clock_hz: 1664000000
+    line_length_pck: 14872
+    frame_length_lines: 3720
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11799
+      basis: CIS indexed setfile
+      mode_index: 34
+      nominal_fps: 30
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_3056x2296_30fps_12bit_ln2
+      mode_name: A02_Full_LN2_3056x2296_r12_30
+  cis_3056x2296_24fps_10bit_ln4:
+    active_width: 3056
+    active_height: 2296
+    pixel_clock_hz: 1664000000
+    line_length_pck: 22296
+    frame_length_lines: 3100
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11817
+      basis: CIS indexed setfile
+      mode_index: 35
+      nominal_fps: 24
+      bits_per_pixel: 10
+      symbol: sensor_imx874_mode_info_A_19p2_3056x2296_24fps_10bit_ln4
+      mode_name: A03_Full_LN4_3056x2296_r10_24
+  cis_3056x2296_24fps_10bit_ln4_pdnoln:
+    active_width: 3056
+    active_height: 2296
+    pixel_clock_hz: 1664000000
+    line_length_pck: 20776
+    frame_length_lines: 3333
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11835
+      basis: CIS indexed setfile
+      mode_index: 36
+      nominal_fps: 24
+      bits_per_pixel: 10
+      symbol: sensor_imx874_mode_info_A_19p2_3056x2296_24fps_10bit_ln4_pdnoln
+      mode_name: A03_Full_LN4_3056x2296_r10_24_pdnoln
+  cis_3056x2296_24fps_12bit_ln4:
+    active_width: 3056
+    active_height: 2296
+    pixel_clock_hz: 1664000000
+    line_length_pck: 22296
+    frame_length_lines: 3100
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11853
+      basis: CIS indexed setfile
+      mode_index: 37
+      nominal_fps: 24
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_3056x2296_24fps_12bit_ln4
+      mode_name: A03_Full_LN4_3056x2296_r12_24
+  cis_3056x2296_24fps_12bit_ln4_pdnoln:
+    active_width: 3056
+    active_height: 2296
+    pixel_clock_hz: 1664000000
+    line_length_pck: 20776
+    frame_length_lines: 3333
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11871
+      basis: CIS indexed setfile
+      mode_index: 38
+      nominal_fps: 24
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_3056x2296_24fps_12bit_ln4_pdnoln
+      mode_name: A03_Full_LN4_3056x2296_r12_24_pdnoln
+  cis_3056x2296_30fps_12bit_ad11:
+    active_width: 3056
+    active_height: 2296
+    pixel_clock_hz: 1664000000
+    line_length_pck: 11856
+    frame_length_lines: 4671
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11889
+      basis: CIS indexed setfile
+      mode_index: 39
+      nominal_fps: 30
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_3056x2296_30fps_12bit_AD11
+      mode_name: A07_Full_AD11_3056x2296_r12_30
+  cis_1528x1148_120fps_10bit:
+    active_width: 1528
+    active_height: 1148
+    pixel_clock_hz: 1664000000
+    line_length_pck: 4136
+    frame_length_lines: 3332
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11907
+      basis: CIS indexed setfile
+      mode_index: 40
+      nominal_fps: 120
+      bits_per_pixel: 10
+      symbol: sensor_imx874_mode_info_A_19p2_1528x1148_120fps_10bit
+      mode_name: C01_V2H2_1528x1148_r10_120
+  cis_1528x1148_30fps_10bit:
+    active_width: 1528
+    active_height: 1148
+    pixel_clock_hz: 1664000000
+    line_length_pck: 4136
+    frame_length_lines: 13332
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11925
+      basis: CIS indexed setfile
+      mode_index: 41
+      nominal_fps: 30
+      bits_per_pixel: 10
+      symbol: sensor_imx874_mode_info_A_19p2_1528x1148_30fps_10bit
+      mode_name: C01_V2H2_1528x1148_r10_30
+  cis_1528x1148_120fps_10bit_c02:
+    active_width: 1528
+    active_height: 1148
+    pixel_clock_hz: 1664000000
+    line_length_pck: 5152
+    frame_length_lines: 2666
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11943
+      basis: CIS indexed setfile
+      mode_index: 42
+      nominal_fps: 120
+      bits_per_pixel: 10
+      symbol: sensor_imx874_mode_info_A_19p2_1528x1148_120fps_10bit_C02
+      mode_name: C02_V2H2_1528x1148_r10_120
+  cis_1528x1148_30fps_10bit_c02:
+    active_width: 1528
+    active_height: 1148
+    pixel_clock_hz: 1664000000
+    line_length_pck: 5152
+    frame_length_lines: 10666
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11961
+      basis: CIS indexed setfile
+      mode_index: 43
+      nominal_fps: 30
+      bits_per_pixel: 10
+      symbol: sensor_imx874_mode_info_A_19p2_1528x1148_30fps_10bit_C02
+      mode_name: C02_V2H2_1528x1148_r10_30
+  cis_3056x1720_30fps_10bit:
+    active_width: 3056
+    active_height: 1720
+    pixel_clock_hz: 1664000000
+    line_length_pck: 8896
+    frame_length_lines: 6213
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11979
+      basis: CIS indexed setfile
+      mode_index: 44
+      nominal_fps: 30
+      bits_per_pixel: 10
+      symbol: sensor_imx874_mode_info_A_19p2_3056x1720_30fps_10bit
+      mode_name: A21_Full_3056x1720_r10_30
+  cis_3056x1720_60fps_10bit:
+    active_width: 3056
+    active_height: 1720
+    pixel_clock_hz: 1664000000
+    line_length_pck: 8896
+    frame_length_lines: 3106
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11997
+      basis: CIS indexed setfile
+      mode_index: 45
+      nominal_fps: 60
+      bits_per_pixel: 10
+      symbol: sensor_imx874_mode_info_A_19p2_3056x1720_60fps_10bit
+      mode_name: A21_Full_3056x1720_r10_60
+  cis_3056x1720_60fps_12bit:
+    active_width: 3056
+    active_height: 1720
+    pixel_clock_hz: 1664000000
+    line_length_pck: 8896
+    frame_length_lines: 3106
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 12016
+      basis: CIS indexed setfile
+      mode_index: 46
+      nominal_fps: 60
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_3056x1720_60fps_12bit
+      mode_name: A21_Full_3056x1720_r12_60
+  cis_3056x1720_30fps_12bit_ln2:
+    active_width: 3056
+    active_height: 1720
+    pixel_clock_hz: 1664000000
+    line_length_pck: 14872
+    frame_length_lines: 3720
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 12034
+      basis: CIS indexed setfile
+      mode_index: 47
+      nominal_fps: 30
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_3056x1720_30fps_12bit_ln2
+      mode_name: A22_Full_LN2_3056x1720_r12_30
+  cis_3056x1720_30fps_10bit_ln4:
+    active_width: 3056
+    active_height: 1720
+    pixel_clock_hz: 1664000000
+    line_length_pck: 22296
+    frame_length_lines: 2480
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 12052
+      basis: CIS indexed setfile
+      mode_index: 48
+      nominal_fps: 30
+      bits_per_pixel: 10
+      symbol: sensor_imx874_mode_info_A_19p2_3056x1720_30fps_10bit_ln4
+      mode_name: A23_Full_LN4_3056x1720_r10_30
+  cis_3056x1720_30fps_10bit_ln4_pdnoln:
+    active_width: 3056
+    active_height: 1720
+    pixel_clock_hz: 1664000000
+    line_length_pck: 20776
+    frame_length_lines: 2666
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 12070
+      basis: CIS indexed setfile
+      mode_index: 49
+      nominal_fps: 30
+      bits_per_pixel: 10
+      symbol: sensor_imx874_mode_info_A_19p2_3056x1720_30fps_10bit_ln4_pdnoln
+      mode_name: A23_Full_LN4_3056x1720_r10_30_pdnoln
+  cis_3056x1720_30fps_12bit_ln4:
+    active_width: 3056
+    active_height: 1720
+    pixel_clock_hz: 1664000000
+    line_length_pck: 22296
+    frame_length_lines: 2480
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 12088
+      basis: CIS indexed setfile
+      mode_index: 50
+      nominal_fps: 30
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_3056x1720_30fps_12bit_ln4
+      mode_name: A23_Full_LN4_3056x1720_r12_30
+  cis_3056x1720_30fps_12bit_ln4_pdnoln:
+    active_width: 3056
+    active_height: 1720
+    pixel_clock_hz: 1664000000
+    line_length_pck: 20776
+    frame_length_lines: 2666
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 12106
+      basis: CIS indexed setfile
+      mode_index: 51
+      nominal_fps: 30
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_3056x1720_30fps_12bit_ln4_pdnoln
+      mode_name: A23_Full_LN4_3056x1720_r12_30_pdnoln
+  cis_3056x1720_60fps_12bit_ad11:
+    active_width: 3056
+    active_height: 1720
+    pixel_clock_hz: 1664000000
+    line_length_pck: 11856
+    frame_length_lines: 2335
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 12124
+      basis: CIS indexed setfile
+      mode_index: 52
+      nominal_fps: 60
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_3056x1720_60fps_12bit_AD11
+      mode_name: A27_Full_AD11_3056x1720_r12_60
+  cis_1528x860_120fps_10bit:
+    active_width: 1528
+    active_height: 860
+    pixel_clock_hz: 1664000000
+    line_length_pck: 4136
+    frame_length_lines: 3332
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 12142
+      basis: CIS indexed setfile
+      mode_index: 53
+      nominal_fps: 120
+      bits_per_pixel: 10
+      symbol: sensor_imx874_mode_info_A_19p2_1528x860_120fps_10bit
+      mode_name: C01_V2H2_1528x860_r10_120
+  cis_1528x860_30fps_10bit:
+    active_width: 1528
+    active_height: 860
+    pixel_clock_hz: 1664000000
+    line_length_pck: 4136
+    frame_length_lines: 13332
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 12160
+      basis: CIS indexed setfile
+      mode_index: 54
+      nominal_fps: 30
+      bits_per_pixel: 10
+      symbol: sensor_imx874_mode_info_A_19p2_1528x860_30fps_10bit
+      mode_name: C01_V2H2_1528x860_r10_30
+  cis_1528x860_120fps_10bit_c02:
+    active_width: 1528
+    active_height: 860
+    pixel_clock_hz: 1664000000
+    line_length_pck: 5152
+    frame_length_lines: 2666
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 12178
+      basis: CIS indexed setfile
+      mode_index: 55
+      nominal_fps: 120
+      bits_per_pixel: 10
+      symbol: sensor_imx874_mode_info_A_19p2_1528x860_120fps_10bit_C02
+      mode_name: C02_V2H2_1528x860_r10_120
+  cis_1528x860_30fps_10bit_c02:
+    active_width: 1528
+    active_height: 860
+    pixel_clock_hz: 1664000000
+    line_length_pck: 5152
+    frame_length_lines: 10666
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 12196
+      basis: CIS indexed setfile
+      mode_index: 56
+      nominal_fps: 30
+      bits_per_pixel: 10
+      symbol: sensor_imx874_mode_info_A_19p2_1528x860_30fps_10bit_C02
+      mode_name: C02_V2H2_1528x860_r10_30
+  cis_2000x1124_120fps_10bit:
+    active_width: 2000
+    active_height: 1124
+    pixel_clock_hz: 1664000000
+    line_length_pck: 5152
+    frame_length_lines: 2666
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11654
+      basis: CIS indexed setfile
+      mode_index: 57
+      nominal_fps: 120
+      bits_per_pixel: 10
+      symbol: sensor_imx874_mode_info_A_19p2_2000x1124_120fps_10bit
+      mode_name: C02_V2H2_2000x1124_r10_120
+  cis_2000x1500_30fps_10bit:
+    active_width: 2000
+    active_height: 1500
+    pixel_clock_hz: 1664000000
+    line_length_pck: 5152
+    frame_length_lines: 10666
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11726
+      basis: CIS indexed setfile
+      mode_index: 58
+      nominal_fps: 30
+      bits_per_pixel: 10
+      symbol: sensor_imx874_mode_info_A_19p2_2000x1500_30fps_10bit
+      mode_name: C02_V2H2_2000x1500_r10_30
+  cis_4000x3000_24fps_10bit_ln4_pdnoln:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 1664000000
+    line_length_pck: 20776
+    frame_length_lines: 3333
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 10664
+      basis: CIS indexed setfile
+      mode_index: 59
+      nominal_fps: 24
+      bits_per_pixel: 10
+      symbol: sensor_imx874_mode_info_A_19p2_4000x3000_24fps_10bit_ln4_pdnoln
+      mode_name: A03_Full_LN4_4000x3000_r10_24_pdnoln
+  cis_3392x2544_30fps_10bit:
+    active_width: 3392
+    active_height: 2544
+    pixel_clock_hz: 1664000000
+    line_length_pck: 8896
+    frame_length_lines: 6213
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11024
+      basis: CIS indexed setfile
+      mode_index: 60
+      nominal_fps: 30
+      bits_per_pixel: 10
+      symbol: sensor_imx874_mode_info_A_19p2_3392x2544_30fps_10bit
+      mode_name: A01_Full_3392x2544_r10_30
+  cis_3392x2544_24fps_10bit_ln4:
+    active_width: 3392
+    active_height: 2544
+    pixel_clock_hz: 1664000000
+    line_length_pck: 22296
+    frame_length_lines: 3100
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11078
+      basis: CIS indexed setfile
+      mode_index: 61
+      nominal_fps: 24
+      bits_per_pixel: 10
+      symbol: sensor_imx874_mode_info_A_19p2_3392x2544_24fps_10bit_ln4
+      mode_name: A03_Full_LN4_3392x2544_r10_24
+  cis_3392x2544_24fps_10bit_ln4_pdnoln:
+    active_width: 3392
+    active_height: 2544
+    pixel_clock_hz: 1664000000
+    line_length_pck: 20776
+    frame_length_lines: 3333
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11096
+      basis: CIS indexed setfile
+      mode_index: 62
+      nominal_fps: 24
+      bits_per_pixel: 10
+      symbol: sensor_imx874_mode_info_A_19p2_3392x2544_24fps_10bit_ln4_pdnoln
+      mode_name: A03_Full_LN4_3392x2544_r10_24_pdnoln
+  cis_3392x2544_30fps_12bit_dsg_pdhg:
+    active_width: 3392
+    active_height: 2544
+    pixel_clock_hz: 1664000000
+    line_length_pck: 12360
+    frame_length_lines: 4475
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11114
+      basis: CIS indexed setfile
+      mode_index: 63
+      nominal_fps: 30
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_3392x2544_30fps_12bit_dsg_pdhg
+      mode_name: A04_Full_DSG_3392x2544_r12_30_pdhg
+  cis_3392x2544_30fps_12bit_dsg_pdlg:
+    active_width: 3392
+    active_height: 2544
+    pixel_clock_hz: 1664000000
+    line_length_pck: 11704
+    frame_length_lines: 4705
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11132
+      basis: CIS indexed setfile
+      mode_index: 64
+      nominal_fps: 30
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_3392x2544_30fps_12bit_dsg_pdlg
+      mode_name: A04_Full_DSG_3392x2544_r12_30_pdlg
+  cis_3392x2544_24fps_12bit_dsg_ln2_pdhg:
+    active_width: 3392
+    active_height: 2544
+    pixel_clock_hz: 1664000000
+    line_length_pck: 19216
+    frame_length_lines: 3603
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11150
+      basis: CIS indexed setfile
+      mode_index: 65
+      nominal_fps: 24
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_3392x2544_24fps_12bit_dsg_ln2_pdhg
+      mode_name: A05_Full_DSG_LN2_3392x2544_r12_24_pdhg
+  cis_3392x2544_24fps_12bit_dsg_ln2_pdlg:
+    active_width: 3392
+    active_height: 2544
+    pixel_clock_hz: 1664000000
+    line_length_pck: 17328
+    frame_length_lines: 3980
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11168
+      basis: CIS indexed setfile
+      mode_index: 66
+      nominal_fps: 24
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_3392x2544_24fps_12bit_dsg_ln2_pdlg
+      mode_name: A05_Full_DSG_LN2_3392x2544_r12_24_pdlg
+  cis_3392x2544_15fps_12bit_dsg_ln4_pdhg:
+    active_width: 3392
+    active_height: 2544
+    pixel_clock_hz: 1664000000
+    line_length_pck: 28160
+    frame_length_lines: 3926
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11186
+      basis: CIS indexed setfile
+      mode_index: 67
+      nominal_fps: 15
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_3392x2544_15fps_12bit_dsg_ln4_pdhg
+      mode_name: A06_Full_DSG_LN4_3392x2544_r12_15_pdhg
+  cis_3392x2544_15fps_12bit_dsg_ln4_pdlg:
+    active_width: 3392
+    active_height: 2544
+    pixel_clock_hz: 1664000000
+    line_length_pck: 25888
+    frame_length_lines: 4280
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11204
+      basis: CIS indexed setfile
+      mode_index: 68
+      nominal_fps: 15
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_3392x2544_15fps_12bit_dsg_ln4_pdlg
+      mode_name: A06_Full_DSG_LN4_3392x2544_r12_15_pdlg
+  cis_3392x2544_30fps_12bit_ad11:
+    active_width: 3392
+    active_height: 2544
+    pixel_clock_hz: 1664000000
+    line_length_pck: 11856
+    frame_length_lines: 4671
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11222
+      basis: CIS indexed setfile
+      mode_index: 69
+      nominal_fps: 30
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_3392x2544_30fps_12bit_AD11
+      mode_name: A07_Full_AD11_3392x2544_r12_30
+  cis_3392x1908_30fps_10bit_ln4:
+    active_width: 3392
+    active_height: 1908
+    pixel_clock_hz: 1664000000
+    line_length_pck: 22296
+    frame_length_lines: 2480
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11276
+      basis: CIS indexed setfile
+      mode_index: 70
+      nominal_fps: 30
+      bits_per_pixel: 10
+      symbol: sensor_imx874_mode_info_A_19p2_3392x1908_30fps_10bit_ln4
+      mode_name: A23_Full_LN4_3392x1908_r10_30
+  cis_3392x1908_60fps_12bit_ad11:
+    active_width: 3392
+    active_height: 1908
+    pixel_clock_hz: 1664000000
+    line_length_pck: 11856
+    frame_length_lines: 2335
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11294
+      basis: CIS indexed setfile
+      mode_index: 71
+      nominal_fps: 60
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_3392x1908_60fps_12bit_AD11
+      mode_name: A27_Full_AD11_3392x1908_r12_60
+  cis_3392x1908_30fps_12bit_dsg_pdhg:
+    active_width: 3392
+    active_height: 1908
+    pixel_clock_hz: 1664000000
+    line_length_pck: 12360
+    frame_length_lines: 4475
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11312
+      basis: CIS indexed setfile
+      mode_index: 72
+      nominal_fps: 30
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_3392x1908_30fps_12bit_dsg_pdhg
+      mode_name: A24_Full_DSG_3392x1908_r12_30_pdhg
+  cis_3392x1908_60fps_12bit_dsg_pdlg:
+    active_width: 3392
+    active_height: 1908
+    pixel_clock_hz: 1664000000
+    line_length_pck: 11704
+    frame_length_lines: 2352
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11330
+      basis: CIS indexed setfile
+      mode_index: 73
+      nominal_fps: 60
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_3392x1908_60fps_12bit_dsg_pdlg
+      mode_name: A24_Full_DSG_3392x1908_r12_60_pdlg
+  cis_3392x1908_30fps_12bit_dsg_ln2_pdhg:
+    active_width: 3392
+    active_height: 1908
+    pixel_clock_hz: 1664000000
+    line_length_pck: 19216
+    frame_length_lines: 2882
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11348
+      basis: CIS indexed setfile
+      mode_index: 74
+      nominal_fps: 30
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_3392x1908_30fps_12bit_dsg_ln2_pdhg
+      mode_name: A25_Full_DSG_LN2_3392x1908_r12_30_pdhg
+  cis_3392x1908_30fps_12bit_dsg_ln2_pdlg:
+    active_width: 3392
+    active_height: 1908
+    pixel_clock_hz: 1664000000
+    line_length_pck: 17328
+    frame_length_lines: 3184
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11366
+      basis: CIS indexed setfile
+      mode_index: 75
+      nominal_fps: 30
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_3392x1908_30fps_12bit_dsg_ln2_pdlg
+      mode_name: A25_Full_DSG_LN2_3392x1908_r12_30_pdlg
+  cis_3392x1908_24fps_12bit_dsg_ln4_pdhg:
+    active_width: 3392
+    active_height: 1908
+    pixel_clock_hz: 1664000000
+    line_length_pck: 28160
+    frame_length_lines: 2453
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11384
+      basis: CIS indexed setfile
+      mode_index: 76
+      nominal_fps: 24
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_3392x1908_24fps_12bit_dsg_ln4_pdhg
+      mode_name: A26_Full_DSG_LN4_3392x1908_r12_24_pdhg
+  cis_3392x1908_24fps_12bit_dsg_ln4_pdlg:
+    active_width: 3392
+    active_height: 1908
+    pixel_clock_hz: 1664000000
+    line_length_pck: 25888
+    frame_length_lines: 2675
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11402
+      basis: CIS indexed setfile
+      mode_index: 77
+      nominal_fps: 24
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_3392x1908_24fps_12bit_dsg_ln4_pdlg
+      mode_name: A26_Full_DSG_LN4_3392x1908_r12_24_pdlg
+  cis_3392x1908_30fps_10bit_ln4_pdnoln:
+    active_width: 3392
+    active_height: 1908
+    pixel_clock_hz: 1664000000
+    line_length_pck: 20776
+    frame_length_lines: 2666
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11420
+      basis: CIS indexed setfile
+      mode_index: 78
+      nominal_fps: 30
+      bits_per_pixel: 10
+      symbol: sensor_imx874_mode_info_A_19p2_3392x1908_30fps_10bit_ln4_pdnoln
+      mode_name: A23_Full_LN4_3392x1908_r10_30_pdnoln
+  cis_4000x3000_24fps_12bit_ln4:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 1664000000
+    line_length_pck: 22296
+    frame_length_lines: 3100
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11492
+      basis: CIS indexed setfile
+      mode_index: 79
+      nominal_fps: 24
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_4000x3000_24fps_12bit_ln4
+      mode_name: A03_Full_LN4_4000x3000_r12_24
+  cis_4000x3000_24fps_12bit_ln4_pdnoln:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 1664000000
+    line_length_pck: 20776
+    frame_length_lines: 3333
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11510
+      basis: CIS indexed setfile
+      mode_index: 80
+      nominal_fps: 24
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_4000x3000_24fps_12bit_ln4_pdnoln
+      mode_name: A03_Full_LN4_4000x3000_r12_24_pdnoln
+  cis_3392x2544_24fps_12bit_ln4:
+    active_width: 3392
+    active_height: 2544
+    pixel_clock_hz: 1664000000
+    line_length_pck: 22296
+    frame_length_lines: 3100
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11528
+      basis: CIS indexed setfile
+      mode_index: 81
+      nominal_fps: 24
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_3392x2544_24fps_12bit_ln4
+      mode_name: A03_Full_LN4_3392x2544_r12_24
+  cis_3392x2544_24fps_12bit_ln4_pdnoln:
+    active_width: 3392
+    active_height: 2544
+    pixel_clock_hz: 1664000000
+    line_length_pck: 20776
+    frame_length_lines: 3333
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11546
+      basis: CIS indexed setfile
+      mode_index: 82
+      nominal_fps: 24
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_3392x2544_24fps_12bit_ln4_pdnoln
+      mode_name: A03_Full_LN4_3392x2544_r12_24_pdnoln
+  cis_4000x2252_30fps_12bit_ln4:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 1664000000
+    line_length_pck: 22296
+    frame_length_lines: 2480
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11564
+      basis: CIS indexed setfile
+      mode_index: 83
+      nominal_fps: 30
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_4000x2252_30fps_12bit_ln4
+      mode_name: A23_Full_LN4_4000x2252_r12_30
+  cis_3392x1908_30fps_12bit_ln4:
+    active_width: 3392
+    active_height: 1908
+    pixel_clock_hz: 1664000000
+    line_length_pck: 22296
+    frame_length_lines: 2480
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11600
+      basis: CIS indexed setfile
+      mode_index: 84
+      nominal_fps: 30
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_3392x1908_30fps_12bit_ln4
+      mode_name: A23_Full_LN4_3392x1908_r12_30
+  cis_3392x1908_30fps_12bit_ln4_pdnoln:
+    active_width: 3392
+    active_height: 1908
+    pixel_clock_hz: 1664000000
+    line_length_pck: 20776
+    frame_length_lines: 2666
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11618
+      basis: CIS indexed setfile
+      mode_index: 85
+      nominal_fps: 30
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_3392x1908_30fps_12bit_ln4_pdnoln
+      mode_name: A23_Full_LN4_3392x1908_r12_30_pdnoln
+  cis_1696x1272_120fps_10bit:
+    active_width: 1696
+    active_height: 1272
+    pixel_clock_hz: 1664000000
+    line_length_pck: 5152
+    frame_length_lines: 2666
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11636
+      basis: CIS indexed setfile
+      mode_index: 86
+      nominal_fps: 120
+      bits_per_pixel: 10
+      symbol: sensor_imx874_mode_info_A_19p2_1696x1272_120fps_10bit
+      mode_name: C02_V2H2_1696x1272_r10_120
+  cis_4000x3000_30fps_12bit_ln2:
+    active_width: 4000
+    active_height: 3000
+    pixel_clock_hz: 1664000000
+    line_length_pck: 14872
+    frame_length_lines: 3720
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11672
+      basis: CIS indexed setfile
+      mode_index: 87
+      nominal_fps: 30
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_4000x3000_30fps_12bit_ln2
+      mode_name: A02_Full_LN2_4000x3000_r12_30
+  cis_3392x2544_30fps_12bit_ln2:
+    active_width: 3392
+    active_height: 2544
+    pixel_clock_hz: 1664000000
+    line_length_pck: 14872
+    frame_length_lines: 3720
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11690
+      basis: CIS indexed setfile
+      mode_index: 88
+      nominal_fps: 30
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_3392x2544_30fps_12bit_ln2
+      mode_name: A02_Full_LN2_3392x2544_r12_30
+  cis_1696x954_120fps_10bit:
+    active_width: 1696
+    active_height: 954
+    pixel_clock_hz: 1664000000
+    line_length_pck: 5152
+    frame_length_lines: 2666
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 11708
+      basis: CIS indexed setfile
+      mode_index: 89
+      nominal_fps: 120
+      bits_per_pixel: 10
+      symbol: sensor_imx874_mode_info_A_19p2_1696x954_120fps_10bit
+      mode_name: C02_V2H2_1696x954_r10_120
+  cis_4000x2252_30fps_12bit_ln2:
+    active_width: 4000
+    active_height: 2252
+    pixel_clock_hz: 1664000000
+    line_length_pck: 14872
+    frame_length_lines: 3720
+    source:
+      path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+      sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+      line: 12214
+      basis: CIS indexed setfile
+      mode_index: 90
+      nominal_fps: 30
+      bits_per_pixel: 12
+      symbol: sensor_imx874_mode_info_A_19p2_4000x2252_30fps_12bit_ln2
+      mode_name: A02_Full_LN2_4000x2252_r12_30
+provenance:
+  selection: setA, 19.2 MHz, basic indexed mode; no runtime seamless switch
+  setfile:
+    path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874-setA-19p2.h
+    sha256: c15fbcf7692b4efa9ec589f866abde6c3faea623e15493b57c7b160466439dae
+  driver:
+    path: exynos/external-modules/camera/camera/sensor/module_framework/cis/is-cis-imx874.c
+    sha256: 76f3f672532ac0710531e2c69ab34aa0f6a0f37310a24413aaf614cd997a3ae5
+  mode_table: sensor_imx874_mode_infos_A_19p2

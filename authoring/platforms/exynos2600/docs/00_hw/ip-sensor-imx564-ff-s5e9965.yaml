@@ -1,0 +1,262 @@
+id: ip-sensor-imx564-ff-s5e9965
+schema_version: '2.2'
+kind: ip
+category: sensor
+hierarchy:
+  type: simple
+capabilities:
+  operating_modes:
+  - id: mode2
+  - id: mode3
+  - id: mode5
+  - id: mode12
+  - id: mode13
+  - id: mode14
+  - id: mode17
+  - id: mode21
+  - id: mode22
+  - id: mode23
+  - id: mode24
+  - id: mode28
+  - id: mode29
+  - id: mode30
+  - id: mode31
+  - id: mode32
+  - id: mode33
+  properties:
+    place: ultrawide
+    sensor_name: IMX564
+    active_size:
+    - 4000
+    - 3000
+    phy_type: CPHY
+    source:
+      path: \\wsl.localhost\Ubuntu\home\neokein\work\12_SM_S947B\exynos\device\erd\erd9965\arch\arm64\boot\dts\samsung\m2s\camera\module_imx564_ff.dtsi
+      sha256: 6b37cd08baed52f29331e11fe7775807bfdf47679d8dceb0128db73b43240c92
+    modes:
+      mode2:
+        sensor_name: IMX564
+        sensor_size:
+        - 4000
+        - 3000
+        sensor_fps: 86.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.784
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 2
+        source_line: 87
+      mode3:
+        sensor_name: IMX564
+        sensor_size:
+        - 4000
+        - 3000
+        sensor_fps: 86.0
+        sensor_format: BAYER
+        sensor_bitwidth: 12
+        sensor_mipi_speed: 2.784
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 3
+        source_line: 103
+      mode5:
+        sensor_name: IMX564
+        sensor_size:
+        - 4000
+        - 3000
+        sensor_fps: 53.0
+        sensor_format: BAYER
+        sensor_bitwidth: 12
+        sensor_mipi_speed: 2.784
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 5
+        source_line: 110
+      mode12:
+        sensor_name: IMX564
+        sensor_size:
+        - 3328
+        - 1872
+        sensor_fps: 141.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 3.379
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 12
+        source_line: 131
+      mode13:
+        sensor_name: IMX564
+        sensor_size:
+        - 4000
+        - 2252
+        sensor_fps: 141.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 3.379
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 13
+        source_line: 138
+      mode14:
+        sensor_name: IMX564
+        sensor_size:
+        - 4000
+        - 2252
+        sensor_fps: 114.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.784
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 14
+        source_line: 145
+      mode17:
+        sensor_name: IMX564
+        sensor_size:
+        - 4000
+        - 2252
+        sensor_fps: 69.0
+        sensor_format: BAYER
+        sensor_bitwidth: 12
+        sensor_mipi_speed: 2.784
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 17
+        source_line: 161
+      mode21:
+        sensor_name: IMX564
+        sensor_size:
+        - 2800
+        - 2100
+        sensor_fps: 86.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.784
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 21
+        source_line: 168
+      mode22:
+        sensor_name: IMX564
+        sensor_size:
+        - 2800
+        - 2100
+        sensor_fps: 86.0
+        sensor_format: BAYER
+        sensor_bitwidth: 12
+        sensor_mipi_speed: 2.784
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 22
+        source_line: 175
+      mode23:
+        sensor_name: IMX564
+        sensor_size:
+        - 3840
+        - 2160
+        sensor_fps: 114.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.784
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 23
+        source_line: 182
+      mode24:
+        sensor_name: IMX564
+        sensor_size:
+        - 3840
+        - 2160
+        sensor_fps: 67.0
+        sensor_format: BAYER
+        sensor_bitwidth: 12
+        sensor_mipi_speed: 2.784
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 24
+        source_line: 189
+      mode28:
+        sensor_name: IMX564
+        sensor_size:
+        - 2800
+        - 2100
+        sensor_fps: 51.0
+        sensor_format: BAYER
+        sensor_bitwidth: 12
+        sensor_mipi_speed: 2.784
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 28
+        source_line: 196
+      mode29:
+        sensor_name: IMX564
+        sensor_size:
+        - 2880
+        - 1620
+        sensor_fps: 92.0
+        sensor_format: BAYER
+        sensor_bitwidth: 12
+        sensor_mipi_speed: 2.784
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 29
+        source_line: 203
+      mode30:
+        sensor_name: IMX564
+        sensor_size:
+        - 2000
+        - 1124
+        sensor_fps: 527.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.988
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 30
+        source_line: 210
+      mode31:
+        sensor_name: IMX564
+        sensor_size:
+        - 2000
+        - 1500
+        sensor_fps: 157.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 1.414
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 31
+        source_line: 217
+      mode32:
+        sensor_name: IMX564
+        sensor_size:
+        - 960
+        - 540
+        sensor_fps: 157.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 1.414
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 32
+        source_line: 224
+      mode33:
+        sensor_name: IMX564
+        sensor_size:
+        - 1408
+        - 792
+        sensor_fps: 302.0
+        sensor_format: BAYER
+        sensor_bitwidth: 10
+        sensor_mipi_speed: 2.988
+        sensor_phy_type: CPHY
+        sensor_lanes: 3
+        dt_mode_index: 33
+        source_line: 231
+    provenance_status: kernel_declared
+    selection_note: DTS capability is not proof of the shipped board or selected runtime
+      sensor mode.
+compatible_soc:
+- soc-exynos2600

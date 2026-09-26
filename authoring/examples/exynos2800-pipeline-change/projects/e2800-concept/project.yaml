@@ -1,0 +1,18 @@
+# HYPOTHETICAL example project: Exynos2800 concept on top of the Exynos2700 reference project.
+kind: authoring.project
+key: e2800-concept
+platform: exynos2800-concept
+extends: e2700-ref
+rename:
+- from: proj-e2700-ref
+  to: proj-e2800-concept
+- from: -e2700
+  to: -e2800c
+document_patch:
+  metadata:
+    name: Exynos2800 concept (pipeline-change example)
+    board_type: E2800-CONCEPT
+    board_name: Exynos2800 concept
+scenarios:
+  include:
+  - uc-camera-recording-e2700

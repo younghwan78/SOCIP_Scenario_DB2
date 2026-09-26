@@ -1,0 +1,322 @@
+# Compact variants: root entries are complete; `extends: <id>` entries are a
+# deep-merge patch over that variant (`$unset: [keys]` removes keys).
+# node sim width/height come from sizes.yaml; sw_timing from sw_timing.yaml.
+- id: cam-cap-r1-sf
+  severity: light
+  design_conditions:
+    subscenario: STILL_SF_CAPTURE
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_CAPTURE
+    sensor_place: rear
+    capture_type: ZSL
+    capture_hint: none
+    flash: false
+    extend_mode: EX_NONE
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_front
+    - npu
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+  node_configs:
+    mtnr:
+      selected_mode: Capture_SF
+  buffer_overrides:
+    MCSC_WDMA_CAP_BUF:
+      size_role: MCSC_OUTPUT2_FULL
+- id: cam-cap-r1-sf-burst
+  extends: cam-cap-r1-sf
+  $unset:
+  - buffer_overrides
+  design_conditions:
+    $unset:
+    - dvfs_sn
+    - flash
+    - extend_mode
+    capture_hint: burst
+- id: cam-cap-r1-sf-single-take
+  extends: cam-cap-r1-sf-burst
+  $unset:
+  - node_configs
+  design_conditions:
+    $unset:
+    - sensor_place
+    - capture_type
+    capture_hint: single_take
+- id: cam-cap-r1-sf-agif
+  extends: cam-cap-r1-sf-single-take
+  design_conditions:
+    capture_hint: agif
+- id: cam-cap-r1-sf-flash
+  extends: cam-cap-r1-sf-burst
+  $unset:
+  - node_configs
+  design_conditions:
+    $unset:
+    - capture_hint
+    flash: true
+- id: cam-cap-r1-sf-pro
+  extends: cam-cap-r1-sf-flash
+  design_conditions:
+    $unset:
+    - capture_type
+    - flash
+    subscenario: STILL_PRO_SF_CAPTURE
+    is_scenario: IS_SCENARIO_PRO_VIDEO
+    extend_mode: EX_NONE
+- id: cam-cap-r1-mf
+  extends: cam-cap-r1-sf-flash
+  design_conditions:
+    subscenario: STILL_MF_CAPTURE
+    capture_type: non_ZSL
+    flash: false
+    isp_features: MTNR,MSNR
+  node_configs:
+    mtnr:
+      selected_mode: Capture_MF
+      isp_features:
+      - MTNR
+      - MSNR
+  buffer_overrides:
+    YUVSC_MTNR_BUF:
+      note: multi-frame accumulation — N×frame 입력
+- id: cam-cap-r1-mf-flash
+  extends: cam-cap-r1-mf
+  $unset:
+  - buffer_overrides
+  design_conditions:
+    $unset:
+    - capture_type
+    subscenario: STILL_FLASH_MF_CAPTURE
+    flash: true
+- id: cam-cap-r1-mf-high-res
+  extends: cam-cap-r1-mf-flash
+  design_conditions:
+    $unset:
+    - flash
+    subscenario: STILL_HIGH_RES_MF_CAPTURE
+    isp_features: MTNR,MSNR,DJAG
+  node_configs:
+    mtnr:
+      isp_features:
+      - MTNR
+      - MSNR
+      - DJAG
+- id: cam-cap-r1-remosaic-sf
+  extends: cam-cap-r1-sf-single-take
+  design_conditions:
+    $unset:
+    - capture_hint
+    subscenario: STILL_REMOSAIC_SF_CAPTURE
+    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_REMOSAIC_CAPTURE
+    extend_mode: EX_SEAMLESS_TETRA
+    is_scenario: IS_SCENARIO_FULL_SIZE
+  node_configs:
+    sensor_rear:
+      selected_mode: full_remosaic
+    mtnr:
+      selected_mode: Remosaic
+  buffer_overrides:
+    MCSC_WDMA_CAP_BUF:
+      format: YUV420
+      bitdepth: 10
+      note: 200MP full-res output
+- id: cam-cap-r1-remosaic-mf
+  extends: cam-cap-r1-remosaic-sf
+  $unset:
+  - buffer_overrides
+  design_conditions:
+    $unset:
+    - dvfs_sn
+    - is_scenario
+    subscenario: STILL_REMOSAIC_MF_CAPTURE
+    isp_features: MTNR,MSNR
+- id: cam-cap-r1-ai-remosaic
+  extends: cam-cap-r1-remosaic-sf
+  $unset:
+  - buffer_overrides
+  design_conditions:
+    $unset:
+    - dvfs_sn
+    - is_scenario
+    extend_mode: EX_AI_REMOSAIC
+    npu_used: true
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - sensor_front
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: sensor_front
+      to: csispdp
+  node_configs:
+    $unset:
+    - mtnr
+    npu:
+      selected_mode: Normal
+- id: cam-cap-r1-remosaic-cal
+  extends: cam-cap-r1-sf-single-take
+  design_conditions:
+    $unset:
+    - capture_hint
+    extend_mode: EX_REMOSAIC_CAL
+- id: cam-cap-r1-low-res-tetra
+  extends: cam-cap-r1-remosaic-cal
+  design_conditions:
+    extend_mode: EX_LOW_RES_TETRA
+- id: cam-cap-r1-remosaic-pro
+  extends: cam-cap-r1-remosaic-mf
+  design_conditions:
+    $unset:
+    - isp_features
+    subscenario: STILL_REMOSAIC_PRO_SF_CAPTURE
+    is_scenario: IS_SCENARIO_PRO_VIDEO
+- id: cam-cap-r1-hhdr
+  extends: cam-cap-r1-remosaic-cal
+  design_conditions:
+    subscenario: STILL_HHDR_AID_CAPTURE
+    extend_mode: EX_3DHDR
+  node_configs:
+    csispdp:
+      selected_mode: VC_DT
+- id: cam-cap-r1-dcg
+  extends: cam-cap-r1-remosaic-cal
+  design_conditions:
+    extend_mode: EX_DCG
+- id: cam-cap-r1-night
+  extends: cam-cap-r1-mf-high-res
+  design_conditions:
+    $unset:
+    - sensor_place
+    subscenario: NIGHT_CAPTURE
+    extend_mode: EX_NIGHT
+    super_night: true
+    isp_features: MSNR
+  node_configs:
+    mtnr:
+      isp_features:
+      - MSNR
+- id: cam-cap-r1-night-max
+  extends: cam-cap-r1-night
+  $unset:
+  - node_configs
+  design_conditions:
+    $unset:
+    - isp_features
+    super_night: max
+- id: cam-cap-r1-night-remosaic
+  extends: cam-cap-r1-remosaic-pro
+  design_conditions:
+    $unset:
+    - is_scenario
+    subscenario: REMOSAIC_NIGHT_CAPTURE
+    super_night: true
+  node_configs:
+    $unset:
+    - mtnr
+- id: cam-cap-r1-srzoom
+  severity: light
+  design_conditions:
+    subscenario: SRZOOM_CAPTURE
+    camera_mode: dual_sync
+  routing_switch:
+    disabled_nodes:
+    - sensor_front
+    - npu
+    disabled_edges:
+    - from: sensor_front
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+- id: cam-cap-r1-motion-free-sf
+  extends: cam-cap-r1-remosaic-cal
+  design_conditions:
+    $unset:
+    - extend_mode
+    subscenario: STILL_MOTION_FREE_SF_CAPTURE
+- id: cam-cap-r1-motion-free-mf
+  extends: cam-cap-r1-mf-flash
+  design_conditions:
+    $unset:
+    - sensor_place
+    - flash
+    subscenario: STILL_MOTION_FREE_MF_CAPTURE
+- id: cam-cap-r1-high-res-raw
+  extends: cam-cap-r1-remosaic-cal
+  design_conditions:
+    subscenario: HIGH_RES_RAW_CAPTURE
+    extend_mode: EX_PDAF_OFF
+    output_format: RAW_BAYER_16
+  buffer_overrides:
+    MCSC_WDMA_CAP_BUF:
+      format: RAW_BAYER
+      bitdepth: 16
+      compression: COMP_OFF
+    JPEG_BUF:
+      format: DNG_RAW
+      bitdepth: 16
+      compression: COMP_OFF
+- id: cam-cap-r1-expert-raw
+  extends: cam-cap-r1-high-res-raw
+  design_conditions:
+    subscenario: STILL_EXPERT_RAW_CAPTURE
+  buffer_overrides:
+    $unset:
+    - JPEG_BUF
+- id: cam-cap-rdual
+  extends: cam-cap-r1-srzoom
+  design_conditions:
+    subscenario: STILL_SF_CAPTURE
+    dvfs_sn: IS_DVFS_SN_REAR_DUAL_CAPTURE
+- id: cam-cap-rtriple
+  extends: cam-cap-rdual
+  design_conditions:
+    dvfs_sn: IS_DVFS_SN_TRIPLE_CAPTURE
+    camera_mode: triple
+- id: cam-cap-f1
+  extends: cam-cap-r1-remosaic-cal
+  design_conditions:
+    $unset:
+    - extend_mode
+    dvfs_sn: IS_DVFS_SN_FRONT_SINGLE_CAPTURE
+    sensor_place: front
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear
+    - sensor_rear2
+    - npu
+    disabled_edges:
+    - from: sensor_rear
+      to: csispdp
+    - from: sensor_rear2
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr
+- id: cam-cap-pip-dual
+  extends: cam-cap-rdual
+  design_conditions:
+    dvfs_sn: IS_DVFS_SN_PIP_DUAL_CAPTURE
+    camera_mode: dual_async
+  routing_switch:
+    disabled_nodes:
+    - sensor_rear2
+    - npu
+    disabled_edges:
+    - from: sensor_rear2
+      to: csispdp
+    - from: csispdp
+      to: npu
+    - from: npu
+      to: mtnr

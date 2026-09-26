@@ -1,0 +1,20 @@
+# SW task timing table. `variants: '*'` = every variant not listed in another
+# group and not in absent_in. Measured overrides go in the project's
+# sw_timing.measured.yaml, not here.
+tasks:
+  modem:
+    groups:
+    - id: modem-a
+      variants: '*'
+      timing:
+        min_ms: 0.2
+        mean_ms: 0.4
+        max_ms: 1.0
+        start_latency_ref: modem_irq
+        start_latency_mean_ms: 0.0
+        rate_hz: 50.0
+        cpu_affinity: CPUCL0
+        value_source: assumed
+        source_note: Execution time and CPU affinity are fixture assumptions (2026-09-16), not measurements. Replace with
+          internal per-task avg/min/max and the cluster the task actually ran on; CPU energy = ip-cpu power_model at that
+          cluster/frequency x exec_ms x rate_hz.

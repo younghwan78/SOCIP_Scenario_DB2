@@ -1,0 +1,261 @@
+id: ip-mtnr-is-v15-s5e9965
+schema_version: '2.2'
+kind: ip
+category: camera
+hierarchy:
+  type: simple
+rtl_version: IS v15
+capabilities:
+  operating_modes:
+  - id: Normal
+  - id: Recording
+  - id: HighSpeed
+  sim:
+    hw_name: MTNR
+    modes:
+      Normal:
+        unit_power_mw_mp: 1.0
+        idc: 0.0
+        ppc: 4.0
+        vdd: VDD_INTCAM
+        dvfs_group: INTCAM
+    source: borrowed_legacy_model
+    source_note: 'Topology/DMA: kernel IS v15. Performance/power: legacy estimate;
+      not calibrated to IS v15.'
+  properties:
+    is_version: 15
+    ip_group: MTNR
+    hierarchy_group: ISP
+    modules:
+    - name: MTNR1_RDMA_CUR_L1_U
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_RDMA_CUR_L1_V
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_RDMA_CUR_L1_Y
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_RDMA_CUR_L2_U
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_RDMA_CUR_L2_V
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_RDMA_CUR_L2_Y
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_RDMA_CUR_L3_U
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_RDMA_CUR_L3_V
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_RDMA_CUR_L3_Y
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_RDMA_CUR_L4_U
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_RDMA_CUR_L4_V
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_RDMA_CUR_L4_Y
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_RDMA_MV_GEOMATCH
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_RDMA_PREV_L1_U
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_RDMA_PREV_L1_V
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_RDMA_PREV_L1_WGT
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_RDMA_PREV_L1_Y
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_RDMA_PREV_L2_U
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_RDMA_PREV_L2_V
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_RDMA_PREV_L2_Y
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_RDMA_PREV_L3_U
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_RDMA_PREV_L3_V
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_RDMA_PREV_L3_Y
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_RDMA_PREV_L4_U
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_RDMA_PREV_L4_V
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_RDMA_PREV_L4_Y
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_RDMA_SEG_L1
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_RDMA_SEG_L2
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_RDMA_SEG_L3
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_RDMA_SEG_L4
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_WDMA_PREV_L1_U
+      type: DMA
+      direction: write
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_WDMA_PREV_L1_V
+      type: DMA
+      direction: write
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_WDMA_PREV_L1_WGT
+      type: DMA
+      direction: write
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_WDMA_PREV_L1_Y
+      type: DMA
+      direction: write
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_WDMA_PREV_L2_U
+      type: DMA
+      direction: write
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_WDMA_PREV_L2_V
+      type: DMA
+      direction: write
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_WDMA_PREV_L2_Y
+      type: DMA
+      direction: write
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_WDMA_PREV_L3_U
+      type: DMA
+      direction: write
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_WDMA_PREV_L3_V
+      type: DMA
+      direction: write
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_WDMA_PREV_L3_Y
+      type: DMA
+      direction: write
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_WDMA_PREV_L4_U
+      type: DMA
+      direction: write
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_WDMA_PREV_L4_V
+      type: DMA
+      direction: write
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR1_WDMA_PREV_L4_Y
+      type: DMA
+      direction: write
+      source_file: hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - name: MTNR0_RDMA_CUR_L0_Y
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-mtnr0-v15_0.c
+    - name: MTNR0_RDMA_MV_GEOMATCH
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-mtnr0-v15_0.c
+    - name: MTNR0_RDMA_PREV_L0_WGT
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-mtnr0-v15_0.c
+    - name: MTNR0_RDMA_PREV_L0_Y
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-mtnr0-v15_0.c
+    - name: MTNR0_RDMA_PREV_L0_Y_1
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-mtnr0-v15_0.c
+    - name: MTNR0_RDMA_SEG_L0
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-mtnr0-v15_0.c
+    - name: MTNR0_WDMA_PREV_L0_WGT
+      type: DMA
+      direction: write
+      source_file: hardware\api\pablo-hw-api-mtnr0-v15_0.c
+    - name: MTNR0_WDMA_PREV_L0_Y
+      type: DMA
+      direction: write
+      source_file: hardware\api\pablo-hw-api-mtnr0-v15_0.c
+    - name: CINFIFO
+      type: FIFO
+      direction: read
+    - name: COUTFIFO
+      type: FIFO
+      direction: write
+    sources:
+    - path: \\wsl.localhost\Ubuntu\home\neokein\work\12_SM_S947B\exynos\external-modules\camera\camera\hardware\api\pablo-hw-api-mtnr1-v15_0.c
+      sha256: 9fcee75ba058da60a561f4616d35d3ca6b278e7eb4a414ed2f68be995ba8ded0
+    - path: \\wsl.localhost\Ubuntu\home\neokein\work\12_SM_S947B\exynos\external-modules\camera\camera\hardware\api\pablo-hw-api-mtnr0-v15_0.c
+      sha256: fc231951780617e73f7073bd05e1c719aa149ca5e0569aa26296719df272c686
+    provenance_status: kernel_declared
+    performance_status: borrowed
+    history:
+      layers:
+      - 0
+      - 1
+      - 2
+      - 3
+      - 4
+      frame_offset: -1
+      initialization: first frame has no previous frame; steady-state history traffic
+        requires warm-up
+      physical_blocks:
+      - MTNR0 (L0)
+      - MTNR1 (L1-L4)
+compatible_soc:
+- soc-exynos2600

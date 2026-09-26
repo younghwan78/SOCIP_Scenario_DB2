@@ -1,0 +1,13 @@
+# HYPOTHETICAL example (not real Exynos2800 data): shows how a pipeline-structure change
+# is expressed on top of the exynos2700 platform. Concept: MTNR + MSNR merged into one NR IP.
+kind: authoring.platform
+id: exynos2800-concept
+extends: exynos2700
+soc_id: soc-exynos2800c
+description: Concept platform for the pipeline-change example (MTNR+MSNR -> NR v2).
+rename:
+- from: exynos2700
+  to: exynos2800c
+rename_exclude:
+- 00_sensor/*
+remove_docs: []   # ip-msnr is kept: variant-injected front paths still use it

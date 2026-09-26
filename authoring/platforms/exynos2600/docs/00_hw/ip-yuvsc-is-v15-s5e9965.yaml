@@ -1,0 +1,70 @@
+id: ip-yuvsc-is-v15-s5e9965
+schema_version: '2.2'
+kind: ip
+category: camera
+hierarchy:
+  type: simple
+rtl_version: IS v15
+capabilities:
+  operating_modes:
+  - id: Normal
+  - id: Recording
+  - id: HighSpeed
+  sim:
+    hw_name: YUVSC
+    modes:
+      Normal:
+        unit_power_mw_mp: 0.352
+        idc: 0.0
+        ppc: 4.0
+        vdd: VDD_CAM
+        dvfs_group: CAM
+      FHD:
+        unit_power_mw_mp: 0.403
+        idc: 0.0
+        ppc: 4.0
+        vdd: VDD_CAM
+        dvfs_group: CAM
+      8K:
+        unit_power_mw_mp: 0.331
+        idc: 0.0
+        ppc: 4.0
+        vdd: VDD_CAM
+        dvfs_group: CAM
+    source: borrowed_legacy_model
+    source_note: 'Topology/DMA: kernel IS v15. Performance/power: legacy estimate;
+      not calibrated to IS v15. YUVP coefficients are a proxy only.'
+  properties:
+    is_version: 15
+    ip_group: YUVSC
+    hierarchy_group: ISP
+    modules:
+    - name: YUVSC_RDMA_UV
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-yuvsc-v15_0.c
+    - name: YUVSC_RDMA_Y
+      type: DMA
+      direction: read
+      source_file: hardware\api\pablo-hw-api-yuvsc-v15_0.c
+    - name: YUVSC_WDMA_UV
+      type: DMA
+      direction: write
+      source_file: hardware\api\pablo-hw-api-yuvsc-v15_0.c
+    - name: YUVSC_WDMA_Y
+      type: DMA
+      direction: write
+      source_file: hardware\api\pablo-hw-api-yuvsc-v15_0.c
+    - name: CINFIFO
+      type: FIFO
+      direction: read
+    - name: COUTFIFO
+      type: FIFO
+      direction: write
+    sources:
+    - path: \\wsl.localhost\Ubuntu\home\neokein\work\12_SM_S947B\exynos\external-modules\camera\camera\hardware\api\pablo-hw-api-yuvsc-v15_0.c
+      sha256: 31c0168f9f40ad194d91f16193ba11d552016b2d6572de8a5155db9d599949ad
+    provenance_status: kernel_declared
+    performance_status: borrowed
+compatible_soc:
+- soc-exynos2600

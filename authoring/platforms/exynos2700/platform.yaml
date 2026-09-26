@@ -1,0 +1,20 @@
+# Exynos2700: same multimedia pipeline structure as Exynos2600.
+# Everything is inherited from exynos2600; only deltas live here.
+#   rename         : id substring rules (applied to every inherited doc id and its references)
+#   rename_exclude : docs kept as-is (shared sensor DT catalogs of the commercial boards)
+#   patches/<id>.yaml : deep-merge patch on a renamed doc (IP clock/PPC/DMA/power deltas)
+#   docs/**        : new or fully replaced canonical docs
+#   remove_docs    : parent doc ids to drop
+kind: authoring.platform
+id: exynos2700
+extends: exynos2600
+soc_id: soc-exynos2700
+description: Exynos2700 baseline = Exynos2600 pipeline. Replace inherited values with 2700 data via patches/.
+rename:
+- from: s5e9965
+  to: exynos2700      # TODO: replace with the 2700 product tag once fixed (e.g. s5eXXXX)
+- from: exynos2600
+  to: exynos2700
+rename_exclude:
+- 00_sensor/*
+remove_docs: []
