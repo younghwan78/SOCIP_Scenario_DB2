@@ -53,7 +53,18 @@ export function topoLayout(model: PipelineModel): TopoLayout {
   const rank = ranks(ips.map((i) => i.pid), model.links)
   const nrt = ips.filter((i) => i.lane === 'nrt').map((i) => rank.get(i.pid) ?? 0)
   const nrtStart = nrt.length ? Math.min(...nrt) : null
-  const placed = ips.map((ip) => ({ ip, r: rank.get(ip.pid) ?? 0, ...placeOf(ip, rank.get(ip.pid) ?? 0, nrtStart) }))
+  // Rank is a drawing order, not a dependency test: parallel branches can have
+  // unrelated depths. Walk actual dependencies to classify pre-NRT work.
+  const upstream = new Set(ips.filter((ip) => ip.lane === 'nrt').map((ip) => ip.pid))
+  const downstream = new Set(upstream)
+  for (let i = 0; i < ips.length; i++) {
+    for (const link of model.links) {
+      if (upstream.has(link.to)) upstream.add(link.from)
+      if (downstream.has(link.from)) downstream.add(link.to)
+    }
+  }
+  const placed = ips.map((ip) => ({ ip, r: rank.get(ip.pid) ?? 0,
+    ...placeOf(ip, upstream.has(ip.pid) && !downstream.has(ip.pid) ? -1 : 0, nrtStart === null ? null : 0) }))
   const hasScaler = ips.some((i) => M2M_SCALER_RE.test(i.pid) || M2M_SCALER_RE.test(i.ipRef))
   const camera = nrtStart !== null
   const columns: TopoColumn[] = []

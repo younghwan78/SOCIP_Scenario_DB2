@@ -117,3 +117,16 @@ describe('ip topology pre/post-NRT split', () => {
     expect(withScaler.nodes.find((n) => n.ip.pid === 'm2msc')?.column).toBe('post')
   })
 })
+
+it('classifies pre-NRT by dependencies across unequal parallel branches', async () => {
+  const { topoLayout } = await import('../src/lib/topology')
+  const ips = [
+    ...['a', 'b', 'c', 'd'].map((pid) => ({ pid, label: pid, ipRef: '', lane: 'sw' })),
+    ...['n1', 'n2'].map((pid) => ({ pid, label: pid, ipRef: '', lane: 'nrt' })),
+    { pid: 'unrelated', label: 'unrelated', ipRef: '', lane: 'm2m' },
+  ]
+  const links = [['a', 'n1'], ['b', 'c'], ['c', 'd'], ['d', 'n2']].map(([from, to]) => ({ from, to, kind: 'M2M' }))
+  const layout = topoLayout({ ips, links } as never)
+  expect(layout.nodes.find((n) => n.ip.pid === 'd')?.column).toBe('pre')
+  expect(layout.nodes.find((n) => n.ip.pid === 'unrelated')?.column).toBe('post')
+})
