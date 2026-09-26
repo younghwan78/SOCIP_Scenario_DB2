@@ -44,14 +44,21 @@ export function focusFor(rows: VariantRow[]): string[] {
   return [...seen]
 }
 
-export const CATEGORY_ORDER = ['camera', 'voice_call', 'video', 'audio', 'game', 'display'] as const
+/** Which category a multi-category scenario belongs to (resolution priority, unchanged). */
+const CATEGORY_PRIORITY = ['camera', 'voice_call', 'video', 'audio', 'game', 'display'] as const
+/** Display order of type pills and grouped lists. */
+export const CATEGORY_ORDER = ['camera', 'video', 'display', 'audio', 'voice_call', 'game'] as const
+/** One hue per scenario type — kept clear of the Explorer facet hues (blue/green/purple/amber/pink) and the teal primary. */
+export const CATEGORY_COLOR: Record<string, string> = {
+  camera: '#C23B22', video: '#0A8391', display: '#6E7F10', audio: '#5B6770', voice_call: '#4338CA', game: '#D9730D', other: '#8A8274',
+}
 export const CATEGORY_LABEL: Record<string, string> = {
-  camera: 'Camera', video: 'Video', video_playback: 'Video', audio: 'Audio', game: 'Game', voice_call: 'Voice · Video call', display: 'Display',
+  camera: 'Camera', video: 'Video', video_playback: 'Video', audio: 'Audio', game: 'Game', voice_call: 'Call (Voice · Video)', display: 'Display', other: 'Other',
 }
 
 /** Primary browse category (video_playback folds into video). */
 export function primaryCategory(categories: string[] | undefined): string {
   const cats = (categories ?? []).map((c) => (c === 'video_playback' ? 'video' : c))
-  for (const c of CATEGORY_ORDER) if (cats.includes(c)) return c
+  for (const c of CATEGORY_PRIORITY) if (cats.includes(c)) return c
   return cats[0] ?? 'other'
 }

@@ -1,9 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type CSSProperties } from 'react'
 import type { Ctx } from '../App'
 import { api } from '../lib/api'
 import { useAsync } from '../lib/route'
 import { CAMERA_LABEL, MISSING, MODE_LABEL, cameraOf, changedKeys, medoidId, stabOf, valueText } from '../lib/conditions'
-import { CATEGORY_LABEL, CATEGORY_ORDER, focusFor, modeBreakdown, primaryCategory, scenarioPurpose } from '../lib/guides'
+import { CATEGORY_COLOR, CATEGORY_LABEL, CATEGORY_ORDER, focusFor, modeBreakdown, primaryCategory, scenarioPurpose } from '../lib/guides'
 import { toRows } from '../components/Picker'
 import { PageLayout, Resizer, useResizable } from '../components/Layout'
 import { Icon } from '../components/Icons'
@@ -22,6 +22,9 @@ function facetValue(key: FacetKey, dc: Record<string, unknown>): string | null {
   return v === undefined || v === null || v === '' ? null : String(v)
 }
 
+const catRank = (c: string[]) => { const i = (CATEGORY_ORDER as readonly string[]).indexOf(primaryCategory(c)); return i < 0 ? 99 : i }
+const catStyle = (c: string) => ({ '--cat': CATEGORY_COLOR[c] ?? CATEGORY_COLOR.other } as CSSProperties)
+
 export function ExplorerPage({ ctx }: { ctx: Ctx }) {
   const type = ctx.params.type ?? 'camera'
   const byType = useMemo(() => {
@@ -36,7 +39,8 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
   }, [ctx.catalog])
   const totalVariants = ctx.catalog.reduce((s, c) => s + c.variant_count, 0)
   const scenarios = ctx.catalog.filter((c) => type === 'all' || primaryCategory(c.category) === type)
-    .sort((a, b) => (a.scenario_id === 'uc-camera-recording' ? -1 : b.scenario_id === 'uc-camera-recording' ? 1 : a.scenario_name.localeCompare(b.scenario_name)))
+    .sort((a, b) => catRank(a.category) - catRank(b.category)
+      || (a.scenario_id === 'uc-camera-recording' ? -1 : b.scenario_id === 'uc-camera-recording' ? 1 : a.scenario_name.localeCompare(b.scenario_name)))
   const selected = scenarios.find((s) => s.scenario_id === ctx.scenario) ?? scenarios[0]
   const variantsQ = useAsync(() => (selected ? api.variants(selected.scenario_id) : Promise.resolve({ items: [], total: 0 })), [selected?.scenario_id])
   const rows = useMemo(() => toRows(selected, variantsQ.data?.items ?? []), [selected, variantsQ.data])
@@ -111,7 +115,7 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
         <span className="muted" style={{ fontSize: 13, marginRight: 4 }}>Scenario type <span className="faint" style={{ fontSize: 11 }}>(scenario 수)</span></span>
         <button className={`tpill ${type === 'all' ? 'on' : ''}`} onClick={() => ctx.navigate(undefined, { type: 'all' })} title={`${ctx.catalog.length} scenarios · ${totalVariants} variants`}><Icon name="all" />전체 <span className="cnt">({ctx.catalog.length})</span></button>
         {CATEGORY_ORDER.filter((c) => byType.get(c)).map((c) => (
-          <button key={c} className={`tpill ${type === c ? 'on' : ''}`} onClick={() => ctx.navigate(undefined, { type: c, scenario: ctx.catalog.find((s) => primaryCategory(s.category) === c)?.scenario_id, variant: undefined })} title={`${byType.get(c)} scenarios · ${variantsByType.get(c) ?? 0} variants`}>
+          <button key={c} className={`tpill cat ${type === c ? 'on' : ''}`} style={catStyle(c)} onClick={() => ctx.navigate(undefined, { type: c, scenario: ctx.catalog.find((s) => primaryCategory(s.category) === c)?.scenario_id, variant: undefined })} title={`${byType.get(c)} scenarios · ${variantsByType.get(c) ?? 0} variants`}>
             <Icon name={c} />{CATEGORY_LABEL[c]} <span className="cnt">({byType.get(c)})</span></button>
         ))}
       </div>} main={
@@ -119,14 +123,16 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
         <section className="panel scn-list" aria-label="Scenario 목록" style={{ width: listW.size }}>
           <div className="panel-head"><span className="muted" style={{ fontSize: 12, fontWeight: 600 }}>{(CATEGORY_LABEL[type] ?? '전체').toUpperCase()} · scenario ({scenarios.length}) · variant ({scenarios.reduce((n, s) => n + s.variant_count, 0)})</span></div>
           <div style={{ overflowY: 'auto' }}>
-            {scenarios.map((s) => (
-              <button key={s.scenario_id} className={`scn-item ${s.scenario_id === selected?.scenario_id ? 'on' : ''}`}
+            {scenarios.map((s, i) => { const cat = primaryCategory(s.category); const head = type === 'all' && (i === 0 || primaryCategory(scenarios[i - 1].category) !== cat)
+              const inCat = scenarios.filter((x) => primaryCategory(x.category) === cat)
+              return <div key={s.scenario_id} className="scn-wrap" style={catStyle(cat)}>
+              {head && <div className="scn-group"><span className="scn-dot" />{CATEGORY_LABEL[cat] ?? cat} <span className="cnt">scenario {inCat.length} · variant {inCat.reduce((n, x) => n + x.variant_count, 0)}</span></div>}
+              <button className={`scn-item ${s.scenario_id === selected?.scenario_id ? 'on' : ''}`}
                 onClick={() => { ctx.navigate(undefined, { scenario: s.scenario_id, variant: undefined }); setFacets({}); setPicked(new Set()) }}>
                 <span className="nm">{s.scenario_name} <span className="cnt" title="variant 수">({s.variant_count})</span></span>
                 <span className="ds">{scenarioPurpose(s.scenario_id).split(/[·:]/)[1]?.trim().slice(0, 42) ?? ''}</span>
                 <span className="ct">variant {s.variant_count} · node {s.node_count} · buffer {s.buffer_count}</span>
-              </button>
-            ))}
+              </button></div> })}
           </div>
         </section>
         <Resizer axis="x" label="Scenario 목록 폭" {...listW.bind} onReset={listW.reset} />

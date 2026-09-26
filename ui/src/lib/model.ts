@@ -30,7 +30,7 @@ export function laneOf(n: ViewNodeData, ch: { rt: string[]; nrt: string[] }): La
   if (ch.nrt.includes(pid)) return 'nrt'
   if (/^(mfc|apv|codec|jpeg|hevc)/.test(pid) || /mfc|apv|codec/.test(ref)) return 'codec'
   if (/^(dpu|panel|decon|display)/.test(pid) || /dpu|panel|display/.test(ref) || isExternal(n)) return 'display'
-  if (/^(lme|vps|gdc|g2d|npu|gpu|dsp|abox)/.test(pid)) return 'm2m'
+  if (/^(lme|vps|gdc|g2d|npu|gpu|dsp|abox|m2msc|m2m_?sc|msc|m2m_?scaler)/.test(pid) || /m2m-scaler/.test(ref)) return 'm2m'
   return 'other'
 }
 
