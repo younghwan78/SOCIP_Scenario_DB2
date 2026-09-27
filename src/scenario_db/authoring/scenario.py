@@ -171,7 +171,10 @@ def decompile_usecase(doc: dict, out_dir: Path) -> dict[str, int]:
     """Write generated sources; hand-authored files (knobs.yaml, overlay.yaml,
     sw_timing.measured.yaml) are kept, and reviewed size bindings are preserved."""
     doc = copy.deepcopy(doc)
-    doc.pop("power_options", None)  # generated from the hand-authored knobs.yaml
+    options = doc.pop("power_options", None)
+    if options and not (out_dir / "knobs.yaml").exists():
+        yamlio.dump(out_dir / "knobs.yaml", options,
+                    header="Architecture knobs recovered from the compiled scenario.")
     variants = doc.get("variants") or []
     knobs = yamlio.load(out_dir / "knobs.yaml") if (out_dir / "knobs.yaml").exists() else None
     previous = yamlio.load(out_dir / "sizes.yaml") if (out_dir / "sizes.yaml").exists() else None
@@ -412,6 +415,10 @@ def compile_usecase(sources: dict[str, Any]) -> dict:
         doc[k] = variants if k == "variants" else val
     if "variants" not in doc and variants:
         doc["variants"] = variants
+    if "power_options" not in doc:
+        options = power_options_doc(sources.get("knobs") or {})
+        if options:
+            doc["power_options"] = options
     return doc
 
 

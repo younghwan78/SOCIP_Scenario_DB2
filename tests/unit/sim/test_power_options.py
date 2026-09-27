@@ -150,3 +150,43 @@ def test_knob_spec_read_back_from_jsonb_order(raw, catalog, dvfs):
     assert got == ref and got["bcrop_out"] == got["mlsc_out"] == got["pyramid_l0"]
     r = ax.explore_variant(g, ax.ArchExplorationSpec(), dvfs_tables=dvfs)
     assert r["power_options"]["errors"] == [] and len(r["power_options"]["results"]) == 3
+
+
+@pytest.mark.parametrize('missing', ['base', 'option'])
+def test_option_attribution_compares_two_baselines_when_one_recommendation_is_missing(monkeypatch, missing):
+    item = {'key': BCROP, 'kind': 'knob', 'label': 'crop'}
+    baseline = {'total_mw': 100.0}
+    recommendation = {'total_mw': 80.0, 'key': 'recommended', 'bw_mbs': 10,
+                      'compression': [], 'dvfs': {}}
+    objective = {'verdict': {'status': 'ok'}, 'stages': {}, 'zero_power_ips': []}
+    base = {'baseline': baseline, 'recommended': None if missing == 'base' else recommendation,
+            'objective_slice': objective, 'buffers': []}
+    option = {**base, 'baseline': {'total_mw': 90.0},
+              'recommended': None if missing == 'option' else recommendation,
+              'spec_ok': missing != 'option', 'spec_reasons': []}
+    monkeypatch.setattr(po, 'option_dimensions', lambda *a, **kw: ([{'items': [item]}], []))
+    monkeypatch.setattr(po, 'apply_option_set', lambda *a: None)
+    monkeypatch.setattr(ax, '_explore', lambda *a: option)
+    compared = []
+    def payload(_slice, case, _buffers):
+        compared.append(case['total_mw'])
+        return case
+    monkeypatch.setattr(ax, 'prediction_payload', payload)
+    monkeypatch.setattr(ax, 'attribute', lambda a, b: {
+        'delta_mw': b['total_mw'] - a['total_mw'], 'components': {}, 'by_category': {}, 'factors': []})
+    result = ax.explore_power_options(None, ax.ArchExplorationSpec(), ax.SimulationRunConfig(), {}, base)
+    assert compared == [100.0, 90.0]
+    assert result['results'][0]['attribution']['reference'] == 'baseline'
+    assert result['results'][0]['attribution']['delta_mw'] == result['results'][0]['raw_delta_mw'] == -10.0
+
+
+def test_power_options_share_the_variant_case_budget(raw, catalog, dvfs):
+    graph = graph_from_fixture(raw, UHD30, catalog)
+    spec = ax.ArchExplorationSpec(axes={'statistics': ['mean'], 'runtime_scales': [1.0],
+                                      'compression': {'enabled': False}, 'dvfs_headroom_levels': 0},
+                                  objective={'statistic': 'mean', 'runtime_scale': 1.0}, max_cases_per_variant=1)
+    result = ax.explore_variant(graph, spec, dvfs_tables=dvfs)
+    assert result['counts']['cases'] == 1
+    assert result['counts']['option_cases'] == 0
+    assert result['power_options']['results'] == []
+    assert any('budget exhausted' in note for note in result['power_options']['notes'])

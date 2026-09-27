@@ -145,6 +145,25 @@ def test_failed_verification_cannot_be_promoted(engine, stored_run):
 BCROP, L0 = "knob:crop_strategy=byrp_bcrop", "knob:pyramid_l0=skip"
 
 
+def test_concurrent_first_option_reviews_preserve_both_history_entries(engine, stored_run):
+    _, ids = stored_run
+    barrier = Barrier(2)
+
+    def save(status):
+        with Session(engine) as db:
+            barrier.wait(timeout=10)
+            return svc.set_option_review(db, PowerOptionReviewRequest(
+                scenario_id=ids[0], option_key=BCROP, status=status))
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(save, status) for status in ('candidate', 'iq_eval')]
+        saved = [future.result(timeout=20) for future in futures]
+    assert saved[0]['id'] == saved[1]['id']
+    with Session(engine) as db:
+        (review,) = svc.list_option_reviews(db, scenario_id=ids[0])
+        assert {h['status'] for h in review['history']} == {'candidate', 'iq_eval'}
+
+
 def _options(total):
     def res(items, delta):
         return {"key": "+".join(sorted(items)), "items": items, "labels": items, "kinds": ["knob"],

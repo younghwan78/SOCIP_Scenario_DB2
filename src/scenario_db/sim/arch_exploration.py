@@ -149,6 +149,7 @@ def explore_variant(
     summary = _explore(graph, spec, config, tables)
     if spec.axes.power_options.enabled:
         summary["power_options"] = explore_power_options(graph, spec, config, tables, summary)
+        summary["counts"]["option_cases"] = summary["power_options"]["cases"]
     summary["input_hash"] = input_hash(graph, spec, config, tables)
     return summary
 
@@ -274,7 +275,8 @@ def explore_power_options(graph, spec: ArchExplorationSpec, config: SimulationRu
     dims, notes = po.option_dimensions(graph, include_knobs=axis.include_knobs, include_modes=axis.include_modes)
     out: dict[str, Any] = {
         "status": "ok", "dimensions": [{k: v for k, v in d.items()} for d in dims], "notes": notes,
-        "sets": po.count_sets(dims), "max_sets": axis.max_sets, "results": [], "best": None, "errors": [],
+        "sets": po.count_sets(dims), "max_sets": axis.max_sets, "cases": 0,
+        "results": [], "best": None, "errors": [],
     }
     if not dims:
         out["status"] = "none"
@@ -291,17 +293,26 @@ def explore_power_options(graph, spec: ArchExplorationSpec, config: SimulationRu
         }),
         "verify": False, "top_n": 1,
     })
-    ref_case = base.get("recommended") or base["baseline"]
-    ref_payload = prediction_payload(base["objective_slice"], ref_case, base["buffers"])
     base_raw = base["baseline"]
+    remaining = spec.max_cases_per_variant - base.get("counts", {}).get("cases", 0)
     for items in po.option_sets(dims):
         key = po.set_key(items)
+        if remaining <= 0:
+            out["notes"].append("case budget exhausted; remaining power-option sets were skipped")
+            break
         try:
-            r = _explore(po.apply_option_set(graph, items), sub, config, tables)
+            bounded = sub.model_copy(update={"max_cases_per_variant": remaining})
+            r = _explore(po.apply_option_set(graph, items), bounded, config, tables)
         except (LookupError, ValueError, po.KnobError) as exc:
             out["errors"].append({"key": key, "error": str(exc)[:300]})
             continue
-        case = r.get("recommended") or r["baseline"]
+        evaluated = r.get("counts", {}).get("cases", 0)
+        out["cases"] += evaluated
+        remaining -= evaluated
+        comparable = bool(base.get("recommended") and r.get("recommended"))
+        ref_case = base["recommended"] if comparable else base_raw
+        ref_payload = prediction_payload(base["objective_slice"], ref_case, base["buffers"])
+        case = r["recommended"] if comparable else r["baseline"]
         payload = prediction_payload(r["objective_slice"], case, r["buffers"])
         att = attribute(ref_payload, payload)
         rec = r.get("recommended")
@@ -327,7 +338,7 @@ def explore_power_options(graph, spec: ArchExplorationSpec, config: SimulationRu
             "raw_delta_mw": round(raw, 3),
             "raw_delta_pct": round(100 * raw / base_raw["total_mw"], 2) if base_raw["total_mw"] else None,
             "attribution": {
-                "reference": "recommended" if base.get("recommended") and rec else "baseline",
+                "reference": "recommended" if comparable else "baseline",
                 "delta_mw": att["delta_mw"], "components": att["components"],
                 "by_category": att["by_category"], "factors": att["factors"][:8],
             },
