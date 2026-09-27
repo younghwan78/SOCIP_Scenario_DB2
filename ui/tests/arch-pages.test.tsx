@@ -46,3 +46,36 @@ it('selects the correct prediction history when scenarios share a variant name',
   await act(async () => root.render(<PredictionsPage ctx={ctx} />))
   expect(history).toHaveBeenCalledWith('s2', 'shared')
 })
+
+
+it('shows power options of the selected prediction and saves an IQ review decision', async () => {
+  const bcrop = 'knob:crop_strategy=byrp_bcrop'
+  const result = { key: bcrop, items: [bcrop], labels: ['BYRP bayer crop: byrp_bcrop'], kinds: ['knob'], iq_eval: 'required',
+    spec_ok: true, spec_reasons: [], total_mw: 640, delta_mw: -33.8, delta_pct: -5.0, delta_bw_mbs: -300, raw_delta_mw: -51.7,
+    raw_delta_pct: -7, attribution: { reference: 'recommended', delta_mw: -33.8, by_category: { 'BW traffic': -40.8, Compression: 17.9, 'IP workload': -10.9 }, factors: [] },
+    review_status: 'candidate' }
+  const row = { id: 'p1', scenario_id: 'uc-rec', variant_id: 'cam-rec-r1-uhd30-vdis', power: { total_mw: 674, cpu_mw: 300, hw_mw: 130, bw_mw: 244 },
+    compression: [], dvfs: {}, fps: 30, previous: null, selected_by: 'auto', eligible_cases: 1,
+    power_options: { status: 'ok', notes: [], sets: 1, reference: { rule: 'auto:min-power', case_key: 'k', note: null },
+      items: [{ key: bcrop, kind: 'knob', label: 'BYRP bayer crop: byrp_bcrop', value: 'byrp_bcrop', from: 'mcsc_crop', iq_eval: 'required',
+        review: { status: 'candidate', scope: null, note: null } }],
+      results: [result], best: { key: bcrop, labels: result.labels, delta_mw: -33.8, delta_pct: -5.0, review_status: 'candidate' } } }
+  const board = vi.spyOn(archApi, 'board').mockResolvedValue({ rows: [row] } as never)
+  vi.spyOn(archApi, 'history').mockResolvedValue([])
+  const save = vi.spyOn(archApi, 'setOptionReview').mockResolvedValue({} as never)
+  const ctx = { scenario: 'uc-rec', params: { v: 'p1' }, navigate: vi.fn() } as unknown as Ctx
+  await act(async () => root.render(<PredictionsPage ctx={ctx} />))
+  expect(host.textContent).toContain('-33.8')
+  expect(host.querySelector('table[aria-label="option IQ 검토"]')).not.toBeNull()
+  expect(host.querySelector('table[aria-label="power option 조합"]')?.textContent).toContain('BW traffic')
+  const btn = [...host.querySelectorAll('button')].find((b) => b.textContent === '상태 변경')!
+  await act(async () => btn.click())
+  const reject = [...host.querySelectorAll('[aria-label="IQ 상태 변경"] button')].find((b) => b.textContent === '기각')!
+  const variantOnly = [...host.querySelectorAll('[aria-label="IQ 상태 변경"] button')].find((b) => b.textContent === '이 variant만')!
+  await act(async () => { reject.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+  await act(async () => { variantOnly.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+  const store = [...host.querySelectorAll('[aria-label="IQ 상태 변경"] button')].find((b) => b.textContent === '저장')!
+  await act(async () => { store.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+  expect(save).toHaveBeenCalledWith({ scenario_id: 'uc-rec', variant_id: 'cam-rec-r1-uhd30-vdis', option_key: bcrop, status: 'rejected', note: undefined })
+  expect(board).toHaveBeenCalledTimes(2)  // board refreshed after the decision
+})

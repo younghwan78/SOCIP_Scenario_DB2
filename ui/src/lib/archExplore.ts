@@ -39,11 +39,57 @@ export interface VariantResult {
   axis_spread: Record<'sw_statistic' | 'sw_growth' | 'compression' | 'dvfs_headroom', { min: number; max: number; range: number }>
   sw_margin: SwMargin; coverage?: { zero_power_ips: string[]; hw_power_modeled: boolean; cpu_power_modeled: boolean }
   warnings: string[]; dvfs_table_ref?: string | null; input_hash: string
+  /** engine rev 4+: power-saving options explored on top of the variant (never variants themselves) */
+  power_options?: PowerOptions
+}
+
+// ---------------------------------------------------------------- power options (IQ 평가 대상)
+export type ReviewStatus = 'candidate' | 'iq_eval' | 'adopted' | 'rejected'
+export interface OptionItem {
+  key: string; kind: 'knob' | 'ip_mode'; label: string; value: string; from: string; iq_eval: string; note?: string | null
+  dimension?: string; node?: string; ip_ref?: string
+  unit_power_mw_mp?: number | null; from_unit_power_mw_mp?: number | null; ppc?: number | null; from_ppc?: number | null; source?: string | null
+}
+export interface OptionDimension { id: string; kind: 'knob' | 'ip_mode'; label: string; current: string; node?: string; ip_ref?: string; items: OptionItem[] }
+export interface OptionResult {
+  key: string; items: string[]; labels: string[]; kinds: string[]; iq_eval: string; spec_ok: boolean; spec_reasons: string[]
+  total_mw: number | null; delta_mw: number | null; delta_pct: number | null; delta_bw_mbs: number | null
+  raw_delta_mw: number; raw_delta_pct: number | null
+  attribution: { reference: string; delta_mw: number; by_category: Record<string, number>; factors: Factor[]; components?: Record<string, number> }
+  fill_pct?: Record<string, number>; review_status?: ReviewStatus
+}
+export interface PowerOptions {
+  status: 'ok' | 'none' | 'skipped'; dimensions: OptionDimension[]; notes: string[]; sets: number; max_sets: number
+  results: OptionResult[]; best: string | null; errors: { key: string; error: string }[]
+}
+export interface ItemReview { status: ReviewStatus; scope: 'variant' | 'scenario' | null; note: string | null; updated_by?: string | null; updated_at?: string | null }
+export interface BoardOptions {
+  status: 'ok' | 'none' | 'skipped' | 'not_explored'; notes: string[]; sets?: number
+  reference?: { rule: string; case_key: string; note: string | null } | null
+  items: (OptionItem & { review: ItemReview })[]; results: OptionResult[]
+  best: { key: string; labels: string[]; delta_mw: number; delta_pct: number | null; review_status: ReviewStatus } | null
+}
+export interface OptionReview {
+  id: string; project_ref: string | null; scenario_id: string; variant_id: string; option_key: string; status: ReviewStatus
+  note: string | null; history: { status: ReviewStatus; note: string | null; by: string | null; at: string }[]
+  updated_by: string | null; updated_at: string | null
+}
+export const REVIEW: Record<ReviewStatus, { label: string; cls: string }> = {
+  candidate: { label: '후보', cls: '' }, iq_eval: { label: 'IQ 평가 중', cls: 'v-warn' },
+  adopted: { label: '채택', cls: 'v-ok' }, rejected: { label: '기각', cls: 'v-fail' },
+}
+export const REVIEW_ORDER: ReviewStatus[] = ['candidate', 'iq_eval', 'adopted', 'rejected']
+
+/** Best spec-OK saving of a run variant (delta vs its recommended case). */
+export function bestOption(po: PowerOptions | undefined): OptionResult | null {
+  if (!po || po.status !== 'ok') return null
+  return po.results.find((r) => r.key === po.best) ?? null
 }
 export interface RunMeta {
   id: string; title: string; scenario_type: string; project_ref: string | null; soc_ref: string | null; dvfs_table_ref: string | null
   engine_rev: string; created_by: string | null; created_at: string | null
-  summary: { variants: number; errors: number; spec_ok: number; cases: number; eligible_cases: number; verified: number; recommended_power_mw: [number, number] | null }
+  summary: { variants: number; errors: number; spec_ok: number; cases: number; eligible_cases: number; verified: number; recommended_power_mw: [number, number] | null
+    power_options?: { variants: number; sets: number; best_saving_mw: [number, number] | null } }
 }
 export interface RunDetail extends RunMeta { spec: Record<string, unknown>; variants: VariantResult[]; errors: { variant_id: string; error: string }[] }
 export interface Power { total_mw: number; cpu_mw: number; hw_mw: number; bw_mw: number; bw_ip_mw?: number; bw_cpu_mw?: number }
@@ -53,6 +99,7 @@ export interface BoardRow {
   fps: number; power: Power; bw_mbs: number; distribution: Dist | null; compression: string[]; dvfs: Record<string, number>
   verdict: string; eligible_cases: number; alternatives: number; verified: Verified | null; statistic: Statistic; runtime_scale: number
   previous: { id: string; total_mw: number; delta_mw: number } | null
+  power_options?: BoardOptions
 }
 export interface HistoryRow { id: string; status: string; run_id: string; selection_rule: string; reason: string | null; created_at: string | null; total_mw: number; power: Power; bw_mbs: number }
 export interface Factor { category: string; item: string; delta_mw: number; detail: string }
@@ -70,10 +117,13 @@ export interface ReportMeta {
 export interface RunOptions {
   statistics: Statistic[]; runtime_scales: number[]; dvfs_headroom_levels: number
   modes: ('lossy' | 'lossless')[]; max_buffers: number; allow_lossy: boolean; objective_statistic: Statistic; objective_scale: number
+  /** power-saving options: knob values (knobs.yaml explore) / substitute IP modes (sim.modes substitutes) */
+  options: { knobs: boolean; modes: boolean; max_sets: number }
 }
 export const DEFAULT_RUN: RunOptions = {
   statistics: ['mean', 'max'], runtime_scales: [1.0, 1.1, 1.2], dvfs_headroom_levels: 1,
   modes: ['lossy'], max_buffers: 8, allow_lossy: true, objective_statistic: 'max', objective_scale: 1.0,
+  options: { knobs: true, modes: true, max_sets: 64 },
 }
 
 /** Request body for POST /arch/exploration/runs. */
@@ -84,7 +134,8 @@ export function runBody(scenarioIds: string[], title: string, scenarioType: stri
     title: title || undefined, scenario_type: scenarioType || undefined, scenario_ids: scenarioIds,
     spec: {
       axes: { statistics: stats, runtime_scales: scales, dvfs_headroom_levels: o.dvfs_headroom_levels,
-        compression: { enabled: o.modes.length > 0 && o.max_buffers > 0, modes: o.modes.length ? o.modes : ['lossy'], max_buffers: o.max_buffers } },
+        compression: { enabled: o.modes.length > 0 && o.max_buffers > 0, modes: o.modes.length ? o.modes : ['lossy'], max_buffers: o.max_buffers },
+        power_options: { enabled: o.options.knobs || o.options.modes, include_knobs: o.options.knobs, include_modes: o.options.modes, max_sets: o.options.max_sets } },
       constraints: { allow_lossy: o.allow_lossy },
       objective: { statistic: o.objective_statistic, runtime_scale: o.objective_scale },
     },
@@ -117,6 +168,9 @@ export const archApi = {
     send<{ promoted: { id: string; variant_id: string; total_mw: number }[]; skipped: { variant_id: string; reason: string }[] }>(
       'POST', '/arch/predictions/promote', { run_id: runId, variant_ids: variantIds, case_key: caseKey, reason, scenario_id: scenarioId }),
   board: (scenarioId?: string) => send<{ rows: BoardRow[] }>('GET', `/arch/predictions/board${q({ scenario_id: scenarioId })}`),
+  optionReviews: (scenarioId?: string) => send<OptionReview[]>('GET', `/arch/power-options/reviews${q({ scenario_id: scenarioId })}`),
+  setOptionReview: (body: { scenario_id: string; variant_id?: string; option_key: string; status: ReviewStatus; note?: string }) =>
+    send<OptionReview>('PUT', '/arch/power-options/reviews', body),
   history: (scenarioId: string, variantId: string) => send<HistoryRow[]>('GET', `/arch/predictions/history${q({ scenario_id: scenarioId, variant_id: variantId })}`),
   compare: (p: { old_id?: string; new_id?: string; scenario_id?: string; variant_id?: string }) =>
     send<{ old: HistoryRow; new: HistoryRow; attribution: Attribution }>('GET', `/arch/predictions/compare${q(p)}`),

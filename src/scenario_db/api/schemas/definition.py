@@ -23,6 +23,7 @@ class ScenarioResponse(BaseModel):
     size_profile: dict | None = None
     design_axes: list | None = None
     parametric_sweeps: list | None = None
+    power_options: dict | None = None
     provenance: dict | None = None
 
 

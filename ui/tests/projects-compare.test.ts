@@ -33,7 +33,7 @@ describe('project scoping', () => {
 
 describe('comparison items', () => {
   it('round-trips, dedupes and accepts legacy variants=', () => {
-    const items = parseItems('uc-cam-recording-e2600~cam-rec-r1-uhd30-vdis,uc-cam-recording-e2700~cam-rec-r1-uhd30-vdis-bcrop,uc-cam-recording-e2600~cam-rec-r1-uhd30-vdis,bad')
+    const items = parseItems('uc-cam-recording-e2600~cam-rec-r1-uhd30-vdis,uc-cam-recording-e2700~cam-rec-r1-uhd30-pro,uc-cam-recording-e2600~cam-rec-r1-uhd30-vdis,bad')
     expect(items).toHaveLength(2)
     expect(parseItems(formatItems(items))).toEqual(items)
     expect(compareItems({ variants: 'a,b,a' }, 'uc-s', 'x')).toEqual([{ scenario: 'uc-s', variant: 'a' }, { scenario: 'uc-s', variant: 'b' }])
@@ -44,8 +44,8 @@ describe('comparison items', () => {
     const p = projectsOf(CATALOG)
     const same = itemLabels([{ scenario: 'uc-cam-recording-e2600', variant: 'cam-rec-r1-uhd30-vdis' }, { scenario: 'uc-cam-recording-e2600', variant: 'cam-rec-r1-fhd30-vdis' }], CATALOG, p)
     expect(same.map((l) => l.short)).toEqual(['uhd30-vdis', 'fhd30-vdis'])
-    const cross = itemLabels([{ scenario: 'uc-cam-recording-e2600', variant: 'cam-rec-r1-uhd30-vdis' }, { scenario: 'uc-cam-recording-e2700', variant: 'cam-rec-r1-uhd30-vdis-bcrop' }, { scenario: 'uc-cam-preview-e2600', variant: 'p1' }], CATALOG, p)
-    expect(cross[1].short).toBe('2700 · Camera Recording · cam-rec-r1-uhd30-vdis-bcrop')
+    const cross = itemLabels([{ scenario: 'uc-cam-recording-e2600', variant: 'cam-rec-r1-uhd30-vdis' }, { scenario: 'uc-cam-recording-e2700', variant: 'cam-rec-r1-uhd30-pro' }, { scenario: 'uc-cam-preview-e2600', variant: 'p1' }], CATALOG, p)
+    expect(cross[1].short).toBe('2700 · Camera Recording · cam-rec-r1-uhd30-pro')
     expect(cross[0].full).toContain('Exynos2600 SM-S947B')
   })
 })

@@ -171,6 +171,7 @@ def decompile_usecase(doc: dict, out_dir: Path) -> dict[str, int]:
     """Write generated sources; hand-authored files (knobs.yaml, overlay.yaml,
     sw_timing.measured.yaml) are kept, and reviewed size bindings are preserved."""
     doc = copy.deepcopy(doc)
+    doc.pop("power_options", None)  # generated from the hand-authored knobs.yaml
     variants = doc.get("variants") or []
     knobs = yamlio.load(out_dir / "knobs.yaml") if (out_dir / "knobs.yaml").exists() else None
     previous = yamlio.load(out_dir / "sizes.yaml") if (out_dir / "sizes.yaml").exists() else None
@@ -404,7 +405,25 @@ def compile_usecase(sources: dict[str, Any]) -> dict:
     variants = select_scope(variants, sources.get("keep"))
     doc = {}
     for k, val in base.items():
+        if k == "variants":
+            options = power_options_doc(sources.get("knobs") or {})
+            if options:
+                doc["power_options"] = options
         doc[k] = variants if k == "variants" else val
     if "variants" not in doc and variants:
         doc["variants"] = variants
     return doc
+
+
+POWER_OPTION_KEYS = ("params", "param_rules", "knobs")
+
+
+def power_options_doc(knobs: dict) -> dict | None:
+    """knobs.yaml -> ``power_options`` of the compiled usecase (runtime knob spec).
+
+    Combination exploration re-applies knob values on top of a formal variant at run
+    time, so the DB needs the definitions, not only the variants that select them.
+    """
+    if not (knobs or {}).get("knobs"):
+        return None
+    return {k: copy.deepcopy(knobs[k]) for k in POWER_OPTION_KEYS if knobs.get(k)}

@@ -10,6 +10,7 @@ from scenario_db.api.resource_limits import admission_slot, enforce_request_size
 from scenario_db.api.schemas.arch_exploration import (
     ArchExplorationRunRequest,
     ArchReportRequest,
+    PowerOptionReviewRequest,
     PromoteRequest,
     ReportStatusRequest,
 )
@@ -73,6 +74,24 @@ def compare(
 ):
     """Power change attribution (default: current vs the prediction it superseded)."""
     return svc.compare(db, old_id=old_id, new_id=new_id, scenario_id=scenario_id, variant_id=variant_id)
+
+
+# ------------------------------------------------------------------- power options (IQ review)
+@router.get("/power-options/reviews")
+def list_option_reviews(project_ref: str | None = None, scenario_id: str | None = None,
+                        db: Session = Depends(get_db)):
+    return svc.list_option_reviews(db, project_ref=project_ref, scenario_id=scenario_id)
+
+
+@router.put("/power-options/reviews")
+def set_option_review(
+    request: PowerOptionReviewRequest,
+    db: Session = Depends(get_db),
+    principal: ApiPrincipal = Depends(require_roles("writer", "admin")),
+):
+    """candidate -> iq_eval -> adopted / rejected. Adopting does not change any variant:
+    add the knob value / IP mode to the formal variant in authoring."""
+    return svc.set_option_review(db, request, principal.subject)
 
 
 @router.get("/predictions/{prediction_id}")

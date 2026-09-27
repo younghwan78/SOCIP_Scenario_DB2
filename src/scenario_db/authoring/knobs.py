@@ -156,6 +156,21 @@ def knob_bound_nodes(spec: dict, variant: dict) -> set[str]:
     return nodes
 
 
+def derived_in_dependency_order(derived: dict[str, dict]) -> list[tuple[str, dict]]:
+    """Derived anchors ordered so every ``from`` / ``clamp_to`` anchor of the same knob value
+    is computed first (a spec read back from JSONB loses the authored key order)."""
+    pending = dict(derived)
+    out: list[tuple[str, dict]] = []
+    while pending:
+        ready = [n for n, r in pending.items()
+                 if not ({r.get("from"), r.get("clamp_to")} & (set(pending) - {n}))]
+        if not ready:
+            raise KnobError(f"derived anchors form a cycle: {sorted(pending)}")
+        for n in sorted(ready, key=list(pending).index):
+            out.append((n, pending.pop(n)))
+    return out
+
+
 def apply_knobs(base_anchors: dict[str, str], variant: dict, spec: dict) -> dict[str, Any]:
     """Apply selected knob values to one expanded variant (in place). Returns a trace."""
     if not spec or not spec.get("knobs"):
@@ -176,7 +191,7 @@ def apply_knobs(base_anchors: dict[str, str], variant: dict, spec: dict) -> dict
             patched = deep_merge(variant, effect["variant_patch"])
             variant.clear()
             variant.update(patched)
-        for anchor, rule in (effect.get("derived") or {}).items():
+        for anchor, rule in derived_in_dependency_order(effect.get("derived") or {}):
             anchors = dict(base_anchors)
             anchors.update(variant.get("size_overrides") or {})
             variant.setdefault("size_overrides", {})[anchor] = compute_anchor(rule, anchors, params, anchor)

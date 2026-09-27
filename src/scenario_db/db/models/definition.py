@@ -27,6 +27,7 @@ class Scenario(Base):
     size_profile   = Column(JSONB)
     design_axes    = Column(JSONB)
     parametric_sweeps = Column(JSONB)
+    power_options  = Column(JSONB)          # architecture knobs + power-option exploration flags
     provenance = Column(JSONB)
     yaml_sha256    = Column(Text, nullable=False)
 

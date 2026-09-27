@@ -6,10 +6,10 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from scenario_db.api.schemas.arch_exploration import ArchReportRequest, PromoteRequest
+from scenario_db.api.schemas.arch_exploration import ArchReportRequest, PowerOptionReviewRequest, PromoteRequest
 from scenario_db.api.services import arch_exploration as svc
 from scenario_db.db.models.definition import Scenario, ScenarioVariant
-from scenario_db.db.models.exploration import ArchExplorationRun, ArchReport, Prediction
+from scenario_db.db.models.exploration import ArchExplorationRun, ArchReport, PowerOptionReview, Prediction
 from scenario_db.exceptions import UnprocessableError
 from scenario_db.sim.arch_exploration import DIST_KEYS
 
@@ -55,6 +55,7 @@ def stored_run(engine):
     finally:
         with Session(engine) as db:
             db.query(ArchReport).filter(ArchReport.exploration_run_refs.contains([rid])).delete(synchronize_session=False)
+            db.query(PowerOptionReview).filter(PowerOptionReview.scenario_ref.in_(ids)).delete(synchronize_session=False)
             db.query(Prediction).filter(Prediction.scenario_ref.in_(ids)).delete(synchronize_session=False)
             db.query(ArchExplorationRun).filter_by(id=rid).delete()
             db.query(ScenarioVariant).filter(ScenarioVariant.scenario_id.in_(ids)).delete(synchronize_session=False)
@@ -139,3 +140,61 @@ def test_failed_verification_cannot_be_promoted(engine, stored_run):
         db.commit()
         with pytest.raises(UnprocessableError, match="verification"):
             svc.promote(db, PromoteRequest(run_id=rid, scenario_id=ids[0]))
+
+
+BCROP, L0 = "knob:crop_strategy=byrp_bcrop", "knob:pyramid_l0=skip"
+
+
+def _options(total):
+    def res(items, delta):
+        return {"key": "+".join(sorted(items)), "items": items, "labels": items, "kinds": ["knob"],
+                "iq_eval": "required", "spec_ok": True, "spec_reasons": [], "total_mw": total + delta,
+                "delta_mw": delta, "delta_pct": round(100 * delta / total, 2), "delta_bw_mbs": -1.0,
+                "raw_delta_mw": delta, "raw_delta_pct": None, "attribution": {"by_category": {"BW traffic": delta}},
+                "fill_pct": {}}
+    return {"status": "ok", "notes": [], "sets": 3, "max_sets": 64, "errors": [], "best": f"{BCROP}+{L0}",
+            "dimensions": [{"id": "knob:crop_strategy", "kind": "knob", "label": "BYRP bayer crop", "current": "mcsc_crop",
+                            "items": [{"key": BCROP, "kind": "knob", "label": "BYRP bayer crop: byrp_bcrop",
+                                       "value": "byrp_bcrop", "from": "mcsc_crop", "iq_eval": "required"}]},
+                           {"id": "knob:pyramid_l0", "kind": "knob", "label": "MTNR L0 skip", "current": "use",
+                            "items": [{"key": L0, "kind": "knob", "label": "MTNR L0 skip: skip", "value": "skip",
+                                       "from": "use", "iq_eval": "required"}]}],
+            "results": [res([BCROP, L0], -3.0), res([L0], -2.0), res([BCROP], -1.0)]}
+
+
+def test_power_options_ride_with_the_prediction_and_follow_iq_review(engine, stored_run):
+    rid, ids = stored_run
+    with Session(engine) as db:
+        run = svc.get_run(db, rid)
+        variants = deepcopy(run.variants)
+        variants[0]["power_options"] = _options(10.0)
+        run.variants = variants
+        db.commit()
+        svc.promote(db, PromoteRequest(run_id=rid))
+        rows = {r["scenario_id"]: r for r in svc.board(db)["rows"] if r["scenario_id"] in ids}
+        po = rows[ids[0]]["power_options"]
+        assert po["best"]["key"] == f"{BCROP}+{L0}" and po["best"]["delta_mw"] == -3.0
+        assert po["best"]["review_status"] == "candidate" and po["reference"]["rule"] == "auto:min-power"
+        assert rows[ids[1]]["power_options"]["status"] == "not_explored"
+        # scenario-wide rejection of bcrop drops every set that contains it
+        svc.set_option_review(db, PowerOptionReviewRequest(scenario_id=ids[0], option_key=BCROP, status="rejected",
+                                                           note="edge sharpness"), "iq")
+        svc.set_option_review(db, PowerOptionReviewRequest(scenario_id=ids[0], option_key=L0, status="iq_eval"), "iq")
+        po = next(r for r in svc.board(db)["rows"] if r["scenario_id"] == ids[0])["power_options"]
+        assert po["best"] == {"key": L0, "labels": [L0], "delta_mw": -2.0, "delta_pct": -20.0, "review_status": "iq_eval"}
+        status = {r["key"]: r["review_status"] for r in po["results"]}
+        assert status == {f"{BCROP}+{L0}": "rejected", L0: "iq_eval", BCROP: "rejected"}
+        # a variant-specific decision overrides the scenario-wide one
+        svc.set_option_review(db, PowerOptionReviewRequest(scenario_id=ids[0], variant_id="shared", option_key=BCROP,
+                                                           status="adopted"), "iq")
+        svc.set_option_review(db, PowerOptionReviewRequest(scenario_id=ids[0], variant_id="shared", option_key=L0,
+                                                           status="adopted"), "iq")
+        po = next(r for r in svc.board(db)["rows"] if r["scenario_id"] == ids[0])["power_options"]
+        assert po["best"]["key"] == f"{BCROP}+{L0}" and po["best"]["review_status"] == "adopted"
+        reviews = svc.list_option_reviews(db, scenario_id=ids[0])
+        assert len(reviews) == 4
+        bcrop = next(r for r in reviews if r["option_key"] == BCROP and r["variant_id"] == "*")
+        svc.set_option_review(db, PowerOptionReviewRequest(scenario_id=ids[0], option_key=BCROP, status="iq_eval"), "iq")
+        again = next(r for r in svc.list_option_reviews(db, scenario_id=ids[0])
+                     if r["option_key"] == BCROP and r["variant_id"] == "*")
+        assert again["id"] == bcrop["id"] and [h["status"] for h in again["history"]] == ["rejected", "iq_eval"]

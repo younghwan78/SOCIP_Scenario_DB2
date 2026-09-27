@@ -3,12 +3,13 @@ import type { Ctx } from '../App'
 import { useAsync } from '../lib/route'
 import { fmt, type Statistic } from '../lib/timingBudget'
 import {
-  DEFAULT_RUN, METRIC_COLOR, archApi, caseCount, caseDelta, levels, runBody, short, variantKey,
+  DEFAULT_RUN, METRIC_COLOR, archApi, bestOption, caseCount, caseDelta, levels, runBody, short, variantKey,
   type DistKey, type ExpCase, type RunDetail, type RunOptions, type VariantResult,
 } from '../lib/archExplore'
 import { Card } from '../components/TimingCharts'
 import { AxisSpread, BufferSavings, CompositionBars, DomainLevels, RangeBoxes, SplitBar, SplitLegend } from '../components/ArchCharts'
 import { DataTable, type Column } from '../components/DataTable'
+import { OPTION_NOTE, OptionResults, signed } from '../components/PowerOptions'
 
 const METRICS: [DistKey, string, string][] = [['total_mw', 'Total', 'mW'], ['cpu_mw', 'CPU', 'mW'], ['bw_cpu_mw', 'CPU BW', 'mW'], ['hw_mw', 'IP', 'mW'], ['bw_ip_mw', 'IP BW', 'mW'], ['bw_mbs', 'BW MB/s', 'MB/s']]
 const SCALES = [1.0, 1.1, 1.2, 1.3, 1.5]
@@ -94,6 +95,13 @@ function RunForm({ ctx, onDone }: { ctx: Ctx; onDone: (r: RunDetail) => void }) 
             <span className="faint" style={{ fontSize: 12 }}>× 증가</span>
             <div className="seg sm">{[1.0, 1.1, 1.2].map((s) => <button key={s} className={o.objective_scale === s ? 'on' : ''} onClick={() => set('objective_scale', s)}>×{s.toFixed(1)}</button>)}</div>
             <span className="faint" style={{ fontSize: 12 }}>= eligible 중 최저 total power</span></div>
+          <div className="ax-row"><span className="ax-label">Power option</span>
+            <label className="ax-check"><input type="checkbox" checked={o.options.knobs} onChange={() => set('options', { ...o.options, knobs: !o.options.knobs })} />arch knob (bcrop, L0 skip …)</label>
+            <label className="ax-check"><input type="checkbox" checked={o.options.modes} onChange={() => set('options', { ...o.options, modes: !o.options.modes })} />IP mode (sim.modes substitutes)</label>
+            <span className="faint" style={{ fontSize: 12 }}>조합 ≤</span>
+            <input className="input" type="number" min={1} max={256} value={o.options.max_sets} style={{ width: 70 }} aria-label="option 조합 상한"
+              onChange={(e) => set('options', { ...o.options, max_sets: Math.max(1, Math.min(256, Number(e.target.value) || 1)) })} />
+            <span className="faint" style={{ fontSize: 12 }}>full factorial · 조합별 재시뮬레이션 · variant 아님 (IQ 평가 대상)</span></div>
         </div>
       </div>
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -135,6 +143,7 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
     ['조합 수', s.cases.toLocaleString(), `eligible ${s.eligible_cases.toLocaleString()}`],
     ['추천 검증', `${s.verified} / ${s.spec_ok}`, '재시뮬레이션 |Δ| < 0.5%'],
     ['추천 power', s.recommended_power_mw ? `${fmt(s.recommended_power_mw[0], 0)}–${fmt(s.recommended_power_mw[1], 0)}` : '—', 'mW (scenario별 최저)'],
+    ['Power option (절감 variant)', `${s.power_options?.variants ?? 0}`, s.power_options?.best_saving_mw ? `최대 절감 ${fmt(s.power_options.best_saving_mw[0], 1)} ~ ${fmt(s.power_options.best_saving_mw[1], 1)} mW` : `${s.power_options?.sets ?? 0} 조합 · IQ 평가 대상`],
   ]
   const cols: Column<VariantResult>[] = [
     { key: 'v', label: 'Variant', width: 210, sticky: true, sort: (r) => r.variant_id, render: (r) => <span className="mono">{short(r.variant_id)}</span> },
@@ -147,6 +156,9 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
     { key: 'bwcpu', label: 'CPU BW', width: 74, align: 'right', firstDir: -1, sort: (r) => r.recommended?.bw_cpu_mw ?? -1, render: (r) => fmt(r.recommended?.bw_cpu_mw, 1) },
     { key: 'bw', label: 'BW MB/s', width: 84, align: 'right', firstDir: -1, sort: (r) => r.recommended?.bw_mbs ?? -1, render: (r) => fmt(r.recommended?.bw_mbs, 0) },
     { key: 'save', label: 'baseline 대비', width: 108, align: 'right', firstDir: 1, sort: (r) => (r.recommended ? r.recommended.total_mw - r.baseline.total_mw : 0), render: (r) => r.recommended ? <span className="mono" style={{ color: 'var(--primary-strong)' }}>{fmt(r.recommended.total_mw - r.baseline.total_mw, 1)}</span> : '—' },
+    { key: 'opt', label: '절감 option', width: 120, align: 'right', firstDir: 1, sort: (r) => bestOption(r.power_options)?.delta_mw ?? 0,
+      title: (r) => { const b = bestOption(r.power_options); return b ? `${b.labels.join(' + ')}\n${OPTION_NOTE}` : (r.power_options?.notes ?? []).join('\n') },
+      render: (r) => { const b = bestOption(r.power_options); return b ? <span className="mono" style={{ color: 'var(--primary-strong)' }}><b>{signed(b.delta_mw)}</b> <span className="faint" style={{ fontSize: 11 }}>{signed(b.delta_pct)}%</span></span> : <span className="faint">—</span> } },
     { key: 'range', label: 'range mW', width: 104, align: 'right', firstDir: -1, sort: (r) => r.distribution.total_mw.max - r.distribution.total_mw.min, render: (r) => <span className="mono">{fmt(r.distribution.total_mw.min, 0)}–{fmt(r.distribution.total_mw.max, 0)}</span> },
     { key: 'comp', label: 'Comp', width: 62, align: 'right', firstDir: -1, sort: (r) => r.recommended?.compression.length ?? -1, title: (r) => r.recommended?.compression.join(', '), render: (r) => r.recommended ? `${r.recommended.compression.length}${r.recommended.lossy ? ' L' : ''}` : '—' },
     { key: 'dvfs', label: 'DVFS', width: 170, sort: (r) => levels(r.recommended?.dvfs), render: (r) => <span className="mono faint">{levels(r.recommended?.dvfs) || '—'}</span> },
@@ -236,6 +248,17 @@ function VariantDetail({ v, run }: { v: VariantResult; run: RunDetail }) {
         {msg && <span className="faint" style={{ fontSize: 12 }}>{msg}</span>}
       </div>
     </Card>
+ {v.power_options && <Card id="ax-options" title="Power option (IQ 평가 대상)" note={OPTION_NOTE} defaultWide>
+      <div style={{ display: 'grid', gap: 8 }}>
+        <div className="faint" style={{ fontSize: 12 }}>
+          {v.power_options.dimensions.map((d) => `${d.label}: ${d.current} → ${d.items.map((i) => i.value).join(' / ')}`).join(' · ') || '적용 가능한 option 없음'}
+          {v.power_options.status === 'ok' ? ` · ${v.power_options.sets} 조합` : ''}</div>
+        {v.power_options.notes.length > 0 && <ul className="faint" style={{ margin: 0, paddingLeft: 18, fontSize: 12 }}>{v.power_options.notes.map((n) => <li key={n}>{n}</li>)}</ul>}
+        {v.power_options.errors.length > 0 && <div className="err" style={{ fontSize: 12 }}>{v.power_options.errors.map((e) => `${e.key}: ${e.error}`).join(' · ')}</div>}
+        {v.power_options.status === 'ok' && <OptionResults results={v.power_options.results} best={v.power_options.best} />}
+        <div className="faint" style={{ fontSize: 11 }}>예측으로 등록하면 이 결과가 예측 현황에 함께 저장되고, 거기서 IQ 평가 상태를 관리합니다.</div>
+      </div>
+    </Card>}
     <Card id="ax-spread" title="Power range 원인 (축별)" note="SW · compression · DVFS"><AxisSpread spread={v.axis_spread} /></Card>
     <Card id="ax-sw" title="SW timing margin · 권고" note="(P − SW − overhead − HW@set clock)/P">
       <table className="tb-mini-table" style={{ width: '100%' }}>

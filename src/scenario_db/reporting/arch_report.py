@@ -143,6 +143,28 @@ def build_snapshot(
                         "by_category": ch["by_category"], "top": ch["factors"][:4],
                         "context": [_ctx(c) for c in ch["context_changes"] if c["item"] != "exploration_run_ref"]})
 
+    options = []
+    for v in variants:
+        pred = predictions.get((v["scenario_id"], v["variant_id"]))
+        po = ((pred or {}).get("metrics") or {}).get("power_options") if pred else v.get("power_options")
+        if not po or po.get("status") != "ok":
+            continue
+        ranked = [r for r in po.get("results") or [] if r.get("delta_mw") is not None]
+        items = {i["key"]: i for d in po.get("dimensions") or [] for i in d.get("items") or []}
+        singles = [r for r in ranked if len(r["items"]) == 1]
+        if not ranked:
+            continue  # spec-fail variant: no comparable (recommended) power
+        options.append({
+            "scenario_id": v["scenario_id"], "variant_id": v["variant_id"], "fps": v["fps"],
+            "base_total_mw": (v.get("recommended") or {}).get("total_mw"),
+            "best": next(({"key": r["key"], "labels": r["labels"], "delta_mw": r["delta_mw"], "delta_pct": r["delta_pct"],
+                           "by_category": r["attribution"]["by_category"]}
+                          for r in ranked if r["spec_ok"] and r["delta_mw"] < 0), None),
+            "singles": [{"key": r["key"], "label": r["labels"][0], "delta_mw": r["delta_mw"], "delta_pct": r["delta_pct"],
+                         "spec_ok": r["spec_ok"], "kind": (items.get(r["items"][0]) or {}).get("kind")} for r in singles],
+            "sets": len(ranked), "notes": po.get("notes") or [],
+        })
+
     totals = [r["power"]["total_mw"] for r in rows if r["spec_ok"] and r["power"].get("total_mw") is not None]
     return {
         "overview": {
@@ -164,6 +186,7 @@ def build_snapshot(
         "scenarios": rows,
         "clocks": clocks,
         "compression": comp_rows,
+        "power_options": options,
         "sw_margin_top5": [m for m in margins if m["spec_ok"]][:5],
         "sw_margin_fail": [m for m in margins if not m["spec_ok"]],
         "domains": domains,
@@ -208,9 +231,10 @@ def render_html(title: str, snap: dict[str, Any]) -> str:
         _sec(6, _boxes(snap["scenarios"])),
         _sec(7, _split(snap["scenarios"])),
         _sec(8, _compression(snap["compression"], snap["scenarios"])),
-        _sec(9, _margins(snap["sw_margin_top5"]) + _fail_margins(snap.get("sw_margin_fail") or [])),
-        _sec(10, _history(snap["history"])),
-        _sec(11, _appendix(snap["appendix"])),
+        _sec(9, _power_options(snap.get("power_options") or [])),
+        _sec(10, _margins(snap["sw_margin_top5"]) + _fail_margins(snap.get("sw_margin_fail") or [])),
+        _sec(11, _history(snap["history"])),
+        _sec(12, _appendix(snap["appendix"])),
         "</main></body></html>",
     ]
     return "".join(parts)
@@ -221,7 +245,7 @@ def html_sha256(html: str) -> str:
 
 
 SECTIONS = ["개요", "Spec 만족", "분류별 검토 의견", "Scenario 요약", "IP 필요 clock", "Power·BW 분포", "CPU/IP/BW",
-            "Compression 절감", "SW margin Top5", "변경 이력", "부록"]
+            "Compression 절감", "Power option (IQ 평가 대상)", "SW margin Top5", "변경 이력", "부록"]
 
 _CSS = """
 body{font:13px/1.45 -apple-system,'Segoe UI','Malgun Gothic',sans-serif;color:#23262E;background:#FBFAF7;margin:0}
@@ -459,6 +483,24 @@ def _compression(rows: list[dict[str, Any]], scen: list[dict[str, Any]]) -> str:
               f"<td class=n>{_f(c['ratio'],2)}</td><td class={'warn' if c['ratio_source']=='assumed' else ''}>{escape(str(c['ratio_source']))}</td>"
               f"<td>{escape(str(c['support']))}</td><td class=n>{c['selected']}/{c['variants']}</td>"
               f"<td class=n>{_f(c['selected_delta_mbs'],0)}</td><td class=n>{_f(c['selected_delta_mw'],1)}</td><td class=n>{_f(c['delta_mbs'],0)}</td></tr>")
+    return h + "</table>"
+
+
+def _power_options(rows: list[dict[str, Any]]) -> str:
+    if not rows:
+        return "<p class='meta'>탐색된 power option 없음 (knobs.yaml explore / IP sim.modes substitutes 미선언)</p>"
+    h = ("<p class='meta'>정식 variant가 아닌 power-saving 후보. 각 조합마다 compression·DVFS를 다시 탐색한 최소 전력을 "
+         "variant 권장 case와 비교한다. 채택하려면 IQ 평가가 필요하다. spec 미달 variant는 제외.</p>"
+         "<table><tr><th>Scenario</th><th>fps</th><th>기준 mW</th><th>최대 절감 조합</th><th>ΔmW</th><th>원인</th><th>단일 option</th></tr>")
+    for r in rows:
+        b = r["best"]
+        cats = ", ".join(f"{k} {v:+.1f}" for k, v in list((b or {}).get("by_category", {}).items())[:3])
+        singles = "<br>".join(f"{escape(x['label'])} <b class='n'>{x['delta_mw']:+.1f}</b>"
+                              f"{'' if x['spec_ok'] else ' <span class=fail>spec fail</span>'}" for x in r["singles"])
+        delta = (f"<b>{b['delta_mw']:+.1f}</b><br><span class=meta>{_f(b['delta_pct'], 1)}%</span>" if b else "—")
+        best = escape(" + ".join(b["labels"])) if b else "—"
+        h += (f"<tr><td>{escape(_short(r['variant_id']))}</td><td class=n>{_f(r['fps'],0)}</td><td class=n>{_f(r['base_total_mw'],1)}</td>"
+              f"<td>{best}</td><td class=n>{delta}</td><td>{escape(cats)}</td><td>{singles}</td></tr>")
     return h + "</table>"
 
 

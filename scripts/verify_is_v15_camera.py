@@ -40,7 +40,8 @@ def read(path: Path) -> dict:
 
 def graph_from_fixture(raw: dict, variant_id: str, catalog: dict) -> CanonicalScenarioGraph:
     scenario = Scenario(id=raw["id"], schema_version=raw["schema_version"], project_ref=raw["project_ref"],
-                        metadata_=raw["metadata"], pipeline=raw["pipeline"], size_profile=raw.get("size_profile"), yaml_sha256="fixture")
+                        metadata_=raw["metadata"], pipeline=raw["pipeline"], size_profile=raw.get("size_profile"),
+                        power_options=raw.get("power_options"), yaml_sha256="fixture")
     rows = {v["id"]: ScenarioVariant(scenario_id=raw["id"], **{
         k: deepcopy(value) for k, value in v.items()
     }) for v in raw["variants"]}

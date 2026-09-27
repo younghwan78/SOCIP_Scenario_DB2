@@ -748,6 +748,86 @@ pipeline:
       outputs by default.
     pyramid_base: mlsc_out
     eis_chain: MCSC -> one EIS SW stage -> preview/video GDC instances
+power_options:
+  params:
+    sensor_margin_pct: 25
+    eis_margin_pct: 25
+  param_rules:
+  - when_node_enabled: eis
+    set:
+      eis_margin_pct: 15
+  knobs:
+    crop_strategy:
+      condition_key: crop_strategy
+      default: mcsc_crop
+      explore:
+        when_node_enabled: eis
+        iq_eval: required
+        label: BYRP bayer crop
+      values:
+        mcsc_crop: {}
+        byrp_bcrop:
+          derived:
+            bcrop_out:
+              from: sensor_full
+              scale: (100 + eis_margin_pct) / (100 + sensor_margin_pct)
+              align_x: 16
+              align_y: 2
+              clamp_to: sensor_full
+            mlsc_out:
+              from: bcrop_out
+            pyramid_l0:
+              from: bcrop_out
+            pyramid_l1:
+              from: pyramid_l0
+              scale: 0.5
+              round: ceil
+            pyramid_l2:
+              from: pyramid_l1
+              scale: 0.5
+              round: ceil
+            pyramid_l3:
+              from: pyramid_l2
+              scale: 0.5
+              round: ceil
+            pyramid_l4:
+              from: pyramid_l3
+              scale: 0.5
+              round: ceil
+          bindings:
+            rgbp: bcrop_out
+            yuvsc: bcrop_out
+            mlsc: bcrop_out
+            mtnr: bcrop_out
+            msnr: bcrop_out
+            yuvp: bcrop_out
+            mcsc: bcrop_out
+          variant_patch:
+            node_configs:
+              byrp:
+                operations:
+                  crop: true
+              mcsc:
+                operations:
+                  crop: false
+                  scale: true
+    pyramid_l0:
+      condition_key: pyramid_l0
+      default: use
+      explore:
+        when_node_enabled: mtnr
+        iq_eval: required
+        label: MTNR L0 skip
+      values:
+        use: {}
+        skip:
+          variant_patch:
+            topology_patch:
+              $append:
+                remove_edges:
+                - from: mlsc
+                  to: mtnr
+                  buffer: PYRAMID_L0
 variants:
 - id: cam-rec-r1-fhd30-sdr
   severity: light

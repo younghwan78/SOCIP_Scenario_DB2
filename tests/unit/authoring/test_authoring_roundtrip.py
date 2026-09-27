@@ -104,7 +104,6 @@ E2700_KPI = [
     "cam-rec-apv-uhd30-422-sdr", "cam-rec-apv-uhd60-422-sdr", "cam-rec-r1-uhd30-pro", "cam-rec-r1-uhd60-pro",
     "cam-rec-r1-uhd120-pro", "cam-rec-apv-uhd120-422-sdr",
 ]
-E2700_EXPLORATION = ["cam-rec-r1-uhd30-vdis-bcrop", "cam-rec-r1-uhd30-vdis-bcrop-l0skip", "cam-rec-r1-fhd30-vdis-bcrop"]
 
 
 def _scenario_ids(report: dict) -> list[str]:
@@ -147,7 +146,12 @@ def test_e2700_is_the_rear_camera_recording_kpi_set():
     rec = docs["uc-cam-recording-e2700"]
     assert rec["project_ref"] == "proj-sm-s957b"
     assert rec["metadata"]["canonical_usecase"] == "uc-cam-recording"
-    assert [v["id"] for v in rec["variants"]] == E2700_KPI + E2700_EXPLORATION
+    assert [v["id"] for v in rec["variants"]] == E2700_KPI
+    # power-saving options are explored on top of KPI variants, never registered as variants
+    assert not [v for v in rec["variants"] if "exploration-only" in (v.get("tags") or [])]
+    knobs = rec["power_options"]["knobs"]
+    assert knobs["crop_strategy"]["explore"]["when_node_enabled"] == "eis"
+    assert knobs["pyramid_l0"]["explore"]["iq_eval"] == "required"
     assert not [v for v in rec["variants"] if v["id"].startswith("cam-rec-pip-")]   # dual wide+front: out of rear scope
     assert all(n["ip_ref"].endswith("s5e9975") for n in rec["pipeline"]["nodes"])
     apv = _variant(rec, "cam-rec-apv-uhd30-422-sdr")
@@ -382,3 +386,32 @@ def test_duplicate_output_paths_are_rejected_before_writing(tmp_path):
     with pytest.raises(AuthoringError, match='duplicate'):
         write_docs([Doc('doc.yaml', data={'a': 1}), Doc('doc.yaml', data={'a': 2})], tmp_path)
     assert target.read_text(encoding='utf-8') == 'keep'
+
+
+def test_runtime_power_option_equals_compiled_knob_variant(child_root: Path):
+    """Combination exploration re-applies knobs on a compiled variant: it must reproduce the
+    variant the authoring compiler would emit for the same knob values."""
+    from copy import deepcopy
+
+    from scenario_db.db.models.definition import Scenario, ScenarioVariant
+    from scenario_db.db.repositories.scenario_graph import CanonicalScenarioGraph
+    from scenario_db.db.repositories.variant_resolution import resolve_variant_from_rows
+    from scenario_db.sim import power_options as po
+
+    rec = _child_recording(child_root)
+    scenario = Scenario(id=rec["id"], schema_version="2.2", project_ref=rec["project_ref"], metadata_=rec["metadata"],
+                        pipeline=rec["pipeline"], size_profile=rec.get("size_profile"),
+                        power_options=rec["power_options"], yaml_sha256="t")
+    rows = {v["id"]: ScenarioVariant(scenario_id=rec["id"], **deepcopy(v)) for v in rec["variants"]}
+    graph = CanonicalScenarioGraph(scenario=scenario,
+                                   variant=resolve_variant_from_rows(rows, rec["id"], "cam-rec-r1-uhd30-vdis"))
+    dims, notes = po.option_dimensions(graph)
+    items = {i["key"]: i for d in dims for i in d["items"]}
+    assert set(items) >= {"knob:crop_strategy=byrp_bcrop", "knob:pyramid_l0=skip"} and notes == []
+    for target, keys in (("cam-rec-r1-uhd30-vdis-bcrop", ["knob:crop_strategy=byrp_bcrop"]),
+                         ("cam-rec-r1-uhd30-vdis-bcrop-l0skip",
+                          ["knob:crop_strategy=byrp_bcrop", "knob:pyramid_l0=skip"])):
+        got = po.variant_dict(po.apply_option_set(graph, [items[k] for k in keys]).variant)
+        want = _variant(rec, target)
+        for field in ("design_conditions", "size_overrides", "topology_patch", "node_configs", "routing_switch"):
+            assert (got.get(field) or {}) == (want.get(field) or {}), (target, field)

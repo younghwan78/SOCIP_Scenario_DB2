@@ -28,7 +28,7 @@ def test_project_db_folders_strict_load_and_preserve_parent(engine):
                 assert session.get(SensorCatalog, 'sensor-gng-m2s-s5e9975') is not None
                 evidence = session.scalars(select(Evidence).where(
                     Evidence.scenario_ref == 'uc-cam-recording-e2700')).all()
-                assert len(evidence) == 35
+                assert len(evidence) == 32  # 16 KPI sim-pred + 16 measurements (power options are not variants)
                 assert all(e.project_ref == 'proj-sm-s957b' for e in evidence)
                 assert all(e.sw_baseline_ref == 'sw-vendor-v1.2.3-s5e9975' for e in evidence)
                 assert load_yaml_dir(child_db, session, strict=True, validate=True).ok

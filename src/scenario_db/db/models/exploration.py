@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Index, Text, func, text
+from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Index, Text, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 
 from scenario_db.db.base import Base
@@ -80,3 +80,33 @@ class ArchReport(Base):
     html_sha256 = Column(Text, nullable=False)
     generated_by = Column(Text)
     generated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+POWER_OPTION_STATUSES = ("candidate", "iq_eval", "adopted", "rejected")
+
+
+class PowerOptionReview(Base):
+    """IQ review state of one power-saving option item (knob value or IP mode).
+
+    Options are predicted by combination exploration on top of formal variants; they
+    are not variants. ``variant_ref='*'`` applies to every variant of the scenario,
+    a concrete variant id overrides it for that variant.
+    """
+
+    __tablename__ = "power_option_reviews"
+    __table_args__ = (
+        CheckConstraint("status in ('candidate', 'iq_eval', 'adopted', 'rejected')",
+                        name="ck_power_option_review_status"),
+        UniqueConstraint("scenario_ref", "variant_ref", "option_key", name="uq_power_option_review"),
+    )
+
+    id = Column(Text, primary_key=True)
+    project_ref = Column(Text, ForeignKey("projects.id"), index=True)
+    scenario_ref = Column(Text, ForeignKey("scenarios.id"), nullable=False)
+    variant_ref = Column(Text, nullable=False)
+    option_key = Column(Text, nullable=False)
+    status = Column(Text, nullable=False)
+    note = Column(Text)
+    history = Column(JSONB, nullable=False)
+    updated_by = Column(Text)
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())

@@ -58,7 +58,8 @@ def test_run_persists_summary_and_reports_partial_failure(monkeypatch):
     result = svc.run_exploration(db, request, "reviewer")
     assert result["project_ref"] == "proj-a" and result["created_by"] == "reviewer"
     assert result["summary"] == {"variants": 1, "errors": 1, "spec_ok": 1, "cases": 12,
-                                  "eligible_cases": 4, "verified": 1, "recommended_power_mw": [10, 10]}
+                                  "eligible_cases": 4, "verified": 1, "recommended_power_mw": [10, 10],
+                                  "power_options": {"variants": 0, "sets": 0, "best_saving_mw": None}}
     assert result["errors"] == [{"scenario_id": "uc-a", "variant_id": "bad", "error": "broken pipeline"}]
     db.commit.assert_called_once()
     with pytest.raises(UnprocessableError, match="max_variants"):
@@ -106,3 +107,27 @@ def test_variant_loader_errors_are_domain_errors(monkeypatch, error, expected):
     monkeypatch.setattr(timing, "_load", MagicMock(side_effect=error))
     with pytest.raises(expected):
         timing.analyze_timing_budget_request(MagicMock(), TimingBudgetRequest(scenario_id="uc-a", variant_id="v"))
+
+
+def test_option_set_status_and_board_best_skip_rejected_items():
+    def item(st):
+        return {"status": st}
+    assert svc.set_status([]) == "candidate"
+    assert svc.set_status([item("adopted"), item("iq_eval")]) == "iq_eval"
+    assert svc.set_status([item("adopted"), item("rejected")]) == "rejected"
+    po = {"status": "ok", "dimensions": [{"items": [{"key": "knob:a=x"}, {"key": "mode:n=LP"}]}],
+          "results": [{"key": "knob:a=x+mode:n=LP", "items": ["knob:a=x", "mode:n=LP"], "spec_ok": True, "delta_mw": -5},
+                      {"key": "mode:n=LP", "items": ["mode:n=LP"], "spec_ok": True, "delta_mw": -2},
+                      {"key": "knob:a=x", "items": ["knob:a=x"], "spec_ok": False, "delta_mw": -9}]}
+    rejected = SimpleNamespace(status="rejected", variant_ref="*", note="IQ", updated_by="u", updated_at=None)
+    out = svc.board_options(po, {("*", "knob:a=x"): rejected}, "v")
+    assert out["best"]["key"] == "mode:n=LP"          # spec-fail and rejected sets are never the best
+    assert [i["review"]["status"] for i in out["items"]] == ["rejected", "candidate"]
+    assert svc.board_options(None, {}, "v")["status"] == "not_explored"
+
+
+def test_option_snapshot_marks_user_selected_reference():
+    po = {"status": "ok", "dimensions": [], "results": [], "best": None}
+    assert svc.option_snapshot(po, {"key": "k"}, "auto:min-power")["reference"]["note"] is None
+    assert "auto" in svc.option_snapshot(po, {"key": "k2"}, "user:rank-2")["reference"]["note"]
+    assert svc.option_snapshot(None, {"key": "k"}, "auto:min-power") is None
