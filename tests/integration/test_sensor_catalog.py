@@ -7,7 +7,7 @@ from scenario_db.etl.loader import load_yaml_dir
 from scenario_db.db.models.sensor import SensorCatalog, SensorTimingProfile, ProjectSensorSelection
 from scenario_db.db.models.definition import ScenarioVariant
 
-FIXTURES = Path(__file__).parents[2] / "db_fixtures_Exynos2600_S26Plus"
+FIXTURES = Path(__file__).parents[2] / "db_Exynos2600_SM-S947B"
 
 @pytest.fixture(scope="module")
 def imported(engine):

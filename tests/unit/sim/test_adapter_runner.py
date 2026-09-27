@@ -971,7 +971,7 @@ def _demo_generated_graph(scenario_id: str, variant_id: str) -> CanonicalScenari
 
 def _exynos2600_generated_graph(scenario_id: str, variant_id: str) -> CanonicalScenarioGraph:
     root = Path(__file__).resolve().parents[3]
-    fixture_root = root / "db_fixtures_Exynos2600_S26Plus"
+    fixture_root = root / "db_Exynos2600_SM-S947B"
     scenario_raw = _read_yaml(fixture_root / "02_definition" / f"{scenario_id}.yaml")
     scenario = Scenario(
         id=scenario_raw["id"],

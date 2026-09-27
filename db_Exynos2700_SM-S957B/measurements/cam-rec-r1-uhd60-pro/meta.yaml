@@ -1,0 +1,169 @@
+# DUMMY measurement input - not silicon data. Replace values with the in-house capture.
+# Values from meas-synth-cam-rec-r1-uhd60-psm-evt1-20260925 + sim-rear-cam-rec-r1-uhd60-psm-mean-20260925 (reference cam-rec-r1-fhd30-sdr), scaled.
+# Update: edit values/CSV, bump provenance.revision, then run scripts/import_measurements.py
+schema_version: '2.2'
+id: meas-dummy-cam-recording-e2700-cam-rec-r1-uhd60-pro-evt0
+project_ref: proj-sm-s957b
+scenario_ref: uc-cam-recording-e2700
+variant_ref: cam-rec-r1-uhd60-pro
+measured_at: '2026-09-27T10:00:00+09:00'
+execution_context:
+  silicon_rev: EVT0
+  sw_baseline_ref: sw-vendor-v1.2.3-s5e9975
+  thermal: room
+  ambient_temp_c: 25.0
+  power_state: discharging
+  method: measurement
+provenance:
+  revision: 3
+  device_id: DUMMY
+  collection_method: synthetic_dummy
+  collection_tool_versions:
+    generator: generate_dummy_measurements.py
+  sample_count: 3
+  duration_per_sample_s: 30.0
+  confidence_level: 0.95
+kpi:
+  frame_latency_ms: 39.81
+  fps_effective: 59.94
+aggregation_strategy: mean_over_runs
+power:
+  format: rail_long
+  csv: rail_power_by_run.csv
+  total_power_rails: []
+  rails:
+    B5S4_VDDMIF_AP_L:
+      domain: MIF
+    B3_4_5S2_VDD_CPUCL3_BIG_L:
+      domain: CPU
+    B3_4S3_VDD_CPUCL2_MID_HF_L:
+      domain: CPU
+    B2S3_VDD_CPUCL1_MID_LF1_L:
+      domain: CPU
+    B2S2_VDD_CPUCL1_MID_LF0_L:
+      domain: CPU
+    B5_6S3_VDD_CPUCL0_DSU_L:
+      domain: CPU
+    B4S4_VDD_INT_L: {}
+    B5_6S1_VDD_CAM_L: {}
+    L1S3_VDD_ICPU_L: {}
+    B1_2_3_4S1_VDD_G3D0_0P725_L: {}
+    B1_2_3E1_VDD_G3D1_0P725_L: {}
+    B6S4_VDDQ_DRAM_MEM_0P5_T:
+      domain: MEM
+    L5M_VDD1_MEM_L: {}
+    SRB1S5_VDD2L_MEM_AP_L: {}
+    SRB1S4_VDD2H_MEM_AP_L: {}
+    B6S2_VDD_SRAM_L: {}
+artifacts:
+- type: power_monitor_csv
+  storage: fileshare
+  source: rail_power_by_run.csv
+  path: artifacts/proj-sm-s957b/uc-cam-recording-e2700/cam-rec-r1-uhd60-pro/dummy-evt0/rail_power_by_run.csv
+  mime: text/csv
+metric_observations:
+- metric_id: bandwidth.total
+  scope:
+    kind: scenario
+    ref: uc-cam-recording-e2700
+  unit: MB/s
+  stats:
+    mean: 8173.014
+- metric_id: bandwidth.read
+  scope:
+    kind: ip
+    ref: DPU
+  unit: MB/s
+  stats:
+    mean: 173.56
+    p95: 187.445
+- metric_id: bandwidth.read
+  scope:
+    kind: ip
+    ref: LME
+  unit: MB/s
+  stats:
+    mean: 85.045
+    p95: 91.848
+- metric_id: bandwidth.read
+  scope:
+    kind: ip
+    ref: MFC
+  unit: MB/s
+  stats:
+    mean: 694.241
+    p95: 749.781
+- metric_id: bandwidth.read
+  scope:
+    kind: ip
+    ref: MTNR
+  unit: MB/s
+  stats:
+    mean: 3130.238
+    p95: 3380.657
+- metric_id: bandwidth.read
+  scope:
+    kind: ip
+    ref: VPS
+  unit: MB/s
+  stats:
+    mean: 24.684
+    p95: 26.659
+- metric_id: bandwidth.write
+  scope:
+    kind: ip
+    ref: MCSC
+  unit: MB/s
+  stats:
+    mean: 867.802
+    p95: 937.226
+- metric_id: bandwidth.write
+  scope:
+    kind: ip
+    ref: MLSC
+  unit: MB/s
+  stats:
+    mean: 1632.325
+    p95: 1762.911
+- metric_id: bandwidth.write
+  scope:
+    kind: ip
+    ref: MTNR
+  unit: MB/s
+  stats:
+    mean: 1565.119
+    p95: 1690.328
+sw_task_timing:
+- task: post_crta
+  timing_scope: exclusive_sw
+  mean_ms: 0.356
+  p50_ms: 0.338
+  p95_ms: 0.481
+  max_ms: 0.636
+  min_ms: 0.303
+  samples: 5400
+  count_per_frame: 1.0
+  value_source: assumed
+  source_note: DUMMY measurement input - not silicon data. Replace values with the in-house capture.
+- task: pre_me_rta
+  timing_scope: exclusive_sw
+  mean_ms: 3.032
+  p50_ms: 2.881
+  p95_ms: 4.094
+  max_ms: 4.381
+  min_ms: 2.577
+  samples: 5400
+  count_per_frame: 1.0
+  value_source: assumed
+  source_note: DUMMY measurement input - not silicon data. Replace values with the in-house capture.
+- task: post_irta
+  timing_scope: exclusive_sw
+  mean_ms: 5.507
+  p50_ms: 5.232
+  p95_ms: 7.435
+  max_ms: 7.745
+  min_ms: 4.681
+  samples: 5400
+  count_per_frame: 1.0
+  value_source: assumed
+  source_note: DUMMY measurement input - not silicon data. Replace values with the in-house capture.

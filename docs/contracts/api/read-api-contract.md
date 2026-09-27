@@ -386,7 +386,7 @@ uv run --group dev pytest tests\integration\test_runtime_view_e2e.py
 
 ## Camera SW timing profiles and history buffers
 
-The IS v15 fixture guide is [Camera Recording](../../../db_fixtures_Exynos2600_S26Plus/README.md).
+The IS v15 fixture guide is [Camera Recording](../../../db_Exynos2600_SM-S947B/README.md).
 `node_configs.<node>.sw_timing` accepts `min_ms`, `mean_ms`, `max_ms`,
 `start_jitter_mean_ms`, `includes_hw_nodes`, `value_source` (`assumed`, `measured`,
 `projected`), and `source_note`. Active simulation profiles require a nonnegative,

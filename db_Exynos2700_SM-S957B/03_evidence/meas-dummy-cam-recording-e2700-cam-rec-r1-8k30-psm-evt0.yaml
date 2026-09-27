@@ -1,0 +1,725 @@
+id: meas-dummy-cam-recording-e2700-cam-rec-r1-8k30-psm-evt0
+schema_version: '2.2'
+kind: evidence.measurement
+scenario_ref: uc-cam-recording-e2700
+variant_ref: cam-rec-r1-8k30-psm
+project_ref: proj-sm-s957b
+measured_at: '2026-09-27T10:00:00+09:00'
+execution_context:
+  silicon_rev: EVT0
+  sw_baseline_ref: sw-vendor-v1.2.3-s5e9975
+  thermal: room
+  method: measurement
+  ambient_temp_c: 25.0
+  power_state: discharging
+provenance:
+  revision: 3
+  device_id: DUMMY
+  collection_method: synthetic_dummy
+  collection_tool_versions:
+    generator: generate_dummy_measurements.py
+  sample_count: 3
+  duration_per_sample_s: 30.0
+  confidence_level: 0.95
+  raw_artifacts: []
+  import_fingerprint: 053fb4fb13337a33e16e12e2b0ff10039dbe33b02b74e9b9d8020914857e1184
+aggregation:
+  strategy: mean_over_runs
+kpi:
+  frame_latency_ms: 99.66
+  fps_effective: 29.97
+  total_power_mw:
+    mean: 1270.626
+    p95: 1284.348
+    std: 15.248
+    n: 3
+    ci_95:
+    - 1232.749
+    - 1308.502
+sw_task_timing:
+- task: post_crta
+  timing_scope: exclusive_sw
+  includes_task_ids: []
+  sample_unit: invocation
+  min_ms: 0.32
+  mean_ms: 0.376
+  p50_ms: 0.357
+  p95_ms: 0.507
+  max_ms: 0.609
+  includes_hw_nodes: []
+  value_source: assumed
+  source_note: DUMMY measurement input - not silicon data. Replace values with the
+    in-house capture.
+  count_per_frame: 1.0
+  samples: 2700
+- task: pre_me_rta
+  timing_scope: exclusive_sw
+  includes_task_ids: []
+  sample_unit: invocation
+  min_ms: 2.76
+  mean_ms: 3.247
+  p50_ms: 3.085
+  p95_ms: 4.384
+  max_ms: 5.161
+  includes_hw_nodes: []
+  value_source: assumed
+  source_note: DUMMY measurement input - not silicon data. Replace values with the
+    in-house capture.
+  count_per_frame: 1.0
+  samples: 2700
+- task: post_irta
+  timing_scope: exclusive_sw
+  includes_task_ids: []
+  sample_unit: invocation
+  min_ms: 4.444
+  mean_ms: 5.228
+  p50_ms: 4.967
+  p95_ms: 6.681
+  max_ms: 6.681
+  includes_hw_nodes: []
+  value_source: assumed
+  source_note: DUMMY measurement input - not silicon data. Replace values with the
+    in-house capture.
+  count_per_frame: 1.0
+  samples: 2700
+vdd_power:
+  B5S4_VDDMIF_AP_L:
+    power_mw: 114.973
+    std_mw: 1.38
+    voltage_v: 0.5687
+    current_ma: 202.168
+    domain: MIF
+  B3_4_5S2_VDD_CPUCL3_BIG_L:
+    power_mw: 15.482
+    std_mw: 0.186
+    voltage_v: 0.0132
+    current_ma: 1172.875
+    domain: CPU
+  B3_4S3_VDD_CPUCL2_MID_HF_L:
+    power_mw: 3.442
+    std_mw: 0.041
+    voltage_v: 0.0357
+    current_ma: 96.404
+    domain: CPU
+  B2S3_VDD_CPUCL1_MID_LF1_L:
+    power_mw: 24.438
+    std_mw: 0.293
+    voltage_v: 0.4519
+    current_ma: 54.077
+    domain: CPU
+  B2S2_VDD_CPUCL1_MID_LF0_L:
+    power_mw: 63.855
+    std_mw: 0.766
+    voltage_v: 0.5954
+    current_ma: 107.247
+    domain: CPU
+  B5_6S3_VDD_CPUCL0_DSU_L:
+    power_mw: 43.663
+    std_mw: 0.524
+    voltage_v: 0.5866
+    current_ma: 74.433
+    domain: CPU
+  B4S4_VDD_INT_L:
+    power_mw: 309.514
+    std_mw: 3.714
+    voltage_v: 0.6313
+    current_ma: 490.281
+  B5_6S1_VDD_CAM_L:
+    power_mw: 330.272
+    std_mw: 3.963
+    voltage_v: 0.6077
+    current_ma: 543.478
+  L1S3_VDD_ICPU_L:
+    power_mw: 19.626
+    std_mw: 0.236
+    voltage_v: 0.7219
+    current_ma: 27.186
+  B1_2_3_4S1_VDD_G3D0_0P725_L:
+    power_mw: 2.402
+    std_mw: 0.029
+    voltage_v: 0.0111
+    current_ma: 216.375
+  B1_2_3E1_VDD_G3D1_0P725_L:
+    power_mw: 1.959
+    std_mw: 0.023
+    voltage_v: 0.0112
+    current_ma: 174.911
+  B6S4_VDDQ_DRAM_MEM_0P5_T:
+    power_mw: 20.698
+    std_mw: 0.248
+    voltage_v: 0.428
+    current_ma: 48.36
+    domain: MEM
+  L5M_VDD1_MEM_L:
+    power_mw: 50.11
+    std_mw: 0.601
+    voltage_v: 1.8014
+    current_ma: 27.817
+  SRB1S5_VDD2L_MEM_AP_L:
+    power_mw: 65.493
+    std_mw: 0.786
+    voltage_v: 0.9108
+    current_ma: 71.908
+  SRB1S4_VDD2H_MEM_AP_L:
+    power_mw: 167.219
+    std_mw: 2.007
+    voltage_v: 1.0027
+    current_ma: 166.768
+  B6S2_VDD_SRAM_L:
+    power_mw: 37.481
+    std_mw: 0.45
+    voltage_v: 0.7217
+    current_ma: 51.934
+metric_observations:
+- metric_id: bandwidth.total
+  scope:
+    kind: scenario
+    ref: uc-cam-recording-e2700
+  unit: MB/s
+  stats:
+    mean: 14895.332
+- metric_id: bandwidth.read
+  scope:
+    kind: ip
+    ref: DPU
+  unit: MB/s
+  stats:
+    mean: 86.78
+    p95: 93.723
+- metric_id: bandwidth.read
+  scope:
+    kind: ip
+    ref: LME
+  unit: MB/s
+  stats:
+    mean: 42.522
+    p95: 45.924
+- metric_id: bandwidth.read
+  scope:
+    kind: ip
+    ref: MFC
+  unit: MB/s
+  stats:
+    mean: 1388.483
+    p95: 1499.561
+- metric_id: bandwidth.read
+  scope:
+    kind: ip
+    ref: MTNR
+  unit: MB/s
+  stats:
+    mean: 5928.17
+    p95: 6402.423
+- metric_id: bandwidth.read
+  scope:
+    kind: ip
+    ref: VPS
+  unit: MB/s
+  stats:
+    mean: 12.342
+    p95: 13.329
+- metric_id: bandwidth.write
+  scope:
+    kind: ip
+    ref: MCSC
+  unit: MB/s
+  stats:
+    mean: 1475.263
+    p95: 1593.284
+- metric_id: bandwidth.write
+  scope:
+    kind: ip
+    ref: MLSC
+  unit: MB/s
+  stats:
+    mean: 2997.688
+    p95: 3237.503
+- metric_id: bandwidth.write
+  scope:
+    kind: ip
+    ref: MTNR
+  unit: MB/s
+  stats:
+    mean: 2964.085
+    p95: 3201.212
+- metric_id: power.total
+  scope:
+    kind: scenario
+    ref: self
+  unit: mW
+  stats:
+    mean: 1270.626
+    p95: 1284.348
+    std: 15.248
+    n: 3
+- metric_id: latency.frame
+  scope:
+    kind: scenario
+    ref: self
+  unit: ms
+  value: 99.66
+- metric_id: camera.fps
+  scope:
+    kind: scenario
+    ref: self
+  unit: fps
+  value: 29.97
+- metric_id: power.rail
+  scope:
+    kind: rail
+    ref: B5S4_VDDMIF_AP_L
+  unit: mW
+  stats:
+    mean: 114.973
+    p95: 116.215
+    std: 1.38
+    n: 3
+- metric_id: power.rail_voltage
+  scope:
+    kind: rail
+    ref: B5S4_VDDMIF_AP_L
+  unit: V
+  stats:
+    mean: 0.5687
+    n: 3
+- metric_id: power.rail_current
+  scope:
+    kind: rail
+    ref: B5S4_VDDMIF_AP_L
+  unit: mA
+  stats:
+    mean: 202.168
+    n: 3
+- metric_id: power.rail
+  scope:
+    kind: rail
+    ref: B3_4_5S2_VDD_CPUCL3_BIG_L
+  unit: mW
+  stats:
+    mean: 15.482
+    p95: 15.649
+    std: 0.186
+    n: 3
+- metric_id: power.rail_voltage
+  scope:
+    kind: rail
+    ref: B3_4_5S2_VDD_CPUCL3_BIG_L
+  unit: V
+  stats:
+    mean: 0.0132
+    n: 3
+- metric_id: power.rail_current
+  scope:
+    kind: rail
+    ref: B3_4_5S2_VDD_CPUCL3_BIG_L
+  unit: mA
+  stats:
+    mean: 1172.875
+    n: 3
+- metric_id: power.rail
+  scope:
+    kind: rail
+    ref: B3_4S3_VDD_CPUCL2_MID_HF_L
+  unit: mW
+  stats:
+    mean: 3.442
+    p95: 3.479
+    std: 0.041
+    n: 3
+- metric_id: power.rail_voltage
+  scope:
+    kind: rail
+    ref: B3_4S3_VDD_CPUCL2_MID_HF_L
+  unit: V
+  stats:
+    mean: 0.0357
+    n: 3
+- metric_id: power.rail_current
+  scope:
+    kind: rail
+    ref: B3_4S3_VDD_CPUCL2_MID_HF_L
+  unit: mA
+  stats:
+    mean: 96.404
+    n: 3
+- metric_id: power.rail
+  scope:
+    kind: rail
+    ref: B2S3_VDD_CPUCL1_MID_LF1_L
+  unit: mW
+  stats:
+    mean: 24.438
+    p95: 24.702
+    std: 0.293
+    n: 3
+- metric_id: power.rail_voltage
+  scope:
+    kind: rail
+    ref: B2S3_VDD_CPUCL1_MID_LF1_L
+  unit: V
+  stats:
+    mean: 0.4519
+    n: 3
+- metric_id: power.rail_current
+  scope:
+    kind: rail
+    ref: B2S3_VDD_CPUCL1_MID_LF1_L
+  unit: mA
+  stats:
+    mean: 54.077
+    n: 3
+- metric_id: power.rail
+  scope:
+    kind: rail
+    ref: B2S2_VDD_CPUCL1_MID_LF0_L
+  unit: mW
+  stats:
+    mean: 63.855
+    p95: 64.544
+    std: 0.766
+    n: 3
+- metric_id: power.rail_voltage
+  scope:
+    kind: rail
+    ref: B2S2_VDD_CPUCL1_MID_LF0_L
+  unit: V
+  stats:
+    mean: 0.5954
+    n: 3
+- metric_id: power.rail_current
+  scope:
+    kind: rail
+    ref: B2S2_VDD_CPUCL1_MID_LF0_L
+  unit: mA
+  stats:
+    mean: 107.247
+    n: 3
+- metric_id: power.rail
+  scope:
+    kind: rail
+    ref: B5_6S3_VDD_CPUCL0_DSU_L
+  unit: mW
+  stats:
+    mean: 43.663
+    p95: 44.134
+    std: 0.524
+    n: 3
+- metric_id: power.rail_voltage
+  scope:
+    kind: rail
+    ref: B5_6S3_VDD_CPUCL0_DSU_L
+  unit: V
+  stats:
+    mean: 0.5866
+    n: 3
+- metric_id: power.rail_current
+  scope:
+    kind: rail
+    ref: B5_6S3_VDD_CPUCL0_DSU_L
+  unit: mA
+  stats:
+    mean: 74.433
+    n: 3
+- metric_id: power.rail
+  scope:
+    kind: rail
+    ref: B4S4_VDD_INT_L
+  unit: mW
+  stats:
+    mean: 309.514
+    p95: 312.857
+    std: 3.714
+    n: 3
+- metric_id: power.rail_voltage
+  scope:
+    kind: rail
+    ref: B4S4_VDD_INT_L
+  unit: V
+  stats:
+    mean: 0.6313
+    n: 3
+- metric_id: power.rail_current
+  scope:
+    kind: rail
+    ref: B4S4_VDD_INT_L
+  unit: mA
+  stats:
+    mean: 490.281
+    n: 3
+- metric_id: power.rail
+  scope:
+    kind: rail
+    ref: B5_6S1_VDD_CAM_L
+  unit: mW
+  stats:
+    mean: 330.272
+    p95: 333.839
+    std: 3.963
+    n: 3
+- metric_id: power.rail_voltage
+  scope:
+    kind: rail
+    ref: B5_6S1_VDD_CAM_L
+  unit: V
+  stats:
+    mean: 0.6077
+    n: 3
+- metric_id: power.rail_current
+  scope:
+    kind: rail
+    ref: B5_6S1_VDD_CAM_L
+  unit: mA
+  stats:
+    mean: 543.478
+    n: 3
+- metric_id: power.rail
+  scope:
+    kind: rail
+    ref: L1S3_VDD_ICPU_L
+  unit: mW
+  stats:
+    mean: 19.626
+    p95: 19.838
+    std: 0.236
+    n: 3
+- metric_id: power.rail_voltage
+  scope:
+    kind: rail
+    ref: L1S3_VDD_ICPU_L
+  unit: V
+  stats:
+    mean: 0.7219
+    n: 3
+- metric_id: power.rail_current
+  scope:
+    kind: rail
+    ref: L1S3_VDD_ICPU_L
+  unit: mA
+  stats:
+    mean: 27.186
+    n: 3
+- metric_id: power.rail
+  scope:
+    kind: rail
+    ref: B1_2_3_4S1_VDD_G3D0_0P725_L
+  unit: mW
+  stats:
+    mean: 2.402
+    p95: 2.428
+    std: 0.029
+    n: 3
+- metric_id: power.rail_voltage
+  scope:
+    kind: rail
+    ref: B1_2_3_4S1_VDD_G3D0_0P725_L
+  unit: V
+  stats:
+    mean: 0.0111
+    n: 3
+- metric_id: power.rail_current
+  scope:
+    kind: rail
+    ref: B1_2_3_4S1_VDD_G3D0_0P725_L
+  unit: mA
+  stats:
+    mean: 216.375
+    n: 3
+- metric_id: power.rail
+  scope:
+    kind: rail
+    ref: B1_2_3E1_VDD_G3D1_0P725_L
+  unit: mW
+  stats:
+    mean: 1.959
+    p95: 1.98
+    std: 0.023
+    n: 3
+- metric_id: power.rail_voltage
+  scope:
+    kind: rail
+    ref: B1_2_3E1_VDD_G3D1_0P725_L
+  unit: V
+  stats:
+    mean: 0.0112
+    n: 3
+- metric_id: power.rail_current
+  scope:
+    kind: rail
+    ref: B1_2_3E1_VDD_G3D1_0P725_L
+  unit: mA
+  stats:
+    mean: 174.911
+    n: 3
+- metric_id: power.rail
+  scope:
+    kind: rail
+    ref: B6S4_VDDQ_DRAM_MEM_0P5_T
+  unit: mW
+  stats:
+    mean: 20.698
+    p95: 20.922
+    std: 0.248
+    n: 3
+- metric_id: power.rail_voltage
+  scope:
+    kind: rail
+    ref: B6S4_VDDQ_DRAM_MEM_0P5_T
+  unit: V
+  stats:
+    mean: 0.428
+    n: 3
+- metric_id: power.rail_current
+  scope:
+    kind: rail
+    ref: B6S4_VDDQ_DRAM_MEM_0P5_T
+  unit: mA
+  stats:
+    mean: 48.36
+    n: 3
+- metric_id: power.rail
+  scope:
+    kind: rail
+    ref: L5M_VDD1_MEM_L
+  unit: mW
+  stats:
+    mean: 50.11
+    p95: 50.651
+    std: 0.601
+    n: 3
+- metric_id: power.rail_voltage
+  scope:
+    kind: rail
+    ref: L5M_VDD1_MEM_L
+  unit: V
+  stats:
+    mean: 1.8014
+    n: 3
+- metric_id: power.rail_current
+  scope:
+    kind: rail
+    ref: L5M_VDD1_MEM_L
+  unit: mA
+  stats:
+    mean: 27.817
+    n: 3
+- metric_id: power.rail
+  scope:
+    kind: rail
+    ref: SRB1S5_VDD2L_MEM_AP_L
+  unit: mW
+  stats:
+    mean: 65.493
+    p95: 66.201
+    std: 0.786
+    n: 3
+- metric_id: power.rail_voltage
+  scope:
+    kind: rail
+    ref: SRB1S5_VDD2L_MEM_AP_L
+  unit: V
+  stats:
+    mean: 0.9108
+    n: 3
+- metric_id: power.rail_current
+  scope:
+    kind: rail
+    ref: SRB1S5_VDD2L_MEM_AP_L
+  unit: mA
+  stats:
+    mean: 71.908
+    n: 3
+- metric_id: power.rail
+  scope:
+    kind: rail
+    ref: SRB1S4_VDD2H_MEM_AP_L
+  unit: mW
+  stats:
+    mean: 167.219
+    p95: 169.025
+    std: 2.007
+    n: 3
+- metric_id: power.rail_voltage
+  scope:
+    kind: rail
+    ref: SRB1S4_VDD2H_MEM_AP_L
+  unit: V
+  stats:
+    mean: 1.0027
+    n: 3
+- metric_id: power.rail_current
+  scope:
+    kind: rail
+    ref: SRB1S4_VDD2H_MEM_AP_L
+  unit: mA
+  stats:
+    mean: 166.768
+    n: 3
+- metric_id: power.rail
+  scope:
+    kind: rail
+    ref: B6S2_VDD_SRAM_L
+  unit: mW
+  stats:
+    mean: 37.481
+    p95: 37.886
+    std: 0.45
+    n: 3
+- metric_id: power.rail_voltage
+  scope:
+    kind: rail
+    ref: B6S2_VDD_SRAM_L
+  unit: V
+  stats:
+    mean: 0.7217
+    n: 3
+- metric_id: power.rail_current
+  scope:
+    kind: rail
+    ref: B6S2_VDD_SRAM_L
+  unit: mA
+  stats:
+    mean: 51.934
+    n: 3
+- metric_id: sw.runtime
+  scope:
+    kind: task
+    ref: post_crta
+  unit: ms
+  stats:
+    mean: 0.376
+    p50: 0.357
+    p95: 0.507
+    min: 0.32
+    max: 0.609
+    n: 2700
+- metric_id: sw.runtime
+  scope:
+    kind: task
+    ref: pre_me_rta
+  unit: ms
+  stats:
+    mean: 3.247
+    p50: 3.085
+    p95: 4.384
+    min: 2.76
+    max: 5.161
+    n: 2700
+- metric_id: sw.runtime
+  scope:
+    kind: task
+    ref: post_irta
+  unit: ms
+  stats:
+    mean: 5.228
+    p50: 4.967
+    p95: 6.681
+    min: 4.444
+    max: 6.681
+    n: 2700
+artifacts:
+- type: power_monitor_csv
+  storage: fileshare
+  path: artifacts/proj-sm-s957b/uc-cam-recording-e2700/cam-rec-r1-8k30-psm/dummy-evt0/rail_power_by_run.csv
+  mime: text/csv
+  sha256: cefbd42b33a8eb247934dd5d9e0e29002de53bcc25729b83d665fc9cb7d10e98
+  bytes: 2313

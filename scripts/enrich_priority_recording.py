@@ -4,7 +4,7 @@ from pathlib import Path
 import yaml
 import json
 
-ROOT = Path(__file__).resolve().parents[1] / "db_fixtures_Exynos2600_S26Plus"
+ROOT = Path(__file__).resolve().parents[1] / "db_Exynos2600_SM-S947B"
 CPU = "ip-cpu-s5e9965"
 CORE = ["csis", "pdp", "byrp", "rgbp", "yuvsc", "mlsc", "mtnr", "msnr", "yuvp", "mcsc"]
 PRIORITY = ["cam-rec-r1-fhd30-vdis", "cam-rec-r1-fhd60-supersteady", "cam-rec-r1-uhd30-vdis", "cam-rec-r1-uhd60-supersteady", "cam-rec-r1-8k30-sdr", "cam-rec-r1-fhd120", "cam-rec-r1-fhd240", "cam-rec-r1-uhd120"]

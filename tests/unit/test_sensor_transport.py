@@ -4,7 +4,7 @@ import pytest
 import yaml
 from scenario_db.sim.sensor_transport import calculate_sensor_transport
 
-FIXTURES = Path(__file__).parents[2] / "db_fixtures_Exynos2600_S26Plus/00_sensor"
+FIXTURES = Path(__file__).parents[2] / "db_Exynos2600_SM-S947B/00_sensor"
 
 
 def mode():

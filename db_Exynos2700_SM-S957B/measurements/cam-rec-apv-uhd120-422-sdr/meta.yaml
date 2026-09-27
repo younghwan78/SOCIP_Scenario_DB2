@@ -1,0 +1,223 @@
+# DUMMY measurement input - not silicon data. Replace values with the in-house capture.
+# Values from meas-synth-cam-rec-r1-uhd120-evt1-20260925 + sim-priority-cam-rec-r1-uhd120-mean-20260913 (reference cam-rec-r1-fhd30-sdr), scaled.
+# Update: edit values/CSV, bump provenance.revision, then run scripts/import_measurements.py
+schema_version: '2.2'
+id: meas-dummy-cam-recording-e2700-cam-rec-apv-uhd120-422-sdr-evt0
+project_ref: proj-sm-s957b
+scenario_ref: uc-cam-recording-e2700
+variant_ref: cam-rec-apv-uhd120-422-sdr
+measured_at: '2026-09-27T10:00:00+09:00'
+execution_context:
+  silicon_rev: EVT0
+  sw_baseline_ref: sw-vendor-v1.2.3-s5e9975
+  thermal: room
+  ambient_temp_c: 25.0
+  power_state: discharging
+  method: measurement
+provenance:
+  revision: 3
+  device_id: DUMMY
+  collection_method: synthetic_dummy
+  collection_tool_versions:
+    generator: generate_dummy_measurements.py
+  sample_count: 3
+  duration_per_sample_s: 30.0
+  confidence_level: 0.95
+kpi:
+  frame_latency_ms: 24.23
+  fps_effective: 119.88
+aggregation_strategy: mean_over_runs
+power:
+  format: rail_long
+  csv: rail_power_by_run.csv
+  total_power_rails: []
+  rails:
+    B5S4_VDDMIF_AP_L:
+      domain: MIF
+    B3_4_5S2_VDD_CPUCL3_BIG_L:
+      domain: CPU
+    B3_4S3_VDD_CPUCL2_MID_HF_L:
+      domain: CPU
+    B2S3_VDD_CPUCL1_MID_LF1_L:
+      domain: CPU
+    B2S2_VDD_CPUCL1_MID_LF0_L:
+      domain: CPU
+    B5_6S3_VDD_CPUCL0_DSU_L:
+      domain: CPU
+    B4S4_VDD_INT_L: {}
+    B5_6S1_VDD_CAM_L: {}
+    L1S3_VDD_ICPU_L: {}
+    B1_2_3_4S1_VDD_G3D0_0P725_L: {}
+    B1_2_3E1_VDD_G3D1_0P725_L: {}
+    B6S4_VDDQ_DRAM_MEM_0P5_T:
+      domain: MEM
+    L5M_VDD1_MEM_L: {}
+    SRB1S5_VDD2L_MEM_AP_L: {}
+    SRB1S4_VDD2H_MEM_AP_L: {}
+    B6S2_VDD_SRAM_L: {}
+artifacts:
+- type: power_monitor_csv
+  storage: fileshare
+  source: rail_power_by_run.csv
+  path: artifacts/proj-sm-s957b/uc-cam-recording-e2700/cam-rec-apv-uhd120-422-sdr/dummy-evt0/rail_power_by_run.csv
+  mime: text/csv
+metric_observations:
+- metric_id: bandwidth.total
+  scope:
+    kind: scenario
+    ref: uc-cam-recording-e2700
+  unit: MB/s
+  stats:
+    mean: 16383.227
+- metric_id: bandwidth.read
+  scope:
+    kind: ip
+    ref: DPU
+  unit: MB/s
+  stats:
+    mean: 347.121
+    p95: 374.89
+- metric_id: bandwidth.read
+  scope:
+    kind: ip
+    ref: LME
+  unit: MB/s
+  stats:
+    mean: 170.089
+    p95: 183.696
+- metric_id: bandwidth.read
+  scope:
+    kind: ip
+    ref: MFC
+  unit: MB/s
+  stats:
+    mean: 1388.483
+    p95: 1499.561
+- metric_id: bandwidth.read
+  scope:
+    kind: ip
+    ref: MPEG_WRITER
+  unit: MB/s
+  stats:
+    mean: 9.3
+    p95: 10.044
+- metric_id: bandwidth.read
+  scope:
+    kind: ip
+    ref: MTNR
+  unit: MB/s
+  stats:
+    mean: 6260.475
+    p95: 6761.313
+- metric_id: bandwidth.read
+  scope:
+    kind: ip
+    ref: STORAGE_WRITE
+  unit: MB/s
+  stats:
+    mean: 9.3
+    p95: 10.044
+- metric_id: bandwidth.read
+  scope:
+    kind: ip
+    ref: VPS
+  unit: MB/s
+  stats:
+    mean: 49.368
+    p95: 53.318
+- metric_id: bandwidth.write
+  scope:
+    kind: ip
+    ref: MCSC
+  unit: MB/s
+  stats:
+    mean: 1735.603
+    p95: 1874.451
+- metric_id: bandwidth.write
+  scope:
+    kind: ip
+    ref: MFC_ENC
+  unit: MB/s
+  stats:
+    mean: 9.3
+    p95: 10.044
+- metric_id: bandwidth.write
+  scope:
+    kind: ip
+    ref: MLSC
+  unit: MB/s
+  stats:
+    mean: 3264.651
+    p95: 3525.823
+- metric_id: bandwidth.write
+  scope:
+    kind: ip
+    ref: MPEG_WRITER
+  unit: MB/s
+  stats:
+    mean: 9.3
+    p95: 10.044
+- metric_id: bandwidth.write
+  scope:
+    kind: ip
+    ref: MTNR
+  unit: MB/s
+  stats:
+    mean: 3130.238
+    p95: 3380.657
+sw_task_timing:
+- task: post_crta
+  timing_scope: exclusive_sw
+  mean_ms: 0.403
+  p50_ms: 0.383
+  p95_ms: 0.544
+  max_ms: 0.617
+  min_ms: 0.343
+  samples: 10800
+  count_per_frame: 1.0
+  value_source: assumed
+  source_note: DUMMY measurement input - not silicon data. Replace values with the in-house capture.
+- task: pre_me_rta
+  timing_scope: exclusive_sw
+  mean_ms: 3.617
+  p50_ms: 3.436
+  p95_ms: 4.883
+  max_ms: 5.317
+  min_ms: 3.074
+  samples: 10800
+  count_per_frame: 1.0
+  value_source: assumed
+  source_note: DUMMY measurement input - not silicon data. Replace values with the in-house capture.
+- task: post_irta
+  timing_scope: exclusive_sw
+  mean_ms: 5.606
+  p50_ms: 5.326
+  p95_ms: 7.568
+  max_ms: 8.26
+  min_ms: 4.765
+  samples: 10800
+  count_per_frame: 1.0
+  value_source: assumed
+  source_note: DUMMY measurement input - not silicon data. Replace values with the in-house capture.
+- task: mpeg_writer
+  timing_scope: exclusive_sw
+  mean_ms: 5.084
+  p50_ms: 4.83
+  p95_ms: 6.864
+  max_ms: 9.379
+  min_ms: 4.321
+  samples: 10800
+  count_per_frame: 1.0
+  value_source: assumed
+  source_note: DUMMY measurement input - not silicon data. Replace values with the in-house capture.
+- task: storage_write
+  timing_scope: exclusive_sw
+  mean_ms: 10.831
+  p50_ms: 10.289
+  p95_ms: 14.621
+  max_ms: 17.847
+  min_ms: 9.206
+  samples: 10800
+  count_per_frame: 1.0
+  value_source: assumed
+  source_note: DUMMY measurement input - not silicon data. Replace values with the in-house capture.

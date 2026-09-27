@@ -31,7 +31,7 @@ LME와 VPS OD를 별도 M2M 노드로 구성하고 DOF/SEG는 기본 비활성�
 
 ```powershell
 .\.venv\Scripts\python.exe scripts/verify_is_v15_camera.py --write-evidence
-.\.venv\Scripts\python.exe -m scenario_db.etl.loader db_fixtures_Exynos2600_S26Plus --strict --report-json output/is-v15-camera/etl-report.json
+.\.venv\Scripts\python.exe -m scenario_db.etl.loader db_Exynos2600_SM-S947B --strict --report-json output/is-v15-camera/etl-report.json
 .\.venv\Scripts\python.exe -m pytest tests/integration/test_is_v15_camera.py -q
 ```
 
@@ -89,7 +89,7 @@ Reproduce explicit fixture assumptions and priority checks:
 ```powershell
 .venv/Scripts/python.exe scripts/enrich_priority_recording.py
 .venv/Scripts/python.exe scripts/verify_priority_recording.py --write-evidence
-.venv/Scripts/python.exe -m scenario_db.etl.loader db_fixtures_Exynos2600_S26Plus --strict
+.venv/Scripts/python.exe -m scenario_db.etl.loader db_Exynos2600_SM-S947B --strict
 ```
 
 `priority_recording_report.json` records all min/mean/max cases and all tested clocks, including **effective clocks after ingress/domain corrections**. The selected value is the lowest requested grid point meeting modeled storage/display cadence and a three-frame latency budget; it is not a measured DVFS or power optimum. Mean-case `sim-priority-*` evidence is generated even for failures, with failure reasons. FHD240 retains the requested 120fps sensor input and cannot pass a 240fps output check without a separately verified cadence mechanism. Existing generated `sim-is-v15-*-explored-*` KPI evidence is refreshed with storage completion and corrected no-table manual clocks. The priority report covers the additional heavy/APV cases; older non-explored evidence remains historical.

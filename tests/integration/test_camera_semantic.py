@@ -29,7 +29,7 @@ def test_uhd30_trace_fixture_import_and_exploration(engine, api_client):
         api_client.app.dependency_overrides[get_db] = test_db
         try:
             with Session(connection, join_transaction_mode="create_savepoint") as session:
-                assert load_yaml_dir(ROOT / "db_fixtures_Exynos2600_S26Plus", session,
+                assert load_yaml_dir(ROOT / "db_Exynos2600_SM-S947B", session,
                                      strict=True, validate=True).ok
             payload = {"evidence": evidence.model_dump(mode="json", exclude_none=True)}
             preview = api_client.post("/api/v1/profiling/import/preview", json=payload)
@@ -89,7 +89,7 @@ def test_camera_import_roundtrip_projection_and_conflicts(engine, api_client):
         try:
             with Session(connection, join_transaction_mode="create_savepoint") as session:
                 assert load_yaml_dir(
-                    ROOT / "db_fixtures_Exynos2600_S26Plus", session, strict=True, validate=True
+                    ROOT / "db_Exynos2600_SM-S947B", session, strict=True, validate=True
                 ).ok
                 before = session.query(Evidence).count()
             markdown = (
@@ -257,7 +257,7 @@ def test_camera_cli_commits_to_postgres(engine, api_client, monkeypatch, tmp_pat
         try:
             with Session(connection, join_transaction_mode="create_savepoint") as session:
                 assert load_yaml_dir(
-                    ROOT / "db_fixtures_Exynos2600_S26Plus", session, strict=True, validate=True
+                    ROOT / "db_Exynos2600_SM-S947B", session, strict=True, validate=True
                 ).ok
                 before = session.query(Evidence).count()
 

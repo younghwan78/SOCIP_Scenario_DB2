@@ -24,7 +24,7 @@ from scenario_db.sim.models import SimulationRunConfig
 from scenario_db.sim.runner import build_simulation_evidence, params_hash, run_simulation
 
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURE = ROOT / "db_fixtures_Exynos2600_S26Plus"
+FIXTURE = ROOT / "db_Exynos2600_SM-S947B"
 SCENARIO_PATH = FIXTURE / "02_definition/uc-cam-recording-e2600.yaml"
 KPI_VARIANTS = (
     "cam-rec-r1-fhd30-vdis", "cam-rec-r1-fhd60-supersteady",

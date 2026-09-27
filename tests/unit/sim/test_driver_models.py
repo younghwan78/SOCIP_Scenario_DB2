@@ -4,7 +4,7 @@ import yaml
 from pydantic import ValidationError
 from scenario_db.sim.driver_models import evaluate
 
-ROOT = Path(__file__).parents[3] / "db_fixtures_Exynos2600_S26Plus/00_hw"
+ROOT = Path(__file__).parents[3] / "db_Exynos2600_SM-S947B/00_hw"
 
 
 def caps(name):

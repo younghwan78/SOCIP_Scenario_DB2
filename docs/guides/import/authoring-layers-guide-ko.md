@@ -1,7 +1,7 @@
 # Authoring Guide — 편집 원본부터 DB 반영까지
 
 `authoring/`은 사람이 편집하는 원본(SSOT)이다. `python -m scenario_db.authoring`이 이를 canonical v2.2 YAML
-(`db_fixtures_*`)로 만들고, `scripts/dev_up.ps1`이 DB에 반영한다. 모든 명령은 `implementation\`에서 실행한다.
+(`db_<SoC>_<board>/`)로 만들고, `scripts/dev_up.ps1`이 DB에 반영한다. 모든 명령은 `implementation\`에서 실행한다.
 
 ```
 편집(authoring/) ─▶ compile·검증 ─▶ sync --to fixture ─▶ dev_up.ps1 ─▶ API/UI 확인
@@ -15,11 +15,22 @@
 
 | 과제 | authoring | 적재 범위 |
 | --- | --- | --- |
-| Exynos2600 · SM-S947B (`proj-sm-s947b`) | `projects/sm-s947b` (root) ≡ `db_fixtures_Exynos2600_S26Plus` | **fixture 전체 그대로**: scenario 13개, camera recording variant 75개, APV scenario 별도, evidence 전체 |
-| Exynos2700 · SM-S957B (`proj-sm-s957b`) | `projects/sm-s957b` (extends sm-s947b, platform exynos2700) | **rear camera recording만**: `uc-cam-recording-e2700` 하나, rear KPI 16개 + 탐색 3개 (dual wide+front 제외) |
+| Exynos2600 · SM-S947B (`proj-sm-s947b`) | `projects/sm-s947b` (root) ≡ `db_Exynos2600_SM-S947B/` | **전체 그대로**: scenario 13개, camera recording variant 75개, APV scenario 별도, evidence 전체 |
+| Exynos2700 · SM-S957B (`proj-sm-s957b`) | `projects/sm-s957b` (extends sm-s947b, platform exynos2700) → `db_Exynos2700_SM-S957B/` | **rear camera recording만**: `uc-cam-recording-e2700` 하나, rear KPI 16개 + 탐색 3개 (dual wide+front 제외) |
 
 Exynos2700의 범위 축소는 `projects/sm-s957b/project.yaml`의 `scenarios.include`와
 `scenarios/uc-cam-recording-e2600/overlay.yaml`의 `variants.keep`으로만 한다. 2600 fixture와 authoring은 건드리지 않는다.
+
+DB 적재 원본은 과제별 폴더 `db_<SoC>_<board>/` 하나다 (2600, 2700 동일한 구조).
+
+| 폴더 | 00_hw · 00_sensor · 01_sw · 02_definition | 03_evidence | measurements/ |
+| --- | --- | --- | --- |
+| `db_Exynos2600_SM-S947B/` | authoring `sm-s947b`와 양방향 sync | 파일 직접 관리 (synthetic 실측 · simulation) | — |
+| `db_Exynos2700_SM-S957B/` | authoring `sm-s957b`에서 생성 (**직접 수정 금지**, dev_up이 sync) | `measurements/`에서 import로 생성 | 실측 입력 (**사람이 관리**). 현재 DUMMY |
+
+상속한 문서는 공유하지 않고 과제별로 복제한다. 같은 IP / 같은 sensor라도 과제마다 내부 사양·세부 설정이 다를 수 있기 때문이다.
+IP는 `ip-*-s5e9975`, sensor DT catalog / timing profile / SW profile(`sw-vendor-v1.2.3-s5e9975`)은 `*-s5e9975` 접미사, board lineup은 `board-lineup-s5e9975`로 2700 전용 행이 된다
+(`platforms/exynos2700/platform.yaml`의 `rename`, `rename_suffix`). 차이는 `platforms/exynos2700/patches/<문서 id>.yaml`로 넣는다.
 
 Exynos2700 KPI variant (`uc-cam-recording-e2700`):
 
@@ -53,7 +64,8 @@ authoring/
     docs/00_hw/*.yaml              IP · SoC · DVFS · sim config (canonical 그대로)
     docs/00_sensor/**              sensor DT catalog
     docs/01_sw/*.yaml              SW profile
-  platforms/exynos2700/            extends exynos2600: s5e9965 → s5e9975 rename + patches/
+  platforms/exynos2700/            extends exynos2600: s5e9965 → s5e9975 rename, sensor id suffix + patches/
+    patches/<문서 id>.yaml         IP / sensor / lineup 차이 (예: ip-mfc-s5e9975.yaml, sensor-gng-m2s-s5e9975.yaml)
   projects/sm-s947b/               root project (Exynos2600, fixture와 1:1)
     project.yaml                   document: 과제 doc
     docs/00_hw/simcfg-*.yaml       과제별 sim config profile
@@ -72,11 +84,18 @@ authoring/
   examples/exynos2800-pipeline-change/   pipeline 변경 예시 (가상, 적재 안 됨)
   id-renames.yaml                  id 변경 이력 → DB in-place rename
   retired.yaml                     DB에서 지울 범위 → DB retire
+
+db_Exynos2600_SM-S947B/           2600 DB 원본 (00~02 + 03_evidence)
+db_Exynos2700_SM-S957B/           2700 DB 원본
+  00_hw/ 00_sensor/ 01_sw/ 02_definition/   authoring에서 생성 (직접 수정 금지)
+  measurements/<variant>/meta.yaml + rail_power_by_run.csv   실측 입력 (사람이 관리)
+  03_evidence/meas-*.yaml          measurements/에서 생성 (scripts/import_measurements.py)
+  03_evidence/sim-pred-*.yaml      예측 + timeline (scripts/generate_simulation_evidence.py, authoring 변경 후 재생성)
 ```
 
 | 파일 | 필수 key | 선택 key | 상세 |
 | --- | --- | --- | --- |
-| `platform.yaml` | `kind`, `id`, (파생) `extends`, `rename` | `soc_id`, `description`, `rename_exclude`, `remove_docs` | 예시 파일 주석 참고 |
+| `platform.yaml` | `kind`, `id`, (파생) `extends`, `rename` | `soc_id`, `description`, `rename_suffix` (SoC 토큰 없는 id에 접미사: sensor), `rename_exclude` (부모 id 공유, 비권장), `remove_docs` | 예시 파일 주석 참고 |
 | `project.yaml` | `kind`, `key`, `platform`, (root) `document` / (파생) `extends` | `rename`, `document_patch`, `scenarios.include/exclude` | 〃 |
 | `overlay.yaml` (파생 과제) | — | `scenario_patch`, `pipeline`, `variants`, `sizes`, `sw_timing`, `knobs`, `prune_missing_nodes` | §6 |
 | `sw_timing.measured.yaml` | `entries[].task`, `entries[].timing` | `group`, `variants`, `when`, `mode` | 예제 4 |
@@ -95,20 +114,22 @@ Patch 규칙 (variants `extends`, overlay, patches 공통):
 
 | 단계 | 명령 | 성공 기준 |
 | --- | --- | --- |
-| ① 차이 확인 | `uv run python -m scenario_db.authoring check sm-s947b --against db_fixtures_Exynos2600_S26Plus` | 편집 전 `0 difference(s)` |
+| ① 차이 확인 | `uv run python -m scenario_db.authoring check sm-s947b --against db_Exynos2600_SM-S947B` | 편집 전 `0 difference(s)` |
 | ② 편집 | authoring 파일 수정 | |
 | ③ compile·검증 | `uv run python -m scenario_db.authoring compile sm-s947b --out output\authoring\sm-s947b` | `"errors": []`, `impact` 확인 |
-| ④ fixture 반영 | `uv run python -m scenario_db.authoring sync sm-s947b --fixture db_fixtures_Exynos2600_S26Plus --to fixture --prune` | `updated`/`removed` 목록이 의도와 일치 |
+| ④ fixture 반영 | `uv run python -m scenario_db.authoring sync sm-s947b --fixture db_Exynos2600_SM-S947B --to fixture --prune` | `updated`/`removed` 목록이 의도와 일치 |
 | ⑤ DB 반영 | API 창 닫기 → `powershell -ExecutionPolicy Bypass -File scripts\dev_up.ps1 -NoUi` | `output\etl\etl-exynos2600.json`에서 `ok: true`, `warnings: []` |
 | ⑥ 확인 | 브라우저 새로고침, 아래 확인 쿼리 | |
-| ⑦ commit | `git add authoring db_fixtures_Exynos2600_S26Plus` 후 commit | unit test 통과 |
+| ⑦ commit | `git add authoring db_Exynos2600_SM-S947B` 후 commit | unit test 통과 |
 
 `dev_up.ps1`의 DB 단계 (모두 멱등, 변경이 없으면 no-op):
 
 1. `scenario_db.etl.rename_ids --apply --backup output\etl\rename-backup-<시각>.json`: `id-renames.yaml` 적용 (PK/FK/JSON)
 2. `scenario_db.etl.retire --apply --backup output\etl\retire-backup-<시각>.json`: `retired.yaml` 범위의 행 삭제 (현재 id 기준)
-3. `etl.loader db_fixtures_Exynos2600_S26Plus --strict`, 그다음 `-AuthoringProjects`(기본 `sm-s957b`)의 파생 과제를 compile해서 적재
-4. API(:18000), UI(:3000) 실행 (`-NoUi`, `-SkipLoad`, `-Streamlit` 옵션)
+3. `etl.loader db_Exynos2600_SM-S947B --strict`
+4. 파생 과제마다 (`-AuthoringProjects`, 기본 `@{ "sm-s957b" = "db_Exynos2700_SM-S957B" }`):
+   `authoring sync --to fixture --prune` → `scripts/import_measurements.py <db> --strict` → `etl.loader <db> --strict`
+5. API(:18000), UI(:3000) 실행 (`-NoUi`, `-SkipLoad`, `-Streamlit` 옵션)
 
 DB 확인 쿼리:
 
@@ -332,8 +353,9 @@ variants:
 반영과 확인:
 
 ```powershell
-uv run python -m scenario_db.authoring compile sm-s957b --out output\authoring\sm-s957b   # scenarios: {uc-cam-recording-e2700: 19}
-powershell -ExecutionPolicy Bypass -File scripts\dev_up.ps1 -NoUi                           # 기본 -AuthoringProjects sm-s957b
+uv run python -m scenario_db.authoring compile sm-s957b --out output\authoring\sm-s957b   # 확인용: scenarios: {uc-cam-recording-e2700: 19}
+powershell -ExecutionPolicy Bypass -File scripts\dev_up.ps1 -NoUi                           # db_Exynos2700_SM-S957B sync + 실측 import + ETL
+git diff db_Exynos2700_SM-S957B                                                             # 생성물 변화 검토 후 commit
 ```
 ```sql
 select s.project_ref, s.id, count(v.id) from scenarios s join scenario_variants v on v.scenario_id=s.id group by 1,2 order by 1,2;
@@ -374,17 +396,37 @@ compile report의 `impact`에는 삭제된 `msnr`을 참조하던 variant 설정
    현재 fixture에 있는 id를 old로 적으면 dev_up마다 그 scenario가 합쳐지므로 금지 (unit test가 확인).
 5. 저장해 둔 UI URL(`items=`)은 다시 만든다. 옛 id는 UI에서 canonical로 매핑된다.
 
-### 예제 9 — 측정 evidence 추가
+### 예제 9 — 실측 입력과 갱신 (Exynos2700: power / BW / SW timing)
 
-- 측정 bundle import는 [Measurement Import Guide](../measurement/measurement-import-guide-ko.md)를 따른다.
-- 대상 참조: 2600 `project=proj-sm-s947b`, `scenario=uc-cam-recording-e2600` / 2700 `proj-sm-s957b`, `uc-cam-recording-e2700`
-- 2600 evidence를 fixture에 보관하려면 `db_fixtures_Exynos2600_S26Plus/03_evidence/`에 저장한다.
+`db_Exynos2700_SM-S957B/measurements/<variant>/`에 KPI 16개 variant의 입력이 있다. **현재 값은 DUMMY**
+(`device_id: DUMMY`, `collection_method: synthetic_dummy` → synthetic으로 분류; 2600 synthetic 실측·simulation을 축척)이며 구조 확인·검증용이다.
+형식은 [Measurement Import Guide](../measurement/measurement-import-guide-ko.md)와 같다.
+
+| 데이터 | meta.yaml | DB evidence (`evidence.measurement`) |
+| --- | --- | --- |
+| Power | `power:` (`format: rail_long`) + `rail_power_by_run.csv` (run, rail, V, mA, mW) | `kpi.total_power_mw`(run 간 mean/p95/CI), `vdd_power`, `power.rail*` |
+| BW | `metric_observations:` `bandwidth.total` (scope scenario), `bandwidth.read/write` (scope ip) | `metric_observations` |
+| SW timing | `sw_task_timing:` task별 min/mean/p95/max/samples (요약값), 또는 `perfetto:` + trace | `sw_task_timing` |
+| Latency / fps | `kpi: {frame_latency_ms, fps_effective}` | `kpi` |
+
+사내 실측으로 교체 / 정정 (`collection_method`를 실제 방식으로 바꾸면 real 실측으로 집계된다):
+
+1. `measurements/<variant>/meta.yaml`과 CSV를 수정한다. `provenance.device_id`, `collection_method`도 실제 값으로.
+2. **`provenance.revision`을 1 올린다.** 같은 `id` = 같은 측정의 정정본이다. 올리지 않으면
+   `conflict: ... bump provenance.revision`으로 멈춘다 (실수로 덮어쓰기 방지). DB도 revision이 더 큰 문서만 교체한다.
+3. `dev_up.ps1 -NoUi` (import → ETL). 결과는 `03_evidence/`와 DB에 반영되고 `git diff`로 확인한다.
+4. 새 측정(새 silicon rev, SW baseline 등)은 폴더를 추가하고 새 `id`를 쓴다. 이전 측정은 이력으로 남는다.
+
+단독 실행: `uv run python scripts/import_measurements.py db_Exynos2700_SM-S957B --strict` → `unchanged / added / updated / conflict`.
+DUMMY 입력 재생성: `uv run python scripts/generate_dummy_measurements.py --db db_Exynos2700_SM-S957B --reference db_Exynos2600_SM-S947B --project sm-s957b --force`.
+
+2600 evidence는 `db_Exynos2600_SM-S947B/03_evidence/`에 파일로 둔다 (import 결과를 복사).
 
 ### 예제 10 — 기존 generator로 fixture를 고친 경우
 
 ```powershell
 uv run python scripts\enrich_priority_recording.py        # fixture 직접 수정
-uv run python -m scenario_db.authoring sync sm-s947b --fixture db_fixtures_Exynos2600_S26Plus --to authoring
+uv run python -m scenario_db.authoring sync sm-s947b --fixture db_Exynos2600_SM-S947B --to authoring
 git diff authoring/                                     # 변경을 authoring 기준으로 검토
 ```
 

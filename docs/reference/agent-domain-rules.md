@@ -8,7 +8,7 @@ For current endpoint contracts, start at [API contracts](../contracts/api/README
 
 - Auxiliary YAML that is not an ETL document (no `kind`) must be listed in
   `<fixtures>\.etlignore` (glob per line) so `--strict` runs stay green.
-- Validate `db_fixtures_Exynos2600_S26Plus` with `--strict` when editing it;
+- Validate `db_Exynos2600_SM-S947B` with `--strict` when editing it;
   do not infer current validity from earlier successful loads.
 - Pipeline edges support optional `port_pairs` (`- src: <WDMA/port>` /
   `dst: <RDMA/port>`); they drive the WDMA→RDMA edge labels and Level 2

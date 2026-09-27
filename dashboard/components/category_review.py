@@ -134,7 +134,7 @@ DRIVER_REFERENCE = """
 | DPU | `exynos/soc-series/common/drivers/dpu/exynos_drm_bts.c`의 `__get_bts_margin`, `__get_resol_clock_internal`, `dpu_bts_calc_dpp_bw` | surface traffic, BTS vote, DISP clock을 구분합니다. v1은 비회전·비압축 레이어 범위이며 GPU 사전 합성 traffic을 대신 계산하지 않습니다. |
 
 DTS 경로의 기준 디렉터리는 `exynos/soc-series/t-android16/arch/arm64/boot/dts/exynos/`입니다.
-검토 원본 정보는 `db_fixtures_Exynos2600_S26Plus/00_hw/`의 각 IP YAML,
+검토 원본 정보는 `db_Exynos2600_SM-S947B/00_hw/`의 각 IP YAML,
 현재 계산 계약은 `docs/guides/driver-models.md`에서 확인합니다.
 
 **결과 읽기:** `calculated`는 입력 가정에 따른 계산, `missing_input`은 입력 부족,

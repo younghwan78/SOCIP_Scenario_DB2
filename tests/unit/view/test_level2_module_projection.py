@@ -11,7 +11,7 @@ from scenario_db.view import service
 from scenario_db.view.level2_semantic import Level2NodeSpec, _level2_node_spec
 
 
-FIXTURE_ROOT = Path("db_fixtures_Exynos2600_S26Plus")
+FIXTURE_ROOT = Path("db_Exynos2600_SM-S947B")
 
 
 def _load_yaml(path: Path) -> dict:

@@ -12,7 +12,7 @@ Migration `0019` adds these tables and `project_sensor_selections`. Selections p
 
 ```powershell
 .\.venv\Scripts\python.exe -m alembic upgrade head
-.\.venv\Scripts\python.exe -m scenario_db.etl.loader db_fixtures_Exynos2600_S26Plus --strict --report-json runtime_logs/sensor-import.json
+.\.venv\Scripts\python.exe -m scenario_db.etl.loader db_Exynos2600_SM-S947B --strict --report-json runtime_logs/sensor-import.json
 ```
 
 The existing ETL CLI imports all three kinds, validates mode counts and lineup references, and rolls back the batch on strict errors. Reimport of an identical hash is unchanged. An updated catalog replaces its document, so review removed modes before import. Existing scenario profiling/evidence and 14 extra camera recording variants are preserved by the selective fixture merge.

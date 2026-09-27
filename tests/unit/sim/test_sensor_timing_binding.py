@@ -5,7 +5,7 @@ import yaml
 from scenario_db.sim.sensor_timing_binding import resolve_timing_binding, timing_mode_hash
 from scenario_db.sim.sensor_timing import calculate_sensor_timing
 
-ROOT = Path(__file__).parents[3] / "db_fixtures_Exynos2600_S26Plus/00_sensor"
+ROOT = Path(__file__).parents[3] / "db_Exynos2600_SM-S947B/00_sensor"
 
 
 def docs():

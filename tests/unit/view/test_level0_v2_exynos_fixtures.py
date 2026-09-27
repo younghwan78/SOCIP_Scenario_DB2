@@ -9,7 +9,7 @@ from scenario_db.db.repositories.scenario_graph import CanonicalScenarioGraph
 from scenario_db.view.level0_v2 import build_resource_overview, project_level0_topology_view
 
 
-FIXTURE_ROOT = Path("db_fixtures_Exynos2600_S26Plus")
+FIXTURE_ROOT = Path("db_Exynos2600_SM-S947B")
 
 
 def _load_yaml(path: Path) -> dict:

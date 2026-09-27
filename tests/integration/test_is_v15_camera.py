@@ -14,7 +14,7 @@ from scenario_db.sim.adapter import build_simulation_inputs
 from scenario_db.sim.runner import build_simulation_evidence, run_simulation
 
 
-FIXTURE = Path(__file__).resolve().parents[2] / "db_fixtures_Exynos2600_S26Plus"
+FIXTURE = Path(__file__).resolve().parents[2] / "db_Exynos2600_SM-S947B"
 
 
 @pytest.fixture

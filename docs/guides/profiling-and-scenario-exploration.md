@@ -56,7 +56,7 @@ latency는 Perfetto `flow.slice_out -> slice_in`으로 연결된 쌍에서 산�
 
 ## 3. 반복 업데이트와 재현성
 
-같은 evidence ID에 다른 내용이 있으면 CLI와 profiling ETL은 덮어쓰기를 거부한다. 새 capture는 새 ID로 만든다. 동일 파일의 재실행은 idempotent하다. metadata를 수정한 경우에도 새 revision ID를 사용한다. fingerprint는 출처 추적용이며 다른 내용의 덮어쓰기 권한이 아니다.
+같은 evidence ID의 내용을 정정하려면 CLI와 profiling ETL에 전달하는 `provenance.revision`을 올린다(미지정은 1). 같은 revision 또는 이전 revision의 변경은 거부한다. 새 capture는 새 ID로 만들며 동일 파일의 재실행은 idempotent하다. 정정 후에는 이전 measurement hash에 묶인 timing profile을 다시 생성해야 한다. fingerprint는 출처 추적용이며 그 자체로 덮어쓰기 권한을 부여하지 않는다.
 
 측정 YAML은 기존 ETL 경로로 적재한다. trace와 summary에서 같은 timing 그룹을 동시에 공급하면 조용히 우선순위를 적용하지 않고 오류로 처리한다.
 
@@ -111,7 +111,7 @@ run_info에 profile 내용과 revision을 저장하고, derived_from으로 측�
 원본과 현행 fixture 비교:
 
 ```powershell
-uv run python scripts/review_fixture_snapshot.py --source <reference-directory> --current db_fixtures_Exynos2600_S26Plus --out <manifest.json>
+uv run python scripts/review_fixture_snapshot.py --source <reference-directory> --current db_Exynos2600_SM-S947B --out <manifest.json>
 ```
 
 manifest는 파일 hash, shared/changed ID, 현행에만 존재하는 variant를 기록한다. source와 current에는 쓰지 않는다.

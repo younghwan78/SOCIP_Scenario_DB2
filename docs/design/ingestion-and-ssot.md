@@ -14,7 +14,7 @@ runtime authority. API, viewer, query, resolver, review, and simulation flows re
 or repositories built from them; they do not silently switch to YAML when the DB is empty.
 
 The supported local sources are synthetic fixtures under `demo/fixtures`,
-`db_fixtures_Exynos2600_S26Plus`, examples, and test fixtures. Legacy adapters may read a
+`db_Exynos2600_SM-S947B`, examples, and test fixtures. Legacy adapters may read a
 separately supplied fixture root, but real company data is outside the repository boundary.
 
 ## 2. Canonical document kinds and load order

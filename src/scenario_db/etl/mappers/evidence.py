@@ -61,7 +61,12 @@ def upsert_measurement(raw: dict, sha256: str, session: Session) -> None:
 
     if row.yaml_sha256 and (obj.provenance.import_fingerprint or
                            (row.provenance or {}).get("import_fingerprint")):
-        raise ValueError("profiling evidence is immutable; use a new evidence id")
+        stored = (row.provenance or {}).get("revision") or 1
+        incoming = obj.provenance.revision or 1
+        if incoming <= stored:
+            raise ValueError(
+                f"measurement evidence {obj.id} (SW timing / profiling) is immutable at revision {stored}; "
+                "bump provenance.revision in meta.yaml to replace it, or use a new evidence id")
 
     # MeasuredKpi는 float/int와 MeasuredKpi 모델이 혼재 — 직렬화 처리
     def _kpi_val(v):

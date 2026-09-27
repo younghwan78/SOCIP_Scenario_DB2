@@ -14,7 +14,8 @@ from scenario_db.authoring.validate import validate_documents
 
 REPO = Path(__file__).resolve().parents[3]
 AUTHORING = REPO / "authoring"
-FIXTURE = REPO / "db_fixtures_Exynos2600_S26Plus"
+FIXTURE = REPO / "db_Exynos2600_SM-S947B"
+DB_2700 = REPO / "db_Exynos2700_SM-S957B"
 EXAMPLE_2800 = AUTHORING / "examples" / "exynos2800-pipeline-change"
 
 
@@ -131,7 +132,18 @@ def test_e2700_is_the_rear_camera_recording_kpi_set():
     assert _scenario_ids(report) == ["uc-cam-recording-e2700"]
     assert "soc-exynos2700" in docs and docs["proj-sm-s957b"]["metadata"]["soc_ref"] == "soc-exynos2700"
     assert not [i for i in docs if i.startswith("ip-") and "s5e9965" in i]
-    assert "ip-mfc-s5e9975" in docs and "sensor-gng-m2s" in docs   # rename_exclude keeps sensor DT ids
+    assert "ip-mfc-s5e9975" in docs
+    # sensor DT catalogs / timing profiles / lineup are per-SoC copies, never shared with 2600
+    assert "sensor-gng-m2s-s5e9975" in docs and "sensor-gng-m2s" not in docs
+    assert docs["board-lineup-s5e9975"]["soc"] == "s5e9975"
+    # SW profile is a per-SoC copy too
+    assert "sw-vendor-v1.2.3-s5e9975" in docs and "sw-vendor-v1.2.3" not in docs
+    assert docs["proj-sm-s957b"]["globals"]["default_sw_profile_ref"] == "sw-vendor-v1.2.3-s5e9975"
+    sensor_ids = [i for i, d in docs.items() if str(d.get("kind", "")).startswith("sensor.")]
+    assert sensor_ids and all(i.endswith("s5e9975") for i in sensor_ids)
+    modes = (docs["sensor-gng-m2s-s5e9975"].get("modes") or {}).values()
+    profile_refs = {(m.get("timing_binding") or {}).get("profile_ref") for m in modes} - {None}
+    assert profile_refs and all(r.endswith("-s5e9975") and r in docs for r in profile_refs)
     rec = docs["uc-cam-recording-e2700"]
     assert rec["project_ref"] == "proj-sm-s957b"
     assert rec["metadata"]["canonical_usecase"] == "uc-cam-recording"
@@ -311,6 +323,10 @@ def test_fixture_with_knob_variants_decompiles_and_recompiles(child_root: Path, 
     decompile_fixture(out, child_root, "rt-platform", "rt")
     assert knobs_dst.exists()
     assert check_against(child_root, "rt", out) == []
+def test_exynos2700_db_folder_matches_authoring():
+    """db_Exynos2700_SM-S957B/00~02 is generated from authoring (dev_up syncs it); never hand-edited."""
+    assert check_against(AUTHORING, "sm-s957b", DB_2700) == []
+
 
 @pytest.mark.parametrize('command', ['compile', 'sync'])
 def test_invalid_compilation_preserves_existing_output(tmp_path, monkeypatch, command):
@@ -348,7 +364,6 @@ def test_decompile_rejects_invalid_source_or_inherited_target_before_removing_fi
     with pytest.raises(AuthoringError):
         decompile_fixture(source, root, 'p', 'project')
     assert target.read_text(encoding='utf-8') == 'keep'
-
 
 def test_overlay_can_reparent_a_child_before_removing_its_old_parent():
     from scenario_db.authoring.pipeline_ops import apply_overlay

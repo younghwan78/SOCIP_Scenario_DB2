@@ -18,9 +18,9 @@ def test_profiling_jsonb_roundtrip_and_revision_guard(engine):
         tx = connection.begin()
         try:
             with Session(connection, join_transaction_mode='create_savepoint') as session:
-                result = load_yaml_dir(ROOT/'db_fixtures_Exynos2600_S26Plus', session, strict=True, validate=True)
+                result = load_yaml_dir(ROOT/'db_Exynos2600_SM-S947B', session, strict=True, validate=True)
                 assert result.ok
-                source = next((ROOT/'db_fixtures_Exynos2600_S26Plus'/'03_evidence').glob('meas-*.yaml'))
+                source = next((ROOT/'db_Exynos2600_SM-S947B'/'03_evidence').glob('meas-*.yaml'))
                 doc = yaml.safe_load(source.read_text(encoding='utf-8'))
                 doc['id'] = 'meas-profiling-persistence'
                 doc['provenance']['import_fingerprint'] = 'a'*64
@@ -39,6 +39,14 @@ def test_profiling_jsonb_roundtrip_and_revision_guard(engine):
                 changed = deepcopy(doc); changed['hw_task_timing'][0]['mean_ms'] = 2.5
                 with pytest.raises(ValueError, match='evidence'):
                     upsert_measurement(changed, 'b'*64, session)
+                changed['provenance']['revision'] = 2
+                upsert_measurement(changed, 'c'*64, session)
+                session.commit(); session.expire_all()
+                updated = session.get(Evidence, doc['id'])
+                assert updated.provenance['revision'] == 2
+                assert updated.hw_task_timing[0]['mean_ms'] == 2.5
+                with pytest.raises(ValueError, match='revision 2'):
+                    upsert_measurement(doc, 'a'*64, session)
         finally:
             tx.rollback()
 
@@ -60,7 +68,7 @@ def test_measured_profile_replay_and_exploration_api(engine, api_client):
         api_client.app.dependency_overrides[get_db] = test_db
         try:
             with Session(connection, join_transaction_mode='create_savepoint') as session:
-                assert load_yaml_dir(ROOT/'db_fixtures_Exynos2600_S26Plus', session, strict=True, validate=True).ok
+                assert load_yaml_dir(ROOT/'db_Exynos2600_SM-S947B', session, strict=True, validate=True).ok
                 meta = MeasurementImportMeta.model_validate(yaml.safe_load((ROOT/'examples/measurement-import/profiling/meta-summary.yaml').read_text(encoding='utf-8')))
                 doc = assemble_evidence(meta, None, None, base_dir=ROOT, report=ImportReport())
                 upsert_measurement(doc, 'b'*64, session); session.commit()

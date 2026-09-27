@@ -7,7 +7,7 @@ import yaml
 from scenario_db.models.evidence.simulation import SimulationEvidence
 
 
-FIXTURE_ROOT = Path(__file__).resolve().parents[2] / "db_fixtures_Exynos2600_S26Plus"
+FIXTURE_ROOT = Path(__file__).resolve().parents[2] / "db_Exynos2600_SM-S947B"
 EVIDENCE_ROOT = FIXTURE_ROOT / "03_evidence"
 
 

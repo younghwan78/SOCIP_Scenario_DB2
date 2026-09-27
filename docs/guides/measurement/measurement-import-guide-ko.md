@@ -202,6 +202,21 @@ artifacts:
 `source` 파일이 존재하면 sha256/bytes를 계산해 기록하고, 없으면 포인터만 남기고
 warning을 낸다(원본이 파일 저장소에만 있고 변환 머신에 없는 경우가 정상).
 
+## 4.6 갱신 (revision)
+
+같은 `id`의 evidence는 같은 측정이다. 값을 정정하려면 meta.yaml을 고치고 `provenance.revision`을 올린다.
+
+```yaml
+id: meas-...-evt0          # 고정 (정정해도 바뀌지 않음)
+provenance:
+  revision: 2              # 1 → 2
+```
+
+- `meas_import.cli`: 출력 파일이 이미 있고 내용이 다르면 revision이 더 클 때만 덮어쓴다 (아니면 `evidence_revision_conflict`).
+- ETL: SW timing / profiling이 들어간 evidence(`import_fingerprint`)는 revision이 더 큰 문서로만 교체된다.
+  이 evidence로 만든 timing profile은 hash가 달라져 simulation 재생 시 `source hash mismatch`로 막힌다 (재생성 필요).
+- 과제 DB 폴더 단위 일괄 처리: `scripts/import_measurements.py <db 폴더>` (예: `db_Exynos2700_SM-S957B`).
+
 ## 5. perfetto 의존성
 
 `perfetto` 패키지는 선택 의존성이며 lazy import된다.
