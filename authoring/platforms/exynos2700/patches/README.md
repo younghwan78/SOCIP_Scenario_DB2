@@ -16,3 +16,5 @@ capabilities:
 
 `python -m scenario_db.authoring compile sm-s957b --out <dir>` prints the effective result;
 `check`-style diffs vs the parent are visible in the generated files.
+
+List 항목 단위 수정(`$items`, `$remove`)과 IP/sensor 예시: `docs/guides/import/authoring-exynos2700-guide-ko.md`.

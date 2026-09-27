@@ -1,6 +1,7 @@
 # db_Exynos2700_SM-S957B — Exynos2700 (S5E9975) · SM-S957B
 
 DB 적재 원본. `scripts/dev_up.ps1`이 이 폴더를 ETL로 적재한다.
+IP / scenario / sensor 수정 방법과 예시: [authoring-exynos2700-guide-ko.md](../docs/guides/import/authoring-exynos2700-guide-ko.md)
 
 | 경로 | 관리 방식 | 수정 방법 |
 | --- | --- | --- |

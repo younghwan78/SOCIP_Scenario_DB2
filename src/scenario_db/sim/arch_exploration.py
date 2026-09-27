@@ -458,6 +458,28 @@ def _support(graph, nodes: set[str]) -> tuple[str, dict[str, list[str]]]:
     return ("unknown" if unknown else "catalog"), listed
 
 
+def _port_unsupported(graph, ports: list[tuple[str, str, str]], mode: str) -> list[str]:
+    """DMA ports whose IP module declares ``supported_compressions`` without ``mode``.
+
+    IP catalog ``capabilities.properties.modules[name=<port>].supported_compressions`` is per
+    DMA port; ports without that list (or without a module entry) are not restricted.
+    """
+    want = normalize_compression(mode)
+    by_id = {str(n.get("id")): n for n in graph.pipeline_nodes}
+    out = []
+    for node, port, _ in ports:
+        ip = graph.ip_catalog.get(str((by_id.get(node) or {}).get("ip_ref")))
+        caps = getattr(ip, "capabilities", None) or {}
+        modules = ((caps.get("properties") or {}).get("modules") or []) if isinstance(caps, dict) else []
+        mod = next((m for m in modules if isinstance(m, dict) and m.get("name") == port), None)
+        listed = (mod or {}).get("supported_compressions")
+        if listed is None:
+            continue
+        if want not in {normalize_compression(v) for v in listed}:
+            out.append(f"{node}.{port}")
+    return out
+
+
 def _dma(graph, config: SimulationRunConfig) -> dict[tuple[str, str, str], tuple[float, float]]:
     inputs = build_simulation_inputs(graph, config)
     fps = float(inputs.config.fps or 30.0)
@@ -501,7 +523,7 @@ def compression_candidates(
         if compression_enabled(eff.get("compression")):
             out.append(row | {"selectable": False, "skip_reason": "already compressed"})
             continue
-        best = None
+        cands = []
         for m in axis.modes:
             mode = f"COMP_{fam}_{m.upper()}"
             if not axis.include_unsupported and any(
@@ -518,17 +540,25 @@ def compression_candidates(
                 ratio, src = DEFAULT_RATIO[m.upper()], "assumed"
             else:
                 continue
-            if best is None or ratio < best[1]:
-                best = (mode, ratio, src, m == "lossy")
-        if best is None:
+            cands.append((mode, ratio, src, m == "lossy"))
+        if not cands:
             out.append(row | {"selectable": False, "skip_reason": "no mode with ratio < 1"})
             continue
-        mode, ratio, src, lossy = best
-        variant = deepcopy(graph.variant)
-        variant.buffer_overrides = deepcopy(variant.buffer_overrides or {})
-        variant.buffer_overrides.setdefault(bid, {}).update({"compression": mode, "comp_ratio": ratio})
-        comp = _dma(replace(graph, variant=variant), config)
-        ports = sorted(k for k in comp if abs(comp[k][0] - base.get(k, (0.0, 0.0))[0]) > 1e-9)
+        cands.sort(key=lambda c: c[1])
+        chosen = None
+        port_block: list[str] = []
+        for cand in cands:
+            variant = deepcopy(graph.variant)
+            variant.buffer_overrides = deepcopy(variant.buffer_overrides or {})
+            variant.buffer_overrides.setdefault(bid, {}).update({"compression": cand[0], "comp_ratio": cand[1]})
+            comp = _dma(replace(graph, variant=variant), config)
+            ports = sorted(k for k in comp if abs(comp[k][0] - base.get(k, (0.0, 0.0))[0]) > 1e-9)
+            blocked = _port_unsupported(graph, ports, cand[0])
+            if chosen is None or (not blocked and port_block):
+                chosen, port_block = (cand, comp, ports), blocked
+            if not blocked:
+                break
+        (mode, ratio, src, lossy), comp, ports = chosen
         raw = sum(base.get(k, (0.0, 0.0))[0] for k in ports)
         d_bw = sum(comp[k][0] for k in comp) - sum(v[0] for v in base.values())
         d_pw = sum(comp[k][1] for k in comp) - sum(v[1] for v in base.values())
@@ -542,10 +572,13 @@ def compression_candidates(
             "delta_mbs": round(d_bw, 3), "delta_mw": round(d_pw, 4),
             "delta_ip_mbs": round(_part(False, 0), 3), "delta_ip_mw": round(_part(False, 1), 4),
             "delta_cpu_mbs": round(_part(True, 0), 3), "delta_cpu_mw": round(_part(True, 1), 4),
+            "unsupported_ports": port_block,
         }
         reason = None
         if support == "unsupported" and not axis.include_unsupported:
             reason = "IP catalog lists no compression for an endpoint"
+        elif port_block and not axis.include_unsupported:
+            reason = f"DMA port without {mode}: {', '.join(port_block)}"
         elif -d_bw < axis.min_saving_mbs:
             reason = f"saving {-d_bw:.1f} MB/s < {axis.min_saving_mbs} MB/s"
         out.append(row | {"selectable": reason is None, "skip_reason": reason})
