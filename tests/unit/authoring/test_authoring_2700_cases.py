@@ -61,6 +61,11 @@ def test_list_operators_remove_and_items():
         deep_merge(base, {"$items": {"modules": {"by": "name", "patch": {"Z": {}}}}})
     with pytest.raises(AuthoringError, match="duplicate"):
         deep_merge(base, {"$items": {"modules": {"by": "name", "add": [{"name": "A"}]}}})
+    with pytest.raises(AuthoringError, match="cannot change"):
+        deep_merge(base, {"$items": {"modules": {"by": "name", "patch": {"A": {"name": "B"}}}}})
+    with pytest.raises(AuthoringError, match="duplicate"):
+        deep_merge({'modules': [{'name': 'A'}, {'name': 'A'}]},
+                   {'$items': {'modules': {'by': 'name', 'patch': {'A': {'c': [2]}}}}})
 
 
 # --- 1. IP: unit power / ppc / mode / DMA port / compression -------------------------------
@@ -221,6 +226,11 @@ def test_scenario_include_and_clone(root: Path):
     assert [v["id"] for v in night["variants"]] == ["cam-rec-r1-fhd30-night", "cam-rec-r1-uhd30-night"]
     assert all(n["ip_ref"].endswith("s5e9975") for n in night["pipeline"]["nodes"])
     assert len(docs[REC]["variants"]) == 16    # the original scenario is unchanged
+    from scenario_db.authoring.cli import write_worksheet
+    write_worksheet(root, 'sm-s957b')
+    worksheet = root / 'projects/sm-s957b/scenarios/uc-cam-recording-night-e2700/sw_timing.measured.yaml'
+    assert worksheet.exists()
+    assert yamlio.load(worksheet)['scenario'] == 'uc-cam-recording-night-e2700'
 
 
 def test_clone_from_unknown_parent_fails(root: Path):

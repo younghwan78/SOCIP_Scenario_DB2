@@ -50,7 +50,7 @@ from scenario_db.sim import power_options as po
 from scenario_db.sim.power_attribution import attribute
 from scenario_db.sim.transfers import compression_catalog
 
-ENGINE_REV = "arch-exploration/4"
+ENGINE_REV = "arch-exploration/5"
 # Power = CPU(SW) + IP core + BW; BW = IP DMA (HW nodes) + CPU DMA (SW tasks, e.g. mpeg_writer)
 DIST_KEYS = ("total_mw", "cpu_mw", "hw_mw", "bw_mw", "bw_ip_mw", "bw_cpu_mw", "bw_mbs", "bw_ip_mbs", "bw_cpu_mbs")
 V_REF_MV = 710.0
@@ -569,6 +569,7 @@ def compression_candidates(
                 chosen, port_block = (cand, comp, ports), blocked
             if not blocked:
                 break
+        assert chosen is not None  # cands is nonempty; the first candidate is always retained
         (mode, ratio, src, lossy), comp, ports = chosen
         raw = sum(base.get(k, (0.0, 0.0))[0] for k in ports)
         d_bw = sum(comp[k][0] for k in comp) - sum(v[0] for v in base.values())

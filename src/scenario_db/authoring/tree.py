@@ -68,7 +68,7 @@ class Bundle:
     measured: dict[str, dict] = field(default_factory=dict)
     overlays: dict[str, dict] = field(default_factory=dict)
     report: dict[str, Any] = field(default_factory=dict)
-    origins: dict[str, str] = field(default_factory=dict)   # child uc id -> parent uc id (authoring dir name)
+    origins: dict[str, str] = field(default_factory=dict)   # child uc id -> local authoring directory name
 
 
 # ---------------------------------------------------------------------------
@@ -316,7 +316,7 @@ def load_project(authoring_root: Path, key: str, _stack: tuple = ()) -> Bundle:
                 new = apply_overlay(new, rename_value(overlay, id_map))
                 scenarios[new_id] = new
                 overlays[new_id] = overlay
-                origins[new_id] = src_uc
+                origins[new_id] = sd.name
                 if (sd / "sw_timing.measured.yaml").exists():
                     measured[new_id] = yamlio.load(sd / "sw_timing.measured.yaml") or {}
                 continue

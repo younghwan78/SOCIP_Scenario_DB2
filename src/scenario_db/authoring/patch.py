@@ -46,7 +46,11 @@ def _selects(item: Any, sel: Any) -> bool:
 def _edit_items(current: list, spec: dict, key: str) -> list:
     by = spec.get("by", "id")
     out = [copy.deepcopy(i) for i in current]
+    if any(not isinstance(i, dict) or by not in i for i in out):
+        raise PatchError(f"$items.{key}: each item needs '{by}'")
     ids = [i.get(by) if isinstance(i, dict) else None for i in out]
+    if any(ids.count(i) > 1 for i in ids):
+        raise PatchError(f"$items.{key}: duplicate '{by}' in current list")
     for rid in spec.get("remove") or []:
         if rid not in ids:
             raise PatchError(f"$items.{key}: remove unknown {by}='{rid}'")
@@ -57,6 +61,8 @@ def _edit_items(current: list, spec: dict, key: str) -> list:
             raise PatchError(f"$items.{key}: patch unknown {by}='{pid}'")
         idx = ids.index(pid)
         out[idx] = deep_merge(out[idx], sub)
+        if not isinstance(out[idx], dict) or out[idx].get(by) != pid:
+            raise PatchError(f"$items.{key}: patch cannot change '{by}'; use remove/add")
     for item in spec.get("add") or []:
         if not isinstance(item, dict) or by not in item:
             raise PatchError(f"$items.{key}: add item needs '{by}'")

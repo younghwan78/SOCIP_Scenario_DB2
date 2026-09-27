@@ -62,7 +62,8 @@ cd <repo>\implementation
 uv run python -m scenario_db.authoring compile sm-s957b --out output\preview
 uv run python -m scenario_db.authoring sync sm-s957b --fixture db_Exynos2700_SM-S957B --to fixture --dry-run
 
-# 2) HW / SW / topology / size를 바꿨으면 simulation evidence를 재생성한다 (dev_up이 하지 않는다)
+# 2) 생성 DB 폴더를 실제 동기화한 뒤 simulation evidence를 재생성한다 (dev_up은 evidence를 재생성하지 않는다)
+uv run python -m scenario_db.authoring sync sm-s957b --fixture db_Exynos2700_SM-S957B --to fixture --prune
 uv run python scripts/generate_simulation_evidence.py db_Exynos2700_SM-S957B uc-cam-recording-e2700
 
 # 3) DB 반영: rename → retire → ETL 2600 → [sync → measurement import → ETL] 2700
@@ -91,6 +92,7 @@ patch는 상속 문서에 deep-merge된다.
 | `$items: {key: {by: name, patch: {ID: {...}}, remove: [ID], add: [{...}]}}` | id 필드(`by`, 기본값 `id`)로 list의 **한 항목만** 수정·삭제·추가한다. 없는 id를 patch/remove하거나 이미 있는 id를 add하면 오류 |
 
 적용 순서: `$unset` → `$remove` → `$append` → `$items` → 일반 key.
+`$items.patch`는 식별 필드(`by`)를 바꾸거나 삭제할 수 없다. 이름을 바꾸려면 기존 항목을 `remove`하고 새 항목을 `add`한다.
 
 ---
 
