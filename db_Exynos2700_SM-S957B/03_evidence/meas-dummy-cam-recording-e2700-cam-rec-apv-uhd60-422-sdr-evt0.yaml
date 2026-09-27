@@ -13,16 +13,16 @@ execution_context:
   ambient_temp_c: 25.0
   power_state: discharging
 provenance:
-  revision: 2
+  revision: 3
   device_id: DUMMY
-  collection_method: dummy_fixture
+  collection_method: synthetic_dummy
   collection_tool_versions:
     generator: generate_dummy_measurements.py
   sample_count: 3
   duration_per_sample_s: 30.0
   confidence_level: 0.95
   raw_artifacts: []
-  import_fingerprint: fdc22c90d102f6a8b9aba4fdb90b7c13a3c17e93beea785ea74b32790c3db3fe
+  import_fingerprint: 27621af868bdc96aa4d911fa1daf0f71368a3f4e76d73d33731f095b7f5cc227
 aggregation:
   strategy: mean_over_runs
 kpi:

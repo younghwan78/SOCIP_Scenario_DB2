@@ -90,6 +90,7 @@ db_Exynos2700_SM-S957B/           2700 DB 원본
   00_hw/ 00_sensor/ 01_sw/ 02_definition/   authoring에서 생성 (직접 수정 금지)
   measurements/<variant>/meta.yaml + rail_power_by_run.csv   실측 입력 (사람이 관리)
   03_evidence/meas-*.yaml          measurements/에서 생성 (scripts/import_measurements.py)
+  03_evidence/sim-pred-*.yaml      예측 + timeline (scripts/generate_simulation_evidence.py, authoring 변경 후 재생성)
 ```
 
 | 파일 | 필수 key | 선택 key | 상세 |
@@ -398,7 +399,7 @@ compile report의 `impact`에는 삭제된 `msnr`을 참조하던 variant 설정
 ### 예제 9 — 실측 입력과 갱신 (Exynos2700: power / BW / SW timing)
 
 `db_Exynos2700_SM-S957B/measurements/<variant>/`에 KPI 16개 variant의 입력이 있다. **현재 값은 DUMMY**
-(`provenance.device_id: DUMMY`, 2600 synthetic 실측·simulation을 축척)이며 구조 확인·검증용이다.
+(`device_id: DUMMY`, `collection_method: synthetic_dummy` → synthetic으로 분류; 2600 synthetic 실측·simulation을 축척)이며 구조 확인·검증용이다.
 형식은 [Measurement Import Guide](../measurement/measurement-import-guide-ko.md)와 같다.
 
 | 데이터 | meta.yaml | DB evidence (`evidence.measurement`) |
@@ -408,7 +409,7 @@ compile report의 `impact`에는 삭제된 `msnr`을 참조하던 variant 설정
 | SW timing | `sw_task_timing:` task별 min/mean/p95/max/samples (요약값), 또는 `perfetto:` + trace | `sw_task_timing` |
 | Latency / fps | `kpi: {frame_latency_ms, fps_effective}` | `kpi` |
 
-사내 실측으로 교체 / 정정:
+사내 실측으로 교체 / 정정 (`collection_method`를 실제 방식으로 바꾸면 real 실측으로 집계된다):
 
 1. `measurements/<variant>/meta.yaml`과 CSV를 수정한다. `provenance.device_id`, `collection_method`도 실제 값으로.
 2. **`provenance.revision`을 1 올린다.** 같은 `id` = 같은 측정의 정정본이다. 올리지 않으면

@@ -13,16 +13,16 @@ execution_context:
   ambient_temp_c: 25.0
   power_state: discharging
 provenance:
-  revision: 2
+  revision: 3
   device_id: DUMMY
-  collection_method: dummy_fixture
+  collection_method: synthetic_dummy
   collection_tool_versions:
     generator: generate_dummy_measurements.py
   sample_count: 3
   duration_per_sample_s: 30.0
   confidence_level: 0.95
   raw_artifacts: []
-  import_fingerprint: 6a7e0e55fef7795486dc759e5c3fdefc30752029b3faff2773d54dc1ca8abb16
+  import_fingerprint: 053fb4fb13337a33e16e12e2b0ff10039dbe33b02b74e9b9d8020914857e1184
 aggregation:
   strategy: mean_over_runs
 kpi:
@@ -31,7 +31,7 @@ kpi:
   total_power_mw:
     mean: 1270.626
     p95: 1284.348
-    std: 15.247
+    std: 15.248
     n: 3
     ci_95:
     - 1232.749
@@ -250,7 +250,7 @@ metric_observations:
   stats:
     mean: 1270.626
     p95: 1284.348
-    std: 15.247
+    std: 15.248
     n: 3
 - metric_id: latency.frame
   scope:

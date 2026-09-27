@@ -119,7 +119,7 @@ def build_meta(project_id: str, scenario_id: str, variant_id: str, meas: dict, s
         "measured_at": "2026-09-27T10:00:00+09:00",
         "execution_context": {"silicon_rev": "EVT0", "sw_baseline_ref": sw_profile, "thermal": "room",
                               "ambient_temp_c": 25.0, "power_state": "discharging", "method": "measurement"},
-        "provenance": {"revision": revision, "device_id": "DUMMY", "collection_method": "dummy_fixture",
+        "provenance": {"revision": revision, "device_id": "DUMMY", "collection_method": "synthetic_dummy",
                        "collection_tool_versions": {"generator": "generate_dummy_measurements.py"},
                        "sample_count": len(RUN_SPREAD), "duration_per_sample_s": 30.0, "confidence_level": 0.95},
         "kpi": {k: v for k, v in {
