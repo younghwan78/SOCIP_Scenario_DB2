@@ -59,7 +59,7 @@ def test_run_persists_summary_and_reports_partial_failure(monkeypatch):
     assert result["project_ref"] == "proj-a" and result["created_by"] == "reviewer"
     assert result["summary"] == {"variants": 1, "errors": 1, "spec_ok": 1, "cases": 12,
                                   "eligible_cases": 4, "verified": 1, "recommended_power_mw": [10, 10],
-                                  "power_options": {"variants": 0, "sets": 0, "best_saving_mw": None}}
+                                  "power_options": {"variants": 0, "sets": 0, "cases": 0, "best_saving_mw": None}}
     assert result["errors"] == [{"scenario_id": "uc-a", "variant_id": "bad", "error": "broken pipeline"}]
     db.commit.assert_called_once()
     with pytest.raises(UnprocessableError, match="max_variants"):

@@ -30,7 +30,8 @@ creation/status changes require writer/admin. Actor identity comes from the API 
 Variant identity is the pair `(scenario_id, variant_id)`, including report and chart
 selection. Promotion locks variant rows in canonical order before reading current
 predictions. Concurrent requests form a supersession chain under the partial unique index.
-Record IDs use UUIDs rather than timestamps. The migration remains `0020`; existing
+Record IDs use UUIDs rather than timestamps. Migration `0021` adds scenario power options
+and IQ review history; existing
 run/prediction/report records remain readable.
 
 Expensive requests use the shared simulation admission slots (429 with Retry-After),
@@ -38,6 +39,18 @@ configured frame limits, and `exploration_max_request_bytes` (413). Each variant
 bounded to 200,000 actual cases; a run evaluates at most 2,000,000 cases. Invalid
 selections/model parameters return 422 and missing entities return 404. Float CPU
 coefficients must have exactly four finite positive entries.
+
+Power-option combinations share those case budgets with the formal variant. The
+separate `max_sets` limit is at most 256; skipped sets are reported in notes/errors.
+Option estimates do not replace the promoted formal variant. Attribution compares
+two recommended cases when both exist, otherwise two baselines.
+
+`GET /arch/power-options/reviews` filters by project/scenario. Writer/admin may use
+`PUT /arch/power-options/reviews` with scenario_id, variant_id (`*` for scenario-wide),
+option_key, status (`candidate`, `iq_eval`, `adopted`, `rejected`), and optional note.
+Variant-specific review overrides scenario-wide review. Concurrent saves serialize
+on the scenario row and preserve history, including first creation. Adoption only
+records review status; applying the option to a formal variant is an authoring edit.
 
 Power and timing remain model estimates. A known failed recommended-case verification
 cannot be labelled spec OK. Unverified alternatives remain visibly unverified.

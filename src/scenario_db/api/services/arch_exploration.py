@@ -116,7 +116,7 @@ def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str |
             continue
         soc_ref = soc_ref or _graph_soc_ref(graph)
         dvfs_ref = dvfs_ref or ref
-        remaining_cases -= summary["counts"]["cases"]
+        remaining_cases -= summary["counts"]["cases"] + summary["counts"].get("option_cases", 0)
         summary["dvfs_table_ref"] = ref
         variants.append(summary)
     if not variants:
@@ -135,6 +135,7 @@ def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str |
     opt = [v["power_options"] for v in variants if (v.get("power_options") or {}).get("status") == "ok"]
     best = [r["delta_mw"] for o in opt for r in o["results"] if r["key"] == o.get("best")]
     counts["power_options"] = {"variants": len(best), "sets": sum(len(o["results"]) for o in opt),
+                               "cases": sum(o.get("cases", 0) for o in opt),
                                "best_saving_mw": [min(best), max(best)] if best else None}
     ihash = hashlib.sha256(json.dumps(sorted(v["input_hash"] for v in variants)).encode()).hexdigest()
     row = ArchExplorationRun(
@@ -487,7 +488,8 @@ def _review_dict(r: PowerOptionReview) -> dict[str, Any]:
 
 
 def set_option_review(db: Session, request: PowerOptionReviewRequest, user: str | None = None) -> dict[str, Any]:
-    scenario = db.get(Scenario, request.scenario_id)
+    # Lock an existing parent even when this review has not been created yet.
+    scenario = db.query(Scenario).filter_by(id=request.scenario_id).with_for_update().one_or_none()
     if scenario is None:
         raise NotFoundError(f"scenario not found: {request.scenario_id}")
     if request.variant_id != "*" and db.query(ScenarioVariant).filter_by(
