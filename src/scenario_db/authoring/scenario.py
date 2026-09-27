@@ -10,7 +10,8 @@ Authoring directory for one scenario::
       sw_timing.yaml   SW task timing table (grouped by identical values)
 
 Compile order per variant:
-    expand ``extends`` -> derived anchors -> size bindings -> sw_timing
+    expand ``extends`` -> overlay ``patch_resolved`` -> derived anchors -> knobs -> size bindings
+    -> sw_timing
 """
 
 from __future__ import annotations
@@ -24,7 +25,13 @@ from typing import Any
 
 from scenario_db.authoring import yamlio
 from scenario_db.authoring.errors import AuthoringError
-from scenario_db.authoring.knobs import apply_knobs, knob_bound_nodes
+from scenario_db.authoring.knobs import (
+    KnobError,
+    apply_knobs,
+    compute_anchor,
+    derived_in_dependency_order,
+    knob_bound_nodes,
+)
 from scenario_db.authoring.patch import deep_merge, make_patch
 
 INCLUDE = "$include"
@@ -252,24 +259,22 @@ def expand_variants(entries: list[dict]) -> list[dict]:
     return [copy.deepcopy(resolve(e["id"], ())) for e in entries]
 
 
-def _align(value: float, align: int) -> int:
-    return int(math.ceil(value / align) * align) if align > 1 else int(round(value))
-
-
 def apply_derived_anchors(doc: dict, variant: dict, derived: dict) -> None:
-    for name, rule in (derived or {}).items():
+    """sizes.yaml ``derived``: per-variant anchors computed from other anchors.
+
+    Same rule keys as knob anchors (``from``, ``scale``/``scale_x``/``scale_y`` number or
+    expression, ``align``/``align_x``/``align_y``, ``round: ceil|nearest``, ``clamp_to``),
+    resolved in dependency order. A variant's own size_overrides entry wins unless ``force``.
+    """
+    for name, rule in derived_in_dependency_order(derived or {}):
         own = variant.get("size_overrides") or {}
         if name in own and not rule.get("force"):
             continue
-        src = resolved_anchors(doc, variant).get(rule["from"])
-        wh = parse_size(src)
-        if wh is None:
-            raise AuthoringError(f"derived anchor '{name}': source anchor '{rule['from']}' unresolved "
-                                 f"in variant '{variant['id']}'")
-        sx = float(rule.get("scale_x", rule.get("scale", 1.0)))
-        sy = float(rule.get("scale_y", rule.get("scale", 1.0)))
-        align = int(rule.get("align", 1))
-        variant.setdefault("size_overrides", {})[name] = f"{_align(wh[0] * sx, align)}x{_align(wh[1] * sy, align)}"
+        try:
+            value = compute_anchor(rule, resolved_anchors(doc, variant), {}, name)
+        except KnobError as exc:
+            raise AuthoringError(f"derived anchor '{name}' in variant '{variant['id']}': {exc}") from exc
+        variant.setdefault("size_overrides", {})[name] = value
 
 
 def apply_size_bindings(doc: dict, variant: dict, bindings: dict[str, str]) -> None:
@@ -395,14 +400,63 @@ def select_scope(variants: list[dict], keep: list[str] | None) -> list[dict]:
     return out
 
 
+def _resolved_match(variant: dict, rule: dict) -> bool:
+    ids = rule.get("variants", ALL)
+    if ids != ALL and variant["id"] not in set(ids):
+        return False
+    if variant["id"] in set(rule.get("exclude") or []):
+        return False
+    disabled = set((variant.get("routing_switch") or {}).get("disabled_nodes") or [])
+    if rule.get("when_node_enabled") and rule["when_node_enabled"] in disabled:
+        return False
+    if rule.get("when_node_disabled") and rule["when_node_disabled"] not in disabled:
+        return False
+    conds = variant.get("design_conditions") or {}
+    for key, want in (rule.get("when") or {}).items():
+        have = conds.get(key)
+        if (have not in want) if isinstance(want, list) else (have != want):
+            return False
+    return True
+
+
+def apply_resolved_patches(variants: list[dict], rules: list[dict]) -> dict[str, list[str]]:
+    """Overlay ``variants.patch_resolved``: deep-merge on fully expanded variants (so
+    ``$remove`` / ``$items`` see inherited lists). A rule that selects nothing is an error."""
+    hits: dict[str, list[str]] = {}
+    known = {v["id"] for v in variants}
+    for i, rule in enumerate(rules or []):
+        if "patch" not in rule:
+            raise AuthoringError(f"patch_resolved[{i}]: 'patch' is required")
+        ids = rule.get("variants", ALL)
+        unknown = [] if ids == ALL else [x for x in ids if x not in known]
+        if unknown:
+            raise AuthoringError(f"patch_resolved[{i}]: unknown variants {unknown}")
+        selected = []
+        for v in variants:
+            if _resolved_match(v, rule):
+                patched = deep_merge(v, rule["patch"])
+                patched["id"] = v["id"]
+                v.clear()
+                v.update(patched)
+                selected.append(v["id"])
+        if not selected and not rule.get("allow_empty"):
+            raise AuthoringError(f"patch_resolved[{i}] selects no variant: {rule.get('note') or rule}")
+        hits[rule.get("note") or f"#{i}"] = selected
+    return hits
+
+
 def compile_usecase(sources: dict[str, Any]) -> dict:
     base = copy.deepcopy(sources["base"])
     variants = expand_variants(sources["variants"])
+    keep = sources.get("keep")
+    scope = [v for v in variants if keep is None or v["id"] in set(keep)]  # templates stay untouched
+    apply_resolved_patches(scope, sources.get("variant_patches") or [])
     sizes = sources.get("sizes") or {}
     base_anchors = dict(((base.get("size_profile") or {}).get("anchors") or {}))
     for v in variants:
-        apply_knobs(base_anchors, v, sources.get("knobs") or {})
+        # derived first: knob anchors (e.g. bcrop pyramid) are computed from them and win
         apply_derived_anchors(base, v, sizes.get("derived") or {})
+        apply_knobs(base_anchors, v, sources.get("knobs") or {})
         apply_size_bindings(base, v, sizes.get("bindings") or {})
     apply_sw_timing(variants, sources.get("sw_timing") or {}, variant_parents(sources["variants"]))
     variants = select_scope(variants, sources.get("keep"))

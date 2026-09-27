@@ -11,6 +11,8 @@ Layout::
       projects/<project>/project.yaml        kind: authoring.project
       projects/<project>/docs/**             project-scoped docs (sim.config_profile ...)
       projects/<project>/scenarios/<uc-id>/  scenario sources (root) or overlay.yaml (child)
+      projects/<project>/scenarios/<new-id>/overlay.yaml  `from: <parent uc id>`: new scenario cloned
+                                             from a parent scenario (child projects)
           sw_timing.measured.yaml            measured SW timing slots (any project)
 """
 
@@ -66,7 +68,7 @@ class Bundle:
     measured: dict[str, dict] = field(default_factory=dict)
     overlays: dict[str, dict] = field(default_factory=dict)
     report: dict[str, Any] = field(default_factory=dict)
-    origins: dict[str, str] = field(default_factory=dict)   # child uc id -> parent uc id (authoring dir name)
+    origins: dict[str, str] = field(default_factory=dict)   # child uc id -> local authoring directory name
 
 
 # ---------------------------------------------------------------------------
@@ -302,6 +304,22 @@ def load_project(authoring_root: Path, key: str, _stack: tuple = ()) -> Bundle:
             measured[new["base"]["id"]] = yamlio.load(odir / "sw_timing.measured.yaml") or {}
     if sdir.exists():   # brand-new scenarios in the child project
         for sd in sorted(p for p in sdir.iterdir() if p.is_dir()):
+            clone = _clone_spec(sd, parent.scenarios)
+            if clone is not None:
+                new_id, src_uc, overlay = clone
+                if new_id in scenarios:
+                    raise AuthoringError(f"project '{key}': cloned scenario id '{new_id}' already exists")
+                new = {k: rename_value(copy.deepcopy(v), id_map) for k, v in parent.scenarios[src_uc].items()}
+                new["base"]["id"] = new_id
+                meta = new["base"].setdefault("metadata", {})
+                meta["canonical_usecase"] = overlay.get("canonical_usecase") or _canonical(new_id)
+                new = apply_overlay(new, rename_value(overlay, id_map))
+                scenarios[new_id] = new
+                overlays[new_id] = overlay
+                origins[new_id] = sd.name
+                if (sd / "sw_timing.measured.yaml").exists():
+                    measured[new_id] = yamlio.load(sd / "sw_timing.measured.yaml") or {}
+                continue
             if (sd / "scenario.yaml").exists():
                 src = load_scenario_sources(sd)
                 scenarios[src["base"]["id"]] = src
@@ -309,6 +327,28 @@ def load_project(authoring_root: Path, key: str, _stack: tuple = ()) -> Bundle:
                     measured[src["base"]["id"]] = yamlio.load(sd / "sw_timing.measured.yaml") or {}
     return Bundle(spec["platform"], platform_docs, platform_map, key, project, docs, scenarios, measured,
                   overlays, {"id_map": id_map}, origins)
+
+
+def _clone_spec(sd: Path, parent_scenarios: dict[str, dict]) -> tuple[str, str, dict] | None:
+    """``scenarios/<new id>/overlay.yaml`` with ``from: <parent uc id>`` = a new scenario of this
+    project, copied from a parent scenario and changed by the same overlay operations."""
+    if sd.name in parent_scenarios or not (sd / "overlay.yaml").exists():
+        return None
+    overlay = yamlio.load(sd / "overlay.yaml") or {}
+    src = overlay.get("from")
+    if not src:
+        return None
+    if src not in parent_scenarios:
+        raise AuthoringError(f"{sd.name}/overlay.yaml: from '{src}' is not a parent scenario "
+                             f"({sorted(parent_scenarios)})")
+    new_id = overlay.get("id") or sd.name
+    return new_id, src, {k: v for k, v in overlay.items() if k not in ("from", "id", "canonical_usecase")} | (
+        {"canonical_usecase": overlay["canonical_usecase"]} if overlay.get("canonical_usecase") else {})
+
+
+def _canonical(uc_id: str) -> str:
+    import re
+    return re.sub(r"-e\d{4}x?$", "", uc_id)
 
 
 # ---------------------------------------------------------------------------

@@ -1,5 +1,7 @@
 # Authoring Guide — 편집 원본부터 DB 반영까지
 
+> Exynos2700 수정 절차·예시(IP 속성, EIS, size, scenario 추가, sensor): [authoring-exynos2700-guide-ko.md](authoring-exynos2700-guide-ko.md)
+
 `authoring/`은 사람이 편집하는 원본(SSOT)이다. `python -m scenario_db.authoring`이 이를 canonical v2.2 YAML
 (`db_<SoC>_<board>/`)로 만들고, `scripts/dev_up.ps1`이 DB에 반영한다. 모든 명령은 `implementation\`에서 실행한다.
 

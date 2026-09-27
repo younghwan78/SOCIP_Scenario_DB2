@@ -17,6 +17,11 @@
       remove: [variant ids]
       patch: {variant id: {...}}                    # deep-merge on the compact entry
       add: [{id: ..., extends: ..., ...}]
+      patch_resolved:                               # bulk deep-merge AFTER `extends` expansion
+      - variants: '*'            # or [ids]; exclude: [ids]
+        when: {stabilization: [null, false]}        # design_conditions match (list = any of)
+        when_node_enabled: eis   # / when_node_disabled: eis
+        patch: {routing_switch: {$remove: {disabled_nodes: [eis]}}}
       keep: [variant ids]    # scope: only these reach the compiled output (in this order);
                              # every other variant stays a template for `extends`
     sizes: {bindings: {...}, derived: {...}}        # deep-merge on sizes.yaml
@@ -102,6 +107,8 @@ def apply_overlay(sources: dict, overlay: dict) -> dict:
             raise AuthoringError(f"variants.patch: unknown variant '{vid}'")
         variants[by_id[vid]] = deep_merge(variants[by_id[vid]], patch)
     variants.extend(copy.deepcopy(vops.get("add") or []))
+    if vops.get("patch_resolved"):
+        out["variant_patches"] = [*(out.get("variant_patches") or []), *copy.deepcopy(vops["patch_resolved"])]
     dangling = [v["id"] for v in variants if v.get("extends") in remove]
     if dangling:
         raise AuthoringError(f"variants.remove leaves children without parent: {dangling} "
