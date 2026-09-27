@@ -35,6 +35,7 @@ from sqlalchemy.orm import Session
 import scenario_db.db.models  # noqa: F401
 from scenario_db.db.base import Base, make_engine
 from scenario_db.etl.validate_loaded import validate_loaded_db
+from scenario_db.etl.reference_validation import validate_foreign_keys
 
 PROJECT_COLS = ("project_ref", "project_id", "source_project_ref")
 SCENARIO_COLS = ("scenario_ref", "scenario_id")
@@ -98,6 +99,7 @@ def apply_plan(db: Session, plan: dict[str, list[dict[str, Any]]]) -> None:
         for row in plan.get(table.name, []):
             db.execute(delete(table).where(and_(*(c == row[c.name] for c in table.primary_key))))
     db.execute(text("SET LOCAL session_replication_role = origin"))
+    validate_foreign_keys(db)
 
 
 def main() -> None:

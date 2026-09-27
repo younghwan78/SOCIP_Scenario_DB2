@@ -16,7 +16,7 @@ def imported(engine):
         assert result.ok
         assert result.counts["sensor.catalog"] == 20
         assert result.counts["sensor.timing_profile"] == 14
-        assert db.scalar(select(func.count()).select_from(ScenarioVariant).where(ScenarioVariant.scenario_id == "uc-camera-recording")) == 75
+        assert db.scalar(select(func.count()).select_from(ScenarioVariant).where(ScenarioVariant.scenario_id == "uc-cam-recording-e2600")) == 75
         catalogs = db.query(SensorCatalog).all()
         assert sum(len(x.document["modes"]) for x in catalogs) == 449
         before = {c.id: (c.yaml_sha256, c.document) for c in catalogs}
@@ -56,8 +56,8 @@ def test_noncamera_inputs_and_camera_readout_projection(imported):
     from scenario_db.sim.adapter import build_simulation_inputs
     from scenario_db.sim.models import SimulationRunConfig
     from scenario_db.models.sensor import SensorTiming
-    ids = ["uc-audio-mp3-playback", "uc-audio-streaming", "uc-gallery-display", "uc-game-play",
-        "uc-game-streaming", "uc-video-playback-local", "uc-voice-call", "uc-youtube-playback"]
+    ids = ["uc-aud-mp3-playback-e2600", "uc-aud-streaming-e2600", "uc-disp-gallery-e2600", "uc-game-play-e2600",
+        "uc-game-streaming-e2600", "uc-vid-playback-local-e2600", "uc-call-voice-e2600", "uc-vid-youtube-e2600"]
     with Session(imported) as db:
         variants = db.query(ScenarioVariant).filter(ScenarioVariant.scenario_id.in_(ids)).all()
         assert len(variants) == 74
@@ -73,7 +73,7 @@ def test_noncamera_inputs_and_camera_readout_projection(imported):
         mode = "cis_4sum_ln1_raw10_4080x3060_120fps_3993msps"
         t = SensorTiming.model_validate(profile.document["modes"][mode])
         # Use a synthetic explicit sensor selection on a real DB-backed graph; do not mutate DB.
-        graph = load_canonical_graph(db, "uc-camera-recording", "cam-rec-r1-fhd30-vdis")
+        graph = load_canonical_graph(db, "uc-cam-recording-e2600", "cam-rec-r1-fhd30-vdis")
         graph.variant.node_configs = {**(graph.variant.node_configs or {}), "sensor_rear": {"selected_mode": mode}}
         config = SimulationRunConfig(sensor_readout={"sensor_rear": t})
         before = dict(graph.variant.node_configs["sensor_rear"])
@@ -161,7 +161,7 @@ def binding_request(imported):
     from scenario_db.db.repositories.scenario_graph import load_canonical_graph
     from scenario_db.sim.external_devices import selected_sensor_mode
     with Session(imported) as db:
-        graph = load_canonical_graph(db, "uc-camera-recording", "cam-rec-r1-fhd30-vdis")
+        graph = load_canonical_graph(db, "uc-cam-recording-e2600", "cam-rec-r1-fhd30-vdis")
         node = next(n for n in graph.pipeline_nodes if n["id"] == "sensor_rear")
         base = selected_sensor_mode(graph, node)
         catalog = db.get(SensorCatalog, "sensor-gng-m2s")

@@ -77,7 +77,24 @@ def decompile_fixture(fixture_dir: Path, authoring_root: Path, platform_id: str,
                       project_key: str) -> dict[str, Any]:
     pdir = authoring_root / "platforms" / platform_id
     jdir = authoring_root / "projects" / project_key
+    # Reject an invalid source or an inherited target before removing owned files.
+    for spec_path in (pdir / "platform.yaml", jdir / "project.yaml"):
+        if spec_path.exists() and (yamlio.load(spec_path) or {}).get("extends"):
+            raise AuthoringError(f"cannot decompile into inherited target: {spec_path}")
+    if not fixture_dir.is_dir():
+        raise AuthoringError(f"fixture directory does not exist: {fixture_dir}")
+    source_docs = [Doc(rel=p.relative_to(fixture_dir).as_posix(), data=yamlio.load(p))
+                   for p in sorted(fixture_dir.rglob("*")) if p.is_file() and p.suffix in (".yaml", ".yml")]
+    projects = [d for d in source_docs if isinstance(d.data, dict) and d.data.get("kind") == "project"]
+    if len(projects) != 1:
+        raise AuthoringError("decompile requires exactly one project document")
+    from scenario_db.authoring.validate import validate_documents
+    validation = validate_documents(source_docs)
+    if validation["errors"]:
+        raise AuthoringError("fixture invalid: " + "; ".join(validation["errors"][:10]))
     for stale in (pdir / "docs", jdir / "docs"):
+        if not stale.resolve().is_relative_to(authoring_root.resolve()):
+            raise AuthoringError(f"target outside authoring root: {stale}")
         if stale.exists():   # decompile owns these verbatim copies (root platform/project only)
             shutil.rmtree(stale)
     stats: dict[str, Any] = {"platform_docs": 0, "project_docs": 0, "scenarios": {}, "skipped": []}
@@ -330,6 +347,9 @@ def write_docs(docs: list[Doc], out_dir: Path) -> None:
         if d.rel in seen:
             raise AuthoringError(f"duplicate output path {d.rel}")
         seen.add(d.rel)
+        if not (out_dir / d.rel).resolve().is_relative_to(out_dir.resolve()):
+            raise AuthoringError(f"output path escapes destination: {d.rel}")
+    for d in docs:
         path = out_dir / d.rel
         path.parent.mkdir(parents=True, exist_ok=True)
         if d.raw is not None:

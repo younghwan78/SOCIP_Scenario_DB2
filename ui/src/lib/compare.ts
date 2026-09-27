@@ -54,8 +54,8 @@ export const pixels = (s: string | undefined | null): number | null => {
 
 export interface Insight {
   index: number
-  kpi: { label: string; unit: string; ref: number; value: number; pct: number }[]
-  dmaTotal?: { ref: number; value: number; pct: number }
+  kpi: { label: string; unit: string; ref: number; value: number; pct: number | null }[]
+  dmaTotal?: { ref: number; value: number; pct: number | null }
   topIp: { ip: string; delta: number }[]
   changed: { conditions: number; ips: number; sizes: number }
 }
@@ -71,7 +71,7 @@ export function insights(args: {
   sizeMaps: Map<string, string>[]
 }): Insight[] {
   const out: Insight[] = []
-  const pct = (v: number, r: number) => (r ? ((v - r) / r) * 100 : 0)
+  const pct = (v: number, r: number) => (r ? ((v - r) / r) * 100 : null)
   const diffCount = (maps: Map<string, string>[], i: number) => {
     const keys = new Set([...(maps[0]?.keys() ?? []), ...(maps[i]?.keys() ?? [])])
     return [...keys].filter((k) => maps[0]?.get(k) !== maps[i]?.get(k)).length
@@ -79,7 +79,7 @@ export function insights(args: {
   for (let i = 1; i < args.n; i++) {
     const kpi = args.kpi.flatMap((r) => {
       const ref = r.values[0], v = r.values[i]
-      return ref !== null && v !== null ? [{ label: r.label, unit: r.unit, ref, value: v, pct: pct(v, ref) }] : []
+      return typeof ref === 'number' && typeof v === 'number' ? [{ label: r.label, unit: r.unit, ref, value: v, pct: pct(v, ref) }] : []
     })
     const d0 = args.dma[0], di = args.dma[i]
     const t0 = args.traffic[0], ti = args.traffic[i]
