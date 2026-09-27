@@ -37,7 +37,7 @@ DB 적재 원본. `scripts/dev_up.ps1`이 이 폴더를 ETL로 적재한다.
 
 ## 예측 / timing diagram
 
-`03_evidence/sim-pred-<variant>-mean-*.yaml`: variant별 simulation evidence (19개). 예측 column과
+`03_evidence/sim-pred-<variant>-mean-*.yaml`: variant별 simulation evidence (16개, KPI variant만 — power option은 조합 탐색에서 예측). 예측 column과
 Pipeline 화면의 timing diagram(timeline_events, 8 frame)이 이 파일을 쓴다. 모델 출력이며 clock은
 300~1000 MHz grid에서 cadence + 3-frame latency를 만족하는 첫 후보다 (실측 아님).
 authoring(HW patch, SW timing, overlay)을 바꾼 뒤 재생성한다:

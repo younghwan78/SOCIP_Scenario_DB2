@@ -34,4 +34,4 @@ __all__ = [
 ]
 
 from scenario_db.db.models.sensor import SensorCatalog, SensorTimingProfile, SensorBoardLineup, ProjectSensorSelection
-from scenario_db.db.models.exploration import ArchExplorationRun, Prediction, ArchReport
+from scenario_db.db.models.exploration import ArchExplorationRun, Prediction, ArchReport, PowerOptionReview

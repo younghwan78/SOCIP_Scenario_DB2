@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { DEFAULT_RUN, archApi, caseCount, caseDelta, levels, runBody, waterfall, type Attribution, type ExpCase } from '../src/lib/archExplore'
+import { DEFAULT_RUN, archApi, bestOption, caseCount, caseDelta, levels, runBody, waterfall, type Attribution, type ExpCase, type PowerOptions } from '../src/lib/archExplore'
 import { parseHash } from '../src/lib/route'
 
 afterEach(() => { vi.unstubAllGlobals() })
@@ -53,4 +53,16 @@ it('splits power into CPU / CPU BW / IP / IP BW (rev-1 rows: all BW as IP BW)', 
   const v1 = powerParts({ total_mw: 674.3, cpu_mw: 310.7, hw_mw: 126.9, bw_mw: 236.7 })
   expect(v1[1].mw).toBe(0)
   expect(v1[3].mw).toBeCloseTo(236.7)
+})
+
+
+it('sends the power-option axis and picks the best option set', () => {
+  const b = runBody(['uc'], '', 'Cam', { ...DEFAULT_RUN, options: { knobs: true, modes: false, max_sets: 16 } })
+  expect(b.spec.axes.power_options).toEqual({ enabled: true, include_knobs: true, include_modes: false, max_sets: 16 })
+  const off = runBody(['uc'], '', 'Cam', { ...DEFAULT_RUN, options: { knobs: false, modes: false, max_sets: 64 } })
+  expect(off.spec.axes.power_options.enabled).toBe(false)
+  const po = { status: 'ok', best: 'b', results: [{ key: 'a', delta_mw: -1 }, { key: 'b', delta_mw: -5 }] } as unknown as PowerOptions
+  expect(bestOption(po)?.delta_mw).toBe(-5)
+  expect(bestOption({ ...po, status: 'skipped' })).toBeNull()
+  expect(bestOption(undefined)).toBeNull()
 })

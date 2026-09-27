@@ -63,3 +63,23 @@ def test_report_html_and_compare(monkeypatch):
     assert res.status_code == 200 and "text/html" in res.headers["content-type"] and "report" in res.text
     cmp = c.get("/api/v1/arch/predictions/compare", params={"scenario_id": "s", "variant_id": "v"}).json()
     assert cmp["kw"]["scenario_id"] == "s" and cmp["kw"]["old_id"] is None
+
+
+def test_power_option_review_routes(monkeypatch):
+    seen = {}
+
+    def fake_set(db, request, user):
+        seen["req"] = request
+        return {"id": "POR-1", "status": request.status}
+
+    c = _client(monkeypatch, set_option_review=fake_set,
+                list_option_reviews=lambda db, project_ref=None, scenario_id=None: [{"scenario_id": scenario_id}])
+    ok = c.put("/api/v1/arch/power-options/reviews", json={
+        "scenario_id": "uc-cam-recording-e2700", "option_key": "knob:crop_strategy=byrp_bcrop", "status": "iq_eval"})
+    assert ok.status_code == 200 and seen["req"].variant_id == "*"
+    bad_status = {"scenario_id": "uc", "option_key": "knob:a=b", "status": "done"}
+    assert c.put("/api/v1/arch/power-options/reviews", json=bad_status).status_code == 422
+    bad_key = {"scenario_id": "uc", "option_key": "bcrop", "status": "adopted"}
+    assert c.put("/api/v1/arch/power-options/reviews", json=bad_key).status_code == 422
+    got = c.get("/api/v1/arch/power-options/reviews", params={"scenario_id": "uc-x"})
+    assert got.status_code == 200 and got.json() == [{"scenario_id": "uc-x"}]

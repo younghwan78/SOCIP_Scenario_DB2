@@ -2,12 +2,14 @@
 # (dual wide+front pip-fhd30 / pip-uhd30 excluded).
 # Exynos2600 (sm-s947b / db_Exynos2600_SM-S947B) stays complete; this overlay only
 # narrows what the Exynos2700 project emits.
-#   variants.keep : emitted variants, in this order (16 rear KPI + 3 exploration). Every other
-#                   inherited 2600 variant stays an `extends` template only.
-#   variants.add  : bcrop / L0-skip exploration variants (knobs: projects/sm-s947b/.../knobs.yaml)
-#                   + KPI variants that do not exist in 2600:
+#   variants.keep : emitted variants, in this order (16 rear KPI). Every other inherited 2600
+#                   variant stays an `extends` template only.
+#   variants.add  : KPI variants that do not exist in 2600:
 #                     APV UHD30/60/120 (apv_enc injected, mfc_enc disabled; UHD120 bitrate assumed)
 #                     Pro video UHD30/60/120 (extra CPU task pro_scope; timing assumed)
+# Power-saving options (BYRP crop, L0 skip, IP low-power modes) are not variants: they are
+# explored on top of these variants by combination exploration (knobs.yaml `explore`,
+# IP sim.modes `substitutes`) and tracked on the prediction board until IQ evaluation.
 kind: authoring.scenario_overlay
 variants:
   keep:
@@ -27,30 +29,7 @@ variants:
   - cam-rec-r1-uhd60-pro
   - cam-rec-r1-uhd120-pro
   - cam-rec-apv-uhd120-422-sdr
-  - cam-rec-r1-uhd30-vdis-bcrop
-  - cam-rec-r1-uhd30-vdis-bcrop-l0skip
-  - cam-rec-r1-fhd30-vdis-bcrop
   add:
-  - id: cam-rec-r1-uhd30-vdis-bcrop
-    extends: cam-rec-r1-uhd30-vdis
-    design_conditions:
-      crop_strategy: byrp_bcrop
-    $append:
-      tags:
-      - exploration-only
-      - arch-knob
-  - id: cam-rec-r1-uhd30-vdis-bcrop-l0skip
-    extends: cam-rec-r1-uhd30-vdis-bcrop
-    design_conditions:
-      pyramid_l0: skip
-  - id: cam-rec-r1-fhd30-vdis-bcrop
-    extends: cam-rec-r1-fhd30-vdis
-    design_conditions:
-      crop_strategy: byrp_bcrop
-    $append:
-      tags:
-      - exploration-only
-      - arch-knob
   - id: cam-rec-apv-uhd30-422-sdr
     extends: cam-rec-r1-uhd30-vdis
     design_conditions:

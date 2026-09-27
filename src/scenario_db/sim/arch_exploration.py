@@ -8,6 +8,11 @@ Axes
 - Buffer compression per M2M/history buffer (OFF or a lossy/lossless mode)
   -> analytic (per-port BW is linear in comp_ratio; the DMA transfer set is
   rebuilt by the real adapter with a ``buffer_overrides`` patch)
+- Power options (``sim.power_options``): architecture knob values / substitute IP
+  modes that need IQ evaluation. Full factorial of the option dimensions; each
+  set is re-simulated at the objective point and gets its own compression/DVFS
+  search. Options never become the promoted case of the variant: the result is
+  a per-option saving report next to it.
 
 Every combination is enumerated for the power/BW range. The recommended case
 is the lowest total power eligible case at the objective statistic/scale; it
@@ -41,9 +46,11 @@ from scenario_db.sim.timing_budget import (
     TimingBudgetOptions,
     analyze_timing_budget,
 )
+from scenario_db.sim import power_options as po
+from scenario_db.sim.power_attribution import attribute
 from scenario_db.sim.transfers import compression_catalog
 
-ENGINE_REV = "arch-exploration/3"
+ENGINE_REV = "arch-exploration/4"
 # Power = CPU(SW) + IP core + BW; BW = IP DMA (HW nodes) + CPU DMA (SW tasks, e.g. mpeg_writer)
 DIST_KEYS = ("total_mw", "cpu_mw", "hw_mw", "bw_mw", "bw_ip_mw", "bw_cpu_mw", "bw_mbs", "bw_ip_mbs", "bw_cpu_mbs")
 V_REF_MV = 710.0
@@ -80,12 +87,20 @@ class CompressionAxis(BaseScenarioModel):
         return self
 
 
+class PowerOptionAxis(BaseScenarioModel):
+    enabled: bool = True
+    include_knobs: bool = True
+    include_modes: bool = True
+    max_sets: int = Field(default=64, ge=1, le=256)  # full factorial above the cap is skipped
+
+
 class ExplorationAxes(BaseScenarioModel):
     statistics: list[Statistic] = Field(default_factory=_mean_max, min_length=1)
     runtime_scales: list[float] = Field(default_factory=lambda: [1.0, 1.1, 1.2], min_length=1, max_length=8)
     eis: Literal["auto", "on", "off"] = "auto"
     dvfs_headroom_levels: int = Field(default=1, ge=0, le=3)
     compression: CompressionAxis = Field(default_factory=CompressionAxis)
+    power_options: PowerOptionAxis = Field(default_factory=PowerOptionAxis)
 
     @model_validator(mode="after")
     def _scales(self) -> ExplorationAxes:
@@ -131,6 +146,16 @@ def explore_variant(
     spec = spec or ArchExplorationSpec()
     tables = dvfs_tables or {}
     config = config or SimulationRunConfig()
+    summary = _explore(graph, spec, config, tables)
+    if spec.axes.power_options.enabled:
+        summary["power_options"] = explore_power_options(graph, spec, config, tables, summary)
+        summary["counts"]["option_cases"] = summary["power_options"]["cases"]
+    summary["input_hash"] = input_hash(graph, spec, config, tables)
+    return summary
+
+
+def _explore(graph, spec: ArchExplorationSpec, config: SimulationRunConfig,
+             tables: dict[str, DVFSTable]) -> dict[str, Any]:
     axes, obj = spec.axes, spec.objective
     stats = list(dict.fromkeys([*axes.statistics, obj.statistic]))
     scales = sorted(set(axes.runtime_scales) | {obj.runtime_scale})
@@ -234,8 +259,101 @@ def explore_variant(
         },
         "warnings": obj_slice["warnings"][:20],
     }
-    summary["input_hash"] = input_hash(graph, spec, config, tables)
     return summary
+
+
+# ------------------------------------------------------------------- power options
+def explore_power_options(graph, spec: ArchExplorationSpec, config: SimulationRunConfig,
+                          tables: dict[str, DVFSTable], base: dict[str, Any]) -> dict[str, Any]:
+    """Predicted saving of every power-option set relative to the variant itself.
+
+    Reference = the variant's recommended case (same objective, own compression/DVFS
+    search per set); ``raw_delta_mw`` compares the no-compression / resolved-DVFS
+    baselines, so it isolates the option itself.
+    """
+    axis = spec.axes.power_options
+    dims, notes = po.option_dimensions(graph, include_knobs=axis.include_knobs, include_modes=axis.include_modes)
+    out: dict[str, Any] = {
+        "status": "ok", "dimensions": [{k: v for k, v in d.items()} for d in dims], "notes": notes,
+        "sets": po.count_sets(dims), "max_sets": axis.max_sets, "cases": 0,
+        "results": [], "best": None, "errors": [],
+    }
+    if not dims:
+        out["status"] = "none"
+        return out
+    if out["sets"] > axis.max_sets:
+        out["status"] = "skipped"
+        out["notes"].append(f"{out['sets']} option sets > max_sets {axis.max_sets}; narrow the options")
+        return out
+    obj = spec.objective
+    sub = spec.model_copy(update={
+        "axes": spec.axes.model_copy(update={
+            "statistics": [obj.statistic], "runtime_scales": [obj.runtime_scale],
+            "power_options": axis.model_copy(update={"enabled": False}),
+        }),
+        "verify": False, "top_n": 1,
+    })
+    base_raw = base["baseline"]
+    remaining = spec.max_cases_per_variant - base.get("counts", {}).get("cases", 0)
+    for items in po.option_sets(dims):
+        key = po.set_key(items)
+        if remaining <= 0:
+            out["notes"].append("case budget exhausted; remaining power-option sets were skipped")
+            break
+        try:
+            bounded = sub.model_copy(update={"max_cases_per_variant": remaining})
+            r = _explore(po.apply_option_set(graph, items), bounded, config, tables)
+        except (LookupError, ValueError, po.KnobError) as exc:
+            out["errors"].append({"key": key, "error": str(exc)[:300]})
+            continue
+        evaluated = r.get("counts", {}).get("cases", 0)
+        out["cases"] += evaluated
+        remaining -= evaluated
+        comparable = bool(base.get("recommended") and r.get("recommended"))
+        ref_case = base["recommended"] if comparable else base_raw
+        ref_payload = prediction_payload(base["objective_slice"], ref_case, base["buffers"])
+        case = r["recommended"] if comparable else r["baseline"]
+        payload = prediction_payload(r["objective_slice"], case, r["buffers"])
+        att = attribute(ref_payload, payload)
+        rec = r.get("recommended")
+        delta = rec["total_mw"] - base["recommended"]["total_mw"] if rec and base.get("recommended") else None
+        raw = r["baseline"]["total_mw"] - base_raw["total_mw"]
+        out["results"].append({
+            "key": key,
+            "items": [i["key"] for i in items],
+            "labels": [i["label"] for i in items],
+            "kinds": sorted({i["kind"] for i in items}),
+            "iq_eval": "required" if any(i.get("iq_eval", "required") == "required" for i in items) else "not_required",
+            "spec_ok": r["spec_ok"], "spec_reasons": r["spec_reasons"],
+            "verdict": r["objective_slice"]["verdict"]["status"],
+            "case_key": rec["key"] if rec else None,
+            "total_mw": round(rec["total_mw"], 3) if rec else None,
+            "delta_mw": round(delta, 3) if delta is not None else None,
+            "delta_pct": round(100 * delta / base["recommended"]["total_mw"], 2)
+            if delta is not None and base["recommended"]["total_mw"] else None,
+            "bw_mbs": round(rec["bw_mbs"], 2) if rec else None,
+            "delta_bw_mbs": round(rec["bw_mbs"] - base["recommended"]["bw_mbs"], 2)
+            if rec and base.get("recommended") else None,
+            "raw_total_mw": round(r["baseline"]["total_mw"], 3),
+            "raw_delta_mw": round(raw, 3),
+            "raw_delta_pct": round(100 * raw / base_raw["total_mw"], 2) if base_raw["total_mw"] else None,
+            "attribution": {
+                "reference": "recommended" if comparable else "baseline",
+                "delta_mw": att["delta_mw"], "components": att["components"],
+                "by_category": att["by_category"], "factors": att["factors"][:8],
+            },
+            "compression": rec["compression"] if rec else [],
+            "dvfs": rec["dvfs"] if rec else {},
+            "fill_pct": {k: v["fill_pct"] for k, v in r["objective_slice"]["stages"].items()},
+            "zero_power_ips": r["objective_slice"]["zero_power_ips"],
+        })
+    def rank(x: dict[str, Any]) -> tuple:
+        d = x["delta_mw"] if x["delta_mw"] is not None else x["raw_delta_mw"]
+        return (not x["spec_ok"], d, len(x["items"]))
+    out["results"].sort(key=rank)
+    best = next((x for x in out["results"] if x["spec_ok"] and (x["delta_mw"] or 0) < 0), None)
+    out["best"] = best["key"] if best else None
+    return out
 
 
 # ------------------------------------------------------------------- slices
@@ -784,6 +902,7 @@ def input_hash(graph, spec, config, tables) -> str:
         "dvfs": {k: t.model_dump(mode="json") for k, t in sorted(tables.items())},
         "simulation_inputs": build_simulation_inputs(graph, config).model_dump(mode="json"),
         "ip_capabilities": {key: row.capabilities for key, row in sorted(graph.ip_catalog.items())},
+        "power_options": getattr(graph.scenario, "power_options", None),
         "soc_catalog": getattr(graph.soc, "compression_modes", None),
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()

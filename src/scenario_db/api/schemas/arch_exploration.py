@@ -49,3 +49,13 @@ class ArchReportRequest(BaseModel):
 
 class ReportStatusRequest(BaseModel):
     status: str = Field(pattern="^(draft|published)$")
+
+
+class PowerOptionReviewRequest(BaseModel):
+    """IQ review state of one power-option item (e.g. knob:crop_strategy=byrp_bcrop, mode:mtnr=LowPower)."""
+
+    scenario_id: str
+    variant_id: str = Field(default="*", max_length=200)  # '*' = every variant of the scenario
+    option_key: str = Field(pattern=r"^(knob|mode):[A-Za-z0-9_.\-]+=[A-Za-z0-9_.\-]+$", max_length=200)
+    status: str = Field(pattern="^(candidate|iq_eval|adopted|rejected)$")
+    note: str | None = Field(default=None, max_length=1000)

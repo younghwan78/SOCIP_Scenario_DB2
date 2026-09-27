@@ -107,3 +107,12 @@ retire:
     - cam-rec-r1-uhd120-pro
     - cam-rec-r1-uhd30-pro
     - cam-rec-r1-uhd60-pro
+- date: '2026-09-27'
+  reason: Power-saving options (BYRP bcrop, MTNR L0 skip) are no longer variants. They are explored on top of the KPI
+    variants (knobs.yaml `explore`) and tracked on the prediction board until IQ evaluation. Removes the earlier
+    exploration-only variants with their simulation evidence and predictions.
+  variants:
+    uc-cam-recording-e2700:
+    - cam-rec-r1-uhd30-vdis-bcrop
+    - cam-rec-r1-uhd30-vdis-bcrop-l0skip
+    - cam-rec-r1-fhd30-vdis-bcrop

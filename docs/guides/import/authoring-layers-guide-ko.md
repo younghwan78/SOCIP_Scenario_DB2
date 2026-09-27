@@ -45,13 +45,13 @@ Exynos2700 KPI variant (`uc-cam-recording-e2700`):
 | UHD30/60/120 Pro video | `cam-rec-r1-uhd30-pro` / `-uhd60-pro` / `-uhd120-pro` | 부모와 동일 | 2700 overlay에서 추가. pipeline 동일 + CPU task `pro_scope` (histogram·equalizer, assumed) |
 | FHD30/UHD30 Portrait | `cam-rec-r1-fhd30-portrait` / `-uhd30-portrait` | | |
 | UHD30/60/120 APV | `cam-rec-apv-uhd30-422-sdr` / `-uhd60-` / `-uhd120-` | | 2700 overlay에서 추가. `apv_enc` 주입, `mfc_enc` disable. UHD120 bitrate assumed |
-| 탐색 | `cam-rec-r1-uhd30-vdis-bcrop` / `-bcrop-l0skip` / `cam-rec-r1-fhd30-vdis-bcrop` | | knob 조건 비교용 (예제 5) |
 
 KPI variant 값은 2600 variant를 그대로 상속한다 (id의 SoC suffix와 IP id만 rename). 2700 실측은 `sw_timing.measured.yaml`,
 HW 차이는 `platforms/exynos2700/patches/`로 넣는다.
 
-EIS on/off, pyramid L0 bypass, bcrop 크기처럼 **power diff를 보기 위한 조건**은 variant로 나누지 않는다.
-`knobs.yaml`의 조건으로 두고 필요한 비교에서만 적용한다(§5 예제 5).
+EIS on/off, pyramid L0 bypass, bcrop 크기, IP low-power mode처럼 **power를 줄이기 위한 검토 option**은 variant로 나누지 않는다.
+화질 평가 전이라 정식 scenario가 아니기 때문이다. `knobs.yaml`의 `explore` / IP `sim.modes`의 `substitutes`로 선언하면
+조합 탐색이 정식 variant 위에서 option별 절감을 예측하고, 예측 현황에서 IQ 평가 상태를 관리한다(§5 예제 5).
 
 ---
 
@@ -141,7 +141,8 @@ select id, metadata->>'board_type' from projects;
 select id, project_ref, metadata->>'canonical_usecase' from scenarios;
 select scenario_id, count(*) from scenario_variants group by 1;
 select variant_ref, kind, count(*) from evidence group by 1,2 order by 1;
-select id, design_conditions->>'crop_strategy' from scenario_variants where id like '%bcrop%';
+select id, jsonb_object_keys(power_options->'knobs') from scenarios where power_options is not null;
+select scenario_ref, variant_ref, option_key, status, note from power_option_reviews;
 ```
 
 API 확인: `http://127.0.0.1:18000/api/v1/explorer/scenario-catalog`, `.../scenarios/uc-cam-recording-e2600/variants`
@@ -269,50 +270,88 @@ entries:
 - 뒤에 있는 항목이 앞 항목보다 우선한다.
 - `mode: merge`(기본)는 지정한 key만 바꾸고, `replace`는 전체를 교체한다.
 
-### 예제 5 — Architecture 조건 비교 (bcrop, L0 skip, EIS)
+### 예제 5 — Power option 탐색 (bcrop, L0 skip, IP mode) — variant가 아니다
 
-`knobs.yaml`에 조건을 정의하고, variant의 `design_conditions`로 조건 값을 선택한다.
+bcrop, L0 skip, IP low-power mode는 **power 절감을 위해 검토하는 option**이다. 과제 적용 여부는 화질(IQ) 평가 후에 결정하므로
+정식 variant로 만들지 않는다. 정식 variant(예: `cam-rec-r1-uhd30-vdis`) 위에서 조합 탐색이 option을 적용해
+"무엇을 켜면 얼마나 줄어드는가"를 예측하고, 결과는 예측 현황의 해당 variant 행에 붙는다.
 
-| knob | 값 | 효과 |
-| --- | --- | --- |
-| `crop_strategy` | `mcsc_crop` (default) / `byrp_bcrop` | bcrop: `bcrop_out = sensor_full × (100+eis)/(100+sensor_margin)`, RGBP~MCSC·mlsc_out·pyramid가 bcrop_out 기준 |
-| `pyramid_l0` | `use` (default) / `skip` | `mlsc→mtnr` PYRAMID_L0 edge 제거 |
-| params | `sensor_margin_pct: 25`, `eis_margin_pct` | EIS node 활성 시 15, 아니면 25 (crop 없음) |
+**1) Arch knob — `knobs.yaml`**
 
-비교용 variant를 **파생 과제 overlay**에 두면 2600 reference를 그대로 유지할 수 있다.
-Exynos2700(`sm-s957b`) overlay에는 아래 bcrop 탐색 variant 3개가 이미 들어 있다. 별도 탐색 과제를 만들 때:
+| knob | 값 | 효과 | `explore` 조건 |
+| --- | --- | --- | --- |
+| `crop_strategy` | `mcsc_crop` (default) / `byrp_bcrop` | bcrop: `bcrop_out = sensor_full × (100+eis)/(100+sensor_margin)`, RGBP~MCSC·mlsc_out·pyramid가 bcrop_out 기준 | `when_node_enabled: eis` (EIS off면 crop 없음 → 탐색 안 함) |
+| `pyramid_l0` | `use` (default) / `skip` | `mlsc→mtnr` PYRAMID_L0 edge 제거 | `when_node_enabled: mtnr` |
+| params | `sensor_margin_pct: 25`, `eis_margin_pct` | EIS node 활성 시 15, 아니면 25 | |
 
 ```yaml
-# projects/explore-2600/project.yaml
-kind: authoring.project
-key: explore-2600
-platform: exynos2600
-extends: sm-s947b
-rename:
-- {from: proj-sm-s947b, to: proj-explore-2600}
-- {from: -e2600, to: -e2600x}
-document_patch: {metadata: {name: 2600 arch exploration, board_type: EXPLORE-2600}}
-scenarios: {include: [uc-cam-recording-e2600]}
+knobs:
+  crop_strategy:
+    condition_key: crop_strategy
+    default: mcsc_crop
+    explore:                     # 없으면 탐색하지 않는다 (정식 variant에서 선택만 가능)
+      when_node_enabled: eis     # when: {design_condition: value} 도 가능
+      iq_eval: required
+      label: BYRP bayer crop
+    values: {...}
 ```
+
+authoring compile은 `knobs.yaml`을 usecase의 `power_options`로 싣는다(DB `scenarios.power_options`).
+탐색은 authoring과 같은 knob 엔진으로 compile된 variant 위에 값을 다시 적용한다. 결과는 같은 값을 선택한 variant를
+compile한 것과 동일하다(`test_runtime_power_option_equals_compiled_knob_variant`).
+
+**2) IP mode — IP `capabilities.sim.modes`**
+
+mode별 `unit_power_mw_mp` / `ppc` / `idc`가 다르면 mode를 추가하고, 어느 mode를 대체할 수 있는지 `substitutes`로 선언한다.
+선언이 없는 mode(HighSpeed, SuperSteady 같은 기능 mode)는 탐색하지 않는다.
+
 ```yaml
-# projects/explore-2600/scenarios/uc-cam-recording-e2600/overlay.yaml
-variants:
-  add:
-  - id: cam-rec-r1-uhd30-vdis-bcrop
-    extends: cam-rec-r1-uhd30-vdis
-    design_conditions: {crop_strategy: byrp_bcrop}
-  - id: cam-rec-r1-uhd30-vdis-bcrop-l0skip
-    extends: cam-rec-r1-uhd30-vdis-bcrop
-    design_conditions: {pyramid_l0: skip}
-```
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\dev_up.ps1 -NoUi -AuthoringProjects explore-2600
+# platforms/exynos2600/docs/00_hw/ip-mtnr-is-v15-s5e9965.yaml (예)
+capabilities:
+  sim:
+    modes:
+      Normal:   {unit_power_mw_mp: 1.0, ppc: 4.0, idc: 0.0, vdd: VDD_INTCAM, dvfs_group: INTCAM}
+      LowPower:
+        unit_power_mw_mp: 0.6    # 실측/설계 값
+        ppc: 4.0
+        idc: 0.0
+        vdd: VDD_INTCAM
+        dvfs_group: INTCAM
+        substitutes: [Normal]    # Normal 대신 쓸 수 있는 power option
+        iq_eval: required
+        label: MTNR low-power NR
+        source: internal_measurement_2026q4
 ```
 
-Compare에서 `2600 · uhd30-vdis` ★ + `explore · vdis-bcrop` + `vdis-bcrop-l0skip`을 고르고 "Simulation 통일" → 예측 실행을
-누르면 같은 모델 기준 Δ가 나온다 (2026-09-26 검증: 총 전력 −9.3% / −19.5%, BW −9.5% / −22.8%).
+**3) 탐색 · 예측 현황**
 
-> 조합 탐색 화면에서 knob을 축으로 직접 sweep하는 기능은 아직 없다. 지금은 variant를 추가해서 비교한다.
+- 조합 탐색 → "Power option" 항목(arch knob / IP mode, 조합 상한). option 차원의 full factorial을 계산하며, 상한을 넘으면 해당 variant는 건너뛴다.
+  - option 차원: knob별 `default → 다른 값`, node별 `현재 mode → substitutes mode`.
+  - 조합마다 graph를 다시 만들어 simulation하고, compression·DVFS를 다시 탐색한다.
+- Δ mW는 option 조합의 최저 power에서 variant 추천 조합을 뺀 값이다. raw Δ는 baseline끼리 비교한 값으로, option 자체의 효과만 보여 준다.
+- 원인은 등록 예측 변경 원인과 같은 방식(LMDI)으로 분해한다: BW traffic, IP workload, IP DVFS 전압, Compression.
+  - 예: 2700 `uhd30-vdis` 기준 (sample DVFS, 2026-09-27)
+
+    | option | Δ | 원인 |
+    |---|---|---|
+    | bcrop | −33.8 mW (−5.0%) | BW −40.8, IP −10.9, compression 이득 감소 +17.9 |
+    | L0 skip | −40.0 mW (−5.9%) | |
+    | 둘 다 | −67.8 mW (−10.1%) | |
+
+- 예측으로 등록하면 option 결과가 등록 예측과 함께 저장된다. 이 variant의 current 예측 자체는 option 없는 정식 구성이다.
+- 예측 현황에서 variant 행 "절감 option (IQ)"을 누르고 option별로 IQ 상태(`후보 → IQ 평가 중 → 채택 / 기각`)와 메모를 기록한다.
+  - 범위는 scenario 전체(`*`)이고, 특정 variant에만 적용되는 결정은 그 variant로 한정할 수 있다. variant 결정이 우선한다.
+  - 기각된 option이 들어간 조합은 "최대 절감"에서 빠진다.
+- 채택 후 정식 반영은 authoring에서 한다.
+  - knob: 해당 KPI variant의 `design_conditions.crop_strategy: byrp_bcrop`.
+  - IP mode: `node_configs.<node>.sim.mode`.
+  - 반영하면 그 option은 "already selects … (adopted)"로 표시되고 더 이상 탐색 대상이 아니다.
+- API:
+  - `GET /api/v1/arch/power-options/reviews?scenario_id=…`
+  - `PUT /api/v1/arch/power-options/reviews` (`{scenario_id, variant_id: "*", option_key: "knob:crop_strategy=byrp_bcrop", status, note}`)
+
+검토용 variant가 따로 필요하면(예: Compare 화면에서 timeline을 직접 비교) 파생 과제 overlay에 knob 값을 선택한 variant를
+추가할 수 있다. 이 variant는 정식 과제 DB에는 넣지 않는다.
 
 ### 예제 6 — Exynos2700 과제 범위 관리 (rear camera recording KPI)
 
@@ -333,7 +372,7 @@ scenarios:
 ```yaml
 # projects/sm-s957b/scenarios/uc-cam-recording-e2600/overlay.yaml
 variants:
-  keep: [cam-rec-r1-fhd30-vdis, ..., cam-rec-apv-uhd120-422-sdr, cam-rec-r1-uhd30-vdis-bcrop, ...]
+  keep: [cam-rec-r1-fhd30-vdis, ..., cam-rec-apv-uhd120-422-sdr]   # 16 KPI (power option은 variant 아님)
   add:
   - id: cam-rec-r1-uhd30-pro
     extends: cam-rec-r1-uhd30-vdis        # keep에 없는 2600 variant도 부모(template)로 쓸 수 있다

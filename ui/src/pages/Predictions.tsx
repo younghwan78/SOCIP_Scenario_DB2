@@ -6,15 +6,19 @@ import { archApi, levels, short, type BoardRow, type HistoryRow } from '../lib/a
 import { Card } from '../components/TimingCharts'
 import { CompositionBars, RangeBoxes, SplitBar, SplitLegend, Waterfall } from '../components/ArchCharts'
 import { DataTable, type Column } from '../components/DataTable'
+import { OPTION_NOTE, OptionResults, OptionReviewPanel, ReviewBadge, signed } from '../components/PowerOptions'
 
 export function PredictionsPage({ ctx }: { ctx: Ctx }) {
   const all = ctx.params.all === '1'
-  const q = useAsync(() => archApi.board(all ? undefined : ctx.scenario), [ctx.scenario, all])
+  const [tick, setTick] = useState(0)
+  const q = useAsync(() => archApi.board(all ? undefined : ctx.scenario), [ctx.scenario, all, tick])
   const rows = q.data?.rows ?? []
   const sel = rows.find((r) => r.id === ctx.params.v)
   const choose = (vid: string) => ctx.navigate(undefined, { v: vid === ctx.params.v ? undefined : vid }, true)
   const changed = rows.filter((r) => r.previous)
   const tot = rows.map((r) => r.power.total_mw)
+  const withOpt = rows.filter((r) => r.power_options?.best)
+  const optBest = withOpt.map((r) => r.power_options?.best?.delta_mw ?? 0)
   const cols: Column<BoardRow>[] = [
     { key: 'v', label: 'Variant', width: 210, sticky: true, sort: (r) => r.variant_id, render: (r) => <span className="mono">{short(r.variant_id)}</span> },
     ...(all ? [{ key: 's', label: 'Scenario', width: 170, sort: (r: BoardRow) => r.scenario_id, render: (r: BoardRow) => <span className="mono faint">{r.scenario_id}</span> }] : []),
@@ -26,6 +30,12 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
     { key: 'bwcpu', label: 'CPU BW', width: 74, align: 'right', firstDir: -1, sort: (r) => r.power.bw_cpu_mw ?? -1, render: (r) => fmt(r.power.bw_cpu_mw, 1) },
     { key: 'bw', label: 'BW MB/s', width: 84, align: 'right', firstDir: -1, sort: (r) => r.bw_mbs, render: (r) => fmt(r.bw_mbs, 0) },
     { key: 'd', label: 'Δ 직전', width: 90, align: 'right', firstDir: -1, sort: (r) => Math.abs(r.previous?.delta_mw ?? 0), render: (r) => r.previous ? <span className="mono" style={{ color: r.previous.delta_mw > 0 ? 'var(--del-text)' : 'var(--primary-strong)' }}>{r.previous.delta_mw >= 0 ? '+' : ''}{fmt(r.previous.delta_mw, 1)}</span> : <span className="faint">첫 등록</span> },
+    { key: 'opt', label: '절감 option (IQ)', width: 190, align: 'right', firstDir: 1, sort: (r) => r.power_options?.best?.delta_mw ?? 0,
+      title: (r) => r.power_options?.best ? `${r.power_options.best.labels.join(' + ')}\n${r.power_options.results.length}개 조합 · ${OPTION_NOTE}` : (r.power_options?.notes ?? []).join('\n'),
+      render: (r) => { const po = r.power_options; const b = po?.best
+        if (b) return <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><b className="mono" style={{ color: 'var(--primary-strong)' }}>{signed(b.delta_mw)}</b><span className="faint mono" style={{ fontSize: 11 }}>{signed(b.delta_pct)}%</span><ReviewBadge status={b.review_status} /></span>
+        if (!po || po.status === 'not_explored') return <span className="faint" style={{ fontSize: 11 }}>재탐색 필요</span>
+        return <span className="faint">—</span> } },
     { key: 'range', label: 'range mW', width: 100, align: 'right', firstDir: -1, sort: (r) => (r.distribution ? r.distribution.total_mw.max - r.distribution.total_mw.min : 0), render: (r) => r.distribution ? <span className="mono">{fmt(r.distribution.total_mw.min, 0)}–{fmt(r.distribution.total_mw.max, 0)}</span> : '—' },
     { key: 'src', label: '출처 · 선택 규칙 · 대안', width: 300, sort: (r) => r.run_created_at ?? '', title: (r) => `${r.run_id}\n${r.case_key}${r.reason ? `\n사유: ${r.reason}` : ''}`, render: (r) => <span style={{ fontSize: 12 }}><span className="mono">{r.run_title ?? r.run_id}</span> · <span className={`badge ${r.selected_by === 'user' ? 'v-warn' : 'v-ok'}`}>{r.selection_rule}</span> · <span className="faint">1/{r.eligible_cases?.toLocaleString()}</span></span> },
     { key: 'sw', label: 'SW 기준', width: 86, sort: (r) => `${r.statistic}${r.runtime_scale}`, render: (r) => <span className="mono faint">{r.statistic} ×{r.runtime_scale}</span> },
@@ -53,11 +63,13 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
           {[['current 예측', `${rows.length}`, all ? '전체 scenario' : ctx.scenario],
             ['Power 범위', `${fmt(Math.min(...tot), 0)}–${fmt(Math.max(...tot), 0)}`, 'mW (등록 조합)'],
             ['직전 대비 변경', `${changed.length}`, changed.length ? `평균 ${fmt(changed.reduce((s, r) => s + (r.previous?.delta_mw ?? 0), 0) / changed.length, 1)} mW` : '—'],
-            ['사람 선택', `${rows.filter((r) => r.selected_by === 'user').length}`, '추천 외 조합 (사유 기록)']].map(([l, v, n]) =>
+            ['사람 선택', `${rows.filter((r) => r.selected_by === 'user').length}`, '추천 외 조합 (사유 기록)'],
+            ['Power option', `${withOpt.length}`, withOpt.length ? `최대 절감 ${fmt(Math.min(...optBest), 1)} ~ ${fmt(Math.max(...optBest), 1)} mW · IQ 평가 대상` : 'variant 아님 · IQ 평가 대상']].map(([l, v, n]) =>
             <div key={l} className="panel tb-kpi"><div className="faint" style={{ fontSize: 12 }}>{l}</div><div className="mono" style={{ fontSize: 20, fontWeight: 600 }}>{v}</div><div className="faint" style={{ fontSize: 11 }}>{n}</div></div>)}
         </section>
         <div className="tb-grid">
           {sel && <ChangeCard key={sel.id} row={sel} />}
+          {sel && <OptionsCard key={`o-${sel.id}`} row={sel} onChanged={() => setTick((t) => t + 1)} />}
           <Card id="pr-table" title="예측 현황 (current)" note="header 클릭 = 정렬 · 행 클릭 = 변경 원인" defaultWide minHeight={260}>
             <SplitLegend />
             <div className="table-x">
@@ -112,6 +124,22 @@ function ChangeCard({ row }: { row: BoardRow }) {
       </table>
     </Card>
   </>
+}
+
+function OptionsCard({ row, onChanged }: { row: BoardRow; onChanged: () => void }) {
+  const po = row.power_options
+  return (
+    <Card id="pr-options" title={`${short(row.variant_id)} — Power option (IQ 평가 대상)`} note={OPTION_NOTE} defaultWide>
+      {(!po || po.status === 'not_explored') && <div className="empty">이 예측은 power option 탐색 전에 등록됐습니다. 조합 탐색을 다시 실행해 등록하세요.</div>}
+      {po && po.status !== 'not_explored' && <div style={{ display: 'grid', gap: 12 }}>
+        {po.reference?.note && <div className="faint" style={{ fontSize: 12 }}>⚠ {po.reference.note}</div>}
+        {po.notes.length > 0 && <ul className="faint" style={{ margin: 0, paddingLeft: 18, fontSize: 12 }}>{po.notes.map((n) => <li key={n}>{n}</li>)}</ul>}
+        {po.status === 'none' && <div className="empty">적용 가능한 option이 없습니다 (knobs.yaml explore / IP sim.modes substitutes 선언 필요).</div>}
+        {po.results.length > 0 && <OptionResults results={po.results} best={po.best?.key} />}
+        <OptionReviewPanel row={row} onChanged={onChanged} />
+      </div>}
+    </Card>
+  )
 }
 
 function show(v: unknown): string {

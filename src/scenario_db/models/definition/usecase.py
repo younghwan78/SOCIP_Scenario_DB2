@@ -197,6 +197,44 @@ class ParametricSweep(BaseScenarioModel):
     values: list[str | int | float] = Field(default_factory=list)
 
 
+class KnobExplore(BaseScenarioModel):
+    """Marks an architecture knob as a power-saving option for combination exploration.
+
+    Options are explored on top of a formal variant (never registered as variants):
+    applicable when the node is enabled / design_conditions match.
+    """
+    when_node_enabled: str | None = None
+    when: dict[str, Any] = Field(default_factory=dict)
+    iq_eval: Literal["required", "not_required"] = "required"
+    label: str | None = None
+    note: str | None = None
+
+
+class ArchKnob(BaseScenarioModel):
+    condition_key: str | None = None
+    default: str
+    values: dict[str, dict[str, Any] | None]
+    explore: KnobExplore | None = None
+    description: str | None = None
+
+    @model_validator(mode="after")
+    def _default_is_a_value(self) -> ArchKnob:
+        if self.default not in self.values:
+            raise ValueError(f"knob default '{self.default}' not in values {sorted(self.values)}")
+        return self
+
+
+class PowerOptionSpec(BaseScenarioModel):
+    """Architecture knobs of a scenario (compiled from authoring knobs.yaml).
+
+    Formal variants select a knob value with design_conditions.<condition_key>;
+    knobs with ``explore`` are also tried as power options by combination exploration.
+    """
+    params: dict[str, float | int | str] = Field(default_factory=dict)
+    param_rules: list[dict[str, Any]] = Field(default_factory=list)
+    knobs: dict[str, ArchKnob] = Field(default_factory=dict)
+
+
 class UsecaseReferences(BaseScenarioModel):
     known_issues: list[DocumentId] = Field(default_factory=list)
 
@@ -228,6 +266,7 @@ class Usecase(BaseScenarioModel):
     variants: list[Variant] = Field(default_factory=list)
     inheritance_policy: InheritancePolicy | None = None
     parametric_sweeps: list[ParametricSweep] = Field(default_factory=list)
+    power_options: PowerOptionSpec | None = None
     references: UsecaseReferences | None = None
 
     @model_validator(mode="after")

@@ -155,6 +155,7 @@ button { font-family: inherit; }
 .btn { font-size: 13px; padding: 7px 13px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--text-2); cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
 .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
 .btn:disabled { opacity: .5; cursor: default; }
+.btn.sm { font-size: 12px; padding: 3px 9px; }
 .input { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 10px; background: var(--surface); }
 .input input { border: 0; outline: none; font-family: inherit; font-size: 13px; background: transparent; min-width: 0; flex-grow: 1; }
 select { font-family: var(--mono); font-size: 12px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }

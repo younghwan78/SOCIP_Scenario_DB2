@@ -13,12 +13,19 @@ from sqlalchemy.orm import Session
 from scenario_db.api.schemas.arch_exploration import (
     ArchExplorationRunRequest,
     ArchReportRequest,
+    PowerOptionReviewRequest,
     PromoteRequest,
 )
 from scenario_db.api.schemas.timing_budget import TimingBudgetRequest
 from scenario_db.api.services.timing_budget import _load, _shim
 from scenario_db.db.models.definition import Scenario, ScenarioVariant
-from scenario_db.db.models.exploration import ArchExplorationRun, ArchReport, Prediction
+from scenario_db.db.models.exploration import (
+    POWER_OPTION_STATUSES,
+    ArchExplorationRun,
+    ArchReport,
+    PowerOptionReview,
+    Prediction,
+)
 from scenario_db.exceptions import NotFoundError, UnprocessableError
 from scenario_db.reporting.arch_report import build_snapshot, html_sha256, render_html
 from scenario_db.sim.arch_exploration import ENGINE_REV, explore_variant, find_case, prediction_payload
@@ -109,7 +116,7 @@ def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str |
             continue
         soc_ref = soc_ref or _graph_soc_ref(graph)
         dvfs_ref = dvfs_ref or ref
-        remaining_cases -= summary["counts"]["cases"]
+        remaining_cases -= summary["counts"]["cases"] + summary["counts"].get("option_cases", 0)
         summary["dvfs_table_ref"] = ref
         variants.append(summary)
     if not variants:
@@ -125,6 +132,11 @@ def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str |
     }
     rec = [v["recommended"]["total_mw"] for v in variants if v.get("recommended")]
     counts["recommended_power_mw"] = [min(rec), max(rec)] if rec else None
+    opt = [v["power_options"] for v in variants if (v.get("power_options") or {}).get("status") == "ok"]
+    best = [r["delta_mw"] for o in opt for r in o["results"] if r["key"] == o.get("best")]
+    counts["power_options"] = {"variants": len(best), "sets": sum(len(o["results"]) for o in opt),
+                               "cases": sum(o.get("cases", 0) for o in opt),
+                               "best_saving_mw": [min(best), max(best)] if best else None}
     ihash = hashlib.sha256(json.dumps(sorted(v["input_hash"] for v in variants)).encode()).hexdigest()
     row = ArchExplorationRun(
         id=f"EXP-{uuid4().hex}",
@@ -218,7 +230,8 @@ def promote(db: Session, request: PromoteRequest, user: str | None = None) -> di
         metrics |= {"dvfs_table_ref": summary.get("dvfs_table_ref"), "exploration_run_ref": run.id,
                     "design_conditions": summary.get("design_conditions"),
                     "distribution": summary["distribution"], "alternatives": len(summary.get("alternatives") or []),
-                    "eligible_cases": summary["counts"]["eligible"], "verified": case.get("verified")}
+                    "eligible_cases": summary["counts"]["eligible"], "verified": case.get("verified"),
+                    "power_options": option_snapshot(summary.get("power_options"), case, rule)}
         prev = (db.query(Prediction)
                 .filter_by(scenario_ref=summary["scenario_id"], variant_ref=vid, status="current").one_or_none())
         if prev is not None:
@@ -251,6 +264,7 @@ def board(db: Session, *, scenario_id: str | None = None, project_ref: str | Non
     prev = {p.id: p for p in db.query(Prediction).filter(Prediction.id.in_(prev_ids)).all()} if prev_ids else {}
     runs = {r.id: r for r in db.query(ArchExplorationRun).filter(
         ArchExplorationRun.id.in_({p.exploration_run_ref for p in current})).all()} if current else {}
+    reviews = _reviews_by_scenario(db, {p.scenario_ref for p in current})
     rows = []
     for p in current:
         m = p.metrics
@@ -264,8 +278,9 @@ def board(db: Session, *, scenario_id: str | None = None, project_ref: str | Non
             "statistic": m.get("statistic"), "runtime_scale": m.get("runtime_scale"),
             "previous": ({"id": old.id, "total_mw": old.metrics["power"]["total_mw"],
                           "delta_mw": round(m["power"]["total_mw"] - old.metrics["power"]["total_mw"], 3)} if old else None),
+            "power_options": board_options(m.get("power_options"), reviews.get(p.scenario_ref, {}), p.variant_ref),
         })
-    return {"rows": rows}
+    return {"rows": rows, "review_statuses": list(POWER_OPTION_STATUSES)}
 
 
 def history(db: Session, scenario_id: str, variant_id: str) -> list[dict[str, Any]]:
@@ -380,3 +395,119 @@ def report_stale(db: Session, report_id: str) -> dict[str, Any]:
             changed.append({"variant_id": row["variant_id"], "snapshot": row.get("prediction_id"),
                             "current": cur.id if cur else None})
     return {"report_id": r.id, "stale": bool(changed), "changed": changed}
+
+
+# ------------------------------------------------------------------- power options
+def option_snapshot(po: dict[str, Any] | None, case: dict[str, Any], rule: str) -> dict[str, Any] | None:
+    """Power options frozen with a prediction. Deltas are relative to the variant's
+    recommended case; a user-selected (non-default) case keeps them but says so."""
+    if po is None:
+        return None
+    out = {k: po.get(k) for k in ("status", "notes", "sets", "max_sets", "best", "errors")}
+    out["dimensions"] = [
+        {k: d.get(k) for k in ("id", "kind", "label", "current", "node", "ip_ref")}
+        | {"items": [{k: i.get(k) for k in ("key", "kind", "label", "value", "from", "iq_eval", "note",
+                                           "unit_power_mw_mp", "from_unit_power_mw_mp", "ppc", "from_ppc",
+                                           "source")} for i in d.get("items") or []]}
+        for d in po.get("dimensions") or []
+    ]
+    out["results"] = po.get("results") or []
+    out["reference"] = {"rule": rule, "case_key": case.get("key"),
+                        "note": None if rule == "auto:min-power" else
+                        "option deltas are relative to the auto (min-power) case, not the selected case"}
+    return out
+
+
+def _reviews_by_scenario(db: Session, scenario_ids: set[str]) -> dict[str, dict[tuple[str, str], PowerOptionReview]]:
+    if not scenario_ids:
+        return {}
+    out: dict[str, dict[tuple[str, str], PowerOptionReview]] = {}
+    for r in db.query(PowerOptionReview).filter(PowerOptionReview.scenario_ref.in_(scenario_ids)).all():
+        out.setdefault(r.scenario_ref, {})[(r.variant_ref, r.option_key)] = r
+    return out
+
+
+_STATUS_RANK = {"rejected": 0, "candidate": 1, "iq_eval": 2, "adopted": 3}
+
+
+def item_status(reviews: dict[tuple[str, str], PowerOptionReview], variant_id: str, key: str) -> dict[str, Any]:
+    r = reviews.get((variant_id, key)) or reviews.get(("*", key))
+    if r is None:
+        return {"status": "candidate", "scope": None, "note": None}
+    return {"status": r.status, "scope": "variant" if r.variant_ref != "*" else "scenario", "note": r.note,
+            "updated_by": r.updated_by, "updated_at": r.updated_at.isoformat() if r.updated_at else None}
+
+
+def set_status(item_states: list[dict[str, Any]]) -> str:
+    """A set is only as far as its least-advanced item; one rejected item rejects the set."""
+    if not item_states:
+        return "candidate"
+    return min((s["status"] for s in item_states), key=lambda s: _STATUS_RANK.get(s, 1))
+
+
+def board_options(po: dict[str, Any] | None, reviews: dict[tuple[str, str], PowerOptionReview],
+                  variant_id: str) -> dict[str, Any]:
+    if po is None:
+        return {"status": "not_explored", "results": [], "items": [], "notes": [
+            "prediction registered before power-option exploration; re-run exploration and promote"]}
+    items = {i["key"]: i for d in po.get("dimensions") or [] for i in d.get("items") or []}
+    states = {k: item_status(reviews, variant_id, k) for k in items}
+    results = []
+    for r in po.get("results") or []:
+        st = set_status([states[k] for k in r["items"] if k in states])
+        results.append({k: r.get(k) for k in ("key", "items", "labels", "kinds", "iq_eval", "spec_ok", "spec_reasons",
+                                              "total_mw", "delta_mw", "delta_pct", "delta_bw_mbs", "raw_delta_mw",
+                                              "raw_delta_pct", "attribution", "fill_pct")} | {"review_status": st})
+    live = [r for r in results if r["spec_ok"] and r["review_status"] != "rejected" and (r["delta_mw"] or 0) < 0]
+    best = min(live, key=lambda r: r["delta_mw"], default=None)
+    return {
+        "status": po.get("status"), "notes": po.get("notes") or [], "sets": po.get("sets"),
+        "reference": po.get("reference"),
+        "items": [items[k] | {"review": states[k]} for k in items],
+        "results": results,
+        "best": ({"key": best["key"], "labels": best["labels"], "delta_mw": best["delta_mw"],
+                  "delta_pct": best["delta_pct"], "review_status": best["review_status"]} if best else None),
+    }
+
+
+def list_option_reviews(db: Session, *, project_ref: str | None = None,
+                        scenario_id: str | None = None) -> list[dict[str, Any]]:
+    q = db.query(PowerOptionReview)
+    if project_ref:
+        q = q.filter(PowerOptionReview.project_ref == project_ref)
+    if scenario_id:
+        q = q.filter(PowerOptionReview.scenario_ref == scenario_id)
+    return [_review_dict(r) for r in q.order_by(PowerOptionReview.scenario_ref, PowerOptionReview.option_key,
+                                                 PowerOptionReview.variant_ref).all()]
+
+
+def _review_dict(r: PowerOptionReview) -> dict[str, Any]:
+    return {"id": r.id, "project_ref": r.project_ref, "scenario_id": r.scenario_ref, "variant_id": r.variant_ref,
+            "option_key": r.option_key, "status": r.status, "note": r.note, "history": r.history,
+            "updated_by": r.updated_by, "updated_at": r.updated_at.isoformat() if r.updated_at else None}
+
+
+def set_option_review(db: Session, request: PowerOptionReviewRequest, user: str | None = None) -> dict[str, Any]:
+    # Lock an existing parent even when this review has not been created yet.
+    scenario = db.query(Scenario).filter_by(id=request.scenario_id).with_for_update().one_or_none()
+    if scenario is None:
+        raise NotFoundError(f"scenario not found: {request.scenario_id}")
+    if request.variant_id != "*" and db.query(ScenarioVariant).filter_by(
+            scenario_id=request.scenario_id, id=request.variant_id).one_or_none() is None:
+        raise NotFoundError(f"variant not found: {request.scenario_id}/{request.variant_id}")
+    row = (db.query(PowerOptionReview)
+           .filter_by(scenario_ref=request.scenario_id, variant_ref=request.variant_id, option_key=request.option_key)
+           .with_for_update().one_or_none())
+    now = _now()
+    entry = {"status": request.status, "note": request.note, "by": user, "at": now.isoformat()}
+    if row is None:
+        row = PowerOptionReview(
+            id=f"POR-{uuid4().hex}", project_ref=scenario.project_ref, scenario_ref=request.scenario_id,
+            variant_ref=request.variant_id, option_key=request.option_key, history=[entry],
+        )
+        db.add(row)
+    else:
+        row.history = [*(row.history or []), entry]
+    row.status, row.note, row.updated_by, row.updated_at = request.status, request.note, user, now
+    db.commit()
+    return _review_dict(row)

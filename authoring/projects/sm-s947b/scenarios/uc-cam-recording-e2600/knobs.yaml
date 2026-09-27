@@ -1,6 +1,10 @@
 # Architecture knobs for camera recording (hand-authored; decompile keeps this file).
 # A variant selects a value with design_conditions.<condition_key>; absent = default.
 # Defaults reproduce the Exynos2600 fixture exactly (full-size chain, MCSC crop+scale, L0..L4).
+# `explore`: power-saving option. Combination exploration (조합 탐색) tries every non-default
+# value on top of each formal variant where it applies and reports the predicted saving on the
+# prediction board (예측 현황). Options are NOT variants: a value becomes part of a formal
+# variant (design_conditions.<condition_key>) only after IQ evaluation adopts it.
 params:
   sensor_margin_pct: 25      # FOV margin baked into the sensor mode (legacy EIS assumption)
   eis_margin_pct: 25         # EIS off -> crop keeps the whole sensor FOV
@@ -12,6 +16,10 @@ knobs:
   crop_strategy:
     condition_key: crop_strategy
     default: mcsc_crop
+    explore:
+      when_node_enabled: eis   # bcrop to the EIS window; EIS off keeps the full FOV (no saving)
+      iq_eval: required
+      label: BYRP bayer crop
     values:
       # Sensor full size through the chain; MCSC crops the EIS window and scales (baseline).
       mcsc_crop: {}
@@ -47,6 +55,10 @@ knobs:
   pyramid_l0:
     condition_key: pyramid_l0
     default: use              # L0..L4 all used
+    explore:
+      when_node_enabled: mtnr
+      iq_eval: required
+      label: MTNR L0 skip
     values:
       use: {}
       skip:                   # low power: drop the full-res L0 level (MLSC GLPG0 -> MTNR0)

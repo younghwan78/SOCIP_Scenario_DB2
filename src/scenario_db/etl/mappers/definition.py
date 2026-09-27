@@ -59,6 +59,7 @@ def upsert_usecase(raw: dict, sha256: str, session: Session) -> None:
     row.provenance = obj.provenance
     row.parametric_sweeps = [a.model_dump(exclude_none=True) for a in obj.parametric_sweeps]
     row.design_axes = [a.model_dump(exclude_none=True) for a in obj.design_axes]
+    row.power_options = obj.power_options.model_dump(exclude_none=True) if obj.power_options else None
     row.yaml_sha256 = sha256
     session.add(row)
     session.flush()

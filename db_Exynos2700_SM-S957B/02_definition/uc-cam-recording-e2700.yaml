@@ -748,6 +748,112 @@ pipeline:
       outputs by default.
     pyramid_base: mlsc_out
     eis_chain: MCSC -> one EIS SW stage -> preview/video GDC instances
+size_profile:
+  anchors:
+    sensor_full: 4080x2296
+    record_out: 1920x1080
+    preview_out: 1920x1080
+    motion_estimation: 1008x756
+    object_detection: 512x288
+    pyramid_l0: 4080x2296
+    pyramid_l1: 2040x1148
+    pyramid_l2: 1020x574
+    pyramid_l3: 510x287
+    pyramid_l4: 255x144
+    cav: 320x180
+    mlsc_out: 4080x2296
+    front_sensor_full: 4080x2296
+    front_record_out: 1920x1080
+    front_preview_out: 1920x1080
+    front_motion_estimation: 1008x756
+    front_object_detection: 512x288
+    front_pyramid_l0: 4080x2296
+    front_pyramid_l1: 2040x1148
+    front_pyramid_l2: 1020x574
+    front_pyramid_l3: 510x287
+    front_pyramid_l4: 255x144
+    front_cav: 320x180
+    front_mlsc_out: 4080x2296
+power_options:
+  params:
+    sensor_margin_pct: 25
+    eis_margin_pct: 25
+  param_rules:
+  - when_node_enabled: eis
+    set:
+      eis_margin_pct: 15
+  knobs:
+    crop_strategy:
+      condition_key: crop_strategy
+      default: mcsc_crop
+      explore:
+        when_node_enabled: eis
+        iq_eval: required
+        label: BYRP bayer crop
+      values:
+        mcsc_crop: {}
+        byrp_bcrop:
+          derived:
+            bcrop_out:
+              from: sensor_full
+              scale: (100 + eis_margin_pct) / (100 + sensor_margin_pct)
+              align_x: 16
+              align_y: 2
+              clamp_to: sensor_full
+            mlsc_out:
+              from: bcrop_out
+            pyramid_l0:
+              from: bcrop_out
+            pyramid_l1:
+              from: pyramid_l0
+              scale: 0.5
+              round: ceil
+            pyramid_l2:
+              from: pyramid_l1
+              scale: 0.5
+              round: ceil
+            pyramid_l3:
+              from: pyramid_l2
+              scale: 0.5
+              round: ceil
+            pyramid_l4:
+              from: pyramid_l3
+              scale: 0.5
+              round: ceil
+          bindings:
+            rgbp: bcrop_out
+            yuvsc: bcrop_out
+            mlsc: bcrop_out
+            mtnr: bcrop_out
+            msnr: bcrop_out
+            yuvp: bcrop_out
+            mcsc: bcrop_out
+          variant_patch:
+            node_configs:
+              byrp:
+                operations:
+                  crop: true
+              mcsc:
+                operations:
+                  crop: false
+                  scale: true
+    pyramid_l0:
+      condition_key: pyramid_l0
+      default: use
+      explore:
+        when_node_enabled: mtnr
+        iq_eval: required
+        label: MTNR L0 skip
+      values:
+        use: {}
+        skip:
+          variant_patch:
+            topology_patch:
+              $append:
+                remove_edges:
+                - from: mlsc
+                  to: mtnr
+                  buffer: PYRAMID_L0
 variants:
 - id: cam-rec-r1-fhd30-vdis
   severity: light
@@ -4860,778 +4966,3 @@ variants:
   - assumed-sw-timing
   - uncalibrated-power
   - apv
-- id: cam-rec-r1-uhd30-vdis-bcrop
-  severity: heavy
-  design_conditions:
-    subscenario: UHD_VIDEO
-    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_UHD30
-    sensor_place: rear
-    resolution: UHD
-    fps: 30
-    stabilization: SWVDIS
-    dpu_layer_count: 3
-    is_version: 15
-    sw_timing_case: mean
-    sw_timing_source: assumed
-    sensor_board: m2s-GNG
-    mcsc_dma_channels: 2
-    sensor_input_fps: 30.0
-    sensor_bitwidth: 10
-    sensor_input_source: user_confirmed
-    is_scenario: IS_SCENARIO_SWVDIS
-    priority_recording: true
-    verification_scope: priority_model_assumed
-    input_ratio: '16:9'
-    record_bitrate_mbps: 80
-    bitrate_source: assumed
-    writer_model: linear_bitrate_wall_time
-    storage_model: sustained_write_assumed
-    crop_strategy: byrp_bcrop
-    sensor_margin_pct: 25
-    eis_margin_pct: 15
-  routing_switch:
-    disabled_nodes:
-    - sensor_rear2
-    - sensor_rear3
-    - sensor_front
-    - vps_dof
-    - vps_seg
-  node_configs:
-    mfc_enc:
-      sim:
-        inherit_shape: true
-        width: 3840
-        height: 2160
-      memory_io:
-      - port: MFC_WDMA_BITSTREAM
-        direction: write
-        bitrate_condition: record_bitrate_mbps
-    yuvsc:
-      operations:
-        scale: false
-      bypass_downscale: true
-      sim:
-        inherit_shape: true
-        width: 3760
-        height: 2114
-    mcsc:
-      operations:
-        crop: false
-        scale: true
-      active_output_ports:
-      - MCSC_WDMA_W0
-      - MCSC_WDMA_W1
-      sim:
-        inherit_shape: true
-        width: 3760
-        height: 2114
-    byrp:
-      video_snapshot_enabled: false
-      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when video_snapshot_enabled; OTF remains connected.
-      sim:
-        inherit_shape: true
-        width: 4080
-        height: 2296
-      operations:
-        crop: true
-    vps_od:
-      selected_mode: Normal
-      function: object_detection
-      sim:
-        inherit_shape: true
-        width: 512
-        height: 288
-    lme:
-      selected_mode: Normal
-      sim:
-        inherit_shape: true
-        width: 1008
-        height: 756
-    sensor_rear:
-      selected_mode: cis_4sum_ln4_raw10_4080x2296_30fps_3993msps
-    csis:
-      sim:
-        inherit_shape: true
-        width: 4080
-        height: 2296
-    pdp:
-      sim:
-        inherit_shape: true
-        width: 4080
-        height: 2296
-    rgbp:
-      sim:
-        inherit_shape: true
-        width: 3760
-        height: 2114
-    mlsc:
-      sim:
-        inherit_shape: true
-        width: 3760
-        height: 2114
-    mtnr:
-      sim:
-        inherit_shape: true
-        width: 3760
-        height: 2114
-    msnr:
-      sim:
-        inherit_shape: true
-        width: 3760
-        height: 2114
-    yuvp:
-      sim:
-        inherit_shape: true
-        width: 3760
-        height: 2114
-    gdc_m:
-      sim:
-        inherit_shape: true
-        width: 1920
-        height: 1080
-      operations:
-        crop: true
-    gdc_o:
-      sim:
-        inherit_shape: true
-        width: 3840
-        height: 2160
-      operations:
-        crop: true
-    dpu:
-      sim:
-        inherit_shape: true
-        width: 1920
-        height: 1080
-    mpeg_writer:
-      sw_bitrate_scaling:
-        reference_bitrate_mbps: 1000
-      memory_io:
-      - port: CPU_BITSTREAM_READ
-        direction: read
-        bitrate_condition: record_bitrate_mbps
-      - port: CPU_BITSTREAM_WRITE
-        direction: write
-        bitrate_condition: record_bitrate_mbps
-      timeline_resource_id: CPU_WRITER
-      source_note: Engineering assumption approved for fixture exploration; replace with internal measurements.
-      sw_timing:
-        min_ms: 2
-        mean_ms: 4
-        max_ms: 8
-        value_source: assumed
-        source_note: Engineering assumption approved for fixture exploration; replace with internal measurements.
-    storage_write:
-      sw_bitrate_scaling:
-        reference_bitrate_mbps: 1000
-      timeline_resource_id: STORAGE_IO
-      memory_io:
-      - port: STORAGE_BITSTREAM_READ
-        direction: read
-        bitrate_condition: record_bitrate_mbps
-      source_note: I/O completion wall time, not CPU active execution; no UFS capacity sign-off. Engineering assumption approved
-        for fixture exploration; replace with internal measurements.
-      sw_timing:
-        min_ms: 4
-        mean_ms: 8
-        max_ms: 16
-        value_source: assumed
-        source_note: Engineering assumption approved for fixture exploration; replace with internal measurements.
-    post_crta:
-      sw_timing:
-        min_ms: 0.1
-        mean_ms: 0.3
-        max_ms: 0.5
-        start_jitter_mean_ms: 1.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal measurements.
-    pre_me_rta:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 4.0
-        includes_hw_nodes:
-        - lme
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal measurements.
-    post_irta:
-      sw_timing:
-        min_ms: 3.0
-        mean_ms: 4.0
-        max_ms: 5.6
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal measurements.
-    eis:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal measurements.
-  topology_patch:
-    add_edges:
-    - from: mfc_enc
-      to: mpeg_writer
-      type: control
-    - from: mpeg_writer
-      to: storage_write
-      type: control
-    add_nodes:
-    - id: mpeg_writer
-      ip_ref: ip-cpu-s5e9975
-      role: sw_task
-      instance_index: 0
-    - id: storage_write
-      ip_ref: ip-cpu-s5e9975
-      role: sw_task
-      instance_index: 0
-  size_overrides:
-    sensor_full: 4080x2296
-    record_out: 3840x2160
-    preview_out: 1920x1080
-    pyramid_l0: 3760x2114
-    pyramid_l1: 1880x1057
-    pyramid_l2: 940x529
-    pyramid_l3: 470x265
-    pyramid_l4: 235x133
-    object_detection: 512x288
-    cav: 320x180
-    mlsc_out: 3760x2114
-    bcrop_out: 3760x2114
-  buffer_overrides: {}
-  tags:
-  - is-v15
-  - assumed-sw-timing
-  - uncalibrated-power
-  - exploration-only
-  - arch-knob
-- id: cam-rec-r1-uhd30-vdis-bcrop-l0skip
-  severity: heavy
-  design_conditions:
-    subscenario: UHD_VIDEO
-    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_UHD30
-    sensor_place: rear
-    resolution: UHD
-    fps: 30
-    stabilization: SWVDIS
-    dpu_layer_count: 3
-    is_version: 15
-    sw_timing_case: mean
-    sw_timing_source: assumed
-    sensor_board: m2s-GNG
-    mcsc_dma_channels: 2
-    sensor_input_fps: 30.0
-    sensor_bitwidth: 10
-    sensor_input_source: user_confirmed
-    is_scenario: IS_SCENARIO_SWVDIS
-    priority_recording: true
-    verification_scope: priority_model_assumed
-    input_ratio: '16:9'
-    record_bitrate_mbps: 80
-    bitrate_source: assumed
-    writer_model: linear_bitrate_wall_time
-    storage_model: sustained_write_assumed
-    crop_strategy: byrp_bcrop
-    pyramid_l0: skip
-    sensor_margin_pct: 25
-    eis_margin_pct: 15
-  routing_switch:
-    disabled_nodes:
-    - sensor_rear2
-    - sensor_rear3
-    - sensor_front
-    - vps_dof
-    - vps_seg
-  node_configs:
-    mfc_enc:
-      sim:
-        inherit_shape: true
-        width: 3840
-        height: 2160
-      memory_io:
-      - port: MFC_WDMA_BITSTREAM
-        direction: write
-        bitrate_condition: record_bitrate_mbps
-    yuvsc:
-      operations:
-        scale: false
-      bypass_downscale: true
-      sim:
-        inherit_shape: true
-        width: 3760
-        height: 2114
-    mcsc:
-      operations:
-        crop: false
-        scale: true
-      active_output_ports:
-      - MCSC_WDMA_W0
-      - MCSC_WDMA_W1
-      sim:
-        inherit_shape: true
-        width: 3760
-        height: 2114
-    byrp:
-      video_snapshot_enabled: false
-      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when video_snapshot_enabled; OTF remains connected.
-      sim:
-        inherit_shape: true
-        width: 4080
-        height: 2296
-      operations:
-        crop: true
-    vps_od:
-      selected_mode: Normal
-      function: object_detection
-      sim:
-        inherit_shape: true
-        width: 512
-        height: 288
-    lme:
-      selected_mode: Normal
-      sim:
-        inherit_shape: true
-        width: 1008
-        height: 756
-    sensor_rear:
-      selected_mode: cis_4sum_ln4_raw10_4080x2296_30fps_3993msps
-    csis:
-      sim:
-        inherit_shape: true
-        width: 4080
-        height: 2296
-    pdp:
-      sim:
-        inherit_shape: true
-        width: 4080
-        height: 2296
-    rgbp:
-      sim:
-        inherit_shape: true
-        width: 3760
-        height: 2114
-    mlsc:
-      sim:
-        inherit_shape: true
-        width: 3760
-        height: 2114
-    mtnr:
-      sim:
-        inherit_shape: true
-        width: 3760
-        height: 2114
-    msnr:
-      sim:
-        inherit_shape: true
-        width: 3760
-        height: 2114
-    yuvp:
-      sim:
-        inherit_shape: true
-        width: 3760
-        height: 2114
-    gdc_m:
-      sim:
-        inherit_shape: true
-        width: 1920
-        height: 1080
-      operations:
-        crop: true
-    gdc_o:
-      sim:
-        inherit_shape: true
-        width: 3840
-        height: 2160
-      operations:
-        crop: true
-    dpu:
-      sim:
-        inherit_shape: true
-        width: 1920
-        height: 1080
-    mpeg_writer:
-      sw_bitrate_scaling:
-        reference_bitrate_mbps: 1000
-      memory_io:
-      - port: CPU_BITSTREAM_READ
-        direction: read
-        bitrate_condition: record_bitrate_mbps
-      - port: CPU_BITSTREAM_WRITE
-        direction: write
-        bitrate_condition: record_bitrate_mbps
-      timeline_resource_id: CPU_WRITER
-      source_note: Engineering assumption approved for fixture exploration; replace with internal measurements.
-      sw_timing:
-        min_ms: 2
-        mean_ms: 4
-        max_ms: 8
-        value_source: assumed
-        source_note: Engineering assumption approved for fixture exploration; replace with internal measurements.
-    storage_write:
-      sw_bitrate_scaling:
-        reference_bitrate_mbps: 1000
-      timeline_resource_id: STORAGE_IO
-      memory_io:
-      - port: STORAGE_BITSTREAM_READ
-        direction: read
-        bitrate_condition: record_bitrate_mbps
-      source_note: I/O completion wall time, not CPU active execution; no UFS capacity sign-off. Engineering assumption approved
-        for fixture exploration; replace with internal measurements.
-      sw_timing:
-        min_ms: 4
-        mean_ms: 8
-        max_ms: 16
-        value_source: assumed
-        source_note: Engineering assumption approved for fixture exploration; replace with internal measurements.
-    post_crta:
-      sw_timing:
-        min_ms: 0.1
-        mean_ms: 0.3
-        max_ms: 0.5
-        start_jitter_mean_ms: 1.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal measurements.
-    pre_me_rta:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 4.0
-        includes_hw_nodes:
-        - lme
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal measurements.
-    post_irta:
-      sw_timing:
-        min_ms: 3.0
-        mean_ms: 4.0
-        max_ms: 5.6
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal measurements.
-    eis:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal measurements.
-  topology_patch:
-    add_edges:
-    - from: mfc_enc
-      to: mpeg_writer
-      type: control
-    - from: mpeg_writer
-      to: storage_write
-      type: control
-    add_nodes:
-    - id: mpeg_writer
-      ip_ref: ip-cpu-s5e9975
-      role: sw_task
-      instance_index: 0
-    - id: storage_write
-      ip_ref: ip-cpu-s5e9975
-      role: sw_task
-      instance_index: 0
-    remove_edges:
-    - from: mlsc
-      to: mtnr
-      buffer: PYRAMID_L0
-  size_overrides:
-    sensor_full: 4080x2296
-    record_out: 3840x2160
-    preview_out: 1920x1080
-    pyramid_l0: 3760x2114
-    pyramid_l1: 1880x1057
-    pyramid_l2: 940x529
-    pyramid_l3: 470x265
-    pyramid_l4: 235x133
-    object_detection: 512x288
-    cav: 320x180
-    mlsc_out: 3760x2114
-    bcrop_out: 3760x2114
-  buffer_overrides: {}
-  tags:
-  - is-v15
-  - assumed-sw-timing
-  - uncalibrated-power
-  - exploration-only
-  - arch-knob
-- id: cam-rec-r1-fhd30-vdis-bcrop
-  severity: light
-  design_conditions:
-    subscenario: FHD_VIDEO
-    dvfs_sn: IS_DVFS_SN_REAR_SINGLE_VIDEO_FHD30
-    sensor_place: rear
-    resolution: FHD
-    fps: 30
-    stabilization: SWVDIS
-    dpu_layer_count: 3
-    is_version: 15
-    sw_timing_case: mean
-    sw_timing_source: assumed
-    sensor_board: m2s-GNG
-    mcsc_dma_channels: 1
-    sensor_input_fps: 30.0
-    sensor_bitwidth: 10
-    sensor_input_source: user_confirmed
-    is_scenario: IS_SCENARIO_SWVDIS
-    priority_recording: true
-    verification_scope: priority_model_assumed
-    input_ratio: '16:9'
-    record_bitrate_mbps: 30
-    bitrate_source: assumed
-    writer_model: linear_bitrate_wall_time
-    storage_model: sustained_write_assumed
-    crop_strategy: byrp_bcrop
-    sensor_margin_pct: 25
-    eis_margin_pct: 15
-  routing_switch:
-    disabled_nodes:
-    - sensor_rear2
-    - sensor_rear3
-    - sensor_front
-    - vps_dof
-    - vps_seg
-  node_configs:
-    mfc_enc:
-      sim:
-        inherit_shape: true
-        width: 1920
-        height: 1080
-      memory_io:
-      - port: MFC_WDMA_BITSTREAM
-        direction: write
-        bitrate_condition: record_bitrate_mbps
-    yuvsc:
-      operations:
-        scale: false
-      bypass_downscale: true
-      sim:
-        inherit_shape: true
-        width: 3760
-        height: 2114
-    mcsc:
-      operations:
-        crop: false
-        scale: true
-      active_output_ports:
-      - MCSC_WDMA_W0
-      sim:
-        inherit_shape: true
-        width: 3760
-        height: 2114
-    byrp:
-      video_snapshot_enabled: false
-      stat_dma_note: IS_LVN_BYRP0_BYR / BYRP_WDMA_BYR dumps full sensor size when video_snapshot_enabled; OTF remains connected.
-      sim:
-        inherit_shape: true
-        width: 4080
-        height: 2296
-      operations:
-        crop: true
-    vps_od:
-      selected_mode: Normal
-      function: object_detection
-      sim:
-        inherit_shape: true
-        width: 512
-        height: 288
-    lme:
-      selected_mode: Normal
-      sim:
-        inherit_shape: true
-        width: 1008
-        height: 756
-    sensor_rear:
-      selected_mode: cis_4sum_ln4_raw10_4080x2296_30fps_3993msps
-    csis:
-      sim:
-        inherit_shape: true
-        width: 4080
-        height: 2296
-    pdp:
-      sim:
-        inherit_shape: true
-        width: 4080
-        height: 2296
-    rgbp:
-      sim:
-        inherit_shape: true
-        width: 3760
-        height: 2114
-    mlsc:
-      sim:
-        inherit_shape: true
-        width: 3760
-        height: 2114
-    mtnr:
-      sim:
-        inherit_shape: true
-        width: 3760
-        height: 2114
-    msnr:
-      sim:
-        inherit_shape: true
-        width: 3760
-        height: 2114
-    yuvp:
-      sim:
-        inherit_shape: true
-        width: 3760
-        height: 2114
-    gdc_m:
-      sim:
-        inherit_shape: true
-        width: 1920
-        height: 1080
-      operations:
-        crop: true
-    gdc_o:
-      sim:
-        inherit_shape: true
-        width: 1920
-        height: 1080
-      operations:
-        crop: true
-    dpu:
-      sim:
-        inherit_shape: true
-        width: 1920
-        height: 1080
-    mpeg_writer:
-      sw_bitrate_scaling:
-        reference_bitrate_mbps: 1000
-      memory_io:
-      - port: CPU_BITSTREAM_READ
-        direction: read
-        bitrate_condition: record_bitrate_mbps
-      - port: CPU_BITSTREAM_WRITE
-        direction: write
-        bitrate_condition: record_bitrate_mbps
-      timeline_resource_id: CPU_WRITER
-      source_note: Engineering assumption approved for fixture exploration; replace with internal measurements.
-      sw_timing:
-        min_ms: 2
-        mean_ms: 4
-        max_ms: 8
-        value_source: assumed
-        source_note: Engineering assumption approved for fixture exploration; replace with internal measurements.
-    storage_write:
-      sw_bitrate_scaling:
-        reference_bitrate_mbps: 1000
-      timeline_resource_id: STORAGE_IO
-      memory_io:
-      - port: STORAGE_BITSTREAM_READ
-        direction: read
-        bitrate_condition: record_bitrate_mbps
-      source_note: I/O completion wall time, not CPU active execution; no UFS capacity sign-off. Engineering assumption approved
-        for fixture exploration; replace with internal measurements.
-      sw_timing:
-        min_ms: 4
-        mean_ms: 8
-        max_ms: 16
-        value_source: assumed
-        source_note: Engineering assumption approved for fixture exploration; replace with internal measurements.
-    post_crta:
-      sw_timing:
-        min_ms: 0.1
-        mean_ms: 0.3
-        max_ms: 0.5
-        start_jitter_mean_ms: 1.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal measurements.
-    pre_me_rta:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 4.0
-        includes_hw_nodes:
-        - lme
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal measurements.
-    post_irta:
-      sw_timing:
-        min_ms: 3.0
-        mean_ms: 4.0
-        max_ms: 5.6
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal measurements.
-    eis:
-      sw_timing:
-        min_ms: 2.5
-        mean_ms: 3.0
-        max_ms: 6.0
-        value_source: assumed
-        source_note: User-supplied fixture values, 2026-09-13; replace with internal measurements.
-  topology_patch:
-    add_edges:
-    - from: mcsc
-      to: gdc_o
-      type: M2M
-      buffer: MCSC_PREVIEW
-      port_pairs:
-      - src: MCSC_WDMA_W0
-        dst: GDC_RDMA
-    - from: mfc_enc
-      to: mpeg_writer
-      type: control
-    - from: mpeg_writer
-      to: storage_write
-      type: control
-    remove_edges:
-    - from: mcsc
-      to: gdc_o
-    add_nodes:
-    - id: mpeg_writer
-      ip_ref: ip-cpu-s5e9975
-      role: sw_task
-      instance_index: 0
-    - id: storage_write
-      ip_ref: ip-cpu-s5e9975
-      role: sw_task
-      instance_index: 0
-  size_overrides:
-    sensor_full: 4080x2296
-    record_out: 1920x1080
-    preview_out: 1920x1080
-    pyramid_l0: 3760x2114
-    pyramid_l1: 1880x1057
-    pyramid_l2: 940x529
-    pyramid_l3: 470x265
-    pyramid_l4: 235x133
-    object_detection: 512x288
-    cav: 320x180
-    mlsc_out: 3760x2114
-    bcrop_out: 3760x2114
-  buffer_overrides: {}
-  tags:
-  - is-v15
-  - assumed-sw-timing
-  - uncalibrated-power
-  - exploration-only
-  - arch-knob
-size_profile:
-  anchors:
-    sensor_full: 4080x2296
-    record_out: 1920x1080
-    preview_out: 1920x1080
-    motion_estimation: 1008x756
-    object_detection: 512x288
-    pyramid_l0: 4080x2296
-    pyramid_l1: 2040x1148
-    pyramid_l2: 1020x574
-    pyramid_l3: 510x287
-    pyramid_l4: 255x144
-    cav: 320x180
-    mlsc_out: 4080x2296
-    front_sensor_full: 4080x2296
-    front_record_out: 1920x1080
-    front_preview_out: 1920x1080
-    front_motion_estimation: 1008x756
-    front_object_detection: 512x288
-    front_pyramid_l0: 4080x2296
-    front_pyramid_l1: 2040x1148
-    front_pyramid_l2: 1020x574
-    front_pyramid_l3: 510x287
-    front_pyramid_l4: 255x144
-    front_cav: 320x180
-    front_mlsc_out: 4080x2296
