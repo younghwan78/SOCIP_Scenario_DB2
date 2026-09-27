@@ -90,6 +90,7 @@ def main() -> int:
     sw = (project.get("globals") or {}).get("default_sw_profile_ref") or project["metadata"].get("default_sw_profile_ref")
     catalog = load_catalog(args.db)
     out_dir = args.db / "03_evidence"
+    out_dir.mkdir(parents=True, exist_ok=True)
     report = []
     for v in raw["variants"]:
         vid = v["id"]

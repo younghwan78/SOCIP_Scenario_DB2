@@ -14,6 +14,7 @@ import io
 import json
 import sys
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import yaml
 
@@ -38,19 +39,21 @@ def main() -> int:
     ap.add_argument("--strict", action="store_true")
     args = ap.parse_args()
     metas = sorted((args.db / "measurements").glob("*/meta.yaml"))
-    work = Path("output") / "meas_import" / args.db.name
     summary, failed = {}, 0
     for meta in metas:
         buf = io.StringIO()
-        with contextlib.redirect_stdout(buf):
-            rc = meas_import(["--meta", str(meta), "--out", str(work / meta.parent.name), "--strict"])
+        # Each invocation owns its output; interrupted or concurrent imports must
+        # never supply another measurement's evidence to this run.
+        with TemporaryDirectory(prefix="scenario-measurement-") as temporary:
+            with contextlib.redirect_stdout(buf):
+                rc = meas_import(["--meta", str(meta), "--out", temporary, "--strict"])
+            emitted = sorted((Path(temporary) / "03_evidence").glob("*.yaml"))
+            new = emitted[0].read_bytes() if rc == 0 and len(emitted) == 1 else None
         report = json.loads(buf.getvalue() or "{}")
-        emitted = sorted((work / meta.parent.name / "03_evidence").glob("*.yaml"))
         status = "error"
-        if rc == 0 and emitted:
+        if new is not None:
             src = emitted[0]
             dst = args.db / "03_evidence" / src.name
-            new = src.read_bytes()
             old = yaml.safe_load(dst.read_text(encoding="utf-8")) if dst.exists() else None
             if old is not None and (dst.read_bytes() == new or _same(old, yaml.safe_load(new))):
                 status = "unchanged"   # identical up to last-digit float rounding across platforms
@@ -67,8 +70,6 @@ def main() -> int:
             status = "error: " + "; ".join(errs[:2])
         failed += status.startswith(("error", "conflict"))
         summary[meta.parent.name] = status
-        for f in emitted:
-            f.unlink()
     print(json.dumps({"db": str(args.db), "inputs": len(metas), "failed": failed, "result": summary},
                      indent=2, ensure_ascii=False))
     return 1 if failed and args.strict else 0

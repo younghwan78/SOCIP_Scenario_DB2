@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import shutil
 
 import sys
 
@@ -9,6 +10,7 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 from generate_simulation_evidence import expected_params_hash  # noqa: E402
+import generate_simulation_evidence  # noqa: E402
 
 from scenario_db.api.services.calibration import is_synthetic  # noqa: E402
 
@@ -44,3 +46,17 @@ def test_dummy_measurements_are_flagged_synthetic():
     """UI / calibration must not count DUMMY inputs as real measurements."""
     for path in sorted((DB / "03_evidence").glob("meas-*.yaml")):
         assert is_synthetic(_read(path)["provenance"]), path.name
+
+
+def test_simulation_generator_creates_evidence_directory(tmp_path, monkeypatch):
+    for directory in ('00_hw', '02_definition'):
+        shutil.copytree(DB / directory, tmp_path / directory)
+    monkeypatch.setattr(sys, 'argv', [
+        'generate_simulation_evidence', str(tmp_path), 'uc-cam-recording-e2700',
+        '--only', 'cam-rec-r1-uhd30-vdis',
+    ])
+    assert generate_simulation_evidence.main() == 0
+    (generated,) = (tmp_path / '03_evidence').glob('*.yaml')
+    evidence = _read(generated)
+    assert evidence['variant_ref'] == 'cam-rec-r1-uhd30-vdis'
+    assert evidence['timeline_events']

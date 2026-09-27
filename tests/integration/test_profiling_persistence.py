@@ -39,6 +39,14 @@ def test_profiling_jsonb_roundtrip_and_revision_guard(engine):
                 changed = deepcopy(doc); changed['hw_task_timing'][0]['mean_ms'] = 2.5
                 with pytest.raises(ValueError, match='evidence'):
                     upsert_measurement(changed, 'b'*64, session)
+                changed['provenance']['revision'] = 2
+                upsert_measurement(changed, 'c'*64, session)
+                session.commit(); session.expire_all()
+                updated = session.get(Evidence, doc['id'])
+                assert updated.provenance['revision'] == 2
+                assert updated.hw_task_timing[0]['mean_ms'] == 2.5
+                with pytest.raises(ValueError, match='revision 2'):
+                    upsert_measurement(doc, 'a'*64, session)
         finally:
             tx.rollback()
 
