@@ -352,6 +352,7 @@ uv run python -m scenario_db.authoring parent-diff sm-s957b
 | `diff` / `in_project` | 목록에는 2700에서 의도적으로 바꾼 값도 함께 나온다. 2600 변경이 2700에도 필요한지 판단해서 해당 파일에 직접 반영한다 |
 | `new_in_parent` | eject 이후 2600에 새로 생긴 문서 |
 | `removed_in_parent` | eject 이후 2600에서 사라진 문서 |
+| `variants_removed` | 해당 scenario의 부모에서 삭제된 variant. 2700 파일에서는 자동으로 삭제하지 않는다 |
 
 검토와 반영이 끝나면 기준점을 현재 2600으로 옮긴다. 같은 변경이 다음 `parent-diff`에 다시 나오지 않는다.
 

@@ -371,3 +371,48 @@ def test_eject_and_parent_diff(root: Path):
                         "diff": ["~ capabilities.sim.modes.Normal.unit_power_mw_mp"]}]
     with pytest.raises(AuthoringError, match="nothing to eject"):
         eject_project(root, "sm-s957b")
+
+
+def test_parent_diff_reports_variant_removal_and_accepts_it(root: Path):
+    from scenario_db.authoring.eject import accept_parent, eject_project, parent_diff
+
+    eject_project(root, "sm-s957b")
+    path = root / "projects/sm-s947b/scenarios/uc-cam-recording-e2600/variants.yaml"
+    variants = yamlio.load(path)
+    parents = {v.get("extends") for v in variants}
+    removed = next(v["id"] for v in reversed(variants) if v["id"] not in parents)
+    yamlio.dump(path, [v for v in variants if v["id"] != removed])
+    change = next(c for c in parent_diff(root, "sm-s957b")["changed"] if c["doc"] == REC)
+    assert change["variants_removed"] == [removed]
+    assert change["variants_changed"] == []
+    accept_parent(root, "sm-s957b")
+    assert parent_diff(root, "sm-s957b")["changed"] == []
+
+
+def test_eject_restores_both_directories_after_publish_failure(root: Path, monkeypatch):
+    from scenario_db.authoring.eject import eject_project
+
+    def contents():
+        return {p.relative_to(root): p.read_bytes() for p in root.rglob("*") if p.is_file()}
+
+    before = contents()
+    original_rename = Path.rename
+
+    def fail_project_publish(source, destination):
+        if (source.name == "sm-s957b" and source.parent.name == "projects"
+                and Path(destination) == root / "projects/sm-s957b"):
+            raise PermissionError("injected second-directory publish failure")
+        return original_rename(source, destination)
+
+    monkeypatch.setattr(Path, "rename", fail_project_publish)
+    with pytest.raises(AuthoringError, match="original files restored"):
+        eject_project(root, "sm-s957b")
+    assert contents() == before
+    assert not list(root.glob(".eject-backup-*"))
+
+
+def test_accept_parent_on_non_ejected_project_is_a_cli_error(root: Path, capsys):
+    from scenario_db.authoring.cli import main
+
+    assert main(["--root", str(root), "parent-diff", "sm-s957b", "--accept"]) == 2
+    assert "not ejected" in capsys.readouterr().err

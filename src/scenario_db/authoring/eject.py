@@ -69,17 +69,41 @@ def _parent_snapshot(root: Path, parent_key: str, id_map: dict[str, str]) -> dic
 
 
 def eject_project(root: Path, key: str, *, commit: str | None = None) -> dict[str, Any]:
-    root = Path(root)
+    root = Path(root).resolve()
+    if (root / "projects" / key).resolve().parent != root / "projects":
+        raise AuthoringError("eject project must be a direct child of projects/")
     spec = yamlio.load(root / "projects" / key / "project.yaml")
     if not spec.get("extends"):
         raise AuthoringError(f"project '{key}' does not extend another project: nothing to eject")
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(dir=root.parent) as tmp:
         work = Path(tmp) / "authoring"
         shutil.copytree(root, work)
         report = _eject_in(work, key, commit)
-        for sub in (f"platforms/{report['platform']}", f"projects/{key}"):
-            shutil.rmtree(root / sub)
-            shutil.copytree(work / sub, root / sub)
+        subs = (f"platforms/{report['platform']}", f"projects/{key}")
+        for sub in subs:
+            target = (root / sub).resolve()
+            if target.parent not in (root / "platforms", root / "projects"):
+                raise AuthoringError(f"eject destination escapes authoring root: {sub}")
+        backup = Path(tempfile.mkdtemp(prefix=".eject-backup-", dir=root))
+        moved: list[tuple[Path, Path]] = []
+        try:
+            for i, sub in enumerate(subs):
+                target, saved = root / sub, backup / str(i)
+                target.rename(saved)
+                moved.append((target, saved))
+                (work / sub).rename(target)
+        except OSError as exc:
+            try:
+                for target, saved in reversed(moved):
+                    if target.exists():
+                        shutil.rmtree(target)
+                    saved.rename(target)
+            except OSError as restore_exc:
+                raise AuthoringError(f"eject restore failed; originals retained at {backup}") from restore_exc
+            shutil.rmtree(backup)
+            raise AuthoringError("eject publish failed; original files restored") from exc
+        else:
+            shutil.rmtree(backup)
     return report
 
 
@@ -190,6 +214,8 @@ def _eject_in(root: Path, key: str, commit: str | None) -> dict[str, Any]:
 def accept_parent(root: Path, key: str) -> int:
     """Re-baseline: record the current parent hashes (after reviewing / porting parent-diff)."""
     rec_path = Path(root) / "projects" / key / EJECT_FILE
+    if not rec_path.exists():
+        raise AuthoringError(f"project '{key}' has no {EJECT_FILE}: not ejected")
     rec = yamlio.load(rec_path)
     rec["parent_docs"] = _parent_snapshot(Path(root), rec["parent_project"], rec.get("id_map") or {})
     rec["accepted"] = _dt.date.today().isoformat()
@@ -224,13 +250,16 @@ def parent_diff(root: Path, key: str, *, limit: int = 20) -> dict[str, Any]:
             now = _usecase_hashes(parent[pid])
             base_changed = now["base"] != old.get("base")
             vchanged = sorted(v for v, h in now["variants"].items() if old.get("variants", {}).get(v) != h)
-            if not (base_changed or vchanged):
+            vremoved = sorted(set(old.get("variants", {})) - set(now["variants"]))
+            if not (base_changed or vchanged or vremoved):
                 continue
             cdoc = child.get(cid) or {}
             cvars = {v["id"]: v for v in cdoc.get("variants") or []}
             pvars = {v["id"]: v for v in pdoc.get("variants") or []}
             item: dict[str, Any] = {"doc": cid, "parent": pid, "base_changed": base_changed,
                                     "variants_changed": vchanged, "in_project": {}}
+            if vremoved:
+                item["variants_removed"] = vremoved
             if base_changed and cdoc:
                 item["base_diff"] = diff_paths({k: v for k, v in pdoc.items() if k != "variants"},
                                                {k: v for k, v in cdoc.items() if k != "variants"})[:limit]
