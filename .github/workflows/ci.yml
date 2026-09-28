@@ -5,6 +5,11 @@ on:
   push:
     branches: [main]
 
+# Superseded PR commits need no result; keep every main push validation.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   react-ui:
     runs-on: ubuntu-latest
@@ -51,7 +56,8 @@ jobs:
       - run: uv run --extra profiling mypy
       - run: uv export --frozen --no-dev --group dashboard --group sim --extra profiling --no-emit-project --quiet -o "${RUNNER_TEMP}/runtime-requirements.txt"
       - run: uv run --extra profiling pip-audit -r "${RUNNER_TEMP}/runtime-requirements.txt" --progress-spinner off
-      - run: uv run --extra profiling pytest tests/unit --cov=scenario_db --cov-report=term-missing
+      # pytest-cov combines worker coverage before enforcing the existing 80% gate.
+      - run: uv run --extra profiling pytest tests/unit -n 4 --dist worksteal --durations=25 --cov=scenario_db --cov-report=term-missing
 
   integration:
     runs-on: ubuntu-latest
@@ -59,4 +65,6 @@ jobs:
       - uses: actions/checkout@v5.1.0
       - uses: astral-sh/setup-uv@v8.3.2
       - run: uv sync --frozen --group dev --group dashboard --group sim --extra profiling
-      - run: uv run --extra profiling pytest tests/integration -q
+      # Each worker owns its session-scoped PostgreSQL testcontainer. Keep tests
+      # from one file together to preserve module fixtures and mutation ordering.
+      - run: uv run --extra profiling pytest tests/integration -n 4 --dist loadfile --durations=25 -q

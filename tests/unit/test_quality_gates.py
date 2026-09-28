@@ -15,6 +15,7 @@ def test_pyproject_declares_static_quality_gates() -> None:
     assert any(dependency.startswith("mypy") for dependency in dev_dependencies)
     assert any(dependency.startswith("pip-audit") for dependency in dev_dependencies)
     assert any(dependency.startswith("pre-commit") for dependency in dev_dependencies)
+    assert any(dependency.startswith("pytest-xdist") for dependency in dev_dependencies)
 
     assert pyproject["tool"]["ruff"]["line-length"] == 100
     assert "F" in pyproject["tool"]["ruff"]["lint"]["select"]
@@ -48,6 +49,21 @@ def test_github_actions_runs_quality_and_test_gates() -> None:
     assert "uv run --extra profiling pip-audit" in workflow
     assert "uv run --extra profiling pytest tests/unit" in workflow
     assert "uv run --extra profiling pytest tests/integration" in workflow
+
+
+def test_parallel_ci_preserves_coverage_and_required_check_names() -> None:
+    import yaml
+
+    workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    jobs = workflow["jobs"]
+    unit_command = jobs["quality"]["steps"][-1]["run"]
+    integration_command = jobs["integration"]["steps"][-1]["run"]
+    assert "-n 4" in unit_command
+    assert "--cov=scenario_db" in unit_command
+    assert "--cov-fail-under" not in unit_command
+    assert "-n 4" in integration_command
+    assert "--dist loadfile" in integration_command
+    assert workflow["concurrency"]["cancel-in-progress"] == "${{ github.event_name == 'pull_request' }}"
 
 
 def test_ubuntu_runbook_matches_mutation_auth_contract() -> None:
