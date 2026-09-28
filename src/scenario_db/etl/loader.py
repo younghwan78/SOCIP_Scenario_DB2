@@ -34,6 +34,7 @@ from scenario_db.etl.mappers.definition import upsert_project, upsert_usecase
 from scenario_db.etl.mappers.evidence import upsert_measurement, upsert_simulation
 from scenario_db.etl.validate_loaded import ValidationReport, validate_loaded_db
 from scenario_db.graph_checks import find_data_flow_cycle
+from scenario_db.yaml_loader import safe_load
 
 logger = logging.getLogger(__name__)
 
@@ -161,7 +162,7 @@ def load_yaml_dir(
     skipped: list[LoadIssue] = []
     for path in _iter_yaml_files(directory):
         try:
-            raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+            raw = safe_load(path.read_text(encoding="utf-8"))
         except Exception as exc:
             logger.warning("YAML parse failed %s: %s", path.name, exc)
             skipped.append(LoadIssue(str(path), None, str(exc), code="yaml_parse_failed"))

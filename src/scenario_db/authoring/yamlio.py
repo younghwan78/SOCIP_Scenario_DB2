@@ -5,6 +5,8 @@ from typing import Any
 
 import yaml
 
+from scenario_db.yaml_loader import safe_load
+
 
 class _Dumper(yaml.SafeDumper):
     pass
@@ -19,7 +21,7 @@ _Dumper.add_representer(str, _str_presenter)
 
 
 def load(path: Path) -> Any:
-    return yaml.safe_load(path.read_text(encoding="utf-8"))
+    return safe_load(path.read_text(encoding="utf-8"))
 
 
 def dump_str(data: Any) -> str:
