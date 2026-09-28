@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { DOMAINS, domainFor } from '../src/lib/tunnel'
+import { DOMAINS, RESUME_GAP_MS, domainFor, frameAdvanceMs } from '../src/lib/tunnel'
 import { errClass } from '../src/lib/calibration'
 import { ipSummary, libraryApi, range } from '../src/lib/library'
 import { formatHash, parseHash } from '../src/lib/route'
@@ -129,4 +129,19 @@ it('classifies pre-NRT by dependencies across unequal parallel branches', async 
   const layout = topoLayout({ ips, links } as never)
   expect(layout.nodes.find((n) => n.ip.pid === 'd')?.column).toBe('pre')
   expect(layout.nodes.find((n) => n.ip.pid === 'unrelated')?.column).toBe('post')
+})
+
+describe('tunnel frame clock', () => {
+  it('advances by real time at low FPS and skips stalls', () => {
+    // 60 / 20 / 10 fps: same animation speed per second (no 50 ms cap any more)
+    for (const fps of [60, 20, 10]) {
+      let t = 0
+      for (let i = 0; i < fps; i++) t += frameAdvanceMs(1000 / fps)
+      expect(t).toBeCloseTo(1000, 6)
+    }
+    expect(frameAdvanceMs(RESUME_GAP_MS + 1)).toBe(0)   // background tab / debugger: no jump
+    expect(frameAdvanceMs(5000)).toBe(0)
+    expect(frameAdvanceMs(-3)).toBe(0)
+    expect(frameAdvanceMs(Number.NaN)).toBe(0)
+  })
 })

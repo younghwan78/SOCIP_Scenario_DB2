@@ -36,6 +36,7 @@
 - [Maintenance Guide](operations/maintenance-guide.md)
 - [Testing Guide](operations/testing.md)
 - [Ubuntu Deployment](operations/deployment-ubuntu.md)
+- [Linux 서버 실행 (dev_up.sh, 사내 Ubuntu)](operations/linux-server-guide-ko.md)
 - [Write API Runbook](operations/write-api-runbook.md)
 - [Dashboard Regression Checklist](operations/dashboard-regression-checklist.md)
 - [Troubleshooting](operations/troubleshooting.md)

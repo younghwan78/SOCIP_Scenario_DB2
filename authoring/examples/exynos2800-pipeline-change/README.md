@@ -14,7 +14,14 @@ The compile report's `impact` lists every variant reference that the structural 
 
 Try it (copies the example into a scratch authoring root):
 
+```bash
+# Linux
+rm -rf /tmp/auth2800 && cp -r authoring /tmp/auth2800
+cp -r authoring/examples/exynos2800-pipeline-change/* /tmp/auth2800/
+uv run python -m scenario_db.authoring --root /tmp/auth2800 compile e2800-concept --out /tmp/c2800
+```
 ```powershell
+# Windows
 Copy-Item -Recurse authoring $env:TEMP\auth2800
 Copy-Item -Recurse authoring\examples\exynos2800-pipeline-change\* $env:TEMP\auth2800 -Force
 uv run python -m scenario_db.authoring --root $env:TEMP\auth2800 compile e2800-concept --out $env:TEMP\c2800

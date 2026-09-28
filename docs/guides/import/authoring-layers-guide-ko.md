@@ -3,10 +3,12 @@
 > Exynos2700 수정 절차·예시(IP 속성, EIS, size, scenario 추가, sensor): [authoring-exynos2700-guide-ko.md](authoring-exynos2700-guide-ko.md)
 
 `authoring/`은 사람이 편집하는 원본(SSOT)이다. `python -m scenario_db.authoring`이 이를 canonical v2.2 YAML
-(`db_<SoC>_<board>/`)로 만들고, `scripts/dev_up.ps1`이 DB에 반영한다. 모든 명령은 `implementation\`에서 실행한다.
+(`db_<SoC>_<board>/`)로 만들고, `scripts/dev_up.ps1`(Windows) 또는 `scripts/dev_up.sh`(Linux)가 DB에 반영한다.
+모든 명령은 `implementation/`에서 실행한다. 아래 예시의 `\` 경로는 Linux에서 `/`로 쓴다
+([Linux 실행 가이드](../../operations/linux-server-guide-ko.md)).
 
 ```
-편집(authoring/) ─▶ compile·검증 ─▶ sync --to fixture ─▶ dev_up.ps1 ─▶ API/UI 확인
+편집(authoring/) ─▶ compile·검증 ─▶ sync --to fixture ─▶ dev_up ─▶ API/UI 확인
                                         ▲                 (rename → retire → ETL --strict)
           기존 generator로 fixture 수정 ─┘ sync --to authoring
 ```
@@ -120,18 +122,18 @@ Patch 규칙 (variants `extends`, overlay, patches 공통):
 | ② 편집 | authoring 파일 수정 | |
 | ③ compile·검증 | `uv run python -m scenario_db.authoring compile sm-s947b --out output\authoring\sm-s947b` | `"errors": []`, `impact` 확인 |
 | ④ fixture 반영 | `uv run python -m scenario_db.authoring sync sm-s947b --fixture db_Exynos2600_SM-S947B --to fixture --prune` | `updated`/`removed` 목록이 의도와 일치 |
-| ⑤ DB 반영 | API 창 닫기 → `powershell -ExecutionPolicy Bypass -File scripts\dev_up.ps1 -NoUi` | `output\etl\etl-exynos2600.json`에서 `ok: true`, `warnings: []` |
+| ⑤ DB 반영 | Windows: API 창 닫기 → `powershell -ExecutionPolicy Bypass -File scripts\dev_up.ps1 -NoUi` · Linux: `scripts/dev_down.sh && scripts/dev_up.sh --no-ui` | `output\etl\etl-exynos2600.json`에서 `ok: true`, `warnings: []` |
 | ⑥ 확인 | 브라우저 새로고침, 아래 확인 쿼리 | |
 | ⑦ commit | `git add authoring db_Exynos2600_SM-S947B` 후 commit | unit test 통과 |
 
-`dev_up.ps1`의 DB 단계 (모두 멱등, 변경이 없으면 no-op):
+`dev_up.ps1` / `dev_up.sh`의 DB 단계 (모두 멱등, 변경이 없으면 no-op):
 
 1. `scenario_db.etl.rename_ids --apply --backup output\etl\rename-backup-<시각>.json`: `id-renames.yaml` 적용 (PK/FK/JSON)
 2. `scenario_db.etl.retire --apply --backup output\etl\retire-backup-<시각>.json`: `retired.yaml` 범위의 행 삭제 (현재 id 기준)
 3. `etl.loader db_Exynos2600_SM-S947B --strict`
-4. 파생 과제마다 (`-AuthoringProjects`, 기본 `@{ "sm-s957b" = "db_Exynos2700_SM-S957B" }`):
+4. 파생 과제마다 (`-AuthoringProjects` / `--project KEY=DIR`, 기본 `sm-s957b` → `db_Exynos2700_SM-S957B`):
    `authoring sync --to fixture --prune` → `scripts/import_measurements.py <db> --strict` → `etl.loader <db> --strict`
-5. API(:18000), UI(:3000) 실행 (`-NoUi`, `-SkipLoad`, `-Streamlit` 옵션)
+5. API(:18000), UI(:3000) 실행 (`-NoUi`, `-SkipLoad`, `-Streamlit` / `--no-ui`, `--skip-load`, `--streamlit`, `--load-only`, `--no-docker`)
 
 DB 확인 쿼리:
 
@@ -235,7 +237,7 @@ API 확인: `http://127.0.0.1:18000/api/v1/explorer/scenario-catalog`, `.../scen
    ```json
    {"applied": false, "rows": {"evidence": 2, "scenario_variants": 1}}
    ```
-6. `dev_up.ps1 -NoUi`. `output\etl\retire-backup-*.json`에 삭제된 행이 남는다.
+6. `dev_up.ps1 -NoUi` / `dev_up.sh --no-ui`. `output/etl/retire-backup-*.json`에 삭제된 행이 남는다.
 
 `retire` 적용 범위:
 
@@ -394,14 +396,14 @@ variants:
 반영과 확인:
 
 ```powershell
-uv run python -m scenario_db.authoring compile sm-s957b --out output\authoring\sm-s957b   # 확인용: scenarios: {uc-cam-recording-e2700: 19}
-powershell -ExecutionPolicy Bypass -File scripts\dev_up.ps1 -NoUi                           # db_Exynos2700_SM-S957B sync + 실측 import + ETL
+uv run python -m scenario_db.authoring compile sm-s957b --out output\authoring\sm-s957b   # 확인용: scenarios: {uc-cam-recording-e2700: 16}
+powershell -ExecutionPolicy Bypass -File scripts\dev_up.ps1 -NoUi                           # db_Exynos2700_SM-S957B sync + 실측 import + ETL (Linux: scripts/dev_up.sh --no-ui)
 git diff db_Exynos2700_SM-S957B                                                             # 생성물 변화 검토 후 commit
 ```
 ```sql
 select s.project_ref, s.id, count(v.id) from scenarios s join scenario_variants v on v.scenario_id=s.id group by 1,2 order by 1,2;
 -- proj-sm-s947b: 13 scenario (uc-cam-recording-e2600 75, apv 9, ...)
--- proj-sm-s957b: uc-cam-recording-e2700 19
+-- proj-sm-s957b: uc-cam-recording-e2700 16
 ```
 
 UI 상단 과제 선택에 `Exynos2700 · SM-S957B`가 나타나고, Compare에서 2600 ↔ 2700 같은 variant를 비교할 수 있다.
@@ -417,7 +419,14 @@ UI 상단 과제 선택에 `Exynos2700 · SM-S957B`가 나타나고, Compare에�
 | `projects/e2800-concept/project.yaml` | sm-s947b 상속 |
 | `projects/e2800-concept/scenarios/uc-cam-recording-e2600/overlay.yaml` | `remove_nodes: [msnr]`, `set_nodes.mtnr.ip_ref`, `add_edges` |
 
+```bash
+# Linux
+rm -rf /tmp/auth2800 && cp -r authoring /tmp/auth2800
+cp -r authoring/examples/exynos2800-pipeline-change/* /tmp/auth2800/
+uv run python -m scenario_db.authoring --root /tmp/auth2800 compile e2800-concept --out /tmp/c2800
+```
 ```powershell
+# Windows
 Copy-Item -Recurse authoring $env:TEMP\auth2800
 Copy-Item -Recurse authoring\examples\exynos2800-pipeline-change\* $env:TEMP\auth2800 -Force
 uv run python -m scenario_db.authoring --root $env:TEMP\auth2800 compile e2800-concept --out $env:TEMP\c2800
@@ -455,7 +464,7 @@ compile report의 `impact`에는 삭제된 `msnr`을 참조하던 variant 설정
 1. `measurements/<variant>/meta.yaml`과 CSV를 수정한다. `provenance.device_id`, `collection_method`도 실제 값으로.
 2. **`provenance.revision`을 1 올린다.** 같은 `id` = 같은 측정의 정정본이다. 올리지 않으면
    `conflict: ... bump provenance.revision`으로 멈춘다 (실수로 덮어쓰기 방지). DB도 revision이 더 큰 문서만 교체한다.
-3. `dev_up.ps1 -NoUi` (import → ETL). 결과는 `03_evidence/`와 DB에 반영되고 `git diff`로 확인한다.
+3. `dev_up.ps1 -NoUi` / `dev_up.sh --no-ui` (import → ETL). 결과는 `03_evidence/`와 DB에 반영되고 `git diff`로 확인한다.
 4. 새 측정(새 silicon rev, SW baseline 등)은 폴더를 추가하고 새 `id`를 쓴다. 이전 측정은 이력으로 남는다.
 
 단독 실행: `uv run python scripts/import_measurements.py db_Exynos2700_SM-S957B --strict` → `unchanged / added / updated / conflict`.
@@ -517,7 +526,7 @@ prune_missing_nodes: false
 | 지운 variant가 UI에 계속 보임 | ETL은 삭제하지 않음 | `retired.yaml`에 추가 → dev_up |
 | 새로 만든 과제가 dev_up 후 사라짐 | `retired.yaml`에 같은 id가 남아 있음 | 해당 항목 제거 |
 | 같은 scenario가 두 개 보임 | id를 바꿨지만 `id-renames.yaml`에 기록하지 않음 | 기록 후 dev_up (merge) |
-| 포트 18000 사용 중 | 이전 API 창이 떠 있음 | 창을 닫고 dev_up |
+| 포트 18000 사용 중 | 이전 API가 떠 있음 | Windows: 창을 닫고 dev_up · Linux: `scripts/dev_down.sh` |
 | rename 결과에 `post_rename_validation.ok=false` | scenario 병합 직후의 일시적 불일치 | 이어지는 ETL `--strict`가 통과하면 정상 |
 | ETL warning `canonical_usecase 'uc-game-play-e2600' ... not project-qualified` | 예전 rename이 old id(`uc-game-play`)와 같은 canonical key까지 바꿨고, ETL은 sha가 같아 재적재를 건너뜀 | 수정됨: rename은 `canonical_usecase`를 건드리지 않고, 손상된 scenario는 다음 dev_up에서 fixture로 재적재 |
 | 2600 scenario/variant가 줄어듦 | 2600 fixture·`sm-s947b`를 직접 줄였거나 `retired.yaml`에 2600 id가 들어감 | 2700 범위는 `sm-s957b` overlay `keep`으로만 조정. unit test가 둘 다 검사 |

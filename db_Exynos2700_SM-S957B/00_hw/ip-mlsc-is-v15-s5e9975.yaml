@@ -131,9 +131,9 @@ capabilities:
       type: FIFO
       direction: write
     sources:
-    - path: \\wsl.localhost\Ubuntu\home\neokein\work\12_SM_S947B\exynos\external-modules\camera\camera\hardware\api\pablo-hw-api-mlsc-v15_0.c
+    - path: exynos/external-modules/camera/camera/hardware/api/pablo-hw-api-mlsc-v15_0.c
       sha256: b717c95c0ba426b1e853bba1b9c73a4a81414d3e74ea135ee7e8e552649b9139
-    - path: \\wsl.localhost\Ubuntu\home\neokein\work\12_SM_S947B\exynos\external-modules\camera\camera\ischain\is-v15_0_0\is-subdev-mlsc.c
+    - path: exynos/external-modules/camera/camera/ischain/is-v15_0_0/is-subdev-mlsc.c
       sha256: b6b4bcf91e38d6bd3b2914afa74873bd029990bcbc2728e9739354438d8f74b8
     provenance_status: kernel_declared
     performance_status: missing

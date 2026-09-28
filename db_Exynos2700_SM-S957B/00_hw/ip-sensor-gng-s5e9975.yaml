@@ -74,7 +74,7 @@ capabilities:
     - 6120
     phy_type: CPHY
     source:
-      path: \\wsl.localhost\Ubuntu\home\neokein\work\12_SM_S947B\exynos\device\erd\erd9965\arch\arm64\boot\dts\samsung\m2s\camera\module_gng.dtsi
+      path: exynos/device/erd/erd9965/arch/arm64/boot/dts/samsung/m2s/camera/module_gng.dtsi
       sha256: 93847f2119b1a5f8e4404ec7c9ff15413edc2ae31291f67654073b41d72e7ca9
     modes:
       mode0:

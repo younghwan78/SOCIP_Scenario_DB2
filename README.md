@@ -71,6 +71,10 @@ disposable outputs and do not belong in either documentation tree.
 - `uv`
 - Node.js 24 and npm, matching the frontend CI jobs
 
+On Linux (e.g. an internal Ubuntu server) use `scripts/dev_up.sh` / `scripts/dev_down.sh`
+instead of `scripts/dev_up.ps1`, and translate the PowerShell examples as described in
+[docs/operations/linux-server-guide-ko.md](docs/operations/linux-server-guide-ko.md).
+
 All commands below assume PowerShell and this working directory:
 
 ```powershell
