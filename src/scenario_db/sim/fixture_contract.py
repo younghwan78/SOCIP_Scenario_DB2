@@ -6,6 +6,8 @@ from typing import Any, Iterable, Literal
 
 import yaml
 
+from scenario_db.yaml_loader import safe_load
+
 
 IssueSeverity = Literal["error", "warning", "borrowable"]
 ContractStatus = Literal["ready", "warning", "blocked"]
@@ -178,7 +180,7 @@ def load_fixture_documents(root: Path) -> list[dict[str, Any]]:
 
     documents: list[dict[str, Any]] = []
     for path in sorted(root.rglob("*.yaml")):
-        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+        raw = safe_load(path.read_text(encoding="utf-8"))
         if isinstance(raw, dict) and raw.get("kind"):
             documents.append(raw)
     return documents

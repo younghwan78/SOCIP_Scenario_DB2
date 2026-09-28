@@ -13,6 +13,8 @@ import json
 import networkx as nx
 import yaml
 
+from scenario_db.yaml_loader import safe_load
+
 from scenario_db.db.models.capability import IpCatalog
 from scenario_db.db.models.definition import Scenario, ScenarioVariant
 from scenario_db.db.repositories.scenario_graph import CanonicalScenarioGraph
@@ -35,7 +37,7 @@ CAMERA_NODES = ("csis", "pdp", "byrp", "rgbp", "yuvsc", "mlsc", "mtnr", "msnr", 
 
 
 def read(path: Path) -> dict:
-    return yaml.safe_load(path.read_text(encoding="utf-8"))
+    return safe_load(path.read_text(encoding="utf-8"))
 
 
 def graph_from_fixture(raw: dict, variant_id: str, catalog: dict) -> CanonicalScenarioGraph:
