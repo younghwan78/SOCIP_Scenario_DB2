@@ -1,0 +1,150 @@
+# SW task timing table. `variants: '*'` = every variant not listed in another
+# group and not in absent_in. Measured overrides go in the project's
+# sw_timing.measured.yaml, not here.
+known_variants:
+- cam-rec-r1-fhd30-vdis
+- cam-rec-r1-fhd60-supersteady
+- cam-rec-r1-uhd30-vdis
+- cam-rec-r1-uhd60-psm
+- cam-rec-r1-8k30-psm
+- cam-rec-r1-fhd120
+- cam-rec-r1-fhd240
+- cam-rec-r1-uhd120
+- cam-rec-r1-fhd30-portrait
+- cam-rec-r1-uhd30-portrait
+- cam-rec-apv-uhd30-422-sdr
+- cam-rec-apv-uhd60-422-sdr
+- cam-rec-r1-uhd30-pro
+- cam-rec-r1-uhd60-pro
+- cam-rec-r1-uhd120-pro
+- cam-rec-apv-uhd120-422-sdr
+tasks:
+  mpeg_writer:
+    groups:
+    - id: mpeg_writer-a
+      variants: '*'
+      timing:
+        min_ms: 2
+        mean_ms: 4
+        max_ms: 8
+        value_source: assumed
+        source_note: Engineering assumption approved for fixture exploration; replace with internal measurements.
+    absent_in:
+    - cam-rec-r1-uhd60-psm
+    - cam-rec-r1-8k30-psm
+    - cam-rec-r1-uhd60-pro
+  storage_write:
+    groups:
+    - id: storage_write-a
+      variants: '*'
+      timing:
+        min_ms: 4
+        mean_ms: 8
+        max_ms: 16
+        value_source: assumed
+        source_note: Engineering assumption approved for fixture exploration; replace with internal measurements.
+    absent_in:
+    - cam-rec-r1-uhd60-psm
+    - cam-rec-r1-8k30-psm
+    - cam-rec-r1-uhd60-pro
+  post_crta:
+    groups:
+    - id: post_crta-a
+      variants: '*'
+      timing:
+        min_ms: 0.1
+        mean_ms: 0.3
+        max_ms: 0.5
+        start_jitter_mean_ms: 1.0
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal measurements.
+  pre_me_rta:
+    groups:
+    - id: pre_me_rta-a
+      variants: '*'
+      timing:
+        min_ms: 2.5
+        mean_ms: 3.0
+        max_ms: 4.0
+        includes_hw_nodes:
+        - lme
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal measurements.
+  post_irta:
+    groups:
+    - id: post_irta-a
+      variants: '*'
+      timing:
+        min_ms: 3.0
+        mean_ms: 4.0
+        max_ms: 5.6
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal measurements.
+  eis:
+    groups:
+    - id: eis-a
+      variants: '*'
+      timing:
+        min_ms: 2.5
+        mean_ms: 3.0
+        max_ms: 6.0
+        value_source: assumed
+        source_note: User-supplied fixture values, 2026-09-13; replace with internal measurements.
+  portrait_blend:
+    groups:
+    - id: portrait_blend-a
+      variants: '*'
+      timing:
+        min_ms: 2
+        mean_ms: 4
+        max_ms: 8
+        value_source: assumed
+        source_note: Engineering assumption approved for fixture exploration; replace with internal measurements.
+    - id: portrait_blend-b
+      variants:
+      - cam-rec-r1-uhd30-portrait
+      timing:
+        min_ms: 4
+        mean_ms: 8
+        max_ms: 16
+        value_source: assumed
+        source_note: Engineering assumption approved for fixture exploration; replace with internal measurements.
+    absent_in:
+    - cam-rec-r1-fhd30-vdis
+    - cam-rec-r1-fhd60-supersteady
+    - cam-rec-r1-uhd30-vdis
+    - cam-rec-r1-uhd60-psm
+    - cam-rec-r1-8k30-psm
+    - cam-rec-r1-fhd120
+    - cam-rec-r1-fhd240
+    - cam-rec-r1-uhd120
+    - cam-rec-apv-uhd30-422-sdr
+    - cam-rec-apv-uhd60-422-sdr
+    - cam-rec-r1-uhd30-pro
+    - cam-rec-r1-uhd60-pro
+    - cam-rec-r1-uhd120-pro
+    - cam-rec-apv-uhd120-422-sdr
+  pro_scope:
+    groups:
+    - id: pro_scope-a
+      variants: '*'
+      timing:
+        min_ms: 2.0
+        mean_ms: 3.0
+        max_ms: 4.5
+        value_source: assumed
+        source_note: Assumed 2026-09-27 (scope reduction); replace with internal measurement.
+    absent_in:
+    - cam-rec-r1-fhd30-vdis
+    - cam-rec-r1-fhd60-supersteady
+    - cam-rec-r1-uhd30-vdis
+    - cam-rec-r1-uhd60-psm
+    - cam-rec-r1-8k30-psm
+    - cam-rec-r1-fhd120
+    - cam-rec-r1-fhd240
+    - cam-rec-r1-uhd120
+    - cam-rec-r1-fhd30-portrait
+    - cam-rec-r1-uhd30-portrait
+    - cam-rec-apv-uhd30-422-sdr
+    - cam-rec-apv-uhd60-422-sdr
+    - cam-rec-apv-uhd120-422-sdr

@@ -1,0 +1,24 @@
+# Exynos2700: same multimedia pipeline structure as Exynos2600.
+# Everything is inherited from exynos2600; only deltas live here. Every inherited doc gets its own
+# Exynos2700 id (no sharing): same IP / same sensor may differ in internal spec or per-project settings.
+#   rename         : id substring rules (applied to every inherited doc id and its references)
+#   rename_suffix  : suffix for inherited ids without a SoC token (sensor DT catalogs, timing profiles,
+#                    SW profiles)
+#   rename_exclude : docs kept with the parent id (shared rows) - not used
+#   patches/<id>.yaml : deep-merge patch on a renamed doc (IP clock/PPC/DMA/power, sensor settings)
+#   docs/**        : new or fully replaced canonical docs
+#   remove_docs    : parent doc ids to drop
+kind: authoring.platform
+id: exynos2700
+extends: exynos2600
+soc_id: soc-exynos2700
+description: Exynos2700 baseline = Exynos2600 pipeline. Replace inherited values with 2700 data via patches/.
+rename:
+- from: s5e9965
+  to: s5e9975         # Exynos2700 product tag
+- from: exynos2600
+  to: exynos2700
+rename_suffix:
+- paths: [00_sensor/*, 01_sw/*]
+  suffix: -s5e9975    # sensor-gng-m2s -> sensor-gng-m2s-s5e9975, sensortiming-... / sw-vendor-v1.2.3 -> ...-s5e9975
+remove_docs: []

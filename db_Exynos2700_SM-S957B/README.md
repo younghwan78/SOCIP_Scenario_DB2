@@ -11,7 +11,7 @@ IP / scenario / sensor 수정 방법과 예시: [authoring-exynos2700-guide-ko.m
 | `03_evidence/sim-pred-*.yaml` | 생성물 (`scripts/generate_simulation_evidence.py`) — 예측 + 8-frame timeline (Pipeline timing diagram) | authoring 변경 후 재생성 |
 
 - IP / sensor / board lineup 문서는 2600과 공유하지 않는다 (`ip-*-s5e9975`, `sensor-*-s5e9975`,
-  `sensortiming-*-s5e9975`, `board-lineup-s5e9975`, SW profile `sw-vendor-v1.2.3-s5e9975`). 과제별 사양/설정 차이는 authoring patch로 넣는다.
+  `sensortiming-*-s5e9975`, `board-lineup-s5e9975`, SW profile `sw-vendor-v1.2.3-s5e9975`). 과제별 사양/설정은 `authoring/platforms/exynos2700/docs/`, `authoring/projects/sm-s957b/`의 파일을 직접 고친다 (eject된 root 과제).
 - 현재 `measurements/`는 **DUMMY** 값이다 (`provenance.device_id: DUMMY`, `collection_method: synthetic_dummy` → UI·calibration에서 synthetic으로 표시, 실측 수에서 제외). 2600 synthetic 실측과
   simulation을 축척한 값이며 구조 확인·검증용이다. 사내 캡처로 교체한다.
 
@@ -41,7 +41,7 @@ IP / scenario / sensor 수정 방법과 예시: [authoring-exynos2700-guide-ko.m
 `03_evidence/sim-pred-<variant>-mean-*.yaml`: variant별 simulation evidence (16개, KPI variant만 — power option은 조합 탐색에서 예측). 예측 column과
 Pipeline 화면의 timing diagram(timeline_events, 8 frame)이 이 파일을 쓴다. 모델 출력이며 clock은
 300~1000 MHz grid에서 cadence + 3-frame latency를 만족하는 첫 후보다 (실측 아님).
-authoring(HW patch, SW timing, overlay)을 바꾼 뒤 재생성한다:
+authoring(HW, SW timing, scenario)을 바꾼 뒤 재생성한다:
 
 ```powershell
 uv run python scripts/generate_simulation_evidence.py db_Exynos2700_SM-S957B uc-cam-recording-e2700

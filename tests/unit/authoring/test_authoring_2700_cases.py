@@ -25,10 +25,21 @@ UC = "projects/sm-s957b/scenarios/uc-cam-recording-e2600"
 REC = "uc-cam-recording-e2700"
 
 
+INHERITED = Path(__file__).parent / "fixtures" / "inherited_2700"
+
+
 @pytest.fixture()
 def root(tmp_path: Path) -> Path:
+    """Scratch authoring tree with Exynos2700 in its inherited (patch/overlay) form.
+
+    The repository's exynos2700 / sm-s957b are ejected (complete files, edited directly);
+    these tests exercise the derived-project mechanics (patch operators, overlays, clone)
+    on the same content as it was before the eject (fixtures/inherited_2700)."""
     r = tmp_path / "authoring"
     shutil.copytree(AUTHORING, r, ignore=shutil.ignore_patterns("examples"))
+    for sub in ("platforms/exynos2700", "projects/sm-s957b"):
+        shutil.rmtree(r / sub)
+        shutil.copytree(INHERITED / sub, r / sub)
     return r
 
 
@@ -326,3 +337,82 @@ def test_new_ip_rebinding_soc_list_and_compression_defaults(root: Path):
     assert next(n for n in rec["pipeline"]["nodes"] if n["id"] == "mfc_enc")["ip_ref"] == "ip-mfc-v2-s5e9975"
     assert rec["pipeline"]["buffers"]["MCSC_VIDEO"]["compression"] == "COMP_YUV_LOSSLESS"
     assert [v["id"] for v in rec["variants"]][-2:] == ["cam-rec-r1-uhd30-hdr10", "cam-rec-r1-uhd30-log"]
+
+
+def test_inherited_fixture_compiles_to_the_ejected_project(root: Path):
+    """fixtures/inherited_2700 and the ejected authoring/ produce the same documents."""
+    from scenario_db.authoring.patch import diff_paths
+
+    inherited = {d.rel: d.data for d in compile_project(root, "sm-s957b")["documents"]}
+    ejected = {d.rel: d.data for d in compile_project(AUTHORING, "sm-s957b")["documents"]}
+    assert set(inherited) == set(ejected)
+    assert [r for r in inherited if diff_paths(inherited[r], ejected[r])] == []
+
+
+def test_eject_and_parent_diff(root: Path):
+    from scenario_db.authoring.eject import eject_project, parent_diff
+
+    rep = eject_project(root, "sm-s957b", commit="test")
+    assert rep["scenarios"] and rep["measured_kept"] == [REC]
+    pj = yamlio.load(root / "projects/sm-s957b/project.yaml")
+    assert "extends" not in pj and pj["document"]["id"] == "proj-sm-s957b"
+    assert not (root / "platforms/exynos2700/patches").exists()
+    assert (root / "platforms/exynos2700/docs/00_hw/ip-mcsc-is-v15-s5e9975.yaml").exists()
+    sdir = root / f"projects/sm-s957b/scenarios/{REC}"
+    assert {p.name for p in sdir.iterdir()} >= {"scenario.yaml", "variants.yaml", "sizes.yaml", "sw_timing.yaml",
+                                              "knobs.yaml", "sw_timing.measured.yaml"}
+    assert parent_diff(root, "sm-s957b")["changed"] == []
+    # a later 2600 change shows up, mapped to the 2700 id
+    ip = root / "platforms/exynos2600/docs/00_hw/ip-mcsc-is-v15-s5e9965.yaml"
+    ip.write_text(ip.read_text(encoding="utf-8").replace("unit_power_mw_mp: 1.5", "unit_power_mw_mp: 1.7", 1),
+                  encoding="utf-8")
+    changed = parent_diff(root, "sm-s957b")["changed"]
+    assert changed == [{"doc": "ip-mcsc-is-v15-s5e9975", "parent": "ip-mcsc-is-v15-s5e9965",
+                        "diff": ["~ capabilities.sim.modes.Normal.unit_power_mw_mp"]}]
+    with pytest.raises(AuthoringError, match="nothing to eject"):
+        eject_project(root, "sm-s957b")
+
+
+def test_parent_diff_reports_variant_removal_and_accepts_it(root: Path):
+    from scenario_db.authoring.eject import accept_parent, eject_project, parent_diff
+
+    eject_project(root, "sm-s957b")
+    path = root / "projects/sm-s947b/scenarios/uc-cam-recording-e2600/variants.yaml"
+    variants = yamlio.load(path)
+    parents = {v.get("extends") for v in variants}
+    removed = next(v["id"] for v in reversed(variants) if v["id"] not in parents)
+    yamlio.dump(path, [v for v in variants if v["id"] != removed])
+    change = next(c for c in parent_diff(root, "sm-s957b")["changed"] if c["doc"] == REC)
+    assert change["variants_removed"] == [removed]
+    assert change["variants_changed"] == []
+    accept_parent(root, "sm-s957b")
+    assert parent_diff(root, "sm-s957b")["changed"] == []
+
+
+def test_eject_restores_both_directories_after_publish_failure(root: Path, monkeypatch):
+    from scenario_db.authoring.eject import eject_project
+
+    def contents():
+        return {p.relative_to(root): p.read_bytes() for p in root.rglob("*") if p.is_file()}
+
+    before = contents()
+    original_rename = Path.rename
+
+    def fail_project_publish(source, destination):
+        if (source.name == "sm-s957b" and source.parent.name == "projects"
+                and Path(destination) == root / "projects/sm-s957b"):
+            raise PermissionError("injected second-directory publish failure")
+        return original_rename(source, destination)
+
+    monkeypatch.setattr(Path, "rename", fail_project_publish)
+    with pytest.raises(AuthoringError, match="original files restored"):
+        eject_project(root, "sm-s957b")
+    assert contents() == before
+    assert not list(root.glob(".eject-backup-*"))
+
+
+def test_accept_parent_on_non_ejected_project_is_a_cli_error(root: Path, capsys):
+    from scenario_db.authoring.cli import main
+
+    assert main(["--root", str(root), "parent-diff", "sm-s957b", "--accept"]) == 2
+    assert "not ejected" in capsys.readouterr().err

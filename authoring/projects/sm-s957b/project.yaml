@@ -1,24 +1,20 @@
-# Exynos2700 SM-S957B = S26+ (sm-s947b) baseline on the exynos2700 (S5E9975) platform.
-# Scope (2026-09-27): rear camera recording only -> uc-cam-recording-e2700 with the KPI variant set
-# (variants.keep in scenarios/uc-cam-recording-e2600/overlay.yaml). Exynos2600 itself stays complete.
-# SW task graph and sensor sizes are inherited. Deltas:
-#   scenarios/<parent uc id>/overlay.yaml             structural/variant deltas (see docs)
-#   scenarios/<parent uc id>/sw_timing.measured.yaml  measured SW timing (python -m scenario_db.authoring worksheet sm-s957b)
-#   patches/<doc id>.yaml                              project-scoped doc patches (sim config profile ...)
+# Root project (ejected from a derived project). Scenario sources under scenarios/<uc id>/
+# are complete: edit variants.yaml / scenario.yaml / sizes.yaml / sw_timing.yaml / knobs.yaml.
 kind: authoring.project
 key: sm-s957b
 platform: exynos2700
-extends: sm-s947b
-rename:
-- from: proj-sm-s947b
-  to: proj-sm-s957b
-- from: -e2600         # scenario ids: uc-<domain>-<use case>-e2600 -> -e2700
-  to: -e2700
-document_patch:
+document:
+  id: proj-sm-s957b
+  schema_version: '2.2'
+  kind: project
   metadata:
     name: Exynos2700 SM-S957B (S26+ pipeline baseline)
+    soc_ref: soc-exynos2700
     board_type: SM-S957B
     board_name: SM-S957B
-scenarios:
-  include:
-  - uc-cam-recording-e2600   # parent id -> uc-cam-recording-e2700
+    sensor_module_ref: ip-sensor-gng-s5e9975
+    display_module_ref: ip-display-panel-s5e9975
+    default_sw_profile_ref: sw-vendor-v1.2.3-s5e9975
+  globals:
+    default_sw_profile_ref: sw-vendor-v1.2.3-s5e9975
+    tested_sw_profiles: []

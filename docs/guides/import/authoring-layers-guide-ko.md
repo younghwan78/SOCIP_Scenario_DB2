@@ -20,10 +20,11 @@
 | 과제 | authoring | 적재 범위 |
 | --- | --- | --- |
 | Exynos2600 · SM-S947B (`proj-sm-s947b`) | `projects/sm-s947b` (root) ≡ `db_Exynos2600_SM-S947B/` | **전체 그대로**: scenario 13개, camera recording variant 75개, APV scenario 별도, evidence 전체 |
-| Exynos2700 · SM-S957B (`proj-sm-s957b`) | `projects/sm-s957b` (extends sm-s947b, platform exynos2700) → `db_Exynos2700_SM-S957B/` | **rear camera recording만**: `uc-cam-recording-e2700` 하나, rear KPI 16개 + 탐색 3개 (dual wide+front 제외) |
+| Exynos2700 · SM-S957B (`proj-sm-s957b`) | `projects/sm-s957b` (root, **eject됨**: 2600에서 풀어낸 전체 파일, platform exynos2700) → `db_Exynos2700_SM-S957B/` | **rear camera recording만**: `uc-cam-recording-e2700` 하나, rear KPI 16개 (dual wide+front 제외) |
 
-Exynos2700의 범위 축소는 `projects/sm-s957b/project.yaml`의 `scenarios.include`와
-`scenarios/uc-cam-recording-e2600/overlay.yaml`의 `variants.keep`으로만 한다. 2600 fixture와 authoring은 건드리지 않는다.
+Exynos2700은 2600에서 상속해 만든 뒤 **eject**했다(2026-09-28). 모든 IP·sensor·SW·scenario가 완전한 파일로
+`platforms/exynos2700/docs/`, `projects/sm-s957b/`에 있으므로 필요한 값을 직접 고친다. 2600 변경은 자동 반영되지 않는다.
+2600에서 무엇이 바뀌었는지는 `parent-diff`로 확인한다. 절차와 예시는 [authoring-exynos2700-guide-ko.md](authoring-exynos2700-guide-ko.md)를 본다.
 
 DB 적재 원본은 과제별 폴더 `db_<SoC>_<board>/` 하나다 (2600, 2700 동일한 구조).
 
@@ -34,7 +35,7 @@ DB 적재 원본은 과제별 폴더 `db_<SoC>_<board>/` 하나다 (2600, 2700 �
 
 상속한 문서는 공유하지 않고 과제별로 복제한다. 같은 IP / 같은 sensor라도 과제마다 내부 사양·세부 설정이 다를 수 있기 때문이다.
 IP는 `ip-*-s5e9975`, sensor DT catalog / timing profile / SW profile(`sw-vendor-v1.2.3-s5e9975`)은 `*-s5e9975` 접미사, board lineup은 `board-lineup-s5e9975`로 2700 전용 행이 된다
-(`platforms/exynos2700/platform.yaml`의 `rename`, `rename_suffix`). 차이는 `platforms/exynos2700/patches/<문서 id>.yaml`로 넣는다.
+(eject 전 `rename`, `rename_suffix` 규칙으로 만들어졌고, 기록은 `platform.yaml`의 `ejected_from`에 있다).
 
 Exynos2700 KPI variant (`uc-cam-recording-e2700`):
 
@@ -50,8 +51,8 @@ Exynos2700 KPI variant (`uc-cam-recording-e2700`):
 | FHD30/UHD30 Portrait | `cam-rec-r1-fhd30-portrait` / `-uhd30-portrait` | | |
 | UHD30/60/120 APV | `cam-rec-apv-uhd30-422-sdr` / `-uhd60-` / `-uhd120-` | | 2700 overlay에서 추가. `apv_enc` 주입, `mfc_enc` disable. UHD120 bitrate assumed |
 
-KPI variant 값은 2600 variant를 그대로 상속한다 (id의 SoC suffix와 IP id만 rename). 2700 실측은 `sw_timing.measured.yaml`,
-HW 차이는 `platforms/exynos2700/patches/`로 넣는다.
+KPI variant 값은 eject 시점의 2600 값과 같다 (id의 SoC suffix와 IP id만 rename). 2700 실측은 `sw_timing.measured.yaml`에,
+HW 차이는 `platforms/exynos2700/docs/`의 해당 파일에 넣는다.
 
 EIS on/off, pyramid L0 bypass, bcrop 크기, IP low-power mode처럼 **power를 줄이기 위한 검토 option**은 variant로 나누지 않는다.
 화질 평가 전이라 정식 scenario가 아니기 때문이다. `knobs.yaml`의 `explore` / IP `sim.modes`의 `substitutes`로 선언하면
@@ -68,8 +69,8 @@ authoring/
     docs/00_hw/*.yaml              IP · SoC · DVFS · sim config (canonical 그대로)
     docs/00_sensor/**              sensor DT catalog
     docs/01_sw/*.yaml              SW profile
-  platforms/exynos2700/            extends exynos2600: s5e9965 → s5e9975 rename, sensor id suffix + patches/
-    patches/<문서 id>.yaml         IP / sensor / lineup 차이 (예: ip-mfc-s5e9975.yaml, sensor-gng-m2s-s5e9975.yaml)
+  platforms/exynos2700/            root platform (eject됨): exynos2600과 같은 구조의 전체 docs/ (id …-s5e9975)
+    platform.yaml                  ejected_from: exynos2600 + 당시 rename 규칙
   projects/sm-s947b/               root project (Exynos2600, fixture와 1:1)
     project.yaml                   document: 과제 doc
     docs/00_hw/simcfg-*.yaml       과제별 sim config profile
@@ -79,11 +80,12 @@ authoring/
       sizes.yaml                   node → size anchor 연결                (생성 → 편집 가능)
       sw_timing.yaml               SW task timing group                  (생성 → 편집 가능)
       knobs.yaml                   architecture 조건 (crop/EIS/pyramid)   (수작성, decompile에도 유지)
-  projects/sm-s957b/               파생 project (Exynos2700 SM-S957B)
-    project.yaml                   extends sm-s947b, scenarios.include: [uc-cam-recording-e2600]
-    patches/simcfg-proj-sm-s957b-v1.yaml
-    scenarios/uc-cam-recording-e2600/   (부모 scenario id 디렉터리)
-      overlay.yaml                 variants.keep (KPI 범위) + add (Pro/APV/탐색 variant)
+  projects/sm-s957b/               root project (Exynos2700 SM-S957B, eject됨)
+    project.yaml                   document: 과제 doc
+    ejected-from.yaml              eject 기록 (부모 id·hash) → parent-diff
+    docs/00_hw/simcfg-proj-sm-s957b-v1.yaml
+    scenarios/uc-cam-recording-e2700/
+      scenario.yaml · variants.yaml · sizes.yaml · sw_timing.yaml · knobs.yaml   (16 KPI variant, 직접 편집)
       sw_timing.measured.yaml      2700 실측 SW timing 칸
   examples/exynos2800-pipeline-change/   pipeline 변경 예시 (가상, 적재 안 됨)
   id-renames.yaml                  id 변경 이력 → DB in-place rename
@@ -211,8 +213,8 @@ API 확인: `http://127.0.0.1:18000/api/v1/explorer/scenario-catalog`, `.../scen
    - SW timing은 `sw_timing.yaml`의 `'*'` group이 적용된다. 새 variant가 표에 없으면 부모의 group을 따른다.
 2. compile: `errors: []` 확인. 없는 node를 참조하면 `unknown_node_config` 오류가 난다.
 3. sync → dev_up. 2600 camera recording variant가 76개로 보이면 성공.
-4. 2700에는 자동으로 나타나지 않는다 (`variants.keep`). 2700 KPI에도 넣으려면
-   `projects/sm-s957b/scenarios/uc-cam-recording-e2600/overlay.yaml`의 `keep`에 id를 추가하고
+4. 2700에는 자동으로 나타나지 않는다 (eject된 별도 과제). 2700 KPI에도 넣으려면
+   `projects/sm-s957b/scenarios/uc-cam-recording-e2700/variants.yaml`에 같은 항목을 추가하고
    `tests/unit/authoring/test_authoring_roundtrip.py`의 `E2700_KPI`도 맞춘다.
 5. 이 variant의 evidence는 측정/예측 import 경로로 추가한다 (예제 9).
 
@@ -258,7 +260,7 @@ root 과제에는 `sw_timing.yaml`을 직접 고치거나(예제 1), 파생 과�
 uv run python -m scenario_db.authoring worksheet sm-s957b
 ```
 ```yaml
-# projects/sm-s957b/scenarios/uc-cam-recording-e2600/sw_timing.measured.yaml
+# projects/sm-s957b/scenarios/uc-cam-recording-e2700/sw_timing.measured.yaml
 entries:
 - task: eis
   group: eis-a                       # 상속된 sw_timing.yaml의 group
@@ -359,39 +361,15 @@ capabilities:
 
 ### 예제 6 — Exynos2700 과제 범위 관리 (rear camera recording KPI)
 
-현재 구성 (§1):
+Exynos2700은 eject된 root 과제다. 범위는 파일 자체로 관리한다.
 
-```yaml
-# projects/sm-s957b/project.yaml
-kind: authoring.project
-key: sm-s957b
-platform: exynos2700
-extends: sm-s947b
-rename:
-- {from: proj-sm-s947b, to: proj-sm-s957b}
-- {from: -e2600, to: -e2700}
-scenarios:
-  include: [uc-cam-recording-e2600]      # → uc-cam-recording-e2700
-```
-```yaml
-# projects/sm-s957b/scenarios/uc-cam-recording-e2600/overlay.yaml
-variants:
-  keep: [cam-rec-r1-fhd30-vdis, ..., cam-rec-apv-uhd120-422-sdr]   # 16 KPI (power option은 variant 아님)
-  add:
-  - id: cam-rec-r1-uhd30-pro
-    extends: cam-rec-r1-uhd30-vdis        # keep에 없는 2600 variant도 부모(template)로 쓸 수 있다
-    design_conditions: {camera_mode: pro_video, ...}
-    ...
-```
-
-- `keep`: compile 산출물에 남길 variant (이 순서). 나머지 상속 variant는 `extends` 부모로만 쓰이고 출력되지 않는다.
-  `remove`와 달리 자식 variant가 남아 있어도 실패하지 않는다. 없는 id를 적으면 compile이 실패한다.
-- KPI 추가: 2600에 있는 variant면 `keep`에 id만 추가, 없는 variant면 `add` + `keep`.
-- KPI 제외: `keep`에서 빼고, DB에 남은 행은 `retired.yaml`의 `variants.uc-cam-recording-e2700`에 추가한다.
-- 다른 scenario를 2700에 다시 넣으려면 `scenarios.include`에 부모 id를 추가하고, `retired.yaml`의 해당 `-e2700` scenario를 지운다.
-  남겨두면 dev_up이 새로 적재한 행을 매번 다시 지운다.
-- 실측 입력 (예제 4), HW 차이 `platforms/exynos2700/patches/ip-*-s5e9975.yaml`,
-  calibration `projects/sm-s957b/patches/simcfg-proj-sm-s957b-v1.yaml` (`status: draft`).
+- KPI variant 목록: `projects/sm-s957b/scenarios/uc-cam-recording-e2700/variants.yaml`의 항목 (16개).
+- KPI 추가: `variants.yaml`에 항목을 추가한다 (`extends: <가까운 variant>` + 차이).
+- KPI 제외: 항목을 지우고, DB에 남은 행은 `retired.yaml`의 `variants.uc-cam-recording-e2700`에 추가한다.
+- 다른 scenario 추가: [authoring-exynos2700-guide-ko.md](authoring-exynos2700-guide-ko.md) §4. `retired.yaml`에 같은 `-e2700` id가 있으면 먼저 지운다.
+- HW 차이는 `platforms/exynos2700/docs/00_hw/ip-*-s5e9975.yaml`에서 직접 수정한다.
+- calibration은 `projects/sm-s957b/docs/00_hw/simcfg-proj-sm-s957b-v1.yaml` (`status: draft`).
+- eject 전의 상속형 정의(overlay `keep`/`add`, patches)는 `tests/unit/authoring/fixtures/inherited_2700/`에 예시로 남아 있다.
 
 반영과 확인:
 
