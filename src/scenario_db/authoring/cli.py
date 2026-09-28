@@ -134,6 +134,42 @@ def write_worksheet(root: Path, key: str) -> list[Path]:
     return written
 
 
+def show_variant(root: Path, key: str, scenario: str, variant: str) -> str:
+    """Compiled (fully resolved) variant + its `extends` children in the source files."""
+    import yaml
+
+    from scenario_db.authoring.tree import load_project
+    report = compile_project(root, key)
+    doc = next((d.data for d in report["documents"] if isinstance(d.data, dict) and d.data.get("id") == scenario), None)
+    if doc is None:
+        raise AuthoringError(f"scenario '{scenario}' not in project '{key}'")
+    v = next((x for x in doc.get("variants") or [] if x["id"] == variant), None)
+    if v is None:
+        raise AuthoringError(f"variant '{variant}' not in '{scenario}': {[x['id'] for x in doc['variants']]}")
+    entries = load_project(root, key).scenarios[scenario]["variants"]
+    parents = {e["id"]: e.get("extends") for e in entries}
+
+    def descendants(vid: str) -> list[str]:
+        kids = [k for k, p in parents.items() if p == vid]
+        return kids + [d for k in kids for d in descendants(k)]
+    chain, cur = [], parents.get(variant)
+    while cur:
+        chain.append(cur)
+        cur = parents.get(cur)
+    head = (f"# {scenario} / {variant}\n# extends: {' <- '.join(chain) or '(root entry)'}\n"
+            f"# editing its entry also changes: {', '.join(descendants(variant)) or '(none)'}\n")
+    return head + yaml.safe_dump(v, sort_keys=False, allow_unicode=True, width=120)
+
+
+def _git_head(root: Path) -> str | None:
+    import subprocess
+    try:
+        return subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=root, capture_output=True,
+                              text=True, check=True).stdout.strip() or None
+    except (OSError, subprocess.CalledProcessError):
+        return None
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="python -m scenario_db.authoring")
     ap.add_argument("--root", type=Path, default=Path("authoring"))
@@ -149,6 +185,17 @@ def main(argv: list[str] | None = None) -> int:
     k = sub.add_parser("check")
     k.add_argument("project")
     k.add_argument("--against", type=Path, required=True)
+    e = sub.add_parser("eject", help="write every inherited doc/scenario of a derived project as editable files")
+    e.add_argument("project")
+    e.add_argument("--commit", help="source commit to record (default: git rev-parse HEAD)")
+    pd = sub.add_parser("parent-diff", help="parent changes since an eject")
+    pd.add_argument("project")
+    pd.add_argument("--limit", type=int, default=20)
+    pd.add_argument("--accept", action="store_true", help="mark the current parent state as reviewed")
+    sh = sub.add_parser("show", help="print one compiled variant and the variants that extend it")
+    sh.add_argument("project")
+    sh.add_argument("scenario")
+    sh.add_argument("variant")
     w = sub.add_parser("worksheet")
     w.add_argument("project")
     y = sub.add_parser("sync")
@@ -199,6 +246,22 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps({"platform_docs": stats["platform_docs"], "project_docs": stats["project_docs"],
                               "scenarios": len(stats["scenarios"]), "not_authored": len(stats["skipped"]),
                               "stale_scenarios": stats["stale_scenarios"]}, indent=2, ensure_ascii=False))
+            return 0
+        if args.cmd == "eject":
+            from scenario_db.authoring.eject import eject_project
+            commit = args.commit or _git_head(args.root)
+            print(json.dumps(eject_project(args.root, args.project, commit=commit), indent=2, ensure_ascii=False))
+            return 0
+        if args.cmd == "parent-diff":
+            from scenario_db.authoring.eject import accept_parent, parent_diff
+            if args.accept:
+                print(f"accepted: {accept_parent(args.root, args.project)} parent documents re-baselined")
+                return 0
+            res = parent_diff(args.root, args.project, limit=args.limit)
+            print(json.dumps(res, indent=2, ensure_ascii=False))
+            return 0
+        if args.cmd == "show":
+            print(show_variant(args.root, args.project, args.scenario, args.variant))
             return 0
         if args.cmd == "worksheet":
             for written in write_worksheet(args.root, args.project):

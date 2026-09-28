@@ -1,0 +1,68 @@
+# Node -> size anchor bindings. Bound nodes get sim.width/height from the
+# variant's resolved anchors (size_profile.anchors + size_overrides).
+# `alternatives` lists other anchors that matched in every variant (review!).
+# `derived` anchors are computed per variant, e.g.
+#   eis_in: {from: record_out, scale: 1.15, align: 16}
+bindings:
+  mfc_enc: record_out
+  yuvsc: sensor_full
+  mcsc: sensor_full
+  byrp: sensor_full
+  vps_od: object_detection
+  lme: motion_estimation
+  csis: sensor_full
+  pdp: sensor_full
+  rgbp: sensor_full
+  mlsc: sensor_full
+  mtnr: sensor_full
+  msnr: sensor_full
+  yuvp: sensor_full
+  gdc_m: preview_out
+  gdc_o: record_out
+  dpu: preview_out
+  vps_seg: object_detection
+  apv_enc: record_out
+alternatives:
+  yuvsc:
+  - pyramid_l0
+  - mlsc_out
+  mcsc:
+  - pyramid_l0
+  - mlsc_out
+  byrp:
+  - pyramid_l0
+  - mlsc_out
+  vps_od:
+  - front_object_detection
+  lme:
+  - front_motion_estimation
+  csis:
+  - pyramid_l0
+  - mlsc_out
+  pdp:
+  - pyramid_l0
+  - mlsc_out
+  rgbp:
+  - pyramid_l0
+  - mlsc_out
+  mlsc:
+  - pyramid_l0
+  - mlsc_out
+  mtnr:
+  - pyramid_l0
+  - mlsc_out
+  msnr:
+  - pyramid_l0
+  - mlsc_out
+  yuvp:
+  - pyramid_l0
+  - mlsc_out
+  gdc_m:
+  - front_record_out
+  - front_preview_out
+  dpu:
+  - front_record_out
+  - front_preview_out
+  vps_seg:
+  - front_object_detection
+derived: {}
