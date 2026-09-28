@@ -1,6 +1,6 @@
 # db_Exynos2700_SM-S957B — Exynos2700 (S5E9975) · SM-S957B
 
-DB 적재 원본. `scripts/dev_up.ps1`이 이 폴더를 ETL로 적재한다.
+DB 적재 원본. `scripts/dev_up.ps1`(Windows) / `scripts/dev_up.sh`(Linux)가 이 폴더를 ETL로 적재한다.
 IP / scenario / sensor 수정 방법과 예시: [authoring-exynos2700-guide-ko.md](../docs/guides/import/authoring-exynos2700-guide-ko.md)
 
 | 경로 | 관리 방식 | 수정 방법 |
@@ -31,7 +31,7 @@ IP / scenario / sensor 수정 방법과 예시: [authoring-exynos2700-guide-ko.m
 
 1. `measurements/<variant>/meta.yaml` 또는 CSV 수정
 2. 같은 파일의 `provenance.revision`을 1 올림 (올리지 않으면 conflict로 멈춘다 — 실수로 덮어쓰기 방지)
-3. `powershell -ExecutionPolicy Bypass -File scripts\dev_up.ps1 -NoUi`
+3. Windows `powershell -ExecutionPolicy Bypass -File scripts\dev_up.ps1 -NoUi` / Linux `scripts/dev_up.sh --no-ui`
    (또는 `uv run python scripts/import_measurements.py db_Exynos2700_SM-S957B --strict` 후 ETL)
 
 새 측정은 폴더를 추가하고 `id`를 새로 정한다 (예: `...-evt1`). 같은 id = 같은 측정의 정정본이다.

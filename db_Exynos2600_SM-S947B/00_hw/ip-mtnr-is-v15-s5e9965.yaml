@@ -238,9 +238,9 @@ capabilities:
       type: FIFO
       direction: write
     sources:
-    - path: \\wsl.localhost\Ubuntu\home\neokein\work\12_SM_S947B\exynos\external-modules\camera\camera\hardware\api\pablo-hw-api-mtnr1-v15_0.c
+    - path: exynos/external-modules/camera/camera/hardware/api/pablo-hw-api-mtnr1-v15_0.c
       sha256: 9fcee75ba058da60a561f4616d35d3ca6b278e7eb4a414ed2f68be995ba8ded0
-    - path: \\wsl.localhost\Ubuntu\home\neokein\work\12_SM_S947B\exynos\external-modules\camera\camera\hardware\api\pablo-hw-api-mtnr0-v15_0.c
+    - path: exynos/external-modules/camera/camera/hardware/api/pablo-hw-api-mtnr0-v15_0.c
       sha256: fc231951780617e73f7073bd05e1c719aa149ca5e0569aa26296719df272c686
     provenance_status: kernel_declared
     performance_status: borrowed

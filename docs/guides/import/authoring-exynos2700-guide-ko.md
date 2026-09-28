@@ -11,7 +11,7 @@
 **`db_Exynos2700_SM-S957B/`의 `00_hw`, `00_sensor`, `01_sw`, `02_definition`은 직접 수정하지 않는다.**
 이 파일들은 `authoring/`에서 compile된 생성물이다.
 
-- `dev_up.ps1`이 `sync --to fixture --prune`으로 매번 덮어쓴다. 직접 고친 내용은 조용히 사라진다.
+- `dev_up.sh` / `dev_up.ps1`이 `sync --to fixture --prune`으로 매번 덮어쓴다. 직접 고친 내용은 조용히 사라진다.
 - `test_exynos2700_db_folder_matches_authoring`이 authoring과 다르면 실패한다.
 - 직접 수정해도 되는 것은 `measurements/<variant>/`(실측 입력)뿐이다.
 
@@ -55,11 +55,13 @@ patch 파일 이름은 **2700에서 rename된 문서 id**다 (예: `ip-mcsc-is-v
 
 ## 1. 작업 절차
 
-```powershell
-cd <repo>\implementation
+사내 Ubuntu 서버 기준 (bash). 서버 준비와 접속은 [Linux 실행 가이드](../../operations/linux-server-guide-ko.md)를 본다.
+
+```bash
+cd <repo>/implementation
 
 # 1) 수정 → compile 결과 미리 보기 (DB 폴더는 건드리지 않는다)
-uv run python -m scenario_db.authoring compile sm-s957b --out output\preview
+uv run python -m scenario_db.authoring compile sm-s957b --out output/preview
 uv run python -m scenario_db.authoring sync sm-s957b --fixture db_Exynos2700_SM-S957B --to fixture --dry-run
 
 # 2) 생성 DB 폴더를 실제 동기화한 뒤 simulation evidence를 재생성한다 (dev_up은 evidence를 재생성하지 않는다)
@@ -67,11 +69,13 @@ uv run python -m scenario_db.authoring sync sm-s957b --fixture db_Exynos2700_SM-
 uv run python scripts/generate_simulation_evidence.py db_Exynos2700_SM-S957B uc-cam-recording-e2700
 
 # 3) DB 반영: rename → retire → ETL 2600 → [sync → measurement import → ETL] 2700
-powershell -ExecutionPolicy Bypass -File scripts\dev_up.ps1 -NoUi
+scripts/dev_down.sh && scripts/dev_up.sh --no-ui          # 기존 PostgreSQL이면 --no-docker 추가
 
 # 4) 검증
 uv run --group dev pytest -q tests/unit/authoring tests/unit/test_exynos2700_db_contract.py
 ```
+
+Windows PC에서는 3)을 `powershell -ExecutionPolicy Bypass -File scripts\dev_up.ps1 -NoUi`로 실행한다. 나머지 명령은 같다.
 
 - 2)를 빠뜨리면 예측 column과 Pipeline timing diagram이 이전 값으로 남는다. stale test가 params_hash로 이를 잡는다.
 - 입력이 바뀌었으므로 **조합 탐색을 다시 실행하고 예측을 재등록**한다. 예측 현황의 변경 원인(LMDI)이 patch의 효과를 보여 준다.

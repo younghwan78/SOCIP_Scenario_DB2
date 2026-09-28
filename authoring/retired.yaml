@@ -1,5 +1,5 @@
 # Rows to remove from runtime DBs so they match the authoring scope. Fixtures/authoring are the source;
-# this only cleans rows left by earlier loads (current ids). scripts/dev_up.ps1 applies it after rename, before ETL:
+# this only cleans rows left by earlier loads (current ids). scripts/dev_up.ps1 / dev_up.sh apply it after rename, before ETL:
 #   python -m scenario_db.etl.retire --apply --backup <json>
 # Scope rule: Exynos2600 (sm-s947b) is the complete reference fixture and must never appear here.
 # Exynos2700 (sm-s957b) emits only uc-cam-recording-e2700 (overlay variants.keep).

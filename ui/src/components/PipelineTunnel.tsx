@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { DOMAIN_LABEL, DOMAINS, type Domain, type Stage } from '../lib/tunnel'
+import { DOMAIN_LABEL, DOMAINS, frameAdvanceMs, type Domain, type Stage } from '../lib/tunnel'
 
 const COL: Record<Stage['k'], string> = { rt: '#2BB3A3', m2m: '#E6A23C', mem: '#6C8EBF', sw: '#D4A93A', post: '#9C8CE0', out: '#4C8DF6' }
 const BAYER = ['#E0584B', '#5BC26B', '#5BC26B', '#4F86E8']
@@ -130,7 +130,7 @@ export function PipelineTunnel({ domain, paused, speed = 0.176 }: { domain: Doma
     }
     const loop = (now: number) => {
       raf = requestAnimationFrame(loop)
-      const dt = Math.min(50, now - last); last = now
+      const dt = frameAdvanceMs(now - last); last = now   // real time at low FPS; skip stalls
       const animate = !pausedRef.current && !reduce && !document.hidden
       if (animate) {
         cam = (cam + dt * speed * 3) % LOOP
@@ -138,8 +138,10 @@ export function PipelineTunnel({ domain, paused, speed = 0.176 }: { domain: Doma
       }
       if (!document.hidden && (animate || dirty)) { draw(); dirty = false }
     }
+    const resumed = () => { last = performance.now() }   // back from a hidden tab: restart the clock
+    document.addEventListener('visibilitychange', resumed)
     raf = requestAnimationFrame(loop)
-    return () => { cancelAnimationFrame(raf); ro.disconnect(); motion.removeEventListener('change', motionChanged) }
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); motion.removeEventListener('change', motionChanged); document.removeEventListener('visibilitychange', resumed) }
   }, [domain, speed])
 
   return <canvas ref={ref} className="tunnel-canvas" role="img"

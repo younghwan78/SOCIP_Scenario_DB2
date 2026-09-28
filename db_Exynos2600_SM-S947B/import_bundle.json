@@ -229,11 +229,11 @@
             ],
             "sources": [
               {
-                "path": "\\\\wsl.localhost\\Ubuntu\\home\\neokein\\work\\12_SM_S947B\\exynos\\external-modules\\camera\\camera\\hardware\\api\\pablo-hw-api-byrp-v15_0.c",
+                "path": "exynos/external-modules/camera/camera/hardware/api/pablo-hw-api-byrp-v15_0.c",
                 "sha256": "832911735daac9633adcdac7cfe2feff3f93fd81ae3b48ff0cfdfdc57f9adbfa"
               },
               {
-                "path": "\\\\wsl.localhost\\Ubuntu\\home\\neokein\\work\\12_SM_S947B\\exynos\\external-modules\\camera\\camera\\ischain\\is-v15_0_0\\is-subdev-byrp.c",
+                "path": "exynos/external-modules/camera/camera/ischain/is-v15_0_0/is-subdev-byrp.c",
                 "sha256": "82d8d859b9e9aecbe6d2d0d099709e8aa8bbaefa3d89e269a5a17f83ffe790ef"
               }
             ],
@@ -2147,11 +2147,11 @@
             ],
             "sources": [
               {
-                "path": "\\\\wsl.localhost\\Ubuntu\\home\\neokein\\work\\12_SM_S947B\\exynos\\external-modules\\camera\\camera\\hardware\\api\\pablo-hw-api-mlsc-v15_0.c",
+                "path": "exynos/external-modules/camera/camera/hardware/api/pablo-hw-api-mlsc-v15_0.c",
                 "sha256": "b717c95c0ba426b1e853bba1b9c73a4a81414d3e74ea135ee7e8e552649b9139"
               },
               {
-                "path": "\\\\wsl.localhost\\Ubuntu\\home\\neokein\\work\\12_SM_S947B\\exynos\\external-modules\\camera\\camera\\ischain\\is-v15_0_0\\is-subdev-mlsc.c",
+                "path": "exynos/external-modules/camera/camera/ischain/is-v15_0_0/is-subdev-mlsc.c",
                 "sha256": "b6b4bcf91e38d6bd3b2914afa74873bd029990bcbc2728e9739354438d8f74b8"
               }
             ],
@@ -2234,7 +2234,7 @@
             ],
             "sources": [
               {
-                "path": "\\\\wsl.localhost\\Ubuntu\\home\\neokein\\work\\12_SM_S947B\\exynos\\external-modules\\camera\\camera\\hardware\\api\\pablo-hw-api-msnr-v15_0.c",
+                "path": "exynos/external-modules/camera/camera/hardware/api/pablo-hw-api-msnr-v15_0.c",
                 "sha256": "7491a9cecdae0fa758533c1285c69ce4584bf4edd35b771b1b5f23b08499d2de"
               }
             ],
@@ -2605,11 +2605,11 @@
             ],
             "sources": [
               {
-                "path": "\\\\wsl.localhost\\Ubuntu\\home\\neokein\\work\\12_SM_S947B\\exynos\\external-modules\\camera\\camera\\hardware\\api\\pablo-hw-api-mtnr1-v15_0.c",
+                "path": "exynos/external-modules/camera/camera/hardware/api/pablo-hw-api-mtnr1-v15_0.c",
                 "sha256": "9fcee75ba058da60a561f4616d35d3ca6b278e7eb4a414ed2f68be995ba8ded0"
               },
               {
-                "path": "\\\\wsl.localhost\\Ubuntu\\home\\neokein\\work\\12_SM_S947B\\exynos\\external-modules\\camera\\camera\\hardware\\api\\pablo-hw-api-mtnr0-v15_0.c",
+                "path": "exynos/external-modules/camera/camera/hardware/api/pablo-hw-api-mtnr0-v15_0.c",
                 "sha256": "fc231951780617e73f7073bd05e1c719aa149ca5e0569aa26296719df272c686"
               }
             ],
@@ -2867,11 +2867,11 @@
             ],
             "sources": [
               {
-                "path": "\\\\wsl.localhost\\Ubuntu\\home\\neokein\\work\\12_SM_S947B\\exynos\\external-modules\\camera\\camera\\hardware\\api\\pablo-hw-api-rgbp-v15_0.c",
+                "path": "exynos/external-modules/camera/camera/hardware/api/pablo-hw-api-rgbp-v15_0.c",
                 "sha256": "6d243d3d9ee7c0ba77554d3941698c4d1d3f820a787f17864cd772ff43f82c62"
               },
               {
-                "path": "\\\\wsl.localhost\\Ubuntu\\home\\neokein\\work\\12_SM_S947B\\exynos\\external-modules\\camera\\camera\\ischain\\is-v15_0_0\\is-subdev-rgbp.c",
+                "path": "exynos/external-modules/camera/camera/ischain/is-v15_0_0/is-subdev-rgbp.c",
                 "sha256": "cdef580f91b3d5762ea91453f88e10b899d2fd5a9b642fb121e5ce95776dd208"
               }
             ],
@@ -2933,7 +2933,7 @@
             ],
             "phy_type": "DPHY",
             "source": {
-              "path": "\\\\wsl.localhost\\Ubuntu\\home\\neokein\\work\\12_SM_S947B\\exynos\\device\\erd\\erd9965\\arch\\arm64\\boot\\dts\\samsung\\m2s\\camera\\module_3ld.dtsi",
+              "path": "exynos/device/erd/erd9965/arch/arm64/boot/dts/samsung/m2s/camera/module_3ld.dtsi",
               "sha256": "40ee55efbe63a2a0e6128e0db46b2f70ac632650f26b8af0996e54f765f33973"
             },
             "modes": {
@@ -3397,7 +3397,7 @@
             ],
             "phy_type": "CPHY",
             "source": {
-              "path": "\\\\wsl.localhost\\Ubuntu\\home\\neokein\\work\\12_SM_S947B\\exynos\\device\\erd\\erd9965\\arch\\arm64\\boot\\dts\\samsung\\m2s\\camera\\module_gng.dtsi",
+              "path": "exynos/device/erd/erd9965/arch/arm64/boot/dts/samsung/m2s/camera/module_gng.dtsi",
               "sha256": "93847f2119b1a5f8e4404ec7c9ff15413edc2ae31291f67654073b41d72e7ca9"
             },
             "modes": {
@@ -4648,7 +4648,7 @@
             ],
             "phy_type": "CPHY",
             "source": {
-              "path": "\\\\wsl.localhost\\Ubuntu\\home\\neokein\\work\\12_SM_S947B\\exynos\\device\\erd\\erd9965\\arch\\arm64\\boot\\dts\\samsung\\m2s\\camera\\module_hp2.dtsi",
+              "path": "exynos/device/erd/erd9965/arch/arm64/boot/dts/samsung/m2s/camera/module_hp2.dtsi",
               "sha256": "9fd6e40fb298458492874bf8b4a1081abcc4a63b35c9a14b41779d4754bfecca"
             },
             "modes": {
@@ -5017,7 +5017,7 @@
             ],
             "phy_type": "CPHY",
             "source": {
-              "path": "\\\\wsl.localhost\\Ubuntu\\home\\neokein\\work\\12_SM_S947B\\exynos\\device\\erd\\erd9965\\arch\\arm64\\boot\\dts\\samsung\\m2s\\camera\\module_imx564_ff.dtsi",
+              "path": "exynos/device/erd/erd9965/arch/arm64/boot/dts/samsung/m2s/camera/module_imx564_ff.dtsi",
               "sha256": "6b37cd08baed52f29331e11fe7775807bfdf47679d8dceb0128db73b43240c92"
             },
             "modes": {
@@ -5359,7 +5359,7 @@
             ],
             "phy_type": "DPHY",
             "source": {
-              "path": "\\\\wsl.localhost\\Ubuntu\\home\\neokein\\work\\12_SM_S947B\\exynos\\device\\erd\\erd9965\\arch\\arm64\\boot\\dts\\samsung\\m2s\\camera\\module_imx874.dtsi",
+              "path": "exynos/device/erd/erd9965/arch/arm64/boot/dts/samsung/m2s/camera/module_imx874.dtsi",
               "sha256": "74acb89d11a9e0da44ac271d381408346339a24507472d83a9ab0a36cb5abe86"
             },
             "modes": {
@@ -5709,7 +5709,7 @@
             ],
             "phy_type": "CPHY",
             "source": {
-              "path": "\\\\wsl.localhost\\Ubuntu\\home\\neokein\\work\\12_SM_S947B\\exynos\\device\\erd\\erd9965\\arch\\arm64\\boot\\dts\\samsung\\m2s\\camera\\module_jn3.dtsi",
+              "path": "exynos/device/erd/erd9965/arch/arm64/boot/dts/samsung/m2s/camera/module_jn3.dtsi",
               "sha256": "020959224a12d83b6bfdfc0b4e6940d947cf01a35abd132231941fc4b26fd737"
             },
             "modes": {
@@ -6257,11 +6257,11 @@
             ],
             "sources": [
               {
-                "path": "\\\\wsl.localhost\\Ubuntu\\home\\neokein\\work\\12_SM_S947B\\exynos\\external-modules\\camera\\camera\\hardware\\api\\pablo-hw-api-yuvp-v15_0.c",
+                "path": "exynos/external-modules/camera/camera/hardware/api/pablo-hw-api-yuvp-v15_0.c",
                 "sha256": "994be17b489015e93fb2dc93e9d84a704eb2c9bad71d0111fb09853bab170e09"
               },
               {
-                "path": "\\\\wsl.localhost\\Ubuntu\\home\\neokein\\work\\12_SM_S947B\\exynos\\external-modules\\camera\\camera\\ischain\\is-v15_0_0\\is-subdev-yuvp.c",
+                "path": "exynos/external-modules/camera/camera/ischain/is-v15_0_0/is-subdev-yuvp.c",
                 "sha256": "c4b93900ea47f2d97af259aa8c308da6e9b9776e13b7be5925df20e371b18584"
               }
             ],
@@ -6364,7 +6364,7 @@
             ],
             "sources": [
               {
-                "path": "\\\\wsl.localhost\\Ubuntu\\home\\neokein\\work\\12_SM_S947B\\exynos\\external-modules\\camera\\camera\\hardware\\api\\pablo-hw-api-yuvsc-v15_0.c",
+                "path": "exynos/external-modules/camera/camera/hardware/api/pablo-hw-api-yuvsc-v15_0.c",
                 "sha256": "31c0168f9f40ad194d91f16193ba11d552016b2d6572de8a5155db9d599949ad"
               }
             ],

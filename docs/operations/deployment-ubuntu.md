@@ -205,6 +205,11 @@ uv run alembic upgrade head
 uv run python -m scenario_db.etl.loader demo/fixtures
 ```
 
+Project DB folders (`db_Exynos2600_SM-S947B`, authoring-derived `db_Exynos2700_SM-S957B`
+with rename / retire / authoring sync / measurement import) are loaded by
+`scripts/dev_up.sh --no-docker --load-only`; see
+[linux-server-guide-ko.md](linux-server-guide-ko.md).
+
 Smoke check:
 
 ```bash

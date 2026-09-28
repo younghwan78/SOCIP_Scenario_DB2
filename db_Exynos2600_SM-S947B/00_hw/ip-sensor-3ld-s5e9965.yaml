@@ -24,7 +24,7 @@ capabilities:
     - 3000
     phy_type: DPHY
     source:
-      path: \\wsl.localhost\Ubuntu\home\neokein\work\12_SM_S947B\exynos\device\erd\erd9965\arch\arm64\boot\dts\samsung\m2s\camera\module_3ld.dtsi
+      path: exynos/device/erd/erd9965/arch/arm64/boot/dts/samsung/m2s/camera/module_3ld.dtsi
       sha256: 40ee55efbe63a2a0e6128e0db46b2f70ac632650f26b8af0996e54f765f33973
     modes:
       mode0:

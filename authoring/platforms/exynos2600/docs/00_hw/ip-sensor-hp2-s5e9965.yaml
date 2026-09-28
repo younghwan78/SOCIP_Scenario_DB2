@@ -33,7 +33,7 @@ capabilities:
     - 12240
     phy_type: CPHY
     source:
-      path: \\wsl.localhost\Ubuntu\home\neokein\work\12_SM_S947B\exynos\device\erd\erd9965\arch\arm64\boot\dts\samsung\m2s\camera\module_hp2.dtsi
+      path: exynos/device/erd/erd9965/arch/arm64/boot/dts/samsung/m2s/camera/module_hp2.dtsi
       sha256: 9fd6e40fb298458492874bf8b4a1081abcc4a63b35c9a14b41779d4754bfecca
     modes:
       mode0:

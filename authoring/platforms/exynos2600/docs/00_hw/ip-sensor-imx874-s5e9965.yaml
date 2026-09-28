@@ -32,7 +32,7 @@ capabilities:
     - 3000
     phy_type: DPHY
     source:
-      path: \\wsl.localhost\Ubuntu\home\neokein\work\12_SM_S947B\exynos\device\erd\erd9965\arch\arm64\boot\dts\samsung\m2s\camera\module_imx874.dtsi
+      path: exynos/device/erd/erd9965/arch/arm64/boot/dts/samsung/m2s/camera/module_imx874.dtsi
       sha256: 74acb89d11a9e0da44ac271d381408346339a24507472d83a9ab0a36cb5abe86
     modes:
       mode1:

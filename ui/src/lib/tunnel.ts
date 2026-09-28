@@ -49,3 +49,16 @@ export function domainFor(categories: string[] | undefined): Domain {
   if (c.some((x) => x.includes('display') || x.includes('game'))) return 'display'
   return 'camera'
 }
+
+/** A frame gap above this is a stall (background tab, debugger, sleep), not a slow frame. */
+export const RESUME_GAP_MS = 250
+
+/**
+ * Animation time to advance for one rAF frame.
+ * Slow frames (low FPS) advance by the real elapsed time so the speed stays constant;
+ * a stall is skipped (0) so the camera does not jump when the tab comes back.
+ */
+export function frameAdvanceMs(elapsedMs: number): number {
+  if (!Number.isFinite(elapsedMs) || elapsedMs <= 0 || elapsedMs > RESUME_GAP_MS) return 0
+  return elapsedMs
+}
