@@ -15,6 +15,7 @@ def test_pyproject_declares_static_quality_gates() -> None:
     assert any(dependency.startswith("mypy") for dependency in dev_dependencies)
     assert any(dependency.startswith("pip-audit") for dependency in dev_dependencies)
     assert any(dependency.startswith("pre-commit") for dependency in dev_dependencies)
+    assert any(dependency.startswith("pytest-xdist") for dependency in dev_dependencies)
 
     assert pyproject["tool"]["ruff"]["line-length"] == 100
     assert "F" in pyproject["tool"]["ruff"]["lint"]["select"]
@@ -46,8 +47,36 @@ def test_github_actions_runs_quality_and_test_gates() -> None:
     assert "uv run --extra profiling ruff check ." in workflow
     assert "uv run --extra profiling mypy" in workflow
     assert "uv run --extra profiling pip-audit" in workflow
-    assert "uv run --extra profiling pytest tests/unit" in workflow
+    assert "uv run --extra profiling pytest ${{ matrix.tests }}" in workflow
     assert "uv run --extra profiling pytest tests/integration" in workflow
+
+
+def test_parallel_ci_preserves_coverage_and_required_check_names() -> None:
+    import yaml
+
+    workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    jobs = workflow["jobs"]
+    unit_command = jobs["unit"]["steps"][3]["run"]
+    integration_command = jobs["integration"]["steps"][-1]["run"]
+    assert "-n 4" in unit_command
+    assert "--cov=scenario_db" in unit_command
+    shards = jobs["unit"]["strategy"]["matrix"]["include"]
+    assert {shard["tests"] for shard in shards} == {
+        "tests/unit/authoring", "tests/unit --ignore=tests/unit/authoring",
+    }
+    assert jobs["unit"]["strategy"]["fail-fast"] is False
+    gate = jobs["quality"]
+    assert set(gate["needs"]) == {"static-quality", "unit"}
+    assert gate["if"] == "${{ always() }}"
+    assert 'test "$STATIC_RESULT" = success' in gate["steps"][0]["run"]
+    assert 'test "$UNIT_RESULT" = success' in gate["steps"][0]["run"]
+    assert gate["steps"][-3]["run"] == "test -s .coverage.authoring && test -s .coverage.remaining"
+    assert gate["steps"][-2]["run"].endswith("coverage combine")
+    assert gate["steps"][-1]["run"].endswith("coverage report --fail-under=80")
+    assert "-n 4" in integration_command
+    assert "--dist loadfile" in integration_command
+    assert "github.run_id" in workflow["concurrency"]["group"]
+    assert workflow["concurrency"]["cancel-in-progress"] == "${{ github.event_name == 'pull_request' }}"
 
 
 def test_ubuntu_runbook_matches_mutation_auth_contract() -> None:
