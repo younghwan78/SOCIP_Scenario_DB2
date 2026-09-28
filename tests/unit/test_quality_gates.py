@@ -63,6 +63,7 @@ def test_parallel_ci_preserves_coverage_and_required_check_names() -> None:
     assert "--cov-fail-under" not in unit_command
     assert "-n 4" in integration_command
     assert "--dist loadfile" in integration_command
+    assert "github.run_id" in workflow["concurrency"]["group"]
     assert workflow["concurrency"]["cancel-in-progress"] == "${{ github.event_name == 'pull_request' }}"
 
 
