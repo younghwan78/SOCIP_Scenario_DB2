@@ -7,9 +7,12 @@ cd "$ROOT" || exit 1
 for name in api ui streamlit; do
   pidf="output/dev/$name.pid"
   [[ -f "$pidf" ]] || continue
-  pid="$(cat "$pidf")"
-  if kill -0 "$pid" 2>/dev/null; then
-    kill -- "-$pid" 2>/dev/null || kill "$pid"   # whole process group (uv -> uvicorn, npm -> vite)
+  pid="$(head -1 "$pidf")"
+  started="$(sed -n '2p' "$pidf")"
+  current="$(ps -o lstart= -p "$pid" 2>/dev/null || true)"
+  sid="$(ps -o sid= -p "$pid" 2>/dev/null | tr -d ' ' || true)"
+  if [[ "$pid" =~ ^[0-9]+$ && "$pid" -gt 1 && "$sid" == "$pid" && -n "$started" && "$started" == "$current" ]] && kill -0 "$pid" 2>/dev/null; then
+    kill -- "-$pid" 2>/dev/null  # only the recorded session, never a reused PID
     echo "stopped $name (pid $pid)"
   fi
   rm -f "$pidf"

@@ -48,6 +48,23 @@ need() { command -v "$1" >/dev/null 2>&1 || die "'$1' not found: $2"; }
 run() { "$@" || die "failed (exit $?): $*"; }
 
 need uv "install uv (https://docs.astral.sh/uv/) or pip install uv"
+# Use the application's dotenv parsing and environment precedence (including
+# quoted values and boolean aliases) before any database mutation.
+auth_off="$(uv run python - <<'PY'
+from scenario_db.config import Settings
+try:
+    settings = Settings()
+except ValueError:
+    raise SystemExit("Invalid configuration: check DATABASE_URL and .env") from None
+print(str(settings.mutation_auth_disabled).lower())
+PY
+)"
+if [[ $LOAD_ONLY -eq 0 && "$BIND" != "127.0.0.1" && "$BIND" != "localhost" && "$BIND" != "::1" && "$auth_off" == "true" ]]; then
+  die "--bind $BIND with authentication disabled exposes write APIs; configure SCENARIO_DB_API_PRINCIPALS"
+fi
+for pair in "${PROJECTS[@]}"; do
+  [[ "$pair" == *=* && -n "${pair%%=*}" && -n "${pair#*=}" ]] || die "--project expects KEY=DB_FOLDER"
+done
 mkdir -p output/etl output/dev
 STAMP="$(date +%Y%m%d-%H%M%S)"
 
@@ -68,12 +85,7 @@ if [[ $NO_DOCKER -eq 0 ]]; then
   echo "postgres: healthy (127.0.0.1:15432)"
 else
   step "PostgreSQL (existing server)"
-  url="${SCENARIO_DB_DATABASE_URL:-${DATABASE_URL:-}}"
-  if [[ -z "$url" && -f .env ]]; then
-    url="$(grep -E '^(SCENARIO_DB_DATABASE_URL|DATABASE_URL)=' .env | head -1 | cut -d= -f2-)"
-  fi
-  [[ -n "$url" ]] || die "--no-docker needs SCENARIO_DB_DATABASE_URL or DATABASE_URL (env or .env)"
-  echo "database: $(sed -E 's#://([^:/@]+):[^@]*@#://\1:***@#' <<<"$url")"
+  echo "database configuration validated (env / .env)"
 fi
 
 step "Alembic migration"
@@ -112,23 +124,27 @@ if [[ $LOAD_ONLY -eq 1 ]]; then
 fi
 
 # ------------------------------------------------------------------ servers
-auth_off="${SCENARIO_DB_MUTATION_AUTH_DISABLED:-}"
-[[ -z "$auth_off" && -f .env ]] && auth_off="$(grep -E '^SCENARIO_DB_MUTATION_AUTH_DISABLED=' .env | cut -d= -f2- || true)"
-if [[ "$BIND" != "127.0.0.1" && "$BIND" != "localhost" && "${auth_off,,}" == "true" ]]; then
-  die "--bind $BIND with SCENARIO_DB_MUTATION_AUTH_DISABLED=true exposes write APIs; configure SCENARIO_DB_API_PRINCIPALS"
-fi
-
 start_bg() {  # name, workdir, command...
   local name="$1" dir="$2"; shift 2
   local pidf="output/dev/$name.pid" log="$ROOT/output/dev/$name.log"
-  if [[ -f "$pidf" ]] && kill -0 "$(cat "$pidf")" 2>/dev/null; then
-    echo "$name already running (pid $(cat "$pidf")); scripts/dev_down.sh to restart"; return
+  local pid started current
+  if [[ -f "$pidf" ]]; then
+    pid="$(head -1 "$pidf")"; started="$(sed -n '2p' "$pidf")"
+    current="$(ps -o lstart= -p "$pid" 2>/dev/null || true)"
+    if [[ "$pid" =~ ^[0-9]+$ && "$pid" -gt 1 && -n "$started" && "$started" == "$current" ]]; then
+      echo "$name already running (pid $pid); scripts/dev_down.sh to restart"; return
+    fi
+    rm -f "$pidf"
   fi
   # new session: the recorded pid is the process-group leader, so dev_down stops uv/npm and their children
   # shellcheck disable=SC2016  # $$ / $0 / $@ expand in the inner bash
-  (cd "$dir" && exec setsid -f bash -c 'echo $$ > "$0"; exec "$@"' "$ROOT/$pidf" "$@" >"$log" 2>&1 < /dev/null)
+  (cd "$dir" && exec setsid -f bash -c '{ echo $$; ps -o lstart= -p $$; } > "$0.tmp"; mv "$0.tmp" "$0"; exec "$@"' "$ROOT/$pidf" "$@" >"$log" 2>&1 < /dev/null)
   for _ in $(seq 20); do [[ -s "$pidf" ]] && break; sleep 0.1; done
-  echo "$name: pid $(cat "$pidf"), log output/dev/$name.log"
+  [[ -s "$pidf" ]] || die "$name failed to start; see $log"
+  pid="$(head -1 "$pidf")"
+  sleep 1
+  kill -0 "$pid" 2>/dev/null || die "$name exited during startup; see $log"
+  echo "$name: pid $pid, log output/dev/$name.log"
 }
 
 step "API http://$BIND:$API_PORT/docs"
@@ -136,7 +152,7 @@ start_bg api "$ROOT" uv run --group sim uvicorn scenario_db.api.app:app --host "
 
 if [[ $NO_UI -eq 0 ]]; then
   step "React UI http://$BIND:$UI_PORT"
-  need npm "install Node.js 20+ (or rerun with --no-ui)"
+  need npm "install Node.js 24 (or rerun with --no-ui)"
   [[ -d ui/node_modules ]] || run bash -c "cd ui && npm ci"
   SCENARIODB_API_TARGET="http://127.0.0.1:$API_PORT" \
     start_bg ui "$ROOT/ui" npm run dev -- --host "$BIND" --port "$UI_PORT" --strictPort

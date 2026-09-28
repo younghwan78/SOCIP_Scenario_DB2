@@ -8,7 +8,7 @@ Windows의 `scripts/dev_up.ps1`에 대응하는 스크립트는 `scripts/dev_up.
 | 항목 | 명령 / 비고 |
 |---|---|
 | Python 3.11+, uv | `curl -LsSf https://astral.sh/uv/install.sh \| sh` (사내 mirror가 있으면 `pip install uv`) |
-| Node.js 20+ (UI) | nvm 또는 사내 패키지. UI를 안 쓰면 `--no-ui` |
+| Node.js 24 (UI) | CI와 동일 버전. UI를 안 쓰면 `--no-ui` |
 | PostgreSQL 16 | Docker(`docker compose`) 또는 기존 PostgreSQL 서버 (`--no-docker`) |
 | 의존성 | `uv sync --frozen --group dev --group dashboard --group sim` (`--extra profiling`은 Perfetto trace import가 필요할 때) |
 | `.env` | `[ -f .env ] \|\| cp .env.example .env` 후 DB URL과 API secret 수정. Git에 올리지 않는다 |
@@ -79,6 +79,7 @@ ssh -L 3000:127.0.0.1:3000 -L 18000:127.0.0.1:18000 <user>@<server>
 ```bash
 uv run python -m scenario_db.authoring compile sm-s957b --out output/preview
 uv run python -m scenario_db.authoring sync sm-s957b --fixture db_Exynos2700_SM-S957B --to fixture --dry-run
+uv run python -m scenario_db.authoring sync sm-s957b --fixture db_Exynos2700_SM-S957B --to fixture --prune
 uv run python scripts/generate_simulation_evidence.py db_Exynos2700_SM-S957B uc-cam-recording-e2700
 scripts/dev_down.sh && scripts/dev_up.sh --no-ui
 uv run --group dev pytest -q tests/unit/authoring tests/unit/test_exynos2700_db_contract.py
