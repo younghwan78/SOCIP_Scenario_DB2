@@ -71,6 +71,19 @@ class PowerSpec(BaseScenarioModel):
     power_column: str = "power_mw"
 
 
+class PmuSpec(BaseScenarioModel):
+    """Neutral PMU digest input (see meas_import/pmu_digest.py for the sample format).
+
+    ``ip_map`` / ``cluster_map`` translate PMU-side names into catalog ids /
+    logical cluster names so the observations join with simulation evidence.
+    """
+    file: str                         # path to the digest (relative to meta dir or absolute)
+    format: Literal["csv", "json"] = "csv"
+    ip_map: dict[str, str] = Field(default_factory=dict)
+    cluster_map: dict[str, str] = Field(default_factory=dict)
+    required: bool = False
+
+
 class TaskMatch(BaseScenarioModel):
     process: str | None = None        # exact process name
     process_re: str | None = None     # regex on process name
@@ -164,6 +177,7 @@ class MeasurementImportMeta(BaseScenarioModel):
     metric_observations: list[MetricObservation] = Field(default_factory=list)
     power: PowerSpec | None = None
     perfetto: PerfettoSpec | None = None
+    pmu: PmuSpec | None = None
     profiling: ProfilingSummary | None = None
     sw_task_timing: list[SwTaskTiming] = Field(default_factory=list)
     artifacts: list[ArtifactSpec] = Field(default_factory=list)
@@ -196,6 +210,7 @@ class MeasurementImportMeta(BaseScenarioModel):
         if (
             self.power is None
             and self.perfetto is None
+            and self.pmu is None
             and not self.kpi
             and not self.metric_observations
             and self.profiling is None
@@ -203,6 +218,6 @@ class MeasurementImportMeta(BaseScenarioModel):
         ):
             raise ValueError(
                 "meta must provide at least one of 'kpi', 'power', 'perfetto', "
-                "or 'metric_observations'"
+                "'pmu', or 'metric_observations'"
             )
         return self

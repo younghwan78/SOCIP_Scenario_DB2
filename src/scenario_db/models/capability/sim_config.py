@@ -25,7 +25,7 @@ from scenario_db.models.common import (
     DocumentId,
     SchemaVersion,
 )
-from scenario_db.sim.clock_models import ClockBasis, ConfiguredClock
+from scenario_db.sim.clock_models import ClockBasis, ConfiguredClock, MeasuredClockStat
 
 
 class SimConfigRunDefaults(BaseScenarioModel):
@@ -47,6 +47,8 @@ class SimConfigRunDefaults(BaseScenarioModel):
     # tier drives the run. None = not pinned (calculated clock).
     clock_basis: ClockBasis | None = None
     configured_clocks: dict[str, ConfiguredClock] | None = None
+    measured_clock_ref: str | None = None
+    measured_clock_stat: MeasuredClockStat | None = None
     memory_rail: str | None = None
     dvfs_overrides: dict[str, int] = Field(default_factory=dict)
 

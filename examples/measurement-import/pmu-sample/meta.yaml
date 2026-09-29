@@ -1,0 +1,39 @@
+# SYNTHETIC PMU-only measurement import (flow verification; not silicon data).
+# Run:
+#   uv run python -m scenario_db.meas_import.cli \
+#     --meta examples/measurement-import/pmu-sample/meta.yaml \
+#     --out output/pmu-sample --strict
+# Inspect only the digest:
+#   uv run python -m scenario_db.meas_import.pmu_digest examples/measurement-import/pmu-sample/pmu_digest.csv \
+#     --ip-map MTNR=ip-mtnr-is-v15-s5e9975 --ip-map MCSC=ip-mcsc-is-v15-s5e9975
+schema_version: '2.2'
+id: meas-synthetic-pmu-sample-evt0
+project_ref: proj-sm-s957b
+scenario_ref: uc-cam-recording-e2700
+variant_ref: cam-rec-r1-uhd30-vdis
+measured_at: '2026-09-29T10:00:00+09:00'
+execution_context:
+  silicon_rev: EVT0
+  sw_baseline_ref: sw-vendor-v1.2.3-s5e9975
+  thermal: room
+  ambient_temp_c: 25.0
+  power_state: discharging
+  method: measurement
+provenance:
+  revision: 1
+  device_id: SYNTHETIC
+  collection_method: synthetic_pmu_sample
+  sample_count: 1
+  duration_per_sample_s: 30.0
+  confidence_level: 0.95
+aggregation_strategy: mean_over_capture
+pmu:
+  file: pmu_digest.csv
+  format: csv
+  # PMU-side name -> catalog id (so observations join simulation evidence)
+  ip_map:
+    MTNR: ip-mtnr-is-v15-s5e9975
+    MCSC: ip-mcsc-is-v15-s5e9975
+  cluster_map:
+    big: BIG
+    little: LIT

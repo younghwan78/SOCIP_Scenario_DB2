@@ -138,3 +138,52 @@ metrics:
     allowed_scopes: [event_pair]
     compare_statistic: mean
     polarity: lower_is_better
+  # --- PMU-derived metrics (meas_import/pmu_digest.py) ---
+  # Effective IP clock: stats.mean is the residency-weighted mean; the
+  # dominant (highest-residency) level is its own metric. Prediction side is
+  # the resolved set clock (dvfs_breakdown), which feeds the clock ledger.
+  clock.ip:
+    category: clock
+    canonical_unit: MHz
+    allowed_scopes: [ip]
+    compare_statistic: mean
+    polarity: neutral
+  clock.ip_dominant:
+    category: clock
+    canonical_unit: MHz
+    allowed_scopes: [ip]
+    compare_statistic: value
+    polarity: neutral
+  # Memory-controller (MIF / DRAM) traffic. Measured includes CPU/GPU/other
+  # masters; the prediction side only covers modelled IP DMA, so the gap is
+  # the non-IP traffic.
+  bandwidth.mem_read:
+    category: bandwidth
+    canonical_unit: MB/s
+    allowed_scopes: [mif, dram]
+    compare_statistic: mean
+    polarity: neutral
+  bandwidth.mem_write:
+    category: bandwidth
+    canonical_unit: MB/s
+    allowed_scopes: [mif, dram]
+    compare_statistic: mean
+    polarity: neutral
+  cpu.cycles:
+    category: cpu
+    canonical_unit: count
+    allowed_scopes: [cluster]
+    compare_statistic: value
+    polarity: neutral
+  cpu.instructions:
+    category: cpu
+    canonical_unit: count
+    allowed_scopes: [cluster]
+    compare_statistic: value
+    polarity: neutral
+  cpu.ipc:
+    category: cpu
+    canonical_unit: ipc
+    allowed_scopes: [cluster]
+    compare_statistic: value
+    polarity: higher_is_better

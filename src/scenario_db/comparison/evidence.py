@@ -277,6 +277,40 @@ def normalize_evidence_observations(
             ),
         )
 
+    # Memory-controller traffic: the prediction side is the modelled IP DMA
+    # total (scope mif/total); a PMU measurement also counts CPU/GPU/other
+    # masters, so the delta is the non-IP traffic.
+    mem_bw = {"read": 0.0, "write": 0.0}
+    seen_direction: set[str] = set()
+    for item in evidence.get("dma_breakdown") or []:
+        if not isinstance(item, dict):
+            continue
+        direction = str(item.get("direction") or "")
+        value = _number(item.get("bw_mbs"))
+        if direction in mem_bw and value is not None:
+            mem_bw[direction] += value
+            seen_direction.add(direction)
+    for direction in sorted(seen_direction):
+        _append_if_new(
+            out,
+            identities,
+            _from_legacy_value(f"bandwidth.mem_{direction}", "mif", "total", "MB/s", round(mem_bw[direction], 6)),
+        )
+
+    # clock.ip — prediction: resolved set clock per IP (max over instances),
+    # the calculated tier of the clock ledger; joins PMU clock observations.
+    ip_clock: dict[str, float] = {}
+    for item in evidence.get("dvfs_breakdown") or []:
+        if not isinstance(item, dict) or not item.get("ip_ref"):
+            continue
+        mhz = _number(item.get("set_clock_mhz"))
+        if mhz is not None and mhz > 0:
+            ref = str(item["ip_ref"])
+            ip_clock[ref] = max(ip_clock.get(ref, 0.0), mhz)
+    for ref, mhz in sorted(ip_clock.items()):
+        for metric_id in ("clock.ip", "clock.ip_dominant"):
+            _append_if_new(out, identities, _from_legacy_value(metric_id, "ip", ref, "MHz", mhz))
+
     for item in evidence.get("timing_breakdown") or []:
         if not isinstance(item, dict):
             continue

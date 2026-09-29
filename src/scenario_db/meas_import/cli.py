@@ -22,6 +22,7 @@ from scenario_db.meas_import.assemble import assemble_evidence
 from scenario_db.meas_import.bench_adapter import bench_files_to_rail_long, collect_bench_files
 from scenario_db.meas_import.meta import MeasurementImportMeta
 from scenario_db.meas_import.perfetto_digest import PerfettoDigest, PerfettoTraceProcessor, extract_digest
+from scenario_db.meas_import.pmu_digest import PmuDigest, PmuDigestError, import_pmu_digest
 from scenario_db.meas_import.power_csv import (
     PowerCsvError,
     PowerDigest,
@@ -167,12 +168,33 @@ def run_import(args: argparse.Namespace, report: ImportReport) -> dict | None:
     elif meta.perfetto is not None and args.skip_perfetto:
         report.info("perfetto_skipped", "Perfetto digest skipped by --skip-perfetto.")
 
+    pmu: PmuDigest | None = None
+    if meta.pmu is not None:
+        pmu_path = _resolve(base_dir, meta.pmu.file)
+        if not pmu_path.exists():
+            (report.error if meta.pmu.required else report.warning)(
+                "pmu_digest_not_found", f"PMU digest not found: {pmu_path}", str(pmu_path)
+            )
+        else:
+            try:
+                pmu = import_pmu_digest(pmu_path, meta.pmu)
+                report.info(
+                    "pmu_digested",
+                    f"Digested {pmu.sample_count} PMU samples into {len(pmu.observations)} observations.",
+                    str(pmu_path),
+                )
+                report.increment("pmu_observations", len(pmu.observations))
+                for message in pmu.warnings:
+                    report.warning("pmu_digest_warning", message, str(pmu_path))
+            except PmuDigestError as exc:
+                report.error("pmu_digest_invalid", str(exc), str(pmu_path))
+
     if meta.perfetto is not None and meta.perfetto.required and perfetto is None:
         report.error("required_perfetto_missing", "Required profiling could not be extracted.")
     if not report.ok:
         return None
     try:
-        doc = assemble_evidence(meta, power, perfetto, base_dir=base_dir, report=report)
+        doc = assemble_evidence(meta, power, perfetto, base_dir=base_dir, report=report, pmu=pmu)
     except ValueError as exc:
         report.error("conflicting_timing_input", str(exc))
         return None

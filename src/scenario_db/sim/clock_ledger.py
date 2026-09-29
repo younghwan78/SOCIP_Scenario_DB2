@@ -71,7 +71,9 @@ def select_clock_basis(
         matched.add(id(value))
         selections[workload.node_id] = ClockSelection(basis, float(value.mhz))
     for key, value in tier_map.items():
-        if id(value) not in matched:
+        # Only hand-authored configured clocks are worth flagging: a measurement
+        # normally covers IPs that are not part of the simulated scenario.
+        if basis == "configured" and id(value) not in matched:
             warnings.append(f"clock_basis={basis}: '{key}' matches no simulated IP (node_id / hw_name / ip_ref)")
     return selections
 

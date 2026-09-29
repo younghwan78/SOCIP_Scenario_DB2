@@ -20,6 +20,7 @@ from scenario_db.db.repositories.scenario_graph import load_canonical_graph
 from scenario_db.models.evidence.common import ExecutionContext
 from scenario_db.sim.adapter import build_simulation_inputs
 from scenario_db.sim.models import DVFSTable, SimulationInputs, SimulationRunConfig
+from scenario_db.sim.measured_clock import measured_clocks_from_observations
 from scenario_db.sim.power_params import power_params_from_row
 from scenario_db.sim.readiness import check_simulation_readiness
 from scenario_db.sim.runner import build_simulation_evidence, params_hash, run_simulation
@@ -155,6 +156,7 @@ def _apply_config_profile(db: Session, request: SimulateRequest) -> str | None:
     if request.config_profile_ref:
         stamp = _merge_config_profile(db, request)
     _apply_power_params(db, request)
+    _apply_measured_clocks(db, request)
     return stamp
 
 
@@ -201,6 +203,35 @@ def _apply_power_params(db: Session, request: SimulateRequest) -> None:
     except ValueError as exc:
         raise UnprocessableError(f"power_model_params '{params_id}' is invalid: {exc}") from exc
     request.config = config.model_copy(update={"power_params": params})
+
+
+def _apply_measured_clocks(db: Session, request: SimulateRequest) -> None:
+    """Resolve ``config.measured_clock_ref`` (measurement evidence id) into measured clocks.
+
+    The measurement must belong to the requested scenario/variant; its
+    ``clock.ip`` PMU observations become the measured tier of the clock ledger.
+    """
+    config = request.config
+    ref = config.measured_clock_ref
+    if not ref or config.measured_clocks is not None:
+        return
+    row = get_evidence(db, ref)
+    if row is None or row.kind != "evidence.measurement":
+        raise NotFoundError(f"measurement evidence not found: {ref}")
+    if (row.scenario_ref, row.variant_ref) != (request.scenario_id, request.variant_id):
+        raise UnprocessableError(
+            f"measurement evidence {ref} belongs to {row.scenario_ref}/{row.variant_ref}, "
+            f"not {request.scenario_id}/{request.variant_id}"
+        )
+    stat = config.measured_clock_stat or "weighted_mean"
+    clocks = measured_clocks_from_observations(
+        row.metric_observations or [], stat=stat, evidence_ref=ref
+    )
+    if not clocks:
+        raise UnprocessableError(
+            f"measurement evidence {ref} has no usable clock.ip observations ({stat})"
+        )
+    request.config = config.model_copy(update={"measured_clocks": clocks})
 
 
 def _check_power_params_scope(config: SimulationRunConfig, graph) -> None:

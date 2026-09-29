@@ -13,6 +13,7 @@ from scenario_db.sim.clock_models import (
     ClockLedger,
     ConfiguredClock,
     MeasuredClock,
+    MeasuredClockStat,
 )
 from scenario_db.models.sensor import SensorTiming, SensorModeBinding
 from scenario_db.sim.driver_models import DriverInput
@@ -168,6 +169,10 @@ class SimulationRunConfig(BaseScenarioModel):
     clock_basis: ClockBasis | None = None
     configured_clocks: dict[str, ConfiguredClock] | None = None
     measured_clocks: dict[str, MeasuredClock] | None = None
+    # Measurement evidence (PMU clock.ip observations) the service turns into
+    # measured_clocks; measured_clock_stat picks weighted mean vs dominant level.
+    measured_clock_ref: str | None = None
+    measured_clock_stat: MeasuredClockStat | None = None
     # Logical rail that carries BW-induced (DRAM/interconnect) power. Measured
     # captures see that power on the MIF buck, never on the initiating IP's
     # rail, so per-rail calibration needs the same attribution here.

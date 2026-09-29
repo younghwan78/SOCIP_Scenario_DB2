@@ -4,6 +4,7 @@ from typing import Any
 
 from scenario_db.meas_import.meta import MeasurementImportMeta
 from scenario_db.meas_import.perfetto_digest import PerfettoDigest
+from scenario_db.meas_import.pmu_digest import PmuDigest
 from scenario_db.meas_import.power_csv import PowerDigest
 from scenario_db.models.evidence.metrics import (
     MetricObservation,
@@ -17,6 +18,7 @@ def build_metric_observations(
     perfetto: PerfettoDigest | None,
     *,
     kpi: dict[str, Any],
+    pmu: PmuDigest | None = None,
 ) -> list[dict]:
     """Merge explicit observations with canonical observations derived by adapters.
 
@@ -94,6 +96,10 @@ def build_metric_observations(
                 identities,
                 _stats_observation("sw.runtime", "task", task_ref, "ms", stats),
             )
+
+    if pmu is not None:
+        for observation in pmu.observations:
+            _append_if_new(observations, identities, observation)
 
     groups = [("sw.runtime", "task", "task", [t.model_dump(exclude_none=True) for t in meta.sw_task_timing])]
     for name, metric, scope, ref in (("hw_task_timing", "hw.runtime", "task", "task"),
