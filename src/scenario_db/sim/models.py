@@ -138,6 +138,12 @@ class SimulationRunConfig(BaseScenarioModel):
     bw_power_coeff: float = 80.0
     # Which registered power physics computes ip/memory power (sim/power_model.py).
     power_model: str = "v1-vfps"
+    # BW -> memory power model (sim/bw_power.py). None keeps the built-in
+    # PowerModel.memory_transfer_power_mw path (default behaviour unchanged);
+    # "legacy-coeff" reproduces it via the registry, "linear-per-gbps" is the
+    # N mW per GB/s rule of thumb. mw_per_gbps overrides the params/default value.
+    bw_power_model: str | None = None
+    bw_power_mw_per_gbps: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     # Logical rail that carries BW-induced (DRAM/interconnect) power. Measured
     # captures see that power on the MIF buck, never on the initiating IP's
     # rail, so per-rail calibration needs the same attribution here.

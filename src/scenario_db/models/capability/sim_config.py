@@ -38,6 +38,8 @@ class SimConfigRunDefaults(BaseScenarioModel):
     pmic_efficiency: float | None = None
     h_blank_margin: float | None = None
     power_model: str | None = None
+    bw_power_model: str | None = None
+    bw_power_mw_per_gbps: float | None = None
     memory_rail: str | None = None
     dvfs_overrides: dict[str, int] = Field(default_factory=dict)
 

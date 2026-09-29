@@ -14,6 +14,7 @@ from scenario_db.models.evidence.resolution import (
 )
 from scenario_db.models.evidence.simulation import IpBreakdown, SimulationEvidence
 from scenario_db.sim.bw_calc import calc_port_bw
+from scenario_db.sim.bw_power import BwPowerContext, bw_model_from_config
 from scenario_db.sim.debug_trace import build_calculation_trace
 from scenario_db.sim.dvfs_resolver import DvfsResolver
 from scenario_db.sim.models import (
@@ -38,6 +39,7 @@ def run_simulation(
     dvfs_tables = dvfs_tables or {}
     config = inputs.config
     power_model = resolve_power_model(config.power_model)
+    bw_model = bw_model_from_config(config)
     effective_fps = float(config.fps or 30.0)
     # Mixed-rate pipelines: each port's traffic runs at its owning node's fps
     # (node sim-block override), falling back to the scenario fps.
@@ -58,6 +60,7 @@ def run_simulation(
             vbat=config.vbat,
             pmic_efficiency=config.pmic_efficiency,
             power_model=power_model,
+            bw_model=bw_model,
         )
         for transfer in inputs.port_transfers
     ]
@@ -96,7 +99,15 @@ def run_simulation(
         )
 
     core_power_mw = sum(item.total_power_mw for item in resolved.values())
-    bw_power_mw = sum(item.bw_power_mw for item in dma_breakdown)
+    bw_total_mbs = sum(item.bw_mbs for item in dma_breakdown)
+    if bw_model is None:
+        bw_power_mw = sum(item.bw_power_mw for item in dma_breakdown)
+    else:
+        # Aggregate hook: a MIF-level / residual model may replace the port sum.
+        bw_power_mw = bw_model.aggregate_power_mw(
+            [item.bw_power_mw for item in dma_breakdown],
+            context=BwPowerContext(memory_rail=config.memory_rail, total_bw_mbs=bw_total_mbs),
+        )
     total_power_mw = core_power_mw + bw_power_mw
     total_power_ma = (
         total_power_mw / config.vbat / config.pmic_efficiency
@@ -111,7 +122,6 @@ def run_simulation(
         )
     feasible = all(item.feasible for item in resolved.values())
     infeasible_reason = _first_infeasible_reason(timing_breakdown)
-    bw_total_mbs = sum(item.bw_mbs for item in dma_breakdown)
     hw_time_max_ms = max((item.hw_time_ms for item in timing_breakdown), default=0.0)
     timeline_end_ms = max((item.end_ms for item in timeline_events), default=None)
     warnings = _simulation_warnings(
@@ -163,12 +173,16 @@ def run_simulation(
         sw_task_timing=inputs.sw_task_timing,
         external_devices=inputs.external_devices,
         topology_order=inputs.topology_order,
-        vdd_power=_vdd_power(resolved, dma_breakdown, memory_rail=config.memory_rail),
+        vdd_power=_vdd_power(
+            resolved, dma_breakdown, memory_rail=config.memory_rail, bw_total_mw=bw_power_mw
+        ),
         power_breakdown=_power_breakdown(
             resolved,
             dma_breakdown,
             memory_rail=config.memory_rail,
             power_model=power_model,
+            bw_total_mw=bw_power_mw,
+            bw_model=bw_model,
         ),
         warnings=warnings,
         calculation_trace=calculation_trace,
@@ -293,6 +307,7 @@ def _vdd_power(
     dma_breakdown: list[PortBWResult],
     *,
     memory_rail: str,
+    bw_total_mw: float | None = None,
 ) -> dict[str, dict[str, float]]:
     """Per-rail power. BW-induced (DRAM/interconnect) power sits on the memory
     rail — where a bench actually measures it — not on the initiating IP's
@@ -304,7 +319,11 @@ def _vdd_power(
             continue
         bucket = grouped.setdefault(vdd, {"core_mw": 0.0, "bw_mw": 0.0, "total_mw": 0.0})
         bucket["core_mw"] += float(getattr(item, "total_power_mw", 0.0))
-    bw_total = sum(dma.bw_power_mw for dma in dma_breakdown)
+    bw_total = (
+        bw_total_mw
+        if bw_total_mw is not None
+        else sum(dma.bw_power_mw for dma in dma_breakdown)
+    )
     if bw_total > 0:
         bucket = grouped.setdefault(
             memory_rail, {"core_mw": 0.0, "bw_mw": 0.0, "total_mw": 0.0}
@@ -321,6 +340,8 @@ def _power_breakdown(
     *,
     memory_rail: str,
     power_model,
+    bw_total_mw: float | None = None,
+    bw_model=None,
 ) -> dict:
     """Three-bucket decomposition aligned with what a bench can measure:
     per-IP core power, memory (BW-driven) power, and CPU/cluster power.
@@ -335,10 +356,17 @@ def _power_breakdown(
         if vdd:
             ip_by_rail[vdd] = ip_by_rail.get(vdd, 0.0) + power
     ip_total = sum(ip_by_node.values())
-    memory_total = sum(dma.bw_power_mw for dma in dma_breakdown)
+    memory_total = (
+        bw_total_mw
+        if bw_total_mw is not None
+        else sum(dma.bw_power_mw for dma in dma_breakdown)
+    )
     total = ip_total + memory_total
+    model_info: dict = {"id": power_model.model_id, "version": power_model.version}
+    if bw_model is not None:
+        model_info["bw_model"] = bw_model.describe()
     return {
-        "model": {"id": power_model.model_id, "version": power_model.version},
+        "model": model_info,
         "ip": {
             "total_mw": round(ip_total, 6),
             "by_rail": {rail: round(mw, 6) for rail, mw in sorted(ip_by_rail.items())},

@@ -40,6 +40,7 @@ from scenario_db.sim.adapter import build_simulation_inputs
 from scenario_db.sim.bw_calc import calc_port_bw, compression_enabled, normalize_compression
 from scenario_db.sim.graph_edges import edge_source, edge_target, edge_type
 from scenario_db.sim.models import DVFSTable, SimulationRunConfig
+from scenario_db.sim.bw_power import bw_model_from_config
 from scenario_db.sim.power_model import resolve_power_model
 from scenario_db.sim.timing_budget import (
     Statistic,
@@ -496,10 +497,12 @@ def _dma(graph, config: SimulationRunConfig) -> dict[tuple[str, str, str], tuple
     fps = float(inputs.config.fps or 30.0)
     fps_by_node = {w.node_id: w.fps for w in inputs.workloads}
     model = resolve_power_model(config.power_model)
+    bw_model = bw_model_from_config(config)
     out: dict[tuple[str, str, str], tuple[float, float]] = {}
     for t in inputs.port_transfers:
         r = calc_port_bw(t, fps=fps_by_node.get(t.node_id, fps), bw_power_coeff=config.bw_power_coeff,
-                         vbat=config.vbat, pmic_efficiency=config.pmic_efficiency, power_model=model)
+                         vbat=config.vbat, pmic_efficiency=config.pmic_efficiency, power_model=model,
+                         bw_model=bw_model)
         key = (t.node_id, t.port, t.port_type.value)
         bw, pw = out.get(key, (0.0, 0.0))
         out[key] = (bw + r.bw_mbs, pw + r.bw_power_mw)

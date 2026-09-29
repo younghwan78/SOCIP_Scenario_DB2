@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from scenario_db.sim.bw_calc import BW_MBS_FORMULA, effective_comp_ratio
+from scenario_db.sim.bw_power import BwPowerModel, bw_model_from_config
 from scenario_db.sim.constants import (
     BPP_DEFAULT,
     BPP_MAP,
@@ -41,6 +42,7 @@ def build_calculation_trace(
     """Build a persisted explanation of how simulation numbers were derived."""
 
     config = inputs.config
+    bw_model = bw_model_from_config(config)
     return {
         "schema_version": "1.0",
         "trace_level": config.debug_trace_level,
@@ -85,6 +87,7 @@ def build_calculation_trace(
             bw_power_coeff=config.bw_power_coeff,
             vbat=config.vbat,
             pmic_efficiency=config.pmic_efficiency,
+            bw_model=bw_model,
         ),
         "external_devices": list(inputs.external_devices),
         "topology_order": list(inputs.topology_order),
@@ -293,6 +296,7 @@ def _dma_traces(
     bw_power_coeff: float,
     vbat: float,
     pmic_efficiency: float,
+    bw_model: BwPowerModel | None = None,
 ) -> list[dict[str, Any]]:
     results = {(item.node_id, item.port): item for item in dma_breakdown}
     traces: list[dict[str, Any]] = []
@@ -313,7 +317,9 @@ def _dma_traces(
                 "direction": result.direction,
                 "formula": "bitrate_mbps / 8 * r_w_rate" if spec.bitrate_mbps is not None else BW_MBS_FORMULA,
                 "bw_formula": "bitrate_mbps / 8 * r_w_rate" if spec.bitrate_mbps is not None else BW_MBS_FORMULA,
-                "bw_power_formula": "bw_mbs * bw_power_coeff / 1000 * llc_weight",
+                "bw_power_formula": (
+                    bw_model.formula() if bw_model else "bw_mbs * bw_power_coeff / 1000 * llc_weight"
+                ),
                 "bw_power_ma_formula": "bw_power_mw / vbat / pmic_efficiency",
                 "inputs": {
                     "width": spec.width,
@@ -327,6 +333,7 @@ def _dma_traces(
                     "r_w_rate": spec.r_w_rate,
                     "llc_enabled": spec.llc_enabled,
                     "bw_power_coeff": bw_power_coeff,
+                    **({"bw_power_model": bw_model.describe()} if bw_model else {}),
                     "vbat": vbat,
                     "pmic_efficiency": pmic_efficiency,
                 },
