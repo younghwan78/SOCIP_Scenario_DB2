@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from scenario_db.db.models.capability import (
     IpCatalog,
+    PowerModelParams,
     SimConfigProfile,
     SocCdgmProfile,
     SocDvfsTable,
@@ -12,6 +13,7 @@ from scenario_db.db.models.capability import (
     SwProfile,
 )
 from scenario_db.models.capability.hw import IpCatalog as PydanticIp
+from scenario_db.models.capability.power_model import PowerModelParams as PydanticPowerModelParams
 from scenario_db.models.capability.sim_config import SimConfigProfile as PydanticSimConfigProfile
 from scenario_db.models.capability.hw import SocCdgmProfile as PydanticSocCdgmProfile
 from scenario_db.models.capability.hw import SocDvfsTable as PydanticSocDvfsTable
@@ -121,6 +123,26 @@ def upsert_sw_component(raw: dict, sha256: str, session: Session) -> None:
     row.metadata_      = obj.metadata.model_dump(exclude_none=True) if obj.metadata else None
     row.feature_flags  = dict(obj.feature_flags) if obj.feature_flags else None
     row.capabilities   = obj.capabilities.model_dump(exclude_none=True) if obj.capabilities else None
+    row.yaml_sha256    = sha256
+    session.add(row)
+
+
+def upsert_power_model_params(raw: dict, sha256: str, session: Session) -> None:
+    obj = PydanticPowerModelParams.model_validate(raw)
+    row = session.get(PowerModelParams, obj.id) or PowerModelParams(id=obj.id)
+    if row.yaml_sha256 == sha256:
+        return
+    row.schema_version = obj.schema_version
+    row.soc_ref        = str(obj.soc_ref)
+    row.version        = obj.version
+    row.status         = obj.status
+    row.description    = obj.description
+    row.params         = obj.model_dump(
+        mode="json",
+        exclude_none=True,
+        include={"ip_model", "ref_voltage_mv", "ref_fps", "bw_model", "bw", "cpu", "calibration"},
+    )
+    row.notes          = obj.notes
     row.yaml_sha256    = sha256
     session.add(row)
 

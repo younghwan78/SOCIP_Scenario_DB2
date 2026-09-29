@@ -118,3 +118,24 @@ class SimConfigProfile(Base):
     rail_domain_map = Column(JSONB)                  # 벤치 physical rail -> power domain
     notes           = Column(Text)
     yaml_sha256     = Column(Text, nullable=False)
+
+
+class PowerModelParams(Base):
+    """SoC별 power model 계수 (ref V/fps, BW model, CPU 계수, calibration lineage)."""
+
+    __tablename__ = "power_model_params"
+    __table_args__ = (
+        UniqueConstraint("soc_ref", "version", name="uq_power_model_params_soc_version"),
+        CheckConstraint("status in ('draft', 'approved')", name="ck_power_model_params_status"),
+        CheckConstraint("version >= 1", name="ck_power_model_params_version"),
+    )
+
+    id             = Column(Text, primary_key=True)
+    schema_version = Column(Text, nullable=False)
+    soc_ref        = Column(Text, ForeignKey("soc_platforms.id"), nullable=False, index=True)
+    version        = Column(Integer, nullable=False, default=1)
+    status         = Column(Text, nullable=False, default="draft")
+    description    = Column(Text)
+    params         = Column(JSONB, nullable=False)   # 계수 본문(ip_model/ref/bw/cpu/calibration)
+    notes          = Column(Text)
+    yaml_sha256    = Column(Text, nullable=False)

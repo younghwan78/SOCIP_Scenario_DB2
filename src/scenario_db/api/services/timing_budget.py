@@ -19,6 +19,7 @@ from scenario_db.models.evidence.common import ExecutionContext
 from scenario_db.sim.adapter import build_simulation_inputs
 from scenario_db.sim.service import (
     _apply_config_profile,
+    _check_power_params_scope,
     _dvfs_tables_from_row,
     _enforce_input_limits,
     _graph_soc_ref,
@@ -60,6 +61,7 @@ def _load(db: Session, shim: SimulateRequest, use_default_dvfs: bool):
     from scenario_db.sim.sensor_projection import resolve_sensor_modes
 
     graph = resolve_sensor_modes(db, graph, shim.config)
+    _check_power_params_scope(shim.config, graph)
     _enforce_input_limits(build_simulation_inputs(graph, shim.config))
     tables, context = _resolve_dvfs_tables(db, graph, shim)
     ref = context.dvfs_table_ref

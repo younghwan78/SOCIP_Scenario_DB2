@@ -31,6 +31,7 @@ from pydantic import Field, model_validator
 from scenario_db.models.common import BaseScenarioModel
 from scenario_db.sim.adapter import build_simulation_inputs
 from scenario_db.sim.models import DVFSTable, SimRunResult, SimulationInputs, SimulationRunConfig
+from scenario_db.sim.power_params import effective_power_params
 from scenario_db.sim.runner import run_simulation
 
 Statistic = Literal["min", "mean", "max"]
@@ -96,6 +97,28 @@ class CpuPowerConfig(BaseScenarioModel):
             raise ValueError("CPU power parameters must be finite and positive")
         return self
 
+    @classmethod
+    def from_params(cls, params) -> CpuPowerConfig | None:
+        """CPU power config from a ``power_model_params`` document (None if it has no cpu block).
+
+        Unset fields keep the class defaults; ``source`` records the params id.
+        """
+        cpu = params.cpu
+        if not cpu.clusters and all(value is None for value in (cpu.default_cluster, cpu.freq_mhz, cpu.volt_v)):
+            return None
+        values: dict[str, Any] = {
+            "source": f"{params.params_ref}" + (f" ({cpu.source})" if cpu.source else ""),
+        }
+        if cpu.clusters:
+            values["coeff_uw_per_mhz_v2"] = [c.coeff_uw_per_mhz_v2 for c in cpu.clusters]
+        if cpu.default_cluster is not None:
+            values["cluster"] = cpu.default_cluster
+        if cpu.freq_mhz is not None:
+            values["freq_mhz"] = cpu.freq_mhz
+        if cpu.volt_v is not None:
+            values["volt_v"] = cpu.volt_v
+        return cls(**values)
+
     def power_mw(self, busy_ms: float, period_ms: float) -> float:
         util = busy_ms / period_ms if period_ms > 0 else 0.0
         return (
@@ -143,6 +166,12 @@ def analyze_timing_budget(
     dvfs_tables: dict[str, DVFSTable] | None = None,
 ) -> dict[str, Any]:
     options = options or TimingBudgetOptions()
+    params = effective_power_params(config) if config is not None else None
+    if params is not None and "cpu" not in options.model_fields_set:
+        # Explicit options.cpu still wins; otherwise CPU coefficients come from data.
+        cpu_from_params = CpuPowerConfig.from_params(params)
+        if cpu_from_params is not None:
+            options = options.model_copy(update={"cpu": cpu_from_params})
     dvfs_tables = dvfs_tables or {}
     base_config = (config or SimulationRunConfig()).model_copy(
         update={

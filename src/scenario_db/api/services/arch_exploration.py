@@ -30,7 +30,8 @@ from scenario_db.exceptions import NotFoundError, UnprocessableError
 from scenario_db.reporting.arch_report import build_snapshot, html_sha256, render_html
 from scenario_db.sim.arch_exploration import ENGINE_REV, explore_variant, find_case, prediction_payload
 from scenario_db.sim.power_attribution import attribute
-from scenario_db.sim.service import _apply_config_profile, _graph_soc_ref
+from scenario_db.sim.model_lineage import lineage_differences, run_model_lineage
+from scenario_db.sim.service import _apply_config_profile, _check_power_params_scope, _graph_soc_ref
 from scenario_db.sim.timing_budget import DERIVED_VARIANT_MARKERS
 
 
@@ -110,7 +111,9 @@ def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str |
             bounded_spec = request.spec.model_copy(update={
                 "max_cases_per_variant": min(request.spec.max_cases_per_variant, remaining_cases),
             })
+            _check_power_params_scope(shim.config, graph)
             summary = explore_variant(graph, bounded_spec, config=shim.config, dvfs_tables=tables)
+            summary["model_lineage"] = run_model_lineage(shim.config)
         except (LookupError, ValueError) as exc:
             errors.append({"scenario_id": scenario.id, "variant_id": variant_id, "error": str(exc)[:300]})
             continue
@@ -231,7 +234,8 @@ def promote(db: Session, request: PromoteRequest, user: str | None = None) -> di
                     "design_conditions": summary.get("design_conditions"),
                     "distribution": summary["distribution"], "alternatives": len(summary.get("alternatives") or []),
                     "eligible_cases": summary["counts"]["eligible"], "verified": case.get("verified"),
-                    "power_options": option_snapshot(summary.get("power_options"), case, rule)}
+                    "power_options": option_snapshot(summary.get("power_options"), case, rule),
+                    "model_lineage": summary.get("model_lineage")}
         prev = (db.query(Prediction)
                 .filter_by(scenario_ref=summary["scenario_id"], variant_ref=vid, status="current").one_or_none())
         if prev is not None:
@@ -277,7 +281,9 @@ def board(db: Session, *, scenario_id: str | None = None, project_ref: str | Non
             "eligible_cases": m.get("eligible_cases"), "alternatives": m.get("alternatives"), "verified": m.get("verified"),
             "statistic": m.get("statistic"), "runtime_scale": m.get("runtime_scale"),
             "previous": ({"id": old.id, "total_mw": old.metrics["power"]["total_mw"],
-                          "delta_mw": round(m["power"]["total_mw"] - old.metrics["power"]["total_mw"], 3)} if old else None),
+                          "delta_mw": round(m["power"]["total_mw"] - old.metrics["power"]["total_mw"], 3),
+                          "lineage_changes": lineage_differences(old.metrics.get("model_lineage"),
+                                                                 m.get("model_lineage"))} if old else None),
             "power_options": board_options(m.get("power_options"), reviews.get(p.scenario_ref, {}), p.variant_ref),
         })
     return {"rows": rows, "review_statuses": list(POWER_OPTION_STATUSES)}
@@ -319,8 +325,16 @@ def compare(db: Session, *, old_id: str | None = None, new_id: str | None = None
         raise NotFoundError(f"prediction not found: {old_ref}")
     if (old.scenario_ref, old.variant_ref) != (new.scenario_ref, new.variant_ref):
         raise UnprocessableError("predictions must belong to the same scenario and variant")
+    changes = lineage_differences(old.metrics.get("model_lineage"), new.metrics.get("model_lineage"))
     return {"old": _pred_dict(old, metrics=False), "new": _pred_dict(new, metrics=False),
-            "attribution": attribute(old.metrics, new.metrics)}
+            "attribution": attribute(old.metrics, new.metrics),
+            # A model/coefficient/clock-basis change moves power with no design
+            # change; the attribution above cannot tell the two apart.
+            "lineage_changes": changes,
+            "lineage_warning": (
+                "model lineage differs (" + ", ".join(c["field"] for c in changes) + "); part of the delta "
+                "comes from the model, not the scenario" if changes else None
+            )}
 
 
 # ------------------------------------------------------------------- reports

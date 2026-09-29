@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from scenario_db.db.repositories.scenario_graph import CanonicalScenarioGraph
-from scenario_db.sim.clock_corrections import apply_sensor_otf_clock_corrections
+from scenario_db.sim.clock_models import ConfiguredClock
+from scenario_db.sim.clock_corrections import add_clock_constraint, apply_sensor_otf_clock_corrections
 from scenario_db.sim.external_devices import (
     active_sensor_nodes,
     external_devices,
@@ -170,6 +171,12 @@ def build_simulation_inputs(
             if workload is None or workload.sim_params.ppc <= 0 or budget <= 0:
                 raise ValueError(f"{stage}: included hardware needs positive PPC and a time budget")
             bound = workload.pixels * (1 + run_config.h_blank_margin) / (budget * workload.sim_params.ppc * 1000)
+            add_clock_constraint(
+                workload,
+                bound,
+                kind="stage_budget",
+                reason=f"included_stage_budget({stage}, {budget:g}ms; lower bound)",
+            )
             if bound > workload.clock_correction_mhz:
                 workload.clock_correction_mhz = bound
                 workload.clock_correction_reason = f"included_stage_budget({stage}, {budget:g}ms; lower bound)"
@@ -193,12 +200,13 @@ def build_simulation_inputs(
         tasks, edges, sw_profiles = apply_projection(graph, run_config.sw_timing_projection, tasks, edges, sw_profiles)
         warnings.append("Projected SW elapsed time and observed gaps are assumptions; CPU active power is not calibrated.")
 
+    configured = effective_configured_clocks(graph, run_config, warnings)
     return SimulationInputs(
         driver_model_report=driver_report if driver_report["rows"] else None,
         scenario_id=graph.scenario_id,
         variant_id=graph.variant_id,
         project_ref=getattr(graph.scenario, "project_ref", None),
-        config=run_config.model_copy(update={"fps": fps}),
+        config=run_config.model_copy(update={"fps": fps, "configured_clocks": configured}),
         workloads=workloads,
         port_transfers=transfers,
         timeline_tasks=tasks,
@@ -208,6 +216,43 @@ def build_simulation_inputs(
         topology_order=[item.node_id for item in workloads],
         warnings=warnings,
     )
+
+
+def effective_configured_clocks(
+    graph: CanonicalScenarioGraph,
+    config: SimulationRunConfig,
+    warnings: list[str],
+) -> dict[str, ConfiguredClock] | None:
+    """Per-variant configured clocks: project < DVFS scenario (dvfs_sn) < variant node.
+
+    Real configured clocks follow the variant's DVFS scenario table, not one
+    project-wide number, so a project map alone cannot express them. Each
+    entry records where it came from (``ConfiguredClock.source``).
+    """
+    merged: dict[str, ConfiguredClock] = {}
+    for key, clock in (config.configured_clocks or {}).items():
+        merged[key] = clock if clock.source else clock.model_copy(update={"source": "project"})
+    dvfs_sn = (graph.variant.design_conditions or {}).get("dvfs_sn")
+    by_sn = config.configured_clocks_by_dvfs_sn or {}
+    if by_sn:
+        table = by_sn.get(str(dvfs_sn)) if dvfs_sn else None
+        if table is None:
+            warnings.append(
+                f"configured clocks: no DVFS scenario table for dvfs_sn={dvfs_sn!r}; "
+                "only project-wide / variant configured clocks apply."
+            )
+        for key, clock in (table or {}).items():
+            merged[key] = clock.model_copy(update={"source": "dvfs_scenario"})
+    for node_id, node_config in (graph.variant.node_configs or {}).items():
+        raw = ((node_config or {}).get("sim") or {}).get("configured_clock")
+        if raw is None:
+            continue
+        try:
+            clock = ConfiguredClock.model_validate(raw)
+        except ValueError as exc:
+            raise ValueError(f"{node_id}: invalid sim.configured_clock: {exc}") from exc
+        merged[str(node_id)] = clock.model_copy(update={"source": "variant"})
+    return merged or None
 
 
 def _fps(graph: CanonicalScenarioGraph, config: SimulationRunConfig) -> float:

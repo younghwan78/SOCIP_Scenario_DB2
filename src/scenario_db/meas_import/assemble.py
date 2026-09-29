@@ -13,6 +13,7 @@ from scenario_db.legacy_import.report import ImportReport
 from scenario_db.meas_import.meta import MeasurementImportMeta
 from scenario_db.meas_import.observations import build_metric_observations
 from scenario_db.meas_import.perfetto_digest import PerfettoDigest
+from scenario_db.meas_import.pmu_digest import PmuDigest
 from scenario_db.meas_import.power_csv import PowerDigest
 
 _SLUG_RE = re.compile(r"[^a-zA-Z0-9.]+")
@@ -108,6 +109,7 @@ def assemble_evidence(
     *,
     base_dir: Path,
     report: ImportReport,
+    pmu: PmuDigest | None = None,
 ) -> dict:
     doc: dict = {
         "id": meta.id or generate_evidence_id(meta),
@@ -151,7 +153,7 @@ def assemble_evidence(
     if power is not None and power.vdd_power:
         doc["vdd_power"] = power.vdd_power
 
-    observations = build_metric_observations(meta, power, perfetto, kpi=kpi)
+    observations = build_metric_observations(meta, power, perfetto, kpi=kpi, pmu=pmu)
     if observations:
         doc["metric_observations"] = observations
 
@@ -163,9 +165,19 @@ def assemble_evidence(
         if trace.is_file() and not any(a.get("type") == "perfetto_trace" for a in artifacts):
             artifacts.append(dict(type="perfetto_trace", storage="fileshare", path=meta.perfetto.trace,
                                   sha256=_sha256(trace), bytes=trace.stat().st_size))
+    if meta.pmu is not None and pmu is not None:
+        pmu_path = Path(meta.pmu.file)
+        if not pmu_path.is_absolute():
+            pmu_path = base_dir / pmu_path
+        if pmu_path.is_file() and not any(a.get("type") == "pmu_digest" for a in artifacts):
+            artifacts.append(dict(type="pmu_digest", storage="fileshare", path=meta.pmu.file,
+                                  sha256=_sha256(pmu_path), bytes=pmu_path.stat().st_size))
     if meta.profiling or meta.sw_task_timing or (meta.perfetto and
             (meta.perfetto.include_sequence or meta.perfetto.event_latency_mapping)):
-        fingerprint_input = dict(meta=meta.model_dump(mode="json"), artifacts=artifacts,
+        meta_dump = meta.model_dump(mode="json")
+        if meta_dump.get("pmu") is None:
+            meta_dump.pop("pmu", None)  # absent PMU input keeps pre-PMU fingerprints stable
+        fingerprint_input = dict(meta=meta_dump, artifacts=artifacts,
                                  digest={k:doc.get(k) for k in ("sw_task_timing", "hw_task_timing", "sw_event_latency", "timeline_events")})
         doc["provenance"]["import_fingerprint"] = hashlib.sha256(
             json.dumps(fingerprint_input, sort_keys=True, separators=(",", ":")).encode()).hexdigest()

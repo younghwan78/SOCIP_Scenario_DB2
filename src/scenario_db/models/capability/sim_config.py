@@ -25,6 +25,7 @@ from scenario_db.models.common import (
     DocumentId,
     SchemaVersion,
 )
+from scenario_db.sim.clock_models import ClockBasis, ConfiguredClock, MeasuredClockStat
 
 
 class SimConfigRunDefaults(BaseScenarioModel):
@@ -38,6 +39,19 @@ class SimConfigRunDefaults(BaseScenarioModel):
     pmic_efficiency: float | None = None
     h_blank_margin: float | None = None
     power_model: str | None = None
+    bw_power_model: str | None = None
+    bw_power_mw_per_gbps: float | None = None
+    power_params_ref: str | None = None
+    # Clock ledger: configured (BSP / DT / kernel) clocks per node_id / hw_name /
+    # ip_ref, each with a mandatory reason code (validated at ETL), and which
+    # tier drives the run. None = not pinned (calculated clock).
+    clock_basis: ClockBasis | None = None
+    configured_clocks: dict[str, ConfiguredClock] | None = None
+    # Per DVFS scenario (variant dvfs_sn) configured clocks; overrides the
+    # project-wide map above for variants running that DVFS scenario.
+    configured_clocks_by_dvfs_sn: dict[str, dict[str, ConfiguredClock]] | None = None
+    measured_clock_ref: str | None = None
+    measured_clock_stat: MeasuredClockStat | None = None
     memory_rail: str | None = None
     dvfs_overrides: dict[str, int] = Field(default_factory=dict)
 

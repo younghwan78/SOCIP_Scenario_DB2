@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from scenario_db.api.schemas.evidence import EvidenceResponse
 from scenario_db.exceptions import NotFoundError, UnprocessableError
 from scenario_db.api.schemas.simulation import SimulateRequest, SimulateRunResponse, SimulationReadinessResponse
+from scenario_db.db.models.capability import PowerModelParams as PowerModelParamsRow
 from scenario_db.db.models.capability import SimConfigProfile, SocDvfsTable
 from scenario_db.db.repositories.evidence import (
     get_evidence,
@@ -19,6 +20,8 @@ from scenario_db.db.repositories.scenario_graph import load_canonical_graph
 from scenario_db.models.evidence.common import ExecutionContext
 from scenario_db.sim.adapter import build_simulation_inputs
 from scenario_db.sim.models import DVFSTable, SimulationInputs, SimulationRunConfig
+from scenario_db.sim.measured_clock import measured_clocks_from_observations
+from scenario_db.sim.power_params import power_params_from_row
 from scenario_db.sim.readiness import check_simulation_readiness
 from scenario_db.sim.runner import build_simulation_evidence, params_hash, run_simulation
 from scenario_db.config import get_settings
@@ -33,6 +36,7 @@ def run_simulation_request(db: Session, request: SimulateRequest) -> SimulateRun
             verify_projection(db, graph, request.config.sw_timing_projection)
         from scenario_db.sim.sensor_projection import resolve_sensor_modes
         graph = resolve_sensor_modes(db, graph, request.config)
+        _check_power_params_scope(request.config, graph)
         inputs = build_simulation_inputs(graph, request.config)
         _enforce_input_limits(inputs)
         dvfs_tables, execution_context = _resolve_dvfs_tables(db, graph, request)
@@ -148,8 +152,15 @@ def _apply_config_profile(db: Session, request: SimulateRequest) -> str | None:
     the merged *values*, so an identical configuration reached without the
     profile is the same physics.)
     """
-    if not request.config_profile_ref:
-        return None
+    stamp = None
+    if request.config_profile_ref:
+        stamp = _merge_config_profile(db, request)
+    _apply_power_params(db, request)
+    _apply_measured_clocks(db, request)
+    return stamp
+
+
+def _merge_config_profile(db: Session, request: SimulateRequest) -> str:
     row = db.get(SimConfigProfile, request.config_profile_ref)
     if row is None:
         raise NotFoundError(f"sim.config_profile not found: {request.config_profile_ref}")
@@ -166,6 +177,71 @@ def _apply_config_profile(db: Session, request: SimulateRequest) -> str | None:
             f"sim.config_profile '{row.id}' produced an invalid run config: {exc}"
         ) from exc
     return f"{row.id}@{row.version}"
+
+
+def _apply_power_params(db: Session, request: SimulateRequest) -> None:
+    """Resolve ``config.power_params_ref`` (``id`` or ``id@version``) into inline params.
+
+    Opt-in: nothing happens unless a ref is set. The resolved object lives in
+    the run config, so the request hash and evidence lineage cover the actual
+    coefficients rather than a mutable reference.
+    """
+    config = request.config
+    ref = config.power_params_ref
+    if not ref or config.power_params is not None:
+        return
+    params_id, _, version_text = ref.partition("@")
+    row = db.get(PowerModelParamsRow, params_id)
+    if row is None:
+        raise NotFoundError(f"power_model_params not found: {ref}")
+    if version_text and (not version_text.isdigit() or int(version_text) != row.version):
+        raise UnprocessableError(
+            f"power_model_params '{params_id}' is at version {row.version}, requested '{version_text}'"
+        )
+    try:
+        params = power_params_from_row(row)
+    except ValueError as exc:
+        raise UnprocessableError(f"power_model_params '{params_id}' is invalid: {exc}") from exc
+    request.config = config.model_copy(update={"power_params": params})
+
+
+def _apply_measured_clocks(db: Session, request: SimulateRequest) -> None:
+    """Resolve ``config.measured_clock_ref`` (measurement evidence id) into measured clocks.
+
+    The measurement must belong to the requested scenario/variant; its
+    ``clock.ip`` PMU observations become the measured tier of the clock ledger.
+    """
+    config = request.config
+    ref = config.measured_clock_ref
+    if not ref or config.measured_clocks is not None:
+        return
+    row = get_evidence(db, ref)
+    if row is None or row.kind != "evidence.measurement":
+        raise NotFoundError(f"measurement evidence not found: {ref}")
+    if (row.scenario_ref, row.variant_ref) != (request.scenario_id, request.variant_id):
+        raise UnprocessableError(
+            f"measurement evidence {ref} belongs to {row.scenario_ref}/{row.variant_ref}, "
+            f"not {request.scenario_id}/{request.variant_id}"
+        )
+    stat = config.measured_clock_stat or "weighted_mean"
+    clocks = measured_clocks_from_observations(
+        row.metric_observations or [], stat=stat, evidence_ref=ref
+    )
+    if not clocks:
+        raise UnprocessableError(
+            f"measurement evidence {ref} has no usable clock.ip observations ({stat})"
+        )
+    request.config = config.model_copy(update={"measured_clocks": clocks})
+
+
+def _check_power_params_scope(config: SimulationRunConfig, graph) -> None:
+    """Power params are SoC-scoped: refuse to apply them to another SoC's scenario."""
+    params = config.power_params
+    soc_ref = _graph_soc_ref(graph)
+    if params is not None and soc_ref and str(params.soc_ref) != str(soc_ref):
+        raise ValueError(
+            f"power_model_params '{params.params_ref}' belongs to {params.soc_ref}, not {soc_ref}"
+        )
 
 
 def _enforce_input_limits(inputs: SimulationInputs) -> None:
@@ -289,7 +365,32 @@ def check_simulation_readiness_request(
         raise NotFoundError(str(exc)) from exc
     except ValueError as exc:
         raise UnprocessableError(str(exc)) from exc
-    return SimulationReadinessResponse.model_validate(check_simulation_readiness(graph))
+    report = check_simulation_readiness(graph)
+    _advise_missing_power_params(db, graph, report)
+    return SimulationReadinessResponse.model_validate(report)
+
+
+def _advise_missing_power_params(db: Session, graph, report: dict) -> None:
+    """Advisory only: a SoC without power_model_params falls back to code constants.
+
+    Appended after the status was decided so it never flips ``ready`` to
+    ``warning`` (results are unchanged, the constants are simply not data).
+    """
+    soc_ref = _graph_soc_ref(graph)
+    if not soc_ref:
+        return
+    exists = db.query(PowerModelParamsRow.id).filter_by(soc_ref=str(soc_ref)).first()
+    if exists is None:
+        report["warnings"].append(
+            {
+                "severity": "warning",
+                "code": "MISSING_POWER_MODEL_PARAMS",
+                "message": (
+                    f"No power_model_params for {soc_ref}; reference voltage/fps and BW/CPU "
+                    "coefficients fall back to code constants."
+                ),
+            }
+        )
 
 
 def _request_hash(

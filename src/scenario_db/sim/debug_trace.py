@@ -3,12 +3,15 @@ from __future__ import annotations
 from typing import Any
 
 from scenario_db.sim.bw_calc import BW_MBS_FORMULA, effective_comp_ratio
+from scenario_db.sim.bw_power import BwPowerModel, bw_model_from_config
 from scenario_db.sim.constants import (
     BPP_DEFAULT,
     BPP_MAP,
     REFERENCE_FPS,
     REFERENCE_VOLTAGE_MV,
 )
+from scenario_db.sim.power_model import resolve_power_model
+from scenario_db.sim.power_params import effective_power_params
 from scenario_db.sim.models import (
     DVFSTable,
     IPTimingResult,
@@ -41,6 +44,10 @@ def build_calculation_trace(
     """Build a persisted explanation of how simulation numbers were derived."""
 
     config = inputs.config
+    bw_model = bw_model_from_config(config)
+    power_model = resolve_power_model(config.power_model, effective_power_params(config))
+    ref_voltage_mv = float(getattr(power_model, "ref_voltage_mv", REFERENCE_VOLTAGE_MV))
+    ref_fps = float(getattr(power_model, "ref_fps", REFERENCE_FPS))
     return {
         "schema_version": "1.0",
         "trace_level": config.debug_trace_level,
@@ -77,6 +84,8 @@ def build_calculation_trace(
             dvfs_tables=dvfs_tables,
             asv_group=config.asv_group,
             h_blank_margin=config.h_blank_margin,
+            ref_voltage_mv=ref_voltage_mv,
+            ref_fps=ref_fps,
         ),
         "dma": _dma_traces(
             inputs.port_transfers,
@@ -85,6 +94,7 @@ def build_calculation_trace(
             bw_power_coeff=config.bw_power_coeff,
             vbat=config.vbat,
             pmic_efficiency=config.pmic_efficiency,
+            bw_model=bw_model,
         ),
         "external_devices": list(inputs.external_devices),
         "topology_order": list(inputs.topology_order),
@@ -143,6 +153,8 @@ def _ip_traces(
     dvfs_tables: dict[str, DVFSTable],
     asv_group: int,
     h_blank_margin: float,
+    ref_voltage_mv: float = REFERENCE_VOLTAGE_MV,
+    ref_fps: float = REFERENCE_FPS,
 ) -> list[dict[str, Any]]:
     timing_by_node = {item.node_id: item for item in timing_breakdown}
     traces: list[dict[str, Any]] = []
@@ -224,7 +236,10 @@ def _ip_traces(
                     "infeasible_reason": config.infeasible_reason,
                 },
                 "power": {
-                    "formula": "unit_power_mw_mp * resolution_mp * (set_voltage_mv / 710)^2 * (fps / 30)",
+                    "formula": (
+                        "unit_power_mw_mp * resolution_mp * "
+                        f"(set_voltage_mv / {ref_voltage_mv:g})^2 * (fps / {ref_fps:g})"
+                    ),
                     "unit_power_source": {
                         "catalog_source": params.source,
                         "source_project": params.source_project,
@@ -235,17 +250,17 @@ def _ip_traces(
                         "unit_power_mw_mp": config.unit_power_mw_mp,
                         "resolution_mp": config.input_resolution_mp,
                         "set_voltage_mv": config.set_voltage_mv,
-                        "reference_voltage_mv": REFERENCE_VOLTAGE_MV,
+                        "reference_voltage_mv": ref_voltage_mv,
                         "fps": config.fps,
-                        "reference_fps": REFERENCE_FPS,
+                        "reference_fps": ref_fps,
                     },
                     "intermediate": {
                         "voltage_scale": (
-                            (config.set_voltage_mv / REFERENCE_VOLTAGE_MV) ** 2
+                            (config.set_voltage_mv / ref_voltage_mv) ** 2
                             if config.set_voltage_mv > 0
                             else 0.0
                         ),
-                        "fps_scale": config.fps / REFERENCE_FPS if config.fps > 0 else 0.0,
+                        "fps_scale": config.fps / ref_fps if config.fps > 0 else 0.0,
                     },
                     "result_mw": config.total_power_mw,
                 },
@@ -293,6 +308,7 @@ def _dma_traces(
     bw_power_coeff: float,
     vbat: float,
     pmic_efficiency: float,
+    bw_model: BwPowerModel | None = None,
 ) -> list[dict[str, Any]]:
     results = {(item.node_id, item.port): item for item in dma_breakdown}
     traces: list[dict[str, Any]] = []
@@ -313,7 +329,9 @@ def _dma_traces(
                 "direction": result.direction,
                 "formula": "bitrate_mbps / 8 * r_w_rate" if spec.bitrate_mbps is not None else BW_MBS_FORMULA,
                 "bw_formula": "bitrate_mbps / 8 * r_w_rate" if spec.bitrate_mbps is not None else BW_MBS_FORMULA,
-                "bw_power_formula": "bw_mbs * bw_power_coeff / 1000 * llc_weight",
+                "bw_power_formula": (
+                    bw_model.formula() if bw_model else "bw_mbs * bw_power_coeff / 1000 * llc_weight"
+                ),
                 "bw_power_ma_formula": "bw_power_mw / vbat / pmic_efficiency",
                 "inputs": {
                     "width": spec.width,
@@ -327,6 +345,7 @@ def _dma_traces(
                     "r_w_rate": spec.r_w_rate,
                     "llc_enabled": spec.llc_enabled,
                     "bw_power_coeff": bw_power_coeff,
+                    **({"bw_power_model": bw_model.describe()} if bw_model else {}),
                     "vbat": vbat,
                     "pmic_efficiency": pmic_efficiency,
                 },

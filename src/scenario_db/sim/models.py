@@ -5,7 +5,16 @@ from typing import Any, Literal
 
 from pydantic import Field, model_validator
 
+from scenario_db.models.capability.power_model import PowerModelParams
 from scenario_db.models.common import BaseScenarioModel
+from scenario_db.sim.clock_models import (
+    ClockBasis,
+    ClockConstraint,
+    ClockLedger,
+    ConfiguredClock,
+    MeasuredClock,
+    MeasuredClockStat,
+)
 from scenario_db.models.sensor import SensorTiming, SensorModeBinding
 from scenario_db.sim.driver_models import DriverInput
 from scenario_db.sim.constants import SW_MARGIN_DEFAULT
@@ -116,6 +125,10 @@ class IPWorkload(BaseScenarioModel):
     manual_clock_mhz: float | None = None
     clock_correction_mhz: float = 0.0
     clock_correction_reason: str | None = None
+    # Every clock lower bound collected while building inputs (the correction
+    # above keeps only the max). Informational: derived from inputs already in
+    # the hash, so it is excluded from serialisation / params_hash.
+    clock_constraints: list[ClockConstraint] = Field(default_factory=list, exclude=True)
     sim_params: IPSimParams
 
     @property
@@ -138,6 +151,33 @@ class SimulationRunConfig(BaseScenarioModel):
     bw_power_coeff: float = 80.0
     # Which registered power physics computes ip/memory power (sim/power_model.py).
     power_model: str = "v1-vfps"
+    # BW -> memory power model (sim/bw_power.py). None keeps the built-in
+    # PowerModel.memory_transfer_power_mw path (default behaviour unchanged);
+    # "legacy-coeff" reproduces it via the registry, "linear-per-gbps" is the
+    # N mW per GB/s rule of thumb. mw_per_gbps overrides the params/default value.
+    bw_power_model: str | None = None
+    bw_power_mw_per_gbps: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    # SoC-scoped power_model_params (opt-in). The service resolves the ref
+    # (id or id@version) against the DB into ``power_params`` so the request
+    # hash and evidence lineage cover the actual coefficients. Precedence for
+    # BW: explicit bw_power_* config > params.bw > code defaults.
+    power_params_ref: str | None = None
+    power_params: PowerModelParams | None = None
+    # Clock ledger (sim/clock_models.py). None keeps the calculated clock.
+    # configured/measured are keyed by node_id, hw_name or ip_ref; a missing
+    # value falls back to the calculated clock with a warning.
+    clock_basis: ClockBasis | None = None
+    configured_clocks: dict[str, ConfiguredClock] | None = None
+    # Configured clocks per DVFS scenario (variant design_conditions.dvfs_sn,
+    # e.g. IS_DVFS_SN_REAR_SINGLE_VIDEO_UHD30). The adapter folds project
+    # defaults < this table < variant node_configs.<node>.sim.configured_clock
+    # into the effective per-variant ``configured_clocks``.
+    configured_clocks_by_dvfs_sn: dict[str, dict[str, ConfiguredClock]] | None = None
+    measured_clocks: dict[str, MeasuredClock] | None = None
+    # Measurement evidence (PMU clock.ip observations) the service turns into
+    # measured_clocks; measured_clock_stat picks weighted mean vs dominant level.
+    measured_clock_ref: str | None = None
+    measured_clock_stat: MeasuredClockStat | None = None
     # Logical rail that carries BW-induced (DRAM/interconnect) power. Measured
     # captures see that power on the MIF buck, never on the initiating IP's
     # rail, so per-rail calibration needs the same attribution here.
@@ -199,6 +239,7 @@ class ResolvedIPConfig(BaseScenarioModel):
     vdd_leader: str | None = None
     feasible: bool = True
     infeasible_reason: str | None = None
+    clock_ledger: ClockLedger | None = None
 
 
 class PortBWResult(BaseScenarioModel):

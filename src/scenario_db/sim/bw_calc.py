@@ -7,6 +7,7 @@ from scenario_db.sim.constants import (
     PMIC_EFFICIENCY_DEFAULT,
     VBAT_DEFAULT,
 )
+from scenario_db.sim.bw_power import BwPowerModel
 from scenario_db.sim.models import PortBWResult, PortTransferSpec, PortType
 from scenario_db.sim.power_model import PowerModel, resolve_power_model
 
@@ -22,8 +23,13 @@ def calc_port_bw(
     vbat: float = VBAT_DEFAULT,
     pmic_efficiency: float = PMIC_EFFICIENCY_DEFAULT,
     power_model: PowerModel | None = None,
+    bw_model: BwPowerModel | None = None,
 ) -> PortBWResult:
-    """Calculate DMA bandwidth and BW-induced power for one port."""
+    """Calculate DMA bandwidth and BW-induced power for one port.
+
+    ``bw_model`` (sim/bw_power.py) takes over the BW -> power step when given;
+    otherwise ``power_model.memory_transfer_power_mw`` is used unchanged.
+    """
 
     direction = _direction(spec.port_type)
     if direction == "otf" or (spec.bitrate_mbps is None and (spec.width <= 0 or spec.height <= 0)):
@@ -53,12 +59,20 @@ def calc_port_bw(
     comp_ratio = effective_comp_ratio(spec)
     llc_weight = spec.llc_weight if spec.llc_enabled else 1.0
     bw_mbs = _bw_mbs(spec, fps=fps, bpp=bpp, comp_ratio=comp_ratio)
-    model = power_model or resolve_power_model(None)
-    bw_power_mw = model.memory_transfer_power_mw(
-        bw_mbs=bw_mbs,
-        bw_power_coeff=bw_power_coeff,
-        llc_weight=llc_weight,
-    )
+    if bw_model is not None:
+        bw_power_mw = bw_model.port_power_mw(
+            bw_mbs=bw_mbs,
+            direction=direction,
+            llc_enabled=spec.llc_enabled,
+            llc_weight=llc_weight,
+        )
+    else:
+        model = power_model or resolve_power_model(None)
+        bw_power_mw = model.memory_transfer_power_mw(
+            bw_mbs=bw_mbs,
+            bw_power_coeff=bw_power_coeff,
+            llc_weight=llc_weight,
+        )
     bw_power_ma = (
         bw_power_mw / vbat / pmic_efficiency
         if vbat > 0 and pmic_efficiency > 0

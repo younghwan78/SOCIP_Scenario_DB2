@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from scenario_db.etl.mappers.capability import (
     upsert_ip,
+    upsert_power_model_params,
     upsert_sim_config_profile,
     upsert_soc,
     upsert_soc_cdgm_profile,
@@ -105,6 +106,7 @@ MAPPER_REGISTRY: dict[str, Mapper] = {
     "sw_profile":             upsert_sw_profile,
     "sw_component":           upsert_sw_component,
     "project":                upsert_project,
+    "power_model_params":     upsert_power_model_params,
     "sim.config_profile":     upsert_sim_config_profile,
     "scenario.usecase":       upsert_usecase,
     "evidence.simulation":    upsert_simulation,
@@ -127,6 +129,7 @@ LOAD_ORDER = [
     "sw_profile",
     "sw_component",
     "project",
+    "power_model_params",   # FK: soc_ref
     "sim.config_profile",   # FK: project_ref / soc_ref
     "scenario.usecase",
     "evidence.simulation",

@@ -86,12 +86,72 @@ def power_summary_rows(evidence: dict[str, Any]) -> list[dict[str, str]]:
     return rows
 
 
+def has_clock_tier_data(evidence: dict[str, Any]) -> bool:
+    """True when any IP carries a configured/measured clock (or a non-default basis)."""
+    for item in _list(evidence.get("dvfs_breakdown")):
+        ledger = _dict(item.get("clock_ledger"))
+        if (
+            ledger.get("configured_mhz") is not None
+            or ledger.get("measured_mhz") is not None
+            or ledger.get("basis", "calculated") != "calculated"
+        ):
+            return True
+    return False
+
+
+def clock_ledger_rows(evidence: dict[str, Any]) -> list[dict[str, str]]:
+    """One row per IP: throughput need, binding constraint, Calc / Cfg / Meas clocks and gaps."""
+    rows = []
+    for item in _list(evidence.get("dvfs_breakdown")):
+        ledger = _dict(item.get("clock_ledger"))
+        if not ledger:
+            continue
+        gap = _dict(ledger.get("gap"))
+        constraints = ", ".join(
+            f"{_text(c.get('kind'))}={_fixed(c.get('mhz'), 1)}" for c in _list(ledger.get("constraints"))
+        )
+        rows.append(
+            {
+                "Node": _text(item.get("node_id")),
+                "HW": _text(item.get("hw_name")),
+                "Throughput (MHz)": _fixed(ledger.get("throughput_required_mhz"), 1),
+                "Constraints (MHz)": constraints or "-",
+                "Binding": _text(ledger.get("binding_kind")),
+                "Calc (MHz)": _fixed(ledger.get("calculated_mhz"), 1),
+                "Cfg (MHz)": _fixed(ledger.get("configured_mhz"), 1),
+                "Cfg Reason": _text(ledger.get("configured_reason_code")),
+                "Meas (MHz)": _fixed(ledger.get("measured_mhz"), 1),
+                "Cfg-Calc (MHz)": _signed_fixed(gap.get("configured_minus_calculated_mhz"), 1),
+                "Meas-Cfg (MHz)": _signed_fixed(gap.get("measured_minus_configured_mhz"), 1),
+                "Meas-Calc (MHz)": _signed_fixed(gap.get("measured_minus_calculated_mhz"), 1),
+                "Cause": _text(gap.get("cause")),
+                "Basis": _text(ledger.get("basis_used")),
+            }
+        )
+    return rows
+
+
 def ip_detail_rows(evidence: dict[str, Any]) -> list[dict[str, str]]:
     timing_by_node = {str(item.get("node_id")): item for item in _list(evidence.get("timing_breakdown"))}
     kpi = _dict(evidence.get("kpi"))
+    tiers = has_clock_tier_data(evidence)
     rows = []
     for item in _list(evidence.get("dvfs_breakdown")):
         timing = timing_by_node.get(str(item.get("node_id"))) or {}
+        ledger = _dict(item.get("clock_ledger"))
+        gap = _dict(ledger.get("gap"))
+        tier_cells = (
+            {
+                "Calc Clk": _fixed(ledger.get("calculated_mhz"), 1),
+                "Cfg Clk": _fixed(ledger.get("configured_mhz"), 1),
+                "Meas Clk": _fixed(ledger.get("measured_mhz"), 1),
+                "Clk Gap": _signed_fixed(
+                    gap.get("measured_minus_calculated_mhz", gap.get("configured_minus_calculated_mhz")), 1
+                ),
+            }
+            if tiers
+            else {}
+        )
         rows.append(
             {
                 "Node": _text(item.get("node_id")),
@@ -106,6 +166,7 @@ def ip_detail_rows(evidence: dict[str, Any]) -> list[dict[str, str]]:
                 "Req Freq": _fixed(item.get("required_clock_mhz"), 1),
                 "Set Freq": _fixed(item.get("set_clock_mhz"), 1),
                 "Set Volt": _fixed(item.get("set_voltage_mv"), 2),
+                **tier_cells,
                 "Power(mW)": _fixed(item.get("total_power_mw"), 2),
                 "Current(mA)": _fixed(item.get("total_power_ma"), 2),
                 "HW Time(ms)": _fixed(timing.get("hw_time_ms") or kpi.get("hw_time_max_ms"), 3),
@@ -227,6 +288,11 @@ def _ms(value: Any) -> str:
 def _fixed(value: Any, digits: int) -> str:
     number = _number(value)
     return "-" if number is None else f"{number:.{digits}f}"
+
+
+def _signed_fixed(value: Any, digits: int) -> str:
+    number = _number(value)
+    return "-" if number is None else f"{number:+.{digits}f}"
 
 
 def _number_text(value: Any) -> str:

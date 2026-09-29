@@ -1,0 +1,36 @@
+id: pmp-exynos2700-v1
+schema_version: '2.2'
+kind: power_model_params
+soc_ref: soc-exynos2700
+version: 1
+status: draft
+description: Power model coefficients (data, not code). Opt-in per run via config.power_params_ref.
+ip_model: v1-vfps
+# Operating point unit_power_mw_mp was characterised at (same as the historical code constants).
+ref_voltage_mv: 710.0
+ref_fps: 30.0
+# BW power rule of thumb: mW per 1 GB/s (1 GB/s = 1000 MB/s). Placeholder pending MIF measurement.
+bw_model: linear-per-gbps
+bw:
+  mw_per_gbps: 50.0
+  llc_hit_scale: 1.0
+cpu:
+  # Index order = timing-budget cluster index 0..3. Profiler coefficients from the CPU IP
+  # catalog; not re-calibrated per project yet.
+  clusters:
+  - name: little
+    coeff_uw_per_mhz_v2: 449.0
+  - name: mid
+    coeff_uw_per_mhz_v2: 449.0
+  - name: big
+    coeff_uw_per_mhz_v2: 505.0
+  - name: prime
+    coeff_uw_per_mhz_v2: 1127.0
+  default_cluster: 1
+  freq_mhz: 2000.0
+  volt_v: 0.8
+  source: CPU IP catalog profiler coefficients; cluster/freq/volt assumed
+calibration:
+  source_evidence: []
+  factor_by_ip: {}
+notes: SYNTHETIC placeholder values for flow verification; replace with calibrated values after measurement.

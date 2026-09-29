@@ -1,0 +1,20 @@
+# SYNTHETIC PMU digest in the neutral sample format (scenario_db.meas_import.pmu_digest).
+# Numbers are invented for flow verification only; they are not silicon data.
+metric,scope_kind,scope_ref,value,unit,stat,freq_mhz
+# IP clock residency (time spent at each clock; reduced to weighted mean / dominant level)
+ip_clock_residency,ip,MTNR,300,ms,,600
+ip_clock_residency,ip,MTNR,600,ms,,800
+ip_clock_residency,ip,MTNR,100,ms,,1000
+# IP clock already reduced by the PMU tool
+ip_clock_mhz,ip,MCSC,650,MHz,weighted_mean,
+ip_clock_mhz,ip,MCSC,800,MHz,dominant,
+ip_clock_mhz,ip,MCSC,1000,MHz,max,
+# Memory controller traffic (includes CPU/GPU/other masters)
+mem_bw_read_mbs,mif,total,5200,MB/s,mean,
+mem_bw_read_mbs,mif,total,6100,MB/s,p95,
+mem_bw_write_mbs,mif,total,3.4,GB/s,mean,
+# CPU cluster counters over the capture
+cpu_cycles,cluster,big,1.8e9,count,sum,
+cpu_instructions,cluster,big,3.6e9,count,sum,
+cpu_cycles,cluster,little,2.0e9,count,sum,
+cpu_instructions,cluster,little,1.0e9,count,sum,

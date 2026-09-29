@@ -8,6 +8,7 @@ from scenario_db.graph_checks import (
     edge_source as _edge_source,
     edge_target as _edge_target,
 )
+from scenario_db.sim.clock_models import ClockConstraint
 from scenario_db.sim.models import IPWorkload
 
 
@@ -47,6 +48,7 @@ def apply_sensor_otf_clock_corrections(
                 _raise_clock_correction(
                     workload,
                     req_clock,
+                    kind="mipi_ingress",
                     reason=(
                         f"sensor_ingress_req_csis_clock({sensor_node.get('id')}, "
                         f"phy={phy_type}, mipi={mipi_speed:g}Gbps, bitwidth={bitwidth:g})"
@@ -61,13 +63,37 @@ def apply_sensor_otf_clock_corrections(
             _raise_clock_correction(
                 workload,
                 stream_clock,
+                kind="vvalid_stream",
                 reason=f"sensor_vvalid_stream_clock({sensor_node.get('id')}, v_valid_ms={v_valid_ms})",
             )
 
     _apply_otf_group_clock_alignment(graph, workloads)
 
 
-def _raise_clock_correction(workload: IPWorkload, clock_mhz: float, *, reason: str) -> None:
+def add_clock_constraint(
+    workload: IPWorkload,
+    clock_mhz: float,
+    *,
+    kind: str,
+    reason: str,
+    source: str = "sim",
+) -> None:
+    """Record a clock lower bound on the workload's ledger (kept even if not the largest)."""
+    if clock_mhz > 0:
+        workload.clock_constraints.append(
+            ClockConstraint(kind=kind, mhz=clock_mhz, reason=reason, source=source)
+        )
+
+
+def _raise_clock_correction(
+    workload: IPWorkload,
+    clock_mhz: float,
+    *,
+    reason: str,
+    kind: str = "correction",
+) -> None:
+    # The ledger keeps every constraint; the legacy fields keep only the max.
+    add_clock_constraint(workload, clock_mhz, kind=kind, reason=reason)
     if clock_mhz > workload.clock_correction_mhz:
         workload.clock_correction_mhz = clock_mhz
         workload.clock_correction_reason = reason
@@ -96,6 +122,7 @@ def _apply_otf_group_clock_alignment(
             _raise_clock_correction(
                 workload,
                 group_clock,
+                kind="otf_align",
                 reason=f"otf_group_clock_align(otf-{group_index}, leader={leader_node_id})",
             )
 
