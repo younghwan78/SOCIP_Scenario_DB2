@@ -104,12 +104,13 @@ class CpuPowerConfig(BaseScenarioModel):
         Unset fields keep the class defaults; ``source`` records the params id.
         """
         cpu = params.cpu
-        if not cpu.clusters:
+        if not cpu.clusters and all(value is None for value in (cpu.default_cluster, cpu.freq_mhz, cpu.volt_v)):
             return None
         values: dict[str, Any] = {
-            "coeff_uw_per_mhz_v2": [c.coeff_uw_per_mhz_v2 for c in cpu.clusters],
             "source": f"{params.params_ref}" + (f" ({cpu.source})" if cpu.source else ""),
         }
+        if cpu.clusters:
+            values["coeff_uw_per_mhz_v2"] = [c.coeff_uw_per_mhz_v2 for c in cpu.clusters]
         if cpu.default_cluster is not None:
             values["cluster"] = cpu.default_cluster
         if cpu.freq_mhz is not None:

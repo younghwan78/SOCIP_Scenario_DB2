@@ -30,6 +30,41 @@ from scenario_db.sim.models import DVFSLevel, DVFSTable, IPSimParams, IPWorkload
 V = {400.0: 650.0, 666.0: 750.0}
 
 
+@pytest.mark.parametrize("residency", [{float("nan"): 1}, {float("inf"): 1}, {400: float("nan")}, {400: float("inf")}])
+def test_nonfinite_residency_is_rejected(residency):
+    with pytest.raises(ValueError, match="residency"):
+        MeasuredClock(mhz=400, residency=residency)
+
+
+def test_residency_preserves_explicit_dvfs_override():
+    resolver = DvfsResolver(_tables(), clock_basis="measured", measured_clocks={
+        "ip-gdc": MeasuredClock(mhz=533, residency={400: 1, 666: 1}),
+    })
+    cfg = resolver.resolve([_wl("gdc")], dvfs_overrides={"CAM": 1})["gdc"]
+    assert (cfg.set_clock_mhz, cfg.set_voltage_mv, cfg.dvfs_level) == (666, 750, 1)
+    assert any("override takes precedence" in warning for warning in resolver.warnings)
+
+
+def test_residency_does_not_lower_calculated_peer_requirement():
+    resolver = DvfsResolver(_tables(), clock_basis="measured", measured_clocks={
+        "gdc": MeasuredClock(mhz=453.2, residency={400: 4, 666: 1}),
+    })
+    out = resolver.resolve([_wl("gdc"), _wl("peer", ip_ref="ip-peer", w=17000)])
+    assert out["peer"].clock_ledger.basis_used == "calculated"
+    assert out["peer"].set_clock_mhz >= out["peer"].required_clock_mhz
+    assert out["gdc"].set_clock_mhz == out["peer"].set_clock_mhz == 666
+    assert any("peer needs a higher clock" in warning for warning in resolver.warnings)
+
+
+def test_nondominant_residency_level_above_table_is_infeasible():
+    resolver = DvfsResolver(_tables(), clock_basis="measured", measured_clocks={
+        "ip-gdc": MeasuredClock(mhz=460, residency={400: 9, 1000: 1}),
+    })
+    cfg = resolver.resolve([_wl("gdc")])["gdc"]
+    assert not cfg.feasible
+    assert "exceeds supported clock" in cfg.infeasible_reason
+
+
 def _tables() -> dict[str, DVFSTable]:
     return {
         "CAM": DVFSTable(

@@ -15,6 +15,7 @@ explain "why does this IP run 40% above what the workload needs":
 """
 from __future__ import annotations
 
+import math
 from typing import Any, Literal
 
 from pydantic import Field, field_validator
@@ -64,9 +65,12 @@ class MeasuredClock(BaseScenarioModel):
     def _normalise_residency(cls, value: dict[float, float] | None) -> dict[float, float] | None:
         if not value:
             return None
-        if any(mhz <= 0 or share < 0 for mhz, share in value.items()):
+        if any(not math.isfinite(mhz) or not math.isfinite(share) or mhz <= 0 or share < 0
+               for mhz, share in value.items()):
             raise ValueError("residency needs positive MHz keys and non-negative shares")
         total = sum(value.values())
+        if not math.isfinite(total):
+            raise ValueError("residency total must be finite")
         if total <= 0:
             return None
         return {float(mhz): share / total for mhz, share in sorted(value.items()) if share > 0}

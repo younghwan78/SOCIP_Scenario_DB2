@@ -186,6 +186,18 @@ def test_cpu_config_from_params_and_absent_cpu_block():
     assert CpuPowerConfig.from_params(_params(cpu={})) is None
 
 
+def test_partial_cpu_params_preserve_default_coefficients():
+    cfg = CpuPowerConfig.from_params(_params(cpu={"freq_mhz": 1234, "volt_v": 0.8, "default_cluster": 1}))
+    assert cfg is not None
+    assert (cfg.freq_mhz, cfg.volt_v, cfg.cluster) == (1234, 0.8, 1)
+    assert cfg.coeff_uw_per_mhz_v2 == CpuPowerConfig().coeff_uw_per_mhz_v2
+
+
+def test_llc_scale_cannot_make_memory_power_negative():
+    with pytest.raises(ValueError, match="llc_hit_scale"):
+        _params(bw={"llc_hit_scale": 2})
+
+
 # --- ETL mapper / service ------------------------------------------------------
 class _Session:
     def __init__(self):

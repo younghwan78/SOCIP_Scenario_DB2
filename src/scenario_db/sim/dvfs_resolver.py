@@ -71,9 +71,11 @@ class DvfsResolver:
             if meas is None:
                 continue
             measured_by_node[workload.node_id] = meas
-            if meas.residency:
+            if meas.residency and workload.sim_params.dvfs_group not in (dvfs_overrides or {}):
                 substitutions[workload.node_id] = meas.dominant_mhz
                 blends[workload.node_id] = meas
+            elif meas.residency:
+                self.warnings.append(f"{workload.node_id}: explicit DVFS override takes precedence over measured residency")
         resolved = (
             self._resolve_pass(workloads, dvfs_overrides, substitutions)
             if substitutions
@@ -81,14 +83,18 @@ class DvfsResolver:
         )
         voltage_basis: dict[str, MeasuredVoltageBasis] = {}
         if blends:
-            voltage_basis.update(self._apply_residency_blend(resolved, blends))
+            minimum_clocks = {
+                node_id: substitutions.get(node_id, config.required_clock_mhz)
+                for node_id, config in calculated.items()
+            }
+            voltage_basis.update(self._apply_residency_blend(resolved, blends, minimum_clocks))
             self._align_voltage_by_vdd(resolved)
             self._recalculate_power(resolved)
         for node_id, meas in measured_by_node.items():
             if node_id in voltage_basis:
                 continue
             config = resolved[node_id]
-            if config.set_clock_mhz > meas.mhz + 1e-6 and meas.stat in ("weighted_mean", "mean"):
+            if not meas.residency and config.set_clock_mhz > meas.mhz + 1e-6 and meas.stat in ("weighted_mean", "mean"):
                 voltage_basis[node_id] = "snapped_mean"
                 self.warnings.append(
                     f"{node_id}: measured {meas.stat} {meas.mhz:.1f}MHz has no level residency and was "
@@ -99,6 +105,15 @@ class DvfsResolver:
                 voltage_basis[node_id] = "level"
         for workload in workloads:
             config = resolved[workload.node_id]
+            meas = blends.get(workload.node_id)
+            if meas is not None and meas.residency:
+                peak = max(meas.residency)
+                table = self.dvfs_tables.get(config.dvfs_group) if config.dvfs_group else None
+                maximum = workload.sim_params.max_clock_mhz
+                if ((maximum and peak > maximum)
+                        or (table and table.levels and table.find_min_level_for_speed(peak, asv_group=self.asv_group) is None)):
+                    config.feasible = False
+                    config.infeasible_reason = f"measured residency clock {peak:g}MHz exceeds supported clock"
             config.clock_ledger = build_clock_ledger(
                 workload,
                 calculated=calculated[workload.node_id],
@@ -142,6 +157,7 @@ class DvfsResolver:
         self,
         resolved: dict[str, ResolvedIPConfig],
         blends: dict[str, MeasuredClock],
+        minimum_clocks: dict[str, float],
     ) -> dict[str, MeasuredVoltageBasis]:
         """Residency-weighted clock and V_eff = sqrt(sum r_i V_i^2) for measured nodes.
 
@@ -165,6 +181,11 @@ class DvfsResolver:
                 table = self.dvfs_tables.get(group)
             residency = meas.residency or {}
             mean_mhz = sum(mhz * share for mhz, share in residency.items())
+            # Keep the resolved domain operating point when an unblended peer
+            # (including a calculated fallback) needs a higher clock.
+            if any(node not in blends and minimum_clocks[node] > mean_mhz for node in members):
+                self.warnings.append(f"{group}: measured residency not applied because a shared-clock peer needs a higher clock")
+                continue
             v_eff: float | None = None
             if table is not None and table.levels:
                 v2 = 0.0

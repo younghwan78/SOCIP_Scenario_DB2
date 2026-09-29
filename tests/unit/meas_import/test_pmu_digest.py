@@ -119,6 +119,8 @@ def test_json_input_equals_csv_input(tmp_path):
         ("ip_clock_mhz,cluster,X,650,MHz,mean,\n", "scope_kind"),
         ("ip_clock_mhz,ip,X,650,MHz,mean,\nip_clock_mhz,ip,X,660,MHz,mean,\n", "duplicate"),
         ("ip_clock_residency,ip,X,5,ms,,\n", "freq_mhz"),
+        ("ip_clock_residency,ip,X,5,ms,,nan\n", "freq_mhz"),
+        ("ip_clock_residency,ip,X,5,ms,,inf\n", "freq_mhz"),
         ("mem_bw_read_mbs,mif,total,-1,MB/s,mean,\n", ">= 0"),
         ("ip_clock_mhz,ip,X,0,MHz,mean,\n", "positive"),
         ("cpu_cycles,cluster,big,5,count,p95,\n", "counter stat"),

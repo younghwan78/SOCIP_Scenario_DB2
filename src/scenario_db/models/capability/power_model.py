@@ -30,7 +30,7 @@ from scenario_db.models.common import BaseScenarioModel, DocumentId, SchemaVersi
 
 class BwPowerParams(BaseScenarioModel):
     mw_per_gbps: float | None = Field(default=None, ge=0, allow_inf_nan=False)
-    llc_hit_scale: float = Field(default=1.0, ge=0, allow_inf_nan=False)
+    llc_hit_scale: float = Field(default=1.0, ge=0, le=1, allow_inf_nan=False)
 
 
 class CpuClusterParams(BaseScenarioModel):

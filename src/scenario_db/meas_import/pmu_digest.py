@@ -49,6 +49,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -214,7 +215,7 @@ def build_pmu_digest(
 
         if sample.metric == "ip_clock_residency":
             _require_scope(sample, {"ip"})
-            if sample.freq_mhz is None or sample.freq_mhz <= 0:
+            if sample.freq_mhz is None or not math.isfinite(sample.freq_mhz) or sample.freq_mhz <= 0:
                 raise PmuDigestError(f"row {sample.line}: ip_clock_residency needs freq_mhz > 0")
             if sample.value < 0:
                 raise PmuDigestError(f"row {sample.line}: residency must be >= 0")

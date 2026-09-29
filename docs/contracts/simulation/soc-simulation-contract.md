@@ -221,6 +221,11 @@ Each resolved IP (`dvfs_breakdown[].clock_ledger`) keeps every clock tier side b
   over the visited levels (exact for the V^2 IP model). Without residency a mean is
   snapped up to a level, marked `snapped_mean` and warned (over-estimates power); use
   `measured_clock_stat: dominant` or import residency.
+  Explicit DVFS overrides take precedence over residency. If an unblended peer
+  in the shared domain needs a higher clock, the resolved domain operating point
+  is preserved with a warning. Every visited residency level must fit the IP and
+  DVFS table limits; an unsupported level makes the result infeasible even when
+  the dominant level is supported. Residency frequencies and shares must be finite.
 - The ledger is informational at the default basis: clock, voltage, power and
   `params_hash` are identical to a run without it. Power changes with the clock only
   through the DVFS voltage of the selected level, so a DVFS table is required for a

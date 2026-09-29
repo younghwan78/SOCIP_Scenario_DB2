@@ -5,9 +5,11 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from scenario_db.db.models.capability import PowerModelParams
 from scenario_db.db.models.evidence import Evidence
 from scenario_db.db.models.sensor import SensorCatalog
 from scenario_db.etl.loader import load_yaml_dir
+from scenario_db.sim.power_params import power_params_from_row
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -24,6 +26,11 @@ def test_project_db_folders_strict_load_and_preserve_parent(engine):
                 child_db = ROOT / 'db_Exynos2700_SM-S957B'
                 assert load_yaml_dir(child_db, session, strict=True, validate=True).ok
                 session.expire_all()
+                for soc in ('exynos2600', 'exynos2700'):
+                    params = power_params_from_row(session.get(PowerModelParams, f'pmp-{soc}-v1'))
+                    assert str(params.soc_ref) == f'soc-{soc}'
+                    assert params.bw.mw_per_gbps == 50
+                    assert params.ref_voltage_mv == 710
                 assert session.get(SensorCatalog, 'sensor-gng-m2s').document == before
                 assert session.get(SensorCatalog, 'sensor-gng-m2s-s5e9975') is not None
                 evidence = session.scalars(select(Evidence).where(
