@@ -7,6 +7,13 @@ from pydantic import Field, model_validator
 
 from scenario_db.models.capability.power_model import PowerModelParams
 from scenario_db.models.common import BaseScenarioModel
+from scenario_db.sim.clock_models import (
+    ClockBasis,
+    ClockConstraint,
+    ClockLedger,
+    ConfiguredClock,
+    MeasuredClock,
+)
 from scenario_db.models.sensor import SensorTiming, SensorModeBinding
 from scenario_db.sim.driver_models import DriverInput
 from scenario_db.sim.constants import SW_MARGIN_DEFAULT
@@ -117,6 +124,10 @@ class IPWorkload(BaseScenarioModel):
     manual_clock_mhz: float | None = None
     clock_correction_mhz: float = 0.0
     clock_correction_reason: str | None = None
+    # Every clock lower bound collected while building inputs (the correction
+    # above keeps only the max). Informational: derived from inputs already in
+    # the hash, so it is excluded from serialisation / params_hash.
+    clock_constraints: list[ClockConstraint] = Field(default_factory=list, exclude=True)
     sim_params: IPSimParams
 
     @property
@@ -151,6 +162,12 @@ class SimulationRunConfig(BaseScenarioModel):
     # BW: explicit bw_power_* config > params.bw > code defaults.
     power_params_ref: str | None = None
     power_params: PowerModelParams | None = None
+    # Clock ledger (sim/clock_models.py). None keeps the calculated clock.
+    # configured/measured are keyed by node_id, hw_name or ip_ref; a missing
+    # value falls back to the calculated clock with a warning.
+    clock_basis: ClockBasis | None = None
+    configured_clocks: dict[str, ConfiguredClock] | None = None
+    measured_clocks: dict[str, MeasuredClock] | None = None
     # Logical rail that carries BW-induced (DRAM/interconnect) power. Measured
     # captures see that power on the MIF buck, never on the initiating IP's
     # rail, so per-rail calibration needs the same attribution here.
@@ -212,6 +229,7 @@ class ResolvedIPConfig(BaseScenarioModel):
     vdd_leader: str | None = None
     feasible: bool = True
     infeasible_reason: str | None = None
+    clock_ledger: ClockLedger | None = None
 
 
 class PortBWResult(BaseScenarioModel):

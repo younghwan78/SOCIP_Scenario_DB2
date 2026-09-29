@@ -46,11 +46,15 @@ def run_simulation(
     # Mixed-rate pipelines: each port's traffic runs at its owning node's fps
     # (node sim-block override), falling back to the scenario fps.
     fps_by_node = {workload.node_id: workload.fps for workload in inputs.workloads}
-    resolved = DvfsResolver(
+    dvfs_resolver = DvfsResolver(
         dvfs_tables,
         asv_group=config.asv_group,
         power_model=power_model,
-    ).resolve(
+        clock_basis=config.clock_basis,
+        configured_clocks=config.configured_clocks,
+        measured_clocks=config.measured_clocks,
+    )
+    resolved = dvfs_resolver.resolve(
         inputs.workloads,
         dvfs_overrides=config.dvfs_overrides,
     )
@@ -131,6 +135,7 @@ def run_simulation(
         core_power_mw=core_power_mw,
         hw_time_max_ms=hw_time_max_ms,
     )
+    warnings.extend(dvfs_resolver.warnings)
     calculation_trace = None
     if config.debug_trace:
         calculation_trace = build_calculation_trace(

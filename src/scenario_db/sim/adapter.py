@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from scenario_db.db.repositories.scenario_graph import CanonicalScenarioGraph
-from scenario_db.sim.clock_corrections import apply_sensor_otf_clock_corrections
+from scenario_db.sim.clock_corrections import add_clock_constraint, apply_sensor_otf_clock_corrections
 from scenario_db.sim.external_devices import (
     active_sensor_nodes,
     external_devices,
@@ -170,6 +170,12 @@ def build_simulation_inputs(
             if workload is None or workload.sim_params.ppc <= 0 or budget <= 0:
                 raise ValueError(f"{stage}: included hardware needs positive PPC and a time budget")
             bound = workload.pixels * (1 + run_config.h_blank_margin) / (budget * workload.sim_params.ppc * 1000)
+            add_clock_constraint(
+                workload,
+                bound,
+                kind="stage_budget",
+                reason=f"included_stage_budget({stage}, {budget:g}ms; lower bound)",
+            )
             if bound > workload.clock_correction_mhz:
                 workload.clock_correction_mhz = bound
                 workload.clock_correction_reason = f"included_stage_budget({stage}, {budget:g}ms; lower bound)"

@@ -6,8 +6,10 @@ from typing import Any
 from scenario_db.reporting.models import ReportContext
 from scenario_db.reporting.tables import (
     basic_conditions_rows,
+    clock_ledger_rows,
     dma_report_rows,
     dvfs_guide_rows,
+    has_clock_tier_data,
     ip_detail_rows,
     power_summary_rows,
     scenario_description_rows,
@@ -55,6 +57,14 @@ def generate_simulation_report_html(
         _rows_table(ip_detail_rows(evidence)),
         "<h2>7. DMA Results</h2>",
         _rows_table(dma_report_rows(evidence)),
+        *(
+            [
+                "<h2>8. Clock Ledger (Calc / Cfg / Meas)</h2>",
+                _rows_table(clock_ledger_rows(evidence)),
+            ]
+            if has_clock_tier_data(evidence)
+            else []
+        ),
         "</body>",
         "</html>",
     ]

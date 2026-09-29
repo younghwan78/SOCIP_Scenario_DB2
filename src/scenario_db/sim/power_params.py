@@ -20,7 +20,7 @@ def effective_power_params(config: Any) -> PowerModelParams | None:
             f"power_params_ref '{config.power_params_ref}' was not resolved to parameters; "
             "resolve it through the simulation service or pass power_params inline"
         )
-    return params  # type: ignore[no-any-return]
+    return params
 
 
 def power_params_lineage(params: PowerModelParams | None) -> dict[str, Any] | None:

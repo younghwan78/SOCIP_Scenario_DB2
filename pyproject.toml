@@ -122,4 +122,9 @@ files = [
     "src/scenario_db/comparison/calibration.py",
     "src/scenario_db/reporting/arch_report.py",
     "src/scenario_db/sim/resource_limits.py",
+    "src/scenario_db/sim/bw_power.py",
+    "src/scenario_db/sim/clock_ledger.py",
+    "src/scenario_db/sim/clock_models.py",
+    "src/scenario_db/sim/power_params.py",
+    "src/scenario_db/models/capability/power_model.py",
 ]
