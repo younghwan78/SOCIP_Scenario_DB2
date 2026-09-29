@@ -26,6 +26,7 @@ from scenario_db.sim.models import (
 )
 from scenario_db.sim.perf_calc import calc_processing_time_ms
 from scenario_db.sim.power_model import resolve_power_model
+from scenario_db.sim.power_params import effective_power_params, power_params_lineage
 from scenario_db.sim.timeline import build_timeline_events
 
 
@@ -38,7 +39,8 @@ def run_simulation(
 
     dvfs_tables = dvfs_tables or {}
     config = inputs.config
-    power_model = resolve_power_model(config.power_model)
+    power_params = effective_power_params(config)
+    power_model = resolve_power_model(config.power_model, power_params)
     bw_model = bw_model_from_config(config)
     effective_fps = float(config.fps or 30.0)
     # Mixed-rate pipelines: each port's traffic runs at its owning node's fps
@@ -183,6 +185,7 @@ def run_simulation(
             power_model=power_model,
             bw_total_mw=bw_power_mw,
             bw_model=bw_model,
+            power_params=power_params,
         ),
         warnings=warnings,
         calculation_trace=calculation_trace,
@@ -342,6 +345,7 @@ def _power_breakdown(
     power_model,
     bw_total_mw: float | None = None,
     bw_model=None,
+    power_params=None,
 ) -> dict:
     """Three-bucket decomposition aligned with what a bench can measure:
     per-IP core power, memory (BW-driven) power, and CPU/cluster power.
@@ -365,6 +369,11 @@ def _power_breakdown(
     model_info: dict = {"id": power_model.model_id, "version": power_model.version}
     if bw_model is not None:
         model_info["bw_model"] = bw_model.describe()
+    lineage = power_params_lineage(power_params)
+    if lineage is not None:
+        model_info.update(lineage)
+        model_info["ref_voltage_mv"] = getattr(power_model, "ref_voltage_mv", None)
+        model_info["ref_fps"] = getattr(power_model, "ref_fps", None)
     return {
         "model": model_info,
         "ip": {

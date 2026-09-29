@@ -18,7 +18,7 @@ SOC = "soc-exynos2500"
 # Shared software/catalog definitions and immutable audit history are retained.
 SCOPED = {
     "soc_platforms", "projects", "scenarios", "scenario_variants", "evidence",
-    "sweep_jobs", "soc_dvfs_tables", "soc_cdgm_profiles", "sim_config_profiles",
+    "sweep_jobs", "soc_dvfs_tables", "soc_cdgm_profiles", "sim_config_profiles", "power_model_params",
     "issues", "waivers", "reviews", "gate_rules",
 }
 

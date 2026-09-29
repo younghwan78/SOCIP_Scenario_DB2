@@ -40,6 +40,7 @@ class SimConfigRunDefaults(BaseScenarioModel):
     power_model: str | None = None
     bw_power_model: str | None = None
     bw_power_mw_per_gbps: float | None = None
+    power_params_ref: str | None = None
     memory_rail: str | None = None
     dvfs_overrides: dict[str, int] = Field(default_factory=dict)
 

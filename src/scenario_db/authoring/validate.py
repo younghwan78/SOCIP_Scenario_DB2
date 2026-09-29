@@ -20,6 +20,7 @@ from scenario_db.integrity_checks import (
 )
 from scenario_db.models import sensor as sensor_models
 from scenario_db.models.capability.hw import IpCatalog, SocCdgmProfile, SocDvfsTable, SocPlatform
+from scenario_db.models.capability.power_model import PowerModelParams
 from scenario_db.models.capability.sim_config import SimConfigProfile
 from scenario_db.models.capability.sw import SwComponent, SwProfile
 from scenario_db.models.definition.project import Project
@@ -30,6 +31,7 @@ MODEL_BY_KIND: dict[str, type[BaseModel]] = {
     "soc": SocPlatform,
     "soc.dvfs_table": SocDvfsTable,
     "soc.cdgm_profile": SocCdgmProfile,
+    "power_model_params": PowerModelParams,
     "sw_profile": SwProfile,
     "sw_component": SwComponent,
     "sim.config_profile": SimConfigProfile,
@@ -81,6 +83,10 @@ def validate_documents(docs: list[Any]) -> dict[str, list[str]]:
             errors.append(f"{cfg['id']}: project_ref '{cfg.get('project_ref')}' not found")
         if cfg.get("soc_ref") and cfg["soc_ref"] not in soc_ids:
             errors.append(f"{cfg['id']}: soc_ref '{cfg['soc_ref']}' not found")
+
+    for pmp in by_kind.get("power_model_params", []):
+        if pmp.get("soc_ref") not in soc_ids:
+            errors.append(f"{pmp['id']}: soc_ref '{pmp.get('soc_ref')}' not found")
 
     ip_modes = IpModeCatalog({
         ip["id"]: operating_mode_ids_from_capabilities(ip.get("capabilities") or {})

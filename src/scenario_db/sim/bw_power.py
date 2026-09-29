@@ -191,13 +191,20 @@ def resolve_bw_power_model(model_id: str, settings: BwPowerSettings) -> BwPowerM
 
 def bw_model_from_config(config: Any) -> BwPowerModel | None:
     """The BW model selected by a ``SimulationRunConfig``, or None (built-in path)."""
-    model_id = getattr(config, "bw_power_model", None)
+    from scenario_db.sim.power_params import effective_power_params
+
+    params = effective_power_params(config)
+    model_id = getattr(config, "bw_power_model", None) or (params.bw_model if params else None)
     if not model_id:
         return None
+    mw_per_gbps = getattr(config, "bw_power_mw_per_gbps", None)
+    if mw_per_gbps is None and params is not None:
+        mw_per_gbps = params.bw.mw_per_gbps
     return resolve_bw_power_model(
         model_id,
         BwPowerSettings(
             bw_power_coeff=config.bw_power_coeff,
-            mw_per_gbps=getattr(config, "bw_power_mw_per_gbps", None),
+            mw_per_gbps=mw_per_gbps,
+            llc_hit_scale=params.bw.llc_hit_scale if params else 1.0,
         ),
     )

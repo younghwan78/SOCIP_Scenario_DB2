@@ -120,7 +120,9 @@ class DvfsResolver:
             table = self.dvfs_tables.get(config.dvfs_group) if config.dvfs_group else None
             if table is None:
                 config.set_clock_mhz = config.required_clock_mhz
-                config.required_voltage_mv = REFERENCE_VOLTAGE_MV
+                config.required_voltage_mv = getattr(
+                    self.power_model, "ref_voltage_mv", REFERENCE_VOLTAGE_MV
+                )
                 continue
             level = table.find_min_level_for_speed(
                 config.required_clock_mhz,

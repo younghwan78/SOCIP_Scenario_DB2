@@ -20,10 +20,14 @@ wrapper) in ``POWER_MODELS``.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Protocol
+from dataclasses import dataclass, replace
+from typing import TYPE_CHECKING, Protocol
 
+from scenario_db.sim.constants import REFERENCE_FPS, REFERENCE_VOLTAGE_MV
 from scenario_db.sim.power_calc import calc_active_power_mw
+
+if TYPE_CHECKING:
+    from scenario_db.models.capability.power_model import PowerModelParams
 
 
 class PowerModel(Protocol):
@@ -52,12 +56,25 @@ class PowerModel(Protocol):
 class V1VfpsModel:
     """The original ScenarioDB physics, unchanged.
 
-    IP:     P = unit_power_mw_mp · MP · (V / 710mV)² · (fps / 30)
+    IP:     P = unit_power_mw_mp · MP · (V / ref_V)² · (fps / ref_fps)
     Memory: P = BW_mbs · bw_power_coeff / 1000 · llc_weight
+
+    ``ref_voltage_mv`` / ``ref_fps`` default to the historical 710 mV / 30 fps
+    constants; a ``power_model_params`` document overrides them per SoC
+    (``with_params``).
     """
 
     model_id: str = "v1-vfps"
     version: str = "1.0"
+    ref_voltage_mv: float = REFERENCE_VOLTAGE_MV
+    ref_fps: float = REFERENCE_FPS
+
+    def with_params(self, params: PowerModelParams) -> V1VfpsModel:
+        return replace(
+            self,
+            ref_voltage_mv=params.ref_voltage_mv or self.ref_voltage_mv,
+            ref_fps=params.ref_fps or self.ref_fps,
+        )
 
     def ip_active_power_mw(
         self,
@@ -72,6 +89,8 @@ class V1VfpsModel:
             resolution_mp=resolution_mp,
             voltage_mv=voltage_mv,
             fps=fps,
+            ref_voltage_mv=self.ref_voltage_mv,
+            ref_fps=self.ref_fps,
         )
 
     def memory_transfer_power_mw(
@@ -93,11 +112,24 @@ POWER_MODELS: dict[str, PowerModel] = {
 }
 
 
-def resolve_power_model(model_id: str | None) -> PowerModel:
+def resolve_power_model(
+    model_id: str | None,
+    params: PowerModelParams | None = None,
+) -> PowerModel:
+    """Registered model, specialised with ``params`` (reference V/fps) when given."""
     effective = model_id or DEFAULT_POWER_MODEL_ID
     model = POWER_MODELS.get(effective)
     if model is None:
         raise ValueError(
             f"Unknown power model '{effective}' (registered: {sorted(POWER_MODELS)})"
         )
+    if params is not None:
+        if params.ip_model != model.model_id:
+            raise ValueError(
+                f"power params '{params.params_ref}' target ip_model '{params.ip_model}' "
+                f"but the run uses power_model '{model.model_id}'"
+            )
+        with_params = getattr(model, "with_params", None)
+        if with_params is not None:
+            return with_params(params)
     return model

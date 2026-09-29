@@ -5,6 +5,7 @@ from typing import Any, Literal
 
 from pydantic import Field, model_validator
 
+from scenario_db.models.capability.power_model import PowerModelParams
 from scenario_db.models.common import BaseScenarioModel
 from scenario_db.models.sensor import SensorTiming, SensorModeBinding
 from scenario_db.sim.driver_models import DriverInput
@@ -144,6 +145,12 @@ class SimulationRunConfig(BaseScenarioModel):
     # N mW per GB/s rule of thumb. mw_per_gbps overrides the params/default value.
     bw_power_model: str | None = None
     bw_power_mw_per_gbps: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    # SoC-scoped power_model_params (opt-in). The service resolves the ref
+    # (id or id@version) against the DB into ``power_params`` so the request
+    # hash and evidence lineage cover the actual coefficients. Precedence for
+    # BW: explicit bw_power_* config > params.bw > code defaults.
+    power_params_ref: str | None = None
+    power_params: PowerModelParams | None = None
     # Logical rail that carries BW-induced (DRAM/interconnect) power. Measured
     # captures see that power on the MIF buck, never on the initiating IP's
     # rail, so per-rail calibration needs the same attribution here.
