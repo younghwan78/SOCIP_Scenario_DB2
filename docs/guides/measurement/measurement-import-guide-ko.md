@@ -188,6 +188,39 @@ perfetto:
 `*_re`는 정규식(부분 일치). **논리 task 이름은 프로젝트 간 SW projection의 join 키**이므로
 U/V에서 같은 기능에 같은 이름을 써야 한다(contract 문서 §2 task naming 규약).
 
+### 4.4.1 PMU digest (`pmu`)
+
+PMU/perfetto 리포트의 사내 포맷이 확정되기 전까지는 **중립 sample 포맷**을 입력으로 받는다
+(리포트별 adapter는 이 포맷의 행만 만들면 된다). 예: `examples/measurement-import/pmu-sample/`.
+
+```yaml
+pmu:
+  file: pmu_digest.csv          # 또는 .json ({"format": "scenariodb.pmu_digest", "samples": [...]})
+  ip_map: {MCSC: ip-mcsc-is-v15-s5e9975}    # PMU 이름 → catalog id (simulation evidence와 join)
+  cluster_map: {big: BIG}
+```
+
+CSV 열: `metric,scope_kind,scope_ref,value,unit,stat,freq_mhz` (`#` 주석 허용).
+
+| `metric` | scope_kind | 생성 observation | 단위 |
+| --- | --- | --- | --- |
+| `ip_clock_mhz` | ip | `clock.ip` stats, `stat=dominant`는 `clock.ip_dominant` | MHz (GHz/kHz/Hz 환산) |
+| `ip_clock_residency` | ip | 주파수별 시간(`freq_mhz` 필수)에서 가중평균/중앙값/min/max/dominant 계산 | 비율만 사용 |
+| `mem_bw_read_mbs`, `mem_bw_write_mbs` | mif, dram | `bandwidth.mem_read`, `bandwidth.mem_write` | MB/s (GB/s 환산) |
+| `cpu_cycles`, `cpu_instructions` | cluster | `cpu.cycles`, `cpu.instructions` (value) | count |
+| `cpu_ipc` | cluster | `cpu.ipc` (없으면 instructions/cycles 파생) | ipc |
+
+- `stat`: `mean|weighted_mean|p50|p95|p99|min|max|std|dominant`(clock/BW), `sum|value`(counter).
+- 명시 clock 행은 residency 파생값보다 우선한다. 알 수 없는 metric은 warning 후 건너뛰고,
+  형식/단위/scope 오류와 중복은 `pmu_digest_invalid` import error다.
+- 예측 쪽은 `dvfs_breakdown`(IP별 set clock, 인스턴스 최대)과 `dma_breakdown`(read/write 합 →
+  `mif/total`)에서 같은 identity로 생성되어 비교 화면에서 정렬된다. 측정 BW는 CPU/GPU 등
+  전체 master를 포함하므로 delta는 IP DMA 밖 트래픽이다. CPU counter는 예측 쪽이 없어
+  `MEASUREMENT_ONLY`로 남는다.
+- 검사만: `uv run python -m scenario_db.meas_import.pmu_digest <file> --ip-map MCSC=ip-...`
+- 측정 clock 사용: 시뮬레이션 요청 `config: {clock_basis: measured, measured_clock_ref: <meas id>}`
+  (Clock Ledger, `docs/contracts/simulation/soc-simulation-contract.md`).
+
 ### 4.5 Artifacts
 
 ```yaml

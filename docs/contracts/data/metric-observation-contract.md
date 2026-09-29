@@ -67,6 +67,13 @@ Raw log adapters must normalize source units into the catalog's canonical unit
 before generating evidence. The comparison layer does not guess whether, for
 example, `GB/s` means decimal or binary bandwidth.
 
+PMU-derived metrics (`clock.ip`, `clock.ip_dominant`, `bandwidth.mem_read`,
+`bandwidth.mem_write`, `cpu.cycles`, `cpu.instructions`, `cpu.ipc`) are produced by
+`meas_import/pmu_digest.py` from a neutral sample format; see the Measurement
+Import Guide section 4.4.1. On the prediction side `clock.ip` comes from
+`dvfs_breakdown` (max set clock per IP ref) and `bandwidth.mem_*` from
+`dma_breakdown` totals under scope `mif/total`.
+
 ## Compatibility policy
 
 - Common scenario KPIs stay in `kpi` for headline queries and gates.

@@ -21,9 +21,9 @@ separately supplied fixture root, but real company data is outside the repositor
 
 `etl.loader` dispatches by top-level `kind` and loads FK dependencies in this order:
 
-1. `soc`, `soc.dvfs_table`, `soc.cdgm_profile`
+1. `soc`, `soc.dvfs_table`, `soc.cdgm_profile`, `power_model_params`
 2. `ip`, `sw_profile`, `sw_component`
-3. `project`, `scenario.usecase`
+3. `project`, `sim.config_profile`, `scenario.usecase`
 4. `evidence.simulation`, `evidence.measurement`
 5. `decision.gate_rule`, `decision.issue`, `decision.waiver`, `decision.review`
 
