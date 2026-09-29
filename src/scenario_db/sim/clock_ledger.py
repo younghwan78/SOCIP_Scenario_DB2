@@ -16,6 +16,7 @@ from scenario_db.sim.clock_models import (
     ClockLedger,
     ConfiguredClock,
     MeasuredClock,
+    MeasuredVoltageBasis,
 )
 
 if TYPE_CHECKING:
@@ -32,18 +33,64 @@ class ClockSelection:
     fallback: str | None = None
 
 
-def lookup_clock(mapping: dict[str, T] | None, workload: IPWorkload) -> T | None:
-    """Match a tier value to a workload by node_id, then hw_name, then ip_ref (case-insensitive)."""
+def instance_key(workload: IPWorkload) -> str | None:
+    """``<ip_ref>#<instance_index>``: the physical-instance key a PMU map can target."""
+    return f"{workload.ip_ref}#{workload.instance_index}" if workload.ip_ref else None
+
+
+def ambiguous_clock_keys(workloads: list[IPWorkload]) -> set[str]:
+    """Generic keys (ip_ref / hw_name, lower-case) that name more than one physical instance.
+
+    Nodes sharing an ip_ref *and* instance_index are one HW block time-shared
+    by several scenario nodes (e.g. gdc_m / gdc_o), so they are not ambiguous.
+    """
+    owners: dict[str, set[tuple[str, int]]] = {}
+    for workload in workloads:
+        physical = (str(workload.ip_ref or workload.hw_name), workload.instance_index)
+        for key in (workload.ip_ref, workload.hw_name):
+            if key:
+                owners.setdefault(str(key).lower(), set()).add(physical)
+    return {key for key, found in owners.items() if len(found) > 1}
+
+
+def lookup_clock(
+    mapping: dict[str, T] | None,
+    workload: IPWorkload,
+    *,
+    ambiguous: set[str] | None = None,
+) -> T | None:
+    """Match a tier value by node_id, ``ip_ref#instance``, ip_ref, hw_name, then DVFS group.
+
+    Matching is case-insensitive. A generic key (ip_ref / hw_name) listed in
+    ``ambiguous`` names several physical instances and is never matched: one
+    measured value would otherwise be copied onto every instance.
+    """
     if not mapping:
         return None
-    keys = [key for key in (workload.node_id, workload.hw_name, workload.ip_ref) if key]
-    for key in keys:
+    ambiguous = ambiguous or set()
+    specific = [key for key in (workload.node_id, instance_key(workload)) if key]
+    generic = [
+        key for key in (workload.ip_ref, workload.hw_name)
+        if key and str(key).lower() not in ambiguous
+    ]
+    # A DVFS-domain key (e.g. "CAM") covers every IP on that shared clock,
+    # which is how DVFS scenario tables are written.
+    if workload.sim_params.dvfs_group:
+        generic.append(workload.sim_params.dvfs_group)
+    lowered = {str(key).lower(): value for key, value in mapping.items()}
+    for key in [*specific, *generic]:
         if key in mapping:
             return mapping[key]
-    lowered = {str(key).lower(): value for key, value in mapping.items()}
-    for key in keys:
         if key.lower() in lowered:
             return lowered[key.lower()]
+    return None
+
+
+def _ambiguous_hit(mapping: dict[str, Any], workload: IPWorkload, ambiguous: set[str]) -> str | None:
+    lowered = {str(key).lower(): key for key in mapping}
+    for key in (workload.ip_ref, workload.hw_name):
+        if key and str(key).lower() in ambiguous and str(key).lower() in lowered:
+            return str(lowered[str(key).lower()])
     return None
 
 
@@ -60,11 +107,19 @@ def select_clock_basis(
     if basis == "calculated":
         return selections
     tier_map: dict[str, Any] = configured if basis == "configured" else measured
+    ambiguous = ambiguous_clock_keys(workloads)
     matched: set[int] = set()
     for workload in workloads:
-        value = lookup_clock(tier_map, workload)
+        value = lookup_clock(tier_map, workload, ambiguous=ambiguous)
         if value is None:
-            note = f"no {basis} clock for {workload.node_id}; using the calculated clock"
+            shared = _ambiguous_hit(tier_map, workload, ambiguous)
+            if shared is not None:
+                note = (
+                    f"'{shared}' names several HW instances; key the {basis} clock for "
+                    f"{workload.node_id} by node_id or '{instance_key(workload)}'. Using the calculated clock"
+                )
+            else:
+                note = f"no {basis} clock for {workload.node_id}; using the calculated clock"
             selections[workload.node_id] = ClockSelection("calculated", 0.0, note)
             warnings.append(f"clock_basis={basis}: {note}")
             continue
@@ -88,6 +143,8 @@ def build_clock_ledger(
     configured: dict[str, ConfiguredClock],
     measured: dict[str, MeasuredClock],
     warnings: list[str],
+    ambiguous: set[str] | None = None,
+    measured_voltage_basis: MeasuredVoltageBasis | None = None,
 ) -> ClockLedger:
     throughput = calculated.base_required_clock_mhz
     constraints: list[ClockConstraint] = list(workload.clock_constraints)
@@ -117,8 +174,8 @@ def build_clock_ledger(
         if mhz > binding_mhz + _EPS:
             binding_kind, binding_mhz = kind, mhz
 
-    cfg = lookup_clock(configured, workload)
-    meas = lookup_clock(measured, workload)
+    cfg = lookup_clock(configured, workload, ambiguous=ambiguous)
+    meas = lookup_clock(measured, workload, ambiguous=ambiguous)
     calc_set = calculated.set_clock_mhz
 
     gap: dict[str, object] = {}
@@ -153,9 +210,16 @@ def build_clock_ledger(
         configured_mhz=cfg.mhz if cfg else None,
         configured_reason_code=cfg.reason_code if cfg else None,
         configured_note=cfg.note if cfg else None,
+        configured_source=cfg.source if cfg else None,
         measured_mhz=meas.mhz if meas else None,
         measured_stat=meas.stat if meas else None,
         measured_evidence_ref=meas.evidence_ref if meas else None,
+        measured_residency=(
+            {f"{mhz:g}": round(share, 6) for mhz, share in meas.residency.items()}
+            if meas and meas.residency
+            else None
+        ),
+        measured_voltage_basis=measured_voltage_basis if used == "measured" else None,
         basis=basis,
         basis_used=used,
         fallback=selection.fallback if selection else None,

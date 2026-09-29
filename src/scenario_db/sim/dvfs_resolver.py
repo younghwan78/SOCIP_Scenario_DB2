@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+import math
 from collections import defaultdict
 
-from scenario_db.sim.clock_ledger import build_clock_ledger, select_clock_basis
-from scenario_db.sim.clock_models import ClockBasis, ConfiguredClock, MeasuredClock
+from scenario_db.sim.clock_ledger import (
+    ambiguous_clock_keys,
+    build_clock_ledger,
+    lookup_clock,
+    select_clock_basis,
+)
+from scenario_db.sim.clock_models import ClockBasis, ConfiguredClock, MeasuredClock, MeasuredVoltageBasis
 from scenario_db.sim.constants import REFERENCE_VOLTAGE_MV
 from scenario_db.sim.models import DVFSTable, IPWorkload, ResolvedIPConfig
 from scenario_db.sim.power_model import PowerModel, resolve_power_model
@@ -50,11 +56,47 @@ class DvfsResolver:
             warnings=self.warnings,
         )
         substitutions = {node_id: sel.mhz for node_id, sel in selections.items() if sel.tier_used != "calculated"}
+        ambiguous = ambiguous_clock_keys(workloads)
+        # A residency-weighted mean clock is not an operating point. With
+        # residency, resolve at the dominant (real) level, then blend V^2 over
+        # the levels actually visited; without it, a mean is snapped up to a
+        # level and flagged, because that over-estimates voltage and power.
+        blends: dict[str, MeasuredClock] = {}
+        measured_by_node: dict[str, MeasuredClock] = {}
+        for workload in workloads:
+            selection = selections.get(workload.node_id)
+            if selection is None or selection.tier_used != "measured":
+                continue
+            meas = lookup_clock(self.measured_clocks, workload, ambiguous=ambiguous)
+            if meas is None:
+                continue
+            measured_by_node[workload.node_id] = meas
+            if meas.residency:
+                substitutions[workload.node_id] = meas.dominant_mhz
+                blends[workload.node_id] = meas
         resolved = (
             self._resolve_pass(workloads, dvfs_overrides, substitutions)
             if substitutions
             else calculated
         )
+        voltage_basis: dict[str, MeasuredVoltageBasis] = {}
+        if blends:
+            voltage_basis.update(self._apply_residency_blend(resolved, blends))
+            self._align_voltage_by_vdd(resolved)
+            self._recalculate_power(resolved)
+        for node_id, meas in measured_by_node.items():
+            if node_id in voltage_basis:
+                continue
+            config = resolved[node_id]
+            if config.set_clock_mhz > meas.mhz + 1e-6 and meas.stat in ("weighted_mean", "mean"):
+                voltage_basis[node_id] = "snapped_mean"
+                self.warnings.append(
+                    f"{node_id}: measured {meas.stat} {meas.mhz:.1f}MHz has no level residency and was "
+                    f"snapped up to {config.set_clock_mhz:.1f}MHz; voltage/power are over-estimated. "
+                    "Import ip_clock_residency or use measured_clock_stat=dominant."
+                )
+            else:
+                voltage_basis[node_id] = "level"
         for workload in workloads:
             config = resolved[workload.node_id]
             config.clock_ledger = build_clock_ledger(
@@ -66,6 +108,8 @@ class DvfsResolver:
                 configured=self.configured_clocks,
                 measured=self.measured_clocks,
                 warnings=self.warnings,
+                ambiguous=ambiguous,
+                measured_voltage_basis=voltage_basis.get(workload.node_id),
             )
         return resolved
 
@@ -93,6 +137,51 @@ class DvfsResolver:
                 config.feasible = False
                 config.infeasible_reason = f"resolved clock exceeds ip max_clock {maximum:g}MHz"
         return resolved
+
+    def _apply_residency_blend(
+        self,
+        resolved: dict[str, ResolvedIPConfig],
+        blends: dict[str, MeasuredClock],
+    ) -> dict[str, MeasuredVoltageBasis]:
+        """Residency-weighted clock and V_eff = sqrt(sum r_i V_i^2) for measured nodes.
+
+        The V1 IP model is P ~ V^2 at fixed work, so time-weighting V^2 over
+        the visited levels gives the energy-equivalent voltage exactly.
+        Nodes sharing a DVFS group share the clock, so the whole group takes
+        the blend of its highest measured clock.
+        """
+        by_group: dict[str, MeasuredClock] = {}
+        for node_id, meas in blends.items():
+            group = resolved[node_id].dvfs_group or f"node:{node_id}"
+            current = by_group.get(group)
+            if current is None or meas.mhz > current.mhz:
+                by_group[group] = meas
+        applied: dict[str, MeasuredVoltageBasis] = {}
+        for group, meas in by_group.items():
+            if group.startswith("node:"):
+                members, table = [group[len("node:"):]], None
+            else:
+                members = [node for node, cfg in resolved.items() if cfg.dvfs_group == group]
+                table = self.dvfs_tables.get(group)
+            residency = meas.residency or {}
+            mean_mhz = sum(mhz * share for mhz, share in residency.items())
+            v_eff: float | None = None
+            if table is not None and table.levels:
+                v2 = 0.0
+                for mhz, share in residency.items():
+                    level = table.find_min_level_for_speed(mhz, asv_group=self.asv_group) or max(
+                        table.levels, key=lambda item: item.speed_mhz
+                    )
+                    v2 += share * table.voltage_for(level, self.asv_group) ** 2
+                v_eff = math.sqrt(v2) if v2 > 0 else None
+            for node in members:
+                config = resolved[node]
+                config.set_clock_mhz = mean_mhz
+                if v_eff is not None:
+                    config.required_voltage_mv = v_eff
+                if node in blends:
+                    applied[node] = "residency_weighted"
+        return applied
 
     @staticmethod
     def _group_required_max(workloads: list[IPWorkload], workload: IPWorkload) -> float | None:

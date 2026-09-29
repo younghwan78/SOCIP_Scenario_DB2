@@ -129,4 +129,5 @@ files = [
     "src/scenario_db/models/capability/power_model.py",
     "src/scenario_db/sim/measured_clock.py",
     "src/scenario_db/meas_import/pmu_digest.py",
+    "src/scenario_db/sim/model_lineage.py",
 ]

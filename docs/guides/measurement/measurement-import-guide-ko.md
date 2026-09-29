@@ -197,6 +197,8 @@ PMU/perfetto 리포트의 사내 포맷이 확정되기 전까지는 **중립 sa
 pmu:
   file: pmu_digest.csv          # 또는 .json ({"format": "scenariodb.pmu_digest", "samples": [...]})
   ip_map: {MCSC: ip-mcsc-is-v15-s5e9975}    # PMU 이름 → catalog id (simulation evidence와 join)
+  # 같은 IP의 instance가 여러 개면 instance별로 구분: {MCSC0: ip-mcsc-...#0, MCSC1: ip-mcsc-...#1}
+  # (여러 PMU 이름을 한 id로 매핑하면 import error)
   cluster_map: {big: BIG}
 ```
 
@@ -205,7 +207,7 @@ CSV 열: `metric,scope_kind,scope_ref,value,unit,stat,freq_mhz` (`#` 주석 허�
 | `metric` | scope_kind | 생성 observation | 단위 |
 | --- | --- | --- | --- |
 | `ip_clock_mhz` | ip | `clock.ip` stats, `stat=dominant`는 `clock.ip_dominant` | MHz (GHz/kHz/Hz 환산) |
-| `ip_clock_residency` | ip | 주파수별 시간(`freq_mhz` 필수)에서 가중평균/중앙값/min/max/dominant 계산 | 비율만 사용 |
+| `ip_clock_residency` | ip | 주파수별 시간(`freq_mhz` 필수)에서 가중평균/중앙값/min/max/dominant 계산 + 레벨별 `clock.ip_residency`(scope `ip_freq`, ref `<ip>@<MHz>`, 비율) | 비율만 사용 |
 | `mem_bw_read_mbs`, `mem_bw_write_mbs` | mif, dram | `bandwidth.mem_read`, `bandwidth.mem_write` | MB/s (GB/s 환산) |
 | `cpu_cycles`, `cpu_instructions` | cluster | `cpu.cycles`, `cpu.instructions` (value) | count |
 | `cpu_ipc` | cluster | `cpu.ipc` (없으면 instructions/cycles 파생) | ipc |
@@ -213,7 +215,9 @@ CSV 열: `metric,scope_kind,scope_ref,value,unit,stat,freq_mhz` (`#` 주석 허�
 - `stat`: `mean|weighted_mean|p50|p95|p99|min|max|std|dominant`(clock/BW), `sum|value`(counter).
 - 명시 clock 행은 residency 파생값보다 우선한다. 알 수 없는 metric은 warning 후 건너뛰고,
   형식/단위/scope 오류와 중복은 `pmu_digest_invalid` import error다.
-- 예측 쪽은 `dvfs_breakdown`(IP별 set clock, 인스턴스 최대)과 `dma_breakdown`(read/write 합 →
+- measured clock으로 시뮬레이션할 때 residency가 있으면 방문한 DVFS 레벨별 V²를 시간가중해 전력을 계산한다.
+  residency 없이 가중평균만 있으면 상위 레벨로 올려지고(`snapped_mean`) warning이 남는다 — 전력 과대 추정.
+- 예측 쪽은 `dvfs_breakdown`(IP별 **calculated** clock, `<ip>#<instance>` 단위)과 `dma_breakdown`(read/write 합 →
   `mif/total`)에서 같은 identity로 생성되어 비교 화면에서 정렬된다. 측정 BW는 CPU/GPU 등
   전체 master를 포함하므로 delta는 IP DMA 밖 트래픽이다. CPU counter는 예측 쪽이 없어
   `MEASUREMENT_ONLY`로 남는다.

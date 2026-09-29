@@ -49,6 +49,7 @@ def compare_prediction_measurement(
         "prediction_id": prediction.get("id"),
         "measurement_id": measurement.get("id"),
         "context": context,
+        "model_lineage": prediction_lineage_notes(prediction, measurement),
         "rows": rows,
         "summary": {
             "total": len(rows),
@@ -58,6 +59,40 @@ def compare_prediction_measurement(
             "measurement_only": counts.get("MEASUREMENT_ONLY", 0),
         },
     }
+
+
+def prediction_lineage_notes(
+    prediction: dict[str, Any],
+    measurement: dict[str, Any],
+) -> dict[str, Any]:
+    """Model lineage of the prediction plus warnings that change how deltas read."""
+    from scenario_db.sim.model_lineage import evidence_model_lineage
+
+    lineage = evidence_model_lineage(prediction) or {}
+    warnings: list[dict[str, str]] = []
+    used = [basis for basis in lineage.get("clock_basis_used", []) if basis != "calculated"]
+    if used:
+        warnings.append({
+            "code": "CLOCK_BASIS_SUBSTITUTED",
+            "message": (
+                f"prediction ran with clock_basis {'/'.join(used)} for some IPs; clock rows compare "
+                "the calculated tier, but power rows include the substituted clocks."
+            ),
+        })
+    if measurement.get("id") and measurement.get("id") in lineage.get("measured_clock_evidence", []):
+        warnings.append({
+            "code": "CIRCULAR_MEASURED_CLOCK",
+            "message": (
+                "prediction clocks were taken from this measurement; power/timing deltas are not an "
+                "independent validation of the model."
+            ),
+        })
+    if lineage and not lineage.get("power_params_hash"):
+        warnings.append({
+            "code": "CODE_CONSTANT_COEFFICIENTS",
+            "message": "prediction used code-constant power coefficients (no power_model_params).",
+        })
+    return {"prediction": lineage or None, "warnings": warnings}
 
 
 def compare_evidence_context(
@@ -297,19 +332,31 @@ def normalize_evidence_observations(
             _from_legacy_value(f"bandwidth.mem_{direction}", "mif", "total", "MB/s", round(mem_bw[direction], 6)),
         )
 
-    # clock.ip — prediction: resolved set clock per IP (max over instances),
-    # the calculated tier of the clock ledger; joins PMU clock observations.
-    ip_clock: dict[str, float] = {}
+    # clock.ip — prediction: the *calculated* tier of the clock ledger (a run
+    # with clock_basis=configured/measured would otherwise put the substituted
+    # clock on the prediction side). Nodes sharing ip_ref + instance_index are
+    # one HW block (max over them); distinct instances get "<ip_ref>#<index>"
+    # refs so they join instance-qualified PMU observations, and the bare
+    # ip_ref is emitted only when it names exactly one instance.
+    ip_clock: dict[tuple[str, int], float] = {}
     for item in evidence.get("dvfs_breakdown") or []:
         if not isinstance(item, dict) or not item.get("ip_ref"):
             continue
-        mhz = _number(item.get("set_clock_mhz"))
+        ledger = _mapping(item.get("clock_ledger"))
+        mhz = _number(ledger.get("calculated_mhz")) if ledger else None
+        if mhz is None:
+            mhz = _number(item.get("set_clock_mhz"))
         if mhz is not None and mhz > 0:
-            ref = str(item["ip_ref"])
-            ip_clock[ref] = max(ip_clock.get(ref, 0.0), mhz)
-    for ref, mhz in sorted(ip_clock.items()):
-        for metric_id in ("clock.ip", "clock.ip_dominant"):
-            _append_if_new(out, identities, _from_legacy_value(metric_id, "ip", ref, "MHz", mhz))
+            key = (str(item["ip_ref"]), int(_number(item.get("instance_index")) or 0))
+            ip_clock[key] = max(ip_clock.get(key, 0.0), mhz)
+    instances: dict[str, int] = {}
+    for ref, _ in ip_clock:
+        instances[ref] = instances.get(ref, 0) + 1
+    for (ref, index), mhz in sorted(ip_clock.items()):
+        refs = [f"{ref}#{index}"] + ([ref] if instances[ref] == 1 else [])
+        for scope_ref in refs:
+            for metric_id in ("clock.ip", "clock.ip_dominant"):
+                _append_if_new(out, identities, _from_legacy_value(metric_id, "ip", scope_ref, "MHz", mhz))
 
     for item in evidence.get("timing_breakdown") or []:
         if not isinstance(item, dict):

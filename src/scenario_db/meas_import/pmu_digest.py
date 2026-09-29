@@ -24,7 +24,8 @@ Source metrics (``metric`` column) and what they become:
 source metric          scope_kind        catalog metric                    unit
 =====================  ================  ================================  =========
 ``ip_clock_mhz``       ip                clock.ip (stats) / clock.ip_dominant  MHz
-``ip_clock_residency`` ip                same, reduced from time-in-freq   (ratio)
+``ip_clock_residency`` ip                same, reduced from time-in-freq,   (ratio)
+                                         plus clock.ip_residency per level
 ``mem_bw_read_mbs``    mif, dram         bandwidth.mem_read (stats)        MB/s
 ``mem_bw_write_mbs``   mif, dram         bandwidth.mem_write (stats)       MB/s
 ``cpu_cycles``         cluster           cpu.cycles (value)                count
@@ -37,6 +38,11 @@ source metric          scope_kind        catalog metric                    unit
 ``cluster_map`` in the meta ``pmu`` section translate PMU names (``MCSC``)
 into catalog ids (``ip-mcsc-...``) so observations join with simulation
 evidence; unmapped names are kept and reported as warnings.
+
+Several physical instances of one IP (``MCSC0``, ``MCSC1``) must map to
+instance-qualified ids (``ip-mcsc-...#0`` / ``#1``) or to scenario node ids;
+mapping two PMU names onto one id is rejected instead of letting the last row
+silently overwrite the first.
 """
 from __future__ import annotations
 
@@ -176,6 +182,7 @@ def build_pmu_digest(
     counters: dict[tuple[str, str], float] = {}
     seen: set[tuple[str, str, str, str, float | None]] = set()
     unmapped: set[str] = set()
+    sources_by_target: dict[tuple[str, str], set[str]] = {}
 
     def scope_ref(sample: PmuSample) -> str:
         table = cluster_map if sample.scope_kind == "cluster" else ip_map if sample.scope_kind == "ip" else None
@@ -183,8 +190,17 @@ def build_pmu_digest(
             return sample.scope_ref
         if sample.scope_ref not in table:
             unmapped.add(f"{sample.scope_kind}:{sample.scope_ref}")
-            return sample.scope_ref
-        return table[sample.scope_ref]
+            target = sample.scope_ref
+        else:
+            target = table[sample.scope_ref]
+        sources = sources_by_target.setdefault((sample.scope_kind, target), set())
+        sources.add(sample.scope_ref)
+        if len(sources) > 1:
+            raise PmuDigestError(
+                f"row {sample.line}: {sample.scope_kind} names {sorted(sources)} all map to '{target}'; "
+                "map each HW instance to its own id (e.g. '<ip-id>#0', '<ip-id>#1' or a node id)"
+            )
+        return target
 
     for sample in samples:
         key = (sample.metric, sample.scope_kind, sample.scope_ref, sample.stat, sample.freq_mhz)
@@ -252,6 +268,15 @@ def build_pmu_digest(
         digest.observations.append(_stats_obs("clock.ip", "ip", ref, "MHz", clock_stats[ref]))
     for ref in sorted(clock_dominant):
         digest.observations.append(_value_obs("clock.ip_dominant", "ip", ref, "MHz", clock_dominant[ref]))
+    for ref in sorted(residency):
+        total = sum(residency[ref].values())
+        if total <= 0:
+            continue
+        for mhz, amount in sorted(residency[ref].items()):
+            if amount > 0:
+                digest.observations.append(
+                    _value_obs("clock.ip_residency", "ip_freq", f"{ref}@{mhz:g}", "ratio", round(amount / total, 6))
+                )
     for (metric_id, kind, ref), stats in sorted(bw.items()):
         digest.observations.append(_stats_obs(metric_id, kind, ref, "MB/s", stats))
     for metric, obs_id, unit in (

@@ -47,6 +47,9 @@ class SimConfigRunDefaults(BaseScenarioModel):
     # tier drives the run. None = not pinned (calculated clock).
     clock_basis: ClockBasis | None = None
     configured_clocks: dict[str, ConfiguredClock] | None = None
+    # Per DVFS scenario (variant dvfs_sn) configured clocks; overrides the
+    # project-wide map above for variants running that DVFS scenario.
+    configured_clocks_by_dvfs_sn: dict[str, dict[str, ConfiguredClock]] | None = None
     measured_clock_ref: str | None = None
     measured_clock_stat: MeasuredClockStat | None = None
     memory_rail: str | None = None

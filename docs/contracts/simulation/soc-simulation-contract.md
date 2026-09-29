@@ -191,8 +191,8 @@ Each resolved IP (`dvfs_breakdown[].clock_ledger`) keeps every clock tier side b
 | `throughput_required_mhz` | pixels x fps / ppc / (1 - margin) |
 | `constraints[]` | all lower bounds: `mipi_ingress`, `vvalid_stream`, `otf_align`, `stage_budget`, `manual` (`manual_clock_mhz`), `dvfs_group_align`; each `{kind, mhz, reason, source}` |
 | `calculated_required_mhz` / `calculated_mhz` | max of the above / DVFS-snapped set clock |
-| `configured_*` | BSP/DT/kernel clock with mandatory `reason_code` (`overflow_guard`, `vvalid`, `bsp_default`, `thermal`, `other`), note |
-| `measured_*` | PMU clock (`weighted_mean`, `dominant`, ...) with `evidence_ref` |
+| `configured_*` | BSP/DT/kernel clock with mandatory `reason_code` (`overflow_guard`, `vvalid`, `bsp_default`, `dvfs_scenario`, `qos_lock`, `thermal`, `other`), note, `configured_source` (`project` / `dvfs_scenario` / `variant`) |
+| `measured_*` | PMU clock (`weighted_mean`, `dominant`, ...) with `evidence_ref`; `measured_residency` (`{MHz: share}`) and `measured_voltage_basis` (`level` / `residency_weighted` / `snapped_mean`) |
 | `basis` / `basis_used` / `fallback` | requested tier / tier that drove this IP / why it fell back |
 | `gap` | `configured_minus_calculated_mhz`, `measured_minus_configured_mhz`, `measured_minus_calculated_mhz`, `*_pct`, `calculated_over_throughput_pct`, `cause` |
 
@@ -206,9 +206,31 @@ Each resolved IP (`dvfs_breakdown[].clock_ledger`) keeps every clock tier side b
   validated at ETL. `config.measured_clock_ref` names a measurement evidence whose
   `clock.ip` observations become the measured tier (`measured_clock_stat`:
   `weighted_mean` | `dominant` | `max`); it must belong to the same scenario/variant.
+- Configured clocks are resolved per variant by the adapter, lowest to highest
+  precedence: project `configured_clocks` < `configured_clocks_by_dvfs_sn[<variant
+  design_conditions.dvfs_sn>]` < `node_configs.<node>.sim.configured_clock`. A
+  `configured_clocks_by_dvfs_sn` map without an entry for the variant's `dvfs_sn` warns.
+- Tier keys match in this order: `node_id`, `<ip_ref>#<instance_index>`, `ip_ref`,
+  `hw_name`, DVFS group (e.g. `CAM`, a whole shared-clock domain). `ip_ref` / `hw_name`
+  are skipped (with a warning) when they name several physical instances (same
+  ip_ref, different `instance_index`); nodes sharing ip_ref *and* instance_index are one
+  time-shared block (e.g. `gdc_m` / `gdc_o`) and share the value.
+- Measured weighted-mean clocks are not operating points. With `clock.ip_residency`
+  observations the IP (and its DVFS group) resolves at the dominant level, then
+  `set_clock_mhz` = residency-weighted mean and voltage `V_eff = sqrt(sum r_i V_i^2)`
+  over the visited levels (exact for the V^2 IP model). Without residency a mean is
+  snapped up to a level, marked `snapped_mean` and warned (over-estimates power); use
+  `measured_clock_stat: dominant` or import residency.
 - The ledger is informational at the default basis: clock, voltage, power and
   `params_hash` are identical to a run without it. Power changes with the clock only
   through the DVFS voltage of the selected level, so a DVFS table is required for a
   basis comparison to show a power difference.
+- Comparisons: the prediction side of `clock.ip` is `clock_ledger.calculated_mhz`
+  (never a substituted clock), per `<ip_ref>#<instance>` and also bare `ip_ref` when it
+  names one instance. `compare_prediction_measurement` returns `model_lineage`
+  (power/BW model, params ref/hash, clock basis) with warnings
+  (`CLOCK_BASIS_SUBSTITUTED`, `CIRCULAR_MEASURED_CLOCK`, `CODE_CONSTANT_COEFFICIENTS`).
+  Predictions store `metrics.model_lineage`; prediction compare / board report
+  `lineage_changes` when the model, coefficients or clock basis changed.
 - Reports: `ip_detail_rows` gains `Calc/Cfg/Meas Clk` + `Clk Gap`, and the HTML report a
   "Clock Ledger" section, only when a configured/measured tier or non-default basis exists.

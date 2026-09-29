@@ -154,6 +154,14 @@ metrics:
     allowed_scopes: [ip]
     compare_statistic: value
     polarity: neutral
+  # Time share at one DVFS level (scope ref "<ip>@<MHz>"); keeps the level
+  # distribution so power is not evaluated at a snapped-up mean clock.
+  clock.ip_residency:
+    category: clock
+    canonical_unit: ratio
+    allowed_scopes: [ip_freq]
+    compare_statistic: value
+    polarity: neutral
   # Memory-controller (MIF / DRAM) traffic. Measured includes CPU/GPU/other
   # masters; the prediction side only covers modelled IP DMA, so the gap is
   # the non-IP traffic.

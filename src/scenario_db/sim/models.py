@@ -168,6 +168,11 @@ class SimulationRunConfig(BaseScenarioModel):
     # value falls back to the calculated clock with a warning.
     clock_basis: ClockBasis | None = None
     configured_clocks: dict[str, ConfiguredClock] | None = None
+    # Configured clocks per DVFS scenario (variant design_conditions.dvfs_sn,
+    # e.g. IS_DVFS_SN_REAR_SINGLE_VIDEO_UHD30). The adapter folds project
+    # defaults < this table < variant node_configs.<node>.sim.configured_clock
+    # into the effective per-variant ``configured_clocks``.
+    configured_clocks_by_dvfs_sn: dict[str, dict[str, ConfiguredClock]] | None = None
     measured_clocks: dict[str, MeasuredClock] | None = None
     # Measurement evidence (PMU clock.ip observations) the service turns into
     # measured_clocks; measured_clock_stat picks weighted mean vs dominant level.
