@@ -10,6 +10,7 @@ import { Card } from '../components/TimingCharts'
 import { AxisSpread, BufferSavings, CompositionBars, DomainLevels, RangeBoxes, SplitBar, SplitLegend } from '../components/ArchCharts'
 import { DataTable, type Column } from '../components/DataTable'
 import { OPTION_NOTE, OptionResults, signed } from '../components/PowerOptions'
+import { VariantFailures } from '../components/VariantFailures'
 
 const METRICS: [DistKey, string, string][] = [['total_mw', 'Total', 'mW'], ['cpu_mw', 'CPU', 'mW'], ['bw_cpu_mw', 'CPU BW', 'mW'], ['hw_mw', 'IP', 'mW'], ['bw_ip_mw', 'IP BW', 'mW'], ['bw_mbs', 'BW MB/s', 'MB/s']]
 const SCALES = [1.0, 1.1, 1.2, 1.3, 1.5]
@@ -179,7 +180,7 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
       <button className="btn" disabled={busy} onClick={promoteAll} title="spec 만족 variant 전체를 최저 power 조합으로 current 등록">최저 power 조합 전체 등록</button>
       <button className="btn primary" disabled={busy} onClick={report}>검토 보고서 생성</button>
     </div>
-    {run.errors.length > 0 && <div className="err">{run.errors.length}개 variant 계산 실패: {run.errors.slice(0, 3).map((e) => e.variant_id).join(', ')}</div>}
+    <VariantFailures errors={run.errors} />
     <div className="tb-grid">
       {sel && <VariantDetail key={variantKey(sel)} v={sel} run={run} />}
       <Card id="ax-range" title="Scenario별 Power · BW range" note="행 클릭 = 조합 상세" defaultWide

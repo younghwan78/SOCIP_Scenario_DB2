@@ -5,6 +5,7 @@ import { fmt, nrtFactor, timingApi, verdictChip, type FleetRow, type Statistic }
 import { Card, FleetRank } from '../components/TimingCharts'
 import { DataTable, type Column } from '../components/DataTable'
 import { SW_COLOR } from '../lib/timingBudget'
+import { VariantFailures } from '../components/VariantFailures'
 
 type Filter = 'all' | 'ok' | 'clock_up' | 'fail'
 
@@ -55,7 +56,7 @@ export function TimingFleetPage({ ctx }: { ctx: Ctx }) {
       </div>
       {q.error && <div className="err">{q.error}</div>}
       {q.loading && <div className="empty">{ctx.scenario} 전체 variant 계산 중…</div>}
-      {q.data && q.data.errors.length > 0 && <div className="err">{q.data.errors.length}개 variant 계산 실패: {q.data.errors.slice(0, 3).map((e) => e.variant_id).join(', ')}</div>}
+      {q.data && <VariantFailures errors={q.data.errors} />}
       {q.data && <div className="tb-grid">
         <Card id="fleet-rank" title="NRT 필요 clock 배율 순위 (25% rule 대비)" note="행 = variant · 겹침 없음 · SW 비중 막대" defaultWide
           actions={<button className="btn tb-mini" onClick={() => setShowAll((s) => !s)}>{showAll ? '상위 25' : `전체 ${shown.length}`}</button>}>
