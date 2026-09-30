@@ -119,3 +119,40 @@ def test_api_service_runs_with_inline_profile():
     assert resp.result["base"]["clusters"]["BIG"]["mhz"] == 1000
     with pytest.raises(UnprocessableError, match="give cpu_profile_ref"):
         run_cpu_whatif(_Db(row), CpuWhatIfRequest(power_params_ref="pmp-t"))
+
+
+def test_list_cpu_inputs_reports_dominant_cluster_per_task():
+    from scenario_db.api.services.cpu import list_cpu_inputs
+
+    topo = SimpleNamespace(id="pmp-x", version="1", soc_ref="soc-x",
+                           params={"cpu": {"clusters": [{"name": "MID"}, {"name": "BIG"}]}})
+    obs = [
+        {"metric_id": "cpu.cycles_pf", "value": 5e6, "scope": {"kind": "task_cluster", "ref": "eis@MID"}},
+        {"metric_id": "cpu.cycles_pf", "value": 9e6, "scope": {"kind": "task_cluster", "ref": "eis@BIG"}},
+        {"metric_id": "cpu.cycles_pf", "value": 1e6, "scope": {"kind": "task_cluster", "ref": "enc@MID"}},
+    ]
+    meas = SimpleNamespace(id="ev-1", scenario_ref="s", variant_ref="v", project_ref="p", metric_observations=obs)
+    plain = SimpleNamespace(id="ev-2", scenario_ref="s", variant_ref="v", project_ref="p",
+                            metric_observations=[{"metric_id": "fps"}])
+
+    class _Q:
+        def __init__(self, rows):
+            self.rows = rows
+
+        def order_by(self, *_):
+            return self
+
+        def filter(self, *_):
+            return self
+
+        def all(self):
+            return self.rows
+
+    class _Db:
+        def query(self, model):
+            return _Q([meas, plain] if model.__name__ == "Evidence" else [topo])
+
+    out = list_cpu_inputs(_Db())  # type: ignore[arg-type]
+    assert out["topologies"] == [{"id": "pmp-x", "version": "1", "soc_ref": "soc-x", "clusters": ["MID", "BIG"]}]
+    assert [p["id"] for p in out["profiles"]] == ["ev-1"]
+    assert out["profiles"][0]["tasks"] == [{"task": "eis", "cluster": "BIG"}, {"task": "enc", "cluster": "MID"}]

@@ -69,6 +69,16 @@ def list_cpu_inputs(db: Session) -> dict:
     for row in db.query(Evidence).filter(Evidence.kind == "evidence.measurement").all():
         obs: list[Any] = list(row.metric_observations or [])
         if any(isinstance(o, dict) and str(o.get("metric_id", "")).endswith("_pf") for o in obs):
+            # task -> dominant measured cluster (for the placement matrix)
+            cycles: dict[str, tuple[str, float]] = {}
+            for o in obs:
+                scope = o.get("scope") or {} if isinstance(o, dict) else {}
+                if isinstance(o, dict) and o.get("metric_id") == "cpu.cycles_pf" and scope.get("kind") == "task_cluster":
+                    task, _, cluster = str(scope.get("ref", "")).rpartition("@")
+                    value = float(o.get("value") or 0.0)
+                    if task and value > cycles.get(task, ("", -1.0))[1]:
+                        cycles[task] = (cluster, value)
             profiles.append({"id": row.id, "scenario_ref": row.scenario_ref, "variant_ref": row.variant_ref,
-                             "project_ref": row.project_ref})
+                             "project_ref": row.project_ref,
+                             "tasks": [{"task": t, "cluster": c} for t, (c, _) in sorted(cycles.items())]})
     return {"topologies": topologies, "profiles": sorted(profiles, key=lambda p: p["id"])}

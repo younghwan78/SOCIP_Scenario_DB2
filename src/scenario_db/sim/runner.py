@@ -455,6 +455,7 @@ def _power_breakdown(
             ip_by_rail[vdd] = ip_by_rail.get(vdd, 0.0) + power
     ip_total = sum(ip_by_node.values())
     clock_overhead = sum(float(getattr(item, "clock_overhead_mw", 0.0)) for item in resolved.values())
+    leakage = sum(float(getattr(item, "leakage_power_mw", 0.0)) for item in resolved.values())
     memory_total = (
         bw_total_mw
         if bw_total_mw is not None
@@ -483,6 +484,7 @@ def _power_breakdown(
             "by_rail": {rail: round(mw, 6) for rail, mw in sorted(ip_by_rail.items())},
             "by_node": ip_by_node,
             **({"clock_overhead_mw": round(clock_overhead, 6)} if clock_overhead else {}),
+            **({"leakage_mw": round(leakage, 6)} if leakage else {}),
         },
         "memory": {
             "total_mw": round(memory_total, 6),
