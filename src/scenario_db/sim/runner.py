@@ -15,7 +15,7 @@ from scenario_db.models.evidence.resolution import (
 from scenario_db.models.evidence.simulation import IpBreakdown, SimulationEvidence
 from scenario_db.sim.bw_calc import calc_port_bw
 from scenario_db.sim.bw_power import BwPowerContext, bw_model_from_config
-from scenario_db.sim.cpu_power import CpuPowerModel, sw_task_cpu_power
+from scenario_db.sim.cpu_power import CpuPowerModel, profile_cpu_power, sw_task_cpu_power
 from scenario_db.sim.debug_trace import build_calculation_trace
 from scenario_db.sim.dvfs_resolver import DvfsResolver
 from scenario_db.sim.models import (
@@ -118,17 +118,39 @@ def run_simulation(
     cpu_model = _cpu_power_model(config, power_params)
     cpu_warnings: list[str] = []
     cpu_breakdown: list[dict] = []
+    cpu_clusters: dict[str, float] = {}
+    cpu_detail: dict | None = None
     if cpu_model is not None:
         period_ms = 1000.0 / effective_fps if effective_fps > 0 else 0.0
-        cpu_breakdown = sw_task_cpu_power(
-            inputs.sw_task_timing,
-            statistic=inputs.sw_timing_case,
-            period_ms=period_ms,
-            hw_time_ms={item.node_id: item.hw_time_ms for item in timing_breakdown},
-            model=cpu_model,
-            warnings=cpu_warnings,
-        )
-    cpu_power_mw = sum(row["power_mw"] for row in cpu_breakdown)
+        if config.cpu_profile is not None:
+            # Measured placement: per task x cluster cycles, frequency residency, gating.
+            profiled = profile_cpu_power(config.cpu_profile, model=cpu_model, period_ms=period_ms,
+                                         warnings=cpu_warnings)
+            cpu_breakdown = profiled["tasks"]
+            cpu_clusters = {name: row["total_mw"] for name, row in profiled["clusters"].items()}
+            if profiled["dsu"] is not None:
+                cpu_clusters[profiled["dsu"]["name"]] = profiled["dsu"]["total_mw"]
+            prof = config.cpu_profile
+            if prof.variant_ref and (prof.scenario_ref, prof.variant_ref) != (inputs.scenario_id, inputs.variant_id):
+                cpu_warnings.append(
+                    f"CPU profile {prof.evidence_ref} was measured on {prof.scenario_ref}/{prof.variant_ref}; "
+                    "its placement and cycles are applied to this variant as-is."
+                )
+            cpu_detail = {"source": "pmu_profile", "profile_ref": config.cpu_profile.evidence_ref,
+                          "clusters": profiled["clusters"], "dsu": profiled["dsu"]}
+        else:
+            cpu_breakdown = sw_task_cpu_power(
+                inputs.sw_task_timing,
+                statistic=inputs.sw_timing_case,
+                period_ms=period_ms,
+                hw_time_ms={item.node_id: item.hw_time_ms for item in timing_breakdown},
+                model=cpu_model,
+                warnings=cpu_warnings,
+            )
+            for row in cpu_breakdown:
+                cpu_clusters[row["cluster"]] = cpu_clusters.get(row["cluster"], 0.0) + row["power_mw"]
+            cpu_detail = {"source": "sw_timing"}
+    cpu_power_mw = sum(cpu_clusters.values())
     total_power_mw = core_power_mw + bw_power_mw + cpu_power_mw
     total_power_ma = (
         total_power_mw / config.vbat / config.pmic_efficiency
@@ -198,7 +220,8 @@ def run_simulation(
         topology_order=inputs.topology_order,
         vdd_power=_vdd_power(
             resolved, dma_breakdown, memory_rail=config.memory_rail, bw_total_mw=bw_power_mw,
-            cpu_breakdown=cpu_breakdown,
+            cpu_clusters=cpu_clusters,
+            cpu_model=cpu_model,
         ),
         power_breakdown=_power_breakdown(
             resolved,
@@ -209,6 +232,8 @@ def run_simulation(
             bw_model=bw_model,
             power_params=power_params,
             cpu_breakdown=cpu_breakdown,
+            cpu_clusters=cpu_clusters,
+            cpu_detail=cpu_detail,
             cpu_model=cpu_model,
         ),
         cpu_power_mw=cpu_power_mw,
@@ -271,7 +296,7 @@ def build_simulation_evidence(
             "total_power_ma": result.total_power_ma,
             "core_power_mw": result.core_power_mw,
             "bw_power_mw": result.bw_power_mw,
-            **({"cpu_power_mw": result.cpu_power_mw} if result.cpu_breakdown else {}),
+            **({"cpu_power_mw": result.cpu_power_mw} if result.cpu_breakdown or result.cpu_power_mw else {}),
             "total_bw_mbs": result.bw_total_mbs,
             "hw_time_max_ms": result.hw_time_max_ms,
             "timeline_end_ms": result.timeline_end_ms or 0.0,
@@ -338,7 +363,8 @@ def _vdd_power(
     *,
     memory_rail: str,
     bw_total_mw: float | None = None,
-    cpu_breakdown: list[dict] | None = None,
+    cpu_clusters: dict[str, float] | None = None,
+    cpu_model: CpuPowerModel | None = None,
 ) -> dict[str, dict[str, float]]:
     """Per-rail power. BW-induced (DRAM/interconnect) power sits on the memory
     rail — where a bench actually measures it — not on the initiating IP's
@@ -360,14 +386,13 @@ def _vdd_power(
             memory_rail, {"core_mw": 0.0, "bw_mw": 0.0, "total_mw": 0.0}
         )
         bucket["bw_mw"] += bw_total
-    # SW-task CPU power sits on the CPU cluster rails ("CPU_<CLUSTER>").
-    for row in cpu_breakdown or []:
-        if row["power_mw"] <= 0:
+    # CPU power sits on the cluster's measured rail (topology ``rail``), else "CPU_<CLUSTER>".
+    for cluster, mw in (cpu_clusters or {}).items():
+        if mw <= 0:
             continue
-        bucket = grouped.setdefault(
-            f"CPU_{str(row['cluster']).upper()}", {"core_mw": 0.0, "bw_mw": 0.0, "total_mw": 0.0}
-        )
-        bucket["core_mw"] += row["power_mw"]
+        rail = cpu_model.rail_for(cluster) if cpu_model is not None else f"CPU_{cluster.upper()}"
+        bucket = grouped.setdefault(rail, {"core_mw": 0.0, "bw_mw": 0.0, "total_mw": 0.0})
+        bucket["core_mw"] += mw
     for bucket in grouped.values():
         bucket["total_mw"] = bucket["core_mw"] + bucket["bw_mw"]
     return grouped
@@ -383,6 +408,8 @@ def _power_breakdown(
     bw_model=None,
     power_params=None,
     cpu_breakdown: list[dict] | None = None,
+    cpu_clusters: dict[str, float] | None = None,
+    cpu_detail: dict | None = None,
     cpu_model: CpuPowerModel | None = None,
 ) -> dict:
     """Three-bucket decomposition aligned with what a bench can measure:
@@ -405,10 +432,11 @@ def _power_breakdown(
         if bw_total_mw is not None
         else sum(dma.bw_power_mw for dma in dma_breakdown)
     )
-    cpu_by_cluster: dict[str, float] = {}
-    for row in cpu_breakdown or []:
-        cpu_by_cluster[str(row["cluster"])] = cpu_by_cluster.get(str(row["cluster"]), 0.0) + row["power_mw"]
+    cpu_by_cluster = dict(cpu_clusters or {})
     cpu_total = sum(cpu_by_cluster.values())
+    cpu_by_task: dict[str, float] = {}
+    for row in cpu_breakdown or []:
+        cpu_by_task[row["task"]] = cpu_by_task.get(row["task"], 0.0) + row["power_mw"]
     total = ip_total + memory_total + cpu_total
     model_info: dict = {"id": power_model.model_id, "version": power_model.version}
     if bw_model is not None:
@@ -438,8 +466,9 @@ def _power_breakdown(
             # Extra keys only when CPU power is modelled, so legacy evidence keeps its shape.
             **(
                 {
-                    "by_task": {row["task"]: round(row["power_mw"], 6) for row in cpu_breakdown or []},
+                    "by_task": {task: round(mw, 6) for task, mw in sorted(cpu_by_task.items())},
                     "model": cpu_model.describe(),
+                    **(cpu_detail or {}),
                 }
                 if cpu_model is not None
                 else {}
@@ -456,6 +485,8 @@ def _cpu_power_model(config, power_params) -> CpuPowerModel | None:
     power_model_params carry a cpu block (coefficients are then data, not code).
     """
     flag = getattr(config, "include_cpu_power", None)
+    if flag is None and getattr(config, "cpu_profile", None) is not None:
+        flag = True  # a measured CPU profile was asked for explicitly
     has_cpu_params = power_params is not None and (
         bool(power_params.cpu.clusters)
         or any(v is not None for v in (power_params.cpu.default_cluster, power_params.cpu.freq_mhz, power_params.cpu.volt_v))

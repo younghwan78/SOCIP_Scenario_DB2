@@ -43,6 +43,7 @@ class SimConfigRunDefaults(BaseScenarioModel):
     bw_power_mw_per_gbps: float | None = None
     power_params_ref: str | None = None
     include_cpu_power: bool | None = None
+    cpu_profile_ref: str | None = None
     # Clock ledger: configured (BSP / DT / kernel) clocks per node_id / hw_name /
     # ip_ref, each with a mandatory reason code (validated at ETL), and which
     # tier drives the run. None = not pinned (calculated clock).

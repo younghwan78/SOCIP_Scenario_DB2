@@ -206,6 +206,21 @@ the same Linux EM formula the timing budget uses:
 - Enable per project without touching scenario data: `sim.config_profile.run_config.include_cpu_power: true`
   or a `cpu` block in that SoC's `power_model_params`.
 
+### CPU topology and measured profile
+
+- `power_model_params.cpu` is the SoC's CPU topology: any number of clusters
+  (`name`, `core_type`, `cores`, `cpus`, `opps[{mhz, mv, mw_per_core}]` or
+  `coeff_uw_per_mhz_v2`, `leakage`, `rail`) plus `dsu`. No fixed cluster count.
+- `config.cpu_profile_ref` (measurement evidence) → `config.cpu_profile`: per-frame
+  cycles/instructions/stall/bus bytes per task × cluster, cluster frequency residency and
+  clock/power-gating ratios (import: `docs/guides/measurement/cpu-profile-import-ko.md`).
+  With a profile, CPU power follows the measured placement:
+  `P_task = cycles × Σ_l r_l × P_core(f_l)/f_l / period`; cluster static
+  `cores × Σ_l r_l leak(V_l) × (1 − power_gated_ratio)`; DSU
+  `Σ_l r_l P_dsu(f_l) × active_ratio + leak`. Unattributed cycles are `(other)`.
+- `power_breakdown.cpu`: `source` (`sw_timing` | `pmu_profile`), `by_cluster` (incl. DSU;
+  joins measured `power.cluster`), `by_task`, `clusters`, `dsu`, `profile_ref`.
+
 ## IP Set-clock Term (`power_model: v2-vf`)
 
 `v2-vf` = v1 x `[(1 - a) + a x f_set / f_ref]`.

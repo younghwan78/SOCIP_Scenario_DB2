@@ -1,0 +1,68 @@
+# SYNTHETIC CPU-profile import example: arbitrary tool exports mapped by configuration.
+# Run:
+#   uv run python -m scenario_db.meas_import.cli \
+#     --meta examples/measurement-import/cpu-profile-sample/meta.yaml \
+#     --out output/cpu-profile-sample --strict
+schema_version: '2.2'
+id: meas-synthetic-cpu-profile-sample-evt0
+project_ref: proj-sm-s957b
+scenario_ref: uc-cam-recording-e2700
+variant_ref: cam-rec-r1-uhd30-vdis
+measured_at: '2026-10-01T10:00:00+09:00'
+execution_context:
+  silicon_rev: EVT0
+  sw_baseline_ref: sw-vendor-v1.2.3-s5e9975
+  thermal: room
+  ambient_temp_c: 25.0
+  power_state: discharging
+  method: measurement
+provenance:
+  device_id: EXAMPLE
+  collection_method: synthetic_cpu_profile_sample
+  sample_count: 1
+  duration_per_sample_s: 30.0
+  confidence_level: 0.95
+aggregation_strategy: mean_over_capture
+pmu:
+  format: table
+  window: {duration_s: 30.0, fps: 30.0}      # -> 900 frames; counters become per-frame
+  cpu_map: {"0-3": MID_LF, "4-7": MID_HF, "8": BIG_LF, "9": BIG}   # = topology cpus
+  table:
+    sources:
+      # 1) PMU counters, one counter per row (simpleperf-like). Preamble text is skipped
+      #    until the header row; "1,234" thousands separators are accepted.
+      - file: simpleperf_stat.tsv
+        kind: counters
+        header_contains: count
+        delimiter: "\t"
+        layout: long
+        counter_column: event
+        value_column: count
+        counters:
+          cycles: [cpu-cycles, CPU_CYCLES]
+          instructions: [instructions, INST_RETIRED]
+          stall_cycles: [stalled-cycles-backend, STALL_BACKEND_MEM]
+          bus_access: [bus-access, BUS_ACCESS]
+        bytes_per_access: 64
+        cpu: {column: cpu}
+        task: {column: thread}
+        task_rules:
+          - {match: "3A|CRTA", task: post_crta}
+          - {match: "EIS", task: eis}
+          - {match: "PostIRTA", task: post_irta}
+          - {match: "MediaCodec|mux", task: mpeg_writer}
+        unmapped_task: other            # keep | other | drop
+      # 2) frequency residency (perfetto SQL export)
+      - file: cpu_freq_residency.csv
+        kind: freq_residency
+        cpu: {column: cpu}
+        freq_column: freq_khz
+        freq_unit: khz
+        value_column: dur_ns
+      # 3) idle-state residency -> clock / power gating ratios
+      - file: cpu_idle_residency.csv
+        kind: idle_residency
+        cpu: {column: cpu}
+        state_column: state
+        value_column: dur_ns
+        states: {"running|active": active, "WFI|C1": clock_gated, "C2|CPD|OFF": power_gated}
