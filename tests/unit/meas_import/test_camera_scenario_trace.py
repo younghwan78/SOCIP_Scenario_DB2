@@ -71,6 +71,18 @@ def test_trace_only_inactive_marker_disables_task_for_entire_capture():
     assert not result.statistics.hw_task_timing
 
 
+def test_direct_summary_import_excludes_inactive_tasks_without_mutating_bundle():
+    bundle = parse_markdown((BUNDLE / "scenario-statistics.md").read_text(encoding="utf-8"))
+    original = bundle.model_dump()
+    evidence = assemble_camera(bundle)
+    skipped = {"pdp", "byrp", "rgbp", "yuvsc", "mlsc"}
+    assert skipped.isdisjoint(evidence.pipeline_model.execution_path.enabled_task_ids)
+    assert skipped.isdisjoint(stat.task for stat in evidence.hw_task_timing)
+    assert all(not ({edge.source_task_id, edge.target_task_id} & skipped)
+               for edge in evidence.pipeline_model.edges)
+    assert bundle.model_dump() == original
+
+
 def test_real_fixture_stats_hierarchy_and_timeline():
     pytest.importorskip("perfetto")
     template = parse_markdown((BUNDLE / "mapping-template.md").read_text(encoding="utf-8"))
