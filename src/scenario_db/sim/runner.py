@@ -22,6 +22,8 @@ from scenario_db.sim.models import (
     DVFSTable,
     IPTimingResult,
     PortBWResult,
+    PortTransferSpec,
+    PortType,
     SimRunResult,
     SimulationInputs,
 )
@@ -69,7 +71,7 @@ def run_simulation(
             power_model=power_model,
             bw_model=bw_model,
         )
-        for transfer in inputs.port_transfers
+        for transfer in [*inputs.port_transfers, *_cpu_bw_transfers(config)]
     ]
     timing_breakdown = [
         IPTimingResult(
@@ -484,6 +486,38 @@ def _power_breakdown(
         },
         "total_mw": round(total, 6),
     }
+
+
+CPU_BW_NODE_PREFIX = "cpu."
+
+
+def _cpu_bw_transfers(config) -> list[PortTransferSpec]:
+    """CPU memory traffic from a measured profile (bus bytes per frame -> MB/s).
+
+    One pseudo DMA port per cluster (``cpu.<cluster>`` / ``BUS``), so CPU BW
+    enters the BW total, BW power and the MIF comparison like IP DMA does.
+    Bus accesses mix reads and writes; they are booked as reads.
+    ``include_cpu_bw`` None = on whenever a CPU profile is given.
+    """
+    profile = getattr(config, "cpu_profile", None)
+    flag = getattr(config, "include_cpu_bw", None)
+    if profile is None or flag is False:
+        return []
+    fps = float(config.fps or 30.0)
+    per_cluster: dict[str, float] = {}
+    for task in profile.tasks:
+        if task.bus_bytes:
+            per_cluster[task.cluster] = per_cluster.get(task.cluster, 0.0) + task.bus_bytes
+    for name, cluster in profile.clusters.items():
+        if name not in per_cluster and cluster.bus_bytes:
+            per_cluster[name] = cluster.bus_bytes
+    return [
+        PortTransferSpec(
+            node_id=f"{CPU_BW_NODE_PREFIX}{name}", hw_name="CPU", port="BUS", port_type=PortType.DMA_READ,
+            width=0, height=0, bitrate_mbps=bytes_pf * fps * 8 / 1e6,
+        )
+        for name, bytes_pf in sorted(per_cluster.items()) if bytes_pf > 0
+    ]
 
 
 def _cpu_power_model(config, power_params) -> CpuPowerModel | None:

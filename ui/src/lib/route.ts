@@ -1,10 +1,10 @@
 // Hash router with shareable query context: #/pipeline?project=…&scenario=…&variant=…
 import { useCallback, useEffect, useState } from 'react'
 
-export type Page = 'home' | 'explorer' | 'matrix' | 'pipeline' | 'compare' | 'timing' | 'timing-fleet' | 'explore' | 'predictions' | 'reports' | 'calibration' | 'library' | 'settings'
+export type Page = 'home' | 'explorer' | 'matrix' | 'pipeline' | 'compare' | 'timing' | 'timing-fleet' | 'explore' | 'predictions' | 'reports' | 'calibration' | 'cpu' | 'library' | 'settings'
 export interface Route { page: Page; params: Record<string, string> }
 
-const PAGES: Page[] = ['home', 'explorer', 'matrix', 'pipeline', 'compare', 'timing', 'timing-fleet', 'explore', 'predictions', 'reports', 'calibration', 'library', 'settings']
+const PAGES: Page[] = ['home', 'explorer', 'matrix', 'pipeline', 'compare', 'timing', 'timing-fleet', 'explore', 'predictions', 'reports', 'calibration', 'cpu', 'library', 'settings']
 
 export function parseHash(hash: string): Route {
   const raw = hash.replace(/^#\/?/, '')

@@ -238,6 +238,9 @@ class SimulationRunConfig(BaseScenarioModel):
     # follows the measured placement instead of the sw_timing estimate.
     cpu_profile_ref: str | None = None
     cpu_profile: CpuProfile | None = None
+    # CPU memory traffic from the profile's bus bytes as a pseudo DMA port per
+    # cluster ("cpu.<cluster>"). None = on whenever a profile is given.
+    include_cpu_bw: bool | None = None
     power_params: PowerModelParams | None = None
     # Clock ledger (sim/clock_models.py). None keeps the calculated clock.
     # configured/measured are keyed by node_id, hw_name or ip_ref; a missing

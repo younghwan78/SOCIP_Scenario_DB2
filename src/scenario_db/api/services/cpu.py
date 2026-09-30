@@ -1,0 +1,74 @@
+from __future__ import annotations
+
+from typing import Any
+
+from sqlalchemy.orm import Session
+
+from scenario_db.api.schemas.cpu import CpuWhatIfRequest, CpuWhatIfResponse
+from scenario_db.db.models.capability import PowerModelParams as PowerModelParamsRow
+from scenario_db.db.repositories.evidence import get_evidence
+from scenario_db.exceptions import NotFoundError, UnprocessableError
+from scenario_db.sim.cpu_power import CpuPowerModel
+from scenario_db.sim.cpu_profile import cpu_profile_from_evidence
+from scenario_db.sim.cpu_whatif import WhatIfSpec, cpu_whatif
+from scenario_db.sim.power_params import power_params_from_row
+
+
+def _model(db: Session, ref: str) -> CpuPowerModel:
+    params_id, _, version = ref.partition("@")
+    row = db.get(PowerModelParamsRow, params_id)
+    if row is None:
+        raise NotFoundError(f"power_model_params not found: {ref}")
+    if version and (not version.isdigit() or int(version) != row.version):
+        raise UnprocessableError(f"power_model_params '{params_id}' is at version {row.version}, requested '{version}'")
+    params = power_params_from_row(row)
+    if not params.cpu.clusters:
+        raise UnprocessableError(f"power_model_params '{ref}' has no cpu topology (cpu.clusters)")
+    return CpuPowerModel.from_params(params)
+
+
+def run_cpu_whatif(db: Session, request: CpuWhatIfRequest) -> CpuWhatIfResponse:
+    profile = request.cpu_profile
+    if profile is None:
+        if not request.cpu_profile_ref:
+            raise UnprocessableError("give cpu_profile_ref or cpu_profile")
+        row = get_evidence(db, request.cpu_profile_ref)
+        if row is None or row.kind != "evidence.measurement":
+            raise NotFoundError(f"measurement evidence not found: {request.cpu_profile_ref}")
+        profile = cpu_profile_from_evidence(row, evidence_ref=request.cpu_profile_ref)
+        if profile is None:
+            raise UnprocessableError(f"measurement evidence {request.cpu_profile_ref} has no per-frame CPU profile")
+    target = _model(db, request.power_params_ref)
+    base = _model(db, request.base_power_params_ref) if request.base_power_params_ref else None
+    spec = WhatIfSpec(
+        growth=request.growth, default_growth=request.default_growth, candidates=request.candidates,
+        budgets_ms=request.budgets_ms, util_cap=request.util_cap, power_gating_eff=request.power_gating_eff,
+        cpu_bw_scale=request.cpu_bw_scale, max_cases=request.max_cases,
+    )
+    try:
+        result = cpu_whatif(profile, target=target, base=base, fps=request.fps, spec=spec)
+    except ValueError as exc:
+        raise UnprocessableError(str(exc)) from exc
+    return CpuWhatIfResponse(profile_ref=profile.evidence_ref, power_params_ref=request.power_params_ref, result=result)
+
+
+def list_cpu_inputs(db: Session) -> dict:
+    """Topologies and measurements that carry a per-frame CPU profile (for pickers)."""
+    from scenario_db.db.models.evidence import Evidence
+
+    def clusters_of(params: Any) -> list[str]:
+        cpu = (params or {}).get("cpu") or {}
+        return [str(c.get("name")) for c in cpu.get("clusters") or [] if isinstance(c, dict)]
+
+    topologies = []
+    for prow in db.query(PowerModelParamsRow).order_by(PowerModelParamsRow.soc_ref, PowerModelParamsRow.id).all():
+        names = clusters_of(prow.params)
+        if names:
+            topologies.append({"id": prow.id, "version": prow.version, "soc_ref": prow.soc_ref, "clusters": names})
+    profiles: list[dict[str, Any]] = []
+    for row in db.query(Evidence).filter(Evidence.kind == "evidence.measurement").all():
+        obs: list[Any] = list(row.metric_observations or [])
+        if any(isinstance(o, dict) and str(o.get("metric_id", "")).endswith("_pf") for o in obs):
+            profiles.append({"id": row.id, "scenario_ref": row.scenario_ref, "variant_ref": row.variant_ref,
+                             "project_ref": row.project_ref})
+    return {"topologies": topologies, "profiles": sorted(profiles, key=lambda p: p["id"])}

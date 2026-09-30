@@ -539,3 +539,7 @@ a.hd-row:hover span { color: #E8EEF0; }
 .vf-hint { color: #5B3A00; background: #FFF6E0; border: 1px solid #F2D8A7; border-radius: 6px; padding: 6px 8px; margin-bottom: 6px; }
 .vf-table { width: 100%; background: var(--surface); color: var(--ink, inherit); }
 .vf-msg { margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 12px; max-height: 160px; overflow: auto; }
+
+/* CPU what-if form */
+.cpu-f { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
+.cpu-f select, .cpu-f input { font-size: 13px; }

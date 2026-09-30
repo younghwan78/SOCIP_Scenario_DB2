@@ -49,6 +49,7 @@ class ClusterModel:
     leak_ref_mv: float = 0.0
     leak_exponent: float = 2.0
     rail: str | None = None
+    ipc_rel: float = 1.0
 
     def opp_for(self, mhz: float) -> Opp | None:
         """The DVFS level that runs ``mhz`` (lowest OPP >= mhz; the top one if faster)."""
@@ -116,6 +117,7 @@ def _cluster_from_params(raw: Any) -> ClusterModel:
         leak_ref_mv=leak.ref_mv if leak else 0.0,
         leak_exponent=leak.exponent if leak else 2.0,
         rail=raw.rail,
+        ipc_rel=raw.ipc_rel or 1.0,
     )
 
 

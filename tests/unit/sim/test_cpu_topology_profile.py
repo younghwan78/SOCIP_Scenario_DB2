@@ -303,3 +303,18 @@ def test_table_nonfinite_counter_and_frequency_are_rejected(tmp_path):
         window={"frames": 10})
     with pytest.raises(PmuDigestError, match="finite"):
         import_pmu_digest(tmp_path, spec)
+
+
+def test_cpu_bw_from_the_profile_enters_dma_and_bw_power(graph, profile):
+    params = _params("exynos2700")
+    on = run_simulation(build_simulation_inputs(graph("cam-rec-r1-uhd30-vdis"),
+                                                SimulationRunConfig(power_params=params, cpu_profile=profile)))
+    off = run_simulation(build_simulation_inputs(graph("cam-rec-r1-uhd30-vdis"),
+                                                 SimulationRunConfig(power_params=params, cpu_profile=profile,
+                                                                     include_cpu_bw=False)))
+    cpu_ports = [d for d in on.dma_breakdown if d.node_id.startswith("cpu.")]
+    expected = sum(t.bus_bytes or 0 for t in profile.tasks) * 30 / 1e6
+    assert sum(d.bw_mbs for d in cpu_ports) == pytest.approx(expected, rel=1e-6)
+    assert on.bw_total_mbs == pytest.approx(off.bw_total_mbs + expected, rel=1e-6)
+    assert on.bw_power_mw > off.bw_power_mw
+    assert not any(d.node_id.startswith("cpu.") for d in off.dma_breakdown)

@@ -81,3 +81,21 @@ config:
 - mapping되지 않은 cycle은 `(other)`로 남는다(버리지 않음).
 - 다른 variant/과제의 profile도 쓸 수 있고(차기 과제 base), 이 경우 warning이 남는다.
 - 결과: `power_breakdown.cpu.{by_cluster, by_task, clusters(dynamic/static/mean_mhz/gating), dsu}`, rail은 topology `rail`.
+
+## 4. CPU 배치 · 주파수 what-if (`#/cpu`, `POST /api/v1/cpu/whatif`)
+
+측정 profile의 task별 frame당 수요를 기준으로, 시계열 없이 배치/주파수 조합을 평가한다.
+
+- 시간 모델 (stall 분리): 측정 cluster c0의 평균 주파수 f0 기준
+  `core = cycles − stall`, `stall_ms = stall / f0` →
+  대상 cluster c, 주파수 f, SW growth g에서 `t = g·core·ipc_rel(c0)/ipc_rel(c)/f + g·stall_ms`.
+  core type별 IPC 비율은 topology `ipc_rel`.
+- cluster별 OPP: task budget(`budgets_ms`, Timing Budget의 SW budget), `Σt ≤ util_cap × cores × period`, `t ≤ period`를 만족하는 **최소 전력 OPP** (같은 전압의 상위 OPP가 더 유리하면 그것).
+- static: `cores × leak(V) × (active + idle × (1 − power_gating_eff))`, DSU는 가장 바쁜 cluster 비율.
+- CPU BW: `bus_bytes × g × fps × cpu_bw_scale` (L3/SLC 변경 등은 배율로).
+- 결과: 측정 placement(측정 DVFS 그대로 / 이상적 DVFS), 후보 배치별 전력·Δ·최소 slack·CPU BW, power–slack Pareto(★).
+- 다른 SoC로 이동: `base_power_params_ref`(측정 SoC topology)를 주면 cluster 이름 → 같은 `core_type` cluster로 대응.
+
+시뮬레이션에서는 profile이 있으면 cluster별 CPU BW가 `cpu.<cluster>`/`BUS` pseudo DMA로 BW 합계·BW power·MIF 비교에 들어간다 (`include_cpu_bw: false`로 끔).
+
+한계(사내 보정 대상): stall 시간의 주파수 무관 가정, core type별 단일 IPC 비율, task는 한 cluster에서 실행.

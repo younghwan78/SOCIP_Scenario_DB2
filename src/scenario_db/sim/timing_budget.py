@@ -813,7 +813,7 @@ def _power_bw(result: SimRunResult, plan: dict, options: TimingBudgetOptions, pe
     bw_sw: dict[str, float] = {}
     bw_power_hw = bw_power_sw = 0.0
     for d in result.dma_breakdown:
-        if d.node_id in sw_nodes:
+        if d.node_id in sw_nodes or d.node_id.startswith("cpu."):
             bw_sw[d.node_id] = bw_sw.get(d.node_id, 0.0) + d.bw_mbs
             bw_power_sw += d.bw_power_mw
         else:
