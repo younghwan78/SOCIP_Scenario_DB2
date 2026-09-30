@@ -5,7 +5,7 @@ import pytest
 from scenario_db.sim.timing_budget import CpuPowerConfig, TimingBudgetOptions
 
 
-@pytest.mark.parametrize("values", [[], [1], [-1, 1, 1, 1], [float("inf")] * 4])
+@pytest.mark.parametrize("values", [[], [-1, 1, 1, 1], [float("inf")] * 4])
 def test_cpu_coefficients_are_validated(values):
     with pytest.raises(ValueError):
         CpuPowerConfig(coeff_uw_per_mhz_v2=values)

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from enum import StrEnum
+import math
 from typing import Any, Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from scenario_db.models.capability.power_model import PowerModelParams
 from scenario_db.models.common import BaseScenarioModel
@@ -141,6 +142,69 @@ class IPWorkload(BaseScenarioModel):
 from scenario_db.models.evidence.profiling import MeasuredTimingProfile
 
 
+class CpuCounters(BaseScenarioModel):
+    """PMU counters per frame (already normalised by the capture window)."""
+
+    cycles: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    instructions: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    stall_cycles: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    bus_bytes: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+
+
+class CpuTaskProfile(CpuCounters):
+    task: str = Field(min_length=1)
+    cluster: str = Field(min_length=1)
+
+
+def _cpu_residency(value: dict[float, float] | None) -> dict[float, float] | None:
+    if value is not None and (
+        any(not math.isfinite(f) or f <= 0 or not math.isfinite(share) or share < 0 for f, share in value.items())
+        or not math.isfinite(sum(value.values()))
+        or sum(value.values()) <= 0
+    ):
+        raise ValueError("CPU residency needs finite positive frequencies and non-negative shares with a positive total")
+    return value
+
+
+class CpuClusterProfile(CpuCounters):
+    # {MHz: time share}; shares are normalised by the model.
+    freq_residency: dict[float, float] | None = None
+    clock_gated_ratio: float | None = Field(default=None, ge=0, le=1)
+    power_gated_ratio: float | None = Field(default=None, ge=0, le=1)
+
+    _valid_residency = field_validator("freq_residency")(_cpu_residency)
+
+
+class CpuDsuProfile(BaseScenarioModel):
+    freq_residency: dict[float, float] | None = None
+    active_ratio: float | None = Field(default=None, ge=0, le=1)
+    power_gated_ratio: float | None = Field(default=None, ge=0, le=1)
+
+    _valid_residency = field_validator("freq_residency")(_cpu_residency)
+
+
+class CpuProfile(BaseScenarioModel):
+    """Measured CPU placement / activity per frame (from PMU / perfetto import)."""
+
+    evidence_ref: str | None = None
+    scenario_ref: str | None = None
+    variant_ref: str | None = None
+    tasks: list[CpuTaskProfile] = Field(default_factory=list)
+    clusters: dict[str, CpuClusterProfile] = Field(default_factory=dict)
+    dsu: CpuDsuProfile | None = None
+
+    @model_validator(mode="after")
+    def _task_clusters(self) -> CpuProfile:
+        names = {name.lower() for name in self.clusters}
+        if len(names) != len(self.clusters):
+            raise ValueError("CPU profile cluster names must be unique ignoring case")
+        for task in self.tasks:
+            if task.cluster.lower() not in names:
+                self.clusters[task.cluster] = CpuClusterProfile()
+                names.add(task.cluster.lower())
+        return self
+
+
 class SimulationRunConfig(BaseScenarioModel):
     sensor_modes: dict[str, SensorModeBinding] = Field(default_factory=dict)
     driver_model_overrides: dict[str, DriverInput] = Field(default_factory=dict)
@@ -168,6 +232,12 @@ class SimulationRunConfig(BaseScenarioModel):
     # None = auto: on when the resolved power_model_params carry a cpu block,
     # otherwise off (legacy totals). True / False force it.
     include_cpu_power: bool | None = None
+    # Measured CPU profile (PMU per-frame cycles per task x cluster, frequency
+    # residency, gating). The service resolves ``cpu_profile_ref`` (a
+    # measurement evidence id) into ``cpu_profile``; with a profile, CPU power
+    # follows the measured placement instead of the sw_timing estimate.
+    cpu_profile_ref: str | None = None
+    cpu_profile: CpuProfile | None = None
     power_params: PowerModelParams | None = None
     # Clock ledger (sim/clock_models.py). None keeps the calculated clock.
     # configured/measured are keyed by node_id, hw_name or ip_ref; a missing

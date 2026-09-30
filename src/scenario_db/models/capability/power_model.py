@@ -8,8 +8,9 @@ node or a calibration round never needs a code change:
   was characterised at (previously global constants).
 - ``bw_model`` + ``bw``: which BW power model to use and its coefficients
   (e.g. ``linear-per-gbps`` with ``mw_per_gbps: 50``).
-- ``cpu.clusters``: per-cluster ``uW / MHz / V^2`` coefficients for the SW/CPU
-  power estimate.
+- ``cpu``: the SoC's CPU topology — any number of clusters (core type, core
+  count, logical CPU ids, EM OPP table or ``uW / MHz / V^2`` coefficient,
+  leakage, measured rail) plus the DSU — for the SW/CPU power estimate.
 - ``calibration``: which measurements the numbers were fitted from
   (lineage only; ``factor_by_ip`` is recorded, not applied by the engine yet).
 
@@ -33,23 +34,91 @@ class BwPowerParams(BaseScenarioModel):
     llc_hit_scale: float = Field(default=1.0, ge=0, le=1, allow_inf_nan=False)
 
 
+class CpuOpp(BaseScenarioModel):
+    """One DVFS operating point of a CPU cluster (or the DSU)."""
+
+    mhz: float = Field(gt=0, allow_inf_nan=False)
+    mv: float = Field(gt=0, allow_inf_nan=False)
+    # Dynamic power of ONE core at 100% utilisation at this OPP (Energy-Model
+    # table). For the DSU: the DSU itself at 100% activity. None = derive from
+    # the cluster ``coeff_uw_per_mhz_v2`` (coeff * f * V^2).
+    mw_per_core: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+
+
+class CpuLeakage(BaseScenarioModel):
+    """Static power per core: mw_per_core_at_ref * (V / ref_mv) ** exponent."""
+
+    mw_per_core_at_ref: float = Field(ge=0, allow_inf_nan=False)
+    ref_mv: float = Field(gt=0, allow_inf_nan=False)
+    exponent: float = Field(default=2.0, ge=0, le=10, allow_inf_nan=False)
+
+
 class CpuClusterParams(BaseScenarioModel):
-    name: str
-    coeff_uw_per_mhz_v2: float = Field(gt=0, allow_inf_nan=False)
+    """One CPU cluster. Cluster count / composition is per SoC (data, not code).
+
+    e.g. Exynos2700: MID_LF x4, MID_HF x4, BIG_LF x1, BIG x1 (+ DSU).
+    Either ``opps`` (EM table) or ``coeff_uw_per_mhz_v2`` must be given.
+    """
+
+    name: str = Field(min_length=1)
+    coeff_uw_per_mhz_v2: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    core_type: str | None = None          # micro-architecture id, reused across SoCs
+    cores: int = Field(default=1, ge=1)
+    cpus: list[int] = Field(default_factory=list)   # logical CPU ids in traces
+    dvfs_domain: str | None = None
+    opps: list[CpuOpp] = Field(default_factory=list)
+    leakage: CpuLeakage | None = None
+    rail: str | None = None               # measured rail name (calibration join)
+    ipc_rel: float | None = Field(default=None, gt=0, allow_inf_nan=False)  # vs reference core type
+
+    @model_validator(mode="after")
+    def _power_source(self) -> CpuClusterParams:
+        if self.coeff_uw_per_mhz_v2 is None and (not self.opps or any(o.mw_per_core is None for o in self.opps)):
+            raise ValueError(f"cpu cluster '{self.name}' needs coeff_uw_per_mhz_v2 or opps[].mw_per_core")
+        if self.opps != sorted(self.opps, key=lambda o: o.mhz):
+            raise ValueError(f"cpu cluster '{self.name}' opps must be sorted by mhz")
+        if len({o.mhz for o in self.opps}) != len(self.opps):
+            raise ValueError(f"cpu cluster '{self.name}' opp frequencies must be unique")
+        if self.cpus and len(self.cpus) != self.cores:
+            raise ValueError(f"cpu cluster '{self.name}' lists {len(self.cpus)} cpus for {self.cores} cores")
+        return self
+
+
+class CpuDsuParams(BaseScenarioModel):
+    """DynamIQ Shared Unit (L3 / snoop control), shared by all clusters."""
+
+    name: str = "DSU"
+    opps: list[CpuOpp] = Field(default_factory=list)
+    leakage: CpuLeakage | None = None
+    rail: str | None = None
+
+    @model_validator(mode="after")
+    def _opps_valid(self) -> CpuDsuParams:
+        if any(o.mw_per_core is None for o in self.opps):
+            raise ValueError("DSU opps need mw_per_core at every frequency")
+        if self.opps != sorted(self.opps, key=lambda o: o.mhz) or len({o.mhz for o in self.opps}) != len(self.opps):
+            raise ValueError("DSU opps must be sorted with unique frequencies")
+        return self
 
 
 class CpuPowerParams(BaseScenarioModel):
-    # Index order matches the timing-budget cluster index (0..3).
-    clusters: list[CpuClusterParams] = Field(default_factory=list, max_length=4)
-    default_cluster: int | None = Field(default=None, ge=0, le=3)
+    clusters: list[CpuClusterParams] = Field(default_factory=list)
+    default_cluster: int | None = Field(default=None, ge=0)
     freq_mhz: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     volt_v: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    dsu: CpuDsuParams | None = None
     source: str | None = None
 
     @model_validator(mode="after")
-    def _clusters_complete(self) -> CpuPowerParams:
-        if self.clusters and len(self.clusters) != 4:
-            raise ValueError("cpu.clusters must list exactly 4 clusters (index 0..3) or none")
+    def _clusters_consistent(self) -> CpuPowerParams:
+        names = [c.name.lower() for c in self.clusters]
+        if len(names) != len(set(names)):
+            raise ValueError("cpu.clusters names must be unique")
+        cpus = [cpu for c in self.clusters for cpu in c.cpus]
+        if len(cpus) != len(set(cpus)):
+            raise ValueError("cpu.clusters cpus must not overlap")
+        if self.default_cluster is not None and self.clusters and self.default_cluster >= len(self.clusters):
+            raise ValueError("cpu.default_cluster is out of range")
         return self
 
 

@@ -166,12 +166,15 @@ def assemble_evidence(
             artifacts.append(dict(type="perfetto_trace", storage="fileshare", path=meta.perfetto.trace,
                                   sha256=_sha256(trace), bytes=trace.stat().st_size))
     if meta.pmu is not None and pmu is not None:
-        pmu_path = Path(meta.pmu.file)
-        if not pmu_path.is_absolute():
-            pmu_path = base_dir / pmu_path
-        if pmu_path.is_file() and not any(a.get("type") == "pmu_digest" for a in artifacts):
-            artifacts.append(dict(type="pmu_digest", storage="fileshare", path=meta.pmu.file,
-                                  sha256=_sha256(pmu_path), bytes=pmu_path.stat().st_size))
+        pmu_files = ([src.file for src in meta.pmu.table.sources] if meta.pmu.table is not None
+                     else [meta.pmu.file] if meta.pmu.file else [])
+        for name in pmu_files:
+            pmu_path = Path(name)
+            if not pmu_path.is_absolute():
+                pmu_path = base_dir / pmu_path
+            if pmu_path.is_file() and not any(a.get("path") == name for a in artifacts):
+                artifacts.append(dict(type="pmu_digest", storage="fileshare", path=name,
+                                      sha256=_sha256(pmu_path), bytes=pmu_path.stat().st_size))
     if meta.profiling or meta.sw_task_timing or (meta.perfetto and
             (meta.perfetto.include_sequence or meta.perfetto.event_latency_mapping)):
         meta_dump = meta.model_dump(mode="json")

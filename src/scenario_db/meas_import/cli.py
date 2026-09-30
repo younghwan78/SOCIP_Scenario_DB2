@@ -170,14 +170,19 @@ def run_import(args: argparse.Namespace, report: ImportReport) -> dict | None:
 
     pmu: PmuDigest | None = None
     if meta.pmu is not None:
-        pmu_path = _resolve(base_dir, meta.pmu.file)
+        pmu_path = _resolve(base_dir, meta.pmu.file) if meta.pmu.format != "table" else base_dir
+        if meta.pmu.format == "table":
+            missing = [src.file for src in meta.pmu.table.sources if not _resolve(base_dir, src.file).exists()]  # type: ignore[union-attr]
+            if missing:
+                pmu_path = _resolve(base_dir, missing[0])
         if not pmu_path.exists():
             (report.error if meta.pmu.required else report.warning)(
                 "pmu_digest_not_found", f"PMU digest not found: {pmu_path}", str(pmu_path)
             )
         else:
             try:
-                pmu = import_pmu_digest(pmu_path, meta.pmu)
+                fallback_cpu_map = {str(k): v for k, v in (meta.perfetto.cpu_to_cluster if meta.perfetto else {}).items()}
+                pmu = import_pmu_digest(pmu_path, meta.pmu, cpu_map=fallback_cpu_map)
                 report.info(
                     "pmu_digested",
                     f"Digested {pmu.sample_count} PMU samples into {len(pmu.observations)} observations.",

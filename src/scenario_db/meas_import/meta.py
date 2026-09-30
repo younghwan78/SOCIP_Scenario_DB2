@@ -19,6 +19,8 @@ from typing import Literal
 
 from pydantic import Field, model_validator
 
+from scenario_db.meas_import.table_adapter import TableSpec
+
 from scenario_db.models.common import BaseScenarioModel
 from scenario_db.models.evidence.common import ExecutionContext
 from scenario_db.models.evidence.measurement import Provenance, SwTaskTiming
@@ -71,17 +73,47 @@ class PowerSpec(BaseScenarioModel):
     power_column: str = "power_mw"
 
 
-class PmuSpec(BaseScenarioModel):
-    """Neutral PMU digest input (see meas_import/pmu_digest.py for the sample format).
+class PmuWindow(BaseScenarioModel):
+    """Capture window used to turn PMU totals into per-frame values."""
+    frames: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    duration_s: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    fps: float | None = Field(default=None, gt=0, allow_inf_nan=False)
 
-    ``ip_map`` / ``cluster_map`` translate PMU-side names into catalog ids /
-    logical cluster names so the observations join with simulation evidence.
+    def frame_count(self) -> float | None:
+        if self.frames is not None:
+            return self.frames
+        if self.duration_s is not None and self.fps is not None:
+            return self.duration_s * self.fps
+        return None
+
+
+class PmuSpec(BaseScenarioModel):
+    """PMU / CPU-profile input (see meas_import/pmu_digest.py and table_adapter.py).
+
+    ``format: csv | json``: one file in the neutral sample format.
+    ``format: table``: ``table.sources`` describe arbitrary tool exports
+    (simpleperf, perfetto SQL results, ...) by column / counter mapping.
+    ``ip_map`` / ``cluster_map`` translate names into catalog ids / topology
+    cluster names; ``cpu_map`` maps CPU ids to clusters (keys "4" or "0-3";
+    falls back to ``perfetto.cpu_to_cluster``); ``window`` normalises counters
+    per frame.
     """
-    file: str                         # path to the digest (relative to meta dir or absolute)
-    format: Literal["csv", "json"] = "csv"
+    file: str | None = None           # neutral digest (relative to meta dir or absolute)
+    format: Literal["csv", "json", "table"] = "csv"
+    table: TableSpec | None = None
     ip_map: dict[str, str] = Field(default_factory=dict)
     cluster_map: dict[str, str] = Field(default_factory=dict)
+    cpu_map: dict[str, str] = Field(default_factory=dict)
+    window: PmuWindow | None = None
     required: bool = False
+
+    @model_validator(mode="after")
+    def _input(self) -> PmuSpec:
+        if self.format == "table" and self.table is None:
+            raise ValueError("pmu.format=table needs pmu.table.sources")
+        if self.format != "table" and not self.file:
+            raise ValueError("pmu.file is required for the neutral csv/json format")
+        return self
 
 
 class TaskMatch(BaseScenarioModel):

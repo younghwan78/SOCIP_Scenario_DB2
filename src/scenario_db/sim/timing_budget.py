@@ -87,16 +87,18 @@ class SwTaskAdjustment(BaseScenarioModel):
 class CpuPowerConfig(BaseScenarioModel):
     """Camera SW CPU power: coeff * f * V^2 * util (Linux EM convention)."""
 
-    cluster: int = Field(default=1, ge=0, le=3)
+    cluster: int = Field(default=1, ge=0)
     freq_mhz: float = Field(default=2000.0, gt=0)
     volt_v: float = Field(default=0.80, gt=0)
-    coeff_uw_per_mhz_v2: list[float] = Field(default_factory=lambda: list(PROFILER_COEFF), min_length=4, max_length=4)
+    coeff_uw_per_mhz_v2: list[float] = Field(default_factory=lambda: list(PROFILER_COEFF), min_length=1)
     source: str = "ip-cpu-s5e9965 profiler coefficients; cluster/freq/volt assumed"
 
     @model_validator(mode="after")
     def _valid_power(self) -> CpuPowerConfig:
         if any(not math.isfinite(v) or v <= 0 for v in [self.freq_mhz, self.volt_v, *self.coeff_uw_per_mhz_v2]):
             raise ValueError("CPU power parameters must be finite and positive")
+        if self.cluster >= len(self.coeff_uw_per_mhz_v2):
+            raise ValueError("CPU cluster index is out of range")
         return self
 
     @classmethod
@@ -112,7 +114,17 @@ class CpuPowerConfig(BaseScenarioModel):
             "source": f"{params.params_ref}" + (f" ({cpu.source})" if cpu.source else ""),
         }
         if cpu.clusters:
-            values["coeff_uw_per_mhz_v2"] = [c.coeff_uw_per_mhz_v2 for c in cpu.clusters]
+            # EM-table clusters become the equivalent coefficient at the default frequency.
+            from scenario_db.sim.cpu_power import CpuPowerModel
+
+            model = CpuPowerModel.from_params(params)
+            # The budget evaluates at one shared configured voltage. Fold each
+            # cluster's actual OPP voltage into its coefficient at that voltage.
+            values["coeff_uw_per_mhz_v2"] = [
+                cluster.core_mw(model.freq_mhz, model.fallback_mv) * 1000.0 / (model.freq_mhz * model.volt_v**2)
+                for cluster in model.clusters
+            ]
+            values["cluster"] = model.default_cluster
         if cpu.default_cluster is not None:
             values["cluster"] = cpu.default_cluster
         if cpu.freq_mhz is not None:

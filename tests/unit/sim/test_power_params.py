@@ -93,7 +93,10 @@ def test_model_accepts_document_id_prefix_and_rejects_bad_input():
     with pytest.raises(ValueError):
         _params(id="power-x-v1")
     with pytest.raises(ValueError):
-        _params(cpu={"clusters": [{"name": "only", "coeff_uw_per_mhz_v2": 1.0}]})  # not 4
+        _params(cpu={"clusters": [{"name": "only"}]})  # neither coefficient nor EM table
+    with pytest.raises(ValueError):
+        _params(cpu={"clusters": [{"name": "a", "coeff_uw_per_mhz_v2": 1.0},
+                                  {"name": "A", "coeff_uw_per_mhz_v2": 1.0}]})  # duplicate name
     with pytest.raises(ValueError):
         _params(ref_voltage_mv=0)
     with pytest.raises(ValueError):

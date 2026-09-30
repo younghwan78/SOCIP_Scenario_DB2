@@ -157,6 +157,7 @@ def _apply_config_profile(db: Session, request: SimulateRequest) -> str | None:
         stamp = _merge_config_profile(db, request)
     _apply_power_params(db, request)
     _apply_measured_clocks(db, request)
+    _apply_cpu_profile(db, request)
     return stamp
 
 
@@ -232,6 +233,35 @@ def _apply_measured_clocks(db: Session, request: SimulateRequest) -> None:
             f"measurement evidence {ref} has no usable clock.ip observations ({stat})"
         )
     request.config = config.model_copy(update={"measured_clocks": clocks})
+
+
+def _apply_cpu_profile(db: Session, request: SimulateRequest) -> None:
+    """Resolve ``config.cpu_profile_ref`` (measurement evidence id) into ``config.cpu_profile``.
+
+    The profile may come from another variant or project (e.g. the previous
+    SoC's measured placement used as the base for the next one); the evidence
+    id is kept in the profile and the run's warnings say so.
+    """
+    from scenario_db.sim.cpu_profile import cpu_profile_from_evidence
+
+    config = request.config
+    ref = config.cpu_profile_ref
+    if not ref or config.cpu_profile is not None:
+        return
+    row = get_evidence(db, ref)
+    if row is None or row.kind != "evidence.measurement":
+        raise NotFoundError(f"measurement evidence not found: {ref}")
+    dsu = config.power_params.cpu.dsu if config.power_params else None
+    try:
+        profile = cpu_profile_from_evidence(row, evidence_ref=ref, dsu_name=dsu.name if dsu else "DSU")
+    except ValueError as exc:
+        raise UnprocessableError(f"measurement evidence {ref} has an invalid CPU profile: {exc}") from exc
+    if profile is None:
+        raise UnprocessableError(
+            f"measurement evidence {ref} has no per-frame CPU profile (cpu.*_pf / cpu.freq_residency observations)"
+        )
+    profile.scenario_ref, profile.variant_ref = row.scenario_ref, row.variant_ref
+    request.config = config.model_copy(update={"cpu_profile": profile})
 
 
 def _check_power_params_scope(config: SimulationRunConfig, graph) -> None:

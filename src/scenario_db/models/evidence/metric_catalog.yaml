@@ -195,3 +195,54 @@ metrics:
     allowed_scopes: [cluster]
     compare_statistic: value
     polarity: higher_is_better
+  # --- Per-frame CPU profile (sim/cpu_profile.py): measured placement ---
+  # Counters are normalised by the capture window (frames) at import.
+  cpu.cycles_pf:
+    category: cpu
+    canonical_unit: count
+    allowed_scopes: [task_cluster, cluster]
+    compare_statistic: value
+    polarity: neutral
+  cpu.instructions_pf:
+    category: cpu
+    canonical_unit: count
+    allowed_scopes: [task_cluster, cluster]
+    compare_statistic: value
+    polarity: neutral
+  cpu.stall_cycles_pf:
+    category: cpu
+    canonical_unit: count
+    allowed_scopes: [task_cluster, cluster]
+    compare_statistic: value
+    polarity: neutral
+  cpu.bus_bytes_pf:
+    category: cpu
+    canonical_unit: bytes
+    allowed_scopes: [task_cluster, cluster]
+    compare_statistic: value
+    polarity: neutral
+  # Time share at one cluster frequency (scope ref "<cluster>@<MHz>").
+  cpu.freq_residency:
+    category: cpu
+    canonical_unit: ratio
+    allowed_scopes: [cluster_freq]
+    compare_statistic: value
+    polarity: neutral
+  cpu.clock_gated_ratio:
+    category: cpu
+    canonical_unit: ratio
+    allowed_scopes: [cluster]
+    compare_statistic: value
+    polarity: neutral
+  cpu.power_gated_ratio:
+    category: cpu
+    canonical_unit: ratio
+    allowed_scopes: [cluster]
+    compare_statistic: value
+    polarity: neutral
+  cpu.active_ratio:
+    category: cpu
+    canonical_unit: ratio
+    allowed_scopes: [cluster]
+    compare_statistic: value
+    polarity: neutral

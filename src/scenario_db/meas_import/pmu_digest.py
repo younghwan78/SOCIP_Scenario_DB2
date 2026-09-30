@@ -56,6 +56,7 @@ from pathlib import Path
 from typing import Any
 
 from scenario_db.meas_import.meta import PmuSpec
+from scenario_db.meas_import.table_adapter import table_samples
 from scenario_db.models.evidence.metrics import validate_metric_observations
 
 FORMAT_ID = "scenariodb.pmu_digest"
@@ -171,11 +172,15 @@ def build_pmu_digest(
     *,
     ip_map: dict[str, str] | None = None,
     cluster_map: dict[str, str] | None = None,
+    cpu_map: dict[str, str] | None = None,
+    frames: float | None = None,
 ) -> PmuDigest:
     """Reduce neutral samples to canonical metric observations (validated against the catalog)."""
     ip_map = ip_map or {}
     cluster_map = cluster_map or {}
     digest = PmuDigest(sample_count=len(samples))
+    cpu_samples: list[PmuSample] = []
+    profile_requested = False
     clock_stats: dict[str, dict[str, float]] = {}
     clock_dominant: dict[str, float] = {}
     residency: dict[str, dict[float, float]] = {}
@@ -204,6 +209,8 @@ def build_pmu_digest(
         return target
 
     for sample in samples:
+        if not math.isfinite(sample.value):
+            raise PmuDigestError(f"row {sample.line}: value must be finite")
         key = (sample.metric, sample.scope_kind, sample.scope_ref, sample.stat, sample.freq_mhz)
         if key in seen:
             raise PmuDigestError(
@@ -211,6 +218,15 @@ def build_pmu_digest(
                 + (f"/{sample.stat}" if sample.stat else "")
             )
         seen.add(key)
+        profile_row = sample.metric in CPU_PROFILE_METRICS or (
+            sample.metric in ("cpu_cycles", "cpu_instructions") and sample.scope_kind != "cluster"
+        )
+        if profile_row:
+            cpu_samples.append(sample)
+            profile_requested = True
+            continue
+        if sample.metric in ("cpu_cycles", "cpu_instructions"):
+            cpu_samples.append(sample)  # cluster totals also feed the per-frame profile
         ref = scope_ref(sample)
 
         if sample.metric == "ip_clock_residency":
@@ -301,6 +317,9 @@ def build_pmu_digest(
         if ipc is not None:
             digest.observations.append(_value_obs("cpu.ipc", "cluster", ref, "ipc", round(ipc, 6)))
 
+    if cpu_samples:
+        _reduce_cpu_profile(cpu_samples, cluster_map=cluster_map, cpu_map=cpu_map or {}, frames=frames,
+                            digest=digest, warn_without_window=profile_requested)
     if unmapped:
         digest.warnings.append(
             "PMU names without ip_map/cluster_map entry (kept as-is, will not join simulation "
@@ -313,11 +332,142 @@ def build_pmu_digest(
     return digest
 
 
-def import_pmu_digest(path: Path, spec: PmuSpec | None = None) -> PmuDigest:
-    """Read + reduce a PMU sample file using the meta ``pmu`` section."""
+def import_pmu_digest(
+    path: Path,
+    spec: PmuSpec | None = None,
+    *,
+    cpu_map: dict[str, str] | None = None,
+) -> PmuDigest:
+    """Read + reduce PMU input using the meta ``pmu`` section.
+
+    ``path``: the neutral file, or (``format: table``) the directory the table
+    sources are relative to. ``cpu_map`` is the fallback CPU -> cluster map.
+    """
     spec = spec or PmuSpec(file=str(path))
-    samples = read_pmu_samples(path, spec.format)
-    return build_pmu_digest(samples, ip_map=spec.ip_map, cluster_map=spec.cluster_map)
+    warnings: list[str] = []
+    if spec.format == "table":
+        assert spec.table is not None
+        base = path if path.is_dir() else path.parent
+        try:
+            rows = table_samples(base, spec.table, warnings)
+        except (OSError, ValueError, KeyError) as exc:
+            raise PmuDigestError(f"table source: {exc}") from exc
+        samples = [
+            PmuSample(metric=r["metric"], scope_kind=r["scope_kind"], scope_ref=r["scope_ref"],
+                      value=float(r["value"]), freq_mhz=r["freq_mhz"], line=index)
+            for index, r in enumerate(rows, start=1)
+        ]
+    else:
+        samples = read_pmu_samples(path, spec.format)
+    frames = spec.window.frame_count() if spec.window else None
+    digest = build_pmu_digest(
+        samples, ip_map=spec.ip_map, cluster_map=spec.cluster_map,
+        cpu_map=spec.cpu_map or cpu_map or {}, frames=frames,
+    )
+    digest.warnings[:0] = warnings
+    return digest
+
+
+# --------------------------------------------------------- per-frame CPU profile
+CPU_PROFILE_METRICS = frozenset({
+    "cpu_stall_cycles", "cpu_bus_bytes", "cpu_freq_time",
+    "cpu_time_active", "cpu_time_clock_gated", "cpu_time_power_gated",
+})
+_PF_METRIC = {
+    "cycles": ("cpu.cycles_pf", "count"),
+    "instructions": ("cpu.instructions_pf", "count"),
+    "stall_cycles": ("cpu.stall_cycles_pf", "count"),
+    "bus_bytes": ("cpu.bus_bytes_pf", "bytes"),
+}
+
+
+def expand_cpu_map(cpu_map: dict[str, str] | dict[int, str]) -> dict[int, str]:
+    """{"0-3": "MID_LF", "8": "BIG"} -> {0: .., 1: .., 2: .., 3: .., 8: ..}."""
+    out: dict[int, str] = {}
+    for key, cluster in cpu_map.items():
+        text = str(key).strip()
+        for part in text.split(","):
+            part = part.strip()
+            if "-" in part:
+                low, high = (int(x) for x in part.split("-", 1))
+                out.update({cpu: cluster for cpu in range(low, high + 1)})
+            elif part:
+                out[int(part)] = cluster
+    return out
+
+
+def _reduce_cpu_profile(
+    samples: list[PmuSample],
+    *,
+    cluster_map: dict[str, str],
+    cpu_map: dict[str, str],
+    frames: float | None,
+    digest: PmuDigest,
+    warn_without_window: bool = True,
+) -> None:
+    """Per-frame counters per task x cluster, cluster frequency residency and gating ratios."""
+    if frames is not None and (not math.isfinite(frames) or frames <= 0):
+        raise PmuDigestError("CPU profile frame count must be finite and positive")
+    cpus = expand_cpu_map(cpu_map)
+    counters: dict[tuple[str | None, str, str], float] = {}
+    freq: dict[tuple[str, float], float] = {}
+    states: dict[tuple[str, str], float] = {}
+    missing: set[str] = set()
+    for sample in samples:
+        kind = sample.scope_kind
+        task, place = (None, sample.scope_ref)
+        if kind in ("task_cpu", "task_cluster"):
+            task, _, place = sample.scope_ref.rpartition("@")
+            if not task:
+                raise PmuDigestError(f"row {sample.line}: {kind} scope_ref must be '<task>@<cpu|cluster>'")
+        if kind in ("cpu", "task_cpu"):
+            digits = "".join(ch for ch in place if ch.isdigit())
+            cluster = cpus.get(int(digits)) if digits else None
+            if cluster is None:
+                missing.add(place)
+                continue
+        elif kind in ("cluster", "task_cluster"):
+            cluster = cluster_map.get(place, place)
+        else:
+            raise PmuDigestError(f"row {sample.line}: {sample.metric} needs scope cpu/cluster/task_cpu/task_cluster")
+        if sample.value < 0:
+            raise PmuDigestError(f"row {sample.line}: {sample.metric} must be >= 0")
+        if sample.metric == "cpu_freq_time":
+            if not sample.freq_mhz or not math.isfinite(sample.freq_mhz) or sample.freq_mhz <= 0:
+                raise PmuDigestError(f"row {sample.line}: cpu_freq_time needs freq_mhz > 0")
+            freq[(cluster, sample.freq_mhz)] = freq.get((cluster, sample.freq_mhz), 0.0) + sample.value
+        elif sample.metric.startswith("cpu_time_"):
+            key = (cluster, sample.metric[len("cpu_time_"):])
+            states[key] = states.get(key, 0.0) + sample.value
+        else:
+            key3 = (task, cluster, sample.metric[len("cpu_"):])
+            counters[key3] = counters.get(key3, 0.0) + sample.value
+    if missing:
+        digest.warnings.append(f"CPU ids without cpu_map entry (skipped): {sorted(missing)}")
+    if counters:
+        if frames:
+            for (task, cluster, name), value in sorted(counters.items(), key=lambda kv: (str(kv[0][0]), kv[0][1], kv[0][2])):
+                metric_id, unit = _PF_METRIC[name]
+                kind, ref = ("task_cluster", f"{task}@{cluster}") if task else ("cluster", cluster)
+                digest.observations.append(_value_obs(metric_id, kind, ref, unit, round(value / frames, 3)))
+        elif warn_without_window:
+            digest.warnings.append("pmu.window (frames, or duration_s + fps) is not set; per-frame CPU profile not emitted")
+    for cluster in sorted({c for c, _ in freq}):
+        levels = {f: t for (c, f), t in freq.items() if c == cluster and t > 0}
+        total = sum(levels.values())
+        for mhz, amount in sorted(levels.items()):
+            digest.observations.append(
+                _value_obs("cpu.freq_residency", "cluster_freq", f"{cluster}@{mhz:g}", "ratio", round(amount / total, 6))
+            )
+    for cluster in sorted({c for c, _ in states}):
+        total = sum(t for (c, _), t in states.items() if c == cluster)
+        if total <= 0:
+            continue
+        for state in ("active", "clock_gated", "power_gated"):
+            if (cluster, state) in states:
+                digest.observations.append(_value_obs(
+                    f"cpu.{state}_ratio", "cluster", cluster, "ratio", round(states[(cluster, state)] / total, 6)))
+
 
 
 def validate_metric_observations_dicts(observations: list[dict]) -> None:

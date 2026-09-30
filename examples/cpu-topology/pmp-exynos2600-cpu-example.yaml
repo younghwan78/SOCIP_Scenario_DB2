@@ -1,0 +1,137 @@
+# EXAMPLE ONLY - synthetic numbers. Cluster composition per SoC; see docs/guides/measurement/cpu-profile-import-ko.md
+id: pmp-exynos2600-cpu-example
+schema_version: '2.2'
+kind: power_model_params
+soc_ref: soc-exynos2600
+version: 1
+status: draft
+description: EXAMPLE CPU topology for exynos2600 (cluster composition as used in-house;
+  all numbers SYNTHETIC).
+cpu:
+  clusters:
+  - name: MID_LF0
+    core_type: MID_LF
+    cores: 3
+    cpus:
+    - 0
+    - 1
+    - 2
+    dvfs_domain: CPUCL_MID_LF0
+    rail: BUCK_MID_LF0
+    opps:
+    - mhz: 400.0
+      mv: 600.0
+      mw_per_core: 20.0
+    - mhz: 1000.0
+      mv: 650.0
+      mw_per_core: 60.0
+    - mhz: 1600.0
+      mv: 720.0
+      mw_per_core: 130.0
+    - mhz: 2000.0
+      mv: 800.0
+      mw_per_core: 210.0
+    leakage:
+      mw_per_core_at_ref: 8.0
+      ref_mv: 800.0
+      exponent: 2.5
+  - name: MID_LF1
+    core_type: MID_LF
+    cores: 3
+    cpus:
+    - 3
+    - 4
+    - 5
+    dvfs_domain: CPUCL_MID_LF1
+    rail: BUCK_MID_LF1
+    opps:
+    - mhz: 400.0
+      mv: 600.0
+      mw_per_core: 20.0
+    - mhz: 1000.0
+      mv: 650.0
+      mw_per_core: 60.0
+    - mhz: 1600.0
+      mv: 720.0
+      mw_per_core: 130.0
+    - mhz: 2000.0
+      mv: 800.0
+      mw_per_core: 210.0
+    leakage:
+      mw_per_core_at_ref: 8.0
+      ref_mv: 800.0
+      exponent: 2.5
+  - name: MID_HF
+    core_type: MID_HF
+    cores: 3
+    cpus:
+    - 6
+    - 7
+    - 8
+    dvfs_domain: CPUCL_MID_HF
+    rail: BUCK_MID_HF
+    opps:
+    - mhz: 600.0
+      mv: 620.0
+      mw_per_core: 45.0
+    - mhz: 1200.0
+      mv: 680.0
+      mw_per_core: 120.0
+    - mhz: 2000.0
+      mv: 780.0
+      mw_per_core: 260.0
+    - mhz: 2600.0
+      mv: 880.0
+      mw_per_core: 420.0
+    leakage:
+      mw_per_core_at_ref: 15.0
+      ref_mv: 800.0
+      exponent: 2.5
+  - name: BIG
+    core_type: BIG
+    cores: 1
+    cpus:
+    - 9
+    dvfs_domain: CPUCL_BIG
+    rail: BUCK_BIG
+    opps:
+    - mhz: 1000.0
+      mv: 660.0
+      mw_per_core: 180.0
+    - mhz: 2000.0
+      mv: 760.0
+      mw_per_core: 480.0
+    - mhz: 3000.0
+      mv: 880.0
+      mw_per_core: 950.0
+    - mhz: 3600.0
+      mv: 980.0
+      mw_per_core: 1400.0
+    leakage:
+      mw_per_core_at_ref: 45.0
+      ref_mv: 800.0
+      exponent: 2.5
+  default_cluster: 1
+  freq_mhz: 2000.0
+  volt_v: 0.8
+  dsu:
+    name: DSU
+    rail: BUCK_DSU
+    opps:
+    - mhz: 400.0
+      mv: 600.0
+      mw_per_core: 15.0
+    - mhz: 900.0
+      mv: 680.0
+      mw_per_core: 40.0
+    - mhz: 1500.0
+      mv: 780.0
+      mw_per_core: 90.0
+    leakage:
+      mw_per_core_at_ref: 10.0
+      ref_mv: 800.0
+      exponent: 2.5
+  source: SYNTHETIC example - replace opps/leakage with the in-house EM table and
+    rail names
+notes: Copy the cpu block into the SoC's power_model_params in-house. cpus = logical
+  CPU ids in traces.
