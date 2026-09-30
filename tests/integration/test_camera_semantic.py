@@ -38,9 +38,12 @@ def test_uhd30_trace_fixture_import_and_exploration(engine, api_client):
                 **payload, "expected_hash": preview.json()["sha256"]})
             assert saved.status_code == 200, saved.text
             got = api_client.get(f"/api/v1/evidence/{evidence.id}").json()
-            assert len(got["timeline_events"]) == 56
+            assert len(got["timeline_events"]) == 41
             assert len(got["sw_task_timing"]) == 5
-            assert len(got["hw_task_timing"]) == 14
+            assert len(got["hw_task_timing"]) == 9
+            assert not {"pdp", "byrp", "rgbp", "yuvsc", "mlsc"}.intersection(
+                row["task"] for row in got["hw_task_timing"]
+            )
             selection = dict(source_evidence_ref=str(evidence.id),
                              target_project_ref=str(evidence.project_ref),
                              target_scenario_ref=str(evidence.scenario_ref),

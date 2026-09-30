@@ -15,7 +15,7 @@ from pathlib import Path
 
 import yaml
 
-from scenario_db.meas_import.camera import CameraBundle, assemble_camera, parse_markdown
+from scenario_db.meas_import.camera import CameraBundle, assemble_camera, exclude_inactive_tasks, parse_markdown
 from scenario_db.meas_import.perfetto_digest import PerfettoTraceProcessor
 from scenario_db.meas_import.sequence import SQL_SLICES, statistics
 from scenario_db.models.evidence.camera import CameraPipeline
@@ -65,20 +65,8 @@ def summarize(tp, template: CameraBundle):
             task_id = logical_name({**row, "slice_name": _unmarked(row["slice_name"])}, model.tasks)
             if task_id:
                 disabled.add(task_id)
-    raw = template.model_dump(mode="json")
+    raw = exclude_inactive_tasks(template, disabled).model_dump(mode="json")
     path = raw["execution_path"]
-    path["enabled_task_ids"] = [task for task in path["enabled_task_ids"] if task not in disabled]
-    already_disabled = {task["task_id"] for task in path["disabled_tasks"]}
-    path["disabled_tasks"].extend(
-        {"task_id": task, "reason": "Producer ! marker: inactive in this scenario"}
-        for task in sorted(disabled - already_disabled)
-    )
-    raw["pipeline_model"]["edges"] = [
-        edge for edge in raw["pipeline_model"].get("edges", [])
-        if not ({edge["source_task_id"], edge["target_task_id"]} & disabled)
-    ]
-    for task in raw["pipeline_model"]["tasks"]:
-        task["includes_task_ids"] = [ref for ref in task.get("includes_task_ids", []) if ref not in disabled]
     model = CameraPipeline.model_validate({**raw["pipeline_model"], "execution_path": path})
     values = defaultdict(list)
     ignored = 0
