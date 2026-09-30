@@ -40,6 +40,7 @@ def build_calculation_trace(
     hw_time_max_ms: float,
     timeline_end_ms: float | None,
     effective_fps: float,
+    cpu_power_mw: float = 0.0,
 ) -> dict[str, Any]:
     """Build a persisted explanation of how simulation numbers were derived."""
 
@@ -67,6 +68,7 @@ def build_calculation_trace(
             "timeline_frame_period_ms": config.timeline_frame_period_ms,
         },
         "kpi": _kpi_trace(
+            cpu_power_mw=cpu_power_mw,
             core_power_mw=core_power_mw,
             bw_power_mw=bw_power_mw,
             total_power_mw=total_power_mw,
@@ -105,6 +107,7 @@ def build_calculation_trace(
 
 def _kpi_trace(
     *,
+    cpu_power_mw: float = 0.0,
     core_power_mw: float,
     bw_power_mw: float,
     total_power_mw: float,
@@ -117,8 +120,9 @@ def _kpi_trace(
 ) -> dict[str, Any]:
     return {
         "total_power_mw": {
-            "formula": "core_power_mw + bw_power_mw",
-            "inputs": {"core_power_mw": core_power_mw, "bw_power_mw": bw_power_mw},
+            "formula": "core_power_mw + bw_power_mw" + (" + cpu_power_mw" if cpu_power_mw else ""),
+            "inputs": {"core_power_mw": core_power_mw, "bw_power_mw": bw_power_mw,
+                       **({"cpu_power_mw": cpu_power_mw} if cpu_power_mw else {})},
             "result": total_power_mw,
         },
         "total_power_ma": {
@@ -239,6 +243,8 @@ def _ip_traces(
                     "formula": (
                         "unit_power_mw_mp * resolution_mp * "
                         f"(set_voltage_mv / {ref_voltage_mv:g})^2 * (fps / {ref_fps:g})"
+                        + (" * ((1 - clock_power_fraction) + clock_power_fraction * set_clock_mhz / ref_clock_mhz)"
+                           if config.clock_power_fraction and config.clock_ref_mhz > 0 else "")
                     ),
                     "unit_power_source": {
                         "catalog_source": params.source,
@@ -253,6 +259,9 @@ def _ip_traces(
                         "reference_voltage_mv": ref_voltage_mv,
                         "fps": config.fps,
                         "reference_fps": ref_fps,
+                        **({"clock_power_fraction": config.clock_power_fraction,
+                            "set_clock_mhz": config.set_clock_mhz, "ref_clock_mhz": config.clock_ref_mhz}
+                           if config.clock_power_fraction and config.clock_ref_mhz > 0 else {}),
                     },
                     "intermediate": {
                         "voltage_scale": (

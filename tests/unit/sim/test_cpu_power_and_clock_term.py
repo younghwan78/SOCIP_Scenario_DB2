@@ -167,3 +167,43 @@ def test_clock_reference_counts_physical_needs_but_not_alignment():
                                       "clock_correction_mhz": throughput * 2})
     cfg = DvfsResolver({}, power_model=model).resolve([aligned])["isp"]
     assert cfg.clock_ref_mhz == pytest.approx(throughput) and cfg.clock_overhead_mw > 0
+
+
+def test_power_hash_covers_cpu_statistic_and_physical_constraints(graph):
+    from scenario_db.sim.clock_models import ClockConstraint
+
+    inputs = build_simulation_inputs(graph("cam-rec-r1-uhd30-vdis"), SimulationRunConfig(include_cpu_power=True))
+    assert params_hash(inputs) != params_hash(inputs.model_copy(update={"sw_timing_case": "max"}))
+    inputs.config = SimulationRunConfig(power_model="v2-vf")
+    before = params_hash(inputs)
+    inputs.workloads[0].clock_constraints.append(ClockConstraint(kind="vvalid_stream", mhz=900))
+    assert params_hash(inputs) != before
+
+
+def test_prediction_attribution_explains_clock_only_power_change():
+    from copy import deepcopy
+    from scenario_db.sim.power_attribution import attribute
+
+    old = {"power": {"total_mw": 100, "hw_mw": 100, "cpu_mw": 0, "bw_mw": 0},
+           "ips": [{"node": "isp", "power_mw": 100, "activity_mw": 100, "voltage_mv": 710,
+                    "set_clock_mhz": 400, "ref_clock_mhz": 400, "clock_power_fraction": 0.5}]}
+    new = deepcopy(old)
+    new["power"].update(total_mw=150, hw_mw=150)
+    new["ips"][0].update(power_mw=150, set_clock_mhz=800)
+    result = attribute(old, new)
+    assert result["by_category"]["IP clock"] == pytest.approx(50)
+    assert result["residual_mw"] == pytest.approx(0)
+
+
+def test_debug_trace_explains_cpu_and_clock_power(graph):
+    params = _params(ip_model="v2-vf", ip_clock_power_fraction=0.25)
+    config = SimulationRunConfig(power_model="v2-vf", power_params=params, include_cpu_power=True, debug_trace=True)
+    result = run_simulation(build_simulation_inputs(graph("cam-rec-r1-uhd30-vdis"), config))
+    trace = result.calculation_trace
+    total = trace["kpi"]["total_power_mw"]
+    assert total["inputs"]["cpu_power_mw"] == result.cpu_power_mw
+    assert sum(total["inputs"].values()) == pytest.approx(total["result"])
+    for row in trace["ip"]:
+        power = row["power"]
+        if power["inputs"].get("clock_power_fraction"):
+            assert "set_clock_mhz / ref_clock_mhz" in power["formula"]

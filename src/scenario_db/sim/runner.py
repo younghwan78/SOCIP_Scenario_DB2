@@ -169,6 +169,7 @@ def run_simulation(
             hw_time_max_ms=hw_time_max_ms,
             timeline_end_ms=timeline_end_ms,
             effective_fps=effective_fps,
+            cpu_power_mw=cpu_power_mw,
         )
         calculation_trace["warnings"] = list(warnings)
 
@@ -303,6 +304,13 @@ def build_simulation_evidence(
 
 def params_hash(inputs: SimulationInputs) -> str:
     payload = inputs.model_dump(mode="json", exclude_none=True)
+    # These derived inputs now affect power. Preserve legacy hashes only when
+    # the corresponding model is disabled.
+    if _cpu_power_model(inputs.config, effective_power_params(inputs.config)) is not None:
+        payload["sw_timing_case"] = inputs.sw_timing_case
+    if inputs.config.power_model == "v2-vf":
+        for raw, workload in zip(payload["workloads"], inputs.workloads):
+            raw["clock_constraints"] = [c.model_dump(mode="json") for c in workload.clock_constraints]
     raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 

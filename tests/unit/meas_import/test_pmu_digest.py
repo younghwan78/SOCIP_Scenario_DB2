@@ -293,7 +293,7 @@ def test_service_resolves_measured_clock_ref_and_drives_the_ledger():
     )
     resolved = resolver.resolve([workload])["mtnr0"]
     ledger = resolved.clock_ledger
-    assert resolved.set_clock_mhz == 760.0
+    assert resolved.set_clock_mhz == pytest.approx(760.0)
     assert ledger.basis_used == "measured" and ledger.measured_evidence_ref == "meas-x"
     assert ledger.gap["measured_minus_configured_mhz"] == -140.0
     assert resolver.warnings == []
