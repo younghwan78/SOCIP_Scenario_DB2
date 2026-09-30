@@ -16,6 +16,7 @@ from scenario_db.db.models.definition import ScenarioVariant
 from scenario_db.db.repositories.scenario_graph import load_canonical_graph
 from scenario_db.exceptions import NotFoundError, UnprocessableError
 from scenario_db.models.evidence.common import ExecutionContext
+from scenario_db.api.services.failures import variant_failure
 from scenario_db.sim.adapter import build_simulation_inputs
 from scenario_db.sim.service import (
     _apply_config_profile,
@@ -128,15 +129,17 @@ def analyze_timing_budget_fleet(
     for variant_id in ids:
         shim = _shim(request, variant_id)
         profile = _apply_config_profile(db, shim)
+        stage = "load"
         try:
             graph, tables, ref = _load(db, shim, request.use_default_dvfs)
+            stage = "timing_budget"
             out.append(
                 fleet_row(
                     analyze_timing_budget(graph, options, config=shim.config, dvfs_tables=tables)
                 )
             )
-        except (LookupError, ValueError) as exc:
-            errors.append({"variant_id": variant_id, "error": str(exc)[:300]})
+        except Exception as exc:  # noqa: BLE001 - one variant must not abort the fleet
+            errors.append(variant_failure(exc, variant_id=variant_id, stage=stage))
     return TimingBudgetFleetResponse(
         scenario_id=request.scenario_id,
         config_profile_ref=profile,

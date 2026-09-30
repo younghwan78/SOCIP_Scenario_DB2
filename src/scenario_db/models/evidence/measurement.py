@@ -74,6 +74,10 @@ class SwTaskTiming(BaseScenarioModel):
     start_latency_mean_ms: float | None = Field(default=None, ge=0)
     rate_hz: float | None = Field(default=None, gt=0)
     cpu_affinity: str | None = None
+    # Share of the wall time that is CPU work (I/O completion / waits are not);
+    # used by the CPU power estimate. None = 1.0.
+    # Omitted when unset so existing import fingerprints / evidence stay byte-identical.
+    cpu_active_ratio: float | None = Field(default=None, gt=0, le=1, exclude_if=lambda value: value is None)
 
     @model_validator(mode="after")
     def ordered_runtime(self) -> SwTaskTiming:

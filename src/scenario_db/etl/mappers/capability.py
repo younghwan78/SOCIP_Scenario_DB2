@@ -140,7 +140,7 @@ def upsert_power_model_params(raw: dict, sha256: str, session: Session) -> None:
     row.params         = obj.model_dump(
         mode="json",
         exclude_none=True,
-        include={"ip_model", "ref_voltage_mv", "ref_fps", "bw_model", "bw", "cpu", "calibration"},
+        include={"ip_model", "ref_voltage_mv", "ref_fps", "ip_clock_power_fraction", "bw_model", "bw", "cpu", "calibration"},
     )
     row.notes          = obj.notes
     row.yaml_sha256    = sha256

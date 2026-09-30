@@ -15,10 +15,15 @@ from pathlib import Path
 
 import yaml
 
-from scenario_db.meas_import.camera import CameraBundle, assemble_camera, parse_markdown
+from scenario_db.meas_import.camera import CameraBundle, assemble_camera, exclude_inactive_tasks, parse_markdown
 from scenario_db.meas_import.perfetto_digest import PerfettoTraceProcessor
 from scenario_db.meas_import.sequence import SQL_SLICES, statistics
 from scenario_db.models.evidence.camera import CameraPipeline
+
+
+def _unmarked(name):
+    # Only used to identify a task to disable, never to activate a marked slice.
+    return name[1:] if name and name.startswith("!") else name
 
 
 def logical_name(row, tasks):
@@ -28,7 +33,11 @@ def logical_name(row, tasks):
     explicit to avoid accepting similarly named events from unrelated tracks.
     """
     matches = []
+    if (row.get("slice_name") or "").startswith("!"):
+        return None
     for task in tasks:
+        if (task.trace_slice_name or "").startswith("!"):
+            continue
         if task.trace_slice_name is None:
             matched = row["slice_name"] == task.task_id
         else:
@@ -48,14 +57,25 @@ def summarize(tp, template: CameraBundle):
         **template.pipeline_model, "execution_path": template.execution_path.model_dump()
     })
     bounds = tp.query("SELECT start_ts, end_ts FROM trace_bounds")[0]
+    trace_rows = tp.query(SQL_SLICES.replace("WHERE s.dur >= 0", "WHERE 1=1"))
+    disabled = {t.task_id for t in model.tasks if (t.trace_slice_name or "").startswith("!")}
+    # Some producers put the inactive marker only on the trace slice.
+    for row in trace_rows:
+        if (row.get("slice_name") or "").startswith("!"):
+            task_id = logical_name({**row, "slice_name": _unmarked(row["slice_name"])}, model.tasks)
+            if task_id:
+                disabled.add(task_id)
+    raw = exclude_inactive_tasks(template, disabled).model_dump(mode="json")
+    path = raw["execution_path"]
+    model = CameraPipeline.model_validate({**raw["pipeline_model"], "execution_path": path})
     values = defaultdict(list)
     ignored = 0
     incomplete = 0
     seen = set()
     # Count unfinished slices as exclusions rather than silently losing them.
-    for row in tp.query(SQL_SLICES.replace("WHERE s.dur >= 0", "WHERE 1=1")):
+    for row in trace_rows:
         task_id = logical_name(row, model.tasks)
-        if task_id is None:
+        if task_id is None or task_id in disabled:
             ignored += 1
             continue
         if task_id not in model.execution_path.enabled_task_ids:
@@ -89,9 +109,9 @@ def summarize(tp, template: CameraBundle):
         duration_ms=(int(bounds["end_ts"]) - int(bounds["start_ts"])) / 1e6,
         ignored_slices=ignored, incomplete_slices=incomplete,
         samples_by_task={k: len(v) for k, v in values.items()},
+        skipped_task_ids=sorted(disabled),
         causal_policy="No latency or flow inferred from frame numbers or timestamp order",
     )
-    raw = template.model_dump(mode="json")
     raw["statistics"] = dict(sw_task_timing=sw, hw_task_timing=hw)
     result = CameraBundle.model_validate(raw)
     assemble_camera(result)

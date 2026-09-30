@@ -215,6 +215,7 @@ def build_simulation_inputs(
         external_devices=external_devices(graph),
         topology_order=[item.node_id for item in workloads],
         warnings=warnings,
+        sw_timing_case=timing_case(graph),
     )
 
 

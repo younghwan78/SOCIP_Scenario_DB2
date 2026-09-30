@@ -41,6 +41,9 @@ class PowerModel(Protocol):
         resolution_mp: float,
         voltage_mv: float,
         fps: float,
+        set_clock_mhz: float | None = None,
+        ref_clock_mhz: float | None = None,
+        clock_power_fraction: float | None = None,
     ) -> float: ...
 
     def memory_transfer_power_mw(
@@ -83,7 +86,11 @@ class V1VfpsModel:
         resolution_mp: float,
         voltage_mv: float,
         fps: float,
+        set_clock_mhz: float | None = None,
+        ref_clock_mhz: float | None = None,
+        clock_power_fraction: float | None = None,
     ) -> float:
+        # v1 has no clock term: set/ref clock and fraction are ignored.
         return calc_active_power_mw(
             unit_power_mw_mp=unit_power_mw_mp,
             resolution_mp=resolution_mp,
@@ -105,10 +112,84 @@ class V1VfpsModel:
         return bw_mbs * bw_power_coeff / 1000.0 * llc_weight
 
 
+@dataclass(frozen=True)
+class V2VfClockModel(V1VfpsModel):
+    """v1 plus a set-clock term (clock tree / ungated logic).
+
+    IP: P = P_v1 · [(1 - a) + a · f_set / f_ref]
+
+    - ``P_v1`` = unit_power · MP · (V / ref_V)² · (fps / ref_fps): the work
+      done per frame at the resolved voltage (unchanged physics).
+    - ``f_ref``: the clock the IP physically needs — throughput (pixels·fps /
+      util-cap / ppc) or a physical lower bound (sensor ingress, v-valid
+      streaming, SW-stage budget), whichever is higher; the operating point
+      ``unit_power_mw_mp`` stands for.
+    - ``a`` (``clock_power_fraction``): share of that power that scales with
+      the set clock instead of the work. Per IP/mode in the catalog sim block,
+      otherwise ``power_model_params.ip_clock_power_fraction``, otherwise 0.
+
+    With a = 0, or f_set == f_ref, the result equals v1 exactly. With a > 0 a
+    clock set above the need (OTF / DVFS-group alignment, DVFS quantisation,
+    overflow guard or other configured / measured overrides) costs power even
+    at the same voltage.
+    """
+
+    model_id: str = "v2-vf"
+    version: str = "1.0"
+    default_clock_power_fraction: float = 0.0
+
+    def with_params(self, params: PowerModelParams) -> V2VfClockModel:
+        base = super().with_params(params)
+        fraction = getattr(params, "ip_clock_power_fraction", None)
+        return replace(
+            base,
+            default_clock_power_fraction=self.default_clock_power_fraction if fraction is None else fraction,
+        )
+
+    def applied_clock_power_fraction(self, clock_power_fraction: float | None) -> float:
+        return self.default_clock_power_fraction if clock_power_fraction is None else clock_power_fraction
+
+    def clock_factor(
+        self,
+        *,
+        set_clock_mhz: float | None,
+        ref_clock_mhz: float | None,
+        clock_power_fraction: float | None,
+    ) -> float:
+        fraction = self.applied_clock_power_fraction(clock_power_fraction)
+        if not fraction or not set_clock_mhz or not ref_clock_mhz or ref_clock_mhz <= 0:
+            return 1.0
+        return (1.0 - fraction) + fraction * (set_clock_mhz / ref_clock_mhz)
+
+    def ip_active_power_mw(
+        self,
+        *,
+        unit_power_mw_mp: float,
+        resolution_mp: float,
+        voltage_mv: float,
+        fps: float,
+        set_clock_mhz: float | None = None,
+        ref_clock_mhz: float | None = None,
+        clock_power_fraction: float | None = None,
+    ) -> float:
+        base = super().ip_active_power_mw(
+            unit_power_mw_mp=unit_power_mw_mp,
+            resolution_mp=resolution_mp,
+            voltage_mv=voltage_mv,
+            fps=fps,
+        )
+        return base * self.clock_factor(
+            set_clock_mhz=set_clock_mhz,
+            ref_clock_mhz=ref_clock_mhz,
+            clock_power_fraction=clock_power_fraction,
+        )
+
+
 DEFAULT_POWER_MODEL_ID = "v1-vfps"
 
 POWER_MODELS: dict[str, PowerModel] = {
     "v1-vfps": V1VfpsModel(),
+    "v2-vf": V2VfClockModel(),
 }
 
 

@@ -38,6 +38,8 @@ class IPSimParams(BaseScenarioModel):
     vdd: str | None = None
     dvfs_group: str | None = None
     max_clock_mhz: float | None = None
+    # v2-vf: share of IP power that scales with the set clock (catalog sim block).
+    clock_power_fraction: float | None = Field(default=None, ge=0, le=1)
     source: str | None = None
     source_project: str | None = None
     source_note: str | None = None
@@ -162,6 +164,10 @@ class SimulationRunConfig(BaseScenarioModel):
     # hash and evidence lineage cover the actual coefficients. Precedence for
     # BW: explicit bw_power_* config > params.bw > code defaults.
     power_params_ref: str | None = None
+    # SW-task CPU power in the simulation total (sim/cpu_power.py).
+    # None = auto: on when the resolved power_model_params carry a cpu block,
+    # otherwise off (legacy totals). True / False force it.
+    include_cpu_power: bool | None = None
     power_params: PowerModelParams | None = None
     # Clock ledger (sim/clock_models.py). None keeps the calculated clock.
     # configured/measured are keyed by node_id, hw_name or ip_ref; a missing
@@ -207,6 +213,10 @@ class SimulationInputs(BaseScenarioModel):
     external_devices: list[dict[str, Any]] = Field(default_factory=list)
     topology_order: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    # Which sw_timing statistic the timeline durations use (design_conditions
+    # sw_timing_case). Derived from inputs already hashed (the durations), so
+    # excluded from serialisation / params_hash.
+    sw_timing_case: str = Field(default="mean", exclude=True)
 
 
 class ResolvedIPConfig(BaseScenarioModel):
@@ -240,6 +250,14 @@ class ResolvedIPConfig(BaseScenarioModel):
     feasible: bool = True
     infeasible_reason: str | None = None
     clock_ledger: ClockLedger | None = None
+    # v2-vf clock term: share of power that scales with the set clock, the
+    # throughput clock it is referenced to, and the mW the set clock adds above
+    # that reference (0 under v1 or when set == reference).
+    clock_power_fraction: float | None = None
+    # Clock the IP physically needs (throughput, sensor ingress, v-valid,
+    # stage budget): the v2-vf reference; clock above it is overhead.
+    clock_ref_mhz: float = 0.0
+    clock_overhead_mw: float = 0.0
 
 
 class PortBWResult(BaseScenarioModel):
@@ -337,5 +355,7 @@ class SimRunResult(BaseScenarioModel):
     topology_order: list[str] = Field(default_factory=list)
     vdd_power: dict[str, dict[str, float]] = Field(default_factory=dict)
     power_breakdown: dict[str, Any] = Field(default_factory=dict)
+    cpu_power_mw: float = 0.0
+    cpu_breakdown: list[dict[str, Any]] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     calculation_trace: dict[str, Any] | None = None

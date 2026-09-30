@@ -22,6 +22,13 @@ def _lmean(a: float, b: float) -> float:
     return a if abs(a - b) < 1e-12 else (a - b) / (math.log(a) - math.log(b))
 
 
+def _clock_factor(ip: dict[str, Any]) -> float:
+    fraction = float(ip.get("clock_power_fraction") or 0)
+    ref = float(ip.get("ref_clock_mhz") or 0)
+    clock = float(ip.get("set_clock_mhz") or 0)
+    return (1 - fraction) + fraction * clock / ref if ref > 0 and clock > 0 else 1.0
+
+
 def attribute(old: dict[str, Any], new: dict[str, Any]) -> dict[str, Any]:
     factors: list[dict[str, Any]] = []
 
@@ -63,6 +70,8 @@ def attribute(old: dict[str, Any], new: dict[str, Any]) -> dict[str, Any]:
         v0, v1 = float(ia["voltage_mv"] or 0), float(ib["voltage_mv"] or 0)
         volt = w * math.log((v1 / v0) ** 2) if v0 > 0 and v1 > 0 else 0.0
         add("IP workload", node, act, "size/fps/mode/cores")
+        clock = w * math.log(_clock_factor(ib) / _clock_factor(ia))
+        add("IP clock", node, clock, "set clock / physical reference clock")
         lv = f"L{ia.get('dvfs_level')}→L{ib.get('dvfs_level')}" if ia.get("dvfs_level") != ib.get("dvfs_level") else ""
         add("IP DVFS 전압", node, volt, f"{v0:.1f}→{v1:.1f} mV {lv}".strip())
     hw_other = (new["power"]["hw_mw"] - sum(float(x["power_mw"]) for x in i1.values())) - (

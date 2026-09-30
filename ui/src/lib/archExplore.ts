@@ -2,6 +2,7 @@
 // Backend: /arch/exploration/runs, /arch/predictions/*, /arch/reports (src/scenario_db/api/routers/arch_exploration.py)
 import { API_BASE, ApiError } from './api'
 import { fetchAdmitted, type Statistic } from './timingBudget'
+import type { VariantFailure } from '../components/VariantFailures'
 
 export interface Quant { min: number; p25: number; median: number; p75: number; max: number }
 /** Distribution keys always present (engine rev 1+); the BW IP/CPU keys exist from rev 2. */
@@ -91,7 +92,7 @@ export interface RunMeta {
   summary: { variants: number; errors: number; spec_ok: number; cases: number; eligible_cases: number; verified: number; recommended_power_mw: [number, number] | null
     power_options?: { variants: number; sets: number; best_saving_mw: [number, number] | null } }
 }
-export interface RunDetail extends RunMeta { spec: Record<string, unknown>; variants: VariantResult[]; errors: { variant_id: string; error: string }[] }
+export interface RunDetail extends RunMeta { spec: Record<string, unknown>; variants: VariantResult[]; errors: VariantFailure[] }
 export interface Power { total_mw: number; cpu_mw: number; hw_mw: number; bw_mw: number; bw_ip_mw?: number; bw_cpu_mw?: number }
 export interface BoardRow {
   id: string; scenario_id: string; variant_id: string; status: string; run_id: string; run_title: string | null; run_created_at: string | null

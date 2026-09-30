@@ -1,6 +1,7 @@
 // Stage timing budget: API types + pure helpers used by the Timing Budget pages.
 // Backend: POST /timing-budget/variant, /timing-budget/fleet (src/scenario_db/sim/timing_budget.py).
 import { API_BASE, ApiError } from './api'
+import type { VariantFailure } from '../components/VariantFailures'
 
 export type StageId = 'rt' | 'nrt' | 'post' | 'output'
 export type Statistic = 'min' | 'mean' | 'max'
@@ -81,7 +82,7 @@ export const timingApi = {
   variant: (scenarioId: string, variantId: string, options: TimingOptions) =>
     postJson<{ report: TimingReport; dvfs_table_ref: string | null }>('/timing-budget/variant', { scenario_id: scenarioId, variant_id: variantId, options }),
   fleet: (scenarioId: string, options: Omit<TimingOptions, 'include_whatif'>) =>
-    postJson<{ rows: FleetRow[]; errors: { variant_id: string; error: string }[]; dvfs_table_ref: string | null }>('/timing-budget/fleet', { scenario_id: scenarioId, options }),
+    postJson<{ rows: FleetRow[]; errors: VariantFailure[]; dvfs_table_ref: string | null }>('/timing-budget/fleet', { scenario_id: scenarioId, options }),
 }
 
 // ---------------------------------------------------------------- helpers

@@ -269,6 +269,8 @@ class DvfsResolver:
             height=workload.height,
             format=workload.format,
             unit_power_mw_mp=params.unit_power_mw_mp,
+            clock_power_fraction=params.clock_power_fraction,
+            clock_ref_mhz=_physical_required_mhz(workload, base_required_clock),
             ppc=params.ppc,
             input_resolution_mp=workload.pixels / 1e6,
             fps=workload.fps,
@@ -395,14 +397,38 @@ class DvfsResolver:
 
     def _recalculate_power(self, resolved: dict[str, ResolvedIPConfig]) -> None:
         for config in resolved.values():
+            common = {
+                "unit_power_mw_mp": config.unit_power_mw_mp,
+                "resolution_mp": config.input_resolution_mp,
+                "voltage_mv": config.set_voltage_mv,
+                "fps": config.fps,
+            }
+            # Clock term reference: the throughput clock the work needs.
             active = self.power_model.ip_active_power_mw(
-                unit_power_mw_mp=config.unit_power_mw_mp,
-                resolution_mp=config.input_resolution_mp,
-                voltage_mv=config.set_voltage_mv,
-                fps=config.fps,
+                **common,
+                set_clock_mhz=config.set_clock_mhz,
+                ref_clock_mhz=config.clock_ref_mhz,
+                clock_power_fraction=config.clock_power_fraction,
             )
+            work_only = self.power_model.ip_active_power_mw(**common, clock_power_fraction=0.0)
             config.active_power_mw = active
             config.total_power_mw = active
+            config.clock_overhead_mw = active - work_only
+            applied = getattr(self.power_model, "applied_clock_power_fraction", None)
+            # The fraction actually applied (None: the model has no clock term).
+            config.clock_power_fraction = applied(config.clock_power_fraction) if applied else None
+
+
+# Lower bounds the IP physically needs (the clock unit power stands for):
+# throughput plus sensor ingress / v-valid streaming / SW-stage time budget.
+# OTF / DVFS-group alignment, manual / configured / measured overrides and
+# DVFS quantisation are clock *above* that need and pay the v2-vf clock term.
+PHYSICAL_CLOCK_CONSTRAINTS = frozenset({"mipi_ingress", "vvalid_stream", "stage_budget"})
+
+
+def _physical_required_mhz(workload: IPWorkload, throughput_mhz: float) -> float:
+    physical = [c.mhz for c in workload.clock_constraints if c.kind in PHYSICAL_CLOCK_CONSTRAINTS]
+    return max([throughput_mhz, *physical])
 
 
 def _base_required_mhz(workload: IPWorkload) -> float:

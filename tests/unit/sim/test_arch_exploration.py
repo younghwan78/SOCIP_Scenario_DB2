@@ -260,3 +260,24 @@ def test_sw_dma_uses_adapter_resolved_fps(monkeypatch):
     monkeypatch.setattr(ax, "calc_port_bw", calc)
     ax._dma(None, ax.SimulationRunConfig())
     assert calc.call_args.kwargs["fps"] == 60
+
+
+def test_v2_clock_term_is_used_by_the_analytic_dvfs_headroom(graph_factory, dvfs, uhd30):
+    from scenario_db.models.capability.power_model import PowerModelParams
+    from scenario_db.sim.models import SimulationRunConfig
+
+    params = PowerModelParams.model_validate({
+        "id": "pmp-t", "schema_version": "2.2", "kind": "power_model_params", "soc_ref": "soc-exynos2600",
+        "ip_model": "v2-vf", "ip_clock_power_fraction": 0.3,
+    })
+    config = SimulationRunConfig(power_model="v2-vf", power_params=params)
+    v2 = ax.explore_variant(graph_factory(UHD30), ax.ArchExplorationSpec(), config=config, dvfs_tables=dvfs)
+    assert v2["recommended"]["verified"]["ok"]
+    cam_v1 = next(d for d in uhd30["domains"] if d["domain"] == "CAM")["options"][1]
+    cam_v2 = next(d for d in v2["domains"] if d["domain"] == "CAM")["options"][1]
+    assert cam_v2["delta_mw"] > cam_v1["delta_mw"]  # the faster level also costs clock power
+    # the clock factor itself: 1 without a fraction/reference, linear in f above the reference
+    ip = {"clock_power_fraction": 0.3, "ref_clock_mhz": 400.0}
+    assert ax._clock_factor(ip, 400.0) == pytest.approx(1.0)
+    assert ax._clock_factor(ip, 533.0) == pytest.approx(0.7 + 0.3 * 533.0 / 400.0)
+    assert ax._clock_factor({"clock_power_fraction": 0.0, "ref_clock_mhz": 400.0}, 533.0) == 1.0

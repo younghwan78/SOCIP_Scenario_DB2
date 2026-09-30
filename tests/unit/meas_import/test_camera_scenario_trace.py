@@ -25,6 +25,15 @@ def test_exact_extensible_mapping():
         logical_name(row, [task, task.model_copy(update={"task_id": "other"})])
 
 
+def test_inactive_marker_never_activates_a_task():
+    task = CameraTask(task_id="mcsc_hw", label="MCSC", kind="hw", stage="nrt", timing_scope="hw_execution",
+                      trace_slice_name="!MCSC", trace_track_name="Scenario / HW / MCSC")
+    row = dict(slice_name="MCSC f0007", track_name="Scenario / HW / MCSC")
+    assert logical_name(row, [task]) is None
+    assert logical_name({**row, "slice_name": "!MCSC f0007"}, [task]) is None
+    assert logical_name({**row, "slice_name": "!MCSC f0007", "track_name": "other"}, [task]) is None
+
+
 def test_missing_duplicate_incomplete_and_extra_events():
     template = parse_markdown((BUNDLE / "mapping-template.md").read_text(encoding="utf-8"))
     template.pipeline_model["tasks"] = [template.pipeline_model["tasks"][7]]
@@ -46,6 +55,34 @@ def test_missing_duplicate_incomplete_and_extra_events():
         summarize(tp, template)
 
 
+def test_trace_only_inactive_marker_disables_task_for_entire_capture():
+    template = parse_markdown((BUNDLE / "mapping-template.md").read_text(encoding="utf-8"))
+    first = template.pipeline_model["tasks"][0]
+    template.pipeline_model["tasks"] = [first, template.pipeline_model["tasks"][7]]
+    template.pipeline_model["edges"] = []
+    template.execution_path.enabled_task_ids = [first["task_id"], "crta_3a"]
+    rows = [dict(slice_name="!" + first["trace_slice_name"] + " f0001",
+                 track_name=first["trace_track_name"], dur_ns=100),
+            dict(slice_name="~CRTA_3A f0001", track_name="Scenario / SW / ICPU", dur_ns=300_000)]
+    tp = SimpleNamespace(query=lambda sql: [dict(start_ts=0, end_ts=15_000_000_000)] if "trace_bounds" in sql else rows)
+    result, report = summarize(tp, template)
+    assert result.execution_path.enabled_task_ids == ["crta_3a"]
+    assert report["skipped_task_ids"] == [first["task_id"]]
+    assert not result.statistics.hw_task_timing
+
+
+def test_direct_summary_import_excludes_inactive_tasks_without_mutating_bundle():
+    bundle = parse_markdown((BUNDLE / "scenario-statistics.md").read_text(encoding="utf-8"))
+    original = bundle.model_dump()
+    evidence = assemble_camera(bundle)
+    skipped = {"pdp", "byrp", "rgbp", "yuvsc", "mlsc"}
+    assert skipped.isdisjoint(evidence.pipeline_model.execution_path.enabled_task_ids)
+    assert skipped.isdisjoint(stat.task for stat in evidence.hw_task_timing)
+    assert all(not ({edge.source_task_id, edge.target_task_id} & skipped)
+               for edge in evidence.pipeline_model.edges)
+    assert bundle.model_dump() == original
+
+
 def test_real_fixture_stats_hierarchy_and_timeline():
     pytest.importorskip("perfetto")
     template = parse_markdown((BUNDLE / "mapping-template.md").read_text(encoding="utf-8"))
@@ -54,13 +91,17 @@ def test_real_fixture_stats_hierarchy_and_timeline():
         bundle, report = summarize(tp, template)
         evidence = assemble_camera(bundle)
         assert report["duration_ms"] == 15000
-        assert len(report["samples_by_task"]) == 19
+        assert len(report["samples_by_task"]) == 14
+        skipped = {"pdp", "byrp", "rgbp", "yuvsc", "mlsc"}
+        assert set(report["skipped_task_ids"]) == skipped
+        assert skipped.isdisjoint(bundle.execution_path.enabled_task_ids)
+        assert {t.task_id for t in bundle.execution_path.disabled_tasks} == skipped
         assert report["samples_by_task"]["gdc_o"] == 449
         assert all(count == 450 for task, count in report["samples_by_task"].items() if task != "gdc_o")
         assert report["incomplete_slices"] == 1
-        assert report["ignored_slices"] == 3
+        assert report["ignored_slices"] == 3 + 5 * 450
         assert len(evidence.sw_task_timing) == 5
-        assert len(evidence.hw_task_timing) == 14
+        assert len(evidence.hw_task_timing) == 9
         stats = {s.task: s for s in [*evidence.sw_task_timing, *evidence.hw_task_timing]}
         for task, typical in {"sensor_readout": 11.8, "pre_me_rta": 4,
                               "eis": 3.2, "mtnr": 8, "msnr": 8, "yuvp": 8,
@@ -71,9 +112,9 @@ def test_real_fixture_stats_hierarchy_and_timeline():
         eis = next(s for s in evidence.sw_task_timing if s.task == "eis")
         assert (eis.min_ms, eis.mean_ms, eis.max_ms) == pytest.approx((3.136, 3.2, 3.264))
         events = sequence_preview(tp, evidence.pipeline_model)
-        assert len(events) == 56
+        assert len(events) == 41
         assert {e["frame_index"] for e in events} == {0, 1, 2}
-        assert sum(len(e["predecessors"]) for e in events) == 18 * 3 - 1
+        assert sum(len(e["predecessors"]) for e in events) == len(evidence.pipeline_model.edges) * 3 - 1
         by_id = {e["event_id"]: e for e in events}
         assert all(by_id[p]["frame_index"] == e["frame_index"]
                    for e in events for p in e["predecessors"])

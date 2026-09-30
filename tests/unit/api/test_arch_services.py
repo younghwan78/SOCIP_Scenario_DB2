@@ -60,7 +60,11 @@ def test_run_persists_summary_and_reports_partial_failure(monkeypatch):
     assert result["summary"] == {"variants": 1, "errors": 1, "spec_ok": 1, "cases": 12,
                                   "eligible_cases": 4, "verified": 1, "recommended_power_mw": [10, 10],
                                   "power_options": {"variants": 0, "sets": 0, "cases": 0, "best_saving_mw": None}}
-    assert result["errors"] == [{"scenario_id": "uc-a", "variant_id": "bad", "error": "broken pipeline"}]
+    [failure] = result["errors"]
+    assert {k: failure[k] for k in ("scenario_id", "variant_id", "error", "stage", "error_type")} == {
+        "scenario_id": "uc-a", "variant_id": "bad", "error": "broken pipeline", "stage": "load", "error_type": "ValueError",
+    }
+    assert failure["location"].startswith("test_arch_services.py:")
     db.commit.assert_called_once()
     with pytest.raises(UnprocessableError, match="max_variants"):
         svc.run_exploration(db, request.model_copy(update={"max_variants": 1}))
@@ -97,7 +101,10 @@ def test_fleet_deduplicates_explicit_selection_and_preserves_partial_errors(monk
     result = timing.analyze_timing_budget_fleet(MagicMock(), TimingBudgetFleetRequest(
         scenario_id="uc-a", variant_ids=["good", "good", "bad"]))
     assert result.rows == [{"variant_id": "good"}]
-    assert result.errors == [{"variant_id": "bad", "error": "missing"}]
+    [failure] = result.errors
+    assert (failure["variant_id"], failure["error"], failure["stage"], failure["category"]) == (
+        "bad", "missing", "load", "reference")
+    assert failure["hint"]
     analyze.assert_called_once()
 
 

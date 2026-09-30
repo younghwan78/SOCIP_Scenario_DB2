@@ -530,3 +530,12 @@ a.hd-row:hover span { color: #E8EEF0; }
 .cmp-chip-proj { font-size: 10.5px; padding: 0 5px; border-radius: 4px; background: var(--line); color: var(--text); }
 .hd-matrix .proj-open { border: 0; padding: 0; background: transparent; color: inherit; cursor: pointer; font: inherit; }
 .hd-matrix .proj-open:focus-visible { outline: 2px solid #7FD6C8; outline-offset: 3px; }
+
+/* Variant failures (collapsible) */
+.vf summary { cursor: pointer; font-weight: 600; }
+.vf[open] summary { margin-bottom: 8px; }
+.vf-group { margin-top: 10px; }
+.vf-head { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.vf-hint { color: #5B3A00; background: #FFF6E0; border: 1px solid #F2D8A7; border-radius: 6px; padding: 6px 8px; margin-bottom: 6px; }
+.vf-table { width: 100%; background: var(--surface); color: var(--ink, inherit); }
+.vf-msg { margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 12px; max-height: 160px; overflow: auto; }

@@ -30,6 +30,7 @@ from scenario_db.exceptions import NotFoundError, UnprocessableError
 from scenario_db.reporting.arch_report import build_snapshot, html_sha256, render_html
 from scenario_db.sim.arch_exploration import ENGINE_REV, explore_variant, find_case, prediction_payload
 from scenario_db.sim.power_attribution import attribute
+from scenario_db.api.services.failures import variant_failure
 from scenario_db.sim.model_lineage import lineage_differences, run_model_lineage
 from scenario_db.sim.service import _apply_config_profile, _check_power_params_scope, _graph_soc_ref
 from scenario_db.sim.timing_budget import DERIVED_VARIANT_MARKERS
@@ -106,16 +107,18 @@ def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str |
         )
         shim = _shim(tb, variant_id)
         _apply_config_profile(db, shim)
+        stage = "load"
         try:
             graph, tables, ref = _load(db, shim, request.use_default_dvfs)
             bounded_spec = request.spec.model_copy(update={
                 "max_cases_per_variant": min(request.spec.max_cases_per_variant, remaining_cases),
             })
             _check_power_params_scope(shim.config, graph)
+            stage = "explore"
             summary = explore_variant(graph, bounded_spec, config=shim.config, dvfs_tables=tables)
             summary["model_lineage"] = run_model_lineage(shim.config)
-        except (LookupError, ValueError) as exc:
-            errors.append({"scenario_id": scenario.id, "variant_id": variant_id, "error": str(exc)[:300]})
+        except Exception as exc:  # noqa: BLE001 - one variant must not abort the run
+            errors.append(variant_failure(exc, variant_id=variant_id, scenario_id=scenario.id, stage=stage))
             continue
         soc_ref = soc_ref or _graph_soc_ref(graph)
         dvfs_ref = dvfs_ref or ref
@@ -123,7 +126,11 @@ def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str |
         summary["dvfs_table_ref"] = ref
         variants.append(summary)
     if not variants:
-        raise UnprocessableError(f"every variant failed: {errors[:3]}")
+        first = errors[0]
+        raise UnprocessableError(
+            f"every variant failed ({len(errors)}); first: {first['variant_id']} "
+            f"[{first['stage']}/{first['category']}] {first['error'][:300]}"
+        )
     names = sorted({str((s.metadata_ or {}).get("name") or s.id) for s in scenarios})
     scenario_type = request.scenario_type or request.category or " + ".join(names)
     counts = {

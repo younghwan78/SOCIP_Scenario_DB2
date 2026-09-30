@@ -112,9 +112,46 @@ def canonical_hash(evidence: MeasurementEvidence) -> str:
     ).hexdigest()
 
 
+def exclude_inactive_tasks(bundle: CameraBundle, disabled=()) -> CameraBundle:
+    """Apply producer inactivity to this capture without changing canonical YAML."""
+    raw = bundle.model_dump(mode="json")
+    tasks = raw["pipeline_model"]["tasks"]
+    disabled = set(disabled) | {
+        task["task_id"] for task in tasks if (task.get("trace_slice_name") or "").startswith("!")
+    }
+    if not disabled:
+        return bundle
+    path = raw["execution_path"]
+    path["enabled_task_ids"] = [task for task in path["enabled_task_ids"] if task not in disabled]
+    already_disabled = {task["task_id"] for task in path["disabled_tasks"]}
+    path["disabled_tasks"].extend(
+        {"task_id": task, "reason": "Producer ! marker: inactive in this scenario"}
+        for task in sorted(disabled - already_disabled)
+    )
+    edges = raw["pipeline_model"].get("edges", [])
+    removed_edges = {edge["edge_id"] for edge in edges
+                     if {edge["source_task_id"], edge["target_task_id"]} & disabled}
+    raw["pipeline_model"]["edges"] = [edge for edge in edges if edge["edge_id"] not in removed_edges]
+    for task in tasks:
+        if task["task_id"] in disabled and task.get("trace_slice_name"):
+            if not task["trace_slice_name"].startswith("!"):
+                task["trace_slice_name"] = "!" + task["trace_slice_name"]
+        task["includes_task_ids"] = [ref for ref in task.get("includes_task_ids", []) if ref not in disabled]
+    stats = raw["statistics"]
+    for field, identity, excluded in (
+        ("sw_task_timing", "task", disabled), ("hw_task_timing", "task", disabled),
+        ("stage_timing", "task_id", disabled), ("sw_event_latency", "edge_id", removed_edges),
+    ):
+        stats[field] = [stat for stat in stats[field] if stat[identity] not in excluded]
+    for stat in stats["sw_task_timing"]:
+        stat["includes_task_ids"] = [ref for ref in stat.get("includes_task_ids", []) if ref not in disabled]
+    return CameraBundle.model_validate(raw)
+
+
 def assemble_camera(bundle: CameraBundle) -> MeasurementEvidence:
     if "execution_path" in bundle.pipeline_model:
         raise ValueError("execution_path must only be declared at bundle root")
+    bundle = exclude_inactive_tasks(bundle)
     pipeline = CameraPipeline.model_validate(
         {**bundle.pipeline_model, "execution_path": bundle.execution_path.model_dump()}
     )
@@ -223,7 +260,10 @@ def bind_graph(evidence, graph):
     for disabled in model.execution_path.disabled_tasks:
         task = declared.get(disabled.task_id)
         refs = set(task.node_refs) if task else {disabled.task_id}
-        if refs & nodes.keys():
+        # A producer marker disables this capture's task even if the canonical
+        # variant contains the node. Ordinary path mismatches remain errors.
+        producer_inactive = task is not None and (task.trace_slice_name or "").startswith("!")
+        if refs & nodes.keys() and not producer_inactive:
             raise ValueError(
                 "disabled semantic task is active in canonical variant; select the correct path variant"
             )

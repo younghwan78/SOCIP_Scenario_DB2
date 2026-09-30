@@ -55,6 +55,15 @@ ENGINE_REV = "arch-exploration/5"
 # Power = CPU(SW) + IP core + BW; BW = IP DMA (HW nodes) + CPU DMA (SW tasks, e.g. mpeg_writer)
 DIST_KEYS = ("total_mw", "cpu_mw", "hw_mw", "bw_mw", "bw_ip_mw", "bw_cpu_mw", "bw_mbs", "bw_ip_mbs", "bw_cpu_mbs")
 V_REF_MV = 710.0
+
+
+def _clock_factor(ip: dict[str, Any], set_clock_mhz: float) -> float:
+    """v2-vf clock factor (1 - a) + a * f / f_ref; 1 under v1 or without a reference clock."""
+    fraction = float(ip.get("clock_power_fraction") or 0.0)
+    ref = float(ip.get("ref_clock_mhz") or 0.0)
+    if fraction <= 0 or ref <= 0 or set_clock_mhz <= 0:
+        return 1.0
+    return (1.0 - fraction) + fraction * set_clock_mhz / ref
 DEFAULT_RATIO = {"LOSSY": 0.5}
 _BAYER_RE = re.compile(r"BAYER|RAW|BGGR|RGGB|GRBG|GBRG|PDAF", re.I)
 
@@ -374,8 +383,11 @@ def _slice(report: dict[str, Any], stat: str, scale: float) -> dict[str, Any]:
             "dvfs_level": ip["dvfs_level"],
             "voltage_mv": v,
             "power_mw": p,
-            # IP power = activity x (V/710)^2 (power model v1-vfps) -> attribution factor
-            "activity_mw": p / (v / V_REF_MV) ** 2 if v > 0 else p,
+            "clock_power_fraction": float(ip.get("clock_power_fraction") or 0.0),
+            "ref_clock_mhz": float(ip.get("ref_clock_mhz") or 0.0),
+            # IP power = activity x (V/710)^2 x clock factor (1 under v1-vfps) -> attribution factor
+            "activity_mw": p / (v / V_REF_MV) ** 2 / _clock_factor(ip, float(ip["set_clock_mhz"] or 0.0))
+            if v > 0 else p,
             "hw_ms": ip["hw_ms"],
             "feasible": ip["feasible"],
         })
@@ -643,7 +655,11 @@ def dvfs_options(ips: list[dict[str, Any]], tables: dict[str, DVFSTable], k: int
             v = table.voltage_for(lv, asv)
             # resolved level = no change; a faster level only ever raises a member's voltage
             delta = 0.0 if lv is base else sum(
-                m["power_mw"] * ((max(v, m["voltage_mv"]) / m["voltage_mv"]) ** 2 - 1.0)
+                m["power_mw"] * (
+                    (max(v, m["voltage_mv"]) / m["voltage_mv"]) ** 2
+                    * _clock_factor(m, lv.speed_mhz) / _clock_factor(m, m["set_clock_mhz"])
+                    - 1.0
+                )
                 for m in members if m["voltage_mv"] > 0
             )
             opts.append({"level": lv.level, "speed_mhz": lv.speed_mhz, "voltage_mv": v,
@@ -891,8 +907,9 @@ def prediction_payload(s: dict[str, Any], case: dict[str, Any], buffers: list[di
     dom_level = case["dvfs"]
     ips = []
     for ip in s["ips"]:
-        ips.append({k: ip[k] for k in ("node", "stage", "dvfs_group", "set_clock_mhz", "dvfs_level",
-                                       "voltage_mv", "power_mw", "activity_mw", "cores")})
+        ips.append({k: ip.get(k) for k in ("node", "stage", "dvfs_group", "set_clock_mhz", "dvfs_level",
+                                           "voltage_mv", "power_mw", "activity_mw", "cores",
+                                           "clock_power_fraction", "ref_clock_mhz")})
     # apply DVFS raise to IP rows (analytic: V from domain option)
     if case["dvfs_raise"]:
         for dom in s.get("domains", []):
@@ -904,7 +921,7 @@ def prediction_payload(s: dict[str, Any], case: dict[str, Any], buffers: list[di
                 if ip["dvfs_group"] == dom["domain"]:
                     v = max(opt["voltage_mv"], ip["voltage_mv"])
                     ip["set_clock_mhz"], ip["dvfs_level"] = opt["speed_mhz"], opt["level"]
-                    ip["power_mw"] = ip["activity_mw"] * (v / V_REF_MV) ** 2
+                    ip["power_mw"] = ip["activity_mw"] * (v / V_REF_MV) ** 2 * _clock_factor(ip, opt["speed_mhz"])
                     ip["voltage_mv"] = v
     bufs = [
         {"buffer": b["buffer"], "raw_mbs": b.get("raw_mbs", 0.0), "compressed": b["buffer"] in comp,

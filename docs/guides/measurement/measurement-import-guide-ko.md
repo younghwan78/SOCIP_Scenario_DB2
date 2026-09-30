@@ -268,6 +268,12 @@ SQL은 `perfetto_digest.py` 상단 상수로 분리되어 trace config에 맞춰
 
 ## 6. 통계 의미
 
+Camera Scenario trace 집계(`camera_scenario_trace`)에서 task의 `trace_slice_name`
+또는 대응하는 trace slice 이름 앞의 `!`는 해당 scenario에서 비활성이라는 뜻이다.
+표시된 task는 집계와 필수 샘플 검사에서 제외하고, 출력 execution path의
+`disabled_tasks`에 사유를 기록한다. 관련 dependency도 제거하며, 제외된 task를
+건너뛰는 새 dependency는 추론하지 않는다. 보고서의 `skipped_task_ids`로 확인한다.
+
 - 한 번의 캡처(단일 CSV) 내 시간 샘플들에 대한 mean/p95/std/n이다. `n`은 CSV 샘플 수.
 - 반복 측정 회수는 `provenance.sample_count`로 별도 기록한다(현재 v1은 캡처당 CSV 1개).
 - `ci_95`는 n>1이고 std>0일 때 정규근사 신뢰구간으로 계산된다.

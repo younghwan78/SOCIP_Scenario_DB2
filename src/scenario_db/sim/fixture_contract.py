@@ -22,6 +22,7 @@ SIM_PARAM_KEYS = {
     "vdd",
     "dvfs_group",
     "max_clock_mhz",
+    "clock_power_fraction",
 }
 
 

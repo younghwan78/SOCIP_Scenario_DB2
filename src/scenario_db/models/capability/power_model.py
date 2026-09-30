@@ -69,6 +69,9 @@ class PowerModelParams(BaseScenarioModel):
     ip_model: str = "v1-vfps"
     ref_voltage_mv: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     ref_fps: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    # v2-vf: default share of IP power that scales with the set clock (per-IP
+    # ``sim.clock_power_fraction`` in the IP catalog wins). None = 0 (v1 physics).
+    ip_clock_power_fraction: float | None = Field(default=None, ge=0, le=1, allow_inf_nan=False)
     bw_model: str | None = None
     bw: BwPowerParams = Field(default_factory=BwPowerParams)
     cpu: CpuPowerParams = Field(default_factory=CpuPowerParams)
