@@ -21,6 +21,11 @@ from scenario_db.meas_import.sequence import SQL_SLICES, statistics
 from scenario_db.models.evidence.camera import CameraPipeline
 
 
+def _unmarked(name):
+    # A leading "!" only flags a slice whose HW assignment the producer marked ambiguous.
+    return name[1:] if name and name.startswith("!") else name
+
+
 def logical_name(row, tasks):
     """Match exact configured prefix + decimal frame ID on an exact track.
 
@@ -34,7 +39,7 @@ def logical_name(row, tasks):
         else:
             matched = (
                 row.get("track_name") == task.trace_track_name
-                and re.fullmatch(re.escape(task.trace_slice_name) + r" f[0-9]+", row["slice_name"] or "")
+                and re.fullmatch(re.escape(_unmarked(task.trace_slice_name)) + r" f[0-9]+", row["slice_name"] or "")
             )
         if matched:
             matches.append(task.task_id)

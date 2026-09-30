@@ -25,6 +25,15 @@ def test_exact_extensible_mapping():
         logical_name(row, [task, task.model_copy(update={"task_id": "other"})])
 
 
+def test_ambiguous_hw_marker_is_not_part_of_the_slice_name():
+    # "!" flags a producer-side ambiguous HW assignment; the trace slice carries the bare name.
+    task = CameraTask(task_id="mcsc_hw", label="MCSC", kind="hw", stage="nrt", timing_scope="hw_execution",
+                      trace_slice_name="!MCSC", trace_track_name="Scenario / HW / MCSC")
+    row = dict(slice_name="MCSC f0007", track_name="Scenario / HW / MCSC")
+    assert logical_name(row, [task]) == "mcsc_hw"
+    assert logical_name({**row, "slice_name": "!MCSC f0007"}, [task]) is None
+
+
 def test_missing_duplicate_incomplete_and_extra_events():
     template = parse_markdown((BUNDLE / "mapping-template.md").read_text(encoding="utf-8"))
     template.pipeline_model["tasks"] = [template.pipeline_model["tasks"][7]]
