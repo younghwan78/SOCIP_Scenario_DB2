@@ -44,6 +44,8 @@ class SimConfigRunDefaults(BaseScenarioModel):
     power_params_ref: str | None = None
     include_cpu_power: bool | None = None
     cpu_profile_ref: str | None = None
+    dvfs_policy: str | None = None
+    dvfs_promote_tolerance_pct: float | None = None
     # Clock ledger: configured (BSP / DT / kernel) clocks per node_id / hw_name /
     # ip_ref, each with a mandatory reason code (validated at ETL), and which
     # tier drives the run. None = not pinned (calculated clock).

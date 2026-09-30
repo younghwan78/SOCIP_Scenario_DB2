@@ -41,6 +41,12 @@ class IPSimParams(BaseScenarioModel):
     max_clock_mhz: float | None = None
     # v2-vf: share of IP power that scales with the set clock (catalog sim block).
     clock_power_fraction: float | None = Field(default=None, ge=0, le=1)
+    # v2-vf gating / leakage (catalog sim block; perfetto gating ratios):
+    # share of clock / leakage power removed while the IP idles, and static
+    # power at the reference voltage.
+    clock_gating_eff: float | None = Field(default=None, ge=0, le=1)
+    power_gating_eff: float | None = Field(default=None, ge=0, le=1)
+    leakage_mw: float | None = Field(default=None, ge=0)
     source: str | None = None
     source_project: str | None = None
     source_note: str | None = None
@@ -241,6 +247,12 @@ class SimulationRunConfig(BaseScenarioModel):
     # CPU memory traffic from the profile's bus bytes as a pseudo DMA port per
     # cluster ("cpu.<cluster>"). None = on whenever a profile is given.
     include_cpu_bw: bool | None = None
+    # DVFS level policy. None / "min_level": lowest level that meets the need.
+    # "same_voltage_up": per DVFS group, move to the fastest higher level at the
+    # SAME voltage when the group power does not rise by more than
+    # dvfs_promote_tolerance_pct (default 0) - more timing margin for free.
+    dvfs_policy: Literal["min_level", "same_voltage_up"] | None = None
+    dvfs_promote_tolerance_pct: float | None = Field(default=None, ge=0, le=100)
     power_params: PowerModelParams | None = None
     # Clock ledger (sim/clock_models.py). None keeps the calculated clock.
     # configured/measured are keyed by node_id, hw_name or ip_ref; a missing
@@ -331,6 +343,13 @@ class ResolvedIPConfig(BaseScenarioModel):
     # stage budget): the v2-vf reference; clock above it is overhead.
     clock_ref_mhz: float = 0.0
     clock_overhead_mw: float = 0.0
+    clock_gating_eff: float | None = None
+    power_gating_eff: float | None = None
+    leakage_mw: float | None = None
+    # Static part of total_power_mw (leakage after power gating; 0 without leakage data).
+    leakage_power_mw: float = 0.0
+    # Same-voltage DVFS promotion applied to this IP's group: {from_mhz, to_mhz, delta_mw}.
+    dvfs_promotion: dict[str, Any] | None = None
 
 
 class PortBWResult(BaseScenarioModel):

@@ -56,6 +56,8 @@ def run_simulation(
         clock_basis=config.clock_basis,
         configured_clocks=config.configured_clocks,
         measured_clocks=config.measured_clocks,
+        dvfs_policy=config.dvfs_policy,
+        promote_tolerance_pct=config.dvfs_promote_tolerance_pct,
     )
     resolved = dvfs_resolver.resolve(
         inputs.workloads,

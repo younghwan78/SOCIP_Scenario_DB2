@@ -41,7 +41,8 @@ from scenario_db.sim.bw_calc import calc_port_bw, compression_enabled, normalize
 from scenario_db.sim.graph_edges import edge_source, edge_target, edge_type
 from scenario_db.sim.models import DVFSTable, SimulationRunConfig
 from scenario_db.sim.bw_power import bw_model_from_config
-from scenario_db.sim.power_model import resolve_power_model
+from scenario_db.sim.power_model import IP_LEAK_EXPONENT, busy_share, resolve_power_model
+from scenario_db.sim.power_model import clock_factor as model_clock_factor
 from scenario_db.sim.timing_budget import (
     Statistic,
     TimingBudgetOptions,
@@ -58,12 +59,27 @@ V_REF_MV = 710.0
 
 
 def _clock_factor(ip: dict[str, Any], set_clock_mhz: float) -> float:
-    """v2-vf clock factor (1 - a) + a * f / f_ref; 1 under v1 or without a reference clock."""
-    fraction = float(ip.get("clock_power_fraction") or 0.0)
+    """v2-vf clock factor (gating aware); 1 under v1 or without a reference clock."""
+    return model_clock_factor(float(ip.get("clock_power_fraction") or 0.0), set_clock_mhz,
+                              float(ip.get("ref_clock_mhz") or 0.0), ip.get("clock_gating_eff"))
+
+
+def _ip_power_at(ip: dict[str, Any], voltage_mv: float, set_clock_mhz: float) -> float:
+    """IP power at another (V, f): dynamic re-scaled by V^2 x clock factor, leakage by V^k x gating."""
+    p = float(ip.get("power_mw") or 0.0)
+    v = float(ip.get("voltage_mv") or 0.0)
+    f = float(ip.get("set_clock_mhz") or 0.0)
+    if v <= 0:
+        return p
+    leak = float(ip.get("leakage_power_mw") or 0.0)
+    dynamic = (p - leak) * (voltage_mv / v) ** 2 * _clock_factor(ip, set_clock_mhz) / _clock_factor(ip, f)
     ref = float(ip.get("ref_clock_mhz") or 0.0)
-    if fraction <= 0 or ref <= 0 or set_clock_mhz <= 0:
-        return 1.0
-    return (1.0 - fraction) + fraction * set_clock_mhz / ref
+    pg = float(ip.get("power_gating_eff") or 0.0)
+    gate = lambda clock: 1.0 - pg * (1.0 - busy_share(clock, ref))  # noqa: E731
+    leak_new = leak * (voltage_mv / v) ** IP_LEAK_EXPONENT * (gate(set_clock_mhz) / gate(f) if gate(f) > 0 else 1.0)
+    return dynamic + leak_new
+
+
 DEFAULT_RATIO = {"LOSSY": 0.5}
 _BAYER_RE = re.compile(r"BAYER|RAW|BGGR|RGGB|GRBG|GBRG|PDAF", re.I)
 
@@ -385,6 +401,9 @@ def _slice(report: dict[str, Any], stat: str, scale: float) -> dict[str, Any]:
             "power_mw": p,
             "clock_power_fraction": float(ip.get("clock_power_fraction") or 0.0),
             "ref_clock_mhz": float(ip.get("ref_clock_mhz") or 0.0),
+            "clock_gating_eff": ip.get("clock_gating_eff"),
+            "power_gating_eff": ip.get("power_gating_eff"),
+            "leakage_power_mw": float(ip.get("leakage_power_mw") or 0.0),
             # IP power = activity x (V/710)^2 x clock factor (1 under v1-vfps) -> attribution factor
             "activity_mw": p / (v / V_REF_MV) ** 2 / _clock_factor(ip, float(ip["set_clock_mhz"] or 0.0))
             if v > 0 else p,
@@ -655,11 +674,7 @@ def dvfs_options(ips: list[dict[str, Any]], tables: dict[str, DVFSTable], k: int
             v = table.voltage_for(lv, asv)
             # resolved level = no change; a faster level only ever raises a member's voltage
             delta = 0.0 if lv is base else sum(
-                m["power_mw"] * (
-                    (max(v, m["voltage_mv"]) / m["voltage_mv"]) ** 2
-                    * _clock_factor(m, lv.speed_mhz) / _clock_factor(m, m["set_clock_mhz"])
-                    - 1.0
-                )
+                _ip_power_at(m, max(v, m["voltage_mv"]), lv.speed_mhz) - m["power_mw"]
                 for m in members if m["voltage_mv"] > 0
             )
             opts.append({"level": lv.level, "speed_mhz": lv.speed_mhz, "voltage_mv": v,
@@ -909,7 +924,8 @@ def prediction_payload(s: dict[str, Any], case: dict[str, Any], buffers: list[di
     for ip in s["ips"]:
         ips.append({k: ip.get(k) for k in ("node", "stage", "dvfs_group", "set_clock_mhz", "dvfs_level",
                                            "voltage_mv", "power_mw", "activity_mw", "cores",
-                                           "clock_power_fraction", "ref_clock_mhz")})
+                                           "clock_power_fraction", "ref_clock_mhz", "clock_gating_eff",
+                                           "power_gating_eff", "leakage_power_mw")})
     # apply DVFS raise to IP rows (analytic: V from domain option)
     if case["dvfs_raise"]:
         for dom in s.get("domains", []):
@@ -920,9 +936,9 @@ def prediction_payload(s: dict[str, Any], case: dict[str, Any], buffers: list[di
             for ip in ips:
                 if ip["dvfs_group"] == dom["domain"]:
                     v = max(opt["voltage_mv"], ip["voltage_mv"])
-                    ip["set_clock_mhz"], ip["dvfs_level"] = opt["speed_mhz"], opt["level"]
-                    ip["power_mw"] = ip["activity_mw"] * (v / V_REF_MV) ** 2 * _clock_factor(ip, opt["speed_mhz"])
-                    ip["voltage_mv"] = v
+                    ip["power_mw"] = _ip_power_at(ip, v, opt["speed_mhz"])
+                    ip["dvfs_level"] = opt["level"]
+                    ip["set_clock_mhz"], ip["voltage_mv"] = opt["speed_mhz"], v
     bufs = [
         {"buffer": b["buffer"], "raw_mbs": b.get("raw_mbs", 0.0), "compressed": b["buffer"] in comp,
          "mode": b.get("mode") if b["buffer"] in comp else None,

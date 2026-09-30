@@ -23,6 +23,9 @@ SIM_PARAM_KEYS = {
     "dvfs_group",
     "max_clock_mhz",
     "clock_power_fraction",
+    "clock_gating_eff",
+    "power_gating_eff",
+    "leakage_mw",
 }
 
 
