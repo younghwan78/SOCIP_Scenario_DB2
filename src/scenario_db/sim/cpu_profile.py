@@ -132,4 +132,6 @@ def cpu_profile_from_evidence(evidence: Any, *, evidence_ref: str | None = None,
         row = profile.clusters.get(name)
         if row is not None and not row.freq_residency:
             row.freq_residency = residency
-    return profile
+    # Assignments above bypass field validators; validate imported fallback bins
+    # before they can reach the power model.
+    return CpuProfile.model_validate(profile.model_dump())

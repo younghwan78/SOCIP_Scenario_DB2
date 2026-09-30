@@ -209,6 +209,8 @@ def build_pmu_digest(
         return target
 
     for sample in samples:
+        if not math.isfinite(sample.value):
+            raise PmuDigestError(f"row {sample.line}: value must be finite")
         key = (sample.metric, sample.scope_kind, sample.scope_ref, sample.stat, sample.freq_mhz)
         if key in seen:
             raise PmuDigestError(
@@ -404,6 +406,8 @@ def _reduce_cpu_profile(
     warn_without_window: bool = True,
 ) -> None:
     """Per-frame counters per task x cluster, cluster frequency residency and gating ratios."""
+    if frames is not None and (not math.isfinite(frames) or frames <= 0):
+        raise PmuDigestError("CPU profile frame count must be finite and positive")
     cpus = expand_cpu_map(cpu_map)
     counters: dict[tuple[str | None, str, str], float] = {}
     freq: dict[tuple[str, float], float] = {}
@@ -429,7 +433,7 @@ def _reduce_cpu_profile(
         if sample.value < 0:
             raise PmuDigestError(f"row {sample.line}: {sample.metric} must be >= 0")
         if sample.metric == "cpu_freq_time":
-            if not sample.freq_mhz or sample.freq_mhz <= 0:
+            if not sample.freq_mhz or not math.isfinite(sample.freq_mhz) or sample.freq_mhz <= 0:
                 raise PmuDigestError(f"row {sample.line}: cpu_freq_time needs freq_mhz > 0")
             freq[(cluster, sample.freq_mhz)] = freq.get((cluster, sample.freq_mhz), 0.0) + sample.value
         elif sample.metric.startswith("cpu_time_"):

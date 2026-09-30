@@ -251,7 +251,11 @@ def _apply_cpu_profile(db: Session, request: SimulateRequest) -> None:
     row = get_evidence(db, ref)
     if row is None or row.kind != "evidence.measurement":
         raise NotFoundError(f"measurement evidence not found: {ref}")
-    profile = cpu_profile_from_evidence(row, evidence_ref=ref)
+    dsu = config.power_params.cpu.dsu if config.power_params else None
+    try:
+        profile = cpu_profile_from_evidence(row, evidence_ref=ref, dsu_name=dsu.name if dsu else "DSU")
+    except ValueError as exc:
+        raise UnprocessableError(f"measurement evidence {ref} has an invalid CPU profile: {exc}") from exc
     if profile is None:
         raise UnprocessableError(
             f"measurement evidence {ref} has no per-frame CPU profile (cpu.*_pf / cpu.freq_residency observations)"

@@ -231,3 +231,75 @@ def test_service_resolves_cpu_profile_ref(profile):
     empty = SimpleNamespace(kind="evidence.measurement", scenario_ref="s", variant_ref="v", metric_observations=[], cpu_breakdown=None)
     with pytest.raises(UnprocessableError, match="no per-frame CPU profile"):
         _apply_cpu_profile(_Db(empty), SimulateRequest.model_validate({**request.model_dump(), "config": {"cpu_profile_ref": "x"}}))
+
+
+@pytest.mark.parametrize("residency", [{0: 1}, {-1: 1}, {1000: -1}, {1000: 0},
+                                        {float("inf"): 1}, {1000: float("nan")}, {1000: float("inf")}])
+def test_cpu_and_dsu_profiles_reject_invalid_residency(residency):
+    from scenario_db.sim.models import CpuDsuProfile
+
+    for model in (CpuClusterProfile, CpuDsuProfile):
+        with pytest.raises(ValueError, match="residency"):
+            model(freq_residency=residency)
+
+
+def test_task_only_profile_keeps_task_energy_and_case_insensitive_cluster():
+    model = CpuPowerModel()
+    prof = CpuProfile(tasks=[CpuTaskProfile(task="t", cluster="MID", cycles=1e6)])
+    out = profile_cpu_power(prof, model=model, period_ms=10)
+    assert out["clusters"]["mid"]["dynamic_mw"] > 0
+    assert out["tasks"][0]["cycles_per_frame"] == 1e6
+    with pytest.raises(ValueError, match="unique"):
+        CpuProfile(clusters={"mid": CpuClusterProfile(), "MID": CpuClusterProfile()})
+
+
+def test_timing_budget_and_runner_agree_at_cluster_opp_voltage():
+    params = PowerModelParams.model_validate({
+        "id": "pmp-t", "schema_version": "2.2", "kind": "power_model_params", "soc_ref": "soc-x",
+        "cpu": {"freq_mhz": 1000, "volt_v": 0.8, "clusters": [
+            {"name": "C", "opps": [{"mhz": 1000, "mv": 600, "mw_per_core": 100}]}]},
+    })
+    model, config = CpuPowerModel.from_params(params), CpuPowerConfig.from_params(params)
+    assert config.power_mw(5, 10) == pytest.approx(model.task_power_mw(5, 10))
+
+
+def test_incomplete_or_duplicate_opp_tables_are_rejected():
+    from scenario_db.models.capability.power_model import CpuClusterParams, CpuDsuParams
+
+    incomplete = [{"mhz": 1000, "mv": 600, "mw_per_core": 100}, {"mhz": 2000, "mv": 800}]
+    with pytest.raises(ValueError, match="mw_per_core"):
+        CpuClusterParams(name="C", opps=incomplete)
+    with pytest.raises(ValueError, match="mw_per_core"):
+        CpuDsuParams(opps=incomplete)
+    with pytest.raises(ValueError, match="unique"):
+        CpuClusterParams(name="C", opps=[incomplete[0], incomplete[0]])
+    with pytest.raises(ValueError, match="sorted"):
+        CpuDsuParams(opps=[{"mhz": 2000, "mv": 800, "mw_per_core": 200}, incomplete[0]])
+
+
+def test_cpu_profile_ref_uses_topology_dsu_name():
+    params = _params("exynos2700").model_copy(deep=True)
+    params.cpu.dsu.name = "SHARED"
+    row = SimpleNamespace(kind="evidence.measurement", scenario_ref="s", variant_ref="v", cpu_breakdown=None,
+                          metric_observations=[{"metric_id": "cpu.active_ratio", "scope": {"kind": "cluster", "ref": "SHARED"}, "value": 0.2}])
+    request = SimulateRequest.model_validate({
+        "scenario_id": "s", "variant_id": "v",
+        "execution_context": {"silicon_rev": "EVT0", "sw_baseline_ref": "sw-x", "thermal": "room"},
+        "config": {"cpu_profile_ref": "meas-x", "power_params": params}})
+    _apply_cpu_profile(_Db(row), request)
+    assert request.config.cpu_profile.dsu.active_ratio == 0.2
+    assert "SHARED" not in request.config.cpu_profile.clusters
+
+
+def test_table_nonfinite_counter_and_frequency_are_rejected(tmp_path):
+    from scenario_db.meas_import.pmu_digest import PmuDigestError
+
+    samples = [PmuSample("cpu_freq_time", "cluster", "C", 1, freq_mhz=float("inf"))]
+    with pytest.raises(PmuDigestError, match="freq_mhz"):
+        build_pmu_digest(samples)
+    (tmp_path / "bad.csv").write_text("cycles\ninf\n")
+    spec = PmuSpec(format="table", table={"sources": [{
+        "file": "bad.csv", "layout": "wide", "counters": {"cycles": []}, "cluster": {"value": "C"}}]},
+        window={"frames": 10})
+    with pytest.raises(PmuDigestError, match="finite"):
+        import_pmu_digest(tmp_path, spec)

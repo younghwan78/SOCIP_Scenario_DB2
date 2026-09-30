@@ -65,7 +65,7 @@ pmu:
 | `cpu.freq_residency` | `cluster_freq` (`cluster@MHz`) |
 | `cpu.active_ratio`, `cpu.clock_gated_ratio`, `cpu.power_gated_ratio` | `cluster` |
 
-이름이 DSU인 cluster 데이터는 DSU로 사용한다. perfetto digest(`perfetto.cpu_to_cluster`)가 만든 `cpu_breakdown[].freq_residency`도 residency가 없는 cluster에 자동 보충된다.
+topology의 `cpu.dsu.name`과 일치하는 cluster 데이터는 DSU로 사용한다(기본 이름 `DSU`). perfetto digest(`perfetto.cpu_to_cluster`)가 만든 `cpu_breakdown[].freq_residency`도 residency가 없는 cluster에 자동 보충된다. 주파수는 유한한 양수, residency는 유한한 음이 아닌 값이어야 하며, 비어 있지 않은 residency의 합은 양수여야 한다.
 
 검증만: `uv run python -m scenario_db.meas_import.cli --meta <meta.yaml> --out <dir> --strict` 후 report의 warning(미매핑 thread/counter/state, cpu_map 누락)을 확인.
 

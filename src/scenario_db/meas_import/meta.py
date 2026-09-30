@@ -75,9 +75,9 @@ class PowerSpec(BaseScenarioModel):
 
 class PmuWindow(BaseScenarioModel):
     """Capture window used to turn PMU totals into per-frame values."""
-    frames: float | None = Field(default=None, gt=0)
-    duration_s: float | None = Field(default=None, gt=0)
-    fps: float | None = Field(default=None, gt=0)
+    frames: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    duration_s: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    fps: float | None = Field(default=None, gt=0, allow_inf_nan=False)
 
     def frame_count(self) -> float | None:
         if self.frames is not None:

@@ -118,7 +118,12 @@ class CpuPowerConfig(BaseScenarioModel):
             from scenario_db.sim.cpu_power import CpuPowerModel
 
             model = CpuPowerModel.from_params(params)
-            values["coeff_uw_per_mhz_v2"] = list(model.coeff_uw_per_mhz_v2)
+            # The budget evaluates at one shared configured voltage. Fold each
+            # cluster's actual OPP voltage into its coefficient at that voltage.
+            values["coeff_uw_per_mhz_v2"] = [
+                cluster.core_mw(model.freq_mhz, model.fallback_mv) * 1000.0 / (model.freq_mhz * model.volt_v**2)
+                for cluster in model.clusters
+            ]
             values["cluster"] = model.default_cluster
         if cpu.default_cluster is not None:
             values["cluster"] = cpu.default_cluster

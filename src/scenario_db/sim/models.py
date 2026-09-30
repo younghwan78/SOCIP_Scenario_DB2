@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from enum import StrEnum
+import math
 from typing import Any, Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from scenario_db.models.capability.power_model import PowerModelParams
 from scenario_db.models.common import BaseScenarioModel
@@ -155,17 +156,31 @@ class CpuTaskProfile(CpuCounters):
     cluster: str = Field(min_length=1)
 
 
+def _cpu_residency(value: dict[float, float] | None) -> dict[float, float] | None:
+    if value is not None and (
+        any(not math.isfinite(f) or f <= 0 or not math.isfinite(share) or share < 0 for f, share in value.items())
+        or not math.isfinite(sum(value.values()))
+        or sum(value.values()) <= 0
+    ):
+        raise ValueError("CPU residency needs finite positive frequencies and non-negative shares with a positive total")
+    return value
+
+
 class CpuClusterProfile(CpuCounters):
     # {MHz: time share}; shares are normalised by the model.
     freq_residency: dict[float, float] | None = None
     clock_gated_ratio: float | None = Field(default=None, ge=0, le=1)
     power_gated_ratio: float | None = Field(default=None, ge=0, le=1)
 
+    _valid_residency = field_validator("freq_residency")(_cpu_residency)
+
 
 class CpuDsuProfile(BaseScenarioModel):
     freq_residency: dict[float, float] | None = None
     active_ratio: float | None = Field(default=None, ge=0, le=1)
     power_gated_ratio: float | None = Field(default=None, ge=0, le=1)
+
+    _valid_residency = field_validator("freq_residency")(_cpu_residency)
 
 
 class CpuProfile(BaseScenarioModel):
@@ -177,6 +192,17 @@ class CpuProfile(BaseScenarioModel):
     tasks: list[CpuTaskProfile] = Field(default_factory=list)
     clusters: dict[str, CpuClusterProfile] = Field(default_factory=dict)
     dsu: CpuDsuProfile | None = None
+
+    @model_validator(mode="after")
+    def _task_clusters(self) -> CpuProfile:
+        names = {name.lower() for name in self.clusters}
+        if len(names) != len(self.clusters):
+            raise ValueError("CPU profile cluster names must be unique ignoring case")
+        for task in self.tasks:
+            if task.cluster.lower() not in names:
+                self.clusters[task.cluster] = CpuClusterProfile()
+                names.add(task.cluster.lower())
+        return self
 
 
 class SimulationRunConfig(BaseScenarioModel):

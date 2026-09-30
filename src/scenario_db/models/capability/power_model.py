@@ -73,10 +73,12 @@ class CpuClusterParams(BaseScenarioModel):
 
     @model_validator(mode="after")
     def _power_source(self) -> CpuClusterParams:
-        if self.coeff_uw_per_mhz_v2 is None and not any(o.mw_per_core is not None for o in self.opps):
+        if self.coeff_uw_per_mhz_v2 is None and (not self.opps or any(o.mw_per_core is None for o in self.opps)):
             raise ValueError(f"cpu cluster '{self.name}' needs coeff_uw_per_mhz_v2 or opps[].mw_per_core")
         if self.opps != sorted(self.opps, key=lambda o: o.mhz):
             raise ValueError(f"cpu cluster '{self.name}' opps must be sorted by mhz")
+        if len({o.mhz for o in self.opps}) != len(self.opps):
+            raise ValueError(f"cpu cluster '{self.name}' opp frequencies must be unique")
         if self.cpus and len(self.cpus) != self.cores:
             raise ValueError(f"cpu cluster '{self.name}' lists {len(self.cpus)} cpus for {self.cores} cores")
         return self
@@ -89,6 +91,14 @@ class CpuDsuParams(BaseScenarioModel):
     opps: list[CpuOpp] = Field(default_factory=list)
     leakage: CpuLeakage | None = None
     rail: str | None = None
+
+    @model_validator(mode="after")
+    def _opps_valid(self) -> CpuDsuParams:
+        if any(o.mw_per_core is None for o in self.opps):
+            raise ValueError("DSU opps need mw_per_core at every frequency")
+        if self.opps != sorted(self.opps, key=lambda o: o.mhz) or len({o.mhz for o in self.opps}) != len(self.opps):
+            raise ValueError("DSU opps must be sorted with unique frequencies")
+        return self
 
 
 class CpuPowerParams(BaseScenarioModel):
