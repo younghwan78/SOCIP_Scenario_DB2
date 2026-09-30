@@ -142,6 +142,9 @@ def sim_params_for_node(
         ppc=ppc,
         unit_power_mw_mp=unit_power,
         idc=float(merged.get("idc") or 0.0),
+        clock_power_fraction=(
+            float(merged["clock_power_fraction"]) if merged.get("clock_power_fraction") is not None else None
+        ),
         vdd=merged.get("vdd"),
         dvfs_group=merged.get("dvfs_group"),
         max_clock_mhz=merged.get("max_clock_mhz"),

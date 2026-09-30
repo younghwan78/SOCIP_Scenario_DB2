@@ -130,4 +130,6 @@ files = [
     "src/scenario_db/sim/measured_clock.py",
     "src/scenario_db/meas_import/pmu_digest.py",
     "src/scenario_db/sim/model_lineage.py",
+    "src/scenario_db/sim/cpu_power.py",
+    "src/scenario_db/api/services/failures.py",
 ]

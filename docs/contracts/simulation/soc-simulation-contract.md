@@ -182,6 +182,47 @@ Coefficient precedence: `bw_power_mw_per_gbps` (config) > `params.bw.mw_per_gbps
 50. `aggregate_power_mw(ports, context)` folds per-port power into the memory-rail
 total (default: sum) and is the hook for a later MIF-level / residual model.
 
+## SW-task CPU Power
+
+The simulation total can carry SW-task CPU power (`sim/cpu_power.py`, model `em-v1`),
+the same Linux EM formula the timing budget uses:
+
+- `P_task = coeff[uW/MHz/V^2] x f[MHz] x V^2 x util / 1000`, `util = active_ms / period_ms`.
+- `active_ms = (sw_timing[<sw_timing_case>]_ms - included HW time) x count_per_frame x cpu_active_ratio`.
+  Included HW time is the simulated `hw_time_ms` of `includes_hw_nodes` (e.g. LME inside
+  pre_me_rta). `count_per_frame` applies to `sample_unit: invocation`. `cpu_active_ratio`
+  (new optional sw_timing field, default 1) marks wall time that is not CPU work
+  (storage I/O completion, waits).
+- Cluster: sw_timing `cluster` (params cluster name or index); an unknown label (raw
+  perfetto CPU list) falls back to the default cluster with a warning.
+- Switch: `config.include_cpu_power` — `None` (default) = on only when the resolved
+  `power_model_params` carry a `cpu` block, `true` = on with profiler defaults, `false` = off.
+  With it off, totals, evidence shape and `params_hash` are unchanged (legacy runs and the
+  committed 03_evidence stay valid).
+- Output: `SimRunResult.cpu_power_mw` / `cpu_breakdown` (per task: wall, included HW,
+  active, cluster, util, mW), `kpi.cpu_power_mw`, `power_breakdown.cpu` (`total_mw`,
+  `by_cluster`, `by_task`, `model`), `vdd_power["CPU_<CLUSTER>"]`, and
+  `total_power_mw = IP + memory + CPU`.
+- Enable per project without touching scenario data: `sim.config_profile.run_config.include_cpu_power: true`
+  or a `cpu` block in that SoC's `power_model_params`.
+
+## IP Set-clock Term (`power_model: v2-vf`)
+
+`v2-vf` = v1 x `[(1 - a) + a x f_set / f_ref]`.
+
+- `f_ref` (`dvfs_breakdown[].clock_ref_mhz`): the clock the IP physically needs —
+  max(throughput, `mipi_ingress`, `vvalid_stream`, `stage_budget`). The sensor v-valid
+  exception is a need, not waste.
+- Clock above `f_ref` — OTF / DVFS-group alignment, DVFS level quantisation, manual /
+  configured / measured overrides — is charged: `dvfs_breakdown[].clock_overhead_mw`,
+  `power_breakdown.ip.clock_overhead_mw`.
+- `a`: per IP/mode `capabilities.sim[.modes.<mode>].clock_power_fraction`, else
+  `power_model_params.ip_clock_power_fraction`, else 0. With `a = 0` v2 equals v1 exactly.
+  `dvfs_breakdown[].clock_power_fraction` is the value applied (None under v1).
+- Select with `config.power_model: v2-vf` and, for params, `ip_model: v2-vf`.
+- Architecture exploration re-scales DVFS headroom analytically with the same factor
+  (V^2 x clock factor), so faster levels also pay the clock term.
+
 ## Clock Ledger
 
 Each resolved IP (`dvfs_breakdown[].clock_ledger`) keeps every clock tier side by side:

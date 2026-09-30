@@ -30,6 +30,7 @@ from pydantic import Field, model_validator
 
 from scenario_db.models.common import BaseScenarioModel
 from scenario_db.sim.adapter import build_simulation_inputs
+from scenario_db.sim.cpu_power import PROFILER_COEFF as _CPU_PROFILER_COEFF
 from scenario_db.sim.models import DVFSTable, SimRunResult, SimulationInputs, SimulationRunConfig
 from scenario_db.sim.power_params import effective_power_params
 from scenario_db.sim.runner import run_simulation
@@ -42,8 +43,9 @@ _MIN_MARGIN = 1e-6
 _MIN_TASK_MS = 1e-6
 _MAX_MARGIN = 0.95
 UHD_PIXELS = 3840 * 2160
-# Linux EM / exynos-cpu-profiler coefficients from ip-cpu-s5e9965 (uW per MHz per V^2).
-PROFILER_COEFF = [449.0, 449.0, 505.0, 1127.0]
+# Linux EM / exynos-cpu-profiler coefficients from ip-cpu-s5e9965 (uW per MHz per V^2);
+# shared with the simulation runner's CPU model (sim/cpu_power.py).
+PROFILER_COEFF = list(_CPU_PROFILER_COEFF)
 _OUTPUT_RE = re.compile(r"(^|_)(mfc|mfd|apv|dpu|panel|display)", re.I)
 _GDC_RE = re.compile(r"(^|_)gdc", re.I)
 _ENCODER_RE = re.compile(r"(^|_)(mfc|apv)", re.I)
@@ -645,6 +647,10 @@ def _report(graph, options, plan, rule_run, run, dvfs_tables) -> dict[str, Any]:
                 "voltage_mv": round(res.set_voltage_mv, 2),
                 "hw_ms": round(timing[node].hw_time_ms, 3) if node in timing else None,
                 "power_mw": round(res.total_power_mw * cores, 3),
+                # v2-vf clock term inputs (0 / None under v1) for analytic re-scaling.
+                "clock_power_fraction": res.clock_power_fraction or 0.0,
+                "ref_clock_mhz": round(res.clock_ref_mhz, 3),
+                "clock_overhead_mw": round(res.clock_overhead_mw * cores, 3),
                 "feasible": res.feasible,
                 "infeasible_reason": res.infeasible_reason,
                 "clock_reason": res.clock_correction_reason,

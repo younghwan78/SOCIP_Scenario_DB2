@@ -15,6 +15,7 @@ from scenario_db.models.evidence.resolution import (
 from scenario_db.models.evidence.simulation import IpBreakdown, SimulationEvidence
 from scenario_db.sim.bw_calc import calc_port_bw
 from scenario_db.sim.bw_power import BwPowerContext, bw_model_from_config
+from scenario_db.sim.cpu_power import CpuPowerModel, sw_task_cpu_power
 from scenario_db.sim.debug_trace import build_calculation_trace
 from scenario_db.sim.dvfs_resolver import DvfsResolver
 from scenario_db.sim.models import (
@@ -114,7 +115,21 @@ def run_simulation(
             [item.bw_power_mw for item in dma_breakdown],
             context=BwPowerContext(memory_rail=config.memory_rail, total_bw_mbs=bw_total_mbs),
         )
-    total_power_mw = core_power_mw + bw_power_mw
+    cpu_model = _cpu_power_model(config, power_params)
+    cpu_warnings: list[str] = []
+    cpu_breakdown: list[dict] = []
+    if cpu_model is not None:
+        period_ms = 1000.0 / effective_fps if effective_fps > 0 else 0.0
+        cpu_breakdown = sw_task_cpu_power(
+            inputs.sw_task_timing,
+            statistic=inputs.sw_timing_case,
+            period_ms=period_ms,
+            hw_time_ms={item.node_id: item.hw_time_ms for item in timing_breakdown},
+            model=cpu_model,
+            warnings=cpu_warnings,
+        )
+    cpu_power_mw = sum(row["power_mw"] for row in cpu_breakdown)
+    total_power_mw = core_power_mw + bw_power_mw + cpu_power_mw
     total_power_ma = (
         total_power_mw / config.vbat / config.pmic_efficiency
         if config.vbat > 0 and config.pmic_efficiency > 0
@@ -136,6 +151,7 @@ def run_simulation(
         hw_time_max_ms=hw_time_max_ms,
     )
     warnings.extend(dvfs_resolver.warnings)
+    warnings.extend(cpu_warnings)
     calculation_trace = None
     if config.debug_trace:
         calculation_trace = build_calculation_trace(
@@ -181,7 +197,8 @@ def run_simulation(
         external_devices=inputs.external_devices,
         topology_order=inputs.topology_order,
         vdd_power=_vdd_power(
-            resolved, dma_breakdown, memory_rail=config.memory_rail, bw_total_mw=bw_power_mw
+            resolved, dma_breakdown, memory_rail=config.memory_rail, bw_total_mw=bw_power_mw,
+            cpu_breakdown=cpu_breakdown,
         ),
         power_breakdown=_power_breakdown(
             resolved,
@@ -191,7 +208,11 @@ def run_simulation(
             bw_total_mw=bw_power_mw,
             bw_model=bw_model,
             power_params=power_params,
+            cpu_breakdown=cpu_breakdown,
+            cpu_model=cpu_model,
         ),
+        cpu_power_mw=cpu_power_mw,
+        cpu_breakdown=cpu_breakdown,
         warnings=warnings,
         calculation_trace=calculation_trace,
     )
@@ -250,6 +271,7 @@ def build_simulation_evidence(
             "total_power_ma": result.total_power_ma,
             "core_power_mw": result.core_power_mw,
             "bw_power_mw": result.bw_power_mw,
+            **({"cpu_power_mw": result.cpu_power_mw} if result.cpu_breakdown else {}),
             "total_bw_mbs": result.bw_total_mbs,
             "hw_time_max_ms": result.hw_time_max_ms,
             "timeline_end_ms": result.timeline_end_ms or 0.0,
@@ -316,6 +338,7 @@ def _vdd_power(
     *,
     memory_rail: str,
     bw_total_mw: float | None = None,
+    cpu_breakdown: list[dict] | None = None,
 ) -> dict[str, dict[str, float]]:
     """Per-rail power. BW-induced (DRAM/interconnect) power sits on the memory
     rail — where a bench actually measures it — not on the initiating IP's
@@ -337,6 +360,14 @@ def _vdd_power(
             memory_rail, {"core_mw": 0.0, "bw_mw": 0.0, "total_mw": 0.0}
         )
         bucket["bw_mw"] += bw_total
+    # SW-task CPU power sits on the CPU cluster rails ("CPU_<CLUSTER>").
+    for row in cpu_breakdown or []:
+        if row["power_mw"] <= 0:
+            continue
+        bucket = grouped.setdefault(
+            f"CPU_{str(row['cluster']).upper()}", {"core_mw": 0.0, "bw_mw": 0.0, "total_mw": 0.0}
+        )
+        bucket["core_mw"] += row["power_mw"]
     for bucket in grouped.values():
         bucket["total_mw"] = bucket["core_mw"] + bucket["bw_mw"]
     return grouped
@@ -351,11 +382,14 @@ def _power_breakdown(
     bw_total_mw: float | None = None,
     bw_model=None,
     power_params=None,
+    cpu_breakdown: list[dict] | None = None,
+    cpu_model: CpuPowerModel | None = None,
 ) -> dict:
     """Three-bucket decomposition aligned with what a bench can measure:
     per-IP core power, memory (BW-driven) power, and CPU/cluster power.
-    The cpu bucket is structural for now — SW tasks carry no compute model
-    yet — so comparison/calibration schemas stay stable when it lands."""
+    The cpu bucket holds SW-task CPU power when it is modelled
+    (``include_cpu_power`` / power params with a cpu block); otherwise it stays
+    empty and the total is the legacy IP + memory sum."""
     ip_by_rail: dict[str, float] = {}
     ip_by_node: dict[str, float] = {}
     for node_id, item in resolved.items():
@@ -365,12 +399,17 @@ def _power_breakdown(
         if vdd:
             ip_by_rail[vdd] = ip_by_rail.get(vdd, 0.0) + power
     ip_total = sum(ip_by_node.values())
+    clock_overhead = sum(float(getattr(item, "clock_overhead_mw", 0.0)) for item in resolved.values())
     memory_total = (
         bw_total_mw
         if bw_total_mw is not None
         else sum(dma.bw_power_mw for dma in dma_breakdown)
     )
-    total = ip_total + memory_total
+    cpu_by_cluster: dict[str, float] = {}
+    for row in cpu_breakdown or []:
+        cpu_by_cluster[str(row["cluster"])] = cpu_by_cluster.get(str(row["cluster"]), 0.0) + row["power_mw"]
+    cpu_total = sum(cpu_by_cluster.values())
+    total = ip_total + memory_total + cpu_total
     model_info: dict = {"id": power_model.model_id, "version": power_model.version}
     if bw_model is not None:
         model_info["bw_model"] = bw_model.describe()
@@ -379,23 +418,51 @@ def _power_breakdown(
         model_info.update(lineage)
         model_info["ref_voltage_mv"] = getattr(power_model, "ref_voltage_mv", None)
         model_info["ref_fps"] = getattr(power_model, "ref_fps", None)
+    if getattr(power_model, "default_clock_power_fraction", None) is not None:
+        model_info["default_clock_power_fraction"] = power_model.default_clock_power_fraction
     return {
         "model": model_info,
         "ip": {
             "total_mw": round(ip_total, 6),
             "by_rail": {rail: round(mw, 6) for rail, mw in sorted(ip_by_rail.items())},
             "by_node": ip_by_node,
+            **({"clock_overhead_mw": round(clock_overhead, 6)} if clock_overhead else {}),
         },
         "memory": {
             "total_mw": round(memory_total, 6),
             "rail": memory_rail,
         },
         "cpu": {
-            "total_mw": 0.0,
-            "by_cluster": {},
+            "total_mw": round(cpu_total, 6),
+            "by_cluster": {name: round(mw, 6) for name, mw in sorted(cpu_by_cluster.items())},
+            # Extra keys only when CPU power is modelled, so legacy evidence keeps its shape.
+            **(
+                {
+                    "by_task": {row["task"]: round(row["power_mw"], 6) for row in cpu_breakdown or []},
+                    "model": cpu_model.describe(),
+                }
+                if cpu_model is not None
+                else {}
+            ),
         },
         "total_mw": round(total, 6),
     }
+
+
+def _cpu_power_model(config, power_params) -> CpuPowerModel | None:
+    """CPU model for the run, or None when SW-task CPU power stays out of the total.
+
+    ``include_cpu_power`` None = auto: included when the resolved
+    power_model_params carry a cpu block (coefficients are then data, not code).
+    """
+    flag = getattr(config, "include_cpu_power", None)
+    has_cpu_params = power_params is not None and (
+        bool(power_params.cpu.clusters)
+        or any(v is not None for v in (power_params.cpu.default_cluster, power_params.cpu.freq_mhz, power_params.cpu.volt_v))
+    )
+    if flag is False or (flag is None and not has_cpu_params):
+        return None
+    return CpuPowerModel.from_params(power_params if has_cpu_params else None)
 
 
 def _first_infeasible_reason(timing_breakdown: list[IPTimingResult]) -> str | None:
