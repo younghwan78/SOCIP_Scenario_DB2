@@ -111,14 +111,28 @@ def run_simulation(
 
     core_power_mw = sum(item.total_power_mw for item in resolved.values())
     bw_total_mbs = sum(item.bw_mbs for item in dma_breakdown)
+    memory_state: dict | None = None
     if bw_model is None:
         bw_power_mw = sum(item.bw_power_mw for item in dma_breakdown)
     else:
         # Aggregate hook: a MIF-level / residual model may replace the port sum.
-        bw_power_mw = bw_model.aggregate_power_mw(
-            [item.bw_power_mw for item in dma_breakdown],
-            context=BwPowerContext(memory_rail=config.memory_rail, total_bw_mbs=bw_total_mbs),
+        bw_context = BwPowerContext(
+            memory_rail=config.memory_rail,
+            total_bw_mbs=bw_total_mbs,
+            extra={
+                "read_mbs": sum(d.bw_mbs for d in dma_breakdown if d.direction == "read"),
+                "write_mbs": sum(d.bw_mbs for d in dma_breakdown if d.direction == "write"),
+                # DRAM-side traffic: LLC hits never reach the memory controller.
+                "dram_mbs": sum(d.bw_mbs * (d.llc_weight if d.llc_enabled and d.llc_weight is not None else 1.0)
+                                for d in dma_breakdown),
+                "dvfs_sn": inputs.dvfs_sn,
+            },
         )
+        bw_power_mw = bw_model.aggregate_power_mw(
+            [item.bw_power_mw for item in dma_breakdown], context=bw_context)
+        mif_state = getattr(bw_model, "mif_state", None)
+        if mif_state is not None:
+            memory_state = mif_state(bw_context)
     cpu_model = _cpu_power_model(config, power_params)
     cpu_warnings: list[str] = []
     cpu_breakdown: list[dict] = []
@@ -240,6 +254,7 @@ def run_simulation(
             cpu_clusters=cpu_clusters,
             cpu_detail=cpu_detail,
             cpu_model=cpu_model,
+            memory_state=memory_state,
         ),
         cpu_power_mw=cpu_power_mw,
         cpu_breakdown=cpu_breakdown,
@@ -423,6 +438,7 @@ def _power_breakdown(
     cpu_clusters: dict[str, float] | None = None,
     cpu_detail: dict | None = None,
     cpu_model: CpuPowerModel | None = None,
+    memory_state: dict | None = None,
 ) -> dict:
     """Three-bucket decomposition aligned with what a bench can measure:
     per-IP core power, memory (BW-driven) power, and CPU/cluster power.
@@ -471,6 +487,7 @@ def _power_breakdown(
         "memory": {
             "total_mw": round(memory_total, 6),
             "rail": memory_rail,
+            **({"mif": memory_state} if memory_state is not None else {}),
         },
         "cpu": {
             "total_mw": round(cpu_total, 6),

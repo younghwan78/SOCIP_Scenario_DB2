@@ -29,9 +29,47 @@ from pydantic import Field, model_validator
 from scenario_db.models.common import BaseScenarioModel, DocumentId, SchemaVersion
 
 
+class MifOpp(BaseScenarioModel):
+    """One MIF (memory interface / DRAM) DVFS level for the ``mif-linear`` BW model."""
+
+    mhz: float = Field(gt=0, allow_inf_nan=False)
+    # Memory-rail power at this level with no traffic (fitted intercept).
+    base_mw: float = Field(default=0.0, ge=0, allow_inf_nan=False)
+    # Deliverable DRAM bandwidth at this level (governor capacity).
+    capacity_mbs: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+
+
+class BwFitInfo(BaseScenarioModel):
+    """Lineage of fitted BW coefficients (sim/bw_fit.py)."""
+
+    method: str = "least_squares"
+    rows: int = Field(default=0, ge=0)
+    r2: float | None = None
+    rmse_mw: float | None = None
+    source: str | None = None
+
+
 class BwPowerParams(BaseScenarioModel):
     mw_per_gbps: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     llc_hit_scale: float = Field(default=1.0, ge=0, le=1, allow_inf_nan=False)
+    # --- mif-linear: P_mem = base(MIF level) + e_rd * RD[GB/s] + e_wr * WR[GB/s] ---
+    e_read_mw_per_gbps: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    e_write_mw_per_gbps: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    mif_opps: list[MifOpp] = Field(default_factory=list, exclude_if=lambda v: not v)
+    # Governor: lowest level whose capacity x util covers DRAM traffic.
+    governor_util: float = Field(default=0.6, gt=0, le=1, allow_inf_nan=False, exclude_if=lambda v: v == 0.6)
+    # Scenario QoS floor (IS_DVFS_SN_* -> minimum MIF MHz).
+    qos_lock_mhz_by_dvfs_sn: dict[str, float] = Field(default_factory=dict, exclude_if=lambda v: not v)
+    # Traffic of masters the scenario does not model (GPU / DPU / modem), MB/s.
+    other_masters_mbs: float = Field(default=0.0, ge=0, allow_inf_nan=False, exclude_if=lambda v: v == 0.0)
+    # Unset mif-linear fields are omitted from dumps so existing params hashes stay stable.
+    fit: BwFitInfo | None = None
+
+    @model_validator(mode="after")
+    def _sorted_levels(self) -> BwPowerParams:
+        if self.mif_opps != sorted(self.mif_opps, key=lambda o: o.mhz):
+            raise ValueError("bw.mif_opps must be sorted by mhz")
+        return self
 
 
 class CpuOpp(BaseScenarioModel):

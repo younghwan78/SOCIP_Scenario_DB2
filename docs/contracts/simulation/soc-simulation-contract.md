@@ -254,6 +254,16 @@ the same Linux EM formula the timing budget uses:
   Recorded as `dvfs_promotion` and a `dvfs_policy` clock-ledger constraint.
 - Architecture exploration's analytic DVFS headroom uses the same dynamic/leakage split.
 
+### Memory (BW) power: `mif-linear`
+
+- `bw_model: mif-linear` — `P_mem = base(MIF level) + e_rd x RD + e_wr x WR` (GB/s, LLC-adjusted
+  per port). MIF level = max(`qos_lock_mhz_by_dvfs_sn[variant dvfs_sn]`, lowest `mif_opps`
+  level with `capacity_mbs x governor_util >= DRAM traffic + other_masters_mbs`).
+- DRAM traffic includes CPU BW when a CPU profile is used (`cpu.<cluster>` ports).
+- `power_breakdown.memory.mif` records level, reason, traffic, utilization, base and
+  other-master power. Coefficients are fitted by `python -m scenario_db.sim.bw_fit`
+  (`docs/guides/measurement/bw-model-fit-ko.md`) and carry `bw.fit` lineage.
+
 ## Clock Ledger
 
 Each resolved IP (`dvfs_breakdown[].clock_ledger`) keeps every clock tier side by side:

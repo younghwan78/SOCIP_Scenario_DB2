@@ -302,6 +302,9 @@ class SimulationInputs(BaseScenarioModel):
     # sw_timing_case). Derived from inputs already hashed (the durations), so
     # excluded from serialisation / params_hash.
     sw_timing_case: str = Field(default="mean", exclude=True)
+    # Variant DVFS scenario (design_conditions.dvfs_sn) for the MIF QoS lock;
+    # informational like sw_timing_case, so excluded from params_hash.
+    dvfs_sn: str | None = Field(default=None, exclude=True)
 
 
 class ResolvedIPConfig(BaseScenarioModel):
