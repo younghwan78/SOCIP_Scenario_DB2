@@ -221,6 +221,13 @@ metrics:
     allowed_scopes: [task_cluster, cluster]
     compare_statistic: value
     polarity: neutral
+  # Cycles per frame of one thread of a task (scope ref "<task>@<cluster>#<thread>").
+  cpu.thread_cycles_pf:
+    category: cpu
+    canonical_unit: count
+    allowed_scopes: [task_thread]
+    compare_statistic: value
+    polarity: neutral
   # Time share at one cluster frequency (scope ref "<cluster>@<MHz>").
   cpu.freq_residency:
     category: cpu

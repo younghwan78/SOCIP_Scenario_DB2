@@ -558,3 +558,18 @@ a.hd-row:hover span { color: #E8EEF0; }
 .cpu-step h3 { margin: 0 0 6px; font-size: 13px; }
 .cpu-help { font-size: 12px; color: var(--text-2, #5A5F6A); margin: 0 0 8px; }
 .plot-grid .pm-card { grid-column: 1 / -1; }
+/* CPU EAS sweep */
+.cpu-range th { vertical-align: bottom; }
+.cpu-range-meta { font-size: 10.5px; font-weight: 400; white-space: nowrap; }
+.cpu-cell { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.cpu-detail { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(320px, 1.2fr); gap: 16px; }
+@media (max-width: 900px) { .cpu-detail { grid-template-columns: 1fr; } }
+.cpu-h { font-size: 13px; margin: 0 0 4px; }
+.cpu-knobs { margin: 0; padding-left: 18px; font-size: 12px; }
+.cpu-cl { padding: 4px 0 6px 8px; margin-bottom: 6px; }
+.cpu-cl-head { display: flex; gap: 6px; align-items: baseline; font-size: 12px; }
+.cpu-bar-row { display: grid; grid-template-columns: 44px 120px 1fr; gap: 6px; align-items: center; font-size: 11px; }
+.cpu-bar { display: block; height: 8px; background: #EEE9E1; border-radius: 2px; overflow: hidden; }
+.cpu-bar > span { display: block; height: 100%; }
+.cpu-range td, .cpu-range th { padding-left: 6px; padding-right: 6px; }
+.cpu-range td input[type="checkbox"] { margin: 0; }

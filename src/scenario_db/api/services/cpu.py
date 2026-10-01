@@ -4,12 +4,13 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from scenario_db.api.schemas.cpu import CpuWhatIfRequest, CpuWhatIfResponse
+from scenario_db.api.schemas.cpu import CpuSweepRequest, CpuWhatIfRequest, CpuWhatIfResponse
 from scenario_db.db.models.capability import PowerModelParams as PowerModelParamsRow
 from scenario_db.db.repositories.evidence import get_evidence
 from scenario_db.exceptions import NotFoundError, UnprocessableError
 from scenario_db.sim.cpu_power import CpuPowerModel
 from scenario_db.sim.cpu_profile import cpu_profile_from_evidence
+from scenario_db.sim.cpu_sched import SweepSpec, cpu_sweep
 from scenario_db.sim.cpu_whatif import WhatIfSpec, cpu_whatif
 from scenario_db.sim.power_params import power_params_from_row
 
@@ -27,7 +28,7 @@ def _model(db: Session, ref: str) -> CpuPowerModel:
     return CpuPowerModel.from_params(params)
 
 
-def run_cpu_whatif(db: Session, request: CpuWhatIfRequest) -> CpuWhatIfResponse:
+def _profile(db: Session, request: CpuWhatIfRequest | CpuSweepRequest) -> Any:
     profile = request.cpu_profile
     if profile is None:
         if not request.cpu_profile_ref:
@@ -38,6 +39,32 @@ def run_cpu_whatif(db: Session, request: CpuWhatIfRequest) -> CpuWhatIfResponse:
         profile = cpu_profile_from_evidence(row, evidence_ref=request.cpu_profile_ref)
         if profile is None:
             raise UnprocessableError(f"measurement evidence {request.cpu_profile_ref} has no per-frame CPU profile")
+    return profile
+
+
+def run_cpu_sweep(db: Session, request: CpuSweepRequest) -> CpuWhatIfResponse:
+    profile = _profile(db, request)
+    target = _model(db, request.power_params_ref)
+    base = _model(db, request.base_power_params_ref) if request.base_power_params_ref else None
+    spec = SweepSpec(
+        growth=request.growth, default_growth=request.default_growth, budgets_ms=request.budgets_ms,
+        threads=request.threads, sweep_clusters=request.sweep_clusters, knobs=tuple(request.knobs),
+        uclamp_max_levels=tuple(request.uclamp_max_levels), uclamp_min_levels=tuple(request.uclamp_min_levels),
+        task_policy={t: p.model_dump() for t, p in request.task_policy.items()}, reference=request.reference,
+        power_gating_eff=request.power_gating_eff, cpu_bw_scale=request.cpu_bw_scale,
+        freq_margin=request.freq_margin, fits_margin=request.fits_margin, util_model=request.util_model,
+        pelt_halflife_ms=request.pelt_halflife_ms, deadline_boost=request.deadline_boost,
+        energy_includes_static=request.energy_includes_static, max_cases=request.max_cases, top=request.top,
+    )
+    try:
+        result = cpu_sweep(profile, target=target, base=base, fps=request.fps, spec=spec)
+    except ValueError as exc:
+        raise UnprocessableError(str(exc)) from exc
+    return CpuWhatIfResponse(profile_ref=profile.evidence_ref, power_params_ref=request.power_params_ref, result=result)
+
+
+def run_cpu_whatif(db: Session, request: CpuWhatIfRequest) -> CpuWhatIfResponse:
+    profile = _profile(db, request)
     target = _model(db, request.power_params_ref)
     base = _model(db, request.base_power_params_ref) if request.base_power_params_ref else None
     spec = WhatIfSpec(
@@ -71,7 +98,12 @@ def list_cpu_inputs(db: Session) -> dict:
         if any(isinstance(o, dict) and str(o.get("metric_id", "")).endswith("_pf") for o in obs):
             # task -> dominant measured cluster (for the placement matrix)
             cycles: dict[str, tuple[str, float]] = {}
+            threads: dict[str, set[str]] = {}
             for o in obs:
+                if isinstance(o, dict) and o.get("metric_id") == "cpu.thread_cycles_pf":
+                    ref = str((o.get("scope") or {}).get("ref", ""))
+                    head, _, thread = ref.partition("#")
+                    threads.setdefault(head.rpartition("@")[0], set()).add(thread)
                 scope = o.get("scope") or {} if isinstance(o, dict) else {}
                 if isinstance(o, dict) and o.get("metric_id") == "cpu.cycles_pf" and scope.get("kind") == "task_cluster":
                     task, _, cluster = str(scope.get("ref", "")).rpartition("@")
@@ -80,5 +112,6 @@ def list_cpu_inputs(db: Session) -> dict:
                         cycles[task] = (cluster, value)
             profiles.append({"id": row.id, "scenario_ref": row.scenario_ref, "variant_ref": row.variant_ref,
                              "project_ref": row.project_ref,
-                             "tasks": [{"task": t, "cluster": c} for t, (c, _) in sorted(cycles.items())]})
+                             "tasks": [{"task": t, "cluster": c, "threads": len(threads.get(t, ())) or None}
+                                       for t, (c, _) in sorted(cycles.items())]})
     return {"topologies": topologies, "profiles": sorted(profiles, key=lambda p: p["id"])}

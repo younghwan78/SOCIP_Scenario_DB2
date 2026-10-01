@@ -155,4 +155,5 @@ def test_list_cpu_inputs_reports_dominant_cluster_per_task():
     out = list_cpu_inputs(_Db())  # type: ignore[arg-type]
     assert out["topologies"] == [{"id": "pmp-x", "version": "1", "soc_ref": "soc-x", "clusters": ["MID", "BIG"]}]
     assert [p["id"] for p in out["profiles"]] == ["ev-1"]
-    assert out["profiles"][0]["tasks"] == [{"task": "eis", "cluster": "BIG"}, {"task": "enc", "cluster": "MID"}]
+    assert out["profiles"][0]["tasks"] == [{"task": "eis", "cluster": "BIG", "threads": None},
+                                           {"task": "enc", "cluster": "MID", "threads": None}]

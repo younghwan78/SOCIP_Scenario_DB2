@@ -130,6 +130,8 @@ class CpuPowerModel:
     dsu: ClusterModel | None = None
     source: str = "ip-cpu-s5e9965 profiler coefficients; cluster/freq/volt assumed"
     model_id: str = "em-v1"
+    # power_model_params.cpu.scheduler (CpuSchedulerParams) for the what-if sweep.
+    scheduler: Any = field(default=None, compare=False, hash=False)
 
     def __post_init__(self) -> None:
         if not self.clusters:
@@ -187,6 +189,8 @@ class CpuPowerModel:
                 leak_exponent=dsu.leakage.exponent if dsu.leakage else 2.0,
                 rail=dsu.rail,
             )
+        if cpu.scheduler is not None:
+            values["scheduler"] = cpu.scheduler
         values["source"] = params.params_ref + (f" ({cpu.source})" if cpu.source else "")
         return cls(**values)
 

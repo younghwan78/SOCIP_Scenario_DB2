@@ -53,6 +53,7 @@ class _Demand:
     bus_bytes: float
     base_cluster: str
     base_ipc_rel: float
+    threads: dict[str, float] | None = None   # thread -> cycles on base_cluster
 
 
 def _mean_mhz(residency: dict[float, float] | None, fallback: float) -> float:
@@ -94,6 +95,7 @@ def demands(profile: Any, *, base: CpuPowerModel, warnings: list[str]) -> dict[s
         out.setdefault(entry.task, []).append(_Demand(
             task=entry.task, core_cycles=cycles - stall, stall_ms=stall / (f0 * 1000.0) if f0 > 0 else 0.0,
             bus_bytes=entry.bus_bytes or 0.0, base_cluster=entry.cluster, base_ipc_rel=bc.ipc_rel if bc else 1.0,
+            threads=dict(entry.threads) if getattr(entry, "threads", None) else None,
         ))
     if no_stall:
         warnings.append(f"no stall_cycles for {sorted(no_stall)}: all cycles scale with frequency")

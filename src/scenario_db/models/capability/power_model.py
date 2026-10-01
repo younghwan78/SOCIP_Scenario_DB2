@@ -139,6 +139,48 @@ class CpuDsuParams(BaseScenarioModel):
         return self
 
 
+class CpuTaskPolicy(BaseScenarioModel):
+    """Android scheduling attributes of one SW task (cpuset / affinity, uclamp, prefer_idle)."""
+
+    allowed: list[str] | None = None      # cluster names or core types (cpuset / affinity); None = all
+    uclamp_min: int | None = Field(default=None, ge=0, le=1024)
+    uclamp_max: int | None = Field(default=None, ge=0, le=1024)
+    prefer_idle: bool = False             # latency-sensitive: take an idle CPU before saving energy
+    threads: int | None = Field(default=None, ge=1, le=64)   # when the profile has no per-thread data
+
+
+class CpuSchedulerParams(BaseScenarioModel):
+    """Scheduler / governor approximation for the CPU what-if (default: Linux EAS + schedutil).
+
+    Vendor kernels (e.g. Exynos EMS + ego) differ in margins and heuristics: tune
+    the numbers here per SoC / SW baseline; add a ``model`` when the heuristic
+    differs in kind. ``capacity`` takes the device's ``cpu_capacity`` (sysfs,
+    0..1024) per cluster; unset = derived from ``ipc_rel * fmax``.
+    """
+
+    model: Literal["eas", "ideal"] = "eas"
+    freq_margin: float = Field(default=1.25, ge=1.0, le=3.0, allow_inf_nan=False)   # schedutil util->freq
+    fits_margin: float = Field(default=1.25, ge=1.0, le=3.0, allow_inf_nan=False)   # fits_capacity
+    # Task util seen by the scheduler: "util_est" = PELT peak of a once-per-frame
+    # activation (Android util_est), "pelt_avg" = PELT average (= duty cycle).
+    util_model: Literal["util_est", "pelt_avg"] = "util_est"
+    pelt_halflife_ms: float = Field(default=32.0, ge=1.0, le=128.0, allow_inf_nan=False)  # 32 / 16 / 8 (pelt multiplier)
+    # Tasks with a time budget get at least the OPP that meets it (ADPF performance
+    # hint / uclamp_min boost by the HAL). False = plain schedutil (may miss budgets).
+    deadline_boost: bool = True
+    capacity: dict[str, float] = Field(default_factory=dict)
+    energy_includes_static: bool = False  # Linux EM compares dynamic energy only
+    task_policy: dict[str, CpuTaskPolicy] = Field(default_factory=dict)
+    source: str | None = None
+
+    @model_validator(mode="after")
+    def _capacity_range(self) -> CpuSchedulerParams:
+        bad = {k: v for k, v in self.capacity.items() if not 0 < v <= 1024}
+        if bad:
+            raise ValueError(f"cpu.scheduler.capacity must be in (0, 1024]: {bad}")
+        return self
+
+
 class CpuPowerParams(BaseScenarioModel):
     clusters: list[CpuClusterParams] = Field(default_factory=list)
     default_cluster: int | None = Field(default=None, ge=0)
@@ -146,6 +188,7 @@ class CpuPowerParams(BaseScenarioModel):
     volt_v: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     dsu: CpuDsuParams | None = None
     source: str | None = None
+    scheduler: CpuSchedulerParams | None = Field(default=None, exclude_if=lambda v: v is None)
 
     @model_validator(mode="after")
     def _clusters_consistent(self) -> CpuPowerParams:

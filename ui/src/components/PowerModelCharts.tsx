@@ -22,6 +22,7 @@ export function PowerStack({ rows, selected, onPick }: { rows: PowerRow[]; selec
   const hasSub = rows.some((r) => r.sub)
   const labelW = Math.min(300, Math.max(200, Math.round(w * 0.24))), valW = 170, rh = hasSub ? 34 : 26
   const maxChars = Math.floor((labelW - 16) / 6.6)
+  const subChars = Math.floor((labelW - 16) / 5.4)
   const totals = rows.map((r) => r.parts.reduce((s, p) => s + p.mw, 0))
   const hi = Math.max(1, ...totals)
   const plotW = Math.max(160, w - labelW - valW - 8)
@@ -44,7 +45,7 @@ export function PowerStack({ rows, selected, onPick }: { rows: PowerRow[]; selec
             <g key={r.id} transform={`translate(0,${i * rh + 2})`} style={{ cursor: onPick ? 'pointer' : undefined }} onClick={() => onPick?.(r.id)}>
               <rect x={0} y={0} width={labelW + plotW + valW} height={rh - 2} fill={selected === r.id ? '#F3EFE8' : 'transparent'} />
               <text x={labelW - 8} y={hasSub ? 13 : 15} fontSize={11} textAnchor="end" fill="#3B3F4A" className="mono">{i === 0 ? '★ ' : ''}{r.label.length > maxChars ? `${r.label.slice(0, maxChars - 1)}…` : r.label}<title>{r.label}</title></text>
-              {r.sub && <text x={labelW - 8} y={26} fontSize={10} textAnchor="end" fill="#8A8274">{r.sub}</text>}
+              {r.sub && <text x={labelW - 8} y={26} fontSize={10} textAnchor="end" fill="#8A8274">{r.sub.length > subChars ? `${r.sub.slice(0, subChars - 1)}…` : r.sub}<title>{r.sub}</title></text>}
               {keys.map((key) => {
                 const p = byKey.get(key)
                 if (!p || p.mw <= 0) return null

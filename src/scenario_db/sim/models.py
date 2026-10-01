@@ -160,6 +160,9 @@ class CpuCounters(BaseScenarioModel):
 class CpuTaskProfile(CpuCounters):
     task: str = Field(min_length=1)
     cluster: str = Field(min_length=1)
+    # Per-thread cycles per frame on this cluster (thread id / name -> cycles), when
+    # the import maps a thread column; drives the scheduler's thread split.
+    threads: dict[str, float] | None = Field(default=None, exclude_if=lambda v: v is None)
 
 
 def _cpu_residency(value: dict[float, float] | None) -> dict[float, float] | None:

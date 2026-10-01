@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { cpuSource, cpuTier, mifSummary, partColor, powerModelParts, sortClusters } from './powerModel'
-import { caseCount, caseParts, type CpuCase } from './cpu'
+import { caseCount, caseParts, freqChanges, knobHow, knobLabel, movedLabel, parseLevels, type CpuCase, type SweepCase } from './cpu'
 
 const pb = {
   cpu: { source: 'pmu_profile', total_mw: 80, by_cluster: { MID_HF: 48, DSU: 18, MID_LF: 14 }, dsu: { name: 'DSU' } },
@@ -52,5 +52,25 @@ describe('cpu what-if helpers', () => {
     }
     expect(caseParts(c).map((p) => [p.key, p.mw])).toEqual([['cpu.dsu', 10], ['cpu.MID_HF', 20]])
     expect(caseCount({ eis: ['A', 'B'], post: ['A', 'B', 'C'], x: [] })).toBe(6)
+  })
+})
+
+describe('cpu EAS sweep helpers', () => {
+  const mk = (placement: Record<string, string[]>, mhz: Record<string, number>): SweepCase => ({
+    placement, total_mw: 0, feasible: true, task_ms: {}, slack_ms: {}, min_slack_ms: null, flags: {}, cpu_bw_mbs: 0, knobs: {}, dsu: null,
+    clusters: Object.fromEntries(Object.entries(mhz).map(([n, f]) => [n, { mhz: f, busy_ms: 1 } as SweepCase['clusters'][string]])),
+  })
+  it('labels knobs and how to apply them', () => {
+    expect(knobLabel('eis', { kind: 'pin', clusters: ['MID_LF0'] })).toBe('eis → MID_LF0 고정')
+    expect(knobLabel('eis', { kind: 'upto', clusters: ['MID_LF0', 'MID_HF'], excluded: ['BIG'] })).toBe('eis ≤ MID_HF (BIG 제외)')
+    expect(knobLabel('eis', { kind: 'uclamp_max', value: 512 })).toBe('eis uclamp.max 512')
+    expect(knobHow({ kind: 'pin' })).toContain('cpuset')
+    expect(parseLevels('256, 512 x 2000')).toEqual([256, 512])
+  })
+  it('placement and frequency changes vs the reference', () => {
+    const ref = mk({ eis: ['MID_HF'] }, { MID_HF: 1200, MID_LF0: 400 })
+    const c = mk({ eis: ['MID_LF0'] }, { MID_HF: 600, MID_LF0: 1000 })
+    expect(movedLabel(c, ref)).toEqual(['eis MID_HF→MID_LF0'])
+    expect(freqChanges(c, ref)).toEqual(['MID_HF 1200→600', 'MID_LF0 400→1000'])
   })
 })
