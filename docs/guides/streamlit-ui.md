@@ -1,6 +1,6 @@
 # Streamlit UI and archived SPA
 
-The default UI is the existing Streamlit Dashboard with the embedded Scenario Workbench. The review SPA introduced by `feat/modern-web-spa` is preserved remotely on [archive/modern-web-spa-is-v15](https://github.com/younghwan78/SOCIP_Scenario_DB2/tree/archive/modern-web-spa-is-v15), including the IS v15 camera improvements. Its SPA source and API static mount are removed from main. `web/package.json` remains only as a compatibility entry point for the existing CI job and delegates to `frontend/`; it contains no UI server. Ignored local build artifacts must not select a different default UI.
+The default UI is the existing Streamlit Dashboard with the embedded Scenario Workbench. The review SPA introduced by `feat/modern-web-spa` is preserved as the git tag [archive/modern-web-spa-is-v15](https://github.com/younghwan78/SOCIP_Scenario_DB2/tree/archive/modern-web-spa-is-v15) (commit `0066e8b`), including the IS v15 camera improvements; restore files with `git checkout archive/modern-web-spa-is-v15 -- web`. Its SPA source and API static mount are removed from main. `web/package.json` remains only as a compatibility entry point for the existing CI job and delegates to `frontend/`; it contains no UI server. Ignored local build artifacts must not select a different default UI.
 
 Run from `implementation/` after configuring the existing PostgreSQL connection:
 
