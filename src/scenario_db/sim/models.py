@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 import math
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import Field, field_validator, model_validator
 
@@ -162,7 +162,8 @@ class CpuTaskProfile(CpuCounters):
     cluster: str = Field(min_length=1)
     # Per-thread cycles per frame on this cluster (thread id / name -> cycles), when
     # the import maps a thread column; drives the scheduler's thread split.
-    threads: dict[str, float] | None = Field(default=None, exclude_if=lambda v: v is None)
+    threads: dict[str, Annotated[float, Field(ge=0, allow_inf_nan=False)]] | None = Field(
+        default=None, exclude_if=lambda v: v is None)
 
 
 def _cpu_residency(value: dict[float, float] | None) -> dict[float, float] | None:
@@ -306,7 +307,7 @@ class SimulationInputs(BaseScenarioModel):
     # excluded from serialisation / params_hash.
     sw_timing_case: str = Field(default="mean", exclude=True)
     # Variant DVFS scenario (design_conditions.dvfs_sn) for the MIF QoS lock;
-    # informational like sw_timing_case, so excluded from params_hash.
+    # Hashed by the runner when mif-linear uses this QoS selection.
     dvfs_sn: str | None = Field(default=None, exclude=True)
 
 

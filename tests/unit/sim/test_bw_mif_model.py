@@ -9,7 +9,7 @@ from scenario_db.models.capability.power_model import PowerModelParams
 from scenario_db.sim.bw_fit import FitRow, fit_mif_linear, main as fit_main, row_from_evidence, rows_from_csv
 from scenario_db.sim.bw_power import BwPowerContext, bw_model_from_config
 from scenario_db.sim.models import IPSimParams, IPWorkload, PortTransferSpec, PortType, SimulationInputs, SimulationRunConfig
-from scenario_db.sim.runner import run_simulation
+from scenario_db.sim.runner import params_hash, run_simulation
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
 BW = {
@@ -72,6 +72,15 @@ def test_existing_params_hash_is_unchanged_by_unset_mif_fields():
     assert set(plain.model_dump(exclude_none=True)["bw"]) == {"mw_per_gbps", "llc_hit_scale"}
 
 
+def test_qos_selection_changes_hash_only_for_mif_linear():
+    inputs = SimulationInputs(scenario_id="s", variant_id="v", config=SimulationRunConfig(power_params=_params()))
+    locked = inputs.model_copy(update={"dvfs_sn": "IS_DVFS_SN_UHD60"})
+    assert run_simulation(inputs).bw_power_mw != run_simulation(locked).bw_power_mw
+    assert params_hash(inputs) != params_hash(locked)
+    legacy = inputs.model_copy(update={"config": SimulationRunConfig()})
+    assert params_hash(legacy) == params_hash(legacy.model_copy(update={"dvfs_sn": "IS_DVFS_SN_UHD60"}))
+
+
 def test_fit_recovers_synthetic_coefficients_and_reports_residuals():
     rows = rows_from_csv(ROOT / "examples" / "bw-fit" / "mem_rows.csv")
     out = fit_mif_linear(rows, capacity_mbs={845.0: 6000})
@@ -104,3 +113,14 @@ def test_evidence_row_and_cli(tmp_path, capsys):
     out = tmp_path / "bw.yaml"
     assert fit_main(["--csv", str(ROOT / "examples" / "bw-fit" / "mem_rows.csv"), "--out", str(out)]) == 0
     assert "mif-linear" in out.read_text()
+
+
+def test_fit_diagnostics_follow_the_exported_clipped_model():
+    rows = [FitRow(str(i), i * 1000, 0, 100 - i * 10, {845.0: 1}) for i in range(6)]
+    out = fit_mif_linear(rows, same_rw=True)
+    assert out["coefficients"]["e_rw"] < 0 and out["bw"]["e_read_mw_per_gbps"] == 0
+    base = out["bw"]["mif_opps"][0]["base_mw"]
+    assert all(row["predicted_mw"] == base for row in out["residuals"])
+    assert out["bw"]["fit"]["rmse_mw"] > 0 and out["bw"]["fit"]["r2"] < 1
+    degenerate = fit_mif_linear([FitRow(str(i), 1000, 500, 100, {845.0: 1}) for i in range(8)])
+    assert any("rank-deficient" in w for w in degenerate["warnings"])

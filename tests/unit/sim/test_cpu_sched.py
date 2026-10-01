@@ -153,6 +153,28 @@ def test_sweep_beam_when_space_is_large():
                                                                knobs=("pin", "upto", "uclamp_max")))
     assert r["range"]["method"] == "beam" and r["range"]["evaluated"] < r["range"]["space"] * 1 + 1
     assert any("beam search" in w for w in r["warnings"])
+    assert r["range"]["evaluated"] <= 2
+
+
+@pytest.mark.parametrize("field,value", [
+    ("growth", {"ui": -1}), ("growth", {"ui": float("nan")}),
+    ("budgets_ms", {"ui": 0}), ("threads", {"ui": -2}), ("threads", {"ui": 65}),
+    ("uclamp_min_levels", [-1]), ("uclamp_max_levels", [1025]),
+])
+def test_sweep_rejects_invalid_task_controls(field, value):
+    with pytest.raises(ValueError):
+        CpuSweepRequest(power_params_ref="pmp-t", **{field: value})
+
+
+def test_sweep_rejects_unknown_cluster_instead_of_allowing_all():
+    with pytest.raises(ValueError, match="unknown target"):
+        cpu_sweep(_profile(), target=_two(), fps=30, spec=SweepSpec(sweep_clusters={"ui": ["typo"]}))
+
+
+def test_profile_rejects_negative_or_nonfinite_thread_cycles():
+    for value in (-1, float("inf")):
+        with pytest.raises(ValueError):
+            CpuTaskProfile(task="ui", cluster="BIG", cycles=1e6, threads={"main": value})
 
 
 def test_exynos2600_sample_import_threads_and_sweep():

@@ -218,13 +218,16 @@ def capacities(model: CpuPowerModel, sched: SchedConfig) -> dict[str, float]:
 
 
 def resolve_allowed(names: tuple[str, ...] | list[str] | None, model: CpuPowerModel) -> list[str]:
-    """Cluster names (target order) from cluster names or core types; None / no match = all."""
+    """Cluster names (target order) from cluster names or core types; None = all."""
     if not names:
         return [c.name for c in model.clusters]
     wanted = {n.lower() for n in names}
+    known = {c.name.lower() for c in model.clusters} | {c.core_type.lower() for c in model.clusters if c.core_type}
+    if wanted - known:
+        raise ValueError(f"unknown target clusters or core types: {sorted(wanted - known)}")
     out = [c.name for c in model.clusters
            if c.name.lower() in wanted or (c.core_type and c.core_type.lower() in wanted)]
-    return out or [c.name for c in model.clusters]
+    return out
 
 
 def pelt_share(run_ms: float, period_ms: float, *, halflife_ms: float, peak: bool) -> float:
@@ -659,6 +662,8 @@ def cpu_sweep(
                 for state in beam:
                     for j in range(len(options[swept[i]])):
                         nxt = state[:i] + (j,) + state[i + 1:]
+                        if nxt not in memo and len(memo) >= spec.max_cases:
+                            continue
                         run(nxt)
                         pool.add(nxt)
                 beam = sorted(pool, key=lambda a: (not memo[a]["feasible"], memo[a]["total_mw"], sum(1 for x in a if x)))

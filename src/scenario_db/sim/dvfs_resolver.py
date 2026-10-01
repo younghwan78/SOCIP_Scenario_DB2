@@ -165,7 +165,7 @@ class DvfsResolver:
             self._promote_same_voltage(resolved, skip_groups={
                 *(dvfs_overrides or {}),
                 *(resolved[n].dvfs_group for n in substitutions if resolved[n].dvfs_group),
-            })
+            }, maximum_clocks={w.node_id: w.sim_params.max_clock_mhz for w in workloads})
         for workload in workloads:
             config = resolved[workload.node_id]
             maximum = workload.sim_params.max_clock_mhz
@@ -445,7 +445,8 @@ class DvfsResolver:
             # The fraction actually applied (None: the model has no clock term).
             config.clock_power_fraction = applied(config.clock_power_fraction) if applied else None
 
-    def _promote_same_voltage(self, resolved: dict[str, ResolvedIPConfig], *, skip_groups: set[str]) -> None:
+    def _promote_same_voltage(self, resolved: dict[str, ResolvedIPConfig], *, skip_groups: set[str],
+                              maximum_clocks: dict[str, float | None]) -> None:
         """Move a DVFS group to the fastest higher level at the same voltage if power allows.
 
         Same voltage = same V^2 work power; only the clock / gating terms can
@@ -472,6 +473,9 @@ class DvfsResolver:
             base_power = sum(m.total_power_mw for m in members)
             chosen = None
             for candidate in same_v:
+                if any(maximum_clocks[m.node_id] is not None
+                       and candidate.speed_mhz > maximum_clocks[m.node_id] for m in members):
+                    continue
                 trial = {m.node_id: m.model_copy(update={"set_clock_mhz": candidate.speed_mhz,
                                                          "dvfs_level": candidate.level}) for m in members}
                 self._recalculate_power(trial)

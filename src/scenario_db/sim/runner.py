@@ -352,6 +352,9 @@ def params_hash(inputs: SimulationInputs) -> str:
     # the corresponding model is disabled.
     if _cpu_power_model(inputs.config, effective_power_params(inputs.config)) is not None:
         payload["sw_timing_case"] = inputs.sw_timing_case
+    bw_model = bw_model_from_config(inputs.config)
+    if bw_model is not None and bw_model.model_id == "mif-linear":
+        payload["dvfs_sn"] = inputs.dvfs_sn
     if inputs.config.power_model == "v2-vf":
         for raw, workload in zip(payload["workloads"], inputs.workloads):
             raw["clock_constraints"] = [c.model_dump(mode="json") for c in workload.clock_constraints]

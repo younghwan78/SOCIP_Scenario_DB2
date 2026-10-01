@@ -70,3 +70,12 @@ def test_promotion_is_skipped_for_overridden_groups():
     table = _table([(200, 650), (300, 650)])
     cfg = DvfsResolver(table, dvfs_policy="same_voltage_up").resolve([_wl()], dvfs_overrides={"CAM": 0})["isp"]
     assert cfg.set_clock_mhz == 200 and cfg.dvfs_promotion is None
+
+
+def test_promotion_respects_every_group_members_maximum_clock():
+    table = _table([(200, 650), (300, 650), (400, 650)])
+    resolved = DvfsResolver(table, dvfs_policy="same_voltage_up").resolve(
+        [_wl(), _wl("tnr", max_clock_mhz=350)])
+    assert all(c.set_clock_mhz == 300 and c.feasible for c in resolved.values())
+    capped = DvfsResolver(table, dvfs_policy="same_voltage_up").resolve([_wl(max_clock_mhz=250)])["isp"]
+    assert capped.set_clock_mhz == 200 and capped.feasible and capped.dvfs_promotion is None

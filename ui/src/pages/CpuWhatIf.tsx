@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Ctx } from '../App'
 import { useAsync } from '../lib/route'
 import { fmt } from '../lib/timingBudget'
@@ -41,6 +41,8 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
   const [result, setResult] = useState<CpuSweep | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const requestId = useRef(0)
+  const inputSelection = useRef('')
   const [sel, setSel] = useState<string>('')
 
   const prof = inputs.data?.profiles.find((p) => p.id === profile)
@@ -59,30 +61,41 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
     if (!target && inputs.data.topologies[0]) setTarget(inputs.data.topologies[0].id)
   }, [inputs.data]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const request = (): CpuSweepRequest => {
-    const pick = (k: 'budget' | 'growth' | 'threads') => Object.fromEntries(Object.entries(edits)
+  const request = (taskEdits = edits): CpuSweepRequest => {
+    const pick = (k: 'budget' | 'growth' | 'threads') => Object.fromEntries(Object.entries(taskEdits)
       .map(([t, e]) => [t, num(e[k])] as const).filter(([, v]) => v !== undefined)) as Record<string, number>
     return {
       cpu_profile_ref: profile, power_params_ref: target, base_power_params_ref: base || undefined, fps,
       default_growth: growth, growth: pick('growth'), budgets_ms: pick('budget'), threads: pick('threads'),
-      sweep_clusters: Object.fromEntries(Object.entries(edits).filter(([, e]) => e.sweep !== null).map(([t, e]) => [t, e.sweep as string[]])),
+      sweep_clusters: Object.fromEntries(Object.entries(taskEdits).filter(([, e]) => e.sweep !== null).map(([t, e]) => [t, e.sweep as string[]])),
       knobs, uclamp_max_levels: parseLevels(uMax), uclamp_min_levels: parseLevels(uMin), reference,
       power_gating_eff: pgEff, cpu_bw_scale: bwScale,
       freq_margin: num(adv.freqMargin), fits_margin: num(adv.fitsMargin), util_model: adv.utilModel || undefined,
       pelt_halflife_ms: num(adv.halflife), deadline_boost: tri(adv.boost), energy_includes_static: tri(adv.emStatic),
     }
   }
-  const run = async () => {
+  const run = async (payload = request()) => {
     if (!profile || !target) return
+    const id = ++requestId.current
     setBusy(true); setError(null)
     try {
-      const r = await cpuApi.sweep(request())
+      const r = await cpuApi.sweep(payload)
+      if (id !== requestId.current) return
       setResult(r); setSel(r.cases[0] ? `c${r.cases[0].rank}` : '')
-    } catch (e) { setError(String((e as Error).message ?? e)) } finally { setBusy(false) }
+    } catch (e) {
+      if (id === requestId.current) setError(String((e as Error).message ?? e))
+    } finally { if (id === requestId.current) setBusy(false) }
   }
   // first look: EAS reproduction + automatic range as soon as the inputs are chosen
-  useEffect(() => { setEdits({}); setResult(null); if (profile && target) void run() }, [profile, target, base]) // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (result) void run() }, [reference]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const selection = JSON.stringify([profile, target, base])
+    const changed = inputSelection.current !== selection
+    inputSelection.current = selection
+    if (changed) setEdits({})
+    setResult(null)
+    if (profile && target) void run(request(changed ? {} : edits))
+    return () => { ++requestId.current }
+  }, [profile, target, base, reference]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleCell = (task: string, cl: string) => {
     const auto = result?.range.tasks.find((t) => t.task === task)
@@ -206,7 +219,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
             })}</tbody></table></div> : <div className="empty">profile에 task별 cycle 정보가 없습니다.</div>}
           <div className="toolbar" style={{ marginTop: 8 }}>
             <span className="faint" style={{ fontSize: 12 }}>{result ? `조합 ${result.range.space.toLocaleString()}개 · 계산 ${result.range.evaluated.toLocaleString()} (${result.range.method === 'beam' ? 'beam 탐색' : '전수'}) · 서로 다른 배치 ${result.range.unique}` : '조합 수는 계산 후 표시'}</span><span className="grow" />
-            <button className="btn primary" disabled={busy || !profile || !target} onClick={run}>{busy ? '계산 중…' : result ? '다시 계산' : 'Sweep 계산'}</button>
+            <button className="btn primary" disabled={busy || !profile || !target} onClick={() => void run()}>{busy ? '계산 중…' : result ? '다시 계산' : 'Sweep 계산'}</button>
           </div>
         </Card>
       </div>

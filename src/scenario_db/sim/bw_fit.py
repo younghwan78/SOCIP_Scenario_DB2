@@ -59,8 +59,13 @@ def fit_mif_linear(rows: list[FitRow], *, same_rw: bool = False,
         matrix.append(energy + [row.mif_residency.get(mhz, 0.0) / total for mhz in levels])
         target.append(row.mem_power_mw)
     a, y = np.asarray(matrix, dtype=float), np.asarray(target, dtype=float)
-    coef, *_ = np.linalg.lstsq(a, y, rcond=None)
-    pred = a @ coef
+    coef, _, rank, _ = np.linalg.lstsq(a, y, rcond=None)
+    # Diagnostics must describe the nonnegative, rounded coefficients exported
+    # to the engine, rather than the unconstrained fit that may be clipped.
+    energy_count = 1 if same_rw else 2
+    applied = np.asarray([round(max(0.0, float(c)), 4 if i < energy_count else 3)
+                          for i, c in enumerate(coef)])
+    pred = a @ applied
     resid = y - pred
     ss_tot = float(((y - y.mean()) ** 2).sum())
     r2 = 1.0 - float((resid ** 2).sum()) / ss_tot if ss_tot > 0 else None
@@ -69,6 +74,8 @@ def fit_mif_linear(rows: list[FitRow], *, same_rw: bool = False,
     warnings = []
     if len(rows) < len(columns) + 2:
         warnings.append(f"{len(rows)} rows for {len(columns)} unknowns: under-determined, add scenarios")
+    if rank < len(columns):
+        warnings.append(f"rank-deficient fit ({rank}/{len(columns)}): add independent levels / directions")
     negative = [k for k, v in values.items() if v < 0]
     if negative:
         warnings.append(f"negative coefficients {negative}: rows do not separate levels / directions; "
