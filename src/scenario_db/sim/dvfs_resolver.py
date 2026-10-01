@@ -9,7 +9,13 @@ from scenario_db.sim.clock_ledger import (
     lookup_clock,
     select_clock_basis,
 )
-from scenario_db.sim.clock_models import ClockBasis, ConfiguredClock, MeasuredClock, MeasuredVoltageBasis
+from scenario_db.sim.clock_models import (
+    ClockBasis,
+    ClockConstraint,
+    ConfiguredClock,
+    MeasuredClock,
+    MeasuredVoltageBasis,
+)
 from scenario_db.sim.constants import REFERENCE_VOLTAGE_MV
 from scenario_db.sim.models import DVFSTable, IPWorkload, ResolvedIPConfig
 from scenario_db.sim.power_model import PowerModel, resolve_power_model
@@ -27,8 +33,12 @@ class DvfsResolver:
         clock_basis: ClockBasis | None = None,
         configured_clocks: dict[str, ConfiguredClock] | None = None,
         measured_clocks: dict[str, MeasuredClock] | None = None,
+        dvfs_policy: str | None = None,
+        promote_tolerance_pct: float | None = None,
     ) -> None:
         self.dvfs_tables = dvfs_tables
+        self.dvfs_policy = dvfs_policy or "min_level"
+        self.promote_tolerance_pct = promote_tolerance_pct or 0.0
         self.asv_group = asv_group
         self.power_model = power_model or resolve_power_model(None)
         self.clock_basis: ClockBasis = clock_basis or "calculated"
@@ -126,6 +136,12 @@ class DvfsResolver:
                 ambiguous=ambiguous,
                 measured_voltage_basis=voltage_basis.get(workload.node_id),
             )
+            if config.dvfs_promotion:
+                promo = config.dvfs_promotion
+                config.clock_ledger.constraints.append(ClockConstraint(
+                    kind="dvfs_policy", mhz=float(promo["to_mhz"]), source="resolver",
+                    reason=f"same_voltage_up {promo['from_mhz']:g}->{promo['to_mhz']:g} MHz "
+                           f"at {promo['voltage_mv']:g} mV ({promo['delta_mw']:+.3f} mW)"))
         return resolved
 
     def _resolve_pass(
@@ -145,6 +161,11 @@ class DvfsResolver:
         self._align_set_clock_by_dvfs_group(resolved)
         self._align_voltage_by_vdd(resolved)
         self._recalculate_power(resolved)
+        if self.dvfs_policy == "same_voltage_up":
+            self._promote_same_voltage(resolved, skip_groups={
+                *(dvfs_overrides or {}),
+                *(resolved[n].dvfs_group for n in substitutions if resolved[n].dvfs_group),
+            }, maximum_clocks={w.node_id: w.sim_params.max_clock_mhz for w in workloads})
         for workload in workloads:
             config = resolved[workload.node_id]
             maximum = workload.sim_params.max_clock_mhz
@@ -270,6 +291,9 @@ class DvfsResolver:
             format=workload.format,
             unit_power_mw_mp=params.unit_power_mw_mp,
             clock_power_fraction=params.clock_power_fraction,
+            clock_gating_eff=params.clock_gating_eff,
+            power_gating_eff=params.power_gating_eff,
+            leakage_mw=params.leakage_mw,
             clock_ref_mhz=_physical_required_mhz(workload, base_required_clock),
             ppc=params.ppc,
             input_resolution_mp=workload.pixels / 1e6,
@@ -402,22 +426,70 @@ class DvfsResolver:
                 "resolution_mp": config.input_resolution_mp,
                 "voltage_mv": config.set_voltage_mv,
                 "fps": config.fps,
+                "set_clock_mhz": config.set_clock_mhz,
+                "ref_clock_mhz": config.clock_ref_mhz,
+                "clock_gating_eff": config.clock_gating_eff,
+                "power_gating_eff": config.power_gating_eff,
             }
-            # Clock term reference: the throughput clock the work needs.
             active = self.power_model.ip_active_power_mw(
-                **common,
-                set_clock_mhz=config.set_clock_mhz,
-                ref_clock_mhz=config.clock_ref_mhz,
-                clock_power_fraction=config.clock_power_fraction,
-            )
-            work_only = self.power_model.ip_active_power_mw(**common, clock_power_fraction=0.0)
+                **common, clock_power_fraction=config.clock_power_fraction, leakage_mw=config.leakage_mw)
+            # Decomposition: work at V, + leakage after gating, + clock above the need.
+            work_only = self.power_model.ip_active_power_mw(**common, clock_power_fraction=0.0, leakage_mw=0.0)
+            with_leak = self.power_model.ip_active_power_mw(
+                **common, clock_power_fraction=0.0, leakage_mw=config.leakage_mw)
             config.active_power_mw = active
             config.total_power_mw = active
-            config.clock_overhead_mw = active - work_only
+            config.leakage_power_mw = with_leak - work_only
+            config.clock_overhead_mw = active - with_leak
             applied = getattr(self.power_model, "applied_clock_power_fraction", None)
             # The fraction actually applied (None: the model has no clock term).
             config.clock_power_fraction = applied(config.clock_power_fraction) if applied else None
 
+    def _promote_same_voltage(self, resolved: dict[str, ResolvedIPConfig], *, skip_groups: set[str],
+                              maximum_clocks: dict[str, float | None]) -> None:
+        """Move a DVFS group to the fastest higher level at the same voltage if power allows.
+
+        Same voltage = same V^2 work power; only the clock / gating terms can
+        change, so under v1 the promotion is free timing margin and under v2
+        it is taken only while the group power stays within the tolerance.
+        """
+        tolerance = self.promote_tolerance_pct / 100.0
+        for group, node_ids in _group_by(resolved, "dvfs_group").items():
+            table = self.dvfs_tables.get(group)
+            if table is None or group in skip_groups:
+                continue
+            members = [resolved[n] for n in node_ids]
+            level = table.get_level(members[0].dvfs_level) if members[0].dvfs_level is not None else None
+            if level is None or any(m.dvfs_level != level.level for m in members):
+                continue
+            volt = table.voltage_for(level, self.asv_group)
+            same_v = sorted(
+                (lv for lv in table.levels
+                 if lv.speed_mhz > level.speed_mhz and abs(table.voltage_for(lv, self.asv_group) - volt) < 1e-6),
+                key=lambda lv: lv.speed_mhz,
+            )
+            if not same_v:
+                continue
+            base_power = sum(m.total_power_mw for m in members)
+            chosen = None
+            for candidate in same_v:
+                if any(maximum_clocks[m.node_id] is not None
+                       and candidate.speed_mhz > maximum_clocks[m.node_id] for m in members):
+                    continue
+                trial = {m.node_id: m.model_copy(update={"set_clock_mhz": candidate.speed_mhz,
+                                                         "dvfs_level": candidate.level}) for m in members}
+                self._recalculate_power(trial)
+                power = sum(t.total_power_mw for t in trial.values())
+                if power <= base_power * (1.0 + tolerance) + 1e-9:
+                    chosen = (candidate, trial, power)
+            if chosen is None:
+                continue
+            candidate, trial, power = chosen
+            note = {"from_mhz": level.speed_mhz, "to_mhz": candidate.speed_mhz,
+                    "delta_mw": round(power - base_power, 6), "voltage_mv": volt}
+            for node_id, config in trial.items():
+                config.dvfs_promotion = note
+                resolved[node_id] = config
 
 # Lower bounds the IP physically needs (the clock unit power stands for):
 # throughput plus sensor ingress / v-valid streaming / SW-stage time budget.

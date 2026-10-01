@@ -18,6 +18,7 @@ cpu:
     - 2
     dvfs_domain: CPUCL_MID_LF0
     rail: BUCK_MID_LF0
+    ipc_rel: 0.8
     opps:
     - mhz: 400.0
       mv: 600.0
@@ -44,6 +45,7 @@ cpu:
     - 5
     dvfs_domain: CPUCL_MID_LF1
     rail: BUCK_MID_LF1
+    ipc_rel: 0.8
     opps:
     - mhz: 400.0
       mv: 600.0
@@ -70,6 +72,7 @@ cpu:
     - 8
     dvfs_domain: CPUCL_MID_HF
     rail: BUCK_MID_HF
+    ipc_rel: 1.0
     opps:
     - mhz: 600.0
       mv: 620.0
@@ -94,6 +97,7 @@ cpu:
     - 9
     dvfs_domain: CPUCL_BIG
     rail: BUCK_BIG
+    ipc_rel: 1.3
     opps:
     - mhz: 1000.0
       mv: 660.0
@@ -131,6 +135,18 @@ cpu:
       mw_per_core_at_ref: 10.0
       ref_mv: 800.0
       exponent: 2.5
+  # Scheduler approximation for the CPU what-if sweep (Android EAS + schedutil).
+  # In-house: capacity = /sys/devices/system/cpu/cpuN/cpu_capacity, margins and
+  # task_policy (cpuset / uclamp of camera & media threads) from the SW baseline.
+  scheduler:
+    model: eas
+    freq_margin: 1.25
+    fits_margin: 1.25
+    capacity: {}
+    energy_includes_static: false
+    task_policy:
+      post_irta: {prefer_idle: true}
+    source: SYNTHETIC example - replace with the device's EAS / governor tunables
   source: SYNTHETIC example - replace opps/leakage with the in-house EM table and
     rail names
 notes: Copy the cpu block into the SoC's power_model_params in-house. cpus = logical

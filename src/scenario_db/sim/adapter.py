@@ -216,6 +216,7 @@ def build_simulation_inputs(
         topology_order=[item.node_id for item in workloads],
         warnings=warnings,
         sw_timing_case=timing_case(graph),
+        dvfs_sn=(str((graph.variant.design_conditions or {}).get("dvfs_sn") or "") or None),
     )
 
 

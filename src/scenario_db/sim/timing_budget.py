@@ -663,6 +663,10 @@ def _report(graph, options, plan, rule_run, run, dvfs_tables) -> dict[str, Any]:
                 "clock_power_fraction": res.clock_power_fraction or 0.0,
                 "ref_clock_mhz": round(res.clock_ref_mhz, 3),
                 "clock_overhead_mw": round(res.clock_overhead_mw * cores, 3),
+                "clock_gating_eff": res.clock_gating_eff,
+                "power_gating_eff": res.power_gating_eff,
+                "leakage_power_mw": round(res.leakage_power_mw * cores, 3),
+                "dvfs_promotion": res.dvfs_promotion,
                 "feasible": res.feasible,
                 "infeasible_reason": res.infeasible_reason,
                 "clock_reason": res.clock_correction_reason,
@@ -813,7 +817,7 @@ def _power_bw(result: SimRunResult, plan: dict, options: TimingBudgetOptions, pe
     bw_sw: dict[str, float] = {}
     bw_power_hw = bw_power_sw = 0.0
     for d in result.dma_breakdown:
-        if d.node_id in sw_nodes:
+        if d.node_id in sw_nodes or d.node_id.startswith("cpu."):
             bw_sw[d.node_id] = bw_sw.get(d.node_id, 0.0) + d.bw_mbs
             bw_power_sw += d.bw_power_mw
         else:

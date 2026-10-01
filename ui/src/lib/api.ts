@@ -89,6 +89,7 @@ export interface Evidence {
   execution_context?: Dict | null
   kpi?: Dict | null
   vdd_power?: Dict | null
+  power_breakdown?: Dict | null
   provenance?: Dict | null
   profiling_metadata?: Dict | null
   timeline_events?: TimelineEvent[] | null
@@ -193,7 +194,7 @@ export interface SimRunRequest {
   execution_context: { silicon_rev: string; sw_baseline_ref: string; thermal: string; method?: string }
   persist?: boolean
 }
-export interface SimRunResponse { evidence_id: string; kpi: Dict; warnings?: string[]; persisted?: boolean }
+export interface SimRunResponse { evidence_id: string; kpi: Dict; warnings?: string[]; persisted?: boolean; result?: { power_breakdown?: Dict | null } | null }
 
 const enc = encodeURIComponent
 

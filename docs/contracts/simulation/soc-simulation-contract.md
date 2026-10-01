@@ -238,6 +238,32 @@ the same Linux EM formula the timing budget uses:
 - Architecture exploration re-scales DVFS headroom analytically with the same factor
   (V^2 x clock factor), so faster levels also pay the clock term.
 
+### Gating-aware IP power and DVFS policy
+
+- v2-vf (1.1): `P = P_v1 x [(1 - a) + a x r x (busy + idle x (1 - cg))] + leak(V) x (1 - pg x idle)`,
+  `r = f_set / f_ref`, `busy = min(1, 1/r)`. Per IP/mode catalog sim keys:
+  `clock_gating_eff` (cg), `power_gating_eff` (pg), `leakage_mw` (static at ref_V,
+  x (V/ref_V)^2.5). Unset = 0 (previous v2; v1 ignores them). This compares "run fast and
+  gate" with "lowest clock that fits" in one formula.
+- `dvfs_breakdown[]`: `leakage_power_mw`, `clock_overhead_mw` (clock above the need after
+  gating), so `total = work + leakage + clock overhead`.
+- `config.dvfs_policy`: `min_level` (default) or `same_voltage_up` — per DVFS group, move to
+  the fastest higher level with the **same voltage** when the group power rises by at most
+  `dvfs_promote_tolerance_pct` (default 0). Under v1 this is free margin; under v2 it depends
+  on gating. Skipped for `dvfs_overrides` groups and configured/measured substitutions.
+  Recorded as `dvfs_promotion` and a `dvfs_policy` clock-ledger constraint.
+- Architecture exploration's analytic DVFS headroom uses the same dynamic/leakage split.
+
+### Memory (BW) power: `mif-linear`
+
+- `bw_model: mif-linear` — `P_mem = base(MIF level) + e_rd x RD + e_wr x WR` (GB/s, LLC-adjusted
+  per port). MIF level = max(`qos_lock_mhz_by_dvfs_sn[variant dvfs_sn]`, lowest `mif_opps`
+  level with `capacity_mbs x governor_util >= DRAM traffic + other_masters_mbs`).
+- DRAM traffic includes CPU BW when a CPU profile is used (`cpu.<cluster>` ports).
+- `power_breakdown.memory.mif` records level, reason, traffic, utilization, base and
+  other-master power. Coefficients are fitted by `python -m scenario_db.sim.bw_fit`
+  (`docs/guides/measurement/bw-model-fit-ko.md`) and carry `bw.fit` lineage.
+
 ## Clock Ledger
 
 Each resolved IP (`dvfs_breakdown[].clock_ledger`) keeps every clock tier side by side:
