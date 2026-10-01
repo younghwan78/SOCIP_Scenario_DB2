@@ -55,7 +55,7 @@ def test_missing_duplicate_incomplete_and_extra_events():
         summarize(tp, template)
 
 
-def test_trace_only_inactive_marker_disables_task_for_entire_capture():
+def test_trace_only_ambiguity_marker_preserves_task_samples():
     template = parse_markdown((BUNDLE / "mapping-template.md").read_text(encoding="utf-8"))
     first = template.pipeline_model["tasks"][0]
     template.pipeline_model["tasks"] = [first, template.pipeline_model["tasks"][7]]
@@ -66,9 +66,34 @@ def test_trace_only_inactive_marker_disables_task_for_entire_capture():
             dict(slice_name="~CRTA_3A f0001", track_name="Scenario / SW / ICPU", dur_ns=300_000)]
     tp = SimpleNamespace(query=lambda sql: [dict(start_ts=0, end_ts=15_000_000_000)] if "trace_bounds" in sql else rows)
     result, report = summarize(tp, template)
-    assert result.execution_path.enabled_task_ids == ["crta_3a"]
-    assert report["skipped_task_ids"] == [first["task_id"]]
-    assert not result.statistics.hw_task_timing
+    assert result.execution_path.enabled_task_ids == [first["task_id"], "crta_3a"]
+    assert report["skipped_task_ids"] == []
+    assert report["samples_by_task"] == {first["task_id"]: 1, "crta_3a": 1}
+    assert result.statistics.hw_task_timing[0].mean_ms == pytest.approx(.0001)
+    # Marked and unmarked copies are still the same task/frame sample.
+    rows.append({**rows[0], "slice_name": rows[0]["slice_name"][1:]})
+    with pytest.raises(ValueError, match="duplicate"):
+        summarize(tp, template)
+
+
+def test_trace_ambiguity_marker_preserves_exact_track_and_preview_source():
+    bundle = parse_markdown((BUNDLE / "mapping-template.md").read_text(encoding="utf-8"))
+    model = assemble_camera(bundle).pipeline_model
+    task = model.tasks[0]
+    name = "!" + task.trace_slice_name + " f0001"
+    row = dict(slice_id=1, slice_name=name, track_name=task.trace_track_name,
+               track_id=7, ts_ns=0, dur_ns=100)
+    assert logical_name(row, model.tasks) == task.task_id
+    assert logical_name({**row, "track_name": "unrelated"}, model.tasks) is None
+    assert logical_name({**row, "slice_name": name + "_extra"}, model.tasks) is None
+    assert logical_name({**row, "slice_name": "!" + name}, model.tasks) is None
+    tp = SimpleNamespace(query=lambda sql: [dict(origin=0)] if "trace_bounds" in sql
+                         else [] if "FROM flow" in sql else [row])
+    events = sequence_preview(tp, model)
+    assert len(events) == 1
+    assert events[0]["logical_task_id"] == task.task_id
+    assert events[0]["source_slice_name"] == name
+    assert events[0]["frame_index"] == 1
 
 
 def test_direct_summary_import_excludes_inactive_tasks_without_mutating_bundle():

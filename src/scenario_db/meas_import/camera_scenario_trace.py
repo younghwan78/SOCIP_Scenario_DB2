@@ -22,7 +22,8 @@ from scenario_db.models.evidence.camera import CameraPipeline
 
 
 def _unmarked(name):
-    # Only used to identify a task to disable, never to activate a marked slice.
+    # A leading "!" on a trace slice only flags an ambiguous HW assignment; the slice is still that task.
+    # (A "!" on the mapping's trace_slice_name is different: it makes the task inactive for the capture.)
     return name[1:] if name and name.startswith("!") else name
 
 
@@ -33,8 +34,6 @@ def logical_name(row, tasks):
     explicit to avoid accepting similarly named events from unrelated tracks.
     """
     matches = []
-    if (row.get("slice_name") or "").startswith("!"):
-        return None
     for task in tasks:
         if (task.trace_slice_name or "").startswith("!"):
             continue
@@ -43,7 +42,7 @@ def logical_name(row, tasks):
         else:
             matched = (
                 row.get("track_name") == task.trace_track_name
-                and re.fullmatch(re.escape(task.trace_slice_name) + r" f[0-9]+", row["slice_name"] or "")
+                and re.fullmatch(re.escape(task.trace_slice_name) + r" f[0-9]+", _unmarked(row["slice_name"]) or "")
             )
         if matched:
             matches.append(task.task_id)
@@ -59,12 +58,6 @@ def summarize(tp, template: CameraBundle):
     bounds = tp.query("SELECT start_ts, end_ts FROM trace_bounds")[0]
     trace_rows = tp.query(SQL_SLICES.replace("WHERE s.dur >= 0", "WHERE 1=1"))
     disabled = {t.task_id for t in model.tasks if (t.trace_slice_name or "").startswith("!")}
-    # Some producers put the inactive marker only on the trace slice.
-    for row in trace_rows:
-        if (row.get("slice_name") or "").startswith("!"):
-            task_id = logical_name({**row, "slice_name": _unmarked(row["slice_name"])}, model.tasks)
-            if task_id:
-                disabled.add(task_id)
     raw = exclude_inactive_tasks(template, disabled).model_dump(mode="json")
     path = raw["execution_path"]
     model = CameraPipeline.model_validate({**raw["pipeline_model"], "execution_path": path})
