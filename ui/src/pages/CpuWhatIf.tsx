@@ -6,6 +6,7 @@ import { caseCount, caseParts, cpuApi, type CpuCase, type CpuWhatIf } from '../l
 import { Card } from '../components/TimingCharts'
 import { DataTable, type Column } from '../components/DataTable'
 import { PowerDeltaTable, PowerStack, type PowerRow } from '../components/PowerModelCharts'
+import { partColor, sortClusters } from '../lib/powerModel'
 
 type TaskOpt = { clusters: string[]; budget: string; growth: string }
 
@@ -31,7 +32,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
 
   const prof = inputs.data?.profiles.find((p) => p.id === profile)
   const topo = inputs.data?.topologies.find((t) => t.id === target)
-  const clusters = topo?.clusters ?? []
+  const clusters = useMemo(() => sortClusters(topo?.clusters ?? []), [topo])
   const tasks = prof?.tasks ?? []
   const measuredOn = (task: string) => tasks.find((t) => t.task === task)?.cluster ?? ''
 
@@ -121,7 +122,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
         <Card id="cpu-matrix" title="③ 배치 후보 · task budget" note="체크 = 그 cluster에서 실행해 봄 · 파란 칸 = 측정 위치" defaultWide
           actions={<><button className="btn tb-mini" onClick={() => allClusters(false)}>측정 배치만</button><button className="btn tb-mini" onClick={() => allClusters(true)}>모든 cluster</button></>}>
           {tasks.length ? <div className="table-x"><table className="grid cpu-matrix">
-            <thead><tr><th>task (측정 위치)</th>{clusters.map((c) => <th key={c}>{c}</th>)}<th title="frame당 허용 시간 (Timing Budget의 SW budget)">budget ms</th><th title="이 task만의 SW 증가 배율">증가 배율</th></tr></thead>
+            <thead><tr><th>task (측정 위치)</th>{clusters.map((c) => <th key={c}><span className="sw pm-sw" style={{ background: partColor(`cpu.${c}`, clusters.map((x) => `cpu.${x}`)) }} />{c}</th>)}<th title="frame당 허용 시간 (Timing Budget의 SW budget)">budget ms</th><th title="이 task만의 SW 증가 배율">증가 배율</th></tr></thead>
             <tbody>{tasks.map((t) => (
               <tr key={t.task}><td className="mono">{t.task} <span className="faint">({t.cluster})</span></td>
                 {clusters.map((c) => <td key={c} className={c === t.cluster ? 'measured' : ''}><input type="checkbox" aria-label={`${t.task} on ${c}`} checked={opts[t.task]?.clusters.includes(c) ?? false} onChange={() => toggle(t.task, c)} /></td>)}

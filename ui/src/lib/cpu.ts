@@ -54,16 +54,16 @@ export const cpuApi = {
   whatif: (req: CpuWhatIfRequest) => postJson<{ result: CpuWhatIf }>('/cpu/whatif', req).then((r) => r.result),
 }
 
-import type { PowerPart } from './powerModel'
+import { compareCpu, type PowerPart } from './powerModel'
 
 /** A what-if case as power parts: one per cluster (dynamic + static) plus the DSU. */
 export function caseParts(c: CpuCase): PowerPart[] {
   const parts: PowerPart[] = Object.entries(c.clusters).map(([name, cl]) => ({
-    key: `cpu.${name}`, label: `CPU ${name}`, family: 'cpu' as const, mw: cl.total_mw,
+    key: `cpu.${name}`, label: name, family: 'cpu' as const, mw: cl.total_mw,
     note: `${cl.mhz} MHz · util ${(cl.util * 100).toFixed(1)}% · dyn ${cl.dynamic_mw.toFixed(1)} / static ${cl.static_mw.toFixed(1)} mW`,
   }))
   if (c.dsu) parts.push({ key: 'cpu.dsu', label: 'DSU', family: 'cpu', mw: c.dsu.total_mw, note: `active ${(c.dsu.active_ratio * 100).toFixed(0)}%` })
-  return parts
+  return parts.sort((a, b) => compareCpu(a.key, b.key))
 }
 
 /** Number of placements the checked matrix produces. */

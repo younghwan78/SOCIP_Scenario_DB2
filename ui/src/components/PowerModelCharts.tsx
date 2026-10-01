@@ -1,5 +1,5 @@
 import { useWidth } from './Charts'
-import { FAMILY_COLOR, partColor, type Family, type PowerPart } from '../lib/powerModel'
+import { FAMILY_COLOR, compareCpu, partColor, type Family, type PowerPart } from '../lib/powerModel'
 import { fmt } from '../lib/timingBudget'
 
 export interface PowerRow { id: string; label: string; parts: PowerPart[]; sub?: string | null }
@@ -11,7 +11,7 @@ function orderKeys(rows: PowerRow[]): { keys: string[]; labels: Record<string, s
   const keys: string[] = []
   for (const r of rows) for (const p of r.parts) if (!(p.key in labels)) { labels[p.key] = p.label; family[p.key] = p.family; keys.push(p.key) }
   const rank: Record<Family, number> = { cpu: 0, ip: 1, mem: 2 }
-  keys.sort((a, b) => rank[family[a]] - rank[family[b]] || (a === 'cpu.dsu' ? 1 : b === 'cpu.dsu' ? -1 : 0))
+  keys.sort((a, b) => rank[family[a]] - rank[family[b]] || (family[a] === 'cpu' ? compareCpu(a, b) : 0))
   return { keys, labels, family, cpuOrder: keys.filter((k) => family[k] === 'cpu') }
 }
 
