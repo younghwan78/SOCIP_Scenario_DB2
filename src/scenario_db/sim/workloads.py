@@ -57,6 +57,10 @@ def build_workload_for_node(
     )
 
 
+def _optional_float(block: dict[str, Any], key: str) -> float | None:
+    return float(block[key]) if block.get(key) is not None else None
+
+
 def node_sim_block(graph: CanonicalScenarioGraph, node_id: str) -> dict[str, Any]:
     node_config = (graph.variant.node_configs or {}).get(node_id) or {}
     sim_block = node_config.get("sim") or {}
@@ -142,9 +146,10 @@ def sim_params_for_node(
         ppc=ppc,
         unit_power_mw_mp=unit_power,
         idc=float(merged.get("idc") or 0.0),
-        clock_power_fraction=(
-            float(merged["clock_power_fraction"]) if merged.get("clock_power_fraction") is not None else None
-        ),
+        clock_power_fraction=_optional_float(merged, "clock_power_fraction"),
+        clock_gating_eff=_optional_float(merged, "clock_gating_eff"),
+        power_gating_eff=_optional_float(merged, "power_gating_eff"),
+        leakage_mw=_optional_float(merged, "leakage_mw"),
         vdd=merged.get("vdd"),
         dvfs_group=merged.get("dvfs_group"),
         max_clock_mhz=merged.get("max_clock_mhz"),

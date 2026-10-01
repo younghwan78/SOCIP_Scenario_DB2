@@ -25,7 +25,7 @@ from scenario_db.sim.models import (  # noqa: E402
 from scenario_db.sim.power_model import resolve_power_model  # noqa: E402
 from scenario_db.sim.runner import build_simulation_evidence, params_hash, run_simulation  # noqa: E402
 
-DB = ROOT / "db_Exynos2700_SM-S957B"
+DB = ROOT / "db_Exynos2600_SM-S947B"
 
 
 @pytest.fixture(scope="module")
@@ -35,13 +35,13 @@ def graph():
         d = read(path)
         catalog[d["id"]] = IpCatalog(id=d["id"], schema_version=d["schema_version"], category=d["category"],
                                      hierarchy=d["hierarchy"], capabilities=d["capabilities"], yaml_sha256="f")
-    raw = read(DB / "02_definition" / "uc-cam-recording-e2700.yaml")
+    raw = read(DB / "02_definition" / "uc-cam-recording-e2600.yaml")
     return lambda variant: graph_from_fixture(raw, variant, catalog)
 
 
 def _params(**extra) -> PowerModelParams:
     return PowerModelParams.model_validate({
-        "id": "pmp-test", "schema_version": "2.2", "kind": "power_model_params", "soc_ref": "soc-exynos2700",
+        "id": "pmp-test", "schema_version": "2.2", "kind": "power_model_params", "soc_ref": "soc-exynos2600",
         **extra,
     })
 
@@ -56,16 +56,17 @@ def test_cpu_power_is_off_by_default_and_hash_unchanged(graph):
     assert params_hash(inputs) != params_hash(on)  # the switch itself is part of the physics
 
 
-def test_pro_video_differs_from_base_once_cpu_is_modelled(graph):
+def test_sw_tasks_of_a_variant_show_up_once_cpu_is_modelled(graph):
     def total(variant, cpu):
         return run_simulation(build_simulation_inputs(graph(variant), SimulationRunConfig(include_cpu_power=cpu)))
 
-    base, pro = total("cam-rec-r1-uhd30-vdis", None), total("cam-rec-r1-uhd30-pro", None)
-    assert pro.total_power_mw == pytest.approx(base.total_power_mw)  # the known v1 gap
-    base, pro = total("cam-rec-r1-uhd30-vdis", True), total("cam-rec-r1-uhd30-pro", True)
-    assert pro.total_power_mw > base.total_power_mw
-    assert "pro_scope" in {row["task"] for row in pro.cpu_breakdown}
-    assert pro.total_power_mw == pytest.approx(pro.core_power_mw + pro.bw_power_mw + pro.cpu_power_mw)
+    sdr, vdis = total("cam-rec-r1-uhd30-sdr", None), total("cam-rec-r1-uhd30-vdis", None)
+    assert sdr.cpu_power_mw == vdis.cpu_power_mw == 0.0             # v1: SW cost invisible
+    sdr, vdis = total("cam-rec-r1-uhd30-sdr", True), total("cam-rec-r1-uhd30-vdis", True)
+    sdr_tasks, vdis_tasks = ({row["task"] for row in r.cpu_breakdown} for r in (sdr, vdis))
+    assert "eis" in vdis_tasks - sdr_tasks                           # VDIS adds SW stages
+    assert vdis.cpu_power_mw > sdr.cpu_power_mw
+    assert vdis.total_power_mw == pytest.approx(vdis.core_power_mw + vdis.bw_power_mw + vdis.cpu_power_mw)
 
 
 def test_cpu_active_time_excludes_included_hw_and_evidence_reports_it(graph):

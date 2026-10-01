@@ -15,6 +15,7 @@ import { PredictionsPage } from './pages/Predictions'
 import { ReportsPage } from './pages/Reports'
 import { HomePage } from './pages/Home'
 import { CalibrationPage } from './pages/Calibration'
+import { CpuWhatIfPage } from './pages/CpuWhatIf'
 import { LibraryPage } from './pages/Library'
 import { SettingsPage } from './pages/Settings'
 import { PREFERRED_REFERENCE } from './lib/defaults'
@@ -33,13 +34,14 @@ const NAV: { title: string; items: NavItem[] }[] = [
     { page: 'calibration', label: '예측 ↔ 실측', icon: 'trend' }] },
   { title: 'Architecture', items: [
     { page: 'explore', label: '조합 탐색', icon: 'probe' },
+    { page: 'cpu', label: 'CPU what-if', icon: 'probe' },
     { page: 'reports', label: '검토 보고서', icon: 'report' }] },
   { title: 'Library', items: [{ page: 'library', label: 'IP · DVFS · SW', icon: 'library' }] },
 ]
 
 const TITLES: Record<Page, string> = {
   home: 'Home', explorer: 'Scenario', matrix: 'Scenario', pipeline: 'Pipeline', compare: 'Compare', timing: 'Timing Budget', 'timing-fleet': 'Timing Budget',
-  explore: '조합 탐색', predictions: '예측 현황', reports: 'Architecture 검토 보고서', calibration: '예측 ↔ 실측', library: 'Library', settings: '설정',
+  explore: '조합 탐색', predictions: '예측 현황', reports: 'Architecture 검토 보고서', calibration: '예측 ↔ 실측', cpu: 'CPU 배치 · 주파수 what-if', library: 'Library', settings: '설정',
 }
 
 export interface Ctx {
@@ -198,6 +200,7 @@ export default function App() {
         {!catalogQ.error && route.page === 'reports' && <ReportsPage ctx={ctx} />}
         {route.page === 'home' && <HomePage key={scenario} ctx={ctx} />}
         {!catalogQ.error && route.page === 'calibration' && <CalibrationPage key={scenario} ctx={ctx} />}
+        {!catalogQ.error && route.page === 'cpu' && <CpuWhatIfPage ctx={ctx} />}
         {!catalogQ.error && route.page === 'library' && <LibraryPage ctx={ctx} />}
         {route.page === 'settings' && <SettingsPage />}
       </div>

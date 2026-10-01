@@ -14,6 +14,8 @@ import { toRows } from '../components/Picker'
 import { PageLayout, usePref } from '../components/Layout'
 import { DataTable, type Column, type RowGroup, type SortValue } from '../components/DataTable'
 import { Bars, BoxPlot, SERIES, StackedBars } from '../components/Charts'
+import { PowerDeltaTable, PowerStack, type PowerRow } from '../components/PowerModelCharts'
+import { cpuSource, mifSummary, powerModelParts } from '../lib/powerModel'
 
 const KPI_FIELDS: [string, string, string][] = [
   ['Total power', 'total_power_mw', 'mW'], ['Core power', 'core_power_mw', 'mW'], ['BW power', 'bw_power_mw', 'mW'],
@@ -118,6 +120,19 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
       }
     }
   }
+  /** power_breakdown per item: same-model simulation first (Simulation 통일), else stored simulation evidence. */
+  const powerOf = (i: number): { pb: Dict | null; source: string | null } => {
+    const st = sims[ids[i]]
+    const simPb = st?.status === 'done' ? st.res.result?.power_breakdown ?? null : null
+    const stored = (evQ.data?.[i] ?? []).find((e) => e.kind === 'evidence.simulation' && e.power_breakdown)
+    if (kpiMode === 'sim' && simPb) return { pb: simPb, source: '즉석 예측' }
+    if (stored?.power_breakdown) return { pb: stored.power_breakdown, source: '예측 evidence' }
+    return simPb ? { pb: simPb, source: '즉석 예측' } : { pb: null, source: null }
+  }
+  const powerRows: PowerRow[] = ids.map((id, i) => {
+    const { pb, source } = powerOf(i)
+    return { id, label: labels[id] ?? id, parts: powerModelParts(pb), sub: [source, mifSummary(pb), cpuSource(pb)].filter(Boolean).join(' · ') || null }
+  }).filter((r) => r.parts.length > 0)
   const noKpi = ids.map((_, i) => i).filter((i) => evQ.data && (kpiMode === 'sim' || !evidence[i]) && sims[ids[i]]?.status !== 'done' && sims[ids[i]]?.status !== 'running')
   const mixed = kpiMode === 'evidence' && new Set(ids.map((_, i) => kpiOf(i).source).filter(Boolean)).size > 1
   const stream = (i: number, id: string): CadenceResult | undefined => cadences[i]?.results.find((r) => r.stream.id === id)
@@ -257,6 +272,12 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
               const v = r.values[i], b = r.values[0]
               return { id, label: labels[id], value: v, color: color(i), note: i > 0 && v !== null && b ? `(${v >= b ? '+' : ''}${(((v - b) / b) * 100).toFixed(1)}%)` : undefined }
             })} /></div>)) : <div className="empty">KPI evidence 없음 — 분석 요약의 “예측 실행”으로 계산</div>}
+      </section>
+      <section className="panel plot-card pm-card"><h3>전력 구성 · 어디서 달라지나 <span className="faint">CPU(cluster) · IP(동작/leakage/clock 초과) · 메모리(traffic/MIF base) · ★ 기준 대비</span></h3>
+        {powerRows.length ? <>
+          <PowerStack rows={powerRows} />
+          {powerRows.length > 1 && <details open style={{ marginTop: 6 }}><summary className="faint" style={{ fontSize: 12 }}>구성별 값 · 기준 대비 Δ</summary><PowerDeltaTable rows={powerRows} /></details>}
+        </> : <div className="empty">예측 evidence 없음 — 분석 요약의 “예측 실행”으로 계산하면 구성이 표시됩니다</div>}
       </section>
       <section className="panel plot-card"><h3>DMA traffic by IP (W+R MB/s) <span className="faint">view memory × fps · stat/size 미정 제외</span></h3>
         <StackedBars unit="MB/s" rows={dmaStack} labelW={150} /></section>

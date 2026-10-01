@@ -23,6 +23,9 @@ Source kinds:
 Scope per row: ``task`` (optional; thread/process name mapped to logical tasks
 with ``task_rules``) and ``cpu`` (CPU id -> cluster via ``cpu_map``) or
 ``cluster``. Rows sharing a scope are summed (several threads -> one task).
+``thread`` (optional, e.g. the tid column) additionally keeps the cycles per
+thread of each task (``cpu_thread_cycles``), so the scheduler what-if can split
+a task into its real threads.
 """
 from __future__ import annotations
 
@@ -83,6 +86,7 @@ class TableSource(BaseScenarioModel):
     task: ColumnRef | None = None
     task_rules: list[TaskRule] = Field(default_factory=list)
     unmapped_task: Literal["keep", "other", "drop"] = "other"
+    thread: ColumnRef | None = None            # thread identity (tid / name) inside a task
     cpu: ColumnRef | None = None
     cluster: ColumnRef | None = None
     freq_column: str | None = None
@@ -240,7 +244,10 @@ def table_samples(base_dir: Path, spec: TableSpec, warnings: list[str]) -> list[
                         column = next((n for n in [canon, *names] if n in row), None)
                         if column is not None:
                             pairs.append((canon, _number(row[column])))
+                thread = _scope_value(source.thread, row) if task else None
                 for canon, value in pairs:
+                    if canon == "cycles" and thread and value is not None:
+                        totals[("cpu_thread_cycles", f"task_thread_{place_kind}", f"{task}#{thread}@{place}", None)] += value
                     if canon == "bus_access":
                         if source.bytes_per_access is None:
                             unknown_counters.add("bus_access (bytes_per_access not set)")

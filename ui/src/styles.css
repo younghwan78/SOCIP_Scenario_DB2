@@ -539,3 +539,37 @@ a.hd-row:hover span { color: #E8EEF0; }
 .vf-hint { color: #5B3A00; background: #FFF6E0; border: 1px solid #F2D8A7; border-radius: 6px; padding: 6px 8px; margin-bottom: 6px; }
 .vf-table { width: 100%; background: var(--surface); color: var(--ink, inherit); }
 .vf-msg { margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 12px; max-height: 160px; overflow: auto; }
+
+/* CPU what-if form */
+.cpu-f { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
+.cpu-f select, .cpu-f input { font-size: 13px; }
+
+/* Power-model composition (Compare, CPU what-if) */
+.pm-legend { gap: 16px; }
+.pm-legend-group { display: inline-flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.pm-table td, .pm-table th { font-size: 12px; white-space: nowrap; }
+.pm-table .pm-total td { border-top: 2px solid var(--line); }
+.pm-sw { width: 10px; height: 10px; border-radius: 2px; display: inline-block; margin-right: 6px; vertical-align: -1px; }
+.pm-up { color: #B42318; font-size: 11px; }
+.pm-down { color: #2F6F68; font-size: 11px; }
+.cpu-matrix td, .cpu-matrix th { font-size: 12px; text-align: center; }
+.cpu-matrix td:first-child, .cpu-matrix th:first-child { text-align: left; }
+.cpu-matrix .measured { background: #EAF3FA; }
+.cpu-step h3 { margin: 0 0 6px; font-size: 13px; }
+.cpu-help { font-size: 12px; color: var(--text-2, #5A5F6A); margin: 0 0 8px; }
+.plot-grid .pm-card { grid-column: 1 / -1; }
+/* CPU EAS sweep */
+.cpu-range th { vertical-align: bottom; }
+.cpu-range-meta { font-size: 10.5px; font-weight: 400; white-space: nowrap; }
+.cpu-cell { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.cpu-detail { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(320px, 1.2fr); gap: 16px; }
+@media (max-width: 900px) { .cpu-detail { grid-template-columns: 1fr; } }
+.cpu-h { font-size: 13px; margin: 0 0 4px; }
+.cpu-knobs { margin: 0; padding-left: 18px; font-size: 12px; }
+.cpu-cl { padding: 4px 0 6px 8px; margin-bottom: 6px; }
+.cpu-cl-head { display: flex; gap: 6px; align-items: baseline; font-size: 12px; }
+.cpu-bar-row { display: grid; grid-template-columns: 44px 120px 1fr; gap: 6px; align-items: center; font-size: 11px; }
+.cpu-bar { display: block; height: 8px; background: #EEE9E1; border-radius: 2px; overflow: hidden; }
+.cpu-bar > span { display: block; height: 100%; }
+.cpu-range td, .cpu-range th { padding-left: 6px; padding-right: 6px; }
+.cpu-range td input[type="checkbox"] { margin: 0; }

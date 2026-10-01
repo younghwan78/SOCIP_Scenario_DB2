@@ -22,6 +22,8 @@ from scenario_db.sim.models import (
     DVFSTable,
     IPTimingResult,
     PortBWResult,
+    PortTransferSpec,
+    PortType,
     SimRunResult,
     SimulationInputs,
 )
@@ -54,6 +56,8 @@ def run_simulation(
         clock_basis=config.clock_basis,
         configured_clocks=config.configured_clocks,
         measured_clocks=config.measured_clocks,
+        dvfs_policy=config.dvfs_policy,
+        promote_tolerance_pct=config.dvfs_promote_tolerance_pct,
     )
     resolved = dvfs_resolver.resolve(
         inputs.workloads,
@@ -69,7 +73,7 @@ def run_simulation(
             power_model=power_model,
             bw_model=bw_model,
         )
-        for transfer in inputs.port_transfers
+        for transfer in [*inputs.port_transfers, *_cpu_bw_transfers(config)]
     ]
     timing_breakdown = [
         IPTimingResult(
@@ -107,14 +111,28 @@ def run_simulation(
 
     core_power_mw = sum(item.total_power_mw for item in resolved.values())
     bw_total_mbs = sum(item.bw_mbs for item in dma_breakdown)
+    memory_state: dict | None = None
     if bw_model is None:
         bw_power_mw = sum(item.bw_power_mw for item in dma_breakdown)
     else:
         # Aggregate hook: a MIF-level / residual model may replace the port sum.
-        bw_power_mw = bw_model.aggregate_power_mw(
-            [item.bw_power_mw for item in dma_breakdown],
-            context=BwPowerContext(memory_rail=config.memory_rail, total_bw_mbs=bw_total_mbs),
+        bw_context = BwPowerContext(
+            memory_rail=config.memory_rail,
+            total_bw_mbs=bw_total_mbs,
+            extra={
+                "read_mbs": sum(d.bw_mbs for d in dma_breakdown if d.direction == "read"),
+                "write_mbs": sum(d.bw_mbs for d in dma_breakdown if d.direction == "write"),
+                # DRAM-side traffic: LLC hits never reach the memory controller.
+                "dram_mbs": sum(d.bw_mbs * (d.llc_weight if d.llc_enabled and d.llc_weight is not None else 1.0)
+                                for d in dma_breakdown),
+                "dvfs_sn": inputs.dvfs_sn,
+            },
         )
+        bw_power_mw = bw_model.aggregate_power_mw(
+            [item.bw_power_mw for item in dma_breakdown], context=bw_context)
+        mif_state = getattr(bw_model, "mif_state", None)
+        if mif_state is not None:
+            memory_state = mif_state(bw_context)
     cpu_model = _cpu_power_model(config, power_params)
     cpu_warnings: list[str] = []
     cpu_breakdown: list[dict] = []
@@ -236,6 +254,7 @@ def run_simulation(
             cpu_clusters=cpu_clusters,
             cpu_detail=cpu_detail,
             cpu_model=cpu_model,
+            memory_state=memory_state,
         ),
         cpu_power_mw=cpu_power_mw,
         cpu_breakdown=cpu_breakdown,
@@ -333,6 +352,9 @@ def params_hash(inputs: SimulationInputs) -> str:
     # the corresponding model is disabled.
     if _cpu_power_model(inputs.config, effective_power_params(inputs.config)) is not None:
         payload["sw_timing_case"] = inputs.sw_timing_case
+    bw_model = bw_model_from_config(inputs.config)
+    if bw_model is not None and bw_model.model_id == "mif-linear":
+        payload["dvfs_sn"] = inputs.dvfs_sn
     if inputs.config.power_model == "v2-vf":
         for raw, workload in zip(payload["workloads"], inputs.workloads):
             raw["clock_constraints"] = [c.model_dump(mode="json") for c in workload.clock_constraints]
@@ -419,6 +441,7 @@ def _power_breakdown(
     cpu_clusters: dict[str, float] | None = None,
     cpu_detail: dict | None = None,
     cpu_model: CpuPowerModel | None = None,
+    memory_state: dict | None = None,
 ) -> dict:
     """Three-bucket decomposition aligned with what a bench can measure:
     per-IP core power, memory (BW-driven) power, and CPU/cluster power.
@@ -435,6 +458,7 @@ def _power_breakdown(
             ip_by_rail[vdd] = ip_by_rail.get(vdd, 0.0) + power
     ip_total = sum(ip_by_node.values())
     clock_overhead = sum(float(getattr(item, "clock_overhead_mw", 0.0)) for item in resolved.values())
+    leakage = sum(float(getattr(item, "leakage_power_mw", 0.0)) for item in resolved.values())
     memory_total = (
         bw_total_mw
         if bw_total_mw is not None
@@ -463,10 +487,12 @@ def _power_breakdown(
             "by_rail": {rail: round(mw, 6) for rail, mw in sorted(ip_by_rail.items())},
             "by_node": ip_by_node,
             **({"clock_overhead_mw": round(clock_overhead, 6)} if clock_overhead else {}),
+            **({"leakage_mw": round(leakage, 6)} if leakage else {}),
         },
         "memory": {
             "total_mw": round(memory_total, 6),
             "rail": memory_rail,
+            **({"mif": memory_state} if memory_state is not None else {}),
         },
         "cpu": {
             "total_mw": round(cpu_total, 6),
@@ -484,6 +510,38 @@ def _power_breakdown(
         },
         "total_mw": round(total, 6),
     }
+
+
+CPU_BW_NODE_PREFIX = "cpu."
+
+
+def _cpu_bw_transfers(config) -> list[PortTransferSpec]:
+    """CPU memory traffic from a measured profile (bus bytes per frame -> MB/s).
+
+    One pseudo DMA port per cluster (``cpu.<cluster>`` / ``BUS``), so CPU BW
+    enters the BW total, BW power and the MIF comparison like IP DMA does.
+    Bus accesses mix reads and writes; they are booked as reads.
+    ``include_cpu_bw`` None = on whenever a CPU profile is given.
+    """
+    profile = getattr(config, "cpu_profile", None)
+    flag = getattr(config, "include_cpu_bw", None)
+    if profile is None or flag is False:
+        return []
+    fps = float(config.fps or 30.0)
+    per_cluster: dict[str, float] = {}
+    for task in profile.tasks:
+        if task.bus_bytes:
+            per_cluster[task.cluster] = per_cluster.get(task.cluster, 0.0) + task.bus_bytes
+    for name, cluster in profile.clusters.items():
+        if name not in per_cluster and cluster.bus_bytes:
+            per_cluster[name] = cluster.bus_bytes
+    return [
+        PortTransferSpec(
+            node_id=f"{CPU_BW_NODE_PREFIX}{name}", hw_name="CPU", port="BUS", port_type=PortType.DMA_READ,
+            width=0, height=0, bitrate_mbps=bytes_pf * fps * 8 / 1e6,
+        )
+        for name, bytes_pf in sorted(per_cluster.items()) if bytes_pf > 0
+    ]
 
 
 def _cpu_power_model(config, power_params) -> CpuPowerModel | None:

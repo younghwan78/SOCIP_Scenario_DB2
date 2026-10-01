@@ -34,12 +34,28 @@ from scenario_db.sim.service import _apply_cpu_profile  # noqa: E402
 from scenario_db.sim.timing_budget import CpuPowerConfig  # noqa: E402
 
 TOPO = ROOT / "examples" / "cpu-topology"
-SAMPLE = ROOT / "examples" / "measurement-import" / "cpu-profile-sample"
-DB = ROOT / "db_Exynos2700_SM-S957B"
+SAMPLE = ROOT / "examples" / "measurement-import" / "cpu-profile-sample-e2600"
+DB = ROOT / "db_Exynos2600_SM-S947B"
+VARIANT = "cam-rec-r1-uhd30-supersteady"     # the sample's variant
 
 
-def _params(soc: str) -> PowerModelParams:
+def _params(soc: str = "exynos2600") -> PowerModelParams:
     return PowerModelParams.model_validate(yaml.safe_load((TOPO / f"pmp-{soc}-cpu-example.yaml").read_text()))
+
+
+def synthetic_topology(clusters: list[tuple[str, str, int]]) -> PowerModelParams:
+    """A synthetic SoC (any cluster count / composition): (name, core_type, cores)."""
+    rows, cpu = [], 0
+    for name, core_type, cores in clusters:
+        rows.append({"name": name, "core_type": core_type, "cores": cores, "cpus": list(range(cpu, cpu + cores)),
+                     "rail": f"BUCK_{name}", "opps": [{"mhz": 1000, "mv": 650, "mw_per_core": 60},
+                                                      {"mhz": 2000, "mv": 800, "mw_per_core": 210}],
+                     "leakage": {"mw_per_core_at_ref": 10, "ref_mv": 800}})
+        cpu += cores
+    return PowerModelParams.model_validate({
+        "id": "pmp-synthetic", "schema_version": "2.2", "kind": "power_model_params", "soc_ref": "soc-synthetic",
+        "cpu": {"clusters": rows, "dsu": {"name": "DSU", "rail": "BUCK_DSU",
+                                          "opps": [{"mhz": 1000, "mv": 700, "mw_per_core": 40}]}}})
 
 
 def _sample_spec() -> PmuSpec:
@@ -61,23 +77,26 @@ def graph():
         d = read(path)
         catalog[d["id"]] = IpCatalog(id=d["id"], schema_version=d["schema_version"], category=d["category"],
                                      hierarchy=d["hierarchy"], capabilities=d["capabilities"], yaml_sha256="f")
-    raw = read(DB / "02_definition" / "uc-cam-recording-e2700.yaml")
+    raw = read(DB / "02_definition" / "uc-cam-recording-e2600.yaml")
     return lambda variant: graph_from_fixture(raw, variant, catalog)
 
 
 # --- topology -----------------------------------------------------------------------
-@pytest.mark.parametrize("soc, names", [
-    ("exynos2600", ["MID_LF0", "MID_LF1", "MID_HF", "BIG"]),
-    ("exynos2700", ["MID_LF", "MID_HF", "BIG_LF", "BIG"]),
-    ("exynos2800", ["MID_HF0", "MID_HF1", "BIG_LF", "BIG"]),
+# Exynos2600 = the shipped example; other compositions (any cluster count) are synthetic.
+@pytest.mark.parametrize("params, names", [
+    (_params(), ["MID_LF0", "MID_LF1", "MID_HF", "BIG"]),
+    (synthetic_topology([("MID_LF", "MID_LF", 4), ("MID_HF", "MID_HF", 4), ("BIG_LF", "BIG_LF", 1), ("BIG", "BIG", 1)]),
+     ["MID_LF", "MID_HF", "BIG_LF", "BIG"]),
+    (synthetic_topology([("MID_HF0", "MID_HF", 3), ("MID_HF1", "MID_HF", 3), ("BIG", "BIG", 2)]),
+     ["MID_HF0", "MID_HF1", "BIG"]),
 ])
-def test_example_topologies_load_with_their_own_cluster_composition(soc, names):
-    model = CpuPowerModel.from_params(_params(soc))
+def test_topologies_load_with_their_own_cluster_composition(params, names):
+    model = CpuPowerModel.from_params(params)
     assert list(model.cluster_names) == names and model.dsu is not None
     assert model.rail_for(names[0]) == f"BUCK_{names[0]}" and model.rail_for("DSU") == "BUCK_DSU"
     # EM clusters expose an equivalent uW/MHz/V^2 at the default frequency (timing budget)
-    cfg = CpuPowerConfig.from_params(_params(soc))
-    assert cfg is not None and len(cfg.coeff_uw_per_mhz_v2) == 4 and all(c > 0 for c in cfg.coeff_uw_per_mhz_v2)
+    cfg = CpuPowerConfig.from_params(params)
+    assert cfg is not None and len(cfg.coeff_uw_per_mhz_v2) == len(names) and all(c > 0 for c in cfg.coeff_uw_per_mhz_v2)
 
 
 def test_topology_validation():
@@ -96,15 +115,17 @@ def test_topology_validation():
 # --- import -------------------------------------------------------------------------
 def test_table_sources_become_a_per_frame_profile(profile):
     tasks = {(t.task, t.cluster): t for t in profile.tasks}
-    assert {("eis", "MID_HF"), ("post_irta", "MID_HF"), ("post_crta", "MID_LF"), ("mpeg_writer", "MID_LF"),
-            ("(other)", "MID_LF")} <= set(tasks)
+    assert {("eis", "MID_HF"), ("post_irta", "MID_HF"), ("post_crta", "MID_LF0"), ("mpeg_writer", "MID_LF1"),
+            ("(other)", "MID_LF0"), ("(other)", "MID_LF1")} <= set(tasks)
     eis = tasks[("eis", "MID_HF")]
-    assert eis.cycles == pytest.approx(6.5e6, rel=0.12)          # per frame (900 frames)
-    assert eis.instructions / eis.cycles == pytest.approx(1.3, rel=1e-3)
-    assert eis.bus_bytes == pytest.approx(eis.instructions / 1000 * 1500, rel=1e-3)  # bus_access x 64
-    mid_lf = profile.clusters["MID_LF"]
-    assert mid_lf.freq_residency == pytest.approx({400.0: 0.55, 1000.0: 0.35, 1600.0: 0.10})
-    assert (mid_lf.clock_gated_ratio, mid_lf.power_gated_ratio) == pytest.approx((0.40, 0.30))
+    assert eis.cycles == pytest.approx(9.0e6 + 3.5e6, rel=1e-6)            # per frame (900 frames), 2 threads
+    assert eis.threads == pytest.approx({"2067": 9.0e6, "2068": 3.5e6}, rel=1e-6)
+    ipc = (9.0e6 * 0.72 * 1.3 + 3.5e6 * 0.70 * 1.2) / 12.5e6
+    assert eis.instructions / eis.cycles == pytest.approx(ipc, rel=1e-4)
+    assert eis.bus_bytes == pytest.approx((9.0e6 * 0.014 + 3.5e6 * 0.016) * 64, rel=1e-4)  # bus_access x 64
+    lf0 = profile.clusters["MID_LF0"]
+    assert lf0.freq_residency == pytest.approx({400.0: 0.35, 1000.0: 0.45, 1600.0: 0.20})
+    assert lf0.clock_gated_ratio / (lf0.clock_gated_ratio + lf0.power_gated_ratio) == pytest.approx(0.40, rel=1e-3)
     assert profile.clusters["BIG"].power_gated_ratio == pytest.approx(0.98)
 
 
@@ -181,12 +202,12 @@ def test_profile_energy_static_and_dsu_math():
 
 
 def test_runner_uses_the_measured_profile_and_topology_rails(graph, profile):
-    params = _params("exynos2700")
-    result = run_simulation(build_simulation_inputs(graph("cam-rec-r1-uhd30-vdis"),
+    params = _params()
+    result = run_simulation(build_simulation_inputs(graph(VARIANT),
                                                     SimulationRunConfig(power_params=params, cpu_profile=profile)))
     cpu = result.power_breakdown["cpu"]
     assert cpu["source"] == "pmu_profile" and cpu["profile_ref"] == "meas-sample"
-    assert set(cpu["by_cluster"]) == {"MID_LF", "MID_HF", "BIG_LF", "BIG", "DSU"}
+    assert set(cpu["by_cluster"]) == {"MID_LF0", "MID_LF1", "MID_HF", "BIG", "DSU"}
     assert result.cpu_power_mw == pytest.approx(sum(cpu["by_cluster"].values()))
     assert result.total_power_mw == pytest.approx(result.core_power_mw + result.bw_power_mw + result.cpu_power_mw)
     assert {"BUCK_MID_HF", "BUCK_DSU"} <= set(result.vdd_power)
@@ -196,10 +217,10 @@ def test_runner_uses_the_measured_profile_and_topology_rails(graph, profile):
 
 
 def test_profile_from_another_variant_is_flagged(graph, profile):
-    foreign = profile.model_copy(update={"scenario_ref": "uc-cam-recording-e2600", "variant_ref": "cam-rec-r1-uhd30-vdis"})
-    result = run_simulation(build_simulation_inputs(graph("cam-rec-r1-uhd30-vdis"),
-                                                    SimulationRunConfig(power_params=_params("exynos2700"), cpu_profile=foreign)))
-    assert any("was measured on uc-cam-recording-e2600" in w for w in result.warnings)
+    foreign = profile.model_copy(update={"scenario_ref": "uc-cam-recording-e2600", "variant_ref": "cam-rec-r1-fhd30-sdr"})
+    result = run_simulation(build_simulation_inputs(graph(VARIANT),
+                                                    SimulationRunConfig(power_params=_params(), cpu_profile=foreign)))
+    assert any("was measured on uc-cam-recording-e2600/cam-rec-r1-fhd30-sdr" in w for w in result.warnings)
 
 
 class _Db:
@@ -278,7 +299,7 @@ def test_incomplete_or_duplicate_opp_tables_are_rejected():
 
 
 def test_cpu_profile_ref_uses_topology_dsu_name():
-    params = _params("exynos2700").model_copy(deep=True)
+    params = _params().model_copy(deep=True)
     params.cpu.dsu.name = "SHARED"
     row = SimpleNamespace(kind="evidence.measurement", scenario_ref="s", variant_ref="v", cpu_breakdown=None,
                           metric_observations=[{"metric_id": "cpu.active_ratio", "scope": {"kind": "cluster", "ref": "SHARED"}, "value": 0.2}])
@@ -303,3 +324,18 @@ def test_table_nonfinite_counter_and_frequency_are_rejected(tmp_path):
         window={"frames": 10})
     with pytest.raises(PmuDigestError, match="finite"):
         import_pmu_digest(tmp_path, spec)
+
+
+def test_cpu_bw_from_the_profile_enters_dma_and_bw_power(graph, profile):
+    params = _params()
+    on = run_simulation(build_simulation_inputs(graph(VARIANT),
+                                                SimulationRunConfig(power_params=params, cpu_profile=profile)))
+    off = run_simulation(build_simulation_inputs(graph(VARIANT),
+                                                 SimulationRunConfig(power_params=params, cpu_profile=profile,
+                                                                     include_cpu_bw=False)))
+    cpu_ports = [d for d in on.dma_breakdown if d.node_id.startswith("cpu.")]
+    expected = sum(t.bus_bytes or 0 for t in profile.tasks) * 30 / 1e6
+    assert sum(d.bw_mbs for d in cpu_ports) == pytest.approx(expected, rel=1e-6)
+    assert on.bw_total_mbs == pytest.approx(off.bw_total_mbs + expected, rel=1e-6)
+    assert on.bw_power_mw > off.bw_power_mw
+    assert not any(d.node_id.startswith("cpu.") for d in off.dma_breakdown)

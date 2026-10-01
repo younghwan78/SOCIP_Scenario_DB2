@@ -370,7 +370,7 @@ def import_pmu_digest(
 
 # --------------------------------------------------------- per-frame CPU profile
 CPU_PROFILE_METRICS = frozenset({
-    "cpu_stall_cycles", "cpu_bus_bytes", "cpu_freq_time",
+    "cpu_stall_cycles", "cpu_bus_bytes", "cpu_freq_time", "cpu_thread_cycles",
     "cpu_time_active", "cpu_time_clock_gated", "cpu_time_power_gated",
 })
 _PF_METRIC = {
@@ -412,11 +412,20 @@ def _reduce_cpu_profile(
     counters: dict[tuple[str | None, str, str], float] = {}
     freq: dict[tuple[str, float], float] = {}
     states: dict[tuple[str, str], float] = {}
+    thread_cycles: dict[tuple[str, str, str], float] = {}
     missing: set[str] = set()
     for sample in samples:
         kind = sample.scope_kind
         task, place = (None, sample.scope_ref)
-        if kind in ("task_cpu", "task_cluster"):
+        thread: str | None = None
+        if kind in ("task_thread_cpu", "task_thread_cluster"):
+            # scope_ref "<task>#<thread>@<cpu|cluster>"
+            head, _, place = sample.scope_ref.rpartition("@")
+            task, _, thread = head.partition("#")
+            if not task or not thread:
+                raise PmuDigestError(f"row {sample.line}: {kind} scope_ref must be '<task>#<thread>@<cpu|cluster>'")
+            kind = kind.replace("task_thread_", "task_")
+        elif kind in ("task_cpu", "task_cluster"):
             task, _, place = sample.scope_ref.rpartition("@")
             if not task:
                 raise PmuDigestError(f"row {sample.line}: {kind} scope_ref must be '<task>@<cpu|cluster>'")
@@ -432,7 +441,12 @@ def _reduce_cpu_profile(
             raise PmuDigestError(f"row {sample.line}: {sample.metric} needs scope cpu/cluster/task_cpu/task_cluster")
         if sample.value < 0:
             raise PmuDigestError(f"row {sample.line}: {sample.metric} must be >= 0")
-        if sample.metric == "cpu_freq_time":
+        if sample.metric == "cpu_thread_cycles":
+            if task is None or thread is None:
+                raise PmuDigestError(f"row {sample.line}: cpu_thread_cycles needs scope task_thread_cpu/task_thread_cluster")
+            tkey = (task, cluster, thread)
+            thread_cycles[tkey] = thread_cycles.get(tkey, 0.0) + sample.value
+        elif sample.metric == "cpu_freq_time":
             if not sample.freq_mhz or not math.isfinite(sample.freq_mhz) or sample.freq_mhz <= 0:
                 raise PmuDigestError(f"row {sample.line}: cpu_freq_time needs freq_mhz > 0")
             freq[(cluster, sample.freq_mhz)] = freq.get((cluster, sample.freq_mhz), 0.0) + sample.value
@@ -450,6 +464,9 @@ def _reduce_cpu_profile(
                 metric_id, unit = _PF_METRIC[name]
                 kind, ref = ("task_cluster", f"{task}@{cluster}") if task else ("cluster", cluster)
                 digest.observations.append(_value_obs(metric_id, kind, ref, unit, round(value / frames, 3)))
+            for (task, cluster, thread), value in sorted(thread_cycles.items()):
+                digest.observations.append(_value_obs(
+                    "cpu.thread_cycles_pf", "task_thread", f"{task}@{cluster}#{thread}", "count", round(value / frames, 3)))
         elif warn_without_window:
             digest.warnings.append("pmu.window (frames, or duration_s + fps) is not set; per-frame CPU profile not emitted")
     for cluster in sorted({c for c, _ in freq}):

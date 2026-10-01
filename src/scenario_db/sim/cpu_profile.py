@@ -6,6 +6,7 @@
 - ``cpu.cycles_pf`` / ``cpu.instructions_pf`` / ``cpu.stall_cycles_pf`` /
   ``cpu.bus_bytes_pf``: per frame; scope ``task_cluster`` (ref ``task@cluster``)
   or ``cluster``.
+- ``cpu.thread_cycles_pf``: per frame, scope ``task_thread`` (ref ``task@cluster#thread``).
 - ``cpu.freq_residency``: scope ``cluster_freq`` (ref ``cluster@MHz``), time share.
 - ``cpu.clock_gated_ratio`` / ``cpu.power_gated_ratio`` / ``cpu.active_ratio``:
   scope ``cluster``, time share.
@@ -48,7 +49,7 @@ def cpu_profile_from_observations(
     dsu_name: str = "DSU",
 ) -> CpuProfile | None:
     """CpuProfile from observations, or None when they carry no per-frame CPU data."""
-    tasks: dict[tuple[str, str], dict[str, float]] = {}
+    tasks: dict[tuple[str, str], dict[str, Any]] = {}
     clusters: dict[str, dict[str, Any]] = {}
     for item in observations:
         if not isinstance(item, dict):
@@ -63,6 +64,12 @@ def cpu_profile_from_observations(
             task, _, cluster = ref.rpartition("@")
             if task and cluster:
                 tasks.setdefault((task, cluster), {})[_COUNTERS[metric]] = value
+        elif metric == "cpu.thread_cycles_pf" and kind == "task_thread":
+            head, _, thread = ref.partition("#")
+            task, _, cluster = head.rpartition("@")
+            if task and cluster and thread:
+                entry = tasks.setdefault((task, cluster), {})
+                entry.setdefault("threads", {})[thread] = value
         elif metric in _COUNTERS and kind == "cluster":
             clusters.setdefault(ref, {})[_COUNTERS[metric]] = value
         elif metric == "cpu.freq_residency" and kind == "cluster_freq":
