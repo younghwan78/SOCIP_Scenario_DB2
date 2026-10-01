@@ -82,12 +82,17 @@ def test_infeasible_reports_fastest_level_and_limits():
 
 
 def test_cross_soc_mapping_by_core_type():
-    load = lambda soc: CpuPowerModel.from_params(PowerModelParams.model_validate(  # noqa: E731
-        yaml.safe_load((TOPO / f"pmp-{soc}-cpu-example.yaml").read_text())))
+    measured_on = CpuPowerModel.from_params(PowerModelParams.model_validate(
+        yaml.safe_load((TOPO / "pmp-exynos2600-cpu-example.yaml").read_text())))
+    opps = [{"mhz": 1000, "mv": 650, "mw_per_core": 60}, {"mhz": 2000, "mv": 800, "mw_per_core": 210}]
+    next_soc = CpuPowerModel.from_params(_params(clusters=[     # synthetic next SoC: other names, same core types
+        {"name": "MID_HF0", "core_type": "MID_HF", "cores": 3, "opps": opps},
+        {"name": "MID_HF1", "core_type": "MID_HF", "cores": 3, "opps": opps},
+        {"name": "BIG", "core_type": "BIG", "cores": 1, "opps": opps}]))
     prof = CpuProfile(tasks=[CpuTaskProfile(task="t", cluster="MID_HF", cycles=1e6, stall_cycles=1e5)],
                       clusters={"MID_HF": CpuClusterProfile(cycles=1e6)})
-    r = cpu_whatif(prof, target=load("exynos2800"), base=load("exynos2700"), fps=30)
-    assert r["base"]["placement"]["t"] == "MID_HF0"      # same core type on the 2800 topology
+    r = cpu_whatif(prof, target=next_soc, base=measured_on, fps=30)
+    assert r["base"]["placement"]["t"] == "MID_HF0"      # same core type on the next topology
     assert r["measured_mw"] is None                        # measured reference only on the same SoC
 
 

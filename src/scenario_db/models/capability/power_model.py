@@ -94,7 +94,7 @@ class CpuLeakage(BaseScenarioModel):
 class CpuClusterParams(BaseScenarioModel):
     """One CPU cluster. Cluster count / composition is per SoC (data, not code).
 
-    e.g. Exynos2700: MID_LF x4, MID_HF x4, BIG_LF x1, BIG x1 (+ DSU).
+    e.g. Exynos2600: MID_LF x3, MID_LF x3, MID_HF x3, BIG x1 (+ DSU).
     Either ``opps`` (EM table) or ``coeff_uw_per_mhz_v2`` must be given.
     """
 

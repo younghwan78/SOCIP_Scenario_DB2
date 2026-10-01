@@ -4,7 +4,7 @@
 
 ## 1. SoC CPU topology (`power_model_params.cpu`)
 
-cluster 수·구성은 SoC마다 다르므로 데이터로 둔다. 예시: `examples/cpu-topology/pmp-exynos2{6,7,8}00-cpu-example.yaml` (수치는 SYNTHETIC).
+cluster 수·구성은 SoC마다 다르므로 데이터로 둔다. 예시: `examples/cpu-topology/pmp-exynos2{6,7,8}00-cpu-example.yaml` (구성은 실제, 수치는 SYNTHETIC). 사외 개발·테스트는 Exynos2600 예시만 사용하고, 2700/2800 예시는 사내 작성용 템플릿으로 두며 사외에서는 수정하지 않는다 (사내에서 실측 기반으로 수정).
 
 | 필드 | 의미 |
 |---|---|
@@ -18,14 +18,14 @@ cluster 수·구성은 SoC마다 다르므로 데이터로 둔다. 예시: `exam
 | `dsu` | DSU OPP/leakage/rail |
 | `scheduler` | what-if용 scheduler 근사 (§5). 없으면 Linux EAS + schedutil 기본값 |
 
-SoC별 구성 (사내 기준):
+SoC별 구성 (사내 기준, topology 작성 참고):
 - Exynos2600: DSU, MID_LF×3, MID_LF×3, MID_HF×3, BIG×1
 - Exynos2700: DSU, MID_LF×4, MID_HF×4, BIG_LF×1, BIG×1
 - Exynos2800: DSU, MID_HF×3, MID_HF×3, BIG_LF×2, BIG×1
 
 ## 2. CPU profile import (`pmu.format: table`)
 
-예시 번들 (사외 기준 Exynos2600): `examples/measurement-import/cpu-profile-sample-e2600/` (simpleperf-like per-thread counter dump + tid, perfetto SQL export 형태의 freq/idle residency). `cpu-profile-sample/`은 thread 정보가 없는 이전 예시.
+예시 번들 (사외 기준 Exynos2600): `examples/measurement-import/cpu-profile-sample-e2600/` (simpleperf-like per-thread counter dump + tid, perfetto SQL export 형태의 freq/idle residency). `cpu-profile-sample/`(Exynos2700, thread 정보 없음)은 사내 템플릿으로 유지.
 
 ```yaml
 pmu:
@@ -77,7 +77,7 @@ topology의 `cpu.dsu.name`과 일치하는 cluster 데이터는 DSU로 사용한
 
 ```yaml
 config:
-  power_params_ref: pmp-exynos2700-v1     # cpu topology 포함
+  power_params_ref: pmp-exynos2600-v1     # cpu topology 포함 (사내: 해당 SoC의 power_model_params)
   cpu_profile_ref: <measurement evidence id>
 ```
 
