@@ -9,6 +9,7 @@ from typing import Any
 
 from scenario_db.reporting.arch_conclusion import build_conclusion, model_limits, run_lineage
 from scenario_db.reporting.arch_opinions import build_opinions, classify
+from scenario_db.reporting.reason_text import explain_all
 
 _CLOCK_RE = re.compile(r"^(\w+): required_clock ([\d.]+)MHz exceeds max DVFS speed ([\d.]+)MHz$")
 
@@ -51,6 +52,10 @@ def build_snapshot(
             "sw_margin_pct": worst.get("margin_pct"), "sw_stage": worst.get("stage"), "sw_bottleneck": worst.get("bottleneck"),
             "variant_id": v["variant_id"], "scenario_id": v["scenario_id"], "fps": v["fps"],
             "spec_ok": v["spec_ok"], "reasons": compact_reasons(v["spec_reasons"]), "eis_on": v["eis_on"],
+            "reasons_explained": explain_all(compact_reasons(v["spec_reasons"]), v["fps"]),
+            "period_ms": v.get("period_ms") or (1000.0 / v["fps"] if v.get("fps") else None),
+            "latency": (v.get("objective_slice") or {}).get("latency"),
+            "intervals": (v.get("objective_slice") or {}).get("intervals"),
             "prediction_id": (pred or {}).get("id"), "selection_rule": (pred or {}).get("selection_rule"),
             "power": chosen.get("power") or {k: rec.get(k) for k in ("total_mw", "cpu_mw", "hw_mw", "bw_mw", "bw_ip_mw", "bw_cpu_mw")},
             "bw_mbs": chosen.get("bw_mbs", rec.get("bw_mbs")),
@@ -152,10 +157,12 @@ def build_snapshot(
             "scenario_id": v["scenario_id"], "variant_id": v["variant_id"], "fps": v["fps"],
             "base_total_mw": (v.get("recommended") or {}).get("total_mw"),
             "best": next(({"key": r["key"], "labels": r["labels"], "delta_mw": r["delta_mw"], "delta_pct": r["delta_pct"],
-                           "by_category": r["attribution"]["by_category"]}
+                           "by_category": r["attribution"]["by_category"], "delta_latency_ms": r.get("delta_latency_ms"),
+                           "iq_eval": r.get("iq_eval"), "kinds": r.get("kinds")}
                           for r in ranked if r["spec_ok"] and r["delta_mw"] < 0), None),
             "singles": [{"key": r["key"], "label": r["labels"][0], "delta_mw": r["delta_mw"], "delta_pct": r["delta_pct"],
-                         "spec_ok": r["spec_ok"], "kind": (items.get(r["items"][0]) or {}).get("kind")} for r in singles],
+                         "spec_ok": r["spec_ok"], "kind": (items.get(r["items"][0]) or {}).get("kind"),
+                         "delta_latency_ms": r.get("delta_latency_ms"), "iq_eval": r.get("iq_eval")} for r in singles],
             "sets": len(ranked), "notes": po.get("notes") or [],
         })
 
@@ -172,12 +179,14 @@ def build_snapshot(
         },
         "spec_summary": {
             "explored": len(variants), "spec_ok": len(ok), "spec_fail": len(variants) - len(ok),
-            "failed": [{"variant_id": v["variant_id"], "reasons": compact_reasons(v["spec_reasons"])[:3]}
+            "failed": [{"variant_id": v["variant_id"], "reasons": compact_reasons(v["spec_reasons"])[:3],
+                        "explained": explain_all(compact_reasons(v["spec_reasons"]), v["fps"])}
                        for v in variants if not v["spec_ok"]],
             "errors": run.get("errors") or [],
             "power_range_mw": [round(min(totals), 1), round(max(totals), 1)] if totals else None,
         },
-        "opinions": build_opinions(rows, domains),
+        "opinions": build_opinions(rows, domains, sample_dvfs=sample_dvfs,
+                                   measured={c["variant_id"] for c in calibration or [] if not c.get("synthetic")}),
         "scenarios": rows,
         "clocks": clocks,
         "compression": comp_rows,
@@ -224,17 +233,18 @@ def render_html(title: str, snap: dict[str, Any]) -> str:
         _sec(4, _calibration(snap.get("calibration") or [])),
         _sec(5, _opinions(snap.get("opinions") or [])),
         _sec(6, _scenarios(snap["scenarios"])),
-        _sec(7, _domains(snap.get("domains") or []) + "<details><summary>IP별 상세 (필요 → 설정 MHz)</summary>"
+        _sec(7, _latency(snap["scenarios"])),
+        _sec(8, _domains(snap.get("domains") or []) + "<details><summary>IP별 상세 (필요 → 설정 MHz)</summary>"
              + _clocks([c for c in snap["clocks"] if (c["scenario_id"], c["variant_id"]) in
                         {(r["scenario_id"], r["variant_id"]) for r in snap["scenarios"] if r["spec_ok"]}])
              + "</details>"),
-        _sec(8, _boxes(snap["scenarios"])),
-        _sec(9, _split(snap["scenarios"])),
-        _sec(10, _compression(snap["compression"], snap["scenarios"])),
-        _sec(11, _power_options(snap.get("power_options") or [])),
-        _sec(12, _margins(snap["sw_margin_top5"]) + _fail_margins(snap.get("sw_margin_fail") or [])),
-        _sec(13, _history(snap["history"])),
-        _sec(14, _appendix(snap["appendix"])),
+        _sec(9, _boxes(snap["scenarios"])),
+        _sec(10, _split(snap["scenarios"])),
+        _sec(11, _compression(snap["compression"], snap["scenarios"])),
+        _sec(12, _power_options(snap.get("power_options") or [])),
+        _sec(13, _margins(snap["sw_margin_top5"]) + _fail_margins(snap.get("sw_margin_fail") or [])),
+        _sec(14, _history(snap["history"])),
+        _sec(15, _appendix(snap["appendix"])),
         "</main></body></html>",
     ]
     return "".join(parts)
@@ -244,7 +254,7 @@ def html_sha256(html: str) -> str:
     return hashlib.sha256(html.encode("utf-8")).hexdigest()
 
 
-SECTIONS = ["결론", "개요", "Spec 만족", "실측 대조", "분류별 검토 의견", "Scenario 요약", "IP 필요 clock", "Power·BW 분포", "CPU/IP/BW",
+SECTIONS = ["결론", "개요", "Spec 만족", "실측 대조", "분류별 검토 의견", "Scenario 요약", "Latency · 출력 간격", "IP 필요 clock", "Power·BW 분포", "CPU/IP/BW",
             "Compression 절감", "Power option (IQ 평가 대상)", "SW margin Top5", "변경 이력", "부록"]
 
 _CSS = """
@@ -260,12 +270,12 @@ td.n{text-align:right;font-variant-numeric:tabular-nums}.ok{color:#2F6F68}.fail{
 .kpi b{font-size:20px;display:block}.scroll{overflow-x:auto}.lg span{display:inline-block;margin-right:12px}.lg i{display:inline-block;width:10px;height:10px;margin-right:4px}
 ul{margin:4px 0 0 18px;padding:0}svg text{font-family:inherit}
 .op{border-top:1px solid #EFEAE1;padding:10px 0}.op:first-of-type{border-top:0}.op h3{font-size:13px;margin:0 0 6px}
-.op li{margin:2px 0}.bar{display:flex;height:8px;border-radius:4px;overflow:hidden;background:#EFEAE1;max-width:420px;margin:4px 0 6px}.bar i{display:block;height:100%}
+.op li{margin:2px 0}.bt{font-size:10.5px;padding:0 5px;border-radius:3px;margin-right:2px}.b-meas{background:#E5F2EC;color:#1E6446}.b-calc{background:#E7ECF5;color:#26406B}.b-asm{background:#FDF0DC;color:#9A5B0B}.b-in{background:#EFEAE1;color:#5A5448}.bar{display:flex;height:8px;border-radius:4px;overflow:hidden;background:#EFEAE1;max-width:420px;margin:4px 0 6px}.bar i{display:block;height:100%}
 """
 
 
 def _sec(i: int, body: str) -> str:
-    return f"<section id='s{i}'><h2>{'①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭'[i-1]} {SECTIONS[i-1]}</h2>{body}</section>"
+    return f"<section id='s{i}'><h2>{'①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮'[i-1]} {SECTIONS[i-1]}</h2>{body}</section>"
 
 
 def _f(v: Any, d: int = 1) -> str:
@@ -357,8 +367,13 @@ def _spec(s: dict[str, Any]) -> str:
          f"<div class='kpi'>spec 미달<b class='fail'>{s['spec_fail']}</b></div>"
          f"<div class='kpi'>등록 예측 power<b>{_f(rng[0], 0) if rng else '—'}–{_f(rng[1], 0) if rng else ''}</b>mW</div></div>")
     if s["failed"]:
-        k += "<table style='margin-top:10px'><tr><th>미달 scenario</th><th>원인</th></tr>" + "".join(
-            f"<tr><td>{escape(_short(f['variant_id']))}</td><td>{escape('; '.join(f['reasons']))}</td></tr>" for f in s["failed"]) + "</table>"
+        k += "<table style='margin-top:10px'><tr><th>미달 scenario</th><th>원인</th><th>필요 조치</th></tr>"
+        for f in s["failed"]:
+            ex = f.get("explained") or [{"text": r, "action": "—", "raw": r} for r in f["reasons"]]
+            k += (f"<tr><td rowspan={len(ex) or 1}>{escape(_short(f['variant_id']))}</td>"
+                  + "</tr><tr>".join(f"<td title='{escape(e['raw'], quote=True)}'>{escape(e['text'])}</td><td>{escape(e['action'])}</td>" for e in ex)
+                  + "</tr>")
+        k += "</table><p class=meta>원인 위에 마우스를 올리면 계산 엔진의 원문 사유가 보입니다.</p>"
     if s["errors"]:
         k += f"<p class='fail'>계산 실패 {len(s['errors'])}: " + escape(", ".join(e["variant_id"] for e in s["errors"][:8])) + "</p>"
     return k
@@ -368,7 +383,9 @@ def _opinions(blocks: list[dict[str, Any]]) -> str:
     if not blocks:
         return "<p class='meta'>분류 정보 없음 (이전 형식 snapshot) — 보고서를 재생성하면 표시됩니다.</p>"
     h = ("<p class='meta'>분류: 30 fps(해상도 × EIS × codec) · 60 fps · 고속(≥100 fps) · Heavy(Pro/Portrait/Dual/Triple). "
-         "의견은 이 snapshot의 예측 수치 (등록 또는 추천)에서 규칙으로 생성 — 실측 근거가 아님.</p>")
+         "의견은 이 snapshot의 예측 수치에서 규칙으로 생성. 문장 앞 태그 = 근거: "
+         + _basis_tag("실측") + "실측 대조 " + _basis_tag("산출") + "예측 계산값 " + _basis_tag("가정") + "가정 입력에 의존 "
+         + _basis_tag("입력") + "catalog · 과제 데이터</p>")
     for b in blocks:
         rng = b.get("power_range_mw")
         sh = b.get("share_pct") or {}
@@ -377,9 +394,45 @@ def _opinions(blocks: list[dict[str, Any]]) -> str:
         if sh:
             h += ("<div class='bar'>" + "".join(f"<i style='width:{v:.1f}%;background:{C[c]}' title='{k} {v:.0f}%'></i>"
                   for (k, v), c in zip(sh.items(), ("cpu", "hw", "bw"), strict=False)) + "</div>")
-        h += "<ul>" + "".join(f"<li>{escape(o)}</li>" for o in b["opinions"]) + "</ul>"
+        bases = b.get("basis") or [""] * len(b["opinions"])
+        h += "<ul>" + "".join(f"<li>{_basis_tag(t)}{escape(o)}</li>" for o, t in zip(b["opinions"], bases, strict=False)) + "</ul>"
+        ev = b.get("evidence")
+        if ev:
+            h += (f"<p class=meta>근거: 실측 대조 variant {ev['measured_variants']}개"
+                  + (f" · 보강 필요: {escape(', '.join(ev['needed']))}" if ev["needed"] else "") + "</p>")
         h += f"<details><summary>variant {len(b['variants'])}</summary><span class=meta>{escape(', '.join(_short(v) for v in b['variants']))}</span></details></div>"
     return h
+
+
+_BASIS_CLS = {"실측": "b-meas", "산출": "b-calc", "가정": "b-asm", "입력": "b-in"}
+
+
+def _basis_tag(t: str) -> str:
+    if not t:
+        return ""
+    head = t.split(" ")[0]
+    return f"<span class='bt {_BASIS_CLS.get(head, 'b-calc')}' title='{escape(t, quote=True)}'>{escape(head)}</span> "
+
+
+def _latency(rows: list[dict[str, Any]]) -> str:
+    h = ("<p class='meta'>Sensor frame 시작 → 출력 buffer 완료까지의 최대 지연과 연속 출력 간격 (조합 탐색의 목적 통계 slice, "
+         "DVFS 상향 · compression 적용 전 timing). 간격이 목표 period ±0.1%를 벗어나면 fps 미달.</p>")
+    rs = [r for r in rows if r.get("latency")]
+    if not rs:
+        return h + "<p class=meta>latency 정보 없음 (이전 형식 snapshot) — 재생성하면 표시</p>"
+    h += ("<div class='scroll'><table><tr><th>Scenario</th><th>fps</th><th>period ms</th><th>Preview latency ms</th><th>(frame)</th>"
+          "<th>Video latency ms</th><th>(frame)</th><th>Preview 간격 ms</th><th>Video 간격 ms</th><th>판정</th></tr>")
+    for r in sorted(rs, key=lambda r: -(r["latency"].get("video_ms") or 0)):
+        lat, iv, p = r["latency"], r.get("intervals") or {}, r.get("period_ms")
+
+        def ivc(v: Any, p: Any = p) -> str:
+            return "" if v is None or not p else ("fail" if abs(v - p) > p * 0.001 else "ok")
+        h += (f"<tr><td>{escape(_short(r['variant_id']))}</td><td class=n>{_f(r['fps'], 0)}</td><td class=n>{_f(p, 2)}</td>"
+              f"<td class=n>{_f(lat.get('preview_ms'), 1)}</td><td class='n meta'>{_f(lat.get('preview_frames'), 2)}</td>"
+              f"<td class=n>{_f(lat.get('video_ms'), 1)}</td><td class='n meta'>{_f(lat.get('video_frames'), 2)}</td>"
+              f"<td class='n {ivc(iv.get('preview'))}'>{_f(iv.get('preview'), 2)}</td><td class='n {ivc(iv.get('video'))}'>{_f(iv.get('video'), 2)}</td>"
+              f"<td class={'ok' if r['spec_ok'] else 'fail'}>{'OK' if r['spec_ok'] else 'FAIL'}</td></tr>")
+    return h + "</table></div>"
 
 
 def _scenarios(rows: list[dict[str, Any]]) -> str:
@@ -531,34 +584,62 @@ def _parts(p: dict[str, Any]) -> list[tuple[str, float]]:
 def _compression(rows: list[dict[str, Any]], scen: list[dict[str, Any]]) -> str:
     saved = [(r["variant_id"], (r["baseline_bw_mbs"] or 0) - (r["bw_mbs"] or 0), (r["baseline_total_mw"] or 0) - (r["power"].get("total_mw") or 0))
              for r in scen if r["spec_ok"] and r["baseline_bw_mbs"] is not None]
-    tot_bw = sum(s[1] for s in saved)
-    h = (f"<div class='kpis'><div class='kpi'>등록 예측 BW 절감 합<b>{tot_bw:,.0f}</b>MB/s</div>"
-         f"<div class='kpi'>scenario 평균<b>{(tot_bw/len(saved) if saved else 0):,.0f}</b>MB/s</div></div>")
-    h += ("<table style='margin-top:10px'><tr><th>Buffer</th><th>Mode</th><th>ratio</th><th>출처</th><th>IP 지원</th><th>적용/대상</th>"
-          "<th>ΔMB/s (선택, 합)</th><th>ΔmW (선택, 합)</th><th>ΔMB/s (전체 적용 시)</th></tr>")
-    for c in rows:
-        h += (f"<tr><td>{escape(c['buffer'])}</td><td>{escape(str(c['mode']))}{' <span class=warn>lossy</span>' if c['lossy'] else ''}</td>"
+    known = [c for c in rows if str(c.get("support") or "unknown") not in ("unknown", "None")]
+    unknown = [c for c in rows if c not in known]
+
+    def per_variant(cs: list[dict[str, Any]], key: str) -> float:
+        n = sum(c["selected"] for c in cs)
+        return sum(c[key] for c in cs) / n if n else 0.0
+    avg_bw = sum(s[1] for s in saved) / len(saved) if saved else 0.0
+    avg_mw = sum(s[2] for s in saved) / len(saved) if saved else 0.0
+    h = ("<p class='meta'>등록 예측이 선택한 buffer 압축의 효과. 합산이 아닌 <b>variant 1개당 평균</b>으로 표시. "
+         "IP 지원이 catalog로 확인되지 않은 buffer는 <span class=warn>잠재 절감</span>으로 분리 — HW 지원 확인 전에는 확정값이 아님.</p>"
+         f"<div class='kpis'><div class='kpi' title='등록(추천) 조합 vs 무압축 · DVFS 기본 baseline'>variant당 BW 절감 (평균, vs baseline)<b>{avg_bw:,.0f}</b>MB/s</div>"
+         f"<div class='kpi' title='등록(추천) 조합 vs 무압축 · DVFS 기본 baseline'>variant당 Power 절감 (평균, vs baseline)<b>{avg_mw:,.1f}</b>mW</div>"
+         f"<div class='kpi'>IP 지원 확인 buffer<b class='ok'>{len(known)}</b>평균 {per_variant(known, 'selected_delta_mw'):+.1f} mW/적용</div>"
+         f"<div class='kpi'>IP 지원 미확인 (잠재)<b class='warn'>{len(unknown)}</b>평균 {per_variant(unknown, 'selected_delta_mw'):+.1f} mW/적용</div></div>")
+    h += ("<table style='margin-top:10px'><tr><th>Buffer</th><th>구분</th><th>Mode</th><th>ratio</th><th>ratio 출처</th><th>IP 지원</th><th>적용/대상</th>"
+          "<th>ΔMB/s (적용 1건 평균)</th><th>ΔmW (적용 1건 평균)</th><th>ΔMB/s (전체 적용 시 1건 평균)</th></tr>")
+    for c in known + unknown:
+        sel = c["selected"] or 0
+
+        def avg(k: str, n: int, c: dict[str, Any] = c) -> float | None:
+            return c[k] / n if n else None
+        h += (f"<tr><td>{escape(c['buffer'])}</td><td class={'ok' if c in known else 'warn'}>{'확정' if c in known else '잠재'}</td>"
+              f"<td>{escape(str(c['mode']))}{' <span class=warn>lossy</span>' if c['lossy'] else ''}</td>"
               f"<td class=n>{_f(c['ratio'],2)}</td><td class={'warn' if c['ratio_source']=='assumed' else ''}>{escape(str(c['ratio_source']))}</td>"
-              f"<td>{escape(str(c['support']))}</td><td class=n>{c['selected']}/{c['variants']}</td>"
-              f"<td class=n>{_f(c['selected_delta_mbs'],0)}</td><td class=n>{_f(c['selected_delta_mw'],1)}</td><td class=n>{_f(c['delta_mbs'],0)}</td></tr>")
+              f"<td>{escape(str(c['support']))}</td><td class=n>{sel}/{c['variants']}</td>"
+              f"<td class=n>{_f(avg('selected_delta_mbs', sel),0)}</td><td class=n>{_f(avg('selected_delta_mw', sel),1)}</td>"
+              f"<td class=n>{_f(avg('delta_mbs', c['variants']),0)}</td></tr>")
     return h + "</table>"
+
+
+def _lat_text(d: dict[str, Any] | None) -> str:
+    if not d or all(v is None for v in d.values()):
+        return "—"
+    return " / ".join(f"{k[0].upper()} {v:+.1f}" for k, v in (("preview", d.get("preview_ms")), ("video", d.get("video_ms"))) if v is not None) + " ms"
+
+
+def _iq_text(iq: str | None) -> str:
+    return {"required": "<span class=warn>IQ 평가 필요</span>", "not_required": "<span class=ok>IQ 영향 없음(선언)</span>"}.get(str(iq), "—")
 
 
 def _power_options(rows: list[dict[str, Any]]) -> str:
     if not rows:
         return "<p class='meta'>탐색된 power option 없음 (knobs.yaml explore / IP sim.modes substitutes 미선언)</p>"
     h = ("<p class='meta'>정식 variant가 아닌 power-saving 후보. 각 조합마다 compression·DVFS를 다시 탐색한 최소 전력을 "
-         "variant 권장 case와 비교한다. 채택하려면 IQ 평가가 필요하다. spec 미달 variant는 제외.</p>"
-         "<table><tr><th>Scenario</th><th>fps</th><th>기준 mW</th><th>최대 절감 조합</th><th>ΔmW</th><th>원인</th><th>단일 option</th></tr>")
+         "variant 권장 case와 비교한다. PPA 3축 = Power(ΔmW) · Latency(Δ, P=preview / V=video) · 화질(IQ 평가 필요 여부). spec 미달 variant는 제외.</p>"
+         "<table><tr><th>Scenario</th><th>fps</th><th>기준 mW</th><th>최대 절감 조합</th><th>ΔPower</th><th>ΔLatency</th><th>IQ</th><th>원인</th><th>단일 option (ΔmW · ΔLatency)</th></tr>")
     for r in rows:
         b = r["best"]
         cats = ", ".join(f"{k} {v:+.1f}" for k, v in list((b or {}).get("by_category", {}).items())[:3])
-        singles = "<br>".join(f"{escape(x['label'])} <b class='n'>{x['delta_mw']:+.1f}</b>"
+        singles = "<br>".join(f"{escape(x['label'])} <b class='n'>{x['delta_mw']:+.1f}</b> · {_lat_text(x.get('delta_latency_ms'))}"
                               f"{'' if x['spec_ok'] else ' <span class=fail>spec fail</span>'}" for x in r["singles"])
-        delta = (f"<b>{b['delta_mw']:+.1f}</b><br><span class=meta>{_f(b['delta_pct'], 1)}%</span>" if b else "—")
+        delta = (f"<b>{b['delta_mw']:+.1f}</b> mW<br><span class=meta>{_f(b['delta_pct'], 1)}%</span>" if b else "—")
         best = escape(" + ".join(b["labels"])) if b else "—"
         h += (f"<tr><td>{escape(_short(r['variant_id']))}</td><td class=n>{_f(r['fps'],0)}</td><td class=n>{_f(r['base_total_mw'],1)}</td>"
-              f"<td>{best}</td><td class=n>{delta}</td><td>{escape(cats)}</td><td>{singles}</td></tr>")
+              f"<td>{best}</td><td class=n>{delta}</td><td class=n>{_lat_text((b or {}).get('delta_latency_ms'))}</td>"
+              f"<td>{_iq_text((b or {}).get('iq_eval')) if b else '—'}</td><td>{escape(cats)}</td><td>{singles}</td></tr>")
     return h + "</table>"
 
 

@@ -107,7 +107,8 @@ def build_conclusion(snap: dict[str, Any]) -> dict[str, Any]:
     risks: list[dict[str, str]] = []
     if s["spec_fail"]:
         names = [f["variant_id"] for f in s["failed"]]
-        first = next((f["reasons"][0] for f in s["failed"] if f["reasons"]), "")
+        first = next(((f.get("explained") or [{"text": r} for r in f["reasons"]])[0]["text"]
+                      for f in s["failed"] if f.get("explained") or f["reasons"]), "")
         risks.append({"title": f"spec 미달 {s['spec_fail']}/{s['explored']}",
                       "detail": f"{', '.join(names[:5])}{' …' if len(names) > 5 else ''} — {first}"})
     low = [m for m in snap.get("sw_margin_top5") or [] if m.get("margin_pct") is not None and m["margin_pct"] < LOW_MARGIN_PCT]
@@ -136,11 +137,21 @@ def build_conclusion(snap: dict[str, Any]) -> dict[str, Any]:
         seen.add(task)
         actions.append({"action": f"{task} 최적화 · HW offload · big core 배치 검토", "target": m["variant_id"], "delta_mw": None,
                         "delta_pct": None, "basis": f"SW margin {m['margin_pct']:.1f}% (SW 가정 기반)", "check": "CPU profile 실측"})
-    if s["spec_fail"]:
+    by_code: dict[str, list[tuple[str, dict[str, str]]]] = {}
+    for f in s["failed"]:
+        for e in f.get("explained") or []:
+            if e["code"] != "interval":  # intervals follow from the stage overrun
+                by_code.setdefault(e["code"], []).append((f["variant_id"], e))
+    for code, items in sorted(by_code.items(), key=lambda kv: -len(kv[1]))[:2]:
+        names = sorted({v for v, _ in items})
+        actions.append({"action": items[0][1]["action"], "target": f"{names[0]}{f' 외 {len(names) - 1}' if len(names) > 1 else ''}",
+                        "delta_mw": None, "delta_pct": None, "basis": f"spec 미달 · {items[0][1]['text']}",
+                        "check": "batch 모델 + 실측" if code == "sw_budget" else "IP 처리량 · DVFS table 확인"})
+    if s["spec_fail"] and not by_code:
         actions.append({"action": "NRT batch · SW 병렬화 또는 HW 예산 재배분", "target": f"spec 미달 {s['spec_fail']}건", "delta_mw": None,
                         "delta_pct": None, "basis": "timing budget", "check": "batch 모델 + 실측"})
     ok, n = s["spec_ok"], s["explored"]
     rng = s.get("power_range_mw")
     headline = (f"탐색 {n}개 중 {ok}개 spec 만족" + (f", 등록 예측 {rng[0]:,.0f}–{rng[1]:,.0f} mW" if rng else "")
                 + (f". 미달 {n - ok}개는 조치 필요" if n - ok else ". 미달 없음"))
-    return {"headline": headline, "risks": risks[:3], "actions": actions[:5], "confidence": _confidence(snap)}
+    return {"headline": headline, "risks": risks[:3], "actions": actions[:6], "confidence": _confidence(snap)}

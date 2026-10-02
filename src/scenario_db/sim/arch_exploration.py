@@ -371,6 +371,9 @@ def explore_power_options(graph, spec: ArchExplorationSpec, config: SimulationRu
             "compression": rec["compression"] if rec else [],
             "dvfs": rec["dvfs"] if rec else {},
             "fill_pct": {k: v["fill_pct"] for k, v in r["objective_slice"]["stages"].items()},
+            # PPA: latency at the objective slice (before compression/DVFS raise) vs the base variant
+            "latency": r["objective_slice"].get("latency"),
+            "delta_latency_ms": _latency_delta(base["objective_slice"].get("latency"), r["objective_slice"].get("latency")),
             "zero_power_ips": r["objective_slice"]["zero_power_ips"],
         })
     def rank(x: dict[str, Any]) -> tuple:
@@ -914,6 +917,14 @@ def find_case(summary: dict[str, Any], case_key: str | None) -> tuple[dict[str, 
     if base and base["key"] == case_key:
         return base, "user:baseline"
     return None, ""
+
+
+def _latency_delta(old: dict[str, Any] | None, new: dict[str, Any] | None) -> dict[str, float | None]:
+    out: dict[str, float | None] = {}
+    for k in ("preview_ms", "video_ms"):
+        a, b = (old or {}).get(k), (new or {}).get(k)
+        out[k] = round(b - a, 3) if a is not None and b is not None else None
+    return out
 
 
 def prediction_payload(s: dict[str, Any], case: dict[str, Any], buffers: list[dict[str, Any]]) -> dict[str, Any]:

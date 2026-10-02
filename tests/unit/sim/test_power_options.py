@@ -134,6 +134,8 @@ def test_review_report_lists_option_savings(uhd30):
     assert {s["key"] for s in row["singles"]} == {BCROP, L0SKIP, MTNR_LP}
     html = render_html("Report", snap)
     assert "Power option (IQ 평가 대상)" in html and "BYRP bayer crop" in html
+    assert set(row["best"]["delta_latency_ms"]) == {"preview_ms", "video_ms"}
+    assert row["best"]["iq_eval"] in ("required", "not_required") and "ΔLatency" in html
 
 
 def test_knob_spec_read_back_from_jsonb_order(raw, catalog, dvfs):
