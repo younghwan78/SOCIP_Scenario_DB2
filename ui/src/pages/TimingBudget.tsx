@@ -3,6 +3,8 @@ import type { Ctx } from '../App'
 import { useAsync } from '../lib/route'
 import { fmt, timingApi, verdictChip, type EisMode, type Statistic, type TimingReport } from '../lib/timingBudget'
 import { Card, ClockChart, Gantt, Intervals, PowerBw, SlotBudget, WhatIf } from '../components/TimingCharts'
+import { ProvBadge } from '../components/Provenance'
+import { powerScope, type Prov } from '../lib/provenance'
 
 const SCALES = [1.0, 1.1, 1.2, 1.3, 1.4, 1.5]
 
@@ -47,19 +49,28 @@ function Body({ r, whatif, whatLoading, current }: { r: TimingReport; ctx: Ctx; 
     return rows.sort((a, b) => b.set_clock_mhz / (b.rule_clock_mhz ?? 1) - a.set_clock_mhz / (a.rule_clock_mhz ?? 1))[0]
   }, [r])
   const iv = r.intervals
-  const kpis = [
+  const prov: Prov = {
+    kind: 'recalc', engine: 'Timing Budget (analytic)', scope: powerScope({ cpu: r.power.cpu_mw, hw: r.power.hw_mw, bw: r.power.bw_mw }),
+    dvfs: r.dvfs.applied ? r.dvfs.table_ref : null,
+    notes: [
+      `CPU 가정: CL${r.power.cpu_model.cluster} ${fmt(r.power.cpu_model.freq_mhz, 0)} MHz ${fmt(r.power.cpu_model.volt_v, 2)} V (${r.power.cpu_model.source})`,
+      ...(r.power.zero_power_ips.length ? [`unit_power=0: ${r.power.zero_power_ips.join(', ')}`] : []),
+      '현재 조건으로 즉석 계산한 값 — 등록 예측(예측 현황)·Simulation evidence와 다를 수 있음',
+    ],
+  }
+  const kpis: { label: string; value: string; unit: string; note: string; bad: boolean; prov?: Prov }[] = [
     { label: 'RT HW / 75% 예산', value: `${fmt(st.rt.hw_ms, 2)}`, unit: `/ ${fmt(st.rt.budget_ms, 2)} ms`, note: 'SW margin 25% rule', bad: st.rt.hw_ms > st.rt.budget_ms },
     { label: 'NRT SW (runtime+latency)', value: fmt(st.nrt.sw_ms, 2), unit: 'ms', note: `HW 예산 ${fmt(st.nrt.budget_ms, 2)} ms`, bad: !st.nrt.feasible },
     { label: 'Post SW (EIS 등)', value: fmt(st.post.sw_ms, 2), unit: 'ms', note: r.eis.on ? 'EIS ON' : 'EIS OFF', bad: !st.post.feasible },
     { label: `NRT clock${nrtDriver ? ` · ${nrtDriver.node.toUpperCase()}` : ''}`, value: fmt(nrtDriver?.set_clock_mhz, 0), unit: 'MHz', note: nrtDriver ? `rule ${fmt(nrtDriver.rule_clock_mhz, 0)} MHz · ×${fmt(nrtDriver.set_clock_mhz / (nrtDriver.rule_clock_mhz ?? 1), 2)}${nrtDriver.dvfs_level !== null ? ` · L${nrtDriver.dvfs_level}` : ''}` : '—', bad: false },
     { label: 'Preview / Video 간격', value: `${fmt(iv.preview.max_ms, 2)} / ${fmt(iv.video.max_ms, 2)}`, unit: 'ms', note: iv.ok ? `목표 ${fmt(iv.target_ms, 2)} ±${fmt(iv.tolerance * 100, 1)}% ✓` : '목표 이탈', bad: !iv.ok },
-    { label: 'Power · BW', value: fmt(r.power.total_mw, 0), unit: 'mW', note: `CPU ${fmt(r.power.cpu_mw, 0)} · HW ${fmt(r.power.hw_mw, 0)} · BW ${fmt(r.power.bw_mw, 0)} · ${fmt(r.bw.total_mbs / 1000, 2)} GB/s`, bad: false },
+    { label: 'Power · BW', value: fmt(r.power.total_mw, 0), unit: 'mW', note: `CPU ${fmt(r.power.cpu_mw, 0)} · HW ${fmt(r.power.hw_mw, 0)} · BW ${fmt(r.power.bw_mw, 0)} · ${fmt(r.bw.total_mbs / 1000, 2)} GB/s`, bad: false, prov },
   ]
   return <>
     <section className="tb-kpis" aria-label="요약">
       {kpis.map((k) => (
         <div key={k.label} className="panel tb-kpi">
-          <div className="faint" style={{ fontSize: 12 }}>{k.label}</div>
+          <div className="faint" style={{ fontSize: 12 }}>{k.label}{k.prov && <> <ProvBadge prov={k.prov} compact /></>}</div>
           <div><span className="mono" style={{ fontSize: 20, fontWeight: 600, color: k.bad ? 'var(--del-text)' : 'var(--text)' }}>{k.value}</span> <span className="faint" style={{ fontSize: 12 }}>{k.unit}</span></div>
           <div className="faint" style={{ fontSize: 11 }}>{k.note}</div>
         </div>

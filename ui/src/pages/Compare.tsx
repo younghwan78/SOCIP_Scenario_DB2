@@ -101,7 +101,7 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
     const e = kpiMode === 'evidence' ? evidence[i] : undefined
     if (e) return { kpi: e.kpi, source: evidenceSource(e) }
     const st = sims[ids[i]]
-    return st?.status === 'done' ? { kpi: st.res.kpi, source: 'calculated · 즉석' } : { kpi: undefined, source: null }
+    return st?.status === 'done' ? { kpi: st.res.kpi, source: '재계산 (즉석)' } : { kpi: undefined, source: null }
   }
   const runSim = async (targets: number[]) => {
     for (const i of targets) {
@@ -125,9 +125,9 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
     const st = sims[ids[i]]
     const simPb = st?.status === 'done' ? st.res.result?.power_breakdown ?? null : null
     const stored = (evQ.data?.[i] ?? []).find((e) => e.kind === 'evidence.simulation' && e.power_breakdown)
-    if (kpiMode === 'sim' && simPb) return { pb: simPb, source: '즉석 예측' }
-    if (stored?.power_breakdown) return { pb: stored.power_breakdown, source: '예측 evidence' }
-    return simPb ? { pb: simPb, source: '즉석 예측' } : { pb: null, source: null }
+    if (kpiMode === 'sim' && simPb) return { pb: simPb, source: '재계산 (즉석)' }
+    if (stored?.power_breakdown) return { pb: stored.power_breakdown, source: 'Sim evidence (저장)' }
+    return simPb ? { pb: simPb, source: '재계산 (즉석)' } : { pb: null, source: null }
   }
   const powerRows: PowerRow[] = ids.map((id, i) => {
     const { pb, source } = powerOf(i)

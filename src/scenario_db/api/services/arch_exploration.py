@@ -19,6 +19,7 @@ from scenario_db.api.schemas.arch_exploration import (
 from scenario_db.api.schemas.timing_budget import TimingBudgetRequest
 from scenario_db.api.services.timing_budget import _load, _shim
 from scenario_db.db.models.definition import Scenario, ScenarioVariant
+from scenario_db.db.models.evidence import Evidence
 from scenario_db.db.models.exploration import (
     POWER_OPTION_STATUSES,
     ArchExplorationRun,
@@ -27,9 +28,11 @@ from scenario_db.db.models.exploration import (
     Prediction,
 )
 from scenario_db.exceptions import NotFoundError, UnprocessableError
+from scenario_db.reporting.arch_conclusion import calibration_row
 from scenario_db.reporting.arch_report import build_snapshot, html_sha256, render_html
 from scenario_db.sim.arch_exploration import ENGINE_REV, explore_variant, find_case, prediction_payload
 from scenario_db.sim.power_attribution import attribute
+from scenario_db.api.services.calibration import is_synthetic, measurement_detail
 from scenario_db.api.services.failures import variant_failure
 from scenario_db.sim.model_lineage import lineage_differences, run_model_lineage
 from scenario_db.sim.service import _apply_config_profile, _check_power_params_scope, _graph_soc_ref
@@ -360,7 +363,7 @@ def create_report(db: Session, request: ArchReportRequest, user: str | None = No
             if old is not None:
                 changes[(sid, vid)] = attribute(old.metrics, cur.metrics)
     run_dict = run_detail(run) | {"created_at": run.created_at}
-    snapshot = build_snapshot(run_dict, preds, changes)
+    snapshot = build_snapshot(run_dict, preds, changes, _report_calibration(db, preds))
     title = request.title or f"{run.soc_ref or ''} {run.scenario_type} Architecture 검토".strip()
     html = render_html(title, snapshot)
     row = ArchReport(
@@ -372,6 +375,30 @@ def create_report(db: Session, request: ArchReportRequest, user: str | None = No
     db.add(row)
     db.commit()
     return report_detail(row)
+
+
+def _report_calibration(db: Session, preds: dict[tuple[str, str], dict[str, Any]]) -> list[dict[str, Any]]:
+    """Latest measurement per reported variant (real silicon preferred over synthetic) vs its registered prediction."""
+    if not preds:
+        return []
+    keys = set(preds)
+    found: dict[tuple[str, str], Evidence] = {}
+    rows = (db.query(Evidence).filter(Evidence.kind == "evidence.measurement",
+                                      Evidence.scenario_ref.in_({sid for sid, _ in keys}))
+            .order_by(Evidence.measured_at.desc().nullslast(), Evidence.id).all())
+    for m in rows:
+        key = (m.scenario_ref, m.variant_ref)
+        if key not in keys:
+            continue
+        held = found.get(key)
+        if held is None or (is_synthetic(held.provenance) and not is_synthetic(m.provenance)):
+            found[key] = m
+    out = []
+    for (sid, vid), m in sorted(found.items()):
+        row = calibration_row(vid, sid, measurement_detail(db, m.id), preds[(sid, vid)]["id"])
+        if row is not None:
+            out.append(row)
+    return out
 
 
 def _report_meta(r: ArchReport) -> dict[str, Any]:
@@ -532,3 +559,59 @@ def set_option_review(db: Session, request: PowerOptionReviewRequest, user: str 
     row.status, row.note, row.updated_by, row.updated_at = request.status, request.note, user, now
     db.commit()
     return _review_dict(row)
+
+
+# ------------------------------------------------------------------- model status
+def _is_sample(ref: str | None) -> bool:
+    return bool(ref) and any(k in str(ref).lower() for k in ("sample", "synthetic"))
+
+
+def model_status(db: Session, *, project_ref: str | None = None) -> dict[str, Any]:
+    """What the displayed numbers rest on: engine rev, DVFS tables, real vs synthetic measurements.
+
+    ``stale_engine`` counts current predictions registered by a run of an older exploration
+    engine — their numbers are not what the current code would produce.
+    """
+    q = db.query(Prediction).filter(Prediction.status == "current")
+    if project_ref:
+        q = q.filter(Prediction.project_ref == project_ref)
+    preds = q.all()
+    run_ids = {p.exploration_run_ref for p in preds}
+    runs = {r.id: r for r in db.query(ArchExplorationRun).filter(ArchExplorationRun.id.in_(run_ids)).all()} if run_ids else {}
+    engines: dict[str, int] = {}
+    dvfs: dict[str, int] = {}
+    for p in preds:
+        run = runs.get(p.exploration_run_ref)
+        rev = run.engine_rev if run is not None else "unknown"
+        engines[rev] = engines.get(rev, 0) + 1
+        ref = p.dvfs_table_ref or (run.dvfs_table_ref if run is not None else None)
+        if ref:
+            dvfs[ref] = dvfs.get(ref, 0) + 1
+
+    mq = db.query(Evidence.provenance).filter(Evidence.kind == "evidence.measurement")
+    if project_ref:
+        scenario_ids = [sid for (sid,) in db.query(Scenario.id).filter(Scenario.project_ref == project_ref).all()]
+        mq = mq.filter(Evidence.scenario_ref.in_(scenario_ids)) if scenario_ids else mq.filter(Evidence.id.is_(None))
+    real = synthetic = 0
+    for (prov,) in mq.all():
+        if is_synthetic(prov):
+            synthetic += 1
+        else:
+            real += 1
+
+    rq = db.query(ArchExplorationRun)
+    if project_ref:
+        rq = rq.filter(ArchExplorationRun.project_ref == project_ref)
+    latest = rq.order_by(ArchExplorationRun.created_at.desc()).first()
+    lineage = (latest.summary or {}).get("model_lineage") if latest is not None else None
+    return {
+        "engine_rev": ENGINE_REV,
+        "project_ref": project_ref,
+        "predictions": {"current": len(preds), "stale_engine": sum(n for e, n in engines.items() if e != ENGINE_REV),
+                        "engines": engines},
+        "dvfs": [{"ref": ref, "sample": _is_sample(ref), "predictions": n} for ref, n in sorted(dvfs.items())],
+        "measurements": {"real": real, "synthetic": synthetic},
+        "lineage": lineage,
+        "latest_run": {"id": latest.id, "engine_rev": latest.engine_rev,
+                       "created_at": latest.created_at.isoformat() if latest.created_at else None} if latest is not None else None,
+    }

@@ -573,3 +573,25 @@ a.hd-row:hover span { color: #E8EEF0; }
 .cpu-bar > span { display: block; height: 100%; }
 .cpu-range td, .cpu-range th { padding-left: 6px; padding-right: 6px; }
 .cpu-range td input[type="checkbox"] { margin: 0; }
+
+/* ---- provenance (U1) / model status (U2) / verdict issues (U4) ---- */
+.prov { font-size: 10.5px; font-weight: 600; padding: 1px 6px; border-radius: 4px; display: inline-block; vertical-align: 1px; white-space: nowrap; border: 1px solid transparent; cursor: help; }
+.prov-eng { font-weight: 500; opacity: .85; }
+.prov-registered { background: var(--primary-soft); color: var(--primary-strong); }
+.prov-recalc { background: #E7ECF5; color: #26406B; border-color: #C9D5EA; }
+.prov-simulation { background: #E6EFF8; color: #1E4E8C; }
+.prov-measured { background: #E5F2EC; color: #1E6446; }
+.prov-synthetic { background: var(--warn-soft); color: var(--warn-text); border-color: #F0D29B; }
+.value-chip { display: inline-flex; align-items: baseline; gap: 2px; }
+.model-status { flex-shrink: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 6px 24px; font-size: 12px; background: var(--surface-soft); border-bottom: 1px solid var(--line); color: var(--text-2); }
+.model-status .ms-title { font-weight: 600; color: var(--muted); }
+.model-status .ms-item { display: inline-flex; align-items: center; gap: 6px; color: inherit; text-decoration: none; }
+.model-status a.ms-item:hover { text-decoration: underline; }
+.model-status .ms-item.warn { color: var(--warn-text); font-weight: 600; }
+.ms-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; background: #9A9387; }
+.ms-dot.ok { background: var(--primary-strong); }
+.ms-dot.warn { background: #E6A23C; }
+.issue { font-size: 10.5px; padding: 1px 5px; border-radius: 4px; background: #F6D5D1; color: #8A1F14; white-space: nowrap; }
+.issue.clock { background: var(--warn-soft); color: var(--warn-text); }
+.issues { display: inline-flex; flex-wrap: wrap; gap: 3px; }
+.offset-flag { font-size: 10.5px; padding: 1px 5px; border-radius: 4px; background: var(--warn-soft); color: var(--warn-text); font-weight: 600; margin-left: 4px; }

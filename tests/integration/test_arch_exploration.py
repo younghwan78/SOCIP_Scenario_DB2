@@ -217,3 +217,16 @@ def test_power_options_ride_with_the_prediction_and_follow_iq_review(engine, sto
         again = next(r for r in svc.list_option_reviews(db, scenario_id=ids[0])
                      if r["option_key"] == BCROP and r["variant_id"] == "*")
         assert again["id"] == bcrop["id"] and [h["status"] for h in again["history"]] == ["rejected", "iq_eval"]
+
+
+def test_model_status_counts_predictions_from_older_engine(engine, stored_run):
+    rid, ids = stored_run
+    with Session(engine) as db:
+        svc.promote(db, PromoteRequest(run_id=rid))
+        project = db.query(Scenario.project_ref).filter(Scenario.id == ids[0]).scalar()
+        status = svc.model_status(db, project_ref=project)
+        assert status["engine_rev"] == svc.ENGINE_REV
+        assert status["predictions"]["engines"].get("test", 0) >= 2  # stored_run uses engine_rev="test"
+        assert status["predictions"]["stale_engine"] >= 2
+        assert set(status["measurements"]) == {"real", "synthetic"}
+        assert all(set(d) == {"ref", "sample", "predictions"} for d in status["dvfs"])

@@ -6,8 +6,28 @@ import { short } from '../lib/archExplore'
 import { Card } from '../components/TimingCharts'
 import { useWidth } from '../components/Charts'
 import { DataTable, type Column } from '../components/DataTable'
+import { ProvBadge } from '../components/Provenance'
+import { categoryFit, powerScope, type CategoryFit } from '../lib/provenance'
 
 const CATS: Category[] = ['cpu', 'ip', 'bw', 'other']
+type Prov = Parameters<typeof ProvBadge>[0]['prov']
+type WithFit = { delta_pct: number | null; category?: CategoryFit | null } | null | undefined
+/** Sort by the category error when known, else by the total error. */
+const fitSort = (p: WithFit) => Math.abs(p?.category?.worst_delta_pct ?? p?.delta_pct ?? -1)
+const fitTitle = (f: CategoryFit | null | undefined) => (f ? `구성 최대 Δ: ${f.worst_category ?? '—'} ${f.worst_delta_pct ?? '—'}%${f.offsetting ? '\n상쇄: total은 맞지만 구성 오차가 큼' : ''}` : '구성 Δ 없음 (rail 또는 예측 split 없음)')
+
+/** U6: colour by the worst category, not the total; flag compensation. */
+function FitCell({ total, delta, fit }: { total: number | null; delta: number | null; fit?: CategoryFit | null }) {
+  const worst = fit?.worst_delta_pct
+  return (
+    <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+      <span className="mono faint">{fmt(total, 0)}{worst !== null && worst !== undefined ? ` · ${pctText(delta)}` : ''}</span>
+      {worst !== null && worst !== undefined && <span className={`badge ${errClass(worst)}`}>{fit?.worst_category?.toUpperCase()} {pctText(worst)}</span>}
+      {(worst === null || worst === undefined) && <span className={`badge ${errClass(delta)}`}>{pctText(delta)}</span>}
+      {fit?.offsetting && <span className="offset-flag">상쇄</span>}
+    </span>
+  )
+}
 const pctText = (v: number | null | undefined) => (v === null || v === undefined ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`)
 
 export function CalibrationPage({ ctx }: { ctx: Ctx }) {
@@ -23,8 +43,8 @@ export function CalibrationPage({ ctx }: { ctx: Ctx }) {
     { key: 'at', label: '측정', width: 130, firstDir: -1, sort: (r) => r.measured_at ?? '', render: (r) => <span className="mono faint">{r.measured_at?.slice(0, 10) ?? '—'}</span> },
     { key: 'ctx', label: 'Silicon · SW', width: 190, sort: (r) => `${r.silicon_rev}${r.sw_baseline_ref}`, render: (r) => <span className="faint">{r.silicon_rev ?? '—'} · {r.sw_baseline_ref ?? '—'}</span> },
     { key: 'meas', label: '실측 mW', width: 110, align: 'right', firstDir: -1, sort: (r) => r.total.mean ?? -1, render: (r) => <span className="mono">{fmt(r.total.mean, 1)}{r.total.std ? <span className="faint"> ±{fmt(r.total.std, 1)}</span> : null}</span> },
-    { key: 'cur', label: '등록 예측 Δ', width: 130, align: 'right', firstDir: -1, sort: (r) => Math.abs(r.current_prediction?.delta_pct ?? -1), render: (r) => r.current_prediction ? <span className={`badge ${errClass(r.current_prediction.delta_pct)}`}>{fmt(r.current_prediction.total_mw, 0)} · {pctText(r.current_prediction.delta_pct)}</span> : <span className="faint">등록 없음</span> },
-    { key: 'sim', label: 'Simulation Δ', width: 130, align: 'right', firstDir: -1, sort: (r) => Math.abs(r.simulation?.delta_pct ?? -1), render: (r) => r.simulation ? <span className={`badge ${errClass(r.simulation.delta_pct)}`}>{fmt(r.simulation.total_mw, 0)} · {pctText(r.simulation.delta_pct)}</span> : <span className="faint">—</span> },
+    { key: 'cur', label: '등록 예측 Δ (total · 구성 최대)', width: 230, align: 'right', firstDir: -1, sort: (r) => fitSort(r.current_prediction), title: (r) => fitTitle(r.current_prediction?.category), render: (r) => r.current_prediction ? <FitCell total={r.current_prediction.total_mw} delta={r.current_prediction.delta_pct} fit={r.current_prediction.category} /> : <span className="faint">등록 없음</span> },
+    { key: 'sim', label: 'Simulation Δ (total · 구성 최대)', width: 230, align: 'right', firstDir: -1, sort: (r) => fitSort(r.simulation), title: (r) => fitTitle(r.simulation?.category), render: (r) => r.simulation ? <FitCell total={r.simulation.total_mw} delta={r.simulation.delta_pct} fit={r.simulation.category} /> : <span className="faint">—</span> },
     { key: 'rails', label: 'rail', width: 60, align: 'right', sort: (r) => r.rails, render: (r) => r.rails },
   ]
   return (
@@ -38,7 +58,7 @@ export function CalibrationPage({ ctx }: { ctx: Ctx }) {
           <button className={!realOnly ? 'on' : ''} onClick={() => ctx.navigate(undefined, { real: undefined, m: undefined }, true)}>합성 포함 ({synthCount})</button>
           <button className={realOnly ? 'on' : ''} onClick={() => ctx.navigate(undefined, { real: '1', m: undefined }, true)}>실제 측정만</button>
         </div>}
-        <span className="faint" style={{ fontSize: 12 }}>실측 rail을 CPU · IP · BW(MIF·DRAM) · 기타로 묶어 예측과 비교합니다. |Δ| ≤10% 녹색 · ≤25% 주황 · 그 이상 빨강</span>
+        <span className="faint" style={{ fontSize: 12 }}>실측 rail을 CPU · IP · BW(MIF·DRAM) · 기타로 묶어 예측과 비교합니다. 색 = total이 아닌 <b>구성(CPU·IP·BW) 최대 |Δ|</b> 기준 · ≤10% 녹색 · ≤25% 주황 · 그 이상 빨강 · “상쇄” = total은 맞지만 구성 오차가 서로 상쇄</span>
       </div>
       {list.error && <div className="err">{list.error}</div>}
       {list.data && !rows.length && <div className="empty">{realOnly && synthCount ? '실제 측정 evidence가 없습니다 (합성 fixture만 있음).' : '실측 evidence가 없습니다. 측정 결과를 import하면 여기에 나타납니다.'}</div>}
@@ -61,17 +81,24 @@ function Detail({ d, ctx }: { d: MeasDetail; ctx: Ctx }) {
   const sims = d.predictions.filter((p) => p.kind === 'simulation')
   const sim = sims[sims.length - 1] // latest — same pick as the list row
   const cols = d.predictions.filter((p) => p.rows)
-  const kpis: [string, string, string, string][] = [
-    ['실측 total', `${fmt(d.total.mean, 1)}`, d.total.std ? `±${fmt(d.total.std, 1)} mW · n=${d.total.n ?? '—'}` : 'mW', ''],
-    ['등록 예측', cur ? fmt(cur.total_mw, 1) : '—', cur ? `${pctText(cur.delta_pct)} · ${cur.statistic ?? ''} · ${cur.selection_rule ?? ''}` : '조합 탐색에서 등록 필요', cur ? errClass(cur.delta_pct) : ''],
-    ['Simulation evidence (최신)', sim ? fmt(sim.total_mw, 1) : '—', sim ? `${pctText(sim.delta_pct)} · ${predLabel(sim)} · ${sims.length}건` : '없음', sim ? errClass(sim.delta_pct) : ''],
-    ['fps · latency', `${fmt(d.fps, 2)}`, d.frame_latency ? `latency mean ${fmt(d.frame_latency.mean, 1)} / p95 ${fmt(d.frame_latency.p95, 1)} ms` : '', ''],
+  const curFit = cur ? categoryFit(cur.rows, cur.delta_pct) : null
+  const simFit = sim ? categoryFit(sim.rows, sim.delta_pct) : null
+  const kpis: [string, string, string, string, Prov | null][] = [
+    ['실측 total', `${fmt(d.total.mean, 1)}`, d.total.std ? `±${fmt(d.total.std, 1)} mW · n=${d.total.n ?? '—'}` : 'mW', '',
+      { kind: d.synthetic ? 'synthetic' : 'measured', id: d.id, at: d.measured_at, notes: [`rail map: ${d.rail_domain_map_ref ?? '이름 규칙'}`] }],
+    ['등록 예측', cur ? fmt(cur.total_mw, 1) : '—', cur ? `${pctText(cur.delta_pct)} · 구성 최대 ${pctText(curFit?.worst_delta_pct)} · ${cur.statistic ?? ''}` : '조합 탐색에서 등록 필요', cur ? errClass(curFit?.worst_delta_pct ?? cur.delta_pct) : '',
+      cur ? { kind: 'registered', engine: 'Arch exploration', scope: powerScope(cur.split), id: cur.id, notes: [`선택: ${cur.selection_rule ?? '—'}`] } : null],
+    ['Simulation evidence (최신)', sim ? fmt(sim.total_mw, 1) : '—', sim ? `${pctText(sim.delta_pct)} · 구성 최대 ${pctText(simFit?.worst_delta_pct)} · ${sims.length}건` : '없음', sim ? errClass(simFit?.worst_delta_pct ?? sim.delta_pct) : '',
+      sim ? { kind: 'simulation', engine: 'Timeline sim (runner)', scope: powerScope(sim.split), id: sim.id, notes: sim.split && !(sim.split.cpu > 0) ? ['CPU power 미포함 — total 비교 시 주의'] : [] } : null],
+    ['fps · latency', `${fmt(d.fps, 2)}`, d.frame_latency ? `latency mean ${fmt(d.frame_latency.mean, 1)} / p95 ${fmt(d.frame_latency.p95, 1)} ms` : '', '', null],
   ]
+  const offset = [curFit?.offsetting ? '등록 예측' : null, simFit?.offsetting ? 'Simulation evidence' : null].filter(Boolean)
   return <>
     {d.synthetic && <div className="lib-note warn" style={{ gridColumn: '1 / -1' }}>합성 fixture — silicon 측정이 아닙니다. 기준 capture를 이 variant의 simulation(IP core · BW)과 SW 부하(CPU)로 rescale한 값이라 예측 오차는 모델 검증 근거가 되지 않습니다{d.derived_from?.length ? ` (source: ${d.derived_from.join(', ')})` : ''}.</div>}
+    {offset.length > 0 && <div className="lib-note warn" style={{ gridColumn: '1 / -1' }}>{offset.join(' · ')}: total은 실측과 ±10% 안이지만 CPU · IP · BW 중 25% 넘게 틀린 항목이 있습니다. 구성 오차가 서로 상쇄된 결과라 what-if(예: BW 절감) 예측은 신뢰하기 어렵습니다.</div>}
     <section className="tb-kpis" style={{ gridColumn: '1 / -1' }} aria-label="요약">
-      {kpis.map(([l, v, n, cls]) => (
-        <div key={l} className="panel tb-kpi"><div className="faint" style={{ fontSize: 12 }}>{l}</div>
+      {kpis.map(([l, v, n, cls, prov]) => (
+        <div key={l} className="panel tb-kpi"><div className="faint" style={{ fontSize: 12 }}>{l}{prov && <> <ProvBadge prov={prov} compact /></>}</div>
           <div className="mono" style={{ fontSize: 20, fontWeight: 600 }}>{v}</div>
           <div style={{ fontSize: 11 }}>{cls ? <span className={`badge ${cls}`}>{n}</span> : <span className="faint">{n}</span>}</div></div>))}
     </section>

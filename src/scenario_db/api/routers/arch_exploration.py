@@ -99,6 +99,13 @@ def get_prediction(prediction_id: str, db: Session = Depends(get_db)):
     return svc.get_prediction(db, prediction_id)
 
 
+# ------------------------------------------------------------------- model status
+@router.get("/model-status")
+def model_status(project_ref: str | None = None, db: Session = Depends(get_db)):
+    """Engine rev, DVFS tables and real/synthetic measurements behind the displayed numbers."""
+    return svc.model_status(db, project_ref=project_ref)
+
+
 # ------------------------------------------------------------------- reports
 @router.post("/reports")
 def create_report(

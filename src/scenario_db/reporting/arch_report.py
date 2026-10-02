@@ -7,6 +7,7 @@ import re
 from html import escape
 from typing import Any
 
+from scenario_db.reporting.arch_conclusion import build_conclusion, model_limits
 from scenario_db.reporting.arch_opinions import build_opinions, classify
 
 _CLOCK_RE = re.compile(r"^(\w+): required_clock ([\d.]+)MHz exceeds max DVFS speed ([\d.]+)MHz$")
@@ -26,22 +27,15 @@ def compact_reasons(reasons: list[str]) -> list[str]:
         out.append(f"{', '.join(nodes)}: 필요 clock {float(req):.0f} MHz > DVFS max {float(mx):.0f} MHz")
     return out
 
-MODEL_LIMITS = [
-    "MIF DVFS는 BW 전력에 반영되지 않음 (BW 전력 = MB/s × coeff).",
-    "CPU 전력은 단일 cluster/주파수/전압 가정 (Linux EM 계수 × busy time).",
-    "Compression은 BW만 감소 (encoder/decoder 전력, 화질 영향 미반영). catalog에 없는 ratio는 assumed.",
-    "DVFS headroom은 domain 단위 level 상향 (V² scaling), 필요 clock보다 빠른 level만 탐색.",
-    "120 fps 이상 NRT batch 처리 미모델.",
-]
-
-
 def build_snapshot(
     run: dict[str, Any],
     predictions: dict[tuple[str, str], dict[str, Any]],
     changes: dict[tuple[str, str], dict[str, Any]],
+    calibration: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """run: exploration run row as dict; predictions: variant -> current prediction row dict;
-    changes: variant -> attribution vs the superseded prediction.
+    changes: variant -> attribution vs the superseded prediction;
+    calibration: ``arch_conclusion.calibration_row`` per measured variant (frozen with the snapshot).
     Classification uses the run's frozen conditions, never the mutable catalog."""
     variants = [v for v in run["variants"] if v.get("variant_id")]
     ok = [v for v in variants if v["spec_ok"]]
@@ -166,14 +160,15 @@ def build_snapshot(
         })
 
     totals = [r["power"]["total_mw"] for r in rows if r["spec_ok"] and r["power"].get("total_mw") is not None]
-    return {
+    lineage = (run.get("summary") or {}).get("model_lineage")
+    snap = {
         "overview": {
             "run_id": run["id"], "run_title": run["title"], "run_created_at": str(run.get("created_at") or ""),
             "target_soc": run.get("soc_ref"), "project": run.get("project_ref"),
             "scenario_type": run["scenario_type"], "dvfs_table_ref": run.get("dvfs_table_ref"),
             "sample_dvfs": sample_dvfs, "objective": run["spec"].get("objective"),
             "axes": run["spec"].get("axes"), "constraints": run["spec"].get("constraints"),
-            "engine_rev": run.get("engine_rev"), "model_limits": MODEL_LIMITS,
+            "engine_rev": run.get("engine_rev"), "model_lineage": lineage, "model_limits": model_limits(lineage),
         },
         "spec_summary": {
             "explored": len(variants), "spec_ok": len(ok), "spec_fail": len(variants) - len(ok),
@@ -196,7 +191,10 @@ def build_snapshot(
             "prediction_ids": sorted(p["id"] for p in predictions.values()),
             "warnings": sorted({w for v in variants for w in (v.get("warnings") or [])})[:40],
         },
+        "calibration": list(calibration or []),
     }
+    snap["conclusion"] = build_conclusion(snap)
+    return snap
 
 
 def _ctx(c: dict[str, Any]) -> dict[str, Any]:
@@ -220,21 +218,23 @@ def render_html(title: str, snap: dict[str, Any]) -> str:
         f"{escape(o['scenario_type'])} · {escape(o['run_id'])} · DVFS {escape(str(o['dvfs_table_ref']))}"
         f"{' <b class=warn>SAMPLE</b>' if o['sample_dvfs'] else ''}</div></header>",
         "<nav>" + "".join(f"<a href='#s{i}'>{t}</a>" for i, t in enumerate(SECTIONS, 1)) + "</nav><main>",
-        _sec(1, _overview(o)),
-        _sec(2, _spec(s)),
-        _sec(3, _opinions(snap.get("opinions") or [])),
-        _sec(4, _scenarios(snap["scenarios"])),
-        _sec(5, _domains(snap.get("domains") or []) + "<details><summary>IP별 상세 (필요 → 설정 MHz)</summary>"
+        _sec(1, _conclusion(snap.get("conclusion"))),
+        _sec(2, _overview(o)),
+        _sec(3, _spec(s)),
+        _sec(4, _calibration(snap.get("calibration") or [])),
+        _sec(5, _opinions(snap.get("opinions") or [])),
+        _sec(6, _scenarios(snap["scenarios"])),
+        _sec(7, _domains(snap.get("domains") or []) + "<details><summary>IP별 상세 (필요 → 설정 MHz)</summary>"
              + _clocks([c for c in snap["clocks"] if (c["scenario_id"], c["variant_id"]) in
                         {(r["scenario_id"], r["variant_id"]) for r in snap["scenarios"] if r["spec_ok"]}])
              + "</details>"),
-        _sec(6, _boxes(snap["scenarios"])),
-        _sec(7, _split(snap["scenarios"])),
-        _sec(8, _compression(snap["compression"], snap["scenarios"])),
-        _sec(9, _power_options(snap.get("power_options") or [])),
-        _sec(10, _margins(snap["sw_margin_top5"]) + _fail_margins(snap.get("sw_margin_fail") or [])),
-        _sec(11, _history(snap["history"])),
-        _sec(12, _appendix(snap["appendix"])),
+        _sec(8, _boxes(snap["scenarios"])),
+        _sec(9, _split(snap["scenarios"])),
+        _sec(10, _compression(snap["compression"], snap["scenarios"])),
+        _sec(11, _power_options(snap.get("power_options") or [])),
+        _sec(12, _margins(snap["sw_margin_top5"]) + _fail_margins(snap.get("sw_margin_fail") or [])),
+        _sec(13, _history(snap["history"])),
+        _sec(14, _appendix(snap["appendix"])),
         "</main></body></html>",
     ]
     return "".join(parts)
@@ -244,7 +244,7 @@ def html_sha256(html: str) -> str:
     return hashlib.sha256(html.encode("utf-8")).hexdigest()
 
 
-SECTIONS = ["개요", "Spec 만족", "분류별 검토 의견", "Scenario 요약", "IP 필요 clock", "Power·BW 분포", "CPU/IP/BW",
+SECTIONS = ["결론", "개요", "Spec 만족", "실측 대조", "분류별 검토 의견", "Scenario 요약", "IP 필요 clock", "Power·BW 분포", "CPU/IP/BW",
             "Compression 절감", "Power option (IQ 평가 대상)", "SW margin Top5", "변경 이력", "부록"]
 
 _CSS = """
@@ -265,7 +265,7 @@ ul{margin:4px 0 0 18px;padding:0}svg text{font-family:inherit}
 
 
 def _sec(i: int, body: str) -> str:
-    return f"<section id='s{i}'><h2>{'①②③④⑤⑥⑦⑧⑨⑩⑪⑫'[i-1]} {SECTIONS[i-1]}</h2>{body}</section>"
+    return f"<section id='s{i}'><h2>{'①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭'[i-1]} {SECTIONS[i-1]}</h2>{body}</section>"
 
 
 def _f(v: Any, d: int = 1) -> str:
@@ -290,6 +290,64 @@ def _overview(o: dict[str, Any]) -> str:
     ]
     body = "<table>" + "".join(f"<tr><th style='width:160px'>{escape(k)}</th><td>{escape(str(v))}</td></tr>" for k, v in rows) + "</table>"
     return body + "<p class='warn'><b>모델 한계</b></p><ul>" + "".join(f"<li>{escape(x)}</li>" for x in o["model_limits"]) + "</ul>"
+
+
+_GRADE_CLASS = {"A": "ok", "B": "warn", "C": "fail"}
+
+
+def _conclusion(c: dict[str, Any] | None) -> str:
+    if not c:
+        return "<p class='meta'>이 snapshot에는 결론이 없음 (이전 형식) — 재생성하면 표시</p>"
+    conf = c["confidence"]
+    h = (f"<p style='font-size:14px'><b>{escape(c['headline'])}</b></p>"
+         f"<div class='kpis'><div class='kpi'>신뢰도<b class='{_GRADE_CLASS[conf['grade']]}'>{conf['grade']}</b>"
+         f"<span class=meta>{escape(conf['meaning'])}</span></div></div>")
+    if conf["reasons"]:
+        h += "<ul>" + "".join(f"<li class=meta>{escape(r)}</li>" for r in conf["reasons"]) + "</ul>"
+    h += "<h3 style='font-size:13px;margin:12px 0 4px'>주요 리스크</h3>"
+    h += ("<ol>" + "".join(f"<li><b>{escape(r['title'])}</b> — {escape(r['detail'])}</li>" for r in c["risks"]) + "</ol>"
+          if c["risks"] else "<p class=meta>식별된 리스크 없음</p>")
+    h += "<h3 style='font-size:13px;margin:12px 0 4px'>권고 조치</h3>"
+    if not c["actions"]:
+        return h + "<p class=meta>권고 조치 없음</p>"
+    h += "<table><tr><th>조치</th><th>대상</th><th>ΔPower</th><th>근거</th><th>필요 검증</th></tr>"
+    for a in c["actions"]:
+        d = f"{a['delta_mw']:+.0f} mW ({_f(a['delta_pct'], 1)}%)" if a["delta_mw"] is not None else "—"
+        h += (f"<tr><td>{escape(a['action'])}</td><td>{escape(_short(str(a['target'])))}</td><td class=n>{d}</td>"
+              f"<td>{escape(a['basis'])}</td><td>{escape(a['check'])}</td></tr>")
+    return h + "</table>"
+
+
+_CAT_LABEL = {"cpu": "CPU", "ip": "IP", "bw": "BW", "other": "기타(미모델)"}
+
+
+def _calibration(rows: list[dict[str, Any]]) -> str:
+    h = ("<p class='meta'>이 보고서의 등록 예측을 실측 rail(CPU · IP · BW(MIF·DRAM) · 기타)과 비교. 판정은 total이 아닌 "
+         "구성 최대 |Δ| 기준(≤10% 녹색 · ≤25% 주황 · 초과 빨강). 합성 fixture는 모델 검증 근거가 아님.</p>")
+    if not rows:
+        return h + "<p class='warn'>실측 대조 가능한 variant 없음 — 이 보고서의 수치는 실측으로 검증되지 않았습니다.</p>"
+    real = sum(1 for r in rows if not r["synthetic"])
+    h += f"<p>실측 {real}건 · 합성 {len(rows) - real}건</p>"
+    h += ("<table><tr><th>Scenario</th><th>측정</th><th>실측 mW</th><th>예측 mW</th><th>total Δ</th>"
+          + "".join(f"<th>{_CAT_LABEL[c]} Δ</th>" for c in ("cpu", "ip", "bw")) + "<th>미모델 mW</th><th>판정</th></tr>")
+
+    def cls(v: Any) -> str:
+        return "" if v is None else "ok" if abs(v) <= 10 else "warn" if abs(v) <= 25 else "fail"
+
+    for r in rows:
+        by = {x["category"]: x for x in r["rows"]}
+        fit = r["fit"]
+        verdict = ("상쇄 (구성 오차)" if fit["offsetting"] else f"최대 {_CAT_LABEL.get(fit['worst_category'] or '', '—')} "
+                   f"{_f(fit['worst_delta_pct'], 1)}%") if fit["worst_delta_pct"] is not None else "구성 비교 불가"
+        h += (f"<tr><td>{escape(_short(r['variant_id']))}</td>"
+              f"<td>{escape(str(r.get('measured_at') or '')[:10])}{' <b class=warn>합성</b>' if r['synthetic'] else ''}</td>"
+              f"<td class=n>{_f(r['measured_mw'], 1)}</td><td class=n>{_f(r['predicted_mw'], 1)}</td>"
+              f"<td class='n {cls(r['delta_pct'])}'>{_f(r['delta_pct'], 1)}%</td>"
+              + "".join(f"<td class='n {cls((by.get(c) or {}).get('delta_pct'))}'>{_f((by.get(c) or {}).get('delta_pct'), 1)}%</td>"
+                        if (by.get(c) or {}).get("delta_pct") is not None else "<td class=meta>미모델</td>" for c in ("cpu", "ip", "bw"))
+              + f"<td class=n>{_f(r.get('unmodeled_mw'), 1)}</td>"
+              f"<td class='{cls(fit['worst_delta_pct']) if not fit['offsetting'] else 'warn'}'>{escape(verdict)}</td></tr>")
+    return h + "</table>"
 
 
 def _spec(s: dict[str, Any]) -> str:

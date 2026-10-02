@@ -1,13 +1,15 @@
 // Prediction ↔ measurement calibration (backend: /calibration/*, src/scenario_db/api/services/calibration.py)
 import { getJson } from './api'
+import type { CategoryFit } from './provenance'
 
 export type Category = 'cpu' | 'ip' | 'bw' | 'other'
 export interface Total { mean: number | null; std: number | null; p95: number | null; ci_95: number[] | null; n: number | null }
 export interface MeasRow {
   id: string; scenario_id: string; variant_id: string; project_ref: string | null; measured_at: string | null
   silicon_rev: string | null; sw_baseline_ref: string | null; thermal: string | null; total: Total; fps: number | null; rails: number; synthetic?: boolean
-  current_prediction: { id: string; total_mw: number; delta_pct: number | null } | null
-  simulation: { id: string; total_mw: number | null; delta_pct: number | null; count: number } | null
+  /** category: worst CPU/IP/BW Δ and whether the total matches only by compensation (absent before the API update) */
+  current_prediction: { id: string; total_mw: number; delta_pct: number | null; category?: CategoryFit | null } | null
+  simulation: { id: string; total_mw: number | null; delta_pct: number | null; count: number; category?: CategoryFit | null } | null
 }
 export interface Rail { rail: string; category: Category; power_mw: number; std_mw: number; voltage_v: number | null; current_ma: number | null; domain: string | null }
 export interface SplitRow { category: Category; prediction_mw: number | null; measurement_mw: number | null; delta_mw: number | null; delta_pct: number | null }

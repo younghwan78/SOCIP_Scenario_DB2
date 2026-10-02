@@ -7,6 +7,13 @@ import { Card } from '../components/TimingCharts'
 import { CompositionBars, RangeBoxes, SplitBar, SplitLegend, Waterfall } from '../components/ArchCharts'
 import { DataTable, type Column } from '../components/DataTable'
 import { OPTION_NOTE, OptionResults, OptionReviewPanel, ReviewBadge, signed } from '../components/PowerOptions'
+import { ProvBadge } from '../components/Provenance'
+import { powerScope, type Prov } from '../lib/provenance'
+
+const regProv = (r: BoardRow): Prov => ({
+  kind: 'registered', engine: 'Arch exploration', scope: powerScope({ cpu: r.power.cpu_mw, hw: r.power.hw_mw, bw: r.power.bw_mw }),
+  id: r.id, at: r.created_at, notes: [`run: ${r.run_title ?? r.run_id}`, `선택: ${r.selection_rule} · SW ${r.statistic} ×${r.runtime_scale}`],
+})
 
 export function PredictionsPage({ ctx }: { ctx: Ctx }) {
   const all = ctx.params.all === '1'
@@ -23,7 +30,7 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
     { key: 'v', label: 'Variant', width: 210, sticky: true, sort: (r) => r.variant_id, render: (r) => <span className="mono">{short(r.variant_id)}</span> },
     ...(all ? [{ key: 's', label: 'Scenario', width: 170, sort: (r: BoardRow) => r.scenario_id, render: (r: BoardRow) => <span className="mono faint">{r.scenario_id}</span> }] : []),
     { key: 'fps', label: 'fps', width: 52, align: 'right', firstDir: -1, sort: (r) => r.fps, render: (r) => fmt(r.fps, 0) },
-    { key: 'tot', label: 'Power mW', width: 160, align: 'right', firstDir: -1, sort: (r) => r.power.total_mw, render: (r) => <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><SplitBar p={r.power} width={70} /><b className="mono">{fmt(r.power.total_mw, 1)}</b></span> },
+    { key: 'tot', label: 'Power mW', width: 200, align: 'right', firstDir: -1, sort: (r) => r.power.total_mw, render: (r) => <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><SplitBar p={r.power} width={70} /><b className="mono">{fmt(r.power.total_mw, 1)}</b><ProvBadge prov={regProv(r)} compact /></span> },
     { key: 'cpu', label: 'CPU', width: 62, align: 'right', firstDir: -1, sort: (r) => r.power.cpu_mw, render: (r) => fmt(r.power.cpu_mw, 0) },
     { key: 'hw', label: 'HW', width: 62, align: 'right', firstDir: -1, sort: (r) => r.power.hw_mw, render: (r) => fmt(r.power.hw_mw, 0) },
     { key: 'bwip', label: 'IP BW', width: 70, align: 'right', firstDir: -1, sort: (r) => r.power.bw_ip_mw ?? r.power.bw_mw, render: (r) => fmt(r.power.bw_ip_mw ?? r.power.bw_mw, 0) },

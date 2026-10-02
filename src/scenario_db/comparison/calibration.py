@@ -81,3 +81,27 @@ def compare_split(pred: dict[str, float] | None, meas: dict[str, float]) -> list
         rows.append({"category": c, "prediction_mw": None if p is None else round(p, 3), "measurement_mw": m,
                      "delta_mw": None if p is None or m is None else round(p - m, 3), "delta_pct": pct(p, m)})
     return rows
+
+
+# Total within this band while a modelled category is off by more than OFFSET_CATEGORY_PCT:
+# the total matches by compensation between categories, not because the model is right.
+OFFSET_TOTAL_PCT = 10.0
+OFFSET_CATEGORY_PCT = 25.0
+
+
+def category_fit(rows: list[dict[str, Any]] | None, total_delta_pct: float | None) -> dict[str, Any]:
+    """Worst modelled-category error of a ``compare_split`` result and whether the total hides it."""
+    worst: dict[str, Any] | None = None
+    for r in rows or []:
+        d = r.get("delta_pct")
+        if d is None:
+            continue
+        if worst is None or abs(d) > abs(worst["delta_pct"]):
+            worst = {"category": r["category"], "delta_pct": d}
+    offsetting = (
+        worst is not None and total_delta_pct is not None
+        and abs(total_delta_pct) <= OFFSET_TOTAL_PCT and abs(worst["delta_pct"]) > OFFSET_CATEGORY_PCT
+    )
+    return {"worst_category": worst["category"] if worst else None,
+            "worst_delta_pct": worst["delta_pct"] if worst else None,
+            "offsetting": bool(offsetting)}

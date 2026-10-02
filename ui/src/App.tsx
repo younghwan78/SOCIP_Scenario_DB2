@@ -4,6 +4,7 @@ import { useAsync, useRoute, type Page } from './lib/route'
 import { Icon } from './components/Icons'
 import { Resizer, usePref, useResizable } from './components/Layout'
 import { Picker } from './components/Picker'
+import { ModelStatusBar } from './components/Provenance'
 import { ExplorerPage } from './pages/Explorer'
 import { MatrixPage } from './pages/Matrix'
 import { PipelinePage } from './pages/Pipeline'
@@ -188,6 +189,7 @@ export default function App() {
             <Icon name="search" size={15} /><span style={{ flexGrow: 1, textAlign: 'left' }}>Variant 찾기</span><span className="kbd">Ctrl K</span>
           </button>
         </header>}
+        {!catalogQ.error && route.page !== 'home' && route.page !== 'settings' && <ModelStatusBar ctx={ctx} />}
         {catalogQ.error && route.page !== 'home' && route.page !== 'settings' && <div className="page"><div className="err">API에 연결할 수 없습니다: {catalogQ.error}<br />FastAPI(:18000)를 실행하고 <span className="mono">npm run dev</span>의 /api 프록시를 확인하세요.</div></div>}
         {!catalogQ.error && route.page === 'explorer' && <ExplorerPage key={`${scenario}:${route.params.type ?? ''}`} ctx={ctx} />}
         {!catalogQ.error && route.page === 'matrix' && <MatrixPage key={project} ctx={ctx} />}
