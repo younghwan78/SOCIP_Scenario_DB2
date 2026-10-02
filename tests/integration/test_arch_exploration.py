@@ -135,6 +135,33 @@ def test_concurrent_first_promotions_form_one_current_history_chain(engine, stor
         assert len(current) == 1 and current[0].supersedes_ref in {r.id for r in rows if r.status == "superseded"}
 
 
+def test_reports_are_created_as_drafts_and_keep_concurrent_review_history(engine, stored_run):
+    rid, _ = stored_run
+    with Session(engine) as db:
+        with pytest.raises(UnprocessableError, match="draft"):
+            svc.create_report(db, ArchReportRequest.model_construct(run_id=rid, status="published"))
+        report = svc.create_report(db, ArchReportRequest(run_id=rid))
+        assert report["status"] == "draft"
+        assert report["snapshot"]["spec_summary"]["power_sources"] == {"registered": 0, "recommended": 2}
+        assert "등록 예측" not in report["snapshot"]["conclusion"]["headline"]
+    barrier = Barrier(2)
+
+    def review(reviewer):
+        with Session(engine) as db:
+            held = svc.get_report(db, report["id"])
+            assert held.review_history == []
+            barrier.wait(timeout=10)
+            return svc.set_report_status(db, report["id"], "published", reviewer=reviewer, note="spec checked")
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(review, reviewer) for reviewer in ("reviewer-a", "reviewer-b")]
+        for future in futures:
+            assert future.result(timeout=20)["status"] == "published"
+    with Session(engine) as db:
+        history = svc.get_report(db, report["id"]).review_history
+        assert len(history) == 2 and {r["reviewer"] for r in history} == {"reviewer-a", "reviewer-b"}
+
+
 def test_failed_verification_cannot_be_promoted(engine, stored_run):
     rid, ids = stored_run
     with Session(engine) as db:

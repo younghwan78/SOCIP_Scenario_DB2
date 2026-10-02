@@ -23,9 +23,16 @@ creation/status changes require writer/admin. Actor identity comes from the API 
   immutable history, detail, and attribution. Comparison requires the same scenario/variant.
 - `POST /arch/reports`: freeze a snapshot and HTML from a run's current registered
   predictions; otherwise use its recommendations, explicitly without a prediction ID.
+  Creation accepts `draft` only. The conclusion and scenario table distinguish registered
+  predictions from exploration recommendations, including a mixed-source power range.
 - `GET /arch/reports[/{id}]`, `/{id}/html`, `/{id}/stale`: metadata, snapshot, HTML,
   and comparison of frozen prediction IDs with current IDs. HTML does not change later.
+- `GET /arch/reports/{id}/xlsx`: export frozen tables as a spreadsheet with numeric cells.
 - `PATCH /arch/reports/{id}`: change status between `draft` and `published` only.
+  Publishing requires nonblank `reviewer` and `note`. Each transition appends actor,
+  timestamp, reviewer, and note to the review history; concurrent reviews serialize
+  on the report row. Metadata exposes the latest review and total review count.
+  Migration `0023` adds report review history.
 
 Variant identity is the pair `(scenario_id, variant_id)`, including report and chart
 selection. Promotion locks variant rows in canonical order before reading current

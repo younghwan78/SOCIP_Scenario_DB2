@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import io
 import zipfile
+from xml.etree import ElementTree
 
 import pytest
 from pydantic import ValidationError
 
-from scenario_db.api.schemas.arch_exploration import ReportStatusRequest
+from scenario_db.api.schemas.arch_exploration import ArchReportRequest, ReportStatusRequest
 from scenario_db.reporting.xlsx_export import report_sheets, write_xlsx
 
 
@@ -33,8 +34,20 @@ def test_report_sheets_tolerate_old_snapshots():
 
 def test_publish_requires_reviewer_and_note():
     with pytest.raises(ValidationError):
+        ArchReportRequest(run_id="EXP-1", status="published")
+    with pytest.raises(ValidationError):
         ReportStatusRequest(status="published")
     with pytest.raises(ValidationError):
         ReportStatusRequest(status="published", reviewer="Joo", note=" ")
     assert ReportStatusRequest(status="draft").status == "draft"
     assert ReportStatusRequest(status="published", reviewer="Joo", note="ok").reviewer == "Joo"
+
+
+def test_sheet_names_escape_attributes_and_resolve_case_insensitive_collisions():
+    data = write_xlsx([(name, ["x"], []) for name in ('a', 'a_2', 'a', 'A', 'quoted" & sheet', '\x01control')])
+    with zipfile.ZipFile(io.BytesIO(data)) as z:
+        root = ElementTree.fromstring(z.read("xl/workbook.xml"))
+    names = [s.attrib["name"] for s in root.iter("{http://schemas.openxmlformats.org/spreadsheetml/2006/main}sheet")]
+    assert len({n.casefold() for n in names}) == len(names)
+    assert names[4:] == ['quoted" & sheet', 'control']
+    assert all(len(n) <= 31 for n in names)

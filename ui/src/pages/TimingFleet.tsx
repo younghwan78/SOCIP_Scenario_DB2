@@ -74,8 +74,8 @@ export function TimingFleetPage({ ctx }: { ctx: Ctx }) {
         <ProvBadge prov={{ kind: 'recalc', engine: 'Timing Budget (analytic)', scope: 'CPU + IP + BW', dvfs: q.data?.dvfs_table_ref ?? null, rev: sp.ref ? `profile ${sp.ref}` : 'profile 없음 (코드 기본값)', notes: ['표의 Power·Latency는 현재 조건으로 즉석 계산 — 등록 예측과 다를 수 있음'] }} />
         {q.data && <span className="chip">DVFS {q.data.dvfs_table_ref ?? '미연결'}</span>}
       </div>
-      {q.error && <div className="err">{q.error}</div>}
-      {q.loading && <div className="empty">{ctx.scenario} 전체 variant 계산 중…</div>}
+      {(sp.error || q.error) && <div className="err">{sp.error || q.error}</div>}
+      {q.loading && !sp.error && <div className="empty">{ctx.scenario} 전체 variant 계산 중…</div>}
       {q.data && <VariantFailures errors={q.data.errors} />}
       {q.data && <div className="tb-grid">
         <Card id="fleet-rank" title={`NRT 필요 clock 배율 순위 (${pct0(margin)} rule 대비)`} note="행 = variant · 겹침 없음 · SW 비중 막대" defaultWide

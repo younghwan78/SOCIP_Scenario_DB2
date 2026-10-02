@@ -10,7 +10,7 @@ import io
 import re
 import zipfile
 from typing import Any
-from xml.sax.saxutils import escape
+from xml.sax.saxutils import escape, quoteattr
 
 Row = list[Any]
 Sheet = tuple[str, Row, list[Row]]  # name, header, rows
@@ -57,11 +57,17 @@ def _sheet_xml(header: Row, rows: list[Row]) -> str:
 
 def write_xlsx(sheets: list[Sheet]) -> bytes:
     names = []
+    used: set[str] = set()
     for name, _, _ in sheets:
-        n = re.sub(r"[\[\]:*?/\\]", "_", name)[:31] or "Sheet"
-        while n in names:
-            n = n[:28] + f"_{len(names)}"
+        base = re.sub(r"[\[\]:*?/\\]", "_", _BAD.sub("", name)).strip("'")[:31] or "Sheet"
+        n = base
+        suffix = 1
+        while n.casefold() in used:
+            tail = f"_{suffix}"
+            n = base[:31 - len(tail)] + tail
+            suffix += 1
         names.append(n)
+        used.add(n.casefold())
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("[Content_Types].xml",
@@ -78,7 +84,7 @@ def write_xlsx(sheets: list[Sheet]) -> bytes:
         z.writestr("xl/workbook.xml",
                    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
                    'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>'
-                   + "".join(f'<sheet name="{escape(n)}" sheetId="{i}" r:id="rId{i}"/>' for i, n in enumerate(names, 1)) + "</sheets></workbook>")
+                   + "".join(f'<sheet name={quoteattr(n)} sheetId="{i}" r:id="rId{i}"/>' for i, n in enumerate(names, 1)) + "</sheets></workbook>")
         z.writestr("xl/_rels/workbook.xml.rels",
                    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
                    + "".join(f'<Relationship Id="rId{i}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet{i}.xml"/>'

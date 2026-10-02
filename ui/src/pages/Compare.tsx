@@ -17,6 +17,7 @@ import { Bars, BoxPlot, SERIES, StackedBars } from '../components/Charts'
 import { PowerDeltaTable, PowerStack, type PowerRow } from '../components/PowerModelCharts'
 import { cpuSource, mifSummary, powerModelParts } from '../lib/powerModel'
 import { CompareSummary, type ItemInfo, type MetricRow } from '../components/CompareSummary'
+import { pickProfile } from '../lib/simProfile'
 
 const KPI_FIELDS: [string, string, string][] = [
   ['Total power', 'total_power_mw', 'mW'], ['Core power', 'core_power_mw', 'mW'], ['BW power', 'bw_power_mw', 'mW'],
@@ -110,7 +111,7 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
       const cat = catOf(it.scenario)
       setSims((m) => ({ ...m, [ids[i]]: { status: 'running' } }))
       try {
-        const cfg = cat ? (await api.simConfigs(cat.project_id).catch(() => null))?.items?.[0]?.id : undefined
+        const cfg = cat ? pickProfile((await api.simConfigs(cat.project_id)).items, undefined) : null
         const res = await api.simulate({
           scenario_id: it.scenario, variant_id: it.variant, config_profile_ref: cfg ?? null,
           execution_context: { silicon_rev: 'EVT1', sw_baseline_ref: cat?.default_sw_profile_ref ?? 'sw-vendor-v1.2.3', thermal: 'nominal', method: 'calculation' },

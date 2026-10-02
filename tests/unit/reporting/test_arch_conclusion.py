@@ -32,10 +32,15 @@ def _snap(**over):
 def test_model_limits_follow_the_run_lineage():
     builtin = model_limits({"power_model": "v1-vfps", "bw_power_model": "builtin", "bw_coefficient": 80.0})
     assert any("MIF DVFS level 미반영" in x for x in builtin)
+    assert any("MB/s ÷ 1000 × 계수 80.0 × LLC weight" in x for x in builtin)
     v2 = model_limits({"power_model": "v2-vf", "bw_power_model": "mif-linear", "power_params_ref": "pmp-x", "clock_basis": "measured"})
     assert not any("MIF DVFS level 미반영" in x for x in v2)
     assert any("mif-linear" in x for x in v2) and any("pmp-x" in x for x in v2)
     assert "lineage 기록이 없음" in model_limits(None)[0]
+    for bw in ("legacy-coeff", "linear-per-gbps"):
+        limits = model_limits({"bw_power_model": bw})
+        assert any("MIF DVFS level 미반영" in x for x in limits)
+        assert not any("read/write 분리 반영" in x for x in limits)
 
 
 def test_calibration_row_flags_offsetting_categories():
@@ -56,6 +61,7 @@ def test_conclusion_risks_actions_and_confidence():
     real = calibration_row("cam-rec-r1-uhd30-vdis", "uc", _detail(PRED, MEAS, 520.2, 519.9), "PRED-1")
     c2 = build_conclusion(_snap(calibration=[real]))
     assert c2["confidence"]["grade"] == "B" and any("상쇄" in r["title"] for r in c2["risks"])
+    assert "≤25%" not in c2["confidence"]["meaning"]  # the BW category error is over 100%
     good = calibration_row("v", "uc", _detail({"cpu": 170, "ip": 185, "bw": 100}, MEAS, 520.2, 455.0), "PRED-1")
     assert build_conclusion(_snap(calibration=[good]))["confidence"]["grade"] == "A"
     assert build_conclusion(_snap(calibration=[good], overview={"sample_dvfs": True, "dvfs_table_ref": "x-sample"}))["confidence"]["grade"] == "C"
@@ -75,6 +81,7 @@ def test_run_lineage_reads_variant_records():
     a, b = {"power_model": "v2-vf"}, {"power_model": "v1-vfps"}
     assert run_lineage({"variants": [{"model_lineage": a}, {"model_lineage": a}]}) == (a, False)
     assert run_lineage({"variants": [{"model_lineage": a}, {"model_lineage": b}]}) == (a, True)
+    assert run_lineage({"variants": [{"model_lineage": a}, {}]}) == (a, True)
     assert run_lineage({"variants": [{}], "summary": {}}) == (None, False)
     assert any("서로 다름" in x for x in model_limits(a, mixed=True))
 
@@ -92,3 +99,26 @@ def test_old_run_without_dvfs_and_empty_measurement_does_not_crash():
     assert any("DVFS table 기록 없음" in r for r in c["confidence"]["reasons"])
     assert any(r["title"] == "DVFS table 미기록" for r in c["risks"]) or len(c["risks"]) == 3
     assert any("실제 silicon 측정과 대조한 variant 없음" in r for r in c["confidence"]["reasons"])
+
+
+def test_headline_identifies_the_source_of_the_power_range():
+    for sources, label in (({"registered": 0, "recommended": 2}, "탐색 추천"),
+                           ({"registered": 2, "recommended": 0}, "등록 예측"),
+                           ({"registered": 1, "recommended": 1}, "등록 예측 · 탐색 추천")):
+        snap = _snap()
+        snap["spec_summary"]["power_sources"] = sources
+        assert f", {label} 500–900 mW" in build_conclusion(snap)["headline"]
+
+
+def test_clock_and_domain_tables_preserve_duplicate_variant_names():
+    from scenario_db.reporting.arch_report import _clocks, _domains
+
+    clocks = [{"scenario_id": sid, "variant_id": "shared", "node": "isp", "stage": "nrt", "required_mhz": 100,
+               "set_mhz": speed, "level": i, "voltage_mv": 800, "headroom_pct": 10}
+              for i, (sid, speed) in enumerate((("uc-one", 110), ("uc-two", 220)))]
+    html = _clocks(clocks)
+    assert "100→110" in html and "100→220" in html
+    domains = [{"scenario_id": c["scenario_id"], "variant_id": "shared", "spec_ok": True, "domain": "CAM", "level": c["level"],
+                "speed_mhz": c["set_mhz"], "voltage_mv": 800, "headroom_pct": 10, "required_mhz": 100, "driver": "isp"} for c in clocks]
+    html = _domains(domains)
+    assert "110 MHz" in html and "220 MHz" in html

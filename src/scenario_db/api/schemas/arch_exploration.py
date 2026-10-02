@@ -44,7 +44,7 @@ class PromoteRequest(BaseModel):
 class ArchReportRequest(BaseModel):
     run_id: str
     title: str | None = Field(default=None, max_length=200)
-    status: str = Field(default="draft", pattern="^(draft|published)$")
+    status: str = Field(default="draft", pattern="^draft$")
 
 
 class ReportStatusRequest(BaseModel):

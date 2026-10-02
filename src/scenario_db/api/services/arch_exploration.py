@@ -351,6 +351,8 @@ def compare(db: Session, *, old_id: str | None = None, new_id: str | None = None
 
 # ------------------------------------------------------------------- reports
 def create_report(db: Session, request: ArchReportRequest, user: str | None = None) -> dict[str, Any]:
+    if request.status != "draft":
+        raise UnprocessableError("reports must be created as draft; publishing requires a review")
     run = get_run(db, request.run_id)
     vids = [(v["scenario_id"], v["variant_id"]) for v in run.variants]
     preds: dict[tuple[str, str], dict[str, Any]] = {}
@@ -440,9 +442,15 @@ def get_report(db: Session, report_id: str) -> ArchReport:
 
 def set_report_status(db: Session, report_id: str, status: str, *, reviewer: str | None = None,
                       note: str | None = None, user: str | None = None) -> dict[str, Any]:
-    r = get_report(db, report_id)
     if status == "published" and (not (reviewer or "").strip() or not (note or "").strip()):
         raise UnprocessableError("publishing requires reviewer and note")
+    if status not in {"draft", "published"}:
+        raise UnprocessableError("invalid report status")
+    # Refresh any cached instance after acquiring the lock, so concurrent reviews
+    # append to the latest history rather than overwriting an earlier review.
+    r = db.query(ArchReport).filter_by(id=report_id).populate_existing().with_for_update().one_or_none()
+    if r is None:
+        raise NotFoundError(f"report not found: {report_id}")
     r.status = status
     r.review_history = [*(r.review_history or []), {"status": status, "reviewer": (reviewer or "").strip() or None,
                                                     "note": (note or "").strip() or None, "by": user, "at": _now().isoformat()}]

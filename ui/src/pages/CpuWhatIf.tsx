@@ -214,8 +214,8 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
               const fixed = rt && rt.options.length <= 1 && e.sweep === null
               return (
                 <tr key={task}>
-                  <td className="mono" title={task === '(other)' ? '어느 task에도 매핑되지 않은 cycle (커널 · 다른 프로세스 · 이름 없는 thread). 정체를 모르는 부하라 측정 배치에 고정 — sweep 대상 아님 (의도된 동작)' : undefined}>{task} <span className="faint">({rt?.measured.join('/') ?? prof?.tasks?.find((t) => t.task === task)?.cluster})</span>
-                    {task === '(other)' && <div className="faint" style={{ fontSize: 10.5, fontFamily: 'var(--font)' }}>미매핑 cycle · 측정 배치 고정</div>}</td>
+                  <td className="mono" title={task === '(other)' ? '어느 task에도 매핑되지 않은 cycle (커널 · 다른 프로세스 · 이름 없는 thread). 기본 정책을 유지하며 sweep에서 제외' : undefined}>{task} <span className="faint">({rt?.measured.join('/') ?? prof?.tasks?.find((t) => t.task === task)?.cluster})</span>
+                    {task === '(other)' && <div className="faint" style={{ fontSize: 10.5, fontFamily: 'var(--font)' }}>미매핑 cycle · 기본 정책 유지</div>}</td>
                   {clusterNames.map((c) => {
                     const cell = rt?.cells[c]
                     return <td key={c} className={rt?.measured.includes(c) ? 'measured' : ''}>

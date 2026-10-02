@@ -25,8 +25,10 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
 
   const q = useAsync(() => (!sp.ready ? new Promise<never>(() => {}) : variant ? timingApi.variant(scenario, variant, { statistic, eis, runtime_scale: scale, timeline_frames: frames, ...marginOpts(margin) }, cfg) : Promise.reject(new Error('variant를 선택하세요 (Ctrl K)'))), [scenario, variant, statistic, eis, scale, cfg, sp.ready, margin, frames])
   // what-if (24 sims) starts after the main report so the page never holds two simulation slots at once
-  const [mainReady, setMainReady] = useState(false)
-  useEffect(() => { if (q.data) setMainReady(true) }, [q.data])
+  const mainKey = JSON.stringify([ctx.project, scenario, variant, cfg, margin])
+  const [mainReadyKey, setMainReadyKey] = useState<string | null>(null)
+  useEffect(() => { if (q.data && sp.ready) setMainReadyKey(mainKey) }, [q.data, sp.ready, mainKey])
+  const mainReady = mainReadyKey === mainKey && sp.ready
   const wq = useAsync(() => (variant && mainReady ? timingApi.variant(scenario, variant, { statistic: 'max', eis: 'auto', runtime_scale: 1, include_whatif: true, ...marginOpts(margin) }, cfg) : Promise.resolve(null)), [scenario, variant, mainReady, cfg, margin])
   const r = q.data?.report
   const whatif = wq.data?.report.whatif ?? []
@@ -56,8 +58,8 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
         {r && <span className="chip" title={r.dvfs.tables.join(', ')}>DVFS {r.dvfs.applied ? r.dvfs.table_ref ?? 'custom' : '미연결'}</span>}
         <button className="btn" onClick={() => ctx.navigate('timing-fleet', { cfg: ctx.params.cfg, margin: ctx.params.margin })}>전체 scenario →</button>
       </div>
-      {q.error && <div className="err">{q.error}</div>}
-      {q.loading && !r && <div className="empty">계산 중…</div>}
+      {(sp.error || q.error) && <div className="err">{sp.error || q.error}</div>}
+      {q.loading && !r && !sp.error && <div className="empty">계산 중…</div>}
       {r && <Body r={r} cfg={q.data?.config_profile_ref ?? null} ctx={ctx} whatif={whatif} whatLoading={wq.loading} current={{ statistic, eis: r.eis.on, scale }} margin={r.sw_margin?.rt ?? margin}
         frames={frames} setFrames={(n) => set('frames', n === 20 ? undefined : String(n))} />}
     </div>

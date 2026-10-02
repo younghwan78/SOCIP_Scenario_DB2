@@ -11,7 +11,7 @@ from typing import Any
 
 # Limits that hold for every engine revision so far (kept until the in-house model removes them).
 STANDING_LIMITS = (
-    "CPU 전력은 cluster · 주파수 · 전압 가정 (Linux EM 계수 × busy time) — 실측 residency 미반영.",
+    "CPU 전력은 cluster · 주파수 · 전압과 계수 기반 추정 — 실측 profile 사용 여부와 계수 검증 필요.",
     "Compression은 BW만 감소 (encoder/decoder 전력 · 화질 영향 미반영). catalog에 없는 ratio는 assumed.",
     "DVFS headroom은 domain 단위 level 상향 (V² scaling), 필요 clock보다 빠른 level만 탐색.",
     "120 fps 이상 NRT batch 처리 미모델 — 고속 recording은 1 frame = 1 period 가정의 보수적 추정.",
@@ -24,11 +24,12 @@ FIT_WARN_PCT = 25.0
 
 def run_lineage(run: dict[str, Any]) -> tuple[dict[str, Any] | None, bool]:
     """Model lineage recorded per explored variant (first one) and whether variants disagree."""
-    seen = [v.get("model_lineage") for v in run.get("variants") or [] if v.get("model_lineage")]
+    records = [v.get("model_lineage") for v in run.get("variants") or []]
+    seen = [x for x in records if x]
     if not seen:
         return (run.get("summary") or {}).get("model_lineage"), False
     first = seen[0]
-    return first, any(x != first for x in seen[1:])
+    return first, any(x != first for x in records)
 
 
 def model_limits(lineage: dict[str, Any] | None, mixed: bool = False) -> list[str]:
@@ -39,14 +40,18 @@ def model_limits(lineage: dict[str, Any] | None, mixed: bool = False) -> list[st
         out.append("이 run에는 model lineage 기록이 없음 (이전 engine) — 아래 한계는 기본 모델 기준.")
     bw = lin.get("bw_power_model") or "builtin"
     if bw == "builtin":
-        out.append(f"BW 전력 = MB/s × 계수 {lin.get('bw_coefficient', 80)} — MIF DVFS level 미반영.")
-    else:
+        out.append(f"BW 전력 = MB/s ÷ 1000 × 계수 {lin.get('bw_coefficient', 80)} × LLC weight — MIF DVFS level 미반영.")
+    elif bw == "mif-linear":
         out.append(f"BW 전력 = {bw} 모델 (MIF level · read/write 분리 반영).")
+    else:
+        out.append(f"BW 전력 = {bw} 모델 — MIF DVFS level 미반영.")
     pm = str(lin.get("power_model") or "v1-vfps")
     if pm.startswith("v1"):
         out.append("IP 전력 = 사용률 × 단위전력 × (V/Vref)² × fps 비 — 설정 clock(f_set) · leakage 미반영.")
-    else:
+    elif pm == "v2-vf":
         out.append(f"IP 전력 = {pm} (clock gating · leakage 반영).")
+    else:
+        out.append(f"IP 전력 = {pm} — 해당 모델의 clock · leakage 처리 확인 필요.")
     ref = lin.get("power_params_ref")
     out.append(f"power params = {ref}." if ref else "power params 미지정 — 코드 기본 계수 사용.")
     if str(lin.get("clock_basis") or "calculated") == "calculated":
@@ -102,8 +107,8 @@ def _confidence(snap: dict[str, Any]) -> dict[str, Any]:
         grade = "B"
         reasons.append(f"실측 대조 최대 |Δ| {worst:.0f}% (≤ {FIT_WARN_PCT:.0f}%)" if worst is not None else "실측 대조 구성 비교 불가")
     return {"grade": grade, "reasons": reasons,
-            "meaning": {"A": "실측 대조 구성 오차 ≤10% — 수치 그대로 검토 가능",
-                        "B": "실측 대조 있음, 구성 오차 ≤25% — 경향 비교 용도",
+            "meaning": {"A": "실측 대조 구성 오차 ≤10% — 대조 범위 내 검토 가능",
+                        "B": "실측 대조 있음 — 구성 오차 · 상쇄를 확인하며 경향 비교",
                         "C": "실측 근거 부족 또는 SAMPLE 입력 — 상대 비교 · 후보 선정 용도"}[grade]}
 
 
@@ -159,6 +164,9 @@ def build_conclusion(snap: dict[str, Any]) -> dict[str, Any]:
                         "delta_pct": None, "basis": "timing budget", "check": "batch 모델 + 실측"})
     ok, n = s["spec_ok"], s["explored"]
     rng = s.get("power_range_mw")
-    headline = (f"탐색 {n}개 중 {ok}개 spec 만족" + (f", 등록 예측 {rng[0]:,.0f}–{rng[1]:,.0f} mW" if rng else "")
+    sources = s.get("power_sources") or {}
+    source = ("등록 예측 · 탐색 추천" if sources.get("registered") and sources.get("recommended") else
+              "등록 예측" if sources.get("registered") else "탐색 추천" if sources.get("recommended") else "예측")
+    headline = (f"탐색 {n}개 중 {ok}개 spec 만족" + (f", {source} {rng[0]:,.0f}–{rng[1]:,.0f} mW" if rng else "")
                 + (f". 미달 {n - ok}개는 조치 필요" if n - ok else ". 미달 없음"))
     return {"headline": headline, "risks": risks[:3], "actions": actions[:6], "confidence": _confidence(snap)}

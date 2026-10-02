@@ -115,7 +115,7 @@ function RunForm({ ctx, onDone }: { ctx: Ctx; onDone: (r: RunDetail) => void }) 
         <span className="faint" style={{ fontSize: 12 }}>SW 통계·증가 = timeline sim · DVFS·compression = analytic · 추천 조합은 재시뮬레이션 검증</span>
         <ProfileSelect profiles={sp.profiles} value={sp.ref} onChange={setCfgSel} />
         <span className="grow" />
-        {err && <span className="err" style={{ margin: 0 }}>{err}</span>}
+        {(sp.error || err) && <span className="err" style={{ margin: 0 }}>{sp.error || err}</span>}
         <button className="btn primary" disabled={busy || !sp.ready || !scenarios.length || !o.statistics.length || !o.runtime_scales.length || cases > 200000} onClick={run}>
           {busy ? `탐색 중… (variant당 ~0.5 s)` : '탐색 실행'}</button>
       </div>

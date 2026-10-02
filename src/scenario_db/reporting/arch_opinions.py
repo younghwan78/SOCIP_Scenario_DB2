@@ -113,7 +113,7 @@ def _f(v: float | None, d: int = 0) -> str:
 
 
 def build_opinions(rows: list[dict[str, Any]], domains: list[dict[str, Any]], *, sample_dvfs: bool = False,
-                   measured: set[str] | None = None, options: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+                   measured: set[tuple[str, str]] | None = None, options: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
     """One block per non-empty category: stats + ordered opinion sentences.
 
     Every sentence carries its evidence basis (R5): 실측 (measurement), 산출 (computed from the
@@ -211,9 +211,9 @@ def build_opinions(rows: list[dict[str, Any]], domains: list[dict[str, Any]], *,
     return out
 
 
-def _evidence(rs: list[dict[str, Any]], measured: set[str], sample_dvfs: bool, share: dict[str, float]) -> dict[str, Any]:
+def _evidence(rs: list[dict[str, Any]], measured: set[tuple[str, str]], sample_dvfs: bool, share: dict[str, float]) -> dict[str, Any]:
     """Block-level evidence: how many variants have a real measurement and what data would firm it up."""
-    n = sum(1 for r in rs if r["variant_id"] in measured)
+    n = sum(1 for r in rs if (r["scenario_id"], r["variant_id"]) in measured)
     needed = []
     if n == 0:
         needed.append("실측 rail power (최소 1개 variant)")
@@ -284,13 +284,13 @@ def _sections(cat: str, rs: list[dict[str, Any]], ok: list[dict[str, Any]], ops:
         comp_n = sum(1 for r in ok if r.get("compression"))
         optim.append([f"추천 조합(compression · DVFS) 적용 시 baseline 대비 평균 −{statistics.mean(saves):,.0f} mW "
                       f"(최대 −{max(saves):,.0f} mW) · compression 사용 {comp_n}/{len(ok)} variant.", "산출"])
-    ids = {r["variant_id"] for r in rs}
-    best = [o for o in options if o["variant_id"] in ids and o.get("best")]
+    ids = {(r["scenario_id"], r["variant_id"]) for r in rs}
+    best = [o for o in options if (o["scenario_id"], o["variant_id"]) in ids and o.get("best")]
     if best:
-        b = min(best, key=lambda o: o["best"]["delta_mw"])
+        best_option = min(best, key=lambda o: o["best"]["delta_mw"])
         avg = statistics.mean(o["best"]["delta_mw"] for o in best)
-        optim.append([f"Power option(IQ 평가 대상) {len(best)}개 variant에서 추가 절감 — 평균 {avg:+,.0f} mW, 최대 {b['best']['delta_mw']:+,.0f} mW "
-                      f"({' + '.join(b['best']['labels'])}, {b['variant_id'].replace('cam-rec-', '')}).", "산출"])
+        optim.append([f"Power option(IQ 평가 대상) {len(best)}개 variant에서 추가 절감 — 평균 {avg:+,.0f} mW, 최대 {best_option['best']['delta_mw']:+,.0f} mW "
+                      f"({' + '.join(best_option['best']['labels'])}, {best_option['variant_id'].replace('cam-rec-', '')}).", "산출"])
     if cat == "highspeed":
         optim.append(["고속 모드 전용 처리 경로(저해상도 NRT · RTA 간헐 실행) 정의 후 재탐색.", "가정 · 모델 밖"])
     if not risk:

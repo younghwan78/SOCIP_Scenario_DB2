@@ -166,7 +166,8 @@ def build_snapshot(
             "sets": len(ranked), "notes": po.get("notes") or [],
         })
 
-    totals = [r["power"]["total_mw"] for r in rows if r["spec_ok"] and r["power"].get("total_mw") is not None]
+    power_rows = [r for r in rows if r["spec_ok"] and r["power"].get("total_mw") is not None]
+    totals = [r["power"]["total_mw"] for r in power_rows]
     lineage, mixed = run_lineage(run)
     snap = {
         "overview": {
@@ -184,9 +185,12 @@ def build_snapshot(
                        for v in variants if not v["spec_ok"]],
             "errors": run.get("errors") or [],
             "power_range_mw": [round(min(totals), 1), round(max(totals), 1)] if totals else None,
+            "power_sources": {"registered": sum(bool(r["prediction_id"]) for r in power_rows),
+                              "recommended": sum(not r["prediction_id"] for r in power_rows)},
         },
         "opinions": build_opinions(rows, domains, sample_dvfs=sample_dvfs,
-                                   measured={c["variant_id"] for c in calibration or [] if not c.get("synthetic")}, options=options),
+                                   measured={(c["scenario_id"], c["variant_id"]) for c in calibration or []
+                                             if not c.get("synthetic") and c["fit"]["worst_delta_pct"] is not None}, options=options),
         "scenarios": rows,
         "clocks": clocks,
         "compression": comp_rows,
@@ -490,7 +494,7 @@ def _latency(rows: list[dict[str, Any]]) -> str:
 
 def _scenarios(rows: list[dict[str, Any]]) -> str:
     h = ("<div class='scroll'><table><tr><th>Scenario</th><th>fps</th><th>EIS</th><th>판정</th><th>Total mW</th>"
-         "<th>CPU</th><th>IP</th><th>IP BW</th><th>CPU BW</th><th>BW MB/s</th><th>range mW (min–max)</th><th>Compression</th><th>DVFS level</th><th>검증</th></tr>")
+         "<th>CPU</th><th>IP</th><th>IP BW</th><th>CPU BW</th><th>BW MB/s</th><th>range mW (min–max)</th><th>Compression</th><th>DVFS level</th><th>검증</th><th>출처</th></tr>")
     for r in rows:
         p, d = r["power"], r["distribution"]["total_mw"]
         ver = r.get("verified") or {}
@@ -500,20 +504,21 @@ def _scenarios(rows: list[dict[str, Any]]) -> str:
               f"<td class=n>{_f(p.get('bw_ip_mw', p.get('bw_mw')))}</td><td class=n>{_f(p.get('bw_cpu_mw'))}</td><td class=n>{_f(r['bw_mbs'],0)}</td><td class=n>{_f(d.get('min'),0)}–{_f(d.get('max'),0)}</td>"
               f"<td>{len(r['compression'])} buf{' <span class=warn>lossy</span>' if r.get('lossy') and r['compression'] else ''}</td>"
               f"<td>{escape(', '.join(f'{k}:L{v}' for k, v in sorted(r['dvfs'].items())))}</td>"
-              f"<td>{'✓ ' + _f(ver.get('delta_pct'), 2) + '%' if ver.get('ok') else ('✗' if ver else '—')}</td></tr>")
+              f"<td>{'✓ ' + _f(ver.get('delta_pct'), 2) + '%' if ver.get('ok') else ('✗' if ver else '—')}</td>"
+              f"<td>{'등록 예측' if r.get('prediction_id') else '탐색 추천'}</td></tr>")
     return h + "</table></div>"
 
 
 def _clocks(clocks: list[dict[str, Any]]) -> str:
     nodes = sorted({c["node"] for c in clocks}, key=lambda n: (min(("rt", "nrt", "post", "output").index(c["stage"]) if c["stage"] in ("rt", "nrt", "post", "output") else 9 for c in clocks if c["node"] == n), n))
-    variants = list(dict.fromkeys(c["variant_id"] for c in clocks))
-    cell = {(c["variant_id"], c["node"]): c for c in clocks}
+    variants = list(dict.fromkeys((c["scenario_id"], c["variant_id"]) for c in clocks))
+    cell = {(c["scenario_id"], c["variant_id"], c["node"]): c for c in clocks}
     h = "<p class='meta'>셀 = 필요 → 설정 MHz · level · 전압. CAM 등 domain level은 scenario별로 다를 수 있음. 색 = headroom (진할수록 여유 적음)</p>"
     h += "<div class='scroll'><table><tr><th>Scenario</th>" + "".join(f"<th>{escape(n.upper())}</th>" for n in nodes) + "</tr>"
-    for v in variants:
-        h += f"<tr><td>{escape(_short(v))}</td>"
+    for sid, v in variants:
+        h += f"<tr><td title='{escape(sid, quote=True)}'>{escape(_short(v))}</td>"
         for n in nodes:
-            c = cell.get((v, n))
+            c = cell.get((sid, v, n))
             if not c:
                 h += "<td></td>"
                 continue
@@ -528,15 +533,15 @@ def _clocks(clocks: list[dict[str, Any]]) -> str:
 
 def _domains(rows: list[dict[str, Any]]) -> str:
     doms = sorted({r["domain"] for r in rows})
-    variants = list(dict.fromkeys(r["variant_id"] for r in rows if r["spec_ok"]))
-    cell = {(r["variant_id"], r["domain"]): r for r in rows}
+    variants = list(dict.fromkeys((r["scenario_id"], r["variant_id"]) for r in rows if r["spec_ok"]))
+    cell = {(r["scenario_id"], r["variant_id"], r["domain"]): r for r in rows}
     h = ("<p class='meta'>DVFS domain별 선택 level (spec 만족 scenario). 셀 = level · MHz · mV / 필요 max MHz (driver IP). "
          "색이 진할수록 headroom 적음. CAM level은 scenario마다 다르게 설정 가능.</p>")
     h += "<div class='scroll'><table><tr><th>Scenario</th>" + "".join(f"<th>{escape(d)}</th>" for d in doms) + "</tr>"
-    for v in variants:
-        h += f"<tr><td>{escape(_short(v))}</td>"
+    for sid, v in variants:
+        h += f"<tr><td title='{escape(sid, quote=True)}'>{escape(_short(v))}</td>"
         for d in doms:
-            c = cell.get((v, d))
+            c = cell.get((sid, v, d))
             if not c:
                 h += "<td></td>"
                 continue
