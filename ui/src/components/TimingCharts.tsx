@@ -1,33 +1,39 @@
-import { useMemo, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { useWidth } from './Charts'
+import { useTip } from './ChartTip'
 import { usePref } from './Layout'
 import {
-  LAT_COLOR, OVH_COLOR, STAGE_COLOR, SW_COLOR, clockText, fmt, niceMax, stageSegments,
+  LAT_COLOR, OVH_COLOR, STAGE_COLOR, SW_COLOR, clockText, fmt, niceMax, pct0, stageSegments,
   type FleetRow, type IpRow, type StageRow, type TimelineRow, type TimingReport, type WhatIfRow,
 } from '../lib/timingBudget'
 
 // ---------------------------------------------------------------- card
 /** Resizable card: drag the bottom-right corner for height, toggle full width. Charts follow the body width. */
-export function Card({ id, title, note, children, actions, defaultWide = false, minHeight = 160 }: {
+export function Card({ id, title, note, children, actions, defaultWide = false, minHeight = 160, help }: {
   id: string; title: ReactNode; note?: ReactNode; children: ReactNode; actions?: ReactNode; defaultWide?: boolean; minHeight?: number
+  /** "?" button → explanation panel (what the card means, how to read / use it) */
+  help?: ReactNode
 }) {
   const [wide, setWide] = usePref(`tb.card.${id}.wide`, defaultWide)
+  const [showHelp, setShowHelp] = useState(false)
   return (
     <section className={`panel tb-card ${wide ? 'wide' : ''}`} aria-label={typeof title === 'string' ? title : id} style={{ minHeight }}>
       <div className="tb-card-head">
         <h2>{title}</h2>
+        {help && <button className={`help-q ${showHelp ? 'on' : ''}`} onClick={() => setShowHelp((v) => !v)} aria-label="도움말" aria-expanded={showHelp} title="이 카드 설명">?</button>}
         {note && <span className="faint tb-note">{note}</span>}
         <span className="grow" />
         {actions}
         <button className="btn tb-mini wide-toggle" onClick={() => setWide((w) => !w)} title={wide ? '반폭으로' : '전체 폭으로'} aria-label={wide ? '반폭으로' : '전체 폭으로'}>{wide ? '⇤⇥' : '⇔'}</button>
       </div>
+      {help && showHelp && <div className="help-panel">{help}</div>}
       <div className="tb-card-body">{children}</div>
     </section>
   )
 }
 
 // ---------------------------------------------------------------- ① slot budget
-export function SlotBudget({ report }: { report: TimingReport }) {
+export function SlotBudget({ report, margin = 0.25 }: { report: TimingReport; margin?: number }) {
   const [ref, w] = useWidth<HTMLDivElement>(900)
   const P = report.period_ms
   const labelW = 150, valW = 150
@@ -36,23 +42,24 @@ export function SlotBudget({ report }: { report: TimingReport }) {
   const rows = report.stages
   return (
     <div ref={ref} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {rows.map((s) => <SlotRow key={s.id} stage={s} P={P} px={px} barW={barW} labelW={labelW} valW={valW} />)}
+      {rows.map((s) => <SlotRow key={s.id} stage={s} P={P} px={px} barW={barW} labelW={labelW} valW={valW} margin={margin} />)}
       <div className="legend-row" style={{ paddingLeft: labelW + 12 }}>
         <Legend color={STAGE_COLOR.rt} label="RT HW" /><Legend color={STAGE_COLOR.nrt} label="NRT HW" /><Legend color={STAGE_COLOR.post} label="GDC HW" />
         <Legend color={STAGE_COLOR.output} label="Output HW" /><Legend color={SW_COLOR} label="SW runtime" /><Legend color={LAT_COLOR} label="SW latency" />
-        <Legend color={OVH_COLOR} label="IP driver/IRQ" /><Legend color="#FCEFD6" border="#E5C48A" label="RT SW margin 25%" />
+        <Legend color={OVH_COLOR} label="IP driver/IRQ" /><Legend color="#FCEFD6" border="#E5C48A" label={`RT · Output SW margin ${pct0(margin)}`} />
         <span className="legend-item"><span style={{ width: 2, height: 12, background: 'var(--text)' }} />frame period</span>
       </div>
     </div>
   )
 }
 
-function SlotRow({ stage, P, px, barW, labelW, valW }: { stage: StageRow; P: number; px: number; barW: number; labelW: number; valW: number }) {
+function SlotRow({ stage, P, px, barW, labelW, valW, margin }: { stage: StageRow; P: number; px: number; barW: number; labelW: number; valW: number; margin: number }) {
+  const tip = useTip()
   const segs = stageSegments(stage)
   let x = 0
   const used = segs.reduce((a, s) => a + s.ms, 0)
   const over = used > P * 1.0005 || !stage.feasible
-  const sub = stage.id === 'rt' ? 'sensor 동기 · 25% rule' : stage.id === 'nrt' ? 'MTNR→MCSC · SW gating 반영' : stage.id === 'post' ? 'memory → EIS/SW → GDC' : 'DPU · MFC · writer (25% rule)'
+  const sub = stage.id === 'rt' ? `sensor 동기 · ${pct0(margin)} rule` : stage.id === 'nrt' ? 'MTNR→MCSC · SW gating 반영' : stage.id === 'post' ? 'memory → EIS/SW → GDC' : `DPU · MFC · writer (${pct0(margin)} rule)`
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
       <div style={{ width: labelW, flexShrink: 0 }}>
@@ -65,8 +72,8 @@ function SlotRow({ stage, P, px, barW, labelW, valW }: { stage: StageRow; P: num
         {segs.map((s) => {
           const w = Math.max(1, Math.min(s.ms, P * 1.5 - x) * px)
           const el = (
-            <g key={s.key}>
-              <title>{s.tip}</title>
+            <g key={s.key} {...tip({ title: s.label, color: s.color, head: { label: '소요', value: `${fmt(s.ms, 2)} ms`, tone: 'strong' },
+              rows: [{ k: 'frame 주기 대비', v: `${fmt((s.ms / P) * 100, 1)}% of ${fmt(P, 2)} ms` }, { k: 'slot 시작', v: `+${fmt(x, 2)} ms` }], foot: s.tip })}>
               <rect x={x * px} y={6} width={w} height={28} fill={s.color} stroke="#FFFFFF" strokeWidth={1} />
               {w > 44 && <text x={x * px + w / 2} y={24} textAnchor="middle" fontSize={11} fill={s.text}>{s.label}</text>}
             </g>
@@ -95,39 +102,80 @@ function Legend({ color, label, border }: { color: string; label: string; border
 }
 
 // ---------------------------------------------------------------- ⑤ clocks
-export function ClockChart({ ips, dvfsApplied = true }: { ips: IpRow[]; dvfsApplied?: boolean }) {
+const DOMAIN_TINT = ['#EEF4FB', '#F2F7EE', '#FBF3EA', '#F4EFFA', '#EEF7F6', '#FAF0F2']
+const DOMAIN_EDGE = ['#7FA7D6', '#8FBF7A', '#E0A867', '#A88BD0', '#6FB8AE', '#D98A9C']
+const STAGE_RANK: Record<string, number> = { rt: 0, nrt: 1, post: 2, output: 3 }
+
+/** IPs grouped by DVFS domain (one voltage per domain → the most demanding IP sets the domain level). */
+export function domainGroups(ips: IpRow[]): { domain: string; rows: IpRow[]; level: number | null; voltage: number; driver: IpRow }[] {
+  const by = new Map<string, IpRow[]>()
+  for (const ip of ips.filter((i) => i.set_clock_mhz > 0)) {
+    const d = ip.dvfs_group ?? '(domain 없음)'
+    by.set(d, [...(by.get(d) ?? []), ip])
+  }
+  return [...by.entries()].map(([domain, rows]) => {
+    const sorted = [...rows].sort((a, b) => (STAGE_RANK[a.stage] ?? 9) - (STAGE_RANK[b.stage] ?? 9) || a.node.localeCompare(b.node))
+    const lv = rows.map((r) => r.dvfs_level).filter((l): l is number => l !== null)
+    const driver = [...rows].sort((a, b) => (b.dvfs_level ?? -1) - (a.dvfs_level ?? -1) || b.required_clock_mhz - a.required_clock_mhz)[0]
+    return { domain, rows: sorted, level: lv.length ? Math.max(...lv) : null, voltage: Math.max(...rows.map((r) => r.voltage_mv)), driver }
+  }).sort((a, b) => Math.min(...a.rows.map((r) => STAGE_RANK[r.stage] ?? 9)) - Math.min(...b.rows.map((r) => STAGE_RANK[r.stage] ?? 9)) || a.domain.localeCompare(b.domain))
+}
+
+export function ClockChart({ ips, dvfsApplied = true, margin = 0.25 }: { ips: IpRow[]; dvfsApplied?: boolean; margin?: number }) {
   const [ref, w] = useWidth<HTMLDivElement>(600)
+  const tip = useTip()
   const rows = ips.filter((i) => i.set_clock_mhz > 0)
   const max = niceMax(Math.max(...rows.map((i) => Math.max(i.set_clock_mhz, i.rule_clock_mhz ?? 0))))
   const labelW = 132, valW = 300
-  const barW = Math.max(120, w - labelW - valW - 16)
+  const barW = Math.max(120, w - labelW - valW - 28)
+  const groups = domainGroups(ips)
+  const rule = pct0(margin)
   return (
-    <div ref={ref} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      {rows.map((ip) => {
-        const up = ip.rule_clock_mhz !== null && ip.set_clock_mhz > ip.rule_clock_mhz + 0.5
-        return (
-          <div key={ip.node} style={{ display: 'flex', alignItems: 'center', gap: 8 }} title={ip.clock_reason ?? undefined}>
-            <div style={{ width: labelW, flexShrink: 0, display: 'flex', gap: 6, alignItems: 'baseline' }}>
-              <span style={{ width: 8, height: 8, borderRadius: 2, background: STAGE_COLOR[ip.stage], flexShrink: 0 }} />
-              <b style={{ fontSize: 12 }}>{ip.node.toUpperCase()}</b>
-              <span className="faint" style={{ fontSize: 11 }}>{ip.dvfs_group ?? ''}{ip.cores > 1 ? ` ×${ip.cores}` : ''}{ip.shared_streams > 1 ? ` ⇄${ip.shared_streams}` : ''}</span>
-            </div>
-            <svg width={barW} height={20} style={{ flexShrink: 0 }} role="img" aria-label={`${ip.node} clock`}>
-              <rect x={0} y={1} width={barW} height={18} fill="#FBFAF7" />
-              {ip.rule_clock_mhz !== null && <rect x={0} y={2} width={(ip.rule_clock_mhz / max) * barW} height={7} fill="#DED8CF"><title>25% rule {fmt(ip.rule_clock_mhz)} MHz</title></rect>}
-              <rect x={0} y={11} width={(ip.set_clock_mhz / max) * barW} height={7} fill={up ? '#C2410C' : '#2F6F68'}><title>set {fmt(ip.set_clock_mhz)} MHz (required {fmt(ip.required_clock_mhz)})</title></rect>
-              {ip.required_clock_mhz < ip.set_clock_mhz - 0.5 && <line x1={(ip.required_clock_mhz / max) * barW} x2={(ip.required_clock_mhz / max) * barW} y1={9} y2={20} stroke="#1F2430" strokeWidth={1.5}><title>required {fmt(ip.required_clock_mhz)} MHz</title></line>}
-            </svg>
-            <span className="mono" style={{ width: valW, flexShrink: 0, fontSize: 12, color: up ? '#C2410C' : 'var(--text-2)' }}>
-              {dvfsApplied ? clockText(ip) : `${fmt(ip.rule_clock_mhz, 0)} → ${fmt(ip.set_clock_mhz, 0)} MHz`}{dvfsApplied && ip.dvfs_table !== false ? <span className="faint"> · {fmt(ip.voltage_mv, 0)} mV</span> : null}
-            </span>
+    <div ref={ref} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {groups.map((g, gi) => (
+        <div key={g.domain} className="dom-group" style={{ background: DOMAIN_TINT[gi % DOMAIN_TINT.length], borderLeftColor: DOMAIN_EDGE[gi % DOMAIN_EDGE.length] }}>
+          <div className="dom-head">
+            <b>{g.domain}</b>
+            {dvfsApplied && g.level !== null && <span className="badge">domain Lv{g.level} · {fmt(g.voltage, 0)} mV</span>}
+            <span className="faint">IP {g.rows.length}개 · level 결정 = <b>{g.driver.node.toUpperCase()}</b> (최고 요구 {fmt(g.driver.required_clock_mhz, 0)} MHz)</span>
           </div>
-        )
-      })}
+          {g.rows.map((ip) => {
+            const up = ip.rule_clock_mhz !== null && ip.set_clock_mhz > ip.rule_clock_mhz + 0.5
+            const isDriver = ip.node === g.driver.node && g.rows.length > 1
+            return (
+              <div key={ip.node} style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+                {...tip({ title: `${ip.node.toUpperCase()} · ${g.domain}`, color: STAGE_COLOR[ip.stage], head: { label: 'set clock', value: `${fmt(ip.set_clock_mhz, 0)} MHz`, tone: 'strong' },
+                  rows: [
+                    { k: `${rule} rule clock`, v: ip.rule_clock_mhz === null ? '—' : `${fmt(ip.rule_clock_mhz, 0)} MHz` },
+                    { k: 'required (level 선택 전)', v: `${fmt(ip.required_clock_mhz, 0)} MHz` },
+                    ...(ip.rule_clock_mhz ? [{ k: 'rule 대비', v: `×${fmt(ip.set_clock_mhz / ip.rule_clock_mhz, 2)}`, tone: (up ? 'bad' : 'good') as 'bad' | 'good' }] : []),
+                    { k: 'DVFS level · 전압', v: dvfsApplied && ip.dvfs_table !== false ? `Lv${ip.dvfs_level ?? '—'} · ${fmt(ip.voltage_mv, 0)} mV` : '표 없음' },
+                    { k: 'HW 시간', v: ip.hw_ms === null ? '—' : `${fmt(ip.hw_ms, 2)} ms` },
+                    { k: 'IP power', v: `${fmt(ip.power_mw, 1)} mW` },
+                  ], foot: ip.clock_reason ?? undefined })}>
+                <div style={{ width: labelW, flexShrink: 0, display: 'flex', gap: 6, alignItems: 'baseline' }}>
+                  <span style={{ width: 8, height: 8, borderRadius: 2, background: STAGE_COLOR[ip.stage], flexShrink: 0 }} />
+                  <b style={{ fontSize: 12 }}>{ip.node.toUpperCase()}</b>
+                  <span className="faint" style={{ fontSize: 11 }}>{ip.stage.toUpperCase()}{ip.cores > 1 ? ` ×${ip.cores}` : ''}{ip.shared_streams > 1 ? ` ⇄${ip.shared_streams}` : ''}{isDriver ? ' ★' : ''}</span>
+                </div>
+                <svg width={barW} height={20} style={{ flexShrink: 0 }} role="img" aria-label={`${ip.node} clock`}>
+                  <rect x={0} y={1} width={barW} height={18} fill="rgba(255,255,255,0.7)" />
+                  {ip.rule_clock_mhz !== null && <rect x={0} y={2} width={(ip.rule_clock_mhz / max) * barW} height={7} fill="#CFC7BA" />}
+                  <rect x={0} y={11} width={(ip.set_clock_mhz / max) * barW} height={7} fill={up ? '#C2410C' : '#2F6F68'} />
+                  {ip.required_clock_mhz < ip.set_clock_mhz - 0.5 && <line x1={(ip.required_clock_mhz / max) * barW} x2={(ip.required_clock_mhz / max) * barW} y1={9} y2={20} stroke="#1F2430" strokeWidth={1.5} />}
+                </svg>
+                <span className="mono" style={{ width: valW, flexShrink: 0, fontSize: 12, color: up ? '#C2410C' : 'var(--text-2)' }}>
+                  {dvfsApplied ? clockText(ip) : `${fmt(ip.rule_clock_mhz, 0)} → ${fmt(ip.set_clock_mhz, 0)} MHz`}{dvfsApplied && ip.dvfs_table !== false ? <span className="faint"> · {fmt(ip.voltage_mv, 0)} mV</span> : null}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      ))}
       <div className="legend-row" style={{ paddingLeft: labelW + 8 }}>
-        <Legend color="#DED8CF" label="25% rule" /><Legend color="#2F6F68" label="Timing budget" /><Legend color="#C2410C" label="rule 대비 상승" />
+        <Legend color="#CFC7BA" label={`${rule} rule`} /><Legend color="#2F6F68" label="Timing budget" /><Legend color="#C2410C" label="rule 대비 상승" />
         <span className="legend-item"><span style={{ width: 2, height: 10, background: '#1F2430' }} />required (DVFS level 선택 전)</span>
-        <span className="faint" style={{ fontSize: 11 }}>×2 = MFC+MFD 병렬 · ⇄2 = 2 stream 공유</span>
+        <span className="faint" style={{ fontSize: 11 }}>배경색 = DVFS domain · ★ = domain level 결정 IP · ×2 = MFC+MFD 병렬 · ⇄2 = 2 stream 공유</span>
         {!dvfsApplied && <span className="badge v-warn" title="DB에 이 SoC의 DVFS table이 없어 level·전압을 정할 수 없습니다 (clock은 필요값 그대로, 전압 기본값)">DVFS table 미연결 — level 없음</span>}
       </div>
     </div>
@@ -234,12 +282,14 @@ const LANES: { id: string; name: string; match: (r: TimelineRow) => boolean }[] 
 
 export function Gantt({ report }: { report: TimingReport }) {
   const [ref, w] = useWidth<HTMLDivElement>(900)
+  const tip = useTip()
   const rows = report.timeline
   const end = Math.max(1, ...rows.map((r) => r.end_ms))
   const labelW = 110
-  const plotW = Math.max(300, w - labelW - 8)
-  const k = plotW / end
   const P = report.period_ms
+  // ≥ 46 px per frame period; wider timelines scroll horizontally instead of squeezing
+  const plotW = Math.max(300, w - labelW - 8, Math.ceil(end / P) * 46)
+  const k = plotW / end
   const lanes = useMemo(() => LANES.map((l) => {
     // RT/NRT HW lanes: per frame, union of the stage's HW node intervals (parallel IPs collapse to one bar).
     const grouped = l.id === 'rt' || l.id === 'nrt'
@@ -267,6 +317,7 @@ export function Gantt({ report }: { report: TimingReport }) {
     return { ...l, bars }
   }).filter((l) => l.bars.length), [rows])
   const ticks = Array.from({ length: Math.floor(end / P) + 1 }, (_, i) => i * P)
+  const every = Math.max(1, Math.ceil(52 / (P * k)))  // label density
   // Output lanes get an extra strip for frame-to-frame interval marks (end → end of consecutive frames).
   const OUT = new Set(['dpu', 'enc'])
   const tol = Math.max(0.01, P * (report.intervals.tolerance || 0.001))
@@ -276,9 +327,11 @@ export function Gantt({ report }: { report: TimingReport }) {
   for (const l of lanes) { laneY.push(acc); acc += laneH(l.id) }
   const H = acc + 6
   return (
-    <div ref={ref}>
+    <div ref={ref} style={{ overflowX: 'auto' }}>
       <svg width={labelW + plotW} height={H} role="img" aria-label="pipeline timeline">
-        {ticks.map((t, i) => <g key={i}><line x1={labelW + t * k} x2={labelW + t * k} y1={14} y2={H - 4} stroke="#C9C1B4" strokeDasharray="2 3" /><text x={labelW + t * k + 2} y={10} fontSize={10} fill="#8A8274">f{i} {fmt(t, 0)}ms</text></g>)}
+        {ticks.map((t, i) => i % 2 === 1 && <rect key={`b${i}`} x={labelW + t * k} y={14} width={Math.min(P, end - t) * k} height={H - 18} fill="#F7F4EE" />)}
+        {ticks.map((t, i) => <g key={i}><line x1={labelW + t * k} x2={labelW + t * k} y1={12} y2={H - 4} stroke="#7A7062" strokeDasharray="4 3" strokeWidth={1} opacity={0.7} />
+          {i % every === 0 && <text x={labelW + t * k + 2} y={10} fontSize={10} fill="#5B5346" fontFamily="var(--mono)">{fmt(t, t < 100 ? 1 : 0)}ms</text>}</g>)}
         {lanes.map((l, li) => {
           const outs = OUT.has(l.id) ? [...l.bars].sort((a, b) => a.end_ms - b.end_ms) : []
           return (
@@ -289,8 +342,9 @@ export function Gantt({ report }: { report: TimingReport }) {
               const color = l.id.includes('sw') ? SW_COLOR : STAGE_COLOR[b.stage]
               const bw = Math.max(1.5, (b.end_ms - b.start_ms) * k)
               return (
-                <g key={i}>
-                  <title>{`${b.node} f${b.frame} · ${fmt(b.start_ms, 2)} → ${fmt(b.end_ms, 2)} ms`}</title>
+                <g key={i} {...tip({ title: `${b.node.toUpperCase()} · f${b.frame}`, color, head: { label: '소요', value: `${fmt(b.end_ms - b.start_ms, 2)} ms`, tone: 'strong' },
+                  rows: [{ k: 'frame 경계 기준 시작', v: `+${fmt(b.start_ms - b.frame * P, 2)} ms (f${b.frame} 경계)` }, { k: '주기 대비', v: `${fmt(((b.end_ms - b.start_ms) / P) * 100, 0)}% of ${fmt(P, 2)} ms` },
+                    { k: '절대 시각', v: `${fmt(b.start_ms, 2)} → ${fmt(b.end_ms, 2)} ms`, tone: 'muted' }] })}>
                   <rect x={labelW + b.start_ms * k} y={3} width={bw} height={16} fill={color} opacity={b.frame % 2 ? 0.62 : 1} rx={2} />
                   {bw > 22 && <text x={labelW + b.start_ms * k + bw / 2} y={15} textAnchor="middle" fontSize={10} fill="#FFFFFF">f{b.frame}</text>}
                 </g>
@@ -300,8 +354,9 @@ export function Gantt({ report }: { report: TimingReport }) {
               const a = outs[i], dt = b.end_ms - a.end_ms, x1 = labelW + a.end_ms * k, x2 = labelW + b.end_ms * k
               const bad = Math.abs(dt - P) > tol
               const c = bad ? '#B42318' : '#5B6B73'
-              return <g key={`iv${i}`}>
-                <title>{`${l.name} f${a.frame} → f${b.frame} 출력 간격 ${fmt(dt, 3)} ms (목표 ${fmt(P, 3)} ms)`}</title>
+              return <g key={`iv${i}`} {...tip({ title: `${l.name} f${a.frame} → f${b.frame} 출력 간격`, color: c, head: { label: '간격', value: `${fmt(dt, 3)} ms`, tone: bad ? 'bad' : 'good' },
+                rows: [{ k: '목표', v: `${fmt(P, 3)} ms` }, { k: '차이', v: `${dt - P >= 0 ? '+' : ''}${fmt(dt - P, 3)} ms`, tone: bad ? 'bad' : 'muted' }] })}>
+                <rect x={x1} y={22} width={Math.max(2, x2 - x1)} height={16} fill="transparent" />
                 <line x1={x1} x2={x2} y1={28} y2={28} stroke={c} strokeWidth={1} />
                 <line x1={x1} x2={x1} y1={24} y2={32} stroke={c} /><line x1={x2} x2={x2} y1={24} y2={32} stroke={c} />
                 {x2 - x1 > 34 && <text x={(x1 + x2) / 2} y={36} textAnchor="middle" fontSize={9.5} fill={c} fontFamily="var(--mono)">{fmt(dt, 2)}</text>}
@@ -310,7 +365,7 @@ export function Gantt({ report }: { report: TimingReport }) {
           </g>
         )})}
       </svg>
-      <div className="faint" style={{ fontSize: 11 }}>DPU(preview) · MFC(video) 아래 눈금 = 연속 frame 출력 완료 간격(ms, end→end) · 빨강 = 목표 {fmt(P, 2)} ms ±{fmt((report.intervals.tolerance || 0) * 100, 1)}% 이탈</div>
+      <div className="faint" style={{ fontSize: 11 }}>세로 점선 = frame 경계 {fmt(P, 2)} ms ({fmt(report.fps, 0)} fps) · 음영 = 홀수 frame 구간 · DPU(preview) · MFC(video) 아래 눈금 = 연속 frame 출력 완료 간격(ms, end→end) · 빨강 = 목표 {fmt(P, 2)} ms ±{fmt((report.intervals.tolerance || 0) * 100, 1)}% 이탈</div>
     </div>
   )
 }
@@ -359,7 +414,7 @@ export function Intervals({ report }: { report: TimingReport }) {
 }
 
 // ---------------------------------------------------------------- ④ what-if
-export function WhatIf({ rows, current }: { rows: WhatIfRow[]; current: { statistic: string; eis: boolean; scale: number } }) {
+export function WhatIf({ rows, current, margin = 0.25 }: { rows: WhatIfRow[]; current: { statistic: string; eis: boolean; scale: number }; margin?: number }) {
   const [ref, w] = useWidth<HTMLDivElement>(600)
   const plotW = Math.max(260, w - 60), H = 220
   const scales = [...new Set(rows.map((r) => r.scale))].sort((a, b) => a - b)
@@ -378,12 +433,12 @@ export function WhatIf({ rows, current }: { rows: WhatIfRow[]; current: { statis
       <svg width={plotW + 60} height={H} role="img" aria-label="SW 증가 대비 NRT clock">
         {[0, 0.25, 0.5, 0.75, 1].map((f) => <g key={f}><line x1={50} x2={plotW + 40} y1={y(max * f)} y2={y(max * f)} stroke="#EFEAE2" /><text x={44} y={y(max * f) + 3} textAnchor="end" fontSize={10} fill="#8A8274">{fmt(max * f, 0)}</text></g>)}
         {scales.map((s) => <text key={s} x={x(s)} y={H - 6} textAnchor="middle" fontSize={10} fill="#8A8274">×{s.toFixed(1)}</text>)}
-        {rule > 0 && <><line x1={50} x2={plotW + 40} y1={y(rule)} y2={y(rule)} stroke="#7A4B12" strokeDasharray="5 4" /><text x={plotW + 40} y={y(rule) - 4} textAnchor="end" fontSize={10} fill="#7A4B12">25% rule {fmt(rule, 0)} MHz</text></>}
+        {rule > 0 && <><line x1={50} x2={plotW + 40} y1={y(rule)} y2={y(rule)} stroke="#7A4B12" strokeDasharray="5 4" /><text x={plotW + 40} y={y(rule) - 4} textAnchor="end" fontSize={10} fill="#7A4B12">{pct0(margin)} rule {fmt(rule, 0)} MHz</text></>}
         {lines.map((l) => {
           const pts = rows.filter((r) => r.statistic === l.stat && r.eis === l.eis).sort((a, b) => a.scale - b.scale)
           return <g key={`${l.stat}${l.eis}`}>
             <polyline points={pts.map((r) => `${x(r.scale)},${y(r.nrt_clock_mhz ?? 0)}`).join(' ')} fill="none" stroke={l.c} strokeWidth={2.2} strokeDasharray={l.dash} />
-            {pts.filter((r) => r.verdict.status === 'fail').map((r) => <circle key={r.scale} cx={x(r.scale)} cy={y(r.nrt_clock_mhz ?? 0)} r={4} fill="#7F1D1D"><title>fail: {r.verdict.reasons[0]}</title></circle>)}
+            {pts.filter((r) => r.verdict.status === 'fail').map((r) => <circle key={r.scale} cx={x(r.scale)} cy={y(r.nrt_clock_mhz ?? 0)} r={4} fill="#7F1D1D"><title>{`fail: ${r.verdict.reasons[0] ?? ''}`}</title></circle>)}
           </g>
         })}
         {cur && <circle cx={x(cur.scale)} cy={y(cur.nrt_clock_mhz ?? 0)} r={6} fill="#1F2430" stroke="#FFFFFF" strokeWidth={2} />}
@@ -402,7 +457,7 @@ export function WhatIf({ rows, current }: { rows: WhatIfRow[]; current: { statis
 
 // ---------------------------------------------------------------- fleet ranking
 /** Ranked dumbbell: one row per variant (rule clock → required clock), sorted by factor. Never overlaps. */
-export function FleetRank({ rows, onPick, limit }: { rows: FleetRow[]; onPick: (v: string) => void; limit: number }) {
+export function FleetRank({ rows, onPick, limit, margin = 0.25 }: { rows: FleetRow[]; onPick: (v: string) => void; limit: number; margin?: number }) {
   const [ref, w] = useWidth<HTMLDivElement>(800)
   const data = rows.map((r) => ({ r, rule: r.clocks.nrt.rule_mhz ?? 0, set: r.clocks.nrt.set_mhz ?? 0, sw: r.stages.nrt.sw_ms / r.period_ms }))
     .sort((a, b) => (b.set / Math.max(b.rule, 1e-9)) - (a.set / Math.max(a.rule, 1e-9))).slice(0, limit)
@@ -413,7 +468,7 @@ export function FleetRank({ rows, onPick, limit }: { rows: FleetRow[]; onPick: (
   return (
     <div ref={ref} style={{ display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', gap: 8, fontSize: 11 }} className="faint">
-        <span style={{ width: labelW }}>Variant</span><span style={{ width: plotW }}>NRT 필요 clock (MHz) · ○ 25% rule → ● timing budget</span>
+        <span style={{ width: labelW }}>Variant</span><span style={{ width: plotW }}>NRT 필요 clock (MHz) · ○ {pct0(margin)} rule → ● timing budget</span>
         <span style={{ width: swW }}>NRT SW / period</span><span style={{ width: valW }}>배율 · level</span>
       </div>
       {data.map(({ r, rule, set, sw }) => {

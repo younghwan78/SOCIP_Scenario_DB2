@@ -1,27 +1,36 @@
 import { useMemo, useState } from 'react'
 import type { Ctx } from '../App'
 import { useAsync } from '../lib/route'
-import { fmt, nrtFactor, timingApi, verdictChip, type FleetRow, type Statistic } from '../lib/timingBudget'
+import { fmt, marginOf, marginOpts, nrtFactor, pct0, timingApi, verdictChip, type FleetRow, type Statistic } from '../lib/timingBudget'
 import { Card, FleetRank } from '../components/TimingCharts'
 import { DataTable, type Column } from '../components/DataTable'
 import { SW_COLOR } from '../lib/timingBudget'
 import { VariantFailures } from '../components/VariantFailures'
+import { ProvBadge } from '../components/Provenance'
+import { ProfileSelect } from '../components/ProfileSelect'
+import { useSimProfiles } from '../lib/simProfile'
+import { ISSUE_LABEL, ISSUE_ORDER, issueCounts, verdictIssues, type IssueCode } from '../lib/provenance'
 
 type Filter = 'all' | 'ok' | 'clock_up' | 'fail'
 
 export function TimingFleetPage({ ctx }: { ctx: Ctx }) {
   const statistic = (ctx.params.stat === 'mean' ? 'mean' : 'max') as Statistic
-  const q = useAsync(() => timingApi.fleet(ctx.scenario, { statistic, eis: 'auto', runtime_scale: 1 }), [ctx.scenario, statistic])
+  const sp = useSimProfiles(ctx.project, ctx.params.cfg)
+  const margin = marginOf(ctx.params.margin)
+  const q = useAsync(() => (sp.ready ? timingApi.fleet(ctx.scenario, { statistic, eis: 'auto', runtime_scale: 1, ...marginOpts(margin) }, sp.ref) : new Promise<never>(() => {})), [ctx.scenario, statistic, sp.ref, sp.ready, margin])
   const [filter, setFilter] = useState<Filter>('all')
   const [showAll, setShowAll] = useState(false)
   const rows = useMemo(() => q.data?.rows ?? [], [q.data])
-  const shown = filter === 'all' ? rows : rows.filter((r) => r.verdict.status === filter)
+  const [issue, setIssue] = useState<IssueCode | null>(null)
+  const byVerdict = filter === 'all' ? rows : rows.filter((r) => r.verdict.status === filter)
+  const shown = issue ? byVerdict.filter((r) => verdictIssues(r.verdict.reasons).some((i) => i.code === issue)) : byVerdict
+  const issueN = useMemo(() => issueCounts(rows.map((r) => r.verdict.reasons)), [rows])
   const counts = useMemo(() => {
     const c: Record<string, number> = { ok: 0, clock_up: 0, fail: 0 }
     rows.forEach((r) => { c[r.verdict.status] = (c[r.verdict.status] ?? 0) + 1 })
     return c
   }, [rows])
-  const open = (v: string) => ctx.navigate('timing', { variant: v, stat: statistic === 'max' ? undefined : statistic })
+  const open = (v: string) => ctx.navigate('timing', { variant: v, stat: statistic === 'max' ? undefined : statistic, cfg: ctx.params.cfg, margin: ctx.params.margin })
 
   const cols: Column<FleetRow>[] = [
     { key: 'v', label: 'Variant', width: 220, sticky: true, sort: (r) => r.variant_id, render: (r) => <span className="mono">{r.variant_id.replace(/^cam-rec-/, '')}</span> },
@@ -37,12 +46,14 @@ export function TimingFleetPage({ ctx }: { ctx: Ctx }) {
     { key: 'pw', label: 'Power mW', width: 160, firstDir: -1, sort: (r) => r.power.total_mw, render: (r) => <PowerMini r={r} /> },
     { key: 'cpu', label: 'CPU %', width: 70, align: 'right', firstDir: -1, sort: (r) => r.power.share_pct.cpu, render: (r) => fmt(r.power.share_pct.cpu, 0) },
     { key: 'bw', label: 'BW MB/s', width: 90, align: 'right', firstDir: -1, sort: (r) => r.bw.total_mbs, render: (r) => fmt(r.bw.total_mbs, 0) },
-    { key: 'verdict', label: '판정', width: 110, sort: (r) => ({ fail: 0, clock_up: 1, ok: 2 }[r.verdict.status]), title: (r) => r.verdict.reasons.join('\n'), render: (r) => <span className={`badge ${verdictChip(r.verdict.status).cls}`}>{verdictChip(r.verdict.status).label}</span> },
+    { key: 'verdict', label: '판정', width: 120, sort: (r) => ({ fail: 0, clock_up: 1, ok: 2 }[r.verdict.status]), title: (r) => r.verdict.reasons.join('\n'), render: (r) => <span className={`badge ${verdictChip(r.verdict.status).cls}`}>{verdictChip(r.verdict.status).label}</span> },
+    { key: 'why', label: '원인', width: 260, sort: (r) => verdictIssues(r.verdict.reasons).map((i) => i.code).join(','), title: (r) => r.verdict.reasons.join('\n'), render: (r) => <Issues r={r} /> },
   ]
 
   return (
     <div className="page tb-page">
       <div className="toolbar" style={{ gap: 14, flexWrap: 'wrap' }}>
+        <span className={`chip ${Math.abs(margin - 0.25) > 1e-9 ? 'mode-warn' : ''}`} title="Timing Budget · variant 화면에서 변경">SW margin {pct0(margin)}</span>
         <span className="muted" style={{ fontSize: 13 }}>SW 통계</span>
         <div className="seg" role="group" aria-label="SW 통계">
           {(['max', 'mean'] as const).map((s) => <button key={s} className={statistic === s ? 'on' : ''} onClick={() => ctx.navigate(undefined, { stat: s === 'max' ? undefined : s }, true)}>{s}</button>)}
@@ -51,16 +62,25 @@ export function TimingFleetPage({ ctx }: { ctx: Ctx }) {
         <div className="seg" role="group" aria-label="판정 필터">
           {(['all', 'fail', 'clock_up', 'ok'] as Filter[]).map((f) => <button key={f} className={filter === f ? 'on' : ''} onClick={() => setFilter(f)}>{f === 'all' ? `전체 ${rows.length}` : `${verdictChip(f).label} ${counts[f] ?? 0}`}</button>)}
         </div>
+        {ISSUE_ORDER.some((c) => issueN[c] > 0) && <>
+          <span className="muted" style={{ fontSize: 13 }}>Fail 원인</span>
+          <div className="seg sm" role="group" aria-label="Fail 원인 필터">
+            <button className={issue === null ? 'on' : ''} onClick={() => setIssue(null)}>전체</button>
+            {ISSUE_ORDER.filter((c) => issueN[c] > 0).map((c) => <button key={c} className={issue === c ? 'on' : ''} onClick={() => setIssue(issue === c ? null : c)}>{ISSUE_LABEL[c]} {issueN[c]}</button>)}
+          </div>
+        </>}
+        <ProfileSelect profiles={sp.profiles} value={sp.ref} onChange={(v) => ctx.navigate(undefined, { cfg: v }, true)} />
         <span className="grow" />
+        <ProvBadge prov={{ kind: 'recalc', engine: 'Timing Budget (analytic)', scope: 'CPU + IP + BW', dvfs: q.data?.dvfs_table_ref ?? null, rev: sp.ref ? `profile ${sp.ref}` : 'profile 없음 (코드 기본값)', notes: ['표의 Power·Latency는 현재 조건으로 즉석 계산 — 등록 예측과 다를 수 있음'] }} />
         {q.data && <span className="chip">DVFS {q.data.dvfs_table_ref ?? '미연결'}</span>}
       </div>
-      {q.error && <div className="err">{q.error}</div>}
-      {q.loading && <div className="empty">{ctx.scenario} 전체 variant 계산 중…</div>}
+      {(sp.error || q.error) && <div className="err">{sp.error || q.error}</div>}
+      {q.loading && !sp.error && <div className="empty">{ctx.scenario} 전체 variant 계산 중…</div>}
       {q.data && <VariantFailures errors={q.data.errors} />}
       {q.data && <div className="tb-grid">
-        <Card id="fleet-rank" title="NRT 필요 clock 배율 순위 (25% rule 대비)" note="행 = variant · 겹침 없음 · SW 비중 막대" defaultWide
+        <Card id="fleet-rank" title={`NRT 필요 clock 배율 순위 (${pct0(margin)} rule 대비)`} note="행 = variant · 겹침 없음 · SW 비중 막대" defaultWide
           actions={<button className="btn tb-mini" onClick={() => setShowAll((s) => !s)}>{showAll ? '상위 25' : `전체 ${shown.length}`}</button>}>
-          <FleetRank rows={shown} onPick={open} limit={showAll ? shown.length : 25} />
+          <FleetRank rows={shown} onPick={open} limit={showAll ? shown.length : 25} margin={margin} />
         </Card>
         <Card id="fleet-table" title="Scenario 표" note="header 클릭 = 정렬 · 행 클릭 = 상세" defaultWide minHeight={300}>
           <div className="table-x">
@@ -94,4 +114,15 @@ function PowerMini({ r }: { r: FleetRow }) {
       <span className="mono">{fmt(r.power.total_mw, 0)}</span>
     </span>
   )
+}
+
+/** U4: why a row failed (or needs a higher clock), readable without hovering. */
+function Issues({ r }: { r: FleetRow }) {
+  const issues = verdictIssues(r.verdict.reasons)
+  if (!issues.length) {
+    return r.verdict.status === 'clock_up'
+      ? <span className="issues"><span className="issue clock" title="SW margin rule 대비 NRT clock 상향">NRT clock ×{fmt(r.verdict.nrt_clock_factor, 2)}</span></span>
+      : <span className="faint">—</span>
+  }
+  return <span className="issues">{issues.map((i) => <span key={`${i.code}:${i.label}`} className="issue" title={i.detail}>{ISSUE_LABEL[i.code]} · {i.label}</span>)}</span>
 }

@@ -10,6 +10,9 @@ import { Icon } from '../components/Icons'
 import { DataTable, type Column } from '../components/DataTable'
 import { SEVERITY_RANK, preferredReference, resFpsKey } from '../lib/defaults'
 import type { VariantRow } from '../lib/api'
+import { archApi, type BoardRow } from '../lib/archExplore'
+import { verdictChip } from '../lib/timingBudget'
+import { ProvBadge } from '../components/Provenance'
 import { calibrationApi, type Coverage } from '../lib/calibration'
 import { DEFAULT_CANONICAL, canonicalOf } from '../lib/projects'
 
@@ -48,6 +51,9 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
   // evidence coverage is optional: an older API without /calibration/coverage just hides the columns' content
   const covQ = useAsync(() => (selected ? calibrationApi.coverage(selected.scenario_id).catch(() => null) : Promise.resolve(null)), [selected?.scenario_id])
   const cov = (v: string): Coverage | undefined => covQ.data?.[v]
+  // U12: registered prediction power + its timing verdict so the table reads as a dashboard
+  const boardQ = useAsync(() => (selected ? archApi.board(selected.scenario_id).catch(() => null) : Promise.resolve(null)), [selected?.scenario_id])
+  const board = useMemo(() => new Map((boardQ.data?.rows ?? []).map((b): [string, BoardRow] => [b.variant_id, b])), [boardQ.data])
   const byId = useMemo(() => new Map(rows.map((r) => [r.variant_id, r])), [rows])
 
   const listW = useResizable('explorer.list.w', 260, 180, 480)
@@ -105,8 +111,14 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
       title: (r) => c.get(r.design_conditions),
       cellClass: (r) => (r.variant_id !== reference && c.keys.some((k) => diffOf(r).has(k)) ? 'chg' : ''),
       render: (r) => c.get(r.design_conditions) })),
+    { key: 'pw', label: 'Power mW', width: 120, align: 'right', firstDir: -1, headTitle: '등록(current) 예측 total power · 조합 탐색에서 등록',
+      sort: (r) => board.get(r.variant_id)?.power.total_mw ?? null,
+      render: (r) => { const b = board.get(r.variant_id); return b ? <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}><span className="mono">{b.power.total_mw.toFixed(0)}</span>
+        <ProvBadge compact prov={{ kind: 'registered', engine: 'Arch exploration', id: b.id, at: b.created_at, notes: [`CPU ${b.power.cpu_mw.toFixed(0)} · IP ${b.power.hw_mw.toFixed(0)} · BW ${b.power.bw_mw.toFixed(0)} mW`] }} /></span> : <span className="faint">—</span> } },
+    { key: 'vd', label: '판정', width: 80, headTitle: '등록 예측의 timing 판정 (OK / Clock↑ / Fail)', sort: (r) => { const v = board.get(r.variant_id)?.verdict; return v ? ({ fail: 0, clock_up: 1, ok: 2 } as Record<string, number>)[v] ?? 3 : null },
+      render: (r) => { const v = board.get(r.variant_id)?.verdict; if (!v) return <span className="faint">—</span>; const c = verdictChip(v as 'ok' | 'clock_up' | 'fail'); return <span className={`badge ${c.cls}`}>{c.label}</span> } },
     { key: 'load', label: 'Load', width: 84, firstDir: -1, sort: (r) => (r.severity ? SEVERITY_RANK[r.severity] ?? 0 : null), render: (r) => r.severity && <span className={`badge load-${r.severity}`}>{r.severity}</span> },
-    { key: 'delta', label: 'Δ 기준', width: 72, align: 'right', firstDir: -1, headTitle: '기준(파생은 부모)과 다른 조건 수 · 클릭 정렬', sort: (r) => (r.variant_id === reference ? 0 : diffOf(r).size), render: (r) => <span className="mono">{r.variant_id === reference ? 0 : diffOf(r).size}</span> },
+    { key: 'delta', label: '다른 조건', width: 84, align: 'right', firstDir: -1, headTitle: '기준 variant(파생은 부모)와 값이 다른 조건 수 — 노란 셀이 그 조건', sort: (r) => (r.variant_id === reference ? 0 : diffOf(r).size), render: (r) => <span className="mono">{r.variant_id === reference ? 0 : diffOf(r).size}</span> },
     { key: 'open', label: '', width: 76, render: (r) => <a href="#" onClick={(e) => { e.preventDefault(); ctx.navigate('pipeline', { scenario: r.scenario_id, variant: r.variant_id }) }}>Pipeline</a> },
   ]
 

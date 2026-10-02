@@ -11,6 +11,7 @@ from copy import deepcopy
 from pathlib import Path
 
 import pytest
+import yaml
 
 from scenario_db.authoring import yamlio
 from scenario_db.authoring.errors import AuthoringError
@@ -26,6 +27,29 @@ REC = "uc-cam-recording-e2700"
 
 
 INHERITED = Path(__file__).parent / "fixtures" / "inherited_2700"
+# Exynos2600 docs added after the 2700 eject (2026-10: v2-vf / mif-linear / CPU topology profile).
+# The ejected 2700 does not take them; parent_diff reports such additions.
+POST_EJECT_2600 = (
+    "platforms/exynos2600/docs/00_hw/pmp-exynos2600-v2.yaml",
+    "projects/sm-s947b/docs/00_hw/simcfg-proj-sm-s947b-v2.yaml",
+)
+# Exynos2600 IP docs edited after the eject (2026-10: SBWC declared on the MLSC -> MTNR L0/L1 DMA ports,
+# synthetic MTNR LowPower mode). The inherited 2700 snapshot predates them -> stripped back here.
+POST_EJECT_EDITED_2600 = (
+    "platforms/exynos2600/docs/00_hw/ip-mlsc-is-v15-s5e9965.yaml",
+    "platforms/exynos2600/docs/00_hw/ip-mtnr-is-v15-s5e9965.yaml",
+)
+
+
+def _strip_post_eject(path: Path) -> None:
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    caps = doc["capabilities"]
+    caps.pop("supported_features", None)
+    for mod in (caps.get("properties") or {}).get("modules") or []:
+        mod.pop("supported_compressions", None)
+    (caps.get("sim") or {}).get("modes", {}).pop("LowPower", None)
+    caps["operating_modes"] = [m for m in caps.get("operating_modes") or [] if m.get("id") != "LowPower"]
+    path.write_text(yaml.safe_dump(doc, allow_unicode=True, sort_keys=False), encoding="utf-8")
 
 
 @pytest.fixture()
@@ -40,6 +64,10 @@ def root(tmp_path: Path) -> Path:
     for sub in ("platforms/exynos2700", "projects/sm-s957b"):
         shutil.rmtree(r / sub)
         shutil.copytree(INHERITED / sub, r / sub)
+    for doc in POST_EJECT_2600:   # parent docs added after the eject are not part of the 2700 snapshot
+        (r / doc).unlink(missing_ok=True)
+    for doc in POST_EJECT_EDITED_2600:
+        _strip_post_eject(r / doc)
     return r
 
 
@@ -129,7 +157,9 @@ def test_port_compression_limits_exploration(root: Path):
                for i, d in docs.items() if d.get("kind") == "ip"}
         g = CanonicalScenarioGraph(scenario=sc, variant=resolve_variant_from_rows(vr, REC, "cam-rec-r1-uhd30-vdis"),
                                    ip_catalog=cat)
-        return {r["buffer"]: r for r in ax.compression_candidates(g, ax.CompressionAxis(), SimulationRunConfig())}
+        # gdc_o declares no compression in the 2700 catalog: relax the endpoint-declaration rule so this
+        # test isolates the per-port supported_compressions limit
+        return {r["buffer"]: r for r in ax.compression_candidates(g, ax.CompressionAxis(require_declared=False), SimulationRunConfig())}
 
     before = rows(_compile(root))["MCSC_VIDEO"]
     assert before["selectable"] and before["mode"] == "COMP_YUV_LOSSY"

@@ -80,6 +80,8 @@ class ArchReport(Base):
     html_sha256 = Column(Text, nullable=False)
     generated_by = Column(Text)
     generated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    # [{status, reviewer, note, by, at}] — publishing requires a reviewer and a note
+    review_history = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
 
 
 POWER_OPTION_STATUSES = ("candidate", "iq_eval", "adopted", "rejected")

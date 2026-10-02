@@ -52,7 +52,7 @@ from scenario_db.sim import power_options as po
 from scenario_db.sim.power_attribution import attribute
 from scenario_db.sim.transfers import compression_catalog
 
-ENGINE_REV = "arch-exploration/5"
+ENGINE_REV = "arch-exploration/6"
 # Power = CPU(SW) + IP core + BW; BW = IP DMA (HW nodes) + CPU DMA (SW tasks, e.g. mpeg_writer)
 DIST_KEYS = ("total_mw", "cpu_mw", "hw_mw", "bw_mw", "bw_ip_mw", "bw_cpu_mw", "bw_mbs", "bw_ip_mbs", "bw_cpu_mbs")
 V_REF_MV = 710.0
@@ -103,6 +103,9 @@ class CompressionAxis(BaseScenarioModel):
     ratio_overrides: dict[str, float] = Field(default_factory=dict)
     buffers: list[str] | None = None
     include_unsupported: bool = False
+    # only DMA whose every endpoint IP declares compression support is explored;
+    # False also explores endpoints the catalog says nothing about (support "unknown")
+    require_declared: bool = True
     max_buffers: int = Field(default=8, ge=0, le=12)
     min_saving_mbs: float = Field(default=1.0, ge=0)
 
@@ -274,6 +277,7 @@ def _explore(graph, spec: ArchExplorationSpec, config: SimulationRunConfig,
         "slices": [_slice_public(s) for s in slices],
         "buffers": buffers,
         "domains": obj_slice["domains"],
+        "ip_modes": po.ip_mode_table(graph, obj_slice["ips"]),
         "axis_spread": _axis_spread(slices, obj_slice, comp_sets, obj),
         "sw_margin": sw_margin(slices, obj_slice, obj),
         # objective slice keeps IP rows + DVFS options: promotion builds the frozen payload from it
@@ -371,6 +375,9 @@ def explore_power_options(graph, spec: ArchExplorationSpec, config: SimulationRu
             "compression": rec["compression"] if rec else [],
             "dvfs": rec["dvfs"] if rec else {},
             "fill_pct": {k: v["fill_pct"] for k, v in r["objective_slice"]["stages"].items()},
+            # PPA: latency at the objective slice (before compression/DVFS raise) vs the base variant
+            "latency": r["objective_slice"].get("latency"),
+            "delta_latency_ms": _latency_delta(base["objective_slice"].get("latency"), r["objective_slice"].get("latency")),
             "zero_power_ips": r["objective_slice"]["zero_power_ips"],
         })
     def rank(x: dict[str, Any]) -> tuple:
@@ -621,8 +628,11 @@ def compression_candidates(
             "unsupported_ports": port_block,
         }
         reason = None
+        undeclared = [n for n in row["nodes"] if n not in listed]
         if support == "unsupported" and not axis.include_unsupported:
             reason = "IP catalog lists no compression for an endpoint"
+        elif undeclared and axis.require_declared and not axis.include_unsupported:
+            reason = f"compression support not declared: {', '.join(undeclared)}"
         elif port_block and not axis.include_unsupported:
             reason = f"DMA port without {mode}: {', '.join(port_block)}"
         elif -d_bw < axis.min_saving_mbs:
@@ -914,6 +924,14 @@ def find_case(summary: dict[str, Any], case_key: str | None) -> tuple[dict[str, 
     if base and base["key"] == case_key:
         return base, "user:baseline"
     return None, ""
+
+
+def _latency_delta(old: dict[str, Any] | None, new: dict[str, Any] | None) -> dict[str, float | None]:
+    out: dict[str, float | None] = {}
+    for k in ("preview_ms", "video_ms"):
+        a, b = (old or {}).get(k), (new or {}).get(k)
+        out[k] = round(b - a, 3) if a is not None and b is not None else None
+    return out
 
 
 def prediction_payload(s: dict[str, Any], case: dict[str, Any], buffers: list[dict[str, Any]]) -> dict[str, Any]:

@@ -87,3 +87,36 @@ const PALETTE: Record<string, string> = {
   SENSOR: '#B8C7D8', RT: '#F4B98C', NRT: '#F0A06B', M2M: '#E9B98E', CODEC: '#CDB6E3', DISPLAY: '#A7D6CC', SW: '#E7CF86', CONCURRENT: '#C9D3DE',
 }
 export function sliceColor(group: string): string { return PALETTE[group] ?? '#D8CFC2' }
+
+// ---- frame × category coloring: hue = frame, lightness/pattern = RT / NRT / M2M / SW / output
+export type SliceCat = 'SENSOR' | 'RT' | 'NRT' | 'M2M' | 'SW' | 'OUT'
+/** Well-separated hues; consecutive frames never share a hue family. */
+export const FRAME_HUES = [212, 26, 142, 278, 352, 186]
+export function sliceCat(group: string): SliceCat {
+  if (group === 'SENSOR' || group === 'RT' || group === 'NRT' || group === 'M2M') return group
+  if (group === 'CODEC' || group === 'DISPLAY') return 'OUT'
+  return 'SW'
+}
+export const CAT_LABEL: Record<SliceCat, string> = { SENSOR: 'Sensor', RT: 'RT', NRT: 'NRT', M2M: 'M2M', SW: 'SW (CPU)', OUT: 'Codec · Display' }
+const SHADE: Record<SliceCat, { s: number; l: number; text: string }> = {
+  SENSOR: { s: 18, l: 86, text: '#2B2F38' },
+  RT: { s: 78, l: 47, text: '#FFFFFF' },
+  NRT: { s: 62, l: 66, text: '#1F2430' },
+  M2M: { s: 55, l: 80, text: '#1F2430' },
+  OUT: { s: 30, l: 56, text: '#FFFFFF' },
+  SW: { s: 40, l: 93, text: '#2B2F38' },
+}
+export interface SliceStyle { fill: string; stroke: string; text: string; pattern: 'm2m' | 'sw' | null; dash?: string }
+export function frameHue(frame: number): number { return FRAME_HUES[((frame % FRAME_HUES.length) + FRAME_HUES.length) % FRAME_HUES.length] }
+export function frameSliceStyle(frame: number, group: string): SliceStyle {
+  const cat = sliceCat(group)
+  const h = frameHue(frame)
+  const sh = SHADE[cat]
+  return {
+    fill: `hsl(${h} ${sh.s}% ${sh.l}%)`,
+    stroke: cat === 'SW' ? `hsl(${h} 55% 42%)` : `hsl(${h} 45% 34% / 0.55)`,
+    text: sh.text,
+    pattern: cat === 'M2M' ? 'm2m' : cat === 'SW' ? 'sw' : null,
+    dash: cat === 'SW' ? '3 2' : undefined,
+  }
+}

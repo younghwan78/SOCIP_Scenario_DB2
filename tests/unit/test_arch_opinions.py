@@ -21,6 +21,12 @@ def _row(vid, sid, fps, eis, total, dc=None, ok=True):
             "cls": classify(vid, sid, fps, eis, dc or {}), "sw_margin_pct": 12.0, "sw_stage": "nrt", "sw_bottleneck": "eis"}
 
 
+def test_measurement_coverage_is_scoped_to_the_scenario():
+    rows = [_row("shared", "uc-one", 30, False, 500), _row("shared", "uc-two", 30, False, 500)]
+    block = build_opinions(rows, [], measured={("uc-one", "shared")})[0]
+    assert block["evidence"]["measured_variants"] == 1
+
+
 def test_opinions_pair_eis_and_codec():
     rows = [_row("cam-rec-r1-uhd30-sdr", "uc-camera-recording", 30, False, 500.0),
             _row("cam-rec-r1-uhd30-vdis", "uc-camera-recording", 30, True, 560.0),

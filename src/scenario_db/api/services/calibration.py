@@ -7,7 +7,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from scenario_db.comparison.calibration import CATEGORIES, compare_split, measured_split, pct
+from scenario_db.comparison.calibration import CATEGORIES, category_fit, compare_split, measured_split, pct
 from scenario_db.db.models.capability import SimConfigProfile
 from scenario_db.db.models.definition import Scenario
 from scenario_db.db.models.evidence import Evidence
@@ -42,6 +42,18 @@ def _rail_map(db: Session, project_ref: str | None) -> tuple[dict[str, str], str
     return dict(row.rail_domain_map or {}), str(row.id)
 
 
+def _rail_maps(db: Session, project_refs: set[str | None]) -> dict[str, dict[str, str]]:
+    """Latest rail map per project in one query (same pick as ``_rail_map``)."""
+    refs = {p for p in project_refs if p}
+    if not refs:
+        return {}
+    out: dict[str, dict[str, str]] = {}
+    for row in (db.query(SimConfigProfile).filter(SimConfigProfile.project_ref.in_(refs))
+                .order_by(SimConfigProfile.version.desc(), SimConfigProfile.id).all()):
+        out.setdefault(row.project_ref, dict(row.rail_domain_map or {}))
+    return out
+
+
 def _sim_order(ev: Evidence) -> tuple[datetime, str]:
     timestamp = ev.measured_at or (ev.run_info or {}).get("timestamp")
     try:
@@ -61,6 +73,18 @@ def _sim_evidence(db: Session, scenario: str, variant: str) -> list[Evidence]:
 def _current(db: Session, scenario: str, variant: str) -> Prediction | None:
     return (db.query(Prediction)
             .filter_by(scenario_ref=scenario, variant_ref=variant, status="current").one_or_none())
+
+
+def _sim_split(ev: Evidence) -> dict[str, float] | None:
+    """CPU/IP/BW split of a simulation evidence (None when it has no IP breakdown)."""
+    pb = ev.power_breakdown or {}
+    if not isinstance(pb, dict) or pb.get("ip") is None:
+        return None
+
+    def _mw(v: Any) -> float:
+        return float(v.get("total_mw", 0.0)) if isinstance(v, dict) else float(v or 0.0)
+
+    return {"cpu": _mw(pb.get("cpu")), "ip": _mw(pb.get("ip")), "bw": _mw(pb.get("memory"))}
 
 
 def _pred_split(power: dict[str, Any]) -> dict[str, float]:
@@ -103,6 +127,13 @@ def coverage_summary(db: Session) -> dict[str, dict[str, int]]:
     return {k: {n: len(v) for n, v in b.items()} for k, b in sets.items()}
 
 
+def _fit(pred: dict[str, float] | None, meas_cat: dict[str, float] | None, total_delta: float | None) -> dict[str, Any] | None:
+    """Category-level fit (U6): a total within 10% can hide -35% IP / +50% BW."""
+    if pred is None or meas_cat is None:
+        return None
+    return category_fit(compare_split(pred, meas_cat), total_delta)
+
+
 def list_measurements(db: Session, *, scenario_id: str | None = None) -> list[dict[str, Any]]:
     q = db.query(Evidence).filter(Evidence.kind == "evidence.measurement")
     if scenario_id:
@@ -117,9 +148,14 @@ def list_measurements(db: Session, *, scenario_id: str | None = None) -> list[di
         simulations.setdefault((ev.scenario_ref, ev.variant_ref), []).append(ev)
     for sims in simulations.values():
         sims.sort(key=_sim_order)
+    scenario_project = {sid: pref for sid, pref in db.query(Scenario.id, Scenario.project_ref)
+                        .filter(Scenario.id.in_(scenario_ids)).all()} if scenario_ids else {}
+    rail_maps = _rail_maps(db, {m.project_ref or scenario_project.get(m.scenario_ref) for m in measurements})
     out = []
     for m in measurements:
         total = _total(m.kpi)
+        rail_map = rail_maps.get(m.project_ref or scenario_project.get(m.scenario_ref)) or {}
+        meas_cat = measured_split(m.vdd_power, rail_map)["categories"] if m.vdd_power else None
         cur = current.get((m.scenario_ref, m.variant_ref))
         sims = simulations.get((m.scenario_ref, m.variant_ref), [])
         sim_total = _total(sims[-1].kpi)["mean"] if sims else None
@@ -131,8 +167,10 @@ def list_measurements(db: Session, *, scenario_id: str | None = None) -> list[di
             "silicon_rev": ctx.get("silicon_rev"), "sw_baseline_ref": m.sw_baseline_ref, "thermal": ctx.get("thermal"),
             "total": total, "fps": (m.kpi or {}).get("fps_effective"),
             "rails": len(m.vdd_power or {}), "synthetic": is_synthetic(m.provenance),
-            "current_prediction": {"id": cur.id, "total_mw": cur_total, "delta_pct": pct(cur_total, total["mean"])} if cur else None,
-            "simulation": {"id": sims[-1].id, "total_mw": sim_total, "delta_pct": pct(sim_total, total["mean"]), "count": len(sims)} if sims else None,
+            "current_prediction": {"id": cur.id, "total_mw": cur_total, "delta_pct": pct(cur_total, total["mean"]),
+                                   "category": _fit(_pred_split(cur.metrics["power"]), meas_cat, pct(cur_total, total["mean"]))} if cur else None,
+            "simulation": {"id": sims[-1].id, "total_mw": sim_total, "delta_pct": pct(sim_total, total["mean"]), "count": len(sims),
+                           "category": _fit(_sim_split(sims[-1]), meas_cat, pct(sim_total, total["mean"]))} if sims else None,
         })
     return out
 
@@ -159,12 +197,7 @@ def measurement_detail(db: Session, measurement_id: str) -> dict[str, Any]:
         })
     for ev in _sim_evidence(db, m.scenario_ref, m.variant_ref):
         t = _total(ev.kpi)["mean"]
-        pb = ev.power_breakdown or {}
-        sp = None
-        if isinstance(pb, dict) and pb.get("ip") is not None:
-            def _mw(v: Any) -> float:
-                return float(v.get("total_mw", 0.0)) if isinstance(v, dict) else float(v or 0.0)
-            sp = {"cpu": _mw(pb.get("cpu")), "ip": _mw(pb.get("ip")), "bw": _mw(pb.get("memory"))}
+        sp = _sim_split(ev)
         predictions.append({
             "kind": "simulation", "id": ev.id, "label": "Simulation evidence",
             "total_mw": t, "delta_pct": pct(t, total["mean"]), "split": sp,

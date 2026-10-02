@@ -4,6 +4,7 @@ import { useAsync, useRoute, type Page } from './lib/route'
 import { Icon } from './components/Icons'
 import { Resizer, usePref, useResizable } from './components/Layout'
 import { Picker } from './components/Picker'
+import { ModelStatusBar } from './components/Provenance'
 import { ExplorerPage } from './pages/Explorer'
 import { MatrixPage } from './pages/Matrix'
 import { PipelinePage } from './pages/Pipeline'
@@ -22,25 +23,36 @@ import { PREFERRED_REFERENCE } from './lib/defaults'
 import { addItem, canonicalOf, compareItems, counterpart, defaultScenario, formatItems, projectText, projectsOf, type ProjectInfo } from './lib/projects'
 
 type NavItem = { page: Page; label: string; icon: string; also?: Page[] }
-// Workflow order: 탐색 → 예측 → Architecture → Library. Home = brand link; legacy Streamlit lives in 설정.
+// Review workflow (U9): 선택 → 예측 → 검증 → 최적화 → 결정·보고, then Library. Home = brand link; legacy Streamlit lives in 설정.
 const NAV: { title: string; items: NavItem[] }[] = [
-  { title: '탐색', items: [
+  { title: '1 · 선택', items: [
     { page: 'explorer', label: 'Scenario', icon: 'explorer', also: ['matrix'] },
     { page: 'pipeline', label: 'Pipeline', icon: 'pipeline' },
     { page: 'compare', label: 'Compare', icon: 'compare' }] },
-  { title: '예측', items: [
+  { title: '2 · 예측', items: [
     { page: 'timing', label: 'Timing Budget', icon: 'timer', also: ['timing-fleet'] },
-    { page: 'predictions', label: '예측 현황', icon: 'bars' },
+    { page: 'predictions', label: '예측 현황', icon: 'bars' }] },
+  { title: '3 · 검증', items: [
     { page: 'calibration', label: '예측 ↔ 실측', icon: 'trend' }] },
-  { title: 'Architecture', items: [
+  { title: '4 · 최적화', items: [
     { page: 'explore', label: '조합 탐색', icon: 'probe' },
-    { page: 'cpu', label: 'CPU what-if', icon: 'probe' },
+    { page: 'cpu', label: 'CPU what-if', icon: 'probe' }] },
+  { title: '5 · 결정 · 보고', items: [
     { page: 'reports', label: '검토 보고서', icon: 'report' }] },
   { title: 'Library', items: [{ page: 'library', label: 'IP · DVFS · SW', icon: 'library' }] },
 ]
 
+/** U9: the natural next page of the review workflow (shown as a button in the top bar). */
+const NEXT: Partial<Record<Page, { page: Page; label: string }>> = {
+  explorer: { page: 'pipeline', label: 'Pipeline 보기' }, matrix: { page: 'pipeline', label: 'Pipeline 보기' },
+  pipeline: { page: 'timing', label: 'Timing Budget' }, compare: { page: 'timing', label: 'Timing Budget' },
+  timing: { page: 'predictions', label: '예측 현황' }, 'timing-fleet': { page: 'predictions', label: '예측 현황' },
+  predictions: { page: 'calibration', label: '실측과 비교' }, calibration: { page: 'explore', label: '조합 탐색' },
+  explore: { page: 'reports', label: '검토 보고서' }, cpu: { page: 'explore', label: '조합 탐색' },
+}
+
 const TITLES: Record<Page, string> = {
-  home: 'Home', explorer: 'Scenario', matrix: 'Scenario', pipeline: 'Pipeline', compare: 'Compare', timing: 'Timing Budget', 'timing-fleet': 'Timing Budget',
+  home: 'Home', explorer: 'Scenario', matrix: 'Scenario', pipeline: 'Pipeline', compare: 'Compare', timing: 'Timing Budget · variant', 'timing-fleet': 'Timing Budget · 전체 scenario',
   explore: '조합 탐색', predictions: '예측 현황', reports: 'Architecture 검토 보고서', calibration: '예측 ↔ 실측', cpu: 'CPU 배치 · 주파수 what-if', library: 'Library', settings: '설정',
 }
 
@@ -184,10 +196,12 @@ export default function App() {
               <a className={route.page === 'timing-fleet' ? 'on' : ''} href={link('timing-fleet')}>전체 scenario</a>
             </div>
           )}
+          {NEXT[route.page] && <a className="btn next-step" href={link(NEXT[route.page]!.page)} title="검토 흐름의 다음 단계">다음: {NEXT[route.page]!.label} →</a>}
           <button className="find-btn" onClick={() => setPicker('open')}>
             <Icon name="search" size={15} /><span style={{ flexGrow: 1, textAlign: 'left' }}>Variant 찾기</span><span className="kbd">Ctrl K</span>
           </button>
         </header>}
+        {!catalogQ.error && route.page !== 'home' && route.page !== 'settings' && <ModelStatusBar ctx={ctx} />}
         {catalogQ.error && route.page !== 'home' && route.page !== 'settings' && <div className="page"><div className="err">API에 연결할 수 없습니다: {catalogQ.error}<br />FastAPI(:18000)를 실행하고 <span className="mono">npm run dev</span>의 /api 프록시를 확인하세요.</div></div>}
         {!catalogQ.error && route.page === 'explorer' && <ExplorerPage key={`${scenario}:${route.params.type ?? ''}`} ctx={ctx} />}
         {!catalogQ.error && route.page === 'matrix' && <MatrixPage key={project} ctx={ctx} />}

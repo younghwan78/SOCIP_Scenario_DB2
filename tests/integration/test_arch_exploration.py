@@ -76,8 +76,13 @@ def test_promote_duplicate_variant_names_preserves_scenarios_and_report(engine, 
         html = svc.get_report(db, report["id"]).rendered_html
         assert "<script>" not in html and "&lt;script&gt;" in html
         assert not svc.report_stale(db, report["id"])["stale"]
-        svc.set_report_status(db, report["id"], "published")
-        assert svc.report_detail(svc.get_report(db, report["id"]))["status"] == "published"
+        with pytest.raises(UnprocessableError):
+            svc.set_report_status(db, report["id"], "published")  # no reviewer / note
+        svc.set_report_status(db, report["id"], "published", reviewer="Joo", note="spec 확인", user="tester")
+        meta = svc.report_detail(svc.get_report(db, report["id"]))
+        assert meta["status"] == "published" and meta["review"]["reviewer"] == "Joo" and meta["review_count"] == 1
+        data, name = svc.report_xlsx(db, report["id"])
+        assert data[:2] == b"PK" and name.endswith(".xlsx")
         svc.promote(db, PromoteRequest(run_id=rid, scenario_id=ids[0], variant_ids=["shared", "shared"]))
         assert len(svc.history(db, ids[0], "shared")) == 2
         assert svc.report_stale(db, report["id"])["stale"]
@@ -128,6 +133,33 @@ def test_concurrent_first_promotions_form_one_current_history_chain(engine, stor
         assert len(rows) == 2
         current = [r for r in rows if r.status == "current"]
         assert len(current) == 1 and current[0].supersedes_ref in {r.id for r in rows if r.status == "superseded"}
+
+
+def test_reports_are_created_as_drafts_and_keep_concurrent_review_history(engine, stored_run):
+    rid, _ = stored_run
+    with Session(engine) as db:
+        with pytest.raises(UnprocessableError, match="draft"):
+            svc.create_report(db, ArchReportRequest.model_construct(run_id=rid, status="published"))
+        report = svc.create_report(db, ArchReportRequest(run_id=rid))
+        assert report["status"] == "draft"
+        assert report["snapshot"]["spec_summary"]["power_sources"] == {"registered": 0, "recommended": 2}
+        assert "등록 예측" not in report["snapshot"]["conclusion"]["headline"]
+    barrier = Barrier(2)
+
+    def review(reviewer):
+        with Session(engine) as db:
+            held = svc.get_report(db, report["id"])
+            assert held.review_history == []
+            barrier.wait(timeout=10)
+            return svc.set_report_status(db, report["id"], "published", reviewer=reviewer, note="spec checked")
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(review, reviewer) for reviewer in ("reviewer-a", "reviewer-b")]
+        for future in futures:
+            assert future.result(timeout=20)["status"] == "published"
+    with Session(engine) as db:
+        history = svc.get_report(db, report["id"]).review_history
+        assert len(history) == 2 and {r["reviewer"] for r in history} == {"reviewer-a", "reviewer-b"}
 
 
 def test_failed_verification_cannot_be_promoted(engine, stored_run):
@@ -217,3 +249,17 @@ def test_power_options_ride_with_the_prediction_and_follow_iq_review(engine, sto
         again = next(r for r in svc.list_option_reviews(db, scenario_id=ids[0])
                      if r["option_key"] == BCROP and r["variant_id"] == "*")
         assert again["id"] == bcrop["id"] and [h["status"] for h in again["history"]] == ["rejected", "iq_eval"]
+
+
+def test_model_status_counts_predictions_from_older_engine(engine, stored_run):
+    rid, ids = stored_run
+    with Session(engine) as db:
+        svc.promote(db, PromoteRequest(run_id=rid))
+        project = db.query(Scenario.project_ref).filter(Scenario.id == ids[0]).scalar()
+        status = svc.model_status(db, project_ref=project)
+        assert status["engine_rev"] == svc.ENGINE_REV
+        assert status["predictions"]["engines"].get("test", 0) >= 2  # stored_run uses engine_rev="test"
+        assert status["predictions"]["stale_engine"] >= 2
+        assert set(status["measurements"]) == {"real", "synthetic", "empty"}
+        assert status["dvfs_unrecorded"] >= 0
+        assert all(set(d) == {"ref", "sample", "predictions"} for d in status["dvfs"])

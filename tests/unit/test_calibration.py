@@ -96,3 +96,14 @@ def test_synthetic_flag_from_provenance():
     assert is_synthetic({"device_id": "SYNTHETIC"})
     assert not is_synthetic({"collection_method": "power_monitor", "device_id": "EVT1-ERD-SN-0042"})
     assert not is_synthetic(None)
+
+
+def test_category_fit_flags_total_that_matches_by_compensation():
+    from scenario_db.comparison.calibration import category_fit
+
+    rows = compare_split({"cpu": 174.1, "ip": 123.8, "bw": 155.6}, {"cpu": 168.5, "ip": 190.9, "bw": 103.6, "other": 57.2})
+    fit = category_fit(rows, 0.9)
+    assert fit["worst_category"] == "bw" and fit["worst_delta_pct"] > 50
+    assert fit["offsetting"] is True
+    assert category_fit(rows, -12.8)["offsetting"] is False
+    assert category_fit(None, 1.0) == {"worst_category": None, "worst_delta_pct": None, "offsetting": False}

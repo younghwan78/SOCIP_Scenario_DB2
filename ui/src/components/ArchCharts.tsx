@@ -1,6 +1,7 @@
 import { useWidth } from './Charts'
+import { useTip } from './ChartTip'
 import { fmt, niceMax } from '../lib/timingBudget'
-import { CAT_COLOR, PCOL, powerParts, waterfall, type Attribution, type BufferRow, type DomainRow, type Power, type Quant } from '../lib/archExplore'
+import { CAT_COLOR, PCOL, powerParts, waterfall, type Attribution, type BufferRow, type DomainRow, type IpModeRow, type Power, type Quant } from '../lib/archExplore'
 
 // ---------------------------------------------------------------- range boxes (one row per scenario, no overlap)
 export interface RangeRow { id: string; label: string; dist: Quant | null | undefined; marker?: number | null; base?: number | null; ok: boolean }
@@ -126,34 +127,93 @@ export function AxisSpread({ spread }: { spread: Record<string, { min: number; m
 }
 
 // ---------------------------------------------------------------- compression savings
+/** Buffer state for the compression axis: applied (recommended) / explored / not explored, and why. */
+export function bufferState(b: BufferRow, selected: string[]): { key: 'on' | 'explored' | 'cap' | 'unsupported' | 'none'; label: string; color: string } {
+  if (selected.includes(b.buffer)) return { key: 'on', label: '추천 조합 적용', color: '#EA8A4E' }
+  if (b.explored) return { key: 'explored', label: '탐색 (미적용)', color: '#F2C9AD' }
+  const r = b.skip_reason ?? ''
+  if (/max_buffers/.test(r)) return { key: 'cap', label: '상한 제외', color: '#E7DFD2' }
+  if (/not declared|port without|lists no compression/.test(r)) return { key: 'unsupported', label: 'DMA 미지원', color: '#D9D4CC' }
+  return { key: 'none', label: '절감 없음', color: '#EDE7DD' }
+}
+function reasonText(b: BufferRow): string {
+  const r = b.skip_reason ?? ''
+  if (/not declared: (.*)/.test(r)) return `지원 미선언 IP: ${r.replace(/.*not declared: /, '')}`
+  if (/DMA port without/.test(r)) { const ps = r.replace(/.*: /, '').split(', '); return `${r.match(/without (\S+):/)?.[1] ?? ''} 미지원 port: ${ps.length > 2 ? `${ps.slice(0, 2).join(', ')} 외 ${ps.length - 2}` : ps.join(', ')}` }
+  if (/lists no compression/.test(r)) return 'endpoint IP가 압축 미지원'
+  if (/max_buffers/.test(r)) return '절감 상위 N개 밖 (buffer 상한)'
+  if (/already compressed/.test(r)) return '이미 압축 사용 중'
+  return r
+}
+
 export function BufferSavings({ buffers, selected }: { buffers: BufferRow[]; selected: string[] }) {
   const [ref, w] = useWidth<HTMLDivElement>(420)
-  const rows = buffers.filter((b) => (b.delta_mbs ?? 0) < -0.5)
-  const labelW = 150, valW = 118
+  const tip = useTip()
+  const rows = buffers.filter((b) => (b.delta_mbs ?? 0) < -0.5 || /not declared|port without|lists no compression/.test(b.skip_reason ?? ''))
+    .sort((a, b) => Number(!!b.explored || selected.includes(b.buffer)) - Number(!!a.explored || selected.includes(a.buffer)) || (a.delta_mbs ?? 0) - (b.delta_mbs ?? 0))
+  const labelW = 150, valW = 150
   const plotW = Math.max(100, w - labelW - valW)
   const hi = niceMax(Math.max(1, ...rows.map((b) => -(b.delta_mbs ?? 0))))
   if (!rows.length) return <div className="empty">압축으로 줄일 DMA traffic 없음</div>
+  const nUnsup = rows.filter((b) => bufferState(b, selected).key === 'unsupported').length
   return (
     <div ref={ref}>
+      <div className="faint" style={{ fontSize: 11.5, marginBottom: 4 }}>압축 지원이 IP catalog에 선언된 DMA만 탐색합니다 (port별 supported_compressions 포함){nUnsup ? ` · 미지원 ${nUnsup}개는 회색 — 단독 적용 시 잠재 절감만 표시` : ''}</div>
       <svg width={labelW + plotW + valW} height={rows.length * 20} role="img" aria-label="compression savings">
         {rows.map((b, i) => {
-          const on = selected.includes(b.buffer)
+          const st = bufferState(b, selected)
           const bw = (-(b.delta_mbs ?? 0) / hi) * plotW
+          const off = st.key === 'unsupported' || st.key === 'cap' || st.key === 'none'
           return (
-            <g key={b.buffer} transform={`translate(0,${i * 20})`}>
-              <title>{`${b.buffer} · ${b.mode} ×${b.comp_ratio} (${b.ratio_source}) · 지원 ${b.support}${b.skip_reason ? ` · ${b.skip_reason}` : ''} · ports ${(b.ports ?? []).join(', ')}`}</title>
-              <text x={labelW - 6} y={13} fontSize={11} textAnchor="end" fill={b.explored ? '#3B3F4A' : '#A39C90'} className="mono">{b.buffer}</text>
-              <rect x={labelW} y={3} width={bw} height={12} fill={on ? '#EA8A4E' : b.explored ? '#F2C9AD' : '#EDE7DD'} />
-              <text x={labelW + plotW + 6} y={13} fontSize={11} className="mono" fill="#3B3F4A">{fmt(b.delta_mbs, 0)} MB/s · {fmt(b.delta_mw, 1)}</text>
+            <g key={b.buffer} transform={`translate(0,${i * 20})`}
+              {...tip({ title: b.buffer, color: st.color, head: { label: st.label, value: `${fmt(b.delta_mbs, 0)} MB/s`, tone: off ? 'muted' : 'good' },
+                rows: [{ k: 'Δ power', v: `${fmt(b.delta_mw, 1)} mW` }, { k: 'mode · ratio', v: `${b.mode ?? '—'} ×${b.comp_ratio ?? '—'} (${b.ratio_source ?? '—'})` },
+                  { k: 'endpoint IP', v: b.nodes.join(', ') }, ...(b.ports?.length ? [{ k: 'DMA port', v: b.ports.length > 3 ? `${b.ports.slice(0, 3).join(', ')} 외 ${b.ports.length - 3}` : b.ports.join(', ') }] : []),
+                  ...(b.skip_reason ? [{ k: '제외 사유', v: reasonText(b), tone: 'bad' as const }] : [])] })}>
+              <rect x={0} y={0} width={labelW + plotW + valW} height={20} fill="transparent" />
+              <text x={labelW - 6} y={13} fontSize={11} textAnchor="end" fill={off ? '#A39C90' : '#3B3F4A'} className="mono">{b.buffer}</text>
+              <rect x={labelW} y={3} width={bw} height={12} fill={st.color} stroke={st.key === 'unsupported' ? '#B8B1A6' : undefined} strokeDasharray={st.key === 'unsupported' ? '3 2' : undefined} />
+              <text x={labelW + plotW + 6} y={13} fontSize={11} className="mono" fill={off ? '#A39C90' : '#3B3F4A'}>{st.key === 'unsupported' ? 'DMA 미지원' : `${fmt(b.delta_mbs, 0)} MB/s · ${fmt(b.delta_mw, 1)}`}</text>
             </g>
           )
         })}
       </svg>
       <div className="legend-row">
-        <span className="legend-item"><span style={{ width: 10, height: 10, background: '#EA8A4E' }} />추천 조합에 적용</span>
-        <span className="legend-item"><span style={{ width: 10, height: 10, background: '#F2C9AD' }} />탐색 (미적용)</span>
-        <span className="legend-item"><span style={{ width: 10, height: 10, background: '#EDE7DD' }} />탐색 제외 (max_buffers)</span>
+        {[['#EA8A4E', '추천 조합에 적용'], ['#F2C9AD', '탐색 (미적용)'], ['#E7DFD2', '상한 제외 (max_buffers)'], ['#D9D4CC', 'DMA 미지원 (탐색 안 함)']].map(([c, l]) =>
+          <span key={l} className="legend-item"><span style={{ width: 10, height: 10, background: c }} />{l}</span>)}
       </div>
+    </div>
+  )
+}
+
+/** Per-IP sim mode table: current mode / unit power, declared alternatives, explored saving. */
+export function IpModes({ rows, results }: { rows: IpModeRow[]; results?: { items: string[]; delta_mw: number | null; spec_ok: boolean }[] }) {
+  if (!rows.length) return <div className="empty">IP mode 정보 없음 (engine rev 6 이전 run)</div>
+  const single = (node: string, mode: string) => results?.find((r) => r.items.length === 1 && r.items[0] === `mode:${node}=${mode}`)
+  return (
+    <div className="table-x">
+      <table className="tb-mini-table" style={{ width: '100%' }} aria-label="IP mode">
+        <thead><tr><th>IP</th><th>DVFS</th><th>현재 mode</th><th title="mW per MP (처리 화소)">unit power</th><th>ppc</th><th>IP power</th><th>대안 mode (unit power · 탐색 결과)</th></tr></thead>
+        <tbody>{rows.map((r) => (
+          <tr key={r.node}>
+            <td><b>{r.node.toUpperCase()}</b> <span className="faint mono" style={{ fontSize: 11 }}>{r.hw_name !== r.node.toUpperCase() ? r.hw_name : ''}</span></td>
+            <td className="mono faint">{r.dvfs_group ?? '—'}</td>
+            <td><span className="badge">{r.mode}</span>{!r.declared && <span className="faint" style={{ fontSize: 11 }}> (mode 미선언)</span>}</td>
+            <td className="mono">{r.unit_power_mw_mp === null ? '—' : `${fmt(r.unit_power_mw_mp, 3)}`}</td>
+            <td className="mono">{fmt(r.ppc, 1)}</td>
+            <td className="mono">{r.power_mw === null ? '—' : `${fmt(r.power_mw, 1)} mW`}</td>
+            <td>{r.alternatives.length ? r.alternatives.map((a) => {
+              const res = single(r.node, a.mode)
+              const d = a.unit_power_mw_mp !== null && r.unit_power_mw_mp ? ((a.unit_power_mw_mp - r.unit_power_mw_mp) / r.unit_power_mw_mp) * 100 : null
+              return <span key={a.mode} className={`mode-alt ${a.explorable ? 'on' : ''}`} title={a.explorable ? `${a.note ?? ''}\n현재 mode 대체 가능 (substitutes) → power option으로 탐색` : '기능/해상도 mode — 대체 선언(substitutes) 없음, 탐색 안 함'}>
+                {a.mode} <span className="mono">{fmt(a.unit_power_mw_mp, 3)}{d !== null ? ` (${d >= 0 ? '+' : ''}${fmt(d, 0)}%)` : ''}</span>
+                {res && res.delta_mw !== null && <b className="mono" style={{ color: res.delta_mw < 0 ? 'var(--primary-strong)' : 'var(--del-text)' }}> → {res.delta_mw >= 0 ? '+' : ''}{fmt(res.delta_mw, 1)} mW{res.spec_ok ? '' : ' (spec ✗)'}</b>}
+                {a.explorable && !res && <span className="faint"> · 탐색 대상</span>}
+              </span>
+            }) : <span className="faint">—</span>}</td>
+          </tr>))}</tbody>
+      </table>
+      <div className="faint" style={{ fontSize: 11, marginTop: 4 }}>초록 테두리 = 현재 mode를 대체할 수 있다고 선언된 mode(substitutes) → power option으로 재시뮬레이션 · 회색 = 기능/해상도 전용 mode (참고) · → Δ = 추천 조합 대비 단독 적용 결과</div>
     </div>
   )
 }

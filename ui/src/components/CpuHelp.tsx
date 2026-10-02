@@ -1,0 +1,59 @@
+// "?" help text for the CPU what-if cards.
+import type { ReactNode } from 'react'
+
+export const CPU_HELP: Record<string, ReactNode> = {
+  input: <>
+    <b>무엇을 기준으로 계산할지 고릅니다.</b>
+    <ul>
+      <li><b>측정 profile</b> — 실기기에서 측정한 task · thread별 CPU cycle, stall, bus 접근량과 cluster별 주파수 residency (PMU + Perfetto). frame 1장당 값으로 정규화되어 있습니다.</li>
+      <li><b>적용할 SoC CPU 구성</b> — what-if를 돌릴 대상 SoC의 cluster 구성 · OPP · 전력 계수 (power_model_params). 차기 SoC 구성을 고르면 “같은 SW를 새 CPU에서 돌리면?”을 봅니다.</li>
+      <li><b>profile을 측정한 SoC</b> — 측정 SoC와 대상 SoC가 다르면 고릅니다. core type(MID_LF / MID_HF / BIG…)으로 cluster를 대응하고 IPC 차이를 반영합니다.</li>
+      <li><b>비교 기준 ★</b> — <code>현재 = 측정 배치</code>: 측정에서 실제로 돈 cluster에 그대로 둔 결과가 기준. <code>EAS 기본</code>: knob 없이 EAS가 스스로 배치한 결과가 기준.</li>
+    </ul></>,
+  cond: <>
+    <b>계산 조건과 scheduler 모델 값입니다.</b>
+    <ul>
+      <li><b>fps</b> — frame 주기(= 1000/fps ms). 모든 task 시간 · 전력은 frame당으로 계산.</li>
+      <li><b>SW 증가 배율</b> — 차기 과제에서 SW instruction이 늘어나는 비율(전체). task별 배율은 ③ 표의 “증가” 칸.</li>
+      <li><b>idle power gating</b> — 일이 없는 core가 power-gate되는 비율(0–1). 높을수록 leakage 감소.</li>
+      <li><b>CPU BW 배율</b> — CPU가 DRAM까지 내보내는 traffic 배율(L3/SLC 변경 what-if). BW 전력에 반영.</li>
+      <li><b>scheduler 보정값</b> — schedutil <code>f = margin × util / capacity × fmax</code>의 margin, EAS fits_capacity margin, util_est / PELT 평균, PELT half-life, deadline boost(budget이 있는 task는 budget을 맞추는 OPP까지 올림), EM에 leakage 포함 여부. 비우면 topology 설정값을 씁니다. “모델 확인” 카드의 측정 vs 모델 MHz 차이가 크면 여기부터 조정합니다.</li>
+    </ul></>,
+  range: <>
+    <b>어떤 task를 어느 cluster 후보로 sweep할지 정합니다.</b>
+    <ul>
+      <li><b>행 = SW task</b>, 괄호는 측정에서 돈 cluster. <b>칸 숫자</b> = 그 cluster fmax에서의 frame당 실행 시간(ms) · ✓ budget 충족 · ✗ 미충족 · ⚠ capacity 초과(EAS가 보내지 않음). 파란 칸 = 측정 위치.</li>
+      <li><b>체크</b> = sweep 후보에 포함. 기본값은 budget을 맞추고 capacity에 맞는 cluster.</li>
+      <li><b>knob</b> — 기기에서 실제로 바꿀 수 있는 것만: <code>cluster 고정</code>(cpuset/affinity로 한 cluster에 묶기), <code>상위 cluster 제외</code>(cpuset 상한), <code>uclamp.max</code>(주파수 상한 효과), <code>uclamp.min</code>(하한 boost).</li>
+      <li><b>thr</b> = thread 수 (비우면 측정 thread 수). <b>budget ms</b> = frame당 허용 시간 (Timing Budget의 SW budget을 넣으면 그 안에 끝나는 배치만 “만족”). <b>증가</b> = 이 task만의 SW 증가 배율.</li>
+      <li><b>(other)</b> — profile에서 어떤 task에도 매핑되지 않은 cycle(커널 · 다른 프로세스 · 이름 없는 thread 등). 정체를 모르는 부하라 옮기는 의미가 없어 <b>측정 배치에 고정</b>하고 sweep하지 않습니다 (의도된 동작). 전력에는 그대로 포함됩니다.</li>
+      <li>thread 이름의 <code>#숫자</code>(예: <code>post_crta#2098</code>)는 측정 trace의 <b>thread id(TID)</b>입니다. 같은 task의 여러 thread를 구분하려는 것이며 표시는 “tid 2098”로 바꿔 보여줍니다.</li>
+    </ul></>,
+  cal: <>
+    <b>모델이 측정을 재현하는지 먼저 확인합니다.</b>
+    <ul>
+      <li>측정 배치 그대로 EAS + schedutil을 돌렸을 때의 cluster 평균 MHz · util을 측정 residency · active 비율과 비교합니다.</li>
+      <li>차이가 크면(예: ±20% 이상) 후보 순위도 믿기 어렵습니다 → ② scheduler 보정값(freq margin, util model, PELT)을 조정한 뒤 다시 계산하세요.</li>
+    </ul></>,
+  better: <>
+    <b>★ 기준보다 CPU 전력이 낮으면서 조건(budget · capacity · frame 주기)을 만족하는 배치 후보입니다.</b>
+    <ul>
+      <li>막대 = cluster별 동적 + leakage + DSU + CPU BW 전력 합. 오른쪽 숫자 = ★ 대비 Δ.</li>
+      <li>기본은 절감이 큰 <b>상위 5개</b>만 보여주고 “전체 펼치기”로 나머지를 봅니다. 행 클릭 = 아래 세부(적용 방법 · core 점유 · task 시간).</li>
+      <li>“동등 N” = 같은 OPP · 같은 전력이 되는 다른 knob 조합 (어느 것을 적용해도 결과 동일).</li>
+    </ul></>,
+  detail: <>
+    <ul>
+      <li><b>적용 방법</b> — 후보를 기기에서 재현하는 knob (cpuset · affinity · uclamp 설정 위치).</li>
+      <li><b>cluster · CPU 점유</b> — core별 util과 올라간 thread. boost 표시는 deadline boost로 schedutil 주파수보다 올린 경우.</li>
+      <li><b>task 표</b> — ★ 대비 배치 · 시간 변화와 budget slack. slack &lt; 0.5 ms는 주의(빨강).</li>
+    </ul></>,
+  others: <>전력이 ★보다 높거나 조건을 만족하지 못한 조합입니다. 정렬해서 “왜 이 배치는 안 되는지” 확인할 때 씁니다.</>,
+}
+
+/** "post_crta#2098" → "post_crta · tid 2098" (numeric thread part = Linux TID from the trace). */
+export function threadLabel(s: string): string {
+  const [task, thread] = s.split('#')
+  if (!thread) return s
+  return /^\d+$/.test(thread) ? `${task} · tid ${thread}` : `${task} · ${thread}`
+}

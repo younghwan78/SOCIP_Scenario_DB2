@@ -154,7 +154,7 @@ class TimingBudgetOptions(BaseScenarioModel):
     mfc_dual: Literal["auto", "on", "off"] = "auto"
     interval_tolerance: float = Field(default=1e-3, gt=0, le=0.05)
     frames: int = Field(default=12, ge=4, le=64)
-    timeline_frames: int = Field(default=6, ge=1, le=16)
+    timeline_frames: int = Field(default=6, ge=1, le=32)
     # Stage model: each stage's SW runs on its own thread/core. True keeps the
     # scenario's CPU resource (e.g. one CPU_CAMERA) so cross-stage contention shows.
     shared_cpu: bool = False
@@ -190,7 +190,8 @@ def analyze_timing_budget(
     base_config = (config or SimulationRunConfig()).model_copy(
         update={
             "include_timeline": True,
-            "timeline_frame_count": options.frames,
+            # the drawn timeline needs a few frames beyond the last one shown (steady state)
+            "timeline_frame_count": max(options.frames, options.timeline_frames + 4),
             "debug_trace": False,
         }
     )
@@ -580,7 +581,7 @@ def _run(graph, options, config, dvfs_tables, plan, *, rule_only: bool) -> dict[
                 if plan["stage"][n] == "rt"
                 else options.output_margin
                 if plan["stage"][n] == "output"
-                else 0.25
+                else options.rt_margin  # NRT/Post rule reference follows the SW margin rule
             )
             k = plan["shared"].get(n, 1)
             margins[n] = 1.0 - (1.0 - m) / k if k > 1 else m
@@ -724,6 +725,7 @@ def _report(graph, options, plan, rule_run, run, dvfs_tables) -> dict[str, Any]:
         },
         "mfc_dual": {k: v for k, v in plan["dual"].items()},
         "growth": {"runtime_scale": options.runtime_scale, "latency_scale": options.latency_scale},
+        "sw_margin": {"rt": options.rt_margin, "output": options.output_margin},
         "dvfs": {"tables": sorted(dvfs_tables), "applied": bool(dvfs_tables)},
         "stages": stages,
         "ips": sorted(
@@ -869,7 +871,8 @@ def _verdict(stages, intervals, ips) -> dict[str, Any]:
             reasons.append(f"{s['name']}: SW {s['sw_ms']:.2f} ms leaves no HW budget")
     rt = next(s for s in stages if s["id"] == "rt")
     if rt["hw_ms"] > rt["budget_ms"] * 1.0001:
-        reasons.append(f"RT HW {rt['hw_ms']:.2f} ms > 75% budget {rt['budget_ms']:.2f} ms")
+        pct = round(100 * (1.0 - float(rt.get("margin", 0.25))))
+        reasons.append(f"RT HW {rt['hw_ms']:.2f} ms > {pct}% budget {rt['budget_ms']:.2f} ms")
     for key in ("preview", "video"):
         s = intervals[key]
         if s["ok"] is False:

@@ -1,4 +1,5 @@
 import { useWidth } from './Charts'
+import { deltaRow, useTip } from './ChartTip'
 import { FAMILY_COLOR, compareCpu, partColor, type Family, type PowerPart } from '../lib/powerModel'
 import { fmt } from '../lib/timingBudget'
 
@@ -18,6 +19,7 @@ function orderKeys(rows: PowerRow[]): { keys: string[]; labels: Record<string, s
 /** Stacked power per row (CPU → IP → memory), first row = reference: dashed line + Δ per row. */
 export function PowerStack({ rows, selected, onPick }: { rows: PowerRow[]; selected?: string; onPick?: (id: string) => void }) {
   const [ref, w] = useWidth<HTMLDivElement>(720)
+  const tip = useTip()
   const { keys, labels, family, cpuOrder } = orderKeys(rows)
   const hasSub = rows.some((r) => r.sub)
   const labelW = Math.min(300, Math.max(200, Math.round(w * 0.24))), valW = 170, rh = hasSub ? 34 : 26
@@ -50,8 +52,11 @@ export function PowerStack({ rows, selected, onPick }: { rows: PowerRow[]; selec
                 const p = byKey.get(key)
                 if (!p || p.mw <= 0) return null
                 const wq = p.mw * k
-                const el = <rect key={key} x={x} y={hasSub ? 7 : 4} width={Math.max(0.5, wq - 0.5)} height={hasSub ? rh - 16 : rh - 10} fill={partColor(key, cpuOrder)}>
-                  <title>{`${r.label} · ${p.label}: ${fmt(p.mw, 1)} mW (${fmt((100 * p.mw) / Math.max(totals[i], 1e-9), 1)}%)${p.note ? ` — ${p.note}` : ''}`}</title></rect>
+                const refMw = rows[0]?.parts.find((q) => q.key === key)?.mw ?? 0
+                const el = <rect key={key} x={x} y={hasSub ? 7 : 4} width={Math.max(0.5, wq - 0.5)} height={hasSub ? rh - 16 : rh - 10} fill={partColor(key, cpuOrder)}
+                  {...tip({ title: `${FAMILY_LABEL[family[key]]} · ${p.label}`, color: partColor(key, cpuOrder), head: { label: r.label, value: `${fmt(p.mw, 1)} mW`, tone: 'strong' },
+                    rows: [{ k: '행 total 대비', v: `${fmt((100 * p.mw) / Math.max(totals[i], 1e-9), 1)}% of ${fmt(totals[i], 1)} mW` }, ...(i > 0 ? [deltaRow('★ 기준 대비', p.mw, refMw, 'mW')] : [])],
+                    foot: p.note ?? undefined })} />
                 x += wq
                 return el
               })}

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from sqlalchemy.orm import Session
 
 from scenario_db.api.auth import ApiPrincipal, require_roles
@@ -99,6 +99,13 @@ def get_prediction(prediction_id: str, db: Session = Depends(get_db)):
     return svc.get_prediction(db, prediction_id)
 
 
+# ------------------------------------------------------------------- model status
+@router.get("/model-status")
+def model_status(project_ref: str | None = None, db: Session = Depends(get_db)):
+    """Engine rev, DVFS tables and real/synthetic measurements behind the displayed numbers."""
+    return svc.model_status(db, project_ref=project_ref)
+
+
 # ------------------------------------------------------------------- reports
 @router.post("/reports")
 def create_report(
@@ -124,6 +131,14 @@ def get_report_html(report_id: str, db: Session = Depends(get_db)):
     return HTMLResponse(svc.get_report(db, report_id).rendered_html)
 
 
+@router.get("/reports/{report_id}/xlsx")
+def get_report_xlsx(report_id: str, db: Session = Depends(get_db)):
+    """Frozen report tables as an Excel workbook (one sheet per table)."""
+    data, filename = svc.report_xlsx(db, report_id)
+    return Response(content=data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
 @router.get("/reports/{report_id}/stale")
 def report_stale(report_id: str, db: Session = Depends(get_db)):
     return svc.report_stale(db, report_id)
@@ -133,6 +148,7 @@ def report_stale(report_id: str, db: Session = Depends(get_db)):
 def set_status(
     report_id: str, request: ReportStatusRequest,
     db: Session = Depends(get_db),
-    _principal: ApiPrincipal = Depends(require_roles("writer", "admin")),
+    principal: ApiPrincipal = Depends(require_roles("writer", "admin")),
 ):
-    return svc.set_report_status(db, report_id, request.status)
+    return svc.set_report_status(db, report_id, request.status, reviewer=request.reviewer, note=request.note,
+                                 user=principal.subject)
