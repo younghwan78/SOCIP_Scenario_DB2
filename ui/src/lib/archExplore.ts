@@ -113,6 +113,8 @@ export interface ReportMeta {
   id: string; title: string; status: 'draft' | 'published'; target_soc_ref: string | null; project_ref: string | null; scenario_type: string
   run_ids: string[]; dvfs_table_ref: string | null; engine_rev: string; html_sha256: string; generated_by: string | null; generated_at: string | null
   spec_ok: number | null; explored: number | null
+  /** latest review entry (publish needs reviewer + note); absent before API 0023 */
+  review?: { status: string; reviewer: string | null; note: string | null; by: string | null; at: string } | null; review_count?: number
 }
 
 export interface RunOptions {
@@ -177,7 +179,9 @@ export const archApi = {
     send<{ old: HistoryRow; new: HistoryRow; attribution: Attribution }>('GET', `/arch/predictions/compare${q(p)}`),
   reports: () => send<ReportMeta[]>('GET', '/arch/reports'),
   createReport: (runId: string, title?: string) => send<ReportMeta>('POST', '/arch/reports', { run_id: runId, title }),
-  setReportStatus: (id: string, status: 'draft' | 'published') => send<ReportMeta>('PATCH', `/arch/reports/${encodeURIComponent(id)}`, { status }),
+  setReportStatus: (id: string, status: 'draft' | 'published', review?: { reviewer: string; note: string }) =>
+    send<ReportMeta>('PATCH', `/arch/reports/${encodeURIComponent(id)}`, { status, ...review }),
+  reportXlsxUrl: (id: string) => `${API_BASE}/arch/reports/${encodeURIComponent(id)}/xlsx`,
   reportStale: (id: string) => send<{ stale: boolean; changed: { variant_id: string }[] }>('GET', `/arch/reports/${encodeURIComponent(id)}/stale`),
   reportHtmlUrl: (id: string) => `${API_BASE}/arch/reports/${encodeURIComponent(id)}/html`,
 }

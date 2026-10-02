@@ -49,6 +49,14 @@ class ArchReportRequest(BaseModel):
 
 class ReportStatusRequest(BaseModel):
     status: str = Field(pattern="^(draft|published)$")
+    reviewer: str | None = Field(default=None, max_length=120)
+    note: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def _publish_needs_review(self) -> ReportStatusRequest:
+        if self.status == "published" and (not (self.reviewer or "").strip() or not (self.note or "").strip()):
+            raise ValueError("publishing requires reviewer and note")
+        return self
 
 
 class PowerOptionReviewRequest(BaseModel):

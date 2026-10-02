@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
@@ -30,6 +31,7 @@ from scenario_db.db.models.exploration import (
 from scenario_db.exceptions import NotFoundError, UnprocessableError
 from scenario_db.reporting.arch_conclusion import calibration_row, run_lineage
 from scenario_db.reporting.arch_report import build_snapshot, html_sha256, render_html
+from scenario_db.reporting.xlsx_export import report_sheets, write_xlsx
 from scenario_db.sim.arch_exploration import ENGINE_REV, explore_variant, find_case, prediction_payload
 from scenario_db.sim.power_attribution import attribute
 from scenario_db.api.services.calibration import is_synthetic, measurement_detail
@@ -407,7 +409,8 @@ def _report_meta(r: ArchReport) -> dict[str, Any]:
             "project_ref": r.project_ref, "scenario_type": r.scenario_type, "run_ids": r.exploration_run_refs,
             "dvfs_table_ref": r.dvfs_table_ref, "engine_rev": r.engine_rev, "html_sha256": r.html_sha256,
             "generated_by": r.generated_by, "generated_at": r.generated_at.isoformat() if r.generated_at else None,
-            "spec_ok": ss.get("spec_ok"), "explored": ss.get("explored")}
+            "spec_ok": ss.get("spec_ok"), "explored": ss.get("explored"),
+            "review": (r.review_history or [None])[-1], "review_count": len(r.review_history or [])}
 
 
 def report_detail(r: ArchReport) -> dict[str, Any]:
@@ -425,11 +428,24 @@ def get_report(db: Session, report_id: str) -> ArchReport:
     return r
 
 
-def set_report_status(db: Session, report_id: str, status: str) -> dict[str, Any]:
+def set_report_status(db: Session, report_id: str, status: str, *, reviewer: str | None = None,
+                      note: str | None = None, user: str | None = None) -> dict[str, Any]:
     r = get_report(db, report_id)
+    if status == "published" and (not (reviewer or "").strip() or not (note or "").strip()):
+        raise UnprocessableError("publishing requires reviewer and note")
     r.status = status
+    r.review_history = [*(r.review_history or []), {"status": status, "reviewer": (reviewer or "").strip() or None,
+                                                    "note": (note or "").strip() or None, "by": user, "at": _now().isoformat()}]
     db.commit()
     return _report_meta(r)
+
+
+def report_xlsx(db: Session, report_id: str) -> tuple[bytes, str]:
+    r = get_report(db, report_id)
+    meta = _report_meta(r)
+    stamp = r.generated_at.strftime("%Y%m%d-%H%M") if r.generated_at else "report"
+    name = re.sub(r"[^A-Za-z0-9._-]+", "_", f"{r.target_soc_ref or 'soc'}_{r.scenario_type}_{stamp}")[:80]
+    return write_xlsx(report_sheets(r.snapshot or {}, meta)), f"{name}.xlsx"
 
 
 def report_stale(db: Session, report_id: str) -> dict[str, Any]:

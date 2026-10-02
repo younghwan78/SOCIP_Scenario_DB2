@@ -76,8 +76,13 @@ def test_promote_duplicate_variant_names_preserves_scenarios_and_report(engine, 
         html = svc.get_report(db, report["id"]).rendered_html
         assert "<script>" not in html and "&lt;script&gt;" in html
         assert not svc.report_stale(db, report["id"])["stale"]
-        svc.set_report_status(db, report["id"], "published")
-        assert svc.report_detail(svc.get_report(db, report["id"]))["status"] == "published"
+        with pytest.raises(UnprocessableError):
+            svc.set_report_status(db, report["id"], "published")  # no reviewer / note
+        svc.set_report_status(db, report["id"], "published", reviewer="Joo", note="spec 확인", user="tester")
+        meta = svc.report_detail(svc.get_report(db, report["id"]))
+        assert meta["status"] == "published" and meta["review"]["reviewer"] == "Joo" and meta["review_count"] == 1
+        data, name = svc.report_xlsx(db, report["id"])
+        assert data[:2] == b"PK" and name.endswith(".xlsx")
         svc.promote(db, PromoteRequest(run_id=rid, scenario_id=ids[0], variant_ids=["shared", "shared"]))
         assert len(svc.history(db, ids[0], "shared")) == 2
         assert svc.report_stale(db, report["id"])["stale"]
