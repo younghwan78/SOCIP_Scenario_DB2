@@ -198,3 +198,48 @@ def apply_option_set(graph: Any, items: list[dict[str, Any]]) -> Any:
         cfgs[it["node"]] = cfg
         variant.node_configs = cfgs
     return replace(graph, variant=variant)
+
+
+def ip_mode_table(graph: Any, ips: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+    """Every active HW node: current sim mode, its coefficients and the declared alternatives.
+
+    ``explorable`` marks alternatives declared as ``substitutes`` of the current mode
+    (those are searched by the power-option axis); the others are listed for review only.
+    ``ips`` (timing-budget IP rows) adds the node's predicted power / clock / DVFS domain.
+    """
+    by_node = {str(i.get("node")): i for i in ips or []}
+    out: list[dict[str, Any]] = []
+    for node in graph.pipeline_nodes:
+        node_id = str(node.get("id") or "")
+        ip_ref = node.get("ip_ref")
+        row = graph.ip_catalog.get(str(ip_ref)) if ip_ref else None
+        if not node_id or row is None or is_external_non_compute_node(node, row):
+            continue
+        if ((graph.variant.node_configs or {}).get(node_id) or {}).get("sw_timing"):
+            continue
+        sim = _sim_block(row)
+        modes = sim.get("modes") if isinstance(sim.get("modes"), dict) else {}
+        cur = current_mode(graph, node_id)
+        cur_params = mode_sim_params(sim, cur) if modes else {}
+
+        def coef(params: dict[str, Any], key: str) -> Any:
+            return params.get(key, sim.get(key))
+        alts = []
+        for mode, params in (modes or {}).items():
+            if not isinstance(params, dict) or str(mode).lower() == cur.lower():
+                continue
+            alts.append({
+                "mode": str(mode), "unit_power_mw_mp": coef(params, "unit_power_mw_mp"), "ppc": coef(params, "ppc"),
+                "explorable": cur.lower() in [x.lower() for x in _substitutes(params)],
+                "label": params.get("label"), "note": params.get("note"),
+            })
+        ip = by_node.get(node_id) or {}
+        out.append({
+            "node": node_id, "ip_ref": str(ip_ref), "hw_name": sim.get("hw_name") or node_id.upper(),
+            "mode": cur, "declared": bool(modes),
+            "unit_power_mw_mp": coef(cur_params, "unit_power_mw_mp"), "ppc": coef(cur_params, "ppc"),
+            "dvfs_group": ip.get("dvfs_group") or coef(cur_params, "dvfs_group"),
+            "power_mw": ip.get("power_mw"), "set_clock_mhz": ip.get("set_clock_mhz"),
+            "alternatives": alts,
+        })
+    return out

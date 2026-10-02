@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import type { BoxStats } from '../lib/cadence'
+import { deltaRow, useTip, type TipRow } from './ChartTip'
 
 export function useWidth<T extends HTMLElement>(fallback = 600): [React.RefObject<T>, number] {
   const ref = useRef<T>(null)
@@ -26,11 +27,14 @@ function niceTicks(lo: number, hi: number, n = 6): number[] {
   return out
 }
 
-export interface BoxRow { id: string; label: ReactNode; box: BoxStats | null; values: number[]; color?: string; note?: string }
+export interface BoxRow { id: string; label: ReactNode; box: BoxStats | null; values: number[]; color?: string; note?: string; tipTitle?: string }
+
+const nf = (v: number, unit: string) => `${Math.abs(v) >= 100 ? v.toFixed(1) : v.toFixed(unit === '%' ? 1 : 3)} ${unit}`
 
 /** Horizontal box plots (Tukey-less: whiskers = min/max) with raw points and an optional target line. */
 export function BoxPlot({ rows, unit = 'ms', target, targetLabel, tolerance = 0.05, labelW = 210 }: { rows: BoxRow[]; unit?: string; target?: number | null; targetLabel?: string; tolerance?: number; labelW?: number }) {
   const [ref, width] = useWidth<HTMLDivElement>()
+  const tip = useTip()
   const vals = rows.flatMap((r) => (r.box ? [r.box.min, r.box.max] : []))
   if (target) vals.push(target * (1 - tolerance * 2), target * (1 + tolerance * 2))
   const lo0 = Math.min(...vals), hi0 = Math.max(...vals)
@@ -56,8 +60,22 @@ export function BoxPlot({ rows, unit = 'ms', target, targetLabel, tolerance = 0.
             const cy = top + i * RH + RH / 2
             const c = r.color ?? SERIES[i % SERIES.length]
             const b = r.box
+            const tipRows: TipRow[] = b ? [
+              { k: '중앙값 (p50)', v: nf(b.median, unit) },
+              { k: 'p95', v: nf(b.p95, unit) },
+              { k: 'min – max', v: `${nf(b.min, '').trim()} – ${nf(b.max, unit)}` },
+              { k: 'IQR (q1 – q3)', v: `${nf(b.q1, '').trim()} – ${nf(b.q3, unit)}` },
+              { k: 'σ (jitter)', v: nf(b.std, unit) },
+              { k: '표본 수', v: `${b.n}`, tone: 'muted' },
+            ] : []
+            if (b && target) {
+              const off = Math.abs(b.mean - target) / target
+              tipRows.unshift({ ...deltaRow('target 대비 평균', b.mean, target, unit, unit === '%' ? 1 : 3), tone: off <= tolerance ? 'good' : 'bad' })
+            }
             return (
-              <g key={r.id}>
+              <g key={r.id} {...(b ? tip({ title: r.tipTitle ?? r.id, color: c, head: { label: '평균', value: nf(b.mean, unit), tone: 'strong' }, rows: tipRows,
+                foot: target ? `target ${targetLabel ?? nf(target, unit)} · 허용 ±${(tolerance * 100).toFixed(0)}%` : undefined }) : {})}>
+                <rect x={labelW} y={cy - RH / 2} width={plotW} height={RH} fill="transparent" />
                 <foreignObject x={0} y={cy - 14} width={labelW - 8} height={28}><div className="bp-label">{r.label}</div></foreignObject>
                 {b && <>
                   <line x1={x(b.min)} y1={cy} x2={x(b.max)} y2={cy} stroke={c} strokeWidth={1.2} />
@@ -69,7 +87,6 @@ export function BoxPlot({ rows, unit = 'ms', target, targetLabel, tolerance = 0.
                 </>}
                 {r.values.map((v, k) => <circle key={k} cx={x(v)} cy={cy + ((k * 7) % 13) - 6} r={2.2} fill={c} opacity={0.55} />)}
                 <text x={labelW + plotW + 6} y={cy + 4} fontSize={9.5} fill="var(--muted)" fontFamily="var(--mono)">{b ? `n${b.n}` : '—'}</text>
-                <title>{b ? `min ${b.min.toFixed(3)} · q1 ${b.q1.toFixed(3)} · med ${b.median.toFixed(3)} · q3 ${b.q3.toFixed(3)} · max ${b.max.toFixed(3)} · mean ${b.mean.toFixed(3)} · σ ${b.std.toFixed(3)} ${unit}` : ''}</title>
               </g>
             )
           })}
@@ -81,8 +98,9 @@ export function BoxPlot({ rows, unit = 'ms', target, targetLabel, tolerance = 0.
 export interface BarDatum { id: string; label: string; value: number | null; color?: string; note?: string }
 
 /** Horizontal bars with value labels; `base` draws a reference line (e.g. baseline variant). */
-export function Bars({ data, unit, base, labelW = 180, format = (v: number) => v.toFixed(1) }: { data: BarDatum[]; unit: string; base?: number | null; labelW?: number; format?: (v: number) => string }) {
+export function Bars({ data, unit, base, labelW = 180, format = (v: number) => v.toFixed(1), lowerIsBetter = true, title }: { data: BarDatum[]; unit: string; base?: number | null; labelW?: number; format?: (v: number) => string; lowerIsBetter?: boolean; title?: string }) {
   const [ref, width] = useWidth<HTMLDivElement>()
+  const tip = useTip()
   const vals = data.map((d) => d.value).filter((v): v is number => v !== null)
   const lo = Math.min(0, ...vals), hi = Math.max(0, ...vals, base ?? 0) || 1
   const RH = 22, plotW = Math.max(100, width - labelW - 90)
@@ -93,13 +111,16 @@ export function Bars({ data, unit, base, labelW = 180, format = (v: number) => v
       <svg width={width} height={H} style={{ display: 'block' }}>
         {data.map((d, i) => {
           const y = 4 + i * RH
-          return <g key={d.id}>
+          const rowsTip: TipRow[] = []
+          if (d.value !== null && base !== undefined && base !== null && i > 0) rowsTip.push(deltaRow('기준(★) 대비', d.value, base, unit, 1, lowerIsBetter))
+          if (base !== undefined && base !== null) rowsTip.push({ k: '기준(★) 값', v: `${format(base)} ${unit}`, tone: 'muted' })
+          return <g key={d.id} {...tip({ title: d.label, color: d.color ?? SERIES[i % SERIES.length], head: { label: title ?? '값', value: d.value === null ? '없음' : `${format(d.value)} ${unit}`, tone: 'strong' }, rows: rowsTip })}>
+            <rect x={0} y={y} width={width} height={RH} fill="transparent" />
             <text x={labelW - 8} y={y + 14} fontSize={10.5} textAnchor="end" fill="var(--text-2)" fontFamily="var(--mono)">{d.label.length > 26 ? d.label.slice(0, 25) + '…' : d.label}</text>
             {d.value !== null ? <>
               <rect x={Math.min(x(0), x(d.value))} y={y + 3} width={Math.max(1, Math.abs(x(d.value) - x(0)))} height={RH - 7} rx={3} fill={d.color ?? SERIES[i % SERIES.length]} opacity={0.85} />
               <text x={Math.max(x(0), x(d.value)) + 5} y={y + 14} fontSize={10} fill="var(--text-2)" fontFamily="var(--mono)">{format(d.value)} {unit}{d.note ? ` ${d.note}` : ''}</text>
             </> : <text x={x(0) + 4} y={y + 14} fontSize={10} fill="var(--faint)">없음</text>}
-            <title>{`${d.label}: ${d.value === null ? '없음' : format(d.value)} ${unit}`}</title>
           </g>
         })}
         {base !== undefined && base !== null && <line x1={x(base)} y1={0} x2={x(base)} y2={H} stroke="var(--primary)" strokeDasharray="4 3" />}
@@ -114,6 +135,7 @@ export interface StackRow { id: string; label: string; parts: { key: string; val
 /** Horizontal stacked bars with shared legend (key → color). */
 export function StackedBars({ rows, unit, labelW = 180 }: { rows: StackRow[]; unit: string; labelW?: number }) {
   const [ref, width] = useWidth<HTMLDivElement>()
+  const tip = useTip()
   const keys = [...new Set(rows.flatMap((r) => r.parts.map((p) => p.key)))]
   const totals = rows.map((r) => r.parts.reduce((s, p) => s + p.value, 0))
   const hi = Math.max(1, ...totals)
@@ -132,7 +154,11 @@ export function StackedBars({ rows, unit, labelW = 180 }: { rows: StackRow[]; un
               const x0 = labelW + (acc / hi) * plotW
               acc += p.value
               const w = (p.value / hi) * plotW
-              return <rect key={p.key} x={x0} y={y + 3} width={Math.max(0.5, w - 0.5)} height={RH - 8} fill={color(p.key)} opacity={0.85}><title>{`${r.label} · ${p.key}: ${p.value.toFixed(1)} ${unit}`}</title></rect>
+              const ref0 = rows[0]?.parts.find((x) => x.key === p.key)?.value ?? 0
+              return <rect key={p.key} x={x0} y={y + 3} width={Math.max(0.5, w - 0.5)} height={RH - 8} fill={color(p.key)} opacity={0.85}
+                {...tip({ title: p.key, color: color(p.key), head: { label: r.label, value: `${p.value.toFixed(1)} ${unit}`, tone: 'strong' },
+                  rows: [{ k: '행 합계 대비', v: `${totals[i] ? ((p.value / totals[i]) * 100).toFixed(1) : '—'}%` }, ...(i > 0 ? [deltaRow('첫 행(기준) 대비', p.value, ref0, unit)] : []),
+                    { section: `${r.label} 상위 구성` }, ...[...r.parts].sort((a, b) => b.value - a.value).slice(0, 5).map((x) => ({ k: x.key, v: `${x.value.toFixed(1)} ${unit}`, color: color(x.key), tone: x.key === p.key ? 'strong' as const : undefined }))] })} />
             })}
             <text x={labelW + (totals[i] / hi) * plotW + 5} y={y + 15} fontSize={10} fill="var(--text-2)" fontFamily="var(--mono)">{totals[i].toFixed(0)} {unit}</text>
           </g>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { frameStarts, neighbours, sliceColor, type Slice, type Timeline } from '../lib/timeline'
+import { CAT_LABEL, FRAME_HUES, frameSliceStyle, frameStarts, neighbours, sliceCat, sliceColor, type Slice, type SliceCat, type Timeline } from '../lib/timeline'
+import { useTip } from './ChartTip'
 
 const LABEL_W = 150
 const ROW = 22
@@ -14,7 +15,28 @@ interface Props {
   colorBy?: 'group' | 'frame'
 }
 
-export const FRAME_COLORS = ['#F4A76E', '#7DB9E8', '#9AD08F', '#D7A6E8', '#F2D16B', '#86D3C7']
+export const FRAME_COLORS = FRAME_HUES.map((h) => `hsl(${h} 70% 62%)`)
+
+/** Legend for the frame × category coloring (hue = frame, shade/pattern = RT · NRT · M2M · SW). */
+export function FrameColorLegend({ frames = 3 }: { frames?: number }) {
+  const cats: SliceCat[] = ['RT', 'NRT', 'M2M', 'OUT', 'SW']
+  return (
+    <span className="legend-mini" style={{ gap: 10 }}>
+      <span className="legend-item" title="같은 frame = 같은 색 계열">{Array.from({ length: frames }, (_, f) => <span key={f} style={{ display: 'inline-block', background: frameSliceStyle(f, 'RT').fill, width: 12, height: 10, borderRadius: 2, marginRight: -2 }} />)}<span style={{ marginLeft: 4 }}>frame f0·f1·f2</span></span>
+      {cats.map((c) => { const st = frameSliceStyle(0, c === 'OUT' ? 'CODEC' : c)
+        return <span key={c} className="legend-item"><svg width="18" height="11"><rect x="0.5" y="0.5" width="17" height="10" rx="2" fill={st.fill} stroke={st.stroke} strokeDasharray={st.dash} />
+          {st.pattern && <rect x="0.5" y="0.5" width="17" height="10" fill={`url(#tl-pat-${st.pattern})`} />}</svg>{CAT_LABEL[c]}</span> })}
+      <svg width="0" height="0" style={{ position: 'absolute' }}><PatternDefs /></svg>
+    </span>
+  )
+}
+
+function PatternDefs() {
+  return <defs>
+    <pattern id="tl-pat-m2m" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="5" stroke="rgba(31,36,48,0.22)" strokeWidth="1.4" /></pattern>
+    <pattern id="tl-pat-sw" width="4" height="4" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="0.7" fill="rgba(31,36,48,0.28)" /></pattern>
+  </defs>
+}
 
 function niceStep(span: number): number {
   const raw = span / 8
@@ -33,6 +55,7 @@ export function TimelineView({ timeline, selectedSlice, highlightNode, showFlows
   const rootRef = useRef<HTMLDivElement>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(800)
+  const tip = useTip()
   useEffect(() => { setRange(defaultRange()) }, [defaultRange])
   useLayoutEffect(() => {
     const el = rootRef.current
@@ -172,8 +195,8 @@ export function TimelineView({ timeline, selectedSlice, highlightNode, showFlows
             ))}
             {flags.map(({ frame, t }) => (
               <g key={frame}>
-                <path d={`M${x(t)} 2 h24 l-5 5 l5 5 h-24z`} fill={colorBy === 'frame' ? FRAME_COLORS[frame % FRAME_COLORS.length] : 'var(--primary)'} stroke={colorBy === 'frame' ? '#6B6558' : undefined} strokeWidth={0.6} />
-                <text x={x(t) + 3} y={11} fontSize={9} fill={colorBy === 'frame' ? '#1F2430' : '#fff'} fontWeight={700}>f{frame}</text>
+                <path d={`M${x(t)} 2 h24 l-5 5 l5 5 h-24z`} fill={colorBy === 'frame' ? frameSliceStyle(frame, 'RT').fill : 'var(--primary)'} stroke={colorBy === 'frame' ? '#6B6558' : undefined} strokeWidth={0.6} />
+                <text x={x(t) + 3} y={11} fontSize={9} fill="#fff" fontWeight={700}>f{frame}</text>
               </g>
             ))}
           </g>
@@ -187,6 +210,7 @@ export function TimelineView({ timeline, selectedSlice, highlightNode, showFlows
           <defs>
             <marker id="f-hi" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="#174D47" /></marker>
             <marker id="f-lo" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0L10 5L0 10z" fill="#9A9184" /></marker>
+            <PatternDefs />
             <clipPath id="tl-plot"><rect x={LABEL_W} y={0} width={plotW + 10} height={rows.height} /></clipPath>
           </defs>
           <g clipPath="url(#tl-plot)">
@@ -213,12 +237,15 @@ export function TimelineView({ timeline, selectedSlice, highlightNode, showFlows
               const isSel = s.id === selectedSlice
               const hot = isSel || (highlightNode !== null && s.nodeId === highlightNode) || focus.has(s.id)
               const dimmed = (selectedSlice !== null || highlightNode !== null) && !hot
+              const st = colorBy === 'frame' && s.frame !== null ? frameSliceStyle(s.frame, s.group) : null
+              const fill = st ? st.fill : sliceColor(s.group)
               return (
-                <g key={s.id} style={{ cursor: 'pointer' }} opacity={dimmed ? 0.45 : 1} onClick={(e) => { e.stopPropagation(); onSelect(s) }}>
-                  <rect x={sx} y={y + 3} width={w} height={ROW - 6} rx={2} fill={colorBy === 'frame' && s.frame !== null ? FRAME_COLORS[s.frame % FRAME_COLORS.length] : sliceColor(s.group)}
-                    stroke={isSel ? '#174D47' : hot ? '#2F6F68' : 'rgba(0,0,0,0.08)'} strokeWidth={isSel ? 2.2 : hot ? 1.4 : 1} />
-                  {w > 40 && <text x={Math.max(sx, LABEL_W) + 4} y={y + 15} fontSize={10} fill="#2B2F38" fontFamily="var(--mono)">{s.label}{s.frame !== null ? ` f${s.frame}` : ''}</text>}
-                  <title>{`${s.label} · f${s.frame ?? '-'}\n${s.start.toFixed(3)} – ${s.end.toFixed(3)} ms (${(s.end - s.start).toFixed(3)} ms)`}</title>
+                <g key={s.id} style={{ cursor: 'pointer' }} opacity={dimmed ? 0.45 : 1} onClick={(e) => { e.stopPropagation(); onSelect(s) }}
+                  {...tip(() => sliceTip(s, timeline, fill))}>
+                  <rect x={sx} y={y + 3} width={w} height={ROW - 6} rx={2} fill={fill}
+                    stroke={isSel ? '#174D47' : hot ? '#2F6F68' : st ? st.stroke : 'rgba(0,0,0,0.08)'} strokeDasharray={!isSel && !hot ? st?.dash : undefined} strokeWidth={isSel ? 2.2 : hot ? 1.4 : 1} />
+                  {st?.pattern && <rect x={sx} y={y + 3} width={w} height={ROW - 6} rx={2} fill={`url(#tl-pat-${st.pattern})`} pointerEvents="none" />}
+                  {w > 40 && <text x={Math.max(sx, LABEL_W) + 4} y={y + 15} fontSize={10} fill={st ? st.text : '#2B2F38'} fontFamily="var(--mono)" pointerEvents="none">{s.label}{s.frame !== null ? ` f${s.frame}` : ''}</text>}
                 </g>
               )
             })}
@@ -247,4 +274,22 @@ export function TimelineView({ timeline, selectedSlice, highlightNode, showFlows
       </div>
     </div>
   )
+}
+
+function sliceTip(s: Slice, tl: Timeline, color: string) {
+  const firsts = frameStarts(tl)
+  const origin = s.frame !== null ? firsts.find((f) => f.frame === s.frame)?.t : undefined
+  const prev = tl.slices.filter((x) => x.track === s.track && x.frame !== null && s.frame !== null && x.frame === s.frame - 1)[0]
+  const dur = s.end - s.start
+  return {
+    title: `${s.label}${s.frame !== null ? ` · f${s.frame}` : ''}`, color,
+    head: { label: '소요 시간', value: `${dur.toFixed(3)} ms`, tone: 'strong' as const },
+    rows: [
+      { k: '분류', v: CAT_LABEL[sliceCat(s.group)] === s.group || sliceCat(s.group) === 'SW' ? CAT_LABEL[sliceCat(s.group)] : `${CAT_LABEL[sliceCat(s.group)]} · ${s.group}` },
+      ...(origin !== undefined ? [{ k: 'frame 시작 기준', v: `+${(s.start - origin).toFixed(2)} → +${(s.end - origin).toFixed(2)} ms` }] : []),
+      ...(prev ? [{ k: '직전 frame 대비 시작 간격', v: `${(s.start - prev.start).toFixed(3)} ms` }] : []),
+      { k: '절대 시각', v: `${s.start.toFixed(3)} – ${s.end.toFixed(3)} ms`, tone: 'muted' as const },
+    ],
+    foot: 'click = 연결된 선·후행 slice 강조',
+  }
 }

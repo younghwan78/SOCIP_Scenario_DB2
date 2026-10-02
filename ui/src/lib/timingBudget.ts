@@ -43,6 +43,8 @@ export interface TimingReport {
   intervals: { target_ms: number; tolerance: number; preview: IntervalSeries; video: IntervalSeries; ok: boolean }
   latency: { preview_ms: number | null; video_ms: number | null; preview_frames: number | null; video_frames: number | null }
   power: PowerSplit; bw: BwSplit; verdict: Verdict; timeline: TimelineRow[]; warnings: string[]; whatif?: WhatIfRow[]
+  /** SW margin rule applied to RT/Output (and the NRT/Post rule reference); absent before API sw_margin */
+  sw_margin?: { rt: number; output: number }
 }
 export interface FleetRow {
   variant_id: string; fps: number; period_ms: number; statistic: Statistic; eis_on: boolean; stabilization: unknown; mfc_dual: boolean
@@ -54,7 +56,24 @@ export interface FleetRow {
   bw: { total_mbs: number; hw_mbs: number; sw_mbs: number }
   verdict: Verdict
 }
-export interface TimingOptions { statistic: Statistic; eis: EisMode; runtime_scale: number; include_whatif?: boolean }
+export interface TimingOptions {
+  statistic: Statistic; eis: EisMode; runtime_scale: number; include_whatif?: boolean
+  /** SW margin rule (fraction of the frame period reserved for SW); default 0.25 */
+  rt_margin?: number; output_margin?: number
+  /** frames drawn in the pipeline timeline (API ≤ 32) */
+  timeline_frames?: number
+}
+
+export const DEFAULT_SW_MARGIN = 0.25
+export const SW_MARGINS = [0.15, 0.2, 0.25, 0.3, 0.35]
+/** URL param ('margin', percent) → fraction; invalid / missing → 25 %. */
+export function marginOf(param: string | undefined): number {
+  const v = Number(param)
+  return Number.isFinite(v) && v >= 5 && v <= 60 ? v / 100 : DEFAULT_SW_MARGIN
+}
+export const pct0 = (m: number) => `${Math.round(m * 100)}%`
+/** Margin options for API calls: both rule margins follow the one SW margin. */
+export const marginOpts = (m: number) => (Math.abs(m - DEFAULT_SW_MARGIN) < 1e-9 ? {} : { rt_margin: m, output_margin: m })
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 

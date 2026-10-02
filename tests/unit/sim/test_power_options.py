@@ -75,7 +75,8 @@ def test_dimensions_come_from_knob_explore_and_mode_substitutes(raw, lp_catalog)
 
 def test_knob_explore_condition_and_adopted_value(raw, catalog):
     psm = po.option_dimensions(graph_from_fixture(raw, "cam-rec-r1-uhd60-psm", catalog))
-    assert [d["id"] for d in psm[0]] == ["knob:pyramid_l0"]          # EIS off: no bcrop
+    # EIS off: no bcrop (mode:mtnr = the fixture's synthetic MTNR LowPower substitute)
+    assert [d["id"] for d in psm[0]] == ["knob:pyramid_l0", "mode:mtnr"]
     assert any("BYRP bayer crop" in n and "eis" in n for n in psm[1])
     adopted = deepcopy(raw)
     v = next(x for x in adopted["variants"] if x["id"] == UHD30)
@@ -151,7 +152,8 @@ def test_knob_spec_read_back_from_jsonb_order(raw, catalog, dvfs):
     ref = po.variant_dict(po.apply_option_set(graph_from_fixture(raw, UHD30, catalog), items).variant)["size_overrides"]
     assert got == ref and got["bcrop_out"] == got["mlsc_out"] == got["pyramid_l0"]
     r = ax.explore_variant(g, ax.ArchExplorationSpec(), dvfs_tables=dvfs)
-    assert r["power_options"]["errors"] == [] and len(r["power_options"]["results"]) == 3
+    # 2 knobs + the fixture's MTNR LowPower mode -> 2^3 - 1 sets
+    assert r["power_options"]["errors"] == [] and len(r["power_options"]["results"]) == 7
 
 
 @pytest.mark.parametrize('missing', ['base', 'option'])

@@ -10,6 +10,7 @@ import { Card } from '../components/TimingCharts'
 import { DataTable, type Column } from '../components/DataTable'
 import { PowerDeltaTable, PowerStack, type PowerRow } from '../components/PowerModelCharts'
 import { partColor, sortClusters } from '../lib/powerModel'
+import { CPU_HELP, threadLabel } from '../components/CpuHelp'
 
 type TaskEdit = { sweep: string[] | null; threads: string; budget: string; growth: string }
 type Adv = { freqMargin: string; fitsMargin: string; utilModel: '' | 'util_est' | 'pelt_avg'; halflife: string; boost: '' | 'on' | 'off'; emStatic: '' | 'on' | 'off' }
@@ -43,6 +44,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
   const requestId = useRef(0)
   const inputSelection = useRef('')
   const [sel, setSel] = useState<string>('')
+  const [showAllBetter, setShowAllBetter] = useState(false)
 
   const prof = inputs.data?.profiles.find((p) => p.id === profile)
   const topo = inputs.data?.topologies.find((t) => t.id === target)
@@ -132,7 +134,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
     { id: 'ref', label: refName, parts: caseParts(ref), sub: sub(ref) },
     ...(result.reference_kind === 'measured' && !result.cases.some((c) => Object.keys(c.knobs).length === 0)
       ? [{ id: 'eas', label: `EAS 기본 (knob 없음)${result.eas_default.feasible ? '' : ' · 미충족'}`, parts: caseParts(result.eas_default), sub: sub(result.eas_default) }] : []),
-    ...result.cases.slice(0, 12).map((c) => ({ id: `c${c.rank}`, label: `#${c.rank} ${caseLabel(c)}`, parts: caseParts(c), sub: sub(c) })),
+    ...result.cases.slice(0, showAllBetter ? result.cases.length : 5).map((c) => ({ id: `c${c.rank}`, label: `#${c.rank} ${caseLabel(c)}`, parts: caseParts(c), sub: sub(c) })),
   ] : []
   const picked = byId(sel)
   const best = result?.cases[0]
@@ -156,7 +158,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
         {!inputs.data.topologies.length && <> cpu topology가 있는 power_model_params를 등록하세요.</>}
       </div>}
       <div className="tb-grid">
-        <Card id="cpu-in" title="① 기준" note="측정 profile · 적용할 SoC · 비교 기준">
+        <Card id="cpu-in" title="① 기준" note="측정 profile · 적용할 SoC · 비교 기준" help={CPU_HELP.input}>
           <div className="cpu-step" style={{ display: 'grid', gap: 8 }}>
             <label className="cpu-f"><span className="faint">측정 profile</span>
               <select value={profile} onChange={(e) => setProfile(e.target.value)}>{rankProfiles(inputs.data?.profiles ?? [], ctx).map((p) => <option key={p.id} value={p.id}>{p.variant_ref ?? p.id} · {p.id}{p.tasks?.length ? '' : ' (task 정보 없음)'}</option>)}</select></label>
@@ -171,7 +173,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
               </div></div>
           </div>
         </Card>
-        <Card id="cpu-cond" title="② 조건 · scheduler" note={sched ? `${sched.from_params ? 'topology 설정' : '기본값'}: margin ${sched.freq_margin} · ${sched.util_model} · PELT ${sched.pelt_halflife_ms} ms · boost ${sched.deadline_boost ? 'on' : 'off'}` : 'EAS + schedutil'}>
+        <Card id="cpu-cond" title="② 조건 · scheduler" help={CPU_HELP.cond} note={sched ? `${sched.from_params ? 'topology 설정' : '기본값'}: margin ${sched.freq_margin} · ${sched.util_model} · PELT ${sched.pelt_halflife_ms} ms · boost ${sched.deadline_boost ? 'on' : 'off'}` : 'EAS + schedutil'}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 8 }}>
             <label className="cpu-f"><span className="faint">fps</span><input type="number" value={fps} min={1} onChange={(e) => setFps(Number(e.target.value))} /></label>
             <label className="cpu-f" title="차기 과제 SW instruction 증가 배율 (전체)"><span className="faint">SW 증가 배율</span><input type="number" step={0.05} value={growth} onChange={(e) => setGrowth(Number(e.target.value))} /></label>
@@ -188,7 +190,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
               <label className="cpu-f" title="EAS 에너지 비교에 leakage 포함 (vendor scheduler)"><span className="faint">EM에 leakage</span><select value={adv.emStatic} onChange={(e) => setAdv({ ...adv, emStatic: e.target.value as Adv['emStatic'] })}><option value="">{sched?.energy_includes_static ? 'on' : 'off'} (설정)</option><option value="on">on</option><option value="off">off</option></select></label>
             </div></details>
         </Card>
-        <Card id="cpu-range" title="③ Sweep 범위" note="cluster별 · 칸 = fmax에서 task 시간 · ✓ budget 충족 · 체크 = sweep에 포함 · 파란 칸 = 측정 위치" defaultWide>
+        <Card id="cpu-range" title="③ Sweep 범위" note="cluster별 · 칸 = fmax에서 task 시간 · ✓ budget 충족 · 체크 = sweep에 포함 · 파란 칸 = 측정 위치" defaultWide help={CPU_HELP.range}>
           <div className="toolbar" style={{ gap: 14, marginBottom: 6, fontSize: 12 }}>
             <span className="faint">knob</span>
             <label><input type="checkbox" checked={knobs.includes('pin')} onChange={() => toggleKnob('pin')} /> cluster 고정 (cpuset/affinity)</label>
@@ -212,7 +214,8 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
               const fixed = rt && rt.options.length <= 1 && e.sweep === null
               return (
                 <tr key={task}>
-                  <td className="mono">{task} <span className="faint">({rt?.measured.join('/') ?? prof?.tasks?.find((t) => t.task === task)?.cluster})</span></td>
+                  <td className="mono" title={task === '(other)' ? '어느 task에도 매핑되지 않은 cycle (커널 · 다른 프로세스 · 이름 없는 thread). 정체를 모르는 부하라 측정 배치에 고정 — sweep 대상 아님 (의도된 동작)' : undefined}>{task} <span className="faint">({rt?.measured.join('/') ?? prof?.tasks?.find((t) => t.task === task)?.cluster})</span>
+                    {task === '(other)' && <div className="faint" style={{ fontSize: 10.5, fontFamily: 'var(--font)' }}>미매핑 cycle · 측정 배치 고정</div>}</td>
                   {clusterNames.map((c) => {
                     const cell = rt?.cells[c]
                     return <td key={c} className={rt?.measured.includes(c) ? 'measured' : ''}>
@@ -221,7 +224,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
                         {cell && <span className={`mono ${cell.meets ? '' : 'pm-up'}`}>{fmt(cell.t_fmax_ms, 1)}{cell.meets ? ' ✓' : ' ✗'}{cell.fits ? '' : ' ⚠'}</span>}
                       </label></td>
                   })}
-                  <td><input style={{ width: 36 }} value={e.threads} placeholder={rt ? String(rt.threads.length) : '1'} title={rt?.thread_source === 'measured' ? `측정 thread: ${rt.threads.map((t) => t.name).join(', ')}` : ''} onChange={(ev) => setEdit(task, { threads: ev.target.value })} /></td>
+                  <td><input style={{ width: 36 }} value={e.threads} placeholder={rt ? String(rt.threads.length) : '1'} title={rt?.thread_source === 'measured' ? `측정 thread (TID): ${rt.threads.map((t) => t.name).join(', ')}` : ''} onChange={(ev) => setEdit(task, { threads: ev.target.value })} /></td>
                   <td><input style={{ width: 48 }} value={e.budget} placeholder="—" onChange={(ev) => setEdit(task, { budget: ev.target.value })} /></td>
                   <td><input style={{ width: 40 }} value={e.growth} placeholder={String(growth)} onChange={(ev) => setEdit(task, { growth: ev.target.value })} /></td>
                   <td className="faint" style={{ textAlign: 'left', fontSize: 11 }}>{Object.entries(rt?.policy ?? {}).map(([k, v]) => `${k}=${String(v)}`).join(' ')}{fixed ? ' 고정 (sweep 제외)' : rt ? ` 후보 ${rt.options.length}` : ''}</td>
@@ -243,7 +246,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
           {tile('최저 전력 후보', best ? `${fmt(best.total_mw, 1)} mW` : '없음', best ? `${refName} 대비 ${signed(best.delta_mw ?? 0)} mW · knob ${Object.keys(best.knobs).length}개` : `${refName}보다 낮은 조건 만족 후보 없음`, best && (best.delta_mw ?? 0) < 0 ? 'pm-down' : '')}
         </section>
         <div className="tb-grid">
-          <Card id="cpu-cal" title="모델 확인" note="측정 residency vs EAS 재현 (현재 배치) — 차이가 크면 scheduler 보정값부터 조정">
+          <Card id="cpu-cal" title="모델 확인" help={CPU_HELP.cal} note="측정 residency vs EAS 재현 (현재 배치) — 차이가 크면 scheduler 보정값부터 조정">
             <table className="grid pm-table"><thead><tr><th>cluster</th><th style={{ textAlign: 'right' }}>측정 평균 MHz</th><th style={{ textAlign: 'right' }}>모델 MHz</th><th style={{ textAlign: 'right' }}>측정 active</th><th style={{ textAlign: 'right' }}>모델 util</th></tr></thead>
               <tbody>{clusterNames.map((c) => {
                 const k = result.calibration[c], m = result.measured_placement.clusters[c]
@@ -255,11 +258,16 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
                   <td className="mono" style={{ textAlign: 'right' }}>{m ? `${fmt(m.util * 100, 1)}%` : '—'}</td></tr>
               })}</tbody></table>
           </Card>
-          <Card id="cpu-stack" title={`${refName} 대비 전력이 낮은 후보`} note={`${result.better_count}개 · 낮은 순 · 행 클릭 = 아래 세부 · 점선 = ★ ${refName}`} defaultWide minHeight={200}>
-            {result.cases.length ? <PowerStack rows={rows} selected={sel} onPick={setSel} /> : <div className="empty">{refName}보다 전력이 낮으면서 조건을 만족하는 조합이 없습니다. sweep 범위나 knob을 넓혀 보세요.</div>}
+          <Card id="cpu-stack" title={`${refName} 대비 전력이 낮은 후보`} help={CPU_HELP.better}
+            note={`${result.better_count}개 · 낮은 순 · ${showAllBetter ? '전체' : `상위 ${Math.min(5, result.cases.length)}개`} 표시 · 행 클릭 = 아래 세부 · 점선 = ★ ${refName}`} defaultWide minHeight={200}
+            actions={result.cases.length > 5 ? <button className="btn tb-mini" onClick={() => setShowAllBetter((v) => !v)}>{showAllBetter ? '상위 5개만' : `전체 ${result.cases.length}개 펼치기`}</button> : undefined}>
+            {result.cases.length ? <>
+              <PowerStack rows={rows} selected={sel} onPick={setSel} />
+              {!showAllBetter && result.cases.length > 5 && <button className="btn" style={{ marginTop: 6 }} onClick={() => setShowAllBetter(true)}>▾ 나머지 {result.cases.length - 5}개 더 보기</button>}
+            </> : <div className="empty">{refName}보다 전력이 낮으면서 조건을 만족하는 조합이 없습니다. sweep 범위나 knob을 넓혀 보세요.</div>}
           </Card>
           {picked && <CaseDetail c={picked} reference={ref} refName={refName} title={rows.find((r) => r.id === sel)?.label ?? ''} clusters={clusterNames} colorOf={colorOf} budgets={Object.fromEntries(Object.entries(edits).map(([t, e]) => [t, num(e.budget)]))} />}
-          <Card id="cpu-others" title="나머지 조합" note="전력 증가 또는 조건 미충족 · 정렬 가능" defaultWide minHeight={120}>
+          <Card id="cpu-others" title="나머지 조합" note="전력 증가 또는 조건 미충족 · 정렬 가능" defaultWide minHeight={120} help={CPU_HELP.others}>
             <details><summary className="faint" style={{ fontSize: 12 }}>{result.other_count}개 중 {result.others.length}개 펼치기</summary>
               <div className="table-x"><DataTable id="cpu.others" columns={otherCols} rows={result.others} rowKey={(c) => caseLabel(c) + c.total_mw}
                 onRowClick={(c) => setSel(`o${result.others.indexOf(c)}`)} rowClass={(c) => (sel === `o${result.others.indexOf(c)}` ? 'selected' : '')} /></div></details>
@@ -279,7 +287,7 @@ function CaseDetail({ c, reference, refName, title, clusters, colorOf, budgets }
   const tasks = Object.keys({ ...reference.task_ms, ...c.task_ms })
   const at = (x: SweepCase, t: string) => (x.placement[t] ?? []).map((n) => `${n}@${fmt(x.clusters[n]?.mhz, 0)}`).join(' ')
   return (
-    <Card id="cpu-detail" title={`★ ${refName} vs ${title}`} note="무엇을 바꾸나 · cluster/CPU 점유 · task 시간" defaultWide>
+    <Card id="cpu-detail" title={`★ ${refName} vs ${title}`} note="무엇을 바꾸나 · cluster/CPU 점유 · task 시간" defaultWide help={CPU_HELP.detail}>
       <div className="cpu-detail">
         <div>
           <h3 className="cpu-h">적용 방법</h3>
@@ -309,7 +317,7 @@ function CaseDetail({ c, reference, refName, title, clusters, colorOf, budgets }
                   <div key={String(cpu.cpu)} className="cpu-bar-row" title={`${cpu.busy_ms} ms busy / frame`}>
                     <span className="mono faint">cpu{cpu.cpu}</span>
                     <span className="cpu-bar"><span style={{ width: `${Math.min(100, (100 * cpu.util) / Math.max(1, cl.capacity))}%`, background: colorOf(n) }} /></span>
-                    <span className="mono" style={{ fontSize: 11 }}>{cpu.threads.length ? cpu.threads.join(', ') : <span className="faint">idle</span>}</span>
+                    <span className="mono" style={{ fontSize: 11 }} title={cpu.threads.some((t) => t.includes('#')) ? '#숫자 = 측정 trace의 thread id (TID)' : undefined}>{cpu.threads.length ? cpu.threads.map(threadLabel).join(', ') : <span className="faint">idle</span>}</span>
                   </div>))}
               </div>)
           })}

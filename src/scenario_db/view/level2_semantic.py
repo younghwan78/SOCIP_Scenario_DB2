@@ -727,9 +727,10 @@ def _level2_module_capability_badges(module: dict[str, Any]) -> list[str]:
     max_bw = module.get("max_bandwidth")
     if max_bw is not None:
         badges.append(f"MaxBW:{_level2_bandwidth_label(max_bw)}")
-    compressions = module.get("supported_compressions") or []
-    if compressions:
-        badges.append(f"Comp:{len(compressions)}")
+    # COMP_OFF only (SBWC not supported on this port) gets no badge
+    enabled = [c for c in module.get("supported_compressions") or [] if "OFF" not in str(c).upper()]
+    if enabled:
+        badges.append(f"Comp:{len(enabled)}")
     return badges
 
 

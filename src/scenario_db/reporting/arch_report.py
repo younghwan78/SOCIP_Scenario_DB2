@@ -9,7 +9,7 @@ from typing import Any
 
 from scenario_db.reporting.arch_conclusion import build_conclusion, model_limits, run_lineage
 from scenario_db.reporting.arch_opinions import build_opinions, classify
-from scenario_db.reporting.reason_text import explain_all
+from scenario_db.reporting.reason_text import diagnose, explain_all
 
 _CLOCK_RE = re.compile(r"^(\w+): required_clock ([\d.]+)MHz exceeds max DVFS speed ([\d.]+)MHz$")
 
@@ -186,7 +186,7 @@ def build_snapshot(
             "power_range_mw": [round(min(totals), 1), round(max(totals), 1)] if totals else None,
         },
         "opinions": build_opinions(rows, domains, sample_dvfs=sample_dvfs,
-                                   measured={c["variant_id"] for c in calibration or [] if not c.get("synthetic")}),
+                                   measured={c["variant_id"] for c in calibration or [] if not c.get("synthetic")}, options=options),
         "scenarios": rows,
         "clocks": clocks,
         "compression": comp_rows,
@@ -258,22 +258,35 @@ SECTIONS = ["결론", "개요", "Spec 만족", "실측 대조", "분류별 검�
             "Compression 절감", "Power option (IQ 평가 대상)", "SW margin Top5", "변경 이력", "부록"]
 
 _CSS = """
-body{font:13px/1.45 -apple-system,'Segoe UI','Malgun Gothic',sans-serif;color:#23262E;background:#FBFAF7;margin:0}
-header{padding:18px 28px;border-bottom:1px solid #E4DED3;background:#fff}h1{margin:0;font-size:20px}
+.meta{font-size:13.5px}h3{font-size:16px}
+body{font:15px/1.6 -apple-system,'Segoe UI','Malgun Gothic',sans-serif;color:#23262E;background:#FBFAF7;margin:0}
+header{padding:20px 32px;border-bottom:1px solid #E4DED3;background:#fff}h1{margin:0;font-size:24px}
 .meta{color:#7A7468;margin-top:4px}nav{position:sticky;top:0;background:#FBFAF7;padding:8px 28px;border-bottom:1px solid #E4DED3;display:flex;flex-wrap:wrap;gap:12px;z-index:2}
-nav a{color:#2F6F68;text-decoration:none;font-size:12px}main{padding:8px 28px 40px;max-width:1280px}
-section{background:#fff;border:1px solid #E4DED3;border-radius:8px;padding:14px 18px;margin:14px 0}
-h2{font-size:15px;margin:0 0 10px}table{border-collapse:collapse;width:100%;font-size:12px}
-th,td{border-bottom:1px solid #EFEAE1;padding:4px 6px;text-align:left;vertical-align:top}th{color:#7A7468;font-weight:600;background:#FBFAF7}
+nav a{color:#2F6F68;text-decoration:none;font-size:13.5px}main{padding:8px 32px 48px;max-width:1920px}
+section{background:#fff;border:1px solid #E4DED3;border-radius:10px;padding:18px 24px;margin:16px 0}
+h2{font-size:19px;margin:0 0 12px}table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{border-bottom:1px solid #EFEAE1;padding:6px 8px;text-align:left;vertical-align:top}th{color:#7A7468;font-weight:600;background:#FBFAF7}
 td.n{text-align:right;font-variant-numeric:tabular-nums}.ok{color:#2F6F68}.fail{color:#9B1C1C}.warn{color:#B45309}
-.kpis{display:flex;gap:10px;flex-wrap:wrap}.kpi{border:1px solid #E4DED3;border-radius:6px;padding:8px 12px;min-width:150px}
-.kpi b{font-size:20px;display:block}.scroll{overflow-x:auto}.lg span{display:inline-block;margin-right:12px}.lg i{display:inline-block;width:10px;height:10px;margin-right:4px}
+.kpis{display:flex;gap:12px;flex-wrap:wrap}.kpi{border:1px solid #E4DED3;border-radius:8px;padding:10px 16px;min-width:170px}
+.kpi b{font-size:26px;display:block}.scroll{overflow-x:auto}.lg span{display:inline-block;margin-right:12px}.lg i{display:inline-block;width:10px;height:10px;margin-right:4px}
 ul{margin:4px 0 0 18px;padding:0}svg text{font-family:inherit}
-.op{border-top:1px solid #EFEAE1;padding:10px 0}.op:first-of-type{border-top:0}.op h3{font-size:13px;margin:0 0 6px}
+.op{border-top:1px solid #EFEAE1;padding:14px 0}.op:first-of-type{border-top:0}.op h3{font-size:16px;margin:0 0 8px}
 @media print{nav{display:none}body{background:#fff}main{max-width:none;padding:0 10mm}section{border:0;padding:6px 0}tr,.kpi,.op h3,h2{break-inside:avoid}h2,.op h3{break-after:avoid}
 details{display:block}details>summary{display:none}.scroll{overflow:visible}
 header{border:0;padding:0 10mm 4mm}@page{size:A4 landscape;margin:12mm}}
-.op li{margin:2px 0}.bt{font-size:10.5px;padding:0 5px;border-radius:3px;margin-right:2px}.b-meas{background:#E5F2EC;color:#1E6446}.b-calc{background:#E7ECF5;color:#26406B}.b-asm{background:#FDF0DC;color:#9A5B0B}.b-in{background:#EFEAE1;color:#5A5448}.bar{display:flex;height:8px;border-radius:4px;overflow:hidden;background:#EFEAE1;max-width:420px;margin:4px 0 6px}.bar i{display:block;height:100%}
+.op li{margin:2px 0}.bt{font-size:11.5px;padding:0 6px;border-radius:3px;margin-right:2px}.b-meas{background:#E5F2EC;color:#1E6446}.b-calc{background:#E7ECF5;color:#26406B}.b-asm{background:#FDF0DC;color:#9A5B0B}.b-in{background:#EFEAE1;color:#5A5448}.bar{display:flex;height:8px;border-radius:4px;overflow:hidden;background:#EFEAE1;max-width:420px;margin:4px 0 6px}.bar i{display:block;height:100%}
+.cause{display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:12px;margin:12px 0}
+.cause>div{border:1px solid #E4DED3;border-left:5px solid #9B1C1C;border-radius:8px;padding:10px 14px;background:#FFFCFA}
+.cause h4{margin:0 0 4px;font-size:15.5px}.cause .sev{font-weight:700;color:#9B1C1C}.cause ol{margin:4px 0 0 20px;padding:0}
+.focus{background:#F4F8F6;border-radius:6px;padding:6px 10px;margin:6px 0;font-size:14px}.focus b{color:#174D47}
+.q4{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:8px}
+.q4>div{border:1px solid #E4DED3;border-radius:8px;padding:10px 14px;background:#fff}
+.q4 h4{margin:0 0 6px;font-size:14.5px;display:flex;align-items:center;gap:8px}.q4 h4 i{display:inline-block;width:10px;height:10px;border-radius:2px}
+.q4 ul{margin:0 0 0 18px}.q4 li{margin:4px 0}
+.q-review{border-top:3px solid #4A5160!important}.q-risk{border-top:3px solid #B42318!important;background:#FFFBFA!important}
+.q-mit{border-top:3px solid #B45309!important}.q-opt{border-top:3px solid #2F6F68!important;background:#FAFDFB!important}
+@media(max-width:1100px){.q4{grid-template-columns:1fr}}
+@media print{.q4{grid-template-columns:1fr 1fr}}
 """
 
 
@@ -312,15 +325,15 @@ def _conclusion(c: dict[str, Any] | None) -> str:
     if not c:
         return "<p class='meta'>이 snapshot에는 결론이 없음 (이전 형식) — 재생성하면 표시</p>"
     conf = c["confidence"]
-    h = (f"<p style='font-size:14px'><b>{escape(c['headline'])}</b></p>"
+    h = (f"<p style='font-size:17px'><b>{escape(c['headline'])}</b></p>"
          f"<div class='kpis'><div class='kpi'>신뢰도<b class='{_GRADE_CLASS[conf['grade']]}'>{conf['grade']}</b>"
          f"<span class=meta>{escape(conf['meaning'])}</span></div></div>")
     if conf["reasons"]:
         h += "<ul>" + "".join(f"<li class=meta>{escape(r)}</li>" for r in conf["reasons"]) + "</ul>"
-    h += "<h3 style='font-size:13px;margin:12px 0 4px'>주요 리스크</h3>"
+    h += "<h3 style='margin:14px 0 4px'>주요 리스크</h3>"
     h += ("<ol>" + "".join(f"<li><b>{escape(r['title'])}</b> — {escape(r['detail'])}</li>" for r in c["risks"]) + "</ol>"
           if c["risks"] else "<p class=meta>식별된 리스크 없음</p>")
-    h += "<h3 style='font-size:13px;margin:12px 0 4px'>권고 조치</h3>"
+    h += "<h3 style='margin:14px 0 4px'>권고 조치</h3>"
     if not c["actions"]:
         return h + "<p class=meta>권고 조치 없음</p>"
     h += "<table><tr><th>조치</th><th>대상</th><th>ΔPower</th><th>근거</th><th>필요 검증</th></tr>"
@@ -370,40 +383,77 @@ def _spec(s: dict[str, Any]) -> str:
          f"<div class='kpi'>spec 미달<b class='fail'>{s['spec_fail']}</b></div>"
          f"<div class='kpi'>등록 예측 power<b>{_f(rng[0], 0) if rng else '—'}–{_f(rng[1], 0) if rng else ''}</b>mW</div></div>")
     if s["failed"]:
-        k += "<table style='margin-top:10px'><tr><th>미달 scenario</th><th>원인</th><th>필요 조치</th></tr>"
+        diag = []
         for f in s["failed"]:
-            ex = f.get("explained") or [{"text": r, "action": "—", "raw": r} for r in f["reasons"]]
-            k += (f"<tr><td rowspan={len(ex) or 1}>{escape(_short(f['variant_id']))}</td>"
-                  + "</tr><tr>".join(f"<td title='{escape(e['raw'], quote=True)}'>{escape(e['text'])}</td><td>{escape(e['action'])}</td>" for e in ex)
-                  + "</tr>")
-        k += "</table><p class=meta>원인 위에 마우스를 올리면 계산 엔진의 원문 사유가 보입니다.</p>"
+            ex = f.get("explained") or [{"text": r, "action": "—", "raw": r, "code": "other"} for r in f["reasons"]]
+            fps = None
+            m = re.search(r"-(?:fhd|uhd|qhd|8k)(\d+)", f["variant_id"])
+            if m:
+                fps = float(m.group(1))
+            per = next((float(x.group(1)) for e in ex for x in [re.search(r"주기 ([\d.]+) ms", e.get("text", ""))] if x), None)
+            diag.append((f, ex, diagnose(ex, 1000.0 / per if per else fps)))
+        groups: dict[str, list[tuple[Any, Any, Any]]] = {}
+        for t in diag:
+            sev = t[2]["severity"]
+            bucket = "근소" if "(근소)" in sev else "중간" if "(중간)" in sev else "구조적" if "(구조적)" in sev else ""
+            groups.setdefault(f"{t[2]['code']}{':' + bucket if bucket else ''}", []).append(t)
+        k += "<h3 style='margin:16px 0 4px'>미달 원인 유형 — 무엇을 중점으로 볼 것인가</h3><div class='cause'>"
+        for code, items in sorted(groups.items(), key=lambda kv: -len(kv[1])):
+            d0 = max(items, key=lambda t: t[2]["ratio"] or 0)[2]
+            names = ", ".join(_short(t[0]["variant_id"]) for t in items)
+            bucket = code.split(":")[1] if ":" in code else ""
+            k += (f"<div><h4>{escape(d0['label'])}{f' · {bucket}' if bucket else ''} <span class=meta>· {len(items)}개</span></h4>"
+                  f"<div class=meta>{escape(names)}</div>"
+                  f"<div class='focus'><b>중점 검토</b> {escape(d0['focus'])}</div>"
+                  f"<div>최대 심각도: <span class='sev'>{escape(d0['severity'])}</span></div>"
+                  "<b style='font-size:14px'>최적화 권고 (효과 큰 순)</b><ol>" + "".join(f"<li>{escape(a)}</li>" for a in d0["actions"]) + "</ol></div>")
+        k += "</div>"
+        k += ("<h3 style='margin:16px 0 4px'>Scenario별 진단</h3><table><tr><th style='width:15%'>미달 scenario</th><th style='width:17%'>주 원인</th>"
+              "<th style='width:14%'>부족 정도</th><th>권고 1순위</th><th style='width:24%'>함께 발생한 원인</th></tr>")
+        for f, ex, d in diag:
+            others = [e["text"] for e in ex if e.get("code") != d["code"] and e.get("code") != "interval"]
+            k += (f"<tr><td><b>{escape(_short(f['variant_id']))}</b></td><td>{escape(d['label'].split(' — ')[0])}</td>"
+                  f"<td class='fail'>{escape(d['severity'])}</td><td>{escape(d['actions'][0] if d['actions'] else d['focus'])}</td>"
+                  f"<td class=meta title='{escape(' | '.join(e.get('raw', '') for e in ex), quote=True)}'>{escape(' · '.join(others) or '—')}</td></tr>")
+        k += "</table><p class=meta>“함께 발생한 원인”에 마우스를 올리면 계산 엔진의 원문 사유가 보입니다. 출력 간격 미달은 위 원인의 결과라 생략.</p>"
     if s["errors"]:
         k += f"<p class='fail'>계산 실패 {len(s['errors'])}: " + escape(", ".join(e["variant_id"] for e in s["errors"][:8])) + "</p>"
     return k
+
+
+_Q4 = (("review", "q-review", "#4A5160", "① 현재 검토"), ("risk", "q-risk", "#B42318", "② Risk"),
+       ("mitigation", "q-mit", "#B45309", "③ Risk 감소 방안"), ("optimize", "q-opt", "#2F6F68", "④ 추가 최적화"))
 
 
 def _opinions(blocks: list[dict[str, Any]]) -> str:
     if not blocks:
         return "<p class='meta'>분류 정보 없음 (이전 형식 snapshot) — 보고서를 재생성하면 표시됩니다.</p>"
     h = ("<p class='meta'>분류: 30 fps(해상도 × EIS × codec) · 60 fps · 고속(≥100 fps) · Heavy(Pro/Portrait/Dual/Triple). "
-         "의견은 이 snapshot의 예측 수치에서 규칙으로 생성. 문장 앞 태그 = 근거: "
+         "분류마다 ① 현재 검토 ② Risk ③ Risk 감소 방안 ④ 추가 최적화로 정리 — 모두 이 snapshot의 예측 수치에서 규칙으로 생성. 문장 앞 태그 = 근거: "
          + _basis_tag("실측") + "실측 대조 " + _basis_tag("산출") + "예측 계산값 " + _basis_tag("가정") + "가정 입력에 의존 "
          + _basis_tag("입력") + "catalog · 과제 데이터</p>")
     for b in blocks:
         rng = b.get("power_range_mw")
         sh = b.get("share_pct") or {}
         h += (f"<div class='op'><h3>{escape(b['title'])} <span class=meta>· {escape(b['scope'])} · "
-              f"spec {b['spec_ok']}/{b['count']}{f' · {rng[0]:,.0f}–{rng[1]:,.0f} mW' if rng else ''}</span></h3>")
+              f"spec <b class='{'ok' if b['spec_ok'] == b['count'] else 'fail'}'>{b['spec_ok']}/{b['count']}</b>{f' · {rng[0]:,.0f}–{rng[1]:,.0f} mW' if rng else ''}</span></h3>")
         if sh:
             h += ("<div class='bar'>" + "".join(f"<i style='width:{v:.1f}%;background:{C[c]}' title='{k} {v:.0f}%'></i>"
                   for (k, v), c in zip(sh.items(), ("cpu", "hw", "bw"), strict=False)) + "</div>")
-        bases = b.get("basis") or [""] * len(b["opinions"])
-        h += "<ul>" + "".join(f"<li>{_basis_tag(t)}{escape(o)}</li>" for o, t in zip(b["opinions"], bases, strict=False)) + "</ul>"
+        sec = b.get("sections")
+        if sec:
+            h += "<div class='q4'>" + "".join(
+                f"<div class='{cls}'><h4><i style='background:{col}'></i>{title}</h4><ul>"
+                + "".join(f"<li>{_basis_tag(t)}{escape(o)}</li>" for o, t in sec.get(key) or []) + "</ul></div>"
+                for key, cls, col, title in _Q4) + "</div>"
+        else:
+            bases = b.get("basis") or [""] * len(b["opinions"])
+            h += "<ul>" + "".join(f"<li>{_basis_tag(t)}{escape(o)}</li>" for o, t in zip(b["opinions"], bases, strict=False)) + "</ul>"
         ev = b.get("evidence")
-        if ev:
+        if ev and not sec:
             h += (f"<p class=meta>근거: 실측 대조 variant {ev['measured_variants']}개"
                   + (f" · 보강 필요: {escape(', '.join(ev['needed']))}" if ev["needed"] else "") + "</p>")
-        h += f"<details><summary>variant {len(b['variants'])}</summary><span class=meta>{escape(', '.join(_short(v) for v in b['variants']))}</span></details></div>"
+        h += f"<details style='margin-top:6px'><summary class=meta>variant {len(b['variants'])}</summary><span class=meta>{escape(', '.join(_short(v) for v in b['variants']))}</span></details></div>"
     return h
 
 
@@ -501,7 +551,7 @@ def _domains(rows: list[dict[str, Any]]) -> str:
 def _fail_margins(rows: list[dict[str, Any]]) -> str:
     if not rows:
         return ""
-    h = f"<h3 style='font-size:13px;margin:14px 0 4px'>spec 미달 {len(rows)}건 (margin 음수)</h3><table><tr><th>Scenario</th><th>fps</th><th>stage</th><th>SW / P</th><th>필요 단축</th><th>병목</th></tr>"
+    h = f"<h3 style='margin:14px 0 4px'>spec 미달 {len(rows)}건 (margin 음수)</h3><table><tr><th>Scenario</th><th>fps</th><th>stage</th><th>SW / P</th><th>필요 단축</th><th>병목</th></tr>"
     for r in rows:
         h += (f"<tr><td>{escape(_short(r['variant_id']))}</td><td class=n>{_f(r['fps'],0)}</td><td>{escape(r['stage'].upper())}</td>"
               f"<td class='n fail'>{_f(r['sw_share_pct'],0)}%</td><td class=n>{_f(-r['slack_ms'],2)} ms</td>"
@@ -511,68 +561,96 @@ def _fail_margins(rows: list[dict[str, Any]]) -> str:
 
 def _boxes(rows: list[dict[str, Any]]) -> str:
     rows = [r for r in rows if r["spec_ok"]]
-    out = "<p class='meta'>spec 만족 scenario만 표시 (미달은 ②). 막대 = min–max, 상자 = p25–p75, 굵은 선 = median</p>"
+    out = ("<p class='meta'>spec 만족 scenario만 표시 (미달은 ③). 중앙값 낮은 순 정렬 · 막대 = min–max, 상자 = p25–p75, 굵은 선 = median, "
+           "◆ = 등록 예측 · 세로 점선 = power 100 mW / BW 1,000 MB/s 격자 (실선 = 눈금 표시)</p>")
     for key, label, unit in (("total_mw", "Total power", "mW"), ("cpu_mw", "CPU (SW)", "mW"), ("hw_mw", "IP (HW core)", "mW"),
                              ("bw_ip_mw", "IP BW", "mW"), ("bw_cpu_mw", "CPU BW", "mW"),
                              ("bw_mbs", "BW", "MB/s")):
-        out += f"<h3 style='font-size:13px;margin:12px 0 4px'>{label} ({unit}) — box = 조합 × SW 통계 · ◆ = 등록 예측</h3>" + _box_svg(rows, key)
+        out += f"<h3 style='margin:18px 0 6px'>{label} ({unit}) <span class=meta>— box = 조합 × SW 통계 · ◆ = 등록 예측</span></h3>" + _box_svg(rows, key)
     return out
 
 
 _KEY_COLOR = {"total_mw": "total", "cpu_mw": "cpu", "hw_mw": "hw", "bw_mw": "bw", "bw_ip_mw": "bw", "bw_cpu_mw": "bwcpu", "bw_mbs": "bw"}
 
 
+def _grid_step(hi: float, unit: str) -> tuple[float, int]:
+    """(minor step, label every n minors): 100 mW grid for power, 1000 MB/s for BW; coarser when too dense."""
+    base = (100.0 if hi >= 400 else 50.0 if hi >= 150 else 20.0) if unit == "mW" else 1000.0
+    step = base
+    while hi / step > 60:
+        step *= 2.5 if str(step)[0] == "2" else 2
+    every = 1
+    while hi / (step * every) > 14:
+        every = {1: 2, 2: 5, 5: 10}.get(every, every * 2)
+    return step, every
+
+
 def _box_svg(rows: list[dict[str, Any]], key: str) -> str:
-    lw, W, rh = 190, 760, 18
-    vals = [r["distribution"][key] for r in rows if r["distribution"].get(key)]
-    if not vals:
+    unit = "MB/s" if key == "bw_mbs" else "mW"
+    lw, W, rh = 230, 1400, 24
+    rows = [r for r in rows if r["distribution"].get(key)]
+    if not rows:
         return ""
-    hi = max(v["max"] for v in vals) * 1.05 or 1
-    k = (W - lw - 70) / hi
-    H = len(rows) * rh + 24
-    g = [f"<svg width='{W}' height='{H}' viewBox='0 0 {W} {H}'>"]
-    for t in range(6):
-        x = lw + t * (W - lw - 70) / 5
-        g.append(f"<line x1='{x:.1f}' x2='{x:.1f}' y1='0' y2='{H-16}' stroke='{C['line']}'/><text x='{x:.1f}' y='{H-4}' font-size='10' fill='{C['mute']}' text-anchor='middle'>{hi*t/5:,.0f}</text>")
+    rows = sorted(rows, key=lambda r: r["distribution"][key]["median"])
+    hi = max(r["distribution"][key]["max"] for r in rows) * 1.04 or 1
+    pw = W - lw - 190
+    k = pw / hi
+    H = len(rows) * rh + 30
+    step, every = _grid_step(hi, unit)
+    g = [f"<svg width='100%' viewBox='0 0 {W} {H}' style='max-width:{W}px;font-size:13px'>"]
+    for i, _ in enumerate(rows):
+        if i % 2:
+            g.append(f"<rect x='0' y='{i * rh + 2}' width='{W}' height='{rh}' fill='#F8F6F2'/>")
+    n = int(hi // step) + 1
+    for t in range(n):
+        x = lw + t * step * k
+        major = t % every == 0
+        dash = "" if major else " stroke-dasharray='2 3'"
+        stroke = "#CFC7BA" if major else "#E2DCD2"
+        g.append(f"<line x1='{x:.1f}' x2='{x:.1f}' y1='0' y2='{H-22}' stroke='{stroke}' stroke-width='{1.2 if major else 1}'{dash}/>")
+        if major:
+            g.append(f"<text x='{x:.1f}' y='{H-6}' font-size='12' fill='{C['mute']}' text-anchor='middle'>{t * step:,.0f}</text>")
+    g.append(f"<text x='{lw + pw + 8}' y='{H-6}' font-size='12' fill='{C['mute']}'>{unit} · 격자 {step:,.0f}</text>")
     for i, r in enumerate(rows):
-        d = r["distribution"].get(key)
-        y = i * rh + 4
-        g.append(f"<text x='{lw-6}' y='{y+11}' font-size='11' text-anchor='end' fill='{C['ink']}'>{escape(_short(r['variant_id']))}</text>")
-        if not d:
-            continue
+        d = r["distribution"][key]
+        y = i * rh + 2
+        cy = y + rh / 2
+        g.append(f"<text x='{lw-8}' y='{cy + 4.5:.1f}' font-size='13' text-anchor='end' fill='{C['ink']}'>{escape(_short(r['variant_id']))}</text>")
         col = C[_KEY_COLOR[key]] if r["spec_ok"] else C["fail"]
-        g.append(f"<line x1='{lw+d['min']*k:.1f}' x2='{lw+d['max']*k:.1f}' y1='{y+7}' y2='{y+7}' stroke='{col}'/>")
-        g.append(f"<rect x='{lw+d['p25']*k:.1f}' y='{y+1}' width='{max(1,(d['p75']-d['p25'])*k):.1f}' height='12' fill='{col}' fill-opacity='.25' stroke='{col}'/>")
-        g.append(f"<line x1='{lw+d['median']*k:.1f}' x2='{lw+d['median']*k:.1f}' y1='{y+1}' y2='{y+13}' stroke='{col}' stroke-width='2'/>")
+        g.append(f"<g><title>{escape(_short(r['variant_id']))}: min {d['min']:,.0f} · p25 {d['p25']:,.0f} · median {d['median']:,.0f} · p75 {d['p75']:,.0f} · max {d['max']:,.0f} {unit}</title>")
+        g.append(f"<line x1='{lw+d['min']*k:.1f}' x2='{lw+d['max']*k:.1f}' y1='{cy:.1f}' y2='{cy:.1f}' stroke='{col}' stroke-width='1.5'/>")
+        g.append(f"<rect x='{lw+d['p25']*k:.1f}' y='{y+5}' width='{max(1.5,(d['p75']-d['p25'])*k):.1f}' height='{rh-10}' rx='2' fill='{col}' fill-opacity='.28' stroke='{col}'/>")
+        g.append(f"<line x1='{lw+d['median']*k:.1f}' x2='{lw+d['median']*k:.1f}' y1='{y+4}' y2='{y+rh-4}' stroke='{col}' stroke-width='2.5'/></g>")
         mk = r["bw_mbs"] if key == "bw_mbs" else r["power"].get(key)
         if mk is not None:
             x = lw + mk * k
-            g.append(f"<path d='M{x:.1f},{y} l5,7 l-5,7 l-5,-7z' fill='#CC3311' stroke='#fff' stroke-width='.8'/>")
-        g.append(f"<text x='{W-66}' y='{y+11}' font-size='10' fill='{C['mute']}'>{d['min']:,.0f}–{d['max']:,.0f}</text>")
+            g.append(f"<path d='M{x:.1f},{cy-7:.1f} l6,7 l-6,7 l-6,-7z' fill='#CC3311' stroke='#fff' stroke-width='.8'><title>등록 예측 {mk:,.0f} {unit}</title></path>")
+        txt = (f"◆ {mk:,.0f} · " if mk is not None else "") + f"{d['min']:,.0f}–{d['max']:,.0f}"
+        g.append(f"<text x='{lw + pw + 8}' y='{cy + 4.5:.1f}' font-size='12.5' fill='{C['ink']}'>{txt}</text>")
     g.append("</svg>")
     return "<div class='scroll'>" + "".join(g) + "</div>"
 
 
 def _split(rows: list[dict[str, Any]]) -> str:
-    lw, W, rh = 190, 760, 18
+    lw, W, rh = 230, 1400, 22
     ok = [r for r in rows if r["power"].get("total_mw")]
     hi = max((r["power"]["total_mw"] for r in ok), default=1) * 1.05
     k = (W - lw - 120) / hi
     H = len(ok) * rh + 8
     g = [f"<div class='lg'><span><i style='background:{C['cpu']}'></i>CPU (SW)</span><span><i style='background:{C['bwcpu']}'></i>CPU BW</span>"
          f"<span><i style='background:{C['hw']}'></i>IP (HW core)</span><span><i style='background:{C['bw']}'></i>IP BW</span></div>",
-         f"<div class='scroll'><svg width='{W}' height='{H}'>"]
+         f"<div class='scroll'><svg width='100%' viewBox='0 0 {W} {H}' style='max-width:{W}px'>"]
     for i, r in enumerate(ok):
         p, y, x = r["power"], i * rh + 4, float(lw)
-        g.append(f"<text x='{lw-6}' y='{y+11}' font-size='11' text-anchor='end'>{escape(_short(r['variant_id']))}</text>")
+        g.append(f"<text x='{lw-8}' y='{y+13}' font-size='13' text-anchor='end'>{escape(_short(r['variant_id']))}</text>")
         parts = _parts(p)
         for key, val in parts:
             w = val * k
-            g.append(f"<rect x='{x:.1f}' y='{y+1}' width='{max(0,w):.1f}' height='12' fill='{C[key]}'/>")
+            g.append(f"<rect x='{x:.1f}' y='{y+1}' width='{max(0,w):.1f}' height='16' fill='{C[key]}'/>")
             x += w
         t = p["total_mw"]
         share = " · ".join(f"{lbl} {100*v/t:.0f}%" for lbl, v in zip(("CPU", "CPU BW", "IP", "IP BW"), [v for _, v in parts], strict=True))
-        g.append(f"<text x='{x+4:.1f}' y='{y+11}' font-size='10' fill='{C['mute']}'>{t:,.0f} mW · {share}</text>")
+        g.append(f"<text x='{x+6:.1f}' y='{y+13}' font-size='12.5' fill='{C['mute']}'>{t:,.0f} mW · {share}</text>")
     g.append("</svg></div>")
     return "".join(g)
 

@@ -5,6 +5,7 @@ import type { Timeline } from '../lib/timeline'
 import type { ModeNote } from '../lib/modes'
 import { LANE_LABEL, LANE_ORDER, type Lane } from '../lib/model'
 import { BoxPlot, SERIES, useWidth } from './Charts'
+import { useTip } from './ChartTip'
 
 const VERDICT: Record<Verdict, { label: string; cls: string }> = {
   ok: { label: 'fps 충족', cls: 'v-ok' }, warn: { label: '주의', cls: 'v-warn' }, fail: { label: 'fps 미달', cls: 'v-fail' }, na: { label: '판정 불가', cls: 'v-na' },
@@ -14,6 +15,7 @@ const LANE_COLOR: Record<string, string> = { sensor: '#94A3B8', rt: '#F4A06B', s
 /** Frame pipeline Gantt: one row per frame, bars per lane window → RT(N+1) ∥ NRT/Output(N) overlap. */
 function FramePipeline({ windows, period }: { windows: ReturnType<typeof frameWindows>; period: number | null }) {
   const [ref, width] = useWidth<HTMLDivElement>()
+  const tip = useTip()
   if (!windows.length) return <div className="empty">frame별 stage 정보 없음</div>
   const frames = [...new Set(windows.map((w) => w.frame))].sort((a, b) => a - b)
   const t0 = Math.min(...windows.map((w) => w.start)), t1 = Math.max(...windows.map((w) => w.end))
@@ -33,7 +35,16 @@ function FramePipeline({ windows, period }: { windows: ReturnType<typeof frameWi
             <line x1={LW} y1={i * RH + RH} x2={LW + plotW} y2={i * RH + RH} stroke="#F1ECE4" />
             {windows.filter((w) => w.frame === f).map((w) => (
               <rect key={w.lane} x={x(w.start)} y={i * RH + 4 + (LANE_ORDER.indexOf(w.lane as Lane) % 2) * 2} width={Math.max(1.5, x(w.end) - x(w.start))} height={RH - 10} rx={2}
-                fill={LANE_COLOR[w.lane] ?? '#ccc'} opacity={0.85}><title>{`f${f} ${LANE_LABEL[w.lane as Lane] ?? w.lane}: ${w.start.toFixed(2)} – ${w.end.toFixed(2)} ms (${(w.end - w.start).toFixed(2)})`}</title></rect>
+                fill={LANE_COLOR[w.lane] ?? '#ccc'} opacity={0.85}
+                {...tip(() => {
+                  const f0 = windows.filter((x) => x.frame === f)
+                  const origin = Math.min(...f0.map((x) => x.start))
+                  return { title: `f${f} · ${LANE_LABEL[w.lane as Lane] ?? w.lane}`, color: LANE_COLOR[w.lane],
+                    head: { label: '구간 길이', value: `${(w.end - w.start).toFixed(2)} ms`, tone: 'strong' as const },
+                    rows: [{ k: '시작 (frame 시작 기준)', v: `+${(w.start - origin).toFixed(2)} ms` }, { k: '종료 (frame 시작 기준)', v: `+${(w.end - origin).toFixed(2)} ms` },
+                      ...(period ? [{ k: '주기 대비', v: `${(((w.end - w.start) / period) * 100).toFixed(0)}% of ${period.toFixed(2)} ms`, tone: (w.end - w.start > period ? 'bad' : undefined) as 'bad' | undefined }] : []),
+                      { k: '절대 시각', v: `${w.start.toFixed(2)} – ${w.end.toFixed(2)} ms`, tone: 'muted' as const }] }
+                })} />
             ))}
           </g>
         ))}
@@ -66,9 +77,11 @@ export function CadenceView({ timeline, view, fps, laneOfPid, notes, source }: {
         <div className="cad-h"><span>{r.stream.label}</span><span className={`badge ${v.cls}`}>{r.batch ? 'batch' : v.label}</span></div>
         <div className="cad-big mono">{r.fpsAchieved ? r.fpsAchieved.toFixed(2) : '—'}<small> fps</small>{fps ? <small className="faint"> / {fps}</small> : null}</div>
         <div className="cad-kv mono">
-          <span>interval</span><span>{r.box ? `${r.box.mean.toFixed(2)} (${r.box.min.toFixed(2)}–${r.box.max.toFixed(2)})` : '—'} ms</span>
+          <span>평균 interval</span><span><b>{r.box ? r.box.mean.toFixed(2) : '—'}</b> ms</span>
+          <span className="faint">min – max</span><span className="faint">{r.box ? `${r.box.min.toFixed(2)} – ${r.box.max.toFixed(2)}` : '—'} ms</span>
           <span>jitter σ</span><span>{r.box ? r.box.std.toFixed(3) : '—'} ms</span>
-          <span>latency</span><span>{r.latBox ? `${r.latBox.mean.toFixed(1)} (max ${r.latBox.max.toFixed(1)})` : '—'} ms</span>
+          <span>평균 latency</span><span><b>{r.latBox ? r.latBox.mean.toFixed(1) : '—'}</b> ms</span>
+          <span className="faint">max latency</span><span className="faint">{r.latBox ? r.latBox.max.toFixed(1) : '—'} ms</span>
           <span>drop</span><span>{a.period ? r.drops : '—'}{r.batch ? ' · burst+gap' : ''}</span>
         </div>
       </div>
@@ -86,10 +99,10 @@ export function CadenceView({ timeline, view, fps, laneOfPid, notes, source }: {
       </div>
       <div className="cad-cards">{outs.map(card)}</div>
       <h4 className="cad-title">출력 buffer 간격 분포 <span className="faint">— 점선 = target period, 음영 = ±5%, ◇ = 평균</span></h4>
-      <BoxPlot rows={a.results.map((r, i) => ({ id: r.stream.id, label: r.stream.label, box: r.box, values: r.intervals, color: r.stream.kind === 'input' ? '#94A3B8' : SERIES[i % SERIES.length] }))}
+      <BoxPlot rows={a.results.map((r, i) => ({ id: r.stream.id, label: r.stream.label, box: r.box, values: r.intervals, tipTitle: `${r.stream.label} · 출력 간격`, color: r.stream.kind === 'input' ? '#94A3B8' : SERIES[i % SERIES.length] }))}
         target={a.period} targetLabel={a.period ? `${a.period.toFixed(2)} ms (${fps} fps)` : undefined} />
       <h4 className="cad-title">Sensor frame start → 출력 지연</h4>
-      <BoxPlot rows={outs.map((r, i) => ({ id: r.stream.id, label: r.stream.label, box: r.latBox, values: r.latencies, color: SERIES[i % SERIES.length] }))} />
+      <BoxPlot rows={outs.map((r, i) => ({ id: r.stream.id, label: r.stream.label, box: r.latBox, values: r.latencies, tipTitle: `${r.stream.label} · sensor → 출력 지연`, color: SERIES[i % SERIES.length] }))} />
       <h4 className="cad-title">Frame pipeline <span className="faint">— frame별 stage 구간 · 세로 점선 = sensor 주기 · RT(N+1)이 N의 NRT/Output과 겹치는지 확인</span></h4>
       <FramePipeline windows={windows} period={a.period} />
       {timeline.frames.length < 4 && <div className="faint" style={{ fontSize: 12, marginTop: 8 }}>frame 수가 적어 분포 신뢰도가 낮습니다. 긴 trace(≥ 30 frame)를 import하면 box plot이 의미 있어집니다.</div>}

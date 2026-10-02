@@ -16,6 +16,7 @@ import { DataTable, type Column, type RowGroup, type SortValue } from '../compon
 import { Bars, BoxPlot, SERIES, StackedBars } from '../components/Charts'
 import { PowerDeltaTable, PowerStack, type PowerRow } from '../components/PowerModelCharts'
 import { cpuSource, mifSummary, powerModelParts } from '../lib/powerModel'
+import { CompareSummary, type ItemInfo, type MetricRow } from '../components/CompareSummary'
 
 const KPI_FIELDS: [string, string, string][] = [
   ['Total power', 'total_power_mw', 'mW'], ['Core power', 'core_power_mw', 'mW'], ['BW power', 'bw_power_mw', 'mW'],
@@ -222,9 +223,48 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
     traffic: models.map((m) => (m ? trafficByIp(m) : null)), changedConditions: condDiff, ipMaps, sizeMaps,
   })
   const sign = (x: number) => `${x >= 0 ? '+' : ''}${x.toFixed(1)}`
+  // ---- decision summary: Power / BW / Latency vs ★
+  const kv = (field: string) => kpiRows.find((r) => r.field === field)?.values ?? ids.map(() => null)
+  const fam = (i: number, f: 'cpu' | 'ip' | 'mem'): number | null => {
+    const r = powerRows.find((x) => x.id === ids[i])
+    return r ? r.parts.filter((p) => p.family === f).reduce((a, p) => a + p.mw, 0) : null
+  }
+  const lat = (sid: 'preview' | 'video') => ids.map((_, i) => stream(i, sid)?.latBox?.mean ?? null)
+  const metrics: MetricRow[] = [
+    { group: 'Power', key: 'total_power_mw', label: 'Total power', unit: 'mW', values: kv('total_power_mw'), hint: 'KPI (evidence 또는 즉석 simulation)' },
+    { group: 'Power', key: 'fam_cpu', label: '구성 · CPU (SW)', unit: 'mW', values: ids.map((_, i) => fam(i, 'cpu')), hint: 'power_breakdown: CPU cluster 합' },
+    { group: 'Power', key: 'fam_ip', label: '구성 · IP core', unit: 'mW', values: ids.map((_, i) => fam(i, 'ip')), hint: 'power_breakdown: IP 동작 + leakage + clock' },
+    { group: 'Power', key: 'fam_mem', label: '구성 · 메모리 (BW)', unit: 'mW', values: ids.map((_, i) => fam(i, 'mem')), hint: 'power_breakdown: traffic + MIF base' },
+    // KPI core/BW power only when the power breakdown is missing (same quantity otherwise)
+    ...(powerRows.length ? [] : [
+      { group: 'Power' as const, key: 'core_power_mw', label: 'Core power', unit: 'mW', values: kv('core_power_mw') },
+      { group: 'Power' as const, key: 'bw_power_mw', label: 'BW power', unit: 'mW', values: kv('bw_power_mw') }]),
+    { group: 'BW', key: 'total_bw_mbs', label: 'Total BW', unit: 'MB/s', digits: 0, values: kv('total_bw_mbs'), hint: 'KPI · DMA W+R' },
+    { group: 'BW', key: 'dma', label: 'DMA 모델 합계', unit: 'MB/s', digits: 0, values: models.map((m) => (m ? m.totalMBs : null)), hint: 'pipeline view memory × fps (stat/size 미정 제외)' },
+    { group: 'Latency · Timing', key: 'preview_lat', label: 'Sensor → Preview 지연 (평균)', unit: 'ms', values: lat('preview'), hint: 'timeline evidence (trace / simulation)' },
+    { group: 'Latency · Timing', key: 'video_lat', label: 'Sensor → Video 지연 (평균)', unit: 'ms', values: lat('video') },
+    { group: 'Latency · Timing', key: 'frame_latency_ms', label: 'Frame latency (KPI)', unit: 'ms', values: kv('frame_latency_ms') },
+    { group: 'Latency · Timing', key: 'hw_time_max_ms', label: 'HW time max', unit: 'ms', values: kv('hw_time_max_ms') },
+    { group: 'Latency · Timing', key: 'fps_effective', label: 'Effective fps', unit: 'fps', digits: 2, values: kv('fps_effective'), lowerIsBetter: false, tolerancePct: 0.5 },
+  ]
+  const summaryItems: ItemInfo[] = ids.map((id, i) => {
+    const f = found.find((x) => x.index === i)
+    const drivers: string[] = []
+    const pr0 = powerRows.find((x) => x.id === ids[0]), pri = powerRows.find((x) => x.id === id)
+    if (i > 0 && pr0 && pri) {
+      const keys = [...new Set([...pr0.parts, ...pri.parts].map((p) => p.key))]
+      keys.map((k) => ({ k, label: (pri.parts.find((p) => p.key === k) ?? pr0.parts.find((p) => p.key === k))!.label, d: (pri.parts.find((p) => p.key === k)?.mw ?? 0) - (pr0.parts.find((p) => p.key === k)?.mw ?? 0) }))
+        .filter((x) => Math.abs(x.d) >= 1).sort((a, b) => Math.abs(b.d) - Math.abs(a.d)).slice(0, 3)
+        .forEach((x) => drivers.push(`${x.label} ${sign(x.d)} mW`))
+    }
+    if (f?.topIp.length) drivers.push(`DMA ${f.topIp.slice(0, 3).map((t) => `${t.ip} ${sign(t.delta)}`).join(', ')} MB/s`)
+    const st = sims[id]
+    return { label: labels[id] ?? id, full: itemLbl[i]?.full, color: color(i), source: kpiOf(i).source, changed: f?.changed, drivers,
+      status: st?.status === 'running' ? <div className="faint">예측 계산 중…</div> : st?.status === 'error' ? <div className="err" style={{ margin: 0 }}>{st.error}</div> : undefined }
+  })
   const analysis = ids.length > 1 && (
     <section className="panel fit" style={{ padding: 10 }}>
-      <div className="panel-head" style={{ padding: '0 0 8px' }}><h2>분석 요약 · 기준 대비</h2>
+      <div className="panel-head" style={{ padding: '0 0 8px' }}><h2>분석 요약 · 기준(★) 대비 Power · BW · Latency</h2>
         <span className="muted" style={{ fontSize: 12 }}>★ {itemLbl[0]?.full}</span><span className="grow" />
         <div className="seg sm" role="group" aria-label="KPI 출처">
           <button className={kpiMode === 'evidence' ? 'on' : ''} onClick={() => setKpiMode('evidence')} title="실측/등록 evidence 우선, 없으면 즉석 예측">Evidence 우선</button>
@@ -233,24 +273,7 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
         {noKpi.length > 0 && <button className="btn primary" onClick={() => runSim(noKpi)} title="simulation으로 KPI 계산 (DB에 저장하지 않음)">{kpiMode === 'sim' ? `${noKpi.length}개 예측 실행` : `KPI 없는 ${noKpi.length}개 예측 실행`}</button>}
       </div>
       {mixed && <div className="faint" style={{ fontSize: 12, margin: '0 0 8px' }}>⚠ KPI 출처가 섞여 있습니다 (실측 vs 계산). 설계 대안 비교는 “Simulation 통일”을 권장합니다.</div>}
-      <div className="cmp-insights">
-        {found.map((f) => {
-          const st = sims[ids[f.index]]
-          return (
-            <div key={ids[f.index]} className="cmp-insight" style={{ borderLeft: `4px solid ${color(f.index)}` }}>
-              <h4 title={itemLbl[f.index]?.full}><span className="mono">{labels[ids[f.index]]}</span></h4>
-              <div className="row faint"><span>변경: 조건 {f.changed.conditions} · IP {f.changed.ips} · size {f.changed.sizes}</span><span>KPI {kpiOf(f.index).source ?? '없음'}</span></div>
-              {f.kpi.filter((k) => /power|bw/i.test(k.label)).map((k) => (
-                <div key={k.label} className="row"><span>{k.label}</span>
-                  <span className={`mono ${(k.pct ?? 0) > 0.05 ? 'up' : (k.pct ?? 0) < -0.05 ? 'down' : ''}`}>{k.value.toFixed(1)} {k.unit} ({k.pct === null ? '기준 0 · 비율 미정' : `${sign(k.pct)}%`})</span></div>))}
-              {f.dmaTotal && <div className="row"><span>DMA 모델 합계</span>
-                <span className={`mono ${(f.dmaTotal.pct ?? 0) > 0.05 ? 'up' : (f.dmaTotal.pct ?? 0) < -0.05 ? 'down' : ''}`}>{f.dmaTotal.value.toFixed(0)} MB/s ({f.dmaTotal.pct === null ? '기준 0 · 비율 미정' : `${sign(f.dmaTotal.pct)}%`})</span></div>}
-              {f.topIp.length > 0 && <div className="faint" style={{ marginTop: 4 }}>DMA Δ 상위: {f.topIp.map((t) => `${t.ip} ${sign(t.delta)}`).join(' · ')} MB/s</div>}
-              {st?.status === 'running' && <div className="faint">예측 계산 중…</div>}
-              {st?.status === 'error' && <div className="err" style={{ margin: '4px 0 0' }}>{st.error}</div>}
-            </div>)
-        })}
-      </div>
+      <CompareSummary items={summaryItems} metrics={metrics} />
     </section>
   )
 
@@ -268,7 +291,7 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
       <section className="panel plot-card"><h3>KPI · 기준(점선) 대비 <span className="faint">evidence KPI · 없으면 즉석 예측</span></h3>
         {kpiRows.length ? kpiRows.map((r) => (
           <div key={r.field} className="kpi-mini"><div className="faint" style={{ fontSize: 11.5 }}>{r.label} ({r.unit})</div>
-            <Bars unit={r.unit} base={r.values[0]} labelW={150} data={ids.map((id, i) => {
+            <Bars unit={r.unit} base={r.values[0]} labelW={150} title={r.label} lowerIsBetter={r.field !== 'fps_effective'} data={ids.map((id, i) => {
               const v = r.values[i], b = r.values[0]
               return { id, label: labels[id], value: v, color: color(i), note: i > 0 && v !== null && b ? `(${v >= b ? '+' : ''}${(((v - b) / b) * 100).toFixed(1)}%)` : undefined }
             })} /></div>)) : <div className="empty">KPI evidence 없음 — 분석 요약의 “예측 실행”으로 계산</div>}

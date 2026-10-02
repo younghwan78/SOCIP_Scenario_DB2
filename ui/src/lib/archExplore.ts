@@ -19,7 +19,7 @@ export interface ExpCase {
 export interface BufferRow {
   buffer: string; format: string; family: string; nodes: string[]; support: string; selectable: boolean; explored?: boolean
   skip_reason?: string | null; mode?: string; comp_ratio?: number; ratio_source?: string; lossy?: boolean
-  raw_mbs?: number; delta_mbs?: number; delta_mw?: number; ports?: string[]
+  raw_mbs?: number; delta_mbs?: number; delta_mw?: number; ports?: string[]; listed_modes?: Record<string, string[]>; unsupported_ports?: string[]
 }
 export interface DomainOpt { level: number; speed_mhz: number; voltage_mv: number; delta_mw: number; raise: boolean }
 export interface DomainRow { domain: string; base_level: number; nodes: string[]; max_required_mhz: number; options: DomainOpt[] }
@@ -42,6 +42,14 @@ export interface VariantResult {
   warnings: string[]; dvfs_table_ref?: string | null; input_hash: string
   /** engine rev 4+: power-saving options explored on top of the variant (never variants themselves) */
   power_options?: PowerOptions
+  /** engine rev 6+: every HW node's sim mode, coefficients and declared alternatives */
+  ip_modes?: IpModeRow[]
+}
+export interface IpModeAlt { mode: string; unit_power_mw_mp: number | null; ppc: number | null; explorable: boolean; label?: string | null; note?: string | null }
+export interface IpModeRow {
+  node: string; ip_ref: string; hw_name: string; mode: string; declared: boolean
+  unit_power_mw_mp: number | null; ppc: number | null; dvfs_group: string | null; power_mw: number | null; set_clock_mhz: number | null
+  alternatives: IpModeAlt[]
 }
 
 // ---------------------------------------------------------------- power options (IQ 평가 대상)
@@ -120,12 +128,14 @@ export interface ReportMeta {
 export interface RunOptions {
   statistics: Statistic[]; runtime_scales: number[]; dvfs_headroom_levels: number
   modes: ('lossy' | 'lossless')[]; max_buffers: number; allow_lossy: boolean; objective_statistic: Statistic; objective_scale: number
+  /** compression only on DMA whose endpoints declare support (IP catalog) */
+  require_declared: boolean
   /** power-saving options: knob values (knobs.yaml explore) / substitute IP modes (sim.modes substitutes) */
   options: { knobs: boolean; modes: boolean; max_sets: number }
 }
 export const DEFAULT_RUN: RunOptions = {
   statistics: ['mean', 'max'], runtime_scales: [1.0, 1.1, 1.2], dvfs_headroom_levels: 1,
-  modes: ['lossy'], max_buffers: 8, allow_lossy: true, objective_statistic: 'max', objective_scale: 1.0,
+  modes: ['lossy'], max_buffers: 8, allow_lossy: true, objective_statistic: 'max', objective_scale: 1.0, require_declared: true,
   options: { knobs: true, modes: true, max_sets: 64 },
 }
 
@@ -138,7 +148,7 @@ export function runBody(scenarioIds: string[], title: string, scenarioType: stri
     config_profile_ref: configProfileRef ?? undefined,
     spec: {
       axes: { statistics: stats, runtime_scales: scales, dvfs_headroom_levels: o.dvfs_headroom_levels,
-        compression: { enabled: o.modes.length > 0 && o.max_buffers > 0, modes: o.modes.length ? o.modes : ['lossy'], max_buffers: o.max_buffers },
+        compression: { enabled: o.modes.length > 0 && o.max_buffers > 0, modes: o.modes.length ? o.modes : ['lossy'], max_buffers: o.max_buffers, require_declared: o.require_declared },
         power_options: { enabled: o.options.knobs || o.options.modes, include_knobs: o.options.knobs, include_modes: o.options.modes, max_sets: o.options.max_sets } },
       constraints: { allow_lossy: o.allow_lossy },
       objective: { statistic: o.objective_statistic, runtime_scale: o.objective_scale },

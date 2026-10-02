@@ -52,7 +52,7 @@ from scenario_db.sim import power_options as po
 from scenario_db.sim.power_attribution import attribute
 from scenario_db.sim.transfers import compression_catalog
 
-ENGINE_REV = "arch-exploration/5"
+ENGINE_REV = "arch-exploration/6"
 # Power = CPU(SW) + IP core + BW; BW = IP DMA (HW nodes) + CPU DMA (SW tasks, e.g. mpeg_writer)
 DIST_KEYS = ("total_mw", "cpu_mw", "hw_mw", "bw_mw", "bw_ip_mw", "bw_cpu_mw", "bw_mbs", "bw_ip_mbs", "bw_cpu_mbs")
 V_REF_MV = 710.0
@@ -103,6 +103,9 @@ class CompressionAxis(BaseScenarioModel):
     ratio_overrides: dict[str, float] = Field(default_factory=dict)
     buffers: list[str] | None = None
     include_unsupported: bool = False
+    # only DMA whose every endpoint IP declares compression support is explored;
+    # False also explores endpoints the catalog says nothing about (support "unknown")
+    require_declared: bool = True
     max_buffers: int = Field(default=8, ge=0, le=12)
     min_saving_mbs: float = Field(default=1.0, ge=0)
 
@@ -274,6 +277,7 @@ def _explore(graph, spec: ArchExplorationSpec, config: SimulationRunConfig,
         "slices": [_slice_public(s) for s in slices],
         "buffers": buffers,
         "domains": obj_slice["domains"],
+        "ip_modes": po.ip_mode_table(graph, obj_slice["ips"]),
         "axis_spread": _axis_spread(slices, obj_slice, comp_sets, obj),
         "sw_margin": sw_margin(slices, obj_slice, obj),
         # objective slice keeps IP rows + DVFS options: promotion builds the frozen payload from it
@@ -624,8 +628,11 @@ def compression_candidates(
             "unsupported_ports": port_block,
         }
         reason = None
+        undeclared = [n for n in row["nodes"] if n not in listed]
         if support == "unsupported" and not axis.include_unsupported:
             reason = "IP catalog lists no compression for an endpoint"
+        elif undeclared and axis.require_declared and not axis.include_unsupported:
+            reason = f"compression support not declared: {', '.join(undeclared)}"
         elif port_block and not axis.include_unsupported:
             reason = f"DMA port without {mode}: {', '.join(port_block)}"
         elif -d_bw < axis.min_saving_mbs:

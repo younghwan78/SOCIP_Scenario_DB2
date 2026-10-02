@@ -57,12 +57,12 @@ export function reportsForProject(list: ReportMeta[], project: string): { mine: 
 export type IssueCode = 'sw_budget' | 'rt_budget' | 'interval' | 'ip_clock' | 'other'
 export interface Issue { code: IssueCode; label: string; detail: string }
 export const ISSUE_LABEL: Record<IssueCode, string> = {
-  sw_budget: 'SW > 예산', rt_budget: 'RT HW > 75%', interval: '출력 간격', ip_clock: 'IP clock 불가', other: '기타',
+  sw_budget: 'SW > 예산', rt_budget: 'RT HW > 예산', interval: '출력 간격', ip_clock: 'IP clock 불가', other: '기타',
 }
 export const ISSUE_ORDER: IssueCode[] = ['sw_budget', 'rt_budget', 'interval', 'ip_clock', 'other']
 
 const RE_SW = /^(.+?): SW ([\d.]+) ms leaves no HW budget$/
-const RE_RT = /^RT HW ([\d.]+) ms > 75% budget ([\d.]+) ms$/
+const RE_RT = /^RT HW ([\d.]+) ms > \d+% budget ([\d.]+) ms$/
 const RE_IV = /^(preview|video) interval ([\d.]+) ms != ([\d.]+) ms$/
 const RE_IP = /^([A-Za-z0-9_.-]+): (.+)$/
 

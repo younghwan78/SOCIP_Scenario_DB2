@@ -7,7 +7,7 @@ import {
   type DistKey, type ExpCase, type RunDetail, type RunOptions, type VariantResult,
 } from '../lib/archExplore'
 import { Card } from '../components/TimingCharts'
-import { AxisSpread, BufferSavings, CompositionBars, DomainLevels, RangeBoxes, SplitBar, SplitLegend } from '../components/ArchCharts'
+import { AxisSpread, BufferSavings, CompositionBars, DomainLevels, IpModes, RangeBoxes, SplitBar, SplitLegend } from '../components/ArchCharts'
 import { DataTable, type Column } from '../components/DataTable'
 import { OPTION_NOTE, OptionResults, signed } from '../components/PowerOptions'
 import { VariantFailures } from '../components/VariantFailures'
@@ -94,7 +94,8 @@ function RunForm({ ctx, onDone }: { ctx: Ctx; onDone: (r: RunDetail) => void }) 
             {(['lossy', 'lossless'] as const).map((m) => <label key={m} className="ax-check"><input type="checkbox" checked={o.modes.includes(m)} onChange={() => set('modes', toggle(o.modes, m))} />{m}</label>)}
             <span className="faint" style={{ fontSize: 12 }}>buffer ≤</span>
             <input className="input" type="number" min={0} max={12} value={o.max_buffers} style={{ width: 64 }} onChange={(e) => set('max_buffers', Math.max(0, Math.min(12, Number(e.target.value) || 0)))} />
-            <label className="ax-check"><input type="checkbox" checked={o.allow_lossy} onChange={() => set('allow_lossy', !o.allow_lossy)} />lossy 추천 허용</label></div>
+            <label className="ax-check"><input type="checkbox" checked={o.allow_lossy} onChange={() => set('allow_lossy', !o.allow_lossy)} />lossy 추천 허용</label>
+            <label className="ax-check" title="해제하면 IP catalog에 압축 지원이 기재되지 않은 DMA도 탐색 (지원 여부 확인 전 잠재 절감 확인용)"><input type="checkbox" checked={o.require_declared} onChange={() => set('require_declared', !o.require_declared)} />지원 DMA만 (catalog 선언)</label></div>
           <div className="ax-row"><span className="ax-label">추천 기준</span>
             <div className="seg sm">{(['max', 'mean'] as Statistic[]).map((s) => <button key={s} className={o.objective_statistic === s ? 'on' : ''} onClick={() => set('objective_statistic', s)}>SW {s}</button>)}</div>
             <span className="faint" style={{ fontSize: 12 }}>× 증가</span>
@@ -102,7 +103,7 @@ function RunForm({ ctx, onDone }: { ctx: Ctx; onDone: (r: RunDetail) => void }) 
             <span className="faint" style={{ fontSize: 12 }}>= eligible 중 최저 total power</span></div>
           <div className="ax-row"><span className="ax-label">Power option</span>
             <label className="ax-check"><input type="checkbox" checked={o.options.knobs} onChange={() => set('options', { ...o.options, knobs: !o.options.knobs })} />arch knob (bcrop, L0 skip …)</label>
-            <label className="ax-check"><input type="checkbox" checked={o.options.modes} onChange={() => set('options', { ...o.options, modes: !o.options.modes })} />IP mode (sim.modes substitutes)</label>
+            <label className="ax-check" title="IP catalog sim.modes 중 현재 mode를 대체(substitutes)할 수 있는 mode를 unit power·ppc로 재시뮬레이션"><input type="checkbox" checked={o.options.modes} onChange={() => set('options', { ...o.options, modes: !o.options.modes })} />IP mode (대체 가능 mode · unit power별)</label>
             <span className="faint" style={{ fontSize: 12 }}>조합 ≤</span>
             <input className="input" type="number" min={1} max={256} value={o.options.max_sets} style={{ width: 70 }} aria-label="option 조합 상한"
               onChange={(e) => set('options', { ...o.options, max_sets: Math.max(1, Math.min(256, Number(e.target.value) || 1)) })} />
@@ -229,6 +230,9 @@ function VariantDetail({ v, run }: { v: VariantResult; run: RunDetail }) {
   const m = v.sw_margin
   return <>
     <Card id="ax-cases" title={`${short(v.variant_id)} — 추천 · 대안 조합`} note={`${v.counts.cases.toLocaleString()} 조합 · eligible ${v.counts.eligible.toLocaleString()} · ${fmt(v.fps, 0)} fps${v.eis_on ? ' · EIS' : ''}`} defaultWide>
+      {(v.ip_modes ?? []).length > 0 && <div className="faint" style={{ fontSize: 12, marginBottom: 6 }}>
+        IP mode (모든 조합 공통): {(v.ip_modes ?? []).map((m) => `${m.node.toUpperCase()} ${m.mode}${m.unit_power_mw_mp !== null ? ` ${fmt(m.unit_power_mw_mp, 2)}` : ''}`).join(' · ')} <span className="mono">mW/MP</span>
+        {(v.ip_modes ?? []).some((m) => m.alternatives.some((a) => a.explorable)) && <> · 대체 mode 결과는 아래 Power option / IP mode 카드</>}</div>}
       {!v.spec_ok && <div className="err" style={{ fontSize: 12 }}>{v.spec_reasons.slice(0, 3).map((x) => <div key={x}>{x}</div>)}</div>}
       <table className="tb-mini-table" style={{ width: '100%' }}>
         <thead><tr><th /><th>순위</th><th>Total mW</th><th title="CPU / CPU BW / IP / IP BW">CPU / CPU BW / IP / IP BW</th><th>BW MB/s</th><th>Δ 추천 대비</th><th>SW</th><th>Compression</th><th>DVFS</th></tr></thead>
@@ -276,7 +280,9 @@ function VariantDetail({ v, run }: { v: VariantResult; run: RunDetail }) {
       <div className="faint" style={{ fontSize: 12, margin: '6px 0' }}>SW 증가 허용 {m.growth_tolerance ? `×${fmt(m.growth_tolerance, 1)}` : '—'} (탐색 최대 ×{fmt(m.growth_tested_max, 1)}) · max–mean 편차 {fmt(m.stat_spread_ms, 1)} ms</div>
       <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13 }}>{m.recommendations.map((r) => <li key={r}>{r}</li>)}</ul>
     </Card>
-    <Card id="ax-comp" title="Compression BW 절감 (buffer별)" note="단독 적용 시 Δ · 합산 가능(port 독립)"><BufferSavings buffers={v.buffers} selected={rec?.compression ?? []} /></Card>
+    <Card id="ax-modes" title="IP mode · unit power" note="IP별 현재 mode와 대안 mode · mode마다 unit power가 다름" defaultWide>
+      <IpModes rows={v.ip_modes ?? []} results={v.power_options?.results} /></Card>
+    <Card id="ax-comp" title="Compression BW 절감 (buffer별)" note="지원 DMA만 탐색 · 단독 적용 시 Δ · 합산 가능(port 독립)"><BufferSavings buffers={v.buffers} selected={rec?.compression ?? []} /></Card>
     <Card id="ax-dvfs" title="DVFS domain level" note="scenario별 level · +level은 전압↑ → power↑"><DomainLevels domains={v.domains} chosen={rec?.dvfs ?? {}} /></Card>
   </>
 }

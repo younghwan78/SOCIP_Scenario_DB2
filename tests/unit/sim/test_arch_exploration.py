@@ -38,16 +38,42 @@ def dvfs():
     return {k: DVFSTable.model_validate(v) for k, v in doc["domains"].items()}
 
 
+# The case-space / compression-math tests use every buffer with DMA traffic (pre-2026-10 behaviour):
+# the default now explores only DMA whose endpoints declare compression (see test_declared_compression_only).
+ALL_BUFFERS = ax.ArchExplorationSpec.model_validate({"axes": {"compression": {"require_declared": False}}})
+
+
 @pytest.fixture(scope="module")
 def uhd30(graph_factory, dvfs):
-    return ax.explore_variant(graph_factory(UHD30), ax.ArchExplorationSpec(), dvfs_tables=dvfs)
+    return ax.explore_variant(graph_factory(UHD30), ALL_BUFFERS, dvfs_tables=dvfs)
+
+
+def test_declared_compression_only(graph_factory):
+    """Default axis: only buffers whose endpoints declare SBWC are explored (2600: MLSC -> MTNR L0/L1)."""
+    from scenario_db.sim.models import SimulationRunConfig
+    rows = {r["buffer"]: r for r in ax.compression_candidates(graph_factory(UHD30), ax.CompressionAxis(), SimulationRunConfig())}
+    assert {b for b, r in rows.items() if r["selectable"]} == {"PYRAMID_L0", "PYRAMID_L1"}
+    assert "not declared" in rows["MCSC_VIDEO"]["skip_reason"]           # gdc_o declares nothing
+    assert "DMA port without" in rows["PYRAMID_L2"]["skip_reason"]       # L2 ports are COMP_OFF only
+    relaxed = {r["buffer"]: r for r in ax.compression_candidates(graph_factory(UHD30), ax.CompressionAxis(require_declared=False),
+                                                                 SimulationRunConfig())}
+    assert relaxed["MCSC_VIDEO"]["selectable"]
+
+
+def test_ip_mode_table(uhd30):
+    modes = {m["node"]: m for m in uhd30["ip_modes"]}
+    mtnr = modes["mtnr"]
+    assert mtnr["mode"] == "Normal" and mtnr["unit_power_mw_mp"] == 1.0
+    assert [(a["mode"], a["explorable"]) for a in mtnr["alternatives"]] == [("LowPower", True)]
+    assert all(not a["explorable"] for a in modes["rgbp"]["alternatives"])  # tDMSC is not a substitute
 
 
 def test_case_space_and_distribution(uhd30):
     c = uhd30["counts"]
-    # 2 statistics x 3 growth scales, 8 buffers, CAM/INT/INTCAM x {base, +1}
-    assert (c["sw_slices"], c["compression_sets"], c["dvfs_sets"]) == (6, 256, 8)
-    assert c["cases"] == 6 * 256 * 8
+    # 2 statistics x 3 growth scales, 5 buffers (port-level SBWC limits drop pyramid L2+ / TNR prev),
+    # CAM/INT/INTCAM x {base, +1}
+    assert (c["sw_slices"], c["compression_sets"], c["dvfs_sets"]) == (6, 32, 8)
+    assert c["cases"] == 6 * 32 * 8
     d = uhd30["distribution"]["total_mw"]
     assert d["min"] <= d["p25"] <= d["median"] <= d["p75"] <= d["max"]
     # every case = CPU + HW + BW
@@ -73,7 +99,7 @@ def test_compression_deltas_are_linear_in_ratio(uhd30):
     assert -b["delta_mbs"] == pytest.approx(0.5 * b["raw_mbs"], abs=0.01)
     assert not rows["RGBP_HIST"]["selectable"]  # no DMA traffic -> nothing to save
     explored = [r for r in uhd30["buffers"] if r["explored"]]
-    assert len(explored) == 8 and all(r["selectable"] for r in explored)
+    assert len(explored) == 5 and all(r["selectable"] for r in explored)
 
 
 def test_dvfs_headroom_raises_voltage_and_power(uhd30):
@@ -128,7 +154,7 @@ def _payload(summary, case):
 
 
 def test_attribution_is_exact(graph_factory, dvfs, uhd30):
-    uhd60 = ax.explore_variant(graph_factory("cam-rec-r1-uhd60-sdr"), ax.ArchExplorationSpec(), dvfs_tables=dvfs)
+    uhd60 = ax.explore_variant(graph_factory("cam-rec-r1-uhd60-sdr"), ALL_BUFFERS, dvfs_tables=dvfs)
     a = _payload(uhd30, uhd30["recommended"])
     b = _payload(uhd60, uhd60["recommended"])
     r = attribute(a, b)

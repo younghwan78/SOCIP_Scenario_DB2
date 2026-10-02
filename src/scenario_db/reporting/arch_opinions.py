@@ -12,7 +12,7 @@ import re
 import statistics
 from typing import Any
 
-from scenario_db.reporting.reason_text import first_text
+from scenario_db.reporting.reason_text import diagnose, explain_all, first_text
 
 CATEGORIES = [
     ("fps30", "30 fps recording", "해상도(FHD · UHD · 8K) × EIS on/off × HEVC/APV"),
@@ -113,7 +113,7 @@ def _f(v: float | None, d: int = 0) -> str:
 
 
 def build_opinions(rows: list[dict[str, Any]], domains: list[dict[str, Any]], *, sample_dvfs: bool = False,
-                   measured: set[str] | None = None) -> list[dict[str, Any]]:
+                   measured: set[str] | None = None, options: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
     """One block per non-empty category: stats + ordered opinion sentences.
 
     Every sentence carries its evidence basis (R5): 실측 (measurement), 산출 (computed from the
@@ -202,10 +202,12 @@ def build_opinions(rows: list[dict[str, Any]], domains: list[dict[str, Any]], *,
         if dom:
             d = min(dom, key=lambda x: x["headroom_pct"])
             add(f"DVFS headroom 최소: {d['domain']} L{d['level']} {_f(d['speed_mhz'])} MHz, 필요 {_f(d['required_mhz'])} MHz (+{d['headroom_pct']:.0f}%, driver {d.get('driver') or '-'}).", dv)
+        evidence = _evidence(rs, measured, sample_dvfs, avg_share)
         out.append({"category": cat, "title": title, "scope": scope, "variants": [r["variant_id"] for r in rs],
                     "spec_ok": len(ok), "count": len(rs), "power_range_mw": [min(tot), max(tot)] if tot else None,
                     "share_pct": {k: round(v, 1) for k, v in avg_share.items()}, "opinions": ops, "basis": basis,
-                    "evidence": _evidence(rs, measured, sample_dvfs, avg_share)})
+                    "evidence": evidence,
+                    "sections": _sections(cat, rs, ok, ops, basis, avg_share, dom, options or [], evidence, sample_dvfs)})
     return out
 
 
@@ -223,3 +225,80 @@ def _evidence(rs: list[dict[str, Any]], measured: set[str], sample_dvfs: bool, s
         needed.append("HFR NRT batch 동작 정의")
     grade = "실측" if n else "산출"
     return {"measured_variants": n, "grade": grade, "needed": needed}
+
+
+# ---------------------------------------------------------------- 4-part review (현재 검토 · Risk · 감소 방안 · 추가 최적화)
+_RISK_HINT = ("미달 원인", "SW timing margin", "모델 밖", "contention", "과소 추정", "DVFS headroom 최소")
+
+
+def _sections(cat: str, rs: list[dict[str, Any]], ok: list[dict[str, Any]], ops: list[str], basis: list[str],
+              share: dict[str, float], dom: list[dict[str, Any]], options: list[dict[str, Any]],
+              evidence: dict[str, Any], sample_dvfs: bool) -> dict[str, list[list[str]]]:
+    """Regroup the category sentences into review / risk and derive mitigations and further optimisations.
+
+    Each item = [text, basis]. Risk sentences are the existing fail / margin / assumption lines; the
+    mitigation and optimisation lines are derived from the same frozen numbers (no new model output).
+    """
+    review: list[list[str]] = []
+    risk: list[list[str]] = []
+    for o, b in zip(ops, basis, strict=False):
+        is_risk = any(h in o for h in _RISK_HINT) and not ("DVFS headroom 최소" in o and "+" in o and _headroom_ok(o))
+        (risk if is_risk or b.startswith("가정 · 모델 밖") else review).append([o, b])
+    if sample_dvfs:
+        risk.append(["DVFS table이 SAMPLE — 전압·level 기반 power 수치는 상대 비교용.", "입력"])
+    mitig: list[list[str]] = []
+    fails = [r for r in rs if not r["spec_ok"]]
+    if fails:
+        groups: dict[str, list[dict[str, Any]]] = {}
+        for r in fails:
+            d = diagnose(r.get("reasons_explained") or explain_all(r["reasons"], r.get("fps")), r.get("fps"))
+            groups.setdefault(d["code"], []).append({**d, "variant": r["variant_id"].replace("cam-rec-", "")})
+        for code, ds in groups.items():
+            names = ", ".join(x["variant"] for x in ds[:4]) + (f" 외 {len(ds) - 4}" if len(ds) > 4 else "")
+            first = ds[0]
+            acts = " / ".join(first["actions"][:2]) if first["actions"] else first["focus"]
+            mitig.append([f"[{first['label']}] {names}: {acts}.", "산출"])
+    margins = [r for r in ok if r.get("sw_margin_pct") is not None and r["sw_margin_pct"] < 10]
+    if margins:
+        w = min(margins, key=lambda r: r["sw_margin_pct"])
+        mitig.append([f"SW margin < 10% {len(margins)}개 (최소 {w['sw_margin_pct']:.1f}% {w['variant_id'].replace('cam-rec-', '')}): "
+                      f"병목 {w.get('sw_bottleneck') or 'SW task'}의 runtime·latency 실측 확보 → Timing Budget의 SW 증가 ×1.1–1.2 what-if로 "
+                      "필요 clock 상승 폭을 미리 확인하고, CPU what-if로 병목 task의 cluster 고정 효과 확인.", "가정 · SW timing"])
+    tight = [d for d in dom if d.get("headroom_pct") is not None and d["headroom_pct"] < 5]
+    if tight:
+        d = min(tight, key=lambda x: x["headroom_pct"])
+        mitig.append([f"DVFS headroom < 5% domain {len({x['domain'] for x in tight})}개 (예: {d['domain']} L{d['level']}, level 결정 IP {d.get('driver') or '-'}): "
+                      "결정 IP의 처리 화소 축소(bcrop · EIS margin) 또는 domain 분리 시 한 단계 낮은 level 가능 여부 검토.", "산출"])
+    for need in evidence.get("needed") or []:
+        mitig.append([f"근거 보강: {need}.", "입력"])
+    optim: list[list[str]] = []
+    if share:
+        top = max(share, key=lambda k: share[k])
+        lever = {"BW": "BW 비중이 가장 큼 → 지원 DMA compression 확대(lossy 포함 IQ 평가), MIF/LLC 경로 절감이 1순위 lever",
+                 "CPU": "CPU 비중이 가장 큼 → SW task 최적화 · CPU 배치(uclamp/cpuset) what-if가 1순위 lever",
+                 "IP core": "IP core 비중이 가장 큼 → IP clock/DVFS level · IP mode(unit power) 조정이 1순위 lever"}[top]
+        optim.append([f"구성 CPU {share['CPU']:.0f}% · IP {share['IP core']:.0f}% · BW {share['BW']:.0f}%: {lever}.", "산출"])
+    saves = [(r["baseline_total_mw"] - r["power"]["total_mw"]) for r in ok
+             if r.get("baseline_total_mw") is not None and r["power"].get("total_mw") is not None]
+    if saves:
+        comp_n = sum(1 for r in ok if r.get("compression"))
+        optim.append([f"추천 조합(compression · DVFS) 적용 시 baseline 대비 평균 −{statistics.mean(saves):,.0f} mW "
+                      f"(최대 −{max(saves):,.0f} mW) · compression 사용 {comp_n}/{len(ok)} variant.", "산출"])
+    ids = {r["variant_id"] for r in rs}
+    best = [o for o in options if o["variant_id"] in ids and o.get("best")]
+    if best:
+        b = min(best, key=lambda o: o["best"]["delta_mw"])
+        avg = statistics.mean(o["best"]["delta_mw"] for o in best)
+        optim.append([f"Power option(IQ 평가 대상) {len(best)}개 variant에서 추가 절감 — 평균 {avg:+,.0f} mW, 최대 {b['best']['delta_mw']:+,.0f} mW "
+                      f"({' + '.join(b['best']['labels'])}, {b['variant_id'].replace('cam-rec-', '')}).", "산출"])
+    if cat == "highspeed":
+        optim.append(["고속 모드 전용 처리 경로(저해상도 NRT · RTA 간헐 실행) 정의 후 재탐색.", "가정 · 모델 밖"])
+    if not risk:
+        risk.append(["식별된 risk 없음 (이 snapshot 기준).", "산출"])
+    return {"review": review, "risk": risk, "mitigation": mitig or [["추가 조치 불필요.", "산출"]],
+            "optimize": optim or [["추가 최적화 후보 없음.", "산출"]]}
+
+
+def _headroom_ok(text: str) -> bool:
+    m = re.search(r"\(\+(\d+)%", text)
+    return bool(m and int(m.group(1)) >= 10)

@@ -10,7 +10,7 @@ import re
 from typing import Any
 
 _SW = re.compile(r"^(?P<stage>.+?): SW (?P<sw>[\d.]+) ms leaves no HW budget$")
-_RT = re.compile(r"^RT HW (?P<hw>[\d.]+) ms > 75% budget (?P<budget>[\d.]+) ms$")
+_RT = re.compile(r"^RT HW (?P<hw>[\d.]+) ms > (?P<pct>\d+)% budget (?P<budget>[\d.]+) ms$")
 _IV = re.compile(r"^(?P<which>preview|video) interval (?P<got>[\d.]+) ms != (?P<target>[\d.]+) ms$")
 _CLK_GROUP = re.compile(r"^(?P<nodes>[\w, ]+): 필요 clock (?P<req>[\d.]+) MHz > DVFS max (?P<max>[\d.]+) MHz$")
 _IP_MAX = re.compile(r"^(?P<node>\w+): required_clock (?P<req>[\d.]+)MHz exceeds ip max_clock (?P<max>[\d.]+)MHz$")
@@ -35,7 +35,7 @@ def explain(reason: str, period_ms: float | None = None) -> dict[str, str]:
     if m:
         hw, budget = float(m["hw"]), float(m["budget"])
         return {"code": "rt_budget", "raw": reason,
-                "text": f"RT HW {hw:.2f} ms > 75% 예산 {budget:.2f} ms (25% SW margin rule)",
+                "text": f"RT HW {hw:.2f} ms > {m['pct']}% 예산 {budget:.2f} ms ({100 - int(m['pct'])}% SW margin rule)",
                 "action": f"RT 경로 {hw - budget:.2f} ms 단축 — RT clock ×{hw / budget:.2f} 이상 또는 처리량(ppc) 증가"}
     m = _IV.match(reason)
     if m:
@@ -112,3 +112,82 @@ def first_text(reasons: list[str], fps: float | None) -> str:
 
 def summarize(ex: list[dict[str, Any]]) -> str:
     return " · ".join(e["text"] for e in ex)
+
+
+# ---------------------------------------------------------------- R3+: what to focus on, what to do
+_PRIORITY = ("sw_budget", "rt_budget", "ip_clock", "constraint", "no_case", "verify", "model", "interval", "other")
+_X = re.compile(r"×([\d.]+)")
+_NODES = re.compile(r"^([\w, ]+):")
+
+CAUSE_LABEL = {
+    "sw_budget": "SW 시간 병목 — NRT/Post SW가 frame 주기를 다 씀",
+    "rt_budget": "RT 경로 HW 시간 초과",
+    "ip_clock": "IP 처리량 병목 — 필요 clock > DVFS 최고",
+    "interval": "출력 간격 미달 (결과 지표)",
+    "constraint": "탐색 제약으로 해 없음",
+    "no_case": "만족 조합 없음",
+    "verify": "추천 조합 검증 불일치",
+    "model": "power 모델 계수 누락",
+    "other": "기타",
+}
+
+
+def _ratio(e: dict[str, str]) -> float | None:
+    m = _X.search(e.get("text", ""))
+    return float(m.group(1)) if m else None
+
+
+def diagnose(explained: list[dict[str, str]], fps: float | None) -> dict[str, Any]:
+    """Primary cause of a spec fail, how severe it is, what to review first and ranked optimisations.
+
+    ``explained`` = ``explain_all`` output (frozen in the report snapshot, so old reports work too).
+    """
+    if not explained:
+        return {"code": "other", "label": CAUSE_LABEL["other"], "severity": "—", "focus": "원인 미기록 — Timing Budget 화면에서 확인",
+                "actions": [], "ratio": None, "nodes": []}
+    ranked = sorted(explained, key=lambda e: _PRIORITY.index(e.get("code", "other")) if e.get("code") in _PRIORITY else 99)
+    p = ranked[0]
+    code = p.get("code", "other")
+    clocks = [e for e in explained if e.get("code") == "ip_clock"]
+    worst_clock = max((r for r in (_ratio(e) for e in clocks) if r), default=None)
+    nodes = sorted({n.strip() for e in clocks for n in ((_NODES.match(e["text"]) or [None, ""])[1] or "").split(",") if n.strip()})
+    period = 1000.0 / fps if fps else None
+    high_fps = bool(fps and fps >= 100)
+    actions: list[str] = []
+    if code == "sw_budget":
+        m = re.search(r"SW ([\d.]+) ms", p["text"])
+        sw = float(m.group(1)) if m else None
+        frames = int(sw // period) + 1 if sw and period else None
+        sev = f"SW {sw:.1f} ms = 주기 {period:.2f} ms의 {sw / period:.1f}배" if sw and period else "SW > 주기"
+        focus = ("NRT 경로 SW(RTA·EIS 등 runtime + latency)가 한 frame 주기 안에 끝나는 구조인지 — "
+                 + ("고속 recording은 1 frame = 1 period 가정 밖이므로 batch 처리 설계가 먼저" if high_fps else "SW 순차 실행 구간과 latency 비중"))
+        actions = [f"{frames}-frame batch (NRT를 {frames} frame 단위로 묶어 처리) 또는 SW pipeline 병렬화" if frames else "SW batch / 병렬화",
+                   "SW 병목 task(EIS·RTA)의 HW offload 또는 처리 축소 (예: 고속 모드에서 RTA 간헐 실행)",
+                   "CPU what-if로 병목 task를 상위 cluster에 고정했을 때 runtime 단축량 확인"]
+        if worst_clock:
+            actions.append(f"SW 해소 후에도 IP 처리량 ×{worst_clock:.2f} 부족 — 아래 IP 처리량 조치 병행")
+    elif code == "rt_budget":
+        r = _ratio(p) or None
+        sev = p["text"]
+        focus = "RT(OTF) 경로는 sensor readout에 동기 — RT IP clock·ppc와 sensor 출력 크기(binning/crop)"
+        actions = ["RT IP clock 상향 또는 ppc 증가", "sensor binning / bayer crop(bcrop)으로 RT 처리 화소 축소", "SW margin rule 재확인 (Timing Budget에서 margin 조정)"]
+        if r:
+            sev = f"RT HW 예산 대비 ×{r:.2f}"
+    elif code == "ip_clock":
+        x = worst_clock or 1.0
+        sev = f"처리량 ×{x:.2f} 부족" + (" (근소)" if x < 1.05 else " (중간)" if x < 1.3 else " (구조적)")
+        focus = (f"{', '.join(nodes[:6])}{' 외' if len(nodes) > 6 else ''}: 처리 화소/s(해상도 × fps) 대비 ppc × DVFS 최고 clock")
+        if x < 1.05:
+            actions = ["근소 초과 — 처리 화소 수 % 단위 축소로 해소: EIS margin 축소 · bcrop · pyramid L0 skip (Power option)",
+                       "DVFS 최고 level clock 소폭 상향 (OD level) 가능 여부 확인", "h-blank / sensor valid time 가정 재확인 (필요 clock 과대 여부)"]
+        elif x < 1.3:
+            actions = [f"처리량 ×{x:.2f}: 상위 DVFS level 추가 또는 ppc 증가 검토", "bcrop · EIS margin 축소로 처리 화소 축소", "동일 domain IP의 level 공유 영향 확인 (domain 분리 검토)"]
+        else:
+            actions = [f"구조적 부족 ×{x:.2f}: IP instance 병렬화 / ppc 상향 (차기 IP spec)", "처리 해상도 또는 fps 축소 (예: 고속 모드 전용 저해상도 경로)",
+                       "spec 요구 자체 재확인 (해당 scenario가 KPI 대상인지)"]
+    else:
+        sev = p["text"]
+        focus = p.get("action") or "—"
+        actions = [p["action"]] if p.get("action") and p["action"] != "—" else []
+    return {"code": code, "label": CAUSE_LABEL.get(code, code), "severity": sev, "focus": focus, "actions": actions,
+            "ratio": worst_clock, "nodes": nodes}

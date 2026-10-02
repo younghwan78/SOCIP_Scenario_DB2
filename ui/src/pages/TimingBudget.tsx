@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Ctx } from '../App'
 import { useAsync } from '../lib/route'
-import { fmt, timingApi, verdictChip, type EisMode, type Statistic, type TimingReport } from '../lib/timingBudget'
+import { SW_MARGINS, fmt, marginOf, marginOpts, pct0, timingApi, verdictChip, type EisMode, type Statistic, type TimingReport } from '../lib/timingBudget'
 import { Card, ClockChart, Gantt, Intervals, PowerBw, SlotBudget, WhatIf } from '../components/TimingCharts'
 import { ProvBadge } from '../components/Provenance'
 import { powerScope, type Prov } from '../lib/provenance'
@@ -15,15 +15,19 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
   const statistic = (ctx.params.stat === 'mean' || ctx.params.stat === 'min' ? ctx.params.stat : 'max') as Statistic
   const eis = (ctx.params.eis === 'on' || ctx.params.eis === 'off' ? ctx.params.eis : 'auto') as EisMode
   const scale = SCALES.includes(Number(ctx.params.scale)) ? Number(ctx.params.scale) : 1.0
+  const margin = marginOf(ctx.params.margin)
+  const [marginDraft, setMarginDraft] = useState(String(Math.round(margin * 100)))
+  useEffect(() => setMarginDraft(String(Math.round(margin * 100))), [margin])
+  const frames = [6, 12, 20].includes(Number(ctx.params.frames)) ? Number(ctx.params.frames) : 20
   const set = (k: string, v: string | undefined) => ctx.navigate(undefined, { [k]: v }, true)
   const sp = useSimProfiles(ctx.project, ctx.params.cfg)
   const cfg = sp.ref
 
-  const q = useAsync(() => (!sp.ready ? new Promise<never>(() => {}) : variant ? timingApi.variant(scenario, variant, { statistic, eis, runtime_scale: scale }, cfg) : Promise.reject(new Error('variant를 선택하세요 (Ctrl K)'))), [scenario, variant, statistic, eis, scale, cfg, sp.ready])
+  const q = useAsync(() => (!sp.ready ? new Promise<never>(() => {}) : variant ? timingApi.variant(scenario, variant, { statistic, eis, runtime_scale: scale, timeline_frames: frames, ...marginOpts(margin) }, cfg) : Promise.reject(new Error('variant를 선택하세요 (Ctrl K)'))), [scenario, variant, statistic, eis, scale, cfg, sp.ready, margin, frames])
   // what-if (24 sims) starts after the main report so the page never holds two simulation slots at once
   const [mainReady, setMainReady] = useState(false)
   useEffect(() => { if (q.data) setMainReady(true) }, [q.data])
-  const wq = useAsync(() => (variant && mainReady ? timingApi.variant(scenario, variant, { statistic: 'max', eis: 'auto', runtime_scale: 1, include_whatif: true }, cfg) : Promise.resolve(null)), [scenario, variant, mainReady, cfg])
+  const wq = useAsync(() => (variant && mainReady ? timingApi.variant(scenario, variant, { statistic: 'max', eis: 'auto', runtime_scale: 1, include_whatif: true, ...marginOpts(margin) }, cfg) : Promise.resolve(null)), [scenario, variant, mainReady, cfg, margin])
   const r = q.data?.report
   const whatif = wq.data?.report.whatif ?? []
 
@@ -33,6 +37,16 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
         <Seg label="SW 통계" value={statistic} options={[['max', 'max'], ['mean', 'mean']]} onPick={(v) => set('stat', v === 'max' ? undefined : v)} />
         <Seg label="EIS" value={eis} options={[['auto', `auto${r ? (r.eis.auto ? ' (ON)' : ' (OFF)') : ''}`], ['on', 'ON'], ['off', 'OFF']]} onPick={(v) => set('eis', v === 'auto' ? undefined : v)} />
         <Seg label="차기 SW 증가" value={String(scale)} options={SCALES.map((s) => [String(s), `×${s.toFixed(1)}`])} onPick={(v) => set('scale', v === '1' ? undefined : v)} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} title="RT · Output HW는 frame period의 (1 − margin) 안에 끝나야 함. NRT · Post 필요 clock의 rule 기준선도 같은 margin을 사용. 기본 25%">
+          <span className="muted" style={{ fontSize: 13 }}>SW margin</span>
+          <div className="seg" role="group" aria-label="SW margin">
+            {SW_MARGINS.map((m) => <button key={m} className={Math.abs(margin - m) < 1e-9 ? 'on' : ''} onClick={() => set('margin', Math.abs(m - 0.25) < 1e-9 ? undefined : String(Math.round(m * 100)))}>{pct0(m)}{Math.abs(m - 0.25) < 1e-9 ? ' (기본)' : ''}</button>)}
+          </div>
+          <input className="input" type="number" min={5} max={60} step={1} value={marginDraft} aria-label="SW margin %" style={{ width: 64, padding: '5px 6px' }}
+            onChange={(e) => setMarginDraft(e.target.value)}
+            onBlur={() => { const v = Math.round(Number(marginDraft)); set('margin', Number.isFinite(v) && v >= 5 && v <= 60 && v !== 25 ? String(v) : undefined) }}
+            onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} /><span className="faint" style={{ fontSize: 12 }}>%</span>
+        </div>
         <ProfileSelect profiles={sp.profiles} value={cfg} onChange={(v) => set('cfg', v)} />
         <span className="grow" />
         {r && <span className={`badge ${verdictChip(r.verdict.status).cls}`} title={r.verdict.reasons.join('\n')}>{verdictChip(r.verdict.status).label}</span>}
@@ -40,16 +54,18 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
           onClick={() => { const d = document.getElementById('tb-warnings') as HTMLDetailsElement | null; if (d) { d.open = true; d.scrollIntoView({ behavior: 'smooth', block: 'center' }) } }}>경고 {r.warnings.length}</button>}
         {r && <span className="chip">{fmt(r.fps, 0)} fps · P {fmt(r.period_ms, 3)} ms</span>}
         {r && <span className="chip" title={r.dvfs.tables.join(', ')}>DVFS {r.dvfs.applied ? r.dvfs.table_ref ?? 'custom' : '미연결'}</span>}
-        <button className="btn" onClick={() => ctx.navigate('timing-fleet', { cfg: ctx.params.cfg })}>전체 scenario →</button>
+        <button className="btn" onClick={() => ctx.navigate('timing-fleet', { cfg: ctx.params.cfg, margin: ctx.params.margin })}>전체 scenario →</button>
       </div>
       {q.error && <div className="err">{q.error}</div>}
       {q.loading && !r && <div className="empty">계산 중…</div>}
-      {r && <Body r={r} cfg={q.data?.config_profile_ref ?? null} ctx={ctx} whatif={whatif} whatLoading={wq.loading} current={{ statistic, eis: r.eis.on, scale }} />}
+      {r && <Body r={r} cfg={q.data?.config_profile_ref ?? null} ctx={ctx} whatif={whatif} whatLoading={wq.loading} current={{ statistic, eis: r.eis.on, scale }} margin={r.sw_margin?.rt ?? margin}
+        frames={frames} setFrames={(n) => set('frames', n === 20 ? undefined : String(n))} />}
     </div>
   )
 }
 
-function Body({ r, cfg, whatif, whatLoading, current }: { r: TimingReport; cfg: string | null; ctx: Ctx; whatif: NonNullable<TimingReport['whatif']>; whatLoading: boolean; current: { statistic: string; eis: boolean; scale: number } }) {
+function Body({ r, cfg, whatif, whatLoading, current, margin, frames, setFrames }: { r: TimingReport; cfg: string | null; ctx: Ctx; whatif: NonNullable<TimingReport['whatif']>; whatLoading: boolean; current: { statistic: string; eis: boolean; scale: number }
+  margin: number; frames: number; setFrames: (n: number) => void }) {
   const st = useMemo(() => Object.fromEntries(r.stages.map((s) => [s.id, s])), [r])
   const nrtDriver = useMemo(() => {
     const rows = r.ips.filter((i) => i.stage === 'nrt' && i.rule_clock_mhz)
@@ -67,7 +83,7 @@ function Body({ r, cfg, whatif, whatLoading, current }: { r: TimingReport; cfg: 
     ],
   }
   const kpis: { label: string; value: string; unit: string; note: string; bad: boolean; prov?: Prov }[] = [
-    { label: 'RT HW / 75% 예산', value: `${fmt(st.rt.hw_ms, 2)}`, unit: `/ ${fmt(st.rt.budget_ms, 2)} ms`, note: 'SW margin 25% rule', bad: st.rt.hw_ms > st.rt.budget_ms },
+    { label: `RT HW / ${pct0(1 - margin)} 예산`, value: `${fmt(st.rt.hw_ms, 2)}`, unit: `/ ${fmt(st.rt.budget_ms, 2)} ms`, note: `SW margin ${pct0(margin)} rule${Math.abs(margin - 0.25) > 1e-9 ? ' (기본 25%에서 변경)' : ''}`, bad: st.rt.hw_ms > st.rt.budget_ms },
     { label: 'NRT SW (runtime+latency)', value: fmt(st.nrt.sw_ms, 2), unit: 'ms', note: `HW 예산 ${fmt(st.nrt.budget_ms, 2)} ms`, bad: !st.nrt.feasible },
     { label: 'Post SW (EIS 등)', value: fmt(st.post.sw_ms, 2), unit: 'ms', note: r.eis.on ? 'EIS ON' : 'EIS OFF', bad: !st.post.feasible },
     { label: `NRT clock${nrtDriver ? ` · ${nrtDriver.node.toUpperCase()}` : ''}`, value: fmt(nrtDriver?.set_clock_mhz, 0), unit: 'MHz', note: nrtDriver ? `rule ${fmt(nrtDriver.rule_clock_mhz, 0)} MHz · ×${fmt(nrtDriver.set_clock_mhz / (nrtDriver.rule_clock_mhz ?? 1), 2)}${nrtDriver.dvfs_level !== null ? ` · L${nrtDriver.dvfs_level}` : ''}` : '—', bad: false },
@@ -86,13 +102,14 @@ function Body({ r, cfg, whatif, whatLoading, current }: { r: TimingReport; cfg: 
     </section>
     {r.verdict.reasons.length > 0 && <div className="err" style={{ fontSize: 13 }}>{r.verdict.reasons.slice(0, 4).map((x) => <div key={x}>{x}</div>)}</div>}
     <div className="tb-grid">
-      <Card id="slot" title="① 1 frame 예산 — stage별 slot" note="stage는 memory로 pipeline · 각 stage가 1 frame 안에 끝나야 함" defaultWide><SlotBudget report={r} /></Card>
-      <Card id="clock" title="⑤ IP별 필요 clock · DVFS level" note="RT·Output 25% rule, NRT·Post는 SW 반영 예산 · domain 정렬 반영"><ClockChart ips={r.ips} dvfsApplied={r.dvfs.applied} /></Card>
+      <Card id="slot" title="① 1 frame 예산 — stage별 slot" note="stage는 memory로 pipeline · 각 stage가 1 frame 안에 끝나야 함" defaultWide><SlotBudget report={r} margin={margin} /></Card>
+      <Card id="clock" title="⑤ IP별 필요 clock · DVFS level" note={`DVFS domain별 묶음 · domain level = 최고 요구 IP · RT·Output ${pct0(margin)} rule, NRT·Post는 SW 반영 예산`}><ClockChart ips={r.ips} dvfsApplied={r.dvfs.applied} margin={margin} /></Card>
       <Card id="power" title="⑥ 예상 Power · BW" note="CPU(SW) / HW(IP별) / BW(HW·SW) 비중"><PowerBw report={r} /></Card>
-      <Card id="gantt" title="② Pipeline timeline" note={`${r.timeline.length ? Math.max(...r.timeline.map((t) => t.frame)) + 1 : 0} frames · 명도 = frame`} defaultWide><Gantt report={r} /></Card>
+      <Card id="gantt" title="② Pipeline timeline" note={`${r.timeline.length ? Math.max(...r.timeline.map((t) => t.frame)) + 1 : 0} frames · 점선 = ${fmt(r.fps, 0)} fps frame 경계 (${fmt(r.period_ms, 2)} ms)`} defaultWide
+        actions={<div className="seg sm" role="group" aria-label="timeline frame 수">{[6, 12, 20].map((n) => <button key={n} className={frames === n ? 'on' : ''} onClick={() => setFrames(n)}>{n} frame</button>)}</div>}><Gantt report={r} /></Card>
       <Card id="interval" title="③ 출력 frame 간격 · pipeline latency" note="합격 기준 = 간격 · latency는 참고"><Intervals report={r} /></Card>
       <Card id="whatif" title="④ 차기 SW 증가 → NRT 필요 clock" note="NRT 예산 = period − SW(runtime+latency)">
-        {whatLoading && !whatif.length ? <div className="empty">what-if 계산 중…</div> : <WhatIf rows={whatif} current={current} />}
+        {whatLoading && !whatif.length ? <div className="empty">what-if 계산 중…</div> : <WhatIf rows={whatif} current={current} margin={margin} />}
       </Card>
     </div>
     {r.warnings.length > 0 && <details id="tb-warnings" className="panel" style={{ padding: '8px 12px', fontSize: 12 }}><summary>경고 {r.warnings.length}</summary>{r.warnings.map((w) => <div key={w} className="faint">{w}</div>)}</details>}

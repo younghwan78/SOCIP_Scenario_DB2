@@ -10,7 +10,7 @@ import { sequenceLayout } from '../lib/sequence'
 import { stageTimings, type StageTiming } from '../lib/cadence'
 import { modeNotes } from '../lib/modes'
 import { GraphView } from '../components/GraphView'
-import { TimelineView } from '../components/TimelineView'
+import { FrameColorLegend, TimelineView } from '../components/TimelineView'
 import { IpInternalView } from '../components/IpInternalView'
 import { CadenceView } from '../components/CadenceView'
 import { BufferTooltip, IpTooltip } from '../components/NodeTooltip'
@@ -251,8 +251,9 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
             </select>}
             <span className="grow" />
             {tview === 'trace' && <>
-              <select value={colorBy} onChange={(e) => setColorBy(e.target.value as 'group' | 'frame')} aria-label="색 기준" title="frame 색 = RT(N+1)과 NRT(N) 중첩이 보임">
-                <option value="frame">색: frame</option><option value="group">색: stage</option></select>
+              {colorBy === 'frame' && <FrameColorLegend />}
+              <select value={colorBy} onChange={(e) => setColorBy(e.target.value as 'group' | 'frame')} aria-label="색 기준" title="frame × 분류: 같은 frame = 같은 색 계열, RT·NRT·M2M·SW = 명도·무늬로 구분 (RT(N+1)과 NRT(N) 중첩이 보임)">
+                <option value="frame">색: frame × 분류</option><option value="group">색: stage</option></select>
               <label className="muted" style={{ fontSize: 12, display: 'flex', gap: 5, whiteSpace: 'nowrap' }}><input type="checkbox" checked={showFlows} onChange={(e) => setShowFlows(e.target.checked)} />Flow</label></>}
           </div>
           <div className="pane-body">
