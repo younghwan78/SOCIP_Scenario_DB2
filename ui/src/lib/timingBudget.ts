@@ -79,10 +79,12 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
 }
 
 export const timingApi = {
-  variant: (scenarioId: string, variantId: string, options: TimingOptions) =>
-    postJson<{ report: TimingReport; dvfs_table_ref: string | null }>('/timing-budget/variant', { scenario_id: scenarioId, variant_id: variantId, options }),
-  fleet: (scenarioId: string, options: Omit<TimingOptions, 'include_whatif'>) =>
-    postJson<{ rows: FleetRow[]; errors: VariantFailure[]; dvfs_table_ref: string | null }>('/timing-budget/fleet', { scenario_id: scenarioId, options }),
+  variant: (scenarioId: string, variantId: string, options: TimingOptions, configProfileRef?: string | null) =>
+    postJson<{ report: TimingReport; dvfs_table_ref: string | null; config_profile_ref?: string | null }>('/timing-budget/variant',
+      { scenario_id: scenarioId, variant_id: variantId, options, config_profile_ref: configProfileRef ?? undefined }),
+  fleet: (scenarioId: string, options: Omit<TimingOptions, 'include_whatif'>, configProfileRef?: string | null) =>
+    postJson<{ rows: FleetRow[]; errors: VariantFailure[]; dvfs_table_ref: string | null; config_profile_ref?: string | null }>('/timing-budget/fleet',
+      { scenario_id: scenarioId, options, config_profile_ref: configProfileRef ?? undefined }),
 }
 
 // ---------------------------------------------------------------- helpers

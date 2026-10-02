@@ -130,11 +130,12 @@ export const DEFAULT_RUN: RunOptions = {
 }
 
 /** Request body for POST /arch/exploration/runs. */
-export function runBody(scenarioIds: string[], title: string, scenarioType: string, o: RunOptions) {
+export function runBody(scenarioIds: string[], title: string, scenarioType: string, o: RunOptions, configProfileRef?: string | null) {
   const scales = [...new Set([...o.runtime_scales, o.objective_scale])].sort((a, b) => a - b)
   const stats = [...new Set([...o.statistics, o.objective_statistic])]
   return {
     title: title || undefined, scenario_type: scenarioType || undefined, scenario_ids: scenarioIds,
+    config_profile_ref: configProfileRef ?? undefined,
     spec: {
       axes: { statistics: stats, runtime_scales: scales, dvfs_headroom_levels: o.dvfs_headroom_levels,
         compression: { enabled: o.modes.length > 0 && o.max_buffers > 0, modes: o.modes.length ? o.modes : ['lossy'], max_buffers: o.max_buffers },

@@ -6,6 +6,19 @@ export interface CpuInputs {
   profiles: { id: string; scenario_ref: string | null; variant_ref: string | null; project_ref: string | null; tasks?: { task: string; cluster: string; threads?: number | null }[] }[]
 }
 
+type Topology = CpuInputs['topologies'][number]
+type Profile = CpuInputs['profiles'][number]
+/** Share of the profile's measured clusters that exist in the topology (1 = all tasks map). */
+export function clusterCover(t: Topology, p: Profile | undefined): number {
+  const need = [...new Set((p?.tasks ?? []).map((x) => x.cluster).filter(Boolean))]
+  if (!need.length) return 0
+  return need.filter((c) => t.clusters.includes(c)).length / need.length
+}
+/** Topologies matching the profile's clusters first, then newest version. */
+export function rankTopologies(list: Topology[], p: Profile | undefined): Topology[] {
+  return [...list].sort((a, b) => clusterCover(b, p) - clusterCover(a, p) || b.version - a.version)
+}
+
 export interface CpuCluster {
   mhz: number; mv: number; util: number; busy_ms: number; dynamic_mw: number; static_mw: number; total_mw: number
   tasks_ms: Record<string, number>; feasible?: boolean

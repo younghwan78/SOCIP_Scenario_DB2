@@ -3,7 +3,7 @@ import type { Ctx } from '../App'
 import { useAsync } from '../lib/route'
 import { fmt } from '../lib/timingBudget'
 import {
-  caseParts, cpuApi, freqChanges, knobHow, knobLabel, movedLabel, parseLevels,
+  caseParts, clusterCover, cpuApi, freqChanges, knobHow, knobLabel, movedLabel, parseLevels, rankTopologies,
   type CpuInputs, type CpuSweep, type CpuSweepRequest, type Knob, type SweepCase, type SweepRangeCluster,
 } from '../lib/cpu'
 import { Card } from '../components/TimingCharts'
@@ -58,8 +58,14 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
     if (!inputs.data) return
     // U10: open on a usable profile — task cycles present, current variant/scenario/project first
     if (!profile && inputs.data.profiles[0]) setProfile(rankProfiles(inputs.data.profiles, ctx)[0].id)
-    if (!target && inputs.data.topologies[0]) setTarget(inputs.data.topologies[0].id)
   }, [inputs.data]) // eslint-disable-line react-hooks/exhaustive-deps
+  // default topology = the one whose clusters cover the profile's measured clusters (then newest version);
+  // re-picked on profile change until the user chooses a topology explicitly
+  const targetPicked = useRef(false)
+  useEffect(() => {
+    if (!inputs.data?.topologies.length || targetPicked.current) return
+    setTarget(rankTopologies(inputs.data.topologies, prof)[0].id)
+  }, [inputs.data, prof]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const request = (taskEdits = edits): CpuSweepRequest => {
     const pick = (k: 'budget' | 'growth' | 'threads') => Object.fromEntries(Object.entries(taskEdits)
@@ -155,7 +161,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
             <label className="cpu-f"><span className="faint">측정 profile</span>
               <select value={profile} onChange={(e) => setProfile(e.target.value)}>{rankProfiles(inputs.data?.profiles ?? [], ctx).map((p) => <option key={p.id} value={p.id}>{p.variant_ref ?? p.id} · {p.id}{p.tasks?.length ? '' : ' (task 정보 없음)'}</option>)}</select></label>
             <label className="cpu-f"><span className="faint">적용할 SoC CPU 구성</span>
-              <select value={target} onChange={(e) => setTarget(e.target.value)}>{(inputs.data?.topologies ?? []).map((t) => <option key={t.id} value={t.id}>{t.soc_ref} · {sortClusters(t.clusters).join(' / ')}</option>)}</select></label>
+              <select value={target} onChange={(e) => { targetPicked.current = true; setTarget(e.target.value) }}>{rankTopologies(inputs.data?.topologies ?? [], prof).map((t) => <option key={t.id} value={t.id}>{t.soc_ref} · v{t.version} · {sortClusters(t.clusters).join(' / ')}{prof?.tasks?.length && clusterCover(t, prof) < 1 ? ' (측정 cluster 불일치)' : ''}</option>)}</select></label>
             <label className="cpu-f" title="다른 과제에서 측정한 profile이면 측정한 SoC의 CPU 구성을 고르세요 (core type으로 대응)"><span className="faint">profile을 측정한 SoC</span>
               <select value={base} onChange={(e) => setBase(e.target.value)}><option value="">적용할 SoC와 같음</option>{(inputs.data?.topologies ?? []).map((t) => <option key={t.id} value={t.id}>{t.soc_ref} · {t.id}</option>)}</select></label>
             <div className="cpu-f"><span className="faint">비교 기준 (★)</span>

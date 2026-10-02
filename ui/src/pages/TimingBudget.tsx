@@ -5,6 +5,8 @@ import { fmt, timingApi, verdictChip, type EisMode, type Statistic, type TimingR
 import { Card, ClockChart, Gantt, Intervals, PowerBw, SlotBudget, WhatIf } from '../components/TimingCharts'
 import { ProvBadge } from '../components/Provenance'
 import { powerScope, type Prov } from '../lib/provenance'
+import { ProfileSelect } from '../components/ProfileSelect'
+import { useSimProfiles } from '../lib/simProfile'
 
 const SCALES = [1.0, 1.1, 1.2, 1.3, 1.4, 1.5]
 
@@ -14,12 +16,14 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
   const eis = (ctx.params.eis === 'on' || ctx.params.eis === 'off' ? ctx.params.eis : 'auto') as EisMode
   const scale = SCALES.includes(Number(ctx.params.scale)) ? Number(ctx.params.scale) : 1.0
   const set = (k: string, v: string | undefined) => ctx.navigate(undefined, { [k]: v }, true)
+  const sp = useSimProfiles(ctx.project, ctx.params.cfg)
+  const cfg = sp.ref
 
-  const q = useAsync(() => (variant ? timingApi.variant(scenario, variant, { statistic, eis, runtime_scale: scale }) : Promise.reject(new Error('variant를 선택하세요 (Ctrl K)'))), [scenario, variant, statistic, eis, scale])
+  const q = useAsync(() => (!sp.ready ? new Promise<never>(() => {}) : variant ? timingApi.variant(scenario, variant, { statistic, eis, runtime_scale: scale }, cfg) : Promise.reject(new Error('variant를 선택하세요 (Ctrl K)'))), [scenario, variant, statistic, eis, scale, cfg, sp.ready])
   // what-if (24 sims) starts after the main report so the page never holds two simulation slots at once
   const [mainReady, setMainReady] = useState(false)
   useEffect(() => { if (q.data) setMainReady(true) }, [q.data])
-  const wq = useAsync(() => (variant && mainReady ? timingApi.variant(scenario, variant, { statistic: 'max', eis: 'auto', runtime_scale: 1, include_whatif: true }) : Promise.resolve(null)), [scenario, variant, mainReady])
+  const wq = useAsync(() => (variant && mainReady ? timingApi.variant(scenario, variant, { statistic: 'max', eis: 'auto', runtime_scale: 1, include_whatif: true }, cfg) : Promise.resolve(null)), [scenario, variant, mainReady, cfg])
   const r = q.data?.report
   const whatif = wq.data?.report.whatif ?? []
 
@@ -29,22 +33,23 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
         <Seg label="SW 통계" value={statistic} options={[['max', 'max'], ['mean', 'mean']]} onPick={(v) => set('stat', v === 'max' ? undefined : v)} />
         <Seg label="EIS" value={eis} options={[['auto', `auto${r ? (r.eis.auto ? ' (ON)' : ' (OFF)') : ''}`], ['on', 'ON'], ['off', 'OFF']]} onPick={(v) => set('eis', v === 'auto' ? undefined : v)} />
         <Seg label="차기 SW 증가" value={String(scale)} options={SCALES.map((s) => [String(s), `×${s.toFixed(1)}`])} onPick={(v) => set('scale', v === '1' ? undefined : v)} />
+        <ProfileSelect profiles={sp.profiles} value={cfg} onChange={(v) => set('cfg', v)} />
         <span className="grow" />
         {r && <span className={`badge ${verdictChip(r.verdict.status).cls}`} title={r.verdict.reasons.join('\n')}>{verdictChip(r.verdict.status).label}</span>}
         {r && r.warnings.length > 0 && <button className="badge v-warn" style={{ border: 0, cursor: 'pointer' }} title={r.warnings.slice(0, 8).join('\n')}
           onClick={() => { const d = document.getElementById('tb-warnings') as HTMLDetailsElement | null; if (d) { d.open = true; d.scrollIntoView({ behavior: 'smooth', block: 'center' }) } }}>경고 {r.warnings.length}</button>}
         {r && <span className="chip">{fmt(r.fps, 0)} fps · P {fmt(r.period_ms, 3)} ms</span>}
         {r && <span className="chip" title={r.dvfs.tables.join(', ')}>DVFS {r.dvfs.applied ? r.dvfs.table_ref ?? 'custom' : '미연결'}</span>}
-        <button className="btn" onClick={() => ctx.navigate('timing-fleet', {})}>전체 scenario →</button>
+        <button className="btn" onClick={() => ctx.navigate('timing-fleet', { cfg: ctx.params.cfg })}>전체 scenario →</button>
       </div>
       {q.error && <div className="err">{q.error}</div>}
       {q.loading && !r && <div className="empty">계산 중…</div>}
-      {r && <Body r={r} ctx={ctx} whatif={whatif} whatLoading={wq.loading} current={{ statistic, eis: r.eis.on, scale }} />}
+      {r && <Body r={r} cfg={q.data?.config_profile_ref ?? null} ctx={ctx} whatif={whatif} whatLoading={wq.loading} current={{ statistic, eis: r.eis.on, scale }} />}
     </div>
   )
 }
 
-function Body({ r, whatif, whatLoading, current }: { r: TimingReport; ctx: Ctx; whatif: NonNullable<TimingReport['whatif']>; whatLoading: boolean; current: { statistic: string; eis: boolean; scale: number } }) {
+function Body({ r, cfg, whatif, whatLoading, current }: { r: TimingReport; cfg: string | null; ctx: Ctx; whatif: NonNullable<TimingReport['whatif']>; whatLoading: boolean; current: { statistic: string; eis: boolean; scale: number } }) {
   const st = useMemo(() => Object.fromEntries(r.stages.map((s) => [s.id, s])), [r])
   const nrtDriver = useMemo(() => {
     const rows = r.ips.filter((i) => i.stage === 'nrt' && i.rule_clock_mhz)
@@ -54,6 +59,7 @@ function Body({ r, whatif, whatLoading, current }: { r: TimingReport; ctx: Ctx; 
   const prov: Prov = {
     kind: 'recalc', engine: 'Timing Budget (analytic)', scope: powerScope({ cpu: r.power.cpu_mw, hw: r.power.hw_mw, bw: r.power.bw_mw }),
     dvfs: r.dvfs.applied ? r.dvfs.table_ref : null,
+    rev: cfg ? `profile ${cfg}` : 'profile 없음 (코드 기본값)',
     notes: [
       `CPU 가정: CL${r.power.cpu_model.cluster} ${fmt(r.power.cpu_model.freq_mhz, 0)} MHz ${fmt(r.power.cpu_model.volt_v, 2)} V (${r.power.cpu_model.source})`,
       ...(r.power.zero_power_ips.length ? [`unit_power=0: ${r.power.zero_power_ips.join(', ')}`] : []),

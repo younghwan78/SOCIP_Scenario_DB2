@@ -7,13 +7,16 @@ import { DataTable, type Column } from '../components/DataTable'
 import { SW_COLOR } from '../lib/timingBudget'
 import { VariantFailures } from '../components/VariantFailures'
 import { ProvBadge } from '../components/Provenance'
+import { ProfileSelect } from '../components/ProfileSelect'
+import { useSimProfiles } from '../lib/simProfile'
 import { ISSUE_LABEL, ISSUE_ORDER, issueCounts, verdictIssues, type IssueCode } from '../lib/provenance'
 
 type Filter = 'all' | 'ok' | 'clock_up' | 'fail'
 
 export function TimingFleetPage({ ctx }: { ctx: Ctx }) {
   const statistic = (ctx.params.stat === 'mean' ? 'mean' : 'max') as Statistic
-  const q = useAsync(() => timingApi.fleet(ctx.scenario, { statistic, eis: 'auto', runtime_scale: 1 }), [ctx.scenario, statistic])
+  const sp = useSimProfiles(ctx.project, ctx.params.cfg)
+  const q = useAsync(() => (sp.ready ? timingApi.fleet(ctx.scenario, { statistic, eis: 'auto', runtime_scale: 1 }, sp.ref) : new Promise<never>(() => {})), [ctx.scenario, statistic, sp.ref, sp.ready])
   const [filter, setFilter] = useState<Filter>('all')
   const [showAll, setShowAll] = useState(false)
   const rows = useMemo(() => q.data?.rows ?? [], [q.data])
@@ -26,7 +29,7 @@ export function TimingFleetPage({ ctx }: { ctx: Ctx }) {
     rows.forEach((r) => { c[r.verdict.status] = (c[r.verdict.status] ?? 0) + 1 })
     return c
   }, [rows])
-  const open = (v: string) => ctx.navigate('timing', { variant: v, stat: statistic === 'max' ? undefined : statistic })
+  const open = (v: string) => ctx.navigate('timing', { variant: v, stat: statistic === 'max' ? undefined : statistic, cfg: ctx.params.cfg })
 
   const cols: Column<FleetRow>[] = [
     { key: 'v', label: 'Variant', width: 220, sticky: true, sort: (r) => r.variant_id, render: (r) => <span className="mono">{r.variant_id.replace(/^cam-rec-/, '')}</span> },
@@ -64,8 +67,9 @@ export function TimingFleetPage({ ctx }: { ctx: Ctx }) {
             {ISSUE_ORDER.filter((c) => issueN[c] > 0).map((c) => <button key={c} className={issue === c ? 'on' : ''} onClick={() => setIssue(issue === c ? null : c)}>{ISSUE_LABEL[c]} {issueN[c]}</button>)}
           </div>
         </>}
+        <ProfileSelect profiles={sp.profiles} value={sp.ref} onChange={(v) => ctx.navigate(undefined, { cfg: v }, true)} />
         <span className="grow" />
-        <ProvBadge prov={{ kind: 'recalc', engine: 'Timing Budget (analytic)', scope: 'CPU + IP + BW', dvfs: q.data?.dvfs_table_ref ?? null, notes: ['표의 Power·Latency는 현재 조건으로 즉석 계산 — 등록 예측과 다를 수 있음'] }} />
+        <ProvBadge prov={{ kind: 'recalc', engine: 'Timing Budget (analytic)', scope: 'CPU + IP + BW', dvfs: q.data?.dvfs_table_ref ?? null, rev: sp.ref ? `profile ${sp.ref}` : 'profile 없음 (코드 기본값)', notes: ['표의 Power·Latency는 현재 조건으로 즉석 계산 — 등록 예측과 다를 수 있음'] }} />
         {q.data && <span className="chip">DVFS {q.data.dvfs_table_ref ?? '미연결'}</span>}
       </div>
       {q.error && <div className="err">{q.error}</div>}

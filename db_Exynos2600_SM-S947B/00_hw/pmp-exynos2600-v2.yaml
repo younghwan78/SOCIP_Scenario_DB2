@@ -1,0 +1,178 @@
+# SYNTHETIC Exynos2600 power model params v2 (off-site main target): enables CPU what-if, v2-vf, mif-linear.
+id: pmp-exynos2600-v2
+schema_version: '2.2'
+kind: power_model_params
+soc_ref: soc-exynos2600
+version: 2
+status: draft
+description: 'Exynos2600 off-site full-feature params: CPU topology (DSU + MID_LF x3 x2 + MID_HF x3 + BIG), v2-vf IP model,
+  mif-linear BW model. ALL NUMBERS SYNTHETIC — for flow verification outside the company.'
+ip_model: v2-vf
+ref_voltage_mv: 710.0
+ref_fps: 30.0
+ip_clock_power_fraction: 0.3
+bw_model: mif-linear
+bw:
+  mw_per_gbps: 50.0
+  llc_hit_scale: 1.0
+  e_read_mw_per_gbps: 50.0
+  e_write_mw_per_gbps: 80.0
+  governor_util: 0.6
+  mif_opps:
+  - mhz: 421
+    base_mw: 25
+    capacity_mbs: 3000
+  - mhz: 845
+    base_mw: 40
+    capacity_mbs: 6000
+  - mhz: 1539
+    base_mw: 90
+    capacity_mbs: 12000
+  - mhz: 2730
+    base_mw: 150
+    capacity_mbs: 21000
+  qos_lock_mhz_by_dvfs_sn: {}
+cpu:
+  clusters:
+  - name: MID_LF0
+    core_type: MID_LF
+    cores: 3
+    cpus:
+    - 0
+    - 1
+    - 2
+    dvfs_domain: CPUCL_MID_LF0
+    rail: BUCK_MID_LF0
+    ipc_rel: 0.8
+    opps:
+    - mhz: 400.0
+      mv: 600.0
+      mw_per_core: 20.0
+    - mhz: 1000.0
+      mv: 650.0
+      mw_per_core: 60.0
+    - mhz: 1600.0
+      mv: 720.0
+      mw_per_core: 130.0
+    - mhz: 2000.0
+      mv: 800.0
+      mw_per_core: 210.0
+    leakage:
+      mw_per_core_at_ref: 8.0
+      ref_mv: 800.0
+      exponent: 2.5
+  - name: MID_LF1
+    core_type: MID_LF
+    cores: 3
+    cpus:
+    - 3
+    - 4
+    - 5
+    dvfs_domain: CPUCL_MID_LF1
+    rail: BUCK_MID_LF1
+    ipc_rel: 0.8
+    opps:
+    - mhz: 400.0
+      mv: 600.0
+      mw_per_core: 20.0
+    - mhz: 1000.0
+      mv: 650.0
+      mw_per_core: 60.0
+    - mhz: 1600.0
+      mv: 720.0
+      mw_per_core: 130.0
+    - mhz: 2000.0
+      mv: 800.0
+      mw_per_core: 210.0
+    leakage:
+      mw_per_core_at_ref: 8.0
+      ref_mv: 800.0
+      exponent: 2.5
+  - name: MID_HF
+    core_type: MID_HF
+    cores: 3
+    cpus:
+    - 6
+    - 7
+    - 8
+    dvfs_domain: CPUCL_MID_HF
+    rail: BUCK_MID_HF
+    ipc_rel: 1.0
+    opps:
+    - mhz: 600.0
+      mv: 620.0
+      mw_per_core: 45.0
+    - mhz: 1200.0
+      mv: 680.0
+      mw_per_core: 120.0
+    - mhz: 2000.0
+      mv: 780.0
+      mw_per_core: 260.0
+    - mhz: 2600.0
+      mv: 880.0
+      mw_per_core: 420.0
+    leakage:
+      mw_per_core_at_ref: 15.0
+      ref_mv: 800.0
+      exponent: 2.5
+  - name: BIG
+    core_type: BIG
+    cores: 1
+    cpus:
+    - 9
+    dvfs_domain: CPUCL_BIG
+    rail: BUCK_BIG
+    ipc_rel: 1.3
+    opps:
+    - mhz: 1000.0
+      mv: 660.0
+      mw_per_core: 180.0
+    - mhz: 2000.0
+      mv: 760.0
+      mw_per_core: 480.0
+    - mhz: 3000.0
+      mv: 880.0
+      mw_per_core: 950.0
+    - mhz: 3600.0
+      mv: 980.0
+      mw_per_core: 1400.0
+    leakage:
+      mw_per_core_at_ref: 45.0
+      ref_mv: 800.0
+      exponent: 2.5
+  default_cluster: 1
+  freq_mhz: 2000.0
+  volt_v: 0.8
+  dsu:
+    name: DSU
+    rail: BUCK_DSU
+    opps:
+    - mhz: 400.0
+      mv: 600.0
+      mw_per_core: 15.0
+    - mhz: 900.0
+      mv: 680.0
+      mw_per_core: 40.0
+    - mhz: 1500.0
+      mv: 780.0
+      mw_per_core: 90.0
+    leakage:
+      mw_per_core_at_ref: 10.0
+      ref_mv: 800.0
+      exponent: 2.5
+  scheduler:
+    model: eas
+    freq_margin: 1.25
+    fits_margin: 1.25
+    capacity: {}
+    energy_includes_static: false
+    task_policy:
+      post_irta:
+        prefer_idle: true
+    source: SYNTHETIC example - replace with the device's EAS / governor tunables
+  source: SYNTHETIC example - replace opps/leakage with the in-house EM table and rail names
+calibration:
+  source_evidence: []
+  factor_by_ip: {}
+notes: SYNTHETIC. CPU topology from examples/cpu-topology/pmp-exynos2600-cpu-example.yaml; MIF levels / energies are placeholders.
+  Opt in with sim config profile simcfg-proj-sm-s947b-v2 (or config.power_params_ref).

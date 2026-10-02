@@ -11,6 +11,8 @@ import { AxisSpread, BufferSavings, CompositionBars, DomainLevels, RangeBoxes, S
 import { DataTable, type Column } from '../components/DataTable'
 import { OPTION_NOTE, OptionResults, signed } from '../components/PowerOptions'
 import { VariantFailures } from '../components/VariantFailures'
+import { ProfileSelect } from '../components/ProfileSelect'
+import { useSimProfiles } from '../lib/simProfile'
 
 const METRICS: [DistKey, string, string][] = [['total_mw', 'Total', 'mW'], ['cpu_mw', 'CPU', 'mW'], ['bw_cpu_mw', 'CPU BW', 'mW'], ['hw_mw', 'IP', 'mW'], ['bw_ip_mw', 'IP BW', 'mW'], ['bw_mbs', 'BW MB/s', 'MB/s']]
 const SCALES = [1.0, 1.1, 1.2, 1.3, 1.5]
@@ -52,6 +54,8 @@ function RunForm({ ctx, onDone }: { ctx: Ctx; onDone: (r: RunDetail) => void }) 
   const [title, setTitle] = useState('')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string>()
+  const [cfgSel, setCfgSel] = useState<string | undefined>(ctx.params.cfg)
+  const sp = useSimProfiles(ctx.project, cfgSel)
   const set = <K extends keyof RunOptions>(k: K, v: RunOptions[K]) => setO((p) => ({ ...p, [k]: v }))
   const toggle = <T,>(list: T[], v: T) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v])
   const cases = caseCount(o)
@@ -59,7 +63,7 @@ function RunForm({ ctx, onDone }: { ctx: Ctx; onDone: (r: RunDetail) => void }) 
   const typeLabel = ctx.catalog.filter((c) => scenarios.includes(c.scenario_id)).map((c) => c.scenario_name).join(' + ')
   const run = async () => {
     setBusy(true); setErr(undefined)
-    try { onDone(await archApi.createRun(runBody(scenarios, title, typeLabel, o))) } catch (e) { setErr(e instanceof Error ? e.message : String(e)) } finally { setBusy(false) }
+    try { onDone(await archApi.createRun(runBody(scenarios, title, typeLabel, o, sp.ref))) } catch (e) { setErr(e instanceof Error ? e.message : String(e)) } finally { setBusy(false) }
   }
   const byCat = useMemo(() => {
     const g: Record<string, typeof ctx.catalog> = {}
@@ -108,9 +112,10 @@ function RunForm({ ctx, onDone }: { ctx: Ctx; onDone: (r: RunDetail) => void }) 
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         <span className="chip" title="파생(-explored-/-timing-) variant는 제외">variant ≤{variants} × 최대 {cases.toLocaleString()} 조합</span>
         <span className="faint" style={{ fontSize: 12 }}>SW 통계·증가 = timeline sim · DVFS·compression = analytic · 추천 조합은 재시뮬레이션 검증</span>
+        <ProfileSelect profiles={sp.profiles} value={sp.ref} onChange={setCfgSel} />
         <span className="grow" />
         {err && <span className="err" style={{ margin: 0 }}>{err}</span>}
-        <button className="btn primary" disabled={busy || !scenarios.length || !o.statistics.length || !o.runtime_scales.length || cases > 200000} onClick={run}>
+        <button className="btn primary" disabled={busy || !sp.ready || !scenarios.length || !o.statistics.length || !o.runtime_scales.length || cases > 200000} onClick={run}>
           {busy ? `탐색 중… (variant당 ~0.5 s)` : '탐색 실행'}</button>
       </div>
     </section>

@@ -26,6 +26,12 @@ REC = "uc-cam-recording-e2700"
 
 
 INHERITED = Path(__file__).parent / "fixtures" / "inherited_2700"
+# Exynos2600 docs added after the 2700 eject (2026-10: v2-vf / mif-linear / CPU topology profile).
+# The ejected 2700 does not take them; parent_diff reports such additions.
+POST_EJECT_2600 = (
+    "platforms/exynos2600/docs/00_hw/pmp-exynos2600-v2.yaml",
+    "projects/sm-s947b/docs/00_hw/simcfg-proj-sm-s947b-v2.yaml",
+)
 
 
 @pytest.fixture()
@@ -40,6 +46,8 @@ def root(tmp_path: Path) -> Path:
     for sub in ("platforms/exynos2700", "projects/sm-s957b"):
         shutil.rmtree(r / sub)
         shutil.copytree(INHERITED / sub, r / sub)
+    for doc in POST_EJECT_2600:   # parent docs added after the eject are not part of the 2700 snapshot
+        (r / doc).unlink(missing_ok=True)
     return r
 
 
