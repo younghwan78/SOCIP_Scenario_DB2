@@ -26,6 +26,9 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
   const tot = rows.map((r) => r.power.total_mw)
   const withOpt = rows.filter((r) => r.power_options?.best)
   const optBest = withOpt.map((r) => r.power_options?.best?.delta_mw ?? 0)
+  // U3: one banner instead of the same text on every row
+  const notExplored = rows.filter((r) => !r.power_options || r.power_options.status === 'not_explored').length
+  const firstReg = rows.length - changed.length
   const cols: Column<BoardRow>[] = [
     { key: 'v', label: 'Variant', width: 210, sticky: true, sort: (r) => r.variant_id, render: (r) => <span className="mono">{short(r.variant_id)}</span> },
     ...(all ? [{ key: 's', label: 'Scenario', width: 170, sort: (r: BoardRow) => r.scenario_id, render: (r: BoardRow) => <span className="mono faint">{r.scenario_id}</span> }] : []),
@@ -36,12 +39,12 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
     { key: 'bwip', label: 'IP BW', width: 70, align: 'right', firstDir: -1, sort: (r) => r.power.bw_ip_mw ?? r.power.bw_mw, render: (r) => fmt(r.power.bw_ip_mw ?? r.power.bw_mw, 0) },
     { key: 'bwcpu', label: 'CPU BW', width: 74, align: 'right', firstDir: -1, sort: (r) => r.power.bw_cpu_mw ?? -1, render: (r) => fmt(r.power.bw_cpu_mw, 1) },
     { key: 'bw', label: 'BW MB/s', width: 84, align: 'right', firstDir: -1, sort: (r) => r.bw_mbs, render: (r) => fmt(r.bw_mbs, 0) },
-    { key: 'd', label: 'Δ 직전', width: 90, align: 'right', firstDir: -1, sort: (r) => Math.abs(r.previous?.delta_mw ?? 0), render: (r) => r.previous ? <span className="mono" style={{ color: r.previous.delta_mw > 0 ? 'var(--del-text)' : 'var(--primary-strong)' }}>{r.previous.delta_mw >= 0 ? '+' : ''}{fmt(r.previous.delta_mw, 1)}</span> : <span className="faint">첫 등록</span> },
+    { key: 'd', label: 'Δ 직전', width: 90, align: 'right', firstDir: -1, sort: (r) => Math.abs(r.previous?.delta_mw ?? 0), render: (r) => r.previous ? <span className="mono" style={{ color: r.previous.delta_mw > 0 ? 'var(--del-text)' : 'var(--primary-strong)' }}>{r.previous.delta_mw >= 0 ? '+' : ''}{fmt(r.previous.delta_mw, 1)}</span> : <span className="faint" title="직전 등록 예측 없음 (첫 등록)">—</span> },
     { key: 'opt', label: '절감 option (IQ)', width: 190, align: 'right', firstDir: 1, sort: (r) => r.power_options?.best?.delta_mw ?? 0,
       title: (r) => r.power_options?.best ? `${r.power_options.best.labels.join(' + ')}\n${r.power_options.results.length}개 조합 · ${OPTION_NOTE}` : (r.power_options?.notes ?? []).join('\n'),
       render: (r) => { const po = r.power_options; const b = po?.best
         if (b) return <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><b className="mono" style={{ color: 'var(--primary-strong)' }}>{signed(b.delta_mw)}</b><span className="faint mono" style={{ fontSize: 11 }}>{signed(b.delta_pct)}%</span><ReviewBadge status={b.review_status} /></span>
-        if (!po || po.status === 'not_explored') return <span className="faint" style={{ fontSize: 11 }}>재탐색 필요</span>
+        if (!po || po.status === 'not_explored') return <span className="faint" title="power option 미탐색 — 상단 안내 참고">·</span>
         return <span className="faint">—</span> } },
     { key: 'range', label: 'range mW', width: 100, align: 'right', firstDir: -1, sort: (r) => (r.distribution ? r.distribution.total_mw.max - r.distribution.total_mw.min : 0), render: (r) => r.distribution ? <span className="mono">{fmt(r.distribution.total_mw.min, 0)}–{fmt(r.distribution.total_mw.max, 0)}</span> : '—' },
     { key: 'src', label: '출처 · 선택 규칙 · 대안', width: 300, sort: (r) => r.run_created_at ?? '', title: (r) => `${r.run_id}\n${r.case_key}${r.reason ? `\n사유: ${r.reason}` : ''}`, render: (r) => <span style={{ fontSize: 12 }}><span className="mono">{r.run_title ?? r.run_id}</span> · <span className={`badge ${r.selected_by === 'user' ? 'v-warn' : 'v-ok'}`}>{r.selection_rule}</span> · <span className="faint">1/{r.eligible_cases?.toLocaleString()}</span></span> },
@@ -65,6 +68,11 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
       {q.error && <div className="err">{q.error}</div>}
       {q.loading && <div className="empty">불러오는 중…</div>}
       {q.data && !rows.length && <div className="empty">등록된 예측이 없습니다. 조합 탐색에서 “최저 power 조합 전체 등록”을 실행하세요.</div>}
+      {rows.length > 0 && (notExplored > 0 || firstReg === rows.length) && <div className="lib-note warn">
+        {notExplored > 0 && <>등록 예측 {rows.length}건 중 <b>{notExplored}건</b>은 power option(bcrop · L0 skip · IP mode)을 탐색하지 않은 run에서 등록됐습니다. 조합 탐색에서 “Power option”을 켜고 다시 실행하면 절감 후보가 채워집니다. </>}
+        {firstReg === rows.length && <>모두 첫 등록이라 직전 대비 변경 원인(Δ 직전)은 아직 없습니다.</>}
+        {' '}<a href="#/explore">조합 탐색 →</a>
+      </div>}
       {rows.length > 0 && <>
         <section className="tb-kpis">
           {[['current 예측', `${rows.length}`, all ? '전체 scenario' : ctx.scenario],

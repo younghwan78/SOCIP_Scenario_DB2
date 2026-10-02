@@ -4,7 +4,7 @@ import { useAsync } from '../lib/route'
 import { fmt } from '../lib/timingBudget'
 import {
   caseParts, cpuApi, freqChanges, knobHow, knobLabel, movedLabel, parseLevels,
-  type CpuSweep, type CpuSweepRequest, type Knob, type SweepCase, type SweepRangeCluster,
+  type CpuInputs, type CpuSweep, type CpuSweepRequest, type Knob, type SweepCase, type SweepRangeCluster,
 } from '../lib/cpu'
 import { Card } from '../components/TimingCharts'
 import { DataTable, type Column } from '../components/DataTable'
@@ -23,7 +23,6 @@ const signed = (v: number, d = 1) => `${v >= 0 ? '+' : ''}${fmt(v, d)}`
 // then an automatic sweep of the knobs a device actually has (cpuset / affinity, uclamp),
 // ranked against "현재" (measured placement) by power.
 export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
-  void ctx
   const inputs = useAsync(() => cpuApi.inputs(), [])
   const [profile, setProfile] = useState('')
   const [target, setTarget] = useState('')
@@ -57,7 +56,8 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
 
   useEffect(() => {
     if (!inputs.data) return
-    if (!profile && inputs.data.profiles[0]) setProfile(inputs.data.profiles[0].id)
+    // U10: open on a usable profile — task cycles present, current variant/scenario/project first
+    if (!profile && inputs.data.profiles[0]) setProfile(rankProfiles(inputs.data.profiles, ctx)[0].id)
     if (!target && inputs.data.topologies[0]) setTarget(inputs.data.topologies[0].id)
   }, [inputs.data]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -144,12 +144,16 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
     <div className="page tb-page">
       <p className="cpu-help">측정한 CPU profile(task·thread별 cycle · stall · bus)을 Android <b>EAS + schedutil</b>로 다시 배치해 보고, 기기에서 실제로 바꿀 수 있는 knob(cpuset/affinity 고정·상한, uclamp)을 자동으로 sweep 합니다. 결과는 <b>{refName}</b> 대비 전력이 낮은 순서입니다. 시계열 없이 frame 단위 정상상태로 계산합니다.</p>
       {inputs.error && <div className="err">{inputs.error}</div>}
-      {inputs.data && (!inputs.data.profiles.length || !inputs.data.topologies.length) && <div className="empty">CPU profile이 있는 측정 evidence와 cpu topology가 있는 power_model_params가 필요합니다 (docs/guides/measurement/cpu-profile-import-ko.md).</div>}
+      {inputs.data && (!inputs.data.profiles.length || !inputs.data.topologies.length) && <div className="lib-note warn">
+        sweep에 필요한 입력이 없습니다 — 측정 CPU profile <b>{inputs.data.profiles.length}건</b> · CPU topology(power_model_params) <b>{inputs.data.topologies.length}건</b>.
+        {!inputs.data.profiles.length && <> task별 cycle · thread를 담은 CPU profile을 측정 evidence로 import하세요 (docs/guides/measurement/cpu-profile-import-ko.md, 예시: examples/measurement-import/cpu-profile-sample/).</>}
+        {!inputs.data.topologies.length && <> cpu topology가 있는 power_model_params를 등록하세요.</>}
+      </div>}
       <div className="tb-grid">
         <Card id="cpu-in" title="① 기준" note="측정 profile · 적용할 SoC · 비교 기준">
           <div className="cpu-step" style={{ display: 'grid', gap: 8 }}>
             <label className="cpu-f"><span className="faint">측정 profile</span>
-              <select value={profile} onChange={(e) => setProfile(e.target.value)}>{(inputs.data?.profiles ?? []).map((p) => <option key={p.id} value={p.id}>{p.variant_ref ?? p.id} · {p.id}</option>)}</select></label>
+              <select value={profile} onChange={(e) => setProfile(e.target.value)}>{rankProfiles(inputs.data?.profiles ?? [], ctx).map((p) => <option key={p.id} value={p.id}>{p.variant_ref ?? p.id} · {p.id}{p.tasks?.length ? '' : ' (task 정보 없음)'}</option>)}</select></label>
             <label className="cpu-f"><span className="faint">적용할 SoC CPU 구성</span>
               <select value={target} onChange={(e) => setTarget(e.target.value)}>{(inputs.data?.topologies ?? []).map((t) => <option key={t.id} value={t.id}>{t.soc_ref} · {sortClusters(t.clusters).join(' / ')}</option>)}</select></label>
             <label className="cpu-f" title="다른 과제에서 측정한 profile이면 측정한 SoC의 CPU 구성을 고르세요 (core type으로 대응)"><span className="faint">profile을 측정한 SoC</span>
@@ -216,7 +220,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
                   <td><input style={{ width: 40 }} value={e.growth} placeholder={String(growth)} onChange={(ev) => setEdit(task, { growth: ev.target.value })} /></td>
                   <td className="faint" style={{ textAlign: 'left', fontSize: 11 }}>{Object.entries(rt?.policy ?? {}).map(([k, v]) => `${k}=${String(v)}`).join(' ')}{fixed ? ' 고정 (sweep 제외)' : rt ? ` 후보 ${rt.options.length}` : ''}</td>
                 </tr>)
-            })}</tbody></table></div> : <div className="empty">profile에 task별 cycle 정보가 없습니다.</div>}
+            })}</tbody></table></div> : (inputs.data?.profiles.length ?? 0) > 0 && <NoTasks profiles={rankProfiles(inputs.data?.profiles ?? [], ctx).filter((p) => p.tasks?.length)} onPick={setProfile} />}
           <div className="toolbar" style={{ marginTop: 8 }}>
             <span className="faint" style={{ fontSize: 12 }}>{result ? `조합 ${result.range.space.toLocaleString()}개 · 계산 ${result.range.evaluated.toLocaleString()} (${result.range.method === 'beam' ? 'beam 탐색' : '전수'}) · 서로 다른 배치 ${result.range.unique}` : '조합 수는 계산 후 표시'}</span><span className="grow" />
             <button className="btn primary" disabled={busy || !profile || !target} onClick={() => void run()}>{busy ? '계산 중…' : result ? '다시 계산' : 'Sweep 계산'}</button>
@@ -316,5 +320,25 @@ function CaseDetail({ c, reference, refName, title, clusters, colorOf, budgets }
             <td className={`mono ${slack === undefined ? '' : slack < 0.5 ? 'pm-up' : 'pm-down'}`} style={{ textAlign: 'right' }}>{slack === undefined ? '—' : fmt(slack, 2)}</td></tr>
         })}</tbody></table>
     </Card>
+  )
+}
+
+type Profile = CpuInputs['profiles'][number]
+/** Profiles with task cycles first; then the current variant, scenario and project. */
+function rankProfiles(list: Profile[], ctx: Ctx): Profile[] {
+  const score = (p: Profile) => (p.tasks?.length ? 8 : 0) + (p.variant_ref === ctx.variant ? 4 : 0) + (p.scenario_ref === ctx.scenario ? 2 : 0) + (p.project_ref === ctx.project ? 1 : 0)
+  return [...list].sort((a, b) => score(b) - score(a))
+}
+
+/** U10: the selected profile cannot be swept — say why and offer the ones that can. */
+function NoTasks({ profiles, onPick }: { profiles: Profile[]; onPick: (id: string) => void }) {
+  return (
+    <div className="empty" style={{ textAlign: 'left' }}>
+      선택한 측정 profile에 task별 cycle 정보가 없어 sweep할 수 없습니다 (thread · cycle을 포함한 CPU profile import 필요 — docs/guides/measurement/cpu-profile-import-ko.md).
+      {profiles.length > 0 ? <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <span className="faint">task 정보가 있는 profile:</span>
+        {profiles.slice(0, 6).map((p) => <button key={p.id} className="btn tb-mini" onClick={() => onPick(p.id)}>{p.variant_ref ?? p.id}</button>)}
+      </div> : <div className="faint" style={{ marginTop: 6 }}>task 정보가 있는 profile이 아직 없습니다.</div>}
+    </div>
   )
 }

@@ -595,3 +595,4 @@ a.hd-row:hover span { color: #E8EEF0; }
 .issue.clock { background: var(--warn-soft); color: var(--warn-text); }
 .issues { display: inline-flex; flex-wrap: wrap; gap: 3px; }
 .offset-flag { font-size: 10.5px; padding: 1px 5px; border-radius: 4px; background: var(--warn-soft); color: var(--warn-text); font-weight: 600; margin-left: 4px; }
+.next-step { white-space: nowrap; font-size: 12px; }
