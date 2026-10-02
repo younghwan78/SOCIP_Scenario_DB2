@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Ctx } from '../App'
 import { useAsync } from '../lib/route'
 import { archApi, type ReportMeta } from '../lib/archExplore'
@@ -20,6 +20,7 @@ export function ReportsPage({ ctx }: { ctx: Ctx }) {
   // U16/R14: publishing records who reviewed it and why; going back to draft is one click
   const [review, setReview] = useState<{ reviewer: string; note: string } | null>(null)
   const frame = useRef<HTMLIFrameElement>(null)
+  useEffect(() => { setReview(null); setMsg(undefined) }, [id]) // a review draft belongs to one report
   const publish = async (r: ReportMeta) => {
     if (r.status === 'draft' && !review) { setReview({ reviewer: '', note: '' }); return }
     try {

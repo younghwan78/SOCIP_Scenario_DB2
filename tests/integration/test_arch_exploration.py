@@ -233,5 +233,6 @@ def test_model_status_counts_predictions_from_older_engine(engine, stored_run):
         assert status["engine_rev"] == svc.ENGINE_REV
         assert status["predictions"]["engines"].get("test", 0) >= 2  # stored_run uses engine_rev="test"
         assert status["predictions"]["stale_engine"] >= 2
-        assert set(status["measurements"]) == {"real", "synthetic"}
+        assert set(status["measurements"]) == {"real", "synthetic", "empty"}
+        assert status["dvfs_unrecorded"] >= 0
         assert all(set(d) == {"ref", "sample", "predictions"} for d in status["dvfs"])

@@ -80,10 +80,14 @@ def calibration_row(variant_id: str, scenario_id: str, detail: dict[str, Any], p
 def _confidence(snap: dict[str, Any]) -> dict[str, Any]:
     reasons: list[str] = []
     cal = snap.get("calibration") or []
-    real = [c for c in cal if not c["synthetic"]]
-    worst = max((abs(c["fit"]["worst_delta_pct"]) for c in real if c["fit"]["worst_delta_pct"] is not None), default=None)
+    # a real capture only counts when it can be compared category by category
+    real = [c for c in cal if not c["synthetic"] and c["fit"]["worst_delta_pct"] is not None]
+    worst = max((abs(c["fit"]["worst_delta_pct"]) for c in real), default=None)
+    weak_input = bool(snap["overview"].get("sample_dvfs")) or not snap["overview"].get("dvfs_table_ref")
     if snap["overview"].get("sample_dvfs"):
         reasons.append("DVFS table이 SAMPLE — 전압 · level이 사내 값이 아님")
+    elif not snap["overview"].get("dvfs_table_ref"):
+        reasons.append("run에 DVFS table 기록 없음 (이전 engine) — 어떤 전압 · level 기준인지 확인 불가")
     if not real:
         reasons.append("실제 silicon 측정과 대조한 variant 없음" + (f" (합성 fixture {len(cal)}건은 근거 아님)" if cal else ""))
     elif worst is not None and worst > FIT_WARN_PCT:
@@ -91,11 +95,12 @@ def _confidence(snap: dict[str, Any]) -> dict[str, Any]:
     if any(c["fit"]["offsetting"] for c in real):
         reasons.append("total은 실측과 맞지만 구성 오차가 상쇄된 variant 있음 — what-if 절감량 신뢰 낮음")
     if reasons:
-        grade = "C" if (snap["overview"].get("sample_dvfs") or not real) else "B"
+        grade = "C" if (weak_input or not real) else "B"
+    elif worst is not None and worst <= FIT_OK_PCT:
+        grade = "A"
     else:
-        grade = "A" if worst is not None and worst <= FIT_OK_PCT else "B"
-        if grade == "B":
-            reasons.append(f"실측 대조 최대 |Δ| {worst:.0f}% (≤ {FIT_WARN_PCT:.0f}%)")
+        grade = "B"
+        reasons.append(f"실측 대조 최대 |Δ| {worst:.0f}% (≤ {FIT_WARN_PCT:.0f}%)" if worst is not None else "실측 대조 구성 비교 불가")
     return {"grade": grade, "reasons": reasons,
             "meaning": {"A": "실측 대조 구성 오차 ≤10% — 수치 그대로 검토 가능",
                         "B": "실측 대조 있음, 구성 오차 ≤25% — 경향 비교 용도",
@@ -123,6 +128,8 @@ def build_conclusion(snap: dict[str, Any]) -> dict[str, Any]:
                       "detail": ", ".join(f"{c['variant_id']} {c['fit']['worst_category']} {c['fit']['worst_delta_pct']:+.0f}%" for c in off[:3])})
     if snap["overview"].get("sample_dvfs"):
         risks.append({"title": "DVFS table SAMPLE", "detail": f"{snap['overview'].get('dvfs_table_ref')} — 사내 table 교체 전 전압 · level 비교는 참고용"})
+    elif not snap["overview"].get("dvfs_table_ref"):
+        risks.append({"title": "DVFS table 미기록", "detail": "이전 engine run이라 사용한 DVFS table이 기록되지 않음 — 현재 engine으로 재탐색 권장"})
 
     actions: list[dict[str, Any]] = []
     for o in sorted((o for o in snap.get("power_options") or [] if o.get("best")), key=lambda o: o["best"]["delta_mw"])[:3]:

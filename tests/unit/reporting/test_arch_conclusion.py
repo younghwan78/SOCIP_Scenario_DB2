@@ -77,3 +77,18 @@ def test_run_lineage_reads_variant_records():
     assert run_lineage({"variants": [{"model_lineage": a}, {"model_lineage": b}]}) == (a, True)
     assert run_lineage({"variants": [{}], "summary": {}}) == (None, False)
     assert any("서로 다름" in x for x in model_limits(a, mixed=True))
+
+
+def test_old_run_without_dvfs_and_empty_measurement_does_not_crash():
+    """Regression: report regeneration 500 on an engine-3 run (no DVFS ref, real capture without power)."""
+    empty = calibration_row("cam-rec-r1-uhd30-vdis", "uc",
+                            {"id": "M-empty", "synthetic": False, "total": {"mean": None},
+                             "predictions": [{"kind": "current", "id": "PRED-1", "total_mw": 677.4, "delta_pct": None,
+                                              "rows": compare_split(PRED, {"cpu": 0.0, "ip": 0.0, "bw": 0.0, "other": 0.0})}]},
+                            "PRED-1")
+    snap = _snap(overview={"sample_dvfs": False, "dvfs_table_ref": None}, calibration=[empty])
+    c = build_conclusion(snap)
+    assert c["confidence"]["grade"] == "C"
+    assert any("DVFS table 기록 없음" in r for r in c["confidence"]["reasons"])
+    assert any(r["title"] == "DVFS table 미기록" for r in c["risks"]) or len(c["risks"]) == 3
+    assert any("실제 silicon 측정과 대조한 variant 없음" in r for r in c["confidence"]["reasons"])

@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-_SW = re.compile(r"^(?P<stage>[\w -]+?): SW (?P<sw>[\d.]+) ms leaves no HW budget$")
+_SW = re.compile(r"^(?P<stage>.+?): SW (?P<sw>[\d.]+) ms leaves no HW budget$")
 _RT = re.compile(r"^RT HW (?P<hw>[\d.]+) ms > 75% budget (?P<budget>[\d.]+) ms$")
 _IV = re.compile(r"^(?P<which>preview|video) interval (?P<got>[\d.]+) ms != (?P<target>[\d.]+) ms$")
 _CLK_GROUP = re.compile(r"^(?P<nodes>[\w, ]+): 필요 clock (?P<req>[\d.]+) MHz > DVFS max (?P<max>[\d.]+) MHz$")

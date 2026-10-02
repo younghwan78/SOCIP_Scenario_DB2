@@ -126,7 +126,10 @@ export interface ModelStatus {
   project_ref: string | null
   predictions: { current: number; stale_engine: number; engines: Record<string, number> }
   dvfs: { ref: string; sample: boolean; predictions: number }[]
-  measurements: { real: number; synthetic: number }
+  /** current predictions whose run did not record a DVFS table (older engines) */
+  dvfs_unrecorded?: number
+  /** real/synthetic = captures with total power; empty = imports without power data */
+  measurements: { real: number; synthetic: number; empty?: number }
   lineage: Record<string, unknown> | null
 }
 export type StatusLevel = 'ok' | 'warn' | 'info'
@@ -136,14 +139,18 @@ export function statusItems(s: ModelStatus, project?: string): StatusItem[] {
   const q = project ? `?project=${encodeURIComponent(project)}` : ''
   const items: StatusItem[] = []
   const sample = s.dvfs.filter((d) => d.sample)
-  items.push(s.dvfs.length === 0
-    ? { key: 'dvfs', text: 'DVFS 미연결', title: '등록 예측이 참조하는 DVFS table 없음', level: 'warn', href: `#/library${q}` }
+  const unrec = s.dvfs_unrecorded ?? 0
+  items.push(s.dvfs.length === 0 && unrec > 0
+    ? { key: 'dvfs', text: 'DVFS 미기록 (이전 run)', title: `등록 예측 ${unrec}건의 run이 사용한 DVFS table을 기록하지 않음 (이전 engine) — 현재 engine으로 재탐색하면 기록됨`, level: 'warn', href: `#/explore${q}` }
+    : s.dvfs.length === 0
+    ? { key: 'dvfs', text: 'DVFS 없음', title: '등록 예측이 없어 참조 DVFS table 없음', level: 'info', href: `#/library${q}` }
     : sample.length
       ? { key: 'dvfs', text: `DVFS SAMPLE ${sample.length}/${s.dvfs.length}`, title: `사내 table 교체 필요: ${sample.map((d) => d.ref).join(', ')}`, level: 'warn', href: `#/library${q}` }
       : { key: 'dvfs', text: `DVFS ${s.dvfs.map((d) => d.ref).join(', ')}`, title: '등록 예측이 참조하는 DVFS table', level: 'ok', href: `#/library${q}` })
   const m = s.measurements
-  items.push({ key: 'meas', text: `실측 ${m.real} · 합성 ${m.synthetic}`,
-    title: m.real === 0 ? '실제 silicon 측정이 없어 예측 정확도를 검증할 수 없음 (합성 fixture는 검증 근거 아님)' : '실제 silicon 측정 / 합성 fixture 건수',
+  items.push({ key: 'meas', text: `실측 ${m.real} · 합성 ${m.synthetic}${m.empty ? ` · 전력 없음 ${m.empty}` : ''}`,
+    title: (m.real === 0 ? '실제 silicon 측정이 없어 예측 정확도를 검증할 수 없음 (합성 fixture는 검증 근거 아님)' : 'total power가 있는 실제 silicon 측정 / 합성 fixture 건수')
+      + (m.empty ? `\n전력 데이터 없이 import된 측정 ${m.empty}건은 제외` : ''),
     level: m.real === 0 ? 'warn' : 'ok', href: `#/calibration${q}` })
   const p = s.predictions
   items.push(p.current === 0

@@ -379,6 +379,16 @@ def create_report(db: Session, request: ArchReportRequest, user: str | None = No
     return report_detail(row)
 
 
+def _has_total(m: Evidence) -> bool:
+    t = (m.kpi or {}).get("total_power_mw")
+    return (t.get("mean") if isinstance(t, dict) else t) is not None
+
+
+def _meas_rank(m: Evidence) -> int:
+    """Comparable capture first (has total power), then real silicon over synthetic; ties keep the newest."""
+    return 2 * _has_total(m) + (not is_synthetic(m.provenance))
+
+
 def _report_calibration(db: Session, preds: dict[tuple[str, str], dict[str, Any]]) -> list[dict[str, Any]]:
     """Latest measurement per reported variant (real silicon preferred over synthetic) vs its registered prediction."""
     if not preds:
@@ -393,7 +403,7 @@ def _report_calibration(db: Session, preds: dict[tuple[str, str], dict[str, Any]
         if key not in keys:
             continue
         held = found.get(key)
-        if held is None or (is_synthetic(held.provenance) and not is_synthetic(m.provenance)):
+        if held is None or _meas_rank(m) > _meas_rank(held):
             found[key] = m
     out = []
     for (sid, vid), m in sorted(found.items()):
@@ -596,6 +606,7 @@ def model_status(db: Session, *, project_ref: str | None = None) -> dict[str, An
     runs = {r.id: r for r in db.query(ArchExplorationRun).filter(ArchExplorationRun.id.in_(run_ids)).all()} if run_ids else {}
     engines: dict[str, int] = {}
     dvfs: dict[str, int] = {}
+    unrecorded = 0
     for p in preds:
         run = runs.get(p.exploration_run_ref)
         rev = run.engine_rev if run is not None else "unknown"
@@ -603,14 +614,19 @@ def model_status(db: Session, *, project_ref: str | None = None) -> dict[str, An
         ref = p.dvfs_table_ref or (run.dvfs_table_ref if run is not None else None)
         if ref:
             dvfs[ref] = dvfs.get(ref, 0) + 1
+        else:
+            unrecorded += 1
 
-    mq = db.query(Evidence.provenance).filter(Evidence.kind == "evidence.measurement")
+    mq = db.query(Evidence.provenance, Evidence.kpi).filter(Evidence.kind == "evidence.measurement")
     if project_ref:
         scenario_ids = [sid for (sid,) in db.query(Scenario.id).filter(Scenario.project_ref == project_ref).all()]
         mq = mq.filter(Evidence.scenario_ref.in_(scenario_ids)) if scenario_ids else mq.filter(Evidence.id.is_(None))
-    real = synthetic = 0
-    for (prov,) in mq.all():
-        if is_synthetic(prov):
+    real = synthetic = empty = 0
+    for (prov, kpi) in mq.all():
+        t = (kpi or {}).get("total_power_mw")
+        if (t.get("mean") if isinstance(t, dict) else t) is None:
+            empty += 1  # import without power data: not evidence for the model
+        elif is_synthetic(prov):
             synthetic += 1
         else:
             real += 1
@@ -626,7 +642,8 @@ def model_status(db: Session, *, project_ref: str | None = None) -> dict[str, An
         "predictions": {"current": len(preds), "stale_engine": sum(n for e, n in engines.items() if e != ENGINE_REV),
                         "engines": engines},
         "dvfs": [{"ref": ref, "sample": _is_sample(ref), "predictions": n} for ref, n in sorted(dvfs.items())],
-        "measurements": {"real": real, "synthetic": synthetic},
+        "dvfs_unrecorded": unrecorded,
+        "measurements": {"real": real, "synthetic": synthetic, "empty": empty},
         "lineage": lineage,
         "latest_run": {"id": latest.id, "engine_rev": latest.engine_rev,
                        "created_at": latest.created_at.isoformat() if latest.created_at else None} if latest is not None else None,

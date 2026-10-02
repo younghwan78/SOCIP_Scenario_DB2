@@ -61,4 +61,11 @@ describe('statusItems (U2)', () => {
     expect(items.find((i) => i.key === 'meas')?.level).toBe('ok')
     expect(items.find((i) => i.key === 'model')?.text).toContain('v2-vf')
   })
+  it('says the DVFS table was not recorded instead of "not connected" for old runs', () => {
+    const old = { ...s, dvfs: [], dvfs_unrecorded: 54, measurements: { real: 1, synthetic: 33, empty: 1 } }
+    const items = statusItems(old, 'p')
+    expect(items.find((i) => i.key === 'dvfs')?.text).toBe('DVFS 미기록 (이전 run)')
+    expect(items.find((i) => i.key === 'meas')?.text).toBe('실측 1 · 합성 33 · 전력 없음 1')
+    expect(statusItems({ ...s, dvfs: [], predictions: { current: 0, stale_engine: 0, engines: {} } }).find((i) => i.key === 'dvfs')?.level).toBe('info')
+  })
 })

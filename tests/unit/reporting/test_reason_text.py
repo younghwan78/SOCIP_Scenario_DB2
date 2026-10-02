@@ -36,3 +36,8 @@ def test_rt_budget_and_passthrough():
 
 def test_off_target_summary_kept_when_no_stream_detail():
     assert [e["code"] for e in explain_all(["preview/video interval off target"], 30)] == ["interval"]
+
+
+def test_stage_names_with_punctuation():
+    e = explain("Post-NRT (EIS/SW → GDC): SW 6.00 ms leaves no HW budget", 1000 / 240)
+    assert e["code"] == "sw_budget" and e["text"].startswith("Post-NRT (EIS/SW → GDC) SW 6.0 ms")
