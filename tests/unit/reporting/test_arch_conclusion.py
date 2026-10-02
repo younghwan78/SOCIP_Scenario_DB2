@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from scenario_db.comparison.calibration import compare_split
-from scenario_db.reporting.arch_conclusion import build_conclusion, calibration_row, model_limits
+from scenario_db.reporting.arch_conclusion import build_conclusion, calibration_row, model_limits, run_lineage
 from scenario_db.reporting.arch_report import render_html
 
 
@@ -69,3 +69,11 @@ def test_render_handles_snapshot_without_conclusion():
     real = calibration_row("cam-rec-r1-uhd30-vdis", "uc", _detail(PRED, MEAS, 520.2, 519.9), "PRED-1")
     assert "상쇄" in _calibration([real])
     assert callable(render_html)
+
+
+def test_run_lineage_reads_variant_records():
+    a, b = {"power_model": "v2-vf"}, {"power_model": "v1-vfps"}
+    assert run_lineage({"variants": [{"model_lineage": a}, {"model_lineage": a}]}) == (a, False)
+    assert run_lineage({"variants": [{"model_lineage": a}, {"model_lineage": b}]}) == (a, True)
+    assert run_lineage({"variants": [{}], "summary": {}}) == (None, False)
+    assert any("서로 다름" in x for x in model_limits(a, mixed=True))

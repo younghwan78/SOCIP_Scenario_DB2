@@ -7,7 +7,7 @@ import re
 from html import escape
 from typing import Any
 
-from scenario_db.reporting.arch_conclusion import build_conclusion, model_limits
+from scenario_db.reporting.arch_conclusion import build_conclusion, model_limits, run_lineage
 from scenario_db.reporting.arch_opinions import build_opinions, classify
 
 _CLOCK_RE = re.compile(r"^(\w+): required_clock ([\d.]+)MHz exceeds max DVFS speed ([\d.]+)MHz$")
@@ -160,7 +160,7 @@ def build_snapshot(
         })
 
     totals = [r["power"]["total_mw"] for r in rows if r["spec_ok"] and r["power"].get("total_mw") is not None]
-    lineage = (run.get("summary") or {}).get("model_lineage")
+    lineage, mixed = run_lineage(run)
     snap = {
         "overview": {
             "run_id": run["id"], "run_title": run["title"], "run_created_at": str(run.get("created_at") or ""),
@@ -168,7 +168,7 @@ def build_snapshot(
             "scenario_type": run["scenario_type"], "dvfs_table_ref": run.get("dvfs_table_ref"),
             "sample_dvfs": sample_dvfs, "objective": run["spec"].get("objective"),
             "axes": run["spec"].get("axes"), "constraints": run["spec"].get("constraints"),
-            "engine_rev": run.get("engine_rev"), "model_lineage": lineage, "model_limits": model_limits(lineage),
+            "engine_rev": run.get("engine_rev"), "model_lineage": lineage, "model_limits": model_limits(lineage, mixed),
         },
         "spec_summary": {
             "explored": len(variants), "spec_ok": len(ok), "spec_fail": len(variants) - len(ok),

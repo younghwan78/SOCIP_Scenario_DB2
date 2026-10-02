@@ -42,6 +42,18 @@ def _rail_map(db: Session, project_ref: str | None) -> tuple[dict[str, str], str
     return dict(row.rail_domain_map or {}), str(row.id)
 
 
+def _rail_maps(db: Session, project_refs: set[str | None]) -> dict[str, dict[str, str]]:
+    """Latest rail map per project in one query (same pick as ``_rail_map``)."""
+    refs = {p for p in project_refs if p}
+    if not refs:
+        return {}
+    out: dict[str, dict[str, str]] = {}
+    for row in (db.query(SimConfigProfile).filter(SimConfigProfile.project_ref.in_(refs))
+                .order_by(SimConfigProfile.version.desc(), SimConfigProfile.id).all()):
+        out.setdefault(row.project_ref, dict(row.rail_domain_map or {}))
+    return out
+
+
 def _sim_order(ev: Evidence) -> tuple[datetime, str]:
     timestamp = ev.measured_at or (ev.run_info or {}).get("timestamp")
     try:
@@ -138,14 +150,12 @@ def list_measurements(db: Session, *, scenario_id: str | None = None) -> list[di
         sims.sort(key=_sim_order)
     scenario_project = {sid: pref for sid, pref in db.query(Scenario.id, Scenario.project_ref)
                         .filter(Scenario.id.in_(scenario_ids)).all()} if scenario_ids else {}
-    rail_maps: dict[str | None, dict[str, str]] = {}
+    rail_maps = _rail_maps(db, {m.project_ref or scenario_project.get(m.scenario_ref) for m in measurements})
     out = []
     for m in measurements:
         total = _total(m.kpi)
-        project_ref = m.project_ref or scenario_project.get(m.scenario_ref)
-        if project_ref not in rail_maps:
-            rail_maps[project_ref] = _rail_map(db, project_ref)[0]
-        meas_cat = measured_split(m.vdd_power, rail_maps[project_ref])["categories"] if m.vdd_power else None
+        rail_map = rail_maps.get(m.project_ref or scenario_project.get(m.scenario_ref)) or {}
+        meas_cat = measured_split(m.vdd_power, rail_map)["categories"] if m.vdd_power else None
         cur = current.get((m.scenario_ref, m.variant_ref))
         sims = simulations.get((m.scenario_ref, m.variant_ref), [])
         sim_total = _total(sims[-1].kpi)["mean"] if sims else None

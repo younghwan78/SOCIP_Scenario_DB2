@@ -48,7 +48,9 @@ def test_calibration_scope_recency_and_constant_query_count(engine):
         finally:
             event.remove(engine, 'before_cursor_execute', counted)
         assert len(rows) == 2
-        assert len(queries) == 3
+        # measurements · predictions · simulations + scenario→project · rail maps (category fit): constant, no N+1
+        assert len(queries) == 5
+        assert rows[0]['simulation']['category'] is None  # no CPU/IP/BW split in this fixture
         assert rows[0]['simulation']['id'] == f'{sid}-a-new'
         detail = cal.measurement_detail(db, f'{sid}-measurement1')
         assert detail['rail_domain_map_ref'] == sid

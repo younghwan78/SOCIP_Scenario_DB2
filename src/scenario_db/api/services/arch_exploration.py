@@ -28,7 +28,7 @@ from scenario_db.db.models.exploration import (
     Prediction,
 )
 from scenario_db.exceptions import NotFoundError, UnprocessableError
-from scenario_db.reporting.arch_conclusion import calibration_row
+from scenario_db.reporting.arch_conclusion import calibration_row, run_lineage
 from scenario_db.reporting.arch_report import build_snapshot, html_sha256, render_html
 from scenario_db.sim.arch_exploration import ENGINE_REV, explore_variant, find_case, prediction_payload
 from scenario_db.sim.power_attribution import attribute
@@ -603,7 +603,7 @@ def model_status(db: Session, *, project_ref: str | None = None) -> dict[str, An
     if project_ref:
         rq = rq.filter(ArchExplorationRun.project_ref == project_ref)
     latest = rq.order_by(ArchExplorationRun.created_at.desc()).first()
-    lineage = (latest.summary or {}).get("model_lineage") if latest is not None else None
+    lineage = run_lineage({"variants": latest.variants, "summary": latest.summary})[0] if latest is not None else None
     return {
         "engine_rev": ENGINE_REV,
         "project_ref": project_ref,

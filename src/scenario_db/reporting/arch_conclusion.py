@@ -22,7 +22,16 @@ FIT_OK_PCT = 10.0
 FIT_WARN_PCT = 25.0
 
 
-def model_limits(lineage: dict[str, Any] | None) -> list[str]:
+def run_lineage(run: dict[str, Any]) -> tuple[dict[str, Any] | None, bool]:
+    """Model lineage recorded per explored variant (first one) and whether variants disagree."""
+    seen = [v.get("model_lineage") for v in run.get("variants") or [] if v.get("model_lineage")]
+    if not seen:
+        return (run.get("summary") or {}).get("model_lineage"), False
+    first = seen[0]
+    return first, any(x != first for x in seen[1:])
+
+
+def model_limits(lineage: dict[str, Any] | None, mixed: bool = False) -> list[str]:
     """Model limits stated from the lineage the run actually used (not a hard-coded list)."""
     lin = lineage or {}
     out: list[str] = []
@@ -42,6 +51,8 @@ def model_limits(lineage: dict[str, Any] | None) -> list[str]:
     out.append(f"power params = {ref}." if ref else "power params 미지정 — 코드 기본 계수 사용.")
     if str(lin.get("clock_basis") or "calculated") == "calculated":
         out.append("IP clock = 계산값 (실측 clock 미반영).")
+    if mixed:
+        out.append("variant별 model lineage가 서로 다름 — 위 내용은 첫 variant 기준.")
     out.extend(STANDING_LIMITS)
     return out
 
