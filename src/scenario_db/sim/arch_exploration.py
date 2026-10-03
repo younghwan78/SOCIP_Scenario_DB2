@@ -1132,6 +1132,9 @@ def prediction_payload(s: dict[str, Any], case: dict[str, Any], buffers: list[di
         "base_bw_ip_mbs": s["bw"]["hw_mbs"], "base_bw_cpu_mbs": s["bw"]["sw_mbs"],
         "cpu_by_task": s["cpu_by_task"], "ips": ips, "buffers": bufs,
         "compression": sorted(comp), "dvfs": dom_level, "verdict": s["verdict"]["status"],
+        # why: reasons + NRT clock factor of the objective slice (board / 판정 popover)
+        "verdict_detail": {k: s["verdict"].get(k) for k in ("status", "reasons", "nrt_clock_factor")},
+        "intervals_ok": s.get("intervals_ok"),
         "lossy": case["lossy"], "assumed_ratio": case["assumed_ratio"],
         "intervals": s["intervals"], "latency": s["latency"],
         "stages": {k: {f: v for f, v in st.items() if f != "sw_items"} for k, st in s["stages"].items()},

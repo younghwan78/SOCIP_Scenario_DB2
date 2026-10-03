@@ -66,3 +66,17 @@ it('graph tooltip parks after a short rest: scrollable, full detail, Esc closes'
   vi.useRealTimers()
   unmount()
 })
+
+it('verdict popover shows reasons, violating stages and the derived note; Esc closes', async () => {
+  const { VerdictPopover } = await import('../src/components/VerdictDetail')
+  let closed = false
+  const d = { status: 'fail', reasons: ['NRT: SW 9.00 ms leaves no HW budget'], nrt_clock_factor: 1.12, derived: true, period_ms: 33.33,
+    intervals: { preview: 33.4 }, stages: [{ id: 'rt', name: 'RT', sw_ms: 1, hw_ms: 20, budget_ms: 25, feasible: true }, { id: 'nrt', name: 'NRT', sw_ms: 9, hw_ms: 20, budget_ms: 8, feasible: false }] }
+  const { host, unmount } = mount(<VerdictPopover d={d} at={{ x: 10, y: 10 }} onClose={() => { closed = true }} />)
+  expect(host.textContent).toContain('NRT: SW 9.00')
+  expect(host.querySelectorAll('tr.vp-bad')).toHaveLength(1)
+  expect(host.textContent).toContain('다시 계산한 사유')
+  act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })) })
+  expect(closed).toBe(true)
+  unmount()
+})

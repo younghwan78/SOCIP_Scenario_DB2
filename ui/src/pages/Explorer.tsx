@@ -13,6 +13,7 @@ import type { VariantRow } from '../lib/api'
 import { archApi, type BoardRow } from '../lib/archExplore'
 import { verdictChip } from '../lib/timingBudget'
 import { ProvBadge } from '../components/Provenance'
+import { VERDICT_HELP, VerdictPopover } from '../components/VerdictDetail'
 import { calibrationApi, type Coverage } from '../lib/calibration'
 import { DEFAULT_CANONICAL, canonicalOf } from '../lib/projects'
 
@@ -67,6 +68,7 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
   const refRow = byId.get(reference)
   const isRef = useCallback((r: VariantRow) => r.variant_id === reference, [reference])
   const [descOpen, setDescOpen] = usePref('explorer.desc.open', true)
+  const [verdictAt, setVerdictAt] = useState<{ id: string; x: number; y: number } | null>(null)
 
   const facetKeys = (['resolution', 'fps', 'stab', 'hdr', 'camera'] as FacetKey[]).filter((k) => rows.some((r) => facetValue(k, r.design_conditions) !== null))
   const visible = rows.filter((r) => (showDerived || !r.derived_from_variant)
@@ -117,8 +119,10 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
       sort: (r) => board.get(r.variant_id)?.power.total_mw ?? null,
       render: (r) => { const b = board.get(r.variant_id); return b ? <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}><span className="mono">{b.power.total_mw.toFixed(0)}</span>
         <ProvBadge compact prov={{ kind: 'registered', engine: 'Arch exploration', id: b.id, at: b.created_at, notes: [`CPU ${b.power.cpu_mw.toFixed(0)} · IP ${b.power.hw_mw.toFixed(0)} · BW ${b.power.bw_mw.toFixed(0)} mW`] }} /></span> : <span className="faint">—</span> } },
-    { key: 'vd', label: '판정', width: 80, headTitle: '등록 예측의 timing 판정 (OK / Clock↑ / Fail)', sort: (r) => { const v = board.get(r.variant_id)?.verdict; return v ? ({ fail: 0, clock_up: 1, ok: 2 } as Record<string, number>)[v] ?? 3 : null },
-      render: (r) => { const v = board.get(r.variant_id)?.verdict; if (!v) return <span className="faint">—</span>; const c = verdictChip(v as 'ok' | 'clock_up' | 'fail'); return <span className={`badge ${c.cls}`}>{c.label}</span> } },
+    { key: 'vd', label: '판정 ⓘ', width: 84, headTitle: `등록 예측의 timing 판정 — 클릭하면 사유. ${VERDICT_HELP}`, sort: (r) => { const v = board.get(r.variant_id)?.verdict; return v ? ({ fail: 0, clock_up: 1, ok: 2 } as Record<string, number>)[v] ?? 3 : null },
+      render: (r) => { const b = board.get(r.variant_id), v = b?.verdict; if (!v) return <span className="faint">—</span>; const c = verdictChip(v as 'ok' | 'clock_up' | 'fail')
+        return <button className={`badge ${c.cls} badge-btn`} title={b?.verdict_detail?.reasons?.[0] ?? '클릭 = 판정 사유'} aria-label={`${r.variant_id} 판정 상세`}
+          onClick={(e) => { e.stopPropagation(); setVerdictAt(b?.verdict_detail ? { id: r.variant_id, x: e.clientX, y: e.clientY } : null) }}>{c.label}</button> } },
     { key: 'load', label: 'Load', width: 84, firstDir: -1, sort: (r) => (r.severity ? SEVERITY_RANK[r.severity] ?? 0 : null), render: (r) => r.severity && <span className={`badge load-${r.severity}`}>{r.severity}</span> },
     { key: 'delta', label: '다른 조건', width: 84, align: 'right', firstDir: -1, headTitle: '기준 variant(파생은 부모)와 값이 다른 조건 수 — 노란 셀이 그 조건', sort: (r) => (r.variant_id === reference ? 0 : diffOf(r).size), render: (r) => <span className="mono">{r.variant_id === reference ? 0 : diffOf(r).size}</span> },
     { key: 'open', label: '', width: 76, render: (r) => <a href="#" onClick={(e) => { e.preventDefault(); ctx.navigate('pipeline', { scenario: r.scenario_id, variant: r.variant_id }) }}>Pipeline</a> },
@@ -204,6 +208,8 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
             {!variantsQ.loading && !visible.length && <div className="empty">조건에 맞는 variant가 없습니다.</div>}
             {variantsQ.loading && <div className="empty">불러오는 중…</div>}
           </div>
+          {verdictAt && board.get(verdictAt.id)?.verdict_detail && <VerdictPopover d={board.get(verdictAt.id)!.verdict_detail!} at={verdictAt} onClose={() => setVerdictAt(null)}
+            onTiming={() => { const id = verdictAt.id; setVerdictAt(null); ctx.navigate('timing', { scenario: selected?.scenario_id, variant: id }) }} />}
           <div className="footer-bar">
             <span style={{ fontSize: 13 }}><b>{picked.size}개</b> 선택됨</span>
             {covQ.data && (() => { const base = rows.filter((r) => !r.derived_from_variant); const p = base.filter((r) => (cov(r.variant_id)?.simulation ?? 0) > 0 || cov(r.variant_id)?.current_prediction).length; const m = base.filter((r) => (cov(r.variant_id)?.measurement ?? 0) > 0).length

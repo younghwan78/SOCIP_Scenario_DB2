@@ -128,6 +128,14 @@ export interface BoardRow {
   verdict: string; eligible_cases: number; alternatives: number; verified: Verified | null; statistic: Statistic; runtime_scale: number
   previous: { id: string; total_mw: number; delta_mw: number } | null
   power_options?: BoardOptions
+  /** why the timing verdict (API ≥ verdict detail); derived = re-built from frozen stages of an older prediction */
+  verdict_detail?: VerdictDetail | null
+}
+export interface VerdictStage { id: string; name?: string; sw_ms?: number; hw_ms?: number; budget_ms?: number; overhead_ms?: number; margin?: number; feasible?: boolean; fill_pct?: number }
+export interface VerdictDetail {
+  status: 'ok' | 'clock_up' | 'fail' | string; reasons: string[]; nrt_clock_factor: number | null; derived: boolean
+  stages: VerdictStage[]; intervals: Record<string, number>; period_ms: number | null
+  latency?: Record<string, number | null> | null; statistic?: string | null; runtime_scale?: number | null
 }
 export interface HistoryRow { id: string; status: string; run_id: string; selection_rule: string; reason: string | null; created_at: string | null; total_mw: number; power: Power; bw_mbs: number }
 export interface Factor { category: string; item: string; delta_mw: number; detail: string }

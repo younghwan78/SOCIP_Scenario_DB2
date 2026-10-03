@@ -687,3 +687,12 @@ td.cs-best { box-shadow: inset 0 0 0 2px #8CC5A0; border-radius: 4px; }
 .timing-opts { display: inline-flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: nowrap; }
 .pane-head .seg button { white-space: nowrap; }
 .timing-ctx { margin: 0; padding: 6px 12px; border-bottom: 1px solid var(--line-soft); flex-shrink: 0; }
+/* Scenario page: 판정 popover */
+.badge-btn { border: 0; cursor: pointer; font: inherit; }
+.badge-btn:hover { filter: brightness(0.95); text-decoration: underline; }
+.verdict-pop { position: fixed; z-index: 1100; width: 430px; max-height: 70vh; overflow: auto; background: #fff; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 10px 28px rgba(31,36,48,.22); padding: 10px 12px; font-size: 12.5px; color: var(--text-2); }
+.vp-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.vp-reasons { margin: 4px 0 6px; padding-left: 18px; color: #B42318; }
+.vp-kv { display: grid; grid-template-columns: 96px 1fr; gap: 8px; line-height: 1.6; }
+.vp-kv > span:first-child { color: var(--muted); }
+tr.vp-bad td { color: #B42318; font-weight: 600; }
