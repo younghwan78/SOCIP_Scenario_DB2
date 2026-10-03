@@ -31,6 +31,7 @@ from scenario_db.db.models.exploration import (
 from scenario_db.exceptions import NotFoundError, UnprocessableError
 from scenario_db.reporting.arch_conclusion import calibration_row, run_lineage
 from scenario_db.reporting.arch_report import build_snapshot, html_sha256, render_html
+from scenario_db.reporting.report_package import package_zip
 from scenario_db.reporting.xlsx_export import report_sheets, write_xlsx
 from scenario_db.sim.arch_exploration import ENGINE_REV, explore_variant, find_case, prediction_payload
 from scenario_db.sim.power_attribution import attribute
@@ -473,6 +474,21 @@ def report_xlsx(db: Session, report_id: str) -> tuple[bytes, str]:
     stamp = r.generated_at.strftime("%Y%m%d-%H%M") if r.generated_at else "report"
     name = re.sub(r"[^A-Za-z0-9._-]+", "_", f"{r.target_soc_ref or 'soc'}_{r.scenario_type}_{stamp}")[:80]
     return write_xlsx(report_sheets(r.snapshot or {}, meta)), f"{name}.xlsx"
+
+
+def report_package(db: Session, report_id: str) -> tuple[bytes, str]:
+    """Frozen body + cover/manifest (review history, input hashes, measurement ids) as one ZIP."""
+    r = get_report(db, report_id)
+    run_inputs: dict[str, dict[str, Any]] = {}
+    for rid in r.exploration_run_refs or []:
+        run = db.get(ArchExplorationRun, rid)
+        if run is None:
+            run_inputs[rid] = {"missing": True}
+            continue
+        run_inputs[rid] = {"input_hash": run.input_hash, "engine_rev": run.engine_rev, "created_at": run.created_at,
+                           "variant_input_hashes": {f"{v['scenario_id']}/{v['variant_id']}": v.get("input_hash")
+                                                    for v in run.variants or [] if v.get("variant_id")}}
+    return package_zip(_report_meta(r), r.snapshot or {}, r.rendered_html, run_inputs, list(r.review_history or []))
 
 
 def report_stale(db: Session, report_id: str) -> dict[str, Any]:

@@ -142,6 +142,14 @@ def get_report_xlsx(report_id: str, db: Session = Depends(get_db)):
                     headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
+@router.get("/reports/{report_id}/package")
+def get_report_package(report_id: str, db: Session = Depends(get_db)):
+    """Review package: frozen report.html + cover.html + manifest.json (works offline)."""
+    data, filename = svc.report_package(db, report_id)
+    return Response(content=data, media_type="application/zip",
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
 @router.get("/reports/{report_id}/stale")
 def report_stale(report_id: str, db: Session = Depends(get_db)):
     return svc.report_stale(db, report_id)

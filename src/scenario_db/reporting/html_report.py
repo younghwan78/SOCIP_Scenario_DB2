@@ -36,6 +36,7 @@ def generate_simulation_report_html(
         "</head>",
         "<body>",
         f"<h1>{escape(title)} - Simulation Report<span class='timestamp'>{escape(_timestamp(evidence))}</span></h1>",
+        _status_banner(evidence),
         _chart_links(timing_chart_file=timing_chart_file, bw_chart_file=bw_chart_file),
         "<div class='two-col'>",
         "<div class='col'>",
@@ -69,6 +70,41 @@ def generate_simulation_report_html(
         "</html>",
     ]
     return "\n".join(part for part in html if part)
+
+
+_FAIL_FEASIBILITY = ("infeasible", "fail", "not_feasible")
+
+
+def report_status(evidence: dict[str, Any]) -> dict[str, Any]:
+    """What a reader must know before trusting the numbers: feasibility, value origin, warnings."""
+    feas = evidence.get("overall_feasibility") or (evidence.get("resolution_result") or {}).get("overall_feasibility")
+    source = (evidence.get("run_info") or {}).get("source")
+    method = (evidence.get("execution_context") or {}).get("method")
+    trace = evidence.get("calculation_trace") if isinstance(evidence.get("calculation_trace"), dict) else {}
+    warnings = [str(w) for w in [*(evidence.get("warnings") or []), *((trace or {}).get("warnings") or [])]]
+    feas_text = str(feas).split(".")[-1] if feas is not None else None
+    return {
+        "feasibility": feas_text,
+        "feasible": None if feas_text is None else not any(k in feas_text.lower() for k in _FAIL_FEASIBILITY),
+        "source": str(source).split(".")[-1] if source is not None else None,
+        "method": method,
+        "warnings": list(dict.fromkeys(warnings)),
+    }
+
+
+def _status_banner(evidence: dict[str, Any]) -> str:
+    st = report_status(evidence)
+    cls = "status-fail" if st["feasible"] is False else "status-warn" if st["source"] == "estimated" or st["warnings"] else "status-ok"
+    items = [
+        f"<b>Feasibility</b> {escape(st['feasibility'] or 'unknown')}",
+        f"<b>Values</b> {escape(st['source'] or 'unknown')}{' (estimated — not a calculation result)' if st['source'] == 'estimated' else ''}",
+        f"<b>Method</b> {escape(st['method'] or '—')}",
+        f"<b>Warnings</b> {len(st['warnings'])}",
+    ]
+    warn = "".join(f"<li>{escape(w)}</li>" for w in st["warnings"][:10])
+    more = f"<li>… {len(st['warnings']) - 10} more</li>" if len(st["warnings"]) > 10 else ""
+    return (f"<div class='status {cls}'>" + " · ".join(items)
+            + (f"<ul>{warn}{more}</ul>" if warn else "") + "</div>")
 
 
 def _clock_results_html(evidence: dict[str, Any]) -> str:
@@ -236,6 +272,11 @@ def _dict_rows(value: Any) -> list[dict[str, Any]]:
 
 def _css() -> str:
     return """
+.status { border: 1px solid #c9c2b4; border-radius: 6px; padding: 8px 12px; margin: 8px 0 16px; font-size: 14px; }
+.status ul { margin: 6px 0 0 18px; padding: 0; font-size: 13px; }
+.status-ok { background: #eef6f1; }
+.status-warn { background: #fff6e5; border-color: #e0b35a; }
+.status-fail { background: #fdecec; border-color: #d36b6b; }
 body {
   font-family: 'Segoe UI', Arial, sans-serif;
   max-width: 1400px;

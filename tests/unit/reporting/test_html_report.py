@@ -174,3 +174,13 @@ def test_simulation_report_highlights_vdd_driver_voltage_lift_compression_and_ll
     assert "class='feature-highlight'>SBWC" in html
     assert "class='feature-highlight'>0.50" in html
     assert "class='feature-highlight'>enable" in html
+
+
+def test_simulation_report_states_feasibility_source_and_warnings_first():
+    ev = _evidence() | {"overall_feasibility": "infeasible", "run_info": {"source": "estimated", "timestamp": "t", "tool": "x"},
+                        "warnings": ["DVFS table is SAMPLE"]}
+    html = generate_simulation_report_html(ev, context=ReportContext(evidence_id="sim-1", scenario_ref="s", variant_ref="v"))
+    banner = html[html.index("class='status"):html.index("</div>", html.index("class='status"))]
+    assert "status-fail" in banner and "infeasible" in banner
+    assert "estimated" in banner and "DVFS table is SAMPLE" in banner
+    assert html.index("class='status") < html.index("1. Scenario Description")

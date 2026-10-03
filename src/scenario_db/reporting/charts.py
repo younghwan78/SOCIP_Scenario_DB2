@@ -1,6 +1,13 @@
 from __future__ import annotations
 
+import os
 from typing import Any
+
+
+# Inline plotly.js: exported charts must render on an air-gapped intranet (no CDN). Each chart file
+# is self-contained (~4.5 MB raw, ~1.3 MB deflated in the ZIP). Set SCENARIO_DB_PLOTLY_JS=cdn to trade
+# portability for size.
+PLOTLY_JS_MODE: Any = True if os.environ.get("SCENARIO_DB_PLOTLY_JS", "inline") != "cdn" else "cdn"
 
 
 def timing_chart_records(evidence: dict[str, Any]) -> list[dict[str, Any]]:
@@ -248,7 +255,7 @@ def generate_timing_chart_html(evidence: dict[str, Any], *, title: str) -> str:
         categoryorder="array",
         categoryarray=timing_yaxis_category_order(records),
     )
-    return fig.to_html(full_html=True, include_plotlyjs="cdn")
+    return fig.to_html(full_html=True, include_plotlyjs=PLOTLY_JS_MODE)
 
 
 def generate_bw_chart_html(evidence: dict[str, Any], *, title: str) -> str:
@@ -301,7 +308,7 @@ def generate_bw_chart_html(evidence: dict[str, Any], *, title: str) -> str:
         legend={"orientation": "v", "yanchor": "top", "y": 1.0, "xanchor": "left", "x": 1.02, "font": {"size": 9}},
         margin={"t": 70, "r": 220, "b": 40, "l": 70},
     )
-    return fig.to_html(full_html=True, include_plotlyjs="cdn")
+    return fig.to_html(full_html=True, include_plotlyjs=PLOTLY_JS_MODE)
 
 
 def _add_bw_traces(

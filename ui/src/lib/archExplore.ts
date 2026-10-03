@@ -205,6 +205,7 @@ export const archApi = {
   setReportStatus: (id: string, status: 'draft' | 'published', review?: { reviewer: string; note: string }) =>
     send<ReportMeta>('PATCH', `/arch/reports/${encodeURIComponent(id)}`, { status, ...review }),
   reportXlsxUrl: (id: string) => `${API_BASE}/arch/reports/${encodeURIComponent(id)}/xlsx`,
+  reportPackageUrl: (id: string) => `${API_BASE}/arch/reports/${encodeURIComponent(id)}/package`,
   reportStale: (id: string) => send<{ stale: boolean; changed: { variant_id: string }[] }>('GET', `/arch/reports/${encodeURIComponent(id)}/stale`),
   reportHtmlUrl: (id: string) => `${API_BASE}/arch/reports/${encodeURIComponent(id)}/html`,
 }

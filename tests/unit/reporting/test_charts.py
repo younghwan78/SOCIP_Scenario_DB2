@@ -213,3 +213,10 @@ def test_chart_html_contains_plotly_and_legacy_titles():
     assert "---- Frame 1 start ----" in timing_html
     assert "Plotly.newPlot" in bw_html
     assert "Total BW" in bw_html
+
+
+def test_chart_html_is_self_contained_for_offline_use():
+    html = generate_bw_chart_html(_evidence(), title="t")
+    import re
+    assert not re.search(r"<script[^>]*\ssrc=", html)  # no external script (CDN) dependency
+    assert len(html) > 1_000_000  # plotly.js inlined
