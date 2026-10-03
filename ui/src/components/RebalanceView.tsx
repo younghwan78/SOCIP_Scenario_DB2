@@ -1,0 +1,209 @@
+// CPU what-if "MID 재분배": setup (pool, task states, co-move) and results (move curve, top splits, OPP states, boundaries).
+import { useMemo } from 'react'
+import { fmt } from '../lib/timingBudget'
+import { partColor, sortClusters } from '../lib/powerModel'
+import type { CpuRebalance, RbBoundary, RbSplit } from '../lib/rebalance'
+import { useTip } from './ChartTip'
+import { useWidth } from './Charts'
+import { DataTable, type Column } from './DataTable'
+import { Card } from './TimingCharts'
+import { CPU_HELP } from './CpuHelp'
+
+export type TaskState = 'auto' | 'exclude' | `pin:${string}`
+const GROUPS = ['', 'G1', 'G2', 'G3', 'G4']
+const OTHER = '#C9C2B6'
+const signed = (v: number, d = 1) => `${v >= 0 ? '+' : ''}${fmt(v, d)}`
+
+export interface SetupRow { task: string; home: string; budget: number | null; util?: Record<string, number>; tms?: Record<string, number> }
+
+/** ③ 분배 대상 — pool clusters, per-task state, co-move groups. Edits never start a run by themselves. */
+export function RebalanceSetup({ clusters, pool, setPool, rows, states, setState, groups, setGroup, budgets, setBudget, space, method, busy, onRun, top, setTop, hasResult }: {
+  clusters: string[]; pool: string[]; setPool: (p: string[]) => void
+  rows: SetupRow[]; states: Record<string, TaskState>; setState: (task: string, s: TaskState) => void
+  groups: Record<string, string>; setGroup: (task: string, g: string) => void
+  budgets: Record<string, string>; setBudget: (task: string, v: string) => void
+  space: { units: number; splits: number; reduced: number }; method?: string
+  busy: boolean; onRun: () => void; top: number; setTop: (n: number) => void; hasResult: boolean
+}) {
+  const keys = clusters.map((c) => `cpu.${c}`)
+  const color = (c: string) => partColor(`cpu.${c}`, keys)
+  const inPool = (c: string) => pool.includes(c)
+  return (
+    <Card id="cpu-rb-setup" title="③ 분배 대상" defaultWide help={CPU_HELP.rbSetup}
+      note="pool cluster 사이에서 task를 cpuset으로 나눔 · 자동 = 계산이 고름 · 고정 / 제외 = 그대로 둠 · 같은 group = 함께 이동">
+      <div className="toolbar" style={{ gap: 10, fontSize: 12, marginBottom: 6, flexWrap: 'wrap' }}>
+        <span className="faint">pool</span>
+        {clusters.map((c) => <label key={c} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+          <input type="checkbox" checked={inPool(c)} onChange={() => setPool(inPool(c) ? pool.filter((x) => x !== c) : sortClusters([...pool, c]))} />
+          <span className="sw pm-sw" style={{ background: color(c) }} />{c}</label>)}
+        {pool.length < 2 && <span className="badge v-fail">cluster 2개 이상 필요</span>}
+        <span className="faint">· BIG 계열은 기본 제외 (camera SW는 대체로 손해)</span>
+      </div>
+      <div className="table-x"><table className="grid cpu-matrix rb-setup">
+        <thead><tr><th>task</th><th>측정 위치</th>
+          {pool.map((c) => <th key={c} style={{ borderTop: `3px solid ${color(c)}`, textAlign: 'right' }} title="fmax에서 task 시간 (가장 긴 thread) · util">{c}<div className="faint" style={{ fontSize: 10.5, fontWeight: 400 }}>ms @fmax · util</div></th>)}
+          <th title="frame당 허용 시간 (가장 긴 thread)">budget ms</th><th>상태</th><th title="같은 group은 같은 cluster로 함께 이동 (wakeup·cache 공유 task)">함께 이동</th></tr></thead>
+        <tbody>{rows.map((r) => {
+          const st = states[r.task] ?? 'auto'
+          const movable = inPool(r.home)
+          return <tr key={r.task} className={st === 'auto' && movable ? '' : 'row-off'}>
+            <td className="mono">{r.task}</td>
+            <td><span className="sw pm-sw" style={{ background: color(r.home) }} />{r.home}{!movable && <span className="faint" style={{ fontSize: 11 }}> · pool 밖 (고정)</span>}</td>
+            {pool.map((c) => <td key={c} className={`mono ${c === r.home ? 'measured' : ''}`} style={{ textAlign: 'right' }}>
+              {r.tms?.[c] !== undefined ? <>{fmt(r.tms[c], 2)}<span className="faint"> · {fmt(r.util?.[c] ?? 0, 0)}</span></> : <span className="faint">—</span>}</td>)}
+            <td><input style={{ width: 52 }} value={budgets[r.task] ?? ''} placeholder={r.budget !== null ? String(r.budget) : '—'} onChange={(e) => setBudget(r.task, e.target.value)} aria-label={`${r.task} budget`} /></td>
+            <td><select value={st} disabled={!movable} aria-label={`${r.task} 상태`} onChange={(e) => setState(r.task, e.target.value as TaskState)}>
+              <option value="auto">자동</option>
+              {pool.map((c) => <option key={c} value={`pin:${c}`}>{c} 고정</option>)}
+              <option value="exclude">제외 (측정 위치)</option></select></td>
+            <td><select value={groups[r.task] ?? ''} disabled={!movable || st !== 'auto'} aria-label={`${r.task} 함께 이동`} onChange={(e) => setGroup(r.task, e.target.value)}>
+              {GROUPS.map((g) => <option key={g} value={g}>{g || '—'}</option>)}</select></td>
+          </tr>
+        })}</tbody></table></div>
+      <div className="toolbar" style={{ marginTop: 8, gap: 10 }}>
+        <span className="faint" style={{ fontSize: 12 }}>이동 단위 {space.units}개 · 분할 {pool.length}^{space.units} = {space.splits.toLocaleString()}{space.reduced !== space.splits ? ` (동일 cluster 대칭 제거 ≈ ${space.reduced.toLocaleString()})` : ''}
+          {' · '}{space.reduced <= 300000 ? '전수 계산' : '국소 탐색 (move / swap)'}{method ? ` · 지난 계산: ${method === 'exhaustive' ? '전수' : '국소 탐색'}` : ''}</span>
+        <span className="grow" />
+        <label className="faint" style={{ fontSize: 12, display: 'flex', gap: 4, alignItems: 'center' }}>결과 상위
+          <select value={top} onChange={(e) => setTop(Number(e.target.value))} aria-label="재분배 결과 상위 N">{[10, 20, 50].map((n) => <option key={n} value={n}>{n}</option>)}</select>개</label>
+        <button className="btn primary" disabled={busy || pool.length < 2} onClick={onRun}>{busy ? '계산 중…' : hasResult ? '다시 계산' : '재분배 계산'}</button>
+      </div>
+    </Card>
+  )
+}
+
+/** Greedy move curve: stacked power per step (pool clusters · DSU · other), total line, ★ start, ● lowest. */
+export function MoveCurve({ r, sel, onPick }: { r: CpuRebalance; sel: string; onPick: (id: string) => void }) {
+  const [ref, width] = useWidth<HTMLDivElement>(800)
+  const tip = useTip()
+  const keys = r.clusters.map((c) => `cpu.${c.name}`)
+  const parts = [...r.pool.map((c) => ({ k: c, label: c, color: partColor(`cpu.${c}`, keys) })), { k: 'dsu', label: 'DSU', color: partColor('cpu.dsu', keys) }, { k: 'other', label: 'pool 밖', color: OTHER }]
+  const pts = r.curve
+  const max = Math.max(...pts.map((p) => p.total_mw), r.reference.total_mw) * 1.08
+  const H = 220, L = 46, B = 92, plotW = Math.max(200, width - L - 12), bw = Math.min(46, (plotW / pts.length) * 0.7)
+  const x = (i: number) => L + (i + 0.5) * (plotW / pts.length)
+  const y = (v: number) => 8 + (1 - v / max) * (H - 8)
+  const lowest = pts.reduce((b, p, i) => (p.feasible && (b < 0 || p.total_mw < pts[b].total_mw) ? i : b), -1)
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => f * max)
+  return (
+    <div ref={ref} style={{ width: '100%' }}>
+      <div className="legend-row">{parts.map((p) => <span key={p.k} className="legend-item"><span className="sw" style={{ background: p.color }} />{p.label}</span>)}
+        <span className="legend-item faint">— 총 CPU mW · ★ 현재 · ● 곡선 최저 · 점선 = 전체 탐색 최저 · 흐린 막대 = budget 미충족</span></div>
+      <svg width={width} height={H + B} role="img" aria-label="이동 곡선">
+        {ticks.map((t) => <g key={t}><line x1={L} x2={L + plotW} y1={y(t)} y2={y(t)} stroke="#EFEAE2" /><text x={L - 6} y={y(t) + 4} fontSize={10} textAnchor="end" fill="var(--muted)">{fmt(t, 0)}</text></g>)}
+        {r.best && <line x1={L} x2={L + plotW} y1={y(r.best.total_mw)} y2={y(r.best.total_mw)} stroke="#2F855A" strokeDasharray="5 4"><title>전체 탐색 최저 {fmt(r.best.total_mw, 1)} mW</title></line>}
+        {pts.map((p, i) => {
+          let acc = 0
+          const id = `s${i}`
+          return <g key={i} opacity={p.feasible ? 1 : 0.35} style={{ cursor: 'pointer' }} onClick={() => onPick(id)}
+            {...tip(() => ({ title: i === 0 ? '현재 (측정 배치)' : `step ${i} · ${p.moved_unit} 이동`, head: { label: '총 CPU', value: `${fmt(p.total_mw, 1)} mW`, tone: 'strong' as const },
+              rows: [{ k: '현재 대비', v: `${signed(p.delta_mw)} mW`, tone: p.delta_mw < 0 ? 'good' as const : 'bad' as const },
+                ...parts.map((q) => ({ k: q.label, v: `${fmt(p.mw[q.k] ?? 0, 1)} mW${p.mhz[q.k] ? ` @${p.mhz[q.k]}` : ''}`, color: q.color })),
+                { k: '옮긴 util', v: `${p.moved_util_pct ?? 0}%` }, { k: '판정', v: p.feasible ? 'budget 충족' : '미충족', tone: p.feasible ? 'good' as const : 'bad' as const }] }))}>
+            {parts.map((q) => { const v = p.mw[q.k] ?? 0; const y0 = y(acc + v), h = y(acc) - y0; acc += v
+              return <rect key={q.k} x={x(i) - bw / 2} y={y0} width={bw} height={Math.max(0, h)} fill={q.color} stroke={sel === id ? '#1F2430' : 'none'} /> })}
+            <text x={x(i)} y={H + 14} fontSize={10} textAnchor="middle" fill="var(--muted)">{i}</text>
+            <text x={x(i) + 3} y={H + 26} fontSize={9.5} textAnchor="end" fill="var(--text-2)" transform={`rotate(-35 ${x(i) + 3} ${H + 26})`}>{i === 0 ? '현재' : p.moved_unit}</text>
+          </g>
+        })}
+        <polyline points={pts.map((p, i) => `${x(i)},${y(p.total_mw)}`).join(' ')} fill="none" stroke="#1F2430" strokeWidth={1.5} />
+        {pts.map((p, i) => <circle key={i} cx={x(i)} cy={y(p.total_mw)} r={2.5} fill="#1F2430" />)}
+        <text x={x(0)} y={y(pts[0].total_mw) - 8} fontSize={13} textAnchor="middle">★</text>
+        {lowest > 0 && <circle cx={x(lowest)} cy={y(pts[lowest].total_mw)} r={6} fill="none" stroke="#2F855A" strokeWidth={2} />}
+      </svg>
+    </div>
+  )
+}
+
+function SplitDetail({ s, r, title }: { s: RbSplit; r: CpuRebalance; title: string }) {
+  const units = r.units
+  return (
+    <Card id="cpu-rb-detail" title={title} defaultWide note="task별 cluster · 시간 · budget" help={CPU_HELP.rbDetail}>
+      <div className="toolbar" style={{ gap: 12, fontSize: 12, flexWrap: 'wrap', marginBottom: 6 }}>
+        {r.pool.map((c) => <span key={c} className="mono">{c} <b>{s.mhz[c]}</b> MHz ({fmt(s.mw[c] ?? 0, 1)} mW · {r.reference.mhz[c]}→{s.mhz[c]})</span>)}
+        <span className="mono">DSU <b>{s.mhz.dsu}</b> MHz ({fmt(s.mw.dsu ?? 0, 1)} mW)</span>
+        {s.knobs.length > 0 && <span className="badge" title="기기 적용 방법">cpuset {s.knobs.length}건</span>}
+      </div>
+      <table className="tb-mini-table" style={{ width: '100%' }}>
+        <thead><tr><th>task</th><th>측정 → 배치</th><th style={{ textAlign: 'right' }}>task ms</th><th style={{ textAlign: 'right' }}>budget</th><th style={{ textAlign: 'right' }}>slack</th></tr></thead>
+        <tbody>{units.flatMap((u) => u.tasks.map((t) => {
+          const at = s.assign[u.unit] ?? u.home, ms = s.task_ms?.[t], sl = s.slack_ms?.[t]
+          return <tr key={t}><td className="mono">{t}{u.tasks.length > 1 && <span className="faint"> ({u.unit})</span>}</td>
+            <td>{u.home}{at !== u.home ? <b> → {at}</b> : ''}</td>
+            <td className="mono" style={{ textAlign: 'right' }}>{ms !== undefined ? fmt(ms, 2) : '—'}</td>
+            <td className="mono" style={{ textAlign: 'right' }}>{u.budget_ms ?? '—'}</td>
+            <td className={`mono ${sl !== undefined && sl < 0 ? 'pm-up' : ''}`} style={{ textAlign: 'right' }}>{sl !== undefined ? fmt(sl, 2) : '—'}</td></tr>
+        }))}</tbody>
+      </table>
+    </Card>
+  )
+}
+
+function Boundaries({ list, title }: { list: RbBoundary[]; title: string }) {
+  return <div>
+    <h3 className="cpu-h">{title}</h3>
+    <table className="tb-mini-table" style={{ width: '100%' }}>
+      <thead><tr><th>cluster</th><th style={{ textAlign: 'right' }}>MHz (mV)</th><th style={{ textAlign: 'right' }}>1 step ↓</th><th style={{ textAlign: 'right' }}>빼야 할 util</th><th>후보 (util)</th></tr></thead>
+      <tbody>{list.map((b) => <tr key={b.cluster}><td className="mono">{b.cluster}</td>
+        <td className="mono" style={{ textAlign: 'right' }}>{b.mhz} ({b.mv})</td>
+        <td className="mono" style={{ textAlign: 'right' }}>{b.next_lower_mhz ? `${b.next_lower_mhz} (${b.next_lower_mv})` : '최저 OPP'}</td>
+        <td className="mono" style={{ textAlign: 'right' }} title={b.boosted_by?.length ? `schedutil은 ${b.sched_mhz} MHz지만 budget 때문에 올림: ${b.boosted_by.join(', ')}` : undefined}>
+          {b.boosted_by?.length ? <span className="badge v-warn">budget ↑ {b.boosted_by.slice(0, 2).join(', ')}{b.boosted_by.length > 2 ? '…' : ''}</span> : (b.delta_util_needed ?? '—')}</td>
+        <td className="mono faint" style={{ fontSize: 11 }}>{(b.candidates ?? []).filter(([, u]) => u >= (b.delta_util_needed ?? 0)).slice(0, 5).map(([t, u]) => `${t} (${fmt(u, 0)})`).join(' · ') || '—'}</td></tr>)}</tbody>
+    </table>
+  </div>
+}
+
+export function RebalanceResults({ r, sel, setSel }: { r: CpuRebalance; sel: string; setSel: (id: string) => void }) {
+  const ref = r.reference, best = r.best
+  const keys = r.clusters.map((c) => `cpu.${c.name}`)
+  const color = (c: string) => (c === 'dsu' ? partColor('cpu.dsu', keys) : c === 'other' ? OTHER : partColor(`cpu.${c}`, keys))
+  const picked: RbSplit | undefined = sel === 'ref' ? ref : sel.startsWith('c') ? r.cases.find((c) => `c${c.rank}` === sel) : sel.startsWith('s') ? r.curve[Number(sel.slice(1))] : undefined
+  const stackKeys = [...r.pool, 'dsu', 'other']
+  const maxMw = Math.max(ref.total_mw, ...r.cases.map((c) => c.total_mw))
+  const cols: Column<RbSplit>[] = useMemo(() => [
+    { key: 'rank', label: '#', width: 40, sort: (c) => c.rank, render: (c) => c.rank },
+    { key: 'mw', label: 'CPU mW', width: 84, align: 'right', sort: (c) => c.total_mw, render: (c) => <span className="mono">{fmt(c.total_mw, 1)}</span> },
+    { key: 'd', label: '현재 대비', width: 90, align: 'right', sort: (c) => c.delta_mw, render: (c) => <span className={`mono ${c.delta_mw < 0 ? 'pm-down' : 'pm-up'}`}>{signed(c.delta_mw)}</span> },
+    { key: 'stack', label: '구성', width: 170, render: (c) => <span className="rb-stack" title={stackKeys.map((k) => `${k} ${fmt(c.mw[k] ?? 0, 1)}`).join(' · ')}>
+      {stackKeys.map((k) => <span key={k} style={{ width: `${(100 * (c.mw[k] ?? 0)) / maxMw}%`, background: color(k) }} />)}</span> },
+    ...r.pool.map((cl): Column<RbSplit> => ({ key: `f.${cl}`, label: cl, width: 86, align: 'right', sort: (c) => c.mhz[cl], render: (c) => <span className={`mono ${c.mhz[cl] < ref.mhz[cl] ? 'pm-down' : c.mhz[cl] > ref.mhz[cl] ? 'pm-up' : ''}`}>{c.mhz[cl]}</span> })),
+    { key: 'dsu', label: 'DSU', width: 64, align: 'right', sort: (c) => c.mhz.dsu, render: (c) => <span className="mono">{c.mhz.dsu}</span> },
+    { key: 'slack', label: 'slack ms', width: 76, align: 'right', sort: (c) => c.min_slack_ms ?? null, render: (c) => <span className="mono">{c.min_slack_ms === null || c.min_slack_ms === undefined ? '—' : fmt(c.min_slack_ms, 2)}</span> },
+    { key: 'mv', label: '옮긴 task → cluster', width: 420, title: (c) => c.moved.map((u) => `${u}→${c.assign[u]}`).join('\n'), render: (c) => <span className="mono faint" style={{ fontSize: 11.5 }}>{c.moved.map((u) => `${u}→${c.assign[u]}`).join(' · ') || '—'}</span> },
+  ], [r]) // eslint-disable-line react-hooks/exhaustive-deps
+  const tile = (label: string, value: string, note: string, tone = '') =>
+    <div key={label} className="panel tb-kpi"><div className="faint" style={{ fontSize: 12 }}>{label}</div><div className={`mono ${tone}`} style={{ fontSize: 20, fontWeight: 600 }}>{value}</div><div className="faint" style={{ fontSize: 11 }}>{note}</div></div>
+  return <>
+    <div className="tb-kpis">
+      {tile('현재 (측정 배치)', `${fmt(ref.total_mw, 1)} mW`, r.pool.map((c) => `${c} ${ref.mhz[c]}`).join(' · ') + ` · DSU ${ref.mhz.dsu}`)}
+      {best && tile('최저 분배', `${fmt(best.total_mw, 1)} mW`, r.pool.map((c) => `${c} ${best.mhz[c]}`).join(' · ') + ` · DSU ${best.mhz.dsu}`, 'pm-down')}
+      {best && tile('절감', `${signed(best.delta_mw)} mW`, `${fmt((100 * best.delta_mw) / ref.total_mw, 1)}% · task ${best.moved.length}개 이동`, best.delta_mw < 0 ? 'pm-down' : '')}
+      {tile('탐색', r.method === 'exhaustive' ? '전수' : '국소 탐색', `분할 ${r.evaluated.toLocaleString()} / ${r.space.toLocaleString()} · 조건 충족 ${r.feasible_count.toLocaleString()} · 정밀 검증 ${r.verified}`)}
+    </div>
+    {r.warnings.filter((w) => !/max_exhaustive/.test(w)).map((w) => <div key={w} className="lib-note warn">{/no same-name/.test(w) ? `측정 cluster 대응 없음 — ${w}` : w}</div>)}
+    <Card id="cpu-rb-curve" title="이동 곡선" defaultWide help={CPU_HELP.rbCurve} note="현재 배치에서 이득이 큰 task부터 하나씩 옮김 · 막대 클릭 = 아래 상세">
+      <MoveCurve r={r} sel={sel} onPick={setSel} />
+    </Card>
+    <Card id="cpu-rb-top" title={`최저 분배 상위 ${r.cases.length}`} defaultWide help={CPU_HELP.rbTop} note="budget 충족 · CPU+DSU 전력 낮은 순 · 행 클릭 = 상세" minHeight={160}>
+      <div className="table-scroll" style={{ maxHeight: 360 }}>
+        <DataTable id="cpu.rb.top" columns={cols} rows={r.cases} rowKey={(c) => `c${c.rank}`} rowClass={(c) => (sel === `c${c.rank}` ? 'sel' : '')} onRowClick={(c) => setSel(`c${c.rank}`)} />
+      </div>
+    </Card>
+    <Card id="cpu-rb-states" title="OPP 상태별 묶음" help={CPU_HELP.rbStates} note={`같은 cluster OPP 조합 = 전력 차이 작음 · ${r.opp_state_count}개 상태`} minHeight={120}>
+      <table className="tb-mini-table" style={{ width: '100%' }}>
+        <thead><tr>{r.pool.map((c) => <th key={c} style={{ textAlign: 'right' }}>{c}</th>)}<th style={{ textAlign: 'right' }}>DSU</th><th style={{ textAlign: 'right' }}>분할 수</th><th style={{ textAlign: 'right' }}>mW 범위</th></tr></thead>
+        <tbody>{r.opp_states.slice(0, 12).map((s, i) => <tr key={i}>{r.pool.map((c) => <td key={c} className="mono" style={{ textAlign: 'right' }}>{s.mhz[c]}</td>)}
+          <td className="mono" style={{ textAlign: 'right' }}>{s.mhz.dsu}</td><td className="mono" style={{ textAlign: 'right' }}>{s.count.toLocaleString()}</td>
+          <td className="mono" style={{ textAlign: 'right' }}>{fmt(s.min_mw, 1)}–{fmt(s.max_mw, 1)}</td></tr>)}</tbody>
+      </table>
+    </Card>
+    <Card id="cpu-rb-bound" title="OPP 경계" help={CPU_HELP.rbBound} note="cluster를 한 단계 낮추려면 빼야 할 util과 후보 task" minHeight={120}>
+      <div style={{ display: 'grid', gap: 10 }}>
+        <Boundaries list={r.boundaries.reference} title="현재" />
+        {best && <Boundaries list={r.boundaries.best} title="최저 분배" />}
+      </div>
+    </Card>
+    {picked && <SplitDetail s={picked} r={r} title={sel === 'ref' ? '현재 (측정 배치)' : picked.rank ? `#${picked.rank} 분배 상세` : `곡선 step ${picked.step}`} />}
+  </>
+}

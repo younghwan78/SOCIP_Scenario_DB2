@@ -2,6 +2,27 @@
 import type { ReactNode } from 'react'
 
 export const CPU_HELP: Record<string, ReactNode> = {
+  rbSetup: <>
+    <b>MID cluster 사이에서 camera SW task를 어떻게 나눌지 계산합니다.</b>
+    <ul>
+      <li><b>pool</b> — task를 나눌 cluster. 기본은 BIG 계열을 뺀 cluster (camera SW에서 BIG 사용은 대체로 손해). 과제마다 MID 구성이 달라도 topology대로 표시됩니다 (E2600 MID_LF0/LF1/HF, 차기 MID_HF0/HF1).</li>
+      <li><b>자동</b> — 계산이 pool 안에서 cluster를 고름 (cpuset 고정). <b>고정</b> — 지정 cluster. <b>제외</b> — 측정 위치 그대로.</li>
+      <li><b>함께 이동</b> — 같은 group의 task는 같은 cluster로 (wakeup 지연·cache 공유가 큰 producer/consumer).</li>
+      <li>같은 구성의 cluster 두 개(MID_HF0/HF1)는 바꿔도 결과가 같아 한 번만 계산하고, 표시는 덜 옮기는 쪽으로 합니다.</li>
+      <li>분할 수가 30만 이하면 전부 계산, 넘으면 move/swap 국소 탐색 (전수 대비 0.1% 이내였음).</li>
+    </ul>
+  </>,
+  rbCurve: <>
+    <b>현재 배치에서 전력 이득이 가장 큰 task부터 하나씩 옮겨 본 경로입니다.</b>
+    <ul>
+      <li>한 cluster에 몰려 있으면 그 cluster OPP(V²f)와 DSU vote가 올라가고, 옮기면 받는 cluster의 전력이 올라갑니다 → U자 곡선의 바닥이 균형점.</li>
+      <li>점선 = 전체 탐색의 최저 (곡선은 한 경로라 최저와 다를 수 있음). 흐린 막대 = budget 미충족.</li>
+    </ul>
+  </>,
+  rbTop: <><b>budget을 만족하는 분배 중 CPU + DSU 전력이 낮은 순.</b> 상위 후보는 전체 EAS 모델로 다시 계산해 검증했습니다. MHz 색: 초록 = 현재보다 낮음, 빨강 = 높음.</>,
+  rbStates: <><b>cluster OPP 조합이 같은 분배끼리 묶은 것.</b> 같은 OPP면 전력 차이가 1 mW 안팎이라 순위보다 “어떤 OPP 조합에 도달하느냐”가 중요합니다. 분할 수가 많을수록 그 상태로 가는 방법이 많다는 뜻.</>,
+  rbBound: <><b>cluster를 OPP 한 단계 낮추는 데 필요한 util 감소량과 그만큼을 덜어 줄 수 있는 task.</b> 전압이 같은 구간이면 OPP를 낮춰도 이득이 작습니다 (mV 확인).</>,
+  rbDetail: <><b>선택한 분배의 task별 배치와 시간.</b> 기기 적용 = 옮긴 task를 해당 cluster cpuset(또는 affinity)으로 고정.</>,
   dsu: <>
     <b>DSU 주파수를 정하는 규칙(가정)을 바꿔 보며 결론이 유지되는지 봅니다.</b>
     <ul>

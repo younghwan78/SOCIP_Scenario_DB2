@@ -1,29 +1,41 @@
 // CPU what-if: DSU <-> cluster clock coupling as an editable architecture assumption.
 // Edits are evaluated client-side on the returned cases (no new sweep); "서버에 적용" reruns the full sweep with it.
 import { useMemo, useState } from 'react'
-import type { CpuSweep } from '../lib/cpu'
+import type { CpuSweep, SweepCase } from '../lib/cpu'
 import { fmt } from '../lib/timingBudget'
 import {
   applyDsu, expandVote, monotone, proportionalVote, shiftVote, summarize, voteYaml,
-  type DsuPolicy, type VoteTable,
+  type DsuModelInfo, type DsuParams, type DsuPolicy, type VoteTable,
 } from '../lib/dsu'
 
 const MODE_LABEL: Record<DsuPolicy['mode'], string> = {
   vote: 'vote 표 (busy cluster 최대)', proportional: '비례 (가장 바쁜 cluster f/fmax)', measured: '측정 residency 고정', fixed: '고정 MHz',
 }
 
-export function DsuPanel({ raw, exp, setExp, onApply, applied }: {
-  raw: CpuSweep
+export interface DsuEval { refMw: number; bestMw: number | null; deltaMw: number | null; refDsuMhz: number | null; bestDsuMhz: number | null; bestKey: string }
+
+const sweepKey = (c: SweepCase | null) => (c ? Object.entries(c.knobs).filter(([, o]) => o.kind !== 'measured').map(([t, o]) => `${t}→${o.clusters?.join('/') ?? o.value ?? o.kind}`).join(' · ') || 'EAS 기본' : '—')
+/** DsuPanel evaluator for an automatic-sweep response */
+export function sweepEvaluator(raw: CpuSweep) {
+  return (pol: DsuPolicy | null): DsuEval => { const s = summarize(pol ? applyDsu(raw, pol) : raw); return { ...s, bestKey: sweepKey(s.best) } }
+}
+
+export function DsuPanel({ params: p, server, measured, check, evalPolicy, candidates, exp, setExp, onApply, applied }: {
+  params: DsuParams | null | undefined
+  server: DsuModelInfo | null | undefined
+  measured?: Record<string, number> | null
+  check?: { measured_mean_mhz: number; model_mhz: number | null } | null
+  /** power summary of the returned candidates under a rule (null = server result) */
+  evalPolicy: (pol: DsuPolicy | null) => DsuEval
+  candidates: number
   exp: DsuPolicy | null
   setExp: (p: DsuPolicy | null) => void
-  /** rerun the sweep with this policy (null = topology / auto) */
+  /** rerun with this rule (null = topology / auto) */
   onApply: (p: DsuPolicy | null) => void
   applied: DsuPolicy | null
 }) {
-  const p = raw.dsu_params
   const [saved, setSaved] = useState<{ A?: DsuPolicy; B?: DsuPolicy }>({})
   const [copied, setCopied] = useState(false)
-  const server = raw.dsu_model
   const startVote = (): VoteTable => (p ? expandVote(server?.vote ?? exp?.vote ?? proportionalVote(p), p) : {})
   const cur: DsuPolicy = exp ?? (server ? { mode: server.mode, vote: server.vote, fixed_mhz: server.fixed_mhz } : { mode: 'proportional' })
   const rows = useMemo(() => {
@@ -36,10 +48,10 @@ export function DsuPanel({ raw, exp, setExp, onApply, applied }: {
     }
     if (saved.A) out.push({ key: 'A', label: '정책 A', pol: saved.A })
     if (saved.B) out.push({ key: 'B', label: '정책 B', pol: saved.B })
-    return out.map((r) => ({ ...r, s: summarize(r.pol ? applyDsu(raw, r.pol) : raw) }))
-  }, [raw, exp, saved, p, server])
+    return out.map((r) => ({ ...r, s: evalPolicy(r.pol) }))
+  }, [evalPolicy, exp, saved, p, server])
   if (!p) return <div className="faint" style={{ fontSize: 12 }}>topology에 DSU OPP가 없어 DSU 가정을 다룰 수 없습니다.</div>
-  const bestKey = (s: (typeof rows)[number]['s']) => (s.best ? Object.entries(s.best.knobs).filter(([, o]) => o.kind !== 'measured').map(([t, o]) => `${t}→${o.clusters?.join('/') ?? o.value ?? o.kind}`).join(' · ') || 'EAS 기본' : '—')
+  const bestKey = (s: DsuEval) => s.bestKey
   const baseBest = rows[0] ? bestKey(rows[0].s) : ''
   const vote = cur.mode === 'vote' ? expandVote(cur.vote ?? {}, p) : null
   const setCell = (cl: string, i: number, d: number) => {
@@ -55,7 +67,7 @@ export function DsuPanel({ raw, exp, setExp, onApply, applied }: {
       <div className="toolbar" style={{ gap: 10, fontSize: 12, flexWrap: 'wrap' }}>
         <span className="faint">서버 적용 규칙</span>
         <span className="badge">{server ? `${MODE_LABEL[server.mode]}${server.source ? ` · ${server.source}` : ''}` : '—'}</span>
-        {raw.dsu_check && <span className="faint" title="측정 배치에서 모델 DSU MHz vs 측정 평균 — 가정 확인용">측정 평균 {fmt(raw.dsu_check.measured_mean_mhz, 0)} MHz · 모델 {raw.dsu_check.model_mhz ?? '—'} MHz</span>}
+        {check && <span className="faint" title="측정 배치에서 모델 DSU MHz vs 측정 평균 — 가정 확인용">측정 평균 {fmt(check.measured_mean_mhz, 0)} MHz · 모델 {check.model_mhz ?? '—'} MHz</span>}
         <span className="grow" />
         <label className="cpu-f" style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><span className="faint">실험 규칙</span>
           <select value={exp ? exp.mode : ''} aria-label="DSU 실험 규칙" onChange={(e) => {
@@ -65,7 +77,7 @@ export function DsuPanel({ raw, exp, setExp, onApply, applied }: {
             <option value="">— (서버 결과 그대로)</option>
             <option value="vote">{MODE_LABEL.vote}</option>
             <option value="proportional">{MODE_LABEL.proportional}</option>
-            {raw.dsu_measured && <option value="measured">{MODE_LABEL.measured}</option>}
+            {measured && <option value="measured">{MODE_LABEL.measured}</option>}
             <option value="fixed">{MODE_LABEL.fixed}</option>
           </select></label>
         {exp?.mode === 'fixed' && <select aria-label="DSU 고정 MHz" value={exp.fixed_mhz} onChange={(e) => setExp({ mode: 'fixed', fixed_mhz: Number(e.target.value) })}>
@@ -105,7 +117,7 @@ export function DsuPanel({ raw, exp, setExp, onApply, applied }: {
             <td className="mono" style={{ textAlign: 'right' }}>{r.s.refDsuMhz ?? '—'} → {r.s.bestDsuMhz ?? '—'}</td>
             <td className="mono faint" style={{ fontSize: 11 }}>{k}{r.key !== 'srv' && k !== baseBest && <span className="badge v-warn" style={{ marginLeft: 6 }}>최적 배치 바뀜</span>}</td></tr> })}</tbody>
       </table>
-      {exp && <div className="faint" style={{ fontSize: 11.5, marginTop: 4 }}>실험 규칙은 서버가 반환한 후보({raw.cases.length + raw.others.length}개) 안에서 다시 계산·정렬합니다. 전체 조합 순위는 “이 규칙으로 다시 계산”.</div>}
+      {exp && <div className="faint" style={{ fontSize: 11.5, marginTop: 4 }}>실험 규칙은 서버가 반환한 후보({candidates}개) 안에서 다시 계산·정렬합니다. 전체 조합 순위는 “이 규칙으로 다시 계산”.</div>}
     </div>
   )
 }

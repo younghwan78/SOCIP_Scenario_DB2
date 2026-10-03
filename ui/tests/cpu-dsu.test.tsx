@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { CpuSweep, SweepCase } from '../src/lib/cpu'
 import { applyDsu, expandVote, monotone, proportionalVote, shiftVote, type VoteTable } from '../src/lib/dsu'
-import { DsuPanel } from '../src/components/DsuPanel'
+import { DsuPanel, sweepEvaluator } from '../src/components/DsuPanel'
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 const fx = JSON.parse(readFileSync(join(process.cwd(), 'tests/fixtures/cpu-dsu-sweeps.json'), 'utf-8')) as
@@ -65,7 +65,9 @@ it('vote table helpers', () => {
 it('DSU panel: experiment rows, corners and changed-optimum flag', () => {
   const host = document.createElement('div'), root = createRoot(host)
   let exp: Parameters<typeof DsuPanel>[0]['exp'] = null
-  const render = () => act(() => root.render(<DsuPanel raw={S('proportional')} exp={exp} setExp={(p) => { exp = p; render() }} onApply={() => {}} applied={null} />))
+  const raw = S('proportional'), ev = sweepEvaluator(raw)
+  const render = () => act(() => root.render(<DsuPanel params={raw.dsu_params} server={raw.dsu_model} measured={raw.dsu_measured} check={raw.dsu_check}
+    evalPolicy={ev} candidates={raw.cases.length + raw.others.length} exp={exp} setExp={(p) => { exp = p; render() }} onApply={() => {}} applied={null} />))
   render()
   expect(host.querySelectorAll('table[aria-label="DSU 정책 비교"] tbody tr')).toHaveLength(1)
   const sel = host.querySelector<HTMLSelectElement>('select[aria-label="DSU 실험 규칙"]')!

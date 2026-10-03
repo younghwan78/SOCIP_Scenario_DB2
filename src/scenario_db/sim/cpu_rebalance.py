@@ -178,7 +178,7 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
         late = [t for t, ms in task_ms.items() if ms > period + 1e-9 or (t in budgets and ms > budgets[t] + 1e-9)]
         out = {"mhz": row["mhz"], "mw": row["total_mw"], "idle": idle, "busy": row["busy_ms"] > 0,
                "feasible": not overloaded and not late, "task_ms": task_ms, "peak_util": max((r["util"] for r in row["cpus"]), default=0.0),
-               "overutilized": over}
+               "overutilized": over, "sched_mhz": row["sched_mhz"], "boosted_by": row["boosted_by"]}
         memo[key] = out
         return out
 
@@ -212,7 +212,8 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
                             + [(c, s["mhz"]) for c, s in fixed_state.items() if s["busy"]]))
         dmhz, dmw = dsu_of(busy, 1.0 - idle)
         mw = fixed_mw + sum(s["mw"] for s in sts) + dmw
-        return mw, fixed_ok and all(s["feasible"] for s in sts), {"dsu_mhz": dmhz, "dsu_mw": dmw, "sts": sts}
+        return mw, fixed_ok and all(s["feasible"] for s in sts), {"dsu_mhz": dmhz, "dsu_mw": dmw, "sts": sts,
+                                                                   "busy": dict(busy), "active": 1.0 - idle}
 
     U, N = len(units), len(pool)
     full = (1 << U) - 1
@@ -375,6 +376,8 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
             "mw": {c: round(s["mw"], 4) for c, s in zip(pool, info["sts"])} | {"dsu": round(info["dsu_mw"], 4), "other": round(fixed_mw, 4)},
             "mhz": {c: s["mhz"] for c, s in zip(pool, info["sts"])} | {"dsu": info["dsu_mhz"]},
             "mv": {c: ctx.by_name[c].voltage_mv(s["mhz"], model.fallback_mv) for c, s in zip(pool, info["sts"])},
+            # what a client needs to re-evaluate the DSU for another vote table
+            "busy_mhz": info["busy"], "dsu_active": round(info["active"], 6),
         }
         if case is not None:
             out |= {"task_ms": case["task_ms"], "slack_ms": case["slack_ms"], "min_slack_ms": case["min_slack_ms"],
@@ -399,7 +402,8 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
         states.setdefault(tuple(s["mhz"] for s in sts) + (dmhz,), []).append((k, mw))
     opp_states = sorted(({"mhz": {c: f for c, f in zip(pool, key[:-1])} | {"dsu": key[-1]}, "count": len(v),
                           "min_mw": round(min(x[1] for x in v), 4), "max_mw": round(max(x[1] for x in v), 4),
-                          "representative": describe(assign_of(min(v, key=lambda x: x[1])[0]))["assign"]}
+                          "representative": (rep := describe(assign_of(min(v, key=lambda x: x[1])[0])))["assign"],
+                          "rep_mw": rep["mw"], "busy_mhz": rep["busy_mhz"], "dsu_active": rep["dsu_active"]}
                          for key, v in states.items()), key=lambda s: s["min_mw"])
 
     curve = []
@@ -419,7 +423,8 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
             s = state(c, m)
             fs = _freqs(ctx.by_name[c], model)
             row: dict[str, Any] = {"cluster": c, "mhz": s["mhz"], "mv": ctx.by_name[c].voltage_mv(s["mhz"], model.fallback_mv),
-                                   "peak_cpu_util": s["peak_util"], "capacity": ctx.caps[c]}
+                                   "peak_cpu_util": s["peak_util"], "capacity": ctx.caps[c],
+                                   "sched_mhz": s["sched_mhz"], "boosted_by": s["boosted_by"]}
             lower = [f for f in fs if f < s["mhz"]]
             if lower:
                 f = lower[-1]

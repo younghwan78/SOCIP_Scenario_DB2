@@ -675,3 +675,7 @@ td.cs-best { box-shadow: inset 0 0 0 2px #8CC5A0; border-radius: 4px; }
 .dsu-panel select { font-size: 12px; padding: 1px 4px; }
 .dsu-vote td { text-align: center; }
 .dsu-vote td:first-child { text-align: left; white-space: nowrap; }
+/* CPU what-if: rebalance */
+.rb-stack { display: flex; height: 10px; width: 100%; border-radius: 3px; overflow: hidden; background: #F3EFE8; }
+.rb-stack > span { display: block; height: 100%; }
+.rb-setup td, .rb-setup th { white-space: nowrap; }

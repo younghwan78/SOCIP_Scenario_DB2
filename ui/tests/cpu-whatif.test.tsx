@@ -9,6 +9,7 @@ import { CpuWhatIfPage } from '../src/pages/CpuWhatIf'
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 
 it('resets task edits on selection and ignores late responses, including reference changes', async () => {
+  localStorage.setItem('sdb.cpu.mode', JSON.stringify('sweep'))
   const inputs = vi.spyOn(cpuApi, 'inputs').mockResolvedValue({
     profiles: ['p1', 'p2'].map((id) => ({ id, scenario_ref: null, variant_ref: null, project_ref: null,
       tasks: [{ task: 'ui', cluster: 'BIG' }] })),
