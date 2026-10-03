@@ -159,7 +159,8 @@ def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str |
         scenario_type=scenario_type,
         project_ref=request.project_ref or scenarios[0].project_ref,
         soc_ref=soc_ref,
-        spec=request.spec.model_dump(mode="json") | {"scenario_ids": [s.id for s in scenarios], "category": request.category},
+        spec=request.spec.model_dump(mode="json") | {"scenario_ids": [s.id for s in scenarios], "category": request.category,
+                                                      "config_profile_ref": request.config_profile_ref},
         variants=variants, errors=errors, summary=counts, dvfs_table_ref=dvfs_ref,
         engine_rev=ENGINE_REV, input_hash=ihash, created_by=user, created_at=_now(),
     )
@@ -172,6 +173,7 @@ def _run_meta(row: ArchExplorationRun) -> dict[str, Any]:
     return {
         "id": row.id, "title": row.title, "scenario_type": row.scenario_type, "project_ref": row.project_ref,
         "soc_ref": row.soc_ref, "dvfs_table_ref": row.dvfs_table_ref, "engine_rev": row.engine_rev,
+        "config_profile_ref": (row.spec or {}).get("config_profile_ref"),
         "summary": row.summary, "created_by": row.created_by,
         "created_at": row.created_at.isoformat() if row.created_at else None,
     }
@@ -181,10 +183,13 @@ def run_detail(row: ArchExplorationRun) -> dict[str, Any]:
     return _run_meta(row) | {"spec": row.spec, "variants": row.variants, "errors": row.errors}
 
 
-def list_runs(db: Session, *, scenario_type: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
+def list_runs(db: Session, *, scenario_type: str | None = None, project_ref: str | None = None,
+              limit: int = 50) -> list[dict[str, Any]]:
     q = db.query(ArchExplorationRun)
     if scenario_type:
         q = q.filter(ArchExplorationRun.scenario_type == scenario_type)
+    if project_ref:
+        q = q.filter(ArchExplorationRun.project_ref == project_ref)
     return [_run_meta(r) for r in q.order_by(ArchExplorationRun.created_at.desc()).limit(limit).all()]
 
 
@@ -211,6 +216,10 @@ def _pred_dict(p: Prediction, *, metrics: bool = True) -> dict[str, Any]:
 
 def promote(db: Session, request: PromoteRequest, user: str | None = None) -> dict[str, Any]:
     run = get_run(db, request.run_id)
+    if request.expected_project_ref is not None and run.project_ref != request.expected_project_ref:
+        raise UnprocessableError(
+            f"run {run.id} belongs to project {run.project_ref!r}, not the selected {request.expected_project_ref!r}; "
+            "predictions are only registered for the run's own project")
     summaries = [v for v in run.variants if request.scenario_id is None or v["scenario_id"] == request.scenario_id]
     if request.variant_ids is not None and request.scenario_id is None:
         for vid in request.variant_ids:

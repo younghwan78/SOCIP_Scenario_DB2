@@ -36,8 +36,11 @@ def create_run(
 
 
 @router.get("/exploration/runs")
-def list_runs(scenario_type: str | None = None, limit: int = Query(50, ge=1, le=200), db: Session = Depends(get_db)):
-    return svc.list_runs(db, scenario_type=scenario_type, limit=limit)
+def list_runs(
+    scenario_type: str | None = None, project_ref: str | None = None,
+    limit: int = Query(50, ge=1, le=200), db: Session = Depends(get_db),
+):
+    return svc.list_runs(db, scenario_type=scenario_type, project_ref=project_ref, limit=limit)
 
 
 @router.get("/exploration/runs/{run_id}")

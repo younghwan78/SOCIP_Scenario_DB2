@@ -8,7 +8,17 @@ export interface Quant { min: number; p25: number; median: number; p75: number; 
 /** Distribution keys always present (engine rev 1+); the BW IP/CPU keys exist from rev 2. */
 export type Dist = Record<'total_mw' | 'cpu_mw' | 'hw_mw' | 'bw_mw' | 'bw_mbs', Quant> & Partial<Record<DistKey, Quant>>
 export type DistKey = 'total_mw' | 'cpu_mw' | 'hw_mw' | 'bw_mw' | 'bw_ip_mw' | 'bw_cpu_mw' | 'bw_mbs' | 'bw_ip_mbs' | 'bw_cpu_mbs'
-export interface Verified { ok: boolean; delta_pct: number; sim_total_mw: number; analytic_total_mw: number; sim_verdict: string }
+export interface Verified {
+  ok: boolean; delta_pct: number; sim_total_mw: number; analytic_total_mw: number; sim_verdict: string
+  /** engine rev ≥ 7: model consistency and re-applied constraints are reported separately */
+  tolerance_pct?: number; sim_bw_mbs?: number; analytic_bw_mbs?: number; bw_delta_pct?: number
+  power_match?: boolean; bw_match?: boolean; timing_pass?: boolean; constraints_pass?: boolean; reasons?: string[]
+}
+export type PowerCoverage = 'complete' | 'partial' | 'none'
+export interface VariantStatus {
+  timing_feasible: boolean; power_coverage: PowerCoverage; power_budget_status: 'n/a' | 'pass' | 'fail' | 'unknown'
+  model_consistency_verified: boolean | null; constraints_verified: boolean | null
+}
 export interface ExpCase {
   key: string; statistic: Statistic; runtime_scale: number; compression: string[]; dvfs: Record<string, number>; dvfs_raise: number
   total_mw: number; cpu_mw: number; hw_mw: number; bw_mw: number; bw_mbs: number; lossy: boolean; assumed_ratio: boolean
@@ -38,7 +48,8 @@ export interface VariantResult {
   distribution: Dist; baseline: ExpCase; recommended: ExpCase | null; alternatives: ExpCase[]
   slices: SliceRow[]; buffers: BufferRow[]; domains: DomainRow[]
   axis_spread: Record<'sw_statistic' | 'sw_growth' | 'compression' | 'dvfs_headroom', { min: number; max: number; range: number }>
-  sw_margin: SwMargin; coverage?: { zero_power_ips: string[]; hw_power_modeled: boolean; cpu_power_modeled: boolean }
+  sw_margin: SwMargin; coverage?: { zero_power_ips: string[]; hw_power_modeled: boolean; cpu_power_modeled: boolean; power_coverage?: PowerCoverage }
+  status?: VariantStatus
   warnings: string[]; dvfs_table_ref?: string | null; input_hash: string
   /** engine rev 4+: power-saving options explored on top of the variant (never variants themselves) */
   power_options?: PowerOptions
@@ -96,7 +107,7 @@ export function bestOption(po: PowerOptions | undefined): OptionResult | null {
 }
 export interface RunMeta {
   id: string; title: string; scenario_type: string; project_ref: string | null; soc_ref: string | null; dvfs_table_ref: string | null
-  engine_rev: string; created_by: string | null; created_at: string | null
+  engine_rev: string; created_by: string | null; created_at: string | null; config_profile_ref?: string | null
   summary: { variants: number; errors: number; spec_ok: number; cases: number; eligible_cases: number; verified: number; recommended_power_mw: [number, number] | null
     power_options?: { variants: number; sets: number; best_saving_mw: [number, number] | null } }
 }
@@ -175,12 +186,13 @@ async function send<T>(method: string, path: string, body?: unknown): Promise<T>
 const q = (p: Record<string, string | undefined>) => { const s = new URLSearchParams(Object.entries(p).filter(([, v]) => v) as [string, string][]).toString(); return s ? `?${s}` : '' }
 
 export const archApi = {
-  runs: () => send<RunMeta[]>('GET', '/arch/exploration/runs'),
+  /** projectRef omitted = every project (explicit comparison mode) */
+  runs: (projectRef?: string) => send<RunMeta[]>('GET', `/arch/exploration/runs${q({ project_ref: projectRef })}`),
   run: (id: string) => send<RunDetail>('GET', `/arch/exploration/runs/${encodeURIComponent(id)}`),
   createRun: (body: ReturnType<typeof runBody>) => send<RunDetail>('POST', '/arch/exploration/runs', body),
-  promote: (runId: string, variantIds?: string[], caseKey?: string, reason?: string, scenarioId?: string) =>
+  promote: (runId: string, variantIds?: string[], caseKey?: string, reason?: string, scenarioId?: string, expectedProject?: string) =>
     send<{ promoted: { id: string; variant_id: string; total_mw: number }[]; skipped: { variant_id: string; reason: string }[] }>(
-      'POST', '/arch/predictions/promote', { run_id: runId, variant_ids: variantIds, case_key: caseKey, reason, scenario_id: scenarioId }),
+      'POST', '/arch/predictions/promote', { run_id: runId, variant_ids: variantIds, case_key: caseKey, reason, scenario_id: scenarioId, expected_project_ref: expectedProject }),
   board: (scenarioId?: string) => send<{ rows: BoardRow[] }>('GET', `/arch/predictions/board${q({ scenario_id: scenarioId })}`),
   optionReviews: (scenarioId?: string) => send<OptionReview[]>('GET', `/arch/power-options/reviews${q({ scenario_id: scenarioId })}`),
   setOptionReview: (body: { scenario_id: string; variant_id?: string; option_key: string; status: ReviewStatus; note?: string }) =>
@@ -241,3 +253,17 @@ export const CAT_COLOR: Record<string, string> = {
 
 /** Variant ids are only unique within a scenario. */
 export const variantKey = (v: { scenario_id: string; variant_id: string }): string => JSON.stringify([v.scenario_id, v.variant_id])
+
+/** Power coverage of a variant (older runs: derived from the zero-power IP list). */
+export function coverageOf(v: Pick<VariantResult, 'status' | 'coverage'>): PowerCoverage | undefined {
+  const c = v.status?.power_coverage ?? v.coverage?.power_coverage
+  if (c) return c
+  if (!v.coverage) return undefined
+  if (!v.coverage.hw_power_modeled) return 'none'
+  return v.coverage.zero_power_ips.length ? 'partial' : 'complete'
+}
+
+/** Variants a bulk "register lowest power" would promote (server rule: spec OK only). */
+export function promoteTargets(run: Pick<RunDetail, 'variants'>): VariantResult[] {
+  return run.variants.filter((v) => v.spec_ok && v.recommended)
+}

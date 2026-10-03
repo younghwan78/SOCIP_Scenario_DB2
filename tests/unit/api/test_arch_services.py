@@ -138,3 +138,12 @@ def test_option_snapshot_marks_user_selected_reference():
     assert svc.option_snapshot(po, {"key": "k"}, "auto:min-power")["reference"]["note"] is None
     assert "auto" in svc.option_snapshot(po, {"key": "k2"}, "user:rank-2")["reference"]["note"]
     assert svc.option_snapshot(None, {"key": "k"}, "auto:min-power") is None
+
+
+def test_promote_refuses_a_run_of_another_project(monkeypatch):
+    from scenario_db.api.schemas.arch_exploration import PromoteRequest
+    run = SimpleNamespace(id="EXP-1", project_ref="proj-b", variants=[])
+    monkeypatch.setattr(svc, "get_run", lambda db, rid: run)
+    with pytest.raises(UnprocessableError, match="belongs to project"):
+        svc.promote(MagicMock(), PromoteRequest(run_id="EXP-1", expected_project_ref="proj-a"))
+    assert svc.promote(MagicMock(), PromoteRequest(run_id="EXP-1", expected_project_ref="proj-b")) is not None

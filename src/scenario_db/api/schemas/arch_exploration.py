@@ -32,6 +32,8 @@ class PromoteRequest(BaseModel):
     variant_ids: list[str] | None = Field(default=None, max_length=500)
     case_key: str | None = None  # non-default choice for exactly one variant
     reason: str | None = Field(default=None, max_length=500)
+    # Project the caller believes it is changing; a mismatch with the run's project is refused
+    expected_project_ref: str | None = None
 
     @model_validator(mode="after")
     def _user_choice(self) -> PromoteRequest:
