@@ -312,17 +312,17 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
         for i in range(U):
             if i in moved:
                 continue
-            for c in range(N):
-                if c == home_idx[i]:
+            for ci in range(N):
+                if ci == home_idx[i]:
                     continue
-                nxt = cur[:i] + (c,) + cur[i + 1:]
-                key = score(nxt)
-                if best is None or key < best[0]:
-                    best = (key, i, c)
+                nxt = cur[:i] + (ci,) + cur[i + 1:]
+                sk = score(nxt)
+                if best is None or sk < best[0]:
+                    best = (sk, i, ci)
         if best is None:
             break
-        _, i, c = best
-        cur = cur[:i] + (c,) + cur[i + 1:]
+        _, i, ci = best
+        cur = cur[:i] + (ci,) + cur[i + 1:]
         moved.add(i)
         curve_assign.append(cur)
     if method == "local":
@@ -332,18 +332,19 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
             for _ in range(200):
                 best_n: tuple[tuple[bool, float], tuple[int, ...]] | None = None
                 for i in range(U):
-                    for c in range(N):
-                        if c != cur[i]:
-                            n = cur[:i] + (c,) + cur[i + 1:]
-                            k = score(n)
-                            if best_n is None or k < best_n[0]:
-                                best_n = (k, n)
+                    for ci in range(N):
+                        if ci != cur[i]:
+                            nb = cur[:i] + (ci,) + cur[i + 1:]
+                            sk = score(nb)
+                            if best_n is None or sk < best_n[0]:
+                                best_n = (sk, nb)
                 for i, j in itertools.combinations(range(U), 2):
                     if cur[i] != cur[j]:
-                        n = list(cur); n[i], n[j] = n[j], n[i]
-                        k = score(tuple(n))
-                        if best_n is None or k < best_n[0]:
-                            best_n = (k, tuple(n))
+                        sw = list(cur)
+                        sw[i], sw[j] = sw[j], sw[i]
+                        sk = score(tuple(sw))
+                        if best_n is None or sk < best_n[0]:
+                            best_n = (sk, tuple(sw))
                 if best_n is None or not best_n[0] < cur_key:
                     break
                 cur, cur_key = best_n[1], best_n[0]
@@ -395,11 +396,11 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
 
     # OPP states: same pool-cluster OPPs (+ DSU) = within ~1 mW, fold them
     states: dict[tuple, list[tuple[tuple[int, ...], float]]] = {}
-    for k, (mw, ok, dmhz) in results.items():
-        if not ok:
+    for rk, (rmw, rok, dmhz) in results.items():
+        if not rok:
             continue
-        sts = [state(c, m) for c, m in zip(pool, k)]
-        states.setdefault(tuple(s["mhz"] for s in sts) + (dmhz,), []).append((k, mw))
+        sts = [state(c, m) for c, m in zip(pool, rk)]
+        states.setdefault(tuple(st["mhz"] for st in sts) + (dmhz,), []).append((rk, rmw))
     opp_states = sorted(({"mhz": {c: f for c, f in zip(pool, key[:-1])} | {"dsu": key[-1]}, "count": len(v),
                           "min_mw": round(min(x[1] for x in v), 4), "max_mw": round(max(x[1] for x in v), 4),
                           "representative": (rep := describe(assign_of(min(v, key=lambda x: x[1])[0])))["assign"],
@@ -407,14 +408,14 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
                          for key, v in states.items()), key=lambda s: s["min_mw"])
 
     curve = []
-    for step, a in enumerate(curve_assign):
-        d = describe(a)
-        d["step"] = step
-        d["moved_unit"] = None if step == 0 else next("+".join(units[i]) for i in range(U) if a[i] != curve_assign[step - 1][i])
+    for step, ca in enumerate(curve_assign):
+        pt = describe(ca)
+        pt["step"] = step
+        pt["moved_unit"] = None if step == 0 else next("+".join(units[i]) for i in range(U) if ca[i] != curve_assign[step - 1][i])
         util_home = sum(sum(ctx.util(th, home[units[i][0]]) for th in unit_threads[i]) for i in range(U))
-        d["moved_util_pct"] = round(100 * sum(sum(ctx.util(th, home[units[i][0]]) for th in unit_threads[i])
-                                              for i in range(U) if a[i] != home_idx[i]) / (util_home or 1.0), 1)
-        curve.append(d)
+        pt["moved_util_pct"] = round(100 * sum(sum(ctx.util(th, home[units[i][0]]) for th in unit_threads[i])
+                                               for i in range(U) if ca[i] != home_idx[i]) / (util_home or 1.0), 1)
+        curve.append(pt)
 
     def boundaries(assign: tuple[int, ...]) -> list[dict[str, Any]]:
         masks = masks_of(assign)
@@ -431,7 +432,7 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
                 limit = ctx.caps[c] * f / fs[-1] / prep.sched.freq_margin
                 row |= {"next_lower_mhz": f, "next_lower_mv": ctx.by_name[c].voltage_mv(f, model.fallback_mv),
                         "delta_util_needed": round(max(0.0, s["peak_util"] - limit), 1),
-                        "candidates": sorted(([ "+".join(units[i]), round(sum(ctx.util(th, c) for th in unit_threads[i]), 1)]
+                        "candidates": sorted((("+".join(units[i]), round(sum(ctx.util(th, c) for th in unit_threads[i]), 1))
                                               for i in range(U) if m >> i & 1), key=lambda x: -x[1])}
             out.append(row)
         return out

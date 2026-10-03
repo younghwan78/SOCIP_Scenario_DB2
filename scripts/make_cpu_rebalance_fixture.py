@@ -66,7 +66,9 @@ def run(key: str) -> dict:
     spec = RebalanceSpec(budgets_ms=BUDGETS, dsu_mode="vote", dsu_vote=VOTE)
     t0 = time.perf_counter()
     result = cpu_rebalance(profile(slots), target=model, fps=FPS, spec=spec)
-    result["_fixture"] = {"synthetic": True, "power_params_ref": params.params_ref, "seconds": round(time.perf_counter() - t0, 2),
+    seconds = round(time.perf_counter() - t0, 2)
+    print(key, "computed in", seconds, "s")
+    result["_fixture"] = {"synthetic": True, "power_params_ref": params.params_ref,
                           "request": {"fps": FPS, "budgets_ms": BUDGETS, "dsu_mode": "vote", "dsu_vote": VOTE}}
     return result
 
@@ -78,7 +80,7 @@ def main() -> None:
         path = OUT / f"cpu-rebalance-{key}.json"
         path.write_text(json.dumps(r, ensure_ascii=False, separators=(",", ":"), sort_keys=True), encoding="utf-8")
         b = r["best"]
-        print(key, path.stat().st_size, r["method"], r["pool"], r["_fixture"]["seconds"], "s | ref", r["reference"]["total_mw"],
+        print(key, path.stat().st_size, r["method"], r["pool"], "| ref", r["reference"]["total_mw"],
               "-> best", b["total_mw"], b["mhz"], "moved", len(b["moved"]))
 
 
