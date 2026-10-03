@@ -52,7 +52,7 @@ from scenario_db.sim import power_options as po
 from scenario_db.sim.power_attribution import attribute
 from scenario_db.sim.transfers import compression_catalog
 
-ENGINE_REV = "arch-exploration/7"
+ENGINE_REV = "arch-exploration/8"
 # Power = CPU(SW) + IP core + BW; BW = IP DMA (HW nodes) + CPU DMA (SW tasks, e.g. mpeg_writer)
 DIST_KEYS = ("total_mw", "cpu_mw", "hw_mw", "bw_mw", "bw_ip_mw", "bw_cpu_mw", "bw_mbs", "bw_ip_mbs", "bw_cpu_mbs")
 V_REF_MV = 710.0
@@ -813,27 +813,30 @@ def _iq_risk(c: dict[str, Any]) -> int:
 def _pareto(cases: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Non-dominated cases on (power, BW, IQ risk, -DVFS raise), returned in power order.
 
-    risk / raise are small discrete axes: a 2-D sweep per (risk, raise) group, then a cross-group check
-    on the few survivors keeps this O(n log n) for the 200k-case limit.
+    Sweep power in ascending order and query prefix-minimum BW by IQ risk and
+    descending DVFS raise. This stays O(n log n) even when every case survives.
     """
-    groups: dict[tuple[int, int], list[dict[str, Any]]] = {}
-    for c in cases:
-        groups.setdefault((_iq_risk(c), c["dvfs_raise"]), []).append(c)
-    front: list[dict[str, Any]] = []
-    for group in groups.values():
+    raises = {value: i for i, value in enumerate(sorted({c["dvfs_raise"] for c in cases}, reverse=True), 1)}
+    trees = [[math.inf] * (len(raises) + 1) for _ in range(4)]
+    ordered = sorted((c["total_mw"], c["bw_mbs"], _iq_risk(c), -c["dvfs_raise"], i, c)
+                     for i, c in enumerate(cases))
+    out = []
+    for _, bw, risk, neg_raise, _, case in ordered:
+        index = raises[-neg_raise]
         best_bw = math.inf
-        for c in sorted(group, key=lambda c: (c["total_mw"], c["bw_mbs"])):
-            if c["bw_mbs"] < best_bw - 1e-9:
-                best_bw = c["bw_mbs"]
-                front.append(c)
-
-    def dominates(a: dict[str, Any], b: dict[str, Any]) -> bool:
-        ka = (a["total_mw"], a["bw_mbs"], _iq_risk(a), -a["dvfs_raise"])
-        kb = (b["total_mw"], b["bw_mbs"], _iq_risk(b), -b["dvfs_raise"])
-        return all(x <= y + 1e-9 for x, y in zip(ka, kb, strict=True)) and ka != kb
-
-    out = [c for c in front if not any(dominates(o, c) for o in front if o is not c)]
-    return sorted(out, key=lambda c: (c["total_mw"], c["bw_mbs"]))
+        for tree in trees[:risk + 1]:
+            j = index
+            while j:
+                best_bw = min(best_bw, tree[j])
+                j -= j & -j
+        if best_bw <= bw + 1e-9:
+            continue  # dominated, or the same four-axis point already represented
+        out.append(case)
+        j = index
+        while j < len(trees[risk]):
+            trees[risk][j] = min(trees[risk][j], bw)
+            j += j & -j
+    return out
 
 
 def _fixed_growth(slices: list[dict[str, Any]], obj: Any, rec: dict[str, Any] | None) -> dict[str, Any]:
@@ -943,28 +946,30 @@ def _verify(graph, spec, config, tables, case, buffers) -> dict[str, Any]:
     sim_total = float(r["power"]["total_mw"])
     sim_bw = float(r["bw"]["total_mbs"])
     delta = sim_total - case["total_mw"]
-    pct = 100.0 * delta / case["total_mw"] if case["total_mw"] else 0.0
+    pct = 100.0 * delta / case["total_mw"] if case["total_mw"] else (0.0 if not sim_total else None)
     bw_delta = sim_bw - case["bw_mbs"]
-    bw_pct = 100.0 * bw_delta / case["bw_mbs"] if case["bw_mbs"] else 0.0
-    power_match = abs(pct) < tol
-    bw_match = abs(bw_pct) < tol
+    bw_pct = 100.0 * bw_delta / case["bw_mbs"] if case["bw_mbs"] else (0.0 if not sim_bw else None)
+    power_match = pct is not None and abs(pct) < tol
+    bw_match = bw_pct is not None and abs(bw_pct) < tol
     sim_slice = _slice(r, case["statistic"], case["runtime_scale"])
     timing_pass, reasons = _slice_ok(sim_slice, spec.constraints)
     sim_case = {"lossy": case["lossy"], "total_mw": sim_total, "bw_mbs": sim_bw}
     budget_reasons = _case_reasons(sim_case, spec.constraints)
     constraints_pass = timing_pass and not budget_reasons
     if not power_match:
-        reasons.append(f"power model mismatch {pct:+.2f}% (tolerance {tol}%)")
+        difference = f"{pct:+.2f}%" if pct is not None else "nonzero simulation against zero estimate"
+        reasons.append(f"power model mismatch {difference} (tolerance {tol}%)")
     if not bw_match:
-        reasons.append(f"BW model mismatch {bw_pct:+.2f}% (tolerance {tol}%)")
+        difference = f"{bw_pct:+.2f}%" if bw_pct is not None else "nonzero simulation against zero estimate"
+        reasons.append(f"BW model mismatch {difference} (tolerance {tol}%)")
     reasons += budget_reasons
     return {
         "method": "re-simulated with buffer_overrides + dvfs_overrides; constraints re-applied",
         "tolerance_pct": tol,
         "sim_total_mw": round(sim_total, 2), "analytic_total_mw": round(case["total_mw"], 2),
-        "delta_mw": round(delta, 3), "delta_pct": round(pct, 3),
+        "delta_mw": round(delta, 3), "delta_pct": round(pct, 3) if pct is not None else None,
         "sim_bw_mbs": round(sim_bw, 2), "analytic_bw_mbs": round(case["bw_mbs"], 2),
-        "bw_delta_mbs": round(bw_delta, 3), "bw_delta_pct": round(bw_pct, 3),
+        "bw_delta_mbs": round(bw_delta, 3), "bw_delta_pct": round(bw_pct, 3) if bw_pct is not None else None,
         "sim_verdict": r["verdict"]["status"],
         "power_match": power_match, "bw_match": bw_match,
         "timing_pass": timing_pass, "constraints_pass": constraints_pass,
@@ -1069,6 +1074,9 @@ def find_case(summary: dict[str, Any], case_key: str | None) -> tuple[dict[str, 
     for rank, alt in enumerate(summary.get("alternatives") or [], start=2):
         if alt["key"] == case_key:
             return alt, f"user:rank-{rank}"
+    for rank, candidate in enumerate(summary.get("pareto") or [], start=1):
+        if candidate["key"] == case_key:
+            return candidate, f"user:pareto-{rank}"
     base = summary.get("baseline")
     if base and base["key"] == case_key:
         return base, "user:baseline"
@@ -1159,6 +1167,7 @@ def input_manifest(graph, config, tables) -> tuple[dict[str, str], dict[str, Any
     raw: dict[str, Any] = {
         "pipeline": _jsonable(graph.scenario.pipeline), "variant_doc": _jsonable(_variant_doc(graph.variant)),
         "config": config.model_dump(mode="json"),
+        "simulation_inputs": build_simulation_inputs(graph, config).model_dump(mode="json"),
         "power_options": _jsonable(getattr(graph.scenario, "power_options", None)),
         "soc_catalog": _jsonable(getattr(graph.soc, "compression_modes", None)),
     }

@@ -360,6 +360,10 @@ def promote(db: Session, request: PromoteRequest, user: str | None = None) -> di
             skipped.append({"variant_id": vid, "reason": "variant not in run"})
     for summary in targets:
         vid = summary["variant_id"]
+        constraints = (run.spec or {}).get("constraints") or {}
+        if ((summary.get("status") or {}).get("power_budget_status") == "unknown"
+                and constraints.get("require_complete_power_for_budget", True)):
+            raise UnprocessableError("power budget cannot be verified with an incomplete power model")
         case, rule = find_case(summary, request.case_key)
         if case is None:
             skipped.append({"variant_id": vid, "reason": "no eligible case" if request.case_key is None else "case_key not found"})

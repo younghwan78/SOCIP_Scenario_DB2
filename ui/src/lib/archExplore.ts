@@ -9,9 +9,9 @@ export interface Quant { min: number; p25: number; median: number; p75: number; 
 export type Dist = Record<'total_mw' | 'cpu_mw' | 'hw_mw' | 'bw_mw' | 'bw_mbs', Quant> & Partial<Record<DistKey, Quant>>
 export type DistKey = 'total_mw' | 'cpu_mw' | 'hw_mw' | 'bw_mw' | 'bw_ip_mw' | 'bw_cpu_mw' | 'bw_mbs' | 'bw_ip_mbs' | 'bw_cpu_mbs'
 export interface Verified {
-  ok: boolean; delta_pct: number; sim_total_mw: number; analytic_total_mw: number; sim_verdict: string
+  ok: boolean; delta_pct: number | null; sim_total_mw: number; analytic_total_mw: number; sim_verdict: string
   /** engine rev ≥ 7: model consistency and re-applied constraints are reported separately */
-  tolerance_pct?: number; sim_bw_mbs?: number; analytic_bw_mbs?: number; bw_delta_pct?: number
+  tolerance_pct?: number; sim_bw_mbs?: number; analytic_bw_mbs?: number; bw_delta_pct?: number | null
   power_match?: boolean; bw_match?: boolean; timing_pass?: boolean; constraints_pass?: boolean; reasons?: string[]
 }
 export type PowerCoverage = 'complete' | 'partial' | 'none'

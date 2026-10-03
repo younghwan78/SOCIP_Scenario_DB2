@@ -174,6 +174,39 @@ def test_failed_verification_cannot_be_promoted(engine, stored_run):
             svc.promote(db, PromoteRequest(run_id=rid, scenario_id=ids[0]))
 
 
+def test_explicit_promotion_cannot_bypass_incomplete_power_budget(engine, stored_run):
+    rid, ids = stored_run
+    with Session(engine) as db:
+        run = svc.get_run(db, rid)
+        variants = deepcopy(run.variants)
+        variants[0] |= {"spec_ok": False, "status": {"power_budget_status": "unknown"}}
+        run.variants = variants
+        run.spec = dict(run.spec) | {"constraints": {"power_budget_mw": 100}}
+        db.commit()
+        request = PromoteRequest(run_id=rid, scenario_id=ids[0], variant_ids=["shared"])
+        with pytest.raises(UnprocessableError, match="incomplete power model"):
+            svc.promote(db, request)
+        assert db.query(Prediction).filter_by(scenario_ref=ids[0]).count() == 0
+        run.spec = dict(run.spec) | {"constraints": {"power_budget_mw": 100, "require_complete_power_for_budget": False}}
+        db.commit()
+        assert len(svc.promote(db, request)["promoted"]) == 1
+
+
+def test_pareto_only_candidate_is_persisted_as_a_user_selection(engine, stored_run):
+    rid, ids = stored_run
+    with Session(engine) as db:
+        run = svc.get_run(db, rid)
+        variants = deepcopy(run.variants)
+        variants[0]["pareto"] = [dict(variants[0]["recommended"]) | {"key": "pareto-only"}]
+        run.variants = variants
+        db.commit()
+        result = svc.promote(db, PromoteRequest(run_id=rid, scenario_id=ids[0], variant_ids=["shared"],
+                                                case_key="pareto-only", reason="headroom review"))
+        assert len(result["promoted"]) == 1
+        prediction = db.get(Prediction, result["promoted"][0]["id"])
+        assert prediction.case_key == "pareto-only" and prediction.selection_rule == "user:pareto-1"
+
+
 BCROP, L0 = "knob:crop_strategy=byrp_bcrop", "knob:pyramid_l0=skip"
 
 

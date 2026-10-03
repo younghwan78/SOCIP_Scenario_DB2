@@ -339,6 +339,14 @@ def test_verify_checks_bw_consistency(graph_factory, dvfs, uhd30):
     assert v["power_match"] and not v["bw_match"] and not v["ok"]
 
 
+def test_zero_estimates_cannot_verify_nonzero_simulation(graph_factory, dvfs, uhd30):
+    rec = dict(uhd30["recommended"]) | {"total_mw": 0.0, "bw_mbs": 0.0}
+    result = ax._verify(graph_factory(UHD30), ALL_BUFFERS, ax.SimulationRunConfig(), dvfs, rec, uhd30["buffers"])
+    assert result["sim_total_mw"] > 0 and result["sim_bw_mbs"] > 0
+    assert not result["power_match"] and not result["bw_match"] and not result["ok"]
+    assert result["delta_pct"] is None and result["bw_delta_pct"] is None
+
+
 def test_partial_power_model_cannot_pass_a_power_budget(graph_factory, dvfs):
     g = graph_factory(UHD30)
     base = {"axes": {"statistics": ["max"], "runtime_scales": [1], "compression": {"enabled": False}}}
@@ -369,6 +377,39 @@ def test_pareto_keeps_equal_power_with_lower_bw_or_iq_risk():
     assert len(ax._distinct([_c("x", 100, 500), _c("y", 100, 400)], 5)) == 2
 
 
+def test_pareto_front_matches_a_brute_force_oracle():
+    from random import Random
+
+    random = Random(42)
+    cases = [_c(str(i), random.randrange(20), random.randrange(20),
+                lossy=bool(random.randrange(2)), comp=() if i % 4 == 0 else ("b",),
+                raise_=random.randrange(5), assumed=bool(random.randrange(2))) for i in range(100)]
+    def point(case):
+        return case["total_mw"], case["bw_mbs"], ax._iq_risk(case), -case["dvfs_raise"]
+    points = {point(case) for case in cases}
+    expected = {p for p in points if not any(q != p and all(a <= b for a, b in zip(q, p, strict=True)) for q in points)}
+    assert {point(case) for case in ax._pareto(cases)} == expected
+
+
+def test_pareto_avoids_pairwise_work_when_all_candidates_survive(monkeypatch):
+    cases = [_c(str(i), i, 1000 - i) for i in range(256)]
+    calls = 0
+    original = ax._iq_risk
+    def counted(case):
+        nonlocal calls
+        calls += 1
+        return original(case)
+    monkeypatch.setattr(ax, "_iq_risk", counted)
+    assert len(ax._pareto(cases)) == len(cases)
+    assert calls <= 10 * len(cases)
+
+
+def test_pareto_candidate_can_be_selected_for_promotion():
+    candidate = _c("front-only", 100, 400)
+    case, rule = ax.find_case({"recommended": _c("rec", 90, 500), "alternatives": [], "pareto": [candidate]}, "front-only")
+    assert case == candidate and rule == "user:pareto-1"
+
+
 def test_fixed_dvfs_growth_tolerance_is_not_the_reoptimised_one(uhd30):
     m = uhd30["sw_margin"]
     assert m["growth_tolerance_fixed"] is not None
@@ -381,6 +422,8 @@ def test_input_manifest_keeps_resolved_inputs_content_addressed(uhd30, graph_fac
     sections, blobs = uhd30["input_sections"], uhd30["_manifest_blobs"]
     assert {"pipeline", "variant_doc", "config"} <= set(sections) and any(k.startswith("dvfs:") for k in sections)
     assert any(k.startswith("ip:") for k in sections)
+    assert blobs[sections["simulation_inputs"]] == ax.build_simulation_inputs(
+        graph_factory(UHD30), ax.SimulationRunConfig()).model_dump(mode="json")
     assert all(sections[k] in blobs for k in sections)
     again, _ = ax.input_manifest(graph_factory(UHD30), ax.SimulationRunConfig(), dvfs)
     assert again == sections  # deterministic

@@ -13,7 +13,7 @@ from scenario_db.db.models.capability import SimConfigProfile
 from scenario_db.db.models.definition import Scenario
 from scenario_db.db.models.evidence import Evidence
 from scenario_db.db.models.exploration import Prediction
-from scenario_db.exceptions import NotFoundError
+from scenario_db.exceptions import NotFoundError, UnprocessableError
 
 
 def _total(kpi: dict[str, Any] | None) -> dict[str, Any]:
@@ -84,7 +84,7 @@ def compare_conditions(measured: dict[str, Any] | None, predicted: dict[str, Any
     items = []
     for k in CONDITION_KEYS:
         a, b = measured.get(k), predicted.get(k)
-        status = "unrecorded" if a is None or b is None else "match" if str(a) == str(b) else "mismatch"
+        status = "unrecorded" if a is None or b is None else "match" if a == b or str(a) == str(b) else "mismatch"
         items.append({"item": k, "measured": a, "predicted": b, "status": status})
     statuses = {i["status"] for i in items}
     overall = "reference" if "mismatch" in statuses else "unverified" if "unrecorded" in statuses else "equivalent"
@@ -92,7 +92,8 @@ def compare_conditions(measured: dict[str, Any] | None, predicted: dict[str, Any
 
 
 def _measurement_rail_map(db: Session, m: Evidence, project_ref: str | None,
-                          latest: dict[str, dict[str, str]] | None = None) -> tuple[dict[str, str], str | None, str]:
+                          latest: dict[str, dict[str, str]] | None = None,
+                          pinned_profiles: dict[str, SimConfigProfile] | None = None) -> tuple[dict[str, str], str | None, str]:
     """Rail map for one measurement: the profile pinned at capture, else the project's latest.
 
     Returns (map, profile id, basis) with basis ``pinned`` / ``latest`` / ``none`` so a comparison
@@ -100,14 +101,28 @@ def _measurement_rail_map(db: Session, m: Evidence, project_ref: str | None,
     """
     pinned = (m.provenance or {}).get("rail_domain_map_ref")
     if pinned:
-        row = db.get(SimConfigProfile, pinned)
-        if row is not None:
-            return dict(row.rail_domain_map or {}), str(row.id), "pinned"
+        row = pinned_profiles.get(pinned) if pinned_profiles is not None else db.get(SimConfigProfile, pinned)
+        if row is None:
+            raise UnprocessableError(f"pinned rail map profile not found: {pinned}")
+        if row.project_ref != project_ref:
+            raise UnprocessableError(f"pinned rail map profile {pinned} belongs to another project")
+        return dict(row.rail_domain_map or {}), str(row.id), "pinned"
     if latest is not None:
         rail = latest.get(project_ref or "")
         return (rail, None, "latest") if rail else ({}, None, "none")
     rail, ref = _rail_map(db, project_ref)
     return rail, ref, "latest" if rail else "none"
+
+
+def _pinned_rail_profiles(db: Session, measurements: list[Evidence]) -> dict[str, SimConfigProfile]:
+    refs = {(m.provenance or {}).get("rail_domain_map_ref") for m in measurements}
+    refs.discard(None)
+    refs.discard("")
+    if not refs:
+        return {}
+    return {str(row.id): row for row in db.query(SimConfigProfile).options(load_only(
+        SimConfigProfile.id, SimConfigProfile.project_ref, SimConfigProfile.rail_domain_map))
+        .filter(SimConfigProfile.id.in_(refs)).all()}
 
 
 def _rail_maps(db: Session, project_refs: set[str | None]) -> dict[str, dict[str, str]]:
@@ -223,10 +238,12 @@ def list_measurements(db: Session, *, scenario_id: str | None = None) -> list[di
     scenario_project = {sid: pref for sid, pref in db.query(Scenario.id, Scenario.project_ref)
                         .filter(Scenario.id.in_(scenario_ids)).all()} if scenario_ids else {}
     rail_maps = _rail_maps(db, {m.project_ref or scenario_project.get(m.scenario_ref) for m in measurements})
+    pinned_profiles = _pinned_rail_profiles(db, measurements)
     out = []
     for m in measurements:
         total = _total(m.kpi)
-        rail_map, _, rail_basis = _measurement_rail_map(db, m, m.project_ref or scenario_project.get(m.scenario_ref), rail_maps)
+        rail_map, _, rail_basis = _measurement_rail_map(db, m, m.project_ref or scenario_project.get(m.scenario_ref),
+                                                      rail_maps, pinned_profiles)
         meas_cat = measured_split(m.vdd_power, rail_map)["categories"] if m.vdd_power else None
         cur = current.get((m.scenario_ref, m.variant_ref))
         sims = simulations.get((m.scenario_ref, m.variant_ref), [])
@@ -279,6 +296,7 @@ def measurement_details(db: Session, measurement_ids: list[str]) -> dict[str, di
                     tuple_(Evidence.scenario_ref, Evidence.variant_ref).in_(keys)).all()):
         sims.setdefault((ev.scenario_ref, ev.variant_ref), []).append(ev)
     projects = {m.project_ref or scen_project.get(m.scenario_ref) for m in ms}
+    pinned_profiles = _pinned_rail_profiles(db, ms)
     latest = {}
     for row in (db.query(SimConfigProfile).filter(SimConfigProfile.project_ref.in_({p for p in projects if p}))
                 .order_by(SimConfigProfile.version.desc(), SimConfigProfile.id).all()):
@@ -286,7 +304,8 @@ def measurement_details(db: Session, measurement_ids: list[str]) -> dict[str, di
     out = {}
     for m in ms:
         project = m.project_ref or scen_project.get(m.scenario_ref)
-        rail = _measurement_rail_map(db, m, project, {}) if (m.provenance or {}).get("rail_domain_map_ref") else None
+        rail = (_measurement_rail_map(db, m, project, {}, pinned_profiles)
+                if (m.provenance or {}).get("rail_domain_map_ref") else None)
         if rail is None or rail[2] != "pinned":
             lm = latest.get(project or "")
             rail = (lm[0], lm[1], "latest") if lm and lm[0] else ({}, None, "none")

@@ -15,10 +15,18 @@ creation/status changes require writer/admin. Actor identity comes from the API 
   mixed-project selection is rejected. The response distinguishes successful variants
   and per-variant errors; an entirely failed run is not stored.
 - `GET /arch/exploration/runs[/{id}]`: list run metadata or retrieve frozen details.
+  Lists accept `project_ref`. Run creation and detail support `view=summary` for compact
+  per-variant rows; `/runs/{id}/variants/{scenario_id}/{variant_id}` returns full variant details.
+  `/runs/{id}/manifest` returns content-addressed resolved config, simulation inputs,
+  pipeline, variant, capabilities, and DVFS inputs.
 - `POST /arch/predictions/promote`: `run_id`, optional `scenario_id`, `variant_ids`,
   `case_key`, and `reason`. Omitted variant IDs select all spec-OK pairs; `[]` selects none.
   An ambiguous variant name requires `scenario_id`. A non-default case requires a reason.
   Known failed re-simulation verification prevents promotion.
+  Listed Pareto candidates can be selected with `case_key` and a reason. A power budget
+  with incomplete model coverage blocks explicit promotion unless the run opted out
+  through `require_complete_power_for_budget=false`. `expected_project_ref` rejects
+  registration when the selected project differs from the run's project.
 - `GET /arch/predictions/board`, `/history`, `/{id}`, `/compare`: current values,
   immutable history, detail, and attribution. Comparison requires the same scenario/variant.
 - `POST /arch/reports`: freeze a snapshot and HTML from a run's current registered
@@ -28,6 +36,9 @@ creation/status changes require writer/admin. Actor identity comes from the API 
 - `GET /arch/reports[/{id}]`, `/{id}/html`, `/{id}/stale`: metadata, snapshot, HTML,
   and comparison of frozen prediction IDs with current IDs. HTML does not change later.
 - `GET /arch/reports/{id}/xlsx`: export frozen tables as a spreadsheet with numeric cells.
+- `GET /arch/reports/{id}/package`: export the frozen HTML body, a review cover, and a
+  manifest containing body integrity, run/input hashes, prediction/measurement IDs,
+  evaluation coverage, and review history.
 - `PATCH /arch/reports/{id}`: change status between `draft` and `published` only.
   Publishing requires nonblank `reviewer` and `note`. Each transition appends actor,
   timestamp, reviewer, and note to the review history; concurrent reviews serialize
@@ -65,3 +76,10 @@ IP overhead is included once in `sw_ms`. Input hashes include adapter inputs, IP
 capabilities, SoC compression catalog, config, DVFS, and exploration options.
 
 See [the guide](../../guides/arch-exploration.md) for model limits and report regeneration.
+
+Calibration classifies measurement origin as `physical_capture`, `synthetic`, or `unknown`.
+A measurement may pin its capture-time rail map with `provenance.rail_domain_map_ref`;
+that profile must exist and belong to the measurement's project. Invalid pins return 422
+instead of silently using a newer or foreign profile. Without a pin, the latest project
+map is used and the comparison records that basis. Batched reads fetch distinct pinned
+profiles in one query.

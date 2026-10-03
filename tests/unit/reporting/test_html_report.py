@@ -184,3 +184,13 @@ def test_simulation_report_states_feasibility_source_and_warnings_first():
     assert "status-fail" in banner and "infeasible" in banner
     assert "estimated" in banner and "DVFS table is SAMPLE" in banner
     assert html.index("class='status") < html.index("1. Scenario Description")
+
+
+def test_report_does_not_show_research_or_unknown_feasibility_as_ready():
+    from scenario_db.reporting.html_report import _status_banner, report_status
+
+    for feasibility in (None, "unknown", "research_mode", "exploration_only"):
+        evidence = {"overall_feasibility": feasibility, "run_info": {"source": "calculated"}}
+        assert "status-warn" in _status_banner(evidence)
+    assert report_status({"overall_feasibility": "unknown"})["feasible"] is None
+    assert "status-ok" in _status_banner({"overall_feasibility": "production_ready", "run_info": {"source": "calculated"}})

@@ -123,6 +123,7 @@ def test_condition_equivalence():
     from scenario_db.api.services.calibration import compare_conditions
     meas = {"silicon_rev": "EVT1", "sw_baseline_ref": "sw-1", "thermal": "chamber25", "power_state": "screen_on", "ambient_temp_c": 25}
     assert compare_conditions(meas, dict(meas))["overall"] == "equivalent"
+    assert compare_conditions(meas, meas | {"ambient_temp_c": 25.0})["overall"] == "equivalent"
     diff = compare_conditions(meas, meas | {"thermal": "room"})
     assert diff["overall"] == "reference" and next(i for i in diff["items"] if i["item"] == "thermal")["status"] == "mismatch"
     assert compare_conditions(meas, {})["overall"] == "unverified"
@@ -132,9 +133,24 @@ def test_measurement_rail_map_prefers_the_pinned_profile():
     from types import SimpleNamespace
     from scenario_db.api.services.calibration import _measurement_rail_map
     db = MagicMock()
-    db.get.return_value = SimpleNamespace(id="simcfg-v1", rail_domain_map={"VDD_CAM": "ip"})
+    db.get.return_value = SimpleNamespace(id="simcfg-v1", project_ref="proj-a", rail_domain_map={"VDD_CAM": "ip"})
     m = SimpleNamespace(provenance={"rail_domain_map_ref": "simcfg-v1"})
     assert _measurement_rail_map(db, m, "proj-a", {"proj-a": {"VDD_CAM": "other"}}) == ({"VDD_CAM": "ip"}, "simcfg-v1", "pinned")
     m2 = SimpleNamespace(provenance={})
     assert _measurement_rail_map(db, m2, "proj-a", {"proj-a": {"VDD_CAM": "other"}})[2] == "latest"
     assert _measurement_rail_map(db, m2, "proj-b", {})[2] == "none"
+
+
+def test_pinned_rail_map_cannot_fall_back_or_cross_project_scope():
+    from types import SimpleNamespace
+    from scenario_db.api.services.calibration import _measurement_rail_map
+    from scenario_db.exceptions import UnprocessableError
+
+    db = MagicMock()
+    measured = SimpleNamespace(provenance={"rail_domain_map_ref": "pin"})
+    foreign = SimpleNamespace(id="pin", project_ref="other", rail_domain_map={"ODD": "cpu"})
+    with pytest.raises(UnprocessableError, match="another project"):
+        _measurement_rail_map(db, measured, "selected", {}, {"pin": foreign})
+    with pytest.raises(UnprocessableError, match="not found"):
+        _measurement_rail_map(db, measured, "selected", {"selected": {"ODD": "cpu"}}, {})
+    db.get.assert_not_called()  # prefetched pins never turn into per-measurement queries

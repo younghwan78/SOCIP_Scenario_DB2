@@ -83,9 +83,11 @@ def report_status(evidence: dict[str, Any]) -> dict[str, Any]:
     trace = evidence.get("calculation_trace") if isinstance(evidence.get("calculation_trace"), dict) else {}
     warnings = [str(w) for w in [*(evidence.get("warnings") or []), *((trace or {}).get("warnings") or [])]]
     feas_text = str(feas).split(".")[-1] if feas is not None else None
+    failed = feas_text is not None and any(k in feas_text.lower() for k in _FAIL_FEASIBILITY)
+    known = feas_text in ("production_ready", "exploration_only", "research_mode", "feasible")
     return {
         "feasibility": feas_text,
-        "feasible": None if feas_text is None else not any(k in feas_text.lower() for k in _FAIL_FEASIBILITY),
+        "feasible": False if failed else True if known else None,
         "source": str(source).split(".")[-1] if source is not None else None,
         "method": method,
         "warnings": list(dict.fromkeys(warnings)),
@@ -94,7 +96,9 @@ def report_status(evidence: dict[str, Any]) -> dict[str, Any]:
 
 def _status_banner(evidence: dict[str, Any]) -> str:
     st = report_status(evidence)
-    cls = "status-fail" if st["feasible"] is False else "status-warn" if st["source"] == "estimated" or st["warnings"] else "status-ok"
+    cls = ("status-fail" if st["feasible"] is False else "status-warn"
+           if st["feasibility"] != "production_ready" or not st["source"] or st["source"] == "estimated" or st["warnings"]
+           else "status-ok")
     items = [
         f"<b>Feasibility</b> {escape(st['feasibility'] or 'unknown')}",
         f"<b>Values</b> {escape(st['source'] or 'unknown')}{' (estimated — not a calculation result)' if st['source'] == 'estimated' else ''}",
