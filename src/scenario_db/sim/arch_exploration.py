@@ -301,7 +301,7 @@ def _explore(graph, spec: ArchExplorationSpec, config: SimulationRunConfig,
         "recommended": _public_case(recommended) if recommended else None,
         "alternatives": [_public_case(c) for c in alternatives],
         # non-dominated eligible cases (power, BW, IQ risk, DVFS headroom): same power can hide other trade-offs
-        "pareto": [_public_case(c) | {"iq_risk": _iq_risk(c)} for c in pareto],
+        "pareto": [{**(_public_case(c) or {}), "iq_risk": _iq_risk(c)} for c in pareto],
         "slices": [_slice_public(s) for s in slices],
         "buffers": buffers,
         "domains": obj_slice["domains"],

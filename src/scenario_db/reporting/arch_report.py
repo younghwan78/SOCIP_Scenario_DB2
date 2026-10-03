@@ -712,8 +712,8 @@ def _compression_only(buffers: list[dict[str, Any]], chosen: list[str]) -> dict[
 def _compression(rows: list[dict[str, Any]], scen: list[dict[str, Any]]) -> str:
     saved = [(r["variant_id"], (r["baseline_bw_mbs"] or 0) - (r["bw_mbs"] or 0), (r["baseline_total_mw"] or 0) - (r["power"].get("total_mw") or 0))
              for r in scen if r["spec_ok"] and r["baseline_bw_mbs"] is not None]
-    only = [(r.get("compression_only_mbs"), r.get("compression_only_mw")) for r in scen
-            if r["spec_ok"] and r.get("compression_only_mw") is not None]
+    only: list[tuple[float, float]] = [(float(r.get("compression_only_mbs") or 0.0), float(r["compression_only_mw"]))
+                                       for r in scen if r["spec_ok"] and r.get("compression_only_mw") is not None]
     only_bw = sum(x[0] for x in only) / len(only) if only else None
     only_mw = sum(x[1] for x in only) / len(only) if only else None
     known = [c for c in rows if str(c.get("support") or "unknown") not in ("unknown", "None")]
