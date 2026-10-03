@@ -59,6 +59,12 @@ export function Picker({ open, onClose, catalog: allCatalog, projects = [], scen
   const [active, setActive] = useState(0)
   const [pins, setPins] = useState<string[]>(() => load(PIN_KEY))
   const inputRef = useRef<HTMLInputElement>(null)
+  // return focus to whatever opened the picker (keyboard users keep their place)
+  useEffect(() => {
+    if (!open) return
+    const opener = document.activeElement as HTMLElement | null
+    return () => { if (opener && document.contains(opener)) opener.focus() }
+  }, [open])
 
   useEffect(() => {
     if (!open) return
@@ -108,8 +114,11 @@ export function Picker({ open, onClose, catalog: allCatalog, projects = [], scen
     onClose()
   }
   const onKey = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') onClose()
-    else if (e.key === 'ArrowDown') { e.preventDefault(); setActive((a) => Math.min(a + 1, list.length - 1)) }
+    if (e.key === 'Escape') { onClose(); return }
+    // result navigation belongs to the search box / result list; filters, pins and links keep their native keys
+    const t = e.target as HTMLElement
+    if (t !== inputRef.current && t.closest('button, select, a, textarea, input:not([type=text])')) return
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActive((a) => Math.min(a + 1, list.length - 1)) }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)) }
     else if (e.key === 'Enter') { e.preventDefault(); pick(list[active], e.shiftKey) }
   }

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import HTMLResponse, Response
 from sqlalchemy.orm import Session
@@ -24,6 +26,7 @@ router = APIRouter(prefix="/arch", tags=["architecture exploration"])
 @router.post("/exploration/runs")
 def create_run(
     request: ArchExplorationRunRequest,
+    view: Literal["full", "summary"] = "full",
     db: Session = Depends(get_db),
     principal: ApiPrincipal = Depends(require_roles("analyst", "writer", "admin")),
 ):
@@ -32,17 +35,35 @@ def create_run(
     enforce_request_size(request, settings.exploration_max_request_bytes)
     enforce_timeline_frame_limit(request.spec.timing.frames, settings.simulation_max_timeline_frames)
     with admission_slot("simulation", settings.simulation_max_concurrent_runs):
-        return svc.run_exploration(db, request, principal.subject)
+        result = svc.run_exploration(db, request, principal.subject)
+    if view == "summary":
+        result = result | {"variants": [svc.variant_summary(v) for v in result["variants"]], "view": "summary"}
+    return result
 
 
 @router.get("/exploration/runs")
-def list_runs(scenario_type: str | None = None, limit: int = Query(50, ge=1, le=200), db: Session = Depends(get_db)):
-    return svc.list_runs(db, scenario_type=scenario_type, limit=limit)
+def list_runs(
+    scenario_type: str | None = None, project_ref: str | None = None,
+    limit: int = Query(50, ge=1, le=200), db: Session = Depends(get_db),
+):
+    return svc.list_runs(db, scenario_type=scenario_type, project_ref=project_ref, limit=limit)
 
 
 @router.get("/exploration/runs/{run_id}")
-def get_run(run_id: str, db: Session = Depends(get_db)):
-    return svc.run_detail(svc.get_run(db, run_id))
+def get_run(run_id: str, view: Literal["full", "summary"] = "full", db: Session = Depends(get_db)):
+    """view=summary: per-variant list fields only (UI); a variant's full summary via /variants/{scenario}/{variant}."""
+    return svc.run_summary(db, run_id) if view == "summary" else svc.run_detail(svc.get_run(db, run_id))
+
+
+@router.get("/exploration/runs/{run_id}/variants/{scenario_id}/{variant_id}")
+def get_run_variant(run_id: str, scenario_id: str, variant_id: str, db: Session = Depends(get_db)):
+    return svc.run_variant(db, run_id, scenario_id, variant_id)
+
+
+@router.get("/exploration/runs/{run_id}/manifest")
+def get_run_manifest(run_id: str, db: Session = Depends(get_db)):
+    """Resolved inputs (config, DVFS, pipeline, variant, IP capabilities) per variant, content-addressed."""
+    return svc.run_manifest(db, run_id)
 
 
 # ------------------------------------------------------------------- predictions
@@ -136,6 +157,14 @@ def get_report_xlsx(report_id: str, db: Session = Depends(get_db)):
     """Frozen report tables as an Excel workbook (one sheet per table)."""
     data, filename = svc.report_xlsx(db, report_id)
     return Response(content=data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+@router.get("/reports/{report_id}/package")
+def get_report_package(report_id: str, db: Session = Depends(get_db)):
+    """Review package: frozen report.html + cover.html + manifest.json (works offline)."""
+    data, filename = svc.report_package(db, report_id)
+    return Response(content=data, media_type="application/zip",
                     headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 

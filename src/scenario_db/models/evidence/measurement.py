@@ -25,19 +25,31 @@ _KPI_KEY_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
 class MeasuredKpi(BaseScenarioModel):
     """Statistical KPI value recorded from repeated measurements."""
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
     mean: float
     p95: float | None = None
-    std: float | None = None
+    std: float | None = Field(default=None, ge=0)
     ci_95: list[float] | None = None     # [lower, upper]; interval at ci_level (default 0.95)
-    ci_level: float | None = None        # confidence level used for ci_95; None == 0.95 default
-    n: int
+    ci_level: float | None = Field(default=None, gt=0, lt=1)  # level used for ci_95; None == 0.95
+    n: int = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _check_interval(self) -> MeasuredKpi:
+        if self.ci_95 is not None:
+            if len(self.ci_95) != 2:
+                raise ValueError("ci_95 must be [lower, upper]")
+            lo, hi = self.ci_95
+            if lo > hi:
+                raise ValueError(f"ci_95 lower {lo} > upper {hi}")
+        return self
 
 
 class FreqResidencyBin(BaseScenarioModel):
     """Time share spent at one frequency step (perfetto cpu_frequency digest)."""
-    freq_mhz: float
-    ratio: float                          # 0.0 - 1.0 residency fraction
-    time_ms: float | None = None
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+    freq_mhz: float = Field(gt=0)
+    ratio: float = Field(ge=0, le=1)      # 0.0 - 1.0 residency fraction
+    time_ms: float | None = Field(default=None, ge=0)
 
 
 class MeasuredCpuCluster(BaseScenarioModel):
@@ -113,6 +125,13 @@ class Provenance(BaseScenarioModel):
     sw_baseline_ref: DocumentId | None = None
     runtime_sw_state: RuntimeSwState | None = None
     collection_method: str | None = None
+    # Explicit origin; None = legacy document, classified by calibration.data_origin()
+    # (omitted when unset so existing import outputs / fingerprints stay byte-identical)
+    data_origin: Literal["synthetic", "physical_capture", "unknown"] | None = Field(
+        default=None, exclude_if=lambda value: value is None)
+    # sim.config_profile whose rail_domain_map defined the rails at capture time (rail -> CPU/IP/BW);
+    # unset = the project's latest profile is used and the comparison says so
+    rail_domain_map_ref: str | None = Field(default=None, exclude_if=lambda value: value is None)
     collection_tool_versions: dict[str, str] = Field(default_factory=dict)
     sample_count: int | None = None
     duration_per_sample_s: float | None = None

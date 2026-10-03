@@ -52,7 +52,7 @@ from scenario_db.sim import power_options as po
 from scenario_db.sim.power_attribution import attribute
 from scenario_db.sim.transfers import compression_catalog
 
-ENGINE_REV = "arch-exploration/6"
+ENGINE_REV = "arch-exploration/8"
 # Power = CPU(SW) + IP core + BW; BW = IP DMA (HW nodes) + CPU DMA (SW tasks, e.g. mpeg_writer)
 DIST_KEYS = ("total_mw", "cpu_mw", "hw_mw", "bw_mw", "bw_ip_mw", "bw_cpu_mw", "bw_mbs", "bw_ip_mbs", "bw_cpu_mbs")
 V_REF_MV = 710.0
@@ -146,6 +146,9 @@ class ExplorationConstraints(BaseScenarioModel):
     require_power_model: bool = True
     power_budget_mw: float | None = Field(default=None, gt=0)
     bw_budget_mbs: float | None = Field(default=None, gt=0)
+    # A power budget judged on a partial model (some active IPs at 0 mW) is "unknown", not "pass".
+    # True: such a variant is not spec OK; False: the budget status is reported as unknown only.
+    require_complete_power_for_budget: bool = True
 
 
 class ExplorationObjective(BaseScenarioModel):
@@ -162,6 +165,8 @@ class ArchExplorationSpec(BaseScenarioModel):
     top_n: int = Field(default=5, ge=1, le=20)
     max_cases_per_variant: int = Field(default=200_000, ge=1, le=200_000)
     verify: bool = True
+    # model-consistency tolerance (analytic vs re-simulated); NOT a product budget tolerance
+    verify_tolerance_pct: float = Field(default=0.5, gt=0, le=10)
 
 
 # ------------------------------------------------------------------- public
@@ -180,6 +185,9 @@ def explore_variant(
         summary["power_options"] = explore_power_options(graph, spec, config, tables, summary)
         summary["counts"]["option_cases"] = summary["power_options"]["cases"]
     summary["input_hash"] = input_hash(graph, spec, config, tables)
+    sections, blobs = input_manifest(graph, config, tables)
+    summary["input_sections"] = sections  # section -> sha256 of the resolved input (blobs stored per run)
+    summary["_manifest_blobs"] = blobs
     return summary
 
 
@@ -242,13 +250,22 @@ def _explore(graph, spec: ArchExplorationSpec, config: SimulationRunConfig,
 
     ranked = _rank([c for c in cases_obj if c["eligible"]], obj.tie_pct)
     recommended = ranked[0] if ranked else None
-    alternatives = _distinct(ranked[1:], spec.top_n, seen={round(recommended["total_mw"], 1)} if recommended else None)
+    alternatives = _distinct(ranked[1:], spec.top_n, seen={_sig(recommended)} if recommended else None)
+    pareto = [c for c in _pareto(ranked) if recommended is None or c["key"] != recommended["key"]][: spec.top_n * 2]
     baseline = next(c for c in cases_obj if not c["compression"] and not c["dvfs_raise"])
     ok_obj, obj_reasons = _slice_ok(obj_slice, spec.constraints)
+    coverage = _power_coverage(obj_slice)
+    budget_status = _power_budget_status(spec.constraints, coverage["power_coverage"], recommended)
+    if budget_status == "unknown" and spec.constraints.require_complete_power_for_budget:
+        obj_reasons.append(
+            "power budget 판정 불가: 활성 IP 전력 미모델 (" + ", ".join(coverage["zero_power_ips"]) + ")"
+        )
     if recommended is not None and spec.verify:
         recommended["verified"] = _verify(graph, spec, config, tables, recommended, buffers)
         if not recommended["verified"]["ok"]:
-            obj_reasons.append("recommended case failed re-simulation verification")
+            obj_reasons.append("recommended case failed re-simulation verification: "
+                               + "; ".join(recommended["verified"].get("reasons") or ["mismatch"]))
+    verified = (recommended or {}).get("verified") or {}
 
     summary = {
         "engine_rev": ENGINE_REV,
@@ -262,6 +279,15 @@ def _explore(graph, spec: ArchExplorationSpec, config: SimulationRunConfig,
         "mfc_dual": obj_slice["mfc_dual"],
         "spec_ok": recommended is not None and not obj_reasons,
         "spec_reasons": obj_reasons or ([] if recommended is not None else ["no eligible combination"]),
+        # decomposed status: spec_ok is the conjunction, these say which part holds
+        "status": {
+            "timing_feasible": ok_obj,
+            "power_coverage": coverage["power_coverage"],
+            "power_budget_status": budget_status,
+            "model_consistency_verified": (bool(verified.get("power_match") and verified.get("bw_match"))
+                                           if verified else None),
+            "constraints_verified": verified.get("constraints_pass") if verified else None,
+        },
         "objective": obj.model_dump(),
         "counts": {
             "cases": len(dist["total_mw"]),
@@ -274,22 +300,42 @@ def _explore(graph, spec: ArchExplorationSpec, config: SimulationRunConfig,
         "baseline": _public_case(baseline),
         "recommended": _public_case(recommended) if recommended else None,
         "alternatives": [_public_case(c) for c in alternatives],
+        # non-dominated eligible cases (power, BW, IQ risk, DVFS headroom): same power can hide other trade-offs
+        "pareto": [{**(_public_case(c) or {}), "iq_risk": _iq_risk(c)} for c in pareto],
         "slices": [_slice_public(s) for s in slices],
         "buffers": buffers,
         "domains": obj_slice["domains"],
         "ip_modes": po.ip_mode_table(graph, obj_slice["ips"]),
         "axis_spread": _axis_spread(slices, obj_slice, comp_sets, obj),
-        "sw_margin": sw_margin(slices, obj_slice, obj),
+        "sw_margin": sw_margin(slices, obj_slice, obj) | _fixed_growth(slices, obj, recommended),
         # objective slice keeps IP rows + DVFS options: promotion builds the frozen payload from it
         "objective_slice": {k: v for k, v in obj_slice.items() if k != "warnings"},
-        "coverage": {
-            "zero_power_ips": obj_slice["zero_power_ips"],
-            "hw_power_modeled": obj_slice["power"]["hw_mw"] > 0,
-            "cpu_power_modeled": obj_slice["power"]["cpu_mw"] > 0,
-        },
+        "coverage": coverage,
         "warnings": obj_slice["warnings"][:20],
     }
     return summary
+
+
+def _power_coverage(obj_slice: dict[str, Any]) -> dict[str, Any]:
+    zero = list(obj_slice["zero_power_ips"])
+    hw = obj_slice["power"]["hw_mw"] > 0
+    level = "none" if not hw else "partial" if zero else "complete"
+    return {
+        "zero_power_ips": zero,
+        "hw_power_modeled": hw,
+        "cpu_power_modeled": obj_slice["power"]["cpu_mw"] > 0,
+        "power_coverage": level,
+        # totals are sums over modeled IPs only unless coverage is complete
+        "power_total_basis": "complete" if level == "complete" else "modeled_ips_only",
+    }
+
+
+def _power_budget_status(c: ExplorationConstraints, coverage: str, recommended: dict[str, Any] | None) -> str:
+    if c.power_budget_mw is None:
+        return "n/a"
+    if recommended is None:
+        return "fail"
+    return "pass" if coverage == "complete" else "unknown"
 
 
 # ------------------------------------------------------------------- power options
@@ -464,12 +510,19 @@ def _slice_ok(s: dict[str, Any], c: ExplorationConstraints) -> tuple[bool, list[
     return not reasons, reasons
 
 
-def _case_ok(case: dict[str, Any], c: ExplorationConstraints) -> bool:
+def _case_reasons(case: dict[str, Any], c: ExplorationConstraints) -> list[str]:
+    reasons: list[str] = []
     if case["lossy"] and not c.allow_lossy:
-        return False
+        reasons.append("lossy compression not allowed")
     if c.power_budget_mw is not None and case["total_mw"] > c.power_budget_mw:
-        return False
-    return not (c.bw_budget_mbs is not None and case["bw_mbs"] > c.bw_budget_mbs)
+        reasons.append(f"power {case['total_mw']:.1f} mW > budget {c.power_budget_mw:g} mW")
+    if c.bw_budget_mbs is not None and case["bw_mbs"] > c.bw_budget_mbs:
+        reasons.append(f"BW {case['bw_mbs']:.1f} MB/s > budget {c.bw_budget_mbs:g} MB/s")
+    return reasons
+
+
+def _case_ok(case: dict[str, Any], c: ExplorationConstraints) -> bool:
+    return not _case_reasons(case, c)
 
 
 # ------------------------------------------------------------------- compression
@@ -745,11 +798,83 @@ def _rank(cases: list[dict[str, Any]], tie_pct: float) -> list[dict[str, Any]]:
     return sorted(cases, key=key)
 
 
-def _distinct(cases: list[dict[str, Any]], n: int, seen: set[float] | None = None) -> list[dict[str, Any]]:
-    """Top-n alternatives with distinct total power (drops zero-cost duplicates, e.g. unmodeled IPs)."""
+def _sig(c: dict[str, Any]) -> tuple:
+    """Alternative identity: equal power with a different BW or IQ risk is a different trade-off."""
+    return (round(c["total_mw"], 1), round(c["bw_mbs"]), bool(c["lossy"]), bool(c["assumed_ratio"]))
+
+
+def _iq_risk(c: dict[str, Any]) -> int:
+    """0 = no compression, 1 = lossless catalog ratio, 2 = assumed ratio, 3 = lossy (IQ evaluation needed)."""
+    if not c["compression"]:
+        return 0
+    return 3 if c["lossy"] else 2 if c["assumed_ratio"] else 1
+
+
+def _pareto(cases: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Non-dominated cases on (power, BW, IQ risk, -DVFS raise), returned in power order.
+
+    Sweep power in ascending order and query prefix-minimum BW by IQ risk and
+    descending DVFS raise. This stays O(n log n) even when every case survives.
+    """
+    raises = {value: i for i, value in enumerate(sorted({c["dvfs_raise"] for c in cases}, reverse=True), 1)}
+    trees = [[math.inf] * (len(raises) + 1) for _ in range(4)]
+    ordered = sorted((c["total_mw"], c["bw_mbs"], _iq_risk(c), -c["dvfs_raise"], i, c)
+                     for i, c in enumerate(cases))
+    out = []
+    for _, bw, risk, neg_raise, _, case in ordered:
+        index = raises[-neg_raise]
+        best_bw = math.inf
+        for tree in trees[:risk + 1]:
+            j = index
+            while j:
+                best_bw = min(best_bw, tree[j])
+                j -= j & -j
+        if best_bw <= bw + 1e-9:
+            continue  # dominated, or the same four-axis point already represented
+        out.append(case)
+        j = index
+        while j < len(trees[risk]):
+            trees[risk][j] = min(trees[risk][j], bw)
+            j += j & -j
+    return out
+
+
+def _fixed_growth(slices: list[dict[str, Any]], obj: Any, rec: dict[str, Any] | None) -> dict[str, Any]:
+    """SW growth the *recommended* DVFS levels absorb (no re-selection), vs the re-optimised tolerance.
+
+    A growth slice passes when its timing verdict is not fail and, per DVFS domain, the recommended
+    level's speed covers that slice's required clock (analytic check; no extra simulation).
+    """
+    if rec is None:
+        return {"growth_tolerance_fixed": None}
+    speed: dict[str, dict[int, float]] = {}
+    for s in slices:
+        for d in s.get("domains") or []:
+            for o in d["options"]:
+                speed.setdefault(d["domain"], {})[o["level"]] = o["speed_mhz"]
+    rows = []
+    for s in sorted((x for x in slices if x["statistic"] == obj.statistic), key=lambda x: x["runtime_scale"]):
+        short = [d["domain"] for d in s.get("domains") or []
+                 if speed.get(d["domain"], {}).get(rec["dvfs"].get(d["domain"], d["base_level"]), 0.0) < d["max_required_mhz"]]
+        rows.append({"runtime_scale": s["runtime_scale"], "ok": s["verdict"]["status"] != "fail" and not short,
+                     "short_domains": short})
+    tol = None
+    for r in rows:
+        if r["runtime_scale"] < obj.runtime_scale:
+            continue
+        if not r["ok"]:
+            break
+        tol = r["runtime_scale"]
+    return {"growth_tolerance_fixed": tol, "growth_fixed_rows": rows,
+            "growth_tolerance_basis": {"growth_tolerance": "DVFS re-selected per growth (re-optimisable range)",
+                                       "growth_tolerance_fixed": "recommended DVFS levels held (robustness)"}}
+
+
+def _distinct(cases: list[dict[str, Any]], n: int, seen: set[tuple] | None = None) -> list[dict[str, Any]]:
+    """Top-n alternatives with a distinct (power, BW, IQ risk) signature (drops zero-cost duplicates)."""
     seen, out = set(seen or ()), []
     for c in cases:
-        sig = round(c["total_mw"], 1)
+        sig = _sig(c)
         if sig in seen:
             continue
         seen.add(sig)
@@ -797,6 +922,11 @@ def _axis_spread(slices, obj_slice, comp_sets, obj) -> dict[str, dict[str, float
 
 # ------------------------------------------------------------------- verification
 def _verify(graph, spec, config, tables, case, buffers) -> dict[str, Any]:
+    """Re-simulate a case and re-apply the product constraints to the re-simulated numbers.
+
+    Two tolerances are kept apart: ``verify_tolerance_pct`` is model consistency (analytic vs
+    re-simulated), the budgets in ``constraints`` are product limits and get no tolerance.
+    """
     by_id = {b["buffer"]: b for b in buffers}
     variant = deepcopy(graph.variant)
     variant.buffer_overrides = deepcopy(variant.buffer_overrides or {})
@@ -812,15 +942,39 @@ def _verify(graph, spec, config, tables, case, buffers) -> dict[str, Any]:
         "eis": spec.axes.eis, "include_whatif": False,
     })
     r = analyze_timing_budget(replace(graph, variant=variant), opts, config=cfg, dvfs_tables=tables)
+    tol = spec.verify_tolerance_pct
     sim_total = float(r["power"]["total_mw"])
+    sim_bw = float(r["bw"]["total_mbs"])
     delta = sim_total - case["total_mw"]
-    pct = 100.0 * delta / case["total_mw"] if case["total_mw"] else 0.0
+    pct = 100.0 * delta / case["total_mw"] if case["total_mw"] else (0.0 if not sim_total else None)
+    bw_delta = sim_bw - case["bw_mbs"]
+    bw_pct = 100.0 * bw_delta / case["bw_mbs"] if case["bw_mbs"] else (0.0 if not sim_bw else None)
+    power_match = pct is not None and abs(pct) < tol
+    bw_match = bw_pct is not None and abs(bw_pct) < tol
+    sim_slice = _slice(r, case["statistic"], case["runtime_scale"])
+    timing_pass, reasons = _slice_ok(sim_slice, spec.constraints)
+    sim_case = {"lossy": case["lossy"], "total_mw": sim_total, "bw_mbs": sim_bw}
+    budget_reasons = _case_reasons(sim_case, spec.constraints)
+    constraints_pass = timing_pass and not budget_reasons
+    if not power_match:
+        difference = f"{pct:+.2f}%" if pct is not None else "nonzero simulation against zero estimate"
+        reasons.append(f"power model mismatch {difference} (tolerance {tol}%)")
+    if not bw_match:
+        difference = f"{bw_pct:+.2f}%" if bw_pct is not None else "nonzero simulation against zero estimate"
+        reasons.append(f"BW model mismatch {difference} (tolerance {tol}%)")
+    reasons += budget_reasons
     return {
-        "method": "re-simulated with buffer_overrides + dvfs_overrides",
+        "method": "re-simulated with buffer_overrides + dvfs_overrides; constraints re-applied",
+        "tolerance_pct": tol,
         "sim_total_mw": round(sim_total, 2), "analytic_total_mw": round(case["total_mw"], 2),
-        "delta_mw": round(delta, 3), "delta_pct": round(pct, 3),
-        "sim_bw_mbs": r["bw"]["total_mbs"], "sim_verdict": r["verdict"]["status"],
-        "ok": abs(pct) < 0.5 and r["verdict"]["status"] != "fail",
+        "delta_mw": round(delta, 3), "delta_pct": round(pct, 3) if pct is not None else None,
+        "sim_bw_mbs": round(sim_bw, 2), "analytic_bw_mbs": round(case["bw_mbs"], 2),
+        "bw_delta_mbs": round(bw_delta, 3), "bw_delta_pct": round(bw_pct, 3) if bw_pct is not None else None,
+        "sim_verdict": r["verdict"]["status"],
+        "power_match": power_match, "bw_match": bw_match,
+        "timing_pass": timing_pass, "constraints_pass": constraints_pass,
+        "reasons": reasons,
+        "ok": power_match and bw_match and constraints_pass,
     }
 
 
@@ -920,6 +1074,9 @@ def find_case(summary: dict[str, Any], case_key: str | None) -> tuple[dict[str, 
     for rank, alt in enumerate(summary.get("alternatives") or [], start=2):
         if alt["key"] == case_key:
             return alt, f"user:rank-{rank}"
+    for rank, candidate in enumerate(summary.get("pareto") or [], start=1):
+        if candidate["key"] == case_key:
+            return candidate, f"user:pareto-{rank}"
     base = summary.get("baseline")
     if base and base["key"] == case_key:
         return base, "user:baseline"
@@ -994,6 +1151,34 @@ def input_hash(graph, spec, config, tables) -> str:
         "soc_catalog": getattr(graph.soc, "compression_modes", None),
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()
+
+
+def _sha(value: Any) -> str:
+    return hashlib.sha256(json.dumps(value, sort_keys=True, default=str).encode()).hexdigest()
+
+
+def input_manifest(graph, config, tables) -> tuple[dict[str, str], dict[str, Any]]:
+    """Resolved inputs of one variant as content-addressed sections.
+
+    ``input_hash`` proves *whether* inputs changed; this keeps *what* they were (config, DVFS tables,
+    pipeline, variant, IP capabilities, power options) so a past run can be re-created after the
+    catalog moved on. Blobs are deduplicated by sha256 at run level.
+    """
+    raw: dict[str, Any] = {
+        "pipeline": _jsonable(graph.scenario.pipeline), "variant_doc": _jsonable(_variant_doc(graph.variant)),
+        "config": config.model_dump(mode="json"),
+        "simulation_inputs": build_simulation_inputs(graph, config).model_dump(mode="json"),
+        "power_options": _jsonable(getattr(graph.scenario, "power_options", None)),
+        "soc_catalog": _jsonable(getattr(graph.soc, "compression_modes", None)),
+    }
+    raw |= {f"dvfs:{k}": t.model_dump(mode="json") for k, t in sorted(tables.items())}
+    raw |= {f"ip:{k}": _jsonable(row.capabilities) for k, row in sorted(graph.ip_catalog.items())}
+    sections, blobs = {}, {}
+    for name, value in raw.items():
+        digest = _sha(value)
+        sections[name] = digest
+        blobs[digest] = value
+    return sections, blobs
 
 
 def _variant_doc(variant) -> Any:

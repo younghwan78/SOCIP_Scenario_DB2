@@ -202,7 +202,7 @@ def test_report_snapshot_and_html(uhd30):
     assert snap["calibration"] == [] and snap["overview"]["model_limits"]
     row = snap["scenarios"][0]
     assert row["latency"]["video_ms"] and row["period_ms"] == pytest.approx(1000 / row["fps"], rel=1e-3)
-    assert "Latency · 출력 간격" in html and "variant당 BW 절감" in html
+    assert "Latency · 출력 간격" in html and "압축 단독 BW 절감" in html and "조합 전체 절감" in html
     block = snap["opinions"][0]
     assert len(block["basis"]) == len(block["opinions"]) and block["evidence"]["grade"] == "산출"
     assert "사내 DVFS table" in block["evidence"]["needed"]
@@ -316,3 +316,126 @@ def test_v2_clock_term_is_used_by_the_analytic_dvfs_headroom(graph_factory, dvfs
     assert ax._clock_factor(ip, 400.0) == pytest.approx(1.0)
     assert ax._clock_factor(ip, 533.0) == pytest.approx(0.7 + 0.3 * 533.0 / 400.0)
     assert ax._clock_factor({"clock_power_fraction": 0.0, "ref_clock_mhz": 400.0}, 533.0) == 1.0
+
+
+# ------------------------------------------------------------------- codex review 7472331 (P1)
+def test_verify_reapplies_budget_to_resimulated_numbers(graph_factory, dvfs, uhd30):
+    """Analytic 100 mW within budget but re-simulated 100.4 mW: model match, budget fail."""
+    rec = dict(uhd30["recommended"])
+    sim = rec["verified"]["sim_total_mw"]
+    rec["total_mw"] = round(sim / 1.004, 3)  # analytic 0.4 % below the re-simulation (< 0.5 % tolerance)
+    spec = ALL_BUFFERS.model_copy(update={"constraints": ax.ExplorationConstraints(
+        power_budget_mw=rec["total_mw"], require_complete_power_for_budget=False)})
+    v = ax._verify(graph_factory(UHD30), spec, ax.SimulationRunConfig(), dvfs, rec, uhd30["buffers"])
+    assert v["power_match"] and v["bw_match"] and v["timing_pass"]
+    assert not v["constraints_pass"] and not v["ok"]
+    assert any("budget" in r for r in v["reasons"])
+
+
+def test_verify_checks_bw_consistency(graph_factory, dvfs, uhd30):
+    rec = dict(uhd30["recommended"])
+    rec["bw_mbs"] = rec["bw_mbs"] * 0.9
+    v = ax._verify(graph_factory(UHD30), ALL_BUFFERS, ax.SimulationRunConfig(), dvfs, rec, uhd30["buffers"])
+    assert v["power_match"] and not v["bw_match"] and not v["ok"]
+
+
+def test_zero_estimates_cannot_verify_nonzero_simulation(graph_factory, dvfs, uhd30):
+    rec = dict(uhd30["recommended"]) | {"total_mw": 0.0, "bw_mbs": 0.0}
+    result = ax._verify(graph_factory(UHD30), ALL_BUFFERS, ax.SimulationRunConfig(), dvfs, rec, uhd30["buffers"])
+    assert result["sim_total_mw"] > 0 and result["sim_bw_mbs"] > 0
+    assert not result["power_match"] and not result["bw_match"] and not result["ok"]
+    assert result["delta_pct"] is None and result["bw_delta_pct"] is None
+
+
+def test_partial_power_model_cannot_pass_a_power_budget(graph_factory, dvfs):
+    g = graph_factory(UHD30)
+    base = {"axes": {"statistics": ["max"], "runtime_scales": [1], "compression": {"enabled": False}}}
+    free = ax.explore_variant(g, ax.ArchExplorationSpec.model_validate(base), dvfs_tables=dvfs)
+    assert free["coverage"]["power_coverage"] == "partial" and free["coverage"]["zero_power_ips"]
+    assert free["status"]["power_budget_status"] == "n/a" and free["spec_ok"]
+    strict = ax.explore_variant(g, ax.ArchExplorationSpec.model_validate(
+        base | {"constraints": {"power_budget_mw": 100_000}}), dvfs_tables=dvfs)
+    assert strict["status"]["power_budget_status"] == "unknown" and not strict["spec_ok"]
+    assert any("판정 불가" in r for r in strict["spec_reasons"])
+    lenient = ax.explore_variant(g, ax.ArchExplorationSpec.model_validate(
+        base | {"constraints": {"power_budget_mw": 100_000, "require_complete_power_for_budget": False}}), dvfs_tables=dvfs)
+    assert lenient["spec_ok"] and lenient["status"]["power_budget_status"] == "unknown"
+    assert lenient["status"]["timing_feasible"] and lenient["status"]["model_consistency_verified"]
+
+
+def _c(key, mw, bw, lossy=False, comp=("b",), raise_=0, assumed=False):
+    return {"key": key, "total_mw": mw, "bw_mbs": bw, "lossy": lossy, "assumed_ratio": assumed,
+            "compression": list(comp), "dvfs_raise": raise_}
+
+
+def test_pareto_keeps_equal_power_with_lower_bw_or_iq_risk():
+    cases = [_c("a", 100, 500, lossy=True), _c("b", 100, 400, lossy=True), _c("c", 100.0, 600, comp=()),
+             _c("d", 120, 700, comp=()), _c("e", 101, 400, lossy=True, raise_=1)]
+    keys = [c["key"] for c in ax._pareto(cases)]
+    assert keys == ["b", "c", "e"]  # a: dominated by b; d: dominated by c; e: more DVFS headroom
+    # alternatives no longer collapse cases that share a rounded power but differ in BW
+    assert len(ax._distinct([_c("x", 100, 500), _c("y", 100, 400)], 5)) == 2
+
+
+def test_pareto_front_matches_a_brute_force_oracle():
+    from random import Random
+
+    random = Random(42)
+    cases = [_c(str(i), random.randrange(20), random.randrange(20),
+                lossy=bool(random.randrange(2)), comp=() if i % 4 == 0 else ("b",),
+                raise_=random.randrange(5), assumed=bool(random.randrange(2))) for i in range(100)]
+    def point(case):
+        return case["total_mw"], case["bw_mbs"], ax._iq_risk(case), -case["dvfs_raise"]
+    points = {point(case) for case in cases}
+    expected = {p for p in points if not any(q != p and all(a <= b for a, b in zip(q, p, strict=True)) for q in points)}
+    assert {point(case) for case in ax._pareto(cases)} == expected
+
+
+def test_pareto_avoids_pairwise_work_when_all_candidates_survive(monkeypatch):
+    cases = [_c(str(i), i, 1000 - i) for i in range(256)]
+    calls = 0
+    original = ax._iq_risk
+    def counted(case):
+        nonlocal calls
+        calls += 1
+        return original(case)
+    monkeypatch.setattr(ax, "_iq_risk", counted)
+    assert len(ax._pareto(cases)) == len(cases)
+    assert calls <= 10 * len(cases)
+
+
+def test_pareto_candidate_can_be_selected_for_promotion():
+    candidate = _c("front-only", 100, 400)
+    case, rule = ax.find_case({"recommended": _c("rec", 90, 500), "alternatives": [], "pareto": [candidate]}, "front-only")
+    assert case == candidate and rule == "user:pareto-1"
+
+
+def test_fixed_dvfs_growth_tolerance_is_not_the_reoptimised_one(uhd30):
+    m = uhd30["sw_margin"]
+    assert m["growth_tolerance_fixed"] is not None
+    assert m["growth_tolerance_fixed"] <= m["growth_tolerance"]
+    assert {"growth_tolerance", "growth_tolerance_fixed"} <= set(m["growth_tolerance_basis"])
+    assert uhd30["pareto"] and all("iq_risk" in c for c in uhd30["pareto"])
+
+
+def test_input_manifest_keeps_resolved_inputs_content_addressed(uhd30, graph_factory, dvfs):
+    sections, blobs = uhd30["input_sections"], uhd30["_manifest_blobs"]
+    assert {"pipeline", "variant_doc", "config"} <= set(sections) and any(k.startswith("dvfs:") for k in sections)
+    assert any(k.startswith("ip:") for k in sections)
+    assert blobs[sections["simulation_inputs"]] == ax.build_simulation_inputs(
+        graph_factory(UHD30), ax.SimulationRunConfig()).model_dump(mode="json")
+    assert all(sections[k] in blobs for k in sections)
+    again, _ = ax.input_manifest(graph_factory(UHD30), ax.SimulationRunConfig(), dvfs)
+    assert again == sections  # deterministic
+
+
+def test_run_list_view_keeps_what_the_run_table_reads(uhd30):
+    import json
+    from scenario_db.api.services.arch_exploration import variant_summary
+    full = {k: v for k, v in uhd30.items() if not k.startswith("_")} | {"scenario_id": "s", "variant_id": "v"}
+    row = variant_summary(full)
+    assert row["detail"] is False and row["recommended"] == full["recommended"] and row["distribution"] == full["distribution"]
+    assert row["sw_margin"]["worst"] == full["sw_margin"]["worst"]
+    assert row["sw_margin"]["growth_tolerance_fixed"] == full["sw_margin"]["growth_tolerance_fixed"]
+    assert {"slices", "buffers", "objective_slice", "pareto"}.isdisjoint(row)
+    assert len(json.dumps(row)) * 10 < len(json.dumps(full, default=str))  # an order of magnitude smaller

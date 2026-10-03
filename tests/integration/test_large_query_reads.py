@@ -188,3 +188,24 @@ def test_matrix_axes_include_overrides_and_filtered_ancestors_on_every_page(cata
     assert first["axis_keys"] == second["axis_keys"]
     assert set(first["axis_keys"]) == {"fps", "clock_mhz", "codec"}
     assert second["items"][0]["design_conditions"] == {"fps": 60, "clock_mhz": 400}
+
+
+def test_scenario_catalog_counts_every_variant_beyond_5000(engine):
+    """Counts are SQL aggregates: a catalog page whose scenarios hold > 5000 variants is not truncated."""
+    with Session(engine) as db:
+        db.add(Project(id="perf-count", schema_version="2.2", yaml_sha256="test", metadata_={"name": "Count"}))
+        db.flush()
+        db.add_all([Scenario(id=f"perf-count-{i}", project_ref="perf-count", schema_version="2.2", yaml_sha256="test",
+                             metadata_={"name": f"c{i}", "category": ["camera"]}, pipeline={}) for i in range(2)])
+        db.flush()
+        db.execute(ScenarioVariant.__table__.insert(), [
+            dict(scenario_id=f"perf-count-{i % 2}", id=f"v-{i:05}", severity="high" if i % 3 else "low") for i in range(5100)])
+        db.flush()
+        app = create_app()
+        app.dependency_overrides[get_db] = lambda: db
+        body = TestClient(app).get("/api/v1/explorer/scenario-catalog", params={"project_ref": "perf-count"}).json()
+        counts = {item["scenario_id"]: item for item in body["items"]}
+        assert sum(item["variant_count"] for item in body["items"]) == 5100
+        assert counts["perf-count-1"]["default_variant_id"] == "v-00001"
+        assert sum(counts["perf-count-0"]["severity_counts"].values()) == 2550
+        db.rollback()

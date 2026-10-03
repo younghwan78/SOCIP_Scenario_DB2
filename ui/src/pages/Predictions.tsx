@@ -18,7 +18,8 @@ const regProv = (r: BoardRow): Prov => ({
 export function PredictionsPage({ ctx }: { ctx: Ctx }) {
   const all = ctx.params.all === '1'
   const [tick, setTick] = useState(0)
-  const q = useAsync(() => archApi.board(all ? undefined : ctx.scenario), [ctx.scenario, all, tick])
+  // "all" = every scenario of the selected 과제 (not every project)
+  const q = useAsync(() => archApi.board(all ? undefined : ctx.scenario, all ? ctx.project || undefined : undefined), [ctx.scenario, ctx.project, all, tick])
   const rows = q.data?.rows ?? []
   const sel = rows.find((r) => r.id === ctx.params.v)
   const choose = (vid: string) => ctx.navigate(undefined, { v: vid === ctx.params.v ? undefined : vid }, true)

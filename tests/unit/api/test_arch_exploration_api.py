@@ -83,3 +83,15 @@ def test_power_option_review_routes(monkeypatch):
     assert c.put("/api/v1/arch/power-options/reviews", json=bad_key).status_code == 422
     got = c.get("/api/v1/arch/power-options/reviews", params={"scenario_id": "uc-x"})
     assert got.status_code == 200 and got.json() == [{"scenario_id": "uc-x"}]
+
+
+def test_list_runs_passes_project_scope(monkeypatch):
+    seen = {}
+
+    def fake(db, **kw):
+        seen.update(kw)
+        return []
+
+    c = _client(monkeypatch, list_runs=fake)
+    assert c.get("/api/v1/arch/exploration/runs", params={"project_ref": "proj-a"}).status_code == 200
+    assert seen["project_ref"] == "proj-a"

@@ -8,7 +8,17 @@ export interface Quant { min: number; p25: number; median: number; p75: number; 
 /** Distribution keys always present (engine rev 1+); the BW IP/CPU keys exist from rev 2. */
 export type Dist = Record<'total_mw' | 'cpu_mw' | 'hw_mw' | 'bw_mw' | 'bw_mbs', Quant> & Partial<Record<DistKey, Quant>>
 export type DistKey = 'total_mw' | 'cpu_mw' | 'hw_mw' | 'bw_mw' | 'bw_ip_mw' | 'bw_cpu_mw' | 'bw_mbs' | 'bw_ip_mbs' | 'bw_cpu_mbs'
-export interface Verified { ok: boolean; delta_pct: number; sim_total_mw: number; analytic_total_mw: number; sim_verdict: string }
+export interface Verified {
+  ok: boolean; delta_pct: number | null; sim_total_mw: number; analytic_total_mw: number; sim_verdict: string
+  /** engine rev ≥ 7: model consistency and re-applied constraints are reported separately */
+  tolerance_pct?: number; sim_bw_mbs?: number; analytic_bw_mbs?: number; bw_delta_pct?: number | null
+  power_match?: boolean; bw_match?: boolean; timing_pass?: boolean; constraints_pass?: boolean; reasons?: string[]
+}
+export type PowerCoverage = 'complete' | 'partial' | 'none'
+export interface VariantStatus {
+  timing_feasible: boolean; power_coverage: PowerCoverage; power_budget_status: 'n/a' | 'pass' | 'fail' | 'unknown'
+  model_consistency_verified: boolean | null; constraints_verified: boolean | null
+}
 export interface ExpCase {
   key: string; statistic: Statistic; runtime_scale: number; compression: string[]; dvfs: Record<string, number>; dvfs_raise: number
   total_mw: number; cpu_mw: number; hw_mw: number; bw_mw: number; bw_mbs: number; lossy: boolean; assumed_ratio: boolean
@@ -27,7 +37,11 @@ export interface MarginStage {
   stage: string; slack_ms: number; margin_pct: number; sw_ms: number; hw_ms: number; sw_share_pct: number
   latency_share_pct: number; bottleneck: string | null; bottleneck_ms: number; bottleneck_share_pct: number
 }
-export interface SwMargin { stages: MarginStage[]; worst: MarginStage | null; growth_tolerance: number | null; growth_tested_max: number | null; stat_spread_ms: number; verdict: string; recommendations: string[] }
+export interface SwMargin {
+  stages: MarginStage[]; worst: MarginStage | null; growth_tolerance: number | null; growth_tested_max: number | null; stat_spread_ms: number; verdict: string; recommendations: string[]
+  /** engine rev ≥ 7: growth absorbed with the recommended DVFS levels held (robustness), vs re-selected (growth_tolerance) */
+  growth_tolerance_fixed?: number | null; growth_fixed_rows?: { runtime_scale: number; ok: boolean; short_domains: string[] }[]
+}
 export interface SliceRow {
   statistic: Statistic; runtime_scale: number; verdict: { status: string; reasons: string[] }; intervals_ok: boolean
   power: { total_mw: number; cpu_mw: number; hw_mw: number; bw_mw: number }; bw: { total_mbs: number }
@@ -36,14 +50,19 @@ export interface VariantResult {
   scenario_id: string; variant_id: string; fps: number; period_ms: number; eis_on: boolean; mfc_dual: boolean
   spec_ok: boolean; spec_reasons: string[]; counts: { cases: number; eligible: number; sw_slices: number; compression_sets: number; dvfs_sets: number }
   distribution: Dist; baseline: ExpCase; recommended: ExpCase | null; alternatives: ExpCase[]
+  /** engine rev ≥ 7: non-dominated eligible cases on power · BW · IQ risk · DVFS headroom */
+  pareto?: (ExpCase & { iq_risk: number })[]
   slices: SliceRow[]; buffers: BufferRow[]; domains: DomainRow[]
   axis_spread: Record<'sw_statistic' | 'sw_growth' | 'compression' | 'dvfs_headroom', { min: number; max: number; range: number }>
-  sw_margin: SwMargin; coverage?: { zero_power_ips: string[]; hw_power_modeled: boolean; cpu_power_modeled: boolean }
+  sw_margin: SwMargin; coverage?: { zero_power_ips: string[]; hw_power_modeled: boolean; cpu_power_modeled: boolean; power_coverage?: PowerCoverage }
+  status?: VariantStatus
   warnings: string[]; dvfs_table_ref?: string | null; input_hash: string
   /** engine rev 4+: power-saving options explored on top of the variant (never variants themselves) */
   power_options?: PowerOptions
   /** engine rev 6+: every HW node's sim mode, coefficients and declared alternatives */
   ip_modes?: IpModeRow[]
+  /** false = list-view row (run?view=summary): fetch archApi.runVariant for slices / buffers / options */
+  detail?: boolean
 }
 export interface IpModeAlt { mode: string; unit_power_mw_mp: number | null; ppc: number | null; explorable: boolean; label?: string | null; note?: string | null }
 export interface IpModeRow {
@@ -96,11 +115,11 @@ export function bestOption(po: PowerOptions | undefined): OptionResult | null {
 }
 export interface RunMeta {
   id: string; title: string; scenario_type: string; project_ref: string | null; soc_ref: string | null; dvfs_table_ref: string | null
-  engine_rev: string; created_by: string | null; created_at: string | null
+  engine_rev: string; created_by: string | null; created_at: string | null; config_profile_ref?: string | null
   summary: { variants: number; errors: number; spec_ok: number; cases: number; eligible_cases: number; verified: number; recommended_power_mw: [number, number] | null
     power_options?: { variants: number; sets: number; best_saving_mw: [number, number] | null } }
 }
-export interface RunDetail extends RunMeta { spec: Record<string, unknown>; variants: VariantResult[]; errors: VariantFailure[] }
+export interface RunDetail extends RunMeta { spec: Record<string, unknown>; variants: VariantResult[]; errors: VariantFailure[]; view?: 'full' | 'summary' }
 export interface Power { total_mw: number; cpu_mw: number; hw_mw: number; bw_mw: number; bw_ip_mw?: number; bw_cpu_mw?: number }
 export interface BoardRow {
   id: string; scenario_id: string; variant_id: string; status: string; run_id: string; run_title: string | null; run_created_at: string | null
@@ -175,13 +194,17 @@ async function send<T>(method: string, path: string, body?: unknown): Promise<T>
 const q = (p: Record<string, string | undefined>) => { const s = new URLSearchParams(Object.entries(p).filter(([, v]) => v) as [string, string][]).toString(); return s ? `?${s}` : '' }
 
 export const archApi = {
-  runs: () => send<RunMeta[]>('GET', '/arch/exploration/runs'),
-  run: (id: string) => send<RunDetail>('GET', `/arch/exploration/runs/${encodeURIComponent(id)}`),
-  createRun: (body: ReturnType<typeof runBody>) => send<RunDetail>('POST', '/arch/exploration/runs', body),
-  promote: (runId: string, variantIds?: string[], caseKey?: string, reason?: string, scenarioId?: string) =>
+  /** projectRef omitted = every project (explicit comparison mode) */
+  runs: (projectRef?: string) => send<RunMeta[]>('GET', `/arch/exploration/runs${q({ project_ref: projectRef })}`),
+  /** list view: per-variant summary rows (~2 KB each); the full summary comes from runVariant on selection */
+  run: (id: string) => send<RunDetail>('GET', `/arch/exploration/runs/${encodeURIComponent(id)}?view=summary`),
+  runVariant: (id: string, scenarioId: string, variantId: string) =>
+    send<VariantResult>('GET', `/arch/exploration/runs/${encodeURIComponent(id)}/variants/${encodeURIComponent(scenarioId)}/${encodeURIComponent(variantId)}`),
+  createRun: (body: ReturnType<typeof runBody>) => send<RunDetail>('POST', '/arch/exploration/runs?view=summary', body),
+  promote: (runId: string, variantIds?: string[], caseKey?: string, reason?: string, scenarioId?: string, expectedProject?: string) =>
     send<{ promoted: { id: string; variant_id: string; total_mw: number }[]; skipped: { variant_id: string; reason: string }[] }>(
-      'POST', '/arch/predictions/promote', { run_id: runId, variant_ids: variantIds, case_key: caseKey, reason, scenario_id: scenarioId }),
-  board: (scenarioId?: string) => send<{ rows: BoardRow[] }>('GET', `/arch/predictions/board${q({ scenario_id: scenarioId })}`),
+      'POST', '/arch/predictions/promote', { run_id: runId, variant_ids: variantIds, case_key: caseKey, reason, scenario_id: scenarioId, expected_project_ref: expectedProject }),
+  board: (scenarioId?: string, projectRef?: string) => send<{ rows: BoardRow[] }>('GET', `/arch/predictions/board${q({ scenario_id: scenarioId, project_ref: projectRef })}`),
   optionReviews: (scenarioId?: string) => send<OptionReview[]>('GET', `/arch/power-options/reviews${q({ scenario_id: scenarioId })}`),
   setOptionReview: (body: { scenario_id: string; variant_id?: string; option_key: string; status: ReviewStatus; note?: string }) =>
     send<OptionReview>('PUT', '/arch/power-options/reviews', body),
@@ -193,6 +216,7 @@ export const archApi = {
   setReportStatus: (id: string, status: 'draft' | 'published', review?: { reviewer: string; note: string }) =>
     send<ReportMeta>('PATCH', `/arch/reports/${encodeURIComponent(id)}`, { status, ...review }),
   reportXlsxUrl: (id: string) => `${API_BASE}/arch/reports/${encodeURIComponent(id)}/xlsx`,
+  reportPackageUrl: (id: string) => `${API_BASE}/arch/reports/${encodeURIComponent(id)}/package`,
   reportStale: (id: string) => send<{ stale: boolean; changed: { variant_id: string }[] }>('GET', `/arch/reports/${encodeURIComponent(id)}/stale`),
   reportHtmlUrl: (id: string) => `${API_BASE}/arch/reports/${encodeURIComponent(id)}/html`,
 }
@@ -241,3 +265,17 @@ export const CAT_COLOR: Record<string, string> = {
 
 /** Variant ids are only unique within a scenario. */
 export const variantKey = (v: { scenario_id: string; variant_id: string }): string => JSON.stringify([v.scenario_id, v.variant_id])
+
+/** Power coverage of a variant (older runs: derived from the zero-power IP list). */
+export function coverageOf(v: Pick<VariantResult, 'status' | 'coverage'>): PowerCoverage | undefined {
+  const c = v.status?.power_coverage ?? v.coverage?.power_coverage
+  if (c) return c
+  if (!v.coverage) return undefined
+  if (!v.coverage.hw_power_modeled) return 'none'
+  return v.coverage.zero_power_ips.length ? 'partial' : 'complete'
+}
+
+/** Variants a bulk "register lowest power" would promote (server rule: spec OK only). */
+export function promoteTargets(run: Pick<RunDetail, 'variants'>): VariantResult[] {
+  return run.variants.filter((v) => v.spec_ok && v.recommended)
+}

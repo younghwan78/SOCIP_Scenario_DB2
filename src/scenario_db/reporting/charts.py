@@ -1,6 +1,13 @@
 from __future__ import annotations
 
+import os
 from typing import Any
+
+
+# Inline plotly.js: exported charts must render on an air-gapped intranet (no CDN). Each chart file
+# is self-contained (~4.5 MB raw, ~1.3 MB deflated in the ZIP). Set SCENARIO_DB_PLOTLY_JS=cdn to trade
+# portability for size.
+PLOTLY_JS_MODE: Any = True if os.environ.get("SCENARIO_DB_PLOTLY_JS", "inline") != "cdn" else "cdn"
 
 
 def timing_chart_records(evidence: dict[str, Any]) -> list[dict[str, Any]]:
@@ -33,36 +40,65 @@ def timing_chart_records(evidence: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def bw_chart_records(evidence: dict[str, Any]) -> list[dict[str, Any]]:
-    event_by_node = _timeline_window_by_node(evidence)
+    """One record per DMA port x frame window of its node (every simulated frame, not only the first).
+
+    Three BW meanings are kept apart:
+    - ``avg_bw_mbs``: frame-average BW (frame bytes x fps) from the DMA breakdown,
+    - ``bw_mbs`` / ``bw_gbps``: active-window BW estimate = frame bytes / active duration, assuming a
+      uniform transfer over the node's active window (bar area = bytes per frame); not a bus peak,
+    - measured bus peak: only from PMU / bus monitor captures, never derived here.
+    """
+    windows_by_node = _timeline_windows_by_node(evidence)
+    period_ms = _frame_period_ms(evidence)
     rows = []
     for item in _dict_rows(evidence.get("dma_breakdown")):
         node_id = str(item.get("node_id") or "")
-        window = event_by_node.get(node_id)
-        if window is None:
+        windows = windows_by_node.get(node_id)
+        if not windows:
             continue
         direction = str(item.get("direction") or "").lower()
-        bw_mbs = _float(item.get("bw_mbs"))
-        rows.append(
-            {
-                "node_id": node_id,
-                "hw_name": str(item.get("hw_name") or node_id),
-                "port": str(item.get("port") or ""),
-                "direction": "Read" if direction == "read" else "Write" if direction == "write" else "OTF",
-                "start_ms": window["start_ms"],
-                "end_ms": window["end_ms"],
-                "duration_ms": max(0.0, window["end_ms"] - window["start_ms"]),
-                "frame_index": window.get("frame_index"),
-                "bw_mbs": bw_mbs,
-                "bw_gbps": bw_mbs / 1000.0,
-                "bw_power_mw": _float(item.get("bw_power_mw")),
-                "bw_power_ma": _float(item.get("bw_power_ma")),
-            }
-        )
+        avg_mbs = _float(item.get("bw_mbs"))
+        for window in windows:
+            duration = max(0.0, window["end_ms"] - window["start_ms"])
+            if period_ms and duration > 0:
+                active_mbs = avg_mbs * period_ms / duration
+                basis = "active_window_uniform"
+            else:
+                active_mbs = avg_mbs
+                basis = "frame_average"
+            rows.append(
+                {
+                    "node_id": node_id,
+                    "hw_name": str(item.get("hw_name") or node_id),
+                    "port": str(item.get("port") or ""),
+                    "direction": "Read" if direction == "read" else "Write" if direction == "write" else "OTF",
+                    "start_ms": window["start_ms"],
+                    "end_ms": window["end_ms"],
+                    "duration_ms": duration,
+                    "frame_index": window.get("frame_index"),
+                    "avg_bw_mbs": avg_mbs,
+                    "avg_bw_gbps": avg_mbs / 1000.0,
+                    "bw_mbs": active_mbs,
+                    "bw_gbps": active_mbs / 1000.0,
+                    "bw_basis": basis,
+                    "period_ms": period_ms,
+                    "bw_power_mw": _float(item.get("bw_power_mw")),
+                    "bw_power_ma": _float(item.get("bw_power_ma")),
+                }
+            )
     rank = {str(node): index for index, node in enumerate(evidence.get("topology_order") or [])}
     return sorted(
         rows,
         key=lambda row: (row["frame_index"] or 0, rank.get(row["node_id"], 10_000), row["start_ms"], row["port"]),
     )
+
+
+def bw_port_summary(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One row per DMA port (frame windows collapsed): frame-average BW and BW power are per port, not per window."""
+    seen: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for row in records:
+        seen.setdefault((row["node_id"], row["port"], row["direction"]), row)
+    return list(seen.values())
 
 
 def timing_sequence_annotations(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -219,7 +255,7 @@ def generate_timing_chart_html(evidence: dict[str, Any], *, title: str) -> str:
         categoryorder="array",
         categoryarray=timing_yaxis_category_order(records),
     )
-    return fig.to_html(full_html=True, include_plotlyjs="cdn")
+    return fig.to_html(full_html=True, include_plotlyjs=PLOTLY_JS_MODE)
 
 
 def generate_bw_chart_html(evidence: dict[str, Any], *, title: str) -> str:
@@ -230,16 +266,22 @@ def generate_bw_chart_html(evidence: dict[str, Any], *, title: str) -> str:
         return _empty_html(title, "No DMA timeline records are available. Run simulation with timeline enabled.")
 
     ips = _unique(row["hw_name"] for row in records)
-    total_power_mw = sum(row["bw_power_mw"] for row in records)
-    total_power_ma = sum(row["bw_power_ma"] for row in records)
-    total_bw_gbps = sum(row["bw_gbps"] for row in records)
-    subplot_titles = [f"Total BW (Avg: {total_bw_gbps:.2f} GB/s, Power: {total_power_mw:.1f} mW / {total_power_ma:.1f} mA)"]
+    ports = bw_port_summary(records)
+    total_power_mw = sum(row["bw_power_mw"] for row in ports)
+    total_power_ma = sum(row["bw_power_ma"] for row in ports)
+    total_bw_gbps = sum(row["avg_bw_gbps"] for row in ports)
+    peak_gbps = _instantaneous_bw_peak_gbps(records)
+    estimated = any(row["bw_basis"] == "active_window_uniform" for row in records)
+    peak_label = (f"active-window peak est. {peak_gbps:.2f} GB/s (uniform transfer; not a bus measurement)"
+                  if estimated else "bars = frame-average BW (frame period unknown)")
+    subplot_titles = [f"Total BW (frame avg: {total_bw_gbps:.2f} GB/s, Power: {total_power_mw:.1f} mW / "
+                      f"{total_power_ma:.1f} mA) · {peak_label}"]
     for ip in ips:
-        ip_rows = [row for row in records if row["hw_name"] == ip]
+        ip_ports = [row for row in ports if row["hw_name"] == ip]
         subplot_titles.append(
-            f"{ip} BW ({sum(row['bw_gbps'] for row in ip_rows):.2f} GB/s, "
-            f"{sum(row['bw_power_mw'] for row in ip_rows):.1f} mW / "
-            f"{sum(row['bw_power_ma'] for row in ip_rows):.1f} mA)"
+            f"{ip} BW (frame avg {sum(row['avg_bw_gbps'] for row in ip_ports):.2f} GB/s, "
+            f"{sum(row['bw_power_mw'] for row in ip_ports):.1f} mW / "
+            f"{sum(row['bw_power_ma'] for row in ip_ports):.1f} mA)"
         )
 
     fig = make_subplots(
@@ -256,7 +298,7 @@ def generate_bw_chart_html(evidence: dict[str, Any], *, title: str) -> str:
 
     y_max = bw_axis_max_gbps(records)
     for row_index in range(1, 2 + len(ips)):
-        fig.update_yaxes(title_text="GB/s", range=[0, y_max], dtick=0.5 if y_max <= 3.0 else 1.0, row=row_index, col=1)
+        fig.update_yaxes(title_text="GB/s (active est.)", range=[0, y_max], dtick=0.5 if y_max <= 3.0 else 1.0 if y_max <= 10.0 else None, row=row_index, col=1)
     fig.update_xaxes(title_text="Time (ms)", row=1 + len(ips), col=1)
     fig.update_layout(
         title=title,
@@ -266,7 +308,7 @@ def generate_bw_chart_html(evidence: dict[str, Any], *, title: str) -> str:
         legend={"orientation": "v", "yanchor": "top", "y": 1.0, "xanchor": "left", "x": 1.02, "font": {"size": 9}},
         margin={"t": 70, "r": 220, "b": 40, "l": 70},
     )
-    return fig.to_html(full_html=True, include_plotlyjs="cdn")
+    return fig.to_html(full_html=True, include_plotlyjs=PLOTLY_JS_MODE)
 
 
 def _add_bw_traces(
@@ -294,7 +336,8 @@ def _add_bw_traces(
                 hovertemplate=(
                     f"{item['hw_name']} / {item['port']}<br>"
                     f"Direction: {direction}<br>"
-                    f"BW: {item['bw_gbps']:.2f} GB/s ({item['bw_mbs']:.1f} MB/s)<br>"
+                    f"Active-window BW (est.): {item['bw_gbps']:.2f} GB/s<br>"
+                    f"Frame-average BW: {item['avg_bw_gbps']:.2f} GB/s ({item['avg_bw_mbs']:.1f} MB/s)<br>"
                     f"Start: {item['start_ms']:.3f} ms<br>"
                     f"End: {item['end_ms']:.3f} ms<br>"
                     f"Duration: {item['duration_ms']:.3f} ms<br>"
@@ -335,18 +378,44 @@ def _instantaneous_bw_peak_gbps(records: list[dict[str, Any]]) -> float:
     return peak
 
 
-def _timeline_window_by_node(evidence: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    result = {}
+def _timeline_windows_by_node(evidence: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    result: dict[str, list[dict[str, Any]]] = {}
     for event in _events(evidence):
         node_id = str(event.get("node_id") or "")
-        if not node_id or node_id in result:
+        if not node_id:
             continue
-        result[node_id] = {
+        result.setdefault(node_id, []).append({
             "start_ms": _float(event.get("start_ms")),
             "end_ms": _float(event.get("end_ms")),
             "frame_index": event.get("frame_index"),
-        }
+        })
+    for windows in result.values():
+        windows.sort(key=lambda w: (w["start_ms"], w["end_ms"]))
     return result
+
+
+def _frame_period_ms(evidence: dict[str, Any]) -> float | None:
+    """Frame period: declared fps first, else the median start-to-start spacing of a node's frames."""
+    for source in (evidence, evidence.get("kpi") or {}, evidence.get("run_config") or {}):
+        if not isinstance(source, dict):
+            continue
+        for key in ("fps", "fps_effective", "target_fps"):
+            value = source.get(key)
+            if isinstance(value, dict):
+                value = value.get("mean")
+            fps = _float(value)
+            if fps > 0:
+                return 1000.0 / fps
+    gaps = []
+    for windows in _timeline_windows_by_node(evidence).values():
+        framed = sorted((w for w in windows if w.get("frame_index") is not None), key=lambda w: w["frame_index"])
+        for prev, cur in zip(framed, framed[1:], strict=False):
+            if cur["frame_index"] == prev["frame_index"] + 1 and cur["start_ms"] > prev["start_ms"]:
+                gaps.append(cur["start_ms"] - prev["start_ms"])
+    if not gaps:
+        return None
+    gaps.sort()
+    return gaps[len(gaps) // 2]
 
 
 def _events(evidence: dict[str, Any]) -> list[dict[str, Any]]:

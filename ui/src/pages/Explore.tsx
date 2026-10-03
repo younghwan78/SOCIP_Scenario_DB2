@@ -3,7 +3,7 @@ import type { Ctx } from '../App'
 import { useAsync } from '../lib/route'
 import { fmt, type Statistic } from '../lib/timingBudget'
 import {
-  DEFAULT_RUN, METRIC_COLOR, archApi, bestOption, caseCount, caseDelta, levels, runBody, short, variantKey,
+  DEFAULT_RUN, METRIC_COLOR, archApi, bestOption, caseCount, caseDelta, coverageOf, levels, promoteTargets, runBody, short, variantKey,
   type DistKey, type ExpCase, type RunDetail, type RunOptions, type VariantResult,
 } from '../lib/archExplore'
 import { Card } from '../components/TimingCharts'
@@ -20,7 +20,10 @@ const SCALES = [1.0, 1.1, 1.2, 1.3, 1.5]
 export function ExplorePage({ ctx }: { ctx: Ctx }) {
   const runId = ctx.params.run
   const [tick, setTick] = useState(0)
-  const runsQ = useAsync(() => archApi.runs(), [tick])
+  // default: runs of the selected 과제 only; other projects are an explicit, read-only comparison mode
+  const [allProjects, setAllProjects] = useState(false)
+  const runsQ = useAsync(() => archApi.runs(allProjects ? undefined : ctx.project || undefined), [tick, ctx.project, allProjects])
+  const runs = runsQ.data ?? []
   const runQ = useAsync(() => (runId ? archApi.run(runId) : Promise.resolve(null)), [runId])
   const [showForm, setShowForm] = useState(!runId)
   const pick = (id: string | undefined) => ctx.navigate(undefined, { run: id, v: undefined })
@@ -29,10 +32,14 @@ export function ExplorePage({ ctx }: { ctx: Ctx }) {
     <div className="page tb-page">
       <div className="toolbar" style={{ gap: 12, flexWrap: 'wrap' }}>
         <span className="muted" style={{ fontSize: 13 }}>탐색 run</span>
-        <select className="input" value={runId ?? ''} onChange={(e) => pick(e.target.value || undefined)} aria-label="탐색 run" style={{ minWidth: 360 }}>
-          <option value="">— 선택 —</option>
-          {(runsQ.data ?? []).map((r) => <option key={r.id} value={r.id}>{r.title} · {r.summary.spec_ok}/{r.summary.variants} · {r.created_at?.slice(0, 16).replace('T', ' ')}</option>)}
+        <select className="input" value={runId ?? ''} onChange={(e) => pick(e.target.value || undefined)} aria-label="탐색 run" style={{ minWidth: 360 }}
+          disabled={runsQ.loading && !runsQ.data}>
+          <option value="">{runsQ.loading && !runsQ.data ? '조회 중…' : runsQ.error ? '조회 실패' : runs.length ? '— 선택 —' : '탐색 run 없음'}</option>
+          {runs.map((r) => <option key={r.id} value={r.id}>{allProjects ? `[${r.project_ref ?? '—'}] ` : ''}{r.title} · {r.summary.spec_ok}/{r.summary.variants} · {r.created_at?.slice(0, 16).replace('T', ' ')}</option>)}
         </select>
+        <label className="ax-check" title="다른 과제의 run도 목록에 표시 (비교 보기 전용 · 예측 등록 불가)">
+          <input type="checkbox" checked={allProjects} onChange={() => setAllProjects((x) => !x)} />다른 과제 포함 (비교)</label>
+        {runsQ.error && <span className="err" style={{ margin: 0 }}>run 목록 조회 실패: {runsQ.error}</span>}
         <button className={`btn ${showForm ? 'primary' : ''}`} onClick={() => setShowForm((s) => !s)}>{showForm ? '새 탐색 닫기' : '＋ 새 탐색'}</button>
         <span className="grow" />
         <a className="btn" href={`#/predictions?scenario=${encodeURIComponent(ctx.scenario)}`}>예측 현황 →</a>
@@ -136,11 +143,19 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
   const s = run.summary
   const sample = (run.dvfs_table_ref ?? '').includes('sample')
   const choose = (vid: string) => ctx.navigate(undefined, { v: vid === ctx.params.v ? undefined : vid }, true)
+  const foreign = !!ctx.project && run.project_ref !== ctx.project
+  const targets = promoteTargets(run)
+  const [confirm, setConfirm] = useState(false)
   const promoteAll = async () => {
+    if (busy || foreign) return
     setBusy(true); setMsg(undefined)
-    try { const r = await archApi.promote(run.id); setMsg(`${r.promoted.length}개 variant를 최저 power 조합으로 등록 (건너뜀 ${r.skipped.length})`) } catch (e) { setMsg(e instanceof Error ? e.message : String(e)) } finally { setBusy(false) }
+    try {
+      const r = await archApi.promote(run.id, undefined, undefined, undefined, undefined, run.project_ref ?? undefined)
+      setMsg(`${r.promoted.length}개 variant를 최저 power 조합으로 등록 (건너뜀 ${r.skipped.length})`); setConfirm(false)
+    } catch (e) { setMsg(e instanceof Error ? e.message : String(e)) } finally { setBusy(false) }
   }
   const report = async () => {
+    if (busy) return
     setBusy(true); setMsg(undefined)
     try { const r = await archApi.createReport(run.id); ctx.navigate('reports', { report: r.id }) } catch (e) { setMsg(e instanceof Error ? e.message : String(e)); setBusy(false) }
   }
@@ -148,14 +163,16 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
     ['탐색 variant', `${s.variants}`, s.errors ? `실패 ${s.errors}` : run.scenario_type],
     ['spec 만족', `${s.spec_ok} / ${s.variants}`, `미달 ${s.variants - s.spec_ok}`],
     ['조합 수', s.cases.toLocaleString(), `eligible ${s.eligible_cases.toLocaleString()}`],
-    ['추천 검증', `${s.verified} / ${s.spec_ok}`, '재시뮬레이션 |Δ| < 0.5%'],
+    ['추천 검증', `${s.verified} / ${s.spec_ok}`, '재시뮬레이션 power·BW 일치 + 제약 재적용'],
     ['추천 power', s.recommended_power_mw ? `${fmt(s.recommended_power_mw[0], 0)}–${fmt(s.recommended_power_mw[1], 0)}` : '—', 'mW (scenario별 최저)'],
     ['Power option (절감 variant)', `${s.power_options?.variants ?? 0}`, s.power_options?.best_saving_mw ? `최대 절감 ${fmt(s.power_options.best_saving_mw[0], 1)} ~ ${fmt(s.power_options.best_saving_mw[1], 1)} mW` : `${s.power_options?.sets ?? 0} 조합 · IQ 평가 대상`],
   ]
   const cols: Column<VariantResult>[] = [
     { key: 'v', label: 'Variant', width: 210, sticky: true, sort: (r) => r.variant_id, render: (r) => <span className="mono">{short(r.variant_id)}</span> },
     { key: 'fps', label: 'fps', width: 52, align: 'right', firstDir: -1, sort: (r) => r.fps, render: (r) => fmt(r.fps, 0) },
-    { key: 'spec', label: 'spec', width: 64, sort: (r) => (r.spec_ok ? 1 : 0), title: (r) => r.spec_reasons.join('\n'), render: (r) => <span className={`badge ${r.spec_ok ? 'v-ok' : 'v-fail'}`}>{r.spec_ok ? 'OK' : 'Fail'}</span> },
+    { key: 'spec', label: 'spec', width: 96, sort: (r) => (r.spec_ok ? 1 : 0), title: (r) => [...r.spec_reasons, ...(coverageOf(r) === 'partial' ? [`전력 미모델 IP: ${(r.coverage?.zero_power_ips ?? []).join(', ')} — power는 모델된 IP 합계`] : [])].join('\n'),
+      render: (r) => <span style={{ display: 'inline-flex', gap: 4 }}><span className={`badge ${r.spec_ok ? 'v-ok' : 'v-fail'}`}>{r.spec_ok ? 'OK' : 'Fail'}</span>
+        {coverageOf(r) === 'partial' && <span className="badge v-warn">부분</span>}</span> },
     { key: 'tot', label: '추천 mW', width: 160, align: 'right', firstDir: -1, sort: (r) => r.recommended?.total_mw ?? -1, render: (r) => r.recommended ? <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><SplitBar p={r.recommended} width={70} /><b className="mono">{fmt(r.recommended.total_mw, 1)}</b></span> : '—' },
     { key: 'cpu', label: 'CPU', width: 64, align: 'right', firstDir: -1, sort: (r) => r.recommended?.cpu_mw ?? -1, render: (r) => fmt(r.recommended?.cpu_mw, 0) },
     { key: 'hw', label: 'HW', width: 64, align: 'right', firstDir: -1, sort: (r) => r.recommended?.hw_mw ?? -1, render: (r) => fmt(r.recommended?.hw_mw, 0) },
@@ -166,29 +183,42 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
     { key: 'opt', label: '절감 option', width: 120, align: 'right', firstDir: 1, sort: (r) => bestOption(r.power_options)?.delta_mw ?? 0,
       title: (r) => { const b = bestOption(r.power_options); return b ? `${b.labels.join(' + ')}\n${OPTION_NOTE}` : (r.power_options?.notes ?? []).join('\n') },
       render: (r) => { const b = bestOption(r.power_options); return b ? <span className="mono" style={{ color: 'var(--primary-strong)' }}><b>{signed(b.delta_mw)}</b> <span className="faint" style={{ fontSize: 11 }}>{signed(b.delta_pct)}%</span></span> : <span className="faint">—</span> } },
-    { key: 'range', label: 'range mW', width: 104, align: 'right', firstDir: -1, sort: (r) => r.distribution.total_mw.max - r.distribution.total_mw.min, render: (r) => <span className="mono">{fmt(r.distribution.total_mw.min, 0)}–{fmt(r.distribution.total_mw.max, 0)}</span> },
+    { key: 'range', label: '설계공간 mW', width: 104, title: () => '탐색 조합의 power 분포 (설계공간 범위) — 실측 신뢰구간 아님', align: 'right', firstDir: -1, sort: (r) => r.distribution.total_mw.max - r.distribution.total_mw.min, render: (r) => <span className="mono">{fmt(r.distribution.total_mw.min, 0)}–{fmt(r.distribution.total_mw.max, 0)}</span> },
     { key: 'comp', label: 'Comp', width: 62, align: 'right', firstDir: -1, sort: (r) => r.recommended?.compression.length ?? -1, title: (r) => r.recommended?.compression.join(', '), render: (r) => r.recommended ? `${r.recommended.compression.length}${r.recommended.lossy ? ' L' : ''}` : '—' },
     { key: 'dvfs', label: 'DVFS', width: 170, sort: (r) => levels(r.recommended?.dvfs), render: (r) => <span className="mono faint">{levels(r.recommended?.dvfs) || '—'}</span> },
     { key: 'margin', label: 'SW margin', width: 90, align: 'right', firstDir: 1, sort: (r) => r.sw_margin.worst?.margin_pct ?? 999, title: (r) => r.sw_margin.recommendations.join('\n'), render: (r) => <span className="mono" style={{ color: (r.sw_margin.worst?.margin_pct ?? 1) < 0 ? 'var(--del-text)' : undefined }}>{fmt(r.sw_margin.worst?.margin_pct, 1)}%</span> },
-    { key: 'grow', label: 'SW 증가 허용', width: 96, align: 'right', firstDir: -1, sort: (r) => r.sw_margin.growth_tolerance ?? 0, render: (r) => (r.sw_margin.growth_tolerance ? `×${fmt(r.sw_margin.growth_tolerance, 1)}` : '—') },
-    { key: 'ver', label: '검증', width: 70, align: 'right', sort: (r) => Math.abs(r.recommended?.verified?.delta_pct ?? 99), render: (r) => { const v = r.recommended?.verified; return v ? <span title={`sim ${fmt(v.sim_total_mw, 2)} / analytic ${fmt(v.analytic_total_mw, 2)} mW`} style={{ color: v.ok ? 'var(--primary-strong)' : 'var(--del-text)' }}>{v.ok ? '✓' : '✗'} {fmt(v.delta_pct, 2)}%</span> : '—' } },
+    { key: 'grow', label: 'SW 증가 허용', width: 110, align: 'right', firstDir: -1, sort: (r) => r.sw_margin.growth_tolerance_fixed ?? r.sw_margin.growth_tolerance ?? 0,
+      title: () => '추천 DVFS 고정 / DVFS 재선택', render: (r) => `${r.sw_margin.growth_tolerance_fixed ? `×${fmt(r.sw_margin.growth_tolerance_fixed, 1)}` : '—'} / ${r.sw_margin.growth_tolerance ? `×${fmt(r.sw_margin.growth_tolerance, 1)}` : '—'}` },
+    { key: 'ver', label: '검증', width: 70, align: 'right', sort: (r) => Math.abs(r.recommended?.verified?.delta_pct ?? 99), render: (r) => { const v = r.recommended?.verified; return v ? <span title={[`sim ${fmt(v.sim_total_mw, 2)} / analytic ${fmt(v.analytic_total_mw, 2)} mW`, ...(v.sim_bw_mbs !== undefined ? [`BW sim ${fmt(v.sim_bw_mbs, 0)} / analytic ${fmt(v.analytic_bw_mbs, 0)} MB/s`] : []), ...(v.reasons ?? [])].join('\n')} style={{ color: v.ok ? 'var(--primary-strong)' : 'var(--del-text)' }}>{v.ok ? '✓' : '✗'} {fmt(v.delta_pct, 2)}%</span> : '—' } },
   ]
   return <>
     <section className="tb-kpis" aria-label="run 요약">
       {kpis.map(([l, v, n]) => <div key={l} className="panel tb-kpi"><div className="faint" style={{ fontSize: 12 }}>{l}</div><div className="mono" style={{ fontSize: 20, fontWeight: 600 }}>{v}</div><div className="faint" style={{ fontSize: 11 }}>{n}</div></div>)}
     </section>
-    <div className="toolbar" style={{ gap: 10, flexWrap: 'wrap' }}>
-      <span className="chip">{run.soc_ref ?? '—'}</span><span className="chip">{run.scenario_type}</span>
+    <div className="toolbar" style={{ gap: 10, flexWrap: 'wrap' }} aria-label="run 범위">
+      <span className={`chip ${foreign ? 'mode-warn' : ''}`} title="이 run의 과제(project)">Project {run.project_ref ?? '—'}</span>
+      <span className="chip" title="Target SoC">SoC {run.soc_ref ?? '—'}</span>
+      <span className="chip" title="Sim config profile">Profile {run.config_profile_ref ?? '기본'}</span>
+      <span className="chip">{run.scenario_type}</span>
       <span className={`chip ${sample ? 'mode-warn' : ''}`} title="DVFS table">DVFS {run.dvfs_table_ref ?? '미연결'}{sample ? ' · SAMPLE' : ''}</span>
       <span className="chip mode-info">MIF DVFS 미반영 · CPU 가정 모델</span>
       <span className="grow" />
       {msg && <span className="faint" style={{ fontSize: 12 }}>{msg}</span>}
-      <button className="btn" disabled={busy} onClick={promoteAll} title="spec 만족 variant 전체를 최저 power 조합으로 current 등록">최저 power 조합 전체 등록</button>
-      <button className="btn primary" disabled={busy} onClick={report}>검토 보고서 생성</button>
+      <button className="btn" disabled={busy || foreign || !targets.length} onClick={() => setConfirm((c) => !c)}
+        title={foreign ? '다른 과제의 run — 비교 보기 전용' : 'spec 만족 variant 전체를 최저 power 조합으로 current 등록 (대상 확인 후)'}>최저 power 조합 전체 등록…</button>
+      <button className="btn primary" disabled={busy} onClick={report}>{busy ? '처리 중…' : '검토 보고서 생성'}</button>
     </div>
+    {foreign && <div className="err" role="status">이 run은 다른 과제({run.project_ref ?? '—'})의 결과입니다 — 비교 보기 전용이며, 현재 과제({ctx.project})의 예측으로 등록할 수 없습니다.</div>}
+    {confirm && !foreign && <section className="panel" style={{ padding: 12, display: 'grid', gap: 8 }} aria-label="등록 대상 확인">
+      <div><b>Project {run.project_ref}</b> · {targets.length}개 variant의 current 예측을 최저 power 조합으로 교체합니다. spec 미달 {run.variants.length - targets.length}개는 건너뜀.</div>
+      <div className="faint mono" style={{ fontSize: 12, maxHeight: 120, overflow: 'auto' }}>{targets.map((v) => `${short(v.variant_id)} ${fmt(v.recommended?.total_mw, 1)} mW${coverageOf(v) === 'partial' ? ' (부분 모델)' : ''}`).join(' · ')}</div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button className="btn primary" disabled={busy} onClick={promoteAll}>{busy ? '등록 중…' : `${targets.length}개 등록`}</button>
+        <button className="btn" disabled={busy} onClick={() => setConfirm(false)}>취소</button></div>
+    </section>}
     <VariantFailures errors={run.errors} />
     <div className="tb-grid">
-      {sel && <VariantDetail key={variantKey(sel)} v={sel} run={run} />}
+      {sel && <VariantDetail key={variantKey(sel)} v={sel} run={run} readOnly={foreign} />}
       <Card id="ax-range" title="Scenario별 Power · BW range" note="행 클릭 = 조합 상세" defaultWide
         actions={<>
           <div className="seg sm">{METRICS.map(([k, l]) => <button key={k} className={metric === k ? 'on' : ''} onClick={() => setMetric(k)}><span className="ax-dot" style={{ background: METRIC_COLOR[k] }} />{l}</button>)}</div>
@@ -214,18 +244,34 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
 }
 
 // ---------------------------------------------------------------- one variant
-function VariantDetail({ v, run }: { v: VariantResult; run: RunDetail }) {
+function VariantDetail({ v, run, readOnly }: { v: VariantResult; run: RunDetail; readOnly: boolean }) {
+  // list rows are summaries; slices, buffers, DVFS domains, IP modes and option results load per variant
+  const fullQ = useAsync(() => (v.detail === false ? archApi.runVariant(run.id, v.scenario_id, v.variant_id) : Promise.resolve(v)),
+    [run.id, v.scenario_id, v.variant_id])
+  if (fullQ.error) return <div className="err" style={{ gridColumn: '1 / -1' }}>{short(v.variant_id)} 상세 조회 실패: {fullQ.error}</div>
+  if (!fullQ.data) return <div className="empty" style={{ gridColumn: '1 / -1' }}>{short(v.variant_id)} 상세 불러오는 중…</div>
+  return <VariantDetailBody v={fullQ.data} run={run} readOnly={readOnly} />
+}
+
+function VariantDetailBody({ v, run, readOnly }: { v: VariantResult; run: RunDetail; readOnly: boolean }) {
   const rec = v.recommended
-  const cands: { rank: string; c: ExpCase }[] = rec ? [{ rank: '추천', c: rec }, ...v.alternatives.map((c, i) => ({ rank: `#${i + 2}`, c })), { rank: 'baseline', c: v.baseline }] : [{ rank: 'baseline', c: v.baseline }]
+  const listed = new Set([rec?.key, ...v.alternatives.map((c) => c.key), v.baseline.key])
+  const pareto = (v.pareto ?? []).filter((c) => !listed.has(c.key))
+  const cands: { rank: string; c: ExpCase }[] = rec
+    ? [{ rank: '추천', c: rec }, ...v.alternatives.map((c, i) => ({ rank: `#${i + 2}`, c })), ...pareto.map((c, i) => ({ rank: `Pareto ${i + 1}`, c })), { rank: 'baseline', c: v.baseline }]
+    : [{ rank: 'baseline', c: v.baseline }]
   const [pick, setPick] = useState<string | undefined>(rec?.key)
   const [reason, setReason] = useState('')
   const [msg, setMsg] = useState<string>()
+  const [busy, setBusy] = useState(false)
   const promote = async () => {
+    if (busy || readOnly) return
     const chosen = pick && pick !== rec?.key ? pick : undefined
+    setBusy(true); setMsg(undefined)
     try {
-      const r = await archApi.promote(run.id, [v.variant_id], chosen, reason || undefined, v.scenario_id)
+      const r = await archApi.promote(run.id, [v.variant_id], chosen, reason || undefined, v.scenario_id, run.project_ref ?? undefined)
       setMsg(r.promoted.length ? `등록: ${r.promoted[0].id} (${fmt(r.promoted[0].total_mw, 1)} mW)` : `건너뜀: ${r.skipped[0]?.reason}`)
-    } catch (e) { setMsg(e instanceof Error ? e.message : String(e)) }
+    } catch (e) { setMsg(e instanceof Error ? e.message : String(e)) } finally { setBusy(false) }
   }
   const m = v.sw_margin
   return <>
@@ -234,6 +280,9 @@ function VariantDetail({ v, run }: { v: VariantResult; run: RunDetail }) {
         IP mode (모든 조합 공통): {(v.ip_modes ?? []).map((m) => `${m.node.toUpperCase()} ${m.mode}${m.unit_power_mw_mp !== null ? ` ${fmt(m.unit_power_mw_mp, 2)}` : ''}`).join(' · ')} <span className="mono">mW/MP</span>
         {(v.ip_modes ?? []).some((m) => m.alternatives.some((a) => a.explorable)) && <> · 대체 mode 결과는 아래 Power option / IP mode 카드</>}</div>}
       {!v.spec_ok && <div className="err" style={{ fontSize: 12 }}>{v.spec_reasons.slice(0, 3).map((x) => <div key={x}>{x}</div>)}</div>}
+      {coverageOf(v) === 'partial' && <div className="faint" style={{ fontSize: 12, marginBottom: 6 }}>
+        <span className="badge v-warn">부분 모델</span> 전력 미모델 IP {(v.coverage?.zero_power_ips ?? []).join(', ')} — Total은 모델된 IP 합계(하한)
+        {v.status?.power_budget_status === 'unknown' ? ' · power budget 판정 불가' : ''}</div>}
       <table className="tb-mini-table" style={{ width: '100%' }}>
         <thead><tr><th /><th>순위</th><th>Total mW</th><th title="CPU / CPU BW / IP / IP BW">CPU / CPU BW / IP / IP BW</th><th>BW MB/s</th><th>Δ 추천 대비</th><th>SW</th><th>Compression</th><th>DVFS</th></tr></thead>
         <tbody>{cands.map(({ rank, c }) => {
@@ -254,7 +303,8 @@ function VariantDetail({ v, run }: { v: VariantResult; run: RunDetail }) {
       </table>
       <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <input className="input" style={{ flex: 1, minWidth: 240 }} placeholder={pick === rec?.key ? '사유 (선택)' : '추천 외 조합 선택 사유 (필수)'} value={reason} onChange={(e) => setReason(e.target.value)} />
-        <button className="btn primary" disabled={!v.spec_ok || (pick !== rec?.key && !reason)} onClick={promote}>예측으로 등록 (current)</button>
+        <button className="btn primary" disabled={busy || readOnly || !v.spec_ok || (pick !== rec?.key && !reason)} onClick={promote}
+          title={readOnly ? '다른 과제의 run — 비교 보기 전용' : undefined}>{busy ? '등록 중…' : '예측으로 등록 (current)'}</button>
         {msg && <span className="faint" style={{ fontSize: 12 }}>{msg}</span>}
       </div>
     </Card>
@@ -277,7 +327,9 @@ function VariantDetail({ v, run }: { v: VariantResult; run: RunDetail }) {
           <td className="mono" style={{ color: s.margin_pct < 0 ? 'var(--del-text)' : undefined }}>{fmt(s.margin_pct, 1)}% · {fmt(s.slack_ms, 2)} ms</td>
           <td className="mono">{fmt(s.sw_share_pct, 0)}%</td><td className="mono">{s.bottleneck} {fmt(s.bottleneck_ms, 1)} ms</td><td className="mono">{fmt(s.latency_share_pct, 0)}%</td></tr>)}</tbody>
       </table>
-      <div className="faint" style={{ fontSize: 12, margin: '6px 0' }}>SW 증가 허용 {m.growth_tolerance ? `×${fmt(m.growth_tolerance, 1)}` : '—'} (탐색 최대 ×{fmt(m.growth_tested_max, 1)}) · max–mean 편차 {fmt(m.stat_spread_ms, 1)} ms</div>
+      <div className="faint" style={{ fontSize: 12, margin: '6px 0' }}>
+        SW 증가 허용 — DVFS 재선택 {m.growth_tolerance ? `×${fmt(m.growth_tolerance, 1)}` : '—'} · <b>추천 DVFS 고정 {m.growth_tolerance_fixed ? `×${fmt(m.growth_tolerance_fixed, 1)}` : '—'}</b> (탐색 최대 ×{fmt(m.growth_tested_max, 1)}) · max–mean 편차 {fmt(m.stat_spread_ms, 1)} ms
+        {(m.growth_fixed_rows ?? []).some((r) => !r.ok && r.short_domains.length) && <> · 고정 시 부족 domain: {(m.growth_fixed_rows ?? []).filter((r) => !r.ok).map((r) => `×${fmt(r.runtime_scale, 1)} ${r.short_domains.join('/') || 'timing'}`).join(', ')}</>}</div>
       <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13 }}>{m.recommendations.map((r) => <li key={r}>{r}</li>)}</ul>
     </Card>
     <Card id="ax-modes" title="IP mode · unit power" note="IP별 현재 mode와 대안 mode · mode마다 unit power가 다름" defaultWide>

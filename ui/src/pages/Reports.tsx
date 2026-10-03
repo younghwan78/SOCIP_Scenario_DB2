@@ -46,6 +46,7 @@ export function ReportsPage({ ctx }: { ctx: Ctx }) {
           {!review && <button className="btn" onClick={() => publish(cur)}>{cur.status === 'draft' ? '게시 (검토 기록)…' : 'draft로'}</button>}
           <button className="btn" onClick={() => regenerate(cur)} title="같은 run과 해당 run에서 등록한 현재 예측으로 새 snapshot 생성. 다른 run의 예측은 해당 run에서 보고서 생성">재생성</button>
           <a className="btn" href={archApi.reportXlsxUrl(cur.id)} title="보고서 표를 sheet별로 (수치 원본)">XLSX</a>
+          <a className="btn" href={archApi.reportPackageUrl(cur.id)} title="고정 본문 + cover(검토 상태·검토자·이력) + manifest(입력 hash·measurement ID·생략 건수) — 오프라인 보관용">검토본 ZIP</a>
           <button className="btn" onClick={printPdf} title="인쇄 대화상자에서 'PDF로 저장' 선택 · A4 가로">PDF</button>
           <a className="btn primary" href={archApi.reportHtmlUrl(cur.id)} target="_blank" rel="noreferrer">HTML 열기 / 저장</a>
         </>}

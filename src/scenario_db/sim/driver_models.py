@@ -67,7 +67,34 @@ INPUT = TypeAdapter(DriverInput)
 MODELS = {"ufs": StorageInput, "abox": AudioInput, "mscl": ScalerInput, "dpu": DisplayInput}
 GROUPS = {"UFS": "ufs", "ABOX": "abox", "MSCL": "mscl", "DPU": "dpu"}
 VERSION = "noncamera-driver-v1"
-SUPPORTED_IPS = {"ip-ufs-s5e9965", "ip-abox-s5e9965", "ip-m2m-scaler-s5e9965", "ip-dpu-s5e9965"}
+# Registry: validated (model, version) pairs. A new SoC's IP opts in by declaring
+#   capabilities.properties.driver_model: {ref: ufs, version: noncamera-driver-v1}
+# with its own coefficients in bw_model/perf_model; nothing is inferred from the IP id.
+REGISTRY: dict[str, set[str]] = {model: {VERSION} for model in MODELS}
+# Legacy: IPs validated before explicit declarations existed (Exynos2600 driver review 2026-09-16).
+LEGACY_IPS = {"ip-ufs-s5e9965", "ip-abox-s5e9965", "ip-m2m-scaler-s5e9965", "ip-dpu-s5e9965"}
+SUPPORTED_IPS = LEGACY_IPS  # backward-compatible name
+
+
+def resolve_driver_model(ip_id: str, caps: dict[str, Any]) -> tuple[str | None, str | None]:
+    """(model, None) when the IP is bound to a registered driver model, else (None, reason).
+
+    (None, None) = not a driver-model IP at all (camera / other IPs) -> silently out of scope.
+    """
+    props = caps.get("properties") or {}
+    decl = props.get("driver_model")
+    group_model = GROUPS.get(props.get("ip_group"))
+    if decl:
+        ref, ver = (decl.get("ref"), decl.get("version")) if isinstance(decl, dict) else (str(decl), None)
+        if ref in REGISTRY and (ver is None or ver in REGISTRY[ref]):
+            return ref, None
+        return None, f"declared driver model {ref}@{ver} is not in the validated registry {sorted(REGISTRY)}"
+    if ip_id in LEGACY_IPS and group_model:
+        return group_model, None
+    if group_model:
+        return None, (f"{props.get('ip_group')} IP without capabilities.properties.driver_model; "
+                      "declare {ref, version} after validating this SoC's coefficients")
+    return None, None
 POSITIVE = TypeAdapter(Positive)
 
 
@@ -211,16 +238,25 @@ def inputs_from_config(model: str, config: dict[str, Any], caps: dict[str, Any])
 def evaluate_graph(graph, overrides: dict[str, Any] | None = None) -> dict[str, Any]:
     overrides = overrides or {}
     rows = []
+    # kept out of ``rows``: evidence calculation_trace only carries evaluated endpoints
+    unsupported_rows: list[dict[str, Any]] = []
     eligible = set()
     for node in graph.pipeline_nodes:
         node_id = str(node["id"])
         ip = graph.ip_catalog.get(str(node.get("ip_ref")))
-        if ip is None or ip.id not in SUPPORTED_IPS:
+        if ip is None:
             continue
         caps = ip.capabilities or {}
-        model = GROUPS.get((caps.get("properties") or {}).get("ip_group"))
+        model, unsupported = resolve_driver_model(ip.id, caps)
         cfg = (graph.variant.node_configs or {}).get(node_id) or {}
-        if model is None or not cfg.get("sim") or (cfg["sim"].get("active") is False):
+        if not cfg.get("sim") or (cfg["sim"].get("active") is False):
+            continue
+        if model is None:
+            if unsupported:  # listed explicitly instead of silently dropping the endpoint
+                unsupported_rows.append({"node_id": node_id, "ip_ref": ip.id, "catalog_sha256": ip.yaml_sha256,
+                             "model": None, "status": "unsupported_model", "reason": unsupported, "power_mw": None,
+                             "input_basis": "fixture", "declared_bw_kb_s": cfg.get("bw_kb_s"),
+                             "input_provenance": {"sim": cfg.get("sim"), "dvfs": cfg.get("dvfs")}})
             continue
         eligible.add(node_id)
         raw: dict[str, Any] = {}
@@ -263,5 +299,6 @@ def evaluate_graph(graph, overrides: dict[str, Any] | None = None) -> dict[str, 
         "variant_id": graph.variant_id,
         "design_conditions": graph.variant.design_conditions or {},
         "rows": rows,
+        "unsupported": unsupported_rows,
         "aggregation": "Per-endpoint estimates; not added to legacy DMA/power totals. Overlapping ownership must be resolved before aggregation.",
     }

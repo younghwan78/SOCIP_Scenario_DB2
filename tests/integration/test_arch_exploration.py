@@ -174,6 +174,39 @@ def test_failed_verification_cannot_be_promoted(engine, stored_run):
             svc.promote(db, PromoteRequest(run_id=rid, scenario_id=ids[0]))
 
 
+def test_explicit_promotion_cannot_bypass_incomplete_power_budget(engine, stored_run):
+    rid, ids = stored_run
+    with Session(engine) as db:
+        run = svc.get_run(db, rid)
+        variants = deepcopy(run.variants)
+        variants[0] |= {"spec_ok": False, "status": {"power_budget_status": "unknown"}}
+        run.variants = variants
+        run.spec = dict(run.spec) | {"constraints": {"power_budget_mw": 100}}
+        db.commit()
+        request = PromoteRequest(run_id=rid, scenario_id=ids[0], variant_ids=["shared"])
+        with pytest.raises(UnprocessableError, match="incomplete power model"):
+            svc.promote(db, request)
+        assert db.query(Prediction).filter_by(scenario_ref=ids[0]).count() == 0
+        run.spec = dict(run.spec) | {"constraints": {"power_budget_mw": 100, "require_complete_power_for_budget": False}}
+        db.commit()
+        assert len(svc.promote(db, request)["promoted"]) == 1
+
+
+def test_pareto_only_candidate_is_persisted_as_a_user_selection(engine, stored_run):
+    rid, ids = stored_run
+    with Session(engine) as db:
+        run = svc.get_run(db, rid)
+        variants = deepcopy(run.variants)
+        variants[0]["pareto"] = [dict(variants[0]["recommended"]) | {"key": "pareto-only"}]
+        run.variants = variants
+        db.commit()
+        result = svc.promote(db, PromoteRequest(run_id=rid, scenario_id=ids[0], variant_ids=["shared"],
+                                                case_key="pareto-only", reason="headroom review"))
+        assert len(result["promoted"]) == 1
+        prediction = db.get(Prediction, result["promoted"][0]["id"])
+        assert prediction.case_key == "pareto-only" and prediction.selection_rule == "user:pareto-1"
+
+
 BCROP, L0 = "knob:crop_strategy=byrp_bcrop", "knob:pyramid_l0=skip"
 
 
@@ -260,6 +293,60 @@ def test_model_status_counts_predictions_from_older_engine(engine, stored_run):
         assert status["engine_rev"] == svc.ENGINE_REV
         assert status["predictions"]["engines"].get("test", 0) >= 2  # stored_run uses engine_rev="test"
         assert status["predictions"]["stale_engine"] >= 2
-        assert set(status["measurements"]) == {"real", "synthetic", "empty"}
+        assert set(status["measurements"]) == {"real", "synthetic", "empty", "unknown"}
         assert status["dvfs_unrecorded"] >= 0
         assert all(set(d) == {"ref", "sample", "predictions"} for d in status["dvfs"])
+
+
+def test_report_package_and_run_manifest(engine, stored_run):
+    import io
+    import json
+    from zipfile import ZipFile
+    rid, ids = stored_run
+    with Session(engine) as db:
+        svc.promote(db, PromoteRequest(run_id=rid, expected_project_ref=svc.get_run(db, rid).project_ref))
+        report = svc.create_report(db, ArchReportRequest(run_id=rid))
+        svc.set_report_status(db, report["id"], "published", reviewer="Kim", note="검토 완료", user="tester")
+        data, name = svc.report_package(db, report["id"])
+        z = ZipFile(io.BytesIO(data))
+        manifest = json.loads(z.read("manifest.json"))
+        assert manifest["body"]["integrity_ok"] and manifest["report"]["status"] == "published"
+        assert manifest["review_history"][-1]["reviewer"] == "Kim"
+        assert manifest["runs"][0]["run_id"] == rid and manifest["runs"][0]["input_hash"] == "test"
+        assert z.read("report.html").decode() == svc.get_report(db, report["id"]).rendered_html
+        m = svc.run_manifest(db, rid)
+        assert m["run_id"] == rid and not m["available"]  # stored before manifests existed
+        assert "manifest" not in svc.run_detail(svc.get_run(db, rid))["spec"]
+        with pytest.raises(UnprocessableError, match="belongs to project"):
+            svc.promote(db, PromoteRequest(run_id=rid, expected_project_ref="proj-other"))
+
+
+def test_run_summary_view_variant_detail_and_gzip(engine, stored_run):
+    from fastapi.testclient import TestClient
+    from scenario_db.api.app import create_app
+    from scenario_db.api.deps import get_db
+    from scenario_db.exceptions import NotFoundError
+    rid, ids = stored_run
+    with Session(engine) as db:
+        summary_view = svc.run_detail(svc.get_run(db, rid), "summary")
+        assert summary_view["view"] == "summary" and all(v["detail"] is False for v in summary_view["variants"])
+        one = svc.run_variant(db, rid, ids[1], "shared")
+        assert one["scenario_id"] == ids[1] and one["detail"] is True
+        with pytest.raises(NotFoundError):
+            svc.run_variant(db, rid, ids[1], "missing")
+        app = create_app()
+        app.dependency_overrides[get_db] = lambda: db
+        res = TestClient(app).get(f"/api/v1/arch/exploration/runs/{rid}", params={"view": "summary"},
+                                  headers={"Accept-Encoding": "gzip"})
+        assert res.status_code == 200 and res.json()["view"] == "summary"
+        if len(res.content) >= 1024:
+            assert res.headers.get("content-encoding") == "gzip"
+
+
+def test_sql_run_summary_matches_python_trimming(engine, stored_run):
+    rid, _ = stored_run
+    with Session(engine) as db:
+        py = svc.run_detail(svc.get_run(db, rid), "summary")
+        sql = svc.run_summary(db, rid)
+        assert sql["variants"] == py["variants"]
+        assert {k: v for k, v in sql.items() if k != "variants"} == {k: v for k, v in py.items() if k != "variants"}

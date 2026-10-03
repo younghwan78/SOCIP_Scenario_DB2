@@ -34,11 +34,13 @@ def test_calibration_scope_recency_and_constant_query_count(engine):
         db.flush()
         synthetic = db.get(Evidence, f'{sid}-measurement2')
         synthetic.provenance = {'collection_method': 'synthetic_fixture', 'device_id': 'SYNTHETIC'}
+        # a silicon capture records how and on which device it was taken; without it the origin is unknown
+        db.get(Evidence, f'{sid}-measurement1').provenance = {'collection_method': 'power_monitor', 'device_id': 'EVT1-01'}
         db.flush()
         assert cal.coverage(db, sid)['v'] == {
-            'simulation': 2, 'measurement': 1, 'synthetic': 1, 'current_prediction': None}
+            'simulation': 2, 'measurement': 1, 'synthetic': 1, 'unknown': 0, 'current_prediction': None}
         assert cal.coverage_summary(db)[sid] == {
-            'simulation': 1, 'measurement': 1, 'synthetic': 1, 'current_prediction': 0}
+            'simulation': 1, 'measurement': 1, 'synthetic': 1, 'unknown': 0, 'current_prediction': 0}
         queries = []
         def counted(*args):
             queries.append(args[2])
@@ -56,6 +58,34 @@ def test_calibration_scope_recency_and_constant_query_count(engine):
         assert detail['rail_domain_map_ref'] == sid
         assert detail['measured']['categories']['cpu'] == 10
         assert [p['id'] for p in detail['predictions']] == [f'{sid}-z-old', f'{sid}-a-new']
+        # batched details (report generation) == one-by-one detail, in a constant number of queries
+        ids = [f'{sid}-measurement1', f'{sid}-measurement2']
+        queries.clear()
+        event.listen(engine, 'before_cursor_execute', counted)
+        try:
+            batch = cal.measurement_details(db, ids)
+        finally:
+            event.remove(engine, 'before_cursor_execute', counted)
+        assert len(queries) <= 5
+        for mid in ids:
+            assert batch[mid] == cal.measurement_detail(db, mid)
+        # Distinct capture-time profiles are fetched once, independent of the measurement count.
+        for index, mid in enumerate(ids):
+            pin = f"{sid}-pin-{index}"
+            db.add(SimConfigProfile(id=pin, project_ref=project, schema_version='1.0.0', version=index + 1,
+                                   status='approved', run_config={}, rail_domain_map={'ODD': 'CPU'}, yaml_sha256='test'))
+            evidence = db.get(Evidence, mid)
+            evidence.provenance = dict(evidence.provenance or {}) | {'rail_domain_map_ref': pin}
+        db.flush()
+        for read in (lambda: cal.list_measurements(db, scenario_id=sid), lambda: cal.measurement_details(db, ids)):
+            queries.clear()
+            event.listen(engine, 'before_cursor_execute', counted)
+            try:
+                pinned = read()
+            finally:
+                event.remove(engine, 'before_cursor_execute', counted)
+            rows = list(pinned.values()) if isinstance(pinned, dict) else pinned
+            assert len(queries) <= 6 and all(r['rail_map_basis'] == 'pinned' for r in rows)
         assert cal._rail_map(db, None) == ({}, None)
         assert cal._rail_map(db, 'unrelated') == ({}, None)
         sw = library.sw_timing(db, scenario_id=sid)
