@@ -83,3 +83,15 @@ class CpuSweepRequest(BaseModel):
     dsu_mode: DsuMode = "auto"
     dsu_vote: dict[str, Annotated[list[tuple[Mhz, Mhz]], Field(min_length=1)]] | None = None
     dsu_fixed_mhz: Mhz | None = None
+
+
+class CpuRebalanceRequest(CpuSweepRequest):
+    """Split the movable tasks over a pool of (MID) clusters: lowest CPU + DSU power within the budgets."""
+
+    pool: list[str] = Field(default_factory=list)              # clusters; [] = default (non-BIG)
+    movable: list[str] | None = None                            # None = tasks measured on a pool cluster
+    locks: dict[str, str] = Field(default_factory=dict)         # task -> cluster | "exclude"
+    co_move: list[Annotated[list[str], Field(min_length=2)]] = Field(default_factory=list)
+    verify_k: int = Field(default=30, ge=1, le=200)
+    max_exhaustive: int = Field(default=300_000, ge=1, le=2_000_000)
+    top: int = Field(default=20, ge=1, le=200)

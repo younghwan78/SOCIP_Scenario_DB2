@@ -115,6 +115,18 @@ def residency(policy: DsuPolicy, model: CpuPowerModel, busy: dict[str, float], f
     return {_snap(dsu, rel * dsu.opps[-1].mhz): 1.0}
 
 
+def power(model: CpuPowerModel, res: dict[float, float], active: float, power_gating_eff: float) -> dict[str, Any]:
+    """DSU power for a frequency residency and the union activity of all CPUs."""
+    dsu = model.dsu
+    assert dsu is not None
+    total = sum(res.values())
+    dyn = sum(s / total * dsu.core_mw(f, model.fallback_mv) for f, s in res.items()) * active
+    leak = sum(s / total * dsu.leak_mw_per_core(dsu.voltage_mv(f, model.fallback_mv)) for f, s in res.items())
+    static = leak * (active + (1 - active) * (1 - power_gating_eff))
+    return {"mhz": round(sum(f * v for f, v in res.items()) / total, 1), "active_ratio": round(active, 6),
+            "dynamic_mw": round(dyn, 6), "static_mw": round(static, 6), "total_mw": round(dyn + static, 6)}
+
+
 def params_view(model: CpuPowerModel, power_gating_eff: float) -> dict[str, Any] | None:
     """What a client needs to recompute DSU power for another vote table (cluster OPPs stay fixed)."""
     dsu = model.dsu

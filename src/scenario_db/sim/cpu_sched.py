@@ -375,7 +375,9 @@ def _cluster_eval(ctx: _Ctx, name: str, cpus: list[list[Thread]], policies: dict
 
 
 # ------------------------------------------------------------------ EAS placement
-def eas_place(threads: list[Thread], ctx: _Ctx, policies: dict[str, TaskPolicy]) -> tuple[dict[str, list[list[Thread]]], list[str]]:
+def eas_place(threads: list[Thread], ctx: _Ctx, policies: dict[str, TaskPolicy],
+              thread_allowed: dict[Thread, str] | None = None) -> tuple[dict[str, list[list[Thread]]], list[str]]:
+    """``thread_allowed`` pins single threads to one cluster (rebalance: threads frozen where EAS put them)."""
     slots: dict[str, list[list[Thread]]] = {c.name: [[] for _ in range(c.cores)] for c in ctx.model.clusters}
     # running util sum per CPU at fmax (same accumulation order as summing the CPU's thread list)
     loads: dict[str, list[float]] = {c.name: [0.0] * c.cores for c in ctx.model.clusters}
@@ -391,7 +393,7 @@ def eas_place(threads: list[Thread], ctx: _Ctx, policies: dict[str, TaskPolicy])
     order = sorted(threads, key=lambda t: (-ctx.util(t, biggest), t.task, t.name))
     for th in order:
         pol = policies.get(th.task, TaskPolicy())
-        allowed = resolve_allowed(pol.allowed, ctx.model)
+        allowed = [thread_allowed[th]] if thread_allowed and th in thread_allowed else resolve_allowed(pol.allowed, ctx.model)
         fitting: list[tuple[str, int]] = []
         for name in allowed:
             cap = ctx.caps[name]
@@ -443,8 +445,9 @@ def evaluate(
     dsu_residency: dict[float, float] | None = None,
     bw_mbs: float,
     dsu_policy: cpu_dsu.DsuPolicy | None = None,
+    pinned_threads: dict[Thread, str] | None = None,
 ) -> dict[str, Any]:
-    slots, overutilized = eas_place(threads, ctx, policies)
+    slots, overutilized = eas_place(threads, ctx, policies, pinned_threads)
     clusters_out: dict[str, Any] = {}
     task_ms: dict[str, float] = {}
     where: dict[str, set[str]] = {}
@@ -485,14 +488,7 @@ def evaluate(
             rel = max((r["mhz"] / ctx.fmax(n) for n, r in clusters_out.items() if r["busy_ms"] > 0), default=0.0)
             dsu_f = [o.mhz for o in model.dsu.opps]
             residency = {next((f for f in dsu_f if f >= rel * dsu_f[-1] - 1e-9), dsu_f[-1]): 1.0}
-        total = sum(residency.values())
-        dyn = sum(s / total * model.dsu.core_mw(f, model.fallback_mv) for f, s in residency.items()) * active
-        leak = sum(s / total * model.dsu.leak_mw_per_core(model.dsu.voltage_mv(f, model.fallback_mv))
-                   for f, s in residency.items())
-        static = leak * (active + (1 - active) * (1 - ctx.sched.power_gating_eff))
-        dsu = {"mhz": round(sum(f * v for f, v in residency.items()) / total, 1),
-               "active_ratio": round(active, 6), "dynamic_mw": round(dyn, 6), "static_mw": round(static, 6),
-               "total_mw": round(dyn + static, 6)}
+        dsu = cpu_dsu.power(model, residency, active, ctx.sched.power_gating_eff)
     total_mw = sum(r["total_mw"] for r in clusters_out.values()) + (dsu["total_mw"] if dsu else 0.0)
     freqs = tuple((n, r["mhz"]) for n, r in clusters_out.items())
     return {
@@ -603,16 +599,27 @@ def _merge_equivalent(cases: list[dict[str, Any]], tol_mw: float, kind: dict[str
     return out
 
 
-def cpu_sweep(
-    profile: Any,
-    *,
-    target: CpuPowerModel,
-    fps: float,
-    spec: SweepSpec | None = None,
-    base: CpuPowerModel | None = None,
-) -> dict[str, Any]:
-    """EAS reproduction of the measured profile on ``target`` + automatic knob sweep."""
-    spec = spec or SweepSpec()
+@dataclass
+class _Prepared:
+    """Context shared by the sweep and the rebalance: scheduler, demands, threads, DSU rule."""
+    warnings: list[str]
+    sched: SchedConfig
+    need: dict[str, list[_Demand]]
+    period: float
+    caps: dict[str, float]
+    ctx: _Ctx
+    every: list[str]
+    base_policies: dict[str, TaskPolicy]
+    threads: list[Thread]
+    thread_source: dict[str, str]
+    bw_mbs: float
+    dsu_res: dict[float, float] | None
+    dsu_policy: cpu_dsu.DsuPolicy | None
+    tasks: list[str]
+    base_model: CpuPowerModel
+
+
+def _prepare(profile: Any, *, target: CpuPowerModel, fps: float, spec: SweepSpec, base: CpuPowerModel | None) -> _Prepared:
     warnings: list[str] = []
     sched = SchedConfig.from_model(
         target, power_gating_eff=spec.power_gating_eff, freq_margin=spec.freq_margin,
@@ -639,6 +646,24 @@ def cpu_sweep(
     dsu_policy = cpu_dsu.resolve(target, mode=spec.dsu_mode, vote=spec.dsu_vote, fixed_mhz=spec.dsu_fixed_mhz,
                                  measured=dsu_res) if target.dsu is not None and target.dsu.opps else None
     tasks = sorted(t for t in need if t != OTHER_TASK) + ([OTHER_TASK] if OTHER_TASK in need else [])
+    return _Prepared(warnings, sched, need, period, caps, ctx, every, base_policies, threads, thread_source, bw_mbs,
+                     dsu_res, dsu_policy, tasks, base_model)
+
+
+def cpu_sweep(
+    profile: Any,
+    *,
+    target: CpuPowerModel,
+    fps: float,
+    spec: SweepSpec | None = None,
+    base: CpuPowerModel | None = None,
+) -> dict[str, Any]:
+    """EAS reproduction of the measured profile on ``target`` + automatic knob sweep."""
+    spec = spec or SweepSpec()
+    prep = _prepare(profile, target=target, fps=fps, spec=spec, base=base)
+    warnings, sched, need, period, caps, ctx = prep.warnings, prep.sched, prep.need, prep.period, prep.caps, prep.ctx
+    every, base_policies, threads, thread_source = prep.every, prep.base_policies, prep.threads, prep.thread_source
+    bw_mbs, dsu_res, dsu_policy, tasks, base_model = prep.bw_mbs, prep.dsu_res, prep.dsu_policy, prep.tasks, prep.base_model
 
     # ---- sweep range: per task x cluster, alone at fmax
     range_tasks: list[dict[str, Any]] = []

@@ -4,12 +4,13 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from scenario_db.api.schemas.cpu import CpuSweepRequest, CpuWhatIfRequest, CpuWhatIfResponse
+from scenario_db.api.schemas.cpu import CpuRebalanceRequest, CpuSweepRequest, CpuWhatIfRequest, CpuWhatIfResponse
 from scenario_db.db.models.capability import PowerModelParams as PowerModelParamsRow
 from scenario_db.db.repositories.evidence import get_evidence
 from scenario_db.exceptions import NotFoundError, UnprocessableError
 from scenario_db.sim.cpu_power import CpuPowerModel
 from scenario_db.sim.cpu_profile import cpu_profile_from_evidence
+from scenario_db.sim.cpu_rebalance import RebalanceSpec, cpu_rebalance
 from scenario_db.sim.cpu_sched import SweepSpec, cpu_sweep
 from scenario_db.sim.cpu_whatif import WhatIfSpec, cpu_whatif
 from scenario_db.sim.power_params import power_params_from_row
@@ -42,11 +43,8 @@ def _profile(db: Session, request: CpuWhatIfRequest | CpuSweepRequest) -> Any:
     return profile
 
 
-def run_cpu_sweep(db: Session, request: CpuSweepRequest) -> CpuWhatIfResponse:
-    profile = _profile(db, request)
-    target = _model(db, request.power_params_ref)
-    base = _model(db, request.base_power_params_ref) if request.base_power_params_ref else None
-    spec = SweepSpec(
+def _sweep_fields(request: CpuSweepRequest) -> dict[str, Any]:
+    return dict(
         growth=request.growth, default_growth=request.default_growth, budgets_ms=request.budgets_ms,
         threads=request.threads, sweep_clusters=request.sweep_clusters, knobs=tuple(request.knobs),
         uclamp_max_levels=tuple(request.uclamp_max_levels), uclamp_min_levels=tuple(request.uclamp_min_levels),
@@ -57,8 +55,30 @@ def run_cpu_sweep(db: Session, request: CpuSweepRequest) -> CpuWhatIfResponse:
         energy_includes_static=request.energy_includes_static, max_cases=request.max_cases, top=request.top,
         dsu_mode=request.dsu_mode, dsu_vote=request.dsu_vote, dsu_fixed_mhz=request.dsu_fixed_mhz,
     )
+
+
+def run_cpu_sweep(db: Session, request: CpuSweepRequest) -> CpuWhatIfResponse:
+    profile = _profile(db, request)
+    target = _model(db, request.power_params_ref)
+    base = _model(db, request.base_power_params_ref) if request.base_power_params_ref else None
+    spec = SweepSpec(**_sweep_fields(request))
     try:
         result = cpu_sweep(profile, target=target, base=base, fps=request.fps, spec=spec)
+    except ValueError as exc:
+        raise UnprocessableError(str(exc)) from exc
+    return CpuWhatIfResponse(profile_ref=profile.evidence_ref, power_params_ref=request.power_params_ref, result=result)
+
+
+def run_cpu_rebalance(db: Session, request: CpuRebalanceRequest) -> CpuWhatIfResponse:
+    profile = _profile(db, request)
+    target = _model(db, request.power_params_ref)
+    base = _model(db, request.base_power_params_ref) if request.base_power_params_ref else None
+    spec = RebalanceSpec(**_sweep_fields(request), pool=tuple(request.pool),
+                         movable=tuple(request.movable) if request.movable is not None else None,
+                         locks=dict(request.locks), co_move=tuple(tuple(g) for g in request.co_move),
+                         verify_k=request.verify_k, max_exhaustive=request.max_exhaustive)
+    try:
+        result = cpu_rebalance(profile, target=target, base=base, fps=request.fps, spec=spec)
     except ValueError as exc:
         raise UnprocessableError(str(exc)) from exc
     return CpuWhatIfResponse(profile_ref=profile.evidence_ref, power_params_ref=request.power_params_ref, result=result)
