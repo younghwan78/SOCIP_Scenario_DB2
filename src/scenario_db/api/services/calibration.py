@@ -70,6 +70,45 @@ def _rail_map(db: Session, project_ref: str | None) -> tuple[dict[str, str], str
     return dict(row.rail_domain_map or {}), str(row.id)
 
 
+CONDITION_KEYS = ("silicon_rev", "sw_baseline_ref", "thermal", "power_state", "ambient_temp_c")
+
+
+def compare_conditions(measured: dict[str, Any] | None, predicted: dict[str, Any] | None) -> dict[str, Any]:
+    """Per condition: match / mismatch / unrecorded; overall equivalent / reference / unverified.
+
+    ``reference`` = at least one recorded condition differs (Δ is a reference comparison only);
+    ``unverified`` = nothing differs but some condition is missing on either side.
+    """
+    measured, predicted = measured or {}, predicted or {}
+    items = []
+    for k in CONDITION_KEYS:
+        a, b = measured.get(k), predicted.get(k)
+        status = "unrecorded" if a is None or b is None else "match" if str(a) == str(b) else "mismatch"
+        items.append({"item": k, "measured": a, "predicted": b, "status": status})
+    statuses = {i["status"] for i in items}
+    overall = "reference" if "mismatch" in statuses else "unverified" if "unrecorded" in statuses else "equivalent"
+    return {"overall": overall, "items": items}
+
+
+def _measurement_rail_map(db: Session, m: Evidence, project_ref: str | None,
+                          latest: dict[str, dict[str, str]] | None = None) -> tuple[dict[str, str], str | None, str]:
+    """Rail map for one measurement: the profile pinned at capture, else the project's latest.
+
+    Returns (map, profile id, basis) with basis ``pinned`` / ``latest`` / ``none`` so a comparison
+    made with a rail definition newer than the capture is visible as such.
+    """
+    pinned = (m.provenance or {}).get("rail_domain_map_ref")
+    if pinned:
+        row = db.get(SimConfigProfile, pinned)
+        if row is not None:
+            return dict(row.rail_domain_map or {}), str(row.id), "pinned"
+    if latest is not None:
+        rail = latest.get(project_ref or "")
+        return (rail, None, "latest") if rail else ({}, None, "none")
+    rail, ref = _rail_map(db, project_ref)
+    return rail, ref, "latest" if rail else "none"
+
+
 def _rail_maps(db: Session, project_refs: set[str | None]) -> dict[str, dict[str, str]]:
     """Latest rail map per project in one query (same pick as ``_rail_map``)."""
     refs = {p for p in project_refs if p}
@@ -183,7 +222,7 @@ def list_measurements(db: Session, *, scenario_id: str | None = None) -> list[di
     out = []
     for m in measurements:
         total = _total(m.kpi)
-        rail_map = rail_maps.get(m.project_ref or scenario_project.get(m.scenario_ref)) or {}
+        rail_map, _, rail_basis = _measurement_rail_map(db, m, m.project_ref or scenario_project.get(m.scenario_ref), rail_maps)
         meas_cat = measured_split(m.vdd_power, rail_map)["categories"] if m.vdd_power else None
         cur = current.get((m.scenario_ref, m.variant_ref))
         sims = simulations.get((m.scenario_ref, m.variant_ref), [])
@@ -196,7 +235,7 @@ def list_measurements(db: Session, *, scenario_id: str | None = None) -> list[di
             "silicon_rev": ctx.get("silicon_rev"), "sw_baseline_ref": m.sw_baseline_ref, "thermal": ctx.get("thermal"),
             "total": total, "fps": (m.kpi or {}).get("fps_effective"),
             "rails": len(m.vdd_power or {}), "synthetic": is_synthetic(m.provenance),
-            "origin": data_origin(m.provenance),
+            "origin": data_origin(m.provenance), "rail_map_basis": rail_basis,
             "current_prediction": {"id": cur.id, "total_mw": cur_total, "delta_pct": pct(cur_total, total["mean"]),
                                    "category": _fit(_pred_split(cur.metrics["power"]), meas_cat, pct(cur_total, total["mean"]))} if cur else None,
             "simulation": {"id": sims[-1].id, "total_mw": sim_total, "delta_pct": pct(sim_total, total["mean"]), "count": len(sims),
@@ -211,7 +250,7 @@ def measurement_detail(db: Session, measurement_id: str) -> dict[str, Any]:
         raise NotFoundError(f"measurement evidence not found: {measurement_id}")
     scenario = db.get(Scenario, m.scenario_ref)
     project_ref = m.project_ref or (scenario.project_ref if scenario is not None else None)
-    rail_map, profile_ref = _rail_map(db, project_ref)
+    rail_map, profile_ref, rail_basis = _measurement_rail_map(db, m, project_ref)
     split = measured_split(m.vdd_power, rail_map)
     total = _total(m.kpi)
     meas_cat = split["categories"]
@@ -225,13 +264,18 @@ def measurement_detail(db: Session, measurement_id: str) -> dict[str, Any]:
             "total_mw": pw["total_mw"], "delta_pct": pct(pw["total_mw"], total["mean"]),
             "split": _pred_split(pw), "rows": compare_split(_pred_split(pw), meas_cat),
         })
+    meas_ctx = dict(m.execution_context or {}) | ({"sw_baseline_ref": m.sw_baseline_ref} if m.sw_baseline_ref else {})
+    for p in predictions:  # registered prediction: the model run records no device/thermal condition
+        p["conditions"] = compare_conditions(meas_ctx, {})
     for ev in _sim_evidence(db, m.scenario_ref, m.variant_ref):
         t = _total(ev.kpi)["mean"]
         sp = _sim_split(ev)
+        sim_ctx = dict(ev.execution_context or {}) | ({"sw_baseline_ref": ev.sw_baseline_ref} if ev.sw_baseline_ref else {})
         predictions.append({
             "kind": "simulation", "id": ev.id, "label": "Simulation evidence",
             "total_mw": t, "delta_pct": pct(t, total["mean"]), "split": sp,
             "rows": compare_split(sp, meas_cat) if sp else None,
+            "conditions": compare_conditions(meas_ctx, sim_ctx),
         })
     sw = []
     for task in (m.sw_task_timing or []):
@@ -245,7 +289,7 @@ def measurement_detail(db: Session, measurement_id: str) -> dict[str, Any]:
         "synthetic": is_synthetic(m.provenance), "origin": data_origin(m.provenance),
         "derived_from": list(m.derived_from or []),
         "total": total, "fps": (m.kpi or {}).get("fps_effective"), "frame_latency": (m.kpi or {}).get("frame_latency_ms"),
-        "measured": split, "rail_domain_map_ref": profile_ref,
+        "measured": split, "rail_domain_map_ref": profile_ref, "rail_map_basis": rail_basis,
         "unexplained_mw": None if total["mean"] is None else round(float(total["mean"]) - split["rail_total_mw"], 3),
         "categories": list(CATEGORIES), "predictions": predictions, "sw_tasks": sw,
         "cpu_clusters": m.cpu_breakdown,

@@ -117,3 +117,24 @@ def test_data_origin_classification():
     assert data_origin({"collection_method": "power_monitor"}) == "unknown"  # no device recorded
     assert data_origin({"collection_method": "power_monitor", "device_id": "EVT1-01"}) == "physical_capture"
     assert data_origin({"data_origin": "synthetic", "collection_method": "power_monitor", "device_id": "X"}) == "synthetic"
+
+
+def test_condition_equivalence():
+    from scenario_db.api.services.calibration import compare_conditions
+    meas = {"silicon_rev": "EVT1", "sw_baseline_ref": "sw-1", "thermal": "chamber25", "power_state": "screen_on", "ambient_temp_c": 25}
+    assert compare_conditions(meas, dict(meas))["overall"] == "equivalent"
+    diff = compare_conditions(meas, meas | {"thermal": "room"})
+    assert diff["overall"] == "reference" and next(i for i in diff["items"] if i["item"] == "thermal")["status"] == "mismatch"
+    assert compare_conditions(meas, {})["overall"] == "unverified"
+
+
+def test_measurement_rail_map_prefers_the_pinned_profile():
+    from types import SimpleNamespace
+    from scenario_db.api.services.calibration import _measurement_rail_map
+    db = MagicMock()
+    db.get.return_value = SimpleNamespace(id="simcfg-v1", rail_domain_map={"VDD_CAM": "ip"})
+    m = SimpleNamespace(provenance={"rail_domain_map_ref": "simcfg-v1"})
+    assert _measurement_rail_map(db, m, "proj-a", {"proj-a": {"VDD_CAM": "other"}}) == ({"VDD_CAM": "ip"}, "simcfg-v1", "pinned")
+    m2 = SimpleNamespace(provenance={})
+    assert _measurement_rail_map(db, m2, "proj-a", {"proj-a": {"VDD_CAM": "other"}})[2] == "latest"
+    assert _measurement_rail_map(db, m2, "proj-b", {})[2] == "none"

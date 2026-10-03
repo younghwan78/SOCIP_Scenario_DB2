@@ -1,7 +1,7 @@
 import type { Ctx } from '../App'
 import { useAsync } from '../lib/route'
 import { fmt } from '../lib/timingBudget'
-import { CAT_COLOR, CAT_LABEL, calibrationApi, errClass, type Category, type MeasDetail, type MeasRow, type PredictionCmp, type Rail } from '../lib/calibration'
+import { CAT_COLOR, CAT_LABEL, CONDITION_LABEL, calibrationApi, errClass, type Category, type Conditions, type MeasDetail, type MeasRow, type PredictionCmp, type Rail } from '../lib/calibration'
 import { short } from '../lib/archExplore'
 import { Card } from '../components/TimingCharts'
 import { useWidth } from '../components/Charts'
@@ -84,11 +84,11 @@ function Detail({ d, ctx }: { d: MeasDetail; ctx: Ctx }) {
   const curFit = cur ? categoryFit(cur.rows, cur.delta_pct) : null
   const simFit = sim ? categoryFit(sim.rows, sim.delta_pct) : null
   const kpis: [string, string, string, string, Prov | null][] = [
-    ['실측 total', `${fmt(d.total.mean, 1)}`, d.total.std ? `±${fmt(d.total.std, 1)} mW · n=${d.total.n ?? '—'}` : 'mW', '',
-      { kind: d.synthetic ? 'synthetic' : 'measured', id: d.id, at: d.measured_at, notes: [`rail map: ${d.rail_domain_map_ref ?? '이름 규칙'}`] }],
-    ['등록 예측', cur ? fmt(cur.total_mw, 1) : '—', cur ? `${pctText(cur.delta_pct)} · 구성 최대 ${pctText(curFit?.worst_delta_pct)} · ${cur.statistic ?? ''}` : '조합 탐색에서 등록 필요', cur ? errClass(curFit?.worst_delta_pct ?? cur.delta_pct) : '',
+    ['실측 total', `${fmt(d.total.mean, 1)}`, totalStats(d.total), '',
+      { kind: d.synthetic ? 'synthetic' : 'measured', id: d.id, at: d.measured_at, notes: [`rail map: ${d.rail_domain_map_ref ?? '이름 규칙'}${d.rail_map_basis === 'latest' ? ' (최신 profile — 측정 시점 미고정)' : ''}`] }],
+    ['등록 예측', cur ? fmt(cur.total_mw, 1) : '—', cur ? `${pctText(cur.delta_pct)} · 구성 최대 ${pctText(curFit?.worst_delta_pct)} · ${cur.statistic ?? ''}${condText(cur.conditions)}` : '조합 탐색에서 등록 필요', cur ? errClass(curFit?.worst_delta_pct ?? cur.delta_pct) : '',
       cur ? { kind: 'registered', engine: 'Arch exploration', scope: powerScope(cur.split), id: cur.id, notes: [`선택: ${cur.selection_rule ?? '—'}`] } : null],
-    ['Simulation evidence (최신)', sim ? fmt(sim.total_mw, 1) : '—', sim ? `${pctText(sim.delta_pct)} · 구성 최대 ${pctText(simFit?.worst_delta_pct)} · ${sims.length}건` : '없음', sim ? errClass(simFit?.worst_delta_pct ?? sim.delta_pct) : '',
+    ['Simulation evidence (최신)', sim ? fmt(sim.total_mw, 1) : '—', sim ? `${pctText(sim.delta_pct)} · 구성 최대 ${pctText(simFit?.worst_delta_pct)} · ${sims.length}건${condText(sim.conditions)}` : '없음', sim ? errClass(simFit?.worst_delta_pct ?? sim.delta_pct) : '',
       sim ? { kind: 'simulation', engine: 'Timeline sim (runner)', scope: powerScope(sim.split), id: sim.id, notes: sim.split && !(sim.split.cpu > 0) ? ['CPU power 미포함 — total 비교 시 주의'] : [] } : null],
     ['fps · latency', `${fmt(d.fps, 2)}`, d.frame_latency ? `latency mean ${fmt(d.frame_latency.mean, 1)} / p95 ${fmt(d.frame_latency.p95, 1)} ms` : '', '', null],
   ]
@@ -116,6 +116,10 @@ function Detail({ d, ctx }: { d: MeasDetail; ctx: Ctx }) {
       </table>
       <div className="faint" style={{ fontSize: 12, marginTop: 6 }}>예측 BW 전력은 모델상 MIF·DRAM rail로 귀속됩니다 (MIF DVFS 미반영). 기타 rail(GPU·SRAM·ICPU 등)은 scenario power model 밖입니다.</div>
     </Card>
+    {cols.some((p) => p.conditions) && <Card id="cal-cond" title="비교 조건 동등성" note="조건이 다르면 Δ는 참고 비교 · 미기록은 동등성 확인 불가" defaultWide>
+      <ConditionTable preds={d.predictions.filter((p) => p.conditions)} />
+      {d.origin === 'unknown' && <div className="lib-note warn" style={{ marginTop: 6 }}>측정 출처(provenance) 미기록 — 실측 정확도 근거에서 제외됩니다.</div>}
+    </Card>}
     <Card id="cal-rails" title="Rail별 실측" note="분류 = sim config rail map → 이름 규칙">
       <RailTable rails={d.measured.rails} />
     </Card>
@@ -131,6 +135,33 @@ function Detail({ d, ctx }: { d: MeasDetail; ctx: Ctx }) {
       </div>
     </Card>
   </>
+}
+
+/** n is shown even when std = 0 (a single capture is not a distribution). */
+function totalStats(t: MeasDetail['total']): string {
+  const parts = [t.std !== null && t.std !== undefined ? `±${fmt(t.std, 1)} mW` : 'mW', `n=${t.n ?? '—'}`]
+  if (t.ci_95?.length === 2) parts.push(`CI ${fmt(t.ci_95[0], 1)}–${fmt(t.ci_95[1], 1)}`)
+  return parts.join(' · ')
+}
+
+function condText(c: Conditions | undefined): string {
+  return c ? ` · ${CONDITION_LABEL[c.overall]}` : ''
+}
+
+const COND_ITEM: Record<string, string> = { silicon_rev: 'Silicon', sw_baseline_ref: 'SW build', thermal: 'Thermal', power_state: 'Power state', ambient_temp_c: '온도 °C' }
+const COND_MARK = { match: ['일치', 'v-ok'], mismatch: ['불일치', 'v-fail'], unrecorded: ['미기록', 'v-warn'] } as const
+
+function ConditionTable({ preds }: { preds: PredictionCmp[] }) {
+  const items = preds[0]?.conditions?.items.map((i) => i.item) ?? []
+  return <table className="tb-mini-table" style={{ width: '100%' }}>
+    <thead><tr><th>조건</th><th>실측</th>{preds.map((p) => <th key={p.id} title={p.id}>{predLabel(p)}</th>)}</tr></thead>
+    <tbody>{items.map((k) => <tr key={k}><td>{COND_ITEM[k] ?? k}</td>
+      <td className="mono">{String(preds[0].conditions?.items.find((i) => i.item === k)?.measured ?? '—')}</td>
+      {preds.map((p) => { const it = p.conditions?.items.find((i) => i.item === k); const [label, cls] = COND_MARK[it?.status ?? 'unrecorded']
+        return <td key={p.id}><span className="mono">{String(it?.predicted ?? '—')}</span> <span className={`badge ${cls}`}>{label}</span></td> })}</tr>)}
+      <tr><td><b>판정</b></td><td />{preds.map((p) => <td key={p.id}><b>{p.conditions ? CONDITION_LABEL[p.conditions.overall] : '—'}</b></td>)}</tr>
+    </tbody>
+  </table>
 }
 
 /** Column label; simulation evidence is disambiguated by its date suffix. */

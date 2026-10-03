@@ -140,3 +140,10 @@ def test_unknown_origin_is_not_accuracy_evidence():
     assert _is_real({"origin": "physical_capture", "synthetic": False})
     assert not _is_real({"origin": "unknown", "synthetic": False})
     assert _is_real({"synthetic": False})  # pre-origin snapshot
+
+
+def test_compression_only_effect_excludes_dvfs_changes():
+    from scenario_db.reporting.arch_report import _compression_only
+    bufs = [{"buffer": "A", "delta_mbs": -100.0, "delta_mw": -5.0}, {"buffer": "B", "delta_mbs": -50.0, "delta_mw": -2.0}]
+    assert _compression_only(bufs, ["A"]) == {"compression_only_mbs": 100.0, "compression_only_mw": 5.0}
+    assert _compression_only(bufs, []) == {"compression_only_mbs": 0.0, "compression_only_mw": 0.0}

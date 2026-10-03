@@ -37,7 +37,11 @@ export interface MarginStage {
   stage: string; slack_ms: number; margin_pct: number; sw_ms: number; hw_ms: number; sw_share_pct: number
   latency_share_pct: number; bottleneck: string | null; bottleneck_ms: number; bottleneck_share_pct: number
 }
-export interface SwMargin { stages: MarginStage[]; worst: MarginStage | null; growth_tolerance: number | null; growth_tested_max: number | null; stat_spread_ms: number; verdict: string; recommendations: string[] }
+export interface SwMargin {
+  stages: MarginStage[]; worst: MarginStage | null; growth_tolerance: number | null; growth_tested_max: number | null; stat_spread_ms: number; verdict: string; recommendations: string[]
+  /** engine rev ≥ 7: growth absorbed with the recommended DVFS levels held (robustness), vs re-selected (growth_tolerance) */
+  growth_tolerance_fixed?: number | null; growth_fixed_rows?: { runtime_scale: number; ok: boolean; short_domains: string[] }[]
+}
 export interface SliceRow {
   statistic: Statistic; runtime_scale: number; verdict: { status: string; reasons: string[] }; intervals_ok: boolean
   power: { total_mw: number; cpu_mw: number; hw_mw: number; bw_mw: number }; bw: { total_mbs: number }
@@ -46,6 +50,8 @@ export interface VariantResult {
   scenario_id: string; variant_id: string; fps: number; period_ms: number; eis_on: boolean; mfc_dual: boolean
   spec_ok: boolean; spec_reasons: string[]; counts: { cases: number; eligible: number; sw_slices: number; compression_sets: number; dvfs_sets: number }
   distribution: Dist; baseline: ExpCase; recommended: ExpCase | null; alternatives: ExpCase[]
+  /** engine rev ≥ 7: non-dominated eligible cases on power · BW · IQ risk · DVFS headroom */
+  pareto?: (ExpCase & { iq_risk: number })[]
   slices: SliceRow[]; buffers: BufferRow[]; domains: DomainRow[]
   axis_spread: Record<'sw_statistic' | 'sw_growth' | 'compression' | 'dvfs_headroom', { min: number; max: number; range: number }>
   sw_margin: SwMargin; coverage?: { zero_power_ips: string[]; hw_power_modeled: boolean; cpu_power_modeled: boolean; power_coverage?: PowerCoverage }

@@ -183,11 +183,12 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
     { key: 'opt', label: '절감 option', width: 120, align: 'right', firstDir: 1, sort: (r) => bestOption(r.power_options)?.delta_mw ?? 0,
       title: (r) => { const b = bestOption(r.power_options); return b ? `${b.labels.join(' + ')}\n${OPTION_NOTE}` : (r.power_options?.notes ?? []).join('\n') },
       render: (r) => { const b = bestOption(r.power_options); return b ? <span className="mono" style={{ color: 'var(--primary-strong)' }}><b>{signed(b.delta_mw)}</b> <span className="faint" style={{ fontSize: 11 }}>{signed(b.delta_pct)}%</span></span> : <span className="faint">—</span> } },
-    { key: 'range', label: 'range mW', width: 104, align: 'right', firstDir: -1, sort: (r) => r.distribution.total_mw.max - r.distribution.total_mw.min, render: (r) => <span className="mono">{fmt(r.distribution.total_mw.min, 0)}–{fmt(r.distribution.total_mw.max, 0)}</span> },
+    { key: 'range', label: '설계공간 mW', width: 104, title: () => '탐색 조합의 power 분포 (설계공간 범위) — 실측 신뢰구간 아님', align: 'right', firstDir: -1, sort: (r) => r.distribution.total_mw.max - r.distribution.total_mw.min, render: (r) => <span className="mono">{fmt(r.distribution.total_mw.min, 0)}–{fmt(r.distribution.total_mw.max, 0)}</span> },
     { key: 'comp', label: 'Comp', width: 62, align: 'right', firstDir: -1, sort: (r) => r.recommended?.compression.length ?? -1, title: (r) => r.recommended?.compression.join(', '), render: (r) => r.recommended ? `${r.recommended.compression.length}${r.recommended.lossy ? ' L' : ''}` : '—' },
     { key: 'dvfs', label: 'DVFS', width: 170, sort: (r) => levels(r.recommended?.dvfs), render: (r) => <span className="mono faint">{levels(r.recommended?.dvfs) || '—'}</span> },
     { key: 'margin', label: 'SW margin', width: 90, align: 'right', firstDir: 1, sort: (r) => r.sw_margin.worst?.margin_pct ?? 999, title: (r) => r.sw_margin.recommendations.join('\n'), render: (r) => <span className="mono" style={{ color: (r.sw_margin.worst?.margin_pct ?? 1) < 0 ? 'var(--del-text)' : undefined }}>{fmt(r.sw_margin.worst?.margin_pct, 1)}%</span> },
-    { key: 'grow', label: 'SW 증가 허용', width: 96, align: 'right', firstDir: -1, sort: (r) => r.sw_margin.growth_tolerance ?? 0, render: (r) => (r.sw_margin.growth_tolerance ? `×${fmt(r.sw_margin.growth_tolerance, 1)}` : '—') },
+    { key: 'grow', label: 'SW 증가 허용', width: 110, align: 'right', firstDir: -1, sort: (r) => r.sw_margin.growth_tolerance_fixed ?? r.sw_margin.growth_tolerance ?? 0,
+      title: () => '추천 DVFS 고정 / DVFS 재선택', render: (r) => `${r.sw_margin.growth_tolerance_fixed ? `×${fmt(r.sw_margin.growth_tolerance_fixed, 1)}` : '—'} / ${r.sw_margin.growth_tolerance ? `×${fmt(r.sw_margin.growth_tolerance, 1)}` : '—'}` },
     { key: 'ver', label: '검증', width: 70, align: 'right', sort: (r) => Math.abs(r.recommended?.verified?.delta_pct ?? 99), render: (r) => { const v = r.recommended?.verified; return v ? <span title={[`sim ${fmt(v.sim_total_mw, 2)} / analytic ${fmt(v.analytic_total_mw, 2)} mW`, ...(v.sim_bw_mbs !== undefined ? [`BW sim ${fmt(v.sim_bw_mbs, 0)} / analytic ${fmt(v.analytic_bw_mbs, 0)} MB/s`] : []), ...(v.reasons ?? [])].join('\n')} style={{ color: v.ok ? 'var(--primary-strong)' : 'var(--del-text)' }}>{v.ok ? '✓' : '✗'} {fmt(v.delta_pct, 2)}%</span> : '—' } },
   ]
   return <>
@@ -245,7 +246,11 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
 // ---------------------------------------------------------------- one variant
 function VariantDetail({ v, run, readOnly }: { v: VariantResult; run: RunDetail; readOnly: boolean }) {
   const rec = v.recommended
-  const cands: { rank: string; c: ExpCase }[] = rec ? [{ rank: '추천', c: rec }, ...v.alternatives.map((c, i) => ({ rank: `#${i + 2}`, c })), { rank: 'baseline', c: v.baseline }] : [{ rank: 'baseline', c: v.baseline }]
+  const listed = new Set([rec?.key, ...v.alternatives.map((c) => c.key), v.baseline.key])
+  const pareto = (v.pareto ?? []).filter((c) => !listed.has(c.key))
+  const cands: { rank: string; c: ExpCase }[] = rec
+    ? [{ rank: '추천', c: rec }, ...v.alternatives.map((c, i) => ({ rank: `#${i + 2}`, c })), ...pareto.map((c, i) => ({ rank: `Pareto ${i + 1}`, c })), { rank: 'baseline', c: v.baseline }]
+    : [{ rank: 'baseline', c: v.baseline }]
   const [pick, setPick] = useState<string | undefined>(rec?.key)
   const [reason, setReason] = useState('')
   const [msg, setMsg] = useState<string>()
@@ -313,7 +318,9 @@ function VariantDetail({ v, run, readOnly }: { v: VariantResult; run: RunDetail;
           <td className="mono" style={{ color: s.margin_pct < 0 ? 'var(--del-text)' : undefined }}>{fmt(s.margin_pct, 1)}% · {fmt(s.slack_ms, 2)} ms</td>
           <td className="mono">{fmt(s.sw_share_pct, 0)}%</td><td className="mono">{s.bottleneck} {fmt(s.bottleneck_ms, 1)} ms</td><td className="mono">{fmt(s.latency_share_pct, 0)}%</td></tr>)}</tbody>
       </table>
-      <div className="faint" style={{ fontSize: 12, margin: '6px 0' }}>SW 증가 허용 {m.growth_tolerance ? `×${fmt(m.growth_tolerance, 1)}` : '—'} (탐색 최대 ×{fmt(m.growth_tested_max, 1)}) · max–mean 편차 {fmt(m.stat_spread_ms, 1)} ms</div>
+      <div className="faint" style={{ fontSize: 12, margin: '6px 0' }}>
+        SW 증가 허용 — DVFS 재선택 {m.growth_tolerance ? `×${fmt(m.growth_tolerance, 1)}` : '—'} · <b>추천 DVFS 고정 {m.growth_tolerance_fixed ? `×${fmt(m.growth_tolerance_fixed, 1)}` : '—'}</b> (탐색 최대 ×{fmt(m.growth_tested_max, 1)}) · max–mean 편차 {fmt(m.stat_spread_ms, 1)} ms
+        {(m.growth_fixed_rows ?? []).some((r) => !r.ok && r.short_domains.length) && <> · 고정 시 부족 domain: {(m.growth_fixed_rows ?? []).filter((r) => !r.ok).map((r) => `×${fmt(r.runtime_scale, 1)} ${r.short_domains.join('/') || 'timing'}`).join(', ')}</>}</div>
       <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13 }}>{m.recommendations.map((r) => <li key={r}>{r}</li>)}</ul>
     </Card>
     <Card id="ax-modes" title="IP mode · unit power" note="IP별 현재 mode와 대안 mode · mode마다 unit power가 다름" defaultWide>

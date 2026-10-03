@@ -13,7 +13,11 @@ export interface MeasRow {
 }
 export interface Rail { rail: string; category: Category; power_mw: number; std_mw: number; voltage_v: number | null; current_ma: number | null; domain: string | null }
 export interface SplitRow { category: Category; prediction_mw: number | null; measurement_mw: number | null; delta_mw: number | null; delta_pct: number | null }
+export type CondStatus = 'match' | 'mismatch' | 'unrecorded'
+export interface Conditions { overall: 'equivalent' | 'reference' | 'unverified'; items: { item: string; measured: unknown; predicted: unknown; status: CondStatus }[] }
+export const CONDITION_LABEL: Record<Conditions['overall'], string> = { equivalent: '조건 일치', reference: '참고 비교 (조건 불일치)', unverified: '조건 미기록' }
 export interface PredictionCmp {
+  conditions?: Conditions
   kind: 'current' | 'simulation'; id: string; label: string; total_mw: number | null; delta_pct: number | null
   split: Record<'cpu' | 'ip' | 'bw', number> | null; rows: SplitRow[] | null; run_id?: string; selection_rule?: string; statistic?: string
 }
@@ -23,10 +27,11 @@ export interface MeasDetail {
   frame_latency: { mean?: number; p95?: number } | null
   measured: { categories: Record<Category, number>; category_std: Record<Category, number>; rail_total_mw: number; rails: Rail[] }
   rail_domain_map_ref: string | null; unexplained_mw: number | null; predictions: PredictionCmp[]
+  origin?: 'synthetic' | 'physical_capture' | 'unknown'; rail_map_basis?: 'pinned' | 'latest' | 'none'
   sw_tasks: { task: string; mean_ms?: number; p95_ms?: number; max_ms?: number; min_ms?: number; count?: number; thread?: string; cluster?: string }[]
 }
 
-export interface Coverage { simulation: number; measurement: number; synthetic: number; current_prediction: { id: string; total_mw: number | null } | null }
+export interface Coverage { simulation: number; measurement: number; synthetic: number; unknown?: number; current_prediction: { id: string; total_mw: number | null } | null }
 export const calibrationApi = {
   coverageSummary: () => getJson<Record<string, Record<'simulation' | 'measurement' | 'synthetic' | 'current_prediction', number>>>('/calibration/coverage-summary', {}, false),
   coverage: (scenarioId: string) => getJson<Record<string, Coverage>>('/calibration/coverage', { scenario_id: scenarioId }, false),

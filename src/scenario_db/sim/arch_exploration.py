@@ -247,7 +247,8 @@ def _explore(graph, spec: ArchExplorationSpec, config: SimulationRunConfig,
 
     ranked = _rank([c for c in cases_obj if c["eligible"]], obj.tie_pct)
     recommended = ranked[0] if ranked else None
-    alternatives = _distinct(ranked[1:], spec.top_n, seen={round(recommended["total_mw"], 1)} if recommended else None)
+    alternatives = _distinct(ranked[1:], spec.top_n, seen={_sig(recommended)} if recommended else None)
+    pareto = [c for c in _pareto(ranked) if recommended is None or c["key"] != recommended["key"]][: spec.top_n * 2]
     baseline = next(c for c in cases_obj if not c["compression"] and not c["dvfs_raise"])
     ok_obj, obj_reasons = _slice_ok(obj_slice, spec.constraints)
     coverage = _power_coverage(obj_slice)
@@ -296,12 +297,14 @@ def _explore(graph, spec: ArchExplorationSpec, config: SimulationRunConfig,
         "baseline": _public_case(baseline),
         "recommended": _public_case(recommended) if recommended else None,
         "alternatives": [_public_case(c) for c in alternatives],
+        # non-dominated eligible cases (power, BW, IQ risk, DVFS headroom): same power can hide other trade-offs
+        "pareto": [_public_case(c) | {"iq_risk": _iq_risk(c)} for c in pareto],
         "slices": [_slice_public(s) for s in slices],
         "buffers": buffers,
         "domains": obj_slice["domains"],
         "ip_modes": po.ip_mode_table(graph, obj_slice["ips"]),
         "axis_spread": _axis_spread(slices, obj_slice, comp_sets, obj),
-        "sw_margin": sw_margin(slices, obj_slice, obj),
+        "sw_margin": sw_margin(slices, obj_slice, obj) | _fixed_growth(slices, obj, recommended),
         # objective slice keeps IP rows + DVFS options: promotion builds the frozen payload from it
         "objective_slice": {k: v for k, v in obj_slice.items() if k != "warnings"},
         "coverage": coverage,
@@ -792,11 +795,80 @@ def _rank(cases: list[dict[str, Any]], tie_pct: float) -> list[dict[str, Any]]:
     return sorted(cases, key=key)
 
 
-def _distinct(cases: list[dict[str, Any]], n: int, seen: set[float] | None = None) -> list[dict[str, Any]]:
-    """Top-n alternatives with distinct total power (drops zero-cost duplicates, e.g. unmodeled IPs)."""
+def _sig(c: dict[str, Any]) -> tuple:
+    """Alternative identity: equal power with a different BW or IQ risk is a different trade-off."""
+    return (round(c["total_mw"], 1), round(c["bw_mbs"]), bool(c["lossy"]), bool(c["assumed_ratio"]))
+
+
+def _iq_risk(c: dict[str, Any]) -> int:
+    """0 = no compression, 1 = lossless catalog ratio, 2 = assumed ratio, 3 = lossy (IQ evaluation needed)."""
+    if not c["compression"]:
+        return 0
+    return 3 if c["lossy"] else 2 if c["assumed_ratio"] else 1
+
+
+def _pareto(cases: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Non-dominated cases on (power, BW, IQ risk, -DVFS raise), returned in power order.
+
+    risk / raise are small discrete axes: a 2-D sweep per (risk, raise) group, then a cross-group check
+    on the few survivors keeps this O(n log n) for the 200k-case limit.
+    """
+    groups: dict[tuple[int, int], list[dict[str, Any]]] = {}
+    for c in cases:
+        groups.setdefault((_iq_risk(c), c["dvfs_raise"]), []).append(c)
+    front: list[dict[str, Any]] = []
+    for group in groups.values():
+        best_bw = math.inf
+        for c in sorted(group, key=lambda c: (c["total_mw"], c["bw_mbs"])):
+            if c["bw_mbs"] < best_bw - 1e-9:
+                best_bw = c["bw_mbs"]
+                front.append(c)
+
+    def dominates(a: dict[str, Any], b: dict[str, Any]) -> bool:
+        ka = (a["total_mw"], a["bw_mbs"], _iq_risk(a), -a["dvfs_raise"])
+        kb = (b["total_mw"], b["bw_mbs"], _iq_risk(b), -b["dvfs_raise"])
+        return all(x <= y + 1e-9 for x, y in zip(ka, kb, strict=True)) and ka != kb
+
+    out = [c for c in front if not any(dominates(o, c) for o in front if o is not c)]
+    return sorted(out, key=lambda c: (c["total_mw"], c["bw_mbs"]))
+
+
+def _fixed_growth(slices: list[dict[str, Any]], obj: Any, rec: dict[str, Any] | None) -> dict[str, Any]:
+    """SW growth the *recommended* DVFS levels absorb (no re-selection), vs the re-optimised tolerance.
+
+    A growth slice passes when its timing verdict is not fail and, per DVFS domain, the recommended
+    level's speed covers that slice's required clock (analytic check; no extra simulation).
+    """
+    if rec is None:
+        return {"growth_tolerance_fixed": None}
+    speed: dict[str, dict[int, float]] = {}
+    for s in slices:
+        for d in s.get("domains") or []:
+            for o in d["options"]:
+                speed.setdefault(d["domain"], {})[o["level"]] = o["speed_mhz"]
+    rows = []
+    for s in sorted((x for x in slices if x["statistic"] == obj.statistic), key=lambda x: x["runtime_scale"]):
+        short = [d["domain"] for d in s.get("domains") or []
+                 if speed.get(d["domain"], {}).get(rec["dvfs"].get(d["domain"], d["base_level"]), 0.0) < d["max_required_mhz"]]
+        rows.append({"runtime_scale": s["runtime_scale"], "ok": s["verdict"]["status"] != "fail" and not short,
+                     "short_domains": short})
+    tol = None
+    for r in rows:
+        if r["runtime_scale"] < obj.runtime_scale:
+            continue
+        if not r["ok"]:
+            break
+        tol = r["runtime_scale"]
+    return {"growth_tolerance_fixed": tol, "growth_fixed_rows": rows,
+            "growth_tolerance_basis": {"growth_tolerance": "DVFS re-selected per growth (re-optimisable range)",
+                                       "growth_tolerance_fixed": "recommended DVFS levels held (robustness)"}}
+
+
+def _distinct(cases: list[dict[str, Any]], n: int, seen: set[tuple] | None = None) -> list[dict[str, Any]]:
+    """Top-n alternatives with a distinct (power, BW, IQ risk) signature (drops zero-cost duplicates)."""
     seen, out = set(seen or ()), []
     for c in cases:
-        sig = round(c["total_mw"], 1)
+        sig = _sig(c)
         if sig in seen:
             continue
         seen.add(sig)

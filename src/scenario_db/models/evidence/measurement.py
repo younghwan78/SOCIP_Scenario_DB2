@@ -129,6 +129,9 @@ class Provenance(BaseScenarioModel):
     # (omitted when unset so existing import outputs / fingerprints stay byte-identical)
     data_origin: Literal["synthetic", "physical_capture", "unknown"] | None = Field(
         default=None, exclude_if=lambda value: value is None)
+    # sim.config_profile whose rail_domain_map defined the rails at capture time (rail -> CPU/IP/BW);
+    # unset = the project's latest profile is used and the comparison says so
+    rail_domain_map_ref: str | None = Field(default=None, exclude_if=lambda value: value is None)
     collection_tool_versions: dict[str, str] = Field(default_factory=dict)
     sample_count: int | None = None
     duration_per_sample_s: float | None = None

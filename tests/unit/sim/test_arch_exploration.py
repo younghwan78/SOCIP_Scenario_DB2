@@ -202,7 +202,7 @@ def test_report_snapshot_and_html(uhd30):
     assert snap["calibration"] == [] and snap["overview"]["model_limits"]
     row = snap["scenarios"][0]
     assert row["latency"]["video_ms"] and row["period_ms"] == pytest.approx(1000 / row["fps"], rel=1e-3)
-    assert "Latency · 출력 간격" in html and "variant당 BW 절감" in html
+    assert "Latency · 출력 간격" in html and "압축 단독 BW 절감" in html and "조합 전체 절감" in html
     block = snap["opinions"][0]
     assert len(block["basis"]) == len(block["opinions"]) and block["evidence"]["grade"] == "산출"
     assert "사내 DVFS table" in block["evidence"]["needed"]
@@ -353,3 +353,25 @@ def test_partial_power_model_cannot_pass_a_power_budget(graph_factory, dvfs):
         base | {"constraints": {"power_budget_mw": 100_000, "require_complete_power_for_budget": False}}), dvfs_tables=dvfs)
     assert lenient["spec_ok"] and lenient["status"]["power_budget_status"] == "unknown"
     assert lenient["status"]["timing_feasible"] and lenient["status"]["model_consistency_verified"]
+
+
+def _c(key, mw, bw, lossy=False, comp=("b",), raise_=0, assumed=False):
+    return {"key": key, "total_mw": mw, "bw_mbs": bw, "lossy": lossy, "assumed_ratio": assumed,
+            "compression": list(comp), "dvfs_raise": raise_}
+
+
+def test_pareto_keeps_equal_power_with_lower_bw_or_iq_risk():
+    cases = [_c("a", 100, 500, lossy=True), _c("b", 100, 400, lossy=True), _c("c", 100.0, 600, comp=()),
+             _c("d", 120, 700, comp=()), _c("e", 101, 400, lossy=True, raise_=1)]
+    keys = [c["key"] for c in ax._pareto(cases)]
+    assert keys == ["b", "c", "e"]  # a: dominated by b; d: dominated by c; e: more DVFS headroom
+    # alternatives no longer collapse cases that share a rounded power but differ in BW
+    assert len(ax._distinct([_c("x", 100, 500), _c("y", 100, 400)], 5)) == 2
+
+
+def test_fixed_dvfs_growth_tolerance_is_not_the_reoptimised_one(uhd30):
+    m = uhd30["sw_margin"]
+    assert m["growth_tolerance_fixed"] is not None
+    assert m["growth_tolerance_fixed"] <= m["growth_tolerance"]
+    assert {"growth_tolerance", "growth_tolerance_fixed"} <= set(m["growth_tolerance_basis"])
+    assert uhd30["pareto"] and all("iq_risk" in c for c in uhd30["pareto"])

@@ -66,6 +66,8 @@ def build_snapshot(
             "baseline_bw_mbs": (v.get("baseline") or {}).get("bw_mbs"),
             "baseline_total_mw": (v.get("baseline") or {}).get("total_mw"),
             "compression": chosen.get("compression", rec.get("compression", [])),
+            # compression-only effect: buffer deltas are port-independent and additive (same SW/DVFS)
+            **_compression_only(v.get("buffers") or [], chosen.get("compression", rec.get("compression", []))),
             "dvfs": chosen.get("dvfs", rec.get("dvfs", {})),
             "distribution": v["distribution"], "verified": chosen.get("verified") if pred else rec.get("verified"),
             "lossy": (chosen.get("lossy", any(b.get("lossy") for b in v.get("buffers", [])
@@ -137,6 +139,7 @@ def build_snapshot(
             continue
         margins.append({"variant_id": v["variant_id"], "fps": v["fps"], "verdict": m.get("verdict"), "spec_ok": v["spec_ok"],
                         **w, "growth_tolerance": m.get("growth_tolerance"),
+                        "growth_tolerance_fixed": m.get("growth_tolerance_fixed"),
                         "recommendations": m.get("recommendations", [])})
     margins.sort(key=lambda r: (r["margin_pct"], -r["sw_share_pct"]))
 
@@ -515,7 +518,7 @@ def _latency(rows: list[dict[str, Any]]) -> str:
 
 def _scenarios(rows: list[dict[str, Any]]) -> str:
     h = ("<div class='scroll'><table><tr><th>Scenario</th><th>fps</th><th>EIS</th><th>판정</th><th>Total mW</th>"
-         "<th>CPU</th><th>IP</th><th>IP BW</th><th>CPU BW</th><th>BW MB/s</th><th>range mW (min–max)</th><th>Compression</th><th>DVFS level</th><th>검증</th><th>출처</th></tr>")
+         "<th>CPU</th><th>IP</th><th>IP BW</th><th>CPU BW</th><th>BW MB/s</th><th title='탐색 조합의 power 분포 (설계공간 범위) — 실측 신뢰구간이 아님'>설계공간 range mW</th><th>Compression</th><th>DVFS level</th><th>검증</th><th>출처</th></tr>")
     for r in rows:
         p, d = r["power"], r["distribution"]["total_mw"]
         ver = r.get("verified") or {}
@@ -598,7 +601,9 @@ def _fail_margins(rows: list[dict[str, Any]]) -> str:
 def _boxes(rows: list[dict[str, Any]]) -> str:
     rows = [r for r in rows if r["spec_ok"]]
     out = ("<p class='meta'>spec 만족 scenario만 표시 (미달은 ③). 중앙값 낮은 순 정렬 · 막대 = min–max, 상자 = p25–p75, 굵은 선 = median, "
-           "◆ = 등록 예측 · 세로 점선 = power 100 mW / BW 1,000 MB/s 격자 (실선 = 눈금 표시)</p>")
+           "◆ = 등록 예측 · 세로 점선 = power 100 mW / BW 1,000 MB/s 격자 (실선 = 눈금 표시)</p>"
+           "<p class='meta'><b>해석</b>: 분포는 <b>설계공간 범위</b>(compression × DVFS × SW 통계·증가 조합)이며 실측 불확실성(신뢰구간)이 아님. "
+           "추천 설정의 SW 증가 robustness는 SW margin 표의 ‘추천 DVFS 고정’ 열, 실측 불확실성은 반복 측정 CI(실측 대조)로 판단.</p>")
     for key, label, unit in (("total_mw", "Total power", "mW"), ("cpu_mw", "CPU (SW)", "mW"), ("hw_mw", "IP (HW core)", "mW"),
                              ("bw_ip_mw", "IP BW", "mW"), ("bw_cpu_mw", "CPU BW", "mW"),
                              ("bw_mbs", "BW", "MB/s")):
@@ -698,9 +703,19 @@ def _parts(p: dict[str, Any]) -> list[tuple[str, float]]:
             ("hw", p.get("hw_mw") or 0.0), ("bw", bw_ip)]
 
 
+def _compression_only(buffers: list[dict[str, Any]], chosen: list[str]) -> dict[str, float]:
+    sel = [b for b in buffers if b.get("buffer") in set(chosen) and "delta_mbs" in b]
+    return {"compression_only_mbs": round(-sum(b["delta_mbs"] for b in sel), 2),
+            "compression_only_mw": round(-sum(b.get("delta_mw", 0.0) for b in sel), 3)}
+
+
 def _compression(rows: list[dict[str, Any]], scen: list[dict[str, Any]]) -> str:
     saved = [(r["variant_id"], (r["baseline_bw_mbs"] or 0) - (r["bw_mbs"] or 0), (r["baseline_total_mw"] or 0) - (r["power"].get("total_mw") or 0))
              for r in scen if r["spec_ok"] and r["baseline_bw_mbs"] is not None]
+    only = [(r.get("compression_only_mbs"), r.get("compression_only_mw")) for r in scen
+            if r["spec_ok"] and r.get("compression_only_mw") is not None]
+    only_bw = sum(x[0] for x in only) / len(only) if only else None
+    only_mw = sum(x[1] for x in only) / len(only) if only else None
     known = [c for c in rows if str(c.get("support") or "unknown") not in ("unknown", "None")]
     unknown = [c for c in rows if c not in known]
 
@@ -711,8 +726,9 @@ def _compression(rows: list[dict[str, Any]], scen: list[dict[str, Any]]) -> str:
     avg_mw = sum(s[2] for s in saved) / len(saved) if saved else 0.0
     h = ("<p class='meta'>등록 예측이 선택한 buffer 압축의 효과. 합산이 아닌 <b>variant 1개당 평균</b>으로 표시. "
          "IP 지원이 catalog로 확인되지 않은 buffer는 <span class=warn>잠재 절감</span>으로 분리 — HW 지원 확인 전에는 확정값이 아님.</p>"
-         f"<div class='kpis'><div class='kpi' title='등록(추천) 조합 vs 무압축 · DVFS 기본 baseline'>variant당 BW 절감 (평균, vs baseline)<b>{avg_bw:,.0f}</b>MB/s</div>"
-         f"<div class='kpi' title='등록(추천) 조합 vs 무압축 · DVFS 기본 baseline'>variant당 Power 절감 (평균, vs baseline)<b>{avg_mw:,.1f}</b>mW</div>"
+         f"<div class='kpis'><div class='kpi' title='SW·DVFS 고정, 선택 buffer 압축만 적용한 효과 (buffer Δ 합, port 독립)'>압축 단독 BW 절감 (variant 평균)<b>{_f(only_bw, 0)}</b>MB/s</div>"
+         f"<div class='kpi' title='SW·DVFS 고정, 선택 buffer 압축만 적용한 효과'>압축 단독 Power 절감 (variant 평균)<b>{_f(only_mw, 1)}</b>mW</div>"
+         f"<div class='kpi' title='등록(추천) 조합 vs 무압축 · DVFS 기본 baseline — DVFS 변경 효과 포함'>조합 전체 절감 (vs baseline, 평균)<b>{avg_mw:,.1f}</b>mW · {avg_bw:,.0f} MB/s</div>"
          f"<div class='kpi'>IP 지원 확인 buffer<b class='ok'>{len(known)}</b>평균 {per_variant(known, 'selected_delta_mw'):+.1f} mW/적용</div>"
          f"<div class='kpi'>IP 지원 미확인 (잠재)<b class='warn'>{len(unknown)}</b>평균 {per_variant(unknown, 'selected_delta_mw'):+.1f} mW/적용</div></div>")
     h += ("<table style='margin-top:10px'><tr><th>Buffer</th><th>구분</th><th>Mode</th><th>ratio</th><th>ratio 출처</th><th>IP 지원</th><th>적용/대상</th>"
@@ -762,12 +778,14 @@ def _power_options(rows: list[dict[str, Any]]) -> str:
 
 def _margins(rows: list[dict[str, Any]]) -> str:
     h = ("<p class='meta'>SW timing margin = (P − SW(runtime+latency) − IP overhead − HW@set clock) / P, NRT·Post-NRT 중 최소, 목적 통계 기준</p>"
-         "<table><tr><th>#</th><th>Scenario</th><th>fps</th><th>stage</th><th>margin</th><th>SW / P</th><th>병목 task</th><th>SW 증가 허용</th><th>권고</th></tr>")
+         "<table><tr><th>#</th><th>Scenario</th><th>fps</th><th>stage</th><th>margin</th><th>SW / P</th><th>병목 task</th><th title='DVFS를 growth마다 다시 고르면 허용되는 SW 증가 (재최적화 가능 범위)'>SW 증가 허용<br><span class=meta>DVFS 재선택</span></th>"
+         "<th title='추천 DVFS level을 고정했을 때 흡수 가능한 SW 증가 (robustness)'>SW 증가 허용<br><span class=meta>추천 DVFS 고정</span></th><th>권고</th></tr>")
     for i, r in enumerate(rows, 1):
         h += (f"<tr><td>{i}</td><td>{escape(_short(r['variant_id']))}</td><td class=n>{_f(r['fps'],0)}</td><td>{escape(r['stage'].upper())}</td>"
               f"<td class='n {'fail' if r['margin_pct'] < 0 else ''}'><b>{_f(r['margin_pct'],1)}%</b><br><span class=meta>{_f(r['slack_ms'],2)} ms</span></td>"
               f"<td class=n>{_f(r['sw_share_pct'],0)}%</td><td>{escape(str(r['bottleneck']))} {_f(r['bottleneck_ms'],1)} ms ({_f(r['bottleneck_share_pct'],0)}%)</td>"
               f"<td class=n>{'×'+_f(r['growth_tolerance'],1) if r['growth_tolerance'] else '—'}</td>"
+              f"<td class=n>{'×'+_f(r.get('growth_tolerance_fixed'),1) if r.get('growth_tolerance_fixed') else '—'}</td>"
               f"<td><ul>{''.join(f'<li>{escape(x)}</li>' for x in r['recommendations'])}</ul></td></tr>")
     return h + "</table>"
 
