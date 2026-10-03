@@ -164,8 +164,32 @@ def test_bw_chart_records_join_dma_to_timeline_by_node():
     assert [row["node_id"] for row in records] == ["isp", "mfc"]
     assert records[0]["start_ms"] == 18.0
     assert records[0]["end_ms"] == 24.0
-    assert records[0]["bw_gbps"] == 1.0
+    assert records[0]["avg_bw_gbps"] == 1.0
+    # frame period inferred from sensor frame spacing (33.333 ms); 1 GB/s over a 6 ms active window
+    assert records[0]["bw_basis"] == "active_window_uniform"
+    assert records[0]["bw_gbps"] == pytest.approx(1.0 * 33.333 / 6.0, rel=1e-6)
     assert records[1]["direction"] == "Read"
+
+
+def test_bw_chart_records_keep_every_frame_window():
+    ev = _evidence()
+    ev["timeline_events"].append({"task_id": "isp#f1", "node_id": "isp", "hw_name": "ISP", "frame_index": 1,
+                                  "start_ms": 51.333, "end_ms": 56.333, "duration_ms": 5.0})
+    ev["fps"] = 30
+    isp = [r for r in bw_chart_records(ev) if r["node_id"] == "isp"]
+    assert [(r["frame_index"], r["start_ms"]) for r in isp] == [(0, 18.0), (1, 51.333)]
+    # review example: 1 GB/s frame average, 30 fps, 5 ms active -> ~6.67 GB/s uniform active BW
+    assert isp[1]["bw_gbps"] == pytest.approx(6.667, abs=0.001)
+
+
+def test_bw_chart_total_is_frame_average_not_window_sum():
+    ev = _evidence()
+    ev["timeline_events"].append({"task_id": "isp#f1", "node_id": "isp", "hw_name": "ISP", "frame_index": 1,
+                                  "start_ms": 51.333, "end_ms": 57.333, "duration_ms": 6.0})
+    html = generate_bw_chart_html(ev, title="t")
+    html = html.replace("\\u002f", "/")
+    assert "frame avg: 1.50 GB/s" in html and "Power: 120.0 mW" in html
+    assert "not a bus measurement" in html
 
 
 def test_bw_axis_max_uses_instantaneous_peak_and_standard_bucket_not_total_sum():

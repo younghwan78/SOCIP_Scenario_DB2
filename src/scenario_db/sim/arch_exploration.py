@@ -52,7 +52,7 @@ from scenario_db.sim import power_options as po
 from scenario_db.sim.power_attribution import attribute
 from scenario_db.sim.transfers import compression_catalog
 
-ENGINE_REV = "arch-exploration/6"
+ENGINE_REV = "arch-exploration/7"
 # Power = CPU(SW) + IP core + BW; BW = IP DMA (HW nodes) + CPU DMA (SW tasks, e.g. mpeg_writer)
 DIST_KEYS = ("total_mw", "cpu_mw", "hw_mw", "bw_mw", "bw_ip_mw", "bw_cpu_mw", "bw_mbs", "bw_ip_mbs", "bw_cpu_mbs")
 V_REF_MV = 710.0
@@ -146,6 +146,9 @@ class ExplorationConstraints(BaseScenarioModel):
     require_power_model: bool = True
     power_budget_mw: float | None = Field(default=None, gt=0)
     bw_budget_mbs: float | None = Field(default=None, gt=0)
+    # A power budget judged on a partial model (some active IPs at 0 mW) is "unknown", not "pass".
+    # True: such a variant is not spec OK; False: the budget status is reported as unknown only.
+    require_complete_power_for_budget: bool = True
 
 
 class ExplorationObjective(BaseScenarioModel):
@@ -162,6 +165,8 @@ class ArchExplorationSpec(BaseScenarioModel):
     top_n: int = Field(default=5, ge=1, le=20)
     max_cases_per_variant: int = Field(default=200_000, ge=1, le=200_000)
     verify: bool = True
+    # model-consistency tolerance (analytic vs re-simulated); NOT a product budget tolerance
+    verify_tolerance_pct: float = Field(default=0.5, gt=0, le=10)
 
 
 # ------------------------------------------------------------------- public
@@ -245,10 +250,18 @@ def _explore(graph, spec: ArchExplorationSpec, config: SimulationRunConfig,
     alternatives = _distinct(ranked[1:], spec.top_n, seen={round(recommended["total_mw"], 1)} if recommended else None)
     baseline = next(c for c in cases_obj if not c["compression"] and not c["dvfs_raise"])
     ok_obj, obj_reasons = _slice_ok(obj_slice, spec.constraints)
+    coverage = _power_coverage(obj_slice)
+    budget_status = _power_budget_status(spec.constraints, coverage["power_coverage"], recommended)
+    if budget_status == "unknown" and spec.constraints.require_complete_power_for_budget:
+        obj_reasons.append(
+            "power budget 판정 불가: 활성 IP 전력 미모델 (" + ", ".join(coverage["zero_power_ips"]) + ")"
+        )
     if recommended is not None and spec.verify:
         recommended["verified"] = _verify(graph, spec, config, tables, recommended, buffers)
         if not recommended["verified"]["ok"]:
-            obj_reasons.append("recommended case failed re-simulation verification")
+            obj_reasons.append("recommended case failed re-simulation verification: "
+                               + "; ".join(recommended["verified"].get("reasons") or ["mismatch"]))
+    verified = (recommended or {}).get("verified") or {}
 
     summary = {
         "engine_rev": ENGINE_REV,
@@ -262,6 +275,15 @@ def _explore(graph, spec: ArchExplorationSpec, config: SimulationRunConfig,
         "mfc_dual": obj_slice["mfc_dual"],
         "spec_ok": recommended is not None and not obj_reasons,
         "spec_reasons": obj_reasons or ([] if recommended is not None else ["no eligible combination"]),
+        # decomposed status: spec_ok is the conjunction, these say which part holds
+        "status": {
+            "timing_feasible": ok_obj,
+            "power_coverage": coverage["power_coverage"],
+            "power_budget_status": budget_status,
+            "model_consistency_verified": (bool(verified.get("power_match") and verified.get("bw_match"))
+                                           if verified else None),
+            "constraints_verified": verified.get("constraints_pass") if verified else None,
+        },
         "objective": obj.model_dump(),
         "counts": {
             "cases": len(dist["total_mw"]),
@@ -282,14 +304,32 @@ def _explore(graph, spec: ArchExplorationSpec, config: SimulationRunConfig,
         "sw_margin": sw_margin(slices, obj_slice, obj),
         # objective slice keeps IP rows + DVFS options: promotion builds the frozen payload from it
         "objective_slice": {k: v for k, v in obj_slice.items() if k != "warnings"},
-        "coverage": {
-            "zero_power_ips": obj_slice["zero_power_ips"],
-            "hw_power_modeled": obj_slice["power"]["hw_mw"] > 0,
-            "cpu_power_modeled": obj_slice["power"]["cpu_mw"] > 0,
-        },
+        "coverage": coverage,
         "warnings": obj_slice["warnings"][:20],
     }
     return summary
+
+
+def _power_coverage(obj_slice: dict[str, Any]) -> dict[str, Any]:
+    zero = list(obj_slice["zero_power_ips"])
+    hw = obj_slice["power"]["hw_mw"] > 0
+    level = "none" if not hw else "partial" if zero else "complete"
+    return {
+        "zero_power_ips": zero,
+        "hw_power_modeled": hw,
+        "cpu_power_modeled": obj_slice["power"]["cpu_mw"] > 0,
+        "power_coverage": level,
+        # totals are sums over modeled IPs only unless coverage is complete
+        "power_total_basis": "complete" if level == "complete" else "modeled_ips_only",
+    }
+
+
+def _power_budget_status(c: ExplorationConstraints, coverage: str, recommended: dict[str, Any] | None) -> str:
+    if c.power_budget_mw is None:
+        return "n/a"
+    if recommended is None:
+        return "fail"
+    return "pass" if coverage == "complete" else "unknown"
 
 
 # ------------------------------------------------------------------- power options
@@ -464,12 +504,19 @@ def _slice_ok(s: dict[str, Any], c: ExplorationConstraints) -> tuple[bool, list[
     return not reasons, reasons
 
 
-def _case_ok(case: dict[str, Any], c: ExplorationConstraints) -> bool:
+def _case_reasons(case: dict[str, Any], c: ExplorationConstraints) -> list[str]:
+    reasons: list[str] = []
     if case["lossy"] and not c.allow_lossy:
-        return False
+        reasons.append("lossy compression not allowed")
     if c.power_budget_mw is not None and case["total_mw"] > c.power_budget_mw:
-        return False
-    return not (c.bw_budget_mbs is not None and case["bw_mbs"] > c.bw_budget_mbs)
+        reasons.append(f"power {case['total_mw']:.1f} mW > budget {c.power_budget_mw:g} mW")
+    if c.bw_budget_mbs is not None and case["bw_mbs"] > c.bw_budget_mbs:
+        reasons.append(f"BW {case['bw_mbs']:.1f} MB/s > budget {c.bw_budget_mbs:g} MB/s")
+    return reasons
+
+
+def _case_ok(case: dict[str, Any], c: ExplorationConstraints) -> bool:
+    return not _case_reasons(case, c)
 
 
 # ------------------------------------------------------------------- compression
@@ -797,6 +844,11 @@ def _axis_spread(slices, obj_slice, comp_sets, obj) -> dict[str, dict[str, float
 
 # ------------------------------------------------------------------- verification
 def _verify(graph, spec, config, tables, case, buffers) -> dict[str, Any]:
+    """Re-simulate a case and re-apply the product constraints to the re-simulated numbers.
+
+    Two tolerances are kept apart: ``verify_tolerance_pct`` is model consistency (analytic vs
+    re-simulated), the budgets in ``constraints`` are product limits and get no tolerance.
+    """
     by_id = {b["buffer"]: b for b in buffers}
     variant = deepcopy(graph.variant)
     variant.buffer_overrides = deepcopy(variant.buffer_overrides or {})
@@ -812,15 +864,37 @@ def _verify(graph, spec, config, tables, case, buffers) -> dict[str, Any]:
         "eis": spec.axes.eis, "include_whatif": False,
     })
     r = analyze_timing_budget(replace(graph, variant=variant), opts, config=cfg, dvfs_tables=tables)
+    tol = spec.verify_tolerance_pct
     sim_total = float(r["power"]["total_mw"])
+    sim_bw = float(r["bw"]["total_mbs"])
     delta = sim_total - case["total_mw"]
     pct = 100.0 * delta / case["total_mw"] if case["total_mw"] else 0.0
+    bw_delta = sim_bw - case["bw_mbs"]
+    bw_pct = 100.0 * bw_delta / case["bw_mbs"] if case["bw_mbs"] else 0.0
+    power_match = abs(pct) < tol
+    bw_match = abs(bw_pct) < tol
+    sim_slice = _slice(r, case["statistic"], case["runtime_scale"])
+    timing_pass, reasons = _slice_ok(sim_slice, spec.constraints)
+    sim_case = {"lossy": case["lossy"], "total_mw": sim_total, "bw_mbs": sim_bw}
+    budget_reasons = _case_reasons(sim_case, spec.constraints)
+    constraints_pass = timing_pass and not budget_reasons
+    if not power_match:
+        reasons.append(f"power model mismatch {pct:+.2f}% (tolerance {tol}%)")
+    if not bw_match:
+        reasons.append(f"BW model mismatch {bw_pct:+.2f}% (tolerance {tol}%)")
+    reasons += budget_reasons
     return {
-        "method": "re-simulated with buffer_overrides + dvfs_overrides",
+        "method": "re-simulated with buffer_overrides + dvfs_overrides; constraints re-applied",
+        "tolerance_pct": tol,
         "sim_total_mw": round(sim_total, 2), "analytic_total_mw": round(case["total_mw"], 2),
         "delta_mw": round(delta, 3), "delta_pct": round(pct, 3),
-        "sim_bw_mbs": r["bw"]["total_mbs"], "sim_verdict": r["verdict"]["status"],
-        "ok": abs(pct) < 0.5 and r["verdict"]["status"] != "fail",
+        "sim_bw_mbs": round(sim_bw, 2), "analytic_bw_mbs": round(case["bw_mbs"], 2),
+        "bw_delta_mbs": round(bw_delta, 3), "bw_delta_pct": round(bw_pct, 3),
+        "sim_verdict": r["verdict"]["status"],
+        "power_match": power_match, "bw_match": bw_match,
+        "timing_pass": timing_pass, "constraints_pass": constraints_pass,
+        "reasons": reasons,
+        "ok": power_match and bw_match and constraints_pass,
     }
 
 

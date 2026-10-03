@@ -107,3 +107,13 @@ def test_category_fit_flags_total_that_matches_by_compensation():
     assert fit["offsetting"] is True
     assert category_fit(rows, -12.8)["offsetting"] is False
     assert category_fit(None, 1.0) == {"worst_category": None, "worst_delta_pct": None, "offsetting": False}
+
+
+def test_data_origin_classification():
+    from scenario_db.api.services.calibration import data_origin, is_synthetic
+    assert data_origin(None) == "unknown" and not is_synthetic(None)
+    assert data_origin({"collection_method": "synthetic_dummy"}) == "synthetic"
+    assert data_origin({"device_id": "SYNTHETIC"}) == "synthetic"
+    assert data_origin({"collection_method": "power_monitor"}) == "unknown"  # no device recorded
+    assert data_origin({"collection_method": "power_monitor", "device_id": "EVT1-01"}) == "physical_capture"
+    assert data_origin({"data_origin": "synthetic", "collection_method": "power_monitor", "device_id": "X"}) == "synthetic"

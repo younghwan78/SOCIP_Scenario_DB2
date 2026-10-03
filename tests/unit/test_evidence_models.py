@@ -533,3 +533,31 @@ def test_sim_derived_from_lineage():
     obj = SimulationEvidence.model_validate(raw)
     assert obj.derived_from[0].startswith("meas-")
     assert obj.execution_context.method == "projection"
+
+
+# codex review 7472331: statistical inputs are validated, not just typed
+import pytest as _pytest  # noqa: E402
+from pydantic import ValidationError as _VE  # noqa: E402
+
+from scenario_db.models.evidence.measurement import FreqResidencyBin  # noqa: E402
+
+
+@_pytest.mark.parametrize("bad", [
+    {"mean": 1.0, "n": -1}, {"mean": 1.0, "n": 0}, {"mean": 1.0, "n": 3, "std": -5},
+    {"mean": 1.0, "n": 3, "ci_95": [2.0, 1.0]}, {"mean": 1.0, "n": 3, "ci_95": [1.0]},
+    {"mean": float("nan"), "n": 3}, {"mean": 1.0, "n": 3, "p95": float("inf")},
+    {"mean": 1.0, "n": 3, "ci_level": 95},
+])
+def test_measured_kpi_rejects_invalid_statistics(bad):
+    with _pytest.raises(_VE):
+        MeasuredKpi.model_validate(bad)
+
+
+def test_measured_kpi_accepts_valid_statistics():
+    k = MeasuredKpi.model_validate({"mean": 10.0, "n": 5, "std": 0.0, "ci_95": [9.5, 10.5], "ci_level": 0.9})
+    assert k.n == 5 and k.std == 0.0
+
+
+def test_freq_residency_ratio_range():
+    with _pytest.raises(_VE):
+        FreqResidencyBin.model_validate({"freq_mhz": 1000, "ratio": 1.2})

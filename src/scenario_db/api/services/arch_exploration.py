@@ -34,7 +34,7 @@ from scenario_db.reporting.arch_report import build_snapshot, html_sha256, rende
 from scenario_db.reporting.xlsx_export import report_sheets, write_xlsx
 from scenario_db.sim.arch_exploration import ENGINE_REV, explore_variant, find_case, prediction_payload
 from scenario_db.sim.power_attribution import attribute
-from scenario_db.api.services.calibration import is_synthetic, measurement_detail
+from scenario_db.api.services.calibration import data_origin, is_physical, is_synthetic, measurement_detail
 from scenario_db.api.services.failures import variant_failure
 from scenario_db.sim.model_lineage import lineage_differences, run_model_lineage
 from scenario_db.sim.service import _apply_config_profile, _check_power_params_scope, _graph_soc_ref
@@ -388,7 +388,7 @@ def _has_total(m: Evidence) -> bool:
 
 def _meas_rank(m: Evidence) -> int:
     """Comparable capture first (has total power), then real silicon over synthetic; ties keep the newest."""
-    return 2 * _has_total(m) + (not is_synthetic(m.provenance))
+    return 4 * _has_total(m) + 2 * is_physical(m.provenance) + (not is_synthetic(m.provenance))
 
 
 def _report_calibration(db: Session, preds: dict[tuple[str, str], dict[str, Any]]) -> list[dict[str, Any]]:
@@ -629,15 +629,18 @@ def model_status(db: Session, *, project_ref: str | None = None) -> dict[str, An
     if project_ref:
         scenario_ids = [sid for (sid,) in db.query(Scenario.id).filter(Scenario.project_ref == project_ref).all()]
         mq = mq.filter(Evidence.scenario_ref.in_(scenario_ids)) if scenario_ids else mq.filter(Evidence.id.is_(None))
-    real = synthetic = empty = 0
+    real = synthetic = empty = unknown = 0
     for (prov, kpi) in mq.all():
         t = (kpi or {}).get("total_power_mw")
+        origin = data_origin(prov)
         if (t.get("mean") if isinstance(t, dict) else t) is None:
             empty += 1  # import without power data: not evidence for the model
-        elif is_synthetic(prov):
+        elif origin == "synthetic":
             synthetic += 1
-        else:
+        elif origin == "physical_capture":
             real += 1
+        else:
+            unknown += 1  # no recorded collection method/device: never counted as silicon evidence
 
     rq = db.query(ArchExplorationRun)
     if project_ref:
@@ -651,7 +654,7 @@ def model_status(db: Session, *, project_ref: str | None = None) -> dict[str, An
                         "engines": engines},
         "dvfs": [{"ref": ref, "sample": _is_sample(ref), "predictions": n} for ref, n in sorted(dvfs.items())],
         "dvfs_unrecorded": unrecorded,
-        "measurements": {"real": real, "synthetic": synthetic, "empty": empty},
+        "measurements": {"real": real, "synthetic": synthetic, "empty": empty, "unknown": unknown},
         "lineage": lineage,
         "latest_run": {"id": latest.id, "engine_rev": latest.engine_rev,
                        "created_at": latest.created_at.isoformat() if latest.created_at else None} if latest is not None else None,

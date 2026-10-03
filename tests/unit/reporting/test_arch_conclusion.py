@@ -122,3 +122,21 @@ def test_clock_and_domain_tables_preserve_duplicate_variant_names():
                 "speed_mhz": c["set_mhz"], "voltage_mv": 800, "headroom_pct": 10, "required_mhz": 100, "driver": "isp"} for c in clocks]
     html = _domains(domains)
     assert "110 MHz" in html and "220 MHz" in html
+
+
+def test_calculation_failures_make_the_headline_a_partial_evaluation():
+    snap = _snap()
+    snap["spec_summary"] = {"requested": 2, "evaluated": 1, "calc_failed": 1, "explored": 1, "spec_ok": 1, "spec_fail": 0,
+                            "power_range_mw": [500.0, 500.0], "failed": [],
+                            "errors": [{"variant_id": "v-bad", "stage": "explore", "category": "model", "error": "boom"}]}
+    c = build_conclusion(snap)
+    assert c["headline"].startswith("[부분 평가] 요청 2개 중 계산 실패 1개")
+    assert "미달 없음" not in c["headline"].replace("평가 완료분 미달 없음", "")
+    assert c["risks"][0]["title"].startswith("계산 실패 1/2")
+
+
+def test_unknown_origin_is_not_accuracy_evidence():
+    from scenario_db.reporting.arch_conclusion import _is_real
+    assert _is_real({"origin": "physical_capture", "synthetic": False})
+    assert not _is_real({"origin": "unknown", "synthetic": False})
+    assert _is_real({"synthetic": False})  # pre-origin snapshot

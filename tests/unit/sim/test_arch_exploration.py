@@ -316,3 +316,40 @@ def test_v2_clock_term_is_used_by_the_analytic_dvfs_headroom(graph_factory, dvfs
     assert ax._clock_factor(ip, 400.0) == pytest.approx(1.0)
     assert ax._clock_factor(ip, 533.0) == pytest.approx(0.7 + 0.3 * 533.0 / 400.0)
     assert ax._clock_factor({"clock_power_fraction": 0.0, "ref_clock_mhz": 400.0}, 533.0) == 1.0
+
+
+# ------------------------------------------------------------------- codex review 7472331 (P1)
+def test_verify_reapplies_budget_to_resimulated_numbers(graph_factory, dvfs, uhd30):
+    """Analytic 100 mW within budget but re-simulated 100.4 mW: model match, budget fail."""
+    rec = dict(uhd30["recommended"])
+    sim = rec["verified"]["sim_total_mw"]
+    rec["total_mw"] = round(sim / 1.004, 3)  # analytic 0.4 % below the re-simulation (< 0.5 % tolerance)
+    spec = ALL_BUFFERS.model_copy(update={"constraints": ax.ExplorationConstraints(
+        power_budget_mw=rec["total_mw"], require_complete_power_for_budget=False)})
+    v = ax._verify(graph_factory(UHD30), spec, ax.SimulationRunConfig(), dvfs, rec, uhd30["buffers"])
+    assert v["power_match"] and v["bw_match"] and v["timing_pass"]
+    assert not v["constraints_pass"] and not v["ok"]
+    assert any("budget" in r for r in v["reasons"])
+
+
+def test_verify_checks_bw_consistency(graph_factory, dvfs, uhd30):
+    rec = dict(uhd30["recommended"])
+    rec["bw_mbs"] = rec["bw_mbs"] * 0.9
+    v = ax._verify(graph_factory(UHD30), ALL_BUFFERS, ax.SimulationRunConfig(), dvfs, rec, uhd30["buffers"])
+    assert v["power_match"] and not v["bw_match"] and not v["ok"]
+
+
+def test_partial_power_model_cannot_pass_a_power_budget(graph_factory, dvfs):
+    g = graph_factory(UHD30)
+    base = {"axes": {"statistics": ["max"], "runtime_scales": [1], "compression": {"enabled": False}}}
+    free = ax.explore_variant(g, ax.ArchExplorationSpec.model_validate(base), dvfs_tables=dvfs)
+    assert free["coverage"]["power_coverage"] == "partial" and free["coverage"]["zero_power_ips"]
+    assert free["status"]["power_budget_status"] == "n/a" and free["spec_ok"]
+    strict = ax.explore_variant(g, ax.ArchExplorationSpec.model_validate(
+        base | {"constraints": {"power_budget_mw": 100_000}}), dvfs_tables=dvfs)
+    assert strict["status"]["power_budget_status"] == "unknown" and not strict["spec_ok"]
+    assert any("판정 불가" in r for r in strict["spec_reasons"])
+    lenient = ax.explore_variant(g, ax.ArchExplorationSpec.model_validate(
+        base | {"constraints": {"power_budget_mw": 100_000, "require_complete_power_for_budget": False}}), dvfs_tables=dvfs)
+    assert lenient["spec_ok"] and lenient["status"]["power_budget_status"] == "unknown"
+    assert lenient["status"]["timing_feasible"] and lenient["status"]["model_consistency_verified"]

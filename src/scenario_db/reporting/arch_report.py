@@ -52,6 +52,10 @@ def build_snapshot(
             "sw_margin_pct": worst.get("margin_pct"), "sw_stage": worst.get("stage"), "sw_bottleneck": worst.get("bottleneck"),
             "variant_id": v["variant_id"], "scenario_id": v["scenario_id"], "fps": v["fps"],
             "spec_ok": v["spec_ok"], "reasons": compact_reasons(v["spec_reasons"]), "eis_on": v["eis_on"],
+            "status": v.get("status") or {},
+            "power_coverage": (v.get("coverage") or {}).get("power_coverage")
+            or ("partial" if (v.get("coverage") or {}).get("zero_power_ips") else None),
+            "zero_power_ips": (v.get("coverage") or {}).get("zero_power_ips") or [],
             "reasons_explained": explain_all(compact_reasons(v["spec_reasons"]), v["fps"]),
             "period_ms": v.get("period_ms") or (1000.0 / v["fps"] if v.get("fps") else None),
             "latency": (v.get("objective_slice") or {}).get("latency"),
@@ -179,6 +183,11 @@ def build_snapshot(
             "engine_rev": run.get("engine_rev"), "model_lineage": lineage, "model_limits": model_limits(lineage, mixed),
         },
         "spec_summary": {
+            # requested = evaluated + calc_failed; "explored" kept as the evaluated count (old snapshots)
+            "requested": len(variants) + len(run.get("errors") or []),
+            "evaluated": len(variants), "calc_failed": len(run.get("errors") or []),
+            "partial": bool(run.get("errors")),
+            "power_partial": sum(1 for r in rows if r["power_coverage"] in ("partial", "none")),
             "explored": len(variants), "spec_ok": len(ok), "spec_fail": len(variants) - len(ok),
             "failed": [{"variant_id": v["variant_id"], "reasons": compact_reasons(v["spec_reasons"])[:3],
                         "explained": explain_all(compact_reasons(v["spec_reasons"]), v["fps"])}
@@ -190,7 +199,8 @@ def build_snapshot(
         },
         "opinions": build_opinions(rows, domains, sample_dvfs=sample_dvfs,
                                    measured={(c["scenario_id"], c["variant_id"]) for c in calibration or []
-                                             if not c.get("synthetic") and c["fit"]["worst_delta_pct"] is not None}, options=options),
+                                             if (c.get("origin") == "physical_capture" if c.get("origin") else not c.get("synthetic"))
+                                             and c["fit"]["worst_delta_pct"] is not None}, options=options),
         "scenarios": rows,
         "clocks": clocks,
         "compression": comp_rows,
@@ -356,8 +366,12 @@ def _calibration(rows: list[dict[str, Any]]) -> str:
          "구성 최대 |Δ| 기준(≤10% 녹색 · ≤25% 주황 · 초과 빨강). 합성 fixture는 모델 검증 근거가 아님.</p>")
     if not rows:
         return h + "<p class='warn'>실측 대조 가능한 variant 없음 — 이 보고서의 수치는 실측으로 검증되지 않았습니다.</p>"
-    real = sum(1 for r in rows if not r["synthetic"])
-    h += f"<p>실측 {real}건 · 합성 {len(rows) - real}건</p>"
+    def origin(r: dict[str, Any]) -> str:
+        return r.get("origin") or ("synthetic" if r["synthetic"] else "physical_capture")
+    real = sum(1 for r in rows if origin(r) == "physical_capture")
+    unknown = sum(1 for r in rows if origin(r) == "unknown")
+    h += (f"<p>실측 {real}건 · 합성 {sum(1 for r in rows if origin(r) == 'synthetic')}건"
+          + (f" · <span class=warn>출처 미기록 {unknown}건 (정확도 근거 제외)</span>" if unknown else "") + "</p>")
     h += ("<table><tr><th>Scenario</th><th>측정</th><th>실측 mW</th><th>예측 mW</th><th>total Δ</th>"
           + "".join(f"<th>{_CAT_LABEL[c]} Δ</th>" for c in ("cpu", "ip", "bw")) + "<th>미모델 mW</th><th>판정</th></tr>")
 
@@ -370,7 +384,7 @@ def _calibration(rows: list[dict[str, Any]]) -> str:
         verdict = ("상쇄 (구성 오차)" if fit["offsetting"] else f"최대 {_CAT_LABEL.get(fit['worst_category'] or '', '—')} "
                    f"{_f(fit['worst_delta_pct'], 1)}%") if fit["worst_delta_pct"] is not None else "구성 비교 불가"
         h += (f"<tr><td>{escape(_short(r['variant_id']))}</td>"
-              f"<td>{escape(str(r.get('measured_at') or '')[:10])}{' <b class=warn>합성</b>' if r['synthetic'] else ''}</td>"
+              f"<td>{escape(str(r.get('measured_at') or '')[:10])}{' <b class=warn>합성</b>' if r['synthetic'] else (' <b class=warn>출처 미기록</b>' if origin(r) == 'unknown' else '')}</td>"
               f"<td class=n>{_f(r['measured_mw'], 1)}</td><td class=n>{_f(r['predicted_mw'], 1)}</td>"
               f"<td class='n {cls(r['delta_pct'])}'>{_f(r['delta_pct'], 1)}%</td>"
               + "".join(f"<td class='n {cls((by.get(c) or {}).get('delta_pct'))}'>{_f((by.get(c) or {}).get('delta_pct'), 1)}%</td>"
@@ -382,9 +396,12 @@ def _calibration(rows: list[dict[str, Any]]) -> str:
 
 def _spec(s: dict[str, Any]) -> str:
     rng = s["power_range_mw"]
-    k = (f"<div class='kpis'><div class='kpi'>탐색 scenario<b>{s['explored']}</b></div>"
+    failed_calc = s.get("calc_failed", len(s.get("errors") or []))
+    k = (f"<div class='kpis'><div class='kpi'>요청 scenario<b>{s.get('requested', s['explored'] + failed_calc)}</b></div>"
+         f"<div class='kpi'>평가 완료<b>{s.get('evaluated', s['explored'])}</b></div>"
          f"<div class='kpi'>spec 만족<b class='ok'>{s['spec_ok']}</b></div>"
          f"<div class='kpi'>spec 미달<b class='fail'>{s['spec_fail']}</b></div>"
+         f"<div class='kpi'>계산 실패<b class='{'fail' if failed_calc else ''}'>{failed_calc}</b></div>"
          f"<div class='kpi'>등록 예측 power<b>{_f(rng[0], 0) if rng else '—'}–{_f(rng[1], 0) if rng else ''}</b>mW</div></div>")
     if s["failed"]:
         diag = []
@@ -421,7 +438,11 @@ def _spec(s: dict[str, Any]) -> str:
                   f"<td class=meta title='{escape(' | '.join(e.get('raw', '') for e in ex), quote=True)}'>{escape(' · '.join(others) or '—')}</td></tr>")
         k += "</table><p class=meta>“함께 발생한 원인”에 마우스를 올리면 계산 엔진의 원문 사유가 보입니다. 출력 간격 미달은 위 원인의 결과라 생략.</p>"
     if s["errors"]:
-        k += f"<p class='fail'>계산 실패 {len(s['errors'])}: " + escape(", ".join(e["variant_id"] for e in s["errors"][:8])) + "</p>"
+        k += (f"<p class='fail'><b>부분 평가 결과</b> — 계산 실패 {len(s['errors'])}건은 위 집계에서 제외됨</p>"
+              "<table><tr><th>Scenario</th><th>Stage</th><th>Category</th><th>원인</th></tr>"
+              + "".join(f"<tr><td>{escape(_short(str(e.get('variant_id'))))}</td><td>{escape(str(e.get('stage') or '—'))}</td>"
+                        f"<td>{escape(str(e.get('category') or '—'))}</td><td class=meta>{escape(str(e.get('error') or '')[:300])}</td></tr>"
+                        for e in s["errors"][:20]) + "</table>")
     return k
 
 
@@ -499,14 +520,24 @@ def _scenarios(rows: list[dict[str, Any]]) -> str:
         p, d = r["power"], r["distribution"]["total_mw"]
         ver = r.get("verified") or {}
         h += (f"<tr><td>{escape(_short(r['variant_id']))}</td><td class=n>{_f(r['fps'],0)}</td><td>{'ON' if r['eis_on'] else '—'}</td>"
-              f"<td class={'ok' if r['spec_ok'] else 'fail'}>{'OK' if r['spec_ok'] else 'FAIL'}</td>"
+              f"<td class={'ok' if r['spec_ok'] else 'fail'}>{'OK' if r['spec_ok'] else 'FAIL'}"
+              f"{_partial_tag(r)}</td>"
               f"<td class=n><b>{_f(p.get('total_mw'))}</b></td><td class=n>{_f(p.get('cpu_mw'))}</td><td class=n>{_f(p.get('hw_mw'))}</td>"
               f"<td class=n>{_f(p.get('bw_ip_mw', p.get('bw_mw')))}</td><td class=n>{_f(p.get('bw_cpu_mw'))}</td><td class=n>{_f(r['bw_mbs'],0)}</td><td class=n>{_f(d.get('min'),0)}–{_f(d.get('max'),0)}</td>"
               f"<td>{len(r['compression'])} buf{' <span class=warn>lossy</span>' if r.get('lossy') and r['compression'] else ''}</td>"
               f"<td>{escape(', '.join(f'{k}:L{v}' for k, v in sorted(r['dvfs'].items())))}</td>"
-              f"<td>{'✓ ' + _f(ver.get('delta_pct'), 2) + '%' if ver.get('ok') else ('✗' if ver else '—')}</td>"
+              f"<td title='{escape('; '.join(ver.get('reasons') or []), quote=True)}'>"
+              f"{'✓ ' + _f(ver.get('delta_pct'), 2) + '%' if ver.get('ok') else ('✗' if ver else '—')}</td>"
               f"<td>{'등록 예측' if r.get('prediction_id') else '탐색 추천'}</td></tr>")
     return h + "</table></div>"
+
+
+def _partial_tag(r: dict[str, Any]) -> str:
+    """Power total over modeled IPs only: budget/total comparisons are lower bounds."""
+    if r.get("power_coverage") not in ("partial", "none"):
+        return ""
+    ips = ", ".join(r.get("zero_power_ips") or [])
+    return (f" <span class=warn title='{escape('전력 미모델 IP: ' + ips, quote=True)}'>부분 모델</span>")
 
 
 def _clocks(clocks: list[dict[str, Any]]) -> str:

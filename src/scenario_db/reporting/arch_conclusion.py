@@ -74,6 +74,7 @@ def calibration_row(variant_id: str, scenario_id: str, detail: dict[str, Any], p
     return {
         "scenario_id": scenario_id, "variant_id": variant_id, "measurement_id": detail.get("id"),
         "measured_at": detail.get("measured_at"), "synthetic": bool(detail.get("synthetic")),
+        "origin": detail.get("origin") or ("synthetic" if detail.get("synthetic") else "physical_capture"),
         "measured_mw": (detail.get("total") or {}).get("mean"), "predicted_mw": pred.get("total_mw"),
         "delta_pct": pred.get("delta_pct"),
         "rows": [{k: r.get(k) for k in ("category", "prediction_mw", "measurement_mw", "delta_pct")} for r in rows],
@@ -82,11 +83,17 @@ def calibration_row(variant_id: str, scenario_id: str, detail: dict[str, Any], p
     }
 
 
+def _is_real(c: dict[str, Any]) -> bool:
+    """Silicon capture only; unknown origin is not accuracy evidence (pre-origin snapshots: not synthetic)."""
+    origin = c.get("origin")
+    return origin == "physical_capture" if origin else not c["synthetic"]
+
+
 def _confidence(snap: dict[str, Any]) -> dict[str, Any]:
     reasons: list[str] = []
     cal = snap.get("calibration") or []
     # a real capture only counts when it can be compared category by category
-    real = [c for c in cal if not c["synthetic"] and c["fit"]["worst_delta_pct"] is not None]
+    real = [c for c in cal if _is_real(c) and c["fit"]["worst_delta_pct"] is not None]
     worst = max((abs(c["fit"]["worst_delta_pct"]) for c in real), default=None)
     weak_input = bool(snap["overview"].get("sample_dvfs")) or not snap["overview"].get("dvfs_table_ref")
     if snap["overview"].get("sample_dvfs"):
@@ -115,6 +122,12 @@ def _confidence(snap: dict[str, Any]) -> dict[str, Any]:
 def build_conclusion(snap: dict[str, Any]) -> dict[str, Any]:
     s = snap["spec_summary"]
     risks: list[dict[str, str]] = []
+    errors = s.get("errors") or []
+    if errors:
+        cats = sorted({f"{e.get('stage')}/{e.get('category')}" for e in errors})
+        risks.append({"title": f"계산 실패 {len(errors)}/{s.get('requested', s['explored'] + len(errors))} — 부분 평가",
+                      "detail": f"{', '.join(str(e.get('variant_id')) for e in errors[:5])}{' …' if len(errors) > 5 else ''} "
+                                f"({', '.join(cats)}) — 결론은 평가 완료 scenario만 대상"})
     if s["spec_fail"]:
         names = [f["variant_id"] for f in s["failed"]]
         first = next(((f.get("explained") or [{"text": r} for r in f["reasons"]])[0]["text"]
@@ -127,7 +140,7 @@ def build_conclusion(snap: dict[str, Any]) -> dict[str, Any]:
         risks.append({"title": f"SW timing margin < {LOW_MARGIN_PCT:.0f}% · {len(low)}건",
                       "detail": f"최소 {m0['margin_pct']:.1f}% ({m0['variant_id']}, {str(m0.get('stage', '')).upper()}, "
                                 f"병목 {m0.get('bottleneck')}) — 차기 SW 증가 시 clock 상향 필요"})
-    off = [c for c in snap.get("calibration") or [] if c["fit"]["offsetting"] and not c["synthetic"]]
+    off = [c for c in snap.get("calibration") or [] if c["fit"]["offsetting"] and _is_real(c)]
     if off:
         risks.append({"title": f"예측 구성 오차 상쇄 {len(off)}건",
                       "detail": ", ".join(f"{c['variant_id']} {c['fit']['worst_category']} {c['fit']['worst_delta_pct']:+.0f}%" for c in off[:3])})
@@ -167,6 +180,7 @@ def build_conclusion(snap: dict[str, Any]) -> dict[str, Any]:
     sources = s.get("power_sources") or {}
     source = ("등록 예측 · 탐색 추천" if sources.get("registered") and sources.get("recommended") else
               "등록 예측" if sources.get("registered") else "탐색 추천" if sources.get("recommended") else "예측")
-    headline = (f"탐색 {n}개 중 {ok}개 spec 만족" + (f", {source} {rng[0]:,.0f}–{rng[1]:,.0f} mW" if rng else "")
-                + (f". 미달 {n - ok}개는 조치 필요" if n - ok else ". 미달 없음"))
+    prefix = (f"[부분 평가] 요청 {s.get('requested', n + len(errors))}개 중 계산 실패 {len(errors)}개 · " if errors else "")
+    headline = (prefix + f"탐색 {n}개 중 {ok}개 spec 만족" + (f", {source} {rng[0]:,.0f}–{rng[1]:,.0f} mW" if rng else "")
+                + (f". 미달 {n - ok}개는 조치 필요" if n - ok else (". 평가 완료분 미달 없음" if errors else ". 미달 없음")))
     return {"headline": headline, "risks": risks[:3], "actions": actions[:6], "confidence": _confidence(snap)}
