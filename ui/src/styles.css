@@ -696,3 +696,8 @@ td.cs-best { box-shadow: inset 0 0 0 2px #8CC5A0; border-radius: 4px; }
 .vp-kv { display: grid; grid-template-columns: 96px 1fr; gap: 8px; line-height: 1.6; }
 .vp-kv > span:first-child { color: var(--muted); }
 tr.vp-bad td { color: #B42318; font-weight: 600; }
+/* CPU what-if: assumption sensitivity */
+.sens-track { position: relative; height: 12px; background: #F3EFE8; border-radius: 3px; }
+.sens-bar { position: absolute; top: 1px; height: 10px; border-radius: 2px; }
+.sens-bar.lo { background: #56B4E9; } .sens-bar.hi { background: #E69F00; opacity: .85; }
+.sens-mid { position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: #4A5160; }

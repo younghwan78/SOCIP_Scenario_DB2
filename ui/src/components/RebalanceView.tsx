@@ -1,8 +1,9 @@
 // CPU what-if "MID 재분배": setup (pool, task states, co-move) and results (move curve, top splits, OPP states, boundaries).
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { fmt } from '../lib/timingBudget'
 import { partColor, sortClusters } from '../lib/powerModel'
-import type { CpuRebalance, RbBoundary, RbSplit } from '../lib/rebalance'
+import { applyDsuRebalance, type CpuRebalance, type RbBoundary, type RbSplit } from '../lib/rebalance'
+import { shiftVote, type DsuPolicy } from '../lib/dsu'
 import { useTip } from './ChartTip'
 import { useWidth } from './Charts'
 import { DataTable, type Column } from './DataTable'
@@ -10,6 +11,12 @@ import { Card } from './TimingCharts'
 import { CPU_HELP } from './CpuHelp'
 
 export type TaskState = 'auto' | 'exclude' | `pin:${string}`
+export type Knob = 'cpuset' | 'affinity'
+export const KNOB_LABEL: Record<Knob, string> = { cpuset: 'cpuset', affinity: 'affinity' }
+export const KNOB_NOTE: Record<Knob, string> = {
+  cpuset: 'process / cgroup 단위 (init.rc · task_profiles) — 가장 쉽게 적용, task가 thread를 여럿 가지면 함께 이동',
+  affinity: 'thread 단위 sched_setaffinity (HAL 코드 수정) — 세밀하지만 SW 변경 필요',
+}
 const GROUPS = ['', 'G1', 'G2', 'G3', 'G4']
 const OTHER = '#C9C2B6'
 const signed = (v: number, d = 1) => `${v >= 0 ? '+' : ''}${fmt(v, d)}`
@@ -17,13 +24,14 @@ const signed = (v: number, d = 1) => `${v >= 0 ? '+' : ''}${fmt(v, d)}`
 export interface SetupRow { task: string; home: string; budget: number | null; util?: Record<string, number>; tms?: Record<string, number> }
 
 /** ③ 분배 대상 — pool clusters, per-task state, co-move groups. Edits never start a run by themselves. */
-export function RebalanceSetup({ clusters, pool, setPool, rows, states, setState, groups, setGroup, budgets, setBudget, space, method, busy, onRun, top, setTop, hasResult }: {
+export function RebalanceSetup({ clusters, pool, setPool, rows, states, setState, groups, setGroup, budgets, setBudget, space, method, busy, onRun, top, setTop, hasResult, knob, setKnob }: {
   clusters: string[]; pool: string[]; setPool: (p: string[]) => void
   rows: SetupRow[]; states: Record<string, TaskState>; setState: (task: string, s: TaskState) => void
   groups: Record<string, string>; setGroup: (task: string, g: string) => void
   budgets: Record<string, string>; setBudget: (task: string, v: string) => void
   space: { units: number; splits: number; reduced: number }; method?: string
   busy: boolean; onRun: () => void; top: number; setTop: (n: number) => void; hasResult: boolean
+  knob: Knob; setKnob: (k: Knob) => void
 }) {
   const keys = clusters.map((c) => `cpu.${c}`)
   const color = (c: string) => partColor(`cpu.${c}`, keys)
@@ -38,6 +46,10 @@ export function RebalanceSetup({ clusters, pool, setPool, rows, states, setState
           <span className="sw pm-sw" style={{ background: color(c) }} />{c}</label>)}
         {pool.length < 2 && <span className="badge v-fail">cluster 2개 이상 필요</span>}
         <span className="faint">· BIG 계열은 기본 제외 (camera SW는 대체로 손해)</span>
+        <span className="grow" />
+        <label className="faint" style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }} title={KNOB_NOTE[knob]}>적용 방법
+          <select value={knob} aria-label="적용 방법" onChange={(e) => setKnob(e.target.value as Knob)}>
+            <option value="cpuset">cpuset (process 단위)</option><option value="affinity">affinity (thread 단위)</option></select></label>
       </div>
       <div className="table-x"><table className="grid cpu-matrix rb-setup">
         <thead><tr><th>task</th><th>측정 위치</th>
@@ -115,14 +127,14 @@ export function MoveCurve({ r, sel, onPick }: { r: CpuRebalance; sel: string; on
   )
 }
 
-function SplitDetail({ s, r, title }: { s: RbSplit; r: CpuRebalance; title: string }) {
+function SplitDetail({ s, r, title, knob = 'cpuset' }: { s: RbSplit; r: CpuRebalance; title: string; knob?: Knob }) {
   const units = r.units
   return (
     <Card id="cpu-rb-detail" title={title} defaultWide note="task별 cluster · 시간 · budget" help={CPU_HELP.rbDetail}>
       <div className="toolbar" style={{ gap: 12, fontSize: 12, flexWrap: 'wrap', marginBottom: 6 }}>
         {r.pool.map((c) => <span key={c} className="mono">{c} <b>{s.mhz[c]}</b> MHz ({fmt(s.mw[c] ?? 0, 1)} mW · {r.reference.mhz[c]}→{s.mhz[c]})</span>)}
         <span className="mono">DSU <b>{s.mhz.dsu}</b> MHz ({fmt(s.mw.dsu ?? 0, 1)} mW)</span>
-        {s.knobs.length > 0 && <span className="badge" title="기기 적용 방법">cpuset {s.knobs.length}건</span>}
+        {s.knobs.length > 0 && <span className="badge" title={KNOB_NOTE[knob]}>{KNOB_LABEL[knob]} {s.knobs.length}건</span>}
       </div>
       <table className="tb-mini-table" style={{ width: '100%' }}>
         <thead><tr><th>task</th><th>측정 → 배치</th><th style={{ textAlign: 'right' }}>task ms</th><th style={{ textAlign: 'right' }}>budget</th><th style={{ textAlign: 'right' }}>slack</th></tr></thead>
@@ -154,7 +166,7 @@ function Boundaries({ list, title }: { list: RbBoundary[]; title: string }) {
   </div>
 }
 
-export function RebalanceResults({ r, sel, setSel }: { r: CpuRebalance; sel: string; setSel: (id: string) => void }) {
+export function RebalanceResults({ r, sel, setSel, knob = 'cpuset', sensitivity }: { r: CpuRebalance; sel: string; setSel: (id: string) => void; knob?: Knob; sensitivity?: React.ReactNode }) {
   const ref = r.reference, best = r.best
   const keys = r.clusters.map((c) => `cpu.${c.name}`)
   const color = (c: string) => (c === 'dsu' ? partColor('cpu.dsu', keys) : c === 'other' ? OTHER : partColor(`cpu.${c}`, keys))
@@ -204,7 +216,8 @@ export function RebalanceResults({ r, sel, setSel }: { r: CpuRebalance; sel: str
         {best && <Boundaries list={r.boundaries.best} title="최저 분배" />}
       </div>
     </Card>
-    {picked && <SplitDetail s={picked} r={r} title={sel === 'ref' ? '현재 (측정 배치)' : picked.rank ? `#${picked.rank} 분배 상세` : `곡선 step ${picked.step}`} />}
+    {sensitivity}
+    {picked && <SplitDetail s={picked} r={r} knob={knob} title={sel === 'ref' ? '현재 (측정 배치)' : picked.rank ? `#${picked.rank} 분배 상세` : `곡선 step ${picked.step}`} />}
   </>
 }
 
@@ -237,6 +250,62 @@ export function CrossSocCompare({ a, b, aName, bName, error, busy }: { a: CpuReb
           <td className="mono" style={{ textAlign: 'right' }}>{B && (k === '현재 배치' || k === '최저 분배') ? (() => { const x = k === '현재 배치' ? B.ref - A.ref : (B.best ?? 0) - (A.best ?? 0); return <span className={x < 0 ? 'pm-down' : 'pm-up'}>{signed(x)} mW</span> })() : ''}</td></tr>)}</tbody>
       </table>
       {B?.warn.map((w) => <div key={w} className="lib-note warn" style={{ marginTop: 6 }}>{bName}: {w}</div>)}
+    </Card>
+  )
+}
+
+/** "가정 민감도": rerun the rebalance with each architecture assumption at its low / high value. */
+export interface SensSpec { key: string; label: string; low: { label: string; patch: Record<string, unknown> }; high: { label: string; patch: Record<string, unknown> } }
+export const SENS_SPECS: SensSpec[] = [
+  { key: 'growth', label: 'SW 부하 증가', low: { label: '×0.9', patch: { default_growth: 0.9 } }, high: { label: '×1.2', patch: { default_growth: 1.2 } } },
+  { key: 'margin', label: 'schedutil margin', low: { label: '1.15', patch: { freq_margin: 1.15 } }, high: { label: '1.35', patch: { freq_margin: 1.35 } } },
+  { key: 'pg', label: 'idle power gating', low: { label: '0.80', patch: { power_gating_eff: 0.8 } }, high: { label: '0.95', patch: { power_gating_eff: 0.95 } } },
+]
+interface SensRow { key: string; label: string; lowLabel: string; highLabel: string; low: CpuRebalance | null; high: CpuRebalance | null }
+const bestSet = (r: CpuRebalance | null) => (r?.best ? r.best.moved.map((u) => `${u}>${r.best!.assign[u]}`).sort().join('|') : '')
+
+export function AssumptionSensitivity({ base, runVariant, dsu }: { base: CpuRebalance; runVariant: (patch: Record<string, unknown>) => Promise<CpuRebalance>; dsu: DsuPolicy | null }) {
+  const [rows, setRows] = useState<SensRow[]>([])
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const go = async () => {
+    setBusy(true); setErr(null); setRows([])
+    try {
+      const out: SensRow[] = []
+      const vote = dsu?.mode === 'vote' ? dsu.vote : base.dsu_model?.mode === 'vote' ? base.dsu_model.vote : undefined
+      if (vote && base.dsu_params) {
+        out.push({ key: 'dsu', label: 'DSU vote 표', lowLabel: '−1 step', highLabel: '+1 step',
+          low: applyDsuRebalance(base, { mode: 'vote', vote: shiftVote(vote, base.dsu_params, -1) }), high: applyDsuRebalance(base, { mode: 'vote', vote: shiftVote(vote, base.dsu_params, 1) }) })
+        setRows([...out])
+      }
+      for (const s of SENS_SPECS) {     // sequential: one simulation admission slot at a time
+        const low = await runVariant(s.low.patch), high = await runVariant(s.high.patch)
+        out.push({ key: s.key, label: s.label, lowLabel: s.low.label, highLabel: s.high.label, low, high })
+        setRows([...out])
+      }
+    } catch (e) { setErr(String((e as Error).message ?? e)) } finally { setBusy(false) }
+  }
+  const b0 = base.best?.total_mw ?? base.reference.total_mw
+  const span = Math.max(1, ...rows.flatMap((r) => [r.low, r.high].map((x) => Math.abs((x?.best?.total_mw ?? b0) - b0))))
+  const ref = bestSet(base)
+  return (
+    <Card id="cpu-rb-sens" title="가정 민감도" defaultWide help={CPU_HELP.rbSens} minHeight={110}
+      note="architecture 가정을 낮게 / 높게 바꿔 최저 전력과 권장 분배가 바뀌는지 · DSU는 즉시, 나머지는 재계산 (가정당 2회)"
+      actions={<button className="btn tb-mini" disabled={busy} onClick={() => void go()}>{busy ? '계산 중…' : rows.length ? '다시 계산' : '민감도 계산'}</button>}>
+      {err && <div className="err">{err}</div>}
+      {!rows.length && !busy && <div className="faint" style={{ fontSize: 12 }}>기준: 최저 {fmt(b0, 1)} mW · 권장 분배 task {base.best?.moved.length ?? 0}개 이동. “민감도 계산”을 누르면 가정별로 다시 계산합니다.</div>}
+      {rows.length > 0 && <table className="tb-mini-table" style={{ width: '100%' }} aria-label="가정 민감도">
+        <thead><tr><th>가정</th><th style={{ textAlign: 'right' }}>낮게</th><th style={{ width: '38%' }}>최저 mW 변화 (기준 {fmt(b0, 1)})</th><th>높게</th><th>권장 분배</th></tr></thead>
+        <tbody>{[...rows].sort((p, q) => Math.abs(((q.high?.best?.total_mw ?? b0) - (q.low?.best?.total_mw ?? b0))) - Math.abs(((p.high?.best?.total_mw ?? b0) - (p.low?.best?.total_mw ?? b0)))).map((r) => {
+          const lo = (r.low?.best?.total_mw ?? b0) - b0, hi = (r.high?.best?.total_mw ?? b0) - b0
+          const changed = [r.low, r.high].filter((x) => x && bestSet(x) !== ref).length
+          const bar = (v: number, cls: string) => <span className={`sens-bar ${cls}`} style={{ width: `${(50 * Math.abs(v)) / span}%`, [v < 0 ? 'right' : 'left']: '50%' } as React.CSSProperties} />
+          return <tr key={r.key}><td>{r.label}</td><td className="mono" style={{ textAlign: 'right' }}>{r.lowLabel} <span className="faint">{signed(lo)}</span></td>
+            <td><div className="sens-track">{bar(lo, 'lo')}{bar(hi, 'hi')}<span className="sens-mid" /></div></td>
+            <td className="mono">{r.highLabel} <span className="faint">{signed(hi)}</span></td>
+            <td>{changed ? <span className="badge v-warn" title="이 가정 범위에서 최저 분배(옮길 task·cluster)가 달라짐 — 먼저 확정할 가정">바뀜 {changed}/2</span> : <span className="badge v-ok">유지</span>}</td></tr>
+        })}</tbody>
+      </table>}
     </Card>
   )
 }

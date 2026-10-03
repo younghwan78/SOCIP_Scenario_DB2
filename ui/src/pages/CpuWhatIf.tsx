@@ -15,7 +15,7 @@ import { usePref } from '../components/Layout'
 import { DsuPanel, sweepEvaluator } from '../components/DsuPanel'
 import { applyDsu, type DsuPolicy } from '../lib/dsu'
 import { applyDsuRebalance, defaultPool, rebalanceApi, type CpuRebalance, type CpuRebalanceRequest } from '../lib/rebalance'
-import { CrossSocCompare, RebalanceResults, RebalanceSetup, type SetupRow, type TaskState } from '../components/RebalanceView'
+import { AssumptionSensitivity, CrossSocCompare, RebalanceResults, RebalanceSetup, type Knob as RbKnob, type SetupRow, type TaskState } from '../components/RebalanceView'
 
 type TaskEdit = { sweep: string[] | null; threads: string; budget: string; growth: string }
 type Adv = { freqMargin: string; fitsMargin: string; utilModel: '' | 'util_est' | 'pelt_avg'; halflife: string; boost: '' | 'on' | 'off'; emStatic: '' | 'on' | 'off' }
@@ -66,6 +66,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
   const [rbSel, setRbSel] = useState('')
   // C6: the same profile rebalanced on another project's topology (sequential run, one admission slot at a time)
   const [cmpTarget, setCmpTarget] = useState('')
+  const [rbKnob, setRbKnob] = usePref<RbKnob>('cpu.rb.knob', 'cpuset')
   const [cmpRb, setCmpRb] = useState<CpuRebalance | null>(null)
   const [cmpErr, setCmpErr] = useState<string | null>(null)
   const rb = useMemo(() => (rbRaw ? applyDsuRebalance(rbRaw, dsuExp) : null), [rbRaw, dsuExp])
@@ -331,7 +332,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
           states={taskStates} setState={(t, st) => setTaskStates((m) => ({ ...m, [t]: st }))}
           groups={groups} setGroup={(t, g) => setGroups((m) => ({ ...m, [t]: g }))}
           budgets={Object.fromEntries(Object.entries(edits).map(([t, e]) => [t, e.budget]))} setBudget={(t, v) => setEdit(t, { budget: v })}
-          space={rbSpace} method={rbRaw?.method} busy={busy} onRun={() => void run()} top={rbTop} setTop={setRbTop} hasResult={!!rbRaw} />}
+          space={rbSpace} method={rbRaw?.method} busy={busy} onRun={() => void run()} top={rbTop} setTop={setRbTop} hasResult={!!rbRaw} knob={rbKnob} setKnob={setRbKnob} />}
         {mode === 'sweep' && <Card id="cpu-range" title="③ Sweep 범위" note="cluster별 · 칸 = fmax에서 task 시간 · ✓ budget 충족 · 체크 = sweep에 포함 · 파란 칸 = 측정 위치" defaultWide help={CPU_HELP.range}>
           <div className="toolbar" style={{ gap: 14, marginBottom: 6, fontSize: 12 }}>
             <span className="faint">knob</span>
@@ -396,7 +397,9 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
       {error && <div className="err">{error}</div>}
       {mode === 'rebalance' && rb && <div className="tb-grid">
         {cmpTarget && <CrossSocCompare a={rb} b={cmpRb ? applyDsuRebalance(cmpRb, dsuExp) : null} aName={topo?.soc_ref ?? target} bName={inputs.data?.topologies.find((t) => t.id === cmpTarget)?.soc_ref ?? cmpTarget} error={cmpErr} busy={busy} />}
-        <RebalanceResults r={rb} sel={rbSel} setSel={setRbSel} /></div>}
+        <RebalanceResults r={rb} sel={rbSel} setSel={setRbSel} knob={rbKnob}
+          sensitivity={rbRaw && <AssumptionSensitivity base={rb} dsu={dsuExp}
+            runVariant={(patch) => rebalanceApi.run({ ...rbRequest(request(edits, dsuReq)), ...patch }).then((r) => (dsuExp ? applyDsuRebalance(r, dsuExp) : r))} />} /></div>}
       {mode === 'sweep' && result && ref && <>
         {result.warnings.length > 0 && <details className="panel" style={{ padding: '8px 12px', fontSize: 12 }}><summary>참고 {result.warnings.length}</summary>{result.warnings.map((w) => <div key={w} className="faint">{w}</div>)}</details>}
         <section className="tb-kpis" aria-label="요약">

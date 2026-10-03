@@ -106,3 +106,19 @@ it('과제 비교: second rebalance on the other topology, measured SoC as base,
     expect(table.textContent).toContain(`${E2800.best!.total_mw.toFixed(1)} mW`)
   } finally { act(() => root.unmount()); inputs.mockRestore(); run.mockRestore(); localStorage.clear() }
 })
+
+it('가정 민감도: DSU corners instantly, other assumptions rerun sequentially, flags a changed split', async () => {
+  const { AssumptionSensitivity } = await import('../src/components/RebalanceView')
+  const patches: Record<string, unknown>[] = []
+  const shifted: CpuRebalance = { ...E2600, best: { ...E2600.best!, total_mw: E2600.best!.total_mw + 30, moved: ['eis_vdis'], assign: { ...E2600.best!.assign, eis_vdis: 'MID_HF' } } }
+  const runVariant = async (patch: Record<string, unknown>) => { patches.push(patch); return patch.default_growth === 1.2 ? shifted : E2600 }
+  const host = document.createElement('div'), root = createRoot(host)
+  await act(async () => root.render(<ChartTipProvider><AssumptionSensitivity base={E2600} runVariant={runVariant} dsu={null} /></ChartTipProvider>))
+  await act(async () => [...host.querySelectorAll('button')].find((b) => b.textContent === '민감도 계산')!.click())
+  expect(patches).toEqual([{ default_growth: 0.9 }, { default_growth: 1.2 }, { freq_margin: 1.15 }, { freq_margin: 1.35 }, { power_gating_eff: 0.8 }, { power_gating_eff: 0.95 }])
+  const rows = [...host.querySelectorAll('table[aria-label="가정 민감도"] tbody tr')].map((tr) => tr.textContent ?? '')
+  expect(rows).toHaveLength(4)
+  expect(rows.find((r) => r.startsWith('SW 부하 증가'))).toContain('바뀜 1/2')
+  expect(rows.find((r) => r.startsWith('DSU vote 표'))).toBeTruthy()
+  act(() => root.unmount())
+})
