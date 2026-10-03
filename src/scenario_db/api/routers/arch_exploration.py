@@ -48,6 +48,12 @@ def get_run(run_id: str, db: Session = Depends(get_db)):
     return svc.run_detail(svc.get_run(db, run_id))
 
 
+@router.get("/exploration/runs/{run_id}/manifest")
+def get_run_manifest(run_id: str, db: Session = Depends(get_db)):
+    """Resolved inputs (config, DVFS, pipeline, variant, IP capabilities) per variant, content-addressed."""
+    return svc.run_manifest(db, run_id)
+
+
 # ------------------------------------------------------------------- predictions
 @router.post("/predictions/promote")
 def promote(

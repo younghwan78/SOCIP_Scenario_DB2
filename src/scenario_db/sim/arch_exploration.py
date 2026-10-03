@@ -185,6 +185,9 @@ def explore_variant(
         summary["power_options"] = explore_power_options(graph, spec, config, tables, summary)
         summary["counts"]["option_cases"] = summary["power_options"]["cases"]
     summary["input_hash"] = input_hash(graph, spec, config, tables)
+    sections, blobs = input_manifest(graph, config, tables)
+    summary["input_sections"] = sections  # section -> sha256 of the resolved input (blobs stored per run)
+    summary["_manifest_blobs"] = blobs
     return summary
 
 
@@ -1140,6 +1143,33 @@ def input_hash(graph, spec, config, tables) -> str:
         "soc_catalog": getattr(graph.soc, "compression_modes", None),
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()
+
+
+def _sha(value: Any) -> str:
+    return hashlib.sha256(json.dumps(value, sort_keys=True, default=str).encode()).hexdigest()
+
+
+def input_manifest(graph, config, tables) -> tuple[dict[str, str], dict[str, Any]]:
+    """Resolved inputs of one variant as content-addressed sections.
+
+    ``input_hash`` proves *whether* inputs changed; this keeps *what* they were (config, DVFS tables,
+    pipeline, variant, IP capabilities, power options) so a past run can be re-created after the
+    catalog moved on. Blobs are deduplicated by sha256 at run level.
+    """
+    raw: dict[str, Any] = {
+        "pipeline": _jsonable(graph.scenario.pipeline), "variant_doc": _jsonable(_variant_doc(graph.variant)),
+        "config": config.model_dump(mode="json"),
+        "power_options": _jsonable(getattr(graph.scenario, "power_options", None)),
+        "soc_catalog": _jsonable(getattr(graph.soc, "compression_modes", None)),
+    }
+    raw |= {f"dvfs:{k}": t.model_dump(mode="json") for k, t in sorted(tables.items())}
+    raw |= {f"ip:{k}": _jsonable(row.capabilities) for k, row in sorted(graph.ip_catalog.items())}
+    sections, blobs = {}, {}
+    for name, value in raw.items():
+        digest = _sha(value)
+        sections[name] = digest
+        blobs[digest] = value
+    return sections, blobs
 
 
 def _variant_doc(variant) -> Any:

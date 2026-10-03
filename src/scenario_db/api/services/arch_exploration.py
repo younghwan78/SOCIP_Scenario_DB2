@@ -99,6 +99,7 @@ def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str |
         raise UnprocessableError(f"exploration scope has {len(plan)} variants > max_variants {request.max_variants}")
     variants: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
+    blobs: dict[str, Any] = {}
     soc_ref = request.soc_ref
     dvfs_ref: str | None = None
     remaining_cases = 2_000_000
@@ -130,6 +131,7 @@ def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str |
         dvfs_ref = dvfs_ref or ref
         remaining_cases -= summary["counts"]["cases"] + summary["counts"].get("option_cases", 0)
         summary["dvfs_table_ref"] = ref
+        blobs.update(summary.pop("_manifest_blobs", {}) or {})
         variants.append(summary)
     if not variants:
         first = errors[0]
@@ -161,13 +163,36 @@ def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str |
         project_ref=request.project_ref or scenarios[0].project_ref,
         soc_ref=soc_ref,
         spec=request.spec.model_dump(mode="json") | {"scenario_ids": [s.id for s in scenarios], "category": request.category,
-                                                      "config_profile_ref": request.config_profile_ref},
+                                                      "config_profile_ref": request.config_profile_ref,
+                                                      # resolved inputs, content-addressed (variants[].input_sections -> blobs)
+                                                      "manifest": {"engine_rev": ENGINE_REV, "tool_version": _tool_version(),
+                                                                   "blobs": blobs}},
         variants=variants, errors=errors, summary=counts, dvfs_table_ref=dvfs_ref,
         engine_rev=ENGINE_REV, input_hash=ihash, created_by=user, created_at=_now(),
     )
     db.add(row)
     db.commit()
     return run_detail(row)
+
+
+def _tool_version() -> str | None:
+    try:
+        from importlib.metadata import version
+        return version("02-scenariodb")
+    except Exception:  # noqa: BLE001 - not installed as a distribution
+        return None
+
+
+def run_manifest(db: Session, run_id: str) -> dict[str, Any]:
+    """Resolved inputs of every variant of a run (re-creates a past exploration)."""
+    row = get_run(db, run_id)
+    m = (row.spec or {}).get("manifest") or {}
+    blobs = m.get("blobs") or {}
+    return {"run_id": row.id, "engine_rev": m.get("engine_rev") or row.engine_rev, "tool_version": m.get("tool_version"),
+            "available": bool(blobs),
+            "variants": [{"scenario_id": v["scenario_id"], "variant_id": v["variant_id"], "input_hash": v.get("input_hash"),
+                          "sections": v.get("input_sections") or {}} for v in row.variants or []],
+            "blobs": blobs}
 
 
 def _run_meta(row: ArchExplorationRun) -> dict[str, Any]:
@@ -181,7 +206,9 @@ def _run_meta(row: ArchExplorationRun) -> dict[str, Any]:
 
 
 def run_detail(row: ArchExplorationRun) -> dict[str, Any]:
-    return _run_meta(row) | {"spec": row.spec, "variants": row.variants, "errors": row.errors}
+    spec = {k: v for k, v in (row.spec or {}).items() if k != "manifest"}  # blobs via /manifest only
+    spec["manifest_available"] = bool(((row.spec or {}).get("manifest") or {}).get("blobs"))
+    return _run_meta(row) | {"spec": spec, "variants": row.variants, "errors": row.errors}
 
 
 def list_runs(db: Session, *, scenario_type: str | None = None, project_ref: str | None = None,
@@ -367,15 +394,20 @@ def create_report(db: Session, request: ArchReportRequest, user: str | None = No
     vids = [(v["scenario_id"], v["variant_id"]) for v in run.variants]
     preds: dict[tuple[str, str], dict[str, Any]] = {}
     changes: dict[tuple[str, str], dict[str, Any]] = {}
-    for sid, vid in vids:
-        cur = db.query(Prediction).filter_by(scenario_ref=sid, variant_ref=vid, status="current").one_or_none()
-        if cur is None or cur.exploration_run_ref != run.id:
-            continue  # the report states predictions registered from this run only
-        preds[(sid, vid)] = _pred_dict(cur)
-        if cur.supersedes_ref:
-            old = db.get(Prediction, cur.supersedes_ref)
-            if old is not None:
-                changes[(sid, vid)] = attribute(old.metrics, cur.metrics)
+    # one query for the run's current predictions (+ one for what they superseded), not 2 per variant
+    wanted = set(vids)
+    currents = [p for p in db.query(Prediction).filter(
+        Prediction.status == "current", Prediction.exploration_run_ref == run.id,
+        Prediction.scenario_ref.in_({sid for sid, _ in vids})).all() if (p.scenario_ref, p.variant_ref) in wanted]
+    olds = {p.id: p for p in db.query(Prediction).filter(
+        Prediction.id.in_([c.supersedes_ref for c in currents if c.supersedes_ref])).all()} if currents else {}
+    order = {k: i for i, k in enumerate(vids)}
+    for cur in sorted(currents, key=lambda p: order[(p.scenario_ref, p.variant_ref)]):  # this run's predictions only
+        key = (cur.scenario_ref, cur.variant_ref)
+        preds[key] = _pred_dict(cur)
+        old = olds.get(cur.supersedes_ref) if cur.supersedes_ref else None
+        if old is not None:
+            changes[key] = attribute(old.metrics, cur.metrics)
     run_dict = run_detail(run) | {"created_at": run.created_at}
     snapshot = build_snapshot(run_dict, preds, changes, _report_calibration(db, preds))
     title = request.title or f"{run.soc_ref or ''} {run.scenario_type} Architecture 검토".strip()

@@ -91,3 +91,16 @@ def test_dpu_vote_floor_is_separate_from_traffic():
 def test_invalid_units_rejected(value):
     with pytest.raises(ValidationError):
         evaluate({"model": "ufs", "bitrate_mbps": value}, caps("ufs"))
+
+
+def test_driver_model_registry_needs_explicit_declaration_for_new_soc():
+    from scenario_db.sim.driver_models import resolve_driver_model
+    ufs = {"properties": {"ip_group": "UFS"}}
+    assert resolve_driver_model("ip-ufs-s5e9965", ufs) == ("ufs", None)  # validated legacy IP
+    model, reason = resolve_driver_model("ip-ufs-s5e9975", ufs)  # same capability, new SoC id
+    assert model is None and "driver_model" in reason
+    declared = {"properties": {"ip_group": "UFS", "driver_model": {"ref": "ufs", "version": "noncamera-driver-v1"}}}
+    assert resolve_driver_model("ip-ufs-s5e9975", declared) == ("ufs", None)
+    bad = {"properties": {"ip_group": "UFS", "driver_model": {"ref": "ufs", "version": "v999"}}}
+    assert resolve_driver_model("ip-ufs-s5e9975", bad)[0] is None
+    assert resolve_driver_model("ip-isp-x", {"properties": {"ip_group": "ISP"}}) == (None, None)

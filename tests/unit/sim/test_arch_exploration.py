@@ -375,3 +375,12 @@ def test_fixed_dvfs_growth_tolerance_is_not_the_reoptimised_one(uhd30):
     assert m["growth_tolerance_fixed"] <= m["growth_tolerance"]
     assert {"growth_tolerance", "growth_tolerance_fixed"} <= set(m["growth_tolerance_basis"])
     assert uhd30["pareto"] and all("iq_risk" in c for c in uhd30["pareto"])
+
+
+def test_input_manifest_keeps_resolved_inputs_content_addressed(uhd30, graph_factory, dvfs):
+    sections, blobs = uhd30["input_sections"], uhd30["_manifest_blobs"]
+    assert {"pipeline", "variant_doc", "config"} <= set(sections) and any(k.startswith("dvfs:") for k in sections)
+    assert any(k.startswith("ip:") for k in sections)
+    assert all(sections[k] in blobs for k in sections)
+    again, _ = ax.input_manifest(graph_factory(UHD30), ax.SimulationRunConfig(), dvfs)
+    assert again == sections  # deterministic

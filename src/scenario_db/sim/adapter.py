@@ -202,7 +202,8 @@ def build_simulation_inputs(
 
     configured = effective_configured_clocks(graph, run_config, warnings)
     return SimulationInputs(
-        driver_model_report=driver_report if driver_report["rows"] else None,
+        # evidence keeps its pre-registry shape: only evaluated endpoints (unsupported ones are API-visible)
+        driver_model_report={k: v for k, v in driver_report.items() if k != "unsupported"} if driver_report["rows"] else None,
         scenario_id=graph.scenario_id,
         variant_id=graph.variant_id,
         project_ref=getattr(graph.scenario, "project_ref", None),

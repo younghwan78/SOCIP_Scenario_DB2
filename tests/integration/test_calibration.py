@@ -34,11 +34,13 @@ def test_calibration_scope_recency_and_constant_query_count(engine):
         db.flush()
         synthetic = db.get(Evidence, f'{sid}-measurement2')
         synthetic.provenance = {'collection_method': 'synthetic_fixture', 'device_id': 'SYNTHETIC'}
+        # a silicon capture records how and on which device it was taken; without it the origin is unknown
+        db.get(Evidence, f'{sid}-measurement1').provenance = {'collection_method': 'power_monitor', 'device_id': 'EVT1-01'}
         db.flush()
         assert cal.coverage(db, sid)['v'] == {
-            'simulation': 2, 'measurement': 1, 'synthetic': 1, 'current_prediction': None}
+            'simulation': 2, 'measurement': 1, 'synthetic': 1, 'unknown': 0, 'current_prediction': None}
         assert cal.coverage_summary(db)[sid] == {
-            'simulation': 1, 'measurement': 1, 'synthetic': 1, 'current_prediction': 0}
+            'simulation': 1, 'measurement': 1, 'synthetic': 1, 'unknown': 0, 'current_prediction': 0}
         queries = []
         def counted(*args):
             queries.append(args[2])

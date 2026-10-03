@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 
 from scenario_db.comparison.calibration import CATEGORIES, category_fit, compare_split, measured_split, pct
 from scenario_db.db.models.capability import SimConfigProfile
@@ -211,7 +211,10 @@ def list_measurements(db: Session, *, scenario_id: str | None = None) -> list[di
     current = {(p.scenario_ref, p.variant_ref): p for p in db.query(Prediction).filter(
         Prediction.status == "current", Prediction.scenario_ref.in_(scenario_ids)).all()}
     simulations: dict[tuple[str, str], list[Evidence]] = {}
-    for ev in db.query(Evidence).filter(Evidence.kind == "evidence.simulation", Evidence.scenario_ref.in_(scenario_ids)).order_by(
+    # only the columns the comparison reads: timeline / DMA breakdowns can be megabytes per row
+    sim_cols = load_only(Evidence.id, Evidence.scenario_ref, Evidence.variant_ref, Evidence.measured_at,
+                         Evidence.run_info, Evidence.kpi, Evidence.power_breakdown)
+    for ev in db.query(Evidence).options(sim_cols).filter(Evidence.kind == "evidence.simulation", Evidence.scenario_ref.in_(scenario_ids)).order_by(
         Evidence.measured_at.asc().nullsfirst(), Evidence.id).all():
         simulations.setdefault((ev.scenario_ref, ev.variant_ref), []).append(ev)
     for sims in simulations.values():

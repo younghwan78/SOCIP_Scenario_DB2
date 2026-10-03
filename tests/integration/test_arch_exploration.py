@@ -260,6 +260,29 @@ def test_model_status_counts_predictions_from_older_engine(engine, stored_run):
         assert status["engine_rev"] == svc.ENGINE_REV
         assert status["predictions"]["engines"].get("test", 0) >= 2  # stored_run uses engine_rev="test"
         assert status["predictions"]["stale_engine"] >= 2
-        assert set(status["measurements"]) == {"real", "synthetic", "empty"}
+        assert set(status["measurements"]) == {"real", "synthetic", "empty", "unknown"}
         assert status["dvfs_unrecorded"] >= 0
         assert all(set(d) == {"ref", "sample", "predictions"} for d in status["dvfs"])
+
+
+def test_report_package_and_run_manifest(engine, stored_run):
+    import io
+    import json
+    from zipfile import ZipFile
+    rid, ids = stored_run
+    with Session(engine) as db:
+        svc.promote(db, PromoteRequest(run_id=rid, expected_project_ref=svc.get_run(db, rid).project_ref))
+        report = svc.create_report(db, ArchReportRequest(run_id=rid))
+        svc.set_report_status(db, report["id"], "published", reviewer="Kim", note="검토 완료", user="tester")
+        data, name = svc.report_package(db, report["id"])
+        z = ZipFile(io.BytesIO(data))
+        manifest = json.loads(z.read("manifest.json"))
+        assert manifest["body"]["integrity_ok"] and manifest["report"]["status"] == "published"
+        assert manifest["review_history"][-1]["reviewer"] == "Kim"
+        assert manifest["runs"][0]["run_id"] == rid and manifest["runs"][0]["input_hash"] == "test"
+        assert z.read("report.html").decode() == svc.get_report(db, report["id"]).rendered_html
+        m = svc.run_manifest(db, rid)
+        assert m["run_id"] == rid and not m["available"]  # stored before manifests existed
+        assert "manifest" not in svc.run_detail(svc.get_run(db, rid))["spec"]
+        with pytest.raises(UnprocessableError, match="belongs to project"):
+            svc.promote(db, PromoteRequest(run_id=rid, expected_project_ref="proj-other"))
