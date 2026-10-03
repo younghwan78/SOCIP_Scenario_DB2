@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from pathlib import Path
 import time
 
@@ -25,6 +26,10 @@ TOPOLOGY = ROOT / "examples" / "cpu-topology" / "pmp-exynos2600-cpu-example.yaml
 
 
 def profile(n_tasks: int, n_threads: int, clusters: list[str]) -> CpuProfile:
+    if n_tasks < 1 or n_threads < n_tasks:
+        raise ValueError("use at least one task and at least one thread per task")
+    if len(clusters) < 2:
+        raise ValueError("the benchmark requires at least two clusters")
     per = [n_threads // n_tasks + (1 if i < n_threads % n_tasks else 0) for i in range(n_tasks)]
     tasks = []
     for i, k in enumerate(per):
@@ -48,6 +53,12 @@ def main() -> None:
     ap.add_argument("--uclamp", action="store_true", help="also sweep uclamp_max / uclamp_min knobs")
     ap.add_argument("--dump", type=Path, default=None)
     args = ap.parse_args()
+    if args.tasks < 1 or args.threads < args.tasks:
+        ap.error("--tasks must be positive and --threads must be at least --tasks")
+    if args.repeats < 1 or args.max_cases < 1:
+        ap.error("--repeats and --max-cases must be positive")
+    if not math.isfinite(args.fps) or args.fps <= 0:
+        ap.error("--fps must be finite and positive")
     params = PowerModelParams.model_validate(yaml.safe_load(TOPOLOGY.read_text(encoding="utf-8")))
     model = CpuPowerModel.from_params(params)
     prof = profile(args.tasks, args.threads, [c.name for c in model.clusters])
