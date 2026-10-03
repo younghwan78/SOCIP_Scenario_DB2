@@ -1,5 +1,6 @@
 // CPU placement / frequency what-if (POST /cpu/whatif) and its pickers (GET /cpu/inputs).
-import { getJson, postJson } from './api'
+import { getJson } from './api'
+import { postAdmitted } from './timingBudget'
 
 export interface CpuInputs {
   topologies: { id: string; version: number; soc_ref: string; clusters: string[] }[]
@@ -110,8 +111,9 @@ export interface CpuSweepRequest {
 
 export const cpuApi = {
   inputs: () => getJson<CpuInputs>('/cpu/inputs'),
-  whatif: (req: CpuWhatIfRequest) => postJson<{ result: CpuWhatIf }>('/cpu/whatif', req).then((r) => r.result),
-  sweep: (req: CpuSweepRequest) => postJson<{ result: CpuSweep }>('/cpu/sweep', req).then((r) => r.result),
+  // simulation admission slots (429 when busy) are shared with exploration / timing: retry like those clients
+  whatif: (req: CpuWhatIfRequest) => postAdmitted<{ result: CpuWhatIf }>('/cpu/whatif', req).then((r) => r.result),
+  sweep: (req: CpuSweepRequest) => postAdmitted<{ result: CpuSweep }>('/cpu/sweep', req).then((r) => r.result),
 }
 
 /** "256, 512" -> [256, 512] (0..1024 integers) */

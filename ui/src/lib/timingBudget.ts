@@ -97,6 +97,9 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
   return res.json() as Promise<T>
 }
 
+/** POST to a simulation endpoint: a 429 (per-process admission slot busy) is retried with backoff. */
+export const postAdmitted = postJson
+
 export const timingApi = {
   variant: (scenarioId: string, variantId: string, options: TimingOptions, configProfileRef?: string | null) =>
     postJson<{ report: TimingReport; dvfs_table_ref: string | null; config_profile_ref?: string | null }>('/timing-budget/variant',

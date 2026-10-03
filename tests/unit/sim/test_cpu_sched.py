@@ -14,6 +14,7 @@ from scenario_db.meas_import.table_adapter import TableSpec, table_samples
 from scenario_db.models.capability.power_model import CpuSchedulerParams, PowerModelParams
 from scenario_db.sim.cpu_power import CpuPowerModel
 from scenario_db.sim.cpu_profile import cpu_profile_from_observations
+from scenario_db.sim import cpu_sched
 from scenario_db.sim.cpu_sched import (
     SchedConfig,
     SweepSpec,
@@ -219,3 +220,70 @@ def test_scheduler_absent_keeps_dump_and_api_service():
         svc._model = orig  # type: ignore[assignment]
     ui = next(t for t in out.result["range"]["tasks"] if t["task"] == "ui")
     assert ui["thread_source"] == "given" and len(ui["threads"]) == 2
+
+
+def test_energy_memo_matches_cluster_eval_and_separates_uclamp():
+    """The sweep memoises per-cluster energy; uclamp changes the schedutil request and must not alias."""
+    m = _two()
+    ctx = _ctx(m)
+    a, b = Thread("eis", "a", ref_cycles=30e6, stall_ms=0.5), Thread("ui", "ui", ref_cycles=1e6, stall_ms=0.0)
+    cpus = [[a], [b]]
+    plain = {}
+    capped = {"eis": policy_from({"uclamp_max": 128})}
+    e_plain = ctx.energy("BIG", cpus, plain, {})
+    e_capped = ctx.energy("BIG", cpus, capped, {"eis": (0.0, 128.0)})
+    assert e_plain == _cluster_eval(_ctx(m), "BIG", cpus, plain)["energy_mw"]
+    assert e_capped == _cluster_eval(_ctx(m), "BIG", cpus, capped)["energy_mw"]
+    assert e_capped < e_plain                         # capped request -> lower OPP; a shared memo entry would hide it
+    assert hash(Thread("eis", "a", 30e6, 0.5)) == hash(a) and Thread("eis", "a", 30e6, 0.5) == a
+
+
+def test_sweep_with_many_threads_is_bounded(monkeypatch):
+    """Bound search work and verify cache reuse independently of host speed or coverage overhead."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("bench_cpu_sweep", ROOT / "scripts" / "bench_cpu_sweep.py")
+    bench = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(bench)
+    model = CpuPowerModel.from_params(PowerModelParams.model_validate(yaml.safe_load(E2600.read_text(encoding="utf-8"))))
+    prof = bench.profile(21, 60, [c.name for c in model.clusters])
+    requests = evaluations = 0
+    direct_eval, cached_energy = _cluster_eval, _Ctx.energy
+
+    def count_eval(*args, **kwargs):
+        nonlocal evaluations
+        evaluations += 1
+        return direct_eval(*args, **kwargs)
+
+    def count_energy(*args, **kwargs):
+        nonlocal requests
+        requests += 1
+        return cached_energy(*args, **kwargs)
+
+    monkeypatch.setattr(cpu_sched, "_cluster_eval", count_eval)
+    monkeypatch.setattr(_Ctx, "energy", count_energy)
+    r = cpu_sweep(prof, target=model, fps=30, spec=SweepSpec())
+    assert 1000 < r["range"]["evaluated"] <= SweepSpec().max_cases
+    assert evaluations < requests / 2  # catches removing the memo without a hardware-dependent timeout
+
+
+@pytest.mark.parametrize("util_model", ["util_est", "pelt_avg"])
+@pytest.mark.parametrize("max_cases", [12, 1000])
+def test_sweep_memo_preserves_complete_results(monkeypatch, util_model, max_cases):
+    """Compare cached sweeps with direct energy evaluation across policies and search modes."""
+    model = _two()
+    prof = CpuProfile(tasks=[
+        CpuTaskProfile(task="eis", cluster="LITTLE", cycles=8e6, stall_cycles=1e6,
+                       threads={"a": 5e6, "b": 3e6}),
+        CpuTaskProfile(task="ui", cluster="BIG", cycles=2e6),
+    ], clusters={"LITTLE": CpuClusterProfile(cycles=8e6), "BIG": CpuClusterProfile(cycles=2e6)})
+    spec = SweepSpec(
+        max_cases=max_cases, util_model=util_model, energy_includes_static=True,
+        budgets_ms={"eis": 12.0}, growth={"eis": 1.2},
+        task_policy={"ui": {"uclamp_min": 128, "prefer_idle": True}},
+        knobs=("pin", "upto", "uclamp_min", "uclamp_max"),
+        uclamp_min_levels=(256,), uclamp_max_levels=(128, 768),
+    )
+    cached = cpu_sweep(prof, target=model, fps=30, spec=spec)
+    monkeypatch.setattr(_Ctx, "energy", lambda ctx, name, cpus, policies, clamped:
+                        _cluster_eval(ctx, name, cpus, policies)["energy_mw"])
+    assert cpu_sweep(prof, target=model, fps=30, spec=spec) == cached
