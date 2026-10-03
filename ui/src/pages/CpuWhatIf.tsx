@@ -11,6 +11,7 @@ import { DataTable, type Column } from '../components/DataTable'
 import { PowerDeltaTable, PowerStack, type PowerRow } from '../components/PowerModelCharts'
 import { partColor, sortClusters } from '../lib/powerModel'
 import { CPU_HELP, threadLabel } from '../components/CpuHelp'
+import { usePref } from '../components/Layout'
 
 type TaskEdit = { sweep: string[] | null; threads: string; budget: string; growth: string }
 type Adv = { freqMargin: string; fitsMargin: string; utilModel: '' | 'util_est' | 'pelt_avg'; halflife: string; boost: '' | 'on' | 'off'; emStatic: '' | 'on' | 'off' }
@@ -45,6 +46,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
   const inputSelection = useRef('')
   const [sel, setSel] = useState<string>('')
   const [showAllBetter, setShowAllBetter] = useState(false)
+  const [top, setTop] = usePref<number>('cpu.top', 60)
 
   const prof = inputs.data?.profiles.find((p) => p.id === profile)
   const topo = inputs.data?.topologies.find((t) => t.id === target)
@@ -79,7 +81,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
       knobs, uclamp_max_levels: parseLevels(uMax), uclamp_min_levels: parseLevels(uMin), reference,
       power_gating_eff: pgEff, cpu_bw_scale: bwScale,
       freq_margin: num(adv.freqMargin), fits_margin: num(adv.fitsMargin), util_model: adv.utilModel || undefined,
-      pelt_halflife_ms: num(adv.halflife), deadline_boost: tri(adv.boost), energy_includes_static: tri(adv.emStatic),
+      pelt_halflife_ms: num(adv.halflife), deadline_boost: tri(adv.boost), energy_includes_static: tri(adv.emStatic), top,
     }
   }
   const run = async (payload = request()) => {
@@ -110,6 +112,33 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
     const cur = edit(task).sweep ?? clusterNames.filter((c) => auto?.cells[c]?.in_sweep)
     setEdit(task, { sweep: cur.includes(cl) ? cur.filter((c) => c !== cl) : [...cur, cl] })
   }
+  // bulk range edits (one state update, no sweep until 계산): column = cluster for every sweepable task
+  const sweepable = (t: string) => t !== '(other)'
+  const autoSet = (t: string) => clusterNames.filter((c) => result?.range.tasks.find((x) => x.task === t)?.cells[c]?.in_sweep)
+  const inSweepOf = (t: string) => edit(t).sweep ?? autoSet(t)
+  const columnState = (c: string): 'all' | 'some' | 'none' => {
+    const ts = tasks.filter(sweepable), n = ts.filter((t) => inSweepOf(t).includes(c)).length
+    return n === 0 ? 'none' : n === ts.length ? 'all' : 'some'
+  }
+  const setColumn = (c: string, on: boolean) => setEdits((m) => {
+    const out = { ...m }
+    for (const t of tasks.filter(sweepable)) {
+      const cur = (m[t]?.sweep ?? autoSet(t)).filter((x) => x !== c)
+      out[t] = { ...(m[t] ?? { sweep: null, threads: '', budget: '', growth: '' }), sweep: on ? sortClusters([...cur, c]) : cur }
+    }
+    return out
+  })
+  const applyPreset = (kind: 'auto' | 'measured' | 'meets' | 'fits') => setEdits((m) => {
+    const out = { ...m }
+    for (const t of tasks.filter(sweepable)) {
+      const rt = result?.range.tasks.find((x) => x.task === t)
+      const base = m[t] ?? { sweep: null, threads: '', budget: '', growth: '' }
+      const pick = kind === 'auto' ? null : kind === 'measured' ? (rt?.measured ?? [])
+        : clusterNames.filter((c) => (kind === 'meets' ? rt?.cells[c]?.meets : rt?.cells[c]?.fits))
+      out[t] = { ...base, sweep: pick }
+    }
+    return out
+  })
   const toggleKnob = (k: Knob) => setKnobs((ks) => (ks.includes(k) ? ks.filter((x) => x !== k) : [...ks, k]))
 
   // ---- results
@@ -200,10 +229,21 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
             <label><input type="checkbox" checked={knobs.includes('uclamp_min')} onChange={() => toggleKnob('uclamp_min')} /> uclamp.min</label>
             {knobs.includes('uclamp_min') && <input style={{ width: 90 }} value={uMin} placeholder="128, 256" onChange={(e) => setUMin(e.target.value)} />}
           </div>
+          {tasks.length > 0 && <div className="toolbar" style={{ gap: 6, marginBottom: 6, fontSize: 12 }}>
+            <span className="faint">범위 preset</span>
+            <button className="btn tb-mini" onClick={() => applyPreset('auto')} title="task별 자동 범위 (fmax에서 budget 충족 cluster)">자동</button>
+            <button className="btn tb-mini" onClick={() => applyPreset('measured')} title="측정에서 돈 cluster만">측정 위치만</button>
+            <button className="btn tb-mini" onClick={() => applyPreset('meets')} disabled={!result} title="✓ budget 충족 cluster 전부">✓ 전부</button>
+            <button className="btn tb-mini" onClick={() => applyPreset('fits')} disabled={!result} title="capacity 초과(⚠) cluster 제외 전부">⚠ 제외 전부</button>
+            <span className="faint">· 열 머리 체크 = 그 cluster를 모든 task에 포함/제외</span>
+          </div>}
           {tasks.length ? <div className="table-x"><table className="grid cpu-matrix cpu-range">
             <thead>
               <tr><th>task</th>{clusterNames.map((c) => { const rc = rangeCluster(c); return (
-                <th key={c} style={{ borderTop: `3px solid ${colorOf(c)}` }}><span className="sw pm-sw" style={{ background: colorOf(c) }} />{c}
+                <th key={c} style={{ borderTop: `3px solid ${colorOf(c)}` }}>
+                  <input type="checkbox" aria-label={`${c} 전체 task 포함`} title={`모든 task에 ${c} 포함 / 제외 ((other) 제외)`} checked={columnState(c) === 'all'}
+                    ref={(el) => { if (el) el.indeterminate = columnState(c) === 'some' }} onChange={() => setColumn(c, columnState(c) !== 'all')} style={{ marginRight: 4 }} />
+                  <span className="sw pm-sw" style={{ background: colorOf(c) }} />{c}
                   {rc && <div className="faint cpu-range-meta">{rc.cores} core · cap {fmt(rc.capacity, 0)}<br />{fmt(rc.opp_min_mhz, 0)}–{fmt(rc.opp_max_mhz, 0)} MHz · {rc.opp_count} OPP</div>}</th>) })}
                 <th title="thread 수 (비우면 측정값 · 없으면 1)">thr</th><th title="frame당 허용 시간 (Timing Budget의 SW budget)">budget ms</th><th title="이 task만의 SW 증가 배율">증가</th><th>정책 · 후보</th></tr>
             </thead>
@@ -231,7 +271,11 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
                 </tr>)
             })}</tbody></table></div> : (inputs.data?.profiles.length ?? 0) > 0 && <NoTasks profiles={rankProfiles(inputs.data?.profiles ?? [], ctx).filter((p) => p.tasks?.length)} onPick={setProfile} />}
           <div className="toolbar" style={{ marginTop: 8 }}>
-            <span className="faint" style={{ fontSize: 12 }}>{result ? `조합 ${result.range.space.toLocaleString()}개 · 계산 ${result.range.evaluated.toLocaleString()} (${result.range.method === 'beam' ? 'beam 탐색' : '전수'}) · 서로 다른 배치 ${result.range.unique}` : '조합 수는 계산 후 표시'}</span><span className="grow" />
+            <span className="faint" style={{ fontSize: 12 }}>{result ? `조합 ${result.range.space.toLocaleString()}개 · 계산 ${result.range.evaluated.toLocaleString()} (${result.range.method === 'beam' ? 'beam 탐색' : '전수'}) · 서로 다른 배치 ${result.range.unique}` : '조합 수는 계산 후 표시'}</span>
+            {result?.range.method === 'beam' && <span className="badge v-warn" title={`조합 ${result.range.space.toLocaleString()}개 중 ${result.range.evaluated.toLocaleString()}개만 계산 — 결과는 부분 탐색 기준 순위`}>부분 탐색</span>}
+            <span className="grow" />
+            <label className="faint" style={{ fontSize: 12, display: 'flex', gap: 4, alignItems: 'center' }}>결과 상위
+              <select value={top} onChange={(e) => setTop(Number(e.target.value))} aria-label="결과 상위 N">{[10, 20, 60, 200].map((n) => <option key={n} value={n}>{n}</option>)}</select>개</label>
             <button className="btn primary" disabled={busy || !profile || !target} onClick={() => void run()}>{busy ? '계산 중…' : result ? '다시 계산' : 'Sweep 계산'}</button>
           </div>
         </Card>

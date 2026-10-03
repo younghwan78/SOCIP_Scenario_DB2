@@ -107,6 +107,8 @@ export interface CpuSweepRequest {
   reference: 'measured' | 'eas'; power_gating_eff: number; cpu_bw_scale: number
   freq_margin?: number; fits_margin?: number; util_model?: 'util_est' | 'pelt_avg'; pelt_halflife_ms?: number
   deadline_boost?: boolean; energy_includes_static?: boolean
+  /** better cases returned (power ascending); server default 60 */
+  top?: number
 }
 
 export const cpuApi = {

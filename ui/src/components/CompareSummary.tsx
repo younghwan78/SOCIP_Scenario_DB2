@@ -48,7 +48,7 @@ export function CompareSummary({ items, metrics }: { items: ItemInfo[]; metrics:
     return vals.reduce((a, b) => ((lo ? b.v < a.v : b.v > a.v) ? b : a)).i
   }
   return (
-    <div className="cs">
+    <div className={`cs ${items.length >= 4 ? 'cs-compact' : ''}`}>
       <div className="cs-cards">
         {items.slice(1).map((it, n) => {
           const i = n + 1
@@ -83,8 +83,8 @@ export function CompareSummary({ items, metrics }: { items: ItemInfo[]; metrics:
           )
         })}
       </div>
-      <table className="cs-table">
-        <thead><tr><th>지표</th>{items.map((it, i) => <th key={i} style={{ borderTop: `3px solid ${it.color}` }} title={it.full}><span className="mono">{it.label}</span>{i === 0 ? ' ★' : ''}</th>)}</tr></thead>
+      <div className="cs-table-wrap"><table className="cs-table">
+        <thead><tr><th>지표</th>{items.map((it, i) => <th key={i} style={{ borderTop: `3px solid ${it.color}` }} title={it.full}><span className="mono cs-th-l">{it.label}</span>{i === 0 ? ' ★' : ''}</th>)}</tr></thead>
         {GROUPS.map((g) => {
           const gr = rows.filter((r) => r.group === g)
           if (!gr.length) return null
@@ -117,7 +117,7 @@ export function CompareSummary({ items, metrics }: { items: ItemInfo[]; metrics:
             </tbody>
           )
         })}
-      </table>
+      </table></div>
       <div className="faint" style={{ fontSize: 11.5 }}>▼ 개선 · ▲ 악화 · ＝ ±1% 이내 (fps는 높을수록 개선) · 굵은 테두리 = 행별 최선 · hover = 절대값·Δ</div>
     </div>
   )

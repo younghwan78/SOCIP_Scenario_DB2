@@ -1,11 +1,11 @@
-import { useMemo, useState, type CSSProperties } from 'react'
+import { useCallback, useMemo, useState, type CSSProperties } from 'react'
 import type { Ctx } from '../App'
 import { api } from '../lib/api'
 import { useAsync } from '../lib/route'
 import { CAMERA_LABEL, MISSING, MODE_LABEL, cameraOf, changedKeys, medoidId, stabOf, valueText } from '../lib/conditions'
 import { CATEGORY_COLOR, CATEGORY_LABEL, CATEGORY_ORDER, focusFor, modeBreakdown, primaryCategory, scenarioPurpose } from '../lib/guides'
 import { toRows } from '../components/Picker'
-import { PageLayout, Resizer, useResizable } from '../components/Layout'
+import { PageLayout, Resizer, usePref, useResizable } from '../components/Layout'
 import { Icon } from '../components/Icons'
 import { DataTable, type Column } from '../components/DataTable'
 import { SEVERITY_RANK, preferredReference, resFpsKey } from '../lib/defaults'
@@ -65,6 +65,8 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
   const medoid = useMemo(() => medoidId(rows), [rows])
   const reference = (selected && refChoice[selected.scenario_id]) || preferredReference(selected ? canonicalOf(selected) : undefined, rows.map((r) => r.variant_id), medoid)
   const refRow = byId.get(reference)
+  const isRef = useCallback((r: VariantRow) => r.variant_id === reference, [reference])
+  const [descOpen, setDescOpen] = usePref('explorer.desc.open', true)
 
   const facetKeys = (['resolution', 'fps', 'stab', 'hdr', 'camera'] as FacetKey[]).filter((k) => rows.some((r) => facetValue(k, r.design_conditions) !== null))
   const visible = rows.filter((r) => (showDerived || !r.derived_from_variant)
@@ -161,7 +163,14 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
                 </select>
               </label>
             </div>
-            <div className="desc-box">
+            <details className="desc-box" open={descOpen} onToggle={(e) => setDescOpen((e.currentTarget as HTMLDetailsElement).open)}>
+              <summary title={descOpen ? '설명 접기' : '설명 펼치기'}>
+                <span className="desc-caret" aria-hidden="true">{descOpen ? '▾' : '▸'}</span>
+                {descOpen ? <span className="faint" style={{ fontSize: 12 }}>설명 · 구성 · Load</span> : <span className="desc-line">
+                  <span>{scenarioPurpose(selected.scenario_id).split(/[.·:]/).slice(0, 2).join(' · ').slice(0, 60)}</span>
+                  {isCamera && rows.length > 0 && <span className="faint">· {modeBreakdown(rows.filter((r) => !r.derived_from_variant)).map(({ mode, count }) => `${mode === 'kpi' ? 'KPI' : MODE_LABEL[mode]} ${count}`).join(' / ')}</span>}
+                  <span className="faint">· Load {Object.entries(selected.severity_counts).map(([k, v]) => `${k} ${v}`).join(' / ')}</span></span>}
+              </summary>
               <p>{scenarioPurpose(selected.scenario_id)}</p>
               {isCamera && rows.length > 0 && <div className="facet-row"><span className="faint" style={{ fontSize: 12 }}>구성</span>
                 {modeBreakdown(rows.filter((r) => !r.derived_from_variant)).map(({ mode, count }) => <span key={mode} className="focus">{mode === 'kpi' ? 'Video recording · 기본 KPI' : MODE_LABEL[mode]} <span className="cnt">({count})</span></span>)}
@@ -171,7 +180,7 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
               <div className="facet-row"><span className="faint" style={{ fontSize: 12 }}>Load</span>
                 {Object.entries(selected.severity_counts).map(([k, v]) => <span key={k} className={`badge load-${k}`}>{k} <span className="cnt">({v})</span></span>)}
                 <span className="faint" style={{ fontSize: 12 }}>· 작성자가 저장한 부하 등급이며 KPI 통과 여부가 아닙니다</span></div>
-            </div>
+            </details>
             <div className="facet-row">
               {facetKeys.map((k) => {
                 const counts = new Map<string, number>()
@@ -191,7 +200,7 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
           <div className="table-scroll" style={{ flexGrow: 1 }}>
             {variantsQ.error && <div className="err" style={{ margin: 12 }}>{variantsQ.error}</div>}
             <DataTable id="explorer.variants" columns={columns} rows={visible} rowKey={(r) => r.variant_id}
-              rowClass={(r) => (r.variant_id === reference ? 'sel' : '')} pinTop={(r) => r.variant_id === reference} />
+              rowClass={(r) => (r.variant_id === reference ? 'sel' : '')} stickyTop={isRef} />
             {!variantsQ.loading && !visible.length && <div className="empty">조건에 맞는 variant가 없습니다.</div>}
             {variantsQ.loading && <div className="empty">불러오는 중…</div>}
           </div>

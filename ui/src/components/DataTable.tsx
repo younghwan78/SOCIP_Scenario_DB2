@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useRef, type ReactNode } from 'react'
+import { Fragment, useLayoutEffect, useMemo, useRef, type ReactNode } from 'react'
 import { usePref } from './Layout'
 
 // ---------------------------------------------------------------------------
@@ -45,8 +45,10 @@ interface Props<T> {
   rowKey: (row: T) => string
   rowClass?: (row: T) => string
   onRowClick?: (row: T) => void
-  /** rows kept on top regardless of sort (e.g. reference variant) */
+  /** rows kept on top while no explicit sort is active */
   pinTop?: (row: T) => boolean
+  /** rows always first (whatever the sort) and sticky under the header (e.g. the ★ reference variant) */
+  stickyTop?: (row: T) => boolean
   defaultSort?: { key: string; dir: 1 | -1 }
   className?: string
   empty?: ReactNode
@@ -75,7 +77,7 @@ export function sortRows<T>(rows: T[], get: ((r: T) => SortValue) | undefined, d
   return idx.map((x) => x.r)
 }
 
-export function DataTable<T>({ id, columns, rows, groups, rowKey, rowClass, onRowClick, pinTop, defaultSort, className = '', empty }: Props<T>) {
+export function DataTable<T>({ id, columns, rows, groups, rowKey, rowClass, onRowClick, pinTop, stickyTop, defaultSort, className = '', empty }: Props<T>) {
   const [widths, setWidths] = usePref<Record<string, number>>(`table.${id}.w`, {})
   const [sort, setSort] = usePref<{ key: string; dir: 1 | -1 } | null>(`table.${id}.sort`, defaultSort ?? null)
   const drag = useRef<{ key: string; x: number; w: number } | null>(null)
@@ -83,8 +85,22 @@ export function DataTable<T>({ id, columns, rows, groups, rowKey, rowClass, onRo
   const total = columns.reduce((s, c) => s + widthOf(c), 0)
   const sortCol = columns.find((c) => c.key === sort?.key && c.sort)
   // pinned rows (reference) only while no explicit sort is active
-  const order = (list: T[]) => sortRows(list, sortCol?.sort, sort?.dir ?? 1, sortCol ? undefined : pinTop)
-  const sortedRows = useMemo(() => (rows ? order(rows) : []), [rows, sortCol, sort?.dir]) // eslint-disable-line react-hooks/exhaustive-deps
+  const order = (list: T[]) => {
+    const sorted = sortRows(stickyTop ? list.filter((r) => !stickyTop(r)) : list, sortCol?.sort, sort?.dir ?? 1, sortCol ? undefined : pinTop)
+    return stickyTop ? [...list.filter(stickyTop), ...sorted] : sorted
+  }
+  const sortedRows = useMemo(() => (rows ? order(rows) : []), [rows, sortCol, sort?.dir, stickyTop]) // eslint-disable-line react-hooks/exhaustive-deps
+  // header height → CSS var so sticky rows sit right under the (possibly two-line) header
+  const tableRef = useRef<HTMLTableElement>(null)
+  useLayoutEffect(() => {
+    const t = tableRef.current, head = t?.tHead
+    if (!t || !head || !stickyTop) return
+    const set = () => t.style.setProperty('--dt-head-h', `${head.getBoundingClientRect().height || 33}px`)
+    set()
+    if (typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(set); ro.observe(head)
+    return () => ro.disconnect()
+  }, [stickyTop])
 
   const onHead = (c: Column<T>) => {
     if (!c.sort) return
@@ -112,7 +128,7 @@ export function DataTable<T>({ id, columns, rows, groups, rowKey, rowClass, onRo
     seenKeys.set(k0, dup + 1)
     const k = dup ? `${k0}#${dup}` : k0
     return (
-      <tr key={k} className={`${rowClass?.(r) ?? ''} ${onRowClick ? 'clickable' : ''}`} onClick={onRowClick ? () => onRowClick(r) : undefined}>
+      <tr key={k} className={`${rowClass?.(r) ?? ''} ${onRowClick ? 'clickable' : ''} ${stickyTop?.(r) ? 'pin-sticky' : ''}`} onClick={onRowClick ? () => onRowClick(r) : undefined}>
         {columns.map((c) => (
           <td key={c.key} className={`${c.cellClass?.(r) ?? ''} ${c.sticky ? 'rowhead' : ''}`} style={c.align ? { textAlign: c.align } : undefined} title={c.title?.(r)}>
             {c.render(r)}
@@ -125,7 +141,7 @@ export function DataTable<T>({ id, columns, rows, groups, rowKey, rowClass, onRo
   const count = groups ? groups.reduce((s, g) => s + g.rows.length, 0) : sortedRows.length
   return (
     <>
-      <table className={`grid dt ${className}`} style={{ width: total, minWidth: '100%' }}>
+      <table ref={tableRef} className={`grid dt ${className}`} style={{ width: total, minWidth: '100%' }}>
         <colgroup>{columns.map((c) => <col key={c.key} style={{ width: widthOf(c) }} />)}</colgroup>
         <thead>
           <tr>
