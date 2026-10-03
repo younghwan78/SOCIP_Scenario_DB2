@@ -4,7 +4,7 @@ from collections import Counter
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from scenario_db.api.deps import get_db
@@ -112,15 +112,9 @@ def scenario_catalog(
         offset=offset,
     )
     page_scenario_ids = {scenario.id for scenario in scenarios}
-    variants, _ = _paged_variants(
-        db,
-        scenario_ids=page_scenario_ids,
-        severities=severity,
-        limit=5000,
-        offset=0,
-    )
+    # SQL aggregate per scenario: a page of scenarios can hold any number of variants
+    variant_stats = _variant_stats(db, page_scenario_ids, severity)
     project_by_id = {project.id: project for project in projects}
-    variants_by_scenario = _variants_by_scenario(variants)
     items: list[ScenarioCatalogItem] = []
     for scenario in sorted(scenarios, key=lambda row: row.id):
         categories = _scenario_list_meta(scenario, "category")
@@ -128,10 +122,10 @@ def scenario_catalog(
         project = project_by_id.get(scenario.project_ref)
         if project is None:
             continue
-        scenario_variants = sorted(variants_by_scenario.get(scenario.id, []), key=lambda row: row.id)
-        severity_counts = Counter(variant.severity or "unknown" for variant in scenario_variants)
+        stats = variant_stats.get(scenario.id) or {"count": 0, "severity": Counter(), "first": None}
+        severity_counts = stats["severity"]
         pipeline = scenario.pipeline or {}
-        default_variant_id = scenario_variants[0].id if scenario_variants else None
+        default_variant_id = stats["first"]
         items.append(
             ScenarioCatalogItem(
                 soc_ref=_project_meta(project, "soc_ref"),
@@ -144,7 +138,7 @@ def scenario_catalog(
                 canonical_usecase=str(_scenario_meta(scenario, "canonical_usecase") or scenario.id),
                 category=categories,
                 domain=_scenario_list_meta(scenario, "domain"),
-                variant_count=len(scenario_variants),
+                variant_count=stats["count"],
                 severity_counts=dict(sorted(severity_counts.items())),
                 sensor_module_ref=_project_meta(project, "sensor_module_ref"),
                 display_module_ref=_project_meta(project, "display_module_ref"),
@@ -398,6 +392,23 @@ def _paged_scenarios(
     total = query.count()
     rows = query.order_by(Scenario.id).offset(offset).limit(limit).all()
     return rows, total
+
+
+def _variant_stats(db: Session, scenario_ids: set[str], severities: list[str] | None) -> dict[str, dict[str, Any]]:
+    """Per scenario: variant count, severity counts and first variant id (by id), aggregated in SQL."""
+    if not scenario_ids:
+        return {}
+    query = db.query(ScenarioVariant.scenario_id, ScenarioVariant.severity, func.count(), func.min(ScenarioVariant.id)) \
+        .filter(ScenarioVariant.scenario_id.in_(scenario_ids))
+    if severities:
+        query = query.filter(ScenarioVariant.severity.in_(severities))
+    out: dict[str, dict[str, Any]] = {}
+    for scenario_id, sev, count, first in query.group_by(ScenarioVariant.scenario_id, ScenarioVariant.severity).all():
+        row = out.setdefault(scenario_id, {"count": 0, "severity": Counter(), "first": None})
+        row["count"] += count
+        row["severity"][sev or "unknown"] += count
+        row["first"] = first if row["first"] is None else min(row["first"], first)
+    return out
 
 
 def _paged_variants(
@@ -692,13 +703,6 @@ def _health_issue(
         path=path,
         fix_hint=fix_hint,
     )
-
-
-def _variants_by_scenario(variants: list[ScenarioVariant]) -> dict[str, list[ScenarioVariant]]:
-    result: dict[str, list[ScenarioVariant]] = {}
-    for variant in variants:
-        result.setdefault(variant.scenario_id, []).append(variant)
-    return result
 
 
 def _project_meta(project: Project, key: str) -> str | None:

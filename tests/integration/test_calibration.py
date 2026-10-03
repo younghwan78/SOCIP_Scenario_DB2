@@ -58,6 +58,17 @@ def test_calibration_scope_recency_and_constant_query_count(engine):
         assert detail['rail_domain_map_ref'] == sid
         assert detail['measured']['categories']['cpu'] == 10
         assert [p['id'] for p in detail['predictions']] == [f'{sid}-z-old', f'{sid}-a-new']
+        # batched details (report generation) == one-by-one detail, in a constant number of queries
+        ids = [f'{sid}-measurement1', f'{sid}-measurement2']
+        queries.clear()
+        event.listen(engine, 'before_cursor_execute', counted)
+        try:
+            batch = cal.measurement_details(db, ids)
+        finally:
+            event.remove(engine, 'before_cursor_execute', counted)
+        assert len(queries) <= 5
+        for mid in ids:
+            assert batch[mid] == cal.measurement_detail(db, mid)
         assert cal._rail_map(db, None) == ({}, None)
         assert cal._rail_map(db, 'unrelated') == ({}, None)
         sw = library.sw_timing(db, scenario_id=sid)

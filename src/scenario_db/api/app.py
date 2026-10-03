@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from sqlalchemy import create_engine
 
 from scenario_db.api.cache import RuleCache
@@ -74,6 +75,9 @@ def create_app() -> FastAPI:
         allow_methods=["GET", "POST", "DELETE"],
         allow_headers=["*"],
     )
+
+    # JSON lists (variant matrix, run summaries, prediction board) compress ~5-10x
+    app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
 
     register_handlers(app)
 

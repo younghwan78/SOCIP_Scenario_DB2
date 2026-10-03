@@ -9,7 +9,8 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy.orm import Session
+from sqlalchemy import func, literal, literal_column, text, tuple_
+from sqlalchemy.orm import Session, defer, load_only
 
 from scenario_db.api.schemas.arch_exploration import (
     ArchExplorationRunRequest,
@@ -35,7 +36,7 @@ from scenario_db.reporting.report_package import package_zip
 from scenario_db.reporting.xlsx_export import report_sheets, write_xlsx
 from scenario_db.sim.arch_exploration import ENGINE_REV, explore_variant, find_case, prediction_payload
 from scenario_db.sim.power_attribution import attribute
-from scenario_db.api.services.calibration import data_origin, is_physical, is_synthetic, measurement_detail
+from scenario_db.api.services.calibration import data_origin, is_physical, is_synthetic, measurement_details
 from scenario_db.api.services.failures import variant_failure
 from scenario_db.sim.model_lineage import lineage_differences, run_model_lineage
 from scenario_db.sim.service import _apply_config_profile, _check_power_params_scope, _graph_soc_ref
@@ -205,20 +206,103 @@ def _run_meta(row: ArchExplorationRun) -> dict[str, Any]:
     }
 
 
-def run_detail(row: ArchExplorationRun) -> dict[str, Any]:
+SUMMARY_KEYS = ("scenario_id", "variant_id", "design_conditions", "severity", "fps", "period_ms", "eis_on", "mfc_dual",
+                "spec_ok", "spec_reasons", "status", "objective", "counts", "distribution", "baseline", "recommended",
+                "coverage", "dvfs_table_ref", "input_hash", "model_lineage")
+SW_MARGIN_SUMMARY_KEYS = ("worst", "growth_tolerance", "growth_tolerance_fixed", "growth_tested_max", "recommendations",
+                          "verdict", "stat_spread_ms")
+
+
+def variant_summary(v: dict[str, Any]) -> dict[str, Any]:
+    """List view of one explored variant (~2 KB instead of ~70 KB): what the run table, range and composition
+    charts and bulk promotion read. Slices, buffers, DVFS domains, IP modes, Pareto and option results stay
+    in the variant detail endpoint."""
+    out = {k: v.get(k) for k in SUMMARY_KEYS if k in v}
+    out["sw_margin"] = {k: (v.get("sw_margin") or {}).get(k) for k in SW_MARGIN_SUMMARY_KEYS} | {"stages": []}
+    po = v.get("power_options")
+    out["power_options"] = None
+    if po:
+        best = [r for r in po.get("results") or [] if r.get("key") == po.get("best")]
+        out["power_options"] = {"status": po.get("status"), "best": po.get("best"), "sets": po.get("sets"),
+                                "notes": po.get("notes") or [], "results": best, "dimensions": [], "errors": []}
+    out["alternatives"] = []
+    out["detail"] = False  # the UI fetches the full summary on selection
+    return out
+
+
+def run_detail(row: ArchExplorationRun, view: str = "full") -> dict[str, Any]:
     spec = {k: v for k, v in (row.spec or {}).items() if k != "manifest"}  # blobs via /manifest only
     spec["manifest_available"] = bool(((row.spec or {}).get("manifest") or {}).get("blobs"))
-    return _run_meta(row) | {"spec": spec, "variants": row.variants, "errors": row.errors}
+    variants = row.variants if view == "full" else [variant_summary(v) for v in row.variants or []]
+    return _run_meta(row) | {"spec": spec, "variants": variants, "errors": row.errors, "view": view}
+
+
+_SUMMARY_SQL = text("""
+SELECT coalesce(jsonb_agg(
+         coalesce((SELECT jsonb_object_agg(k, e->k) FROM unnest(ARRAY[%(keys)s]) k WHERE e ? k), '{}'::jsonb)
+         || jsonb_build_object(
+              'sw_margin', jsonb_build_object(%(sw)s, 'stages', '[]'::jsonb),
+              'power_options', CASE WHEN coalesce(e->'power_options', 'null'::jsonb) IN ('null'::jsonb, '{}'::jsonb) THEN NULL
+                ELSE jsonb_build_object(
+                  'status', e->'power_options'->'status', 'best', e->'power_options'->'best',
+                  'sets', e->'power_options'->'sets', 'notes', coalesce(e->'power_options'->'notes', '[]'::jsonb),
+                  'dimensions', '[]'::jsonb, 'errors', '[]'::jsonb,
+                  'results', coalesce((SELECT jsonb_agg(r) FROM jsonb_array_elements(
+                      coalesce(e->'power_options'->'results', '[]'::jsonb)) r
+                    WHERE r->>'key' = e->'power_options'->>'best'), '[]'::jsonb)) END,
+              'alternatives', '[]'::jsonb, 'detail', false)
+         ORDER BY ord), '[]'::jsonb)
+FROM arch_exploration_runs, jsonb_array_elements(variants) WITH ORDINALITY AS t(e, ord)
+WHERE id = :run_id
+""" % {"keys": ", ".join(f"'{k}'" for k in SUMMARY_KEYS),
+       "sw": ", ".join(f"'{k}', e->'sw_margin'->'{k}'" for k in SW_MARGIN_SUMMARY_KEYS)})
+
+
+def run_summary(db: Session, run_id: str) -> dict[str, Any]:
+    """``run_detail(view="summary")`` with the per-variant trimming done in PostgreSQL: the ~70 KB per-variant
+    summaries are never parsed in Python (same rows as ``variant_summary``)."""
+    R = ArchExplorationRun
+    row = (db.query(R).options(defer(R.variants), defer(R.spec))
+           .filter(R.id == run_id).one_or_none())
+    if row is None:
+        raise NotFoundError(f"exploration run not found: {run_id}")
+    spec, has_blobs = db.query(R.spec.op("-")("manifest"), R.spec["manifest"]["blobs"].isnot(None)).filter(R.id == run_id).one()
+    variants = db.execute(_SUMMARY_SQL, {"run_id": run_id}).scalar() or []
+    meta = {"id": row.id, "title": row.title, "scenario_type": row.scenario_type, "project_ref": row.project_ref,
+            "soc_ref": row.soc_ref, "dvfs_table_ref": row.dvfs_table_ref, "engine_rev": row.engine_rev,
+            "config_profile_ref": (spec or {}).get("config_profile_ref"), "summary": row.summary,
+            "created_by": row.created_by, "created_at": row.created_at.isoformat() if row.created_at else None}
+    return meta | {"spec": (spec or {}) | {"manifest_available": bool(has_blobs)}, "variants": variants,
+                   "errors": row.errors, "view": "summary"}
+
+
+def run_variant(db: Session, run_id: str, scenario_id: str, variant_id: str) -> dict[str, Any]:
+    """One variant's full exploration summary, extracted in SQL (the other variants are not transferred)."""
+    R = ArchExplorationRun
+    found = db.query(R.id, func.jsonb_path_query_first(
+        R.variants, literal_column("'$[*] ? (@.scenario_id == $s && @.variant_id == $v)'::jsonpath"),
+        func.jsonb_build_object(literal("s"), scenario_id, literal("v"), variant_id))).filter(R.id == run_id).one_or_none()
+    if found is None:
+        raise NotFoundError(f"exploration run not found: {run_id}")
+    if found[1] is None:
+        raise NotFoundError(f"variant {scenario_id}/{variant_id} not in run {run_id}")
+    return found[1] | {"detail": True}
 
 
 def list_runs(db: Session, *, scenario_type: str | None = None, project_ref: str | None = None,
               limit: int = 50) -> list[dict[str, Any]]:
-    q = db.query(ArchExplorationRun)
+    R = ArchExplorationRun
+    # meta columns only: variants / spec (with the input manifest) are megabytes per run
+    q = db.query(R.id, R.title, R.scenario_type, R.project_ref, R.soc_ref, R.dvfs_table_ref, R.engine_rev, R.summary,
+                 R.created_by, R.created_at, R.spec["config_profile_ref"].astext)
     if scenario_type:
-        q = q.filter(ArchExplorationRun.scenario_type == scenario_type)
+        q = q.filter(R.scenario_type == scenario_type)
     if project_ref:
-        q = q.filter(ArchExplorationRun.project_ref == project_ref)
-    return [_run_meta(r) for r in q.order_by(ArchExplorationRun.created_at.desc()).limit(limit).all()]
+        q = q.filter(R.project_ref == project_ref)
+    return [{"id": r[0], "title": r[1], "scenario_type": r[2], "project_ref": r[3], "soc_ref": r[4], "dvfs_table_ref": r[5],
+             "engine_rev": r[6], "config_profile_ref": r[10], "summary": r[7], "created_by": r[8],
+             "created_at": r[9].isoformat() if r[9] else None}
+            for r in q.order_by(R.created_at.desc()).limit(limit).all()]
 
 
 def get_run(db: Session, run_id: str) -> ArchExplorationRun:
@@ -257,12 +341,20 @@ def promote(db: Session, request: PromoteRequest, user: str | None = None) -> di
                if request.variant_ids is not None else v["spec_ok"])]
     # Lock the stable variant row, including the first promotion when no prediction exists.
     # Acquire all locks in canonical order to avoid deadlocks between overlapping requests.
-    for summary in sorted(targets, key=lambda v: (v["scenario_id"], v["variant_id"])):
-        variant = db.query(ScenarioVariant).filter_by(
-            scenario_id=summary["scenario_id"], id=summary["variant_id"]).with_for_update().one_or_none()
-        if variant is None:
+    # One statement: rows are locked in the ORDER BY order, the same canonical order as before.
+    keys = sorted({(v["scenario_id"], v["variant_id"]) for v in targets})
+    if keys:
+        locked = (db.query(ScenarioVariant.scenario_id, ScenarioVariant.id)
+                  .filter(tuple_(ScenarioVariant.scenario_id, ScenarioVariant.id).in_(keys))
+                  .order_by(ScenarioVariant.scenario_id, ScenarioVariant.id).with_for_update().all())
+        if len(locked) != len(keys):
             raise UnprocessableError("explored variant no longer exists")
+    currents = {(p.scenario_ref, p.variant_ref): p for p in db.query(Prediction)
+                .options(load_only(Prediction.id, Prediction.scenario_ref, Prediction.variant_ref, Prediction.status))
+                .filter(Prediction.status == "current",
+                        tuple_(Prediction.scenario_ref, Prediction.variant_ref).in_(keys)).all()} if keys else {}
     promoted, skipped = [], []
+    new_rows: list[tuple[Prediction, float]] = []
     for vid in dict.fromkeys(request.variant_ids or []):
         if not any(v["variant_id"] == vid for v in targets):
             skipped.append({"variant_id": vid, "reason": "variant not in run"})
@@ -285,11 +377,7 @@ def promote(db: Session, request: PromoteRequest, user: str | None = None) -> di
                     "eligible_cases": summary["counts"]["eligible"], "verified": case.get("verified"),
                     "power_options": option_snapshot(summary.get("power_options"), case, rule),
                     "model_lineage": summary.get("model_lineage")}
-        prev = (db.query(Prediction)
-                .filter_by(scenario_ref=summary["scenario_id"], variant_ref=vid, status="current").one_or_none())
-        if prev is not None:
-            prev.status = "superseded"
-            db.flush()
+        prev = currents.get((summary["scenario_id"], vid))
         pred = Prediction(
             id=f"PRED-{uuid4().hex}",
             scenario_ref=summary["scenario_id"], variant_ref=vid, project_ref=run.project_ref,
@@ -299,29 +387,46 @@ def promote(db: Session, request: PromoteRequest, user: str | None = None) -> di
             dvfs_table_ref=summary.get("dvfs_table_ref"), supersedes_ref=prev.id if prev else None,
             created_at=_now(),
         )
-        db.add(pred)
+        new_rows.append((pred, metrics["power"]["total_mw"]))
+    # supersede first (one current per variant), then insert the new predictions in one flush
+    replaced = [pred.supersedes_ref for pred, _ in new_rows if pred.supersedes_ref]
+    if replaced:
+        db.query(Prediction).filter(Prediction.id.in_(replaced)).update({"status": "superseded"}, synchronize_session=False)
         db.flush()
-        promoted.append(_pred_dict(pred, metrics=False) | {"total_mw": metrics["power"]["total_mw"]})
+    db.add_all([pred for pred, _ in new_rows])
+    db.flush()
+    promoted = [_pred_dict(pred, metrics=False) | {"total_mw": total} for pred, total in new_rows]
     db.commit()
     return {"run_id": run.id, "promoted": promoted, "skipped": skipped}
 
 
+BOARD_METRIC_KEYS = ("fps", "power", "bw_mbs", "distribution", "compression", "dvfs", "verdict", "eligible_cases",
+                     "alternatives", "verified", "statistic", "runtime_scale", "model_lineage", "power_options")
+
+
+def _metrics_subset(keys: tuple[str, ...]) -> Any:
+    """Selected top-level keys of ``predictions.metrics`` built in SQL (the IP / buffer / stage rows stay in the DB)."""
+    return func.jsonb_build_object(*[x for k in keys for x in (literal(k), Prediction.metrics[k])])
+
+
 def board(db: Session, *, scenario_id: str | None = None, project_ref: str | None = None) -> dict[str, Any]:
-    q = db.query(Prediction).filter(Prediction.status == "current")
+    q = db.query(Prediction, _metrics_subset(BOARD_METRIC_KEYS)).options(defer(Prediction.metrics)) \
+        .filter(Prediction.status == "current")
     if scenario_id:
         q = q.filter(Prediction.scenario_ref == scenario_id)
     if project_ref:
         q = q.filter(Prediction.project_ref == project_ref)
     current = q.order_by(Prediction.scenario_ref, Prediction.variant_ref).all()
-    prev_ids = [p.supersedes_ref for p in current if p.supersedes_ref]
-    prev = {p.id: p for p in db.query(Prediction).filter(Prediction.id.in_(prev_ids)).all()} if prev_ids else {}
-    runs = {r.id: r for r in db.query(ArchExplorationRun).filter(
-        ArchExplorationRun.id.in_({p.exploration_run_ref for p in current})).all()} if current else {}
-    reviews = _reviews_by_scenario(db, {p.scenario_ref for p in current})
+    prev_ids = [p.supersedes_ref for p, _ in current if p.supersedes_ref]
+    prev = {pid: m for pid, m in db.query(Prediction.id, _metrics_subset(("power", "model_lineage")))
+            .filter(Prediction.id.in_(prev_ids)).all()} if prev_ids else {}
+    runs = {r.id: r for r in db.query(ArchExplorationRun.id, ArchExplorationRun.title, ArchExplorationRun.created_at)
+            .filter(ArchExplorationRun.id.in_({p.exploration_run_ref for p, _ in current})).all()} if current else {}
+    reviews = _reviews_by_scenario(db, {p.scenario_ref for p, _ in current})
     rows = []
-    for p in current:
-        m = p.metrics
-        old = prev.get(p.supersedes_ref) if p.supersedes_ref else None
+    for p, m in current:
+        old_m = prev.get(p.supersedes_ref) if p.supersedes_ref else None
+        old = {"id": p.supersedes_ref, "metrics": old_m} if old_m is not None else None
         run = runs.get(p.exploration_run_ref)
         rows.append(_pred_dict(p, metrics=False) | {
             "run_title": run.title if run else None, "run_created_at": run.created_at.isoformat() if run and run.created_at else None,
@@ -329,9 +434,9 @@ def board(db: Session, *, scenario_id: str | None = None, project_ref: str | Non
             "compression": m.get("compression"), "dvfs": m.get("dvfs"), "verdict": m.get("verdict"),
             "eligible_cases": m.get("eligible_cases"), "alternatives": m.get("alternatives"), "verified": m.get("verified"),
             "statistic": m.get("statistic"), "runtime_scale": m.get("runtime_scale"),
-            "previous": ({"id": old.id, "total_mw": old.metrics["power"]["total_mw"],
-                          "delta_mw": round(m["power"]["total_mw"] - old.metrics["power"]["total_mw"], 3),
-                          "lineage_changes": lineage_differences(old.metrics.get("model_lineage"),
+            "previous": ({"id": old["id"], "total_mw": old["metrics"]["power"]["total_mw"],
+                          "delta_mw": round(m["power"]["total_mw"] - old["metrics"]["power"]["total_mw"], 3),
+                          "lineage_changes": lineage_differences(old["metrics"].get("model_lineage"),
                                                                  m.get("model_lineage"))} if old else None),
             "power_options": board_options(m.get("power_options"), reviews.get(p.scenario_ref, {}), p.variant_ref),
         })
@@ -439,8 +544,9 @@ def _report_calibration(db: Session, preds: dict[tuple[str, str], dict[str, Any]
         return []
     keys = set(preds)
     found: dict[tuple[str, str], Evidence] = {}
-    rows = (db.query(Evidence).filter(Evidence.kind == "evidence.measurement",
-                                      Evidence.scenario_ref.in_({sid for sid, _ in keys}))
+    rows = (db.query(Evidence).options(load_only(Evidence.id, Evidence.scenario_ref, Evidence.variant_ref,
+                                                 Evidence.measured_at, Evidence.provenance, Evidence.kpi))
+            .filter(Evidence.kind == "evidence.measurement", Evidence.scenario_ref.in_({sid for sid, _ in keys}))
             .order_by(Evidence.measured_at.desc().nullslast(), Evidence.id).all())
     for m in rows:
         key = (m.scenario_ref, m.variant_ref)
@@ -449,9 +555,10 @@ def _report_calibration(db: Session, preds: dict[tuple[str, str], dict[str, Any]
         held = found.get(key)
         if held is None or _meas_rank(m) > _meas_rank(held):
             found[key] = m
+    details = measurement_details(db, [m.id for m in found.values()])  # constant query count
     out = []
     for (sid, vid), m in sorted(found.items()):
-        row = calibration_row(vid, sid, measurement_detail(db, m.id), preds[(sid, vid)]["id"])
+        row = calibration_row(vid, sid, details[m.id], preds[(sid, vid)]["id"])
         if row is not None:
             out.append(row)
     return out
@@ -527,12 +634,15 @@ def report_stale(db: Session, report_id: str) -> dict[str, Any]:
     """Current predictions that differ from the frozen snapshot (-> regenerate)."""
     r = get_report(db, report_id)
     changed = []
-    for row in (r.snapshot or {}).get("scenarios", []):
-        cur = db.query(Prediction).filter_by(scenario_ref=row["scenario_id"], variant_ref=row["variant_id"],
-                                             status="current").one_or_none()
-        if (cur.id if cur else None) != row.get("prediction_id"):
-            changed.append({"variant_id": row["variant_id"], "snapshot": row.get("prediction_id"),
-                            "current": cur.id if cur else None})
+    snap_rows = (r.snapshot or {}).get("scenarios", [])
+    keys = {(row["scenario_id"], row["variant_id"]) for row in snap_rows}
+    current = {(sid, vid): pid for pid, sid, vid in db.query(Prediction.id, Prediction.scenario_ref, Prediction.variant_ref)
+               .filter(Prediction.status == "current",
+                       tuple_(Prediction.scenario_ref, Prediction.variant_ref).in_(keys)).all()} if keys else {}
+    for row in snap_rows:
+        cur = current.get((row["scenario_id"], row["variant_id"]))
+        if cur != row.get("prediction_id"):
+            changed.append({"variant_id": row["variant_id"], "snapshot": row.get("prediction_id"), "current": cur})
     return {"report_id": r.id, "stale": bool(changed), "changed": changed}
 
 
@@ -663,24 +773,27 @@ def model_status(db: Session, *, project_ref: str | None = None) -> dict[str, An
     ``stale_engine`` counts current predictions registered by a run of an older exploration
     engine — their numbers are not what the current code would produce.
     """
-    q = db.query(Prediction).filter(Prediction.status == "current")
+    # SQL aggregate (run, DVFS) -> count: the prediction metrics are never loaded
+    q = db.query(Prediction.exploration_run_ref, Prediction.dvfs_table_ref, func.count()).filter(Prediction.status == "current")
     if project_ref:
         q = q.filter(Prediction.project_ref == project_ref)
-    preds = q.all()
-    run_ids = {p.exploration_run_ref for p in preds}
-    runs = {r.id: r for r in db.query(ArchExplorationRun).filter(ArchExplorationRun.id.in_(run_ids)).all()} if run_ids else {}
+    groups = q.group_by(Prediction.exploration_run_ref, Prediction.dvfs_table_ref).all()
+    run_ids = {g[0] for g in groups}
+    runs = {r.id: r for r in db.query(ArchExplorationRun.id, ArchExplorationRun.engine_rev, ArchExplorationRun.dvfs_table_ref)
+            .filter(ArchExplorationRun.id.in_(run_ids)).all()} if run_ids else {}
+    n_current = sum(g[2] for g in groups)
     engines: dict[str, int] = {}
     dvfs: dict[str, int] = {}
     unrecorded = 0
-    for p in preds:
-        run = runs.get(p.exploration_run_ref)
+    for run_ref, pred_dvfs, count in groups:
+        run = runs.get(run_ref)
         rev = run.engine_rev if run is not None else "unknown"
-        engines[rev] = engines.get(rev, 0) + 1
-        ref = p.dvfs_table_ref or (run.dvfs_table_ref if run is not None else None)
+        engines[rev] = engines.get(rev, 0) + count
+        ref = pred_dvfs or (run.dvfs_table_ref if run is not None else None)
         if ref:
-            dvfs[ref] = dvfs.get(ref, 0) + 1
+            dvfs[ref] = dvfs.get(ref, 0) + count
         else:
-            unrecorded += 1
+            unrecorded += count
 
     mq = db.query(Evidence.provenance, Evidence.kpi).filter(Evidence.kind == "evidence.measurement")
     if project_ref:
@@ -699,15 +812,18 @@ def model_status(db: Session, *, project_ref: str | None = None) -> dict[str, An
         else:
             unknown += 1  # no recorded collection method/device: never counted as silicon evidence
 
-    rq = db.query(ArchExplorationRun)
+    R = ArchExplorationRun
+    rq = db.query(R.id, R.engine_rev, R.created_at, R.summary,
+                  func.jsonb_path_query_array(R.variants, literal_column("'$[*].model_lineage'::jsonpath")))  # lineages only, not the summaries
     if project_ref:
-        rq = rq.filter(ArchExplorationRun.project_ref == project_ref)
-    latest = rq.order_by(ArchExplorationRun.created_at.desc()).first()
-    lineage = run_lineage({"variants": latest.variants, "summary": latest.summary})[0] if latest is not None else None
+        rq = rq.filter(R.project_ref == project_ref)
+    latest = rq.order_by(R.created_at.desc()).first()
+    lineage = (run_lineage({"variants": [{"model_lineage": x} for x in latest[4] or []], "summary": latest.summary})[0]
+               if latest is not None else None)
     return {
         "engine_rev": ENGINE_REV,
         "project_ref": project_ref,
-        "predictions": {"current": len(preds), "stale_engine": sum(n for e, n in engines.items() if e != ENGINE_REV),
+        "predictions": {"current": n_current, "stale_engine": sum(n for e, n in engines.items() if e != ENGINE_REV),
                         "engines": engines},
         "dvfs": [{"ref": ref, "sample": _is_sample(ref), "predictions": n} for ref, n in sorted(dvfs.items())],
         "dvfs_unrecorded": unrecorded,

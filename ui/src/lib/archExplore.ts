@@ -61,6 +61,8 @@ export interface VariantResult {
   power_options?: PowerOptions
   /** engine rev 6+: every HW node's sim mode, coefficients and declared alternatives */
   ip_modes?: IpModeRow[]
+  /** false = list-view row (run?view=summary): fetch archApi.runVariant for slices / buffers / options */
+  detail?: boolean
 }
 export interface IpModeAlt { mode: string; unit_power_mw_mp: number | null; ppc: number | null; explorable: boolean; label?: string | null; note?: string | null }
 export interface IpModeRow {
@@ -117,7 +119,7 @@ export interface RunMeta {
   summary: { variants: number; errors: number; spec_ok: number; cases: number; eligible_cases: number; verified: number; recommended_power_mw: [number, number] | null
     power_options?: { variants: number; sets: number; best_saving_mw: [number, number] | null } }
 }
-export interface RunDetail extends RunMeta { spec: Record<string, unknown>; variants: VariantResult[]; errors: VariantFailure[] }
+export interface RunDetail extends RunMeta { spec: Record<string, unknown>; variants: VariantResult[]; errors: VariantFailure[]; view?: 'full' | 'summary' }
 export interface Power { total_mw: number; cpu_mw: number; hw_mw: number; bw_mw: number; bw_ip_mw?: number; bw_cpu_mw?: number }
 export interface BoardRow {
   id: string; scenario_id: string; variant_id: string; status: string; run_id: string; run_title: string | null; run_created_at: string | null
@@ -194,12 +196,15 @@ const q = (p: Record<string, string | undefined>) => { const s = new URLSearchPa
 export const archApi = {
   /** projectRef omitted = every project (explicit comparison mode) */
   runs: (projectRef?: string) => send<RunMeta[]>('GET', `/arch/exploration/runs${q({ project_ref: projectRef })}`),
-  run: (id: string) => send<RunDetail>('GET', `/arch/exploration/runs/${encodeURIComponent(id)}`),
-  createRun: (body: ReturnType<typeof runBody>) => send<RunDetail>('POST', '/arch/exploration/runs', body),
+  /** list view: per-variant summary rows (~2 KB each); the full summary comes from runVariant on selection */
+  run: (id: string) => send<RunDetail>('GET', `/arch/exploration/runs/${encodeURIComponent(id)}?view=summary`),
+  runVariant: (id: string, scenarioId: string, variantId: string) =>
+    send<VariantResult>('GET', `/arch/exploration/runs/${encodeURIComponent(id)}/variants/${encodeURIComponent(scenarioId)}/${encodeURIComponent(variantId)}`),
+  createRun: (body: ReturnType<typeof runBody>) => send<RunDetail>('POST', '/arch/exploration/runs?view=summary', body),
   promote: (runId: string, variantIds?: string[], caseKey?: string, reason?: string, scenarioId?: string, expectedProject?: string) =>
     send<{ promoted: { id: string; variant_id: string; total_mw: number }[]; skipped: { variant_id: string; reason: string }[] }>(
       'POST', '/arch/predictions/promote', { run_id: runId, variant_ids: variantIds, case_key: caseKey, reason, scenario_id: scenarioId, expected_project_ref: expectedProject }),
-  board: (scenarioId?: string) => send<{ rows: BoardRow[] }>('GET', `/arch/predictions/board${q({ scenario_id: scenarioId })}`),
+  board: (scenarioId?: string, projectRef?: string) => send<{ rows: BoardRow[] }>('GET', `/arch/predictions/board${q({ scenario_id: scenarioId, project_ref: projectRef })}`),
   optionReviews: (scenarioId?: string) => send<OptionReview[]>('GET', `/arch/power-options/reviews${q({ scenario_id: scenarioId })}`),
   setOptionReview: (body: { scenario_id: string; variant_id?: string; option_key: string; status: ReviewStatus; note?: string }) =>
     send<OptionReview>('PUT', '/arch/power-options/reviews', body),

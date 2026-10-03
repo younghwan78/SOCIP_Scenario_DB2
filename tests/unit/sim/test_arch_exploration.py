@@ -384,3 +384,15 @@ def test_input_manifest_keeps_resolved_inputs_content_addressed(uhd30, graph_fac
     assert all(sections[k] in blobs for k in sections)
     again, _ = ax.input_manifest(graph_factory(UHD30), ax.SimulationRunConfig(), dvfs)
     assert again == sections  # deterministic
+
+
+def test_run_list_view_keeps_what_the_run_table_reads(uhd30):
+    import json
+    from scenario_db.api.services.arch_exploration import variant_summary
+    full = {k: v for k, v in uhd30.items() if not k.startswith("_")} | {"scenario_id": "s", "variant_id": "v"}
+    row = variant_summary(full)
+    assert row["detail"] is False and row["recommended"] == full["recommended"] and row["distribution"] == full["distribution"]
+    assert row["sw_margin"]["worst"] == full["sw_margin"]["worst"]
+    assert row["sw_margin"]["growth_tolerance_fixed"] == full["sw_margin"]["growth_tolerance_fixed"]
+    assert {"slices", "buffers", "objective_slice", "pareto"}.isdisjoint(row)
+    assert len(json.dumps(row)) * 10 < len(json.dumps(full, default=str))  # an order of magnitude smaller

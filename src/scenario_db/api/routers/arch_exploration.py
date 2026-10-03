@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import HTMLResponse, Response
 from sqlalchemy.orm import Session
@@ -24,6 +26,7 @@ router = APIRouter(prefix="/arch", tags=["architecture exploration"])
 @router.post("/exploration/runs")
 def create_run(
     request: ArchExplorationRunRequest,
+    view: Literal["full", "summary"] = "full",
     db: Session = Depends(get_db),
     principal: ApiPrincipal = Depends(require_roles("analyst", "writer", "admin")),
 ):
@@ -32,7 +35,10 @@ def create_run(
     enforce_request_size(request, settings.exploration_max_request_bytes)
     enforce_timeline_frame_limit(request.spec.timing.frames, settings.simulation_max_timeline_frames)
     with admission_slot("simulation", settings.simulation_max_concurrent_runs):
-        return svc.run_exploration(db, request, principal.subject)
+        result = svc.run_exploration(db, request, principal.subject)
+    if view == "summary":
+        result = result | {"variants": [svc.variant_summary(v) for v in result["variants"]], "view": "summary"}
+    return result
 
 
 @router.get("/exploration/runs")
@@ -44,8 +50,14 @@ def list_runs(
 
 
 @router.get("/exploration/runs/{run_id}")
-def get_run(run_id: str, db: Session = Depends(get_db)):
-    return svc.run_detail(svc.get_run(db, run_id))
+def get_run(run_id: str, view: Literal["full", "summary"] = "full", db: Session = Depends(get_db)):
+    """view=summary: per-variant list fields only (UI); a variant's full summary via /variants/{scenario}/{variant}."""
+    return svc.run_summary(db, run_id) if view == "summary" else svc.run_detail(svc.get_run(db, run_id))
+
+
+@router.get("/exploration/runs/{run_id}/variants/{scenario_id}/{variant_id}")
+def get_run_variant(run_id: str, scenario_id: str, variant_id: str, db: Session = Depends(get_db)):
+    return svc.run_variant(db, run_id, scenario_id, variant_id)
 
 
 @router.get("/exploration/runs/{run_id}/manifest")

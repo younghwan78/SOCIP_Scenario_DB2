@@ -5,7 +5,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy.orm import Session, load_only
+from sqlalchemy import func, literal, tuple_
+from sqlalchemy.orm import Session, defer, load_only
 
 from scenario_db.comparison.calibration import CATEGORIES, category_fit, compare_split, measured_split, pct
 from scenario_db.db.models.capability import SimConfigProfile
@@ -253,24 +254,66 @@ def measurement_detail(db: Session, measurement_id: str) -> dict[str, Any]:
         raise NotFoundError(f"measurement evidence not found: {measurement_id}")
     scenario = db.get(Scenario, m.scenario_ref)
     project_ref = m.project_ref or (scenario.project_ref if scenario is not None else None)
-    rail_map, profile_ref, rail_basis = _measurement_rail_map(db, m, project_ref)
+    cur = _current(db, m.scenario_ref, m.variant_ref)
+    return _detail(m, _measurement_rail_map(db, m, project_ref), cur, cur.metrics if cur is not None else None,
+                   _sim_evidence(db, m.scenario_ref, m.variant_ref))
+
+
+def measurement_details(db: Session, measurement_ids: list[str]) -> dict[str, dict[str, Any]]:
+    """``measurement_detail`` for many measurements in a constant number of queries (report generation)."""
+    if not measurement_ids:
+        return {}
+    ms = db.query(Evidence).filter(Evidence.id.in_(measurement_ids), Evidence.kind == "evidence.measurement").all()
+    keys = {(m.scenario_ref, m.variant_ref) for m in ms}
+    scen_project = dict(db.query(Scenario.id, Scenario.project_ref).filter(Scenario.id.in_({k[0] for k in keys})).all())
+    cur_metrics = func.jsonb_build_object(literal("power"), Prediction.metrics["power"],
+                                          literal("statistic"), Prediction.metrics["statistic"])
+    currents = {(p.scenario_ref, p.variant_ref): (p, pm) for p, pm in db.query(Prediction, cur_metrics)
+                .options(defer(Prediction.metrics))
+                .filter(Prediction.status == "current", tuple_(Prediction.scenario_ref, Prediction.variant_ref).in_(keys)).all()}
+    sims: dict[tuple[str, str], list[Evidence]] = {}
+    for ev in (db.query(Evidence).options(load_only(
+            Evidence.id, Evidence.scenario_ref, Evidence.variant_ref, Evidence.measured_at, Evidence.run_info,
+            Evidence.kpi, Evidence.power_breakdown, Evidence.execution_context, Evidence.sw_baseline_ref))
+            .filter(Evidence.kind == "evidence.simulation",
+                    tuple_(Evidence.scenario_ref, Evidence.variant_ref).in_(keys)).all()):
+        sims.setdefault((ev.scenario_ref, ev.variant_ref), []).append(ev)
+    projects = {m.project_ref or scen_project.get(m.scenario_ref) for m in ms}
+    latest = {}
+    for row in (db.query(SimConfigProfile).filter(SimConfigProfile.project_ref.in_({p for p in projects if p}))
+                .order_by(SimConfigProfile.version.desc(), SimConfigProfile.id).all()):
+        latest.setdefault(row.project_ref, (dict(row.rail_domain_map or {}), str(row.id)))
+    out = {}
+    for m in ms:
+        project = m.project_ref or scen_project.get(m.scenario_ref)
+        rail = _measurement_rail_map(db, m, project, {}) if (m.provenance or {}).get("rail_domain_map_ref") else None
+        if rail is None or rail[2] != "pinned":
+            lm = latest.get(project or "")
+            rail = (lm[0], lm[1], "latest") if lm and lm[0] else ({}, None, "none")
+        cur, cm = currents.get((m.scenario_ref, m.variant_ref), (None, None))
+        out[m.id] = _detail(m, rail, cur, cm, sorted(sims.get((m.scenario_ref, m.variant_ref), []), key=_sim_order))
+    return out
+
+
+def _detail(m: Evidence, rail: tuple[dict[str, str], str | None, str], cur: Prediction | None,
+            cur_metrics: dict[str, Any] | None, sims: list[Evidence]) -> dict[str, Any]:
+    rail_map, profile_ref, rail_basis = rail
     split = measured_split(m.vdd_power, rail_map)
     total = _total(m.kpi)
     meas_cat = split["categories"]
     predictions: list[dict[str, Any]] = []
-    cur = _current(db, m.scenario_ref, m.variant_ref)
-    if cur is not None:
-        pw = cur.metrics["power"]
+    if cur is not None and cur_metrics is not None:
+        pw = cur_metrics["power"]
         predictions.append({
             "kind": "current", "id": cur.id, "label": "등록 예측 (current)", "run_id": cur.exploration_run_ref,
-            "selection_rule": cur.selection_rule, "statistic": cur.metrics.get("statistic"),
+            "selection_rule": cur.selection_rule, "statistic": cur_metrics.get("statistic"),
             "total_mw": pw["total_mw"], "delta_pct": pct(pw["total_mw"], total["mean"]),
             "split": _pred_split(pw), "rows": compare_split(_pred_split(pw), meas_cat),
         })
     meas_ctx = dict(m.execution_context or {}) | ({"sw_baseline_ref": m.sw_baseline_ref} if m.sw_baseline_ref else {})
     for p in predictions:  # registered prediction: the model run records no device/thermal condition
         p["conditions"] = compare_conditions(meas_ctx, {})
-    for ev in _sim_evidence(db, m.scenario_ref, m.variant_ref):
+    for ev in sims:
         t = _total(ev.kpi)["mean"]
         sp = _sim_split(ev)
         sim_ctx = dict(ev.execution_context or {}) | ({"sw_baseline_ref": ev.sw_baseline_ref} if ev.sw_baseline_ref else {})

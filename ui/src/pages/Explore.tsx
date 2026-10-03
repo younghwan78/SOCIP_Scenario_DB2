@@ -245,6 +245,15 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
 
 // ---------------------------------------------------------------- one variant
 function VariantDetail({ v, run, readOnly }: { v: VariantResult; run: RunDetail; readOnly: boolean }) {
+  // list rows are summaries; slices, buffers, DVFS domains, IP modes and option results load per variant
+  const fullQ = useAsync(() => (v.detail === false ? archApi.runVariant(run.id, v.scenario_id, v.variant_id) : Promise.resolve(v)),
+    [run.id, v.scenario_id, v.variant_id])
+  if (fullQ.error) return <div className="err" style={{ gridColumn: '1 / -1' }}>{short(v.variant_id)} 상세 조회 실패: {fullQ.error}</div>
+  if (!fullQ.data) return <div className="empty" style={{ gridColumn: '1 / -1' }}>{short(v.variant_id)} 상세 불러오는 중…</div>
+  return <VariantDetailBody v={fullQ.data} run={run} readOnly={readOnly} />
+}
+
+function VariantDetailBody({ v, run, readOnly }: { v: VariantResult; run: RunDetail; readOnly: boolean }) {
   const rec = v.recommended
   const listed = new Set([rec?.key, ...v.alternatives.map((c) => c.key), v.baseline.key])
   const pareto = (v.pareto ?? []).filter((c) => !listed.has(c.key))

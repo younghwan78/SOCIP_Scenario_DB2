@@ -3,6 +3,7 @@ import type { Ctx } from '../App'
 import { useAsync } from '../lib/route'
 import { archApi } from '../lib/archExplore'
 import { calibrationApi } from '../lib/calibration'
+import { provenanceApi } from '../lib/provenance'
 import { libraryApi } from '../lib/library'
 import { CATEGORY_COLOR, CATEGORY_LABEL, CATEGORY_ORDER, primaryCategory } from '../lib/guides'
 import { DOMAIN_LABEL, domainFor, type Domain } from '../lib/tunnel'
@@ -17,7 +18,8 @@ export function HomePage({ ctx }: { ctx: Ctx }) {
   const [paused, setPaused] = useState(false)
   const runs = useAsync(() => quiet(archApi.runs()), [])
   const reports = useAsync(() => quiet(archApi.reports()), [])
-  const board = useAsync(() => quiet(archApi.board()), [])
+  // count only: model-status aggregates in SQL instead of shipping every prediction row
+  const status = useAsync(() => quiet(provenanceApi.modelStatus()), [])
   const meas = useAsync(() => quiet(calibrationApi.measurements()), [])
   const cov = useAsync(() => quiet(calibrationApi.coverageSummary()), [])
   const dvfs = useAsync(() => quiet(libraryApi.dvfs()), [])
@@ -93,7 +95,7 @@ export function HomePage({ ctx }: { ctx: Ctx }) {
         </a>
         <div className="hd-block">
           <h3>Architecture 검토</h3>
-          <a className="hd-row" href="#/predictions"><span>등록 예측</span><b>{board.data ? board.data.rows.length : '—'}</b></a>
+          <a className="hd-row" href="#/predictions"><span>등록 예측</span><b>{status.data ? status.data.predictions.current : '—'}</b></a>
           <a className="hd-row" href={run ? `#/explore?run=${encodeURIComponent(run.id)}` : '#/explore'}><span>최근 탐색</span>
             <b className="txt" title={run?.title}>{run ? `${run.summary.spec_ok}/${run.summary.variants} 만족 · ${run.created_at?.slice(5, 10) ?? ''}` : '없음'}</b></a>
           <a className="hd-row" href={report ? `#/reports?report=${encodeURIComponent(report.id)}` : '#/reports'}><span>보고서</span>

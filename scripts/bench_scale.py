@@ -172,31 +172,42 @@ def measure(engine, fn: Callable[[], Any], repeats: int) -> dict[str, Any]:
         start = time.perf_counter()
         fn()
         times.append((time.perf_counter() - start) * 1000)
+    wire = None
+    if isinstance(result, tuple):  # (decoded bytes, bytes on the wire after gzip)
+        result, wire = result
     size = result if isinstance(result, int) else len(json.dumps(result, default=str).encode())
     times = times or [cold]
-    return {"cold_ms": round(cold, 1), "median_ms": round(statistics.median(times), 1),
-            "max_ms": round(max(times), 1), "selects": len(stmts), "bytes": size}
+    out = {"cold_ms": round(cold, 1), "median_ms": round(statistics.median(times), 1),
+           "max_ms": round(max(times), 1), "selects": len(stmts), "bytes": size}
+    if wire is not None:
+        out["wire_bytes"] = wire
+    return out
 
 
-def all_pages(client, path: str, params: dict[str, Any], limit: int) -> int:
-    """Mirror of ui/src/lib/api.ts allPages: returns total response bytes."""
-    total_bytes, offset, total = 0, 0, None
+def _wire(res) -> int:
+    return int(res.headers.get("content-length") or len(res.content))
+
+
+def all_pages(client, path: str, params: dict[str, Any], limit: int) -> tuple[int, int]:
+    """Mirror of ui/src/lib/api.ts allPages: (decoded bytes, wire bytes) over all pages."""
+    total_bytes, wire, offset, total = 0, 0, 0, None
     while total is None or offset < total:
-        res = client.get(path, params={**params, "limit": limit, "offset": offset})
+        res = client.get(path, params={**params, "limit": limit, "offset": offset}, headers={"Accept-Encoding": "gzip"})
         res.raise_for_status()
         total_bytes += len(res.content)
+        wire += _wire(res)
         body = res.json()
         total = body["total"]
         if not body["items"]:
             break
         offset += len(body["items"])
-    return total_bytes
+    return total_bytes, wire
 
 
-def get_bytes(client, path: str, params: dict[str, Any] | None = None) -> int:
-    res = client.get(path, params=params or {})
+def get_bytes(client, path: str, params: dict[str, Any] | None = None) -> tuple[int, int]:
+    res = client.get(path, params=params or {}, headers={"Accept-Encoding": "gzip"})
     res.raise_for_status()
-    return len(res.content)
+    return len(res.content), _wire(res)
 
 
 def run(args) -> dict[str, Any]:
@@ -244,6 +255,10 @@ def run(args) -> dict[str, Any]:
             break
     out["check.catalog_variant_count"] = {"expected": args.variants, "counted": counted, "ok": counted == args.variants}
     print(f"  check.catalog_variant_count                {out['check.catalog_variant_count']}", flush=True)
+    with Session(engine) as db:  # SQL-trimmed run list view == Python trimming on a real summary
+        same = svc.run_summary(db, rid)["variants"] == svc.run_detail(svc.get_run(db, rid), "summary")["variants"]
+    out["check.run_summary_sql_equals_python"] = {"ok": same}
+    print(f"  check.run_summary_sql_equals_python        {out['check.run_summary_sql_equals_python']}", flush=True)
     m("explorer.scenario_catalog (allPages 500)", lambda: all_pages(client, f"{api}/explorer/scenario-catalog", {"project_ref": PROJECT}, 500))
     m("explorer.variant_matrix (allPages 1000)", lambda: all_pages(client, f"{api}/explorer/variant-matrix", {"project_ref": PROJECT}, 1000))
     m("scenario.variants s0 (allPages 500)", lambda: all_pages(client, f"{api}/scenarios/{s0}/variants", {}, 500))
@@ -253,7 +268,9 @@ def run(args) -> dict[str, Any]:
     m("calibration.coverage s0", lambda: get_bytes(client, f"{api}/calibration/coverage", {"scenario_id": s0}))
     m("calibration.measurement_detail", lambda: get_bytes(client, f"{api}/calibration/measurements/{ids['measurement']}"))
     m("arch.runs list", lambda: get_bytes(client, f"{api}/arch/exploration/runs", {"project_ref": PROJECT}))
-    m("arch.run detail (max run)", lambda: get_bytes(client, f"{api}/arch/exploration/runs/{rid}"))
+    m("arch.run detail full (max run)", lambda: get_bytes(client, f"{api}/arch/exploration/runs/{rid}"))
+    m("arch.run detail summary (UI)", lambda: get_bytes(client, f"{api}/arch/exploration/runs/{rid}", {"view": "summary"}))
+    m("arch.run variant detail (UI select)", lambda: get_bytes(client, f"{api}/arch/exploration/runs/{rid}/variants/{s0}/v-00000"))
     m("arch.run manifest", lambda: get_bytes(client, f"{api}/arch/exploration/runs/{rid}/manifest"))
     m("arch.predictions board (project)", lambda: get_bytes(client, f"{api}/arch/predictions/board", {"project_ref": PROJECT}))
     m("arch.model_status", lambda: get_bytes(client, f"{api}/arch/model-status", {"project_ref": PROJECT}))

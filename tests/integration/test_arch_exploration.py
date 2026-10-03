@@ -286,3 +286,34 @@ def test_report_package_and_run_manifest(engine, stored_run):
         assert "manifest" not in svc.run_detail(svc.get_run(db, rid))["spec"]
         with pytest.raises(UnprocessableError, match="belongs to project"):
             svc.promote(db, PromoteRequest(run_id=rid, expected_project_ref="proj-other"))
+
+
+def test_run_summary_view_variant_detail_and_gzip(engine, stored_run):
+    from fastapi.testclient import TestClient
+    from scenario_db.api.app import create_app
+    from scenario_db.api.deps import get_db
+    from scenario_db.exceptions import NotFoundError
+    rid, ids = stored_run
+    with Session(engine) as db:
+        summary_view = svc.run_detail(svc.get_run(db, rid), "summary")
+        assert summary_view["view"] == "summary" and all(v["detail"] is False for v in summary_view["variants"])
+        one = svc.run_variant(db, rid, ids[1], "shared")
+        assert one["scenario_id"] == ids[1] and one["detail"] is True
+        with pytest.raises(NotFoundError):
+            svc.run_variant(db, rid, ids[1], "missing")
+        app = create_app()
+        app.dependency_overrides[get_db] = lambda: db
+        res = TestClient(app).get(f"/api/v1/arch/exploration/runs/{rid}", params={"view": "summary"},
+                                  headers={"Accept-Encoding": "gzip"})
+        assert res.status_code == 200 and res.json()["view"] == "summary"
+        if len(res.content) >= 1024:
+            assert res.headers.get("content-encoding") == "gzip"
+
+
+def test_sql_run_summary_matches_python_trimming(engine, stored_run):
+    rid, _ = stored_run
+    with Session(engine) as db:
+        py = svc.run_detail(svc.get_run(db, rid), "summary")
+        sql = svc.run_summary(db, rid)
+        assert sql["variants"] == py["variants"]
+        assert {k: v for k, v in sql.items() if k != "variants"} == {k: v for k, v in py.items() if k != "variants"}
