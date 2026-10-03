@@ -12,7 +12,7 @@ import { modeNotes } from '../lib/modes'
 import { GraphView } from '../components/GraphView'
 import { FrameColorLegend, TimelineView } from '../components/TimelineView'
 import { IpInternalView } from '../components/IpInternalView'
-import { CadenceView } from '../components/CadenceView'
+import { CadenceView, TimingContextStrip } from '../components/CadenceView'
 import { BufferTooltip, IpTooltip } from '../components/NodeTooltip'
 import { DataTable, type Column } from '../components/DataTable'
 import { useWidth } from '../components/Charts'
@@ -190,10 +190,10 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
     { key: 'flags', label: 'Config', width: 260, title: (i) => i.flags.map(([k, v]) => `${k}=${v}`).join(' · '), render: (i) => <span className="faint">{i.flags.map(([k, v]) => `${k}=${v}`).join(' · ')}</span> },
   ]
   const onIpRow = (i: IpModel) => selectNode(i.viewId)
-  const nodeTip = (id: string) => {
+  const nodeTip = (id: string, pinned: boolean) => {
     if (id.startsWith('buf:')) { const b = model?.buffers.find((x) => `buf:${x.name}` === id); return b ? <BufferTooltip b={b} /> : null }
     const ip = model?.byPid.get(pipelineIdOf(id))
-    return ip ? <IpTooltip ip={ip} timing={timing?.get(ip.pid)} /> : null
+    return ip ? <IpTooltip ip={ip} timing={timing?.get(ip.pid)} expanded={pinned} /> : null
   }
   const st: StageTiming | undefined = selectedPid ? timing?.get(selectedPid) : undefined
 
@@ -250,19 +250,28 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
               {traces.map((t) => <option key={t.id} value={t.id}>{evidenceSource(t)} · {new Set((t.timeline_events ?? []).map((x) => x.frame_index)).size}f · {t.id}</option>)}
             </select>}
             <span className="grow" />
-            {tview === 'trace' && <>
+          </div>
+          {timeline && <TimingContextStrip timeline={timeline} view={view} fps={fps} laneOfPid={laneOfPid} notes={notes}
+            extra={<>{slice ? <span className="chip" title="선택한 slice">선택 {slice.label}{slice.frame !== null ? ` · f${slice.frame}` : ''}</span> : null}
+              <span className="grow" />
+              {/* same controls in every Timing view: color and legend apply to both, Flow only draws in Trace */}
+            <span className="timing-opts">
               {colorBy === 'frame' && <FrameColorLegend />}
               <select value={colorBy} onChange={(e) => setColorBy(e.target.value as 'group' | 'frame')} aria-label="색 기준" title="frame × 분류: 같은 frame = 같은 색 계열, RT·NRT·M2M·SW = 명도·무늬로 구분 (RT(N+1)과 NRT(N) 중첩이 보임)">
                 <option value="frame">색: frame × 분류</option><option value="group">색: stage</option></select>
-              <label className="muted" style={{ fontSize: 12, display: 'flex', gap: 5, whiteSpace: 'nowrap' }}><input type="checkbox" checked={showFlows} onChange={(e) => setShowFlows(e.target.checked)} />Flow</label></>}
-          </div>
+              <label className="muted" style={{ fontSize: 12, display: 'flex', gap: 5, whiteSpace: 'nowrap', opacity: tview === 'trace' ? 1 : 0.45 }} title={tview === 'trace' ? 'slice 간 의존 화살표' : 'Trace 보기에서만 표시'}>
+                <input type="checkbox" checked={showFlows} disabled={tview !== 'trace'} onChange={(e) => setShowFlows(e.target.checked)} />Flow</label>
+            </span>
+            </>} />}
           <div className="pane-body">
             {evidenceQ.error && <div className="err">{evidenceQ.error}</div>}
             {evidenceQ.loading && <div className="empty">Evidence 불러오는 중…</div>}
             {!evidenceQ.loading && !timeline && <div className="empty">이 variant에는 timeline event가 있는 evidence가 없습니다. Camera Profiling에서 trace를 import하거나 simulation을 저장하세요.</div>}
             {timeline && tview === 'trace' && <TimelineView timeline={timeline} selectedSlice={slice?.id ?? null} colorBy={colorBy}
               highlightNode={slice ? null : highlightPid} showFlows={showFlows} onSelect={selectSlice} />}
-            {timeline && tview === 'cadence' && <CadenceView timeline={timeline} view={view} fps={fps} laneOfPid={laneOfPid} notes={notes} source={trace ? `${evidenceSource(trace)} · ${trace.id}` : ''} />}
+            {timeline && tview === 'cadence' && <CadenceView timeline={timeline} view={view} fps={fps} laneOfPid={laneOfPid} colorBy={colorBy}
+              picked={slice && slice.frame !== null && slice.nodeId ? { frame: slice.frame, lane: laneOfPid(pipelineIdOf(slice.nodeId.replace(/^stage:/, ''))) ?? '' } : null}
+              onPick={(f, lane) => selectSlice(timeline.slices.filter((x) => x.frame === f && x.nodeId && laneOfPid(pipelineIdOf(x.nodeId.replace(/^stage:/, ''))) === lane).sort((a, b) => a.start - b.start)[0] ?? null)} />}
           </div>
         </section>}
       </div>

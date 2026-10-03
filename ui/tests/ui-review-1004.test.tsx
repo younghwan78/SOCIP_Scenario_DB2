@@ -39,3 +39,30 @@ it('wraps the compare summary table in a scroller and compacts 4+ items', () => 
   expect(host.querySelectorAll('th .cs-th-l')).toHaveLength(4)
   unmount()
 })
+
+it('graph tooltip parks after a short rest: scrollable, full detail, Esc closes', async () => {
+  const { vi } = await import('vitest')
+  const { GraphView } = await import('../src/components/GraphView')
+  vi.useFakeTimers()
+  if (typeof ResizeObserver === 'undefined') Object.assign(globalThis, { ResizeObserver: class { observe() {} unobserve() {} disconnect() {} } })
+  const layout = { nodes: [{ id: 'ip:sensor', label: 'Sensor', kind: 'ip', group: null, width: 120, height: 40, x: 10, y: 10 }], groups: [], edges: [], width: 300, height: 200 } as never
+  const seen: boolean[] = []
+  const tip = (id: string, pinned: boolean) => { seen.push(pinned); return <div className="body">{id}{pinned ? ' · modes: m0 m1 m2' : ''}</div> }
+  const { host, unmount } = mount(<GraphView layout={layout} selected={null} related={new Set()} onSelect={() => {}} onToggleGroup={() => {}} tooltip={tip} />)
+  const node = host.querySelector('g.node')!
+  act(() => { node.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: 30, clientY: 30 })) })
+  expect(host.querySelector('.gtip')?.className).not.toContain('pinned')
+  act(() => { vi.advanceTimersByTime(450) })
+  const tipEl = host.querySelector('.gtip.pinned')!
+  expect(tipEl).not.toBeNull()
+  expect(tipEl.textContent).toContain('modes')
+  act(() => { node.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: document.body })) })
+  expect(host.querySelector('.gtip.pinned')).not.toBeNull()          // stays after leaving the node
+  const wheel = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 40 })
+  tipEl.dispatchEvent(wheel)
+  expect(wheel.defaultPrevented).toBe(false)                          // native scroll inside the parked tooltip
+  act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })) })
+  expect(host.querySelector('.gtip.pinned')).toBeNull()
+  vi.useRealTimers()
+  unmount()
+})
