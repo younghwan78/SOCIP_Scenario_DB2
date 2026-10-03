@@ -2,6 +2,16 @@
 import type { ReactNode } from 'react'
 
 export const CPU_HELP: Record<string, ReactNode> = {
+  dsu: <>
+    <b>DSU 주파수를 정하는 규칙(가정)을 바꿔 보며 결론이 유지되는지 봅니다.</b>
+    <ul>
+      <li><b>vote 표</b> — busy cluster마다 자기 OPP에 대한 DSU 최소 주파수를 요청하고 DSU는 그 최대값으로 동작. architecture 단계에서는 가정값 (topology <code>cpu.dsu.vote</code>, <code>vote_source: estimate</code>).</li>
+      <li><b>즉시 재계산</b> — DSU는 cluster 주파수·배치를 바꾸지 않으므로 표를 바꾸면 반환된 후보의 DSU 전력과 순위만 다시 계산. 전체 조합 순위가 필요하면 “이 규칙으로 다시 계산”.</li>
+      <li><b>−1 / +1 step</b> — 표 전체를 DSU OPP 한 단계씩 내리고/올린 corner. 최적 배치가 바뀌면 그 가정을 먼저 확정해야 합니다.</li>
+      <li><b>A / B</b> — 두 정책을 저장해 비교. <b>YAML 복사</b>로 topology에 붙여 넣어 팀 가정으로 등록.</li>
+      <li><b>측정 고정</b> — 측정 residency를 모든 배치에 그대로 쓰는 예전 방식: 배치를 바꿔도 DSU 전력이 변하지 않아 재분배 이득을 과소평가합니다.</li>
+    </ul>
+  </>,
   input: <>
     <b>무엇을 기준으로 계산할지 고릅니다.</b>
     <ul>

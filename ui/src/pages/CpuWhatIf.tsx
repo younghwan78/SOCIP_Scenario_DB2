@@ -12,6 +12,8 @@ import { PowerDeltaTable, PowerStack, type PowerRow } from '../components/PowerM
 import { partColor, sortClusters } from '../lib/powerModel'
 import { CPU_HELP, threadLabel } from '../components/CpuHelp'
 import { usePref } from '../components/Layout'
+import { DsuPanel } from '../components/DsuPanel'
+import { applyDsu, type DsuPolicy } from '../lib/dsu'
 
 type TaskEdit = { sweep: string[] | null; threads: string; budget: string; growth: string }
 type Adv = { freqMargin: string; fitsMargin: string; utilModel: '' | 'util_est' | 'pelt_avg'; halflife: string; boost: '' | 'on' | 'off'; emStatic: '' | 'on' | 'off' }
@@ -39,7 +41,11 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
   const [uMin, setUMin] = useState('')
   const [adv, setAdv] = useState<Adv>(NO_ADV)
   const [edits, setEdits] = useState<Record<string, TaskEdit>>({})
-  const [result, setResult] = useState<CpuSweep | null>(null)
+  const [rawResult, setResult] = useState<CpuSweep | null>(null)
+  // DSU assumption: exp = client-side experiment on the returned cases, dsuReq = rule sent to the server
+  const [dsuExp, setDsuExp] = useState<DsuPolicy | null>(null)
+  const [dsuReq, setDsuReq] = useState<DsuPolicy | null>(null)
+  const result = useMemo(() => (rawResult ? applyDsu(rawResult, dsuExp) : null), [rawResult, dsuExp])
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const requestId = useRef(0)
@@ -71,7 +77,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
     setTarget(rankTopologies(inputs.data.topologies, prof)[0].id)
   }, [inputs.data, prof]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const request = (taskEdits = edits): CpuSweepRequest => {
+  const request = (taskEdits = edits, dsu = dsuReq): CpuSweepRequest => {
     const pick = (k: 'budget' | 'growth' | 'threads') => Object.fromEntries(Object.entries(taskEdits)
       .map(([t, e]) => [t, num(e[k])] as const).filter(([, v]) => v !== undefined)) as Record<string, number>
     return {
@@ -82,6 +88,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
       power_gating_eff: pgEff, cpu_bw_scale: bwScale,
       freq_margin: num(adv.freqMargin), fits_margin: num(adv.fitsMargin), util_model: adv.utilModel || undefined,
       pelt_halflife_ms: num(adv.halflife), deadline_boost: tri(adv.boost), energy_includes_static: tri(adv.emStatic), top,
+      ...(dsu ? { dsu_mode: dsu.mode, dsu_vote: dsu.mode === 'vote' ? dsu.vote : undefined, dsu_fixed_mhz: dsu.mode === 'fixed' ? dsu.fixed_mhz : undefined } : {}),
     }
   }
   const run = async (payload = request()) => {
@@ -101,9 +108,9 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
     const selection = JSON.stringify([profile, target, base])
     const changed = inputSelection.current !== selection
     inputSelection.current = selection
-    if (changed) setEdits({})
+    if (changed) { setEdits({}); setDsuExp(null); setDsuReq(null) }
     setResult(null)
-    if (profile && target) void run(request(changed ? {} : edits))
+    if (profile && target) void run(request(changed ? {} : edits, changed ? null : dsuReq))
     return () => { ++requestId.current }
   }, [profile, target, base, reference]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -139,6 +146,9 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
     }
     return out
   })
+  // DSU experiment re-ranks the cases: keep the selection on the new best
+  useEffect(() => { if (result) setSel(result.cases[0] ? `c${result.cases[0].rank}` : '') }, [dsuExp]) // eslint-disable-line react-hooks/exhaustive-deps
+  const applyDsuToServer = (pol: DsuPolicy | null) => { setDsuReq(pol); setDsuExp(null); void run(request(edits, pol)) }
   const toggleKnob = (k: Knob) => setKnobs((ks) => (ks.includes(k) ? ks.filter((x) => x !== k) : [...ks, k]))
 
   // ---- results
@@ -219,6 +229,10 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
               <label className="cpu-f" title="EAS 에너지 비교에 leakage 포함 (vendor scheduler)"><span className="faint">EM에 leakage</span><select value={adv.emStatic} onChange={(e) => setAdv({ ...adv, emStatic: e.target.value as Adv['emStatic'] })}><option value="">{sched?.energy_includes_static ? 'on' : 'off'} (설정)</option><option value="on">on</option><option value="off">off</option></select></label>
             </div></details>
         </Card>
+        {rawResult?.dsu_params && <Card id="cpu-dsu" title="DSU 동기화 (가정)" defaultWide minHeight={120} help={CPU_HELP.dsu}
+          note={`DSU 주파수 = busy cluster vote 최대 · 표를 바꾸면 반환된 후보를 즉시 재계산${dsuExp ? ' · 실험 적용 중' : ''}`}>
+          <DsuPanel raw={rawResult} exp={dsuExp} setExp={setDsuExp} onApply={applyDsuToServer} applied={dsuReq} />
+        </Card>}
         <Card id="cpu-range" title="③ Sweep 범위" note="cluster별 · 칸 = fmax에서 task 시간 · ✓ budget 충족 · 체크 = sweep에 포함 · 파란 칸 = 측정 위치" defaultWide help={CPU_HELP.range}>
           <div className="toolbar" style={{ gap: 14, marginBottom: 6, fontSize: 12 }}>
             <span className="faint">knob</span>

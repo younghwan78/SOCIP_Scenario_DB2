@@ -122,6 +122,32 @@ class CpuClusterParams(BaseScenarioModel):
         return self
 
 
+class CpuDsuVote(BaseScenarioModel):
+    """DSU frequency one cluster requests (DSU <-> cluster clock coupling).
+
+    ``points`` = ascending ``[cluster_mhz, dsu_min_mhz]`` steps: a cluster running at
+    ``f`` votes the ``dsu_min_mhz`` of the first point with ``cluster_mhz >= f`` (the
+    last point above the table). The DSU runs at the highest vote of the busy clusters.
+    In the architecture phase this table is an assumption (``CpuDsuParams.vote_source``).
+    """
+
+    cluster: str = Field(min_length=1)    # cluster name or core_type
+    points: list[tuple[float, float]] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _points_valid(self) -> CpuDsuVote:
+        for f, d in self.points:
+            if not (f > 0 and d > 0) or f != f or d != d:
+                raise ValueError(f"DSU vote '{self.cluster}': frequencies must be positive")
+        fs = [f for f, _ in self.points]
+        if fs != sorted(fs) or len(set(fs)) != len(fs):
+            raise ValueError(f"DSU vote '{self.cluster}': cluster_mhz must be strictly ascending")
+        ds = [d for _, d in self.points]
+        if ds != sorted(ds):
+            raise ValueError(f"DSU vote '{self.cluster}': dsu_min_mhz must not decrease")
+        return self
+
+
 class CpuDsuParams(BaseScenarioModel):
     """DynamIQ Shared Unit (L3 / snoop control), shared by all clusters."""
 
@@ -129,6 +155,10 @@ class CpuDsuParams(BaseScenarioModel):
     opps: list[CpuOpp] = Field(default_factory=list)
     leakage: CpuLeakage | None = None
     rail: str | None = None
+    # cluster -> DSU clock coupling; None = not modelled (measured residency or proportional fallback).
+    # None (not []) keeps params_ref of existing documents unchanged (hash drops None fields).
+    vote: list[CpuDsuVote] | None = None
+    vote_source: Literal["estimate", "ect", "measured"] | None = None
 
     @model_validator(mode="after")
     def _opps_valid(self) -> CpuDsuParams:

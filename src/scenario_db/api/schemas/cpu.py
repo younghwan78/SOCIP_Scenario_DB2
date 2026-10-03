@@ -10,6 +10,8 @@ Growth = Annotated[float, Field(gt=0, le=10, allow_inf_nan=False)]
 Budget = Annotated[float, Field(gt=0, allow_inf_nan=False)]
 ThreadCount = Annotated[int, Field(ge=1, le=64)]
 ClampLevel = Annotated[int, Field(ge=0, le=1024)]
+Mhz = Annotated[float, Field(gt=0, le=20000, allow_inf_nan=False)]
+DsuMode = Literal["auto", "vote", "proportional", "measured", "fixed"]
 
 
 class CpuWhatIfRequest(BaseModel):
@@ -76,3 +78,8 @@ class CpuSweepRequest(BaseModel):
     energy_includes_static: bool | None = None
     max_cases: int = Field(default=3000, ge=1, le=20000)
     top: int = Field(default=60, ge=1, le=500)
+    # DSU <-> cluster clock coupling (architecture-phase assumption): auto = topology vote table if any,
+    # else the measured residency, else proportional. dsu_vote overrides the topology table (experiment).
+    dsu_mode: DsuMode = "auto"
+    dsu_vote: dict[str, Annotated[list[tuple[Mhz, Mhz]], Field(min_length=1)]] | None = None
+    dsu_fixed_mhz: Mhz | None = None

@@ -59,6 +59,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 
 from scenario_db.sim.cpu_power import OTHER_TASK, ClusterModel, CpuPowerModel
+from scenario_db.sim import cpu_dsu
 from scenario_db.sim.cpu_whatif import _Demand, _map_to_target, _mean_mhz, demands
 
 SCALE = 1024.0
@@ -439,8 +440,9 @@ def evaluate(
     policies: dict[str, TaskPolicy],
     *,
     budgets_ms: dict[str, float],
-    dsu_residency: dict[float, float] | None,
+    dsu_residency: dict[float, float] | None = None,
     bw_mbs: float,
+    dsu_policy: cpu_dsu.DsuPolicy | None = None,
 ) -> dict[str, Any]:
     slots, overutilized = eas_place(threads, ctx, policies)
     clusters_out: dict[str, Any] = {}
@@ -474,7 +476,10 @@ def evaluate(
             for cpu in row["cpus"]:
                 idle_all *= 1.0 - min(1.0, cpu["busy_ms"] / period)
         active = 1.0 - idle_all
-        if dsu_residency:
+        if dsu_policy is not None:
+            busy = {n: r["mhz"] for n, r in clusters_out.items() if r["busy_ms"] > 0}
+            residency = cpu_dsu.residency(dsu_policy, model, busy, {n: ctx.fmax(n) for n in busy})
+        elif dsu_residency:
             residency = dsu_residency
         else:   # no measured DSU residency: follow the busiest cluster's relative frequency
             rel = max((r["mhz"] / ctx.fmax(n) for n, r in clusters_out.items() if r["busy_ms"] > 0), default=0.0)
@@ -532,6 +537,9 @@ class SweepSpec:
     beam_width: int = 12
     top: int = 60
     reference: str = "measured"     # measured = measured clusters + schedutil ("현재"), eas = EAS default
+    dsu_mode: str = "auto"          # cpu_dsu.MODES
+    dsu_vote: Any = None            # request vote table (experiment) — overrides the topology's
+    dsu_fixed_mhz: float | None = None
     equal_mw: float = 0.1           # cases within this power and with the same OPPs are folded together
 
 
@@ -628,6 +636,8 @@ def cpu_sweep(
     bus = sum(d.bus_bytes * spec.growth.get(t, spec.default_growth) for t, ds in need.items() for d in ds)
     bw_mbs = bus * fps * spec.cpu_bw_scale / 1e6
     dsu_res = profile.dsu.freq_residency if getattr(profile, "dsu", None) else None
+    dsu_policy = cpu_dsu.resolve(target, mode=spec.dsu_mode, vote=spec.dsu_vote, fixed_mhz=spec.dsu_fixed_mhz,
+                                 measured=dsu_res) if target.dsu is not None and target.dsu.opps else None
     tasks = sorted(t for t in need if t != OTHER_TASK) + ([OTHER_TASK] if OTHER_TASK in need else [])
 
     # ---- sweep range: per task x cluster, alone at fmax
@@ -675,7 +685,8 @@ def cpu_sweep(
             for task, index in zip(swept, assign):
                 if index:
                     policies[task] = _apply(policies.get(task, TaskPolicy()), options[task][index])
-            case = evaluate(threads, ctx, policies, budgets_ms=spec.budgets_ms, dsu_residency=dsu_res, bw_mbs=bw_mbs)
+            case = evaluate(threads, ctx, policies, budgets_ms=spec.budgets_ms, dsu_residency=dsu_res, bw_mbs=bw_mbs,
+                            dsu_policy=dsu_policy)
             case["knobs"] = {task: options[task][index] for task, index in zip(swept, assign) if index}
             memo[assign] = case
         return memo[assign]
@@ -687,7 +698,7 @@ def cpu_sweep(
     for task, where in measured_where.items():
         measured_policies[task] = replace(measured_policies.get(task, TaskPolicy()), allowed=tuple(where))
     measured_case = evaluate(threads, ctx, measured_policies, budgets_ms=spec.budgets_ms, dsu_residency=dsu_res,
-                             bw_mbs=bw_mbs)
+                             bw_mbs=bw_mbs, dsu_policy=dsu_policy)
     measured_case["knobs"] = {t: {"kind": "measured", "clusters": w} for t, w in measured_where.items() if t in swept}
     reference = measured_case if spec.reference == "measured" else eas_default
     if space <= spec.max_cases:
@@ -777,7 +788,7 @@ def cpu_sweep(
             "clusters": [{"name": c.name, "core_type": c.core_type, "cores": c.cores, "cpus": list(c.cpus),
                           "capacity": caps[c.name], "ipc_rel": c.ipc_rel,
                           "opp_min_mhz": _freqs(c, target)[0], "opp_max_mhz": _freqs(c, target)[-1],
-                          "opp_count": len(_freqs(c, target))} for c in target.clusters],
+                          "opp_count": len(_freqs(c, target)), "opps_mhz": _freqs(c, target)} for c in target.clusters],
             "tasks": range_tasks,
             "knobs": list(spec.knobs),
             "space": space,
@@ -787,6 +798,11 @@ def cpu_sweep(
         },
         "measured_mw": measured_mw,
         "calibration": calibration,
+        "dsu_model": dsu_policy.describe() if dsu_policy else None,
+        "dsu_params": cpu_dsu.params_view(target, sched.power_gating_eff),
+        "dsu_measured": {str(f): v for f, v in dsu_res.items()} if dsu_res else None,
+        "dsu_check": ({"measured_mean_mhz": round(_mean_mhz(dsu_res, 0.0), 1),
+                       "model_mhz": (measured_case.get("dsu") or {}).get("mhz")} if dsu_res and dsu_policy else None),
         "reference_kind": spec.reference,
         "reference": reference,
         "eas_default": eas_default,

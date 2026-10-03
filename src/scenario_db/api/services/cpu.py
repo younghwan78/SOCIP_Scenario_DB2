@@ -55,6 +55,7 @@ def run_cpu_sweep(db: Session, request: CpuSweepRequest) -> CpuWhatIfResponse:
         freq_margin=request.freq_margin, fits_margin=request.fits_margin, util_model=request.util_model,
         pelt_halflife_ms=request.pelt_halflife_ms, deadline_boost=request.deadline_boost,
         energy_includes_static=request.energy_includes_static, max_cases=request.max_cases, top=request.top,
+        dsu_mode=request.dsu_mode, dsu_vote=request.dsu_vote, dsu_fixed_mhz=request.dsu_fixed_mhz,
     )
     try:
         result = cpu_sweep(profile, target=target, base=base, fps=request.fps, spec=spec)
