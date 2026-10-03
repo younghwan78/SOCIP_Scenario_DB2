@@ -219,3 +219,33 @@ def test_scheduler_absent_keeps_dump_and_api_service():
         svc._model = orig  # type: ignore[assignment]
     ui = next(t for t in out.result["range"]["tasks"] if t["task"] == "ui")
     assert ui["thread_source"] == "given" and len(ui["threads"]) == 2
+
+
+def test_energy_memo_matches_cluster_eval_and_separates_uclamp():
+    """The sweep memoises per-cluster energy; uclamp changes the schedutil request and must not alias."""
+    m = _two()
+    ctx = _ctx(m)
+    a, b = Thread("eis", "a", ref_cycles=30e6, stall_ms=0.5), Thread("ui", "ui", ref_cycles=1e6, stall_ms=0.0)
+    cpus = [[a], [b]]
+    plain = {}
+    capped = {"eis": policy_from({"uclamp_max": 128})}
+    e_plain = ctx.energy("BIG", cpus, plain, {})
+    e_capped = ctx.energy("BIG", cpus, capped, {"eis": (0.0, 128.0)})
+    assert e_plain == _cluster_eval(_ctx(m), "BIG", cpus, plain)["energy_mw"]
+    assert e_capped == _cluster_eval(_ctx(m), "BIG", cpus, capped)["energy_mw"]
+    assert e_capped < e_plain                         # capped request -> lower OPP; a shared memo entry would hide it
+    assert hash(Thread("eis", "a", 30e6, 0.5)) == hash(a) and Thread("eis", "a", 30e6, 0.5) == a
+
+
+def test_sweep_with_many_threads_is_bounded():
+    """21 tasks / 60 threads (in-house recording profile size) stays interactive (was ~37 s)."""
+    import time
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("bench_cpu_sweep", ROOT / "scripts" / "bench_cpu_sweep.py")
+    bench = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(bench)
+    model = CpuPowerModel.from_params(PowerModelParams.model_validate(yaml.safe_load(E2600.read_text(encoding="utf-8"))))
+    prof = bench.profile(21, 60, [c.name for c in model.clusters])
+    t0 = time.perf_counter()
+    r = cpu_sweep(prof, target=model, fps=30, spec=SweepSpec())
+    assert r["range"]["evaluated"] > 1000 and time.perf_counter() - t0 < 20   # generous: CI machines vary

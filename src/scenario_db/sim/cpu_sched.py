@@ -92,6 +92,9 @@ class TaskPolicy:
         return out
 
 
+_DEFAULT_POLICY = TaskPolicy()
+
+
 def policy_from(raw: Any) -> TaskPolicy:
     """TaskPolicy from a CpuTaskPolicy model, a dict or a TaskPolicy."""
     if raw is None:
@@ -148,6 +151,13 @@ class Thread:
     ref_cycles: float     # core cycles per frame at IPC 1.0
     stall_ms: float       # frequency-invariant memory time per frame
     growth: float = 1.0
+
+    def __post_init__(self) -> None:
+        # memo keys hash threads millions of times per sweep; the fields never change
+        object.__setattr__(self, "_hash", hash((self.task, self.name, self.ref_cycles, self.stall_ms, self.growth)))
+
+    def __hash__(self) -> int:
+        return self._hash  # type: ignore[attr-defined]
 
     def ms(self, cluster: ClusterModel, mhz: float) -> float:
         return self.growth * (self.ref_cycles / cluster.ipc_rel / (mhz * 1000.0) + self.stall_ms)
@@ -256,14 +266,39 @@ class _Ctx:
     caps: dict[str, float]
     by_name: dict[str, ClusterModel]
     budgets_ms: dict[str, float] = field(default_factory=dict)
+    # Pure-function memos for one sweep (model / scheduler / period / budgets are fixed per context).
+    # The sweep evaluates thousands of placements that share most per-cluster states.
+    _fmax_memo: dict[str, float] = field(default_factory=dict, repr=False, compare=False)
+    _util_memo: dict[tuple[Thread, str, float], float] = field(default_factory=dict, repr=False, compare=False)
+    _energy_memo: dict[Any, float] = field(default_factory=dict, repr=False, compare=False)
 
     def fmax(self, name: str) -> float:
-        return _fmax(self.by_name[name], self.model)
+        value = self._fmax_memo.get(name)
+        if value is None:
+            value = self._fmax_memo[name] = _fmax(self.by_name[name], self.model)
+        return value
 
     def util(self, th: Thread, name: str, mhz: float | None = None) -> float:
-        c = self.by_name[name]
         f = self.fmax(name) if mhz is None else mhz
-        return _util(th, c, f, period=self.period, fmax=self.fmax(name), cap=self.caps[name], sched=self.sched)
+        key = (th, name, f)
+        value = self._util_memo.get(key)
+        if value is None:
+            value = self._util_memo[key] = _util(th, self.by_name[name], f, period=self.period, fmax=self.fmax(name),
+                                                 cap=self.caps[name], sched=self.sched)
+        return value
+
+    def energy(self, name: str, cpus: list[list[Thread]], policies: dict[str, TaskPolicy],
+               clamped: dict[str, tuple[float, float]]) -> float:
+        """``_cluster_eval(...)["energy_mw"]`` memoised on (cluster, thread -> CPU assignment, uclamp of
+        the tasks on it): the only inputs it depends on besides the fixed context. ``clamped`` = tasks
+        whose policy has a non-default uclamp (usually none)."""
+        state = tuple(tuple(ths) for ths in cpus)
+        clamps = tuple((t.task, clamped[t.task]) for ths in cpus for t in ths if t.task in clamped) if clamped else ()
+        key = (name, state, clamps)
+        value = self._energy_memo.get(key)
+        if value is None:
+            value = self._energy_memo[key] = _cluster_eval(self, name, cpus, policies)["energy_mw"]
+        return value
 
 
 def _cluster_eval(ctx: _Ctx, name: str, cpus: list[list[Thread]], policies: dict[str, TaskPolicy]) -> dict[str, Any]:
@@ -341,6 +376,15 @@ def _cluster_eval(ctx: _Ctx, name: str, cpus: list[list[Thread]], policies: dict
 # ------------------------------------------------------------------ EAS placement
 def eas_place(threads: list[Thread], ctx: _Ctx, policies: dict[str, TaskPolicy]) -> tuple[dict[str, list[list[Thread]]], list[str]]:
     slots: dict[str, list[list[Thread]]] = {c.name: [[] for _ in range(c.cores)] for c in ctx.model.clusters}
+    # running util sum per CPU at fmax (same accumulation order as summing the CPU's thread list)
+    loads: dict[str, list[float]] = {c.name: [0.0] * c.cores for c in ctx.model.clusters}
+    clamped = {t: (p.uclamp_min, p.uclamp_max) for t, p in policies.items()
+               if (p.uclamp_min, p.uclamp_max) != (_DEFAULT_POLICY.uclamp_min, _DEFAULT_POLICY.uclamp_max)}
+
+    def put(name: str, index: int, th: Thread) -> None:
+        slots[name][index].append(th)
+        loads[name][index] += ctx.util(th, name)
+
     overutilized: list[str] = []
     biggest = max(ctx.caps, key=lambda n: (ctx.caps[n], n))
     order = sorted(threads, key=lambda t: (-ctx.util(t, biggest), t.task, t.name))
@@ -354,8 +398,7 @@ def eas_place(threads: list[Thread], ctx: _Ctx, policies: dict[str, TaskPolicy])
             if u * ctx.sched.fits_margin > cap + 1e-9:
                 continue
             best, spare_best = None, -math.inf
-            for index, ths in enumerate(slots[name]):
-                cur = sum(ctx.util(t, name) for t in ths)
+            for index, cur in enumerate(loads[name]):
                 if (cur + u) * ctx.sched.fits_margin > cap + 1e-9:
                     continue
                 if cap - cur > spare_best:
@@ -366,28 +409,27 @@ def eas_place(threads: list[Thread], ctx: _Ctx, policies: dict[str, TaskPolicy])
             overutilized.append(th.label)
             name, index = max(
                 ((n, i) for n in allowed for i in range(len(slots[n]))),
-                key=lambda ni: (ctx.caps[ni[0]] - sum(ctx.util(t, ni[0]) for t in slots[ni[0]][ni[1]]),
-                                ctx.caps[ni[0]]))
-            slots[name][index].append(th)
+                key=lambda ni: (ctx.caps[ni[0]] - loads[ni[0]][ni[1]], ctx.caps[ni[0]]))
+            put(name, index, th)
             continue
         if pol.prefer_idle:
             idle = [(n, i) for n, i in fitting if not slots[n][i]]
             if idle:
                 idle.sort(key=lambda ni: ctx.caps[ni[0]], reverse=pol.uclamp_min > 0)
                 n, i = idle[0]
-                slots[n][i].append(th)
+                put(n, i, th)
                 continue
         choice: tuple[tuple[float, float], str, int] | None = None
         for name, index in fitting:
-            before = _cluster_eval(ctx, name, slots[name], policies)["energy_mw"]
+            before = ctx.energy(name, slots[name], policies, clamped)
             trial = [list(x) for x in slots[name]]
             trial[index].append(th)
-            after = _cluster_eval(ctx, name, trial, policies)["energy_mw"]
+            after = ctx.energy(name, trial, policies, clamped)
             key = (round(after - before, 9), ctx.caps[name])
             if choice is None or key < choice[0]:
                 choice = (key, name, index)
         assert choice is not None
-        slots[choice[1]][choice[2]].append(th)
+        put(choice[1], choice[2], th)
     return slots, overutilized
 
 
