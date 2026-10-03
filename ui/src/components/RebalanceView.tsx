@@ -207,3 +207,36 @@ export function RebalanceResults({ r, sel, setSel }: { r: CpuRebalance; sel: str
     {picked && <SplitDetail s={picked} r={r} title={sel === 'ref' ? '현재 (측정 배치)' : picked.rank ? `#${picked.rank} 분배 상세` : `곡선 step ${picked.step}`} />}
   </>
 }
+
+/** C6: the same measured profile rebalanced on two projects' CPU topologies. */
+export function CrossSocCompare({ a, b, aName, bName, error, busy }: { a: CpuRebalance; b: CpuRebalance | null; aName: string; bName: string; error: string | null; busy: boolean }) {
+  const col = (r: CpuRebalance) => {
+    const best = r.best
+    return {
+      pool: r.pool.join(' / '), ref: r.reference.total_mw, best: best?.total_mw ?? null, d: best ? best.delta_mw : null,
+      refMhz: r.pool.map((c) => `${c} ${r.reference.mhz[c]}`).join(' · ') + ` · DSU ${r.reference.mhz.dsu}`,
+      bestMhz: best ? r.pool.map((c) => `${c} ${best.mhz[c]}`).join(' · ') + ` · DSU ${best.mhz.dsu}` : '—',
+      moved: best ? best.moved.length : 0, sym: r.symmetric.map((x) => x.join('=')).join(', ') || '—', method: r.method === 'exhaustive' ? '전수' : '국소 탐색',
+      warn: r.warnings.filter((w) => !/max_exhaustive/.test(w)),
+    }
+  }
+  const A = col(a), B = b ? col(b) : null
+  const rows: [string, (x: ReturnType<typeof col>) => string, ((x: ReturnType<typeof col>) => string)?][] = [
+    ['pool', (x) => x.pool], ['현재 배치', (x) => `${fmt(x.ref, 1)} mW`], ['현재 clock', (x) => x.refMhz],
+    ['최저 분배', (x) => (x.best === null ? '—' : `${fmt(x.best, 1)} mW`), (x) => (x.d === null ? '' : `${signed(x.d)} mW`)], ['최저 clock', (x) => x.bestMhz],
+    ['옮긴 task', (x) => `${x.moved}개`], ['동일 cluster', (x) => x.sym], ['탐색', (x) => x.method],
+  ]
+  return (
+    <Card id="cpu-rb-cross" title="과제 비교" defaultWide minHeight={120} help={CPU_HELP.rbCross} note="같은 측정 profile · 같은 budget · 같은 DSU 규칙으로 두 과제 CPU 구성에서 재분배">
+      {error && <div className="err">{error}</div>}
+      <table className="tb-mini-table" style={{ width: '100%' }} aria-label="과제 비교">
+        <thead><tr><th /><th>{aName}</th><th>{bName}</th><th style={{ textAlign: 'right' }}>차이 ({bName} − {aName})</th></tr></thead>
+        <tbody>{rows.map(([k, f, sub]) => <tr key={k}><td className="faint">{k}</td>
+          <td className="mono">{f(A)}{sub && <span className="faint"> {sub(A)}</span>}</td>
+          <td className="mono">{B ? <>{f(B)}{sub && <span className="faint"> {sub(B)}</span>}</> : busy ? '계산 중…' : '—'}</td>
+          <td className="mono" style={{ textAlign: 'right' }}>{B && (k === '현재 배치' || k === '최저 분배') ? (() => { const x = k === '현재 배치' ? B.ref - A.ref : (B.best ?? 0) - (A.best ?? 0); return <span className={x < 0 ? 'pm-down' : 'pm-up'}>{signed(x)} mW</span> })() : ''}</td></tr>)}</tbody>
+      </table>
+      {B?.warn.map((w) => <div key={w} className="lib-note warn" style={{ marginTop: 6 }}>{bName}: {w}</div>)}
+    </Card>
+  )
+}

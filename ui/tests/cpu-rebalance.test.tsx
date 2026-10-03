@@ -74,3 +74,35 @@ it('rebalance mode: setup, run with locks / co-move, curve and top splits', asyn
     expect(last.top).toBe(20)
   } finally { act(() => root.unmount()); inputs.mockRestore(); run.mockRestore(); sweep.mockRestore(); localStorage.clear() }
 })
+
+it('과제 비교: second rebalance on the other topology, measured SoC as base, only exclude locks kept', async () => {
+  localStorage.setItem('sdb.cpu.mode', JSON.stringify('rebalance'))
+  const tasks = E2600.units.flatMap((u) => u.tasks.map((t) => ({ task: t, cluster: u.home })))
+  const inputs = vi.spyOn(cpuApi, 'inputs').mockResolvedValue({
+    profiles: [{ id: 'p1', scenario_ref: null, variant_ref: null, project_ref: null, tasks }],
+    topologies: [{ id: 'pmp-e2600', version: 1, soc_ref: 'soc-exynos2600', clusters: ['MID_LF0', 'MID_LF1', 'MID_HF', 'BIG'] },
+      { id: 'pmp-e2800', version: 1, soc_ref: 'soc-exynos2800', clusters: ['MID_HF0', 'MID_HF1', 'BIG_LF', 'BIG'] }],
+  })
+  const calls: CpuRebalanceRequest[] = []
+  const run = vi.spyOn(rebalanceApi, 'run').mockImplementation(async (req) => { calls.push(req); return req.power_params_ref === 'pmp-e2800' ? E2800 : E2600 })
+  const host = document.createElement('div'), root = createRoot(host)
+  try {
+    await act(async () => root.render(<ChartTipProvider><CpuWhatIfPage ctx={{} as Ctx} /></ChartTipProvider>))
+    const cmp = host.querySelector<HTMLSelectElement>('select[aria-label="비교할 SoC"]')!
+    await act(async () => { cmp.value = 'pmp-e2800'; cmp.dispatchEvent(new Event('change', { bubbles: true })) })
+    const st = host.querySelector<HTMLSelectElement>('select[aria-label="isp_ctrl 상태"]')!
+    await act(async () => { st.value = 'exclude'; st.dispatchEvent(new Event('change', { bubbles: true })) })
+    const st2 = host.querySelector<HTMLSelectElement>('select[aria-label="eis_vdis 상태"]')!
+    await act(async () => { st2.value = 'pin:MID_LF1'; st2.dispatchEvent(new Event('change', { bubbles: true })) })
+    await act(async () => [...host.querySelectorAll('button')].find((b) => b.textContent === '다시 계산')!.click())
+    const [main, other] = calls.slice(-2)
+    expect(main.power_params_ref).toBe('pmp-e2600')
+    expect(other.power_params_ref).toBe('pmp-e2800')
+    expect(other.base_power_params_ref).toBe('pmp-e2600')
+    expect(other.locks).toEqual({ isp_ctrl: 'exclude' })
+    expect(other.pool).toEqual([])
+    const table = host.querySelector('table[aria-label="과제 비교"]')!
+    expect(table.textContent).toContain('soc-exynos2800')
+    expect(table.textContent).toContain(`${E2800.best!.total_mw.toFixed(1)} mW`)
+  } finally { act(() => root.unmount()); inputs.mockRestore(); run.mockRestore(); localStorage.clear() }
+})

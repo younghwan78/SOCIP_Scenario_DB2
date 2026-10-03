@@ -22,6 +22,7 @@ export const CPU_HELP: Record<string, ReactNode> = {
   rbTop: <><b>budget을 만족하는 분배 중 CPU + DSU 전력이 낮은 순.</b> 상위 후보는 전체 EAS 모델로 다시 계산해 검증했습니다. MHz 색: 초록 = 현재보다 낮음, 빨강 = 높음.</>,
   rbStates: <><b>cluster OPP 조합이 같은 분배끼리 묶은 것.</b> 같은 OPP면 전력 차이가 1 mW 안팎이라 순위보다 “어떤 OPP 조합에 도달하느냐”가 중요합니다. 분할 수가 많을수록 그 상태로 가는 방법이 많다는 뜻.</>,
   rbBound: <><b>cluster를 OPP 한 단계 낮추는 데 필요한 util 감소량과 그만큼을 덜어 줄 수 있는 task.</b> 전압이 같은 구간이면 OPP를 낮춰도 이득이 작습니다 (mV 확인).</>,
+  rbCross: <><b>같은 측정 profile을 다른 과제의 CPU 구성에서 재분배해 MID 구조 변경의 영향을 봅니다</b> (예: E2600 MID_LF0/LF1/HF → 차기 MID_HF0/HF1). 측정 cluster는 이름 → core type 순으로 대응하고, 대응이 없으면 기본 cluster로 보내며 경고를 표시합니다. task 고정(cluster 지정)은 비교 SoC에 적용되지 않고 ‘제외’만 유지됩니다.</>,
   rbDetail: <><b>선택한 분배의 task별 배치와 시간.</b> 기기 적용 = 옮긴 task를 해당 cluster cpuset(또는 affinity)으로 고정.</>,
   dsu: <>
     <b>DSU 주파수를 정하는 규칙(가정)을 바꿔 보며 결론이 유지되는지 봅니다.</b>

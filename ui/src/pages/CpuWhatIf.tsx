@@ -15,7 +15,7 @@ import { usePref } from '../components/Layout'
 import { DsuPanel, sweepEvaluator } from '../components/DsuPanel'
 import { applyDsu, type DsuPolicy } from '../lib/dsu'
 import { applyDsuRebalance, defaultPool, rebalanceApi, type CpuRebalance, type CpuRebalanceRequest } from '../lib/rebalance'
-import { RebalanceResults, RebalanceSetup, type SetupRow, type TaskState } from '../components/RebalanceView'
+import { CrossSocCompare, RebalanceResults, RebalanceSetup, type SetupRow, type TaskState } from '../components/RebalanceView'
 
 type TaskEdit = { sweep: string[] | null; threads: string; budget: string; growth: string }
 type Adv = { freqMargin: string; fitsMargin: string; utilModel: '' | 'util_est' | 'pelt_avg'; halflife: string; boost: '' | 'on' | 'off'; emStatic: '' | 'on' | 'off' }
@@ -64,6 +64,10 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
   const [taskStates, setTaskStates] = useState<Record<string, TaskState>>({})
   const [groups, setGroups] = useState<Record<string, string>>({})
   const [rbSel, setRbSel] = useState('')
+  // C6: the same profile rebalanced on another project's topology (sequential run, one admission slot at a time)
+  const [cmpTarget, setCmpTarget] = useState('')
+  const [cmpRb, setCmpRb] = useState<CpuRebalance | null>(null)
+  const [cmpErr, setCmpErr] = useState<string | null>(null)
   const rb = useMemo(() => (rbRaw ? applyDsuRebalance(rbRaw, dsuExp) : null), [rbRaw, dsuExp])
 
   const prof = inputs.data?.profiles.find((p) => p.id === profile)
@@ -119,6 +123,14 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
       const r = await rebalanceApi.run(payload)
       if (id !== requestId.current) return
       setRbRaw(r); setRbSel(r.cases[0] ? `c${r.cases[0].rank}` : 'ref')
+      setCmpRb(null); setCmpErr(null)
+      if (cmpTarget && cmpTarget !== payload.power_params_ref) {
+        const exclude = Object.fromEntries(Object.entries(payload.locks).filter(([, v]) => v === 'exclude'))
+        try {
+          const c = await rebalanceApi.run({ ...payload, power_params_ref: cmpTarget, base_power_params_ref: payload.base_power_params_ref || payload.power_params_ref, pool: [], locks: exclude })
+          if (id === requestId.current) setCmpRb(c)
+        } catch (e) { if (id === requestId.current) setCmpErr(String((e as Error).message ?? e)) }
+      }
     } catch (e) {
       if (id === requestId.current) setError(String((e as Error).message ?? e))
     } finally { if (id === requestId.current) setBusy(false) }
@@ -275,6 +287,9 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
               <select value={profile} onChange={(e) => setProfile(e.target.value)}>{rankProfiles(inputs.data?.profiles ?? [], ctx).map((p) => <option key={p.id} value={p.id}>{p.variant_ref ?? p.id} · {p.id}{p.tasks?.length ? '' : ' (task 정보 없음)'}</option>)}</select></label>
             <label className="cpu-f"><span className="faint">적용할 SoC CPU 구성</span>
               <select value={target} onChange={(e) => { targetPicked.current = true; setTarget(e.target.value) }}>{rankTopologies(inputs.data?.topologies ?? [], prof).map((t) => <option key={t.id} value={t.id}>{t.soc_ref} · v{t.version} · {sortClusters(t.clusters).join(' / ')}{prof?.tasks?.length && clusterCover(t, prof) < 1 ? ' (측정 cluster 불일치)' : ''}</option>)}</select></label>
+            {mode === 'rebalance' && <label className="cpu-f" title="같은 측정 profile을 다른 과제의 CPU 구성에도 재분배해 나란히 비교 (MID 구조 변경 영향)"><span className="faint">과제 비교 (선택)</span>
+              <select value={cmpTarget} aria-label="비교할 SoC" onChange={(e) => setCmpTarget(e.target.value)}><option value="">— 비교 안 함</option>
+                {(inputs.data?.topologies ?? []).filter((t) => t.id !== target).map((t) => <option key={t.id} value={t.id}>{t.soc_ref} · v{t.version} · {sortClusters(t.clusters).join(' / ')}</option>)}</select></label>}
             <label className="cpu-f" title="다른 과제에서 측정한 profile이면 측정한 SoC의 CPU 구성을 고르세요 (core type으로 대응)"><span className="faint">profile을 측정한 SoC</span>
               <select value={base} onChange={(e) => setBase(e.target.value)}><option value="">적용할 SoC와 같음</option>{(inputs.data?.topologies ?? []).map((t) => <option key={t.id} value={t.id}>{t.soc_ref} · {t.id}</option>)}</select></label>
             <div className="cpu-f"><span className="faint">비교 기준 (★)</span>
@@ -379,7 +394,9 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
         </Card>}
       </div>
       {error && <div className="err">{error}</div>}
-      {mode === 'rebalance' && rb && <div className="tb-grid"><RebalanceResults r={rb} sel={rbSel} setSel={setRbSel} /></div>}
+      {mode === 'rebalance' && rb && <div className="tb-grid">
+        {cmpTarget && <CrossSocCompare a={rb} b={cmpRb ? applyDsuRebalance(cmpRb, dsuExp) : null} aName={topo?.soc_ref ?? target} bName={inputs.data?.topologies.find((t) => t.id === cmpTarget)?.soc_ref ?? cmpTarget} error={cmpErr} busy={busy} />}
+        <RebalanceResults r={rb} sel={rbSel} setSel={setRbSel} /></div>}
       {mode === 'sweep' && result && ref && <>
         {result.warnings.length > 0 && <details className="panel" style={{ padding: '8px 12px', fontSize: 12 }}><summary>참고 {result.warnings.length}</summary>{result.warnings.map((w) => <div key={w} className="faint">{w}</div>)}</details>}
         <section className="tb-kpis" aria-label="요약">
