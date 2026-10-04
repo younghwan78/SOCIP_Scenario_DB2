@@ -334,9 +334,9 @@ def test_simulation_regression_smoke_keeps_reference_kpis_and_clocks_stable():
     assert demo_result.bw_total_mbs == pytest.approx(419.904)
     assert demo_result.hw_time_max_ms == pytest.approx(29.75)
     assert demo_result.timeline_end_ms == pytest.approx(92.833333, rel=1e-6)
-    assert demo_result.resolved["csis0"].clock_correction_reason == "otf_group_clock_align(otf-0, leader=isp0)"
-    assert demo_result.resolved["isp0"].clock_correction_reason == "otf_group_clock_align(otf-0, leader=isp0)"
-    assert demo_result.resolved["csis0"].required_clock_mhz == pytest.approx(18.296470588235298)
+    assert demo_result.resolved["csis0"].clock_correction_reason.startswith("otf_group_rate_align(otf-0, leader=isp0")
+    assert demo_result.resolved["isp0"].clock_correction_reason.startswith("otf_group_rate_align(otf-0, leader=isp0")
+    assert demo_result.resolved["csis0"].required_clock_mhz == pytest.approx(9.148235294117649)  # OTF rate align (PPC 2x isp0)
     assert demo_result.resolved["isp0"].required_clock_mhz == pytest.approx(18.296470588235298)
     assert demo_result.resolved["mfc"].required_clock_mhz == pytest.approx(18.296470588235298)
     assert demo_result.resolved["dpu"].required_clock_mhz == pytest.approx(18.296470588235298)
@@ -417,7 +417,7 @@ def test_golden_comparator_accepts_reference_result_and_reports_diffs():
             "total_power_mw": {"value": 58.745088, "rel_tol": 1e-6},
             "bw_total_mbs": {"value": 419.904, "abs_tol": 1e-6},
         },
-        "resolved": {"csis0": {"required_clock_mhz": {"value": 18.296470588235298, "abs_tol": 1e-6}}},
+        "resolved": {"csis0": {"required_clock_mhz": {"value": 9.148235294117649, "abs_tol": 1e-6}}},  # OTF rate align: PPC 2x isp0
     }
 
     assert compare_golden_result(result, expected) == []
@@ -676,7 +676,7 @@ def test_csis_mipi_clock_formula_applies_ppc_only_for_sbwc(phy_type, sbwc_enable
     ) == pytest.approx(expected)
 
 
-def test_adapter_aligns_sensor_otf_group_without_reapplying_mipi_clock_to_downstream_ips():
+def test_adapter_rt_clock_follows_sensor_readout_and_keeps_mipi_ingress_local():
     graph = _graph()
     graph.variant.design_conditions.update(
         {
@@ -791,14 +791,24 @@ def test_adapter_aligns_sensor_otf_group_without_reapplying_mipi_clock_to_downst
     )
 
     ingress_clock = 3.993 * (16 / 7) * 3 / (12 * 8) * 1000
-    downstream_mipi_clock = 3.993 * (16 / 7) * 3 / (12 * 4) * 1000
+    readout_ms = 29_216 * 1000 / 3_532_800_000 * 2296          # line time x active lines
+    readout_clock = 1920 * 1080 * 1.05 / (4 * readout_ms) / 1000  # min clock whose HW time fits the read-out
+    # MIPI ingress stays on the receiving IP (CSIS buffers the burst)
     assert by_node["csispdp"].clock_correction_mhz == pytest.approx(ingress_clock)
     assert by_node["csispdp"].clock_correction_reason.startswith("sensor_ingress_req_csis_clock")
-    assert by_node["byrp"].clock_correction_mhz == pytest.approx(ingress_clock)
-    assert by_node["byrp"].clock_correction_mhz < downstream_mipi_clock
-    assert by_node["byrp"].clock_correction_reason == "otf_group_clock_align(otf-0, leader=csispdp)"
+    # downstream RT IP: read-out stream clock, not the ingress MHz and not the SW-margin rule
+    assert by_node["byrp"].readout_clocked and by_node["byrp"].sensor_readout_ms == pytest.approx(readout_ms)
+    assert by_node["byrp"].clock_correction_mhz == pytest.approx(readout_clock)
+    assert result.resolved["byrp"].base_required_clock_mhz == 0.0
     assert result.resolved["csispdp"].set_clock_mhz == pytest.approx(332.0)
-    assert result.resolved["byrp"].set_clock_mhz == pytest.approx(332.0)
+    assert result.resolved["byrp"].set_clock_mhz == pytest.approx(133.0)
+    # sensor-bound: cannot finish before the read-out window ends
+    timing = {t.node_id: t for t in result.timing_breakdown}
+    assert timing["byrp"].hw_time_ms == pytest.approx(readout_ms)
+
+    legacy = build_simulation_inputs(graph, SimulationRunConfig(include_timeline=True, rt_clock_basis="sw_margin"))
+    byrp = next(w for w in legacy.workloads if w.node_id == "byrp")
+    assert not byrp.readout_clocked and byrp.sensor_readout_ms == pytest.approx(readout_ms)
 
 
 def _graph() -> CanonicalScenarioGraph:

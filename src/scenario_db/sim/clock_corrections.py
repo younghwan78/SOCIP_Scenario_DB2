@@ -17,8 +17,18 @@ def apply_sensor_otf_clock_corrections(
     workloads: list[IPWorkload],
     warnings: list[str],
     sensor_modes: Iterable[tuple[dict[str, Any], dict[str, Any]]],
+    *,
+    h_blank_margin: float = 0.0,
+    readout_clocked: bool = True,
 ) -> None:
-    """Apply sensor ingress, v-valid stream, and OTF group clock corrections."""
+    """Apply sensor ingress, read-out (v-valid) stream, and OTF group clock corrections.
+
+    Sensor-synchronous IPs get ``sensor_readout_ms`` (HW time floor). With
+    ``readout_clocked`` their clock basis is the read-out stream clock — the
+    minimum whose HW time (incl. h-blank) fits the read-out window — not the
+    SW-margin rule. MIPI ingress stays local to the receiving IP (CSIS buffers
+    the burst); OTF groups align pixel *rate* (MHz x PPC), not MHz.
+    """
 
     workload_by_node = {item.node_id: item for item in workloads}
     for sensor_node, sensor_mode in sensor_modes:
@@ -59,12 +69,17 @@ def apply_sensor_otf_clock_corrections(
             workload = workload_by_node.get(node_id)
             if workload is None or workload.sim_params.ppc <= 0:
                 continue
-            stream_clock = _req_vvalid_stream_clock_mhz(workload, v_valid_ms)
+            if v_valid_ms and v_valid_ms > 0:
+                prev = workload.sensor_readout_ms
+                workload.sensor_readout_ms = v_valid_ms if prev is None else max(prev, v_valid_ms)
+                workload.readout_clocked = readout_clocked
+            stream_clock = _req_vvalid_stream_clock_mhz(workload, v_valid_ms, h_blank_margin)
             _raise_clock_correction(
                 workload,
                 stream_clock,
                 kind="vvalid_stream",
-                reason=f"sensor_vvalid_stream_clock({sensor_node.get('id')}, v_valid_ms={v_valid_ms})",
+                reason=f"sensor_readout_stream_clock({sensor_node.get('id')}, readout_ms={v_valid_ms:.3f})"
+                if v_valid_ms else "sensor_readout_stream_clock",
             )
 
     _apply_otf_group_clock_alignment(graph, workloads)
@@ -99,44 +114,54 @@ def _raise_clock_correction(
         workload.clock_correction_reason = reason
 
 
+# Constraints that belong to one IP's own interface and must not spread over the OTF group.
+_LOCAL_CONSTRAINTS = frozenset({"mipi_ingress", "stage_budget"})
+
+
 def _apply_otf_group_clock_alignment(
     graph: CanonicalScenarioGraph,
     workloads: list[IPWorkload],
 ) -> None:
+    """OTF members stream the same pixels: align the pixel rate (MHz x PPC) to the group's fastest need."""
     workload_by_node = {item.node_id: item for item in workloads}
     for group_index, group in enumerate(_otf_node_groups(graph)):
-        group_workloads = [workload_by_node[node_id] for node_id in group if node_id in workload_by_node]
+        group_workloads = [
+            workload_by_node[node_id]
+            for node_id in group
+            if node_id in workload_by_node and workload_by_node[node_id].sim_params.ppc > 0
+        ]
         if len(group_workloads) < 2:
             continue
-        required_by_node = {
-            workload.node_id: _pre_resolver_required_clock_mhz(workload)
+        rate_by_node = {
+            workload.node_id: _alignable_required_clock_mhz(workload) * workload.sim_params.ppc
             for workload in group_workloads
         }
-        leader_node_id, group_clock = max(
-            required_by_node.items(),
-            key=lambda item: (item[1], item[0]),
-        )
-        if group_clock <= 0:
+        leader_node_id, group_rate = max(rate_by_node.items(), key=lambda item: (item[1], item[0]))
+        if group_rate <= 0:
             continue
         for workload in group_workloads:
             _raise_clock_correction(
                 workload,
-                group_clock,
+                group_rate / workload.sim_params.ppc,
                 kind="otf_align",
-                reason=f"otf_group_clock_align(otf-{group_index}, leader={leader_node_id})",
+                reason=f"otf_group_rate_align(otf-{group_index}, leader={leader_node_id}, {group_rate:.0f} Mpix/s)",
             )
 
 
-def _pre_resolver_required_clock_mhz(workload: IPWorkload) -> float:
+def _alignable_required_clock_mhz(workload: IPWorkload) -> float:
+    """Pre-resolver need that the OTF group shares (local interface constraints excluded)."""
     required = _base_required_clock_mhz(workload)
     if workload.manual_clock_mhz and workload.manual_clock_mhz > required:
         required = workload.manual_clock_mhz
-    if workload.clock_correction_mhz > required:
-        required = workload.clock_correction_mhz
+    for constraint in workload.clock_constraints:
+        if constraint.kind not in _LOCAL_CONSTRAINTS and constraint.mhz > required:
+            required = constraint.mhz
     return required
 
 
 def _base_required_clock_mhz(workload: IPWorkload) -> float:
+    if workload.readout_clocked:
+        return 0.0  # clock follows the sensor read-out stream, not the SW-margin rule
     params = workload.sim_params
     if workload.pixels <= 0 or workload.fps <= 0 or params.ppc <= 0:
         return 0.0
@@ -144,11 +169,12 @@ def _base_required_clock_mhz(workload: IPWorkload) -> float:
     return workload.pixels * workload.fps / usable / params.ppc / 1e6
 
 
-def _req_vvalid_stream_clock_mhz(workload: IPWorkload, v_valid_ms: float | None) -> float:
+def _req_vvalid_stream_clock_mhz(workload: IPWorkload, v_valid_ms: float | None, h_blank_margin: float = 0.0) -> float:
+    """Minimum clock whose HW time (pixels x (1 + h_blank) / (clock x PPC)) fits the read-out window."""
     params = workload.sim_params
     if workload.pixels <= 0 or not v_valid_ms or v_valid_ms <= 0 or params.ppc <= 0:
         return 0.0
-    return workload.pixels / v_valid_ms / params.ppc / 1000.0
+    return workload.pixels * (1.0 + h_blank_margin) / v_valid_ms / params.ppc / 1000.0
 
 
 def _sensor_otf_connected_node_ids(graph: CanonicalScenarioGraph, sensor_node_id: str) -> set[str]:

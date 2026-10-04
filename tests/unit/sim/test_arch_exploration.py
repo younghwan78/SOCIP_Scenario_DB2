@@ -105,8 +105,12 @@ def test_compression_deltas_are_linear_in_ratio(uhd30):
 def test_dvfs_headroom_raises_voltage_and_power(uhd30):
     cam = next(d for d in uhd30["domains"] if d["domain"] == "CAM")
     base, up = cam["options"]
-    assert base["level"] == 4 and up["level"] == 3 and up["speed_mhz"] > base["speed_mhz"]
-    assert up["voltage_mv"] > base["voltage_mv"] and up["delta_mw"] > 0
+    # RT clock follows the sensor read-out (241.5 MHz) -> CAM L6 266 MHz; headroom = next level up
+    assert base["level"] == 6 and up["level"] == 5 and up["speed_mhz"] > base["speed_mhz"]
+    # VDD_CAM is already held above L5 by the CSIS clock (MIPI ingress) -> raising CAM alone costs nothing
+    assert up["voltage_mv"] > base["voltage_mv"] and up["delta_mw"] == 0
+    intcam = next(d for d in uhd30["domains"] if d["domain"] == "INTCAM")
+    assert intcam["options"][1]["voltage_mv"] > intcam["options"][0]["voltage_mv"] and intcam["options"][1]["delta_mw"] > 0
     spread = uhd30["axis_spread"]
     assert spread["dvfs_headroom"]["range"] == pytest.approx(sum(d["options"][-1]["delta_mw"] for d in uhd30["domains"]), abs=0.02)
 
@@ -171,8 +175,8 @@ def test_attribution_dvfs_voltage_factor(uhd30):
     raised = next(c for c in [*uhd30["alternatives"]] if c["dvfs_raise"]) if any(
         c["dvfs_raise"] for c in uhd30["alternatives"]) else None
     base = uhd30["recommended"]
-    case = dict(base) | {"dvfs": {**base["dvfs"], "CAM": 3}, "dvfs_raise": 1}
-    cam = next(d for d in uhd30["domains"] if d["domain"] == "CAM")
+    cam = next(d for d in uhd30["domains"] if d["domain"] == "INTCAM")   # CAM's rail is pinned by CSIS (no V change)
+    case = dict(base) | {"dvfs": {**base["dvfs"], "INTCAM": cam["options"][1]["level"]}, "dvfs_raise": 1}
     case["hw_mw"] = base["hw_mw"] + cam["options"][1]["delta_mw"]
     case["total_mw"] = base["total_mw"] + cam["options"][1]["delta_mw"]
     r = attribute(_payload(uhd30, base), _payload(uhd30, case))

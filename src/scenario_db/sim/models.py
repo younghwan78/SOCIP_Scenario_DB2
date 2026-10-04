@@ -138,6 +138,12 @@ class IPWorkload(BaseScenarioModel):
     # above keeps only the max). Informational: derived from inputs already in
     # the hash, so it is excluded from serialisation / params_hash.
     clock_constraints: list[ClockConstraint] = Field(default_factory=list, exclude=True)
+    # Sensor-synchronous (OTF from a sensor) RT IPs: data arrives over the sensor
+    # read-out window, so the IP cannot finish earlier (HW time >= read-out) and,
+    # when readout_clocked, its clock is the minimum that keeps up with the
+    # read-out instead of the SW-margin rule (running faster buys nothing).
+    sensor_readout_ms: float | None = Field(default=None, gt=0, exclude_if=lambda v: v is None)
+    readout_clocked: bool = Field(default=False, exclude_if=lambda v: not v)
     sim_params: IPSimParams
 
     @property
@@ -280,6 +286,9 @@ class SimulationRunConfig(BaseScenarioModel):
     vbat: float = 4.0
     pmic_efficiency: float = 0.85
     h_blank_margin: float = 0.05
+    # RT (sensor OTF) clock basis. None / "sensor_readout": minimum clock whose HW
+    # time meets the sensor read-out window. "sw_margin": legacy (1 - margin) rule.
+    rt_clock_basis: Literal["sensor_readout", "sw_margin"] | None = Field(default=None, exclude_if=lambda v: v is None)
     dvfs_overrides: dict[str, int] = Field(default_factory=dict)
     include_timeline: bool = True
     timeline_frame_count: int = Field(default=4, ge=1)

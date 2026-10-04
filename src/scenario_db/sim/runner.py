@@ -80,11 +80,15 @@ def run_simulation(
             node_id=workload.node_id,
             ip_ref=workload.ip_ref,
             hw_name=workload.hw_name,
-            hw_time_ms=calc_processing_time_ms(
-                pixels=workload.pixels,
-                set_clock_mhz=resolved[workload.node_id].set_clock_mhz,
-                ppc=workload.sim_params.ppc,
-                h_blank_margin=config.h_blank_margin,
+            # sensor-synchronous IPs cannot finish before the read-out window ends
+            hw_time_ms=max(
+                calc_processing_time_ms(
+                    pixels=workload.pixels,
+                    set_clock_mhz=resolved[workload.node_id].set_clock_mhz,
+                    ppc=workload.sim_params.ppc,
+                    h_blank_margin=config.h_blank_margin,
+                ),
+                workload.sensor_readout_ms or 0.0,
             ),
             required_clock_mhz=resolved[workload.node_id].required_clock_mhz,
             set_clock_mhz=resolved[workload.node_id].set_clock_mhz,

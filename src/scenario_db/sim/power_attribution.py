@@ -31,10 +31,13 @@ def _clock_factor(ip: dict[str, Any]) -> float:
 
 def attribute(old: dict[str, Any], new: dict[str, Any]) -> dict[str, Any]:
     factors: list[dict[str, Any]] = []
+    small: dict[str, float] = {}   # terms below the display threshold, kept per category so the sum stays exact
 
     def add(category: str, item: str, delta: float, detail: str = "") -> None:
         if abs(delta) >= 5e-3:
             factors.append({"category": category, "item": item, "delta_mw": round(delta, 3), "detail": detail})
+        else:
+            small[category] = small.get(category, 0.0) + delta
 
     # CPU (SW)
     c0, c1 = old.get("cpu_by_task") or {}, new.get("cpu_by_task") or {}
@@ -96,6 +99,10 @@ def attribute(old: dict[str, Any], new: dict[str, Any]) -> dict[str, Any]:
         detail = {(False, True): "compression ON", (True, False): "compression OFF"}.get((on0, on1), "ratio/traffic")
         add("Compression", buf, s1 - s0, detail)
 
+    for category, delta in small.items():
+        if abs(delta) >= 5e-4:
+            factors.append({"category": category, "item": "(small terms)", "delta_mw": round(delta, 3),
+                            "detail": "sum of items below 0.005 mW"})
     total = new["power"]["total_mw"] - old["power"]["total_mw"]
     explained = sum(f["delta_mw"] for f in factors)
     by_cat: dict[str, float] = {}
