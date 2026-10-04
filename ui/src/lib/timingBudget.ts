@@ -139,7 +139,7 @@ export function stageSegments(stage: StageRow): Segment[] {
   const segs: Segment[] = []
   const critical = stage.sw_items.filter((i) => i.critical !== false)
   if (stage.id === 'rt') {
-    segs.push({ key: 'hw', label: 'RT HW', ms: stage.hw_ms, color: STAGE_COLOR.rt, text: '#FFFFFF', tip: `RT HW ${stage.hw_ms.toFixed(2)} ms (25% rule budget ${stage.budget_ms.toFixed(2)})` })
+    segs.push({ key: 'hw', label: 'RT HW', ms: stage.hw_ms, color: STAGE_COLOR.rt, text: '#FFFFFF', tip: `RT HW ${stage.hw_ms.toFixed(2)} ms (sensor readout 종속 · rule budget ${stage.budget_ms.toFixed(2)} ms)` })
     return segs
   }
   for (const i of critical) {

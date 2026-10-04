@@ -59,7 +59,7 @@ function SlotRow({ stage, P, px, barW, labelW, valW, margin }: { stage: StageRow
   let x = 0
   const used = segs.reduce((a, s) => a + s.ms, 0)
   const over = used > P * 1.0005 || !stage.feasible
-  const sub = stage.id === 'rt' ? `sensor 동기 · ${pct0(margin)} rule` : stage.id === 'nrt' ? 'MTNR→MCSC · SW gating 반영' : stage.id === 'post' ? 'memory → EIS/SW → GDC' : `DPU · MFC · writer (${pct0(margin)} rule)`
+  const sub = stage.id === 'rt' ? `sensor readout 종속 · ${pct0(margin)} rule은 판정만` : stage.id === 'nrt' ? 'MTNR→MCSC · SW gating 반영' : stage.id === 'post' ? 'memory → EIS/SW → GDC' : `DPU · MFC · writer (${pct0(margin)} rule)`
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
       <div style={{ width: labelW, flexShrink: 0 }}>
@@ -456,7 +456,7 @@ export function WhatIf({ rows, current, margin = 0.25 }: { rows: WhatIfRow[]; cu
         {[0, 0.25, 0.5, 0.75, 1].map((f) => <g key={f}><line x1={50} x2={plotW + 40} y1={y(max * f)} y2={y(max * f)} stroke="#EFEAE2" /><text x={44} y={y(max * f) + 3} textAnchor="end" fontSize={10} fill="#8A8274">{fmt(max * f, 0)}</text></g>)}
         {scales.map((s) => <text key={s} x={x(s)} y={H - 6} textAnchor="middle" fontSize={10} fill="#8A8274">×{s.toFixed(1)}</text>)}
         {rule > 0 && <><line x1={50} x2={plotW + 40} y1={y(rule)} y2={y(rule)} stroke="#7A4B12" strokeDasharray="5 4" /><text x={plotW + 40} y={y(rule) - 4} textAnchor="end" fontSize={10} fill="#7A4B12">{domain ? `${domain} ` : ''}{pct0(margin)} rule {fmt(rule, 0)} MHz</text></>}
-        {be && <><line x1={x(be.scale)} x2={x(be.scale)} y1={16} y2={H - 24} stroke="#7F1D1D" strokeDasharray="2 3" /><text x={x(be.scale) + 4} y={24} fontSize={10} fill="#7F1D1D">×{be.scale.toFixed(1)}부터 {fmt(be.from, 0)}→{fmt(be.to, 0)} MHz</text></>}
+        {be && <><line x1={x(be.scale)} x2={x(be.scale)} y1={16} y2={H - 24} stroke="#7F1D1D" strokeDasharray="2 3" /><text x={x(be.scale) > (plotW + 60) * 0.6 ? x(be.scale) - 4 : x(be.scale) + 4} textAnchor={x(be.scale) > (plotW + 60) * 0.6 ? 'end' : 'start'} y={24} fontSize={10} fill="#7F1D1D">×{be.scale.toFixed(1)}부터 {fmt(be.from, 0)}→{fmt(be.to, 0)} MHz</text></>}
         {lines.map((l) => {
           const pts = rows.filter((r) => r.statistic === l.stat && r.eis === l.eis && clockOf(r) !== null).sort((a, b) => a.scale - b.scale)
           return <g key={`${l.stat}${l.eis}`}>
