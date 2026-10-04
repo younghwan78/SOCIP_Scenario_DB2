@@ -1,0 +1,11 @@
+# Exynos2700 keeps its own YUVSC PPC / note (Exynos2700 docs are edited independently; Exynos2600 moved to 8 PPC on 2026-10-04).
+capabilities:
+  sim:
+    modes:
+      Normal:
+        ppc: 4.0
+      FHD:
+        ppc: 4.0
+      8K:
+        ppc: 4.0
+    source_note: 'Topology/DMA: kernel IS v15. Performance/power: legacy estimate; not calibrated to IS v15. YUVP coefficients are a proxy only.'
