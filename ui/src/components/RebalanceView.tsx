@@ -21,6 +21,24 @@ const GROUPS = ['', 'G1', 'G2', 'G3', 'G4']
 const OTHER = '#C9C2B6'
 const signed = (v: number, d = 1) => `${v >= 0 ? '+' : ''}${fmt(v, d)}`
 
+/** "MID_LF0" → "LF0" for compact segment labels (full name stays in the title). */
+export const shortCluster = (c: string) => c.replace(/^MID_/, '')
+
+/** In-page segmented control (radiogroup). Replaces native <select> in dense tables: no OS popup, one click per change. */
+export function Seg({ label, value, options, onChange, disabled }: {
+  label: string; value: string; disabled?: boolean; onChange: (v: string) => void
+  options: { value: string; label: string; title?: string; color?: string }[]
+}) {
+  return <div className={`seg xs${disabled ? ' off' : ''}`} role="radiogroup" aria-label={label} aria-disabled={disabled || undefined}>
+    {options.map((o) => {
+      const on = o.value === value
+      return <button key={o.value} type="button" role="radio" aria-checked={on} data-value={o.value} className={on ? 'on' : ''}
+        title={o.title} disabled={disabled} onClick={() => { if (!on) onChange(o.value) }}
+        style={on && o.color ? { boxShadow: `inset 0 -2px 0 ${o.color}, 0 1px 2px rgba(31,36,48,.12)` } : undefined}>{o.label}</button>
+    })}
+  </div>
+}
+
 export interface SetupRow { task: string; home: string; budget: number | null; util?: Record<string, number>; tms?: Record<string, number> }
 
 /** ③ 분배 대상 — pool clusters, per-task state, co-move groups. Edits never start a run by themselves. */
@@ -64,12 +82,12 @@ export function RebalanceSetup({ clusters, pool, setPool, rows, states, setState
             {pool.map((c) => <td key={c} className={`mono ${c === r.home ? 'measured' : ''}`} style={{ textAlign: 'right' }}>
               {r.tms?.[c] !== undefined ? <>{fmt(r.tms[c], 2)}<span className="faint"> · {fmt(r.util?.[c] ?? 0, 0)}</span></> : <span className="faint">—</span>}</td>)}
             <td><input style={{ width: 52 }} value={budgets[r.task] ?? ''} placeholder={r.budget !== null ? String(r.budget) : '—'} onChange={(e) => setBudget(r.task, e.target.value)} aria-label={`${r.task} budget`} /></td>
-            <td><select value={st} disabled={!movable} aria-label={`${r.task} 상태`} onChange={(e) => setState(r.task, e.target.value as TaskState)}>
-              <option value="auto">자동</option>
-              {pool.map((c) => <option key={c} value={`pin:${c}`}>{c} 고정</option>)}
-              <option value="exclude">제외 (측정 위치)</option></select></td>
-            <td><select value={groups[r.task] ?? ''} disabled={!movable || st !== 'auto'} aria-label={`${r.task} 함께 이동`} onChange={(e) => setGroup(r.task, e.target.value)}>
-              {GROUPS.map((g) => <option key={g} value={g}>{g || '—'}</option>)}</select></td>
+            <td><Seg label={`${r.task} 상태`} value={st} disabled={!movable} onChange={(v) => setState(r.task, v as TaskState)}
+              options={[{ value: 'auto', label: '자동', title: '계산이 cluster를 고름' },
+                ...pool.map((c) => ({ value: `pin:${c}`, label: shortCluster(c), title: `${c} 고정`, color: color(c) })),
+                { value: 'exclude', label: '제외', title: '제외 — 측정 위치에 그대로 둠' }]} /></td>
+            <td><Seg label={`${r.task} 함께 이동`} value={groups[r.task] ?? ''} disabled={!movable || st !== 'auto'} onChange={(v) => setGroup(r.task, v)}
+              options={GROUPS.map((g) => ({ value: g, label: g || '—', title: g ? `group ${g}: 같은 cluster로 함께 이동` : '단독 이동' }))} /></td>
           </tr>
         })}</tbody></table></div>
       <div className="toolbar" style={{ marginTop: 8, gap: 10 }}>

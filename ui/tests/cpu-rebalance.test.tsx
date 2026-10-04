@@ -15,6 +15,15 @@ if (typeof ResizeObserver === 'undefined') Object.assign(globalThis, { ResizeObs
 const load = (k: string) => JSON.parse(readFileSync(join(process.cwd(), `tests/fixtures/cpu-rebalance-${k}.json`), 'utf-8')) as CpuRebalance
 const E2600 = load('e2600'), E2800 = load('e2800')
 
+
+/** Click one option of a segmented control (radiogroup) by aria-label + value. */
+async function pick(host: HTMLElement, label: string, value: string) {
+  const b = host.querySelector<HTMLButtonElement>(`[role="radiogroup"][aria-label="${label}"] button[data-value="${value}"]`)!
+  expect(b).not.toBeNull()
+  await act(async () => b.click())
+  expect(b.getAttribute('aria-checked')).toBe('true')
+}
+
 it('fixtures: next-gen MID_HF0/HF1 pool is symmetric, E2600 splits over MID_LF0/LF1/HF', () => {
   expect(E2600.pool).toEqual(['MID_LF0', 'MID_LF1', 'MID_HF'])
   expect(E2800.pool).toEqual(['MID_HF0', 'MID_HF1'])
@@ -57,12 +66,9 @@ it('rebalance mode: setup, run with locks / co-move, curve and top splits', asyn
     expect(host.textContent).toContain('최저 분배')
     expect(host.querySelectorAll(`section[aria-label="최저 분배 상위 ${E2600.cases.length}"] tbody tr`)).toHaveLength(E2600.cases.length)
     // pin one task, group two, drop MID_HF from the pool, rerun
-    const st = host.querySelector<HTMLSelectElement>('select[aria-label="eis_vdis 상태"]')!
-    await act(async () => { st.value = 'pin:MID_LF1'; st.dispatchEvent(new Event('change', { bubbles: true })) })
-    for (const t of ['cam_hal_request', 'cam_hal_result']) {
-      const g = host.querySelector<HTMLSelectElement>(`select[aria-label="${t} 함께 이동"]`)!
-      await act(async () => { g.value = 'G1'; g.dispatchEvent(new Event('change', { bubbles: true })) })
-    }
+    await pick(host, 'eis_vdis 상태', 'pin:MID_LF1')
+    expect(host.querySelector('[aria-label="eis_vdis 함께 이동"] button')!.hasAttribute('disabled')).toBe(true)   // pinned → no group
+    for (const t of ['cam_hal_request', 'cam_hal_result']) await pick(host, `${t} 함께 이동`, 'G1')
     const hf = [...host.querySelectorAll('label')].find((l) => l.textContent === 'MID_HF')!.querySelector('input')!
     await act(async () => hf.click())
     const btn = [...host.querySelectorAll('button')].find((b) => b.textContent === '다시 계산')!
@@ -90,10 +96,8 @@ it('과제 비교: second rebalance on the other topology, measured SoC as base,
     await act(async () => root.render(<ChartTipProvider><CpuWhatIfPage ctx={{} as Ctx} /></ChartTipProvider>))
     const cmp = host.querySelector<HTMLSelectElement>('select[aria-label="비교할 SoC"]')!
     await act(async () => { cmp.value = 'pmp-e2800'; cmp.dispatchEvent(new Event('change', { bubbles: true })) })
-    const st = host.querySelector<HTMLSelectElement>('select[aria-label="isp_ctrl 상태"]')!
-    await act(async () => { st.value = 'exclude'; st.dispatchEvent(new Event('change', { bubbles: true })) })
-    const st2 = host.querySelector<HTMLSelectElement>('select[aria-label="eis_vdis 상태"]')!
-    await act(async () => { st2.value = 'pin:MID_LF1'; st2.dispatchEvent(new Event('change', { bubbles: true })) })
+    await pick(host, 'isp_ctrl 상태', 'exclude')
+    await pick(host, 'eis_vdis 상태', 'pin:MID_LF1')
     await act(async () => [...host.querySelectorAll('button')].find((b) => b.textContent === '다시 계산')!.click())
     const [main, other] = calls.slice(-2)
     expect(main.power_params_ref).toBe('pmp-e2600')
