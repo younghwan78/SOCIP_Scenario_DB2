@@ -33,8 +33,8 @@ kpi:
   core_power_mw: 139.68097536
   bw_power_mw: 390.5159808000002
   total_bw_mbs: 4881.449759999999
-  hw_time_max_ms: 2.04918
-  timeline_end_ms: 73.63332633333333
+  hw_time_max_ms: 2.776413043478261
+  timeline_end_ms: 73.63332637681161
   critical_path_ms: 0.0
   critical_path_task_count: 0
 ip_breakdown:
@@ -1256,56 +1256,62 @@ timing_breakdown:
   ip_ref: ip-csis-is-v15-s5e9975
   hw_name: CSIS
   task_type: hw
-  hw_time_ms: 0.9763313367819223
+  hw_time_ms: 2.776413043478261
   required_clock_mhz: 314.8285714285714
   set_clock_mhz: 314.8285714285714
   set_voltage_mv: 710.0
   feasible: true
+  otf_group: otf-0
 - node_id: pdp
   ip_ref: ip-pdp-is-v15-s5e9975
   hw_name: PDP
   task_type: hw
-  hw_time_ms: 0.9763313367819223
+  hw_time_ms: 2.776413043478261
   required_clock_mhz: 314.8285714285714
   set_clock_mhz: 314.8285714285714
   set_voltage_mv: 710.0
   feasible: true
+  otf_group: otf-0
 - node_id: byrp
   ip_ref: ip-byrp-is-v15-s5e9975
   hw_name: BYRP
   task_type: hw
-  hw_time_ms: 1.9526626735638446
-  required_clock_mhz: 314.8285714285714
-  set_clock_mhz: 314.8285714285714
+  hw_time_ms: 2.776413043478261
+  required_clock_mhz: 600.0
+  set_clock_mhz: 600.0
   set_voltage_mv: 710.0
   feasible: true
+  otf_group: otf-0
 - node_id: rgbp
   ip_ref: ip-rgbp-is-v15-s5e9975
   hw_name: RGBP
   task_type: hw
-  hw_time_ms: 1.9526626735638446
-  required_clock_mhz: 314.8285714285714
-  set_clock_mhz: 314.8285714285714
+  hw_time_ms: 2.776413043478261
+  required_clock_mhz: 600.0
+  set_clock_mhz: 600.0
   set_voltage_mv: 710.0
   feasible: true
+  otf_group: otf-0
 - node_id: yuvsc
   ip_ref: ip-yuvsc-is-v15-s5e9975
   hw_name: YUVSC
   task_type: hw
-  hw_time_ms: 1.9526626735638446
-  required_clock_mhz: 314.8285714285714
-  set_clock_mhz: 314.8285714285714
+  hw_time_ms: 2.776413043478261
+  required_clock_mhz: 600.0
+  set_clock_mhz: 600.0
   set_voltage_mv: 710.0
   feasible: true
+  otf_group: otf-0
 - node_id: mlsc
   ip_ref: ip-mlsc-is-v15-s5e9975
   hw_name: MLSC
   task_type: hw
-  hw_time_ms: 1.9526626735638446
-  required_clock_mhz: 314.8285714285714
-  set_clock_mhz: 314.8285714285714
+  hw_time_ms: 2.776413043478261
+  required_clock_mhz: 600.0
+  set_clock_mhz: 600.0
   set_voltage_mv: 710.0
   feasible: true
+  otf_group: otf-0
 - node_id: mtnr
   ip_ref: ip-mtnr-is-v15-s5e9975
   hw_name: MTNR
@@ -1315,6 +1321,7 @@ timing_breakdown:
   set_clock_mhz: 300.0
   set_voltage_mv: 710.0
   feasible: true
+  otf_group: otf-1
 - node_id: msnr
   ip_ref: ip-msnr-is-v15-s5e9975
   hw_name: MSNR
@@ -1324,40 +1331,45 @@ timing_breakdown:
   set_clock_mhz: 300.0
   set_voltage_mv: 710.0
   feasible: true
+  otf_group: otf-1
 - node_id: yuvp
   ip_ref: ip-yuvp-is-v15-s5e9975
   hw_name: YUVP
   task_type: hw
-  hw_time_ms: 1.9526626735638446
-  required_clock_mhz: 314.8285714285714
-  set_clock_mhz: 314.8285714285714
+  hw_time_ms: 2.04918
+  required_clock_mhz: 600.0
+  set_clock_mhz: 600.0
   set_voltage_mv: 710.0
   feasible: true
+  otf_group: otf-1
+  standalone_hw_time_ms: 1.02459
 - node_id: mcsc
   ip_ref: ip-mcsc-is-v15-s5e9975
   hw_name: MCSC
   task_type: hw
-  hw_time_ms: 1.9526626735638446
-  required_clock_mhz: 314.8285714285714
-  set_clock_mhz: 314.8285714285714
+  hw_time_ms: 2.04918
+  required_clock_mhz: 600.0
+  set_clock_mhz: 600.0
   set_voltage_mv: 710.0
   feasible: true
+  otf_group: otf-1
+  standalone_hw_time_ms: 1.02459
 - node_id: lme
   ip_ref: ip-lme-is-v15-s5e9975
   hw_name: LME
   task_type: hw
-  hw_time_ms: 0.6353857881840457
-  required_clock_mhz: 314.8285714285714
-  set_clock_mhz: 314.8285714285714
+  hw_time_ms: 0.333396
+  required_clock_mhz: 600.0
+  set_clock_mhz: 600.0
   set_voltage_mv: 710.0
   feasible: true
 - node_id: vps_od
   ip_ref: ip-vps-is-v15-s5e9975
   hw_name: VPS
   task_type: hw
-  hw_time_ms: 0.491787639531718
-  required_clock_mhz: 314.8285714285714
-  set_clock_mhz: 314.8285714285714
+  hw_time_ms: 0.258048
+  required_clock_mhz: 600.0
+  set_clock_mhz: 600.0
   set_voltage_mv: 710.0
   feasible: true
 - node_id: mfc_enc
@@ -1385,7 +1397,7 @@ dvfs_breakdown:
   hw_name: CSIS
   mode: Normal
   required_clock_mhz: 314.8285714285714
-  base_required_clock_mhz: 41.328
+  base_required_clock_mhz: 0.0
   manual_clock_mhz: 300.0
   clock_correction_mhz: 314.8285714285714
   clock_correction_reason: sensor_ingress_req_csis_clock(sensor_rear, phy=CPHY, mipi=3.673Gbps,
@@ -1407,16 +1419,46 @@ dvfs_breakdown:
   total_power_ma: 0.578592
   vdd_leader: byrp,csis,lme,mcsc,mlsc,pdp,rgbp,vps_od,yuvp,yuvsc
   feasible: true
+  clock_ledger:
+    throughput_required_mhz: 0.0
+    constraints:
+    - kind: mipi_ingress
+      mhz: 314.8285714285714
+      reason: sensor_ingress_req_csis_clock(sensor_rear, phy=CPHY, mipi=3.673Gbps,
+        bitwidth=10)
+      source: sim
+    - kind: vvalid_stream
+      mhz: 110.71011235955056
+      reason: sensor_readout_stream_clock(sensor_rear, readout_ms=2.776)
+      source: sim
+    - kind: otf_align
+      mhz: 300.0
+      reason: otf_group_rate_align(otf-0, leader=pdp, 2400 Mpix/s)
+      source: sim
+    - kind: manual
+      mhz: 300.0
+      reason: manual_clock_mhz
+      source: node_config.sim
+    binding_kind: mipi_ingress
+    calculated_required_mhz: 314.8285714285714
+    calculated_mhz: 314.8285714285714
+    basis: calculated
+    basis_used: calculated
+    gap:
+      cause: mipi_ingress
+  clock_ref_mhz: 314.8285714285714
+  clock_overhead_mw: 0.0
+  leakage_power_mw: 0.0
 - node_id: pdp
   instance_index: 0
   ip_ref: ip-pdp-is-v15-s5e9975
   hw_name: PDP
   mode: Normal
   required_clock_mhz: 314.8285714285714
-  base_required_clock_mhz: 41.328
+  base_required_clock_mhz: 0.0
   manual_clock_mhz: 300.0
-  clock_correction_mhz: 314.8285714285714
-  clock_correction_reason: otf_group_clock_align(otf-0, leader=csis)
+  clock_correction_mhz: 300.0
+  clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp, 2400 Mpix/s)
   set_clock_mhz: 314.8285714285714
   dvfs_group: CSIS
   required_voltage_mv: 710.0
@@ -1434,17 +1476,46 @@ dvfs_breakdown:
   total_power_ma: 0.4683840000000001
   vdd_leader: byrp,csis,lme,mcsc,mlsc,pdp,rgbp,vps_od,yuvp,yuvsc
   feasible: true
+  clock_ledger:
+    throughput_required_mhz: 0.0
+    constraints:
+    - kind: vvalid_stream
+      mhz: 110.71011235955056
+      reason: sensor_readout_stream_clock(sensor_rear, readout_ms=2.776)
+      source: sim
+    - kind: otf_align
+      mhz: 300.0
+      reason: otf_group_rate_align(otf-0, leader=pdp, 2400 Mpix/s)
+      source: sim
+    - kind: manual
+      mhz: 300.0
+      reason: manual_clock_mhz
+      source: node_config.sim
+    - kind: dvfs_group_align
+      mhz: 314.8285714285714
+      reason: dvfs_group_align(CSIS)
+      source: resolver
+    binding_kind: dvfs_group_align
+    calculated_required_mhz: 314.8285714285714
+    calculated_mhz: 314.8285714285714
+    basis: calculated
+    basis_used: calculated
+    gap:
+      cause: dvfs_group_align
+  clock_ref_mhz: 110.71011235955056
+  clock_overhead_mw: 0.0
+  leakage_power_mw: 0.0
 - node_id: byrp
   instance_index: 0
   ip_ref: ip-byrp-is-v15-s5e9975
   hw_name: BYRP
   mode: Normal
-  required_clock_mhz: 314.8285714285714
-  base_required_clock_mhz: 82.656
+  required_clock_mhz: 600.0
+  base_required_clock_mhz: 0.0
   manual_clock_mhz: 300.0
-  clock_correction_mhz: 314.8285714285714
-  clock_correction_reason: otf_group_clock_align(otf-0, leader=csis)
-  set_clock_mhz: 314.8285714285714
+  clock_correction_mhz: 600.0
+  clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp, 2400 Mpix/s)
+  set_clock_mhz: 600.0
   dvfs_group: CAM
   required_voltage_mv: 710.0
   set_voltage_mv: 710.0
@@ -1461,17 +1532,42 @@ dvfs_breakdown:
   total_power_ma: 11.957568
   vdd_leader: byrp,csis,lme,mcsc,mlsc,pdp,rgbp,vps_od,yuvp,yuvsc
   feasible: true
+  clock_ledger:
+    throughput_required_mhz: 0.0
+    constraints:
+    - kind: vvalid_stream
+      mhz: 221.42022471910113
+      reason: sensor_readout_stream_clock(sensor_rear, readout_ms=2.776)
+      source: sim
+    - kind: otf_align
+      mhz: 600.0
+      reason: otf_group_rate_align(otf-0, leader=pdp, 2400 Mpix/s)
+      source: sim
+    - kind: manual
+      mhz: 300.0
+      reason: manual_clock_mhz
+      source: node_config.sim
+    binding_kind: otf_align
+    calculated_required_mhz: 600.0
+    calculated_mhz: 600.0
+    basis: calculated
+    basis_used: calculated
+    gap:
+      cause: otf_align
+  clock_ref_mhz: 221.42022471910113
+  clock_overhead_mw: 0.0
+  leakage_power_mw: 0.0
 - node_id: rgbp
   instance_index: 0
   ip_ref: ip-rgbp-is-v15-s5e9975
   hw_name: RGBP
   mode: Normal
-  required_clock_mhz: 314.8285714285714
-  base_required_clock_mhz: 82.656
+  required_clock_mhz: 600.0
+  base_required_clock_mhz: 0.0
   manual_clock_mhz: 300.0
-  clock_correction_mhz: 314.8285714285714
-  clock_correction_reason: otf_group_clock_align(otf-0, leader=csis)
-  set_clock_mhz: 314.8285714285714
+  clock_correction_mhz: 600.0
+  clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp, 2400 Mpix/s)
+  set_clock_mhz: 600.0
   dvfs_group: CAM
   required_voltage_mv: 710.0
   set_voltage_mv: 710.0
@@ -1488,17 +1584,42 @@ dvfs_breakdown:
   total_power_ma: 10.2713856
   vdd_leader: byrp,csis,lme,mcsc,mlsc,pdp,rgbp,vps_od,yuvp,yuvsc
   feasible: true
+  clock_ledger:
+    throughput_required_mhz: 0.0
+    constraints:
+    - kind: vvalid_stream
+      mhz: 221.42022471910113
+      reason: sensor_readout_stream_clock(sensor_rear, readout_ms=2.776)
+      source: sim
+    - kind: otf_align
+      mhz: 600.0
+      reason: otf_group_rate_align(otf-0, leader=pdp, 2400 Mpix/s)
+      source: sim
+    - kind: manual
+      mhz: 300.0
+      reason: manual_clock_mhz
+      source: node_config.sim
+    binding_kind: otf_align
+    calculated_required_mhz: 600.0
+    calculated_mhz: 600.0
+    basis: calculated
+    basis_used: calculated
+    gap:
+      cause: otf_align
+  clock_ref_mhz: 221.42022471910113
+  clock_overhead_mw: 0.0
+  leakage_power_mw: 0.0
 - node_id: yuvsc
   instance_index: 0
   ip_ref: ip-yuvsc-is-v15-s5e9975
   hw_name: YUVSC
   mode: Normal
-  required_clock_mhz: 314.8285714285714
-  base_required_clock_mhz: 82.656
+  required_clock_mhz: 600.0
+  base_required_clock_mhz: 0.0
   manual_clock_mhz: 300.0
-  clock_correction_mhz: 314.8285714285714
-  clock_correction_reason: otf_group_clock_align(otf-0, leader=csis)
-  set_clock_mhz: 314.8285714285714
+  clock_correction_mhz: 600.0
+  clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp, 2400 Mpix/s)
+  set_clock_mhz: 600.0
   dvfs_group: CAM
   required_voltage_mv: 710.0
   set_voltage_mv: 710.0
@@ -1515,17 +1636,42 @@ dvfs_breakdown:
   total_power_ma: 0.9698304
   vdd_leader: byrp,csis,lme,mcsc,mlsc,pdp,rgbp,vps_od,yuvp,yuvsc
   feasible: true
+  clock_ledger:
+    throughput_required_mhz: 0.0
+    constraints:
+    - kind: vvalid_stream
+      mhz: 221.42022471910113
+      reason: sensor_readout_stream_clock(sensor_rear, readout_ms=2.776)
+      source: sim
+    - kind: otf_align
+      mhz: 600.0
+      reason: otf_group_rate_align(otf-0, leader=pdp, 2400 Mpix/s)
+      source: sim
+    - kind: manual
+      mhz: 300.0
+      reason: manual_clock_mhz
+      source: node_config.sim
+    binding_kind: otf_align
+    calculated_required_mhz: 600.0
+    calculated_mhz: 600.0
+    basis: calculated
+    basis_used: calculated
+    gap:
+      cause: otf_align
+  clock_ref_mhz: 221.42022471910113
+  clock_overhead_mw: 0.0
+  leakage_power_mw: 0.0
 - node_id: mlsc
   instance_index: 0
   ip_ref: ip-mlsc-is-v15-s5e9975
   hw_name: MLSC
   mode: Normal
-  required_clock_mhz: 314.8285714285714
-  base_required_clock_mhz: 82.656
+  required_clock_mhz: 600.0
+  base_required_clock_mhz: 0.0
   manual_clock_mhz: 300.0
-  clock_correction_mhz: 314.8285714285714
-  clock_correction_reason: otf_group_clock_align(otf-0, leader=csis)
-  set_clock_mhz: 314.8285714285714
+  clock_correction_mhz: 600.0
+  clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp, 2400 Mpix/s)
+  set_clock_mhz: 600.0
   dvfs_group: CAM
   required_voltage_mv: 710.0
   set_voltage_mv: 710.0
@@ -1542,6 +1688,31 @@ dvfs_breakdown:
   total_power_ma: 0.0
   vdd_leader: byrp,csis,lme,mcsc,mlsc,pdp,rgbp,vps_od,yuvp,yuvsc
   feasible: true
+  clock_ledger:
+    throughput_required_mhz: 0.0
+    constraints:
+    - kind: vvalid_stream
+      mhz: 221.42022471910113
+      reason: sensor_readout_stream_clock(sensor_rear, readout_ms=2.776)
+      source: sim
+    - kind: otf_align
+      mhz: 600.0
+      reason: otf_group_rate_align(otf-0, leader=pdp, 2400 Mpix/s)
+      source: sim
+    - kind: manual
+      mhz: 300.0
+      reason: manual_clock_mhz
+      source: node_config.sim
+    binding_kind: otf_align
+    calculated_required_mhz: 600.0
+    calculated_mhz: 600.0
+    basis: calculated
+    basis_used: calculated
+    gap:
+      cause: otf_align
+  clock_ref_mhz: 221.42022471910113
+  clock_overhead_mw: 0.0
+  leakage_power_mw: 0.0
 - node_id: mtnr
   instance_index: 0
   ip_ref: ip-mtnr-is-v15-s5e9975
@@ -1551,7 +1722,7 @@ dvfs_breakdown:
   base_required_clock_mhz: 82.656
   manual_clock_mhz: 300.0
   clock_correction_mhz: 300.0
-  clock_correction_reason: otf_group_clock_align(otf-1, leader=yuvp)
+  clock_correction_reason: otf_group_rate_align(otf-1, leader=yuvp, 1200 Mpix/s)
   set_clock_mhz: 300.0
   dvfs_group: INTCAM
   required_voltage_mv: 710.0
@@ -1569,6 +1740,28 @@ dvfs_breakdown:
   total_power_ma: 2.7552
   vdd_leader: msnr,mtnr
   feasible: true
+  clock_ledger:
+    throughput_required_mhz: 82.656
+    constraints:
+    - kind: otf_align
+      mhz: 300.0
+      reason: otf_group_rate_align(otf-1, leader=yuvp, 1200 Mpix/s)
+      source: sim
+    - kind: manual
+      mhz: 300.0
+      reason: manual_clock_mhz
+      source: node_config.sim
+    binding_kind: otf_align
+    calculated_required_mhz: 300.0
+    calculated_mhz: 300.0
+    basis: calculated
+    basis_used: calculated
+    gap:
+      calculated_over_throughput_pct: 262.95
+      cause: otf_align
+  clock_ref_mhz: 82.656
+  clock_overhead_mw: 0.0
+  leakage_power_mw: 0.0
 - node_id: msnr
   instance_index: 0
   ip_ref: ip-msnr-is-v15-s5e9975
@@ -1578,7 +1771,7 @@ dvfs_breakdown:
   base_required_clock_mhz: 82.656
   manual_clock_mhz: 300.0
   clock_correction_mhz: 300.0
-  clock_correction_reason: otf_group_clock_align(otf-1, leader=yuvp)
+  clock_correction_reason: otf_group_rate_align(otf-1, leader=yuvp, 1200 Mpix/s)
   set_clock_mhz: 300.0
   dvfs_group: INTCAM
   required_voltage_mv: 710.0
@@ -1596,17 +1789,39 @@ dvfs_breakdown:
   total_power_ma: 2.7552
   vdd_leader: msnr,mtnr
   feasible: true
+  clock_ledger:
+    throughput_required_mhz: 82.656
+    constraints:
+    - kind: otf_align
+      mhz: 300.0
+      reason: otf_group_rate_align(otf-1, leader=yuvp, 1200 Mpix/s)
+      source: sim
+    - kind: manual
+      mhz: 300.0
+      reason: manual_clock_mhz
+      source: node_config.sim
+    binding_kind: otf_align
+    calculated_required_mhz: 300.0
+    calculated_mhz: 300.0
+    basis: calculated
+    basis_used: calculated
+    gap:
+      calculated_over_throughput_pct: 262.95
+      cause: otf_align
+  clock_ref_mhz: 82.656
+  clock_overhead_mw: 0.0
+  leakage_power_mw: 0.0
 - node_id: yuvp
   instance_index: 0
   ip_ref: ip-yuvp-is-v15-s5e9975
   hw_name: YUVP
   mode: Normal
-  required_clock_mhz: 314.8285714285714
+  required_clock_mhz: 600.0
   base_required_clock_mhz: 82.656
   manual_clock_mhz: 300.0
   clock_correction_mhz: 300.0
-  clock_correction_reason: otf_group_clock_align(otf-1, leader=yuvp)
-  set_clock_mhz: 314.8285714285714
+  clock_correction_reason: otf_group_rate_align(otf-1, leader=yuvp, 1200 Mpix/s)
+  set_clock_mhz: 600.0
   dvfs_group: CAM
   required_voltage_mv: 710.0
   set_voltage_mv: 710.0
@@ -1623,17 +1838,43 @@ dvfs_breakdown:
   total_power_ma: 0.9698304
   vdd_leader: byrp,csis,lme,mcsc,mlsc,pdp,rgbp,vps_od,yuvp,yuvsc
   feasible: true
+  clock_ledger:
+    throughput_required_mhz: 82.656
+    constraints:
+    - kind: otf_align
+      mhz: 300.0
+      reason: otf_group_rate_align(otf-1, leader=yuvp, 1200 Mpix/s)
+      source: sim
+    - kind: manual
+      mhz: 300.0
+      reason: manual_clock_mhz
+      source: node_config.sim
+    - kind: dvfs_group_align
+      mhz: 600.0
+      reason: dvfs_group_align(CAM)
+      source: resolver
+    binding_kind: dvfs_group_align
+    calculated_required_mhz: 600.0
+    calculated_mhz: 600.0
+    basis: calculated
+    basis_used: calculated
+    gap:
+      calculated_over_throughput_pct: 625.9
+      cause: dvfs_group_align
+  clock_ref_mhz: 82.656
+  clock_overhead_mw: 0.0
+  leakage_power_mw: 0.0
 - node_id: mcsc
   instance_index: 0
   ip_ref: ip-mcsc-is-v15-s5e9975
   hw_name: MCSC
   mode: Normal
-  required_clock_mhz: 314.8285714285714
+  required_clock_mhz: 600.0
   base_required_clock_mhz: 82.656
   manual_clock_mhz: 300.0
   clock_correction_mhz: 300.0
-  clock_correction_reason: otf_group_clock_align(otf-1, leader=yuvp)
-  set_clock_mhz: 314.8285714285714
+  clock_correction_reason: otf_group_rate_align(otf-1, leader=yuvp, 1200 Mpix/s)
+  set_clock_mhz: 600.0
   dvfs_group: CAM
   required_voltage_mv: 710.0
   set_voltage_mv: 710.0
@@ -1650,17 +1891,43 @@ dvfs_breakdown:
   total_power_ma: 4.1328000000000005
   vdd_leader: byrp,csis,lme,mcsc,mlsc,pdp,rgbp,vps_od,yuvp,yuvsc
   feasible: true
+  clock_ledger:
+    throughput_required_mhz: 82.656
+    constraints:
+    - kind: otf_align
+      mhz: 300.0
+      reason: otf_group_rate_align(otf-1, leader=yuvp, 1200 Mpix/s)
+      source: sim
+    - kind: manual
+      mhz: 300.0
+      reason: manual_clock_mhz
+      source: node_config.sim
+    - kind: dvfs_group_align
+      mhz: 600.0
+      reason: dvfs_group_align(CAM)
+      source: resolver
+    binding_kind: dvfs_group_align
+    calculated_required_mhz: 600.0
+    calculated_mhz: 600.0
+    basis: calculated
+    basis_used: calculated
+    gap:
+      calculated_over_throughput_pct: 625.9
+      cause: dvfs_group_align
+  clock_ref_mhz: 82.656
+  clock_overhead_mw: 0.0
+  leakage_power_mw: 0.0
 - node_id: lme
   instance_index: 0
   ip_ref: ip-lme-is-v15-s5e9975
   hw_name: LME
   mode: Normal
-  required_clock_mhz: 314.8285714285714
+  required_clock_mhz: 600.0
   base_required_clock_mhz: 26.895811764705883
   manual_clock_mhz: 300.0
   clock_correction_mhz: 66.67920000000001
   clock_correction_reason: included_stage_budget(pre_me_rta, 3ms; lower bound)
-  set_clock_mhz: 314.8285714285714
+  set_clock_mhz: 600.0
   dvfs_group: CAM
   required_voltage_mv: 710.0
   set_voltage_mv: 710.0
@@ -1677,16 +1944,42 @@ dvfs_breakdown:
   total_power_ma: 1.344790588235294
   vdd_leader: byrp,csis,lme,mcsc,mlsc,pdp,rgbp,vps_od,yuvp,yuvsc
   feasible: true
+  clock_ledger:
+    throughput_required_mhz: 26.895811764705883
+    constraints:
+    - kind: stage_budget
+      mhz: 66.67920000000001
+      reason: included_stage_budget(pre_me_rta, 3ms; lower bound)
+      source: sim
+    - kind: manual
+      mhz: 300.0
+      reason: manual_clock_mhz
+      source: node_config.sim
+    - kind: dvfs_group_align
+      mhz: 600.0
+      reason: dvfs_group_align(CAM)
+      source: resolver
+    binding_kind: dvfs_group_align
+    calculated_required_mhz: 600.0
+    calculated_mhz: 600.0
+    basis: calculated
+    basis_used: calculated
+    gap:
+      calculated_over_throughput_pct: 2130.83
+      cause: dvfs_group_align
+  clock_ref_mhz: 66.67920000000001
+  clock_overhead_mw: 0.0
+  leakage_power_mw: 0.0
 - node_id: vps_od
   instance_index: 0
   ip_ref: ip-vps-is-v15-s5e9975
   hw_name: VPS
   mode: Normal
-  required_clock_mhz: 314.8285714285714
+  required_clock_mhz: 600.0
   base_required_clock_mhz: 20.81731764705882
   manual_clock_mhz: 300.0
   clock_correction_mhz: 0.0
-  set_clock_mhz: 314.8285714285714
+  set_clock_mhz: 600.0
   dvfs_group: CAM
   required_voltage_mv: 710.0
   set_voltage_mv: 710.0
@@ -1703,6 +1996,28 @@ dvfs_breakdown:
   total_power_ma: 0.0
   vdd_leader: byrp,csis,lme,mcsc,mlsc,pdp,rgbp,vps_od,yuvp,yuvsc
   feasible: true
+  clock_ledger:
+    throughput_required_mhz: 20.81731764705882
+    constraints:
+    - kind: manual
+      mhz: 300.0
+      reason: manual_clock_mhz
+      source: node_config.sim
+    - kind: dvfs_group_align
+      mhz: 600.0
+      reason: dvfs_group_align(CAM)
+      source: resolver
+    binding_kind: dvfs_group_align
+    calculated_required_mhz: 600.0
+    calculated_mhz: 600.0
+    basis: calculated
+    basis_used: calculated
+    gap:
+      calculated_over_throughput_pct: 2782.22
+      cause: dvfs_group_align
+  clock_ref_mhz: 20.81731764705882
+  clock_overhead_mw: 0.0
+  leakage_power_mw: 0.0
 - node_id: mfc_enc
   instance_index: 0
   ip_ref: ip-mfc-s5e9975
@@ -1729,6 +2044,24 @@ dvfs_breakdown:
   total_power_ma: 2.4395294117647057
   vdd_leader: dpu,mfc_enc
   feasible: true
+  clock_ledger:
+    throughput_required_mhz: 73.18588235294119
+    constraints:
+    - kind: manual
+      mhz: 300.0
+      reason: manual_clock_mhz
+      source: node_config.sim
+    binding_kind: manual
+    calculated_required_mhz: 300.0
+    calculated_mhz: 300.0
+    basis: calculated
+    basis_used: calculated
+    gap:
+      calculated_over_throughput_pct: 309.92
+      cause: manual
+  clock_ref_mhz: 73.18588235294119
+  clock_overhead_mw: 0.0
+  leakage_power_mw: 0.0
 - node_id: dpu
   instance_index: 0
   ip_ref: ip-dpu-s5e9975
@@ -1754,6 +2087,19 @@ dvfs_breakdown:
   total_power_ma: 2.4395294117647057
   vdd_leader: dpu,mfc_enc
   feasible: true
+  clock_ledger:
+    throughput_required_mhz: 73.18588235294119
+    constraints: []
+    binding_kind: throughput
+    calculated_required_mhz: 73.18588235294119
+    calculated_mhz: 300.0
+    basis: calculated
+    basis_used: calculated
+    gap:
+      calculated_over_throughput_pct: 309.92
+  clock_ref_mhz: 73.18588235294119
+  clock_overhead_mw: 0.0
+  leakage_power_mw: 0.0
 timeline_events:
 - task_id: sensor_rear#f0
   node_id: sensor_rear
@@ -1763,14 +2109,13 @@ timeline_events:
   resource_id: sensor_rear
   otf_group_id: otf-0#f0
   latency_offset_ms: 0.0
-  bottleneck: true
-  bottleneck_reason: longest duration in OTF streaming group
+  bottleneck: false
   constraint_type: source
   source_fps: 120.0
   v_valid_ms: 2.776413
   start_ms: 0.0
-  end_ms: 2.776413
-  duration_ms: 2.776413
+  end_ms: 2.776413043478261
+  duration_ms: 2.776413043478261
   cadence_violation: false
   ready_ms: 0.0
   resource_wait_ms: 0.0
@@ -1786,10 +2131,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f0
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 0.0
-  end_ms: 2.776413
-  duration_ms: 2.776413
+  end_ms: 2.776413043478261
+  duration_ms: 2.776413043478261
   cadence_violation: false
   ready_ms: 0.0
   resource_wait_ms: 0.0
@@ -1806,10 +2152,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f0
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 0.0
-  end_ms: 2.776413
-  duration_ms: 2.776413
+  end_ms: 2.776413043478261
+  duration_ms: 2.776413043478261
   cadence_violation: false
   ready_ms: 0.0
   resource_wait_ms: 0.0
@@ -1826,10 +2173,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f0
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 0.0
-  end_ms: 2.776413
-  duration_ms: 2.776413
+  end_ms: 2.776413043478261
+  duration_ms: 2.776413043478261
   cadence_violation: false
   ready_ms: 0.0
   resource_wait_ms: 0.0
@@ -1846,10 +2194,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f0
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 0.0
-  end_ms: 2.776413
-  duration_ms: 2.776413
+  end_ms: 2.776413043478261
+  duration_ms: 2.776413043478261
   cadence_violation: false
   ready_ms: 0.0
   resource_wait_ms: 0.0
@@ -1866,10 +2215,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f0
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 0.0
-  end_ms: 2.776413
-  duration_ms: 2.776413
+  end_ms: 2.776413043478261
+  duration_ms: 2.776413043478261
   cadence_violation: false
   ready_ms: 0.0
   resource_wait_ms: 0.0
@@ -1886,10 +2236,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f0
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 0.0
-  end_ms: 2.776413
-  duration_ms: 2.776413
+  end_ms: 2.776413043478261
+  duration_ms: 2.776413043478261
   cadence_violation: false
   ready_ms: 0.0
   resource_wait_ms: 0.0
@@ -1905,14 +2256,14 @@ timeline_events:
   resource_id: vps_od
   edge_type: M2M
   bottleneck: false
-  start_ms: 2.776413
-  end_ms: 3.2682006395317176
-  duration_ms: 0.4917876395317178
-  cadence_avg_interval_ms: 8.333333333333332
+  start_ms: 2.776413043478261
+  end_ms: 3.034461043478261
+  duration_ms: 0.25804800000000006
+  cadence_avg_interval_ms: 8.333333333333334
   cadence_budget_ms: 8.333333333333334
-  cadence_slack_ms: 1.7763568394002505e-15
+  cadence_slack_ms: 0.0
   cadence_violation: false
-  ready_ms: 2.776413
+  ready_ms: 2.776413043478261
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -1926,11 +2277,11 @@ timeline_events:
   resource_id: CPU_CAMERA
   edge_type: control
   bottleneck: false
-  start_ms: 3.776413
-  end_ms: 4.076413
+  start_ms: 3.776413043478261
+  end_ms: 4.076413043478261
   duration_ms: 0.2999999999999998
   cadence_violation: false
-  ready_ms: 3.776413
+  ready_ms: 3.776413043478261
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -1946,11 +2297,11 @@ timeline_events:
   resource_id: stage:pre_me_rta
   edge_type: control,M2M
   bottleneck: false
-  start_ms: 4.076413
-  end_ms: 7.076413
+  start_ms: 4.076413043478261
+  end_ms: 7.076413043478261
   duration_ms: 3.0
   cadence_violation: false
-  ready_ms: 4.076413
+  ready_ms: 4.076413043478261
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -1965,11 +2316,11 @@ timeline_events:
   resource_id: CPU_CAMERA
   edge_type: control
   bottleneck: false
-  start_ms: 7.076413
-  end_ms: 11.076412999999999
-  duration_ms: 3.999999999999999
+  start_ms: 7.076413043478261
+  end_ms: 11.076413043478261
+  duration_ms: 4.000000000000001
   cadence_violation: false
-  ready_ms: 7.076413
+  ready_ms: 7.076413043478261
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -1986,11 +2337,11 @@ timeline_events:
   latency_offset_ms: 0.0
   bottleneck: true
   bottleneck_reason: longest duration in OTF streaming group
-  start_ms: 11.076412999999999
-  end_ms: 13.125592999999999
+  start_ms: 11.076413043478261
+  end_ms: 13.125593043478261
   duration_ms: 2.04918
   cadence_violation: false
-  ready_ms: 11.076412999999999
+  ready_ms: 11.076413043478261
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -2008,11 +2359,11 @@ timeline_events:
   latency_offset_ms: 0.0
   bottleneck: true
   bottleneck_reason: longest duration in OTF streaming group
-  start_ms: 11.076412999999999
-  end_ms: 13.125592999999999
+  start_ms: 11.076413043478261
+  end_ms: 13.125593043478261
   duration_ms: 2.04918
   cadence_violation: false
-  ready_ms: 11.076412999999999
+  ready_ms: 11.076413043478261
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -2027,12 +2378,13 @@ timeline_events:
   edge_type: OTF,M2M,M2M
   otf_group_id: otf-1#f0
   latency_offset_ms: 0.0
-  bottleneck: false
-  start_ms: 11.076412999999999
-  end_ms: 13.125592999999999
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
+  start_ms: 11.076413043478261
+  end_ms: 13.125593043478261
   duration_ms: 2.04918
   cadence_violation: false
-  ready_ms: 11.076412999999999
+  ready_ms: 11.076413043478261
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -2049,12 +2401,13 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-1#f0
   latency_offset_ms: 0.0
-  bottleneck: false
-  start_ms: 11.076412999999999
-  end_ms: 13.125592999999999
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
+  start_ms: 11.076413043478261
+  end_ms: 13.125593043478261
   duration_ms: 2.04918
   cadence_violation: false
-  ready_ms: 11.076412999999999
+  ready_ms: 11.076413043478261
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -2068,11 +2421,11 @@ timeline_events:
   resource_id: mfc_enc
   edge_type: M2M
   bottleneck: false
-  start_ms: 13.125592999999999
-  end_ms: 14.939992999999998
+  start_ms: 13.125593043478261
+  end_ms: 14.93999304347826
   duration_ms: 1.8143999999999991
   cadence_violation: false
-  ready_ms: 13.125592999999999
+  ready_ms: 13.125593043478261
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -2092,16 +2445,16 @@ timeline_events:
   constraint_type: sink
   refresh_hz: 120.0
   scanout_ms: 8.333333333333334
-  start_ms: 13.125592999999999
-  end_ms: 14.939992999999998
+  start_ms: 13.125593043478261
+  end_ms: 14.93999304347826
   duration_ms: 1.8143999999999991
   deadline_ms: 8.333333333333334
-  slack_ms: -6.606659666666664
-  cadence_avg_interval_ms: 8.333333333333332
+  slack_ms: -6.6066597101449265
+  cadence_avg_interval_ms: 8.333333333333336
   cadence_budget_ms: 8.333333333333334
-  cadence_slack_ms: 1.7763568394002505e-15
+  cadence_slack_ms: -1.7763568394002505e-15
   cadence_violation: false
-  ready_ms: 13.125592999999999
+  ready_ms: 13.125593043478261
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -2120,16 +2473,16 @@ timeline_events:
   constraint_type: sink
   refresh_hz: 120.0
   scanout_ms: 8.333333333333334
-  start_ms: 13.125592999999999
-  end_ms: 14.939992999999998
+  start_ms: 13.125593043478261
+  end_ms: 14.93999304347826
   duration_ms: 1.8143999999999991
   deadline_ms: 8.333333333333334
-  slack_ms: -6.606659666666664
-  cadence_avg_interval_ms: 8.333333333333332
+  slack_ms: -6.6066597101449265
+  cadence_avg_interval_ms: 8.333333333333336
   cadence_budget_ms: 8.333333333333334
-  cadence_slack_ms: 1.7763568394002505e-15
+  cadence_slack_ms: -1.7763568394002505e-15
   cadence_violation: false
-  ready_ms: 13.125592999999999
+  ready_ms: 13.125593043478261
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -2143,11 +2496,11 @@ timeline_events:
   resource_id: CPU_WRITER
   edge_type: control
   bottleneck: false
-  start_ms: 14.939992999999998
-  end_ms: 15.059992999999997
+  start_ms: 14.93999304347826
+  end_ms: 15.05999304347826
   duration_ms: 0.11999999999999922
   cadence_violation: false
-  ready_ms: 14.939992999999998
+  ready_ms: 14.93999304347826
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -2161,14 +2514,14 @@ timeline_events:
   resource_id: STORAGE_IO
   edge_type: control
   bottleneck: false
-  start_ms: 15.059992999999997
-  end_ms: 15.299992999999997
+  start_ms: 15.05999304347826
+  end_ms: 15.29999304347826
   duration_ms: 0.2400000000000002
-  cadence_avg_interval_ms: 8.333333333333332
+  cadence_avg_interval_ms: 8.333333333333336
   cadence_budget_ms: 8.333333333333334
-  cadence_slack_ms: 1.7763568394002505e-15
+  cadence_slack_ms: -1.7763568394002505e-15
   cadence_violation: false
-  ready_ms: 15.059992999999997
+  ready_ms: 15.05999304347826
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -2182,14 +2535,13 @@ timeline_events:
   resource_id: sensor_rear
   otf_group_id: otf-0#f1
   latency_offset_ms: 0.0
-  bottleneck: true
-  bottleneck_reason: longest duration in OTF streaming group
+  bottleneck: false
   constraint_type: source
   source_fps: 120.0
   v_valid_ms: 2.776413
   start_ms: 8.333333333333334
-  end_ms: 11.109746333333334
-  duration_ms: 2.776413
+  end_ms: 11.109746376811595
+  duration_ms: 2.776413043478261
   cadence_violation: false
   ready_ms: 8.333333333333334
   resource_wait_ms: 0.0
@@ -2205,10 +2557,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f1
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 8.333333333333334
-  end_ms: 11.109746333333334
-  duration_ms: 2.776413
+  end_ms: 11.109746376811595
+  duration_ms: 2.776413043478261
   cadence_violation: false
   ready_ms: 8.333333333333334
   resource_wait_ms: 0.0
@@ -2225,10 +2578,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f1
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 8.333333333333334
-  end_ms: 11.109746333333334
-  duration_ms: 2.776413
+  end_ms: 11.109746376811595
+  duration_ms: 2.776413043478261
   cadence_violation: false
   ready_ms: 8.333333333333334
   resource_wait_ms: 0.0
@@ -2245,10 +2599,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f1
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 8.333333333333334
-  end_ms: 11.109746333333334
-  duration_ms: 2.776413
+  end_ms: 11.109746376811595
+  duration_ms: 2.776413043478261
   cadence_violation: false
   ready_ms: 8.333333333333334
   resource_wait_ms: 0.0
@@ -2265,10 +2620,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f1
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 8.333333333333334
-  end_ms: 11.109746333333334
-  duration_ms: 2.776413
+  end_ms: 11.109746376811595
+  duration_ms: 2.776413043478261
   cadence_violation: false
   ready_ms: 8.333333333333334
   resource_wait_ms: 0.0
@@ -2285,10 +2641,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f1
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 8.333333333333334
-  end_ms: 11.109746333333334
-  duration_ms: 2.776413
+  end_ms: 11.109746376811595
+  duration_ms: 2.776413043478261
   cadence_violation: false
   ready_ms: 8.333333333333334
   resource_wait_ms: 0.0
@@ -2305,10 +2662,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f1
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 8.333333333333334
-  end_ms: 11.109746333333334
-  duration_ms: 2.776413
+  end_ms: 11.109746376811595
+  duration_ms: 2.776413043478261
   cadence_violation: false
   ready_ms: 8.333333333333334
   resource_wait_ms: 0.0
@@ -2324,15 +2682,15 @@ timeline_events:
   resource_id: vps_od
   edge_type: M2M
   bottleneck: false
-  start_ms: 11.109746333333334
-  end_ms: 11.601533972865052
-  duration_ms: 0.49178763953171867
-  cadence_interval_ms: 8.333333333333336
-  cadence_avg_interval_ms: 8.333333333333332
+  start_ms: 11.109746376811595
+  end_ms: 11.367794376811595
+  duration_ms: 0.2580480000000005
+  cadence_interval_ms: 8.333333333333334
+  cadence_avg_interval_ms: 8.333333333333334
   cadence_budget_ms: 8.333333333333334
-  cadence_slack_ms: 1.7763568394002505e-15
+  cadence_slack_ms: 0.0
   cadence_violation: false
-  ready_ms: 11.109746333333334
+  ready_ms: 11.109746376811595
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -2346,11 +2704,11 @@ timeline_events:
   resource_id: CPU_CAMERA
   edge_type: control
   bottleneck: false
-  start_ms: 12.109746333333334
-  end_ms: 12.409746333333334
+  start_ms: 12.109746376811595
+  end_ms: 12.409746376811595
   duration_ms: 0.3000000000000007
   cadence_violation: false
-  ready_ms: 12.109746333333334
+  ready_ms: 12.109746376811595
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -2366,11 +2724,11 @@ timeline_events:
   resource_id: stage:pre_me_rta
   edge_type: control,M2M
   bottleneck: false
-  start_ms: 12.409746333333334
-  end_ms: 15.409746333333334
+  start_ms: 12.409746376811595
+  end_ms: 15.409746376811595
   duration_ms: 3.0
   cadence_violation: false
-  ready_ms: 12.409746333333334
+  ready_ms: 12.409746376811595
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -2385,11 +2743,11 @@ timeline_events:
   resource_id: CPU_CAMERA
   edge_type: control
   bottleneck: false
-  start_ms: 15.409746333333334
-  end_ms: 19.409746333333334
-  duration_ms: 4.0
+  start_ms: 15.409746376811595
+  end_ms: 19.409746376811597
+  duration_ms: 4.000000000000002
   cadence_violation: false
-  ready_ms: 15.409746333333334
+  ready_ms: 15.409746376811595
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -2406,11 +2764,11 @@ timeline_events:
   latency_offset_ms: 0.0
   bottleneck: true
   bottleneck_reason: longest duration in OTF streaming group
-  start_ms: 19.409746333333334
-  end_ms: 21.458926333333334
+  start_ms: 19.409746376811597
+  end_ms: 21.458926376811597
   duration_ms: 2.04918
   cadence_violation: false
-  ready_ms: 19.409746333333334
+  ready_ms: 19.409746376811597
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -2428,11 +2786,11 @@ timeline_events:
   latency_offset_ms: 0.0
   bottleneck: true
   bottleneck_reason: longest duration in OTF streaming group
-  start_ms: 19.409746333333334
-  end_ms: 21.458926333333334
+  start_ms: 19.409746376811597
+  end_ms: 21.458926376811597
   duration_ms: 2.04918
   cadence_violation: false
-  ready_ms: 19.409746333333334
+  ready_ms: 19.409746376811597
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -2447,12 +2805,13 @@ timeline_events:
   edge_type: OTF,M2M,M2M
   otf_group_id: otf-1#f1
   latency_offset_ms: 0.0
-  bottleneck: false
-  start_ms: 19.409746333333334
-  end_ms: 21.458926333333334
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
+  start_ms: 19.409746376811597
+  end_ms: 21.458926376811597
   duration_ms: 2.04918
   cadence_violation: false
-  ready_ms: 19.409746333333334
+  ready_ms: 19.409746376811597
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -2469,12 +2828,13 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-1#f1
   latency_offset_ms: 0.0
-  bottleneck: false
-  start_ms: 19.409746333333334
-  end_ms: 21.458926333333334
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
+  start_ms: 19.409746376811597
+  end_ms: 21.458926376811597
   duration_ms: 2.04918
   cadence_violation: false
-  ready_ms: 19.409746333333334
+  ready_ms: 19.409746376811597
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -2488,11 +2848,11 @@ timeline_events:
   resource_id: mfc_enc
   edge_type: M2M
   bottleneck: false
-  start_ms: 21.458926333333334
-  end_ms: 23.273326333333333
+  start_ms: 21.458926376811597
+  end_ms: 23.273326376811596
   duration_ms: 1.8143999999999991
   cadence_violation: false
-  ready_ms: 21.458926333333334
+  ready_ms: 21.458926376811597
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -2512,17 +2872,17 @@ timeline_events:
   constraint_type: sink
   refresh_hz: 120.0
   scanout_ms: 8.333333333333334
-  start_ms: 21.458926333333334
-  end_ms: 23.273326333333333
+  start_ms: 21.458926376811597
+  end_ms: 23.273326376811596
   duration_ms: 1.8143999999999991
   deadline_ms: 16.666666666666668
-  slack_ms: -6.6066596666666655
+  slack_ms: -6.606659710144928
   cadence_interval_ms: 8.333333333333336
-  cadence_avg_interval_ms: 8.333333333333332
+  cadence_avg_interval_ms: 8.333333333333336
   cadence_budget_ms: 8.333333333333334
-  cadence_slack_ms: 1.7763568394002505e-15
+  cadence_slack_ms: -1.7763568394002505e-15
   cadence_violation: false
-  ready_ms: 21.458926333333334
+  ready_ms: 21.458926376811597
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -2541,17 +2901,17 @@ timeline_events:
   constraint_type: sink
   refresh_hz: 120.0
   scanout_ms: 8.333333333333334
-  start_ms: 21.458926333333334
-  end_ms: 23.273326333333333
+  start_ms: 21.458926376811597
+  end_ms: 23.273326376811596
   duration_ms: 1.8143999999999991
   deadline_ms: 16.666666666666668
-  slack_ms: -6.6066596666666655
+  slack_ms: -6.606659710144928
   cadence_interval_ms: 8.333333333333336
-  cadence_avg_interval_ms: 8.333333333333332
+  cadence_avg_interval_ms: 8.333333333333336
   cadence_budget_ms: 8.333333333333334
-  cadence_slack_ms: 1.7763568394002505e-15
+  cadence_slack_ms: -1.7763568394002505e-15
   cadence_violation: false
-  ready_ms: 21.458926333333334
+  ready_ms: 21.458926376811597
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -2565,11 +2925,11 @@ timeline_events:
   resource_id: CPU_WRITER
   edge_type: control
   bottleneck: false
-  start_ms: 23.273326333333333
-  end_ms: 23.393326333333334
+  start_ms: 23.273326376811596
+  end_ms: 23.393326376811597
   duration_ms: 0.120000000000001
   cadence_violation: false
-  ready_ms: 23.273326333333333
+  ready_ms: 23.273326376811596
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -2583,15 +2943,15 @@ timeline_events:
   resource_id: STORAGE_IO
   edge_type: control
   bottleneck: false
-  start_ms: 23.393326333333334
-  end_ms: 23.633326333333333
+  start_ms: 23.393326376811597
+  end_ms: 23.633326376811596
   duration_ms: 0.23999999999999844
   cadence_interval_ms: 8.333333333333336
-  cadence_avg_interval_ms: 8.333333333333332
+  cadence_avg_interval_ms: 8.333333333333336
   cadence_budget_ms: 8.333333333333334
-  cadence_slack_ms: 1.7763568394002505e-15
+  cadence_slack_ms: -1.7763568394002505e-15
   cadence_violation: false
-  ready_ms: 23.393326333333334
+  ready_ms: 23.393326376811597
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -2605,14 +2965,13 @@ timeline_events:
   resource_id: sensor_rear
   otf_group_id: otf-0#f2
   latency_offset_ms: 0.0
-  bottleneck: true
-  bottleneck_reason: longest duration in OTF streaming group
+  bottleneck: false
   constraint_type: source
   source_fps: 120.0
   v_valid_ms: 2.776413
   start_ms: 16.666666666666668
-  end_ms: 19.44307966666667
-  duration_ms: 2.7764130000000016
+  end_ms: 19.44307971014493
+  duration_ms: 2.776413043478261
   cadence_violation: false
   ready_ms: 16.666666666666668
   resource_wait_ms: 0.0
@@ -2628,10 +2987,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f2
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 16.666666666666668
-  end_ms: 19.44307966666667
-  duration_ms: 2.7764130000000016
+  end_ms: 19.44307971014493
+  duration_ms: 2.776413043478261
   cadence_violation: false
   ready_ms: 16.666666666666668
   resource_wait_ms: 0.0
@@ -2648,10 +3008,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f2
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 16.666666666666668
-  end_ms: 19.44307966666667
-  duration_ms: 2.7764130000000016
+  end_ms: 19.44307971014493
+  duration_ms: 2.776413043478261
   cadence_violation: false
   ready_ms: 16.666666666666668
   resource_wait_ms: 0.0
@@ -2668,10 +3029,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f2
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 16.666666666666668
-  end_ms: 19.44307966666667
-  duration_ms: 2.7764130000000016
+  end_ms: 19.44307971014493
+  duration_ms: 2.776413043478261
   cadence_violation: false
   ready_ms: 16.666666666666668
   resource_wait_ms: 0.0
@@ -2688,10 +3050,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f2
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 16.666666666666668
-  end_ms: 19.44307966666667
-  duration_ms: 2.7764130000000016
+  end_ms: 19.44307971014493
+  duration_ms: 2.776413043478261
   cadence_violation: false
   ready_ms: 16.666666666666668
   resource_wait_ms: 0.0
@@ -2708,10 +3071,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f2
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 16.666666666666668
-  end_ms: 19.44307966666667
-  duration_ms: 2.7764130000000016
+  end_ms: 19.44307971014493
+  duration_ms: 2.776413043478261
   cadence_violation: false
   ready_ms: 16.666666666666668
   resource_wait_ms: 0.0
@@ -2728,10 +3092,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f2
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 16.666666666666668
-  end_ms: 19.44307966666667
-  duration_ms: 2.7764130000000016
+  end_ms: 19.44307971014493
+  duration_ms: 2.776413043478261
   cadence_violation: false
   ready_ms: 16.666666666666668
   resource_wait_ms: 0.0
@@ -2747,15 +3112,15 @@ timeline_events:
   resource_id: vps_od
   edge_type: M2M
   bottleneck: false
-  start_ms: 19.44307966666667
-  end_ms: 19.934867306198388
-  duration_ms: 0.49178763953171867
-  cadence_interval_ms: 8.333333333333336
-  cadence_avg_interval_ms: 8.333333333333332
+  start_ms: 19.44307971014493
+  end_ms: 19.701127710144927
+  duration_ms: 0.2580479999999987
+  cadence_interval_ms: 8.333333333333332
+  cadence_avg_interval_ms: 8.333333333333334
   cadence_budget_ms: 8.333333333333334
-  cadence_slack_ms: 1.7763568394002505e-15
+  cadence_slack_ms: 0.0
   cadence_violation: false
-  ready_ms: 19.44307966666667
+  ready_ms: 19.44307971014493
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -2769,11 +3134,11 @@ timeline_events:
   resource_id: CPU_CAMERA
   edge_type: control
   bottleneck: false
-  start_ms: 20.44307966666667
-  end_ms: 20.74307966666667
+  start_ms: 20.44307971014493
+  end_ms: 20.74307971014493
   duration_ms: 0.3000000000000007
   cadence_violation: false
-  ready_ms: 20.44307966666667
+  ready_ms: 20.44307971014493
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -2789,11 +3154,11 @@ timeline_events:
   resource_id: stage:pre_me_rta
   edge_type: control,M2M
   bottleneck: false
-  start_ms: 20.74307966666667
-  end_ms: 23.74307966666667
+  start_ms: 20.74307971014493
+  end_ms: 23.74307971014493
   duration_ms: 3.0
   cadence_violation: false
-  ready_ms: 20.74307966666667
+  ready_ms: 20.74307971014493
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -2808,11 +3173,11 @@ timeline_events:
   resource_id: CPU_CAMERA
   edge_type: control
   bottleneck: false
-  start_ms: 23.74307966666667
-  end_ms: 27.74307966666667
+  start_ms: 23.74307971014493
+  end_ms: 27.74307971014493
   duration_ms: 4.0
   cadence_violation: false
-  ready_ms: 23.74307966666667
+  ready_ms: 23.74307971014493
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -2829,11 +3194,11 @@ timeline_events:
   latency_offset_ms: 0.0
   bottleneck: true
   bottleneck_reason: longest duration in OTF streaming group
-  start_ms: 27.74307966666667
-  end_ms: 29.79225966666667
+  start_ms: 27.74307971014493
+  end_ms: 29.79225971014493
   duration_ms: 2.04918
   cadence_violation: false
-  ready_ms: 27.74307966666667
+  ready_ms: 27.74307971014493
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -2851,11 +3216,11 @@ timeline_events:
   latency_offset_ms: 0.0
   bottleneck: true
   bottleneck_reason: longest duration in OTF streaming group
-  start_ms: 27.74307966666667
-  end_ms: 29.79225966666667
+  start_ms: 27.74307971014493
+  end_ms: 29.79225971014493
   duration_ms: 2.04918
   cadence_violation: false
-  ready_ms: 27.74307966666667
+  ready_ms: 27.74307971014493
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -2870,12 +3235,13 @@ timeline_events:
   edge_type: OTF,M2M,M2M
   otf_group_id: otf-1#f2
   latency_offset_ms: 0.0
-  bottleneck: false
-  start_ms: 27.74307966666667
-  end_ms: 29.79225966666667
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
+  start_ms: 27.74307971014493
+  end_ms: 29.79225971014493
   duration_ms: 2.04918
   cadence_violation: false
-  ready_ms: 27.74307966666667
+  ready_ms: 27.74307971014493
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -2892,12 +3258,13 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-1#f2
   latency_offset_ms: 0.0
-  bottleneck: false
-  start_ms: 27.74307966666667
-  end_ms: 29.79225966666667
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
+  start_ms: 27.74307971014493
+  end_ms: 29.79225971014493
   duration_ms: 2.04918
   cadence_violation: false
-  ready_ms: 27.74307966666667
+  ready_ms: 27.74307971014493
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -2911,11 +3278,11 @@ timeline_events:
   resource_id: mfc_enc
   edge_type: M2M
   bottleneck: false
-  start_ms: 29.79225966666667
-  end_ms: 31.60665966666667
+  start_ms: 29.79225971014493
+  end_ms: 31.60665971014493
   duration_ms: 1.8143999999999991
   cadence_violation: false
-  ready_ms: 29.79225966666667
+  ready_ms: 29.79225971014493
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -2935,17 +3302,17 @@ timeline_events:
   constraint_type: sink
   refresh_hz: 120.0
   scanout_ms: 8.333333333333334
-  start_ms: 29.79225966666667
-  end_ms: 31.60665966666667
+  start_ms: 29.79225971014493
+  end_ms: 31.60665971014493
   duration_ms: 1.8143999999999991
   deadline_ms: 25.0
-  slack_ms: -6.606659666666669
-  cadence_interval_ms: 8.333333333333336
-  cadence_avg_interval_ms: 8.333333333333332
+  slack_ms: -6.606659710144928
+  cadence_interval_ms: 8.333333333333332
+  cadence_avg_interval_ms: 8.333333333333336
   cadence_budget_ms: 8.333333333333334
-  cadence_slack_ms: 1.7763568394002505e-15
+  cadence_slack_ms: -1.7763568394002505e-15
   cadence_violation: false
-  ready_ms: 29.79225966666667
+  ready_ms: 29.79225971014493
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -2964,17 +3331,17 @@ timeline_events:
   constraint_type: sink
   refresh_hz: 120.0
   scanout_ms: 8.333333333333334
-  start_ms: 29.79225966666667
-  end_ms: 31.60665966666667
+  start_ms: 29.79225971014493
+  end_ms: 31.60665971014493
   duration_ms: 1.8143999999999991
   deadline_ms: 25.0
-  slack_ms: -6.606659666666669
-  cadence_interval_ms: 8.333333333333336
-  cadence_avg_interval_ms: 8.333333333333332
+  slack_ms: -6.606659710144928
+  cadence_interval_ms: 8.333333333333332
+  cadence_avg_interval_ms: 8.333333333333336
   cadence_budget_ms: 8.333333333333334
-  cadence_slack_ms: 1.7763568394002505e-15
+  cadence_slack_ms: -1.7763568394002505e-15
   cadence_violation: false
-  ready_ms: 29.79225966666667
+  ready_ms: 29.79225971014493
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -2988,11 +3355,11 @@ timeline_events:
   resource_id: CPU_WRITER
   edge_type: control
   bottleneck: false
-  start_ms: 31.60665966666667
-  end_ms: 31.72665966666667
+  start_ms: 31.60665971014493
+  end_ms: 31.72665971014493
   duration_ms: 0.120000000000001
   cadence_violation: false
-  ready_ms: 31.60665966666667
+  ready_ms: 31.60665971014493
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -3006,15 +3373,15 @@ timeline_events:
   resource_id: STORAGE_IO
   edge_type: control
   bottleneck: false
-  start_ms: 31.72665966666667
-  end_ms: 31.96665966666667
+  start_ms: 31.72665971014493
+  end_ms: 31.966659710144928
   duration_ms: 0.23999999999999844
-  cadence_interval_ms: 8.333333333333336
-  cadence_avg_interval_ms: 8.333333333333332
+  cadence_interval_ms: 8.333333333333332
+  cadence_avg_interval_ms: 8.333333333333336
   cadence_budget_ms: 8.333333333333334
-  cadence_slack_ms: 1.7763568394002505e-15
+  cadence_slack_ms: -1.7763568394002505e-15
   cadence_violation: false
-  ready_ms: 31.72665966666667
+  ready_ms: 31.72665971014493
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -3028,14 +3395,13 @@ timeline_events:
   resource_id: sensor_rear
   otf_group_id: otf-0#f3
   latency_offset_ms: 0.0
-  bottleneck: true
-  bottleneck_reason: longest duration in OTF streaming group
+  bottleneck: false
   constraint_type: source
   source_fps: 120.0
   v_valid_ms: 2.776413
   start_ms: 25.0
-  end_ms: 27.776412999999998
-  duration_ms: 2.776412999999998
+  end_ms: 27.77641304347826
+  duration_ms: 2.776413043478261
   cadence_violation: false
   ready_ms: 25.0
   resource_wait_ms: 0.0
@@ -3051,10 +3417,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f3
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 25.0
-  end_ms: 27.776412999999998
-  duration_ms: 2.776412999999998
+  end_ms: 27.77641304347826
+  duration_ms: 2.776413043478261
   cadence_violation: false
   ready_ms: 25.0
   resource_wait_ms: 0.0
@@ -3071,10 +3438,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f3
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 25.0
-  end_ms: 27.776412999999998
-  duration_ms: 2.776412999999998
+  end_ms: 27.77641304347826
+  duration_ms: 2.776413043478261
   cadence_violation: false
   ready_ms: 25.0
   resource_wait_ms: 0.0
@@ -3091,10 +3459,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f3
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 25.0
-  end_ms: 27.776412999999998
-  duration_ms: 2.776412999999998
+  end_ms: 27.77641304347826
+  duration_ms: 2.776413043478261
   cadence_violation: false
   ready_ms: 25.0
   resource_wait_ms: 0.0
@@ -3111,10 +3480,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f3
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 25.0
-  end_ms: 27.776412999999998
-  duration_ms: 2.776412999999998
+  end_ms: 27.77641304347826
+  duration_ms: 2.776413043478261
   cadence_violation: false
   ready_ms: 25.0
   resource_wait_ms: 0.0
@@ -3131,10 +3501,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f3
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 25.0
-  end_ms: 27.776412999999998
-  duration_ms: 2.776412999999998
+  end_ms: 27.77641304347826
+  duration_ms: 2.776413043478261
   cadence_violation: false
   ready_ms: 25.0
   resource_wait_ms: 0.0
@@ -3151,10 +3522,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f3
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 25.0
-  end_ms: 27.776412999999998
-  duration_ms: 2.776412999999998
+  end_ms: 27.77641304347826
+  duration_ms: 2.776413043478261
   cadence_violation: false
   ready_ms: 25.0
   resource_wait_ms: 0.0
@@ -3170,15 +3542,15 @@ timeline_events:
   resource_id: vps_od
   edge_type: M2M
   bottleneck: false
-  start_ms: 27.776412999999998
-  end_ms: 28.268200639531717
-  duration_ms: 0.49178763953171867
-  cadence_interval_ms: 8.333333333333329
-  cadence_avg_interval_ms: 8.333333333333332
+  start_ms: 27.77641304347826
+  end_ms: 28.03446104347826
+  duration_ms: 0.2580479999999987
+  cadence_interval_ms: 8.333333333333332
+  cadence_avg_interval_ms: 8.333333333333334
   cadence_budget_ms: 8.333333333333334
-  cadence_slack_ms: 1.7763568394002505e-15
+  cadence_slack_ms: 0.0
   cadence_violation: false
-  ready_ms: 27.776412999999998
+  ready_ms: 27.77641304347826
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -3192,11 +3564,11 @@ timeline_events:
   resource_id: CPU_CAMERA
   edge_type: control
   bottleneck: false
-  start_ms: 28.776412999999998
-  end_ms: 29.076413
+  start_ms: 28.77641304347826
+  end_ms: 29.07641304347826
   duration_ms: 0.3000000000000007
   cadence_violation: false
-  ready_ms: 28.776412999999998
+  ready_ms: 28.77641304347826
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -3212,11 +3584,11 @@ timeline_events:
   resource_id: stage:pre_me_rta
   edge_type: control,M2M
   bottleneck: false
-  start_ms: 29.076413
-  end_ms: 32.076413
-  duration_ms: 3.0000000000000036
+  start_ms: 29.07641304347826
+  end_ms: 32.07641304347826
+  duration_ms: 3.0
   cadence_violation: false
-  ready_ms: 29.076413
+  ready_ms: 29.07641304347826
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -3231,11 +3603,11 @@ timeline_events:
   resource_id: CPU_CAMERA
   edge_type: control
   bottleneck: false
-  start_ms: 32.076413
-  end_ms: 36.076413
+  start_ms: 32.07641304347826
+  end_ms: 36.07641304347826
   duration_ms: 4.0
   cadence_violation: false
-  ready_ms: 32.076413
+  ready_ms: 32.07641304347826
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -3252,11 +3624,11 @@ timeline_events:
   latency_offset_ms: 0.0
   bottleneck: true
   bottleneck_reason: longest duration in OTF streaming group
-  start_ms: 36.076413
-  end_ms: 38.125593
+  start_ms: 36.07641304347826
+  end_ms: 38.12559304347826
   duration_ms: 2.04918
   cadence_violation: false
-  ready_ms: 36.076413
+  ready_ms: 36.07641304347826
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -3274,11 +3646,11 @@ timeline_events:
   latency_offset_ms: 0.0
   bottleneck: true
   bottleneck_reason: longest duration in OTF streaming group
-  start_ms: 36.076413
-  end_ms: 38.125593
+  start_ms: 36.07641304347826
+  end_ms: 38.12559304347826
   duration_ms: 2.04918
   cadence_violation: false
-  ready_ms: 36.076413
+  ready_ms: 36.07641304347826
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -3293,12 +3665,13 @@ timeline_events:
   edge_type: OTF,M2M,M2M
   otf_group_id: otf-1#f3
   latency_offset_ms: 0.0
-  bottleneck: false
-  start_ms: 36.076413
-  end_ms: 38.125593
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
+  start_ms: 36.07641304347826
+  end_ms: 38.12559304347826
   duration_ms: 2.04918
   cadence_violation: false
-  ready_ms: 36.076413
+  ready_ms: 36.07641304347826
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -3315,12 +3688,13 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-1#f3
   latency_offset_ms: 0.0
-  bottleneck: false
-  start_ms: 36.076413
-  end_ms: 38.125593
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
+  start_ms: 36.07641304347826
+  end_ms: 38.12559304347826
   duration_ms: 2.04918
   cadence_violation: false
-  ready_ms: 36.076413
+  ready_ms: 36.07641304347826
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -3334,11 +3708,11 @@ timeline_events:
   resource_id: mfc_enc
   edge_type: M2M
   bottleneck: false
-  start_ms: 38.125593
-  end_ms: 39.939993
+  start_ms: 38.12559304347826
+  end_ms: 39.93999304347826
   duration_ms: 1.8143999999999991
   cadence_violation: false
-  ready_ms: 38.125593
+  ready_ms: 38.12559304347826
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -3358,17 +3732,17 @@ timeline_events:
   constraint_type: sink
   refresh_hz: 120.0
   scanout_ms: 8.333333333333334
-  start_ms: 38.125593
-  end_ms: 39.939993
+  start_ms: 38.12559304347826
+  end_ms: 39.93999304347826
   duration_ms: 1.8143999999999991
   deadline_ms: 33.333333333333336
-  slack_ms: -6.6066596666666655
+  slack_ms: -6.606659710144925
   cadence_interval_ms: 8.333333333333332
-  cadence_avg_interval_ms: 8.333333333333332
+  cadence_avg_interval_ms: 8.333333333333336
   cadence_budget_ms: 8.333333333333334
-  cadence_slack_ms: 1.7763568394002505e-15
+  cadence_slack_ms: -1.7763568394002505e-15
   cadence_violation: false
-  ready_ms: 38.125593
+  ready_ms: 38.12559304347826
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -3387,17 +3761,17 @@ timeline_events:
   constraint_type: sink
   refresh_hz: 120.0
   scanout_ms: 8.333333333333334
-  start_ms: 38.125593
-  end_ms: 39.939993
+  start_ms: 38.12559304347826
+  end_ms: 39.93999304347826
   duration_ms: 1.8143999999999991
   deadline_ms: 33.333333333333336
-  slack_ms: -6.6066596666666655
+  slack_ms: -6.606659710144925
   cadence_interval_ms: 8.333333333333332
-  cadence_avg_interval_ms: 8.333333333333332
+  cadence_avg_interval_ms: 8.333333333333336
   cadence_budget_ms: 8.333333333333334
-  cadence_slack_ms: 1.7763568394002505e-15
+  cadence_slack_ms: -1.7763568394002505e-15
   cadence_violation: false
-  ready_ms: 38.125593
+  ready_ms: 38.12559304347826
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -3411,11 +3785,11 @@ timeline_events:
   resource_id: CPU_WRITER
   edge_type: control
   bottleneck: false
-  start_ms: 39.939993
-  end_ms: 40.059993
+  start_ms: 39.93999304347826
+  end_ms: 40.05999304347826
   duration_ms: 0.11999999999999744
   cadence_violation: false
-  ready_ms: 39.939993
+  ready_ms: 39.93999304347826
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -3429,15 +3803,15 @@ timeline_events:
   resource_id: STORAGE_IO
   edge_type: control
   bottleneck: false
-  start_ms: 40.059993
-  end_ms: 40.299993
+  start_ms: 40.05999304347826
+  end_ms: 40.29999304347826
   duration_ms: 0.240000000000002
   cadence_interval_ms: 8.333333333333332
-  cadence_avg_interval_ms: 8.333333333333332
+  cadence_avg_interval_ms: 8.333333333333336
   cadence_budget_ms: 8.333333333333334
-  cadence_slack_ms: 1.7763568394002505e-15
+  cadence_slack_ms: -1.7763568394002505e-15
   cadence_violation: false
-  ready_ms: 40.059993
+  ready_ms: 40.05999304347826
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -3451,14 +3825,13 @@ timeline_events:
   resource_id: sensor_rear
   otf_group_id: otf-0#f4
   latency_offset_ms: 0.0
-  bottleneck: true
-  bottleneck_reason: longest duration in OTF streaming group
+  bottleneck: false
   constraint_type: source
   source_fps: 120.0
   v_valid_ms: 2.776413
   start_ms: 33.333333333333336
-  end_ms: 36.109746333333334
-  duration_ms: 2.776412999999998
+  end_ms: 36.1097463768116
+  duration_ms: 2.7764130434782643
   cadence_violation: false
   ready_ms: 33.333333333333336
   resource_wait_ms: 0.0
@@ -3474,10 +3847,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f4
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 33.333333333333336
-  end_ms: 36.109746333333334
-  duration_ms: 2.776412999999998
+  end_ms: 36.1097463768116
+  duration_ms: 2.7764130434782643
   cadence_violation: false
   ready_ms: 33.333333333333336
   resource_wait_ms: 0.0
@@ -3494,10 +3868,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f4
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 33.333333333333336
-  end_ms: 36.109746333333334
-  duration_ms: 2.776412999999998
+  end_ms: 36.1097463768116
+  duration_ms: 2.7764130434782643
   cadence_violation: false
   ready_ms: 33.333333333333336
   resource_wait_ms: 0.0
@@ -3514,10 +3889,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f4
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 33.333333333333336
-  end_ms: 36.109746333333334
-  duration_ms: 2.776412999999998
+  end_ms: 36.1097463768116
+  duration_ms: 2.7764130434782643
   cadence_violation: false
   ready_ms: 33.333333333333336
   resource_wait_ms: 0.0
@@ -3534,10 +3910,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f4
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 33.333333333333336
-  end_ms: 36.109746333333334
-  duration_ms: 2.776412999999998
+  end_ms: 36.1097463768116
+  duration_ms: 2.7764130434782643
   cadence_violation: false
   ready_ms: 33.333333333333336
   resource_wait_ms: 0.0
@@ -3554,10 +3931,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f4
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 33.333333333333336
-  end_ms: 36.109746333333334
-  duration_ms: 2.776412999999998
+  end_ms: 36.1097463768116
+  duration_ms: 2.7764130434782643
   cadence_violation: false
   ready_ms: 33.333333333333336
   resource_wait_ms: 0.0
@@ -3574,10 +3952,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f4
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 33.333333333333336
-  end_ms: 36.109746333333334
-  duration_ms: 2.776412999999998
+  end_ms: 36.1097463768116
+  duration_ms: 2.7764130434782643
   cadence_violation: false
   ready_ms: 33.333333333333336
   resource_wait_ms: 0.0
@@ -3593,15 +3972,15 @@ timeline_events:
   resource_id: vps_od
   edge_type: M2M
   bottleneck: false
-  start_ms: 36.109746333333334
-  end_ms: 36.60153397286505
-  duration_ms: 0.4917876395317151
-  cadence_interval_ms: 8.333333333333332
-  cadence_avg_interval_ms: 8.333333333333332
+  start_ms: 36.1097463768116
+  end_ms: 36.3677943768116
+  duration_ms: 0.2580480000000023
+  cadence_interval_ms: 8.333333333333343
+  cadence_avg_interval_ms: 8.333333333333334
   cadence_budget_ms: 8.333333333333334
-  cadence_slack_ms: 1.7763568394002505e-15
+  cadence_slack_ms: 0.0
   cadence_violation: false
-  ready_ms: 36.109746333333334
+  ready_ms: 36.1097463768116
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -3615,11 +3994,11 @@ timeline_events:
   resource_id: CPU_CAMERA
   edge_type: control
   bottleneck: false
-  start_ms: 37.109746333333334
-  end_ms: 37.40974633333333
+  start_ms: 37.1097463768116
+  end_ms: 37.4097463768116
   duration_ms: 0.29999999999999716
   cadence_violation: false
-  ready_ms: 37.109746333333334
+  ready_ms: 37.1097463768116
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -3635,11 +4014,11 @@ timeline_events:
   resource_id: stage:pre_me_rta
   edge_type: control,M2M
   bottleneck: false
-  start_ms: 37.40974633333333
-  end_ms: 40.40974633333333
+  start_ms: 37.4097463768116
+  end_ms: 40.4097463768116
   duration_ms: 3.0
   cadence_violation: false
-  ready_ms: 37.40974633333333
+  ready_ms: 37.4097463768116
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -3654,11 +4033,11 @@ timeline_events:
   resource_id: CPU_CAMERA
   edge_type: control
   bottleneck: false
-  start_ms: 40.40974633333333
-  end_ms: 44.40974633333333
+  start_ms: 40.4097463768116
+  end_ms: 44.4097463768116
   duration_ms: 4.0
   cadence_violation: false
-  ready_ms: 40.40974633333333
+  ready_ms: 40.4097463768116
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -3675,11 +4054,11 @@ timeline_events:
   latency_offset_ms: 0.0
   bottleneck: true
   bottleneck_reason: longest duration in OTF streaming group
-  start_ms: 44.40974633333333
-  end_ms: 46.45892633333333
+  start_ms: 44.4097463768116
+  end_ms: 46.4589263768116
   duration_ms: 2.04918
   cadence_violation: false
-  ready_ms: 44.40974633333333
+  ready_ms: 44.4097463768116
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -3697,11 +4076,11 @@ timeline_events:
   latency_offset_ms: 0.0
   bottleneck: true
   bottleneck_reason: longest duration in OTF streaming group
-  start_ms: 44.40974633333333
-  end_ms: 46.45892633333333
+  start_ms: 44.4097463768116
+  end_ms: 46.4589263768116
   duration_ms: 2.04918
   cadence_violation: false
-  ready_ms: 44.40974633333333
+  ready_ms: 44.4097463768116
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -3716,12 +4095,13 @@ timeline_events:
   edge_type: OTF,M2M,M2M
   otf_group_id: otf-1#f4
   latency_offset_ms: 0.0
-  bottleneck: false
-  start_ms: 44.40974633333333
-  end_ms: 46.45892633333333
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
+  start_ms: 44.4097463768116
+  end_ms: 46.4589263768116
   duration_ms: 2.04918
   cadence_violation: false
-  ready_ms: 44.40974633333333
+  ready_ms: 44.4097463768116
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -3738,12 +4118,13 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-1#f4
   latency_offset_ms: 0.0
-  bottleneck: false
-  start_ms: 44.40974633333333
-  end_ms: 46.45892633333333
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
+  start_ms: 44.4097463768116
+  end_ms: 46.4589263768116
   duration_ms: 2.04918
   cadence_violation: false
-  ready_ms: 44.40974633333333
+  ready_ms: 44.4097463768116
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -3757,11 +4138,11 @@ timeline_events:
   resource_id: mfc_enc
   edge_type: M2M
   bottleneck: false
-  start_ms: 46.45892633333333
-  end_ms: 48.27332633333333
+  start_ms: 46.4589263768116
+  end_ms: 48.273326376811596
   duration_ms: 1.8143999999999991
   cadence_violation: false
-  ready_ms: 46.45892633333333
+  ready_ms: 46.4589263768116
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -3781,17 +4162,17 @@ timeline_events:
   constraint_type: sink
   refresh_hz: 120.0
   scanout_ms: 8.333333333333334
-  start_ms: 46.45892633333333
-  end_ms: 48.27332633333333
+  start_ms: 46.4589263768116
+  end_ms: 48.273326376811596
   duration_ms: 1.8143999999999991
   deadline_ms: 41.66666666666667
-  slack_ms: -6.606659666666658
-  cadence_interval_ms: 8.333333333333329
-  cadence_avg_interval_ms: 8.333333333333332
+  slack_ms: -6.606659710144925
+  cadence_interval_ms: 8.333333333333336
+  cadence_avg_interval_ms: 8.333333333333336
   cadence_budget_ms: 8.333333333333334
-  cadence_slack_ms: 1.7763568394002505e-15
+  cadence_slack_ms: -1.7763568394002505e-15
   cadence_violation: false
-  ready_ms: 46.45892633333333
+  ready_ms: 46.4589263768116
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -3810,17 +4191,17 @@ timeline_events:
   constraint_type: sink
   refresh_hz: 120.0
   scanout_ms: 8.333333333333334
-  start_ms: 46.45892633333333
-  end_ms: 48.27332633333333
+  start_ms: 46.4589263768116
+  end_ms: 48.273326376811596
   duration_ms: 1.8143999999999991
   deadline_ms: 41.66666666666667
-  slack_ms: -6.606659666666658
-  cadence_interval_ms: 8.333333333333329
-  cadence_avg_interval_ms: 8.333333333333332
+  slack_ms: -6.606659710144925
+  cadence_interval_ms: 8.333333333333336
+  cadence_avg_interval_ms: 8.333333333333336
   cadence_budget_ms: 8.333333333333334
-  cadence_slack_ms: 1.7763568394002505e-15
+  cadence_slack_ms: -1.7763568394002505e-15
   cadence_violation: false
-  ready_ms: 46.45892633333333
+  ready_ms: 46.4589263768116
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -3834,11 +4215,11 @@ timeline_events:
   resource_id: CPU_WRITER
   edge_type: control
   bottleneck: false
-  start_ms: 48.27332633333333
-  end_ms: 48.39332633333333
+  start_ms: 48.273326376811596
+  end_ms: 48.39332637681159
   duration_ms: 0.11999999999999744
   cadence_violation: false
-  ready_ms: 48.27332633333333
+  ready_ms: 48.273326376811596
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -3852,15 +4233,15 @@ timeline_events:
   resource_id: STORAGE_IO
   edge_type: control
   bottleneck: false
-  start_ms: 48.39332633333333
-  end_ms: 48.63332633333333
+  start_ms: 48.39332637681159
+  end_ms: 48.633326376811596
   duration_ms: 0.240000000000002
-  cadence_interval_ms: 8.333333333333329
-  cadence_avg_interval_ms: 8.333333333333332
+  cadence_interval_ms: 8.333333333333336
+  cadence_avg_interval_ms: 8.333333333333336
   cadence_budget_ms: 8.333333333333334
-  cadence_slack_ms: 1.7763568394002505e-15
+  cadence_slack_ms: -1.7763568394002505e-15
   cadence_violation: false
-  ready_ms: 48.39332633333333
+  ready_ms: 48.39332637681159
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -3874,14 +4255,13 @@ timeline_events:
   resource_id: sensor_rear
   otf_group_id: otf-0#f5
   latency_offset_ms: 0.0
-  bottleneck: true
-  bottleneck_reason: longest duration in OTF streaming group
+  bottleneck: false
   constraint_type: source
   source_fps: 120.0
   v_valid_ms: 2.776413
   start_ms: 41.66666666666667
-  end_ms: 44.44307966666667
-  duration_ms: 2.776412999999998
+  end_ms: 44.44307971014493
+  duration_ms: 2.7764130434782572
   cadence_violation: false
   ready_ms: 41.66666666666667
   resource_wait_ms: 0.0
@@ -3897,10 +4277,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f5
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 41.66666666666667
-  end_ms: 44.44307966666667
-  duration_ms: 2.776412999999998
+  end_ms: 44.44307971014493
+  duration_ms: 2.7764130434782572
   cadence_violation: false
   ready_ms: 41.66666666666667
   resource_wait_ms: 0.0
@@ -3917,10 +4298,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f5
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 41.66666666666667
-  end_ms: 44.44307966666667
-  duration_ms: 2.776412999999998
+  end_ms: 44.44307971014493
+  duration_ms: 2.7764130434782572
   cadence_violation: false
   ready_ms: 41.66666666666667
   resource_wait_ms: 0.0
@@ -3937,10 +4319,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f5
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 41.66666666666667
-  end_ms: 44.44307966666667
-  duration_ms: 2.776412999999998
+  end_ms: 44.44307971014493
+  duration_ms: 2.7764130434782572
   cadence_violation: false
   ready_ms: 41.66666666666667
   resource_wait_ms: 0.0
@@ -3957,10 +4340,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f5
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 41.66666666666667
-  end_ms: 44.44307966666667
-  duration_ms: 2.776412999999998
+  end_ms: 44.44307971014493
+  duration_ms: 2.7764130434782572
   cadence_violation: false
   ready_ms: 41.66666666666667
   resource_wait_ms: 0.0
@@ -3977,10 +4361,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f5
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 41.66666666666667
-  end_ms: 44.44307966666667
-  duration_ms: 2.776412999999998
+  end_ms: 44.44307971014493
+  duration_ms: 2.7764130434782572
   cadence_violation: false
   ready_ms: 41.66666666666667
   resource_wait_ms: 0.0
@@ -3997,10 +4382,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f5
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 41.66666666666667
-  end_ms: 44.44307966666667
-  duration_ms: 2.776412999999998
+  end_ms: 44.44307971014493
+  duration_ms: 2.7764130434782572
   cadence_violation: false
   ready_ms: 41.66666666666667
   resource_wait_ms: 0.0
@@ -4016,15 +4402,15 @@ timeline_events:
   resource_id: vps_od
   edge_type: M2M
   bottleneck: false
-  start_ms: 44.44307966666667
-  end_ms: 44.934867306198385
-  duration_ms: 0.4917876395317151
-  cadence_interval_ms: 8.333333333333336
-  cadence_avg_interval_ms: 8.333333333333332
+  start_ms: 44.44307971014493
+  end_ms: 44.70112771014493
+  duration_ms: 0.2580480000000023
+  cadence_interval_ms: 8.333333333333329
+  cadence_avg_interval_ms: 8.333333333333334
   cadence_budget_ms: 8.333333333333334
-  cadence_slack_ms: 1.7763568394002505e-15
+  cadence_slack_ms: 0.0
   cadence_violation: false
-  ready_ms: 44.44307966666667
+  ready_ms: 44.44307971014493
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -4038,11 +4424,11 @@ timeline_events:
   resource_id: CPU_CAMERA
   edge_type: control
   bottleneck: false
-  start_ms: 45.44307966666667
-  end_ms: 45.74307966666667
+  start_ms: 45.44307971014493
+  end_ms: 45.743079710144926
   duration_ms: 0.29999999999999716
   cadence_violation: false
-  ready_ms: 45.44307966666667
+  ready_ms: 45.44307971014493
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -4058,11 +4444,11 @@ timeline_events:
   resource_id: stage:pre_me_rta
   edge_type: control,M2M
   bottleneck: false
-  start_ms: 45.74307966666667
-  end_ms: 48.74307966666667
+  start_ms: 45.743079710144926
+  end_ms: 48.743079710144926
   duration_ms: 3.0
   cadence_violation: false
-  ready_ms: 45.74307966666667
+  ready_ms: 45.743079710144926
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -4077,11 +4463,11 @@ timeline_events:
   resource_id: CPU_CAMERA
   edge_type: control
   bottleneck: false
-  start_ms: 48.74307966666667
-  end_ms: 52.74307966666667
+  start_ms: 48.743079710144926
+  end_ms: 52.743079710144926
   duration_ms: 4.0
   cadence_violation: false
-  ready_ms: 48.74307966666667
+  ready_ms: 48.743079710144926
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -4098,11 +4484,11 @@ timeline_events:
   latency_offset_ms: 0.0
   bottleneck: true
   bottleneck_reason: longest duration in OTF streaming group
-  start_ms: 52.74307966666667
-  end_ms: 54.792259666666666
+  start_ms: 52.743079710144926
+  end_ms: 54.792259710144926
   duration_ms: 2.04918
   cadence_violation: false
-  ready_ms: 52.74307966666667
+  ready_ms: 52.743079710144926
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -4120,11 +4506,11 @@ timeline_events:
   latency_offset_ms: 0.0
   bottleneck: true
   bottleneck_reason: longest duration in OTF streaming group
-  start_ms: 52.74307966666667
-  end_ms: 54.792259666666666
+  start_ms: 52.743079710144926
+  end_ms: 54.792259710144926
   duration_ms: 2.04918
   cadence_violation: false
-  ready_ms: 52.74307966666667
+  ready_ms: 52.743079710144926
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -4139,12 +4525,13 @@ timeline_events:
   edge_type: OTF,M2M,M2M
   otf_group_id: otf-1#f5
   latency_offset_ms: 0.0
-  bottleneck: false
-  start_ms: 52.74307966666667
-  end_ms: 54.792259666666666
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
+  start_ms: 52.743079710144926
+  end_ms: 54.792259710144926
   duration_ms: 2.04918
   cadence_violation: false
-  ready_ms: 52.74307966666667
+  ready_ms: 52.743079710144926
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -4161,12 +4548,13 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-1#f5
   latency_offset_ms: 0.0
-  bottleneck: false
-  start_ms: 52.74307966666667
-  end_ms: 54.792259666666666
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
+  start_ms: 52.743079710144926
+  end_ms: 54.792259710144926
   duration_ms: 2.04918
   cadence_violation: false
-  ready_ms: 52.74307966666667
+  ready_ms: 52.743079710144926
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -4180,11 +4568,11 @@ timeline_events:
   resource_id: mfc_enc
   edge_type: M2M
   bottleneck: false
-  start_ms: 54.792259666666666
-  end_ms: 56.606659666666665
+  start_ms: 54.792259710144926
+  end_ms: 56.606659710144925
   duration_ms: 1.8143999999999991
   cadence_violation: false
-  ready_ms: 54.792259666666666
+  ready_ms: 54.792259710144926
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -4204,17 +4592,17 @@ timeline_events:
   constraint_type: sink
   refresh_hz: 120.0
   scanout_ms: 8.333333333333334
-  start_ms: 54.792259666666666
-  end_ms: 56.606659666666665
+  start_ms: 54.792259710144926
+  end_ms: 56.606659710144925
   duration_ms: 1.8143999999999991
   deadline_ms: 50.00000000000001
-  slack_ms: -6.606659666666658
-  cadence_interval_ms: 8.333333333333336
-  cadence_avg_interval_ms: 8.333333333333332
+  slack_ms: -6.606659710144918
+  cadence_interval_ms: 8.333333333333329
+  cadence_avg_interval_ms: 8.333333333333336
   cadence_budget_ms: 8.333333333333334
-  cadence_slack_ms: 1.7763568394002505e-15
+  cadence_slack_ms: -1.7763568394002505e-15
   cadence_violation: false
-  ready_ms: 54.792259666666666
+  ready_ms: 54.792259710144926
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -4233,17 +4621,17 @@ timeline_events:
   constraint_type: sink
   refresh_hz: 120.0
   scanout_ms: 8.333333333333334
-  start_ms: 54.792259666666666
-  end_ms: 56.606659666666665
+  start_ms: 54.792259710144926
+  end_ms: 56.606659710144925
   duration_ms: 1.8143999999999991
   deadline_ms: 50.00000000000001
-  slack_ms: -6.606659666666658
-  cadence_interval_ms: 8.333333333333336
-  cadence_avg_interval_ms: 8.333333333333332
+  slack_ms: -6.606659710144918
+  cadence_interval_ms: 8.333333333333329
+  cadence_avg_interval_ms: 8.333333333333336
   cadence_budget_ms: 8.333333333333334
-  cadence_slack_ms: 1.7763568394002505e-15
+  cadence_slack_ms: -1.7763568394002505e-15
   cadence_violation: false
-  ready_ms: 54.792259666666666
+  ready_ms: 54.792259710144926
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -4257,11 +4645,11 @@ timeline_events:
   resource_id: CPU_WRITER
   edge_type: control
   bottleneck: false
-  start_ms: 56.606659666666665
-  end_ms: 56.72665966666666
+  start_ms: 56.606659710144925
+  end_ms: 56.72665971014492
   duration_ms: 0.11999999999999744
   cadence_violation: false
-  ready_ms: 56.606659666666665
+  ready_ms: 56.606659710144925
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -4275,15 +4663,15 @@ timeline_events:
   resource_id: STORAGE_IO
   edge_type: control
   bottleneck: false
-  start_ms: 56.72665966666666
-  end_ms: 56.966659666666665
+  start_ms: 56.72665971014492
+  end_ms: 56.966659710144924
   duration_ms: 0.240000000000002
-  cadence_interval_ms: 8.333333333333336
-  cadence_avg_interval_ms: 8.333333333333332
+  cadence_interval_ms: 8.333333333333329
+  cadence_avg_interval_ms: 8.333333333333336
   cadence_budget_ms: 8.333333333333334
-  cadence_slack_ms: 1.7763568394002505e-15
+  cadence_slack_ms: -1.7763568394002505e-15
   cadence_violation: false
-  ready_ms: 56.72665966666666
+  ready_ms: 56.72665971014492
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -4297,14 +4685,13 @@ timeline_events:
   resource_id: sensor_rear
   otf_group_id: otf-0#f6
   latency_offset_ms: 0.0
-  bottleneck: true
-  bottleneck_reason: longest duration in OTF streaming group
+  bottleneck: false
   constraint_type: source
   source_fps: 120.0
   v_valid_ms: 2.776413
   start_ms: 50.0
-  end_ms: 52.776413
-  duration_ms: 2.776412999999998
+  end_ms: 52.77641304347826
+  duration_ms: 2.7764130434782572
   cadence_violation: false
   ready_ms: 50.0
   resource_wait_ms: 0.0
@@ -4320,10 +4707,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f6
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 50.0
-  end_ms: 52.776413
-  duration_ms: 2.776412999999998
+  end_ms: 52.77641304347826
+  duration_ms: 2.7764130434782572
   cadence_violation: false
   ready_ms: 50.0
   resource_wait_ms: 0.0
@@ -4340,10 +4728,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f6
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 50.0
-  end_ms: 52.776413
-  duration_ms: 2.776412999999998
+  end_ms: 52.77641304347826
+  duration_ms: 2.7764130434782572
   cadence_violation: false
   ready_ms: 50.0
   resource_wait_ms: 0.0
@@ -4360,10 +4749,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f6
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 50.0
-  end_ms: 52.776413
-  duration_ms: 2.776412999999998
+  end_ms: 52.77641304347826
+  duration_ms: 2.7764130434782572
   cadence_violation: false
   ready_ms: 50.0
   resource_wait_ms: 0.0
@@ -4380,10 +4770,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f6
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 50.0
-  end_ms: 52.776413
-  duration_ms: 2.776412999999998
+  end_ms: 52.77641304347826
+  duration_ms: 2.7764130434782572
   cadence_violation: false
   ready_ms: 50.0
   resource_wait_ms: 0.0
@@ -4400,10 +4791,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f6
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 50.0
-  end_ms: 52.776413
-  duration_ms: 2.776412999999998
+  end_ms: 52.77641304347826
+  duration_ms: 2.7764130434782572
   cadence_violation: false
   ready_ms: 50.0
   resource_wait_ms: 0.0
@@ -4420,10 +4812,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f6
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 50.0
-  end_ms: 52.776413
-  duration_ms: 2.776412999999998
+  end_ms: 52.77641304347826
+  duration_ms: 2.7764130434782572
   cadence_violation: false
   ready_ms: 50.0
   resource_wait_ms: 0.0
@@ -4439,15 +4832,15 @@ timeline_events:
   resource_id: vps_od
   edge_type: M2M
   bottleneck: false
-  start_ms: 52.776413
-  end_ms: 53.26820063953171
-  duration_ms: 0.4917876395317151
+  start_ms: 52.77641304347826
+  end_ms: 53.03446104347826
+  duration_ms: 0.2580480000000023
   cadence_interval_ms: 8.333333333333329
-  cadence_avg_interval_ms: 8.333333333333332
+  cadence_avg_interval_ms: 8.333333333333334
   cadence_budget_ms: 8.333333333333334
-  cadence_slack_ms: 1.7763568394002505e-15
+  cadence_slack_ms: 0.0
   cadence_violation: false
-  ready_ms: 52.776413
+  ready_ms: 52.77641304347826
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -4461,11 +4854,11 @@ timeline_events:
   resource_id: CPU_CAMERA
   edge_type: control
   bottleneck: false
-  start_ms: 53.776413
-  end_ms: 54.076412999999995
+  start_ms: 53.77641304347826
+  end_ms: 54.076413043478254
   duration_ms: 0.29999999999999716
   cadence_violation: false
-  ready_ms: 53.776413
+  ready_ms: 53.77641304347826
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -4481,11 +4874,11 @@ timeline_events:
   resource_id: stage:pre_me_rta
   edge_type: control,M2M
   bottleneck: false
-  start_ms: 54.076412999999995
-  end_ms: 57.076412999999995
+  start_ms: 54.076413043478254
+  end_ms: 57.076413043478254
   duration_ms: 3.0
   cadence_violation: false
-  ready_ms: 54.076412999999995
+  ready_ms: 54.076413043478254
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -4500,11 +4893,11 @@ timeline_events:
   resource_id: CPU_CAMERA
   edge_type: control
   bottleneck: false
-  start_ms: 57.076412999999995
-  end_ms: 61.076412999999995
+  start_ms: 57.076413043478254
+  end_ms: 61.076413043478254
   duration_ms: 4.0
   cadence_violation: false
-  ready_ms: 57.076412999999995
+  ready_ms: 57.076413043478254
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -4521,11 +4914,11 @@ timeline_events:
   latency_offset_ms: 0.0
   bottleneck: true
   bottleneck_reason: longest duration in OTF streaming group
-  start_ms: 61.076412999999995
-  end_ms: 63.125592999999995
+  start_ms: 61.076413043478254
+  end_ms: 63.125593043478254
   duration_ms: 2.04918
   cadence_violation: false
-  ready_ms: 61.076412999999995
+  ready_ms: 61.076413043478254
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -4543,11 +4936,11 @@ timeline_events:
   latency_offset_ms: 0.0
   bottleneck: true
   bottleneck_reason: longest duration in OTF streaming group
-  start_ms: 61.076412999999995
-  end_ms: 63.125592999999995
+  start_ms: 61.076413043478254
+  end_ms: 63.125593043478254
   duration_ms: 2.04918
   cadence_violation: false
-  ready_ms: 61.076412999999995
+  ready_ms: 61.076413043478254
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -4562,12 +4955,13 @@ timeline_events:
   edge_type: OTF,M2M,M2M
   otf_group_id: otf-1#f6
   latency_offset_ms: 0.0
-  bottleneck: false
-  start_ms: 61.076412999999995
-  end_ms: 63.125592999999995
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
+  start_ms: 61.076413043478254
+  end_ms: 63.125593043478254
   duration_ms: 2.04918
   cadence_violation: false
-  ready_ms: 61.076412999999995
+  ready_ms: 61.076413043478254
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -4584,12 +4978,13 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-1#f6
   latency_offset_ms: 0.0
-  bottleneck: false
-  start_ms: 61.076412999999995
-  end_ms: 63.125592999999995
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
+  start_ms: 61.076413043478254
+  end_ms: 63.125593043478254
   duration_ms: 2.04918
   cadence_violation: false
-  ready_ms: 61.076412999999995
+  ready_ms: 61.076413043478254
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -4603,11 +4998,11 @@ timeline_events:
   resource_id: mfc_enc
   edge_type: M2M
   bottleneck: false
-  start_ms: 63.125592999999995
-  end_ms: 64.939993
-  duration_ms: 1.8144000000000062
+  start_ms: 63.125593043478254
+  end_ms: 64.93999304347825
+  duration_ms: 1.8143999999999991
   cadence_violation: false
-  ready_ms: 63.125592999999995
+  ready_ms: 63.125593043478254
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -4627,17 +5022,17 @@ timeline_events:
   constraint_type: sink
   refresh_hz: 120.0
   scanout_ms: 8.333333333333334
-  start_ms: 63.125592999999995
-  end_ms: 64.939993
-  duration_ms: 1.8144000000000062
+  start_ms: 63.125593043478254
+  end_ms: 64.93999304347825
+  duration_ms: 1.8143999999999991
   deadline_ms: 58.333333333333336
-  slack_ms: -6.6066596666666655
-  cadence_interval_ms: 8.333333333333336
-  cadence_avg_interval_ms: 8.333333333333332
+  slack_ms: -6.606659710144918
+  cadence_interval_ms: 8.333333333333329
+  cadence_avg_interval_ms: 8.333333333333336
   cadence_budget_ms: 8.333333333333334
-  cadence_slack_ms: 1.7763568394002505e-15
+  cadence_slack_ms: -1.7763568394002505e-15
   cadence_violation: false
-  ready_ms: 63.125592999999995
+  ready_ms: 63.125593043478254
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -4656,17 +5051,17 @@ timeline_events:
   constraint_type: sink
   refresh_hz: 120.0
   scanout_ms: 8.333333333333334
-  start_ms: 63.125592999999995
-  end_ms: 64.939993
-  duration_ms: 1.8144000000000062
+  start_ms: 63.125593043478254
+  end_ms: 64.93999304347825
+  duration_ms: 1.8143999999999991
   deadline_ms: 58.333333333333336
-  slack_ms: -6.6066596666666655
-  cadence_interval_ms: 8.333333333333336
-  cadence_avg_interval_ms: 8.333333333333332
+  slack_ms: -6.606659710144918
+  cadence_interval_ms: 8.333333333333329
+  cadence_avg_interval_ms: 8.333333333333336
   cadence_budget_ms: 8.333333333333334
-  cadence_slack_ms: 1.7763568394002505e-15
+  cadence_slack_ms: -1.7763568394002505e-15
   cadence_violation: false
-  ready_ms: 63.125592999999995
+  ready_ms: 63.125593043478254
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -4680,11 +5075,11 @@ timeline_events:
   resource_id: CPU_WRITER
   edge_type: control
   bottleneck: false
-  start_ms: 64.939993
-  end_ms: 65.059993
+  start_ms: 64.93999304347825
+  end_ms: 65.05999304347826
   duration_ms: 0.12000000000000455
   cadence_violation: false
-  ready_ms: 64.939993
+  ready_ms: 64.93999304347825
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -4698,15 +5093,15 @@ timeline_events:
   resource_id: STORAGE_IO
   edge_type: control
   bottleneck: false
-  start_ms: 65.059993
-  end_ms: 65.299993
+  start_ms: 65.05999304347826
+  end_ms: 65.29999304347825
   duration_ms: 0.23999999999999488
-  cadence_interval_ms: 8.333333333333336
-  cadence_avg_interval_ms: 8.333333333333332
+  cadence_interval_ms: 8.333333333333329
+  cadence_avg_interval_ms: 8.333333333333336
   cadence_budget_ms: 8.333333333333334
-  cadence_slack_ms: 1.7763568394002505e-15
+  cadence_slack_ms: -1.7763568394002505e-15
   cadence_violation: false
-  ready_ms: 65.059993
+  ready_ms: 65.05999304347826
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -4720,14 +5115,13 @@ timeline_events:
   resource_id: sensor_rear
   otf_group_id: otf-0#f7
   latency_offset_ms: 0.0
-  bottleneck: true
-  bottleneck_reason: longest duration in OTF streaming group
+  bottleneck: false
   constraint_type: source
   source_fps: 120.0
   v_valid_ms: 2.776413
   start_ms: 58.333333333333336
-  end_ms: 61.109746333333334
-  duration_ms: 2.776412999999998
+  end_ms: 61.1097463768116
+  duration_ms: 2.7764130434782643
   cadence_violation: false
   ready_ms: 58.333333333333336
   resource_wait_ms: 0.0
@@ -4743,10 +5137,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f7
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 58.333333333333336
-  end_ms: 61.109746333333334
-  duration_ms: 2.776412999999998
+  end_ms: 61.1097463768116
+  duration_ms: 2.7764130434782643
   cadence_violation: false
   ready_ms: 58.333333333333336
   resource_wait_ms: 0.0
@@ -4763,10 +5158,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f7
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 58.333333333333336
-  end_ms: 61.109746333333334
-  duration_ms: 2.776412999999998
+  end_ms: 61.1097463768116
+  duration_ms: 2.7764130434782643
   cadence_violation: false
   ready_ms: 58.333333333333336
   resource_wait_ms: 0.0
@@ -4783,10 +5179,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f7
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 58.333333333333336
-  end_ms: 61.109746333333334
-  duration_ms: 2.776412999999998
+  end_ms: 61.1097463768116
+  duration_ms: 2.7764130434782643
   cadence_violation: false
   ready_ms: 58.333333333333336
   resource_wait_ms: 0.0
@@ -4803,10 +5200,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f7
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 58.333333333333336
-  end_ms: 61.109746333333334
-  duration_ms: 2.776412999999998
+  end_ms: 61.1097463768116
+  duration_ms: 2.7764130434782643
   cadence_violation: false
   ready_ms: 58.333333333333336
   resource_wait_ms: 0.0
@@ -4823,10 +5221,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f7
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 58.333333333333336
-  end_ms: 61.109746333333334
-  duration_ms: 2.776412999999998
+  end_ms: 61.1097463768116
+  duration_ms: 2.7764130434782643
   cadence_violation: false
   ready_ms: 58.333333333333336
   resource_wait_ms: 0.0
@@ -4843,10 +5242,11 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-0#f7
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 58.333333333333336
-  end_ms: 61.109746333333334
-  duration_ms: 2.776412999999998
+  end_ms: 61.1097463768116
+  duration_ms: 2.7764130434782643
   cadence_violation: false
   ready_ms: 58.333333333333336
   resource_wait_ms: 0.0
@@ -4862,15 +5262,15 @@ timeline_events:
   resource_id: vps_od
   edge_type: M2M
   bottleneck: false
-  start_ms: 61.109746333333334
-  end_ms: 61.60153397286505
-  duration_ms: 0.4917876395317151
-  cadence_interval_ms: 8.333333333333336
-  cadence_avg_interval_ms: 8.333333333333332
+  start_ms: 61.1097463768116
+  end_ms: 61.3677943768116
+  duration_ms: 0.2580480000000023
+  cadence_interval_ms: 8.333333333333343
+  cadence_avg_interval_ms: 8.333333333333334
   cadence_budget_ms: 8.333333333333334
-  cadence_slack_ms: 1.7763568394002505e-15
+  cadence_slack_ms: 0.0
   cadence_violation: false
-  ready_ms: 61.109746333333334
+  ready_ms: 61.1097463768116
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -4884,11 +5284,11 @@ timeline_events:
   resource_id: CPU_CAMERA
   edge_type: control
   bottleneck: false
-  start_ms: 62.109746333333334
-  end_ms: 62.40974633333333
+  start_ms: 62.1097463768116
+  end_ms: 62.4097463768116
   duration_ms: 0.29999999999999716
   cadence_violation: false
-  ready_ms: 62.109746333333334
+  ready_ms: 62.1097463768116
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -4904,11 +5304,11 @@ timeline_events:
   resource_id: stage:pre_me_rta
   edge_type: control,M2M
   bottleneck: false
-  start_ms: 62.40974633333333
-  end_ms: 65.40974633333333
+  start_ms: 62.4097463768116
+  end_ms: 65.4097463768116
   duration_ms: 3.0
   cadence_violation: false
-  ready_ms: 62.40974633333333
+  ready_ms: 62.4097463768116
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -4923,11 +5323,11 @@ timeline_events:
   resource_id: CPU_CAMERA
   edge_type: control
   bottleneck: false
-  start_ms: 65.40974633333333
-  end_ms: 69.40974633333333
+  start_ms: 65.4097463768116
+  end_ms: 69.4097463768116
   duration_ms: 4.0
   cadence_violation: false
-  ready_ms: 65.40974633333333
+  ready_ms: 65.4097463768116
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -4944,11 +5344,11 @@ timeline_events:
   latency_offset_ms: 0.0
   bottleneck: true
   bottleneck_reason: longest duration in OTF streaming group
-  start_ms: 69.40974633333333
-  end_ms: 71.45892633333332
-  duration_ms: 2.0491799999999927
+  start_ms: 69.4097463768116
+  end_ms: 71.4589263768116
+  duration_ms: 2.049180000000007
   cadence_violation: false
-  ready_ms: 69.40974633333333
+  ready_ms: 69.4097463768116
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -4966,11 +5366,11 @@ timeline_events:
   latency_offset_ms: 0.0
   bottleneck: true
   bottleneck_reason: longest duration in OTF streaming group
-  start_ms: 69.40974633333333
-  end_ms: 71.45892633333332
-  duration_ms: 2.0491799999999927
+  start_ms: 69.4097463768116
+  end_ms: 71.4589263768116
+  duration_ms: 2.049180000000007
   cadence_violation: false
-  ready_ms: 69.40974633333333
+  ready_ms: 69.4097463768116
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -4985,12 +5385,13 @@ timeline_events:
   edge_type: OTF,M2M,M2M
   otf_group_id: otf-1#f7
   latency_offset_ms: 0.0
-  bottleneck: false
-  start_ms: 69.40974633333333
-  end_ms: 71.45892633333332
-  duration_ms: 2.0491799999999927
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
+  start_ms: 69.4097463768116
+  end_ms: 71.4589263768116
+  duration_ms: 2.049180000000007
   cadence_violation: false
-  ready_ms: 69.40974633333333
+  ready_ms: 69.4097463768116
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -5007,12 +5408,13 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-1#f7
   latency_offset_ms: 0.0
-  bottleneck: false
-  start_ms: 69.40974633333333
-  end_ms: 71.45892633333332
-  duration_ms: 2.0491799999999927
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
+  start_ms: 69.4097463768116
+  end_ms: 71.4589263768116
+  duration_ms: 2.049180000000007
   cadence_violation: false
-  ready_ms: 69.40974633333333
+  ready_ms: 69.4097463768116
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -5026,11 +5428,11 @@ timeline_events:
   resource_id: mfc_enc
   edge_type: M2M
   bottleneck: false
-  start_ms: 71.45892633333332
-  end_ms: 73.27332633333333
+  start_ms: 71.4589263768116
+  end_ms: 73.27332637681161
   duration_ms: 1.8144000000000062
   cadence_violation: false
-  ready_ms: 71.45892633333332
+  ready_ms: 71.4589263768116
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -5050,17 +5452,17 @@ timeline_events:
   constraint_type: sink
   refresh_hz: 120.0
   scanout_ms: 8.333333333333334
-  start_ms: 71.45892633333332
-  end_ms: 73.27332633333333
+  start_ms: 71.4589263768116
+  end_ms: 73.27332637681161
   duration_ms: 1.8144000000000062
   deadline_ms: 66.66666666666667
-  slack_ms: -6.606659666666658
-  cadence_interval_ms: 8.333333333333329
-  cadence_avg_interval_ms: 8.333333333333332
+  slack_ms: -6.606659710144939
+  cadence_interval_ms: 8.333333333333357
+  cadence_avg_interval_ms: 8.333333333333336
   cadence_budget_ms: 8.333333333333334
-  cadence_slack_ms: 1.7763568394002505e-15
+  cadence_slack_ms: -1.7763568394002505e-15
   cadence_violation: false
-  ready_ms: 71.45892633333332
+  ready_ms: 71.4589263768116
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -5079,17 +5481,17 @@ timeline_events:
   constraint_type: sink
   refresh_hz: 120.0
   scanout_ms: 8.333333333333334
-  start_ms: 71.45892633333332
-  end_ms: 73.27332633333333
+  start_ms: 71.4589263768116
+  end_ms: 73.27332637681161
   duration_ms: 1.8144000000000062
   deadline_ms: 66.66666666666667
-  slack_ms: -6.606659666666658
-  cadence_interval_ms: 8.333333333333329
-  cadence_avg_interval_ms: 8.333333333333332
+  slack_ms: -6.606659710144939
+  cadence_interval_ms: 8.333333333333357
+  cadence_avg_interval_ms: 8.333333333333336
   cadence_budget_ms: 8.333333333333334
-  cadence_slack_ms: 1.7763568394002505e-15
+  cadence_slack_ms: -1.7763568394002505e-15
   cadence_violation: false
-  ready_ms: 71.45892633333332
+  ready_ms: 71.4589263768116
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -5103,11 +5505,11 @@ timeline_events:
   resource_id: CPU_WRITER
   edge_type: control
   bottleneck: false
-  start_ms: 73.27332633333333
-  end_ms: 73.39332633333333
+  start_ms: 73.27332637681161
+  end_ms: 73.39332637681161
   duration_ms: 0.12000000000000455
   cadence_violation: false
-  ready_ms: 73.27332633333333
+  ready_ms: 73.27332637681161
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -5121,15 +5523,15 @@ timeline_events:
   resource_id: STORAGE_IO
   edge_type: control
   bottleneck: false
-  start_ms: 73.39332633333333
-  end_ms: 73.63332633333333
+  start_ms: 73.39332637681161
+  end_ms: 73.63332637681161
   duration_ms: 0.23999999999999488
-  cadence_interval_ms: 8.333333333333329
-  cadence_avg_interval_ms: 8.333333333333332
+  cadence_interval_ms: 8.333333333333357
+  cadence_avg_interval_ms: 8.333333333333336
   cadence_budget_ms: 8.333333333333334
-  cadence_slack_ms: 1.7763568394002505e-15
+  cadence_slack_ms: -1.7763568394002505e-15
   cadence_violation: false
-  ready_ms: 73.39332633333333
+  ready_ms: 73.39332637681161
   resource_wait_ms: 0.0
   token_wait_ms: 0.0
   critical: false
@@ -5232,7 +5634,7 @@ power_breakdown:
     total_mw: 390.515981
     rail: MIF
   cpu:
-    total_mw: 0.0
+    total_mw: 0
     by_cluster: {}
   total_mw: 530.196956
 sw_task_timing:
@@ -5286,7 +5688,7 @@ sw_task_timing:
   value_source: assumed
   source_note: User-supplied fixture values, 2026-09-13; replace with internal measurements.
 metric_observations: []
-params_hash: c5ccd964edbc2e77
+params_hash: 8941cdc215366720
 calculation_trace:
   schema_version: '1.0'
   trace_level: formula
@@ -5323,10 +5725,10 @@ calculation_trace:
       result: 4881.449759999999
     hw_time_max_ms:
       formula: max(timing_breakdown[].hw_time_ms)
-      result: 2.04918
+      result: 2.776413043478261
     timeline_end_ms:
       formula: max(timeline_events[].end_ms)
-      result: 73.63332633333333
+      result: 73.63332637681161
   ip:
   - node_id: csis
     ip_ref: ip-csis-is-v15-s5e9975
@@ -5413,7 +5815,7 @@ calculation_trace:
         set_clock_mhz: 314.8285714285714
         ppc: 8.0
         h_blank_margin: 0.05
-      result_ms: 0.9763313367819223
+      result_ms: 2.776413043478261
       feasible: true
       infeasible_reason: null
   - node_id: pdp
@@ -5443,17 +5845,18 @@ calculation_trace:
         sw_margin: 0.15
         ppc: 8.0
         manual_clock_mhz: 300.0
-        clock_correction_mhz: 314.8285714285714
-        clock_correction_reason: otf_group_clock_align(otf-0, leader=csis)
+        clock_correction_mhz: 300.0
+        clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp, 2400 Mpix/s)
       base_formula: pixels * fps / (1 - sw_margin) / ppc / 1e6
       initial_required_mhz: 41.328
-      before_group_align_mhz: 314.8285714285714
+      before_group_align_mhz: 300.0
       manual_clock_mhz: 300.0
       after_manual_clock_mhz: 314.8285714285714
-      clock_correction_mhz: 314.8285714285714
-      clock_correction_reason: otf_group_clock_align(otf-0, leader=csis)
-      sensor_otf_clock_correction_mhz: 314.8285714285714
-      sensor_otf_clock_correction_reason: otf_group_clock_align(otf-0, leader=csis)
+      clock_correction_mhz: 300.0
+      clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp, 2400 Mpix/s)
+      sensor_otf_clock_correction_mhz: 300.0
+      sensor_otf_clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp,
+        2400 Mpix/s)
       after_group_align_mhz: 314.8285714285714
     dvfs:
       dvfs_group: CSIS
@@ -5499,7 +5902,7 @@ calculation_trace:
         set_clock_mhz: 314.8285714285714
         ppc: 8.0
         h_blank_margin: 0.05
-      result_ms: 0.9763313367819223
+      result_ms: 2.776413043478261
       feasible: true
       infeasible_reason: null
   - node_id: byrp
@@ -5529,18 +5932,19 @@ calculation_trace:
         sw_margin: 0.15
         ppc: 4.0
         manual_clock_mhz: 300.0
-        clock_correction_mhz: 314.8285714285714
-        clock_correction_reason: otf_group_clock_align(otf-0, leader=csis)
+        clock_correction_mhz: 600.0
+        clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp, 2400 Mpix/s)
       base_formula: pixels * fps / (1 - sw_margin) / ppc / 1e6
       initial_required_mhz: 82.656
-      before_group_align_mhz: 314.8285714285714
+      before_group_align_mhz: 600.0
       manual_clock_mhz: 300.0
-      after_manual_clock_mhz: 314.8285714285714
-      clock_correction_mhz: 314.8285714285714
-      clock_correction_reason: otf_group_clock_align(otf-0, leader=csis)
-      sensor_otf_clock_correction_mhz: 314.8285714285714
-      sensor_otf_clock_correction_reason: otf_group_clock_align(otf-0, leader=csis)
-      after_group_align_mhz: 314.8285714285714
+      after_manual_clock_mhz: 600.0
+      clock_correction_mhz: 600.0
+      clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp, 2400 Mpix/s)
+      sensor_otf_clock_correction_mhz: 600.0
+      sensor_otf_clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp,
+        2400 Mpix/s)
+      after_group_align_mhz: 600.0
     dvfs:
       dvfs_group: CAM
       asv_group: 4
@@ -5551,9 +5955,9 @@ calculation_trace:
       set_voltage_rule: align to max required_voltage_mv in the shared VDD domain
       candidate_levels: []
       selected_level: null
-      selected_speed_mhz: 314.8285714285714
+      selected_speed_mhz: 600.0
       required_voltage_mv: 710.0
-      set_clock_mhz: 314.8285714285714
+      set_clock_mhz: 600.0
       set_voltage_mv: 710.0
       vdd: VDD_CAM
       vdd_leader: byrp,csis,lme,mcsc,mlsc,pdp,rgbp,vps_od,yuvp,yuvsc
@@ -5582,10 +5986,10 @@ calculation_trace:
       formula: pixels / (set_clock_mhz * 1e6 * ppc) * (1 + h_blank_margin) * 1000
       inputs:
         pixels: 2341920
-        set_clock_mhz: 314.8285714285714
+        set_clock_mhz: 600.0
         ppc: 4.0
         h_blank_margin: 0.05
-      result_ms: 1.9526626735638446
+      result_ms: 2.776413043478261
       feasible: true
       infeasible_reason: null
   - node_id: rgbp
@@ -5615,18 +6019,19 @@ calculation_trace:
         sw_margin: 0.15
         ppc: 4.0
         manual_clock_mhz: 300.0
-        clock_correction_mhz: 314.8285714285714
-        clock_correction_reason: otf_group_clock_align(otf-0, leader=csis)
+        clock_correction_mhz: 600.0
+        clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp, 2400 Mpix/s)
       base_formula: pixels * fps / (1 - sw_margin) / ppc / 1e6
       initial_required_mhz: 82.656
-      before_group_align_mhz: 314.8285714285714
+      before_group_align_mhz: 600.0
       manual_clock_mhz: 300.0
-      after_manual_clock_mhz: 314.8285714285714
-      clock_correction_mhz: 314.8285714285714
-      clock_correction_reason: otf_group_clock_align(otf-0, leader=csis)
-      sensor_otf_clock_correction_mhz: 314.8285714285714
-      sensor_otf_clock_correction_reason: otf_group_clock_align(otf-0, leader=csis)
-      after_group_align_mhz: 314.8285714285714
+      after_manual_clock_mhz: 600.0
+      clock_correction_mhz: 600.0
+      clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp, 2400 Mpix/s)
+      sensor_otf_clock_correction_mhz: 600.0
+      sensor_otf_clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp,
+        2400 Mpix/s)
+      after_group_align_mhz: 600.0
     dvfs:
       dvfs_group: CAM
       asv_group: 4
@@ -5637,9 +6042,9 @@ calculation_trace:
       set_voltage_rule: align to max required_voltage_mv in the shared VDD domain
       candidate_levels: []
       selected_level: null
-      selected_speed_mhz: 314.8285714285714
+      selected_speed_mhz: 600.0
       required_voltage_mv: 710.0
-      set_clock_mhz: 314.8285714285714
+      set_clock_mhz: 600.0
       set_voltage_mv: 710.0
       vdd: VDD_CAM
       vdd_leader: byrp,csis,lme,mcsc,mlsc,pdp,rgbp,vps_od,yuvp,yuvsc
@@ -5668,10 +6073,10 @@ calculation_trace:
       formula: pixels / (set_clock_mhz * 1e6 * ppc) * (1 + h_blank_margin) * 1000
       inputs:
         pixels: 2341920
-        set_clock_mhz: 314.8285714285714
+        set_clock_mhz: 600.0
         ppc: 4.0
         h_blank_margin: 0.05
-      result_ms: 1.9526626735638446
+      result_ms: 2.776413043478261
       feasible: true
       infeasible_reason: null
   - node_id: yuvsc
@@ -5701,18 +6106,19 @@ calculation_trace:
         sw_margin: 0.15
         ppc: 4.0
         manual_clock_mhz: 300.0
-        clock_correction_mhz: 314.8285714285714
-        clock_correction_reason: otf_group_clock_align(otf-0, leader=csis)
+        clock_correction_mhz: 600.0
+        clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp, 2400 Mpix/s)
       base_formula: pixels * fps / (1 - sw_margin) / ppc / 1e6
       initial_required_mhz: 82.656
-      before_group_align_mhz: 314.8285714285714
+      before_group_align_mhz: 600.0
       manual_clock_mhz: 300.0
-      after_manual_clock_mhz: 314.8285714285714
-      clock_correction_mhz: 314.8285714285714
-      clock_correction_reason: otf_group_clock_align(otf-0, leader=csis)
-      sensor_otf_clock_correction_mhz: 314.8285714285714
-      sensor_otf_clock_correction_reason: otf_group_clock_align(otf-0, leader=csis)
-      after_group_align_mhz: 314.8285714285714
+      after_manual_clock_mhz: 600.0
+      clock_correction_mhz: 600.0
+      clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp, 2400 Mpix/s)
+      sensor_otf_clock_correction_mhz: 600.0
+      sensor_otf_clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp,
+        2400 Mpix/s)
+      after_group_align_mhz: 600.0
     dvfs:
       dvfs_group: CAM
       asv_group: 4
@@ -5723,9 +6129,9 @@ calculation_trace:
       set_voltage_rule: align to max required_voltage_mv in the shared VDD domain
       candidate_levels: []
       selected_level: null
-      selected_speed_mhz: 314.8285714285714
+      selected_speed_mhz: 600.0
       required_voltage_mv: 710.0
-      set_clock_mhz: 314.8285714285714
+      set_clock_mhz: 600.0
       set_voltage_mv: 710.0
       vdd: VDD_CAM
       vdd_leader: byrp,csis,lme,mcsc,mlsc,pdp,rgbp,vps_od,yuvp,yuvsc
@@ -5754,10 +6160,10 @@ calculation_trace:
       formula: pixels / (set_clock_mhz * 1e6 * ppc) * (1 + h_blank_margin) * 1000
       inputs:
         pixels: 2341920
-        set_clock_mhz: 314.8285714285714
+        set_clock_mhz: 600.0
         ppc: 4.0
         h_blank_margin: 0.05
-      result_ms: 1.9526626735638446
+      result_ms: 2.776413043478261
       feasible: true
       infeasible_reason: null
   - node_id: mlsc
@@ -5787,18 +6193,19 @@ calculation_trace:
         sw_margin: 0.15
         ppc: 4.0
         manual_clock_mhz: 300.0
-        clock_correction_mhz: 314.8285714285714
-        clock_correction_reason: otf_group_clock_align(otf-0, leader=csis)
+        clock_correction_mhz: 600.0
+        clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp, 2400 Mpix/s)
       base_formula: pixels * fps / (1 - sw_margin) / ppc / 1e6
       initial_required_mhz: 82.656
-      before_group_align_mhz: 314.8285714285714
+      before_group_align_mhz: 600.0
       manual_clock_mhz: 300.0
-      after_manual_clock_mhz: 314.8285714285714
-      clock_correction_mhz: 314.8285714285714
-      clock_correction_reason: otf_group_clock_align(otf-0, leader=csis)
-      sensor_otf_clock_correction_mhz: 314.8285714285714
-      sensor_otf_clock_correction_reason: otf_group_clock_align(otf-0, leader=csis)
-      after_group_align_mhz: 314.8285714285714
+      after_manual_clock_mhz: 600.0
+      clock_correction_mhz: 600.0
+      clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp, 2400 Mpix/s)
+      sensor_otf_clock_correction_mhz: 600.0
+      sensor_otf_clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp,
+        2400 Mpix/s)
+      after_group_align_mhz: 600.0
     dvfs:
       dvfs_group: CAM
       asv_group: 4
@@ -5809,9 +6216,9 @@ calculation_trace:
       set_voltage_rule: align to max required_voltage_mv in the shared VDD domain
       candidate_levels: []
       selected_level: null
-      selected_speed_mhz: 314.8285714285714
+      selected_speed_mhz: 600.0
       required_voltage_mv: 710.0
-      set_clock_mhz: 314.8285714285714
+      set_clock_mhz: 600.0
       set_voltage_mv: 710.0
       vdd: VDD_CAM
       vdd_leader: byrp,csis,lme,mcsc,mlsc,pdp,rgbp,vps_od,yuvp,yuvsc
@@ -5840,10 +6247,10 @@ calculation_trace:
       formula: pixels / (set_clock_mhz * 1e6 * ppc) * (1 + h_blank_margin) * 1000
       inputs:
         pixels: 2341920
-        set_clock_mhz: 314.8285714285714
+        set_clock_mhz: 600.0
         ppc: 4.0
         h_blank_margin: 0.05
-      result_ms: 1.9526626735638446
+      result_ms: 2.776413043478261
       feasible: true
       infeasible_reason: null
   - node_id: mtnr
@@ -5874,16 +6281,17 @@ calculation_trace:
         ppc: 4.0
         manual_clock_mhz: 300.0
         clock_correction_mhz: 300.0
-        clock_correction_reason: otf_group_clock_align(otf-1, leader=yuvp)
+        clock_correction_reason: otf_group_rate_align(otf-1, leader=yuvp, 1200 Mpix/s)
       base_formula: pixels * fps / (1 - sw_margin) / ppc / 1e6
       initial_required_mhz: 82.656
       before_group_align_mhz: 300.0
       manual_clock_mhz: 300.0
       after_manual_clock_mhz: 300.0
       clock_correction_mhz: 300.0
-      clock_correction_reason: otf_group_clock_align(otf-1, leader=yuvp)
+      clock_correction_reason: otf_group_rate_align(otf-1, leader=yuvp, 1200 Mpix/s)
       sensor_otf_clock_correction_mhz: 300.0
-      sensor_otf_clock_correction_reason: otf_group_clock_align(otf-1, leader=yuvp)
+      sensor_otf_clock_correction_reason: otf_group_rate_align(otf-1, leader=yuvp,
+        1200 Mpix/s)
       after_group_align_mhz: 300.0
     dvfs:
       dvfs_group: INTCAM
@@ -5960,16 +6368,17 @@ calculation_trace:
         ppc: 4.0
         manual_clock_mhz: 300.0
         clock_correction_mhz: 300.0
-        clock_correction_reason: otf_group_clock_align(otf-1, leader=yuvp)
+        clock_correction_reason: otf_group_rate_align(otf-1, leader=yuvp, 1200 Mpix/s)
       base_formula: pixels * fps / (1 - sw_margin) / ppc / 1e6
       initial_required_mhz: 82.656
       before_group_align_mhz: 300.0
       manual_clock_mhz: 300.0
       after_manual_clock_mhz: 300.0
       clock_correction_mhz: 300.0
-      clock_correction_reason: otf_group_clock_align(otf-1, leader=yuvp)
+      clock_correction_reason: otf_group_rate_align(otf-1, leader=yuvp, 1200 Mpix/s)
       sensor_otf_clock_correction_mhz: 300.0
-      sensor_otf_clock_correction_reason: otf_group_clock_align(otf-1, leader=yuvp)
+      sensor_otf_clock_correction_reason: otf_group_rate_align(otf-1, leader=yuvp,
+        1200 Mpix/s)
       after_group_align_mhz: 300.0
     dvfs:
       dvfs_group: INTCAM
@@ -6046,17 +6455,18 @@ calculation_trace:
         ppc: 4.0
         manual_clock_mhz: 300.0
         clock_correction_mhz: 300.0
-        clock_correction_reason: otf_group_clock_align(otf-1, leader=yuvp)
+        clock_correction_reason: otf_group_rate_align(otf-1, leader=yuvp, 1200 Mpix/s)
       base_formula: pixels * fps / (1 - sw_margin) / ppc / 1e6
       initial_required_mhz: 82.656
       before_group_align_mhz: 300.0
       manual_clock_mhz: 300.0
-      after_manual_clock_mhz: 314.8285714285714
+      after_manual_clock_mhz: 600.0
       clock_correction_mhz: 300.0
-      clock_correction_reason: otf_group_clock_align(otf-1, leader=yuvp)
+      clock_correction_reason: otf_group_rate_align(otf-1, leader=yuvp, 1200 Mpix/s)
       sensor_otf_clock_correction_mhz: 300.0
-      sensor_otf_clock_correction_reason: otf_group_clock_align(otf-1, leader=yuvp)
-      after_group_align_mhz: 314.8285714285714
+      sensor_otf_clock_correction_reason: otf_group_rate_align(otf-1, leader=yuvp,
+        1200 Mpix/s)
+      after_group_align_mhz: 600.0
     dvfs:
       dvfs_group: CAM
       asv_group: 4
@@ -6067,9 +6477,9 @@ calculation_trace:
       set_voltage_rule: align to max required_voltage_mv in the shared VDD domain
       candidate_levels: []
       selected_level: null
-      selected_speed_mhz: 314.8285714285714
+      selected_speed_mhz: 600.0
       required_voltage_mv: 710.0
-      set_clock_mhz: 314.8285714285714
+      set_clock_mhz: 600.0
       set_voltage_mv: 710.0
       vdd: VDD_CAM
       vdd_leader: byrp,csis,lme,mcsc,mlsc,pdp,rgbp,vps_od,yuvp,yuvsc
@@ -6098,10 +6508,10 @@ calculation_trace:
       formula: pixels / (set_clock_mhz * 1e6 * ppc) * (1 + h_blank_margin) * 1000
       inputs:
         pixels: 2341920
-        set_clock_mhz: 314.8285714285714
+        set_clock_mhz: 600.0
         ppc: 4.0
         h_blank_margin: 0.05
-      result_ms: 1.9526626735638446
+      result_ms: 2.04918
       feasible: true
       infeasible_reason: null
   - node_id: mcsc
@@ -6131,17 +6541,18 @@ calculation_trace:
         ppc: 4.0
         manual_clock_mhz: 300.0
         clock_correction_mhz: 300.0
-        clock_correction_reason: otf_group_clock_align(otf-1, leader=yuvp)
+        clock_correction_reason: otf_group_rate_align(otf-1, leader=yuvp, 1200 Mpix/s)
       base_formula: pixels * fps / (1 - sw_margin) / ppc / 1e6
       initial_required_mhz: 82.656
       before_group_align_mhz: 300.0
       manual_clock_mhz: 300.0
-      after_manual_clock_mhz: 314.8285714285714
+      after_manual_clock_mhz: 600.0
       clock_correction_mhz: 300.0
-      clock_correction_reason: otf_group_clock_align(otf-1, leader=yuvp)
+      clock_correction_reason: otf_group_rate_align(otf-1, leader=yuvp, 1200 Mpix/s)
       sensor_otf_clock_correction_mhz: 300.0
-      sensor_otf_clock_correction_reason: otf_group_clock_align(otf-1, leader=yuvp)
-      after_group_align_mhz: 314.8285714285714
+      sensor_otf_clock_correction_reason: otf_group_rate_align(otf-1, leader=yuvp,
+        1200 Mpix/s)
+      after_group_align_mhz: 600.0
     dvfs:
       dvfs_group: CAM
       asv_group: 4
@@ -6152,9 +6563,9 @@ calculation_trace:
       set_voltage_rule: align to max required_voltage_mv in the shared VDD domain
       candidate_levels: []
       selected_level: null
-      selected_speed_mhz: 314.8285714285714
+      selected_speed_mhz: 600.0
       required_voltage_mv: 710.0
-      set_clock_mhz: 314.8285714285714
+      set_clock_mhz: 600.0
       set_voltage_mv: 710.0
       vdd: VDD_CAM
       vdd_leader: byrp,csis,lme,mcsc,mlsc,pdp,rgbp,vps_od,yuvp,yuvsc
@@ -6183,10 +6594,10 @@ calculation_trace:
       formula: pixels / (set_clock_mhz * 1e6 * ppc) * (1 + h_blank_margin) * 1000
       inputs:
         pixels: 2341920
-        set_clock_mhz: 314.8285714285714
+        set_clock_mhz: 600.0
         ppc: 4.0
         h_blank_margin: 0.05
-      result_ms: 1.9526626735638446
+      result_ms: 2.04918
       feasible: true
       infeasible_reason: null
   - node_id: lme
@@ -6222,13 +6633,13 @@ calculation_trace:
       initial_required_mhz: 26.895811764705883
       before_group_align_mhz: 66.67920000000001
       manual_clock_mhz: 300.0
-      after_manual_clock_mhz: 314.8285714285714
+      after_manual_clock_mhz: 600.0
       clock_correction_mhz: 66.67920000000001
       clock_correction_reason: included_stage_budget(pre_me_rta, 3ms; lower bound)
       sensor_otf_clock_correction_mhz: 66.67920000000001
       sensor_otf_clock_correction_reason: included_stage_budget(pre_me_rta, 3ms; lower
         bound)
-      after_group_align_mhz: 314.8285714285714
+      after_group_align_mhz: 600.0
     dvfs:
       dvfs_group: CAM
       asv_group: 4
@@ -6239,9 +6650,9 @@ calculation_trace:
       set_voltage_rule: align to max required_voltage_mv in the shared VDD domain
       candidate_levels: []
       selected_level: null
-      selected_speed_mhz: 314.8285714285714
+      selected_speed_mhz: 600.0
       required_voltage_mv: 710.0
-      set_clock_mhz: 314.8285714285714
+      set_clock_mhz: 600.0
       set_voltage_mv: 710.0
       vdd: VDD_CAM
       vdd_leader: byrp,csis,lme,mcsc,mlsc,pdp,rgbp,vps_od,yuvp,yuvsc
@@ -6270,10 +6681,10 @@ calculation_trace:
       formula: pixels / (set_clock_mhz * 1e6 * ppc) * (1 + h_blank_margin) * 1000
       inputs:
         pixels: 762048
-        set_clock_mhz: 314.8285714285714
+        set_clock_mhz: 600.0
         ppc: 4.0
         h_blank_margin: 0.05
-      result_ms: 0.6353857881840457
+      result_ms: 0.333396
       feasible: true
       infeasible_reason: null
   - node_id: vps_od
@@ -6309,12 +6720,12 @@ calculation_trace:
       initial_required_mhz: 20.81731764705882
       before_group_align_mhz: 20.81731764705882
       manual_clock_mhz: 300.0
-      after_manual_clock_mhz: 314.8285714285714
+      after_manual_clock_mhz: 600.0
       clock_correction_mhz: 0.0
       clock_correction_reason: null
       sensor_otf_clock_correction_mhz: 0.0
       sensor_otf_clock_correction_reason: null
-      after_group_align_mhz: 314.8285714285714
+      after_group_align_mhz: 600.0
     dvfs:
       dvfs_group: CAM
       asv_group: 4
@@ -6325,9 +6736,9 @@ calculation_trace:
       set_voltage_rule: align to max required_voltage_mv in the shared VDD domain
       candidate_levels: []
       selected_level: null
-      selected_speed_mhz: 314.8285714285714
+      selected_speed_mhz: 600.0
       required_voltage_mv: 710.0
-      set_clock_mhz: 314.8285714285714
+      set_clock_mhz: 600.0
       set_voltage_mv: 710.0
       vdd: VDD_CAM
       vdd_leader: byrp,csis,lme,mcsc,mlsc,pdp,rgbp,vps_od,yuvp,yuvsc
@@ -6356,10 +6767,10 @@ calculation_trace:
       formula: pixels / (set_clock_mhz * 1e6 * ppc) * (1 + h_blank_margin) * 1000
       inputs:
         pixels: 147456
-        set_clock_mhz: 314.8285714285714
+        set_clock_mhz: 600.0
         ppc: 1.0
         h_blank_margin: 0.05
-      result_ms: 0.491787639531718
+      result_ms: 0.258048
       feasible: true
       infeasible_reason: null
   - node_id: mfc_enc
@@ -8847,10 +9258,15 @@ calculation_trace:
       - yuvsc#f0
       - mlsc#f0
       bottleneck_tasks:
-      - sensor_rear#f0
+      - csis#f0
+      - pdp#f0
+      - byrp#f0
+      - rgbp#f0
+      - yuvsc#f0
+      - mlsc#f0
       start_ms: 0.0
-      end_ms: 2.776413
-      span_ms: 2.776413
+      end_ms: 2.776413043478261
+      span_ms: 2.776413043478261
     - group_id: otf-0#f1
       tasks:
       - sensor_rear#f1
@@ -8861,10 +9277,15 @@ calculation_trace:
       - yuvsc#f1
       - mlsc#f1
       bottleneck_tasks:
-      - sensor_rear#f1
+      - csis#f1
+      - pdp#f1
+      - byrp#f1
+      - rgbp#f1
+      - yuvsc#f1
+      - mlsc#f1
       start_ms: 8.333333333333334
-      end_ms: 11.109746333333334
-      span_ms: 2.776413
+      end_ms: 11.109746376811595
+      span_ms: 2.776413043478261
     - group_id: otf-0#f2
       tasks:
       - sensor_rear#f2
@@ -8875,10 +9296,15 @@ calculation_trace:
       - yuvsc#f2
       - mlsc#f2
       bottleneck_tasks:
-      - sensor_rear#f2
+      - csis#f2
+      - pdp#f2
+      - byrp#f2
+      - rgbp#f2
+      - yuvsc#f2
+      - mlsc#f2
       start_ms: 16.666666666666668
-      end_ms: 19.44307966666667
-      span_ms: 2.7764130000000016
+      end_ms: 19.44307971014493
+      span_ms: 2.776413043478261
     - group_id: otf-0#f3
       tasks:
       - sensor_rear#f3
@@ -8889,10 +9315,15 @@ calculation_trace:
       - yuvsc#f3
       - mlsc#f3
       bottleneck_tasks:
-      - sensor_rear#f3
+      - csis#f3
+      - pdp#f3
+      - byrp#f3
+      - rgbp#f3
+      - yuvsc#f3
+      - mlsc#f3
       start_ms: 25.0
-      end_ms: 27.776412999999998
-      span_ms: 2.776412999999998
+      end_ms: 27.77641304347826
+      span_ms: 2.776413043478261
     - group_id: otf-0#f4
       tasks:
       - sensor_rear#f4
@@ -8903,10 +9334,15 @@ calculation_trace:
       - yuvsc#f4
       - mlsc#f4
       bottleneck_tasks:
-      - sensor_rear#f4
+      - csis#f4
+      - pdp#f4
+      - byrp#f4
+      - rgbp#f4
+      - yuvsc#f4
+      - mlsc#f4
       start_ms: 33.333333333333336
-      end_ms: 36.109746333333334
-      span_ms: 2.776412999999998
+      end_ms: 36.1097463768116
+      span_ms: 2.7764130434782643
     - group_id: otf-0#f5
       tasks:
       - sensor_rear#f5
@@ -8917,10 +9353,15 @@ calculation_trace:
       - yuvsc#f5
       - mlsc#f5
       bottleneck_tasks:
-      - sensor_rear#f5
+      - csis#f5
+      - pdp#f5
+      - byrp#f5
+      - rgbp#f5
+      - yuvsc#f5
+      - mlsc#f5
       start_ms: 41.66666666666667
-      end_ms: 44.44307966666667
-      span_ms: 2.776412999999998
+      end_ms: 44.44307971014493
+      span_ms: 2.7764130434782572
     - group_id: otf-0#f6
       tasks:
       - sensor_rear#f6
@@ -8931,10 +9372,15 @@ calculation_trace:
       - yuvsc#f6
       - mlsc#f6
       bottleneck_tasks:
-      - sensor_rear#f6
+      - csis#f6
+      - pdp#f6
+      - byrp#f6
+      - rgbp#f6
+      - yuvsc#f6
+      - mlsc#f6
       start_ms: 50.0
-      end_ms: 52.776413
-      span_ms: 2.776412999999998
+      end_ms: 52.77641304347826
+      span_ms: 2.7764130434782572
     - group_id: otf-0#f7
       tasks:
       - sensor_rear#f7
@@ -8945,10 +9391,15 @@ calculation_trace:
       - yuvsc#f7
       - mlsc#f7
       bottleneck_tasks:
-      - sensor_rear#f7
+      - csis#f7
+      - pdp#f7
+      - byrp#f7
+      - rgbp#f7
+      - yuvsc#f7
+      - mlsc#f7
       start_ms: 58.333333333333336
-      end_ms: 61.109746333333334
-      span_ms: 2.776412999999998
+      end_ms: 61.1097463768116
+      span_ms: 2.7764130434782643
     - group_id: otf-1#f0
       tasks:
       - mtnr#f0
@@ -8958,8 +9409,10 @@ calculation_trace:
       bottleneck_tasks:
       - mtnr#f0
       - msnr#f0
-      start_ms: 11.076412999999999
-      end_ms: 13.125592999999999
+      - yuvp#f0
+      - mcsc#f0
+      start_ms: 11.076413043478261
+      end_ms: 13.125593043478261
       span_ms: 2.04918
     - group_id: otf-1#f1
       tasks:
@@ -8970,8 +9423,10 @@ calculation_trace:
       bottleneck_tasks:
       - mtnr#f1
       - msnr#f1
-      start_ms: 19.409746333333334
-      end_ms: 21.458926333333334
+      - yuvp#f1
+      - mcsc#f1
+      start_ms: 19.409746376811597
+      end_ms: 21.458926376811597
       span_ms: 2.04918
     - group_id: otf-1#f2
       tasks:
@@ -8982,8 +9437,10 @@ calculation_trace:
       bottleneck_tasks:
       - mtnr#f2
       - msnr#f2
-      start_ms: 27.74307966666667
-      end_ms: 29.79225966666667
+      - yuvp#f2
+      - mcsc#f2
+      start_ms: 27.74307971014493
+      end_ms: 29.79225971014493
       span_ms: 2.04918
     - group_id: otf-1#f3
       tasks:
@@ -8994,8 +9451,10 @@ calculation_trace:
       bottleneck_tasks:
       - mtnr#f3
       - msnr#f3
-      start_ms: 36.076413
-      end_ms: 38.125593
+      - yuvp#f3
+      - mcsc#f3
+      start_ms: 36.07641304347826
+      end_ms: 38.12559304347826
       span_ms: 2.04918
     - group_id: otf-1#f4
       tasks:
@@ -9006,8 +9465,10 @@ calculation_trace:
       bottleneck_tasks:
       - mtnr#f4
       - msnr#f4
-      start_ms: 44.40974633333333
-      end_ms: 46.45892633333333
+      - yuvp#f4
+      - mcsc#f4
+      start_ms: 44.4097463768116
+      end_ms: 46.4589263768116
       span_ms: 2.04918
     - group_id: otf-1#f5
       tasks:
@@ -9018,8 +9479,10 @@ calculation_trace:
       bottleneck_tasks:
       - mtnr#f5
       - msnr#f5
-      start_ms: 52.74307966666667
-      end_ms: 54.792259666666666
+      - yuvp#f5
+      - mcsc#f5
+      start_ms: 52.743079710144926
+      end_ms: 54.792259710144926
       span_ms: 2.04918
     - group_id: otf-1#f6
       tasks:
@@ -9030,8 +9493,10 @@ calculation_trace:
       bottleneck_tasks:
       - mtnr#f6
       - msnr#f6
-      start_ms: 61.076412999999995
-      end_ms: 63.125592999999995
+      - yuvp#f6
+      - mcsc#f6
+      start_ms: 61.076413043478254
+      end_ms: 63.125593043478254
       span_ms: 2.04918
     - group_id: otf-1#f7
       tasks:
@@ -9042,17 +9507,19 @@ calculation_trace:
       bottleneck_tasks:
       - mtnr#f7
       - msnr#f7
-      start_ms: 69.40974633333333
-      end_ms: 71.45892633333332
-      span_ms: 2.0491799999999927
+      - yuvp#f7
+      - mcsc#f7
+      start_ms: 69.4097463768116
+      end_ms: 71.4589263768116
+      span_ms: 2.049180000000007
     - group_id: otf-2#f0
       tasks:
       - dpu#f0
       - panel#f0
       bottleneck_tasks:
       - dpu#f0
-      start_ms: 13.125592999999999
-      end_ms: 14.939992999999998
+      start_ms: 13.125593043478261
+      end_ms: 14.93999304347826
       span_ms: 1.8143999999999991
     - group_id: otf-2#f1
       tasks:
@@ -9060,8 +9527,8 @@ calculation_trace:
       - panel#f1
       bottleneck_tasks:
       - dpu#f1
-      start_ms: 21.458926333333334
-      end_ms: 23.273326333333333
+      start_ms: 21.458926376811597
+      end_ms: 23.273326376811596
       span_ms: 1.8143999999999991
     - group_id: otf-2#f2
       tasks:
@@ -9069,8 +9536,8 @@ calculation_trace:
       - panel#f2
       bottleneck_tasks:
       - dpu#f2
-      start_ms: 29.79225966666667
-      end_ms: 31.60665966666667
+      start_ms: 29.79225971014493
+      end_ms: 31.60665971014493
       span_ms: 1.8143999999999991
     - group_id: otf-2#f3
       tasks:
@@ -9078,8 +9545,8 @@ calculation_trace:
       - panel#f3
       bottleneck_tasks:
       - dpu#f3
-      start_ms: 38.125593
-      end_ms: 39.939993
+      start_ms: 38.12559304347826
+      end_ms: 39.93999304347826
       span_ms: 1.8143999999999991
     - group_id: otf-2#f4
       tasks:
@@ -9087,8 +9554,8 @@ calculation_trace:
       - panel#f4
       bottleneck_tasks:
       - dpu#f4
-      start_ms: 46.45892633333333
-      end_ms: 48.27332633333333
+      start_ms: 46.4589263768116
+      end_ms: 48.273326376811596
       span_ms: 1.8143999999999991
     - group_id: otf-2#f5
       tasks:
@@ -9096,8 +9563,8 @@ calculation_trace:
       - panel#f5
       bottleneck_tasks:
       - dpu#f5
-      start_ms: 54.792259666666666
-      end_ms: 56.606659666666665
+      start_ms: 54.792259710144926
+      end_ms: 56.606659710144925
       span_ms: 1.8143999999999991
     - group_id: otf-2#f6
       tasks:
@@ -9105,17 +9572,17 @@ calculation_trace:
       - panel#f6
       bottleneck_tasks:
       - dpu#f6
-      start_ms: 63.125592999999995
-      end_ms: 64.939993
-      span_ms: 1.8144000000000062
+      start_ms: 63.125593043478254
+      end_ms: 64.93999304347825
+      span_ms: 1.8143999999999991
     - group_id: otf-2#f7
       tasks:
       - dpu#f7
       - panel#f7
       bottleneck_tasks:
       - dpu#f7
-      start_ms: 71.45892633333332
-      end_ms: 73.27332633333333
+      start_ms: 71.4589263768116
+      end_ms: 73.27332637681161
       span_ms: 1.8144000000000062
     critical_path: []
     top_waits:
@@ -9127,18 +9594,18 @@ calculation_trace:
       resource_id: dpu
       edge_type: M2M
       otf_group_id: otf-2#f0
-      start_ms: 13.125592999999999
-      end_ms: 14.939992999999998
+      start_ms: 13.125593043478261
+      end_ms: 14.93999304347826
       duration_ms: 1.8143999999999991
-      ready_ms: 13.125592999999999
+      ready_ms: 13.125593043478261
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 8.333333333333334
-      slack_ms: -6.606659666666664
+      slack_ms: -6.6066597101449265
       cadence_interval_ms: null
-      cadence_avg_interval_ms: 8.333333333333332
+      cadence_avg_interval_ms: 8.333333333333336
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: -1.7763568394002505e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -9154,18 +9621,18 @@ calculation_trace:
       resource_id: panel
       edge_type: OTF
       otf_group_id: otf-2#f0
-      start_ms: 13.125592999999999
-      end_ms: 14.939992999999998
+      start_ms: 13.125593043478261
+      end_ms: 14.93999304347826
       duration_ms: 1.8143999999999991
-      ready_ms: 13.125592999999999
+      ready_ms: 13.125593043478261
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 8.333333333333334
-      slack_ms: -6.606659666666664
+      slack_ms: -6.6066597101449265
       cadence_interval_ms: null
-      cadence_avg_interval_ms: 8.333333333333332
+      cadence_avg_interval_ms: 8.333333333333336
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: -1.7763568394002505e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -9181,18 +9648,18 @@ calculation_trace:
       resource_id: dpu
       edge_type: M2M
       otf_group_id: otf-2#f1
-      start_ms: 21.458926333333334
-      end_ms: 23.273326333333333
+      start_ms: 21.458926376811597
+      end_ms: 23.273326376811596
       duration_ms: 1.8143999999999991
-      ready_ms: 21.458926333333334
+      ready_ms: 21.458926376811597
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 16.666666666666668
-      slack_ms: -6.6066596666666655
+      slack_ms: -6.606659710144928
       cadence_interval_ms: 8.333333333333336
-      cadence_avg_interval_ms: 8.333333333333332
+      cadence_avg_interval_ms: 8.333333333333336
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: -1.7763568394002505e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -9208,18 +9675,18 @@ calculation_trace:
       resource_id: panel
       edge_type: OTF
       otf_group_id: otf-2#f1
-      start_ms: 21.458926333333334
-      end_ms: 23.273326333333333
+      start_ms: 21.458926376811597
+      end_ms: 23.273326376811596
       duration_ms: 1.8143999999999991
-      ready_ms: 21.458926333333334
+      ready_ms: 21.458926376811597
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 16.666666666666668
-      slack_ms: -6.6066596666666655
+      slack_ms: -6.606659710144928
       cadence_interval_ms: 8.333333333333336
-      cadence_avg_interval_ms: 8.333333333333332
+      cadence_avg_interval_ms: 8.333333333333336
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: -1.7763568394002505e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -9235,18 +9702,18 @@ calculation_trace:
       resource_id: dpu
       edge_type: M2M
       otf_group_id: otf-2#f2
-      start_ms: 29.79225966666667
-      end_ms: 31.60665966666667
+      start_ms: 29.79225971014493
+      end_ms: 31.60665971014493
       duration_ms: 1.8143999999999991
-      ready_ms: 29.79225966666667
+      ready_ms: 29.79225971014493
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 25.0
-      slack_ms: -6.606659666666669
-      cadence_interval_ms: 8.333333333333336
-      cadence_avg_interval_ms: 8.333333333333332
+      slack_ms: -6.606659710144928
+      cadence_interval_ms: 8.333333333333332
+      cadence_avg_interval_ms: 8.333333333333336
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: -1.7763568394002505e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -9262,18 +9729,18 @@ calculation_trace:
       resource_id: panel
       edge_type: OTF
       otf_group_id: otf-2#f2
-      start_ms: 29.79225966666667
-      end_ms: 31.60665966666667
+      start_ms: 29.79225971014493
+      end_ms: 31.60665971014493
       duration_ms: 1.8143999999999991
-      ready_ms: 29.79225966666667
+      ready_ms: 29.79225971014493
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 25.0
-      slack_ms: -6.606659666666669
-      cadence_interval_ms: 8.333333333333336
-      cadence_avg_interval_ms: 8.333333333333332
+      slack_ms: -6.606659710144928
+      cadence_interval_ms: 8.333333333333332
+      cadence_avg_interval_ms: 8.333333333333336
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: -1.7763568394002505e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -9289,18 +9756,18 @@ calculation_trace:
       resource_id: dpu
       edge_type: M2M
       otf_group_id: otf-2#f3
-      start_ms: 38.125593
-      end_ms: 39.939993
+      start_ms: 38.12559304347826
+      end_ms: 39.93999304347826
       duration_ms: 1.8143999999999991
-      ready_ms: 38.125593
+      ready_ms: 38.12559304347826
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 33.333333333333336
-      slack_ms: -6.6066596666666655
+      slack_ms: -6.606659710144925
       cadence_interval_ms: 8.333333333333332
-      cadence_avg_interval_ms: 8.333333333333332
+      cadence_avg_interval_ms: 8.333333333333336
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: -1.7763568394002505e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -9316,18 +9783,18 @@ calculation_trace:
       resource_id: panel
       edge_type: OTF
       otf_group_id: otf-2#f3
-      start_ms: 38.125593
-      end_ms: 39.939993
+      start_ms: 38.12559304347826
+      end_ms: 39.93999304347826
       duration_ms: 1.8143999999999991
-      ready_ms: 38.125593
+      ready_ms: 38.12559304347826
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 33.333333333333336
-      slack_ms: -6.6066596666666655
+      slack_ms: -6.606659710144925
       cadence_interval_ms: 8.333333333333332
-      cadence_avg_interval_ms: 8.333333333333332
+      cadence_avg_interval_ms: 8.333333333333336
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: -1.7763568394002505e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -9343,18 +9810,18 @@ calculation_trace:
       resource_id: dpu
       edge_type: M2M
       otf_group_id: otf-2#f4
-      start_ms: 46.45892633333333
-      end_ms: 48.27332633333333
+      start_ms: 46.4589263768116
+      end_ms: 48.273326376811596
       duration_ms: 1.8143999999999991
-      ready_ms: 46.45892633333333
+      ready_ms: 46.4589263768116
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 41.66666666666667
-      slack_ms: -6.606659666666658
-      cadence_interval_ms: 8.333333333333329
-      cadence_avg_interval_ms: 8.333333333333332
+      slack_ms: -6.606659710144925
+      cadence_interval_ms: 8.333333333333336
+      cadence_avg_interval_ms: 8.333333333333336
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: -1.7763568394002505e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -9370,18 +9837,18 @@ calculation_trace:
       resource_id: panel
       edge_type: OTF
       otf_group_id: otf-2#f4
-      start_ms: 46.45892633333333
-      end_ms: 48.27332633333333
+      start_ms: 46.4589263768116
+      end_ms: 48.273326376811596
       duration_ms: 1.8143999999999991
-      ready_ms: 46.45892633333333
+      ready_ms: 46.4589263768116
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 41.66666666666667
-      slack_ms: -6.606659666666658
-      cadence_interval_ms: 8.333333333333329
-      cadence_avg_interval_ms: 8.333333333333332
+      slack_ms: -6.606659710144925
+      cadence_interval_ms: 8.333333333333336
+      cadence_avg_interval_ms: 8.333333333333336
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: -1.7763568394002505e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -9398,18 +9865,18 @@ calculation_trace:
       resource_id: vps_od
       edge_type: M2M
       otf_group_id: null
-      start_ms: 2.776413
-      end_ms: 3.2682006395317176
-      duration_ms: 0.4917876395317178
-      ready_ms: 2.776413
+      start_ms: 2.776413043478261
+      end_ms: 3.034461043478261
+      duration_ms: 0.25804800000000006
+      ready_ms: 2.776413043478261
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: null
       slack_ms: null
       cadence_interval_ms: null
-      cadence_avg_interval_ms: 8.333333333333332
+      cadence_avg_interval_ms: 8.333333333333334
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: 0.0
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -9425,18 +9892,18 @@ calculation_trace:
       resource_id: dpu
       edge_type: M2M
       otf_group_id: otf-2#f0
-      start_ms: 13.125592999999999
-      end_ms: 14.939992999999998
+      start_ms: 13.125593043478261
+      end_ms: 14.93999304347826
       duration_ms: 1.8143999999999991
-      ready_ms: 13.125592999999999
+      ready_ms: 13.125593043478261
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 8.333333333333334
-      slack_ms: -6.606659666666664
+      slack_ms: -6.6066597101449265
       cadence_interval_ms: null
-      cadence_avg_interval_ms: 8.333333333333332
+      cadence_avg_interval_ms: 8.333333333333336
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: -1.7763568394002505e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -9452,18 +9919,18 @@ calculation_trace:
       resource_id: panel
       edge_type: OTF
       otf_group_id: otf-2#f0
-      start_ms: 13.125592999999999
-      end_ms: 14.939992999999998
+      start_ms: 13.125593043478261
+      end_ms: 14.93999304347826
       duration_ms: 1.8143999999999991
-      ready_ms: 13.125592999999999
+      ready_ms: 13.125593043478261
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 8.333333333333334
-      slack_ms: -6.606659666666664
+      slack_ms: -6.6066597101449265
       cadence_interval_ms: null
-      cadence_avg_interval_ms: 8.333333333333332
+      cadence_avg_interval_ms: 8.333333333333336
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: -1.7763568394002505e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -9479,18 +9946,18 @@ calculation_trace:
       resource_id: STORAGE_IO
       edge_type: control
       otf_group_id: null
-      start_ms: 15.059992999999997
-      end_ms: 15.299992999999997
+      start_ms: 15.05999304347826
+      end_ms: 15.29999304347826
       duration_ms: 0.2400000000000002
-      ready_ms: 15.059992999999997
+      ready_ms: 15.05999304347826
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: null
       slack_ms: null
       cadence_interval_ms: null
-      cadence_avg_interval_ms: 8.333333333333332
+      cadence_avg_interval_ms: 8.333333333333336
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: -1.7763568394002505e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -9506,18 +9973,18 @@ calculation_trace:
       resource_id: vps_od
       edge_type: M2M
       otf_group_id: null
-      start_ms: 11.109746333333334
-      end_ms: 11.601533972865052
-      duration_ms: 0.49178763953171867
-      ready_ms: 11.109746333333334
+      start_ms: 11.109746376811595
+      end_ms: 11.367794376811595
+      duration_ms: 0.2580480000000005
+      ready_ms: 11.109746376811595
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: null
       slack_ms: null
-      cadence_interval_ms: 8.333333333333336
-      cadence_avg_interval_ms: 8.333333333333332
+      cadence_interval_ms: 8.333333333333334
+      cadence_avg_interval_ms: 8.333333333333334
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: 0.0
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -9533,18 +10000,18 @@ calculation_trace:
       resource_id: dpu
       edge_type: M2M
       otf_group_id: otf-2#f1
-      start_ms: 21.458926333333334
-      end_ms: 23.273326333333333
+      start_ms: 21.458926376811597
+      end_ms: 23.273326376811596
       duration_ms: 1.8143999999999991
-      ready_ms: 21.458926333333334
+      ready_ms: 21.458926376811597
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 16.666666666666668
-      slack_ms: -6.6066596666666655
+      slack_ms: -6.606659710144928
       cadence_interval_ms: 8.333333333333336
-      cadence_avg_interval_ms: 8.333333333333332
+      cadence_avg_interval_ms: 8.333333333333336
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: -1.7763568394002505e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -9560,18 +10027,18 @@ calculation_trace:
       resource_id: panel
       edge_type: OTF
       otf_group_id: otf-2#f1
-      start_ms: 21.458926333333334
-      end_ms: 23.273326333333333
+      start_ms: 21.458926376811597
+      end_ms: 23.273326376811596
       duration_ms: 1.8143999999999991
-      ready_ms: 21.458926333333334
+      ready_ms: 21.458926376811597
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 16.666666666666668
-      slack_ms: -6.6066596666666655
+      slack_ms: -6.606659710144928
       cadence_interval_ms: 8.333333333333336
-      cadence_avg_interval_ms: 8.333333333333332
+      cadence_avg_interval_ms: 8.333333333333336
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: -1.7763568394002505e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -9587,18 +10054,18 @@ calculation_trace:
       resource_id: STORAGE_IO
       edge_type: control
       otf_group_id: null
-      start_ms: 23.393326333333334
-      end_ms: 23.633326333333333
+      start_ms: 23.393326376811597
+      end_ms: 23.633326376811596
       duration_ms: 0.23999999999999844
-      ready_ms: 23.393326333333334
+      ready_ms: 23.393326376811597
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: null
       slack_ms: null
       cadence_interval_ms: 8.333333333333336
-      cadence_avg_interval_ms: 8.333333333333332
+      cadence_avg_interval_ms: 8.333333333333336
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: -1.7763568394002505e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -9614,18 +10081,18 @@ calculation_trace:
       resource_id: vps_od
       edge_type: M2M
       otf_group_id: null
-      start_ms: 19.44307966666667
-      end_ms: 19.934867306198388
-      duration_ms: 0.49178763953171867
-      ready_ms: 19.44307966666667
+      start_ms: 19.44307971014493
+      end_ms: 19.701127710144927
+      duration_ms: 0.2580479999999987
+      ready_ms: 19.44307971014493
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: null
       slack_ms: null
-      cadence_interval_ms: 8.333333333333336
-      cadence_avg_interval_ms: 8.333333333333332
+      cadence_interval_ms: 8.333333333333332
+      cadence_avg_interval_ms: 8.333333333333334
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: 0.0
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -9641,18 +10108,18 @@ calculation_trace:
       resource_id: dpu
       edge_type: M2M
       otf_group_id: otf-2#f2
-      start_ms: 29.79225966666667
-      end_ms: 31.60665966666667
+      start_ms: 29.79225971014493
+      end_ms: 31.60665971014493
       duration_ms: 1.8143999999999991
-      ready_ms: 29.79225966666667
+      ready_ms: 29.79225971014493
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 25.0
-      slack_ms: -6.606659666666669
-      cadence_interval_ms: 8.333333333333336
-      cadence_avg_interval_ms: 8.333333333333332
+      slack_ms: -6.606659710144928
+      cadence_interval_ms: 8.333333333333332
+      cadence_avg_interval_ms: 8.333333333333336
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: -1.7763568394002505e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -9668,18 +10135,18 @@ calculation_trace:
       resource_id: panel
       edge_type: OTF
       otf_group_id: otf-2#f2
-      start_ms: 29.79225966666667
-      end_ms: 31.60665966666667
+      start_ms: 29.79225971014493
+      end_ms: 31.60665971014493
       duration_ms: 1.8143999999999991
-      ready_ms: 29.79225966666667
+      ready_ms: 29.79225971014493
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 25.0
-      slack_ms: -6.606659666666669
-      cadence_interval_ms: 8.333333333333336
-      cadence_avg_interval_ms: 8.333333333333332
+      slack_ms: -6.606659710144928
+      cadence_interval_ms: 8.333333333333332
+      cadence_avg_interval_ms: 8.333333333333336
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: -1.7763568394002505e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -9695,18 +10162,18 @@ calculation_trace:
       resource_id: STORAGE_IO
       edge_type: control
       otf_group_id: null
-      start_ms: 31.72665966666667
-      end_ms: 31.96665966666667
+      start_ms: 31.72665971014493
+      end_ms: 31.966659710144928
       duration_ms: 0.23999999999999844
-      ready_ms: 31.72665966666667
+      ready_ms: 31.72665971014493
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: null
       slack_ms: null
-      cadence_interval_ms: 8.333333333333336
-      cadence_avg_interval_ms: 8.333333333333332
+      cadence_interval_ms: 8.333333333333332
+      cadence_avg_interval_ms: 8.333333333333336
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: -1.7763568394002505e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -9722,18 +10189,18 @@ calculation_trace:
       resource_id: vps_od
       edge_type: M2M
       otf_group_id: null
-      start_ms: 27.776412999999998
-      end_ms: 28.268200639531717
-      duration_ms: 0.49178763953171867
-      ready_ms: 27.776412999999998
+      start_ms: 27.77641304347826
+      end_ms: 28.03446104347826
+      duration_ms: 0.2580479999999987
+      ready_ms: 27.77641304347826
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: null
       slack_ms: null
-      cadence_interval_ms: 8.333333333333329
-      cadence_avg_interval_ms: 8.333333333333332
+      cadence_interval_ms: 8.333333333333332
+      cadence_avg_interval_ms: 8.333333333333334
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: 0.0
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -9749,18 +10216,18 @@ calculation_trace:
       resource_id: dpu
       edge_type: M2M
       otf_group_id: otf-2#f3
-      start_ms: 38.125593
-      end_ms: 39.939993
+      start_ms: 38.12559304347826
+      end_ms: 39.93999304347826
       duration_ms: 1.8143999999999991
-      ready_ms: 38.125593
+      ready_ms: 38.12559304347826
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 33.333333333333336
-      slack_ms: -6.6066596666666655
+      slack_ms: -6.606659710144925
       cadence_interval_ms: 8.333333333333332
-      cadence_avg_interval_ms: 8.333333333333332
+      cadence_avg_interval_ms: 8.333333333333336
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: -1.7763568394002505e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -9776,18 +10243,18 @@ calculation_trace:
       resource_id: panel
       edge_type: OTF
       otf_group_id: otf-2#f3
-      start_ms: 38.125593
-      end_ms: 39.939993
+      start_ms: 38.12559304347826
+      end_ms: 39.93999304347826
       duration_ms: 1.8143999999999991
-      ready_ms: 38.125593
+      ready_ms: 38.12559304347826
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 33.333333333333336
-      slack_ms: -6.6066596666666655
+      slack_ms: -6.606659710144925
       cadence_interval_ms: 8.333333333333332
-      cadence_avg_interval_ms: 8.333333333333332
+      cadence_avg_interval_ms: 8.333333333333336
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: -1.7763568394002505e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -9803,18 +10270,18 @@ calculation_trace:
       resource_id: STORAGE_IO
       edge_type: control
       otf_group_id: null
-      start_ms: 40.059993
-      end_ms: 40.299993
+      start_ms: 40.05999304347826
+      end_ms: 40.29999304347826
       duration_ms: 0.240000000000002
-      ready_ms: 40.059993
+      ready_ms: 40.05999304347826
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: null
       slack_ms: null
       cadence_interval_ms: 8.333333333333332
-      cadence_avg_interval_ms: 8.333333333333332
+      cadence_avg_interval_ms: 8.333333333333336
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: -1.7763568394002505e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -9830,18 +10297,18 @@ calculation_trace:
       resource_id: vps_od
       edge_type: M2M
       otf_group_id: null
-      start_ms: 36.109746333333334
-      end_ms: 36.60153397286505
-      duration_ms: 0.4917876395317151
-      ready_ms: 36.109746333333334
+      start_ms: 36.1097463768116
+      end_ms: 36.3677943768116
+      duration_ms: 0.2580480000000023
+      ready_ms: 36.1097463768116
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: null
       slack_ms: null
-      cadence_interval_ms: 8.333333333333332
-      cadence_avg_interval_ms: 8.333333333333332
+      cadence_interval_ms: 8.333333333333343
+      cadence_avg_interval_ms: 8.333333333333334
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: 0.0
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -9857,18 +10324,18 @@ calculation_trace:
       resource_id: dpu
       edge_type: M2M
       otf_group_id: otf-2#f4
-      start_ms: 46.45892633333333
-      end_ms: 48.27332633333333
+      start_ms: 46.4589263768116
+      end_ms: 48.273326376811596
       duration_ms: 1.8143999999999991
-      ready_ms: 46.45892633333333
+      ready_ms: 46.4589263768116
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 41.66666666666667
-      slack_ms: -6.606659666666658
-      cadence_interval_ms: 8.333333333333329
-      cadence_avg_interval_ms: 8.333333333333332
+      slack_ms: -6.606659710144925
+      cadence_interval_ms: 8.333333333333336
+      cadence_avg_interval_ms: 8.333333333333336
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: -1.7763568394002505e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -9884,18 +10351,18 @@ calculation_trace:
       resource_id: panel
       edge_type: OTF
       otf_group_id: otf-2#f4
-      start_ms: 46.45892633333333
-      end_ms: 48.27332633333333
+      start_ms: 46.4589263768116
+      end_ms: 48.273326376811596
       duration_ms: 1.8143999999999991
-      ready_ms: 46.45892633333333
+      ready_ms: 46.4589263768116
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 41.66666666666667
-      slack_ms: -6.606659666666658
-      cadence_interval_ms: 8.333333333333329
-      cadence_avg_interval_ms: 8.333333333333332
+      slack_ms: -6.606659710144925
+      cadence_interval_ms: 8.333333333333336
+      cadence_avg_interval_ms: 8.333333333333336
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: -1.7763568394002505e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -9911,18 +10378,18 @@ calculation_trace:
       resource_id: STORAGE_IO
       edge_type: control
       otf_group_id: null
-      start_ms: 48.39332633333333
-      end_ms: 48.63332633333333
+      start_ms: 48.39332637681159
+      end_ms: 48.633326376811596
       duration_ms: 0.240000000000002
-      ready_ms: 48.39332633333333
+      ready_ms: 48.39332637681159
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: null
       slack_ms: null
-      cadence_interval_ms: 8.333333333333329
-      cadence_avg_interval_ms: 8.333333333333332
+      cadence_interval_ms: 8.333333333333336
+      cadence_avg_interval_ms: 8.333333333333336
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: -1.7763568394002505e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -9938,18 +10405,18 @@ calculation_trace:
       resource_id: vps_od
       edge_type: M2M
       otf_group_id: null
-      start_ms: 44.44307966666667
-      end_ms: 44.934867306198385
-      duration_ms: 0.4917876395317151
-      ready_ms: 44.44307966666667
+      start_ms: 44.44307971014493
+      end_ms: 44.70112771014493
+      duration_ms: 0.2580480000000023
+      ready_ms: 44.44307971014493
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: null
       slack_ms: null
-      cadence_interval_ms: 8.333333333333336
-      cadence_avg_interval_ms: 8.333333333333332
+      cadence_interval_ms: 8.333333333333329
+      cadence_avg_interval_ms: 8.333333333333334
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: 0.0
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -9965,18 +10432,18 @@ calculation_trace:
       resource_id: dpu
       edge_type: M2M
       otf_group_id: otf-2#f5
-      start_ms: 54.792259666666666
-      end_ms: 56.606659666666665
+      start_ms: 54.792259710144926
+      end_ms: 56.606659710144925
       duration_ms: 1.8143999999999991
-      ready_ms: 54.792259666666666
+      ready_ms: 54.792259710144926
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 50.00000000000001
-      slack_ms: -6.606659666666658
-      cadence_interval_ms: 8.333333333333336
-      cadence_avg_interval_ms: 8.333333333333332
+      slack_ms: -6.606659710144918
+      cadence_interval_ms: 8.333333333333329
+      cadence_avg_interval_ms: 8.333333333333336
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: -1.7763568394002505e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -9992,18 +10459,18 @@ calculation_trace:
       resource_id: panel
       edge_type: OTF
       otf_group_id: otf-2#f5
-      start_ms: 54.792259666666666
-      end_ms: 56.606659666666665
+      start_ms: 54.792259710144926
+      end_ms: 56.606659710144925
       duration_ms: 1.8143999999999991
-      ready_ms: 54.792259666666666
+      ready_ms: 54.792259710144926
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 50.00000000000001
-      slack_ms: -6.606659666666658
-      cadence_interval_ms: 8.333333333333336
-      cadence_avg_interval_ms: 8.333333333333332
+      slack_ms: -6.606659710144918
+      cadence_interval_ms: 8.333333333333329
+      cadence_avg_interval_ms: 8.333333333333336
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: -1.7763568394002505e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -10019,18 +10486,18 @@ calculation_trace:
       resource_id: STORAGE_IO
       edge_type: control
       otf_group_id: null
-      start_ms: 56.72665966666666
-      end_ms: 56.966659666666665
+      start_ms: 56.72665971014492
+      end_ms: 56.966659710144924
       duration_ms: 0.240000000000002
-      ready_ms: 56.72665966666666
+      ready_ms: 56.72665971014492
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: null
       slack_ms: null
-      cadence_interval_ms: 8.333333333333336
-      cadence_avg_interval_ms: 8.333333333333332
+      cadence_interval_ms: 8.333333333333329
+      cadence_avg_interval_ms: 8.333333333333336
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: -1.7763568394002505e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -10046,18 +10513,18 @@ calculation_trace:
       resource_id: vps_od
       edge_type: M2M
       otf_group_id: null
-      start_ms: 52.776413
-      end_ms: 53.26820063953171
-      duration_ms: 0.4917876395317151
-      ready_ms: 52.776413
+      start_ms: 52.77641304347826
+      end_ms: 53.03446104347826
+      duration_ms: 0.2580480000000023
+      ready_ms: 52.77641304347826
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: null
       slack_ms: null
       cadence_interval_ms: 8.333333333333329
-      cadence_avg_interval_ms: 8.333333333333332
+      cadence_avg_interval_ms: 8.333333333333334
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: 0.0
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -10073,18 +10540,18 @@ calculation_trace:
       resource_id: dpu
       edge_type: M2M
       otf_group_id: otf-2#f6
-      start_ms: 63.125592999999995
-      end_ms: 64.939993
-      duration_ms: 1.8144000000000062
-      ready_ms: 63.125592999999995
+      start_ms: 63.125593043478254
+      end_ms: 64.93999304347825
+      duration_ms: 1.8143999999999991
+      ready_ms: 63.125593043478254
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 58.333333333333336
-      slack_ms: -6.6066596666666655
-      cadence_interval_ms: 8.333333333333336
-      cadence_avg_interval_ms: 8.333333333333332
+      slack_ms: -6.606659710144918
+      cadence_interval_ms: 8.333333333333329
+      cadence_avg_interval_ms: 8.333333333333336
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: -1.7763568394002505e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -10100,18 +10567,18 @@ calculation_trace:
       resource_id: panel
       edge_type: OTF
       otf_group_id: otf-2#f6
-      start_ms: 63.125592999999995
-      end_ms: 64.939993
-      duration_ms: 1.8144000000000062
-      ready_ms: 63.125592999999995
+      start_ms: 63.125593043478254
+      end_ms: 64.93999304347825
+      duration_ms: 1.8143999999999991
+      ready_ms: 63.125593043478254
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 58.333333333333336
-      slack_ms: -6.6066596666666655
-      cadence_interval_ms: 8.333333333333336
-      cadence_avg_interval_ms: 8.333333333333332
+      slack_ms: -6.606659710144918
+      cadence_interval_ms: 8.333333333333329
+      cadence_avg_interval_ms: 8.333333333333336
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: -1.7763568394002505e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -10127,18 +10594,18 @@ calculation_trace:
       resource_id: STORAGE_IO
       edge_type: control
       otf_group_id: null
-      start_ms: 65.059993
-      end_ms: 65.299993
+      start_ms: 65.05999304347826
+      end_ms: 65.29999304347825
       duration_ms: 0.23999999999999488
-      ready_ms: 65.059993
+      ready_ms: 65.05999304347826
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: null
       slack_ms: null
-      cadence_interval_ms: 8.333333333333336
-      cadence_avg_interval_ms: 8.333333333333332
+      cadence_interval_ms: 8.333333333333329
+      cadence_avg_interval_ms: 8.333333333333336
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: -1.7763568394002505e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -10154,18 +10621,18 @@ calculation_trace:
       resource_id: vps_od
       edge_type: M2M
       otf_group_id: null
-      start_ms: 61.109746333333334
-      end_ms: 61.60153397286505
-      duration_ms: 0.4917876395317151
-      ready_ms: 61.109746333333334
+      start_ms: 61.1097463768116
+      end_ms: 61.3677943768116
+      duration_ms: 0.2580480000000023
+      ready_ms: 61.1097463768116
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: null
       slack_ms: null
-      cadence_interval_ms: 8.333333333333336
-      cadence_avg_interval_ms: 8.333333333333332
+      cadence_interval_ms: 8.333333333333343
+      cadence_avg_interval_ms: 8.333333333333334
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: 0.0
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -10181,18 +10648,18 @@ calculation_trace:
       resource_id: dpu
       edge_type: M2M
       otf_group_id: otf-2#f7
-      start_ms: 71.45892633333332
-      end_ms: 73.27332633333333
+      start_ms: 71.4589263768116
+      end_ms: 73.27332637681161
       duration_ms: 1.8144000000000062
-      ready_ms: 71.45892633333332
+      ready_ms: 71.4589263768116
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 66.66666666666667
-      slack_ms: -6.606659666666658
-      cadence_interval_ms: 8.333333333333329
-      cadence_avg_interval_ms: 8.333333333333332
+      slack_ms: -6.606659710144939
+      cadence_interval_ms: 8.333333333333357
+      cadence_avg_interval_ms: 8.333333333333336
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: -1.7763568394002505e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -10208,18 +10675,18 @@ calculation_trace:
       resource_id: panel
       edge_type: OTF
       otf_group_id: otf-2#f7
-      start_ms: 71.45892633333332
-      end_ms: 73.27332633333333
+      start_ms: 71.4589263768116
+      end_ms: 73.27332637681161
       duration_ms: 1.8144000000000062
-      ready_ms: 71.45892633333332
+      ready_ms: 71.4589263768116
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: 66.66666666666667
-      slack_ms: -6.606659666666658
-      cadence_interval_ms: 8.333333333333329
-      cadence_avg_interval_ms: 8.333333333333332
+      slack_ms: -6.606659710144939
+      cadence_interval_ms: 8.333333333333357
+      cadence_avg_interval_ms: 8.333333333333336
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: -1.7763568394002505e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null
@@ -10235,18 +10702,18 @@ calculation_trace:
       resource_id: STORAGE_IO
       edge_type: control
       otf_group_id: null
-      start_ms: 73.39332633333333
-      end_ms: 73.63332633333333
+      start_ms: 73.39332637681161
+      end_ms: 73.63332637681161
       duration_ms: 0.23999999999999488
-      ready_ms: 73.39332633333333
+      ready_ms: 73.39332637681161
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: null
       slack_ms: null
-      cadence_interval_ms: 8.333333333333329
-      cadence_avg_interval_ms: 8.333333333333332
+      cadence_interval_ms: 8.333333333333357
+      cadence_avg_interval_ms: 8.333333333333336
       cadence_budget_ms: 8.333333333333334
-      cadence_slack_ms: 1.7763568394002505e-15
+      cadence_slack_ms: -1.7763568394002505e-15
       cadence_violation: false
       critical: false
       critical_path_rank: null

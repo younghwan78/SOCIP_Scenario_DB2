@@ -1274,56 +1274,62 @@ timing_breakdown:
   ip_ref: ip-csis-is-v15-s5e9975
   hw_name: CSIS
   task_type: hw
-  hw_time_ms: 2.04918
+  hw_time_ms: 5.8907789855072465
   required_clock_mhz: 600.0
   set_clock_mhz: 600.0
   set_voltage_mv: 710.0
   feasible: true
+  otf_group: otf-0
 - node_id: pdp
   ip_ref: ip-pdp-is-v15-s5e9975
   hw_name: PDP
   task_type: hw
-  hw_time_ms: 2.04918
+  hw_time_ms: 5.8907789855072465
   required_clock_mhz: 600.0
   set_clock_mhz: 600.0
   set_voltage_mv: 710.0
   feasible: true
+  otf_group: otf-0
 - node_id: byrp
   ip_ref: ip-byrp-is-v15-s5e9975
   hw_name: BYRP
   task_type: hw
-  hw_time_ms: 4.09836
-  required_clock_mhz: 600.0
-  set_clock_mhz: 600.0
+  hw_time_ms: 5.8907789855072465
+  required_clock_mhz: 1200.0
+  set_clock_mhz: 1200.0
   set_voltage_mv: 710.0
   feasible: true
+  otf_group: otf-0
 - node_id: rgbp
   ip_ref: ip-rgbp-is-v15-s5e9975
   hw_name: RGBP
   task_type: hw
-  hw_time_ms: 4.09836
-  required_clock_mhz: 600.0
-  set_clock_mhz: 600.0
+  hw_time_ms: 5.8907789855072465
+  required_clock_mhz: 1200.0
+  set_clock_mhz: 1200.0
   set_voltage_mv: 710.0
   feasible: true
+  otf_group: otf-0
 - node_id: yuvsc
   ip_ref: ip-yuvsc-is-v15-s5e9975
   hw_name: YUVSC
   task_type: hw
-  hw_time_ms: 4.09836
-  required_clock_mhz: 600.0
-  set_clock_mhz: 600.0
+  hw_time_ms: 5.8907789855072465
+  required_clock_mhz: 1200.0
+  set_clock_mhz: 1200.0
   set_voltage_mv: 710.0
   feasible: true
+  otf_group: otf-0
 - node_id: mlsc
   ip_ref: ip-mlsc-is-v15-s5e9975
   hw_name: MLSC
   task_type: hw
-  hw_time_ms: 4.09836
-  required_clock_mhz: 600.0
-  set_clock_mhz: 600.0
+  hw_time_ms: 5.8907789855072465
+  required_clock_mhz: 1200.0
+  set_clock_mhz: 1200.0
   set_voltage_mv: 710.0
   feasible: true
+  otf_group: otf-0
 - node_id: mtnr
   ip_ref: ip-mtnr-is-v15-s5e9975
   hw_name: MTNR
@@ -1333,6 +1339,7 @@ timing_breakdown:
   set_clock_mhz: 600.0
   set_voltage_mv: 710.0
   feasible: true
+  otf_group: otf-1
 - node_id: msnr
   ip_ref: ip-msnr-is-v15-s5e9975
   hw_name: MSNR
@@ -1342,40 +1349,45 @@ timing_breakdown:
   set_clock_mhz: 600.0
   set_voltage_mv: 710.0
   feasible: true
+  otf_group: otf-1
 - node_id: yuvp
   ip_ref: ip-yuvp-is-v15-s5e9975
   hw_name: YUVP
   task_type: hw
   hw_time_ms: 4.09836
-  required_clock_mhz: 600.0
-  set_clock_mhz: 600.0
+  required_clock_mhz: 1200.0
+  set_clock_mhz: 1200.0
   set_voltage_mv: 710.0
   feasible: true
+  otf_group: otf-1
+  standalone_hw_time_ms: 2.04918
 - node_id: mcsc
   ip_ref: ip-mcsc-is-v15-s5e9975
   hw_name: MCSC
   task_type: hw
   hw_time_ms: 4.09836
-  required_clock_mhz: 600.0
-  set_clock_mhz: 600.0
+  required_clock_mhz: 1200.0
+  set_clock_mhz: 1200.0
   set_voltage_mv: 710.0
   feasible: true
+  otf_group: otf-1
+  standalone_hw_time_ms: 2.04918
 - node_id: lme
   ip_ref: ip-lme-is-v15-s5e9975
   hw_name: LME
   task_type: hw
-  hw_time_ms: 0.333396
-  required_clock_mhz: 600.0
-  set_clock_mhz: 600.0
+  hw_time_ms: 0.166698
+  required_clock_mhz: 1200.0
+  set_clock_mhz: 1200.0
   set_voltage_mv: 710.0
   feasible: true
 - node_id: vps_od
   ip_ref: ip-vps-is-v15-s5e9975
   hw_name: VPS
   task_type: hw
-  hw_time_ms: 0.258048
-  required_clock_mhz: 600.0
-  set_clock_mhz: 600.0
+  hw_time_ms: 0.129024
+  required_clock_mhz: 1200.0
+  set_clock_mhz: 1200.0
   set_voltage_mv: 710.0
   feasible: true
 - node_id: dpu
@@ -1403,10 +1415,10 @@ dvfs_breakdown:
   hw_name: CSIS
   mode: Normal
   required_clock_mhz: 600.0
-  base_required_clock_mhz: 82.656
+  base_required_clock_mhz: 0.0
   manual_clock_mhz: 600.0
   clock_correction_mhz: 600.0
-  clock_correction_reason: otf_group_clock_align(otf-0, leader=yuvsc)
+  clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp, 4800 Mpix/s)
   set_clock_mhz: 600.0
   dvfs_group: CSIS
   required_voltage_mv: 710.0
@@ -1424,16 +1436,46 @@ dvfs_breakdown:
   total_power_ma: 1.157184
   vdd_leader: byrp,csis,lme,mcsc,mlsc,pdp,rgbp,vps_od,yuvp,yuvsc
   feasible: true
+  clock_ledger:
+    throughput_required_mhz: 0.0
+    constraints:
+    - kind: mipi_ingress
+      mhz: 342.25714285714287
+      reason: sensor_ingress_req_csis_clock(sensor_rear, phy=CPHY, mipi=3.993Gbps,
+        bitwidth=10)
+      source: sim
+    - kind: vvalid_stream
+      mhz: 208.71738746690204
+      reason: sensor_readout_stream_clock(sensor_rear, readout_ms=5.891)
+      source: sim
+    - kind: otf_align
+      mhz: 600.0
+      reason: otf_group_rate_align(otf-0, leader=pdp, 4800 Mpix/s)
+      source: sim
+    - kind: manual
+      mhz: 600.0
+      reason: manual_clock_mhz
+      source: node_config.sim
+    binding_kind: otf_align
+    calculated_required_mhz: 600.0
+    calculated_mhz: 600.0
+    basis: calculated
+    basis_used: calculated
+    gap:
+      cause: otf_align
+  clock_ref_mhz: 342.25714285714287
+  clock_overhead_mw: 0.0
+  leakage_power_mw: 0.0
 - node_id: pdp
   instance_index: 0
   ip_ref: ip-pdp-is-v15-s5e9975
   hw_name: PDP
   mode: Normal
   required_clock_mhz: 600.0
-  base_required_clock_mhz: 82.656
+  base_required_clock_mhz: 0.0
   manual_clock_mhz: 600.0
   clock_correction_mhz: 600.0
-  clock_correction_reason: otf_group_clock_align(otf-0, leader=yuvsc)
+  clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp, 4800 Mpix/s)
   set_clock_mhz: 600.0
   dvfs_group: CSIS
   required_voltage_mv: 710.0
@@ -1451,17 +1493,42 @@ dvfs_breakdown:
   total_power_ma: 0.9367680000000002
   vdd_leader: byrp,csis,lme,mcsc,mlsc,pdp,rgbp,vps_od,yuvp,yuvsc
   feasible: true
+  clock_ledger:
+    throughput_required_mhz: 0.0
+    constraints:
+    - kind: vvalid_stream
+      mhz: 208.71738746690204
+      reason: sensor_readout_stream_clock(sensor_rear, readout_ms=5.891)
+      source: sim
+    - kind: otf_align
+      mhz: 600.0
+      reason: otf_group_rate_align(otf-0, leader=pdp, 4800 Mpix/s)
+      source: sim
+    - kind: manual
+      mhz: 600.0
+      reason: manual_clock_mhz
+      source: node_config.sim
+    binding_kind: otf_align
+    calculated_required_mhz: 600.0
+    calculated_mhz: 600.0
+    basis: calculated
+    basis_used: calculated
+    gap:
+      cause: otf_align
+  clock_ref_mhz: 208.71738746690204
+  clock_overhead_mw: 0.0
+  leakage_power_mw: 0.0
 - node_id: byrp
   instance_index: 0
   ip_ref: ip-byrp-is-v15-s5e9975
   hw_name: BYRP
   mode: Normal
-  required_clock_mhz: 600.0
-  base_required_clock_mhz: 165.312
+  required_clock_mhz: 1200.0
+  base_required_clock_mhz: 0.0
   manual_clock_mhz: 600.0
-  clock_correction_mhz: 600.0
-  clock_correction_reason: otf_group_clock_align(otf-0, leader=yuvsc)
-  set_clock_mhz: 600.0
+  clock_correction_mhz: 1200.0
+  clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp, 4800 Mpix/s)
+  set_clock_mhz: 1200.0
   dvfs_group: CAM
   required_voltage_mv: 710.0
   set_voltage_mv: 710.0
@@ -1478,17 +1545,42 @@ dvfs_breakdown:
   total_power_ma: 23.915136
   vdd_leader: byrp,csis,lme,mcsc,mlsc,pdp,rgbp,vps_od,yuvp,yuvsc
   feasible: true
+  clock_ledger:
+    throughput_required_mhz: 0.0
+    constraints:
+    - kind: vvalid_stream
+      mhz: 417.4347749338041
+      reason: sensor_readout_stream_clock(sensor_rear, readout_ms=5.891)
+      source: sim
+    - kind: otf_align
+      mhz: 1200.0
+      reason: otf_group_rate_align(otf-0, leader=pdp, 4800 Mpix/s)
+      source: sim
+    - kind: manual
+      mhz: 600.0
+      reason: manual_clock_mhz
+      source: node_config.sim
+    binding_kind: otf_align
+    calculated_required_mhz: 1200.0
+    calculated_mhz: 1200.0
+    basis: calculated
+    basis_used: calculated
+    gap:
+      cause: otf_align
+  clock_ref_mhz: 417.4347749338041
+  clock_overhead_mw: 0.0
+  leakage_power_mw: 0.0
 - node_id: rgbp
   instance_index: 0
   ip_ref: ip-rgbp-is-v15-s5e9975
   hw_name: RGBP
   mode: Normal
-  required_clock_mhz: 600.0
-  base_required_clock_mhz: 165.312
+  required_clock_mhz: 1200.0
+  base_required_clock_mhz: 0.0
   manual_clock_mhz: 600.0
-  clock_correction_mhz: 600.0
-  clock_correction_reason: otf_group_clock_align(otf-0, leader=yuvsc)
-  set_clock_mhz: 600.0
+  clock_correction_mhz: 1200.0
+  clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp, 4800 Mpix/s)
+  set_clock_mhz: 1200.0
   dvfs_group: CAM
   required_voltage_mv: 710.0
   set_voltage_mv: 710.0
@@ -1505,17 +1597,42 @@ dvfs_breakdown:
   total_power_ma: 20.5427712
   vdd_leader: byrp,csis,lme,mcsc,mlsc,pdp,rgbp,vps_od,yuvp,yuvsc
   feasible: true
+  clock_ledger:
+    throughput_required_mhz: 0.0
+    constraints:
+    - kind: vvalid_stream
+      mhz: 417.4347749338041
+      reason: sensor_readout_stream_clock(sensor_rear, readout_ms=5.891)
+      source: sim
+    - kind: otf_align
+      mhz: 1200.0
+      reason: otf_group_rate_align(otf-0, leader=pdp, 4800 Mpix/s)
+      source: sim
+    - kind: manual
+      mhz: 600.0
+      reason: manual_clock_mhz
+      source: node_config.sim
+    binding_kind: otf_align
+    calculated_required_mhz: 1200.0
+    calculated_mhz: 1200.0
+    basis: calculated
+    basis_used: calculated
+    gap:
+      cause: otf_align
+  clock_ref_mhz: 417.4347749338041
+  clock_overhead_mw: 0.0
+  leakage_power_mw: 0.0
 - node_id: yuvsc
   instance_index: 0
   ip_ref: ip-yuvsc-is-v15-s5e9975
   hw_name: YUVSC
   mode: Normal
-  required_clock_mhz: 600.0
-  base_required_clock_mhz: 165.312
+  required_clock_mhz: 1200.0
+  base_required_clock_mhz: 0.0
   manual_clock_mhz: 600.0
-  clock_correction_mhz: 600.0
-  clock_correction_reason: otf_group_clock_align(otf-0, leader=yuvsc)
-  set_clock_mhz: 600.0
+  clock_correction_mhz: 1200.0
+  clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp, 4800 Mpix/s)
+  set_clock_mhz: 1200.0
   dvfs_group: CAM
   required_voltage_mv: 710.0
   set_voltage_mv: 710.0
@@ -1532,17 +1649,42 @@ dvfs_breakdown:
   total_power_ma: 1.9396608
   vdd_leader: byrp,csis,lme,mcsc,mlsc,pdp,rgbp,vps_od,yuvp,yuvsc
   feasible: true
+  clock_ledger:
+    throughput_required_mhz: 0.0
+    constraints:
+    - kind: vvalid_stream
+      mhz: 417.4347749338041
+      reason: sensor_readout_stream_clock(sensor_rear, readout_ms=5.891)
+      source: sim
+    - kind: otf_align
+      mhz: 1200.0
+      reason: otf_group_rate_align(otf-0, leader=pdp, 4800 Mpix/s)
+      source: sim
+    - kind: manual
+      mhz: 600.0
+      reason: manual_clock_mhz
+      source: node_config.sim
+    binding_kind: otf_align
+    calculated_required_mhz: 1200.0
+    calculated_mhz: 1200.0
+    basis: calculated
+    basis_used: calculated
+    gap:
+      cause: otf_align
+  clock_ref_mhz: 417.4347749338041
+  clock_overhead_mw: 0.0
+  leakage_power_mw: 0.0
 - node_id: mlsc
   instance_index: 0
   ip_ref: ip-mlsc-is-v15-s5e9975
   hw_name: MLSC
   mode: Normal
-  required_clock_mhz: 600.0
-  base_required_clock_mhz: 165.312
+  required_clock_mhz: 1200.0
+  base_required_clock_mhz: 0.0
   manual_clock_mhz: 600.0
-  clock_correction_mhz: 600.0
-  clock_correction_reason: otf_group_clock_align(otf-0, leader=yuvsc)
-  set_clock_mhz: 600.0
+  clock_correction_mhz: 1200.0
+  clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp, 4800 Mpix/s)
+  set_clock_mhz: 1200.0
   dvfs_group: CAM
   required_voltage_mv: 710.0
   set_voltage_mv: 710.0
@@ -1559,6 +1701,31 @@ dvfs_breakdown:
   total_power_ma: 0.0
   vdd_leader: byrp,csis,lme,mcsc,mlsc,pdp,rgbp,vps_od,yuvp,yuvsc
   feasible: true
+  clock_ledger:
+    throughput_required_mhz: 0.0
+    constraints:
+    - kind: vvalid_stream
+      mhz: 417.4347749338041
+      reason: sensor_readout_stream_clock(sensor_rear, readout_ms=5.891)
+      source: sim
+    - kind: otf_align
+      mhz: 1200.0
+      reason: otf_group_rate_align(otf-0, leader=pdp, 4800 Mpix/s)
+      source: sim
+    - kind: manual
+      mhz: 600.0
+      reason: manual_clock_mhz
+      source: node_config.sim
+    binding_kind: otf_align
+    calculated_required_mhz: 1200.0
+    calculated_mhz: 1200.0
+    basis: calculated
+    basis_used: calculated
+    gap:
+      cause: otf_align
+  clock_ref_mhz: 417.4347749338041
+  clock_overhead_mw: 0.0
+  leakage_power_mw: 0.0
 - node_id: mtnr
   instance_index: 0
   ip_ref: ip-mtnr-is-v15-s5e9975
@@ -1568,7 +1735,7 @@ dvfs_breakdown:
   base_required_clock_mhz: 165.312
   manual_clock_mhz: 600.0
   clock_correction_mhz: 600.0
-  clock_correction_reason: otf_group_clock_align(otf-1, leader=yuvp)
+  clock_correction_reason: otf_group_rate_align(otf-1, leader=yuvp, 2400 Mpix/s)
   set_clock_mhz: 600.0
   dvfs_group: INTCAM
   required_voltage_mv: 710.0
@@ -1586,6 +1753,28 @@ dvfs_breakdown:
   total_power_ma: 5.5104
   vdd_leader: msnr,mtnr
   feasible: true
+  clock_ledger:
+    throughput_required_mhz: 165.312
+    constraints:
+    - kind: otf_align
+      mhz: 600.0
+      reason: otf_group_rate_align(otf-1, leader=yuvp, 2400 Mpix/s)
+      source: sim
+    - kind: manual
+      mhz: 600.0
+      reason: manual_clock_mhz
+      source: node_config.sim
+    binding_kind: otf_align
+    calculated_required_mhz: 600.0
+    calculated_mhz: 600.0
+    basis: calculated
+    basis_used: calculated
+    gap:
+      calculated_over_throughput_pct: 262.95
+      cause: otf_align
+  clock_ref_mhz: 165.312
+  clock_overhead_mw: 0.0
+  leakage_power_mw: 0.0
 - node_id: msnr
   instance_index: 0
   ip_ref: ip-msnr-is-v15-s5e9975
@@ -1595,7 +1784,7 @@ dvfs_breakdown:
   base_required_clock_mhz: 165.312
   manual_clock_mhz: 600.0
   clock_correction_mhz: 600.0
-  clock_correction_reason: otf_group_clock_align(otf-1, leader=yuvp)
+  clock_correction_reason: otf_group_rate_align(otf-1, leader=yuvp, 2400 Mpix/s)
   set_clock_mhz: 600.0
   dvfs_group: INTCAM
   required_voltage_mv: 710.0
@@ -1613,17 +1802,39 @@ dvfs_breakdown:
   total_power_ma: 5.5104
   vdd_leader: msnr,mtnr
   feasible: true
+  clock_ledger:
+    throughput_required_mhz: 165.312
+    constraints:
+    - kind: otf_align
+      mhz: 600.0
+      reason: otf_group_rate_align(otf-1, leader=yuvp, 2400 Mpix/s)
+      source: sim
+    - kind: manual
+      mhz: 600.0
+      reason: manual_clock_mhz
+      source: node_config.sim
+    binding_kind: otf_align
+    calculated_required_mhz: 600.0
+    calculated_mhz: 600.0
+    basis: calculated
+    basis_used: calculated
+    gap:
+      calculated_over_throughput_pct: 262.95
+      cause: otf_align
+  clock_ref_mhz: 165.312
+  clock_overhead_mw: 0.0
+  leakage_power_mw: 0.0
 - node_id: yuvp
   instance_index: 0
   ip_ref: ip-yuvp-is-v15-s5e9975
   hw_name: YUVP
   mode: Normal
-  required_clock_mhz: 600.0
+  required_clock_mhz: 1200.0
   base_required_clock_mhz: 165.312
   manual_clock_mhz: 600.0
   clock_correction_mhz: 600.0
-  clock_correction_reason: otf_group_clock_align(otf-1, leader=yuvp)
-  set_clock_mhz: 600.0
+  clock_correction_reason: otf_group_rate_align(otf-1, leader=yuvp, 2400 Mpix/s)
+  set_clock_mhz: 1200.0
   dvfs_group: CAM
   required_voltage_mv: 710.0
   set_voltage_mv: 710.0
@@ -1640,17 +1851,43 @@ dvfs_breakdown:
   total_power_ma: 1.9396608
   vdd_leader: byrp,csis,lme,mcsc,mlsc,pdp,rgbp,vps_od,yuvp,yuvsc
   feasible: true
+  clock_ledger:
+    throughput_required_mhz: 165.312
+    constraints:
+    - kind: otf_align
+      mhz: 600.0
+      reason: otf_group_rate_align(otf-1, leader=yuvp, 2400 Mpix/s)
+      source: sim
+    - kind: manual
+      mhz: 600.0
+      reason: manual_clock_mhz
+      source: node_config.sim
+    - kind: dvfs_group_align
+      mhz: 1200.0
+      reason: dvfs_group_align(CAM)
+      source: resolver
+    binding_kind: dvfs_group_align
+    calculated_required_mhz: 1200.0
+    calculated_mhz: 1200.0
+    basis: calculated
+    basis_used: calculated
+    gap:
+      calculated_over_throughput_pct: 625.9
+      cause: dvfs_group_align
+  clock_ref_mhz: 165.312
+  clock_overhead_mw: 0.0
+  leakage_power_mw: 0.0
 - node_id: mcsc
   instance_index: 0
   ip_ref: ip-mcsc-is-v15-s5e9975
   hw_name: MCSC
   mode: Normal
-  required_clock_mhz: 600.0
+  required_clock_mhz: 1200.0
   base_required_clock_mhz: 165.312
   manual_clock_mhz: 600.0
   clock_correction_mhz: 600.0
-  clock_correction_reason: otf_group_clock_align(otf-1, leader=yuvp)
-  set_clock_mhz: 600.0
+  clock_correction_reason: otf_group_rate_align(otf-1, leader=yuvp, 2400 Mpix/s)
+  set_clock_mhz: 1200.0
   dvfs_group: CAM
   required_voltage_mv: 710.0
   set_voltage_mv: 710.0
@@ -1667,17 +1904,43 @@ dvfs_breakdown:
   total_power_ma: 8.265600000000001
   vdd_leader: byrp,csis,lme,mcsc,mlsc,pdp,rgbp,vps_od,yuvp,yuvsc
   feasible: true
+  clock_ledger:
+    throughput_required_mhz: 165.312
+    constraints:
+    - kind: otf_align
+      mhz: 600.0
+      reason: otf_group_rate_align(otf-1, leader=yuvp, 2400 Mpix/s)
+      source: sim
+    - kind: manual
+      mhz: 600.0
+      reason: manual_clock_mhz
+      source: node_config.sim
+    - kind: dvfs_group_align
+      mhz: 1200.0
+      reason: dvfs_group_align(CAM)
+      source: resolver
+    binding_kind: dvfs_group_align
+    calculated_required_mhz: 1200.0
+    calculated_mhz: 1200.0
+    basis: calculated
+    basis_used: calculated
+    gap:
+      calculated_over_throughput_pct: 625.9
+      cause: dvfs_group_align
+  clock_ref_mhz: 165.312
+  clock_overhead_mw: 0.0
+  leakage_power_mw: 0.0
 - node_id: lme
   instance_index: 0
   ip_ref: ip-lme-is-v15-s5e9975
   hw_name: LME
   mode: Normal
-  required_clock_mhz: 600.0
+  required_clock_mhz: 1200.0
   base_required_clock_mhz: 13.447905882352941
   manual_clock_mhz: 600.0
   clock_correction_mhz: 66.67920000000001
   clock_correction_reason: included_stage_budget(pre_me_rta, 3ms; lower bound)
-  set_clock_mhz: 600.0
+  set_clock_mhz: 1200.0
   dvfs_group: CAM
   required_voltage_mv: 710.0
   set_voltage_mv: 710.0
@@ -1694,16 +1957,42 @@ dvfs_breakdown:
   total_power_ma: 0.672395294117647
   vdd_leader: byrp,csis,lme,mcsc,mlsc,pdp,rgbp,vps_od,yuvp,yuvsc
   feasible: true
+  clock_ledger:
+    throughput_required_mhz: 13.447905882352941
+    constraints:
+    - kind: stage_budget
+      mhz: 66.67920000000001
+      reason: included_stage_budget(pre_me_rta, 3ms; lower bound)
+      source: sim
+    - kind: manual
+      mhz: 600.0
+      reason: manual_clock_mhz
+      source: node_config.sim
+    - kind: dvfs_group_align
+      mhz: 1200.0
+      reason: dvfs_group_align(CAM)
+      source: resolver
+    binding_kind: dvfs_group_align
+    calculated_required_mhz: 1200.0
+    calculated_mhz: 1200.0
+    basis: calculated
+    basis_used: calculated
+    gap:
+      calculated_over_throughput_pct: 8823.32
+      cause: dvfs_group_align
+  clock_ref_mhz: 66.67920000000001
+  clock_overhead_mw: 0.0
+  leakage_power_mw: 0.0
 - node_id: vps_od
   instance_index: 0
   ip_ref: ip-vps-is-v15-s5e9975
   hw_name: VPS
   mode: Normal
-  required_clock_mhz: 600.0
+  required_clock_mhz: 1200.0
   base_required_clock_mhz: 10.40865882352941
   manual_clock_mhz: 600.0
   clock_correction_mhz: 0.0
-  set_clock_mhz: 600.0
+  set_clock_mhz: 1200.0
   dvfs_group: CAM
   required_voltage_mv: 710.0
   set_voltage_mv: 710.0
@@ -1720,6 +2009,28 @@ dvfs_breakdown:
   total_power_ma: 0.0
   vdd_leader: byrp,csis,lme,mcsc,mlsc,pdp,rgbp,vps_od,yuvp,yuvsc
   feasible: true
+  clock_ledger:
+    throughput_required_mhz: 10.40865882352941
+    constraints:
+    - kind: manual
+      mhz: 600.0
+      reason: manual_clock_mhz
+      source: node_config.sim
+    - kind: dvfs_group_align
+      mhz: 1200.0
+      reason: dvfs_group_align(CAM)
+      source: resolver
+    binding_kind: dvfs_group_align
+    calculated_required_mhz: 1200.0
+    calculated_mhz: 1200.0
+    basis: calculated
+    basis_used: calculated
+    gap:
+      calculated_over_throughput_pct: 11428.86
+      cause: dvfs_group_align
+  clock_ref_mhz: 10.40865882352941
+  clock_overhead_mw: 0.0
+  leakage_power_mw: 0.0
 - node_id: dpu
   instance_index: 0
   ip_ref: ip-dpu-s5e9975
@@ -1745,6 +2056,19 @@ dvfs_breakdown:
   total_power_ma: 1.2197647058823529
   vdd_leader: dpu
   feasible: true
+  clock_ledger:
+    throughput_required_mhz: 36.592941176470596
+    constraints: []
+    binding_kind: throughput
+    calculated_required_mhz: 36.592941176470596
+    calculated_mhz: 36.592941176470596
+    basis: calculated
+    basis_used: calculated
+    gap:
+      calculated_over_throughput_pct: 0.0
+  clock_ref_mhz: 36.592941176470596
+  clock_overhead_mw: 0.0
+  leakage_power_mw: 0.0
 - node_id: apv_enc
   instance_index: 0
   ip_ref: ip-apv-s5e9975
@@ -1771,6 +2095,24 @@ dvfs_breakdown:
   total_power_ma: 0.0
   vdd_leader: apv_enc
   feasible: true
+  clock_ledger:
+    throughput_required_mhz: 292.74352941176477
+    constraints:
+    - kind: manual
+      mhz: 600.0
+      reason: manual_clock_mhz
+      source: node_config.sim
+    binding_kind: manual
+    calculated_required_mhz: 600.0
+    calculated_mhz: 600.0
+    basis: calculated
+    basis_used: calculated
+    gap:
+      calculated_over_throughput_pct: 104.96
+      cause: manual
+  clock_ref_mhz: 292.74352941176477
+  clock_overhead_mw: 0.0
+  leakage_power_mw: 0.0
 timeline_events:
 - task_id: sensor_rear#f0
   node_id: sensor_rear
@@ -1923,8 +2265,8 @@ timeline_events:
   edge_type: M2M
   bottleneck: false
   start_ms: 5.890779
-  end_ms: 6.148827
-  duration_ms: 0.2580479999999996
+  end_ms: 6.0198030000000005
+  duration_ms: 0.12902400000000025
   cadence_avg_interval_ms: 16.666666666666668
   cadence_budget_ms: 16.666666666666668
   cadence_slack_ms: 0.0
@@ -2344,9 +2686,9 @@ timeline_events:
   edge_type: M2M
   bottleneck: false
   start_ms: 22.557445666666666
-  end_ms: 22.815493666666665
-  duration_ms: 0.2580479999999987
-  cadence_interval_ms: 16.666666666666664
+  end_ms: 22.686469666666667
+  duration_ms: 0.12902400000000114
+  cadence_interval_ms: 16.666666666666668
   cadence_avg_interval_ms: 16.666666666666668
   cadence_budget_ms: 16.666666666666668
   cadence_slack_ms: 0.0
@@ -2769,9 +3111,9 @@ timeline_events:
   edge_type: M2M
   bottleneck: false
   start_ms: 39.22411233333334
-  end_ms: 39.48216033333334
-  duration_ms: 0.2580480000000023
-  cadence_interval_ms: 16.666666666666675
+  end_ms: 39.35313633333334
+  duration_ms: 0.12902400000000114
+  cadence_interval_ms: 16.66666666666667
   cadence_avg_interval_ms: 16.666666666666668
   cadence_budget_ms: 16.666666666666668
   cadence_slack_ms: 0.0
@@ -3194,8 +3536,8 @@ timeline_events:
   edge_type: M2M
   bottleneck: false
   start_ms: 55.890779
-  end_ms: 56.148827000000004
-  duration_ms: 0.2580480000000023
+  end_ms: 56.019803
+  duration_ms: 0.12902400000000114
   cadence_interval_ms: 16.666666666666664
   cadence_avg_interval_ms: 16.666666666666668
   cadence_budget_ms: 16.666666666666668
@@ -3619,8 +3961,8 @@ timeline_events:
   edge_type: M2M
   bottleneck: false
   start_ms: 72.55744566666667
-  end_ms: 72.81549366666667
-  duration_ms: 0.2580480000000023
+  end_ms: 72.68646966666667
+  duration_ms: 0.12902400000000114
   cadence_interval_ms: 16.666666666666664
   cadence_avg_interval_ms: 16.666666666666668
   cadence_budget_ms: 16.666666666666668
@@ -4044,8 +4386,8 @@ timeline_events:
   edge_type: M2M
   bottleneck: false
   start_ms: 89.22411233333334
-  end_ms: 89.48216033333334
-  duration_ms: 0.2580480000000023
+  end_ms: 89.35313633333334
+  duration_ms: 0.12902400000000114
   cadence_interval_ms: 16.66666666666667
   cadence_avg_interval_ms: 16.666666666666668
   cadence_budget_ms: 16.666666666666668
@@ -4469,8 +4811,8 @@ timeline_events:
   edge_type: M2M
   bottleneck: false
   start_ms: 105.890779
-  end_ms: 106.148827
-  duration_ms: 0.2580480000000023
+  end_ms: 106.019803
+  duration_ms: 0.12902400000000114
   cadence_interval_ms: 16.666666666666657
   cadence_avg_interval_ms: 16.666666666666668
   cadence_budget_ms: 16.666666666666668
@@ -4894,8 +5236,8 @@ timeline_events:
   edge_type: M2M
   bottleneck: false
   start_ms: 122.55744566666667
-  end_ms: 122.81549366666667
-  duration_ms: 0.2580480000000023
+  end_ms: 122.68646966666667
+  duration_ms: 0.12902400000000114
   cadence_interval_ms: 16.66666666666667
   cadence_avg_interval_ms: 16.666666666666668
   cadence_budget_ms: 16.666666666666668
@@ -5270,7 +5612,7 @@ power_breakdown:
     total_mw: 862.681184
     rail: MIF
   cpu:
-    total_mw: 0.0
+    total_mw: 0
     by_cluster: {}
   total_mw: 1106.154303
 sw_task_timing:
@@ -5324,7 +5666,7 @@ sw_task_timing:
   value_source: assumed
   source_note: User-supplied fixture values, 2026-09-13; replace with internal measurements.
 metric_observations: []
-params_hash: 272e871dd7d7d4dd
+params_hash: 9f08f374a7abe502
 calculation_trace:
   schema_version: '1.0'
   trace_level: formula
@@ -5393,16 +5735,17 @@ calculation_trace:
         ppc: 8.0
         manual_clock_mhz: 600.0
         clock_correction_mhz: 600.0
-        clock_correction_reason: otf_group_clock_align(otf-0, leader=yuvsc)
+        clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp, 4800 Mpix/s)
       base_formula: pixels * fps / (1 - sw_margin) / ppc / 1e6
       initial_required_mhz: 82.656
       before_group_align_mhz: 600.0
       manual_clock_mhz: 600.0
       after_manual_clock_mhz: 600.0
       clock_correction_mhz: 600.0
-      clock_correction_reason: otf_group_clock_align(otf-0, leader=yuvsc)
+      clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp, 4800 Mpix/s)
       sensor_otf_clock_correction_mhz: 600.0
-      sensor_otf_clock_correction_reason: otf_group_clock_align(otf-0, leader=yuvsc)
+      sensor_otf_clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp,
+        4800 Mpix/s)
       after_group_align_mhz: 600.0
     dvfs:
       dvfs_group: CSIS
@@ -5448,7 +5791,7 @@ calculation_trace:
         set_clock_mhz: 600.0
         ppc: 8.0
         h_blank_margin: 0.05
-      result_ms: 2.04918
+      result_ms: 5.8907789855072465
       feasible: true
       infeasible_reason: null
   - node_id: pdp
@@ -5479,16 +5822,17 @@ calculation_trace:
         ppc: 8.0
         manual_clock_mhz: 600.0
         clock_correction_mhz: 600.0
-        clock_correction_reason: otf_group_clock_align(otf-0, leader=yuvsc)
+        clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp, 4800 Mpix/s)
       base_formula: pixels * fps / (1 - sw_margin) / ppc / 1e6
       initial_required_mhz: 82.656
       before_group_align_mhz: 600.0
       manual_clock_mhz: 600.0
       after_manual_clock_mhz: 600.0
       clock_correction_mhz: 600.0
-      clock_correction_reason: otf_group_clock_align(otf-0, leader=yuvsc)
+      clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp, 4800 Mpix/s)
       sensor_otf_clock_correction_mhz: 600.0
-      sensor_otf_clock_correction_reason: otf_group_clock_align(otf-0, leader=yuvsc)
+      sensor_otf_clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp,
+        4800 Mpix/s)
       after_group_align_mhz: 600.0
     dvfs:
       dvfs_group: CSIS
@@ -5534,7 +5878,7 @@ calculation_trace:
         set_clock_mhz: 600.0
         ppc: 8.0
         h_blank_margin: 0.05
-      result_ms: 2.04918
+      result_ms: 5.8907789855072465
       feasible: true
       infeasible_reason: null
   - node_id: byrp
@@ -5564,18 +5908,19 @@ calculation_trace:
         sw_margin: 0.15
         ppc: 4.0
         manual_clock_mhz: 600.0
-        clock_correction_mhz: 600.0
-        clock_correction_reason: otf_group_clock_align(otf-0, leader=yuvsc)
+        clock_correction_mhz: 1200.0
+        clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp, 4800 Mpix/s)
       base_formula: pixels * fps / (1 - sw_margin) / ppc / 1e6
       initial_required_mhz: 165.312
-      before_group_align_mhz: 600.0
+      before_group_align_mhz: 1200.0
       manual_clock_mhz: 600.0
-      after_manual_clock_mhz: 600.0
-      clock_correction_mhz: 600.0
-      clock_correction_reason: otf_group_clock_align(otf-0, leader=yuvsc)
-      sensor_otf_clock_correction_mhz: 600.0
-      sensor_otf_clock_correction_reason: otf_group_clock_align(otf-0, leader=yuvsc)
-      after_group_align_mhz: 600.0
+      after_manual_clock_mhz: 1200.0
+      clock_correction_mhz: 1200.0
+      clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp, 4800 Mpix/s)
+      sensor_otf_clock_correction_mhz: 1200.0
+      sensor_otf_clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp,
+        4800 Mpix/s)
+      after_group_align_mhz: 1200.0
     dvfs:
       dvfs_group: CAM
       asv_group: 4
@@ -5586,9 +5931,9 @@ calculation_trace:
       set_voltage_rule: align to max required_voltage_mv in the shared VDD domain
       candidate_levels: []
       selected_level: null
-      selected_speed_mhz: 600.0
+      selected_speed_mhz: 1200.0
       required_voltage_mv: 710.0
-      set_clock_mhz: 600.0
+      set_clock_mhz: 1200.0
       set_voltage_mv: 710.0
       vdd: VDD_CAM
       vdd_leader: byrp,csis,lme,mcsc,mlsc,pdp,rgbp,vps_od,yuvp,yuvsc
@@ -5617,10 +5962,10 @@ calculation_trace:
       formula: pixels / (set_clock_mhz * 1e6 * ppc) * (1 + h_blank_margin) * 1000
       inputs:
         pixels: 9367680
-        set_clock_mhz: 600.0
+        set_clock_mhz: 1200.0
         ppc: 4.0
         h_blank_margin: 0.05
-      result_ms: 4.09836
+      result_ms: 5.8907789855072465
       feasible: true
       infeasible_reason: null
   - node_id: rgbp
@@ -5650,18 +5995,19 @@ calculation_trace:
         sw_margin: 0.15
         ppc: 4.0
         manual_clock_mhz: 600.0
-        clock_correction_mhz: 600.0
-        clock_correction_reason: otf_group_clock_align(otf-0, leader=yuvsc)
+        clock_correction_mhz: 1200.0
+        clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp, 4800 Mpix/s)
       base_formula: pixels * fps / (1 - sw_margin) / ppc / 1e6
       initial_required_mhz: 165.312
-      before_group_align_mhz: 600.0
+      before_group_align_mhz: 1200.0
       manual_clock_mhz: 600.0
-      after_manual_clock_mhz: 600.0
-      clock_correction_mhz: 600.0
-      clock_correction_reason: otf_group_clock_align(otf-0, leader=yuvsc)
-      sensor_otf_clock_correction_mhz: 600.0
-      sensor_otf_clock_correction_reason: otf_group_clock_align(otf-0, leader=yuvsc)
-      after_group_align_mhz: 600.0
+      after_manual_clock_mhz: 1200.0
+      clock_correction_mhz: 1200.0
+      clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp, 4800 Mpix/s)
+      sensor_otf_clock_correction_mhz: 1200.0
+      sensor_otf_clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp,
+        4800 Mpix/s)
+      after_group_align_mhz: 1200.0
     dvfs:
       dvfs_group: CAM
       asv_group: 4
@@ -5672,9 +6018,9 @@ calculation_trace:
       set_voltage_rule: align to max required_voltage_mv in the shared VDD domain
       candidate_levels: []
       selected_level: null
-      selected_speed_mhz: 600.0
+      selected_speed_mhz: 1200.0
       required_voltage_mv: 710.0
-      set_clock_mhz: 600.0
+      set_clock_mhz: 1200.0
       set_voltage_mv: 710.0
       vdd: VDD_CAM
       vdd_leader: byrp,csis,lme,mcsc,mlsc,pdp,rgbp,vps_od,yuvp,yuvsc
@@ -5703,10 +6049,10 @@ calculation_trace:
       formula: pixels / (set_clock_mhz * 1e6 * ppc) * (1 + h_blank_margin) * 1000
       inputs:
         pixels: 9367680
-        set_clock_mhz: 600.0
+        set_clock_mhz: 1200.0
         ppc: 4.0
         h_blank_margin: 0.05
-      result_ms: 4.09836
+      result_ms: 5.8907789855072465
       feasible: true
       infeasible_reason: null
   - node_id: yuvsc
@@ -5736,18 +6082,19 @@ calculation_trace:
         sw_margin: 0.15
         ppc: 4.0
         manual_clock_mhz: 600.0
-        clock_correction_mhz: 600.0
-        clock_correction_reason: otf_group_clock_align(otf-0, leader=yuvsc)
+        clock_correction_mhz: 1200.0
+        clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp, 4800 Mpix/s)
       base_formula: pixels * fps / (1 - sw_margin) / ppc / 1e6
       initial_required_mhz: 165.312
-      before_group_align_mhz: 600.0
+      before_group_align_mhz: 1200.0
       manual_clock_mhz: 600.0
-      after_manual_clock_mhz: 600.0
-      clock_correction_mhz: 600.0
-      clock_correction_reason: otf_group_clock_align(otf-0, leader=yuvsc)
-      sensor_otf_clock_correction_mhz: 600.0
-      sensor_otf_clock_correction_reason: otf_group_clock_align(otf-0, leader=yuvsc)
-      after_group_align_mhz: 600.0
+      after_manual_clock_mhz: 1200.0
+      clock_correction_mhz: 1200.0
+      clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp, 4800 Mpix/s)
+      sensor_otf_clock_correction_mhz: 1200.0
+      sensor_otf_clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp,
+        4800 Mpix/s)
+      after_group_align_mhz: 1200.0
     dvfs:
       dvfs_group: CAM
       asv_group: 4
@@ -5758,9 +6105,9 @@ calculation_trace:
       set_voltage_rule: align to max required_voltage_mv in the shared VDD domain
       candidate_levels: []
       selected_level: null
-      selected_speed_mhz: 600.0
+      selected_speed_mhz: 1200.0
       required_voltage_mv: 710.0
-      set_clock_mhz: 600.0
+      set_clock_mhz: 1200.0
       set_voltage_mv: 710.0
       vdd: VDD_CAM
       vdd_leader: byrp,csis,lme,mcsc,mlsc,pdp,rgbp,vps_od,yuvp,yuvsc
@@ -5789,10 +6136,10 @@ calculation_trace:
       formula: pixels / (set_clock_mhz * 1e6 * ppc) * (1 + h_blank_margin) * 1000
       inputs:
         pixels: 9367680
-        set_clock_mhz: 600.0
+        set_clock_mhz: 1200.0
         ppc: 4.0
         h_blank_margin: 0.05
-      result_ms: 4.09836
+      result_ms: 5.8907789855072465
       feasible: true
       infeasible_reason: null
   - node_id: mlsc
@@ -5822,18 +6169,19 @@ calculation_trace:
         sw_margin: 0.15
         ppc: 4.0
         manual_clock_mhz: 600.0
-        clock_correction_mhz: 600.0
-        clock_correction_reason: otf_group_clock_align(otf-0, leader=yuvsc)
+        clock_correction_mhz: 1200.0
+        clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp, 4800 Mpix/s)
       base_formula: pixels * fps / (1 - sw_margin) / ppc / 1e6
       initial_required_mhz: 165.312
-      before_group_align_mhz: 600.0
+      before_group_align_mhz: 1200.0
       manual_clock_mhz: 600.0
-      after_manual_clock_mhz: 600.0
-      clock_correction_mhz: 600.0
-      clock_correction_reason: otf_group_clock_align(otf-0, leader=yuvsc)
-      sensor_otf_clock_correction_mhz: 600.0
-      sensor_otf_clock_correction_reason: otf_group_clock_align(otf-0, leader=yuvsc)
-      after_group_align_mhz: 600.0
+      after_manual_clock_mhz: 1200.0
+      clock_correction_mhz: 1200.0
+      clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp, 4800 Mpix/s)
+      sensor_otf_clock_correction_mhz: 1200.0
+      sensor_otf_clock_correction_reason: otf_group_rate_align(otf-0, leader=pdp,
+        4800 Mpix/s)
+      after_group_align_mhz: 1200.0
     dvfs:
       dvfs_group: CAM
       asv_group: 4
@@ -5844,9 +6192,9 @@ calculation_trace:
       set_voltage_rule: align to max required_voltage_mv in the shared VDD domain
       candidate_levels: []
       selected_level: null
-      selected_speed_mhz: 600.0
+      selected_speed_mhz: 1200.0
       required_voltage_mv: 710.0
-      set_clock_mhz: 600.0
+      set_clock_mhz: 1200.0
       set_voltage_mv: 710.0
       vdd: VDD_CAM
       vdd_leader: byrp,csis,lme,mcsc,mlsc,pdp,rgbp,vps_od,yuvp,yuvsc
@@ -5875,10 +6223,10 @@ calculation_trace:
       formula: pixels / (set_clock_mhz * 1e6 * ppc) * (1 + h_blank_margin) * 1000
       inputs:
         pixels: 9367680
-        set_clock_mhz: 600.0
+        set_clock_mhz: 1200.0
         ppc: 4.0
         h_blank_margin: 0.05
-      result_ms: 4.09836
+      result_ms: 5.8907789855072465
       feasible: true
       infeasible_reason: null
   - node_id: mtnr
@@ -5909,16 +6257,17 @@ calculation_trace:
         ppc: 4.0
         manual_clock_mhz: 600.0
         clock_correction_mhz: 600.0
-        clock_correction_reason: otf_group_clock_align(otf-1, leader=yuvp)
+        clock_correction_reason: otf_group_rate_align(otf-1, leader=yuvp, 2400 Mpix/s)
       base_formula: pixels * fps / (1 - sw_margin) / ppc / 1e6
       initial_required_mhz: 165.312
       before_group_align_mhz: 600.0
       manual_clock_mhz: 600.0
       after_manual_clock_mhz: 600.0
       clock_correction_mhz: 600.0
-      clock_correction_reason: otf_group_clock_align(otf-1, leader=yuvp)
+      clock_correction_reason: otf_group_rate_align(otf-1, leader=yuvp, 2400 Mpix/s)
       sensor_otf_clock_correction_mhz: 600.0
-      sensor_otf_clock_correction_reason: otf_group_clock_align(otf-1, leader=yuvp)
+      sensor_otf_clock_correction_reason: otf_group_rate_align(otf-1, leader=yuvp,
+        2400 Mpix/s)
       after_group_align_mhz: 600.0
     dvfs:
       dvfs_group: INTCAM
@@ -5995,16 +6344,17 @@ calculation_trace:
         ppc: 4.0
         manual_clock_mhz: 600.0
         clock_correction_mhz: 600.0
-        clock_correction_reason: otf_group_clock_align(otf-1, leader=yuvp)
+        clock_correction_reason: otf_group_rate_align(otf-1, leader=yuvp, 2400 Mpix/s)
       base_formula: pixels * fps / (1 - sw_margin) / ppc / 1e6
       initial_required_mhz: 165.312
       before_group_align_mhz: 600.0
       manual_clock_mhz: 600.0
       after_manual_clock_mhz: 600.0
       clock_correction_mhz: 600.0
-      clock_correction_reason: otf_group_clock_align(otf-1, leader=yuvp)
+      clock_correction_reason: otf_group_rate_align(otf-1, leader=yuvp, 2400 Mpix/s)
       sensor_otf_clock_correction_mhz: 600.0
-      sensor_otf_clock_correction_reason: otf_group_clock_align(otf-1, leader=yuvp)
+      sensor_otf_clock_correction_reason: otf_group_rate_align(otf-1, leader=yuvp,
+        2400 Mpix/s)
       after_group_align_mhz: 600.0
     dvfs:
       dvfs_group: INTCAM
@@ -6081,17 +6431,18 @@ calculation_trace:
         ppc: 4.0
         manual_clock_mhz: 600.0
         clock_correction_mhz: 600.0
-        clock_correction_reason: otf_group_clock_align(otf-1, leader=yuvp)
+        clock_correction_reason: otf_group_rate_align(otf-1, leader=yuvp, 2400 Mpix/s)
       base_formula: pixels * fps / (1 - sw_margin) / ppc / 1e6
       initial_required_mhz: 165.312
       before_group_align_mhz: 600.0
       manual_clock_mhz: 600.0
-      after_manual_clock_mhz: 600.0
+      after_manual_clock_mhz: 1200.0
       clock_correction_mhz: 600.0
-      clock_correction_reason: otf_group_clock_align(otf-1, leader=yuvp)
+      clock_correction_reason: otf_group_rate_align(otf-1, leader=yuvp, 2400 Mpix/s)
       sensor_otf_clock_correction_mhz: 600.0
-      sensor_otf_clock_correction_reason: otf_group_clock_align(otf-1, leader=yuvp)
-      after_group_align_mhz: 600.0
+      sensor_otf_clock_correction_reason: otf_group_rate_align(otf-1, leader=yuvp,
+        2400 Mpix/s)
+      after_group_align_mhz: 1200.0
     dvfs:
       dvfs_group: CAM
       asv_group: 4
@@ -6102,9 +6453,9 @@ calculation_trace:
       set_voltage_rule: align to max required_voltage_mv in the shared VDD domain
       candidate_levels: []
       selected_level: null
-      selected_speed_mhz: 600.0
+      selected_speed_mhz: 1200.0
       required_voltage_mv: 710.0
-      set_clock_mhz: 600.0
+      set_clock_mhz: 1200.0
       set_voltage_mv: 710.0
       vdd: VDD_CAM
       vdd_leader: byrp,csis,lme,mcsc,mlsc,pdp,rgbp,vps_od,yuvp,yuvsc
@@ -6133,7 +6484,7 @@ calculation_trace:
       formula: pixels / (set_clock_mhz * 1e6 * ppc) * (1 + h_blank_margin) * 1000
       inputs:
         pixels: 9367680
-        set_clock_mhz: 600.0
+        set_clock_mhz: 1200.0
         ppc: 4.0
         h_blank_margin: 0.05
       result_ms: 4.09836
@@ -6166,17 +6517,18 @@ calculation_trace:
         ppc: 4.0
         manual_clock_mhz: 600.0
         clock_correction_mhz: 600.0
-        clock_correction_reason: otf_group_clock_align(otf-1, leader=yuvp)
+        clock_correction_reason: otf_group_rate_align(otf-1, leader=yuvp, 2400 Mpix/s)
       base_formula: pixels * fps / (1 - sw_margin) / ppc / 1e6
       initial_required_mhz: 165.312
       before_group_align_mhz: 600.0
       manual_clock_mhz: 600.0
-      after_manual_clock_mhz: 600.0
+      after_manual_clock_mhz: 1200.0
       clock_correction_mhz: 600.0
-      clock_correction_reason: otf_group_clock_align(otf-1, leader=yuvp)
+      clock_correction_reason: otf_group_rate_align(otf-1, leader=yuvp, 2400 Mpix/s)
       sensor_otf_clock_correction_mhz: 600.0
-      sensor_otf_clock_correction_reason: otf_group_clock_align(otf-1, leader=yuvp)
-      after_group_align_mhz: 600.0
+      sensor_otf_clock_correction_reason: otf_group_rate_align(otf-1, leader=yuvp,
+        2400 Mpix/s)
+      after_group_align_mhz: 1200.0
     dvfs:
       dvfs_group: CAM
       asv_group: 4
@@ -6187,9 +6539,9 @@ calculation_trace:
       set_voltage_rule: align to max required_voltage_mv in the shared VDD domain
       candidate_levels: []
       selected_level: null
-      selected_speed_mhz: 600.0
+      selected_speed_mhz: 1200.0
       required_voltage_mv: 710.0
-      set_clock_mhz: 600.0
+      set_clock_mhz: 1200.0
       set_voltage_mv: 710.0
       vdd: VDD_CAM
       vdd_leader: byrp,csis,lme,mcsc,mlsc,pdp,rgbp,vps_od,yuvp,yuvsc
@@ -6218,7 +6570,7 @@ calculation_trace:
       formula: pixels / (set_clock_mhz * 1e6 * ppc) * (1 + h_blank_margin) * 1000
       inputs:
         pixels: 9367680
-        set_clock_mhz: 600.0
+        set_clock_mhz: 1200.0
         ppc: 4.0
         h_blank_margin: 0.05
       result_ms: 4.09836
@@ -6257,13 +6609,13 @@ calculation_trace:
       initial_required_mhz: 13.447905882352941
       before_group_align_mhz: 66.67920000000001
       manual_clock_mhz: 600.0
-      after_manual_clock_mhz: 600.0
+      after_manual_clock_mhz: 1200.0
       clock_correction_mhz: 66.67920000000001
       clock_correction_reason: included_stage_budget(pre_me_rta, 3ms; lower bound)
       sensor_otf_clock_correction_mhz: 66.67920000000001
       sensor_otf_clock_correction_reason: included_stage_budget(pre_me_rta, 3ms; lower
         bound)
-      after_group_align_mhz: 600.0
+      after_group_align_mhz: 1200.0
     dvfs:
       dvfs_group: CAM
       asv_group: 4
@@ -6274,9 +6626,9 @@ calculation_trace:
       set_voltage_rule: align to max required_voltage_mv in the shared VDD domain
       candidate_levels: []
       selected_level: null
-      selected_speed_mhz: 600.0
+      selected_speed_mhz: 1200.0
       required_voltage_mv: 710.0
-      set_clock_mhz: 600.0
+      set_clock_mhz: 1200.0
       set_voltage_mv: 710.0
       vdd: VDD_CAM
       vdd_leader: byrp,csis,lme,mcsc,mlsc,pdp,rgbp,vps_od,yuvp,yuvsc
@@ -6305,10 +6657,10 @@ calculation_trace:
       formula: pixels / (set_clock_mhz * 1e6 * ppc) * (1 + h_blank_margin) * 1000
       inputs:
         pixels: 762048
-        set_clock_mhz: 600.0
+        set_clock_mhz: 1200.0
         ppc: 4.0
         h_blank_margin: 0.05
-      result_ms: 0.333396
+      result_ms: 0.166698
       feasible: true
       infeasible_reason: null
   - node_id: vps_od
@@ -6344,12 +6696,12 @@ calculation_trace:
       initial_required_mhz: 10.40865882352941
       before_group_align_mhz: 10.40865882352941
       manual_clock_mhz: 600.0
-      after_manual_clock_mhz: 600.0
+      after_manual_clock_mhz: 1200.0
       clock_correction_mhz: 0.0
       clock_correction_reason: null
       sensor_otf_clock_correction_mhz: 0.0
       sensor_otf_clock_correction_reason: null
-      after_group_align_mhz: 600.0
+      after_group_align_mhz: 1200.0
     dvfs:
       dvfs_group: CAM
       asv_group: 4
@@ -6360,9 +6712,9 @@ calculation_trace:
       set_voltage_rule: align to max required_voltage_mv in the shared VDD domain
       candidate_levels: []
       selected_level: null
-      selected_speed_mhz: 600.0
+      selected_speed_mhz: 1200.0
       required_voltage_mv: 710.0
-      set_clock_mhz: 600.0
+      set_clock_mhz: 1200.0
       set_voltage_mv: 710.0
       vdd: VDD_CAM
       vdd_leader: byrp,csis,lme,mcsc,mlsc,pdp,rgbp,vps_od,yuvp,yuvsc
@@ -6391,10 +6743,10 @@ calculation_trace:
       formula: pixels / (set_clock_mhz * 1e6 * ppc) * (1 + h_blank_margin) * 1000
       inputs:
         pixels: 147456
-        set_clock_mhz: 600.0
+        set_clock_mhz: 1200.0
         ppc: 1.0
         h_blank_margin: 0.05
-      result_ms: 0.258048
+      result_ms: 0.129024
       feasible: true
       infeasible_reason: null
   - node_id: dpu
@@ -9486,8 +9838,8 @@ calculation_trace:
       edge_type: M2M
       otf_group_id: null
       start_ms: 5.890779
-      end_ms: 6.148827
-      duration_ms: 0.2580479999999996
+      end_ms: 6.0198030000000005
+      duration_ms: 0.12902400000000025
       ready_ms: 5.890779
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
@@ -9594,14 +9946,14 @@ calculation_trace:
       edge_type: M2M
       otf_group_id: null
       start_ms: 22.557445666666666
-      end_ms: 22.815493666666665
-      duration_ms: 0.2580479999999987
+      end_ms: 22.686469666666667
+      duration_ms: 0.12902400000000114
       ready_ms: 22.557445666666666
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: null
       slack_ms: null
-      cadence_interval_ms: 16.666666666666664
+      cadence_interval_ms: 16.666666666666668
       cadence_avg_interval_ms: 16.666666666666668
       cadence_budget_ms: 16.666666666666668
       cadence_slack_ms: 0.0
@@ -9702,14 +10054,14 @@ calculation_trace:
       edge_type: M2M
       otf_group_id: null
       start_ms: 39.22411233333334
-      end_ms: 39.48216033333334
-      duration_ms: 0.2580480000000023
+      end_ms: 39.35313633333334
+      duration_ms: 0.12902400000000114
       ready_ms: 39.22411233333334
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
       deadline_ms: null
       slack_ms: null
-      cadence_interval_ms: 16.666666666666675
+      cadence_interval_ms: 16.66666666666667
       cadence_avg_interval_ms: 16.666666666666668
       cadence_budget_ms: 16.666666666666668
       cadence_slack_ms: 0.0
@@ -9810,8 +10162,8 @@ calculation_trace:
       edge_type: M2M
       otf_group_id: null
       start_ms: 55.890779
-      end_ms: 56.148827000000004
-      duration_ms: 0.2580480000000023
+      end_ms: 56.019803
+      duration_ms: 0.12902400000000114
       ready_ms: 55.890779
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
@@ -9918,8 +10270,8 @@ calculation_trace:
       edge_type: M2M
       otf_group_id: null
       start_ms: 72.55744566666667
-      end_ms: 72.81549366666667
-      duration_ms: 0.2580480000000023
+      end_ms: 72.68646966666667
+      duration_ms: 0.12902400000000114
       ready_ms: 72.55744566666667
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
@@ -10026,8 +10378,8 @@ calculation_trace:
       edge_type: M2M
       otf_group_id: null
       start_ms: 89.22411233333334
-      end_ms: 89.48216033333334
-      duration_ms: 0.2580480000000023
+      end_ms: 89.35313633333334
+      duration_ms: 0.12902400000000114
       ready_ms: 89.22411233333334
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
@@ -10134,8 +10486,8 @@ calculation_trace:
       edge_type: M2M
       otf_group_id: null
       start_ms: 105.890779
-      end_ms: 106.148827
-      duration_ms: 0.2580480000000023
+      end_ms: 106.019803
+      duration_ms: 0.12902400000000114
       ready_ms: 105.890779
       resource_wait_ms: 0.0
       token_wait_ms: 0.0
@@ -10242,8 +10594,8 @@ calculation_trace:
       edge_type: M2M
       otf_group_id: null
       start_ms: 122.55744566666667
-      end_ms: 122.81549366666667
-      duration_ms: 0.2580480000000023
+      end_ms: 122.68646966666667
+      duration_ms: 0.12902400000000114
       ready_ms: 122.55744566666667
       resource_wait_ms: 0.0
       token_wait_ms: 0.0

@@ -261,6 +261,7 @@ def main() -> int:
             selected, last = simulate(raw, vid, catalog)
             sim = sim_evidence(raw, vid, selected, last)
             sim["id"] = f"sim-baseline-{vid}-mean-{DATE}"
+            sim["run"]["timestamp"] = STAMP
             row["sim_clock_mhz"] = selected[2]["clock_mhz"] if selected else None
             row["added"].append(sim["id"])
             if args.write:

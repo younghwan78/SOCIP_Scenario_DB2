@@ -19,7 +19,7 @@ resolution_result:
     warn_and_cap: 0
     warn_and_emulate: 0
 run:
-  timestamp: '2026-09-25T00:00:00+09:00'
+  timestamp: '2026-10-04T10:00:00+09:00'
   tool: scenariodb-sim
   tool_version: 0.1.0
   source: estimated
