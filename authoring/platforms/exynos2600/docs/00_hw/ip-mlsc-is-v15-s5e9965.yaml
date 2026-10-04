@@ -19,9 +19,9 @@ capabilities:
   sim:
     hw_name: MLSC
     source: assumed_capacity
-    source_note: PPC is an exploration assumption, not a verified silicon capacity.
-      Power coefficient is unavailable and core power is excluded.
-    ppc: 4.0
+    source_note: 'PPC 8: RT path (CSIS -> MLSC) runs at 8 pixels/clock (Joo, 2026-10-04).
+      Power coefficient is unavailable and core power is excluded.'
+    ppc: 8.0
     vdd: VDD_CAM
     dvfs_group: CAM
   properties:

@@ -920,7 +920,11 @@ def _verdict(stages, intervals, ips, domains=None) -> dict[str, Any]:
         for d in (domains or {}).get(st, []):
             if d["rule_mhz"] and d["set_mhz"] > d["rule_mhz"] * 1.05:
                 lv = f" (L{d['rule_level']}→L{d['level']})" if d["level"] is not None and d["rule_level"] is not None else ""
-                notes.append(f"{st.upper()} {d['domain']}: 필요 {d['required_mhz']:.1f} MHz > rule {d['rule_mhz']:.0f} → {d['set_mhz']:.0f} MHz{lv}")
+                if d["required_mhz"] > d["rule_mhz"]:
+                    notes.append(f"{st.upper()} {d['domain']}: 필요 {d['required_mhz']:.1f} MHz > rule {d['rule_mhz']:.0f} → {d['set_mhz']:.0f} MHz{lv}")
+                else:  # lifted by another IP of the shared DVFS domain
+                    by = f" ({d['domain_leader'].upper()})" if d.get("domain_leader") else ""
+                    notes.append(f"{st.upper()} {d['domain']}: domain 공유{by}로 {d['set_mhz']:.0f} MHz{lv} (자체 필요 {d['required_mhz']:.1f})")
     return {
         "status": status,
         "reasons": reasons,

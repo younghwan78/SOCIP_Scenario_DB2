@@ -105,9 +105,9 @@ def test_compression_deltas_are_linear_in_ratio(uhd30):
 def test_dvfs_headroom_raises_voltage_and_power(uhd30):
     cam = next(d for d in uhd30["domains"] if d["domain"] == "CAM")
     base, up = cam["options"]
-    # RT clock follows the sensor read-out (241.5 MHz) -> CAM L6 266 MHz; headroom = next level up
-    assert base["level"] == 6 and up["level"] == 5 and up["speed_mhz"] > base["speed_mhz"]
-    # VDD_CAM is already held above L5 by the CSIS clock (MIPI ingress) -> raising CAM alone costs nothing
+    # RT (8 PPC) read-out 120.8 MHz, NRT 110.6 -> CAM floor L7 133 MHz; headroom = next level up
+    assert base["level"] == 7 and up["level"] == 6 and up["speed_mhz"] > base["speed_mhz"]
+    # VDD_CAM is already held above L6 by the CSIS clock (MIPI ingress) -> raising CAM alone costs nothing
     assert up["voltage_mv"] > base["voltage_mv"] and up["delta_mw"] == 0
     intcam = next(d for d in uhd30["domains"] if d["domain"] == "INTCAM")
     assert intcam["options"][1]["voltage_mv"] > intcam["options"][0]["voltage_mv"] and intcam["options"][1]["delta_mw"] > 0
