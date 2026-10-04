@@ -151,6 +151,13 @@ def test_rt_clock_follows_sensor_readout_and_nrt_reports_each_dvfs_domain():
     assert set(nrt) == {"CAM", "INTCAM"}
     assert nrt["INTCAM"]["set_mhz"] == 133 and nrt["INTCAM"]["set_reason"] == "dvfs_floor"
     assert nrt["CAM"]["set_reason"] == "domain" and nrt["CAM"]["domain_leader"] == "byrp"
+    # OTF chain mtnr -> msnr (INTCAM 133) -> yuvp -> mcsc (CAM 266, lifted by RT): rate-locked across domains,
+    # so the CAM members run for the INTCAM members' time and only report their stand-alone time aside
+    ips = {i["node"]: i for i in base["ips"]}
+    assert ips["yuvp"]["otf_group"] == ips["mtnr"]["otf_group"] is not None
+    assert ips["yuvp"]["hw_ms"] == ips["mtnr"]["hw_ms"] == 18.489 and ips["yuvp"]["standalone_hw_ms"] == 9.244
+    assert ips["mtnr"]["standalone_hw_ms"] is None
+    assert nrt["CAM"]["hw_ms"] == nrt["INTCAM"]["hw_ms"]
     # LME runs inside the pre_me_rta SW stage: it never drives the NRT clock
     assert stage_driver(base["ips"], "nrt")["node"] in {"mtnr", "msnr"}
 

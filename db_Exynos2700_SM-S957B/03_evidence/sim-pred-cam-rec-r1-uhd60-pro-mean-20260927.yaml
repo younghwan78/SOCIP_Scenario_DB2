@@ -1203,6 +1203,7 @@ timing_breakdown:
   set_clock_mhz: 400.0
   set_voltage_mv: 710.0
   feasible: true
+  otf_group: otf-0
 - node_id: pdp
   ip_ref: ip-pdp-is-v15-s5e9975
   hw_name: PDP
@@ -1212,6 +1213,7 @@ timing_breakdown:
   set_clock_mhz: 400.0
   set_voltage_mv: 710.0
   feasible: true
+  otf_group: otf-0
 - node_id: byrp
   ip_ref: ip-byrp-is-v15-s5e9975
   hw_name: BYRP
@@ -1221,6 +1223,7 @@ timing_breakdown:
   set_clock_mhz: 800.0
   set_voltage_mv: 710.0
   feasible: true
+  otf_group: otf-0
 - node_id: rgbp
   ip_ref: ip-rgbp-is-v15-s5e9975
   hw_name: RGBP
@@ -1230,6 +1233,7 @@ timing_breakdown:
   set_clock_mhz: 800.0
   set_voltage_mv: 710.0
   feasible: true
+  otf_group: otf-0
 - node_id: yuvsc
   ip_ref: ip-yuvsc-is-v15-s5e9975
   hw_name: YUVSC
@@ -1239,6 +1243,7 @@ timing_breakdown:
   set_clock_mhz: 800.0
   set_voltage_mv: 710.0
   feasible: true
+  otf_group: otf-0
 - node_id: mlsc
   ip_ref: ip-mlsc-is-v15-s5e9975
   hw_name: MLSC
@@ -1248,6 +1253,7 @@ timing_breakdown:
   set_clock_mhz: 800.0
   set_voltage_mv: 710.0
   feasible: true
+  otf_group: otf-0
 - node_id: mtnr
   ip_ref: ip-mtnr-is-v15-s5e9975
   hw_name: MTNR
@@ -1257,6 +1263,7 @@ timing_breakdown:
   set_clock_mhz: 400.0
   set_voltage_mv: 710.0
   feasible: true
+  otf_group: otf-1
 - node_id: msnr
   ip_ref: ip-msnr-is-v15-s5e9975
   hw_name: MSNR
@@ -1266,24 +1273,29 @@ timing_breakdown:
   set_clock_mhz: 400.0
   set_voltage_mv: 710.0
   feasible: true
+  otf_group: otf-1
 - node_id: yuvp
   ip_ref: ip-yuvp-is-v15-s5e9975
   hw_name: YUVP
   task_type: hw
-  hw_time_ms: 3.0737700000000006
+  hw_time_ms: 6.147540000000001
   required_clock_mhz: 800.0
   set_clock_mhz: 800.0
   set_voltage_mv: 710.0
   feasible: true
+  otf_group: otf-1
+  standalone_hw_time_ms: 3.0737700000000006
 - node_id: mcsc
   ip_ref: ip-mcsc-is-v15-s5e9975
   hw_name: MCSC
   task_type: hw
-  hw_time_ms: 3.0737700000000006
+  hw_time_ms: 6.147540000000001
   required_clock_mhz: 800.0
   set_clock_mhz: 800.0
   set_voltage_mv: 710.0
   feasible: true
+  otf_group: otf-1
+  standalone_hw_time_ms: 3.0737700000000006
 - node_id: lme
   ip_ref: ip-lme-is-v15-s5e9975
   hw_name: LME
@@ -2295,7 +2307,8 @@ timeline_events:
   edge_type: OTF,M2M,M2M
   otf_group_id: otf-1#f0
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 14.190779
   end_ms: 20.338319
   duration_ms: 6.147539999999999
@@ -2317,7 +2330,8 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-1#f0
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 14.190779
   end_ms: 20.338319
   duration_ms: 6.147539999999999
@@ -2700,7 +2714,8 @@ timeline_events:
   edge_type: OTF,M2M,M2M
   otf_group_id: otf-1#f1
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 30.857445666666667
   end_ms: 37.00498566666667
   duration_ms: 6.147540000000003
@@ -2722,7 +2737,8 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-1#f1
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 30.857445666666667
   end_ms: 37.00498566666667
   duration_ms: 6.147540000000003
@@ -3109,7 +3125,8 @@ timeline_events:
   edge_type: OTF,M2M,M2M
   otf_group_id: otf-1#f2
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 47.524112333333335
   end_ms: 53.671652333333334
   duration_ms: 6.147539999999999
@@ -3131,7 +3148,8 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-1#f2
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 47.524112333333335
   end_ms: 53.671652333333334
   duration_ms: 6.147539999999999
@@ -3518,7 +3536,8 @@ timeline_events:
   edge_type: OTF,M2M,M2M
   otf_group_id: otf-1#f3
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 64.19077899999999
   end_ms: 70.338319
   duration_ms: 6.147540000000006
@@ -3540,7 +3559,8 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-1#f3
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 64.19077899999999
   end_ms: 70.338319
   duration_ms: 6.147540000000006
@@ -3927,7 +3947,8 @@ timeline_events:
   edge_type: OTF,M2M,M2M
   otf_group_id: otf-1#f4
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 80.85744566666666
   end_ms: 87.00498566666667
   duration_ms: 6.147540000000006
@@ -3949,7 +3970,8 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-1#f4
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 80.85744566666666
   end_ms: 87.00498566666667
   duration_ms: 6.147540000000006
@@ -4336,7 +4358,8 @@ timeline_events:
   edge_type: OTF,M2M,M2M
   otf_group_id: otf-1#f5
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 97.52411233333333
   end_ms: 103.67165233333334
   duration_ms: 6.147540000000006
@@ -4358,7 +4381,8 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-1#f5
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 97.52411233333333
   end_ms: 103.67165233333334
   duration_ms: 6.147540000000006
@@ -4745,7 +4769,8 @@ timeline_events:
   edge_type: OTF,M2M,M2M
   otf_group_id: otf-1#f6
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 114.19077899999999
   end_ms: 120.338319
   duration_ms: 6.147540000000006
@@ -4767,7 +4792,8 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-1#f6
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 114.19077899999999
   end_ms: 120.338319
   duration_ms: 6.147540000000006
@@ -5154,7 +5180,8 @@ timeline_events:
   edge_type: OTF,M2M,M2M
   otf_group_id: otf-1#f7
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 130.85744566666665
   end_ms: 137.00498566666664
   duration_ms: 6.147539999999992
@@ -5176,7 +5203,8 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-1#f7
   latency_offset_ms: 0.0
-  bottleneck: false
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 130.85744566666665
   end_ms: 137.00498566666664
   duration_ms: 6.147539999999992
@@ -6251,7 +6279,7 @@ calculation_trace:
         set_clock_mhz: 800.0
         ppc: 4.0
         h_blank_margin: 0.05
-      result_ms: 3.0737700000000006
+      result_ms: 6.147540000000001
       feasible: true
       infeasible_reason: null
   - node_id: mcsc
@@ -6337,7 +6365,7 @@ calculation_trace:
         set_clock_mhz: 800.0
         ppc: 4.0
         h_blank_margin: 0.05
-      result_ms: 3.0737700000000006
+      result_ms: 6.147540000000001
       feasible: true
       infeasible_reason: null
   - node_id: lme
@@ -9012,6 +9040,8 @@ calculation_trace:
       bottleneck_tasks:
       - mtnr#f0
       - msnr#f0
+      - yuvp#f0
+      - mcsc#f0
       start_ms: 14.190779
       end_ms: 20.338319
       span_ms: 6.147539999999999
@@ -9024,6 +9054,8 @@ calculation_trace:
       bottleneck_tasks:
       - mtnr#f1
       - msnr#f1
+      - yuvp#f1
+      - mcsc#f1
       start_ms: 30.857445666666667
       end_ms: 37.00498566666667
       span_ms: 6.147540000000003
@@ -9036,6 +9068,8 @@ calculation_trace:
       bottleneck_tasks:
       - mtnr#f2
       - msnr#f2
+      - yuvp#f2
+      - mcsc#f2
       start_ms: 47.524112333333335
       end_ms: 53.671652333333334
       span_ms: 6.147539999999999
@@ -9048,6 +9082,8 @@ calculation_trace:
       bottleneck_tasks:
       - mtnr#f3
       - msnr#f3
+      - yuvp#f3
+      - mcsc#f3
       start_ms: 64.19077899999999
       end_ms: 70.338319
       span_ms: 6.147540000000006
@@ -9060,6 +9096,8 @@ calculation_trace:
       bottleneck_tasks:
       - mtnr#f4
       - msnr#f4
+      - yuvp#f4
+      - mcsc#f4
       start_ms: 80.85744566666666
       end_ms: 87.00498566666667
       span_ms: 6.147540000000006
@@ -9072,6 +9110,8 @@ calculation_trace:
       bottleneck_tasks:
       - mtnr#f5
       - msnr#f5
+      - yuvp#f5
+      - mcsc#f5
       start_ms: 97.52411233333333
       end_ms: 103.67165233333334
       span_ms: 6.147540000000006
@@ -9084,6 +9124,8 @@ calculation_trace:
       bottleneck_tasks:
       - mtnr#f6
       - msnr#f6
+      - yuvp#f6
+      - mcsc#f6
       start_ms: 114.19077899999999
       end_ms: 120.338319
       span_ms: 6.147540000000006
@@ -9096,6 +9138,8 @@ calculation_trace:
       bottleneck_tasks:
       - mtnr#f7
       - msnr#f7
+      - yuvp#f7
+      - mcsc#f7
       start_ms: 130.85744566666665
       end_ms: 137.00498566666664
       span_ms: 6.147539999999992

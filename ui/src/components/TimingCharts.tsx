@@ -3,7 +3,7 @@ import { useWidth } from './Charts'
 import { useTip } from './ChartTip'
 import { usePref } from './Layout'
 import {
-  LAT_COLOR, OVH_COLOR, SET_REASON_LABEL, STAGE_COLOR, SW_COLOR, basisLabel, breakEven, clockText, domainOf, fmt, niceMax, pct0, stageSegments, whatIfDomains,
+  LAT_COLOR, OVH_COLOR, SET_REASON_LABEL, STAGE_COLOR, SW_COLOR, basisLabel, breakEven, clockText, domainOf, fmt, niceMax, otfPacers, pct0, stageSegments, whatIfDomains,
   type FleetRow, type IpRow, type StageRow, type TimelineRow, type TimingReport, type WhatIfRow,
 } from '../lib/timingBudget'
 
@@ -130,6 +130,7 @@ export function ClockChart({ ips, dvfsApplied = true, margin = 0.25 }: { ips: Ip
   const labelW = 132, valW = 300
   const barW = Math.max(120, w - labelW - valW - 28)
   const groups = domainGroups(ips)
+  const pacers = otfPacers(ips)
   const rule = pct0(margin)
   return (
     <div ref={ref} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -154,13 +155,16 @@ export function ClockChart({ ips, dvfsApplied = true, margin = 0.25 }: { ips: Ip
                     ...(ip.sensor_readout_ms ? [{ k: 'sensor readout', v: `${fmt(ip.sensor_readout_ms, 2)} ms (HW 시간 하한)` }] : []),
                     ...(ip.rule_clock_mhz ? [{ k: 'rule 대비', v: `×${fmt(ip.set_clock_mhz / ip.rule_clock_mhz, 2)}`, tone: (up ? 'bad' : 'good') as 'bad' | 'good' }] : []),
                     { k: 'DVFS level · 전압', v: dvfsApplied && ip.dvfs_table !== false ? `Lv${ip.dvfs_level ?? '—'} · ${fmt(ip.voltage_mv, 0)} mV` : '표 없음' },
-                    { k: 'HW 시간', v: ip.hw_ms === null ? '—' : `${fmt(ip.hw_ms, 2)} ms` },
+                    { k: 'HW 시간', v: ip.hw_ms === null ? '—' : `${fmt(ip.hw_ms, 2)} ms${ip.standalone_hw_ms ? ` (단독 ${fmt(ip.standalone_hw_ms, 2)})` : ''}` },
+                    ...(ip.otf_group ? [{ k: `OTF 연동 ${ip.otf_group}`, v: ip.standalone_hw_ms
+                      ? `${(pacers.get(ip.otf_group) ?? []).join(', ').toUpperCase()} 속도에 맞춰 대기`
+                      : ip.sensor_readout_ms ? 'sensor readout에 맞춰 진행' : '그룹 시간 결정 (가장 느림)' }] : []),
                     { k: 'IP power', v: `${fmt(ip.power_mw, 1)} mW` },
                   ], foot: ip.clock_reason ?? undefined })}>
                 <div style={{ width: labelW, flexShrink: 0, display: 'flex', gap: 6, alignItems: 'baseline' }}>
                   <span style={{ width: 8, height: 8, borderRadius: 2, background: STAGE_COLOR[ip.stage], flexShrink: 0 }} />
                   <b style={{ fontSize: 12 }}>{ip.node.toUpperCase()}</b>
-                  <span className="faint" style={{ fontSize: 11 }}>{ip.stage.toUpperCase()}{ip.cores > 1 ? ` ×${ip.cores}` : ''}{ip.shared_streams > 1 ? ` ⇄${ip.shared_streams}` : ''}{isDriver ? ' ★' : ''}</span>
+                  <span className="faint" style={{ fontSize: 11 }}>{ip.stage.toUpperCase()}{ip.cores > 1 ? ` ×${ip.cores}` : ''}{ip.shared_streams > 1 ? ` ⇄${ip.shared_streams}` : ''}{isDriver ? ' ★' : ''}{ip.otf_group ? <span title={`OTF ${ip.otf_group}: domain이 달라도 같은 pixel rate로 연동`}> ⛓{ip.otf_group.replace('otf-', '')}</span> : null}</span>
                 </div>
                 <svg width={barW} height={20} style={{ flexShrink: 0 }} role="img" aria-label={`${ip.node} clock`}>
                   <rect x={0} y={1} width={barW} height={18} fill="rgba(255,255,255,0.7)" />
@@ -179,7 +183,7 @@ export function ClockChart({ ips, dvfsApplied = true, margin = 0.25 }: { ips: Ip
       <div className="legend-row" style={{ paddingLeft: labelW + 8 }}>
         <Legend color="#CFC7BA" label={`${rule} rule`} /><Legend color="#2F6F68" label="Timing budget" /><Legend color="#C2410C" label="rule 대비 상승" />
         <span className="legend-item"><span style={{ width: 2, height: 10, background: '#1F2430' }} />자체 필요 clock (DVFS level·domain 공유 전)</span>
-        <span className="faint" style={{ fontSize: 11 }}>배경색 = DVFS domain · ★ = domain level 결정 IP · ×2 = MFC+MFD 병렬 · ⇄2 = 2 stream 공유</span>
+        <span className="faint" style={{ fontSize: 11 }}>배경색 = DVFS domain · ★ = domain level 결정 IP · ⛓n = OTF 연동 그룹 (domain이 달라도 같은 속도 · 시간 = 가장 느린 IP) · ×2 = MFC+MFD 병렬 · ⇄2 = 2 stream 공유</span>
         {!dvfsApplied && <span className="badge v-warn" title="DB에 이 SoC의 DVFS table이 없어 level·전압을 정할 수 없습니다 (clock은 필요값 그대로, 전압 기본값)">DVFS table 미연결 — level 없음</span>}
       </div>
     </div>

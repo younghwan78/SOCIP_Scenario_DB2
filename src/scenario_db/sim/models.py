@@ -403,6 +403,10 @@ class IPTimingResult(BaseScenarioModel):
     set_voltage_mv: float | None = None
     feasible: bool = True
     infeasible_reason: str | None = None
+    # OTF-linked IPs stream the same pixels: every member runs for the group's time
+    # (slowest member / read-out). standalone_hw_time_ms = this IP alone at its clock.
+    otf_group: str | None = Field(default=None, exclude_if=lambda v: v is None)
+    standalone_hw_time_ms: float | None = Field(default=None, exclude_if=lambda v: v is None)
 
 
 class TimelineEvent(BaseScenarioModel):

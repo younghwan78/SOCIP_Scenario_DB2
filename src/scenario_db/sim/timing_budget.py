@@ -667,6 +667,10 @@ def _report(graph, options, plan, rule_run, run, dvfs_tables) -> dict[str, Any]:
                 "dvfs_table": bool(res.dvfs_group) and res.dvfs_group in dvfs_tables,
                 "voltage_mv": round(res.set_voltage_mv, 2),
                 "hw_ms": round(timing[node].hw_time_ms, 3) if node in timing else None,
+                # OTF-linked across DVFS domains: hw_ms is the group's time; standalone = this IP alone
+                "otf_group": timing[node].otf_group if node in timing else None,
+                "standalone_hw_ms": round(timing[node].standalone_hw_time_ms, 3)
+                if node in timing and timing[node].standalone_hw_time_ms is not None else None,
                 "power_mw": round(res.total_power_mw * cores, 3),
                 # v2-vf clock term inputs (0 / None under v1) for analytic re-scaling.
                 "clock_power_fraction": res.clock_power_fraction or 0.0,
@@ -989,6 +993,7 @@ def stage_driver(ips: list[dict[str, Any]], stage: str) -> dict[str, Any] | None
             round(ip["set_clock_mhz"] / ip["rule_clock_mhz"], 3),
             ip.get("own_required_mhz") or 0.0,
             ip.get("hw_ms") or 0.0,
+            ip.get("standalone_hw_ms") is None,   # OTF pacer (sets the group time) over a waiting member
         ),
     )
 

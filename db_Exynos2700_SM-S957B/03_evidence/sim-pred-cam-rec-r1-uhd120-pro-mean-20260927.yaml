@@ -1279,6 +1279,7 @@ timing_breakdown:
   set_clock_mhz: 1000.0
   set_voltage_mv: 710.0
   feasible: true
+  otf_group: otf-0
 - node_id: pdp
   ip_ref: ip-pdp-is-v15-s5e9975
   hw_name: PDP
@@ -1288,6 +1289,7 @@ timing_breakdown:
   set_clock_mhz: 1000.0
   set_voltage_mv: 710.0
   feasible: true
+  otf_group: otf-0
 - node_id: byrp
   ip_ref: ip-byrp-is-v15-s5e9975
   hw_name: BYRP
@@ -1297,6 +1299,7 @@ timing_breakdown:
   set_clock_mhz: 2000.0
   set_voltage_mv: 710.0
   feasible: true
+  otf_group: otf-0
 - node_id: rgbp
   ip_ref: ip-rgbp-is-v15-s5e9975
   hw_name: RGBP
@@ -1306,6 +1309,7 @@ timing_breakdown:
   set_clock_mhz: 2000.0
   set_voltage_mv: 710.0
   feasible: true
+  otf_group: otf-0
 - node_id: yuvsc
   ip_ref: ip-yuvsc-is-v15-s5e9975
   hw_name: YUVSC
@@ -1315,6 +1319,7 @@ timing_breakdown:
   set_clock_mhz: 2000.0
   set_voltage_mv: 710.0
   feasible: true
+  otf_group: otf-0
 - node_id: mlsc
   ip_ref: ip-mlsc-is-v15-s5e9975
   hw_name: MLSC
@@ -1324,6 +1329,7 @@ timing_breakdown:
   set_clock_mhz: 2000.0
   set_voltage_mv: 710.0
   feasible: true
+  otf_group: otf-0
 - node_id: mtnr
   ip_ref: ip-mtnr-is-v15-s5e9975
   hw_name: MTNR
@@ -1333,6 +1339,7 @@ timing_breakdown:
   set_clock_mhz: 1000.0
   set_voltage_mv: 710.0
   feasible: true
+  otf_group: otf-1
 - node_id: msnr
   ip_ref: ip-msnr-is-v15-s5e9975
   hw_name: MSNR
@@ -1342,24 +1349,29 @@ timing_breakdown:
   set_clock_mhz: 1000.0
   set_voltage_mv: 710.0
   feasible: true
+  otf_group: otf-1
 - node_id: yuvp
   ip_ref: ip-yuvp-is-v15-s5e9975
   hw_name: YUVP
   task_type: hw
-  hw_time_ms: 1.229508
+  hw_time_ms: 2.459016
   required_clock_mhz: 2000.0
   set_clock_mhz: 2000.0
   set_voltage_mv: 710.0
   feasible: true
+  otf_group: otf-1
+  standalone_hw_time_ms: 1.229508
 - node_id: mcsc
   ip_ref: ip-mcsc-is-v15-s5e9975
   hw_name: MCSC
   task_type: hw
-  hw_time_ms: 1.229508
+  hw_time_ms: 2.459016
   required_clock_mhz: 2000.0
   set_clock_mhz: 2000.0
   set_voltage_mv: 710.0
   feasible: true
+  otf_group: otf-1
+  standalone_hw_time_ms: 1.229508
 - node_id: lme
   ip_ref: ip-lme-is-v15-s5e9975
   hw_name: LME
@@ -2400,8 +2412,8 @@ timeline_events:
   edge_type: OTF,M2M,M2M
   otf_group_id: otf-1#f0
   latency_offset_ms: 0.0
-  bottleneck: false
-  bottleneck_reason: on critical path after frame-budget check
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 14.071196
   end_ms: 16.530212
   duration_ms: 2.4590159999999983
@@ -2424,8 +2436,8 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-1#f0
   latency_offset_ms: 0.0
-  bottleneck: false
-  bottleneck_reason: on critical path after frame-budget check
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 14.071196
   end_ms: 16.530212
   duration_ms: 2.4590159999999983
@@ -2853,8 +2865,8 @@ timeline_events:
   edge_type: OTF,M2M,M2M
   otf_group_id: otf-1#f1
   latency_offset_ms: 0.0
-  bottleneck: false
-  bottleneck_reason: on critical path after frame-budget check
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 23.530212
   end_ms: 25.989227999999997
   duration_ms: 2.4590159999999983
@@ -2877,8 +2889,8 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-1#f1
   latency_offset_ms: 0.0
-  bottleneck: false
-  bottleneck_reason: on critical path after frame-budget check
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 23.530212
   end_ms: 25.989227999999997
   duration_ms: 2.4590159999999983
@@ -3311,8 +3323,8 @@ timeline_events:
   edge_type: OTF,M2M,M2M
   otf_group_id: otf-1#f2
   latency_offset_ms: 0.0
-  bottleneck: false
-  bottleneck_reason: on critical path after frame-budget check
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 32.989228
   end_ms: 35.448243999999995
   duration_ms: 2.4590159999999983
@@ -3335,8 +3347,8 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-1#f2
   latency_offset_ms: 0.0
-  bottleneck: false
-  bottleneck_reason: on critical path after frame-budget check
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 32.989228
   end_ms: 35.448243999999995
   duration_ms: 2.4590159999999983
@@ -3769,8 +3781,8 @@ timeline_events:
   edge_type: OTF,M2M,M2M
   otf_group_id: otf-1#f3
   latency_offset_ms: 0.0
-  bottleneck: false
-  bottleneck_reason: on critical path after frame-budget check
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 42.448243999999995
   end_ms: 44.907259999999994
   duration_ms: 2.4590159999999983
@@ -3793,8 +3805,8 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-1#f3
   latency_offset_ms: 0.0
-  bottleneck: false
-  bottleneck_reason: on critical path after frame-budget check
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 42.448243999999995
   end_ms: 44.907259999999994
   duration_ms: 2.4590159999999983
@@ -4227,8 +4239,8 @@ timeline_events:
   edge_type: OTF,M2M,M2M
   otf_group_id: otf-1#f4
   latency_offset_ms: 0.0
-  bottleneck: false
-  bottleneck_reason: on critical path after frame-budget check
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 51.907259999999994
   end_ms: 54.36627599999999
   duration_ms: 2.4590159999999983
@@ -4251,8 +4263,8 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-1#f4
   latency_offset_ms: 0.0
-  bottleneck: false
-  bottleneck_reason: on critical path after frame-budget check
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 51.907259999999994
   end_ms: 54.36627599999999
   duration_ms: 2.4590159999999983
@@ -4685,8 +4697,8 @@ timeline_events:
   edge_type: OTF,M2M,M2M
   otf_group_id: otf-1#f5
   latency_offset_ms: 0.0
-  bottleneck: false
-  bottleneck_reason: on critical path after frame-budget check
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 61.36627599999999
   end_ms: 63.82529199999999
   duration_ms: 2.4590159999999983
@@ -4709,8 +4721,8 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-1#f5
   latency_offset_ms: 0.0
-  bottleneck: false
-  bottleneck_reason: on critical path after frame-budget check
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 61.36627599999999
   end_ms: 63.82529199999999
   duration_ms: 2.4590159999999983
@@ -5143,8 +5155,8 @@ timeline_events:
   edge_type: OTF,M2M,M2M
   otf_group_id: otf-1#f6
   latency_offset_ms: 0.0
-  bottleneck: false
-  bottleneck_reason: on critical path after frame-budget check
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 70.82529199999999
   end_ms: 73.284308
   duration_ms: 2.4590160000000054
@@ -5167,8 +5179,8 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-1#f6
   latency_offset_ms: 0.0
-  bottleneck: false
-  bottleneck_reason: on critical path after frame-budget check
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 70.82529199999999
   end_ms: 73.284308
   duration_ms: 2.4590160000000054
@@ -5601,8 +5613,8 @@ timeline_events:
   edge_type: OTF,M2M,M2M
   otf_group_id: otf-1#f7
   latency_offset_ms: 0.0
-  bottleneck: false
-  bottleneck_reason: on critical path after frame-budget check
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 80.284308
   end_ms: 82.743324
   duration_ms: 2.4590160000000054
@@ -5625,8 +5637,8 @@ timeline_events:
   edge_type: OTF
   otf_group_id: otf-1#f7
   latency_offset_ms: 0.0
-  bottleneck: false
-  bottleneck_reason: on critical path after frame-budget check
+  bottleneck: true
+  bottleneck_reason: longest duration in OTF streaming group
   start_ms: 80.284308
   end_ms: 82.743324
   duration_ms: 2.4590160000000054
@@ -6766,7 +6778,7 @@ calculation_trace:
         set_clock_mhz: 2000.0
         ppc: 4.0
         h_blank_margin: 0.05
-      result_ms: 1.229508
+      result_ms: 2.459016
       feasible: true
       infeasible_reason: null
   - node_id: mcsc
@@ -6852,7 +6864,7 @@ calculation_trace:
         set_clock_mhz: 2000.0
         ppc: 4.0
         h_blank_margin: 0.05
-      result_ms: 1.229508
+      result_ms: 2.459016
       feasible: true
       infeasible_reason: null
   - node_id: lme
@@ -9659,6 +9671,8 @@ calculation_trace:
       bottleneck_tasks:
       - mtnr#f0
       - msnr#f0
+      - yuvp#f0
+      - mcsc#f0
       start_ms: 14.071196
       end_ms: 16.530212
       span_ms: 2.4590159999999983
@@ -9671,6 +9685,8 @@ calculation_trace:
       bottleneck_tasks:
       - mtnr#f1
       - msnr#f1
+      - yuvp#f1
+      - mcsc#f1
       start_ms: 23.530212
       end_ms: 25.989227999999997
       span_ms: 2.4590159999999983
@@ -9683,6 +9699,8 @@ calculation_trace:
       bottleneck_tasks:
       - mtnr#f2
       - msnr#f2
+      - yuvp#f2
+      - mcsc#f2
       start_ms: 32.989228
       end_ms: 35.448243999999995
       span_ms: 2.4590159999999983
@@ -9695,6 +9713,8 @@ calculation_trace:
       bottleneck_tasks:
       - mtnr#f3
       - msnr#f3
+      - yuvp#f3
+      - mcsc#f3
       start_ms: 42.448243999999995
       end_ms: 44.907259999999994
       span_ms: 2.4590159999999983
@@ -9707,6 +9727,8 @@ calculation_trace:
       bottleneck_tasks:
       - mtnr#f4
       - msnr#f4
+      - yuvp#f4
+      - mcsc#f4
       start_ms: 51.907259999999994
       end_ms: 54.36627599999999
       span_ms: 2.4590159999999983
@@ -9719,6 +9741,8 @@ calculation_trace:
       bottleneck_tasks:
       - mtnr#f5
       - msnr#f5
+      - yuvp#f5
+      - mcsc#f5
       start_ms: 61.36627599999999
       end_ms: 63.82529199999999
       span_ms: 2.4590159999999983
@@ -9731,6 +9755,8 @@ calculation_trace:
       bottleneck_tasks:
       - mtnr#f6
       - msnr#f6
+      - yuvp#f6
+      - mcsc#f6
       start_ms: 70.82529199999999
       end_ms: 73.284308
       span_ms: 2.4590160000000054
@@ -9743,6 +9769,8 @@ calculation_trace:
       bottleneck_tasks:
       - mtnr#f7
       - msnr#f7
+      - yuvp#f7
+      - mcsc#f7
       start_ms: 80.284308
       end_ms: 82.743324
       span_ms: 2.4590160000000054
@@ -10177,8 +10205,8 @@ calculation_trace:
       cadence_violation: false
       critical: true
       critical_path_rank: 12
-      bottleneck: false
-      bottleneck_reason: on critical path after frame-budget check
+      bottleneck: true
+      bottleneck_reason: longest duration in OTF streaming group
       predecessors:
       - msnr#f0
       - rgbp#f0
@@ -10206,8 +10234,8 @@ calculation_trace:
       cadence_violation: false
       critical: true
       critical_path_rank: 13
-      bottleneck: false
-      bottleneck_reason: on critical path after frame-budget check
+      bottleneck: true
+      bottleneck_reason: longest duration in OTF streaming group
       predecessors:
       - yuvp#f0
     - task_id: pro_scope#f0
@@ -10342,8 +10370,8 @@ calculation_trace:
       cadence_violation: false
       critical: true
       critical_path_rank: 18
-      bottleneck: false
-      bottleneck_reason: on critical path after frame-budget check
+      bottleneck: true
+      bottleneck_reason: longest duration in OTF streaming group
       predecessors:
       - msnr#f1
       - rgbp#f1
@@ -10371,8 +10399,8 @@ calculation_trace:
       cadence_violation: false
       critical: true
       critical_path_rank: 19
-      bottleneck: false
-      bottleneck_reason: on critical path after frame-budget check
+      bottleneck: true
+      bottleneck_reason: longest duration in OTF streaming group
       predecessors:
       - yuvp#f1
     - task_id: pro_scope#f1
@@ -10507,8 +10535,8 @@ calculation_trace:
       cadence_violation: false
       critical: true
       critical_path_rank: 24
-      bottleneck: false
-      bottleneck_reason: on critical path after frame-budget check
+      bottleneck: true
+      bottleneck_reason: longest duration in OTF streaming group
       predecessors:
       - msnr#f2
       - rgbp#f2
@@ -10536,8 +10564,8 @@ calculation_trace:
       cadence_violation: false
       critical: true
       critical_path_rank: 25
-      bottleneck: false
-      bottleneck_reason: on critical path after frame-budget check
+      bottleneck: true
+      bottleneck_reason: longest duration in OTF streaming group
       predecessors:
       - yuvp#f2
     - task_id: pro_scope#f2
@@ -10672,8 +10700,8 @@ calculation_trace:
       cadence_violation: false
       critical: true
       critical_path_rank: 30
-      bottleneck: false
-      bottleneck_reason: on critical path after frame-budget check
+      bottleneck: true
+      bottleneck_reason: longest duration in OTF streaming group
       predecessors:
       - msnr#f3
       - rgbp#f3
@@ -10701,8 +10729,8 @@ calculation_trace:
       cadence_violation: false
       critical: true
       critical_path_rank: 31
-      bottleneck: false
-      bottleneck_reason: on critical path after frame-budget check
+      bottleneck: true
+      bottleneck_reason: longest duration in OTF streaming group
       predecessors:
       - yuvp#f3
     - task_id: pro_scope#f3
@@ -10837,8 +10865,8 @@ calculation_trace:
       cadence_violation: false
       critical: true
       critical_path_rank: 36
-      bottleneck: false
-      bottleneck_reason: on critical path after frame-budget check
+      bottleneck: true
+      bottleneck_reason: longest duration in OTF streaming group
       predecessors:
       - msnr#f4
       - rgbp#f4
@@ -10866,8 +10894,8 @@ calculation_trace:
       cadence_violation: false
       critical: true
       critical_path_rank: 37
-      bottleneck: false
-      bottleneck_reason: on critical path after frame-budget check
+      bottleneck: true
+      bottleneck_reason: longest duration in OTF streaming group
       predecessors:
       - yuvp#f4
     - task_id: pro_scope#f4
@@ -11002,8 +11030,8 @@ calculation_trace:
       cadence_violation: false
       critical: true
       critical_path_rank: 42
-      bottleneck: false
-      bottleneck_reason: on critical path after frame-budget check
+      bottleneck: true
+      bottleneck_reason: longest duration in OTF streaming group
       predecessors:
       - msnr#f5
       - rgbp#f5
@@ -11031,8 +11059,8 @@ calculation_trace:
       cadence_violation: false
       critical: true
       critical_path_rank: 43
-      bottleneck: false
-      bottleneck_reason: on critical path after frame-budget check
+      bottleneck: true
+      bottleneck_reason: longest duration in OTF streaming group
       predecessors:
       - yuvp#f5
     - task_id: pro_scope#f5
@@ -11167,8 +11195,8 @@ calculation_trace:
       cadence_violation: false
       critical: true
       critical_path_rank: 48
-      bottleneck: false
-      bottleneck_reason: on critical path after frame-budget check
+      bottleneck: true
+      bottleneck_reason: longest duration in OTF streaming group
       predecessors:
       - msnr#f6
       - rgbp#f6
@@ -11196,8 +11224,8 @@ calculation_trace:
       cadence_violation: false
       critical: true
       critical_path_rank: 49
-      bottleneck: false
-      bottleneck_reason: on critical path after frame-budget check
+      bottleneck: true
+      bottleneck_reason: longest duration in OTF streaming group
       predecessors:
       - yuvp#f6
     - task_id: pro_scope#f6
@@ -11332,8 +11360,8 @@ calculation_trace:
       cadence_violation: false
       critical: true
       critical_path_rank: 54
-      bottleneck: false
-      bottleneck_reason: on critical path after frame-budget check
+      bottleneck: true
+      bottleneck_reason: longest duration in OTF streaming group
       predecessors:
       - msnr#f7
       - rgbp#f7
@@ -11361,8 +11389,8 @@ calculation_trace:
       cadence_violation: false
       critical: true
       critical_path_rank: 55
-      bottleneck: false
-      bottleneck_reason: on critical path after frame-budget check
+      bottleneck: true
+      bottleneck_reason: longest duration in OTF streaming group
       predecessors:
       - yuvp#f7
     - task_id: mfc_enc#f7

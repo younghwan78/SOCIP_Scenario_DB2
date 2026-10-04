@@ -20,6 +20,8 @@ export interface IpRow {
   /** IP's own need before DVFS-domain sharing, the constraint that set it, and why the set clock is higher */
   own_required_mhz?: number; basis?: ClockBasisKind; set_reason?: SetReason; domain_leader?: string | null
   next_level_mhz?: number | null; sensor_readout_ms?: number | null
+  /** OTF-linked group (any DVFS domain): hw_ms is the group's time; standalone_hw_ms = this IP alone at its clock */
+  otf_group?: string | null; standalone_hw_ms?: number | null
 }
 export type ClockBasisKind = 'budget' | 'rule' | 'sensor_readout' | 'mipi_ingress' | 'vvalid_stream' | 'otf_align' | 'stage_budget' | 'manual' | string
 export type SetReason = 'exact' | 'dvfs_step' | 'dvfs_floor' | 'domain'
@@ -240,4 +242,11 @@ export function stageDomainsOf(r: Pick<TimingReport, 'ips' | 'stage_domains'>, s
       level: d.dvfs_level, rule_level: d.rule_dvfs_level ?? null, next_mhz: d.next_level_mhz ?? null, headroom_pct: req > 0 ? (d.set_clock_mhz / req - 1) * 100 : null,
       hw_ms: Math.max(...timed.map((m) => m.hw_ms ?? 0)), basis: d.basis ?? null, set_reason: d.set_reason ?? null, domain_leader: d.domain_leader ?? null }
   }).sort((a, b) => b.set_mhz - a.set_mhz || a.domain.localeCompare(b.domain))
+}
+
+/** IPs that set an OTF group's time (the slowest stream members), by group id. */
+export function otfPacers(ips: IpRow[]): Map<string, string[]> {
+  const out = new Map<string, string[]>()
+  for (const ip of ips) if (ip.otf_group && (ip.standalone_hw_ms === null || ip.standalone_hw_ms === undefined)) out.set(ip.otf_group, [...(out.get(ip.otf_group) ?? []), ip.node])
+  return out
 }

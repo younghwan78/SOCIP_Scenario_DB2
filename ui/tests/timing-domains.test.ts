@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import { breakEven, stageDomainsOf, whatIfDomains, type IpRow, type WhatIfRow } from '../src/lib/timingBudget'
+import { breakEven, otfPacers, stageDomainsOf, whatIfDomains, type IpRow, type WhatIfRow } from '../src/lib/timingBudget'
 
 // cam-rec-r1-uhd30-vdis shape: NRT = CAM (held by RT at 266) + INTCAM (SW-budget driven, 133 -> 266 at x1.4)
 const row = (scale: number, intcam: number, req: number): WhatIfRow => ({
@@ -31,4 +31,9 @@ it('stage domains derived from IP rows (older API): one per DVFS domain, SW-stag
   const ds = stageDomainsOf({ ips: [ip('lme', 'CAM', 400, 342.3, 0.5, 'included_stage_budget(pre_me_rta, 4ms; lower bound)'), ip('yuvp', 'CAM', 400, 342.3, 6.1),
     ip('mtnr', 'INTCAM', 133, 110.6, 18.5)] }, 'nrt')
   expect(ds.map((d) => [d.domain, d.ip, d.set_mhz])).toEqual([['CAM', 'yuvp', 400], ['INTCAM', 'mtnr', 133]])
+})
+
+it('OTF pacers: the members that set the group time (no stand-alone time aside)', () => {
+  const ip = (node: string, standalone: number | null) => ({ node, otf_group: 'otf-1', standalone_hw_ms: standalone }) as unknown as IpRow
+  expect(otfPacers([ip('mtnr', null), ip('msnr', null), ip('yuvp', 9.244), ip('mcsc', 9.244)]).get('otf-1')).toEqual(['mtnr', 'msnr'])
 })
