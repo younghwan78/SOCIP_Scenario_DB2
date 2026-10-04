@@ -17,7 +17,16 @@ export const KNOB_NOTE: Record<Knob, string> = {
   cpuset: 'process / cgroup 단위 (init.rc · task_profiles) — 가장 쉽게 적용, task가 thread를 여럿 가지면 함께 이동',
   affinity: 'thread 단위 sched_setaffinity (HAL 코드 수정) — 세밀하지만 SW 변경 필요',
 }
-const GROUPS = ['', 'G1', 'G2', 'G3', 'G4']
+/** Android cpuset cgroups (task_profiles / EMS tuning pin per cgroup). Group = cgroup: members move to the same cluster. */
+export const CGROUPS: { id: string; short: string; note: string }[] = [
+  { id: 'camera-daemon', short: 'cam', note: 'camera-daemon — cameraserver · camera provider(HAL) · 3A/algo daemon' },
+  { id: 'top-app', short: 'top', note: 'top-app — 화면 앞 app (camera app UI · RenderThread)' },
+  { id: 'foreground', short: 'fg', note: 'foreground — media codec · audio 등 foreground service' },
+  { id: 'system-background', short: 'sys', note: 'system-background — system daemon' },
+  { id: 'background', short: 'bg', note: 'background' },
+]
+const GROUP_OPTS = [{ value: '', label: '—', title: 'cgroup 미지정 — task 단독으로 이동' },
+  ...CGROUPS.map((g) => ({ value: g.id, label: g.short, title: `${g.note} · 같은 cgroup = 같은 cluster로 함께 pinning` }))]
 const OTHER = '#C9C2B6'
 const signed = (v: number, d = 1) => `${v >= 0 ? '+' : ''}${fmt(v, d)}`
 
@@ -56,7 +65,7 @@ export function RebalanceSetup({ clusters, pool, setPool, rows, states, setState
   const inPool = (c: string) => pool.includes(c)
   return (
     <Card id="cpu-rb-setup" title="③ 분배 대상" defaultWide help={CPU_HELP.rbSetup}
-      note="pool cluster 사이에서 task를 cpuset으로 나눔 · 자동 = 계산이 고름 · 고정 / 제외 = 그대로 둠 · 같은 group = 함께 이동">
+      note="pool cluster 사이에서 task를 cpuset으로 나눔 · 자동 = 계산이 고름 · 고정 / 제외 = 그대로 둠 · 같은 cgroup = 같은 cluster로 함께 pinning">
       <div className="toolbar" style={{ gap: 10, fontSize: 12, marginBottom: 6, flexWrap: 'wrap' }}>
         <span className="faint">pool</span>
         {clusters.map((c) => <label key={c} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
@@ -69,10 +78,11 @@ export function RebalanceSetup({ clusters, pool, setPool, rows, states, setState
           <select value={knob} aria-label="적용 방법" onChange={(e) => setKnob(e.target.value as Knob)}>
             <option value="cpuset">cpuset (process 단위)</option><option value="affinity">affinity (thread 단위)</option></select></label>
       </div>
+      <CgroupSummary rows={rows} groups={groups} states={states} pool={pool} />
       <div className="table-x"><table className="grid cpu-matrix rb-setup">
         <thead><tr><th>task</th><th>측정 위치</th>
           {pool.map((c) => <th key={c} style={{ borderTop: `3px solid ${color(c)}`, textAlign: 'right' }} title="fmax에서 task 시간 (가장 긴 thread) · util">{c}<div className="faint" style={{ fontSize: 10.5, fontWeight: 400 }}>ms @fmax · util</div></th>)}
-          <th title="frame당 허용 시간 (가장 긴 thread)">budget ms</th><th>상태</th><th title="같은 group은 같은 cluster로 함께 이동 (wakeup·cache 공유 task)">함께 이동</th></tr></thead>
+          <th title="frame당 허용 시간 (가장 긴 thread)">budget ms</th><th>상태</th><th title="cpuset cgroup — 같은 cgroup의 task는 같은 cluster로 함께 pinning (task_profiles · EMS tuning 방식). 가정값: 사용자가 지정, task 이름 기준으로 기억">cgroup (함께 이동)</th></tr></thead>
         <tbody>{rows.map((r) => {
           const st = states[r.task] ?? 'auto'
           const movable = inPool(r.home)
@@ -87,7 +97,7 @@ export function RebalanceSetup({ clusters, pool, setPool, rows, states, setState
                 ...pool.map((c) => ({ value: `pin:${c}`, label: shortCluster(c), title: `${c} 고정`, color: color(c) })),
                 { value: 'exclude', label: '제외', title: '제외 — 측정 위치에 그대로 둠' }]} /></td>
             <td><Seg label={`${r.task} 함께 이동`} value={groups[r.task] ?? ''} disabled={!movable || st !== 'auto'} onChange={(v) => setGroup(r.task, v)}
-              options={GROUPS.map((g) => ({ value: g, label: g || '—', title: g ? `group ${g}: 같은 cluster로 함께 이동` : '단독 이동' }))} /></td>
+              options={GROUP_OPTS} /></td>
           </tr>
         })}</tbody></table></div>
       <div className="toolbar" style={{ marginTop: 8, gap: 10 }}>
@@ -100,6 +110,20 @@ export function RebalanceSetup({ clusters, pool, setPool, rows, states, setState
       </div>
     </Card>
   )
+}
+
+/** cgroup membership at a glance: which tasks move as one unit (only cgroups with members). */
+function CgroupSummary({ rows, groups, states, pool }: { rows: SetupRow[]; groups: Record<string, string>; states: Record<string, TaskState>; pool: string[] }) {
+  const used = CGROUPS.map((g) => ({ g, tasks: rows.filter((r) => groups[r.task] === g.id) })).filter((x) => x.tasks.length)
+  if (!used.length) return <div className="faint" style={{ fontSize: 12, marginBottom: 6 }}>cgroup 미지정 — task마다 따로 이동 · 오른쪽 열에서 cgroup을 지정하면 같은 cgroup끼리 같은 cluster로 묶음 (가정값, task 이름 기준으로 기억)</div>
+  return <div className="toolbar cg-summary" aria-label="cgroup 구성" style={{ gap: 8, fontSize: 12, marginBottom: 6, flexWrap: 'wrap' }}>
+    <span className="faint">cgroup</span>
+    {used.map(({ g, tasks }) => {
+      const active = tasks.filter((r) => pool.includes(r.home) && (states[r.task] ?? 'auto') === 'auto')
+      return <span key={g.id} className="chip" title={`${g.note}\n${tasks.map((r) => r.task).join(', ')}`}>
+        <b>{g.id}</b> {active.length}{active.length !== tasks.length ? `/${tasks.length}` : ''} task{active.length > 1 ? ' → 1 단위' : ''}</span>
+    })}
+  </div>
 }
 
 /** Greedy move curve: stacked power per step (pool clusters · DSU · other), total line, ★ start, ● lowest. */

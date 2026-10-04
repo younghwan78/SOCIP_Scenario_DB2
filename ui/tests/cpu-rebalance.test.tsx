@@ -68,7 +68,9 @@ it('rebalance mode: setup, run with locks / co-move, curve and top splits', asyn
     // pin one task, group two, drop MID_HF from the pool, rerun
     await pick(host, 'eis_vdis 상태', 'pin:MID_LF1')
     expect(host.querySelector('[aria-label="eis_vdis 함께 이동"] button')!.hasAttribute('disabled')).toBe(true)   // pinned → no group
-    for (const t of ['cam_hal_request', 'cam_hal_result']) await pick(host, `${t} 함께 이동`, 'G1')
+    for (const t of ['cam_hal_request', 'cam_hal_result']) await pick(host, `${t} 함께 이동`, 'camera-daemon')
+    expect(host.querySelector('[aria-label="cgroup 구성"]')!.textContent).toContain('camera-daemon 2 task')
+    expect(JSON.parse(localStorage.getItem('sdb.cpu.rb.cgroup')!)).toEqual({ cam_hal_request: 'camera-daemon', cam_hal_result: 'camera-daemon' })   // kept by task name
     const hf = [...host.querySelectorAll('label')].find((l) => l.textContent === 'MID_HF')!.querySelector('input')!
     await act(async () => hf.click())
     const btn = [...host.querySelectorAll('button')].find((b) => b.textContent === '다시 계산')!

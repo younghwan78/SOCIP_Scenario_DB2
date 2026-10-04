@@ -62,7 +62,8 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
   const [rbTop, setRbTop] = usePref<number>('cpu.rb.top', 20)
   const [poolSel, setPoolSel] = useState<string[] | null>(null)
   const [taskStates, setTaskStates] = useState<Record<string, TaskState>>({})
-  const [groups, setGroups] = useState<Record<string, string>>({})
+  // cgroup per task name (assumption, kept across profiles — same logical task names)
+  const [groups, setGroups] = usePref<Record<string, string>>('cpu.rb.cgroup', {})
   const [rbSel, setRbSel] = useState('')
   // C6: the same profile rebalanced on another project's topology (sequential run, one admission slot at a time)
   const [cmpTarget, setCmpTarget] = useState('')
@@ -114,7 +115,8 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
     const locks: Record<string, string> = {}
     for (const [t, st] of Object.entries(taskStates)) if (st === 'exclude') locks[t] = 'exclude'; else if (st.startsWith('pin:')) locks[t] = st.slice(4)
     const byGroup = new Map<string, string[]>()
-    for (const [t, g] of Object.entries(groups)) if (g && (taskStates[t] ?? 'auto') === 'auto') byGroup.set(g, [...(byGroup.get(g) ?? []), t])
+    const present = new Set(rbRows.map((r) => r.task))
+    for (const [t, g] of Object.entries(groups)) if (g && present.has(t) && (taskStates[t] ?? 'auto') === 'auto') byGroup.set(g, [...(byGroup.get(g) ?? []), t])
     return { ...base, top: rbTop, pool, locks, co_move: [...byGroup.values()].filter((g) => g.length > 1) }
   }
   const runRb = async (payload: CpuRebalanceRequest) => {
@@ -154,7 +156,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
     const selection = JSON.stringify([profile, target, base])
     const changed = inputSelection.current !== selection
     inputSelection.current = selection
-    if (changed) { setEdits({}); setDsuExp(null); setDsuReq(null); setPoolSel(null); setTaskStates({}); setGroups({}); setRbRaw(null) }
+    if (changed) { setEdits({}); setDsuExp(null); setDsuReq(null); setPoolSel(null); setTaskStates({}); setRbRaw(null) }
     setResult(null)
     if (profile && target) {
       const req = request(changed ? {} : edits, changed ? null : dsuReq)
