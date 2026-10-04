@@ -82,7 +82,7 @@ export function RebalanceSetup({ clusters, pool, setPool, rows, states, setState
       <div className="table-x"><table className="grid cpu-matrix rb-setup">
         <thead><tr><th>task</th><th>측정 위치</th>
           {pool.map((c) => <th key={c} style={{ borderTop: `3px solid ${color(c)}`, textAlign: 'right' }} title="fmax에서 task 시간 (가장 긴 thread) · util">{c}<div className="faint" style={{ fontSize: 10.5, fontWeight: 400 }}>ms @fmax · util</div></th>)}
-          <th title="frame당 허용 시간 (가장 긴 thread)">budget ms</th><th>상태</th><th title="cpuset cgroup — 같은 cgroup의 task는 같은 cluster로 함께 pinning (task_profiles · EMS tuning 방식). 가정값: 사용자가 지정, task 이름 기준으로 기억">cgroup (함께 이동)</th></tr></thead>
+          <th title="frame당 허용 시간 (가장 긴 thread)">budget ms</th><th>상태</th><th title="cpuset cgroup — 같은 cgroup의 task는 같은 cluster로 함께 pinning (task_profiles · EMS tuning 방식). 가정값: 사용자가 지정, task 이름 기준으로 기억 · TBD: cgroup 구성·분리 비용 data 없음 — 지금은 같은 cluster 제약만 적용">cgroup (함께 이동) <span className="badge">TBD</span></th></tr></thead>
         <tbody>{rows.map((r) => {
           const st = states[r.task] ?? 'auto'
           const movable = inPool(r.home)
@@ -115,9 +115,9 @@ export function RebalanceSetup({ clusters, pool, setPool, rows, states, setState
 /** cgroup membership at a glance: which tasks move as one unit (only cgroups with members). */
 function CgroupSummary({ rows, groups, states, pool }: { rows: SetupRow[]; groups: Record<string, string>; states: Record<string, TaskState>; pool: string[] }) {
   const used = CGROUPS.map((g) => ({ g, tasks: rows.filter((r) => groups[r.task] === g.id) })).filter((x) => x.tasks.length)
-  if (!used.length) return <div className="faint" style={{ fontSize: 12, marginBottom: 6 }}>cgroup 미지정 — task마다 따로 이동 · 오른쪽 열에서 cgroup을 지정하면 같은 cgroup끼리 같은 cluster로 묶음 (가정값, task 이름 기준으로 기억)</div>
+  if (!used.length) return <div className="faint" style={{ fontSize: 12, marginBottom: 6 }}><span className="badge">TBD</span> cgroup 미지정 — task마다 따로 이동 · 오른쪽 열에서 cgroup을 지정하면 같은 cgroup끼리 같은 cluster로 묶음 (가정값, task 이름 기준으로 기억)</div>
   return <div className="toolbar cg-summary" aria-label="cgroup 구성" style={{ gap: 8, fontSize: 12, marginBottom: 6, flexWrap: 'wrap' }}>
-    <span className="faint">cgroup</span>
+    <span className="faint">cgroup</span><span className="badge" title="cgroup 구성·분리 비용 data 없음 — 같은 cluster 제약만 적용">TBD</span>
     {used.map(({ g, tasks }) => {
       const active = tasks.filter((r) => pool.includes(r.home) && (states[r.task] ?? 'auto') === 'auto')
       return <span key={g.id} className="chip" title={`${g.note}\n${tasks.map((r) => r.task).join(', ')}`}>

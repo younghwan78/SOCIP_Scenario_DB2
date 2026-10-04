@@ -7,7 +7,7 @@ export const CPU_HELP: Record<string, ReactNode> = {
     <ul>
       <li><b>pool</b> — task를 나눌 cluster. 기본은 BIG 계열을 뺀 cluster (camera SW에서 BIG 사용은 대체로 손해). 과제마다 MID 구성이 달라도 topology대로 표시됩니다 (E2600 MID_LF0/LF1/HF, 차기 MID_HF0/HF1).</li>
       <li><b>자동</b> — 계산이 pool 안에서 cluster를 고름 (cpuset 고정). <b>고정</b> — 지정 cluster. <b>제외</b> — 측정 위치 그대로.</li>
-      <li><b>cgroup (함께 이동)</b> — 실제 EMS tuning·task_profiles처럼 cpuset cgroup 단위로 cluster를 pinning한다고 가정: 같은 cgroup(camera-daemon · top-app · foreground …)의 task는 같은 cluster로 함께 이동. 지정은 가정값이며 task 이름 기준으로 기억 (profile을 바꿔도 유지). process · wakeup 기반 자동 group은 TBD.</li>
+      <li><b>cgroup (함께 이동) — TBD</b>: cgroup 구성과 분리 비용에 대한 data가 아직 없어 UI만 제공, 지정하면 같은 cluster 제약만 적용. 실제 EMS tuning·task_profiles처럼 cpuset cgroup 단위로 cluster를 pinning한다고 가정: 같은 cgroup(camera-daemon · top-app · foreground …)의 task는 같은 cluster로 함께 이동. 지정은 가정값이며 task 이름 기준으로 기억 (profile을 바꿔도 유지). process · wakeup 기반 자동 group은 TBD.</li>
       <li>같은 구성의 cluster 두 개(MID_HF0/HF1)는 바꿔도 결과가 같아 한 번만 계산하고, 표시는 덜 옮기는 쪽으로 합니다.</li>
       <li>분할 수가 30만 이하면 전부 계산, 넘으면 move/swap 국소 탐색 (전수 대비 0.1% 이내였음).</li>
     </ul>
