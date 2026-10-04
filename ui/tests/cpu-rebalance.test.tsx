@@ -47,6 +47,16 @@ it('DSU rule change re-evaluates the returned splits client-side', () => {
   expect(same.curve.map((p) => p.total_mw.toFixed(2))).toEqual(E2600.curve.map((p) => p.total_mw.toFixed(2)))
 })
 
+it('rebalance measured DSU experiments retain the exported residency', () => {
+  const raw = { ...E2600, dsu_measured: { '1500': 1 } }
+  const fixed = applyDsuRebalance(raw, { mode: 'fixed', fixed_mhz: 1500 })
+  const measured = applyDsuRebalance(raw, { mode: 'measured' })
+  expect(measured.reference.total_mw).toBeCloseTo(fixed.reference.total_mw, 6)
+  expect(measured.reference.mhz.dsu).toBe(1500)
+  expect(measured.cases.map((c) => c.total_mw)).toEqual(fixed.cases.map((c) => c.total_mw))
+  expect(measured.opp_states.map((s) => s.min_mw)).toEqual(fixed.opp_states.map((s) => s.min_mw))
+})
+
 it('rebalance mode: setup, run with locks / co-move, curve and top splits', async () => {
   localStorage.setItem('sdb.cpu.mode', JSON.stringify('rebalance'))
   const tasks = E2600.units.flatMap((u) => u.tasks.map((t) => ({ task: t, cluster: u.home })))

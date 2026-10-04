@@ -65,7 +65,7 @@ export function RebalanceSetup({ clusters, pool, setPool, rows, states, setState
   const inPool = (c: string) => pool.includes(c)
   return (
     <Card id="cpu-rb-setup" title="③ 분배 대상" defaultWide help={CPU_HELP.rbSetup}
-      note="pool cluster 사이에서 task를 cpuset으로 나눔 · 자동 = 계산이 고름 · 고정 / 제외 = 그대로 둠 · 같은 cgroup = 같은 cluster로 함께 pinning">
+      note="pool cluster 사이에서 task를 cpuset으로 나눔 · 자동 = 계산이 고름 · 고정 / 제외 = 그대로 둠 · 같은 측정 cluster의 task만 같은 cgroup으로 함께 pinning">
       <div className="toolbar" style={{ gap: 10, fontSize: 12, marginBottom: 6, flexWrap: 'wrap' }}>
         <span className="faint">pool</span>
         {clusters.map((c) => <label key={c} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>

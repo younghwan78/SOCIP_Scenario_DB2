@@ -72,7 +72,7 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
     every = prep.every
     pool = list(spec.pool) or default_pool(model)
     unknown = [c for c in pool if c not in every]
-    if unknown or len(pool) < 2:
+    if unknown or len(set(pool)) < 2:
         raise ValueError(f"rebalance pool needs >= 2 known clusters (unknown: {unknown})" if unknown else "rebalance pool needs >= 2 clusters")
     pool = [c for c in every if c in pool]            # topology order
     warnings = list(prep.warnings)
@@ -100,16 +100,19 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
         if where != "exclude" and where not in every:
             raise ValueError(f"lock '{task}': unknown cluster '{where}'")
     cand = [t for t in prep.tasks if t != OTHER_TASK and home[t] in pool and t not in spec.locks]
-    movable = [t for t in (spec.movable if spec.movable is not None else cand) if t in cand]
+    movable = list(dict.fromkeys(t for t in (spec.movable if spec.movable is not None else cand) if t in cand))
     unknown_m = [t for t in (spec.movable or ()) if t not in prep.need]
     if unknown_m:
         raise ValueError(f"unknown movable tasks: {unknown_m}")
-    # units = co-move groups (first member's home is the group's home)
+    # A co-move unit needs one measured home; otherwise grouping would silently
+    # move members before computing the supposedly measured reference.
     units: list[tuple[str, ...]] = []
     seen: set[str] = set()
     for group in spec.co_move:
         g = tuple(t for t in group if t in movable and t not in seen)
         if g:
+            if len({home[t] for t in g}) > 1:
+                raise ValueError("co-move tasks must share a measured home cluster")
             units.append(g)
             seen.update(g)
     units += [(t,) for t in movable if t not in seen]
@@ -226,10 +229,12 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
         return m
 
     # symmetry classes: identical pool clusters without frozen load
-    sig = {c: (_signature(model, c), bool(frozen[c])) for c in pool}
+    sig = {c: (_signature(model, c), ctx.caps[c],
+               tuple(cpu_dsu.cluster_vote(dsu_pol, ctx.by_name[c], f) for f in _freqs(ctx.by_name[c], model))
+               if dsu_pol is not None and dsu_pol.mode == "vote" else (), bool(frozen[c])) for c in pool}
     classes: list[list[int]] = []
     for i, c in enumerate(pool):
-        if sig[c][1]:
+        if sig[c][-1]:
             continue
         for cl in classes:
             if sig[pool[cl[0]]] == sig[c]:
@@ -457,6 +462,7 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
         "cases": cases, "opp_states": opp_states[:40], "opp_state_count": len(opp_states), "curve": curve,
         "boundaries": {"reference": boundaries(home_idx), "best": boundaries(best_assign)},
         "dsu_model": dsu_pol.describe() if dsu_pol else None,
+        "dsu_measured": prep.dsu_res,
         "dsu_params": cpu_dsu.params_view(model, prep.sched.power_gating_eff),
         "warnings": warnings,
     }

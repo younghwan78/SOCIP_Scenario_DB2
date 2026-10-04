@@ -25,7 +25,7 @@ export interface CpuRebalance {
   space: number; evaluated: number; cluster_states: number; method: 'exhaustive' | 'local'; feasible_count: number; verified: number
   reference: RbSplit; best: RbSplit | null; cases: RbSplit[]; opp_states: RbState[]; opp_state_count: number; curve: RbSplit[]
   boundaries: { reference: RbBoundary[]; best: RbBoundary[] }
-  dsu_model: DsuModelInfo | null; dsu_params: DsuParams | null; warnings: string[]
+  dsu_model: DsuModelInfo | null; dsu_params: DsuParams | null; dsu_measured?: Record<string, number> | null; warnings: string[]
 }
 export interface CpuRebalanceRequest extends CpuSweepRequest {
   pool: string[]; movable?: string[]; locks: Record<string, string>; co_move: string[][]; verify_k?: number; max_exhaustive?: number
@@ -40,8 +40,8 @@ export function defaultPool(names: string[]): string[] {
   return p.length >= 2 ? p : names
 }
 
-function reDsu(s: { total_mw: number; mw: Record<string, number>; busy_mhz: Record<string, number>; dsu_active: number }, pol: DsuPolicy, p: DsuParams) {
-  const d = dsuPower(p, residency(pol, p, s.busy_mhz), s.dsu_active)
+function reDsu(s: { total_mw: number; mw: Record<string, number>; busy_mhz: Record<string, number>; dsu_active: number }, pol: DsuPolicy, p: DsuParams, measured?: Record<string, number> | null) {
+  const d = dsuPower(p, residency(pol, p, s.busy_mhz, measured), s.dsu_active)
   return { total: s.total_mw - (s.mw.dsu ?? 0) + d.total_mw, dsuMw: d.total_mw, dsuMhz: d.mhz }
 }
 
@@ -50,14 +50,14 @@ export function applyDsuRebalance(r: CpuRebalance, pol: DsuPolicy | null): CpuRe
   const p = r.dsu_params
   if (!pol || !p) return r
   const fix = (s: RbSplit, refTotal?: number): RbSplit => {
-    const x = reDsu(s, pol, p)
+    const x = reDsu(s, pol, p, r.dsu_measured)
     return { ...s, total_mw: x.total, mw: { ...s.mw, dsu: x.dsuMw }, mhz: { ...s.mhz, dsu: x.dsuMhz }, delta_mw: refTotal === undefined ? 0 : x.total - refTotal }
   }
   const reference = fix(r.reference)
   const cases = r.cases.map((c) => fix(c, reference.total_mw)).sort((a, b) => a.total_mw - b.total_mw || a.moved.length - b.moved.length).map((c, i) => ({ ...c, rank: i + 1 }))
   const curve = r.curve.map((c) => fix(c, reference.total_mw))
   const opp_states = r.opp_states.map((s) => {
-    const x = reDsu({ total_mw: s.min_mw, mw: s.rep_mw, busy_mhz: s.busy_mhz, dsu_active: s.dsu_active }, pol, p)
+    const x = reDsu({ total_mw: s.min_mw, mw: s.rep_mw, busy_mhz: s.busy_mhz, dsu_active: s.dsu_active }, pol, p, r.dsu_measured)
     const shift = x.total - s.min_mw
     return { ...s, min_mw: x.total, max_mw: s.max_mw + shift, mhz: { ...s.mhz, dsu: x.dsuMhz }, rep_mw: { ...s.rep_mw, dsu: x.dsuMw } }
   }).sort((a, b) => a.min_mw - b.min_mw)

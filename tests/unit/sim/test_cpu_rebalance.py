@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import pathlib
+from dataclasses import replace
 
 import pytest
 import yaml
@@ -9,7 +10,7 @@ import yaml
 from scenario_db.models.capability.power_model import PowerModelParams
 from scenario_db.sim.cpu_power import CpuPowerModel
 from scenario_db.sim.cpu_rebalance import RebalanceSpec, cpu_rebalance, default_pool
-from scenario_db.sim.models import CpuClusterProfile, CpuProfile, CpuTaskProfile
+from scenario_db.sim.models import CpuClusterProfile, CpuDsuProfile, CpuProfile, CpuTaskProfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
 TOPO = ROOT / "examples" / "cpu-topology"
@@ -131,3 +132,32 @@ def test_api_service(monkeypatch):
     assert out.result["pool"] == ["MID_LF0", "MID_HF"] and len(out.result["cases"]) <= 5
     with pytest.raises(svc.UnprocessableError):
         svc.run_cpu_rebalance(object(), CpuRebalanceRequest(cpu_profile=_profile("MID_LF0"), power_params_ref="p", pool=["X", "Y"]))  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("difference", ["capacity", "vote"])
+def test_symmetry_respects_capacity_and_named_dsu_votes(difference):
+    model = _model("2800")
+    if difference == "capacity":
+        from scenario_db.sim.cpu_sched import SchedConfig
+        model = replace(model, scheduler=SchedConfig(capacity={"MID_HF0": 300, "MID_HF1": 600}))
+    vote = {"MID_HF0": [[2600, 1500]], "MID_HF1": [[2600, 400]]} if difference == "vote" else VOTE
+    r = cpu_rebalance(_profile("MID_HF0", n=3), target=model, fps=30,
+                      spec=RebalanceSpec(dsu_mode="vote", dsu_vote=vote))
+    assert r["symmetric"] == [] and r["evaluated"] == 2 ** 3
+    assert all(abs(c["model_err_mw"]) < 1e-3 for c in [r["reference"], *r["cases"]])
+
+
+def test_rebalance_rejects_duplicate_pool_and_mixed_home_co_move():
+    with pytest.raises(ValueError, match="pool needs"):
+        _run(pool=["MID_LF0", "MID_LF0"])
+    with pytest.raises(ValueError, match="share a measured home"):
+        _run(profile=_profile("MID_LF0", {"sf": "MID_LF1"}, n=2), co_move=[["eis", "sf"]])
+    r = _run(n=2, movable=["eis", "eis", "hal"])
+    assert [u["tasks"] for u in r["units"]] == [["eis"], ["hal"]]
+
+
+def test_rebalance_exports_measured_dsu_residency_for_client_experiments():
+    prof = _profile("MID_LF0", n=3).model_copy(update={"dsu": CpuDsuProfile(freq_residency={400.0: 0.3, 900.0: 0.7})})
+    r = cpu_rebalance(prof, target=_model("2600"), fps=30, spec=RebalanceSpec(dsu_mode="measured"))
+    assert r["dsu_measured"] == {400.0: 0.3, 900.0: 0.7}
+    assert r["dsu_model"]["mode"] == "measured"
