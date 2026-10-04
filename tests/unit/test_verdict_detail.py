@@ -27,3 +27,9 @@ def test_absent_and_bare_fail():
     assert verdict_detail({}) is None
     d = verdict_detail({"verdict": "fail"})
     assert d["reasons"] == ["timing fail (detail not stored for this prediction)"] and d["stages"] == []
+
+
+def test_clock_up_derived_reason():
+    st = {"nrt": {"id": "nrt", "name": "NRT", "sw_ms": 11.1, "hw_ms": 22.23, "budget_ms": 22.23, "feasible": True, "fill_pct": 100.0}}
+    d = verdict_detail({"verdict": "clock_up", "stages": st})
+    assert d["derived"] and d["reasons"][0].startswith("NRT HW가 budget을 꽉 채움")

@@ -437,6 +437,11 @@ def verdict_detail(m: dict[str, Any]) -> dict[str, Any] | None:
         if m.get("intervals_ok") is False and period:
             for k, v in intervals.items():
                 reasons.append(f"{k} interval {v:.3f} ms vs {float(period):.3f} ms")
+        if status == "clock_up":
+            full = [st for st in stages if st.get("id") == "nrt" and float(st.get("fill_pct") or 0) >= 99.0]
+            reasons.append("NRT HW가 budget을 꽉 채움 (점유 ≥ 99%) — NRT clock을 25% rule보다 올려서 맞춘 상태"
+                           if full else "NRT clock을 25% rule보다 올려야 budget을 맞춤")
+            reasons.append("clock 배율은 이 예측에 저장되지 않음 — 다시 등록하면 표시됩니다")
         if status == "fail" and not reasons:
             reasons.append("timing fail (detail not stored for this prediction)")
     return {"status": status, "reasons": reasons, "nrt_clock_factor": factor, "derived": derived,

@@ -182,7 +182,7 @@ export function RebalanceResults({ r, sel, setSel, knob = 'cpuset', sensitivity 
     ...r.pool.map((cl): Column<RbSplit> => ({ key: `f.${cl}`, label: cl, width: 86, align: 'right', sort: (c) => c.mhz[cl], render: (c) => <span className={`mono ${c.mhz[cl] < ref.mhz[cl] ? 'pm-down' : c.mhz[cl] > ref.mhz[cl] ? 'pm-up' : ''}`}>{c.mhz[cl]}</span> })),
     { key: 'dsu', label: 'DSU', width: 64, align: 'right', sort: (c) => c.mhz.dsu, render: (c) => <span className="mono">{c.mhz.dsu}</span> },
     { key: 'slack', label: 'slack ms', width: 76, align: 'right', sort: (c) => c.min_slack_ms ?? null, render: (c) => <span className="mono">{c.min_slack_ms === null || c.min_slack_ms === undefined ? '—' : fmt(c.min_slack_ms, 2)}</span> },
-    { key: 'mv', label: '옮긴 task → cluster', width: 420, title: (c) => c.moved.map((u) => `${u}→${c.assign[u]}`).join('\n'), render: (c) => <span className="mono faint" style={{ fontSize: 11.5 }}>{c.moved.map((u) => `${u}→${c.assign[u]}`).join(' · ') || '—'}</span> },
+    { key: 'mv', label: '옮긴 task → cluster', width: 420, title: (c) => c.moved.map((u) => `${u}→${c.assign[u]}`).join('\n'), render: (c) => <span className="mono faint" style={{ fontSize: 11.5 }}>{c.moved.map((u) => `${u}→${c.assign[u]}`).join(' · ') || <span className="badge">현재 배치 그대로</span>}</span> },
   ], [r]) // eslint-disable-line react-hooks/exhaustive-deps
   const tile = (label: string, value: string, note: string, tone = '') =>
     <div key={label} className="panel tb-kpi"><div className="faint" style={{ fontSize: 12 }}>{label}</div><div className={`mono ${tone}`} style={{ fontSize: 20, fontWeight: 600 }}>{value}</div><div className="faint" style={{ fontSize: 11 }}>{note}</div></div>

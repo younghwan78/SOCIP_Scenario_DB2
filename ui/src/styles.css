@@ -432,6 +432,9 @@ th.ref-col { background: var(--primary-soft) !important; color: var(--primary-st
 .gtip .tt-sec > b { display: block; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); margin-bottom: 3px; }
 .gtip .tt-kv { display: grid; grid-template-columns: 84px 1fr; gap: 1px 8px; }
 .gtip .tt-kv > span:nth-child(odd) { color: var(--muted); }
+.gtip .tt-kv > span { min-width: 0; overflow-wrap: anywhere; }
+.gtip .tt-chips span { max-width: 100%; overflow-wrap: anywhere; }
+.gtip { overflow-x: hidden; }
 .gtip .tt-port { display: grid; grid-template-columns: 12px 1fr auto; gap: 4px; align-items: baseline; font-family: var(--mono); font-size: 10.5px; line-height: 1.45; }
 .gtip .tt-port .d { width: 8px; height: 8px; border-radius: 4px; display: inline-block; }
 .gtip .tt-port .m { color: var(--muted); font-size: 10px; text-align: right; }
@@ -684,7 +687,8 @@ td.cs-best { box-shadow: inset 0 0 0 2px #8CC5A0; border-radius: 4px; }
 .rb-stack > span { display: block; height: 100%; }
 .rb-setup td, .rb-setup th { white-space: nowrap; }
 /* Pipeline Timing: identical header in every view */
-.timing-opts { display: inline-flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: nowrap; }
+.timing-opts { display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px 8px; min-width: 0; flex-wrap: wrap; }
+.timing-opts .legend-mini { flex: 0 1 auto; flex-wrap: wrap; justify-content: flex-start; overflow: visible; row-gap: 2px; }
 .pane-head .seg button { white-space: nowrap; }
 .timing-ctx { margin: 0; padding: 6px 12px; border-bottom: 1px solid var(--line-soft); flex-shrink: 0; }
 /* Scenario page: 판정 popover */
