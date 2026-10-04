@@ -108,6 +108,8 @@ files = [
     "src/scenario_db/api/deps.py",
     "src/scenario_db/api/pagination.py",
     "src/scenario_db/api/resource_limits.py",
+    "src/scenario_db/sim/cpu_dsu.py",
+    "src/scenario_db/sim/cpu_rebalance.py",
     "src/scenario_db/api/schemas/simulation.py",
     "src/scenario_db/api/schemas/write.py",
     "src/scenario_db/config.py",

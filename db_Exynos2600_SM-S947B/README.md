@@ -108,3 +108,14 @@ Reproduce explicit fixture assumptions and priority checks:
 - 표시: `provenance.collection_method: synthetic_fixture`, `device_id: SYNTHETIC`, `derived_from`에 기준 capture와 sim id를 넣는다. 예측 ↔ 실측 화면은 `합성` badge를 달고 "실제 측정만" filter를 제공하며, Home의 최대 |Δ|는 실제 측정만으로 계산한다.
 - `cam-rec-r1-fhd480`, `cam-rec-r1-fhd960-ssm`: sim은 추가했지만 cadence/latency를 만족하는 clock 후보가 없어 `feasible: false`. 합성 측정은 만들지 않는다.
 - 합성 측정의 예측 오차는 모델 검증 근거가 아니다. 실제 capture를 import하면 같은 variant의 `meas-synth-*` 파일을 삭제한다.
+
+## Baseline 3종 합성 evidence (2026-10-04)
+
+기준 variant `cam-rec-r1-uhd30-vdis`, `cam-rec-f1-uhd60`, `cam-rec-r1-8k30-psm`이 모든 화면(Scenario 예측/실측, Pipeline Timing 예측↔실측, 예측↔실측, CPU what-if)에서 보이도록 `scripts/generate_baseline_evidence.py`로 만든 **합성** evidence다. 실측이 아니다(`device_id: SYNTHETIC`).
+
+| 파일 | 내용 |
+|---|---|
+| `sim-baseline-cam-rec-f1-uhd60-mean-20261004` | f1-uhd60 simulation (rear gap fill과 같은 clock grid, SW mean) |
+| `meas-synth-baseline-<variant>-evt1-20261004` | simulation timeline을 stage별로 흔든 측정형 trace 12 frame, SW task 통계, frame 단위 CPU profile(task×cluster cycle·stall·bus, thread, freq residency, gating, DSU) — rail은 측정 rail이 없는 f1-uhd60만 |
+
+CPU profile 부하는 가정값이며 pmp-exynos2600-v2 EAS 모델에서 MID_LF0 1600 MHz(uhd30·8k30) / 2000 MHz(f1-uhd60)가 나오도록 잡았다. 재생성: `python scripts/generate_baseline_evidence.py --write` 후 strict ETL.

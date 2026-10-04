@@ -80,11 +80,15 @@ def run_simulation(
             node_id=workload.node_id,
             ip_ref=workload.ip_ref,
             hw_name=workload.hw_name,
-            hw_time_ms=calc_processing_time_ms(
-                pixels=workload.pixels,
-                set_clock_mhz=resolved[workload.node_id].set_clock_mhz,
-                ppc=workload.sim_params.ppc,
-                h_blank_margin=config.h_blank_margin,
+            # sensor-synchronous IPs cannot finish before the read-out window ends
+            hw_time_ms=max(
+                calc_processing_time_ms(
+                    pixels=workload.pixels,
+                    set_clock_mhz=resolved[workload.node_id].set_clock_mhz,
+                    ppc=workload.sim_params.ppc,
+                    h_blank_margin=config.h_blank_margin,
+                ),
+                workload.sensor_readout_ms or 0.0,
             ),
             required_clock_mhz=resolved[workload.node_id].required_clock_mhz,
             set_clock_mhz=resolved[workload.node_id].set_clock_mhz,
@@ -94,6 +98,7 @@ def run_simulation(
         )
         for workload in inputs.workloads
     ]
+    _link_otf_group_times(timing_breakdown, inputs)
     timeline_events = []
     if config.include_timeline and inputs.timeline_tasks:
         timeline_tasks = _with_calculated_durations(inputs.timeline_tasks, timing_breakdown)
@@ -360,6 +365,52 @@ def params_hash(inputs: SimulationInputs) -> str:
             raw["clock_constraints"] = [c.model_dump(mode="json") for c in workload.clock_constraints]
     raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+
+
+def _otf_hw_groups(inputs: SimulationInputs) -> list[list[str]]:
+    """Connected OTF components among the simulated HW nodes (any DVFS domain; sensors are not workloads)."""
+    node_of = {str(t.get("id")): str(t.get("node_id") or t.get("id")) for t in inputs.timeline_tasks}
+    hw = {w.node_id for w in inputs.workloads}
+    parent: dict[str, str] = {}
+
+    def find(x: str) -> str:
+        while parent.setdefault(x, x) != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    for edge in inputs.timeline_edges:
+        if str(edge.get("type") or "").upper() != "OTF":
+            continue
+        a = node_of.get(str(edge.get("from") or edge.get("source")), str(edge.get("from") or edge.get("source")))
+        b = node_of.get(str(edge.get("to") or edge.get("target")), str(edge.get("to") or edge.get("target")))
+        if a in hw and b in hw:
+            parent[find(a)] = find(b)
+    groups: dict[str, list[str]] = {}
+    for node in parent:
+        groups.setdefault(find(node), []).append(node)
+    order = {w.node_id: i for i, w in enumerate(inputs.workloads)}
+    return sorted((sorted(g, key=lambda n: order.get(n, 0)) for g in groups.values() if len(g) > 1),
+                  key=lambda g: order.get(g[0], 0))
+
+
+def _link_otf_group_times(timing_breakdown: list[IPTimingResult], inputs: SimulationInputs) -> None:
+    """OTF members are rate-locked across DVFS domains: each runs for the slowest member's time.
+
+    A member whose domain is lifted by another IP clocks faster but still waits on the stream,
+    so its active time is the group's, not its stand-alone pixel time.
+    """
+    by_node = {t.node_id: t for t in timing_breakdown}
+    for index, group in enumerate(_otf_hw_groups(inputs)):
+        members = [by_node[n] for n in group if n in by_node]
+        if len(members) < 2:
+            continue
+        group_ms = max(m.hw_time_ms for m in members)
+        for m in members:
+            m.otf_group = f"otf-{index}"
+            if m.hw_time_ms < group_ms - 1e-9:
+                m.standalone_hw_time_ms = m.hw_time_ms
+                m.hw_time_ms = group_ms
 
 
 def _with_calculated_durations(

@@ -16,18 +16,18 @@ capabilities:
       Normal:
         unit_power_mw_mp: 4.34
         idc: 0.0
-        ppc: 4.0
+        ppc: 8.0
         vdd: VDD_CAM
         dvfs_group: CAM
       tDMSC:
         unit_power_mw_mp: 4.36
         idc: 0.0
-        ppc: 4.0
+        ppc: 8.0
         vdd: VDD_CAM
         dvfs_group: CAM
     source: borrowed_legacy_model
-    source_note: 'Topology/DMA: kernel IS v15. Performance/power: legacy estimate;
-      not calibrated to IS v15.'
+    source_note: 'Topology/DMA: kernel IS v15. PPC 8: RT path runs at 8 pixels/clock (Joo,
+      2026-10-04). Power: legacy estimate; not calibrated to IS v15.'
   properties:
     is_version: 15
     ip_group: BYRP

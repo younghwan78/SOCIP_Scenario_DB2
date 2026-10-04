@@ -1,11 +1,11 @@
-import { useMemo, useState, type CSSProperties } from 'react'
+import { useCallback, useMemo, useState, type CSSProperties } from 'react'
 import type { Ctx } from '../App'
 import { api } from '../lib/api'
 import { useAsync } from '../lib/route'
 import { CAMERA_LABEL, MISSING, MODE_LABEL, cameraOf, changedKeys, medoidId, stabOf, valueText } from '../lib/conditions'
 import { CATEGORY_COLOR, CATEGORY_LABEL, CATEGORY_ORDER, focusFor, modeBreakdown, primaryCategory, scenarioPurpose } from '../lib/guides'
 import { toRows } from '../components/Picker'
-import { PageLayout, Resizer, useResizable } from '../components/Layout'
+import { PageLayout, Resizer, usePref, useResizable } from '../components/Layout'
 import { Icon } from '../components/Icons'
 import { DataTable, type Column } from '../components/DataTable'
 import { SEVERITY_RANK, preferredReference, resFpsKey } from '../lib/defaults'
@@ -13,6 +13,7 @@ import type { VariantRow } from '../lib/api'
 import { archApi, type BoardRow } from '../lib/archExplore'
 import { verdictChip } from '../lib/timingBudget'
 import { ProvBadge } from '../components/Provenance'
+import { VERDICT_HELP, VerdictPopover } from '../components/VerdictDetail'
 import { calibrationApi, type Coverage } from '../lib/calibration'
 import { DEFAULT_CANONICAL, canonicalOf } from '../lib/projects'
 
@@ -65,6 +66,9 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
   const medoid = useMemo(() => medoidId(rows), [rows])
   const reference = (selected && refChoice[selected.scenario_id]) || preferredReference(selected ? canonicalOf(selected) : undefined, rows.map((r) => r.variant_id), medoid)
   const refRow = byId.get(reference)
+  const isRef = useCallback((r: VariantRow) => r.variant_id === reference, [reference])
+  const [descOpen, setDescOpen] = usePref('explorer.desc.open', true)
+  const [verdictAt, setVerdictAt] = useState<{ id: string; x: number; y: number } | null>(null)
 
   const facetKeys = (['resolution', 'fps', 'stab', 'hdr', 'camera'] as FacetKey[]).filter((k) => rows.some((r) => facetValue(k, r.design_conditions) !== null))
   const visible = rows.filter((r) => (showDerived || !r.derived_from_variant)
@@ -115,8 +119,10 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
       sort: (r) => board.get(r.variant_id)?.power.total_mw ?? null,
       render: (r) => { const b = board.get(r.variant_id); return b ? <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}><span className="mono">{b.power.total_mw.toFixed(0)}</span>
         <ProvBadge compact prov={{ kind: 'registered', engine: 'Arch exploration', id: b.id, at: b.created_at, notes: [`CPU ${b.power.cpu_mw.toFixed(0)} · IP ${b.power.hw_mw.toFixed(0)} · BW ${b.power.bw_mw.toFixed(0)} mW`] }} /></span> : <span className="faint">—</span> } },
-    { key: 'vd', label: '판정', width: 80, headTitle: '등록 예측의 timing 판정 (OK / Clock↑ / Fail)', sort: (r) => { const v = board.get(r.variant_id)?.verdict; return v ? ({ fail: 0, clock_up: 1, ok: 2 } as Record<string, number>)[v] ?? 3 : null },
-      render: (r) => { const v = board.get(r.variant_id)?.verdict; if (!v) return <span className="faint">—</span>; const c = verdictChip(v as 'ok' | 'clock_up' | 'fail'); return <span className={`badge ${c.cls}`}>{c.label}</span> } },
+    { key: 'vd', label: '판정 ⓘ', width: 84, headTitle: `등록 예측의 timing 판정 — 클릭하면 사유. ${VERDICT_HELP}`, sort: (r) => { const v = board.get(r.variant_id)?.verdict; return v ? ({ fail: 0, clock_up: 1, ok: 2 } as Record<string, number>)[v] ?? 3 : null },
+      render: (r) => { const b = board.get(r.variant_id), v = b?.verdict; if (!v) return <span className="faint">—</span>; const c = verdictChip(v as 'ok' | 'clock_up' | 'fail')
+        return <button className={`badge ${c.cls} badge-btn`} title={b?.verdict_detail?.reasons?.[0] ?? '클릭 = 판정 사유'} aria-label={`${r.variant_id} 판정 상세`}
+          onClick={(e) => { e.stopPropagation(); setVerdictAt(b?.verdict_detail ? { id: r.variant_id, x: e.clientX, y: e.clientY } : null) }}>{c.label}</button> } },
     { key: 'load', label: 'Load', width: 84, firstDir: -1, sort: (r) => (r.severity ? SEVERITY_RANK[r.severity] ?? 0 : null), render: (r) => r.severity && <span className={`badge load-${r.severity}`}>{r.severity}</span> },
     { key: 'delta', label: '다른 조건', width: 84, align: 'right', firstDir: -1, headTitle: '기준 variant(파생은 부모)와 값이 다른 조건 수 — 노란 셀이 그 조건', sort: (r) => (r.variant_id === reference ? 0 : diffOf(r).size), render: (r) => <span className="mono">{r.variant_id === reference ? 0 : diffOf(r).size}</span> },
     { key: 'open', label: '', width: 76, render: (r) => <a href="#" onClick={(e) => { e.preventDefault(); ctx.navigate('pipeline', { scenario: r.scenario_id, variant: r.variant_id }) }}>Pipeline</a> },
@@ -161,7 +167,14 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
                 </select>
               </label>
             </div>
-            <div className="desc-box">
+            <details className="desc-box" open={descOpen} onToggle={(e) => setDescOpen((e.currentTarget as HTMLDetailsElement).open)}>
+              <summary title={descOpen ? '설명 접기' : '설명 펼치기'}>
+                <span className="desc-caret" aria-hidden="true">{descOpen ? '▾' : '▸'}</span>
+                {descOpen ? <span className="faint" style={{ fontSize: 12 }}>설명 · 구성 · Load</span> : <span className="desc-line">
+                  <span>{scenarioPurpose(selected.scenario_id).split(/[.·:]/).slice(0, 2).join(' · ').slice(0, 60)}</span>
+                  {isCamera && rows.length > 0 && <span className="faint">· {modeBreakdown(rows.filter((r) => !r.derived_from_variant)).map(({ mode, count }) => `${mode === 'kpi' ? 'KPI' : MODE_LABEL[mode]} ${count}`).join(' / ')}</span>}
+                  <span className="faint">· Load {Object.entries(selected.severity_counts).map(([k, v]) => `${k} ${v}`).join(' / ')}</span></span>}
+              </summary>
               <p>{scenarioPurpose(selected.scenario_id)}</p>
               {isCamera && rows.length > 0 && <div className="facet-row"><span className="faint" style={{ fontSize: 12 }}>구성</span>
                 {modeBreakdown(rows.filter((r) => !r.derived_from_variant)).map(({ mode, count }) => <span key={mode} className="focus">{mode === 'kpi' ? 'Video recording · 기본 KPI' : MODE_LABEL[mode]} <span className="cnt">({count})</span></span>)}
@@ -171,7 +184,7 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
               <div className="facet-row"><span className="faint" style={{ fontSize: 12 }}>Load</span>
                 {Object.entries(selected.severity_counts).map(([k, v]) => <span key={k} className={`badge load-${k}`}>{k} <span className="cnt">({v})</span></span>)}
                 <span className="faint" style={{ fontSize: 12 }}>· 작성자가 저장한 부하 등급이며 KPI 통과 여부가 아닙니다</span></div>
-            </div>
+            </details>
             <div className="facet-row">
               {facetKeys.map((k) => {
                 const counts = new Map<string, number>()
@@ -191,10 +204,12 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
           <div className="table-scroll" style={{ flexGrow: 1 }}>
             {variantsQ.error && <div className="err" style={{ margin: 12 }}>{variantsQ.error}</div>}
             <DataTable id="explorer.variants" columns={columns} rows={visible} rowKey={(r) => r.variant_id}
-              rowClass={(r) => (r.variant_id === reference ? 'sel' : '')} pinTop={(r) => r.variant_id === reference} />
+              rowClass={(r) => (r.variant_id === reference ? 'sel' : '')} stickyTop={isRef} />
             {!variantsQ.loading && !visible.length && <div className="empty">조건에 맞는 variant가 없습니다.</div>}
             {variantsQ.loading && <div className="empty">불러오는 중…</div>}
           </div>
+          {verdictAt && board.get(verdictAt.id)?.verdict_detail && <VerdictPopover d={board.get(verdictAt.id)!.verdict_detail!} at={verdictAt} onClose={() => setVerdictAt(null)}
+            onTiming={() => { const id = verdictAt.id; setVerdictAt(null); ctx.navigate('timing', { scenario: selected?.scenario_id, variant: id }) }} />}
           <div className="footer-bar">
             <span style={{ fontSize: 13 }}><b>{picked.size}개</b> 선택됨</span>
             {covQ.data && (() => { const base = rows.filter((r) => !r.derived_from_variant); const p = base.filter((r) => (cov(r.variant_id)?.simulation ?? 0) > 0 || cov(r.variant_id)?.current_prediction).length; const m = base.filter((r) => (cov(r.variant_id)?.measurement ?? 0) > 0).length

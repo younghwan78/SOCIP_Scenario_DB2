@@ -1,3 +1,4 @@
+import type { DsuMode, DsuModelInfo, DsuParams, VoteTable } from './dsu'
 // CPU placement / frequency what-if (POST /cpu/whatif) and its pickers (GET /cpu/inputs).
 import { getJson } from './api'
 import { postAdmitted } from './timingBudget'
@@ -87,7 +88,7 @@ export interface SweepRangeTask {
 }
 export interface SweepRangeCluster {
   name: string; core_type: string | null; cores: number; cpus: number[]; capacity: number; ipc_rel: number
-  opp_min_mhz: number; opp_max_mhz: number; opp_count: number
+  opp_min_mhz: number; opp_max_mhz: number; opp_count: number; opps_mhz?: number[]
 }
 export interface CpuSweep {
   scheduler: { model: string; freq_margin: number; fits_margin: number; util_model: string; pelt_halflife_ms: number
@@ -99,6 +100,9 @@ export interface CpuSweep {
   calibration: Record<string, { eas_mhz: number; eas_util: number; measured_mean_mhz?: number; measured_active?: number }>
   reference_kind: 'measured' | 'eas'; reference: SweepCase; eas_default: SweepCase; measured_placement: SweepCase
   cases: SweepCase[]; better_count: number; equal_mw: number; others: SweepCase[]; other_count: number; tasks: string[]; warnings: string[]
+  /** DSU rule actually used (API ≥ DSU vote); absent on older servers */
+  dsu_model?: DsuModelInfo | null; dsu_params?: DsuParams | null; dsu_measured?: Record<string, number> | null
+  dsu_check?: { measured_mean_mhz: number; model_mhz: number | null } | null
 }
 export interface CpuSweepRequest {
   cpu_profile_ref: string; power_params_ref: string; base_power_params_ref?: string; fps: number
@@ -107,6 +111,9 @@ export interface CpuSweepRequest {
   reference: 'measured' | 'eas'; power_gating_eff: number; cpu_bw_scale: number
   freq_margin?: number; fits_margin?: number; util_model?: 'util_est' | 'pelt_avg'; pelt_halflife_ms?: number
   deadline_boost?: boolean; energy_includes_static?: boolean
+  /** better cases returned (power ascending); server default 60 */
+  top?: number
+  dsu_mode?: DsuMode; dsu_vote?: VoteTable; dsu_fixed_mhz?: number
 }
 
 export const cpuApi = {

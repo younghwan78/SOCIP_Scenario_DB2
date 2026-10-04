@@ -133,7 +133,33 @@ stop
 | capacity | `scheduler.capacity`(기기 `/sys/devices/system/cpu/cpuN/cpu_capacity`) 또는 `1024·ipc_rel·fmax / max` |
 | 배치 | thread를 util 큰 순으로: 허용 cluster(cpuset) 중 `clamp(util)·fits_margin ≤ cap`, cluster 안에서 여유 capacity가 가장 큰 CPU, cluster 간에는 **동적 전력 증가가 가장 작은 곳** (Linux EM; `energy_includes_static`로 leakage 포함). `prefer_idle` task는 idle CPU 우선. 들어갈 곳이 없으면 overutilized → 여유가 가장 큰 CPU |
 | 주파수 | schedutil: `f = 다음 OPP ≥ freq_margin · max_cpu(clamp(Σutil)) / cap · fmax` (stall 때문에 고정점 반복). `deadline_boost`(기본 on): budget이 있는 task는 budget을 맞추는 OPP까지 올림 (ADPF hint / HAL uclamp.min) |
-| 전력 | CPU별 `busy/period · P_core(f)` + `leak(V)·(active + idle·(1−pg))`, DSU는 CPU 활동의 합집합 · 측정 residency(없으면 가장 바쁜 cluster의 상대 주파수) |
+| 전력 | CPU별 `busy/period · P_core(f)` + `leak(V)·(active + idle·(1−pg))`, DSU active = CPU 활동의 합집합, DSU 주파수 = 아래 DSU vote 규칙 |
+
+### DSU ↔ cluster clock 동기화 (vote)
+
+DSU 주파수는 cluster 주파수를 따라간다: busy cluster마다 자기 주파수에 대한 DSU 최소 주파수를 vote하고 DSU는 그 최대값(DSU OPP로 올림)으로 동작한다. architecture 단계에서는 이 표가 **가정값**이므로 topology에 `vote_source: estimate`로 두고, 화면 ②의 DSU 패널에서 바꿔 가며 실험한다(요청의 `dsu_vote`가 topology 값을 덮어씀, 저장되지 않음).
+
+```yaml
+dsu:
+  name: DSU
+  opps: [...]
+  vote_source: estimate        # estimate | ect | measured
+  vote:                        # cluster 이름 또는 core_type
+  - cluster: MID_LF
+    points: [[1000, 400], [1600, 900], [2000, 1500]]   # [cluster_mhz 이하, DSU 최소 MHz]
+  - cluster: MID_HF
+    points: [[1200, 400], [2000, 900], [2600, 1500]]
+```
+
+| `dsu_mode` | DSU 주파수 |
+|---|---|
+| `auto` (기본) | vote 표가 있으면 `vote`, 없으면 측정 residency(`measured`), 그것도 없으면 `proportional` (vote 도입 전 동작과 동일) |
+| `vote` | busy cluster vote의 최대값 |
+| `proportional` | 가장 바쁜 cluster의 f/fmax를 DSU OPP 범위에 비례 |
+| `measured` | 측정 residency를 모든 배치에 고정 — 배치를 바꿔도 DSU 전력이 변하지 않음 |
+| `fixed` | `dsu_fixed_mhz` 하나로 고정 |
+
+DSU vote는 cluster 주파수·배치를 바꾸지 않으므로(EAS 배치는 cluster energy만 비교) 화면은 vote 표를 바꿀 때 sweep을 다시 돌리지 않고 응답의 `dsu_params`로 DSU 전력과 순위를 즉시 다시 계산한다. 응답 `dsu_model`(적용 규칙·출처), `dsu_check`(측정 평균 vs 모델 DSU MHz)로 가정을 확인한다.
 
 `power_model_params.cpu.scheduler` (SoC/SW baseline별, 화면 ②의 보정값으로 덮어쓰기 가능):
 

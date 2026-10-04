@@ -158,7 +158,11 @@ def build_simulation_inputs(
         for sensor_node in active_sensor_nodes(graph)
         if (sensor_mode := selected_sensor_mode(graph, sensor_node))
     ]
-    apply_sensor_otf_clock_corrections(graph, workloads, warnings, sensor_modes)
+    apply_sensor_otf_clock_corrections(
+        graph, workloads, warnings, sensor_modes,
+        h_blank_margin=run_config.h_blank_margin,
+        readout_clocked=(run_config.rt_clock_basis or "sensor_readout") == "sensor_readout",
+    )
     # Included hardware must fit its aggregate wall-time budget. This is a lower
     # clock bound: CPU/HW overlap inside that interval is not characterized.
     by_node = {item.node_id: item for item in workloads}

@@ -1,0 +1,5 @@
+# Exynos2700 keeps its own MLSC PPC / note (Exynos2700 docs are edited independently; Exynos2600 moved to 8 PPC on 2026-10-04).
+capabilities:
+  sim:
+    ppc: 4.0
+    source_note: PPC is an exploration assumption, not a verified silicon capacity. Power coefficient is unavailable and core power is excluded.

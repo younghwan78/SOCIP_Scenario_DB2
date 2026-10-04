@@ -52,7 +52,7 @@ from scenario_db.sim import power_options as po
 from scenario_db.sim.power_attribution import attribute
 from scenario_db.sim.transfers import compression_catalog
 
-ENGINE_REV = "arch-exploration/8"
+ENGINE_REV = "arch-exploration/9"  # 9: RT clock = sensor read-out basis, OTF rate align
 # Power = CPU(SW) + IP core + BW; BW = IP DMA (HW nodes) + CPU DMA (SW tasks, e.g. mpeg_writer)
 DIST_KEYS = ("total_mw", "cpu_mw", "hw_mw", "bw_mw", "bw_ip_mw", "bw_cpu_mw", "bw_mbs", "bw_ip_mbs", "bw_cpu_mbs")
 V_REF_MV = 710.0
@@ -1132,6 +1132,9 @@ def prediction_payload(s: dict[str, Any], case: dict[str, Any], buffers: list[di
         "base_bw_ip_mbs": s["bw"]["hw_mbs"], "base_bw_cpu_mbs": s["bw"]["sw_mbs"],
         "cpu_by_task": s["cpu_by_task"], "ips": ips, "buffers": bufs,
         "compression": sorted(comp), "dvfs": dom_level, "verdict": s["verdict"]["status"],
+        # why: reasons + NRT clock factor of the objective slice (board / 판정 popover)
+        "verdict_detail": {k: s["verdict"].get(k) for k in ("status", "reasons", "nrt_clock_factor")},
+        "intervals_ok": s.get("intervals_ok"),
         "lossy": case["lossy"], "assumed_ratio": case["assumed_ratio"],
         "intervals": s["intervals"], "latency": s["latency"],
         "stages": {k: {f: v for f, v in st.items() if f != "sw_items"} for k, st in s["stages"].items()},

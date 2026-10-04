@@ -128,6 +128,9 @@ class CpuPowerModel:
     freq_mhz: float = 2000.0
     volt_v: float = 0.80
     dsu: ClusterModel | None = None
+    # cpu.dsu.vote: ((cluster name / core_type, ((cluster_mhz, dsu_min_mhz), ...)), ...) — see cpu_dsu
+    dsu_vote: tuple[tuple[str, tuple[tuple[float, float], ...]], ...] = ()
+    dsu_vote_source: str | None = None
     source: str = "ip-cpu-s5e9965 profiler coefficients; cluster/freq/volt assumed"
     model_id: str = "em-v1"
     # power_model_params.cpu.scheduler (CpuSchedulerParams) for the what-if sweep.
@@ -189,6 +192,9 @@ class CpuPowerModel:
                 leak_exponent=dsu.leakage.exponent if dsu.leakage else 2.0,
                 rail=dsu.rail,
             )
+            if dsu.vote:
+                values["dsu_vote"] = tuple((v.cluster, tuple((float(f), float(d)) for f, d in v.points)) for v in dsu.vote)
+                values["dsu_vote_source"] = dsu.vote_source
         if cpu.scheduler is not None:
             values["scheduler"] = cpu.scheduler
         values["source"] = params.params_ref + (f" ({cpu.source})" if cpu.source else "")

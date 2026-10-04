@@ -11,6 +11,11 @@ import { DataTable, type Column } from '../components/DataTable'
 import { PowerDeltaTable, PowerStack, type PowerRow } from '../components/PowerModelCharts'
 import { partColor, sortClusters } from '../lib/powerModel'
 import { CPU_HELP, threadLabel } from '../components/CpuHelp'
+import { usePref } from '../components/Layout'
+import { DsuPanel, sweepEvaluator } from '../components/DsuPanel'
+import { applyDsu, type DsuPolicy } from '../lib/dsu'
+import { applyDsuRebalance, defaultPool, rebalanceApi, type CpuRebalance, type CpuRebalanceRequest } from '../lib/rebalance'
+import { AssumptionSensitivity, CrossSocCompare, RebalanceResults, RebalanceSetup, type Knob as RbKnob, type SetupRow, type TaskState } from '../components/RebalanceView'
 
 type TaskEdit = { sweep: string[] | null; threads: string; budget: string; growth: string }
 type Adv = { freqMargin: string; fitsMargin: string; utilModel: '' | 'util_est' | 'pelt_avg'; halflife: string; boost: '' | 'on' | 'off'; emStatic: '' | 'on' | 'off' }
@@ -38,13 +43,34 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
   const [uMin, setUMin] = useState('')
   const [adv, setAdv] = useState<Adv>(NO_ADV)
   const [edits, setEdits] = useState<Record<string, TaskEdit>>({})
-  const [result, setResult] = useState<CpuSweep | null>(null)
+  const [rawResult, setResult] = useState<CpuSweep | null>(null)
+  // DSU assumption: exp = client-side experiment on the returned cases, dsuReq = rule sent to the server
+  const [dsuExp, setDsuExp] = useState<DsuPolicy | null>(null)
+  const [dsuReq, setDsuReq] = useState<DsuPolicy | null>(null)
+  const result = useMemo(() => (rawResult ? applyDsu(rawResult, dsuExp) : null), [rawResult, dsuExp])
+  const sweepEval = useMemo(() => (rawResult ? sweepEvaluator(rawResult) : () => ({ refMw: 0, bestMw: null, deltaMw: null, refDsuMhz: null, bestDsuMhz: null, bestKey: '' })), [rawResult])
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const requestId = useRef(0)
   const inputSelection = useRef('')
   const [sel, setSel] = useState<string>('')
   const [showAllBetter, setShowAllBetter] = useState(false)
+  const [top, setTop] = usePref<number>('cpu.top', 60)
+  // mode: MID 재분배 (split tasks over the MID clusters) or the automatic knob sweep
+  const [mode, setMode] = usePref<'rebalance' | 'sweep'>('cpu.mode', 'rebalance')
+  const [rbRaw, setRbRaw] = useState<CpuRebalance | null>(null)
+  const [rbTop, setRbTop] = usePref<number>('cpu.rb.top', 20)
+  const [poolSel, setPoolSel] = useState<string[] | null>(null)
+  const [taskStates, setTaskStates] = useState<Record<string, TaskState>>({})
+  // cgroup per task name (assumption, kept across profiles — same logical task names)
+  const [groups, setGroups] = usePref<Record<string, string>>('cpu.rb.cgroup', {})
+  const [rbSel, setRbSel] = useState('')
+  // C6: the same profile rebalanced on another project's topology (sequential run, one admission slot at a time)
+  const [cmpTarget, setCmpTarget] = useState('')
+  const [rbKnob, setRbKnob] = usePref<RbKnob>('cpu.rb.knob', 'cpuset')
+  const [cmpRb, setCmpRb] = useState<CpuRebalance | null>(null)
+  const [cmpErr, setCmpErr] = useState<string | null>(null)
+  const rb = useMemo(() => (rbRaw ? applyDsuRebalance(rbRaw, dsuExp) : null), [rbRaw, dsuExp])
 
   const prof = inputs.data?.profiles.find((p) => p.id === profile)
   const topo = inputs.data?.topologies.find((t) => t.id === target)
@@ -69,7 +95,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
     setTarget(rankTopologies(inputs.data.topologies, prof)[0].id)
   }, [inputs.data, prof]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const request = (taskEdits = edits): CpuSweepRequest => {
+  const request = (taskEdits = edits, dsu = dsuReq): CpuSweepRequest => {
     const pick = (k: 'budget' | 'growth' | 'threads') => Object.fromEntries(Object.entries(taskEdits)
       .map(([t, e]) => [t, num(e[k])] as const).filter(([, v]) => v !== undefined)) as Record<string, number>
     return {
@@ -79,11 +105,42 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
       knobs, uclamp_max_levels: parseLevels(uMax), uclamp_min_levels: parseLevels(uMin), reference,
       power_gating_eff: pgEff, cpu_bw_scale: bwScale,
       freq_margin: num(adv.freqMargin), fits_margin: num(adv.fitsMargin), util_model: adv.utilModel || undefined,
-      pelt_halflife_ms: num(adv.halflife), deadline_boost: tri(adv.boost), energy_includes_static: tri(adv.emStatic),
+      pelt_halflife_ms: num(adv.halflife), deadline_boost: tri(adv.boost), energy_includes_static: tri(adv.emStatic), top,
+      ...(dsu ? { dsu_mode: dsu.mode, dsu_vote: dsu.mode === 'vote' ? dsu.vote : undefined, dsu_fixed_mhz: dsu.mode === 'fixed' ? dsu.fixed_mhz : undefined } : {}),
     }
+  }
+  const poolNames = rbRaw?.clusters.map((c) => c.name) ?? sortClusters(topo?.clusters ?? [])
+  const pool = poolSel ?? rbRaw?.default_pool ?? defaultPool(poolNames)
+  const rbRequest = (base: CpuSweepRequest): CpuRebalanceRequest => {
+    const locks: Record<string, string> = {}
+    for (const [t, st] of Object.entries(taskStates)) if (st === 'exclude') locks[t] = 'exclude'; else if (st.startsWith('pin:')) locks[t] = st.slice(4)
+    const byGroup = new Map<string, string[]>()
+    const present = new Set(rbRows.map((r) => r.task))
+    for (const [t, g] of Object.entries(groups)) if (g && present.has(t) && (taskStates[t] ?? 'auto') === 'auto') byGroup.set(g, [...(byGroup.get(g) ?? []), t])
+    return { ...base, top: rbTop, pool, locks, co_move: [...byGroup.values()].filter((g) => g.length > 1) }
+  }
+  const runRb = async (payload: CpuRebalanceRequest) => {
+    const id = ++requestId.current
+    setBusy(true); setError(null)
+    try {
+      const r = await rebalanceApi.run(payload)
+      if (id !== requestId.current) return
+      setRbRaw(r); setRbSel(r.cases[0] ? `c${r.cases[0].rank}` : 'ref')
+      setCmpRb(null); setCmpErr(null)
+      if (cmpTarget && cmpTarget !== payload.power_params_ref) {
+        const exclude = Object.fromEntries(Object.entries(payload.locks).filter(([, v]) => v === 'exclude'))
+        try {
+          const c = await rebalanceApi.run({ ...payload, power_params_ref: cmpTarget, base_power_params_ref: payload.base_power_params_ref || payload.power_params_ref, pool: [], locks: exclude })
+          if (id === requestId.current) setCmpRb(c)
+        } catch (e) { if (id === requestId.current) setCmpErr(String((e as Error).message ?? e)) }
+      }
+    } catch (e) {
+      if (id === requestId.current) setError(String((e as Error).message ?? e))
+    } finally { if (id === requestId.current) setBusy(false) }
   }
   const run = async (payload = request()) => {
     if (!profile || !target) return
+    if (mode === 'rebalance') return runRb(rbRequest(payload))
     const id = ++requestId.current
     setBusy(true); setError(null)
     try {
@@ -99,17 +156,79 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
     const selection = JSON.stringify([profile, target, base])
     const changed = inputSelection.current !== selection
     inputSelection.current = selection
-    if (changed) setEdits({})
+    if (changed) { setEdits({}); setDsuExp(null); setDsuReq(null); setPoolSel(null); setTaskStates({}); setRbRaw(null) }
     setResult(null)
-    if (profile && target) void run(request(changed ? {} : edits))
+    if (profile && target) {
+      const req = request(changed ? {} : edits, changed ? null : dsuReq)
+      if (mode === 'rebalance') void runRb(changed ? { ...req, top: rbTop, pool: [], locks: {}, co_move: [] } : rbRequest(req))
+      else void run(req)
+    }
     return () => { ++requestId.current }
-  }, [profile, target, base, reference]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [profile, target, base, reference, mode]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleCell = (task: string, cl: string) => {
     const auto = result?.range.tasks.find((t) => t.task === task)
     const cur = edit(task).sweep ?? clusterNames.filter((c) => auto?.cells[c]?.in_sweep)
     setEdit(task, { sweep: cur.includes(cl) ? cur.filter((c) => c !== cl) : [...cur, cl] })
   }
+  // bulk range edits (one state update, no sweep until 계산): column = cluster for every sweepable task
+  const sweepable = (t: string) => t !== '(other)'
+  const autoSet = (t: string) => clusterNames.filter((c) => result?.range.tasks.find((x) => x.task === t)?.cells[c]?.in_sweep)
+  const inSweepOf = (t: string) => edit(t).sweep ?? autoSet(t)
+  const columnState = (c: string): 'all' | 'some' | 'none' => {
+    const ts = tasks.filter(sweepable), n = ts.filter((t) => inSweepOf(t).includes(c)).length
+    return n === 0 ? 'none' : n === ts.length ? 'all' : 'some'
+  }
+  const setColumn = (c: string, on: boolean) => setEdits((m) => {
+    const out = { ...m }
+    for (const t of tasks.filter(sweepable)) {
+      const cur = (m[t]?.sweep ?? autoSet(t)).filter((x) => x !== c)
+      out[t] = { ...(m[t] ?? { sweep: null, threads: '', budget: '', growth: '' }), sweep: on ? sortClusters([...cur, c]) : cur }
+    }
+    return out
+  })
+  const applyPreset = (kind: 'auto' | 'measured' | 'meets' | 'fits') => setEdits((m) => {
+    const out = { ...m }
+    for (const t of tasks.filter(sweepable)) {
+      const rt = result?.range.tasks.find((x) => x.task === t)
+      const base = m[t] ?? { sweep: null, threads: '', budget: '', growth: '' }
+      const pick = kind === 'auto' ? null : kind === 'measured' ? (rt?.measured ?? [])
+        : clusterNames.filter((c) => (kind === 'meets' ? rt?.cells[c]?.meets : rt?.cells[c]?.fits))
+      out[t] = { ...base, sweep: pick }
+    }
+    return out
+  })
+  // DSU experiment re-ranks the cases: keep the selection on the new best
+  useEffect(() => { if (result) setSel(result.cases[0] ? `c${result.cases[0].rank}` : '') }, [dsuExp]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (rb) setRbSel(rb.cases[0] ? `c${rb.cases[0].rank}` : 'ref') }, [dsuExp]) // eslint-disable-line react-hooks/exhaustive-deps
+  const rbEval = useMemo(() => (pol: DsuPolicy | null) => {
+    const r = rbRaw ? (pol ? applyDsuRebalance(rbRaw, pol) : rbRaw) : null
+    const b = r?.best ?? null
+    return { refMw: r?.reference.total_mw ?? 0, bestMw: b?.total_mw ?? null, deltaMw: b && r ? b.total_mw - r.reference.total_mw : null,
+      refDsuMhz: r?.reference.mhz.dsu ?? null, bestDsuMhz: b?.mhz.dsu ?? null, bestKey: b ? b.moved.map((u) => `${u}→${b.assign[u]}`).join(' · ') || '현재 그대로' : '—' }
+  }, [rbRaw])
+  // setup rows: units of the last result (per task) or the profile's tasks before the first run
+  const rbRows: SetupRow[] = useMemo(() => {
+    if (rbRaw) {
+      const unitOf = new Map(rbRaw.units.flatMap((u) => u.tasks.map((t) => [t, u] as const)))
+      const all = (prof?.tasks ?? []).map((t) => t.task).filter((t, i, a) => a.indexOf(t) === i && t !== '(other)')
+      return all.map((t) => { const u = unitOf.get(t)
+        return { task: t, home: u?.home ?? prof?.tasks?.find((x) => x.task === t)?.cluster ?? '', budget: u?.budget_ms ?? null, util: u?.util_fmax, tms: u?.t_fmax_ms } })
+    }
+    return (prof?.tasks ?? []).filter((t, i, a) => a.findIndex((x) => x.task === t.task) === i && t.task !== '(other)').map((t) => ({ task: t.task, home: t.cluster, budget: null }))
+  }, [rbRaw, prof])
+  const rbSpace = useMemo(() => {
+    const movable = rbRows.filter((r) => pool.includes(r.home) && (taskStates[r.task] ?? 'auto') === 'auto')
+    const grouped = new Set(movable.filter((r) => groups[r.task]).map((r) => groups[r.task]))
+    const units = movable.filter((r) => !groups[r.task]).length + grouped.size
+    const splits = pool.length ** units
+    const sig = (c: string) => { const m = rbRaw?.clusters.find((x) => x.name === c); return m ? `${m.core_type}|${m.cores}|${m.opps_mhz.join(',')}` : c }
+    const counts = new Map<string, number>(); pool.forEach((c) => counts.set(sig(c), (counts.get(sig(c)) ?? 0) + 1))
+    let reduced = splits
+    counts.forEach((n) => { for (let k = 2; k <= n; k++) reduced = Math.floor(reduced / k) })
+    return { units, splits, reduced }
+  }, [rbRows, pool, taskStates, groups, rbRaw])
+  const applyDsuToServer = (pol: DsuPolicy | null) => { setDsuReq(pol); setDsuExp(null); void run(request(edits, pol)) }
   const toggleKnob = (k: Knob) => setKnobs((ks) => (ks.includes(k) ? ks.filter((x) => x !== k) : [...ks, k]))
 
   // ---- results
@@ -151,6 +270,13 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
   return (
     <div className="page tb-page">
       <p className="cpu-help">측정한 CPU profile(task·thread별 cycle · stall · bus)을 Android <b>EAS + schedutil</b>로 다시 배치해 보고, 기기에서 실제로 바꿀 수 있는 knob(cpuset/affinity 고정·상한, uclamp)을 자동으로 sweep 합니다. 결과는 <b>{refName}</b> 대비 전력이 낮은 순서입니다. 시계열 없이 frame 단위 정상상태로 계산합니다.</p>
+      <div className="toolbar" style={{ gap: 10, marginBottom: 8 }}>
+        <div className="seg" role="group" aria-label="CPU what-if 방식">
+          <button className={mode === 'rebalance' ? 'on' : ''} onClick={() => setMode('rebalance')} title="camera SW task를 MID cluster 사이에서 나누는 최적점 (cpuset)">MID 재분배</button>
+          <button className={mode === 'sweep' ? 'on' : ''} onClick={() => setMode('sweep')} title="task별 cpuset / uclamp knob 조합을 자동 탐색해 현재보다 전력이 낮은 배치를 찾음">자동 탐색 (고급)</button>
+        </div>
+        <span className="faint" style={{ fontSize: 12 }}>{mode === 'rebalance' ? '한 MID cluster에 몰린 task를 같은 tier의 cluster로 나눴을 때 CPU + DSU 전력 최저점' : 'task별 knob 조합 자동 탐색 · 현재보다 전력이 낮은 배치'}</span>
+      </div>
       {inputs.error && <div className="err">{inputs.error}</div>}
       {inputs.data && (!inputs.data.profiles.length || !inputs.data.topologies.length) && <div className="lib-note warn">
         sweep에 필요한 입력이 없습니다 — 측정 CPU profile <b>{inputs.data.profiles.length}건</b> · CPU topology(power_model_params) <b>{inputs.data.topologies.length}건</b>.
@@ -164,6 +290,9 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
               <select value={profile} onChange={(e) => setProfile(e.target.value)}>{rankProfiles(inputs.data?.profiles ?? [], ctx).map((p) => <option key={p.id} value={p.id}>{p.variant_ref ?? p.id} · {p.id}{p.tasks?.length ? '' : ' (task 정보 없음)'}</option>)}</select></label>
             <label className="cpu-f"><span className="faint">적용할 SoC CPU 구성</span>
               <select value={target} onChange={(e) => { targetPicked.current = true; setTarget(e.target.value) }}>{rankTopologies(inputs.data?.topologies ?? [], prof).map((t) => <option key={t.id} value={t.id}>{t.soc_ref} · v{t.version} · {sortClusters(t.clusters).join(' / ')}{prof?.tasks?.length && clusterCover(t, prof) < 1 ? ' (측정 cluster 불일치)' : ''}</option>)}</select></label>
+            {mode === 'rebalance' && <label className="cpu-f" title="같은 측정 profile을 다른 과제의 CPU 구성에도 재분배해 나란히 비교 (MID 구조 변경 영향)"><span className="faint">과제 비교 (선택)</span>
+              <select value={cmpTarget} aria-label="비교할 SoC" onChange={(e) => setCmpTarget(e.target.value)}><option value="">— 비교 안 함</option>
+                {(inputs.data?.topologies ?? []).filter((t) => t.id !== target).map((t) => <option key={t.id} value={t.id}>{t.soc_ref} · v{t.version} · {sortClusters(t.clusters).join(' / ')}</option>)}</select></label>}
             <label className="cpu-f" title="다른 과제에서 측정한 profile이면 측정한 SoC의 CPU 구성을 고르세요 (core type으로 대응)"><span className="faint">profile을 측정한 SoC</span>
               <select value={base} onChange={(e) => setBase(e.target.value)}><option value="">적용할 SoC와 같음</option>{(inputs.data?.topologies ?? []).map((t) => <option key={t.id} value={t.id}>{t.soc_ref} · {t.id}</option>)}</select></label>
             <div className="cpu-f"><span className="faint">비교 기준 (★)</span>
@@ -190,7 +319,23 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
               <label className="cpu-f" title="EAS 에너지 비교에 leakage 포함 (vendor scheduler)"><span className="faint">EM에 leakage</span><select value={adv.emStatic} onChange={(e) => setAdv({ ...adv, emStatic: e.target.value as Adv['emStatic'] })}><option value="">{sched?.energy_includes_static ? 'on' : 'off'} (설정)</option><option value="on">on</option><option value="off">off</option></select></label>
             </div></details>
         </Card>
-        <Card id="cpu-range" title="③ Sweep 범위" note="cluster별 · 칸 = fmax에서 task 시간 · ✓ budget 충족 · 체크 = sweep에 포함 · 파란 칸 = 측정 위치" defaultWide help={CPU_HELP.range}>
+        {mode === 'rebalance' && rbRaw?.dsu_params && <Card id="cpu-dsu" title="DSU 동기화 (가정)" defaultWide minHeight={120} help={CPU_HELP.dsu}
+          note={`DSU 주파수 = busy cluster vote 최대 · 표를 바꾸면 반환된 분배를 즉시 재계산${dsuExp ? ' · 실험 적용 중' : ''}`}>
+          <DsuPanel params={rbRaw.dsu_params} server={rbRaw.dsu_model} measured={rbRaw.dsu_measured} evalPolicy={rbEval} candidates={rbRaw.cases.length + rbRaw.curve.length}
+            exp={dsuExp} setExp={setDsuExp} onApply={applyDsuToServer} applied={dsuReq} />
+        </Card>}
+        {mode === 'sweep' && rawResult?.dsu_params && <Card id="cpu-dsu" title="DSU 동기화 (가정)" defaultWide minHeight={120} help={CPU_HELP.dsu}
+          note={`DSU 주파수 = busy cluster vote 최대 · 표를 바꾸면 반환된 후보를 즉시 재계산${dsuExp ? ' · 실험 적용 중' : ''}`}>
+          <DsuPanel params={rawResult.dsu_params} server={rawResult.dsu_model} measured={rawResult.dsu_measured} check={rawResult.dsu_check}
+            evalPolicy={sweepEval} candidates={rawResult.cases.length + rawResult.others.length}
+            exp={dsuExp} setExp={setDsuExp} onApply={applyDsuToServer} applied={dsuReq} />
+        </Card>}
+        {mode === 'rebalance' && <RebalanceSetup clusters={poolNames} pool={pool} setPool={setPoolSel} rows={rbRows}
+          states={taskStates} setState={(t, st) => setTaskStates((m) => ({ ...m, [t]: st }))}
+          groups={groups} setGroup={(t, g) => setGroups((m) => ({ ...m, [t]: g }))}
+          budgets={Object.fromEntries(Object.entries(edits).map(([t, e]) => [t, e.budget]))} setBudget={(t, v) => setEdit(t, { budget: v })}
+          space={rbSpace} method={rbRaw?.method} busy={busy} onRun={() => void run()} top={rbTop} setTop={setRbTop} hasResult={!!rbRaw} knob={rbKnob} setKnob={setRbKnob} />}
+        {mode === 'sweep' && <Card id="cpu-range" title="③ Sweep 범위" note="cluster별 · 칸 = fmax에서 task 시간 · ✓ budget 충족 · 체크 = sweep에 포함 · 파란 칸 = 측정 위치" defaultWide help={CPU_HELP.range}>
           <div className="toolbar" style={{ gap: 14, marginBottom: 6, fontSize: 12 }}>
             <span className="faint">knob</span>
             <label><input type="checkbox" checked={knobs.includes('pin')} onChange={() => toggleKnob('pin')} /> cluster 고정 (cpuset/affinity)</label>
@@ -200,10 +345,21 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
             <label><input type="checkbox" checked={knobs.includes('uclamp_min')} onChange={() => toggleKnob('uclamp_min')} /> uclamp.min</label>
             {knobs.includes('uclamp_min') && <input style={{ width: 90 }} value={uMin} placeholder="128, 256" onChange={(e) => setUMin(e.target.value)} />}
           </div>
+          {tasks.length > 0 && <div className="toolbar" style={{ gap: 6, marginBottom: 6, fontSize: 12 }}>
+            <span className="faint">범위 preset</span>
+            <button className="btn tb-mini" onClick={() => applyPreset('auto')} title="task별 자동 범위 (fmax에서 budget 충족 cluster)">자동</button>
+            <button className="btn tb-mini" onClick={() => applyPreset('measured')} title="측정에서 돈 cluster만">측정 위치만</button>
+            <button className="btn tb-mini" onClick={() => applyPreset('meets')} disabled={!result} title="✓ budget 충족 cluster 전부">✓ 전부</button>
+            <button className="btn tb-mini" onClick={() => applyPreset('fits')} disabled={!result} title="capacity 초과(⚠) cluster 제외 전부">⚠ 제외 전부</button>
+            <span className="faint">· 열 머리 체크 = 그 cluster를 모든 task에 포함/제외</span>
+          </div>}
           {tasks.length ? <div className="table-x"><table className="grid cpu-matrix cpu-range">
             <thead>
               <tr><th>task</th>{clusterNames.map((c) => { const rc = rangeCluster(c); return (
-                <th key={c} style={{ borderTop: `3px solid ${colorOf(c)}` }}><span className="sw pm-sw" style={{ background: colorOf(c) }} />{c}
+                <th key={c} style={{ borderTop: `3px solid ${colorOf(c)}` }}>
+                  <input type="checkbox" aria-label={`${c} 전체 task 포함`} title={`모든 task에 ${c} 포함 / 제외 ((other) 제외)`} checked={columnState(c) === 'all'}
+                    ref={(el) => { if (el) el.indeterminate = columnState(c) === 'some' }} onChange={() => setColumn(c, columnState(c) !== 'all')} style={{ marginRight: 4 }} />
+                  <span className="sw pm-sw" style={{ background: colorOf(c) }} />{c}
                   {rc && <div className="faint cpu-range-meta">{rc.cores} core · cap {fmt(rc.capacity, 0)}<br />{fmt(rc.opp_min_mhz, 0)}–{fmt(rc.opp_max_mhz, 0)} MHz · {rc.opp_count} OPP</div>}</th>) })}
                 <th title="thread 수 (비우면 측정값 · 없으면 1)">thr</th><th title="frame당 허용 시간 (Timing Budget의 SW budget)">budget ms</th><th title="이 task만의 SW 증가 배율">증가</th><th>정책 · 후보</th></tr>
             </thead>
@@ -231,13 +387,22 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
                 </tr>)
             })}</tbody></table></div> : (inputs.data?.profiles.length ?? 0) > 0 && <NoTasks profiles={rankProfiles(inputs.data?.profiles ?? [], ctx).filter((p) => p.tasks?.length)} onPick={setProfile} />}
           <div className="toolbar" style={{ marginTop: 8 }}>
-            <span className="faint" style={{ fontSize: 12 }}>{result ? `조합 ${result.range.space.toLocaleString()}개 · 계산 ${result.range.evaluated.toLocaleString()} (${result.range.method === 'beam' ? 'beam 탐색' : '전수'}) · 서로 다른 배치 ${result.range.unique}` : '조합 수는 계산 후 표시'}</span><span className="grow" />
+            <span className="faint" style={{ fontSize: 12 }}>{result ? `조합 ${result.range.space.toLocaleString()}개 · 계산 ${result.range.evaluated.toLocaleString()} (${result.range.method === 'beam' ? 'beam 탐색' : '전수'}) · 서로 다른 배치 ${result.range.unique}` : '조합 수는 계산 후 표시'}</span>
+            {result?.range.method === 'beam' && <span className="badge v-warn" title={`조합 ${result.range.space.toLocaleString()}개 중 ${result.range.evaluated.toLocaleString()}개만 계산 — 결과는 부분 탐색 기준 순위`}>부분 탐색</span>}
+            <span className="grow" />
+            <label className="faint" style={{ fontSize: 12, display: 'flex', gap: 4, alignItems: 'center' }}>결과 상위
+              <select value={top} onChange={(e) => setTop(Number(e.target.value))} aria-label="결과 상위 N">{[10, 20, 60, 200].map((n) => <option key={n} value={n}>{n}</option>)}</select>개</label>
             <button className="btn primary" disabled={busy || !profile || !target} onClick={() => void run()}>{busy ? '계산 중…' : result ? '다시 계산' : 'Sweep 계산'}</button>
           </div>
-        </Card>
+        </Card>}
       </div>
       {error && <div className="err">{error}</div>}
-      {result && ref && <>
+      {mode === 'rebalance' && rb && <div className="tb-grid">
+        {cmpTarget && <CrossSocCompare a={rb} b={cmpRb ? applyDsuRebalance(cmpRb, dsuExp) : null} aName={topo?.soc_ref ?? target} bName={inputs.data?.topologies.find((t) => t.id === cmpTarget)?.soc_ref ?? cmpTarget} error={cmpErr} busy={busy} />}
+        <RebalanceResults r={rb} sel={rbSel} setSel={setRbSel} knob={rbKnob}
+          sensitivity={rbRaw && <AssumptionSensitivity base={rb} dsu={dsuExp}
+            runVariant={(patch) => rebalanceApi.run({ ...rbRequest(request(edits, dsuReq)), ...patch }).then((r) => (dsuExp ? applyDsuRebalance(r, dsuExp) : r))} />} /></div>}
+      {mode === 'sweep' && result && ref && <>
         {result.warnings.length > 0 && <details className="panel" style={{ padding: '8px 12px', fontSize: 12 }}><summary>참고 {result.warnings.length}</summary>{result.warnings.map((w) => <div key={w} className="faint">{w}</div>)}</details>}
         <section className="tb-kpis" aria-label="요약">
           {tile('측정 (실측 DVFS)', result.measured_mw === null ? '—' : `${fmt(result.measured_mw, 1)} mW`, '측정 residency · gating 그대로')}

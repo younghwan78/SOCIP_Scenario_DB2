@@ -33,6 +33,7 @@ FastAPI의 `/openapi.json`, `/docs`는 실행 중인 build의 endpoint와 schema
 - [Write API Contract](write-api-contract.md)
 - [Exploration API Contract](exploration-api-contract.md)
 - [Architecture Analysis API Contract](architecture-analysis-contract.md)
+- [CPU Analysis API Contract](cpu-analysis-contract.md)
 - [API Naming Conventions](../../reference/api-conventions.md)
 - [API Status Codes](../../reference/api-status-codes.md)
 

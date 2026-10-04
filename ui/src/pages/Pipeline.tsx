@@ -12,7 +12,8 @@ import { modeNotes } from '../lib/modes'
 import { GraphView } from '../components/GraphView'
 import { FrameColorLegend, TimelineView } from '../components/TimelineView'
 import { IpInternalView } from '../components/IpInternalView'
-import { CadenceView } from '../components/CadenceView'
+import { CadenceView, TimingContextStrip } from '../components/CadenceView'
+import { TimingCompare } from '../components/TimingCompare'
 import { BufferTooltip, IpTooltip } from '../components/NodeTooltip'
 import { DataTable, type Column } from '../components/DataTable'
 import { useWidth } from '../components/Charts'
@@ -21,7 +22,7 @@ import { PageLayout, Resizer, usePref } from '../components/Layout'
 
 type Lens = 'sequence' | 'dma' | 'ip'
 type Mode = 'split' | 'graph' | 'timing'
-type TimingView = 'trace' | 'cadence'
+type TimingView = 'trace' | 'cadence' | 'compare'
 
 const LENS: { id: Lens; label: string; hint: string }[] = [
   { id: 'sequence', label: 'Sequence · HW/SW 순서', hint: 'Sensor → Panel/Storage 실행 순서. 같은 열 = OTF streaming(같은 시점), 다음 열 = M2M 또는 SW hand-off. RT 이후 어떤 SW가 NRT를 열고, NRT 이후 어떤 SW가 출력단을 여는지 확인. 노드: +frame 기준 시작 · 소요(ms) / 처리 크기' },
@@ -78,6 +79,7 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
   // ---- timing evidence
   const traces = useMemo(() => (evidenceQ.data?.items ?? []).filter((e) => (e.timeline_events ?? []).length > 3).sort((a, b) => rankTrace(b) - rankTrace(a)), [evidenceQ.data])
   const trace: Evidence | undefined = traces.find((t) => t.id === traceId) ?? traces[0]
+  const canCompare = traces.some((t) => evidenceSource(t) === 'calculated') && traces.some((t) => evidenceSource(t) !== 'calculated')
   const timeline = useMemo(() => (trace ? buildTimeline(trace.timeline_events ?? [], { maxFrames: 16 }) : null), [trace])
   const timing = useMemo(() => (timeline ? stageTimings(timeline) : undefined), [timeline])
   const activePids = useMemo(() => new Set(model?.ips.map((i) => i.pid) ?? []), [model])
@@ -190,10 +192,10 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
     { key: 'flags', label: 'Config', width: 260, title: (i) => i.flags.map(([k, v]) => `${k}=${v}`).join(' · '), render: (i) => <span className="faint">{i.flags.map(([k, v]) => `${k}=${v}`).join(' · ')}</span> },
   ]
   const onIpRow = (i: IpModel) => selectNode(i.viewId)
-  const nodeTip = (id: string) => {
+  const nodeTip = (id: string, pinned: boolean) => {
     if (id.startsWith('buf:')) { const b = model?.buffers.find((x) => `buf:${x.name}` === id); return b ? <BufferTooltip b={b} /> : null }
     const ip = model?.byPid.get(pipelineIdOf(id))
-    return ip ? <IpTooltip ip={ip} timing={timing?.get(ip.pid)} /> : null
+    return ip ? <IpTooltip ip={ip} timing={timing?.get(ip.pid)} expanded={pinned} /> : null
   }
   const st: StageTiming | undefined = selectedPid ? timing?.get(selectedPid) : undefined
 
@@ -244,25 +246,39 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
             <div className="seg sm" role="group" aria-label="Timing 보기">
               <button className={tview === 'trace' ? 'on' : ''} onClick={() => setTview('trace')}>Trace</button>
               <button className={tview === 'cadence' ? 'on' : ''} onClick={() => setTview('cadence')}>주기 · 지연</button>
+              <button className={tview === 'compare' ? 'on' : ''} onClick={() => setTview('compare')} disabled={!canCompare}
+                title={canCompare ? '예측(simulation) trace와 실측 trace를 IP·출력 stream별로 비교' : '예측 trace와 실측 trace가 모두 있어야 합니다'}>예측 ↔ 실측</button>
             </div>
-            {trace && <span className={`badge src-${evidenceSource(trace)}`}>{evidenceSource(trace)}</span>}
-            {traces.length > 0 && <select value={trace?.id ?? ''} onChange={(e) => { setTraceId(e.target.value); setSlice(null) }} aria-label="timing evidence" style={{ minWidth: 0, flex: '0 1 300px' }}>
+            {trace && tview !== 'compare' && <span className={`badge src-${evidenceSource(trace)}`}>{evidenceSource(trace)}</span>}
+            {traces.length > 0 && tview !== 'compare' && <select value={trace?.id ?? ''} onChange={(e) => { setTraceId(e.target.value); setSlice(null) }} aria-label="timing evidence" style={{ minWidth: 0, flex: '0 1 300px' }}>
               {traces.map((t) => <option key={t.id} value={t.id}>{evidenceSource(t)} · {new Set((t.timeline_events ?? []).map((x) => x.frame_index)).size}f · {t.id}</option>)}
             </select>}
             <span className="grow" />
-            {tview === 'trace' && <>
+          </div>
+          {timeline && <TimingContextStrip timeline={timeline} view={view} fps={fps} laneOfPid={laneOfPid} notes={notes}
+            extra={<>{slice ? <span className="chip" title="선택한 slice">선택 {slice.label}{slice.frame !== null ? ` · f${slice.frame}` : ''}</span> : null}
+              <span className="grow" />
+              {/* same controls in every Timing view: color and legend apply to both, Flow only draws in Trace */}
+            <span className="timing-opts">
               {colorBy === 'frame' && <FrameColorLegend />}
               <select value={colorBy} onChange={(e) => setColorBy(e.target.value as 'group' | 'frame')} aria-label="색 기준" title="frame × 분류: 같은 frame = 같은 색 계열, RT·NRT·M2M·SW = 명도·무늬로 구분 (RT(N+1)과 NRT(N) 중첩이 보임)">
                 <option value="frame">색: frame × 분류</option><option value="group">색: stage</option></select>
-              <label className="muted" style={{ fontSize: 12, display: 'flex', gap: 5, whiteSpace: 'nowrap' }}><input type="checkbox" checked={showFlows} onChange={(e) => setShowFlows(e.target.checked)} />Flow</label></>}
-          </div>
+              <label className="muted" style={{ fontSize: 12, display: 'flex', gap: 5, whiteSpace: 'nowrap', opacity: tview === 'trace' ? 1 : 0.45 }} title={tview === 'trace' ? 'slice 간 의존 화살표' : 'Trace 보기에서만 표시'}>
+                <input type="checkbox" checked={showFlows} disabled={tview !== 'trace'} onChange={(e) => setShowFlows(e.target.checked)} />Flow</label>
+            </span>
+            </>} />}
           <div className="pane-body">
             {evidenceQ.error && <div className="err">{evidenceQ.error}</div>}
             {evidenceQ.loading && <div className="empty">Evidence 불러오는 중…</div>}
             {!evidenceQ.loading && !timeline && <div className="empty">이 variant에는 timeline event가 있는 evidence가 없습니다. Camera Profiling에서 trace를 import하거나 simulation을 저장하세요.</div>}
             {timeline && tview === 'trace' && <TimelineView timeline={timeline} selectedSlice={slice?.id ?? null} colorBy={colorBy}
               highlightNode={slice ? null : highlightPid} showFlows={showFlows} onSelect={selectSlice} />}
-            {timeline && tview === 'cadence' && <CadenceView timeline={timeline} view={view} fps={fps} laneOfPid={laneOfPid} notes={notes} source={trace ? `${evidenceSource(trace)} · ${trace.id}` : ''} />}
+            {timeline && tview === 'compare' && canCompare && <div style={{ overflow: 'auto', padding: 12 }}><TimingCompare traces={traces} view={view} fps={fps} laneOfPid={laneOfPid}
+              onPickPid={(pid) => { const ip = model?.byPid.get(pid); if (ip) selectNode(ip.viewId) }} /></div>}
+            {timeline && tview === 'compare' && !canCompare && <div className="empty">예측(simulation) trace와 실측 trace가 모두 있어야 비교할 수 있습니다.</div>}
+            {timeline && tview === 'cadence' && <CadenceView timeline={timeline} view={view} fps={fps} laneOfPid={laneOfPid} colorBy={colorBy}
+              picked={slice && slice.frame !== null && slice.nodeId ? { frame: slice.frame, lane: laneOfPid(pipelineIdOf(slice.nodeId.replace(/^stage:/, ''))) ?? '' } : null}
+              onPick={(f, lane) => selectSlice(timeline.slices.filter((x) => x.frame === f && x.nodeId && laneOfPid(pipelineIdOf(x.nodeId.replace(/^stage:/, ''))) === lane).sort((a, b) => a.start - b.start)[0] ?? null)} />}
           </div>
         </section>}
       </div>

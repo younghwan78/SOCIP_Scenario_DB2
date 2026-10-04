@@ -20,7 +20,8 @@ interface Props {
   onToggleGroup: (groupId: string) => void
   showOps: boolean
   /** rich hover card for a node id (replaces the native SVG title) */
-  tooltip?: (id: string) => ReactNode
+  /** node tooltip; ``pinned`` = the user parked it (scrollable, full detail) */
+  tooltip?: (id: string, pinned: boolean) => ReactNode
 }
 
 /** Small numbered circles: RDMA (blue) / WDMA (orange) channels in use; hollow when the IP has none in use. */
@@ -69,6 +70,21 @@ export function fitView(layout: Layout, w: number, h: number, mode: 'all' | 'wid
  */
 export function GraphView({ layout, selected, related, onSelect, onToggleGroup, showOps, tooltip }: Props) {
   const [hover, setHover] = useState<{ id: string; x: number; y: number } | null>(null)
+  // hover follows the pointer (summary); resting ~400 ms on a node (or pressing P) parks it: fixed, scrollable, full detail
+  const [pinned, setPinned] = useState<{ id: string; x: number; y: number } | null>(null)
+  const dwell = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const clearDwell = () => { if (dwell.current) { clearTimeout(dwell.current); dwell.current = null } }
+  useEffect(() => () => clearDwell(), [])
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPinned(null)
+      if ((e.key === 'p' || e.key === 'P') && hoverRef.current && !(e.target as Element)?.closest?.('input,select,textarea')) setPinned(hoverRef.current)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+  const hoverRef = useRef(hover)
+  hoverRef.current = hover
   const wrapRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState({ w: 600, h: 400 })
   const [view, setView] = useState<View>({ x: 0, y: 0, s: 1 })
@@ -118,6 +134,7 @@ export function GraphView({ layout, selected, related, onSelect, onToggleGroup, 
     const el = wrapRef.current
     if (!el) return
     const onWheel = (e: WheelEvent) => {
+      if ((e.target as Element | null)?.closest?.('.gtip')) return   // let a parked tooltip scroll natively
       e.preventDefault()
       touched.current = true
       const r = el.getBoundingClientRect()
@@ -170,7 +187,7 @@ export function GraphView({ layout, selected, related, onSelect, onToggleGroup, 
       onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
       onClickCapture={(e) => { if (suppressClick.current) { suppressClick.current = false; e.stopPropagation(); e.preventDefault() } }}
       onDoubleClick={(e) => { if ((e.target as Element).tagName === 'svg') fit('all') }}>
-      <svg width={size.w} height={size.h} viewBox={vb} role="img" aria-label="Pipeline graph" onClick={() => onSelect(null)} style={{ display: 'block' }}>
+      <svg width={size.w} height={size.h} viewBox={vb} role="img" aria-label="Pipeline graph" onClick={() => { setPinned(null); onSelect(null) }} style={{ display: 'block' }}>
         <defs>
           {(['otf', 'm2m', 'ctl'] as const).map((k) => (
             <marker key={k} id={`m-${k}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
@@ -210,8 +227,17 @@ export function GraphView({ layout, selected, related, onSelect, onToggleGroup, 
           const on = !dim || related.has(n.id)
           const isSel = selected === n.id
           const common = { opacity: on ? 1 : 0.3, className: 'node', onClick: (ev: React.MouseEvent) => { ev.stopPropagation(); if (n.kind === 'group') onToggleGroup(n.id); else onSelect(n.id) },
-            onMouseMove: tooltip && n.kind !== 'group' ? (ev: React.MouseEvent) => { const r = wrapRef.current!.getBoundingClientRect(); setHover({ id: n.id, x: ev.clientX - r.left, y: ev.clientY - r.top }) } : undefined,
-            onMouseLeave: tooltip ? () => setHover(null) : undefined }
+            onMouseMove: tooltip && n.kind !== 'group' ? (ev: React.MouseEvent) => {
+              const r = wrapRef.current!.getBoundingClientRect()
+              const h = { id: n.id, x: ev.clientX - r.left, y: ev.clientY - r.top }
+              const prev = hoverRef.current
+              setHover(h)
+              if (!prev || prev.id !== h.id || Math.hypot(prev.x - h.x, prev.y - h.y) > 3) {
+                clearDwell()
+                dwell.current = setTimeout(() => { if (!drag.current?.moved) setPinned(hoverRef.current) }, 400)
+              }
+            } : undefined,
+            onMouseLeave: tooltip ? () => { clearDwell(); setHover(null) } : undefined }
           if (n.kind === 'buffer') {
             return (
               <g key={n.id} {...common}>
@@ -252,12 +278,25 @@ export function GraphView({ layout, selected, related, onSelect, onToggleGroup, 
             stroke="#FFFFFF" strokeWidth={3} onClick={(e) => { e.stopPropagation(); onToggleGroup(g.id) }}>▾ {g.label} · {g.count}</text>
         ))}
       </svg>
-      {tooltip && hover && !drag.current?.moved && (() => {
-        const body = tooltip(hover.id)
+      {tooltip && (pinned ?? hover) && !drag.current?.moved && (() => {
+        const t = pinned ?? hover!
+        const isPinned = !!pinned && t === pinned
+        const body = tooltip(t.id, isPinned)
         if (!body) return null
-        const left = hover.x + 16 + 340 > size.w ? Math.max(4, hover.x - 356) : hover.x + 16
-        const top = Math.min(hover.y + 12, Math.max(4, size.h - 40))
-        return <div className="gtip" style={{ left, top, maxHeight: size.h - top - 8 }}>{body}</div>
+        const left = t.x + 16 + 340 > size.w ? Math.max(4, t.x - 356) : t.x + 16
+        // open toward the larger free side so nodes near the bottom still get a tall tooltip
+        const below = size.h - t.y - 20, above = t.y - 20
+        const style: React.CSSProperties = below >= above || below >= 260
+          ? { left, top: t.y + 12, maxHeight: Math.max(120, below) }
+          : { left, bottom: size.h - t.y + 12, maxHeight: Math.max(120, above) }
+        return <div className={`gtip ${isPinned ? 'pinned' : ''}`} style={style} role={isPinned ? 'dialog' : 'tooltip'} aria-label={isPinned ? '고정된 상세' : undefined}
+          onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
+          {isPinned
+            ? <div className="gtip-bar"><span>고정됨 · 스크롤 가능</span><span className="grow" /><span className="faint">Esc</span>
+              <button className="btn tb-mini" aria-label="상세 닫기" onClick={() => setPinned(null)}>✕</button></div>
+            : <div className="gtip-hint faint">잠시 멈추면 고정 → 스크롤 · 전체 항목 (P)</div>}
+          {body}
+        </div>
       })()}
       <div className="canvas-ctl" onPointerDown={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
         <button className="btn" onClick={() => zoomAt(1 / 1.25)} aria-label="축소" title="축소 (Ctrl+wheel)">－</button>

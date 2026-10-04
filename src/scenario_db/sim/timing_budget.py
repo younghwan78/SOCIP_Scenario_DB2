@@ -258,6 +258,11 @@ def summarize(
             }
             for k, v in stages.items()
         },
+        "domains": {
+            st: [{k: d[k] for k in ("domain", "ip", "rule_mhz", "required_mhz", "set_mhz", "level")}
+                 for d in full.get("stage_domains", {}).get(st, [])]
+            for st in ("rt", "nrt", "post", "output")
+        },
         "nrt_driver": (stage_driver(ips, "nrt") or {}).get("node"),
         "nrt_clock_mhz": stage_clock("nrt"),
         "nrt_rule_clock_mhz": stage_rule_clock("nrt"),
@@ -637,11 +642,14 @@ def _report(graph, options, plan, rule_run, run, dvfs_tables) -> dict[str, Any]:
     period = plan["period"]
     stage = plan["stage"]
     timing = {t.node_id: t for t in result.timing_breakdown}
+    workloads = {w.node_id: w for w in run["inputs"].workloads}
     ips = []
     for node, res in result.resolved.items():
         cores = plan["dual"].get(node, 1)
+        basis = _clock_basis(res, workloads.get(node), stage.get(node, "nrt"), dvfs_tables)
         ips.append(
             {
+                **basis,
                 "node": node,
                 "hw_name": res.hw_name,
                 "stage": stage.get(node, "nrt"),
@@ -659,6 +667,10 @@ def _report(graph, options, plan, rule_run, run, dvfs_tables) -> dict[str, Any]:
                 "dvfs_table": bool(res.dvfs_group) and res.dvfs_group in dvfs_tables,
                 "voltage_mv": round(res.set_voltage_mv, 2),
                 "hw_ms": round(timing[node].hw_time_ms, 3) if node in timing else None,
+                # OTF-linked across DVFS domains: hw_ms is the group's time; standalone = this IP alone
+                "otf_group": timing[node].otf_group if node in timing else None,
+                "standalone_hw_ms": round(timing[node].standalone_hw_time_ms, 3)
+                if node in timing and timing[node].standalone_hw_time_ms is not None else None,
                 "power_mw": round(res.total_power_mw * cores, 3),
                 # v2-vf clock term inputs (0 / None under v1) for analytic re-scaling.
                 "clock_power_fraction": res.clock_power_fraction or 0.0,
@@ -673,6 +685,15 @@ def _report(graph, options, plan, rule_run, run, dvfs_tables) -> dict[str, Any]:
                 "clock_reason": res.clock_correction_reason,
             }
         )
+    # IPs lifted by a shared DVFS domain: name the domain member that sets the level.
+    by_group: dict[str, list[dict[str, Any]]] = {}
+    for ip in ips:
+        if ip["dvfs_group"]:
+            by_group.setdefault(ip["dvfs_group"], []).append(ip)
+    for members in by_group.values():
+        leader = max(members, key=lambda m: m["own_required_mhz"])
+        for m in members:
+            m["domain_leader"] = leader["node"] if m["set_reason"] == "domain" else None
     # Stage HW time = busiest physical resource (streams sharing one IP add up).
     per_resource: dict[tuple[str, str], float] = {}
     for ip in ips:
@@ -710,7 +731,8 @@ def _report(graph, options, plan, rule_run, run, dvfs_tables) -> dict[str, Any]:
         )
     intervals, latency = _cadence(result, run["inputs"], plan, options)
     power, bw = _power_bw(result, plan, options, period)
-    verdict = _verdict(stages, intervals, ips)
+    domains = {st: stage_domains(ips, st) for st in STAGES}
+    verdict = _verdict(stages, intervals, ips, domains)
     return {
         "scenario_id": graph.scenario_id,
         "variant_id": graph.variant_id,
@@ -736,6 +758,7 @@ def _report(graph, options, plan, rule_run, run, dvfs_tables) -> dict[str, Any]:
         "power": power,
         "bw": bw,
         "verdict": verdict,
+        "stage_domains": domains,
         "timeline": [
             {
                 "node": str(e.node_id),
@@ -864,7 +887,7 @@ def _power_bw(result: SimRunResult, plan: dict, options: TimingBudgetOptions, pe
     return power, bw
 
 
-def _verdict(stages, intervals, ips) -> dict[str, Any]:
+def _verdict(stages, intervals, ips, domains=None) -> dict[str, Any]:
     reasons = []
     for s in stages:
         if not s["feasible"]:
@@ -892,9 +915,20 @@ def _verdict(stages, intervals, ips) -> dict[str, Any]:
         status = "clock_up"
     else:
         status = "ok"
+    notes = []
+    for st in ("nrt", "post"):
+        for d in (domains or {}).get(st, []):
+            if d["rule_mhz"] and d["set_mhz"] > d["rule_mhz"] * 1.05:
+                lv = f" (L{d['rule_level']}→L{d['level']})" if d["level"] is not None and d["rule_level"] is not None else ""
+                if d["required_mhz"] > d["rule_mhz"]:
+                    notes.append(f"{st.upper()} {d['domain']}: 필요 {d['required_mhz']:.1f} MHz > rule {d['rule_mhz']:.0f} → {d['set_mhz']:.0f} MHz{lv}")
+                else:  # lifted by another IP of the shared DVFS domain
+                    by = f" ({d['domain_leader'].upper()})" if d.get("domain_leader") else ""
+                    notes.append(f"{st.upper()} {d['domain']}: domain 공유{by}로 {d['set_mhz']:.0f} MHz{lv} (자체 필요 {d['required_mhz']:.1f})")
     return {
         "status": status,
         "reasons": reasons,
+        "notes": notes,
         "nrt_clock_factor": None if factor is None else round(factor, 3),
     }
 
@@ -945,11 +979,15 @@ def _edge_pair(edge: dict[str, Any]) -> tuple[str, str]:
 
 
 def stage_driver(ips: list[dict[str, Any]], stage: str) -> dict[str, Any] | None:
-    """IP whose clock the stage budget moves most (max set/rule ratio, then longest HW time)."""
+    """IP whose clock the stage budget moves most (max set/rule ratio, then own need, then HW time).
+
+    IPs whose time is counted inside a SW stage (``included_stage_budget``) never drive the stage.
+    """
     rows = [
         ip
         for ip in ips
         if ip["stage"] == stage and ip.get("set_clock_mhz") and ip.get("rule_clock_mhz")
+        and ip.get("basis") != "stage_budget"
     ]
     if not rows:
         return None
@@ -957,9 +995,80 @@ def stage_driver(ips: list[dict[str, Any]], stage: str) -> dict[str, Any] | None
         rows,
         key=lambda ip: (
             round(ip["set_clock_mhz"] / ip["rule_clock_mhz"], 3),
+            ip.get("own_required_mhz") or 0.0,
             ip.get("hw_ms") or 0.0,
+            ip.get("standalone_hw_ms") is None,   # OTF pacer (sets the group time) over a waiting member
         ),
     )
+
+
+def stage_domains(ips: list[dict[str, Any]], stage: str) -> list[dict[str, Any]]:
+    """One row per DVFS domain used by the stage (NRT = CAM + INTCAM …): its clock, need and quantisation."""
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for ip in ips:
+        if ip["stage"] == stage:
+            groups.setdefault(ip.get("dvfs_group") or ip["node"], []).append(ip)
+    out = []
+    for domain, members in groups.items():
+        timed = [m for m in members if m.get("basis") != "stage_budget"] or members
+        driver = max(timed, key=lambda m: (m.get("own_required_mhz") or 0.0, m.get("hw_ms") or 0.0))
+        need = max((m.get("own_required_mhz") or 0.0) for m in timed)
+        out.append({
+            "domain": domain,
+            "ip": driver["node"],
+            "nodes": sorted(m["node"] for m in members),
+            "rule_mhz": driver.get("rule_clock_mhz"),
+            "required_mhz": round(need, 1),
+            "set_mhz": driver["set_clock_mhz"],
+            "level": driver.get("dvfs_level"),
+            "rule_level": driver.get("rule_dvfs_level"),
+            "next_mhz": driver.get("next_level_mhz"),
+            "headroom_pct": round((driver["set_clock_mhz"] / need - 1) * 100, 1) if need > 0 else None,
+            "hw_ms": max((m.get("hw_ms") or 0.0) for m in timed),
+            "basis": driver.get("basis"),
+            "set_reason": driver.get("set_reason"),
+            "domain_leader": driver.get("domain_leader"),
+        })
+    return sorted(out, key=lambda d: (-(d["set_mhz"] or 0), d["domain"]))
+
+
+_EPS_MHZ = 1e-6
+_SENSOR_KINDS = ("vvalid_stream", "mipi_ingress", "otf_align")
+
+
+def _clock_basis(res, workload, stage: str, dvfs_tables: dict[str, DVFSTable]) -> dict[str, Any]:
+    """What decided this IP's clock: its own need (binding constraint) and why the set clock is higher."""
+    base = float(res.base_required_clock_mhz or 0.0)
+    cands: list[tuple[str, float]] = [("budget" if stage in ("nrt", "post") else "rule", base)]
+    for c in (workload.clock_constraints if workload is not None else []):
+        cands.append((c.kind, float(c.mhz)))
+    if res.manual_clock_mhz:
+        cands.append(("manual", float(res.manual_clock_mhz)))
+    kind, own = max(cands, key=lambda kv: kv[1])
+    if workload is not None and workload.readout_clocked and kind in ("vvalid_stream", "otf_align"):
+        kind = "sensor_readout"
+    set_mhz = float(res.set_clock_mhz)
+    table = dvfs_tables.get(res.dvfs_group or "")
+    reason, next_mhz = "exact", None
+    if table is not None and table.levels:
+        speeds = sorted(lv.speed_mhz for lv in table.levels if lv.speed_mhz > 0)
+        own_level = next((v for v in speeds if v >= own - _EPS_MHZ), None)
+        next_mhz = next((v for v in speeds if v > set_mhz + _EPS_MHZ), None)
+        if own_level is not None and set_mhz > own_level + _EPS_MHZ:
+            reason = "domain"
+        elif speeds and own < speeds[0] - _EPS_MHZ and set_mhz <= speeds[0] + _EPS_MHZ:
+            reason = "dvfs_floor"
+        elif set_mhz > own + _EPS_MHZ:
+            reason = "dvfs_step"
+    elif set_mhz > own + _EPS_MHZ:
+        reason = "domain"
+    return {
+        "own_required_mhz": round(own, 1),
+        "basis": kind,
+        "set_reason": reason,
+        "next_level_mhz": next_mhz,
+        "sensor_readout_ms": round(workload.sensor_readout_ms, 3) if workload is not None and workload.sensor_readout_ms else None,
+    }
 
 
 DERIVED_VARIANT_MARKERS = ("-explored-", "-timing-min", "-timing-max")
@@ -998,6 +1107,9 @@ def fleet_row(report: dict[str, Any]) -> dict[str, Any]:
         "clocks": {
             st: {
                 "ip": (stage_driver(report["ips"], st) or {}).get("node"),
+                "domain": (stage_driver(report["ips"], st) or {}).get("dvfs_group"),
+                "domains": [{k: d[k] for k in ("domain", "ip", "rule_mhz", "required_mhz", "set_mhz", "level")}
+                            for d in report.get("stage_domains", {}).get(st, [])],
                 "rule_mhz": stage_clock(st, "rule_clock_mhz"),
                 "set_mhz": stage_clock(st, "set_clock_mhz"),
                 "level": stage_level(st),

@@ -405,7 +405,48 @@ def promote(db: Session, request: PromoteRequest, user: str | None = None) -> di
 
 
 BOARD_METRIC_KEYS = ("fps", "power", "bw_mbs", "distribution", "compression", "dvfs", "verdict", "eligible_cases",
-                     "alternatives", "verified", "statistic", "runtime_scale", "model_lineage", "power_options")
+                     "alternatives", "verified", "statistic", "runtime_scale", "model_lineage", "power_options",
+                     "verdict_detail", "stages", "intervals", "intervals_ok", "period_ms", "latency")
+
+STAGE_KEYS = ("id", "name", "sw_ms", "hw_ms", "budget_ms", "overhead_ms", "margin", "feasible", "fill_pct")
+
+
+def verdict_detail(m: dict[str, Any]) -> dict[str, Any] | None:
+    """Why a registered prediction got its timing verdict: stored reasons (predictions promoted after
+    verdict_detail existed) or reasons re-derived from the frozen stages / intervals (older ones)."""
+    status = m.get("verdict")
+    if not status:
+        return None
+    raw = m.get("stages") or {}
+    stages = [({"id": key} | {k: st.get(k) for k in STAGE_KEYS if k in st}) for key, st in (raw.items() if isinstance(raw, dict) else
+              ((st.get("id"), st) for st in raw))]
+    period = m.get("period_ms")
+    iv = m.get("intervals") or {}
+    intervals = {k: iv.get(k) for k in ("preview", "video") if isinstance(iv.get(k), (int, float))}
+    stored = m.get("verdict_detail")
+    if stored:
+        reasons, factor, derived = list(stored.get("reasons") or []), stored.get("nrt_clock_factor"), False
+    else:
+        reasons, factor, derived = [], None, True
+        for st in stages:
+            if st.get("feasible") is False:
+                reasons.append(f"{st.get('name') or st['id']}: SW {float(st.get('sw_ms') or 0):.2f} ms leaves no HW budget")
+            elif st.get("id") == "rt" and st.get("hw_ms") is not None and st.get("budget_ms") is not None \
+                    and float(st["hw_ms"]) > float(st["budget_ms"]) * 1.0001:
+                reasons.append(f"RT HW {float(st['hw_ms']):.2f} ms > budget {float(st['budget_ms']):.2f} ms")
+        if m.get("intervals_ok") is False and period:
+            for k, v in intervals.items():
+                reasons.append(f"{k} interval {v:.3f} ms vs {float(period):.3f} ms")
+        if status == "clock_up":
+            full = [st for st in stages if st.get("id") == "nrt" and float(st.get("fill_pct") or 0) >= 99.0]
+            reasons.append("NRT HW가 budget을 꽉 채움 (점유 ≥ 99%) — NRT clock을 25% rule보다 올려서 맞춘 상태"
+                           if full else "NRT clock을 25% rule보다 올려야 budget을 맞춤")
+            reasons.append("clock 배율은 이 예측에 저장되지 않음 — 다시 등록하면 표시됩니다")
+        if status == "fail" and not reasons:
+            reasons.append("timing fail (detail not stored for this prediction)")
+    return {"status": status, "reasons": reasons, "nrt_clock_factor": factor, "derived": derived,
+            "stages": stages, "intervals": intervals, "period_ms": period, "latency": m.get("latency"),
+            "statistic": m.get("statistic"), "runtime_scale": m.get("runtime_scale")}
 
 
 def _metrics_subset(keys: tuple[str, ...]) -> Any:
@@ -443,6 +484,7 @@ def board(db: Session, *, scenario_id: str | None = None, project_ref: str | Non
                           "lineage_changes": lineage_differences(old["metrics"].get("model_lineage"),
                                                                  m.get("model_lineage"))} if old else None),
             "power_options": board_options(m.get("power_options"), reviews.get(p.scenario_ref, {}), p.variant_ref),
+            "verdict_detail": verdict_detail(m),
         })
     return {"rows": rows, "review_statuses": list(POWER_OPTION_STATUSES)}
 

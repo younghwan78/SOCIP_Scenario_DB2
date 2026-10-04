@@ -246,10 +246,7 @@ class DvfsResolver:
         substituted_mhz: float | None = None,
     ) -> ResolvedIPConfig:
         params = workload.sim_params
-        required_clock = 0.0
-        if workload.pixels > 0 and workload.fps > 0 and params.ppc > 0:
-            usable = max(1e-9, 1.0 - workload.sw_margin)
-            required_clock = workload.pixels * workload.fps / usable / params.ppc / 1e6
+        required_clock = _base_required_mhz(workload)
         base_required_clock = required_clock
         if substituted_mhz is not None:
             # configured / measured basis: that clock replaces the calculated
@@ -504,6 +501,9 @@ def _physical_required_mhz(workload: IPWorkload, throughput_mhz: float) -> float
 
 
 def _base_required_mhz(workload: IPWorkload) -> float:
+    """SW-margin throughput rule; 0 for read-out-clocked RT IPs (their read-out stream constraint decides)."""
+    if workload.readout_clocked:
+        return 0.0
     params = workload.sim_params
     if workload.pixels > 0 and workload.fps > 0 and params.ppc > 0:
         usable = max(1e-9, 1.0 - workload.sw_margin)
