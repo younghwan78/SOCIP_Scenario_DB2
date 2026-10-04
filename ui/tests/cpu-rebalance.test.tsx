@@ -8,6 +8,7 @@ import type { Ctx } from '../src/App'
 import { cpuApi } from '../src/lib/cpu'
 import { applyDsuRebalance, defaultPool, rebalanceApi, type CpuRebalance, type CpuRebalanceRequest } from '../src/lib/rebalance'
 import { CpuWhatIfPage } from '../src/pages/CpuWhatIf'
+import { powerParts } from '../src/components/RebalanceView'
 import { ChartTipProvider } from '../src/components/ChartTip'
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
@@ -127,4 +128,9 @@ it('가정 민감도: DSU corners instantly, other assumptions rerun sequentiall
   expect(rows.find((r) => r.startsWith('SW 부하 증가'))).toContain('바뀜 1/2')
   expect(rows.find((r) => r.startsWith('DSU vote 표'))).toBeTruthy()
   act(() => root.unmount())
+})
+
+it('power breakdown order: DSU → pool clusters (topology order) → outside-pool clusters by name', () => {
+  expect(powerParts(E2600).map((p) => p.label)).toEqual(['DSU', 'MID_LF0', 'MID_LF1', 'MID_HF', 'BIG (pool 밖)'])
+  expect(powerParts({ ...E2600, pool: ['MID_HF', 'MID_LF0'] }).map((p) => p.label)).toEqual(['DSU', 'MID_LF0', 'MID_HF', 'MID_LF1 + BIG (pool 밖)'])
 })

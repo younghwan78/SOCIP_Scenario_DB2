@@ -126,12 +126,21 @@ function CgroupSummary({ rows, groups, states, pool }: { rows: SetupRow[]; group
   </div>
 }
 
+/** Stack / legend order for power breakdowns: DSU first, then pool clusters in topology order, then the clusters outside the pool
+ * (aggregated as `other` by the server — named after them, e.g. BIG). Bottom→top in the curve, left→right in the bars. */
+export function powerParts(r: CpuRebalance): { k: string; label: string; color: string }[] {
+  const keys = r.clusters.map((c) => `cpu.${c.name}`)
+  const outside = sortClusters(r.clusters.map((c) => c.name).filter((c) => !r.pool.includes(c)))
+  return [{ k: 'dsu', label: 'DSU', color: partColor('cpu.dsu', keys) },
+    ...sortClusters([...r.pool]).map((c) => ({ k: c, label: c, color: partColor(`cpu.${c}`, keys) })),
+    { k: 'other', label: outside.length ? `${outside.join(' + ')} (pool 밖)` : 'pool 밖', color: outside.length === 1 ? partColor(`cpu.${outside[0]}`, keys) : OTHER }]
+}
+
 /** Greedy move curve: stacked power per step (pool clusters · DSU · other), total line, ★ start, ● lowest. */
 export function MoveCurve({ r, sel, onPick }: { r: CpuRebalance; sel: string; onPick: (id: string) => void }) {
   const [ref, width] = useWidth<HTMLDivElement>(800)
   const tip = useTip()
-  const keys = r.clusters.map((c) => `cpu.${c.name}`)
-  const parts = [...r.pool.map((c) => ({ k: c, label: c, color: partColor(`cpu.${c}`, keys) })), { k: 'dsu', label: 'DSU', color: partColor('cpu.dsu', keys) }, { k: 'other', label: 'pool 밖', color: OTHER }]
+  const parts = powerParts(r)
   const pts = r.curve
   const max = Math.max(...pts.map((p) => p.total_mw), r.reference.total_mw) * 1.08
   const H = 220, L = 46, B = 92, plotW = Math.max(200, width - L - 12), bw = Math.min(46, (plotW / pts.length) * 0.7)
@@ -210,17 +219,15 @@ function Boundaries({ list, title }: { list: RbBoundary[]; title: string }) {
 
 export function RebalanceResults({ r, sel, setSel, knob = 'cpuset', sensitivity }: { r: CpuRebalance; sel: string; setSel: (id: string) => void; knob?: Knob; sensitivity?: React.ReactNode }) {
   const ref = r.reference, best = r.best
-  const keys = r.clusters.map((c) => `cpu.${c.name}`)
-  const color = (c: string) => (c === 'dsu' ? partColor('cpu.dsu', keys) : c === 'other' ? OTHER : partColor(`cpu.${c}`, keys))
+  const parts = powerParts(r)
   const picked: RbSplit | undefined = sel === 'ref' ? ref : sel.startsWith('c') ? r.cases.find((c) => `c${c.rank}` === sel) : sel.startsWith('s') ? r.curve[Number(sel.slice(1))] : undefined
-  const stackKeys = [...r.pool, 'dsu', 'other']
   const maxMw = Math.max(ref.total_mw, ...r.cases.map((c) => c.total_mw))
   const cols: Column<RbSplit>[] = useMemo(() => [
     { key: 'rank', label: '#', width: 40, sort: (c) => c.rank, render: (c) => c.rank },
     { key: 'mw', label: 'CPU mW', width: 84, align: 'right', sort: (c) => c.total_mw, render: (c) => <span className="mono">{fmt(c.total_mw, 1)}</span> },
     { key: 'd', label: '현재 대비', width: 90, align: 'right', sort: (c) => c.delta_mw, render: (c) => <span className={`mono ${c.delta_mw < 0 ? 'pm-down' : 'pm-up'}`}>{signed(c.delta_mw)}</span> },
-    { key: 'stack', label: '구성', width: 170, render: (c) => <span className="rb-stack" title={stackKeys.map((k) => `${k} ${fmt(c.mw[k] ?? 0, 1)}`).join(' · ')}>
-      {stackKeys.map((k) => <span key={k} style={{ width: `${(100 * (c.mw[k] ?? 0)) / maxMw}%`, background: color(k) }} />)}</span> },
+    { key: 'stack', label: '구성', width: 170, render: (c) => <span className="rb-stack" title={parts.map((q) => `${q.label} ${fmt(c.mw[q.k] ?? 0, 1)}`).join(' · ')}>
+      {parts.map((q) => <span key={q.k} style={{ width: `${(100 * (c.mw[q.k] ?? 0)) / maxMw}%`, background: q.color }} />)}</span> },
     ...r.pool.map((cl): Column<RbSplit> => ({ key: `f.${cl}`, label: cl, width: 86, align: 'right', sort: (c) => c.mhz[cl], render: (c) => <span className={`mono ${c.mhz[cl] < ref.mhz[cl] ? 'pm-down' : c.mhz[cl] > ref.mhz[cl] ? 'pm-up' : ''}`}>{c.mhz[cl]}</span> })),
     { key: 'dsu', label: 'DSU', width: 64, align: 'right', sort: (c) => c.mhz.dsu, render: (c) => <span className="mono">{c.mhz.dsu}</span> },
     { key: 'slack', label: 'slack ms', width: 76, align: 'right', sort: (c) => c.min_slack_ms ?? null, render: (c) => <span className="mono">{c.min_slack_ms === null || c.min_slack_ms === undefined ? '—' : fmt(c.min_slack_ms, 2)}</span> },
