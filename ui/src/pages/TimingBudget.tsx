@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Ctx } from '../App'
 import { useAsync } from '../lib/route'
-import { SW_MARGINS, fmt, marginOf, marginOpts, pct0, timingApi, verdictChip, type EisMode, type Statistic, type TimingReport } from '../lib/timingBudget'
+import { SW_MARGINS, fmt, stageDomainsOf, marginOf, marginOpts, pct0, timingApi, verdictChip, type EisMode, type Statistic, type TimingReport } from '../lib/timingBudget'
 import { Card, ClockChart, Gantt, Intervals, PowerBw, SlotBudget, WhatIf } from '../components/TimingCharts'
 import { ProvBadge } from '../components/Provenance'
 import { powerScope, type Prov } from '../lib/provenance'
@@ -69,10 +69,9 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
 function Body({ r, cfg, whatif, whatLoading, current, margin, frames, setFrames }: { r: TimingReport; cfg: string | null; ctx: Ctx; whatif: NonNullable<TimingReport['whatif']>; whatLoading: boolean; current: { statistic: string; eis: boolean; scale: number }
   margin: number; frames: number; setFrames: (n: number) => void }) {
   const st = useMemo(() => Object.fromEntries(r.stages.map((s) => [s.id, s])), [r])
-  const nrtDriver = useMemo(() => {
-    const rows = r.ips.filter((i) => i.stage === 'nrt' && i.rule_clock_mhz)
-    return rows.sort((a, b) => b.set_clock_mhz / (b.rule_clock_mhz ?? 1) - a.set_clock_mhz / (a.rule_clock_mhz ?? 1))[0]
-  }, [r])
+  // one clock per DVFS domain: a stage can span several (NRT = CAM + INTCAM); never mix them in one number
+  const nrtDomains = useMemo(() => stageDomainsOf(r, 'nrt'), [r])
+  const rtReadout = useMemo(() => r.ips.find((i) => i.stage === 'rt' && i.sensor_readout_ms)?.sensor_readout_ms ?? null, [r])
   const iv = r.intervals
   const prov: Prov = {
     kind: 'recalc', engine: 'Timing Budget (analytic)', scope: powerScope({ cpu: r.power.cpu_mw, hw: r.power.hw_mw, bw: r.power.bw_mw }),
@@ -84,11 +83,15 @@ function Body({ r, cfg, whatif, whatLoading, current, margin, frames, setFrames 
       '현재 조건으로 즉석 계산한 값 — 등록 예측(예측 현황)·Simulation evidence와 다를 수 있음',
     ],
   }
-  const kpis: { label: string; value: string; unit: string; note: string; bad: boolean; prov?: Prov }[] = [
-    { label: `RT HW / ${pct0(1 - margin)} 예산`, value: `${fmt(st.rt.hw_ms, 2)}`, unit: `/ ${fmt(st.rt.budget_ms, 2)} ms`, note: `SW margin ${pct0(margin)} rule${Math.abs(margin - 0.25) > 1e-9 ? ' (기본 25%에서 변경)' : ''}`, bad: st.rt.hw_ms > st.rt.budget_ms },
+  const kpis: { label: string; value: string; unit: string; note: string; bad: boolean; prov?: Prov; small?: boolean }[] = [
+    { label: `RT HW / ${pct0(1 - margin)} 예산`, value: `${fmt(st.rt.hw_ms, 2)}`, unit: `/ ${fmt(st.rt.budget_ms, 2)} ms`,
+      note: rtReadout ? `sensor readout ${fmt(rtReadout, 2)} ms에 종속 · clock = readout 만족 최소 (margin 무관)` : `SW margin ${pct0(margin)} rule${Math.abs(margin - 0.25) > 1e-9 ? ' (기본 25%에서 변경)' : ''}`,
+      bad: st.rt.hw_ms > st.rt.budget_ms },
     { label: 'NRT SW (runtime+latency)', value: fmt(st.nrt.sw_ms, 2), unit: 'ms', note: `HW 예산 ${fmt(st.nrt.budget_ms, 2)} ms`, bad: !st.nrt.feasible },
     { label: 'Post SW (EIS 등)', value: fmt(st.post.sw_ms, 2), unit: 'ms', note: r.eis.on ? 'EIS ON' : 'EIS OFF', bad: !st.post.feasible },
-    { label: `NRT clock${nrtDriver ? ` · ${nrtDriver.node.toUpperCase()}` : ''}`, value: fmt(nrtDriver?.set_clock_mhz, 0), unit: 'MHz', note: nrtDriver ? `rule ${fmt(nrtDriver.rule_clock_mhz, 0)} MHz · ×${fmt(nrtDriver.set_clock_mhz / (nrtDriver.rule_clock_mhz ?? 1), 2)}${nrtDriver.dvfs_level !== null ? ` · L${nrtDriver.dvfs_level}` : ''}` : '—', bad: false },
+    { label: 'NRT clock · DVFS domain별', value: nrtDomains.map((d) => `${d.domain} ${fmt(d.set_mhz, 0)}`).join(' · ') || '—', unit: 'MHz',
+      note: nrtDomains.map((d) => `${d.domain} 필요 ${fmt(d.required_mhz, 0)}${d.level !== null ? `→L${d.level}` : ''}${d.headroom_pct !== null ? ` 여유 ${fmt(d.headroom_pct, 0)}%` : ''}${d.set_reason === 'domain' && d.domain_leader ? ` (${d.domain_leader.toUpperCase()}가 결정)` : ''}`).join(' · ') || '—',
+      bad: nrtDomains.some((d) => d.rule_mhz !== null && d.set_mhz > d.rule_mhz * 1.05), small: nrtDomains.length > 1 },
     { label: 'Preview / Video 간격', value: `${fmt(iv.preview.max_ms, 2)} / ${fmt(iv.video.max_ms, 2)}`, unit: 'ms', note: iv.ok ? `목표 ${fmt(iv.target_ms, 2)} ±${fmt(iv.tolerance * 100, 1)}% ✓` : '목표 이탈', bad: !iv.ok },
     { label: 'Power · BW', value: fmt(r.power.total_mw, 0), unit: 'mW', note: `CPU ${fmt(r.power.cpu_mw, 0)} · HW ${fmt(r.power.hw_mw, 0)} · BW ${fmt(r.power.bw_mw, 0)} · ${fmt(r.bw.total_mbs / 1000, 2)} GB/s`, bad: false, prov },
   ]
@@ -97,20 +100,22 @@ function Body({ r, cfg, whatif, whatLoading, current, margin, frames, setFrames 
       {kpis.map((k) => (
         <div key={k.label} className="panel tb-kpi">
           <div className="faint" style={{ fontSize: 12 }}>{k.label}{k.prov && <> <ProvBadge prov={k.prov} compact /></>}</div>
-          <div><span className="mono" style={{ fontSize: 20, fontWeight: 600, color: k.bad ? 'var(--del-text)' : 'var(--text)' }}>{k.value}</span> <span className="faint" style={{ fontSize: 12 }}>{k.unit}</span></div>
+          <div><span className="mono" style={{ fontSize: k.small ? 16 : 20, fontWeight: 600, color: k.bad ? 'var(--del-text)' : 'var(--text)' }}>{k.value}</span> <span className="faint" style={{ fontSize: 12 }}>{k.unit}</span></div>
           <div className="faint" style={{ fontSize: 11 }}>{k.note}</div>
         </div>
       ))}
     </section>
     {r.verdict.reasons.length > 0 && <div className="err" style={{ fontSize: 13 }}>{r.verdict.reasons.slice(0, 4).map((x) => <div key={x}>{x}</div>)}</div>}
+    {(r.verdict.notes?.length ?? 0) > 0 && <div className="panel tb-notes" role="note" style={{ fontSize: 13, padding: '6px 12px', borderLeft: '3px solid var(--warn-text, #B7791F)' }}>
+      <b>Clock ↑</b> {r.verdict.notes!.map((x) => <div key={x} className="mono" style={{ fontSize: 12 }}>{x}</div>)}</div>}
     <div className="tb-grid">
       <Card id="slot" title="① 1 frame 예산 — stage별 slot" note="stage는 memory로 pipeline · 각 stage가 1 frame 안에 끝나야 함" defaultWide><SlotBudget report={r} margin={margin} /></Card>
-      <Card id="clock" title="⑤ IP별 필요 clock · DVFS level" note={`DVFS domain별 묶음 · domain level = 최고 요구 IP · RT·Output ${pct0(margin)} rule, NRT·Post는 SW 반영 예산`}><ClockChart ips={r.ips} dvfsApplied={r.dvfs.applied} margin={margin} /></Card>
+      <Card id="clock" title="⑤ IP별 필요 clock · DVFS level" note={`DVFS domain별 묶음 · domain level = 최고 요구 IP · RT = sensor readout 기준 · Output ${pct0(margin)} rule · NRT·Post = SW 반영 예산`}><ClockChart ips={r.ips} dvfsApplied={r.dvfs.applied} margin={margin} /></Card>
       <Card id="power" title="⑥ 예상 Power · BW" note="CPU(SW) / HW(IP별) / BW(HW·SW) 비중"><PowerBw report={r} /></Card>
       <Card id="gantt" title="② Pipeline timeline" note={`${r.timeline.length ? Math.max(...r.timeline.map((t) => t.frame)) + 1 : 0} frames · 점선 = ${fmt(r.fps, 0)} fps frame 경계 (${fmt(r.period_ms, 2)} ms)`} defaultWide
         actions={<div className="seg sm" role="group" aria-label="timeline frame 수">{[6, 12, 20].map((n) => <button key={n} className={frames === n ? 'on' : ''} onClick={() => setFrames(n)}>{n} frame</button>)}</div>}><Gantt report={r} /></Card>
       <Card id="interval" title="③ 출력 frame 간격 · pipeline latency" note="합격 기준 = 간격 · latency는 참고"><Intervals report={r} /></Card>
-      <Card id="whatif" title="④ 차기 SW 증가 → NRT 필요 clock" note="NRT 예산 = period − SW(runtime+latency)">
+      <Card id="whatif" title="④ 차기 SW 증가 → NRT 필요 clock" note="NRT 예산 = period − SW(runtime+latency) · DVFS domain별 (CAM / INTCAM …)">
         {whatLoading && !whatif.length ? <div className="empty">what-if 계산 중…</div> : <WhatIf rows={whatif} current={current} margin={margin} />}
       </Card>
     </div>

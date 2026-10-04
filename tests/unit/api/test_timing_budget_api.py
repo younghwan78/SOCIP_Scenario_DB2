@@ -120,3 +120,49 @@ def test_service_runs_read_only_with_default_dvfs_lookup(monkeypatch):
     assert res.dvfs_table_ref is None
     db.add.assert_not_called()
     db.commit.assert_not_called()
+
+
+def _uhd30_graph_and_dvfs():
+    import yaml
+    from scenario_db.sim.models import DVFSTable
+
+    catalog = {}
+    for path in (FIXTURE / "00_hw").glob("ip-*.yaml"):
+        d = read(path)
+        catalog[d["id"]] = IpCatalog(id=d["id"], schema_version=d["schema_version"], category=d["category"],
+                                     hierarchy=d["hierarchy"], capabilities=d["capabilities"], yaml_sha256="fixture")
+    graph = graph_from_fixture(read(FIXTURE / "02_definition" / "uc-cam-recording-e2600.yaml"), "cam-rec-r1-uhd30-vdis", catalog)
+    doc = yaml.safe_load((FIXTURE / "00_hw" / "dvfs-exynos2600-sample-v0.yaml").read_text(encoding="utf-8"))
+    return graph, {k: DVFSTable.model_validate(v) for k, v in doc["domains"].items()}
+
+
+def test_rt_clock_follows_sensor_readout_and_nrt_reports_each_dvfs_domain():
+    from scenario_db.sim.timing_budget import analyze_timing_budget, stage_driver
+
+    graph, dvfs = _uhd30_graph_and_dvfs()
+    base = analyze_timing_budget(graph, TimingBudgetOptions(), dvfs_tables=dvfs)
+    rt = {d["domain"]: d for d in base["stage_domains"]["rt"]}
+    # RT: min clock whose HW time fits the read-out (241.5 MHz -> CAM L6 266), HW time = read-out window
+    assert rt["CAM"]["basis"] == "sensor_readout" and rt["CAM"]["set_mhz"] == 266 and rt["CAM"]["required_mhz"] == 241.5
+    stage = {s["id"]: s for s in base["stages"]}
+    assert stage["rt"]["hw_ms"] == 10.18
+    # NRT spans two DVFS domains, never merged into one clock
+    nrt = {d["domain"]: d for d in base["stage_domains"]["nrt"]}
+    assert set(nrt) == {"CAM", "INTCAM"}
+    assert nrt["INTCAM"]["set_mhz"] == 133 and nrt["INTCAM"]["set_reason"] == "dvfs_floor"
+    assert nrt["CAM"]["set_reason"] == "domain" and nrt["CAM"]["domain_leader"] == "byrp"
+    # LME runs inside the pre_me_rta SW stage: it never drives the NRT clock
+    assert stage_driver(base["ips"], "nrt")["node"] in {"mtnr", "msnr"}
+
+    grown = analyze_timing_budget(graph, TimingBudgetOptions(runtime_scale=1.4), dvfs_tables=dvfs)
+    intcam = next(d for d in grown["stage_domains"]["nrt"] if d["domain"] == "INTCAM")
+    assert intcam["required_mhz"] == 135.2 and intcam["set_mhz"] == 266 and intcam["level"] == 4
+    assert grown["verdict"]["status"] == "clock_up" and grown["verdict"]["reasons"] == []
+    assert any("INTCAM" in n and "266" in n for n in grown["verdict"]["notes"])
+
+    # SW margin: RT is read-out bound, Output sits on the INT floor -> clocks unchanged, only the RT budget moves
+    wide = analyze_timing_budget(graph, TimingBudgetOptions(rt_margin=0.35, output_margin=0.35), dvfs_tables=dvfs)
+    assert [i["set_clock_mhz"] for i in wide["ips"]] == [i["set_clock_mhz"] for i in base["ips"]]
+    assert next(s for s in wide["stages"] if s["id"] == "rt")["budget_ms"] < stage["rt"]["budget_ms"]
+    out = next(d for d in wide["stage_domains"]["output"] if d["domain"] == "INT")
+    assert out["set_reason"] == "dvfs_floor"

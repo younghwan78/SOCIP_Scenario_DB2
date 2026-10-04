@@ -17,7 +17,19 @@ export interface IpRow {
   rule_clock_mhz: number | null; required_clock_mhz: number; set_clock_mhz: number; dvfs_level: number | null; voltage_mv: number
   rule_dvfs_level?: number | null; dvfs_table?: boolean
   hw_ms: number | null; power_mw: number; feasible: boolean; infeasible_reason: string | null; clock_reason: string | null
+  /** IP's own need before DVFS-domain sharing, the constraint that set it, and why the set clock is higher */
+  own_required_mhz?: number; basis?: ClockBasisKind; set_reason?: SetReason; domain_leader?: string | null
+  next_level_mhz?: number | null; sensor_readout_ms?: number | null
 }
+export type ClockBasisKind = 'budget' | 'rule' | 'sensor_readout' | 'mipi_ingress' | 'vvalid_stream' | 'otf_align' | 'stage_budget' | 'manual' | string
+export type SetReason = 'exact' | 'dvfs_step' | 'dvfs_floor' | 'domain'
+/** One DVFS domain of a stage (NRT = CAM + INTCAM …). */
+export interface StageDomain {
+  domain: string; ip: string; nodes: string[]; rule_mhz: number | null; required_mhz: number; set_mhz: number
+  level: number | null; rule_level: number | null; next_mhz: number | null; headroom_pct: number | null; hw_ms: number
+  basis: ClockBasisKind | null; set_reason: SetReason | null; domain_leader: string | null
+}
+export type DomainClock = Pick<StageDomain, 'domain' | 'ip' | 'rule_mhz' | 'required_mhz' | 'set_mhz' | 'level'>
 export interface IntervalSeries { node: string | null; values: number[]; max_ms: number | null; min_ms: number | null; ok: boolean | null }
 export interface TimelineRow { node: string; type: string; frame: number; start_ms: number; end_ms: number; stage: StageId }
 export interface PowerSplit {
@@ -27,12 +39,14 @@ export interface PowerSplit {
   cpu_model: { cluster: number; freq_mhz: number; volt_v: number; source: string }; zero_power_ips: string[]
 }
 export interface BwSplit { total_mbs: number; hw_mbs: number; sw_mbs: number; hw_by_ip: Record<string, number>; sw_by_task: Record<string, number>; share_pct: { hw: number; sw: number } }
-export interface Verdict { status: 'ok' | 'clock_up' | 'fail'; reasons: string[]; nrt_clock_factor: number | null }
+export interface Verdict { status: 'ok' | 'clock_up' | 'fail'; reasons: string[]; notes?: string[]; nrt_clock_factor: number | null }
 export interface WhatIfRow {
   statistic: Statistic; eis: boolean; scale: number; verdict: Verdict
   stages: Record<StageId, { sw_ms: number; budget_ms: number; hw_ms: number; feasible: boolean }>
   nrt_driver: string | null; nrt_clock_mhz: number | null; nrt_rule_clock_mhz: number | null; post_clock_mhz: number | null
   interval_ok: boolean
+  /** per stage, one clock per DVFS domain (absent before API stage_domains) */
+  domains?: Partial<Record<StageId, DomainClock[]>>
 }
 export interface TimingReport {
   scenario_id: string; variant_id: string; fps: number; period_ms: number; statistic: Statistic
@@ -43,13 +57,14 @@ export interface TimingReport {
   intervals: { target_ms: number; tolerance: number; preview: IntervalSeries; video: IntervalSeries; ok: boolean }
   latency: { preview_ms: number | null; video_ms: number | null; preview_frames: number | null; video_frames: number | null }
   power: PowerSplit; bw: BwSplit; verdict: Verdict; timeline: TimelineRow[]; warnings: string[]; whatif?: WhatIfRow[]
+  stage_domains?: Partial<Record<StageId, StageDomain[]>>
   /** SW margin rule applied to RT/Output (and the NRT/Post rule reference); absent before API sw_margin */
   sw_margin?: { rt: number; output: number }
 }
 export interface FleetRow {
   variant_id: string; fps: number; period_ms: number; statistic: Statistic; eis_on: boolean; stabilization: unknown; mfc_dual: boolean
   stages: Record<StageId, { sw_ms: number; budget_ms: number; hw_ms: number; feasible: boolean }>
-  clocks: Record<StageId, { ip: string | null; rule_mhz: number | null; set_mhz: number | null; level: number | null }>
+  clocks: Record<StageId, { ip: string | null; rule_mhz: number | null; set_mhz: number | null; level: number | null; domain?: string | null; domains?: DomainClock[] }>
   intervals: { ok: boolean; preview_max_ms: number | null; video_max_ms: number | null }
   latency: TimingReport['latency']
   power: { total_mw: number; cpu_mw: number; hw_mw: number; bw_mw: number; share_pct: { cpu: number; hw: number; bw: number } }
@@ -169,4 +184,60 @@ export function clockText(ip: Pick<IpRow, 'rule_clock_mhz' | 'set_clock_mhz' | '
   const noTable = ip.dvfs_table === false
   const rule = ip.rule_clock_mhz === null ? '—' : noTable ? fmt(ip.rule_clock_mhz, 0) : `${fmt(ip.rule_clock_mhz, 0)} (${lv(ip.rule_dvfs_level)})`
   return `${rule} → ${fmt(ip.set_clock_mhz, 0)} MHz (${noTable ? `Lv — · ${ip.dvfs_group ?? '?'} 표 없음` : lv(ip.dvfs_level)})`
+}
+
+// ---------------------------------------------------------------- clock basis (what set the clock)
+export const BASIS_LABEL: Record<string, string> = {
+  budget: 'SW 반영 예산', rule: 'margin rule', sensor_readout: 'sensor readout', vvalid_stream: 'sensor readout',
+  mipi_ingress: 'MIPI ingress', otf_align: 'OTF rate 정렬', stage_budget: 'SW stage 포함 (lower bound)', manual: '수동 지정',
+}
+export const SET_REASON_LABEL: Record<SetReason, string> = {
+  exact: '필요값 그대로', dvfs_step: 'DVFS level 올림', dvfs_floor: 'DVFS 최저 level', domain: 'domain 공유',
+}
+export const basisLabel = (k: string | null | undefined) => (k ? BASIS_LABEL[k] ?? k : '—')
+
+/** 'INTCAM 133 (L5)' */
+export function domainClockText(d: Pick<DomainClock, 'domain' | 'set_mhz' | 'level'>): string {
+  return `${d.domain} ${fmt(d.set_mhz, 0)}${d.level !== null && d.level !== undefined ? ` (L${d.level})` : ''}`
+}
+
+/** Domains of a stage in the what-if grid, most-moving first (the one SW growth pushes). */
+export function whatIfDomains(rows: WhatIfRow[], stage: StageId = 'nrt'): string[] {
+  const span = new Map<string, number[]>()
+  for (const r of rows) for (const d of r.domains?.[stage] ?? []) span.set(d.domain, [...(span.get(d.domain) ?? []), d.set_mhz])
+  return [...span.entries()].sort((a, b) => (Math.max(...b[1]) - Math.min(...b[1])) - (Math.max(...a[1]) - Math.min(...a[1])) || a[0].localeCompare(b[0])).map(([d]) => d)
+}
+
+export function domainOf(r: WhatIfRow, domain: string, stage: StageId = 'nrt'): DomainClock | undefined {
+  return r.domains?.[stage]?.find((d) => d.domain === domain)
+}
+
+/** First SW growth where the domain needs a faster DVFS level than at the smallest scale (null = never in range). */
+export function breakEven(rows: WhatIfRow[], domain: string, statistic: string, eis: boolean, stage: StageId = 'nrt'): { scale: number; from: number; to: number } | null {
+  const pts = rows.filter((r) => r.statistic === statistic && r.eis === eis).sort((a, b) => a.scale - b.scale)
+  const first = pts.length ? domainOf(pts[0], domain, stage) : undefined
+  if (!first) return null
+  for (const r of pts) {
+    const d = domainOf(r, domain, stage)
+    if (d && d.set_mhz > first.set_mhz + 0.5) return { scale: r.scale, from: first.set_mhz, to: d.set_mhz }
+  }
+  return null
+}
+
+/** Stage DVFS domains from the report; derived from the IP rows for an API without stage_domains. */
+export function stageDomainsOf(r: Pick<TimingReport, 'ips' | 'stage_domains'>, stage: StageId): StageDomain[] {
+  const given = r.stage_domains?.[stage]
+  if (given) return given
+  const by = new Map<string, IpRow[]>()
+  for (const ip of r.ips.filter((i) => i.stage === stage && i.set_clock_mhz > 0)) by.set(ip.dvfs_group ?? ip.node, [...(by.get(ip.dvfs_group ?? ip.node) ?? []), ip])
+  const inSw = (i: IpRow) => i.basis === 'stage_budget' || (i.clock_reason ?? '').startsWith('included_stage_budget')
+  return [...by.entries()].map(([domain, members]) => {
+    const timed = members.filter((m) => !inSw(m)).length ? members.filter((m) => !inSw(m)) : members
+    const need = (m: IpRow) => m.own_required_mhz ?? m.required_clock_mhz
+    const d = [...timed].sort((a, b) => need(b) - need(a) || (b.hw_ms ?? 0) - (a.hw_ms ?? 0))[0]
+    const req = Math.max(...timed.map(need))
+    return { domain, ip: d.node, nodes: members.map((m) => m.node).sort(), rule_mhz: d.rule_clock_mhz, required_mhz: req, set_mhz: d.set_clock_mhz,
+      level: d.dvfs_level, rule_level: d.rule_dvfs_level ?? null, next_mhz: d.next_level_mhz ?? null, headroom_pct: req > 0 ? (d.set_clock_mhz / req - 1) * 100 : null,
+      hw_ms: Math.max(...timed.map((m) => m.hw_ms ?? 0)), basis: d.basis ?? null, set_reason: d.set_reason ?? null, domain_leader: d.domain_leader ?? null }
+  }).sort((a, b) => b.set_mhz - a.set_mhz || a.domain.localeCompare(b.domain))
 }

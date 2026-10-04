@@ -3,7 +3,7 @@ import { useWidth } from './Charts'
 import { useTip } from './ChartTip'
 import { usePref } from './Layout'
 import {
-  LAT_COLOR, OVH_COLOR, STAGE_COLOR, SW_COLOR, clockText, fmt, niceMax, pct0, stageSegments,
+  LAT_COLOR, OVH_COLOR, SET_REASON_LABEL, STAGE_COLOR, SW_COLOR, basisLabel, breakEven, clockText, domainOf, fmt, niceMax, pct0, stageSegments, whatIfDomains,
   type FleetRow, type IpRow, type StageRow, type TimelineRow, type TimingReport, type WhatIfRow,
 } from '../lib/timingBudget'
 
@@ -116,7 +116,8 @@ export function domainGroups(ips: IpRow[]): { domain: string; rows: IpRow[]; lev
   return [...by.entries()].map(([domain, rows]) => {
     const sorted = [...rows].sort((a, b) => (STAGE_RANK[a.stage] ?? 9) - (STAGE_RANK[b.stage] ?? 9) || a.node.localeCompare(b.node))
     const lv = rows.map((r) => r.dvfs_level).filter((l): l is number => l !== null)
-    const driver = [...rows].sort((a, b) => (b.dvfs_level ?? -1) - (a.dvfs_level ?? -1) || b.required_clock_mhz - a.required_clock_mhz)[0]
+    const need = (r: IpRow) => r.own_required_mhz ?? r.required_clock_mhz
+    const driver = [...rows].sort((a, b) => need(b) - need(a) || (b.hw_ms ?? 0) - (a.hw_ms ?? 0))[0]
     return { domain, rows: sorted, level: lv.length ? Math.max(...lv) : null, voltage: Math.max(...rows.map((r) => r.voltage_mv)), driver }
   }).sort((a, b) => Math.min(...a.rows.map((r) => STAGE_RANK[r.stage] ?? 9)) - Math.min(...b.rows.map((r) => STAGE_RANK[r.stage] ?? 9)) || a.domain.localeCompare(b.domain))
 }
@@ -137,7 +138,7 @@ export function ClockChart({ ips, dvfsApplied = true, margin = 0.25 }: { ips: Ip
           <div className="dom-head">
             <b>{g.domain}</b>
             {dvfsApplied && g.level !== null && <span className="badge">domain Lv{g.level} · {fmt(g.voltage, 0)} mV</span>}
-            <span className="faint">IP {g.rows.length}개 · level 결정 = <b>{g.driver.node.toUpperCase()}</b> (최고 요구 {fmt(g.driver.required_clock_mhz, 0)} MHz)</span>
+            <span className="faint">IP {g.rows.length}개 · level 결정 = <b>{g.driver.node.toUpperCase()}</b> (최고 요구 {fmt(g.driver.own_required_mhz ?? g.driver.required_clock_mhz, 0)} MHz{g.driver.basis ? ` · ${basisLabel(g.driver.basis)}` : ''})</span>
           </div>
           {g.rows.map((ip) => {
             const up = ip.rule_clock_mhz !== null && ip.set_clock_mhz > ip.rule_clock_mhz + 0.5
@@ -147,7 +148,10 @@ export function ClockChart({ ips, dvfsApplied = true, margin = 0.25 }: { ips: Ip
                 {...tip({ title: `${ip.node.toUpperCase()} · ${g.domain}`, color: STAGE_COLOR[ip.stage], head: { label: 'set clock', value: `${fmt(ip.set_clock_mhz, 0)} MHz`, tone: 'strong' },
                   rows: [
                     { k: `${rule} rule clock`, v: ip.rule_clock_mhz === null ? '—' : `${fmt(ip.rule_clock_mhz, 0)} MHz` },
-                    { k: 'required (level 선택 전)', v: `${fmt(ip.required_clock_mhz, 0)} MHz` },
+                    { k: '자체 필요 clock', v: `${fmt(ip.own_required_mhz ?? ip.required_clock_mhz, 1)} MHz` },
+                    ...(ip.basis ? [{ k: '결정 요인', v: basisLabel(ip.basis) }] : []),
+                    ...(ip.set_reason ? [{ k: 'set이 더 높은 이유', v: `${SET_REASON_LABEL[ip.set_reason] ?? ip.set_reason}${ip.domain_leader ? ` (${ip.domain_leader.toUpperCase()})` : ''}` }] : []),
+                    ...(ip.sensor_readout_ms ? [{ k: 'sensor readout', v: `${fmt(ip.sensor_readout_ms, 2)} ms (HW 시간 하한)` }] : []),
                     ...(ip.rule_clock_mhz ? [{ k: 'rule 대비', v: `×${fmt(ip.set_clock_mhz / ip.rule_clock_mhz, 2)}`, tone: (up ? 'bad' : 'good') as 'bad' | 'good' }] : []),
                     { k: 'DVFS level · 전압', v: dvfsApplied && ip.dvfs_table !== false ? `Lv${ip.dvfs_level ?? '—'} · ${fmt(ip.voltage_mv, 0)} mV` : '표 없음' },
                     { k: 'HW 시간', v: ip.hw_ms === null ? '—' : `${fmt(ip.hw_ms, 2)} ms` },
@@ -162,10 +166,10 @@ export function ClockChart({ ips, dvfsApplied = true, margin = 0.25 }: { ips: Ip
                   <rect x={0} y={1} width={barW} height={18} fill="rgba(255,255,255,0.7)" />
                   {ip.rule_clock_mhz !== null && <rect x={0} y={2} width={(ip.rule_clock_mhz / max) * barW} height={7} fill="#CFC7BA" />}
                   <rect x={0} y={11} width={(ip.set_clock_mhz / max) * barW} height={7} fill={up ? '#C2410C' : '#2F6F68'} />
-                  {ip.required_clock_mhz < ip.set_clock_mhz - 0.5 && <line x1={(ip.required_clock_mhz / max) * barW} x2={(ip.required_clock_mhz / max) * barW} y1={9} y2={20} stroke="#1F2430" strokeWidth={1.5} />}
+                  {(ip.own_required_mhz ?? ip.required_clock_mhz) < ip.set_clock_mhz - 0.5 && <line x1={((ip.own_required_mhz ?? ip.required_clock_mhz) / max) * barW} x2={((ip.own_required_mhz ?? ip.required_clock_mhz) / max) * barW} y1={9} y2={20} stroke="#1F2430" strokeWidth={1.5} />}
                 </svg>
                 <span className="mono" style={{ width: valW, flexShrink: 0, fontSize: 12, color: up ? '#C2410C' : 'var(--text-2)' }}>
-                  {dvfsApplied ? clockText(ip) : `${fmt(ip.rule_clock_mhz, 0)} → ${fmt(ip.set_clock_mhz, 0)} MHz`}{dvfsApplied && ip.dvfs_table !== false ? <span className="faint"> · {fmt(ip.voltage_mv, 0)} mV</span> : null}
+                  {dvfsApplied ? clockText(ip) : `${fmt(ip.rule_clock_mhz, 0)} → ${fmt(ip.set_clock_mhz, 0)} MHz`}{dvfsApplied && ip.dvfs_table !== false ? <span className="faint"> · {fmt(ip.voltage_mv, 0)} mV</span> : null}{ip.basis ? <span className="faint" title={ip.set_reason ? SET_REASON_LABEL[ip.set_reason] : undefined}> · {basisLabel(ip.basis)}</span> : null}
                 </span>
               </div>
             )
@@ -174,7 +178,7 @@ export function ClockChart({ ips, dvfsApplied = true, margin = 0.25 }: { ips: Ip
       ))}
       <div className="legend-row" style={{ paddingLeft: labelW + 8 }}>
         <Legend color="#CFC7BA" label={`${rule} rule`} /><Legend color="#2F6F68" label="Timing budget" /><Legend color="#C2410C" label="rule 대비 상승" />
-        <span className="legend-item"><span style={{ width: 2, height: 10, background: '#1F2430' }} />required (DVFS level 선택 전)</span>
+        <span className="legend-item"><span style={{ width: 2, height: 10, background: '#1F2430' }} />자체 필요 clock (DVFS level·domain 공유 전)</span>
         <span className="faint" style={{ fontSize: 11 }}>배경색 = DVFS domain · ★ = domain level 결정 IP · ×2 = MFC+MFD 병렬 · ⇄2 = 2 stream 공유</span>
         {!dvfsApplied && <span className="badge v-warn" title="DB에 이 SoC의 DVFS table이 없어 level·전압을 정할 수 없습니다 (clock은 필요값 그대로, 전압 기본값)">DVFS table 미연결 — level 없음</span>}
       </div>
@@ -416,10 +420,15 @@ export function Intervals({ report }: { report: TimingReport }) {
 // ---------------------------------------------------------------- ④ what-if
 export function WhatIf({ rows, current, margin = 0.25 }: { rows: WhatIfRow[]; current: { statistic: string; eis: boolean; scale: number }; margin?: number }) {
   const [ref, w] = useWidth<HTMLDivElement>(600)
+  // one DVFS domain at a time: NRT spans several (CAM / INTCAM) and their clocks must not share one line
+  const domains = useMemo(() => whatIfDomains(rows), [rows])
+  const [pick, setPick] = useState<string>('')
+  const domain = domains.includes(pick) ? pick : domains[0] ?? ''
+  const clockOf = (r: WhatIfRow) => (domain ? domainOf(r, domain)?.set_mhz ?? null : r.nrt_clock_mhz)
   const plotW = Math.max(260, w - 60), H = 220
   const scales = [...new Set(rows.map((r) => r.scale))].sort((a, b) => a - b)
-  const vals = rows.map((r) => r.nrt_clock_mhz ?? 0)
-  const rule = rows.find((r) => r.nrt_rule_clock_mhz)?.nrt_rule_clock_mhz ?? 0
+  const vals = rows.map((r) => clockOf(r) ?? 0)
+  const rule = (domain ? rows.map((r) => domainOf(r, domain)?.rule_mhz).find((v) => v) : rows.find((r) => r.nrt_rule_clock_mhz)?.nrt_rule_clock_mhz) ?? 0
   const max = niceMax(Math.max(rule, ...vals))
   const x = (s: number) => 50 + ((s - scales[0]) / Math.max(1e-9, scales[scales.length - 1] - scales[0])) * (plotW - 10)
   const y = (v: number) => H - 24 - (v / max) * (H - 40)
@@ -428,20 +437,30 @@ export function WhatIf({ rows, current, margin = 0.25 }: { rows: WhatIfRow[]; cu
     { stat: 'mean', eis: true, c: '#2F6F68', dash: '' }, { stat: 'mean', eis: false, c: '#2F6F68', dash: '6 4' },
   ]
   const cur = rows.find((r) => r.statistic === current.statistic && r.eis === current.eis && Math.abs(r.scale - current.scale) < 1e-6)
+  const curD = cur && domain ? domainOf(cur, domain) : undefined
+  const be = domain ? breakEven(rows, domain, current.statistic, current.eis) : null
   return (
     <div ref={ref}>
+      {domains.length > 1 && <div className="toolbar" style={{ gap: 8, marginBottom: 4, fontSize: 12 }}>
+        <span className="faint">DVFS domain</span>
+        <div className="seg sm" role="radiogroup" aria-label="what-if DVFS domain">
+          {domains.map((d) => <button key={d} type="button" role="radio" aria-checked={d === domain} className={d === domain ? 'on' : ''} onClick={() => setPick(d)}>{d}</button>)}
+        </div>
+        <span className="faint">IP: {[...new Set(rows.map((r) => domainOf(r, domain)?.ip).filter(Boolean))].join(', ').toUpperCase()}</span>
+      </div>}
       <svg width={plotW + 60} height={H} role="img" aria-label="SW 증가 대비 NRT clock">
         {[0, 0.25, 0.5, 0.75, 1].map((f) => <g key={f}><line x1={50} x2={plotW + 40} y1={y(max * f)} y2={y(max * f)} stroke="#EFEAE2" /><text x={44} y={y(max * f) + 3} textAnchor="end" fontSize={10} fill="#8A8274">{fmt(max * f, 0)}</text></g>)}
         {scales.map((s) => <text key={s} x={x(s)} y={H - 6} textAnchor="middle" fontSize={10} fill="#8A8274">×{s.toFixed(1)}</text>)}
-        {rule > 0 && <><line x1={50} x2={plotW + 40} y1={y(rule)} y2={y(rule)} stroke="#7A4B12" strokeDasharray="5 4" /><text x={plotW + 40} y={y(rule) - 4} textAnchor="end" fontSize={10} fill="#7A4B12">{pct0(margin)} rule {fmt(rule, 0)} MHz</text></>}
+        {rule > 0 && <><line x1={50} x2={plotW + 40} y1={y(rule)} y2={y(rule)} stroke="#7A4B12" strokeDasharray="5 4" /><text x={plotW + 40} y={y(rule) - 4} textAnchor="end" fontSize={10} fill="#7A4B12">{domain ? `${domain} ` : ''}{pct0(margin)} rule {fmt(rule, 0)} MHz</text></>}
+        {be && <><line x1={x(be.scale)} x2={x(be.scale)} y1={16} y2={H - 24} stroke="#7F1D1D" strokeDasharray="2 3" /><text x={x(be.scale) + 4} y={24} fontSize={10} fill="#7F1D1D">×{be.scale.toFixed(1)}부터 {fmt(be.from, 0)}→{fmt(be.to, 0)} MHz</text></>}
         {lines.map((l) => {
-          const pts = rows.filter((r) => r.statistic === l.stat && r.eis === l.eis).sort((a, b) => a.scale - b.scale)
+          const pts = rows.filter((r) => r.statistic === l.stat && r.eis === l.eis && clockOf(r) !== null).sort((a, b) => a.scale - b.scale)
           return <g key={`${l.stat}${l.eis}`}>
-            <polyline points={pts.map((r) => `${x(r.scale)},${y(r.nrt_clock_mhz ?? 0)}`).join(' ')} fill="none" stroke={l.c} strokeWidth={2.2} strokeDasharray={l.dash} />
-            {pts.filter((r) => r.verdict.status === 'fail').map((r) => <circle key={r.scale} cx={x(r.scale)} cy={y(r.nrt_clock_mhz ?? 0)} r={4} fill="#7F1D1D"><title>{`fail: ${r.verdict.reasons[0] ?? ''}`}</title></circle>)}
+            <polyline points={pts.map((r) => `${x(r.scale)},${y(clockOf(r) ?? 0)}`).join(' ')} fill="none" stroke={l.c} strokeWidth={2.2} strokeDasharray={l.dash} />
+            {pts.filter((r) => r.verdict.status === 'fail').map((r) => <circle key={r.scale} cx={x(r.scale)} cy={y(clockOf(r) ?? 0)} r={4} fill="#7F1D1D"><title>{`fail: ${r.verdict.reasons[0] ?? ''}`}</title></circle>)}
           </g>
         })}
-        {cur && <circle cx={x(cur.scale)} cy={y(cur.nrt_clock_mhz ?? 0)} r={6} fill="#1F2430" stroke="#FFFFFF" strokeWidth={2} />}
+        {cur && <circle cx={x(cur.scale)} cy={y(clockOf(cur) ?? 0)} r={6} fill="#1F2430" stroke="#FFFFFF" strokeWidth={2} />}
       </svg>
       <div className="legend-row">
         <span className="legend-item"><span style={{ width: 18, borderTop: '3px solid #C2410C' }} />max · EIS on</span>
@@ -449,8 +468,11 @@ export function WhatIf({ rows, current, margin = 0.25 }: { rows: WhatIfRow[]; cu
         <span className="legend-item"><span style={{ width: 18, borderTop: '3px solid #2F6F68' }} />mean · EIS on</span>
         <span className="legend-item"><span style={{ width: 18, borderTop: '2px dashed #2F6F68' }} />mean · EIS off</span>
         <span className="legend-item"><span style={{ width: 8, height: 8, borderRadius: 4, background: '#7F1D1D' }} />fail</span>
+        <span className="legend-item faint">계단 = DVFS level (필요 clock이 level을 조금만 넘어도 다음 level)</span>
       </div>
-      {cur && <div className="mono" style={{ fontSize: 12, marginTop: 4 }}>현재 {current.statistic} · EIS {current.eis ? 'on' : 'off'} · ×{current.scale.toFixed(1)} → {cur.nrt_driver?.toUpperCase()} {fmt(cur.nrt_clock_mhz, 0)} MHz · NRT SW {fmt(cur.stages.nrt.sw_ms, 1)} ms · HW 예산 {fmt(cur.stages.nrt.budget_ms, 1)} ms · {cur.interval_ok ? '간격 OK' : '간격 ✗'}</div>}
+      {cur && <div className="mono" style={{ fontSize: 12, marginTop: 4 }}>현재 {current.statistic} · EIS {current.eis ? 'on' : 'off'} · ×{current.scale.toFixed(1)} → {curD
+        ? `${curD.domain} 필요 ${fmt(curD.required_mhz, 1)} → ${fmt(curD.set_mhz, 0)} MHz${curD.level !== null ? ` (L${curD.level})` : ''} · ${curD.ip.toUpperCase()}`
+        : `${cur.nrt_driver?.toUpperCase()} ${fmt(cur.nrt_clock_mhz, 0)} MHz`} · NRT SW {fmt(cur.stages.nrt.sw_ms, 1)} ms · HW 예산 {fmt(cur.stages.nrt.budget_ms, 1)} ms · {cur.interval_ok ? '간격 OK' : '간격 ✗'}</div>}
     </div>
   )
 }
@@ -483,7 +505,7 @@ export function FleetRank({ rows, onPick, limit, margin = 0.25 }: { rows: FleetR
               <circle cx={x(set)} cy={9} r={5} fill={color} />
             </svg>
             <svg width={swW} height={12} style={{ flexShrink: 0 }}><rect x={0} y={1} width={swW} height={10} fill="#F7F4EF" /><rect x={0} y={1} width={Math.min(1, sw) * swW} height={10} fill={SW_COLOR} /></svg>
-            <span className="mono" style={{ width: valW, textAlign: 'left', color }}>×{fmt(rule ? set / rule : null, 2)} · {fmt(set, 0)} MHz{r.clocks.nrt.level !== null ? ` L${r.clocks.nrt.level}` : ''}</span>
+            <span className="mono" style={{ width: valW, textAlign: 'left', color }}>×{fmt(rule ? set / rule : null, 2)} · {r.clocks.nrt.domain ? `${r.clocks.nrt.domain} ` : ''}{fmt(set, 0)} MHz{r.clocks.nrt.level !== null ? ` L${r.clocks.nrt.level}` : ''}</span>
           </button>
         )
       })}
