@@ -37,7 +37,7 @@ kpi:
     - 947.886
     n: 3
   frame_latency_ms:
-    mean: 26.69
+    mean: 28.49
     n: 12
   fps_effective: 59.94
 vdd_power:
@@ -204,7 +204,7 @@ timeline_events:
   task_type: hw
   frame_index: 0
   start_ms: 0.0316
-  end_ms: 2.2275
+  end_ms: 3.9726
   resource_id: sensor_front
   predecessors: []
 - task_id: csis#f0
@@ -213,7 +213,7 @@ timeline_events:
   task_type: hw
   frame_index: 0
   start_ms: 0.0094
-  end_ms: 2.194
+  end_ms: 3.9301
   resource_id: csis
   predecessors:
   - sensor_front#f0
@@ -223,7 +223,7 @@ timeline_events:
   task_type: hw
   frame_index: 0
   start_ms: 0.0
-  end_ms: 2.1914
+  end_ms: 3.9329
   resource_id: pdp
   predecessors:
   - csis#f0
@@ -233,7 +233,7 @@ timeline_events:
   task_type: hw
   frame_index: 0
   start_ms: 0.01
-  end_ms: 2.1983
+  end_ms: 3.9373
   resource_id: byrp
   predecessors:
   - pdp#f0
@@ -243,7 +243,7 @@ timeline_events:
   task_type: hw
   frame_index: 0
   start_ms: 0.0264
-  end_ms: 2.2054
+  end_ms: 3.937
   resource_id: rgbp
   predecessors:
   - byrp#f0
@@ -253,7 +253,7 @@ timeline_events:
   task_type: hw
   frame_index: 0
   start_ms: 0.0425
-  end_ms: 2.2517
+  end_ms: 4.0073
   resource_id: yuvsc
   predecessors:
   - rgbp#f0
@@ -263,7 +263,7 @@ timeline_events:
   task_type: hw
   frame_index: 0
   start_ms: 0.0
-  end_ms: 2.2033
+  end_ms: 3.9543
   resource_id: mlsc
   predecessors:
   - yuvsc#f0
@@ -272,8 +272,8 @@ timeline_events:
   hw_name: VPS
   task_type: hw
   frame_index: 0
-  start_ms: 2.201
-  end_ms: 2.3522
+  start_ms: 4.0298
+  end_ms: 4.3012
   resource_id: vps_od
   predecessors:
   - mlsc#f0
@@ -282,8 +282,8 @@ timeline_events:
   hw_name: CPU
   task_type: sw
   frame_index: 0
-  start_ms: 4.0047
-  end_ms: 4.351
+  start_ms: 6.0638
+  end_ms: 6.4101
   resource_id: CPU_CAMERA
   predecessors:
   - mlsc#f0
@@ -294,8 +294,8 @@ timeline_events:
   hw_name: CPU
   task_type: sw
   frame_index: 0
-  start_ms: 4.3744
-  end_ms: 8.1825
+  start_ms: 6.4336
+  end_ms: 10.2416
   resource_id: stage:pre_me_rta
   predecessors:
   - post_crta#f0
@@ -305,8 +305,8 @@ timeline_events:
   hw_name: CPU
   task_type: sw
   frame_index: 0
-  start_ms: 7.762
-  end_ms: 12.273
+  start_ms: 9.8211
+  end_ms: 14.3322
   resource_id: CPU_CAMERA
   predecessors:
   - pre_me_rta#f0
@@ -315,8 +315,8 @@ timeline_events:
   hw_name: MTNR
   task_type: hw
   frame_index: 0
-  start_ms: 10.6551
-  end_ms: 18.9958
+  start_ms: 12.463
+  end_ms: 20.8036
   resource_id: mtnr
   predecessors:
   - mlsc#f0
@@ -326,8 +326,8 @@ timeline_events:
   hw_name: MSNR
   task_type: hw
   frame_index: 0
-  start_ms: 11.1007
-  end_ms: 19.5423
+  start_ms: 12.9086
+  end_ms: 21.3502
   resource_id: msnr
   predecessors:
   - mtnr#f0
@@ -336,8 +336,8 @@ timeline_events:
   hw_name: YUVP
   task_type: hw
   frame_index: 0
-  start_ms: 10.8
-  end_ms: 19.4914
+  start_ms: 12.6078
+  end_ms: 21.2993
   resource_id: yuvp
   predecessors:
   - msnr#f0
@@ -348,8 +348,8 @@ timeline_events:
   hw_name: MCSC
   task_type: hw
   frame_index: 0
-  start_ms: 10.7406
-  end_ms: 18.8121
+  start_ms: 12.5485
+  end_ms: 20.62
   resource_id: mcsc
   predecessors:
   - yuvp#f0
@@ -358,8 +358,8 @@ timeline_events:
   hw_name: MFC
   task_type: hw
   frame_index: 0
-  start_ms: 18.9006
-  end_ms: 26.6571
+  start_ms: 20.698
+  end_ms: 28.4545
   resource_id: mfc_enc
   predecessors:
   - mcsc#f0
@@ -368,8 +368,8 @@ timeline_events:
   hw_name: DPU
   task_type: hw
   frame_index: 0
-  start_ms: 18.8215
-  end_ms: 20.6841
+  start_ms: 20.598
+  end_ms: 22.4606
   resource_id: dpu
   predecessors:
   - mcsc#f0
@@ -378,8 +378,8 @@ timeline_events:
   hw_name: DISPLAY
   task_type: hw
   frame_index: 0
-  start_ms: 18.8763
-  end_ms: 20.7443
+  start_ms: 20.6528
+  end_ms: 22.5208
   resource_id: panel
   predecessors:
   - dpu#f0
@@ -389,7 +389,7 @@ timeline_events:
   task_type: hw
   frame_index: 1
   start_ms: 16.6696
-  end_ms: 18.8656
+  end_ms: 20.6106
   resource_id: sensor_front
   predecessors: []
 - task_id: csis#f1
@@ -398,7 +398,7 @@ timeline_events:
   task_type: hw
   frame_index: 1
   start_ms: 16.6667
-  end_ms: 18.8528
+  end_ms: 20.59
   resource_id: csis
   predecessors:
   - sensor_front#f1
@@ -408,7 +408,7 @@ timeline_events:
   task_type: hw
   frame_index: 1
   start_ms: 16.7088
-  end_ms: 18.9161
+  end_ms: 20.6702
   resource_id: pdp
   predecessors:
   - csis#f1
@@ -418,7 +418,7 @@ timeline_events:
   task_type: hw
   frame_index: 1
   start_ms: 16.7011
-  end_ms: 18.8876
+  end_ms: 20.6252
   resource_id: byrp
   predecessors:
   - pdp#f1
@@ -428,7 +428,7 @@ timeline_events:
   task_type: hw
   frame_index: 1
   start_ms: 16.6792
-  end_ms: 18.8728
+  end_ms: 20.616
   resource_id: rgbp
   predecessors:
   - byrp#f1
@@ -438,7 +438,7 @@ timeline_events:
   task_type: hw
   frame_index: 1
   start_ms: 16.6667
-  end_ms: 18.8596
+  end_ms: 20.6022
   resource_id: yuvsc
   predecessors:
   - rgbp#f1
@@ -448,7 +448,7 @@ timeline_events:
   task_type: hw
   frame_index: 1
   start_ms: 16.6667
-  end_ms: 18.8616
+  end_ms: 20.6058
   resource_id: mlsc
   predecessors:
   - yuvsc#f1
@@ -457,8 +457,8 @@ timeline_events:
   hw_name: VPS
   task_type: hw
   frame_index: 1
-  start_ms: 19.0646
-  end_ms: 19.2229
+  start_ms: 20.8934
+  end_ms: 21.1774
   resource_id: vps_od
   predecessors:
   - mlsc#f1
@@ -467,8 +467,8 @@ timeline_events:
   hw_name: CPU
   task_type: sw
   frame_index: 1
-  start_ms: 20.5025
-  end_ms: 20.873
+  start_ms: 22.5617
+  end_ms: 22.9321
   resource_id: CPU_CAMERA
   predecessors:
   - mlsc#f1
@@ -479,8 +479,8 @@ timeline_events:
   hw_name: CPU
   task_type: sw
   frame_index: 1
-  start_ms: 20.7539
-  end_ms: 24.7323
+  start_ms: 22.8131
+  end_ms: 26.7915
   resource_id: stage:pre_me_rta
   predecessors:
   - post_crta#f1
@@ -490,8 +490,8 @@ timeline_events:
   hw_name: CPU
   task_type: sw
   frame_index: 1
-  start_ms: 24.4661
-  end_ms: 29.5828
+  start_ms: 26.5252
+  end_ms: 31.642
   resource_id: CPU_CAMERA
   predecessors:
   - pre_me_rta#f1
@@ -500,8 +500,8 @@ timeline_events:
   hw_name: MTNR
   task_type: hw
   frame_index: 1
-  start_ms: 27.5253
-  end_ms: 35.6356
+  start_ms: 29.3332
+  end_ms: 37.4435
   resource_id: mtnr
   predecessors:
   - mlsc#f1
@@ -511,8 +511,8 @@ timeline_events:
   hw_name: MSNR
   task_type: hw
   frame_index: 1
-  start_ms: 27.299
-  end_ms: 35.8038
+  start_ms: 29.1068
+  end_ms: 37.6116
   resource_id: msnr
   predecessors:
   - mtnr#f1
@@ -521,8 +521,8 @@ timeline_events:
   hw_name: YUVP
   task_type: hw
   frame_index: 1
-  start_ms: 27.5386
-  end_ms: 35.9122
+  start_ms: 29.3465
+  end_ms: 37.7201
   resource_id: yuvp
   predecessors:
   - msnr#f1
@@ -533,8 +533,8 @@ timeline_events:
   hw_name: MCSC
   task_type: hw
   frame_index: 1
-  start_ms: 27.5925
-  end_ms: 35.9376
+  start_ms: 29.4004
+  end_ms: 37.7454
   resource_id: mcsc
   predecessors:
   - yuvp#f1
@@ -543,8 +543,8 @@ timeline_events:
   hw_name: MFC
   task_type: hw
   frame_index: 1
-  start_ms: 35.7478
-  end_ms: 43.5107
+  start_ms: 37.5452
+  end_ms: 45.3081
   resource_id: mfc_enc
   predecessors:
   - mcsc#f1
@@ -553,8 +553,8 @@ timeline_events:
   hw_name: DPU
   task_type: hw
   frame_index: 1
-  start_ms: 35.2875
-  end_ms: 37.1597
+  start_ms: 37.064
+  end_ms: 38.9362
   resource_id: dpu
   predecessors:
   - mcsc#f1
@@ -563,8 +563,8 @@ timeline_events:
   hw_name: DISPLAY
   task_type: hw
   frame_index: 1
-  start_ms: 35.5055
-  end_ms: 37.3784
+  start_ms: 37.282
+  end_ms: 39.1548
   resource_id: panel
   predecessors:
   - dpu#f1
@@ -574,7 +574,7 @@ timeline_events:
   task_type: hw
   frame_index: 2
   start_ms: 33.3333
-  end_ms: 35.5293
+  end_ms: 37.2743
   resource_id: sensor_front
   predecessors: []
 - task_id: csis#f2
@@ -583,7 +583,7 @@ timeline_events:
   task_type: hw
   frame_index: 2
   start_ms: 33.3333
-  end_ms: 35.5378
+  end_ms: 37.2896
   resource_id: csis
   predecessors:
   - sensor_front#f2
@@ -593,7 +593,7 @@ timeline_events:
   task_type: hw
   frame_index: 2
   start_ms: 33.3333
-  end_ms: 35.5417
+  end_ms: 37.2966
   resource_id: pdp
   predecessors:
   - csis#f2
@@ -603,7 +603,7 @@ timeline_events:
   task_type: hw
   frame_index: 2
   start_ms: 33.3333
-  end_ms: 35.5092
+  end_ms: 37.2382
   resource_id: byrp
   predecessors:
   - pdp#f2
@@ -613,7 +613,7 @@ timeline_events:
   task_type: hw
   frame_index: 2
   start_ms: 33.3333
-  end_ms: 35.524
+  end_ms: 37.2648
   resource_id: rgbp
   predecessors:
   - byrp#f2
@@ -623,7 +623,7 @@ timeline_events:
   task_type: hw
   frame_index: 2
   start_ms: 33.3333
-  end_ms: 35.5353
+  end_ms: 37.2851
   resource_id: yuvsc
   predecessors:
   - rgbp#f2
@@ -633,7 +633,7 @@ timeline_events:
   task_type: hw
   frame_index: 2
   start_ms: 33.3818
-  end_ms: 35.5851
+  end_ms: 37.336
   resource_id: mlsc
   predecessors:
   - yuvsc#f2
@@ -642,8 +642,8 @@ timeline_events:
   hw_name: VPS
   task_type: hw
   frame_index: 2
-  start_ms: 35.7396
-  end_ms: 35.8936
+  start_ms: 37.5684
+  end_ms: 37.8449
   resource_id: vps_od
   predecessors:
   - mlsc#f2
@@ -652,8 +652,8 @@ timeline_events:
   hw_name: CPU
   task_type: sw
   frame_index: 2
-  start_ms: 37.1477
-  end_ms: 37.5371
+  start_ms: 39.2069
+  end_ms: 39.5963
   resource_id: CPU_CAMERA
   predecessors:
   - mlsc#f2
@@ -664,8 +664,8 @@ timeline_events:
   hw_name: CPU
   task_type: sw
   frame_index: 2
-  start_ms: 37.2997
-  end_ms: 41.3657
+  start_ms: 39.3589
+  end_ms: 43.4249
   resource_id: stage:pre_me_rta
   predecessors:
   - post_crta#f2
@@ -675,8 +675,8 @@ timeline_events:
   hw_name: CPU
   task_type: sw
   frame_index: 2
-  start_ms: 40.8111
-  end_ms: 45.9933
+  start_ms: 42.8703
+  end_ms: 48.0524
   resource_id: CPU_CAMERA
   predecessors:
   - pre_me_rta#f2
@@ -685,8 +685,8 @@ timeline_events:
   hw_name: MTNR
   task_type: hw
   frame_index: 2
-  start_ms: 44.2391
-  end_ms: 52.5038
+  start_ms: 46.0469
+  end_ms: 54.3116
   resource_id: mtnr
   predecessors:
   - mlsc#f2
@@ -696,8 +696,8 @@ timeline_events:
   hw_name: MSNR
   task_type: hw
   frame_index: 2
-  start_ms: 44.0655
-  end_ms: 52.3523
+  start_ms: 45.8734
+  end_ms: 54.1602
   resource_id: msnr
   predecessors:
   - mtnr#f2
@@ -706,8 +706,8 @@ timeline_events:
   hw_name: YUVP
   task_type: hw
   frame_index: 2
-  start_ms: 44.2878
-  end_ms: 52.8523
+  start_ms: 46.0957
+  end_ms: 54.6602
   resource_id: yuvp
   predecessors:
   - msnr#f2
@@ -718,8 +718,8 @@ timeline_events:
   hw_name: MCSC
   task_type: hw
   frame_index: 2
-  start_ms: 44.3686
-  end_ms: 52.6965
+  start_ms: 46.1764
+  end_ms: 54.5044
   resource_id: mcsc
   predecessors:
   - yuvp#f2
@@ -728,8 +728,8 @@ timeline_events:
   hw_name: MFC
   task_type: hw
   frame_index: 2
-  start_ms: 52.2504
-  end_ms: 60.026
+  start_ms: 54.0478
+  end_ms: 61.8234
   resource_id: mfc_enc
   predecessors:
   - mcsc#f2
@@ -738,8 +738,8 @@ timeline_events:
   hw_name: DPU
   task_type: hw
   frame_index: 2
-  start_ms: 52.0091
-  end_ms: 53.8819
+  start_ms: 53.7855
+  end_ms: 55.6584
   resource_id: dpu
   predecessors:
   - mcsc#f2
@@ -748,8 +748,8 @@ timeline_events:
   hw_name: DISPLAY
   task_type: hw
   frame_index: 2
-  start_ms: 52.0662
-  end_ms: 53.939
+  start_ms: 53.8427
+  end_ms: 55.7155
   resource_id: panel
   predecessors:
   - dpu#f2
@@ -759,7 +759,7 @@ timeline_events:
   task_type: hw
   frame_index: 3
   start_ms: 50.0492
-  end_ms: 52.2451
+  end_ms: 53.9902
   resource_id: sensor_front
   predecessors: []
 - task_id: csis#f3
@@ -768,7 +768,7 @@ timeline_events:
   task_type: hw
   frame_index: 3
   start_ms: 50.0121
-  end_ms: 52.2019
+  end_ms: 53.942
   resource_id: csis
   predecessors:
   - sensor_front#f3
@@ -778,7 +778,7 @@ timeline_events:
   task_type: hw
   frame_index: 3
   start_ms: 50.0
-  end_ms: 52.2073
+  end_ms: 53.9613
   resource_id: pdp
   predecessors:
   - csis#f3
@@ -788,7 +788,7 @@ timeline_events:
   task_type: hw
   frame_index: 3
   start_ms: 50.0302
-  end_ms: 52.2185
+  end_ms: 53.9575
   resource_id: byrp
   predecessors:
   - pdp#f3
@@ -798,7 +798,7 @@ timeline_events:
   task_type: hw
   frame_index: 3
   start_ms: 50.0
-  end_ms: 52.1807
+  end_ms: 53.9136
   resource_id: rgbp
   predecessors:
   - byrp#f3
@@ -808,7 +808,7 @@ timeline_events:
   task_type: hw
   frame_index: 3
   start_ms: 50.0374
-  end_ms: 52.2296
+  end_ms: 53.9717
   resource_id: yuvsc
   predecessors:
   - rgbp#f3
@@ -818,7 +818,7 @@ timeline_events:
   task_type: hw
   frame_index: 3
   start_ms: 50.0
-  end_ms: 52.2019
+  end_ms: 53.9518
   resource_id: mlsc
   predecessors:
   - yuvsc#f3
@@ -827,8 +827,8 @@ timeline_events:
   hw_name: VPS
   task_type: hw
   frame_index: 3
-  start_ms: 52.3711
-  end_ms: 52.525
+  start_ms: 54.1999
+  end_ms: 54.4762
   resource_id: vps_od
   predecessors:
   - mlsc#f3
@@ -837,8 +837,8 @@ timeline_events:
   hw_name: CPU
   task_type: sw
   frame_index: 3
-  start_ms: 53.6382
-  end_ms: 53.9763
+  start_ms: 55.6973
+  end_ms: 56.0354
   resource_id: CPU_CAMERA
   predecessors:
   - mlsc#f3
@@ -849,8 +849,8 @@ timeline_events:
   hw_name: CPU
   task_type: sw
   frame_index: 3
-  start_ms: 54.0439
-  end_ms: 58.0516
+  start_ms: 56.103
+  end_ms: 60.1107
   resource_id: stage:pre_me_rta
   predecessors:
   - post_crta#f3
@@ -860,8 +860,8 @@ timeline_events:
   hw_name: CPU
   task_type: sw
   frame_index: 3
-  start_ms: 57.4728
-  end_ms: 62.4587
+  start_ms: 59.5319
+  end_ms: 64.5179
   resource_id: CPU_CAMERA
   predecessors:
   - pre_me_rta#f3
@@ -870,8 +870,8 @@ timeline_events:
   hw_name: MTNR
   task_type: hw
   frame_index: 3
-  start_ms: 61.0623
-  end_ms: 69.0737
+  start_ms: 62.8702
+  end_ms: 70.8816
   resource_id: mtnr
   predecessors:
   - mlsc#f3
@@ -881,8 +881,8 @@ timeline_events:
   hw_name: MSNR
   task_type: hw
   frame_index: 3
-  start_ms: 60.7287
-  end_ms: 69.3134
+  start_ms: 62.5366
+  end_ms: 71.1212
   resource_id: msnr
   predecessors:
   - mtnr#f3
@@ -891,8 +891,8 @@ timeline_events:
   hw_name: YUVP
   task_type: hw
   frame_index: 3
-  start_ms: 61.0801
-  end_ms: 69.7908
+  start_ms: 62.888
+  end_ms: 71.5986
   resource_id: yuvp
   predecessors:
   - msnr#f3
@@ -903,8 +903,8 @@ timeline_events:
   hw_name: MCSC
   task_type: hw
   frame_index: 3
-  start_ms: 60.6449
-  end_ms: 68.7274
+  start_ms: 62.4528
+  end_ms: 70.5352
   resource_id: mcsc
   predecessors:
   - yuvp#f3
@@ -913,8 +913,8 @@ timeline_events:
   hw_name: MFC
   task_type: hw
   frame_index: 3
-  start_ms: 68.9398
-  end_ms: 76.71
+  start_ms: 70.7372
+  end_ms: 78.5074
   resource_id: mfc_enc
   predecessors:
   - mcsc#f3
@@ -923,8 +923,8 @@ timeline_events:
   hw_name: DPU
   task_type: hw
   frame_index: 3
-  start_ms: 68.6825
-  end_ms: 70.5398
+  start_ms: 70.4589
+  end_ms: 72.3162
   resource_id: dpu
   predecessors:
   - mcsc#f3
@@ -933,8 +933,8 @@ timeline_events:
   hw_name: DISPLAY
   task_type: hw
   frame_index: 3
-  start_ms: 68.646
-  end_ms: 70.5123
+  start_ms: 70.4225
+  end_ms: 72.2888
   resource_id: panel
   predecessors:
   - dpu#f3
@@ -944,7 +944,7 @@ timeline_events:
   task_type: hw
   frame_index: 4
   start_ms: 66.6784
-  end_ms: 68.8743
+  end_ms: 70.6194
   resource_id: sensor_front
   predecessors: []
 - task_id: csis#f4
@@ -953,7 +953,7 @@ timeline_events:
   task_type: hw
   frame_index: 4
   start_ms: 66.6694
-  end_ms: 68.8564
+  end_ms: 70.5944
   resource_id: csis
   predecessors:
   - sensor_front#f4
@@ -963,7 +963,7 @@ timeline_events:
   task_type: hw
   frame_index: 4
   start_ms: 66.7006
-  end_ms: 68.8937
+  end_ms: 70.6364
   resource_id: pdp
   predecessors:
   - csis#f4
@@ -973,7 +973,7 @@ timeline_events:
   task_type: hw
   frame_index: 4
   start_ms: 66.715
-  end_ms: 68.8969
+  end_ms: 70.6307
   resource_id: byrp
   predecessors:
   - pdp#f4
@@ -983,7 +983,7 @@ timeline_events:
   task_type: hw
   frame_index: 4
   start_ms: 66.7008
-  end_ms: 68.8911
+  end_ms: 70.6316
   resource_id: rgbp
   predecessors:
   - byrp#f4
@@ -993,7 +993,7 @@ timeline_events:
   task_type: hw
   frame_index: 4
   start_ms: 66.7102
-  end_ms: 68.9055
+  end_ms: 70.65
   resource_id: yuvsc
   predecessors:
   - rgbp#f4
@@ -1003,7 +1003,7 @@ timeline_events:
   task_type: hw
   frame_index: 4
   start_ms: 66.6667
-  end_ms: 68.8676
+  end_ms: 70.6166
   resource_id: mlsc
   predecessors:
   - yuvsc#f4
@@ -1012,8 +1012,8 @@ timeline_events:
   hw_name: VPS
   task_type: hw
   frame_index: 4
-  start_ms: 69.0039
-  end_ms: 69.161
+  start_ms: 70.8327
+  end_ms: 71.1146
   resource_id: vps_od
   predecessors:
   - mlsc#f4
@@ -1022,8 +1022,8 @@ timeline_events:
   hw_name: CPU
   task_type: sw
   frame_index: 4
-  start_ms: 70.5203
-  end_ms: 70.886
+  start_ms: 72.5794
+  end_ms: 72.9452
   resource_id: CPU_CAMERA
   predecessors:
   - mlsc#f4
@@ -1034,8 +1034,8 @@ timeline_events:
   hw_name: CPU
   task_type: sw
   frame_index: 4
-  start_ms: 71.012
-  end_ms: 74.704
+  start_ms: 73.0711
+  end_ms: 76.7632
   resource_id: stage:pre_me_rta
   predecessors:
   - post_crta#f4
@@ -1045,8 +1045,8 @@ timeline_events:
   hw_name: CPU
   task_type: sw
   frame_index: 4
-  start_ms: 74.381
-  end_ms: 79.4596
+  start_ms: 76.4402
+  end_ms: 81.5187
   resource_id: CPU_CAMERA
   predecessors:
   - pre_me_rta#f4
@@ -1055,8 +1055,8 @@ timeline_events:
   hw_name: MTNR
   task_type: hw
   frame_index: 4
-  start_ms: 77.3765
-  end_ms: 85.7466
+  start_ms: 79.1844
+  end_ms: 87.5545
   resource_id: mtnr
   predecessors:
   - mlsc#f4
@@ -1066,8 +1066,8 @@ timeline_events:
   hw_name: MSNR
   task_type: hw
   frame_index: 4
-  start_ms: 77.3236
-  end_ms: 85.9138
+  start_ms: 79.1315
+  end_ms: 87.7216
   resource_id: msnr
   predecessors:
   - mtnr#f4
@@ -1076,8 +1076,8 @@ timeline_events:
   hw_name: YUVP
   task_type: hw
   frame_index: 4
-  start_ms: 77.7839
-  end_ms: 86.4296
+  start_ms: 79.5917
+  end_ms: 88.2375
   resource_id: yuvp
   predecessors:
   - msnr#f4
@@ -1088,8 +1088,8 @@ timeline_events:
   hw_name: MCSC
   task_type: hw
   frame_index: 4
-  start_ms: 77.6833
-  end_ms: 85.6818
+  start_ms: 79.4912
+  end_ms: 87.4897
   resource_id: mcsc
   predecessors:
   - yuvp#f4
@@ -1098,8 +1098,8 @@ timeline_events:
   hw_name: MFC
   task_type: hw
   frame_index: 4
-  start_ms: 85.6348
-  end_ms: 93.2327
+  start_ms: 87.4322
+  end_ms: 95.0301
   resource_id: mfc_enc
   predecessors:
   - mcsc#f4
@@ -1108,8 +1108,8 @@ timeline_events:
   hw_name: DPU
   task_type: hw
   frame_index: 4
-  start_ms: 85.338
-  end_ms: 87.1823
+  start_ms: 87.1145
+  end_ms: 88.9587
   resource_id: dpu
   predecessors:
   - mcsc#f4
@@ -1118,8 +1118,8 @@ timeline_events:
   hw_name: DISPLAY
   task_type: hw
   frame_index: 4
-  start_ms: 85.3718
-  end_ms: 87.2546
+  start_ms: 87.1483
+  end_ms: 89.031
   resource_id: panel
   predecessors:
   - dpu#f4
@@ -1129,7 +1129,7 @@ timeline_events:
   task_type: hw
   frame_index: 5
   start_ms: 83.3697
-  end_ms: 85.5656
+  end_ms: 87.3107
   resource_id: sensor_front
   predecessors: []
 - task_id: csis#f5
@@ -1138,7 +1138,7 @@ timeline_events:
   task_type: hw
   frame_index: 5
   start_ms: 83.3612
-  end_ms: 85.5501
+  end_ms: 87.2895
   resource_id: csis
   predecessors:
   - sensor_front#f5
@@ -1148,7 +1148,7 @@ timeline_events:
   task_type: hw
   frame_index: 5
   start_ms: 83.3647
-  end_ms: 85.5606
+  end_ms: 87.3055
   resource_id: pdp
   predecessors:
   - csis#f5
@@ -1158,7 +1158,7 @@ timeline_events:
   task_type: hw
   frame_index: 5
   start_ms: 83.3333
-  end_ms: 85.5266
+  end_ms: 87.2695
   resource_id: byrp
   predecessors:
   - pdp#f5
@@ -1168,7 +1168,7 @@ timeline_events:
   task_type: hw
   frame_index: 5
   start_ms: 83.3333
-  end_ms: 85.5318
+  end_ms: 87.2788
   resource_id: rgbp
   predecessors:
   - byrp#f5
@@ -1178,7 +1178,7 @@ timeline_events:
   task_type: hw
   frame_index: 5
   start_ms: 83.3333
-  end_ms: 85.5378
+  end_ms: 87.2897
   resource_id: yuvsc
   predecessors:
   - rgbp#f5
@@ -1188,7 +1188,7 @@ timeline_events:
   task_type: hw
   frame_index: 5
   start_ms: 83.3745
-  end_ms: 85.589
+  end_ms: 87.3487
   resource_id: mlsc
   predecessors:
   - yuvsc#f5
@@ -1197,8 +1197,8 @@ timeline_events:
   hw_name: VPS
   task_type: hw
   frame_index: 5
-  start_ms: 85.5589
-  end_ms: 85.7157
+  start_ms: 87.3877
+  end_ms: 87.6691
   resource_id: vps_od
   predecessors:
   - mlsc#f5
@@ -1207,8 +1207,8 @@ timeline_events:
   hw_name: CPU
   task_type: sw
   frame_index: 5
-  start_ms: 87.0159
-  end_ms: 87.4117
+  start_ms: 89.0751
+  end_ms: 89.4709
   resource_id: CPU_CAMERA
   predecessors:
   - mlsc#f5
@@ -1219,8 +1219,8 @@ timeline_events:
   hw_name: CPU
   task_type: sw
   frame_index: 5
-  start_ms: 87.6624
-  end_ms: 91.8678
+  start_ms: 89.7215
+  end_ms: 93.9269
   resource_id: stage:pre_me_rta
   predecessors:
   - post_crta#f5
@@ -1230,8 +1230,8 @@ timeline_events:
   hw_name: CPU
   task_type: sw
   frame_index: 5
-  start_ms: 91.0769
-  end_ms: 96.1752
+  start_ms: 93.1361
+  end_ms: 98.2343
   resource_id: CPU_CAMERA
   predecessors:
   - pre_me_rta#f5
@@ -1240,8 +1240,8 @@ timeline_events:
   hw_name: MTNR
   task_type: hw
   frame_index: 5
-  start_ms: 94.2651
-  end_ms: 102.3828
+  start_ms: 96.073
+  end_ms: 104.1907
   resource_id: mtnr
   predecessors:
   - mlsc#f5
@@ -1251,8 +1251,8 @@ timeline_events:
   hw_name: MSNR
   task_type: hw
   frame_index: 5
-  start_ms: 94.3979
-  end_ms: 102.8569
+  start_ms: 96.2058
+  end_ms: 104.6648
   resource_id: msnr
   predecessors:
   - mtnr#f5
@@ -1261,8 +1261,8 @@ timeline_events:
   hw_name: YUVP
   task_type: hw
   frame_index: 5
-  start_ms: 94.0864
-  end_ms: 102.5685
+  start_ms: 95.8943
+  end_ms: 104.3764
   resource_id: yuvp
   predecessors:
   - msnr#f5
@@ -1273,8 +1273,8 @@ timeline_events:
   hw_name: MCSC
   task_type: hw
   frame_index: 5
-  start_ms: 94.2379
-  end_ms: 102.4331
+  start_ms: 96.0458
+  end_ms: 104.2409
   resource_id: mcsc
   predecessors:
   - yuvp#f5
@@ -1283,8 +1283,8 @@ timeline_events:
   hw_name: MFC
   task_type: hw
   frame_index: 5
-  start_ms: 102.4089
-  end_ms: 110.1543
+  start_ms: 104.2063
+  end_ms: 111.9517
   resource_id: mfc_enc
   predecessors:
   - mcsc#f5
@@ -1293,8 +1293,8 @@ timeline_events:
   hw_name: DPU
   task_type: hw
   frame_index: 5
-  start_ms: 101.9417
-  end_ms: 103.7916
+  start_ms: 103.7181
+  end_ms: 105.5681
   resource_id: dpu
   predecessors:
   - mcsc#f5
@@ -1303,8 +1303,8 @@ timeline_events:
   hw_name: DISPLAY
   task_type: hw
   frame_index: 5
-  start_ms: 102.2359
-  end_ms: 104.0997
+  start_ms: 104.0123
+  end_ms: 105.8761
   resource_id: panel
   predecessors:
   - dpu#f5
@@ -1314,7 +1314,7 @@ timeline_events:
   task_type: hw
   frame_index: 6
   start_ms: 100.0
-  end_ms: 102.196
+  end_ms: 103.941
   resource_id: sensor_front
   predecessors: []
 - task_id: csis#f6
@@ -1323,7 +1323,7 @@ timeline_events:
   task_type: hw
   frame_index: 6
   start_ms: 100.0
-  end_ms: 102.1814
+  end_ms: 103.9149
   resource_id: csis
   predecessors:
   - sensor_front#f6
@@ -1333,7 +1333,7 @@ timeline_events:
   task_type: hw
   frame_index: 6
   start_ms: 100.0342
-  end_ms: 102.2352
+  end_ms: 103.9842
   resource_id: pdp
   predecessors:
   - csis#f6
@@ -1343,7 +1343,7 @@ timeline_events:
   task_type: hw
   frame_index: 6
   start_ms: 100.0
-  end_ms: 102.1996
+  end_ms: 103.9475
   resource_id: byrp
   predecessors:
   - pdp#f6
@@ -1353,7 +1353,7 @@ timeline_events:
   task_type: hw
   frame_index: 6
   start_ms: 100.0
-  end_ms: 102.1866
+  end_ms: 103.9241
   resource_id: rgbp
   predecessors:
   - byrp#f6
@@ -1363,7 +1363,7 @@ timeline_events:
   task_type: hw
   frame_index: 6
   start_ms: 100.0323
-  end_ms: 102.2274
+  end_ms: 103.9717
   resource_id: yuvsc
   predecessors:
   - rgbp#f6
@@ -1373,7 +1373,7 @@ timeline_events:
   task_type: hw
   frame_index: 6
   start_ms: 100.0
-  end_ms: 102.2031
+  end_ms: 103.9539
   resource_id: mlsc
   predecessors:
   - yuvsc#f6
@@ -1382,8 +1382,8 @@ timeline_events:
   hw_name: VPS
   task_type: hw
   frame_index: 6
-  start_ms: 102.3336
-  end_ms: 102.4915
+  start_ms: 104.1624
+  end_ms: 104.4459
   resource_id: vps_od
   predecessors:
   - mlsc#f6
@@ -1392,8 +1392,8 @@ timeline_events:
   hw_name: CPU
   task_type: sw
   frame_index: 6
-  start_ms: 103.7864
-  end_ms: 104.1456
+  start_ms: 105.8455
+  end_ms: 106.2047
   resource_id: CPU_CAMERA
   predecessors:
   - mlsc#f6
@@ -1404,8 +1404,8 @@ timeline_events:
   hw_name: CPU
   task_type: sw
   frame_index: 6
-  start_ms: 103.9402
-  end_ms: 107.9261
+  start_ms: 105.9993
+  end_ms: 109.9853
   resource_id: stage:pre_me_rta
   predecessors:
   - post_crta#f6
@@ -1415,8 +1415,8 @@ timeline_events:
   hw_name: CPU
   task_type: sw
   frame_index: 6
-  start_ms: 107.8586
-  end_ms: 112.8126
+  start_ms: 109.9177
+  end_ms: 114.8717
   resource_id: CPU_CAMERA
   predecessors:
   - pre_me_rta#f6
@@ -1425,8 +1425,8 @@ timeline_events:
   hw_name: MTNR
   task_type: hw
   frame_index: 6
-  start_ms: 110.7805
-  end_ms: 118.8959
+  start_ms: 112.5884
+  end_ms: 120.7038
   resource_id: mtnr
   predecessors:
   - mlsc#f6
@@ -1436,8 +1436,8 @@ timeline_events:
   hw_name: MSNR
   task_type: hw
   frame_index: 6
-  start_ms: 110.7978
-  end_ms: 119.2495
+  start_ms: 112.6057
+  end_ms: 121.0573
   resource_id: msnr
   predecessors:
   - mtnr#f6
@@ -1446,8 +1446,8 @@ timeline_events:
   hw_name: YUVP
   task_type: hw
   frame_index: 6
-  start_ms: 111.031
-  end_ms: 119.4791
+  start_ms: 112.8388
+  end_ms: 121.287
   resource_id: yuvp
   predecessors:
   - msnr#f6
@@ -1458,8 +1458,8 @@ timeline_events:
   hw_name: MCSC
   task_type: hw
   frame_index: 6
-  start_ms: 111.1108
-  end_ms: 119.2262
+  start_ms: 112.9187
+  end_ms: 121.0341
   resource_id: mcsc
   predecessors:
   - yuvp#f6
@@ -1468,8 +1468,8 @@ timeline_events:
   hw_name: MFC
   task_type: hw
   frame_index: 6
-  start_ms: 119.0987
-  end_ms: 126.7354
+  start_ms: 120.8961
+  end_ms: 128.5328
   resource_id: mfc_enc
   predecessors:
   - mcsc#f6
@@ -1478,8 +1478,8 @@ timeline_events:
   hw_name: DPU
   task_type: hw
   frame_index: 6
-  start_ms: 118.5053
-  end_ms: 120.3487
+  start_ms: 120.2818
+  end_ms: 122.1252
   resource_id: dpu
   predecessors:
   - mcsc#f6
@@ -1488,8 +1488,8 @@ timeline_events:
   hw_name: DISPLAY
   task_type: hw
   frame_index: 6
-  start_ms: 118.7235
-  end_ms: 120.578
+  start_ms: 120.5
+  end_ms: 122.3544
   resource_id: panel
   predecessors:
   - dpu#f6
@@ -1499,7 +1499,7 @@ timeline_events:
   task_type: hw
   frame_index: 7
   start_ms: 116.6896
-  end_ms: 118.8856
+  end_ms: 120.6306
   resource_id: sensor_front
   predecessors: []
 - task_id: csis#f7
@@ -1508,7 +1508,7 @@ timeline_events:
   task_type: hw
   frame_index: 7
   start_ms: 116.6886
-  end_ms: 118.8905
+  end_ms: 120.6402
   resource_id: csis
   predecessors:
   - sensor_front#f7
@@ -1518,7 +1518,7 @@ timeline_events:
   task_type: hw
   frame_index: 7
   start_ms: 116.7002
-  end_ms: 118.8916
+  end_ms: 120.6331
   resource_id: pdp
   predecessors:
   - csis#f7
@@ -1528,7 +1528,7 @@ timeline_events:
   task_type: hw
   frame_index: 7
   start_ms: 116.6667
-  end_ms: 118.8605
+  end_ms: 120.6039
   resource_id: byrp
   predecessors:
   - pdp#f7
@@ -1538,7 +1538,7 @@ timeline_events:
   task_type: hw
   frame_index: 7
   start_ms: 116.7116
-  end_ms: 118.9014
+  end_ms: 120.6415
   resource_id: rgbp
   predecessors:
   - byrp#f7
@@ -1548,7 +1548,7 @@ timeline_events:
   task_type: hw
   frame_index: 7
   start_ms: 116.6674
-  end_ms: 118.8626
+  end_ms: 120.607
   resource_id: yuvsc
   predecessors:
   - rgbp#f7
@@ -1558,7 +1558,7 @@ timeline_events:
   task_type: hw
   frame_index: 7
   start_ms: 116.6667
-  end_ms: 118.875
+  end_ms: 120.6298
   resource_id: mlsc
   predecessors:
   - yuvsc#f7
@@ -1567,8 +1567,8 @@ timeline_events:
   hw_name: VPS
   task_type: hw
   frame_index: 7
-  start_ms: 118.7386
-  end_ms: 118.8905
+  start_ms: 120.5674
+  end_ms: 120.84
   resource_id: vps_od
   predecessors:
   - mlsc#f7
@@ -1577,8 +1577,8 @@ timeline_events:
   hw_name: CPU
   task_type: sw
   frame_index: 7
-  start_ms: 120.4643
-  end_ms: 120.8166
+  start_ms: 122.5234
+  end_ms: 122.8758
   resource_id: CPU_CAMERA
   predecessors:
   - mlsc#f7
@@ -1589,8 +1589,8 @@ timeline_events:
   hw_name: CPU
   task_type: sw
   frame_index: 7
-  start_ms: 120.849
-  end_ms: 124.9469
+  start_ms: 122.9082
+  end_ms: 127.0061
   resource_id: stage:pre_me_rta
   predecessors:
   - post_crta#f7
@@ -1600,8 +1600,8 @@ timeline_events:
   hw_name: CPU
   task_type: sw
   frame_index: 7
-  start_ms: 124.2923
-  end_ms: 129.3995
+  start_ms: 126.3514
+  end_ms: 131.4586
   resource_id: CPU_CAMERA
   predecessors:
   - pre_me_rta#f7
@@ -1610,8 +1610,8 @@ timeline_events:
   hw_name: MTNR
   task_type: hw
   frame_index: 7
-  start_ms: 127.4465
-  end_ms: 135.8007
+  start_ms: 129.2543
+  end_ms: 137.6086
   resource_id: mtnr
   predecessors:
   - mlsc#f7
@@ -1621,8 +1621,8 @@ timeline_events:
   hw_name: MSNR
   task_type: hw
   frame_index: 7
-  start_ms: 127.4825
-  end_ms: 135.8912
+  start_ms: 129.2904
+  end_ms: 137.6991
   resource_id: msnr
   predecessors:
   - mtnr#f7
@@ -1631,8 +1631,8 @@ timeline_events:
   hw_name: YUVP
   task_type: hw
   frame_index: 7
-  start_ms: 127.4279
-  end_ms: 135.772
+  start_ms: 129.2358
+  end_ms: 137.5798
   resource_id: yuvp
   predecessors:
   - msnr#f7
@@ -1643,8 +1643,8 @@ timeline_events:
   hw_name: MCSC
   task_type: hw
   frame_index: 7
-  start_ms: 127.6023
-  end_ms: 135.8203
+  start_ms: 129.4102
+  end_ms: 137.6281
   resource_id: mcsc
   predecessors:
   - yuvp#f7
@@ -1653,8 +1653,8 @@ timeline_events:
   hw_name: MFC
   task_type: hw
   frame_index: 7
-  start_ms: 135.3661
-  end_ms: 143.0672
+  start_ms: 137.1635
+  end_ms: 144.8646
   resource_id: mfc_enc
   predecessors:
   - mcsc#f7
@@ -1663,8 +1663,8 @@ timeline_events:
   hw_name: DPU
   task_type: hw
   frame_index: 7
-  start_ms: 135.5138
-  end_ms: 137.3554
+  start_ms: 137.2902
+  end_ms: 139.1319
   resource_id: dpu
   predecessors:
   - mcsc#f7
@@ -1673,8 +1673,8 @@ timeline_events:
   hw_name: DISPLAY
   task_type: hw
   frame_index: 7
-  start_ms: 135.2927
-  end_ms: 137.1685
+  start_ms: 137.0692
+  end_ms: 138.9449
   resource_id: panel
   predecessors:
   - dpu#f7
@@ -1684,7 +1684,7 @@ timeline_events:
   task_type: hw
   frame_index: 8
   start_ms: 133.338
-  end_ms: 135.5339
+  end_ms: 137.279
   resource_id: sensor_front
   predecessors: []
 - task_id: csis#f8
@@ -1693,7 +1693,7 @@ timeline_events:
   task_type: hw
   frame_index: 8
   start_ms: 133.3333
-  end_ms: 135.5375
+  end_ms: 137.2891
   resource_id: csis
   predecessors:
   - sensor_front#f8
@@ -1703,7 +1703,7 @@ timeline_events:
   task_type: hw
   frame_index: 8
   start_ms: 133.36
-  end_ms: 135.5598
+  end_ms: 137.3078
   resource_id: pdp
   predecessors:
   - csis#f8
@@ -1713,7 +1713,7 @@ timeline_events:
   task_type: hw
   frame_index: 8
   start_ms: 133.3415
-  end_ms: 135.5224
+  end_ms: 137.2555
   resource_id: byrp
   predecessors:
   - pdp#f8
@@ -1723,7 +1723,7 @@ timeline_events:
   task_type: hw
   frame_index: 8
   start_ms: 133.3462
-  end_ms: 135.5246
+  end_ms: 137.2556
   resource_id: rgbp
   predecessors:
   - byrp#f8
@@ -1733,7 +1733,7 @@ timeline_events:
   task_type: hw
   frame_index: 8
   start_ms: 133.3333
-  end_ms: 135.5285
+  end_ms: 137.2729
   resource_id: yuvsc
   predecessors:
   - rgbp#f8
@@ -1743,7 +1743,7 @@ timeline_events:
   task_type: hw
   frame_index: 8
   start_ms: 133.3333
-  end_ms: 135.5503
+  end_ms: 137.312
   resource_id: mlsc
   predecessors:
   - yuvsc#f8
@@ -1752,8 +1752,8 @@ timeline_events:
   hw_name: VPS
   task_type: hw
   frame_index: 8
-  start_ms: 135.5659
-  end_ms: 135.7168
+  start_ms: 137.3948
+  end_ms: 137.6655
   resource_id: vps_od
   predecessors:
   - mlsc#f8
@@ -1762,8 +1762,8 @@ timeline_events:
   hw_name: CPU
   task_type: sw
   frame_index: 8
-  start_ms: 137.2551
-  end_ms: 137.6469
+  start_ms: 139.3143
+  end_ms: 139.7061
   resource_id: CPU_CAMERA
   predecessors:
   - mlsc#f8
@@ -1774,8 +1774,8 @@ timeline_events:
   hw_name: CPU
   task_type: sw
   frame_index: 8
-  start_ms: 137.6722
-  end_ms: 141.8422
+  start_ms: 139.7314
+  end_ms: 143.9014
   resource_id: stage:pre_me_rta
   predecessors:
   - post_crta#f8
@@ -1785,8 +1785,8 @@ timeline_events:
   hw_name: CPU
   task_type: sw
   frame_index: 8
-  start_ms: 141.0477
-  end_ms: 146.0894
+  start_ms: 143.1068
+  end_ms: 148.1485
   resource_id: CPU_CAMERA
   predecessors:
   - pre_me_rta#f8
@@ -1795,8 +1795,8 @@ timeline_events:
   hw_name: MTNR
   task_type: hw
   frame_index: 8
-  start_ms: 143.9846
-  end_ms: 152.3579
+  start_ms: 145.7925
+  end_ms: 154.1658
   resource_id: mtnr
   predecessors:
   - mlsc#f8
@@ -1806,8 +1806,8 @@ timeline_events:
   hw_name: MSNR
   task_type: hw
   frame_index: 8
-  start_ms: 144.1362
-  end_ms: 152.5592
+  start_ms: 145.9441
+  end_ms: 154.3671
   resource_id: msnr
   predecessors:
   - mtnr#f8
@@ -1816,8 +1816,8 @@ timeline_events:
   hw_name: YUVP
   task_type: hw
   frame_index: 8
-  start_ms: 144.0282
-  end_ms: 152.493
+  start_ms: 145.836
+  end_ms: 154.3009
   resource_id: yuvp
   predecessors:
   - msnr#f8
@@ -1828,8 +1828,8 @@ timeline_events:
   hw_name: MCSC
   task_type: hw
   frame_index: 8
-  start_ms: 144.0131
-  end_ms: 152.3901
+  start_ms: 145.821
+  end_ms: 154.1979
   resource_id: mcsc
   predecessors:
   - yuvp#f8
@@ -1838,8 +1838,8 @@ timeline_events:
   hw_name: MFC
   task_type: hw
   frame_index: 8
-  start_ms: 152.4779
-  end_ms: 160.2737
+  start_ms: 154.2753
+  end_ms: 162.0711
   resource_id: mfc_enc
   predecessors:
   - mcsc#f8
@@ -1848,8 +1848,8 @@ timeline_events:
   hw_name: DPU
   task_type: hw
   frame_index: 8
-  start_ms: 151.9735
-  end_ms: 153.8311
+  start_ms: 153.75
+  end_ms: 155.6076
   resource_id: dpu
   predecessors:
   - mcsc#f8
@@ -1858,8 +1858,8 @@ timeline_events:
   hw_name: DISPLAY
   task_type: hw
   frame_index: 8
-  start_ms: 152.1308
-  end_ms: 154.0179
+  start_ms: 153.9072
+  end_ms: 155.7944
   resource_id: panel
   predecessors:
   - dpu#f8
@@ -1869,7 +1869,7 @@ timeline_events:
   task_type: hw
   frame_index: 9
   start_ms: 150.0
-  end_ms: 152.196
+  end_ms: 153.941
   resource_id: sensor_front
   predecessors: []
 - task_id: csis#f9
@@ -1878,7 +1878,7 @@ timeline_events:
   task_type: hw
   frame_index: 9
   start_ms: 150.0251
-  end_ms: 152.2198
+  end_ms: 153.9639
   resource_id: csis
   predecessors:
   - sensor_front#f9
@@ -1888,7 +1888,7 @@ timeline_events:
   task_type: hw
   frame_index: 9
   start_ms: 150.0073
-  end_ms: 152.2056
+  end_ms: 153.9526
   resource_id: pdp
   predecessors:
   - csis#f9
@@ -1898,7 +1898,7 @@ timeline_events:
   task_type: hw
   frame_index: 9
   start_ms: 150.0
-  end_ms: 152.1978
+  end_ms: 153.9442
   resource_id: byrp
   predecessors:
   - pdp#f9
@@ -1908,7 +1908,7 @@ timeline_events:
   task_type: hw
   frame_index: 9
   start_ms: 150.0
-  end_ms: 152.1921
+  end_ms: 153.9341
   resource_id: rgbp
   predecessors:
   - byrp#f9
@@ -1918,7 +1918,7 @@ timeline_events:
   task_type: hw
   frame_index: 9
   start_ms: 150.0
-  end_ms: 152.1951
+  end_ms: 153.9395
   resource_id: yuvsc
   predecessors:
   - rgbp#f9
@@ -1928,7 +1928,7 @@ timeline_events:
   task_type: hw
   frame_index: 9
   start_ms: 150.0
-  end_ms: 152.2055
+  end_ms: 153.9582
   resource_id: mlsc
   predecessors:
   - yuvsc#f9
@@ -1937,8 +1937,8 @@ timeline_events:
   hw_name: VPS
   task_type: hw
   frame_index: 9
-  start_ms: 152.318
-  end_ms: 152.4726
+  start_ms: 154.1469
+  end_ms: 154.4243
   resource_id: vps_od
   predecessors:
   - mlsc#f9
@@ -1947,8 +1947,8 @@ timeline_events:
   hw_name: CPU
   task_type: sw
   frame_index: 9
-  start_ms: 153.8991
-  end_ms: 154.2826
+  start_ms: 155.9583
+  end_ms: 156.3418
   resource_id: CPU_CAMERA
   predecessors:
   - mlsc#f9
@@ -1959,8 +1959,8 @@ timeline_events:
   hw_name: CPU
   task_type: sw
   frame_index: 9
-  start_ms: 153.9883
-  end_ms: 158.1231
+  start_ms: 156.0474
+  end_ms: 160.1822
   resource_id: stage:pre_me_rta
   predecessors:
   - post_crta#f9
@@ -1970,8 +1970,8 @@ timeline_events:
   hw_name: CPU
   task_type: sw
   frame_index: 9
-  start_ms: 157.7478
-  end_ms: 162.8852
+  start_ms: 159.807
+  end_ms: 164.9444
   resource_id: CPU_CAMERA
   predecessors:
   - pre_me_rta#f9
@@ -1980,8 +1980,8 @@ timeline_events:
   hw_name: MTNR
   task_type: hw
   frame_index: 9
-  start_ms: 160.6627
-  end_ms: 168.7475
+  start_ms: 162.4706
+  end_ms: 170.5553
   resource_id: mtnr
   predecessors:
   - mlsc#f9
@@ -1991,8 +1991,8 @@ timeline_events:
   hw_name: MSNR
   task_type: hw
   frame_index: 9
-  start_ms: 160.646
-  end_ms: 168.9638
+  start_ms: 162.4539
+  end_ms: 170.7717
   resource_id: msnr
   predecessors:
   - mtnr#f9
@@ -2001,8 +2001,8 @@ timeline_events:
   hw_name: YUVP
   task_type: hw
   frame_index: 9
-  start_ms: 160.625
-  end_ms: 169.1985
+  start_ms: 162.4329
+  end_ms: 171.0064
   resource_id: yuvp
   predecessors:
   - msnr#f9
@@ -2013,8 +2013,8 @@ timeline_events:
   hw_name: MCSC
   task_type: hw
   frame_index: 9
-  start_ms: 160.6509
-  end_ms: 168.7133
+  start_ms: 162.4588
+  end_ms: 170.5212
   resource_id: mcsc
   predecessors:
   - yuvp#f9
@@ -2023,8 +2023,8 @@ timeline_events:
   hw_name: MFC
   task_type: hw
   frame_index: 9
-  start_ms: 169.0708
-  end_ms: 176.6782
+  start_ms: 170.8682
+  end_ms: 178.4756
   resource_id: mfc_enc
   predecessors:
   - mcsc#f9
@@ -2033,8 +2033,8 @@ timeline_events:
   hw_name: DPU
   task_type: hw
   frame_index: 9
-  start_ms: 168.7002
-  end_ms: 170.5715
+  start_ms: 170.4766
+  end_ms: 172.348
   resource_id: dpu
   predecessors:
   - mcsc#f9
@@ -2043,8 +2043,8 @@ timeline_events:
   hw_name: DISPLAY
   task_type: hw
   frame_index: 9
-  start_ms: 168.8119
-  end_ms: 170.6904
+  start_ms: 170.5883
+  end_ms: 172.4669
   resource_id: panel
   predecessors:
   - dpu#f9
@@ -2054,7 +2054,7 @@ timeline_events:
   task_type: hw
   frame_index: 10
   start_ms: 166.6667
-  end_ms: 168.8626
+  end_ms: 170.6077
   resource_id: sensor_front
   predecessors: []
 - task_id: csis#f10
@@ -2063,7 +2063,7 @@ timeline_events:
   task_type: hw
   frame_index: 10
   start_ms: 166.6704
-  end_ms: 168.8517
+  end_ms: 170.5852
   resource_id: csis
   predecessors:
   - sensor_front#f10
@@ -2073,7 +2073,7 @@ timeline_events:
   task_type: hw
   frame_index: 10
   start_ms: 166.6667
-  end_ms: 168.8638
+  end_ms: 170.6098
   resource_id: pdp
   predecessors:
   - csis#f10
@@ -2083,7 +2083,7 @@ timeline_events:
   task_type: hw
   frame_index: 10
   start_ms: 166.6799
-  end_ms: 168.8592
+  end_ms: 170.591
   resource_id: byrp
   predecessors:
   - pdp#f10
@@ -2093,7 +2093,7 @@ timeline_events:
   task_type: hw
   frame_index: 10
   start_ms: 166.6667
-  end_ms: 168.8461
+  end_ms: 170.578
   resource_id: rgbp
   predecessors:
   - byrp#f10
@@ -2103,7 +2103,7 @@ timeline_events:
   task_type: hw
   frame_index: 10
   start_ms: 166.6667
-  end_ms: 168.8684
+  end_ms: 170.618
   resource_id: yuvsc
   predecessors:
   - rgbp#f10
@@ -2113,7 +2113,7 @@ timeline_events:
   task_type: hw
   frame_index: 10
   start_ms: 166.6667
-  end_ms: 168.8825
+  end_ms: 170.6433
   resource_id: mlsc
   predecessors:
   - yuvsc#f10
@@ -2122,8 +2122,8 @@ timeline_events:
   hw_name: VPS
   task_type: hw
   frame_index: 10
-  start_ms: 169.1403
-  end_ms: 169.2967
+  start_ms: 170.9691
+  end_ms: 171.2498
   resource_id: vps_od
   predecessors:
   - mlsc#f10
@@ -2132,8 +2132,8 @@ timeline_events:
   hw_name: CPU
   task_type: sw
   frame_index: 10
-  start_ms: 170.5486
-  end_ms: 170.9423
+  start_ms: 172.6077
+  end_ms: 173.0015
   resource_id: CPU_CAMERA
   predecessors:
   - mlsc#f10
@@ -2144,8 +2144,8 @@ timeline_events:
   hw_name: CPU
   task_type: sw
   frame_index: 10
-  start_ms: 171.0159
-  end_ms: 174.7461
+  start_ms: 173.0751
+  end_ms: 176.8053
   resource_id: stage:pre_me_rta
   predecessors:
   - post_crta#f10
@@ -2155,8 +2155,8 @@ timeline_events:
   hw_name: CPU
   task_type: sw
   frame_index: 10
-  start_ms: 174.4337
-  end_ms: 179.6243
+  start_ms: 176.4929
+  end_ms: 181.6834
   resource_id: CPU_CAMERA
   predecessors:
   - pre_me_rta#f10
@@ -2165,8 +2165,8 @@ timeline_events:
   hw_name: MTNR
   task_type: hw
   frame_index: 10
-  start_ms: 177.7385
-  end_ms: 185.8919
+  start_ms: 179.5463
+  end_ms: 187.6997
   resource_id: mtnr
   predecessors:
   - mlsc#f10
@@ -2176,8 +2176,8 @@ timeline_events:
   hw_name: MSNR
   task_type: hw
   frame_index: 10
-  start_ms: 177.7487
-  end_ms: 186.1936
+  start_ms: 179.5565
+  end_ms: 188.0015
   resource_id: msnr
   predecessors:
   - mtnr#f10
@@ -2186,8 +2186,8 @@ timeline_events:
   hw_name: YUVP
   task_type: hw
   frame_index: 10
-  start_ms: 177.7373
-  end_ms: 186.3996
+  start_ms: 179.5452
+  end_ms: 188.2075
   resource_id: yuvp
   predecessors:
   - msnr#f10
@@ -2198,8 +2198,8 @@ timeline_events:
   hw_name: MCSC
   task_type: hw
   frame_index: 10
-  start_ms: 177.4244
-  end_ms: 185.6644
+  start_ms: 179.2322
+  end_ms: 187.4723
   resource_id: mcsc
   predecessors:
   - yuvp#f10
@@ -2208,8 +2208,8 @@ timeline_events:
   hw_name: MFC
   task_type: hw
   frame_index: 10
-  start_ms: 185.6463
-  end_ms: 193.2301
+  start_ms: 187.4437
+  end_ms: 195.0275
   resource_id: mfc_enc
   predecessors:
   - mcsc#f10
@@ -2218,8 +2218,8 @@ timeline_events:
   hw_name: DPU
   task_type: hw
   frame_index: 10
-  start_ms: 185.2047
-  end_ms: 187.075
+  start_ms: 186.9812
+  end_ms: 188.8515
   resource_id: dpu
   predecessors:
   - mcsc#f10
@@ -2228,8 +2228,8 @@ timeline_events:
   hw_name: DISPLAY
   task_type: hw
   frame_index: 10
-  start_ms: 185.1565
-  end_ms: 187.0175
+  start_ms: 186.933
+  end_ms: 188.794
   resource_id: panel
   predecessors:
   - dpu#f10
@@ -2239,7 +2239,7 @@ timeline_events:
   task_type: hw
   frame_index: 11
   start_ms: 183.3333
-  end_ms: 185.5293
+  end_ms: 187.2743
   resource_id: sensor_front
   predecessors: []
 - task_id: csis#f11
@@ -2248,7 +2248,7 @@ timeline_events:
   task_type: hw
   frame_index: 11
   start_ms: 183.3812
-  end_ms: 185.5763
+  end_ms: 187.3206
   resource_id: csis
   predecessors:
   - sensor_front#f11
@@ -2258,7 +2258,7 @@ timeline_events:
   task_type: hw
   frame_index: 11
   start_ms: 183.3333
-  end_ms: 185.5202
+  end_ms: 187.258
   resource_id: pdp
   predecessors:
   - csis#f11
@@ -2268,7 +2268,7 @@ timeline_events:
   task_type: hw
   frame_index: 11
   start_ms: 183.3333
-  end_ms: 185.5197
+  end_ms: 187.2572
   resource_id: byrp
   predecessors:
   - pdp#f11
@@ -2278,7 +2278,7 @@ timeline_events:
   task_type: hw
   frame_index: 11
   start_ms: 183.3547
-  end_ms: 185.5444
+  end_ms: 187.2845
   resource_id: rgbp
   predecessors:
   - byrp#f11
@@ -2288,7 +2288,7 @@ timeline_events:
   task_type: hw
   frame_index: 11
   start_ms: 183.3558
-  end_ms: 185.555
+  end_ms: 187.3027
   resource_id: yuvsc
   predecessors:
   - rgbp#f11
@@ -2298,7 +2298,7 @@ timeline_events:
   task_type: hw
   frame_index: 11
   start_ms: 183.3756
-  end_ms: 185.5867
+  end_ms: 187.3437
   resource_id: mlsc
   predecessors:
   - yuvsc#f11
@@ -2307,8 +2307,8 @@ timeline_events:
   hw_name: VPS
   task_type: hw
   frame_index: 11
-  start_ms: 185.7693
-  end_ms: 185.9251
+  start_ms: 187.5981
+  end_ms: 187.8777
   resource_id: vps_od
   predecessors:
   - mlsc#f11
@@ -2317,8 +2317,8 @@ timeline_events:
   hw_name: CPU
   task_type: sw
   frame_index: 11
-  start_ms: 186.8847
-  end_ms: 187.2171
+  start_ms: 188.9439
+  end_ms: 189.2762
   resource_id: CPU_CAMERA
   predecessors:
   - mlsc#f11
@@ -2329,8 +2329,8 @@ timeline_events:
   hw_name: CPU
   task_type: sw
   frame_index: 11
-  start_ms: 187.2124
-  end_ms: 191.0416
+  start_ms: 189.2716
+  end_ms: 193.1008
   resource_id: stage:pre_me_rta
   predecessors:
   - post_crta#f11
@@ -2340,8 +2340,8 @@ timeline_events:
   hw_name: CPU
   task_type: sw
   frame_index: 11
-  start_ms: 190.7942
-  end_ms: 196.0614
+  start_ms: 192.8534
+  end_ms: 198.1205
   resource_id: CPU_CAMERA
   predecessors:
   - pre_me_rta#f11
@@ -2350,8 +2350,8 @@ timeline_events:
   hw_name: MTNR
   task_type: hw
   frame_index: 11
-  start_ms: 194.0455
-  end_ms: 202.13
+  start_ms: 195.8533
+  end_ms: 203.9378
   resource_id: mtnr
   predecessors:
   - mlsc#f11
@@ -2361,8 +2361,8 @@ timeline_events:
   hw_name: MSNR
   task_type: hw
   frame_index: 11
-  start_ms: 194.2818
-  end_ms: 202.5718
+  start_ms: 196.0897
+  end_ms: 204.3797
   resource_id: msnr
   predecessors:
   - mtnr#f11
@@ -2371,8 +2371,8 @@ timeline_events:
   hw_name: YUVP
   task_type: hw
   frame_index: 11
-  start_ms: 193.9936
-  end_ms: 202.5893
+  start_ms: 195.8015
+  end_ms: 204.3971
   resource_id: yuvp
   predecessors:
   - msnr#f11
@@ -2383,8 +2383,8 @@ timeline_events:
   hw_name: MCSC
   task_type: hw
   frame_index: 11
-  start_ms: 194.0142
-  end_ms: 202.2223
+  start_ms: 195.822
+  end_ms: 204.0302
   resource_id: mcsc
   predecessors:
   - yuvp#f11
@@ -2393,8 +2393,8 @@ timeline_events:
   hw_name: MFC
   task_type: hw
   frame_index: 11
-  start_ms: 202.3128
-  end_ms: 210.0296
+  start_ms: 204.1102
+  end_ms: 211.827
   resource_id: mfc_enc
   predecessors:
   - mcsc#f11
@@ -2403,8 +2403,8 @@ timeline_events:
   hw_name: DPU
   task_type: hw
   frame_index: 11
-  start_ms: 201.9605
-  end_ms: 203.8125
+  start_ms: 203.737
+  end_ms: 205.589
   resource_id: dpu
   predecessors:
   - mcsc#f11
@@ -2413,8 +2413,8 @@ timeline_events:
   hw_name: DISPLAY
   task_type: hw
   frame_index: 11
-  start_ms: 201.9917
-  end_ms: 203.8752
+  start_ms: 203.7681
+  end_ms: 205.6517
   resource_id: panel
   predecessors:
   - dpu#f11

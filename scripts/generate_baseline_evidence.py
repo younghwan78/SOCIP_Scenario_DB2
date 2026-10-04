@@ -20,6 +20,8 @@ NOT silicon data: provenance.device_id SYNTHETIC, collection_method synthetic_fi
 
     python scripts/generate_baseline_evidence.py            # dry run (prints a summary)
     python scripts/generate_baseline_evidence.py --write    # writes into 03_evidence
+    python scripts/generate_baseline_evidence.py --write --resimulate   # re-run the simulator for all three
+                                        # (after a model change); writes sim-baseline-<variant>-mean-20261004
 """
 from __future__ import annotations
 
@@ -240,6 +242,8 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--write", action="store_true")
     ap.add_argument("--only", nargs="*")
+    ap.add_argument("--resimulate", action="store_true",
+                    help="simulate every baseline with the current model instead of reusing older simulation evidence")
     args = ap.parse_args()
     raw = read(FIXTURE / "02_definition" / f"{SCENARIO}.yaml")
     catalog = load_catalog.cache = load_catalog()
@@ -252,7 +256,7 @@ def main() -> int:
         graph = graph_from_fixture(raw, vid, catalog)
         fps = float((graph.variant.design_conditions or {}).get("fps") or 30)
         row: dict = {"variant": vid, "had": sorted(have.get(vid, set())), "added": []}
-        sim = find_sim(vid)
+        sim = None if args.resimulate else find_sim(vid)
         if sim is None:
             selected, last = simulate(raw, vid, catalog)
             sim = sim_evidence(raw, vid, selected, last)
