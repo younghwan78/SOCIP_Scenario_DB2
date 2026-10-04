@@ -65,13 +65,14 @@ it('rebalance mode: setup, run with locks / co-move, curve and top splits', asyn
     topologies: [{ id: 'pmp-e2600', version: 1, soc_ref: 'soc-exynos2600', clusters: ['MID_LF0', 'MID_LF1', 'MID_HF', 'BIG'] }],
   })
   const calls: CpuRebalanceRequest[] = []
-  const run = vi.spyOn(rebalanceApi, 'run').mockImplementation(async (req) => { calls.push(req); return E2600 })
+  const run = vi.spyOn(rebalanceApi, 'run').mockImplementation(async (req) => { calls.push(req); return { ...E2600, dsu_measured: { '1500': 1 } } })
   const sweep = vi.spyOn(cpuApi, 'sweep').mockRejectedValue(new Error('sweep must not run in rebalance mode'))
   const host = document.createElement('div'), root = createRoot(host)
   try {
     await act(async () => root.render(<ChartTipProvider><CpuWhatIfPage ctx={{} as Ctx} /></ChartTipProvider>))
     expect(calls).toHaveLength(1)
     expect(calls[0].pool).toEqual([])                       // first run: server default pool
+    expect(host.querySelector('select[aria-label="DSU 실험 규칙"] option[value="measured"]')).not.toBeNull()
     expect(sweep).not.toHaveBeenCalled()
     expect(host.querySelector('svg[aria-label="이동 곡선"]')).not.toBeNull()
     expect(host.textContent).toContain('최저 분배')

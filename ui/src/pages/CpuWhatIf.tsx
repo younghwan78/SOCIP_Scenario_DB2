@@ -321,7 +321,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
         </Card>
         {mode === 'rebalance' && rbRaw?.dsu_params && <Card id="cpu-dsu" title="DSU 동기화 (가정)" defaultWide minHeight={120} help={CPU_HELP.dsu}
           note={`DSU 주파수 = busy cluster vote 최대 · 표를 바꾸면 반환된 분배를 즉시 재계산${dsuExp ? ' · 실험 적용 중' : ''}`}>
-          <DsuPanel params={rbRaw.dsu_params} server={rbRaw.dsu_model} evalPolicy={rbEval} candidates={rbRaw.cases.length + rbRaw.curve.length}
+          <DsuPanel params={rbRaw.dsu_params} server={rbRaw.dsu_model} measured={rbRaw.dsu_measured} evalPolicy={rbEval} candidates={rbRaw.cases.length + rbRaw.curve.length}
             exp={dsuExp} setExp={setDsuExp} onApply={applyDsuToServer} applied={dsuReq} />
         </Card>}
         {mode === 'sweep' && rawResult?.dsu_params && <Card id="cpu-dsu" title="DSU 동기화 (가정)" defaultWide minHeight={120} help={CPU_HELP.dsu}
