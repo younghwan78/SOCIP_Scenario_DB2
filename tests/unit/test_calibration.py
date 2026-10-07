@@ -72,7 +72,7 @@ def _client(monkeypatch, **fakes):
 def test_routes(monkeypatch):
     c = _client(monkeypatch,
                 **{"cal.list_measurements": lambda db, scenario_id=None: [{"id": "m", "scenario_id": scenario_id}],
-                   "cal.measurement_detail": lambda db, mid: {"id": mid},
+                   "cal.measurement_detail_view": lambda db, mid: {"id": mid},
                    "cal.coverage": lambda db, scenario_id: {"v1": {"simulation": 1, "s": scenario_id}},
                    "cal.coverage_summary": lambda db: {"sc": {"simulation": 3}},
                    "lib.sw_timing": lambda db, scenario_id=None: {"tasks": [], "measured": [], "s": scenario_id}})

@@ -1,0 +1,10 @@
+pass,domain,state,dur_ns
+1,GPU,busy,5100000000
+1,GPU,clock_gated,4500000000
+1,GPU,power_off,5400000000
+2,GPU,busy,5100000000
+2,GPU,clock_gated,4500000000
+2,GPU,power_off,5400000000
+3,GPU,busy,5100000000
+3,GPU,clock_gated,4500000000
+3,GPU,power_off,5400000000

@@ -185,18 +185,21 @@ def _cpu_residency(value: dict[float, float] | None) -> dict[float, float] | Non
 class CpuClusterProfile(CpuCounters):
     # {MHz: time share}; shares are normalised by the model.
     freq_residency: dict[float, float] | None = None
+    # {MHz: share of running (non-idle) time}; when present, dynamic energy uses it (cycle-weighted).
+    freq_residency_active: dict[float, float] | None = None
     clock_gated_ratio: float | None = Field(default=None, ge=0, le=1)
     power_gated_ratio: float | None = Field(default=None, ge=0, le=1)
 
-    _valid_residency = field_validator("freq_residency")(_cpu_residency)
+    _valid_residency = field_validator("freq_residency", "freq_residency_active")(_cpu_residency)
 
 
 class CpuDsuProfile(BaseScenarioModel):
     freq_residency: dict[float, float] | None = None
+    freq_residency_active: dict[float, float] | None = None
     active_ratio: float | None = Field(default=None, ge=0, le=1)
     power_gated_ratio: float | None = Field(default=None, ge=0, le=1)
 
-    _valid_residency = field_validator("freq_residency")(_cpu_residency)
+    _valid_residency = field_validator("freq_residency", "freq_residency_active")(_cpu_residency)
 
 
 class CpuProfile(BaseScenarioModel):

@@ -1,6 +1,7 @@
 // Prediction ↔ measurement calibration (backend: /calibration/*, src/scenario_db/api/services/calibration.py)
 import { getJson } from './api'
 import type { CategoryFit } from './provenance'
+import type { ClockView } from './clockResidency'
 
 export type Category = 'cpu' | 'ip' | 'bw' | 'other'
 export interface Total { mean: number | null; std: number | null; p95: number | null; ci_95: number[] | null; n: number | null }
@@ -29,6 +30,8 @@ export interface MeasDetail {
   rail_domain_map_ref: string | null; unexplained_mw: number | null; predictions: PredictionCmp[]
   origin?: 'synthetic' | 'physical_capture' | 'unknown'; rail_map_basis?: 'pinned' | 'latest' | 'none'
   sw_tasks: { task: string; mean_ms?: number; p95_ms?: number; max_ms?: number; min_ms?: number; count?: number; thread?: string; cluster?: string }[]
+  /** CPU cluster · DSU · GPU frequency residency (absent before the API update / null without residency) */
+  clock_residency?: ClockView | null
 }
 
 export interface Coverage { simulation: number; measurement: number; synthetic: number; unknown?: number; current_prediction: { id: string; total_mw: number | null } | null }

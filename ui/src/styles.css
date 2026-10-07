@@ -713,3 +713,13 @@ tr.vp-bad td { color: #B42318; font-weight: 600; }
 .seg.xs.off { opacity: .5; }
 .seg.xs button:focus-visible { outline: 2px solid var(--primary-strong); outline-offset: -2px; }
 .rb-setup td:has(> .seg) { white-space: nowrap; }
+
+/* clock residency (components/ClockResidency.tsx) */
+.clk-summary { margin: 0 0 8px; padding: 8px 12px 8px 26px; background: var(--surface-soft); border-radius: var(--radius); font-size: 13px; }
+.clk-summary li { margin: 2px 0; }
+.clk-table tr.clickable { cursor: pointer; }
+.clk-table tr.clk-group td { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--sd-group); padding-top: 10px; border-bottom: 0; }
+.clk-table tr.clk-detail td { background: var(--surface-soft); }
+.clk-note { font-size: 12px; line-height: 1.45; margin: 2px 0; }
+.clk-note.info { color: var(--muted); }
+.clk-note.warn { color: var(--warn-text); }

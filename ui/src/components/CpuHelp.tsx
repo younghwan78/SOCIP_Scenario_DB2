@@ -74,6 +74,7 @@ export const CPU_HELP: Record<string, ReactNode> = {
     <ul>
       <li>측정 배치 그대로 EAS + schedutil을 돌렸을 때의 cluster 평균 MHz · util을 측정 residency · active 비율과 비교합니다.</li>
       <li>차이가 크면(예: ±20% 이상) 후보 순위도 믿기 어렵습니다 → ② scheduler 보정값(freq margin, util model, PELT)을 조정한 뒤 다시 계산하세요.</li>
+      <li><b>측정 분포 vs 모델</b> — 막대 = 측정 주파수별 시간 비율(회색 전체 · 청록 running), 진한 선 = 측정 평균, 빨간 점선 = 모델 MHz, 회색 점선 = fmax. 측정이 여러 OPP에 퍼져 있는데 모델이 한 OPP면 평균이 맞아도 V²f 전력은 다를 수 있습니다. running(idle 제외) 분포가 import되면 측정 평균도 running 기준입니다.</li>
     </ul></>,
   better: <>
     <b>★ 기준보다 CPU 전력이 낮으면서 조건(budget · capacity · frame 주기)을 만족하는 배치 후보입니다.</b>

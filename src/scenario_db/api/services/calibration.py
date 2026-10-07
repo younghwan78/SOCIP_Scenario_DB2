@@ -276,6 +276,83 @@ def measurement_detail(db: Session, measurement_id: str) -> dict[str, Any]:
                    _sim_evidence(db, m.scenario_ref, m.variant_ref))
 
 
+def measurement_detail_view(db: Session, measurement_id: str) -> dict[str, Any]:
+    """``measurement_detail`` + the clock-domain residency view (calibration page)."""
+    out = measurement_detail(db, measurement_id)
+    out["clock_residency"] = clock_residency_of(db, db.get(Evidence, measurement_id))
+    return out
+
+
+def _cpu_domains(m: Any) -> set[str]:
+    names = {str(e.get("cluster")) for e in (m.cpu_breakdown or []) if isinstance(e, dict) and e.get("cluster")}
+    for o in m.metric_observations or []:
+        if isinstance(o, dict) and str(o.get("metric_id", "")).startswith("cpu.freq_residency"):
+            names.add(str((o.get("scope") or {}).get("ref", "")).rpartition("@")[0])
+    return names
+
+
+def _soc_of(db: Session, m: Any) -> str | None:
+    from scenario_db.db.models.definition import Project
+
+    project_ref = m.project_ref
+    if not project_ref:
+        scenario = db.get(Scenario, m.scenario_ref)
+        project_ref = scenario.project_ref if scenario is not None else None
+    project = db.get(Project, project_ref) if project_ref else None
+    return (project.metadata_ or {}).get("soc_ref") if project is not None else None
+
+
+def clock_residency_of(db: Session, m: Any, params_rows: list[Any] | None = None,
+                       ip_rows: list[Any] | None = None) -> dict[str, Any] | None:
+    """Clock residency view of one measurement (max OPP: CPU topology of the SoC, IP catalog for GPU …)."""
+    from scenario_db.api.services.clock_residency import clock_residency_view, opp_max_from_ip_catalog, opp_max_from_params
+    from scenario_db.db.models.capability import IpCatalog, PowerModelParams
+
+    if not _cpu_domains(m) and not any(isinstance(o, dict) and ".freq_residency" in str(o.get("metric_id", ""))
+                                       for o in m.metric_observations or []):
+        return None
+    soc = _soc_of(db, m)
+    if params_rows is None:
+        params_rows = db.query(PowerModelParams).all()
+    if ip_rows is None:
+        ip_rows = db.query(IpCatalog).options(load_only(IpCatalog.id, IpCatalog.capabilities, IpCatalog.compatible_soc)).all()
+    same_soc = [r for r in params_rows if not soc or getattr(r, "soc_ref", None) == soc] or list(params_rows)
+    opp_max = opp_max_from_ip_catalog(ip_rows, soc) | opp_max_from_params(same_soc, _cpu_domains(m))
+    return clock_residency_view(m.metric_observations, m.cpu_breakdown, opp_max=opp_max)
+
+
+def clock_residency_rows(db: Session, scenario_id: str | None = None) -> list[dict[str, Any]]:
+    """One row per measurement with clock residency (variant / SW comparison table)."""
+    from scenario_db.db.models.capability import PowerModelParams
+
+    q = db.query(Evidence).options(load_only(
+        Evidence.id, Evidence.scenario_ref, Evidence.variant_ref, Evidence.measured_at, Evidence.provenance,
+        Evidence.execution_context, Evidence.metric_observations, Evidence.cpu_breakdown)).filter(
+        Evidence.kind == "evidence.measurement")
+    if scenario_id:
+        q = q.filter(Evidence.scenario_ref == scenario_id)
+    from scenario_db.db.models.capability import IpCatalog
+
+    params_rows = db.query(PowerModelParams).all()
+    ip_rows = db.query(IpCatalog).options(load_only(IpCatalog.id, IpCatalog.capabilities, IpCatalog.compatible_soc)).all()
+    out = []
+    for m in q.order_by(Evidence.measured_at.desc().nullslast(), Evidence.id).all():
+        view = clock_residency_of(db, m, params_rows, ip_rows)
+        if view is None:
+            continue
+        ctx = m.execution_context or {}
+        out.append({"id": m.id, "scenario_id": m.scenario_ref, "variant_id": m.variant_ref,
+                    "measured_at": m.measured_at.isoformat() if m.measured_at else None,
+                    "sw_baseline_ref": ctx.get("sw_baseline_ref"), "synthetic": is_synthetic(m.provenance),
+                    "domains": [{k: d[k] for k in ("domain_class", "class_label", "domain", "is_dsu", "active_ratio", "pass_jsd")}
+                                | {"mean_mhz": (d["active"] or d["wall"])["mean_mhz"], "opp_max_mhz": d["opp_max_mhz"],
+                                   "high_share": (d["active"] or d["wall"])["high_share"],
+                                   "basis": "active" if d["active"] else "wall",
+                                   "warns": sum(1 for n in d["notes"] if n["level"] == "warn")}
+                                for d in view["domains"]]})
+    return out
+
+
 def measurement_details(db: Session, measurement_ids: list[str]) -> dict[str, dict[str, Any]]:
     """``measurement_detail`` for many measurements in a constant number of queries (report generation)."""
     if not measurement_ids:

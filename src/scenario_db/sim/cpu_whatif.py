@@ -84,7 +84,8 @@ def demands(profile: Any, *, base: CpuPowerModel, warnings: list[str]) -> dict[s
     no_stall: set[str] = set()
     for entry in profile.tasks:
         cstat = profile.clusters.get(entry.cluster)
-        f0 = _mean_mhz(cstat.freq_residency if cstat else None, base.freq_mhz)
+        # running-time residency (when imported) is the frequency the cycles were executed at
+        f0 = _mean_mhz((cstat.freq_residency_active or cstat.freq_residency) if cstat else None, base.freq_mhz)
         cycles = entry.cycles or 0.0
         stall = entry.stall_cycles
         if stall is None:

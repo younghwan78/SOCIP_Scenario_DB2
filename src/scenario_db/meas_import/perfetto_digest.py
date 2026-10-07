@@ -66,6 +66,67 @@ SQL_FRAME_COUNT = "SELECT COUNT(*) AS frame_count FROM slice WHERE name = :frame
 
 NS_PER_MS = 1_000_000.0
 
+# CPU time per frequency while the CPU is not idle (clock_residency "active" basis):
+# cpufreq spans x cpuidle spans per CPU (cpuidle value 4294967295 / -1 = left idle = running).
+# Multi-statement: helper views + SPAN_JOIN; the last statement returns the rows.
+SQL_CPU_ACTIVE_RESIDENCY = """
+DROP TABLE IF EXISTS _sdb_cpu_freq_idle;
+DROP VIEW IF EXISTS _sdb_cpu_freq;
+DROP VIEW IF EXISTS _sdb_cpu_idle;
+CREATE VIEW _sdb_cpu_freq AS
+SELECT ts, dur, cpu, freq_khz FROM (
+  SELECT c.ts AS ts, LEAD(c.ts) OVER (PARTITION BY c.track_id ORDER BY c.ts) - c.ts AS dur,
+         cct.cpu AS cpu, c.value AS freq_khz
+  FROM counter c JOIN cpu_counter_track cct ON c.track_id = cct.id
+  WHERE cct.name = 'cpufreq'
+) WHERE dur > 0;
+CREATE VIEW _sdb_cpu_idle AS
+SELECT ts, dur, cpu, CASE WHEN idle_value IN (4294967295, -1) THEN 1 ELSE 0 END AS running FROM (
+  SELECT c.ts AS ts, LEAD(c.ts) OVER (PARTITION BY c.track_id ORDER BY c.ts) - c.ts AS dur,
+         cct.cpu AS cpu, c.value AS idle_value
+  FROM counter c JOIN cpu_counter_track cct ON c.track_id = cct.id
+  WHERE cct.name = 'cpuidle'
+) WHERE dur > 0;
+CREATE VIRTUAL TABLE _sdb_cpu_freq_idle USING SPAN_JOIN(_sdb_cpu_freq PARTITIONED cpu, _sdb_cpu_idle PARTITIONED cpu);
+SELECT cpu, freq_khz, SUM(dur) AS dur_ns FROM _sdb_cpu_freq_idle WHERE running = 1 GROUP BY cpu, freq_khz
+"""
+
+
+def _names(tracks: list[str]) -> str:
+    return ", ".join(_sql_quote(t) for t in tracks)
+
+
+def sql_counter_residency(tracks: list[str]) -> str:
+    """Wall-clock time per value of the named counter tracks (grouped by track)."""
+    return f"""
+SELECT track, value, SUM(dur) AS dur_ns FROM (
+  SELECT t.name AS track, c.value AS value,
+         LEAD(c.ts) OVER (PARTITION BY c.track_id ORDER BY c.ts) - c.ts AS dur
+  FROM counter c JOIN counter_track t ON c.track_id = t.id
+  WHERE t.name IN ({_names(tracks)})
+) WHERE dur > 0 GROUP BY track, value
+"""
+
+
+def sql_counter_active_residency(freq_track: str, util_track: str, scale: float) -> str:
+    """Busy-weighted time per frequency: frequency spans x utilisation spans (value / scale = busy share)."""
+    return f"""
+DROP TABLE IF EXISTS _sdb_cd_join;
+DROP VIEW IF EXISTS _sdb_cd_freq;
+DROP VIEW IF EXISTS _sdb_cd_util;
+CREATE VIEW _sdb_cd_freq AS SELECT ts, dur, value AS freq FROM (
+  SELECT c.ts AS ts, LEAD(c.ts) OVER (ORDER BY c.ts) - c.ts AS dur, c.value AS value
+  FROM counter c JOIN counter_track t ON c.track_id = t.id WHERE t.name = {_sql_quote(freq_track)}
+) WHERE dur > 0;
+CREATE VIEW _sdb_cd_util AS SELECT ts, dur, value AS util FROM (
+  SELECT c.ts AS ts, LEAD(c.ts) OVER (ORDER BY c.ts) - c.ts AS dur, c.value AS value
+  FROM counter c JOIN counter_track t ON c.track_id = t.id WHERE t.name = {_sql_quote(util_track)}
+) WHERE dur > 0;
+CREATE VIRTUAL TABLE _sdb_cd_join USING SPAN_JOIN(_sdb_cd_freq, _sdb_cd_util);
+SELECT freq AS value, SUM(dur * MIN(MAX(util / {float(scale)!r}, 0.0), 1.0)) AS busy_ns, SUM(dur) AS dur_ns
+FROM _sdb_cd_join GROUP BY freq
+"""
+
 
 # --- frequency residency -----------------------------------------------------
 
@@ -114,6 +175,80 @@ def avg_freq_mhz(bins: list[dict]) -> float | None:
     if total_ratio <= 0:
         return None
     return round(sum(b["freq_mhz"] * b["ratio"] for b in bins) / total_ratio, 3)
+
+
+# --- clock-domain residency --------------------------------------------------
+
+_TO_MHZ = {"mhz": 1.0, "khz": 1e-3, "hz": 1e-6, "ghz": 1000.0}
+
+
+def extract_cpu_active_residency(rows: list[dict[str, Any]], cpu_to_cluster: dict[int, str]) -> dict[str, dict[float, float]]:
+    """{cluster: {MHz: running ns}} from SQL_CPU_ACTIVE_RESIDENCY rows (CPUs summed per cluster)."""
+    out: dict[str, dict[float, float]] = {}
+    for row in rows:
+        cluster = cpu_to_cluster.get(int(row["cpu"]))
+        dur = float(row.get("dur_ns") or 0.0)
+        if cluster is None or dur <= 0 or not row.get("freq_khz"):
+            continue
+        mhz = round(float(row["freq_khz"]) / 1000.0, 3)
+        level = out.setdefault(cluster, {})
+        level[mhz] = level.get(mhz, 0.0) + dur
+    return out
+
+
+def extract_counter_residency(rows: list[dict[str, Any]], tracks: list[str], unit: str) -> tuple[str | None, dict[float, float]]:
+    """(track used, {MHz: ns}) — the first configured track that has samples."""
+    by_track: dict[str, dict[float, float]] = {}
+    for row in rows:
+        value, dur = row.get("value"), float(row.get("dur_ns") or 0.0)
+        if value is None or float(value) <= 0 or dur <= 0:
+            continue
+        mhz = round(float(value) * _TO_MHZ[unit], 3)
+        level = by_track.setdefault(str(row.get("track")), {})
+        level[mhz] = level.get(mhz, 0.0) + dur
+    for track in tracks:
+        if by_track.get(track):
+            return track, by_track[track]
+    return None, {}
+
+
+def extract_active_split(rows: list[dict[str, Any]], unit: str) -> tuple[dict[float, float], float | None]:
+    """({MHz: busy ns}, busy share) from sql_counter_active_residency rows."""
+    busy: dict[float, float] = {}
+    total = busy_total = 0.0
+    for row in rows:
+        value = row.get("value")
+        if value is None or float(value) <= 0:
+            continue
+        b, d = float(row.get("busy_ns") or 0.0), float(row.get("dur_ns") or 0.0)
+        total += d
+        busy_total += b
+        if b > 0:
+            mhz = round(float(value) * _TO_MHZ[unit], 3)
+            busy[mhz] = busy.get(mhz, 0.0) + b
+    return busy, (busy_total / total if total > 0 else None)
+
+
+def extract_clock_domains(tp: TraceQuery, spec: PerfettoSpec, digest: PerfettoDigest) -> None:
+    """Fill ``digest.clock_residency`` / ``clock_ratios`` (see clock_residency.perfetto_observations)."""
+    if spec.cpu_active_residency and spec.cpu_to_cluster:
+        for cluster, bins in sorted(extract_cpu_active_residency(tp.query(SQL_CPU_ACTIVE_RESIDENCY), spec.cpu_to_cluster).items()):
+            digest.clock_residency.append({"domain_class": "cpu", "domain": cluster, "basis": "active", "bins": bins})
+    for dom in spec.clock_domains:
+        track, wall = extract_counter_residency(tp.query(sql_counter_residency(dom.tracks)), dom.tracks, dom.freq_unit)
+        if track is None:
+            digest.warnings.append(f"clock domain {dom.name}: no samples on tracks {dom.tracks}")
+            continue
+        digest.clock_residency.append({"domain_class": dom.domain_class, "domain": dom.name, "basis": "wall", "bins": wall})
+        if dom.utilization_track:
+            busy, share = extract_active_split(
+                tp.query(sql_counter_active_residency(track, dom.utilization_track, dom.utilization_scale)), dom.freq_unit)
+            if busy:
+                digest.clock_residency.append({"domain_class": dom.domain_class, "domain": dom.name, "basis": "active", "bins": busy})
+            if share is not None:
+                digest.clock_ratios.append({"domain_class": dom.domain_class, "domain": dom.name, "active_ratio": share})
+            else:
+                digest.warnings.append(f"clock domain {dom.name}: utilization track {dom.utilization_track} has no samples")
 
 
 # --- sw task timing ----------------------------------------------------------
@@ -180,6 +315,10 @@ class PerfettoDigest:
         self.hw_task_timing: list[dict] = []
         self.sw_event_latency: list[dict] = []
         self.timeline_events: list[dict] = []
+        # clock-domain residency: [{domain_class, domain, basis, bins {MHz: ns}}], [{domain_class, domain, active_ratio}]
+        self.clock_residency: list[dict] = []
+        self.clock_ratios: list[dict] = []
+        self.warnings: list[str] = []
 
 
 def extract_digest(tp: TraceQuery, spec: PerfettoSpec) -> PerfettoDigest:
@@ -192,6 +331,9 @@ def extract_digest(tp: TraceQuery, spec: PerfettoSpec) -> PerfettoDigest:
             avg = avg_freq_mhz(bins)
             if avg is not None:
                 digest.cluster_avg_freq[cluster] = avg
+
+    if spec.cpu_active_residency or spec.clock_domains:
+        extract_clock_domains(tp, spec, digest)
 
     # frame count: explicit override, else count frame-marker slices.
     frame_count = spec.frame_count

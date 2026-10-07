@@ -795,6 +795,10 @@ def cpu_sweep(
             entry: dict[str, Any] = {"eas_mhz": row["mhz"], "eas_util": row["util"]}
             if prof.freq_residency:
                 entry["measured_mean_mhz"] = round(_mean_mhz(prof.freq_residency, 0.0), 1)
+                entry["measured_residency"] = _share_bins(prof.freq_residency)
+            if prof.freq_residency_active:
+                entry["measured_active_mean_mhz"] = round(_mean_mhz(prof.freq_residency_active, 0.0), 1)
+                entry["measured_residency_active"] = _share_bins(prof.freq_residency_active)
             gated = (prof.clock_gated_ratio or 0.0) + (prof.power_gated_ratio or 0.0)
             if prof.clock_gated_ratio is not None or prof.power_gated_ratio is not None:
                 entry["measured_active"] = round(max(0.0, 1.0 - gated), 4)
@@ -840,3 +844,9 @@ def cpu_sweep(
         "tasks": tasks,
         "warnings": warnings,
     }
+
+
+def _share_bins(residency: dict[float, float]) -> list[dict[str, float]]:
+    """[{mhz, ratio}] normalised, ascending frequency (UI residency bars)."""
+    total = sum(v for v in residency.values() if v > 0)
+    return [{"mhz": f, "ratio": round(v / total, 6)} for f, v in sorted(residency.items()) if v > 0] if total > 0 else []

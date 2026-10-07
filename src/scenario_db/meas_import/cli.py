@@ -158,9 +158,12 @@ def run_import(args: argparse.Namespace, report: ImportReport) -> dict | None:
                 report.info(
                     "perfetto_extracted",
                     f"Extracted {len(perfetto.freq_residency)} cluster residency sets, "
-                    f"{len(perfetto.sw_task_timing)} task timings.",
+                    f"{len(perfetto.sw_task_timing)} task timings, "
+                    f"{len(perfetto.clock_residency)} clock-domain residency sets.",
                     str(trace_path),
                 )
+                for message in perfetto.warnings:
+                    report.warning("perfetto_clock_domain", message, str(trace_path))
             except ValueError as exc:
                 report.error("perfetto_invalid", str(exc), str(trace_path))
             except RuntimeError as exc:

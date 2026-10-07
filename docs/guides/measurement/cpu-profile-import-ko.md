@@ -73,6 +73,8 @@ topology의 `cpu.dsu.name`과 일치하는 cluster 데이터는 DSU로 사용한
 
 검증만: `uv run python -m scenario_db.meas_import.cli --meta <meta.yaml> --out <dir> --strict` 후 report의 warning(미매핑 thread/counter/state, cpu_map 누락)을 확인.
 
+running(idle 제외) 기준 residency, DSU · GPU clock 분포, PMU pass별 group은 [Clock 분포 import 가이드](clock-residency-import-ko.md) 참고.
+
 ## 3. 시뮬레이션에서 사용
 
 ```yaml

@@ -1,0 +1,309 @@
+id: meas-synthetic-clock-residency-r1-uhd30-vdis-e2600-evt1
+schema_version: '2.2'
+kind: evidence.measurement
+scenario_ref: uc-cam-recording-e2600
+variant_ref: cam-rec-r1-uhd30-vdis
+project_ref: proj-sm-s947b
+measured_at: '2026-10-07T10:00:00+09:00'
+execution_context:
+  silicon_rev: EVT1
+  sw_baseline_ref: sw-vendor-v1.2.3
+  thermal: room
+  method: measurement
+  ambient_temp_c: 25.0
+  power_state: discharging
+provenance:
+  device_id: SYNTHETIC
+  collection_method: synthetic_clock_residency
+  collection_tool_versions: {}
+  sample_count: 3
+  duration_per_sample_s: 15.0
+  confidence_level: 0.95
+  raw_artifacts: []
+aggregation:
+  strategy: mean_over_capture
+metric_observations:
+- metric_id: cpu.freq_residency
+  scope:
+    kind: cluster_freq
+    ref: BIG@1000
+  unit: ratio
+  value: 1.0
+- metric_id: cpu.freq_residency
+  scope:
+    kind: cluster_freq
+    ref: DSU@400
+  unit: ratio
+  value: 0.3
+- metric_id: cpu.freq_residency
+  scope:
+    kind: cluster_freq
+    ref: DSU@900
+  unit: ratio
+  value: 0.7
+- metric_id: cpu.freq_residency
+  scope:
+    kind: cluster_freq
+    ref: MID_HF@600
+  unit: ratio
+  value: 0.95
+- metric_id: cpu.freq_residency
+  scope:
+    kind: cluster_freq
+    ref: MID_HF@1200
+  unit: ratio
+  value: 0.05
+- metric_id: cpu.freq_residency
+  scope:
+    kind: cluster_freq
+    ref: MID_LF0@400
+  unit: ratio
+  value: 0.3
+- metric_id: cpu.freq_residency
+  scope:
+    kind: cluster_freq
+    ref: MID_LF0@1000
+  unit: ratio
+  value: 0.7
+- metric_id: cpu.freq_residency
+  scope:
+    kind: cluster_freq
+    ref: MID_LF1@400
+  unit: ratio
+  value: 1.0
+- metric_id: cpu.active_ratio
+  scope:
+    kind: cluster
+    ref: BIG
+  unit: ratio
+  value: 0.0
+- metric_id: cpu.clock_gated_ratio
+  scope:
+    kind: cluster
+    ref: BIG
+  unit: ratio
+  value: 0.45
+- metric_id: cpu.power_gated_ratio
+  scope:
+    kind: cluster
+    ref: BIG
+  unit: ratio
+  value: 0.55
+- metric_id: cpu.active_ratio
+  scope:
+    kind: cluster
+    ref: MID_HF
+  unit: ratio
+  value: 0.11
+- metric_id: cpu.clock_gated_ratio
+  scope:
+    kind: cluster
+    ref: MID_HF
+  unit: ratio
+  value: 0.4
+- metric_id: cpu.power_gated_ratio
+  scope:
+    kind: cluster
+    ref: MID_HF
+  unit: ratio
+  value: 0.49
+- metric_id: cpu.active_ratio
+  scope:
+    kind: cluster
+    ref: MID_LF0
+  unit: ratio
+  value: 0.51
+- metric_id: cpu.clock_gated_ratio
+  scope:
+    kind: cluster
+    ref: MID_LF0
+  unit: ratio
+  value: 0.22
+- metric_id: cpu.power_gated_ratio
+  scope:
+    kind: cluster
+    ref: MID_LF0
+  unit: ratio
+  value: 0.27
+- metric_id: cpu.active_ratio
+  scope:
+    kind: cluster
+    ref: MID_LF1
+  unit: ratio
+  value: 0.3
+- metric_id: cpu.clock_gated_ratio
+  scope:
+    kind: cluster
+    ref: MID_LF1
+  unit: ratio
+  value: 0.32
+- metric_id: cpu.power_gated_ratio
+  scope:
+    kind: cluster
+    ref: MID_LF1
+  unit: ratio
+  value: 0.38
+- metric_id: cpu.freq_residency_active
+  scope:
+    kind: cluster_freq
+    ref: DSU@400
+  unit: ratio
+  value: 0.15
+- metric_id: cpu.freq_residency_active
+  scope:
+    kind: cluster_freq
+    ref: DSU@900
+  unit: ratio
+  value: 0.85
+- metric_id: cpu.freq_residency_active
+  scope:
+    kind: cluster_freq
+    ref: MID_HF@600
+  unit: ratio
+  value: 0.85
+- metric_id: cpu.freq_residency_active
+  scope:
+    kind: cluster_freq
+    ref: MID_HF@1200
+  unit: ratio
+  value: 0.15
+- metric_id: cpu.freq_residency_active
+  scope:
+    kind: cluster_freq
+    ref: MID_LF0@400
+  unit: ratio
+  value: 0.086667
+- metric_id: cpu.freq_residency_active
+  scope:
+    kind: cluster_freq
+    ref: MID_LF0@1000
+  unit: ratio
+  value: 0.913333
+- metric_id: cpu.freq_residency_active
+  scope:
+    kind: cluster_freq
+    ref: MID_LF1@400
+  unit: ratio
+  value: 1.0
+- metric_id: gpu.freq_residency_active
+  scope:
+    kind: gpu_freq
+    ref: GPU@226
+  unit: ratio
+  value: 0.35
+- metric_id: gpu.freq_residency_active
+  scope:
+    kind: gpu_freq
+    ref: GPU@262
+  unit: ratio
+  value: 0.3
+- metric_id: gpu.freq_residency_active
+  scope:
+    kind: gpu_freq
+    ref: GPU@356
+  unit: ratio
+  value: 0.25
+- metric_id: gpu.freq_residency_active
+  scope:
+    kind: gpu_freq
+    ref: GPU@461
+  unit: ratio
+  value: 0.1
+- metric_id: gpu.freq_residency
+  scope:
+    kind: gpu_freq
+    ref: GPU@226
+  unit: ratio
+  value: 0.55
+- metric_id: gpu.freq_residency
+  scope:
+    kind: gpu_freq
+    ref: GPU@262
+  unit: ratio
+  value: 0.25
+- metric_id: gpu.freq_residency
+  scope:
+    kind: gpu_freq
+    ref: GPU@356
+  unit: ratio
+  value: 0.15
+- metric_id: gpu.freq_residency
+  scope:
+    kind: gpu_freq
+    ref: GPU@461
+  unit: ratio
+  value: 0.05
+- metric_id: gpu.active_ratio
+  scope:
+    kind: gpu
+    ref: GPU
+  unit: ratio
+  value: 0.22
+- metric_id: gpu.clock_gated_ratio
+  scope:
+    kind: gpu
+    ref: GPU
+  unit: ratio
+  value: 0.38
+- metric_id: gpu.power_gated_ratio
+  scope:
+    kind: gpu
+    ref: GPU
+  unit: ratio
+  value: 0.4
+- metric_id: clock.residency_pass_jsd
+  scope:
+    kind: clock_domain
+    ref: cpu/BIG
+  unit: ratio
+  value: 0.0
+- metric_id: clock.residency_pass_jsd
+  scope:
+    kind: clock_domain
+    ref: cpu/MID_HF
+  unit: ratio
+  value: 0.0
+- metric_id: clock.residency_pass_jsd
+  scope:
+    kind: clock_domain
+    ref: cpu/MID_LF0
+  unit: ratio
+  value: 0.000882
+- metric_id: clock.residency_pass_jsd
+  scope:
+    kind: clock_domain
+    ref: cpu/MID_LF1
+  unit: ratio
+  value: 0.0
+- metric_id: clock.residency_pass_jsd
+  scope:
+    kind: clock_domain
+    ref: gpu/GPU
+  unit: ratio
+  value: 0.0
+artifacts:
+- type: pmu_digest
+  storage: fileshare
+  path: cpu_freq_residency.csv
+  sha256: a85fe735778b092936b95fb49f34430aec011e66792741c54feefd68f0fa439d
+  bytes: 1123
+- type: pmu_digest
+  storage: fileshare
+  path: cpu_freq_residency_running.csv
+  sha256: 0a682dacf24092590315f70bba5fdf27fff8e9c700ae6701dcedecc6282fae7c
+  bytes: 1015
+- type: pmu_digest
+  storage: fileshare
+  path: cpu_idle_residency.csv
+  sha256: b0693c18ce429515dd1f004cbaebd8570f4fdef4b1158e763fd55bce8be8b18e
+  bytes: 1795
+- type: pmu_digest
+  storage: fileshare
+  path: dsu_gpu_freq_residency.csv
+  sha256: 6aad78b6c67af318eb9591fd9da8e663d634c09163332cfa62445cddf7278985
+  bytes: 1123
+- type: pmu_digest
+  storage: fileshare
+  path: gpu_idle_residency.csv
+  sha256: 2bfe9ce8247332ac45cf3395028839bb27d9c0c99bd6dd791946e5f205c69e8d
+  bytes: 259

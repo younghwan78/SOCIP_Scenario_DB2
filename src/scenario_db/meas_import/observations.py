@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from scenario_db.meas_import.meta import MeasurementImportMeta
+from scenario_db.meas_import.clock_residency import perfetto_observations
 from scenario_db.meas_import.perfetto_digest import PerfettoDigest
 from scenario_db.meas_import.pmu_digest import PmuDigest
 from scenario_db.meas_import.power_csv import PowerDigest
@@ -100,6 +101,15 @@ def build_metric_observations(
     if pmu is not None:
         for observation in pmu.observations:
             _append_if_new(observations, identities, observation)
+    if perfetto is not None:
+        # Clock-domain residency from the trace; a domain the PMU tables already describe keeps that
+        # source only (mixing two sources' frequency bins would not sum to one).
+        def _domain(o: dict) -> tuple[str, str]:
+            return o["metric_id"], str(o["scope"]["ref"]).rpartition("@")[0] or str(o["scope"]["ref"])
+        owned = {_domain(o) for o in observations}
+        for observation in perfetto_observations(perfetto):
+            if _domain(observation) not in owned:
+                _append_if_new(observations, identities, observation)
 
     groups = [("sw.runtime", "task", "task", [t.model_dump(exclude_none=True) for t in meta.sw_task_timing])]
     for name, metric, scope, ref in (("hw_task_timing", "hw.runtime", "task", "task"),

@@ -312,7 +312,7 @@ def profile_cpu_power(
     rows plus per-cluster dynamic / static totals and the DSU.
     """
     notes = warnings if warnings is not None else []
-    by_cluster: dict[str, dict[str, float]] = {}
+    by_cluster: dict[str, dict[str, Any]] = {}
     rows: list[dict[str, Any]] = []
     known = {c.name.lower(): c for c in model.clusters}
     for cluster_name, cstat in sorted(profile.clusters.items()):
@@ -323,7 +323,15 @@ def profile_cpu_power(
         residency = _residency(cluster, cstat.freq_residency, model.freq_mhz)
         if not cstat.freq_residency:
             notes.append(f"{cluster.name}: no measured frequency residency; using {model.freq_mhz:g} MHz")
-        e_cycle = sum(share * cluster.energy_nj_per_cycle(f, model.fallback_mv) for f, share in residency.items())
+        running = _residency(cluster, cstat.freq_residency_active, model.freq_mhz) if cstat.freq_residency_active else None
+        if running:
+            # Cycles are executed at the running-time frequencies: weight energy/cycle by cycles (time x f).
+            weight = {f: share * f for f, share in running.items()}
+            total_w = sum(weight.values())
+            e_cycle = sum(w * cluster.energy_nj_per_cycle(f, model.fallback_mv) for f, w in weight.items()) / total_w
+        else:
+            e_cycle = sum(share * cluster.energy_nj_per_cycle(f, model.fallback_mv) for f, share in residency.items())
+        row_residency = running or residency
         tasks = sorted((t for t in profile.tasks if t.cluster.lower() == cluster_name.lower()), key=lambda t: t.task)
         attributed = 0.0
         for counters in tasks:
@@ -331,7 +339,7 @@ def profile_cpu_power(
             cycles = counters.cycles or 0.0
             attributed += cycles
             power = cycles * e_cycle / period_ms / 1000.0 if period_ms > 0 else 0.0
-            rows.append(_profile_row(task, cluster.name, counters, cycles, power, period_ms, residency))
+            rows.append(_profile_row(task, cluster.name, counters, cycles, power, period_ms, row_residency))
         other = max(0.0, (cstat.cycles or 0.0) - attributed)
         if other > 1e-6 * max(1.0, cstat.cycles or 0.0):
             # Cluster cycles no mapped task accounts for (other threads, kernel, idle loops).
@@ -341,9 +349,9 @@ def profile_cpu_power(
                 cycles_total = existing["cycles_per_frame"] + other
                 existing.pop("ipc", None)
                 existing.update(_profile_row(OTHER_TASK, cluster.name, None, cycles_total,
-                                             existing["power_mw"] + power, period_ms, residency))
+                                             existing["power_mw"] + power, period_ms, row_residency))
             else:
-                rows.append(_profile_row(OTHER_TASK, cluster.name, None, other, power, period_ms, residency))
+                rows.append(_profile_row(OTHER_TASK, cluster.name, None, other, power, period_ms, row_residency))
         dynamic = sum(r["power_mw"] for r in rows if r["cluster"] == cluster.name)
         leak = sum(share * cluster.leak_mw_per_core(cluster.voltage_mv(f, model.fallback_mv))
                    for f, share in residency.items())
@@ -354,6 +362,8 @@ def profile_cpu_power(
             "static_mw": round(static, 6),
             "total_mw": round(dynamic + static, 6),
             "mean_mhz": round(sum(f * s for f, s in residency.items()), 3),
+            **({"mean_active_mhz": round(sum(f * s for f, s in running.items()), 3), "residency_basis": "active"}
+               if running else {}),
             "power_gated_ratio": cstat.power_gated_ratio,
             "clock_gated_ratio": cstat.clock_gated_ratio,
         }
@@ -364,7 +374,9 @@ def profile_cpu_power(
         if not (dstat and dstat.freq_residency):
             notes.append(f"{model.dsu.name}: no measured frequency residency; using the top OPP {model.dsu.opps[-1].mhz:g} MHz")
         active = dstat.active_ratio if dstat and dstat.active_ratio is not None else _union_active(profile)
-        dynamic = sum(share * model.dsu.core_mw(f, model.fallback_mv) for f, share in residency.items()) * active
+        dyn_res = (_residency(model.dsu, dstat.freq_residency_active, model.dsu.opps[-1].mhz)
+                   if dstat and dstat.freq_residency_active else residency)
+        dynamic = sum(share * model.dsu.core_mw(f, model.fallback_mv) for f, share in dyn_res.items()) * active
         leak = sum(share * model.dsu.leak_mw_per_core(model.dsu.voltage_mv(f, model.fallback_mv))
                    for f, share in residency.items())
         gated = dstat.power_gated_ratio if dstat and dstat.power_gated_ratio is not None else 0.0

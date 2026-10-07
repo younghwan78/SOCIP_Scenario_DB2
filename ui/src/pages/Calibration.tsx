@@ -8,6 +8,7 @@ import { useWidth } from '../components/Charts'
 import { DataTable, type Column } from '../components/DataTable'
 import { ProvBadge } from '../components/Provenance'
 import { categoryFit, powerScope, type CategoryFit } from '../lib/provenance'
+import { ClockCompareCard, ClockResidencyCard } from '../components/ClockResidency'
 
 const CATS: Category[] = ['cpu', 'ip', 'bw', 'other']
 type Prov = Parameters<typeof ProvBadge>[0]['prov']
@@ -71,6 +72,7 @@ export function CalibrationPage({ ctx }: { ctx: Ctx }) {
         </Card>
         {detail.error && <div className="err" style={{ gridColumn: '1 / -1' }}>{detail.error}</div>}
         {detail.data && <Detail d={detail.data} ctx={ctx} />}
+        <ClockCompareCard scenarioId={all ? undefined : ctx.scenario} selectedId={selId} onPick={(id) => ctx.navigate(undefined, { m: id }, true)} />
       </div>}
     </div>
   )
@@ -116,6 +118,7 @@ function Detail({ d, ctx }: { d: MeasDetail; ctx: Ctx }) {
       </table>
       <div className="faint" style={{ fontSize: 12, marginTop: 6 }}>예측 BW 전력은 모델상 MIF·DRAM rail로 귀속됩니다 (MIF DVFS 미반영). 기타 rail(GPU·SRAM·ICPU 등)은 scenario power model 밖입니다.</div>
     </Card>
+    {d.clock_residency && <ClockResidencyCard view={d.clock_residency} cpuLink="#/cpu" />}
     {cols.some((p) => p.conditions) && <Card id="cal-cond" title="비교 조건 동등성" note="조건이 다르면 Δ는 참고 비교 · 미기록은 동등성 확인 불가" defaultWide>
       <ConditionTable preds={d.predictions.filter((p) => p.conditions)} />
       {d.origin === 'unknown' && <div className="lib-note warn" style={{ marginTop: 6 }}>측정 출처(provenance) 미기록 — 실측 정확도 근거에서 제외됩니다.</div>}

@@ -97,7 +97,10 @@ export interface CpuSweep {
   fps: number; period_ms: number
   range: { clusters: SweepRangeCluster[]; tasks: SweepRangeTask[]; knobs: string[]; space: number; evaluated: number; unique: number; method: 'exhaustive' | 'beam' }
   measured_mw: number | null
-  calibration: Record<string, { eas_mhz: number; eas_util: number; measured_mean_mhz?: number; measured_active?: number }>
+  calibration: Record<string, { eas_mhz: number; eas_util: number; measured_mean_mhz?: number; measured_active?: number
+    /** measured frequency distribution (wall) / while running; absent on older servers or without residency */
+    measured_residency?: { mhz: number; ratio: number }[]; measured_residency_active?: { mhz: number; ratio: number }[]
+    measured_active_mean_mhz?: number }>
   reference_kind: 'measured' | 'eas'; reference: SweepCase; eas_default: SweepCase; measured_placement: SweepCase
   cases: SweepCase[]; better_count: number; equal_mw: number; others: SweepCase[]; other_count: number; tasks: string[]; warnings: string[]
   /** DSU rule actually used (API ≥ DSU vote); absent on older servers */

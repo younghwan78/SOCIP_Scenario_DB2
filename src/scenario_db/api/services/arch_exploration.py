@@ -561,6 +561,9 @@ def create_report(db: Session, request: ArchReportRequest, user: str | None = No
             changes[key] = attribute(old.metrics, cur.metrics)
     run_dict = run_detail(run) | {"created_at": run.created_at}
     snapshot = build_snapshot(run_dict, preds, changes, _report_calibration(db, preds))
+    clock = _report_clock(db, preds)
+    if clock:
+        snapshot["clock_residency"] = clock  # absent key = report generated before clock residency existed
     title = request.title or f"{run.soc_ref or ''} {run.scenario_type} Architecture 검토".strip()
     html = render_html(title, snapshot)
     row = ArchReport(
@@ -608,6 +611,37 @@ def _report_calibration(db: Session, preds: dict[tuple[str, str], dict[str, Any]
         if row is not None:
             out.append(row)
     return out
+
+
+def _report_clock(db: Session, preds: dict[tuple[str, str], dict[str, Any]]) -> list[dict[str, Any]]:
+    """Per reported variant, the newest measurement with clock residency (real silicon preferred)."""
+    from scenario_db.api.services.calibration import clock_residency_of
+    from scenario_db.db.models.capability import PowerModelParams
+    from scenario_db.reporting.clock_section import report_rows
+
+    if not preds:
+        return []
+    keys = set(preds)
+    rows = (db.query(Evidence).options(load_only(Evidence.id, Evidence.scenario_ref, Evidence.variant_ref, Evidence.measured_at,
+                                                 Evidence.provenance, Evidence.metric_observations, Evidence.cpu_breakdown))
+            .filter(Evidence.kind == "evidence.measurement", Evidence.scenario_ref.in_({sid for sid, _ in keys}))
+            .order_by(Evidence.measured_at.desc().nullslast(), Evidence.id).all())
+    from scenario_db.db.models.capability import IpCatalog
+
+    params_rows = db.query(PowerModelParams).all()
+    ip_rows = db.query(IpCatalog).options(load_only(IpCatalog.id, IpCatalog.capabilities, IpCatalog.compatible_soc)).all()
+    found: dict[tuple[str, str], tuple[Evidence, dict[str, Any]]] = {}
+    for m in rows:
+        key = (m.scenario_ref, m.variant_ref)
+        if key not in keys:
+            continue
+        held = found.get(key)
+        if held is not None and not (is_physical(m.provenance) and not is_physical(held[0].provenance)):
+            continue
+        view = clock_residency_of(db, m, params_rows, ip_rows)
+        if view is not None:
+            found[key] = (m, view)
+    return [report_rows(vid, sid, m, view) for (sid, vid), (m, view) in sorted(found.items())]
 
 
 def _report_meta(r: ArchReport) -> dict[str, Any]:

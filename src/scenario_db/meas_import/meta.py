@@ -155,6 +155,27 @@ class EventLatencyMapping(BaseScenarioModel):
     source_anchor: Literal["start", "end"] = "end"
 
 
+class PerfettoClockDomain(BaseScenarioModel):
+    """A clock domain read from perfetto counter tracks (GPU, DSU, ...; see meas_import/clock_residency.py).
+
+    ``tracks``: exact counter track names holding the frequency (the first one present is used).
+    ``utilization_track``: optional counter track with the busy share (value / ``utilization_scale``);
+    with it the active residency and ``<class>.active_ratio`` are derived.
+    """
+    name: str                          # domain name (e.g. GPU, DSU)
+    domain_class: str = "gpu"          # clock_residency.DOMAIN_CLASSES key
+    tracks: list[str] = Field(min_length=1)
+    freq_unit: Literal["mhz", "khz", "hz", "ghz"] = "khz"
+    utilization_track: str | None = None
+    utilization_scale: float = Field(default=100.0, gt=0)
+
+    @model_validator(mode="after")
+    def _known_class(self) -> PerfettoClockDomain:
+        from scenario_db.meas_import.clock_residency import domain_class
+        domain_class(self.domain_class)
+        return self
+
+
 class PerfettoSpec(BaseScenarioModel):
     """Perfetto trace input + extraction instructions."""
     trace: str                        # path to the trace (.pb / .pftrace)
@@ -166,6 +187,10 @@ class PerfettoSpec(BaseScenarioModel):
     # frame counter slice name used to derive frame count (count_per_frame).
     frame_slice_name: str | None = None
     frame_count: int | None = None    # explicit frame count override
+    # clock-domain residency (meas_import/clock_residency.py): CPU time per frequency while not idle
+    # (cpufreq x cpuidle), and extra domains such as GPU / DSU from counter tracks.
+    cpu_active_residency: bool = False
+    clock_domains: list[PerfettoClockDomain] = Field(default_factory=list)
 
 
     @model_validator(mode="after")

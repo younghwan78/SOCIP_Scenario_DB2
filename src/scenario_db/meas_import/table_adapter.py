@@ -26,6 +26,13 @@ with ``task_rules``) and ``cpu`` (CPU id -> cluster via ``cpu_map``) or
 ``thread`` (optional, e.g. the tid column) additionally keeps the cycles per
 thread of each task (``cpu_thread_cycles``), so the scheduler what-if can split
 a task into its real threads.
+
+Clock-domain residency (``meas_import/clock_residency.py``): a ``freq_residency``
+/ ``idle_residency`` source may set ``domain_class`` (``cpu`` default, ``gpu``,
+...; scope ``cluster`` = the domain name), ``basis: active`` (time per frequency
+while running, e.g. a perfetto cpufreq x cpuidle join) and ``group`` (the PMU
+pass / capture part the file belongs to; residency is summed over groups and
+their divergence is reported as capture quality).
 """
 from __future__ import annotations
 
@@ -38,6 +45,7 @@ from typing import Literal
 
 from pydantic import Field, model_validator
 
+from scenario_db.meas_import.clock_residency import domain_class, sample_metric
 from scenario_db.models.common import BaseScenarioModel
 
 CANONICAL_COUNTERS = ("cycles", "instructions", "stall_cycles", "bus_access", "bus_bytes")
@@ -93,6 +101,9 @@ class TableSource(BaseScenarioModel):
     freq_unit: Literal["mhz", "khz", "hz", "ghz"] = "mhz"
     state_column: str | None = None
     states: dict[str, Literal["active", "clock_gated", "power_gated"]] = Field(default_factory=dict)
+    domain_class: str = "cpu"                  # clock_residency.DOMAIN_CLASSES key (residency sources)
+    basis: Literal["wall", "active"] = "wall"  # freq_residency: whole capture or running time only
+    group: str | None = None                   # capture part (e.g. PMU pass) for residency sources
 
     @model_validator(mode="after")
     def _kind_fields(self) -> TableSource:
@@ -101,6 +112,13 @@ class TableSource(BaseScenarioModel):
             raise ValueError(f"unknown canonical counters {sorted(unknown)} (use {list(CANONICAL_COUNTERS)})")
         if (self.cpu is None) == (self.cluster is None):
             raise ValueError(f"{self.file}: give exactly one of cpu / cluster scope")
+        domain_class(self.domain_class)
+        if self.kind == "counters" and (self.domain_class != "cpu" or self.basis != "wall" or self.group):
+            raise ValueError(f"{self.file}: domain_class / basis / group apply to residency sources only")
+        if self.kind == "idle_residency" and self.basis != "wall":
+            raise ValueError(f"{self.file}: idle_residency is wall-clock (basis: wall)")
+        if self.domain_class != "cpu" and (self.cpu is not None or self.task is not None):
+            raise ValueError(f"{self.file}: {self.domain_class} residency needs a cluster (domain) scope, no cpu / task")
         if self.kind == "counters":
             if not self.counters:
                 raise ValueError(f"{self.file}: counters mapping is required")
@@ -199,7 +217,7 @@ def _task(source: TableSource, row: dict[str, str], unmapped: set[str]) -> tuple
 
 def table_samples(base_dir: Path, spec: TableSpec, warnings: list[str]) -> list[dict]:
     """Neutral sample dicts (summed per identity) from every configured source."""
-    totals: dict[tuple[str, str, str, float | None], float] = defaultdict(float)
+    totals: dict[tuple[str, str, str, float | None, str], float] = defaultdict(float)
     for source in spec.sources:
         path = Path(source.file)
         path = path if path.is_absolute() else base_dir / path
@@ -226,9 +244,11 @@ def table_samples(base_dir: Path, spec: TableSpec, warnings: list[str]) -> list[
             scope_kind = f"task_{place_kind}" if task else place_kind
             scope_ref = f"{task}@{place}" if task else place
 
+            group = source.group or ""
+
             def add(metric: str, value: float | None, freq: float | None = None) -> None:
                 if value is not None:
-                    totals[(metric, scope_kind, scope_ref, freq)] += value
+                    totals[(metric, scope_kind, scope_ref, freq, group)] += value
 
             if source.kind == "counters":
                 if source.layout == "long":
@@ -247,7 +267,7 @@ def table_samples(base_dir: Path, spec: TableSpec, warnings: list[str]) -> list[
                 thread = _scope_value(source.thread, row) if task else None
                 for canon, value in pairs:
                     if canon == "cycles" and thread and value is not None:
-                        totals[("cpu_thread_cycles", f"task_thread_{place_kind}", f"{task}#{thread}@{place}", None)] += value
+                        totals[("cpu_thread_cycles", f"task_thread_{place_kind}", f"{task}#{thread}@{place}", None, "")] += value
                     if canon == "bus_access":
                         if source.bytes_per_access is None:
                             unknown_counters.add("bus_access (bytes_per_access not set)")
@@ -259,7 +279,8 @@ def table_samples(base_dir: Path, spec: TableSpec, warnings: list[str]) -> list[
                 freq = _number(row.get(source.freq_column or "", ""))
                 if freq is None or freq <= 0:
                     continue
-                add("cpu_freq_time", _number(row.get(source.value_column or "", "")),
+                add(sample_metric(source.domain_class, "freq", basis=source.basis),
+                    _number(row.get(source.value_column or "", "")),
                     round(freq * _FREQ_TO_MHZ[source.freq_unit], 3))
             else:
                 state = row.get(source.state_column or "", "").strip()
@@ -267,7 +288,7 @@ def table_samples(base_dir: Path, spec: TableSpec, warnings: list[str]) -> list[
                 if target is None:
                     unknown_states.add(state)
                     continue
-                add(f"cpu_time_{target}", _number(row.get(source.value_column or "", "")))
+                add(sample_metric(source.domain_class, "state", state=target), _number(row.get(source.value_column or "", "")))
         if unmapped:
             warnings.append(f"{source.file}: unmapped tasks -> {source.unmapped_task}: {sorted(unmapped)[:20]}")
         if unknown_counters:
@@ -275,6 +296,6 @@ def table_samples(base_dir: Path, spec: TableSpec, warnings: list[str]) -> list[
         if unknown_states:
             warnings.append(f"{source.file}: idle states not mapped (skipped): {sorted(unknown_states)[:20]}")
     return [
-        {"metric": metric, "scope_kind": kind, "scope_ref": ref, "value": value, "freq_mhz": freq}
-        for (metric, kind, ref, freq), value in sorted(totals.items(), key=lambda kv: tuple(str(x) for x in kv[0]))
+        {"metric": metric, "scope_kind": kind, "scope_ref": ref, "value": value, "freq_mhz": freq, "group": group}
+        for (metric, kind, ref, freq, group), value in sorted(totals.items(), key=lambda kv: tuple(str(x) for x in kv[0]))
     ]
