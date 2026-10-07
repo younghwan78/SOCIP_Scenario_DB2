@@ -144,6 +144,17 @@ capabilities:
     profiler_dynamic_coeff: 13360
     profiler_static_coeff: 400
     ect_coeff_index: 4
+    # SAMPLE V-f table / leakage (ECT/ASV voltages are not in the source release): used only to estimate
+    # GPU power from measured clock residency (sim/domain_power.py); results are flagged SAMPLE.
+    vf_table_sample:
+    - {mhz: 226, mv: 600}
+    - {mhz: 262, mv: 612}
+    - {mhz: 356, mv: 637}
+    - {mhz: 461, mv: 662}
+    - {mhz: 605, mv: 700}
+    - {mhz: 764, mv: 750}
+    - {mhz: 980, mv: 812}
+    leakage_sample: {mw_at_ref: 40.0, ref_mv: 750.0, exponent: 2.5}
     note: 'Two coefficients exist: gpu_power_coeff (thermal/IPA cooling device) and
       the profiler power-coefficient. They are not the same scale; pick one convention
       and keep it. Voltage comes from ECT/ASV, which is not in this source release.'

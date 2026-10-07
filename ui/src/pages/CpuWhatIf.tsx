@@ -401,6 +401,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
       {mode === 'rebalance' && rb && <div className="tb-grid">
         {cmpTarget && <CrossSocCompare a={rb} b={cmpRb ? applyDsuRebalance(cmpRb, dsuExp) : null} aName={topo?.soc_ref ?? target} bName={inputs.data?.topologies.find((t) => t.id === cmpTarget)?.soc_ref ?? cmpTarget} error={cmpErr} busy={busy} />}
         <RebalanceResults r={rb} sel={rbSel} setSel={setRbSel} knob={rbKnob}
+          onPickStrategy={(assign) => setTaskStates((m) => ({ ...m, ...Object.fromEntries(Object.entries(assign).flatMap(([u, c]) => u.split('+').map((t) => [t, `pin:${c}` as TaskState]))) }))}
           sensitivity={rbRaw && <AssumptionSensitivity base={rb} dsu={dsuExp}
             runVariant={(patch) => rebalanceApi.run({ ...rbRequest(request(edits, dsuReq)), ...patch }).then((r) => (dsuExp ? applyDsuRebalance(r, dsuExp) : r))} />} /></div>}
       {mode === 'sweep' && result && ref && <>

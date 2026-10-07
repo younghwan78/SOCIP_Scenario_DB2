@@ -106,6 +106,19 @@ task를 지정 cluster에 고정하고 이상적 DVFS(조건 만족 최소 전�
 
 한계(사내 보정 대상): stall 시간의 주파수 무관 가정, core type별 단일 IPC 비율, task는 한 cluster에서 실행.
 
+## 4-1. MID 집중 vs 분산 (`#/cpu` MID 재분배, `POST /api/v1/cpu/rebalance` → `result.strategies`)
+
+camera SW는 대부분 MID cluster에서 돌고 BIG은 전력이 커서 이득인 경우가 거의 없으므로, 재분배 결과는 **① MID 집중 vs 분산**부터 보여 준다.
+
+| 항목 | 의미 |
+|---|---|
+| 집중 | 옮길 수 있는 task를 MID cluster 하나에 pin (cluster별 1행, 같은 구성 cluster는 한 번) |
+| 분산 | MID cluster 2개 … 전체 조합마다 budget 만족 최저 분배 (전체 EAS 재계산 값) |
+| `winner` / `spread_gain_mw` | 최저 집중 − 최저 분산 (양수 = 분산 유리) |
+| BIG 확인 | 최저 MID 분배에서 task 하나(또는 전체)를 BIG으로 옮긴 Δ mW. 음수일 때만 BIG 검토 (UHD120처럼 BW·고속 조건) |
+
+행 클릭 → task 배치, “이 배치 고정”은 ③ 분배 대상에 pin으로 반영한다. BIG을 정식 탐색하려면 pool에 BIG을 넣는다.
+
 ## 5. EAS + schedutil 재현 · 자동 sweep (`#/cpu`, `POST /api/v1/cpu/sweep`)
 
 Android 기본 가정: **Linux EAS + schedutil**. task가 어디서 도는지는 scheduler가 정하므로, 결과는 "어느 cluster에 둔다"가 아니라 **기기에서 바꿀 수 있는 knob**(cpuset/affinity 고정·상한, uclamp)으로 표현한다.

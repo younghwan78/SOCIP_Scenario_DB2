@@ -55,7 +55,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from scenario_db.meas_import import clock_residency
+from scenario_db.meas_import import clock_residency, pmu_passes
 from scenario_db.meas_import.meta import PmuSpec
 from scenario_db.meas_import.table_adapter import table_samples
 from scenario_db.models.evidence.metrics import validate_metric_observations
@@ -85,7 +85,7 @@ class PmuSample:
     stat: str = ""
     freq_mhz: float | None = None
     line: int | None = None
-    group: str = ""                   # capture part (PMU pass) — residency only, see clock_residency
+    group: str = ""                   # capture part (PMU pass): residency -> clock_residency, counters -> pmu_passes
 
 
 @dataclass(slots=True)
@@ -182,6 +182,11 @@ def build_pmu_digest(
     ip_map = ip_map or {}
     cluster_map = cluster_map or {}
     digest = PmuDigest(sample_count=len(samples))
+    # counters split over PMU passes (sample.group) -> one merged set + cpu.pass_cv (meas_import/pmu_passes.py)
+    samples, pass_obs, pass_warnings = pmu_passes.merge_counter_groups(
+        samples, lambda metric, kind, ref, value, line: PmuSample(metric=metric, scope_kind=kind, scope_ref=ref,
+                                                                  value=value, line=line))
+    digest.warnings.extend(pass_warnings)
     cpu_samples: list[PmuSample] = []
     clock_samples: list[PmuSample] = []
     profile_requested = False
@@ -328,6 +333,7 @@ def build_pmu_digest(
     if cpu_samples:
         _reduce_cpu_profile(cpu_samples, cluster_map=cluster_map, cpu_map=cpu_map or {}, frames=frames,
                             digest=digest, warn_without_window=profile_requested)
+    digest.observations.extend(pass_obs)
     if clock_samples:
         try:
             digest.observations.extend(clock_residency.reduce_samples(

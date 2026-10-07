@@ -723,3 +723,17 @@ tr.vp-bad td { color: #B42318; font-weight: 600; }
 .clk-note { font-size: 12px; line-height: 1.45; margin: 2px 0; }
 .clk-note.info { color: var(--muted); }
 .clk-note.warn { color: var(--warn-text); }
+
+/* CPU what-if ① MID 집중 vs 분산 (components/RebalanceView.tsx StrategyCard) */
+.rb-strat { display: grid; gap: 10px; }
+.rb-strat-head { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--sd-group); margin: 2px 0 4px; }
+.rb-strat-row { display: grid; grid-template-columns: 170px minmax(160px, 1fr) 70px 70px minmax(220px, 1.2fr); gap: 10px; align-items: center; width: 100%; padding: 5px 8px; border: 0; background: transparent; border-radius: 6px; cursor: pointer; text-align: left; font-size: 12.5px; color: inherit; }
+.rb-strat-row:hover, .rb-strat-row.on { background: var(--surface-soft); }
+.rb-strat-row.infeasible .rb-strat-label { color: var(--faint); text-decoration: line-through; }
+.rb-strat-bar { position: relative; height: 12px; background: #EFEAE1; border-radius: 3px; }
+.rb-strat-bar > span { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; }
+.rb-strat-bar > i { position: absolute; top: -3px; bottom: -3px; border-left: 1.5px dashed #4A5160; }
+.rb-strat-mw, .rb-strat-d { text-align: right; }
+.rb-strat-mhz { font-size: 11.5px; }
+.rb-strat-detail { padding: 4px 8px 8px 188px; font-size: 12px; }
+@media (max-width: 900px) { .rb-strat-row { grid-template-columns: 1fr 70px 70px; } .rb-strat-bar, .rb-strat-mhz { grid-column: 1 / -1; } .rb-strat-detail { padding-left: 8px; } }

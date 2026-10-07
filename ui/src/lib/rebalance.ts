@@ -18,12 +18,24 @@ export interface RbSplit {
 export interface RbUnit { unit: string; tasks: string[]; home: string; budget_ms: number | null; threads: number; util_fmax: Record<string, number>; t_fmax_ms: Record<string, number> }
 export interface RbBoundary { cluster: string; mhz: number; mv: number; peak_cpu_util: number; capacity: number; sched_mhz?: number; boosted_by?: string[]; next_lower_mhz?: number; next_lower_mv?: number; delta_util_needed?: number; candidates?: [string, number][] }
 export interface RbState { mhz: Record<string, number>; count: number; min_mw: number; max_mw: number; representative: Record<string, string>; rep_mw: Record<string, number>; busy_mhz: Record<string, number>; dsu_active: number }
+export interface RbStrategyRow {
+  kind: 'concentrate' | 'spread'; clusters: string[]; ways: number; total_mw: number; delta_mw: number; feasible: boolean
+  mhz: Record<string, number>; mw: Record<string, number>; assign: Record<string, string>; moved: string[]; min_slack_ms?: number | null
+}
+export interface RbBigMove { unit: string; cluster: string; total_mw: number; delta_mw: number; feasible: boolean; mhz: number; dsu_mhz: number }
+export interface RbStrategies {
+  rows: RbStrategyRow[]; best_concentrate: RbStrategyRow | null; best_spread: RbStrategyRow | null
+  winner: 'concentrate' | 'spread' | 'tie' | 'none'; spread_gain_mw: number | null; complete: boolean
+  big_check: { clusters: string[]; base_mw: number; base_assign: Record<string, string>; moves: RbBigMove[]; best: RbBigMove | null; gain: boolean } | null
+}
 export interface CpuRebalance {
   fps: number; period_ms: number; pool: string[]; default_pool: string[]
   clusters: { name: string; core_type: string | null; cores: number; in_pool: boolean; opps_mhz: number[]; capacity: number }[]
   units: RbUnit[]; frozen: string[]; symmetric: string[][]
   space: number; evaluated: number; cluster_states: number; method: 'exhaustive' | 'local'; feasible_count: number; verified: number
   reference: RbSplit; best: RbSplit | null; cases: RbSplit[]; opp_states: RbState[]; opp_state_count: number; curve: RbSplit[]
+  /** concentrate vs spread over the pool + BIG check (absent on older servers) */
+  strategies?: RbStrategies
   boundaries: { reference: RbBoundary[]; best: RbBoundary[] }
   dsu_model: DsuModelInfo | null; dsu_params: DsuParams | null; dsu_measured?: Record<string, number> | null; warnings: string[]
 }
@@ -32,6 +44,24 @@ export interface CpuRebalanceRequest extends CpuSweepRequest {
 }
 export const rebalanceApi = {
   run: (req: CpuRebalanceRequest) => postAdmitted<{ result: CpuRebalance }>('/cpu/rebalance', req).then((r) => r.result),
+}
+
+/** One-line reading of the concentrate / spread / BIG result for the strategy card. */
+export function strategyVerdict(s: RbStrategies): { text: string; tone: 'ok' | 'warn' | '' } {
+  const c = s.best_concentrate, p = s.best_spread
+  if (!c && !p) return { text: 'budget을 만족하는 분배가 없습니다 — budget·SW 부하 가정을 확인하세요.', tone: 'warn' }
+  const name = (r: RbStrategyRow) => r.clusters.join(' + ')
+  if (s.winner === 'spread' && c && p) return { text: `분산이 유리: ${name(p)}에 나누면 ${name(c)} 한 곳 집중보다 ${s.spread_gain_mw?.toFixed(1)} mW 낮습니다 (OPP가 내려감).`, tone: 'ok' }
+  if (s.winner === 'concentrate' && c && p) return { text: `집중이 유리: ${name(c)} 한 곳에 두면 분산(${name(p)})보다 ${Math.abs(s.spread_gain_mw ?? 0).toFixed(1)} mW 낮습니다 (다른 cluster를 깨우는 비용 > OPP 절감).`, tone: 'ok' }
+  if (s.winner === 'tie') return { text: '집중과 분산의 차이가 작습니다 — 응답성(slack)·thermal 기준으로 고르세요.', tone: '' }
+  return { text: c ? `한 곳 집중만 budget을 만족합니다 (${name(c)}).` : `분산만 budget을 만족합니다 (${name(p!)}).`, tone: 'warn' }
+}
+
+export function bigVerdict(b: NonNullable<RbStrategies['big_check']>): { text: string; tone: 'ok' | 'warn' } {
+  const m = b.best
+  if (!m) return { text: `${b.clusters.join(', ')}로 옮기면 모두 budget 미충족입니다.`, tone: 'ok' }
+  if (b.gain) return { text: `${m.unit} → ${m.cluster} 이동이 ${Math.abs(m.delta_mw).toFixed(1)} mW 낮습니다 — 고부하(BW·고속) 조건이면 BIG 사용을 검토하세요.`, tone: 'warn' }
+  return { text: `BIG 사용 이득 없음: 가장 유리한 경우(${m.unit} → ${m.cluster})도 +${m.delta_mw.toFixed(1)} mW.`, tone: 'ok' }
 }
 
 /** client default pool when no result yet: clusters whose name has no "BIG" (≥ 2), else all */

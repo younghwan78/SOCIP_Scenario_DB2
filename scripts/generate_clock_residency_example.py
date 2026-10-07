@@ -1,8 +1,10 @@
-"""SYNTHETIC Exynos2600 clock-residency capture example (CPU cluster · DSU · GPU, 3 PMU passes).
+"""SYNTHETIC Exynos2600 capture example: clock residency (CPU cluster · DSU · GPU) + PMU counters, 3 passes.
 
 Writes ``examples/measurement-import/clock-residency-e2600/<variant>/`` — perfetto-SQL-export-like CSVs
 (wall / running residency per CPU, idle states, DSU and GPU frequency tracks; one ``pass`` column for the
-three 15 s PMU passes) and a ``meta.yaml`` showing the ``domain_class`` / ``basis`` / ``group`` source options.
+three 15 s PMU passes), per-pass PMU counters (simpleperf-like: pass1 core+stall, pass2 anchors only, pass3 bus;
+CPU_CYCLES / INST_RETIRED in every pass, derived from the variant's baseline CPU profile) and a ``meta.yaml``
+showing the ``domain_class`` / ``basis`` / ``group`` source options.
 NOT silicon data (provenance.collection_method synthetic_clock_residency).
 
     python scripts/generate_clock_residency_example.py            # writes the example folders
@@ -17,7 +19,11 @@ from pathlib import Path
 
 import yaml
 
-ROOT = Path(__file__).resolve().parents[1] / "examples" / "measurement-import" / "clock-residency-e2600"
+REPO = Path(__file__).resolve().parents[1]
+ROOT = REPO / "examples" / "measurement-import" / "clock-residency-e2600"
+BASELINE = REPO / "db_Exynos2600_SM-S947B" / "03_evidence" / "meas-synth-baseline-{variant}-evt1-20261004.yaml"
+FPS = 30.0
+FRAMES_PER_PASS = 15.0 * FPS
 PASS_NS = 15_000_000_000          # 15 s per PMU pass
 CPU_MAP = {"0-2": "MID_LF0", "3-5": "MID_LF1", "6-8": "MID_HF", "9": "BIG"}
 CPUS = {"MID_LF0": [0, 1, 2], "MID_LF1": [3, 4, 5], "MID_HF": [6, 7, 8], "BIG": [9]}
@@ -34,6 +40,7 @@ VARIANTS = {
             "BIG": ({1000: 1.0}, {}, 0.0, 0.45),
         },
         "pass_shift": [("MID_LF0", 3, {400: 0.10, 1000: 0.90})],
+        "counter_drift": {},                       # task -> (pass, factor): work seen by one pass
         "dsu": ({400: 0.30, 900: 0.70}, {400: 0.15, 900: 0.85}),
         "gpu": ({226: 0.55, 262: 0.25, 356: 0.15, 461: 0.05}, {226: 0.35, 262: 0.30, 356: 0.25, 461: 0.10}, 0.22, 0.38),
     },
@@ -47,6 +54,8 @@ VARIANTS = {
         },
         # third pass ran warmer: MID_LF0 spends less time at 1.6 GHz
         "pass_shift": [("MID_LF0", 3, {400: 0.10, 1000: 0.80, 1600: 0.10})],
+        # the warmer third pass also saw a heavier scene for the IRTA post-processing (+12 % work)
+        "counter_drift": {"post_irta": (3, 1.12)},
         "dsu": ({400: 0.15, 900: 0.60, 1500: 0.25}, {400: 0.05, 900: 0.60, 1500: 0.35}),
         "gpu": ({262: 0.35, 356: 0.35, 461: 0.20, 605: 0.10}, {262: 0.20, 356: 0.35, 461: 0.28, 605: 0.17}, 0.34, 0.30),
     },
@@ -99,11 +108,39 @@ def write_variant(vid: str, spec: dict) -> Path:
             pg = max(0.0, 1.0 - gpu_active - gpu_cg)
             for state, share in (("busy", gpu_active), ("clock_gated", gpu_cg), ("power_off", pg)):
                 w.writerow([p, "GPU", state, round(share * PASS_NS)])
-    (out / "meta.yaml").write_text(_meta(vid, spec), encoding="utf-8")
+    (out / "meta.yaml").write_text(_meta(vid, spec, write_counters(vid, spec, out)), encoding="utf-8")
     return out
 
 
-def _meta(vid: str, spec: dict) -> str:
+def write_counters(vid: str, spec: dict, out: Path) -> bool:
+    """Per-pass counters from the baseline per-frame profile (cycles / instructions in every pass)."""
+    base = BASELINE.with_name(BASELINE.name.format(variant=vid))
+    if not base.is_file():
+        return False
+    obs = yaml.safe_load(base.read_text(encoding="utf-8")).get("metric_observations") or []
+    pf: dict[tuple[str, str], dict[str, float]] = {}
+    for o in obs:
+        if o["scope"]["kind"] == "task_cluster" and o["metric_id"] in ("cpu.cycles_pf", "cpu.instructions_pf", "cpu.stall_cycles_pf", "cpu.bus_bytes_pf"):
+            task, _, cluster = o["scope"]["ref"].rpartition("@")
+            pf.setdefault((task, cluster), {})[o["metric_id"]] = float(o["value"])
+    events = {1: ("CPU_CYCLES", "INST_RETIRED", "STALL_BACKEND_MEM"), 2: ("CPU_CYCLES", "INST_RETIRED"),
+              3: ("CPU_CYCLES", "INST_RETIRED", "BUS_ACCESS")}
+    with (out / "pmu_counters_by_pass.tsv").open("w", newline="") as f:
+        w = csv.writer(f, delimiter="\t", lineterminator="\n")
+        w.writerow(["pass", "cluster", "thread", "event", "count"])
+        for p, evs in events.items():
+            for (task, cluster), v in sorted(pf.items()):
+                d_pass, d_fac = spec["counter_drift"].get(task, (0, 1.0))
+                k = FRAMES_PER_PASS * (1.0 + 0.01 * (p - 2)) * (d_fac if d_pass == p else 1.0)   # ±1 % between passes
+                vals = {"CPU_CYCLES": v.get("cpu.cycles_pf", 0.0), "INST_RETIRED": v.get("cpu.instructions_pf", 0.0),
+                        "STALL_BACKEND_MEM": v.get("cpu.stall_cycles_pf", 0.0), "BUS_ACCESS": v.get("cpu.bus_bytes_pf", 0.0) / 64.0}
+                for ev in evs:
+                    if vals[ev] > 0:
+                        w.writerow([p, cluster, task, ev, round(vals[ev] * k)])
+    return True
+
+
+def _meta(vid: str, spec: dict, counters: bool = False) -> str:
     cpu_states = {"running": "active", "WFI": "clock_gated", "C2": "power_gated"}
     sources: list[dict] = []
     for p in (1, 2, 3):
@@ -129,6 +166,14 @@ def _meta(vid: str, spec: dict) -> str:
                 if p:
                     src["group"] = f"pass{p}"
                 sources.append(src)
+    if counters:
+        for p in (1, 2, 3):
+            sources.append({"file": "pmu_counters_by_pass.tsv", "kind": "counters", "group": f"pass{p}", "delimiter": "\t",
+                            "filter": {"pass": f"^{p}$"}, "layout": "long", "counter_column": "event", "value_column": "count",
+                            "counters": {"cycles": ["CPU_CYCLES"], "instructions": ["INST_RETIRED"],
+                                         "stall_cycles": ["STALL_BACKEND_MEM"], "bus_access": ["BUS_ACCESS"]},
+                            "bytes_per_access": 64, "cluster": {"column": "cluster"}, "task": {"column": "thread"},
+                            "unmapped_task": "keep"})
     sources.append({"file": "gpu_idle_residency.csv", "kind": "idle_residency", "domain_class": "gpu",
                     "cluster": {"column": "domain"}, "state_column": "state", "value_column": "dur_ns",
                     "states": {"busy": "active", "clock_gated": "clock_gated", "power_off": "power_gated"}})
@@ -141,14 +186,17 @@ def _meta(vid: str, spec: dict) -> str:
         "measured_at": spec["measured_at"],
         "execution_context": {"silicon_rev": "EVT1", "sw_baseline_ref": "sw-vendor-v1.2.3", "thermal": "room",
                               "ambient_temp_c": 25.0, "power_state": "discharging", "method": "measurement"},
-        "provenance": {"device_id": "SYNTHETIC", "collection_method": "synthetic_clock_residency", "sample_count": 3,
+        "provenance": {"device_id": "SYNTHETIC", "collection_method": "synthetic_clock_residency", "sample_count": 3, "revision": 2,
                        "duration_per_sample_s": 15.0, "confidence_level": 0.95},
         "aggregation_strategy": "mean_over_capture",
-        "pmu": {"format": "table", "cpu_map": CPU_MAP, "table": {"sources": sources}},
+        "pmu": {"format": "table", "cpu_map": CPU_MAP, "table": {"sources": sources},
+                **({"window": {"frames": FRAMES_PER_PASS}} if counters else {})},
     }
     head = ("# SYNTHETIC Exynos2600 clock-residency example (generated by scripts/generate_clock_residency_example.py).\n"
             "# 3 PMU passes x 15 s: wall + running (non-idle) CPU residency per pass (group -> pass divergence),\n"
-            "# DSU (domain_class cpu) and GPU (domain_class gpu) frequency tracks, idle states.\n")
+            "# DSU (domain_class cpu) and GPU (domain_class gpu) frequency tracks, idle states.\n"
+            "# Counters: one source per PMU pass (group) -> merged with CPU_CYCLES / INST_RETIRED anchors;\n"
+            "# pmu.window = ONE pass (15 s x 30 fps).\n")
     return head + yaml.safe_dump(meta, sort_keys=False, allow_unicode=True)
 
 

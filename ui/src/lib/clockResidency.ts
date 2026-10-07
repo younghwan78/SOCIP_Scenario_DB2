@@ -9,20 +9,28 @@ export interface ResStats {
   high_share: number | null
 }
 export interface ClockNote { level: 'info' | 'warn'; code: string; text: string }
+export interface DomainPower {
+  dynamic_mw: number; static_mw: number; total_mw: number; ip_ref: string; sample: boolean; coeff_source?: string; notes: string[]
+  at_fmax_mw: number; measured_mw: number | null; rails: string[]; delta_pct: number | null
+}
 export interface ClockDomain {
   domain_class: string; class_label: string; domain: string; is_dsu: boolean; opp_max_mhz: number | null
   wall: ResStats | null; active: ResStats | null
   active_ratio: number | null; clock_gated_ratio: number | null; power_gated_ratio: number | null
   pass_jsd: number | null; source: string | null; notes: ClockNote[]
+  /** GPU / NPU power estimate from the residency (IP catalog power_model) vs measured rails */
+  power?: DomainPower
 }
 export interface ClockView {
   rules_version: number; domains: ClockDomain[]; summary: string[]
   thresholds: { high_opp_fraction: number; high_opp_warn: number; pass_jsd_warn: number }
+  /** PMU pass anchor stability (cpu.pass_cv) */
+  pmu_pass?: { capture_cv: number | null; tasks: Record<string, number>; noisy: string[] } | null
 }
 export interface ClockRow {
   id: string; scenario_id: string; variant_id: string; measured_at: string | null; sw_baseline_ref: string | null; synthetic: boolean
   domains: { domain_class: string; class_label: string; domain: string; is_dsu: boolean; active_ratio: number | null; pass_jsd: number | null
-    mean_mhz: number; high_share: number | null; basis: 'active' | 'wall'; warns: number; opp_max_mhz: number | null }[]
+    mean_mhz: number; high_share: number | null; basis: 'active' | 'wall'; warns: number; opp_max_mhz: number | null; power_mw?: number | null }[]
 }
 
 export const clockApi = {

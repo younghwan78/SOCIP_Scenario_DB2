@@ -32,7 +32,8 @@ Clock-domain residency (``meas_import/clock_residency.py``): a ``freq_residency`
 ...; scope ``cluster`` = the domain name), ``basis: active`` (time per frequency
 while running, e.g. a perfetto cpufreq x cpuidle join) and ``group`` (the PMU
 pass / capture part the file belongs to; residency is summed over groups and
-their divergence is reported as capture quality).
+their divergence is reported as capture quality). On a ``counters`` source ``group`` marks the PMU
+pass: passes are merged with the anchor counters (``meas_import/pmu_passes.py``) instead of summed.
 """
 from __future__ import annotations
 
@@ -113,8 +114,8 @@ class TableSource(BaseScenarioModel):
         if (self.cpu is None) == (self.cluster is None):
             raise ValueError(f"{self.file}: give exactly one of cpu / cluster scope")
         domain_class(self.domain_class)
-        if self.kind == "counters" and (self.domain_class != "cpu" or self.basis != "wall" or self.group):
-            raise ValueError(f"{self.file}: domain_class / basis / group apply to residency sources only")
+        if self.kind == "counters" and (self.domain_class != "cpu" or self.basis != "wall"):
+            raise ValueError(f"{self.file}: domain_class / basis apply to residency sources only")
         if self.kind == "idle_residency" and self.basis != "wall":
             raise ValueError(f"{self.file}: idle_residency is wall-clock (basis: wall)")
         if self.domain_class != "cpu" and (self.cpu is not None or self.task is not None):
@@ -267,7 +268,7 @@ def table_samples(base_dir: Path, spec: TableSpec, warnings: list[str]) -> list[
                 thread = _scope_value(source.thread, row) if task else None
                 for canon, value in pairs:
                     if canon == "cycles" and thread and value is not None:
-                        totals[("cpu_thread_cycles", f"task_thread_{place_kind}", f"{task}#{thread}@{place}", None, "")] += value
+                        totals[("cpu_thread_cycles", f"task_thread_{place_kind}", f"{task}#{thread}@{place}", None, group)] += value
                     if canon == "bus_access":
                         if source.bytes_per_access is None:
                             unknown_counters.add("bus_access (bytes_per_access not set)")

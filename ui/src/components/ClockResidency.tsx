@@ -53,6 +53,7 @@ export function ResidencyHist({ wall, active, fmax, marks = [], width = 360, hei
 }
 
 const NOTE_BADGE = { warn: 'v-warn', info: '' } as const
+const fmt0 = (v: number | null | undefined) => (v === null || v === undefined ? '—' : `${Math.round(v).toLocaleString()}`)
 
 export const CLOCK_HELP: ReactNode = <>
   <b>측정 중 각 clock domain이 어떤 주파수에 얼마나 머물렀는지</b> (perfetto cpufreq · cpuidle · GPU freq track, PMU pass별 export).
@@ -70,6 +71,8 @@ export function ClockResidencyCard({ view, cpuLink }: { view: ClockView; cpuLink
   const [basis, setBasis] = useState<Basis>('active')
   const [open, setOpen] = useState<string | null>(null)
   const warns = view.domains.reduce((a, d) => a + d.notes.filter((n) => n.level === 'warn').length, 0)
+  const hasPower = view.domains.some((d) => d.power)
+  const cols = hasPower ? 9 : 8
   const anyActive = view.domains.some((d) => d.active)
   return (
     <Card id="cal-clock" title="Clock 분포 — CPU · DSU · GPU" help={CLOCK_HELP} defaultWide
@@ -83,13 +86,14 @@ export function ClockResidencyCard({ view, cpuLink }: { view: ClockView; cpuLink
         <table className="tb-mini-table clk-table" style={{ width: '100%' }}>
           <thead><tr><th>Domain</th><th>분포</th><th style={{ textAlign: 'right' }}>평균</th><th style={{ textAlign: 'right' }}>최빈</th>
             <th style={{ textAlign: 'right' }} title="최대 OPP의 80% 이상">고 OPP</th><th style={{ textAlign: 'right' }} title="동작(running) 시간 비율">동작</th>
-            <th style={{ textAlign: 'right' }} title="PMU pass 사이 분포 차이">pass JSD</th><th>메모</th></tr></thead>
+            <th style={{ textAlign: 'right' }} title="PMU pass 사이 분포 차이">pass JSD</th>
+            {hasPower && <th style={{ textAlign: 'right' }} title="IP catalog power_model × 분포 (CPU는 CPU what-if)">추정 mW</th>}<th>메모</th></tr></thead>
           <tbody>{view.domains.map((d, i) => {
             const { s, used } = pickStats(d, basis)
             const key = `${d.domain_class}/${d.domain}`
             const prev = view.domains[i - 1]
             return <Fragment key={key}>
-              {(!prev || groupLabel(prev) !== groupLabel(d)) && <tr className="clk-group"><td colSpan={8}>{groupLabel(d)}</td></tr>}
+              {(!prev || groupLabel(prev) !== groupLabel(d)) && <tr className="clk-group"><td colSpan={cols}>{groupLabel(d)}</td></tr>}
               <tr className={`clickable ${open === key ? 'selected' : ''}`} onClick={() => setOpen(open === key ? null : key)} aria-expanded={open === key}>
                 <td className="mono"><b>{d.domain}</b>{used !== basis && <span className="faint" title="선택한 기준의 분포가 없어 다른 기준 표시"> ({used === 'wall' ? '전체' : 'running'})</span>}</td>
                 <td>{s ? <><ResidencyStrip bins={s.bins} fmax={d.opp_max_mhz} /><div className="faint" style={{ fontSize: 11 }}>{mhzText(s.min_mhz)} … {mhzText(s.max_mhz)}{d.opp_max_mhz ? ` / fmax ${mhzText(d.opp_max_mhz)}` : ''}</div></> : '—'}</td>
@@ -100,10 +104,13 @@ export function ClockResidencyCard({ view, cpuLink }: { view: ClockView; cpuLink
                 <td className="mono" style={{ textAlign: 'right' }}>{pctText(d.active_ratio)}</td>
                 <td className="mono" style={{ textAlign: 'right' }}>{d.pass_jsd === null ? <span className="faint">—</span>
                   : <span className={d.pass_jsd > view.thresholds.pass_jsd_warn ? 'badge v-warn' : ''}>{d.pass_jsd.toFixed(3)}</span>}</td>
+                {hasPower && <td className="mono" style={{ textAlign: 'right' }} title={d.power ? [...d.power.notes, d.power.measured_mw !== null ? `실측 rail ${d.power.rails.join(', ')}` : ''].filter(Boolean).join('\n') : ''}>
+                  {d.power ? <>{fmt0(d.power.total_mw)}{d.power.sample && <span className="badge v-warn" style={{ marginLeft: 4 }}>SAMPLE</span>}
+                    {d.power.measured_mw !== null && <div className="faint" style={{ fontSize: 11 }}>실측 {fmt0(d.power.measured_mw)}{d.power.delta_pct !== null ? ` (${d.power.delta_pct >= 0 ? '+' : ''}${d.power.delta_pct.toFixed(0)}%)` : ''}</div>}</> : <span className="faint">—</span>}</td>}
                 <td style={{ maxWidth: 420 }}>{d.notes.length ? d.notes.map((n) => <div key={n.code} className={`clk-note ${n.level}`}>
                   {n.level === 'warn' && <span className={`badge ${NOTE_BADGE[n.level]}`}>확인</span>} {n.text}</div>) : <span className="faint">—</span>}</td>
               </tr>
-              {open === key && <tr className="clk-detail"><td colSpan={8}>
+              {open === key && <tr className="clk-detail"><td colSpan={cols}>
                 <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'flex-start' }}>
                   <ResidencyHist wall={d.wall?.bins} active={d.active?.bins} fmax={d.opp_max_mhz}
                     marks={[...(d.active ? [{ mhz: d.active.mean_mhz, label: 'running 평균', color: '#174D47' }] : []),
@@ -119,6 +126,7 @@ export function ClockResidencyCard({ view, cpuLink }: { view: ClockView; cpuLink
                       <tr><td>평균 (running / 전체)</td><td className="mono">{mhzText(d.active?.mean_mhz)} / {mhzText(d.wall?.mean_mhz)}</td></tr>
                       <tr><td>중앙값 (running / 전체)</td><td className="mono">{mhzText(d.active?.p50_mhz)} / {mhzText(d.wall?.p50_mhz)}</td></tr>
                       <tr><td>source</td><td className="faint">{d.source === 'perfetto' ? 'perfetto digest (cpu_breakdown)' : 'metric observation'}</td></tr>
+                      {d.power && <tr><td>추정 power (dynamic + static)</td><td className="mono">{fmt0(d.power.dynamic_mw)} + {fmt0(d.power.static_mw)} = {fmt0(d.power.total_mw)} mW <span className="faint">({d.power.ip_ref}, fmax 100% {fmt0(d.power.at_fmax_mw)} mW)</span></td></tr>}
                     </tbody></table>
                     {d.domain_class === 'cpu' && !d.is_dsu && cpuLink && <a className="btn" style={{ marginTop: 6 }} href={cpuLink}>CPU what-if에서 분산 검토 →</a>}
                   </div>

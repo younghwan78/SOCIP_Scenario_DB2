@@ -61,8 +61,9 @@ def clock_block(rows: list[dict[str, Any]]) -> str:
                  f"{escape(str(r.get('measurement_id') or ''))}</span></h3>")
         if r.get("summary"):
             h.append("<ul>" + "".join(f"<li>{escape(s)}</li>" for s in r["summary"]) + "</ul>")
+        has_power = any(d.get("power") for d in r["domains"])
         h.append("<div class='scroll'><table><tr><th>Domain</th><th>기준</th><th>분포 (낮음 → 높음)</th><th>평균</th>"
-                 "<th>최빈</th><th>고 OPP</th><th>동작</th><th>pass JSD</th><th>메모</th></tr>")
+                 "<th>최빈</th><th>고 OPP</th><th>동작</th><th>pass JSD</th>" + ("<th>추정 mW</th>" if has_power else "") + "<th>메모</th></tr>")
         for d in r["domains"]:
             notes = "".join(f"<div class='{'warn' if n['level'] == 'warn' else 'meta'}'>{escape(n['text'])}</div>" for n in d.get("notes") or [])
             jsd = d.get("pass_jsd")
@@ -76,9 +77,18 @@ def clock_block(rows: list[dict[str, Any]]) -> str:
                 f"<td class='n {'warn' if (d['high_share'] or 0) >= 0.3 else ''}'>{_pct(d['high_share'])}</td>"
                 f"<td class=n>{_pct(d.get('active_ratio'))}</td>"
                 f"<td class='n {'warn' if isinstance(jsd, (int, float)) and jsd > 0.05 else ''}'>{'—' if jsd is None else f'{jsd:.3f}'}</td>"
-                f"<td style='max-width:420px'>{notes or '<span class=meta>—</span>'}</td></tr>")
+                + (_power_cell(d.get("power")) if has_power else "")
+                + f"<td style='max-width:420px'>{notes or '<span class=meta>—</span>'}</td></tr>")
         h.append("</table></div></div>")
     return "".join(h)
+
+
+def _power_cell(p: dict[str, Any] | None) -> str:
+    if not p:
+        return "<td class=meta>—</td>"
+    meas = (f"<div class=meta>실측 {p['measured_mw']:.0f}" + (f" ({p['delta_pct']:+.0f}%)" if p.get("delta_pct") is not None else "") + "</div>"
+            if p.get("measured_mw") is not None else "")
+    return f"<td class=n>{p['total_mw']:.0f}{' <b class=warn>SAMPLE</b>' if p.get('sample') else ''}{meas}</td>"
 
 
 def report_rows(variant_id: str, scenario_id: str, measurement: Any, view: dict[str, Any]) -> dict[str, Any]:
@@ -92,11 +102,12 @@ def report_rows(variant_id: str, scenario_id: str, measurement: Any, view: dict[
                         "is_dsu": d["is_dsu"], "basis": "active" if d["active"] else "wall", "bins": s["bins"],
                         "mean_mhz": s["mean_mhz"], "dominant_mhz": s["dominant_mhz"], "dominant_share": s["dominant_share"],
                         "high_share": s["high_share"], "opp_max_mhz": d["opp_max_mhz"], "active_ratio": d["active_ratio"],
-                        "pass_jsd": d["pass_jsd"], "notes": d["notes"]})
+                        "pass_jsd": d["pass_jsd"], "notes": d["notes"], "power": d.get("power")})
     return {"scenario_id": scenario_id, "variant_id": variant_id, "measurement_id": measurement.id,
             "measured_at": measurement.measured_at.isoformat() if measurement.measured_at else None,
             "synthetic": is_synthetic(measurement.provenance), "origin": data_origin(measurement.provenance),
-            "summary": view["summary"], "rules_version": view["rules_version"], "domains": domains}
+            "summary": view["summary"], "rules_version": view["rules_version"], "domains": domains,
+            "pmu_pass": view.get("pmu_pass")}
 
 
 def clock_sheet(snap: dict[str, Any]) -> tuple[str, list[str], list[list[Any]]]:
@@ -106,7 +117,8 @@ def clock_sheet(snap: dict[str, Any]) -> tuple[str, list[str], list[list[Any]]]:
             rows.append([r["variant_id"], r["synthetic"], str(r.get("measured_at") or "")[:10], d["class_label"], d["domain"],
                          d["basis"], d["mean_mhz"], d["dominant_mhz"], round(d["dominant_share"], 4), d["high_share"],
                          d.get("active_ratio"), d.get("pass_jsd"), d.get("opp_max_mhz"),
+                         (d.get("power") or {}).get("total_mw"), (d.get("power") or {}).get("measured_mw"),
                          " | ".join(f"{b['mhz']:g}:{b['ratio']:.4f}" for b in d["bins"]),
                          " / ".join(n["text"] for n in d.get("notes") or [])])
     return ("Clock 분포", ["variant", "합성", "측정일", "class", "domain", "기준", "평균 MHz", "최빈 MHz", "최빈 비율", "고 OPP 비율",
-                         "동작 비율", "pass JSD", "fmax MHz", "분포 (MHz:비율)", "메모"], rows)
+                         "동작 비율", "pass JSD", "fmax MHz", "추정 mW", "실측 rail mW", "분포 (MHz:비율)", "메모"], rows)

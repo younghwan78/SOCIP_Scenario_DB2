@@ -316,9 +316,15 @@ def clock_residency_of(db: Session, m: Any, params_rows: list[Any] | None = None
         params_rows = db.query(PowerModelParams).all()
     if ip_rows is None:
         ip_rows = db.query(IpCatalog).options(load_only(IpCatalog.id, IpCatalog.capabilities, IpCatalog.compatible_soc)).all()
+    from scenario_db.meas_import.clock_residency import DOMAIN_CLASSES
+    from scenario_db.sim.domain_power import models_from_ip_catalog
+
     same_soc = [r for r in params_rows if not soc or getattr(r, "soc_ref", None) == soc] or list(params_rows)
     opp_max = opp_max_from_ip_catalog(ip_rows, soc) | opp_max_from_params(same_soc, _cpu_domains(m))
-    return clock_residency_view(m.metric_observations, m.cpu_breakdown, opp_max=opp_max)
+    labels = {dc.label: dc.name for dc in DOMAIN_CLASSES.values() if dc.name != "cpu"}
+    return clock_residency_view(m.metric_observations, m.cpu_breakdown, opp_max=opp_max,
+                                power_models=models_from_ip_catalog(ip_rows, soc, labels),
+                                vdd_power=getattr(m, "vdd_power", None))
 
 
 def clock_residency_rows(db: Session, scenario_id: str | None = None) -> list[dict[str, Any]]:
@@ -327,7 +333,7 @@ def clock_residency_rows(db: Session, scenario_id: str | None = None) -> list[di
 
     q = db.query(Evidence).options(load_only(
         Evidence.id, Evidence.scenario_ref, Evidence.variant_ref, Evidence.measured_at, Evidence.provenance,
-        Evidence.execution_context, Evidence.metric_observations, Evidence.cpu_breakdown)).filter(
+        Evidence.execution_context, Evidence.metric_observations, Evidence.cpu_breakdown, Evidence.vdd_power)).filter(
         Evidence.kind == "evidence.measurement")
     if scenario_id:
         q = q.filter(Evidence.scenario_ref == scenario_id)
@@ -346,6 +352,7 @@ def clock_residency_rows(db: Session, scenario_id: str | None = None) -> list[di
                     "sw_baseline_ref": ctx.get("sw_baseline_ref"), "synthetic": is_synthetic(m.provenance),
                     "domains": [{k: d[k] for k in ("domain_class", "class_label", "domain", "is_dsu", "active_ratio", "pass_jsd")}
                                 | {"mean_mhz": (d["active"] or d["wall"])["mean_mhz"], "opp_max_mhz": d["opp_max_mhz"],
+                                   "power_mw": (d.get("power") or {}).get("total_mw"),
                                    "high_share": (d["active"] or d["wall"])["high_share"],
                                    "basis": "active" if d["active"] else "wall",
                                    "warns": sum(1 for n in d["notes"] if n["level"] == "warn")}

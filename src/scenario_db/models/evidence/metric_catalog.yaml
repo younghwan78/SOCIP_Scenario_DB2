@@ -299,3 +299,11 @@ metrics:
     allowed_scopes: [clock_domain]
     compare_statistic: value
     polarity: lower_is_better
+  # Coefficient of variation of the anchor counters (CPU_CYCLES, INST_RETIRED) across PMU passes
+  # (meas_import/pmu_passes.py); ref = task, or "all" for the capture. > 0.05 = passes saw different work.
+  cpu.pass_cv:
+    category: cpu
+    canonical_unit: ratio
+    allowed_scopes: [task, capture]
+    compare_statistic: value
+    polarity: lower_is_better

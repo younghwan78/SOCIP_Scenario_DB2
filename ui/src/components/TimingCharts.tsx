@@ -3,7 +3,7 @@ import { useWidth } from './Charts'
 import { useTip } from './ChartTip'
 import { usePref } from './Layout'
 import {
-  LAT_COLOR, OVH_COLOR, SET_REASON_LABEL, STAGE_COLOR, SW_COLOR, basisLabel, breakEven, clockText, domainOf, fmt, niceMax, otfPacers, pct0, stageSegments, whatIfDomains,
+  LAT_COLOR, OVH_COLOR, SET_REASON_LABEL, STAGE_COLOR, SW_COLOR, basisLabel, breakEven, clockText, cpuTileNote, domainOf, fmt, niceMax, otfPacers, pct0, stageSegments, whatIfDomains,
   type FleetRow, type IpRow, type StageRow, type TimelineRow, type TimingReport, type WhatIfRow,
 } from '../lib/timingBudget'
 
@@ -211,7 +211,7 @@ export function PowerBw({ report }: { report: TimingReport }) {
       <div className="faint" style={{ fontSize: 12 }}>Power (mW · Total 대비 비중)</div>
       <div className="tb-tiles">
         <Tile label="Total power" value={`${fmt(p.total_mw)} mW`} note="CPU + HW IP core + BW(MIF)" strong />
-        <Tile label="CPU power" value={`${fmt(p.cpu_mw)} mW`} share={pct(p.cpu_mw, p.total_mw)} note={`${fmt(p.cpu_busy_ms, 1)} ms/frame · CL${p.cpu_model.cluster} ${p.cpu_model.freq_mhz} MHz ${p.cpu_model.volt_v} V`} color={SW_COLOR} />
+        <Tile label="CPU power" value={`${fmt(p.cpu_mw)} mW`} share={pct(p.cpu_mw, p.total_mw)} note={cpuTileNote(p)} color={SW_COLOR} />
         <Tile label="HW IP core power" value={`${fmt(p.hw_mw)} mW`} share={pct(p.hw_mw, p.total_mw)} note={p.zero_power_ips.length ? `unit_power=0: ${p.zero_power_ips.join(', ')}` : '전 IP 계수 있음'} color={STAGE_COLOR.rt} />
         <Tile label="BW (MIF) power" value={`${fmt(p.bw_mw)} mW`} share={pct(p.bw_mw, p.total_mw)} note={`HW ${fmt(p.bw_hw_mw, 0)} · CPU ${fmt(p.bw_sw_mw, 0)} mW`} color={STAGE_COLOR.nrt} />
       </div>

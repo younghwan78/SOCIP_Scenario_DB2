@@ -68,8 +68,11 @@ def test_source_validation():
         TableSource(file="g.csv", kind="freq_residency", domain_class="gpu", cpu={"column": "cpu"},
                     freq_column="f", value_column="t")
     with pytest.raises(ValueError, match="residency sources only"):
-        TableSource(file="c.csv", kind="counters", group="pass1", cpu={"column": "cpu"},
+        TableSource(file="c.csv", kind="counters", basis="active", cpu={"column": "cpu"},
                     counters={"cycles": ["cpu-cycles"]}, counter_column="e", value_column="v")
+    # a PMU pass on a counter source is allowed (merged by meas_import/pmu_passes.py)
+    TableSource(file="c.csv", kind="counters", group="pass1", cpu={"column": "cpu"},
+                counters={"cycles": ["cpu-cycles"]}, counter_column="e", value_column="v")
     with pytest.raises(ValueError, match="unknown clock domain class"):
         TableSource(file="n.csv", kind="freq_residency", domain_class="npu", cluster={"value": "NPU"},
                     freq_column="f", value_column="t")

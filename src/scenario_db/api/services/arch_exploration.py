@@ -118,8 +118,11 @@ def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str |
         stage = "load"
         try:
             graph, tables, ref = _load(db, shim, request.use_default_dvfs)
+            from scenario_db.api.services.cpu import with_cpu_profile
+
             bounded_spec = request.spec.model_copy(update={
                 "max_cases_per_variant": min(request.spec.max_cases_per_variant, remaining_cases),
+                "timing": with_cpu_profile(db, request.spec.timing, scenario.id, variant_id),
             })
             _check_power_params_scope(shim.config, graph)
             stage = "explore"
@@ -623,7 +626,7 @@ def _report_clock(db: Session, preds: dict[tuple[str, str], dict[str, Any]]) -> 
         return []
     keys = set(preds)
     rows = (db.query(Evidence).options(load_only(Evidence.id, Evidence.scenario_ref, Evidence.variant_ref, Evidence.measured_at,
-                                                 Evidence.provenance, Evidence.metric_observations, Evidence.cpu_breakdown))
+                                                 Evidence.provenance, Evidence.metric_observations, Evidence.cpu_breakdown, Evidence.vdd_power))
             .filter(Evidence.kind == "evidence.measurement", Evidence.scenario_ref.in_({sid for sid, _ in keys}))
             .order_by(Evidence.measured_at.desc().nullslast(), Evidence.id).all())
     from scenario_db.db.models.capability import IpCatalog

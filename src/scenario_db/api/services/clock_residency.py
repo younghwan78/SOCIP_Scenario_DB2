@@ -125,12 +125,16 @@ def _notes(d: dict[str, Any]) -> list[dict[str, str]]:
 
 
 def clock_residency_view(observations: Iterable[Any] | None, cpu_breakdown: Iterable[Any] | None = None, *,
-                         opp_max: dict[str, float] | None = None) -> dict[str, Any] | None:
+                         opp_max: dict[str, float] | None = None, power_models: dict[str, Any] | None = None,
+                         vdd_power: dict[str, Any] | None = None) -> dict[str, Any] | None:
     """Per-domain residency + notes, or None when the evidence has no clock residency.
 
-    ``opp_max``: domain name -> max OPP MHz (topology); without it the highest observed frequency is used.
+    ``opp_max``: domain name -> max OPP MHz (topology / IP catalog); unknown -> no high-OPP claim.
+    ``power_models``: domain name -> ``sim.domain_power.DomainPowerModel`` (GPU …) -> ``power`` estimate,
+    compared with the measured rails of that class in ``vdd_power``.
     """
-    freq, ratios, jsd = _collect(list(observations or []))
+    observations = list(observations or [])
+    freq, ratios, jsd = _collect(observations)
     sources = {key: "observation" for key in freq}
     for entry in cpu_breakdown or []:
         if not isinstance(entry, dict) or not entry.get("cluster"):
@@ -162,11 +166,45 @@ def clock_residency_view(observations: Iterable[Any] | None, cpu_breakdown: Iter
         }
         if d["active_ratio"] is None and (d["clock_gated_ratio"] is not None or d["power_gated_ratio"] is not None):
             d["active_ratio"] = round(max(0.0, 1.0 - (d["clock_gated_ratio"] or 0.0) - (d["power_gated_ratio"] or 0.0)), 4)
+        model = (power_models or {}).get(domain)
+        if model is not None and cls != "cpu":
+            est = model.estimate(d["wall"]["bins"] if d["wall"] else None, d["active"]["bins"] if d["active"] else None,
+                                 d["active_ratio"], d["power_gated_ratio"])
+            from scenario_db.sim.domain_power import measured_rail_mw
+
+            meas, rails = measured_rail_mw(vdd_power, cls)
+            est |= {"measured_mw": meas, "rails": rails,
+                    "delta_pct": round(100 * (est["total_mw"] - meas) / meas, 1) if meas else None}
+            d["power"] = est
         d["notes"] = _notes(d)
         domains.append(d)
-    return {"rules_version": RULES_VERSION, "domains": domains, "summary": summary(domains),
+    quality = _pass_quality(observations)
+    lines = summary(domains)
+    if quality and quality["capture_cv"] is not None and quality["capture_cv"] > 0.05:
+        lines.insert(len(lines) - (1 if lines and lines[-1].startswith("확인 필요") else 0),
+                     f"PMU pass 간 cycle·instruction 차이 {quality['capture_cv'] * 100:.1f}% — 측정 중 부하가 달랐습니다"
+                     + (f" (task: {', '.join(quality['noisy'][:4])})" if quality["noisy"] else ""))
+    return {"rules_version": RULES_VERSION, "domains": domains, "summary": lines, "pmu_pass": quality,
             "thresholds": {"high_opp_fraction": HIGH_OPP_FRACTION, "high_opp_warn": HIGH_OPP_WARN,
                            "pass_jsd_warn": PASS_JSD_WARN}}
+
+
+def _pass_quality(observations: list[Any]) -> dict[str, Any] | None:
+    """``cpu.pass_cv`` (meas_import/pmu_passes.py): capture CV and tasks above 5 %."""
+    capture, tasks = None, {}
+    for o in observations:
+        if not isinstance(o, dict) or o.get("metric_id") != "cpu.pass_cv":
+            continue
+        scope, v = o.get("scope") or {}, _value(o)
+        if v is None:
+            continue
+        if scope.get("kind") == "capture":
+            capture = v
+        elif scope.get("kind") == "task":
+            tasks[str(scope.get("ref"))] = v
+    if capture is None and not tasks:
+        return None
+    return {"capture_cv": capture, "tasks": tasks, "noisy": sorted((t for t, v in tasks.items() if v > 0.05), key=lambda t: -tasks[t])}
 
 
 def summary(domains: list[dict[str, Any]]) -> list[str]:
@@ -185,9 +223,12 @@ def summary(domains: list[dict[str, Any]]) -> list[str]:
     for d in domains:
         if d["is_dsu"] or d["domain_class"] != "cpu":
             s = d["active"] or d["wall"]
+            p = d.get("power")
             out.append(f"{d['class_label'] if d['is_dsu'] else d['domain']}: {'running' if d['active'] else '전체'} 평균 {_mhz(s['mean_mhz'])}"
                        + (f", 동작 {d['active_ratio'] * 100:.0f}%" if d["active_ratio"] is not None else "")
-                       + (f", 고 OPP {s['high_share'] * 100:.0f}%" if s["high_share"] is not None else ""))
+                       + (f", 고 OPP {s['high_share'] * 100:.0f}%" if s["high_share"] is not None else "")
+                       + (f", 추정 {p['total_mw']:.0f} mW" + (f" (실측 rail {p['measured_mw']:.0f} mW)" if p.get("measured_mw") else "")
+                          + (" · SAMPLE V-f" if p.get("sample") else "") if p else ""))
     if cpus and not any(d["active"] for d in cpus):
         out.append("CPU running(idle 제외) 분포 없음 — dynamic power는 전체 시간 분포로 근사 "
                    "(perfetto cpu_active_residency 또는 basis: active source 추가 권장)")

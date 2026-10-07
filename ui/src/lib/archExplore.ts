@@ -159,6 +159,8 @@ export interface RunOptions {
   require_declared: boolean
   /** power-saving options: knob values (knobs.yaml explore) / substitute IP modes (sim.modes substitutes) */
   options: { knobs: boolean; modes: boolean; max_sets: number }
+  /** CPU term of every case: flat assumption or the variant's measured CPU profile (EAS + growth) */
+  cpu_model?: 'flat' | 'profile'
 }
 export const DEFAULT_RUN: RunOptions = {
   statistics: ['mean', 'max'], runtime_scales: [1.0, 1.1, 1.2], dvfs_headroom_levels: 1,
@@ -179,6 +181,7 @@ export function runBody(scenarioIds: string[], title: string, scenarioType: stri
         power_options: { enabled: o.options.knobs || o.options.modes, include_knobs: o.options.knobs, include_modes: o.options.modes, max_sets: o.options.max_sets } },
       constraints: { allow_lossy: o.allow_lossy },
       objective: { statistic: o.objective_statistic, runtime_scale: o.objective_scale },
+      ...(o.cpu_model === 'profile' ? { timing: { cpu_model: 'profile' } } : {}),
     },
   }
 }

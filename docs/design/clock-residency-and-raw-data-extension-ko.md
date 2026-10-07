@@ -4,7 +4,7 @@
 추가할 확장(raw data 관리, 조합 탐색 CPU 모델, 3-pass PMU, GPU 모델)의 설계를 정리한다.
 사용법은 [Clock 분포 import 가이드](../guides/measurement/clock-residency-import-ko.md) 참고.
 
-## 1. 이번 구현 범위 (완료)
+## 1. 1차 구현 범위 (clock residency, 완료)
 
 | 영역 | 내용 | 파일 |
 |---|---|---|
@@ -88,25 +88,41 @@ VIEW --> REP
 - cluster clock 분포 → `cpu_freq_time` sample (`group: report`), IP clock 분포 → 기존 `ip_clock_residency`.
 - perfetto와 report가 같은 cluster를 주면 perfetto를 canonical로, report는 JSD 비교용 group으로만 사용.
 
-### E4. 조합 탐색 CPU 항 (C1, opt-in)
-- 현재 `timing_budget._power_bw`의 CPU = `coeff·f·V²·util` (단일 cluster, 고정 OPP).
-- 확장: `TimingBudgetOptions.cpu_model: "flat" | "profile"` (기본 `flat` = 현행). `profile`이면 variant의 measured CPU profile로 `cpu_sched.evaluate(profile, growth=g)` → cluster OPP·leakage·DSU 포함 mW를 `cpu_mw`로, OPP를 `cpu_opp`로 기록.
-- running residency가 있으면 기준 측정 전력(`profile_cpu_power`)도 running 기준이 되어 what-if와 같은 값이 된다.
-- provenance chip에 `cpu_model` 표시 (U1).
+### E4. 조합 탐색 CPU 항 (C1, opt-in) — **구현됨**
+- `TimingBudgetOptions.cpu_model: "flat" | "profile"` (기본 `flat` = 현행), `cpu_profile_ref`, `cpu_bw_source`, `cpu_bw_scale`.
+- `profile`: service(`api/services/cpu.with_cpu_profile`)가 `cpu_profile_ref` 또는 variant의 최신 측정 profile(실측 우선)을 붙이고,
+  `sim/cpu_scenario.apply_profile_cpu`가 측정 배치 × SW 증가(`runtime_scale`)를 EAS + schedutil로 재현 → cluster OPP·leakage·DSU 포함
+  `cpu_mw`. 기존 값은 `cpu_mw_flat`으로 남고 `power.cpu_profile`에 근거(OPP, profile id, BW 출처)를 기록.
+- profile 또는 CPU topology(`power_model_params.cpu`)가 없으면 flat 유지 + `cpu_profile.note`.
+- UI: Timing Budget “CPU 모델: 가정 / 측정 profile”(`#/timing?...&cpu=profile`), 조합 탐색 “CPU: 측정 profile (EAS)”. slice에 `cpu_basis`.
+- 예 (E2600 f1-uhd60, simcfg v2): 가정 92 mW → profile 453 mW (×1.0), 578 mW (×1.3) — 가정 모델이 CPU를 크게 과소평가.
 
-### E5. CPU BW 실측 (C2)
-- `cpu.bus_bytes_pf`(pass3 `BUS_ACCESS`×64B) × growth × fps → 조합 탐색 `bw_cpu_mbs`. RD/WR 분리 시 `bw_fit` 계수로 BW power.
+### E5. CPU BW 실측 (C2) — **구현됨**
+- `cpu_model: profile` + `cpu_bw_source: measured`(기본): `cpu.bus_bytes_pf` × growth × fps × `cpu_bw_scale` → `bw.sw_mbs`.
+  BW 전력 = 측정 MB/s × BW 모델의 mW/MBps(CPU DMA가 없으면 HW 평균). 모델 값은 `sw_mbs_model`, `bw_sw_mw_model`.
+- 모델 SW DMA node 이름은 유지(측정 총량으로 비례 조정) → compression delta 계산 키가 깨지지 않음.
 
-### E6. PMU 3-pass counter 정합 (C3)
-- 현재 `group`은 residency에만 허용(counter에 주면 오류). counter에 확장할 때 규칙:
-  - 모든 pass에 `CPU_CYCLES`, `INST_RETIRED` anchor
-  - pass별 counter를 per-instruction ratio로 정규화 → instructions/frame은 3 pass 평균
-  - anchor의 pass 간 CV를 `cpu.pass_cv`(가칭) observation으로, 5% 초과 시 경고
-- `clock.residency_pass_jsd`와 같이 capture 품질 카드에 표시.
+### E6. PMU 3-pass counter 정합 — **구현됨**
+- `counters` source에 `group`(pass) 허용 → `meas_import/pmu_passes.py`가 합산 대신 병합:
+  anchor(`cycles`, `instructions`) = pass 평균, 그 외 counter = 측정 pass의 instruction당 비율 × 병합 instructions, thread cycles = 평균.
+- 품질: task별 / capture 전체 anchor CV → `cpu.pass_cv` (scope `task`, `capture`), 5% 초과(cycle 비중 1% 이상 task)면 import 경고,
+  Calibration Clock 카드 요약에 표시.
+- `pmu.window`는 **pass 하나**의 frame 수/시간.
 
-### E7. GPU power
-- 1차: `P_gpu = Σ residency_active(f)·P_dyn(f)·active_ratio + Σ residency_wall(f)·P_leak(V(f))` — `power_model_params.gpu`(OPP: MHz, mV, mW) 추가 시 계산 가능. 현재는 분포 표시만.
-- 2차: vendor counter(busy cycles, ext RD/WR bytes)가 확보되면 per-frame job record로 확장.
+### E7. GPU power — **구현됨 (SAMPLE 계수)**
+- `sim/domain_power.py`: IP catalog `capabilities.power_model`의 `dynamic_coeff_uw_per_mhz_v2`(없으면 driver `profiler_dynamic_coeff`),
+  `vf_table`(없으면 `vf_table_sample`), `leakage`(없으면 `leakage_sample`).
+  dynamic = 동작 비율 × Σ running 분포 × coeff·f·V², static = (1 − power gated) × Σ 전체 분포 × leak(V).
+- 같은 측정의 rail(이름에 `G3D|GPU`) 합과 비교 (`measured_mw`, `delta_pct`). Calibration Clock 카드 “추정 mW” 열, 보고서 · XLSX.
+- E2600 `ip-gpu-s5e9965`에 SAMPLE V-f / leakage 추가 (ECT/ASV 미확보 → SAMPLE 표시). profiler 계수 scale은 실측 rail로 확인 필요.
+- NPU 등: 같은 키를 IP catalog에 넣고 `DOMAIN_CLASSES` + `RAIL_HINTS`에 1줄.
+
+### E8. CPU what-if: MID 집중 vs 분산 + BIG 확인 — **구현됨**
+- `cpu_rebalance` 결과에 `strategies`: pool cluster 조합별(집중 = 1개, 분산 = 2…N개) budget 만족 최저 분배(전체 EAS로 검증),
+  `winner`(spread / concentrate / tie), `spread_gain_mw`. 국소 탐색일 때도 각 조합 안에서 move 탐색으로 채움.
+- `big_check`: 최저 MID 분배에서 task 하나(또는 전체)를 pool 밖 BIG 계열로 옮긴 전력 Δ — 이득(Δ < 0)이면 경고 톤.
+  BIG을 정식 탐색하려면 pool에 BIG 포함(그때는 big_check 생략).
+- UI: MID 재분배 결과 맨 위 “① MID 집중 vs 분산” 카드 (결론 문장, 조합별 막대, task 배치, “이 배치 고정” → ③에 pin, BIG 표).
 
 ## 4. Merge conflict 최소화
 

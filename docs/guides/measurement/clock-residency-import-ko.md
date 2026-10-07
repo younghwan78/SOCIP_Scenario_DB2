@@ -103,3 +103,13 @@ fmax: CPU cluster · DSU = 같은 SoC의 `power_model_params.cpu`, GPU = IP cata
 3. (선택) IP catalog `ip-npu-*`에 `capabilities.dvfs_model.max_freq_khz` — 고 OPP 판정에 사용
 
 import · 화면 · 보고서는 registry를 따라 자동으로 표시된다.
+
+## 6. PMU pass별 counter · GPU power
+
+- `counters` source에도 `group: pass1..3`을 주면 pass별 counter를 합산하지 않고 anchor(CPU_CYCLES·INST_RETIRED)로 병합한다.
+  `pmu.window`는 pass 하나 기준. 결과 `cpu.pass_cv`(task / capture)가 5%를 넘으면 import 경고와 Clock 카드 요약에 표시.
+  예: `examples/measurement-import/clock-residency-e2600/*/pmu_counters_by_pass.tsv` (8k30-psm은 3번째 pass에서 post_irta +12% → 경고).
+- GPU power 추정: IP catalog `ip-gpu-*`의 `capabilities.power_model` (`dynamic_coeff_uw_per_mhz_v2` 또는 `profiler_dynamic_coeff`,
+  `vf_table`/`vf_table_sample`, `leakage`/`leakage_sample`) × running/전체 분포 × 동작·power-gated 비율. 같은 측정에 `G3D|GPU` rail이 있으면 비교.
+  상세: [design E7](../../design/clock-residency-and-raw-data-extension-ko.md).
+

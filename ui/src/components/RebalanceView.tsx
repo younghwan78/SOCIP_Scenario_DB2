@@ -2,7 +2,7 @@
 import { useMemo, useState } from 'react'
 import { fmt } from '../lib/timingBudget'
 import { partColor, sortClusters } from '../lib/powerModel'
-import { applyDsuRebalance, type CpuRebalance, type RbBoundary, type RbSplit } from '../lib/rebalance'
+import { applyDsuRebalance, bigVerdict, strategyVerdict, type CpuRebalance, type RbBoundary, type RbSplit, type RbStrategyRow } from '../lib/rebalance'
 import { shiftVote, type DsuPolicy } from '../lib/dsu'
 import { useTip } from './ChartTip'
 import { useWidth } from './Charts'
@@ -217,7 +217,9 @@ function Boundaries({ list, title }: { list: RbBoundary[]; title: string }) {
   </div>
 }
 
-export function RebalanceResults({ r, sel, setSel, knob = 'cpuset', sensitivity }: { r: CpuRebalance; sel: string; setSel: (id: string) => void; knob?: Knob; sensitivity?: React.ReactNode }) {
+export function RebalanceResults({ r, sel, setSel, knob = 'cpuset', sensitivity, onPickStrategy }: { r: CpuRebalance; sel: string; setSel: (id: string) => void; knob?: Knob; sensitivity?: React.ReactNode
+  /** pin every task of a strategy row (setup ③ 고정) */
+  onPickStrategy?: (assign: Record<string, string>) => void }) {
   const ref = r.reference, best = r.best
   const parts = powerParts(r)
   const picked: RbSplit | undefined = sel === 'ref' ? ref : sel.startsWith('c') ? r.cases.find((c) => `c${c.rank}` === sel) : sel.startsWith('s') ? r.curve[Number(sel.slice(1))] : undefined
@@ -243,6 +245,7 @@ export function RebalanceResults({ r, sel, setSel, knob = 'cpuset', sensitivity 
       {tile('탐색', r.method === 'exhaustive' ? '전수' : '국소 탐색', `분할 ${r.evaluated.toLocaleString()} / ${r.space.toLocaleString()} · 조건 충족 ${r.feasible_count.toLocaleString()} · 정밀 검증 ${r.verified}`)}
     </div>
     {r.warnings.filter((w) => !/max_exhaustive/.test(w)).map((w) => <div key={w} className="lib-note warn">{/no same-name/.test(w) ? `측정 cluster 대응 없음 — ${w}` : w}</div>)}
+    <StrategyCard r={r} onPickCase={onPickStrategy} />
     <Card id="cpu-rb-curve" title="이동 곡선" defaultWide help={CPU_HELP.rbCurve} note="현재 배치에서 이득이 큰 task부터 하나씩 옮김 · 막대 클릭 = 아래 상세">
       <MoveCurve r={r} sel={sel} onPick={setSel} />
     </Card>
@@ -355,6 +358,63 @@ export function AssumptionSensitivity({ base, runVariant, dsu }: { base: CpuReba
             <td>{changed ? <span className="badge v-warn" title="이 가정 범위에서 최저 분배(옮길 task·cluster)가 달라짐 — 먼저 확정할 가정">바뀜 {changed}/2</span> : <span className="badge v-ok">유지</span>}</td></tr>
         })}</tbody>
       </table>}
+    </Card>
+  )
+}
+
+/** ① first look: concentrate on one MID cluster vs spread over 2 … N, then whether BIG would ever help. */
+export function StrategyCard({ r, onPickCase }: { r: CpuRebalance; onPickCase?: (assign: Record<string, string>) => void }) {
+  const s = r.strategies
+  const [open, setOpen] = useState<string | null>(null)
+  if (!s) return null
+  const v = strategyVerdict(s)
+  const rows = s.rows
+  const ref = r.reference.total_mw
+  const hi = Math.max(ref, ...rows.map((x) => x.total_mw), ...(s.big_check?.best ? [s.big_check.best.total_mw] : [])) * 1.05
+  const pct = (mw: number) => `${Math.max(0, Math.min(100, (100 * mw) / hi))}%`
+  const sym = r.symmetric.filter((g) => g.length > 1)
+  const label = (x: RbStrategyRow) => x.kind === 'concentrate' ? `${x.clusters[0]}만` : `${x.clusters.map(shortCluster).join(' + ')}`
+  const bestMw = Math.min(...rows.filter((x) => x.feasible).map((x) => x.total_mw))
+  return (
+    <Card id="cpu-rb-strategy" title="① MID 집중 vs 분산" defaultWide help={CPU_HELP.rbStrategy}
+      note={`camera SW를 MID cluster 하나에 모을지, 여러 개에 나눌지 먼저 비교 · 막대 = CPU + DSU mW · 점선 = 현재 ${fmt(ref, 1)} mW${s.complete ? '' : ' · 국소 탐색'}`}>
+      <div className={`lib-note ${v.tone === 'warn' ? 'warn' : ''}`} style={{ marginBottom: 8, fontSize: 13 }}><b>{v.text}</b></div>
+      <div className="rb-strat">
+        {(['concentrate', 'spread'] as const).map((kind) => <div key={kind} className="rb-strat-group">
+          <div className="rb-strat-head">{kind === 'concentrate' ? '집중 (한 cluster)' : '분산 (여러 cluster)'}</div>
+          {rows.filter((x) => x.kind === kind).map((x) => {
+            const key = x.clusters.join('+')
+            return <div key={key}>
+              <button className={`rb-strat-row ${x.feasible ? '' : 'infeasible'} ${open === key ? 'on' : ''}`} onClick={() => setOpen(open === key ? null : key)}
+                title={x.feasible ? '클릭 = task 배치' : 'budget 미충족'}>
+                <span className="rb-strat-label mono">{label(x)}{x.total_mw === bestMw && x.feasible ? ' ★' : ''}</span>
+                <span className="rb-strat-bar"><span style={{ width: pct(x.total_mw), background: x.feasible ? (kind === 'concentrate' ? '#8A8274' : '#2F6F68') : '#E2DBCF' }} />
+                  <i style={{ left: pct(ref) }} /></span>
+                <span className="mono rb-strat-mw">{fmt(x.total_mw, 1)}</span>
+                <span className={`mono rb-strat-d ${x.delta_mw < 0 ? 'pm-down' : 'pm-up'}`}>{x.delta_mw >= 0 ? '+' : ''}{fmt(x.delta_mw, 1)}</span>
+                <span className="faint rb-strat-mhz">{r.pool.map((c) => `${shortCluster(c)} ${x.mhz[c]}`).join(' · ')} · DSU {x.mhz.dsu}{x.feasible ? '' : ' · budget 미충족'}</span>
+              </button>
+              {open === key && <div className="rb-strat-detail">
+                {Object.entries(x.assign).map(([u, c]) => <span key={u} className="badge" style={{ marginRight: 4 }}>{u} → {shortCluster(c)}</span>)}
+                {x.min_slack_ms !== undefined && x.min_slack_ms !== null && <span className="faint"> · 최소 slack {fmt(x.min_slack_ms, 2)} ms</span>}
+                {onPickCase && <button className="btn tb-mini" style={{ marginLeft: 8 }} onClick={() => onPickCase(x.assign)}>이 배치 고정 →</button>}
+              </div>}
+            </div>
+          })}
+        </div>)}
+        {s.big_check && <div className="rb-strat-group">
+          <div className="rb-strat-head">BIG 확인 (pool 밖, 최저 MID 분배 기준)</div>
+          <div className={`lib-note ${bigVerdict(s.big_check).tone === 'warn' ? 'warn' : ''}`} style={{ fontSize: 12.5 }}>{bigVerdict(s.big_check).text}</div>
+          <table className="tb-mini-table" style={{ marginTop: 4 }}>
+            <thead><tr><th>옮길 task</th><th>cluster</th><th style={{ textAlign: 'right' }}>CPU+DSU mW</th><th style={{ textAlign: 'right' }}>Δ</th><th style={{ textAlign: 'right' }}>BIG MHz</th></tr></thead>
+            <tbody>{s.big_check.moves.slice(0, 5).map((m) => <tr key={m.unit + m.cluster} className={m.feasible ? '' : 'faint'}>
+              <td className="mono">{m.unit}</td><td>{m.cluster}</td><td className="mono" style={{ textAlign: 'right' }}>{fmt(m.total_mw, 1)}</td>
+              <td className={`mono ${m.delta_mw < 0 ? 'pm-down' : 'pm-up'}`} style={{ textAlign: 'right' }}>{m.delta_mw >= 0 ? '+' : ''}{fmt(m.delta_mw, 1)}{m.feasible ? '' : ' (미충족)'}</td>
+              <td className="mono" style={{ textAlign: 'right' }}>{m.mhz}</td></tr>)}</tbody>
+          </table>
+        </div>}
+      </div>
+      {sym.length > 0 && <div className="faint" style={{ fontSize: 11.5, marginTop: 6 }}>같은 구성: {sym.map((g) => g.join(' ≡ ')).join(' · ')} — 한쪽만 표시</div>}
     </Card>
   )
 }

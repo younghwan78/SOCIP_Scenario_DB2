@@ -31,7 +31,7 @@ from pydantic import Field, model_validator
 from scenario_db.models.common import BaseScenarioModel
 from scenario_db.sim.adapter import build_simulation_inputs
 from scenario_db.sim.cpu_power import PROFILER_COEFF as _CPU_PROFILER_COEFF
-from scenario_db.sim.models import DVFSTable, SimRunResult, SimulationInputs, SimulationRunConfig
+from scenario_db.sim.models import CpuProfile, DVFSTable, SimRunResult, SimulationInputs, SimulationRunConfig
 from scenario_db.sim.power_params import effective_power_params
 from scenario_db.sim.runner import run_simulation
 
@@ -159,6 +159,14 @@ class TimingBudgetOptions(BaseScenarioModel):
     # scenario's CPU resource (e.g. one CPU_CAMERA) so cross-stage contention shows.
     shared_cpu: bool = False
     cpu: CpuPowerConfig = Field(default_factory=CpuPowerConfig)
+    # CPU term: "flat" = coeff*f*V^2*util at one OPP (default); "profile" = measured per-frame CPU profile
+    # replayed through EAS + schedutil with SW growth (sim/cpu_scenario.py). The service resolves
+    # ``cpu_profile_ref`` (or the variant's newest measured profile) into ``cpu_profile``.
+    cpu_model: Literal["flat", "profile"] = "flat"
+    cpu_profile_ref: str | None = None
+    cpu_profile: CpuProfile | None = None
+    cpu_bw_source: Literal["model", "measured"] = "measured"   # with cpu_model=profile: CPU BW from bus bytes
+    cpu_bw_scale: float = Field(default=1.0, gt=0, le=10)
     include_whatif: bool = False
     whatif_scales: list[float] = Field(
         default_factory=lambda: [1.0, 1.1, 1.2, 1.3, 1.4, 1.5], max_length=12
@@ -199,6 +207,8 @@ def analyze_timing_budget(
     rule = _run(graph, options, base_config, dvfs_tables, plan, rule_only=True)
     budget = _run(graph, options, base_config, dvfs_tables, plan, rule_only=False)
     report = _report(graph, options, plan, rule, budget, dvfs_tables)
+    if options.cpu_model == "profile":
+        _profile_cpu(report, options, params, config)
     if options.include_whatif:
         report["whatif"] = whatif(graph, options, config=config, dvfs_tables=dvfs_tables)
     return report
@@ -1128,3 +1138,25 @@ def fleet_row(report: dict[str, Any]) -> dict[str, Any]:
         "bw": {k: report["bw"][k] for k in ("total_mbs", "hw_mbs", "sw_mbs")},
         "verdict": report["verdict"],
     }
+
+
+def _profile_cpu(report: dict[str, Any], options: TimingBudgetOptions, params: Any, config: SimulationRunConfig | None) -> None:
+    """``cpu_model: profile``: CPU power / BW from the measured profile; the flat numbers stay as *_flat."""
+    from scenario_db.sim.cpu_power import CpuPowerModel
+    from scenario_db.sim.cpu_scenario import apply_profile_cpu
+
+    profile = options.cpu_profile or (config.cpu_profile if config is not None else None)
+    note = None
+    if profile is None:
+        note = "cpu_model=profile but no measured CPU profile was resolved; flat CPU model kept"
+    elif params is None or not params.cpu.clusters:
+        note = "cpu_model=profile needs power_model_params with cpu.clusters; flat CPU model kept"
+    if note:
+        report["power"]["cpu_profile"] = {"kind": "flat", "note": note}
+        return
+    try:
+        apply_profile_cpu(report, profile=profile, model=CpuPowerModel.from_params(params), growth=options.runtime_scale,
+                          bw_source=options.cpu_bw_source, cpu_bw_scale=options.cpu_bw_scale,
+                          profile_ref=options.cpu_profile_ref)
+    except ValueError as exc:
+        report["power"]["cpu_profile"] = {"kind": "flat", "note": f"profile CPU model failed: {exc}; flat CPU model kept"}

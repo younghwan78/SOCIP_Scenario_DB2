@@ -19,6 +19,16 @@ export const CPU_HELP: Record<string, ReactNode> = {
       <li>점선 = 전체 탐색의 최저 (곡선은 한 경로라 최저와 다를 수 있음). 흐린 막대 = budget 미충족.</li>
     </ul>
   </>,
+  rbStrategy: <>
+    <b>먼저 “MID 한 곳에 모을까, 나눌까”를 봅니다.</b> camera SW는 대부분 MID에서 돌고, BIG은 전력이 커서 지금까지 이득인 경우가 거의 없었습니다.
+    <ul>
+      <li><b>집중</b> — 옮길 수 있는 task를 MID cluster 하나에 모두 pin. 다른 cluster를 깨우지 않지만 그 cluster OPP(V²f)와 DSU vote가 올라갑니다.</li>
+      <li><b>분산</b> — 2개 … 전체 MID cluster 조합마다 budget을 만족하는 최저 분배. OPP는 내려가지만 깨어 있는 cluster가 늘어납니다.</li>
+      <li>막대 = CPU + DSU mW, 점선 = 현재(측정 배치). 행 클릭 = task 배치, “이 배치 고정”으로 ③에 반영 후 다시 계산하면 상세(이동 곡선·OPP 경계)를 볼 수 있습니다.</li>
+      <li><b>BIG 확인</b> — 최저 MID 분배에서 task 하나(또는 전체)를 BIG으로 옮긴 경우. Δ가 음수면 UHD120처럼 BW가 크거나 고속인 조건에서 BIG 사용을 검토할 근거가 됩니다. BIG을 정식 탐색하려면 ③ pool에 BIG을 넣으세요.</li>
+      <li>같은 구성(core type · core 수 · OPP)이고 고정 부하가 없는 cluster는 바꿔도 결과가 같아 한쪽만 표시합니다.</li>
+    </ul>
+  </>,
   rbTop: <><b>budget을 만족하는 분배 중 CPU + DSU 전력이 낮은 순.</b> 상위 후보는 전체 EAS 모델로 다시 계산해 검증했습니다. MHz 색: 초록 = 현재보다 낮음, 빨강 = 높음.</>,
   rbStates: <><b>cluster OPP 조합이 같은 분배끼리 묶은 것.</b> 같은 OPP면 전력 차이가 1 mW 안팎이라 순위보다 “어떤 OPP 조합에 도달하느냐”가 중요합니다. 분할 수가 많을수록 그 상태로 가는 방법이 많다는 뜻.</>,
   rbBound: <><b>cluster를 OPP 한 단계 낮추는 데 필요한 util 감소량과 그만큼을 덜어 줄 수 있는 task.</b> 전압이 같은 구간이면 OPP를 낮춰도 이득이 작습니다 (mV 확인).</>,

@@ -354,6 +354,28 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
                     break
                 cur, cur_key = best_n[1], best_n[0]
 
+    # every "concentrate on one pool cluster" split is part of the strategy view (local search may skip them)
+    for ci in range(N):
+        record(masks_of(tuple([ci] * U)))
+    if method == "local":
+        # strategy view needs a good split for every cluster combination: move / swap search inside each subset
+        for size in range(2, N + 1):
+            for idx in itertools.combinations(range(N), size):
+                scur = tuple(home_idx[i] if home_idx[i] in idx else idx[0] for i in range(U))
+                skey = score(scur)
+                for _ in range(100):
+                    snx: tuple[tuple[bool, float], tuple[int, ...]] | None = None
+                    for i in range(U):
+                        for ci in idx:
+                            if ci != scur[i]:
+                                nb = scur[:i] + (ci,) + scur[i + 1:]
+                                sk = score(nb)
+                                if snx is None or sk < snx[0]:
+                                    snx = (sk, nb)
+                    if snx is None or not snx[0] < skey:
+                        break
+                    scur, skey = snx[1], snx[0]
+
     def assign_of(masks: tuple[int, ...]) -> tuple[int, ...]:
         return best_label(tuple(next(c for c in range(N) if masks[c] >> i & 1) for i in range(U)))
 
@@ -443,6 +465,67 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
         return out
 
     best_assign = assign_of(verified[0][0]) if verified else home_idx
+
+    # ---- strategy view: concentrate on one cluster vs spread over k clusters, then the BIG check
+    def total_with(masks: list[int], extra: dict[str, int]) -> tuple[float, bool, float, dict[str, float]]:
+        sts = [state(c, m) for c, m in zip(pool, masks)]
+        fx = {c: (state(c, extra[c]) if c in extra else s) for c, s in fixed_state.items()}
+        idle = math.prod(s["idle"] for s in fx.values()) * math.prod(s["idle"] for s in sts)
+        busy = tuple(sorted([(c, s["mhz"]) for c, s in zip(pool, sts) if s["busy"]]
+                            + [(c, s["mhz"]) for c, s in fx.items() if s["busy"]]))
+        dmhz, dmw = dsu_of(busy, 1.0 - idle)
+        mw = sum(s["mw"] for s in fx.values()) + sum(s["mw"] for s in sts) + dmw
+        ok = all(s["feasible"] for s in fx.values()) and all(s["feasible"] for s in sts)
+        return mw, ok, dmhz, {c: fx[c]["mhz"] for c in extra}
+
+    by_pattern: dict[tuple[str, ...], tuple[tuple[int, ...], tuple[float, bool, float]]] = {}
+    for key, val in results.items():
+        pat = tuple(pool[i] for i, m in enumerate(key) if m)
+        held_p = by_pattern.get(pat)
+        if held_p is None or (not val[1], val[0]) < (not held_p[1][1], held_p[1][0]):
+            by_pattern[pat] = (key, val)
+    strategy_rows = []
+    for pat, (key, _val) in sorted(by_pattern.items(), key=lambda kv: (len(kv[0]), not kv[1][1][1], kv[1][1][0])):
+        assign = assign_of(key)
+        case = full_eval(assign)
+        desc = describe(assign, case)
+        strategy_rows.append({"kind": "concentrate" if len(pat) == 1 else "spread", "clusters": list(pat), "ways": len(pat),
+                              "total_mw": desc["total_mw"], "delta_mw": desc["delta_mw"], "feasible": desc["feasible"], "mhz": desc["mhz"],
+                              "mw": desc["mw"], "assign": desc["assign"], "moved": desc["moved"], "min_slack_ms": desc.get("min_slack_ms")})
+    feas = [r for r in strategy_rows if r["feasible"]]
+    conc = min((r for r in feas if r["kind"] == "concentrate"), key=lambda r: r["total_mw"], default=None)
+    sprd = min((r for r in feas if r["kind"] == "spread"), key=lambda r: r["total_mw"], default=None)
+    if conc and sprd:
+        gain = round(conc["total_mw"] - sprd["total_mw"], 4)
+        winner = "tie" if abs(gain) <= spec.equal_mw else ("spread" if gain > 0 else "concentrate")
+    else:
+        gain, winner = None, ("concentrate" if conc else "spread" if sprd else "none")
+
+    # BIG check: from the best MID split, move one unit (or all of them) onto a cluster outside the pool
+    big_check: dict[str, Any] | None = None
+    big = [c for c in fixed_clusters if any(h in f"{ctx.by_name[c].core_type or ''} {c}".lower() for h in BIG_HINT)]
+    if big:
+        base_assign = assign_of(feasible[0]) if feasible else home_idx
+        base_masks = masks_of(base_assign)
+        base_mw = total_with(base_masks, {})[0]
+        moves: list[dict[str, Any]] = []
+        for bc in big:
+            for i in range(U):
+                masks = list(base_masks)
+                masks[base_assign[i]] &= ~(1 << i)
+                bmw, bok, bdmhz, bmhz = total_with(masks, {bc: 1 << i})
+                moves.append({"unit": "+".join(units[i]), "cluster": bc, "total_mw": round(bmw, 4), "delta_mw": round(bmw - base_mw, 4),
+                              "feasible": bok, "mhz": bmhz[bc], "dsu_mhz": bdmhz})
+            bmw, bok, bdmhz, bmhz = total_with([0] * N, {bc: full})
+            moves.append({"unit": "(전체)", "cluster": bc, "total_mw": round(bmw, 4), "delta_mw": round(bmw - base_mw, 4),
+                          "feasible": bok, "mhz": bmhz[bc], "dsu_mhz": bdmhz})
+        moves.sort(key=lambda m: (not m["feasible"], m["delta_mw"]))
+        best_big = next((m for m in moves if m["feasible"]), None)
+        big_check = {"clusters": big, "base_mw": round(base_mw, 4), "base_assign": {"+".join(units[i]): pool[a] for i, a in enumerate(base_assign)},
+                     "moves": moves[:12], "best": best_big,
+                     "gain": bool(best_big and float(best_big["delta_mw"]) < -spec.equal_mw)}
+    strategies = {"rows": strategy_rows, "best_concentrate": conc, "best_spread": sprd, "winner": winner,
+                  "spread_gain_mw": gain, "complete": method == "exhaustive", "big_check": big_check}
     return {
         "fps": fps, "period_ms": round(period, 4), "pool": pool, "default_pool": default_pool(model),
         "clusters": [{"name": c.name, "core_type": c.core_type, "cores": c.cores, "in_pool": c.name in pool,
@@ -459,7 +542,7 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
         "feasible_count": len(feasible), "verified": len(verified),
         "reference": describe(home_idx, ref_case) | {"label": "현재 (측정 배치)"},
         "best": cases[0] if cases else None,
-        "cases": cases, "opp_states": opp_states[:40], "opp_state_count": len(opp_states), "curve": curve,
+        "cases": cases, "strategies": strategies, "opp_states": opp_states[:40], "opp_state_count": len(opp_states), "curve": curve,
         "boundaries": {"reference": boundaries(home_idx), "best": boundaries(best_assign)},
         "dsu_model": dsu_pol.describe() if dsu_pol else None,
         "dsu_measured": prep.dsu_res,
