@@ -4,13 +4,32 @@ import { TOPO, colorMap, linkPath, topoLayout } from '../lib/topology'
 import { usePref } from './Layout'
 import { DataTable, type Column } from './DataTable'
 
-const VIA_STYLE: Record<Via, { stroke: string; fill: string; dash?: string; label: string }> = {
-  OTF: { stroke: '#2563EB', fill: '#EFF4FF', label: 'OTF' },
-  DMA: { stroke: '#F97316', fill: '#FFF4EA', label: 'DMA' },
-  history: { stroke: '#4F46E5', fill: '#EEF2FF', label: 'history' },
-  stat: { stroke: '#B45309', fill: '#FFF7E6', dash: '4 3', label: 'stat' },
-  optional: { stroke: '#A1A1AA', fill: '#F4F4F5', dash: '4 3', label: 'off' },
-  ctrl: { stroke: '#A16207', fill: '#FFFBEB', dash: '2 3', label: 'SW' },
+// Two independent visual axes (UX 2026-10-09):
+//   line / box border = how the data moves  → OTF (thin blue) · DMA (thick orange, memory) · SW (dotted violet, CPU trigger)
+//   box fill + tag    = what the data is    → IMG (image) · STAT (statistics) · HIST (previous-frame reference) · TRIG (SW trigger)
+// so a stat WDMA is drawn with the same solid DMA line as an image WDMA and only its tag / fill differ.
+export type PathKind = 'OTF' | 'DMA' | 'SW' | 'off'
+export type DataKind = 'image' | 'stat' | 'history' | 'trigger' | 'off'
+export const PATH_STYLE: Record<PathKind, { stroke: string; width: number; dash?: string; label: string }> = {
+  OTF: { stroke: '#2563EB', width: 1.4, label: 'OTF (on-the-fly)' },
+  DMA: { stroke: '#EA580C', width: 2.4, label: 'DMA (memory)' },
+  SW: { stroke: '#7C3AED', width: 1.4, dash: '1.5 3', label: 'SW (CPU trigger)' },
+  off: { stroke: '#A1A1AA', width: 1.2, dash: '4 3', label: 'off (disabled)' },
+}
+export const DATA_STYLE: Record<DataKind, { fill: string; tag: string; tagColor: string; label: string }> = {
+  image: { fill: '#FFFFFF', tag: 'IMG', tagColor: '#1F2430', label: 'image' },
+  stat: { fill: '#FEF3C7', tag: 'STAT', tagColor: '#92400E', label: 'stat (3A · histogram …)' },
+  history: { fill: '#E0E7FF', tag: 'HIST', tagColor: '#3730A3', label: 'history (prev frame)' },
+  trigger: { fill: '#F5F3FF', tag: 'TRIG', tagColor: '#6D28D9', label: 'SW trigger · IRQ' },
+  off: { fill: '#F4F4F5', tag: 'OFF', tagColor: '#71717A', label: 'disabled' },
+}
+export const pathOf = (v: Via): PathKind => (v === 'OTF' ? 'OTF' : v === 'ctrl' ? 'SW' : v === 'optional' ? 'off' : 'DMA')
+export const dataOf = (v: Via): DataKind => (v === 'stat' ? 'stat' : v === 'history' ? 'history' : v === 'ctrl' ? 'trigger' : v === 'optional' ? 'off' : 'image')
+/** "WDMA · STAT", "RDMA · HIST", "OTF out · IMG", "SW · TRIG" */
+export function portKindLabel(p: Pick<Port, 'via' | 'dir'>): string {
+  const path = pathOf(p.via), data = DATA_STYLE[dataOf(p.via)].tag
+  const how = path === 'DMA' ? (p.dir === 'in' ? 'RDMA' : 'WDMA') : path === 'OTF' ? `OTF ${p.dir}` : path === 'SW' ? 'SW' : 'off'
+  return `${how} · ${data}`
 }
 
 const ROW = 44, GAP = 8, PW = 250, CW = 250, COL_GAP = 70, TOP = 38
@@ -24,17 +43,20 @@ function ratio(a: string, b: string | undefined): string {
 }
 
 function PortBox({ p, x, y, inSize }: { p: Port; x: number; y: number; inSize?: string }) {
-  const st = VIA_STYLE[p.via]
+  const ps = PATH_STYLE[pathOf(p.via)], ds = DATA_STYLE[dataOf(p.via)]
   const l2 = [p.buffer, [p.size, p.format, p.bit ? `${p.bit}b` : '', p.comp && p.comp !== 'COMP_OFF' ? p.comp.replace('COMP_', '') : ''].filter(Boolean).join(' ')].filter(Boolean).join(' · ')
   const r = p.dir === 'out' && p.size && inSize ? ratio(inSize, p.size) : ''
+  // keep the port name clear of the right-aligned "WDMA · STAT ↓2.00" tag (mono 11px ≈ 6.7 px/char, tag 9px ≈ 5.6)
+  const tagChars = portKindLabel(p).length + (r ? r.length + 1 : 0)
+  const nameMax = Math.max(12, Math.floor((PW - 24 - tagChars * 5.6) / 6.7))
   return (
     <g opacity={p.enabled ? 1 : 0.55}>
-      <rect x={x} y={y} width={PW} height={ROW} rx={6} fill={st.fill} stroke={st.stroke} strokeDasharray={st.dash} />
-      <text x={x + 8} y={y + 15} fontSize={11} fontWeight={700} fontFamily="var(--mono)" fill="#1F2430">{p.port.length > 30 ? p.port.slice(0, 29) + '…' : p.port}</text>
-      <text x={x + PW - 8} y={y + 15} fontSize={9} textAnchor="end" fill={st.stroke} fontWeight={700}>{st.label}{r ? ` ${r}` : ''}</text>
+      <rect x={x} y={y} width={PW} height={ROW} rx={6} fill={ds.fill} stroke={ps.stroke} strokeWidth={ps.width > 2 ? 1.8 : 1.1} strokeDasharray={ps.dash} />
+      <text x={x + 8} y={y + 15} fontSize={11} fontWeight={700} fontFamily="var(--mono)" fill="#1F2430">{p.port.length > nameMax ? p.port.slice(0, nameMax - 1) + '…' : p.port}</text>
+      <text x={x + PW - 8} y={y + 15} fontSize={9} textAnchor="end" fontWeight={700}><tspan fill={ps.stroke}>{portKindLabel(p).split(' · ')[0]}</tspan><tspan fill={ds.tagColor}> · {ds.tag}</tspan>{r ? <tspan fill="#3B3F4A"> {r}</tspan> : null}</text>
       <text x={x + 8} y={y + 29} fontSize={9.5} fontFamily="var(--mono)" fill="#3B3F4A">{(l2 || p.peer || '').slice(0, 42)}</text>
       <text x={x + 8} y={y + 40} fontSize={9} fill="var(--muted)">{p.dir === 'in' ? '← ' : '→ '}{p.peer ?? ''}{p.mb ? ` · ${p.mb.toFixed(2)} MB/f` : ''}{p.enabled ? '' : ' · disabled'}</text>
-      <title>{[p.port, p.buffer, l2, p.peer, p.note].filter(Boolean).join('\n')}</title>
+      <title>{[p.port, `${PATH_STYLE[pathOf(p.via)].label} · ${ds.label}`, p.buffer, l2, p.peer, p.note].filter(Boolean).join('\n')}</title>
     </g>
   )
 }
@@ -88,7 +110,7 @@ export function IpDiagram({ ip }: { ip: IpModel }) {
       {ins.map((p, i) => {
         const y = TOP + i * (ROW + GAP)
         return <g key={`i${i}`}><PortBox p={p} x={0} y={y} />
-          <path d={`M${PW} ${y + ROW / 2} C ${PW + 35} ${y + ROW / 2}, ${cx - 35} ${midY}, ${cx} ${midY}`} fill="none" stroke={VIA_STYLE[p.via].stroke} strokeDasharray={VIA_STYLE[p.via].dash} strokeWidth={1.4} markerEnd="url(#ipa)" opacity={0.75} /></g>
+          <path d={`M${PW} ${y + ROW / 2} C ${PW + 35} ${y + ROW / 2}, ${cx - 35} ${midY}, ${cx} ${midY}`} fill="none" stroke={PATH_STYLE[pathOf(p.via)].stroke} strokeDasharray={PATH_STYLE[pathOf(p.via)].dash} strokeWidth={PATH_STYLE[pathOf(p.via)].width} markerEnd="url(#ipa)" opacity={0.75} /></g>
       })}
       {!ins.length && <text x={10} y={TOP + 20} fontSize={11} fill="var(--faint)">입력 port 정보 없음</text>}
       <rect x={cx} y={TOP} width={CW} height={coreH} rx={10} fill="var(--ip-fill)" stroke="var(--ip-line)" strokeWidth={1.4} />
@@ -109,7 +131,7 @@ export function IpDiagram({ ip }: { ip: IpModel }) {
       {outs.map((p, i) => {
         const y = TOP + i * (ROW + GAP)
         return <g key={`o${i}`}>
-          <path d={`M${cx + CW} ${midY} C ${cx + CW + 35} ${midY}, ${ox - 35} ${y + ROW / 2}, ${ox} ${y + ROW / 2}`} fill="none" stroke={VIA_STYLE[p.via].stroke} strokeDasharray={VIA_STYLE[p.via].dash} strokeWidth={1.4} markerEnd="url(#ipa)" opacity={0.75} />
+          <path d={`M${cx + CW} ${midY} C ${cx + CW + 35} ${midY}, ${ox - 35} ${y + ROW / 2}, ${ox} ${y + ROW / 2}`} fill="none" stroke={PATH_STYLE[pathOf(p.via)].stroke} strokeDasharray={PATH_STYLE[pathOf(p.via)].dash} strokeWidth={PATH_STYLE[pathOf(p.via)].width} markerEnd="url(#ipa)" opacity={0.75} />
           <PortBox p={p} x={ox} y={y} inSize={ip.inSize} /></g>
       })}
       {!outs.length && <text x={ox + 10} y={TOP + 20} fontSize={11} fill="var(--faint)">출력 port 정보 없음</text>}
@@ -129,7 +151,7 @@ export function IpDiagram({ ip }: { ip: IpModel }) {
 const portCols: Column<Port>[] = [
   { key: 'use', label: '상태', width: 64, sort: (p) => (p.unused ? 2 : p.enabled ? 0 : 1), render: (p) => (p.unused ? <span className="badge buf-optional">미사용</span> : p.enabled ? <span className="badge buf-data">사용</span> : <span className="badge buf-stat">off</span>) },
   { key: 'dir', label: 'Dir', width: 52, sort: (p) => p.dir, render: (p) => (p.dir === 'in' ? 'IN' : 'OUT') },
-  { key: 'via', label: 'Path', width: 76, sort: (p) => p.via, render: (p) => <span style={{ color: VIA_STYLE[p.via].stroke, fontWeight: 600 }}>{VIA_STYLE[p.via].label}</span> },
+  { key: 'via', label: '경로 · 데이터', width: 116, sort: (p) => `${pathOf(p.via)}|${dataOf(p.via)}`, render: (p) => <span style={{ fontWeight: 600 }}><span style={{ color: PATH_STYLE[pathOf(p.via)].stroke }}>{portKindLabel(p).split(' · ')[0]}</span> · <span style={{ color: DATA_STYLE[dataOf(p.via)].tagColor, background: DATA_STYLE[dataOf(p.via)].fill, padding: '0 3px', borderRadius: 3 }}>{DATA_STYLE[dataOf(p.via)].tag}</span></span> },
   { key: 'port', label: 'Port', width: 210, sort: (p) => p.port, title: (p) => p.port, render: (p) => <span className="mono">{p.port}</span> },
   { key: 'buf', label: 'Buffer', width: 150, sort: (p) => p.buffer ?? null, render: (p) => <span className="mono">{p.buffer ?? '—'}</span> },
   { key: 'peer', label: 'Peer', width: 130, sort: (p) => p.peer ?? null, render: (p) => p.peer ?? '—' },
@@ -143,9 +165,9 @@ const portCols: Column<Port>[] = [
 
 type ColorKey = 'vdd' | 'blk'
 const LINK_STYLE: Record<IpLink['kind'], { stroke: string; dash?: string; label: string }> = {
-  OTF: { stroke: '#2563EB', label: 'OTF' },
-  M2M: { stroke: '#F97316', label: 'M2M (DMA · memory)' },
-  ctrl: { stroke: '#A16207', dash: '3 3', label: 'SW control' },
+  OTF: { stroke: PATH_STYLE.OTF.stroke, label: 'OTF' },
+  M2M: { stroke: PATH_STYLE.DMA.stroke, label: 'M2M (DMA · memory)' },
+  ctrl: { stroke: PATH_STYLE.SW.stroke, dash: PATH_STYLE.SW.dash, label: 'SW trigger (CPU)' },
 }
 
 /** All IPs and how they connect. Fill = voltage domain or BLK (translucent), click = details below. */
@@ -249,8 +271,12 @@ export function IpInternalView({ model, selectedPid, onSelect }: { model: Pipeli
           {ip.type !== 'sw' && <b className="mono" style={{ fontSize: 11 }}>RDMA {ip.rdma.used}{ip.rdma.total !== null ? `/${ip.rdma.total}` : ''} · WDMA {ip.wdma.used}{ip.wdma.total !== null ? `/${ip.wdma.total}` : ''} 사용</b>}
         </div>
         <div className="ipv-legend">
-          {(Object.keys(VIA_STYLE) as Via[]).map((v) => <span key={v} className="legend-item"><svg width="18" height="8"><rect x="1" y="1" width="16" height="6" rx="2" fill={VIA_STYLE[v].fill} stroke={VIA_STYLE[v].stroke} strokeDasharray={VIA_STYLE[v].dash} /></svg>{VIA_STYLE[v].label}</span>)}
-          <span className="faint">↓/↑ = 입력(처리 크기) 대비 출력 scale · 회색 점선 = IP catalog에 있으나 이 variant에서 미사용</span>
+          <b className="faint" style={{ fontSize: 11 }}>전달 경로 (선)</b>
+          {(['OTF', 'DMA', 'SW', 'off'] as PathKind[]).map((k) => <span key={k} className="legend-item"><svg width="24" height="8"><line x1="1" y1="4" x2="23" y2="4" stroke={PATH_STYLE[k].stroke} strokeWidth={PATH_STYLE[k].width} strokeDasharray={PATH_STYLE[k].dash} /></svg>{PATH_STYLE[k].label}</span>)}
+          <span className="vsep" />
+          <b className="faint" style={{ fontSize: 11 }}>데이터 종류 (칸 색 · tag)</b>
+          {(['image', 'stat', 'history', 'trigger'] as DataKind[]).map((k) => <span key={k} className="legend-item"><span style={{ fontSize: 10, fontWeight: 700, color: DATA_STYLE[k].tagColor, background: DATA_STYLE[k].fill, border: '1px solid #D4D4D8', borderRadius: 3, padding: '0 4px' }}>{DATA_STYLE[k].tag}</span>{DATA_STYLE[k].label}</span>)}
+          <span className="faint">예: stat WDMA = 주황 실선(DMA) + STAT · ↓/↑ = 입력 대비 출력 scale · 회색 점선 칸 = catalog에 있으나 이 variant 미사용</span>
         </div>
         <div className="ipv-svg"><IpDiagram ip={ip} /></div>
         <div className="ipv-table"><DataTable id="ip.ports" columns={portCols} rows={rows} rowKey={(p) => `${p.dir}|${p.port}|${p.buffer ?? ''}|${p.peer ?? ''}`} /></div>

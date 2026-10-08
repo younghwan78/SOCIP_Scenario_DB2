@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from sqlalchemy.orm import Session
 
 from scenario_db.api.schemas.simulation import SimulateRequest
@@ -150,3 +152,22 @@ def analyze_timing_budget_fleet(
         rows=out,
         errors=errors,
     )
+
+
+def analyze_dvfs_whatif_request(db: Session, request: Any) -> dict[str, Any]:
+    """DVFS level +/-k what-if for one variant (``sim.timing_budget.dvfs_level_whatif``)."""
+    from scenario_db.sim.timing_budget import dvfs_level_whatif
+
+    shim = _shim(request, request.variant_id)
+    profile = _apply_config_profile(db, shim)
+    try:
+        graph, tables, ref = _load(db, shim, request.use_default_dvfs)
+        options = with_cpu_profile(db, request.options, request.scenario_id, request.variant_id)
+        out = dvfs_level_whatif(graph, options, config=shim.config, dvfs_tables=tables,
+                                shifts=tuple(sorted(set(request.shifts))), domains=request.domains)
+    except LookupError as exc:
+        raise NotFoundError(str(exc)) from exc
+    except ValueError as exc:
+        raise UnprocessableError(str(exc)) from exc
+    return {"scenario_id": request.scenario_id, "variant_id": request.variant_id, "config_profile_ref": profile,
+            "dvfs_table_ref": ref, **out}

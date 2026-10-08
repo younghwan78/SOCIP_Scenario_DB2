@@ -61,6 +61,8 @@ export interface VariantResult {
   power_options?: PowerOptions
   /** engine rev 6+: every HW node's sim mode, coefficients and declared alternatives */
   ip_modes?: IpModeRow[]
+  /** API ≥ 2026-10-09: IQ/performance-keeping optimum + near-optimal window vs lossy optimum */
+  tiers?: Tiers
   /** false = list-view row (run?view=summary): fetch archApi.runVariant for slices / buffers / options */
   detail?: boolean
 }
@@ -85,10 +87,23 @@ export interface OptionResult {
   raw_delta_mw: number; raw_delta_pct: number | null
   attribution: { reference: string; delta_mw: number; by_category: Record<string, number>; factors: Factor[]; components?: Record<string, number> }
   fill_pct?: Record<string, number>; review_status?: ReviewStatus
+  /** API ≥ 2026-10-09: set Δ minus the Δ of the always-beneficial (fixed) options alone; null = not a superset */
+  effect_given_fixed?: number | null
 }
+/** Effect of adding one option to every set that lacks it (API ≥ 2026-10-09). */
+export interface OptionMarginal {
+  key: string; label: string; dimension: string; contexts: number; mean_mw: number; min_mw: number; max_mw: number
+  always_beneficial: boolean; sign_varies: boolean; fixed: boolean
+}
+export interface TierWindow {
+  best: ExpCase; near_pct: number; near_cases: number; near_mw: [number, number]; near_bw_mbs: [number, number]
+  dvfs_range: Record<string, [number, number]>; compression_always: string[]; compression_optional: string[]
+}
+export interface Tiers { keep: TierWindow | null; trade: TierWindow | null; trade_gain: { delta_mw: number; delta_mbs: number; iq_risk: number } | null }
 export interface PowerOptions {
   status: 'ok' | 'none' | 'skipped'; dimensions: OptionDimension[]; notes: string[]; sets: number; max_sets: number
   results: OptionResult[]; best: string | null; errors: { key: string; error: string }[]
+  marginal?: OptionMarginal[]; fixed?: string[]
 }
 export interface ItemReview { status: ReviewStatus; scope: 'variant' | 'scenario' | null; note: string | null; updated_by?: string | null; updated_at?: string | null }
 export interface BoardOptions {

@@ -223,7 +223,7 @@ export const api = {
   ipCatalog: (ipId: string) => getJson<IpCatalog>(`/ip-catalogs/${enc(ipId)}`),
   evidenceList: (scenarioId: string, variantId: string, projectRef?: string) => allPages<Evidence>('/evidence', { scenario_ref: scenarioId, variant_ref: variantId, project_ref: projectRef }, 200),
   evidence: (id: string) => getJson<Evidence>(`/evidence/${enc(id)}`),
-  simConfigs: (projectRef: string) => getJson<Paged<{ id: string; status?: string; version?: number }>>('/sim-config-profiles', { project_ref: projectRef, limit: 50 }),
+  simConfigs: (projectRef: string) => getJson<Paged<{ id: string; status?: string; version?: number; run_config?: { vbat?: number | null; pmic_efficiency?: number | null } }>>('/sim-config-profiles', { project_ref: projectRef, limit: 50 }),
   simulate: (req: SimRunRequest) => postJson<SimRunResponse>('/simulation/run', { persist: false, ...req }),
   predMeas: (predictionId: string, measurementId: string) => getJson<{ rows: Dict[]; summary: Dict; context: Dict }>('/compare/prediction-measurement', { prediction_id: predictionId, measurement_id: measurementId }),
 }

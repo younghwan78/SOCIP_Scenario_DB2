@@ -28,6 +28,12 @@ def coverage(scenario_id: str, db: Session = Depends(get_db)):
     return cal.coverage(db, scenario_id)
 
 
+@router.get("/calibration/ip-bandwidth")
+def ip_bandwidth(scenario_id: str, variant_id: str, measurement_id: str | None = None, db: Session = Depends(get_db)):
+    """Per-IP read / write bandwidth: newest simulation (DMA ports summed per IP) vs measured IP bandwidth."""
+    return cal.ip_bandwidth(db, scenario_id, variant_id, measurement_id)
+
+
 @router.get("/calibration/clock-residency")
 def clock_residency(scenario_id: str | None = None, db: Session = Depends(get_db)):
     """Measurements with clock-domain residency (CPU cluster · DSU · GPU): per-domain mean, high-OPP share, notes."""

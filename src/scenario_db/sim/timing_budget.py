@@ -158,6 +158,13 @@ class TimingBudgetOptions(BaseScenarioModel):
     # Stage model: each stage's SW runs on its own thread/core. True keeps the
     # scenario's CPU resource (e.g. one CPU_CAMERA) so cross-stage contention shows.
     shared_cpu: bool = False
+    # Throughput model of the NRT / Post stages.
+    #   "stage"     (legacy): SW + HW of a stage must fit one frame period -> HW clocks raised to
+    #               period - SW (the stage behaves like one frame-synchronous block).
+    #   "pipelined": stages are decoupled by M2M buffers. Each IP keeps the rule clock (period x
+    #               (1 - rt_margin)), each SW task must fit one period on its own thread; a chain longer
+    #               than the period only adds latency. fps is judged by the output interval.
+    throughput_model: Literal["stage", "pipelined"] = "stage"
     cpu: CpuPowerConfig = Field(default_factory=CpuPowerConfig)
     # CPU term: "flat" = coeff*f*V^2*util at one OPP (default); "profile" = measured per-frame CPU profile
     # replayed through EAS + schedutil with SW growth (sim/cpu_scenario.py). The service resolves
@@ -375,7 +382,12 @@ def _plan(graph, options: TimingBudgetOptions, config: SimulationRunConfig) -> d
     for st in STAGES:
         nodes = [n for n in workloads if stage.get(n) == st]
         sw_total = _critical_sw(sw_items[st], edges)
-        if st in ("nrt", "post"):
+        longest_sw = max((i["runtime_ms"] for i in sw_items[st]), default=0.0)
+        if st in ("nrt", "post") and options.throughput_model == "pipelined":
+            margin = options.rt_margin
+            budget = (1.0 - margin) * period
+            feasible = longest_sw <= period
+        elif st in ("nrt", "post"):
             budget = period - sw_total
             margin = 1.0 - budget / ((1.0 + h_blank) * period)
             feasible = margin <= _MAX_MARGIN
@@ -385,6 +397,7 @@ def _plan(graph, options: TimingBudgetOptions, config: SimulationRunConfig) -> d
             budget = (1.0 - margin) * period
             feasible = True
         budgets[st] = {
+            "longest_sw_ms": longest_sw,
             "sw_ms": sw_total,
             "budget_ms": budget,
             "margin": margin,
@@ -628,7 +641,9 @@ def _apply_sw(inputs: SimulationInputs, plan: dict, options: TimingBudgetOptions
         if task.get("task_type") == "sw":
             own_stage = str(task.get("resource_id") or "").startswith("stage:")
             if not options.shared_cpu and not own_stage and not plan["explicit_resource"].get(tid):
-                task["resource_id"] = f"CPU_{plan['stage'].get(tid, 'nrt').upper()}"
+                pipelined = options.throughput_model == "pipelined" and plan["stage"].get(tid) in ("nrt", "post")
+                # pipelined: every SW task is its own thread (frame N+1 can start while N is downstream)
+                task["resource_id"] = f"CPU_{tid}" if pipelined else f"CPU_{plan['stage'].get(tid, 'nrt').upper()}"
             if tid in items:
                 task["duration_ms"] = max(_MIN_TASK_MS, items[tid]["runtime_ms"])
             else:  # EIS off
@@ -734,6 +749,9 @@ def _report(graph, options, plan, rule_run, run, dvfs_tables) -> dict[str, Any]:
                 "overhead_ms": round(overhead, 3),
                 "margin": round(b["margin"], 4),
                 "feasible": b["feasible"],
+                "throughput": options.throughput_model if st in ("nrt", "post") else "frame",
+                "longest_sw_ms": round(b["longest_sw_ms"], 3),
+                "chain_ms": round(b["sw_ms"] + stage_hw.get(st, 0.0), 3),
                 "fill_pct": round(100 * (b["sw_ms"] + stage_hw.get(st, 0.0)) / period, 1)
                 if st in ("nrt", "post")
                 else round(100 * stage_hw.get(st, 0.0) / period, 1),
@@ -900,7 +918,9 @@ def _power_bw(result: SimRunResult, plan: dict, options: TimingBudgetOptions, pe
 def _verdict(stages, intervals, ips, domains=None) -> dict[str, Any]:
     reasons = []
     for s in stages:
-        if not s["feasible"]:
+        if not s["feasible"] and s.get("throughput") == "pipelined":
+            reasons.append(f"{s['name']}: SW task {s['longest_sw_ms']:.2f} ms > frame period (한 thread가 1 frame 안에 못 끝남)")
+        elif not s["feasible"]:
             reasons.append(f"{s['name']}: SW {s['sw_ms']:.2f} ms leaves no HW budget")
     rt = next(s for s in stages if s["id"] == "rt")
     if rt["hw_ms"] > rt["budget_ms"] * 1.0001:
@@ -926,6 +946,12 @@ def _verdict(stages, intervals, ips, domains=None) -> dict[str, Any]:
     else:
         status = "ok"
     notes = []
+    period = intervals.get("target_ms") or 0.0
+    for s in stages:
+        if s.get("throughput") == "pipelined" and period and s["chain_ms"] > period * 1.0001:
+            extra = math.ceil(s["chain_ms"] / period) - 1
+            notes.append(f"{s['name']}: SW+HW {s['chain_ms']:.1f} ms > period {period:.1f} ms → buffering으로 latency +{extra} frame "
+                         "(fps는 출력 간격으로 판정)")
     for st in ("nrt", "post"):
         for d in (domains or {}).get(st, []):
             if d["rule_mhz"] and d["set_mhz"] > d["rule_mhz"] * 1.05:
@@ -1160,3 +1186,84 @@ def _profile_cpu(report: dict[str, Any], options: TimingBudgetOptions, params: A
                           profile_ref=options.cpu_profile_ref)
     except ValueError as exc:
         report["power"]["cpu_profile"] = {"kind": "flat", "note": f"profile CPU model failed: {exc}; flat CPU model kept"}
+
+
+# ------------------------------------------------------------ DVFS level what-if
+def _stage_slack(report: dict[str, Any]) -> dict[str, float]:
+    """SW time still available per stage at the current clocks (ms; negative = over).
+
+    RT / Output: HW budget left ((1-margin) period - HW). NRT / Post: "stage" model = period - (SW + HW);
+    "pipelined" = period - the longest single SW task (each SW task is its own thread).
+    """
+    period = float(report["period_ms"])
+    out: dict[str, float] = {}
+    for s in report["stages"]:
+        if s["id"] in ("nrt", "post"):
+            used = s.get("longest_sw_ms", s["sw_ms"]) if s.get("throughput") == "pipelined" else s["sw_ms"] + s["hw_ms"]
+            out[s["id"]] = round(period - used, 3)
+        else:
+            out[s["id"]] = round(s["budget_ms"] - s["hw_ms"], 3)
+    return out
+
+
+def _brief(report: dict[str, Any]) -> dict[str, Any]:
+    p, b = report["power"], report["bw"]
+    return {"total_mw": p["total_mw"], "cpu_mw": p["cpu_mw"], "hw_mw": p["hw_mw"], "bw_mw": p["bw_mw"], "bw_mbs": b["total_mbs"],
+            "verdict": report["verdict"]["status"], "reasons": report["verdict"]["reasons"][:3],
+            "intervals_ok": report["intervals"]["ok"], "latency_ms": report["latency"],
+            "slack_ms": _stage_slack(report),
+            "stage_hw_ms": {s["id"]: s["hw_ms"] for s in report["stages"]}}
+
+
+def dvfs_level_whatif(graph, options: TimingBudgetOptions, *, config: SimulationRunConfig | None = None,
+                      dvfs_tables: dict[str, DVFSTable] | None = None, shifts: tuple[int, ...] = (-2, -1, 1, 2),
+                      domains: list[str] | None = None) -> dict[str, Any]:
+    """Pin one DVFS domain k levels faster (+) / slower (-) than the resolved level and re-run the budget.
+
+    Answers the routine project question "if we raise / lower CAM by one level, what happens to the SW margin,
+    power and BW?". Every row is a full timing-budget run with ``config.dvfs_overrides`` for that domain.
+    """
+    tables = dvfs_tables or {}
+    config = config or SimulationRunConfig()
+    opts = options.model_copy(update={"include_whatif": False})
+    base = analyze_timing_budget(graph, opts, config=config, dvfs_tables=tables)
+    found: dict[str, dict[str, Any]] = {}
+    for ip in base["ips"]:
+        g = ip.get("dvfs_group")
+        if not g or g not in tables or ip.get("dvfs_level") is None:
+            continue
+        d = found.setdefault(g, {"domain": g, "level": ip["dvfs_level"], "mhz": ip["set_clock_mhz"], "mv": ip["voltage_mv"],
+                                 "stages": set(), "ips": []})
+        d["stages"].add(ip["stage"])
+        d["ips"].append(ip["node"])
+    base_brief = _brief(base)
+    rows: list[dict[str, Any]] = []
+    for g, info in sorted(found.items()):
+        if domains and g not in domains:
+            continue
+        ladder = sorted(tables[g].levels, key=lambda lv: lv.speed_mhz)      # slow -> fast
+        idx = next((i for i, lv in enumerate(ladder) if lv.level == info["level"]), None)
+        if idx is None:
+            continue
+        for k in shifts:
+            j = idx + k
+            if not 0 <= j < len(ladder):
+                continue
+            target = ladder[j]
+            cfg = config.model_copy(update={"dvfs_overrides": {**config.dvfs_overrides, g: target.level}})
+            try:
+                rep = analyze_timing_budget(graph, opts, config=cfg, dvfs_tables=tables)
+            except ValueError as exc:
+                rows.append({"domain": g, "shift": k, "level": target.level, "mhz": target.speed_mhz, "error": str(exc)})
+                continue
+            brief = _brief(rep)
+            rows.append({"domain": g, "shift": k, "level": target.level, "mhz": target.speed_mhz, **brief,
+                         "delta_mw": round(brief["total_mw"] - base_brief["total_mw"], 2),
+                         "delta_hw_mw": round(brief["hw_mw"] - base_brief["hw_mw"], 2),
+                         "delta_bw_mw": round(brief["bw_mw"] - base_brief["bw_mw"], 2),
+                         "delta_mbs": round(brief["bw_mbs"] - base_brief["bw_mbs"], 1),
+                         "delta_slack_ms": {s: round(v - base_brief["slack_ms"].get(s, 0.0), 3) for s, v in brief["slack_ms"].items()}})
+    return {"base": base_brief, "fps": base["fps"], "period_ms": base["period_ms"],
+            "throughput_model": options.throughput_model,
+            "domains": [{**{k: v for k, v in d.items() if k != "stages"}, "stages": sorted(d["stages"])} for d in found.values()],
+            "rows": rows}
