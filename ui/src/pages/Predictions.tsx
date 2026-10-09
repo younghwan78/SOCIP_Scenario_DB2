@@ -13,6 +13,9 @@ import { KIND_LABEL, RISK_CLASS, RISK_LABEL, assessAll, type RiskLevel, type Ris
 import { calibrationApi } from '../lib/calibration'
 import { batteryNote, maText, useBattery, type Battery } from '../lib/battery'
 import { usePref } from '../components/Layout'
+import { JUDGE_CLASS, JUDGE_LABEL, reviewApi, useReferences, type References } from '../lib/review'
+import { ThermalWatchView } from '../components/ThermalWatch'
+import { useSimProfiles } from '../lib/simProfile'
 import type { Ctx as AppCtx } from '../App'
 
 const regProv = (r: BoardRow): Prov => ({
@@ -36,7 +39,13 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
     .then((list) => { const m = new Map<string, number>(); let ok = false
       for (const x of list) { if (!x) continue; ok = true; for (const [vid, c] of Object.entries(x[1])) m.set(`${x[0]}|${vid}`, c.measurement) }
       return ok ? m : undefined }), [scenIds.join(',')])
-  const risk = assessAll(rows, { target_mw: target, measured: covQ.data ?? undefined })
+  const refs = useReferences(ctx.project)
+  const simRef = useSimProfiles(ctx.project, ctx.params.cfg)
+  const risk = assessAll(rows, { target_mw: target, measured: covQ.data ?? undefined, references: refs?.references,
+    tolerance_pct: refs?.tolerance_pct, max_latency_frames: refs?.policy.max_latency_frames })
+  const watch = (refs?.policy.thermal_watch.length ?? 0) > 0
+  const twQ = useAsync(() => (watch && ctx.project ? reviewApi.thermalWatch(ctx.project, simRef.ref) : Promise.resolve(null)), [watch, ctx.project, simRef.ref, tick])
+  const staleRows = rows.filter((r) => r.throughput_model === 'stage' && refs?.policy.throughput_model === 'pipelined').length
   const sel = rows.find((r) => r.id === ctx.params.v)
   const choose = (vid: string) => ctx.navigate(undefined, { v: vid === ctx.params.v ? undefined : vid }, true)
   const changed = rows.filter((r) => r.previous)
@@ -82,7 +91,7 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
           <button className={all ? 'on' : ''} onClick={() => ctx.navigate(undefined, { all: '1', v: undefined }, true)}>전체</button>
         </div>
         <label className="faint" style={{ fontSize: 12, display: 'inline-flex', gap: 6, alignItems: 'center' }} title="고객 성능·발열 scenario의 power 목표 (모든 행에 같은 값). 비우면 상대 비교만. URL에 남아 공유 가능">
-          목표 power <input className="input" type="number" min={0} step={10} style={{ width: 80, padding: '3px 6px' }} value={targetRaw} placeholder="mW"
+          {refs?.policy.power_reference ? '목표 (전과제 값 없는 variant)' : '목표 power'} <input className="input" type="number" min={0} step={10} style={{ width: 80, padding: '3px 6px' }} value={targetRaw} placeholder="mW"
             onChange={(e) => { setTargetPref(e.target.value); ctx.navigate(undefined, { target: e.target.value || undefined }, true) }} /> mW
           {target && <span className="mono">({maText(target, battery)}@Vbat)</span>}</label>
         <span className="faint" style={{ fontSize: 12 }}>current 예측은 조합 탐색에서만 등록됩니다 (기본 = 최저 power 조합).</span>
@@ -109,7 +118,12 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
         <div className="tb-grid">
           {sel && <ChangeCard key={sel.id} row={sel} />}
           {sel && <OptionsCard key={`o-${sel.id}`} row={sel} onChanged={() => setTick((t) => t + 1)} />}
-          <RiskCard risk={risk} target={target} battery={battery} ctx={ctx} measuredKnown={!!covQ.data} onPick={choose} />
+          <RiskCard risk={risk} target={target} battery={battery} ctx={ctx} measuredKnown={!!covQ.data} onPick={choose} refs={refs} staleRows={staleRows} />
+          {watch && <Card id="pr-thermal" title="② 발열 대응 — power 감소 요청 대비 (thermal watch)" defaultWide minHeight={160}
+            note="고객 board 발열로 power 감소 요청이 오는 scenario · 기준 = 화질·fps 유지 최적 · lever별 절감 mW/mA와 희생 · −10/−20% 요청 충족 여부">
+            {twQ.error ? <div className="err">{twQ.error}</div> : !twQ.data ? <div className="empty">계산 중… (IP clock level what-if 포함)</div>
+              : <ThermalWatchView data={twQ.data} battery={battery} onOpen={(sc, v) => ctx.navigate('timing', { scenario: sc, variant: v })} />}
+          </Card>}
           <Card id="pr-table" title="예측 현황 (current)" note="header 클릭 = 정렬 · 행 클릭 = 변경 원인" defaultWide minHeight={260}>
             <SplitLegend />
             <div className="table-x">
@@ -191,7 +205,9 @@ function show(v: unknown): string {
 const LEVELS: RiskLevel[] = ['high', 'med', 'low', 'ok']
 
 /** Risk · Focus: which predictions threaten the customer's performance / thermal target and what to work on. */
-function RiskCard({ risk, target, battery, ctx, measuredKnown, onPick }: { risk: RiskRow[]; target: number | null; battery: Battery; ctx: AppCtx; measuredKnown: boolean; onPick: (id: string) => void }) {
+function RiskCard({ risk, target, battery, ctx, measuredKnown, onPick, refs, staleRows }: { risk: RiskRow[]; target: number | null; battery: Battery; ctx: AppCtx; measuredKnown: boolean; onPick: (id: string) => void
+  refs: References | null; staleRows: number }) {
+  const pr = refs?.policy.power_reference
   const [showAll, setShowAll] = useState(false)
   const count = (l: RiskLevel) => risk.filter((x) => x.level === l).length
   const listed = risk.filter((x) => x.level !== 'ok').concat(risk.filter((x) => x.level === 'ok').slice(0, 3))
@@ -203,22 +219,25 @@ function RiskCard({ risk, target, battery, ctx, measuredKnown, onPick }: { risk:
   const go = (page: string | undefined, r: RiskRow['row']) => page && ctx.navigate(page as Parameters<AppCtx['navigate']>[0], { scenario: r.scenario_id, variant: r.variant_id })
   return (
     <Card id="pr-risk" title="① Risk · Focus — 고객 성능/발열 목표 대비" defaultWide minHeight={200}
-      note={`성능 = timing 판정 · SW 여유 / 발열 = ${target ? `목표 ${target.toFixed(0)} mW (${maText(target, battery)})` : '목표 미설정 → 상대 비교 (툴바에서 입력)'} / 신뢰도 = 실측 · sim 검증 · range`}>
+      note={`성능 = fps 유지 (timing 판정 · ${refs?.policy.throughput_model === 'pipelined' ? 'pipeline buffering 기준' : 'stage 기준'}) · SW 여유 / 소비전류 = ${pr ? `전과제 대비 (≤ +${pr.tolerance_pct}% 유사)` : target ? `목표 ${target.toFixed(0)} mW (${maText(target, battery)})` : '목표 미설정 → 상대 비교'} / 신뢰도 = 실측 · sim 검증 · range`}>
+      {pr?.source_note && <div className="faint" style={{ fontSize: 11.5, marginBottom: 4 }}>전과제 값: {pr.project_ref ?? '직접 지정'} · {pr.source_note}</div>}
+      {staleRows > 0 && <div className="lib-note warn" style={{ marginBottom: 6 }}>{staleRows}건은 이전 판정 기준(stage)으로 등록된 예측입니다 — 과제 기준은 pipeline buffering. 조합 탐색을 다시 실행해 등록하세요.</div>}
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 8, fontSize: 12.5 }}>
         {LEVELS.map((l) => <span key={l} className={`badge ${RISK_CLASS[l]}`}>{RISK_LABEL[l]} {count(l)}</span>)}
-        {target && <span className="faint">목표 초과 {over.length}건{over.length ? ` · 최대 +${Math.max(...over.map((x) => x.gap_mw ?? 0)).toFixed(0)} mW` : ''}</span>}
+        {(target || pr) && <span className="faint">{pr ? '전과제 초과' : '목표 초과'} {over.length}건{over.length ? ` · 최대 +${Math.max(...over.map((x) => x.gap_mw ?? 0)).toFixed(0)} mW` : ''}</span>}
         {!measuredKnown && <span className="faint">실측 coverage를 불러오지 못해 신뢰도는 sim 검증·range만 사용</span>}
         <span className="grow" />
         {[...levers].sort((a, b) => b[1].n - a[1].n).map(([k, v]) => <span key={k} className="chip" title="위험 행의 첫 번째 focus 기준">{LEVER[k] ?? k} {v.n}{v.gain ? ` · ${v.gain.toFixed(0)} mW` : ''}</span>)}
       </div>
       <div className="table-x"><table className="tb-mini-table" style={{ width: '100%' }}>
-        <thead><tr><th>Risk</th><th>Variant</th><th style={{ textAlign: 'right' }}>Power</th><th style={{ textAlign: 'right' }}>목표 대비</th><th style={{ textAlign: 'right' }}>BW</th><th>최대 비중</th><th>위험 요인</th><th>먼저 볼 것 (focus)</th></tr></thead>
+        <thead><tr><th>Risk</th><th>Variant</th><th style={{ textAlign: 'right' }}>Power</th><th style={{ textAlign: 'right' }}>{pr ? '전과제 대비' : '목표 대비'}</th><th style={{ textAlign: 'right' }}>BW</th><th>최대 비중</th><th>위험 요인</th><th>먼저 볼 것 (focus)</th></tr></thead>
         <tbody>{shown.map((x) => (
           <tr key={x.row.id} onClick={() => onPick(x.row.id)} style={{ cursor: 'pointer' }}>
             <td><span className={`badge ${RISK_CLASS[x.level]}`}>{RISK_LABEL[x.level]}</span></td>
             <td className="mono" style={{ fontSize: 12 }}>{short(x.row.variant_id)}<div className="faint" style={{ fontSize: 10.5 }}>{x.row.scenario_id} · {fmt(x.row.fps, 0)} fps</div></td>
             <td className="mono" style={{ textAlign: 'right' }}>{fmt(x.row.power.total_mw, 0)} mW<div className="faint" style={{ fontSize: 10.5 }}>{maText(x.row.power.total_mw, battery)}</div></td>
-            <td className="mono" style={{ textAlign: 'right', color: (x.gap_mw ?? -1) > 0 ? 'var(--del-text)' : undefined }}>{x.gap_mw === null ? '—' : `${x.gap_mw > 0 ? '+' : ''}${x.gap_mw.toFixed(0)}`}</td>
+            <td className="mono" style={{ textAlign: 'right', color: (x.gap_mw ?? -1) > 0 ? 'var(--del-text)' : undefined }}>{x.gap_mw === null ? '—' : `${x.gap_mw > 0 ? '+' : ''}${x.gap_mw.toFixed(0)}`}
+              {x.judge && <div><span className={`badge ${JUDGE_CLASS[x.judge.status]}`} style={{ fontSize: 10.5 }}>{JUDGE_LABEL[x.judge.status]}</span></div>}</td>
             <td className="mono" style={{ textAlign: 'right' }}>{fmt(x.row.bw_mbs / 1000, 2)} GB/s</td>
             <td style={{ fontSize: 12 }}>{x.dominant.part} {(100 * x.dominant.share).toFixed(0)}%</td>
             <td style={{ minWidth: 340 }}><ul className="risk-list">{x.risks.length ? x.risks.map((k) => <li key={k.text}><span className="rk">{KIND_LABEL[k.kind]}</span><span>{k.text}</span></li>) : <li className="faint">—</li>}</ul></td>

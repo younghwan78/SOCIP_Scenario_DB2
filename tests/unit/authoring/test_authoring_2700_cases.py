@@ -41,6 +41,8 @@ POST_EJECT_EDITED_2600 = (
 )
 # 2026-10: SAMPLE GPU V-f / leakage (clock-residency GPU power estimate) added to the 2600 GPU IP only.
 POST_EJECT_GPU_2600 = "platforms/exynos2600/docs/00_hw/ip-gpu-s5e9965.yaml"
+# 2026-10: review_policy (throughput / power reference / thermal watch) added to the 2600 project only.
+POST_EJECT_PROJECT_2600 = "projects/sm-s947b/project.yaml"
 
 
 def _strip_post_eject(path: Path) -> None:
@@ -75,6 +77,10 @@ def root(tmp_path: Path) -> Path:
     for key in ("vf_table_sample", "leakage_sample"):
         gdoc["capabilities"]["power_model"].pop(key, None)
     gpu.write_text(yaml.safe_dump(gdoc, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    proj = r / POST_EJECT_PROJECT_2600
+    pdoc = yaml.safe_load(proj.read_text(encoding="utf-8"))
+    (pdoc["document"].get("globals") or {}).pop("review_policy", None)
+    proj.write_text(yaml.safe_dump(pdoc, allow_unicode=True, sort_keys=False), encoding="utf-8")
     return r
 
 

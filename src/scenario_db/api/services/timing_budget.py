@@ -20,6 +20,7 @@ from scenario_db.exceptions import NotFoundError, UnprocessableError
 from scenario_db.models.evidence.common import ExecutionContext
 from scenario_db.api.services.cpu import with_cpu_profile
 from scenario_db.api.services.failures import variant_failure
+from scenario_db.api.services.review_policy import apply_throughput, scenario_policy
 from scenario_db.sim.adapter import build_simulation_inputs
 from scenario_db.sim.service import (
     _apply_config_profile,
@@ -91,7 +92,8 @@ def analyze_timing_budget_request(
     profile = _apply_config_profile(db, shim)
     try:
         graph, tables, ref = _load(db, shim, request.use_default_dvfs)
-        options = with_cpu_profile(db, request.options, request.scenario_id, request.variant_id)
+        options = with_cpu_profile(db, apply_throughput(request.options, scenario_policy(db, request.scenario_id)),
+                                   request.scenario_id, request.variant_id)
         report = analyze_timing_budget(
             graph, options, config=shim.config, dvfs_tables=tables
         )
@@ -125,7 +127,7 @@ def analyze_timing_budget_fleet(
             raise NotFoundError(f"scenario has no variants: {request.scenario_id}")
         if not request.include_derived:
             ids = [i for i in ids if not any(m in i for m in DERIVED_VARIANT_MARKERS)]
-    options = request.options.model_copy(update={"include_whatif": False})
+    options = apply_throughput(request.options, scenario_policy(db, request.scenario_id)).model_copy(update={"include_whatif": False})
     ids = list(dict.fromkeys(ids))
     if len(ids) > 200:
         raise UnprocessableError("fleet scope exceeds 200 variants; select a bounded subset")
@@ -162,7 +164,8 @@ def analyze_dvfs_whatif_request(db: Session, request: Any) -> dict[str, Any]:
     profile = _apply_config_profile(db, shim)
     try:
         graph, tables, ref = _load(db, shim, request.use_default_dvfs)
-        options = with_cpu_profile(db, request.options, request.scenario_id, request.variant_id)
+        options = with_cpu_profile(db, apply_throughput(request.options, scenario_policy(db, request.scenario_id)),
+                                   request.scenario_id, request.variant_id)
         out = dvfs_level_whatif(graph, options, config=shim.config, dvfs_tables=tables,
                                 shifts=tuple(sorted(set(request.shifts))), domains=request.domains)
     except LookupError as exc:

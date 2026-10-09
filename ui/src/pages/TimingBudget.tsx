@@ -9,6 +9,7 @@ import { ProfileSelect } from '../components/ProfileSelect'
 import { useSimProfiles } from '../lib/simProfile'
 import { maText, useBattery, batteryNote, type Battery } from '../lib/battery'
 import { DvfsWhatIfTable } from '../components/DvfsWhatIf'
+import { useReferences } from '../lib/review'
 
 const SCALES = [1.0, 1.1, 1.2, 1.3, 1.4, 1.5]
 
@@ -19,7 +20,11 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
   const scale = SCALES.includes(Number(ctx.params.scale)) ? Number(ctx.params.scale) : 1.0
   const cpuModel: CpuModel = ctx.params.cpu === 'profile' ? 'profile' : 'flat'
   // default = pipelined: stages are decoupled by M2M buffers, fps is judged by the output interval
-  const tp: ThroughputModel = ctx.params.tp === 'stage' ? 'stage' : 'pipelined'
+  // URL override only; otherwise the server applies the project review policy (and the toggle shows the effective one)
+  const tpParam: ThroughputModel | undefined = ctx.params.tp === 'stage' || ctx.params.tp === 'pipelined' ? ctx.params.tp : undefined
+  const refs = useReferences(ctx.project)
+  const policyTp: ThroughputModel = refs?.policy.throughput_model ?? 'stage'
+  const tpOpt = tpParam ? { throughput_model: tpParam } : {}
   const margin = marginOf(ctx.params.margin)
   const [marginDraft, setMarginDraft] = useState(String(Math.round(margin * 100)))
   useEffect(() => setMarginDraft(String(Math.round(margin * 100))), [margin])
@@ -29,7 +34,7 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
   const cfg = sp.ref
   const battery = useBattery(ctx.project, ctx.params.cfg)
 
-  const q = useAsync(() => (!sp.ready ? new Promise<never>(() => {}) : variant ? timingApi.variant(scenario, variant, { statistic, eis, runtime_scale: scale, timeline_frames: frames, cpu_model: cpuModel, throughput_model: tp, ...marginOpts(margin) }, cfg) : Promise.reject(new Error('variant를 선택하세요 (Ctrl K)'))), [scenario, variant, statistic, eis, scale, cfg, sp.ready, margin, frames, cpuModel, tp])
+  const q = useAsync(() => (!sp.ready ? new Promise<never>(() => {}) : variant ? timingApi.variant(scenario, variant, { statistic, eis, runtime_scale: scale, timeline_frames: frames, cpu_model: cpuModel, ...tpOpt, ...marginOpts(margin) }, cfg) : Promise.reject(new Error('variant를 선택하세요 (Ctrl K)'))), [scenario, variant, statistic, eis, scale, cfg, sp.ready, margin, frames, cpuModel, tpParam])
   // what-if (24 sims) starts after the main report so the page never holds two simulation slots at once
   const mainKey = JSON.stringify([ctx.project, scenario, variant, cfg, margin])
   const [mainReadyKey, setMainReadyKey] = useState<string | null>(null)
@@ -37,8 +42,8 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
   const mainReady = mainReadyKey === mainKey && sp.ready
   const wq = useAsync(() => (variant && mainReady ? timingApi.variant(scenario, variant, { statistic: 'max', eis: 'auto', runtime_scale: 1, include_whatif: true, ...marginOpts(margin) }, cfg) : Promise.resolve(null)), [scenario, variant, mainReady, cfg, margin])
   // ⑦ DVFS level ±1/±2 per domain — runs after ④ so at most one simulation slot is held
-  const dq = useAsync(() => (variant && mainReady && !wq.loading && !q.loading ? timingApi.dvfsWhatif(scenario, variant, { statistic, eis, runtime_scale: scale, cpu_model: cpuModel, throughput_model: tp, ...marginOpts(margin) }, cfg) : Promise.resolve(null)),
-    [scenario, variant, mainReady, wq.loading, q.loading, cfg, margin, statistic, eis, scale, cpuModel, tp])
+  const dq = useAsync(() => (variant && mainReady && !wq.loading && !q.loading ? timingApi.dvfsWhatif(scenario, variant, { statistic, eis, runtime_scale: scale, cpu_model: cpuModel, ...tpOpt, ...marginOpts(margin) }, cfg) : Promise.resolve(null)),
+    [scenario, variant, mainReady, wq.loading, q.loading, cfg, margin, statistic, eis, scale, cpuModel, tpParam])
   const r = q.data?.report
   const whatif = wq.data?.report.whatif ?? []
 
@@ -51,7 +56,9 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
         <span title="가정 = 한 cluster·고정 OPP의 coeff·f·V²·util (기존) · 측정 profile = 이 variant의 측정 CPU profile을 EAS + schedutil로 재현, SW 증가에 따라 OPP·DSU·leakage가 함께 변함 (CPU BW도 측정 bus bytes)">
           <Seg label="CPU 모델" value={cpuModel} options={[['flat', '가정'], ['profile', '측정 profile']]} onPick={(v) => set('cpu', v === 'flat' ? undefined : v)} /></span>
         <span title={'pipeline (buffer) = stage 사이 M2M buffer로 분리: 각 SW task가 1 frame 안에, NRT/Post HW는 IP rule clock. SW+HW 합이 period를 넘으면 latency만 증가하고 fps는 출력 간격으로 판정 (기본)\nstage 1 frame = NRT · Post SW + HW 합이 1 frame 안에 (보수적, 이전 기준)'}>
-          <Seg label="처리량 기준" value={tp} options={[['pipelined', 'pipeline (buffer)'], ['stage', 'stage 1 frame']]} onPick={(v) => set('tp', v === 'pipelined' ? undefined : v)} /></span>
+          <Seg label="처리량 기준" value={tpParam ?? (q.data?.report?.stages?.find((x) => x.id === 'nrt')?.throughput === 'pipelined' ? 'pipelined' : q.data?.report ? 'stage' : policyTp)}
+            options={[['pipelined', `pipeline (buffer)${policyTp === 'pipelined' ? ' · 과제 기준' : ''}`], ['stage', `stage 1 frame${policyTp === 'stage' ? ' · 과제 기준' : ''}`]]}
+            onPick={(v) => set('tp', v === policyTp ? undefined : v)} /></span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} title="RT · Output HW는 frame period의 (1 − margin) 안에 끝나야 함. NRT · Post 필요 clock의 rule 기준선도 같은 margin을 사용. 기본 25%">
           <span className="muted" style={{ fontSize: 13 }}>SW margin</span>
           <div className="seg" role="group" aria-label="SW margin">

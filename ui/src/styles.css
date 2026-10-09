@@ -766,3 +766,6 @@ tr.vp-bad td { color: #B42318; font-weight: 600; }
 .cpu-q { display: grid; gap: 4px; align-content: start; padding: 8px 10px; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--panel, #fff); font-size: 12.5px; }
 .cpu-runs { grid-column: 1 / -1; font-size: 12px; }
 .tb-page > * { flex-shrink: 0; }
+.tw-item { border: 1px solid var(--line-soft); border-left: 4px solid var(--warn-text, #B7791F); border-radius: 8px; padding: 8px 12px; display: grid; gap: 6px; }
+.tw-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+tr.row-off td { opacity: .6; }

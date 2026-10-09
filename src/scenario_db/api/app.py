@@ -18,6 +18,7 @@ from scenario_db.api.routers import timing_budget as timing_budget_router
 from scenario_db.api.routers import arch_exploration as arch_exploration_router
 from scenario_db.api.routers import calibration as calibration_router
 from scenario_db.api.routers import cpu as cpu_router
+from scenario_db.api.routers import review as review_router
 from scenario_db.api.routers import view as view_router
 from scenario_db.config import get_settings
 from scenario_db.db.session import make_session_factory
@@ -104,6 +105,7 @@ def create_app() -> FastAPI:
         arch_exploration_router.router,
         calibration_router.router,
         cpu_router.router,
+        review_router.router,
         view_router.router,
         write.router,
     ]

@@ -39,4 +39,19 @@ describe('prediction risk', () => {
     const all = assessAll([row({ id: 'a' }), slack, row({ id: 'c', verdict: 'fail' })], { target_mw: null })
     expect(all.map((x) => x.row.id)).toEqual(['c', 'b', 'a'])
   })
+  it('judges current against the previous project (similar within tolerance) and flags stage-registered rows', () => {
+    const refs = { a: { mw: 1000, source: 'explicit' as const, project_ref: null, id: null, at: null } }
+    expect(assessRisk(row({ id: 'a', total: 1020 }), { target_mw: null, references: refs, tolerance_pct: 3 }).judge?.status).toBe('similar')
+    const over = assessRisk(row({ id: 'a', total: 1100 }), { target_mw: 500, references: refs, tolerance_pct: 3 })
+    expect(over.level).toBe('high')
+    expect(over.gap_mw).toBe(100)   // reference wins over the manual target
+    expect(assessRisk(row({ id: 'a', total: 950 }), { target_mw: null, references: refs, tolerance_pct: 3 }).judge?.status).toBe('ok')
+    const stale = assessRisk(row({ id: 'b', throughput_model: 'stage' }), { target_mw: null, references: refs })
+    expect(stale.risks.some((x) => x.text.includes('stage'))).toBe(true)
+  })
+  it('uses the longest SW task as the slack of a pipelined stage', () => {
+    const r = row({ id: 'p', verdict_detail: { status: 'ok', reasons: [], nrt_clock_factor: null, derived: false, period_ms: 33.3, intervals: {},
+      stages: [{ id: 'nrt', budget_ms: 25, sw_ms: 20, hw_ms: 11, throughput: 'pipelined', longest_sw_ms: 10 }] } })
+    expect(minSlackPct(r)).toBeCloseTo((23.3 / 33.3) * 100, 1)
+  })
 })
