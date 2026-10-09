@@ -154,6 +154,9 @@ class TimingBudgetOptions(BaseScenarioModel):
     mfc_dual: Literal["auto", "on", "off"] = "auto"
     interval_tolerance: float = Field(default=1e-3, gt=0, le=0.05)
     frames: int = Field(default=12, ge=4, le=64)
+    # TIM-09: leading output intervals excluded from the cadence verdict (pipeline fill / AE-AWB settle).
+    # 0 = every interval judged (previous behaviour); jitter / drop statistics are reported either way.
+    warmup_frames: int = Field(default=0, ge=0, le=16)
     timeline_frames: int = Field(default=6, ge=1, le=32)
     # Stage model: each stage's SW runs on its own thread/core. True keeps the
     # scenario's CPU resource (e.g. one CPU_CAMERA) so cross-stage contention shows.
@@ -848,13 +851,16 @@ def _cadence(
         events = sorted(by_node[node], key=lambda e: e.frame_index)
         ends = [e.end_ms for e in events]
         gaps = [b - a for a, b in zip(ends, ends[1:])]
-        worst = max((abs(g - period) for g in gaps), default=0.0)
+        skip = min(options.warmup_frames, max(len(gaps) - 1, 0))
+        judged = gaps[skip:]
+        worst = max((abs(g - period) for g in judged), default=0.0)
         return {
             "node": node,
             "values": [round(g, 4) for g in gaps],
             "max_ms": round(max(gaps), 4) if gaps else None,
             "min_ms": round(min(gaps), 4) if gaps else None,
             "ok": worst <= period * tol,
+            **_interval_stats(gaps, period, tol, skip),
         }
 
     def lat(node):
@@ -880,6 +886,23 @@ def _cadence(
             "video_frames": None if lat(video) is None else round(lat(video) / period, 2),
         },
     )
+
+
+def _interval_stats(gaps: list[float], period: float, tol: float, skip: int) -> dict[str, Any]:
+    """TIM-09: jitter (std / p95 |gap - period|), drops (a gap of ~k periods = k-1 missing frames) and the
+    natural warm-up (leading intervals off-cadence before the first on-cadence one). Report only - ``ok`` above
+    stays the verdict; ``skip`` = intervals excluded by ``warmup_frames``."""
+    if not gaps:
+        return {"jitter_ms": None, "p95_dev_ms": None, "drops": 0, "warmup_observed": 0, "warmup_excluded": 0}
+    judged = gaps[skip:] or gaps
+    mean = sum(judged) / len(judged)
+    std = (sum((g - mean) ** 2 for g in judged) / len(judged)) ** 0.5
+    devs = sorted(abs(g - period) for g in judged)
+    p95 = devs[min(len(devs) - 1, int(round(0.95 * (len(devs) - 1))))]
+    drops = sum(max(0, round(g / period) - 1) for g in judged if g > 1.5 * period)
+    lead = next((i for i, g in enumerate(gaps) if abs(g - period) <= period * tol), len(gaps))
+    return {"jitter_ms": round(std, 4), "p95_dev_ms": round(p95, 4), "drops": int(drops),
+            "warmup_observed": lead, "warmup_excluded": skip}
 
 
 def _peak_bw(ips: list[dict[str, Any]], bw: dict[str, Any], period: float) -> dict[str, Any]:

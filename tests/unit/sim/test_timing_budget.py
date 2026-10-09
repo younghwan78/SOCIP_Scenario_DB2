@@ -292,3 +292,21 @@ def test_dvfs_combo_star_moves_every_domain(graph_factory, dvfs):
     (row,) = out["combos"]
     assert set(row["combo"]) == {d["domain"] for d in out["domains"]}
     assert all(k == 1 for k in row["combo"].values())
+
+
+def test_interval_stats_jitter_drops_warmup():
+    """TIM-09: report-only statistics; a 2-period gap = one dropped frame; leading off-cadence gaps = warm-up."""
+    st = tb._interval_stats([40.0, 33.3, 66.6, 33.3, 33.3], 33.3, 1e-3, 0)
+    assert st["drops"] == 1 and st["warmup_observed"] == 1 and st["warmup_excluded"] == 0
+    assert st["jitter_ms"] > 0 and st["p95_dev_ms"] == pytest.approx(33.3, abs=0.01)
+    st2 = tb._interval_stats([40.0, 33.3, 33.3], 33.3, 1e-3, 1)
+    assert st2["drops"] == 0 and st2["jitter_ms"] == pytest.approx(0) and st2["warmup_excluded"] == 1
+
+
+def test_warmup_frames_only_relaxes_leading_intervals(graph_factory, dvfs):
+    g = graph_factory("cam-rec-r1-uhd30-vdis")
+    a = tb.analyze_timing_budget(g, tb.TimingBudgetOptions(), dvfs_tables=dvfs)
+    b = tb.analyze_timing_budget(g, tb.TimingBudgetOptions(warmup_frames=2), dvfs_tables=dvfs)
+    assert a["intervals"]["video"]["values"] == b["intervals"]["video"]["values"]
+    assert b["intervals"]["video"]["warmup_excluded"] == 2
+    assert not (a["intervals"]["ok"] and not b["intervals"]["ok"])  # excluding intervals never turns ok into fail

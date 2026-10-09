@@ -34,7 +34,11 @@ export interface StageDomain {
   basis: ClockBasisKind | null; set_reason: SetReason | null; domain_leader: string | null
 }
 export type DomainClock = Pick<StageDomain, 'domain' | 'ip' | 'rule_mhz' | 'required_mhz' | 'set_mhz' | 'level'>
-export interface IntervalSeries { node: string | null; values: number[]; max_ms: number | null; min_ms: number | null; ok: boolean | null }
+export interface IntervalSeries {
+  node: string | null; values: number[]; max_ms: number | null; min_ms: number | null; ok: boolean | null
+  /** TIM-09 (report only): σ of intervals, p95 |interval − period|, dropped frames, leading off-cadence intervals, intervals excluded from the verdict */
+  jitter_ms?: number | null; p95_dev_ms?: number | null; drops?: number; warmup_observed?: number; warmup_excluded?: number
+}
 export interface TimelineRow { node: string; type: string; frame: number; start_ms: number; end_ms: number; stage: StageId }
 export interface PowerSplit {
   total_mw: number; cpu_mw: number; hw_mw: number; bw_mw: number; bw_hw_mw: number; bw_sw_mw: number
@@ -139,6 +143,8 @@ export interface TimingOptions {
   rt_margin?: number; output_margin?: number
   /** frames drawn in the pipeline timeline (API ≤ 32) */
   timeline_frames?: number
+  /** TIM-09: leading output intervals excluded from the cadence verdict (0 = all judged) */
+  warmup_frames?: number
 }
 
 export const DEFAULT_SW_MARGIN = 0.25
