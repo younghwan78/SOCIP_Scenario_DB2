@@ -159,6 +159,7 @@ export interface BoardRow {
   condition?: PredCondition
 }
 export interface PredCondition {
+  warmup_frames?: number
   source: 'timing-budget' | 'exploration'; statistic: string | null; runtime_scale: number | null; throughput_model: string; eis: string
   cpu_model: string; rt_margin: number | null; output_margin: number | null; config_profile_ref: string | null
   dvfs_overrides: Record<string, number>; dvfs: Record<string, number>; compression: string[]
@@ -173,13 +174,14 @@ export function conditionParams(r: Pick<BoardRow, 'scenario_id' | 'variant_id' |
   return {
     scenario: r.scenario_id, variant: r.variant_id,
     stat: c?.statistic && c.statistic !== 'max' ? c.statistic : undefined,
-    scale: c?.runtime_scale && c.runtime_scale !== 1 ? String(c.runtime_scale) : undefined,
+    scale: c?.runtime_scale !== null && c?.runtime_scale !== undefined && c.runtime_scale !== 1 ? String(c.runtime_scale) : undefined,
     eis: c?.eis && c.eis !== 'auto' ? c.eis : undefined,
     cpu: c?.cpu_model === 'profile' ? 'profile' : undefined,
     tp: c?.throughput_model === 'stage' || c?.throughput_model === 'pipelined' ? c.throughput_model : undefined,
     margin: m !== null && m !== undefined && Math.abs(m - 0.25) > 1e-9 ? String(Math.round(m * 100)) : undefined,
     cfg: c?.config_profile_ref ?? undefined,
     dvo: ov || undefined,
+    warmup: c?.warmup_frames ? String(c.warmup_frames) : undefined,
     mref: c?.measured?.ref ?? undefined,
     min: c?.measured?.ref ? (['sw', 'clock', 'cpu'] as const).filter((k) => c.measured!.inputs?.[k]).join(',') || undefined : undefined,
   }

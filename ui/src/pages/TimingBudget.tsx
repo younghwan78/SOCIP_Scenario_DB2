@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Ctx } from '../App'
 import { useAsync } from '../lib/route'
-import { SW_MARGINS, fmt, stageDomainsOf, stageSlack, marginOf, marginOpts, pct0, timingApi, verdictChip, type CpuModel, type EisMode, type Statistic, type ThroughputModel, type TimingReport, type DvfsWhatIf, type TimingConfig, type IntervalDistribution, DEFAULT_COMBOS, formatOverrides, parseOverrides, parseMeasured, formatMeasuredFlags, type MeasuredInputs } from '../lib/timingBudget'
+import { SW_MARGINS, runtimeScaleOf, fmt, stageDomainsOf, stageSlack, marginOf, marginOpts, pct0, timingApi, verdictChip, type CpuModel, type EisMode, type Statistic, type ThroughputModel, type TimingReport, type DvfsWhatIf, type TimingConfig, type IntervalDistribution, DEFAULT_COMBOS, formatOverrides, parseOverrides, parseMeasured, formatMeasuredFlags, type MeasuredInputs } from '../lib/timingBudget'
 import { Card, ClockChart, Gantt, Intervals, PowerBw, SlotBudget, WhatIf } from '../components/TimingCharts'
 import { ProvBadge } from '../components/Provenance'
 import { powerScope, type Prov } from '../lib/provenance'
@@ -20,7 +20,7 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
   const { scenario, variant } = ctx
   const statistic = (ctx.params.stat === 'mean' || ctx.params.stat === 'min' ? ctx.params.stat : 'max') as Statistic
   const eis = (ctx.params.eis === 'on' || ctx.params.eis === 'off' ? ctx.params.eis : 'auto') as EisMode
-  const scale = SCALES.includes(Number(ctx.params.scale)) ? Number(ctx.params.scale) : 1.0
+  const scale = runtimeScaleOf(ctx.params.scale)
   const cpuModel: CpuModel = ctx.params.cpu === 'profile' ? 'profile' : 'flat'
   // URL override only; otherwise the server applies the project review policy (and the toggle shows the effective one)
   const tpParam: ThroughputModel | undefined = ctx.params.tp === 'stage' || ctx.params.tp === 'pipelined' ? ctx.params.tp : undefined
@@ -73,7 +73,7 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
       <div className="toolbar" style={{ flexWrap: 'wrap', gap: 14 }}>
         <Seg label="SW 통계" value={statistic} options={[['max', 'max'], ['mean', 'mean']]} onPick={(v) => set('stat', v === 'max' ? undefined : v)} />
         <Seg label="EIS" value={eis} options={[['auto', `auto${r ? (r.eis.auto ? ' (ON)' : ' (OFF)') : ''}`], ['on', 'ON'], ['off', 'OFF']]} onPick={(v) => set('eis', v === 'auto' ? undefined : v)} />
-        <Seg label="차기 SW 증가" value={String(scale)} options={SCALES.map((s) => [String(s), `×${s.toFixed(1)}`])} onPick={(v) => set('scale', v === '1' ? undefined : v)} />
+        <Seg label="차기 SW 증가" value={String(scale)} options={[...new Set([...SCALES, scale])].sort((a, b) => a - b).map((s) => [String(s), `×${Number.isInteger(s) ? s.toFixed(1) : s}`])} onPick={(v) => set('scale', v === '1' ? undefined : v)} />
         <span title="가정 = 한 cluster·고정 OPP의 coeff·f·V²·util (기존) · 측정 profile = 이 variant의 측정 CPU profile을 EAS + schedutil로 재현, SW 증가에 따라 OPP·DSU·leakage가 함께 변함 (CPU BW도 측정 bus bytes)">
           <Seg label="CPU 모델" value={cpuModel} options={[['flat', '가정'], ['profile', '측정 profile']]} onPick={(v) => set('cpu', v === 'flat' ? undefined : v)} /></span>
         <span title={'pipeline (buffer) = stage 사이 M2M buffer로 분리: 각 SW task가 1 frame 안에, NRT/Post HW는 IP rule clock. SW+HW 합이 period를 넘으면 latency만 증가하고 fps는 출력 간격으로 판정 (기본)\nstage 1 frame = NRT · Post SW + HW 합이 1 frame 안에 (보수적, 이전 기준)'}>
@@ -100,10 +100,10 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
         {r && <span className="chip" title={r.dvfs.tables.join(', ')}>DVFS {r.dvfs.applied ? r.dvfs.table_ref ?? 'custom' : '미연결'}</span>}
         <button className="btn" title="현재 scenario의 모든 variant를 같은 모델(CPU · 처리량 · margin · 통계)로" onClick={() => ctx.navigate('timing-fleet', { cfg: ctx.params.cfg, margin: ctx.params.margin, cpu: ctx.params.cpu, tp: ctx.params.tp, stat: ctx.params.stat })}>전체 variant →</button>
       </div>
-      {r && variant && <ConditionBar cond={cond} verdict={r.verdict.status}
-        onSaveEvidence={async () => { const x = await timingApi.saveEvidence(scenario, variant, baseOpts, cfg, config); invalidateCache('/evidence'); invalidateCache('/calibration')
+      {r && variant && <ConditionBar key={JSON.stringify([scenario, variant, cond, r.condition_hash])} cond={cond} verdict={r.verdict.status}
+        onSaveEvidence={async () => { const x = await timingApi.saveEvidence(scenario, variant, baseOpts, cfg, config, r.condition_hash); invalidateCache('/evidence'); invalidateCache('/calibration'); invalidateCache(`/scenarios/${encodeURIComponent(scenario)}`)
           return x.existed ? `이미 저장된 같은 조건 (${x.evidence_id})` : `저장됨 ${x.evidence_id}` }}
-        onRegister={async (reason) => { const x = await timingApi.register(scenario, variant, baseOpts, reason, cfg, config, ctx.project)
+        onRegister={async (reason) => { const x = await timingApi.register(scenario, variant, baseOpts, reason, cfg, config, ctx.project, r.condition_hash)
           const p = x.promoted[0]; return p ? `등록됨 ${p.id}${x.total_mw ? ` · ${fmt(x.total_mw, 0)} mW` : ''}` : `등록 안 됨: ${x.skipped.map((k) => k.reason).join(', ')}` }}
         onOpenPredictions={() => ctx.navigate('predictions', { sf: scenario })} />}
       {(sp.error || q.error) && <div className="err">{sp.error || q.error}</div>}

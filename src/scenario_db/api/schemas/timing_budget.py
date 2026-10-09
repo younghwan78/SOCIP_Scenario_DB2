@@ -34,6 +34,7 @@ class TimingBudgetRequest(_DvfsSelection):
     variant_id: str
     options: TimingBudgetOptions = Field(default_factory=TimingBudgetOptions)
     measured: MeasuredInputs | None = None
+    expected_condition_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{16}$")
 
 
 class TimingBudgetDvfsWhatIfRequest(TimingBudgetRequest):

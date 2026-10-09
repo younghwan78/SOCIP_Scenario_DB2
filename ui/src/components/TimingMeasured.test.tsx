@@ -42,8 +42,8 @@ it('compares the condition with the measurement per rail category', () => {
 it('keeps measured inputs in the condition chips and when re-opening a registration', () => {
   expect(conditionChips({ statistic: 'max', scale: 1, eis: 'auto', cpuModel: 'flat', throughput: 'pipelined', margin: 0.25, profile: null, overrides: {}, measured: { measurement_ref: 'm', clock: true } })).toContain('실측 입력 clock')
   const row = { scenario_id: 's', variant_id: 'v', condition: { source: 'timing-budget', statistic: 'max', runtime_scale: 1, throughput_model: 'pipelined', eis: 'auto', cpu_model: 'flat',
-    rt_margin: 0.25, output_margin: 0.25, config_profile_ref: null, dvfs_overrides: {}, dvfs: {}, compression: [],
+    rt_margin: 0.25, output_margin: 0.25, warmup_frames: 4, config_profile_ref: null, dvfs_overrides: {}, dvfs: {}, compression: [],
     measured: { ref: 'meas-1', inputs: { sw: true, clock: false, cpu: false }, sw: ['post_irta'], clock_ref: null, cpu_ref: null } } } as unknown as BoardRow
-  expect(conditionParams(row)).toMatchObject({ mref: 'meas-1', min: 'sw' })
+  expect(conditionParams(row)).toMatchObject({ mref: 'meas-1', min: 'sw', warmup: '4' })
   expect(conditionText(row.condition)).toContain('실측 SW')
 })
