@@ -24,6 +24,22 @@ RAILS = {
 }
 
 
+@pytest.mark.parametrize("soc", ["soc-exynos2600", None])
+def test_clock_residency_does_not_borrow_another_soc_topology(monkeypatch, soc):
+    from types import SimpleNamespace
+    from scenario_db.api.services import calibration
+
+    monkeypatch.setattr(calibration, "_soc_of", lambda db, measurement: soc)
+    measurement = SimpleNamespace(cpu_breakdown=[], metric_observations=[{
+        "metric_id": "cpu.freq_residency", "scope": {"kind": "cluster_freq", "ref": "MID@1000"}, "value": 1.0,
+    }])
+    other_soc = SimpleNamespace(soc_ref="soc-other", version=1, params={"cpu": {"clusters": [
+        {"name": "MID", "opps": [{"mhz": 1200}]}]}},)
+    view = calibration.clock_residency_of(MagicMock(), measurement, [other_soc], [])
+    assert view["domains"][0]["opp_max_mhz"] is None
+    assert view["domains"][0]["wall"]["high_share"] is None
+
+
 @pytest.mark.parametrize("rail,cat", [
     ("B4S4_VDD_INT_L", "ip"), ("B5_6S1_VDD_CAM_L", "ip"), ("B5S4_VDDMIF_AP_L", "bw"),
     ("SRB1S5_VDD2L_MEM_AP_L", "bw"), ("L5M_VDD1_MEM_L", "bw"), ("B3_4_5S2_VDD_CPUCL3_BIG_L", "cpu"),

@@ -163,7 +163,7 @@ export function ClockCompareCard({ scenarioId, selectedId, onPick }: { scenarioI
           <thead><tr><th>Variant</th><th>SW</th><th>측정</th>{domains.map((d) => <th key={d.key} style={{ textAlign: 'center' }}>{d.label}</th>)}</tr></thead>
           <tbody>{data.map((r) => (
             <tr key={r.id} className={`clickable ${r.id === selectedId ? 'selected' : ''}`} onClick={() => onPick(r.id)}>
-              <td className="mono">{r.variant_id.replace('cam-rec-', '')}{r.synthetic && <span className="badge v-warn" style={{ marginLeft: 6 }}>합성</span>}</td>
+              <td className="mono">{r.variant_id?.replace('cam-rec-', '') ?? '기본 시나리오'}{r.synthetic && <span className="badge v-warn" style={{ marginLeft: 6 }}>합성</span>}</td>
               <td className="faint">{r.sw_baseline_ref ?? '—'}</td>
               <td className="mono faint">{r.measured_at?.slice(0, 10) ?? '—'}</td>
               {domains.map((k) => {

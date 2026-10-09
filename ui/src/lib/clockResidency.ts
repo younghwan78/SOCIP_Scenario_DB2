@@ -28,7 +28,7 @@ export interface ClockView {
   pmu_pass?: { capture_cv: number | null; tasks: Record<string, number>; noisy: string[] } | null
 }
 export interface ClockRow {
-  id: string; scenario_id: string; variant_id: string; measured_at: string | null; sw_baseline_ref: string | null; synthetic: boolean
+  id: string; scenario_id: string; variant_id: string | null; measured_at: string | null; sw_baseline_ref: string | null; synthetic: boolean
   domains: { domain_class: string; class_label: string; domain: string; is_dsu: boolean; active_ratio: number | null; pass_jsd: number | null
     mean_mhz: number; high_share: number | null; basis: 'active' | 'wall'; warns: number; opp_max_mhz: number | null; power_mw?: number | null }[]
 }

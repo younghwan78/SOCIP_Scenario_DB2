@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
-import { describe, expect, it } from 'vitest'
-import { ClockResidencyCard, ModelCheckDist } from './ClockResidency'
+import { describe, expect, it, vi } from 'vitest'
+import { ClockCompareCard, ClockResidencyCard, ModelCheckDist } from './ClockResidency'
+import { clockApi } from '../lib/clockResidency'
 import type { ClockDomain, ClockView } from '../lib/clockResidency'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -31,6 +32,20 @@ function mount(el: ReturnType<typeof createElement>) {
 }
 
 describe('ClockResidencyCard', () => {
+  it('renders measurement evidence without a variant', async () => {
+    const spy = vi.spyOn(clockApi, 'rows').mockResolvedValue([{
+      id: 'base-measurement', scenario_id: 'scenario', variant_id: null,
+      measured_at: null, sw_baseline_ref: null, synthetic: false, domains: [],
+    }])
+    const { host, root } = mount(createElement(ClockCompareCard, { onPick: () => {} }))
+    try {
+      await act(async () => { await Promise.resolve() })
+      expect(host.textContent).toContain('기본 시나리오')
+    } finally {
+      act(() => root.unmount())
+      spy.mockRestore()
+    }
+  })
   it('groups CPU / DSU / GPU, flags warnings and toggles the basis', () => {
     const { host, root } = mount(createElement(ClockResidencyCard, { view }))
     const text = host.textContent ?? ''
