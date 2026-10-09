@@ -167,7 +167,7 @@ def analyze_dvfs_whatif_request(db: Session, request: Any) -> dict[str, Any]:
         options = with_cpu_profile(db, apply_throughput(request.options, scenario_policy(db, request.scenario_id)),
                                    request.scenario_id, request.variant_id)
         out = dvfs_level_whatif(graph, options, config=shim.config, dvfs_tables=tables,
-                                shifts=tuple(sorted(set(request.shifts))), domains=request.domains)
+                                shifts=tuple(sorted(set(request.shifts))), domains=request.domains, combos=request.combos)
     except LookupError as exc:
         raise NotFoundError(str(exc)) from exc
     except ValueError as exc:

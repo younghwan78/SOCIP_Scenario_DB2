@@ -784,6 +784,7 @@ def _report(graph, options, plan, rule_run, run, dvfs_tables) -> dict[str, Any]:
         )
     intervals, latency = _cadence(result, run["inputs"], plan, options)
     power, bw = _power_bw(result, plan, options, period)
+    bw["peak"] = _peak_bw(ips, bw, period)
     domains = {st: stage_domains(ips, st) for st in STAGES}
     verdict = _verdict(stages, intervals, ips, domains, period)
     return {
@@ -879,6 +880,26 @@ def _cadence(
             "video_frames": None if lat(video) is None else round(lat(video) / period, 2),
         },
     )
+
+
+def _peak_bw(ips: list[dict[str, Any]], bw: dict[str, Any], period: float) -> dict[str, Any]:
+    """Average vs peak traffic (TIM-08). Average = bytes/frame x fps; an IP moves the same bytes inside its active
+    time, so its peak ~ average x period / hw_ms. Raising its clock shortens hw_ms: average unchanged, peak up.
+    ``stage_mbs`` = the stage's IPs streaming together; ``upper_mbs`` = all stages overlapping (pipelined bound)."""
+    by_ip: dict[str, float] = {}
+    stage_of: dict[str, str] = {}
+    for ip in ips:
+        avg = bw["hw_by_ip"].get(ip["node"])
+        hw = ip.get("standalone_hw_ms") or ip.get("hw_ms")
+        if avg and hw and hw > 0:
+            by_ip[ip["node"]] = round(avg * min(period / hw, 1000.0), 1)
+            stage_of[ip["node"]] = ip["stage"]
+    by_stage: dict[str, float] = {}
+    for node, mbs in by_ip.items():
+        by_stage[stage_of[node]] = round(by_stage.get(stage_of[node], 0.0) + mbs, 1)
+    return {"by_ip": dict(sorted(by_ip.items(), key=lambda x: -x[1])), "by_stage": by_stage,
+            "max_stage_mbs": max(by_stage.values(), default=0.0), "upper_mbs": round(sum(by_stage.values()), 1),
+            "avg_mbs": bw["total_mbs"]}
 
 
 def _power_bw(result: SimRunResult, plan: dict, options: TimingBudgetOptions, period: float):
@@ -1248,16 +1269,26 @@ def _stage_slack(report: dict[str, Any]) -> dict[str, float]:
 def _brief(report: dict[str, Any]) -> dict[str, Any]:
     p, b = report["power"], report["bw"]
     return {"total_mw": p["total_mw"], "cpu_mw": p["cpu_mw"], "hw_mw": p["hw_mw"], "bw_mw": p["bw_mw"], "bw_mbs": b["total_mbs"],
+            "peak_stage_mbs": (b.get("peak") or {}).get("max_stage_mbs"), "peak_upper_mbs": (b.get("peak") or {}).get("upper_mbs"),
             "verdict": report["verdict"]["status"], "reasons": report["verdict"]["reasons"][:3],
             "intervals_ok": report["intervals"]["ok"], "latency_ms": report["latency"],
             "slack_ms": _stage_slack(report),
             "stage_hw_ms": {s["id"]: s["hw_ms"] for s in report["stages"]}}
 
 
+def _dpeak(brief: dict[str, Any], base: dict[str, Any]) -> float | None:
+    a, b = brief.get("peak_stage_mbs"), base.get("peak_stage_mbs")
+    return round(a - b, 1) if a is not None and b is not None else None
+
+
 def dvfs_level_whatif(graph, options: TimingBudgetOptions, *, config: SimulationRunConfig | None = None,
                       dvfs_tables: dict[str, DVFSTable] | None = None, shifts: tuple[int, ...] = (-2, -1, 1, 2),
-                      domains: list[str] | None = None) -> dict[str, Any]:
+                      domains: list[str] | None = None,
+                      combos: list[dict[str, int]] | None = None) -> dict[str, Any]:
     """Pin one DVFS domain k levels faster (+) / slower (-) than the resolved level and re-run the budget.
+
+    ``combos`` (TIM-05): several domains moved together, e.g. ``{"CAM": -1, "INTCAM": -1}`` (``{"*": -1}`` = every domain); a shift past the lowest /
+    highest OPP is reported as a boundary row (``boundary``) instead of being dropped.
 
     Answers the routine project question "if we raise / lower CAM by one level, what happens to the SW margin,
     power and BW?". Every row is a full timing-budget run with ``config.dvfs_overrides`` for that domain.
@@ -1277,6 +1308,7 @@ def dvfs_level_whatif(graph, options: TimingBudgetOptions, *, config: Simulation
         d["ips"].append(ip["node"])
     base_brief = _brief(base)
     rows: list[dict[str, Any]] = []
+    combo_rows: list[dict[str, Any]] = []
     for g, info in sorted(found.items()):
         if domains and g not in domains:
             continue
@@ -1287,6 +1319,10 @@ def dvfs_level_whatif(graph, options: TimingBudgetOptions, *, config: Simulation
         for k in shifts:
             j = idx + k
             if not 0 <= j < len(ladder):
+                edge = ladder[0] if j < 0 else ladder[-1]
+                rows.append({"domain": g, "shift": k, "level": None, "mhz": None,
+                             "boundary": "최저 OPP" if j < 0 else "최고 OPP",
+                             "error": f"{'최저' if j < 0 else '최고'} OPP L{edge.level} ({edge.speed_mhz:g} MHz)에서 더 {'내릴' if j < 0 else '올릴'} level 없음"})
                 continue
             target = ladder[j]
             cfg = config.model_copy(update={"dvfs_overrides": {**config.dvfs_overrides, g: target.level}})
@@ -1301,8 +1337,45 @@ def dvfs_level_whatif(graph, options: TimingBudgetOptions, *, config: Simulation
                          "delta_hw_mw": round(brief["hw_mw"] - base_brief["hw_mw"], 2),
                          "delta_bw_mw": round(brief["bw_mw"] - base_brief["bw_mw"], 2),
                          "delta_mbs": round(brief["bw_mbs"] - base_brief["bw_mbs"], 1),
+                         "delta_peak_mbs": _dpeak(brief, base_brief),
                          "delta_slack_ms": {s: round(v - base_brief["slack_ms"].get(s, 0.0), 3) for s, v in brief["slack_ms"].items()}})
+    for combo in combos or []:
+        if "*" in combo:  # every domain of this variant moved together
+            combo = {g: combo["*"] for g in found} | {g: k for g, k in combo.items() if g != "*"}
+        overrides: dict[str, int] = {}
+        label, problem = [], None
+        for g, k in sorted(combo.items()):
+            if g not in found:
+                problem = f"{g}: 이 variant에서 level을 정할 수 없는 domain"
+                break
+            ladder = sorted(tables[g].levels, key=lambda lv: lv.speed_mhz)
+            idx = next((i for i, lv in enumerate(ladder) if lv.level == found[g]["level"]), None)
+            j = None if idx is None else idx + k
+            if j is None or not 0 <= j < len(ladder):
+                problem = f"{g} {k:+d}: OPP 경계 밖"
+                break
+            overrides[g] = ladder[j].level
+            label.append(f"{g} L{ladder[j].level}")
+        row: dict[str, Any] = {"combo": dict(sorted(combo.items())), "label": " + ".join(label) or None}
+        if problem:
+            rows_combo = row | {"error": problem, "boundary": "경계" if "경계" in problem else None}
+            combo_rows.append(rows_combo)
+            continue
+        cfg = config.model_copy(update={"dvfs_overrides": {**config.dvfs_overrides, **overrides}})
+        try:
+            rep_c = analyze_timing_budget(graph, opts, config=cfg, dvfs_tables=tables)
+        except ValueError as exc:
+            combo_rows.append(row | {"error": str(exc)})
+            continue
+        brief = _brief(rep_c)
+        combo_rows.append(row | brief | {
+            "delta_mw": round(brief["total_mw"] - base_brief["total_mw"], 2),
+            "delta_hw_mw": round(brief["hw_mw"] - base_brief["hw_mw"], 2),
+            "delta_bw_mw": round(brief["bw_mw"] - base_brief["bw_mw"], 2),
+            "delta_mbs": round(brief["bw_mbs"] - base_brief["bw_mbs"], 1),
+            "delta_peak_mbs": _dpeak(brief, base_brief),
+            "delta_slack_ms": {s: round(v - base_brief["slack_ms"].get(s, 0.0), 3) for s, v in brief["slack_ms"].items()}})
     return {"base": base_brief, "fps": base["fps"], "period_ms": base["period_ms"],
-            "throughput_model": options.throughput_model,
+            "throughput_model": options.throughput_model, "combos": combo_rows,
             "domains": [{**{k: v for k, v in d.items() if k != "stages"}, "stages": sorted(d["stages"])} for d in found.values()],
             "rows": rows}

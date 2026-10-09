@@ -64,17 +64,29 @@ export function stageSlack(r: Pick<TimingReport, 'period_ms' | 'stages'>): Recor
 }
 
 export interface DvfsBrief {
-  total_mw: number; cpu_mw: number; hw_mw: number; bw_mw: number; bw_mbs: number; verdict: Verdict['status']; reasons: string[]
+  total_mw: number; cpu_mw: number; hw_mw: number; bw_mw: number; bw_mbs: number
+  /** TIM-08: peak DMA BW — largest single stage while its HW runs, and all stages overlapping (upper bound) */
+  peak_stage_mbs?: number | null; peak_upper_mbs?: number | null; verdict: Verdict['status']; reasons: string[]
   intervals_ok: boolean; latency_ms: { preview_ms: number | null; video_ms: number | null }; slack_ms: Record<StageId, number>; stage_hw_ms: Record<StageId, number>
 }
 export interface DvfsRow extends Partial<DvfsBrief> {
-  domain: string; shift: number; level: number; mhz: number; error?: string
-  delta_mw?: number; delta_hw_mw?: number; delta_bw_mw?: number; delta_mbs?: number; delta_slack_ms?: Record<StageId, number>
+  domain: string; shift: number; level: number | null; mhz: number | null; error?: string
+  /** set when the shift runs past the lowest / highest OPP of the domain */
+  boundary?: string | null
+  delta_mw?: number; delta_hw_mw?: number; delta_bw_mw?: number; delta_mbs?: number; delta_peak_mbs?: number | null; delta_slack_ms?: Record<StageId, number>
+}
+/** TIM-05: several domains moved together (e.g. CAM −1 + INTCAM −1). */
+export interface DvfsComboRow extends Partial<DvfsBrief> {
+  combo: Record<string, number>; label: string | null; error?: string; boundary?: string | null
+  delta_mw?: number; delta_hw_mw?: number; delta_bw_mw?: number; delta_mbs?: number; delta_peak_mbs?: number | null; delta_slack_ms?: Record<StageId, number>
 }
 export interface DvfsWhatIf {
   base: DvfsBrief; fps: number; period_ms: number; throughput_model: ThroughputModel
   domains: { domain: string; level: number; mhz: number; mv: number; ips: string[]; stages: StageId[] }[]; rows: DvfsRow[]
+  combos?: DvfsComboRow[]
 }
+/** Default multi-domain presets: every domain one level down together, and one level up together ('*' = all domains). */
+export const DEFAULT_COMBOS: Record<string, number>[] = [{ '*': -1 }, { '*': 1 }]
 /** Short tile note for the CPU power of a timing report. */
 export function cpuTileNote(p: PowerSplit): string {
   const c = p.cpu_profile
@@ -169,9 +181,9 @@ export const timingApi = {
   variant: (scenarioId: string, variantId: string, options: TimingOptions, configProfileRef?: string | null) =>
     postJson<{ report: TimingReport; dvfs_table_ref: string | null; config_profile_ref?: string | null }>('/timing-budget/variant',
       { scenario_id: scenarioId, variant_id: variantId, options, config_profile_ref: configProfileRef ?? undefined }),
-  dvfsWhatif: (scenarioId: string, variantId: string, options: TimingOptions, configProfileRef?: string | null, shifts = [-2, -1, 1, 2]) =>
+  dvfsWhatif: (scenarioId: string, variantId: string, options: TimingOptions, configProfileRef?: string | null, shifts = [-2, -1, 1, 2], combos?: Record<string, number>[] | null) =>
     postJson<DvfsWhatIf>('/timing-budget/dvfs-whatif',
-      { scenario_id: scenarioId, variant_id: variantId, options: { ...options, include_whatif: false }, shifts, config_profile_ref: configProfileRef ?? undefined }),
+      { scenario_id: scenarioId, variant_id: variantId, options: { ...options, include_whatif: false }, shifts, combos: combos?.length ? combos : undefined, config_profile_ref: configProfileRef ?? undefined }),
   fleet: (scenarioId: string, options: Omit<TimingOptions, 'include_whatif'>, configProfileRef?: string | null) =>
     postJson<{ rows: FleetRow[]; errors: VariantFailure[]; dvfs_table_ref: string | null; config_profile_ref?: string | null }>('/timing-budget/fleet',
       { scenario_id: scenarioId, options, config_profile_ref: configProfileRef ?? undefined }),

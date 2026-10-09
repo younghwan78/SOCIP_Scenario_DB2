@@ -263,3 +263,32 @@ def test_pipelined_single_ip_slower_than_the_period_still_fails(graph_factory, d
     assert slow
     for r in slow:
         assert r["verdict"] == "fail" and any("interval" in x for x in r["reasons"])
+
+
+def test_dvfs_combos_boundaries_and_peak_bw(graph_factory, dvfs):
+    """TIM-05: several domains together + boundary rows; TIM-08: faster clock keeps average BW, raises peak."""
+    g = graph_factory("cam-rec-r1-uhd30-vdis")
+    out = tb.dvfs_level_whatif(g, tb.TimingBudgetOptions(throughput_model="pipelined"), dvfs_tables=dvfs,
+                               shifts=(-9, 1), combos=[{"CAM": 1, "INTCAM": 1}, {"CAM": -9}])
+    edge = [r for r in out["rows"] if r["shift"] == -9]
+    assert edge and all(r.get("boundary") == "최저 OPP" and r["level"] is None for r in edge)
+    combo, outside = out["combos"]
+    assert outside.get("error") and outside["boundary"] == "경계"
+    singles = {r["domain"]: r for r in out["rows"] if r["shift"] == 1 and not r.get("error")}
+    if "CAM" in singles and "INTCAM" in singles and not combo.get("error"):
+        # both faster: power at least each single step, average BW unchanged, peak not lower
+        assert combo["delta_mw"] >= max(singles["CAM"]["delta_mw"], singles["INTCAM"]["delta_mw"]) - 0.05
+        assert combo["delta_mbs"] == pytest.approx(0, abs=0.5)
+        assert combo["delta_peak_mbs"] >= -0.5
+    peak = out["base"]["peak_stage_mbs"]
+    assert peak is not None and peak >= 0
+
+
+def test_dvfs_combo_star_moves_every_domain(graph_factory, dvfs):
+    """'*' preset = every DVFS domain of the variant shifted together."""
+    g = graph_factory("cam-rec-r1-uhd30-vdis")
+    out = tb.dvfs_level_whatif(g, tb.TimingBudgetOptions(throughput_model="pipelined"), dvfs_tables=dvfs,
+                               shifts=(1,), combos=[{"*": 1}])
+    (row,) = out["combos"]
+    assert set(row["combo"]) == {d["domain"] for d in out["domains"]}
+    assert all(k == 1 for k in row["combo"].values())

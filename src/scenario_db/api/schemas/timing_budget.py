@@ -30,6 +30,8 @@ class TimingBudgetDvfsWhatIfRequest(TimingBudgetRequest):
 
     shifts: list[int] = Field(default_factory=lambda: [-2, -1, 1, 2], min_length=1, max_length=6)
     domains: list[str] | None = Field(default=None, max_length=12)
+    # several domains moved together, e.g. [{"CAM": -1, "INTCAM": -1}] (TIM-05)
+    combos: list[dict[str, int]] | None = Field(default=None, max_length=8)
 
 
 class TimingBudgetFleetRequest(_DvfsSelection):
