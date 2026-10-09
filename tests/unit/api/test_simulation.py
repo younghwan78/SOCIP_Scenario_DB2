@@ -29,7 +29,7 @@ def test_simulation_run_endpoint(monkeypatch):
 
     app.dependency_overrides[get_db] = _override_db
 
-    def _fake_run(db_arg, request):
+    def _fake_run(db_arg, request, requested_by=None):
         assert db_arg is db
         assert request.scenario_id == "uc-camera-recording"
         return {
@@ -817,3 +817,49 @@ def test_run_simulation_request_loads_db_dvfs_table_and_marks_context(monkeypatc
     assert captured["execution_context"].dvfs_table_ref == "dvfs-soc-A-v4"
     assert captured["execution_context"].dvfs_version == 4
     assert captured["execution_context"].evt_hint == "EVT1"
+
+
+def test_audit_user_ignores_the_local_bypass():
+    from scenario_db.api.auth import LOCAL_SUBJECT, ApiPrincipal, audit_user
+
+    assert audit_user(ApiPrincipal(subject=LOCAL_SUBJECT)) is None
+    assert audit_user(None) is None
+    assert audit_user(ApiPrincipal(subject="joo")) == "joo"
+
+
+def test_persisted_simulation_records_who_ran_it(monkeypatch):
+    """run_info.writer = authenticated user on a saved run (not part of the params hash)."""
+    from scenario_db.sim.runner import build_simulation_evidence as real_build
+
+    class _Inputs:
+        scenario_id = "uc-scenario"
+        variant_id = "variant"
+        project_ref = "proj-x"
+        warnings = []
+
+    result = SimRunResult(scenario_id="uc-scenario", variant_id="variant", total_power_mw=1.0, total_power_ma=0.0,
+                          core_power_mw=1.0, bw_power_mw=0.0, bw_total_mbs=0.0, hw_time_max_ms=0.0, feasible=True)
+    saved = {}
+
+    def _upsert(db_arg, evidence):
+        saved["writer"] = evidence.run.writer
+        return SimpleNamespace(id=evidence.id)
+
+    monkeypatch.setattr("scenario_db.sim.service.load_canonical_graph", lambda *a: object())
+    monkeypatch.setattr("scenario_db.sim.service.build_simulation_inputs", lambda graph, config: _Inputs())
+    monkeypatch.setattr("scenario_db.sim.service.params_hash", lambda inputs: "inputs-hash")
+    monkeypatch.setattr("scenario_db.sim.service.get_simulation_evidence_by_params_hash", lambda *a, **k: None)
+    monkeypatch.setattr("scenario_db.sim.service.get_evidence", lambda *a, **k: None)
+    monkeypatch.setattr("scenario_db.sim.service.run_simulation", lambda inputs, dvfs_tables: result)
+    monkeypatch.setattr("scenario_db.sim.service.build_simulation_evidence",
+                        lambda res, **kw: real_build(res, **{k: v for k, v in kw.items()}))
+    monkeypatch.setattr("scenario_db.sim.service.upsert_simulation_evidence", _upsert)
+    monkeypatch.setattr("scenario_db.sim.service.EvidenceResponse",
+                        SimpleNamespace(model_validate=lambda row: SimpleNamespace(model_dump=lambda **k: {})))
+    request = SimulateRequest(scenario_id="uc-scenario", variant_id="variant", persist=True, force=True,
+                              execution_context=ExecutionContext(silicon_rev="EVT0", sw_baseline_ref="sw-vendor-v1.2.3",
+                                                                 thermal="normal"))
+    run_simulation_request(MagicMock(), request, requested_by="joo")
+    assert saved["writer"] == "joo"
+    run_simulation_request(MagicMock(), request)
+    assert saved["writer"] is None

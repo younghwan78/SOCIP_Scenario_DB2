@@ -27,7 +27,9 @@ from scenario_db.sim.runner import build_simulation_evidence, params_hash, run_s
 from scenario_db.config import get_settings
 
 
-def run_simulation_request(db: Session, request: SimulateRequest) -> SimulateRunResponse:
+def run_simulation_request(db: Session, request: SimulateRequest, *, requested_by: str | None = None) -> SimulateRunResponse:
+    """``requested_by``: authenticated user saved as ``run_info.writer`` when the result is persisted (not part of the
+    params hash, so identical runs by different users still converge on one evidence row - the first saver is kept)."""
     config_profile_stamp = _apply_config_profile(db, request)
     try:
         graph = load_canonical_graph(db, request.scenario_id, request.variant_id)
@@ -104,6 +106,8 @@ def run_simulation_request(db: Session, request: SimulateRequest) -> SimulateRun
         config_profile_ref=config_profile_stamp,
     )
     persisted_evidence_payload: dict | None = None
+    if request.persist and requested_by:
+        evidence = evidence.model_copy(update={"run": evidence.run.model_copy(update={"writer": requested_by})})
     if request.persist:
         # Deterministic evidence ids make identical requests converge. Track
         # whether this transaction intended an insert so only a primary-key

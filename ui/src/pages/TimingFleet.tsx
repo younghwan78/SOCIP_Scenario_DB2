@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { Ctx } from '../App'
 import { useAsync } from '../lib/route'
-import { fmt, marginOf, marginOpts, nrtFactor, pct0, timingApi, verdictChip, type FleetRow, type Statistic } from '../lib/timingBudget'
+import { fmt, marginOf, marginOpts, nrtFactor, pct0, timingApi, verdictChip, type CpuModel, type FleetRow, type Statistic, type ThroughputModel } from '../lib/timingBudget'
 import { Card, FleetRank } from '../components/TimingCharts'
 import { DataTable, type Column } from '../components/DataTable'
 import { SW_COLOR } from '../lib/timingBudget'
@@ -17,7 +17,11 @@ export function TimingFleetPage({ ctx }: { ctx: Ctx }) {
   const statistic = (ctx.params.stat === 'mean' ? 'mean' : 'max') as Statistic
   const sp = useSimProfiles(ctx.project, ctx.params.cfg)
   const margin = marginOf(ctx.params.margin)
-  const q = useAsync(() => (sp.ready ? timingApi.fleet(ctx.scenario, { statistic, eis: 'auto', runtime_scale: 1, ...marginOpts(margin) }, sp.ref) : new Promise<never>(() => {})), [ctx.scenario, statistic, sp.ref, sp.ready, margin])
+  // same model as the variant page (TIM-06): CPU model and throughput override travel in the URL;
+  // without tp the server applies the project review policy
+  const cpuModel: CpuModel = ctx.params.cpu === 'profile' ? 'profile' : 'flat'
+  const tp: ThroughputModel | undefined = ctx.params.tp === 'stage' || ctx.params.tp === 'pipelined' ? ctx.params.tp : undefined
+  const q = useAsync(() => (sp.ready ? timingApi.fleet(ctx.scenario, { statistic, eis: 'auto', runtime_scale: 1, cpu_model: cpuModel, ...(tp ? { throughput_model: tp } : {}), ...marginOpts(margin) }, sp.ref) : new Promise<never>(() => {})), [ctx.scenario, statistic, sp.ref, sp.ready, margin, cpuModel, tp])
   const [filter, setFilter] = useState<Filter>('all')
   const [showAll, setShowAll] = useState(false)
   const rows = useMemo(() => q.data?.rows ?? [], [q.data])
@@ -30,7 +34,7 @@ export function TimingFleetPage({ ctx }: { ctx: Ctx }) {
     rows.forEach((r) => { c[r.verdict.status] = (c[r.verdict.status] ?? 0) + 1 })
     return c
   }, [rows])
-  const open = (v: string) => ctx.navigate('timing', { variant: v, stat: statistic === 'max' ? undefined : statistic, cfg: ctx.params.cfg, margin: ctx.params.margin })
+  const open = (v: string) => ctx.navigate('timing', { variant: v, stat: statistic === 'max' ? undefined : statistic, cfg: ctx.params.cfg, margin: ctx.params.margin, cpu: ctx.params.cpu, tp: ctx.params.tp })
 
   const cols: Column<FleetRow>[] = [
     { key: 'v', label: 'Variant', width: 220, sticky: true, sort: (r) => r.variant_id, render: (r) => <span className="mono">{r.variant_id.replace(/^cam-rec-/, '')}</span> },
@@ -54,6 +58,8 @@ export function TimingFleetPage({ ctx }: { ctx: Ctx }) {
     <div className="page tb-page">
       <div className="toolbar" style={{ gap: 14, flexWrap: 'wrap' }}>
         <span className={`chip ${Math.abs(margin - 0.25) > 1e-9 ? 'mode-warn' : ''}`} title="Timing Budget · variant 화면에서 변경">SW margin {pct0(margin)}</span>
+        <span className="chip" title="Timing Budget · variant 화면과 같은 모델 (URL cpu / tp)">CPU {cpuModel === 'profile' ? '측정 profile' : '가정'} · 처리량 {tp ? (tp === 'pipelined' ? 'pipeline' : 'stage') : '과제 기준'}</span>
+        <span className="faint" style={{ fontSize: 12 }}>범위: 현재 scenario의 전체 variant</span>
         <span className="muted" style={{ fontSize: 13 }}>SW 통계</span>
         <div className="seg" role="group" aria-label="SW 통계">
           {(['max', 'mean'] as const).map((s) => <button key={s} className={statistic === s ? 'on' : ''} onClick={() => ctx.navigate(undefined, { stat: s === 'max' ? undefined : s }, true)}>{s}</button>)}

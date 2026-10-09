@@ -34,7 +34,7 @@ export interface MeasDetail {
   clock_residency?: ClockView | null
 }
 
-export interface CoverageSim { id: string; at: string | null; tool?: string | null; tool_version?: string | null; source?: string | null; sw_baseline_ref?: string | null; total_mw?: number | null; shown?: boolean }
+export interface CoverageSim { id: string; at: string | null; tool?: string | null; tool_version?: string | null; source?: string | null; sw_baseline_ref?: string | null; total_mw?: number | null; shown?: boolean; by?: string | null }
 export interface CoverageMeas { id: string; at: string | null; origin: string; synthetic: boolean; sw_baseline_ref?: string | null; silicon_rev?: string | null; thermal?: string | null; build_id?: string | null; total_mw?: number | null; shown?: boolean }
 export interface CoveragePrediction { id: string; total_mw: number | null; created_at?: string | null; run?: string | null; case_key?: string | null; selection_rule?: string | null; selected_by?: string | null; dvfs_table_ref?: string | null; supersedes?: string | null; version?: number }
 export interface Coverage {
@@ -50,6 +50,17 @@ export function shortId(id: string | null | undefined, n = 5): string {
   if (m) return `${m[1]}${m[2].slice(0, n)}…`
   return id.length > 32 ? `${id.slice(0, 28)}…` : id
 }
+/** Short ids that stay distinct inside one list: 5 characters, longer only where two ids collide (SCN-02). */
+export function uniqueShortIds(ids: (string | null | undefined)[], n = 5): Map<string, string> {
+  const out = new Map<string, string>()
+  const list = [...new Set(ids.filter((x): x is string => !!x))]
+  for (const id of list) {
+    let k = n
+    while (k < 32 && list.some((o) => o !== id && shortId(o, k) === shortId(id, k))) k += 1
+    out.set(id, shortId(id, k))
+  }
+  return out
+}
 /** ISO timestamp → "2026-10-04" (local date of the recorded offset). */
 export const dayOf = (at: string | null | undefined): string => (at ? at.slice(0, 10) : '날짜 없음')
 
@@ -57,11 +68,11 @@ export function simTooltip(c: Coverage): string {
   const sims = c.simulations ?? []
   if (!sims.length) return `simulation evidence ${c.simulation}건`
   return [`simulation evidence ${sims.length}건 (최신순, ▶ = 대표)`,
-    ...sims.slice(0, 6).map((s) => `${s.shown ? '▶' : ' '} ${dayOf(s.at)} · ${s.tool ?? 'sim'} v${s.tool_version ?? '?'}${s.source ? ` (${s.source})` : ''} · SW ${s.sw_baseline_ref ?? '—'}${s.total_mw != null ? ` · ${s.total_mw.toFixed(0)} mW` : ''}\n    ${s.id}`),
+    ...sims.slice(0, 6).map((s) => `${s.shown ? '▶' : ' '} ${dayOf(s.at)} · ${s.tool ?? 'sim'} v${s.tool_version ?? '?'}${s.source ? ` (${s.source})` : ''} · SW ${s.sw_baseline_ref ?? '—'}${s.total_mw != null ? ` · ${s.total_mw.toFixed(0)} mW` : ''}${s.by ? ` · by ${s.by}` : ''}\n    ${s.id}`),
     ...(sims.length > 6 ? [`… 외 ${sims.length - 6}건`] : [])].join('\n')
 }
-export function predictionTooltip(p: CoveragePrediction): string {
-  return [`등록 예측 ${shortId(p.id)}${p.version ? ` · v${p.version}` : ''} · ${dayOf(p.created_at)}`,
+export function predictionTooltip(p: CoveragePrediction, short?: string): string {
+  return [`등록 예측 ${short ?? shortId(p.id)} (클릭 = 전체 ID 복사: ${p.id})${p.version ? ` · v${p.version}` : ''} · ${dayOf(p.created_at)}`,
     p.total_mw != null ? `total ${p.total_mw.toFixed(0)} mW` : null,
     p.selection_rule ? `선정 ${p.selection_rule}${p.selected_by ? ` (${p.selected_by})` : ''}` : null,
     p.run ? `조합 탐색 run ${shortId(p.run)}` : null,
@@ -91,6 +102,8 @@ export interface IpBwRow {
 }
 export interface IpBandwidth {
   scenario_id: string; variant_id: string; rows: IpBwRow[]; note: string
+  /** like-for-like check (PIPE-05): synthetic / unknown origin / SW / fps differences make it a reference comparison */
+  comparability?: { equivalent: boolean; statistic: string; reasons: string[] } | null
   simulation: { id: string; at: string | null; tool_version?: string | null } | null
   measurement: { id: string; at: string | null; synthetic: boolean; sw_baseline_ref?: string | null; silicon_rev?: string | null } | null
   measurements: { id: string; at: string | null; synthetic: boolean }[]

@@ -238,3 +238,75 @@ def test_dvfs_level_whatif_rows(graph_factory, dvfs):
     # domain filter
     only = tb.dvfs_level_whatif(g, tb.TimingBudgetOptions(), dvfs_tables=dvfs, shifts=(1,), domains=[out["domains"][0]["domain"]])
     assert {r["domain"] for r in only["rows"]} <= {out["domains"][0]["domain"]}
+
+
+def test_pipelined_sw_on_one_cpu_resource_must_fit_the_period_together(graph_factory):
+    """AC-05: two SW tasks on the same core cannot pass as independent threads (sum > period fails)."""
+    g = graph_factory("cam-rec-r1-fhd120")
+    free = tb.analyze_timing_budget(g, tb.TimingBudgetOptions(throughput_model="pipelined"))
+    shared = tb.analyze_timing_budget(g, tb.TimingBudgetOptions(throughput_model="pipelined", shared_cpu=True))
+    nrt_free, nrt_shared = _stage(free, "nrt"), _stage(shared, "nrt")
+    period = shared["period_ms"]
+    assert nrt_free["longest_sw_ms"] <= period and nrt_free["cpu_groups"] == []
+    group = nrt_shared["cpu_groups"][0]
+    assert group["load_ms"] == pytest.approx(sum(i["runtime_ms"] for i in nrt_shared["sw_items"] if i["kind"] == "sw"), abs=0.01)
+    if group["load_ms"] > period:
+        assert not nrt_shared["feasible"] and shared["verdict"]["status"] == "fail"
+        assert any("같은 thread/core" in r for r in shared["verdict"]["reasons"])
+
+
+def test_pipelined_single_ip_slower_than_the_period_still_fails(graph_factory, dvfs):
+    """AC-04: buffering does not rescue a stage whose service time per frame exceeds the period."""
+    g = graph_factory("cam-rec-r1-uhd60-sdr")
+    out = tb.dvfs_level_whatif(g, tb.TimingBudgetOptions(throughput_model="pipelined"), dvfs_tables=dvfs, shifts=(-1,))
+    slow = [r for r in out["rows"] if not r.get("error") and r["stage_hw_ms"]["nrt"] > out["period_ms"] * 1.001]
+    assert slow
+    for r in slow:
+        assert r["verdict"] == "fail" and any("interval" in x for x in r["reasons"])
+
+
+def test_dvfs_combos_boundaries_and_peak_bw(graph_factory, dvfs):
+    """TIM-05: several domains together + boundary rows; TIM-08: faster clock keeps average BW, raises peak."""
+    g = graph_factory("cam-rec-r1-uhd30-vdis")
+    out = tb.dvfs_level_whatif(g, tb.TimingBudgetOptions(throughput_model="pipelined"), dvfs_tables=dvfs,
+                               shifts=(-9, 1), combos=[{"CAM": 1, "INTCAM": 1}, {"CAM": -9}])
+    edge = [r for r in out["rows"] if r["shift"] == -9]
+    assert edge and all(r.get("boundary") == "최저 OPP" and r["level"] is None for r in edge)
+    combo, outside = out["combos"]
+    assert outside.get("error") and outside["boundary"] == "경계"
+    singles = {r["domain"]: r for r in out["rows"] if r["shift"] == 1 and not r.get("error")}
+    if "CAM" in singles and "INTCAM" in singles and not combo.get("error"):
+        # both faster: power at least each single step, average BW unchanged, peak not lower
+        assert combo["delta_mw"] >= max(singles["CAM"]["delta_mw"], singles["INTCAM"]["delta_mw"]) - 0.05
+        assert combo["delta_mbs"] == pytest.approx(0, abs=0.5)
+        assert combo["delta_peak_mbs"] >= -0.5
+    peak = out["base"]["peak_stage_mbs"]
+    assert peak is not None and peak >= 0
+
+
+def test_dvfs_combo_star_moves_every_domain(graph_factory, dvfs):
+    """'*' preset = every DVFS domain of the variant shifted together."""
+    g = graph_factory("cam-rec-r1-uhd30-vdis")
+    out = tb.dvfs_level_whatif(g, tb.TimingBudgetOptions(throughput_model="pipelined"), dvfs_tables=dvfs,
+                               shifts=(1,), combos=[{"*": 1}])
+    (row,) = out["combos"]
+    assert set(row["combo"]) == {d["domain"] for d in out["domains"]}
+    assert all(k == 1 for k in row["combo"].values())
+
+
+def test_interval_stats_jitter_drops_warmup():
+    """TIM-09: report-only statistics; a 2-period gap = one dropped frame; leading off-cadence gaps = warm-up."""
+    st = tb._interval_stats([40.0, 33.3, 66.6, 33.3, 33.3], 33.3, 1e-3, 0)
+    assert st["drops"] == 1 and st["warmup_observed"] == 1 and st["warmup_excluded"] == 0
+    assert st["jitter_ms"] > 0 and st["p95_dev_ms"] == pytest.approx(33.3, abs=0.01)
+    st2 = tb._interval_stats([40.0, 33.3, 33.3], 33.3, 1e-3, 1)
+    assert st2["drops"] == 0 and st2["jitter_ms"] == pytest.approx(0) and st2["warmup_excluded"] == 1
+
+
+def test_warmup_frames_only_relaxes_leading_intervals(graph_factory, dvfs):
+    g = graph_factory("cam-rec-r1-uhd30-vdis")
+    a = tb.analyze_timing_budget(g, tb.TimingBudgetOptions(), dvfs_tables=dvfs)
+    b = tb.analyze_timing_budget(g, tb.TimingBudgetOptions(warmup_frames=2), dvfs_tables=dvfs)
+    assert a["intervals"]["video"]["values"] == b["intervals"]["video"]["values"]
+    assert b["intervals"]["video"]["warmup_excluded"] == 2
+    assert not (a["intervals"]["ok"] and not b["intervals"]["ok"])  # excluding intervals never turns ok into fail

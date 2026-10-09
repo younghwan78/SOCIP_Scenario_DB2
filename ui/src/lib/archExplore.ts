@@ -48,6 +48,8 @@ export interface SliceRow {
 }
 export interface VariantResult {
   scenario_id: string; variant_id: string; fps: number; period_ms: number; eis_on: boolean; mfc_dual: boolean
+  /** EXP-05: power budget this variant was explored with (spec value or previous-project reference) */
+  power_budget?: { mw: number | null; source: string | null; reference_mw?: number } | null
   spec_ok: boolean; spec_reasons: string[]; counts: { cases: number; eligible: number; sw_slices: number; compression_sets: number; dvfs_sets: number }
   distribution: Dist; baseline: ExpCase; recommended: ExpCase | null; alternatives: ExpCase[]
   /** engine rev ≥ 7: non-dominated eligible cases on power · BW · IQ risk · DVFS headroom */
@@ -63,6 +65,8 @@ export interface VariantResult {
   ip_modes?: IpModeRow[]
   /** API ≥ 2026-10-09: IQ/performance-keeping optimum + near-optimal window vs lossy optimum */
   tiers?: Tiers
+  /** tier A best total (compact copy for the run list view) */
+  keep_total_mw?: number | null
   /** timing judgement of the run (project review policy) */
   throughput_model?: 'stage' | 'pipelined'
   /** false = list-view row (run?view=summary): fetch archApi.runVariant for slices / buffers / options */
@@ -100,6 +104,8 @@ export interface OptionMarginal {
 export interface TierWindow {
   best: ExpCase; near_pct: number; near_cases: number; near_mw: [number, number]; near_bw_mbs: [number, number]
   dvfs_range: Record<string, [number, number]>; compression_always: string[]; compression_optional: string[]
+  /** evaluated cases inside the window (API ≥ 2026-10-09 b) */
+  near_list?: { key: string; dvfs: Record<string, number>; compression: string[]; statistic: string; runtime_scale: number; total_mw: number; bw_mbs: number }[]
 }
 export interface Tiers { keep: TierWindow | null; trade: TierWindow | null; trade_gain: { delta_mw: number; delta_mbs: number; iq_risk: number } | null }
 export interface PowerOptions {
@@ -180,6 +186,10 @@ export interface RunOptions {
   options: { knobs: boolean; modes: boolean; max_sets: number }
   /** CPU term of every case: flat assumption or the variant's measured CPU profile (EAS + growth) */
   cpu_model?: 'flat' | 'profile'
+  /** EXP-05: customer budget — cases above it are not recommended (null = none) */
+  power_budget_mw?: number | null; bw_budget_mbs?: number | null
+  /** per variant: previous-project reference × (1 + tolerance) from the project review policy (tighter of the two) */
+  budget_from_reference?: boolean
 }
 export const DEFAULT_RUN: RunOptions = {
   statistics: ['mean', 'max'], runtime_scales: [1.0, 1.1, 1.2], dvfs_headroom_levels: 1,
@@ -194,11 +204,13 @@ export function runBody(scenarioIds: string[], title: string, scenarioType: stri
   return {
     title: title || undefined, scenario_type: scenarioType || undefined, scenario_ids: scenarioIds,
     config_profile_ref: configProfileRef ?? undefined,
+    ...(o.budget_from_reference ? { power_budget_from_reference: true } : {}),
     spec: {
       axes: { statistics: stats, runtime_scales: scales, dvfs_headroom_levels: o.dvfs_headroom_levels,
         compression: { enabled: o.modes.length > 0 && o.max_buffers > 0, modes: o.modes.length ? o.modes : ['lossy'], max_buffers: o.max_buffers, require_declared: o.require_declared },
         power_options: { enabled: o.options.knobs || o.options.modes, include_knobs: o.options.knobs, include_modes: o.options.modes, max_sets: o.options.max_sets } },
-      constraints: { allow_lossy: o.allow_lossy },
+      constraints: { allow_lossy: o.allow_lossy,
+        ...(o.power_budget_mw ? { power_budget_mw: o.power_budget_mw } : {}), ...(o.bw_budget_mbs ? { bw_budget_mbs: o.bw_budget_mbs } : {}) },
       objective: { statistic: o.objective_statistic, runtime_scale: o.objective_scale },
       ...(o.cpu_model === 'profile' ? { timing: { cpu_model: 'profile' } } : {}),
     },
@@ -238,6 +250,7 @@ export const archApi = {
   optionReviews: (scenarioId?: string) => send<OptionReview[]>('GET', `/arch/power-options/reviews${q({ scenario_id: scenarioId })}`),
   setOptionReview: (body: { scenario_id: string; variant_id?: string; option_key: string; status: ReviewStatus; note?: string }) =>
     send<OptionReview>('PUT', '/arch/power-options/reviews', body),
+  freshness: (scenarioId?: string, projectRef?: string) => send<Freshness>('GET', `/arch/predictions/freshness${q({ scenario_id: scenarioId, project_ref: projectRef })}`),
   history: (scenarioId: string, variantId: string) => send<HistoryRow[]>('GET', `/arch/predictions/history${q({ scenario_id: scenarioId, variant_id: variantId })}`),
   compare: (p: { old_id?: string; new_id?: string; scenario_id?: string; variant_id?: string }) =>
     send<{ old: HistoryRow; new: HistoryRow; attribution: Attribution }>('GET', `/arch/predictions/compare${q(p)}`),
@@ -309,3 +322,7 @@ export function coverageOf(v: Pick<VariantResult, 'status' | 'coverage'>): Power
 export function promoteTargets(run: Pick<RunDetail, 'variants'>): VariantResult[] {
   return run.variants.filter((v) => v.spec_ok && v.recommended)
 }
+
+/** current prediction vs today's inputs (PRED-04) */
+export interface FreshRow { prediction_id: string; scenario_id: string; variant_id: string; run_id?: string; status: 'fresh' | 'stale' | 'unknown'; reasons: string[]; changed: string[] }
+export interface Freshness { rows: FreshRow[]; stale: number; fresh: number; engine_rev: string }

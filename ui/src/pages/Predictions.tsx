@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { Ctx } from '../App'
 import { useAsync } from '../lib/route'
+import { api } from '../lib/api'
 import { fmt } from '../lib/timingBudget'
 import { archApi, levels, short, type BoardRow, type HistoryRow } from '../lib/archExplore'
 import { Card } from '../components/TimingCharts'
@@ -41,8 +42,15 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
       return ok ? m : undefined }), [scenIds.join(',')])
   const refs = useReferences(ctx.project)
   const simRef = useSimProfiles(ctx.project, ctx.params.cfg)
+  // PRED-04: is each registration still today's result?  PRED-05: evaluation targets without a registration
+  const freshQ = useAsync(() => (rows.length ? archApi.freshness(all ? undefined : ctx.scenario, all ? ctx.project || undefined : undefined).catch(() => null) : Promise.resolve(null)), [rows.length, all, ctx.scenario, ctx.project, tick])
+  const stale = useMemo(() => new Map((freshQ.data?.rows ?? []).filter((x) => x.status === 'stale').map((x) => [x.prediction_id, x.reasons])), [freshQ.data])
+  const scopeScenarios = all ? (ctx.catalog ?? []).map((c) => c.scenario_id) : [ctx.scenario].filter(Boolean)
+  const varsQ = useAsync(() => Promise.all(scopeScenarios.map((sid) => api.variants(sid).then((r) => r.items.filter((v) => !v.derived_from_variant).map((v) => [sid, v.id] as const)).catch(() => [] as (readonly [string, string])[]))).then((x) => x.flat()), [scopeScenarios.join(',')])
+  const registered = new Set(rows.map((r) => `${r.scenario_id}|${r.variant_id}`))
+  const unregistered = (varsQ.data ?? []).filter(([sid, vid]) => !registered.has(`${sid}|${vid}`))
   const risk = assessAll(rows, { target_mw: target, measured: covQ.data ?? undefined, references: refs?.references,
-    tolerance_pct: refs?.tolerance_pct, max_latency_frames: refs?.policy.max_latency_frames })
+    tolerance_pct: refs?.tolerance_pct, max_latency_frames: refs?.policy.max_latency_frames, stale })
   const watch = (refs?.policy.thermal_watch.length ?? 0) > 0
   const twQ = useAsync(() => (watch && ctx.project ? reviewApi.thermalWatch(ctx.project, simRef.ref) : Promise.resolve(null)), [watch, ctx.project, simRef.ref, tick])
   const staleRows = rows.filter((r) => r.throughput_model === 'stage' && refs?.policy.throughput_model === 'pipelined').length
@@ -118,7 +126,8 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
         <div className="tb-grid">
           {sel && <ChangeCard key={sel.id} row={sel} />}
           {sel && <OptionsCard key={`o-${sel.id}`} row={sel} onChanged={() => setTick((t) => t + 1)} />}
-          <RiskCard risk={risk} target={target} battery={battery} ctx={ctx} measuredKnown={!!covQ.data} onPick={choose} refs={refs} staleRows={staleRows} />
+          <RiskCard risk={risk} target={target} battery={battery} ctx={ctx} measuredKnown={!!covQ.data} onPick={choose} refs={refs} staleRows={staleRows}
+            coverage={{ targets: varsQ.data?.length ?? null, unregistered, stale: stale.size, freshChecked: !!freshQ.data }} />
           {watch && <Card id="pr-thermal" title="② 발열 대응 — power 감소 요청 대비 (thermal watch)" defaultWide minHeight={160}
             note="고객 board 발열로 power 감소 요청이 오는 scenario · 기준 = 화질·fps 유지 최적 · lever별 절감 mW/mA와 희생 · −10/−20% 요청 충족 여부">
             {twQ.error ? <div className="err">{twQ.error}</div> : !twQ.data ? <div className="empty">계산 중… (IP clock level what-if 포함)</div>
@@ -205,8 +214,9 @@ function show(v: unknown): string {
 const LEVELS: RiskLevel[] = ['high', 'med', 'low', 'ok']
 
 /** Risk · Focus: which predictions threaten the customer's performance / thermal target and what to work on. */
-function RiskCard({ risk, target, battery, ctx, measuredKnown, onPick, refs, staleRows }: { risk: RiskRow[]; target: number | null; battery: Battery; ctx: AppCtx; measuredKnown: boolean; onPick: (id: string) => void
-  refs: References | null; staleRows: number }) {
+function RiskCard({ risk, target, battery, ctx, measuredKnown, onPick, refs, staleRows, coverage }: { risk: RiskRow[]; target: number | null; battery: Battery; ctx: AppCtx; measuredKnown: boolean; onPick: (id: string) => void
+  refs: References | null; staleRows: number
+  coverage: { targets: number | null; unregistered: (readonly [string, string])[]; stale: number; freshChecked: boolean } }) {
   const pr = refs?.policy.power_reference
   const [showAll, setShowAll] = useState(false)
   const count = (l: RiskLevel) => risk.filter((x) => x.level === l).length
@@ -219,8 +229,15 @@ function RiskCard({ risk, target, battery, ctx, measuredKnown, onPick, refs, sta
   const go = (page: string | undefined, r: RiskRow['row']) => page && ctx.navigate(page as Parameters<AppCtx['navigate']>[0], { scenario: r.scenario_id, variant: r.variant_id })
   return (
     <Card id="pr-risk" title="① Risk · Focus — 고객 성능/발열 목표 대비" defaultWide minHeight={200}
-      note={`성능 = fps 유지 (timing 판정 · ${refs?.policy.throughput_model === 'pipelined' ? 'pipeline buffering 기준' : 'stage 기준'}) · SW 여유 / 소비전류 = ${pr ? `전과제 대비 (≤ +${pr.tolerance_pct}% 유사)` : target ? `목표 ${target.toFixed(0)} mW (${maText(target, battery)})` : '목표 미설정 → 상대 비교'} / 신뢰도 = 실측 · sim 검증 · range`}>
+      note={`성능 = fps 유지 (timing 판정 · ${refs?.policy.throughput_model === 'pipelined' ? 'pipeline buffering 기준' : 'stage 기준'}) · SW 여유 / 소비전류 = ${pr ? `전과제 대비 (≤ +${pr.tolerance_pct}% 유사)` : target ? `목표 ${target.toFixed(0)} mW (${maText(target, battery)})` : '목표 미설정 → 상대 비교'} / 신뢰도 = 실측 · sim 검증 · range · 발열은 열 모델·동등 실측 없이 PASS 판정하지 않음 (power = 대리 지표)`}>
       {pr?.source_note && <div className="faint" style={{ fontSize: 11.5, marginBottom: 4 }}>전과제 값: {pr.project_ref ?? '직접 지정'} · {pr.source_note}</div>}
+      {coverage.targets !== null && <div className="faint" style={{ fontSize: 12, marginBottom: 4 }}>
+        평가 대상 variant {coverage.targets} = 등록 {coverage.targets - coverage.unregistered.length} + <b style={{ color: coverage.unregistered.length ? 'var(--del-text)' : undefined }}>미등록 {coverage.unregistered.length}</b>
+        {coverage.freshChecked && <> · 등록 중 입력 변경(stale) <b style={{ color: coverage.stale ? 'var(--del-text)' : undefined }}>{coverage.stale}</b></>}
+        {coverage.unregistered.length > 0 && <details style={{ display: 'inline-block', marginLeft: 8 }}><summary>미등록 목록</summary>
+          <div className="mono" style={{ fontSize: 11 }}>{coverage.unregistered.map(([s, v]) => `${s} / ${v}`).join(' · ')}</div>
+          <div>조합 탐색에서 실행 · 등록하면 위험 판정에 포함됩니다 (미등록 = 미평가, 통과 아님).</div></details>}
+      </div>}
       {staleRows > 0 && <div className="lib-note warn" style={{ marginBottom: 6 }}>{staleRows}건은 이전 판정 기준(stage)으로 등록된 예측입니다 — 과제 기준은 pipeline buffering. 조합 탐색을 다시 실행해 등록하세요.</div>}
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 8, fontSize: 12.5 }}>
         {LEVELS.map((l) => <span key={l} className={`badge ${RISK_CLASS[l]}`}>{RISK_LABEL[l]} {count(l)}</span>)}

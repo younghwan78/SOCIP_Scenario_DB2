@@ -21,6 +21,7 @@ import { LibraryPage } from './pages/Library'
 import { SettingsPage } from './pages/Settings'
 import { PREFERRED_REFERENCE } from './lib/defaults'
 import { addItem, canonicalOf, compareItems, counterpart, defaultScenario, formatItems, projectText, projectsOf, type ProjectInfo } from './lib/projects'
+import { AdmissionWaitPill } from './components/AdmissionWait'
 
 type NavItem = { page: Page; label: string; icon: string; also?: Page[] }
 // Review workflow (U9): 선택 → 예측 → 검증 → 최적화 → 결정·보고, then Library. Home = brand link; legacy Streamlit lives in 설정.
@@ -52,7 +53,7 @@ const NEXT: Partial<Record<Page, { page: Page; label: string }>> = {
 }
 
 const TITLES: Record<Page, string> = {
-  home: 'Home', explorer: 'Scenario', matrix: 'Scenario', pipeline: 'Pipeline', compare: 'Compare', timing: 'Timing Budget · variant', 'timing-fleet': 'Timing Budget · 전체 scenario',
+  home: 'Home', explorer: 'Scenario', matrix: 'Scenario', pipeline: 'Pipeline', compare: 'Compare', timing: 'Timing Budget · variant', 'timing-fleet': 'Timing Budget · 전체 variant',
   explore: '조합 탐색', predictions: '예측 현황', reports: 'Architecture 검토 보고서', calibration: '예측 ↔ 실측', cpu: 'CPU 배치 · 주파수 what-if', library: 'Library', settings: '설정',
 }
 
@@ -193,7 +194,7 @@ export default function App() {
           {(route.page === 'timing' || route.page === 'timing-fleet') && (
             <div className="seg" role="group" aria-label="보기">
               <a className={route.page === 'timing' ? 'on' : ''} href={link('timing')}>Variant</a>
-              <a className={route.page === 'timing-fleet' ? 'on' : ''} href={link('timing-fleet')}>전체 scenario</a>
+              <a className={route.page === 'timing-fleet' ? 'on' : ''} href={link('timing-fleet')}>전체 variant</a>
             </div>
           )}
           {NEXT[route.page] && <a className="btn next-step" href={link(NEXT[route.page]!.page)} title="검토 흐름의 다음 단계">다음: {NEXT[route.page]!.label} →</a>}
@@ -222,6 +223,7 @@ export default function App() {
         onPick={(s, v) => (picker === 'compare' || route.page === 'compare' ? toCompare(s, v)
           : navigate(route.page === 'timing' ? 'timing' : 'pipeline', { scenario: s, variant: v }))}
         onAddCompare={toCompare} />
+      <AdmissionWaitPill />
     </div>
   )
 }

@@ -12,6 +12,16 @@ PROTECTED_ROLES = frozenset({"analyst", "writer", "admin"})
 ALL_ROLES = frozenset({"reader", *PROTECTED_ROLES})
 
 
+LOCAL_SUBJECT = "local-auth-disabled"
+
+
+def audit_user(principal: ApiPrincipal | None) -> str | None:
+    """Identity worth recording on data (who ran / saved it); None while auth is disabled (no real user)."""
+    if principal is None or principal.subject == LOCAL_SUBJECT:
+        return None
+    return principal.subject
+
+
 @dataclass(frozen=True, slots=True)
 class ApiPrincipal:
     subject: str
@@ -30,7 +40,7 @@ def require_api_principal(
 
     settings = get_settings()
     if settings.mutation_auth_disabled:
-        return ApiPrincipal(subject="local-auth-disabled", roles=ALL_ROLES)
+        return ApiPrincipal(subject=LOCAL_SUBJECT, roles=ALL_ROLES)
 
     configured_principals = getattr(settings, "api_principals", {})
     legacy_keys = settings.mutation_api_keys

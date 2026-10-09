@@ -91,8 +91,29 @@ def _variant_ids(db: Session, scenario_id: str, request: ArchExplorationRunReque
 
 
 # ------------------------------------------------------------------- runs
+def _reference_budgets(db: Session, project_ref: str | None) -> dict[str, dict[str, Any]]:
+    """variant id -> {"mw": reference x (1 + tol), "reference_mw", "source"} from the project review_policy."""
+    if not project_ref:
+        return {}
+    from scenario_db.api.services.review import power_references
+
+    refs = power_references(db, project_ref)
+    tol = (refs.get("tolerance_pct") or 0.0) / 100.0
+    return {vid: {"mw": round(r["mw"] * (1 + tol), 2), "reference_mw": r["mw"], "source": r["source"]}
+            for vid, r in refs["references"].items() if r.get("mw")}
+
+
+def _variant_budget(spec_mw: float | None, ref: dict[str, Any] | None) -> dict[str, Any]:
+    if ref is None:
+        return {"mw": spec_mw, "source": "spec" if spec_mw is not None else None}
+    if spec_mw is not None and spec_mw <= ref["mw"]:
+        return {"mw": spec_mw, "source": "spec", "reference_mw": ref["reference_mw"]}
+    return {"mw": ref["mw"], "source": f"전과제 {ref['source']}", "reference_mw": ref["reference_mw"]}
+
+
 def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str | None = None) -> dict[str, Any]:
     scenarios = _scenarios(db, request)
+    throughput_from_policy = "throughput_model" not in request.spec.timing.model_fields_set
     # project review policy decides the throughput judgement unless the spec sets it (stored in run.spec)
     from scenario_db.api.services.review_policy import apply_throughput, project_policy
 
@@ -110,6 +131,7 @@ def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str |
     soc_ref = request.soc_ref
     dvfs_ref: str | None = None
     remaining_cases = 2_000_000
+    ref_budget = _reference_budgets(db, scenarios[0].project_ref) if request.power_budget_from_reference else {}
     for scenario, variant_id in plan:
         if remaining_cases <= 0:
             raise UnprocessableError("exploration exceeds 2000000 total cases; narrow the scope")
@@ -130,10 +152,16 @@ def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str |
                 "max_cases_per_variant": min(request.spec.max_cases_per_variant, remaining_cases),
                 "timing": with_cpu_profile(db, request.spec.timing, scenario.id, variant_id),
             })
+            budget = _variant_budget(request.spec.constraints.power_budget_mw, ref_budget.get(variant_id))
+            if budget["mw"] != request.spec.constraints.power_budget_mw:
+                bounded_spec = bounded_spec.model_copy(update={
+                    "constraints": bounded_spec.constraints.model_copy(update={"power_budget_mw": budget["mw"]})})
             _check_power_params_scope(shim.config, graph)
             stage = "explore"
             summary = explore_variant(graph, bounded_spec, config=shim.config, dvfs_tables=tables)
             summary["model_lineage"] = run_model_lineage(shim.config)
+            if budget["mw"] is not None:
+                summary["power_budget"] = budget
         except Exception as exc:  # noqa: BLE001 - one variant must not abort the run
             errors.append(variant_failure(exc, variant_id=variant_id, scenario_id=scenario.id, stage=stage))
             continue
@@ -174,6 +202,10 @@ def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str |
         soc_ref=soc_ref,
         spec=request.spec.model_dump(mode="json") | {"scenario_ids": [s.id for s in scenarios], "category": request.category,
                                                       "config_profile_ref": request.config_profile_ref,
+                                                      "input_selection": request.model_dump(mode="json", include={
+                                                          "config", "config_profile_ref", "dvfs_tables", "dvfs_table_ref",
+                                                          "soc_ref", "dvfs_version", "use_default_dvfs"}, exclude_unset=True),
+                                                      "throughput_from_policy": throughput_from_policy,
                                                       # resolved inputs, content-addressed (variants[].input_sections -> blobs)
                                                       "manifest": {"engine_rev": ENGINE_REV, "tool_version": _tool_version(),
                                                                    "blobs": blobs}},
@@ -217,7 +249,8 @@ def _run_meta(row: ArchExplorationRun) -> dict[str, Any]:
 
 SUMMARY_KEYS = ("scenario_id", "variant_id", "design_conditions", "severity", "fps", "period_ms", "eis_on", "mfc_dual",
                 "spec_ok", "spec_reasons", "status", "objective", "counts", "distribution", "baseline", "recommended",
-                "coverage", "dvfs_table_ref", "input_hash", "model_lineage")
+                "coverage", "dvfs_table_ref", "input_hash", "model_lineage", "keep_total_mw", "throughput_model",
+                "power_budget")
 SW_MARGIN_SUMMARY_KEYS = ("worst", "growth_tolerance", "growth_tolerance_fixed", "growth_tested_max", "recommendations",
                           "verdict", "stat_spread_ms")
 
@@ -586,6 +619,12 @@ def create_report(db: Session, request: ArchReportRequest, user: str | None = No
     clock = _report_clock(db, preds)
     if clock:
         snapshot["clock_residency"] = clock  # absent key = report generated before clock residency existed
+    from scenario_db.api.services.review import report_context
+
+    blobs = ((run.spec or {}).get("manifest") or {}).get("blobs") or {}
+    config_hash = ((run.variants[0] if run.variants else {}).get("input_sections") or {}).get("config")
+    snapshot["review_context"] = report_context(db, run.project_ref, (run.spec or {}).get("config_profile_ref"), preds,
+                                                 frozen_config=blobs.get(config_hash))
     title = request.title or f"{run.soc_ref or ''} {run.scenario_type} Architecture 검토".strip()
     html = render_html(title, snapshot)
     row = ArchReport(
@@ -936,3 +975,80 @@ def model_status(db: Session, *, project_ref: str | None = None) -> dict[str, An
         "latest_run": {"id": latest.id, "engine_rev": latest.engine_rev,
                        "created_at": latest.created_at.isoformat() if latest.created_at else None} if latest is not None else None,
     }
+
+
+def prediction_freshness(db: Session, *, scenario_id: str | None = None, project_ref: str | None = None) -> dict[str, Any]:
+    """Is each current prediction still the result of today's inputs? (PRED-04)
+
+    Re-resolves every registered variant's inputs the way its run did (config profile, DVFS table) and compares the
+    content-addressed input sections with the ones frozen in the run, plus the engine revision and the project's
+    throughput judgement. Changed sections name the cause (variant_doc, ip:<id>, dvfs:<domain>, config, …).
+    """
+    from scenario_db.api.services.review_policy import project_policy
+    from scenario_db.sim.arch_exploration import input_manifest
+
+    q = db.query(Prediction.id, Prediction.scenario_ref, Prediction.variant_ref, Prediction.exploration_run_ref,
+                 Prediction.project_ref, Prediction.metrics["throughput_model"].astext).filter(Prediction.status == "current")
+    if scenario_id:
+        q = q.filter(Prediction.scenario_ref == scenario_id)
+    if project_ref:
+        q = q.filter(Prediction.project_ref == project_ref)
+    preds = q.all()
+    runs = {r.id: r for r in db.query(ArchExplorationRun.id, ArchExplorationRun.engine_rev, ArchExplorationRun.project_ref,
+                                      ArchExplorationRun.spec["input_selection"].label("selection"),
+                                      ArchExplorationRun.spec["timing"].label("timing"),
+                                      ArchExplorationRun.spec["throughput_from_policy"].label("policy_tp"))
+            .filter(ArchExplorationRun.id.in_({p[3] for p in preds})).all()} if preds else {}
+    policies: dict[str | None, Any] = {}
+    rows = []
+    for pid, sid, vid, run_id, proj, tp in preds:
+        run = runs.get(run_id)
+        reasons: list[str] = []
+        changed: list[str] = []
+        if run is None:
+            rows.append({"prediction_id": pid, "scenario_id": sid, "variant_id": vid, "status": "unknown",
+                         "reasons": ["run 없음"], "changed": []})
+            continue
+        if run.engine_rev != ENGINE_REV:
+            reasons.append(f"engine {run.engine_rev} → {ENGINE_REV}")
+        if proj not in policies:
+            policies[proj] = project_policy(db, proj)
+        pol = policies[proj]
+        want_tp = (pol.throughput_model if pol and pol.throughput_model else "stage")
+        if run.policy_tp is not False and (tp or "stage") != want_tp:
+            reasons.append(f"판정 기준 {tp or 'stage'} → {want_tp}")
+        frozen = (_run_variant_sections(db, run_id, sid, vid) or {})
+        try:
+            if run.selection is None:
+                raise ValueError("run에 설정/DVFS 입력 선택 기록 없음 — 현재 입력과 비교할 수 없음")
+            tb = TimingBudgetRequest(scenario_id=sid, variant_id=vid, **run.selection)
+            shim = _shim(tb, vid)
+            _apply_config_profile(db, shim)
+            graph, tables, _ = _load(db, shim, tb.use_default_dvfs)
+            from scenario_db.api.services.cpu import with_cpu_profile
+            from scenario_db.sim.timing_budget import TimingBudgetOptions
+
+            timing = TimingBudgetOptions.model_validate(run.timing or {})
+            if run.policy_tp is True:
+                timing = timing.model_copy(update={"throughput_model": want_tp})
+            timing = with_cpu_profile(db, timing, sid, vid)
+            now, _ = input_manifest(graph, shim.config, tables, timing=timing)
+            if frozen:
+                changed = sorted(k for k in set(now) | set(frozen) if now.get(k) != frozen.get(k))
+            else:
+                reasons.append("run에 입력 manifest 없음 (이전 run)")
+        except Exception as exc:  # noqa: BLE001 - one variant must not hide the others
+            reasons.append(f"현재 입력 해석 실패: {str(exc)[:160]}")
+        if changed:
+            reasons.append("입력 변경: " + ", ".join(changed[:6]) + (f" 외 {len(changed) - 6}" if len(changed) > 6 else ""))
+        rows.append({"prediction_id": pid, "scenario_id": sid, "variant_id": vid, "run_id": run_id,
+                     "status": "stale" if reasons else "fresh", "reasons": reasons, "changed": changed})
+    return {"rows": rows, "stale": sum(r["status"] == "stale" for r in rows), "fresh": sum(r["status"] == "fresh" for r in rows),
+            "engine_rev": ENGINE_REV}
+
+
+def _run_variant_sections(db: Session, run_id: str, scenario_id: str, variant_id: str) -> dict[str, str] | None:
+    R = ArchExplorationRun
+    return db.query(func.jsonb_path_query_first(
+        R.variants, literal_column("'$[*] ? (@.scenario_id == $s && @.variant_id == $v).input_sections'::jsonpath"),
+        func.jsonb_build_object(literal("s"), scenario_id, literal("v"), variant_id))).filter(R.id == run_id).scalar()

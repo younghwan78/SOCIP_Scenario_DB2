@@ -11,6 +11,18 @@ import { DataTable, type Column, type RowGroup } from '../components/DataTable'
 import { SEVERITY_RANK, resFpsKey } from '../lib/defaults'
 import { MISSING } from '../lib/conditions'
 import { canonicalOf, formatItems } from '../lib/projects'
+import { archApi, type BoardRow, type FreshRow } from '../lib/archExplore'
+import { calibrationApi } from '../lib/calibration'
+import { fmt, verdictChip } from '../lib/timingBudget'
+
+/** MAT-02: per variant — registered prediction, its timing verdict and how trustworthy it is (measured / stale). */
+export interface PredCell { row: BoardRow | null; fresh: FreshRow | null; measured: number | null }
+export function provenanceText(c: PredCell | undefined): { text: string; cls: string; tip: string } {
+  if (!c?.row) return { text: '미등록', cls: 'v-fail', tip: '예측 현황에 current prediction 없음 — 조합 탐색 후 등록' }
+  if (c.fresh?.status === 'stale') return { text: '입력 변경', cls: 'v-warn', tip: `등록 후 입력이 바뀜: ${c.fresh.reasons.join(', ')}` }
+  if (c.measured) return { text: `실측 ${c.measured}`, cls: 'v-ok', tip: '실측 evidence 있음 — Calibration에서 예측 대비 확인' }
+  return { text: '예측만', cls: 'v-info', tip: `run ${c.row.run_id} · ${c.row.selection_rule}${c.measured === null ? ' · 실측 coverage 미확인' : ''}` }
+}
 
 const COLS = ['Res · fps', 'Mode · Format', 'Output · HDR', 'Stab', 'Camera', 'Codec · Rate', 'Screen']
 
@@ -21,6 +33,21 @@ export function MatrixPage({ ctx }: { ctx: Ctx }) {
   const [load, setLoad] = useState('')
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [grouped, setGrouped] = usePref('matrix.grouped', true)
+  const [showPred, setShowPred] = usePref('matrix.pred', true)
+  const scenIds = useMemo(() => [...new Set((q.data?.items ?? []).map((r) => r.scenario_id))].sort(), [q.data])
+  const predQ = useAsync(() => (!showPred || !scenIds.length ? Promise.resolve(null) : Promise.all([
+    archApi.board(undefined, ctx.project || undefined).catch(() => ({ rows: [] as BoardRow[] })),
+    archApi.freshness(undefined, ctx.project || undefined).catch(() => null),
+    Promise.all(scenIds.map((sid) => calibrationApi.coverage(sid).then((c) => [sid, c] as const).catch(() => null))),
+  ]).then(([b, f, cov]) => {
+    const m = new Map<string, PredCell>()
+    const cell = (k: string) => m.get(k) ?? (m.set(k, { row: null, fresh: null, measured: null }), m.get(k)!)
+    for (const r of b.rows) if (r.status === 'current') cell(`${r.scenario_id}::${r.variant_id}`).row = r
+    for (const x of f?.rows ?? []) cell(`${x.scenario_id}::${x.variant_id}`).fresh = x
+    for (const x of cov) if (x) for (const [vid, c] of Object.entries(x[1])) cell(`${x[0]}::${vid}`).measured = c.measurement
+    return m
+  })), [showPred, scenIds.join(','), ctx.project])
+  const predOf = (r: VariantRow) => predQ.data?.get(`${r.scenario_id}::${r.variant_id}`)
 
   const groups = useMemo(() => {
     const m = new Map<string, VariantRow[]>()
@@ -33,7 +60,11 @@ export function MatrixPage({ ctx }: { ctx: Ctx }) {
       .sort((a, b) => Number(!a[0].includes('camera')) - Number(!b[0].includes('camera')))
   }, [q.data, ctx.catalog])
 
-  const match = (r: VariantRow) => (!load || r.severity === load) && (!search || search.toLowerCase().split(/\s+/).every((t) => `${r.variant_id} ${Object.values(r.design_conditions).join(' ')}`.toLowerCase().includes(t)))
+  const [provFilter, setProvFilter] = useState('')
+  const match = (r: VariantRow) => (!load || r.severity === load) && (!provFilter || !predQ.data || provenanceText(predOf(r)).text.replace(/ \d+$/, '') === provFilter) && (!search || search.toLowerCase().split(/\s+/).every((t) => `${r.variant_id} ${Object.values(r.design_conditions).join(' ')}`.toLowerCase().includes(t)))
+  const provCount: Record<string, number> = {}
+  if (predQ.data) for (const r of q.data?.items ?? []) { const t = provenanceText(predOf(r)).text.replace(/ \d+$/, ''); provCount[t] = (provCount[t] ?? 0) + 1 }
+  const provSummary = `전체 ${q.data?.items.length ?? 0} = 등록 ${(provCount['입력 변경'] ?? 0) + (provCount['예측만'] ?? 0) + (provCount['실측'] ?? 0)} (실측 ${provCount['실측'] ?? 0} · 입력 변경 ${provCount['입력 변경'] ?? 0}) + 미등록 ${provCount['미등록'] ?? 0}`
   const pickedScenarios = new Set([...picked].map((k) => k.split('::')[0]))
   const total = q.data?.items.length ?? 0
   const refs = useMemo(() => new Map(groups.map(([sid, rows]) => {
@@ -52,12 +83,21 @@ export function MatrixPage({ ctx }: { ctx: Ctx }) {
       cellClass: (r) => { const ref = refs.get(r.scenario_id); return ref && r.variant_id !== ref.id && matrixColumns(r.design_conditions)[c] !== ref.cols[c] ? 'chg' : '' },
       render: (r) => matrixColumns(r.design_conditions)[c] })),
     { key: 'load', label: 'Load', width: 84, firstDir: -1, sort: (r) => (r.severity ? SEVERITY_RANK[r.severity] ?? 0 : null), render: (r) => r.severity && <span className={`badge load-${r.severity}`}>{r.severity}</span> },
+    ...(showPred ? [
+      { key: 'pred_mw', label: '등록 mW', width: 90, firstDir: -1, sort: (r) => predOf(r)?.row?.power.total_mw ?? null,
+        title: (r) => { const p = predOf(r)?.row; return p ? `CPU ${fmt(p.power.cpu_mw, 0)} · IP ${fmt(p.power.hw_mw, 0)} · BW ${fmt(p.power.bw_mw, 0)} mW · ${p.case_key}` : '' },
+        render: (r) => { const p = predOf(r)?.row; return p ? <span className="mono">{fmt(p.power.total_mw, 0)}</span> : <span className="faint">—</span> } },
+      { key: 'pred_verdict', label: '판정', width: 78, sort: (r) => predOf(r)?.row?.verdict ?? null,
+        render: (r) => { const p = predOf(r)?.row; if (!p) return null; const v = verdictChip(p.verdict as never); return <span className={`badge ${v.cls}`} title={p.verdict_detail?.reasons?.join('\n')}>{v.label}</span> } },
+      { key: 'pred_src', label: '근거', width: 92, sort: (r) => provenanceText(predOf(r)).text,
+        render: (r) => { if (!predQ.data) return null; const t = provenanceText(predOf(r)); return <span className={`badge ${t.cls}`} title={t.tip}>{t.text}</span> } },
+    ] as Column<VariantRow>[] : []),
   ]
   const flatRows = groups.flatMap(([, rows]) => rows.filter(match))
   const flatCols: Column<VariantRow>[] = [columns[0], { key: 'scenario', label: 'Scenario', width: 170, sort: (r) => r.scenario_name ?? r.scenario_id, title: (r) => r.scenario_id, render: (r) => r.scenario_name ?? r.scenario_id }, ...columns.slice(1)]
   const tableGroups: RowGroup<VariantRow>[] = groups.map(([sid, rows]) => {
     const shown = rows.filter(match)
-    const isOpen = open.has(sid) || !!search || !!load
+    const isOpen = open.has(sid) || !!search || !!load || !!provFilter
     const name = rows[0]?.scenario_name ?? sid
     return { id: sid, open: isOpen, onToggle: () => toggle(sid), rows: shown, header: (
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
@@ -73,6 +113,7 @@ export function MatrixPage({ ctx }: { ctx: Ctx }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <h2 style={{ margin: 0, fontSize: 16 }}>전체 Variant Matrix</h2>
         <span className="muted" style={{ fontSize: 13 }}>{groups.length} scenarios · {total} variants · scenario별 묶음, 공통 열 기준</span>
+        {showPred && predQ.data && <span className="faint" style={{ fontSize: 12 }}>{provSummary}</span>}
         <span className="grow" />
         <span className="input" style={{ width: 240 }}><Icon name="search" size={14} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="variant, 조건 검색" aria-label="검색" /></span>
         <select value={load} onChange={(e) => setLoad(e.target.value)} aria-label="Load">
@@ -82,12 +123,17 @@ export function MatrixPage({ ctx }: { ctx: Ctx }) {
           <button className={grouped ? 'on' : ''} onClick={() => setGrouped(true)} title="scenario별 그룹 · 정렬은 그룹 안에서">Scenario별</button>
           <button className={!grouped ? 'on' : ''} onClick={() => setGrouped(false)} title="전체 variant를 한 표로 · 정렬이 전체에 적용">전체 한 표</button>
         </div>
+        <label className="faint" style={{ fontSize: 12, display: 'inline-flex', gap: 4, alignItems: 'center' }} title="등록 예측 power · timing 판정 · 근거(실측 / 예측만 / 입력 변경 / 미등록)">
+          <input type="checkbox" checked={showPred} onChange={(e) => setShowPred(e.target.checked)} />예측 열</label>
+        {showPred && predQ.data && <select value={provFilter} onChange={(e) => setProvFilter(e.target.value)} aria-label="근거 filter" title={provSummary}>
+          <option value="">근거: 전체</option>{['미등록', '입력 변경', '예측만', '실측'].map((x) => <option key={x} value={x}>{x} ({provCount[x] ?? 0})</option>)}
+        </select>}
         {grouped && <><button className="btn" onClick={() => setOpen(new Set(groups.map(([g]) => g)))}>모두 펼치기</button>
         <button className="btn" onClick={() => setOpen(new Set())}>모두 접기</button></>}
       </div>} main={<>
       {q.error && <div className="err">{q.error}</div>}
       <div className="panel table-scroll" style={{ flexGrow: 1 }}>
-        {grouped ? <DataTable id="matrix" columns={columns} groups={tableGroups.filter((g) => g.rows.length || (!search && !load))} rowKey={(r) => `${r.scenario_id}::${r.variant_id}`}
+        {grouped ? <DataTable id="matrix" columns={columns} groups={tableGroups.filter((g) => g.rows.length || (!search && !load && !provFilter))} rowKey={(r) => `${r.scenario_id}::${r.variant_id}`}
           rowClass={(r) => (r.variant_id === refs.get(r.scenario_id)?.id ? 'sel' : '')} pinTop={(r) => r.variant_id === refs.get(r.scenario_id)?.id} />
           : <DataTable id="matrix.flat" columns={flatCols} rows={flatRows} rowKey={(r) => `${r.scenario_id}::${r.variant_id}`}
             rowClass={(r) => (r.variant_id === refs.get(r.scenario_id)?.id ? 'sel' : '')} />}

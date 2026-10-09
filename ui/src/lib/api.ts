@@ -1,4 +1,5 @@
 // Thin client for the ScenarioDB FastAPI read endpoints (served under /api/v1).
+import { fetchAdmitted } from './admission'
 export const API_BASE: string = (import.meta.env.VITE_SCENARIODB_API_BASE as string | undefined) ?? '/api/v1'
 
 export type Dict = Record<string, unknown>
@@ -159,13 +160,14 @@ function qs(params: Record<string, string | number | undefined | null>): string 
   return '?' + entries.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`).join('&')
 }
 
+
 const cache = new Map<string, { promise: Promise<unknown>; expires: number }>()
 
 export async function getJson<T>(path: string, params: Record<string, string | number | undefined | null> = {}, useCache = true): Promise<T> {
   const url = `${API_BASE}${path}${qs(params)}`
   const cached = cache.get(url)
   if (useCache && cached && cached.expires > Date.now()) return cached.promise as Promise<T>
-  const promise = fetch(url).then(async (res) => {
+  const promise = fetchAdmitted(url, {}).then(async (res) => {
     if (!res.ok) throw new ApiError(`${res.status} ${res.statusText} — ${path}`, res.status)
     return res.json() as Promise<T>
   })
@@ -178,7 +180,7 @@ export async function getJson<T>(path: string, params: Record<string, string | n
 }
 
 export async function postJson<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  const res = await fetchAdmitted(`${API_BASE}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
   if (!res.ok) {
     let detail = ''
     try { const j = await res.json() as Dict; detail = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail ?? j).slice(0, 300) } catch { /* not JSON */ }

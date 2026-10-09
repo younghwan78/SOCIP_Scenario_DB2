@@ -2,6 +2,7 @@
 // Backend: POST /timing-budget/variant, /timing-budget/fleet (src/scenario_db/sim/timing_budget.py).
 import { API_BASE, ApiError } from './api'
 import type { VariantFailure } from '../components/VariantFailures'
+import { fetchAdmitted } from './admission'
 
 export type StageId = 'rt' | 'nrt' | 'post' | 'output'
 export type Statistic = 'min' | 'mean' | 'max'
@@ -34,7 +35,11 @@ export interface StageDomain {
   basis: ClockBasisKind | null; set_reason: SetReason | null; domain_leader: string | null
 }
 export type DomainClock = Pick<StageDomain, 'domain' | 'ip' | 'rule_mhz' | 'required_mhz' | 'set_mhz' | 'level'>
-export interface IntervalSeries { node: string | null; values: number[]; max_ms: number | null; min_ms: number | null; ok: boolean | null }
+export interface IntervalSeries {
+  node: string | null; values: number[]; max_ms: number | null; min_ms: number | null; ok: boolean | null
+  /** TIM-09 (report only): σ of intervals, p95 |interval − period|, dropped frames, leading off-cadence intervals, intervals excluded from the verdict */
+  jitter_ms?: number | null; p95_dev_ms?: number | null; p99_dev_ms?: number | null; max_dev_ms?: number | null; duration_ms?: number; drops?: number; warmup_observed?: number; warmup_excluded?: number
+}
 export interface TimelineRow { node: string; type: string; frame: number; start_ms: number; end_ms: number; stage: StageId }
 export interface PowerSplit {
   total_mw: number; cpu_mw: number; hw_mw: number; bw_mw: number; bw_hw_mw: number; bw_sw_mw: number
@@ -64,17 +69,29 @@ export function stageSlack(r: Pick<TimingReport, 'period_ms' | 'stages'>): Recor
 }
 
 export interface DvfsBrief {
-  total_mw: number; cpu_mw: number; hw_mw: number; bw_mw: number; bw_mbs: number; verdict: Verdict['status']; reasons: string[]
+  total_mw: number; cpu_mw: number; hw_mw: number; bw_mw: number; bw_mbs: number
+  /** TIM-08: peak DMA BW — largest single stage while its HW runs, and all stages overlapping (upper bound) */
+  peak_stage_mbs?: number | null; peak_upper_mbs?: number | null; verdict: Verdict['status']; reasons: string[]
   intervals_ok: boolean; latency_ms: { preview_ms: number | null; video_ms: number | null }; slack_ms: Record<StageId, number>; stage_hw_ms: Record<StageId, number>
 }
 export interface DvfsRow extends Partial<DvfsBrief> {
-  domain: string; shift: number; level: number; mhz: number; error?: string
-  delta_mw?: number; delta_hw_mw?: number; delta_bw_mw?: number; delta_mbs?: number; delta_slack_ms?: Record<StageId, number>
+  domain: string; shift: number; level: number | null; mhz: number | null; error?: string
+  /** set when the shift runs past the lowest / highest OPP of the domain */
+  boundary?: string | null
+  delta_mw?: number; delta_hw_mw?: number; delta_bw_mw?: number; delta_mbs?: number; delta_peak_mbs?: number | null; delta_slack_ms?: Record<StageId, number>
+}
+/** TIM-05: several domains moved together (e.g. CAM −1 + INTCAM −1). */
+export interface DvfsComboRow extends Partial<DvfsBrief> {
+  combo: Record<string, number>; label: string | null; error?: string; boundary?: string | null
+  delta_mw?: number; delta_hw_mw?: number; delta_bw_mw?: number; delta_mbs?: number; delta_peak_mbs?: number | null; delta_slack_ms?: Record<StageId, number>
 }
 export interface DvfsWhatIf {
   base: DvfsBrief; fps: number; period_ms: number; throughput_model: ThroughputModel
   domains: { domain: string; level: number; mhz: number; mv: number; ips: string[]; stages: StageId[] }[]; rows: DvfsRow[]
+  combos?: DvfsComboRow[]
 }
+/** Default multi-domain presets: every domain one level down together, and one level up together ('*' = all domains). */
+export const DEFAULT_COMBOS: Record<string, number>[] = [{ '*': -1 }, { '*': 1 }]
 /** Short tile note for the CPU power of a timing report. */
 export function cpuTileNote(p: PowerSplit): string {
   const c = p.cpu_profile
@@ -127,6 +144,8 @@ export interface TimingOptions {
   rt_margin?: number; output_margin?: number
   /** frames drawn in the pipeline timeline (API ≤ 32) */
   timeline_frames?: number
+  /** TIM-09: leading output intervals excluded from the cadence verdict (0 = all judged) */
+  warmup_frames?: number
 }
 
 export const DEFAULT_SW_MARGIN = 0.25
@@ -140,17 +159,7 @@ export const pct0 = (m: number) => `${Math.round(m * 100)}%`
 /** Margin options for API calls: both rule margins follow the one SW margin. */
 export const marginOpts = (m: number) => (Math.abs(m - DEFAULT_SW_MARGIN) < 1e-9 ? {} : { rt_margin: m, output_margin: m })
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
-
-/** fetch with retry on 429: the API admits only N concurrent simulations per worker (non-blocking). */
-export async function fetchAdmitted(url: string, init: RequestInit, retries = 6): Promise<Response> {
-  for (let i = 0; ; i++) {
-    const res = await fetch(url, init)
-    if (res.status !== 429 || i >= retries) return res
-    const after = Number(res.headers?.get?.('Retry-After') ?? 1)
-    await sleep(Math.min(4000, (Number.isFinite(after) && after > 0 ? after * 1000 : 1000) * (0.5 + 0.25 * i) + Math.random() * 200))
-  }
-}
+export { fetchAdmitted } from './admission'
 
 async function postJson<T>(path: string, body: unknown): Promise<T> {
   const res = await fetchAdmitted(`${API_BASE}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
@@ -169,9 +178,9 @@ export const timingApi = {
   variant: (scenarioId: string, variantId: string, options: TimingOptions, configProfileRef?: string | null) =>
     postJson<{ report: TimingReport; dvfs_table_ref: string | null; config_profile_ref?: string | null }>('/timing-budget/variant',
       { scenario_id: scenarioId, variant_id: variantId, options, config_profile_ref: configProfileRef ?? undefined }),
-  dvfsWhatif: (scenarioId: string, variantId: string, options: TimingOptions, configProfileRef?: string | null, shifts = [-2, -1, 1, 2]) =>
+  dvfsWhatif: (scenarioId: string, variantId: string, options: TimingOptions, configProfileRef?: string | null, shifts = [-2, -1, 1, 2], combos?: Record<string, number>[] | null) =>
     postJson<DvfsWhatIf>('/timing-budget/dvfs-whatif',
-      { scenario_id: scenarioId, variant_id: variantId, options: { ...options, include_whatif: false }, shifts, config_profile_ref: configProfileRef ?? undefined }),
+      { scenario_id: scenarioId, variant_id: variantId, options: { ...options, include_whatif: false }, shifts, combos: combos?.length ? combos : undefined, config_profile_ref: configProfileRef ?? undefined }),
   fleet: (scenarioId: string, options: Omit<TimingOptions, 'include_whatif'>, configProfileRef?: string | null) =>
     postJson<{ rows: FleetRow[]; errors: VariantFailure[]; dvfs_table_ref: string | null; config_profile_ref?: string | null }>('/timing-budget/fleet',
       { scenario_id: scenarioId, options, config_profile_ref: configProfileRef ?? undefined }),

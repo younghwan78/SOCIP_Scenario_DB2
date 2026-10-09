@@ -236,6 +236,26 @@ C = {"cpu": "#0072B2", "bwcpu": "#56B4E9", "hw": "#009E73", "bw": "#E69F00", "to
      "line": "#E4DED3", "ok": "#2F6F68", "fail": "#9B1C1C"}
 
 
+def _review(ctx: dict[str, Any] | None) -> str:
+    """Review policy + battery conversion frozen at report time (absent in reports made before 2026-10-09)."""
+    if not ctx:
+        return ""
+    pol, bat = ctx.get("policy") or {}, ctx.get("battery") or {}
+    head = (f"<p class='meta'>판정 기준 {escape(str(pol.get('throughput_model', 'stage')))} · 기본 등록 "
+            f"{escape(str(pol.get('register_baseline') or 'min_power'))} · mA@Vbat = mW ÷ {bat.get('vbat')} V ÷ "
+            f"{bat.get('pmic_efficiency')} ({escape(str(bat.get('source')))})</p>")
+    judged = [r for r in ctx.get("rows") or [] if r.get("reference")]
+    if not judged:
+        return head
+    label = {"ok": "전과제 이하", "similar": "유사", "over": "초과"}
+    body = "".join(
+        f"<tr><td>{escape(r['variant_id'])}</td><td class='num'>{r['total_mw']:.0f}</td><td class='num'>{r['ma']}</td>"
+        f"<td class='num'>{r['reference']['reference_mw']:.0f}</td><td class='num'>{r['reference']['delta_pct']:+.1f}%</td>"
+        f"<td>{label.get(r['reference']['status'], r['reference']['status'])}</td></tr>" for r in judged)
+    return head + ("<table><thead><tr><th>Variant</th><th>mW</th><th>mA</th><th>전과제 mW</th><th>Δ</th><th>판정</th></tr></thead>"
+                   f"<tbody>{body}</tbody></table>")
+
+
 def render_html(title: str, snap: dict[str, Any]) -> str:
     o, s = snap["overview"], snap["spec_summary"]
     parts = [
@@ -247,7 +267,7 @@ def render_html(title: str, snap: dict[str, Any]) -> str:
         "<nav>" + "".join(f"<a href='#s{i}'>{t}</a>" for i, t in enumerate(SECTIONS, 1)) + "</nav><main>",
         _sec(1, _conclusion(snap.get("conclusion"))),
         _sec(2, _overview(o)),
-        _sec(3, _spec(s)),
+        _sec(3, _spec(s) + _review(snap.get("review_context"))),
         _sec(4, _calibration(snap.get("calibration") or []) + clock_block(snap.get("clock_residency") or [])),
         _sec(5, _opinions(snap.get("opinions") or [])),
         _sec(6, _scenarios(snap["scenarios"])),

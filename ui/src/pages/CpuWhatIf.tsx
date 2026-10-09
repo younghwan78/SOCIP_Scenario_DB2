@@ -72,7 +72,8 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
   const [rbKnob, setRbKnob] = usePref<RbKnob>('cpu.rb.knob', 'cpuset')
   const [cmpRb, setCmpRb] = useState<CpuRebalance | null>(null)
   const [cmpErr, setCmpErr] = useState<string | null>(null)
-  const [runs, setRuns] = useState<CpuRun[]>([])
+  // CPU-07: the run log survives reloads (per browser); each entry keeps its full request context
+  const [runs, setRuns] = usePref<CpuRun[]>('cpu.runs', [])
   const [pendingRun, setPendingRun] = useState(false)
   const rb = useMemo(() => (rbRaw ? applyDsuRebalance(rbRaw, dsuExp) : null), [rbRaw, dsuExp])
 
@@ -140,12 +141,12 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
         } catch (e) { if (id === requestId.current) setCmpErr(String((e as Error).message ?? e)) }
       }
       const { default_growth: _growth, cpu_bw_scale: _bw, ...runContext } = payload
-      if (id === requestId.current) setRuns((rs) => [...rs.slice(-11), {
-        context: JSON.stringify(runContext),
+      if (id === requestId.current) setRuns((rs) => [...rs.slice(-19), {
+        context: JSON.stringify(runContext), at: new Date().toISOString(),
         n: (rs[rs.length - 1]?.n ?? 0) + 1, profile: payload.cpu_profile_ref, target: payload.power_params_ref, cmp: cmpRes ? cmpTarget : null,
         growth: payload.default_growth ?? 1, bwScale: payload.cpu_bw_scale ?? 1, pgEff: payload.power_gating_eff ?? 0.9,
         ref_mw: r.reference.total_mw, best_mw: r.best?.total_mw ?? null, cmp_ref_mw: cmpRes?.reference.total_mw ?? null, cmp_best_mw: cmpRes?.best?.total_mw ?? null,
-        winner: r.strategies?.winner ?? null }])
+        winner: r.strategies?.winner ?? null, bw_mbs: r.cpu_bw_mbs ?? null }])
     } catch (e) {
       if (id === requestId.current) setError(String((e as Error).message ?? e))
     } finally { if (id === requestId.current) setBusy(false) }
@@ -291,7 +292,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
         </div>
         <span className="faint" style={{ fontSize: 12 }}>{mode === 'rebalance' ? '한 MID cluster에 몰린 task를 같은 tier의 cluster로 나눴을 때 CPU + DSU 전력 최저점' : 'task별 knob 조합 자동 탐색 · 현재보다 전력이 낮은 배치'}</span>
       </div>
-      <CpuPurpose rb={rb} cmp={cmpRb} runs={runs} growth={growth} bwScale={bwScale}
+      <CpuPurpose rb={rb} cmp={cmpRb} runs={runs} growth={growth} bwScale={bwScale} onClear={() => setRuns([])}
         onRebalance={() => { setMode('rebalance'); setPendingRun(true) }}
         onPreset={(p) => { setMode('rebalance'); if (p.growth !== undefined) setGrowth(p.growth); if (p.bwScale !== undefined) setBwScale(p.bwScale); setPendingRun(true) }} />
       {inputs.error && <div className="err">{inputs.error}</div>}
@@ -304,7 +305,8 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
         <Card id="cpu-in" title="① 기준" note="측정 profile · 적용할 SoC · 비교 기준" help={CPU_HELP.input}>
           <div className="cpu-step" style={{ display: 'grid', gap: 8 }}>
             <label className="cpu-f"><span className="faint">측정 profile</span>
-              <select value={profile} onChange={(e) => setProfile(e.target.value)}>{rankProfiles(inputs.data?.profiles ?? [], ctx).map((p) => <option key={p.id} value={p.id}>{p.variant_ref ?? p.id} · {p.id}{p.tasks?.length ? '' : ' (task 정보 없음)'}</option>)}</select></label>
+              <select value={profile} onChange={(e) => setProfile(e.target.value)}>{rankProfiles(inputs.data?.profiles ?? [], ctx).map((p) => <option key={p.id} value={p.id}>{p.origin === 'synthetic' ? '[합성] ' : p.origin === 'unknown' ? '[출처 미상] ' : ''}{p.variant_ref ?? p.id} · {p.measured_at?.slice(0, 10) ?? '날짜 없음'}{p.sw_baseline_ref ? ` · ${p.sw_baseline_ref}` : ''}{p.silicon_rev ? ` · ${p.silicon_rev}` : ''} · {p.id}{p.tasks?.length ? '' : ' (task 정보 없음)'}</option>)}</select></label>
+            {prof?.origin && prof.origin !== 'physical_capture' && <div className="lib-note warn" style={{ fontSize: 11.5, margin: 0 }}>{prof.origin === 'synthetic' ? '합성 profile — 실기기 측정이 아니므로 결과는 모델 동작 확인용이며 실제 절감 근거가 아닙니다.' : '출처 미상 profile — 측정 방법·장비가 기록되지 않았습니다.'}</div>}
             <label className="cpu-f"><span className="faint">적용할 SoC CPU 구성</span>
               <select value={target} onChange={(e) => { targetPicked.current = true; setTarget(e.target.value) }}>{rankTopologies(inputs.data?.topologies ?? [], prof).map((t) => <option key={t.id} value={t.id}>{t.soc_ref} · v{t.version} · {sortClusters(t.clusters).join(' / ')}{prof?.tasks?.length && clusterCover(t, prof) < 1 ? ' (측정 cluster 불일치)' : ''}</option>)}</select></label>
             {mode === 'rebalance' && <label className="cpu-f" title="같은 측정 profile을 다른 과제의 CPU 구성에도 재분배해 나란히 비교 (MID 구조 변경 영향)"><span className="faint">과제 비교 (선택)</span>

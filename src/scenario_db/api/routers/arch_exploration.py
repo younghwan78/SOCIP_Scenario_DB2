@@ -82,6 +82,12 @@ def board(scenario_id: str | None = None, project_ref: str | None = None, db: Se
     return svc.board(db, scenario_id=scenario_id, project_ref=project_ref)
 
 
+@router.get("/predictions/freshness")
+def freshness(scenario_id: str | None = None, project_ref: str | None = None, db: Session = Depends(get_db)):
+    """Current predictions vs today's inputs: engine, throughput policy and changed input sections (stale cause)."""
+    return svc.prediction_freshness(db, scenario_id=scenario_id, project_ref=project_ref)
+
+
 @router.get("/predictions/history")
 def history(scenario_id: str, variant_id: str, db: Session = Depends(get_db)):
     return svc.history(db, scenario_id, variant_id)

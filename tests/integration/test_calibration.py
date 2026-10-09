@@ -133,6 +133,8 @@ def test_ip_bandwidth_joins_measured_ip_scope_on_node_or_hw_name(engine):
         assert out['unmatched'] == [{'ref': 'GPU', 'read': 9.0}]
         assert out['measurement']['id'] == f'{sid}-meas' and out['measurement']['synthetic'] is True
         assert out['simulation']['id'] == f'{sid}-sim'
+        comp = out['comparability']                                # PIPE-05: synthetic is a reference comparison only
+        assert comp['equivalent'] is False and any('합성' in r for r in comp['reasons']) and comp['statistic'] == 'mean'
         for suffix, origin, year in [('physical', 'physical_capture', 2024), ('unknown', 'unknown', 2026)]:
             db.add(Evidence(id=f'{sid}-{suffix}', scenario_ref=sid, variant_ref='v', schema_version='1.0.0',
                             kind='evidence.measurement', measured_at=datetime(year, 1, 1, tzinfo=timezone.utc),

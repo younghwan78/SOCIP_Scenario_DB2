@@ -3,11 +3,47 @@
 from __future__ import annotations
 
 import pytest
+from datetime import datetime, timezone
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
-from scenario_db.api.services.review import judge_power, plan_for, reduction_menu
+from scenario_db.api.services.review import approved_plan, judge_power, plan_for, reduction_menu
 from scenario_db.api.services.review_policy import apply_throughput, policy_view
 from scenario_db.models.definition.project import Project, ReviewPolicy
 from scenario_db.sim.timing_budget import TimingBudgetOptions
+
+
+def test_previous_project_prefers_physical_power_over_newer_unknown_capture(monkeypatch):
+    from scenario_db.api.services import review
+
+    monkeypatch.setattr(review, "project_policy", lambda *_: ReviewPolicy(power_reference={"project_ref": "proj-prev"}))
+    measurements = [SimpleNamespace(id=origin, variant_ref="v1", scenario_ref="s1", kpi={"total_power_mw": {"mean": mw}},
+                    measured_at=datetime(year, 1, 1, tzinfo=timezone.utc), provenance={"data_origin": origin})
+                    for origin, mw, year in [("unknown", 200, 2026), ("physical_capture", 100, 2024)]]
+    db = MagicMock()
+    db.query.return_value.filter.return_value.all.side_effect = [[], measurements]
+    ref = review.power_references(db, "proj-current")["references"]["v1"]
+    assert ref["mw"] == 100 and ref["source"] == "measurement"
+
+
+def test_report_current_conversion_uses_the_frozen_run_settings():
+    from scenario_db.api.services.review import report_context
+
+    db = MagicMock()
+    db.get.return_value.run_config = {"vbat": 4.2, "pmic_efficiency": 0.9}
+    ctx = report_context(db, None, "cfg", {("s", "v"): {"metrics": {"power": {"total_mw": 312}}}},
+                         frozen_config={"vbat": 3.9, "pmic_efficiency": 0.8})
+    assert ctx["rows"][0]["ma"] == 100 and ctx["battery"]["source"] == "run"
+
+
+def test_bw_comparison_requires_both_sw_and_fps():
+    from scenario_db.api.services.calibration import _bw_comparability
+
+    sim = SimpleNamespace(sw_baseline_ref=None, kpi={})
+    meas = SimpleNamespace(sw_baseline_ref="sw", kpi={"fps_effective": 30}, provenance={"data_origin": "physical_capture"})
+    assert not _bw_comparability(sim, meas)["equivalent"]
+    sim.sw_baseline_ref, sim.kpi = "sw", {"fps_effective": 30}
+    assert _bw_comparability(sim, meas)["equivalent"]
 
 
 def test_policy_fills_throughput_only_when_the_request_did_not_set_it():
@@ -73,3 +109,40 @@ def test_reduction_menu_orders_free_levers_first_and_skips_fps_drops():
     assert p5["picked"] == ["dvfs:CAM:L5"] and p5["achieved"] and not p5["iq_cost"]
     p20 = plan_for(menu, 1000.0, 20)
     assert not p20["achieved"] and p20["saving_mw"] == -175.0 and "dvfs:CAM:L6" not in p20["picked"]
+
+
+def test_iq_review_status_orders_adopted_first_and_drops_rejected():
+    """EXP-06: stored IQ approval moves an adopted option ahead of lossy; a rejected one never enters a plan."""
+    states = {"knob:pyramid_l0=skip": {"status": "rejected"}, "mode:mtnr=LowPower": {"status": "adopted"}}
+    menu = reduction_menu(_variant(), 1000.0, [], review_of=lambda k: states.get(k))
+    assert [m["key"] for m in menu] == ["mode:mtnr=LowPower", "lossy", "knob:pyramid_l0=skip"]
+    assert menu[-1]["feasible"] is False and "반려" in menu[-1]["cost"]
+    p10 = plan_for(menu, 1000.0, 10)
+    assert "knob:pyramid_l0=skip" not in p10["picked"] and p10["iq_pending"] == ["lossy"]
+    ap = approved_plan(menu, 1000.0, 10)
+    assert ap["picked"] == ["mode:mtnr=LowPower"] and not ap["achieved"] and ap["iq_pending"] == []
+
+
+def test_performance_trade_diffs_only_trade_down_on_the_same_camera():
+    """EXP-04: lower fps / resolution on the same camera is a trade; other camera, HDR or a feature turned on is not."""
+    from scenario_db.api.services.review import _trade_diffs
+
+    me = {"fps": 120, "resolution": "UHD", "sensor_place": "rear", "dvfs_sn": "IS_DVFS_SN_REAR_SINGLE_VIDEO_UHD120",
+          "sensor_mode": "high_speed"}
+    sib = {"fps": 60, "resolution": "UHD", "sensor_place": "rear", "dvfs_sn": "IS_DVFS_SN_REAR_SINGLE_VIDEO_UHD60"}
+    assert [(d["key"], d["to"]) for d in _trade_diffs(me, sib)] == [("fps", 60), ("sensor_mode", "normal")]
+    assert _trade_diffs(me, sib | {"dvfs_sn": "IS_DVFS_SN_REAR_DUAL_VIDEO_UHD60"}) is None
+    assert _trade_diffs(me, sib | {"hdr": "HDR10"}) is None
+    assert _trade_diffs(me, sib | {"stabilization": "SuperSteady"}) is None
+    assert _trade_diffs(me, sib | {"resolution": "8K"}) is None
+
+
+def test_reference_budget_takes_the_tighter_of_spec_and_previous_project():
+    """EXP-05: per-variant budget from the previous-project reference x (1 + tol)."""
+    from scenario_db.api.services.arch_exploration import _variant_budget
+
+    ref = {"mw": 2100.0, "reference_mw": 2000.0, "source": "explicit"}
+    assert _variant_budget(None, ref) == {"mw": 2100.0, "source": "전과제 explicit", "reference_mw": 2000.0}
+    assert _variant_budget(1800.0, ref)["source"] == "spec"
+    assert _variant_budget(2500.0, ref)["mw"] == 2100.0
+    assert _variant_budget(None, None) == {"mw": None, "source": None}

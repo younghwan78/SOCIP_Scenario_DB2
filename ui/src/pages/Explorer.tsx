@@ -14,7 +14,7 @@ import { archApi, type BoardRow } from '../lib/archExplore'
 import { verdictChip } from '../lib/timingBudget'
 import { ProvBadge } from '../components/Provenance'
 import { VERDICT_HELP, VerdictPopover } from '../components/VerdictDetail'
-import { calibrationApi, dayOf, measTooltip, predictionTooltip, shortId, simTooltip, type Coverage } from '../lib/calibration'
+import { calibrationApi, measTooltip, predictionTooltip, simTooltip, uniqueShortIds, type Coverage } from '../lib/calibration'
 import { batteryNote, maText, useBattery } from '../lib/battery'
 import { DEFAULT_CANONICAL, canonicalOf } from '../lib/projects'
 
@@ -57,6 +57,8 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
   // U12: registered prediction power + its timing verdict so the table reads as a dashboard
   const boardQ = useAsync(() => (selected ? archApi.board(selected.scenario_id).catch(() => null) : Promise.resolve(null)), [selected?.scenario_id])
   const board = useMemo(() => new Map((boardQ.data?.rows ?? []).map((b): [string, BoardRow] => [b.variant_id, b])), [boardQ.data])
+  const shortIds = useMemo(() => uniqueShortIds([...Object.values(covQ.data ?? {}).map((c) => c.current_prediction?.id), ...board.values()].map((x) => (typeof x === 'string' ? x : x?.id))), [covQ.data, board])
+  const copyId = (id: string) => { try { void navigator.clipboard?.writeText(id) } catch { /* clipboard unavailable */ } }
   const byId = useMemo(() => new Map(rows.map((r) => [r.variant_id, r])), [rows])
 
   const listW = useResizable('explorer.list.w', 260, 180, 480)
@@ -100,19 +102,18 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
         {isRef && <span className="badge" style={{ background: 'var(--primary)', color: '#fff', marginLeft: 6 }}>기준</span>}
         {r.derived_from_variant && <span className="faint" style={{ marginLeft: 6, fontSize: 11 }}>← {r.derived_from_variant}</span>}</span>
     } },
-    { key: 'pred', label: '예측', width: 190, firstDir: -1, headTitle: 'Simulation evidence 수 · 최신 날짜 / 등록(current) 예측 — 짧은 key · 버전 · 등록일 (hover = 전체 이력)', sort: (r) => { const c = cov(r.variant_id); return c ? c.simulation + (c.current_prediction ? 100 : 0) : 0 },
+    { key: 'pred', label: '예측', width: 120, firstDir: -1, headTitle: 'sim = 저장된 simulation evidence 수 (Simulate 실행 결과, 실행마다 1건 · 비교/검증용 이력)\n등록 = 예측 현황에 current로 등록된 예측 (조합 탐색 결과 중 고객 보고용으로 고른 1건, v = 등록 버전)\nhover = 날짜 · 전체 이력', sort: (r) => { const c = cov(r.variant_id); return c ? c.simulation + (c.current_prediction ? 100 : 0) : 0 },
       render: (r) => { const c = cov(r.variant_id); if (!covQ.data) return null
-        const sim = c?.simulations?.find((x) => x.shown)
         return c && (c.simulation || c.current_prediction) ? <span className="cov">
-          {c.simulation > 0 && <span className="badge cov-sim" title={simTooltip(c)}>sim {c.simulation}{sim?.at ? ` · ${dayOf(sim.at).slice(5)}` : ''}</span>}
-          {c.current_prediction && <span className="badge cov-pred" title={predictionTooltip(c.current_prediction)}>등록{c.current_prediction.version ? ` v${c.current_prediction.version}` : ''}{c.current_prediction.created_at ? ` · ${dayOf(c.current_prediction.created_at).slice(5)}` : ''}</span>}</span>
+          {c.simulation > 0 && <span className="badge cov-sim" title={simTooltip(c)}>sim {c.simulation}</span>}
+          {c.current_prediction && <span className="badge cov-pred" style={{ cursor: 'copy' }} title={predictionTooltip(c.current_prediction, shortIds.get(c.current_prediction.id))}
+            onClick={(e) => { e.stopPropagation(); copyId(c.current_prediction!.id) }}>등록{c.current_prediction.version ? ` v${c.current_prediction.version}` : ''}</span>}</span>
           : <span className="faint">—</span> } },
-    { key: 'meas', label: '실측', width: 160, firstDir: -1, headTitle: '측정 evidence 수 (합성 fixture 별도) · 대표 측정 날짜 (hover = 측정별 날짜 · SW · silicon · build)', sort: (r) => { const c = cov(r.variant_id); return c ? c.measurement * 10 + c.synthetic : 0 },
+    { key: 'meas', label: '실측', width: 110, firstDir: -1, headTitle: '측정 evidence 수 (합성 fixture 별도) · hover = 측정별 날짜 · SW · silicon · build', sort: (r) => { const c = cov(r.variant_id); return c ? c.measurement * 10 + c.synthetic : 0 },
       render: (r) => { const c = cov(r.variant_id); if (!covQ.data) return null
-        const shown = c?.measurements?.find((x) => x.shown)
         return c && (c.measurement || c.synthetic) ? <a className="cov" href={`#/calibration?scenario=${encodeURIComponent(r.scenario_id)}`} onClick={(e) => e.stopPropagation()} title={measTooltip(c)}>
-          {c.measurement > 0 && <span className="badge cov-meas">실측 {c.measurement}{shown && !shown.synthetic && shown.at ? ` · ${dayOf(shown.at).slice(5)}` : ''}</span>}
-          {c.synthetic > 0 && <span className="badge v-warn">합성 {c.synthetic}{shown?.synthetic && shown.at ? ` · ${dayOf(shown.at).slice(5)}` : ''}</span>}</a>
+          {c.measurement > 0 && <span className="badge cov-meas">실측 {c.measurement}</span>}
+          {c.synthetic > 0 && <span className="badge v-warn">합성 {c.synthetic}</span>}</a>
           : <span className="faint">—</span> } },
     ...COLS.map((c): Column<VariantRow> => ({ key: c.key, label: c.label, width: c.key === 'codec' ? 190 : c.key === 'mode' ? 170 : 130,
       sort: c.key === 'rf' ? (r) => resFpsKey(r.design_conditions) : (r) => { const v = c.get(r.design_conditions); return v === MISSING ? null : v },
@@ -122,7 +123,7 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
     { key: 'pw', label: 'Power mW · mA', width: 150, align: 'right', firstDir: -1, headTitle: `등록(current) 예측 total power · 조합 탐색에서 등록 · ${batteryNote(battery)}`,
       sort: (r) => board.get(r.variant_id)?.power.total_mw ?? null,
       render: (r) => { const b = board.get(r.variant_id); return b ? <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}><span className="mono">{b.power.total_mw.toFixed(0)}</span><span className="mono faint" style={{ fontSize: 11 }} title={batteryNote(battery)}>{maText(b.power.total_mw, battery)}</span>
-        <ProvBadge compact prov={{ kind: 'registered', engine: 'Arch exploration', id: shortId(b.id), at: b.created_at, notes: [`CPU ${b.power.cpu_mw.toFixed(0)} · IP ${b.power.hw_mw.toFixed(0)} · BW ${b.power.bw_mw.toFixed(0)} mW`] }} /></span> : <span className="faint">—</span> } },
+        <ProvBadge compact prov={{ kind: 'registered', engine: 'Arch exploration', id: shortIds.get(b.id) ?? b.id, at: b.created_at, notes: [`CPU ${b.power.cpu_mw.toFixed(0)} · IP ${b.power.hw_mw.toFixed(0)} · BW ${b.power.bw_mw.toFixed(0)} mW`] }} /></span> : <span className="faint">—</span> } },
     { key: 'vd', label: '판정 ⓘ', width: 84, headTitle: `등록 예측의 timing 판정 — 클릭하면 사유. ${VERDICT_HELP}`, sort: (r) => { const v = board.get(r.variant_id)?.verdict; return v ? ({ fail: 0, clock_up: 1, ok: 2 } as Record<string, number>)[v] ?? 3 : null },
       render: (r) => { const b = board.get(r.variant_id), v = b?.verdict; if (!v) return <span className="faint">—</span>; const c = verdictChip(v as 'ok' | 'clock_up' | 'fail')
         return <button className={`badge ${c.cls} badge-btn`} title={b?.verdict_detail?.reasons?.[0] ?? '클릭 = 판정 사유'} aria-label={`${r.variant_id} 판정 상세`}

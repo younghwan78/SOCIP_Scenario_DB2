@@ -547,5 +547,7 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
         "dsu_model": dsu_pol.describe() if dsu_pol else None,
         "dsu_measured": prep.dsu_res,
         "dsu_params": cpu_dsu.params_view(model, prep.sched.power_gating_eff),
+        # CPU traffic to DRAM after cpu_bw_scale; the CPU + DSU power above does not depend on it (BW-only effect)
+        "cpu_bw_mbs": round(prep.bw_mbs, 3),
         "warnings": warnings,
     }

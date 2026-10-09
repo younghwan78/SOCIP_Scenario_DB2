@@ -154,6 +154,9 @@ class TimingBudgetOptions(BaseScenarioModel):
     mfc_dual: Literal["auto", "on", "off"] = "auto"
     interval_tolerance: float = Field(default=1e-3, gt=0, le=0.05)
     frames: int = Field(default=12, ge=4, le=64)
+    # TIM-09: leading output intervals excluded from the cadence verdict (pipeline fill / AE-AWB settle).
+    # 0 = every interval judged (previous behaviour); jitter / drop statistics are reported either way.
+    warmup_frames: int = Field(default=0, ge=0, le=16)
     timeline_frames: int = Field(default=6, ge=1, le=32)
     # Stage model: each stage's SW runs on its own thread/core. True keeps the
     # scenario's CPU resource (e.g. one CPU_CAMERA) so cross-stage contention shows.
@@ -379,14 +382,37 @@ def _plan(graph, options: TimingBudgetOptions, config: SimulationRunConfig) -> d
     margins: dict[str, float] = {}
     shared: dict[str, int] = {}
     budgets: dict[str, dict[str, Any]] = {}
+    # pipelined: SW tasks on the same CPU resource (shared_cpu, or one declared timeline_resource_id) serialize —
+    # their per-frame sum must fit the period even though each task alone does (no free extra cores).
+    cpu_group: dict[str, str] = {}
+    if options.throughput_model == "pipelined":
+        for st in ("nrt", "post"):
+            for i in sw_items[st]:
+                if i["kind"] != "sw":
+                    continue
+                declared = ((graph.variant.node_configs or {}).get(i["task"]) or {}).get("timeline_resource_id")
+                cpu_group[i["task"]] = "CPU (shared_cpu)" if options.shared_cpu else str(declared or i["task"])
+    group_load: dict[str, float] = {}
+    group_tasks: dict[str, list[str]] = {}
+    for st in ("nrt", "post"):
+        for i in sw_items[st]:
+            g = cpu_group.get(i["task"]) if i["kind"] == "sw" else None
+            if g is not None:
+                group_load[g] = group_load.get(g, 0.0) + i["runtime_ms"]
+                group_tasks.setdefault(g, []).append(i["task"])
     for st in STAGES:
         nodes = [n for n in workloads if stage.get(n) == st]
         sw_total = _critical_sw(sw_items[st], edges)
         longest_sw = max((i["runtime_ms"] for i in sw_items[st]), default=0.0)
+        cpu_groups: list[dict[str, Any]] = []
         if st in ("nrt", "post") and options.throughput_model == "pipelined":
             margin = options.rt_margin
             budget = (1.0 - margin) * period
-            feasible = longest_sw <= period
+            mine = {cpu_group[i["task"]] for i in sw_items[st] if i["task"] in cpu_group}
+            cpu_groups = [{"resource": g, "tasks": group_tasks[g], "load_ms": round(group_load[g], 3)}
+                          for g in sorted(mine) if len(group_tasks[g]) > 1]
+            cpu_load = max((group_load[g] for g in mine), default=0.0)
+            feasible = longest_sw <= period and cpu_load <= period
         elif st in ("nrt", "post"):
             budget = period - sw_total
             margin = 1.0 - budget / ((1.0 + h_blank) * period)
@@ -397,6 +423,7 @@ def _plan(graph, options: TimingBudgetOptions, config: SimulationRunConfig) -> d
             budget = (1.0 - margin) * period
             feasible = True
         budgets[st] = {
+            "cpu_groups": cpu_groups,
             "longest_sw_ms": longest_sw,
             "sw_ms": sw_total,
             "budget_ms": budget,
@@ -751,6 +778,7 @@ def _report(graph, options, plan, rule_run, run, dvfs_tables) -> dict[str, Any]:
                 "feasible": b["feasible"],
                 "throughput": options.throughput_model if st in ("nrt", "post") else "frame",
                 "longest_sw_ms": round(b["longest_sw_ms"], 3),
+                "cpu_groups": b.get("cpu_groups", []),
                 "chain_ms": round(b["sw_ms"] + stage_hw.get(st, 0.0), 3),
                 "fill_pct": round(100 * (b["sw_ms"] + stage_hw.get(st, 0.0)) / period, 1)
                 if st in ("nrt", "post")
@@ -759,8 +787,9 @@ def _report(graph, options, plan, rule_run, run, dvfs_tables) -> dict[str, Any]:
         )
     intervals, latency = _cadence(result, run["inputs"], plan, options)
     power, bw = _power_bw(result, plan, options, period)
+    bw["peak"] = _peak_bw(ips, bw, period)
     domains = {st: stage_domains(ips, st) for st in STAGES}
-    verdict = _verdict(stages, intervals, ips, domains)
+    verdict = _verdict(stages, intervals, ips, domains, period)
     return {
         "scenario_id": graph.scenario_id,
         "variant_id": graph.variant_id,
@@ -822,13 +851,16 @@ def _cadence(
         events = sorted(by_node[node], key=lambda e: e.frame_index)
         ends = [e.end_ms for e in events]
         gaps = [b - a for a, b in zip(ends, ends[1:])]
-        worst = max((abs(g - period) for g in gaps), default=0.0)
+        skip = min(options.warmup_frames, max(len(gaps) - 1, 0))
+        judged = gaps[skip:]
+        worst = max((abs(g - period) for g in judged), default=0.0)
         return {
             "node": node,
             "values": [round(g, 4) for g in gaps],
             "max_ms": round(max(gaps), 4) if gaps else None,
             "min_ms": round(min(gaps), 4) if gaps else None,
             "ok": worst <= period * tol,
+            **_interval_stats(gaps, period, tol, skip),
         }
 
     def lat(node):
@@ -839,9 +871,14 @@ def _cadence(
         )
 
     p, v = series(preview), series(video)
-    ok = all(s["ok"] is not False for s in (p, v)) and any(s["ok"] is not None for s in (p, v))
+    # every terminal stream counts (dual / PIP / multi-encoder): the first display / encoder alone is not enough
+    extra = [n for n in nodes if n not in (preview, video) and (_DISPLAY_RE.search(n) or _ENCODER_RE.search(n))]
+    streams = [{"kind": "preview" if _DISPLAY_RE.search(n) else "video", **series(n)} for n in extra]
+    streams = [x for x in streams if x["ok"] is not None]
+    ok = (all(s["ok"] is not False for s in (p, v, *streams))
+          and any(s["ok"] is not None for s in (p, v)))
     return (
-        {"target_ms": round(period, 4), "tolerance": tol, "preview": p, "video": v, "ok": ok},
+        {"target_ms": round(period, 4), "tolerance": tol, "preview": p, "video": v, "streams": streams, "ok": ok},
         {
             "preview_ms": lat(preview),
             "video_ms": lat(video),
@@ -849,6 +886,47 @@ def _cadence(
             "video_frames": None if lat(video) is None else round(lat(video) / period, 2),
         },
     )
+
+
+def _interval_stats(gaps: list[float], period: float, tol: float, skip: int) -> dict[str, Any]:
+    """TIM-09: jitter (std / p95 |gap - period|), drops (a gap of ~k periods = k-1 missing frames) and the
+    natural warm-up (leading intervals off-cadence before the first on-cadence one). Report only - ``ok`` above
+    stays the verdict; ``skip`` = intervals excluded by ``warmup_frames``."""
+    if not gaps:
+        return {"jitter_ms": None, "p95_dev_ms": None, "p99_dev_ms": None, "max_dev_ms": None, "duration_ms": 0.0,
+                "drops": 0, "warmup_observed": 0, "warmup_excluded": 0}
+    judged = gaps[skip:] or gaps
+    mean = sum(judged) / len(judged)
+    std = (sum((g - mean) ** 2 for g in judged) / len(judged)) ** 0.5
+    devs = sorted(abs(g - period) for g in judged)
+    def pct(q: float) -> float:
+        return devs[min(len(devs) - 1, int(round(q * (len(devs) - 1))))]
+    p95 = pct(0.95)
+    drops = sum(max(0, round(g / period) - 1) for g in judged if g > 1.5 * period)
+    lead = next((i for i, g in enumerate(gaps) if abs(g - period) <= period * tol), len(gaps))
+    return {"jitter_ms": round(std, 4), "p95_dev_ms": round(p95, 4), "p99_dev_ms": round(pct(0.99), 4),
+            "max_dev_ms": round(devs[-1], 4), "duration_ms": round(sum(judged), 3), "drops": int(drops),
+            "warmup_observed": lead, "warmup_excluded": skip}
+
+
+def _peak_bw(ips: list[dict[str, Any]], bw: dict[str, Any], period: float) -> dict[str, Any]:
+    """Average vs peak traffic (TIM-08). Average = bytes/frame x fps; an IP moves the same bytes inside its active
+    time, so its peak ~ average x period / hw_ms. Raising its clock shortens hw_ms: average unchanged, peak up.
+    ``stage_mbs`` = the stage's IPs streaming together; ``upper_mbs`` = all stages overlapping (pipelined bound)."""
+    by_ip: dict[str, float] = {}
+    stage_of: dict[str, str] = {}
+    for ip in ips:
+        avg = bw["hw_by_ip"].get(ip["node"])
+        hw = ip.get("standalone_hw_ms") or ip.get("hw_ms")
+        if avg and hw and hw > 0:
+            by_ip[ip["node"]] = round(avg * min(period / hw, 1000.0), 1)
+            stage_of[ip["node"]] = ip["stage"]
+    by_stage: dict[str, float] = {}
+    for node, mbs in by_ip.items():
+        by_stage[stage_of[node]] = round(by_stage.get(stage_of[node], 0.0) + mbs, 1)
+    return {"by_ip": dict(sorted(by_ip.items(), key=lambda x: -x[1])), "by_stage": by_stage,
+            "max_stage_mbs": max(by_stage.values(), default=0.0), "upper_mbs": round(sum(by_stage.values()), 1),
+            "avg_mbs": bw["total_mbs"]}
 
 
 def _power_bw(result: SimRunResult, plan: dict, options: TimingBudgetOptions, period: float):
@@ -915,11 +993,17 @@ def _power_bw(result: SimRunResult, plan: dict, options: TimingBudgetOptions, pe
     return power, bw
 
 
-def _verdict(stages, intervals, ips, domains=None) -> dict[str, Any]:
+def _verdict(stages, intervals, ips, domains=None, period: float | None = None) -> dict[str, Any]:
+    limit = period if period else float("inf")
     reasons = []
     for s in stages:
         if not s["feasible"] and s.get("throughput") == "pipelined":
-            reasons.append(f"{s['name']}: SW task {s['longest_sw_ms']:.2f} ms > frame period (한 thread가 1 frame 안에 못 끝남)")
+            over = [g for g in s.get("cpu_groups") or [] if g["load_ms"] > limit]
+            if s["longest_sw_ms"] > limit or not s.get("cpu_groups"):
+                reasons.append(f"{s['name']}: SW task {s['longest_sw_ms']:.2f} ms > frame period (한 thread가 1 frame 안에 못 끝남)")
+            for g in over:
+                reasons.append(f"{s['name']}: CPU {g['resource']}의 SW 합 {g['load_ms']:.2f} ms > frame period "
+                               f"(같은 thread/core: {', '.join(g['tasks'])})")
         elif not s["feasible"]:
             reasons.append(f"{s['name']}: SW {s['sw_ms']:.2f} ms leaves no HW budget")
     rt = next(s for s in stages if s["id"] == "rt")
@@ -932,6 +1016,9 @@ def _verdict(stages, intervals, ips, domains=None) -> dict[str, Any]:
             reasons.append(
                 f"{key} interval {s['max_ms']:.3f} ms != {intervals['target_ms']:.3f} ms"
             )
+    for s in intervals.get("streams") or []:
+        if s["ok"] is False:
+            reasons.append(f"{s['node']} ({s['kind']}) interval {s['max_ms']:.3f} ms != {intervals['target_ms']:.3f} ms")
     for ip in ips:
         if not ip["feasible"]:
             reasons.append(f"{ip['node']}: {ip['infeasible_reason']}")
@@ -1209,16 +1296,26 @@ def _stage_slack(report: dict[str, Any]) -> dict[str, float]:
 def _brief(report: dict[str, Any]) -> dict[str, Any]:
     p, b = report["power"], report["bw"]
     return {"total_mw": p["total_mw"], "cpu_mw": p["cpu_mw"], "hw_mw": p["hw_mw"], "bw_mw": p["bw_mw"], "bw_mbs": b["total_mbs"],
+            "peak_stage_mbs": (b.get("peak") or {}).get("max_stage_mbs"), "peak_upper_mbs": (b.get("peak") or {}).get("upper_mbs"),
             "verdict": report["verdict"]["status"], "reasons": report["verdict"]["reasons"][:3],
             "intervals_ok": report["intervals"]["ok"], "latency_ms": report["latency"],
             "slack_ms": _stage_slack(report),
             "stage_hw_ms": {s["id"]: s["hw_ms"] for s in report["stages"]}}
 
 
+def _dpeak(brief: dict[str, Any], base: dict[str, Any]) -> float | None:
+    a, b = brief.get("peak_stage_mbs"), base.get("peak_stage_mbs")
+    return round(a - b, 1) if a is not None and b is not None else None
+
+
 def dvfs_level_whatif(graph, options: TimingBudgetOptions, *, config: SimulationRunConfig | None = None,
                       dvfs_tables: dict[str, DVFSTable] | None = None, shifts: tuple[int, ...] = (-2, -1, 1, 2),
-                      domains: list[str] | None = None) -> dict[str, Any]:
+                      domains: list[str] | None = None,
+                      combos: list[dict[str, int]] | None = None) -> dict[str, Any]:
     """Pin one DVFS domain k levels faster (+) / slower (-) than the resolved level and re-run the budget.
+
+    ``combos`` (TIM-05): several domains moved together, e.g. ``{"CAM": -1, "INTCAM": -1}`` (``{"*": -1}`` = every domain); a shift past the lowest /
+    highest OPP is reported as a boundary row (``boundary``) instead of being dropped.
 
     Answers the routine project question "if we raise / lower CAM by one level, what happens to the SW margin,
     power and BW?". Every row is a full timing-budget run with ``config.dvfs_overrides`` for that domain.
@@ -1238,6 +1335,7 @@ def dvfs_level_whatif(graph, options: TimingBudgetOptions, *, config: Simulation
         d["ips"].append(ip["node"])
     base_brief = _brief(base)
     rows: list[dict[str, Any]] = []
+    combo_rows: list[dict[str, Any]] = []
     for g, info in sorted(found.items()):
         if domains and g not in domains:
             continue
@@ -1248,6 +1346,10 @@ def dvfs_level_whatif(graph, options: TimingBudgetOptions, *, config: Simulation
         for k in shifts:
             j = idx + k
             if not 0 <= j < len(ladder):
+                edge = ladder[0] if j < 0 else ladder[-1]
+                rows.append({"domain": g, "shift": k, "level": None, "mhz": None,
+                             "boundary": "최저 OPP" if j < 0 else "최고 OPP",
+                             "error": f"{'최저' if j < 0 else '최고'} OPP L{edge.level} ({edge.speed_mhz:g} MHz)에서 더 {'내릴' if j < 0 else '올릴'} level 없음"})
                 continue
             target = ladder[j]
             cfg = config.model_copy(update={"dvfs_overrides": {**config.dvfs_overrides, g: target.level}})
@@ -1262,8 +1364,45 @@ def dvfs_level_whatif(graph, options: TimingBudgetOptions, *, config: Simulation
                          "delta_hw_mw": round(brief["hw_mw"] - base_brief["hw_mw"], 2),
                          "delta_bw_mw": round(brief["bw_mw"] - base_brief["bw_mw"], 2),
                          "delta_mbs": round(brief["bw_mbs"] - base_brief["bw_mbs"], 1),
+                         "delta_peak_mbs": _dpeak(brief, base_brief),
                          "delta_slack_ms": {s: round(v - base_brief["slack_ms"].get(s, 0.0), 3) for s, v in brief["slack_ms"].items()}})
+    for combo in combos or []:
+        if "*" in combo:  # every domain of this variant moved together
+            combo = {g: combo["*"] for g in found} | {g: k for g, k in combo.items() if g != "*"}
+        overrides: dict[str, int] = {}
+        label, problem = [], None
+        for g, k in sorted(combo.items()):
+            if g not in found:
+                problem = f"{g}: 이 variant에서 level을 정할 수 없는 domain"
+                break
+            ladder = sorted(tables[g].levels, key=lambda lv: lv.speed_mhz)
+            idx = next((i for i, lv in enumerate(ladder) if lv.level == found[g]["level"]), None)
+            j = None if idx is None else idx + k
+            if j is None or not 0 <= j < len(ladder):
+                problem = f"{g} {k:+d}: OPP 경계 밖"
+                break
+            overrides[g] = ladder[j].level
+            label.append(f"{g} L{ladder[j].level}")
+        row: dict[str, Any] = {"combo": dict(sorted(combo.items())), "label": " + ".join(label) or None}
+        if problem:
+            rows_combo = row | {"error": problem, "boundary": "경계" if "경계" in problem else None}
+            combo_rows.append(rows_combo)
+            continue
+        cfg = config.model_copy(update={"dvfs_overrides": {**config.dvfs_overrides, **overrides}})
+        try:
+            rep_c = analyze_timing_budget(graph, opts, config=cfg, dvfs_tables=tables)
+        except ValueError as exc:
+            combo_rows.append(row | {"error": str(exc)})
+            continue
+        brief = _brief(rep_c)
+        combo_rows.append(row | brief | {
+            "delta_mw": round(brief["total_mw"] - base_brief["total_mw"], 2),
+            "delta_hw_mw": round(brief["hw_mw"] - base_brief["hw_mw"], 2),
+            "delta_bw_mw": round(brief["bw_mw"] - base_brief["bw_mw"], 2),
+            "delta_mbs": round(brief["bw_mbs"] - base_brief["bw_mbs"], 1),
+            "delta_peak_mbs": _dpeak(brief, base_brief),
+            "delta_slack_ms": {s: round(v - base_brief["slack_ms"].get(s, 0.0), 3) for s, v in brief["slack_ms"].items()}})
     return {"base": base_brief, "fps": base["fps"], "period_ms": base["period_ms"],
-            "throughput_model": options.throughput_model,
+            "throughput_model": options.throughput_model, "combos": combo_rows,
             "domains": [{**{k: v for k, v in d.items() if k != "stages"}, "stages": sorted(d["stages"])} for d in found.values()],
             "rows": rows}

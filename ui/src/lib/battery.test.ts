@@ -14,3 +14,13 @@ describe('mA@Vbat', () => {
     expect(batteryOf([{ id: 'p', run_config: {} }], 'p')).toBe(DEFAULT_BATTERY)
   })
 })
+
+describe('ΔI across projects (AC-02)', () => {
+  it('is the difference of each current, not ΔmW converted with one setting', async () => {
+    const { deltaMaText } = await import('./battery')
+    const a = { vbat: 4.0, eff: 0.85, source: 'a' }, b = { vbat: 3.85, eff: 0.9, source: 'b' }
+    // same power, different conversion → ΔI ≠ 0
+    expect(deltaMaText(340, b, 340, a)).toBe('-1.9 mA')
+    expect(deltaMaText(374, a, 340, a)).toBe('+10.0 mA')
+  })
+})

@@ -131,8 +131,15 @@ def list_cpu_inputs(db: Session) -> dict:
                     value = float(o.get("value") or 0.0)
                     if task and value > cycles.get(task, ("", -1.0))[1]:
                         cycles[task] = (cluster, value)
+            from scenario_db.api.services.calibration import data_origin
+
             profiles.append({"id": row.id, "scenario_ref": row.scenario_ref, "variant_ref": row.variant_ref,
                              "project_ref": row.project_ref,
+                             # CPU-05: where the profile came from (synthetic must not read as a silicon capture)
+                             "origin": data_origin(getattr(row, "provenance", None)),
+                             "measured_at": row.measured_at.isoformat() if getattr(row, "measured_at", None) else None,
+                             "sw_baseline_ref": getattr(row, "sw_baseline_ref", None),
+                             "silicon_rev": (getattr(row, "execution_context", None) or {}).get("silicon_rev"),
                              "tasks": [{"task": t, "cluster": c, "threads": len(threads.get(t, ())) or None}
                                        for t, (c, _) in sorted(cycles.items())]})
     return {"topologies": topologies, "profiles": sorted(profiles, key=lambda p: p["id"])}

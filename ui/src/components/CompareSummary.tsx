@@ -1,7 +1,7 @@
 // Compare page: decision summary vs the reference (★) — Power / BW / Latency first.
 import type { ReactNode } from 'react'
 import { useTip, type TipRow } from './ChartTip'
-import { DEFAULT_BATTERY, batteryNote, maText, type Battery } from '../lib/battery'
+import { DEFAULT_BATTERY, batteryNote, deltaMaText, maText, sameBattery, type Battery } from '../lib/battery'
 
 export type MetricGroup = 'Power' | 'BW' | 'Latency · Timing'
 export interface MetricRow {
@@ -24,7 +24,7 @@ export interface ItemInfo {
 export interface Driver { kind: 'power' | 'bw'; label: string; delta: number; unit: 'mW' | 'MB/s' }
 
 /** 주요 원인: one line per contributor — direction, name, signed Δ (+ mA for power), bar ∝ |Δ| within its kind. */
-function Drivers({ list, battery }: { list: Driver[]; battery: Battery }) {
+function Drivers({ list, battery, mixed }: { list: Driver[]; battery: Battery; mixed: boolean }) {
   const maxOf = (k: Driver['kind']) => Math.max(1e-9, ...list.filter((d) => d.kind === k).map((d) => Math.abs(d.delta)))
   return <div className="cs-why">
     <b>주요 원인</b>
@@ -34,7 +34,7 @@ function Drivers({ list, battery }: { list: Driver[]; battery: Battery }) {
         <td className="cs-drv-k">{d.kind === 'power' ? 'Power' : 'DMA'}</td>
         <td className="cs-drv-l" title={d.label}>{d.label}</td>
         <td className={`mono cs-drv-v ${up ? 't-bad' : 't-good'}`}>{up ? '▲' : '▼'} {up ? '+' : '−'}{Math.abs(d.delta).toFixed(d.unit === 'mW' ? 1 : 0)} {d.unit}
-          {d.unit === 'mW' && <span className="faint"> ({maText(d.delta, battery, true)})</span>}</td>
+          {d.unit === 'mW' && !mixed && <span className="faint"> ({maText(d.delta, battery, true)})</span>}</td>
         <td className="cs-drv-bar"><span style={{ width: `${Math.round((Math.abs(d.delta) / maxOf(d.kind)) * 100)}%`, background: up ? 'var(--del-text, #C2410C)' : 'var(--add-text, #15803D)' }} /></td>
       </tr> })}</tbody></table>
   </div>
@@ -58,8 +58,14 @@ export function deltaText(d: Delta, unit: string, digits: number): string {
 }
 const ARROW = { good: '▼', bad: '▲', same: '＝' } as const
 
-export function CompareSummary({ items, metrics, battery = DEFAULT_BATTERY }: { items: ItemInfo[]; metrics: MetricRow[]; battery?: Battery }) {
-  const ma = (v: number | null, unit: string, signed = false) => (unit === 'mW' && v !== null ? maText(v, battery, signed) : null)
+export function CompareSummary({ items, metrics, battery = DEFAULT_BATTERY, batteries }: { items: ItemInfo[]; metrics: MetricRow[]; battery?: Battery
+  /** per-column Vbat / efficiency (each result's project); ΔI = I(column) − I(★) with each column's own setting */
+  batteries?: Battery[] }) {
+  const bat = (i: number) => batteries?.[i] ?? battery
+  const mixedAt = (i: number) => !sameBattery(bat(i), bat(0))
+  const anyMixed = items.some((_, i) => mixedAt(i))
+  const ma = (v: number | null, unit: string, i = 0) => (unit === 'mW' && v !== null ? maText(v, bat(i)) : null)
+  const dma = (m: MetricRow, i: number) => (m.unit === 'mW' ? deltaMaText(m.values[i], bat(i), m.values[0], bat(0)) : null)
   const tip = useTip()
   const rows = metrics.filter((m) => m.values.some((v) => v !== null))
   const headline = (g: MetricGroup) => HEADLINE[g].map((k) => rows.find((r) => r.key === k && r.values[0] !== null)).find(Boolean) ?? rows.find((r) => r.group === g && r.values[0] !== null)
@@ -89,13 +95,13 @@ export function CompareSummary({ items, metrics, battery = DEFAULT_BATTERY }: { 
                       <div className="cs-g">{g}</div>
                       {d && m ? <>
                         <div className="cs-v mono"><span className="cs-arrow">{ARROW[d.tone]}</span>{d.pct !== null ? `${sgn(d.pct, 1)}%` : sgn(d.abs, m.digits ?? 1)}</div>
-                        <div className="cs-sub mono">{sgn(d.abs, m.digits ?? 1)} {m.unit}{ma(d.abs, m.unit, true) ? ` (${ma(d.abs, m.unit, true)})` : ''} · {m.label}</div>
+                        <div className="cs-sub mono">{sgn(d.abs, m.digits ?? 1)} {m.unit}{dma(m, i) ? ` (${dma(m, i)})` : ''} · {m.label}</div>
                       </> : <div className="cs-v faint">—</div>}
                     </div>
                   )
                 })}
               </div>
-              {it.drivers && it.drivers.length > 0 && <Drivers list={it.drivers} battery={battery} />}
+              {it.drivers && it.drivers.length > 0 && <Drivers list={it.drivers} battery={bat(i)} mixed={mixedAt(i)} />}
               <div className="cs-meta faint">
                 {it.changed && <span>변경: 조건 {it.changed.conditions} · IP {it.changed.ips} · size {it.changed.sizes}</span>}
                 <span>KPI {it.source ?? '없음'}</span>
@@ -127,7 +133,7 @@ export function CompareSummary({ items, metrics, battery = DEFAULT_BATTERY }: { 
                         <td key={i} className={`mono ${b === i ? 'cs-best' : ''}`}
                           {...(v !== null ? tip({ title: `${m.label} · ${items[i].label}`, color: items[i].color, head: { label: '값', value: `${v.toFixed(m.digits ?? 1)} ${m.unit}`, tone: 'strong' }, rows: tipRows, foot: m.hint }) : {})}>
                           {v === null ? <span className="faint">—</span> : <>
-                            <span className="cs-val">{v.toFixed(m.digits ?? 1)}</span>{ma(v, m.unit) && <span className="cs-ma">{ma(v, m.unit)}</span>}
+                            <span className="cs-val">{v.toFixed(m.digits ?? 1)}</span>{ma(v, m.unit, i) && <span className="cs-ma" title={batteryNote(bat(i))}>{ma(v, m.unit, i)}</span>}
                             {d && <span className={`cs-chip t-${d.tone}`}>{ARROW[d.tone]} {d.pct !== null ? `${sgn(d.pct, 1)}%` : sgn(d.abs, m.digits ?? 1)}</span>}
                           </>}
                         </td>
@@ -140,7 +146,7 @@ export function CompareSummary({ items, metrics, battery = DEFAULT_BATTERY }: { 
           )
         })}
       </table></div>
-      <div className="faint" style={{ fontSize: 11.5 }}>▼ 개선 · ▲ 악화 · ＝ ±1% 이내 (fps는 높을수록 개선) · 굵은 테두리 = 행별 최선 · hover = 절대값·Δ · {batteryNote(battery)}</div>
+      <div className="faint" style={{ fontSize: 11.5 }}>▼ 개선 · ▲ 악화 · ＝ ±1% 이내 (fps는 높을수록 개선) · 굵은 테두리 = 행별 최선 · hover = 절대값·Δ · {anyMixed ? '열마다 Vbat·효율이 다름 — 전류는 각 열의 과제 설정으로 환산, ΔI = 각 전류의 차' : batteryNote(bat(0))}</div>
     </div>
   )
 }

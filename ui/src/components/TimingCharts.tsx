@@ -408,6 +408,8 @@ export function Intervals({ report }: { report: TimingReport }) {
               <span className="mono" style={{ fontSize: 12, color: x.s.ok ? 'var(--primary-strong)' : 'var(--del-text)' }}>
                 {x.s.ok ? '✓' : '✗'} max {fmt(x.s.max_ms, 3)} · min {fmt(x.s.min_ms, 3)} ms (±{fmt(tol * 100, 1)}%)
               </span>
+              {x.s.jitter_ms !== undefined && <span className="mono faint" style={{ fontSize: 11.5 }} title="σ = 판정 구간 간격의 표준편차 · p95 = |간격 − 주기|의 95%ile · drop = 주기의 ~k배 간격이면 k−1 frame 누락 · warm-up = 첫 정상 간격 전 이탈 개수">
+                σ {fmt(x.s.jitter_ms ?? null, 3)} · p95/p99 {fmt(x.s.p95_dev_ms ?? null, 3)}/{fmt(x.s.p99_dev_ms ?? null, 3)} ms · 판정 {fmt(x.s.duration_ms ?? null, 0)} ms · drop {x.s.drops ?? 0}{(x.s.drops ?? 0) > 0 ? ' ⚠' : ''} · warm-up {x.s.warmup_observed ?? 0}{x.s.warmup_excluded ? ` (앞 ${x.s.warmup_excluded}개 판정 제외)` : ''}</span>}
               <span className="grow" />
               <span className="mono" style={{ fontSize: 12 }}>latency {fmt(x.lat, 1)} ms ({fmt(x.lf, 2)} frame)</span>
             </div>
@@ -417,8 +419,8 @@ export function Intervals({ report }: { report: TimingReport }) {
               <line x1={0} x2={plotW} y1={y(t)} y2={y(t)} stroke="#2F6F68" strokeDasharray="4 3" />
               <text x={plotW - 4} y={y(t) - 4} textAnchor="end" fontSize={10} fill="#2F6F68">target {fmt(t, 3)} ms</text>
               {x.s.values.map((v, i) => {
-                const bad = Math.abs(v - t) > t * tol
-                return <circle key={i} cx={16 + (i * (plotW - 32)) / Math.max(1, n - 1)} cy={Math.max(5, Math.min(H - 5, y(v)))} r={4.5} fill={bad ? '#7F1D1D' : x.c}><title>{`f${i + 1}: ${fmt(v, 3)} ms`}</title></circle>
+                const bad = Math.abs(v - t) > t * tol && i >= (x.s.warmup_excluded ?? 0)
+                return <circle key={i} cx={16 + (i * (plotW - 32)) / Math.max(1, n - 1)} cy={Math.max(5, Math.min(H - 5, y(v)))} r={4.5} fill={bad ? '#7F1D1D' : i < (x.s.warmup_excluded ?? 0) ? '#B8B2A7' : x.c}><title>{`f${i + 1}: ${fmt(v, 3)} ms`}</title></circle>
               })}
             </svg>
           </div>

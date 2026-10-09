@@ -42,14 +42,18 @@ it('keeps the SW what-if on the selected CPU and throughput models', async () =>
   vi.spyOn(timingApi, 'dvfsWhatif').mockResolvedValue(null as never)
   const ctx = { scenario: 's', variant: 'v', params: {}, navigate: vi.fn() } as unknown as Ctx
   await act(async () => root.render(<TimingBudgetPage ctx={ctx} />))
-  expect(send.mock.calls.find((c) => c[2].include_whatif)?.[2]).toMatchObject({
-    cpu_model: 'flat',
-  })
-  expect(send.mock.calls.find((c) => c[2].include_whatif)?.[2]).not.toHaveProperty('throughput_model')
+  // no URL override: the server applies the project review policy's throughput model
+  const first = send.mock.calls.find((c) => c[2].include_whatif)?.[2]
+  expect(first).toMatchObject({ cpu_model: 'flat' })
+  expect(first).not.toHaveProperty('throughput_model')
   await act(async () => root.render(<TimingBudgetPage ctx={{ ...ctx, params: { cpu: 'profile', tp: 'stage' } }} />))
   const whatifs = send.mock.calls.filter((c) => c[2].include_whatif)
   expect(whatifs).toHaveLength(2)
   expect(whatifs[1][2]).toMatchObject({ cpu_model: 'profile', throughput_model: 'stage' })
+  await act(async () => root.render(<TimingBudgetPage ctx={{ ...ctx, params: { warmup: '2' } }} />))
+  expect(send.mock.calls.filter((c) => c[2].include_whatif).at(-1)?.[2]).toMatchObject({ warmup_frames: 2 })
+  expect(timingApi.dvfsWhatif).toHaveBeenLastCalledWith('s', 'v', expect.objectContaining({ warmup_frames: 2 }),
+    null, undefined, expect.any(Array))
 })
 
 it('selects the correct prediction history when scenarios share a variant name', async () => {
