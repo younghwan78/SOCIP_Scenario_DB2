@@ -17,6 +17,7 @@ import { Bars, BoxPlot, SERIES, StackedBars } from '../components/Charts'
 import { PowerDeltaTable, PowerStack, type PowerRow } from '../components/PowerModelCharts'
 import { cpuSource, mifSummary, powerModelParts } from '../lib/powerModel'
 import { CompareSummary, type Driver, type ItemInfo, type MetricRow } from '../components/CompareSummary'
+import { archApi, type BoardRow } from '../lib/archExplore'
 import { useBatteries, useBattery } from '../lib/battery'
 import { pickProfile } from '../lib/simProfile'
 
@@ -24,6 +25,15 @@ const KPI_FIELDS: [string, string, string][] = [
   ['Total power', 'total_power_mw', 'mW'], ['Core power', 'core_power_mw', 'mW'], ['BW power', 'bw_power_mw', 'mW'],
   ['Total BW', 'total_bw_mbs', 'MB/s'], ['Frame latency', 'frame_latency_ms', 'ms'], ['HW time max', 'hw_time_max_ms', 'ms'], ['Effective fps', 'fps_effective', 'fps'],
 ]
+
+/** CMP-03: registered prediction → the KPI fields Compare uses (core = CPU + IP; fps only when timing holds). */
+export function predictionKpi(p: BoardRow): Dict {
+  return {
+    total_power_mw: p.power.total_mw, core_power_mw: p.power.cpu_mw + p.power.hw_mw, bw_power_mw: p.power.bw_mw,
+    total_bw_mbs: p.bw_mbs, fps_effective: p.verdict === 'fail' ? null : p.fps,
+    frame_latency_ms: p.verdict_detail?.latency?.video_ms ?? null,
+  }
+}
 
 export function kpiNumber(v: unknown): number | null {
   if (typeof v === 'number') return v
@@ -78,7 +88,11 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
   const [show, setShow] = usePref<'both' | 'table' | 'plot'>('compare.show', 'both')
   const [sims, setSims] = useState<Record<string, SimState>>({})
   // evidence: measured/registered KPI first (mixed sources) · sim: every column from the same simulation model
-  const [kpiMode, setKpiMode] = usePref<'evidence' | 'sim'>('compare.kpi', 'evidence')
+  // pred (CMP-03): the registered (current) prediction of each variant — the number reported to the customer
+  const [kpiMode, setKpiMode] = usePref<'evidence' | 'sim' | 'pred'>('compare.kpi', 'evidence')
+  const predQ = useAsync(() => (kpiMode !== 'pred' ? Promise.resolve(null)
+    : Promise.all([...new Set(cItems.map((it) => it.scenario))].map((s) => archApi.board(s).then((r) => r.rows).catch(() => [] as BoardRow[])))
+      .then((all) => new Map(all.flat().filter((r) => r.status === 'current').map((r) => [`${r.scenario_id}~${r.variant_id}`, r])))), [key, kpiMode])
 
   const rows = useMemo(() => new Map((variantsQ.data ?? []).map(([s, items]) => [s, toRows(catOf(s), items)])), [variantsQ.data, ctx.allCatalog]) // eslint-disable-line react-hooks/exhaustive-deps
   const selected = cItems.map((it): VariantRow => rows.get(it.scenario)?.find((r) => r.variant_id === it.variant)
@@ -104,6 +118,10 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
   }), [evQ.data, models, viewsQ.data])
   /** KPI source per item: evidence KPI, else an on-demand (not persisted) simulation result. */
   const kpiOf = (i: number): { kpi: Dict | null | undefined; source: string | null } => {
+    if (kpiMode === 'pred') {
+      const p = predQ.data?.get(ids[i])
+      return p ? { kpi: predictionKpi(p), source: `등록 예측 (${p.case_key})` } : { kpi: undefined, source: predQ.loading ? null : '등록 예측 없음' }
+    }
     const e = kpiMode === 'evidence' ? evidence[i] : undefined
     if (e) return { kpi: e.kpi, source: evidenceSource(e) }
     const st = sims[ids[i]]
@@ -139,7 +157,7 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
     const { pb, source } = powerOf(i)
     return { id, label: labels[id] ?? id, parts: powerModelParts(pb), sub: [source, mifSummary(pb), cpuSource(pb)].filter(Boolean).join(' · ') || null }
   }).filter((r) => r.parts.length > 0)
-  const noKpi = ids.map((_, i) => i).filter((i) => evQ.data && (kpiMode === 'sim' || !evidence[i]) && sims[ids[i]]?.status !== 'done' && sims[ids[i]]?.status !== 'running')
+  const noKpi = ids.map((_, i) => i).filter((i) => evQ.data && kpiMode !== 'pred' && (kpiMode === 'sim' || !evidence[i]) && sims[ids[i]]?.status !== 'done' && sims[ids[i]]?.status !== 'running')
   const mixed = kpiMode === 'evidence' && new Set(ids.map((_, i) => kpiOf(i).source).filter(Boolean)).size > 1
   const stream = (i: number, id: string): CadenceResult | undefined => cadences[i]?.results.find((r) => r.stream.id === id)
 
@@ -273,6 +291,7 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
         <div className="seg sm" role="group" aria-label="KPI 출처">
           <button className={kpiMode === 'evidence' ? 'on' : ''} onClick={() => setKpiMode('evidence')} title="실측/등록 evidence 우선, 없으면 즉석 예측">Evidence 우선</button>
           <button className={kpiMode === 'sim' ? 'on' : ''} onClick={() => setKpiMode('sim')} title="모든 항목을 같은 simulation 모델로 계산 (공정 비교)">Simulation 통일</button>
+          <button className={kpiMode === 'pred' ? 'on' : ''} onClick={() => setKpiMode('pred')} title="예측 현황에 등록된 current prediction (조합 탐색 결과, 고객 보고 숫자)">등록 예측</button>
         </div>
         {noKpi.length > 0 && <button className="btn primary" onClick={() => runSim(noKpi)} title="simulation으로 KPI 계산 (DB에 저장하지 않음)">{kpiMode === 'sim' ? `${noKpi.length}개 예측 실행` : `KPI 없는 ${noKpi.length}개 예측 실행`}</button>}
       </div>
