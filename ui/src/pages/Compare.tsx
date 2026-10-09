@@ -298,7 +298,7 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
           <button className={kpiMode === 'pred' ? 'on' : ''} onClick={() => setKpiMode('pred')} title="예측 현황에 등록된 current prediction (조합 탐색 결과, 고객 보고 숫자)">등록 예측</button>
         </div>
         {unsaved.length > 1 && <button className="btn" onClick={() => saveSim(unsaved)} title="즉석 계산 결과를 simulation evidence로 저장 (같은 조건은 1건으로 합쳐짐)">즉석 결과 {unsaved.length}개 저장</button>}
-        {noKpi.length > 0 && <button className="btn primary" onClick={() => runSim(noKpi)} title="simulation으로 KPI 계산 (미리보기 — 저장하려면 결과 옆 “결과 저장”)">{kpiMode === 'sim' ? `${noKpi.length}개 예측 실행` : `KPI 없는 ${noKpi.length}개 예측 실행`}</button>}
+        {noKpi.length > 0 && <button className="btn primary" onClick={() => runSim(noKpi)} title="같은 기본 조건 simulation으로 KPI 계산 (비교용 미리보기 — 저장은 결과 옆 “결과 저장”). 예측 조건 설정 · 등록은 Timing Budget">{kpiMode === 'sim' ? `${noKpi.length}개 예측 실행` : `KPI 없는 ${noKpi.length}개 예측 실행`}</button>}
       </div>
       {mixed && <div className="faint" style={{ fontSize: 12, margin: '0 0 8px' }}>⚠ KPI 출처가 섞여 있습니다 (실측 vs 계산). 설계 대안 비교는 “Simulation 통일”을 권장합니다.</div>}
       <CompareSummary items={summaryItems} metrics={metrics} battery={battery} batteries={batteries} />

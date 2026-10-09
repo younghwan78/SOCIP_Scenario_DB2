@@ -4,7 +4,7 @@ import { useTip } from './ChartTip'
 import { usePref } from './Layout'
 import {
   LAT_COLOR, OVH_COLOR, SET_REASON_LABEL, STAGE_COLOR, SW_COLOR, basisLabel, breakEven, clockText, cpuTileNote, domainOf, fmt, niceMax, otfPacers, pct0, stageSegments, whatIfDomains,
-  type FleetRow, type IpRow, type StageRow, type TimelineRow, type TimingReport, type WhatIfRow,
+  type FleetRow, type IpRow, type StageId, type StageRow, type TimelineRow, type TimingReport, type WhatIfRow,
 } from '../lib/timingBudget'
 
 // ---------------------------------------------------------------- card
@@ -295,17 +295,49 @@ const LANES: { id: string; name: string; match: (r: TimelineRow) => boolean }[] 
   { id: 'wsw', name: 'Writer SW', match: (r) => r.stage === 'output' && r.type === 'sw' },
 ]
 
-export function Gantt({ report }: { report: TimingReport }) {
+/** Detailed lanes: one row per IP / SW task, ordered RT → NRT (SW, HW) → Post → Output (SW, HW). */
+export function detailLanes(rows: TimelineRow[]): { id: string; name: string; stage: StageId; sw: boolean; out: boolean; bars: TimelineRow[] }[] {
+  const order: Record<StageId, number> = { rt: 0, nrt: 1, post: 2, output: 3 }
+  const keys = new Map<string, { stage: StageId; sw: boolean; node: string }>()
+  for (const r of rows) if (!keys.has(r.node)) keys.set(r.node, { stage: r.stage, sw: r.type === 'sw', node: r.node })
+  return [...keys.values()]
+    .sort((a, b) => order[a.stage] - order[b.stage] || Number(b.sw) - Number(a.sw) || a.node.localeCompare(b.node))
+    .map((k) => {
+      const seen = new Set<number>()
+      const bars = rows.filter((r) => r.node === k.node && !seen.has(r.frame) && (seen.add(r.frame), true))
+      const out = !k.sw && k.stage === 'output' && /(^|_)(dpu|mfc|apv)/i.test(k.node)
+      return { id: k.node, name: `${k.sw ? 'SW · ' : ''}${k.node}`, stage: k.stage, sw: k.sw, out, bars }
+    })
+}
+
+/** Per frame: when the preview (DPU) and the video (MFC/APV) output of the same source frame complete. */
+export function outputPairs(rows: TimelineRow[], period: number): { frame: number; preview: TimelineRow | null; video: TimelineRow | null; delta_ms: number | null; preview_lat_ms: number | null; video_lat_ms: number | null }[] {
+  const pick = (re: RegExp) => {
+    const m = new Map<number, TimelineRow>()
+    for (const r of rows) if (r.type === 'hw' && r.stage === 'output' && re.test(r.node)) { const cur = m.get(r.frame); if (!cur || r.end_ms > cur.end_ms) m.set(r.frame, r) }
+    return m
+  }
+  const pv = pick(/(^|_)dpu/i), vd = pick(/(^|_)(mfc|apv)/i)
+  const frames = [...new Set([...pv.keys(), ...vd.keys()])].sort((a, b) => a - b)
+  return frames.map((f) => {
+    const p = pv.get(f) ?? null, v = vd.get(f) ?? null
+    return { frame: f, preview: p, video: v, delta_ms: p && v ? v.end_ms - p.end_ms : null,
+      preview_lat_ms: p ? p.end_ms - f * period : null, video_lat_ms: v ? v.end_ms - f * period : null }
+  })
+}
+
+export function Gantt({ report, detail = false }: { report: TimingReport; detail?: boolean }) {
   const [ref, w] = useWidth<HTMLDivElement>(900)
   const tip = useTip()
   const rows = report.timeline
   const end = Math.max(1, ...rows.map((r) => r.end_ms))
-  const labelW = 110
+  const labelW = detail ? 170 : 110
   const P = report.period_ms
   // ≥ 46 px per frame period; wider timelines scroll horizontally instead of squeezing
   const plotW = Math.max(300, w - labelW - 8, Math.ceil(end / P) * 46)
   const k = plotW / end
-  const lanes = useMemo(() => LANES.map((l) => {
+  const lanes = useMemo(() => (detail ? detailLanes(rows).map((l) => ({ id: l.out ? (/(^|_)dpu/i.test(l.id) ? 'dpu' : 'enc') : l.id, key: l.id, name: l.name, match: () => false, bars: l.bars, sw: l.sw }))
+    : LANES.map((l) => {
     // RT/NRT HW lanes: per frame, union of the stage's HW node intervals (parallel IPs collapse to one bar).
     const grouped = l.id === 'rt' || l.id === 'nrt'
     const hit = rows.filter(l.match)
@@ -329,8 +361,9 @@ export function Gantt({ report }: { report: TimingReport }) {
       const seen = new Set<string>()
       bars = hit.filter((r) => { const key = `${r.frame}:${r.node}`; if (seen.has(key)) return false; seen.add(key); return true })
     }
-    return { ...l, bars }
-  }).filter((l) => l.bars.length), [rows])
+    return { ...l, key: l.id, bars, sw: l.id.includes('sw') }
+  }).filter((l) => l.bars.length)), [rows, detail])
+  const pairs = useMemo(() => outputPairs(rows, P), [rows, P])
   const ticks = Array.from({ length: Math.floor(end / P) + 1 }, (_, i) => i * P)
   const every = Math.max(1, Math.ceil(52 / (P * k)))  // label density
   // Output lanes get an extra strip for frame-to-frame interval marks (end → end of consecutive frames).
@@ -350,11 +383,11 @@ export function Gantt({ report }: { report: TimingReport }) {
         {lanes.map((l, li) => {
           const outs = OUT.has(l.id) ? [...l.bars].sort((a, b) => a.end_ms - b.end_ms) : []
           return (
-          <g key={l.id} transform={`translate(0, ${laneY[li]})`}>
-            <text x={labelW - 6} y={14} textAnchor="end" fontSize={11} fill="#3B3F4A">{l.name}</text>
+          <g key={l.key} transform={`translate(0, ${laneY[li]})`}>
+            <text x={labelW - 6} y={14} textAnchor="end" fontSize={detail ? 10.5 : 11} fill={l.sw ? '#8A5A12' : '#3B3F4A'} fontFamily={detail ? 'var(--mono)' : undefined}>{l.name.length > 26 ? `${l.name.slice(0, 25)}…` : l.name}<title>{l.name}</title></text>
             <rect x={labelW} y={1} width={plotW} height={20} fill="#FBFAF7" />
             {l.bars.map((b, i) => {
-              const color = l.id.includes('sw') ? SW_COLOR : STAGE_COLOR[b.stage]
+              const color = l.sw ? SW_COLOR : STAGE_COLOR[b.stage]
               const bw = Math.max(1.5, (b.end_ms - b.start_ms) * k)
               return (
                 <g key={i} {...tip({ title: `${b.node.toUpperCase()} · f${b.frame}`, color, head: { label: '소요', value: `${fmt(b.end_ms - b.start_ms, 2)} ms`, tone: 'strong' },
@@ -379,10 +412,43 @@ export function Gantt({ report }: { report: TimingReport }) {
             })}
           </g>
         )})}
+        {(() => {
+          // same source frame: preview (DPU) end ↔ video (MFC/APV) end
+          const iP = lanes.findIndex((l) => l.id === 'dpu'), iV = lanes.findIndex((l) => l.id === 'enc')
+          if (iP < 0 || iV < 0) return null
+          const yP = laneY[iP] + 11, yV = laneY[iV] + 11
+          return pairs.filter((x) => x.preview && x.video).map((x) => {
+            const xp = labelW + x.preview!.end_ms * k, xv = labelW + x.video!.end_ms * k
+            return <g key={`pair${x.frame}`} {...tip({ title: `f${x.frame} 출력 관계 (같은 sensor frame)`, color: '#6B4FA3', head: { label: 'Video − Preview', value: `${x.delta_ms! >= 0 ? '+' : ''}${fmt(x.delta_ms, 2)} ms`, tone: 'strong' },
+              rows: [{ k: 'Preview 완료 (f 경계 기준)', v: `${fmt(x.preview_lat_ms, 2)} ms · ${fmt((x.preview_lat_ms ?? 0) / P, 2)} frame` },
+                { k: 'Video 완료 (f 경계 기준)', v: `${fmt(x.video_lat_ms, 2)} ms · ${fmt((x.video_lat_ms ?? 0) / P, 2)} frame` }] })}>
+              <line x1={xp} y1={yP} x2={xv} y2={yV} stroke="transparent" strokeWidth={8} />
+              <line x1={xp} y1={yP} x2={xv} y2={yV} stroke="#6B4FA3" strokeDasharray="3 2" strokeWidth={1} opacity={0.8} />
+              <circle cx={xp} cy={yP} r={2.6} fill="#6B4FA3" /><circle cx={xv} cy={yV} r={2.6} fill="#6B4FA3" />
+            </g>
+          })
+        })()}
       </svg>
-      <div className="faint" style={{ fontSize: 11 }}>세로 점선 = frame 경계 {fmt(P, 2)} ms ({fmt(report.fps, 0)} fps) · 음영 = 홀수 frame 구간 · DPU(preview) · MFC(video) 아래 눈금 = 연속 frame 출력 완료 간격(ms, end→end) · 빨강 = 목표 {fmt(P, 2)} ms ±{fmt((report.intervals.tolerance || 0) * 100, 1)}% 이탈</div>
+      <div className="faint" style={{ fontSize: 11 }}>세로 점선 = frame 경계 {fmt(P, 2)} ms ({fmt(report.fps, 0)} fps) · 음영 = 홀수 frame 구간 · DPU(preview) · MFC(video) 아래 눈금 = 연속 frame 출력 완료 간격(ms, end→end) · 빨강 = 목표 {fmt(P, 2)} ms ±{fmt((report.intervals.tolerance || 0) * 100, 1)}% 이탈
+        · <span style={{ color: '#6B4FA3' }}>보라 점선</span> = 같은 sensor frame의 preview ↔ video 출력 완료{detail ? ' · 상세 = IP · SW task별 행 (SW 갈색)' : ''}</div>
+      {pairs.some((x) => x.preview && x.video) && <OutputPairTable pairs={pairs} period={P} />}
     </div>
   )
+}
+
+function OutputPairTable({ pairs, period }: { pairs: ReturnType<typeof outputPairs>; period: number }) {
+  const shown = pairs.filter((x) => x.preview || x.video).slice(0, 12)
+  return <div className="table-x" style={{ marginTop: 6 }}>
+    <table className="tb-mini-table" style={{ fontSize: 11.5 }}>
+      <thead><tr><th>frame</th>{shown.map((x) => <th key={x.frame} style={{ textAlign: 'right' }}>f{x.frame}</th>)}</tr></thead>
+      <tbody>
+        <tr><td>Preview 완료</td>{shown.map((x) => <td key={x.frame} className="mono" style={{ textAlign: 'right' }}>{x.preview_lat_ms === null ? '—' : fmt(x.preview_lat_ms, 1)}</td>)}</tr>
+        <tr><td>Video 완료</td>{shown.map((x) => <td key={x.frame} className="mono" style={{ textAlign: 'right' }}>{x.video_lat_ms === null ? '—' : fmt(x.video_lat_ms, 1)}</td>)}</tr>
+        <tr><td>Video − Preview</td>{shown.map((x) => <td key={x.frame} className="mono faint" style={{ textAlign: 'right' }}>{x.delta_ms === null ? '—' : fmt(x.delta_ms, 1)}</td>)}</tr>
+      </tbody>
+    </table>
+    <div className="faint" style={{ fontSize: 11 }}>ms, frame f 경계(f × {fmt(period, 2)} ms) 기준 — 같은 sensor frame이 preview / video로 나가기까지의 지연</div>
+  </div>
 }
 
 // ---------------------------------------------------------------- ③ intervals

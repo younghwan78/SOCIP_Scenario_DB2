@@ -155,6 +155,36 @@ export interface BoardRow {
   verdict_detail?: VerdictDetail | null
   /** API ≥ 2026-10-09: timing judgement the prediction was registered with ("stage" = before the review policy) */
   throughput_model?: 'stage' | 'pipelined'
+  /** analysis condition of the registration (re-open in Timing Budget) */
+  condition?: PredCondition
+}
+export interface PredCondition {
+  source: 'timing-budget' | 'exploration'; statistic: string | null; runtime_scale: number | null; throughput_model: string; eis: string
+  cpu_model: string; rt_margin: number | null; output_margin: number | null; config_profile_ref: string | null
+  dvfs_overrides: Record<string, number>; dvfs: Record<string, number>; compression: string[]
+}
+/** Timing Budget URL params that re-create a registered condition (defaults left out). */
+export function conditionParams(r: Pick<BoardRow, 'scenario_id' | 'variant_id' | 'condition'>): Record<string, string | undefined> {
+  const c = r.condition
+  const ov = Object.entries(c?.dvfs_overrides ?? {}).sort(([a], [b]) => a.localeCompare(b)).map(([d, l]) => `${d}:${l}`).join(',')
+  const m = c?.rt_margin
+  return {
+    scenario: r.scenario_id, variant: r.variant_id,
+    stat: c?.statistic && c.statistic !== 'max' ? c.statistic : undefined,
+    scale: c?.runtime_scale && c.runtime_scale !== 1 ? String(c.runtime_scale) : undefined,
+    eis: c?.eis && c.eis !== 'auto' ? c.eis : undefined,
+    cpu: c?.cpu_model === 'profile' ? 'profile' : undefined,
+    tp: c?.throughput_model === 'stage' || c?.throughput_model === 'pipelined' ? c.throughput_model : undefined,
+    margin: m !== null && m !== undefined && Math.abs(m - 0.25) > 1e-9 ? String(Math.round(m * 100)) : undefined,
+    cfg: c?.config_profile_ref ?? undefined,
+    dvo: ov || undefined,
+  }
+}
+export function conditionText(c: PredCondition | undefined): string {
+  if (!c) return '—'
+  const ov = Object.entries(c.dvfs_overrides).sort(([a], [b]) => a.localeCompare(b))
+  return [`${c.source === 'timing-budget' ? 'TB' : '탐색'}`, `SW ${c.statistic ?? '?'} ×${c.runtime_scale ?? '?'}`, c.throughput_model === 'pipelined' ? 'pipeline' : 'stage',
+    c.cpu_model === 'profile' ? 'CPU 측정' : null, ov.length ? `override ${ov.map(([d, l]) => `${d}:L${l}`).join(',')}` : null].filter(Boolean).join(' · ')
 }
 export interface VerdictStage { id: string; name?: string; sw_ms?: number; hw_ms?: number; budget_ms?: number; overhead_ms?: number; margin?: number; feasible?: boolean; fill_pct?: number; throughput?: string; longest_sw_ms?: number; chain_ms?: number }
 export interface VerdictDetail {

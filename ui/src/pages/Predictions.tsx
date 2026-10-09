@@ -3,7 +3,7 @@ import type { Ctx } from '../App'
 import { useAsync } from '../lib/route'
 import { api } from '../lib/api'
 import { fmt } from '../lib/timingBudget'
-import { archApi, levels, short, type BoardRow, type HistoryRow } from '../lib/archExplore'
+import { archApi, conditionParams, conditionText, levels, short, type BoardRow, type HistoryRow } from '../lib/archExplore'
 import { Card } from '../components/TimingCharts'
 import { CompositionBars, RangeBoxes, SplitBar, SplitLegend, Waterfall } from '../components/ArchCharts'
 import { DataTable, type Column } from '../components/DataTable'
@@ -20,16 +20,18 @@ import { useSimProfiles } from '../lib/simProfile'
 import type { Ctx as AppCtx } from '../App'
 
 const regProv = (r: BoardRow): Prov => ({
-  kind: 'registered', engine: 'Arch exploration', scope: powerScope({ cpu: r.power.cpu_mw, hw: r.power.hw_mw, bw: r.power.bw_mw }),
+  kind: 'registered', engine: r.condition?.source === 'timing-budget' ? 'Timing Budget 조건' : 'Arch exploration', scope: powerScope({ cpu: r.power.cpu_mw, hw: r.power.hw_mw, bw: r.power.bw_mw }),
   id: r.id, at: r.created_at, notes: [`run: ${r.run_title ?? r.run_id}`, `선택: ${r.selection_rule} · SW ${r.statistic} ×${r.runtime_scale}`],
 })
 
 export function PredictionsPage({ ctx }: { ctx: Ctx }) {
-  const all = ctx.params.all === '1'
+  // scope = the selected 과제; the in-page filter narrows it to one scenario (sf), independent of the global picker
+  const sf = ctx.params.sf ?? ''
+  const all = !sf
   const [tick, setTick] = useState(0)
-  // "all" = every scenario of the selected 과제 (not every project)
-  const q = useAsync(() => archApi.board(all ? undefined : ctx.scenario, all ? ctx.project || undefined : undefined), [ctx.scenario, ctx.project, all, tick])
-  const rows = q.data?.rows ?? []
+  const q = useAsync(() => archApi.board(undefined, ctx.project || undefined), [ctx.project, tick])
+  const allRows = q.data?.rows ?? []
+  const rows = sf ? allRows.filter((r) => r.scenario_id === sf) : allRows
   const battery = useBattery(ctx.project, ctx.params.cfg)
   // customer performance / thermal target: URL (shareable) > this viewer's last value
   const [targetPref, setTargetPref] = usePref<string>('pred.target_mw', '')
@@ -43,9 +45,11 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
   const refs = useReferences(ctx.project)
   const simRef = useSimProfiles(ctx.project, ctx.params.cfg)
   // PRED-04: is each registration still today's result?  PRED-05: evaluation targets without a registration
-  const freshQ = useAsync(() => (rows.length ? archApi.freshness(all ? undefined : ctx.scenario, all ? ctx.project || undefined : undefined).catch(() => null) : Promise.resolve(null)), [rows.length, all, ctx.scenario, ctx.project, tick])
+  const freshQ = useAsync(() => (allRows.length ? archApi.freshness(undefined, ctx.project || undefined).catch(() => null) : Promise.resolve(null)), [allRows.length, ctx.project, tick])
   const stale = useMemo(() => new Map((freshQ.data?.rows ?? []).filter((x) => x.status === 'stale').map((x) => [x.prediction_id, x.reasons])), [freshQ.data])
-  const scopeScenarios = all ? (ctx.catalog ?? []).map((c) => c.scenario_id) : [ctx.scenario].filter(Boolean)
+  const scopeScenarios = sf ? [sf] : (ctx.catalog ?? []).map((c) => c.scenario_id)
+  const scnCount = useMemo(() => { const m = new Map<string, number>(); for (const r of allRows) m.set(r.scenario_id, (m.get(r.scenario_id) ?? 0) + 1); return m }, [allRows])
+  const scnName = (sid: string) => (ctx.catalog ?? []).find((c) => c.scenario_id === sid)?.scenario_name ?? sid
   const varsQ = useAsync(() => Promise.all(scopeScenarios.map((sid) => api.variants(sid).then((r) => r.items.filter((v) => !v.derived_from_variant).map((v) => [sid, v.id] as const)).catch(() => [] as (readonly [string, string])[]))).then((x) => x.flat()), [scopeScenarios.join(',')])
   const registered = new Set(rows.map((r) => `${r.scenario_id}|${r.variant_id}`))
   const unregistered = (varsQ.data ?? []).filter(([sid, vid]) => !registered.has(`${sid}|${vid}`))
@@ -85,7 +89,9 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
         return <span className="faint">—</span> } },
     { key: 'range', label: 'range mW', width: 100, align: 'right', firstDir: -1, sort: (r) => (r.distribution ? r.distribution.total_mw.max - r.distribution.total_mw.min : 0), render: (r) => r.distribution ? <span className="mono">{fmt(r.distribution.total_mw.min, 0)}–{fmt(r.distribution.total_mw.max, 0)}</span> : '—' },
     { key: 'src', label: '출처 · 선택 규칙 · 대안', width: 300, sort: (r) => r.run_created_at ?? '', title: (r) => `${r.run_id}\n${r.case_key}${r.reason ? `\n사유: ${r.reason}` : ''}`, render: (r) => <span style={{ fontSize: 12 }}><span className="mono">{r.run_title ?? r.run_id}</span> · <span className={`badge ${r.selected_by === 'user' ? 'v-warn' : 'v-ok'}`}>{r.selection_rule}</span> · <span className="faint">1/{r.eligible_cases?.toLocaleString()}</span></span> },
-    { key: 'sw', label: 'SW 기준', width: 86, sort: (r) => `${r.statistic}${r.runtime_scale}`, render: (r) => <span className="mono faint">{r.statistic} ×{r.runtime_scale}</span> },
+    { key: 'cond', label: '조건', width: 250, sort: (r) => conditionText(r.condition), title: (r) => `${conditionText(r.condition)}${r.condition?.config_profile_ref ? `\nprofile ${r.condition.config_profile_ref}` : ''}\n클릭 = Timing Budget에서 이 조건으로 열기`,
+      render: (r) => <a href="#" style={{ fontSize: 12 }} onClick={(e) => { e.preventDefault(); e.stopPropagation(); ctx.navigate('timing', conditionParams(r)) }}>
+        <span className="mono faint">{conditionText(r.condition)}</span> <span>→</span></a> },
     { key: 'comp', label: 'Comp', width: 56, align: 'right', firstDir: -1, sort: (r) => r.compression.length, title: (r) => r.compression.join(', '), render: (r) => r.compression.length },
     { key: 'dvfs', label: 'DVFS', width: 160, sort: (r) => levels(r.dvfs), render: (r) => <span className="mono faint">{levels(r.dvfs)}</span> },
     { key: 'ver', label: '검증', width: 64, align: 'right', sort: (r) => Math.abs(r.verified?.delta_pct ?? 99), render: (r) => (r.verified ? <span style={{ color: r.verified.ok ? 'var(--primary-strong)' : 'var(--del-text)' }}>{r.verified.ok ? '✓' : '✗'}</span> : '—') },
@@ -94,21 +100,22 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
   return (
     <div className="page tb-page">
       <div className="toolbar" style={{ gap: 12, flexWrap: 'wrap' }}>
-        <div className="seg sm" role="group" aria-label="범위">
-          <button className={!all ? 'on' : ''} onClick={() => ctx.navigate(undefined, { all: undefined, v: undefined }, true)}>현재 scenario</button>
-          <button className={all ? 'on' : ''} onClick={() => ctx.navigate(undefined, { all: '1', v: undefined }, true)}>전체</button>
-        </div>
+        <label className="faint" style={{ fontSize: 12, display: 'inline-flex', gap: 6, alignItems: 'center' }} title="과제 전체 등록 예측 중 scenario 하나로 좁히기 (상단 Ctrl K 선택과 무관)">Scenario
+          <select value={sf} onChange={(e) => ctx.navigate(undefined, { sf: e.target.value || undefined, v: undefined, all: undefined }, true)} aria-label="scenario filter">
+            <option value="">과제 전체 ({allRows.length})</option>
+            {[...new Set([...(ctx.catalog ?? []).map((c) => c.scenario_id), ...scnCount.keys()])].map((sid) => <option key={sid} value={sid}>{scnName(sid)} ({scnCount.get(sid) ?? 0})</option>)}
+          </select></label>
         <label className="faint" style={{ fontSize: 12, display: 'inline-flex', gap: 6, alignItems: 'center' }} title="고객 성능·발열 scenario의 power 목표 (모든 행에 같은 값). 비우면 상대 비교만. URL에 남아 공유 가능">
           {refs?.policy.power_reference ? '목표 (전과제 값 없는 variant)' : '목표 power'} <input className="input" type="number" min={0} step={10} style={{ width: 80, padding: '3px 6px' }} value={targetRaw} placeholder="mW"
             onChange={(e) => { setTargetPref(e.target.value); ctx.navigate(undefined, { target: e.target.value || undefined }, true) }} /> mW
           {target && <span className="mono">({maText(target, battery)}@Vbat)</span>}</label>
-        <span className="faint" style={{ fontSize: 12 }}>current 예측은 조합 탐색에서만 등록됩니다 (기본 = 최저 power 조합).</span>
+        <span className="faint" style={{ fontSize: 12 }}>등록: Timing Budget (variant 하나 · 조건 지정) 또는 조합 탐색 (일괄 · 최저 power 조합). 조건 열 클릭 = 그 조건으로 Timing Budget 열기.</span>
         <span className="grow" />
         <a className="btn" href="#/explore">조합 탐색 →</a>
       </div>
       {q.error && <div className="err">{q.error}</div>}
       {q.loading && <div className="empty">불러오는 중…</div>}
-      {q.data && !rows.length && <div className="empty">등록된 예측이 없습니다. 조합 탐색에서 “최저 power 조합 전체 등록”을 실행하세요.</div>}
+      {q.data && !rows.length && <div className="empty">등록된 예측이 없습니다. Timing Budget에서 조건을 정해 “예측으로 등록”하거나 조합 탐색에서 “최저 power 조합 전체 등록”을 실행하세요.</div>}
       {rows.length > 0 && (notExplored > 0 || firstReg === rows.length) && <div className="lib-note warn">
         {notExplored > 0 && <>등록 예측 {rows.length}건 중 <b>{notExplored}건</b>은 power option(bcrop · L0 skip · IP mode)을 탐색하지 않은 run에서 등록됐습니다. 조합 탐색에서 “Power option”을 켜고 다시 실행하면 절감 후보가 채워집니다. </>}
         {firstReg === rows.length && <>모두 첫 등록이라 직전 대비 변경 원인(Δ 직전)은 아직 없습니다.</>}
@@ -116,7 +123,7 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
       </div>}
       {rows.length > 0 && <>
         <section className="tb-kpis">
-          {[['current 예측', `${rows.length}`, all ? '전체 scenario' : ctx.scenario],
+          {[['current 예측', `${rows.length}`, all ? '과제 전체 scenario' : scnName(sf)],
             ['Power 범위', `${fmt(Math.min(...tot), 0)}–${fmt(Math.max(...tot), 0)}`, 'mW (등록 조합)'],
             ['직전 대비 변경', `${changed.length}`, changed.length ? `평균 ${fmt(changed.reduce((s, r) => s + (r.previous?.delta_mw ?? 0), 0) / changed.length, 1)} mW` : '—'],
             ['사람 선택', `${rows.filter((r) => r.selected_by === 'user').length}`, '추천 외 조합 (사유 기록)'],
@@ -226,7 +233,7 @@ function RiskCard({ risk, target, battery, ctx, measuredKnown, onPick, refs, sta
   const levers = new Map<string, { n: number; gain: number }>()
   for (const x of risk) if (x.level !== 'ok') { const f = x.focus[0]; if (f) { const v = levers.get(f.lever) ?? { n: 0, gain: 0 }; v.n += 1; v.gain += f.gain_mw ?? 0; levers.set(f.lever, v) } }
   const LEVER: Record<string, string> = { option: 'Power option (IQ)', cpu: 'CPU (EMS · 분산)', ip: 'IP clock · mode', bw: 'BW (compression · LLC)', clock: 'Timing (SW · buffering)', measure: '실측 검증' }
-  const go = (page: string | undefined, r: RiskRow['row']) => page && ctx.navigate(page as Parameters<AppCtx['navigate']>[0], { scenario: r.scenario_id, variant: r.variant_id })
+  const go = (page: string | undefined, r: RiskRow['row']) => page && ctx.navigate(page as Parameters<AppCtx['navigate']>[0], page === 'timing' ? conditionParams(r) : { scenario: r.scenario_id, variant: r.variant_id })
   return (
     <Card id="pr-risk" title="① Risk · Focus — 고객 성능/발열 목표 대비" defaultWide minHeight={200}
       note={`성능 = fps 유지 (timing 판정 · ${refs?.policy.throughput_model === 'pipelined' ? 'pipeline buffering 기준' : 'stage 기준'}) · SW 여유 / 소비전류 = ${pr ? `전과제 대비 (≤ +${pr.tolerance_pct}% 유사)` : target ? `목표 ${target.toFixed(0)} mW (${maText(target, battery)})` : '목표 미설정 → 상대 비교'} / 신뢰도 = 실측 · sim 검증 · range · 발열은 열 모델·동등 실측 없이 PASS 판정하지 않음 (power = 대리 지표)`}>

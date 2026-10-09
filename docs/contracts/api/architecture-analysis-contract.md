@@ -77,6 +77,16 @@ capabilities, SoC compression catalog, config, DVFS, and exploration options.
 
 See [the guide](../../guides/arch-exploration.md) for model limits and report regeneration.
 
+Timing Budget can register one explicit condition with `POST /timing-budget/register`
+(writer/admin, reason required) or save its timeline with `POST /timing-budget/evidence`
+(analyst/writer/admin). The variant report exposes `condition_hash`, covering resolved
+graph/config/DVFS/CPU inputs and timing choices. Both mutations accept optional
+`expected_condition_hash` (16 lowercase hex characters); changed inputs return 409
+before persistence. Display-only timeline length and what-if options are excluded.
+Evidence IDs include the resolved condition and execution context; saved power/BW
+and current use the report's CPU model. `/interval-distribution` samples per-frame
+SW variability without changing the verdict or persisting data.
+
 Calibration classifies measurement origin as `physical_capture`, `synthetic`, or `unknown`.
 A measurement may pin its capture-time rail map with `provenance.rail_domain_map_ref`;
 that profile must exist and belong to the measurement's project. Invalid pins return 422

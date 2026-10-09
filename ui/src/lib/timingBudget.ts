@@ -112,10 +112,15 @@ export interface WhatIfRow {
   domains?: Partial<Record<StageId, DomainClock[]>>
 }
 export interface TimingReport {
+  condition_hash?: string
   scenario_id: string; variant_id: string; fps: number; period_ms: number; statistic: Statistic
   eis: { on: boolean; auto: boolean; mode: EisMode; stabilization: unknown }
   mfc_dual: Record<string, number>; growth: { runtime_scale: number; latency_scale: number }
-  dvfs: { tables: string[]; applied: boolean; table_ref?: string | null }
+  dvfs: { tables: string[]; applied: boolean; table_ref?: string | null
+    /** domain → level pinned by the request (config.dvfs_overrides) */
+    overrides?: Record<string, number>
+    /** selectable levels per domain used by this variant (slow → fast) */
+    ladders?: Record<string, DvfsLadderLevel[]> }
   stages: StageRow[]; ips: IpRow[]
   intervals: { target_ms: number; tolerance: number; preview: IntervalSeries; video: IntervalSeries; ok: boolean }
   latency: { preview_ms: number | null; video_ms: number | null; preview_frames: number | null; video_frames: number | null }
@@ -174,16 +179,71 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
 /** POST to a simulation endpoint: a 429 (per-process admission slot busy) is retried with backoff. */
 export const postAdmitted = postJson
 
+export interface DvfsLadderLevel { level: number; mhz: number; mv: number | null }
+/** Request-level config of a Timing Budget condition (DVFS level overrides per domain). */
+export interface TimingConfig { dvfs_overrides?: Record<string, number> }
+const cfgBody = (c?: TimingConfig | null) => (c?.dvfs_overrides && Object.keys(c.dvfs_overrides).length ? { config: { dvfs_overrides: c.dvfs_overrides } } : {})
+
+/** ③ box plot: output interval / latency samples under per-frame SW variance. */
+export interface IntervalDistribution {
+  period_ms: number; trials: number; frames: number; warmup_excluded: number; tolerance: number; method: string
+  varied: string[]; fixed: string[]
+  streams: { node: string; kind: 'preview' | 'video'; intervals: number[]; latency: number[]; drops: number; off_cadence_pct: number | null }[]
+}
+export interface RegisterResult { run_id: string; promoted: { id: string; variant_id: string }[]; skipped: { variant_id: string; reason: string }[]; total_mw?: number }
+export interface EvidenceResult { evidence_id: string; existed: boolean; params_hash: string; total_mw: number | null }
+
 export const timingApi = {
-  variant: (scenarioId: string, variantId: string, options: TimingOptions, configProfileRef?: string | null) =>
+  variant: (scenarioId: string, variantId: string, options: TimingOptions, configProfileRef?: string | null, config?: TimingConfig | null) =>
     postJson<{ report: TimingReport; dvfs_table_ref: string | null; config_profile_ref?: string | null }>('/timing-budget/variant',
-      { scenario_id: scenarioId, variant_id: variantId, options, config_profile_ref: configProfileRef ?? undefined }),
-  dvfsWhatif: (scenarioId: string, variantId: string, options: TimingOptions, configProfileRef?: string | null, shifts = [-2, -1, 1, 2], combos?: Record<string, number>[] | null) =>
+      { scenario_id: scenarioId, variant_id: variantId, options, config_profile_ref: configProfileRef ?? undefined, ...cfgBody(config) }),
+  dvfsWhatif: (scenarioId: string, variantId: string, options: TimingOptions, configProfileRef?: string | null, shifts = [-2, -1, 1, 2], combos?: Record<string, number>[] | null, config?: TimingConfig | null) =>
     postJson<DvfsWhatIf>('/timing-budget/dvfs-whatif',
-      { scenario_id: scenarioId, variant_id: variantId, options: { ...options, include_whatif: false }, shifts, combos: combos?.length ? combos : undefined, config_profile_ref: configProfileRef ?? undefined }),
+      { scenario_id: scenarioId, variant_id: variantId, options: { ...options, include_whatif: false }, shifts, combos: combos?.length ? combos : undefined, config_profile_ref: configProfileRef ?? undefined, ...cfgBody(config) }),
+  distribution: (scenarioId: string, variantId: string, options: TimingOptions, configProfileRef?: string | null, config?: TimingConfig | null) =>
+    postJson<IntervalDistribution>('/timing-budget/interval-distribution',
+      { scenario_id: scenarioId, variant_id: variantId, options: { ...options, include_whatif: false }, config_profile_ref: configProfileRef ?? undefined, ...cfgBody(config) }),
+  register: (scenarioId: string, variantId: string, options: TimingOptions, reason: string, configProfileRef?: string | null, config?: TimingConfig | null, expectedProject?: string | null, expectedHash?: string) =>
+    postJson<RegisterResult>('/timing-budget/register',
+      { scenario_id: scenarioId, variant_id: variantId, options: { ...options, include_whatif: false }, reason, config_profile_ref: configProfileRef ?? undefined, expected_project_ref: expectedProject || undefined, expected_condition_hash: expectedHash, ...cfgBody(config) }),
+  saveEvidence: (scenarioId: string, variantId: string, options: TimingOptions, configProfileRef?: string | null, config?: TimingConfig | null, expectedHash?: string) =>
+    postJson<EvidenceResult>('/timing-budget/evidence',
+      { scenario_id: scenarioId, variant_id: variantId, options: { ...options, include_whatif: false }, config_profile_ref: configProfileRef ?? undefined, expected_condition_hash: expectedHash, ...cfgBody(config) }),
   fleet: (scenarioId: string, options: Omit<TimingOptions, 'include_whatif'>, configProfileRef?: string | null) =>
     postJson<{ rows: FleetRow[]; errors: VariantFailure[]; dvfs_table_ref: string | null; config_profile_ref?: string | null }>('/timing-budget/fleet',
       { scenario_id: scenarioId, options, config_profile_ref: configProfileRef ?? undefined }),
+}
+
+/** URL ``dvo`` ⇄ DVFS overrides: "CAM:3,INTCAM:2" (domain:level). Invalid parts are dropped. */
+export function parseOverrides(text: string | undefined | null): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const part of (text ?? '').split(',')) {
+    const m = /^\s*([A-Za-z0-9_.-]+)\s*:\s*(\d+)\s*$/.exec(part)
+    if (m) out[m[1]] = Number(m[2])
+  }
+  return out
+}
+export function formatOverrides(o: Record<string, number>): string | undefined {
+  const parts = Object.entries(o).sort(([a], [b]) => a.localeCompare(b)).map(([d, l]) => `${d}:${l}`)
+  return parts.length ? parts.join(',') : undefined
+}
+
+/** Auto (calculated) level of a domain: the slowest level whose clock meets every member IP's required clock. */
+export function autoLevel(ladder: DvfsLadderLevel[], requiredMhz: number): DvfsLadderLevel | null {
+  return ladder.find((l) => l.mhz + 1e-6 >= requiredMhz) ?? null
+}
+
+/** Rows of the DVFS override table: per domain, member IPs, max required clock, calculated vs applied level. */
+export function dvfsDomains(r: TimingReport): { domain: string; ips: IpRow[]; required_mhz: number; auto: DvfsLadderLevel | null; applied: DvfsLadderLevel | null; override: number | null; ladder: DvfsLadderLevel[]; below: boolean }[] {
+  const ladders = r.dvfs.ladders ?? {}
+  return Object.entries(ladders).map(([domain, ladder]) => {
+    const ips = r.ips.filter((i) => i.dvfs_group === domain)
+    const req = Math.max(0, ...ips.map((i) => i.required_clock_mhz))
+    const lvl = ips.find((i) => i.dvfs_level !== null)?.dvfs_level ?? null
+    const applied = ladder.find((l) => l.level === lvl) ?? null
+    const override = r.dvfs.overrides?.[domain] ?? null
+    return { domain, ips, required_mhz: req, auto: autoLevel(ladder, req), applied, override, ladder, below: !!applied && applied.mhz + 1e-6 < req }
+  })
 }
 
 // ---------------------------------------------------------------- helpers

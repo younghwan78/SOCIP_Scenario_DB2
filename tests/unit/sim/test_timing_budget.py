@@ -310,3 +310,56 @@ def test_warmup_frames_only_relaxes_leading_intervals(graph_factory, dvfs):
     assert a["intervals"]["video"]["values"] == b["intervals"]["video"]["values"]
     assert b["intervals"]["video"]["warmup_excluded"] == 2
     assert not (a["intervals"]["ok"] and not b["intervals"]["ok"])  # excluding intervals never turns ok into fail
+
+
+def test_interval_distribution_varies_sw_per_frame(graph_factory, dvfs):
+    """③ box plot: per-frame SW variance spreads output intervals / latency; fixed clocks, report only."""
+    g = graph_factory("cam-rec-r1-uhd30-vdis")
+    opts = tb.TimingBudgetOptions(throughput_model="pipelined")
+    out = tb.interval_distribution(g, opts, dvfs_tables=dvfs, trials=3, frames=12)
+    assert out["streams"] and out["warmup_excluded"] == 2
+    s = out["streams"][0]
+    assert len(s["intervals"]) == 3 * (12 - 2 - 1) and len(s["latency"]) == 3 * (12 - 2)
+    if out["varied"]:
+        assert max(s["latency"]) > min(s["latency"])   # SW variance reaches the output
+    again = tb.interval_distribution(g, opts, dvfs_tables=dvfs, trials=3, frames=12)
+    assert again["streams"][0]["intervals"] == s["intervals"]   # seeded, reproducible
+
+
+def test_report_lists_dvfs_ladders_and_overrides(graph_factory, dvfs):
+    g = graph_factory("cam-rec-r1-uhd30-vdis")
+    base = tb.analyze_timing_budget(g, tb.TimingBudgetOptions(), dvfs_tables=dvfs)
+    dom, ladder = next(iter(base["dvfs"]["ladders"].items()))
+    assert ladder == sorted(ladder, key=lambda x: x["mhz"]) and base["dvfs"]["overrides"] == {}
+    fastest = ladder[-1]["level"]
+    from scenario_db.sim.models import SimulationRunConfig
+    pinned = tb.analyze_timing_budget(g, tb.TimingBudgetOptions(), dvfs_tables=dvfs,
+                                      config=SimulationRunConfig(dvfs_overrides={dom: fastest}))
+    assert pinned["dvfs"]["overrides"] == {dom: fastest}
+    assert all(ip["dvfs_level"] == fastest for ip in pinned["ips"] if ip["dvfs_group"] == dom)
+
+
+@pytest.mark.parametrize("mean", [1.0, 50.0, 99.0])
+def test_sw_sampling_preserves_skewed_means(mean):
+    import random
+
+    rng = random.Random(7)
+    values = [tb._sample_sw(rng, 0.0, mean, 100.0) for _ in range(30000)]
+    assert min(values) >= 0 and max(values) <= 100
+    assert sum(values) / len(values) == pytest.approx(mean, abs=0.35)
+    assert tb._sample_sw(rng, 0, 0, 100) == 0
+    assert tb._sample_sw(rng, 0, 100, 100) == 100
+
+
+def test_condition_hash_tracks_dvfs_content(graph_factory, dvfs):
+    from scenario_db.api.schemas.timing_budget import TimingBudgetRequest
+    from scenario_db.api.services.timing_budget import _condition_hash, _shim
+
+    graph = graph_factory("cam-rec-r1-uhd30-vdis")
+    request = TimingBudgetRequest(scenario_id=graph.scenario_id, variant_id=graph.variant_id)
+    shim = _shim(request, graph.variant_id)
+    before = _condition_hash(graph, request.options, shim, dvfs)
+    tables = {k: v.model_copy(deep=True) for k, v in dvfs.items()}
+    first = next(iter(tables.values()))
+    first.levels[0] = first.levels[0].model_copy(update={"speed_mhz": first.levels[0].speed_mhz + 1})
+    assert _condition_hash(graph, request.options, shim, tables) != before

@@ -10,9 +10,6 @@ import { sequenceLayout, sequenceOrder } from '../lib/sequence'
 import { stageTimings, type StageTiming } from '../lib/cadence'
 import { modeNotes } from '../lib/modes'
 import { calibrationApi, dayOf, errClass } from '../lib/calibration'
-import { runPreview } from '../lib/simRun'
-import { useSimRuns } from '../lib/useSimRuns'
-import { SimRunControls } from '../components/SimSave'
 import { GraphView } from '../components/GraphView'
 import { FrameColorLegend, TimelineView } from '../components/TimelineView'
 import { IpInternalView } from '../components/IpInternalView'
@@ -36,7 +33,24 @@ const LENS: { id: Lens; label: string; hint: string }[] = [
 const legacyLens = (l?: string): Lens => (l === 'topology' ? 'sequence' : l === 'transform' ? 'ip' : l === 'dma' || l === 'ip' || l === 'sequence' ? l : 'sequence')
 const OUT_NODES = /^(panel|dpu|mfc|apv)/
 
-const PREVIEW_ID = '__sim-preview__'
+/** Which condition produced a timing trace (simulation tool / profile / date, or measurement). */
+export function traceCondition(ev: Evidence): { text: string; tip: string } {
+  const run = (ev.run_info ?? {}) as Record<string, unknown>
+  const day = String(run.timestamp ?? ev.measured_at ?? '').slice(0, 10)
+  if (ev.kind !== 'evidence.simulation') return { text: `실측${day ? ` · ${day}` : ''}`, tip: '측정 trace' }
+  const tb = run.tool === 'scenariodb-timing-budget'
+  const prof = run.config_profile_ref ? String(run.config_profile_ref) : null
+  return {
+    text: `${tb ? 'Timing Budget 조건' : 'Simulate 기본 조건'}${prof ? ` · ${prof}` : ''}${day ? ` · ${day}` : ''}`,
+    tip: tb ? 'Timing Budget에서 정한 조건(SW 통계 · CPU · 처리량 · margin · DVFS override)으로 저장된 결과'
+      : '기본 조건 simulation (variant SW timing · 계산 clock 최소 level · 처리량 / margin rule 미적용) — 예측 조건과 다를 수 있음' + (run.writer ? ` · by ${run.writer}` : ''),
+  }
+}
+
+function TraceCondition({ ev }: { ev: Evidence }) {
+  const c = traceCondition(ev)
+  return <span className="chip" style={{ fontSize: 11, whiteSpace: 'nowrap', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis' }} title={`${c.text}\n${c.tip}`}>{c.text}</span>
+}
 
 function rankTrace(e: Evidence): number {
   const t = e.timeline_events ?? []
@@ -47,37 +61,13 @@ function rankTrace(e: Evidence): number {
 
 export function PipelinePage({ ctx }: { ctx: Ctx }) {
   const { scenario, variant } = ctx
-  const [evTick, setEvTick] = useState(0)
-  const viewQ = useAsync(() => api.view(scenario, variant, 1), [scenario, variant, evTick])
-  const evidenceQ = useAsync(() => (variant ? api.evidenceList(scenario, variant, ctx.project) : Promise.resolve({ items: [], total: 0 })), [scenario, variant, ctx.project, evTick])
-  // simulation preview (not stored) → "결과 저장" turns it into simulation evidence
-  const simRuns = useSimRuns()
-  const simKey = JSON.stringify([ctx.project, scenario, variant, ctx.params.cfg])
-  const sim = simRuns.sims[simKey]
-  const cancelSim = simRuns.cancel
-  useEffect(() => () => cancelSim(simKey), [simKey, cancelSim])
-  const catItem = ctx.allCatalog.find((c) => c.scenario_id === scenario)
-  const runSim = async () => {
-    const done = await simRuns.run(simKey, () => runPreview({ scenario, variant, project_id: catItem?.project_id,
-      default_sw_profile_ref: catItem?.default_sw_profile_ref }, ctx.params.cfg))
-    if (done) {
-      setTraceId(done.res.persisted ? done.res.evidence_id : PREVIEW_ID)
-    }
-  }
-  const saveSim = async () => {
-    const saved = await simRuns.save(simKey)
-    if (saved) {
-      setEvTick((n) => n + 1)
-      setTraceId(saved.evidence_id)
-    }
-  }
-  const previewEv: Evidence | null = sim?.status === 'done' && !sim.res.persisted && sim.save?.status !== 'saved' && sim.res.evidence
-    ? { ...(sim.res.evidence as unknown as Evidence), id: PREVIEW_ID } : null
+  const viewQ = useAsync(() => api.view(scenario, variant, 1), [scenario, variant])
+  const evidenceQ = useAsync(() => (variant ? api.evidenceList(scenario, variant, ctx.project) : Promise.resolve({ items: [], total: 0 })), [scenario, variant, ctx.project])
   const scnQ = useAsync(() => api.scenario(scenario).catch(() => null), [scenario])
   // measured per-IP bandwidth (PMU / bus monitor counts per IP, not per DMA port) vs newest simulation
   const [bwMeas, setBwMeas] = useState<string>('')
   useEffect(() => setBwMeas(''), [scenario, variant])
-  const ipBwQ = useAsync(() => (variant ? calibrationApi.ipBandwidth(scenario, variant, bwMeas || undefined) : Promise.resolve(null)), [scenario, variant, bwMeas, evTick])
+  const ipBwQ = useAsync(() => (variant ? calibrationApi.ipBandwidth(scenario, variant, bwMeas || undefined) : Promise.resolve(null)), [scenario, variant, bwMeas])
   const ipBw = useMemo(() => new Map((ipBwQ.data?.rows ?? []).map((r) => [r.node, r])), [ipBwQ.data])
   const hasMeasBw = (ipBwQ.data?.rows ?? []).some((r) => r.meas)
   const varQ = useAsync(() => (variant ? api.variant(scenario, variant).catch(() => null) : Promise.resolve(null)), [scenario, variant])
@@ -113,8 +103,8 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
   const model = useMemo(() => (view ? buildModel(view, scnQ.data, varQ.data, catQ.data) : null), [view, scnQ.data, varQ.data, catQ.data])
 
   // ---- timing evidence
-  const traces = useMemo(() => [...(previewEv ? [previewEv] : []), ...(evidenceQ.data?.items ?? []).filter((e) => (e.timeline_events ?? []).length > 3).sort((a, b) => rankTrace(b) - rankTrace(a))],
-    [evidenceQ.data, previewEv])
+  const traces = useMemo(() => (evidenceQ.data?.items ?? []).filter((e) => (e.timeline_events ?? []).length > 3).sort((a, b) => rankTrace(b) - rankTrace(a)),
+    [evidenceQ.data])
   const trace: Evidence | undefined = traces.find((t) => t.id === traceId) ?? traces[0]
   const canCompare = traces.some((t) => evidenceSource(t) === 'calculated') && traces.some((t) => evidenceSource(t) !== 'calculated')
   const timeline = useMemo(() => (trace ? buildTimeline(trace.timeline_events ?? [], { maxFrames: 16 }) : null), [trace])
@@ -305,10 +295,12 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
             </div>
             {trace && tview !== 'compare' && <span className={`badge src-${evidenceSource(trace)}`}>{evidenceSource(trace)}</span>}
             {traces.length > 0 && tview !== 'compare' && <select value={trace?.id ?? ''} onChange={(e) => { setTraceId(e.target.value); setSlice(null) }} aria-label="timing evidence" style={{ minWidth: 0, flex: '0 1 300px' }}>
-              {traces.map((t) => <option key={t.id} value={t.id}>{t.id === PREVIEW_ID ? '즉석 sim (미저장)' : `${evidenceSource(t)} · ${new Set((t.timeline_events ?? []).map((x) => x.frame_index)).size}f · ${t.id}`}</option>)}
+              {traces.map((t) => <option key={t.id} value={t.id}>{`${evidenceSource(t)} · ${new Set((t.timeline_events ?? []).map((x) => x.frame_index)).size}f · ${t.id}`}</option>)}
             </select>}
             <span className="grow" />
-            <SimRunControls sim={sim} onRun={runSim} onSave={saveSim} disabled={!variant} />
+            {trace && <TraceCondition ev={trace} />}
+            <button className="btn tb-mini" disabled={!variant} onClick={() => ctx.navigate('timing', { scenario, variant })}
+              style={{ whiteSpace: 'nowrap' }} title="예측 조건(SW 통계 · CPU · 처리량 · margin · DVFS override …)은 Timing Budget에서 정하고 실행 · Sim evidence 저장 · 예측 등록">조건 설정 →</button>
           </div>
           {timeline && <TimingContextStrip timeline={timeline} view={view} fps={fps} laneOfPid={laneOfPid} notes={notes}
             extra={<>{slice ? <span className="chip" title="선택한 slice">선택 {slice.label}{slice.frame !== null ? ` · f${slice.frame}` : ''}</span> : null}
@@ -325,7 +317,7 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
           <div className="pane-body">
             {evidenceQ.error && <div className="err">{evidenceQ.error}</div>}
             {evidenceQ.loading && <div className="empty">Evidence 불러오는 중…</div>}
-            {!evidenceQ.loading && !timeline && <div className="empty">이 variant에는 timeline event가 있는 evidence가 없습니다. 위 “Simulation 실행” 후 “결과 저장”하거나 Camera Profiling에서 trace를 import하세요.</div>}
+            {!evidenceQ.loading && !timeline && <div className="empty">이 variant에는 timeline event가 있는 evidence가 없습니다. Timing Budget에서 조건을 정하고 “Sim evidence 저장”하거나 Camera Profiling에서 trace를 import하세요.</div>}
             {timeline && tview === 'trace' && <TimelineView timeline={timeline} selectedSlice={slice?.id ?? null} colorBy={colorBy}
               highlightNode={slice ? null : highlightPid} showFlows={showFlows} onSelect={selectSlice} />}
             {timeline && tview === 'compare' && canCompare && <div style={{ overflow: 'auto', padding: 12 }}><TimingCompare traces={traces} view={view} fps={fps} laneOfPid={laneOfPid}
