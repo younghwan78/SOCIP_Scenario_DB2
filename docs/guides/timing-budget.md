@@ -65,6 +65,21 @@ stage 사이는 memory(M2M)이므로 pipeline으로 동작한다. 각 stage가 1
 - BW: HW DMA와 SW DMA(`mpeg_writer`, `storage_write` 등)를 분리한다. BW power는 MIF `bw_power_coeff`를 사용한다.
 - UI ⑥: Power = Total / CPU / HW IP core / BW(MIF), BW = Total / CPU / HW IP core, 각 Total 대비 비중. ② timeline의 DPU(preview)·MFC(video) lane 아래 눈금은 연속 frame 출력 완료 간격(end→end, 목표 period ± tolerance 이탈 시 빨강).
 
+## 5a. 예측 workbench (조건 → 저장 → 등록)
+
+예측 조건은 Timing Budget 한 곳에서 정한다. Pipeline · Compare는 조회 / 비교 전용이다.
+
+| 단계 | UI | API |
+|---|---|---|
+| 조건 | toolbar(SW 통계 · 증가 · EIS · CPU · 처리량 · margin · profile) + ⑤ DVFS level `자동(계산)` / override (URL `dvo=CAM:3,INTCAM:2`) | `config.dvfs_overrides`, `report.dvfs.ladders / overrides` |
+| Sim evidence 저장 | 예측 조건 bar | `POST /timing-budget/evidence` — 조건 전체 hash로 id 고정(같은 조건 = 1건), `run_info.tool = scenariodb-timing-budget` |
+| 예측 등록 | 예측 조건 bar (사유 필수, timing fail 불가) | `POST /timing-budget/register` — 조합 하나짜리 탐색 run(통계 × 증가 1개, headroom 0, 압축 / power option 없음) + promote, 규칙 `manual:timing-budget` → freshness · 이력 · 변경 원인 동일 |
+| 다시 열기 | 예측 현황 `조건` 열 | board row `condition` |
+
+- 계산 level = domain IP 중 최고 필요 clock을 만족하는 가장 낮은 level. override가 필요 clock보다 낮으면 `필요 clock 미달`(fps drop 위험).
+- ② `상세` = IP · SW task별 행, 같은 sensor frame의 preview(DPU) ↔ video(MFC/APV) 출력 완료를 보라 점선으로 연결하고 frame별 완료 시각 표를 함께 표시.
+- ③ SW 편차 분포: `POST /timing-budget/interval-distribution` — SW task runtime을 frame마다 triangular(min, mode, max)에서 추출(평균 유지, seed 고정), clock은 조건 그대로, 앞 warm-up(≥2) 제외. 출력 간격 · latency box plot. 판정은 바꾸지 않는 참고 지표이며 display vsync / encoder queue 완충은 미모델(상한 쪽 추정).
+
 ## 6. 실행
 
 ```bash

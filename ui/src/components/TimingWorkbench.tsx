@@ -64,10 +64,13 @@ export function DvfsOverrideTable({ report, overrides, onChange }: { report: Tim
   }
   return <div className="table-x" style={{ marginTop: 8 }}>
     <table className="tb-mini-table" style={{ width: '100%', fontSize: 12 }}>
-      <thead><tr><th>DVFS domain</th><th>IP (필요 MHz)</th><th style={{ textAlign: 'right' }}>필요 max</th><th>계산 level</th><th>적용</th><th>판정</th></tr></thead>
+      <thead><tr><th>DVFS domain</th><th title="domain level을 정하는 IP (최고 필요 clock) · hover = 전체">결정 IP</th><th style={{ textAlign: 'right' }}>필요 max</th><th>계산 level</th><th>적용</th><th>판정</th></tr></thead>
       <tbody>{rows.map((d) => <tr key={d.domain}>
         <td><b>{d.domain}</b></td>
-        <td className="mono" style={{ fontSize: 11 }}>{d.ips.map((i) => `${i.node} ${fmt(i.required_clock_mhz, 0)}`).join(' · ')}</td>
+        <td style={{ fontSize: 11.5 }} title={d.ips.map((i) => `${i.node} ${fmt(i.required_clock_mhz, 0)} MHz`).join('\n')}>{(() => {
+          const top = [...d.ips].sort((a, b) => b.required_clock_mhz - a.required_clock_mhz)[0]
+          return top ? <><span className="mono">{top.node}</span> 최고{d.ips.length > 1 ? <span className="faint"> 외 {d.ips.length - 1}개</span> : null}</> : '—'
+        })()}</td>
         <td className="mono" style={{ textAlign: 'right' }}>{fmt(d.required_mhz, 0)}</td>
         <td className="mono">{d.auto ? `L${d.auto.level} · ${fmt(d.auto.mhz, 0)} MHz` : '—'}</td>
         <td><select value={overrides[d.domain] ?? ''} onChange={(e) => set(d.domain, e.target.value)} aria-label={`${d.domain} level`}>

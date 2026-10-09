@@ -168,7 +168,7 @@ function Body({ r, cfg, whatif, whatLoading, current, margin, frames, setFrames,
         actions={<span style={{ display: 'inline-flex', gap: 6 }}>
           <div className="seg sm" role="group" aria-label="timeline 상세도"><button className={ganttDetail ? 'on' : ''} onClick={() => setGanttDetail(true)} title="IP · SW task별 행">상세</button><button className={!ganttDetail ? 'on' : ''} onClick={() => setGanttDetail(false)} title="stage별 묶음">요약</button></div>
           <div className="seg sm" role="group" aria-label="timeline frame 수">{[6, 12, 20].map((n) => <button key={n} className={frames === n ? 'on' : ''} onClick={() => setFrames(n)}>{n} frame</button>)}</div></span>}><Gantt report={r} detail={ganttDetail} /></Card>
-      <Card id="interval" title="③ 출력 frame 간격 · pipeline latency" note="합격 기준 = 간격 · latency는 참고 · jitter · drop은 참고 지표"
+      <Card id="interval" title="③ 출력 frame 간격 · pipeline latency" defaultWide note="합격 기준 = 간격 · latency는 참고 · jitter · drop · SW 편차 분포는 참고 지표"
         actions={<div className="seg sm" role="group" aria-label="warm-up 제외" title="앞쪽 출력 간격 N개를 판정에서 제외 (pipeline fill · AE/AWB 안정화). 0 = 모두 판정">{[0, 1, 2, 4].map((n) => <button key={n} className={warmup === n ? 'on' : ''} onClick={() => setWarmup(n)}>{n ? `warm-up ${n}` : 'warm-up 없음'}</button>)}</div>}><Intervals report={r} />
         <label className="faint" style={{ fontSize: 12, display: 'inline-flex', gap: 4, marginTop: 6 }}><input type="checkbox" checked={distOn} onChange={(e) => setDistOn(e.target.checked)} />SW 편차 box plot</label>
         {distOn && (distError ? <div className="err">{distError}</div> : dist ? <IntervalBoxes data={dist} /> : distLoading ? <div className="faint" style={{ fontSize: 12 }}>SW 편차 분포 계산 중…</div> : null)}</Card>

@@ -233,7 +233,7 @@ function RiskCard({ risk, target, battery, ctx, measuredKnown, onPick, refs, sta
   const levers = new Map<string, { n: number; gain: number }>()
   for (const x of risk) if (x.level !== 'ok') { const f = x.focus[0]; if (f) { const v = levers.get(f.lever) ?? { n: 0, gain: 0 }; v.n += 1; v.gain += f.gain_mw ?? 0; levers.set(f.lever, v) } }
   const LEVER: Record<string, string> = { option: 'Power option (IQ)', cpu: 'CPU (EMS · 분산)', ip: 'IP clock · mode', bw: 'BW (compression · LLC)', clock: 'Timing (SW · buffering)', measure: '실측 검증' }
-  const go = (page: string | undefined, r: RiskRow['row']) => page && ctx.navigate(page as Parameters<AppCtx['navigate']>[0], { scenario: r.scenario_id, variant: r.variant_id })
+  const go = (page: string | undefined, r: RiskRow['row']) => page && ctx.navigate(page as Parameters<AppCtx['navigate']>[0], page === 'timing' ? conditionParams(r) : { scenario: r.scenario_id, variant: r.variant_id })
   return (
     <Card id="pr-risk" title="① Risk · Focus — 고객 성능/발열 목표 대비" defaultWide minHeight={200}
       note={`성능 = fps 유지 (timing 판정 · ${refs?.policy.throughput_model === 'pipelined' ? 'pipeline buffering 기준' : 'stage 기준'}) · SW 여유 / 소비전류 = ${pr ? `전과제 대비 (≤ +${pr.tolerance_pct}% 유사)` : target ? `목표 ${target.toFixed(0)} mW (${maText(target, battery)})` : '목표 미설정 → 상대 비교'} / 신뢰도 = 실측 · sim 검증 · range · 발열은 열 모델·동등 실측 없이 PASS 판정하지 않음 (power = 대리 지표)`}>

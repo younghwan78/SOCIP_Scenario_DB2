@@ -49,7 +49,7 @@ export function traceCondition(ev: Evidence): { text: string; tip: string } {
 
 function TraceCondition({ ev }: { ev: Evidence }) {
   const c = traceCondition(ev)
-  return <span className="chip" style={{ fontSize: 11 }} title={c.tip}>{c.text}</span>
+  return <span className="chip" style={{ fontSize: 11, whiteSpace: 'nowrap', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis' }} title={`${c.text}\n${c.tip}`}>{c.text}</span>
 }
 
 function rankTrace(e: Evidence): number {
@@ -300,7 +300,7 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
             <span className="grow" />
             {trace && <TraceCondition ev={trace} />}
             <button className="btn tb-mini" disabled={!variant} onClick={() => ctx.navigate('timing', { scenario, variant })}
-              title="예측 조건(SW 통계 · CPU · 처리량 · margin · DVFS override …)은 Timing Budget에서 정하고 실행 · Sim evidence 저장 · 예측 등록">Timing Budget에서 조건 설정 →</button>
+              style={{ whiteSpace: 'nowrap' }} title="예측 조건(SW 통계 · CPU · 처리량 · margin · DVFS override …)은 Timing Budget에서 정하고 실행 · Sim evidence 저장 · 예측 등록">조건 설정 →</button>
           </div>
           {timeline && <TimingContextStrip timeline={timeline} view={view} fps={fps} laneOfPid={laneOfPid} notes={notes}
             extra={<>{slice ? <span className="chip" title="선택한 slice">선택 {slice.label}{slice.frame !== null ? ` · f${slice.frame}` : ''}</span> : null}
