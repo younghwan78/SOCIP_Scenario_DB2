@@ -16,14 +16,30 @@ export interface PowerJudge { reference_mw: number; delta_mw: number; delta_pct:
 export interface MenuItem {
   key: string; label: string; kind: 'dvfs' | 'lossy' | 'option'; feasible: boolean; cost: string; delta_mw: number
   range_mw?: [number, number]; always_beneficial?: boolean; latency_ms?: number | null; exclusive: string
+  /** EXP-06: stored IQ review of an option (candidate · iq_eval · adopted · rejected) */
+  iq_status?: 'candidate' | 'iq_eval' | 'adopted' | 'rejected'; review?: { status: string; scope: string | null; note: string | null; updated_by?: string | null; updated_at?: string | null } | null
 }
-export interface ReductionPlan { ask_pct: number; need_mw: number; picked: string[]; saving_mw: number; achieved: boolean; iq_cost: boolean }
+export interface ReductionPlan {
+  ask_pct: number; need_mw: number; picked: string[]; saving_mw: number; achieved: boolean; iq_cost: boolean
+  /** IQ items in the plan that are not adopted yet */
+  iq_pending?: string[]; scope?: 'approved'
+}
+/** EXP-04: a sibling variant that drops performance (fps / resolution …) and its registered power. */
+export interface PerfTrade {
+  variant_id: string; total_mw: number; delta_mw: number; delta_pct: number | null
+  changes: { key: string; from: unknown; to: unknown }[]; verdict: string | null; prediction_id: string; also?: string[]
+}
 export interface WatchItem {
   scenario_id: string; variant_id: string; label: string; note: string | null; prediction_id: string | null; run_id: string | null
   current_mw: number | null; baseline: 'iq_keep' | 'registered'; registered_mw: number | null; registered_lossy: boolean
   throughput_model: ThroughputModel; verdict: string | null; reference: PowerJudge | null
   menu: MenuItem[]; plans: ReductionPlan[]; notes: string[]
+  approved_plans?: ReductionPlan[]; trades?: PerfTrade[]
 }
+export const IQ_LABEL: Record<string, string> = { candidate: '미평가', iq_eval: 'IQ 평가 중', adopted: 'IQ 승인', rejected: 'IQ 반려' }
+export const IQ_CLASS: Record<string, string> = { candidate: 'v-info', iq_eval: 'v-warn', adopted: 'v-ok', rejected: 'v-fail' }
+const TRADE_KEY: Record<string, string> = { fps: 'fps', resolution: '해상도', stabilization: '손떨림 보정', hdr: 'HDR', power_saving_mode: '절전 모드', sensor_mode: 'sensor mode' }
+export const tradeText = (c: PerfTrade['changes'][number]) => `${TRADE_KEY[c.key] ?? c.key} ${String(c.from)}→${String(c.to)}`
 export interface ThermalWatch { project_ref: string; policy: ReviewPolicy; items: WatchItem[] }
 
 export const reviewApi = {

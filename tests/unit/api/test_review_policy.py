@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from scenario_db.api.services.review import judge_power, plan_for, reduction_menu
+from scenario_db.api.services.review import approved_plan, judge_power, plan_for, reduction_menu
 from scenario_db.api.services.review_policy import apply_throughput, policy_view
 from scenario_db.models.definition.project import Project, ReviewPolicy
 from scenario_db.sim.timing_budget import TimingBudgetOptions
@@ -67,3 +67,29 @@ def test_reduction_menu_orders_free_levers_first_and_skips_fps_drops():
     assert p5["picked"] == ["dvfs:CAM:L5"] and p5["achieved"] and not p5["iq_cost"]
     p20 = plan_for(menu, 1000.0, 20)
     assert not p20["achieved"] and p20["saving_mw"] == -175.0 and "dvfs:CAM:L6" not in p20["picked"]
+
+
+def test_iq_review_status_orders_adopted_first_and_drops_rejected():
+    """EXP-06: stored IQ approval moves an adopted option ahead of lossy; a rejected one never enters a plan."""
+    states = {"knob:pyramid_l0=skip": {"status": "rejected"}, "mode:mtnr=LowPower": {"status": "adopted"}}
+    menu = reduction_menu(_variant(), 1000.0, [], review_of=lambda k: states.get(k))
+    assert [m["key"] for m in menu] == ["mode:mtnr=LowPower", "lossy", "knob:pyramid_l0=skip"]
+    assert menu[-1]["feasible"] is False and "반려" in menu[-1]["cost"]
+    p10 = plan_for(menu, 1000.0, 10)
+    assert "knob:pyramid_l0=skip" not in p10["picked"] and p10["iq_pending"] == ["lossy"]
+    ap = approved_plan(menu, 1000.0, 10)
+    assert ap["picked"] == ["mode:mtnr=LowPower"] and not ap["achieved"] and ap["iq_pending"] == []
+
+
+def test_performance_trade_diffs_only_trade_down_on_the_same_camera():
+    """EXP-04: lower fps / resolution on the same camera is a trade; other camera, HDR or a feature turned on is not."""
+    from scenario_db.api.services.review import _trade_diffs
+
+    me = {"fps": 120, "resolution": "UHD", "sensor_place": "rear", "dvfs_sn": "IS_DVFS_SN_REAR_SINGLE_VIDEO_UHD120",
+          "sensor_mode": "high_speed"}
+    sib = {"fps": 60, "resolution": "UHD", "sensor_place": "rear", "dvfs_sn": "IS_DVFS_SN_REAR_SINGLE_VIDEO_UHD60"}
+    assert [(d["key"], d["to"]) for d in _trade_diffs(me, sib)] == [("fps", 60), ("sensor_mode", "normal")]
+    assert _trade_diffs(me, sib | {"dvfs_sn": "IS_DVFS_SN_REAR_DUAL_VIDEO_UHD60"}) is None
+    assert _trade_diffs(me, sib | {"hdr": "HDR10"}) is None
+    assert _trade_diffs(me, sib | {"stabilization": "SuperSteady"}) is None
+    assert _trade_diffs(me, sib | {"resolution": "8K"}) is None
