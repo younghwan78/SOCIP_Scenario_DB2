@@ -43,3 +43,24 @@ def test_condition_evidence_register_and_board(api_client, engine):
     assert cond["source"] == "timing-budget" and cond["statistic"] == "max" and cond["dvfs_overrides"] == {}
     fresh = api_client.get("/api/v1/arch/predictions/freshness", params={"scenario_id": S}).json()["rows"]
     assert next(r for r in fresh if r["prediction_id"] == pid)["status"] == "fresh"
+
+
+def test_measurement_as_input_and_reference(api_client):
+    """S4: measured-inputs listing, compare-only reference and measured SW runtime as input."""
+    v = "UHD60-HDR10-H265"
+    opts = api_client.get("/api/v1/timing-budget/measured-inputs", params={"scenario_id": S, "variant_id": v})
+    assert opts.status_code == 200, opts.text
+    meas = next(o for o in opts.json() if o["id"].startswith("meas-uc-projecta-fhd30-recording-UHD60-HDR10-H265-EVT0"))
+    assert "eis_warp" in meas["sw_tasks"]
+    base = {"scenario_id": S, "variant_id": v, "options": {"statistic": "mean"}}
+    ref = api_client.post("/api/v1/timing-budget/variant", json={**base, "measured": {"measurement_ref": meas["id"]}})
+    assert ref.status_code == 200, ref.text
+    cmp_ = ref.json()["report"]["measured_compare"]
+    assert cmp_["measurement_ref"] == meas["id"] and cmp_["inputs"] == {"sw": False, "clock": False, "cpu": False}
+    assert {r["category"] for r in cmp_["rows"]} == {"cpu", "ip", "bw", "other"}
+    used = api_client.post("/api/v1/timing-budget/variant", json={**base, "measured": {"measurement_ref": meas["id"], "sw": True}})
+    assert used.status_code == 200, used.text
+    assert used.json()["report"]["condition"]["task_runtime"]
+    wrong = api_client.post("/api/v1/timing-budget/variant",
+                            json={**base, "variant_id": V, "measured": {"measurement_ref": meas["id"], "sw": True}})
+    assert wrong.status_code == 422      # a measurement of another variant is refused

@@ -206,6 +206,7 @@ def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str |
                                                           "config", "config_profile_ref", "dvfs_tables", "dvfs_table_ref",
                                                           "soc_ref", "dvfs_version", "use_default_dvfs"}, exclude_unset=True),
                                                       "throughput_from_policy": throughput_from_policy,
+                                                      **({"timing_budget": request.timing_budget} if request.timing_budget else {}),
                                                       # resolved inputs, content-addressed (variants[].input_sections -> blobs)
                                                       "manifest": {"engine_rev": ENGINE_REV, "tool_version": _tool_version(),
                                                                    "blobs": blobs}},
@@ -527,7 +528,8 @@ def board(db: Session, *, scenario_id: str | None = None, project_ref: str | Non
                                        ArchExplorationRun.spec["timing"].label("timing"),
                                        ArchExplorationRun.spec["axes"].label("axes"),
                                        ArchExplorationRun.spec["config_profile_ref"].label("profile"),
-                                       ArchExplorationRun.spec["input_selection"].label("selection"))
+                                       ArchExplorationRun.spec["input_selection"].label("selection"),
+                                       ArchExplorationRun.spec["timing_budget"].label("tb"))
             .filter(ArchExplorationRun.id.in_({p.exploration_run_ref for p, _ in current})).all()} if current else {}
     reviews = _reviews_by_scenario(db, {p.scenario_ref for p, _ in current})
     rows = []
@@ -567,6 +569,12 @@ def _condition(run, m: dict[str, Any]) -> dict[str, Any]:
         "config_profile_ref": sel.get("config_profile_ref") or (getattr(run, "profile", None) if run is not None else None),
         "dvfs_overrides": ((sel.get("config") or {}).get("dvfs_overrides") or {}),
         "dvfs": m.get("dvfs") or {}, "compression": m.get("compression") or [],
+        # S4: measurement used as input (SW task runtime / IP clocks / CPU profile)
+        "measured": {"ref": ((getattr(run, "tb", None) or {}).get("measured") or {}).get("measurement_ref") if run is not None else None,
+                     "inputs": ((getattr(run, "tb", None) or {}).get("measured") or {}) if run is not None else {},
+                     "sw": sorted((timing.get("task_runtime") or {}).keys()),
+                     "clock_ref": (sel.get("config") or {}).get("measured_clock_ref"),
+                     "cpu_ref": timing.get("cpu_profile_ref") if timing.get("cpu_model") == "profile" else None},
     }
 
 

@@ -21,6 +21,8 @@ class ArchExplorationRunRequest(_DvfsSelection):
     # EXP-05: per-variant power budget = previous-project reference x (1 + tolerance) from the project review_policy
     # (the tighter of it and spec.constraints.power_budget_mw); variants without a reference keep the spec budget.
     power_budget_from_reference: bool = False
+    # set by Timing Budget registration: the condition as the user chose it (e.g. which measurement fed which input)
+    timing_budget: dict | None = None
 
     @model_validator(mode="after")
     def _scope(self) -> ArchExplorationRunRequest:

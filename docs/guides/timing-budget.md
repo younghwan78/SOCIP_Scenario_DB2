@@ -80,6 +80,20 @@ stage 사이는 memory(M2M)이므로 pipeline으로 동작한다. 각 stage가 1
 - ② `상세` = IP · SW task별 행, 같은 sensor frame의 preview(DPU) ↔ video(MFC/APV) 출력 완료를 보라 점선으로 연결하고 frame별 완료 시각 표를 함께 표시.
 - ③ SW 편차 분포: `POST /timing-budget/interval-distribution` — SW task runtime을 frame마다 triangular(min, mode, max)에서 추출(평균 유지, seed 고정), clock은 조건 그대로, 앞 warm-up(≥2) 제외. 출력 간격 · latency box plot. 판정은 바꾸지 않는 참고 지표이며 display vsync / encoder queue 완충은 미모델(상한 쪽 추정).
 
+### 실측 기반 입력 (S4)
+
+toolbar `실측`에서 이 variant의 measurement를 고르면 **실측 대비** 카드(예측 vs 실측 total · CPU / IP / BW / 기타 rail, 예측↔실측 페이지와 같은 rail 규칙)가 나타난다. 체크한 부분만 모델 입력을 실측으로 바꾼다 (URL `mref=<id>&min=sw,clock,cpu`).
+
+| 입력 | 요청 변환 (`apply_measured`) | 조건 |
+|---|---|---|
+| SW | `options.task_runtime[task] = {min, mean, max}` (측정 `sw_task_timing`; min/max 없으면 p50/p95, invocation × `count_per_frame`) | 통계(max/mean)·SW 증가·task 조정은 그 위에 그대로 적용, ③ 편차 분포도 같은 범위 |
+| clock | `config.measured_clock_ref` + `clock_basis = measured` (clock ledger 측정 단계, residency V² blend) | `clock.ip` 관측이 없는 측정은 거부 |
+| CPU | `cpu_model = profile`, `cpu_profile_ref = 측정 id` (EAS + schedutil) | per-frame CPU profile이 있어야 함 |
+
+- 변환된 값이 조건 자체이므로 Sim evidence 저장 · 예측 등록에 그대로 남는다. 등록 run에는 `spec.timing_budget.measured`(측정 id · 체크한 입력)가 같이 저장되고, 예측 현황 `조건` 열에서 다시 열 수 있다.
+- 남는 오차 = 모델 계수(IP core · BW · CPU) 쪽 — 계수 보정은 S5. 합성(SYNTHETIC) 측정은 배지로 구분하며 모델 검증 근거로 쓰지 않는다.
+- Sim evidence 저장 시 power(kpi · power_breakdown)는 Timing Budget의 CPU 모델 기준 split으로 기록된다.
+
 ## 6. 실행
 
 ```bash

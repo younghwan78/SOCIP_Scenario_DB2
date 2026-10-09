@@ -148,6 +148,9 @@ class TimingBudgetOptions(BaseScenarioModel):
     latency_scale: float = Field(default=1.0, ge=0, le=10)
     task_adjustments: dict[str, SwTaskAdjustment] = Field(default_factory=dict)
     task_latency: dict[str, TimingStat] = Field(default_factory=dict)
+    # Measured SW runtime per task (min / mean / max ms) replacing the variant's assumed timing (S4: measurement
+    # as input). ``statistic`` picks the value; ``runtime_scale`` / ``task_adjustments`` still apply on top.
+    task_runtime: dict[str, TimingStat] = Field(default_factory=dict)
     ip_overhead: dict[str, TimingStat] = Field(default_factory=dict)
     stage_overrides: dict[str, Stage] = Field(default_factory=dict)
     rt_margin: float = Field(default=0.25, ge=0, lt=1)
@@ -257,6 +260,8 @@ def _sw_ranges(plan: dict, options: TimingBudgetOptions) -> dict[str, tuple[floa
             if item["kind"] != "sw":
                 continue
             row = plan["profiles"].get(item["task"]) or {}
+            if item["task"] in options.task_runtime:
+                row = options.task_runtime[item["task"]].model_dump()
             vals = [row.get(k) for k in ("min_ms", "mean_ms", "max_ms")]
             if any(v is None for v in vals) or float(vals[2]) <= float(vals[0]):
                 continue
@@ -701,6 +706,8 @@ def _downstream_of(tid, pred, stage, target) -> bool:
 
 def _task_runtime(task_id: str, task: dict, profiles: dict, options: TimingBudgetOptions) -> float:
     row = profiles.get(task_id)
+    if task_id in options.task_runtime:
+        row = options.task_runtime[task_id].model_dump()
     base = (
         float(row[f"{options.statistic}_ms"])
         if row and row.get(f"{options.statistic}_ms") is not None
