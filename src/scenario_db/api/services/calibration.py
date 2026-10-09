@@ -547,7 +547,7 @@ def ip_bandwidth(db: Session, scenario_id: str, variant_id: str, measurement_id:
         row[item["direction"]] += float(value)
         row["ports"] += 1
     meas_rows = (db.query(Evidence).options(load_only(Evidence.id, Evidence.measured_at, Evidence.provenance, Evidence.metric_observations,
-                                                       Evidence.sw_baseline_ref, Evidence.execution_context))
+                                                       Evidence.sw_baseline_ref, Evidence.execution_context, Evidence.kpi))
                  .filter(Evidence.kind == "evidence.measurement", Evidence.scenario_ref == scenario_id, Evidence.variant_ref == variant_id).all())
     candidates = []
     for m in meas_rows:
@@ -585,6 +585,7 @@ def ip_bandwidth(db: Session, scenario_id: str, variant_id: str, measurement_id:
     unmatched = sorted(set(measured) - used)
     m_ev = chosen[0] if chosen else None
     return {
+        "comparability": _bw_comparability(sim, m_ev),
         "scenario_id": scenario_id, "variant_id": variant_id,
         "simulation": {"id": sim.id, "at": _iso(sim.measured_at) or (sim.run_info or {}).get("timestamp"),
                        "tool_version": (sim.run_info or {}).get("tool_version")} if sim is not None else None,
@@ -595,3 +596,23 @@ def ip_bandwidth(db: Session, scenario_id: str, variant_id: str, measurement_id:
         "unmatched": [{"ref": r, **{k: v.get("mean") for k, v in measured[r].items()}} for r in unmatched],
         "note": "예측 = 최신 simulation evidence의 DMA port BW를 IP별 합산 · 실측 = IP 단위 (DMA port별 측정 아님)",
     }
+
+
+def _bw_comparability(sim: Evidence | None, meas: Evidence | None) -> dict[str, Any] | None:
+    """Is the IP-bandwidth comparison like-for-like? (PIPE-05) — reasons make it a reference comparison only."""
+    if sim is None or meas is None:
+        return None
+    reasons: list[str] = []
+    if is_synthetic(meas.provenance):
+        reasons.append("합성 측정 — 모델 정확도 검증으로 사용 불가")
+    elif not is_physical(meas.provenance):
+        reasons.append("측정 출처 미상 (collection_method / device 미기록)")
+    if sim.sw_baseline_ref and meas.sw_baseline_ref and sim.sw_baseline_ref != meas.sw_baseline_ref:
+        reasons.append(f"SW 다름: 예측 {sim.sw_baseline_ref} · 실측 {meas.sw_baseline_ref}")
+    elif not meas.sw_baseline_ref:
+        reasons.append("실측 SW 미기록")
+    sim_fps = (sim.kpi or {}).get("fps_effective") or (sim.kpi or {}).get("fps")
+    meas_fps = (meas.kpi or {}).get("fps_effective")
+    if isinstance(sim_fps, (int, float)) and isinstance(meas_fps, (int, float)) and sim_fps and abs(meas_fps - sim_fps) / sim_fps > 0.02:
+        reasons.append(f"fps 다름: 예측 {sim_fps:g} · 실측 {meas_fps:g}")
+    return {"equivalent": not reasons, "statistic": "mean", "reasons": reasons}

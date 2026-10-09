@@ -17,7 +17,7 @@ import { Bars, BoxPlot, SERIES, StackedBars } from '../components/Charts'
 import { PowerDeltaTable, PowerStack, type PowerRow } from '../components/PowerModelCharts'
 import { cpuSource, mifSummary, powerModelParts } from '../lib/powerModel'
 import { CompareSummary, type Driver, type ItemInfo, type MetricRow } from '../components/CompareSummary'
-import { useBattery } from '../lib/battery'
+import { useBatteries, useBattery } from '../lib/battery'
 import { pickProfile } from '../lib/simProfile'
 
 const KPI_FIELDS: [string, string, string][] = [
@@ -63,6 +63,8 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
   const key = ids.join(',')
   const battery = useBattery(ctx.project, ctx.params.cfg)
   const catOf = (s: string) => ctx.allCatalog.find((c) => c.scenario_id === s)
+  const projectBat = useBatteries(cItems.map((it) => catOf(it.scenario)?.project_id))
+  const batteries = cItems.map((it) => projectBat[catOf(it.scenario)?.project_id ?? ''] ?? battery)
   const scnIds = [...new Set(cItems.map((it) => it.scenario))]
   const scnKey = scnIds.join(',')
   const variantsQ = useAsync(() => Promise.all(scnIds.map((s) => api.variants(s).then((r) => [s, r.items] as const))), [scnKey])
@@ -275,7 +277,7 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
         {noKpi.length > 0 && <button className="btn primary" onClick={() => runSim(noKpi)} title="simulation으로 KPI 계산 (DB에 저장하지 않음)">{kpiMode === 'sim' ? `${noKpi.length}개 예측 실행` : `KPI 없는 ${noKpi.length}개 예측 실행`}</button>}
       </div>
       {mixed && <div className="faint" style={{ fontSize: 12, margin: '0 0 8px' }}>⚠ KPI 출처가 섞여 있습니다 (실측 vs 계산). 설계 대안 비교는 “Simulation 통일”을 권장합니다.</div>}
-      <CompareSummary items={summaryItems} metrics={metrics} battery={battery} />
+      <CompareSummary items={summaryItems} metrics={metrics} battery={battery} batteries={batteries} />
     </section>
   )
 

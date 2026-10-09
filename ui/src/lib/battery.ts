@@ -40,3 +40,22 @@ export function useBattery(project: string | undefined, param?: string): Battery
   try { ref = param === NO_PROFILE ? null : pickProfile(rows, param) } catch { ref = null }
   return batteryOf(rows, ref)
 }
+
+export const sameBattery = (a: Battery, b: Battery) => a.vbat === b.vbat && a.eff === b.eff
+
+/** ΔI between two results that may use different Vbat / efficiency: I(cand) − I(ref), never ΔmW with one setting. */
+export function deltaMaText(candMw: number | null | undefined, candB: Battery, refMw: number | null | undefined, refB: Battery): string {
+  const a = toMa(candMw, candB), b = toMa(refMw, refB)
+  if (a === null || b === null) return '—'
+  const d = a - b
+  const v = Math.abs(d) >= 100 ? d.toFixed(0) : d.toFixed(1)
+  return `${d >= 0 ? '+' : ''}${v} mA`
+}
+
+/** Battery constants per project (each project's latest / approved sim config profile). */
+export function useBatteries(projects: (string | undefined)[]): Record<string, Battery> {
+  const uniq = [...new Set(projects.filter((p): p is string => !!p))].sort()
+  const q = useAsync(() => Promise.all(uniq.map((p) => api.simConfigs(p).then((r) => r.items as ProfileRow[]).catch(() => [] as ProfileRow[])
+    .then((rows) => { let ref: string | null = null; try { ref = pickProfile(rows, undefined) } catch { ref = null } return [p, batteryOf(rows, ref)] as const }))), [uniq.join(',')])
+  return Object.fromEntries(q.data ?? [])
+}

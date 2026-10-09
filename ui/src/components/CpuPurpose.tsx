@@ -8,6 +8,8 @@ export interface CpuRun {
   n: number; profile: string; target: string; cmp: string | null; context: string
   growth: number; bwScale: number; pgEff: number
   ref_mw: number; best_mw: number | null; cmp_ref_mw: number | null; cmp_best_mw: number | null; winner: string | null
+  /** CPU → DRAM MB/s of the run (BW-only effect of the BW scale) */
+  bw_mbs?: number | null
 }
 
 const sg = (v: number | null | undefined, d = 1) => (v === null || v === undefined ? '—' : `${v >= 0 ? '+' : ''}${fmt(v, d)}`)
@@ -32,12 +34,13 @@ export function CpuPurpose({ rb, cmp, runs, growth, bwScale, onRebalance, onPres
     </div>
     <div className="cpu-q">
       <b>② Traffic shaping (CPU BW · DSU)</b>
-      <div className="faint">CPU BW 배율(L3/SLC hit ↑, burst 완화) · DSU 동기화 가정 — 같은 profile로 다시 실행해 비교</div>
+      <div className="faint">CPU BW 배율(L3/SLC hit ↑, burst 완화) · DSU 동기화 가정 — 같은 profile로 다시 실행해 비교.
+        <b> 현재 모델: BW 배율은 CPU→DRAM traffic(MB/s)만 바꾸고 CPU+DSU power는 그대로</b> (stall·OPP 연계 미모델) — 아래 Δ는 traffic 변화로 읽으세요.</div>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         {[0.9, 0.8, 0.7].map((s) => <button key={s} className={`btn tb-mini ${bwScale === s ? 'primary' : ''}`} onClick={() => onPreset({ bwScale: s })}>BW ×{s}</button>)}
         {bwScale !== 1 && <button className="btn tb-mini" onClick={() => onPreset({ bwScale: 1 })}>×1 (기준)</button>}
       </div>
-      {shaping.length > 0 && base && <div style={{ fontSize: 12 }}>{shaping.map((r) => <div key={r.n} className="mono">BW ×{r.bwScale}: {sg(r.ref_mw - base.ref_mw)} mW (현재 배치) · 최적 {sg((r.best_mw ?? r.ref_mw) - (base.best_mw ?? base.ref_mw))}</div>)}</div>}
+      {shaping.length > 0 && base && <div style={{ fontSize: 12 }}>{shaping.map((r) => <div key={r.n} className="mono">BW ×{r.bwScale}: CPU BW {r.bw_mbs != null && base.bw_mbs != null ? `${fmt(base.bw_mbs, 0)}→${fmt(r.bw_mbs, 0)} MB/s (${sg(r.bw_mbs - base.bw_mbs, 0)})` : '—'} · CPU+DSU {sg(r.ref_mw - base.ref_mw)} mW{Math.abs(r.ref_mw - base.ref_mw) < 0.05 ? ' (BW-only)' : ''}</div>)}</div>}
     </div>
     <div className="cpu-q">
       <b>③ 차기 과제 — cluster 구조 · SW 증가</b>

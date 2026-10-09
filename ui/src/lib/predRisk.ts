@@ -23,12 +23,14 @@ export interface RiskContext {
   references?: Record<string, PowerRef>; tolerance_pct?: number | null
   /** latency limit in frames (project policy); buffering may add frames, fps itself is never traded */
   max_latency_frames?: number | null
+  /** prediction id → reasons the registration no longer matches today's inputs (PRED-04) */
+  stale?: Map<string, string[]>
 }
 
 const RANK: Record<RiskLevel, number> = { high: 3, med: 2, low: 1, ok: 0 }
 export const RISK_LABEL: Record<RiskLevel, string> = { high: '높음', med: '중간', low: '낮음', ok: '양호' }
 export const RISK_CLASS: Record<RiskLevel, string> = { high: 'v-fail', med: 'v-warn', low: 'v-info', ok: 'v-ok' }
-export const KIND_LABEL: Record<RiskKind, string> = { perf: '성능', thermal: '발열·power', confidence: '예측 신뢰도' }
+export const KIND_LABEL: Record<RiskKind, string> = { perf: '성능', thermal: '소비전류(발열 대리)', confidence: '예측 신뢰도' }
 
 /** Smallest SW slack over the frozen stages, as % of the frame period. budget_ms is the HW budget, which for NRT / Post
  *  already excludes the SW time (period − SW), so slack = budget − HW for every stage. */
@@ -67,7 +69,10 @@ export function assessRisk(r: BoardRow, ctx: RiskContext, peers: BoardRow[] = []
   const period = r.verdict_detail?.period_ms ?? (r.fps ? 1000 / r.fps : null)
   if (ctx.max_latency_frames && lat && period && lat / period > ctx.max_latency_frames)
     risks.push({ kind: 'perf', level: 'med', text: `latency ${(lat / period).toFixed(1)} frame > 한도 ${ctx.max_latency_frames} frame` })
-  if (r.throughput_model === 'stage' && ctx.references)
+  const staleWhy = ctx.stale?.get(r.id)
+  if (staleWhy?.length)
+    risks.push({ kind: 'confidence', level: 'med', text: `등록 후 입력 변경 — 현재 조건 결과 아님 (${staleWhy.join(' · ')})` })
+  else if (r.throughput_model === 'stage' && ctx.references)
     risks.push({ kind: 'confidence', level: 'low', text: '이전 판정 기준(stage)으로 등록 — 조합 탐색 후 다시 등록' })
 
   // ---- thermal / power (customer target: 전과제와 유사 혹은 낮게)
@@ -104,6 +109,7 @@ export function assessRisk(r: BoardRow, ctx: RiskContext, peers: BoardRow[] = []
   else focus.push({ lever: 'bw', text: `BW ${p.bw_mw.toFixed(0)} mW (${(100 * dominant.share).toFixed(0)}%) — compression · LLC · buffer 크기`, page: 'pipeline' })
   if (r.verdict === 'clock_up' || r.verdict === 'fail') focus.push({ lever: 'clock', text: 'SW 단축 또는 pipeline buffering으로 clock ↑ 회피 (Timing Budget)', page: 'timing' })
   else if (slack !== null && slack > 30) focus.push({ lever: 'clock', text: `SW 여유 ${slack.toFixed(0)}% — IP clock level ↓ 여지 (Timing Budget ⑦)`, page: 'timing' })
+  if (staleWhy?.length) focus.unshift({ lever: 'measure', text: '조합 탐색 재실행 → 다시 등록 (입력 변경)', page: 'explore' })
   if (ctx.measured && !meas && nearTarget) focus.push({ lever: 'measure', text: '실측으로 예측 검증 (Calibration)', page: 'calibration' })
 
   const level = risks.reduce<RiskLevel>((a, x) => (RANK[x.level] > RANK[a] ? x.level : a), 'ok')

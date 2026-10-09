@@ -379,14 +379,37 @@ def _plan(graph, options: TimingBudgetOptions, config: SimulationRunConfig) -> d
     margins: dict[str, float] = {}
     shared: dict[str, int] = {}
     budgets: dict[str, dict[str, Any]] = {}
+    # pipelined: SW tasks on the same CPU resource (shared_cpu, or one declared timeline_resource_id) serialize —
+    # their per-frame sum must fit the period even though each task alone does (no free extra cores).
+    cpu_group: dict[str, str] = {}
+    if options.throughput_model == "pipelined":
+        for st in ("nrt", "post"):
+            for i in sw_items[st]:
+                if i["kind"] != "sw":
+                    continue
+                declared = ((graph.variant.node_configs or {}).get(i["task"]) or {}).get("timeline_resource_id")
+                cpu_group[i["task"]] = "CPU (shared_cpu)" if options.shared_cpu else str(declared or i["task"])
+    group_load: dict[str, float] = {}
+    group_tasks: dict[str, list[str]] = {}
+    for st in ("nrt", "post"):
+        for i in sw_items[st]:
+            g = cpu_group.get(i["task"]) if i["kind"] == "sw" else None
+            if g is not None:
+                group_load[g] = group_load.get(g, 0.0) + i["runtime_ms"]
+                group_tasks.setdefault(g, []).append(i["task"])
     for st in STAGES:
         nodes = [n for n in workloads if stage.get(n) == st]
         sw_total = _critical_sw(sw_items[st], edges)
         longest_sw = max((i["runtime_ms"] for i in sw_items[st]), default=0.0)
+        cpu_groups: list[dict[str, Any]] = []
         if st in ("nrt", "post") and options.throughput_model == "pipelined":
             margin = options.rt_margin
             budget = (1.0 - margin) * period
-            feasible = longest_sw <= period
+            mine = {cpu_group[i["task"]] for i in sw_items[st] if i["task"] in cpu_group}
+            cpu_groups = [{"resource": g, "tasks": group_tasks[g], "load_ms": round(group_load[g], 3)}
+                          for g in sorted(mine) if len(group_tasks[g]) > 1]
+            cpu_load = max((group_load[g] for g in mine), default=0.0)
+            feasible = longest_sw <= period and cpu_load <= period
         elif st in ("nrt", "post"):
             budget = period - sw_total
             margin = 1.0 - budget / ((1.0 + h_blank) * period)
@@ -397,6 +420,7 @@ def _plan(graph, options: TimingBudgetOptions, config: SimulationRunConfig) -> d
             budget = (1.0 - margin) * period
             feasible = True
         budgets[st] = {
+            "cpu_groups": cpu_groups,
             "longest_sw_ms": longest_sw,
             "sw_ms": sw_total,
             "budget_ms": budget,
@@ -751,6 +775,7 @@ def _report(graph, options, plan, rule_run, run, dvfs_tables) -> dict[str, Any]:
                 "feasible": b["feasible"],
                 "throughput": options.throughput_model if st in ("nrt", "post") else "frame",
                 "longest_sw_ms": round(b["longest_sw_ms"], 3),
+                "cpu_groups": b.get("cpu_groups", []),
                 "chain_ms": round(b["sw_ms"] + stage_hw.get(st, 0.0), 3),
                 "fill_pct": round(100 * (b["sw_ms"] + stage_hw.get(st, 0.0)) / period, 1)
                 if st in ("nrt", "post")
@@ -760,7 +785,7 @@ def _report(graph, options, plan, rule_run, run, dvfs_tables) -> dict[str, Any]:
     intervals, latency = _cadence(result, run["inputs"], plan, options)
     power, bw = _power_bw(result, plan, options, period)
     domains = {st: stage_domains(ips, st) for st in STAGES}
-    verdict = _verdict(stages, intervals, ips, domains)
+    verdict = _verdict(stages, intervals, ips, domains, period)
     return {
         "scenario_id": graph.scenario_id,
         "variant_id": graph.variant_id,
@@ -839,9 +864,14 @@ def _cadence(
         )
 
     p, v = series(preview), series(video)
-    ok = all(s["ok"] is not False for s in (p, v)) and any(s["ok"] is not None for s in (p, v))
+    # every terminal stream counts (dual / PIP / multi-encoder): the first display / encoder alone is not enough
+    extra = [n for n in nodes if n not in (preview, video) and (_DISPLAY_RE.search(n) or _ENCODER_RE.search(n))]
+    streams = [{"kind": "preview" if _DISPLAY_RE.search(n) else "video", **series(n)} for n in extra]
+    streams = [x for x in streams if x["ok"] is not None]
+    ok = (all(s["ok"] is not False for s in (p, v, *streams))
+          and any(s["ok"] is not None for s in (p, v)))
     return (
-        {"target_ms": round(period, 4), "tolerance": tol, "preview": p, "video": v, "ok": ok},
+        {"target_ms": round(period, 4), "tolerance": tol, "preview": p, "video": v, "streams": streams, "ok": ok},
         {
             "preview_ms": lat(preview),
             "video_ms": lat(video),
@@ -915,11 +945,17 @@ def _power_bw(result: SimRunResult, plan: dict, options: TimingBudgetOptions, pe
     return power, bw
 
 
-def _verdict(stages, intervals, ips, domains=None) -> dict[str, Any]:
+def _verdict(stages, intervals, ips, domains=None, period: float | None = None) -> dict[str, Any]:
+    limit = period if period else float("inf")
     reasons = []
     for s in stages:
         if not s["feasible"] and s.get("throughput") == "pipelined":
-            reasons.append(f"{s['name']}: SW task {s['longest_sw_ms']:.2f} ms > frame period (한 thread가 1 frame 안에 못 끝남)")
+            over = [g for g in s.get("cpu_groups") or [] if g["load_ms"] > limit]
+            if s["longest_sw_ms"] > limit or not s.get("cpu_groups"):
+                reasons.append(f"{s['name']}: SW task {s['longest_sw_ms']:.2f} ms > frame period (한 thread가 1 frame 안에 못 끝남)")
+            for g in over:
+                reasons.append(f"{s['name']}: CPU {g['resource']}의 SW 합 {g['load_ms']:.2f} ms > frame period "
+                               f"(같은 thread/core: {', '.join(g['tasks'])})")
         elif not s["feasible"]:
             reasons.append(f"{s['name']}: SW {s['sw_ms']:.2f} ms leaves no HW budget")
     rt = next(s for s in stages if s["id"] == "rt")
@@ -932,6 +968,9 @@ def _verdict(stages, intervals, ips, domains=None) -> dict[str, Any]:
             reasons.append(
                 f"{key} interval {s['max_ms']:.3f} ms != {intervals['target_ms']:.3f} ms"
             )
+    for s in intervals.get("streams") or []:
+        if s["ok"] is False:
+            reasons.append(f"{s['node']} ({s['kind']}) interval {s['max_ms']:.3f} ms != {intervals['target_ms']:.3f} ms")
     for ip in ips:
         if not ip["feasible"]:
             reasons.append(f"{ip['node']}: {ip['infeasible_reason']}")

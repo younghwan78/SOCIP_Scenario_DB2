@@ -354,6 +354,10 @@ def _tiers(eligible: list[dict[str, Any]], tie_pct: float) -> dict[str, Any]:
             "dvfs_range": {d: [min(v), max(v)] for d, v in sorted(levels.items())},
             "compression_always": sorted(b for b, n in comp_count.items() if n == len(near)),
             "compression_optional": sorted(b for b, n in comp_count.items() if n < len(near)),
+            # the window is this set of evaluated cases — axis min/max crossed freely is NOT evaluated
+            "near_list": [{k: c[k] for k in ("key", "dvfs", "compression", "statistic", "runtime_scale")}
+                          | {"total_mw": round(c["total_mw"], 2), "bw_mbs": round(c["bw_mbs"], 1)}
+                          for c in sorted(near, key=lambda c: c["total_mw"])[:12]],
         }
 
     keep = window([c for c in eligible if _iq_risk(c) <= 1])

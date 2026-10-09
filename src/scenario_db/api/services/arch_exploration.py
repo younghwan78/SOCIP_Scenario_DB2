@@ -936,3 +936,70 @@ def model_status(db: Session, *, project_ref: str | None = None) -> dict[str, An
         "latest_run": {"id": latest.id, "engine_rev": latest.engine_rev,
                        "created_at": latest.created_at.isoformat() if latest.created_at else None} if latest is not None else None,
     }
+
+
+def prediction_freshness(db: Session, *, scenario_id: str | None = None, project_ref: str | None = None) -> dict[str, Any]:
+    """Is each current prediction still the result of today's inputs? (PRED-04)
+
+    Re-resolves every registered variant's inputs the way its run did (config profile, DVFS table) and compares the
+    content-addressed input sections with the ones frozen in the run, plus the engine revision and the project's
+    throughput judgement. Changed sections name the cause (variant_doc, ip:<id>, dvfs:<domain>, config, …).
+    """
+    from scenario_db.api.services.review_policy import project_policy
+    from scenario_db.sim.arch_exploration import input_manifest
+
+    q = db.query(Prediction.id, Prediction.scenario_ref, Prediction.variant_ref, Prediction.exploration_run_ref,
+                 Prediction.project_ref, Prediction.metrics["throughput_model"].astext).filter(Prediction.status == "current")
+    if scenario_id:
+        q = q.filter(Prediction.scenario_ref == scenario_id)
+    if project_ref:
+        q = q.filter(Prediction.project_ref == project_ref)
+    preds = q.all()
+    runs = {r.id: r for r in db.query(ArchExplorationRun.id, ArchExplorationRun.engine_rev, ArchExplorationRun.project_ref,
+                                      ArchExplorationRun.spec["config_profile_ref"].astext.label("cfg"),
+                                      ArchExplorationRun.spec["use_default_dvfs"].astext.label("dvfs"))
+            .filter(ArchExplorationRun.id.in_({p[3] for p in preds})).all()} if preds else {}
+    policies: dict[str | None, Any] = {}
+    rows = []
+    for pid, sid, vid, run_id, proj, tp in preds:
+        run = runs.get(run_id)
+        reasons: list[str] = []
+        changed: list[str] = []
+        if run is None:
+            rows.append({"prediction_id": pid, "scenario_id": sid, "variant_id": vid, "status": "unknown",
+                         "reasons": ["run 없음"], "changed": []})
+            continue
+        if run.engine_rev != ENGINE_REV:
+            reasons.append(f"engine {run.engine_rev} → {ENGINE_REV}")
+        if proj not in policies:
+            policies[proj] = project_policy(db, proj)
+        pol = policies[proj]
+        want_tp = (pol.throughput_model if pol and pol.throughput_model else "stage")
+        if (tp or "stage") != want_tp:
+            reasons.append(f"판정 기준 {tp or 'stage'} → {want_tp}")
+        frozen = (_run_variant_sections(db, run_id, sid, vid) or {})
+        try:
+            tb = TimingBudgetRequest(scenario_id=sid, variant_id=vid, config_profile_ref=run.cfg or None)
+            shim = _shim(tb, vid)
+            _apply_config_profile(db, shim)
+            graph, tables, _ = _load(db, shim, True)
+            now, _ = input_manifest(graph, shim.config, tables)
+            if frozen:
+                changed = sorted(k for k in set(now) | set(frozen) if now.get(k) != frozen.get(k))
+            else:
+                reasons.append("run에 입력 manifest 없음 (이전 run)")
+        except Exception as exc:  # noqa: BLE001 - one variant must not hide the others
+            reasons.append(f"현재 입력 해석 실패: {str(exc)[:160]}")
+        if changed:
+            reasons.append("입력 변경: " + ", ".join(changed[:6]) + (f" 외 {len(changed) - 6}" if len(changed) > 6 else ""))
+        rows.append({"prediction_id": pid, "scenario_id": sid, "variant_id": vid, "run_id": run_id,
+                     "status": "stale" if reasons else "fresh", "reasons": reasons, "changed": changed})
+    return {"rows": rows, "stale": sum(r["status"] == "stale" for r in rows), "fresh": sum(r["status"] == "fresh" for r in rows),
+            "engine_rev": ENGINE_REV}
+
+
+def _run_variant_sections(db: Session, run_id: str, scenario_id: str, variant_id: str) -> dict[str, str] | None:
+    R = ArchExplorationRun
+    return db.query(func.jsonb_path_query_first(
+        R.variants, literal_column("'$[*] ? (@.scenario_id == $s && @.variant_id == $v).input_sections'::jsonpath"),
+        func.jsonb_build_object(literal("s"), scenario_id, literal("v"), variant_id))).filter(R.id == run_id).scalar()

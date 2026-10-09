@@ -145,7 +145,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
         n: (rs[rs.length - 1]?.n ?? 0) + 1, profile: payload.cpu_profile_ref, target: payload.power_params_ref, cmp: cmpRes ? cmpTarget : null,
         growth: payload.default_growth ?? 1, bwScale: payload.cpu_bw_scale ?? 1, pgEff: payload.power_gating_eff ?? 0.9,
         ref_mw: r.reference.total_mw, best_mw: r.best?.total_mw ?? null, cmp_ref_mw: cmpRes?.reference.total_mw ?? null, cmp_best_mw: cmpRes?.best?.total_mw ?? null,
-        winner: r.strategies?.winner ?? null }])
+        winner: r.strategies?.winner ?? null, bw_mbs: r.cpu_bw_mbs ?? null }])
     } catch (e) {
       if (id === requestId.current) setError(String((e as Error).message ?? e))
     } finally { if (id === requestId.current) setBusy(false) }

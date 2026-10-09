@@ -38,12 +38,16 @@ export function TiersView({ v, battery }: { v: VariantResult; battery: Battery }
         {!keep ? <div className="empty">lossless / 무압축으로 timing을 만족하는 조합이 없습니다.</div> : <>
           <div className="tier-big"><span className="mono">{fmt(keep.best.total_mw, 1)}</span> mW <span className="faint">({maText(keep.best.total_mw, battery)}) · {fmt(keep.best.bw_mbs / 1000, 2)} GB/s</span></div>
           <table className="tb-mini-table" style={{ width: '100%' }}><tbody>
-            <tr><td>최적 ±{fmt(keep.near_pct, 0)}% 범위</td><td className="mono">{keep.near_cases}개 조합 · {fmt(keep.near_mw[0], 1)}–{fmt(keep.near_mw[1], 1)} mW · {fmt(keep.near_bw_mbs[0] / 1000, 2)}–{fmt(keep.near_bw_mbs[1] / 1000, 2)} GB/s</td></tr>
-            <tr><td>DVFS level 범위</td><td className="mono">{Object.entries(keep.dvfs_range).map(([d, [a, b]]) => `${d} L${a}${a !== b ? `–L${b}` : ''}`).join(' · ') || '—'}</td></tr>
+            <tr><td>최적 +{fmt(keep.near_pct, 0)}% 이내</td><td className="mono">{keep.near_cases}개 조합 · {fmt(keep.near_mw[0], 1)}–{fmt(keep.near_mw[1], 1)} mW · {fmt(keep.near_bw_mbs[0] / 1000, 2)}–{fmt(keep.near_bw_mbs[1] / 1000, 2)} GB/s</td></tr>
+            <tr><td title="평가된 조합에서 관측된 level의 최소~최대 — 이 범위의 임의 교차 조합이 평가된 것은 아님">DVFS level (관측)</td><td className="mono">{Object.entries(keep.dvfs_range).map(([d, [a, b]]) => `${d} L${a}${a !== b ? `–L${b}` : ''}`).join(' · ') || '—'}</td></tr>
             <tr><td>Compression (lossless)</td><td className="mono" style={{ fontSize: 11.5 }}>{keep.compression_always.length ? `항상 ${keep.compression_always.join(', ')}` : '필수 없음'}{keep.compression_optional.length ? ` · 선택 ${keep.compression_optional.join(', ')}` : ''}</td></tr>
             <tr><td>SW 기준</td><td className="mono">{keep.best.statistic} ×{keep.best.runtime_scale} · 판정 {keep.best.verdict}</td></tr>
           </tbody></table>
-          <div className="faint" style={{ fontSize: 11.5 }}>표시 범위는 검증한 {keep.near_cases}개 조합의 최소·최대입니다. DVFS level · compression을 새로 조합하거나 SW 조건을 바꾸면 다시 예측하세요.</div>
+          {(keep.near_list?.length ?? 0) > 0 && <details><summary className="faint" style={{ fontSize: 12 }}>평가된 유효 조합 {keep.near_list!.length}{keep.near_cases > keep.near_list!.length ? ` / ${keep.near_cases}` : ''}개 (이 목록만 검증됨)</summary>
+            <table className="tb-mini-table" style={{ width: '100%' }}><thead><tr><th style={{ textAlign: 'right' }}>mW</th><th style={{ textAlign: 'right' }}>MB/s</th><th>DVFS</th><th>Compression</th></tr></thead>
+              <tbody>{keep.near_list!.map((c) => <tr key={c.key}><td className="mono" style={{ textAlign: 'right' }}>{fmt(c.total_mw, 1)}</td><td className="mono" style={{ textAlign: 'right' }}>{fmt(c.bw_mbs, 0)}</td>
+                <td className="mono" style={{ fontSize: 11 }}>{Object.entries(c.dvfs).map(([d, l]) => `${d}:L${l}`).join(' ')}</td><td className="mono" style={{ fontSize: 11 }}>{c.compression.join(', ') || '—'}</td></tr>)}</tbody></table></details>}
+          <div className="faint" style={{ fontSize: 11.5 }}>최저 +{fmt(keep.near_pct, 0)}% 이내로 평가된 {keep.near_cases}개 조합의 요약입니다. 위 목록에 없는 level · compression 교차 조합은 미평가 — 다시 예측하세요.</div>
         </>}
       </section>
       <section className="tier tier-trade">

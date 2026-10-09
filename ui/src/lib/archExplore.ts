@@ -100,6 +100,8 @@ export interface OptionMarginal {
 export interface TierWindow {
   best: ExpCase; near_pct: number; near_cases: number; near_mw: [number, number]; near_bw_mbs: [number, number]
   dvfs_range: Record<string, [number, number]>; compression_always: string[]; compression_optional: string[]
+  /** evaluated cases inside the window (API ≥ 2026-10-09 b) */
+  near_list?: { key: string; dvfs: Record<string, number>; compression: string[]; statistic: string; runtime_scale: number; total_mw: number; bw_mbs: number }[]
 }
 export interface Tiers { keep: TierWindow | null; trade: TierWindow | null; trade_gain: { delta_mw: number; delta_mbs: number; iq_risk: number } | null }
 export interface PowerOptions {
@@ -238,6 +240,7 @@ export const archApi = {
   optionReviews: (scenarioId?: string) => send<OptionReview[]>('GET', `/arch/power-options/reviews${q({ scenario_id: scenarioId })}`),
   setOptionReview: (body: { scenario_id: string; variant_id?: string; option_key: string; status: ReviewStatus; note?: string }) =>
     send<OptionReview>('PUT', '/arch/power-options/reviews', body),
+  freshness: (scenarioId?: string, projectRef?: string) => send<Freshness>('GET', `/arch/predictions/freshness${q({ scenario_id: scenarioId, project_ref: projectRef })}`),
   history: (scenarioId: string, variantId: string) => send<HistoryRow[]>('GET', `/arch/predictions/history${q({ scenario_id: scenarioId, variant_id: variantId })}`),
   compare: (p: { old_id?: string; new_id?: string; scenario_id?: string; variant_id?: string }) =>
     send<{ old: HistoryRow; new: HistoryRow; attribution: Attribution }>('GET', `/arch/predictions/compare${q(p)}`),
@@ -309,3 +312,7 @@ export function coverageOf(v: Pick<VariantResult, 'status' | 'coverage'>): Power
 export function promoteTargets(run: Pick<RunDetail, 'variants'>): VariantResult[] {
   return run.variants.filter((v) => v.spec_ok && v.recommended)
 }
+
+/** current prediction vs today's inputs (PRED-04) */
+export interface FreshRow { prediction_id: string; scenario_id: string; variant_id: string; run_id?: string; status: 'fresh' | 'stale' | 'unknown'; reasons: string[]; changed: string[] }
+export interface Freshness { rows: FreshRow[]; stale: number; fresh: number; engine_rev: string }

@@ -38,6 +38,8 @@ export interface CpuRebalance {
   strategies?: RbStrategies
   boundaries: { reference: RbBoundary[]; best: RbBoundary[] }
   dsu_model: DsuModelInfo | null; dsu_params: DsuParams | null; dsu_measured?: Record<string, number> | null; warnings: string[]
+  /** CPU → DRAM traffic after cpu_bw_scale (API ≥ 2026-10-09); CPU + DSU power does not depend on it */
+  cpu_bw_mbs?: number
 }
 export interface CpuRebalanceRequest extends CpuSweepRequest {
   pool: string[]; movable?: string[]; locks: Record<string, string>; co_move: string[][]; verify_k?: number; max_exhaustive?: number

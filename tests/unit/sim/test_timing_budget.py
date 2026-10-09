@@ -238,3 +238,28 @@ def test_dvfs_level_whatif_rows(graph_factory, dvfs):
     # domain filter
     only = tb.dvfs_level_whatif(g, tb.TimingBudgetOptions(), dvfs_tables=dvfs, shifts=(1,), domains=[out["domains"][0]["domain"]])
     assert {r["domain"] for r in only["rows"]} <= {out["domains"][0]["domain"]}
+
+
+def test_pipelined_sw_on_one_cpu_resource_must_fit_the_period_together(graph_factory):
+    """AC-05: two SW tasks on the same core cannot pass as independent threads (sum > period fails)."""
+    g = graph_factory("cam-rec-r1-fhd120")
+    free = tb.analyze_timing_budget(g, tb.TimingBudgetOptions(throughput_model="pipelined"))
+    shared = tb.analyze_timing_budget(g, tb.TimingBudgetOptions(throughput_model="pipelined", shared_cpu=True))
+    nrt_free, nrt_shared = _stage(free, "nrt"), _stage(shared, "nrt")
+    period = shared["period_ms"]
+    assert nrt_free["longest_sw_ms"] <= period and nrt_free["cpu_groups"] == []
+    group = nrt_shared["cpu_groups"][0]
+    assert group["load_ms"] == pytest.approx(sum(i["runtime_ms"] for i in nrt_shared["sw_items"] if i["kind"] == "sw"), abs=0.01)
+    if group["load_ms"] > period:
+        assert not nrt_shared["feasible"] and shared["verdict"]["status"] == "fail"
+        assert any("같은 thread/core" in r for r in shared["verdict"]["reasons"])
+
+
+def test_pipelined_single_ip_slower_than_the_period_still_fails(graph_factory, dvfs):
+    """AC-04: buffering does not rescue a stage whose service time per frame exceeds the period."""
+    g = graph_factory("cam-rec-r1-uhd60-sdr")
+    out = tb.dvfs_level_whatif(g, tb.TimingBudgetOptions(throughput_model="pipelined"), dvfs_tables=dvfs, shifts=(-1,))
+    slow = [r for r in out["rows"] if not r.get("error") and r["stage_hw_ms"]["nrt"] > out["period_ms"] * 1.001]
+    assert slow
+    for r in slow:
+        assert r["verdict"] == "fail" and any("interval" in x for x in r["reasons"])

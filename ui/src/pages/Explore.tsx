@@ -320,7 +320,7 @@ function VariantDetailBody({ v, run, readOnly, battery, iqKeep = false }: { v: V
         {msg && <span className="faint" style={{ fontSize: 12 }}>{msg}</span>}
       </div>
     </Card>
- <Card id="ax-tiers" title={`${short(v.variant_id)} — 화질·성능 유지 최적 범위 vs Power 우선 메뉴`} note="A = lossy · IQ option 없이 timing 만족 최저 + ±3% 조건 범위 · B = 화질을 희생할 때 항목별 단독 효과" defaultWide>
+ <Card id="ax-tiers" title={`${short(v.variant_id)} — 화질·성능 유지 최적 범위 vs Power 우선 메뉴`} note="A = lossy · IQ option 없이 timing 만족 최저 + 최저 +3% 이내 평가 조합 · B = 화질을 희생할 때 항목별 단독 효과" defaultWide>
       <TiersView v={v} battery={battery} /></Card>
  {v.power_options && <Card id="ax-options" title="Power option 조합 (IQ 평가 대상)" note={`${OPTION_NOTE}${(v.power_options.fixed ?? []).length ? ' · 고정 대비 = 항상 이득인 option을 고정했을 때 나머지 option의 추가 효과' : ''}`} defaultWide>
       <div style={{ display: 'grid', gap: 8 }}>

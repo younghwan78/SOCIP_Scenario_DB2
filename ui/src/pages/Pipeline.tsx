@@ -48,7 +48,7 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
   // measured per-IP bandwidth (PMU / bus monitor counts per IP, not per DMA port) vs newest simulation
   const [bwMeas, setBwMeas] = useState<string>('')
   useEffect(() => setBwMeas(''), [scenario, variant])
-  const ipBwQ = useAsync(() => (variant ? calibrationApi.ipBandwidth(scenario, variant, bwMeas || undefined).catch(() => null) : Promise.resolve(null)), [scenario, variant, bwMeas])
+  const ipBwQ = useAsync(() => (variant ? calibrationApi.ipBandwidth(scenario, variant, bwMeas || undefined) : Promise.resolve(null)), [scenario, variant, bwMeas])
   const ipBw = useMemo(() => new Map((ipBwQ.data?.rows ?? []).map((r) => [r.node, r])), [ipBwQ.data])
   const hasMeasBw = (ipBwQ.data?.rows ?? []).some((r) => r.meas)
   const varQ = useAsync(() => (variant ? api.variant(scenario, variant).catch(() => null) : Promise.resolve(null)), [scenario, variant])
@@ -370,7 +370,10 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
             {ipBwQ.data && ipBwQ.data.measurements.length > 0 ? <label>· 실측 IP BW <select className="input" style={{ padding: '1px 4px', fontSize: 11 }} value={bwMeas || ipBwQ.data.measurement?.id || ''} onChange={(e) => setBwMeas(e.target.value)}>
               {ipBwQ.data.measurements.map((m) => <option key={m.id} value={m.id}>{dayOf(m.at)} · {m.synthetic ? '합성' : '실측'} · {m.id}</option>)}</select> (IP 단위 측정 · DMA별 아님 · Δ = (예측−실측)/실측)</label>
               : ipBwQ.data && <span>· IP별 실측 BW 없음 (metric_observations bandwidth.read/write · scope ip를 import하면 비교 열이 생김)</span>}
-            {(ipBwQ.data?.unmatched.length ?? 0) > 0 && <span title={ipBwQ.data!.unmatched.map((u) => u.ref).join(', ')}>· 매칭 안 된 실측 IP {ipBwQ.data!.unmatched.length}</span>}
+            {(ipBwQ.data?.unmatched.length ?? 0) > 0 && <span title={ipBwQ.data!.unmatched.map((u) => `${u.ref}: R ${u.read ?? '—'} · W ${u.write ?? '—'} · total ${u.total ?? '—'} MB/s (node id / HW 이름과 불일치)`).join('\n')}>· 매칭 안 된 실측 IP {ipBwQ.data!.unmatched.length}</span>}
+            {ipBwQ.data?.comparability && <span className={`badge ${ipBwQ.data.comparability.equivalent ? 'v-ok' : 'v-warn'}`} title={ipBwQ.data.comparability.reasons.join('\n') || '같은 SW · fps · 실기기 측정 (mean 대 mean)'}>
+              {ipBwQ.data.comparability.equivalent ? '동등 조건 비교' : `참고 비교 — ${ipBwQ.data.comparability.reasons[0]}${ipBwQ.data.comparability.reasons.length > 1 ? ` 외 ${ipBwQ.data.comparability.reasons.length - 1}` : ''}`}</span>}
+            {ipBwQ.error && <span className="err" style={{ margin: 0, padding: '1px 6px' }}>IP BW 조회 실패 (실측 없음 아님): {ipBwQ.error}</span>}
           </div>
         </div>
         ) },

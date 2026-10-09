@@ -225,3 +225,7 @@ def test_tiers_split_iq_keeping_and_lossy_optimum(uhd30):
     lo, hi = keep["near_mw"]
     assert lo == pytest.approx(keep["best"]["total_mw"], abs=0.02) and hi <= lo * (1 + keep["near_pct"] / 100) + 0.02
     assert keep["near_cases"] >= 1 and all(a <= b for a, b in keep["dvfs_range"].values())
+    # the window is reported as its evaluated cases (no free crossing of axis ranges)
+    near = keep["near_list"]
+    assert len(near) == min(12, keep["near_cases"]) and near[0]["total_mw"] == pytest.approx(keep["near_mw"][0], abs=0.02)
+    assert [c["total_mw"] for c in near] == sorted(c["total_mw"] for c in near)

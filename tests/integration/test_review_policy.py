@@ -45,6 +45,8 @@ def test_policy_registers_the_iq_keeping_case_and_builds_the_thermal_watch(engin
             pred = db.get(Prediction, out["promoted"][0]["id"])
             assert pred.selection_rule == "auto:min-power-iq" and pred.selected_by == "auto"
             assert pred.metrics["power"]["total_mw"] == 12.0 and pred.metrics["throughput_model"] == "pipelined"
+            fresh = svc.prediction_freshness(db, scenario_id=sid)["rows"][0]   # PRED-04
+            assert fresh["status"] == "stale" and any("engine" in r for r in fresh["reasons"])  # fixture run engine_rev="test"
             board = svc.board(db, scenario_id=sid)["rows"][0]
             assert board["throughput_model"] == "pipelined"
 
