@@ -63,6 +63,8 @@ export interface VariantResult {
   ip_modes?: IpModeRow[]
   /** API ≥ 2026-10-09: IQ/performance-keeping optimum + near-optimal window vs lossy optimum */
   tiers?: Tiers
+  /** timing judgement of the run (project review policy) */
+  throughput_model?: 'stage' | 'pipelined'
   /** false = list-view row (run?view=summary): fetch archApi.runVariant for slices / buffers / options */
   detail?: boolean
 }
@@ -145,8 +147,10 @@ export interface BoardRow {
   power_options?: BoardOptions
   /** why the timing verdict (API ≥ verdict detail); derived = re-built from frozen stages of an older prediction */
   verdict_detail?: VerdictDetail | null
+  /** API ≥ 2026-10-09: timing judgement the prediction was registered with ("stage" = before the review policy) */
+  throughput_model?: 'stage' | 'pipelined'
 }
-export interface VerdictStage { id: string; name?: string; sw_ms?: number; hw_ms?: number; budget_ms?: number; overhead_ms?: number; margin?: number; feasible?: boolean; fill_pct?: number }
+export interface VerdictStage { id: string; name?: string; sw_ms?: number; hw_ms?: number; budget_ms?: number; overhead_ms?: number; margin?: number; feasible?: boolean; fill_pct?: number; throughput?: string; longest_sw_ms?: number; chain_ms?: number }
 export interface VerdictDetail {
   status: 'ok' | 'clock_up' | 'fail' | string; reasons: string[]; nrt_clock_factor: number | null; derived: boolean
   stages: VerdictStage[]; intervals: Record<string, number>; period_ms: number | null

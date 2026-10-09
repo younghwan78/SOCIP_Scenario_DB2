@@ -12,3 +12,29 @@ metadata:
 globals:
   default_sw_profile_ref: sw-vendor-v1.2.3
   tested_sw_profiles: []
+  review_policy:
+    throughput_model: pipelined
+    register_baseline: iq_keep
+    power_reference:
+      tolerance_pct: 3
+      source_note: SAMPLE — 사외 검증용 가상 전과제 값 (실측·실과제 아님). 사내에서는 project_ref(전과제)로 대체
+      values_mw:
+        cam-rec-r1-uhd120: 2000
+        cam-rec-apv-uhd60-422-sdr: 1720
+        cam-rec-r1-uhd30-portrait: 640
+        cam-rec-r1-uhd30-vdis: 620
+    thermal_watch:
+    - scenario_ref: uc-cam-recording-e2600
+      variant_ref: cam-rec-r1-uhd120
+      label: UHD120 video
+      reduction_pct: [10, 20]
+      note: 고객 board 발열로 power 감소 요청이 잦은 scenario
+    - scenario_ref: uc-cam-recording-apv-e2600
+      variant_ref: cam-rec-apv-uhd60-422-sdr
+      label: Pro video (APV) UHD60
+      reduction_pct: [10, 20]
+      note: E2600 APV 최대 UHD60 (UHD120 Pro video는 차기 과제)
+    - scenario_ref: uc-cam-recording-e2600
+      variant_ref: cam-rec-r1-uhd30-portrait
+      label: UHD portrait video
+      reduction_pct: [10, 20]

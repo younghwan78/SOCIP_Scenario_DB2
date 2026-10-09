@@ -275,6 +275,7 @@ def _explore(graph, spec: ArchExplorationSpec, config: SimulationRunConfig,
         "severity": getattr(graph.variant, "severity", None),
         "fps": obj_slice["fps"],
         "period_ms": obj_slice["period_ms"],
+        "throughput_model": spec.timing.throughput_model,
         "eis_on": obj_slice["eis_on"],
         "mfc_dual": obj_slice["mfc_dual"],
         "spec_ok": recommended is not None and not obj_reasons,
@@ -590,6 +591,7 @@ def _slice(report: dict[str, Any], stat: str, scale: float) -> dict[str, Any]:
         "sw_nodes": sorted(report["bw"].get("sw_by_task", {})),
         "stages": {
             k: {f: st[k][f] for f in ("sw_ms", "budget_ms", "hw_ms", "overhead_ms", "feasible", "fill_pct")}
+            | {f: st[k][f] for f in ("throughput", "longest_sw_ms", "chain_ms") if f in st[k]}
             | {"sw_items": [i for i in st[k]["sw_items"] if i.get("critical") is not False]}
             for k in st
         },

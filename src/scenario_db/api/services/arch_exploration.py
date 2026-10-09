@@ -93,6 +93,12 @@ def _variant_ids(db: Session, scenario_id: str, request: ArchExplorationRunReque
 # ------------------------------------------------------------------- runs
 def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str | None = None) -> dict[str, Any]:
     scenarios = _scenarios(db, request)
+    # project review policy decides the throughput judgement unless the spec sets it (stored in run.spec)
+    from scenario_db.api.services.review_policy import apply_throughput, project_policy
+
+    timing = apply_throughput(request.spec.timing, project_policy(db, scenarios[0].project_ref))
+    if timing is not request.spec.timing:
+        request = request.model_copy(update={"spec": request.spec.model_copy(update={"timing": timing})})
     plan = [(s, v) for s in scenarios for v in _variant_ids(db, s.id, request)]
     if not plan:
         raise NotFoundError("exploration scope has no variants")
@@ -358,6 +364,11 @@ def promote(db: Session, request: PromoteRequest, user: str | None = None) -> di
                         tuple_(Prediction.scenario_ref, Prediction.variant_ref).in_(keys)).all()} if keys else {}
     promoted, skipped = [], []
     new_rows: list[tuple[Prediction, float]] = []
+    # review policy: the default registration may be the IQ/performance-keeping optimum (no lossy / assumed ratio)
+    from scenario_db.api.services.review_policy import project_policy
+
+    policy = project_policy(db, run.project_ref)
+    iq_keep = policy is not None and policy.register_baseline == "iq_keep"
     for vid in dict.fromkeys(request.variant_ids or []):
         if not any(v["variant_id"] == vid for v in targets):
             skipped.append({"variant_id": vid, "reason": "variant not in run"})
@@ -367,13 +378,17 @@ def promote(db: Session, request: PromoteRequest, user: str | None = None) -> di
         if ((summary.get("status") or {}).get("power_budget_status") == "unknown"
                 and constraints.get("require_complete_power_for_budget", True)):
             raise UnprocessableError("power budget cannot be verified with an incomplete power model")
-        case, rule = find_case(summary, request.case_key)
+        keep = ((summary.get("tiers") or {}).get("keep") or {}).get("best")
+        if request.case_key is None and iq_keep:
+            case, rule = keep, "auto:min-power-iq"
+        else:
+            case, rule = find_case(summary, request.case_key)
         if case is None:
             skipped.append({"variant_id": vid, "reason": "no eligible case" if request.case_key is None else "case_key not found"})
             continue
-        if rule != "auto:min-power" and not request.reason:
+        if not rule.startswith("auto:") and not request.reason:
             raise UnprocessableError("a non-default case needs a reason")
-        if rule != "auto:min-power" and not case.get("eligible", True):
+        if not rule.startswith("auto:") and not case.get("eligible", True):
             raise UnprocessableError("selected case is not eligible (spec)")
         if case.get("verified") and not case["verified"]["ok"]:
             raise UnprocessableError("selected case failed re-simulation verification")
@@ -383,13 +398,15 @@ def promote(db: Session, request: PromoteRequest, user: str | None = None) -> di
                     "distribution": summary["distribution"], "alternatives": len(summary.get("alternatives") or []),
                     "eligible_cases": summary["counts"]["eligible"], "verified": case.get("verified"),
                     "power_options": option_snapshot(summary.get("power_options"), case, rule),
-                    "model_lineage": summary.get("model_lineage")}
+                    "model_lineage": summary.get("model_lineage"),
+                    # None = registered before the review policy (stage judgement)
+                    "throughput_model": summary.get("throughput_model")}
         prev = currents.get((summary["scenario_id"], vid))
         pred = Prediction(
             id=f"PRED-{uuid4().hex}",
             scenario_ref=summary["scenario_id"], variant_ref=vid, project_ref=run.project_ref,
             status="current", exploration_run_ref=run.id, case_key=case["key"], selection_rule=rule,
-            selected_by="auto" if rule == "auto:min-power" else "user", selected_by_user=user,
+            selected_by="auto" if rule.startswith("auto:") else "user", selected_by_user=user,
             reason=request.reason, metrics=metrics, input_hash=summary["input_hash"],
             dvfs_table_ref=summary.get("dvfs_table_ref"), supersedes_ref=prev.id if prev else None,
             created_at=_now(),
@@ -409,9 +426,10 @@ def promote(db: Session, request: PromoteRequest, user: str | None = None) -> di
 
 BOARD_METRIC_KEYS = ("fps", "power", "bw_mbs", "distribution", "compression", "dvfs", "verdict", "eligible_cases",
                      "alternatives", "verified", "statistic", "runtime_scale", "model_lineage", "power_options",
-                     "verdict_detail", "stages", "intervals", "intervals_ok", "period_ms", "latency")
+                     "verdict_detail", "stages", "intervals", "intervals_ok", "period_ms", "latency", "throughput_model")
 
-STAGE_KEYS = ("id", "name", "sw_ms", "hw_ms", "budget_ms", "overhead_ms", "margin", "feasible", "fill_pct")
+STAGE_KEYS = ("id", "name", "sw_ms", "hw_ms", "budget_ms", "overhead_ms", "margin", "feasible", "fill_pct",
+              "throughput", "longest_sw_ms", "chain_ms")
 
 
 def verdict_detail(m: dict[str, Any]) -> dict[str, Any] | None:
@@ -488,6 +506,7 @@ def board(db: Session, *, scenario_id: str | None = None, project_ref: str | Non
                                                                  m.get("model_lineage"))} if old else None),
             "power_options": board_options(m.get("power_options"), reviews.get(p.scenario_ref, {}), p.variant_ref),
             "verdict_detail": verdict_detail(m),
+            "throughput_model": m.get("throughput_model") or "stage",
         })
     return {"rows": rows, "review_statuses": list(POWER_OPTION_STATUSES)}
 
@@ -746,6 +765,8 @@ def option_snapshot(po: dict[str, Any] | None, case: dict[str, Any], rule: str) 
     out["results"] = po.get("results") or []
     out["reference"] = {"rule": rule, "case_key": case.get("key"),
                         "note": None if rule == "auto:min-power" else
+                        "option deltas are relative to the min-power (lossy allowed) case, not the registered IQ-keeping case"
+                        if rule == "auto:min-power-iq" else
                         "option deltas are relative to the auto (min-power) case, not the selected case"}
     return out
 

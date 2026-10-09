@@ -12,6 +12,7 @@ import { DataTable, type Column } from '../components/DataTable'
 import { OPTION_NOTE, OptionResults, signed } from '../components/PowerOptions'
 import { TiersView } from '../components/ExploreTiers'
 import { useBattery, type Battery } from '../lib/battery'
+import { useReferences } from '../lib/review'
 import { VariantFailures } from '../components/VariantFailures'
 import { ProfileSelect } from '../components/ProfileSelect'
 import { useSimProfiles } from '../lib/simProfile'
@@ -249,28 +250,35 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
 // ---------------------------------------------------------------- one variant
 function VariantDetail({ v, run, readOnly }: { v: VariantResult; run: RunDetail; readOnly: boolean }) {
   const battery = useBattery(run.project_ref ?? undefined)
+  const refs = useReferences(run.project_ref ?? undefined)
   // list rows are summaries; slices, buffers, DVFS domains, IP modes and option results load per variant
   const fullQ = useAsync(() => (v.detail === false ? archApi.runVariant(run.id, v.scenario_id, v.variant_id) : Promise.resolve(v)),
     [run.id, v.scenario_id, v.variant_id])
   if (fullQ.error) return <div className="err" style={{ gridColumn: '1 / -1' }}>{short(v.variant_id)} 상세 조회 실패: {fullQ.error}</div>
   if (!fullQ.data) return <div className="empty" style={{ gridColumn: '1 / -1' }}>{short(v.variant_id)} 상세 불러오는 중…</div>
-  return <VariantDetailBody v={fullQ.data} run={run} readOnly={readOnly} battery={battery} />
+  return <VariantDetailBody v={fullQ.data} run={run} readOnly={readOnly} battery={battery} iqKeep={refs?.policy.register_baseline === 'iq_keep'} />
 }
 
-function VariantDetailBody({ v, run, readOnly, battery }: { v: VariantResult; run: RunDetail; readOnly: boolean; battery: Battery }) {
+function VariantDetailBody({ v, run, readOnly, battery, iqKeep = false }: { v: VariantResult; run: RunDetail; readOnly: boolean; battery: Battery; iqKeep?: boolean }) {
   const rec = v.recommended
   const listed = new Set([rec?.key, ...v.alternatives.map((c) => c.key), v.baseline.key])
   const pareto = (v.pareto ?? []).filter((c) => !listed.has(c.key))
+  // project policy "iq_keep": the default registration is the IQ/performance-keeping optimum (tier A), not the lossy minimum
+  const keepCase = iqKeep ? v.tiers?.keep?.best ?? null : null
+  const keepRow = keepCase && keepCase.key !== rec?.key ? [{ rank: '기본 등록 · 화질 유지', c: keepCase }] : []
+  const defaultKey = iqKeep ? keepCase?.key : rec?.key
   const cands: { rank: string; c: ExpCase }[] = rec
-    ? [{ rank: '추천', c: rec }, ...v.alternatives.map((c, i) => ({ rank: `#${i + 2}`, c })), ...pareto.map((c, i) => ({ rank: `Pareto ${i + 1}`, c })), { rank: 'baseline', c: v.baseline }]
+    ? [...keepRow, { rank: keepRow.length ? '최저 power (lossy)' : '추천', c: rec }, ...v.alternatives.map((c, i) => ({ rank: `#${i + 2}`, c })), ...pareto.map((c, i) => ({ rank: `Pareto ${i + 1}`, c })), { rank: 'baseline', c: v.baseline }]
     : [{ rank: 'baseline', c: v.baseline }]
-  const [pick, setPick] = useState<string | undefined>(rec?.key)
+  const seenKeys = new Set<string>()
+  const candRows = cands.filter((x) => (seenKeys.has(x.c.key) ? false : (seenKeys.add(x.c.key), true)))
+  const [pick, setPick] = useState<string | undefined>(defaultKey)
   const [reason, setReason] = useState('')
   const [msg, setMsg] = useState<string>()
   const [busy, setBusy] = useState(false)
   const promote = async () => {
     if (busy || readOnly) return
-    const chosen = pick && pick !== rec?.key ? pick : undefined
+    const chosen = pick && pick !== defaultKey ? pick : undefined
     setBusy(true); setMsg(undefined)
     try {
       const r = await archApi.promote(run.id, [v.variant_id], chosen, reason || undefined, v.scenario_id, run.project_ref ?? undefined)
@@ -279,7 +287,7 @@ function VariantDetailBody({ v, run, readOnly, battery }: { v: VariantResult; ru
   }
   const m = v.sw_margin
   return <>
-    <Card id="ax-cases" title={`${short(v.variant_id)} — 추천 · 대안 조합`} note={`${v.counts.cases.toLocaleString()} 조합 · eligible ${v.counts.eligible.toLocaleString()} · ${fmt(v.fps, 0)} fps${v.eis_on ? ' · EIS' : ''}`} defaultWide>
+    <Card id="ax-cases" title={`${short(v.variant_id)} — 추천 · 대안 조합`} note={`${v.counts.cases.toLocaleString()} 조합 · eligible ${v.counts.eligible.toLocaleString()} · ${fmt(v.fps, 0)} fps${v.eis_on ? ' · EIS' : ''} · 판정 ${v.throughput_model === 'pipelined' ? 'pipeline buffering' : 'stage 1 frame'}${keepRow.length ? ' · 기본 등록 = 화질 유지 최적 (과제 기준)' : ''}`} defaultWide>
       {(v.ip_modes ?? []).length > 0 && <div className="faint" style={{ fontSize: 12, marginBottom: 6 }}>
         IP mode (모든 조합 공통): {(v.ip_modes ?? []).map((m) => `${m.node.toUpperCase()} ${m.mode}${m.unit_power_mw_mp !== null ? ` ${fmt(m.unit_power_mw_mp, 2)}` : ''}`).join(' · ')} <span className="mono">mW/MP</span>
         {(v.ip_modes ?? []).some((m) => m.alternatives.some((a) => a.explorable)) && <> · 대체 mode 결과는 아래 Power option / IP mode 카드</>}</div>}
@@ -289,7 +297,7 @@ function VariantDetailBody({ v, run, readOnly, battery }: { v: VariantResult; ru
         {v.status?.power_budget_status === 'unknown' ? ' · power budget 판정 불가' : ''}</div>}
       <table className="tb-mini-table" style={{ width: '100%' }}>
         <thead><tr><th /><th>순위</th><th>Total mW</th><th title="CPU / CPU BW / IP / IP BW">CPU / CPU BW / IP / IP BW</th><th>BW MB/s</th><th>Δ 추천 대비</th><th>SW</th><th>Compression</th><th>DVFS</th></tr></thead>
-        <tbody>{cands.map(({ rank, c }) => {
+        <tbody>{candRows.map(({ rank, c }) => {
           const d = rec ? caseDelta(c, rec) : null
           return (
             <tr key={c.key} className={pick === c.key ? 'selected' : ''} onClick={() => setPick(c.key)} style={{ cursor: 'pointer' }}>
@@ -306,8 +314,8 @@ function VariantDetailBody({ v, run, readOnly, battery }: { v: VariantResult; ru
         })}</tbody>
       </table>
       <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-        <input className="input" style={{ flex: 1, minWidth: 240 }} placeholder={pick === rec?.key ? '사유 (선택)' : '추천 외 조합 선택 사유 (필수)'} value={reason} onChange={(e) => setReason(e.target.value)} />
-        <button className="btn primary" disabled={busy || readOnly || !v.spec_ok || (pick !== rec?.key && !reason)} onClick={promote}
+        <input className="input" style={{ flex: 1, minWidth: 240 }} placeholder={pick === defaultKey || pick === rec?.key ? '사유 (선택)' : '추천 외 조합 선택 사유 (필수)'} value={reason} onChange={(e) => setReason(e.target.value)} />
+        <button className="btn primary" disabled={busy || readOnly || !v.spec_ok || (pick !== defaultKey && pick !== rec?.key && !reason)} onClick={promote}
           title={readOnly ? '다른 과제의 run — 비교 보기 전용' : undefined}>{busy ? '등록 중…' : '예측으로 등록 (current)'}</button>
         {msg && <span className="faint" style={{ fontSize: 12 }}>{msg}</span>}
       </div>
