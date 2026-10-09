@@ -50,6 +50,10 @@ it('keeps the SW what-if on the selected CPU and throughput models', async () =>
   const whatifs = send.mock.calls.filter((c) => c[2].include_whatif)
   expect(whatifs).toHaveLength(2)
   expect(whatifs[1][2]).toMatchObject({ cpu_model: 'profile', throughput_model: 'stage' })
+  await act(async () => root.render(<TimingBudgetPage ctx={{ ...ctx, params: { warmup: '2' } }} />))
+  expect(send.mock.calls.filter((c) => c[2].include_whatif).at(-1)?.[2]).toMatchObject({ warmup_frames: 2 })
+  expect(timingApi.dvfsWhatif).toHaveBeenLastCalledWith('s', 'v', expect.objectContaining({ warmup_frames: 2 }),
+    null, undefined, expect.any(Array))
 })
 
 it('selects the correct prediction history when scenarios share a variant name', async () => {

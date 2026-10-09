@@ -429,7 +429,8 @@ def test_input_manifest_keeps_resolved_inputs_content_addressed(uhd30, graph_fac
     assert blobs[sections["simulation_inputs"]] == ax.build_simulation_inputs(
         graph_factory(UHD30), ax.SimulationRunConfig()).model_dump(mode="json")
     assert all(sections[k] in blobs for k in sections)
-    again, _ = ax.input_manifest(graph_factory(UHD30), ax.SimulationRunConfig(), dvfs)
+    timing = ax.TimingBudgetOptions.model_validate(blobs[sections["timing_inputs"]])
+    again, _ = ax.input_manifest(graph_factory(UHD30), ax.SimulationRunConfig(), dvfs, timing=timing)
     assert again == sections  # deterministic
 
 

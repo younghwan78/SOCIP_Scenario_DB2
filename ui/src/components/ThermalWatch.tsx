@@ -40,7 +40,7 @@ export function ThermalWatchView({ data, battery, onOpen }: { data: ThermalWatch
             {it.plans.map((p) => <td key={p.ask_pct} style={{ textAlign: 'center' }}>
               <span className={`badge ${p.achieved ? (p.iq_cost ? 'v-warn' : 'v-ok') : 'v-fail'}`} title={`필요 ${fmt(p.need_mw, 0)} mW`}>
                 {fmt(p.saving_mw, 0)} mW {p.achieved ? planTag(p) : '· 부족'}</span></td>)}</tr>
-            {(it.approved_plans?.length ?? 0) > 0 && <tr><td colSpan={6} className="faint" style={{ fontSize: 11.5 }}>지금 바로 적용 가능 (IP clock + IQ 승인 항목만)</td>
+            {(it.approved_plans?.length ?? 0) > 0 && <tr><td colSpan={6} className="faint" style={{ fontSize: 11.5 }}>IP clock + IQ 승인 항목 절감 추정 (조합 검증 필요)</td>
               {it.approved_plans!.map((p) => <td key={p.ask_pct} style={{ textAlign: 'center' }}>
                 <span className={`badge ${p.achieved ? 'v-ok' : 'v-fail'}`} title={p.picked.join(', ') || '적용 가능 항목 없음'}>{fmt(p.saving_mw, 0)} mW {p.achieved ? '· 가능' : '· 부족'}</span></td>)}</tr>}
           </tfoot>

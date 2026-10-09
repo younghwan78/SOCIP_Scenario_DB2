@@ -12,11 +12,16 @@ export function useAdmissionWait(): AdmissionWait {
   return useSyncExternalStore((l) => { listeners.add(l); return () => listeners.delete(l) }, admissionState, admissionState)
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+const sleep = (ms: number, signal?: AbortSignal | null) => new Promise<void>((resolve, reject) => {
+  const abort = () => { clearTimeout(timer); reject(signal?.reason ?? new DOMException('Aborted', 'AbortError')) }
+  const timer = setTimeout(() => { signal?.removeEventListener('abort', abort); resolve() }, ms)
+  if (signal?.aborted) abort()
+  else signal?.addEventListener('abort', abort, { once: true })
+})
 /** Backoff for retry i: Retry-After (s) scaled up to 5 s, with jitter so queued clients do not retry in lockstep. */
 export function backoffMs(i: number, retryAfter: number | null, rand = Math.random()): number {
   const base = retryAfter && Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 1000
-  return Math.min(5000, base * (0.5 + 0.25 * i)) + rand * 300
+  return Math.max(base, Math.min(5000, base * (1 + 0.25 * i))) + rand * 300
 }
 /** Total wait before giving up (the user can still re-run): long enough for a couple of other users' runs. */
 export const ADMISSION_BUDGET_MS = 120_000
@@ -31,7 +36,10 @@ export async function fetchAdmitted(url: string, init: RequestInit, budgetMs = A
       if (res.status !== 429 || Date.now() - start >= budgetMs) return res
       if (!queued) { queued = true; emit({ waiting: state.waiting + 1, since: state.since ?? Date.now(), attempts: state.attempts }) }
       emit({ ...state, attempts: state.attempts + 1 })
-      await sleep(backoffMs(i, Number(res.headers?.get?.('Retry-After') ?? 1)))
+      const delay = backoffMs(i, Number(res.headers?.get?.('Retry-After') ?? 1))
+      const remaining = budgetMs - (Date.now() - start)
+      await sleep(Math.min(delay, remaining), init.signal)
+      if (Date.now() - start >= budgetMs) return res
     }
   } finally {
     if (queued) { const w = Math.max(0, state.waiting - 1); emit({ waiting: w, since: w ? state.since : null, attempts: w ? state.attempts : 0 }) }

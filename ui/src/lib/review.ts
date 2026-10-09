@@ -10,7 +10,7 @@ export interface ReviewPolicy {
   power_reference: { project_ref: string | null; values_mw: Record<string, number>; tolerance_pct: number; source_note: string | null } | null
   thermal_watch: { scenario_ref: string; variant_ref: string; label: string | null; reduction_pct: number[]; note: string | null }[]
 }
-export interface PowerRef { mw: number; source: 'explicit' | 'prediction' | 'measurement' | 'synthetic'; project_ref: string | null; id: string | null; at: string | null; note?: string | null }
+export interface PowerRef { mw: number; source: 'explicit' | 'prediction' | 'measurement' | 'synthetic' | 'unknown'; project_ref: string | null; id: string | null; at: string | null; note?: string | null }
 export interface References { policy: ReviewPolicy; tolerance_pct: number | null; references: Record<string, PowerRef> }
 export interface PowerJudge { reference_mw: number; delta_mw: number; delta_pct: number | null; status: 'ok' | 'similar' | 'over'; source: PowerRef['source'] }
 export interface MenuItem {

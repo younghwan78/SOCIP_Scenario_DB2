@@ -3,11 +3,47 @@
 from __future__ import annotations
 
 import pytest
+from datetime import datetime, timezone
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 from scenario_db.api.services.review import approved_plan, judge_power, plan_for, reduction_menu
 from scenario_db.api.services.review_policy import apply_throughput, policy_view
 from scenario_db.models.definition.project import Project, ReviewPolicy
 from scenario_db.sim.timing_budget import TimingBudgetOptions
+
+
+def test_previous_project_prefers_physical_power_over_newer_unknown_capture(monkeypatch):
+    from scenario_db.api.services import review
+
+    monkeypatch.setattr(review, "project_policy", lambda *_: ReviewPolicy(power_reference={"project_ref": "proj-prev"}))
+    measurements = [SimpleNamespace(id=origin, variant_ref="v1", scenario_ref="s1", kpi={"total_power_mw": {"mean": mw}},
+                    measured_at=datetime(year, 1, 1, tzinfo=timezone.utc), provenance={"data_origin": origin})
+                    for origin, mw, year in [("unknown", 200, 2026), ("physical_capture", 100, 2024)]]
+    db = MagicMock()
+    db.query.return_value.filter.return_value.all.side_effect = [[], measurements]
+    ref = review.power_references(db, "proj-current")["references"]["v1"]
+    assert ref["mw"] == 100 and ref["source"] == "measurement"
+
+
+def test_report_current_conversion_uses_the_frozen_run_settings():
+    from scenario_db.api.services.review import report_context
+
+    db = MagicMock()
+    db.get.return_value.run_config = {"vbat": 4.2, "pmic_efficiency": 0.9}
+    ctx = report_context(db, None, "cfg", {("s", "v"): {"metrics": {"power": {"total_mw": 312}}}},
+                         frozen_config={"vbat": 3.9, "pmic_efficiency": 0.8})
+    assert ctx["rows"][0]["ma"] == 100 and ctx["battery"]["source"] == "run"
+
+
+def test_bw_comparison_requires_both_sw_and_fps():
+    from scenario_db.api.services.calibration import _bw_comparability
+
+    sim = SimpleNamespace(sw_baseline_ref=None, kpi={})
+    meas = SimpleNamespace(sw_baseline_ref="sw", kpi={"fps_effective": 30}, provenance={"data_origin": "physical_capture"})
+    assert not _bw_comparability(sim, meas)["equivalent"]
+    sim.sw_baseline_ref, sim.kpi = "sw", {"fps_effective": 30}
+    assert _bw_comparability(sim, meas)["equivalent"]
 
 
 def test_policy_fills_throughput_only_when_the_request_did_not_set_it():

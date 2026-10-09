@@ -30,6 +30,41 @@ def test_previous_project_reference_does_not_guess_between_scenarios(engine, sto
             db.commit()
 
 
+def test_freshness_replays_explicit_settings_and_preserves_throughput_override(engine, stored_run, monkeypatch):
+    from scenario_db.sim import arch_exploration as ax
+
+    rid, ids = stored_run
+    calls = []
+    def load(_db, shim, defaults):
+        calls.append((shim.config.vbat, shim.dvfs_table_ref, defaults))
+        return object(), {}, None
+    monkeypatch.setattr(svc, "_load", load)
+    monkeypatch.setattr(ax, "input_manifest", lambda _g, cfg, _t, *, timing: (
+        {"config": str(cfg.vbat), "timing_inputs": timing.throughput_model}, {}))
+    with Session(engine) as db:
+        run = db.get(ArchExplorationRun, rid)
+        run.engine_rev = svc.ENGINE_REV
+        run.spec = run.spec | {"input_selection": {"config": {"vbat": 3.9}, "dvfs_table_ref": "dvfs-explicit",
+                               "use_default_dvfs": False}, "timing": {"throughput_model": "stage"}, "throughput_from_policy": False}
+        run.variants = [s | {"input_sections": {"config": "3.9", "timing_inputs": "stage"}, "throughput_model": "stage"}
+                        for s in run.variants]
+        project = db.get(Project, run.project_ref)
+        original = project.globals_
+        try:
+            project.globals_ = {"review_policy": {"throughput_model": "pipelined"}}
+            db.commit()
+            svc.promote(db, PromoteRequest(run_id=rid))
+            assert svc.prediction_freshness(db, scenario_id=ids[0])["rows"][0]["status"] == "fresh"
+            assert calls[-1] == (3.9, "dvfs-explicit", False)
+            run.spec = run.spec | {"input_selection": {"config": {"vbat": 4.0}, "use_default_dvfs": False}}
+            db.commit()
+            changed = svc.prediction_freshness(db, scenario_id=ids[0])["rows"][0]
+            assert changed["status"] == "stale" and changed["changed"] == ["config"]
+        finally:
+            project.globals_ = original
+            db.commit()
+
+
 def test_policy_registers_the_iq_keeping_case_and_builds_the_thermal_watch(engine):
     token = uuid4().hex[:10]
     pid, sid, rid = f"proj-rp-{token}", f"uc-rp-{token}", f"EXP-rp-{token}"

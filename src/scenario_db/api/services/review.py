@@ -14,7 +14,7 @@ from typing import Any
 from sqlalchemy import func, literal, literal_column
 from sqlalchemy.orm import Session
 
-from scenario_db.api.services.calibration import _iso, _total, _when, is_synthetic
+from scenario_db.api.services.calibration import _iso, _total, _when, data_origin, is_physical, is_synthetic
 from scenario_db.api.services.review_policy import policy_view, project_policy
 from scenario_db.db.models.evidence import Evidence
 from scenario_db.db.models.definition import Scenario, ScenarioVariant
@@ -38,13 +38,13 @@ def power_references(db: Session, project_ref: str) -> dict[str, Any]:
                 out.setdefault(p.variant_ref, {"mw": float(mw), "source": "prediction", "project_ref": ref.project_ref,
                                                "id": p.id, "at": _iso(p.created_at)})
         meas = (db.query(Evidence).filter(Evidence.kind == "evidence.measurement", Evidence.project_ref == ref.project_ref).all())
-        meas.sort(key=lambda m: (not is_synthetic(m.provenance), _when(_iso(m.measured_at))), reverse=True)
+        meas.sort(key=lambda m: (is_physical(m.provenance), not is_synthetic(m.provenance), _when(_iso(m.measured_at))), reverse=True)
         for m in meas:
             mw = _total(m.kpi).get("mean")
             if mw is not None:
                 scopes.setdefault(m.variant_ref, set()).add(m.scenario_ref)
             if mw is not None and m.variant_ref not in out:
-                out[m.variant_ref] = {"mw": float(mw), "source": "synthetic" if is_synthetic(m.provenance) else "measurement",
+                out[m.variant_ref] = {"mw": float(mw), "source": "measurement" if is_physical(m.provenance) else data_origin(m.provenance),
                                       "project_ref": ref.project_ref, "id": m.id, "at": _iso(m.measured_at)}
         # Variant IDs are scenario-local. An ambiguous previous-project ID is not a usable reference.
         out = {vid: value for vid, value in out.items() if len(scopes.get(vid, set())) == 1}
@@ -312,21 +312,24 @@ def _review_state(reviews: dict[tuple[str, str], Any], variant_id: str, key: str
     return item_status(reviews, variant_id, key)
 
 
-def battery_of(db: Session, config_profile_ref: str | None) -> dict[str, Any]:
+def battery_of(db: Session, config_profile_ref: str | None, *, frozen_config: dict[str, Any] | None = None) -> dict[str, Any]:
     """Vbat / PMIC efficiency used for mA@Vbat (sim config profile run_config; default 4.0 V · 0.85)."""
     from scenario_db.db.models.capability import SimConfigProfile
 
     row = db.get(SimConfigProfile, config_profile_ref) if config_profile_ref else None
     rc = (row.run_config or {}) if row is not None else {}
+    if frozen_config is not None:
+        rc = frozen_config
     vbat, eff = rc.get("vbat") or 4.0, rc.get("pmic_efficiency") or 0.85
-    return {"vbat": float(vbat), "pmic_efficiency": float(eff), "source": config_profile_ref if row is not None and (rc.get("vbat") or rc.get("pmic_efficiency")) else "default"}
+    source = "run" if frozen_config is not None else config_profile_ref if row is not None and (rc.get("vbat") or rc.get("pmic_efficiency")) else "default"
+    return {"vbat": float(vbat), "pmic_efficiency": float(eff), "source": source}
 
 
 def report_context(db: Session, project_ref: str | None, config_profile_ref: str | None,
-                   predictions: dict[tuple[str, str], dict[str, Any]]) -> dict[str, Any]:
+                   predictions: dict[tuple[str, str], dict[str, Any]], *, frozen_config: dict[str, Any] | None = None) -> dict[str, Any]:
     """Frozen with a report (RPT-03): review policy, battery conversion and each variant's previous-project judgement,
     so the report's mA and target verdicts do not move when the project settings change later."""
-    bat = battery_of(db, config_profile_ref)
+    bat = battery_of(db, config_profile_ref, frozen_config=frozen_config)
     refs = power_references(db, project_ref) if project_ref else {"policy": policy_view(None), "tolerance_pct": None, "references": {}}
     rows = []
     for (sid, vid), pred in predictions.items():

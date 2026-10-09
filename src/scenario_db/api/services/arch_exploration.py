@@ -113,6 +113,7 @@ def _variant_budget(spec_mw: float | None, ref: dict[str, Any] | None) -> dict[s
 
 def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str | None = None) -> dict[str, Any]:
     scenarios = _scenarios(db, request)
+    throughput_from_policy = "throughput_model" not in request.spec.timing.model_fields_set
     # project review policy decides the throughput judgement unless the spec sets it (stored in run.spec)
     from scenario_db.api.services.review_policy import apply_throughput, project_policy
 
@@ -201,6 +202,10 @@ def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str |
         soc_ref=soc_ref,
         spec=request.spec.model_dump(mode="json") | {"scenario_ids": [s.id for s in scenarios], "category": request.category,
                                                       "config_profile_ref": request.config_profile_ref,
+                                                      "input_selection": request.model_dump(mode="json", include={
+                                                          "config", "config_profile_ref", "dvfs_tables", "dvfs_table_ref",
+                                                          "soc_ref", "dvfs_version", "use_default_dvfs"}, exclude_unset=True),
+                                                      "throughput_from_policy": throughput_from_policy,
                                                       # resolved inputs, content-addressed (variants[].input_sections -> blobs)
                                                       "manifest": {"engine_rev": ENGINE_REV, "tool_version": _tool_version(),
                                                                    "blobs": blobs}},
@@ -616,7 +621,10 @@ def create_report(db: Session, request: ArchReportRequest, user: str | None = No
         snapshot["clock_residency"] = clock  # absent key = report generated before clock residency existed
     from scenario_db.api.services.review import report_context
 
-    snapshot["review_context"] = report_context(db, run.project_ref, (run.spec or {}).get("config_profile_ref"), preds)
+    blobs = ((run.spec or {}).get("manifest") or {}).get("blobs") or {}
+    config_hash = ((run.variants[0] if run.variants else {}).get("input_sections") or {}).get("config")
+    snapshot["review_context"] = report_context(db, run.project_ref, (run.spec or {}).get("config_profile_ref"), preds,
+                                                 frozen_config=blobs.get(config_hash))
     title = request.title or f"{run.soc_ref or ''} {run.scenario_type} Architecture 검토".strip()
     html = render_html(title, snapshot)
     row = ArchReport(
@@ -987,8 +995,9 @@ def prediction_freshness(db: Session, *, scenario_id: str | None = None, project
         q = q.filter(Prediction.project_ref == project_ref)
     preds = q.all()
     runs = {r.id: r for r in db.query(ArchExplorationRun.id, ArchExplorationRun.engine_rev, ArchExplorationRun.project_ref,
-                                      ArchExplorationRun.spec["config_profile_ref"].astext.label("cfg"),
-                                      ArchExplorationRun.spec["use_default_dvfs"].astext.label("dvfs"))
+                                      ArchExplorationRun.spec["input_selection"].label("selection"),
+                                      ArchExplorationRun.spec["timing"].label("timing"),
+                                      ArchExplorationRun.spec["throughput_from_policy"].label("policy_tp"))
             .filter(ArchExplorationRun.id.in_({p[3] for p in preds})).all()} if preds else {}
     policies: dict[str | None, Any] = {}
     rows = []
@@ -1006,15 +1015,24 @@ def prediction_freshness(db: Session, *, scenario_id: str | None = None, project
             policies[proj] = project_policy(db, proj)
         pol = policies[proj]
         want_tp = (pol.throughput_model if pol and pol.throughput_model else "stage")
-        if (tp or "stage") != want_tp:
+        if run.policy_tp is not False and (tp or "stage") != want_tp:
             reasons.append(f"판정 기준 {tp or 'stage'} → {want_tp}")
         frozen = (_run_variant_sections(db, run_id, sid, vid) or {})
         try:
-            tb = TimingBudgetRequest(scenario_id=sid, variant_id=vid, config_profile_ref=run.cfg or None)
+            if run.selection is None:
+                raise ValueError("run에 설정/DVFS 입력 선택 기록 없음 — 현재 입력과 비교할 수 없음")
+            tb = TimingBudgetRequest(scenario_id=sid, variant_id=vid, **run.selection)
             shim = _shim(tb, vid)
             _apply_config_profile(db, shim)
-            graph, tables, _ = _load(db, shim, True)
-            now, _ = input_manifest(graph, shim.config, tables)
+            graph, tables, _ = _load(db, shim, tb.use_default_dvfs)
+            from scenario_db.api.services.cpu import with_cpu_profile
+            from scenario_db.sim.timing_budget import TimingBudgetOptions
+
+            timing = TimingBudgetOptions.model_validate(run.timing or {})
+            if run.policy_tp is True:
+                timing = timing.model_copy(update={"throughput_model": want_tp})
+            timing = with_cpu_profile(db, timing, sid, vid)
+            now, _ = input_manifest(graph, shim.config, tables, timing=timing)
             if frozen:
                 changed = sorted(k for k in set(now) | set(frozen) if now.get(k) != frozen.get(k))
             else:

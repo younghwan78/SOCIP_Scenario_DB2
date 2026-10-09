@@ -52,7 +52,7 @@ from scenario_db.sim import power_options as po
 from scenario_db.sim.power_attribution import attribute
 from scenario_db.sim.transfers import compression_catalog
 
-ENGINE_REV = "arch-exploration/9"  # 9: RT clock = sensor read-out basis, OTF rate align
+ENGINE_REV = "arch-exploration/10"  # 10: shared CPU load, all output streams, resolved timing manifest
 # Power = CPU(SW) + IP core + BW; BW = IP DMA (HW nodes) + CPU DMA (SW tasks, e.g. mpeg_writer)
 DIST_KEYS = ("total_mw", "cpu_mw", "hw_mw", "bw_mw", "bw_ip_mw", "bw_cpu_mw", "bw_mbs", "bw_ip_mbs", "bw_cpu_mbs")
 V_REF_MV = 710.0
@@ -185,7 +185,7 @@ def explore_variant(
         summary["power_options"] = explore_power_options(graph, spec, config, tables, summary)
         summary["counts"]["option_cases"] = summary["power_options"]["cases"]
     summary["input_hash"] = input_hash(graph, spec, config, tables)
-    sections, blobs = input_manifest(graph, config, tables)
+    sections, blobs = input_manifest(graph, config, tables, timing=spec.timing)
     summary["input_sections"] = sections  # section -> sha256 of the resolved input (blobs stored per run)
     summary["_manifest_blobs"] = blobs
     return summary
@@ -1277,7 +1277,7 @@ def _sha(value: Any) -> str:
     return hashlib.sha256(json.dumps(value, sort_keys=True, default=str).encode()).hexdigest()
 
 
-def input_manifest(graph, config, tables) -> tuple[dict[str, str], dict[str, Any]]:
+def input_manifest(graph, config, tables, *, timing=None) -> tuple[dict[str, str], dict[str, Any]]:
     """Resolved inputs of one variant as content-addressed sections.
 
     ``input_hash`` proves *whether* inputs changed; this keeps *what* they were (config, DVFS tables,
@@ -1292,6 +1292,8 @@ def input_manifest(graph, config, tables) -> tuple[dict[str, str], dict[str, Any
         "soc_catalog": _jsonable(getattr(graph.soc, "compression_modes", None)),
     }
     raw |= {f"dvfs:{k}": t.model_dump(mode="json") for k, t in sorted(tables.items())}
+    if timing is not None:
+        raw["timing_inputs"] = timing.model_dump(mode="json")
     raw |= {f"ip:{k}": _jsonable(row.capabilities) for k, row in sorted(graph.ip_catalog.items())}
     sections, blobs = {}, {}
     for name, value in raw.items():

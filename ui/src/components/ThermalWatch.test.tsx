@@ -24,7 +24,7 @@ it('shows IQ review status, the approved-only plan and performance trades (EXP-0
   const html = renderToStaticMarkup(createElement(ThermalWatchView, { data, battery: DEFAULT_BATTERY }))
   expect(html).toContain('IQ 승인')
   expect(html).toContain('IQ 반려')
-  expect(html).toContain('지금 바로 적용 가능')
+  expect(html).toContain('조합 검증 필요')
   expect(html).toContain('성능 trade 후보')
   expect(html).toContain('fps 120→60')
   expect(html).toContain('uhd60 +1')

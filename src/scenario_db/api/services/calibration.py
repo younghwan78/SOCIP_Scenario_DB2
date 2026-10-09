@@ -608,12 +608,18 @@ def _bw_comparability(sim: Evidence | None, meas: Evidence | None) -> dict[str, 
         reasons.append("합성 측정 — 모델 정확도 검증으로 사용 불가")
     elif not is_physical(meas.provenance):
         reasons.append("측정 출처 미상 (collection_method / device 미기록)")
+    if not sim.sw_baseline_ref:
+        reasons.append("예측 SW 미기록")
     if sim.sw_baseline_ref and meas.sw_baseline_ref and sim.sw_baseline_ref != meas.sw_baseline_ref:
         reasons.append(f"SW 다름: 예측 {sim.sw_baseline_ref} · 실측 {meas.sw_baseline_ref}")
     elif not meas.sw_baseline_ref:
         reasons.append("실측 SW 미기록")
     sim_fps = (sim.kpi or {}).get("fps_effective") or (sim.kpi or {}).get("fps")
     meas_fps = (meas.kpi or {}).get("fps_effective")
+    if not isinstance(sim_fps, (int, float)) or sim_fps <= 0:
+        reasons.append("예측 fps 미확인")
+    if not isinstance(meas_fps, (int, float)) or meas_fps <= 0:
+        reasons.append("실측 fps 미확인")
     if isinstance(sim_fps, (int, float)) and isinstance(meas_fps, (int, float)) and sim_fps and abs(meas_fps - sim_fps) / sim_fps > 0.02:
         reasons.append(f"fps 다름: 예측 {sim_fps:g} · 실측 {meas_fps:g}")
     return {"equivalent": not reasons, "statistic": "mean", "reasons": reasons}
