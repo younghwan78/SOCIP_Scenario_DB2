@@ -103,3 +103,23 @@ that profile must exist and belong to the measurement's project. Invalid pins re
 instead of silently using a newer or foreign profile. Without a pin, the latest project
 map is used and the comparison records that basis. Batched reads fetch distinct pinned
 profiles in one query.
+
+`POST /calibration/power-fit` (analyst/writer/admin) proposes CPU/IP/BW factors for
+up to 500 measurements in one project, optionally narrowed to one scenario. Base
+parameters must belong to the project's SoC. Synthetic measurements are excluded
+by default; including synthetic or unknown-origin measurements never makes a
+factor recommended.
+`POST /calibration/power-params` (writer/admin) creates a draft version without
+modifying the base. Source references must resolve to measurements of that SoC;
+synthetic lineage is derived from stored provenance. Factors must be finite and
+within 0.2–5. IP calibration scales both keyed and fallback factors. BW calibration
+requires linear-per-gbps or mif-linear parameters. Version allocation is serialized
+per SoC. `GET /calibration/power-params?soc_ref=...` lists available versions.
+
+`POST /arch/predictions/{prediction_id}/recompute` (writer/admin) re-registers a
+current prediction using its stored condition; optional `power_params_ref` selects
+new parameters and `reason` records the change. Measured SW values are re-read while
+explicit runtime overrides are retained. New Timing Budget registrations preserve
+explicit default-valued choices. Exploration recompute retains reference power
+budgets; manually selected exploration cases are skipped. Superseded predictions
+return 422.

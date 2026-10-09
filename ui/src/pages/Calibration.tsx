@@ -9,6 +9,7 @@ import { DataTable, type Column } from '../components/DataTable'
 import { ProvBadge } from '../components/Provenance'
 import { categoryFit, powerScope, type CategoryFit } from '../lib/provenance'
 import { ClockCompareCard, ClockResidencyCard } from '../components/ClockResidency'
+import { PowerFitCard } from '../components/PowerFit'
 
 const CATS: Category[] = ['cpu', 'ip', 'bw', 'other']
 type Prov = Parameters<typeof ProvBadge>[0]['prov']
@@ -73,6 +74,8 @@ export function CalibrationPage({ ctx }: { ctx: Ctx }) {
         {detail.error && <div className="err" style={{ gridColumn: '1 / -1' }}>{detail.error}</div>}
         {detail.data && <Detail d={detail.data} ctx={ctx} />}
         <ClockCompareCard scenarioId={all ? undefined : ctx.scenario} selectedId={selId} onPick={(id) => ctx.navigate(undefined, { m: id }, true)} />
+        <PowerFitCard key={`${ctx.project}:${ctx.params.cfg ?? ''}`} project={ctx.project} cfgParam={ctx.params.cfg}
+          onOpenTiming={(pp) => ctx.navigate('timing', { pp })} onOpenPredictions={(pp) => ctx.navigate('predictions', { pp, rc: '1' })} />
       </div>}
     </div>
   )

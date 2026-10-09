@@ -428,11 +428,14 @@ class DvfsResolver:
                 "clock_gating_eff": config.clock_gating_eff,
                 "power_gating_eff": config.power_gating_eff,
             }
-            active = self.power_model.ip_active_power_mw(
+            # calibrated scale (opt-in power_model_params.calibration.ip_power_scale; 1 when absent)
+            scale_for = getattr(self.power_model, "ip_scale_for", None)
+            k = scale_for(config.node_id, config.hw_name, config.ip_ref, config.dvfs_group) if scale_for else 1.0
+            active = k * self.power_model.ip_active_power_mw(
                 **common, clock_power_fraction=config.clock_power_fraction, leakage_mw=config.leakage_mw)
             # Decomposition: work at V, + leakage after gating, + clock above the need.
-            work_only = self.power_model.ip_active_power_mw(**common, clock_power_fraction=0.0, leakage_mw=0.0)
-            with_leak = self.power_model.ip_active_power_mw(
+            work_only = k * self.power_model.ip_active_power_mw(**common, clock_power_fraction=0.0, leakage_mw=0.0)
+            with_leak = k * self.power_model.ip_active_power_mw(
                 **common, clock_power_fraction=0.0, leakage_mw=config.leakage_mw)
             config.active_power_mw = active
             config.total_power_mw = active

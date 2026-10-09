@@ -206,6 +206,7 @@ def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str |
                                                           "config", "config_profile_ref", "dvfs_tables", "dvfs_table_ref",
                                                           "soc_ref", "dvfs_version", "use_default_dvfs"}, exclude_unset=True),
                                                       "throughput_from_policy": throughput_from_policy,
+                                                      "power_budget_from_reference": request.power_budget_from_reference,
                                                       **({"timing_budget": request.timing_budget} if request.timing_budget else {}),
                                                       # resolved inputs, content-addressed (variants[].input_sections -> blobs)
                                                       "manifest": {"engine_rev": ENGINE_REV, "tool_version": _tool_version(),
@@ -569,6 +570,7 @@ def _condition(run, m: dict[str, Any]) -> dict[str, Any]:
         "warmup_frames": timing.get("warmup_frames") or 0,
         "config_profile_ref": sel.get("config_profile_ref") or (getattr(run, "profile", None) if run is not None else None),
         "dvfs_overrides": ((sel.get("config") or {}).get("dvfs_overrides") or {}),
+        "power_params_ref": (sel.get("config") or {}).get("power_params_ref"),
         "dvfs": m.get("dvfs") or {}, "compression": m.get("compression") or [],
         # S4: measurement used as input (SW task runtime / IP clocks / CPU profile)
         "measured": {"ref": ((getattr(run, "tb", None) or {}).get("measured") or {}).get("measurement_ref") if run is not None else None,

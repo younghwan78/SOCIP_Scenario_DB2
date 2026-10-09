@@ -9,7 +9,7 @@ S, V = "uc-projecta-fhd30-recording", "FHD30-recording"
 CTX = {"silicon_rev": "EVT1", "sw_baseline_ref": "sw-vendor-v1.2.3", "thermal": "nominal", "method": "calculation"}
 
 
-def test_condition_evidence_register_and_board(api_client, engine):
+def test_condition_evidence_register_and_board(api_client, engine, demo_cleanup):
     base = {"scenario_id": S, "variant_id": V, "options": {"statistic": "max"}}
     rep = api_client.post("/api/v1/timing-budget/variant", json=base)
     assert rep.status_code == 200, rep.text
@@ -46,7 +46,7 @@ def test_condition_evidence_register_and_board(api_client, engine):
     assert next(r for r in fresh if r["prediction_id"] == pid)["status"] == "fresh"
 
 
-def test_measurement_as_input_and_reference(api_client):
+def test_measurement_as_input_and_reference(api_client, demo_cleanup):
     """S4: measured-inputs listing, compare-only reference and measured SW runtime as input."""
     v = "UHD60-HDR10-H265"
     opts = api_client.get("/api/v1/timing-budget/measured-inputs", params={"scenario_id": S, "variant_id": v})
@@ -71,7 +71,7 @@ def test_measurement_as_input_and_reference(api_client):
         assert wrong.status_code == 422, wrong.text
 
 
-def test_intentional_dvfs_override_is_registered_as_is(api_client):
+def test_intentional_dvfs_override_is_registered_as_is(api_client, demo_cleanup):
     """A DVFS level the user pins on purpose is part of the registered condition (and its prediction levels)."""
     base = {"scenario_id": S, "variant_id": V, "options": {"statistic": "mean"}}
     ips = api_client.post("/api/v1/timing-budget/variant", json=base).json()["report"]["ips"]

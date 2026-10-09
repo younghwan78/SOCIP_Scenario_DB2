@@ -274,6 +274,7 @@ def register_condition(db: Session, request: Any, user: str | None = None) -> di
         dvfs_table_ref=request.dvfs_table_ref, soc_ref=request.soc_ref, dvfs_version=request.dvfs_version,
         use_default_dvfs=request.use_default_dvfs, spec=spec,
         timing_budget={"measured": original.measured.model_dump() if original.measured else None,
+                       "options": original.options.model_dump(mode="json", exclude_unset=True),
                        "task_runtime": {k: v.model_dump() for k, v in original.options.task_runtime.items()}},
     )
     run = run_exploration(db, run_req, user)

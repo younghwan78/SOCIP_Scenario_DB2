@@ -27,6 +27,20 @@ Rail → 구분 (`comparison/calibration.py`)
 - Simulation 열: `power_breakdown`이 있는 evidence만 split 비교, 날짜 suffix로 구분 (`Sim MM-DD`). KPI tile·목록은 최신 sim.
 - 최신 simulation은 `measured_at` 기준이며 시각이 없는 evidence는 뒤로 둔다. project가 없는 실측은 소유 scenario의 project를 사용하며 다른 project의 rail map은 사용하지 않는다.
 
+### 계수 보정 (S5)
+
+`예측 ↔ 실측` 하단 **계수 보정** 카드. 기존 params는 바꾸지 않고 새 draft 버전을 만든다.
+
+| 단계 | API | 내용 |
+|---|---|---|
+| 보정 계산 | `POST /calibration/power-fit` | 과제의 각 측정을 같은 조건(Timing Budget · SW 통계 · 측정 SW runtime 입력 · 기준 params)으로 예측 → rail 구분(CPU · IP · BW)별 k = Σp·m / Σp² (원점 통과 최소제곱, 0.2–5 제한), RMSE · MAPE 전후 · R². `recommended` = n ≥ 3 · R² ≥ 0.5 · MAPE 개선 |
+| 새 params 버전 | `POST /calibration/power-params` | 체크한 k만 적용: CPU = EM table·DSU·leakage 계수 × k, BW = mif-linear 계수(e_rd · e_wr · MIF base) / mw_per_gbps × k, IP = `calibration.ip_power_scale["*"]` (engine이 IP power에 곱함, key = node · hw · ip_ref · DVFS domain · `*`). 버전 = SoC 최대+1, status draft, `calibration.fit`·`source_evidence`에 lineage. YAML을 함께 돌려주며 DB row는 작업본 — 유지하려면 authoring / db YAML에 커밋 |
+| 검증 | (보정 계산 재실행) | 새 params로 같은 측정을 다시 계산해 k ≈ 1이면 반영 확인 |
+| 사용 | Timing Budget `power params` (URL `pp`) · 예측 현황 `재계산…` | 재계산 = `POST /arch/predictions/{id}/recompute?power_params_ref=` — 등록 조건 그대로(Timing Budget 조건 또는 조합 탐색 spec) 다시 계산해 새 버전 등록, 사람이 고른 조합(user:…)은 건너뜀 |
+
+- 합성 측정은 기본 제외(포함 시 경고). 단일 배율로 설명되지 않는 구분(R² 낮음, MAPE 악화)은 비권장으로 표시 — OPP·SW 부하·rail 귀속 등 모델 구조 확인 대상.
+- `ip_power_scale`이 비어 있으면(기존 params 전부) engine 결과와 params hash는 이전과 같다.
+
 ### 합성(SYNTHETIC) 측정 fixture
 
 - `provenance.collection_method: synthetic_fixture` 또는 `device_id: SYNTHETIC`이면 API가 `synthetic: true`를 돌려준다.
