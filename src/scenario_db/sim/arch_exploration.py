@@ -326,7 +326,7 @@ def _tiers(eligible: list[dict[str, Any]], tie_pct: float) -> dict[str, Any]:
 
     ``keep`` = no lossy compression and no assumed ratio (iq_risk <= 1): the optimum that keeps IQ and fps,
     plus the *range* of conditions within ``TIER_NEAR_PCT`` of it (DVFS levels per domain, buffers that are
-    always / sometimes compressed) — the "safe operating window" a project can pick from without re-running.
+    always / sometimes compressed). These marginal ranges describe tested cases; new combinations need a re-run.
     ``trade`` = the optimum when lossy / assumed-ratio compression is allowed (IQ evaluation needed); its gain vs
     ``keep`` is what giving up IQ buys. Power options (IP mode / knob) are reported separately (``power_options``).
     """

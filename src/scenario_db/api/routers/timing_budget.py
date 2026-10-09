@@ -46,6 +46,7 @@ def timing_budget_dvfs_whatif(
     """DVFS domain level +/-k: SW slack, power, BW and verdict per domain and shift (read-only)."""
     settings = get_settings()
     enforce_request_size(request, settings.exploration_max_request_bytes)
+    enforce_timeline_frame_limit(request.options.frames, settings.simulation_max_timeline_frames)
     with admission_slot("simulation", settings.simulation_max_concurrent_runs):
         return analyze_dvfs_whatif_request(db, request)
 

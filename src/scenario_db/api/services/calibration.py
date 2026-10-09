@@ -230,7 +230,7 @@ def coverage(db: Session, scenario_id: str) -> dict[str, dict[str, Any]]:
             items.sort(key=lambda e: (_when(e["at"]), e["id"]), reverse=True)
             if key == "measurements":
                 # representative = newest real measurement with a power total, then synthetic (stable sort)
-                items.sort(key=lambda e: (e["synthetic"], e["total_mw"] is None))
+                items.sort(key=lambda e: (e["origin"] != "physical_capture", e["synthetic"], e["total_mw"] is None))
             for i, e in enumerate(items):
                 e["shown"] = i == 0
     versions = dict(db.query(Prediction.variant_ref, func.count(Prediction.id))
@@ -555,7 +555,7 @@ def ip_bandwidth(db: Session, scenario_id: str, variant_id: str, measurement_id:
         if obs:
             candidates.append((m, obs))
     candidates.sort(key=lambda c: (_when(_iso(c[0].measured_at)), c[0].id), reverse=True)
-    candidates.sort(key=lambda c: is_synthetic(c[0].provenance))
+    candidates.sort(key=lambda c: (not is_physical(c[0].provenance), is_synthetic(c[0].provenance)))
     chosen = next((c for c in candidates if c[0].id == measurement_id), None) if measurement_id else (candidates[0] if candidates else None)
     if measurement_id and chosen is None:
         raise NotFoundError(f"measurement with IP bandwidth not found for {scenario_id}/{variant_id}: {measurement_id}")

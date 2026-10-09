@@ -43,7 +43,7 @@ export function TiersView({ v, battery }: { v: VariantResult; battery: Battery }
             <tr><td>Compression (lossless)</td><td className="mono" style={{ fontSize: 11.5 }}>{keep.compression_always.length ? `항상 ${keep.compression_always.join(', ')}` : '필수 없음'}{keep.compression_optional.length ? ` · 선택 ${keep.compression_optional.join(', ')}` : ''}</td></tr>
             <tr><td>SW 기준</td><td className="mono">{keep.best.statistic} ×{keep.best.runtime_scale} · 판정 {keep.best.verdict}</td></tr>
           </tbody></table>
-          <div className="faint" style={{ fontSize: 11.5 }}>이 범위 안의 조건(위 DVFS level · compression)은 power 차이 ≤{fmt(keep.near_pct, 0)}% — 과제에서 조건이 바뀌어도 이 안이면 다시 예측할 필요가 없습니다.</div>
+          <div className="faint" style={{ fontSize: 11.5 }}>표시 범위는 검증한 {keep.near_cases}개 조합의 최소·최대입니다. DVFS level · compression을 새로 조합하거나 SW 조건을 바꾸면 다시 예측하세요.</div>
         </>}
       </section>
       <section className="tier tier-trade">

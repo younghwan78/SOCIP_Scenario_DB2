@@ -5,7 +5,7 @@ import { fmt } from '../lib/timingBudget'
 import { strategyVerdict, type CpuRebalance } from '../lib/rebalance'
 
 export interface CpuRun {
-  n: number; profile: string; target: string; cmp: string | null
+  n: number; profile: string; target: string; cmp: string | null; context: string
   growth: number; bwScale: number; pgEff: number
   ref_mw: number; best_mw: number | null; cmp_ref_mw: number | null; cmp_best_mw: number | null; winner: string | null
 }
@@ -16,12 +16,12 @@ export function CpuPurpose({ rb, cmp, runs, growth, bwScale, onRebalance, onPres
   rb: CpuRebalance | null; cmp: CpuRebalance | null; runs: CpuRun[]; growth: number; bwScale: number
   onRebalance: () => void; onPreset: (p: { growth?: number; bwScale?: number }) => void
 }) {
-  const base = runs.find((r) => r.growth === 1 && r.bwScale === 1 && !r.cmp) ?? runs[0]
   const last = runs[runs.length - 1]
+  const base = [...runs].reverse().find((r) => r.context === last?.context && r.growth === 1 && r.bwScale === 1)
   const tuneGain = rb?.best ? rb.best.total_mw - rb.reference.total_mw : null
   const sv = rb?.strategies ? strategyVerdict(rb.strategies) : null
-  const shaping = runs.filter((r) => r.bwScale !== 1 && base && r.target === base.target && r.growth === base.growth)
-  const growthRuns = runs.filter((r) => r.growth !== 1 && base && r.target === base.target && r.bwScale === base.bwScale)
+  const shaping = runs.filter((r) => r.bwScale !== 1 && base && r.context === base.context && r.growth === base.growth)
+  const growthRuns = runs.filter((r) => r.growth !== 1 && base && r.context === base.context && r.bwScale === base.bwScale)
   return <section className="cpu-purpose" aria-label="CPU what-if 목적">
     <div className="cpu-q">
       <b>① 현재 SW · EMS tuning / workload 분산</b>

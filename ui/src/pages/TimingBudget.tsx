@@ -31,11 +31,11 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
 
   const q = useAsync(() => (!sp.ready ? new Promise<never>(() => {}) : variant ? timingApi.variant(scenario, variant, { statistic, eis, runtime_scale: scale, timeline_frames: frames, cpu_model: cpuModel, throughput_model: tp, ...marginOpts(margin) }, cfg) : Promise.reject(new Error('variant를 선택하세요 (Ctrl K)'))), [scenario, variant, statistic, eis, scale, cfg, sp.ready, margin, frames, cpuModel, tp])
   // what-if (24 sims) starts after the main report so the page never holds two simulation slots at once
-  const mainKey = JSON.stringify([ctx.project, scenario, variant, cfg, margin])
+  const mainKey = JSON.stringify([ctx.project, scenario, variant, cfg, margin, cpuModel, tp])
   const [mainReadyKey, setMainReadyKey] = useState<string | null>(null)
   useEffect(() => { if (q.data && sp.ready) setMainReadyKey(mainKey) }, [q.data, sp.ready, mainKey])
   const mainReady = mainReadyKey === mainKey && sp.ready
-  const wq = useAsync(() => (variant && mainReady ? timingApi.variant(scenario, variant, { statistic: 'max', eis: 'auto', runtime_scale: 1, include_whatif: true, ...marginOpts(margin) }, cfg) : Promise.resolve(null)), [scenario, variant, mainReady, cfg, margin])
+  const wq = useAsync(() => (variant && mainReady ? timingApi.variant(scenario, variant, { statistic: 'max', eis: 'auto', runtime_scale: 1, include_whatif: true, cpu_model: cpuModel, throughput_model: tp, ...marginOpts(margin) }, cfg) : Promise.resolve(null)), [scenario, variant, mainReady, cfg, margin, cpuModel, tp])
   // ⑦ DVFS level ±1/±2 per domain — runs after ④ so at most one simulation slot is held
   const dq = useAsync(() => (variant && mainReady && !wq.loading && !q.loading ? timingApi.dvfsWhatif(scenario, variant, { statistic, eis, runtime_scale: scale, cpu_model: cpuModel, throughput_model: tp, ...marginOpts(margin) }, cfg) : Promise.resolve(null)),
     [scenario, variant, mainReady, wq.loading, q.loading, cfg, margin, statistic, eis, scale, cpuModel, tp])

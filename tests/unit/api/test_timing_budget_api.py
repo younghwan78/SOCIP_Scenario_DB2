@@ -92,6 +92,27 @@ def test_variant_endpoint_rejects_bad_options(monkeypatch):
     assert res.status_code == 422
 
 
+def test_dvfs_whatif_enforces_configured_frame_limit(monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(router, "get_settings", lambda: SimpleNamespace(
+        exploration_max_request_bytes=100000, simulation_max_timeline_frames=6,
+        simulation_max_concurrent_runs=1,
+    ))
+    service_call = MagicMock(return_value={"rows": []})
+    client = _client(monkeypatch, "analyze_dvfs_whatif_request", service_call)
+    response = client.post("/api/v1/timing-budget/dvfs-whatif", json={
+        "scenario_id": "s", "variant_id": "v", "options": {"frames": 7},
+    })
+    assert response.status_code == 422
+    service_call.assert_not_called()
+    valid = client.post("/api/v1/timing-budget/dvfs-whatif", json={
+        "scenario_id": "s", "variant_id": "v", "options": {"frames": 6},
+    })
+    assert valid.status_code == 200
+    service_call.assert_called_once()
+
+
 def test_service_runs_read_only_with_default_dvfs_lookup(monkeypatch):
     catalog = {}
     for path in (FIXTURE / "00_hw").glob("ip-*.yaml"):

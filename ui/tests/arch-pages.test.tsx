@@ -35,6 +35,22 @@ it('runs the expensive what-if once, without repeating it on each statistic chan
   expect(send).toHaveBeenCalledTimes(3)
 })
 
+it('keeps the SW what-if on the selected CPU and throughput models', async () => {
+  const send = vi.spyOn(timingApi, 'variant').mockImplementation(async (_s, _v, options) => ({
+    report: options.include_whatif ? { whatif: [] } : undefined, dvfs_table_ref: null,
+  }) as never)
+  vi.spyOn(timingApi, 'dvfsWhatif').mockResolvedValue(null as never)
+  const ctx = { scenario: 's', variant: 'v', params: {}, navigate: vi.fn() } as unknown as Ctx
+  await act(async () => root.render(<TimingBudgetPage ctx={ctx} />))
+  expect(send.mock.calls.find((c) => c[2].include_whatif)?.[2]).toMatchObject({
+    cpu_model: 'flat', throughput_model: 'pipelined',
+  })
+  await act(async () => root.render(<TimingBudgetPage ctx={{ ...ctx, params: { cpu: 'profile', tp: 'stage' } }} />))
+  const whatifs = send.mock.calls.filter((c) => c[2].include_whatif)
+  expect(whatifs).toHaveLength(2)
+  expect(whatifs[1][2]).toMatchObject({ cpu_model: 'profile', throughput_model: 'stage' })
+})
+
 it('selects the correct prediction history when scenarios share a variant name', async () => {
   const row = { variant_id: 'shared', power: { total_mw: 1, cpu_mw: 1, hw_mw: 0, bw_mw: 0 },
     compression: [], dvfs: {}, fps: 30, previous: null, selected_by: 'auto' }

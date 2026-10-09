@@ -133,3 +133,13 @@ def test_ip_bandwidth_joins_measured_ip_scope_on_node_or_hw_name(engine):
         assert out['unmatched'] == [{'ref': 'GPU', 'read': 9.0}]
         assert out['measurement']['id'] == f'{sid}-meas' and out['measurement']['synthetic'] is True
         assert out['simulation']['id'] == f'{sid}-sim'
+        for suffix, origin, year in [('physical', 'physical_capture', 2024), ('unknown', 'unknown', 2026)]:
+            db.add(Evidence(id=f'{sid}-{suffix}', scenario_ref=sid, variant_ref='v', schema_version='1.0.0',
+                            kind='evidence.measurement', measured_at=datetime(year, 1, 1, tzinfo=timezone.utc),
+                            provenance={'data_origin': origin}, execution_context={}, aggregation={},
+                            kpi={'total_power_mw': 10}, yaml_sha256='test',
+                            metric_observations=[obs('bandwidth.read', 'MTNR', 120.0)]))
+        db.flush()
+        # Unknown provenance must not displace an older physical capture.
+        assert cal.ip_bandwidth(db, sid, 'v')['measurement']['id'] == f'{sid}-physical'
+        assert next(m for m in cal.coverage(db, sid)['v']['measurements'] if m['shown'])['id'] == f'{sid}-physical'
