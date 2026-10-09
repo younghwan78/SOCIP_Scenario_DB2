@@ -136,3 +136,43 @@ def list_cpu_inputs(db: Session) -> dict:
                              "tasks": [{"task": t, "cluster": c, "threads": len(threads.get(t, ())) or None}
                                        for t, (c, _) in sorted(cycles.items())]})
     return {"topologies": topologies, "profiles": sorted(profiles, key=lambda p: p["id"])}
+
+
+def resolve_cpu_profile(db: Session, scenario_id: str, variant_id: str | None, ref: str | None = None) -> tuple[Any, str | None]:
+    """(CpuProfile, evidence id) for the profile CPU model: ``ref`` when given, else the variant's newest
+    measurement with a per-frame CPU profile (silicon captures before synthetic). (None, None) when none."""
+    from scenario_db.api.services.calibration import is_physical
+    from scenario_db.db.models.evidence import Evidence
+
+    if ref:
+        row = get_evidence(db, ref)
+        if row is None or row.kind != "evidence.measurement":
+            raise NotFoundError(f"measurement evidence not found: {ref}")
+        if row.scenario_ref != scenario_id or row.variant_ref != variant_id:
+            raise UnprocessableError(f"measurement evidence {ref} does not belong to the requested scenario and variant")
+        rows = [row]
+    else:
+        rows = (db.query(Evidence).filter(Evidence.kind == "evidence.measurement", Evidence.scenario_ref == scenario_id,
+                                          Evidence.variant_ref == variant_id)
+                .order_by(Evidence.measured_at.desc().nullslast(), Evidence.id).all())
+        rows.sort(key=lambda r: not is_physical(dict(r.provenance or {})))      # stable: newest physical first
+    for row in rows:
+        try:
+            profile = cpu_profile_from_evidence(row, evidence_ref=str(row.id))
+        except ValueError:
+            continue
+        if profile is not None and profile.tasks:
+            return profile, str(row.id)
+    if ref:
+        raise UnprocessableError(f"measurement evidence {ref} has no per-frame CPU profile")
+    return None, None
+
+
+def with_cpu_profile(db: Session, options: Any, scenario_id: str, variant_id: str | None) -> Any:
+    """TimingBudgetOptions with ``cpu_profile`` resolved when ``cpu_model == 'profile'`` (else unchanged)."""
+    if getattr(options, "cpu_model", "flat") != "profile" or options.cpu_profile is not None:
+        return options
+    profile, ref = resolve_cpu_profile(db, scenario_id, variant_id, options.cpu_profile_ref)
+    if profile is None:
+        return options
+    return options.model_copy(update={"cpu_profile": profile, "cpu_profile_ref": ref})

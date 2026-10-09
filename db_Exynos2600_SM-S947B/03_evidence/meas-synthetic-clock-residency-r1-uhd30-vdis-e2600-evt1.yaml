@@ -1,0 +1,819 @@
+id: meas-synthetic-clock-residency-r1-uhd30-vdis-e2600-evt1
+schema_version: '2.2'
+kind: evidence.measurement
+scenario_ref: uc-cam-recording-e2600
+variant_ref: cam-rec-r1-uhd30-vdis
+project_ref: proj-sm-s947b
+measured_at: '2026-10-07T10:00:00+09:00'
+execution_context:
+  silicon_rev: EVT1
+  sw_baseline_ref: sw-vendor-v1.2.3
+  thermal: room
+  method: measurement
+  ambient_temp_c: 25.0
+  power_state: discharging
+provenance:
+  revision: 2
+  device_id: SYNTHETIC
+  collection_method: synthetic_clock_residency
+  collection_tool_versions: {}
+  sample_count: 3
+  duration_per_sample_s: 15.0
+  confidence_level: 0.95
+  raw_artifacts: []
+aggregation:
+  strategy: mean_over_capture
+metric_observations:
+- metric_id: cpu.bus_bytes_pf
+  scope:
+    kind: task_cluster
+    ref: (other)@MID_HF
+  unit: bytes
+  value: 440000.07
+- metric_id: cpu.cycles_pf
+  scope:
+    kind: task_cluster
+    ref: (other)@MID_HF
+  unit: count
+  value: 1760000.0
+- metric_id: cpu.instructions_pf
+  scope:
+    kind: task_cluster
+    ref: (other)@MID_HF
+  unit: count
+  value: 1320000.0
+- metric_id: cpu.stall_cycles_pf
+  scope:
+    kind: task_cluster
+    ref: (other)@MID_HF
+  unit: count
+  value: 440000.0
+- metric_id: cpu.bus_bytes_pf
+  scope:
+    kind: task_cluster
+    ref: (other)@MID_LF0
+  unit: bytes
+  value: 960000.0
+- metric_id: cpu.cycles_pf
+  scope:
+    kind: task_cluster
+    ref: (other)@MID_LF0
+  unit: count
+  value: 3072000.0
+- metric_id: cpu.instructions_pf
+  scope:
+    kind: task_cluster
+    ref: (other)@MID_LF0
+  unit: count
+  value: 2304000.0
+- metric_id: cpu.stall_cycles_pf
+  scope:
+    kind: task_cluster
+    ref: (other)@MID_LF0
+  unit: count
+  value: 768000.0
+- metric_id: cpu.bus_bytes_pf
+  scope:
+    kind: task_cluster
+    ref: (other)@MID_LF1
+  unit: bytes
+  value: 800000.0
+- metric_id: cpu.cycles_pf
+  scope:
+    kind: task_cluster
+    ref: (other)@MID_LF1
+  unit: count
+  value: 2560000.0
+- metric_id: cpu.instructions_pf
+  scope:
+    kind: task_cluster
+    ref: (other)@MID_LF1
+  unit: count
+  value: 1920000.0
+- metric_id: cpu.stall_cycles_pf
+  scope:
+    kind: task_cluster
+    ref: (other)@MID_LF1
+  unit: count
+  value: 640000.0
+- metric_id: cpu.bus_bytes_pf
+  scope:
+    kind: task_cluster
+    ref: aaa_ae_awb@MID_LF0
+  unit: bytes
+  value: 3556980.734
+- metric_id: cpu.cycles_pf
+  scope:
+    kind: task_cluster
+    ref: aaa_ae_awb@MID_LF0
+  unit: count
+  value: 8795443.2
+- metric_id: cpu.instructions_pf
+  scope:
+    kind: task_cluster
+    ref: aaa_ae_awb@MID_LF0
+  unit: count
+  value: 6860445.7
+- metric_id: cpu.stall_cycles_pf
+  scope:
+    kind: task_cluster
+    ref: aaa_ae_awb@MID_LF0
+  unit: count
+  value: 1552137.001
+- metric_id: cpu.bus_bytes_pf
+  scope:
+    kind: task_cluster
+    ref: af_algo@MID_LF0
+  unit: bytes
+  value: 1515394.535
+- metric_id: cpu.cycles_pf
+  scope:
+    kind: task_cluster
+    ref: af_algo@MID_LF0
+  unit: count
+  value: 3747157.3
+- metric_id: cpu.instructions_pf
+  scope:
+    kind: task_cluster
+    ref: af_algo@MID_LF0
+  unit: count
+  value: 2922782.7
+- metric_id: cpu.stall_cycles_pf
+  scope:
+    kind: task_cluster
+    ref: af_algo@MID_LF0
+  unit: count
+  value: 661263.1
+- metric_id: cpu.bus_bytes_pf
+  scope:
+    kind: task_cluster
+    ref: audio_hal@MID_LF1
+  unit: bytes
+  value: 471793.497
+- metric_id: cpu.cycles_pf
+  scope:
+    kind: task_cluster
+    ref: audio_hal@MID_LF1
+  unit: count
+  value: 1166616.7
+- metric_id: cpu.instructions_pf
+  scope:
+    kind: task_cluster
+    ref: audio_hal@MID_LF1
+  unit: count
+  value: 909961.0
+- metric_id: cpu.stall_cycles_pf
+  scope:
+    kind: task_cluster
+    ref: audio_hal@MID_LF1
+  unit: count
+  value: 205873.499
+- metric_id: cpu.bus_bytes_pf
+  scope:
+    kind: task_cluster
+    ref: c2_encoder@MID_LF1
+  unit: bytes
+  value: 1547871.753
+- metric_id: cpu.cycles_pf
+  scope:
+    kind: task_cluster
+    ref: c2_encoder@MID_LF1
+  unit: count
+  value: 3827464.9
+- metric_id: cpu.instructions_pf
+  scope:
+    kind: task_cluster
+    ref: c2_encoder@MID_LF1
+  unit: count
+  value: 2985422.6
+- metric_id: cpu.stall_cycles_pf
+  scope:
+    kind: task_cluster
+    ref: c2_encoder@MID_LF1
+  unit: count
+  value: 675434.999
+- metric_id: cpu.bus_bytes_pf
+  scope:
+    kind: task_cluster
+    ref: camera_hal_request@MID_LF0
+  unit: bytes
+  value: 4396565.545
+- metric_id: cpu.cycles_pf
+  scope:
+    kind: task_cluster
+    ref: camera_hal_request@MID_LF0
+  unit: count
+  value: 10871507.4
+- metric_id: cpu.instructions_pf
+  scope:
+    kind: task_cluster
+    ref: camera_hal_request@MID_LF0
+  unit: count
+  value: 8479775.8
+- metric_id: cpu.stall_cycles_pf
+  scope:
+    kind: task_cluster
+    ref: camera_hal_request@MID_LF0
+  unit: count
+  value: 1918501.3
+- metric_id: cpu.bus_bytes_pf
+  scope:
+    kind: task_cluster
+    ref: camera_hal_result@MID_LF0
+  unit: bytes
+  value: 2787154.658
+- metric_id: cpu.cycles_pf
+  scope:
+    kind: task_cluster
+    ref: camera_hal_result@MID_LF0
+  unit: count
+  value: 6891873.5
+- metric_id: cpu.instructions_pf
+  scope:
+    kind: task_cluster
+    ref: camera_hal_result@MID_LF0
+  unit: count
+  value: 5375661.4
+- metric_id: cpu.stall_cycles_pf
+  scope:
+    kind: task_cluster
+    ref: camera_hal_result@MID_LF0
+  unit: count
+  value: 1216213.001
+- metric_id: cpu.bus_bytes_pf
+  scope:
+    kind: task_cluster
+    ref: eis@MID_LF0
+  unit: bytes
+  value: 2239599.947
+- metric_id: cpu.cycles_pf
+  scope:
+    kind: task_cluster
+    ref: eis@MID_LF0
+  unit: count
+  value: 5537920.0
+- metric_id: cpu.instructions_pf
+  scope:
+    kind: task_cluster
+    ref: eis@MID_LF0
+  unit: count
+  value: 4319577.6
+- metric_id: cpu.stall_cycles_pf
+  scope:
+    kind: task_cluster
+    ref: eis@MID_LF0
+  unit: count
+  value: 977280.0
+- metric_id: cpu.bus_bytes_pf
+  scope:
+    kind: task_cluster
+    ref: face_det_post@MID_LF0
+  unit: bytes
+  value: 2002377.646
+- metric_id: cpu.cycles_pf
+  scope:
+    kind: task_cluster
+    ref: face_det_post@MID_LF0
+  unit: count
+  value: 4951333.7
+- metric_id: cpu.instructions_pf
+  scope:
+    kind: task_cluster
+    ref: face_det_post@MID_LF0
+  unit: count
+  value: 3862040.3
+- metric_id: cpu.stall_cycles_pf
+  scope:
+    kind: task_cluster
+    ref: face_det_post@MID_LF0
+  unit: count
+  value: 873764.799
+- metric_id: cpu.bus_bytes_pf
+  scope:
+    kind: task_cluster
+    ref: mpeg_writer@MID_LF1
+  unit: bytes
+  value: 244749.941
+- metric_id: cpu.cycles_pf
+  scope:
+    kind: task_cluster
+    ref: mpeg_writer@MID_LF1
+  unit: count
+  value: 605200.0
+- metric_id: cpu.instructions_pf
+  scope:
+    kind: task_cluster
+    ref: mpeg_writer@MID_LF1
+  unit: count
+  value: 472056.0
+- metric_id: cpu.stall_cycles_pf
+  scope:
+    kind: task_cluster
+    ref: mpeg_writer@MID_LF1
+  unit: count
+  value: 106800.0
+- metric_id: cpu.bus_bytes_pf
+  scope:
+    kind: task_cluster
+    ref: post_crta@MID_LF0
+  unit: bytes
+  value: 226599.991
+- metric_id: cpu.cycles_pf
+  scope:
+    kind: task_cluster
+    ref: post_crta@MID_LF0
+  unit: count
+  value: 560320.0
+- metric_id: cpu.instructions_pf
+  scope:
+    kind: task_cluster
+    ref: post_crta@MID_LF0
+  unit: count
+  value: 437049.6
+- metric_id: cpu.stall_cycles_pf
+  scope:
+    kind: task_cluster
+    ref: post_crta@MID_LF0
+  unit: count
+  value: 98880.0
+- metric_id: cpu.bus_bytes_pf
+  scope:
+    kind: task_cluster
+    ref: post_irta@MID_LF0
+  unit: bytes
+  value: 2927649.936
+- metric_id: cpu.cycles_pf
+  scope:
+    kind: task_cluster
+    ref: post_irta@MID_LF0
+  unit: count
+  value: 7239280.0
+- metric_id: cpu.instructions_pf
+  scope:
+    kind: task_cluster
+    ref: post_irta@MID_LF0
+  unit: count
+  value: 5646638.4
+- metric_id: cpu.stall_cycles_pf
+  scope:
+    kind: task_cluster
+    ref: post_irta@MID_LF0
+  unit: count
+  value: 1277520.0
+- metric_id: cpu.bus_bytes_pf
+  scope:
+    kind: task_cluster
+    ref: pre_me_rta@MID_LF0
+  unit: bytes
+  value: 2327600.018
+- metric_id: cpu.cycles_pf
+  scope:
+    kind: task_cluster
+    ref: pre_me_rta@MID_LF0
+  unit: count
+  value: 5755520.0
+- metric_id: cpu.instructions_pf
+  scope:
+    kind: task_cluster
+    ref: pre_me_rta@MID_LF0
+  unit: count
+  value: 4489305.6
+- metric_id: cpu.stall_cycles_pf
+  scope:
+    kind: task_cluster
+    ref: pre_me_rta@MID_LF0
+  unit: count
+  value: 1015680.0
+- metric_id: cpu.bus_bytes_pf
+  scope:
+    kind: task_cluster
+    ref: storage_write@MID_LF1
+  unit: bytes
+  value: 470800.052
+- metric_id: cpu.cycles_pf
+  scope:
+    kind: task_cluster
+    ref: storage_write@MID_LF1
+  unit: count
+  value: 1164160.0
+- metric_id: cpu.instructions_pf
+  scope:
+    kind: task_cluster
+    ref: storage_write@MID_LF1
+  unit: count
+  value: 908044.8
+- metric_id: cpu.stall_cycles_pf
+  scope:
+    kind: task_cluster
+    ref: storage_write@MID_LF1
+  unit: count
+  value: 205440.0
+- metric_id: cpu.bus_bytes_pf
+  scope:
+    kind: task_cluster
+    ref: surfaceflinger@MID_LF1
+  unit: bytes
+  value: 2103263.754
+- metric_id: cpu.cycles_pf
+  scope:
+    kind: task_cluster
+    ref: surfaceflinger@MID_LF1
+  unit: count
+  value: 5200797.4
+- metric_id: cpu.instructions_pf
+  scope:
+    kind: task_cluster
+    ref: surfaceflinger@MID_LF1
+  unit: count
+  value: 4056622.0
+- metric_id: cpu.stall_cycles_pf
+  scope:
+    kind: task_cluster
+    ref: surfaceflinger@MID_LF1
+  unit: count
+  value: 917787.8
+- metric_id: cpu.freq_residency
+  scope:
+    kind: cluster_freq
+    ref: BIG@1000
+  unit: ratio
+  value: 1.0
+- metric_id: cpu.freq_residency
+  scope:
+    kind: cluster_freq
+    ref: DSU@400
+  unit: ratio
+  value: 0.3
+- metric_id: cpu.freq_residency
+  scope:
+    kind: cluster_freq
+    ref: DSU@900
+  unit: ratio
+  value: 0.7
+- metric_id: cpu.freq_residency
+  scope:
+    kind: cluster_freq
+    ref: MID_HF@600
+  unit: ratio
+  value: 0.95
+- metric_id: cpu.freq_residency
+  scope:
+    kind: cluster_freq
+    ref: MID_HF@1200
+  unit: ratio
+  value: 0.05
+- metric_id: cpu.freq_residency
+  scope:
+    kind: cluster_freq
+    ref: MID_LF0@400
+  unit: ratio
+  value: 0.3
+- metric_id: cpu.freq_residency
+  scope:
+    kind: cluster_freq
+    ref: MID_LF0@1000
+  unit: ratio
+  value: 0.7
+- metric_id: cpu.freq_residency
+  scope:
+    kind: cluster_freq
+    ref: MID_LF1@400
+  unit: ratio
+  value: 1.0
+- metric_id: cpu.active_ratio
+  scope:
+    kind: cluster
+    ref: BIG
+  unit: ratio
+  value: 0.0
+- metric_id: cpu.clock_gated_ratio
+  scope:
+    kind: cluster
+    ref: BIG
+  unit: ratio
+  value: 0.45
+- metric_id: cpu.power_gated_ratio
+  scope:
+    kind: cluster
+    ref: BIG
+  unit: ratio
+  value: 0.55
+- metric_id: cpu.active_ratio
+  scope:
+    kind: cluster
+    ref: MID_HF
+  unit: ratio
+  value: 0.11
+- metric_id: cpu.clock_gated_ratio
+  scope:
+    kind: cluster
+    ref: MID_HF
+  unit: ratio
+  value: 0.4
+- metric_id: cpu.power_gated_ratio
+  scope:
+    kind: cluster
+    ref: MID_HF
+  unit: ratio
+  value: 0.49
+- metric_id: cpu.active_ratio
+  scope:
+    kind: cluster
+    ref: MID_LF0
+  unit: ratio
+  value: 0.51
+- metric_id: cpu.clock_gated_ratio
+  scope:
+    kind: cluster
+    ref: MID_LF0
+  unit: ratio
+  value: 0.22
+- metric_id: cpu.power_gated_ratio
+  scope:
+    kind: cluster
+    ref: MID_LF0
+  unit: ratio
+  value: 0.27
+- metric_id: cpu.active_ratio
+  scope:
+    kind: cluster
+    ref: MID_LF1
+  unit: ratio
+  value: 0.3
+- metric_id: cpu.clock_gated_ratio
+  scope:
+    kind: cluster
+    ref: MID_LF1
+  unit: ratio
+  value: 0.32
+- metric_id: cpu.power_gated_ratio
+  scope:
+    kind: cluster
+    ref: MID_LF1
+  unit: ratio
+  value: 0.38
+- metric_id: cpu.pass_cv
+  scope:
+    kind: task
+    ref: (other)
+  unit: ratio
+  value: 0.01
+- metric_id: cpu.pass_cv
+  scope:
+    kind: task
+    ref: aaa_ae_awb
+  unit: ratio
+  value: 0.01
+- metric_id: cpu.pass_cv
+  scope:
+    kind: task
+    ref: af_algo
+  unit: ratio
+  value: 0.01
+- metric_id: cpu.pass_cv
+  scope:
+    kind: task
+    ref: audio_hal
+  unit: ratio
+  value: 0.01
+- metric_id: cpu.pass_cv
+  scope:
+    kind: task
+    ref: c2_encoder
+  unit: ratio
+  value: 0.01
+- metric_id: cpu.pass_cv
+  scope:
+    kind: task
+    ref: camera_hal_request
+  unit: ratio
+  value: 0.01
+- metric_id: cpu.pass_cv
+  scope:
+    kind: task
+    ref: camera_hal_result
+  unit: ratio
+  value: 0.01
+- metric_id: cpu.pass_cv
+  scope:
+    kind: task
+    ref: eis
+  unit: ratio
+  value: 0.01
+- metric_id: cpu.pass_cv
+  scope:
+    kind: task
+    ref: face_det_post
+  unit: ratio
+  value: 0.01
+- metric_id: cpu.pass_cv
+  scope:
+    kind: task
+    ref: mpeg_writer
+  unit: ratio
+  value: 0.01
+- metric_id: cpu.pass_cv
+  scope:
+    kind: task
+    ref: post_crta
+  unit: ratio
+  value: 0.01
+- metric_id: cpu.pass_cv
+  scope:
+    kind: task
+    ref: post_irta
+  unit: ratio
+  value: 0.01
+- metric_id: cpu.pass_cv
+  scope:
+    kind: task
+    ref: pre_me_rta
+  unit: ratio
+  value: 0.01
+- metric_id: cpu.pass_cv
+  scope:
+    kind: task
+    ref: storage_write
+  unit: ratio
+  value: 0.01
+- metric_id: cpu.pass_cv
+  scope:
+    kind: task
+    ref: surfaceflinger
+  unit: ratio
+  value: 0.01
+- metric_id: cpu.pass_cv
+  scope:
+    kind: capture
+    ref: all
+  unit: ratio
+  value: 0.01
+- metric_id: cpu.freq_residency_active
+  scope:
+    kind: cluster_freq
+    ref: DSU@400
+  unit: ratio
+  value: 0.15
+- metric_id: cpu.freq_residency_active
+  scope:
+    kind: cluster_freq
+    ref: DSU@900
+  unit: ratio
+  value: 0.85
+- metric_id: cpu.freq_residency_active
+  scope:
+    kind: cluster_freq
+    ref: MID_HF@600
+  unit: ratio
+  value: 0.85
+- metric_id: cpu.freq_residency_active
+  scope:
+    kind: cluster_freq
+    ref: MID_HF@1200
+  unit: ratio
+  value: 0.15
+- metric_id: cpu.freq_residency_active
+  scope:
+    kind: cluster_freq
+    ref: MID_LF0@400
+  unit: ratio
+  value: 0.086667
+- metric_id: cpu.freq_residency_active
+  scope:
+    kind: cluster_freq
+    ref: MID_LF0@1000
+  unit: ratio
+  value: 0.913333
+- metric_id: cpu.freq_residency_active
+  scope:
+    kind: cluster_freq
+    ref: MID_LF1@400
+  unit: ratio
+  value: 1.0
+- metric_id: gpu.freq_residency_active
+  scope:
+    kind: gpu_freq
+    ref: GPU@226
+  unit: ratio
+  value: 0.35
+- metric_id: gpu.freq_residency_active
+  scope:
+    kind: gpu_freq
+    ref: GPU@262
+  unit: ratio
+  value: 0.3
+- metric_id: gpu.freq_residency_active
+  scope:
+    kind: gpu_freq
+    ref: GPU@356
+  unit: ratio
+  value: 0.25
+- metric_id: gpu.freq_residency_active
+  scope:
+    kind: gpu_freq
+    ref: GPU@461
+  unit: ratio
+  value: 0.1
+- metric_id: gpu.freq_residency
+  scope:
+    kind: gpu_freq
+    ref: GPU@226
+  unit: ratio
+  value: 0.55
+- metric_id: gpu.freq_residency
+  scope:
+    kind: gpu_freq
+    ref: GPU@262
+  unit: ratio
+  value: 0.25
+- metric_id: gpu.freq_residency
+  scope:
+    kind: gpu_freq
+    ref: GPU@356
+  unit: ratio
+  value: 0.15
+- metric_id: gpu.freq_residency
+  scope:
+    kind: gpu_freq
+    ref: GPU@461
+  unit: ratio
+  value: 0.05
+- metric_id: gpu.active_ratio
+  scope:
+    kind: gpu
+    ref: GPU
+  unit: ratio
+  value: 0.22
+- metric_id: gpu.clock_gated_ratio
+  scope:
+    kind: gpu
+    ref: GPU
+  unit: ratio
+  value: 0.38
+- metric_id: gpu.power_gated_ratio
+  scope:
+    kind: gpu
+    ref: GPU
+  unit: ratio
+  value: 0.4
+- metric_id: clock.residency_pass_jsd
+  scope:
+    kind: clock_domain
+    ref: cpu/BIG
+  unit: ratio
+  value: 0.0
+- metric_id: clock.residency_pass_jsd
+  scope:
+    kind: clock_domain
+    ref: cpu/MID_HF
+  unit: ratio
+  value: 0.0
+- metric_id: clock.residency_pass_jsd
+  scope:
+    kind: clock_domain
+    ref: cpu/MID_LF0
+  unit: ratio
+  value: 0.000882
+- metric_id: clock.residency_pass_jsd
+  scope:
+    kind: clock_domain
+    ref: cpu/MID_LF1
+  unit: ratio
+  value: 0.0
+- metric_id: clock.residency_pass_jsd
+  scope:
+    kind: clock_domain
+    ref: gpu/GPU
+  unit: ratio
+  value: 0.0
+artifacts:
+- type: pmu_digest
+  storage: fileshare
+  path: cpu_freq_residency.csv
+  sha256: a85fe735778b092936b95fb49f34430aec011e66792741c54feefd68f0fa439d
+  bytes: 1123
+- type: pmu_digest
+  storage: fileshare
+  path: cpu_freq_residency_running.csv
+  sha256: 0a682dacf24092590315f70bba5fdf27fff8e9c700ae6701dcedecc6282fae7c
+  bytes: 1015
+- type: pmu_digest
+  storage: fileshare
+  path: cpu_idle_residency.csv
+  sha256: b0693c18ce429515dd1f004cbaebd8570f4fdef4b1158e763fd55bce8be8b18e
+  bytes: 1795
+- type: pmu_digest
+  storage: fileshare
+  path: dsu_gpu_freq_residency.csv
+  sha256: 6aad78b6c67af318eb9591fd9da8e663d634c09163332cfa62445cddf7278985
+  bytes: 1123
+- type: pmu_digest
+  storage: fileshare
+  path: pmu_counters_by_pass.tsv
+  sha256: 5d5f6a93ad51ee8342a2ae6123ab0367c0b8b526262727fba7fcec4fb6b04929
+  bytes: 6030
+- type: pmu_digest
+  storage: fileshare
+  path: gpu_idle_residency.csv
+  sha256: 2bfe9ce8247332ac45cf3395028839bb27d9c0c99bd6dd791946e5f205c69e8d
+  bytes: 259

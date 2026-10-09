@@ -28,10 +28,16 @@ def coverage(scenario_id: str, db: Session = Depends(get_db)):
     return cal.coverage(db, scenario_id)
 
 
+@router.get("/calibration/clock-residency")
+def clock_residency(scenario_id: str | None = None, db: Session = Depends(get_db)):
+    """Measurements with clock-domain residency (CPU cluster · DSU · GPU): per-domain mean, high-OPP share, notes."""
+    return cal.clock_residency_rows(db, scenario_id)
+
+
 @router.get("/calibration/measurements/{measurement_id}")
 def measurement(measurement_id: str, db: Session = Depends(get_db)):
-    """Measured rails grouped as CPU / IP / BW / other and compared with each prediction."""
-    return cal.measurement_detail(db, measurement_id)
+    """Measured rails grouped as CPU / IP / BW / other and compared with each prediction; clock residency."""
+    return cal.measurement_detail_view(db, measurement_id)
 
 
 @router.get("/library/sw-timing")

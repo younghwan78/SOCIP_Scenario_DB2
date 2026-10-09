@@ -39,6 +39,24 @@ export interface PowerSplit {
   share_pct: { cpu: number; hw: number; bw: number }
   hw_by_ip: Record<string, number>; cpu_by_task: Record<string, number>; cpu_busy_ms: number
   cpu_model: { cluster: number; freq_mhz: number; volt_v: number; source: string }; zero_power_ips: string[]
+  /** cpu_model=profile: measured CPU profile replayed with SW growth (absent = flat assumption) */
+  cpu_profile?: CpuProfileTerm
+  cpu_mw_flat?: number; bw_sw_mw_model?: number
+}
+export interface CpuProfileTerm {
+  kind: 'profile' | 'flat'; note?: string; profile_ref?: string | null; growth?: number
+  clusters?: Record<string, { mhz: number; total_mw: number; busy_ms: number }>; dsu_mhz?: number | null; dsu_mw?: number
+  feasible?: boolean; cpu_mw_flat?: number; bw_source?: 'model' | 'measured'; bw_mw_per_mbs?: number
+}
+export type CpuModel = 'flat' | 'profile'
+/** Short tile note for the CPU power of a timing report. */
+export function cpuTileNote(p: PowerSplit): string {
+  const c = p.cpu_profile
+  if (c?.kind === 'profile') {
+    const ops = Object.entries(c.clusters ?? {}).filter(([, v]) => v.busy_ms > 0).map(([k, v]) => `${k.replace(/^MID_/, '')} ${v.mhz}`).join(' · ')
+    return `측정 profile ×${c.growth} · ${ops}${c.dsu_mhz ? ` · DSU ${c.dsu_mhz}` : ''} · 가정 모델 ${fmt(c.cpu_mw_flat ?? null, 0)} mW`
+  }
+  return `${fmt(p.cpu_busy_ms, 1)} ms/frame · CL${p.cpu_model.cluster} ${p.cpu_model.freq_mhz} MHz ${p.cpu_model.volt_v} V${c?.note ? ` · ${c.note}` : ''}`
 }
 export interface BwSplit { total_mbs: number; hw_mbs: number; sw_mbs: number; hw_by_ip: Record<string, number>; sw_by_task: Record<string, number>; share_pct: { hw: number; sw: number } }
 export interface Verdict { status: 'ok' | 'clock_up' | 'fail'; reasons: string[]; notes?: string[]; nrt_clock_factor: number | null }
@@ -75,6 +93,8 @@ export interface FleetRow {
 }
 export interface TimingOptions {
   statistic: Statistic; eis: EisMode; runtime_scale: number; include_whatif?: boolean
+  /** CPU term: flat assumption (default) or the variant's measured CPU profile through EAS */
+  cpu_model?: CpuModel
   /** SW margin rule (fraction of the frame period reserved for SW); default 0.25 */
   rt_margin?: number; output_margin?: number
   /** frames drawn in the pipeline timeline (API ≤ 32) */

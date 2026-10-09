@@ -253,3 +253,57 @@ metrics:
     allowed_scopes: [cluster]
     compare_statistic: value
     polarity: neutral
+  # Clock-domain residency (meas_import/clock_residency.py). "_active" = time share per frequency
+  # while the domain runs (not idle) — dynamic energy follows it; the plain one is the wall-clock share.
+  cpu.freq_residency_active:
+    category: cpu
+    canonical_unit: ratio
+    allowed_scopes: [cluster_freq]
+    compare_statistic: value
+    polarity: neutral
+  gpu.freq_residency:
+    category: gpu
+    canonical_unit: ratio
+    allowed_scopes: [gpu_freq]
+    compare_statistic: value
+    polarity: neutral
+  gpu.freq_residency_active:
+    category: gpu
+    canonical_unit: ratio
+    allowed_scopes: [gpu_freq]
+    compare_statistic: value
+    polarity: neutral
+  gpu.active_ratio:
+    category: gpu
+    canonical_unit: ratio
+    allowed_scopes: [gpu]
+    compare_statistic: value
+    polarity: neutral
+  gpu.clock_gated_ratio:
+    category: gpu
+    canonical_unit: ratio
+    allowed_scopes: [gpu]
+    compare_statistic: value
+    polarity: neutral
+  gpu.power_gated_ratio:
+    category: gpu
+    canonical_unit: ratio
+    allowed_scopes: [gpu]
+    compare_statistic: value
+    polarity: neutral
+  # Max Jensen–Shannon divergence of one domain's residency between capture groups (PMU passes);
+  # ref "<class>/<domain>". > 0.05 = DVFS behaviour changed between passes.
+  clock.residency_pass_jsd:
+    category: clock
+    canonical_unit: ratio
+    allowed_scopes: [clock_domain]
+    compare_statistic: value
+    polarity: lower_is_better
+  # Coefficient of variation of the anchor counters (CPU_CYCLES, INST_RETIRED) across PMU passes
+  # (meas_import/pmu_passes.py); ref = task, or "all" for the capture. > 0.05 = passes saw different work.
+  cpu.pass_cv:
+    category: cpu
+    canonical_unit: ratio
+    allowed_scopes: [task, capture]
+    compare_statistic: value
+    polarity: lower_is_better

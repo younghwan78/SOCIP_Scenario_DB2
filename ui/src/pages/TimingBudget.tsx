@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Ctx } from '../App'
 import { useAsync } from '../lib/route'
-import { SW_MARGINS, fmt, stageDomainsOf, marginOf, marginOpts, pct0, timingApi, verdictChip, type EisMode, type Statistic, type TimingReport } from '../lib/timingBudget'
+import { SW_MARGINS, fmt, stageDomainsOf, marginOf, marginOpts, pct0, timingApi, verdictChip, type CpuModel, type EisMode, type Statistic, type TimingReport } from '../lib/timingBudget'
 import { Card, ClockChart, Gantt, Intervals, PowerBw, SlotBudget, WhatIf } from '../components/TimingCharts'
 import { ProvBadge } from '../components/Provenance'
 import { powerScope, type Prov } from '../lib/provenance'
@@ -15,6 +15,7 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
   const statistic = (ctx.params.stat === 'mean' || ctx.params.stat === 'min' ? ctx.params.stat : 'max') as Statistic
   const eis = (ctx.params.eis === 'on' || ctx.params.eis === 'off' ? ctx.params.eis : 'auto') as EisMode
   const scale = SCALES.includes(Number(ctx.params.scale)) ? Number(ctx.params.scale) : 1.0
+  const cpuModel: CpuModel = ctx.params.cpu === 'profile' ? 'profile' : 'flat'
   const margin = marginOf(ctx.params.margin)
   const [marginDraft, setMarginDraft] = useState(String(Math.round(margin * 100)))
   useEffect(() => setMarginDraft(String(Math.round(margin * 100))), [margin])
@@ -23,7 +24,7 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
   const sp = useSimProfiles(ctx.project, ctx.params.cfg)
   const cfg = sp.ref
 
-  const q = useAsync(() => (!sp.ready ? new Promise<never>(() => {}) : variant ? timingApi.variant(scenario, variant, { statistic, eis, runtime_scale: scale, timeline_frames: frames, ...marginOpts(margin) }, cfg) : Promise.reject(new Error('variant를 선택하세요 (Ctrl K)'))), [scenario, variant, statistic, eis, scale, cfg, sp.ready, margin, frames])
+  const q = useAsync(() => (!sp.ready ? new Promise<never>(() => {}) : variant ? timingApi.variant(scenario, variant, { statistic, eis, runtime_scale: scale, timeline_frames: frames, cpu_model: cpuModel, ...marginOpts(margin) }, cfg) : Promise.reject(new Error('variant를 선택하세요 (Ctrl K)'))), [scenario, variant, statistic, eis, scale, cfg, sp.ready, margin, frames, cpuModel])
   // what-if (24 sims) starts after the main report so the page never holds two simulation slots at once
   const mainKey = JSON.stringify([ctx.project, scenario, variant, cfg, margin])
   const [mainReadyKey, setMainReadyKey] = useState<string | null>(null)
@@ -39,6 +40,8 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
         <Seg label="SW 통계" value={statistic} options={[['max', 'max'], ['mean', 'mean']]} onPick={(v) => set('stat', v === 'max' ? undefined : v)} />
         <Seg label="EIS" value={eis} options={[['auto', `auto${r ? (r.eis.auto ? ' (ON)' : ' (OFF)') : ''}`], ['on', 'ON'], ['off', 'OFF']]} onPick={(v) => set('eis', v === 'auto' ? undefined : v)} />
         <Seg label="차기 SW 증가" value={String(scale)} options={SCALES.map((s) => [String(s), `×${s.toFixed(1)}`])} onPick={(v) => set('scale', v === '1' ? undefined : v)} />
+        <span title="가정 = 한 cluster·고정 OPP의 coeff·f·V²·util (기존) · 측정 profile = 이 variant의 측정 CPU profile을 EAS + schedutil로 재현, SW 증가에 따라 OPP·DSU·leakage가 함께 변함 (CPU BW도 측정 bus bytes)">
+          <Seg label="CPU 모델" value={cpuModel} options={[['flat', '가정'], ['profile', '측정 profile']]} onPick={(v) => set('cpu', v === 'flat' ? undefined : v)} /></span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} title="RT · Output HW는 frame period의 (1 − margin) 안에 끝나야 함. NRT · Post 필요 clock의 rule 기준선도 같은 margin을 사용. 기본 25%">
           <span className="muted" style={{ fontSize: 13 }}>SW margin</span>
           <div className="seg" role="group" aria-label="SW margin">

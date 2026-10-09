@@ -55,6 +55,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from scenario_db.meas_import import clock_residency, pmu_passes
 from scenario_db.meas_import.meta import PmuSpec
 from scenario_db.meas_import.table_adapter import table_samples
 from scenario_db.models.evidence.metrics import validate_metric_observations
@@ -84,6 +85,7 @@ class PmuSample:
     stat: str = ""
     freq_mhz: float | None = None
     line: int | None = None
+    group: str = ""                   # capture part (PMU pass): residency -> clock_residency, counters -> pmu_passes
 
 
 @dataclass(slots=True)
@@ -163,6 +165,7 @@ def _sample_from_row(row: dict[str, str], line: int) -> PmuSample:
         stat=row.get("stat", "").lower(),
         freq_mhz=freq,
         line=line,
+        group=row.get("group", ""),
     )
 
 
@@ -179,14 +182,20 @@ def build_pmu_digest(
     ip_map = ip_map or {}
     cluster_map = cluster_map or {}
     digest = PmuDigest(sample_count=len(samples))
+    # counters split over PMU passes (sample.group) -> one merged set + cpu.pass_cv (meas_import/pmu_passes.py)
+    samples, pass_obs, pass_warnings = pmu_passes.merge_counter_groups(
+        samples, lambda metric, kind, ref, value, line: PmuSample(metric=metric, scope_kind=kind, scope_ref=ref,
+                                                                  value=value, line=line))
+    digest.warnings.extend(pass_warnings)
     cpu_samples: list[PmuSample] = []
+    clock_samples: list[PmuSample] = []
     profile_requested = False
     clock_stats: dict[str, dict[str, float]] = {}
     clock_dominant: dict[str, float] = {}
     residency: dict[str, dict[float, float]] = {}
     bw: dict[tuple[str, str, str], dict[str, float]] = {}
     counters: dict[tuple[str, str], float] = {}
-    seen: set[tuple[str, str, str, str, float | None]] = set()
+    seen: set[tuple[str, str, str, str, float | None, str]] = set()
     unmapped: set[str] = set()
     sources_by_target: dict[tuple[str, str], set[str]] = {}
 
@@ -211,13 +220,17 @@ def build_pmu_digest(
     for sample in samples:
         if not math.isfinite(sample.value):
             raise PmuDigestError(f"row {sample.line}: value must be finite")
-        key = (sample.metric, sample.scope_kind, sample.scope_ref, sample.stat, sample.freq_mhz)
+        key = (sample.metric, sample.scope_kind, sample.scope_ref, sample.stat, sample.freq_mhz, sample.group)
         if key in seen:
             raise PmuDigestError(
                 f"row {sample.line}: duplicate sample {sample.metric}/{sample.scope_kind}/{sample.scope_ref}"
                 + (f"/{sample.stat}" if sample.stat else "")
             )
         seen.add(key)
+        if clock_residency.observes(sample.metric):
+            clock_samples.append(sample)
+            if clock_residency.handles(sample.metric):
+                continue
         profile_row = sample.metric in CPU_PROFILE_METRICS or (
             sample.metric in ("cpu_cycles", "cpu_instructions") and sample.scope_kind != "cluster"
         )
@@ -320,6 +333,13 @@ def build_pmu_digest(
     if cpu_samples:
         _reduce_cpu_profile(cpu_samples, cluster_map=cluster_map, cpu_map=cpu_map or {}, frames=frames,
                             digest=digest, warn_without_window=profile_requested)
+    digest.observations.extend(pass_obs)
+    if clock_samples:
+        try:
+            digest.observations.extend(clock_residency.reduce_samples(
+                clock_samples, cpu_map=expand_cpu_map(cpu_map or {}), cluster_map=cluster_map, warnings=digest.warnings))
+        except ValueError as exc:
+            raise PmuDigestError(str(exc)) from exc
     if unmapped:
         digest.warnings.append(
             "PMU names without ip_map/cluster_map entry (kept as-is, will not join simulation "
@@ -354,7 +374,7 @@ def import_pmu_digest(
             raise PmuDigestError(f"table source: {exc}") from exc
         samples = [
             PmuSample(metric=r["metric"], scope_kind=r["scope_kind"], scope_ref=r["scope_ref"],
-                      value=float(r["value"]), freq_mhz=r["freq_mhz"], line=index)
+                      value=float(r["value"]), freq_mhz=r["freq_mhz"], line=index, group=r.get("group") or "")
             for index, r in enumerate(rows, start=1)
         ]
     else:

@@ -8,6 +8,7 @@
   or ``cluster``.
 - ``cpu.thread_cycles_pf``: per frame, scope ``task_thread`` (ref ``task@cluster#thread``).
 - ``cpu.freq_residency``: scope ``cluster_freq`` (ref ``cluster@MHz``), time share.
+- ``cpu.freq_residency_active``: same, share of running (non-idle) time (optional).
 - ``cpu.clock_gated_ratio`` / ``cpu.power_gated_ratio`` / ``cpu.active_ratio``:
   scope ``cluster``, time share.
 
@@ -72,14 +73,15 @@ def cpu_profile_from_observations(
                 entry.setdefault("threads", {})[thread] = value
         elif metric in _COUNTERS and kind == "cluster":
             clusters.setdefault(ref, {})[_COUNTERS[metric]] = value
-        elif metric == "cpu.freq_residency" and kind == "cluster_freq":
+        elif metric in ("cpu.freq_residency", "cpu.freq_residency_active") and kind == "cluster_freq":
             cluster, _, freq = ref.rpartition("@")
             try:
                 mhz = float(freq)
             except ValueError:
                 continue
+            field = "freq_residency" if metric == "cpu.freq_residency" else "freq_residency_active"
             if cluster and mhz > 0 and value > 0:
-                clusters.setdefault(cluster, {}).setdefault("freq_residency", {})[mhz] = value
+                clusters.setdefault(cluster, {}).setdefault(field, {})[mhz] = value
         elif metric in _RATIOS and kind == "cluster":
             clusters.setdefault(ref, {})[_RATIOS[metric]] = value
     if not tasks and not clusters:
@@ -90,6 +92,7 @@ def cpu_profile_from_observations(
         if name.lower() == dsu_name.lower():
             dsu = CpuDsuProfile(
                 freq_residency=raw.get("freq_residency"),
+                freq_residency_active=raw.get("freq_residency_active"),
                 active_ratio=raw.get("active_ratio"),
                 power_gated_ratio=raw.get("power_gated_ratio"),
             )

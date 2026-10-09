@@ -102,6 +102,7 @@ function RunForm({ ctx, onDone }: { ctx: Ctx; onDone: (r: RunDetail) => void }) 
             <span className="faint" style={{ fontSize: 12 }}>buffer ≤</span>
             <input className="input" type="number" min={0} max={12} value={o.max_buffers} style={{ width: 64 }} onChange={(e) => set('max_buffers', Math.max(0, Math.min(12, Number(e.target.value) || 0)))} />
             <label className="ax-check"><input type="checkbox" checked={o.allow_lossy} onChange={() => set('allow_lossy', !o.allow_lossy)} />lossy 추천 허용</label>
+            <label className="ax-check" title="체크 = variant의 측정 CPU profile을 EAS + schedutil로 재현해 SW 증가 축마다 cluster OPP·DSU·leakage와 CPU BW(측정 bus bytes)를 계산. profile이 없는 variant는 기존 가정 모델 유지 (결과의 CPU power 근거에 표시)"><input type="checkbox" checked={o.cpu_model === 'profile'} onChange={() => set('cpu_model', o.cpu_model === 'profile' ? 'flat' : 'profile')} />CPU: 측정 profile (EAS)</label>
             <label className="ax-check" title="해제하면 IP catalog에 압축 지원이 기재되지 않은 DMA도 탐색 (지원 여부 확인 전 잠재 절감 확인용)"><input type="checkbox" checked={o.require_declared} onChange={() => set('require_declared', !o.require_declared)} />지원 DMA만 (catalog 선언)</label></div>
           <div className="ax-row"><span className="ax-label">추천 기준</span>
             <div className="seg sm">{(['max', 'mean'] as Statistic[]).map((s) => <button key={s} className={o.objective_statistic === s ? 'on' : ''} onClick={() => set('objective_statistic', s)}>SW {s}</button>)}</div>

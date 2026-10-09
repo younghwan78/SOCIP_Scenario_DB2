@@ -477,6 +477,7 @@ def _slice(report: dict[str, Any], stat: str, scale: float) -> dict[str, Any]:
         "latency": report["latency"],
         "power": {k: report["power"][k] for k in ("total_mw", "cpu_mw", "hw_mw", "bw_mw", "bw_hw_mw", "bw_sw_mw")},
         "cpu_by_task": report["power"]["cpu_by_task"],
+        "cpu_basis": (report["power"].get("cpu_profile") or {}).get("kind", "flat"),
         "zero_power_ips": report["power"].get("zero_power_ips", []),
         "bw": {k: report["bw"][k] for k in ("total_mbs", "hw_mbs", "sw_mbs")},
         "sw_nodes": sorted(report["bw"].get("sw_by_task", {})),

@@ -10,6 +10,7 @@ from typing import Any
 from scenario_db.reporting.arch_conclusion import build_conclusion, model_limits, run_lineage
 from scenario_db.reporting.arch_opinions import build_opinions, classify
 from scenario_db.reporting.reason_text import diagnose, explain_all
+from scenario_db.reporting.clock_section import clock_block
 
 _CLOCK_RE = re.compile(r"^(\w+): required_clock ([\d.]+)MHz exceeds max DVFS speed ([\d.]+)MHz$")
 
@@ -247,7 +248,7 @@ def render_html(title: str, snap: dict[str, Any]) -> str:
         _sec(1, _conclusion(snap.get("conclusion"))),
         _sec(2, _overview(o)),
         _sec(3, _spec(s)),
-        _sec(4, _calibration(snap.get("calibration") or [])),
+        _sec(4, _calibration(snap.get("calibration") or []) + clock_block(snap.get("clock_residency") or [])),
         _sec(5, _opinions(snap.get("opinions") or [])),
         _sec(6, _scenarios(snap["scenarios"])),
         _sec(7, _latency(snap["scenarios"])),

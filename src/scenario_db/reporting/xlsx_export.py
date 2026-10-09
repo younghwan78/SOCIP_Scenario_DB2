@@ -12,6 +12,8 @@ import zipfile
 from typing import Any
 from xml.sax.saxutils import escape, quoteattr
 
+from scenario_db.reporting.clock_section import clock_sheet
+
 Row = list[Any]
 Sheet = tuple[str, Row, list[Row]]  # name, header, rows
 
@@ -143,6 +145,8 @@ def report_sheets(snap: dict[str, Any], meta: dict[str, Any] | None = None) -> l
                    [[r["variant_id"], r["synthetic"], str(r.get("measured_at") or "")[:10], _r(r["measured_mw"]), _r(r["predicted_mw"]), _r(r["delta_pct"], 2)]
                     + [_r(next((x["delta_pct"] for x in r["rows"] if x["category"] == k), None), 2) for k in ("cpu", "ip", "bw")]
                     + [_r(r.get("unmodeled_mw")), r["fit"]["worst_category"], r["fit"]["offsetting"]] for r in snap.get("calibration") or []]))
+    if snap.get("clock_residency"):
+        sheets.append(clock_sheet(snap))
     sheets.append(("Compression", ["scenario", "buffer", "mode", "ratio", "ratio 출처", "IP 지원", "적용", "대상", "Δ MB/s (적용 합)", "Δ mW (적용 합)", "Δ MB/s (전체 적용)"],
                    [[x["scenario_id"], x["buffer"], x["mode"], x["ratio"], x["ratio_source"], x["support"], x["selected"], x["variants"],
                      x["selected_delta_mbs"], x["selected_delta_mw"], x["delta_mbs"]] for x in snap.get("compression") or []]))

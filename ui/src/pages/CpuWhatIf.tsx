@@ -16,6 +16,7 @@ import { DsuPanel, sweepEvaluator } from '../components/DsuPanel'
 import { applyDsu, type DsuPolicy } from '../lib/dsu'
 import { applyDsuRebalance, defaultPool, rebalanceApi, type CpuRebalance, type CpuRebalanceRequest } from '../lib/rebalance'
 import { AssumptionSensitivity, CrossSocCompare, RebalanceResults, RebalanceSetup, type Knob as RbKnob, type SetupRow, type TaskState } from '../components/RebalanceView'
+import { ModelCheckDist } from '../components/ClockResidency'
 
 type TaskEdit = { sweep: string[] | null; threads: string; budget: string; growth: string }
 type Adv = { freqMargin: string; fitsMargin: string; utilModel: '' | 'util_est' | 'pelt_avg'; halflife: string; boost: '' | 'on' | 'off'; emStatic: '' | 'on' | 'off' }
@@ -400,6 +401,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
       {mode === 'rebalance' && rb && <div className="tb-grid">
         {cmpTarget && <CrossSocCompare a={rb} b={cmpRb ? applyDsuRebalance(cmpRb, dsuExp) : null} aName={topo?.soc_ref ?? target} bName={inputs.data?.topologies.find((t) => t.id === cmpTarget)?.soc_ref ?? cmpTarget} error={cmpErr} busy={busy} />}
         <RebalanceResults r={rb} sel={rbSel} setSel={setRbSel} knob={rbKnob}
+          onPickStrategy={(assign) => setTaskStates((m) => ({ ...m, ...Object.fromEntries(Object.entries(assign).flatMap(([u, c]) => u.split('+').map((t) => [t, `pin:${c}` as TaskState]))) }))}
           sensitivity={rbRaw && <AssumptionSensitivity base={rb} dsu={dsuExp}
             runVariant={(patch) => rebalanceApi.run({ ...rbRequest(request(edits, dsuReq)), ...patch }).then((r) => (dsuExp ? applyDsuRebalance(r, dsuExp) : r))} />} /></div>}
       {mode === 'sweep' && result && ref && <>
@@ -412,7 +414,8 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
         </section>
         <div className="tb-grid">
           <Card id="cpu-cal" title="모델 확인" help={CPU_HELP.cal} note="측정 residency vs EAS 재현 (현재 배치) — 차이가 크면 scheduler 보정값부터 조정">
-            <table className="grid pm-table"><thead><tr><th>cluster</th><th style={{ textAlign: 'right' }}>측정 평균 MHz</th><th style={{ textAlign: 'right' }}>모델 MHz</th><th style={{ textAlign: 'right' }}>측정 active</th><th style={{ textAlign: 'right' }}>모델 util</th></tr></thead>
+            <table className="grid pm-table"><thead><tr><th>cluster</th><th style={{ textAlign: 'right' }}>측정 평균 MHz</th><th style={{ textAlign: 'right' }}>모델 MHz</th><th style={{ textAlign: 'right' }}>측정 active</th><th style={{ textAlign: 'right' }}>모델 util</th>
+              <th title="측정 주파수 분포 (회색 전체 · 청록 running) · 진한 선 = 측정 평균 · 빨간 점선 = 모델 MHz">측정 분포 vs 모델</th></tr></thead>
               <tbody>{clusterNames.map((c) => {
                 const k = result.calibration[c], m = result.measured_placement.clusters[c]
                 if (!k && !m) return null
@@ -420,7 +423,9 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
                   <td className="mono" style={{ textAlign: 'right' }}>{k?.measured_mean_mhz === undefined ? '—' : fmt(k.measured_mean_mhz, 0)}</td>
                   <td className="mono" style={{ textAlign: 'right' }}>{m ? fmt(m.mhz, 0) : '—'}{m && m.boosted_by.length ? <span className="faint"> (boost {m.boosted_by.join(',')})</span> : null}</td>
                   <td className="mono" style={{ textAlign: 'right' }}>{k?.measured_active === undefined ? '—' : `${fmt(k.measured_active * 100, 1)}%`}</td>
-                  <td className="mono" style={{ textAlign: 'right' }}>{m ? `${fmt(m.util * 100, 1)}%` : '—'}</td></tr>
+                  <td className="mono" style={{ textAlign: 'right' }}>{m ? `${fmt(m.util * 100, 1)}%` : '—'}</td>
+                  <td><ModelCheckDist wall={k?.measured_residency} active={k?.measured_residency_active} modelMhz={m?.mhz}
+                    fmax={result.range.clusters.find((x) => x.name === c)?.opp_max_mhz} /></td></tr>
               })}</tbody></table>
           </Card>
           <Card id="cpu-stack" title={`${refName} 대비 전력이 낮은 후보`} help={CPU_HELP.better}
