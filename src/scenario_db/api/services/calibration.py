@@ -215,6 +215,7 @@ def coverage(db: Session, scenario_id: str) -> dict[str, dict[str, Any]]:
                 "id": ev.id, "at": _iso(ev.measured_at) or run.get("timestamp"), "tool": run.get("tool"),
                 "tool_version": run.get("tool_version"), "source": run.get("source"),
                 "sw_baseline_ref": ev.sw_baseline_ref, "total_mw": _total(ev.kpi).get("mean"),
+                "by": run.get("writer"),
             })
         elif ev.kind == "evidence.measurement":
             bucket = _origin_bucket(ev.provenance)

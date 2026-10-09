@@ -34,7 +34,7 @@ export interface MeasDetail {
   clock_residency?: ClockView | null
 }
 
-export interface CoverageSim { id: string; at: string | null; tool?: string | null; tool_version?: string | null; source?: string | null; sw_baseline_ref?: string | null; total_mw?: number | null; shown?: boolean }
+export interface CoverageSim { id: string; at: string | null; tool?: string | null; tool_version?: string | null; source?: string | null; sw_baseline_ref?: string | null; total_mw?: number | null; shown?: boolean; by?: string | null }
 export interface CoverageMeas { id: string; at: string | null; origin: string; synthetic: boolean; sw_baseline_ref?: string | null; silicon_rev?: string | null; thermal?: string | null; build_id?: string | null; total_mw?: number | null; shown?: boolean }
 export interface CoveragePrediction { id: string; total_mw: number | null; created_at?: string | null; run?: string | null; case_key?: string | null; selection_rule?: string | null; selected_by?: string | null; dvfs_table_ref?: string | null; supersedes?: string | null; version?: number }
 export interface Coverage {
@@ -68,7 +68,7 @@ export function simTooltip(c: Coverage): string {
   const sims = c.simulations ?? []
   if (!sims.length) return `simulation evidence ${c.simulation}건`
   return [`simulation evidence ${sims.length}건 (최신순, ▶ = 대표)`,
-    ...sims.slice(0, 6).map((s) => `${s.shown ? '▶' : ' '} ${dayOf(s.at)} · ${s.tool ?? 'sim'} v${s.tool_version ?? '?'}${s.source ? ` (${s.source})` : ''} · SW ${s.sw_baseline_ref ?? '—'}${s.total_mw != null ? ` · ${s.total_mw.toFixed(0)} mW` : ''}\n    ${s.id}`),
+    ...sims.slice(0, 6).map((s) => `${s.shown ? '▶' : ' '} ${dayOf(s.at)} · ${s.tool ?? 'sim'} v${s.tool_version ?? '?'}${s.source ? ` (${s.source})` : ''} · SW ${s.sw_baseline_ref ?? '—'}${s.total_mw != null ? ` · ${s.total_mw.toFixed(0)} mW` : ''}${s.by ? ` · by ${s.by}` : ''}\n    ${s.id}`),
     ...(sims.length > 6 ? [`… 외 ${sims.length - 6}건`] : [])].join('\n')
 }
 export function predictionTooltip(p: CoveragePrediction, short?: string): string {

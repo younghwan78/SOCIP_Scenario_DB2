@@ -30,7 +30,8 @@ it('stops retrying CPU admission and reports the final error', async () => {
   const pending = expect(cpuApi.sweep({} as CpuSweepRequest)).rejects.toThrow(/simulation concurrency limit reached/)
   await vi.runAllTimersAsync()
   await pending
-  expect(fetcher).toHaveBeenCalledTimes(7)
+  // waits for other users' runs up to the admission budget (2 min) before reporting the 429
+  expect(fetcher.mock.calls.length).toBeGreaterThan(20)
 })
 
 it('does not retry CPU validation errors', async () => {

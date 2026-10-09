@@ -2,6 +2,7 @@
 // Backend: POST /timing-budget/variant, /timing-budget/fleet (src/scenario_db/sim/timing_budget.py).
 import { API_BASE, ApiError } from './api'
 import type { VariantFailure } from '../components/VariantFailures'
+import { fetchAdmitted } from './admission'
 
 export type StageId = 'rt' | 'nrt' | 'post' | 'output'
 export type Statistic = 'min' | 'mean' | 'max'
@@ -158,17 +159,7 @@ export const pct0 = (m: number) => `${Math.round(m * 100)}%`
 /** Margin options for API calls: both rule margins follow the one SW margin. */
 export const marginOpts = (m: number) => (Math.abs(m - DEFAULT_SW_MARGIN) < 1e-9 ? {} : { rt_margin: m, output_margin: m })
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
-
-/** fetch with retry on 429: the API admits only N concurrent simulations per worker (non-blocking). */
-export async function fetchAdmitted(url: string, init: RequestInit, retries = 6): Promise<Response> {
-  for (let i = 0; ; i++) {
-    const res = await fetch(url, init)
-    if (res.status !== 429 || i >= retries) return res
-    const after = Number(res.headers?.get?.('Retry-After') ?? 1)
-    await sleep(Math.min(4000, (Number.isFinite(after) && after > 0 ? after * 1000 : 1000) * (0.5 + 0.25 * i) + Math.random() * 200))
-  }
-}
+export { fetchAdmitted } from './admission'
 
 async function postJson<T>(path: string, body: unknown): Promise<T> {
   const res = await fetchAdmitted(`${API_BASE}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })

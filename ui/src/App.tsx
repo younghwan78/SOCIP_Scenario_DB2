@@ -21,6 +21,7 @@ import { LibraryPage } from './pages/Library'
 import { SettingsPage } from './pages/Settings'
 import { PREFERRED_REFERENCE } from './lib/defaults'
 import { addItem, canonicalOf, compareItems, counterpart, defaultScenario, formatItems, projectText, projectsOf, type ProjectInfo } from './lib/projects'
+import { AdmissionWaitPill } from './components/AdmissionWait'
 
 type NavItem = { page: Page; label: string; icon: string; also?: Page[] }
 // Review workflow (U9): 선택 → 예측 → 검증 → 최적화 → 결정·보고, then Library. Home = brand link; legacy Streamlit lives in 설정.
@@ -222,6 +223,7 @@ export default function App() {
         onPick={(s, v) => (picker === 'compare' || route.page === 'compare' ? toCompare(s, v)
           : navigate(route.page === 'timing' ? 'timing' : 'pipeline', { scenario: s, variant: v }))}
         onAddCompare={toCompare} />
+      <AdmissionWaitPill />
     </div>
   )
 }

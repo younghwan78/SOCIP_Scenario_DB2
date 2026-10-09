@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Session
 
-from scenario_db.api.auth import ApiPrincipal, require_roles
+from scenario_db.api.auth import ApiPrincipal, audit_user, require_roles
 from scenario_db.api.deps import get_db
 from scenario_db.api.resource_limits import admission_slot, enforce_timeline_frame_limit
 from scenario_db.api.schemas.common import PagedResponse
@@ -54,7 +54,7 @@ def run_simulation(
         settings.simulation_max_timeline_frames,
     )
     with admission_slot("simulation", settings.simulation_max_concurrent_runs):
-        return run_simulation_request(db, request)
+        return run_simulation_request(db, request, requested_by=audit_user(_principal))
 
 
 @router.get("/readiness", response_model=SimulationReadinessResponse)
