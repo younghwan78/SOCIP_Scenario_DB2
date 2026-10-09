@@ -43,8 +43,9 @@ it('keeps the SW what-if on the selected CPU and throughput models', async () =>
   const ctx = { scenario: 's', variant: 'v', params: {}, navigate: vi.fn() } as unknown as Ctx
   await act(async () => root.render(<TimingBudgetPage ctx={ctx} />))
   expect(send.mock.calls.find((c) => c[2].include_whatif)?.[2]).toMatchObject({
-    cpu_model: 'flat', throughput_model: 'pipelined',
+    cpu_model: 'flat',
   })
+  expect(send.mock.calls.find((c) => c[2].include_whatif)?.[2]).not.toHaveProperty('throughput_model')
   await act(async () => root.render(<TimingBudgetPage ctx={{ ...ctx, params: { cpu: 'profile', tp: 'stage' } }} />))
   const whatifs = send.mock.calls.filter((c) => c[2].include_whatif)
   expect(whatifs).toHaveLength(2)

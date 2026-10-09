@@ -31,6 +31,12 @@ def test_project_yaml_accepts_review_policy_and_stays_optional():
     assert rp.thermal_watch[0].reduction_pct == [10.0, 20.0] and rp.power_reference.values_mw == {"v1": 1000.0}
     with pytest.raises(ValueError):
         Project.model_validate(base | {"globals": {"review_policy": {"throughput_model": "frame"}}})
+    for value in (0, -1, float("nan"), float("inf")):
+        with pytest.raises(ValueError):
+            ReviewPolicy(power_reference={"values_mw": {"v1": value}})
+    for value in (0, -10, 101, float("nan")):
+        with pytest.raises(ValueError):
+            ReviewPolicy(thermal_watch=[{"scenario_ref": "uc-x", "variant_ref": "v1", "reduction_pct": [value]}])
 
 
 def test_power_judgement_against_previous_project():

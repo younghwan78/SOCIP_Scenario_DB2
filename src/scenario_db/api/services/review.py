@@ -17,8 +17,9 @@ from sqlalchemy.orm import Session
 from scenario_db.api.services.calibration import _iso, _total, _when, is_synthetic
 from scenario_db.api.services.review_policy import policy_view, project_policy
 from scenario_db.db.models.evidence import Evidence
+from scenario_db.db.models.definition import Scenario, ScenarioVariant
 from scenario_db.db.models.exploration import ArchExplorationRun, Prediction
-from scenario_db.exceptions import NotFoundError
+from scenario_db.exceptions import NotFoundError, UnprocessableError
 
 
 def power_references(db: Session, project_ref: str) -> dict[str, Any]:
@@ -29,18 +30,24 @@ def power_references(db: Session, project_ref: str) -> dict[str, Any]:
     if ref is None:
         return {"policy": policy_view(policy), "tolerance_pct": None, "references": out}
     if ref.project_ref:
+        scopes: dict[str, set[str]] = {}
         for p in db.query(Prediction).filter(Prediction.project_ref == ref.project_ref, Prediction.status == "current").all():
             mw = ((p.metrics or {}).get("power") or {}).get("total_mw")
             if mw is not None:
+                scopes.setdefault(p.variant_ref, set()).add(p.scenario_ref)
                 out.setdefault(p.variant_ref, {"mw": float(mw), "source": "prediction", "project_ref": ref.project_ref,
                                                "id": p.id, "at": _iso(p.created_at)})
         meas = (db.query(Evidence).filter(Evidence.kind == "evidence.measurement", Evidence.project_ref == ref.project_ref).all())
         meas.sort(key=lambda m: (not is_synthetic(m.provenance), _when(_iso(m.measured_at))), reverse=True)
         for m in meas:
             mw = _total(m.kpi).get("mean")
+            if mw is not None:
+                scopes.setdefault(m.variant_ref, set()).add(m.scenario_ref)
             if mw is not None and m.variant_ref not in out:
                 out[m.variant_ref] = {"mw": float(mw), "source": "synthetic" if is_synthetic(m.provenance) else "measurement",
                                       "project_ref": ref.project_ref, "id": m.id, "at": _iso(m.measured_at)}
+        # Variant IDs are scenario-local. An ambiguous previous-project ID is not a usable reference.
+        out = {vid: value for vid, value in out.items() if len(scopes.get(vid, set())) == 1}
     for vid, mw in ref.values_mw.items():
         out[vid] = {"mw": float(mw), "source": "explicit", "project_ref": ref.project_ref, "id": None, "at": None,
                     "note": ref.source_note}
@@ -125,7 +132,7 @@ def plan_for(items: list[dict[str, Any]], current_mw: float, ask_pct: float) -> 
 def thermal_watch(db: Session, project_ref: str, *, dvfs_whatif=None) -> dict[str, Any]:
     """Per watch-list variant: current prediction, reference judgement, reduction menu and 10 / 20 % plans.
 
-    ``dvfs_whatif(scenario_id, variant_id) -> rows`` supplies DVFS level-down rows (timing-budget what-if); omitted =
+    ``dvfs_whatif(scenario_id, variant_id) -> {base, rows}`` supplies DVFS level-down rows with their baseline; omitted =
     no DVFS levers (tests, or when the timing analysis fails).
     """
     policy = project_policy(db, project_ref)
@@ -134,7 +141,13 @@ def thermal_watch(db: Session, project_ref: str, *, dvfs_whatif=None) -> dict[st
     refs = power_references(db, project_ref)
     out = []
     for w in policy.thermal_watch:
-        pred = db.query(Prediction).filter_by(scenario_ref=w.scenario_ref, variant_ref=w.variant_ref, status="current").one_or_none()
+        scenario = db.get(Scenario, w.scenario_ref)
+        if scenario is None or scenario.project_ref != project_ref:
+            raise UnprocessableError("thermal-watch scenario must belong to the selected project")
+        if db.get(ScenarioVariant, (w.scenario_ref, w.variant_ref)) is None:
+            raise UnprocessableError("thermal-watch variant does not exist in the selected scenario")
+        pred = db.query(Prediction).filter_by(project_ref=project_ref, scenario_ref=w.scenario_ref,
+                                             variant_ref=w.variant_ref, status="current").one_or_none()
         run_id = pred.exploration_run_ref if pred is not None else _latest_run_with(db, project_ref, w.scenario_ref, w.variant_ref)
         v = _run_variant(db, run_id, w.scenario_ref, w.variant_ref) if run_id else None
         registered = ((pred.metrics or {}).get("power") or {}).get("total_mw") if pred is not None else \
@@ -162,7 +175,12 @@ def thermal_watch(db: Session, project_ref: str, *, dvfs_whatif=None) -> dict[st
             dv_rows = None
             if dvfs_whatif is not None:
                 try:
-                    dv_rows = dvfs_whatif(w.scenario_ref, w.variant_ref)
+                    dvfs = dvfs_whatif(w.scenario_ref, w.variant_ref)
+                    base_mw = (dvfs.get("base") or {}).get("total_mw")
+                    if base_mw is not None and abs(float(base_mw) - float(current)) <= 0.5:
+                        dv_rows = dvfs["rows"]
+                    else:
+                        row["notes"].append("DVFS 기준 power가 화질 유지 기준과 달라 절감량 합산에서 제외 — 동일 조건으로 재계산 필요")
                 except Exception as exc:  # noqa: BLE001 - the menu still works without DVFS levers
                     row["notes"].append(f"DVFS level what-if 실패: {str(exc)[:160]}")
             row["menu"] = reduction_menu(v, float(current), dv_rows)
