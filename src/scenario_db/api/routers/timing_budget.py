@@ -7,12 +7,14 @@ from scenario_db.api.auth import ApiPrincipal, require_roles
 from scenario_db.api.deps import get_db
 from scenario_db.api.resource_limits import admission_slot, enforce_request_size, enforce_timeline_frame_limit
 from scenario_db.api.schemas.timing_budget import (
+    TimingBudgetDvfsWhatIfRequest,
     TimingBudgetFleetRequest,
     TimingBudgetFleetResponse,
     TimingBudgetRequest,
     TimingBudgetResponse,
 )
 from scenario_db.api.services.timing_budget import (
+    analyze_dvfs_whatif_request,
     analyze_timing_budget_fleet,
     analyze_timing_budget_request,
 )
@@ -33,6 +35,20 @@ def timing_budget_variant(
     enforce_timeline_frame_limit(request.options.frames, settings.simulation_max_timeline_frames)
     with admission_slot("simulation", settings.simulation_max_concurrent_runs):
         return analyze_timing_budget_request(db, request)
+
+
+@router.post("/dvfs-whatif", response_model=dict)
+def timing_budget_dvfs_whatif(
+    request: TimingBudgetDvfsWhatIfRequest,
+    db: Session = Depends(get_db),
+    _principal: ApiPrincipal = Depends(require_roles("analyst", "writer", "admin")),
+):
+    """DVFS domain level +/-k: SW slack, power, BW and verdict per domain and shift (read-only)."""
+    settings = get_settings()
+    enforce_request_size(request, settings.exploration_max_request_bytes)
+    enforce_timeline_frame_limit(request.options.frames, settings.simulation_max_timeline_frames)
+    with admission_slot("simulation", settings.simulation_max_concurrent_runs):
+        return analyze_dvfs_whatif_request(db, request)
 
 
 @router.post("/fleet", response_model=TimingBudgetFleetResponse)

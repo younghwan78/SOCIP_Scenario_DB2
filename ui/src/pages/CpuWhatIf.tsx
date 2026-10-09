@@ -17,6 +17,7 @@ import { applyDsu, type DsuPolicy } from '../lib/dsu'
 import { applyDsuRebalance, defaultPool, rebalanceApi, type CpuRebalance, type CpuRebalanceRequest } from '../lib/rebalance'
 import { AssumptionSensitivity, CrossSocCompare, RebalanceResults, RebalanceSetup, type Knob as RbKnob, type SetupRow, type TaskState } from '../components/RebalanceView'
 import { ModelCheckDist } from '../components/ClockResidency'
+import { CpuPurpose, type CpuRun } from '../components/CpuPurpose'
 
 type TaskEdit = { sweep: string[] | null; threads: string; budget: string; growth: string }
 type Adv = { freqMargin: string; fitsMargin: string; utilModel: '' | 'util_est' | 'pelt_avg'; halflife: string; boost: '' | 'on' | 'off'; emStatic: '' | 'on' | 'off' }
@@ -71,6 +72,8 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
   const [rbKnob, setRbKnob] = usePref<RbKnob>('cpu.rb.knob', 'cpuset')
   const [cmpRb, setCmpRb] = useState<CpuRebalance | null>(null)
   const [cmpErr, setCmpErr] = useState<string | null>(null)
+  const [runs, setRuns] = useState<CpuRun[]>([])
+  const [pendingRun, setPendingRun] = useState(false)
   const rb = useMemo(() => (rbRaw ? applyDsuRebalance(rbRaw, dsuExp) : null), [rbRaw, dsuExp])
 
   const prof = inputs.data?.profiles.find((p) => p.id === profile)
@@ -128,13 +131,21 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
       if (id !== requestId.current) return
       setRbRaw(r); setRbSel(r.cases[0] ? `c${r.cases[0].rank}` : 'ref')
       setCmpRb(null); setCmpErr(null)
+      let cmpRes: CpuRebalance | null = null
       if (cmpTarget && cmpTarget !== payload.power_params_ref) {
         const exclude = Object.fromEntries(Object.entries(payload.locks).filter(([, v]) => v === 'exclude'))
         try {
           const c = await rebalanceApi.run({ ...payload, power_params_ref: cmpTarget, base_power_params_ref: payload.base_power_params_ref || payload.power_params_ref, pool: [], locks: exclude })
-          if (id === requestId.current) setCmpRb(c)
+          if (id === requestId.current) { setCmpRb(c); cmpRes = c }
         } catch (e) { if (id === requestId.current) setCmpErr(String((e as Error).message ?? e)) }
       }
+      const { default_growth: _growth, cpu_bw_scale: _bw, ...runContext } = payload
+      if (id === requestId.current) setRuns((rs) => [...rs.slice(-11), {
+        context: JSON.stringify(runContext),
+        n: (rs[rs.length - 1]?.n ?? 0) + 1, profile: payload.cpu_profile_ref, target: payload.power_params_ref, cmp: cmpRes ? cmpTarget : null,
+        growth: payload.default_growth ?? 1, bwScale: payload.cpu_bw_scale ?? 1, pgEff: payload.power_gating_eff ?? 0.9,
+        ref_mw: r.reference.total_mw, best_mw: r.best?.total_mw ?? null, cmp_ref_mw: cmpRes?.reference.total_mw ?? null, cmp_best_mw: cmpRes?.best?.total_mw ?? null,
+        winner: r.strategies?.winner ?? null }])
     } catch (e) {
       if (id === requestId.current) setError(String((e as Error).message ?? e))
     } finally { if (id === requestId.current) setBusy(false) }
@@ -229,6 +240,8 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
     counts.forEach((n) => { for (let k = 2; k <= n; k++) reduced = Math.floor(reduced / k) })
     return { units, splits, reduced }
   }, [rbRows, pool, taskStates, groups, rbRaw])
+  // purpose-panel presets: state first, then one run with the new values (effect sees the updated closure)
+  useEffect(() => { if (pendingRun) { setPendingRun(false); void run() } }, [pendingRun]) // eslint-disable-line react-hooks/exhaustive-deps
   const applyDsuToServer = (pol: DsuPolicy | null) => { setDsuReq(pol); setDsuExp(null); void run(request(edits, pol)) }
   const toggleKnob = (k: Knob) => setKnobs((ks) => (ks.includes(k) ? ks.filter((x) => x !== k) : [...ks, k]))
 
@@ -278,6 +291,9 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
         </div>
         <span className="faint" style={{ fontSize: 12 }}>{mode === 'rebalance' ? '한 MID cluster에 몰린 task를 같은 tier의 cluster로 나눴을 때 CPU + DSU 전력 최저점' : 'task별 knob 조합 자동 탐색 · 현재보다 전력이 낮은 배치'}</span>
       </div>
+      <CpuPurpose rb={rb} cmp={cmpRb} runs={runs} growth={growth} bwScale={bwScale}
+        onRebalance={() => { setMode('rebalance'); setPendingRun(true) }}
+        onPreset={(p) => { setMode('rebalance'); if (p.growth !== undefined) setGrowth(p.growth); if (p.bwScale !== undefined) setBwScale(p.bwScale); setPendingRun(true) }} />
       {inputs.error && <div className="err">{inputs.error}</div>}
       {inputs.data && (!inputs.data.profiles.length || !inputs.data.topologies.length) && <div className="lib-note warn">
         sweep에 필요한 입력이 없습니다 — 측정 CPU profile <b>{inputs.data.profiles.length}건</b> · CPU topology(power_model_params) <b>{inputs.data.topologies.length}건</b>.

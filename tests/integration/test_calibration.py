@@ -37,8 +37,14 @@ def test_calibration_scope_recency_and_constant_query_count(engine):
         # a silicon capture records how and on which device it was taken; without it the origin is unknown
         db.get(Evidence, f'{sid}-measurement1').provenance = {'collection_method': 'power_monitor', 'device_id': 'EVT1-01'}
         db.flush()
-        assert cal.coverage(db, sid)['v'] == {
+        cov = cal.coverage(db, sid)['v']
+        assert {k: cov[k] for k in ('simulation', 'measurement', 'synthetic', 'unknown', 'current_prediction')} == {
             'simulation': 2, 'measurement': 1, 'synthetic': 1, 'unknown': 0, 'current_prediction': None}
+        # registration detail for the Scenario page tooltips: newest first, representative = newest real measurement
+        assert [x['id'] for x in cov['simulations']] == [f'{sid}-a-new', f'{sid}-z-old']
+        assert cov['simulations'][0]['shown'] and cov['simulations'][0]['at'].startswith('2026')
+        assert [(x['id'], x['synthetic'], x['shown']) for x in cov['measurements']] == [
+            (f'{sid}-measurement1', False, True), (f'{sid}-measurement2', True, False)]
         assert cal.coverage_summary(db)[sid] == {
             'simulation': 1, 'measurement': 1, 'synthetic': 1, 'unknown': 0, 'current_prediction': 0}
         queries = []
@@ -93,3 +99,47 @@ def test_calibration_scope_recency_and_constant_query_count(engine):
         assert len(sw['measured']) == 2
         assert sum(t['synthetic'] for t in sw['measured']) == 1
         db.rollback()
+
+
+def test_ip_bandwidth_joins_measured_ip_scope_on_node_or_hw_name(engine):
+    with Session(engine) as db:
+        sid = 'review-ipbw-' + uuid4().hex
+        project = db.query(Scenario.project_ref).first()[0]
+        db.add(Scenario(id=sid, project_ref=project, schema_version='1.0.0', metadata_={}, pipeline={}, yaml_sha256='test'))
+        db.flush()
+        db.add(ScenarioVariant(scenario_id=sid, id='v', design_conditions={}, node_configs={}))
+        dma = [{'node_id': 'mtnr', 'hw_name': 'MTNR', 'port': 'R0', 'direction': 'read', 'bw_mbs': 100.0},
+               {'node_id': 'mtnr', 'hw_name': 'MTNR', 'port': 'R1', 'direction': 'read', 'bw_mbs': 50.0},
+               {'node_id': 'mtnr', 'hw_name': 'MTNR', 'port': 'W0', 'direction': 'write', 'bw_mbs': 80.0},
+               {'node_id': 'mfc_enc', 'hw_name': 'MFC', 'port': 'R', 'direction': 'read', 'bw_mbs': 40.0},
+               {'node_id': 'dpu', 'hw_name': 'DPU', 'port': 'R', 'direction': 'read', 'bw_mbs': 20.0}]
+        db.add(Evidence(id=f'{sid}-sim', scenario_ref=sid, variant_ref='v', schema_version='1.0.0', kind='evidence.simulation',
+                        run_info={'timestamp': '2026-10-01T00:00:00Z', 'tool_version': '0.1.0'}, execution_context={}, aggregation={},
+                        kpi={}, dma_breakdown=dma, yaml_sha256='test'))
+        obs = lambda m, ref, v: {'metric_id': m, 'scope': {'kind': 'ip', 'ref': ref}, 'unit': 'MB/s', 'stats': {'mean': v, 'p95': v * 1.1}}  # noqa: E731
+        db.add(Evidence(id=f'{sid}-meas', scenario_ref=sid, variant_ref='v', schema_version='1.0.0', kind='evidence.measurement',
+                        measured_at=datetime(2026, 10, 2, tzinfo=timezone.utc), execution_context={'silicon_rev': 'EVT1'}, aggregation={}, kpi={},
+                        provenance={'collection_method': 'synthetic_fixture', 'device_id': 'SYNTHETIC'}, yaml_sha256='test',
+                        metric_observations=[obs('bandwidth.read', 'MTNR', 120.0), obs('bandwidth.write', 'MTNR', 100.0),
+                                             obs('bandwidth.read', 'MFC', 50.0), obs('bandwidth.read', 'DPU', 25.0), obs('bandwidth.read', 'GPU', 9.0)]))
+        db.flush()
+        out = cal.ip_bandwidth(db, sid, 'v')
+        rows = {r['node']: r for r in out['rows']}
+        assert rows['mtnr']['pred'] == {'read': 150.0, 'write': 80.0, 'total': 230.0} and rows['mtnr']['ports'] == 3
+        assert rows['mtnr']['meas']['read'] == 120.0 and rows['mtnr']['delta_pct']['read'] == 25.0
+        assert rows['mtnr']['delta_pct']['total'] == round(100 * (230 - 220) / 220, 2)
+        assert rows['mfc_enc']['measured_ref'] == 'MFC'           # joined on hw_name when the node id differs
+        assert rows['dpu']['meas']['total'] == 25.0                 # write not measured, model has no write either
+        assert out['unmatched'] == [{'ref': 'GPU', 'read': 9.0}]
+        assert out['measurement']['id'] == f'{sid}-meas' and out['measurement']['synthetic'] is True
+        assert out['simulation']['id'] == f'{sid}-sim'
+        for suffix, origin, year in [('physical', 'physical_capture', 2024), ('unknown', 'unknown', 2026)]:
+            db.add(Evidence(id=f'{sid}-{suffix}', scenario_ref=sid, variant_ref='v', schema_version='1.0.0',
+                            kind='evidence.measurement', measured_at=datetime(year, 1, 1, tzinfo=timezone.utc),
+                            provenance={'data_origin': origin}, execution_context={}, aggregation={},
+                            kpi={'total_power_mw': 10}, yaml_sha256='test',
+                            metric_observations=[obs('bandwidth.read', 'MTNR', 120.0)]))
+        db.flush()
+        # Unknown provenance must not displace an older physical capture.
+        assert cal.ip_bandwidth(db, sid, 'v')['measurement']['id'] == f'{sid}-physical'
+        assert next(m for m in cal.coverage(db, sid)['v']['measurements'] if m['shown'])['id'] == f'{sid}-physical'

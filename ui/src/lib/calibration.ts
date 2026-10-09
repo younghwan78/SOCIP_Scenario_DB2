@@ -34,12 +34,67 @@ export interface MeasDetail {
   clock_residency?: ClockView | null
 }
 
-export interface Coverage { simulation: number; measurement: number; synthetic: number; unknown?: number; current_prediction: { id: string; total_mw: number | null } | null }
+export interface CoverageSim { id: string; at: string | null; tool?: string | null; tool_version?: string | null; source?: string | null; sw_baseline_ref?: string | null; total_mw?: number | null; shown?: boolean }
+export interface CoverageMeas { id: string; at: string | null; origin: string; synthetic: boolean; sw_baseline_ref?: string | null; silicon_rev?: string | null; thermal?: string | null; build_id?: string | null; total_mw?: number | null; shown?: boolean }
+export interface CoveragePrediction { id: string; total_mw: number | null; created_at?: string | null; run?: string | null; case_key?: string | null; selection_rule?: string | null; selected_by?: string | null; dvfs_table_ref?: string | null; supersedes?: string | null; version?: number }
+export interface Coverage {
+  simulation: number; measurement: number; synthetic: number; unknown?: number; current_prediction: CoveragePrediction | null
+  /** API ≥ 2026-10-09: newest first, ``shown`` = the representative entry */
+  simulations?: CoverageSim[]; measurements?: CoverageMeas[]
+}
+
+/** "PRED-3fa9c…" style short id: prefix + first 5 characters of the key. */
+export function shortId(id: string | null | undefined, n = 5): string {
+  if (!id) return '—'
+  const m = /^([A-Za-z]+-)([0-9a-f]{12,})$/.exec(id)
+  if (m) return `${m[1]}${m[2].slice(0, n)}…`
+  return id.length > 32 ? `${id.slice(0, 28)}…` : id
+}
+/** ISO timestamp → "2026-10-04" (local date of the recorded offset). */
+export const dayOf = (at: string | null | undefined): string => (at ? at.slice(0, 10) : '날짜 없음')
+
+export function simTooltip(c: Coverage): string {
+  const sims = c.simulations ?? []
+  if (!sims.length) return `simulation evidence ${c.simulation}건`
+  return [`simulation evidence ${sims.length}건 (최신순, ▶ = 대표)`,
+    ...sims.slice(0, 6).map((s) => `${s.shown ? '▶' : ' '} ${dayOf(s.at)} · ${s.tool ?? 'sim'} v${s.tool_version ?? '?'}${s.source ? ` (${s.source})` : ''} · SW ${s.sw_baseline_ref ?? '—'}${s.total_mw != null ? ` · ${s.total_mw.toFixed(0)} mW` : ''}\n    ${s.id}`),
+    ...(sims.length > 6 ? [`… 외 ${sims.length - 6}건`] : [])].join('\n')
+}
+export function predictionTooltip(p: CoveragePrediction): string {
+  return [`등록 예측 ${shortId(p.id)}${p.version ? ` · v${p.version}` : ''} · ${dayOf(p.created_at)}`,
+    p.total_mw != null ? `total ${p.total_mw.toFixed(0)} mW` : null,
+    p.selection_rule ? `선정 ${p.selection_rule}${p.selected_by ? ` (${p.selected_by})` : ''}` : null,
+    p.run ? `조합 탐색 run ${shortId(p.run)}` : null,
+    p.dvfs_table_ref ? `DVFS ${p.dvfs_table_ref}` : null,
+    p.supersedes ? `이전 등록 ${shortId(p.supersedes)} 대체` : null].filter(Boolean).join('\n')
+}
+export function measTooltip(c: Coverage): string {
+  const ms = c.measurements ?? []
+  if (!ms.length) return `실제 측정 ${c.measurement}건 · 합성 ${c.synthetic}건`
+  return [`측정 evidence ${ms.length}건 (▶ = 대표: 최신 실측 → 합성 순)`,
+    ...ms.slice(0, 6).map((m) => `${m.shown ? '▶' : ' '} ${dayOf(m.at)} · ${m.synthetic ? '합성' : '실측'} · ${m.silicon_rev ?? '—'} · SW ${m.sw_baseline_ref ?? '—'}${m.build_id ? ` · ${m.build_id}` : ''}${m.total_mw != null ? ` · ${m.total_mw.toFixed(0)} mW` : ' · power 없음'}\n    ${m.id}`),
+    ...(ms.length > 6 ? [`… 외 ${ms.length - 6}건`] : [])].join('\n')
+}
 export const calibrationApi = {
   coverageSummary: () => getJson<Record<string, Record<'simulation' | 'measurement' | 'synthetic' | 'current_prediction', number>>>('/calibration/coverage-summary', {}, false),
   coverage: (scenarioId: string) => getJson<Record<string, Coverage>>('/calibration/coverage', { scenario_id: scenarioId }, false),
   measurements: (scenarioId?: string) => getJson<MeasRow[]>('/calibration/measurements', { scenario_id: scenarioId }, false),
   detail: (id: string) => getJson<MeasDetail>(`/calibration/measurements/${encodeURIComponent(id)}`, {}, false),
+  ipBandwidth: (scenarioId: string, variantId: string, measurementId?: string) =>
+    getJson<IpBandwidth>('/calibration/ip-bandwidth', { scenario_id: scenarioId, variant_id: variantId, measurement_id: measurementId }, false),
+}
+
+type Rw = { read: number | null; write: number | null; total: number | null }
+export interface IpBwRow {
+  node: string; hw_name?: string | null; ports: number; measured_ref: string | null
+  pred: { read: number; write: number; total: number }; meas: (Rw & { read_p95?: number | null; write_p95?: number | null }) | null; delta_pct: Rw | null
+}
+export interface IpBandwidth {
+  scenario_id: string; variant_id: string; rows: IpBwRow[]; note: string
+  simulation: { id: string; at: string | null; tool_version?: string | null } | null
+  measurement: { id: string; at: string | null; synthetic: boolean; sw_baseline_ref?: string | null; silicon_rev?: string | null } | null
+  measurements: { id: string; at: string | null; synthetic: boolean }[]
+  unmatched: { ref: string; read?: number | null; write?: number | null; total?: number | null }[]
 }
 
 export const CAT_LABEL: Record<Category, string> = { cpu: 'CPU (SW)', ip: 'IP (HW core)', bw: 'BW (MIF · DRAM)', other: '기타 (미모델)' }

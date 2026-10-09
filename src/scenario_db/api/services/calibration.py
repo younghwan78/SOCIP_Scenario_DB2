@@ -175,21 +175,74 @@ def _pred_split(power: dict[str, Any]) -> dict[str, float]:
             "bw": float(power.get("bw_mw") or 0.0)}
 
 
+def _iso(dt: Any) -> str | None:
+    return dt.isoformat() if dt is not None else None
+
+
+def _when(at: str | None) -> datetime:
+    """Sort key for ISO timestamps with mixed offsets (naive = UTC, unparsable / missing = oldest)."""
+    try:
+        dt = datetime.fromisoformat(at) if at else None
+    except ValueError:
+        dt = None
+    if dt is None:
+        return datetime.min.replace(tzinfo=timezone.utc)
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
 def coverage(db: Session, scenario_id: str) -> dict[str, dict[str, Any]]:
-    """Per variant: simulation evidence count, real / synthetic measurement count, current prediction."""
+    """Per variant: simulation evidence count, real / synthetic measurement count, current prediction.
+
+    Besides the counts (unchanged), each variant lists its simulation and measurement evidence newest
+    first with the registration facts the Scenario page tooltips show (date, engine version, SW, silicon,
+    origin) — ``shown`` marks the entry the page's numbers come from (the newest one).
+    """
     out: dict[str, dict[str, Any]] = {}
 
     def row(v: str) -> dict[str, Any]:
-        return out.setdefault(v, {"simulation": 0, "measurement": 0, "synthetic": 0, "unknown": 0, "current_prediction": None})
+        return out.setdefault(v, {"simulation": 0, "measurement": 0, "synthetic": 0, "unknown": 0, "current_prediction": None,
+                                  "simulations": [], "measurements": []})
 
-    for kind, variant, prov in (db.query(Evidence.kind, Evidence.variant_ref, Evidence.provenance)
-                                .filter(Evidence.scenario_ref == scenario_id).all()):
-        if kind == "evidence.simulation":
-            row(variant)["simulation"] += 1
-        elif kind == "evidence.measurement":
-            row(variant)[_origin_bucket(prov)] += 1
+    cols = load_only(Evidence.id, Evidence.kind, Evidence.variant_ref, Evidence.provenance, Evidence.measured_at,
+                     Evidence.run_info, Evidence.kpi, Evidence.sw_baseline_ref, Evidence.execution_context, Evidence.project_ref)
+    for ev in db.query(Evidence).options(cols).filter(Evidence.scenario_ref == scenario_id).all():
+        r = row(ev.variant_ref)
+        run = ev.run_info or {}
+        ctx = ev.execution_context or {}
+        if ev.kind == "evidence.simulation":
+            r["simulation"] += 1
+            r["simulations"].append({
+                "id": ev.id, "at": _iso(ev.measured_at) or run.get("timestamp"), "tool": run.get("tool"),
+                "tool_version": run.get("tool_version"), "source": run.get("source"),
+                "sw_baseline_ref": ev.sw_baseline_ref, "total_mw": _total(ev.kpi).get("mean"),
+            })
+        elif ev.kind == "evidence.measurement":
+            bucket = _origin_bucket(ev.provenance)
+            r[bucket] += 1
+            r["measurements"].append({
+                "id": ev.id, "at": _iso(ev.measured_at), "origin": data_origin(ev.provenance), "synthetic": bucket == "synthetic",
+                "sw_baseline_ref": ev.sw_baseline_ref, "silicon_rev": ctx.get("silicon_rev"), "thermal": ctx.get("thermal"),
+                "build_id": (ev.provenance or {}).get("build_id"), "total_mw": _total(ev.kpi).get("mean"),
+            })
+    for r in out.values():
+        for key in ("simulations", "measurements"):
+            items = r[key]
+            items.sort(key=lambda e: (_when(e["at"]), e["id"]), reverse=True)
+            if key == "measurements":
+                # representative = newest real measurement with a power total, then synthetic (stable sort)
+                items.sort(key=lambda e: (e["origin"] != "physical_capture", e["synthetic"], e["total_mw"] is None))
+            for i, e in enumerate(items):
+                e["shown"] = i == 0
+    versions = dict(db.query(Prediction.variant_ref, func.count(Prediction.id))
+                    .filter(Prediction.scenario_ref == scenario_id).group_by(Prediction.variant_ref).all())
     for p in db.query(Prediction).filter_by(scenario_ref=scenario_id, status="current").all():
-        row(p.variant_ref)["current_prediction"] = {"id": p.id, "total_mw": (p.metrics or {}).get("power", {}).get("total_mw")}
+        metrics = p.metrics or {}
+        row(p.variant_ref)["current_prediction"] = {
+            "id": p.id, "total_mw": metrics.get("power", {}).get("total_mw"), "created_at": _iso(p.created_at),
+            "run": p.exploration_run_ref, "case_key": p.case_key, "selection_rule": p.selection_rule,
+            "selected_by": p.selected_by, "dvfs_table_ref": p.dvfs_table_ref, "supersedes": p.supersedes_ref,
+            "version": int(versions.get(p.variant_ref, 1)),  # n-th registration of this variant (superseded + current)
+        }
     return out
 
 
@@ -444,4 +497,101 @@ def _detail(m: Evidence, rail: tuple[dict[str, str], str | None, str], cur: Pred
         "unexplained_mw": None if total["mean"] is None else round(float(total["mean"]) - split["rail_total_mw"], 3),
         "categories": list(CATEGORIES), "predictions": predictions, "sw_tasks": sw,
         "cpu_clusters": m.cpu_breakdown,
+    }
+
+
+_IP_BW_METRICS = {"bandwidth.read": "read", "bandwidth.write": "write", "bandwidth.total": "total"}
+
+
+def _ip_bw_observations(ev: Evidence) -> dict[str, dict[str, dict[str, float | None]]]:
+    """Measured per-IP bandwidth (metric_observations ``bandwidth.read/write/total`` with scope ``ip``).
+
+    PMU / bus monitors count per IP master, not per DMA port, so the scope is the IP (in-house refs are the
+    upper-case HW names: MTNR, MFC_ENC …). Returns {ref: {read|write|total: {mean, p95}}}.
+    """
+    out: dict[str, dict[str, dict[str, float | None]]] = {}
+    for o in ev.metric_observations or []:
+        if not isinstance(o, dict):
+            continue
+        key = _IP_BW_METRICS.get(str(o.get("metric_id")))
+        scope = o.get("scope") or {}
+        if key is None or scope.get("kind") != "ip" or not scope.get("ref"):
+            continue
+        stats = o.get("stats") or {}
+        mean = stats.get("mean", stats.get("value"))
+        if not isinstance(mean, (int, float)):
+            continue
+        p95 = stats.get("p95")
+        out.setdefault(str(scope["ref"]), {})[key] = {"mean": float(mean), "p95": float(p95) if isinstance(p95, (int, float)) else None}
+    return out
+
+
+def ip_bandwidth(db: Session, scenario_id: str, variant_id: str, measurement_id: str | None = None) -> dict[str, Any]:
+    """Per-IP read / write bandwidth: newest simulation evidence (DMA ports summed per IP) vs measured IP bandwidth.
+
+    The measurement is ``measurement_id`` or the representative one (newest real measurement with IP bandwidth,
+    then synthetic). Measured IPs are joined on node id / HW name (case-insensitive); a measurement with only
+    ``bandwidth.total`` is compared against predicted read + write.
+    """
+    sims = _sim_evidence(db, scenario_id, variant_id)
+    sim = sims[-1] if sims else None
+    pred: dict[str, dict[str, Any]] = {}
+    for item in (sim.dma_breakdown or []) if sim is not None else []:
+        if not isinstance(item, dict) or item.get("direction") not in ("read", "write"):
+            continue
+        node = str(item.get("node_id") or "")
+        value = item.get("bw_mbs")
+        if not node or not isinstance(value, (int, float)):
+            continue
+        row = pred.setdefault(node, {"node": node, "hw_name": item.get("hw_name"), "read": 0.0, "write": 0.0, "ports": 0})
+        row[item["direction"]] += float(value)
+        row["ports"] += 1
+    meas_rows = (db.query(Evidence).options(load_only(Evidence.id, Evidence.measured_at, Evidence.provenance, Evidence.metric_observations,
+                                                       Evidence.sw_baseline_ref, Evidence.execution_context))
+                 .filter(Evidence.kind == "evidence.measurement", Evidence.scenario_ref == scenario_id, Evidence.variant_ref == variant_id).all())
+    candidates = []
+    for m in meas_rows:
+        obs = _ip_bw_observations(m)
+        if obs:
+            candidates.append((m, obs))
+    candidates.sort(key=lambda c: (_when(_iso(c[0].measured_at)), c[0].id), reverse=True)
+    candidates.sort(key=lambda c: (not is_physical(c[0].provenance), is_synthetic(c[0].provenance)))
+    chosen = next((c for c in candidates if c[0].id == measurement_id), None) if measurement_id else (candidates[0] if candidates else None)
+    if measurement_id and chosen is None:
+        raise NotFoundError(f"measurement with IP bandwidth not found for {scenario_id}/{variant_id}: {measurement_id}")
+    measured = chosen[1] if chosen else {}
+    by_key = {k.lower(): k for k in measured}
+    used: set[str] = set()
+    rows = []
+    for node, p in sorted(pred.items()):
+        ref = by_key.get(node.lower()) or (by_key.get(str(p["hw_name"]).lower()) if p.get("hw_name") else None)
+        mv: dict[str, dict[str, float | None]] = measured.get(ref, {}) if ref else {}
+        if ref:
+            used.add(ref)
+        p_total = p["read"] + p["write"]
+        m_read, m_write, m_total = (mv.get(k, {}).get("mean") for k in ("read", "write", "total"))
+        if m_total is None and (m_read is not None or m_write is not None):
+            # a side that is not measured counts only when the model also has no traffic there
+            if all(v is not None or p[k] == 0 for k, v in (("read", m_read), ("write", m_write))):
+                m_total = (m_read or 0.0) + (m_write or 0.0)
+        rows.append({
+            "node": node, "hw_name": p.get("hw_name"), "ports": p["ports"], "measured_ref": ref,
+            "pred": {"read": round(p["read"], 3), "write": round(p["write"], 3), "total": round(p_total, 3)},
+            "meas": {"read": m_read, "write": m_write, "total": m_total,
+                     "read_p95": mv.get("read", {}).get("p95"), "write_p95": mv.get("write", {}).get("p95")} if ref else None,
+            "delta_pct": {"read": pct(p["read"], m_read) if m_read else None, "write": pct(p["write"], m_write) if m_write else None,
+                          "total": pct(p_total, m_total) if m_total else None} if ref else None,
+        })
+    unmatched = sorted(set(measured) - used)
+    m_ev = chosen[0] if chosen else None
+    return {
+        "scenario_id": scenario_id, "variant_id": variant_id,
+        "simulation": {"id": sim.id, "at": _iso(sim.measured_at) or (sim.run_info or {}).get("timestamp"),
+                       "tool_version": (sim.run_info or {}).get("tool_version")} if sim is not None else None,
+        "measurement": {"id": m_ev.id, "at": _iso(m_ev.measured_at), "synthetic": is_synthetic(m_ev.provenance),
+                        "sw_baseline_ref": m_ev.sw_baseline_ref, "silicon_rev": (m_ev.execution_context or {}).get("silicon_rev")} if m_ev else None,
+        "measurements": [{"id": m.id, "at": _iso(m.measured_at), "synthetic": is_synthetic(m.provenance)} for m, _ in candidates],
+        "rows": rows,
+        "unmatched": [{"ref": r, **{k: v.get("mean") for k, v in measured[r].items()}} for r in unmatched],
+        "note": "예측 = 최신 simulation evidence의 DMA port BW를 IP별 합산 · 실측 = IP 단위 (DMA port별 측정 아님)",
     }

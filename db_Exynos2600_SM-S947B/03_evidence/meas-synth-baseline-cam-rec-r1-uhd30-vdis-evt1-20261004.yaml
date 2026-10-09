@@ -3610,6 +3610,110 @@ metric_observations:
     ref: DSU@400
   unit: ratio
   value: 0.3
+- metric_id: bandwidth.total
+  scope:
+    kind: ip
+    ref: DPU
+  unit: MB/s
+  stats:
+    mean: 104.955
+    p95: 111.252
+- metric_id: bandwidth.read
+  scope:
+    kind: ip
+    ref: GDC_M
+  unit: MB/s
+  stats:
+    mean: 87.236
+    p95: 92.47
+- metric_id: bandwidth.write
+  scope:
+    kind: ip
+    ref: GDC_M
+  unit: MB/s
+  stats:
+    mean: 100.907
+    p95: 106.961
+- metric_id: bandwidth.read
+  scope:
+    kind: ip
+    ref: GDC_O
+  unit: MB/s
+  stats:
+    mean: 442.559
+    p95: 469.113
+- metric_id: bandwidth.write
+  scope:
+    kind: ip
+    ref: GDC_O
+  unit: MB/s
+  stats:
+    mean: 353.7
+    p95: 374.922
+- metric_id: bandwidth.read
+  scope:
+    kind: ip
+    ref: LME
+  unit: MB/s
+  stats:
+    mean: 45.599
+    p95: 48.335
+- metric_id: bandwidth.write
+  scope:
+    kind: ip
+    ref: MCSC
+  unit: MB/s
+  stats:
+    mean: 479.918
+    p95: 508.713
+- metric_id: bandwidth.read
+  scope:
+    kind: ip
+    ref: MFC_ENC
+  unit: MB/s
+  stats:
+    mean: 394.325
+    p95: 417.985
+- metric_id: bandwidth.write
+  scope:
+    kind: ip
+    ref: MFC_ENC
+  unit: MB/s
+  stats:
+    mean: 10.165
+    p95: 10.775
+- metric_id: bandwidth.write
+  scope:
+    kind: ip
+    ref: MLSC
+  unit: MB/s
+  stats:
+    mean: 898.752
+    p95: 952.677
+- metric_id: bandwidth.read
+  scope:
+    kind: ip
+    ref: MTNR
+  unit: MB/s
+  stats:
+    mean: 2016.592
+    p95: 2137.588
+- metric_id: bandwidth.write
+  scope:
+    kind: ip
+    ref: MTNR
+  unit: MB/s
+  stats:
+    mean: 791.752
+    p95: 839.257
+- metric_id: bandwidth.read
+  scope:
+    kind: ip
+    ref: VPS_OD
+  unit: MB/s
+  stats:
+    mean: 12.5
+    p95: 13.25
 cpu_breakdown:
 - cluster: MID_LF0
   avg_freq_mhz: 1468.0

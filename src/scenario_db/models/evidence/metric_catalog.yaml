@@ -53,7 +53,7 @@ metrics:
   bandwidth.total:
     category: bandwidth
     canonical_unit: MB/s
-    allowed_scopes: [scenario]
+    allowed_scopes: [scenario, ip]
     compare_statistic: mean
     polarity: neutral
     kpi_key: total_bw_mbs

@@ -194,3 +194,34 @@ def test_power_options_share_the_variant_case_budget(raw, catalog, dvfs):
     assert result['counts']['option_cases'] == 0
     assert result['power_options']['results'] == []
     assert any('budget exhausted' in note for note in result['power_options']['notes'])
+
+
+def test_option_marginals_fix_always_beneficial_options(uhd30):
+    p = uhd30["power_options"]
+    m = {x["key"]: x for x in p["marginal"]}
+    assert set(m) == {BCROP, L0SKIP, MTNR_LP}
+    # every option appears in 4 contexts (alone + with each subset of the other two)
+    assert all(x["contexts"] == 4 for x in m.values())
+    assert m[L0SKIP]["always_beneficial"] and m[L0SKIP]["max_mw"] < 0
+    assert set(p["fixed"]) == {k for k, x in m.items() if x["fixed"]} and L0SKIP in p["fixed"]
+    # effect_given_fixed = set delta minus the fixed set's delta, only for strict supersets of it
+    fixed = frozenset(p["fixed"])
+    by = {frozenset(r["items"]): r for r in p["results"]}
+    for r in p["results"]:
+        items = frozenset(r["items"])
+        if fixed < items:
+            assert r["effect_given_fixed"] == pytest.approx(r["delta_mw"] - by[fixed]["delta_mw"], abs=0.02)
+        else:
+            assert r["effect_given_fixed"] is None
+
+
+def test_tiers_split_iq_keeping_and_lossy_optimum(uhd30):
+    t = uhd30["tiers"]
+    keep, trade = t["keep"], t["trade"]
+    assert keep and trade
+    assert keep["best"]["lossy"] is False and not keep["best"]["assumed_ratio"]
+    assert trade["best"]["total_mw"] <= keep["best"]["total_mw"] + 1e-6
+    assert t["trade_gain"]["delta_mw"] == pytest.approx(trade["best"]["total_mw"] - keep["best"]["total_mw"], abs=0.02)
+    lo, hi = keep["near_mw"]
+    assert lo == pytest.approx(keep["best"]["total_mw"], abs=0.02) and hi <= lo * (1 + keep["near_pct"] / 100) + 0.02
+    assert keep["near_cases"] >= 1 and all(a <= b for a, b in keep["dvfs_range"].values())

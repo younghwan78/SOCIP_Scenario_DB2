@@ -9,6 +9,11 @@ import { DataTable, type Column } from '../components/DataTable'
 import { OPTION_NOTE, OptionResults, OptionReviewPanel, ReviewBadge, signed } from '../components/PowerOptions'
 import { ProvBadge } from '../components/Provenance'
 import { powerScope, type Prov } from '../lib/provenance'
+import { KIND_LABEL, RISK_CLASS, RISK_LABEL, assessAll, type RiskLevel, type RiskRow } from '../lib/predRisk'
+import { calibrationApi } from '../lib/calibration'
+import { batteryNote, maText, useBattery, type Battery } from '../lib/battery'
+import { usePref } from '../components/Layout'
+import type { Ctx as AppCtx } from '../App'
 
 const regProv = (r: BoardRow): Prov => ({
   kind: 'registered', engine: 'Arch exploration', scope: powerScope({ cpu: r.power.cpu_mw, hw: r.power.hw_mw, bw: r.power.bw_mw }),
@@ -21,6 +26,17 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
   // "all" = every scenario of the selected 과제 (not every project)
   const q = useAsync(() => archApi.board(all ? undefined : ctx.scenario, all ? ctx.project || undefined : undefined), [ctx.scenario, ctx.project, all, tick])
   const rows = q.data?.rows ?? []
+  const battery = useBattery(ctx.project, ctx.params.cfg)
+  // customer performance / thermal target: URL (shareable) > this viewer's last value
+  const [targetPref, setTargetPref] = usePref<string>('pred.target_mw', '')
+  const targetRaw = ctx.params.target ?? targetPref
+  const target = Number(targetRaw) > 0 ? Number(targetRaw) : null
+  const scenIds = [...new Set(rows.map((r) => r.scenario_id))].sort()
+  const covQ = useAsync(() => Promise.all(scenIds.map((sid) => calibrationApi.coverage(sid).then((c) => [sid, c] as const).catch(() => null)))
+    .then((list) => { const m = new Map<string, number>(); let ok = false
+      for (const x of list) { if (!x) continue; ok = true; for (const [vid, c] of Object.entries(x[1])) m.set(`${x[0]}|${vid}`, c.measurement) }
+      return ok ? m : undefined }), [scenIds.join(',')])
+  const risk = assessAll(rows, { target_mw: target, measured: covQ.data ?? undefined })
   const sel = rows.find((r) => r.id === ctx.params.v)
   const choose = (vid: string) => ctx.navigate(undefined, { v: vid === ctx.params.v ? undefined : vid }, true)
   const changed = rows.filter((r) => r.previous)
@@ -34,7 +50,10 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
     { key: 'v', label: 'Variant', width: 210, sticky: true, sort: (r) => r.variant_id, render: (r) => <span className="mono">{short(r.variant_id)}</span> },
     ...(all ? [{ key: 's', label: 'Scenario', width: 170, sort: (r: BoardRow) => r.scenario_id, render: (r: BoardRow) => <span className="mono faint">{r.scenario_id}</span> }] : []),
     { key: 'fps', label: 'fps', width: 52, align: 'right', firstDir: -1, sort: (r) => r.fps, render: (r) => fmt(r.fps, 0) },
-    { key: 'tot', label: 'Power mW', width: 200, align: 'right', firstDir: -1, sort: (r) => r.power.total_mw, render: (r) => <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><SplitBar p={r.power} width={70} /><b className="mono">{fmt(r.power.total_mw, 1)}</b><ProvBadge prov={regProv(r)} compact /></span> },
+    { key: 'risk', label: 'Risk', width: 70, firstDir: -1, sort: (r) => { const x = risk.find((y) => y.row.id === r.id); return x ? ({ high: 3, med: 2, low: 1, ok: 0 } as Record<RiskLevel, number>)[x.level] * 100 + x.score : 0 },
+      title: (r) => risk.find((y) => y.row.id === r.id)?.risks.map((x) => `[${KIND_LABEL[x.kind]}] ${x.text}`).join('\n') ?? '',
+      render: (r) => { const x = risk.find((y) => y.row.id === r.id); return x ? <span className={`badge ${RISK_CLASS[x.level]}`}>{RISK_LABEL[x.level]}</span> : null } },
+    { key: 'tot', label: 'Power mW', width: 200, align: 'right', firstDir: -1, sort: (r) => r.power.total_mw, render: (r) => <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><SplitBar p={r.power} width={70} /><b className="mono">{fmt(r.power.total_mw, 1)}</b><span className="mono faint" style={{ fontSize: 11 }} title={batteryNote(battery)}>{maText(r.power.total_mw, battery)}</span><ProvBadge prov={regProv(r)} compact /></span> },
     { key: 'cpu', label: 'CPU', width: 62, align: 'right', firstDir: -1, sort: (r) => r.power.cpu_mw, render: (r) => fmt(r.power.cpu_mw, 0) },
     { key: 'hw', label: 'HW', width: 62, align: 'right', firstDir: -1, sort: (r) => r.power.hw_mw, render: (r) => fmt(r.power.hw_mw, 0) },
     { key: 'bwip', label: 'IP BW', width: 70, align: 'right', firstDir: -1, sort: (r) => r.power.bw_ip_mw ?? r.power.bw_mw, render: (r) => fmt(r.power.bw_ip_mw ?? r.power.bw_mw, 0) },
@@ -62,6 +81,10 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
           <button className={!all ? 'on' : ''} onClick={() => ctx.navigate(undefined, { all: undefined, v: undefined }, true)}>현재 scenario</button>
           <button className={all ? 'on' : ''} onClick={() => ctx.navigate(undefined, { all: '1', v: undefined }, true)}>전체</button>
         </div>
+        <label className="faint" style={{ fontSize: 12, display: 'inline-flex', gap: 6, alignItems: 'center' }} title="고객 성능·발열 scenario의 power 목표 (모든 행에 같은 값). 비우면 상대 비교만. URL에 남아 공유 가능">
+          목표 power <input className="input" type="number" min={0} step={10} style={{ width: 80, padding: '3px 6px' }} value={targetRaw} placeholder="mW"
+            onChange={(e) => { setTargetPref(e.target.value); ctx.navigate(undefined, { target: e.target.value || undefined }, true) }} /> mW
+          {target && <span className="mono">({maText(target, battery)}@Vbat)</span>}</label>
         <span className="faint" style={{ fontSize: 12 }}>current 예측은 조합 탐색에서만 등록됩니다 (기본 = 최저 power 조합).</span>
         <span className="grow" />
         <a className="btn" href="#/explore">조합 탐색 →</a>
@@ -86,6 +109,7 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
         <div className="tb-grid">
           {sel && <ChangeCard key={sel.id} row={sel} />}
           {sel && <OptionsCard key={`o-${sel.id}`} row={sel} onChanged={() => setTick((t) => t + 1)} />}
+          <RiskCard risk={risk} target={target} battery={battery} ctx={ctx} measuredKnown={!!covQ.data} onPick={choose} />
           <Card id="pr-table" title="예측 현황 (current)" note="header 클릭 = 정렬 · 행 클릭 = 변경 원인" defaultWide minHeight={260}>
             <SplitLegend />
             <div className="table-x">
@@ -162,4 +186,49 @@ function show(v: unknown): string {
   if (Array.isArray(v)) return v.length ? v.join(', ') : '—'
   if (v === null || v === undefined) return '—'
   return String(v)
+}
+
+const LEVELS: RiskLevel[] = ['high', 'med', 'low', 'ok']
+
+/** Risk · Focus: which predictions threaten the customer's performance / thermal target and what to work on. */
+function RiskCard({ risk, target, battery, ctx, measuredKnown, onPick }: { risk: RiskRow[]; target: number | null; battery: Battery; ctx: AppCtx; measuredKnown: boolean; onPick: (id: string) => void }) {
+  const [showAll, setShowAll] = useState(false)
+  const count = (l: RiskLevel) => risk.filter((x) => x.level === l).length
+  const listed = risk.filter((x) => x.level !== 'ok').concat(risk.filter((x) => x.level === 'ok').slice(0, 3))
+  const shown = showAll ? listed : listed.slice(0, 10)
+  const over = risk.filter((x) => (x.gap_mw ?? 0) > 0)
+  const levers = new Map<string, { n: number; gain: number }>()
+  for (const x of risk) if (x.level !== 'ok') { const f = x.focus[0]; if (f) { const v = levers.get(f.lever) ?? { n: 0, gain: 0 }; v.n += 1; v.gain += f.gain_mw ?? 0; levers.set(f.lever, v) } }
+  const LEVER: Record<string, string> = { option: 'Power option (IQ)', cpu: 'CPU (EMS · 분산)', ip: 'IP clock · mode', bw: 'BW (compression · LLC)', clock: 'Timing (SW · buffering)', measure: '실측 검증' }
+  const go = (page: string | undefined, r: RiskRow['row']) => page && ctx.navigate(page as Parameters<AppCtx['navigate']>[0], { scenario: r.scenario_id, variant: r.variant_id })
+  return (
+    <Card id="pr-risk" title="① Risk · Focus — 고객 성능/발열 목표 대비" defaultWide minHeight={200}
+      note={`성능 = timing 판정 · SW 여유 / 발열 = ${target ? `목표 ${target.toFixed(0)} mW (${maText(target, battery)})` : '목표 미설정 → 상대 비교 (툴바에서 입력)'} / 신뢰도 = 실측 · sim 검증 · range`}>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 8, fontSize: 12.5 }}>
+        {LEVELS.map((l) => <span key={l} className={`badge ${RISK_CLASS[l]}`}>{RISK_LABEL[l]} {count(l)}</span>)}
+        {target && <span className="faint">목표 초과 {over.length}건{over.length ? ` · 최대 +${Math.max(...over.map((x) => x.gap_mw ?? 0)).toFixed(0)} mW` : ''}</span>}
+        {!measuredKnown && <span className="faint">실측 coverage를 불러오지 못해 신뢰도는 sim 검증·range만 사용</span>}
+        <span className="grow" />
+        {[...levers].sort((a, b) => b[1].n - a[1].n).map(([k, v]) => <span key={k} className="chip" title="위험 행의 첫 번째 focus 기준">{LEVER[k] ?? k} {v.n}{v.gain ? ` · ${v.gain.toFixed(0)} mW` : ''}</span>)}
+      </div>
+      <div className="table-x"><table className="tb-mini-table" style={{ width: '100%' }}>
+        <thead><tr><th>Risk</th><th>Variant</th><th style={{ textAlign: 'right' }}>Power</th><th style={{ textAlign: 'right' }}>목표 대비</th><th style={{ textAlign: 'right' }}>BW</th><th>최대 비중</th><th>위험 요인</th><th>먼저 볼 것 (focus)</th></tr></thead>
+        <tbody>{shown.map((x) => (
+          <tr key={x.row.id} onClick={() => onPick(x.row.id)} style={{ cursor: 'pointer' }}>
+            <td><span className={`badge ${RISK_CLASS[x.level]}`}>{RISK_LABEL[x.level]}</span></td>
+            <td className="mono" style={{ fontSize: 12 }}>{short(x.row.variant_id)}<div className="faint" style={{ fontSize: 10.5 }}>{x.row.scenario_id} · {fmt(x.row.fps, 0)} fps</div></td>
+            <td className="mono" style={{ textAlign: 'right' }}>{fmt(x.row.power.total_mw, 0)} mW<div className="faint" style={{ fontSize: 10.5 }}>{maText(x.row.power.total_mw, battery)}</div></td>
+            <td className="mono" style={{ textAlign: 'right', color: (x.gap_mw ?? -1) > 0 ? 'var(--del-text)' : undefined }}>{x.gap_mw === null ? '—' : `${x.gap_mw > 0 ? '+' : ''}${x.gap_mw.toFixed(0)}`}</td>
+            <td className="mono" style={{ textAlign: 'right' }}>{fmt(x.row.bw_mbs / 1000, 2)} GB/s</td>
+            <td style={{ fontSize: 12 }}>{x.dominant.part} {(100 * x.dominant.share).toFixed(0)}%</td>
+            <td style={{ minWidth: 340 }}><ul className="risk-list">{x.risks.length ? x.risks.map((k) => <li key={k.text}><span className="rk">{KIND_LABEL[k.kind]}</span><span>{k.text}</span></li>) : <li className="faint">—</li>}</ul></td>
+            <td style={{ minWidth: 300 }}><ul className="risk-list">{x.focus.slice(0, 3).map((f) => <li key={f.text}>
+              {f.page ? <a href="#" onClick={(e) => { e.preventDefault(); e.stopPropagation(); go(f.page, x.row) }}>{f.text}</a> : f.text}
+              {f.gain_mw ? <span className="mono" style={{ color: 'var(--primary-strong)' }}> {f.gain_mw.toFixed(0)} mW</span> : null}</li>)}</ul></td>
+          </tr>))}</tbody>
+      </table></div>
+      {listed.length > 10 && <button className="btn tb-mini" style={{ marginTop: 6 }} onClick={() => setShowAll((v) => !v)}>{showAll ? '상위 10건만' : `전체 ${listed.length}건 보기`}</button>}
+      <div className="faint" style={{ fontSize: 11.5, marginTop: 6 }}>목표 = 고객사 성능/발열 scenario를 만족하는 power 상한. 위험 행만 표시 (양호는 상위 3건). 목표를 만족하면서 power를 더 줄일 수 있는 조건은 조합 탐색의 “화질·성능 유지” 범위에서 확인.</div>
+    </Card>
+  )
 }

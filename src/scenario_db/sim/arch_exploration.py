@@ -312,8 +312,113 @@ def _explore(graph, spec: ArchExplorationSpec, config: SimulationRunConfig,
         "objective_slice": {k: v for k, v in obj_slice.items() if k != "warnings"},
         "coverage": coverage,
         "warnings": obj_slice["warnings"][:20],
+        # IQ/performance-keeping optimum and its near-optimal condition range vs the IQ-trading lossy optimum
+        "tiers": _tiers([c for c in cases_obj if c["eligible"]], obj.tie_pct),
     }
     return summary
+
+
+TIER_NEAR_PCT = 3.0
+
+
+def _tiers(eligible: list[dict[str, Any]], tie_pct: float) -> dict[str, Any]:
+    """Split the eligible objective-slice cases by what they cost in image quality.
+
+    ``keep`` = no lossy compression and no assumed ratio (iq_risk <= 1): the optimum that keeps IQ and fps,
+    plus the *range* of conditions within ``TIER_NEAR_PCT`` of it (DVFS levels per domain, buffers that are
+    always / sometimes compressed). These marginal ranges describe tested cases; new combinations need a re-run.
+    ``trade`` = the optimum when lossy / assumed-ratio compression is allowed (IQ evaluation needed); its gain vs
+    ``keep`` is what giving up IQ buys. Power options (IP mode / knob) are reported separately (``power_options``).
+    """
+    def window(cases: list[dict[str, Any]]) -> dict[str, Any] | None:
+        ranked = _rank(cases, tie_pct)
+        if not ranked:
+            return None
+        best = ranked[0]
+        near = [c for c in cases if c["total_mw"] <= best["total_mw"] * (1 + TIER_NEAR_PCT / 100.0)]
+        levels: dict[str, list[int]] = {}
+        for c in near:
+            for d, lv in c["dvfs"].items():
+                levels.setdefault(d, []).append(lv)
+        comp_count: dict[str, int] = {}
+        for c in near:
+            for b in c["compression"]:
+                comp_count[b] = comp_count.get(b, 0) + 1
+        return {
+            "best": _public_case(best),
+            "near_pct": TIER_NEAR_PCT,
+            "near_cases": len(near),
+            "near_mw": [round(min(c["total_mw"] for c in near), 2), round(max(c["total_mw"] for c in near), 2)],
+            "near_bw_mbs": [round(min(c["bw_mbs"] for c in near)), round(max(c["bw_mbs"] for c in near))],
+            "dvfs_range": {d: [min(v), max(v)] for d, v in sorted(levels.items())},
+            "compression_always": sorted(b for b, n in comp_count.items() if n == len(near)),
+            "compression_optional": sorted(b for b, n in comp_count.items() if n < len(near)),
+        }
+
+    keep = window([c for c in eligible if _iq_risk(c) <= 1])
+    trade = window(eligible)
+    gain = None
+    if keep and trade:
+        gain = {"delta_mw": round(trade["best"]["total_mw"] - keep["best"]["total_mw"], 2),
+                "delta_mbs": round(trade["best"]["bw_mbs"] - keep["best"]["bw_mbs"], 1),
+                "iq_risk": _iq_risk(trade["best"])}
+    return {"keep": keep, "trade": trade, "trade_gain": gain}
+
+
+def option_marginals(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Effect of adding one option to every set that lacks it (conditional on the other options).
+
+    An option whose effect is negative in every context (e.g. L0 bypass) is ``always_beneficial``: it wins in every
+    combination, so ranking whole sets hides the rest. The UI fixes such options and ranks the others on
+    ``effect_given_fixed`` instead (= set delta minus the delta of the fixed options alone).
+    """
+    def metric(r: dict[str, Any]) -> float | None:
+        v = r.get("delta_mw")
+        return float(v) if v is not None else (float(r["raw_delta_mw"]) if r.get("raw_delta_mw") is not None else None)
+
+    by_set = {frozenset(r["items"]): r for r in results}
+    label = {k: lb for r in results for k, lb in zip(r["items"], r["labels"], strict=False)}
+    effects: dict[str, list[float]] = {}
+    for r in results:
+        m = metric(r)
+        if m is None:
+            continue
+        items = frozenset(r["items"])
+        for it in items:
+            rest = items - {it}
+            if rest:
+                parent = by_set.get(rest)
+                pm = metric(parent) if parent is not None else None
+                if pm is None:
+                    continue
+            else:
+                pm = 0.0
+            effects.setdefault(it, []).append(m - pm)
+    out = []
+    for it, v in effects.items():
+        out.append({
+            "key": it, "label": label.get(it, it), "contexts": len(v),
+            "mean_mw": round(sum(v) / len(v), 2), "min_mw": round(min(v), 2), "max_mw": round(max(v), 2),
+            "always_beneficial": max(v) < 0, "sign_varies": min(v) < 0 < max(v),
+        })
+    out.sort(key=lambda x: x["mean_mw"])
+    # one value per dimension ("knob:name" / "mode:node"): the strongest always-beneficial value
+    per_dim: dict[str, str] = {}
+    for x in out:
+        dim = x["key"].split("=", 1)[0]
+        x["dimension"] = dim
+        if x["always_beneficial"] and dim not in per_dim:
+            per_dim[dim] = x["key"]
+    for x in out:
+        x["fixed"] = x["key"] in per_dim.values()
+    fixed = frozenset(per_dim.values())
+    base = by_set.get(fixed)
+    base_m = metric(base) if base is not None else None
+    for r in results:
+        m = metric(r)
+        r["effect_given_fixed"] = (round(m - base_m, 2) if m is not None and base_m is not None
+                                   and fixed and fixed <= frozenset(r["items"]) and frozenset(r["items"]) != fixed else None)
+    return out
 
 
 def _power_coverage(obj_slice: dict[str, Any]) -> dict[str, Any]:
@@ -430,6 +535,8 @@ def explore_power_options(graph, spec: ArchExplorationSpec, config: SimulationRu
         d = x["delta_mw"] if x["delta_mw"] is not None else x["raw_delta_mw"]
         return (not x["spec_ok"], d, len(x["items"]))
     out["results"].sort(key=rank)
+    out["marginal"] = option_marginals(out["results"])
+    out["fixed"] = [m["key"] for m in out["marginal"] if m["fixed"]]
     best = next((x for x in out["results"] if x["spec_ok"] and (x["delta_mw"] or 0) < 0), None)
     out["best"] = best["key"] if best else None
     return out

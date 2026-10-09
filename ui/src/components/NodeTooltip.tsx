@@ -42,7 +42,9 @@ export function IpTooltip({ ip, timing, expanded = false }: { ip: IpModel; timin
           <span>Out</span><span className="mono">{outs.join(' / ') || (otf.some((p) => p.dir === 'out') ? 'OTF' : '—')}</span></>}
         {ip.ops.length > 0 && <><span>Ops</span><span>{ip.ops.join(' · ')}</span></>}
         {(ip.mode || ip.modes?.length) && <><span>Mode</span><span className="mono">{ip.mode ?? '—'}{!expanded && (ip.modes?.length ?? 0) > 0 ? <span className="faint"> (catalog {ip.modes!.length}개)</span> : null}</span></>}
-        {timing && <><span>Timing</span><span className="mono">+{f2(timing.offset)} ms · {f2(timing.dur)} ms ({f2(timing.durMin)}–{f2(timing.durMax)}, n{timing.n})</span></>}
+        {timing && <><span>Timing</span><span className="mono tt-timing">
+          <span>시작 +{f2(timing.offset)} ms · 소요 {f2(timing.dur)} ms</span>
+          <span className="faint">범위 {f2(timing.durMin)}–{f2(timing.durMax)} ms · {timing.n} frame 평균 · 끝 +{f2(timing.offset + timing.dur)} ms</span></span></>}
         {ip.sw && <><span>SW time</span><span className="mono">{ip.sw.mean} ms ({ip.sw.min}–{ip.sw.max}) · {ip.sw.source}</span></>}
         {otf.length > 0 && <><span>OTF</span><span className="mono">{otf.map((p) => `${p.dir === 'in' ? '←' : '→'} ${p.peer}`).join('  ')}</span></>}
         {ctrl.length > 0 && <><span>SW trigger</span><span>{ctrl.map((p) => `${p.dir === 'in' ? '←' : '→'} ${p.peer}`).join('  ')}</span></>}
@@ -56,6 +58,7 @@ export function IpTooltip({ ip, timing, expanded = false }: { ip: IpModel; timin
       {unused.length > 0 && <div className="tt-sec"><b>미사용 DMA · {unused.length}</b>
         <div className="tt-chips">{(expanded ? unused : unused.slice(0, 14)).map((c) => <span key={c.name} title={c.purpose}>{c.name}</span>)}{!expanded && unused.length > 14 && <span>+{unused.length - 14}</span>}</div></div>}
       {ip.type !== 'sw' && ip.rdma.total === null && <div className="tt-sec faint" style={{ fontSize: 11 }}>IP catalog에 DMA 목록이 없어 사용 채널만 표시</div>}
+      {timing && <div className="tt-sec faint" style={{ fontSize: 10.5 }}>Timing: 시작 = 같은 frame의 sensor 시작(frame 기준점)에서 이 IP/SW가 시작하기까지 평균 · 소요 = 처리 시간 평균 · 범위 = trace의 frame별 최소–최대 소요 · 끝 = 시작 + 소요 (sensor 기준 지연)</div>}
       <div className="faint" style={{ fontSize: 10.5, marginTop: 6 }}>클릭 = 선택 · 하단 상세 / IP 내부에서 전체 port{expanded ? '' : ' · 고정하면 전체 목록'}</div>
     </div>
   )

@@ -11,6 +11,8 @@ export interface SwItem { task: string; kind: 'sw' | 'ip_overhead'; runtime_ms: 
 export interface StageRow {
   id: StageId; name: string; nodes: string[]; sw_items: SwItem[]
   sw_ms: number; budget_ms: number; hw_ms: number; overhead_ms: number; margin: number; feasible: boolean; fill_pct: number
+  /** NRT / Post throughput model (API ≥ 2026-10-09): pipelined = stages decoupled by M2M buffers */
+  throughput?: 'stage' | 'pipelined' | 'frame'; longest_sw_ms?: number; chain_ms?: number
 }
 export interface IpRow {
   node: string; hw_name: string; stage: StageId; dvfs_group: string | null; cores: number; shared_streams: number
@@ -49,6 +51,30 @@ export interface CpuProfileTerm {
   feasible?: boolean; cpu_mw_flat?: number; bw_source?: 'model' | 'measured'; bw_mw_per_mbs?: number
 }
 export type CpuModel = 'flat' | 'profile'
+export type ThroughputModel = 'stage' | 'pipelined'
+
+/** SW time still available per stage at the current clocks (same rule as the API's dvfs-whatif slack). */
+export function stageSlack(r: Pick<TimingReport, 'period_ms' | 'stages'>): Record<StageId, number> {
+  const out = {} as Record<StageId, number>
+  for (const s of r.stages) {
+    if (s.id === 'nrt' || s.id === 'post') out[s.id] = r.period_ms - (s.throughput === 'pipelined' ? (s.longest_sw_ms ?? s.sw_ms) : s.sw_ms + s.hw_ms)
+    else out[s.id] = s.budget_ms - s.hw_ms
+  }
+  return out
+}
+
+export interface DvfsBrief {
+  total_mw: number; cpu_mw: number; hw_mw: number; bw_mw: number; bw_mbs: number; verdict: Verdict['status']; reasons: string[]
+  intervals_ok: boolean; latency_ms: { preview_ms: number | null; video_ms: number | null }; slack_ms: Record<StageId, number>; stage_hw_ms: Record<StageId, number>
+}
+export interface DvfsRow extends Partial<DvfsBrief> {
+  domain: string; shift: number; level: number; mhz: number; error?: string
+  delta_mw?: number; delta_hw_mw?: number; delta_bw_mw?: number; delta_mbs?: number; delta_slack_ms?: Record<StageId, number>
+}
+export interface DvfsWhatIf {
+  base: DvfsBrief; fps: number; period_ms: number; throughput_model: ThroughputModel
+  domains: { domain: string; level: number; mhz: number; mv: number; ips: string[]; stages: StageId[] }[]; rows: DvfsRow[]
+}
 /** Short tile note for the CPU power of a timing report. */
 export function cpuTileNote(p: PowerSplit): string {
   const c = p.cpu_profile
@@ -95,6 +121,8 @@ export interface TimingOptions {
   statistic: Statistic; eis: EisMode; runtime_scale: number; include_whatif?: boolean
   /** CPU term: flat assumption (default) or the variant's measured CPU profile through EAS */
   cpu_model?: CpuModel
+  /** NRT / Post: "stage" = SW + HW in one frame (legacy), "pipelined" = per-IP rule clock, chain > period = latency only */
+  throughput_model?: ThroughputModel
   /** SW margin rule (fraction of the frame period reserved for SW); default 0.25 */
   rt_margin?: number; output_margin?: number
   /** frames drawn in the pipeline timeline (API ≤ 32) */
@@ -141,6 +169,9 @@ export const timingApi = {
   variant: (scenarioId: string, variantId: string, options: TimingOptions, configProfileRef?: string | null) =>
     postJson<{ report: TimingReport; dvfs_table_ref: string | null; config_profile_ref?: string | null }>('/timing-budget/variant',
       { scenario_id: scenarioId, variant_id: variantId, options, config_profile_ref: configProfileRef ?? undefined }),
+  dvfsWhatif: (scenarioId: string, variantId: string, options: TimingOptions, configProfileRef?: string | null, shifts = [-2, -1, 1, 2]) =>
+    postJson<DvfsWhatIf>('/timing-budget/dvfs-whatif',
+      { scenario_id: scenarioId, variant_id: variantId, options: { ...options, include_whatif: false }, shifts, config_profile_ref: configProfileRef ?? undefined }),
   fleet: (scenarioId: string, options: Omit<TimingOptions, 'include_whatif'>, configProfileRef?: string | null) =>
     postJson<{ rows: FleetRow[]; errors: VariantFailure[]; dvfs_table_ref: string | null; config_profile_ref?: string | null }>('/timing-budget/fleet',
       { scenario_id: scenarioId, options, config_profile_ref: configProfileRef ?? undefined }),

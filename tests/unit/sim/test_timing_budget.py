@@ -201,3 +201,40 @@ def test_sample_dvfs_fixture_is_valid_and_labelled():
     table = SocDvfsTable.model_validate(doc)
     assert "SYNTHETIC" in table.source.note
     assert all(level.speed_mhz > 0 for dom in table.domains.values() for level in dom.levels)
+
+
+def test_pipelined_throughput_only_adds_latency(graph_factory):
+    g = graph_factory("cam-rec-r1-fhd120")
+    stage = tb.analyze_timing_budget(g)
+    pipe = tb.analyze_timing_budget(g, tb.TimingBudgetOptions(throughput_model="pipelined"))
+    nrt = _stage(pipe, "nrt")
+    assert nrt["throughput"] == "pipelined"
+    assert nrt["longest_sw_ms"] <= nrt["chain_ms"] + 1e-9
+    # pipelined never needs a faster clock / more power than the conservative stage model
+    assert pipe["power"]["total_mw"] <= stage["power"]["total_mw"] + 0.05
+    if stage["verdict"]["status"] == "fail" and pipe["verdict"]["status"] != "fail":
+        assert any("latency" in n for n in pipe["verdict"].get("notes", []))
+    # 30 fps scenario without the long chain is unchanged
+    g30 = graph_factory("cam-rec-r1-uhd30-vdis")
+    a = tb.analyze_timing_budget(g30)
+    b = tb.analyze_timing_budget(g30, tb.TimingBudgetOptions(throughput_model="pipelined"))
+    assert a["intervals"]["ok"] == b["intervals"]["ok"]
+
+
+def test_dvfs_level_whatif_rows(graph_factory, dvfs):
+    g = graph_factory("cam-rec-r1-uhd30-vdis")
+    out = tb.dvfs_level_whatif(g, tb.TimingBudgetOptions(throughput_model="pipelined"), dvfs_tables=dvfs, shifts=(-1, 1))
+    assert out["throughput_model"] == "pipelined" and out["domains"]
+    base = out["base"]
+    assert set(base["slack_ms"]) == {"rt", "nrt", "post", "output"}
+    for row in out["rows"]:
+        if row.get("error"):
+            continue
+        assert row["delta_mw"] == pytest.approx(row["total_mw"] - base["total_mw"], abs=0.05)
+        dom = next(d for d in out["domains"] if d["domain"] == row["domain"])
+        assert (row["mhz"] > dom["mhz"]) == (row["shift"] > 0)
+    up = [r for r in out["rows"] if r["shift"] > 0 and not r.get("error")]
+    assert up and all(r["delta_mw"] >= -0.05 for r in up)  # a faster level never lowers power
+    # domain filter
+    only = tb.dvfs_level_whatif(g, tb.TimingBudgetOptions(), dvfs_tables=dvfs, shifts=(1,), domains=[out["domains"][0]["domain"]])
+    assert {r["domain"] for r in only["rows"]} <= {out["domains"][0]["domain"]}

@@ -10,6 +10,8 @@ import { Card } from '../components/TimingCharts'
 import { AxisSpread, BufferSavings, CompositionBars, DomainLevels, IpModes, RangeBoxes, SplitBar, SplitLegend } from '../components/ArchCharts'
 import { DataTable, type Column } from '../components/DataTable'
 import { OPTION_NOTE, OptionResults, signed } from '../components/PowerOptions'
+import { TiersView } from '../components/ExploreTiers'
+import { useBattery, type Battery } from '../lib/battery'
 import { VariantFailures } from '../components/VariantFailures'
 import { ProfileSelect } from '../components/ProfileSelect'
 import { useSimProfiles } from '../lib/simProfile'
@@ -246,15 +248,16 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
 
 // ---------------------------------------------------------------- one variant
 function VariantDetail({ v, run, readOnly }: { v: VariantResult; run: RunDetail; readOnly: boolean }) {
+  const battery = useBattery(run.project_ref ?? undefined)
   // list rows are summaries; slices, buffers, DVFS domains, IP modes and option results load per variant
   const fullQ = useAsync(() => (v.detail === false ? archApi.runVariant(run.id, v.scenario_id, v.variant_id) : Promise.resolve(v)),
     [run.id, v.scenario_id, v.variant_id])
   if (fullQ.error) return <div className="err" style={{ gridColumn: '1 / -1' }}>{short(v.variant_id)} 상세 조회 실패: {fullQ.error}</div>
   if (!fullQ.data) return <div className="empty" style={{ gridColumn: '1 / -1' }}>{short(v.variant_id)} 상세 불러오는 중…</div>
-  return <VariantDetailBody v={fullQ.data} run={run} readOnly={readOnly} />
+  return <VariantDetailBody v={fullQ.data} run={run} readOnly={readOnly} battery={battery} />
 }
 
-function VariantDetailBody({ v, run, readOnly }: { v: VariantResult; run: RunDetail; readOnly: boolean }) {
+function VariantDetailBody({ v, run, readOnly, battery }: { v: VariantResult; run: RunDetail; readOnly: boolean; battery: Battery }) {
   const rec = v.recommended
   const listed = new Set([rec?.key, ...v.alternatives.map((c) => c.key), v.baseline.key])
   const pareto = (v.pareto ?? []).filter((c) => !listed.has(c.key))
@@ -309,7 +312,9 @@ function VariantDetailBody({ v, run, readOnly }: { v: VariantResult; run: RunDet
         {msg && <span className="faint" style={{ fontSize: 12 }}>{msg}</span>}
       </div>
     </Card>
- {v.power_options && <Card id="ax-options" title="Power option (IQ 평가 대상)" note={OPTION_NOTE} defaultWide>
+ <Card id="ax-tiers" title={`${short(v.variant_id)} — 화질·성능 유지 최적 범위 vs Power 우선 메뉴`} note="A = lossy · IQ option 없이 timing 만족 최저 + ±3% 조건 범위 · B = 화질을 희생할 때 항목별 단독 효과" defaultWide>
+      <TiersView v={v} battery={battery} /></Card>
+ {v.power_options && <Card id="ax-options" title="Power option 조합 (IQ 평가 대상)" note={`${OPTION_NOTE}${(v.power_options.fixed ?? []).length ? ' · 고정 대비 = 항상 이득인 option을 고정했을 때 나머지 option의 추가 효과' : ''}`} defaultWide>
       <div style={{ display: 'grid', gap: 8 }}>
         <div className="faint" style={{ fontSize: 12 }}>
           {v.power_options.dimensions.map((d) => `${d.label}: ${d.current} → ${d.items.map((i) => i.value).join(' / ')}`).join(' · ') || '적용 가능한 option 없음'}

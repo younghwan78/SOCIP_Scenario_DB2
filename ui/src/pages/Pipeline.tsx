@@ -6,9 +6,10 @@ import { buildGraph, layoutGraph, memoryText, pipelineIdOf, type Layout } from '
 import { buildTimeline, type Slice } from '../lib/timeline'
 import { evidenceSource } from '../lib/conditions'
 import { buildModel, LANE_LABEL, type BufferRow, type IpModel } from '../lib/model'
-import { sequenceLayout } from '../lib/sequence'
+import { sequenceLayout, sequenceOrder } from '../lib/sequence'
 import { stageTimings, type StageTiming } from '../lib/cadence'
 import { modeNotes } from '../lib/modes'
+import { calibrationApi, dayOf, errClass } from '../lib/calibration'
 import { GraphView } from '../components/GraphView'
 import { FrameColorLegend, TimelineView } from '../components/TimelineView'
 import { IpInternalView } from '../components/IpInternalView'
@@ -44,6 +45,12 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
   const viewQ = useAsync(() => api.view(scenario, variant, 1), [scenario, variant])
   const evidenceQ = useAsync(() => (variant ? api.evidenceList(scenario, variant, ctx.project) : Promise.resolve({ items: [], total: 0 })), [scenario, variant, ctx.project])
   const scnQ = useAsync(() => api.scenario(scenario).catch(() => null), [scenario])
+  // measured per-IP bandwidth (PMU / bus monitor counts per IP, not per DMA port) vs newest simulation
+  const [bwMeas, setBwMeas] = useState<string>('')
+  useEffect(() => setBwMeas(''), [scenario, variant])
+  const ipBwQ = useAsync(() => (variant ? calibrationApi.ipBandwidth(scenario, variant, bwMeas || undefined).catch(() => null) : Promise.resolve(null)), [scenario, variant, bwMeas])
+  const ipBw = useMemo(() => new Map((ipBwQ.data?.rows ?? []).map((r) => [r.node, r])), [ipBwQ.data])
+  const hasMeasBw = (ipBwQ.data?.rows ?? []).some((r) => r.meas)
   const varQ = useAsync(() => (variant ? api.variant(scenario, variant).catch(() => null) : Promise.resolve(null)), [scenario, variant])
   const [lens, setLensState] = useState<Lens>(legacyLens(ctx.params.lens))
   const setLens = (l: Lens) => { setLensState(l); ctx.navigate(undefined, { lens: l }, true) }
@@ -98,6 +105,11 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
     })
     return m
   }, [varQ.data])
+  // default table order = Sequence order (Sensor → RT → NRT → output), not alphabetical / catalog order
+  const seqOrder = useMemo(() => sequenceOrder(view, merged), [view, merged])
+  const seqKey = useCallback((pid: string) => seqOrder.get(pid) ?? 9999, [seqOrder])
+  const ipsBySeq = useMemo(() => (model ? [...model.ips].sort((a, b) => seqKey(a.pid) - seqKey(b.pid)) : []), [model, seqKey])
+  const bufsBySeq = useMemo(() => (model ? [...model.buffers].sort((a, b) => seqKey(a.producerPid) - seqKey(b.producerPid) || Math.min(...a.consumerPids.map(seqKey), 9999) - Math.min(...b.consumerPids.map(seqKey), 9999)) : []), [model, seqKey])
   const seqLayout = useMemo(() => (view && lens === 'sequence' ? sequenceLayout(view, { showSw, timing, model, scenario: scnQ.data, fitWidth: fitW, merged }) : null), [view, lens, showSw, timing, model, scnQ.data, fitW, merged])
   const graph = useMemo(() => {
     if (!view || lens !== 'dma') return null
@@ -164,6 +176,7 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
   // ---- tables
   const bufCols: Column<BufferRow>[] = [
     { key: 'kind', label: 'Type', width: 76, sort: (b) => b.kind, render: (b) => <span className={`badge buf-${b.kind}`}>{b.kind}</span> },
+    { key: 'seq', label: '#', width: 40, align: 'right', headTitle: 'Sequence 순서 (producer 기준) — 기본 정렬', sort: (b) => seqKey(b.producerPid), render: (b) => <span className="mono faint">{seqOrder.has(b.producerPid) ? seqKey(b.producerPid) + 1 : '—'}</span> },
     { key: 'producer', label: 'Producer', width: 110, sort: (b) => b.producer, render: (b) => b.producer },
     { key: 'wport', label: 'WDMA port', width: 170, sort: (b) => b.wPorts.join(','), title: (b) => b.wPorts.join(', '), render: (b) => <span className="mono">{b.wPorts.join(', ') || '—'}</span> },
     { key: 'buffer', label: 'Buffer', width: 150, sort: (b) => b.name, render: (b) => <span className="mono">{b.name}</span> },
@@ -179,6 +192,7 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
     { key: 'note', label: 'Note', width: 280, title: (b) => b.note, render: (b) => <span className="faint">{b.enabled ? '' : '[off] '}{b.note}</span> },
   ]
   const ipCols: Column<IpModel>[] = [
+    { key: 'seq', label: '#', width: 40, align: 'right', headTitle: 'Sequence 순서 — 기본 정렬', sort: (i) => seqKey(i.pid), render: (i) => <span className="mono faint">{seqOrder.has(i.pid) ? seqKey(i.pid) + 1 : '—'}</span> },
     { key: 'lane', label: 'Lane', width: 90, sort: (i) => i.lane, render: (i) => LANE_LABEL[i.lane] },
     { key: 'ip', label: 'IP / SW', width: 120, sort: (i) => i.label, render: (i) => <b>{i.label}</b> },
     { key: 'in', label: 'In (처리)', width: 100, sort: (i) => i.inSize || null, render: (i) => <span className="mono">{i.inSize || '—'}</span> },
@@ -187,6 +201,16 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
     { key: 'mode', label: 'Mode', width: 110, sort: (i) => i.mode ?? null, title: (i) => i.mode, render: (i) => i.mode ?? '—' },
     { key: 'rd', label: 'RDMA', width: 58, align: 'right', sort: (i) => i.ports.filter((p) => p.dir === 'in' && p.via !== 'OTF' && p.via !== 'ctrl').length, render: (i) => i.ports.filter((p) => p.dir === 'in' && p.via !== 'OTF' && p.via !== 'ctrl').length },
     { key: 'wr', label: 'WDMA', width: 58, align: 'right', sort: (i) => i.ports.filter((p) => p.dir === 'out' && p.via !== 'OTF' && p.via !== 'ctrl').length, render: (i) => i.ports.filter((p) => p.dir === 'out' && p.via !== 'OTF' && p.via !== 'ctrl').length },
+    ...(ipBwQ.data?.rows.length ? ([['read', 'R'], ['write', 'W']] as const).map(([k, l]): Column<IpModel> => ({
+      key: `bw_${k}`, label: `${l} MB/s 예측${hasMeasBw ? ' · 실측' : ''}`, width: hasMeasBw ? 150 : 90, align: 'right' as const, firstDir: -1 as const,
+      headTitle: `${k === 'read' ? 'Read' : 'Write'} BW — 예측 = 최신 simulation의 DMA port 합 (IP 단위) · 실측 = IP 단위 측정 (DMA별 측정 아님) · Δ = (예측 − 실측) / 실측`,
+      sort: (i) => ipBw.get(i.pid)?.pred[k] ?? null,
+      render: (i) => { const b = ipBw.get(i.pid); if (!b) return <span className="faint">—</span>
+        const m = b.meas?.[k], d = b.delta_pct?.[k]
+        return <span className="mono">{b.pred[k] ? b.pred[k].toFixed(0) : '0'}{m != null && <span className="faint"> · {m.toFixed(0)}</span>}
+          {d != null && <span className={`badge ${errClass(d)}`} style={{ marginLeft: 4, fontSize: 10.5 }}>{d > 0 ? '+' : ''}{d.toFixed(0)}%</span>}</span> } })) : []),
+    ...(hasMeasBw ? [{ key: 'bw_total', label: 'R+W Δ', width: 70, align: 'right' as const, headTitle: '실측이 total만 있으면 R+W 합으로 비교', sort: (i: IpModel) => ipBw.get(i.pid)?.delta_pct?.total ?? null,
+      render: (i: IpModel) => { const d = ipBw.get(i.pid)?.delta_pct?.total; return d == null ? <span className="faint">—</span> : <span className={`badge ${errClass(d)}`}>{d > 0 ? '+' : ''}{d.toFixed(0)}%</span> } }] : []),
     { key: 'start', label: '+start ms', width: 80, align: 'right', sort: (i) => timing?.get(i.pid)?.offset ?? null, render: (i) => <span className="mono">{timing?.get(i.pid)?.offset.toFixed(2) ?? '—'}</span> },
     { key: 'dur', label: 'dur ms', width: 70, align: 'right', sort: (i) => timing?.get(i.pid)?.dur ?? i.sw?.mean ?? null, render: (i) => <span className="mono">{timing?.get(i.pid)?.dur.toFixed(2) ?? (i.sw?.mean !== undefined ? `${i.sw.mean}*` : '—')}</span> },
     { key: 'flags', label: 'Config', width: 260, title: (i) => i.flags.map(([k, v]) => `${k}=${v}`).join(' · '), render: (i) => <span className="faint">{i.flags.map(([k, v]) => `${k}=${v}`).join(' · ')}</span> },
@@ -332,15 +356,22 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
         ) },
         { id: 'dma', label: <>DMA · Buffer <span className="tab-note">{model?.buffers.length ?? 0} · {model?.totalMBs.toFixed(0) ?? 0} MB/s</span></>, content: (
         <div className="table-scroll" style={{ height: '100%' }}>
-          {model && <DataTable id="pipeline.dma" columns={bufCols} rows={model.buffers} rowKey={(b) => b.name}
+          {model && <DataTable id="pipeline.dma" columns={bufCols} rows={bufsBySeq} rowKey={(b) => b.name}
             rowClass={(b) => `${selected === `buf:${b.name}` ? 'sel' : ''} ${b.enabled ? '' : 'row-off'}`} onRowClick={(b) => selectNode(`buf:${b.name}`)} />}
         </div>
         ) },
         { id: 'ips', label: <>IP In/Out · Timing <span className="tab-note">{model?.ips.length ?? 0}</span></>, content: (
         <div className="table-scroll" style={{ height: '100%' }}>
-          {model && <DataTable id="pipeline.ips" columns={ipCols} rows={model.ips} rowKey={(i) => i.pid} onRowClick={onIpRow}
+          {model && <DataTable id="pipeline.ips" columns={ipCols} rows={ipsBySeq} rowKey={(i) => i.pid} onRowClick={onIpRow}
             rowClass={(i) => (i.pid === selectedPid ? 'sel' : '')} />}
-          <div className="faint" style={{ fontSize: 11, padding: '6px 12px' }}>+start = frame의 sensor readout 시작 기준 평균 · * = trace 없음, 정의된 SW time(assumed)</div>
+          <div className="faint" style={{ fontSize: 11, padding: '6px 12px', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span># = Sequence 순서 (기본 정렬) · +start = frame의 sensor readout 시작 기준 평균 · * = trace 없음, 정의된 SW time(assumed)</span>
+            {ipBwQ.data?.simulation && <span>· BW 예측 = {ipBwQ.data.simulation.id} ({dayOf(ipBwQ.data.simulation.at)})</span>}
+            {ipBwQ.data && ipBwQ.data.measurements.length > 0 ? <label>· 실측 IP BW <select className="input" style={{ padding: '1px 4px', fontSize: 11 }} value={bwMeas || ipBwQ.data.measurement?.id || ''} onChange={(e) => setBwMeas(e.target.value)}>
+              {ipBwQ.data.measurements.map((m) => <option key={m.id} value={m.id}>{dayOf(m.at)} · {m.synthetic ? '합성' : '실측'} · {m.id}</option>)}</select> (IP 단위 측정 · DMA별 아님 · Δ = (예측−실측)/실측)</label>
+              : ipBwQ.data && <span>· IP별 실측 BW 없음 (metric_observations bandwidth.read/write · scope ip를 import하면 비교 열이 생김)</span>}
+            {(ipBwQ.data?.unmatched.length ?? 0) > 0 && <span title={ipBwQ.data!.unmatched.map((u) => u.ref).join(', ')}>· 매칭 안 된 실측 IP {ipBwQ.data!.unmatched.length}</span>}
+          </div>
         </div>
         ) },
       ]} />

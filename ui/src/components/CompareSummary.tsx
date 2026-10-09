@@ -1,6 +1,7 @@
 // Compare page: decision summary vs the reference (★) — Power / BW / Latency first.
 import type { ReactNode } from 'react'
 import { useTip, type TipRow } from './ChartTip'
+import { DEFAULT_BATTERY, batteryNote, maText, type Battery } from '../lib/battery'
 
 export type MetricGroup = 'Power' | 'BW' | 'Latency · Timing'
 export interface MetricRow {
@@ -15,8 +16,28 @@ export interface MetricRow {
 export interface ItemInfo {
   label: string; full?: string; color: string; source: string | null
   changed?: { conditions: number; ips: number; sizes: number }
-  drivers?: string[]
+  /** biggest contributors to the change vs ★ (power parts in mW, DMA traffic per IP in MB/s) */
+  drivers?: Driver[]
   status?: ReactNode
+}
+
+export interface Driver { kind: 'power' | 'bw'; label: string; delta: number; unit: 'mW' | 'MB/s' }
+
+/** 주요 원인: one line per contributor — direction, name, signed Δ (+ mA for power), bar ∝ |Δ| within its kind. */
+function Drivers({ list, battery }: { list: Driver[]; battery: Battery }) {
+  const maxOf = (k: Driver['kind']) => Math.max(1e-9, ...list.filter((d) => d.kind === k).map((d) => Math.abs(d.delta)))
+  return <div className="cs-why">
+    <b>주요 원인</b>
+    <table className="cs-drv"><tbody>{list.map((d) => {
+      const up = d.delta > 0
+      return <tr key={`${d.kind}${d.label}`}>
+        <td className="cs-drv-k">{d.kind === 'power' ? 'Power' : 'DMA'}</td>
+        <td className="cs-drv-l" title={d.label}>{d.label}</td>
+        <td className={`mono cs-drv-v ${up ? 't-bad' : 't-good'}`}>{up ? '▲' : '▼'} {up ? '+' : '−'}{Math.abs(d.delta).toFixed(d.unit === 'mW' ? 1 : 0)} {d.unit}
+          {d.unit === 'mW' && <span className="faint"> ({maText(d.delta, battery, true)})</span>}</td>
+        <td className="cs-drv-bar"><span style={{ width: `${Math.round((Math.abs(d.delta) / maxOf(d.kind)) * 100)}%`, background: up ? 'var(--del-text, #C2410C)' : 'var(--add-text, #15803D)' }} /></td>
+      </tr> })}</tbody></table>
+  </div>
 }
 
 const GROUPS: MetricGroup[] = ['Power', 'BW', 'Latency · Timing']
@@ -37,7 +58,8 @@ export function deltaText(d: Delta, unit: string, digits: number): string {
 }
 const ARROW = { good: '▼', bad: '▲', same: '＝' } as const
 
-export function CompareSummary({ items, metrics }: { items: ItemInfo[]; metrics: MetricRow[] }) {
+export function CompareSummary({ items, metrics, battery = DEFAULT_BATTERY }: { items: ItemInfo[]; metrics: MetricRow[]; battery?: Battery }) {
+  const ma = (v: number | null, unit: string, signed = false) => (unit === 'mW' && v !== null ? maText(v, battery, signed) : null)
   const tip = useTip()
   const rows = metrics.filter((m) => m.values.some((v) => v !== null))
   const headline = (g: MetricGroup) => HEADLINE[g].map((k) => rows.find((r) => r.key === k && r.values[0] !== null)).find(Boolean) ?? rows.find((r) => r.group === g && r.values[0] !== null)
@@ -67,13 +89,13 @@ export function CompareSummary({ items, metrics }: { items: ItemInfo[]; metrics:
                       <div className="cs-g">{g}</div>
                       {d && m ? <>
                         <div className="cs-v mono"><span className="cs-arrow">{ARROW[d.tone]}</span>{d.pct !== null ? `${sgn(d.pct, 1)}%` : sgn(d.abs, m.digits ?? 1)}</div>
-                        <div className="cs-sub mono">{sgn(d.abs, m.digits ?? 1)} {m.unit} · {m.label}</div>
+                        <div className="cs-sub mono">{sgn(d.abs, m.digits ?? 1)} {m.unit}{ma(d.abs, m.unit, true) ? ` (${ma(d.abs, m.unit, true)})` : ''} · {m.label}</div>
                       </> : <div className="cs-v faint">—</div>}
                     </div>
                   )
                 })}
               </div>
-              {it.drivers && it.drivers.length > 0 && <div className="cs-why"><b>주요 원인</b> {it.drivers.join(' · ')}</div>}
+              {it.drivers && it.drivers.length > 0 && <Drivers list={it.drivers} battery={battery} />}
               <div className="cs-meta faint">
                 {it.changed && <span>변경: 조건 {it.changed.conditions} · IP {it.changed.ips} · size {it.changed.sizes}</span>}
                 <span>KPI {it.source ?? '없음'}</span>
@@ -95,7 +117,7 @@ export function CompareSummary({ items, metrics }: { items: ItemInfo[]; metrics:
                 const b = best(m)
                 return (
                   <tr key={m.key}>
-                    <td title={m.hint}>{m.label} <span className="faint">({m.unit})</span></td>
+                    <td title={m.unit === 'mW' ? `${m.hint ? `${m.hint} · ` : ''}${batteryNote(battery)}` : m.hint}>{m.label} <span className="faint">({m.unit}{m.unit === 'mW' ? ' · mA@Vbat' : ''})</span></td>
                     {m.values.map((v, i) => {
                       const d = i > 0 ? delta(v, m.values[0], m.lowerIsBetter !== false, m.tolerancePct ?? 1) : null
                       const tipRows: TipRow[] = [{ k: `★ ${items[0].label}`, v: m.values[0] === null ? '—' : `${m.values[0]!.toFixed(m.digits ?? 1)} ${m.unit}`, tone: 'muted' }]
@@ -105,7 +127,7 @@ export function CompareSummary({ items, metrics }: { items: ItemInfo[]; metrics:
                         <td key={i} className={`mono ${b === i ? 'cs-best' : ''}`}
                           {...(v !== null ? tip({ title: `${m.label} · ${items[i].label}`, color: items[i].color, head: { label: '값', value: `${v.toFixed(m.digits ?? 1)} ${m.unit}`, tone: 'strong' }, rows: tipRows, foot: m.hint }) : {})}>
                           {v === null ? <span className="faint">—</span> : <>
-                            <span className="cs-val">{v.toFixed(m.digits ?? 1)}</span>
+                            <span className="cs-val">{v.toFixed(m.digits ?? 1)}</span>{ma(v, m.unit) && <span className="cs-ma">{ma(v, m.unit)}</span>}
                             {d && <span className={`cs-chip t-${d.tone}`}>{ARROW[d.tone]} {d.pct !== null ? `${sgn(d.pct, 1)}%` : sgn(d.abs, m.digits ?? 1)}</span>}
                           </>}
                         </td>
@@ -118,7 +140,7 @@ export function CompareSummary({ items, metrics }: { items: ItemInfo[]; metrics:
           )
         })}
       </table></div>
-      <div className="faint" style={{ fontSize: 11.5 }}>▼ 개선 · ▲ 악화 · ＝ ±1% 이내 (fps는 높을수록 개선) · 굵은 테두리 = 행별 최선 · hover = 절대값·Δ</div>
+      <div className="faint" style={{ fontSize: 11.5 }}>▼ 개선 · ▲ 악화 · ＝ ±1% 이내 (fps는 높을수록 개선) · 굵은 테두리 = 행별 최선 · hover = 절대값·Δ · {batteryNote(battery)}</div>
     </div>
   )
 }

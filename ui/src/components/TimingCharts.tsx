@@ -58,7 +58,10 @@ function SlotRow({ stage, P, px, barW, labelW, valW, margin }: { stage: StageRow
   const segs = stageSegments(stage)
   let x = 0
   const used = segs.reduce((a, s) => a + s.ms, 0)
-  const over = used > P * 1.0005 || !stage.feasible
+  // pipelined NRT / Post: SW and HW run on different frames through M2M buffers — a chain > period only adds latency
+  const piped = stage.throughput === 'pipelined' && (stage.id === 'nrt' || stage.id === 'post')
+  const over = piped ? !stage.feasible : used > P * 1.0005 || !stage.feasible
+  const extraFrames = piped && used > P * 1.0005 ? Math.ceil(used / P) - 1 : 0
   const sub = stage.id === 'rt' ? `sensor readout 종속 · ${pct0(margin)} rule은 판정만` : stage.id === 'nrt' ? 'MTNR→MCSC · SW gating 반영' : stage.id === 'post' ? 'memory → EIS/SW → GDC' : `DPU · MFC · writer (${pct0(margin)} rule)`
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -70,7 +73,8 @@ function SlotRow({ stage, P, px, barW, labelW, valW, margin }: { stage: StageRow
         <rect x={0} y={6} width={barW} height={28} fill="#F7F4EF" rx={3} />
         {stage.id === 'rt' && <rect x={stage.budget_ms * px} y={6} width={(P - stage.budget_ms) * px} height={28} fill="#FCEFD6" stroke="#E5C48A" />}
         {segs.map((s) => {
-          const w = Math.max(1, Math.min(s.ms, P * 1.5 - x) * px)
+          const w = Math.max(1, Math.min(s.ms, (piped ? P : P * 1.5) - x) * px)
+          if ((piped ? P : P * 1.5) - x <= 0) { x += s.ms; return null }
           const el = (
             <g key={s.key} {...tip({ title: s.label, color: s.color, head: { label: '소요', value: `${fmt(s.ms, 2)} ms`, tone: 'strong' },
               rows: [{ k: 'frame 주기 대비', v: `${fmt((s.ms / P) * 100, 1)}% of ${fmt(P, 2)} ms` }, { k: 'slot 시작', v: `+${fmt(x, 2)} ms` }], foot: s.tip })}>
@@ -86,12 +90,15 @@ function SlotRow({ stage, P, px, barW, labelW, valW, margin }: { stage: StageRow
         )}
         {stage.id === 'rt' && <line x1={stage.budget_ms * px} x2={stage.budget_ms * px} y1={0} y2={40} stroke="#7A4B12" strokeDasharray="4 3" strokeWidth={1.5} />}
         <line x1={barW} x2={barW} y1={0} y2={40} stroke="var(--text)" strokeWidth={2} />
+        {extraFrames > 0 && <g><rect x={barW - 46} y={8} width={42} height={24} rx={4} fill="#FFFFFF" opacity={0.9} /><text x={barW - 25} y={24} textAnchor="middle" fontSize={11} fontWeight={700} fill="#7A4B12">+{extraFrames}f ▶</text>
+          <title>{`SW+HW ${fmt(used, 2)} ms > frame ${fmt(P, 2)} ms — 남은 부분은 다음 frame 구간에서 처리 (buffering, latency +${extraFrames} frame)`}</title></g>}
       </svg>
       <div className="mono" style={{ width: valW, flexShrink: 0, fontSize: 12, textAlign: 'right', color: over ? 'var(--del-text)' : 'var(--text-2)' }}>
         {stage.id === 'rt' || stage.id === 'output'
           ? `HW ${fmt(stage.hw_ms, 2)} / ${fmt(stage.budget_ms, 2)}`
           : `SW ${fmt(stage.sw_ms, 2)} + HW ${fmt(stage.hw_ms, 2)}`}
-        <div className="faint" style={{ fontSize: 11 }}>{stage.feasible ? `${fmt(stage.fill_pct, 0)}% of ${fmt(P, 2)} ms` : 'HW 예산 없음'}</div>
+        <div className="faint" style={{ fontSize: 11 }}>{!stage.feasible ? (piped ? `최장 SW ${fmt(stage.longest_sw_ms ?? 0, 2)} > frame` : 'HW 예산 없음')
+          : extraFrames ? `${fmt((used / P) * 100, 0)}% · pipeline → latency +${extraFrames} frame` : `${fmt(stage.fill_pct, 0)}% of ${fmt(P, 2)} ms`}</div>
       </div>
     </div>
   )

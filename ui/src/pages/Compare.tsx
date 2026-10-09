@@ -16,7 +16,8 @@ import { DataTable, type Column, type RowGroup, type SortValue } from '../compon
 import { Bars, BoxPlot, SERIES, StackedBars } from '../components/Charts'
 import { PowerDeltaTable, PowerStack, type PowerRow } from '../components/PowerModelCharts'
 import { cpuSource, mifSummary, powerModelParts } from '../lib/powerModel'
-import { CompareSummary, type ItemInfo, type MetricRow } from '../components/CompareSummary'
+import { CompareSummary, type Driver, type ItemInfo, type MetricRow } from '../components/CompareSummary'
+import { useBattery } from '../lib/battery'
 import { pickProfile } from '../lib/simProfile'
 
 const KPI_FIELDS: [string, string, string][] = [
@@ -60,6 +61,7 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
   const cItems: CompareItem[] = compareItems(ctx.params, ctx.scenario, ctx.variant)
   const ids = cItems.map((it) => `${it.scenario}~${it.variant}`)
   const key = ids.join(',')
+  const battery = useBattery(ctx.project, ctx.params.cfg)
   const catOf = (s: string) => ctx.allCatalog.find((c) => c.scenario_id === s)
   const scnIds = [...new Set(cItems.map((it) => it.scenario))]
   const scnKey = scnIds.join(',')
@@ -223,7 +225,6 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
     n: ids.length, kpi: kpiRows, dma: models.map((m) => (m ? m.totalMBs : null)),
     traffic: models.map((m) => (m ? trafficByIp(m) : null)), changedConditions: condDiff, ipMaps, sizeMaps,
   })
-  const sign = (x: number) => `${x >= 0 ? '+' : ''}${x.toFixed(1)}`
   // ---- decision summary: Power / BW / Latency vs ★
   const kv = (field: string) => kpiRows.find((r) => r.field === field)?.values ?? ids.map(() => null)
   const fam = (i: number, f: 'cpu' | 'ip' | 'mem'): number | null => {
@@ -250,15 +251,15 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
   ]
   const summaryItems: ItemInfo[] = ids.map((id, i) => {
     const f = found.find((x) => x.index === i)
-    const drivers: string[] = []
+    const drivers: Driver[] = []
     const pr0 = powerRows.find((x) => x.id === ids[0]), pri = powerRows.find((x) => x.id === id)
     if (i > 0 && pr0 && pri) {
       const keys = [...new Set([...pr0.parts, ...pri.parts].map((p) => p.key))]
       keys.map((k) => ({ k, label: (pri.parts.find((p) => p.key === k) ?? pr0.parts.find((p) => p.key === k))!.label, d: (pri.parts.find((p) => p.key === k)?.mw ?? 0) - (pr0.parts.find((p) => p.key === k)?.mw ?? 0) }))
         .filter((x) => Math.abs(x.d) >= 1).sort((a, b) => Math.abs(b.d) - Math.abs(a.d)).slice(0, 3)
-        .forEach((x) => drivers.push(`${x.label} ${sign(x.d)} mW`))
+        .forEach((x) => drivers.push({ kind: 'power', label: x.label, delta: x.d, unit: 'mW' }))
     }
-    if (f?.topIp.length) drivers.push(`DMA ${f.topIp.slice(0, 3).map((t) => `${t.ip} ${sign(t.delta)}`).join(', ')} MB/s`)
+    f?.topIp.slice(0, 3).filter((t) => Math.abs(t.delta) >= 0.5).forEach((t) => drivers.push({ kind: 'bw', label: t.ip, delta: t.delta, unit: 'MB/s' }))
     const st = sims[id]
     return { label: labels[id] ?? id, full: itemLbl[i]?.full, color: color(i), source: kpiOf(i).source, changed: f?.changed, drivers,
       status: st?.status === 'running' ? <div className="faint">예측 계산 중…</div> : st?.status === 'error' ? <div className="err" style={{ margin: 0 }}>{st.error}</div> : undefined }
@@ -274,7 +275,7 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
         {noKpi.length > 0 && <button className="btn primary" onClick={() => runSim(noKpi)} title="simulation으로 KPI 계산 (DB에 저장하지 않음)">{kpiMode === 'sim' ? `${noKpi.length}개 예측 실행` : `KPI 없는 ${noKpi.length}개 예측 실행`}</button>}
       </div>
       {mixed && <div className="faint" style={{ fontSize: 12, margin: '0 0 8px' }}>⚠ KPI 출처가 섞여 있습니다 (실측 vs 계산). 설계 대안 비교는 “Simulation 통일”을 권장합니다.</div>}
-      <CompareSummary items={summaryItems} metrics={metrics} />
+      <CompareSummary items={summaryItems} metrics={metrics} battery={battery} />
     </section>
   )
 

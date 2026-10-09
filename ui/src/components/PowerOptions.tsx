@@ -31,10 +31,11 @@ export const OPTION_NOTE = 'Δ = option 적용 후 compression·DVFS를 다시 �
 
 export function OptionResults({ results, best }: { results: OptionResult[]; best?: string | null }) {
   if (!results.length) return <div className="empty">탐색된 option 조합이 없습니다.</div>
+  const fixedCol = results.some((r) => r.effect_given_fixed != null)
   return (
     <div className="table-x">
       <table className="tb-mini-table" style={{ width: '100%' }} aria-label="power option 조합">
-        <thead><tr><th>Option 조합</th><th>종류</th><th title="variant 추천 조합 대비">Δ mW</th><th>Δ%</th><th title="compression·DVFS 재탐색 전 baseline끼리 비교">raw Δ</th><th>Δ BW MB/s</th><th>원인</th><th>spec</th><th>IQ</th></tr></thead>
+        <thead><tr><th>Option 조합</th><th>종류</th><th title="variant 추천 조합 대비">Δ mW</th><th>Δ%</th><th title="compression·DVFS 재탐색 전 baseline끼리 비교">raw Δ</th><th>Δ BW MB/s</th>{fixedCol && <th title="항상 이득인 option을 고정했을 때 나머지 option이 더하는 효과">고정 대비</th>}<th>원인</th><th>spec</th><th>IQ</th></tr></thead>
         <tbody>{results.map((r) => (
           <tr key={r.key} className={r.key === best ? 'selected' : ''} title={r.key}>
             <td>{r.labels.join(' + ')}</td>
@@ -43,6 +44,7 @@ export function OptionResults({ results, best }: { results: OptionResult[]; best
             <td className="mono">{r.delta_pct === null ? '—' : `${signed(r.delta_pct)}%`}</td>
             <td className="mono faint">{signed(r.raw_delta_mw)}</td>
             <td className="mono">{signed(r.delta_bw_mbs, 0)}</td>
+            {fixedCol && <td className="mono">{r.effect_given_fixed == null ? <span className="faint">—</span> : signed(r.effect_given_fixed)}</td>}
             <td><Causes by={r.attribution.by_category} /></td>
             <td title={r.spec_reasons.join('\n')}><span className={`badge ${r.spec_ok ? 'v-ok' : 'v-fail'}`}>{r.spec_ok ? 'OK' : 'Fail'}</span></td>
             <td>{r.review_status ? <ReviewBadge status={r.review_status} /> : <span className="faint" style={{ fontSize: 11 }}>{r.iq_eval === 'required' ? '평가 필요' : '—'}</span>}</td>

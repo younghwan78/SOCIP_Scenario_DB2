@@ -25,6 +25,13 @@ class TimingBudgetRequest(_DvfsSelection):
     options: TimingBudgetOptions = Field(default_factory=TimingBudgetOptions)
 
 
+class TimingBudgetDvfsWhatIfRequest(TimingBudgetRequest):
+    """Each DVFS domain pinned k levels faster (+) / slower (-) than resolved; one budget run per cell."""
+
+    shifts: list[int] = Field(default_factory=lambda: [-2, -1, 1, 2], min_length=1, max_length=6)
+    domains: list[str] | None = Field(default=None, max_length=12)
+
+
 class TimingBudgetFleetRequest(_DvfsSelection):
     scenario_id: str
     variant_ids: list[str] | None = Field(default=None, max_length=200)

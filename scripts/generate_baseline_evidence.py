@@ -238,6 +238,34 @@ def cpu_profile(vid: str, graph, fps: float, sw_meas: dict[str, float]) -> tuple
     return obs, breakdown, summary
 
 
+def ip_bw_observations(sim: dict) -> list[dict]:
+    """SYNTHETIC per-IP measured bandwidth (scope ip, in-house style refs = upper-case node id).
+
+    Real captures count bytes per IP master (bus / PMU monitor), not per DMA port, so the simulation's DMA
+    ports are summed per IP and skewed deterministically (CRC of the node id) to look like a capture:
+    read ×0.90–1.20, write ×0.94–1.10. ``dpu`` reports only a total (read + write) to exercise that path.
+    """
+    import zlib
+
+    per: dict[str, dict[str, float]] = {}
+    for item in sim.get("dma_breakdown") or []:
+        if item.get("direction") in ("read", "write") and isinstance(item.get("bw_mbs"), (int, float)):
+            per.setdefault(item["node_id"], {"read": 0.0, "write": 0.0})[item["direction"]] += float(item["bw_mbs"])
+    obs: list[dict] = []
+    for node in sorted(per):
+        if node in ("mpeg_writer", "storage_write"):
+            continue  # SW / storage path, no HW bus master
+        c = zlib.crc32(node.encode()) / 0xFFFFFFFF
+        factor = {"read": 0.90 + 0.30 * c, "write": 0.94 + 0.16 * (1 - c)}
+        vals = {k: round(v * factor[k], 3) for k, v in per[node].items() if v > 0}
+        if node == "dpu":
+            vals = {"total": round(sum(vals.values()), 3)}
+        for k, v in vals.items():
+            obs.append({"metric_id": f"bandwidth.{k}", "scope": {"kind": "ip", "ref": node.upper()}, "unit": "MB/s",
+                        "stats": {"mean": v, "p95": round(v * 1.06, 3)}})
+    return obs
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--write", action="store_true")
@@ -292,7 +320,7 @@ def main() -> int:
         doc["kpi"]["fps_effective"] = round(fps * 0.999, 2)
         doc["timeline_events"] = trace
         doc["sw_task_timing"] = sw
-        doc["metric_observations"] = obs
+        doc["metric_observations"] = obs + ip_bw_observations(sim)
         doc["cpu_breakdown"] = breakdown if has_rails else breakdown + [b for b in doc.get("cpu_breakdown", []) if b["cluster"] not in {x["cluster"] for x in breakdown}]
         MeasurementEvidence.model_validate(doc)
         row["added"].append(doc["id"])

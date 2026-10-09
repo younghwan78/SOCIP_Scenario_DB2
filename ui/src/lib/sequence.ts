@@ -193,3 +193,20 @@ export function sequenceLayout(view: ViewResponse, opts: SeqOptions): Layout {
     lanes: lanes.map((l) => ({ id: l, label: LANE_LABEL[l], ...laneY.get(l)! })).map((l) => ({ id: l.id, label: l.label, y: l.y, height: l.h })),
   }
 }
+
+/** Sequence position per pipeline id (pid): the Sequence lens column (rank), then the view's node order.
+ *  Tables use it as their default order so rows read Sensor → RT → NRT → output like the Sequence diagram. */
+export function sequenceOrder(view: ViewResponse | undefined, merged?: Map<string, string>): Map<string, number> {
+  const out = new Map<string, number>()
+  if (!view) return out
+  const units = view.nodes.map((n) => n.data).filter((n) => n.type === 'ip' || n.type === 'sw')
+  const ids = new Set(units.map((n) => n.id))
+  const idOfPid = new Map(units.map((n) => [pipelineIdOf(n.id), n.id]))
+  const inside = new Set<string>()
+  for (const [hw, sw] of merged ?? []) { const a = idOfPid.get(sw), b = idOfPid.get(hw); if (a && b) inside.add(`${a}|${b}`) }
+  const rank = sequenceRanks(units.map((n) => n.id), view.edges.map((e) => e.data).filter((e) => ids.has(e.source) && ids.has(e.target)).map((e) => ({
+    source: e.source, target: e.target, kind: inside.has(`${e.source}|${e.target}`) ? 'OTF' : e.flow_type === 'M2M' ? 'M2M' : e.flow_type === 'control' ? 'control' : 'OTF' })))
+  units.map((n, i) => ({ pid: pipelineIdOf(n.id), key: (rank.get(n.id) ?? 0) * 10000 + i }))
+    .sort((a, b) => a.key - b.key).forEach((u, i) => { if (!out.has(u.pid)) out.set(u.pid, i) })
+  return out
+}
