@@ -217,7 +217,7 @@ def _run_meta(row: ArchExplorationRun) -> dict[str, Any]:
 
 SUMMARY_KEYS = ("scenario_id", "variant_id", "design_conditions", "severity", "fps", "period_ms", "eis_on", "mfc_dual",
                 "spec_ok", "spec_reasons", "status", "objective", "counts", "distribution", "baseline", "recommended",
-                "coverage", "dvfs_table_ref", "input_hash", "model_lineage")
+                "coverage", "dvfs_table_ref", "input_hash", "model_lineage", "tiers", "throughput_model")
 SW_MARGIN_SUMMARY_KEYS = ("worst", "growth_tolerance", "growth_tolerance_fixed", "growth_tested_max", "recommendations",
                           "verdict", "stat_spread_ms")
 
@@ -586,6 +586,9 @@ def create_report(db: Session, request: ArchReportRequest, user: str | None = No
     clock = _report_clock(db, preds)
     if clock:
         snapshot["clock_residency"] = clock  # absent key = report generated before clock residency existed
+    from scenario_db.api.services.review import report_context
+
+    snapshot["review_context"] = report_context(db, run.project_ref, (run.spec or {}).get("config_profile_ref"), preds)
     title = request.title or f"{run.soc_ref or ''} {run.scenario_type} Architecture 검토".strip()
     html = render_html(title, snapshot)
     row = ArchReport(

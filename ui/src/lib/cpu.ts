@@ -5,7 +5,9 @@ import { postAdmitted } from './timingBudget'
 
 export interface CpuInputs {
   topologies: { id: string; version: number; soc_ref: string; clusters: string[] }[]
-  profiles: { id: string; scenario_ref: string | null; variant_ref: string | null; project_ref: string | null; tasks?: { task: string; cluster: string; threads?: number | null }[] }[]
+  profiles: { id: string; scenario_ref: string | null; variant_ref: string | null; project_ref: string | null; tasks?: { task: string; cluster: string; threads?: number | null }[]
+    /** CPU-05 (API ≥ 2026-10-09): synthetic | physical_capture | unknown, capture date, SW, silicon */
+    origin?: string; measured_at?: string | null; sw_baseline_ref?: string | null; silicon_rev?: string | null }[]
 }
 
 type Topology = CpuInputs['topologies'][number]

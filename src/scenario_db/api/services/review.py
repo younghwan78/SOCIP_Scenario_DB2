@@ -177,3 +177,30 @@ def thermal_watch(db: Session, project_ref: str, *, dvfs_whatif=None) -> dict[st
                                     "해상도·fps·EIS 등 성능 조건 변경(다른 variant) 검토 필요")
         out.append(row)
     return {"project_ref": project_ref, "policy": refs["policy"], "items": out}
+
+
+def battery_of(db: Session, config_profile_ref: str | None) -> dict[str, Any]:
+    """Vbat / PMIC efficiency used for mA@Vbat (sim config profile run_config; default 4.0 V · 0.85)."""
+    from scenario_db.db.models.capability import SimConfigProfile
+
+    row = db.get(SimConfigProfile, config_profile_ref) if config_profile_ref else None
+    rc = (row.run_config or {}) if row is not None else {}
+    vbat, eff = rc.get("vbat") or 4.0, rc.get("pmic_efficiency") or 0.85
+    return {"vbat": float(vbat), "pmic_efficiency": float(eff), "source": config_profile_ref if row is not None and (rc.get("vbat") or rc.get("pmic_efficiency")) else "default"}
+
+
+def report_context(db: Session, project_ref: str | None, config_profile_ref: str | None,
+                   predictions: dict[tuple[str, str], dict[str, Any]]) -> dict[str, Any]:
+    """Frozen with a report (RPT-03): review policy, battery conversion and each variant's previous-project judgement,
+    so the report's mA and target verdicts do not move when the project settings change later."""
+    bat = battery_of(db, config_profile_ref)
+    refs = power_references(db, project_ref) if project_ref else {"policy": policy_view(None), "tolerance_pct": None, "references": {}}
+    rows = []
+    for (sid, vid), pred in predictions.items():
+        mw = (((pred or {}).get("metrics") or {}).get("power") or {}).get("total_mw")
+        j = judge_power(mw, refs["references"].get(vid), refs["tolerance_pct"])
+        rows.append({"scenario_id": sid, "variant_id": vid, "total_mw": mw,
+                     "ma": round(mw / bat["vbat"] / bat["pmic_efficiency"], 1) if mw is not None else None,
+                     "throughput_model": ((pred or {}).get("metrics") or {}).get("throughput_model") or "stage",
+                     "reference": j})
+    return {"policy": refs["policy"], "battery": bat, "rows": rows}

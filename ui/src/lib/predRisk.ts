@@ -38,8 +38,8 @@ export function minSlackPct(r: BoardRow): number | null {
   const d = r.verdict_detail
   const period = d?.period_ms ?? (r.fps ? 1000 / r.fps : null)
   if (!d?.stages?.length || !period) return null
-  // RT is bound by the sensor read-out (no SW in the stage) — only stages with SW / SW-margin rules count
-  const vals = d.stages.filter((s) => s.id !== 'rt' && s.budget_ms !== undefined && s.budget_ms > 0 && s.hw_ms !== undefined && s.hw_ms > 0)
+  // only the SW stages (NRT / Post): RT is bound by the sensor read-out, Output is a HW margin rule without SW
+  const vals = d.stages.filter((s) => (s.id === 'nrt' || s.id === 'post') && s.budget_ms !== undefined && s.budget_ms > 0 && s.hw_ms !== undefined && s.hw_ms > 0)
     .map((s) => (s.throughput === 'pipelined' && s.longest_sw_ms !== undefined
       ? (period - s.longest_sw_ms) / period   // pipelined: the longest SW task must fit one frame
       : (s.budget_ms! - s.hw_ms!) / period) * 100)

@@ -12,7 +12,7 @@ import { DataTable, type Column } from '../components/DataTable'
 import { OPTION_NOTE, OptionResults, signed } from '../components/PowerOptions'
 import { TiersView } from '../components/ExploreTiers'
 import { useBattery, type Battery } from '../lib/battery'
-import { useReferences } from '../lib/review'
+import { JUDGE_CLASS, JUDGE_LABEL, judgePower, useReferences } from '../lib/review'
 import { VariantFailures } from '../components/VariantFailures'
 import { ProfileSelect } from '../components/ProfileSelect'
 import { useSimProfiles } from '../lib/simProfile'
@@ -171,6 +171,9 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
     ['추천 power', s.recommended_power_mw ? `${fmt(s.recommended_power_mw[0], 0)}–${fmt(s.recommended_power_mw[1], 0)}` : '—', 'mW (scenario별 최저)'],
     ['Power option (절감 variant)', `${s.power_options?.variants ?? 0}`, s.power_options?.best_saving_mw ? `최대 절감 ${fmt(s.power_options.best_saving_mw[0], 1)} ~ ${fmt(s.power_options.best_saving_mw[1], 1)} mW` : `${s.power_options?.sets ?? 0} 조합 · IQ 평가 대상`],
   ]
+  const refs = useReferences(run.project_ref ?? undefined)
+  const iqKeepRun = refs?.policy.register_baseline === 'iq_keep'
+  const baseOf = (r: VariantResult) => (iqKeepRun ? r.tiers?.keep?.best.total_mw : undefined) ?? r.recommended?.total_mw ?? null
   const cols: Column<VariantResult>[] = [
     { key: 'v', label: 'Variant', width: 210, sticky: true, sort: (r) => r.variant_id, render: (r) => <span className="mono">{short(r.variant_id)}</span> },
     { key: 'fps', label: 'fps', width: 52, align: 'right', firstDir: -1, sort: (r) => r.fps, render: (r) => fmt(r.fps, 0) },
@@ -183,6 +186,11 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
     { key: 'bwip', label: 'IP BW', width: 70, align: 'right', firstDir: -1, sort: (r) => r.recommended?.bw_ip_mw ?? r.recommended?.bw_mw ?? -1, render: (r) => fmt(r.recommended?.bw_ip_mw ?? r.recommended?.bw_mw, 0) },
     { key: 'bwcpu', label: 'CPU BW', width: 74, align: 'right', firstDir: -1, sort: (r) => r.recommended?.bw_cpu_mw ?? -1, render: (r) => fmt(r.recommended?.bw_cpu_mw, 1) },
     { key: 'bw', label: 'BW MB/s', width: 84, align: 'right', firstDir: -1, sort: (r) => r.recommended?.bw_mbs ?? -1, render: (r) => fmt(r.recommended?.bw_mbs, 0) },
+    ...(refs?.policy.power_reference ? [{ key: 'ref', label: '전과제 대비', width: 110, align: 'right' as const, firstDir: -1 as const,
+      headTitle: `과제 review policy의 전과제 값 대비 (≤ +${refs.policy.power_reference.tolerance_pct}% 유사) · 기준 = ${iqKeepRun ? '화질 유지 최적 (기본 등록)' : '추천'}`,
+      sort: (r: VariantResult) => judgePower(baseOf(r), refs.references[r.variant_id], refs.tolerance_pct)?.delta_pct ?? null,
+      render: (r: VariantResult) => { const j = judgePower(baseOf(r), refs.references[r.variant_id], refs.tolerance_pct)
+        return j ? <span className="mono">{j.delta_mw >= 0 ? '+' : ''}{fmt(j.delta_mw, 0)} <span className={`badge ${JUDGE_CLASS[j.status]}`} style={{ fontSize: 10.5 }}>{JUDGE_LABEL[j.status]}</span></span> : <span className="faint">—</span> } }] : []),
     { key: 'save', label: 'baseline 대비', width: 108, align: 'right', firstDir: 1, sort: (r) => (r.recommended ? r.recommended.total_mw - r.baseline.total_mw : 0), render: (r) => r.recommended ? <span className="mono" style={{ color: 'var(--primary-strong)' }}>{fmt(r.recommended.total_mw - r.baseline.total_mw, 1)}</span> : '—' },
     { key: 'opt', label: '절감 option', width: 120, align: 'right', firstDir: 1, sort: (r) => bestOption(r.power_options)?.delta_mw ?? 0,
       title: (r) => { const b = bestOption(r.power_options); return b ? `${b.labels.join(' + ')}\n${OPTION_NOTE}` : (r.power_options?.notes ?? []).join('\n') },
