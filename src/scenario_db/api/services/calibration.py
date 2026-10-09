@@ -319,7 +319,9 @@ def clock_residency_of(db: Session, m: Any, params_rows: list[Any] | None = None
     from scenario_db.meas_import.clock_residency import DOMAIN_CLASSES
     from scenario_db.sim.domain_power import models_from_ip_catalog
 
-    same_soc = [r for r in params_rows if not soc or getattr(r, "soc_ref", None) == soc] or list(params_rows)
+    same_soc = [r for r in params_rows if soc and getattr(r, "soc_ref", None) == soc]
+    if not soc:
+        return clock_residency_view(m.metric_observations, m.cpu_breakdown)
     opp_max = opp_max_from_ip_catalog(ip_rows, soc) | opp_max_from_params(same_soc, _cpu_domains(m))
     labels = {dc.label: dc.name for dc in DOMAIN_CLASSES.values() if dc.name != "cpu"}
     return clock_residency_view(m.metric_observations, m.cpu_breakdown, opp_max=opp_max,

@@ -148,6 +148,8 @@ def resolve_cpu_profile(db: Session, scenario_id: str, variant_id: str | None, r
         row = get_evidence(db, ref)
         if row is None or row.kind != "evidence.measurement":
             raise NotFoundError(f"measurement evidence not found: {ref}")
+        if row.scenario_ref != scenario_id or row.variant_ref != variant_id:
+            raise UnprocessableError(f"measurement evidence {ref} does not belong to the requested scenario and variant")
         rows = [row]
     else:
         rows = (db.query(Evidence).filter(Evidence.kind == "evidence.measurement", Evidence.scenario_ref == scenario_id,
