@@ -7,7 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from scenario_db.api.schemas.evidence import EvidenceResponse
-from scenario_db.exceptions import NotFoundError, UnprocessableError
+from scenario_db.exceptions import ConflictError, NotFoundError, UnprocessableError
 from scenario_db.api.schemas.simulation import SimulateRequest, SimulateRunResponse, SimulationReadinessResponse
 from scenario_db.db.models.capability import PowerModelParams as PowerModelParamsRow
 from scenario_db.db.models.capability import SimConfigProfile, SocDvfsTable
@@ -83,6 +83,8 @@ def run_simulation_request(db: Session, request: SimulateRequest, *, requested_b
         dvfs_tables=dvfs_tables,
         execution_context=execution_context,
     )
+    if request.expected_params_hash is not None and hash_value != request.expected_params_hash:
+        raise ConflictError("Simulation inputs changed since preview; run a new preview before saving")
     if not request.force:
         cached = get_simulation_evidence_by_params_hash(
             db,

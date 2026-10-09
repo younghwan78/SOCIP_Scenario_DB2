@@ -19,6 +19,8 @@ def test_request_hash_ignores_persist_and_force_flags() -> None:
     transient_forced = _request_hash(inputs, _request(persist=False, force=True))
 
     assert baseline == transient_forced
+    guarded = _request(persist=True).model_copy(update={"expected_params_hash": baseline})
+    assert _request_hash(inputs, guarded) == baseline
 
 
 def test_request_hash_ignores_debug_trace_flags() -> None:

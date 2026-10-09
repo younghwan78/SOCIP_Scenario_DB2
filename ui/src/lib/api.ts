@@ -200,6 +200,7 @@ export interface SimRunRequest {
   config_profile_ref?: string | null
   execution_context: { silicon_rev: string; sw_baseline_ref: string; thermal: string; method?: string }
   persist?: boolean
+  expected_params_hash?: string
 }
 export interface SimRunResponse { evidence_id: string; kpi: Dict; warnings?: string[]; persisted?: boolean; cached?: boolean; params_hash?: string; evidence?: Dict | null; result?: { power_breakdown?: Dict | null } | null }
 

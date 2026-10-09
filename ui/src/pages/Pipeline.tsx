@@ -10,7 +10,8 @@ import { sequenceLayout, sequenceOrder } from '../lib/sequence'
 import { stageTimings, type StageTiming } from '../lib/cadence'
 import { modeNotes } from '../lib/modes'
 import { calibrationApi, dayOf, errClass } from '../lib/calibration'
-import { runPreview, saveResult, type SimState } from '../lib/simRun'
+import { runPreview } from '../lib/simRun'
+import { useSimRuns } from '../lib/useSimRuns'
 import { SimRunControls } from '../components/SimSave'
 import { GraphView } from '../components/GraphView'
 import { FrameColorLegend, TimelineView } from '../components/TimelineView'
@@ -46,30 +47,29 @@ function rankTrace(e: Evidence): number {
 
 export function PipelinePage({ ctx }: { ctx: Ctx }) {
   const { scenario, variant } = ctx
-  const viewQ = useAsync(() => api.view(scenario, variant, 1), [scenario, variant])
   const [evTick, setEvTick] = useState(0)
+  const viewQ = useAsync(() => api.view(scenario, variant, 1), [scenario, variant, evTick])
   const evidenceQ = useAsync(() => (variant ? api.evidenceList(scenario, variant, ctx.project) : Promise.resolve({ items: [], total: 0 })), [scenario, variant, ctx.project, evTick])
   // simulation preview (not stored) → "결과 저장" turns it into simulation evidence
-  const [sim, setSim] = useState<SimState | undefined>(undefined)
-  useEffect(() => setSim(undefined), [scenario, variant])
+  const simRuns = useSimRuns()
+  const simKey = JSON.stringify([ctx.project, scenario, variant, ctx.params.cfg])
+  const sim = simRuns.sims[simKey]
+  const cancelSim = simRuns.cancel
+  useEffect(() => () => cancelSim(simKey), [simKey, cancelSim])
   const catItem = ctx.allCatalog.find((c) => c.scenario_id === scenario)
   const runSim = async () => {
-    setSim({ status: 'running' })
-    try {
-      const done = await runPreview({ scenario, variant, project_id: catItem?.project_id, default_sw_profile_ref: catItem?.default_sw_profile_ref })
-      setSim(done)
+    const done = await simRuns.run(simKey, () => runPreview({ scenario, variant, project_id: catItem?.project_id,
+      default_sw_profile_ref: catItem?.default_sw_profile_ref }, ctx.params.cfg))
+    if (done) {
       setTraceId(done.res.persisted ? done.res.evidence_id : PREVIEW_ID)
-    } catch (e) { setSim({ status: 'error', error: e instanceof Error ? e.message : String(e) }) }
+    }
   }
   const saveSim = async () => {
-    if (sim?.status !== 'done') return
-    setSim({ ...sim, save: { status: 'saving' } })
-    try {
-      const saved = await saveResult(sim.req)
-      setSim({ ...sim, save: saved })
+    const saved = await simRuns.save(simKey)
+    if (saved) {
       setEvTick((n) => n + 1)
       setTraceId(saved.evidence_id)
-    } catch (e) { setSim({ ...sim, save: { status: 'error', error: e instanceof Error ? e.message : String(e) } }) }
+    }
   }
   const previewEv: Evidence | null = sim?.status === 'done' && !sim.res.persisted && sim.save?.status !== 'saved' && sim.res.evidence
     ? { ...(sim.res.evidence as unknown as Evidence), id: PREVIEW_ID } : null
@@ -77,7 +77,7 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
   // measured per-IP bandwidth (PMU / bus monitor counts per IP, not per DMA port) vs newest simulation
   const [bwMeas, setBwMeas] = useState<string>('')
   useEffect(() => setBwMeas(''), [scenario, variant])
-  const ipBwQ = useAsync(() => (variant ? calibrationApi.ipBandwidth(scenario, variant, bwMeas || undefined) : Promise.resolve(null)), [scenario, variant, bwMeas])
+  const ipBwQ = useAsync(() => (variant ? calibrationApi.ipBandwidth(scenario, variant, bwMeas || undefined) : Promise.resolve(null)), [scenario, variant, bwMeas, evTick])
   const ipBw = useMemo(() => new Map((ipBwQ.data?.rows ?? []).map((r) => [r.node, r])), [ipBwQ.data])
   const hasMeasBw = (ipBwQ.data?.rows ?? []).some((r) => r.meas)
   const varQ = useAsync(() => (variant ? api.variant(scenario, variant).catch(() => null) : Promise.resolve(null)), [scenario, variant])

@@ -1,8 +1,8 @@
 // Preview-then-save for simulations (same flow as the Streamlit Evidence Dashboard "Confirm & Save Evidence"):
 // a run is a preview (persist: false) until the user saves it; saving re-sends the identical request with
-// persist: true, so the stored evidence has the same params hash / id as the preview. Identical requests by other
+// persist: true with an expected params hash, so changed inputs cannot silently replace the preview. Identical requests by other
 // users converge on one evidence row (deterministic id) — the response then says it already existed.
-import { api, invalidateCache, type SimRunRequest, type SimRunResponse } from './api'
+import { api, ApiError, invalidateCache, type SimRunRequest, type SimRunResponse } from './api'
 import { pickProfile } from './simProfile'
 
 export interface SimTarget { scenario: string; variant: string; project_id?: string | null; default_sw_profile_ref?: string | null }
@@ -24,14 +24,21 @@ export async function simRequest(t: SimTarget, profileParam?: string): Promise<S
 export async function runPreview(t: SimTarget, profileParam?: string): Promise<Extract<SimState, { status: 'done' }>> {
   const req = await simRequest(t, profileParam)
   const res = await api.simulate({ ...req, persist: false })
-  return { status: 'done', res, req }
+  return { status: 'done', res, req: { ...req, expected_params_hash: res.params_hash } }
 }
 
 /** Save a previewed run as simulation evidence. ``existed`` = the same inputs were already saved (by anyone). */
 export async function saveResult(req: SimRunRequest): Promise<Extract<SaveState, { status: 'saved' }>> {
-  const res = await api.simulate({ ...req, persist: true })
+  if (!req.expected_params_hash) throw new Error('저장 확인 정보가 없습니다. Simulation을 다시 실행하세요.')
+  let res: SimRunResponse
+  try { res = await api.simulate({ ...req, persist: true }) } catch (e) {
+    if (e instanceof ApiError && e.status === 409) throw new Error('입력·설정이 변경됐습니다. Simulation을 다시 실행한 뒤 저장하세요.')
+    throw e
+  }
+  if (!res.persisted || res.params_hash !== req.expected_params_hash) throw new Error('미리보기와 동일한 결과의 저장을 확인하지 못했습니다. Simulation을 다시 실행하세요.')
   invalidateCache('/evidence')
   invalidateCache('/calibration')
+  invalidateCache(`/scenarios/${encodeURIComponent(req.scenario_id)}`)
   return { status: 'saved', evidence_id: res.evidence_id, existed: !!res.cached }
 }
 

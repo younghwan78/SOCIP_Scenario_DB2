@@ -19,7 +19,8 @@ import { cpuSource, mifSummary, powerModelParts } from '../lib/powerModel'
 import { CompareSummary, type Driver, type ItemInfo, type MetricRow } from '../components/CompareSummary'
 import { archApi, type BoardRow } from '../lib/archExplore'
 import { useBatteries, useBattery } from '../lib/battery'
-import { runPreview, saveResult, type SimState } from '../lib/simRun'
+import { runPreview } from '../lib/simRun'
+import { useSimRuns } from '../lib/useSimRuns'
 import { SimSaveLine } from '../components/SimSave'
 
 const KPI_FIELDS: [string, string, string][] = [
@@ -87,7 +88,8 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
   const [onlyDiff, setOnlyDiff] = useState(true)
   const [orient, setOrient] = usePref<'items' | 'variants'>('compare.orient', 'items')
   const [show, setShow] = usePref<'both' | 'table' | 'plot'>('compare.show', 'both')
-  const [sims, setSims] = useState<Record<string, SimState>>({})
+  const simRuns = useSimRuns()
+  const sims = simRuns.sims
   // evidence: measured/registered KPI first (mixed sources) · sim: every column from the same simulation model
   // pred (CMP-03): the registered (current) prediction of each variant — the number reported to the customer
   const [kpiMode, setKpiMode] = usePref<'evidence' | 'sim' | 'pred'>('compare.kpi', 'evidence')
@@ -132,25 +134,17 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
     for (const i of targets) {
       const it = cItems[i]
       const cat = catOf(it.scenario)
-      setSims((m) => ({ ...m, [ids[i]]: { status: 'running' } }))
-      try {
-        const done = await runPreview({ scenario: it.scenario, variant: it.variant, project_id: cat?.project_id, default_sw_profile_ref: cat?.default_sw_profile_ref })
-        setSims((m) => ({ ...m, [ids[i]]: done }))
-      } catch (e) {
-        setSims((m) => ({ ...m, [ids[i]]: { status: 'error', error: e instanceof Error ? e.message : String(e) } }))
-      }
+      await simRuns.run(ids[i], () => runPreview({ scenario: it.scenario, variant: it.variant,
+        project_id: cat?.project_id, default_sw_profile_ref: cat?.default_sw_profile_ref }))
     }
   }
   /** "결과 저장": the previewed run becomes simulation evidence (same request, persist: true). */
   const saveSim = async (targets: string[]) => {
+    let saved = false
     for (const id of targets) {
-      const st = sims[id]
-      if (st?.status !== 'done' || st.res.persisted || st.save?.status === 'saving' || st.save?.status === 'saved') continue
-      const setSave = (save: Extract<SimState, { status: 'done' }>['save']) => setSims((m) => { const cur = m[id]; return cur?.status === 'done' ? { ...m, [id]: { ...cur, save } } : m })
-      setSave({ status: 'saving' })
-      try { setSave(await saveResult(st.req)) } catch (e) { setSave({ status: 'error', error: e instanceof Error ? e.message : String(e) }) }
+      if (await simRuns.save(id)) saved = true
     }
-    setEvTick((n) => n + 1)
+    if (saved) setEvTick((n) => n + 1)
   }
   const unsaved = ids.filter((id) => { const st = sims[id]; return st?.status === 'done' && !st.res.persisted && (!st.save || st.save.status === 'error') })
   /** power_breakdown per item: same-model simulation first (Simulation 통일), else stored simulation evidence. */

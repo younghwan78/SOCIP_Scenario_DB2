@@ -13,5 +13,9 @@ it('offers "결과 저장" only for an unsaved preview', () => {
   const html = renderToStaticMarkup(createElement(SimSaveLine, { st: saved, onSave: noop }))
   expect(html).not.toContain('>결과 저장<')
   expect(html).toContain('저장됨')
+  expect(html).not.toContain('미저장')
+  expect(renderToStaticMarkup(createElement(SimRunControls, {
+    sim: { ...done, save: { status: 'saving' } }, onRun: noop, onSave: noop,
+  }))).toContain('disabled=""')
   expect(renderToStaticMarkup(createElement(SimRunControls, { sim: undefined, onRun: noop, onSave: noop }))).toContain('Simulation 실행')
 })
