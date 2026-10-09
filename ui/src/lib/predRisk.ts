@@ -2,6 +2,7 @@
 // target and which lever (CPU · IP clock · BW · power option) to work on first. Pure rules over the board row,
 // measurement coverage and an optional power target, so the page and the tests share one implementation.
 import type { BoardRow } from './archExplore'
+import { judgePower, JUDGE_LABEL, type PowerJudge, type PowerRef } from './review'
 
 export type RiskLevel = 'high' | 'med' | 'low' | 'ok'
 export type RiskKind = 'perf' | 'thermal' | 'confidence'
@@ -10,7 +11,7 @@ export interface FocusItem { lever: 'cpu' | 'ip' | 'bw' | 'option' | 'clock' | '
 export interface RiskRow {
   row: BoardRow; level: RiskLevel; score: number; risks: RiskItem[]; focus: FocusItem[]
   /** target gap: positive = over the target (mW) */
-  gap_mw: number | null; dominant: { part: 'CPU' | 'IP' | 'BW'; mw: number; share: number }
+  gap_mw: number | null; judge: PowerJudge | null; dominant: { part: 'CPU' | 'IP' | 'BW'; mw: number; share: number }
   min_slack_pct: number | null
 }
 export interface RiskContext {
@@ -18,6 +19,10 @@ export interface RiskContext {
   target_mw: number | null
   /** real measurements per variant key `${scenario}|${variant}`; undefined = unknown (coverage API unavailable) */
   measured?: Map<string, number>
+  /** 전과제 power per variant id (project review policy); takes precedence over target_mw */
+  references?: Record<string, PowerRef>; tolerance_pct?: number | null
+  /** latency limit in frames (project policy); buffering may add frames, fps itself is never traded */
+  max_latency_frames?: number | null
 }
 
 const RANK: Record<RiskLevel, number> = { high: 3, med: 2, low: 1, ok: 0 }
@@ -31,8 +36,11 @@ export function minSlackPct(r: BoardRow): number | null {
   const d = r.verdict_detail
   const period = d?.period_ms ?? (r.fps ? 1000 / r.fps : null)
   if (!d?.stages?.length || !period) return null
-  const vals = d.stages.filter((s) => s.budget_ms !== undefined && s.budget_ms > 0 && s.hw_ms !== undefined && s.hw_ms > 0)
-    .map((s) => ((s.budget_ms! - s.hw_ms!) / period) * 100)
+  // RT is bound by the sensor read-out (no SW in the stage) — only stages with SW / SW-margin rules count
+  const vals = d.stages.filter((s) => s.id !== 'rt' && s.budget_ms !== undefined && s.budget_ms > 0 && s.hw_ms !== undefined && s.hw_ms > 0)
+    .map((s) => (s.throughput === 'pipelined' && s.longest_sw_ms !== undefined
+      ? (period - s.longest_sw_ms) / period   // pipelined: the longest SW task must fit one frame
+      : (s.budget_ms! - s.hw_ms!) / period) * 100)
   return vals.length ? Math.min(...vals) : null
 }
 
@@ -54,13 +62,26 @@ export function assessRisk(r: BoardRow, ctx: RiskContext, peers: BoardRow[] = []
     else if (slack < 10) risks.push({ kind: 'perf', level: 'med', text: `SW 여유 ${slack.toFixed(0)}% of frame — 차기 SW 증가(×1.1~1.3)에 취약` })
   }
 
-  // ---- thermal / power (customer target)
+  // ---- latency (buffering adds frames; only a declared limit makes it a risk)
+  const lat = r.verdict_detail?.latency?.video_ms ?? r.verdict_detail?.latency?.preview_ms ?? null
+  const period = r.verdict_detail?.period_ms ?? (r.fps ? 1000 / r.fps : null)
+  if (ctx.max_latency_frames && lat && period && lat / period > ctx.max_latency_frames)
+    risks.push({ kind: 'perf', level: 'med', text: `latency ${(lat / period).toFixed(1)} frame > 한도 ${ctx.max_latency_frames} frame` })
+  if (r.throughput_model === 'stage' && ctx.references)
+    risks.push({ kind: 'confidence', level: 'low', text: '이전 판정 기준(stage)으로 등록 — 조합 탐색 후 다시 등록' })
+
+  // ---- thermal / power (customer target: 전과제와 유사 혹은 낮게)
   let gap: number | null = null
-  if (ctx.target_mw && ctx.target_mw > 0) {
+  const judge = judgePower(p.total_mw, ctx.references?.[r.variant_id], ctx.tolerance_pct)
+  if (judge) {
+    gap = judge.delta_mw
+    if (judge.status !== 'ok') risks.push({ kind: 'thermal', level: judge.status === 'over' ? 'high' : 'med',
+      text: `전과제 ${judge.reference_mw.toFixed(0)} mW 대비 ${JUDGE_LABEL[judge.status]} ${judge.delta_mw >= 0 ? '+' : ''}${judge.delta_mw.toFixed(0)} mW (${judge.delta_pct?.toFixed(1)}%)` })
+  } else if (ctx.target_mw && ctx.target_mw > 0) {
     gap = p.total_mw - ctx.target_mw
     if (gap > 0) risks.push({ kind: 'thermal', level: 'high', text: `목표 ${ctx.target_mw.toFixed(0)} mW 초과 +${gap.toFixed(0)} mW` })
     else if (p.total_mw > 0.9 * ctx.target_mw) risks.push({ kind: 'thermal', level: 'med', text: `목표의 ${((100 * p.total_mw) / ctx.target_mw).toFixed(0)}% — 여유 ${(-gap).toFixed(0)} mW` })
-  } else if (peers.length >= 4) {
+  } else if (peers.length >= 4 && !ctx.references) {
     const sorted = peers.map((x) => x.power.total_mw).sort((a, b) => a - b)
     const p80 = sorted[Math.floor(0.8 * (sorted.length - 1))]
     if (p.total_mw >= p80 && p.total_mw > sorted[0]) risks.push({ kind: 'thermal', level: 'low', text: `상위 20% power (${p.total_mw.toFixed(0)} mW) — 목표 미설정, 상대 비교` })
@@ -68,7 +89,7 @@ export function assessRisk(r: BoardRow, ctx: RiskContext, peers: BoardRow[] = []
 
   // ---- confidence (is the number trustworthy enough to commit to the customer?)
   const meas = ctx.measured?.get(`${r.scenario_id}|${r.variant_id}`)
-  const nearTarget = gap === null || gap > -0.1 * (ctx.target_mw ?? 0)
+  const nearTarget = gap === null || gap > -0.1 * (judge?.reference_mw ?? ctx.target_mw ?? 0)
   if (ctx.measured && !meas) risks.push({ kind: 'confidence', level: gap !== null && nearTarget ? 'med' : 'low', text: '실측 없음 — 예측만으로 판단' })
   if (r.verified && !r.verified.ok) risks.push({ kind: 'confidence', level: 'med', text: `sim 검증 불일치${r.verified.delta_pct !== null ? ` ${r.verified.delta_pct.toFixed(1)}%` : ''}` })
   const dist = r.distribution?.total_mw
@@ -87,7 +108,7 @@ export function assessRisk(r: BoardRow, ctx: RiskContext, peers: BoardRow[] = []
 
   const level = risks.reduce<RiskLevel>((a, x) => (RANK[x.level] > RANK[a] ? x.level : a), 'ok')
   const score = risks.reduce((s, x) => s + RANK[x.level] * (x.kind === 'confidence' ? 0.5 : 1), 0) + (gap !== null && gap > 0 ? gap / 100 : 0)
-  return { row: r, level, score, risks, focus, gap_mw: gap, dominant, min_slack_pct: slack }
+  return { row: r, level, score, risks, focus, gap_mw: gap, judge, dominant, min_slack_pct: slack }
 }
 
 export function assessAll(rows: BoardRow[], ctx: RiskContext): RiskRow[] {
