@@ -64,3 +64,31 @@ def test_measurement_as_input_and_reference(api_client):
     wrong = api_client.post("/api/v1/timing-budget/variant",
                             json={**base, "variant_id": V, "measured": {"measurement_ref": meas["id"], "sw": True}})
     assert wrong.status_code == 422      # a measurement of another variant is refused
+
+
+def test_intentional_dvfs_override_is_registered_as_is(api_client):
+    """A DVFS level the user pins on purpose is part of the registered condition (and its prediction levels)."""
+    base = {"scenario_id": S, "variant_id": V, "options": {"statistic": "mean"}}
+    ips = api_client.post("/api/v1/timing-budget/variant", json=base).json()["report"]["ips"]
+    groups = sorted({ip["dvfs_group"] for ip in ips if ip.get("dvfs_group")})
+    assert groups
+    # explicit DVFS tables for the demo (fixture ships none): three levels per domain, ASV group 4
+    tables = {g: {"domain": g, "levels": [{"level": 0, "speed_mhz": 1200, "voltages": {"4": 850}},
+                                          {"level": 1, "speed_mhz": 800, "voltages": {"4": 750}},
+                                          {"level": 2, "speed_mhz": 400, "voltages": {"4": 650}}]} for g in groups}
+    base = base | {"dvfs_tables": tables}
+    rep = api_client.post("/api/v1/timing-budget/variant", json=base).json()["report"]
+    dom = groups[0]
+    assert [x["level"] for x in rep["dvfs"]["ladders"][dom]] == [2, 1, 0]
+    body = {**base, "config": {"dvfs_overrides": {dom: 0}}, "reason": "pin fastest level on purpose"}
+    pinned = api_client.post("/api/v1/timing-budget/variant", json=body).json()["report"]
+    assert pinned["dvfs"]["overrides"] == {dom: 0}
+    reg = api_client.post("/api/v1/timing-budget/register", json=body)
+    if pinned["verdict"]["status"] == "fail":
+        assert reg.status_code == 422      # a failing condition is never registered (fps drop)
+        return
+    assert reg.status_code == 200, reg.text
+    pid = reg.json()["promoted"][0]["id"]
+    row = next(r for r in api_client.get("/api/v1/arch/predictions/board", params={"scenario_id": S}).json()["rows"] if r["id"] == pid)
+    assert row["condition"]["dvfs_overrides"] == {dom: 0} and row["dvfs"][dom] == 0
+    assert row["selection_rule"] == "manual:timing-budget" and row["reason"] == "pin fastest level on purpose"
