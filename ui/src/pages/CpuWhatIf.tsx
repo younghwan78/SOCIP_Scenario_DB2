@@ -72,7 +72,8 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
   const [rbKnob, setRbKnob] = usePref<RbKnob>('cpu.rb.knob', 'cpuset')
   const [cmpRb, setCmpRb] = useState<CpuRebalance | null>(null)
   const [cmpErr, setCmpErr] = useState<string | null>(null)
-  const [runs, setRuns] = useState<CpuRun[]>([])
+  // CPU-07: the run log survives reloads (per browser); each entry keeps its full request context
+  const [runs, setRuns] = usePref<CpuRun[]>('cpu.runs', [])
   const [pendingRun, setPendingRun] = useState(false)
   const rb = useMemo(() => (rbRaw ? applyDsuRebalance(rbRaw, dsuExp) : null), [rbRaw, dsuExp])
 
@@ -140,8 +141,8 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
         } catch (e) { if (id === requestId.current) setCmpErr(String((e as Error).message ?? e)) }
       }
       const { default_growth: _growth, cpu_bw_scale: _bw, ...runContext } = payload
-      if (id === requestId.current) setRuns((rs) => [...rs.slice(-11), {
-        context: JSON.stringify(runContext),
+      if (id === requestId.current) setRuns((rs) => [...rs.slice(-19), {
+        context: JSON.stringify(runContext), at: new Date().toISOString(),
         n: (rs[rs.length - 1]?.n ?? 0) + 1, profile: payload.cpu_profile_ref, target: payload.power_params_ref, cmp: cmpRes ? cmpTarget : null,
         growth: payload.default_growth ?? 1, bwScale: payload.cpu_bw_scale ?? 1, pgEff: payload.power_gating_eff ?? 0.9,
         ref_mw: r.reference.total_mw, best_mw: r.best?.total_mw ?? null, cmp_ref_mw: cmpRes?.reference.total_mw ?? null, cmp_best_mw: cmpRes?.best?.total_mw ?? null,
@@ -291,7 +292,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
         </div>
         <span className="faint" style={{ fontSize: 12 }}>{mode === 'rebalance' ? '한 MID cluster에 몰린 task를 같은 tier의 cluster로 나눴을 때 CPU + DSU 전력 최저점' : 'task별 knob 조합 자동 탐색 · 현재보다 전력이 낮은 배치'}</span>
       </div>
-      <CpuPurpose rb={rb} cmp={cmpRb} runs={runs} growth={growth} bwScale={bwScale}
+      <CpuPurpose rb={rb} cmp={cmpRb} runs={runs} growth={growth} bwScale={bwScale} onClear={() => setRuns([])}
         onRebalance={() => { setMode('rebalance'); setPendingRun(true) }}
         onPreset={(p) => { setMode('rebalance'); if (p.growth !== undefined) setGrowth(p.growth); if (p.bwScale !== undefined) setBwScale(p.bwScale); setPendingRun(true) }} />
       {inputs.error && <div className="err">{inputs.error}</div>}

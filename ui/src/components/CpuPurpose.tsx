@@ -10,13 +10,15 @@ export interface CpuRun {
   ref_mw: number; best_mw: number | null; cmp_ref_mw: number | null; cmp_best_mw: number | null; winner: string | null
   /** CPU → DRAM MB/s of the run (BW-only effect of the BW scale) */
   bw_mbs?: number | null
+  /** CPU-07: when the run was made (kept across reloads with the request context) */
+  at?: string
 }
 
 const sg = (v: number | null | undefined, d = 1) => (v === null || v === undefined ? '—' : `${v >= 0 ? '+' : ''}${fmt(v, d)}`)
 
-export function CpuPurpose({ rb, cmp, runs, growth, bwScale, onRebalance, onPreset }: {
+export function CpuPurpose({ rb, cmp, runs, growth, bwScale, onRebalance, onPreset, onClear }: {
   rb: CpuRebalance | null; cmp: CpuRebalance | null; runs: CpuRun[]; growth: number; bwScale: number
-  onRebalance: () => void; onPreset: (p: { growth?: number; bwScale?: number }) => void
+  onRebalance: () => void; onPreset: (p: { growth?: number; bwScale?: number }) => void; onClear?: () => void
 }) {
   const last = runs[runs.length - 1]
   const base = [...runs].reverse().find((r) => r.context === last?.context && r.growth === 1 && r.bwScale === 1)
@@ -52,9 +54,12 @@ export function CpuPurpose({ rb, cmp, runs, growth, bwScale, onRebalance, onPres
       {cmp && rb && <div style={{ fontSize: 12 }} className="mono">구조 변경: 최적 {fmt(cmp.best?.total_mw ?? cmp.reference.total_mw, 0)} vs {fmt(rb.best?.total_mw ?? rb.reference.total_mw, 0)} mW ({sg((cmp.best?.total_mw ?? cmp.reference.total_mw) - (rb.best?.total_mw ?? rb.reference.total_mw))})</div>}
       {growthRuns.length > 0 && base && <div style={{ fontSize: 12 }}>{growthRuns.map((r) => <div key={r.n} className="mono">SW ×{r.growth}: {sg(r.ref_mw - base.ref_mw)} mW · 최적 배치 {sg((r.best_mw ?? r.ref_mw) - (base.best_mw ?? base.ref_mw))}</div>)}</div>}
     </div>
-    {runs.length > 1 && <details className="cpu-runs"><summary className="faint">실행 기록 {runs.length}건 (같은 profile · 조건별 CPU power)</summary>
-      <table className="tb-mini-table"><thead><tr><th>#</th><th>SoC</th><th>SW ×</th><th>BW ×</th><th>gating</th><th style={{ textAlign: 'right' }}>현재 배치 mW</th><th style={{ textAlign: 'right' }}>최적 mW</th><th>집중/분산</th><th style={{ textAlign: 'right' }}>비교 SoC 최적</th></tr></thead>
-        <tbody>{runs.map((r) => <tr key={r.n} className={r === last ? 'selected' : ''}><td>{r.n}</td><td className="mono" style={{ fontSize: 11 }}>{r.target}</td><td>{r.growth}</td><td>{r.bwScale}</td><td>{r.pgEff}</td>
+    {runs.length > 1 && <details className="cpu-runs"><summary className="faint">실행 기록 {runs.length}건 (같은 profile · 조건별 CPU power · 새로고침 후에도 유지)</summary>
+      {onClear && <button className="btn tb-mini" style={{ margin: '4px 0' }} onClick={onClear}>기록 지우기</button>}
+      <table className="tb-mini-table"><thead><tr><th>#</th><th>시각</th><th>Profile</th><th>SoC</th><th>SW ×</th><th>BW ×</th><th>gating</th><th style={{ textAlign: 'right' }}>현재 배치 mW</th><th style={{ textAlign: 'right' }}>최적 mW</th><th>집중/분산</th><th style={{ textAlign: 'right' }}>비교 SoC 최적</th></tr></thead>
+        <tbody>{runs.map((r) => <tr key={r.n} className={r === last ? 'selected' : ''}><td>{r.n}</td>
+          <td className="mono faint" style={{ fontSize: 11 }}>{r.at ? r.at.slice(5, 16).replace('T', ' ') : '—'}</td>
+          <td className="mono" style={{ fontSize: 11 }} title={r.context}>{r.profile}</td><td className="mono" style={{ fontSize: 11 }}>{r.target}</td><td>{r.growth}</td><td>{r.bwScale}</td><td>{r.pgEff}</td>
           <td className="mono" style={{ textAlign: 'right' }}>{fmt(r.ref_mw, 1)}</td><td className="mono" style={{ textAlign: 'right' }}>{r.best_mw === null ? '—' : fmt(r.best_mw, 1)}</td><td>{r.winner ?? '—'}</td>
           <td className="mono" style={{ textAlign: 'right' }}>{r.cmp_best_mw === null ? '—' : `${fmt(r.cmp_best_mw, 1)} (${r.cmp})`}</td></tr>)}</tbody></table></details>}
   </section>
