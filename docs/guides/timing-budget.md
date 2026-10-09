@@ -78,7 +78,7 @@ stage 사이는 memory(M2M)이므로 pipeline으로 동작한다. 각 stage가 1
 
 - 계산 level = domain IP 중 최고 필요 clock을 만족하는 가장 낮은 level. override가 필요 clock보다 낮으면 `필요 clock 미달`(fps drop 위험).
 - ② `상세` = IP · SW task별 행, 같은 sensor frame의 preview(DPU) ↔ video(MFC/APV) 출력 완료를 보라 점선으로 연결하고 frame별 완료 시각 표를 함께 표시.
-- ③ SW 편차 분포: `POST /timing-budget/interval-distribution` — SW task runtime을 frame마다 triangular(min, mode, max)에서 추출(평균 유지, seed 고정), clock은 조건 그대로, 앞 warm-up(≥2) 제외. 출력 간격 · latency box plot. 판정은 바꾸지 않는 참고 지표이며 display vsync / encoder queue 완충은 미모델(상한 쪽 추정).
+- ③ SW 편차 분포: `POST /timing-budget/interval-distribution` — SW task runtime을 frame마다 triangular(min, mode, max)에서 추출(기대 평균 유지, 평균이 범위 중앙 1/3 밖이면 bounded beta 사용, seed 고정), clock은 조건 그대로, 앞 warm-up(≥2) 제외. 출력 간격 · latency box plot. 판정은 바꾸지 않는 참고 지표이며 display vsync / encoder queue 완충은 미모델(상한 쪽 추정).
 
 ## 6. 실행
 

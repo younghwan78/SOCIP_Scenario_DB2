@@ -16,7 +16,7 @@ from scenario_db.api.schemas.timing_budget import (
 from scenario_db.db.models.capability import SocDvfsTable
 from scenario_db.db.models.definition import ScenarioVariant
 from scenario_db.db.repositories.scenario_graph import load_canonical_graph
-from scenario_db.exceptions import NotFoundError, UnprocessableError
+from scenario_db.exceptions import ConflictError, NotFoundError, UnprocessableError
 from scenario_db.models.evidence.common import ExecutionContext
 from scenario_db.api.services.cpu import with_cpu_profile
 from scenario_db.api.services.failures import variant_failure
@@ -29,6 +29,7 @@ from scenario_db.sim.service import (
     _enforce_input_limits,
     _graph_soc_ref,
     _resolve_dvfs_tables,
+    _request_hash,
 )
 from scenario_db.sim.timing_budget import (
     DERIVED_VARIANT_MARKERS,
@@ -85,6 +86,21 @@ def _load(db: Session, shim: SimulateRequest, use_default_dvfs: bool):
     return graph, tables, ref
 
 
+def _condition_hash(graph, options, shim, tables) -> str:
+    """Fingerprint resolved inputs, tables and timing choices; display-only options do not change the condition."""
+    import hashlib
+    import json
+
+    payload = {"simulation": _request_hash(build_simulation_inputs(graph, shim.config), shim, dvfs_tables=tables),
+               "options": options.model_dump(mode="json", exclude={"include_whatif", "whatif_scales", "timeline_frames"})}
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:16]
+
+
+def _check_condition(request, condition_hash: str) -> None:
+    if request.expected_condition_hash is not None and request.expected_condition_hash != condition_hash:
+        raise ConflictError("Timing Budget inputs changed; recalculate before saving or registering")
+
+
 def analyze_timing_budget_request(
     db: Session, request: TimingBudgetRequest
 ) -> TimingBudgetResponse:
@@ -102,6 +118,7 @@ def analyze_timing_budget_request(
     except ValueError as exc:
         raise UnprocessableError(str(exc)) from exc
     report["dvfs"]["table_ref"] = ref
+    report["condition_hash"] = _condition_hash(graph, options, shim, tables)
     return TimingBudgetResponse(
         scenario_id=request.scenario_id,
         variant_id=request.variant_id,
@@ -206,6 +223,17 @@ def register_condition(db: Session, request: Any, user: str | None = None) -> di
     from scenario_db.api.services.arch_exploration import promote, run_exploration
     from scenario_db.sim.arch_exploration import ArchExplorationSpec
 
+    shim = _shim(request, request.variant_id)
+    _apply_config_profile(db, shim)
+    try:
+        graph, tables, _ref = _load(db, shim, request.use_default_dvfs)
+        options = with_cpu_profile(db, apply_throughput(request.options, scenario_policy(db, request.scenario_id)),
+                                   request.scenario_id, request.variant_id)
+    except LookupError as exc:
+        raise NotFoundError(str(exc)) from exc
+    except ValueError as exc:
+        raise UnprocessableError(str(exc)) from exc
+    _check_condition(request, _condition_hash(graph, options, shim, tables))
     o = request.options
     spec = ArchExplorationSpec.model_validate({
         "axes": {"statistics": [o.statistic], "runtime_scales": [o.runtime_scale], "eis": o.eis,
@@ -264,17 +292,33 @@ def save_condition_evidence(db: Session, request: Any, user: str | None = None) 
         graph, tables, ref = _load(db, shim, request.use_default_dvfs)
         options = with_cpu_profile(db, apply_throughput(request.options, scenario_policy(db, request.scenario_id)),
                                    request.scenario_id, request.variant_id)
+        condition_hash = _condition_hash(graph, options, shim, tables)
+        _check_condition(request, condition_hash)
         result = budget_simulation(graph, options, config=shim.config, dvfs_tables=tables)
+        report = analyze_timing_budget(graph, options.model_copy(update={"include_whatif": False}),
+                                       config=shim.config, dvfs_tables=tables)
     except LookupError as exc:
         raise NotFoundError(str(exc)) from exc
     except ValueError as exc:
         raise UnprocessableError(str(exc)) from exc
-    condition = {"options": options.model_dump(mode="json"), "config": shim.config.model_dump(mode="json", exclude_none=True),
+    condition = {"condition_hash": condition_hash, "options": options.model_dump(mode="json"), "config": shim.config.model_dump(mode="json", exclude_none=True),
                  "dvfs_table_ref": ref, "context": ctx.model_dump(mode="json", exclude_none=True)}
     digest = "tb" + hashlib.sha256(json.dumps(condition, sort_keys=True, default=str).encode()).hexdigest()[:16]
     ctx = ctx.model_copy(update={"dvfs_table_ref": ref}) if ref and ctx.dvfs_table_ref is None else ctx
     evidence = build_simulation_evidence(result, execution_context=ctx, project_ref=scenario.project_ref,
                                          params_hash=digest, config_profile_ref=profile)
+    power = report["power"]
+    kpi = dict(evidence.kpi or {}) | {"total_power_mw": power["total_mw"], "cpu_power_mw": power["cpu_mw"],
+                                    "core_power_mw": power["hw_mw"], "bw_power_mw": power["bw_mw"],
+                                    "total_power_ma": power["total_mw"] / shim.config.vbat,
+                                    "total_bw_mbs": report["bw"]["total_mbs"]}
+    pb = dict(evidence.power_breakdown or {})
+    for key, mw in (("ip", power["hw_mw"]), ("memory", power["bw_mw"])):
+        pb[key] = {**(pb.get(key) if isinstance(pb.get(key), dict) else {}), "total_mw": mw}
+    pb["cpu"] = {"total_mw": power["cpu_mw"], "by_task": power["cpu_by_task"],
+                 "model": power.get("cpu_profile") or power["cpu_model"]}
+    pb.update(total_mw=power["total_mw"], source="timing_budget")
+    evidence = evidence.model_copy(update={"kpi": kpi, "power_breakdown": pb})
     evidence = evidence.model_copy(update={"run": evidence.run.model_copy(update={
         "tool": "scenariodb-timing-budget", **({"writer": user} if user else {})})})
     existed = get_evidence(db, evidence.id) is not None

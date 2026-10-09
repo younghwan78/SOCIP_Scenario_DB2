@@ -24,6 +24,7 @@ class TimingBudgetRequest(_DvfsSelection):
     scenario_id: str
     variant_id: str
     options: TimingBudgetOptions = Field(default_factory=TimingBudgetOptions)
+    expected_condition_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{16}$")
 
 
 class TimingBudgetDvfsWhatIfRequest(TimingBudgetRequest):

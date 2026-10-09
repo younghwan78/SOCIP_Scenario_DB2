@@ -92,10 +92,10 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
         {r && <span className="chip" title={r.dvfs.tables.join(', ')}>DVFS {r.dvfs.applied ? r.dvfs.table_ref ?? 'custom' : '미연결'}</span>}
         <button className="btn" title="현재 scenario의 모든 variant를 같은 모델(CPU · 처리량 · margin · 통계)로" onClick={() => ctx.navigate('timing-fleet', { cfg: ctx.params.cfg, margin: ctx.params.margin, cpu: ctx.params.cpu, tp: ctx.params.tp, stat: ctx.params.stat })}>전체 variant →</button>
       </div>
-      {r && variant && <ConditionBar cond={cond} verdict={r.verdict.status}
-        onSaveEvidence={async () => { const x = await timingApi.saveEvidence(scenario, variant, baseOpts, cfg, config); invalidateCache('/evidence'); invalidateCache('/calibration')
+      {r && variant && <ConditionBar key={JSON.stringify([scenario, variant, cond, r.condition_hash])} cond={cond} verdict={r.verdict.status}
+        onSaveEvidence={async () => { const x = await timingApi.saveEvidence(scenario, variant, baseOpts, cfg, config, r.condition_hash); invalidateCache('/evidence'); invalidateCache('/calibration'); invalidateCache(`/scenarios/${encodeURIComponent(scenario)}`)
           return x.existed ? `이미 저장된 같은 조건 (${x.evidence_id})` : `저장됨 ${x.evidence_id}` }}
-        onRegister={async (reason) => { const x = await timingApi.register(scenario, variant, baseOpts, reason, cfg, config, ctx.project)
+        onRegister={async (reason) => { const x = await timingApi.register(scenario, variant, baseOpts, reason, cfg, config, ctx.project, r.condition_hash)
           const p = x.promoted[0]; return p ? `등록됨 ${p.id}${x.total_mw ? ` · ${fmt(x.total_mw, 0)} mW` : ''}` : `등록 안 됨: ${x.skipped.map((k) => k.reason).join(', ')}` }}
         onOpenPredictions={() => ctx.navigate('predictions', { sf: scenario })} />}
       {(sp.error || q.error) && <div className="err">{sp.error || q.error}</div>}

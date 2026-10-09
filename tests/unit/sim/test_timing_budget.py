@@ -337,3 +337,29 @@ def test_report_lists_dvfs_ladders_and_overrides(graph_factory, dvfs):
                                       config=SimulationRunConfig(dvfs_overrides={dom: fastest}))
     assert pinned["dvfs"]["overrides"] == {dom: fastest}
     assert all(ip["dvfs_level"] == fastest for ip in pinned["ips"] if ip["dvfs_group"] == dom)
+
+
+@pytest.mark.parametrize("mean", [1.0, 50.0, 99.0])
+def test_sw_sampling_preserves_skewed_means(mean):
+    import random
+
+    rng = random.Random(7)
+    values = [tb._sample_sw(rng, 0.0, mean, 100.0) for _ in range(30000)]
+    assert min(values) >= 0 and max(values) <= 100
+    assert sum(values) / len(values) == pytest.approx(mean, abs=0.35)
+    assert tb._sample_sw(rng, 0, 0, 100) == 0
+    assert tb._sample_sw(rng, 0, 100, 100) == 100
+
+
+def test_condition_hash_tracks_dvfs_content(graph_factory, dvfs):
+    from scenario_db.api.schemas.timing_budget import TimingBudgetRequest
+    from scenario_db.api.services.timing_budget import _condition_hash, _shim
+
+    graph = graph_factory("cam-rec-r1-uhd30-vdis")
+    request = TimingBudgetRequest(scenario_id=graph.scenario_id, variant_id=graph.variant_id)
+    shim = _shim(request, graph.variant_id)
+    before = _condition_hash(graph, request.options, shim, dvfs)
+    tables = {k: v.model_copy(deep=True) for k, v in dvfs.items()}
+    first = next(iter(tables.values()))
+    first.levels[0] = first.levels[0].model_copy(update={"speed_mhz": first.levels[0].speed_mhz + 1})
+    assert _condition_hash(graph, request.options, shim, tables) != before
