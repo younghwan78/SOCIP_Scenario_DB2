@@ -80,6 +80,13 @@ def test_params_validate_scope_lineage_and_scale_existing_ip_factors(api_client,
         calibration = db.get(Row, new.json()["id"]).params["calibration"]
         assert calibration["ip_power_scale"] == {"*": 0.6, "mfc": 0.4}
         assert calibration["fit"]["synthetic_rows"] == 1
+        db.get(Evidence, ref).provenance = {}
+        db.commit()
+    fit = api_client.post("/api/v1/calibration/power-fit", json={"project_ref": "proj-A-exynos2500", "base_params_ref": pid, "scenario_id": S})
+    assert fit.status_code == 200, fit.text
+    body = fit.json()
+    assert any(r["data_origin"] == "unknown" for r in body["rows"])
+    assert all(not f["recommended"] for f in body["factors"].values())
     wrong = api_client.post("/api/v1/calibration/power-fit", json={"project_ref": "missing", "base_params_ref": pid})
     assert wrong.status_code == 404
     with Session(engine) as db:

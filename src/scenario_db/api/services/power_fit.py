@@ -99,6 +99,7 @@ def _fit(pairs: list[tuple[float, float]]) -> dict[str, Any]:
 
 
 def fit_proposal(db: Session, req: Any) -> dict[str, Any]:
+    from scenario_db.api.services.calibration import data_origin
     from scenario_db.api.schemas.timing_budget import MeasuredInputs, TimingBudgetRequest
     from scenario_db.api.services.timing_budget import _sw_stats, analyze_timing_budget_request
     from scenario_db.sim.models import SimulationRunConfig
@@ -133,11 +134,13 @@ def fit_proposal(db: Session, req: Any) -> dict[str, Any]:
         meas = {r["category"]: r["measurement_mw"] for r in cmp_["rows"]}
         p = rep["power"]
         rows.append({"measurement_ref": m.id, "scenario_id": m.scenario_ref, "variant_id": m.variant_ref, "synthetic": synthetic,
+                     "data_origin": data_origin(m.provenance),
                      "measured_sw": use_sw, "verdict": rep["verdict"]["status"],
                      "predicted": {"cpu": p["cpu_mw"], "ip": p["hw_mw"], "bw": p["bw_mw"], "total": p["total_mw"]},
                      "measured": {**meas, "total": cmp_["total"]["measurement_mw"]}})
     factors = {c: _fit([(r["predicted"][c], r["measured"].get(c)) for r in rows]) for c in CATS}
     synth = sum(1 for r in rows if r["synthetic"])
+    unknown = sum(1 for r in rows if r["data_origin"] == "unknown")
     from scenario_db.sim.power_params import power_params_from_row
 
     params = power_params_from_row(base_row)
@@ -145,7 +148,7 @@ def fit_proposal(db: Session, req: Any) -> dict[str, Any]:
     for c in CATS:
         f = factors[c]
         # recommend only a factor that actually explains the measurements better
-        f["recommended"] = bool(applicable[c] and not synth and f.get("k") and f["n"] >= 3 and not f.get("clamped") and (f.get("r2_after") or -1) >= 0.5
+        f["recommended"] = bool(applicable[c] and not synth and not unknown and f.get("k") and f["n"] >= 3 and not f.get("clamped") and (f.get("r2_after") or -1) >= 0.5
                                 and f["mape_after_pct"] < f["mape_before_pct"])
     for r in rows:
         after = {c: (r["predicted"][c] * factors[c]["k"] if factors[c].get("k") else r["predicted"][c]) for c in CATS}
@@ -156,6 +159,8 @@ def fit_proposal(db: Session, req: Any) -> dict[str, Any]:
     warnings = []
     if synth:
         warnings.append(f"합성(SYNTHETIC) 측정 {synth}건 포함 — 흐름 검증용이며 실제 계수 근거가 아님")
+    if unknown:
+        warnings.append(f"출처 미확인(unknown) 측정 {unknown}건 포함 — 수집 출처 확인 전 계수 적용 비권장")
     for c in CATS:
         f = factors[c]
         if f.get("n", 0) < 3:

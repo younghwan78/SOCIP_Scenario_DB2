@@ -107,7 +107,8 @@ profiles in one query.
 `POST /calibration/power-fit` (analyst/writer/admin) proposes CPU/IP/BW factors for
 up to 500 measurements in one project, optionally narrowed to one scenario. Base
 parameters must belong to the project's SoC. Synthetic measurements are excluded
-by default; including them never makes a factor recommended.
+by default; including synthetic or unknown-origin measurements never makes a
+factor recommended.
 `POST /calibration/power-params` (writer/admin) creates a draft version without
 modifying the base. Source references must resolve to measurements of that SoC;
 synthetic lineage is derived from stored provenance. Factors must be finite and
