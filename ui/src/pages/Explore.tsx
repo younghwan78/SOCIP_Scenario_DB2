@@ -282,7 +282,7 @@ function VariantDetailBody({ v, run, readOnly, battery, iqKeep = false }: { v: V
   // project policy "iq_keep": the default registration is the IQ/performance-keeping optimum (tier A), not the lossy minimum
   const keepCase = iqKeep ? v.tiers?.keep?.best ?? null : null
   const keepRow = keepCase && keepCase.key !== rec?.key ? [{ rank: '기본 등록 · 화질 유지', c: keepCase }] : []
-  const defaultKey = keepCase?.key ?? rec?.key
+  const defaultKey = iqKeep ? keepCase?.key : rec?.key
   const cands: { rank: string; c: ExpCase }[] = rec
     ? [...keepRow, { rank: keepRow.length ? '최저 power (lossy)' : '추천', c: rec }, ...v.alternatives.map((c, i) => ({ rank: `#${i + 2}`, c })), ...pareto.map((c, i) => ({ rank: `Pareto ${i + 1}`, c })), { rank: 'baseline', c: v.baseline }]
     : [{ rank: 'baseline', c: v.baseline }]

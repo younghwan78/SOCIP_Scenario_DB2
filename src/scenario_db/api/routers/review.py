@@ -32,7 +32,7 @@ def thermal_watch(
     def dvfs_rows(scenario_id: str, variant_id: str):
         req = TimingBudgetDvfsWhatIfRequest(scenario_id=scenario_id, variant_id=variant_id, shifts=[-2, -1],
                                             config_profile_ref=config_profile_ref)
-        return analyze_dvfs_whatif_request(db, req)["rows"]
+        return analyze_dvfs_whatif_request(db, req)
 
     settings = get_settings()
     with admission_slot("simulation", settings.simulation_max_concurrent_runs):

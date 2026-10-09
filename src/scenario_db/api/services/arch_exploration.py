@@ -407,7 +407,7 @@ def promote(db: Session, request: PromoteRequest, user: str | None = None) -> di
                 and constraints.get("require_complete_power_for_budget", True)):
             raise UnprocessableError("power budget cannot be verified with an incomplete power model")
         keep = ((summary.get("tiers") or {}).get("keep") or {}).get("best")
-        if request.case_key is None and iq_keep and keep is not None:
+        if request.case_key is None and iq_keep:
             case, rule = keep, "auto:min-power-iq"
         else:
             case, rule = find_case(summary, request.case_key)

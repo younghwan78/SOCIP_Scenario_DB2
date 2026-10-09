@@ -33,5 +33,8 @@ E2600 (사외 fixture): `values_mw`는 **SAMPLE 가상 값** — 사내에서는
 
 ## 계산 규칙 · 한계
 - 감소 lever 합은 항목 효과의 합(근사). option 효과는 lossy 최저 조합 기준 단독 효과(조합 탐색 `power_options.marginal`).
+- 화질 유지 조합이 없으면 자동 등록을 건너뛴다. 손실 압축 조합은 사유를 입력해 명시적으로 선택한다.
+- 전과제에서 같은 variant ID가 여러 scenario에 있으면 자동 매칭하지 않는다. 직접 지정한 reference 값은 사용할 수 있다.
+- 발열 watch의 scenario/variant는 선택한 과제에 속해야 하며, DVFS 기준 power가 watch 기준과 다르면 절감량 합산에서 제외한다.
 - IP clock ↓는 domain별 L−1/L−2를 다시 계산해 fps를 지키는 것만 사용 (E2600 watch 3종은 이미 최소 level → 전부 fps drop).
 - 요청을 IQ lever로도 못 채우면 "성능 조건 변경(해상도 · fps · EIS) 필요"로 표시 — fps는 자동으로 낮추지 않음.

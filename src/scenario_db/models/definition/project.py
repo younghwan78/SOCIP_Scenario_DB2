@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import Field
 
@@ -25,7 +25,7 @@ class PowerReference(BaseScenarioModel):
     variant id); ``values_mw`` = explicit per-variant values when the previous project is not in the DB.
     """
     project_ref: DocumentId | None = None
-    values_mw: dict[str, float] = Field(default_factory=dict)
+    values_mw: dict[str, Annotated[float, Field(gt=0, allow_inf_nan=False)]] = Field(default_factory=dict)
     # up to this much above the reference still counts as "similar" (medium risk); above it is high
     tolerance_pct: float = Field(default=3.0, ge=0, le=50)
     source_note: str | None = None
@@ -37,7 +37,7 @@ class ThermalWatch(BaseScenarioModel):
     variant_ref: str
     label: str | None = None
     # reduction asks to pre-check, % of the current prediction
-    reduction_pct: list[float] = Field(default_factory=lambda: [10.0, 20.0])
+    reduction_pct: list[Annotated[float, Field(gt=0, le=100, allow_inf_nan=False)]] = Field(default_factory=lambda: [10.0, 20.0])
     note: str | None = None
 
 
