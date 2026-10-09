@@ -163,6 +163,11 @@ function qs(params: Record<string, string | number | undefined | null>): string 
 
 const cache = new Map<string, { promise: Promise<unknown>; expires: number }>()
 
+/** Drop cached GET responses whose path starts with ``prefix`` (after a write, e.g. a saved simulation). */
+export function invalidateCache(prefix: string): void {
+  for (const k of [...cache.keys()]) if (k.startsWith(`${API_BASE}${prefix}`)) cache.delete(k)
+}
+
 export async function getJson<T>(path: string, params: Record<string, string | number | undefined | null> = {}, useCache = true): Promise<T> {
   const url = `${API_BASE}${path}${qs(params)}`
   const cached = cache.get(url)
@@ -196,7 +201,7 @@ export interface SimRunRequest {
   execution_context: { silicon_rev: string; sw_baseline_ref: string; thermal: string; method?: string }
   persist?: boolean
 }
-export interface SimRunResponse { evidence_id: string; kpi: Dict; warnings?: string[]; persisted?: boolean; result?: { power_breakdown?: Dict | null } | null }
+export interface SimRunResponse { evidence_id: string; kpi: Dict; warnings?: string[]; persisted?: boolean; cached?: boolean; params_hash?: string; evidence?: Dict | null; result?: { power_breakdown?: Dict | null } | null }
 
 const enc = encodeURIComponent
 

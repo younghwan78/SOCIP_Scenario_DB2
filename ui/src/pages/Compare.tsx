@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import type { Ctx } from '../App'
-import { api, type Dict, type Evidence, type ScenarioDef, type SimRunResponse, type VariantRow, type ViewResponse } from '../lib/api'
+import { api, type Dict, type Evidence, type ScenarioDef, type VariantRow, type ViewResponse } from '../lib/api'
 import { useAsync } from '../lib/route'
 import { MISSING, evidenceSource, valueText, varyingKeys } from '../lib/conditions'
 import { compareItems, formatItems, type CompareItem } from '../lib/projects'
@@ -19,7 +19,8 @@ import { cpuSource, mifSummary, powerModelParts } from '../lib/powerModel'
 import { CompareSummary, type Driver, type ItemInfo, type MetricRow } from '../components/CompareSummary'
 import { archApi, type BoardRow } from '../lib/archExplore'
 import { useBatteries, useBattery } from '../lib/battery'
-import { pickProfile } from '../lib/simProfile'
+import { runPreview, saveResult, type SimState } from '../lib/simRun'
+import { SimSaveLine } from '../components/SimSave'
 
 const KPI_FIELDS: [string, string, string][] = [
   ['Total power', 'total_power_mw', 'mW'], ['Core power', 'core_power_mw', 'mW'], ['BW power', 'bw_power_mw', 'mW'],
@@ -65,7 +66,6 @@ interface Item { id: string; section: string; label: ReactNode; sortLabel: strin
 
 const num = (s: string | null): number | null => { if (s === null) return null; const m = s.replace(/,/g, '').match(/-?\d+(\.\d+)?/); return m ? Number(m[0]) : null }
 
-type SimState = { status: 'running' } | { status: 'done'; res: SimRunResponse } | { status: 'error'; error: string }
 
 export function ComparePage({ ctx }: { ctx: Ctx }) {
   const cItems: CompareItem[] = compareItems(ctx.params, ctx.scenario, ctx.variant)
@@ -82,7 +82,8 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
   const scnDef = (s: string): ScenarioDef | null | undefined => scnQ.data?.find(([k]) => k === s)?.[1]
   const viewsQ = useAsync(() => Promise.all(cItems.map((it) => api.view(it.scenario, it.variant, 1))), [key])
   const detailsQ = useAsync(() => Promise.all(cItems.map((it) => api.variant(it.scenario, it.variant))), [key])
-  const evQ = useAsync(() => Promise.all(cItems.map((it) => api.evidenceList(it.scenario, it.variant, catOf(it.scenario)?.project_id).then((r) => r.items))), [key, ctx.allCatalog.length])
+  const [evTick, setEvTick] = useState(0)
+  const evQ = useAsync(() => Promise.all(cItems.map((it) => api.evidenceList(it.scenario, it.variant, catOf(it.scenario)?.project_id).then((r) => r.items))), [key, ctx.allCatalog.length, evTick])
   const [onlyDiff, setOnlyDiff] = useState(true)
   const [orient, setOrient] = usePref<'items' | 'variants'>('compare.orient', 'items')
   const [show, setShow] = usePref<'both' | 'table' | 'plot'>('compare.show', 'both')
@@ -133,17 +134,25 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
       const cat = catOf(it.scenario)
       setSims((m) => ({ ...m, [ids[i]]: { status: 'running' } }))
       try {
-        const cfg = cat ? pickProfile((await api.simConfigs(cat.project_id)).items, undefined) : null
-        const res = await api.simulate({
-          scenario_id: it.scenario, variant_id: it.variant, config_profile_ref: cfg ?? null,
-          execution_context: { silicon_rev: 'EVT1', sw_baseline_ref: cat?.default_sw_profile_ref ?? 'sw-vendor-v1.2.3', thermal: 'nominal', method: 'calculation' },
-        })
-        setSims((m) => ({ ...m, [ids[i]]: { status: 'done', res } }))
+        const done = await runPreview({ scenario: it.scenario, variant: it.variant, project_id: cat?.project_id, default_sw_profile_ref: cat?.default_sw_profile_ref })
+        setSims((m) => ({ ...m, [ids[i]]: done }))
       } catch (e) {
         setSims((m) => ({ ...m, [ids[i]]: { status: 'error', error: e instanceof Error ? e.message : String(e) } }))
       }
     }
   }
+  /** "결과 저장": the previewed run becomes simulation evidence (same request, persist: true). */
+  const saveSim = async (targets: string[]) => {
+    for (const id of targets) {
+      const st = sims[id]
+      if (st?.status !== 'done' || st.res.persisted || st.save?.status === 'saving' || st.save?.status === 'saved') continue
+      const setSave = (save: Extract<SimState, { status: 'done' }>['save']) => setSims((m) => { const cur = m[id]; return cur?.status === 'done' ? { ...m, [id]: { ...cur, save } } : m })
+      setSave({ status: 'saving' })
+      try { setSave(await saveResult(st.req)) } catch (e) { setSave({ status: 'error', error: e instanceof Error ? e.message : String(e) }) }
+    }
+    setEvTick((n) => n + 1)
+  }
+  const unsaved = ids.filter((id) => { const st = sims[id]; return st?.status === 'done' && !st.res.persisted && (!st.save || st.save.status === 'error') })
   /** power_breakdown per item: same-model simulation first (Simulation 통일), else stored simulation evidence. */
   const powerOf = (i: number): { pb: Dict | null; source: string | null } => {
     const st = sims[ids[i]]
@@ -282,7 +291,8 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
     f?.topIp.slice(0, 3).filter((t) => Math.abs(t.delta) >= 0.5).forEach((t) => drivers.push({ kind: 'bw', label: t.ip, delta: t.delta, unit: 'MB/s' }))
     const st = sims[id]
     return { label: labels[id] ?? id, full: itemLbl[i]?.full, color: color(i), source: kpiOf(i).source, changed: f?.changed, drivers,
-      status: st?.status === 'running' ? <div className="faint">예측 계산 중…</div> : st?.status === 'error' ? <div className="err" style={{ margin: 0 }}>{st.error}</div> : undefined }
+      status: st?.status === 'running' ? <div className="faint">예측 계산 중…</div> : st?.status === 'error' ? <div className="err" style={{ margin: 0 }}>{st.error}</div>
+        : st?.status === 'done' ? <SimSaveLine st={st} onSave={() => saveSim([id])} /> : undefined }
   })
   const analysis = ids.length > 1 && (
     <section className="panel fit" style={{ padding: 10 }}>
@@ -293,7 +303,8 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
           <button className={kpiMode === 'sim' ? 'on' : ''} onClick={() => setKpiMode('sim')} title="모든 항목을 같은 simulation 모델로 계산 (공정 비교)">Simulation 통일</button>
           <button className={kpiMode === 'pred' ? 'on' : ''} onClick={() => setKpiMode('pred')} title="예측 현황에 등록된 current prediction (조합 탐색 결과, 고객 보고 숫자)">등록 예측</button>
         </div>
-        {noKpi.length > 0 && <button className="btn primary" onClick={() => runSim(noKpi)} title="simulation으로 KPI 계산 (DB에 저장하지 않음)">{kpiMode === 'sim' ? `${noKpi.length}개 예측 실행` : `KPI 없는 ${noKpi.length}개 예측 실행`}</button>}
+        {unsaved.length > 1 && <button className="btn" onClick={() => saveSim(unsaved)} title="즉석 계산 결과를 simulation evidence로 저장 (같은 조건은 1건으로 합쳐짐)">즉석 결과 {unsaved.length}개 저장</button>}
+        {noKpi.length > 0 && <button className="btn primary" onClick={() => runSim(noKpi)} title="simulation으로 KPI 계산 (미리보기 — 저장하려면 결과 옆 “결과 저장”)">{kpiMode === 'sim' ? `${noKpi.length}개 예측 실행` : `KPI 없는 ${noKpi.length}개 예측 실행`}</button>}
       </div>
       {mixed && <div className="faint" style={{ fontSize: 12, margin: '0 0 8px' }}>⚠ KPI 출처가 섞여 있습니다 (실측 vs 계산). 설계 대안 비교는 “Simulation 통일”을 권장합니다.</div>}
       <CompareSummary items={summaryItems} metrics={metrics} battery={battery} batteries={batteries} />
@@ -382,3 +393,4 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
       </> }] : undefined} />
   )
 }
+
