@@ -893,15 +893,19 @@ def _interval_stats(gaps: list[float], period: float, tol: float, skip: int) -> 
     natural warm-up (leading intervals off-cadence before the first on-cadence one). Report only - ``ok`` above
     stays the verdict; ``skip`` = intervals excluded by ``warmup_frames``."""
     if not gaps:
-        return {"jitter_ms": None, "p95_dev_ms": None, "drops": 0, "warmup_observed": 0, "warmup_excluded": 0}
+        return {"jitter_ms": None, "p95_dev_ms": None, "p99_dev_ms": None, "max_dev_ms": None, "duration_ms": 0.0,
+                "drops": 0, "warmup_observed": 0, "warmup_excluded": 0}
     judged = gaps[skip:] or gaps
     mean = sum(judged) / len(judged)
     std = (sum((g - mean) ** 2 for g in judged) / len(judged)) ** 0.5
     devs = sorted(abs(g - period) for g in judged)
-    p95 = devs[min(len(devs) - 1, int(round(0.95 * (len(devs) - 1))))]
+    def pct(q: float) -> float:
+        return devs[min(len(devs) - 1, int(round(q * (len(devs) - 1))))]
+    p95 = pct(0.95)
     drops = sum(max(0, round(g / period) - 1) for g in judged if g > 1.5 * period)
     lead = next((i for i, g in enumerate(gaps) if abs(g - period) <= period * tol), len(gaps))
-    return {"jitter_ms": round(std, 4), "p95_dev_ms": round(p95, 4), "drops": int(drops),
+    return {"jitter_ms": round(std, 4), "p95_dev_ms": round(p95, 4), "p99_dev_ms": round(pct(0.99), 4),
+            "max_dev_ms": round(devs[-1], 4), "duration_ms": round(sum(judged), 3), "drops": int(drops),
             "warmup_observed": lead, "warmup_excluded": skip}
 
 

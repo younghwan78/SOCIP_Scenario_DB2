@@ -409,7 +409,7 @@ export function Intervals({ report }: { report: TimingReport }) {
                 {x.s.ok ? '✓' : '✗'} max {fmt(x.s.max_ms, 3)} · min {fmt(x.s.min_ms, 3)} ms (±{fmt(tol * 100, 1)}%)
               </span>
               {x.s.jitter_ms !== undefined && <span className="mono faint" style={{ fontSize: 11.5 }} title="σ = 판정 구간 간격의 표준편차 · p95 = |간격 − 주기|의 95%ile · drop = 주기의 ~k배 간격이면 k−1 frame 누락 · warm-up = 첫 정상 간격 전 이탈 개수">
-                σ {fmt(x.s.jitter_ms ?? null, 3)} · p95 {fmt(x.s.p95_dev_ms ?? null, 3)} ms · drop {x.s.drops ?? 0}{(x.s.drops ?? 0) > 0 ? ' ⚠' : ''} · warm-up {x.s.warmup_observed ?? 0}{x.s.warmup_excluded ? ` (앞 ${x.s.warmup_excluded}개 판정 제외)` : ''}</span>}
+                σ {fmt(x.s.jitter_ms ?? null, 3)} · p95/p99 {fmt(x.s.p95_dev_ms ?? null, 3)}/{fmt(x.s.p99_dev_ms ?? null, 3)} ms · 판정 {fmt(x.s.duration_ms ?? null, 0)} ms · drop {x.s.drops ?? 0}{(x.s.drops ?? 0) > 0 ? ' ⚠' : ''} · warm-up {x.s.warmup_observed ?? 0}{x.s.warmup_excluded ? ` (앞 ${x.s.warmup_excluded}개 판정 제외)` : ''}</span>}
               <span className="grow" />
               <span className="mono" style={{ fontSize: 12 }}>latency {fmt(x.lat, 1)} ms ({fmt(x.lf, 2)} frame)</span>
             </div>

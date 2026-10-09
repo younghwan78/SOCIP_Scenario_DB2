@@ -48,6 +48,8 @@ export interface SliceRow {
 }
 export interface VariantResult {
   scenario_id: string; variant_id: string; fps: number; period_ms: number; eis_on: boolean; mfc_dual: boolean
+  /** EXP-05: power budget this variant was explored with (spec value or previous-project reference) */
+  power_budget?: { mw: number | null; source: string | null; reference_mw?: number } | null
   spec_ok: boolean; spec_reasons: string[]; counts: { cases: number; eligible: number; sw_slices: number; compression_sets: number; dvfs_sets: number }
   distribution: Dist; baseline: ExpCase; recommended: ExpCase | null; alternatives: ExpCase[]
   /** engine rev ≥ 7: non-dominated eligible cases on power · BW · IQ risk · DVFS headroom */
@@ -184,6 +186,10 @@ export interface RunOptions {
   options: { knobs: boolean; modes: boolean; max_sets: number }
   /** CPU term of every case: flat assumption or the variant's measured CPU profile (EAS + growth) */
   cpu_model?: 'flat' | 'profile'
+  /** EXP-05: customer budget — cases above it are not recommended (null = none) */
+  power_budget_mw?: number | null; bw_budget_mbs?: number | null
+  /** per variant: previous-project reference × (1 + tolerance) from the project review policy (tighter of the two) */
+  budget_from_reference?: boolean
 }
 export const DEFAULT_RUN: RunOptions = {
   statistics: ['mean', 'max'], runtime_scales: [1.0, 1.1, 1.2], dvfs_headroom_levels: 1,
@@ -198,11 +204,13 @@ export function runBody(scenarioIds: string[], title: string, scenarioType: stri
   return {
     title: title || undefined, scenario_type: scenarioType || undefined, scenario_ids: scenarioIds,
     config_profile_ref: configProfileRef ?? undefined,
+    ...(o.budget_from_reference ? { power_budget_from_reference: true } : {}),
     spec: {
       axes: { statistics: stats, runtime_scales: scales, dvfs_headroom_levels: o.dvfs_headroom_levels,
         compression: { enabled: o.modes.length > 0 && o.max_buffers > 0, modes: o.modes.length ? o.modes : ['lossy'], max_buffers: o.max_buffers, require_declared: o.require_declared },
         power_options: { enabled: o.options.knobs || o.options.modes, include_knobs: o.options.knobs, include_modes: o.options.modes, max_sets: o.options.max_sets } },
-      constraints: { allow_lossy: o.allow_lossy },
+      constraints: { allow_lossy: o.allow_lossy,
+        ...(o.power_budget_mw ? { power_budget_mw: o.power_budget_mw } : {}), ...(o.bw_budget_mbs ? { bw_budget_mbs: o.bw_budget_mbs } : {}) },
       objective: { statistic: o.objective_statistic, runtime_scale: o.objective_scale },
       ...(o.cpu_model === 'profile' ? { timing: { cpu_model: 'profile' } } : {}),
     },

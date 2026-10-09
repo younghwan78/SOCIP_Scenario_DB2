@@ -60,7 +60,11 @@ export function MatrixPage({ ctx }: { ctx: Ctx }) {
       .sort((a, b) => Number(!a[0].includes('camera')) - Number(!b[0].includes('camera')))
   }, [q.data, ctx.catalog])
 
-  const match = (r: VariantRow) => (!load || r.severity === load) && (!search || search.toLowerCase().split(/\s+/).every((t) => `${r.variant_id} ${Object.values(r.design_conditions).join(' ')}`.toLowerCase().includes(t)))
+  const [provFilter, setProvFilter] = useState('')
+  const match = (r: VariantRow) => (!load || r.severity === load) && (!provFilter || !predQ.data || provenanceText(predOf(r)).text.replace(/ \d+$/, '') === provFilter) && (!search || search.toLowerCase().split(/\s+/).every((t) => `${r.variant_id} ${Object.values(r.design_conditions).join(' ')}`.toLowerCase().includes(t)))
+  const provCount: Record<string, number> = {}
+  if (predQ.data) for (const r of q.data?.items ?? []) { const t = provenanceText(predOf(r)).text.replace(/ \d+$/, ''); provCount[t] = (provCount[t] ?? 0) + 1 }
+  const provSummary = `전체 ${q.data?.items.length ?? 0} = 등록 ${(provCount['입력 변경'] ?? 0) + (provCount['예측만'] ?? 0) + (provCount['실측'] ?? 0)} (실측 ${provCount['실측'] ?? 0} · 입력 변경 ${provCount['입력 변경'] ?? 0}) + 미등록 ${provCount['미등록'] ?? 0}`
   const pickedScenarios = new Set([...picked].map((k) => k.split('::')[0]))
   const total = q.data?.items.length ?? 0
   const refs = useMemo(() => new Map(groups.map(([sid, rows]) => {
@@ -93,7 +97,7 @@ export function MatrixPage({ ctx }: { ctx: Ctx }) {
   const flatCols: Column<VariantRow>[] = [columns[0], { key: 'scenario', label: 'Scenario', width: 170, sort: (r) => r.scenario_name ?? r.scenario_id, title: (r) => r.scenario_id, render: (r) => r.scenario_name ?? r.scenario_id }, ...columns.slice(1)]
   const tableGroups: RowGroup<VariantRow>[] = groups.map(([sid, rows]) => {
     const shown = rows.filter(match)
-    const isOpen = open.has(sid) || !!search || !!load
+    const isOpen = open.has(sid) || !!search || !!load || !!provFilter
     const name = rows[0]?.scenario_name ?? sid
     return { id: sid, open: isOpen, onToggle: () => toggle(sid), rows: shown, header: (
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
@@ -109,6 +113,7 @@ export function MatrixPage({ ctx }: { ctx: Ctx }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <h2 style={{ margin: 0, fontSize: 16 }}>전체 Variant Matrix</h2>
         <span className="muted" style={{ fontSize: 13 }}>{groups.length} scenarios · {total} variants · scenario별 묶음, 공통 열 기준</span>
+        {showPred && predQ.data && <span className="faint" style={{ fontSize: 12 }}>{provSummary}</span>}
         <span className="grow" />
         <span className="input" style={{ width: 240 }}><Icon name="search" size={14} /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="variant, 조건 검색" aria-label="검색" /></span>
         <select value={load} onChange={(e) => setLoad(e.target.value)} aria-label="Load">
@@ -120,12 +125,15 @@ export function MatrixPage({ ctx }: { ctx: Ctx }) {
         </div>
         <label className="faint" style={{ fontSize: 12, display: 'inline-flex', gap: 4, alignItems: 'center' }} title="등록 예측 power · timing 판정 · 근거(실측 / 예측만 / 입력 변경 / 미등록)">
           <input type="checkbox" checked={showPred} onChange={(e) => setShowPred(e.target.checked)} />예측 열</label>
+        {showPred && predQ.data && <select value={provFilter} onChange={(e) => setProvFilter(e.target.value)} aria-label="근거 filter" title={provSummary}>
+          <option value="">근거: 전체</option>{['미등록', '입력 변경', '예측만', '실측'].map((x) => <option key={x} value={x}>{x} ({provCount[x] ?? 0})</option>)}
+        </select>}
         {grouped && <><button className="btn" onClick={() => setOpen(new Set(groups.map(([g]) => g)))}>모두 펼치기</button>
         <button className="btn" onClick={() => setOpen(new Set())}>모두 접기</button></>}
       </div>} main={<>
       {q.error && <div className="err">{q.error}</div>}
       <div className="panel table-scroll" style={{ flexGrow: 1 }}>
-        {grouped ? <DataTable id="matrix" columns={columns} groups={tableGroups.filter((g) => g.rows.length || (!search && !load))} rowKey={(r) => `${r.scenario_id}::${r.variant_id}`}
+        {grouped ? <DataTable id="matrix" columns={columns} groups={tableGroups.filter((g) => g.rows.length || (!search && !load && !provFilter))} rowKey={(r) => `${r.scenario_id}::${r.variant_id}`}
           rowClass={(r) => (r.variant_id === refs.get(r.scenario_id)?.id ? 'sel' : '')} pinTop={(r) => r.variant_id === refs.get(r.scenario_id)?.id} />
           : <DataTable id="matrix.flat" columns={flatCols} rows={flatRows} rowKey={(r) => `${r.scenario_id}::${r.variant_id}`}
             rowClass={(r) => (r.variant_id === refs.get(r.scenario_id)?.id ? 'sel' : '')} />}

@@ -18,6 +18,9 @@ class ArchExplorationRunRequest(_DvfsSelection):
     include_derived: bool = False
     max_variants: int = Field(default=200, ge=1, le=500)
     spec: ArchExplorationSpec = Field(default_factory=ArchExplorationSpec)
+    # EXP-05: per-variant power budget = previous-project reference x (1 + tolerance) from the project review_policy
+    # (the tighter of it and spec.constraints.power_budget_mw); variants without a reference keep the spec budget.
+    power_budget_from_reference: bool = False
 
     @model_validator(mode="after")
     def _scope(self) -> ArchExplorationRunRequest:

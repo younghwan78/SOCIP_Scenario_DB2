@@ -91,6 +91,26 @@ def _variant_ids(db: Session, scenario_id: str, request: ArchExplorationRunReque
 
 
 # ------------------------------------------------------------------- runs
+def _reference_budgets(db: Session, project_ref: str | None) -> dict[str, dict[str, Any]]:
+    """variant id -> {"mw": reference x (1 + tol), "reference_mw", "source"} from the project review_policy."""
+    if not project_ref:
+        return {}
+    from scenario_db.api.services.review import power_references
+
+    refs = power_references(db, project_ref)
+    tol = (refs.get("tolerance_pct") or 0.0) / 100.0
+    return {vid: {"mw": round(r["mw"] * (1 + tol), 2), "reference_mw": r["mw"], "source": r["source"]}
+            for vid, r in refs["references"].items() if r.get("mw")}
+
+
+def _variant_budget(spec_mw: float | None, ref: dict[str, Any] | None) -> dict[str, Any]:
+    if ref is None:
+        return {"mw": spec_mw, "source": "spec" if spec_mw is not None else None}
+    if spec_mw is not None and spec_mw <= ref["mw"]:
+        return {"mw": spec_mw, "source": "spec", "reference_mw": ref["reference_mw"]}
+    return {"mw": ref["mw"], "source": f"전과제 {ref['source']}", "reference_mw": ref["reference_mw"]}
+
+
 def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str | None = None) -> dict[str, Any]:
     scenarios = _scenarios(db, request)
     # project review policy decides the throughput judgement unless the spec sets it (stored in run.spec)
@@ -110,6 +130,7 @@ def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str |
     soc_ref = request.soc_ref
     dvfs_ref: str | None = None
     remaining_cases = 2_000_000
+    ref_budget = _reference_budgets(db, scenarios[0].project_ref) if request.power_budget_from_reference else {}
     for scenario, variant_id in plan:
         if remaining_cases <= 0:
             raise UnprocessableError("exploration exceeds 2000000 total cases; narrow the scope")
@@ -130,10 +151,16 @@ def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str |
                 "max_cases_per_variant": min(request.spec.max_cases_per_variant, remaining_cases),
                 "timing": with_cpu_profile(db, request.spec.timing, scenario.id, variant_id),
             })
+            budget = _variant_budget(request.spec.constraints.power_budget_mw, ref_budget.get(variant_id))
+            if budget["mw"] != request.spec.constraints.power_budget_mw:
+                bounded_spec = bounded_spec.model_copy(update={
+                    "constraints": bounded_spec.constraints.model_copy(update={"power_budget_mw": budget["mw"]})})
             _check_power_params_scope(shim.config, graph)
             stage = "explore"
             summary = explore_variant(graph, bounded_spec, config=shim.config, dvfs_tables=tables)
             summary["model_lineage"] = run_model_lineage(shim.config)
+            if budget["mw"] is not None:
+                summary["power_budget"] = budget
         except Exception as exc:  # noqa: BLE001 - one variant must not abort the run
             errors.append(variant_failure(exc, variant_id=variant_id, scenario_id=scenario.id, stage=stage))
             continue
@@ -217,7 +244,8 @@ def _run_meta(row: ArchExplorationRun) -> dict[str, Any]:
 
 SUMMARY_KEYS = ("scenario_id", "variant_id", "design_conditions", "severity", "fps", "period_ms", "eis_on", "mfc_dual",
                 "spec_ok", "spec_reasons", "status", "objective", "counts", "distribution", "baseline", "recommended",
-                "coverage", "dvfs_table_ref", "input_hash", "model_lineage", "keep_total_mw", "throughput_model")
+                "coverage", "dvfs_table_ref", "input_hash", "model_lineage", "keep_total_mw", "throughput_model",
+                "power_budget")
 SW_MARGIN_SUMMARY_KEYS = ("worst", "growth_tolerance", "growth_tolerance_fixed", "growth_tested_max", "recommendations",
                           "verdict", "stat_spread_ms")
 

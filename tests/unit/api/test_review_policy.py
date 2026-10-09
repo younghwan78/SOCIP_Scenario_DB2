@@ -93,3 +93,14 @@ def test_performance_trade_diffs_only_trade_down_on_the_same_camera():
     assert _trade_diffs(me, sib | {"hdr": "HDR10"}) is None
     assert _trade_diffs(me, sib | {"stabilization": "SuperSteady"}) is None
     assert _trade_diffs(me, sib | {"resolution": "8K"}) is None
+
+
+def test_reference_budget_takes_the_tighter_of_spec_and_previous_project():
+    """EXP-05: per-variant budget from the previous-project reference x (1 + tol)."""
+    from scenario_db.api.services.arch_exploration import _variant_budget
+
+    ref = {"mw": 2100.0, "reference_mw": 2000.0, "source": "explicit"}
+    assert _variant_budget(None, ref) == {"mw": 2100.0, "source": "전과제 explicit", "reference_mw": 2000.0}
+    assert _variant_budget(1800.0, ref)["source"] == "spec"
+    assert _variant_budget(2500.0, ref)["mw"] == 2100.0
+    assert _variant_budget(None, None) == {"mw": None, "source": None}

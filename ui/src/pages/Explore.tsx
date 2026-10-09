@@ -107,6 +107,14 @@ function RunForm({ ctx, onDone }: { ctx: Ctx; onDone: (r: RunDetail) => void }) 
             <label className="ax-check"><input type="checkbox" checked={o.allow_lossy} onChange={() => set('allow_lossy', !o.allow_lossy)} />lossy 추천 허용</label>
             <label className="ax-check" title="체크 = variant의 측정 CPU profile을 EAS + schedutil로 재현해 SW 증가 축마다 cluster OPP·DSU·leakage와 CPU BW(측정 bus bytes)를 계산. profile이 없는 variant는 기존 가정 모델 유지 (결과의 CPU power 근거에 표시)"><input type="checkbox" checked={o.cpu_model === 'profile'} onChange={() => set('cpu_model', o.cpu_model === 'profile' ? 'flat' : 'profile')} />CPU: 측정 profile (EAS)</label>
             <label className="ax-check" title="해제하면 IP catalog에 압축 지원이 기재되지 않은 DMA도 탐색 (지원 여부 확인 전 잠재 절감 확인용)"><input type="checkbox" checked={o.require_declared} onChange={() => set('require_declared', !o.require_declared)} />지원 DMA만 (catalog 선언)</label></div>
+          <div className="ax-row"><span className="ax-label">고객 budget</span>
+            <span className="faint" style={{ fontSize: 12 }}>power ≤</span>
+            <input className="input" type="number" min={0} placeholder="없음" value={o.power_budget_mw ?? ''} style={{ width: 80 }} aria-label="power budget mW"
+              onChange={(e) => set('power_budget_mw', Number(e.target.value) > 0 ? Number(e.target.value) : null)} /><span className="faint" style={{ fontSize: 12 }}>mW · BW ≤</span>
+            <input className="input" type="number" min={0} placeholder="없음" value={o.bw_budget_mbs ?? ''} style={{ width: 90 }} aria-label="BW budget MB/s"
+              onChange={(e) => set('bw_budget_mbs', Number(e.target.value) > 0 ? Number(e.target.value) : null)} /><span className="faint" style={{ fontSize: 12 }}>MB/s</span>
+            <label className="ax-check" title="variant마다 전과제 기준(review_policy power_reference) × (1 + 허용 %)를 power 상한으로 — 위 입력값과 함께 있으면 더 낮은 값. 기준이 없는 variant는 위 입력값만"><input type="checkbox" checked={!!o.budget_from_reference} onChange={() => set('budget_from_reference', !o.budget_from_reference)} />전과제 기준을 상한으로</label>
+            <span className="faint" style={{ fontSize: 12 }}>넘는 조합은 추천 제외 · 미모델 IP가 있으면 판정 불가(unknown)</span></div>
           <div className="ax-row"><span className="ax-label">추천 기준</span>
             <div className="seg sm">{(['max', 'mean'] as Statistic[]).map((s) => <button key={s} className={o.objective_statistic === s ? 'on' : ''} onClick={() => set('objective_statistic', s)}>SW {s}</button>)}</div>
             <span className="faint" style={{ fontSize: 12 }}>× 증가</span>
@@ -299,6 +307,8 @@ function VariantDetailBody({ v, run, readOnly, battery, iqKeep = false }: { v: V
       {(v.ip_modes ?? []).length > 0 && <div className="faint" style={{ fontSize: 12, marginBottom: 6 }}>
         IP mode (모든 조합 공통): {(v.ip_modes ?? []).map((m) => `${m.node.toUpperCase()} ${m.mode}${m.unit_power_mw_mp !== null ? ` ${fmt(m.unit_power_mw_mp, 2)}` : ''}`).join(' · ')} <span className="mono">mW/MP</span>
         {(v.ip_modes ?? []).some((m) => m.alternatives.some((a) => a.explorable)) && <> · 대체 mode 결과는 아래 Power option / IP mode 카드</>}</div>}
+      {v.power_budget?.mw && <div className="faint" style={{ fontSize: 12, marginBottom: 4 }}>power budget ≤ <b className="mono">{v.power_budget.mw.toFixed(0)}</b> mW ({v.power_budget.source}{v.power_budget.reference_mw ? ` · 기준 ${v.power_budget.reference_mw.toFixed(0)} mW` : ''})
+        {v.status?.power_budget_status && <span className={`badge ${v.status.power_budget_status === 'pass' ? 'v-ok' : v.status.power_budget_status === 'fail' ? 'v-fail' : 'v-info'}`} style={{ marginLeft: 6 }}>{v.status.power_budget_status}</span>}</div>}
       {!v.spec_ok && <div className="err" style={{ fontSize: 12 }}>{v.spec_reasons.slice(0, 3).map((x) => <div key={x}>{x}</div>)}</div>}
       {coverageOf(v) === 'partial' && <div className="faint" style={{ fontSize: 12, marginBottom: 6 }}>
         <span className="badge v-warn">부분 모델</span> 전력 미모델 IP {(v.coverage?.zero_power_ips ?? []).join(', ')} — Total은 모델된 IP 합계(하한)
