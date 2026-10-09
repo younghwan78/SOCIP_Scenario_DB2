@@ -23,6 +23,8 @@ class SimulateRequest(BaseModel):
     dvfs_version: int | None = Field(default=None, ge=0)
     persist: bool = False
     force: bool = False
+    # Preview-then-save precondition; checked before any cached result or persistence.
+    expected_params_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{16}$")
 
 
 class SimulateRunResponse(BaseModel):

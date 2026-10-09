@@ -27,6 +27,12 @@ FastAPI의 `/openapi.json`, `/docs`는 실행 중인 build의 endpoint와 schema
 | Write | `/api/v1/write/*` | Authenticated stage/validate/diff/apply workflow |
 | Admin | `/api/v1/admin/*` | Disabled-by-default internal operations |
 
+`POST /simulation/run` previews with `persist: false` and returns `params_hash`.
+To save that preview, resend its request with `persist: true` and
+`expected_params_hash` (the returned 16-character hex hash). Changed resolved
+inputs cause HTTP 409 before cache lookup or persistence, including with `force`.
+Without this optional precondition the existing run behavior is unchanged.
+
 ## Detailed contracts
 
 - [Read API Contract](read-api-contract.md)
