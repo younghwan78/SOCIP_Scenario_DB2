@@ -53,10 +53,11 @@ def recompute_prediction(db: Session, prediction_id: str, *, power_params_ref: s
         from scenario_db.api.schemas.timing_budget import TimingBudgetRegisterRequest
         from scenario_db.api.services.timing_budget import register_condition
 
-        timing = dict(spec.get("timing") or {})
+        original_options = (spec.get("timing_budget") or {}).get("options")
+        timing = dict(original_options if original_options is not None else spec.get("timing") or {})
         measured = ((spec.get("timing_budget") or {}).get("measured")) or None
         if measured and measured.get("sw"):
-            timing.pop("task_runtime", None)          # re-read the measurement
+            timing["task_runtime"] = (spec.get("timing_budget") or {}).get("task_runtime") or {}
         if measured and measured.get("cpu"):
             timing.pop("cpu_profile", None)
         req = TimingBudgetRegisterRequest(scenario_id=pred.scenario_ref, variant_id=pred.variant_ref, options=timing,
@@ -73,6 +74,7 @@ def recompute_prediction(db: Session, prediction_id: str, *, power_params_ref: s
         req = ArchExplorationRunRequest(
             title=f"재계산 · {pred.variant_ref}", scenario_type=run.scenario_type, scenario_ids=[pred.scenario_ref],
             variant_ids=[pred.variant_ref], include_derived=True, max_variants=1, config=config,
+            power_budget_from_reference=bool(spec.get("power_budget_from_reference")),
             spec={k: spec[k] for k in _SPEC_KEYS if k in spec}, **{k: sel[k] for k in _SEL_KEYS if k in sel})
         new_run = run_exploration(db, req, user)
         out = promote(db, PromoteRequest(run_id=new_run["id"], scenario_id=pred.scenario_ref, variant_ids=[pred.variant_ref],

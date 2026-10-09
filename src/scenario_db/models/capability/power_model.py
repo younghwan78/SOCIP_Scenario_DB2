@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import Field, model_validator
 
@@ -249,7 +249,7 @@ class PowerCalibrationParams(BaseScenarioModel):
     source_evidence: list[str] = Field(default_factory=list)
     factor_by_ip: dict[str, float] = Field(default_factory=dict)
     # Applied by the engine (opt-in): IP power x factor; key = node id / hw name / DVFS domain / "*".
-    ip_power_scale: dict[str, float] = Field(default_factory=dict, exclude_if=lambda v: not v)
+    ip_power_scale: dict[str, Annotated[float, Field(gt=0, allow_inf_nan=False)]] = Field(default_factory=dict, exclude_if=lambda v: not v)
     fit: PowerCalibrationFit | None = Field(default=None, exclude_if=lambda v: v is None)
 
 

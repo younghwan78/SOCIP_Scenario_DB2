@@ -16,7 +16,7 @@ import re
 from typing import Any
 
 import yaml
-from sqlalchemy import func
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from scenario_db.exceptions import NotFoundError, UnprocessableError
@@ -45,7 +45,7 @@ def _params_row(db: Session, ref: str):
     row = db.get(Row, pid)
     if row is None:
         raise NotFoundError(f"power_model_params not found: {ref}")
-    if ver and int(ver) != row.version:
+    if ver and (not ver.isdigit() or int(ver) != row.version):
         raise UnprocessableError(f"power_model_params '{pid}' is at version {row.version}, requested {ver}")
     return row
 
@@ -61,7 +61,7 @@ def _measurements(db: Session, project_ref: str, scenario_id: str | None, includ
         q = q.filter(Evidence.scenario_ref == scenario_id)
     out = []
     for m in q.order_by(Evidence.scenario_ref, Evidence.variant_ref, Evidence.id).all():
-        if (m.project_ref or scen.get(m.scenario_ref)) != project_ref:
+        if scen.get(m.scenario_ref) != project_ref or (m.project_ref and m.project_ref != project_ref):
             continue
         synthetic = is_synthetic(m.provenance)
         if synthetic and not include_synthetic:
@@ -69,6 +69,8 @@ def _measurements(db: Session, project_ref: str, scenario_id: str | None, includ
         if not m.vdd_power:
             continue
         out.append((m, synthetic))
+        if len(out) > 500:
+            raise UnprocessableError("power fit exceeds 500 measurements; select a scenario")
     return out
 
 
@@ -103,7 +105,18 @@ def fit_proposal(db: Session, req: Any) -> dict[str, Any]:
     from scenario_db.sim.timing_budget import TimingBudgetOptions
 
     base = _base_ref(db, req.base_params_ref, req.config_profile_ref)
-    _params_row(db, base)
+    base_row = _params_row(db, base)
+    from scenario_db.db.models.definition import Project, Scenario
+
+    project = db.get(Project, req.project_ref)
+    if project is None:
+        raise NotFoundError(f"project not found: {req.project_ref}")
+    if ((project.metadata_ or {}).get("soc_ref") or (project.globals_ or {}).get("soc_ref")) != base_row.soc_ref:
+        raise UnprocessableError("base power params SoC does not match the project")
+    if req.scenario_id:
+        scenario = db.get(Scenario, req.scenario_id)
+        if scenario is None or scenario.project_ref != req.project_ref:
+            raise UnprocessableError("scenario does not belong to the project")
     rows, errors = [], []
     for m, synthetic in _measurements(db, req.project_ref, req.scenario_id, req.include_synthetic):
         use_sw = bool(req.measured_sw and _sw_stats(m))
@@ -124,10 +137,15 @@ def fit_proposal(db: Session, req: Any) -> dict[str, Any]:
                      "predicted": {"cpu": p["cpu_mw"], "ip": p["hw_mw"], "bw": p["bw_mw"], "total": p["total_mw"]},
                      "measured": {**meas, "total": cmp_["total"]["measurement_mw"]}})
     factors = {c: _fit([(r["predicted"][c], r["measured"].get(c)) for r in rows]) for c in CATS}
+    synth = sum(1 for r in rows if r["synthetic"])
+    from scenario_db.sim.power_params import power_params_from_row
+
+    params = power_params_from_row(base_row)
+    applicable = {"cpu": bool(params.cpu.clusters), "ip": True, "bw": params.bw_model in ("linear-per-gbps", "mif-linear")}
     for c in CATS:
         f = factors[c]
         # recommend only a factor that actually explains the measurements better
-        f["recommended"] = bool(f.get("k") and f["n"] >= 3 and not f.get("clamped") and (f.get("r2_after") or -1) >= 0.5
+        f["recommended"] = bool(applicable[c] and not synth and f.get("k") and f["n"] >= 3 and not f.get("clamped") and (f.get("r2_after") or -1) >= 0.5
                                 and f["mape_after_pct"] < f["mape_before_pct"])
     for r in rows:
         after = {c: (r["predicted"][c] * factors[c]["k"] if factors[c].get("k") else r["predicted"][c]) for c in CATS}
@@ -136,7 +154,6 @@ def fit_proposal(db: Session, req: Any) -> dict[str, Any]:
         r["delta_pct_before"] = round(100 * (r["predicted"]["total"] - mt) / mt, 1) if mt else None
         r["delta_pct_after"] = round(100 * (r["after"]["total"] - mt) / mt, 1) if mt else None
     warnings = []
-    synth = sum(1 for r in rows if r["synthetic"])
     if synth:
         warnings.append(f"합성(SYNTHETIC) 측정 {synth}건 포함 — 흐름 검증용이며 실제 계수 근거가 아님")
     for c in CATS:
@@ -172,7 +189,15 @@ def _scale_cpu(cpu: dict[str, Any], k: float) -> None:
             dsu["leakage"]["mw_per_core_at_ref"] = round(dsu["leakage"]["mw_per_core_at_ref"] * k, 4)
 
 
-def _scale_bw(bw: dict[str, Any], k: float) -> bool:
+def _scale_bw(bw: dict[str, Any], k: float, model: str | None = None) -> bool:
+    from scenario_db.sim.bw_power import BW_MW_PER_GBPS_DEFAULT
+
+    if model == "linear-per-gbps":
+        bw.setdefault("mw_per_gbps", BW_MW_PER_GBPS_DEFAULT)
+    elif model == "mif-linear":
+        default = bw.get("mw_per_gbps", BW_MW_PER_GBPS_DEFAULT)
+        bw.setdefault("e_read_mw_per_gbps", default)
+        bw.setdefault("e_write_mw_per_gbps", default)
     touched = False
     for key in ("mw_per_gbps", "e_read_mw_per_gbps", "e_write_mw_per_gbps"):
         if bw.get(key) is not None:
@@ -193,6 +218,20 @@ def create_calibrated_params(db: Session, req: Any, user: str | None = None) -> 
 
     base_row = _params_row(db, req.base_params_ref)
     base = power_params_from_row(base_row)
+    from scenario_db.api.services.calibration import is_synthetic
+    from scenario_db.db.models.definition import Project, Scenario
+    from scenario_db.db.models.evidence import Evidence
+
+    synthetic_rows = 0
+    for ref in set(req.source_evidence):
+        evidence = db.get(Evidence, ref)
+        scenario = db.get(Scenario, evidence.scenario_ref) if evidence is not None else None
+        project = db.get(Project, scenario.project_ref) if scenario is not None else None
+        if (evidence is None or evidence.kind != "evidence.measurement" or project is None
+                or ((project.metadata_ or {}).get("soc_ref") or (project.globals_ or {}).get("soc_ref")) != base_row.soc_ref
+                or (evidence.project_ref and evidence.project_ref != project.id)):
+            raise UnprocessableError(f"calibration evidence is not a measurement of this SoC: {ref}")
+        synthetic_rows += int(is_synthetic(evidence.provenance))
     doc = base.model_dump(mode="json", exclude_none=True)
     applied: dict[str, float] = {}
     for cat, k in req.factors.items():
@@ -205,16 +244,20 @@ def create_calibrated_params(db: Session, req: Any, user: str | None = None) -> 
                 raise UnprocessableError("base params has no CPU clusters to scale")
             _scale_cpu(doc["cpu"], k)
         elif cat == "bw":
-            if not _scale_bw(doc.setdefault("bw", {}), k):
+            if base.bw_model not in ("linear-per-gbps", "mif-linear") or not _scale_bw(doc.setdefault("bw", {}), k, base.bw_model):
                 raise UnprocessableError("base params has no BW coefficients to scale (bw_model builtin)")
         else:
             cal = doc.setdefault("calibration", {})
             scale = dict(cal.get("ip_power_scale") or {})
-            scale["*"] = round(float(scale.get("*", 1.0)) * k, 4)
+            scale.setdefault("*", 1.0)
+            scale = {key: round(float(value) * k, 4) for key, value in scale.items()}
             cal["ip_power_scale"] = scale
         applied[cat] = k
     if not applied:
         raise UnprocessableError("no factor to apply")
+    # Serialize version allocation across all bases for this SoC in the current transaction.
+    lock_key = int.from_bytes(hashlib.sha256(base_row.soc_ref.encode()).digest()[:8], "big", signed=True)
+    db.execute(select(func.pg_advisory_xact_lock(lock_key)))
     version = (db.query(func.max(Row.version)).filter(Row.soc_ref == base_row.soc_ref).scalar() or 0) + 1
     new_id = re.sub(r"-v\d+$", f"-v{version}", base_row.id) if re.search(r"-v\d+$", base_row.id) else f"{base_row.id}-v{version}"
     if db.get(Row, new_id) is not None:
@@ -222,13 +265,13 @@ def create_calibrated_params(db: Session, req: Any, user: str | None = None) -> 
     cal = doc.setdefault("calibration", {})
     cal["source_evidence"] = sorted(set(req.source_evidence))
     cal["fit"] = {"method": "least_squares_through_origin", "base_params_ref": base.params_ref, "statistic": req.statistic,
-                  "measured_sw": req.measured_sw, "synthetic_rows": req.synthetic_rows,
+                  "measured_sw": req.measured_sw, "synthetic_rows": synthetic_rows,
                   "factors": {c: {"k": k, **{kk: vv for kk, vv in (req.fit_stats.get(c) or {}).items() if kk in ("n", "rmse_before_mw", "rmse_after_mw", "r2_after")}}
                               for c, k in applied.items()}}
     doc.update({"id": new_id, "version": version, "status": "draft",
                 "description": req.description or f"{base.params_ref} x fit ({', '.join(f'{c} {k:g}' for c, k in applied.items())})",
                 "notes": (f"Calibrated from {len(cal['source_evidence'])} measurements by {user or 'unknown'}; "
-                          f"base {base.params_ref}." + (" SYNTHETIC rows included — flow check only." if req.synthetic_rows else ""))})
+                          f"base {base.params_ref}." + (" SYNTHETIC rows included — flow check only." if synthetic_rows else ""))})
     params = PowerModelParams.model_validate(doc)
     text = yaml.safe_dump(params.model_dump(mode="json", exclude_none=True), sort_keys=False, allow_unicode=True)
     row = Row(id=new_id, schema_version=params.schema_version, soc_ref=str(params.soc_ref), version=version,

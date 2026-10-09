@@ -77,9 +77,48 @@ capabilities, SoC compression catalog, config, DVFS, and exploration options.
 
 See [the guide](../../guides/arch-exploration.md) for model limits and report regeneration.
 
+Timing Budget can register one explicit condition with `POST /timing-budget/register`
+(writer/admin, reason required) or save its timeline with `POST /timing-budget/evidence`
+(analyst/writer/admin). The variant report exposes `condition_hash`, covering resolved
+graph/config/DVFS/CPU inputs and timing choices. Both mutations accept optional
+`expected_condition_hash` (16 lowercase hex characters); changed inputs return 409
+before persistence. Display-only timeline length and what-if options are excluded.
+Evidence IDs include the resolved condition and execution context; saved power/BW
+and current use the report's CPU model. `/interval-distribution` samples per-frame
+SW variability without changing the verdict or persisting data.
+
+`GET /timing-budget/measured-inputs` lists measurements owned by the selected
+scenario/variant. Variant, distribution, DVFS what-if, register and evidence requests
+accept optional `measured: {measurement_ref, sw, clock, cpu}`. Each part is opt-in;
+an all-false selection is a comparison reference. Foreign/missing references are
+rejected even for compare-only mutations. CPU input requires a usable profile and
+resolved CPU topology parameters (422 rather than flat-model fallback). Saved
+evidence records input lineage in `derived_from` and `run_info.timing_budget`.
+Freshness re-resolves measured SW values and retains original explicit overrides;
+changed measurements require recalculation before a guarded mutation.
+
 Calibration classifies measurement origin as `physical_capture`, `synthetic`, or `unknown`.
 A measurement may pin its capture-time rail map with `provenance.rail_domain_map_ref`;
 that profile must exist and belong to the measurement's project. Invalid pins return 422
 instead of silently using a newer or foreign profile. Without a pin, the latest project
 map is used and the comparison records that basis. Batched reads fetch distinct pinned
 profiles in one query.
+
+`POST /calibration/power-fit` (analyst/writer/admin) proposes CPU/IP/BW factors for
+up to 500 measurements in one project, optionally narrowed to one scenario. Base
+parameters must belong to the project's SoC. Synthetic measurements are excluded
+by default; including them never makes a factor recommended.
+`POST /calibration/power-params` (writer/admin) creates a draft version without
+modifying the base. Source references must resolve to measurements of that SoC;
+synthetic lineage is derived from stored provenance. Factors must be finite and
+within 0.2–5. IP calibration scales both keyed and fallback factors. BW calibration
+requires linear-per-gbps or mif-linear parameters. Version allocation is serialized
+per SoC. `GET /calibration/power-params?soc_ref=...` lists available versions.
+
+`POST /arch/predictions/{prediction_id}/recompute` (writer/admin) re-registers a
+current prediction using its stored condition; optional `power_params_ref` selects
+new parameters and `reason` records the change. Measured SW values are re-read while
+explicit runtime overrides are retained. New Timing Budget registrations preserve
+explicit default-valued choices. Exploration recompute retains reference power
+budgets; manually selected exploration cases are skipped. Superseded predictions
+return 422.

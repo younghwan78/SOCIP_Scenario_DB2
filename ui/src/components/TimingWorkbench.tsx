@@ -1,6 +1,6 @@
 // Timing Budget = prediction workbench: the condition (summary + actions), DVFS level override per domain and the
 // ③ interval / latency spread under per-frame SW variance.
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { BoxPlot } from './Charts'
 import { boxStats } from '../lib/cadence'
 import { fmt, dvfsDomains, type IntervalDistribution, type MeasuredCompare, type MeasuredInputOption, type MeasuredInputs, type TimingReport } from '../lib/timingBudget'
@@ -16,7 +16,7 @@ export interface Condition {
 export function conditionChips(c: Condition): string[] {
   const ov = Object.entries(c.overrides)
   return [
-    `SW ${c.statistic} ×${c.scale.toFixed(1)}`, `EIS ${c.eis}`, `CPU ${c.cpuModel === 'profile' ? '측정 profile' : '가정'}`,
+    `SW ${c.statistic} ×${Number.isInteger(c.scale) ? c.scale.toFixed(1) : c.scale}`, `EIS ${c.eis}`, `CPU ${c.cpuModel === 'profile' ? '측정 profile' : '가정'}`,
     c.throughput === 'pipelined' ? 'pipeline (buffer)' : 'stage 1 frame', `margin ${Math.round(c.margin * 100)}%`,
     `profile ${c.profile ?? '없음'}`,
     ov.length ? `DVFS override ${ov.map(([d, l]) => `${d} L${l}`).join(' · ')}` : 'DVFS 자동(계산)',
@@ -40,9 +40,13 @@ export function ConditionBar({ cond, verdict, onSaveEvidence, onRegister, onOpen
   const [reason, setReason] = useState('')
   const [asking, setAsking] = useState(false)
   const [act, setAct] = useState<Act>({ status: 'idle' })
+  const busy = useRef(false)
   const run = async (f: () => Promise<string>, link?: { label: string; onClick: () => void }) => {
+    if (busy.current) return
+    busy.current = true
     setAct({ status: 'busy' })
     try { setAct({ status: 'done', text: await f(), link }) } catch (e) { setAct({ status: 'error', text: e instanceof Error ? e.message : String(e) }) }
+    finally { busy.current = false }
   }
   const canRegister = verdict !== 'fail'
   return <div className="panel tb-cond" style={{ padding: '6px 10px', display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', fontSize: 12 }}>
@@ -102,7 +106,7 @@ export function IntervalBoxes({ data }: { data: IntervalDistribution }) {
   const COLOR: Record<string, string> = { preview: '#2F6F68', video: '#4C5E8C' }
   const label = (s: IntervalDistribution['streams'][number]) => `${s.kind === 'preview' ? 'Preview' : 'Video'} · ${s.node}`
   return <div style={{ marginTop: 10 }}>
-    <div style={{ fontSize: 12, fontWeight: 600 }}>SW 편차 반영 분포 <span className="faint" style={{ fontWeight: 400 }}>— SW task별 runtime을 frame마다 min~max에서 추출 (평균 유지) · {data.trials}회 × {data.frames} frame · 앞 {data.warmup_excluded}개 제외</span></div>
+    <div style={{ fontSize: 12, fontWeight: 600 }}>SW 편차 반영 분포 <span className="faint" style={{ fontWeight: 400 }} title={data.method}>— SW task별 runtime을 frame마다 min~max에서 추출 (기대 평균 유지) · {data.trials}회 × {data.frames} frame · 앞 {data.warmup_excluded}개 제외</span></div>
     <div className="faint" style={{ fontSize: 11.5, margin: '2px 0 4px' }}>출력 간격</div>
     <BoxPlot rows={data.streams.map((s) => ({ id: `iv-${s.node}`, label: label(s), box: boxStats(s.intervals), values: s.intervals, color: COLOR[s.kind], tipTitle: `${label(s)} · 출력 간격`,
       note: `drop ${s.drops}${s.off_cadence_pct !== null ? ` · 목표 이탈 ${fmt(s.off_cadence_pct, 0)}%` : ''}` }))} target={P} targetLabel={`목표 ${fmt(P, 2)} ms`} tolerance={data.tolerance} />

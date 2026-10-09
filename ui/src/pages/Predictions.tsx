@@ -117,7 +117,7 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
           title="등록 조건 그대로(또는 새 power params로) 다시 계산해 재등록 — 입력 변경(stale) 예측 정리 · 보정 params 반영">재계산…</button>
         <a className="btn" href="#/explore">조합 탐색 →</a>
       </div>
-      {ctx.params.rc && <RecomputePanel rows={rows} staleIds={new Set(stale.keys())} params={ppQ.data ?? []} initialParams={ctx.params.pp}
+      {ctx.params.rc && <RecomputePanel key={`${ctx.project}:${sf ?? ''}:${ctx.params.pp ?? ''}`} rows={rows} staleIds={new Set(stale.keys())} params={ppQ.data ?? []} initialParams={ctx.params.pp}
         onDone={() => setTick((t) => t + 1)} onClose={() => ctx.navigate(undefined, { rc: undefined, pp: undefined }, true)} />}
       {q.error && <div className="err">{q.error}</div>}
       {q.loading && <div className="empty">불러오는 중…</div>}

@@ -17,11 +17,14 @@ export function RecomputePanel({ rows, staleIds, params, initialParams, onDone, 
   const [reason, setReason] = useState('')
   const [items, setItems] = useState<Item[]>([])
   const [running, setRunning] = useState(false)
-  const [stop, setStop] = useState(false)
   const targets = scope === 'stale' ? stale : rows
-  const stopRef = useStopRef(stop)
+  const stopRef = useRef(false)
+  const runningRef = useRef(false)
+  useEffect(() => { stopRef.current = false; return () => { stopRef.current = true } }, [])
   const start = async () => {
-    setRunning(true); setStop(false); setItems([])
+    if (runningRef.current) return
+    runningRef.current = true
+    setRunning(true); stopRef.current = false; setItems([])
     const out: Item[] = []
     for (const r of targets) {
       if (stopRef.current) break
@@ -30,7 +33,7 @@ export function RecomputePanel({ rows, staleIds, params, initialParams, onDone, 
       }
       setItems([...out])
     }
-    setRunning(false); stopRef.current = false
+    setRunning(false); runningRef.current = false
     onDone()
   }
   const done = items.filter((x) => x.status === 'recomputed')
@@ -38,15 +41,15 @@ export function RecomputePanel({ rows, staleIds, params, initialParams, onDone, 
     <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', fontSize: 12 }}>
       <b style={{ fontSize: 13 }}>재계산</b>
       <div className="seg sm" role="group" aria-label="대상">
-        <button className={scope === 'stale' ? 'on' : ''} disabled={!stale.length} onClick={() => setScope('stale')}>입력 변경(stale) {stale.length}</button>
-        <button className={scope === 'all' ? 'on' : ''} onClick={() => setScope('all')}>표시된 전체 {rows.length}</button>
+        <button className={scope === 'stale' ? 'on' : ''} disabled={running || !stale.length} onClick={() => setScope('stale')}>입력 변경(stale) {stale.length}</button>
+        <button className={scope === 'all' ? 'on' : ''} disabled={running} onClick={() => setScope('all')}>표시된 전체 {rows.length}</button>
       </div>
-      <label>power params <select value={pp} onChange={(e) => setPp(e.target.value)} aria-label="재계산 power params">
+      <label>power params <select disabled={running} value={pp} onChange={(e) => setPp(e.target.value)} aria-label="재계산 power params">
         <option value="">등록 조건 그대로</option>{params.map((p) => <option key={p.ref} value={p.ref}>{p.ref}{p.calibrated ? ' · 보정' : ''}{p.status === 'draft' ? ' · draft' : ''}</option>)}</select></label>
-      <input className="input" style={{ width: 220, padding: '3px 6px' }} placeholder="사유 (기본: 재계산 · params …)" value={reason} onChange={(e) => setReason(e.target.value)} aria-label="재계산 사유" />
+      <input disabled={running} className="input" style={{ width: 220, padding: '3px 6px' }} placeholder="사유 (기본: 재계산 · params …)" value={reason} onChange={(e) => setReason(e.target.value)} aria-label="재계산 사유" />
       {!running ? <button className="btn primary" disabled={!targets.length} onClick={start}
         title="각 예측을 등록 당시 조건(Timing Budget 조건 또는 조합 탐색 spec)으로 다시 계산해 새 버전으로 등록 — 이전 버전은 superseded, 변경 원인은 이력에서 비교">{targets.length}건 재계산</button>
-        : <button className="btn" onClick={() => setStop(true)}>중지</button>}
+        : <button className="btn" onClick={() => { stopRef.current = true }}>중지</button>}
       <span className="grow" /><button className="btn tb-mini" onClick={onClose} disabled={running}>닫기</button>
     </div>
     <div className="faint" style={{ fontSize: 11.5, marginTop: 4 }}>사람이 고른 조합(user:…)은 자동 재현할 수 없어 건너뜁니다 · 조합 탐색 등록은 탐색을 다시 실행하므로 시간이 걸립니다 · params의 power model(v1/v2)이 run과 다르면 오류로 표시</div>
@@ -62,10 +65,4 @@ export function RecomputePanel({ rows, staleIds, params, initialParams, onDone, 
           <td className="faint" title={x.error ?? x.reason}>{(x.error ?? x.reason ?? '').slice(0, 90)}</td></tr>)}</tbody></table></div>
     </>}
   </section>
-}
-
-function useStopRef(stop: boolean) {
-  const ref = useRef(false)
-  useEffect(() => { ref.current = stop }, [stop])
-  return ref
 }

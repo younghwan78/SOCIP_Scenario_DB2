@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
@@ -21,9 +21,9 @@ class PowerParamsCreateRequest(BaseModel):
     """New draft power_model_params version = base x accepted factors (category -> k; None / 1 = unchanged)."""
 
     base_params_ref: str
-    factors: dict[str, float | None]
+    factors: dict[Literal["cpu", "ip", "bw"], Annotated[float, Field(ge=0.2, le=5.0, allow_inf_nan=False)] | None]
     source_evidence: list[str] = Field(default_factory=list, max_length=500)
-    statistic: str = "mean"
+    statistic: Literal["min", "mean", "max"] = "mean"
     measured_sw: bool = True
     synthetic_rows: int = 0
     fit_stats: dict[str, dict] = Field(default_factory=dict)

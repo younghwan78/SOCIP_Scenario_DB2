@@ -74,7 +74,7 @@ export function CalibrationPage({ ctx }: { ctx: Ctx }) {
         {detail.error && <div className="err" style={{ gridColumn: '1 / -1' }}>{detail.error}</div>}
         {detail.data && <Detail d={detail.data} ctx={ctx} />}
         <ClockCompareCard scenarioId={all ? undefined : ctx.scenario} selectedId={selId} onPick={(id) => ctx.navigate(undefined, { m: id }, true)} />
-        <PowerFitCard project={ctx.project} cfgParam={ctx.params.cfg}
+        <PowerFitCard key={`${ctx.project}:${ctx.params.cfg ?? ''}`} project={ctx.project} cfgParam={ctx.params.cfg}
           onOpenTiming={(pp) => ctx.navigate('timing', { pp })} onOpenPredictions={(pp) => ctx.navigate('predictions', { pp, rc: '1' })} />
       </div>}
     </div>

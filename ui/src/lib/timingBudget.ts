@@ -112,6 +112,7 @@ export interface WhatIfRow {
   domains?: Partial<Record<StageId, DomainClock[]>>
 }
 export interface TimingReport {
+  condition_hash?: string
   scenario_id: string; variant_id: string; fps: number; period_ms: number; statistic: Statistic
   eis: { on: boolean; auto: boolean; mode: EisMode; stabilization: unknown }
   mfc_dual: Record<string, number>; growth: { runtime_scale: number; latency_scale: number }
@@ -158,6 +159,11 @@ export interface TimingOptions {
 
 export const DEFAULT_SW_MARGIN = 0.25
 export const SW_MARGINS = [0.15, 0.2, 0.25, 0.3, 0.35]
+/** Registered conditions may use custom growth values, including zero. */
+export function runtimeScaleOf(param: string | undefined): number {
+  const n = Number(param)
+  return param !== undefined && Number.isFinite(n) && n >= 0 && n <= 10 ? n : 1
+}
 /** URL param ('margin', percent) → fraction; invalid / missing → 25 %. */
 export function marginOf(param: string | undefined): number {
   const v = Number(param)
@@ -239,14 +245,14 @@ export const timingApi = {
   distribution: (scenarioId: string, variantId: string, options: TimingOptions, configProfileRef?: string | null, config?: TimingConfig | null) =>
     postJson<IntervalDistribution>('/timing-budget/interval-distribution',
       { scenario_id: scenarioId, variant_id: variantId, options: { ...options, include_whatif: false }, config_profile_ref: configProfileRef ?? undefined, ...cfgBody(config) }),
-  register: (scenarioId: string, variantId: string, options: TimingOptions, reason: string, configProfileRef?: string | null, config?: TimingConfig | null, expectedProject?: string | null) =>
+  register: (scenarioId: string, variantId: string, options: TimingOptions, reason: string, configProfileRef?: string | null, config?: TimingConfig | null, expectedProject?: string | null, expectedHash?: string) =>
     postJson<RegisterResult>('/timing-budget/register',
-      { scenario_id: scenarioId, variant_id: variantId, options: { ...options, include_whatif: false }, reason, config_profile_ref: configProfileRef ?? undefined, expected_project_ref: expectedProject || undefined, ...cfgBody(config) }),
+      { scenario_id: scenarioId, variant_id: variantId, options: { ...options, include_whatif: false }, reason, config_profile_ref: configProfileRef ?? undefined, expected_project_ref: expectedProject || undefined, expected_condition_hash: expectedHash, ...cfgBody(config) }),
   measuredInputs: (scenarioId: string, variantId: string) =>
     getJson<MeasuredInputOption[]>('/timing-budget/measured-inputs', { scenario_id: scenarioId, variant_id: variantId }, false),
-  saveEvidence: (scenarioId: string, variantId: string, options: TimingOptions, configProfileRef?: string | null, config?: TimingConfig | null) =>
+  saveEvidence: (scenarioId: string, variantId: string, options: TimingOptions, configProfileRef?: string | null, config?: TimingConfig | null, expectedHash?: string) =>
     postJson<EvidenceResult>('/timing-budget/evidence',
-      { scenario_id: scenarioId, variant_id: variantId, options: { ...options, include_whatif: false }, config_profile_ref: configProfileRef ?? undefined, ...cfgBody(config) }),
+      { scenario_id: scenarioId, variant_id: variantId, options: { ...options, include_whatif: false }, config_profile_ref: configProfileRef ?? undefined, expected_condition_hash: expectedHash, ...cfgBody(config) }),
   fleet: (scenarioId: string, options: Omit<TimingOptions, 'include_whatif'>, configProfileRef?: string | null) =>
     postJson<{ rows: FleetRow[]; errors: VariantFailure[]; dvfs_table_ref: string | null; config_profile_ref?: string | null }>('/timing-budget/fleet',
       { scenario_id: scenarioId, options, config_profile_ref: configProfileRef ?? undefined }),

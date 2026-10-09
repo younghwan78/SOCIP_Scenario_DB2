@@ -252,8 +252,7 @@ def dvfs_ladders(ips: list[dict[str, Any]], tables: dict[str, DVFSTable], asv: i
 
 
 def _sw_ranges(plan: dict, options: TimingBudgetOptions) -> dict[str, tuple[float, float, float]]:
-    """Per SW task (min, mode, max) runtime for per-frame sampling; mode keeps the measured mean of a triangular
-    distribution (mean = (min + mode + max) / 3). Tasks without a min/max profile stay fixed."""
+    """Per SW task (min, mean, max) runtime for per-frame sampling. Tasks without min/max stay fixed."""
     out: dict[str, tuple[float, float, float]] = {}
     for items in plan["sw_items"].values():
         for item in items:
@@ -269,9 +268,21 @@ def _sw_ranges(plan: dict, options: TimingBudgetOptions) -> dict[str, tuple[floa
             adj = options.task_adjustments.get(item["task"])
             if adj is not None:
                 lo, mean, hi = adj.apply(lo), adj.apply(mean), adj.apply(hi)
-            mode = min(hi, max(lo, 3 * mean - lo - hi))
-            out[item["task"]] = (lo, mode, hi)
+            out[item["task"]] = (lo, mean, hi)
     return out
+
+
+def _sample_sw(rng: random.Random, lo: float, mean: float, hi: float) -> float:
+    """A triangular distribution cannot express a mean outside the middle third; use bounded beta there."""
+    if hi <= lo or mean <= lo:
+        return lo
+    if mean >= hi:
+        return hi
+    mode = 3 * mean - lo - hi
+    if lo <= mode <= hi:
+        return rng.triangular(lo, hi, mode)
+    fraction = (mean - lo) / (hi - lo)
+    return lo + (hi - lo) * rng.betavariate(2 * fraction, 2 * (1 - fraction))
 
 
 def interval_distribution(
@@ -281,7 +292,7 @@ def interval_distribution(
     """Output interval / latency spread when every SW task varies frame to frame within its measured min..max.
 
     Clocks follow the chosen condition (same plan as the budget report); each trial re-runs the timeline with
-    per-frame SW durations drawn from a triangular(min, mode, max) distribution that keeps the measured mean.
+    per-frame SW durations drawn from a bounded distribution that keeps the measured expected mean.
     Report only: the verdict of the budget report is not changed.
     """
     options = options.model_copy(update={"include_whatif": False})
@@ -302,7 +313,7 @@ def interval_distribution(
         for task in inputs.timeline_tasks:
             r = ranges.get(str(task["id"]))
             if r is not None:
-                task["duration_by_frame"] = [max(_MIN_TASK_MS, rng.triangular(r[0], r[2], r[1])) for _ in range(frames)]
+                task["duration_by_frame"] = [max(_MIN_TASK_MS, _sample_sw(rng, *r)) for _ in range(frames)]
         result = run_simulation(inputs, dvfs_tables=dvfs_tables)
         by_node: dict[str, list] = {}
         for e in result.timeline_events:
@@ -326,7 +337,7 @@ def interval_distribution(
                            "off_cadence_pct": round(100.0 * sum(abs(g - period) > period * tol for g in iv) / len(iv), 2) if iv else None})
     rows.sort(key=lambda r: (r["kind"] != "preview", r["node"]))
     return {"period_ms": round(period, 4), "trials": trials, "frames": frames, "warmup_excluded": skip, "tolerance": tol,
-            "method": "per-frame SW runtime ~ triangular(min, mode, max), mean kept; clocks fixed by the condition",
+            "method": "per-frame SW runtime ~ bounded triangular (beta for skewed means), expected mean kept; clocks fixed by the condition",
             "varied": sorted(ranges), "fixed": fixed, "streams": rows}
 
 

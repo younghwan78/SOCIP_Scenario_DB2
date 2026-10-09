@@ -1,7 +1,7 @@
 // S5 (예측 ↔ 실측): fit CPU / IP / BW power factors to the project's measurements and publish them as a new draft
 // power_model_params version. Nothing is overwritten; the new version is opt-in (Timing Budget "power params",
 // 예측 현황 재계산).
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useAsync } from '../lib/route'
 import { calibrationApi, type FitCat, type PowerFit, type PowerParamsCreated } from '../lib/calibration'
 import { fmt } from '../lib/timingBudget'
@@ -37,22 +37,28 @@ export function PowerFitCard({ project, cfgParam, onOpenTiming, onOpenPrediction
   const [created, setCreated] = useState<PowerParamsCreated | null>(null)
   const [check, setCheck] = useState<PowerFit | null>(null)
   const [desc, setDesc] = useState('')
+  const busyRef = useRef(false)
+  useEffect(() => { setFit(null); setCreated(null); setCheck(null) }, [project, base, profile, synthetic, statistic, measuredSw])
   const run = async () => {
+    if (busyRef.current) return
+    busyRef.current = true
+    setFit(null)
     setBusy('보정 계산 중…'); setErr(null); setCreated(null); setCheck(null)
     try {
       const f = await calibrationApi.powerFit({ project_ref: project, base_params_ref: base || undefined, config_profile_ref: profile, include_synthetic: synthetic, statistic, measured_sw: measuredSw })
       setFit(f); setPicks(defaultPicks(f))
-    } catch (e) { setErr(e instanceof Error ? e.message : String(e)) } finally { setBusy(null) }
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)) } finally { busyRef.current = false; setBusy(null) }
   }
   const publish = async () => {
-    if (!fit) return
+    if (!fit || busyRef.current || created) return
+    busyRef.current = true
     setBusy('새 params 버전 만드는 중…'); setErr(null)
     try {
       const c = await calibrationApi.createPowerParams(fit, Object.fromEntries(CATS.map((k) => [k, picks[k] ? fit.factors[k].k : null])), desc || undefined)
       setCreated(c)
       setBusy('새 params로 다시 계산해 검증 중…')
       setCheck(await calibrationApi.powerFit({ project_ref: project, base_params_ref: c.params_ref, config_profile_ref: profile, include_synthetic: synthetic, statistic, measured_sw: measuredSw }))
-    } catch (e) { setErr(e instanceof Error ? e.message : String(e)) } finally { setBusy(null) }
+    } catch (e) { setErr(e instanceof Error ? e.message : String(e)) } finally { busyRef.current = false; setBusy(null) }
   }
   const download = () => {
     if (!created) return
@@ -60,20 +66,21 @@ export function PowerFitCard({ project, cfgParam, onOpenTiming, onOpenPrediction
     a.href = URL.createObjectURL(new Blob([created.yaml], { type: 'text/yaml' }))
     a.download = `${created.id}.yaml`
     a.click()
+    URL.revokeObjectURL(a.href)
   }
   const synthRows = fit?.rows.filter((r) => r.synthetic).length ?? 0
   return <Card id="cal-fit" title="계수 보정 (S5) — 실측으로 CPU · IP · BW 계수 맞추기" defaultWide
     note="각 측정을 같은 조건(Timing Budget · 실측 SW 입력)으로 예측해 구분별 배율 k를 최소제곱(원점 통과)으로 구하고, 새 draft params 버전으로 발행 — 기존 params는 바뀌지 않음">
-    <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', fontSize: 12 }}>
+    <fieldset disabled={!!busy} style={{ border: 0, padding: 0, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', fontSize: 12 }}>
       <ProfileSelect profiles={sp.profiles} value={profile} onChange={setProfile} />
       <label>기준 params <select value={base} onChange={(e) => setBase(e.target.value)} aria-label="기준 params">
         <option value="">profile 기본</option>{(paramsQ.data ?? []).map((p) => <option key={p.ref} value={p.ref}>{p.ref}{p.calibrated ? ' (보정)' : ''} · {p.status}</option>)}</select></label>
       <label title="측정과 같은 조건을 맞추려면 mean 권장">SW 통계 <select value={statistic} onChange={(e) => setStatistic(e.target.value as 'mean' | 'max')}><option value="mean">mean</option><option value="max">max</option></select></label>
       <label title="측정에 SW task timing이 있으면 SW 가정 대신 사용 — 남는 오차를 계수 쪽으로 좁힘"><input type="checkbox" checked={measuredSw} onChange={(e) => setMeasuredSw(e.target.checked)} /> 실측 SW 입력</label>
       <label title="합성 fixture는 흐름 검증용 — 실제 계수 근거 아님"><input type="checkbox" checked={synthetic} onChange={(e) => setSynthetic(e.target.checked)} /> 합성 포함</label>
-      <button className="btn primary" disabled={!project || !!busy} onClick={run}>보정 계산</button>
+      <button className="btn primary" disabled={!project || !!busy || !sp.ready} onClick={run}>보정 계산</button>
       {busy && <span className="faint">{busy}</span>}
-    </div>
+    </fieldset>
     {err && <div className="err" style={{ marginTop: 6 }}>{err}</div>}
     {fit && <>
       <div className="faint" style={{ fontSize: 12, margin: '6px 0' }}>기준 {fit.base_params_ref} · 측정 {fit.rows.length}건{synthRows ? ` (합성 ${synthRows})` : ''} · SW {fit.statistic}{fit.errors.length ? ` · 계산 실패 ${fit.errors.length}` : ''}</div>
@@ -101,7 +108,7 @@ export function PowerFitCard({ project, cfgParam, onOpenTiming, onOpenPrediction
             <td style={{ textAlign: 'right' }}><span className={`badge ${cls(r.delta_pct_after)}`}>{pct(r.delta_pct_after)}</span></td></tr>)}</tbody></table></div></details>
       <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 8, flexWrap: 'wrap', fontSize: 12 }}>
         <input className="input" style={{ width: 320, padding: '3px 6px' }} placeholder="설명 (선택)" value={desc} onChange={(e) => setDesc(e.target.value)} aria-label="params 설명" />
-        <button className="btn primary" disabled={!!busy || !CATS.some((c) => picks[c])} onClick={publish}
+        <button className="btn primary" disabled={!!busy || !!created || !CATS.some((c) => picks[c])} onClick={publish}
           title="체크한 배율을 기준 params에 곱해 새 draft 버전을 만들고, 같은 측정으로 다시 계산해 검증 (기존 params 불변)">새 params 버전 만들기 (draft)</button>
       </div>
     </>}

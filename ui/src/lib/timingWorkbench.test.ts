@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import { autoLevel, dvfsDomains, formatOverrides, parseOverrides, type TimingReport } from './timingBudget'
+import { autoLevel, runtimeScaleOf, dvfsDomains, formatOverrides, parseOverrides, type TimingReport } from './timingBudget'
 import { conditionParams, conditionText, type BoardRow } from './archExplore'
 import { detailLanes, outputPairs } from '../components/TimingCharts'
 import { traceCondition } from '../pages/Pipeline'
@@ -45,7 +45,7 @@ it('re-opens a registered condition in Timing Budget with non-default params onl
   const row = { scenario_id: 's', variant_id: 'v', condition: { source: 'timing-budget', statistic: 'mean', runtime_scale: 1.2, throughput_model: 'pipelined', eis: 'auto',
     cpu_model: 'profile', rt_margin: 0.25, output_margin: 0.25, config_profile_ref: 'simcfg-a', dvfs_overrides: { INTCAM: 2, CAM: 3 }, dvfs: {}, compression: [] } } as unknown as BoardRow
   expect(conditionParams(row)).toEqual({ scenario: 's', variant: 'v', stat: 'mean', scale: '1.2', eis: undefined, cpu: 'profile', tp: 'pipelined',
-    margin: undefined, cfg: 'simcfg-a', dvo: 'CAM:3,INTCAM:2' })
+    margin: undefined, cfg: 'simcfg-a', dvo: 'CAM:3,INTCAM:2', warmup: undefined, mref: undefined, min: undefined })
   expect(conditionText(row.condition)).toBe('TB · SW mean ×1.2 · pipeline · CPU 측정 · override CAM:L3,INTCAM:L2')
 })
 
@@ -54,4 +54,12 @@ it('names the condition behind a Pipeline trace', () => {
     .toBe('Timing Budget 조건 · simcfg-a · 2026-10-09')
   expect(traceCondition({ id: 'b', kind: 'evidence.simulation', run_info: { tool: 'scenariodb-sim' } }).text).toBe('Simulate 기본 조건')
   expect(traceCondition({ id: 'c', kind: 'evidence.measurement', measured_at: '2026-06-14T00:00:00Z' }).text).toBe('실측 · 2026-06-14')
+})
+
+it('preserves custom growth when reopening a registered condition', () => {
+  expect(runtimeScaleOf('1.05')).toBe(1.05)
+  expect(runtimeScaleOf('0')).toBe(0)
+  expect(runtimeScaleOf('-1')).toBe(1)
+  expect(runtimeScaleOf('11')).toBe(1)
+  expect(runtimeScaleOf(undefined)).toBe(1)
 })

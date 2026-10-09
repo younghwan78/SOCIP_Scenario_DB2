@@ -25,6 +25,32 @@ def test_scale_cpu_and_bw_documents():
     bw = {"e_read_mw_per_gbps": 50.0, "e_write_mw_per_gbps": 80.0, "mif_opps": [{"mhz": 421, "base_mw": 25.0}]}
     assert pf._scale_bw(bw, 2.0) and bw["e_read_mw_per_gbps"] == 100.0 and bw["mif_opps"][0]["base_mw"] == 50.0
     assert not pf._scale_bw({}, 2.0)
+    bw = {"e_read_mw_per_gbps": 80.0}
+    assert pf._scale_bw(bw, 0.5, "mif-linear")
+    assert bw["e_read_mw_per_gbps"] == 40.0
+    from scenario_db.sim.bw_power import BW_MW_PER_GBPS_DEFAULT
+
+    assert bw["e_write_mw_per_gbps"] == BW_MW_PER_GBPS_DEFAULT * 0.5
+
+
+def test_recompute_retains_measured_sw_overrides_and_explicit_defaults(monkeypatch):
+    from types import SimpleNamespace
+
+    from scenario_db.api.services.recompute import recompute_prediction
+    from scenario_db.api.services import timing_budget
+    from scenario_db.db.models.exploration import Prediction
+    from scenario_db.sim.timing_budget import TimingBudgetOptions
+
+    pred = SimpleNamespace(id="p", status="current", exploration_run_ref="r", scenario_ref="s", variant_ref="v", project_ref="proj", metrics={})
+    options = {"cpu": TimingBudgetOptions().cpu.model_dump(), "task_runtime": {"sw": {"min_ms": 2.0, "mean_ms": 3.0, "max_ms": 4.0}}}
+    run = SimpleNamespace(scenario_type="timing-budget", spec={"input_selection": {}, "timing_budget": {
+        "measured": {"measurement_ref": "m", "sw": True}, "options": options, "task_runtime": options["task_runtime"]}})
+    db = SimpleNamespace(get=lambda model, ref: pred if model is Prediction else run)
+    captured = []
+    monkeypatch.setattr(timing_budget, "register_condition", lambda db, req, user: captured.append(req) or {"promoted": [{"id": "new"}]})
+    assert recompute_prediction(db, "p")["status"] == "recomputed"
+    assert captured[0].options.task_runtime["sw"].mean_ms == 3.0
+    assert "cpu" in captured[0].options.model_fields_set
 
 
 def test_ip_power_scale_is_opt_in_and_keyed():
