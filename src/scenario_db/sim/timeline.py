@@ -198,7 +198,7 @@ def build_timeline_events(
 
         run.ready_ms = float(env.now)
         run.token_wait_ms = token_wait
-        duration = _task_duration(run.task)
+        duration = _task_duration(run.task, run.frame_index)
         resource_id = _task_resource_id(run.task)
         run.resource_id = resource_id
         if resource_id:
@@ -619,7 +619,11 @@ def _task_resource_capacity(task: dict[str, Any]) -> int:
     return int(task.get("resource_capacity") or task.get("capacity") or 1)
 
 
-def _task_duration(task: dict[str, Any]) -> float:
+def _task_duration(task: dict[str, Any], frame_index: int | None = None) -> float:
+    # Opt-in per-frame durations (SW variance studies): ``duration_by_frame[i % n]`` for frame i.
+    by_frame = task.get("duration_by_frame")
+    if by_frame and frame_index is not None:
+        return float(by_frame[frame_index % len(by_frame)])
     duration = task.get("duration_ms")
     if duration is None or float(duration or 0.0) <= 0.0:
         duration = task.get("source_valid_ms") or task.get("v_valid_ms")

@@ -21,6 +21,7 @@ Read-only: builds simulation inputs from a copied graph and never persists.
 from __future__ import annotations
 
 import math
+import random
 import re
 from copy import deepcopy
 from dataclasses import replace
@@ -217,11 +218,111 @@ def analyze_timing_budget(
     rule = _run(graph, options, base_config, dvfs_tables, plan, rule_only=True)
     budget = _run(graph, options, base_config, dvfs_tables, plan, rule_only=False)
     report = _report(graph, options, plan, rule, budget, dvfs_tables)
+    report["dvfs"]["overrides"] = dict(base_config.dvfs_overrides)
+    report["dvfs"]["ladders"] = dvfs_ladders(report["ips"], dvfs_tables, base_config.asv_group)
     if options.cpu_model == "profile":
         _profile_cpu(report, options, params, config)
     if options.include_whatif:
         report["whatif"] = whatif(graph, options, config=config, dvfs_tables=dvfs_tables)
     return report
+
+
+def budget_simulation(graph, options: TimingBudgetOptions, *, config: SimulationRunConfig | None = None,
+                      dvfs_tables: dict[str, DVFSTable] | None = None) -> SimRunResult:
+    """The budget run of ``analyze_timing_budget`` (clocks and SW of the chosen condition) as a simulation result,
+    e.g. to keep it as simulation evidence."""
+    options = options.model_copy(update={"include_whatif": False})
+    base_config = (config or SimulationRunConfig()).model_copy(
+        update={"include_timeline": True, "timeline_frame_count": max(options.frames, options.timeline_frames + 4),
+                "debug_trace": False})
+    plan = _plan(graph, options, base_config)
+    return _run(graph, options, base_config, dvfs_tables or {}, plan, rule_only=False)["result"]
+
+
+def dvfs_ladders(ips: list[dict[str, Any]], tables: dict[str, DVFSTable], asv: int) -> dict[str, list[dict[str, Any]]]:
+    """Selectable levels per DVFS domain used by this variant (slow -> fast), for a level override."""
+    out: dict[str, list[dict[str, Any]]] = {}
+    for g in sorted({ip["dvfs_group"] for ip in ips if ip.get("dvfs_group") in tables}):
+        out[g] = [{"level": lv.level, "mhz": lv.speed_mhz, "mv": tables[g].voltage_for(lv, asv) or None}
+                  for lv in sorted(tables[g].levels, key=lambda lv: lv.speed_mhz)]
+    return out
+
+
+def _sw_ranges(plan: dict, options: TimingBudgetOptions) -> dict[str, tuple[float, float, float]]:
+    """Per SW task (min, mode, max) runtime for per-frame sampling; mode keeps the measured mean of a triangular
+    distribution (mean = (min + mode + max) / 3). Tasks without a min/max profile stay fixed."""
+    out: dict[str, tuple[float, float, float]] = {}
+    for items in plan["sw_items"].values():
+        for item in items:
+            if item["kind"] != "sw":
+                continue
+            row = plan["profiles"].get(item["task"]) or {}
+            vals = [row.get(k) for k in ("min_ms", "mean_ms", "max_ms")]
+            if any(v is None for v in vals) or float(vals[2]) <= float(vals[0]):
+                continue
+            lo, mean, hi = (float(v) * options.runtime_scale for v in vals)
+            adj = options.task_adjustments.get(item["task"])
+            if adj is not None:
+                lo, mean, hi = adj.apply(lo), adj.apply(mean), adj.apply(hi)
+            mode = min(hi, max(lo, 3 * mean - lo - hi))
+            out[item["task"]] = (lo, mode, hi)
+    return out
+
+
+def interval_distribution(
+    graph, options: TimingBudgetOptions, *, config: SimulationRunConfig | None = None,
+    dvfs_tables: dict[str, DVFSTable] | None = None, trials: int = 8, frames: int = 24, seed: int = 7,
+) -> dict[str, Any]:
+    """Output interval / latency spread when every SW task varies frame to frame within its measured min..max.
+
+    Clocks follow the chosen condition (same plan as the budget report); each trial re-runs the timeline with
+    per-frame SW durations drawn from a triangular(min, mode, max) distribution that keeps the measured mean.
+    Report only: the verdict of the budget report is not changed.
+    """
+    options = options.model_copy(update={"include_whatif": False})
+    dvfs_tables = dvfs_tables or {}
+    base_config = (config or SimulationRunConfig()).model_copy(
+        update={"include_timeline": True, "timeline_frame_count": frames, "debug_trace": False})
+    plan = _plan(graph, options, base_config)
+    period = plan["period"]
+    ranges = _sw_ranges(plan, options)
+    rng = random.Random(seed)
+    skip = min(max(options.warmup_frames, 2), max(frames - 3, 0))
+    tol = options.interval_tolerance
+    streams: dict[str, dict[str, Any]] = {}
+    fixed: list[str] = []
+    for _ in range(trials):
+        inputs = _budget_inputs(graph, options, base_config, plan, plan["margins"])
+        fixed = sorted(str(t["id"]) for t in inputs.timeline_tasks if t.get("task_type") == "sw" and str(t["id"]) not in ranges)
+        for task in inputs.timeline_tasks:
+            r = ranges.get(str(task["id"]))
+            if r is not None:
+                task["duration_by_frame"] = [max(_MIN_TASK_MS, rng.triangular(r[0], r[2], r[1])) for _ in range(frames)]
+        result = run_simulation(inputs, dvfs_tables=dvfs_tables)
+        by_node: dict[str, list] = {}
+        for e in result.timeline_events:
+            if e.frame_index is not None:
+                by_node.setdefault(str(e.node_id), []).append(e)
+        for t in inputs.timeline_tasks:
+            node = str(t["id"])
+            kind = "preview" if _DISPLAY_RE.search(node) else "video" if _ENCODER_RE.search(node) else None
+            if kind is None or node not in by_node:
+                continue
+            ev = sorted(by_node[node], key=lambda e: e.frame_index)
+            acc = streams.setdefault(node, {"node": node, "kind": kind, "intervals": [], "latency": []})
+            ends = [e.end_ms for e in ev]
+            acc["intervals"] += [round(b - a, 4) for a, b in zip(ends[skip:], ends[skip + 1:])]
+            acc["latency"] += [round(e.end_ms - _frame_start(result, e.frame_index, period), 4) for e in ev[skip:]]
+    rows = []
+    for acc in streams.values():
+        iv = acc["intervals"]
+        drops = sum(max(0, round(g / period) - 1) for g in iv if g > 1.5 * period)
+        rows.append(acc | {"drops": int(drops),
+                           "off_cadence_pct": round(100.0 * sum(abs(g - period) > period * tol for g in iv) / len(iv), 2) if iv else None})
+    rows.sort(key=lambda r: (r["kind"] != "preview", r["node"]))
+    return {"period_ms": round(period, 4), "trials": trials, "frames": frames, "warmup_excluded": skip, "tolerance": tol,
+            "method": "per-frame SW runtime ~ triangular(min, mode, max), mean kept; clocks fixed by the condition",
+            "varied": sorted(ranges), "fixed": fixed, "streams": rows}
 
 
 def whatif(
@@ -480,6 +581,7 @@ def _plan(graph, options: TimingBudgetOptions, config: SimulationRunConfig) -> d
         "eis_auto": eis_auto,
         "stabilization": stabilization,
         "warnings": warnings,
+        "profiles": profiles,
     }
 
 
@@ -642,6 +744,12 @@ def _run(graph, options, config, dvfs_tables, plan, *, rule_only: bool) -> dict[
             margins[n] = 1.0 - (1.0 - m) / k if k > 1 else m
     else:
         margins = plan["margins"]
+    inputs = _budget_inputs(graph, options, config, plan, margins)
+    result = run_simulation(inputs, dvfs_tables=dvfs_tables)
+    return {"inputs": inputs, "result": result}
+
+
+def _budget_inputs(graph, options, config, plan, margins) -> SimulationInputs:
     copy = _graph_copy(graph, options.statistic, margins)
     inputs = build_simulation_inputs(copy, config)
     for workload in inputs.workloads:
@@ -649,8 +757,7 @@ def _run(graph, options, config, dvfs_tables, plan, *, rule_only: bool) -> dict[
         if cores:
             workload.width = max(1, workload.width // cores)
     _apply_sw(inputs, plan, options)
-    result = run_simulation(inputs, dvfs_tables=dvfs_tables)
-    return {"inputs": inputs, "result": result}
+    return inputs
 
 
 def _apply_sw(inputs: SimulationInputs, plan: dict, options: TimingBudgetOptions) -> None:

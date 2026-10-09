@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Ctx } from '../App'
 import { useAsync } from '../lib/route'
-import { SW_MARGINS, fmt, stageDomainsOf, stageSlack, marginOf, marginOpts, pct0, timingApi, verdictChip, type CpuModel, type EisMode, type Statistic, type ThroughputModel, type TimingReport, type DvfsWhatIf, DEFAULT_COMBOS } from '../lib/timingBudget'
+import { SW_MARGINS, fmt, stageDomainsOf, stageSlack, marginOf, marginOpts, pct0, timingApi, verdictChip, type CpuModel, type EisMode, type Statistic, type ThroughputModel, type TimingReport, type DvfsWhatIf, type TimingConfig, type IntervalDistribution, DEFAULT_COMBOS, formatOverrides, parseOverrides } from '../lib/timingBudget'
 import { Card, ClockChart, Gantt, Intervals, PowerBw, SlotBudget, WhatIf } from '../components/TimingCharts'
 import { ProvBadge } from '../components/Provenance'
 import { powerScope, type Prov } from '../lib/provenance'
@@ -10,6 +10,9 @@ import { useSimProfiles } from '../lib/simProfile'
 import { maText, useBattery, batteryNote, type Battery } from '../lib/battery'
 import { DvfsWhatIfTable } from '../components/DvfsWhatIf'
 import { useReferences } from '../lib/review'
+import { usePref } from '../components/Layout'
+import { invalidateCache } from '../lib/api'
+import { ConditionBar, DvfsOverrideTable, IntervalBoxes, type Condition } from '../components/TimingWorkbench'
 
 const SCALES = [1.0, 1.1, 1.2, 1.3, 1.4, 1.5]
 
@@ -33,19 +36,30 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
   const sp = useSimProfiles(ctx.project, ctx.params.cfg)
   const cfg = sp.ref
   const battery = useBattery(ctx.project, ctx.params.cfg)
+  // DVFS level override per domain (URL dvo = "CAM:3,INTCAM:2"); part of the condition
+  const dvo = ctx.params.dvo ?? ''
+  const overrides = useMemo(() => parseOverrides(dvo), [dvo])
+  const config: TimingConfig | null = useMemo(() => (Object.keys(overrides).length ? { dvfs_overrides: overrides } : null), [overrides])
+  const baseOpts = { statistic, eis, runtime_scale: scale, cpu_model: cpuModel, ...tpOpt, ...marginOpts(margin), ...(warmup ? { warmup_frames: warmup } : {}) }
 
-  const q = useAsync(() => (!sp.ready ? new Promise<never>(() => {}) : variant ? timingApi.variant(scenario, variant, { statistic, eis, runtime_scale: scale, timeline_frames: frames, cpu_model: cpuModel, ...tpOpt, ...marginOpts(margin), ...(warmup ? { warmup_frames: warmup } : {}) }, cfg) : Promise.reject(new Error('variant를 선택하세요 (Ctrl K)'))), [scenario, variant, statistic, eis, scale, cfg, sp.ready, margin, frames, cpuModel, tpParam, warmup])
+  const q = useAsync(() => (!sp.ready ? new Promise<never>(() => {}) : variant ? timingApi.variant(scenario, variant, { ...baseOpts, timeline_frames: frames }, cfg, config) : Promise.reject(new Error('variant를 선택하세요 (Ctrl K)'))), [scenario, variant, statistic, eis, scale, cfg, sp.ready, margin, frames, cpuModel, tpParam, warmup, dvo])
   // what-if (24 sims) starts after the main report so the page never holds two simulation slots at once
-  const mainKey = JSON.stringify([ctx.project, scenario, variant, cfg, margin, cpuModel, tpParam, warmup])
+  const mainKey = JSON.stringify([ctx.project, scenario, variant, cfg, margin, cpuModel, tpParam, warmup, dvo])
   const [mainReadyKey, setMainReadyKey] = useState<string | null>(null)
   useEffect(() => { if (q.data && sp.ready) setMainReadyKey(mainKey) }, [q.data, sp.ready, mainKey])
   const mainReady = mainReadyKey === mainKey && sp.ready
-  const wq = useAsync(() => (variant && mainReady ? timingApi.variant(scenario, variant, { statistic: 'max', eis: 'auto', runtime_scale: 1, include_whatif: true, cpu_model: cpuModel, ...tpOpt, ...marginOpts(margin), ...(warmup ? { warmup_frames: warmup } : {}) }, cfg) : Promise.resolve(null)), [scenario, variant, mainReady, cfg, margin, cpuModel, tpParam, warmup])
+  const wq = useAsync(() => (variant && mainReady ? timingApi.variant(scenario, variant, { statistic: 'max', eis: 'auto', runtime_scale: 1, include_whatif: true, cpu_model: cpuModel, ...tpOpt, ...marginOpts(margin), ...(warmup ? { warmup_frames: warmup } : {}) }, cfg, config) : Promise.resolve(null)), [scenario, variant, mainReady, cfg, margin, cpuModel, tpParam, warmup, dvo])
   // ⑦ DVFS level ±1/±2 per domain — runs after ④ so at most one simulation slot is held
-  const dq = useAsync(() => (variant && mainReady && !wq.loading && !q.loading ? timingApi.dvfsWhatif(scenario, variant, { statistic, eis, runtime_scale: scale, cpu_model: cpuModel, ...tpOpt, ...marginOpts(margin), ...(warmup ? { warmup_frames: warmup } : {}) }, cfg, undefined, DEFAULT_COMBOS) : Promise.resolve(null)),
-    [scenario, variant, mainReady, wq.loading, q.loading, cfg, margin, statistic, eis, scale, cpuModel, tpParam, warmup])
+  const dq = useAsync(() => (variant && mainReady && !wq.loading && !q.loading ? timingApi.dvfsWhatif(scenario, variant, baseOpts, cfg, undefined, DEFAULT_COMBOS, config) : Promise.resolve(null)),
+    [scenario, variant, mainReady, wq.loading, q.loading, cfg, margin, statistic, eis, scale, cpuModel, tpParam, warmup, dvo])
+  // ③ SW-variance box plot: last, after ⑦ (one simulation slot at a time)
+  const [distOn, setDistOn] = usePref<boolean>('tb.dist', true)
+  const distQ = useAsync<IntervalDistribution | null>(() => (variant && distOn && mainReady && !dq.loading && !wq.loading && !q.loading ? timingApi.distribution(scenario, variant, baseOpts, cfg, config) : Promise.resolve(null)),
+    [scenario, variant, distOn, mainReady, dq.loading, wq.loading, q.loading, cfg, margin, statistic, eis, scale, cpuModel, tpParam, warmup, dvo])
   const r = q.data?.report
   const whatif = wq.data?.report.whatif ?? []
+  const effTp = tpParam ?? (r?.stages?.find((x) => x.id === 'nrt')?.throughput === 'pipelined' ? 'pipelined' : r ? 'stage' : policyTp)
+  const cond: Condition = { statistic, scale, eis, cpuModel, throughput: effTp, margin, profile: q.data?.config_profile_ref ?? cfg ?? null, overrides }
 
   return (
     <div className="page tb-page">
@@ -78,16 +92,27 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
         {r && <span className="chip" title={r.dvfs.tables.join(', ')}>DVFS {r.dvfs.applied ? r.dvfs.table_ref ?? 'custom' : '미연결'}</span>}
         <button className="btn" title="현재 scenario의 모든 variant를 같은 모델(CPU · 처리량 · margin · 통계)로" onClick={() => ctx.navigate('timing-fleet', { cfg: ctx.params.cfg, margin: ctx.params.margin, cpu: ctx.params.cpu, tp: ctx.params.tp, stat: ctx.params.stat })}>전체 variant →</button>
       </div>
+      {r && variant && <ConditionBar cond={cond} verdict={r.verdict.status}
+        onSaveEvidence={async () => { const x = await timingApi.saveEvidence(scenario, variant, baseOpts, cfg, config); invalidateCache('/evidence'); invalidateCache('/calibration')
+          return x.existed ? `이미 저장된 같은 조건 (${x.evidence_id})` : `저장됨 ${x.evidence_id}` }}
+        onRegister={async (reason) => { const x = await timingApi.register(scenario, variant, baseOpts, reason, cfg, config, ctx.project)
+          const p = x.promoted[0]; return p ? `등록됨 ${p.id}${x.total_mw ? ` · ${fmt(x.total_mw, 0)} mW` : ''}` : `등록 안 됨: ${x.skipped.map((k) => k.reason).join(', ')}` }}
+        onOpenPredictions={() => ctx.navigate('predictions', { sf: scenario })} />}
       {(sp.error || q.error) && <div className="err">{sp.error || q.error}</div>}
       {q.loading && !r && !sp.error && <div className="empty">계산 중…</div>}
       {r && <Body r={r} cfg={q.data?.config_profile_ref ?? null} ctx={ctx} whatif={whatif} battery={battery} dvfs={dq.data ?? null} dvfsLoading={dq.loading || wq.loading} dvfsError={dq.error ?? null} whatLoading={wq.loading} current={{ statistic, eis: r.eis.on, scale }} margin={r.sw_margin?.rt ?? margin}
-        frames={frames} setFrames={(n) => set('frames', n === 20 ? undefined : String(n))} warmup={warmup} setWarmup={(n) => set('warmup', n ? String(n) : undefined)} />}
+        frames={frames} setFrames={(n) => set('frames', n === 20 ? undefined : String(n))} warmup={warmup} setWarmup={(n) => set('warmup', n ? String(n) : undefined)}
+        overrides={overrides} setOverrides={(o) => set('dvo', formatOverrides(o))}
+        dist={distQ.data ?? null} distLoading={distQ.loading} distError={distQ.error ?? null} distOn={distOn} setDistOn={setDistOn} />}
     </div>
   )
 }
 
-function Body({ r, cfg, whatif, whatLoading, current, margin, frames, setFrames, warmup, setWarmup, battery, dvfs, dvfsLoading, dvfsError }: { r: TimingReport; cfg: string | null; ctx: Ctx; whatif: NonNullable<TimingReport['whatif']>; whatLoading: boolean; current: { statistic: string; eis: boolean; scale: number }
-  margin: number; frames: number; setFrames: (n: number) => void; warmup: number; setWarmup: (n: number) => void; battery: Battery; dvfs: DvfsWhatIf | null; dvfsLoading: boolean; dvfsError: string | null }) {
+function Body({ r, cfg, whatif, whatLoading, current, margin, frames, setFrames, warmup, setWarmup, battery, dvfs, dvfsLoading, dvfsError, overrides, setOverrides, dist, distLoading, distError, distOn, setDistOn }: { r: TimingReport; cfg: string | null; ctx: Ctx; whatif: NonNullable<TimingReport['whatif']>; whatLoading: boolean; current: { statistic: string; eis: boolean; scale: number }
+  margin: number; frames: number; setFrames: (n: number) => void; warmup: number; setWarmup: (n: number) => void; battery: Battery; dvfs: DvfsWhatIf | null; dvfsLoading: boolean; dvfsError: string | null
+  overrides: Record<string, number>; setOverrides: (o: Record<string, number>) => void
+  dist: IntervalDistribution | null; distLoading: boolean; distError: string | null; distOn: boolean; setDistOn: (v: boolean) => void }) {
+  const [ganttDetail, setGanttDetail] = usePref<boolean>('tb.gantt.detail', true)
   const st = useMemo(() => Object.fromEntries(r.stages.map((s) => [s.id, s])), [r])
   // one clock per DVFS domain: a stage can span several (NRT = CAM + INTCAM); never mix them in one number
   const nrtDomains = useMemo(() => stageDomainsOf(r, 'nrt'), [r])
@@ -135,12 +160,18 @@ function Body({ r, cfg, whatif, whatLoading, current, margin, frames, setFrames,
       <b>참고 (clock ↑ · pipeline latency)</b> {r.verdict.notes!.map((x) => <div key={x} className="mono" style={{ fontSize: 12 }}>{x}</div>)}</div>}
     <div className="tb-grid">
       <Card id="slot" title="① 1 frame 예산 — stage별 slot" note={pipelined ? 'stage는 M2M buffer로 pipeline · 각 SW task / HW stage가 1 frame 안에 · 합이 넘으면 latency만 증가 (fps = 출력 간격)' : 'stage 1 frame 기준 · 각 stage SW+HW가 1 frame 안에 끝나야 함 (보수적)'} defaultWide><SlotBudget report={r} margin={margin} /></Card>
-      <Card id="clock" title="⑤ IP별 필요 clock · DVFS level" note={`DVFS domain별 묶음 · domain level = 최고 요구 IP · RT = sensor readout 기준 · Output ${pct0(margin)} rule · NRT·Post = SW 반영 예산`}><ClockChart ips={r.ips} dvfsApplied={r.dvfs.applied} margin={margin} /></Card>
+      <Card id="clock" title="⑤ IP별 필요 clock · DVFS level (계산 / override)" note={`DVFS domain별 묶음 · domain level = 최고 요구 IP · RT = sensor readout 기준 · Output ${pct0(margin)} rule · NRT·Post = SW 반영 예산`}>
+        <ClockChart ips={r.ips} dvfsApplied={r.dvfs.applied} margin={margin} />
+        <DvfsOverrideTable report={r} overrides={overrides} onChange={setOverrides} /></Card>
       <Card id="power" title="⑥ 예상 Power · BW" note="CPU(SW) / HW(IP별) / BW(HW·SW) 비중"><PowerBw report={r} /></Card>
       <Card id="gantt" title="② Pipeline timeline" note={`${r.timeline.length ? Math.max(...r.timeline.map((t) => t.frame)) + 1 : 0} frames · 점선 = ${fmt(r.fps, 0)} fps frame 경계 (${fmt(r.period_ms, 2)} ms)`} defaultWide
-        actions={<div className="seg sm" role="group" aria-label="timeline frame 수">{[6, 12, 20].map((n) => <button key={n} className={frames === n ? 'on' : ''} onClick={() => setFrames(n)}>{n} frame</button>)}</div>}><Gantt report={r} /></Card>
+        actions={<span style={{ display: 'inline-flex', gap: 6 }}>
+          <div className="seg sm" role="group" aria-label="timeline 상세도"><button className={ganttDetail ? 'on' : ''} onClick={() => setGanttDetail(true)} title="IP · SW task별 행">상세</button><button className={!ganttDetail ? 'on' : ''} onClick={() => setGanttDetail(false)} title="stage별 묶음">요약</button></div>
+          <div className="seg sm" role="group" aria-label="timeline frame 수">{[6, 12, 20].map((n) => <button key={n} className={frames === n ? 'on' : ''} onClick={() => setFrames(n)}>{n} frame</button>)}</div></span>}><Gantt report={r} detail={ganttDetail} /></Card>
       <Card id="interval" title="③ 출력 frame 간격 · pipeline latency" note="합격 기준 = 간격 · latency는 참고 · jitter · drop은 참고 지표"
-        actions={<div className="seg sm" role="group" aria-label="warm-up 제외" title="앞쪽 출력 간격 N개를 판정에서 제외 (pipeline fill · AE/AWB 안정화). 0 = 모두 판정">{[0, 1, 2, 4].map((n) => <button key={n} className={warmup === n ? 'on' : ''} onClick={() => setWarmup(n)}>{n ? `warm-up ${n}` : 'warm-up 없음'}</button>)}</div>}><Intervals report={r} /></Card>
+        actions={<div className="seg sm" role="group" aria-label="warm-up 제외" title="앞쪽 출력 간격 N개를 판정에서 제외 (pipeline fill · AE/AWB 안정화). 0 = 모두 판정">{[0, 1, 2, 4].map((n) => <button key={n} className={warmup === n ? 'on' : ''} onClick={() => setWarmup(n)}>{n ? `warm-up ${n}` : 'warm-up 없음'}</button>)}</div>}><Intervals report={r} />
+        <label className="faint" style={{ fontSize: 12, display: 'inline-flex', gap: 4, marginTop: 6 }}><input type="checkbox" checked={distOn} onChange={(e) => setDistOn(e.target.checked)} />SW 편차 box plot</label>
+        {distOn && (distError ? <div className="err">{distError}</div> : dist ? <IntervalBoxes data={dist} /> : distLoading ? <div className="faint" style={{ fontSize: 12 }}>SW 편차 분포 계산 중…</div> : null)}</Card>
       <Card id="whatif" title="④ 차기 SW 증가 → NRT 필요 clock" note="NRT 예산 = period − SW(runtime+latency) · DVFS domain별 (CAM / INTCAM …)">
         {whatLoading && !whatif.length ? <div className="empty">what-if 계산 중…</div> : <WhatIf rows={whatif} current={current} margin={margin} />}
       </Card>

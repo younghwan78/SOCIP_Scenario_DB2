@@ -94,6 +94,9 @@ export interface Evidence {
   provenance?: Dict | null
   profiling_metadata?: Dict | null
   timeline_events?: TimelineEvent[] | null
+  /** simulation: tool (scenariodb-sim = Simulate 기본 조건, scenariodb-timing-budget = Timing Budget 조건), timestamp, config profile, writer */
+  run_info?: Dict | null
+  measured_at?: string | null
 }
 
 export interface TimelineEvent {

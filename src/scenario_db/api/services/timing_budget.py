@@ -174,3 +174,112 @@ def analyze_dvfs_whatif_request(db: Session, request: Any) -> dict[str, Any]:
         raise UnprocessableError(str(exc)) from exc
     return {"scenario_id": request.scenario_id, "variant_id": request.variant_id, "config_profile_ref": profile,
             "dvfs_table_ref": ref, **out}
+
+
+def interval_distribution_request(db: Session, request: Any) -> dict[str, Any]:
+    """③ box plot: output interval / latency spread under per-frame SW variance (read-only)."""
+    from scenario_db.sim.timing_budget import interval_distribution
+
+    shim = _shim(request, request.variant_id)
+    _apply_config_profile(db, shim)
+    try:
+        graph, tables, _ref = _load(db, shim, request.use_default_dvfs)
+        options = with_cpu_profile(db, apply_throughput(request.options, scenario_policy(db, request.scenario_id)),
+                                   request.scenario_id, request.variant_id)
+        out = interval_distribution(graph, options, config=shim.config, dvfs_tables=tables,
+                                    trials=request.trials, frames=request.frames)
+    except LookupError as exc:
+        raise NotFoundError(str(exc)) from exc
+    except ValueError as exc:
+        raise UnprocessableError(str(exc)) from exc
+    return {"scenario_id": request.scenario_id, "variant_id": request.variant_id, **out}
+
+
+def register_condition(db: Session, request: Any, user: str | None = None) -> dict[str, Any]:
+    """Register the Timing Budget condition as the current prediction.
+
+    The condition becomes a single-case exploration run (one SW statistic x growth, no DVFS headroom, no compression /
+    power options; DVFS overrides and the config profile travel in the run's input selection), so freshness, history
+    and attribution work exactly like an exploration registration. Rule: ``manual:timing-budget``.
+    """
+    from scenario_db.api.schemas.arch_exploration import ArchExplorationRunRequest, PromoteRequest
+    from scenario_db.api.services.arch_exploration import promote, run_exploration
+    from scenario_db.sim.arch_exploration import ArchExplorationSpec
+
+    o = request.options
+    spec = ArchExplorationSpec.model_validate({
+        "axes": {"statistics": [o.statistic], "runtime_scales": [o.runtime_scale], "eis": o.eis,
+                 "dvfs_headroom_levels": 0, "compression": {"enabled": False}, "power_options": {"enabled": False}},
+        "objective": {"statistic": o.statistic, "runtime_scale": o.runtime_scale},
+        "timing": o.model_dump(exclude_unset=True, exclude={"include_whatif"}),
+        "top_n": 1,
+    })
+    run_req = ArchExplorationRunRequest(
+        title=f"Timing Budget · {request.variant_id}", scenario_type="timing-budget",
+        scenario_ids=[request.scenario_id], variant_ids=[request.variant_id], include_derived=True, max_variants=1,
+        config=request.config, config_profile_ref=request.config_profile_ref, dvfs_tables=request.dvfs_tables,
+        dvfs_table_ref=request.dvfs_table_ref, soc_ref=request.soc_ref, dvfs_version=request.dvfs_version,
+        use_default_dvfs=request.use_default_dvfs, spec=spec,
+    )
+    run = run_exploration(db, run_req, user)
+    if not run["variants"]:
+        raise UnprocessableError("timing budget condition could not be evaluated")
+    summary = run["variants"][0]
+    rec = summary.get("recommended")
+    if rec is None:
+        raise UnprocessableError("이 조건은 spec 미달이라 등록할 수 없습니다: " + "; ".join(summary.get("spec_reasons") or ["no eligible case"]))
+    out = promote(db, PromoteRequest(run_id=run["id"], scenario_id=request.scenario_id, variant_ids=[request.variant_id],
+                                     case_key=rec["key"], reason=request.reason,
+                                     expected_project_ref=request.expected_project_ref),
+                  user, rule="manual:timing-budget")
+    return out | {"total_mw": rec.get("total_mw")}
+
+
+def save_condition_evidence(db: Session, request: Any, user: str | None = None) -> dict[str, Any]:
+    """Keep the condition's budget run as simulation evidence (Pipeline trace, Compare, Calibration).
+
+    The evidence id is derived from the whole condition, so saving the same condition twice (by anyone) converges on
+    one row; ``existed`` tells the caller."""
+    import hashlib
+    import json
+
+    from scenario_db.db.models.definition import Project, Scenario
+    from scenario_db.db.repositories.evidence import get_evidence, upsert_simulation_evidence
+    from scenario_db.sim.runner import build_simulation_evidence
+    from scenario_db.sim.timing_budget import budget_simulation
+
+    shim = _shim(request, request.variant_id)
+    profile = _apply_config_profile(db, shim)
+    scenario = db.get(Scenario, request.scenario_id)
+    if scenario is None:
+        raise NotFoundError(f"scenario not found: {request.scenario_id}")
+    ctx = request.execution_context
+    if ctx is None:
+        project = db.get(Project, scenario.project_ref) if scenario.project_ref else None
+        sw = ((project.metadata_ or {}).get("default_sw_profile_ref") or (project.globals_ or {}).get("default_sw_profile_ref")) if project else None
+        if not sw:
+            raise UnprocessableError("execution_context.sw_baseline_ref is required (project has no default_sw_profile_ref)")
+        ctx = ExecutionContext(silicon_rev="EVT1", sw_baseline_ref=sw, thermal="nominal", method="calculation")
+    try:
+        graph, tables, ref = _load(db, shim, request.use_default_dvfs)
+        options = with_cpu_profile(db, apply_throughput(request.options, scenario_policy(db, request.scenario_id)),
+                                   request.scenario_id, request.variant_id)
+        result = budget_simulation(graph, options, config=shim.config, dvfs_tables=tables)
+    except LookupError as exc:
+        raise NotFoundError(str(exc)) from exc
+    except ValueError as exc:
+        raise UnprocessableError(str(exc)) from exc
+    condition = {"options": options.model_dump(mode="json"), "config": shim.config.model_dump(mode="json", exclude_none=True),
+                 "dvfs_table_ref": ref, "context": ctx.model_dump(mode="json", exclude_none=True)}
+    digest = "tb" + hashlib.sha256(json.dumps(condition, sort_keys=True, default=str).encode()).hexdigest()[:16]
+    ctx = ctx.model_copy(update={"dvfs_table_ref": ref}) if ref and ctx.dvfs_table_ref is None else ctx
+    evidence = build_simulation_evidence(result, execution_context=ctx, project_ref=scenario.project_ref,
+                                         params_hash=digest, config_profile_ref=profile)
+    evidence = evidence.model_copy(update={"run": evidence.run.model_copy(update={
+        "tool": "scenariodb-timing-budget", **({"writer": user} if user else {})})})
+    existed = get_evidence(db, evidence.id) is not None
+    if not existed:
+        upsert_simulation_evidence(db, evidence)
+        db.commit()
+    return {"evidence_id": evidence.id, "existed": existed, "params_hash": digest,
+            "total_mw": evidence.kpi.get("total_power_mw") if isinstance(evidence.kpi, dict) else None}

@@ -368,7 +368,8 @@ def _pred_dict(p: Prediction, *, metrics: bool = True) -> dict[str, Any]:
     return out
 
 
-def promote(db: Session, request: PromoteRequest, user: str | None = None) -> dict[str, Any]:
+def promote(db: Session, request: PromoteRequest, user: str | None = None, *, rule: str | None = None) -> dict[str, Any]:
+    """``rule`` (internal callers only): selection rule recorded instead of the default, e.g. ``manual:timing-budget``."""
     run = get_run(db, request.run_id)
     if request.expected_project_ref is not None and run.project_ref != request.expected_project_ref:
         raise UnprocessableError(
@@ -401,7 +402,8 @@ def promote(db: Session, request: PromoteRequest, user: str | None = None) -> di
     from scenario_db.api.services.review_policy import project_policy
 
     policy = project_policy(db, run.project_ref)
-    iq_keep = policy is not None and policy.register_baseline == "iq_keep"
+    iq_keep = policy is not None and policy.register_baseline == "iq_keep" and rule is None
+    rule_override = rule
     for vid in dict.fromkeys(request.variant_ids or []):
         if not any(v["variant_id"] == vid for v in targets):
             skipped.append({"variant_id": vid, "reason": "variant not in run"})
@@ -416,6 +418,7 @@ def promote(db: Session, request: PromoteRequest, user: str | None = None) -> di
             case, rule = keep, "auto:min-power-iq"
         else:
             case, rule = find_case(summary, request.case_key)
+        rule = rule_override or rule
         if case is None:
             skipped.append({"variant_id": vid, "reason": "no eligible case" if request.case_key is None else "case_key not found"})
             continue
@@ -519,7 +522,12 @@ def board(db: Session, *, scenario_id: str | None = None, project_ref: str | Non
     prev_ids = [p.supersedes_ref for p, _ in current if p.supersedes_ref]
     prev = {pid: m for pid, m in db.query(Prediction.id, _metrics_subset(("power", "model_lineage")))
             .filter(Prediction.id.in_(prev_ids)).all()} if prev_ids else {}
-    runs = {r.id: r for r in db.query(ArchExplorationRun.id, ArchExplorationRun.title, ArchExplorationRun.created_at)
+    runs = {r.id: r for r in db.query(ArchExplorationRun.id, ArchExplorationRun.title, ArchExplorationRun.created_at,
+                                       ArchExplorationRun.scenario_type,
+                                       ArchExplorationRun.spec["timing"].label("timing"),
+                                       ArchExplorationRun.spec["axes"].label("axes"),
+                                       ArchExplorationRun.spec["config_profile_ref"].label("profile"),
+                                       ArchExplorationRun.spec["input_selection"].label("selection"))
             .filter(ArchExplorationRun.id.in_({p.exploration_run_ref for p, _ in current})).all()} if current else {}
     reviews = _reviews_by_scenario(db, {p.scenario_ref for p, _ in current})
     rows = []
@@ -540,8 +548,26 @@ def board(db: Session, *, scenario_id: str | None = None, project_ref: str | Non
             "power_options": board_options(m.get("power_options"), reviews.get(p.scenario_ref, {}), p.variant_ref),
             "verdict_detail": verdict_detail(m),
             "throughput_model": m.get("throughput_model") or "stage",
+            "condition": _condition(run, m),
         })
     return {"rows": rows, "review_statuses": list(POWER_OPTION_STATUSES)}
+
+
+def _condition(run, m: dict[str, Any]) -> dict[str, Any]:
+    """The analysis condition a prediction was registered with (to re-open it in Timing Budget)."""
+    timing = (getattr(run, "timing", None) or {}) if run is not None else {}
+    axes = (getattr(run, "axes", None) or {}) if run is not None else {}
+    sel = (getattr(run, "selection", None) or {}) if run is not None else {}
+    return {
+        "source": "timing-budget" if run is not None and getattr(run, "scenario_type", None) == "timing-budget" else "exploration",
+        "statistic": m.get("statistic"), "runtime_scale": m.get("runtime_scale"),
+        "throughput_model": m.get("throughput_model") or "stage", "eis": axes.get("eis") or "auto",
+        "cpu_model": timing.get("cpu_model") or "flat",
+        "rt_margin": timing.get("rt_margin"), "output_margin": timing.get("output_margin"),
+        "config_profile_ref": sel.get("config_profile_ref") or (getattr(run, "profile", None) if run is not None else None),
+        "dvfs_overrides": ((sel.get("config") or {}).get("dvfs_overrides") or {}),
+        "dvfs": m.get("dvfs") or {}, "compression": m.get("compression") or [],
+    }
 
 
 def history(db: Session, scenario_id: str, variant_id: str) -> list[dict[str, Any]]:
