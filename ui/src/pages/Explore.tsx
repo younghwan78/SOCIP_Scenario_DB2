@@ -173,7 +173,7 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
   ]
   const refs = useReferences(run.project_ref ?? undefined)
   const iqKeepRun = refs?.policy.register_baseline === 'iq_keep'
-  const baseOf = (r: VariantResult) => (iqKeepRun ? r.tiers?.keep?.best.total_mw : undefined) ?? r.recommended?.total_mw ?? null
+  const baseOf = (r: VariantResult) => (iqKeepRun ? r.keep_total_mw ?? r.tiers?.keep?.best.total_mw : undefined) ?? r.recommended?.total_mw ?? null
   const cols: Column<VariantResult>[] = [
     { key: 'v', label: 'Variant', width: 210, sticky: true, sort: (r) => r.variant_id, render: (r) => <span className="mono">{short(r.variant_id)}</span> },
     { key: 'fps', label: 'fps', width: 52, align: 'right', firstDir: -1, sort: (r) => r.fps, render: (r) => fmt(r.fps, 0) },

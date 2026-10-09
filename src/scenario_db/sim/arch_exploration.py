@@ -316,6 +316,9 @@ def _explore(graph, spec: ArchExplorationSpec, config: SimulationRunConfig,
         # IQ/performance-keeping optimum and its near-optimal condition range vs the IQ-trading lossy optimum
         "tiers": _tiers([c for c in cases_obj if c["eligible"]], obj.tie_pct),
     }
+    # compact copy for list views (the run table reads it without the whole tiers block)
+    keep = (summary["tiers"].get("keep") or {}).get("best")
+    summary["keep_total_mw"] = keep["total_mw"] if keep else None
     return summary
 
 

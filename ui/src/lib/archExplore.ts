@@ -63,6 +63,8 @@ export interface VariantResult {
   ip_modes?: IpModeRow[]
   /** API ≥ 2026-10-09: IQ/performance-keeping optimum + near-optimal window vs lossy optimum */
   tiers?: Tiers
+  /** tier A best total (compact copy for the run list view) */
+  keep_total_mw?: number | null
   /** timing judgement of the run (project review policy) */
   throughput_model?: 'stage' | 'pipelined'
   /** false = list-view row (run?view=summary): fetch archApi.runVariant for slices / buffers / options */

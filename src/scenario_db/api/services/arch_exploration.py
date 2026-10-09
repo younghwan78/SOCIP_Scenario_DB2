@@ -217,7 +217,7 @@ def _run_meta(row: ArchExplorationRun) -> dict[str, Any]:
 
 SUMMARY_KEYS = ("scenario_id", "variant_id", "design_conditions", "severity", "fps", "period_ms", "eis_on", "mfc_dual",
                 "spec_ok", "spec_reasons", "status", "objective", "counts", "distribution", "baseline", "recommended",
-                "coverage", "dvfs_table_ref", "input_hash", "model_lineage", "tiers", "throughput_model")
+                "coverage", "dvfs_table_ref", "input_hash", "model_lineage", "keep_total_mw", "throughput_model")
 SW_MARGIN_SUMMARY_KEYS = ("worst", "growth_tolerance", "growth_tolerance_fixed", "growth_tested_max", "recommendations",
                           "verdict", "stat_spread_ms")
 
