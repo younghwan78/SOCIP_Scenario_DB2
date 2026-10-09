@@ -206,6 +206,7 @@ def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str |
                                                           "config", "config_profile_ref", "dvfs_tables", "dvfs_table_ref",
                                                           "soc_ref", "dvfs_version", "use_default_dvfs"}, exclude_unset=True),
                                                       "throughput_from_policy": throughput_from_policy,
+                                                      **({"timing_budget": request.timing_budget} if request.timing_budget else {}),
                                                       # resolved inputs, content-addressed (variants[].input_sections -> blobs)
                                                       "manifest": {"engine_rev": ENGINE_REV, "tool_version": _tool_version(),
                                                                    "blobs": blobs}},
@@ -527,7 +528,8 @@ def board(db: Session, *, scenario_id: str | None = None, project_ref: str | Non
                                        ArchExplorationRun.spec["timing"].label("timing"),
                                        ArchExplorationRun.spec["axes"].label("axes"),
                                        ArchExplorationRun.spec["config_profile_ref"].label("profile"),
-                                       ArchExplorationRun.spec["input_selection"].label("selection"))
+                                       ArchExplorationRun.spec["input_selection"].label("selection"),
+                                       ArchExplorationRun.spec["timing_budget"].label("tb"))
             .filter(ArchExplorationRun.id.in_({p.exploration_run_ref for p, _ in current})).all()} if current else {}
     reviews = _reviews_by_scenario(db, {p.scenario_ref for p, _ in current})
     rows = []
@@ -564,9 +566,16 @@ def _condition(run, m: dict[str, Any]) -> dict[str, Any]:
         "throughput_model": m.get("throughput_model") or "stage", "eis": axes.get("eis") or "auto",
         "cpu_model": timing.get("cpu_model") or "flat",
         "rt_margin": timing.get("rt_margin"), "output_margin": timing.get("output_margin"),
+        "warmup_frames": timing.get("warmup_frames") or 0,
         "config_profile_ref": sel.get("config_profile_ref") or (getattr(run, "profile", None) if run is not None else None),
         "dvfs_overrides": ((sel.get("config") or {}).get("dvfs_overrides") or {}),
         "dvfs": m.get("dvfs") or {}, "compression": m.get("compression") or [],
+        # S4: measurement used as input (SW task runtime / IP clocks / CPU profile)
+        "measured": {"ref": ((getattr(run, "tb", None) or {}).get("measured") or {}).get("measurement_ref") if run is not None else None,
+                     "inputs": ((getattr(run, "tb", None) or {}).get("measured") or {}) if run is not None else {},
+                     "sw": sorted((timing.get("task_runtime") or {}).keys()),
+                     "clock_ref": (sel.get("config") or {}).get("measured_clock_ref"),
+                     "cpu_ref": timing.get("cpu_profile_ref") if timing.get("cpu_model") == "profile" else None},
     }
 
 
@@ -1023,6 +1032,7 @@ def prediction_freshness(db: Session, *, scenario_id: str | None = None, project
     runs = {r.id: r for r in db.query(ArchExplorationRun.id, ArchExplorationRun.engine_rev, ArchExplorationRun.project_ref,
                                       ArchExplorationRun.spec["input_selection"].label("selection"),
                                       ArchExplorationRun.spec["timing"].label("timing"),
+                                      ArchExplorationRun.spec["timing_budget"].label("tb"),
                                       ArchExplorationRun.spec["throughput_from_policy"].label("policy_tp"))
             .filter(ArchExplorationRun.id.in_({p[3] for p in preds})).all()} if preds else {}
     policies: dict[str | None, Any] = {}
@@ -1055,6 +1065,18 @@ def prediction_freshness(db: Session, *, scenario_id: str | None = None, project
             from scenario_db.sim.timing_budget import TimingBudgetOptions
 
             timing = TimingBudgetOptions.model_validate(run.timing or {})
+            measured = (run.tb or {}).get("measured")
+            if measured and measured.get("sw"):
+                # Frozen resolved SW values describe the old run. Re-resolve its selected measurement,
+                # retaining only the original caller's explicit overrides for today's manifest.
+                from scenario_db.api.services.timing_budget import apply_measured
+                from scenario_db.api.schemas.timing_budget import MeasuredInputs
+                from scenario_db.sim.timing_budget import TimingStat
+
+                timing = timing.model_copy(update={"task_runtime": {
+                    k: TimingStat.model_validate(v) for k, v in (run.tb.get("task_runtime") or {}).items()}})
+                timing = apply_measured(db, tb.model_copy(update={
+                    "options": timing, "measured": MeasuredInputs.model_validate(measured)})).options
             if run.policy_tp is True:
                 timing = timing.model_copy(update={"throughput_model": want_tp})
             timing = with_cpu_profile(db, timing, sid, vid)

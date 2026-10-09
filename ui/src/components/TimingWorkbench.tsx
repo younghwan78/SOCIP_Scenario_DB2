@@ -3,21 +3,29 @@
 import { useRef, useState } from 'react'
 import { BoxPlot } from './Charts'
 import { boxStats } from '../lib/cadence'
-import { fmt, dvfsDomains, type IntervalDistribution, type TimingReport } from '../lib/timingBudget'
+import { fmt, dvfsDomains, type IntervalDistribution, type MeasuredCompare, type MeasuredInputOption, type MeasuredInputs, type TimingReport } from '../lib/timingBudget'
+import { maText, type Battery } from '../lib/battery'
 
 export interface Condition {
   statistic: string; scale: number; eis: string; cpuModel: string; throughput: string; margin: number
   profile: string | null; overrides: Record<string, number>
+  measured?: MeasuredInputs | null
 }
 
 export function conditionChips(c: Condition): string[] {
   const ov = Object.entries(c.overrides)
   return [
-    `SW ${c.statistic} ×${c.scale.toFixed(1)}`, `EIS ${c.eis}`, `CPU ${c.cpuModel === 'profile' ? '측정 profile' : '가정'}`,
+    `SW ${c.statistic} ×${Number.isInteger(c.scale) ? c.scale.toFixed(1) : c.scale}`, `EIS ${c.eis}`, `CPU ${c.cpuModel === 'profile' ? '측정 profile' : '가정'}`,
     c.throughput === 'pipelined' ? 'pipeline (buffer)' : 'stage 1 frame', `margin ${Math.round(c.margin * 100)}%`,
     `profile ${c.profile ?? '없음'}`,
     ov.length ? `DVFS override ${ov.map(([d, l]) => `${d} L${l}`).join(' · ')}` : 'DVFS 자동(계산)',
+    ...(c.measured ? [measuredChip(c.measured)] : []),
   ]
+}
+
+export function measuredChip(m: MeasuredInputs): string {
+  const used = (['sw', 'clock', 'cpu'] as const).filter((k) => m[k]).map((k) => ({ sw: 'SW', clock: 'clock', cpu: 'CPU' })[k])
+  return used.length ? `실측 입력 ${used.join('·')}` : '실측 비교만'
 }
 
 type Act = { status: 'idle' } | { status: 'busy' } | { status: 'done'; text: string; link?: { label: string; onClick: () => void } } | { status: 'error'; text: string }
@@ -107,4 +115,60 @@ export function IntervalBoxes({ data }: { data: IntervalDistribution }) {
       clock은 현재 조건 그대로 · display vsync / encoder queue 완충은 미모델이라 간격 흔들림은 상한 쪽 추정 · 판정(합격/불합격)은 위 고정 통계 기준을 따릅니다.
     </div>
   </div>
+}
+
+const shortMeas = (o: MeasuredInputOption) => `${o.synthetic ? '합성 ' : ''}${(o.measured_at ?? '').slice(0, 10) || o.id.slice(0, 24)}${o.total_mw ? ` · ${fmt(o.total_mw, 0)} mW` : ''}`
+
+/** S4: pick a measurement of this variant; each part (SW task timing / IP clocks / CPU profile) is used as input only
+ * when ticked — with none ticked the measurement is the comparison reference only. */
+export function MeasuredPicker({ options, value, onChange }: { options: MeasuredInputOption[]; value: MeasuredInputs | null; onChange: (m: MeasuredInputs | null) => void }) {
+  if (!options.length) return <span className="faint" style={{ fontSize: 12 }} title="이 variant의 measurement evidence 없음 — Camera Profiling / import로 추가">실측 없음</span>
+  const sel = options.find((o) => o.id === value?.measurement_ref) ?? null
+  const flag = (k: 'sw' | 'clock' | 'cpu', ok: boolean, label: string, tip: string) => (
+    <label className="faint" style={{ fontSize: 12, display: 'inline-flex', gap: 3, alignItems: 'center', opacity: ok ? 1 : 0.45 }} title={ok ? tip : `${tip} — 이 측정에 데이터 없음`}>
+      <input type="checkbox" disabled={!ok || !value} checked={!!value?.[k]} onChange={(e) => value && onChange({ ...value, [k]: e.target.checked })} />{label}</label>)
+  return <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+    <span className="muted" style={{ fontSize: 13 }}>실측</span>
+    <select value={value?.measurement_ref ?? ''} onChange={(e) => onChange(e.target.value ? { measurement_ref: e.target.value } : null)} aria-label="measurement" style={{ maxWidth: 230 }}>
+      <option value="">사용 안 함</option>
+      {options.map((o) => <option key={o.id} value={o.id} title={o.id}>{shortMeas(o)}</option>)}
+    </select>
+    {value && <>
+      {flag('sw', (sel?.sw_tasks.length ?? 0) > 0, 'SW', `측정 SW task runtime(min/mean/max)을 모델 대신 사용${sel?.sw_tasks.length ? ` — ${sel.sw_tasks.join(', ')}` : ''}`)}
+      {flag('clock', (sel?.clock_ips ?? 0) > 0, 'clock', `측정 IP clock(clock ledger 측정 단계, residency V² blend)${sel?.clock_ips ? ` — IP ${sel.clock_ips}개` : ''}`)}
+      {flag('cpu', !!sel?.cpu, 'CPU', '측정 per-frame CPU profile을 EAS + schedutil로 재현 (CPU 모델 = 측정 profile)')}
+      {sel?.synthetic && <span className="badge v-warn" title="SYNTHETIC fixture — silicon 측정이 아님">합성</span>}
+    </>}
+  </div>
+}
+
+const CAT: Record<string, string> = { cpu: 'CPU', ip: 'IP core', bw: 'BW (MIF·DRAM)', other: '기타 (미모델)' }
+const dCls = (p: number | null) => (p === null ? '' : Math.abs(p) <= 10 ? 'v-ok' : Math.abs(p) <= 25 ? 'v-warn' : 'v-fail')
+
+/** S4: this condition vs the selected measurement — total and rail categories, with which inputs were measured. */
+export function MeasuredCompareCard({ data, battery }: { data: MeasuredCompare; battery: Battery }) {
+  const used = (['sw', 'clock', 'cpu'] as const).filter((k) => data.inputs[k])
+  const t = data.total
+  return <section className="panel" style={{ padding: '8px 12px' }} aria-label="실측 대비">
+    <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
+      <b style={{ fontSize: 13 }}>실측 대비</b>
+      <span className="mono faint" style={{ fontSize: 11.5 }} title={data.measurement_ref}>{data.measurement_ref}</span>
+      {data.synthetic && <span className="badge v-warn" title="SYNTHETIC fixture — silicon 측정 아님. 오차는 모델 검증 근거가 될 수 없음">합성</span>}
+      <span className="faint" style={{ fontSize: 12 }}>{(data.measured_at ?? '').slice(0, 10)} · {data.context ? Object.values(data.context).filter(Boolean).join(' · ') : ''}</span>
+      <span className="chip" style={{ fontSize: 11.5 }}>{used.length ? `실측 입력: ${used.map((k) => ({ sw: 'SW runtime', clock: 'IP clock', cpu: 'CPU profile' })[k]).join(' · ')}` : '실측은 비교 기준만 (입력은 모델)'}</span>
+      <span className="grow" />
+      <span className="mono" style={{ fontSize: 13 }}>예측 <b>{fmt(t.prediction_mw, 0)}</b> vs 실측 <b>{fmt(t.measurement_mw, 0)}</b> mW
+        {t.delta_pct !== null && <span className={`badge ${dCls(t.delta_pct)}`} style={{ marginLeft: 6 }}>{t.delta_pct >= 0 ? '+' : ''}{fmt(t.delta_pct, 1)}%</span>}
+        <span className="faint" style={{ fontSize: 11.5, marginLeft: 6 }}>{t.delta_mw !== null ? `Δ ${maText(t.delta_mw, battery, true)}` : ''}</span></span>
+    </div>
+    <div className="table-x"><table className="tb-mini-table" style={{ marginTop: 4, fontSize: 12 }}>
+      <thead><tr><th>구분</th><th style={{ textAlign: 'right' }}>예측 mW</th><th style={{ textAlign: 'right' }}>실측 mW</th><th style={{ textAlign: 'right' }}>Δ mW</th><th style={{ textAlign: 'right' }}>Δ%</th></tr></thead>
+      <tbody>{data.rows.map((r) => <tr key={r.category}><td>{CAT[r.category] ?? r.category}</td>
+        <td className="mono" style={{ textAlign: 'right' }}>{r.prediction_mw === null ? <span className="faint">미모델</span> : fmt(r.prediction_mw, 0)}</td>
+        <td className="mono" style={{ textAlign: 'right' }}>{fmt(r.measurement_mw, 0)}</td>
+        <td className="mono" style={{ textAlign: 'right' }}>{r.delta_mw === null ? '—' : `${r.delta_mw >= 0 ? '+' : ''}${fmt(r.delta_mw, 0)}`}</td>
+        <td style={{ textAlign: 'right' }}>{r.delta_pct === null ? '—' : <span className={`badge ${dCls(r.delta_pct)}`}>{r.delta_pct >= 0 ? '+' : ''}{fmt(r.delta_pct, 1)}%</span>}</td></tr>)}</tbody>
+    </table></div>
+    <div className="faint" style={{ fontSize: 11 }}>rail → 구분은 예측 ↔ 실측 페이지와 같은 규칙 · |Δ| ≤10% 녹색 · ≤25% 주황 · 기타 rail은 scenario power model 밖. 입력을 실측으로 바꾸면 남는 오차는 모델 계수(IP · BW · CPU) 쪽 — 계수 보정은 S5.</div>
+  </section>
 }

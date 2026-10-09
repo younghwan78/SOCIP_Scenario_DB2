@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Ctx } from '../App'
 import { useAsync } from '../lib/route'
-import { SW_MARGINS, fmt, stageDomainsOf, stageSlack, marginOf, marginOpts, pct0, timingApi, verdictChip, type CpuModel, type EisMode, type Statistic, type ThroughputModel, type TimingReport, type DvfsWhatIf, type TimingConfig, type IntervalDistribution, DEFAULT_COMBOS, formatOverrides, parseOverrides } from '../lib/timingBudget'
+import { SW_MARGINS, runtimeScaleOf, fmt, stageDomainsOf, stageSlack, marginOf, marginOpts, pct0, timingApi, verdictChip, type CpuModel, type EisMode, type Statistic, type ThroughputModel, type TimingReport, type DvfsWhatIf, type TimingConfig, type IntervalDistribution, DEFAULT_COMBOS, formatOverrides, parseOverrides, parseMeasured, formatMeasuredFlags, type MeasuredInputs } from '../lib/timingBudget'
 import { Card, ClockChart, Gantt, Intervals, PowerBw, SlotBudget, WhatIf } from '../components/TimingCharts'
 import { ProvBadge } from '../components/Provenance'
 import { powerScope, type Prov } from '../lib/provenance'
@@ -12,7 +12,7 @@ import { DvfsWhatIfTable } from '../components/DvfsWhatIf'
 import { useReferences } from '../lib/review'
 import { usePref } from '../components/Layout'
 import { invalidateCache } from '../lib/api'
-import { ConditionBar, DvfsOverrideTable, IntervalBoxes, type Condition } from '../components/TimingWorkbench'
+import { ConditionBar, DvfsOverrideTable, IntervalBoxes, MeasuredCompareCard, MeasuredPicker, type Condition } from '../components/TimingWorkbench'
 
 const SCALES = [1.0, 1.1, 1.2, 1.3, 1.4, 1.5]
 
@@ -20,7 +20,7 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
   const { scenario, variant } = ctx
   const statistic = (ctx.params.stat === 'mean' || ctx.params.stat === 'min' ? ctx.params.stat : 'max') as Statistic
   const eis = (ctx.params.eis === 'on' || ctx.params.eis === 'off' ? ctx.params.eis : 'auto') as EisMode
-  const scale = SCALES.includes(Number(ctx.params.scale)) ? Number(ctx.params.scale) : 1.0
+  const scale = runtimeScaleOf(ctx.params.scale)
   const cpuModel: CpuModel = ctx.params.cpu === 'profile' ? 'profile' : 'flat'
   // URL override only; otherwise the server applies the project review policy (and the toggle shows the effective one)
   const tpParam: ThroughputModel | undefined = ctx.params.tp === 'stage' || ctx.params.tp === 'pipelined' ? ctx.params.tp : undefined
@@ -39,34 +39,41 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
   // DVFS level override per domain (URL dvo = "CAM:3,INTCAM:2"); part of the condition
   const dvo = ctx.params.dvo ?? ''
   const overrides = useMemo(() => parseOverrides(dvo), [dvo])
-  const config: TimingConfig | null = useMemo(() => (Object.keys(overrides).length ? { dvfs_overrides: overrides } : null), [overrides])
+  // S4: measurement as input (URL mref = measurement id, min = "sw,clock,cpu") and as the comparison reference
+  const mref = ctx.params.mref ?? ''
+  const mflags = ctx.params.min ?? ''
+  const measured = useMemo(() => parseMeasured(mref, mflags), [mref, mflags])
+  const config: TimingConfig | null = useMemo(() => (Object.keys(overrides).length || measured ? { dvfs_overrides: overrides, measured } : null), [overrides, measured])
+  const measQ = useAsync(() => (variant ? timingApi.measuredInputs(scenario, variant).catch(() => []) : Promise.resolve([])), [scenario, variant])
+  const setMeasured = (m: MeasuredInputs | null) => ctx.navigate(undefined, { mref: m?.measurement_ref || undefined, min: formatMeasuredFlags(m) }, true)
+  const condKey = `${dvo}|${mref}|${mflags}`
   const baseOpts = { statistic, eis, runtime_scale: scale, cpu_model: cpuModel, ...tpOpt, ...marginOpts(margin), ...(warmup ? { warmup_frames: warmup } : {}) }
 
-  const q = useAsync(() => (!sp.ready ? new Promise<never>(() => {}) : variant ? timingApi.variant(scenario, variant, { ...baseOpts, timeline_frames: frames }, cfg, config) : Promise.reject(new Error('variant를 선택하세요 (Ctrl K)'))), [scenario, variant, statistic, eis, scale, cfg, sp.ready, margin, frames, cpuModel, tpParam, warmup, dvo])
+  const q = useAsync(() => (!sp.ready ? new Promise<never>(() => {}) : variant ? timingApi.variant(scenario, variant, { ...baseOpts, timeline_frames: frames }, cfg, config) : Promise.reject(new Error('variant를 선택하세요 (Ctrl K)'))), [scenario, variant, statistic, eis, scale, cfg, sp.ready, margin, frames, cpuModel, tpParam, warmup, condKey])
   // what-if (24 sims) starts after the main report so the page never holds two simulation slots at once
-  const mainKey = JSON.stringify([ctx.project, scenario, variant, cfg, margin, cpuModel, tpParam, warmup, dvo])
+  const mainKey = JSON.stringify([ctx.project, scenario, variant, cfg, margin, cpuModel, tpParam, warmup, condKey])
   const [mainReadyKey, setMainReadyKey] = useState<string | null>(null)
   useEffect(() => { if (q.data && sp.ready) setMainReadyKey(mainKey) }, [q.data, sp.ready, mainKey])
   const mainReady = mainReadyKey === mainKey && sp.ready
-  const wq = useAsync(() => (variant && mainReady ? timingApi.variant(scenario, variant, { statistic: 'max', eis: 'auto', runtime_scale: 1, include_whatif: true, cpu_model: cpuModel, ...tpOpt, ...marginOpts(margin), ...(warmup ? { warmup_frames: warmup } : {}) }, cfg, config) : Promise.resolve(null)), [scenario, variant, mainReady, cfg, margin, cpuModel, tpParam, warmup, dvo])
+  const wq = useAsync(() => (variant && mainReady ? timingApi.variant(scenario, variant, { statistic: 'max', eis: 'auto', runtime_scale: 1, include_whatif: true, cpu_model: cpuModel, ...tpOpt, ...marginOpts(margin), ...(warmup ? { warmup_frames: warmup } : {}) }, cfg, config) : Promise.resolve(null)), [scenario, variant, mainReady, cfg, margin, cpuModel, tpParam, warmup, condKey])
   // ⑦ DVFS level ±1/±2 per domain — runs after ④ so at most one simulation slot is held
   const dq = useAsync(() => (variant && mainReady && !wq.loading && !q.loading ? timingApi.dvfsWhatif(scenario, variant, baseOpts, cfg, undefined, DEFAULT_COMBOS, config) : Promise.resolve(null)),
-    [scenario, variant, mainReady, wq.loading, q.loading, cfg, margin, statistic, eis, scale, cpuModel, tpParam, warmup, dvo])
+    [scenario, variant, mainReady, wq.loading, q.loading, cfg, margin, statistic, eis, scale, cpuModel, tpParam, warmup, condKey])
   // ③ SW-variance box plot: last, after ⑦ (one simulation slot at a time)
   const [distOn, setDistOn] = usePref<boolean>('tb.dist', true)
   const distQ = useAsync<IntervalDistribution | null>(() => (variant && distOn && mainReady && !dq.loading && !wq.loading && !q.loading ? timingApi.distribution(scenario, variant, baseOpts, cfg, config) : Promise.resolve(null)),
-    [scenario, variant, distOn, mainReady, dq.loading, wq.loading, q.loading, cfg, margin, statistic, eis, scale, cpuModel, tpParam, warmup, dvo])
+    [scenario, variant, distOn, mainReady, dq.loading, wq.loading, q.loading, cfg, margin, statistic, eis, scale, cpuModel, tpParam, warmup, condKey])
   const r = q.data?.report
   const whatif = wq.data?.report.whatif ?? []
   const effTp = tpParam ?? (r?.stages?.find((x) => x.id === 'nrt')?.throughput === 'pipelined' ? 'pipelined' : r ? 'stage' : policyTp)
-  const cond: Condition = { statistic, scale, eis, cpuModel, throughput: effTp, margin, profile: q.data?.config_profile_ref ?? cfg ?? null, overrides }
+  const cond: Condition = { statistic, scale, eis, cpuModel: measured?.cpu ? 'profile' : cpuModel, throughput: effTp, margin, profile: q.data?.config_profile_ref ?? cfg ?? null, overrides, measured }
 
   return (
     <div className="page tb-page">
       <div className="toolbar" style={{ flexWrap: 'wrap', gap: 14 }}>
         <Seg label="SW 통계" value={statistic} options={[['max', 'max'], ['mean', 'mean']]} onPick={(v) => set('stat', v === 'max' ? undefined : v)} />
         <Seg label="EIS" value={eis} options={[['auto', `auto${r ? (r.eis.auto ? ' (ON)' : ' (OFF)') : ''}`], ['on', 'ON'], ['off', 'OFF']]} onPick={(v) => set('eis', v === 'auto' ? undefined : v)} />
-        <Seg label="차기 SW 증가" value={String(scale)} options={SCALES.map((s) => [String(s), `×${s.toFixed(1)}`])} onPick={(v) => set('scale', v === '1' ? undefined : v)} />
+        <Seg label="차기 SW 증가" value={String(scale)} options={[...new Set([...SCALES, scale])].sort((a, b) => a - b).map((s) => [String(s), `×${Number.isInteger(s) ? s.toFixed(1) : s}`])} onPick={(v) => set('scale', v === '1' ? undefined : v)} />
         <span title="가정 = 한 cluster·고정 OPP의 coeff·f·V²·util (기존) · 측정 profile = 이 variant의 측정 CPU profile을 EAS + schedutil로 재현, SW 증가에 따라 OPP·DSU·leakage가 함께 변함 (CPU BW도 측정 bus bytes)">
           <Seg label="CPU 모델" value={cpuModel} options={[['flat', '가정'], ['profile', '측정 profile']]} onPick={(v) => set('cpu', v === 'flat' ? undefined : v)} /></span>
         <span title={'pipeline (buffer) = stage 사이 M2M buffer로 분리: 각 SW task가 1 frame 안에, NRT/Post HW는 IP rule clock. SW+HW 합이 period를 넘으면 latency만 증가하고 fps는 출력 간격으로 판정 (기본)\nstage 1 frame = NRT · Post SW + HW 합이 1 frame 안에 (보수적, 이전 기준)'}>
@@ -84,6 +91,7 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
             onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} /><span className="faint" style={{ fontSize: 12 }}>%</span>
         </div>
         <ProfileSelect profiles={sp.profiles} value={cfg} onChange={(v) => set('cfg', v)} />
+        <MeasuredPicker options={measQ.data ?? []} value={measured} onChange={setMeasured} />
         <span className="grow" />
         {r && <span className={`badge ${verdictChip(r.verdict.status).cls}`} title={r.verdict.reasons.join('\n')}>{verdictChip(r.verdict.status).label}</span>}
         {r && r.warnings.length > 0 && <button className="badge v-warn" style={{ border: 0, cursor: 'pointer' }} title={r.warnings.slice(0, 8).join('\n')}
@@ -158,6 +166,7 @@ function Body({ r, cfg, whatif, whatLoading, current, margin, frames, setFrames,
     {r.verdict.reasons.length > 0 && <div className="err" style={{ fontSize: 13 }}>{r.verdict.reasons.slice(0, 4).map((x) => <div key={x}>{x}</div>)}</div>}
     {(r.verdict.notes?.length ?? 0) > 0 && <div className="panel tb-notes" role="note" style={{ fontSize: 13, padding: '6px 12px', borderLeft: '3px solid var(--warn-text, #B7791F)' }}>
       <b>참고 (clock ↑ · pipeline latency)</b> {r.verdict.notes!.map((x) => <div key={x} className="mono" style={{ fontSize: 12 }}>{x}</div>)}</div>}
+    {r.measured_compare && <MeasuredCompareCard data={r.measured_compare} battery={battery} />}
     <div className="tb-grid">
       <Card id="slot" title="① 1 frame 예산 — stage별 slot" note={pipelined ? 'stage는 M2M buffer로 pipeline · 각 SW task / HW stage가 1 frame 안에 · 합이 넘으면 latency만 증가 (fps = 출력 간격)' : 'stage 1 frame 기준 · 각 stage SW+HW가 1 frame 안에 끝나야 함 (보수적)'} defaultWide><SlotBudget report={r} margin={margin} /></Card>
       <Card id="clock" title="⑤ IP별 필요 clock · DVFS level (계산 / override)" note={`DVFS domain별 묶음 · domain level = 최고 요구 IP · RT = sensor readout 기준 · Output ${pct0(margin)} rule · NRT·Post = SW 반영 예산`}>

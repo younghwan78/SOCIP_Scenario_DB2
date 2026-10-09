@@ -339,6 +339,21 @@ def test_report_lists_dvfs_ladders_and_overrides(graph_factory, dvfs):
     assert all(ip["dvfs_level"] == fastest for ip in pinned["ips"] if ip["dvfs_group"] == dom)
 
 
+def test_measured_task_runtime_replaces_assumed_sw(graph_factory, dvfs):
+    """S4: options.task_runtime (measured min / mean / max) drives the SW budget and the variance ranges."""
+    g = graph_factory("cam-rec-r1-uhd30-vdis")
+    base = tb.analyze_timing_budget(g, tb.TimingBudgetOptions(statistic="mean"), dvfs_tables=dvfs)
+    nrt_sw = [i for i in _stage(base, "nrt")["sw_items"] if i.get("kind", "sw") == "sw"]
+    task = nrt_sw[0]["task"]
+    opts = tb.TimingBudgetOptions(statistic="mean", task_runtime={task: tb.TimingStat(min_ms=1.0, mean_ms=9.0, max_ms=12.0)})
+    measured = tb.analyze_timing_budget(g, opts, dvfs_tables=dvfs)
+    item = next(i for i in _stage(measured, "nrt")["sw_items"] if i["task"] == task)
+    assert item["runtime_ms"] == pytest.approx(9.0)
+    plan = tb._plan(g, opts, tb.SimulationRunConfig(timeline_frame_count=8))
+    lo, mode, hi = tb._sw_ranges(plan, opts)[task]
+    assert (lo, hi) == (1.0, 12.0) and lo <= mode <= hi
+
+
 @pytest.mark.parametrize("mean", [1.0, 50.0, 99.0])
 def test_sw_sampling_preserves_skewed_means(mean):
     import random

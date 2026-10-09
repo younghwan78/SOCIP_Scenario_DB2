@@ -87,6 +87,16 @@ Evidence IDs include the resolved condition and execution context; saved power/B
 and current use the report's CPU model. `/interval-distribution` samples per-frame
 SW variability without changing the verdict or persisting data.
 
+`GET /timing-budget/measured-inputs` lists measurements owned by the selected
+scenario/variant. Variant, distribution, DVFS what-if, register and evidence requests
+accept optional `measured: {measurement_ref, sw, clock, cpu}`. Each part is opt-in;
+an all-false selection is a comparison reference. Foreign/missing references are
+rejected even for compare-only mutations. CPU input requires a usable profile and
+resolved CPU topology parameters (422 rather than flat-model fallback). Saved
+evidence records input lineage in `derived_from` and `run_info.timing_budget`.
+Freshness re-resolves measured SW values and retains original explicit overrides;
+changed measurements require recalculation before a guarded mutation.
+
 Calibration classifies measurement origin as `physical_capture`, `synthetic`, or `unknown`.
 A measurement may pin its capture-time rail map with `provenance.rail_domain_map_ref`;
 that profile must exist and belong to the measurement's project. Invalid pins return 422

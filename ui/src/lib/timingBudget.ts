@@ -1,6 +1,6 @@
 // Stage timing budget: API types + pure helpers used by the Timing Budget pages.
 // Backend: POST /timing-budget/variant, /timing-budget/fleet (src/scenario_db/sim/timing_budget.py).
-import { API_BASE, ApiError } from './api'
+import { API_BASE, ApiError, getJson } from './api'
 import type { VariantFailure } from '../components/VariantFailures'
 import { fetchAdmitted } from './admission'
 
@@ -128,6 +128,10 @@ export interface TimingReport {
   stage_domains?: Partial<Record<StageId, StageDomain[]>>
   /** SW margin rule applied to RT/Output (and the NRT/Post rule reference); absent before API sw_margin */
   sw_margin?: { rt: number; output: number }
+  /** S4: predicted (this condition) vs the selected measurement */
+  measured_compare?: MeasuredCompare | null
+  /** inputs the condition actually used (measured SW runtime / clock / CPU profile) */
+  condition?: { task_runtime: Record<string, { min_ms: number; mean_ms: number; max_ms: number }>; measured_clock_ref: string | null; clock_basis: string | null; cpu_profile_ref: string | null }
 }
 export interface FleetRow {
   variant_id: string; fps: number; period_ms: number; statistic: Statistic; eis_on: boolean; stabilization: unknown; mfc_dual: boolean
@@ -155,6 +159,11 @@ export interface TimingOptions {
 
 export const DEFAULT_SW_MARGIN = 0.25
 export const SW_MARGINS = [0.15, 0.2, 0.25, 0.3, 0.35]
+/** Registered conditions may use custom growth values, including zero. */
+export function runtimeScaleOf(param: string | undefined): number {
+  const n = Number(param)
+  return param !== undefined && Number.isFinite(n) && n >= 0 && n <= 10 ? n : 1
+}
 /** URL param ('margin', percent) → fraction; invalid / missing → 25 %. */
 export function marginOf(param: string | undefined): number {
   const v = Number(param)
@@ -180,9 +189,34 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
 export const postAdmitted = postJson
 
 export interface DvfsLadderLevel { level: number; mhz: number; mv: number | null }
-/** Request-level config of a Timing Budget condition (DVFS level overrides per domain). */
-export interface TimingConfig { dvfs_overrides?: Record<string, number> }
-const cfgBody = (c?: TimingConfig | null) => (c?.dvfs_overrides && Object.keys(c.dvfs_overrides).length ? { config: { dvfs_overrides: c.dvfs_overrides } } : {})
+/** S4: a measurement of this variant as input (SW / clock / CPU, each opt-in) and as the comparison reference. */
+export interface MeasuredInputs { measurement_ref: string; sw?: boolean; clock?: boolean; cpu?: boolean }
+/** Request-level part of a Timing Budget condition: DVFS level overrides per domain, measured inputs. */
+export interface TimingConfig { dvfs_overrides?: Record<string, number>; measured?: MeasuredInputs | null }
+const cfgBody = (c?: TimingConfig | null) => ({
+  ...(c?.dvfs_overrides && Object.keys(c.dvfs_overrides).length ? { config: { dvfs_overrides: c.dvfs_overrides } } : {}),
+  ...(c?.measured?.measurement_ref ? { measured: c.measured } : {}),
+})
+/** A measurement of the variant and which inputs it can supply. */
+export interface MeasuredInputOption {
+  id: string; measured_at: string | null; synthetic: boolean; origin: string; total_mw: number | null
+  sw_tasks: string[]; clock_ips: number; cpu: boolean; context: Record<string, string | null>
+}
+export interface MeasuredCompare {
+  measurement_ref: string; measured_at: string | null; synthetic: boolean; origin: string; context: Record<string, string | null> | null
+  inputs: { sw: boolean; clock: boolean; cpu: boolean }
+  total: { prediction_mw: number; measurement_mw: number | null; delta_pct: number | null; delta_mw: number | null }
+  rows: { category: string; prediction_mw: number | null; measurement_mw: number | null; delta_mw: number | null; delta_pct: number | null }[]
+  unexplained_mw: number | null; fps: number | null; frame_latency: unknown
+  sw_tasks: { task: string; mean_ms?: number; p95_ms?: number; max_ms?: number; min_ms?: number }[]
+}
+/** URL ``min`` ⇄ measured input flags ("sw,clock,cpu"). */
+export function parseMeasured(ref: string | undefined | null, flags: string | undefined | null): MeasuredInputs | null {
+  if (!ref) return null
+  const f = new Set((flags ?? '').split(',').map((x) => x.trim()))
+  return { measurement_ref: ref, sw: f.has('sw'), clock: f.has('clock'), cpu: f.has('cpu') }
+}
+export const formatMeasuredFlags = (m: MeasuredInputs | null) => (m ? (['sw', 'clock', 'cpu'] as const).filter((k) => m[k]).join(',') || undefined : undefined)
 
 /** ③ box plot: output interval / latency samples under per-frame SW variance. */
 export interface IntervalDistribution {
@@ -206,6 +240,8 @@ export const timingApi = {
   register: (scenarioId: string, variantId: string, options: TimingOptions, reason: string, configProfileRef?: string | null, config?: TimingConfig | null, expectedProject?: string | null, expectedHash?: string) =>
     postJson<RegisterResult>('/timing-budget/register',
       { scenario_id: scenarioId, variant_id: variantId, options: { ...options, include_whatif: false }, reason, config_profile_ref: configProfileRef ?? undefined, expected_project_ref: expectedProject || undefined, expected_condition_hash: expectedHash, ...cfgBody(config) }),
+  measuredInputs: (scenarioId: string, variantId: string) =>
+    getJson<MeasuredInputOption[]>('/timing-budget/measured-inputs', { scenario_id: scenarioId, variant_id: variantId }, false),
   saveEvidence: (scenarioId: string, variantId: string, options: TimingOptions, configProfileRef?: string | null, config?: TimingConfig | null, expectedHash?: string) =>
     postJson<EvidenceResult>('/timing-budget/evidence',
       { scenario_id: scenarioId, variant_id: variantId, options: { ...options, include_whatif: false }, config_profile_ref: configProfileRef ?? undefined, expected_condition_hash: expectedHash, ...cfgBody(config) }),

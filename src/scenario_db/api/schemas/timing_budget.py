@@ -18,12 +18,22 @@ class _DvfsSelection(BaseModel):
     use_default_dvfs: bool = True
 
 
+class MeasuredInputs(BaseModel):
+    """S4: a measurement of this variant as model input (each part opt-in) and as the comparison reference."""
+
+    measurement_ref: str
+    sw: bool = False      # measured SW task runtime (min / mean / max) instead of the assumed timing
+    clock: bool = False   # measured IP clocks (clock ledger measured tier, residency V^2 blend)
+    cpu: bool = False     # measured per-frame CPU profile through EAS (CPU model "profile")
+
+
 class TimingBudgetRequest(_DvfsSelection):
     """Read-only stage timing budget for one scenario variant."""
 
     scenario_id: str
     variant_id: str
     options: TimingBudgetOptions = Field(default_factory=TimingBudgetOptions)
+    measured: MeasuredInputs | None = None
     expected_condition_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{16}$")
 
 

@@ -101,15 +101,29 @@ def _check_condition(request, condition_hash: str) -> None:
         raise ConflictError("Timing Budget inputs changed; recalculate before saving or registering")
 
 
+def _validate_measured_cpu(request, options, config) -> None:
+    """An explicit measured CPU input must be usable rather than silently reverting to the flat model."""
+    if getattr(request, "measured", None) is None or not request.measured.cpu:
+        return
+    from scenario_db.sim.power_params import effective_power_params
+
+    params = effective_power_params(config)
+    if options.cpu_profile is None or params is None or not params.cpu.clusters:
+        raise UnprocessableError("Measured CPU input requires a per-frame CPU profile and power_model_params with cpu.clusters")
+
+
 def analyze_timing_budget_request(
     db: Session, request: TimingBudgetRequest
 ) -> TimingBudgetResponse:
+    original = request
+    request = apply_measured(db, request)
     shim = _shim(request, request.variant_id)
     profile = _apply_config_profile(db, shim)
     try:
         graph, tables, ref = _load(db, shim, request.use_default_dvfs)
         options = with_cpu_profile(db, apply_throughput(request.options, scenario_policy(db, request.scenario_id)),
                                    request.scenario_id, request.variant_id)
+        _validate_measured_cpu(request, options, shim.config)
         report = analyze_timing_budget(
             graph, options, config=shim.config, dvfs_tables=tables
         )
@@ -118,6 +132,10 @@ def analyze_timing_budget_request(
     except ValueError as exc:
         raise UnprocessableError(str(exc)) from exc
     report["dvfs"]["table_ref"] = ref
+    report["measured_compare"] = measured_compare(db, original, report)
+    report["condition"] = {"task_runtime": {k: v.model_dump() for k, v in options.task_runtime.items()},
+                           "measured_clock_ref": shim.config.measured_clock_ref, "clock_basis": shim.config.clock_basis,
+                           "cpu_profile_ref": options.cpu_profile_ref if options.cpu_model == "profile" else None}
     report["condition_hash"] = _condition_hash(graph, options, shim, tables)
     return TimingBudgetResponse(
         scenario_id=request.scenario_id,
@@ -177,12 +195,14 @@ def analyze_dvfs_whatif_request(db: Session, request: Any) -> dict[str, Any]:
     """DVFS level +/-k what-if for one variant (``sim.timing_budget.dvfs_level_whatif``)."""
     from scenario_db.sim.timing_budget import dvfs_level_whatif
 
+    request = apply_measured(db, request)
     shim = _shim(request, request.variant_id)
     profile = _apply_config_profile(db, shim)
     try:
         graph, tables, ref = _load(db, shim, request.use_default_dvfs)
         options = with_cpu_profile(db, apply_throughput(request.options, scenario_policy(db, request.scenario_id)),
                                    request.scenario_id, request.variant_id)
+        _validate_measured_cpu(request, options, shim.config)
         out = dvfs_level_whatif(graph, options, config=shim.config, dvfs_tables=tables,
                                 shifts=tuple(sorted(set(request.shifts))), domains=request.domains, combos=request.combos)
     except LookupError as exc:
@@ -197,12 +217,14 @@ def interval_distribution_request(db: Session, request: Any) -> dict[str, Any]:
     """③ box plot: output interval / latency spread under per-frame SW variance (read-only)."""
     from scenario_db.sim.timing_budget import interval_distribution
 
+    request = apply_measured(db, request)
     shim = _shim(request, request.variant_id)
     _apply_config_profile(db, shim)
     try:
         graph, tables, _ref = _load(db, shim, request.use_default_dvfs)
         options = with_cpu_profile(db, apply_throughput(request.options, scenario_policy(db, request.scenario_id)),
                                    request.scenario_id, request.variant_id)
+        _validate_measured_cpu(request, options, shim.config)
         out = interval_distribution(graph, options, config=shim.config, dvfs_tables=tables,
                                     trials=request.trials, frames=request.frames)
     except LookupError as exc:
@@ -223,12 +245,15 @@ def register_condition(db: Session, request: Any, user: str | None = None) -> di
     from scenario_db.api.services.arch_exploration import promote, run_exploration
     from scenario_db.sim.arch_exploration import ArchExplorationSpec
 
+    original = request
+    request = apply_measured(db, request)
     shim = _shim(request, request.variant_id)
     _apply_config_profile(db, shim)
     try:
         graph, tables, _ref = _load(db, shim, request.use_default_dvfs)
         options = with_cpu_profile(db, apply_throughput(request.options, scenario_policy(db, request.scenario_id)),
                                    request.scenario_id, request.variant_id)
+        _validate_measured_cpu(request, options, shim.config)
     except LookupError as exc:
         raise NotFoundError(str(exc)) from exc
     except ValueError as exc:
@@ -248,6 +273,8 @@ def register_condition(db: Session, request: Any, user: str | None = None) -> di
         config=request.config, config_profile_ref=request.config_profile_ref, dvfs_tables=request.dvfs_tables,
         dvfs_table_ref=request.dvfs_table_ref, soc_ref=request.soc_ref, dvfs_version=request.dvfs_version,
         use_default_dvfs=request.use_default_dvfs, spec=spec,
+        timing_budget={"measured": original.measured.model_dump() if original.measured else None,
+                       "task_runtime": {k: v.model_dump() for k, v in original.options.task_runtime.items()}},
     )
     run = run_exploration(db, run_req, user)
     if not run["variants"]:
@@ -276,6 +303,8 @@ def save_condition_evidence(db: Session, request: Any, user: str | None = None) 
     from scenario_db.sim.runner import build_simulation_evidence
     from scenario_db.sim.timing_budget import budget_simulation
 
+    original = request
+    request = apply_measured(db, request)
     shim = _shim(request, request.variant_id)
     profile = _apply_config_profile(db, shim)
     scenario = db.get(Scenario, request.scenario_id)
@@ -292,6 +321,7 @@ def save_condition_evidence(db: Session, request: Any, user: str | None = None) 
         graph, tables, ref = _load(db, shim, request.use_default_dvfs)
         options = with_cpu_profile(db, apply_throughput(request.options, scenario_policy(db, request.scenario_id)),
                                    request.scenario_id, request.variant_id)
+        _validate_measured_cpu(request, options, shim.config)
         condition_hash = _condition_hash(graph, options, shim, tables)
         _check_condition(request, condition_hash)
         result = budget_simulation(graph, options, config=shim.config, dvfs_tables=tables)
@@ -319,11 +349,131 @@ def save_condition_evidence(db: Session, request: Any, user: str | None = None) 
                  "model": power.get("cpu_profile") or power["cpu_model"]}
     pb.update(total_mw=power["total_mw"], source="timing_budget")
     evidence = evidence.model_copy(update={"kpi": kpi, "power_breakdown": pb})
-    evidence = evidence.model_copy(update={"run": evidence.run.model_copy(update={
-        "tool": "scenariodb-timing-budget", **({"writer": user} if user else {})})})
+    sources = [*evidence.derived_from, options.cpu_profile_ref if options.cpu_model == "profile" else None,
+               shim.config.measured_clock_ref,
+               original.measured.measurement_ref if original.measured and original.measured.sw else None]
+    evidence = evidence.model_copy(update={"derived_from": list(dict.fromkeys(s for s in sources if s)),
+                                          "run": evidence.run.model_copy(update={
+        "tool": "scenariodb-timing-budget", "timing_budget": {
+            "condition_hash": condition_hash, "options": options.model_dump(mode="json", exclude={"cpu_profile"}),
+            "measured": original.measured.model_dump() if original.measured else None,
+            "dvfs_overrides": shim.config.dvfs_overrides, "dvfs_table_ref": ref},
+        **({"writer": user} if user else {})})})
     existed = get_evidence(db, evidence.id) is not None
     if not existed:
         upsert_simulation_evidence(db, evidence)
         db.commit()
     return {"evidence_id": evidence.id, "existed": existed, "params_hash": digest,
             "total_mw": evidence.kpi.get("total_power_mw") if isinstance(evidence.kpi, dict) else None}
+
+
+# ------------------------------------------------------------------- S4: measurement as input / reference
+def _measurement(db: Session, request: Any):
+    from scenario_db.db.repositories.evidence import get_evidence
+
+    ref = request.measured.measurement_ref
+    row = get_evidence(db, ref)
+    if row is None or row.kind != "evidence.measurement":
+        raise NotFoundError(f"measurement evidence not found: {ref}")
+    if (row.scenario_ref, row.variant_ref) != (request.scenario_id, request.variant_id):
+        raise UnprocessableError(f"measurement evidence {ref} belongs to {row.scenario_ref}/{row.variant_ref}")
+    return row
+
+
+def _sw_stats(row) -> dict[str, dict[str, float]]:
+    """Measured SW task runtime per task: min / mean / max (p50 / p95 stand in when min / max are missing)."""
+    out: dict[str, dict[str, float]] = {}
+    for t in row.sw_task_timing or []:
+        if not isinstance(t, dict) or not t.get("task") or t.get("mean_ms") is None:
+            continue
+        # per-invocation statistics x invocations per frame = time per frame
+        k = float(t["count_per_frame"]) if t.get("sample_unit", "invocation") == "invocation" and t.get("count_per_frame") is not None else 1.0
+        mean = float(t["mean_ms"])
+        lo = float(t.get("min_ms") if t.get("min_ms") is not None else t.get("p50_ms") if t.get("p50_ms") is not None else mean)
+        hi = float(t.get("max_ms") if t.get("max_ms") is not None else t.get("p95_ms") if t.get("p95_ms") is not None else mean)
+        out[str(t["task"])] = {"min_ms": round(min(lo, mean) * k, 4), "mean_ms": round(mean * k, 4), "max_ms": round(max(hi, mean) * k, 4)}
+    return out
+
+
+def _clock_count(row) -> int:
+    from scenario_db.sim.measured_clock import measured_clocks_from_observations
+
+    try:
+        return len(measured_clocks_from_observations(row.metric_observations or [], stat="weighted_mean", evidence_ref=str(row.id)))
+    except Exception:  # noqa: BLE001 - unusable observations = no clock input
+        return 0
+
+
+def apply_measured(db: Session, request: Any) -> Any:
+    """Turn ``request.measured`` into plain options / config fields, so the condition (and a registration or saved
+    evidence made from it) carries the measured inputs explicitly: SW -> ``options.task_runtime``, clock ->
+    ``config.measured_clock_ref`` + ``clock_basis="measured"``, CPU -> ``options.cpu_model="profile"`` + ``cpu_profile_ref``."""
+    m = getattr(request, "measured", None)
+    if m is None:
+        return request
+    row = _measurement(db, request)
+    if not (m.sw or m.clock or m.cpu):
+        return request
+    options, config = request.options, request.config
+    if m.sw:
+        stats = _sw_stats(row)
+        if not stats:
+            raise UnprocessableError(f"measurement {row.id} has no SW task timing")
+        from scenario_db.sim.timing_budget import TimingStat
+
+        options = options.model_copy(update={"task_runtime": {**{k: TimingStat(**v) for k, v in stats.items()}, **options.task_runtime}})
+    if m.cpu:
+        options = options.model_copy(update={"cpu_model": "profile", "cpu_profile_ref": str(row.id), "cpu_profile": None})
+    if m.clock:
+        if not _clock_count(row):
+            raise UnprocessableError(f"measurement {row.id} has no usable clock.ip observations")
+        config = config.model_copy(update={"measured_clock_ref": str(row.id), "measured_clocks": None, "clock_basis": "measured"})
+    return request.model_copy(update={"options": options, "config": config})
+
+
+def measured_compare(db: Session, request: Any, report: dict[str, Any]) -> dict[str, Any] | None:
+    """Predicted (this condition) vs the selected measurement: total and CPU / IP / BW / other rails."""
+    m = getattr(request, "measured", None)
+    if m is None:
+        return None
+    from scenario_db.api.services.calibration import measurement_detail
+    from scenario_db.comparison.calibration import compare_split, pct
+
+    d = measurement_detail(db, m.measurement_ref)
+    if (d["scenario_id"], d["variant_id"]) != (request.scenario_id, request.variant_id):
+        raise UnprocessableError("measurement belongs to another variant")
+    p = report["power"]
+    pred = {"cpu": p["cpu_mw"], "ip": p["hw_mw"], "bw": p["bw_mw"]}
+    meas_total = (d.get("total") or {}).get("mean")
+    return {
+        "measurement_ref": d["id"], "measured_at": d.get("measured_at"), "synthetic": d.get("synthetic"), "origin": d.get("origin"),
+        "context": d.get("context"), "inputs": {"sw": m.sw, "clock": m.clock, "cpu": m.cpu},
+        "total": {"prediction_mw": p["total_mw"], "measurement_mw": meas_total, "delta_pct": pct(p["total_mw"], meas_total),
+                  "delta_mw": None if meas_total is None else round(p["total_mw"] - meas_total, 3)},
+        "rows": compare_split(pred, d["measured"]["categories"]),
+        "unexplained_mw": d.get("unexplained_mw"), "fps": d.get("fps"), "frame_latency": d.get("frame_latency"),
+        "sw_tasks": d.get("sw_tasks") or [],
+    }
+
+
+def measured_inputs(db: Session, scenario_id: str, variant_id: str) -> list[dict[str, Any]]:
+    """Measurements of a variant usable as inputs: which parts each one can supply (SW / clock / CPU)."""
+    from scenario_db.api.services.calibration import _total, data_origin, is_synthetic
+    from scenario_db.api.services.cpu import resolve_cpu_profile
+    from scenario_db.db.models.evidence import Evidence
+
+    rows = (db.query(Evidence).filter(Evidence.kind == "evidence.measurement", Evidence.scenario_ref == scenario_id,
+                                      Evidence.variant_ref == variant_id)
+            .order_by(Evidence.measured_at.desc().nullslast(), Evidence.id).all())
+    out = []
+    for r in rows:
+        try:
+            cpu = resolve_cpu_profile(db, scenario_id, variant_id, str(r.id))[0] is not None
+        except Exception:  # noqa: BLE001 - no usable CPU profile in this measurement
+            cpu = False
+        out.append({"id": r.id, "measured_at": r.measured_at.isoformat() if r.measured_at else None,
+                    "synthetic": is_synthetic(r.provenance), "origin": data_origin(r.provenance),
+                    "total_mw": _total(r.kpi).get("mean"), "sw_tasks": sorted(_sw_stats(r)), "clock_ips": _clock_count(r), "cpu": cpu,
+                    "context": {k: (r.execution_context or {}).get(k) for k in ("silicon_rev", "sw_baseline_ref", "thermal")}})
+    out.sort(key=lambda x: (x["synthetic"], x["measured_at"] is None))
+    return out

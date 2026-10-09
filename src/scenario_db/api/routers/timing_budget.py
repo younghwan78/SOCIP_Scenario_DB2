@@ -21,6 +21,7 @@ from scenario_db.api.services.timing_budget import (
     analyze_timing_budget_fleet,
     analyze_timing_budget_request,
     interval_distribution_request,
+    measured_inputs,
     register_condition,
     save_condition_evidence,
 )
@@ -111,3 +112,9 @@ def timing_budget_save_evidence(
     enforce_timeline_frame_limit(request.options.frames, settings.simulation_max_timeline_frames)
     with admission_slot("simulation", settings.simulation_max_concurrent_runs):
         return save_condition_evidence(db, request, audit_user(principal))
+
+
+@router.get("/measured-inputs", response_model=list)
+def timing_budget_measured_inputs(scenario_id: str, variant_id: str, db: Session = Depends(get_db)):
+    """Measurements of the variant and which inputs each can supply (SW task timing / IP clocks / CPU profile)."""
+    return measured_inputs(db, scenario_id, variant_id)
