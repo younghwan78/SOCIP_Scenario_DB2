@@ -77,6 +77,18 @@ def promote(
     return svc.promote(db, request, principal.subject)
 
 
+@router.post("/predictions/{prediction_id}/recompute")
+def recompute(prediction_id: str, power_params_ref: str | None = None, reason: str | None = None,
+              db: Session = Depends(get_db), principal: ApiPrincipal = Depends(require_roles("writer", "admin"))):
+    """Re-run a current prediction under its stored condition (optionally other power params) and register it."""
+    from scenario_db.api.resource_limits import admission_slot
+    from scenario_db.api.services.recompute import recompute_prediction
+    from scenario_db.config import get_settings
+
+    with admission_slot("simulation", get_settings().simulation_max_concurrent_runs):
+        return recompute_prediction(db, prediction_id, power_params_ref=power_params_ref, reason=reason, user=principal.subject)
+
+
 @router.get("/predictions/board")
 def board(scenario_id: str | None = None, project_ref: str | None = None, db: Session = Depends(get_db)):
     return svc.board(db, scenario_id=scenario_id, project_ref=project_ref)

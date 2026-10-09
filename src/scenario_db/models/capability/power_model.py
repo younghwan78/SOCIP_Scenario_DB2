@@ -12,7 +12,8 @@ node or a calibration round never needs a code change:
   count, logical CPU ids, EM OPP table or ``uW / MHz / V^2`` coefficient,
   leakage, measured rail) plus the DSU — for the SW/CPU power estimate.
 - ``calibration``: which measurements the numbers were fitted from
-  (lineage only; ``factor_by_ip`` is recorded, not applied by the engine yet).
+  (lineage; ``factor_by_ip`` is recorded only) and ``ip_power_scale``, the
+  fitted IP power factor the engine applies (empty = none).
 
 Every field is optional: an absent field falls back to the code constant, so
 a partial params document never changes anything it does not mention.
@@ -233,9 +234,23 @@ class CpuPowerParams(BaseScenarioModel):
         return self
 
 
+class PowerCalibrationFit(BaseScenarioModel):
+    """Lineage of a measurement fit (``api/services/power_fit.py``): per category factor and quality."""
+
+    method: str = "least_squares_through_origin"
+    base_params_ref: str | None = None
+    statistic: str | None = None
+    measured_sw: bool | None = None
+    synthetic_rows: int = 0
+    factors: dict[str, dict[str, float | int | None]] = Field(default_factory=dict)
+
+
 class PowerCalibrationParams(BaseScenarioModel):
     source_evidence: list[str] = Field(default_factory=list)
     factor_by_ip: dict[str, float] = Field(default_factory=dict)
+    # Applied by the engine (opt-in): IP power x factor; key = node id / hw name / DVFS domain / "*".
+    ip_power_scale: dict[str, float] = Field(default_factory=dict, exclude_if=lambda v: not v)
+    fit: PowerCalibrationFit | None = Field(default=None, exclude_if=lambda v: v is None)
 
 
 class PowerModelParams(BaseScenarioModel):

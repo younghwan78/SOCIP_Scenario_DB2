@@ -10,6 +10,7 @@ export interface Condition {
   statistic: string; scale: number; eis: string; cpuModel: string; throughput: string; margin: number
   profile: string | null; overrides: Record<string, number>
   measured?: MeasuredInputs | null
+  powerParams?: string | null
 }
 
 export function conditionChips(c: Condition): string[] {
@@ -20,6 +21,7 @@ export function conditionChips(c: Condition): string[] {
     `profile ${c.profile ?? '없음'}`,
     ov.length ? `DVFS override ${ov.map(([d, l]) => `${d} L${l}`).join(' · ')}` : 'DVFS 자동(계산)',
     ...(c.measured ? [measuredChip(c.measured)] : []),
+    ...(c.powerParams ? [`params ${c.powerParams}`] : []),
   ]
 }
 

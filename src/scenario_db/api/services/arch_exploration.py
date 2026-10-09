@@ -568,6 +568,7 @@ def _condition(run, m: dict[str, Any]) -> dict[str, Any]:
         "rt_margin": timing.get("rt_margin"), "output_margin": timing.get("output_margin"),
         "config_profile_ref": sel.get("config_profile_ref") or (getattr(run, "profile", None) if run is not None else None),
         "dvfs_overrides": ((sel.get("config") or {}).get("dvfs_overrides") or {}),
+        "power_params_ref": (sel.get("config") or {}).get("power_params_ref"),
         "dvfs": m.get("dvfs") or {}, "compression": m.get("compression") or [],
         # S4: measurement used as input (SW task runtime / IP clocks / CPU profile)
         "measured": {"ref": ((getattr(run, "tb", None) or {}).get("measured") or {}).get("measurement_ref") if run is not None else None,

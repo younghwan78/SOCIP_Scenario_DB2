@@ -186,11 +186,19 @@ export interface DvfsLadderLevel { level: number; mhz: number; mv: number | null
 /** S4: a measurement of this variant as input (SW / clock / CPU, each opt-in) and as the comparison reference. */
 export interface MeasuredInputs { measurement_ref: string; sw?: boolean; clock?: boolean; cpu?: boolean }
 /** Request-level part of a Timing Budget condition: DVFS level overrides per domain, measured inputs. */
-export interface TimingConfig { dvfs_overrides?: Record<string, number>; measured?: MeasuredInputs | null }
-const cfgBody = (c?: TimingConfig | null) => ({
-  ...(c?.dvfs_overrides && Object.keys(c.dvfs_overrides).length ? { config: { dvfs_overrides: c.dvfs_overrides } } : {}),
+export interface TimingConfig { dvfs_overrides?: Record<string, number>; measured?: MeasuredInputs | null
+  /** S5: power params version instead of the profile's (e.g. a calibrated draft) */
+  power_params_ref?: string | null }
+const cfgBody = (c?: TimingConfig | null) => {
+  const config = {
+    ...(c?.dvfs_overrides && Object.keys(c.dvfs_overrides).length ? { dvfs_overrides: c.dvfs_overrides } : {}),
+    ...(c?.power_params_ref ? { power_params_ref: c.power_params_ref } : {}),
+  }
+  return {
+  ...(Object.keys(config).length ? { config } : {}),
   ...(c?.measured?.measurement_ref ? { measured: c.measured } : {}),
-})
+  }
+}
 /** A measurement of the variant and which inputs it can supply. */
 export interface MeasuredInputOption {
   id: string; measured_at: string | null; synthetic: boolean; origin: string; total_mw: number | null

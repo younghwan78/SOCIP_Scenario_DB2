@@ -162,9 +162,13 @@ export interface PredCondition {
   source: 'timing-budget' | 'exploration'; statistic: string | null; runtime_scale: number | null; throughput_model: string; eis: string
   cpu_model: string; rt_margin: number | null; output_margin: number | null; config_profile_ref: string | null
   dvfs_overrides: Record<string, number>; dvfs: Record<string, number>; compression: string[]
+  /** S5: explicit power params of the condition (absent = the profile's) */
+  power_params_ref?: string | null
   /** S4: measurement used as input */
   measured?: { ref: string | null; inputs: { sw?: boolean; clock?: boolean; cpu?: boolean; measurement_ref?: string }; sw: string[]; clock_ref: string | null; cpu_ref: string | null }
 }
+export interface RecomputeResult { prediction_id: string; variant_id: string; scenario_id?: string; status: 'recomputed' | 'skipped'; reason?: string
+  new_prediction_id?: string; old_total_mw?: number | null; new_total_mw?: number | null; delta_mw?: number | null }
 /** Timing Budget URL params that re-create a registered condition (defaults left out). */
 export function conditionParams(r: Pick<BoardRow, 'scenario_id' | 'variant_id' | 'condition'>): Record<string, string | undefined> {
   const c = r.condition
@@ -180,6 +184,7 @@ export function conditionParams(r: Pick<BoardRow, 'scenario_id' | 'variant_id' |
     margin: m !== null && m !== undefined && Math.abs(m - 0.25) > 1e-9 ? String(Math.round(m * 100)) : undefined,
     cfg: c?.config_profile_ref ?? undefined,
     dvo: ov || undefined,
+    pp: c?.power_params_ref ?? undefined,
     mref: c?.measured?.ref ?? undefined,
     min: c?.measured?.ref ? (['sw', 'clock', 'cpu'] as const).filter((k) => c.measured!.inputs?.[k]).join(',') || undefined : undefined,
   }
@@ -189,7 +194,8 @@ export function conditionText(c: PredCondition | undefined): string {
   const ov = Object.entries(c.dvfs_overrides).sort(([a], [b]) => a.localeCompare(b))
   return [`${c.source === 'timing-budget' ? 'TB' : '탐색'}`, `SW ${c.statistic ?? '?'} ×${c.runtime_scale ?? '?'}`, c.throughput_model === 'pipelined' ? 'pipeline' : 'stage',
     c.cpu_model === 'profile' ? 'CPU 측정' : null, ov.length ? `override ${ov.map(([d, l]) => `${d}:L${l}`).join(',')}` : null,
-    c.measured?.sw?.length ? '실측 SW' : null, c.measured?.clock_ref ? '실측 clock' : null].filter(Boolean).join(' · ')
+    c.measured?.sw?.length ? '실측 SW' : null, c.measured?.clock_ref ? '실측 clock' : null,
+    c.power_params_ref ? `params ${c.power_params_ref}` : null].filter(Boolean).join(' · ')
 }
 export interface VerdictStage { id: string; name?: string; sw_ms?: number; hw_ms?: number; budget_ms?: number; overhead_ms?: number; margin?: number; feasible?: boolean; fill_pct?: number; throughput?: string; longest_sw_ms?: number; chain_ms?: number }
 export interface VerdictDetail {
@@ -285,6 +291,9 @@ export const archApi = {
   optionReviews: (scenarioId?: string) => send<OptionReview[]>('GET', `/arch/power-options/reviews${q({ scenario_id: scenarioId })}`),
   setOptionReview: (body: { scenario_id: string; variant_id?: string; option_key: string; status: ReviewStatus; note?: string }) =>
     send<OptionReview>('PUT', '/arch/power-options/reviews', body),
+  /** S5: re-run a current prediction under its stored condition (optionally other power params) and register it */
+  recompute: (predictionId: string, powerParamsRef?: string | null, reason?: string) =>
+    send<RecomputeResult>('POST', `/arch/predictions/${encodeURIComponent(predictionId)}/recompute${q({ power_params_ref: powerParamsRef || undefined, reason: reason || undefined })}`),
   freshness: (scenarioId?: string, projectRef?: string) => send<Freshness>('GET', `/arch/predictions/freshness${q({ scenario_id: scenarioId, project_ref: projectRef })}`),
   history: (scenarioId: string, variantId: string) => send<HistoryRow[]>('GET', `/arch/predictions/history${q({ scenario_id: scenarioId, variant_id: variantId })}`),
   compare: (p: { old_id?: string; new_id?: string; scenario_id?: string; variant_id?: string }) =>

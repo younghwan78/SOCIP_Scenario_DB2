@@ -74,13 +74,28 @@ class V1VfpsModel:
     version: str = "1.0"
     ref_voltage_mv: float = REFERENCE_VOLTAGE_MV
     ref_fps: float = REFERENCE_FPS
+    # Calibrated IP power scale (``power_model_params.calibration.ip_power_scale``): key -> factor, key = node id,
+    # hw name, DVFS domain or "*" (all IPs). Empty = no scaling (opt-in; absent from older params).
+    ip_power_scale: tuple[tuple[str, float], ...] = ()
 
     def with_params(self, params: PowerModelParams) -> V1VfpsModel:
+        scale = getattr(getattr(params, "calibration", None), "ip_power_scale", None) or {}
         return replace(
             self,
             ref_voltage_mv=params.ref_voltage_mv or self.ref_voltage_mv,
             ref_fps=params.ref_fps or self.ref_fps,
+            ip_power_scale=tuple(sorted((str(k), float(v)) for k, v in scale.items())),
         )
+
+    def ip_scale_for(self, *keys: str | None) -> float:
+        """Calibrated factor of one IP: the first matching key (node, hw name, domain), else "*", else 1."""
+        if not self.ip_power_scale:
+            return 1.0
+        table = dict(self.ip_power_scale)
+        for key in keys:
+            if key and key in table:
+                return table[key]
+        return table.get("*", 1.0)
 
     def ip_active_power_mw(
         self,

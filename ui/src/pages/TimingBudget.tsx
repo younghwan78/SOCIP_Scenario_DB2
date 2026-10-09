@@ -13,6 +13,7 @@ import { useReferences } from '../lib/review'
 import { usePref } from '../components/Layout'
 import { invalidateCache } from '../lib/api'
 import { ConditionBar, DvfsOverrideTable, IntervalBoxes, MeasuredCompareCard, MeasuredPicker, type Condition } from '../components/TimingWorkbench'
+import { calibrationApi } from '../lib/calibration'
 
 const SCALES = [1.0, 1.1, 1.2, 1.3, 1.4, 1.5]
 
@@ -43,10 +44,12 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
   const mref = ctx.params.mref ?? ''
   const mflags = ctx.params.min ?? ''
   const measured = useMemo(() => parseMeasured(mref, mflags), [mref, mflags])
-  const config: TimingConfig | null = useMemo(() => (Object.keys(overrides).length || measured ? { dvfs_overrides: overrides, measured } : null), [overrides, measured])
+  const pp = ctx.params.pp ?? ''
+  const config: TimingConfig | null = useMemo(() => (Object.keys(overrides).length || measured || pp ? { dvfs_overrides: overrides, measured, power_params_ref: pp || null } : null), [overrides, measured, pp])
+  const ppQ = useAsync(() => calibrationApi.powerParams().catch(() => []), [])
   const measQ = useAsync(() => (variant ? timingApi.measuredInputs(scenario, variant).catch(() => []) : Promise.resolve([])), [scenario, variant])
   const setMeasured = (m: MeasuredInputs | null) => ctx.navigate(undefined, { mref: m?.measurement_ref || undefined, min: formatMeasuredFlags(m) }, true)
-  const condKey = `${dvo}|${mref}|${mflags}`
+  const condKey = `${dvo}|${mref}|${mflags}|${pp}`
   const baseOpts = { statistic, eis, runtime_scale: scale, cpu_model: cpuModel, ...tpOpt, ...marginOpts(margin), ...(warmup ? { warmup_frames: warmup } : {}) }
 
   const q = useAsync(() => (!sp.ready ? new Promise<never>(() => {}) : variant ? timingApi.variant(scenario, variant, { ...baseOpts, timeline_frames: frames }, cfg, config) : Promise.reject(new Error('variant를 선택하세요 (Ctrl K)'))), [scenario, variant, statistic, eis, scale, cfg, sp.ready, margin, frames, cpuModel, tpParam, warmup, condKey])
@@ -66,7 +69,7 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
   const r = q.data?.report
   const whatif = wq.data?.report.whatif ?? []
   const effTp = tpParam ?? (r?.stages?.find((x) => x.id === 'nrt')?.throughput === 'pipelined' ? 'pipelined' : r ? 'stage' : policyTp)
-  const cond: Condition = { statistic, scale, eis, cpuModel: measured?.cpu ? 'profile' : cpuModel, throughput: effTp, margin, profile: q.data?.config_profile_ref ?? cfg ?? null, overrides, measured }
+  const cond: Condition = { statistic, scale, eis, cpuModel: measured?.cpu ? 'profile' : cpuModel, throughput: effTp, margin, profile: q.data?.config_profile_ref ?? cfg ?? null, overrides, measured, powerParams: pp || null }
 
   return (
     <div className="page tb-page">
@@ -92,6 +95,11 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
         </div>
         <ProfileSelect profiles={sp.profiles} value={cfg} onChange={(v) => set('cfg', v)} />
         <MeasuredPicker options={measQ.data ?? []} value={measured} onChange={setMeasured} />
+        <label style={{ display: 'inline-flex', gap: 6, alignItems: 'center', fontSize: 13 }} className="muted" title="power model 계수 버전 — 기본은 설정 profile의 것. 보정(S5)으로 만든 draft를 골라 비교 · 등록">power params
+          <select value={pp} onChange={(e) => set('pp', e.target.value || undefined)} aria-label="power params">
+            <option value="">profile 기본</option>
+            {(ppQ.data ?? []).map((p) => <option key={p.ref} value={p.ref}>{p.ref}{p.calibrated ? ' · 보정' : ''}{p.status === 'draft' ? ' · draft' : ''}</option>)}
+          </select></label>
         <span className="grow" />
         {r && <span className={`badge ${verdictChip(r.verdict.status).cls}`} title={r.verdict.reasons.join('\n')}>{verdictChip(r.verdict.status).label}</span>}
         {r && r.warnings.length > 0 && <button className="badge v-warn" style={{ border: 0, cursor: 'pointer' }} title={r.warnings.slice(0, 8).join('\n')}

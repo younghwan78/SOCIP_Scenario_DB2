@@ -109,3 +109,25 @@ def api_client(engine, rule_cache):
         yield client
 
     app.dependency_overrides.clear()
+
+
+# ---------------------------------------------------------------------------
+# Predictions / runs / Timing Budget evidence a test registers on the shared demo fixture are removed afterwards
+# (test_retire_demo deletes the demo scenarios later in the session).
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def demo_cleanup(engine):
+    from datetime import datetime, timezone
+
+    from scenario_db.db.models.evidence import Evidence
+    from scenario_db.db.models.exploration import ArchExplorationRun, Prediction
+
+    start = datetime.now(timezone.utc)
+    yield
+    with Session(engine) as db:
+        db.query(Prediction).filter(Prediction.created_at >= start).delete(synchronize_session=False)
+        db.query(ArchExplorationRun).filter(ArchExplorationRun.created_at >= start).delete(synchronize_session=False)
+        db.query(Evidence).filter(Evidence.kind == "evidence.simulation",
+                                  Evidence.run_info["tool"].astext == "scenariodb-timing-budget").delete(synchronize_session=False)
+        db.commit()

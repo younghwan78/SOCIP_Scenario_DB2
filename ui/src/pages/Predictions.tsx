@@ -18,6 +18,7 @@ import { JUDGE_CLASS, JUDGE_LABEL, reviewApi, useReferences, type References } f
 import { ThermalWatchView } from '../components/ThermalWatch'
 import { useSimProfiles } from '../lib/simProfile'
 import type { Ctx as AppCtx } from '../App'
+import { RecomputePanel } from '../components/RecomputePanel'
 
 const regProv = (r: BoardRow): Prov => ({
   kind: 'registered', engine: r.condition?.source === 'timing-budget' ? 'Timing Budget 조건' : 'Arch exploration', scope: powerScope({ cpu: r.power.cpu_mw, hw: r.power.hw_mw, bw: r.power.bw_mw }),
@@ -31,6 +32,7 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
   const [tick, setTick] = useState(0)
   const q = useAsync(() => archApi.board(undefined, ctx.project || undefined), [ctx.project, tick])
   const allRows = q.data?.rows ?? []
+  const ppQ = useAsync(() => (ctx.params.rc ? calibrationApi.powerParams().catch(() => []) : Promise.resolve([])), [ctx.params.rc])
   const rows = sf ? allRows.filter((r) => r.scenario_id === sf) : allRows
   const battery = useBattery(ctx.project, ctx.params.cfg)
   // customer performance / thermal target: URL (shareable) > this viewer's last value
@@ -111,8 +113,12 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
           {target && <span className="mono">({maText(target, battery)}@Vbat)</span>}</label>
         <span className="faint" style={{ fontSize: 12 }}>등록: Timing Budget (variant 하나 · 조건 지정) 또는 조합 탐색 (일괄 · 최저 power 조합). 조건 열 클릭 = 그 조건으로 Timing Budget 열기.</span>
         <span className="grow" />
+        <button className="btn" onClick={() => ctx.navigate(undefined, { rc: ctx.params.rc ? undefined : '1' }, true)}
+          title="등록 조건 그대로(또는 새 power params로) 다시 계산해 재등록 — 입력 변경(stale) 예측 정리 · 보정 params 반영">재계산…</button>
         <a className="btn" href="#/explore">조합 탐색 →</a>
       </div>
+      {ctx.params.rc && <RecomputePanel rows={rows} staleIds={new Set(stale.keys())} params={ppQ.data ?? []} initialParams={ctx.params.pp}
+        onDone={() => setTick((t) => t + 1)} onClose={() => ctx.navigate(undefined, { rc: undefined, pp: undefined }, true)} />}
       {q.error && <div className="err">{q.error}</div>}
       {q.loading && <div className="empty">불러오는 중…</div>}
       {q.data && !rows.length && <div className="empty">등록된 예측이 없습니다. Timing Budget에서 조건을 정해 “예측으로 등록”하거나 조합 탐색에서 “최저 power 조합 전체 등록”을 실행하세요.</div>}

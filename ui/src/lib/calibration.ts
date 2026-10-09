@@ -1,5 +1,5 @@
 // Prediction ↔ measurement calibration (backend: /calibration/*, src/scenario_db/api/services/calibration.py)
-import { getJson } from './api'
+import { getJson, postJson } from './api'
 import type { CategoryFit } from './provenance'
 import type { ClockView } from './clockResidency'
 
@@ -86,11 +86,29 @@ export function measTooltip(c: Coverage): string {
     ...ms.slice(0, 6).map((m) => `${m.shown ? '▶' : ' '} ${dayOf(m.at)} · ${m.synthetic ? '합성' : '실측'} · ${m.silicon_rev ?? '—'} · SW ${m.sw_baseline_ref ?? '—'}${m.build_id ? ` · ${m.build_id}` : ''}${m.total_mw != null ? ` · ${m.total_mw.toFixed(0)} mW` : ' · power 없음'}\n    ${m.id}`),
     ...(ms.length > 6 ? [`… 외 ${ms.length - 6}건`] : [])].join('\n')
 }
+/** S5: power coefficient fit (per category k through the origin) and the params versions it publishes. */
+export type FitCat = 'cpu' | 'ip' | 'bw'
+export interface FitFactor { k: number | null; k_raw?: number; clamped?: boolean; n: number; rmse_before_mw?: number; rmse_after_mw?: number
+  mape_before_pct?: number; mape_after_pct?: number; r2_after?: number | null; recommended?: boolean }
+export interface FitRow { measurement_ref: string; scenario_id: string; variant_id: string; synthetic: boolean; measured_sw: boolean; verdict: string
+  predicted: Record<FitCat | 'total', number>; measured: Partial<Record<FitCat | 'other' | 'total', number | null>>; after: Record<FitCat | 'total', number>
+  delta_pct_before: number | null; delta_pct_after: number | null }
+export interface PowerFit { base_params_ref: string; statistic: string; measured_sw: boolean; rows: FitRow[]; errors: { measurement_ref: string; variant_id: string; error: string }[]
+  factors: Record<FitCat, FitFactor>; warnings: string[] }
+export interface PowerParamsVersion { id: string; version: number; ref: string; soc_ref: string; status: string; description: string | null; calibrated: boolean; ip_power_scale: Record<string, number> }
+export interface PowerParamsCreated { params_ref: string; id: string; version: number; applied: Partial<Record<FitCat, number>>; yaml: string; params_hash: string }
+
 export const calibrationApi = {
   coverageSummary: () => getJson<Record<string, Record<'simulation' | 'measurement' | 'synthetic' | 'current_prediction', number>>>('/calibration/coverage-summary', {}, false),
   coverage: (scenarioId: string) => getJson<Record<string, Coverage>>('/calibration/coverage', { scenario_id: scenarioId }, false),
   measurements: (scenarioId?: string) => getJson<MeasRow[]>('/calibration/measurements', { scenario_id: scenarioId }, false),
   detail: (id: string) => getJson<MeasDetail>(`/calibration/measurements/${encodeURIComponent(id)}`, {}, false),
+  powerFit: (body: { project_ref: string; scenario_id?: string; base_params_ref?: string; config_profile_ref?: string | null; include_synthetic: boolean; statistic: string; measured_sw: boolean }) =>
+    postJson<PowerFit>('/calibration/power-fit', body),
+  createPowerParams: (fit: PowerFit, factors: Partial<Record<FitCat, number | null>>, description?: string) =>
+    postJson<PowerParamsCreated>('/calibration/power-params', { base_params_ref: fit.base_params_ref, factors, statistic: fit.statistic, measured_sw: fit.measured_sw,
+      source_evidence: fit.rows.map((r) => r.measurement_ref), synthetic_rows: fit.rows.filter((r) => r.synthetic).length, fit_stats: fit.factors, description }),
+  powerParams: (socRef?: string) => getJson<PowerParamsVersion[]>('/calibration/power-params', { soc_ref: socRef }, false),
   ipBandwidth: (scenarioId: string, variantId: string, measurementId?: string) =>
     getJson<IpBandwidth>('/calibration/ip-bandwidth', { scenario_id: scenarioId, variant_id: variantId, measurement_id: measurementId }, false),
 }
