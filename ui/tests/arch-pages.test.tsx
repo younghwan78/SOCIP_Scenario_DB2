@@ -42,9 +42,10 @@ it('keeps the SW what-if on the selected CPU and throughput models', async () =>
   vi.spyOn(timingApi, 'dvfsWhatif').mockResolvedValue(null as never)
   const ctx = { scenario: 's', variant: 'v', params: {}, navigate: vi.fn() } as unknown as Ctx
   await act(async () => root.render(<TimingBudgetPage ctx={ctx} />))
-  expect(send.mock.calls.find((c) => c[2].include_whatif)?.[2]).toMatchObject({
-    cpu_model: 'flat', throughput_model: 'pipelined',
-  })
+  // no URL override: the server applies the project review policy's throughput model
+  const first = send.mock.calls.find((c) => c[2].include_whatif)?.[2]
+  expect(first).toMatchObject({ cpu_model: 'flat' })
+  expect(first).not.toHaveProperty('throughput_model')
   await act(async () => root.render(<TimingBudgetPage ctx={{ ...ctx, params: { cpu: 'profile', tp: 'stage' } }} />))
   const whatifs = send.mock.calls.filter((c) => c[2].include_whatif)
   expect(whatifs).toHaveLength(2)

@@ -19,7 +19,6 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
   const eis = (ctx.params.eis === 'on' || ctx.params.eis === 'off' ? ctx.params.eis : 'auto') as EisMode
   const scale = SCALES.includes(Number(ctx.params.scale)) ? Number(ctx.params.scale) : 1.0
   const cpuModel: CpuModel = ctx.params.cpu === 'profile' ? 'profile' : 'flat'
-  // default = pipelined: stages are decoupled by M2M buffers, fps is judged by the output interval
   // URL override only; otherwise the server applies the project review policy (and the toggle shows the effective one)
   const tpParam: ThroughputModel | undefined = ctx.params.tp === 'stage' || ctx.params.tp === 'pipelined' ? ctx.params.tp : undefined
   const refs = useReferences(ctx.project)
@@ -36,11 +35,11 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
 
   const q = useAsync(() => (!sp.ready ? new Promise<never>(() => {}) : variant ? timingApi.variant(scenario, variant, { statistic, eis, runtime_scale: scale, timeline_frames: frames, cpu_model: cpuModel, ...tpOpt, ...marginOpts(margin) }, cfg) : Promise.reject(new Error('variant를 선택하세요 (Ctrl K)'))), [scenario, variant, statistic, eis, scale, cfg, sp.ready, margin, frames, cpuModel, tpParam])
   // what-if (24 sims) starts after the main report so the page never holds two simulation slots at once
-  const mainKey = JSON.stringify([ctx.project, scenario, variant, cfg, margin, cpuModel, tp])
+  const mainKey = JSON.stringify([ctx.project, scenario, variant, cfg, margin, cpuModel, tpParam])
   const [mainReadyKey, setMainReadyKey] = useState<string | null>(null)
   useEffect(() => { if (q.data && sp.ready) setMainReadyKey(mainKey) }, [q.data, sp.ready, mainKey])
   const mainReady = mainReadyKey === mainKey && sp.ready
-  const wq = useAsync(() => (variant && mainReady ? timingApi.variant(scenario, variant, { statistic: 'max', eis: 'auto', runtime_scale: 1, include_whatif: true, cpu_model: cpuModel, throughput_model: tp, ...marginOpts(margin) }, cfg) : Promise.resolve(null)), [scenario, variant, mainReady, cfg, margin, cpuModel, tp])
+  const wq = useAsync(() => (variant && mainReady ? timingApi.variant(scenario, variant, { statistic: 'max', eis: 'auto', runtime_scale: 1, include_whatif: true, cpu_model: cpuModel, ...tpOpt, ...marginOpts(margin) }, cfg) : Promise.resolve(null)), [scenario, variant, mainReady, cfg, margin, cpuModel, tpParam])
   // ⑦ DVFS level ±1/±2 per domain — runs after ④ so at most one simulation slot is held
   const dq = useAsync(() => (variant && mainReady && !wq.loading && !q.loading ? timingApi.dvfsWhatif(scenario, variant, { statistic, eis, runtime_scale: scale, cpu_model: cpuModel, ...tpOpt, ...marginOpts(margin) }, cfg) : Promise.resolve(null)),
     [scenario, variant, mainReady, wq.loading, q.loading, cfg, margin, statistic, eis, scale, cpuModel, tpParam])
