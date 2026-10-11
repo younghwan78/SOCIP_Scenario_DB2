@@ -91,6 +91,21 @@ def _variant_ids(db: Session, scenario_id: str, request: ArchExplorationRunReque
 
 
 # ------------------------------------------------------------------- runs
+def _apply_options(graph, keys: list[str]) -> tuple[Any, list[dict[str, Any]]]:
+    """The variant graph with power-option items applied (same mechanics as the option exploration)."""
+    from scenario_db.sim import power_options as po
+
+    dims, _ = po.option_dimensions(graph)
+    items = {it["key"]: it for d in dims for it in d["items"]}
+    missing = [k for k in keys if k not in items]
+    if missing:
+        raise UnprocessableError(f"power option not applicable to this variant: {missing}")
+    chosen = [items[k] for k in dict.fromkeys(keys)]
+    if len({it["dimension"] for it in chosen}) != len(chosen):
+        raise UnprocessableError("two values of the same option dimension were selected")
+    return po.apply_option_set(graph, chosen), chosen
+
+
 def _reference_budgets(db: Session, project_ref: str | None) -> dict[str, dict[str, Any]]:
     """variant id -> {"mw": reference x (1 + tol), "reference_mw", "source"} from the project review_policy."""
     if not project_ref:
@@ -157,8 +172,15 @@ def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str |
                 bounded_spec = bounded_spec.model_copy(update={
                     "constraints": bounded_spec.constraints.model_copy(update={"power_budget_mw": budget["mw"]})})
             _check_power_params_scope(shim.config, graph)
+            applied: list[dict[str, Any]] = []
+            if request.apply_options:
+                graph, applied = _apply_options(graph, request.apply_options)
+                bounded_spec = bounded_spec.model_copy(update={"axes": bounded_spec.axes.model_copy(update={
+                    "power_options": bounded_spec.axes.power_options.model_copy(update={"enabled": False})})})
             stage = "explore"
             summary = explore_variant(graph, bounded_spec, config=shim.config, dvfs_tables=tables)
+            if applied:
+                summary["applied_options"] = [{k: it.get(k) for k in ("key", "label", "kind", "iq_eval", "note")} for it in applied]
             summary["model_lineage"] = run_model_lineage(shim.config)
             if budget["mw"] is not None:
                 summary["power_budget"] = budget
@@ -207,6 +229,7 @@ def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str |
                                                           "soc_ref", "dvfs_version", "use_default_dvfs"}, exclude_unset=True),
                                                       "throughput_from_policy": throughput_from_policy,
                                                       "power_budget_from_reference": request.power_budget_from_reference,
+                                                      "apply_options": request.apply_options,
                                                       **({"timing_budget": request.timing_budget} if request.timing_budget else {}),
                                                       # resolved inputs, content-addressed (variants[].input_sections -> blobs)
                                                       "manifest": {"engine_rev": ENGINE_REV, "tool_version": _tool_version(),
@@ -428,6 +451,14 @@ def promote(db: Session, request: PromoteRequest, user: str | None = None, *, ru
             raise UnprocessableError("a non-default case needs a reason")
         if not rule.startswith("auto:") and not case.get("eligible", True):
             raise UnprocessableError("selected case is not eligible (spec)")
+        from scenario_db.sim.arch_exploration import ExplorationConstraints, _case_ok, _slice_ok
+
+        effective_constraints = dict(summary.get("constraints") or constraints)
+        if (summary.get("power_budget") or {}).get("mw") is not None:
+            effective_constraints["power_budget_mw"] = summary["power_budget"]["mw"]
+        limits = ExplorationConstraints.model_validate(effective_constraints)
+        if not _slice_ok(summary["objective_slice"], limits)[0] or not _case_ok(case, limits):
+            raise UnprocessableError("selected case is not eligible (spec constraints)")
         if case.get("verified") and not case["verified"]["ok"]:
             raise UnprocessableError("selected case failed re-simulation verification")
         metrics = prediction_payload(summary["objective_slice"], case, summary["buffers"])
@@ -436,6 +467,7 @@ def promote(db: Session, request: PromoteRequest, user: str | None = None, *, ru
                     "distribution": summary["distribution"], "alternatives": len(summary.get("alternatives") or []),
                     "eligible_cases": summary["counts"]["eligible"], "verified": case.get("verified"),
                     "power_options": option_snapshot(summary.get("power_options"), case, rule),
+                    "applied_options": summary.get("applied_options") or [],
                     "model_lineage": summary.get("model_lineage"),
                     # None = registered before the review policy (stage judgement)
                     "throughput_model": summary.get("throughput_model")}
@@ -464,7 +496,7 @@ def promote(db: Session, request: PromoteRequest, user: str | None = None, *, ru
 
 BOARD_METRIC_KEYS = ("fps", "power", "bw_mbs", "distribution", "compression", "dvfs", "verdict", "eligible_cases",
                      "alternatives", "verified", "statistic", "runtime_scale", "model_lineage", "power_options",
-                     "verdict_detail", "stages", "intervals", "intervals_ok", "period_ms", "latency", "throughput_model")
+                     "verdict_detail", "stages", "intervals", "intervals_ok", "period_ms", "latency", "throughput_model", "applied_options")
 
 STAGE_KEYS = ("id", "name", "sw_ms", "hw_ms", "budget_ms", "overhead_ms", "margin", "feasible", "fill_pct",
               "throughput", "longest_sw_ms", "chain_ms")
@@ -572,6 +604,7 @@ def _condition(run, m: dict[str, Any]) -> dict[str, Any]:
         "dvfs_overrides": ((sel.get("config") or {}).get("dvfs_overrides") or {}),
         "power_params_ref": (sel.get("config") or {}).get("power_params_ref"),
         "dvfs": m.get("dvfs") or {}, "compression": m.get("compression") or [],
+        "applied_options": m.get("applied_options") or [],
         # S4: measurement used as input (SW task runtime / IP clocks / CPU profile)
         "measured": {"ref": ((getattr(run, "tb", None) or {}).get("measured") or {}).get("measurement_ref") if run is not None else None,
                      "inputs": ((getattr(run, "tb", None) or {}).get("measured") or {}) if run is not None else {},
@@ -1035,6 +1068,7 @@ def prediction_freshness(db: Session, *, scenario_id: str | None = None, project
                                       ArchExplorationRun.spec["input_selection"].label("selection"),
                                       ArchExplorationRun.spec["timing"].label("timing"),
                                       ArchExplorationRun.spec["timing_budget"].label("tb"),
+                                      ArchExplorationRun.spec["apply_options"].label("applied"),
                                       ArchExplorationRun.spec["throughput_from_policy"].label("policy_tp"))
             .filter(ArchExplorationRun.id.in_({p[3] for p in preds})).all()} if preds else {}
     policies: dict[str | None, Any] = {}
@@ -1063,6 +1097,8 @@ def prediction_freshness(db: Session, *, scenario_id: str | None = None, project
             shim = _shim(tb, vid)
             _apply_config_profile(db, shim)
             graph, tables, _ = _load(db, shim, tb.use_default_dvfs)
+            if run.applied:
+                graph, _ = _apply_options(graph, run.applied)
             from scenario_db.api.services.cpu import with_cpu_profile
             from scenario_db.sim.timing_budget import TimingBudgetOptions
 
@@ -1102,3 +1138,86 @@ def _run_variant_sections(db: Session, run_id: str, scenario_id: str, variant_id
     return db.query(func.jsonb_path_query_first(
         R.variants, literal_column("'$[*] ? (@.scenario_id == $s && @.variant_id == $v).input_sections'::jsonpath"),
         func.jsonb_build_object(literal("s"), scenario_id, literal("v"), variant_id))).filter(R.id == run_id).scalar()
+
+
+# ------------------------------------------------------------------- lever selection -> prediction
+def register_lever(db: Session, request: Any, user: str | None = None) -> dict[str, Any]:
+    """Register the lever selector's combination (compression modes [+ IQ-adopted options]) as the current prediction.
+
+    - no option: the case is rebuilt from the run's objective slice (``case_from_selection``) and promoted
+      (rule ``lever:iq-keep`` without lossy compression, ``lever:trade`` with lossy -> reason required).
+    - options: every option needs an IQ result. The results are stored as option reviews (adopted / rejected); a
+      rejected item stops the registration. With all adopted, the variant is re-explored with the options applied
+      (``apply_options``, same spec / inputs as the source run) and the same compression is promoted
+      (rule ``lever:iq-adopted``). The prediction keeps the selection and the IQ notes (``metrics.lever_selection``).
+    """
+    from scenario_db.api.schemas.arch_exploration import PowerOptionReviewRequest
+    from scenario_db.api.services.recompute import _SEL_KEYS, _SPEC_KEYS
+    from scenario_db.sim.arch_exploration import case_from_selection
+
+    run = get_run(db, request.run_id)
+    if request.expected_project_ref is not None and run.project_ref != request.expected_project_ref:
+        raise UnprocessableError(f"run {run.id} belongs to project {run.project_ref!r}, not {request.expected_project_ref!r}")
+    src = next((v for v in run.variants if v["scenario_id"] == request.scenario_id and v["variant_id"] == request.variant_id), None)
+    if src is None:
+        raise NotFoundError(f"variant {request.scenario_id}/{request.variant_id} not in run {run.id}")
+    options = list(dict.fromkeys(request.options))
+    iq = {r.option_key: r for r in request.iq_results}
+    lossy = any(str(m).upper().endswith("LOSSY") for m in request.compression.values())
+    if lossy and not (request.reason or "").strip():
+        raise UnprocessableError("lossy compression (화질 trade) needs a reason")
+    if options:
+        available = {it["key"] for d in (src.get("power_options") or {}).get("dimensions") or [] for it in d["items"]}
+        if any(o not in available for o in options) or len({o.split("=", 1)[0] for o in options}) != len(options):
+            raise UnprocessableError("selected power options were not evaluated in this run")
+        missing = [o for o in options if o not in iq]
+        if missing:
+            raise UnprocessableError(f"IQ 평가 결과가 없는 option: {', '.join(missing)}")
+        for o in options:
+            set_option_review(db, PowerOptionReviewRequest(scenario_id=request.scenario_id, variant_id=request.variant_id,
+                                                           option_key=o, status=iq[o].status, note=iq[o].note), user)
+        rejected = [o for o in options if iq[o].status != "adopted"]
+        if rejected:
+            return {"status": "rejected", "rejected": rejected, "promoted": [],
+                    "message": "화질 평가 기각 option이 있어 등록하지 않았습니다 (review에 기각으로 기록)"}
+        spec = dict(run.spec or {})
+        sel = dict(spec.get("input_selection") or {})
+        if isinstance(spec.get("timing"), dict):
+            # the run stores the full option dump: a field at its default must stay unset (as in recompute), e.g. the
+            # CPU model unset = coefficients from the profile's power params, set = the code default
+            from scenario_db.sim.timing_budget import TimingBudgetOptions
+
+            defaults = TimingBudgetOptions().model_dump(mode="json")
+            spec["timing"] = {k: v for k, v in spec["timing"].items() if k not in defaults or v != defaults[k]}
+            if spec.get("throughput_from_policy"):
+                spec["timing"].pop("throughput_model", None)
+        new_run = run_exploration(db, ArchExplorationRunRequest(
+            title=f"Lever 등록 · {request.variant_id} + {len(options)} option", scenario_type=run.scenario_type,
+            scenario_ids=[request.scenario_id], variant_ids=[request.variant_id], include_derived=True, max_variants=1,
+            # an empty explicit config would mask the run's config profile -> pass it only when the run set one
+            **({"config": sel["config"]} if sel.get("config") else {}), apply_options=options, project_ref=run.project_ref,
+            power_budget_from_reference=bool(spec.get("power_budget_from_reference")),
+            spec={k: spec[k] for k in _SPEC_KEYS if k in spec}, **{k: sel[k] for k in _SEL_KEYS if k in sel}), user)
+        target_run, summary = new_run["id"], new_run["variants"][0]
+        rule = "lever:iq-adopted"
+    else:
+        target_run, summary = run.id, src
+        rule = "lever:trade" if lossy else "lever:iq-keep"
+    case = case_from_selection(summary, dict(request.compression))
+    if case is None:
+        raise UnprocessableError("selected compression is not an evaluated combination of this variant")
+    if lossy and not request.reason:
+        raise UnprocessableError("lossy compression (화질 trade) needs a reason")
+    notes = "; ".join(f"{o}: {iq[o].note}" for o in options)
+    reason = request.reason or ("Lever 선택 · 화질 무손실" if not options else f"Lever 선택 · IQ 채택 option ({notes})")
+    out = promote(db, PromoteRequest(run_id=target_run, scenario_id=request.scenario_id, variant_ids=[request.variant_id],
+                                     case_key=case["key"], reason=reason, expected_project_ref=run.project_ref), user, rule=rule)
+    for p in out.get("promoted") or []:
+        row = db.get(Prediction, p["id"])
+        if row is not None:
+            row.metrics = {**(row.metrics or {}), "lever_selection": {
+                "source_run": run.id, "compression": dict(request.compression), "options": options,
+                "iq_results": {o: {"status": iq[o].status, "note": iq[o].note} for o in options},
+                "base_total_mw": (src.get("baseline") or {}).get("total_mw")}}
+    db.commit()
+    return {"status": "registered", **out, "rule": rule, "case_key": case["key"], "run_id": target_run}

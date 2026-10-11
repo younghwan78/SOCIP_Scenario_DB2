@@ -19,11 +19,12 @@ def summary(sid, value):
         "key": "base", "total_mw": value, "cpu_mw": value, "compression": [], "dvfs": {},
         "dvfs_raise": 0, "statistic": "max", "runtime_scale": 1.0, "eligible": True,
         "verified": {"ok": True, "delta_pct": 0}, "lossy": False, "assumed_ratio": False,
+        "bw_mbs": 0,
     }
     obj = {"fps": 30, "period_ms": 33.333, "eis_on": False, "ips": [], "domains": [],
            "bw": {"total_mbs": 0, "hw_mbs": 0, "sw_mbs": 0},
-           "power": {"bw_mw": 0, "bw_hw_mw": 0, "bw_sw_mw": 0}, "cpu_by_task": {"cpu": value},
-           "verdict": {"status": "ok"}, "intervals": {}, "latency": {}, "stages": {}}
+           "power": {"hw_mw": value, "bw_mw": 0, "bw_hw_mw": 0, "bw_sw_mw": 0}, "cpu_by_task": {"cpu": value},
+           "verdict": {"status": "ok"}, "intervals_ok": True, "intervals": {}, "latency": {}, "stages": {}}
     return {"scenario_id": sid, "variant_id": "shared", "spec_ok": True, "spec_reasons": [],
             "recommended": case, "baseline": case, "alternatives": [], "buffers": [],
             "objective_slice": obj, "input_hash": sid, "distribution": {

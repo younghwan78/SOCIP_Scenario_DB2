@@ -22,6 +22,14 @@ capabilities:
         ppc: 4.0
         vdd: VDD_INT
         dvfs_group: INT
+      LowPower:
+        # SAMPLE (off-site, 2026-10-11): assumed unit power so lever / power distribution is complete; replace with in-house coefficient.
+        # power-saving-mode encode (8K PSM): same throughput, lower unit power
+        unit_power_mw_mp: 0.85
+        idc: 0.0
+        ppc: 4.0
+        vdd: VDD_INT
+        dvfs_group: INT
   supported_features:
     bitdepth:
     - 8

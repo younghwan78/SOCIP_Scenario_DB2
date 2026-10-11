@@ -351,8 +351,24 @@ def test_zero_estimates_cannot_verify_nonzero_simulation(graph_factory, dvfs, uh
     assert result["delta_pct"] is None and result["bw_delta_pct"] is None
 
 
+def _zero_power(g, ip_ref: str):
+    """Graph whose ``ip_ref`` has no unit power (an unmodelled IP -> partial power coverage)."""
+    import copy
+    import dataclasses
+
+    row = g.ip_catalog[ip_ref]
+    caps = copy.deepcopy(row.capabilities)
+    caps["sim"].pop("unit_power_mw_mp", None)
+    for mode in (caps["sim"].get("modes") or {}).values():
+        mode.pop("unit_power_mw_mp", None)
+    clone = IpCatalog(id=row.id, schema_version=row.schema_version, category=row.category,
+                      hierarchy=row.hierarchy, capabilities=caps, yaml_sha256="fixture")
+    return dataclasses.replace(g, ip_catalog={**g.ip_catalog, ip_ref: clone})
+
+
 def test_partial_power_model_cannot_pass_a_power_budget(graph_factory, dvfs):
-    g = graph_factory(UHD30)
+    # the E2600 fixture models every active IP (SAMPLE coefficients); drop one to get a partial model
+    g = _zero_power(graph_factory(UHD30), "ip-gdc-is-v15-s5e9965")
     base = {"axes": {"statistics": ["max"], "runtime_scales": [1], "compression": {"enabled": False}}}
     free = ax.explore_variant(g, ax.ArchExplorationSpec.model_validate(base), dvfs_tables=dvfs)
     assert free["coverage"]["power_coverage"] == "partial" and free["coverage"]["zero_power_ips"]
@@ -444,3 +460,65 @@ def test_run_list_view_keeps_what_the_run_table_reads(uhd30):
     assert row["sw_margin"]["growth_tolerance_fixed"] == full["sw_margin"]["growth_tolerance_fixed"]
     assert {"slices", "buffers", "objective_slice", "pareto"}.isdisjoint(row)
     assert len(json.dumps(row)) * 10 < len(json.dumps(full, default=str))  # an order of magnitude smaller
+
+
+# ------------------------------------------------------------------ lossless vs lossy + lever analysis
+PSM8K = "cam-rec-r1-8k30-psm"
+
+
+def _with_soc(g):
+    """Attach the E2600 SoC compression catalog (typical lossless ratio) to a fixture graph."""
+    import dataclasses
+    from types import SimpleNamespace
+
+    soc = read(FIXTURE / "00_hw" / "soc-exynos2600.yaml")
+    return dataclasses.replace(g, soc=SimpleNamespace(id=soc["id"], compression_modes=soc["compression_modes"]))
+
+
+def test_lossless_and_lossy_are_separate_choices_per_buffer(graph_factory):
+    from scenario_db.sim.models import SimulationRunConfig
+
+    rows = {r["buffer"]: r for r in ax.compression_candidates(_with_soc(graph_factory(PSM8K)), ax.CompressionAxis(),
+                                                              SimulationRunConfig())}
+    l0 = {m["mode"]: m for m in rows["PYRAMID_L0"]["modes"]}
+    assert l0["COMP_YUV_LOSSLESS"]["ratio_source"] == "typical" and l0["COMP_YUV_LOSSLESS"]["selectable"]
+    assert l0["COMP_YUV_LOSSY"]["delta_mw"] < l0["COMP_YUV_LOSSLESS"]["delta_mw"] < 0
+    video = {m["mode"]: m for m in rows["MCSC_VIDEO"]["modes"]}
+    # MFC_RDMA reads SBWC lossless only: the video buffer is an IQ-neutral lever, its lossy mode is blocked
+    assert video["COMP_YUV_LOSSLESS"]["selectable"] and not video["COMP_YUV_LOSSY"]["selectable"]
+    assert rows["MCSC_VIDEO"]["selectable"] and rows["MCSC_VIDEO"]["mode"] == "COMP_YUV_LOSSLESS"
+    sets = ax._subset_sums([rows["PYRAMID_L0"], rows["MCSC_VIDEO"]])
+    assert len(sets) == 3 * 2   # L0: off / lossless / lossy x video: off / lossless
+
+
+def test_lever_analysis_path_keeps_iq_first(graph_factory, dvfs):
+    r = ax.explore_variant(_with_soc(graph_factory(PSM8K)), ax.ArchExplorationSpec.model_validate(
+        {"axes": {"statistics": ["max"], "runtime_scales": [1]}}), dvfs_tables=dvfs)
+    lv = r["levers"]
+    assert lv["status"] == "ok" and lv["point_count"] >= 9
+    phases = [s["phase"] for s in lv["steps"]]
+    assert phases[0] == "baseline" and phases == sorted(phases, key=["baseline", "neutral", "eval", "trade"].index)
+    ms = lv["milestones"]
+    assert ms["neutral"]["delta_mw"] < 0 and all(m.endswith("LOSSLESS") for m in ms["neutral"]["compression"].values())
+    assert ms["neutral"]["total_mw"] == pytest.approx(r["tiers"]["keep"]["best"]["total_mw"], abs=0.01)
+    assert ms["trade"]["total_mw"] <= ms["eval"]["total_mw"] <= ms["neutral"]["total_mw"]
+    by = {x["key"]: x for x in lv["levers"]}
+    assert lv["best_lever"]["neutral"].startswith("comp:") and by[lv["best_lever"]["neutral"]]["iq"] == "neutral"
+    skip = by["knob:pyramid_l0=skip"]
+    assert skip["iq"] == "eval" and skip["alone"]["total_mw"] < 0
+    # L0 skipped in the final state -> L0 compression has nothing left to save
+    assert by["comp:PYRAMID_L0=COMP_YUV_LOSSLESS"]["moot"] and by["comp:PYRAMID_L0=COMP_YUV_LOSSLESS"]["overlap"]
+    assert all(c["delta_mw"] >= 0 for c in lv["costs"])
+
+
+def test_any_design_point_is_rebuilt_from_its_key(graph_factory, dvfs):
+    r = ax.explore_variant(_with_soc(graph_factory(PSM8K)), ax.ArchExplorationSpec.model_validate(
+        {"axes": {"statistics": ["max"], "runtime_scales": [1], "power_options": {"enabled": False}}}), dvfs_tables=dvfs)
+    for p in r["design_points"]:
+        case, rule = ax.find_case(r, p["key"])
+        assert case is not None and case["key"] == p["key"] and case["total_mw"] == pytest.approx(p["total_mw"], abs=0.01)
+    keep = r["tiers"]["keep"]["best"]
+    sel = ax.case_from_selection(r, keep["compression_modes"])
+    assert sel is not None and sel["key"] == keep["key"] and sel["total_mw"] == pytest.approx(keep["total_mw"], abs=0.01)
+    assert ax.case_from_key(r, keep["key"].replace("s=max", "s=mean")) is None       # other SW slice: not rebuilt
+    assert ax.case_from_key(r, "s=max|x=1|c=NOPE:LL|d=-") is None

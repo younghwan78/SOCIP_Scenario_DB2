@@ -50,6 +50,9 @@ class RebalanceSpec(SweepSpec):
     verify_k: int = 30
     max_exhaustive: int = 300_000
     top: int = 20
+    # task -> allowed slow-down vs its measured-placement time (e.g. Timing Budget stage SW slack); becomes
+    # budgets_ms[task] = reference ms x factor unless budgets_ms already names the task
+    stretch_budgets: dict[str, float] = field(default_factory=dict)
 
 
 def default_pool(model: CpuPowerModel) -> list[str]:
@@ -144,6 +147,10 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
     thread_pol = {th: n for th, n in frozen_at.items()}
     unit_threads = [[th for th in threads if th.task in g] for g in units]
 
+    # ---- budgets: explicit ms, plus stretch factors anchored on the measured-placement task time
+    budgets = dict(spec.budgets_ms)   # filled with the stretch budgets below, before the first state() call
+    budget_source = {t: "user" for t in budgets}
+
     def policies_for(assign: tuple[int, ...]) -> dict[str, TaskPolicy]:
         pol = dict(ref_pol)
         for i, g in enumerate(units):
@@ -154,12 +161,14 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
         return pol
 
     # ---- per-cluster state memo: (cluster, unit mask) -> state
-    budgets = spec.budgets_ms
     memo: dict[tuple[str, int], dict[str, Any]] = {}
 
-    def state(c: str, mask: int) -> dict[str, Any]:
+    def _task_ms(c: str, mask: int) -> dict[str, float]:
+        return state(c, mask, cache=False)["task_ms"]
+
+    def state(c: str, mask: int, cache: bool = True) -> dict[str, Any]:
         key = (c, mask)
-        hit = memo.get(key)
+        hit = memo.get(key) if cache else None
         if hit is not None:
             return hit
         ths = list(frozen[c]) + [th for i, uts in enumerate(unit_threads) if mask >> i & 1 for th in uts]
@@ -182,8 +191,30 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
         out = {"mhz": row["mhz"], "mw": row["total_mw"], "idle": idle, "busy": row["busy_ms"] > 0,
                "feasible": not overloaded and not late, "task_ms": task_ms, "peak_util": max((r["util"] for r in row["cpus"]), default=0.0),
                "overutilized": over, "sched_mhz": row["sched_mhz"], "boosted_by": row["boosted_by"]}
-        memo[key] = out
+        if cache:
+            memo[key] = out
         return out
+
+    verification_budgets = dict(budgets)
+    if spec.stretch_budgets:
+        # anchor = the measured placement's task time; the larger of the per-cluster estimate used by the search and
+        # the full evaluation, so the measured placement stays feasible in both
+        anchor = evaluate(threads, ctx, ref_pol, budgets_ms={}, dsu_residency=prep.dsu_res, bw_mbs=prep.bw_mbs,
+                          dsu_policy=prep.dsu_policy, pinned_threads=thread_pol)["task_ms"]
+        verified_anchor = dict(anchor)
+        home_mask = {c: sum(1 << i for i, g in enumerate(units) if home[g[0]] == c) for c in every}
+        for c in every:
+            for task, ms in _task_ms(c, home_mask[c]).items():
+                anchor[task] = max(anchor.get(task, 0.0), ms)
+        for task, factor in spec.stretch_budgets.items():
+            ms = anchor.get(task)
+            if ms:
+                limit = ms * max(1.0, float(factor)) * (1 + 1e-6)
+                if task not in budgets or limit < budgets[task]:
+                    budgets[task] = limit
+                    budget_source[task] = "stretch"
+                verified_limit = verified_anchor[task] * max(1.0, float(factor)) * (1 + 1e-6)
+                verification_budgets[task] = min(verification_budgets.get(task, math.inf), verified_limit)
 
     fixed_clusters = [c for c in every if c not in pool]
     fixed_state = {c: state(c, 0) for c in fixed_clusters}
@@ -382,7 +413,7 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
     # ---- verify: full evaluate for the reference and the top-K feasible splits
     def full_eval(assign: tuple[int, ...]) -> dict[str, Any]:
         pol = policies_for(assign)
-        case = evaluate(threads, ctx, pol, budgets_ms=budgets, dsu_residency=prep.dsu_res, bw_mbs=prep.bw_mbs,
+        case = evaluate(threads, ctx, pol, budgets_ms=verification_budgets, dsu_residency=prep.dsu_res, bw_mbs=prep.bw_mbs,
                         dsu_policy=dsu_pol, pinned_threads=thread_pol)
         case.pop("_signature", None)
         return case
@@ -418,6 +449,7 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
 
     top_keys = feasible[: max(spec.verify_k, spec.top)]
     verified = [(k, full_eval(assign_of(k))) for k in top_keys]
+    verified = [(k, case) for k, case in verified if case["feasible"]]
     verified.sort(key=lambda kv: (kv[1]["total_mw"], sum(1 for i, a in enumerate(assign_of(kv[0])) if a != home_idx[i])))
     cases = [describe(assign_of(k), case) | {"rank": i + 1} for i, (k, case) in enumerate(verified[: spec.top])]
 
@@ -526,12 +558,13 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
                      "gain": bool(best_big and float(best_big["delta_mw"]) < -spec.equal_mw)}
     strategies = {"rows": strategy_rows, "best_concentrate": conc, "best_spread": sprd, "winner": winner,
                   "spread_gain_mw": gain, "complete": method == "exhaustive", "big_check": big_check}
-    return {
+    out = {
         "fps": fps, "period_ms": round(period, 4), "pool": pool, "default_pool": default_pool(model),
         "clusters": [{"name": c.name, "core_type": c.core_type, "cores": c.cores, "in_pool": c.name in pool,
                       "opps_mhz": _freqs(c, model), "capacity": ctx.caps[c.name]} for c in model.clusters],
         "units": [{"unit": "+".join(g), "tasks": list(g), "home": home[g[0]],
                    "budget_ms": min((budgets[t] for t in g if t in budgets), default=None),
+                   "budget_source": next((budget_source[t] for t in g if t in budget_source), None),
                    "threads": len(unit_threads[i]),
                    "util_fmax": {c: round(sum(ctx.util(th, c) for th in unit_threads[i]), 1) for c in pool},
                    "t_fmax_ms": {c: round(max(th.ms(ctx.by_name[c], ctx.fmax(c)) for th in unit_threads[i]), 3) for c in pool}}
@@ -549,5 +582,63 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
         "dsu_params": cpu_dsu.params_view(model, prep.sched.power_gating_eff),
         # CPU traffic to DRAM after cpu_bw_scale; the CPU + DSU power above does not depend on it (BW-only effect)
         "cpu_bw_mbs": round(prep.bw_mbs, 3),
+        "budgets_ms": {t: round(v, 4) for t, v in verification_budgets.items()},
+        "budget_source": budget_source,
         "warnings": warnings,
+    }
+    out["why"] = explain(out)
+    return out
+
+
+def explain(result: dict[str, Any]) -> dict[str, Any] | None:
+    """Why the best split wins: per-cluster OPP (f, V) change, the moved units and what they cost in task time.
+
+    CPU power ~ active time x C V^2 f per cluster: moving util off the busiest cluster lets schedutil drop it
+    one or more OPPs (V^2 f falls super-linearly) while the receiving clusters stay on their floor OPP and only
+    add active time. The price is task latency: the same cycles run at a lower frequency.
+    """
+    ref, best = result.get("reference"), result.get("best")
+    if not ref or not best:
+        return None
+    units = {u["unit"]: u for u in result.get("units") or []}
+    clusters = []
+    for c in result.get("pool") or []:
+        f0, f1 = ref["mhz"].get(c), best["mhz"].get(c)
+        p0, p1 = ref["mw"].get(c, 0.0), best["mw"].get(c, 0.0)
+        clusters.append({"cluster": c, "mhz": [f0, f1], "mv": [ref["mv"].get(c), best["mv"].get(c)],
+                         "mw": [round(p0, 2), round(p1, 2)], "delta_mw": round(p1 - p0, 2),
+                         "opp_change": "down" if (f1 or 0) < (f0 or 0) else "up" if (f1 or 0) > (f0 or 0) else "same"})
+    dsu = {"mhz": [ref["mhz"].get("dsu"), best["mhz"].get("dsu")],
+           "mw": [round(ref["mw"].get("dsu", 0.0), 2), round(best["mw"].get("dsu", 0.0), 2)],
+           "delta_mw": round(best["mw"].get("dsu", 0.0) - ref["mw"].get("dsu", 0.0), 2)}
+    moves = []
+    budgets = result.get("budgets_ms") or {}
+    for name in best.get("moved") or []:
+        u = units.get(name, {})
+        to = best["assign"].get(name)
+        ms0 = max((ref.get("task_ms") or {}).get(t, 0.0) for t in u.get("tasks", [name]))
+        ms1 = max((best.get("task_ms") or {}).get(t, 0.0) for t in u.get("tasks", [name]))
+        moves.append({"unit": name, "from": u.get("home"), "to": to, "util_fmax_to": (u.get("util_fmax") or {}).get(to),
+                      "ms": [round(ms0, 3), round(ms1, 3)], "stretch": round(ms1 / ms0, 2) if ms0 else None,
+                      "budget_ms": u.get("budget_ms")})
+    stretched = []
+    for t, ms1 in (best.get("task_ms") or {}).items():
+        ms0 = (ref.get("task_ms") or {}).get(t)
+        if ms0 and ms1 > ms0 * 1.2:
+            b = budgets.get(t)
+            stretched.append({"task": t, "ms": [round(ms0, 3), round(ms1, 3)], "stretch": round(ms1 / ms0, 2),
+                              "budget_ms": round(b, 3) if b else None,
+                              "budget_used_pct": round(100 * ms1 / b, 1) if b else None})
+    stretched.sort(key=lambda x: -x["stretch"])
+    top = max(clusters, key=lambda c: -c["delta_mw"], default=None)  # biggest saving
+    bound = next((b for b in (result.get("boundaries") or {}).get("reference") or []
+                  if top and b["cluster"] == top["cluster"] and b.get("next_lower_mhz")), None)
+    return {
+        "delta_mw": round(best["total_mw"] - ref["total_mw"], 2),
+        "clusters": clusters, "dsu": dsu, "moves": moves, "stretched": stretched[:8],
+        "driver": {"cluster": top["cluster"], "mhz": top["mhz"], "mv": top["mv"], "delta_mw": top["delta_mw"],
+                   "peak_util": bound.get("peak_cpu_util") if bound else None,
+                   "delta_util_needed": bound.get("delta_util_needed") if bound else None,
+                   "next_lower_mhz": bound.get("next_lower_mhz") if bound else None} if top else None,
+        "budget_limited": [m["unit"] for m in moves if m.get("budget_ms") and m["ms"][1] >= 0.9 * m["budget_ms"]],
     }

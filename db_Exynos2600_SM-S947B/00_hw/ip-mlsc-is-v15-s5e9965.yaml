@@ -20,8 +20,10 @@ capabilities:
     hw_name: MLSC
     source: assumed_capacity
     source_note: 'PPC 8: RT path (CSIS -> MLSC) runs at 8 pixels/clock (Joo, 2026-10-04).
-      Power coefficient is unavailable and core power is excluded.'
+      SAMPLE unit power is an unverified exploration assumption; replace with an in-house coefficient.'
     ppc: 8.0
+    unit_power_mw_mp: 0.6
+    # SAMPLE (off-site, 2026-10-11): assumed unit power so lever / power distribution is complete; replace with in-house coefficient.
     vdd: VDD_CAM
     dvfs_group: CAM
   properties:

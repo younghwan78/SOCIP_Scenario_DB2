@@ -17,6 +17,7 @@ import { applyDsu, type DsuPolicy } from '../lib/dsu'
 import { applyDsuRebalance, defaultPool, rebalanceApi, type CpuRebalance, type CpuRebalanceRequest } from '../lib/rebalance'
 import { AssumptionSensitivity, CrossSocCompare, RebalanceResults, RebalanceSetup, type Knob as RbKnob, type SetupRow, type TaskState } from '../components/RebalanceView'
 import { ModelCheckDist } from '../components/ClockResidency'
+import { RebalanceWhy } from '../components/RebalanceWhy'
 import { CpuPurpose, type CpuRun } from '../components/CpuPurpose'
 
 type TaskEdit = { sweep: string[] | null; threads: string; budget: string; growth: string }
@@ -70,6 +71,8 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
   // C6: the same profile rebalanced on another project's topology (sequential run, one admission slot at a time)
   const [cmpTarget, setCmpTarget] = useState('')
   const [rbKnob, setRbKnob] = usePref<RbKnob>('cpu.rb.knob', 'cpuset')
+  // SW timing coupling with the profile variant's Timing Budget (default: keep pipeline latency)
+  const [timingMode, setTimingMode] = usePref<'off' | 'stage_slack'>('cpu.rb.timing', 'stage_slack')
   const [cmpRb, setCmpRb] = useState<CpuRebalance | null>(null)
   const [cmpErr, setCmpErr] = useState<string | null>(null)
   // CPU-07: the run log survives reloads (per browser); each entry keeps its full request context
@@ -122,7 +125,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
     const byGroup = new Map<string, string[]>()
     const present = new Set(rbRows.map((r) => r.task))
     for (const [t, g] of Object.entries(groups)) if (g && present.has(t) && (taskStates[t] ?? 'auto') === 'auto') byGroup.set(g, [...(byGroup.get(g) ?? []), t])
-    return { ...base, top: rbTop, pool, locks, co_move: [...byGroup.values()].filter((g) => g.length > 1) }
+    return { ...base, top: rbTop, pool, locks, co_move: [...byGroup.values()].filter((g) => g.length > 1), timing_coupling: timingMode }
   }
   const runRb = async (payload: CpuRebalanceRequest) => {
     const id = ++requestId.current
@@ -173,7 +176,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
     setResult(null)
     if (profile && target) {
       const req = request(changed ? {} : edits, changed ? null : dsuReq)
-      if (mode === 'rebalance') void runRb(changed ? { ...req, top: rbTop, pool: [], locks: {}, co_move: [] } : rbRequest(req))
+      if (mode === 'rebalance') void runRb(changed ? { ...req, top: rbTop, pool: [], locks: {}, co_move: [], timing_coupling: timingMode } : rbRequest(req))
       else void run(req)
     }
     return () => { ++requestId.current }
@@ -418,6 +421,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
       {error && <div className="err">{error}</div>}
       {mode === 'rebalance' && rb && <div className="tb-grid">
         {cmpTarget && <CrossSocCompare a={rb} b={cmpRb ? applyDsuRebalance(cmpRb, dsuExp) : null} aName={topo?.soc_ref ?? target} bName={inputs.data?.topologies.find((t) => t.id === cmpTarget)?.soc_ref ?? cmpTarget} error={cmpErr} busy={busy} />}
+        <RebalanceWhy r={rb} mode={timingMode} onMode={(m) => { setTimingMode(m); setPendingRun(true) }} />
         <RebalanceResults r={rb} sel={rbSel} setSel={setRbSel} knob={rbKnob}
           onPickStrategy={(assign) => setTaskStates((m) => ({ ...m, ...Object.fromEntries(Object.entries(assign).flatMap(([u, c]) => u.split('+').map((t) => [t, `pin:${c}` as TaskState]))) }))}
           sensitivity={rbRaw && <AssumptionSensitivity base={rb} dsu={dsuExp}

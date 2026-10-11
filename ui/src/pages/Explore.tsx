@@ -1,9 +1,9 @@
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useRef, useState } from 'react'
 import type { Ctx } from '../App'
 import { useAsync } from '../lib/route'
 import { fmt, type Statistic } from '../lib/timingBudget'
 import {
-  DEFAULT_RUN, METRIC_COLOR, archApi, bestOption, caseCount, caseDelta, coverageOf, levels, promoteTargets, runBody, short, variantKey,
+  DEFAULT_RUN, IQ_COLOR, METRIC_COLOR, archApi, caseGroups, bestOption, caseCount, caseDelta, coverageOf, levels, promoteTargets, runBody, short, variantKey,
   type DistKey, type ExpCase, type RunDetail, type RunOptions, type VariantResult,
 } from '../lib/archExplore'
 import { Card } from '../components/TimingCharts'
@@ -11,6 +11,10 @@ import { AxisSpread, BufferSavings, CompositionBars, DomainLevels, IpModes, Rang
 import { DataTable, type Column } from '../components/DataTable'
 import { OPTION_NOTE, OptionResults, signed } from '../components/PowerOptions'
 import { TiersView } from '../components/ExploreTiers'
+import { LeverAnalysisView, type Measured } from '../components/LeverAnalysis'
+import { calibrationApi } from '../lib/calibration'
+import { useTip } from '../components/ChartTip'
+import { caseTip } from '../components/CaseTip'
 import { useBattery, type Battery } from '../lib/battery'
 import { JUDGE_CLASS, JUDGE_LABEL, judgePower, useReferences } from '../lib/review'
 import { VariantFailures } from '../components/VariantFailures'
@@ -272,7 +276,7 @@ function VariantDetail({ v, run, readOnly }: { v: VariantResult; run: RunDetail;
     [run.id, v.scenario_id, v.variant_id])
   if (fullQ.error) return <div className="err" style={{ gridColumn: '1 / -1' }}>{short(v.variant_id)} 상세 조회 실패: {fullQ.error}</div>
   if (!fullQ.data) return <div className="empty" style={{ gridColumn: '1 / -1' }}>{short(v.variant_id)} 상세 불러오는 중…</div>
-  return <VariantDetailBody v={fullQ.data} run={run} readOnly={readOnly} battery={battery} iqKeep={refs?.policy.register_baseline === 'iq_keep'} />
+  return <VariantDetailBody key={JSON.stringify([run.id, v.scenario_id, v.variant_id, readOnly])} v={fullQ.data} run={run} readOnly={readOnly} battery={battery} iqKeep={refs?.policy.register_baseline === 'iq_keep'} />
 }
 
 function VariantDetailBody({ v, run, readOnly, battery, iqKeep = false }: { v: VariantResult; run: RunDetail; readOnly: boolean; battery: Battery; iqKeep?: boolean }) {
@@ -282,27 +286,62 @@ function VariantDetailBody({ v, run, readOnly, battery, iqKeep = false }: { v: V
   // project policy "iq_keep": the default registration is the IQ/performance-keeping optimum (tier A), not the lossy minimum
   const keepCase = iqKeep ? v.tiers?.keep?.best ?? null : null
   const keepRow = keepCase && keepCase.key !== rec?.key ? [{ rank: '기본 등록 · 화질 유지', c: keepCase }] : []
-  const defaultKey = iqKeep ? keepCase?.key : rec?.key
+  // default selection = 화질 무손실 최적 (tier keep) whenever it exists; the server default follows the project policy
+  const keepBest = v.tiers?.keep?.best ?? null
+  const serverDefault = iqKeep ? keepCase?.key : rec?.key
+  const defaultKey = keepBest?.key ?? serverDefault
   const cands: { rank: string; c: ExpCase }[] = rec
     ? [...keepRow, { rank: keepRow.length ? '최저 power (lossy)' : '추천', c: rec }, ...v.alternatives.map((c, i) => ({ rank: `#${i + 2}`, c })), ...pareto.map((c, i) => ({ rank: `Pareto ${i + 1}`, c })), { rank: 'baseline', c: v.baseline }]
     : [{ rank: 'baseline', c: v.baseline }]
   const seenKeys = new Set<string>()
   const candRows = cands.filter((x) => (seenKeys.has(x.c.key) ? false : (seenKeys.add(x.c.key), true)))
+  const [withRaise, setWithRaise] = useState(false)
+  const [open, setOpen] = useState<Record<'keep' | 'trade', boolean>>({ keep: false, trade: false })
+  const groups = v.design_points?.length ? caseGroups(v, withRaise) : null
+  const tagOf = (c: ExpCase): string[] => [c.key === defaultKey ? '기본 등록' : '', c.key === rec?.key ? '최저 power' : '',
+    c.key === v.baseline.key ? 'baseline' : '', c.dvfs_raise ? `DVFS +${c.dvfs_raise}` : ''].filter(Boolean)
+  const grouped: { group: 'keep' | 'trade'; rank: string; c: ExpCase }[] = groups
+    ? (['keep', 'trade'] as const).flatMap((g) => groups[g].slice(0, open[g] ? undefined : 5).map((c, i) => ({ group: g, rank: `#${i + 1}`, c })))
+    : []
   const [pick, setPick] = useState<string | undefined>(defaultKey)
   const [reason, setReason] = useState('')
   const [msg, setMsg] = useState<string>()
   const [busy, setBusy] = useState(false)
+  const allCases = groups ? [...groups.keep, ...groups.trade] : candRows.map((x) => x.c)
+  const registering = useRef(false)
+  const picked = allCases.find((c) => c.key === pick)
+  // IQ-keeping case at the resolved DVFS -> lever registration (no reason needed, rule lever:iq-keep)
+  const viaLever = !!picked && !!v.design_points?.length && !(picked.lossy && picked.compression.length) && !picked.dvfs_raise
+  const needsReason = !viaLever && pick !== serverDefault
   const promote = async () => {
-    if (busy || readOnly) return
-    const chosen = pick && pick !== defaultKey ? pick : undefined
+    if (registering.current || readOnly || !picked?.eligible) return
+    registering.current = true
     setBusy(true); setMsg(undefined)
     try {
+      if (viaLever && picked) {
+        const r = await archApi.registerLever({ run_id: run.id, scenario_id: v.scenario_id, variant_id: v.variant_id,
+          compression: picked.compression_modes ?? {}, options: [], iq_results: [], reason: reason || undefined, expected_project_ref: run.project_ref ?? undefined })
+        setMsg(r.promoted.length ? `등록: ${r.promoted[0].id} (${fmt(r.promoted[0].total_mw, 1)} mW · ${r.rule})` : `건너뜀: ${r.skipped?.[0]?.reason ?? ''}`)
+        return
+      }
+      const chosen = pick && pick !== serverDefault ? pick : undefined
       const r = await archApi.promote(run.id, [v.variant_id], chosen, reason || undefined, v.scenario_id, run.project_ref ?? undefined)
       setMsg(r.promoted.length ? `등록: ${r.promoted[0].id} (${fmt(r.promoted[0].total_mw, 1)} mW)` : `건너뜀: ${r.skipped[0]?.reason}`)
-    } catch (e) { setMsg(e instanceof Error ? e.message : String(e)) } finally { setBusy(false) }
+    } catch (e) { setMsg(e instanceof Error ? e.message : String(e)) } finally { registering.current = false; setBusy(false) }
   }
   const m = v.sw_margin
+  const tip = useTip()
+  const leverMin = v.levers?.milestones?.trade?.total_mw ?? null
+  // newest real measurement (else synthetic) of this variant: the anchor on the power-distribution axis
+  const covQ = useAsync(() => calibrationApi.coverage(v.scenario_id), [v.scenario_id])
+  const meas = (covQ.data?.[v.variant_id]?.measurements ?? []).find((x) => x.shown && x.total_mw != null)
+  const measured: Measured | null = meas ? { total_mw: meas.total_mw!, label: `${meas.synthetic ? 'synthetic' : meas.origin} · ${meas.silicon_rev ?? ''} ${meas.sw_baseline_ref ?? ''}`.trim() } : null
   return <>
+    <Card id="ax-levers" title={`${short(v.variant_id)} — Lever 분석: 화질 손해 없이 무엇이 가장 효과적인가`}
+      note="baseline → 화질 무손실 lever → IQ 평가 필요 lever → lossy 순으로 가장 큰 절감부터 · 점 분포 = 모든 설계 조합" defaultWide>
+      <LeverAnalysisView la={v.levers} battery={battery} measured={measured}
+        reg={{ runId: run.id, scenarioId: v.scenario_id, variantId: v.variant_id, projectRef: run.project_ref, readOnly }} />
+    </Card>
     <Card id="ax-cases" title={`${short(v.variant_id)} — 추천 · 대안 조합`} note={`${v.counts.cases.toLocaleString()} 조합 · eligible ${v.counts.eligible.toLocaleString()} · ${fmt(v.fps, 0)} fps${v.eis_on ? ' · EIS' : ''} · 판정 ${v.throughput_model === 'pipelined' ? 'pipeline buffering' : 'stage 1 frame'}${keepRow.length ? ' · 기본 등록 = 화질 유지 최적 (과제 기준)' : ''}`} defaultWide>
       {(v.ip_modes ?? []).length > 0 && <div className="faint" style={{ fontSize: 12, marginBottom: 6 }}>
         IP mode (모든 조합 공통): {(v.ip_modes ?? []).map((m) => `${m.node.toUpperCase()} ${m.mode}${m.unit_power_mw_mp !== null ? ` ${fmt(m.unit_power_mw_mp, 2)}` : ''}`).join(' · ')} <span className="mono">mW/MP</span>
@@ -313,27 +352,37 @@ function VariantDetailBody({ v, run, readOnly, battery, iqKeep = false }: { v: V
       {coverageOf(v) === 'partial' && <div className="faint" style={{ fontSize: 12, marginBottom: 6 }}>
         <span className="badge v-warn">부분 모델</span> 전력 미모델 IP {(v.coverage?.zero_power_ips ?? []).join(', ')} — Total은 모델된 IP 합계(하한)
         {v.status?.power_budget_status === 'unknown' ? ' · power budget 판정 불가' : ''}</div>}
+      {groups && <label className="ax-check" style={{ fontSize: 12 }} title="DVFS를 해석 level보다 올린 조합 — power는 늘고 성능 여유만 늘어남"><input type="checkbox" checked={withRaise} onChange={() => setWithRaise(!withRaise)} />DVFS 여유(+level) 조합 포함</label>}
+      <div className="faint" style={{ fontSize: 12, marginBottom: 4 }}>이 표 = variant 자체의 compression · DVFS 조합만 (power option 미포함) · 행에 마우스 = 조합 상세{leverMin !== null && rec && leverMin < rec.total_mw - 0.05 ? <> · Lever 분석 최저 <b className="mono">{fmt(leverMin, 1)}</b> mW는 IQ 평가 option(L0 skip · bcrop · IP mode) 포함</> : null}</div>
       <table className="tb-mini-table" style={{ width: '100%' }}>
-        <thead><tr><th /><th>순위</th><th>Total mW</th><th title="CPU / CPU BW / IP / IP BW">CPU / CPU BW / IP / IP BW</th><th>BW MB/s</th><th>Δ 추천 대비</th><th>SW</th><th>Compression</th><th>DVFS</th></tr></thead>
-        <tbody>{candRows.map(({ rank, c }) => {
-          const d = rec ? caseDelta(c, rec) : null
-          return (
-            <tr key={c.key} className={pick === c.key ? 'selected' : ''} onClick={() => setPick(c.key)} style={{ cursor: 'pointer' }}>
+        <thead><tr><th /><th>순위</th><th>Total mW</th><th title="CPU / CPU BW / IP / IP BW">CPU / CPU BW / IP / IP BW</th><th>BW MB/s</th><th>{groups ? 'Δ baseline' : 'Δ 추천 대비'}</th><th>SW</th><th>Compression</th><th>DVFS</th></tr></thead>
+        <tbody>{(groups ? grouped : candRows.map((x) => ({ ...x, group: null as 'keep' | 'trade' | null }))).map(({ rank, c, group }, i, arr) => {
+          const d = groups ? caseDelta(c, v.baseline) : rec ? caseDelta(c, rec) : null
+          const head = groups && group && (i === 0 || arr[i - 1].group !== group)
+          const tail = groups && group && (i === arr.length - 1 || arr[i + 1].group !== group)
+          const total = groups && group ? groups[group].length : 0
+          return (<Fragment key={c.key}>
+            {head && <tr className="case-group"><td colSpan={9} style={{ color: group === 'keep' ? IQ_COLOR.neutral : IQ_COLOR.trade }}>
+              {group === 'keep' ? '화질 유지 — 무압축 · lossless' : '화질 trade — lossy 포함 (IQ 평가 · 사유 필요)'} <span className="faint">· {total}개 · 낮은 power 순</span></td></tr>}
+            <tr key={c.key} className={pick === c.key ? 'selected' : ''} onClick={() => setPick(c.key)} style={{ cursor: 'pointer' }} {...tip(() => caseTip(c, v))}>
               <td><input type="radio" checked={pick === c.key} onChange={() => setPick(c.key)} aria-label={`${rank} 선택`} /></td>
-              <td>{rank}{c.lossy && c.compression.length ? <span className="badge v-warn" style={{ marginLeft: 4 }}>lossy</span> : null}{c.assumed_ratio && c.compression.length ? <span className="badge v-warn" style={{ marginLeft: 4 }} title="catalog에 없는 ratio 사용">가정</span> : null}</td>
+              <td>{rank}{groups && tagOf(c).map((x) => <span key={x} className="badge v-info" style={{ marginLeft: 4 }}>{x}</span>)}{!groups && c.lossy && c.compression.length ? <span className="badge v-warn" style={{ marginLeft: 4 }}>lossy</span> : null}{c.assumed_ratio && c.compression.length ? <span className="badge v-warn" style={{ marginLeft: 4 }} title="catalog에 없는 ratio 사용">가정</span> : null}</td>
               <td className="mono"><b>{fmt(c.total_mw, 1)}</b></td>
               <td><span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><SplitBar p={c} width={80} /><span className="mono faint">{fmt(c.cpu_mw, 0)}/{fmt(c.bw_cpu_mw, 0)}/{fmt(c.hw_mw, 0)}/{fmt(c.bw_ip_mw ?? c.bw_mw, 0)}</span></span></td>
               <td className="mono">{fmt(c.bw_mbs, 0)}</td>
               <td className="mono" style={{ color: d && d.total > 0 ? 'var(--del-text)' : undefined }}>{d ? `${d.total >= 0 ? '+' : ''}${fmt(d.total, 1)}` : '—'}</td>
               <td className="mono faint">{c.statistic} ×{c.runtime_scale}</td>
-              <td title={c.compression.join(', ')}>{c.compression.length ? `${c.compression.length} buf` : '—'}</td>
+              <td className="mono" style={{ fontSize: 11 }}>{c.compression.length ? c.compression.map((b) => `${b.replace('PYRAMID_', '')}:${(c.compression_modes?.[b] ?? '').toUpperCase().endsWith('LOSSLESS') ? 'LL' : 'LY'}`).join(' ') : '—'}</td>
               <td className="mono faint">{levels(c.dvfs)}{c.dvfs_raise ? ` (+${c.dvfs_raise})` : ''}</td>
-            </tr>)
+            </tr>
+            {tail && total > 5 && <tr><td colSpan={9}><button className="btn tb-mini" onClick={() => setOpen({ ...open, [group!]: !open[group!] })}>
+              {open[group!] ? '상위 5개만' : `세부 순위 전체 (${total})`}</button></td></tr>}
+          </Fragment>)
         })}</tbody>
       </table>
       <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-        <input className="input" style={{ flex: 1, minWidth: 240 }} placeholder={pick === defaultKey || pick === rec?.key ? '사유 (선택)' : '추천 외 조합 선택 사유 (필수)'} value={reason} onChange={(e) => setReason(e.target.value)} />
-        <button className="btn primary" disabled={busy || readOnly || !v.spec_ok || (pick !== defaultKey && pick !== rec?.key && !reason)} onClick={promote}
+        <input className="input" style={{ flex: 1, minWidth: 240 }} placeholder={needsReason ? (picked?.lossy ? 'lossy(화질 trade) 선택 사유 (필수)' : '기본 외 조합 선택 사유 (필수)') : '사유 (선택)'} value={reason} onChange={(e) => setReason(e.target.value)} />
+        <button className="btn primary" disabled={busy || readOnly || !v.spec_ok || !picked?.eligible || (needsReason && !reason.trim())} onClick={promote}
           title={readOnly ? '다른 과제의 run — 비교 보기 전용' : undefined}>{busy ? '등록 중…' : '예측으로 등록 (current)'}</button>
         {msg && <span className="faint" style={{ fontSize: 12 }}>{msg}</span>}
       </div>

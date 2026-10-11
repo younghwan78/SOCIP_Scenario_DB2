@@ -21,6 +21,8 @@ export interface VariantStatus {
 }
 export interface ExpCase {
   key: string; statistic: Statistic; runtime_scale: number; compression: string[]; dvfs: Record<string, number>; dvfs_raise: number
+  /** engine rev ≥ 11: buffer -> chosen mode (lossless and lossy are separate choices) */
+  compression_modes?: Record<string, string>
   total_mw: number; cpu_mw: number; hw_mw: number; bw_mw: number; bw_mbs: number; lossy: boolean; assumed_ratio: boolean
   // engine rev 2+: BW split into IP BW (HW nodes) and CPU BW (SW tasks)
   bw_ip_mw?: number; bw_cpu_mw?: number; bw_ip_mbs?: number; bw_cpu_mbs?: number
@@ -30,6 +32,8 @@ export interface BufferRow {
   buffer: string; format: string; family: string; nodes: string[]; support: string; selectable: boolean; explored?: boolean
   skip_reason?: string | null; mode?: string; comp_ratio?: number; ratio_source?: string; lossy?: boolean
   raw_mbs?: number; delta_mbs?: number; delta_mw?: number; ports?: string[]; listed_modes?: Record<string, string[]>; unsupported_ports?: string[]
+  /** engine rev ≥ 11: every evaluated mode of the buffer (lossless / lossy) */
+  modes?: { mode: string; comp_ratio: number; ratio_source: string; lossy: boolean; delta_mw: number; delta_mbs: number; selectable: boolean; skip_reason?: string | null }[]
 }
 export interface DomainOpt { level: number; speed_mhz: number; voltage_mv: number; delta_mw: number; raise: boolean }
 export interface DomainRow { domain: string; base_level: number; nodes: string[]; max_required_mhz: number; options: DomainOpt[] }
@@ -67,11 +71,89 @@ export interface VariantResult {
   tiers?: Tiers
   /** tier A best total (compact copy for the run list view) */
   keep_total_mw?: number | null
+  /** engine rev ≥ 11: per-lever effect, IQ-first greedy path and the design-space points */
+  levers?: LeverAnalysis
+  /** engine rev ≥ 11: every compression choice of the objective slice at the resolved DVFS levels */
+  design_points?: DesignPoint[]
   /** timing judgement of the run (project review policy) */
   throughput_model?: 'stage' | 'pipelined'
   /** false = list-view row (run?view=summary): fetch archApi.runVariant for slices / buffers / options */
   detail?: boolean
 }
+// ---------------------------------------------------------------- lever analysis (engine rev ≥ 11)
+/** neutral = keeps image quality (lossless SBWC) · eval = needs IQ evaluation (IP mode / knob) · trade = lossy */
+export type IqClass = 'neutral' | 'eval' | 'trade'
+export interface LeverDelta { total_mw: number; cpu_mw: number; hw_mw: number; bw_mw: number; bw_mbs: number }
+export interface LeverRow {
+  key: string; kind: 'compression' | 'option'; label: string; iq: IqClass; confidence: string; note?: string | null
+  buffer?: string; mode?: string; comp_ratio?: number | null
+  /** vs baseline, this lever only */
+  alone: LeverDelta | null
+  /** at the end of the path: on vs off with every other chosen lever kept */
+  in_context: LeverDelta | null; in_final?: boolean
+  /** the buffer no longer exists with the final options (e.g. L0 skipped) */
+  moot?: boolean; overlap: boolean
+}
+export interface LeverStep {
+  phase: 'baseline' | IqClass; lever?: string; label: string; iq: IqClass; delta_mw: number; total_mw: number
+  bw_mbs: number; delta_bw_mbs?: number; dropped?: string[] | null
+}
+export interface LeverMilestone { total_mw: number; bw_mbs: number; delta_mw: number; delta_pct: number | null; options: string[]; compression: Record<string, string> }
+export interface LeverPoint {
+  eligible?: boolean
+  options: string[]; comp: Record<string, string>; iq: IqClass; total_mw: number; bw_mbs: number; cpu_mw: number; hw_mw: number; bw_mw: number
+  /** API ≥ 2026-10-11 b: option item keys and the case key (base option set = a case of this run) */
+  option_keys?: string[]; key?: string | null
+}
+export interface LeverRegisterBody {
+  run_id: string; scenario_id: string; variant_id: string; compression: Record<string, string>; options: string[]
+  iq_results: { option_key: string; status: 'adopted' | 'rejected'; note: string }[]; reason?: string; expected_project_ref?: string
+}
+export interface LeverRegisterResult {
+  status: 'registered' | 'rejected'; rule?: string; case_key?: string; run_id?: string; rejected?: string[]; message?: string
+  promoted: { id: string; total_mw: number }[]; skipped?: { variant_id: string; reason: string }[]
+}
+export interface LeverAnalysis {
+  status: 'ok' | 'none'
+  basis?: { statistic: string; runtime_scale: number; dvfs: string; sw_band_mw?: [number, number] | null }
+  baseline?: LeverDelta
+  levers?: LeverRow[]
+  costs?: { key: string; label: string; delta_mw: number; speed_mhz: number; voltage_mv: number }[]
+  steps?: LeverStep[]
+  milestones?: Partial<Record<IqClass, LeverMilestone>>
+  best_lever?: Partial<Record<IqClass, string | null>>
+  points?: LeverPoint[]; point_count?: number
+}
+export interface DesignPoint {
+  eligible?: boolean
+  key?: string; comp: Record<string, string | null>; dvfs?: Record<string, number>
+  total_mw: number; cpu_mw: number; hw_mw: number; bw_mw: number; bw_ip_mw?: number; bw_cpu_mw?: number; bw_mbs: number; lossy: boolean; assumed: boolean
+}
+
+/** Every listable case of the variant (design points at the resolved DVFS + listed cases), split by IQ cost. */
+export function caseGroups(v: VariantResult, withRaise: boolean): { keep: ExpCase[]; trade: ExpCase[] } {
+  const b = v.baseline
+  const fromPoint = (p: DesignPoint): ExpCase | null => (p.key ? {
+    key: p.key, statistic: b.statistic, runtime_scale: b.runtime_scale, dvfs: p.dvfs ?? b.dvfs, dvfs_raise: 0,
+    compression: Object.keys(p.comp), compression_modes: Object.fromEntries(Object.entries(p.comp).filter(([, m]) => m)) as Record<string, string>,
+    total_mw: p.total_mw, cpu_mw: p.cpu_mw, hw_mw: p.hw_mw, bw_mw: p.bw_mw, bw_ip_mw: p.bw_ip_mw, bw_cpu_mw: p.bw_cpu_mw, bw_mbs: p.bw_mbs,
+    lossy: p.lossy, assumed_ratio: p.assumed, verdict: b.verdict, eligible: p.eligible ?? b.eligible,
+  } : null)
+  const listed = [v.recommended, ...v.alternatives, ...(v.pareto ?? []), v.baseline, v.tiers?.keep?.best, v.tiers?.trade?.best]
+  const seen = new Set<string>()
+  const all: ExpCase[] = []
+  for (const c of [...(v.design_points ?? []).map(fromPoint), ...listed]) {
+    if (!c || seen.has(c.key) || (!withRaise && c.dvfs_raise > 0)) continue
+    seen.add(c.key); all.push(c)
+  }
+  all.sort((x, y) => x.total_mw - y.total_mw || x.bw_mbs - y.bw_mbs)
+  const trade = (c: ExpCase) => c.lossy && c.compression.length > 0
+  return { keep: all.filter((c) => !trade(c)), trade: all.filter(trade) }
+}
+
+export const IQ_LABEL: Record<IqClass, string> = { neutral: '화질 무손실', eval: 'IQ 평가 필요', trade: '화질 trade (lossy)' }
+export const IQ_COLOR: Record<IqClass, string> = { neutral: '#2F6F68', eval: '#B45309', trade: '#9B1C1C' }
+
 export interface IpModeAlt { mode: string; unit_power_mw_mp: number | null; ppc: number | null; explorable: boolean; label?: string | null; note?: string | null }
 export interface IpModeRow {
   node: string; ip_ref: string; hw_name: string; mode: string; declared: boolean
@@ -159,6 +241,7 @@ export interface BoardRow {
   condition?: PredCondition
 }
 export interface PredCondition {
+  applied_options?: { key: string; label: string }[]
   warmup_frames?: number
   source: 'timing-budget' | 'exploration'; statistic: string | null; runtime_scale: number | null; throughput_model: string; eis: string
   cpu_model: string; rt_margin: number | null; output_margin: number | null; config_profile_ref: string | null
@@ -197,7 +280,8 @@ export function conditionText(c: PredCondition | undefined): string {
   return [`${c.source === 'timing-budget' ? 'TB' : '탐색'}`, `SW ${c.statistic ?? '?'} ×${c.runtime_scale ?? '?'}`, c.throughput_model === 'pipelined' ? 'pipeline' : 'stage',
     c.cpu_model === 'profile' ? 'CPU 측정' : null, ov.length ? `override ${ov.map(([d, l]) => `${d}:L${l}`).join(',')}` : null,
     c.measured?.sw?.length ? '실측 SW' : null, c.measured?.clock_ref ? '실측 clock' : null,
-    c.power_params_ref ? `params ${c.power_params_ref}` : null].filter(Boolean).join(' · ')
+    c.power_params_ref ? `params ${c.power_params_ref}` : null,
+    c.applied_options?.length ? c.applied_options.map((o) => o.label || o.key).join(' + ') : null].filter(Boolean).join(' · ')
 }
 export interface VerdictStage { id: string; name?: string; sw_ms?: number; hw_ms?: number; budget_ms?: number; overhead_ms?: number; margin?: number; feasible?: boolean; fill_pct?: number; throughput?: string; longest_sw_ms?: number; chain_ms?: number }
 export interface VerdictDetail {
@@ -290,6 +374,8 @@ export const archApi = {
     send<{ promoted: { id: string; variant_id: string; total_mw: number }[]; skipped: { variant_id: string; reason: string }[] }>(
       'POST', '/arch/predictions/promote', { run_id: runId, variant_ids: variantIds, case_key: caseKey, reason, scenario_id: scenarioId, expected_project_ref: expectedProject }),
   board: (scenarioId?: string, projectRef?: string) => send<{ rows: BoardRow[] }>('GET', `/arch/predictions/board${q({ scenario_id: scenarioId, project_ref: projectRef })}`),
+  /** lever selector -> current prediction; options need IQ results (adopted) and are re-explored server side */
+  registerLever: (body: LeverRegisterBody) => send<LeverRegisterResult>('POST', '/arch/predictions/lever', body),
   optionReviews: (scenarioId?: string) => send<OptionReview[]>('GET', `/arch/power-options/reviews${q({ scenario_id: scenarioId })}`),
   setOptionReview: (body: { scenario_id: string; variant_id?: string; option_key: string; status: ReviewStatus; note?: string }) =>
     send<OptionReview>('PUT', '/arch/power-options/reviews', body),

@@ -41,6 +41,12 @@ POST_EJECT_EDITED_2600 = (
 )
 # 2026-10: SAMPLE GPU V-f / leakage (clock-residency GPU power estimate) added to the 2600 GPU IP only.
 POST_EJECT_GPU_2600 = "platforms/exynos2600/docs/00_hw/ip-gpu-s5e9965.yaml"
+# 2026-10-11: SAMPLE unit power (MLSC / GDC / VPS), MFC LowPower mode and SBWC lossless typical_ratio on the
+# 2600 platform only (lever analysis). The inherited 2700 snapshot predates them -> stripped back here.
+POST_EJECT_SAMPLE_POWER_2600 = tuple(f"platforms/exynos2600/docs/00_hw/{n}.yaml" for n in (
+    "ip-mlsc-is-v15-s5e9965", "ip-gdc-is-v15-s5e9965", "ip-vps-is-v15-s5e9965"))
+POST_EJECT_MFC_2600 = "platforms/exynos2600/docs/00_hw/ip-mfc-s5e9965.yaml"
+POST_EJECT_SOC_2600 = "platforms/exynos2600/docs/00_hw/soc-exynos2600.yaml"
 # 2026-10: review_policy (throughput / power reference / thermal watch) added to the 2600 project only.
 POST_EJECT_PROJECT_2600 = "projects/sm-s947b/project.yaml"
 
@@ -77,6 +83,25 @@ def root(tmp_path: Path) -> Path:
     for key in ("vf_table_sample", "leakage_sample"):
         gdoc["capabilities"]["power_model"].pop(key, None)
     gpu.write_text(yaml.safe_dump(gdoc, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    for rel in POST_EJECT_SAMPLE_POWER_2600:
+        path = r / rel
+        sdoc = yaml.safe_load(path.read_text(encoding="utf-8"))
+        sdoc["capabilities"]["sim"].pop("unit_power_mw_mp", None)
+        sim = sdoc["capabilities"]["sim"]
+        sim["source_note"] = sim["source_note"].replace(
+            "SAMPLE unit power is an unverified exploration assumption; replace with an in-house coefficient.",
+            "Power coefficient is unavailable and core power is excluded.")
+        path.write_text(yaml.safe_dump(sdoc, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    mfc = r / POST_EJECT_MFC_2600
+    mdoc = yaml.safe_load(mfc.read_text(encoding="utf-8"))
+    mdoc["capabilities"]["sim"]["modes"].pop("LowPower", None)
+    mfc.write_text(yaml.safe_dump(mdoc, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    soc = r / POST_EJECT_SOC_2600
+    sodoc = yaml.safe_load(soc.read_text(encoding="utf-8"))
+    for mode in sodoc["compression_modes"].values():
+        mode.pop("typical_ratio", None)
+        mode.pop("note", None)
+    soc.write_text(yaml.safe_dump(sodoc, allow_unicode=True, sort_keys=False), encoding="utf-8")
     proj = r / POST_EJECT_PROJECT_2600
     pdoc = yaml.safe_load(proj.read_text(encoding="utf-8"))
     (pdoc["document"].get("globals") or {}).pop("review_policy", None)

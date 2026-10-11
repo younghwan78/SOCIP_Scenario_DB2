@@ -50,9 +50,9 @@ from scenario_db.sim.timing_budget import (
 )
 from scenario_db.sim import power_options as po
 from scenario_db.sim.power_attribution import attribute
-from scenario_db.sim.transfers import compression_catalog
+from scenario_db.sim.transfers import compression_catalog, compression_typical
 
-ENGINE_REV = "arch-exploration/10"  # 10: shared CPU load, all output streams, resolved timing manifest
+ENGINE_REV = "arch-exploration/11"  # 11: lossless + lossy per buffer, lever analysis; 10: shared CPU load, all output streams
 # Power = CPU(SW) + IP core + BW; BW = IP DMA (HW nodes) + CPU DMA (SW tasks, e.g. mpeg_writer)
 DIST_KEYS = ("total_mw", "cpu_mw", "hw_mw", "bw_mw", "bw_ip_mw", "bw_cpu_mw", "bw_mbs", "bw_ip_mbs", "bw_cpu_mbs")
 V_REF_MV = 710.0
@@ -89,7 +89,8 @@ CompressionMode = Literal["lossy", "lossless"]
 
 
 def _lossy() -> list[CompressionMode]:
-    return ["lossy"]
+    # lossless keeps image quality (IQ-neutral lever), lossy trades it: both are explored as separate choices
+    return ["lossless", "lossy"]
 
 
 def _mean_max() -> list[Statistic]:
@@ -184,6 +185,7 @@ def explore_variant(
     if spec.axes.power_options.enabled:
         summary["power_options"] = explore_power_options(graph, spec, config, tables, summary)
         summary["counts"]["option_cases"] = summary["power_options"]["cases"]
+    summary["levers"] = lever_analysis(summary)
     summary["input_hash"] = input_hash(graph, spec, config, tables)
     sections, blobs = input_manifest(graph, config, tables, timing=spec.timing)
     summary["input_sections"] = sections  # section -> sha256 of the resolved input (blobs stored per run)
@@ -222,7 +224,8 @@ def _explore(graph, spec: ArchExplorationSpec, config: SimulationRunConfig,
     for s in slices:
         s["domains"] = dvfs_options(s["ips"], tables, axes.dvfs_headroom_levels, config.asv_group)
 
-    n_comp = 2 ** len(active)
+    comp_sets = _subset_sums(active)
+    n_comp = len(comp_sets)
     n_dvfs = math.prod(len(d["options"]) for d in obj_slice["domains"]) if obj_slice["domains"] else 1
     total_cases = n_comp * sum(math.prod(len(d["options"]) for d in s["domains"]) for s in slices)
     if total_cases > spec.max_cases_per_variant:
@@ -231,7 +234,6 @@ def _explore(graph, spec: ArchExplorationSpec, config: SimulationRunConfig,
             f"({len(slices)} SW x {n_comp} compression x {n_dvfs} DVFS); reduce axes"
         )
 
-    comp_sets = _subset_sums(active)
     dist: dict[str, list[float]] = {k: [] for k in DIST_KEYS}
     eligible_count = 0
     cases_obj: list[dict[str, Any]] = []
@@ -290,6 +292,7 @@ def _explore(graph, spec: ArchExplorationSpec, config: SimulationRunConfig,
             "constraints_verified": verified.get("constraints_pass") if verified else None,
         },
         "objective": obj.model_dump(),
+        "constraints": spec.constraints.model_dump(),
         "counts": {
             "cases": len(dist["total_mw"]),
             "eligible": eligible_count,
@@ -315,6 +318,9 @@ def _explore(graph, spec: ArchExplorationSpec, config: SimulationRunConfig,
         "warnings": obj_slice["warnings"][:20],
         # IQ/performance-keeping optimum and its near-optimal condition range vs the IQ-trading lossy optimum
         "tiers": _tiers([c for c in cases_obj if c["eligible"]], obj.tie_pct),
+        # every compression choice at the resolved DVFS levels (lever analysis / distribution)
+        "design_points": [_point(c) for c in cases_obj if not c["dvfs_raise"]],
+        "sw_band_mw": _sw_band(slices, obj_slice),
     }
     # compact copy for list views (the run table reads it without the whole tiers block)
     keep = (summary["tiers"].get("keep") or {}).get("best")
@@ -538,6 +544,9 @@ def explore_power_options(graph, spec: ArchExplorationSpec, config: SimulationRu
             "latency": r["objective_slice"].get("latency"),
             "delta_latency_ms": _latency_delta(base["objective_slice"].get("latency"), r["objective_slice"].get("latency")),
             "zero_power_ips": r["objective_slice"]["zero_power_ips"],
+            "keep_total_mw": (((r.get("tiers") or {}).get("keep") or {}).get("best") or {}).get("total_mw"),
+            "trade_total_mw": (((r.get("tiers") or {}).get("trade") or {}).get("best") or {}).get("total_mw"),
+            "design_points": r.get("design_points") or [],
         })
     def rank(x: dict[str, Any]) -> tuple:
         d = x["delta_mw"] if x["delta_mw"] is not None else x["raw_delta_mw"]
@@ -720,9 +729,16 @@ def _dma(graph, config: SimulationRunConfig) -> dict[tuple[str, str, str], tuple
 def compression_candidates(
     graph, axis: CompressionAxis, config: SimulationRunConfig, sw_nodes: set[str] | None = None
 ) -> list[dict[str, Any]]:
-    """Per-buffer BW/power delta when that buffer alone is compressed (split IP DMA / CPU DMA)."""
+    """Per-buffer BW/power delta when that buffer alone is compressed (split IP DMA / CPU DMA).
+
+    Every requested mode (lossless / lossy) is evaluated on its own (``modes``): a lossless SBWC buffer keeps
+    image quality, so it is a different lever from the lossy one. Ratio per mode: spec override > SoC catalog
+    ``typical_ratio`` (average, power) > catalog ``comp_ratio`` < 1 > assumed default. The top-level fields
+    repeat the selectable mode with the largest saving (older readers keep working).
+    """
     sw = sw_nodes or set()
     catalog = compression_catalog(graph.soc)
+    typical = compression_typical(graph.soc)
     buffers = (graph.scenario.pipeline or {}).get("buffers") or {}
     node_map = _buffer_nodes(graph)
     active = {str(n.get("id")) for n in graph.pipeline_nodes}
@@ -743,71 +759,65 @@ def compression_candidates(
             "base_compression": normalize_compression(eff.get("compression")),
         }
         if compression_enabled(eff.get("compression")):
-            out.append(row | {"selectable": False, "skip_reason": "already compressed"})
+            out.append(row | {"selectable": False, "skip_reason": "already compressed", "modes": []})
             continue
-        cands = []
+        undeclared = [n for n in row["nodes"] if n not in listed]
+        modes: list[dict[str, Any]] = []
         for m in axis.modes:
             mode = f"COMP_{fam}_{m.upper()}"
             if not axis.include_unsupported and any(
-                mode not in {normalize_compression(v) for v in modes}
-                and f"COMP_{m.upper()}" not in {str(v).upper() for v in modes}
-                for modes in listed.values()
+                mode not in {normalize_compression(v) for v in modes_}
+                and f"COMP_{m.upper()}" not in {str(v).upper() for v in modes_}
+                for modes_ in listed.values()
             ):
                 continue
             if mode in axis.ratio_overrides:
                 ratio, src = axis.ratio_overrides[mode], "override"
+            elif mode in typical and typical[mode] < 1.0:
+                ratio, src = typical[mode], "typical"
             elif mode in catalog and catalog[mode] < 1.0:
                 ratio, src = catalog[mode], "catalog"
             elif m.upper() in DEFAULT_RATIO and mode not in catalog:
                 ratio, src = DEFAULT_RATIO[m.upper()], "assumed"
             else:
                 continue
-            cands.append((mode, ratio, src, m == "lossy"))
-        if not cands:
-            out.append(row | {"selectable": False, "skip_reason": "no mode with ratio < 1"})
-            continue
-        cands.sort(key=lambda c: c[1])
-        chosen = None
-        port_block: list[str] = []
-        for cand in cands:
             variant = deepcopy(graph.variant)
             variant.buffer_overrides = deepcopy(variant.buffer_overrides or {})
-            variant.buffer_overrides.setdefault(bid, {}).update({"compression": cand[0], "comp_ratio": cand[1]})
+            variant.buffer_overrides.setdefault(bid, {}).update({"compression": mode, "comp_ratio": ratio})
             comp = _dma(replace(graph, variant=variant), config)
             ports = sorted(k for k in comp if abs(comp[k][0] - base.get(k, (0.0, 0.0))[0]) > 1e-9)
-            blocked = _port_unsupported(graph, ports, cand[0])
-            if chosen is None or (not blocked and port_block):
-                chosen, port_block = (cand, comp, ports), blocked
-            if not blocked:
-                break
-        assert chosen is not None  # cands is nonempty; the first candidate is always retained
-        (mode, ratio, src, lossy), comp, ports = chosen
-        raw = sum(base.get(k, (0.0, 0.0))[0] for k in ports)
-        d_bw = sum(comp[k][0] for k in comp) - sum(v[0] for v in base.values())
-        d_pw = sum(comp[k][1] for k in comp) - sum(v[1] for v in base.values())
-        keys = set(comp) | set(base)
+            blocked = _port_unsupported(graph, ports, mode)
+            raw = sum(base.get(k, (0.0, 0.0))[0] for k in ports)
+            d_bw = sum(comp[k][0] for k in comp) - sum(v[0] for v in base.values())
+            d_pw = sum(comp[k][1] for k in comp) - sum(v[1] for v in base.values())
+            keys = set(comp) | set(base)
 
-        def _part(cpu: bool, i: int) -> float:
-            return sum(comp.get(k, (0.0, 0.0))[i] - base.get(k, (0.0, 0.0))[i] for k in keys if (k[0] in sw) == cpu)
-        row |= {
-            "mode": mode, "comp_ratio": ratio, "ratio_source": src, "lossy": lossy,
-            "ports": [f"{n}.{p}" for n, p, _ in ports], "raw_mbs": round(raw, 2),
-            "delta_mbs": round(d_bw, 3), "delta_mw": round(d_pw, 4),
-            "delta_ip_mbs": round(_part(False, 0), 3), "delta_ip_mw": round(_part(False, 1), 4),
-            "delta_cpu_mbs": round(_part(True, 0), 3), "delta_cpu_mw": round(_part(True, 1), 4),
-            "unsupported_ports": port_block,
-        }
-        reason = None
-        undeclared = [n for n in row["nodes"] if n not in listed]
-        if support == "unsupported" and not axis.include_unsupported:
-            reason = "IP catalog lists no compression for an endpoint"
-        elif undeclared and axis.require_declared and not axis.include_unsupported:
-            reason = f"compression support not declared: {', '.join(undeclared)}"
-        elif port_block and not axis.include_unsupported:
-            reason = f"DMA port without {mode}: {', '.join(port_block)}"
-        elif -d_bw < axis.min_saving_mbs:
-            reason = f"saving {-d_bw:.1f} MB/s < {axis.min_saving_mbs} MB/s"
-        out.append(row | {"selectable": reason is None, "skip_reason": reason})
+            def _part(cpu: bool, i: int, comp=comp, keys=keys) -> float:
+                return sum(comp.get(k, (0.0, 0.0))[i] - base.get(k, (0.0, 0.0))[i] for k in keys if (k[0] in sw) == cpu)
+            reason = None
+            if support == "unsupported" and not axis.include_unsupported:
+                reason = "IP catalog lists no compression for an endpoint"
+            elif undeclared and axis.require_declared and not axis.include_unsupported:
+                reason = f"compression support not declared: {', '.join(undeclared)}"
+            elif blocked and not axis.include_unsupported:
+                reason = f"DMA port without {mode}: {', '.join(blocked)}"
+            elif -d_bw < axis.min_saving_mbs:
+                reason = f"saving {-d_bw:.1f} MB/s < {axis.min_saving_mbs} MB/s"
+            modes.append({
+                "mode": mode, "comp_ratio": ratio, "ratio_source": src, "lossy": m == "lossy",
+                "ports": [f"{n}.{p}" for n, p, _ in ports], "raw_mbs": round(raw, 2),
+                "delta_mbs": round(d_bw, 3), "delta_mw": round(d_pw, 4),
+                "delta_ip_mbs": round(_part(False, 0), 3), "delta_ip_mw": round(_part(False, 1), 4),
+                "delta_cpu_mbs": round(_part(True, 0), 3), "delta_cpu_mw": round(_part(True, 1), 4),
+                "unsupported_ports": blocked, "selectable": reason is None, "skip_reason": reason,
+            })
+        if not modes:
+            out.append(row | {"selectable": False, "skip_reason": "no mode with ratio < 1", "modes": []})
+            continue
+        sel = [x for x in modes if x["selectable"]]
+        top = min(sel or modes, key=lambda x: x["delta_mw"])
+        row |= {k: v for k, v in top.items() if k not in ("selectable", "skip_reason")}
+        out.append(row | {"selectable": bool(sel), "skip_reason": None if sel else top["skip_reason"], "modes": modes})
     out.sort(key=lambda r: (not r["selectable"], r.get("delta_mw", 0.0)))
     return out
 
@@ -815,20 +825,39 @@ def compression_candidates(
 _DELTA_KEYS = ("delta_mw", "delta_mbs", "delta_ip_mw", "delta_ip_mbs", "delta_cpu_mw", "delta_cpu_mbs")
 
 
+def _selectable_modes(b: dict[str, Any]) -> list[dict[str, Any]]:
+    return [m for m in (b.get("modes") or [b]) if m.get("selectable", True)]
+
+
 def _subset_sums(active: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Every per-buffer choice (off or one selectable mode); deltas add up (ports are independent)."""
     zero = {k: 0.0 for k in _DELTA_KEYS}
-    sets: list[dict[str, Any]] = [{"buffers": (), **zero, "lossy": False, "assumed": False}]
+    sets: list[dict[str, Any]] = [{"buffers": (), "modes": {}, **zero, "lossy": False, "assumed": False}]
     for b in active:
-        sets += [
-            {
-                "buffers": s["buffers"] + (b["buffer"],),
-                **{k: s[k] + b.get(k, 0.0) for k in _DELTA_KEYS},
-                "lossy": s["lossy"] or b["lossy"],
-                "assumed": s["assumed"] or b["ratio_source"] == "assumed",
-            }
-            for s in sets
-        ]
+        grown = list(sets)
+        for m in _selectable_modes(b):
+            grown += [
+                {
+                    "buffers": s["buffers"] + (b["buffer"],),
+                    "modes": {**s["modes"], b["buffer"]: m["mode"]},
+                    **{k: s[k] + m.get(k, 0.0) for k in _DELTA_KEYS},
+                    "lossy": s["lossy"] or bool(m["lossy"]),
+                    "assumed": s["assumed"] or m["ratio_source"] == "assumed",
+                }
+                for s in sets
+            ]
+        sets = grown
     return sets
+
+
+def _mode_of(buffers: list[dict[str, Any]], bid: str, mode: str | None) -> dict[str, Any] | None:
+    """The evaluated mode row of a buffer (``mode`` None = the top-level / best mode)."""
+    b = next((x for x in buffers if x["buffer"] == bid), None)
+    if b is None:
+        return None
+    if mode is None:
+        return b
+    return next((m for m in b.get("modes") or [] if m["mode"] == mode), b if b.get("mode") == mode else None)
 
 
 # ------------------------------------------------------------------- DVFS
@@ -886,12 +915,13 @@ def _case(s: dict[str, Any], cset: dict[str, Any], dset: dict[str, Any]) -> dict
     total = p["cpu_mw"] + hw + bw
     key = "|".join([
         f"s={s['statistic']}", f"x={s['runtime_scale']:g}",
-        "c=" + ("+".join(cset["buffers"]) or "-"),
+        "c=" + ("+".join(f"{b}:{_short_mode(cset.get('modes', {}).get(b))}" for b in cset["buffers"]) or "-"),
         "d=" + (",".join(f"{k}:L{v}" for k, v in sorted(dset["levels"].items())) or "-"),
     ])
     return {
         "key": key, "statistic": s["statistic"], "runtime_scale": s["runtime_scale"],
-        "compression": list(cset["buffers"]), "dvfs": dict(dset["levels"]), "dvfs_raise": dset["raises"],
+        "compression": list(cset["buffers"]), "compression_modes": dict(cset.get("modes") or {}),
+        "dvfs": dict(dset["levels"]), "dvfs_raise": dset["raises"],
         "total_mw": total, "cpu_mw": p["cpu_mw"], "hw_mw": hw, "bw_mw": bw,
         "bw_mbs": b["total_mbs"] + cset["delta_mbs"],
         "bw_ip_mw": p["bw_hw_mw"] + cset["delta_ip_mw"], "bw_cpu_mw": p["bw_sw_mw"] + cset["delta_cpu_mw"],
@@ -899,6 +929,11 @@ def _case(s: dict[str, Any], cset: dict[str, Any], dset: dict[str, Any]) -> dict
         "lossy": cset["lossy"], "assumed_ratio": cset["assumed"],
         "verdict": s["verdict"]["status"],
     }
+
+
+def _short_mode(mode: str | None) -> str:
+    m = str(mode or "").upper()
+    return "LL" if m.endswith("LOSSLESS") else "LY" if m.endswith("LOSSY") else (m or "?")
 
 
 def _rank(cases: list[dict[str, Any]], tie_pct: float) -> list[dict[str, Any]]:
@@ -1044,11 +1079,12 @@ def _verify(graph, spec, config, tables, case, buffers) -> dict[str, Any]:
     Two tolerances are kept apart: ``verify_tolerance_pct`` is model consistency (analytic vs
     re-simulated), the budgets in ``constraints`` are product limits and get no tolerance.
     """
-    by_id = {b["buffer"]: b for b in buffers}
     variant = deepcopy(graph.variant)
     variant.buffer_overrides = deepcopy(variant.buffer_overrides or {})
     for bid in case["compression"]:
-        b = by_id[bid]
+        b = _mode_of(buffers, bid, (case.get("compression_modes") or {}).get(bid))
+        if b is None:
+            raise LookupError(f"compression buffer {bid} not evaluated")
         variant.buffer_overrides.setdefault(bid, {}).update({"compression": b["mode"], "comp_ratio": b["comp_ratio"]})
     raised = {}
     if case["dvfs_raise"]:
@@ -1197,7 +1233,78 @@ def find_case(summary: dict[str, Any], case_key: str | None) -> tuple[dict[str, 
     base = summary.get("baseline")
     if base and base["key"] == case_key:
         return base, "user:baseline"
+    rebuilt = case_from_key(summary, case_key)
+    if rebuilt is not None:
+        return rebuilt, "user:design-point"
     return None, ""
+
+
+def case_from_key(summary: dict[str, Any], key: str | None) -> dict[str, Any] | None:
+    """Rebuild any evaluated case of the objective slice from its key (compression modes + DVFS levels).
+
+    The run stores only the listed cases; every other combination of the objective slice is exactly reproducible
+    from the frozen objective slice, the buffer modes and the DVFS options (the same analytic sums as the search).
+    Returns None for a key of another SW slice or with an unknown buffer / mode / level.
+    """
+    obj = summary.get("objective_slice")
+    if not obj or not key:
+        return None
+    parts = dict(p.split("=", 1) for p in key.split("|") if "=" in p)
+    try:
+        if parts.get("s") != obj["statistic"] or float(parts.get("x", "nan")) != float(obj["runtime_scale"]):
+            return None
+    except ValueError:
+        return None
+    bufs = {b["buffer"]: b for b in summary.get("buffers") or []}
+    zero = {k: 0.0 for k in _DELTA_KEYS}
+    cset: dict[str, Any] = {"buffers": (), "modes": {}, **zero, "lossy": False, "assumed": False}
+    for tok in [x for x in (parts.get("c") or "-").split("+") if x and x != "-"]:
+        bid, _, short = tok.partition(":")
+        b = bufs.get(bid)
+        if b is None or b.get("explored") is False:
+            return None
+        modes = [m for m in (b.get("modes") or [b]) if m.get("selectable", True) and m.get("mode")]
+        m = next((x for x in modes if _short_mode(x["mode"]) == short), None) if short else (modes[0] if modes else None)
+        if m is None:
+            return None
+        cset = {"buffers": cset["buffers"] + (bid,), "modes": {**cset["modes"], bid: m["mode"]},
+                **{k: cset[k] + m.get(k, 0.0) for k in _DELTA_KEYS},
+                "lossy": cset["lossy"] or bool(m.get("lossy")), "assumed": cset["assumed"] or m.get("ratio_source") == "assumed"}
+    domains = {d["domain"]: d for d in obj.get("domains") or summary.get("domains") or []}
+    levels: dict[str, int] = {}
+    delta, raises = 0.0, 0
+    for tok in [x for x in (parts.get("d") or "-").split(",") if x and x != "-"]:
+        dom, _, lv = tok.partition(":L")
+        opt = next((o for o in (domains.get(dom) or {}).get("options") or [] if str(o["level"]) == lv), None)
+        if opt is None:
+            return None
+        levels[dom] = int(lv)
+        delta += opt["delta_mw"]
+        raises += int(bool(opt["raise"]))
+    case = _case(obj, cset, {"levels": levels, "delta_mw": delta, "raises": raises})
+    if case["key"] != key:
+        return None
+    constraints = ExplorationConstraints.model_validate(summary.get("constraints") or {})
+    case["eligible"] = _slice_ok(obj, constraints)[0] and _case_ok(case, constraints)
+    return case
+
+
+def case_from_selection(summary: dict[str, Any], compression: dict[str, str]) -> dict[str, Any] | None:
+    """The objective-slice case with ``compression`` (buffer -> mode) at the resolved DVFS levels."""
+    obj = summary.get("objective_slice")
+    if not obj:
+        return None
+    order = [b["buffer"] for b in summary.get("buffers") or [] if b["buffer"] in compression]
+    if len(order) != len(compression):
+        return None
+    for bid, mode in compression.items():
+        candidate = _mode_of(summary.get("buffers") or [], bid, mode)
+        if candidate is None or candidate.get("mode") != mode:
+            return None
+    c = "+".join(f"{b}:{_short_mode(compression[b])}" for b in order) or "-"
+    doms = obj.get("domains") or summary.get("domains") or []
+    d = ",".join(f"{x['domain']}:L{x['base_level']}" for x in sorted(doms, key=lambda x: x["domain"])) or "-"
+    return case_from_key(summary, f"s={obj['statistic']}|x={obj['runtime_scale']:g}|c={c}|d={d}")
 
 
 def _latency_delta(old: dict[str, Any] | None, new: dict[str, Any] | None) -> dict[str, float | None]:
@@ -1231,14 +1338,18 @@ def prediction_payload(s: dict[str, Any], case: dict[str, Any], buffers: list[di
                     ip["power_mw"] = _ip_power_at(ip, v, opt["speed_mhz"])
                     ip["dvfs_level"] = opt["level"]
                     ip["set_clock_mhz"], ip["voltage_mv"] = opt["speed_mhz"], v
-    bufs = [
-        {"buffer": b["buffer"], "raw_mbs": b.get("raw_mbs", 0.0), "compressed": b["buffer"] in comp,
-         "mode": b.get("mode") if b["buffer"] in comp else None,
-         "comp_ratio": b.get("comp_ratio") if b["buffer"] in comp else 1.0,
-         "delta_mbs": b.get("delta_mbs", 0.0) if b["buffer"] in comp else 0.0,
-         "delta_mw": b.get("delta_mw", 0.0) if b["buffer"] in comp else 0.0}
-        for b in buffers if "raw_mbs" in b
-    ]
+    cmodes = case.get("compression_modes") or {}
+    bufs = []
+    for b in buffers:
+        if "raw_mbs" not in b:
+            continue
+        on = b["buffer"] in comp
+        m = (_mode_of(buffers, b["buffer"], cmodes.get(b["buffer"])) or b) if on else b
+        bufs.append({"buffer": b["buffer"], "raw_mbs": m.get("raw_mbs", b.get("raw_mbs", 0.0)), "compressed": on,
+                     "mode": m.get("mode") if on else None,
+                     "comp_ratio": m.get("comp_ratio") if on else 1.0,
+                     "delta_mbs": m.get("delta_mbs", 0.0) if on else 0.0,
+                     "delta_mw": m.get("delta_mw", 0.0) if on else 0.0})
     return {
         "fps": s["fps"], "period_ms": s["period_ms"], "statistic": case["statistic"],
         "runtime_scale": case["runtime_scale"], "eis_on": s["eis_on"],
@@ -1248,7 +1359,8 @@ def prediction_payload(s: dict[str, Any], case: dict[str, Any], buffers: list[di
         "base_bw_ip_mw": s["power"]["bw_hw_mw"], "base_bw_cpu_mw": s["power"]["bw_sw_mw"],
         "base_bw_ip_mbs": s["bw"]["hw_mbs"], "base_bw_cpu_mbs": s["bw"]["sw_mbs"],
         "cpu_by_task": s["cpu_by_task"], "ips": ips, "buffers": bufs,
-        "compression": sorted(comp), "dvfs": dom_level, "verdict": s["verdict"]["status"],
+        "compression": sorted(comp), "compression_modes": {b: cmodes[b] for b in sorted(comp) if b in cmodes},
+        "dvfs": dom_level, "verdict": s["verdict"]["status"],
         # why: reasons + NRT clock factor of the objective slice (board / 판정 popover)
         "verdict_detail": {k: s["verdict"].get(k) for k in ("status", "reasons", "nrt_clock_factor")},
         "intervals_ok": s.get("intervals_ok"),
@@ -1314,3 +1426,209 @@ def _variant_doc(variant) -> Any:
 
 def _jsonable(value: Any) -> Any:
     return json.loads(json.dumps(value, default=str))
+
+
+# ------------------------------------------------------------------- lever analysis
+IQ_ORDER = {"neutral": 0, "eval": 1, "trade": 2}
+_MIN_GAIN_MW = 0.05
+
+
+def _point(c: dict[str, Any]) -> dict[str, Any]:
+    return {"key": c["key"], "comp": dict(c.get("compression_modes") or {b: None for b in c["compression"]}),
+            "eligible": bool(c.get("eligible", False)),
+            "dvfs": dict(c["dvfs"]),
+            "total_mw": round(c["total_mw"], 3), "cpu_mw": round(c["cpu_mw"], 3), "hw_mw": round(c["hw_mw"], 3),
+            "bw_mw": round(c["bw_mw"], 3), "bw_ip_mw": round(c["bw_ip_mw"], 3), "bw_cpu_mw": round(c["bw_cpu_mw"], 3),
+            "bw_mbs": round(c["bw_mbs"], 1), "lossy": bool(c["lossy"]), "assumed": bool(c["assumed_ratio"])}
+
+
+def _sw_band(slices: list[dict[str, Any]], obj_slice: dict[str, Any]) -> list[float]:
+    base = obj_slice["power"]["total_mw"]
+    vals = [s["power"]["total_mw"] - base for s in slices]
+    return [round(min(vals), 2), round(max(vals), 2)]
+
+
+def lever_analysis(summary: dict[str, Any]) -> dict[str, Any]:
+    """Per-lever effect, an exact greedy path and the design-space distribution at the objective point.
+
+    Design points = every option set (power_options) x every compression choice (off / lossless / lossy per
+    buffer) at the resolved DVFS levels and the objective SW statistic/growth; totals come from the same
+    analytic cases as the exploration (no new model). IQ class of a lever: ``neutral`` = keeps image quality
+    (lossless SBWC, options marked iq_eval not_required), ``eval`` = needs IQ evaluation (IP mode / knob
+    options), ``trade`` = gives up image quality (lossy compression). The path adds the best lever of each
+    class in turn (neutral -> eval -> trade); each step's total is a looked-up design point, so steps include
+    interactions (e.g. L0 skip removes the L0 buffer, so L0 compression no longer saves anything).
+    """
+    po = summary.get("power_options") or {}
+    item_iq: dict[str, str] = {}
+    item_label: dict[str, str] = {}
+    item_note: dict[str, str] = {}
+    for d in po.get("dimensions") or []:
+        for it in d.get("items") or []:
+            item_iq[it["key"]] = "eval" if it.get("iq_eval", "required") == "required" else "neutral"
+            item_label[it["key"]] = it.get("label") or it["key"]
+            item_note[it["key"]] = str(it.get("note") or "")
+    sets: dict[frozenset, list[dict[str, Any]]] = {frozenset(): summary.get("design_points") or []}
+    for r in po.get("results") or []:
+        if r.get("design_points"):
+            sets[frozenset(r["items"])] = r["design_points"]
+    table: dict[tuple[frozenset, frozenset], dict[str, Any]] = {}
+    avail: dict[frozenset, set[str]] = {}
+    for s, pts in sets.items():
+        avail[s] = {b for p in pts for b in p["comp"]}
+        for p in pts:
+            table[(s, frozenset(p["comp"].items()))] = p
+    base = table.get((frozenset(), frozenset()))
+    if base is None:
+        return {"status": "none"}
+    bufs = {b["buffer"]: b for b in summary.get("buffers") or []}
+
+    def mode_info(bid: str, mode: str) -> dict[str, Any]:
+        return next((m for m in (bufs.get(bid) or {}).get("modes") or [] if m["mode"] == mode), {})
+
+    def comp_iq(mode: str | None) -> str:
+        return "trade" if str(mode or "").upper().endswith("LOSSY") else "neutral"
+
+    def lookup(s: frozenset, comp: dict[str, str]) -> tuple[dict[str, Any] | None, dict[str, str]]:
+        kept = {b: m for b, m in comp.items() if b in avail.get(s, set())}
+        return table.get((s, frozenset(kept.items()))), kept
+
+    def point_iq(s: frozenset, comp: dict[str, str]) -> str:
+        lv = [item_iq.get(i, "eval") for i in s] + [comp_iq(m) for m in comp.values()]
+        return max(lv, key=lambda x: IQ_ORDER[x], default="neutral")
+
+    # ---- lever list (compression mode per buffer + option items)
+    comp_levers = sorted({(b, m) for pts in sets.values() for p in pts for b, m in p["comp"].items() if m})
+    levers: list[dict[str, Any]] = []
+    for b, m in comp_levers:
+        info = mode_info(b, m)
+        levers.append({"key": f"comp:{b}={m}", "kind": "compression", "buffer": b, "mode": m,
+                       "label": f"{b} {'lossless' if comp_iq(m) == 'neutral' else 'lossy'} SBWC",
+                       "iq": comp_iq(m), "confidence": info.get("ratio_source") or "catalog",
+                       "comp_ratio": info.get("comp_ratio"),
+                       "note": f"ratio {info.get('comp_ratio')} ({info.get('ratio_source')})" if info else None})
+    for it in sorted({i for s in sets for i in s}):
+        note = item_note.get(it, "")
+        levers.append({"key": it, "kind": "option", "label": item_label.get(it, it), "iq": item_iq.get(it, "eval"),
+                       "confidence": "synthetic" if "SYNTHETIC" in note.upper() else "model", "note": note or None})
+
+    def apply(state: tuple[frozenset, dict[str, str]], lv: dict[str, Any], on: bool = True):
+        s, c = state
+        if lv["kind"] == "compression":
+            c2 = dict(c)
+            if on:
+                c2[lv["buffer"]] = lv["mode"]
+            elif c2.get(lv["buffer"]) == lv["mode"]:
+                c2.pop(lv["buffer"])
+            else:
+                return None
+            return (s, c2)
+        s2 = (s | {lv["key"]}) if on else (s - {lv["key"]})
+        if s2 not in sets or (on and lv["key"] in s) or (not on and lv["key"] not in s):
+            return None
+        return (s2, dict(c))
+
+    def total_of(state) -> tuple[dict[str, Any] | None, dict[str, str]]:
+        return lookup(state[0], state[1])
+
+    def delta(a: dict[str, Any], b: dict[str, Any]) -> dict[str, float]:
+        return {k: round(b[k] - a[k], 2) for k in ("total_mw", "cpu_mw", "hw_mw", "bw_mw", "bw_mbs")}
+
+    # ---- greedy path: neutral -> eval -> trade
+    state: tuple[frozenset, dict[str, str]] = (frozenset(), {})
+    cur = base
+    steps: list[dict[str, Any]] = [{"phase": "baseline", "label": "baseline", "total_mw": base["total_mw"],
+                                    "bw_mbs": base["bw_mbs"], "delta_mw": 0.0, "iq": "neutral"}]
+    milestones: dict[str, dict[str, Any]] = {}
+    for phase in ("neutral", "eval", "trade"):
+        allowed = [lv for lv in levers if IQ_ORDER[lv["iq"]] <= IQ_ORDER[phase]]
+        while True:
+            best = None
+            for lv in allowed:
+                nxt = apply(state, lv)
+                if nxt is None or (lv["kind"] == "compression" and state[1].get(lv["buffer"]) == lv["mode"]):
+                    continue
+                cand, kept = total_of(nxt)
+                if cand is None or IQ_ORDER[point_iq(nxt[0], kept)] > IQ_ORDER[phase]:
+                    continue
+                if best is None or cand["total_mw"] < best[0]["total_mw"]:
+                    best = (cand, (nxt[0], kept), lv)
+            if best is None or best[0]["total_mw"] > cur["total_mw"] - _MIN_GAIN_MW:
+                break
+            prev_comp = state[1]
+            p, state, lv = best
+            steps.append({"phase": phase, "lever": lv["key"], "label": lv["label"], "iq": lv["iq"],
+                          "delta_mw": round(p["total_mw"] - cur["total_mw"], 2), "total_mw": p["total_mw"],
+                          "bw_mbs": p["bw_mbs"], "delta_bw_mbs": round(p["bw_mbs"] - cur["bw_mbs"], 1),
+                          # compression made moot by this lever (e.g. L0 skip removes the L0 buffer)
+                          "dropped": sorted(set(prev_comp) - set(state[1])) or None})
+            cur = p
+        milestones[phase] = {"total_mw": cur["total_mw"], "bw_mbs": cur["bw_mbs"],
+                             "delta_mw": round(cur["total_mw"] - base["total_mw"], 2),
+                             "delta_pct": round(100 * (cur["total_mw"] - base["total_mw"]) / base["total_mw"], 2)
+                             if base["total_mw"] else None,
+                             "options": sorted(item_label.get(i, i) for i in state[0]), "compression": dict(state[1])}
+    final = state
+
+    # ---- per-lever effect: alone (vs baseline) and in context (toggle at the final state)
+    fin_p, _ = total_of(final)
+    for lv in levers:
+        alone_state = apply((frozenset(), {}), lv)
+        ap = total_of(alone_state)[0] if alone_state else None
+        lv["alone"] = delta(base, ap) if ap else None
+        ctx = None
+        lv["moot"] = False
+        if fin_p is not None and lv["kind"] == "compression":
+            s_f, c_f = final
+            lv["in_final"] = c_f.get(lv["buffer"]) == lv["mode"]
+            if lv["buffer"] not in avail.get(s_f, set()):
+                lv["moot"] = True  # the buffer no longer exists with the final options (e.g. L0 skipped)
+            else:
+                on = total_of((s_f, {**c_f, lv["buffer"]: lv["mode"]}))[0]
+                off = total_of((s_f, {k: v for k, v in c_f.items() if k != lv["buffer"]}))[0]
+                ctx = delta(off, on) if on is not None and off is not None else None
+        elif fin_p is not None:
+            on_now = lv["key"] in final[0]
+            other = apply(final, lv, on=not on_now)
+            op = total_of(other)[0] if other else None
+            if op is not None:
+                ctx = delta(op, fin_p) if on_now else delta(fin_p, op)
+            lv["in_final"] = on_now
+        lv["in_context"] = ctx
+        a = (lv["alone"] or {}).get("total_mw")
+        c = (ctx or {}).get("total_mw")
+        lv["overlap"] = bool(lv["moot"] or (a is not None and c is not None and a < -1 and abs(c - a) > max(2.0, 0.2 * abs(a))))
+    levers.sort(key=lambda x: (IQ_ORDER[x["iq"]], (x["alone"] or {}).get("total_mw", 0.0)))
+
+    # ---- cost levers: one DVFS level up per domain (robustness, never a saving)
+    costs = []
+    for d in summary.get("domains") or []:
+        up = next((o for o in d["options"] if o.get("raise")), None)
+        if up:
+            costs.append({"key": f"dvfs:{d['domain']}+1", "label": f"{d['domain']} L{d['base_level']}→L{up['level']}",
+                          "delta_mw": round(up["delta_mw"], 2), "speed_mhz": up["speed_mhz"], "voltage_mv": up["voltage_mv"]})
+
+    points = []
+    for s, pts in sets.items():
+        for p in pts:
+            comp = {b: m for b, m in p["comp"].items() if m}
+            points.append({"options": sorted(item_label.get(i, i) for i in s), "option_keys": sorted(s), "comp": comp,
+                           "eligible": p.get("eligible", False),
+                           "key": p.get("key"),
+                           "iq": point_iq(s, comp), "total_mw": p["total_mw"], "bw_mbs": p["bw_mbs"],
+                           "cpu_mw": p["cpu_mw"], "hw_mw": p["hw_mw"], "bw_mw": p["bw_mw"]})
+    points.sort(key=lambda x: x["total_mw"])
+    best_by: dict[str, str | None] = {}
+    for cls in ("neutral", "eval", "trade"):
+        gains = [lv for lv in levers if lv["iq"] == cls and lv["alone"] and lv["alone"]["total_mw"] < -_MIN_GAIN_MW]
+        best_by[cls] = min(gains, key=lambda x: x["alone"]["total_mw"])["key"] if gains else None
+    return {
+        "status": "ok",
+        "basis": {"statistic": (summary.get("objective") or {}).get("statistic"),
+                  "runtime_scale": (summary.get("objective") or {}).get("runtime_scale"),
+                  "dvfs": "resolved levels (no headroom)",
+                  "sw_band_mw": summary.get("sw_band_mw")},
+        "baseline": {k: base[k] for k in ("total_mw", "cpu_mw", "hw_mw", "bw_mw", "bw_mbs")},
+        "levers": levers, "costs": costs, "steps": steps, "milestones": milestones,
+        "best_lever": best_by, "points": points, "point_count": len(points),
+    }

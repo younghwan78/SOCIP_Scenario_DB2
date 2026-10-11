@@ -28,8 +28,10 @@ capabilities:
     hw_name: GDC
     source: assumed_capacity
     source_note: PPC is an exploration assumption, not a verified silicon capacity.
-      Power coefficient is unavailable and core power is excluded.
+      SAMPLE unit power is an unverified exploration assumption; replace with an in-house coefficient.
     ppc: 4.0
+    unit_power_mw_mp: 1.2
+    # SAMPLE (off-site, 2026-10-11): assumed unit power so lever / power distribution is complete; replace with in-house coefficient.
     vdd: VDD_CAM
     dvfs_group: CAM
 compatible_soc:
