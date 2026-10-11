@@ -509,3 +509,16 @@ def test_lever_analysis_path_keeps_iq_first(graph_factory, dvfs):
     # L0 skipped in the final state -> L0 compression has nothing left to save
     assert by["comp:PYRAMID_L0=COMP_YUV_LOSSLESS"]["moot"] and by["comp:PYRAMID_L0=COMP_YUV_LOSSLESS"]["overlap"]
     assert all(c["delta_mw"] >= 0 for c in lv["costs"])
+
+
+def test_any_design_point_is_rebuilt_from_its_key(graph_factory, dvfs):
+    r = ax.explore_variant(_with_soc(graph_factory(PSM8K)), ax.ArchExplorationSpec.model_validate(
+        {"axes": {"statistics": ["max"], "runtime_scales": [1], "power_options": {"enabled": False}}}), dvfs_tables=dvfs)
+    for p in r["design_points"]:
+        case, rule = ax.find_case(r, p["key"])
+        assert case is not None and case["key"] == p["key"] and case["total_mw"] == pytest.approx(p["total_mw"], abs=0.01)
+    keep = r["tiers"]["keep"]["best"]
+    sel = ax.case_from_selection(r, keep["compression_modes"])
+    assert sel is not None and sel["key"] == keep["key"] and sel["total_mw"] == pytest.approx(keep["total_mw"], abs=0.01)
+    assert ax.case_from_key(r, keep["key"].replace("s=max", "s=mean")) is None       # other SW slice: not rebuilt
+    assert ax.case_from_key(r, "s=max|x=1|c=NOPE:LL|d=-") is None

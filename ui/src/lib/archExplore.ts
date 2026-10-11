@@ -73,6 +73,8 @@ export interface VariantResult {
   keep_total_mw?: number | null
   /** engine rev ≥ 11: per-lever effect, IQ-first greedy path and the design-space points */
   levers?: LeverAnalysis
+  /** engine rev ≥ 11: every compression choice of the objective slice at the resolved DVFS levels */
+  design_points?: DesignPoint[]
   /** timing judgement of the run (project review policy) */
   throughput_model?: 'stage' | 'pipelined'
   /** false = list-view row (run?view=summary): fetch archApi.runVariant for slices / buffers / options */
@@ -97,7 +99,19 @@ export interface LeverStep {
   bw_mbs: number; delta_bw_mbs?: number; dropped?: string[] | null
 }
 export interface LeverMilestone { total_mw: number; bw_mbs: number; delta_mw: number; delta_pct: number | null; options: string[]; compression: Record<string, string> }
-export interface LeverPoint { options: string[]; comp: Record<string, string>; iq: IqClass; total_mw: number; bw_mbs: number; cpu_mw: number; hw_mw: number; bw_mw: number }
+export interface LeverPoint {
+  options: string[]; comp: Record<string, string>; iq: IqClass; total_mw: number; bw_mbs: number; cpu_mw: number; hw_mw: number; bw_mw: number
+  /** API ≥ 2026-10-11 b: option item keys and the case key (base option set = a case of this run) */
+  option_keys?: string[]; key?: string | null
+}
+export interface LeverRegisterBody {
+  run_id: string; scenario_id: string; variant_id: string; compression: Record<string, string>; options: string[]
+  iq_results: { option_key: string; status: 'adopted' | 'rejected'; note: string }[]; reason?: string; expected_project_ref?: string
+}
+export interface LeverRegisterResult {
+  status: 'registered' | 'rejected'; rule?: string; case_key?: string; run_id?: string; rejected?: string[]; message?: string
+  promoted: { id: string; total_mw: number }[]; skipped?: { variant_id: string; reason: string }[]
+}
 export interface LeverAnalysis {
   status: 'ok' | 'none'
   basis?: { statistic: string; runtime_scale: number; dvfs: string; sw_band_mw?: [number, number] | null }
@@ -109,6 +123,32 @@ export interface LeverAnalysis {
   best_lever?: Partial<Record<IqClass, string | null>>
   points?: LeverPoint[]; point_count?: number
 }
+export interface DesignPoint {
+  key?: string; comp: Record<string, string | null>; dvfs?: Record<string, number>
+  total_mw: number; cpu_mw: number; hw_mw: number; bw_mw: number; bw_ip_mw?: number; bw_cpu_mw?: number; bw_mbs: number; lossy: boolean; assumed: boolean
+}
+
+/** Every listable case of the variant (design points at the resolved DVFS + listed cases), split by IQ cost. */
+export function caseGroups(v: VariantResult, withRaise: boolean): { keep: ExpCase[]; trade: ExpCase[] } {
+  const b = v.baseline
+  const fromPoint = (p: DesignPoint): ExpCase | null => (p.key ? {
+    key: p.key, statistic: b.statistic, runtime_scale: b.runtime_scale, dvfs: p.dvfs ?? b.dvfs, dvfs_raise: 0,
+    compression: Object.keys(p.comp), compression_modes: Object.fromEntries(Object.entries(p.comp).filter(([, m]) => m)) as Record<string, string>,
+    total_mw: p.total_mw, cpu_mw: p.cpu_mw, hw_mw: p.hw_mw, bw_mw: p.bw_mw, bw_ip_mw: p.bw_ip_mw, bw_cpu_mw: p.bw_cpu_mw, bw_mbs: p.bw_mbs,
+    lossy: p.lossy, assumed_ratio: p.assumed, verdict: b.verdict, eligible: true,
+  } : null)
+  const listed = [v.recommended, ...v.alternatives, ...(v.pareto ?? []), v.baseline, v.tiers?.keep?.best, v.tiers?.trade?.best]
+  const seen = new Set<string>()
+  const all: ExpCase[] = []
+  for (const c of [...(v.design_points ?? []).map(fromPoint), ...listed]) {
+    if (!c || seen.has(c.key) || (!withRaise && c.dvfs_raise > 0)) continue
+    seen.add(c.key); all.push(c)
+  }
+  all.sort((x, y) => x.total_mw - y.total_mw || x.bw_mbs - y.bw_mbs)
+  const trade = (c: ExpCase) => c.lossy && c.compression.length > 0
+  return { keep: all.filter((c) => !trade(c)), trade: all.filter(trade) }
+}
+
 export const IQ_LABEL: Record<IqClass, string> = { neutral: '화질 무손실', eval: 'IQ 평가 필요', trade: '화질 trade (lossy)' }
 export const IQ_COLOR: Record<IqClass, string> = { neutral: '#2F6F68', eval: '#B45309', trade: '#9B1C1C' }
 
@@ -330,6 +370,8 @@ export const archApi = {
     send<{ promoted: { id: string; variant_id: string; total_mw: number }[]; skipped: { variant_id: string; reason: string }[] }>(
       'POST', '/arch/predictions/promote', { run_id: runId, variant_ids: variantIds, case_key: caseKey, reason, scenario_id: scenarioId, expected_project_ref: expectedProject }),
   board: (scenarioId?: string, projectRef?: string) => send<{ rows: BoardRow[] }>('GET', `/arch/predictions/board${q({ scenario_id: scenarioId, project_ref: projectRef })}`),
+  /** lever selector -> current prediction; options need IQ results (adopted) and are re-explored server side */
+  registerLever: (body: LeverRegisterBody) => send<LeverRegisterResult>('POST', '/arch/predictions/lever', body),
   optionReviews: (scenarioId?: string) => send<OptionReview[]>('GET', `/arch/power-options/reviews${q({ scenario_id: scenarioId })}`),
   setOptionReview: (body: { scenario_id: string; variant_id?: string; option_key: string; status: ReviewStatus; note?: string }) =>
     send<OptionReview>('PUT', '/arch/power-options/reviews', body),

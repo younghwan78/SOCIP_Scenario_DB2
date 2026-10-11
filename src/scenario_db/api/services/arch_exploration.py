@@ -91,6 +91,21 @@ def _variant_ids(db: Session, scenario_id: str, request: ArchExplorationRunReque
 
 
 # ------------------------------------------------------------------- runs
+def _apply_options(graph, keys: list[str]) -> tuple[Any, list[dict[str, Any]]]:
+    """The variant graph with power-option items applied (same mechanics as the option exploration)."""
+    from scenario_db.sim import power_options as po
+
+    dims, _ = po.option_dimensions(graph)
+    items = {it["key"]: it for d in dims for it in d["items"]}
+    missing = [k for k in keys if k not in items]
+    if missing:
+        raise UnprocessableError(f"power option not applicable to this variant: {missing}")
+    chosen = [items[k] for k in dict.fromkeys(keys)]
+    if len({it["dimension"] for it in chosen}) != len(chosen):
+        raise UnprocessableError("two values of the same option dimension were selected")
+    return po.apply_option_set(graph, chosen), chosen
+
+
 def _reference_budgets(db: Session, project_ref: str | None) -> dict[str, dict[str, Any]]:
     """variant id -> {"mw": reference x (1 + tol), "reference_mw", "source"} from the project review_policy."""
     if not project_ref:
@@ -157,8 +172,15 @@ def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str |
                 bounded_spec = bounded_spec.model_copy(update={
                     "constraints": bounded_spec.constraints.model_copy(update={"power_budget_mw": budget["mw"]})})
             _check_power_params_scope(shim.config, graph)
+            applied: list[dict[str, Any]] = []
+            if request.apply_options:
+                graph, applied = _apply_options(graph, request.apply_options)
+                bounded_spec = bounded_spec.model_copy(update={"axes": bounded_spec.axes.model_copy(update={
+                    "power_options": bounded_spec.axes.power_options.model_copy(update={"enabled": False})})})
             stage = "explore"
             summary = explore_variant(graph, bounded_spec, config=shim.config, dvfs_tables=tables)
+            if applied:
+                summary["applied_options"] = [{k: it.get(k) for k in ("key", "label", "kind", "iq_eval", "note")} for it in applied]
             summary["model_lineage"] = run_model_lineage(shim.config)
             if budget["mw"] is not None:
                 summary["power_budget"] = budget
@@ -1102,3 +1124,80 @@ def _run_variant_sections(db: Session, run_id: str, scenario_id: str, variant_id
     return db.query(func.jsonb_path_query_first(
         R.variants, literal_column("'$[*] ? (@.scenario_id == $s && @.variant_id == $v).input_sections'::jsonpath"),
         func.jsonb_build_object(literal("s"), scenario_id, literal("v"), variant_id))).filter(R.id == run_id).scalar()
+
+
+# ------------------------------------------------------------------- lever selection -> prediction
+def register_lever(db: Session, request: Any, user: str | None = None) -> dict[str, Any]:
+    """Register the lever selector's combination (compression modes [+ IQ-adopted options]) as the current prediction.
+
+    - no option: the case is rebuilt from the run's objective slice (``case_from_selection``) and promoted
+      (rule ``lever:iq-keep`` without lossy compression, ``lever:trade`` with lossy -> reason required).
+    - options: every option needs an IQ result. The results are stored as option reviews (adopted / rejected); a
+      rejected item stops the registration. With all adopted, the variant is re-explored with the options applied
+      (``apply_options``, same spec / inputs as the source run) and the same compression is promoted
+      (rule ``lever:iq-adopted``). The prediction keeps the selection and the IQ notes (``metrics.lever_selection``).
+    """
+    from scenario_db.api.schemas.arch_exploration import PowerOptionReviewRequest
+    from scenario_db.api.services.recompute import _SEL_KEYS, _SPEC_KEYS
+    from scenario_db.sim.arch_exploration import case_from_selection
+
+    run = get_run(db, request.run_id)
+    if request.expected_project_ref is not None and run.project_ref != request.expected_project_ref:
+        raise UnprocessableError(f"run {run.id} belongs to project {run.project_ref!r}, not {request.expected_project_ref!r}")
+    src = next((v for v in run.variants if v["scenario_id"] == request.scenario_id and v["variant_id"] == request.variant_id), None)
+    if src is None:
+        raise NotFoundError(f"variant {request.scenario_id}/{request.variant_id} not in run {run.id}")
+    options = list(dict.fromkeys(request.options))
+    iq = {r.option_key: r for r in request.iq_results}
+    lossy = any(str(m).upper().endswith("LOSSY") for m in request.compression.values())
+    if options:
+        missing = [o for o in options if o not in iq]
+        if missing:
+            raise UnprocessableError(f"IQ 평가 결과가 없는 option: {', '.join(missing)}")
+        for o in options:
+            set_option_review(db, PowerOptionReviewRequest(scenario_id=request.scenario_id, variant_id=request.variant_id,
+                                                           option_key=o, status=iq[o].status, note=iq[o].note), user)
+        rejected = [o for o in options if iq[o].status != "adopted"]
+        if rejected:
+            return {"status": "rejected", "rejected": rejected, "promoted": [],
+                    "message": "화질 평가 기각 option이 있어 등록하지 않았습니다 (review에 기각으로 기록)"}
+        spec = dict(run.spec or {})
+        sel = dict(spec.get("input_selection") or {})
+        if isinstance(spec.get("timing"), dict):
+            # the run stores the full option dump: a field at its default must stay unset (as in recompute), e.g. the
+            # CPU model unset = coefficients from the profile's power params, set = the code default
+            from scenario_db.sim.timing_budget import TimingBudgetOptions
+
+            defaults = TimingBudgetOptions().model_dump(mode="json")
+            spec["timing"] = {k: v for k, v in spec["timing"].items() if k not in defaults or v != defaults[k]}
+            if spec.get("throughput_from_policy"):
+                spec["timing"].pop("throughput_model", None)
+        new_run = run_exploration(db, ArchExplorationRunRequest(
+            title=f"Lever 등록 · {request.variant_id} + {len(options)} option", scenario_type=run.scenario_type,
+            scenario_ids=[request.scenario_id], variant_ids=[request.variant_id], include_derived=True, max_variants=1,
+            # an empty explicit config would mask the run's config profile -> pass it only when the run set one
+            **({"config": sel["config"]} if sel.get("config") else {}), apply_options=options, project_ref=run.project_ref,
+            spec={k: spec[k] for k in _SPEC_KEYS if k in spec}, **{k: sel[k] for k in _SEL_KEYS if k in sel}), user)
+        target_run, summary = new_run["id"], new_run["variants"][0]
+        rule = "lever:iq-adopted"
+    else:
+        target_run, summary = run.id, src
+        rule = "lever:trade" if lossy else "lever:iq-keep"
+    case = case_from_selection(summary, dict(request.compression))
+    if case is None:
+        raise UnprocessableError("selected compression is not an evaluated combination of this variant")
+    if lossy and not request.reason:
+        raise UnprocessableError("lossy compression (화질 trade) needs a reason")
+    notes = "; ".join(f"{o}: {iq[o].note}" for o in options)
+    reason = request.reason or ("Lever 선택 · 화질 무손실" if not options else f"Lever 선택 · IQ 채택 option ({notes})")
+    out = promote(db, PromoteRequest(run_id=target_run, scenario_id=request.scenario_id, variant_ids=[request.variant_id],
+                                     case_key=case["key"], reason=reason, expected_project_ref=run.project_ref), user, rule=rule)
+    for p in out.get("promoted") or []:
+        row = db.get(Prediction, p["id"])
+        if row is not None:
+            row.metrics = {**(row.metrics or {}), "lever_selection": {
+                "source_run": run.id, "compression": dict(request.compression), "options": options,
+                "iq_results": {o: {"status": iq[o].status, "note": iq[o].note} for o in options},
+                "base_total_mw": (src.get("baseline") or {}).get("total_mw")}}
+    db.commit()
+    return {"status": "registered", **out, "rule": rule, "case_key": case["key"], "run_id": target_run}

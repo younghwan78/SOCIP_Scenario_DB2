@@ -3,11 +3,12 @@
 //   Q2 knob별 효과 → lever table: 단독 Δ (baseline 대비) vs 최종 조합 안에서의 Δ (중첩 · 무효화 표시)
 //   Q3 power 분포 → every design point (option set × compression choice) on one mW axis, by IQ class,
 //      with the SW-condition band (statistic × growth = 불확실성, knob 아님) and the measured total.
-import { Fragment, useMemo } from 'react'
+import { Fragment, useMemo, useState } from 'react'
+import { LeverSelect, lookupPoint, milestoneSelection, type Selection } from './LeverSelect'
 import { useWidth } from './Charts'
 import { useTip } from './ChartTip'
 import { fmt } from '../lib/timingBudget'
-import { IQ_COLOR, IQ_LABEL, PCOL, type IqClass, type LeverAnalysis, type LeverDelta, type LeverRow, type LeverStep } from '../lib/archExplore'
+import { IQ_COLOR, IQ_LABEL, PCOL, type IqClass, type LeverAnalysis, type LeverDelta, type LeverPoint, type LeverRow, type LeverStep } from '../lib/archExplore'
 import { maText, type Battery } from '../lib/battery'
 
 const PHASES: IqClass[] = ['neutral', 'eval', 'trade']
@@ -16,11 +17,19 @@ const shortMode = (m: string) => (m.toUpperCase().endsWith('LOSSLESS') ? 'lossle
 
 export interface Measured { total_mw: number; label: string }
 
-export function LeverAnalysisView({ la, battery, measured }: { la: LeverAnalysis | undefined; battery: Battery; measured?: Measured | null }) {
+export interface RegisterCtx { runId: string; scenarioId: string; variantId: string; projectRef?: string | null; readOnly: boolean }
+
+export function LeverAnalysisView({ la, battery, measured, reg }: { la: LeverAnalysis | undefined; battery: Battery; measured?: Measured | null; reg?: RegisterCtx }) {
   if (!la || la.status !== 'ok' || !la.baseline) {
     return <div className="empty">이 run에는 lever 분석이 없습니다 (engine rev 11 이후 다시 탐색하면 표시).</div>
   }
-  const base = la.baseline
+  return <LeverBody la={la} battery={battery} measured={measured} reg={reg} />
+}
+
+function LeverBody({ la, battery, measured, reg }: { la: LeverAnalysis; battery: Battery; measured?: Measured | null; reg?: RegisterCtx }) {
+  const [sel, setSel] = useState<Selection>(() => milestoneSelection(la, 'neutral'))
+  const picked = lookupPoint(la.points ?? [], sel).point
+  const base = la.baseline!
   const ms = la.milestones ?? {}
   const levers = la.levers ?? []
   const best = (c: IqClass) => levers.find((l) => l.key === la.best_lever?.[c])
@@ -41,6 +50,7 @@ export function LeverAnalysisView({ la, battery, measured }: { la: LeverAnalysis
         {ms.trade && ms.eval && ms.trade.total_mw < ms.eval.total_mw - 0.05 && <li><b>lossy까지 허용</b>하면 추가 {signed(ms.trade.total_mw - ms.eval.total_mw)} mW</li>}
         {levers.some((l) => l.moot || l.overlap) && <li className="faint">중첩: {levers.filter((l) => l.moot || l.overlap).map((l) => l.label).join(', ')} — 같은 traffic을 줄이는 lever라 함께 쓰면 단독 효과의 합보다 작습니다.</li>}
       </ul>
+      {reg && (la.points ?? []).some((p) => p.option_keys) && <LeverSelect la={la} battery={battery} sel={sel} setSel={setSel} {...reg} />}
       <div className="lever-grid">
         <section>
           <h4>IQ 우선 경로 <span className="faint">(각 단계 = 남은 lever 중 가장 큰 절감 · 무손실 → IQ 평가 → lossy)</span></h4>
@@ -48,7 +58,7 @@ export function LeverAnalysisView({ la, battery, measured }: { la: LeverAnalysis
         </section>
         <section>
           <h4>Power 분포 <span className="faint">({la.point_count ?? 0}개 설계 조합 · SW {la.basis?.statistic} ×{la.basis?.runtime_scale} · DVFS 해석 level)</span></h4>
-          <Distribution la={la} measured={measured} />
+          <Distribution la={la} measured={measured} picked={picked} />
         </section>
       </div>
       <h4 style={{ margin: '10px 0 4px' }}>Lever별 효과 <span className="faint">(단독 = baseline에 이것만 · 최종 조합 내 = 경로 끝에서 on/off)</span></h4>
@@ -134,7 +144,7 @@ function PathChart({ steps }: { steps: LeverStep[] }) {
   )
 }
 
-function Distribution({ la, measured }: { la: LeverAnalysis; measured?: Measured | null }) {
+function Distribution({ la, measured, picked }: { la: LeverAnalysis; measured?: Measured | null; picked?: LeverPoint | null }) {
   const [ref, w] = useWidth<HTMLDivElement>(560)
   const tip = useTip()
   const pts = la.points ?? []
@@ -181,6 +191,10 @@ function Distribution({ la, measured }: { la: LeverAnalysis; measured?: Measured
                      { k: 'CPU / IP / BW', v: `${fmt(p.cpu_mw, 0)} / ${fmt(p.hw_mw, 0)} / ${fmt(p.bw_mw, 0)} mW` },
                      { k: 'DRAM BW', v: `${fmt(p.bw_mbs / 1000, 2)} GB/s` }] })} />
         })}
+        {picked && lanes.includes(picked.iq) && <g pointerEvents="none">
+          <circle cx={X(picked.total_mw)} cy={laneY(picked.iq) + laneH / 2} r={9} fill="none" stroke="#1F2430" strokeWidth={2} />
+          <text x={X(picked.total_mw)} y={laneY(picked.iq) + 6} fontSize={10} fill="#1F2430" textAnchor="middle" fontWeight={600}>선택</text>
+        </g>}
         <line x1={X(base)} x2={X(base)} y1={top - 4} y2={top + lanes.length * laneH} stroke="#3B3F4A" strokeWidth={1.5} />
         <text x={X(base) + 3} y={top + lanes.length * laneH - 3} fontSize={10} fill="#3B3F4A">baseline</text>
         {measured && <g><line x1={X(measured.total_mw)} x2={X(measured.total_mw)} y1={top - 4} y2={top + lanes.length * laneH} stroke="#2563EB" strokeWidth={1.5} strokeDasharray="4 3" />

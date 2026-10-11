@@ -12,6 +12,7 @@ from scenario_db.api.resource_limits import admission_slot, enforce_request_size
 from scenario_db.api.schemas.arch_exploration import (
     ArchExplorationRunRequest,
     ArchReportRequest,
+    LeverRegisterRequest,
     PowerOptionReviewRequest,
     PromoteRequest,
     ReportStatusRequest,
@@ -75,6 +76,16 @@ def promote(
 ):
     """Register run cases as current predictions (default: lowest-power eligible case)."""
     return svc.promote(db, request, principal.subject)
+
+
+@router.post("/predictions/lever")
+def register_lever(
+    request: LeverRegisterRequest,
+    db: Session = Depends(get_db),
+    principal: ApiPrincipal = Depends(require_roles("writer", "admin")),
+):
+    """Register the lever selector's combination; power options need IQ results (adopted) and are re-explored."""
+    return svc.register_lever(db, request, principal.subject)
 
 
 @router.post("/predictions/{prediction_id}/recompute")

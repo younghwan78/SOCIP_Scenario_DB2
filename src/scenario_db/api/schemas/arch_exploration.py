@@ -23,6 +23,9 @@ class ArchExplorationRunRequest(_DvfsSelection):
     power_budget_from_reference: bool = False
     # set by Timing Budget registration: the condition as the user chose it (e.g. which measurement fed which input)
     timing_budget: dict | None = None
+    # power-option items (knob:/mode: keys) applied to every explored variant before the search; used to register
+    # a prediction that includes IQ-adopted options (the option axis itself is then not explored)
+    apply_options: list[str] | None = Field(default=None, max_length=16)
 
     @model_validator(mode="after")
     def _scope(self) -> ArchExplorationRunRequest:
@@ -74,3 +77,41 @@ class PowerOptionReviewRequest(BaseModel):
     option_key: str = Field(pattern=r"^(knob|mode):[A-Za-z0-9_.\-]+=[A-Za-z0-9_.\-]+$", max_length=200)
     status: str = Field(pattern="^(candidate|iq_eval|adopted|rejected)$")
     note: str | None = Field(default=None, max_length=1000)
+
+
+OPTION_KEY = r"^(knob|mode):[A-Za-z0-9_.\-]+=[A-Za-z0-9_.\-]+$"
+
+
+class IqResult(BaseModel):
+    """Image-quality evaluation result of one power-option item, entered when registering with that option."""
+
+    option_key: str = Field(pattern=OPTION_KEY, max_length=200)
+    status: str = Field(pattern="^(adopted|rejected)$")
+    note: str = Field(min_length=1, max_length=1000)
+
+
+class LeverRegisterRequest(BaseModel):
+    """Register the combination chosen in the lever selector as the variant's current prediction.
+
+    compression: buffer -> mode (e.g. COMP_YUV_LOSSLESS) at the resolved DVFS levels of the objective slice.
+    options: power-option items; each needs an IQ result (adopted) in ``iq_results`` — rejected items stop the
+    registration and are recorded as rejected.
+    """
+
+    run_id: str
+    scenario_id: str
+    variant_id: str
+    compression: dict[str, str] = Field(default_factory=dict)
+    options: list[str] = Field(default_factory=list, max_length=16)
+    iq_results: list[IqResult] = Field(default_factory=list, max_length=16)
+    reason: str | None = Field(default=None, max_length=500)
+    expected_project_ref: str | None = None
+
+    @model_validator(mode="after")
+    def _options(self) -> LeverRegisterRequest:
+        import re
+
+        bad = [o for o in self.options if not re.match(OPTION_KEY, o)]
+        if bad:
+            raise ValueError(f"invalid option keys: {bad}")
+        return self

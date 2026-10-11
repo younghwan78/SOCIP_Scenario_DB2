@@ -1232,7 +1232,73 @@ def find_case(summary: dict[str, Any], case_key: str | None) -> tuple[dict[str, 
     base = summary.get("baseline")
     if base and base["key"] == case_key:
         return base, "user:baseline"
+    rebuilt = case_from_key(summary, case_key)
+    if rebuilt is not None:
+        return rebuilt, "user:design-point"
     return None, ""
+
+
+def case_from_key(summary: dict[str, Any], key: str | None) -> dict[str, Any] | None:
+    """Rebuild any evaluated case of the objective slice from its key (compression modes + DVFS levels).
+
+    The run stores only the listed cases; every other combination of the objective slice is exactly reproducible
+    from the frozen objective slice, the buffer modes and the DVFS options (the same analytic sums as the search).
+    Returns None for a key of another SW slice or with an unknown buffer / mode / level.
+    """
+    obj = summary.get("objective_slice")
+    if not obj or not key:
+        return None
+    parts = dict(p.split("=", 1) for p in key.split("|") if "=" in p)
+    try:
+        if parts.get("s") != obj["statistic"] or float(parts.get("x", "nan")) != float(obj["runtime_scale"]):
+            return None
+    except ValueError:
+        return None
+    bufs = {b["buffer"]: b for b in summary.get("buffers") or []}
+    zero = {k: 0.0 for k in _DELTA_KEYS}
+    cset: dict[str, Any] = {"buffers": (), "modes": {}, **zero, "lossy": False, "assumed": False}
+    for tok in [x for x in (parts.get("c") or "-").split("+") if x and x != "-"]:
+        bid, _, short = tok.partition(":")
+        b = bufs.get(bid)
+        if b is None:
+            return None
+        modes = [m for m in (b.get("modes") or [b]) if m.get("selectable", True) and m.get("mode")]
+        m = next((x for x in modes if _short_mode(x["mode"]) == short), None) if short else (modes[0] if modes else None)
+        if m is None:
+            return None
+        cset = {"buffers": cset["buffers"] + (bid,), "modes": {**cset["modes"], bid: m["mode"]},
+                **{k: cset[k] + m.get(k, 0.0) for k in _DELTA_KEYS},
+                "lossy": cset["lossy"] or bool(m.get("lossy")), "assumed": cset["assumed"] or m.get("ratio_source") == "assumed"}
+    domains = {d["domain"]: d for d in obj.get("domains") or summary.get("domains") or []}
+    levels: dict[str, int] = {}
+    delta, raises = 0.0, 0
+    for tok in [x for x in (parts.get("d") or "-").split(",") if x and x != "-"]:
+        dom, _, lv = tok.partition(":L")
+        opt = next((o for o in (domains.get(dom) or {}).get("options") or [] if str(o["level"]) == lv), None)
+        if opt is None:
+            return None
+        levels[dom] = int(lv)
+        delta += opt["delta_mw"]
+        raises += int(bool(opt["raise"]))
+    case = _case(obj, cset, {"levels": levels, "delta_mw": delta, "raises": raises})
+    if case["key"] != key:
+        return None
+    case["eligible"] = obj["verdict"]["status"] != "fail" and bool(obj.get("intervals_ok", True))
+    return case
+
+
+def case_from_selection(summary: dict[str, Any], compression: dict[str, str]) -> dict[str, Any] | None:
+    """The objective-slice case with ``compression`` (buffer -> mode) at the resolved DVFS levels."""
+    obj = summary.get("objective_slice")
+    if not obj:
+        return None
+    order = [b["buffer"] for b in summary.get("buffers") or [] if b["buffer"] in compression]
+    if len(order) != len(compression):
+        return None
+    c = "+".join(f"{b}:{_short_mode(compression[b])}" for b in order) or "-"
+    doms = obj.get("domains") or summary.get("domains") or []
+    d = ",".join(f"{x['domain']}:L{x['base_level']}" for x in sorted(doms, key=lambda x: x["domain"])) or "-"
+    return case_from_key(summary, f"s={obj['statistic']}|x={obj['runtime_scale']:g}|c={c}|d={d}")
 
 
 def _latency_delta(old: dict[str, Any] | None, new: dict[str, Any] | None) -> dict[str, float | None]:
@@ -1362,10 +1428,11 @@ _MIN_GAIN_MW = 0.05
 
 
 def _point(c: dict[str, Any]) -> dict[str, Any]:
-    return {"comp": dict(c.get("compression_modes") or {b: None for b in c["compression"]}),
+    return {"key": c["key"], "comp": dict(c.get("compression_modes") or {b: None for b in c["compression"]}),
+            "dvfs": dict(c["dvfs"]),
             "total_mw": round(c["total_mw"], 3), "cpu_mw": round(c["cpu_mw"], 3), "hw_mw": round(c["hw_mw"], 3),
-            "bw_mw": round(c["bw_mw"], 3), "bw_mbs": round(c["bw_mbs"], 1), "lossy": bool(c["lossy"]),
-            "assumed": bool(c["assumed_ratio"])}
+            "bw_mw": round(c["bw_mw"], 3), "bw_ip_mw": round(c["bw_ip_mw"], 3), "bw_cpu_mw": round(c["bw_cpu_mw"], 3),
+            "bw_mbs": round(c["bw_mbs"], 1), "lossy": bool(c["lossy"]), "assumed": bool(c["assumed_ratio"])}
 
 
 def _sw_band(slices: list[dict[str, Any]], obj_slice: dict[str, Any]) -> list[float]:
@@ -1538,7 +1605,8 @@ def lever_analysis(summary: dict[str, Any]) -> dict[str, Any]:
     for s, pts in sets.items():
         for p in pts:
             comp = {b: m for b, m in p["comp"].items() if m}
-            points.append({"options": sorted(item_label.get(i, i) for i in s), "comp": comp,
+            points.append({"options": sorted(item_label.get(i, i) for i in s), "option_keys": sorted(s), "comp": comp,
+                           "key": p.get("key"),
                            "iq": point_iq(s, comp), "total_mw": p["total_mw"], "bw_mbs": p["bw_mbs"],
                            "cpu_mw": p["cpu_mw"], "hw_mw": p["hw_mw"], "bw_mw": p["bw_mw"]})
     points.sort(key=lambda x: x["total_mw"])
