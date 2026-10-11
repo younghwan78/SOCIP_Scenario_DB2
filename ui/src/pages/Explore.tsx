@@ -11,6 +11,10 @@ import { AxisSpread, BufferSavings, CompositionBars, DomainLevels, IpModes, Rang
 import { DataTable, type Column } from '../components/DataTable'
 import { OPTION_NOTE, OptionResults, signed } from '../components/PowerOptions'
 import { TiersView } from '../components/ExploreTiers'
+import { LeverAnalysisView, type Measured } from '../components/LeverAnalysis'
+import { calibrationApi } from '../lib/calibration'
+import { useTip } from '../components/ChartTip'
+import { caseTip } from '../components/CaseTip'
 import { useBattery, type Battery } from '../lib/battery'
 import { JUDGE_CLASS, JUDGE_LABEL, judgePower, useReferences } from '../lib/review'
 import { VariantFailures } from '../components/VariantFailures'
@@ -302,7 +306,17 @@ function VariantDetailBody({ v, run, readOnly, battery, iqKeep = false }: { v: V
     } catch (e) { setMsg(e instanceof Error ? e.message : String(e)) } finally { setBusy(false) }
   }
   const m = v.sw_margin
+  const tip = useTip()
+  const leverMin = v.levers?.milestones?.trade?.total_mw ?? null
+  // newest real measurement (else synthetic) of this variant: the anchor on the power-distribution axis
+  const covQ = useAsync(() => calibrationApi.coverage(v.scenario_id), [v.scenario_id])
+  const meas = (covQ.data?.[v.variant_id]?.measurements ?? []).find((x) => x.shown && x.total_mw != null)
+  const measured: Measured | null = meas ? { total_mw: meas.total_mw!, label: `${meas.synthetic ? 'synthetic' : meas.origin} · ${meas.silicon_rev ?? ''} ${meas.sw_baseline_ref ?? ''}`.trim() } : null
   return <>
+    <Card id="ax-levers" title={`${short(v.variant_id)} — Lever 분석: 화질 손해 없이 무엇이 가장 효과적인가`}
+      note="baseline → 화질 무손실 lever → IQ 평가 필요 lever → lossy 순으로 가장 큰 절감부터 · 점 분포 = 모든 설계 조합" defaultWide>
+      <LeverAnalysisView la={v.levers} battery={battery} measured={measured} />
+    </Card>
     <Card id="ax-cases" title={`${short(v.variant_id)} — 추천 · 대안 조합`} note={`${v.counts.cases.toLocaleString()} 조합 · eligible ${v.counts.eligible.toLocaleString()} · ${fmt(v.fps, 0)} fps${v.eis_on ? ' · EIS' : ''} · 판정 ${v.throughput_model === 'pipelined' ? 'pipeline buffering' : 'stage 1 frame'}${keepRow.length ? ' · 기본 등록 = 화질 유지 최적 (과제 기준)' : ''}`} defaultWide>
       {(v.ip_modes ?? []).length > 0 && <div className="faint" style={{ fontSize: 12, marginBottom: 6 }}>
         IP mode (모든 조합 공통): {(v.ip_modes ?? []).map((m) => `${m.node.toUpperCase()} ${m.mode}${m.unit_power_mw_mp !== null ? ` ${fmt(m.unit_power_mw_mp, 2)}` : ''}`).join(' · ')} <span className="mono">mW/MP</span>
@@ -313,12 +327,13 @@ function VariantDetailBody({ v, run, readOnly, battery, iqKeep = false }: { v: V
       {coverageOf(v) === 'partial' && <div className="faint" style={{ fontSize: 12, marginBottom: 6 }}>
         <span className="badge v-warn">부분 모델</span> 전력 미모델 IP {(v.coverage?.zero_power_ips ?? []).join(', ')} — Total은 모델된 IP 합계(하한)
         {v.status?.power_budget_status === 'unknown' ? ' · power budget 판정 불가' : ''}</div>}
+      <div className="faint" style={{ fontSize: 12, marginBottom: 4 }}>이 표 = variant 자체의 compression · DVFS 조합만 (power option 미포함) · 행에 마우스 = 조합 상세{leverMin !== null && rec && leverMin < rec.total_mw - 0.05 ? <> · Lever 분석 최저 <b className="mono">{fmt(leverMin, 1)}</b> mW는 IQ 평가 option(L0 skip · bcrop · IP mode) 포함</> : null}</div>
       <table className="tb-mini-table" style={{ width: '100%' }}>
         <thead><tr><th /><th>순위</th><th>Total mW</th><th title="CPU / CPU BW / IP / IP BW">CPU / CPU BW / IP / IP BW</th><th>BW MB/s</th><th>Δ 추천 대비</th><th>SW</th><th>Compression</th><th>DVFS</th></tr></thead>
         <tbody>{candRows.map(({ rank, c }) => {
           const d = rec ? caseDelta(c, rec) : null
           return (
-            <tr key={c.key} className={pick === c.key ? 'selected' : ''} onClick={() => setPick(c.key)} style={{ cursor: 'pointer' }}>
+            <tr key={c.key} className={pick === c.key ? 'selected' : ''} onClick={() => setPick(c.key)} style={{ cursor: 'pointer' }} {...tip(() => caseTip(c, v))}>
               <td><input type="radio" checked={pick === c.key} onChange={() => setPick(c.key)} aria-label={`${rank} 선택`} /></td>
               <td>{rank}{c.lossy && c.compression.length ? <span className="badge v-warn" style={{ marginLeft: 4 }}>lossy</span> : null}{c.assumed_ratio && c.compression.length ? <span className="badge v-warn" style={{ marginLeft: 4 }} title="catalog에 없는 ratio 사용">가정</span> : null}</td>
               <td className="mono"><b>{fmt(c.total_mw, 1)}</b></td>
@@ -326,7 +341,7 @@ function VariantDetailBody({ v, run, readOnly, battery, iqKeep = false }: { v: V
               <td className="mono">{fmt(c.bw_mbs, 0)}</td>
               <td className="mono" style={{ color: d && d.total > 0 ? 'var(--del-text)' : undefined }}>{d ? `${d.total >= 0 ? '+' : ''}${fmt(d.total, 1)}` : '—'}</td>
               <td className="mono faint">{c.statistic} ×{c.runtime_scale}</td>
-              <td title={c.compression.join(', ')}>{c.compression.length ? `${c.compression.length} buf` : '—'}</td>
+              <td className="mono" style={{ fontSize: 11 }}>{c.compression.length ? c.compression.map((b) => `${b.replace('PYRAMID_', '')}:${(c.compression_modes?.[b] ?? '').toUpperCase().endsWith('LOSSLESS') ? 'LL' : 'LY'}`).join(' ') : '—'}</td>
               <td className="mono faint">{levels(c.dvfs)}{c.dvfs_raise ? ` (+${c.dvfs_raise})` : ''}</td>
             </tr>)
         })}</tbody>

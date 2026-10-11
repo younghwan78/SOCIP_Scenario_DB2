@@ -150,3 +150,30 @@ def test_gpu_power_from_ip_catalog_and_rails():
     assert DomainPowerModel.from_ip("GPU", "x", {"power_model": {"profiler_dynamic_coeff": 1.0}}) is None   # no V-f
     mw, rails = measured_rail_mw({"VDD_G3D0": {"power_mw": 3.0}, "VDD_G3D1": {"power_mw": 1.5}, "VDD_MIF": {"power_mw": 9.0}}, "gpu")
     assert mw == 4.5 and rails == ["VDD_G3D0", "VDD_G3D1"]
+
+
+# ------------------------------------------------------------------ Timing Budget coupling (stretch budgets)
+def test_stretch_budgets_keep_the_measured_placement_feasible_and_bound_the_tasks(model):
+    free = cpu_rebalance(_profile("r1-8k30-psm"), target=model, fps=30, spec=RebalanceSpec())
+    nrt = ("post_crta", "pre_me_rta", "post_irta")
+    # unconstrained: dropping MID_LF0 one OPP slows the NRT tasks left on it (latency, not fps)
+    assert free["best"]["delta_mw"] < -10
+    assert any(free["best"]["task_ms"][t] > free["reference"]["task_ms"][t] * 1.05 for t in nrt)
+    # stretch 1.0 = the NRT stage has no SW slack left: no NRT task may get slower than measured
+    tight = cpu_rebalance(_profile("r1-8k30-psm"), target=model, fps=30,
+                          spec=RebalanceSpec(stretch_budgets={t: 1.0 for t in nrt}))
+    assert tight["curve"][0]["feasible"] and tight["reference"]["feasible"]
+    assert tight["best"]["total_mw"] <= tight["reference"]["total_mw"] + 1e-6
+    assert all(tight["best"]["task_ms"][t] <= tight["budgets_ms"][t] for t in nrt)
+    assert {tight["budget_source"][t] for t in nrt} == {"stretch"}
+    assert {u["budget_source"] for u in tight["units"] if u["unit"] in nrt} <= {"stretch"}
+
+
+def test_explain_names_the_cluster_whose_opp_drops(model):
+    r = cpu_rebalance(_profile("r1-uhd30-vdis"), target=model, fps=30, spec=RebalanceSpec())
+    why = r["why"]
+    assert why["delta_mw"] == pytest.approx(r["best"]["delta_mw"], abs=0.01)
+    assert why["driver"]["cluster"] == "MID_LF0" and why["driver"]["mhz"][1] < why["driver"]["mhz"][0]
+    assert why["driver"]["delta_util_needed"] is not None
+    assert {m["unit"] for m in why["moves"]} == set(r["best"]["moved"])
+    assert why["stretched"] and all(s["stretch"] > 1.2 for s in why["stretched"])

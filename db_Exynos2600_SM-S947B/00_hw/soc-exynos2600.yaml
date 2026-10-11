@@ -8,12 +8,16 @@ compression_modes:
   COMP_BAYER_LOSSLESS:
     compressor: SBWC
     comp_ratio: 1.0
+    typical_ratio: 0.75
+    note: comp_ratio = worst-case (BW allocation); typical_ratio = SAMPLE average for power (off-site assumption)
   COMP_BAYER_LOSSY:
     compressor: SBWC
     comp_ratio: 0.5
   COMP_YUV_LOSSLESS:
     compressor: SBWC
     comp_ratio: 1.0
+    typical_ratio: 0.7
+    note: comp_ratio = worst-case (BW allocation); typical_ratio = SAMPLE average for power (off-site assumption)
   COMP_YUV_LOSSY:
     compressor: SBWC
     comp_ratio: 0.5

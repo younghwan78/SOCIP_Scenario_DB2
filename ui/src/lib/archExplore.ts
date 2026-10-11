@@ -21,6 +21,8 @@ export interface VariantStatus {
 }
 export interface ExpCase {
   key: string; statistic: Statistic; runtime_scale: number; compression: string[]; dvfs: Record<string, number>; dvfs_raise: number
+  /** engine rev ≥ 11: buffer -> chosen mode (lossless and lossy are separate choices) */
+  compression_modes?: Record<string, string>
   total_mw: number; cpu_mw: number; hw_mw: number; bw_mw: number; bw_mbs: number; lossy: boolean; assumed_ratio: boolean
   // engine rev 2+: BW split into IP BW (HW nodes) and CPU BW (SW tasks)
   bw_ip_mw?: number; bw_cpu_mw?: number; bw_ip_mbs?: number; bw_cpu_mbs?: number
@@ -30,6 +32,8 @@ export interface BufferRow {
   buffer: string; format: string; family: string; nodes: string[]; support: string; selectable: boolean; explored?: boolean
   skip_reason?: string | null; mode?: string; comp_ratio?: number; ratio_source?: string; lossy?: boolean
   raw_mbs?: number; delta_mbs?: number; delta_mw?: number; ports?: string[]; listed_modes?: Record<string, string[]>; unsupported_ports?: string[]
+  /** engine rev ≥ 11: every evaluated mode of the buffer (lossless / lossy) */
+  modes?: { mode: string; comp_ratio: number; ratio_source: string; lossy: boolean; delta_mw: number; delta_mbs: number; selectable: boolean; skip_reason?: string | null }[]
 }
 export interface DomainOpt { level: number; speed_mhz: number; voltage_mv: number; delta_mw: number; raise: boolean }
 export interface DomainRow { domain: string; base_level: number; nodes: string[]; max_required_mhz: number; options: DomainOpt[] }
@@ -67,11 +71,47 @@ export interface VariantResult {
   tiers?: Tiers
   /** tier A best total (compact copy for the run list view) */
   keep_total_mw?: number | null
+  /** engine rev ≥ 11: per-lever effect, IQ-first greedy path and the design-space points */
+  levers?: LeverAnalysis
   /** timing judgement of the run (project review policy) */
   throughput_model?: 'stage' | 'pipelined'
   /** false = list-view row (run?view=summary): fetch archApi.runVariant for slices / buffers / options */
   detail?: boolean
 }
+// ---------------------------------------------------------------- lever analysis (engine rev ≥ 11)
+/** neutral = keeps image quality (lossless SBWC) · eval = needs IQ evaluation (IP mode / knob) · trade = lossy */
+export type IqClass = 'neutral' | 'eval' | 'trade'
+export interface LeverDelta { total_mw: number; cpu_mw: number; hw_mw: number; bw_mw: number; bw_mbs: number }
+export interface LeverRow {
+  key: string; kind: 'compression' | 'option'; label: string; iq: IqClass; confidence: string; note?: string | null
+  buffer?: string; mode?: string; comp_ratio?: number | null
+  /** vs baseline, this lever only */
+  alone: LeverDelta | null
+  /** at the end of the path: on vs off with every other chosen lever kept */
+  in_context: LeverDelta | null; in_final?: boolean
+  /** the buffer no longer exists with the final options (e.g. L0 skipped) */
+  moot?: boolean; overlap: boolean
+}
+export interface LeverStep {
+  phase: 'baseline' | IqClass; lever?: string; label: string; iq: IqClass; delta_mw: number; total_mw: number
+  bw_mbs: number; delta_bw_mbs?: number; dropped?: string[] | null
+}
+export interface LeverMilestone { total_mw: number; bw_mbs: number; delta_mw: number; delta_pct: number | null; options: string[]; compression: Record<string, string> }
+export interface LeverPoint { options: string[]; comp: Record<string, string>; iq: IqClass; total_mw: number; bw_mbs: number; cpu_mw: number; hw_mw: number; bw_mw: number }
+export interface LeverAnalysis {
+  status: 'ok' | 'none'
+  basis?: { statistic: string; runtime_scale: number; dvfs: string; sw_band_mw?: [number, number] | null }
+  baseline?: LeverDelta
+  levers?: LeverRow[]
+  costs?: { key: string; label: string; delta_mw: number; speed_mhz: number; voltage_mv: number }[]
+  steps?: LeverStep[]
+  milestones?: Partial<Record<IqClass, LeverMilestone>>
+  best_lever?: Partial<Record<IqClass, string | null>>
+  points?: LeverPoint[]; point_count?: number
+}
+export const IQ_LABEL: Record<IqClass, string> = { neutral: '화질 무손실', eval: 'IQ 평가 필요', trade: '화질 trade (lossy)' }
+export const IQ_COLOR: Record<IqClass, string> = { neutral: '#2F6F68', eval: '#B45309', trade: '#9B1C1C' }
+
 export interface IpModeAlt { mode: string; unit_power_mw_mp: number | null; ppc: number | null; explorable: boolean; label?: string | null; note?: string | null }
 export interface IpModeRow {
   node: string; ip_ref: string; hw_name: string; mode: string; declared: boolean

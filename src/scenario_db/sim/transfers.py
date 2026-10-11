@@ -25,6 +25,17 @@ def compression_catalog(soc: object | None) -> dict[str, float]:
     return catalog
 
 
+def compression_typical(soc: object | None) -> dict[str, float]:
+    """{mode_name: typical_ratio} for modes that declare an average ratio (power / mean BW), else nothing."""
+    modes = getattr(soc, "compression_modes", None) or {}
+    out: dict[str, float] = {}
+    for name, entry in modes.items():
+        ratio = entry.get("typical_ratio") if isinstance(entry, dict) else getattr(entry, "typical_ratio", None)
+        if ratio is not None:
+            out[str(name)] = float(ratio)
+    return out
+
+
 def _resolve_port_comp_ratio(
     compression: str,
     raw_override: object,

@@ -142,6 +142,9 @@ class CompressionMode(BaseScenarioModel):
     """
     compressor: str
     comp_ratio: float
+    # average remaining-BW fraction for power / mean-BW estimates (content dependent, e.g. SBWC lossless ~0.7);
+    # comp_ratio stays the worst-case value used for BW allocation. None = use comp_ratio.
+    typical_ratio: float | None = Field(default=None, gt=0, le=1)
     note: str | None = None
 
     @model_validator(mode="after")

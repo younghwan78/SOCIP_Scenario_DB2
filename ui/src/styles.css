@@ -778,3 +778,22 @@ tr.row-off td { opacity: .6; }
   border-top-color: var(--primary, #2F6F68); animation: adm-spin .9s linear infinite; }
 @keyframes adm-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .admission-wait .spinner { animation: none; } }
+
+/* 조합 탐색 · Lever 분석 (2026-10-11) */
+.lever { display: grid; gap: 10px; }
+.lever h4 { margin: 0 0 4px; font-size: 12.5px; }
+.lever-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.lever-tile { border: 1px solid var(--line-soft); border-top: 3px solid; border-radius: 6px; padding: 6px 9px; display: grid; gap: 2px; background: var(--surface-soft); }
+.lever-tile-h { font-size: 11.5px; font-weight: 600; color: var(--text-2); }
+.lever-tile-v { font-size: 19px; font-weight: 600; }
+.lever-answer { margin: 0; padding-left: 18px; font-size: 13px; display: grid; gap: 2px; }
+.lever-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+@media (max-width: 1000px) { .lever-grid { grid-template-columns: 1fr; } }
+.lever-table .lever-group td { font-weight: 600; font-size: 11.5px; background: var(--surface-soft); }
+.cpu-why-head { font-size: 13px; padding: 6px 10px; border-radius: 6px; background: var(--surface-soft); border-left: 3px solid var(--line); }
+.cpu-why-head.ok { border-left-color: var(--primary); }
+.cpu-why-head.warn { border-left-color: #B45309; background: var(--warn-soft); }
+.cpu-why-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+@media (max-width: 1000px) { .cpu-why-grid { grid-template-columns: 1fr; } }
+.profile-sel { display: inline-flex; flex-direction: column; gap: 2px; min-width: 0; max-width: 560px; }
+.profile-desc { font-size: 11.5px; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }

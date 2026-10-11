@@ -30,6 +30,8 @@ capabilities:
     source_note: PPC is an exploration assumption, not a verified silicon capacity.
       Power coefficient is unavailable and core power is excluded.
     ppc: 4.0
+    unit_power_mw_mp: 1.2
+    # SAMPLE (off-site, 2026-10-11): assumed unit power so lever / power distribution is complete; replace with in-house coefficient.
     vdd: VDD_CAM
     dvfs_group: CAM
 compatible_soc:

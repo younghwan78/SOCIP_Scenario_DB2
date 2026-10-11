@@ -367,7 +367,8 @@ def test_exynos2600_camera_recording_vdis_preserves_is_v15_timing_contract():
     lme = next(row for row in result.timing_breakdown if row.node_id == "lme")
     assert lme.hw_time_ms <= 3.0 + 1e-9
     assert any("assumed wall time" in warning for warning in result.warnings)
-    assert any("core power estimate will be zero" in warning for warning in result.warnings)
+    # every active IP carries a (SAMPLE) unit power since 2026-10-11, so no zero-power warning
+    assert not any("core power estimate will be zero" in warning for warning in result.warnings)
     assert result.bw_total_mbs == pytest.approx(4092.40188 + 1008 * 756 * 30 / 1e6 + (512 * 288 * 3 - 640 * 480 * 1.5) * 2 * 30 / 1e6 + 4 * 30 / 8)
 
 

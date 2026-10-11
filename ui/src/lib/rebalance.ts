@@ -15,7 +15,7 @@ export interface RbSplit {
   dsu?: { mhz: number; active_ratio: number; total_mw: number } | null
   label?: string
 }
-export interface RbUnit { unit: string; tasks: string[]; home: string; budget_ms: number | null; threads: number; util_fmax: Record<string, number>; t_fmax_ms: Record<string, number> }
+export interface RbUnit { unit: string; tasks: string[]; home: string; budget_ms: number | null; budget_source?: 'user' | 'stretch' | null; threads: number; util_fmax: Record<string, number>; t_fmax_ms: Record<string, number> }
 export interface RbBoundary { cluster: string; mhz: number; mv: number; peak_cpu_util: number; capacity: number; sched_mhz?: number; boosted_by?: string[]; next_lower_mhz?: number; next_lower_mv?: number; delta_util_needed?: number; candidates?: [string, number][] }
 export interface RbState { mhz: Record<string, number>; count: number; min_mw: number; max_mw: number; representative: Record<string, string>; rep_mw: Record<string, number>; busy_mhz: Record<string, number>; dsu_active: number }
 export interface RbStrategyRow {
@@ -40,9 +40,33 @@ export interface CpuRebalance {
   dsu_model: DsuModelInfo | null; dsu_params: DsuParams | null; dsu_measured?: Record<string, number> | null; warnings: string[]
   /** CPU → DRAM traffic after cpu_bw_scale (API ≥ 2026-10-09); CPU + DSU power does not depend on it */
   cpu_bw_mbs?: number
+  /** API ≥ 2026-10-11: task budgets in effect and where they came from (user / stretch = Timing Budget) */
+  budgets_ms?: Record<string, number>; budget_source?: Record<string, 'user' | 'stretch'>
+  /** API ≥ 2026-10-11: the variant's Timing Budget stages, enforced (stage_slack) or only reported (off) */
+  timing_coupling?: TimingCoupling
+  /** API ≥ 2026-10-11: why the best split wins (OPP change per cluster, moves, stretched tasks) */
+  why?: RbWhy | null
+}
+export interface TimingStage { stage: string; sw_ms: number; hw_ms: number; overhead_ms: number; room_ms: number; slack_ms: number; stretch: number; tasks: { task: string; ms: number }[] }
+export interface TimingImpact { stage: string; sw_ms: number; delta_sw_ms: number; slack_ms: number; chain_ms: number; extra_latency_frames: number; ok: boolean }
+export interface TimingCoupling {
+  mode: 'stage_slack'; enforced: boolean; scenario_id: string; variant_id: string; statistic: string; runtime_scale: number; period_ms: number
+  stages: TimingStage[]; stretch: Record<string, number>; matched_tasks: string[]; unmatched_tasks: string[]
+  impact: { reference: TimingImpact[]; best: TimingImpact[] | null }
+}
+export interface RbWhy {
+  delta_mw: number
+  clusters: { cluster: string; mhz: [number, number]; mv: [number, number]; mw: [number, number]; delta_mw: number; opp_change: 'down' | 'up' | 'same' }[]
+  dsu: { mhz: [number, number]; mw: [number, number]; delta_mw: number }
+  moves: { unit: string; from: string; to: string; util_fmax_to: number | null; ms: [number, number]; stretch: number | null; budget_ms: number | null }[]
+  stretched: { task: string; ms: [number, number]; stretch: number; budget_ms: number | null; budget_used_pct: number | null }[]
+  driver: { cluster: string; mhz: [number, number]; mv: [number, number]; delta_mw: number; peak_util: number | null; delta_util_needed: number | null; next_lower_mhz: number | null } | null
+  budget_limited: string[]
 }
 export interface CpuRebalanceRequest extends CpuSweepRequest {
   pool: string[]; movable?: string[]; locks: Record<string, string>; co_move: string[][]; verify_k?: number; max_exhaustive?: number
+  /** stage_slack = Timing Budget stage SW slack bounds each SW task (no extra pipeline latency); off = frame only */
+  timing_coupling?: 'off' | 'stage_slack'; timing_statistic?: 'min' | 'mean' | 'max'
 }
 export const rebalanceApi = {
   run: (req: CpuRebalanceRequest) => postAdmitted<{ result: CpuRebalance }>('/cpu/rebalance', req).then((r) => r.result),

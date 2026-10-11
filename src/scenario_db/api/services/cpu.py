@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any
+import math
+from typing import Any, Literal
 
 from sqlalchemy.orm import Session
 
@@ -69,18 +70,102 @@ def run_cpu_sweep(db: Session, request: CpuSweepRequest) -> CpuWhatIfResponse:
     return CpuWhatIfResponse(profile_ref=profile.evidence_ref, power_params_ref=request.power_params_ref, result=result)
 
 
+def timing_stretch(db: Session, scenario_id: str, variant_id: str, *, statistic: Literal["min", "mean", "max"] = "max",
+                   runtime_scale: float = 1.0) -> dict[str, Any]:
+    """Per-task slow-down allowed by the variant's Timing Budget (stage SW slack), plus the stage table.
+
+    room = P - HW - overhead of the stage; stretch = room / SW (>= 1: a stage already over the 25 %-style
+    budget allows no slow-down at all). Each SW item of the stage gets the stage's stretch, so the stage SW
+    total stays within its room when every task slows down by the same factor (conservative split).
+    """
+    from scenario_db.api.schemas.timing_budget import TimingBudgetRequest
+    from scenario_db.api.services.timing_budget import analyze_timing_budget_request
+    from scenario_db.sim.timing_budget import TimingBudgetOptions
+
+    opts = TimingBudgetOptions(statistic=statistic, runtime_scale=runtime_scale, include_whatif=False)
+    rep = analyze_timing_budget_request(db, TimingBudgetRequest(scenario_id=scenario_id, variant_id=variant_id,
+                                                                options=opts)).report
+    period = float(rep["period_ms"])
+    stages: list[dict[str, Any]] = []
+    stretch: dict[str, float] = {}
+    for st in rep["stages"]:
+        items = [i for i in st.get("sw_items") or [] if i.get("kind", "sw") == "sw" and i.get("critical") is not False]
+        sw = float(st.get("sw_ms") or 0.0)
+        if not items or sw <= 0:
+            continue
+        room = period - float(st.get("hw_ms") or 0.0) - float(st.get("overhead_ms") or 0.0)
+        factor = max(1.0, room / sw)
+        for i in items:
+            stretch[i["task"]] = min(stretch.get(i["task"], math.inf), factor)
+        stages.append({"stage": st["id"], "sw_ms": round(sw, 3), "hw_ms": round(float(st.get("hw_ms") or 0.0), 3),
+                       "overhead_ms": round(float(st.get("overhead_ms") or 0.0), 3), "room_ms": round(room, 3),
+                       "slack_ms": round(room - sw, 3), "stretch": round(factor, 3),
+                       "tasks": [{"task": i["task"], "ms": float(i.get("runtime_ms") or 0.0)} for i in items]})
+    return {"mode": "stage_slack", "scenario_id": scenario_id, "variant_id": variant_id, "statistic": statistic,
+            "runtime_scale": runtime_scale, "period_ms": period, "stages": stages,
+            "stretch": {k: round(v, 4) for k, v in stretch.items()}}
+
+
+def timing_impact(coupling: dict[str, Any], reference: dict[str, Any], case: dict[str, Any]) -> list[dict[str, Any]]:
+    """Stage SW after a placement: each Timing Budget SW item scales with its CPU task time (case / reference)."""
+    out = []
+    ref_ms, new_ms = reference.get("task_ms") or {}, case.get("task_ms") or {}
+    for st in coupling["stages"]:
+        add = 0.0
+        for it in st["tasks"]:
+            a, b = ref_ms.get(it["task"]), new_ms.get(it["task"])
+            if a and b:
+                add += it["ms"] * (b / a - 1.0)
+        sw = st["sw_ms"] + add
+        period = coupling["period_ms"]
+        chain0 = st["sw_ms"] + st["hw_ms"] + st["overhead_ms"]
+        chain = chain0 + add
+        # pipelined: fps holds while each task fits a frame; a longer SW+HW chain only adds buffered frames (latency)
+        extra = max(0, math.ceil(chain / period - 1e-9) - math.ceil(chain0 / period - 1e-9)) if period > 0 else 0
+        out.append({"stage": st["stage"], "sw_ms": round(sw, 3), "delta_sw_ms": round(add, 3),
+                    "slack_ms": round(st["room_ms"] - sw, 3), "chain_ms": round(chain, 3),
+                    "extra_latency_frames": extra, "ok": st["room_ms"] - sw >= -1e-6 or add <= 1e-6})
+    return out
+
+
 def run_cpu_rebalance(db: Session, request: CpuRebalanceRequest) -> CpuWhatIfResponse:
     profile = _profile(db, request)
     target = _model(db, request.power_params_ref)
     base = _model(db, request.base_power_params_ref) if request.base_power_params_ref else None
+    # the Timing Budget of the profile's variant: enforced as task budgets (stage_slack) or only reported (off)
+    enforce = request.timing_coupling != "off"
+    coupling = None
+    row = get_evidence(db, request.cpu_profile_ref) if request.cpu_profile_ref else None
+    if row is not None and row.scenario_ref and row.variant_ref:
+        try:
+            coupling = timing_stretch(db, str(row.scenario_ref), str(row.variant_ref), statistic=request.timing_statistic,
+                                      runtime_scale=request.default_growth)
+        except (NotFoundError, UnprocessableError) as exc:
+            if enforce:
+                raise UnprocessableError(f"timing coupling: {exc}") from exc
+    elif enforce:
+        raise UnprocessableError("timing_coupling needs a cpu_profile_ref measured on a scenario variant")
     spec = RebalanceSpec(**_sweep_fields(request), pool=tuple(request.pool),
                          movable=tuple(request.movable) if request.movable is not None else None,
                          locks=dict(request.locks), co_move=tuple(tuple(g) for g in request.co_move),
-                         verify_k=request.verify_k, max_exhaustive=request.max_exhaustive)
+                         verify_k=request.verify_k, max_exhaustive=request.max_exhaustive,
+                         stretch_budgets=dict(coupling["stretch"]) if coupling and enforce else {})
     try:
         result = cpu_rebalance(profile, target=target, base=base, fps=request.fps, spec=spec)
     except ValueError as exc:
         raise UnprocessableError(str(exc)) from exc
+    if coupling:
+        coupling["enforced"] = enforce
+        ref = result["reference"]
+        matched = sorted(t for t in coupling["stretch"] if t in (ref.get("task_ms") or {}))
+        coupling["matched_tasks"] = matched
+        coupling["unmatched_tasks"] = sorted(set(coupling["stretch"]) - set(matched))
+        coupling["impact"] = {"reference": timing_impact(coupling, ref, ref),
+                              "best": timing_impact(coupling, ref, result["best"]) if result.get("best") else None}
+        for c in result.get("cases") or []:
+            rows = timing_impact(coupling, ref, c)
+            c["timing_slack_ms"] = min((r["slack_ms"] for r in rows), default=None)
+        result["timing_coupling"] = coupling
     return CpuWhatIfResponse(profile_ref=profile.evidence_ref, power_params_ref=request.power_params_ref, result=result)
 
 
