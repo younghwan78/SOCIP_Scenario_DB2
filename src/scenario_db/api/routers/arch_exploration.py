@@ -19,6 +19,7 @@ from scenario_db.api.schemas.arch_exploration import (
 )
 from scenario_db.api.services import arch_exploration as svc
 from scenario_db.config import get_settings
+from scenario_db.exceptions import UnprocessableError
 
 router = APIRouter(prefix="/arch", tags=["architecture exploration"])
 
@@ -33,6 +34,8 @@ def create_run(
 ):
     """SW statistic x growth (simulated) x DVFS headroom x compression (analytic) per variant; persisted."""
     settings = get_settings()
+    if request.apply_options:
+        raise UnprocessableError("apply_options is reserved for IQ-reviewed lever registration")
     enforce_request_size(request, settings.exploration_max_request_bytes)
     enforce_timeline_frame_limit(request.spec.timing.frames, settings.simulation_max_timeline_frames)
     with admission_slot("simulation", settings.simulation_max_concurrent_runs):
@@ -85,7 +88,10 @@ def register_lever(
     principal: ApiPrincipal = Depends(require_roles("writer", "admin")),
 ):
     """Register the lever selector's combination; power options need IQ results (adopted) and are re-explored."""
-    return svc.register_lever(db, request, principal.subject)
+    settings = get_settings()
+    enforce_request_size(request, settings.exploration_max_request_bytes)
+    with admission_slot("simulation", settings.simulation_max_concurrent_runs):
+        return svc.register_lever(db, request, principal.subject)
 
 
 @router.post("/predictions/{prediction_id}/recompute")

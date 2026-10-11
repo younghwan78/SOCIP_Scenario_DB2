@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from 'react'
+import { Fragment, useMemo, useRef, useState } from 'react'
 import type { Ctx } from '../App'
 import { useAsync } from '../lib/route'
 import { fmt, type Statistic } from '../lib/timingBudget'
@@ -276,7 +276,7 @@ function VariantDetail({ v, run, readOnly }: { v: VariantResult; run: RunDetail;
     [run.id, v.scenario_id, v.variant_id])
   if (fullQ.error) return <div className="err" style={{ gridColumn: '1 / -1' }}>{short(v.variant_id)} 상세 조회 실패: {fullQ.error}</div>
   if (!fullQ.data) return <div className="empty" style={{ gridColumn: '1 / -1' }}>{short(v.variant_id)} 상세 불러오는 중…</div>
-  return <VariantDetailBody v={fullQ.data} run={run} readOnly={readOnly} battery={battery} iqKeep={refs?.policy.register_baseline === 'iq_keep'} />
+  return <VariantDetailBody key={JSON.stringify([run.id, v.scenario_id, v.variant_id, readOnly])} v={fullQ.data} run={run} readOnly={readOnly} battery={battery} iqKeep={refs?.policy.register_baseline === 'iq_keep'} />
 }
 
 function VariantDetailBody({ v, run, readOnly, battery, iqKeep = false }: { v: VariantResult; run: RunDetail; readOnly: boolean; battery: Battery; iqKeep?: boolean }) {
@@ -308,12 +308,14 @@ function VariantDetailBody({ v, run, readOnly, battery, iqKeep = false }: { v: V
   const [msg, setMsg] = useState<string>()
   const [busy, setBusy] = useState(false)
   const allCases = groups ? [...groups.keep, ...groups.trade] : candRows.map((x) => x.c)
+  const registering = useRef(false)
   const picked = allCases.find((c) => c.key === pick)
   // IQ-keeping case at the resolved DVFS -> lever registration (no reason needed, rule lever:iq-keep)
   const viaLever = !!picked && !!v.design_points?.length && !(picked.lossy && picked.compression.length) && !picked.dvfs_raise
   const needsReason = !viaLever && pick !== serverDefault
   const promote = async () => {
-    if (busy || readOnly) return
+    if (registering.current || readOnly || !picked?.eligible) return
+    registering.current = true
     setBusy(true); setMsg(undefined)
     try {
       if (viaLever && picked) {
@@ -325,7 +327,7 @@ function VariantDetailBody({ v, run, readOnly, battery, iqKeep = false }: { v: V
       const chosen = pick && pick !== serverDefault ? pick : undefined
       const r = await archApi.promote(run.id, [v.variant_id], chosen, reason || undefined, v.scenario_id, run.project_ref ?? undefined)
       setMsg(r.promoted.length ? `등록: ${r.promoted[0].id} (${fmt(r.promoted[0].total_mw, 1)} mW)` : `건너뜀: ${r.skipped[0]?.reason}`)
-    } catch (e) { setMsg(e instanceof Error ? e.message : String(e)) } finally { setBusy(false) }
+    } catch (e) { setMsg(e instanceof Error ? e.message : String(e)) } finally { registering.current = false; setBusy(false) }
   }
   const m = v.sw_margin
   const tip = useTip()
@@ -380,7 +382,7 @@ function VariantDetailBody({ v, run, readOnly, battery, iqKeep = false }: { v: V
       </table>
       <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <input className="input" style={{ flex: 1, minWidth: 240 }} placeholder={needsReason ? (picked?.lossy ? 'lossy(화질 trade) 선택 사유 (필수)' : '기본 외 조합 선택 사유 (필수)') : '사유 (선택)'} value={reason} onChange={(e) => setReason(e.target.value)} />
-        <button className="btn primary" disabled={busy || readOnly || !v.spec_ok || (needsReason && !reason)} onClick={promote}
+        <button className="btn primary" disabled={busy || readOnly || !v.spec_ok || !picked?.eligible || (needsReason && !reason.trim())} onClick={promote}
           title={readOnly ? '다른 과제의 run — 비교 보기 전용' : undefined}>{busy ? '등록 중…' : '예측으로 등록 (current)'}</button>
         {msg && <span className="faint" style={{ fontSize: 12 }}>{msg}</span>}
       </div>

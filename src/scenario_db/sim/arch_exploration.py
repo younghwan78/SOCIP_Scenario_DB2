@@ -292,6 +292,7 @@ def _explore(graph, spec: ArchExplorationSpec, config: SimulationRunConfig,
             "constraints_verified": verified.get("constraints_pass") if verified else None,
         },
         "objective": obj.model_dump(),
+        "constraints": spec.constraints.model_dump(),
         "counts": {
             "cases": len(dist["total_mw"]),
             "eligible": eligible_count,
@@ -1260,7 +1261,7 @@ def case_from_key(summary: dict[str, Any], key: str | None) -> dict[str, Any] | 
     for tok in [x for x in (parts.get("c") or "-").split("+") if x and x != "-"]:
         bid, _, short = tok.partition(":")
         b = bufs.get(bid)
-        if b is None:
+        if b is None or b.get("explored") is False:
             return None
         modes = [m for m in (b.get("modes") or [b]) if m.get("selectable", True) and m.get("mode")]
         m = next((x for x in modes if _short_mode(x["mode"]) == short), None) if short else (modes[0] if modes else None)
@@ -1283,7 +1284,8 @@ def case_from_key(summary: dict[str, Any], key: str | None) -> dict[str, Any] | 
     case = _case(obj, cset, {"levels": levels, "delta_mw": delta, "raises": raises})
     if case["key"] != key:
         return None
-    case["eligible"] = obj["verdict"]["status"] != "fail" and bool(obj.get("intervals_ok", True))
+    constraints = ExplorationConstraints.model_validate(summary.get("constraints") or {})
+    case["eligible"] = _slice_ok(obj, constraints)[0] and _case_ok(case, constraints)
     return case
 
 
@@ -1295,6 +1297,10 @@ def case_from_selection(summary: dict[str, Any], compression: dict[str, str]) ->
     order = [b["buffer"] for b in summary.get("buffers") or [] if b["buffer"] in compression]
     if len(order) != len(compression):
         return None
+    for bid, mode in compression.items():
+        candidate = _mode_of(summary.get("buffers") or [], bid, mode)
+        if candidate is None or candidate.get("mode") != mode:
+            return None
     c = "+".join(f"{b}:{_short_mode(compression[b])}" for b in order) or "-"
     doms = obj.get("domains") or summary.get("domains") or []
     d = ",".join(f"{x['domain']}:L{x['base_level']}" for x in sorted(doms, key=lambda x: x["domain"])) or "-"
@@ -1429,6 +1435,7 @@ _MIN_GAIN_MW = 0.05
 
 def _point(c: dict[str, Any]) -> dict[str, Any]:
     return {"key": c["key"], "comp": dict(c.get("compression_modes") or {b: None for b in c["compression"]}),
+            "eligible": bool(c.get("eligible", False)),
             "dvfs": dict(c["dvfs"]),
             "total_mw": round(c["total_mw"], 3), "cpu_mw": round(c["cpu_mw"], 3), "hw_mw": round(c["hw_mw"], 3),
             "bw_mw": round(c["bw_mw"], 3), "bw_ip_mw": round(c["bw_ip_mw"], 3), "bw_cpu_mw": round(c["bw_cpu_mw"], 3),
@@ -1606,6 +1613,7 @@ def lever_analysis(summary: dict[str, Any]) -> dict[str, Any]:
         for p in pts:
             comp = {b: m for b, m in p["comp"].items() if m}
             points.append({"options": sorted(item_label.get(i, i) for i in s), "option_keys": sorted(s), "comp": comp,
+                           "eligible": p.get("eligible", False),
                            "key": p.get("key"),
                            "iq": point_iq(s, comp), "total_mw": p["total_mw"], "bw_mbs": p["bw_mbs"],
                            "cpu_mw": p["cpu_mw"], "hw_mw": p["hw_mw"], "bw_mw": p["bw_mw"]})

@@ -100,6 +100,7 @@ export interface LeverStep {
 }
 export interface LeverMilestone { total_mw: number; bw_mbs: number; delta_mw: number; delta_pct: number | null; options: string[]; compression: Record<string, string> }
 export interface LeverPoint {
+  eligible?: boolean
   options: string[]; comp: Record<string, string>; iq: IqClass; total_mw: number; bw_mbs: number; cpu_mw: number; hw_mw: number; bw_mw: number
   /** API ≥ 2026-10-11 b: option item keys and the case key (base option set = a case of this run) */
   option_keys?: string[]; key?: string | null
@@ -124,6 +125,7 @@ export interface LeverAnalysis {
   points?: LeverPoint[]; point_count?: number
 }
 export interface DesignPoint {
+  eligible?: boolean
   key?: string; comp: Record<string, string | null>; dvfs?: Record<string, number>
   total_mw: number; cpu_mw: number; hw_mw: number; bw_mw: number; bw_ip_mw?: number; bw_cpu_mw?: number; bw_mbs: number; lossy: boolean; assumed: boolean
 }
@@ -135,7 +137,7 @@ export function caseGroups(v: VariantResult, withRaise: boolean): { keep: ExpCas
     key: p.key, statistic: b.statistic, runtime_scale: b.runtime_scale, dvfs: p.dvfs ?? b.dvfs, dvfs_raise: 0,
     compression: Object.keys(p.comp), compression_modes: Object.fromEntries(Object.entries(p.comp).filter(([, m]) => m)) as Record<string, string>,
     total_mw: p.total_mw, cpu_mw: p.cpu_mw, hw_mw: p.hw_mw, bw_mw: p.bw_mw, bw_ip_mw: p.bw_ip_mw, bw_cpu_mw: p.bw_cpu_mw, bw_mbs: p.bw_mbs,
-    lossy: p.lossy, assumed_ratio: p.assumed, verdict: b.verdict, eligible: true,
+    lossy: p.lossy, assumed_ratio: p.assumed, verdict: b.verdict, eligible: p.eligible ?? b.eligible,
   } : null)
   const listed = [v.recommended, ...v.alternatives, ...(v.pareto ?? []), v.baseline, v.tiers?.keep?.best, v.tiers?.trade?.best]
   const seen = new Set<string>()
@@ -239,6 +241,7 @@ export interface BoardRow {
   condition?: PredCondition
 }
 export interface PredCondition {
+  applied_options?: { key: string; label: string }[]
   warmup_frames?: number
   source: 'timing-budget' | 'exploration'; statistic: string | null; runtime_scale: number | null; throughput_model: string; eis: string
   cpu_model: string; rt_margin: number | null; output_margin: number | null; config_profile_ref: string | null
@@ -277,7 +280,8 @@ export function conditionText(c: PredCondition | undefined): string {
   return [`${c.source === 'timing-budget' ? 'TB' : '탐색'}`, `SW ${c.statistic ?? '?'} ×${c.runtime_scale ?? '?'}`, c.throughput_model === 'pipelined' ? 'pipeline' : 'stage',
     c.cpu_model === 'profile' ? 'CPU 측정' : null, ov.length ? `override ${ov.map(([d, l]) => `${d}:L${l}`).join(',')}` : null,
     c.measured?.sw?.length ? '실측 SW' : null, c.measured?.clock_ref ? '실측 clock' : null,
-    c.power_params_ref ? `params ${c.power_params_ref}` : null].filter(Boolean).join(' · ')
+    c.power_params_ref ? `params ${c.power_params_ref}` : null,
+    c.applied_options?.length ? c.applied_options.map((o) => o.label || o.key).join(' + ') : null].filter(Boolean).join(' · ')
 }
 export interface VerdictStage { id: string; name?: string; sw_ms?: number; hw_ms?: number; budget_ms?: number; overhead_ms?: number; margin?: number; feasible?: boolean; fill_pct?: number; throughput?: string; longest_sw_ms?: number; chain_ms?: number }
 export interface VerdictDetail {

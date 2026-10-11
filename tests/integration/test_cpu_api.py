@@ -42,3 +42,5 @@ def test_cpu_inputs_and_analysis_use_postgres_topology(api_client, cpu_topology)
         assert wrong_version.status_code == 422
     unknown = api_client.post("/api/v1/cpu/sweep", json={**request, "sweep_clusters": {"ui": ["typo"]}})
     assert unknown.status_code == 422
+    coupled = api_client.post("/api/v1/cpu/rebalance", json=request | {"timing_coupling": "stage_slack"})
+    assert coupled.status_code == 422 and "inline" in coupled.text

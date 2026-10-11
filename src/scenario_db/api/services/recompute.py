@@ -65,7 +65,7 @@ def recompute_prediction(db: Session, prediction_id: str, *, power_params_ref: s
                                           **{k: sel[k] for k in _SEL_KEYS if k in sel})
         out = register_condition(db, req, user)
     else:
-        if str(pred.selection_rule or "").startswith(("user:", "lever:")):
+        if spec.get("apply_options") or str(pred.selection_rule or "").startswith(("user:", "lever:")):
             return {"prediction_id": pred.id, "variant_id": pred.variant_ref, "status": "skipped",
                     "reason": f"사람이 고른 조합 ({pred.selection_rule}) — 조합 탐색에서 다시 선택 필요"}
         from scenario_db.api.schemas.arch_exploration import ArchExplorationRunRequest, PromoteRequest

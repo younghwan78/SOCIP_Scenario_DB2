@@ -195,20 +195,26 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
             memo[key] = out
         return out
 
+    verification_budgets = dict(budgets)
     if spec.stretch_budgets:
         # anchor = the measured placement's task time; the larger of the per-cluster estimate used by the search and
         # the full evaluation, so the measured placement stays feasible in both
         anchor = evaluate(threads, ctx, ref_pol, budgets_ms={}, dsu_residency=prep.dsu_res, bw_mbs=prep.bw_mbs,
                           dsu_policy=prep.dsu_policy, pinned_threads=thread_pol)["task_ms"]
+        verified_anchor = dict(anchor)
         home_mask = {c: sum(1 << i for i, g in enumerate(units) if home[g[0]] == c) for c in every}
         for c in every:
             for task, ms in _task_ms(c, home_mask[c]).items():
                 anchor[task] = max(anchor.get(task, 0.0), ms)
         for task, factor in spec.stretch_budgets.items():
             ms = anchor.get(task)
-            if ms and task not in budgets:
-                budgets[task] = ms * max(1.0, float(factor)) * (1 + 1e-6)
-                budget_source[task] = "stretch"
+            if ms:
+                limit = ms * max(1.0, float(factor)) * (1 + 1e-6)
+                if task not in budgets or limit < budgets[task]:
+                    budgets[task] = limit
+                    budget_source[task] = "stretch"
+                verified_limit = verified_anchor[task] * max(1.0, float(factor)) * (1 + 1e-6)
+                verification_budgets[task] = min(verification_budgets.get(task, math.inf), verified_limit)
 
     fixed_clusters = [c for c in every if c not in pool]
     fixed_state = {c: state(c, 0) for c in fixed_clusters}
@@ -407,7 +413,7 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
     # ---- verify: full evaluate for the reference and the top-K feasible splits
     def full_eval(assign: tuple[int, ...]) -> dict[str, Any]:
         pol = policies_for(assign)
-        case = evaluate(threads, ctx, pol, budgets_ms=budgets, dsu_residency=prep.dsu_res, bw_mbs=prep.bw_mbs,
+        case = evaluate(threads, ctx, pol, budgets_ms=verification_budgets, dsu_residency=prep.dsu_res, bw_mbs=prep.bw_mbs,
                         dsu_policy=dsu_pol, pinned_threads=thread_pol)
         case.pop("_signature", None)
         return case
@@ -443,6 +449,7 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
 
     top_keys = feasible[: max(spec.verify_k, spec.top)]
     verified = [(k, full_eval(assign_of(k))) for k in top_keys]
+    verified = [(k, case) for k, case in verified if case["feasible"]]
     verified.sort(key=lambda kv: (kv[1]["total_mw"], sum(1 for i, a in enumerate(assign_of(kv[0])) if a != home_idx[i])))
     cases = [describe(assign_of(k), case) | {"rank": i + 1} for i, (k, case) in enumerate(verified[: spec.top])]
 
@@ -575,7 +582,7 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
         "dsu_params": cpu_dsu.params_view(model, prep.sched.power_gating_eff),
         # CPU traffic to DRAM after cpu_bw_scale; the CPU + DSU power above does not depend on it (BW-only effect)
         "cpu_bw_mbs": round(prep.bw_mbs, 3),
-        "budgets_ms": {t: round(v, 4) for t, v in budgets.items()},
+        "budgets_ms": {t: round(v, 4) for t, v in verification_budgets.items()},
         "budget_source": budget_source,
         "warnings": warnings,
     }

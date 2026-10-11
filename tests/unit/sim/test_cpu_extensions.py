@@ -165,8 +165,12 @@ def test_stretch_budgets_keep_the_measured_placement_feasible_and_bound_the_task
     assert tight["curve"][0]["feasible"] and tight["reference"]["feasible"]
     assert tight["best"]["total_mw"] <= tight["reference"]["total_mw"] + 1e-6
     assert all(tight["best"]["task_ms"][t] <= tight["budgets_ms"][t] for t in nrt)
+    assert all(tight["best"]["task_ms"][t] <= tight["reference"]["task_ms"][t] * (1 + 1e-6) for t in nrt)
     assert {tight["budget_source"][t] for t in nrt} == {"stretch"}
     assert {u["budget_source"] for u in tight["units"] if u["unit"] in nrt} <= {"stretch"}
+    loose_user = cpu_rebalance(_profile("r1-8k30-psm"), target=model, fps=30,
+                              spec=RebalanceSpec(budgets_ms={t: 100.0 for t in nrt}, stretch_budgets={t: 1.0 for t in nrt}))
+    assert all(loose_user["best"]["task_ms"][t] <= loose_user["reference"]["task_ms"][t] * (1 + 1e-6) for t in nrt)
 
 
 def test_explain_names_the_cluster_whose_opp_drops(model):

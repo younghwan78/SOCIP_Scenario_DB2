@@ -114,4 +114,8 @@ class LeverRegisterRequest(BaseModel):
         bad = [o for o in self.options if not re.match(OPTION_KEY, o)]
         if bad:
             raise ValueError(f"invalid option keys: {bad}")
+        if any(not r.note.strip() for r in self.iq_results):
+            raise ValueError("IQ result note must contain non-whitespace text")
+        if len({r.option_key for r in self.iq_results}) != len(self.iq_results):
+            raise ValueError("duplicate IQ result keys")
         return self

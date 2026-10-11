@@ -87,6 +87,10 @@ def root(tmp_path: Path) -> Path:
         path = r / rel
         sdoc = yaml.safe_load(path.read_text(encoding="utf-8"))
         sdoc["capabilities"]["sim"].pop("unit_power_mw_mp", None)
+        sim = sdoc["capabilities"]["sim"]
+        sim["source_note"] = sim["source_note"].replace(
+            "SAMPLE unit power is an unverified exploration assumption; replace with an in-house coefficient.",
+            "Power coefficient is unavailable and core power is excluded.")
         path.write_text(yaml.safe_dump(sdoc, allow_unicode=True, sort_keys=False), encoding="utf-8")
     mfc = r / POST_EJECT_MFC_2600
     mdoc = yaml.safe_load(mfc.read_text(encoding="utf-8"))

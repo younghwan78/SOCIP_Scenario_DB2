@@ -23,7 +23,7 @@ export function LeverAnalysisView({ la, battery, measured, reg }: { la: LeverAna
   if (!la || la.status !== 'ok' || !la.baseline) {
     return <div className="empty">이 run에는 lever 분석이 없습니다 (engine rev 11 이후 다시 탐색하면 표시).</div>
   }
-  return <LeverBody la={la} battery={battery} measured={measured} reg={reg} />
+  return <LeverBody key={JSON.stringify([reg?.runId, reg?.scenarioId, reg?.variantId, reg?.projectRef, reg?.readOnly])} la={la} battery={battery} measured={measured} reg={reg} />
 }
 
 function LeverBody({ la, battery, measured, reg }: { la: LeverAnalysis; battery: Battery; measured?: Measured | null; reg?: RegisterCtx }) {

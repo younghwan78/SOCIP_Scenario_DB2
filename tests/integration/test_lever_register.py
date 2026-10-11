@@ -68,5 +68,32 @@ def test_lever_selection_registers_with_iq_results(e2600):
     pred = c.get(f"/api/v1/arch/predictions/{a['promoted'][0]['id']}").json()
     sel = (pred.get("metrics") or {}).get("lever_selection") or {}
     assert sel.get("options") == opts and sel["iq_results"][opts[0]]["status"] == "adopted"
+    assert pred["metrics"]["applied_options"][0]["key"] == opts[0]
+    freshness = c.get("/api/v1/arch/predictions/freshness", params={"scenario_id": SC}).json()
+    current = next(p for p in freshness["rows"] if p["prediction_id"] == pred["id"])
+    assert current["status"] == "fresh", current
     reviews = c.get("/api/v1/arch/power-options/reviews", params={"scenario_id": SC}).json()
     assert any(rv["option_key"] == opts[0] and rv["status"] == "adopted" for rv in reviews)
+
+
+def test_lever_cannot_bypass_constraints_or_iq_validation(e2600):
+    c = e2600
+    request = {"scenario_ids": [SC], "variant_ids": [VAR], "project_ref": "proj-sm-s947b"}
+    run = c.post("/api/v1/arch/exploration/runs", json=request).json()
+    v = run["variants"][0]
+    budget = (v["baseline"]["total_mw"] + v["tiers"]["keep"]["best"]["total_mw"]) / 2
+    assert budget < v["baseline"]["total_mw"]
+    constrained = c.post("/api/v1/arch/exploration/runs", json=request | {"spec": {"constraints": {"power_budget_mw": budget}}})
+    assert constrained.status_code == 200, constrained.text
+    run = constrained.json()
+    base = {"run_id": run["id"], "scenario_id": SC, "variant_id": VAR}
+    forbidden = c.post("/api/v1/arch/predictions/lever", json=base | {"compression": {}})
+    assert forbidden.status_code == 422 and "eligible" in forbidden.text
+    alias = c.post("/api/v1/arch/predictions/lever", json=base | {"compression": {"PYRAMID_L1": "INVALID_LOSSLESS"}})
+    assert alias.status_code == 422
+    opt = "knob:pyramid_l0=skip"
+    iq = {"option_key": opt, "status": "adopted", "note": "verified IQ evaluation"}
+    for results in ([iq | {"note": "  "}], [iq, iq]):
+        response = c.post("/api/v1/arch/predictions/lever", json=base | {"options": [opt], "iq_results": results})
+        assert response.status_code == 422
+    assert c.post("/api/v1/arch/exploration/runs", json=request | {"apply_options": [opt]}).status_code == 422

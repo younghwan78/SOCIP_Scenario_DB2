@@ -71,7 +71,7 @@ def run_cpu_sweep(db: Session, request: CpuSweepRequest) -> CpuWhatIfResponse:
 
 
 def timing_stretch(db: Session, scenario_id: str, variant_id: str, *, statistic: Literal["min", "mean", "max"] = "max",
-                   runtime_scale: float = 1.0) -> dict[str, Any]:
+                   runtime_scale: float = 1.0, growth: dict[str, float] | None = None) -> dict[str, Any]:
     """Per-task slow-down allowed by the variant's Timing Budget (stage SW slack), plus the stage table.
 
     room = P - HW - overhead of the stage; stretch = room / SW (>= 1: a stage already over the 25 %-style
@@ -80,16 +80,20 @@ def timing_stretch(db: Session, scenario_id: str, variant_id: str, *, statistic:
     """
     from scenario_db.api.schemas.timing_budget import TimingBudgetRequest
     from scenario_db.api.services.timing_budget import analyze_timing_budget_request
-    from scenario_db.sim.timing_budget import TimingBudgetOptions
+    from scenario_db.sim.timing_budget import SwTaskAdjustment, TimingBudgetOptions
 
     opts = TimingBudgetOptions(statistic=statistic, runtime_scale=runtime_scale, include_whatif=False)
+    if growth:
+        if runtime_scale <= 0:
+            raise UnprocessableError("task-specific growth needs positive default_growth for timing coupling")
+        opts.task_adjustments = {t: SwTaskAdjustment(scale=g / runtime_scale) for t, g in growth.items()}
     rep = analyze_timing_budget_request(db, TimingBudgetRequest(scenario_id=scenario_id, variant_id=variant_id,
                                                                 options=opts)).report
     period = float(rep["period_ms"])
     stages: list[dict[str, Any]] = []
     stretch: dict[str, float] = {}
     for st in rep["stages"]:
-        items = [i for i in st.get("sw_items") or [] if i.get("kind", "sw") == "sw" and i.get("critical") is not False]
+        items = [i for i in st.get("sw_items") or [] if i.get("kind", "sw") == "sw"]
         sw = float(st.get("sw_ms") or 0.0)
         if not items or sw <= 0:
             continue
@@ -135,11 +139,17 @@ def run_cpu_rebalance(db: Session, request: CpuRebalanceRequest) -> CpuWhatIfRes
     # the Timing Budget of the profile's variant: enforced as task budgets (stage_slack) or only reported (off)
     enforce = request.timing_coupling != "off"
     coupling = None
-    row = get_evidence(db, request.cpu_profile_ref) if request.cpu_profile_ref else None
+    if enforce and request.cpu_profile is not None:
+        raise UnprocessableError("timing_coupling needs a stored measurement profile, not an inline CPU profile")
+    row = get_evidence(db, request.cpu_profile_ref) if request.cpu_profile_ref and request.cpu_profile is None else None
     if row is not None and row.scenario_ref and row.variant_ref:
         try:
             coupling = timing_stretch(db, str(row.scenario_ref), str(row.variant_ref), statistic=request.timing_statistic,
-                                      runtime_scale=request.default_growth)
+                                      runtime_scale=request.default_growth, growth=request.growth)
+            if not math.isclose(coupling["period_ms"], 1000.0 / request.fps, rel_tol=1e-3):
+                if enforce:
+                    raise UnprocessableError("timing coupling: CPU fps does not match the scenario variant")
+                coupling = None
         except (NotFoundError, UnprocessableError) as exc:
             if enforce:
                 raise UnprocessableError(f"timing coupling: {exc}") from exc

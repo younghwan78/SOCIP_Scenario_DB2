@@ -40,13 +40,22 @@
   - 측정 profile의 scenario variant로 Timing Budget을 계산
   - SW item이 있는 stage마다 `stretch = max(1, (P − HW − overhead) / SW)`
   - 해당 task의 budget = 측정 배치의 task 시간 × stretch
-  - 결과: stage SW 합이 여유를 넘지 않음 → pipeline latency 유지
+  - 결과: 모델의 stage SW 시간 증가를 여유 범위로 제한. 기존 timing 실패를 해결하거나 전체 fps/latency를 보증하지는 않음
 - `off`여도 `timing_coupling.impact`(측정 배치 / 최적 배치의 stage SW Δ, 여유, +latency frame)는 계산
 - `RebalanceSpec.stretch_budgets`: anchor는 측정 배치의 task 시간
-  - per-cluster 추정과 full evaluate 중 큰 값 → 측정 배치는 항상 feasible
+  - 탐색은 per-cluster 추정과 full evaluate 중 큰 값을 사용하며, 최종 검산은 full evaluate 기준 제한을 적용
+  - 사용자 지정 budget과 stage 제한 중 더 엄격한 값을 적용하고 최종 feasible 후보만 선택
 - `result.why`: cluster별 OPP(f, V) 변화, DSU, 이동 task와 시간 변화, 늘어난 task, OPP를 내리는 데 필요한 util
 - UI: 결과 첫 카드 "왜 이 분배인가 · SW timing 영향"
-  - `latency 유지 | fps만 유지` 전환 (기본 latency 유지, `cpu.rb.timing`)
+  - `SW 여유 제약 | CPU 주기만` 전환 (기본 SW 여유 제약, `cpu.rb.timing`)
+  - inline CPU profile은 stage 연동 불가, CPU fps와 scenario fps가 다르면 연동 요청 거부
+  - Timing Budget 기준은 scenario SW 통계에 task별 growth를 적용한 모델 값이며, CPU profile의 관측 시간과 동일한 값이라는 의미는 아님
+
+## 등록 조건과 근거 보존
+- 재구성한 압축 조합에도 원래 탐색의 timing, power, BW 제약과 탐색 buffer 범위를 적용
+- IQ option은 평가한 dimension의 값만 선택 가능. 중복 IQ 결과나 공백 근거는 거부
+- 적용 option은 run spec과 prediction 조건에 보존하며 freshness는 같은 option을 적용한 입력으로 비교
+- option 적용 예측의 조건 링크는 적용 run을 다시 열고, 자동 재계산은 재선택이 필요하다고 표시
 
 ## 3. 해석 주의
 - lossless typical ratio, SAMPLE unit power, synthetic MTNR LowPower는 off-site 예시 값

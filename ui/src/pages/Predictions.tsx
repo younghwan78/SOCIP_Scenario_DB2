@@ -3,7 +3,7 @@ import type { Ctx } from '../App'
 import { useAsync } from '../lib/route'
 import { api } from '../lib/api'
 import { fmt } from '../lib/timingBudget'
-import { archApi, conditionParams, conditionText, levels, short, type BoardRow, type HistoryRow } from '../lib/archExplore'
+import { archApi, conditionParams, conditionText, levels, short, variantKey, type BoardRow, type HistoryRow } from '../lib/archExplore'
 import { Card } from '../components/TimingCharts'
 import { CompositionBars, RangeBoxes, SplitBar, SplitLegend, Waterfall } from '../components/ArchCharts'
 import { DataTable, type Column } from '../components/DataTable'
@@ -91,8 +91,8 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
         return <span className="faint">—</span> } },
     { key: 'range', label: 'range mW', width: 100, align: 'right', firstDir: -1, sort: (r) => (r.distribution ? r.distribution.total_mw.max - r.distribution.total_mw.min : 0), render: (r) => r.distribution ? <span className="mono">{fmt(r.distribution.total_mw.min, 0)}–{fmt(r.distribution.total_mw.max, 0)}</span> : '—' },
     { key: 'src', label: '출처 · 선택 규칙 · 대안', width: 300, sort: (r) => r.run_created_at ?? '', title: (r) => `${r.run_id}\n${r.case_key}${r.reason ? `\n사유: ${r.reason}` : ''}`, render: (r) => <span style={{ fontSize: 12 }}><span className="mono">{r.run_title ?? r.run_id}</span> · <span className={`badge ${r.selected_by === 'user' ? 'v-warn' : 'v-ok'}`}>{r.selection_rule}</span> · <span className="faint">1/{r.eligible_cases?.toLocaleString()}</span></span> },
-    { key: 'cond', label: '조건', width: 250, sort: (r) => conditionText(r.condition), title: (r) => `${conditionText(r.condition)}${r.condition?.config_profile_ref ? `\nprofile ${r.condition.config_profile_ref}` : ''}\n클릭 = Timing Budget에서 이 조건으로 열기`,
-      render: (r) => <a href="#" style={{ fontSize: 12 }} onClick={(e) => { e.preventDefault(); e.stopPropagation(); ctx.navigate('timing', conditionParams(r)) }}>
+    { key: 'cond', label: '조건', width: 250, sort: (r) => conditionText(r.condition), title: (r) => `${conditionText(r.condition)}${r.condition?.config_profile_ref ? `\nprofile ${r.condition.config_profile_ref}` : ''}\n클릭 = ${r.condition?.applied_options?.length ? '적용 option이 저장된 조합 탐색' : 'Timing Budget'}에서 열기`,
+      render: (r) => <a href="#" style={{ fontSize: 12 }} onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (r.condition?.applied_options?.length) ctx.navigate('explore', { run: r.run_id, v: variantKey(r) }); else ctx.navigate('timing', conditionParams(r)) }}>
         <span className="mono faint">{conditionText(r.condition)}</span> <span>→</span></a> },
     { key: 'comp', label: 'Comp', width: 56, align: 'right', firstDir: -1, sort: (r) => r.compression.length, title: (r) => r.compression.join(', '), render: (r) => r.compression.length },
     { key: 'dvfs', label: 'DVFS', width: 160, sort: (r) => levels(r.dvfs), render: (r) => <span className="mono faint">{levels(r.dvfs)}</span> },

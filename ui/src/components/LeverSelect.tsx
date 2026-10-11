@@ -5,7 +5,7 @@
 //     · lossy 포함    → 사유 필수 (lever:trade)
 //     · IQ option 포함 → ① 후보로 등록 (review = IQ 평가 중) ② 화질 평가 결과(채택/기각 + 근거)를 넣고 등록
 //                        (채택만 있으면 option을 적용해 서버가 다시 탐색 · lever:iq-adopted, 기각이 있으면 등록 안 함)
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { fmt } from '../lib/timingBudget'
 import { archApi, IQ_COLOR, IQ_LABEL, REVIEW, type IqClass, type LeverAnalysis, type LeverPoint, type OptionReview, type ReviewStatus } from '../lib/archExplore'
 import { maText, type Battery } from '../lib/battery'
@@ -51,11 +51,16 @@ export function LeverSelect({ la, battery, runId, scenarioId, variantId, project
     return [...m.entries()].map(([b, modes]) => ({ buffer: b, modes: [...modes].sort((a, c) => Number(isLossy(a)) - Number(isLossy(c))) }))
   }, [points])
   const { point, moot } = lookupPoint(points, sel)
-  const iq: IqClass = sel.options.length ? 'eval' : Object.values(sel.comp).some(isLossy) ? 'trade' : 'neutral'
+  const iq: IqClass = Object.values(sel.comp).some(isLossy) ? 'trade' : sel.options.length ? 'eval' : 'neutral'
   const lossy = Object.entries(sel.comp).some(([b, m]) => isLossy(m) && !moot.includes(b))
   const [reviews, setReviews] = useState<OptionReview[] | null>(null)
   const loadReviews = () => archApi.optionReviews(scenarioId).then(setReviews).catch(() => setReviews([]))
-  useEffect(() => { void loadReviews() }, [scenarioId]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    let live = true
+    setReviews(null)
+    void archApi.optionReviews(scenarioId).then((r) => { if (live) setReviews(r) }).catch(() => { if (live) setReviews([]) })
+    return () => { live = false }
+  }, [scenarioId])
   const reviewOf = (key: string): ReviewStatus | null => {
     const rs = (reviews ?? []).filter((r) => r.option_key === key && (r.variant_id === variantId || r.variant_id === '*'))
     return (rs.find((r) => r.variant_id === variantId) ?? rs[0])?.status ?? null
@@ -64,6 +69,10 @@ export function LeverSelect({ la, battery, runId, scenarioId, variantId, project
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ text: string; tone: 'ok' | 'err' } | null>(null)
+  const busyRef = useRef(false)
+  const liveRef = useRef(true)
+  useEffect(() => { liveRef.current = true; return () => { liveRef.current = false } }, [])
+  useEffect(() => { setMsg(null) }, [sel])
   const preset = (phase: IqClass) => setSel(milestoneSelection(la, phase))
   const toggleOpt = (key: string) => {
     const dim = key.split('=')[0]
@@ -76,17 +85,22 @@ export function LeverSelect({ la, battery, runId, scenarioId, variantId, project
     setSel({ ...sel, comp })
   }
   const candidate = async () => {
+    if (busyRef.current || readOnly) return
+    busyRef.current = true
     setBusy(true); setMsg(null)
     try {
       for (const o of sel.options) {
+        if (!liveRef.current) break
         await archApi.setOptionReview({ scenario_id: scenarioId, variant_id: variantId, option_key: o, status: 'iq_eval',
           note: `Lever 선택 후보 · 예상 ${point ? `${fmt(point.total_mw, 1)} mW (baseline ${s1(point.total_mw - base.total_mw)} mW)` : ''}` })
       }
       await loadReviews()
       setMsg({ text: `${sel.options.length}개 option을 후보(IQ 평가 중)로 등록했습니다 — 예측 현황에서 추적됩니다. 평가 결과를 넣으면 등록할 수 있습니다.`, tone: 'ok' })
-    } catch (e) { setMsg({ text: e instanceof Error ? e.message : String(e), tone: 'err' }) } finally { setBusy(false) }
+    } catch (e) { setMsg({ text: e instanceof Error ? e.message : String(e), tone: 'err' }) } finally { busyRef.current = false; setBusy(false) }
   }
   const register = async () => {
+    if (busyRef.current || readOnly) return
+    busyRef.current = true
     setBusy(true); setMsg(null)
     try {
       const comp = Object.fromEntries(Object.entries(sel.comp).filter(([b]) => !moot.includes(b)))
@@ -98,12 +112,12 @@ export function LeverSelect({ la, battery, runId, scenarioId, variantId, project
       await loadReviews()
       if (r.status === 'rejected') setMsg({ text: `등록 안 함 — 기각: ${(r.rejected ?? []).join(', ')} (review에 기록됨)`, tone: 'err' })
       else setMsg({ text: `등록: ${r.promoted[0]?.id ?? ''} · ${fmt(r.promoted[0]?.total_mw, 1)} mW · ${r.rule}${r.run_id !== runId ? ` · option 적용 재탐색 run ${r.run_id}` : ''}`, tone: 'ok' })
-    } catch (e) { setMsg({ text: e instanceof Error ? e.message : String(e), tone: 'err' }) } finally { setBusy(false) }
+    } catch (e) { setMsg({ text: e instanceof Error ? e.message : String(e), tone: 'err' }) } finally { busyRef.current = false; setBusy(false) }
   }
   const iqReady = sel.options.every((o) => iqIn[o]?.status && (iqIn[o]?.note ?? '').trim())
-  const canRegister = !readOnly && !!point && !busy && (!lossy || !!reason.trim()) && (!sel.options.length || iqReady)
+  const canRegister = !readOnly && !!point && point.eligible !== false && !busy && (!lossy || !!reason.trim()) && (!sel.options.length || iqReady)
   return (
-    <div className="lever-select">
+    <fieldset disabled={busy} className="lever-select" style={{ border: 0, margin: 0, padding: 0, minWidth: 0 }}>
       <div className="lever-select-head">
         <h4>조합 선택 → 예측 등록</h4>
         <div className="seg" role="group" aria-label="시작점">
@@ -134,6 +148,7 @@ export function LeverSelect({ la, battery, runId, scenarioId, variantId, project
         </section>
         <section className="lever-select-result" style={{ borderLeftColor: IQ_COLOR[iq] }}>
           {point ? <>
+            {point.eligible === false && <div className="err">이 조합은 탐색 제약을 만족하지 않아 등록할 수 없습니다.</div>}
             <div><span className="mono lever-tile-v">{fmt(point.total_mw, 1)}</span> mW <span className="faint">{maText(point.total_mw, battery)}</span>
               <span className="badge" style={{ marginLeft: 6, background: IQ_COLOR[iq], color: '#fff' }}>{IQ_LABEL[iq]}</span></div>
             <div className="mono" style={{ fontSize: 12 }}>baseline {s1(point.total_mw - base.total_mw)} mW · 무손실 최적 {keep ? s1(point.total_mw - keep.total_mw) : '—'} mW · {fmt(point.bw_mbs / 1000, 2)} GB/s</div>
@@ -164,6 +179,6 @@ export function LeverSelect({ la, battery, runId, scenarioId, variantId, project
           </div>
         </section>
       </div>
-    </div>
+    </fieldset>
   )
 }
