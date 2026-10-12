@@ -54,6 +54,8 @@ Sidebar groups: 탐색 · 예측 · Architecture · Library; 설정 at the botto
 
 ## Source layout
 
+Memory lever 표시와 DRAM traffic은 설정 기반 추정입니다. Exynos2600 MTNR의 공유 LLC 4 MB 및 `llc_weight: 0.6`은 실측값이 아닌 SAMPLE 가정이며 buffer Note에서 출처를 확인할 수 있습니다. 버스 BW는 압축 ratio를 적용하고, LLC 계수는 DRAM 추정과 BW 전력에 적용합니다. 압축 이름만으로 절감률을 가정하지 않으며 catalog ratio가 없으면 무압축 상한을 표시합니다.
+
 - `src/lib/` — api client, condition normalization, graph build/ELK layout, timeline model, routing
 - `src/components/` — GraphView, TimelineView, Picker, DataTable, PipelineTunnel
 - `src/pages/` — Home, Explorer, Matrix, Pipeline, Compare, TimingBudget, Predictions, Explore, Reports, Calibration, Library, Settings

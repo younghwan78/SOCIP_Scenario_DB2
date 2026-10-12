@@ -27,7 +27,7 @@ export function ipPills(l: IpLevers | undefined): LeverPill[] {
   const out: LeverPill[] = []
   if (l.votf.length) out.push({ key: 'votf', text: 'vOTF', title: `vOTF ↔ ${l.votf.join(', ')}` })
   if (l.llc.length) out.push({ key: 'llc', text: `LLC${l.llc.length > 1 ? ` ${l.llc.length}` : ''}`, title: `LLC buffer: ${l.llc.join(', ')}` })
-  if (l.sbwc.length) out.push({ key: 'sbwc', text: `SBWC${l.sbwc.length > 1 ? ` ${l.sbwc.length}` : ''}`, title: `압축 buffer: ${l.sbwc.join(', ')}` })
+  if (l.sbwc.length) out.push({ key: 'sbwc', text: `압축${l.sbwc.length > 1 ? ` ${l.sbwc.length}` : ''}`, title: `SBWC/AFBC 압축 buffer: ${l.sbwc.join(', ')}` })
   return out
 }
 

@@ -348,6 +348,7 @@ pipeline:
         allocation_owner: MTNR
         llc_allocation_mb: 4  # MTNR partition: 2 way x 2MB, shared by L0/L1 pyramid + TNR history
         llc_weight: 0.6  # architect estimate: LLC-resident -> ~40% fewer DRAM bytes
+      source_note: 'SAMPLE architect assumption: shared MTNR 4 MB partition and DRAM factor 0.6; not measured.'
     TNR_PREV_L0:
       size_ref: mlsc_out
       format: Y
@@ -367,6 +368,7 @@ pipeline:
         allocation_owner: MTNR
         llc_allocation_mb: 4  # MTNR partition: 2 way x 2MB, shared by L0/L1 pyramid + TNR history
         llc_weight: 0.6  # architect estimate: LLC-resident -> ~40% fewer DRAM bytes
+      source_note: 'SAMPLE architect assumption: shared MTNR 4 MB partition and DRAM factor 0.6; not measured.'
     PYRAMID_L1:
       size_ref: pyramid_l1
       format: YUV444
@@ -379,6 +381,7 @@ pipeline:
         allocation_owner: MTNR
         llc_allocation_mb: 4  # MTNR partition: 2 way x 2MB, shared by L0/L1 pyramid + TNR history
         llc_weight: 0.6  # architect estimate: LLC-resident -> ~40% fewer DRAM bytes
+      source_note: 'SAMPLE architect assumption: shared MTNR 4 MB partition and DRAM factor 0.6; not measured.'
     TNR_PREV_L1:
       size_ref: pyramid_l1
       format: YUV444
@@ -402,6 +405,7 @@ pipeline:
         allocation_owner: MTNR
         llc_allocation_mb: 4  # MTNR partition: 2 way x 2MB, shared by L0/L1 pyramid + TNR history
         llc_weight: 0.6  # architect estimate: LLC-resident -> ~40% fewer DRAM bytes
+      source_note: 'SAMPLE architect assumption: shared MTNR 4 MB partition and DRAM factor 0.6; not measured.'
     PYRAMID_L2:
       size_ref: pyramid_l2
       format: YUV444

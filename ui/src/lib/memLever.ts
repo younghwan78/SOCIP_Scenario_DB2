@@ -9,7 +9,7 @@ export const LEVER_COLOR = {
 } as const
 export type LeverKey = keyof typeof LEVER_COLOR
 
-const OFF = new Set(['', 'COMP_OFF', 'NONE', 'OFF', 'DISABLE', 'DISABLED', 'FALSE', '0'])
+const OFF = new Set(['', 'COMP_OFF', 'COMP_NONE', 'NONE', 'NO', 'OFF', 'DISABLE', 'DISABLED', 'FALSE', '0'])
 
 export interface CompMode { comp_ratio?: number; typical_ratio?: number; compressor?: string }
 export type CompCatalog = Record<string, CompMode>

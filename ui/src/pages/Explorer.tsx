@@ -96,7 +96,7 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
     { key: 'mode', label: 'Mode', get: (dc) => [dc.extend_mode && dc.extend_mode !== 'EX_NONE' ? String(dc.extend_mode).replace('EX_', '') : null, dc.subscenario].filter(Boolean).join(' · ') || MISSING, keys: ['extend_mode', 'subscenario'] },
   ]
 
-  const hasLever = [...(leverQ.data?.values() ?? [])].some((m) => !!(m?.llc?.length || m?.compressed?.length))
+  const hasLever = [...(leverQ.data?.values() ?? [])].some((m) => !!(m?.llc?.length || m?.compressed?.length || m?.votf?.length))
   const memOf = (id: string) => leverQ.data?.get(id) ?? null
   const llcText = (m: MemoryLevers | null) => (!m?.llc?.length ? MISSING : m.llc_mb ? `${m.llc_mb} MB${m.llc_unsized ? ' +?' : ''}` : '크기 미정')
   const sbwcText = (m: MemoryLevers | null) => (m?.compressed_dma ? `${m.compressed_dma} DMA` : MISSING)
@@ -107,12 +107,18 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
       title: (r) => { const m = memOf(r.variant_id); return m?.llc?.length ? `owner ${m.llc_owners?.join(', ') || '—'} · buffer ${m.llc.join(', ')}${m.llc_weight_min ? ` · DRAM ×${m.llc_weight_min}` : ''}` : 'LLC 없음' },
       cellClass: (r) => (r.variant_id !== reference && llcText(memOf(r.variant_id)) !== llcText(memOf(reference)) ? 'chg' : ''),
       render: (r) => llcText(memOf(r.variant_id)) },
-    { key: 'sbwc', label: 'SBWC', width: 76, align: 'right', firstDir: -1,
-      headTitle: 'SBWC(압축)가 적용된 DMA 수 — 압축 buffer를 쓰는 WDMA + RDMA port · hover = buffer',
+    { key: 'sbwc', label: '압축 DMA', width: 76, align: 'right', firstDir: -1,
+      headTitle: 'SBWC/AFBC 압축이 적용된 DMA 수 — 압축 buffer를 쓰는 WDMA + RDMA port · hover = buffer',
       sort: (r) => memOf(r.variant_id)?.compressed_dma || null,
       title: (r) => { const m = memOf(r.variant_id); return m?.compressed?.length ? `buffer ${m.compressed.join(', ')}` : '압축 없음' },
       cellClass: (r) => (r.variant_id !== reference && sbwcText(memOf(r.variant_id)) !== sbwcText(memOf(reference)) ? 'chg' : ''),
       render: (r) => sbwcText(memOf(r.variant_id)) },
+    { key: 'votf', label: 'vOTF', width: 64, align: 'right', firstDir: -1,
+      headTitle: '활성 vOTF 연결 수 — DRAM 왕복 없는 streaming 연결',
+      sort: (r) => memOf(r.variant_id)?.votf?.length ?? null,
+      title: (r) => memOf(r.variant_id)?.votf?.join(', ') || 'vOTF 없음',
+      cellClass: (r) => (r.variant_id !== reference && JSON.stringify(memOf(r.variant_id)?.votf ?? []) !== JSON.stringify(memOf(reference)?.votf ?? []) ? 'chg' : ''),
+      render: (r) => memOf(r.variant_id) ? memOf(r.variant_id)?.votf?.length || MISSING : MISSING },
   ]
   const diffOf = (r: VariantRow) => new Set(changedKeys(r, refRow, byId))
   const columns: Column<VariantRow>[] = [

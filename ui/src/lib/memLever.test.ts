@@ -9,7 +9,7 @@ const CAT = { COMP_YUV_LOSSLESS: { compressor: 'SBWC', comp_ratio: 1.0, typical_
 
 describe('compInfo', () => {
   it('treats off tokens as off', () => {
-    for (const m of ['', 'COMP_OFF', 'disable', 'NONE']) expect(compInfo(m).on).toBe(false)
+    for (const m of ['', 'COMP_OFF', 'COMP_NONE', 'disable', 'NONE', 'no']) expect(compInfo(m).on).toBe(false)
   })
   it('labels SBWC from the SoC catalog compressor and takes its comp_ratio', () => {
     const c = compInfo('COMP_YUV_LOSSY', CAT)
@@ -107,10 +107,11 @@ describe('variant table lever column', () => {
   it('summarises the server-side lever set and flags a different set vs the reference', async () => {
     const { variantPills, leverColumn } = await import('../components/LeverTag')
     const ml = { llc: ['PYRAMID_L0', 'TNR_PREV_L0'], compressed: ['PYRAMID_L0'], votf: [], llc_weight_min: 0.6 }
-    expect(variantPills(ml).map((p) => p.text)).toEqual(['LLC 2 ×0.6', 'SBWC 1'])
+    expect(variantPills(ml).map((p) => p.text)).toEqual(['LLC 2 ×0.6', '압축 1'])
     expect(variantPills({ llc: [], compressed: [], votf: [] })).toEqual([])
     const col = leverColumn<{ m: typeof ml | null }>((r) => r.m, () => ({ llc: [], compressed: [], votf: [] }))
     expect(col.cellClass({ m: ml })).toBe('chg')
     expect(col.sort({ m: ml })).toBe(210)
+    expect(leverColumn<{ m: typeof ml }>((r) => r.m, () => ({ ...ml, llc_weight_min: 0.8 })).cellClass({ m: ml })).toBe('chg')
   })
 })

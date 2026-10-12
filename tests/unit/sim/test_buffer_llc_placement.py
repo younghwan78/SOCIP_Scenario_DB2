@@ -3,6 +3,9 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
+from scenario_db.sim.bw_calc import calc_port_bw
 from scenario_db.sim.transfers import history_port_transfers
 
 
@@ -37,3 +40,17 @@ def test_weight_ignored_when_not_allocated_and_override_merges():
     assert all(not s.llc_enabled and s.llc_weight == 1.0 for s in off)
     merged = history_port_transfers(_graph({"llc_allocated": True, "llc_weight": 0.6}, {"placement": {"llc_weight": 0.5}}), WL)
     assert all(s.llc_enabled and s.llc_weight == 0.5 for s in merged)
+
+
+def test_llc_changes_power_without_changing_bus_bandwidth_and_can_be_cleared():
+    on = history_port_transfers(_graph({"llc_allocated": True, "llc_weight": 0.6}), WL)
+    off = history_port_transfers(_graph({"llc_allocated": True, "llc_weight": 0.6}, {"placement": None}), WL)
+    for a, b in zip(on, off):
+        x, y = calc_port_bw(a, fps=30), calc_port_bw(b, fps=30)
+        assert x.bw_mbs == y.bw_mbs and x.bw_power_mw == pytest.approx(y.bw_power_mw * 0.6)
+
+
+@pytest.mark.parametrize("weight", [0, -0.1, 1.1, float("nan"), float("inf")])
+def test_invalid_llc_factor_cannot_create_invalid_power(weight):
+    with pytest.raises(ValueError, match="llc_weight"):
+        history_port_transfers(_graph({"llc_allocated": True, "llc_weight": weight}), WL)

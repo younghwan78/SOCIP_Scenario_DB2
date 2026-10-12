@@ -26,3 +26,30 @@ def test_overrides_and_votf():
     assert {k: lv[k] for k in ("llc", "compressed", "votf", "llc_mb", "compressed_dma")} == {
         "llc": [], "compressed": ["B"], "votf": ["b->c"], "llc_mb": None, "compressed_dma": 2}
     assert memory_levers(pipe, {}, ["c"])["votf"] == []
+
+
+def test_disabled_routing_topology_and_optional_dma_do_not_count():
+    from types import SimpleNamespace
+
+    from scenario_db.api.routers.explorer import _variant_memory_levers
+
+    pipe = {"nodes": [{"id": n} for n in ("a", "b", "c")],
+            "edges": [{"from": "a", "to": "b", "type": "M2M", "buffer": "B"}, {"from": "b", "to": "c", "type": "vOTF"}],
+            "buffers": {"B": {"compression": "COMP_YUV_LOSSLESS", "placement": {"llc_allocated": True}},
+                        "AUX": {"compression": "AFBC", "dma": {"node_id": "a", "activation_flag": "stats", "write_ports": ["WDMA"]}}}}
+    variant = SimpleNamespace(routing_switch={"disabled_edges": [{"from": "a", "to": "b"}]},
+                              topology_patch={"remove_edges": [{"from": "b", "to": "c"}]}, buffer_overrides={}, node_configs={})
+    lv = _variant_memory_levers(pipe, variant)
+    assert lv["llc"] == lv["compressed"] == lv["votf"] == []
+    variant.node_configs = {"a": {"stats": True}}
+    assert _variant_memory_levers(pipe, variant)["compressed"] == ["AUX"]
+    variant.routing_switch = {"disabled_nodes": ["a", "b", "c"]}
+    assert _variant_memory_levers(pipe, variant)["compressed"] == []
+
+
+def test_llc_partition_size_is_shared_and_dma_names_are_scoped_to_nodes():
+    pipe = {"buffers": {n: {"compression": "AFBC", "dma": {"node_id": n, "write_ports": ["WDMA"]},
+                           "placement": {"llc_allocated": True, "allocation_owner": "shared", **({"llc_allocation_mb": 4} if n == "b" else {})}}
+                        for n in ("a", "b")}}
+    lv = memory_levers(pipe, {})
+    assert lv["llc_mb"] == 4 and lv["llc_unsized"] == 0 and lv["compressed_dma"] == 2

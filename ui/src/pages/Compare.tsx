@@ -236,7 +236,7 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
   const perKeys = items.filter((it) => it.section !== 'dma' && it.section !== 'lever')
   const leverPillsOf = (i: number) => { const m = models[i]; return m ? variantPills({ llc: m.buffers.filter((b) => b.enabled && b.llc).map((b) => b.name),
     compressed: m.buffers.filter((b) => b.enabled && b.compression.on).map((b) => b.name), votf: m.links.filter((l) => l.kind === 'vOTF').map((l) => `${l.from}->${l.to}`),
-    llc_weight_min: (() => { const w = m.buffers.filter((b) => b.llc?.weightKnown).map((b) => b.llc!.weight); return w.length ? Math.min(...w) : null })() }) : [] }
+    llc_weight_min: (() => { const w = m.buffers.filter((b) => b.enabled && b.llc?.weightKnown).map((b) => b.llc!.weight); return w.length ? Math.min(...w) : null })() }) : [] }
   const varCols: Column<VRow>[] = [
     { key: 'variant', label: 'Variant', width: 250, sticky: true, sort: (r) => r.id, render: (r) => <span className="mono" title={itemLbl[r.i]?.full}>{labels[r.id]}{r.i === 0 ? ' ★' : ''}</span> },
     ...(models.some((m) => m && (m.levers.llc || m.levers.sbwc || m.levers.votf)) ? [{ key: 'lever', label: 'Lever', width: 96, headTitle: 'Memory power lever (LLC · SBWC · vOTF)',

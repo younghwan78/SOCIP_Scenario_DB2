@@ -17,13 +17,16 @@ export function variantPills(ml?: MemoryLevers | null): LeverPill[] {
   if (!ml) return []
   const out: LeverPill[] = []
   if (ml.llc?.length) out.push({ key: 'llc', text: `LLC ${ml.llc.length}${ml.llc_weight_min ? ` ×${ml.llc_weight_min}` : ''}`, title: `LLC buffer: ${ml.llc.join(', ')}` })
-  if (ml.compressed?.length) out.push({ key: 'sbwc', text: `SBWC ${ml.compressed.length}`, title: `압축 buffer: ${ml.compressed.join(', ')}` })
+  if (ml.compressed?.length) out.push({ key: 'sbwc', text: `압축 ${ml.compressed.length}`, title: `SBWC/AFBC 압축 buffer: ${ml.compressed.join(', ')}` })
   if (ml.votf?.length) out.push({ key: 'votf', text: `vOTF ${ml.votf.length}`, title: `vOTF: ${ml.votf.join(', ')}` })
   return out
 }
 
 const leverScore = (ml?: MemoryLevers | null) => (ml ? (ml.llc?.length ?? 0) * 100 + (ml.compressed?.length ?? 0) * 10 + (ml.votf?.length ?? 0) : null)
-const leverKey = (ml?: MemoryLevers | null) => (ml ? [ml.llc, ml.compressed, ml.votf].map((x) => (x ?? []).join(',')).join('|') : '')
+const leverKey = (ml?: MemoryLevers | null) => (ml ? JSON.stringify([
+  ...[ml.llc, ml.compressed, ml.votf, ml.llc_owners].map((x) => [...(x ?? [])].sort()),
+  ml.llc_mb ?? null, ml.llc_weight_min ?? null, ml.llc_unsized ?? 0, ml.compressed_dma ?? null,
+]) : '')
 
 /** Column spec shared by the variant tables (Explorer / Matrix). ``ref`` = row to diff against (yellow cell when the lever set differs). */
 export function leverColumn<T>(get: (r: T) => MemoryLevers | null | undefined, ref?: (r: T) => MemoryLevers | null | undefined) {
