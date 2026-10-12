@@ -5,7 +5,7 @@ export interface Paged<T> { items: T[]; total: number }
 export interface IpRow { id: string; category: string; capabilities: Dict; hierarchy?: Dict }
 export interface DvfsLevel { level: number; speed_mhz: number; voltages: Record<string, number> }
 export interface DvfsTable { id: string; soc_ref: string; dvfs_version: number; evt_hint: string | null; source: Dict | null; domains: Record<string, { domain: string; levels: DvfsLevel[] }> }
-export interface SocRow { id: string; process_node?: string; memory_type?: string; compression_modes: Record<string, { comp_ratio?: number; compressor?: string }> | null }
+export interface SocRow { id: string; process_node?: string; memory_type?: string; compression_modes: Record<string, { comp_ratio?: number; typical_ratio?: number; compressor?: string }> | null }
 export interface SensorCatalogRow { id: string; board: string; sensor_name: string; mode_count: number }
 export interface SensorTimingRow { id: string; sensor_name: string; revision?: string; modes: string[] }
 export interface SwTaskRow {

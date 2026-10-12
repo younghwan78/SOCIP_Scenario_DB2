@@ -1,11 +1,14 @@
 import { Fragment, type ReactNode } from 'react'
 import { LANE_LABEL, type BufferRow, type DmaChannel, type IpModel, type Port } from '../lib/model'
 import type { StageTiming } from '../lib/cadence'
-import { memoryText } from '../lib/graph'
+import { bufferPills, ipPills, memoryText } from '../lib/graph'
+import { compDetail, compInfo, llcDetail } from '../lib/memLever'
 import { groupPorts } from './IpInternalView'
+import { LeverTag, LeverTags } from './LeverTag'
 
 const f2 = (x: number) => (x >= 10 ? x.toFixed(1) : x.toFixed(2))
-const portInfo = (p?: Port) => (p ? [p.size, p.format, p.bit ? `${p.bit}b` : '', p.comp && p.comp !== 'COMP_OFF' ? p.comp.replace('COMP_', '') : ''].filter(Boolean).join(' ') : '')
+// compression / LLC are drawn as pills next to the port name
+const portInfo = (p?: Port) => (p ? [p.size, p.format, p.bit ? `${p.bit}b` : ''].filter(Boolean).join(' ') : '')
 
 function Channels({ title, list, ports, color, total, expanded = false }: { title: string; list: DmaChannel[]; ports: Port[]; color: string; total: number | null; expanded?: boolean }) {
   const used = list.filter((c) => c.status === 'used')
@@ -18,10 +21,12 @@ function Channels({ title, list, ports, color, total, expanded = false }: { titl
         const names = new Set(used.map((c) => c.name))
         const g = groupPorts(ports.filter((p) => names.has(p.port) && p.via !== 'OTF'))
         const rest = used.filter((c) => !ports.some((p) => p.port === c.name && p.via !== 'OTF'))
-        const rows = [...g.map((p) => ({ k: p.port, name: p.port, buf: p.buffer, info: portInfo(p) || (p.peer ?? '') })), ...rest.map((c) => ({ k: c.name, name: c.name, buf: c.buffer, info: c.peer ?? '' }))]
+        const rows = [...g.map((p) => ({ k: p.port, name: p.port, buf: p.buffer, info: portInfo(p) || (p.peer ?? ''), p })), ...rest.map((c) => ({ k: c.name, name: c.name, buf: c.buffer, info: c.peer ?? '', p: undefined as Port | undefined }))]
         const shown = expanded ? rows : rows.slice(0, 10)
         return <>{shown.map((r) => <div key={r.k} className="tt-port"><span className="d" style={{ background: color }} />
-          <span>{r.name}{r.buf ? <span className="faint"> · {r.buf}</span> : null}</span><span className="m">{r.info}</span></div>)}
+          <span>{r.name}{r.buf ? <span className="faint"> · {r.buf}</span> : null}
+            {r.p?.llc && <> <LeverTag k="llc" text={r.p.llc.label} title={llcDetail(r.p.llc)} /></>}
+            {compInfo(r.p?.comp).on && <> <LeverTag k="sbwc" text={compInfo(r.p?.comp).label} /></>}</span><span className="m">{r.info}</span></div>)}
           {!expanded && rows.length > 10 && <div className="faint" style={{ fontSize: 10.5 }}>+{rows.length - 10} more (고정하면 전체)</div>}</>
       })()}
       {off.map((c) => <div key={c.name} className="tt-port tt-off"><span className="d" style={{ border: `1px dashed ${color}` }} /><span>{c.name} · off</span><span className="m">{c.buffer ?? ''}</span></div>)}
@@ -38,6 +43,7 @@ export function IpTooltip({ ip, timing, expanded = false }: { ip: IpModel; timin
     <div>
       <h4>{ip.label} <span className="sub">{LANE_LABEL[ip.lane]} · {ip.ipRef.replace(/^ip-/, '')}</span></h4>
       <div className="tt-sec tt-kv">
+        {ipPills(ip.levers).length > 0 && <><span>Power lever</span><span><LeverTags pills={ipPills(ip.levers)} /></span></>}
         {ip.type !== 'sw' && <><span>In (처리)</span><span className="mono">{ip.inSize || '—'}</span>
           <span>Out</span><span className="mono">{outs.join(' / ') || (otf.some((p) => p.dir === 'out') ? 'OTF' : '—')}</span></>}
         {ip.ops.length > 0 && <><span>Ops</span><span>{ip.ops.join(' · ')}</span></>}
@@ -46,7 +52,7 @@ export function IpTooltip({ ip, timing, expanded = false }: { ip: IpModel; timin
           <span>시작 +{f2(timing.offset)} ms · 소요 {f2(timing.dur)} ms</span>
           <span className="faint">범위 {f2(timing.durMin)}–{f2(timing.durMax)} ms · {timing.n} frame 평균 · 끝 +{f2(timing.offset + timing.dur)} ms</span></span></>}
         {ip.sw && <><span>SW time</span><span className="mono">{ip.sw.mean} ms ({ip.sw.min}–{ip.sw.max}) · {ip.sw.source}</span></>}
-        {otf.length > 0 && <><span>OTF</span><span className="mono">{otf.map((p) => `${p.dir === 'in' ? '←' : '→'} ${p.peer}`).join('  ')}</span></>}
+        {otf.length > 0 && <><span>OTF</span><span className="mono">{otf.map((p) => `${p.dir === 'in' ? '←' : '→'} ${p.peer}${p.votf ? ' (vOTF)' : ''}`).join('  ')}</span></>}
         {ctrl.length > 0 && <><span>SW trigger</span><span>{ctrl.map((p) => `${p.dir === 'in' ? '←' : '→'} ${p.peer}`).join('  ')}</span></>}
         {(expanded ? ip.flags : ip.flags.slice(0, 4)).map(([k, v]) => <Fragment key={k}><span>{k}</span><span className="mono">{v}</span></Fragment>)}
         {!expanded && ip.flags.length > 4 && <><span /><span className="faint">+{ip.flags.length - 4} config</span></>}
@@ -69,11 +75,15 @@ export function BufferTooltip({ b }: { b: BufferRow }): ReactNode {
     <div>
       <h4>{b.name} <span className="sub">{b.kind}{b.enabled ? '' : ' · off'}</span></h4>
       <div className="tt-sec tt-kv">
+        <span>Power lever</span><span><LeverTags pills={bufferPills(b)} empty="없음 (DRAM · 무압축)" /></span>
+        {b.compression.on && <><span>압축</span><span className="mono">{b.compression.family} · {compDetail(b.compression)}</span></>}
+        {b.llc && <><span>LLC</span><span className="mono">{llcDetail(b.llc)}</span></>}
         <span>Producer</span><span>{b.producer} <span className="mono faint">{b.wPorts.join(', ')}</span></span>
         <span>Consumer</span><span>{b.consumers.join(', ') || '—'} <span className="mono faint">{b.rPorts.join(', ')}</span></span>
         <span>Size / fmt</span><span className="mono">{memoryText({ width: b.width, height: b.height, format: b.format, bitdepth: b.bit, compression: b.comp }) || '미정'}</span>
-        <span>MB / frame</span><span className="mono">{b.mbFrame?.toFixed(2) ?? '—'}</span>
+        <span>MB / frame</span><span className="mono">{b.mbFrame?.toFixed(2) ?? '—'}{b.compression.on && b.mbRaw !== null ? <span className="faint"> (무압축 {b.mbRaw.toFixed(2)}{b.compression.ratio === null ? ' · ratio 미정 → 상한' : ''})</span> : null}</span>
         <span>W / R MB/s</span><span className="mono">{b.wMBs ?? '—'} / {b.rMBs ?? '—'}{b.fps ? ` @${b.fps}fps` : ''}</span>
+        {b.llc && <><span>DRAM MB/s</span><span className="mono">{b.dramMBs ?? '—'} <span className="faint">(W+R × {b.llc.weight})</span></span></>}
       </div>
       {b.note && <div className="tt-sec faint" style={{ fontSize: 11 }}>{b.note}</div>}
     </div>

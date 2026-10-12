@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { usePref } from '../components/Layout'
 import type { Ctx } from '../App'
 import { api, type VariantRow } from '../lib/api'
+import { leverColumn } from '../components/LeverTag'
 import { useAsync } from '../lib/route'
 import { matrixColumns, medoidId } from '../lib/conditions'
 import { scenarioPurpose } from '../lib/guides'
@@ -71,6 +72,8 @@ export function MatrixPage({ ctx }: { ctx: Ctx }) {
     const id = medoidId(rows)
     return [sid, { id, cols: matrixColumns(rows.find((r) => r.variant_id === id)?.design_conditions ?? {}) }]
   })), [groups])
+  const rowsOf = (sid: string) => groups.find(([s]) => s === sid)?.[1] ?? []
+  const hasLever = (q.data?.items ?? []).some((r) => { const m = r.memory_levers; return !!(m?.llc?.length || m?.compressed?.length || m?.votf?.length) })
   const toggle = (sid: string) => setOpen((o) => { const s = new Set(o); if (s.has(sid)) s.delete(sid); else s.add(sid); return s })
   const columns: Column<VariantRow>[] = [
     { key: 'pick', label: '', width: 34, minWidth: 30, render: (r) => { const key = `${r.scenario_id}::${r.variant_id}`
@@ -82,6 +85,8 @@ export function MatrixPage({ ctx }: { ctx: Ctx }) {
       title: (r) => matrixColumns(r.design_conditions)[c],
       cellClass: (r) => { const ref = refs.get(r.scenario_id); return ref && r.variant_id !== ref.id && matrixColumns(r.design_conditions)[c] !== ref.cols[c] ? 'chg' : '' },
       render: (r) => matrixColumns(r.design_conditions)[c] })),
+    // Lever column only when some variant uses LLC / compression / vOTF (keeps the table width otherwise)
+    ...(hasLever ? [leverColumn<VariantRow>((r) => r.memory_levers ?? null, (r) => { const ref = refs.get(r.scenario_id); return !ref || r.variant_id === ref.id ? undefined : rowsOf(r.scenario_id).find((x) => x.variant_id === ref.id)?.memory_levers ?? null })] : []),
     { key: 'load', label: 'Load', width: 84, firstDir: -1, sort: (r) => (r.severity ? SEVERITY_RANK[r.severity] ?? 0 : null), render: (r) => r.severity && <span className={`badge load-${r.severity}`}>{r.severity}</span> },
     ...(showPred ? [
       { key: 'pred_mw', label: '등록 mW', width: 90, firstDir: -1, sort: (r) => predOf(r)?.row?.power.total_mw ?? null,

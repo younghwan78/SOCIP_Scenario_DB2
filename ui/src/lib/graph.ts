@@ -1,10 +1,39 @@
 // View (Level 1 projection) → hierarchical graph with explicit buffer nodes,
 // laid out by ELK layered with orthogonal edge routing.
 import type { Dict, ViewResponse, ViewNodeData, ViewEdgeData } from './api'
-import type { PipelineModel } from './model'
+import type { BufferRow, IpLevers, PipelineModel } from './model'
+import { compInfo, compDetail, llcDetail, type LeverKey } from './memLever'
 
 export type NodeKind = 'ip' | 'sw' | 'buffer' | 'external' | 'group'
-export type EdgeKind = 'OTF' | 'M2M' | 'control'
+export type EdgeKind = 'OTF' | 'vOTF' | 'M2M' | 'control'
+
+/** Power-lever pill drawn on a node (LLC / SBWC / vOTF). */
+export interface LeverPill { key: LeverKey; text: string; title?: string }
+
+export const edgeKindOf = (flow: string): EdgeKind => (flow === 'M2M' ? 'M2M' : flow === 'control' ? 'control' : flow === 'vOTF' ? 'vOTF' : 'OTF')
+
+/** Pills for a buffer: LLC (with DRAM factor) and compression family. */
+export function bufferPills(b: Pick<BufferRow, 'llc' | 'compression' | 'enabled'> | undefined): LeverPill[] {
+  if (!b || !b.enabled) return []
+  const out: LeverPill[] = []
+  if (b.llc) out.push({ key: 'llc', text: b.llc.label, title: `LLC · ${llcDetail(b.llc)}` })
+  if (b.compression.on) out.push({ key: 'sbwc', text: b.compression.label, title: `${b.compression.family} · ${compDetail(b.compression)}` })
+  return out
+}
+
+/** Pills for an IP: which levers its DMA / streaming ports use. */
+export function ipPills(l: IpLevers | undefined): LeverPill[] {
+  if (!l) return []
+  const out: LeverPill[] = []
+  if (l.votf.length) out.push({ key: 'votf', text: 'vOTF', title: `vOTF ↔ ${l.votf.join(', ')}` })
+  if (l.llc.length) out.push({ key: 'llc', text: `LLC${l.llc.length > 1 ? ` ${l.llc.length}` : ''}`, title: `LLC buffer: ${l.llc.join(', ')}` })
+  if (l.sbwc.length) out.push({ key: 'sbwc', text: `SBWC${l.sbwc.length > 1 ? ` ${l.sbwc.length}` : ''}`, title: `압축 buffer: ${l.sbwc.join(', ')}` })
+  return out
+}
+
+/** Strongest lever on a buffer path (edge colour): LLC beats compression. */
+export const bufferLever = (b?: Pick<BufferRow, 'llc' | 'compression' | 'enabled'>): LeverKey | undefined =>
+  !b || !b.enabled ? undefined : b.llc ? 'llc' : b.compression.on ? 'sbwc' : undefined
 
 export interface GNode {
   id: string
@@ -22,6 +51,8 @@ export interface GNode {
   data?: ViewNodeData
   memory?: Dict | null
   bufferRef?: string
+  /** LLC / SBWC / vOTF pills (power levers) */
+  levers?: LeverPill[]
 }
 
 export interface GEdge {
@@ -33,6 +64,8 @@ export interface GEdge {
   ports?: string
   count?: number
   faint?: boolean
+  /** memory lever on this path → edge drawn in the lever colour */
+  lever?: LeverKey
 }
 
 export interface GGroup { id: string; label: string; count: number }
@@ -91,7 +124,7 @@ export function memoryText(mem: Dict | null | undefined): string {
   const size = mem.width && mem.height ? `${mem.width}×${mem.height}` : ''
   const fmt = mem.format ? String(mem.format).replace('YUV', '') : ''
   const bit = mem.bitdepth ? `${mem.bitdepth}b` : ''
-  const comp = mem.compression && mem.compression !== 'COMP_OFF' ? String(mem.compression).replace('COMP_', '') : ''
+  const comp = compInfo(mem.compression).label
   return [size, fmt, bit, comp].filter(Boolean).join(' ')
 }
 
@@ -121,7 +154,7 @@ export function buildGraph(view: ViewResponse, collapsed: ReadonlySet<string> = 
       wdma: ipm && kind === 'ip' && (ipm.wdma.used || ipm.wdma.total) ? ipm.wdma : undefined,
       id: n.id, label: n.label.replace(/ /g, '_').replace(/_(ENC|REAR)$/, (m) => ' ' + m.slice(1)).replace(/_/g, ' '),
       kind, group, width: kind === 'sw' ? 108 : kind === 'external' ? 128 : io ? 150 : 108, height: kind === 'sw' ? 24 : kind === 'external' ? 32 : io ? 34 : 28,
-      pipelineId: pipelineIdOf(n.id), data: n,
+      pipelineId: pipelineIdOf(n.id), data: n, levers: kind === 'ip' ? ipPills(ipm?.levers) : undefined,
     })
   }
   for (const g of collapsed) {
@@ -142,19 +175,21 @@ export function buildGraph(view: ViewResponse, collapsed: ReadonlySet<string> = 
     const src = alias.get(e.source)
     const dst = alias.get(e.target)
     if (!src || !dst) continue
-    const kind: EdgeKind = e.flow_type === 'M2M' ? 'M2M' : e.flow_type === 'control' ? 'control' : 'OTF'
+    const kind: EdgeKind = edgeKindOf(e.flow_type)
     if (kind === 'control' && hiddenKinds.has('control')) continue
     const ports = (e.port_pairs ?? []).map((p) => `${p.src}→${p.dst}`).join(', ')
     if (kind === 'M2M' && e.buffer_ref && !hiddenKinds.has('buffer')) {
       const bid = `buf:${e.buffer_ref}`
+      const lever = bufferLever(model?.buffers.find((x) => x.name === e.buffer_ref))
       if (!nodes.has(bid)) {
         const b = model?.buffers.find((x) => x.name === e.buffer_ref)
         const rate = b && b.mbFrame !== null ? `${b.mbFrame.toFixed(2)} MB/f${b.wMBs !== null ? ` · ${((b.wMBs ?? 0) + (b.rMBs ?? 0)).toFixed(0)} MB/s` : ''}` : b?.kind === 'stat' ? 'stat · size 미정' : ''
         nodes.set(bid, { id: bid, label: shortBuffer(e.buffer_ref), kind: 'buffer', group: null, width: 140, height: rate ? 40 : 30,
-          sub: memoryText(e.memory) || (b?.kind === 'stat' ? 'stat' : ''), sub2: rate || undefined, tone: b?.kind === 'stat' ? 'stat' : undefined, memory: e.memory, bufferRef: e.buffer_ref })
+          sub: memoryText(b ? { ...(e.memory ?? {}), compression: b.comp } : e.memory) || (b?.kind === 'stat' ? 'stat' : ''), sub2: rate || undefined, tone: b?.kind === 'stat' ? 'stat' : undefined, memory: e.memory, bufferRef: e.buffer_ref,
+          levers: bufferPills(b) })
       }
-      push({ id: `${e.id}:w`, source: src, target: bid, kind, ports })
-      push({ id: `${e.id}:r`, source: bid, target: dst, kind, ports })
+      push({ id: `${e.id}:w`, source: src, target: bid, kind, ports, lever })
+      push({ id: `${e.id}:r`, source: bid, target: dst, kind, ports, lever })
     } else {
       push({ id: e.id, source: src, target: dst, kind, label: kind === 'M2M' ? e.buffer_ref ?? undefined : undefined, ports })
     }
@@ -169,14 +204,15 @@ export function buildGraph(view: ViewResponse, collapsed: ReadonlySet<string> = 
       if (!owner) continue
       const bid = `buf:${b.name}`
       const mem = { width: b.width, height: b.height, format: b.format, bitdepth: b.bit, compression: b.comp }
-      nodes.set(bid, { id: bid, label: shortBuffer(b.name), kind: 'buffer', group: null, width: 140, height: 40, bufferRef: b.name, memory: mem,
+      const lever = bufferLever(b)
+      nodes.set(bid, { id: bid, label: shortBuffer(b.name), kind: 'buffer', group: null, width: 140, height: 40, bufferRef: b.name, memory: mem, levers: bufferPills(b),
         sub: memoryText(mem) || (b.kind === 'stat' ? 'stat · size 미정' : ''),
         sub2: b.kind === 'history' ? `history f-1${b.mbFrame !== null ? ` · ${b.mbFrame.toFixed(2)} MB/f` : ''}` : b.kind === 'optional' ? 'optional · off' : b.mbFrame !== null ? `${b.mbFrame.toFixed(2)} MB/f` : 'stat',
         tone: b.kind })
       if (b.kind === 'history') {
-        if (b.wPorts.length) push({ id: `${bid}:hw`, source: owner, target: bid, kind: 'M2M', ports: b.wPorts.join(', ') })
-        push({ id: `${bid}:hr`, source: bid, target: owner, kind: 'M2M', ports: b.rPorts.join(', ') })
-      } else push({ id: `${bid}:w`, source: owner, target: bid, kind: 'M2M', ports: b.wPorts.join(', ') })
+        if (b.wPorts.length) push({ id: `${bid}:hw`, source: owner, target: bid, kind: 'M2M', ports: b.wPorts.join(', '), lever })
+        push({ id: `${bid}:hr`, source: bid, target: owner, kind: 'M2M', ports: b.rPorts.join(', '), lever })
+      } else push({ id: `${bid}:w`, source: owner, target: bid, kind: 'M2M', ports: b.wPorts.join(', '), lever })
     }
   }
   const groups = [...groupCount.entries()].map(([id, count]) => ({ id, label: GROUP_LABEL[id] ?? id.replace(/^g:/, ''), count }))
@@ -236,7 +272,8 @@ export function toElk(graph: Graph, opts: ElkOptions = {}): ElkNode {
   for (const [g, members] of byGroup) {
     root.push({
       id: g,
-      layoutOptions: { 'elk.padding': '[top=26,left=12,bottom=12,right=12]' },
+      // top leaves room for the group title + power-lever pills above the first node
+      layoutOptions: { 'elk.padding': '[top=36,left=12,bottom=12,right=12]' },
       children: members.map((m) => ({ id: m.id, width: m.width, height: m.height })),
     })
   }
@@ -321,7 +358,7 @@ export function edgePath(points: { x: number; y: number }[]): string {
 // DMA table rows (buffer centric)
 // ---------------------------------------------------------------------------
 
-export interface DmaRow { buffer: string; producer: string; consumer: string; ports: string; size: string; format: string; bit: string; compression: string; mb: number | null }
+export interface DmaRow { buffer: string; producer: string; consumer: string; ports: string; size: string; format: string; bit: string; compression: string; llc: string; mb: number | null }
 
 const PLANE: Record<string, number> = { Y: 1, BAYER: 1, RAW_BAYER: 1, YUV420: 1.5, NV12: 1.5, NV21: 1.5, YUV422: 2, YUV444: 3, RGB: 3, RGB888: 3, P010: 1.5, P210: 2 }
 
@@ -355,6 +392,7 @@ export function dmaRows(view: ViewResponse): DmaRow[] {
       format: String(mem.format ?? ''),
       bit: mem.bitdepth ? String(mem.bitdepth) : '',
       compression: String(mem.compression ?? ''),
+      llc: e.placement?.llc_allocated === true ? `LLC${e.placement.llc_weight ? ` ×${e.placement.llc_weight}` : ''}` : '',
       mb: frameMb(mem),
     }
   }).sort((a, b) => a.producer.localeCompare(b.producer) || a.buffer.localeCompare(b.buffer))

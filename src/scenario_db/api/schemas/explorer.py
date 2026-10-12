@@ -81,6 +81,8 @@ class VariantMatrixItem(BaseModel):
     disabled_edges: int = 0
     buffer_override_count: int = 0
     node_config_count: int = 0
+    # memory power levers: {llc: [buffer], compressed: [buffer], votf: ["src->dst"], llc_weight_min}
+    memory_levers: dict[str, Any] = Field(default_factory=dict)
     tags: list[str] = Field(default_factory=list)
     derived_from_variant: str | None = None
     own_condition_keys: list[str] = Field(default_factory=list)

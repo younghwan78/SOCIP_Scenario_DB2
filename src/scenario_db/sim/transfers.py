@@ -126,6 +126,8 @@ def _effective_buffer(graph: CanonicalScenarioGraph, buffer_id: str) -> dict[str
     merged = {**base, **override}
     if "dma" in override:
         merged["dma"] = {**base.get("dma", {}), **override["dma"]}
+    if "placement" in override:
+        merged["placement"] = {**(base.get("placement") or {}), **(override["placement"] or {})}
     return merged
 
 
@@ -154,6 +156,9 @@ def _buffer_transfers(
     comp_ratio = _resolve_port_comp_ratio(
         compression, buffer.get("comp_ratio"), comp_catalog, warnings, f"buffer.{buffer_id}"
     )
+    placement = buffer.get("placement") or {}
+    llc_on = enabled(placement.get("llc_allocated", False))
+    llc_weight = float(placement.get("llc_weight") or 1.0) if llc_on else 1.0
     fmt = buffer.get("format")
     # A planar YUV444 buffer has three full-size single-component planes.
     # Names remain physical driver DMA identifiers while BW counts each plane once.
@@ -164,6 +169,7 @@ def _buffer_transfers(
         port=name, port_type=direction, width=width, height=height,
         format=fmt, bitwidth=int(buffer.get("bitdepth") or 8),
         compression=compression, comp_ratio=comp_ratio,
+        llc_enabled=llc_on, llc_weight=llc_weight,
     ) for name in names]
 
 

@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { edgePath, type Layout, type Placed } from '../lib/graph'
+import { edgePath, type Layout, type LeverPill, type Placed } from '../lib/graph'
+import { LEVER_COLOR, pillWidth } from '../lib/memLever'
 
 const EDGE_STYLE = {
   OTF: { stroke: 'var(--otf)', dash: undefined, marker: 'm-otf', width: 1.8 },
+  vOTF: { stroke: LEVER_COLOR.votf.line, dash: undefined, marker: 'm-votf', width: 2.8 },
   M2M: { stroke: 'var(--m2m)', dash: '6 4', marker: 'm-m2m', width: 1.8 },
   control: { stroke: 'var(--control)', dash: '2 3', marker: 'm-ctl', width: 1.3 },
 } as const
@@ -34,6 +36,21 @@ function DmaBadges({ n }: { n: Placed }) {
       <text x={cx} y={cy + 3} textAnchor="middle" fontSize={b.v.used > 9 ? 7.5 : 8.5} fontWeight={700} fill={b.v.used ? '#fff' : b.c} fontFamily="var(--mono)">{b.v.used}</text>
     </g>
   })}</>
+}
+
+/** LLC / SBWC / vOTF pills straddling the node's top border (left-aligned; right-aligned for buffers). */
+function LeverPills({ n, align }: { n: Placed; align: 'left' | 'right' }) {
+  if (!n.levers?.length) return null
+  let x = align === 'left' ? n.x + 4 : n.x + n.width - 4
+  return <g pointerEvents="none">{n.levers.map((p: LeverPill) => {
+    const w = pillWidth(p.text), c = LEVER_COLOR[p.key]
+    const px = align === 'left' ? x : x - w
+    x = align === 'left' ? x + w + 3 : x - w - 3
+    return <g key={p.key}>
+      <rect x={px} y={n.y - 10} width={w} height={12} rx={6} fill={c.line} stroke="#fff" strokeWidth={1} />
+      <text x={px + w / 2} y={n.y - 1} textAnchor="middle" fontSize={8.5} fontWeight={700} fill="#fff" fontFamily="var(--mono)">{p.text}</text>
+    </g>
+  })}</g>
 }
 
 interface View { x: number; y: number; s: number }
@@ -189,9 +206,9 @@ export function GraphView({ layout, selected, related, onSelect, onToggleGroup, 
       onDoubleClick={(e) => { if ((e.target as Element).tagName === 'svg') fit('all') }}>
       <svg width={size.w} height={size.h} viewBox={vb} role="img" aria-label="Pipeline graph" onClick={() => { setPinned(null); onSelect(null) }} style={{ display: 'block' }}>
         <defs>
-          {(['otf', 'm2m', 'ctl'] as const).map((k) => (
+          {([['otf', '#2563EB'], ['m2m', '#F97316'], ['ctl', '#A16207'], ['votf', LEVER_COLOR.votf.line], ['llc', LEVER_COLOR.llc.line], ['sbwc', LEVER_COLOR.sbwc.line]] as const).map(([k, c]) => (
             <marker key={k} id={`m-${k}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-              <path d="M0 0L10 5L0 10z" fill={k === 'otf' ? '#2563EB' : k === 'm2m' ? '#F97316' : '#A16207'} />
+              <path d="M0 0L10 5L0 10z" fill={c} />
             </marker>
           ))}
         </defs>
@@ -216,8 +233,12 @@ export function GraphView({ layout, selected, related, onSelect, onToggleGroup, 
         {edges.map((e) => {
           const st = EDGE_STYLE[e.kind]
           const on = !dim || (related.has(e.source) && related.has(e.target))
-          return <path key={e.id} d={edgePath(e.points)} fill="none" stroke={st.stroke} strokeWidth={on && dim ? st.width + 0.8 : st.width}
-            strokeDasharray={st.dash} markerEnd={`url(#${st.marker})`} opacity={on ? (e.faint && !(dim && on) ? 0.4 : 1) : 0.18}><title>{e.ports || e.kind}</title></path>
+          // memory lever on the DMA path (LLC / SBWC): lever colour, thicker; dash keeps the M2M meaning
+          const lv = e.kind === 'M2M' && e.lever ? LEVER_COLOR[e.lever] : null
+          const w = lv ? st.width + 0.9 : st.width
+          return <path key={e.id} d={edgePath(e.points)} fill="none" stroke={lv ? lv.line : st.stroke} strokeWidth={on && dim ? w + 0.8 : w}
+            strokeDasharray={st.dash} markerEnd={`url(#${lv ? `m-${e.lever}` : st.marker})`} opacity={on ? (e.faint && !(dim && on) ? 0.4 : 1) : 0.18}>
+            <title>{`${e.kind}${e.lever ? ` · ${e.lever.toUpperCase()}` : ''}${e.ports ? `\n${e.ports}` : ''}`}</title></path>
         })}
         {edges.filter((e) => e.label && e.points.length > 1).map((e) => {
           const p = e.points[Math.floor(e.points.length / 2)], q = e.points[Math.floor(e.points.length / 2) - 1] ?? p
@@ -239,15 +260,19 @@ export function GraphView({ layout, selected, related, onSelect, onToggleGroup, 
             } : undefined,
             onMouseLeave: tooltip ? () => { clearDwell(); setHover(null) } : undefined }
           if (n.kind === 'buffer') {
+            // LLC-resident buffer = green fill + thick green border; compressed only = pink border
+            const lk = n.levers?.some((p) => p.key === 'llc') ? 'llc' : n.levers?.some((p) => p.key === 'sbwc') ? 'sbwc' : null
             return (
               <g key={n.id} {...common}>
-                <rect x={n.x} y={n.y} width={n.width} height={n.height} rx={5} fill={n.tone === 'stat' ? '#FFF7E6' : n.tone === 'history' ? '#EEF2FF' : n.tone === 'optional' ? '#F4F4F5' : 'var(--buf-fill)'}
-                  stroke={isSel ? 'var(--primary-strong)' : n.tone === 'stat' ? '#B45309' : n.tone === 'history' ? '#4F46E5' : n.tone === 'optional' ? '#A1A1AA' : 'var(--buf-line)'} strokeWidth={isSel ? 2.4 : 1.1}
+                <rect x={n.x} y={n.y} width={n.width} height={n.height} rx={5} fill={lk === 'llc' ? LEVER_COLOR.llc.fill : n.tone === 'stat' ? '#FFF7E6' : n.tone === 'history' ? '#EEF2FF' : n.tone === 'optional' ? '#F4F4F5' : 'var(--buf-fill)'}
+                  stroke={isSel ? 'var(--primary-strong)' : lk ? LEVER_COLOR[lk].line : n.tone === 'stat' ? '#B45309' : n.tone === 'history' ? '#4F46E5' : n.tone === 'optional' ? '#A1A1AA' : 'var(--buf-line)'} strokeWidth={isSel ? 2.4 : lk ? 2.2 : 1.1}
                   strokeDasharray={n.tone === 'stat' || n.tone === 'optional' ? '4 3' : undefined} />
+                {lk === 'llc' && n.levers?.some((p) => p.key === 'sbwc') && <rect x={n.x + 2.5} y={n.y + 2.5} width={n.width - 5} height={n.height - 5} rx={3.5} fill="none" stroke={LEVER_COLOR.sbwc.line} strokeWidth={1} strokeDasharray="3 2" />}
                 <text x={n.x + 6} y={n.y + 12} fontSize={10} fontWeight={700} fill="var(--buf-text)" fontFamily="var(--mono)">{n.label}</text>
                 <text x={n.x + 6} y={n.y + 24} fontSize={9} fill="var(--buf-text)" fontFamily="var(--mono)">{n.sub}</text>
                 {n.sub2 && <text x={n.x + 6} y={n.y + 35} fontSize={9} fill="var(--buf-text)" fontFamily="var(--mono)" opacity={0.8}>{n.sub2}</text>}
-                {!tooltip && <title>{`${n.bufferRef}\n${n.sub ?? ''}\n${n.sub2 ?? ''}`}</title>}
+                <LeverPills n={n} align="right" />
+                {!tooltip && <title>{`${n.bufferRef}\n${n.sub ?? ''}\n${n.sub2 ?? ''}${n.levers?.length ? `\n${n.levers.map((p) => p.title ?? p.text).join('\n')}` : ''}`}</title>}
               </g>
             )
           }
@@ -269,6 +294,7 @@ export function GraphView({ layout, selected, related, onSelect, onToggleGroup, 
               {n.kind === 'external' && <text x={n.x + n.width - 4} y={n.y - 3} textAnchor="end" fontSize={8.5} fontWeight={700} fill="var(--ext-line)">EXT</text>}
               {ops && <text x={n.x + n.width / 2} y={n.y + n.height + 11} textAnchor="middle" fontSize={9.5} fill="#9A4A12">{ops}</text>}
               <DmaBadges n={n} />
+              <LeverPills n={n} align="left" />
               {!tooltip && <title>{[n.data?.ip_ref ?? n.label, n.sub, n.sub2].filter(Boolean).join('\n')}</title>}
             </g>
           )

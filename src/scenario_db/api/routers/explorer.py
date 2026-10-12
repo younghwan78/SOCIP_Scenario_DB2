@@ -28,6 +28,7 @@ from scenario_db.graph_checks import (
     edge_target as _edge_target,
     find_data_flow_cycle,
 )
+from scenario_db.view.memory_levers import memory_levers
 from scenario_db.integrity_checks import (
     IntegrityIssue,
     validate_scenario_identity_conventions,
@@ -242,6 +243,7 @@ def variant_matrix(
                 disabled_edges=len(routing.get("disabled_edges") or []),
                 buffer_override_count=len(effective.buffer_overrides or {}),
                 node_config_count=len(effective.node_configs or {}),
+                memory_levers=memory_levers(scenario.pipeline, effective.buffer_overrides, disabled_nodes),
                 tags=effective.tags or [],
                 derived_from_variant=parent_id,
                 own_condition_keys=own_keys if parent_id else [],

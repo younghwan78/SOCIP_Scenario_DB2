@@ -5,7 +5,7 @@
 // where they gate the next HW stage.
 import type { ViewResponse } from './api'
 import type { GEdge, GNode, Layout, Placed, PlacedEdge } from './graph'
-import { pipelineIdOf, isExternal } from './graph'
+import { bufferLever, edgeKindOf, ipPills, pipelineIdOf, isExternal } from './graph'
 import { LANE_LABEL, LANE_ORDER, laneOf, chains, type Lane, type PipelineModel } from './model'
 import type { StageTiming } from './cadence'
 import type { ScenarioDef } from './api'
@@ -26,13 +26,15 @@ const MIN_NODE_W = 82, MIN_GAP = 22
 
 const fmt = (x: number) => (x >= 10 ? x.toFixed(1) : x.toFixed(2))
 
-/** Longest-path rank with OTF weight 0, others 1. Back edges (cycles) ignored. */
+const streaming = (k: string) => k === 'OTF' || k === 'vOTF'
+
+/** Longest-path rank with OTF / vOTF weight 0, others 1. Back edges (cycles) ignored. */
 export function sequenceRanks(ids: string[], edges: { source: string; target: string; kind: string }[]): Map<string, number> {
   const out = new Map<string, { t: string; w: number }[]>()
   const indeg = new Map(ids.map((i) => [i, 0]))
   for (const e of edges) {
     if (!indeg.has(e.source) || !indeg.has(e.target) || e.source === e.target) continue
-    out.set(e.source, [...(out.get(e.source) ?? []), { t: e.target, w: e.kind === 'OTF' ? 0 : 1 }])
+    out.set(e.source, [...(out.get(e.source) ?? []), { t: e.target, w: streaming(e.kind) ? 0 : 1 }])
     indeg.set(e.target, (indeg.get(e.target) ?? 0) + 1)
   }
   const rank = new Map(ids.map((i) => [i, 0]))
@@ -50,7 +52,7 @@ export function sequenceRanks(ids: string[], edges: { source: string; target: st
   // nodes in cycles: place after their highest ranked resolved predecessor
   for (const i of ids) if (!seen.has(i)) {
     let r = 0
-    for (const e of edges) if (e.target === i && seen.has(e.source)) r = Math.max(r, rank.get(e.source)! + (e.kind === 'OTF' ? 0 : 1))
+    for (const e of edges) if (e.target === i && seen.has(e.source)) r = Math.max(r, rank.get(e.source)! + (streaming(e.kind) ? 0 : 1))
     rank.set(i, r)
   }
   return rank
@@ -75,7 +77,7 @@ export function sequenceLayout(view: ViewResponse, opts: SeqOptions): Layout {
   const inside = new Set<string>()
   for (const [hw, sw] of opts.merged ?? []) { const a = idOfPid.get(sw), b = idOfPid.get(hw); if (a && b) inside.add(`${a}|${b}`) }
   const rank = sequenceRanks(units.map((n) => n.id), rawEdges.map((e) => ({ source: e.source, target: e.target,
-    kind: inside.has(`${e.source}|${e.target}`) ? 'OTF' : e.flow_type === 'M2M' ? 'M2M' : e.flow_type === 'control' ? 'control' : 'OTF' })))
+    kind: inside.has(`${e.source}|${e.target}`) ? 'OTF' : edgeKindOf(e.flow_type) })))
   const visible = units.filter((n) => opts.showSw || n.type !== 'sw')
   const lane = new Map(visible.map((n) => [n.id, laneOf(n, ch)]))
   const usedRanks = [...new Set(visible.map((n) => rank.get(n.id)!))].sort((a, b) => a - b)
@@ -130,6 +132,7 @@ export function sequenceLayout(view: ViewResponse, opts: SeqOptions): Layout {
         sub: sub || sub2, sub2: sub ? sub2 : undefined,
         rdma: kind === 'ip' && ip && (ip.rdma.used || ip.rdma.total) ? ip.rdma : undefined,
         wdma: kind === 'ip' && ip && (ip.wdma.used || ip.wdma.total) ? ip.wdma : undefined,
+        levers: kind === 'ip' ? ipPills(ip?.levers) : undefined,
         x: x0 + Number(c) * colW, y: ly.y + (ly.h - stackH) / 2 + i * (SEQ.nodeH + SEQ.gapY),
       })
     })
@@ -140,11 +143,13 @@ export function sequenceLayout(view: ViewResponse, opts: SeqOptions): Layout {
   const agg = new Map<string, GEdge & { bufs: string[] }>()
   for (const e of rawEdges) {
     if (!pos.has(e.source) || !pos.has(e.target)) continue
-    const kind = e.flow_type === 'M2M' ? 'M2M' : e.flow_type === 'control' ? 'control' : 'OTF'
+    const kind = edgeKindOf(e.flow_type)
     const k = `${e.source}|${e.target}|${kind}`
     const cur = agg.get(k) ?? { id: k, source: e.source, target: e.target, kind, count: 0, bufs: [] as string[] }
     cur.count = (cur.count ?? 0) + 1
     if (e.buffer_ref) cur.bufs.push(e.buffer_ref)
+    const lv = bufferLever(opts.model?.buffers.find((b) => b.name === e.buffer_ref))
+    if (lv === 'llc' || (lv && !cur.lever)) cur.lever = lv
     agg.set(k, cur)
   }
   const outIdx = new Map<string, number>()
@@ -155,7 +160,7 @@ export function sequenceLayout(view: ViewResponse, opts: SeqOptions): Layout {
     if (Math.abs(a.x - b.x) < 1) {
       // same step: vertical (OTF streaming inside the column)
       const down = b.y > a.y
-      const off = e.kind === 'OTF' ? 0 : 10
+      const off = streaming(e.kind) ? 0 : 10
       points = [{ x: a.x + a.width / 2 + off, y: down ? a.y + a.height : a.y }, { x: b.x + b.width / 2 + off, y: down ? b.y : b.y + b.height }]
     } else {
       const k = outIdx.get(e.source) ?? 0
@@ -167,7 +172,7 @@ export function sequenceLayout(view: ViewResponse, opts: SeqOptions): Layout {
       points = b.x > a.x ? [{ x: sx, y: sy }, { x: mx, y: sy }, { x: mx, y: ty }, { x: tx, y: ty }]
         : [{ x: sx, y: sy }, { x: sx + 14, y: sy }, { x: sx + 14, y: Math.max(a.y, b.y) + SEQ.nodeH + 6 }, { x: tx - 14, y: Math.max(a.y, b.y) + SEQ.nodeH + 6 }, { x: tx - 14, y: ty }, { x: tx, y: ty }]
     }
-    return { id: e.id, source: e.source, target: e.target, kind: e.kind, ports, count: e.count, faint: e.kind === 'M2M', label: e.count && e.count > 1 ? `×${e.count}` : undefined, points }
+    return { id: e.id, source: e.source, target: e.target, kind: e.kind, ports, count: e.count, faint: e.kind === 'M2M' && !e.lever, lever: e.lever, label: e.count && e.count > 1 ? `×${e.count}` : undefined, points }
   })
 
   // phase bands over columns
@@ -205,7 +210,7 @@ export function sequenceOrder(view: ViewResponse | undefined, merged?: Map<strin
   const inside = new Set<string>()
   for (const [hw, sw] of merged ?? []) { const a = idOfPid.get(sw), b = idOfPid.get(hw); if (a && b) inside.add(`${a}|${b}`) }
   const rank = sequenceRanks(units.map((n) => n.id), view.edges.map((e) => e.data).filter((e) => ids.has(e.source) && ids.has(e.target)).map((e) => ({
-    source: e.source, target: e.target, kind: inside.has(`${e.source}|${e.target}`) ? 'OTF' : e.flow_type === 'M2M' ? 'M2M' : e.flow_type === 'control' ? 'control' : 'OTF' })))
+    source: e.source, target: e.target, kind: inside.has(`${e.source}|${e.target}`) ? 'OTF' : edgeKindOf(e.flow_type) })))
   units.map((n, i) => ({ pid: pipelineIdOf(n.id), key: (rank.get(n.id) ?? 0) * 10000 + i }))
     .sort((a, b) => a.key - b.key).forEach((u, i) => { if (!out.has(u.pid)) out.set(u.pid, i) })
   return out

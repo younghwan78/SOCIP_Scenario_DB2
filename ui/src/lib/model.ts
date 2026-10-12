@@ -3,6 +3,7 @@
 // DMA·Memory and IP-internal lenses. Never invents sizes: unknown stays null.
 import type { BufferDef, Dict, IpCatalog, ScenarioDef, VariantDetail, ViewEdgeData, ViewNodeData, ViewResponse } from './api'
 import { frameMb, isExternal, pipelineIdOf } from './graph'
+import { compInfo, llcInfo, type CompCatalog, type CompInfo, type LlcInfo } from './memLever'
 
 export type Lane = 'sensor' | 'rt' | 'sw' | 'nrt' | 'm2m' | 'codec' | 'display' | 'other'
 export const LANE_ORDER: Lane[] = ['sensor', 'rt', 'sw', 'nrt', 'm2m', 'codec', 'display', 'other']
@@ -54,6 +55,10 @@ export interface Port {
   mb?: number | null
   enabled: boolean
   note?: string
+  /** buffer behind this DMA port is LLC-resident */
+  llc?: LlcInfo | null
+  /** streaming port is a virtual OTF (vOTF) link */
+  votf?: boolean
   /** catalog channel not used in this variant */
   unused?: boolean
 }
@@ -97,9 +102,13 @@ export interface IpModel {
   /** voltage rail / DVFS group from catalog sim (selected mode first) */
   vdd?: string
   dvfsGroup?: string
+  /** power levers active on this IP: buffers in LLC / compressed buffers / vOTF peers */
+  levers: IpLevers
 }
 
-export interface IpLink { from: string; to: string; kind: 'OTF' | 'M2M' | 'ctrl'; buffer?: string; mbs?: number | null }
+export interface IpLevers { llc: string[]; sbwc: string[]; votf: string[] }
+
+export interface IpLink { from: string; to: string; kind: 'OTF' | 'vOTF' | 'M2M' | 'ctrl'; buffer?: string; mbs?: number | null; llc?: boolean; comp?: boolean }
 
 export type BufferKind = 'data' | 'stat' | 'history' | 'optional'
 export interface BufferRow {
@@ -116,10 +125,19 @@ export interface BufferRow {
   format: string
   bit: string
   comp: string
+  /** compression mode decoded (SBWC/AFBC, ratio from authored → SoC catalog) */
+  compression: CompInfo
+  /** LLC placement (null = DRAM only) */
+  llc: LlcInfo | null
+  /** uncompressed MB/frame */
+  mbRaw: number | null
+  /** MB/frame on the bus (mbRaw × comp ratio; ratio unknown → mbRaw upper bound) */
   mbFrame: number | null
   fps: number | null
   wMBs: number | null
   rMBs: number | null
+  /** DRAM traffic W+R after LLC (= (W+R) × llc weight) */
+  dramMBs: number | null
   enabled: boolean
   note: string
 }
@@ -133,7 +151,28 @@ export interface PipelineModel {
   fps: number | null
   /** total DMA traffic (W+R, MB/s) over characterised buffers */
   totalMBs: number
+  /** DRAM traffic after LLC (W+R × llc weight) */
+  totalDramMBs: number
   unknownBuffers: number
+  /** lever summary: LLC / compressed buffers, vOTF links */
+  levers: { llc: number; sbwc: number; votf: number }
+}
+
+export interface ModelOptions { compCatalog?: CompCatalog | null }
+
+function deepMerge<T extends object>(base: T | undefined, over: Dict | undefined): T | undefined {
+  if (!over || !Object.keys(over).length) return base
+  const out: Dict = { ...(base ?? {}) }
+  for (const [k, v] of Object.entries(over)) out[k] = v && typeof v === 'object' && !Array.isArray(v) && out[k] && typeof out[k] === 'object' ? deepMerge(out[k] as Dict, v as Dict) : v
+  return out as T
+}
+
+/** Uncompressed MB/frame, then the bus size with the compression ratio applied. */
+function sizes(mem: Dict | null, comp: CompInfo): { raw: number | null; bus: number | null } {
+  if (!mem) return { raw: null, bus: null }
+  const raw = frameMb({ ...mem, compression: undefined })
+  if (typeof mem.size_bytes === 'number') return { raw, bus: raw }
+  return { raw, bus: raw === null ? null : comp.on && comp.ratio !== null ? raw * comp.ratio : raw }
 }
 
 function opsOf(ops: Dict | null | undefined, cfg: Dict | undefined): string[] {
@@ -169,7 +208,7 @@ function bufSize(def: BufferDef | undefined, scn?: ScenarioDef | null, variant?:
 
 const isStatName = (n: string) => /HIST|SAT|DRC|STAT|_MV\b|RESULT/i.test(n)
 
-export function buildModel(view: ViewResponse, scn?: ScenarioDef | null, variant?: VariantDetail | null, catalogs?: Map<string, IpCatalog>): PipelineModel {
+export function buildModel(view: ViewResponse, scn?: ScenarioDef | null, variant?: VariantDetail | null, catalogs?: Map<string, IpCatalog>, opts: ModelOptions = {}): PipelineModel {
   const ch = chains(scn)
   const units = view.nodes.map((n) => n.data).filter((n) => n.type === 'ip' || n.type === 'sw')
   const label = new Map(units.map((n) => [n.id, n.label]))
@@ -179,7 +218,11 @@ export function buildModel(view: ViewResponse, scn?: ScenarioDef | null, variant
   const fps = Number(view.summary.fps ?? variant?.design_conditions?.fps ?? NaN)
   const vfps = Number.isFinite(fps) && fps > 0 ? fps : null
   const edges = view.edges.map((e) => e.data)
-  const defs = scn?.pipeline?.buffers ?? {}
+  const baseDefs = scn?.pipeline?.buffers ?? {}
+  const overrides = (variant?.buffer_overrides ?? {}) as Record<string, Dict>
+  const defs: Record<string, BufferDef> = Object.fromEntries([...new Set([...Object.keys(baseDefs), ...Object.keys(overrides)])]
+    .map((k) => [k, deepMerge(baseDefs[k], overrides[k]) ?? {}]))
+  const cc = opts.compCatalog
 
   // ---- buffers from view M2M edges (grouped by buffer_ref)
   const bufMap = new Map<string, BufferRow>()
@@ -191,13 +234,17 @@ export function buildModel(view: ViewResponse, scn?: ScenarioDef | null, variant
     if (!b) {
       const def = defs[name]
       const w = Number(mem.width) || null, h = Number(mem.height) || null
-      const mb = frameMb(mem)
+      // authored definition (+ variant override) wins over the view's derived descriptor for compression
+      const comp = String(def?.compression ?? mem.compression ?? '')
+      const ci = compInfo(comp, cc, def?.comp_ratio ?? mem.comp_ratio)
+      const sz = sizes(mem, ci)
       const f = Number(mem.fps) || vfps
       const unknown = !w || !h || !mem.format
       b = { name, kind: unknown && (isStatName(name) || def?.size_status === 'unknown') ? 'stat' : unknown ? 'stat' : 'data',
         producer: label.get(e.source) ?? e.source, producerPid: pipelineIdOf(e.source), consumers: [], consumerPids: [], wPorts: [], rPorts: [],
         width: w, height: h, format: String(mem.format ?? def?.format ?? ''), bit: mem.bitdepth ? String(mem.bitdepth) : def?.bitdepth ? String(def.bitdepth) : '',
-        comp: String(mem.compression ?? def?.compression ?? ''), mbFrame: mb, fps: f ?? null, wMBs: null, rMBs: null, enabled: true, note: def?.source_note ?? '' }
+        comp, compression: ci, llc: llcInfo(def?.placement ?? (e.placement as Dict | null | undefined)), mbRaw: sz.raw, mbFrame: sz.bus,
+        fps: f ?? null, wMBs: null, rMBs: null, dramMBs: null, enabled: true, note: def?.source_note ?? '' }
       bufMap.set(name, b)
     }
     const cons = label.get(e.target) ?? e.target
@@ -214,7 +261,8 @@ export function buildModel(view: ViewResponse, scn?: ScenarioDef | null, variant
     if (!node || !active.has(node)) continue
     const sz = bufSize(def, scn, variant)
     const mem = sz ? { width: sz.w, height: sz.h, format: def.format, bitdepth: def.bitdepth, compression: def.compression } : null
-    const mb = frameMb(mem)
+    const ci = compInfo(def.compression, cc, def.comp_ratio)
+    const mb = sizes(mem, ci)
     const cfg = cfgs[node] as Dict | undefined
     let enabled = true
     if (def.dma?.enabled === false) enabled = false
@@ -226,10 +274,11 @@ export function buildModel(view: ViewResponse, scn?: ScenarioDef | null, variant
       consumers: def.history ? [nodeLabel] : [], consumerPids: def.history ? [node] : [],
       wPorts: def.history?.write_ports ?? def.dma?.write_ports ?? [], rPorts: def.history?.read_ports ?? def.dma?.read_ports ?? [],
       width: sz?.w ?? null, height: sz?.h ?? null, format: def.format ?? '', bit: def.bitdepth ? String(def.bitdepth) : '', comp: def.compression ?? '',
-      mbFrame: mb, fps: vfps, wMBs: null, rMBs: null, enabled, note: def.source_note ?? (def.history ? `history · frame_offset ${def.history.frame_offset ?? -1}${def.history.producer ? ` · ${def.history.producer}` : ''}` : ''),
+      compression: ci, llc: llcInfo(def.placement), mbRaw: mb.raw,
+      mbFrame: mb.bus, fps: vfps, wMBs: null, rMBs: null, dramMBs: null, enabled, note: def.source_note ?? (def.history ? `history · frame_offset ${def.history.frame_offset ?? -1}${def.history.producer ? ` · ${def.history.producer}` : ''}` : ''),
     })
   }
-  let total = 0, unknown = 0
+  let total = 0, dram = 0, unknown = 0
   for (const b of bufMap.values()) {
     if (b.mbFrame === null || !b.fps || !b.enabled) { if (b.enabled) unknown++; continue }
     const perFrame = b.mbFrame * b.fps
@@ -237,7 +286,9 @@ export function buildModel(view: ViewResponse, scn?: ScenarioDef | null, variant
     b.rMBs = perFrame * Math.max(1, b.kind === 'history' ? 1 : b.consumers.length || (b.rPorts.length ? 1 : 0))
     if (b.kind !== 'history' && !b.consumers.length && !b.rPorts.length) b.rMBs = 0
     b.wMBs = +b.wMBs.toFixed(1); b.rMBs = +b.rMBs.toFixed(1)
+    b.dramMBs = +((b.wMBs + b.rMBs) * (b.llc?.weight ?? 1)).toFixed(1)
     total += b.wMBs + b.rMBs
+    dram += b.dramMBs
   }
   const buffers = [...bufMap.values()]
 
@@ -256,15 +307,15 @@ export function buildModel(view: ViewResponse, scn?: ScenarioDef | null, variant
         const b = bufMap.get(e.buffer_ref ?? '')
         const pairs = e.port_pairs?.length ? e.port_pairs : [{ src: 'WDMA', dst: 'RDMA' }]
         for (const p of pairs) ports.push({ port: out ? p.src : p.dst, dir: out ? 'out' : 'in', via: b?.kind === 'stat' ? 'stat' : 'DMA', buffer: e.buffer_ref ?? undefined, peer,
-          size: b ? sizeText(b.width, b.height) : '', format: b?.format, bit: b?.bit, comp: b?.comp, mb: b?.mbFrame ?? null, enabled: true })
+          size: b ? sizeText(b.width, b.height) : '', format: b?.format, bit: b?.bit, comp: b?.comp, mb: b?.mbFrame ?? null, enabled: true, llc: b?.llc ?? null })
         continue
       }
       const pairs = e.port_pairs?.length ? e.port_pairs : [{ src: 'OTF out', dst: 'OTF in' }]
-      for (const p of pairs) ports.push({ port: out ? p.src : p.dst, dir: out ? 'out' : 'in', via: 'OTF', peer, enabled: true })
+      for (const p of pairs) ports.push({ port: out ? p.src : p.dst, dir: out ? 'out' : 'in', via: 'OTF', peer, enabled: true, votf: e.flow_type === 'vOTF' })
     }
     for (const b of buffers) {
       if (b.producerPid !== pid || (b.kind !== 'history' && b.kind !== 'stat' && b.kind !== 'optional') || edges.some((e) => e.buffer_ref === b.name)) continue
-      const common = { buffer: b.name, size: sizeText(b.width, b.height), format: b.format, bit: b.bit, comp: b.comp, mb: b.mbFrame, enabled: b.enabled, note: b.note }
+      const common = { buffer: b.name, size: sizeText(b.width, b.height), format: b.format, bit: b.bit, comp: b.comp, mb: b.mbFrame, enabled: b.enabled, note: b.note, llc: b.llc }
       if (b.kind === 'history') {
         b.rPorts.forEach((p) => ports.push({ ...common, port: p, dir: 'in', via: 'history', peer: 'prev frame' }))
         b.wPorts.forEach((p) => ports.push({ ...common, port: p, dir: 'out', via: 'history', peer: 'next frame' }))
@@ -288,16 +339,33 @@ export function buildModel(view: ViewResponse, scn?: ScenarioDef | null, variant
       viewId: n.id, pid, label: n.label, lane: laneOf(n, ch), type: n.type, ipRef: String(n.ip_ref ?? ''), inSize, outSizes,
       ops: opsOf(n.active_operations, cfg), mode: cfg?.selected_mode ? String(cfg.selected_mode) : undefined, flags: flagsOf(cfg), sw: swTimingOf(cfg), ports,
       channels, rdma: count('in'), wdma: count('out'), modes: cat?.capabilities?.operating_modes?.map((m) => m.id),
-      ...domainOf(cat, cfg),
+      ...domainOf(cat, cfg), levers: leversOf(ports, buffers),
     }
   })
   const links: IpLink[] = edges.filter((e) => e.flow_type !== 'risk' && active.has(pipelineIdOf(e.source)) && active.has(pipelineIdOf(e.target)))
     .map((e) => {
-      const kind: IpLink['kind'] = e.flow_type === 'control' ? 'ctrl' : e.flow_type === 'M2M' ? 'M2M' : 'OTF'
+      const kind: IpLink['kind'] = e.flow_type === 'control' ? 'ctrl' : e.flow_type === 'M2M' ? 'M2M' : e.flow_type === 'vOTF' ? 'vOTF' : 'OTF'
       const b = e.buffer_ref ? bufMap.get(e.buffer_ref) : undefined
-      return { from: pipelineIdOf(e.source), to: pipelineIdOf(e.target), kind, buffer: e.buffer_ref ?? undefined, mbs: b && b.consumers.length ? (b.rMBs ?? 0) / b.consumers.length : null }
+      return { from: pipelineIdOf(e.source), to: pipelineIdOf(e.target), kind, buffer: e.buffer_ref ?? undefined, mbs: b && b.consumers.length ? (b.rMBs ?? 0) / b.consumers.length : null,
+        llc: !!b?.llc, comp: !!b?.compression.on }
     })
-  return { ips, byPid: new Map(ips.map((i) => [i.pid, i])), links, buffers, fps: vfps, totalMBs: +total.toFixed(1), unknownBuffers: unknown }
+  const levers = {
+    llc: buffers.filter((b) => b.enabled && b.llc).length,
+    sbwc: buffers.filter((b) => b.enabled && b.compression.on).length,
+    votf: edges.filter((e) => e.flow_type === 'vOTF').length,
+  }
+  return { ips, byPid: new Map(ips.map((i) => [i.pid, i])), links, buffers, fps: vfps, totalMBs: +total.toFixed(1), totalDramMBs: +dram.toFixed(1), unknownBuffers: unknown, levers }
+}
+
+function leversOf(ports: Port[], buffers: BufferRow[]): IpLevers {
+  const uniq = (xs: string[]) => [...new Set(xs)]
+  const bufs = new Map(buffers.map((b) => [b.name, b]))
+  const mine = ports.filter((p) => p.buffer && p.enabled).map((p) => bufs.get(p.buffer!)).filter((b): b is BufferRow => !!b && b.enabled)
+  return {
+    llc: uniq(mine.filter((b) => b.llc).map((b) => b.name)),
+    sbwc: uniq(mine.filter((b) => b.compression.on).map((b) => b.name)),
+    votf: uniq(ports.filter((p) => p.votf).map((p) => p.peer ?? '')),
+  }
 }
 
 /** BLK / voltage rail / DVFS group from the IP catalog. The selected mode's sim entry wins. */

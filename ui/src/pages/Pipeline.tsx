@@ -2,7 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Ctx } from '../App'
 import { api, type Evidence } from '../lib/api'
 import { useAsync } from '../lib/route'
-import { buildGraph, layoutGraph, memoryText, pipelineIdOf, type Layout } from '../lib/graph'
+import { bufferPills, buildGraph, ipPills, layoutGraph, memoryText, pipelineIdOf, type Layout } from '../lib/graph'
+import { libraryApi } from '../lib/library'
+import { compDetail, llcDetail, LEVER_COLOR } from '../lib/memLever'
+import { LeverTag, LeverTags } from '../components/LeverTag'
 import { buildTimeline, type Slice } from '../lib/timeline'
 import { evidenceSource } from '../lib/conditions'
 import { buildModel, LANE_LABEL, type BufferRow, type IpModel } from '../lib/model'
@@ -12,7 +15,7 @@ import { modeNotes } from '../lib/modes'
 import { calibrationApi, dayOf, errClass } from '../lib/calibration'
 import { GraphView } from '../components/GraphView'
 import { FrameColorLegend, TimelineView } from '../components/TimelineView'
-import { IpInternalView } from '../components/IpInternalView'
+import { IpInternalView, LeverLegend } from '../components/IpInternalView'
 import { CadenceView, TimingContextStrip } from '../components/CadenceView'
 import { TimingCompare } from '../components/TimingCompare'
 import { BufferTooltip, IpTooltip } from '../components/NodeTooltip'
@@ -100,7 +103,11 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
   const ipRefs = useMemo(() => [...new Set((view?.nodes ?? []).map((n) => n.data).filter((n) => n.type === 'ip' && n.ip_ref).map((n) => String(n.ip_ref)))].sort(), [view])
   const catQ = useAsync(() => Promise.all(ipRefs.map((r) => api.ipCatalog(r).then((c) => [r, c] as const).catch(() => null)))
     .then((l) => new Map(l.filter((x): x is readonly [string, NonNullable<typeof x>[1]] => !!x))), [ipRefs.join(',')])
-  const model = useMemo(() => (view ? buildModel(view, scnQ.data, varQ.data, catQ.data) : null), [view, scnQ.data, varQ.data, catQ.data])
+  // SoC compression catalog (SBWC comp_ratio) — same ratio the simulation uses for BW
+  const socRef = ctx.allCatalog.find((c) => c.scenario_id === scenario)?.soc_ref ?? null
+  const socQ = useAsync(() => libraryApi.socs().catch(() => null), [])
+  const compCatalog = useMemo(() => socQ.data?.items.find((x) => x.id === socRef)?.compression_modes ?? null, [socQ.data, socRef])
+  const model = useMemo(() => (view ? buildModel(view, scnQ.data, varQ.data, catQ.data, { compCatalog }) : null), [view, scnQ.data, varQ.data, catQ.data, compCatalog])
 
   // ---- timing evidence
   const traces = useMemo(() => (evidenceQ.data?.items ?? []).filter((e) => (e.timeline_events ?? []).length > 3).sort((a, b) => rankTrace(b) - rankTrace(a)),
@@ -183,17 +190,23 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
   const legend = lens === 'ip' ? null : (
     <div className="legend-mini">
       <span className="legend-item"><svg width="20" height="6"><line x1="0" y1="3" x2="20" y2="3" stroke="#2563EB" strokeWidth="2" /></svg>OTF</span>
+      <span className="legend-item" title="virtual OTF — DRAM 왕복 없음"><svg width="20" height="6"><line x1="0" y1="3" x2="20" y2="3" stroke={LEVER_COLOR.votf.line} strokeWidth="3" /></svg>vOTF</span>
       <span className="legend-item"><svg width="20" height="6"><line x1="0" y1="3" x2="20" y2="3" stroke="#F97316" strokeWidth="2" strokeDasharray="5 3" /></svg>M2M</span>
       <span className="legend-item"><svg width="20" height="6"><line x1="0" y1="3" x2="20" y2="3" stroke="#A16207" strokeWidth="1.6" strokeDasharray="2 3" /></svg>SW trigger</span>
       <span className="legend-item"><span className="sw-ip" />IP</span>
       <span className="legend-item" title="IP 우상단 원 = 사용 중 RDMA(파랑)/WDMA(주황) 채널 수 · 흰 원 = 0 · catalog 전체 수와 port 목록은 hover"><svg width="30" height="12"><circle cx="6" cy="6" r="5.5" fill="#2563EB" /><circle cx="22" cy="6" r="5.5" fill="#F97316" /></svg>RDMA / WDMA 사용</span>
       {lens === 'dma' && <><span className="legend-item"><span className="sw-buf" />Buffer</span>
         <span className="legend-item"><span className="sw-buf" style={{ background: '#EEF2FF', borderColor: '#4F46E5' }} />history</span>
-        <span className="legend-item"><span className="sw-buf" style={{ background: '#FFF7E6', borderColor: '#B45309', borderStyle: 'dashed' }} />stat</span></>}
+        <span className="legend-item"><span className="sw-buf" style={{ background: '#FFF7E6', borderColor: '#B45309', borderStyle: 'dashed' }} />stat</span>
+        <span className="legend-item" title="LLC 상주 buffer: 녹색 채움 + 굵은 녹색 테두리 + 알약 · 연결 DMA 선도 녹색"><span className="sw-buf" style={{ background: LEVER_COLOR.llc.fill, borderColor: LEVER_COLOR.llc.line, borderWidth: 2 }} />LLC</span>
+        <span className="legend-item" title="SBWC/AFBC 압축 buffer: 분홍 테두리 + 알약 · 연결 DMA 선도 분홍 (LLC와 함께면 안쪽 분홍 점선)"><span className="sw-buf" style={{ borderColor: LEVER_COLOR.sbwc.line, borderWidth: 2 }} />SBWC</span></>}
+      {lens === 'sequence' && <LeverLegend />}
     </div>
   )
 
   // ---- tables
+  const hasLlc = (model?.levers.llc ?? 0) > 0
+  const ipLevers = (model?.ips ?? []).some((i) => ipPills(i.levers).length > 0)
   const bufCols: Column<BufferRow>[] = [
     { key: 'kind', label: 'Type', width: 76, sort: (b) => b.kind, render: (b) => <span className={`badge buf-${b.kind}`}>{b.kind}</span> },
     { key: 'seq', label: '#', width: 40, align: 'right', headTitle: 'Sequence 순서 (producer 기준) — 기본 정렬', sort: (b) => seqKey(b.producerPid), render: (b) => <span className="mono faint">{seqOrder.has(b.producerPid) ? seqKey(b.producerPid) + 1 : '—'}</span> },
@@ -205,16 +218,26 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
     { key: 'size', label: 'W×H', width: 96, sort: (b) => (b.width && b.height ? b.width * b.height : null), render: (b) => <span className="mono">{b.width ? `${b.width}×${b.height}` : '—'}</span> },
     { key: 'fmt', label: 'Format', width: 80, sort: (b) => b.format || null, render: (b) => b.format || '—' },
     { key: 'bit', label: 'Bit', width: 48, sort: (b) => Number(b.bit) || null, render: (b) => b.bit || '—' },
-    { key: 'comp', label: 'Comp', width: 88, sort: (b) => b.comp || null, render: (b) => b.comp || '—' },
-    { key: 'mb', label: 'MB/f', width: 66, align: 'right', sort: (b) => b.mbFrame, render: (b) => <span className="mono">{b.mbFrame?.toFixed(2) ?? '—'}</span> },
+    // one compact column for both memory levers (table width unchanged: replaces the old Comp column)
+    { key: 'lever', label: '압축 · LLC', width: 112, headTitle: 'SBWC/AFBC 압축 (ratio = authored → SoC catalog comp_ratio, simulation BW와 동일) · LLC placement (DRAM × llc_weight)',
+      sort: (b) => (b.llc ? 10 : 0) + (b.compression.on ? 1 : 0) || null,
+      title: (b) => [b.compression.on ? `${b.comp} · ${compDetail(b.compression)}` : `압축 ${b.comp || 'off'}`, b.llc ? `LLC · ${llcDetail(b.llc)}` : 'DRAM (LLC 없음)'].join('\n'),
+      cellClass: (b) => (!b.enabled ? '' : b.llc ? 'cell-llc' : b.compression.on ? 'cell-sbwc' : ''),
+      render: (b) => <LeverTags pills={bufferPills(b)} empty={b.comp && b.comp !== 'COMP_OFF' ? b.comp : 'off'} /> },
+    { key: 'mb', label: 'MB/f', width: 66, align: 'right', headTitle: '압축 적용 후 MB/frame (hover = 무압축)', sort: (b) => b.mbFrame, title: (b) => (b.mbRaw !== null ? `무압축 ${b.mbRaw.toFixed(2)} MB/f` : undefined), render: (b) => <span className="mono">{b.mbFrame?.toFixed(2) ?? '—'}</span> },
     { key: 'w', label: 'W MB/s', width: 74, align: 'right', sort: (b) => b.wMBs, render: (b) => <span className="mono">{b.wMBs ?? '—'}</span> },
     { key: 'r', label: 'R MB/s', width: 74, align: 'right', sort: (b) => b.rMBs, render: (b) => <span className="mono">{b.rMBs ?? '—'}</span> },
-    { key: 'note', label: 'Note', width: 280, title: (b) => b.note, render: (b) => <span className="faint">{b.enabled ? '' : '[off] '}{b.note}</span> },
+    // DRAM column only when some buffer is LLC-resident; Note gives up the same width
+    ...(hasLlc ? [{ key: 'dram', label: 'DRAM', width: 64, align: 'right' as const, headTitle: 'DRAM MB/s = (W+R) × llc_weight (LLC 없으면 W+R)', sort: (b: BufferRow) => b.dramMBs,
+      render: (b: BufferRow) => <span className="mono" style={b.llc ? { color: LEVER_COLOR.llc.text, fontWeight: 700 } : undefined}>{b.dramMBs ?? '—'}</span> }] : []),
+    { key: 'note', label: 'Note', width: hasLlc ? 216 : 256, title: (b) => b.note, render: (b) => <span className="faint">{b.enabled ? '' : '[off] '}{b.note}</span> },
   ]
   const ipCols: Column<IpModel>[] = [
     { key: 'seq', label: '#', width: 40, align: 'right', headTitle: 'Sequence 순서 — 기본 정렬', sort: (i) => seqKey(i.pid), render: (i) => <span className="mono faint">{seqOrder.has(i.pid) ? seqKey(i.pid) + 1 : '—'}</span> },
     { key: 'lane', label: 'Lane', width: 90, sort: (i) => i.lane, render: (i) => LANE_LABEL[i.lane] },
     { key: 'ip', label: 'IP / SW', width: 120, sort: (i) => i.label, render: (i) => <b>{i.label}</b> },
+    ...(ipLevers ? [{ key: 'lever', label: 'Lever', width: 96, headTitle: 'Memory power lever: LLC 상주 buffer · 압축 buffer · vOTF 연결 (lever가 있는 variant에서만 표시)', sort: (i: IpModel) => ipPills(i.levers).length || null,
+      title: (i: IpModel) => ipPills(i.levers).map((p) => p.title ?? p.text).join('\n'), render: (i: IpModel) => <LeverTags pills={ipPills(i.levers)} empty="" /> }] : []),
     { key: 'in', label: 'In (처리)', width: 100, sort: (i) => i.inSize || null, render: (i) => <span className="mono">{i.inSize || '—'}</span> },
     { key: 'out', label: 'Out (WDMA)', width: 170, sort: (i) => i.outSizes.join(',') || null, render: (i) => <span className="mono">{i.outSizes.join(' / ') || '—'}</span> },
     { key: 'ops', label: 'Ops', width: 150, sort: (i) => i.ops.join(',') || null, render: (i) => i.ops.join(' · ') || '—' },
@@ -233,7 +256,7 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
       render: (i: IpModel) => { const d = ipBw.get(i.pid)?.delta_pct?.total; return d == null ? <span className="faint">—</span> : <span className={`badge ${errClass(d)}`}>{d > 0 ? '+' : ''}{d.toFixed(0)}%</span> } }] : []),
     { key: 'start', label: '+start ms', width: 80, align: 'right', sort: (i) => timing?.get(i.pid)?.offset ?? null, render: (i) => <span className="mono">{timing?.get(i.pid)?.offset.toFixed(2) ?? '—'}</span> },
     { key: 'dur', label: 'dur ms', width: 70, align: 'right', sort: (i) => timing?.get(i.pid)?.dur ?? i.sw?.mean ?? null, render: (i) => <span className="mono">{timing?.get(i.pid)?.dur.toFixed(2) ?? (i.sw?.mean !== undefined ? `${i.sw.mean}*` : '—')}</span> },
-    { key: 'flags', label: 'Config', width: 260, title: (i) => i.flags.map(([k, v]) => `${k}=${v}`).join(' · '), render: (i) => <span className="faint">{i.flags.map(([k, v]) => `${k}=${v}`).join(' · ')}</span> },
+    { key: 'flags', label: 'Config', width: ipLevers ? 164 : 260, title: (i) => i.flags.map(([k, v]) => `${k}=${v}`).join(' · '), render: (i) => <span className="faint">{i.flags.map(([k, v]) => `${k}=${v}`).join(' · ')}</span> },
   ]
   const onIpRow = (i: IpModel) => selectNode(i.viewId)
   const nodeTip = (id: string, pinned: boolean) => {
@@ -258,7 +281,11 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
         {notes.map((n) => <span key={n.id} className={`chip mode-${n.tone}`} title={n.detail}>{n.label}</span>)}
         <span className="grow" />
         {view && <><span className="chip">{view.summary.subtitle}</span><span className="chip">period {view.summary.period_ms} ms</span>
-          {model && <span className="chip" title={`특성화된 buffer W+R 합계 · size 미정 ${model.unknownBuffers}개 제외`}>DMA {model.totalMBs.toFixed(0)} MB/s</span>}</>}
+          {model && <span className="chip" title={`특성화된 buffer W+R 합계 (압축 ratio 적용) · size 미정 ${model.unknownBuffers}개 제외`}>DMA {model.totalMBs.toFixed(0)} MB/s</span>}
+          {model && model.levers.llc > 0 && <span className="chip lv-sum" title="LLC 적용 후 DRAM traffic = Σ (W+R) × llc_weight">DRAM {model.totalDramMBs.toFixed(0)} MB/s</span>}
+          {model && <span className="chip" title="이 variant에서 켜진 memory power lever (buffer / 연결 수)">
+            <span className="lv-row">{model.levers.llc > 0 && <LeverTag k="llc" text={`LLC ${model.levers.llc}`} />}{model.levers.sbwc > 0 && <LeverTag k="sbwc" text={`SBWC ${model.levers.sbwc}`} />}
+              {model.levers.votf > 0 && <LeverTag k="votf" text={`vOTF ${model.levers.votf}`} />}{!model.levers.llc && !model.levers.sbwc && !model.levers.votf && <span className="faint">LLC · SBWC · vOTF 없음</span>}</span></span>}</>}
         <button className="btn" onClick={() => ctx.navigate('compare', { items: `${scenario}~${variant}`, variants: undefined })}>Compare에 추가</button>
       </div>
       <div className="lens-hint"><b>{LENS.find((l) => l.id === lens)?.label}</b> {LENS.find((l) => l.id === lens)?.hint}</div>
@@ -357,11 +384,15 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
               <div className="kv"><span>RDMA</span><span className="mono">{selectedBuf.rPorts.join(', ') || '—'}</span></div>
               <div className="kv"><span>Size / fmt</span><span className="mono">{memoryText({ width: selectedBuf.width, height: selectedBuf.height, format: selectedBuf.format, bitdepth: selectedBuf.bit, compression: selectedBuf.comp }) || '미정'}</span></div>
               <div className="kv"><span>MB/f · W / R MB/s</span><span className="mono">{selectedBuf.mbFrame?.toFixed(2) ?? '—'} · {selectedBuf.wMBs ?? '—'} / {selectedBuf.rMBs ?? '—'}</span></div>
+              <div className="kv"><span>Power lever</span><span><LeverTags pills={bufferPills(selectedBuf)} empty="없음 (DRAM · 무압축)" /></span></div>
+              {selectedBuf.compression.on && <div className="kv"><span>압축</span><span className="mono">{compDetail(selectedBuf.compression)}{selectedBuf.mbRaw !== null ? ` · 무압축 ${selectedBuf.mbRaw.toFixed(2)} MB/f` : ''}</span></div>}
+              {selectedBuf.llc && <div className="kv"><span>LLC · DRAM MB/s</span><span className="mono">{llcDetail(selectedBuf.llc)} · {selectedBuf.dramMBs ?? '—'}</span></div>}
               {selectedBuf.note && <div className="faint" style={{ fontSize: 12, marginTop: 6 }}>{selectedBuf.note}</div>}
             </> : selectedIp ? <>
               <div className="kv"><span>Lane</span><span>{LANE_LABEL[selectedIp.lane]}</span></div>
               <div className="kv"><span>In → Out</span><span className="mono">{selectedIp.inSize || '—'} → {selectedIp.outSizes.join(' / ') || '—'}</span></div>
               {selectedIp.ops.length > 0 && <div className="kv"><span>Ops</span><span>{selectedIp.ops.join(' · ')}</span></div>}
+              {ipPills(selectedIp.levers).length > 0 && <div className="kv"><span>Power lever</span><span><LeverTags pills={ipPills(selectedIp.levers)} /></span></div>}
               {selectedIp.mode && <div className="kv"><span>Mode</span><span className="mono">{selectedIp.mode}</span></div>}
               {selectedIp.sw && <div className="kv"><span>SW time (정의)</span><span className="mono">{selectedIp.sw.mean} ms ({selectedIp.sw.min}–{selectedIp.sw.max}) · {selectedIp.sw.source}</span></div>}
               {selectedIp.flags.map(([k, v]) => <div key={k} className="kv"><span>{k}</span><span className="mono">{v}</span></div>)}
@@ -371,7 +402,8 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
           <div style={{ borderRight: 0 }}>
             <h5>Ports {selectedIp ? `· ${selectedIp.ports.length}` : ''}</h5>
             {selectedIp ? selectedIp.ports.map((p, i) => (
-              <div key={i} className="kv"><span>{p.dir === 'in' ? '←' : '→'} <span className="mono">{p.port}</span> <span className="faint">({p.via}{p.buffer ? ` · ${p.buffer}` : ''})</span></span>
+              <div key={i} className="kv"><span>{p.dir === 'in' ? '←' : '→'} <span className="mono">{p.port}</span> <span className="faint">({p.votf ? 'vOTF' : p.via}{p.buffer ? ` · ${p.buffer}` : ''})</span>
+                {p.llc && <> <LeverTag k="llc" text={p.llc.label} /></>}{p.buffer && model?.buffers.find((b) => b.name === p.buffer)?.compression.on && <> <LeverTag k="sbwc" text={model.buffers.find((b) => b.name === p.buffer)!.compression.label} /></>}</span>
                 <span className="mono">{[p.size, p.format, p.bit ? `${p.bit}b` : ''].filter(Boolean).join(' ') || p.peer || ''}</span></div>
             )) : <span className="faint" style={{ fontSize: 13 }}>—</span>}
           </div>
@@ -380,7 +412,7 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
         { id: 'dma', label: <>DMA · Buffer <span className="tab-note">{model?.buffers.length ?? 0} · {model?.totalMBs.toFixed(0) ?? 0} MB/s</span></>, content: (
         <div className="table-scroll" style={{ height: '100%' }}>
           {model && <DataTable id="pipeline.dma" columns={bufCols} rows={bufsBySeq} rowKey={(b) => b.name}
-            rowClass={(b) => `${selected === `buf:${b.name}` ? 'sel' : ''} ${b.enabled ? '' : 'row-off'}`} onRowClick={(b) => selectNode(`buf:${b.name}`)} />}
+            rowClass={(b) => `${selected === `buf:${b.name}` ? 'sel' : ''} ${b.enabled ? (b.llc ? 'row-llc' : b.compression.on ? 'row-sbwc' : '') : 'row-off'}`} onRowClick={(b) => selectNode(`buf:${b.name}`)} />}
         </div>
         ) },
         { id: 'ips', label: <>IP In/Out · Timing <span className="tab-note">{model?.ips.length ?? 0}</span></>, content: (

@@ -19,7 +19,8 @@ npm run dev          # http://localhost:3000  (/api → http://127.0.0.1:18000)
 - Static build: `npm run build` → `dist/` (set `VITE_SCENARIODB_API_BASE` if the API is not served under `/api/v1` on the same origin)
 - Checks: `npm run typecheck`, `npm test` (vitest), `npm run build`, `npm audit`
 - CI checks this application in `react-ui`; `web` checks the existing Workbench.
-- DMA sizes use decimal MB and the declared sample bit depth (P010/P210 use 16-bit containers). Compressed/aligned buffers without an explicit byte size are excluded from the traffic estimate. This is a partial model estimate, not measured DRAM traffic.
+- DMA sizes use decimal MB and the declared sample bit depth (P010/P210 use 16-bit containers). Compressed (SBWC/AFBC) buffers use the authored `comp_ratio`, else the SoC `compression_modes` `comp_ratio` (same basis as the simulation BW); with no ratio the uncompressed size is shown as an upper bound. Aligned buffers without an explicit byte size are excluded. This is a partial model estimate, not measured DRAM traffic.
+- Power levers are highlighted everywhere in Pipeline: **LLC** (green — buffer `placement.llc_allocated`, DRAM MB/s = (W+R) × `placement.llc_weight`), **SBWC** compression (pink), **vOTF** (teal edge, `flow_type: vOTF`). Diagram nodes carry pills, LLC buffers are filled green, lever DMA paths are drawn in the lever colour, and the tables carry them without growing: DMA table `압축 · LLC` (replaces Comp) + `DRAM` (only when LLC is used, Note narrows), IP table `Lever` (only when used, Config narrows), Explorer / Matrix `Lever` (server `memory_levers`, only when used, yellow = differs from the reference), Compare `Memory power lever` rows + `DRAM 모델 합계 (LLC 반영)`.
 - Timing preserves the recorded durations and frame IDs. Sensor-to-output latency requires an explicit predecessor path to a sensor; unlinked frame numbers do not establish latency.
 
 ## Pages (hash routes, shareable)

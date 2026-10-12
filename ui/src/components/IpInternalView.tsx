@@ -3,6 +3,9 @@ import { LANE_LABEL, parseSize, type IpLink, type IpModel, type PipelineModel, t
 import { TOPO, colorMap, linkPath, topoLayout } from '../lib/topology'
 import { usePref } from './Layout'
 import { DataTable, type Column } from './DataTable'
+import { ipPills } from '../lib/graph'
+import { compInfo, llcDetail, LEVER_COLOR, pillWidth } from '../lib/memLever'
+import { LeverTag } from './LeverTag'
 
 // Two independent visual axes (UX 2026-10-09):
 //   line / box border = how the data moves  → OTF (thin blue) · DMA (thick orange, memory) · SW (dotted violet, CPU trigger)
@@ -26,9 +29,9 @@ export const DATA_STYLE: Record<DataKind, { fill: string; tag: string; tagColor:
 export const pathOf = (v: Via): PathKind => (v === 'OTF' ? 'OTF' : v === 'ctrl' ? 'SW' : v === 'optional' ? 'off' : 'DMA')
 export const dataOf = (v: Via): DataKind => (v === 'stat' ? 'stat' : v === 'history' ? 'history' : v === 'ctrl' ? 'trigger' : v === 'optional' ? 'off' : 'image')
 /** "WDMA · STAT", "RDMA · HIST", "OTF out · IMG", "SW · TRIG" */
-export function portKindLabel(p: Pick<Port, 'via' | 'dir'>): string {
+export function portKindLabel(p: Pick<Port, 'via' | 'dir' | 'votf'>): string {
   const path = pathOf(p.via), data = DATA_STYLE[dataOf(p.via)].tag
-  const how = path === 'DMA' ? (p.dir === 'in' ? 'RDMA' : 'WDMA') : path === 'OTF' ? `OTF ${p.dir}` : path === 'SW' ? 'SW' : 'off'
+  const how = path === 'DMA' ? (p.dir === 'in' ? 'RDMA' : 'WDMA') : path === 'OTF' ? `${p.votf ? 'vOTF' : 'OTF'} ${p.dir}` : path === 'SW' ? 'SW' : 'off'
   return `${how} · ${data}`
 }
 
@@ -43,8 +46,13 @@ function ratio(a: string, b: string | undefined): string {
 }
 
 function PortBox({ p, x, y, inSize }: { p: Port; x: number; y: number; inSize?: string }) {
-  const ps = PATH_STYLE[pathOf(p.via)], ds = DATA_STYLE[dataOf(p.via)]
-  const l2 = [p.buffer, [p.size, p.format, p.bit ? `${p.bit}b` : '', p.comp && p.comp !== 'COMP_OFF' ? p.comp.replace('COMP_', '') : ''].filter(Boolean).join(' ')].filter(Boolean).join(' · ')
+  const base = PATH_STYLE[pathOf(p.via)], ds = DATA_STYLE[dataOf(p.via)]
+  const comp = compInfo(p.comp)
+  // power lever on the port: LLC (green) > compression (pink) > vOTF (teal) colour the box border
+  const lv = p.llc && p.enabled ? LEVER_COLOR.llc : comp.on && p.enabled ? LEVER_COLOR.sbwc : p.votf ? LEVER_COLOR.votf : null
+  const ps = lv ? { ...base, stroke: lv.line, width: Math.max(base.width, 2.4) } : base
+  const tags = [p.votf ? 'vOTF' : '', comp.label, p.llc ? p.llc.label : ''].filter(Boolean)
+  const l2 = [p.buffer, [p.size, p.format, p.bit ? `${p.bit}b` : ''].filter(Boolean).join(' ')].filter(Boolean).join(' · ')
   const r = p.dir === 'out' && p.size && inSize ? ratio(inSize, p.size) : ''
   // keep the port name clear of the right-aligned "WDMA · STAT ↓2.00" tag (mono 11px ≈ 6.7 px/char, tag 9px ≈ 5.6)
   const tagChars = portKindLabel(p).length + (r ? r.length + 1 : 0)
@@ -56,7 +64,18 @@ function PortBox({ p, x, y, inSize }: { p: Port; x: number; y: number; inSize?: 
       <text x={x + PW - 8} y={y + 15} fontSize={9} textAnchor="end" fontWeight={700}><tspan fill={ps.stroke}>{portKindLabel(p).split(' · ')[0]}</tspan><tspan fill={ds.tagColor}> · {ds.tag}</tspan>{r ? <tspan fill="#3B3F4A"> {r}</tspan> : null}</text>
       <text x={x + 8} y={y + 29} fontSize={9.5} fontFamily="var(--mono)" fill="#3B3F4A">{(l2 || p.peer || '').slice(0, 42)}</text>
       <text x={x + 8} y={y + 40} fontSize={9} fill="var(--muted)">{p.dir === 'in' ? '← ' : '→ '}{p.peer ?? ''}{p.mb ? ` · ${p.mb.toFixed(2)} MB/f` : ''}{p.enabled ? '' : ' · disabled'}</text>
-      <title>{[p.port, `${PATH_STYLE[pathOf(p.via)].label} · ${ds.label}`, p.buffer, l2, p.peer, p.note].filter(Boolean).join('\n')}</title>
+      {tags.length > 0 && (() => {
+        let tx = x + PW - 4
+        return tags.map((t) => {
+          const w = pillWidth(t), k = t === 'vOTF' ? 'votf' : t.startsWith('LLC') ? 'llc' : 'sbwc'
+          tx -= w
+          const el = <g key={t}><rect x={tx} y={y + ROW - 15} width={w} height={12} rx={6} fill={LEVER_COLOR[k].line} />
+            <text x={tx + w / 2} y={y + ROW - 6} textAnchor="middle" fontSize={8.5} fontWeight={700} fill="#fff" fontFamily="var(--mono)">{t}</text></g>
+          tx -= 3
+          return el
+        })
+      })()}
+      <title>{[p.port, `${PATH_STYLE[pathOf(p.via)].label} · ${ds.label}`, p.buffer, l2, comp.on ? `압축 ${comp.mode}` : '', p.llc ? `LLC · ${llcDetail(p.llc)}` : '', p.votf ? 'vOTF (DRAM 우회)' : '', p.peer, p.note].filter(Boolean).join('\n')}</title>
     </g>
   )
 }
@@ -158,14 +177,18 @@ const portCols: Column<Port>[] = [
   { key: 'size', label: 'W×H', width: 100, sort: (p) => { const s = parseSize(p.size); return s ? s.w * s.h : null }, render: (p) => <span className="mono">{p.size || '—'}</span> },
   { key: 'fmt', label: 'Format', width: 86, sort: (p) => p.format ?? null, render: (p) => p.format || '—' },
   { key: 'bit', label: 'Bit', width: 50, sort: (p) => Number(p.bit) || null, render: (p) => p.bit || '—' },
-  { key: 'comp', label: 'Comp', width: 90, sort: (p) => p.comp ?? null, render: (p) => p.comp || '—' },
+  { key: 'comp', label: 'Comp · LLC', width: 100, sort: (p) => (p.llc ? 10 : 0) + (compInfo(p.comp).on ? 1 : 0) + (p.votf ? 100 : 0) || null,
+    title: (p) => [p.comp, p.llc ? `LLC · ${llcDetail(p.llc)}` : '', p.votf ? 'vOTF' : ''].filter(Boolean).join('\n'),
+    render: (p) => (compInfo(p.comp).on || p.llc || p.votf ? <span className="lv-row">{p.votf && <LeverTag k="votf" text="vOTF" />}{compInfo(p.comp).on && <LeverTag k="sbwc" text={compInfo(p.comp).label} />}{p.llc && <LeverTag k="llc" text={p.llc.label} />}</span>
+      : <span className="faint">{p.comp || '—'}</span>) },
   { key: 'mb', label: 'MB/f', width: 70, align: 'right', sort: (p) => p.mb ?? null, render: (p) => <span className="mono">{p.mb?.toFixed(2) ?? '—'}</span> },
-  { key: 'note', label: 'Note', width: 260, title: (p) => p.note, render: (p) => <span className="faint">{p.note ?? ''}</span> },
+  { key: 'note', label: 'Note', width: 250, title: (p) => p.note, render: (p) => <span className="faint">{p.note ?? ''}</span> },
 ]
 
 type ColorKey = 'vdd' | 'blk'
 const LINK_STYLE: Record<IpLink['kind'], { stroke: string; dash?: string; label: string }> = {
   OTF: { stroke: PATH_STYLE.OTF.stroke, label: 'OTF' },
+  vOTF: { stroke: LEVER_COLOR.votf.line, label: 'vOTF' },
   M2M: { stroke: PATH_STYLE.DMA.stroke, label: 'M2M (DMA · memory)' },
   ctrl: { stroke: PATH_STYLE.SW.stroke, dash: PATH_STYLE.SW.dash, label: 'SW trigger (CPU)' },
 }
@@ -178,8 +201,8 @@ export function IpTopology({ model, selectedPid, onSelect, colorBy }: { model: P
   const { W, H } = TOPO
   return (
     <svg className="ipt-svg" viewBox={`0 0 ${lay.width} ${lay.height}`} width={lay.width} height={lay.height} role="group" aria-label="IP 연결 구조">
-      <defs>{(Object.keys(LINK_STYLE) as IpLink['kind'][]).map((k) => (
-        <marker key={k} id={`ipt-${k}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill={LINK_STYLE[k].stroke} /></marker>))}</defs>
+      <defs>{[...(Object.keys(LINK_STYLE) as IpLink['kind'][]).map((k) => [k, LINK_STYLE[k].stroke] as const), ['llc', LEVER_COLOR.llc.line] as const, ['sbwc', LEVER_COLOR.sbwc.line] as const].map(([k, c]) => (
+        <marker key={k} id={`ipt-${k}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill={c} /></marker>))}</defs>
       {lay.columns.map((c) => <g key={c.id}>
         <rect x={c.x - 8} y={4} width={c.w + 16} height={lay.height - 8} rx={8} fill="#F6F3EE" opacity={0.7} />
         <text x={c.x} y={20} fontSize={11} fontWeight={700} fill="var(--muted)">{c.label}</text>
@@ -201,9 +224,11 @@ export function IpTopology({ model, selectedPid, onSelect, colorBy }: { model: P
         if (!a || !b || e.from === e.to) return null
         const st = LINK_STYLE[e.kind]
         const hot = selectedPid !== null && (e.from === selectedPid || e.to === selectedPid)
-        return <path key={i} d={linkPath(a, b)} fill="none" stroke={st.stroke} strokeDasharray={st.dash} strokeWidth={hot ? 2.4 : e.kind === 'M2M' ? 1.6 : 1.3}
-          opacity={selectedPid === null || hot ? 0.9 : 0.22} markerEnd={`url(#ipt-${e.kind})`}>
-          <title>{`${model.byPid.get(e.from)?.label ?? e.from} → ${model.byPid.get(e.to)?.label ?? e.to} · ${st.label}${e.buffer ? ` · ${e.buffer}` : ''}${e.mbs ? ` · ${e.mbs.toFixed(0)} MB/s` : ''}`}</title></path>
+        const lv = e.kind === 'M2M' && e.llc ? 'llc' : e.kind === 'M2M' && e.comp ? 'sbwc' : null
+        return <path key={i} d={linkPath(a, b)} fill="none" stroke={lv ? LEVER_COLOR[lv].line : st.stroke} strokeDasharray={st.dash}
+          strokeWidth={hot ? 2.6 : lv || e.kind === 'vOTF' ? 2.4 : e.kind === 'M2M' ? 1.6 : 1.3}
+          opacity={selectedPid === null || hot ? 0.9 : 0.22} markerEnd={`url(#ipt-${lv ?? e.kind})`}>
+          <title>{`${model.byPid.get(e.from)?.label ?? e.from} → ${model.byPid.get(e.to)?.label ?? e.to} · ${st.label}${e.buffer ? ` · ${e.buffer}` : ''}${lv === 'llc' ? ' · LLC' : ''}${e.comp ? ' · 압축' : ''}${e.mbs ? ` · ${e.mbs.toFixed(0)} MB/s` : ''}`}</title></path>
       })}
       {lay.nodes.map(({ ip, x, y }) => {
         const key = colorBy === 'vdd' ? ip.vdd : ip.blk
@@ -216,7 +241,17 @@ export function IpTopology({ model, selectedPid, onSelect, colorBy }: { model: P
           <text x={x + 8} y={y + 17} fontSize={12} fontWeight={700} fill="#1F2430">{ip.label.length > 14 ? ip.label.slice(0, 13) + '…' : ip.label}</text>
           <text x={x + 8} y={y + 31} fontSize={9.5} fontFamily="var(--mono)" fill="#3B3F4A">{[ip.blk, ip.vdd?.replace(/^VDD_/, '')].filter(Boolean).join(' · ') || (ip.type === 'sw' ? 'CPU task' : '—')}</text>
           <text x={x + 8} y={y + 43} fontSize={9} fill="var(--muted)">{ip.type === 'sw' ? (ip.sw?.mean !== undefined ? `${ip.sw.mean} ms` : '') : `R${ip.rdma.used} · W${ip.wdma.used}${ip.inSize ? ` · ${ip.inSize}` : ''}`}</text>
-          <title>{[ip.label, ip.ipRef, ip.blk ? `BLK ${ip.blk}${ip.blkSource === 'hierarchy_group' ? ' (hierarchy_group)' : ''}` : 'BLK —', `VDD ${ip.vdd ?? '—'} · DVFS ${ip.dvfsGroup ?? '—'}`].join('\n')}</title>
+          {(() => {
+            let px = x + W - 3
+            return ipPills(ip.levers).map((p) => {
+              const w = pillWidth(p.text); px -= w
+              const el = <g key={p.key} pointerEvents="none"><rect x={px} y={y - 6} width={w} height={12} rx={6} fill={LEVER_COLOR[p.key].line} stroke="#fff" />
+                <text x={px + w / 2} y={y + 3} textAnchor="middle" fontSize={8.5} fontWeight={700} fill="#fff" fontFamily="var(--mono)">{p.text}</text></g>
+              px -= 3
+              return el
+            })
+          })()}
+          <title>{[ip.label, ip.ipRef, ...ipPills(ip.levers).map((p) => p.title ?? p.text), ip.blk ? `BLK ${ip.blk}${ip.blkSource === 'hierarchy_group' ? ' (hierarchy_group)' : ''}` : 'BLK —', `VDD ${ip.vdd ?? '—'} · DVFS ${ip.dvfsGroup ?? '—'}`].join('\n')}</title>
         </g>
       })}
     </svg>
@@ -232,6 +267,8 @@ function Legend({ model, colorBy }: { model: PipelineModel; colorBy: ColorKey })
     <span className="vsep" />
     {(Object.keys(LINK_STYLE) as IpLink['kind'][]).map((k) => <span key={k} className="legend-item"><svg width="22" height="8"><line x1="1" y1="4" x2="21" y2="4" stroke={LINK_STYLE[k].stroke} strokeWidth="2" strokeDasharray={LINK_STYLE[k].dash} /></svg>{LINK_STYLE[k].label}</span>)}
     <span className="legend-item"><span className="ipt-swatch" style={{ borderStyle: 'dashed' }} />SW task</span>
+    <span className="vsep" />
+    <LeverLegend />
   </div>
 }
 
@@ -283,4 +320,13 @@ export function IpInternalView({ model, selectedPid, onSelect }: { model: Pipeli
       </section> : <div className="empty">IP 정보가 없습니다.</div>}
     </div>
   )
+}
+
+/** Power-lever legend shared by the pipeline lenses. */
+export function LeverLegend() {
+  return <>
+    <span className="legend-item" title="buffer가 LLC에 상주 → DRAM traffic × llc_weight"><span className="lv-legend" style={{ background: LEVER_COLOR.llc.line }} />LLC</span>
+    <span className="legend-item" title="SBWC / AFBC 압축 buffer → BW × comp ratio"><span className="lv-legend" style={{ background: LEVER_COLOR.sbwc.line }} />SBWC 압축</span>
+    <span className="legend-item" title="virtual OTF — DRAM 왕복 없음"><span className="lv-legend" style={{ background: LEVER_COLOR.votf.line }} />vOTF</span>
+  </>
 }
