@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import Any, cast
 
 from scenario_db.db.repositories.scenario_graph import CanonicalScenarioGraph
@@ -124,8 +125,9 @@ def _effective_buffer(graph: CanonicalScenarioGraph, buffer_id: str) -> dict[str
     base = (cast(dict[str, Any], graph.scenario.pipeline or {}).get("buffers") or {}).get(buffer_id) or {}
     override = (graph.variant.buffer_overrides or {}).get(buffer_id) or {}
     merged = {**base, **override}
-    if "dma" in override:
-        merged["dma"] = {**base.get("dma", {}), **override["dma"]}
+    for key in ("dma", "history", "placement"):
+        if isinstance(override.get(key), dict):
+            merged[key] = {**(base.get(key) or {}), **override[key]}
     return merged
 
 
@@ -154,6 +156,12 @@ def _buffer_transfers(
     comp_ratio = _resolve_port_comp_ratio(
         compression, buffer.get("comp_ratio"), comp_catalog, warnings, f"buffer.{buffer_id}"
     )
+    placement = buffer.get("placement") or {}
+    llc_on = enabled(placement.get("llc_allocated", False))
+    raw_weight = placement.get("llc_weight")
+    llc_weight = float(raw_weight) if llc_on and raw_weight is not None else 1.0
+    if not math.isfinite(llc_weight) or not 0 < llc_weight <= 1:
+        raise ValueError(f"buffer.{buffer_id}: llc_weight must be finite and in (0, 1]")
     fmt = buffer.get("format")
     # A planar YUV444 buffer has three full-size single-component planes.
     # Names remain physical driver DMA identifiers while BW counts each plane once.
@@ -164,6 +172,7 @@ def _buffer_transfers(
         port=name, port_type=direction, width=width, height=height,
         format=fmt, bitwidth=int(buffer.get("bitdepth") or 8),
         compression=compression, comp_ratio=comp_ratio,
+        llc_enabled=llc_on, llc_weight=llc_weight,
     ) for name in names]
 
 

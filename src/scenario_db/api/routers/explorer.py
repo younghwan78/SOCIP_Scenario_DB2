@@ -22,6 +22,7 @@ from scenario_db.api.schemas.explorer import (
 from scenario_db.db.models.capability import IpCatalog, SocPlatform, SwProfile
 from scenario_db.db.models.definition import Project, Scenario, ScenarioVariant
 from scenario_db.db.models.write import WriteBatch
+from scenario_db.db.repositories.scenario_graph import _effective_pipeline
 from scenario_db.db.repositories.variant_resolution import include_variant_parent_rows, resolve_variant_from_rows
 from scenario_db.graph_checks import (
     edge_source as _edge_source,
@@ -33,8 +34,15 @@ from scenario_db.integrity_checks import (
     validate_scenario_identity_conventions,
     validate_variant_overlay_integrity,
 )
+from scenario_db.view.memory_levers import memory_levers
 
 router = APIRouter(prefix="/explorer", tags=["explorer"])
+
+
+def _variant_memory_levers(pipeline, variant):
+    nodes, edges = _effective_pipeline(pipeline or {}, variant)
+    return memory_levers({**(pipeline or {}), "nodes": nodes, "edges": edges}, variant.buffer_overrides,
+                         node_configs=variant.node_configs)
 
 
 @router.get("/summary", response_model=ExplorerSummaryResponse)
@@ -242,6 +250,7 @@ def variant_matrix(
                 disabled_edges=len(routing.get("disabled_edges") or []),
                 buffer_override_count=len(effective.buffer_overrides or {}),
                 node_config_count=len(effective.node_configs or {}),
+                memory_levers=_variant_memory_levers(scenario.pipeline, effective),
                 tags=effective.tags or [],
                 derived_from_variant=parent_id,
                 own_condition_keys=own_keys if parent_id else [],

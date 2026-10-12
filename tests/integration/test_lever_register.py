@@ -7,6 +7,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from scenario_db.api.deps import get_db
+from scenario_db.db.models.definition import ScenarioVariant
 from scenario_db.etl.loader import load_yaml_dir
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -27,6 +28,14 @@ def e2600(engine, api_client):
         try:
             with Session(connection, join_transaction_mode="create_savepoint") as session:
                 assert load_yaml_dir(ROOT / "db_Exynos2600_SM-S947B", session, strict=True, validate=True).ok
+                # These tests exercise adding compression to an uncompressed baseline.
+                # Keep that precondition explicit as authored defaults gain SBWC/LLC.
+                variant = session.get(ScenarioVariant, (SC, VAR))
+                overrides = dict(variant.buffer_overrides or {})
+                for buffer in ("PYRAMID_L0", "PYRAMID_L1"):
+                    overrides[buffer] = {**(overrides.get(buffer) or {}), "compression": "COMP_OFF"}
+                variant.buffer_overrides = overrides
+                session.commit()
             yield api_client
         finally:
             api_client.app.dependency_overrides[get_db] = previous

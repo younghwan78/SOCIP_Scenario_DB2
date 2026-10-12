@@ -48,6 +48,8 @@ class MemoryPlacement(BaseModel):
     llc_allocation_mb: float | None = None
     llc_policy: Literal["none", "shared", "dedicated", "pinned"] = "none"
     allocation_owner: str | None = None
+    # DRAM traffic factor while the buffer is LLC-resident (0.6 = 40% fewer DRAM bytes).
+    llc_weight: float | None = None
     expected_bw_reduction_gbps: float | None = None
 
 

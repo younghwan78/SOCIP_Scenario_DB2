@@ -19,7 +19,8 @@ npm run dev          # http://localhost:3000  (/api → http://127.0.0.1:18000)
 - Static build: `npm run build` → `dist/` (set `VITE_SCENARIODB_API_BASE` if the API is not served under `/api/v1` on the same origin)
 - Checks: `npm run typecheck`, `npm test` (vitest), `npm run build`, `npm audit`
 - CI checks this application in `react-ui`; `web` checks the existing Workbench.
-- DMA sizes use decimal MB and the declared sample bit depth (P010/P210 use 16-bit containers). Compressed/aligned buffers without an explicit byte size are excluded from the traffic estimate. This is a partial model estimate, not measured DRAM traffic.
+- DMA sizes use decimal MB and the declared sample bit depth (P010/P210 use 16-bit containers). Compressed (SBWC/AFBC) buffers use the authored `comp_ratio`, else the SoC `compression_modes` `comp_ratio` (same basis as the simulation BW); with no ratio the uncompressed size is shown as an upper bound. Aligned buffers without an explicit byte size are excluded. This is a partial model estimate, not measured DRAM traffic.
+- Power levers are highlighted everywhere in Pipeline: **LLC** (green — buffer `placement.llc_allocated`, DRAM MB/s = (W+R) × `placement.llc_weight`), **SBWC** compression (pink), **vOTF** (teal edge, `flow_type: vOTF`). Diagram nodes carry pills, LLC buffers are filled green, lever DMA paths are drawn in the lever colour, and the tables carry them without growing: DMA table `압축 · LLC` (replaces Comp) + `DRAM` (only when LLC is used, Note narrows), IP table `Lever` (only when used, Config narrows), Explorer / Matrix `Lever` (server `memory_levers`, only when used, yellow = differs from the reference), Compare `Memory power lever` rows + `DRAM 모델 합계 (LLC 반영)`.
 - Timing preserves the recorded durations and frame IDs. Sensor-to-output latency requires an explicit predecessor path to a sensor; unlinked frame numbers do not establish latency.
 
 ## Pages (hash routes, shareable)
@@ -52,6 +53,8 @@ Sidebar groups: 탐색 · 예측 · Architecture · Library; 설정 at the botto
 - Sizes and modes persist per browser (localStorage)
 
 ## Source layout
+
+Memory lever 표시와 DRAM traffic은 설정 기반 추정입니다. Exynos2600 MTNR의 공유 LLC 4 MB 및 `llc_weight: 0.6`은 실측값이 아닌 SAMPLE 가정이며 buffer Note에서 출처를 확인할 수 있습니다. 버스 BW는 압축 ratio를 적용하고, LLC 계수는 DRAM 추정과 BW 전력에 적용합니다. 압축 이름만으로 절감률을 가정하지 않으며 catalog ratio가 없으면 무압축 상한을 표시합니다.
 
 - `src/lib/` — api client, condition normalization, graph build/ELK layout, timeline model, routing
 - `src/components/` — GraphView, TimelineView, Picker, DataTable, PipelineTunnel

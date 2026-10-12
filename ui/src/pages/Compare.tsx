@@ -7,6 +7,8 @@ import { compareItems, formatItems, type CompareItem } from '../lib/projects'
 import { insights, itemLabels, nodeIps, nodeSizes, pixels, type Insight } from '../lib/compare'
 import { memoryText } from '../lib/graph'
 import { buildModel, trafficByIp, type PipelineModel } from '../lib/model'
+import { libraryApi } from '../lib/library'
+import { LeverTags, variantPills } from '../components/LeverTag'
 import { buildTimeline } from '../lib/timeline'
 import { analyse, type CadenceResult } from '../lib/cadence'
 import { SEVERITY_RANK } from '../lib/defaults'
@@ -48,8 +50,10 @@ export function transfers(view: ViewResponse | undefined): Map<string, string> {
   if (!view) return out
   const label = new Map(view.nodes.map((n) => [n.data.id, n.data.label]))
   for (const { data: e } of view.edges) {
+    if (e.flow_type === 'vOTF') { out.set(`${label.get(e.source) ?? e.source} → vOTF → ${label.get(e.target) ?? e.target}`, 'vOTF'); continue }
     if (e.flow_type !== 'M2M') continue
-    out.set(`${label.get(e.source) ?? e.source} → ${e.buffer_ref ?? '?'} → ${label.get(e.target) ?? e.target}`, memoryText(e.memory) || '✓')
+    const llc = e.placement?.llc_allocated === true ? `LLC${e.placement.llc_weight ? ` ×${e.placement.llc_weight}` : ''}` : ''
+    out.set(`${label.get(e.source) ?? e.source} → ${e.buffer_ref ?? '?'} → ${label.get(e.target) ?? e.target}`, [memoryText(e.memory), llc].filter(Boolean).join(' · ') || '✓')
   }
   return out
 }
@@ -109,7 +113,10 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
   const transKeys = [...new Set(trans.flatMap((t) => [...t.keys()]))].sort()
   const shownTrans = transKeys.filter((k) => !onlyDiff || new Set(trans.map((t) => t.get(k) ?? MISSING)).size > 1)
   const evidence = (evQ.data ?? []).map((items) => pickEvidence(items))
-  const models: (PipelineModel | null)[] = useMemo(() => (viewsQ.data ?? []).map((v, i) => (v ? buildModel(v, scnDef(cItems[i].scenario), detailsQ.data?.[i]) : null)), [viewsQ.data, scnQ.data, detailsQ.data]) // eslint-disable-line react-hooks/exhaustive-deps
+  // SoC compression catalog per item (SBWC comp_ratio — same basis as Pipeline / simulation)
+  const socQ = useAsync(() => libraryApi.socs().catch(() => null), [])
+  const compOf = (s: string) => socQ.data?.items.find((x) => x.id === catOf(s)?.soc_ref)?.compression_modes ?? null
+  const models: (PipelineModel | null)[] = useMemo(() => (viewsQ.data ?? []).map((v, i) => (v ? buildModel(v, scnDef(cItems[i].scenario), detailsQ.data?.[i], undefined, { compCatalog: compOf(cItems[i].scenario) }) : null)), [viewsQ.data, scnQ.data, detailsQ.data, socQ.data]) // eslint-disable-line react-hooks/exhaustive-deps
   const ipMaps = (viewsQ.data ?? []).map((v) => nodeIps(v))
   const sizeMaps = (detailsQ.data ?? []).map((d) => nodeSizes(d))
   const cadences = useMemo(() => (evQ.data ?? []).map((items, i) => {
@@ -178,6 +185,18 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
   add('cond', 'load', 'Load', 'Load', selected.map((r) => r.severity ?? null), 'ref', selected.map((r) => (r.severity ? SEVERITY_RANK[r.severity] ?? null : null)))
   condKeys.forEach((k) => add('cond', k, k, k, selected.map((r) => valueText(r.design_conditions[k]))))
   add('perf', 'dma', 'DMA traffic W+R (MB/s)', 'DMA', models.map((m) => (m ? m.totalMBs.toFixed(0) : null)), 'ref')
+  // ---- memory power levers (LLC / SBWC / vOTF) — highlighted cells where the lever is on
+  const leverRow = (id: string, label: string, sortLabel: string, cell: string, pick: (m: PipelineModel) => string[]) => {
+    const lists = models.map((m) => (m ? pick(m) : null))
+    add('lever', id, label, sortLabel, lists.map((l) => (l === null ? null : l.length ? `${l.length} · ${l.join(', ')}` : '없음')), 'ref', lists.map((l) => (l === null ? null : l.length)))
+    const it = items[items.length - 1]
+    it.cls = it.cls.map((c, i) => (lists[i]?.length ? `${c} ${cell}` : c))
+  }
+  leverRow('llc', 'LLC buffer', 'LLC buffer', 'lvc-llc', (m) => m.buffers.filter((b) => b.enabled && b.llc).map((b) => b.name))
+  leverRow('sbwc', '압축 buffer (SBWC/AFBC)', '압축 buffer', 'lvc-sbwc', (m) => m.buffers.filter((b) => b.enabled && b.compression.on).map((b) => b.name))
+  leverRow('votf', 'vOTF 연결', 'vOTF', 'lvc-votf', (m) => m.links.filter((l) => l.kind === 'vOTF').map((l) => `${m.byPid.get(l.from)?.label ?? l.from}→${m.byPid.get(l.to)?.label ?? l.to}`))
+  add('lever', 'dram', 'DRAM traffic · LLC 반영 (MB/s)', 'DRAM', models.map((m) => (m ? `${m.totalDramMBs.toFixed(0)}${m.totalMBs > m.totalDramMBs ? ` (−${(m.totalMBs - m.totalDramMBs).toFixed(0)})` : ''}` : null)), 'ref',
+    models.map((m) => (m ? m.totalDramMBs : null)))
   for (const [sid, label] of [['preview', 'Preview buffer'], ['video', 'Video buffer']] as const) {
     add('perf', `${sid}-fps`, `${label} fps (achieved / target)`, `${label} fps`, ids.map((_, i) => { const r = stream(i, sid); return r?.fpsAchieved ? `${r.fpsAchieved.toFixed(2)} / ${cadences[i]?.fps ?? '?'}` : null }), 'none')
     add('perf', `${sid}-int`, `${label} interval max (ms)`, `${label} interval`, ids.map((_, i) => { const b = stream(i, sid)?.box; return b ? b.max.toFixed(2) : null }), 'none')
@@ -198,7 +217,7 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
     return i > 0 && b ? `${v.toFixed(1)} (${v >= b ? '+' : ''}${(((v - b) / b) * 100).toFixed(1)}%)` : v.toFixed(1)
   }), 'none', r.values))
 
-  const SECTIONS: [string, string][] = [['cond', '조건 · 기준과 다른 값 강조'], ['hw', 'HW 구성 · node → IP (과제 태그 제외)'], ['size', '처리 크기 · node sim size'], ['perf', 'Timing · DMA 요약 (trace / 모델 계산)'], ['dma', 'DMA 전송 · 파랑 = 기준에 없음, 빨강 = 기준에만 있음'], ['kpi', 'KPI · 값 (기준 대비 Δ%) · evidence 출처']]
+  const SECTIONS: [string, string][] = [['cond', '조건 · 기준과 다른 값 강조'], ['hw', 'HW 구성 · node → IP (과제 태그 제외)'], ['size', '처리 크기 · node sim size'], ['perf', 'Timing · DMA 요약 (trace / 모델 계산)'], ['lever', 'Memory power lever · 녹색 = LLC · 분홍 = 압축 · teal = vOTF'], ['dma', 'DMA 전송 · 파랑 = 기준에 없음, 빨강 = 기준에만 있음'], ['kpi', 'KPI · 값 (기준 대비 Δ%) · evidence 출처']]
   const groups: RowGroup<Item>[] = SECTIONS.map(([s, title]) => ({ id: s, header: <span className="sec-h">{title}</span>, rows: items.filter((it) => it.section === s), className: 'sec-row' }))
     .filter((g) => g.rows.length)
   const itemCols: Column<Item>[] = [
@@ -213,9 +232,16 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
   // ---------------- variant rows (non-transposed)
   interface VRow { id: string; i: number }
   const vrows: VRow[] = ids.map((id, i) => ({ id, i }))
-  const perKeys = items.filter((it) => it.section !== 'dma')
+  // variant orientation: the 4 lever rows collapse into one compact pill column (keeps the table width)
+  const perKeys = items.filter((it) => it.section !== 'dma' && it.section !== 'lever')
+  const leverPillsOf = (i: number) => { const m = models[i]; return m ? variantPills({ llc: m.buffers.filter((b) => b.enabled && b.llc).map((b) => b.name),
+    compressed: m.buffers.filter((b) => b.enabled && b.compression.on).map((b) => b.name), votf: m.links.filter((l) => l.kind === 'vOTF').map((l) => `${l.from}->${l.to}`),
+    llc_weight_min: (() => { const w = m.buffers.filter((b) => b.enabled && b.llc?.weightKnown).map((b) => b.llc!.weight); return w.length ? Math.min(...w) : null })() }) : [] }
   const varCols: Column<VRow>[] = [
     { key: 'variant', label: 'Variant', width: 250, sticky: true, sort: (r) => r.id, render: (r) => <span className="mono" title={itemLbl[r.i]?.full}>{labels[r.id]}{r.i === 0 ? ' ★' : ''}</span> },
+    ...(models.some((m) => m && (m.levers.llc || m.levers.sbwc || m.levers.votf)) ? [{ key: 'lever', label: 'Lever', width: 96, headTitle: 'Memory power lever (LLC · SBWC · vOTF)',
+      sort: (r: VRow) => leverPillsOf(r.i).length || null, title: (r: VRow) => leverPillsOf(r.i).map((p) => p.title ?? p.text).join('\n'),
+      render: (r: VRow) => <LeverTags pills={leverPillsOf(r.i)} empty="없음" /> }] : []),
     ...perKeys.map((it): Column<VRow> => ({ key: it.id, label: it.sortLabel, width: 130, headTitle: it.sortLabel, sort: (r) => it.nums[r.i] ?? it.values[r.i],
       title: (r) => it.values[r.i] ?? '', cellClass: (r) => `mono ${it.cls[r.i]}`, render: (r) => it.values[r.i] ?? <span className="dim">—</span> })),
   ]
@@ -265,7 +291,8 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
       { group: 'Power' as const, key: 'core_power_mw', label: 'Core power', unit: 'mW', values: kv('core_power_mw') },
       { group: 'Power' as const, key: 'bw_power_mw', label: 'BW power', unit: 'mW', values: kv('bw_power_mw') }]),
     { group: 'BW', key: 'total_bw_mbs', label: 'Total BW', unit: 'MB/s', digits: 0, values: kv('total_bw_mbs'), hint: 'KPI · DMA W+R' },
-    { group: 'BW', key: 'dma', label: 'DMA 모델 합계', unit: 'MB/s', digits: 0, values: models.map((m) => (m ? m.totalMBs : null)), hint: 'pipeline view memory × fps (stat/size 미정 제외)' },
+    { group: 'BW', key: 'dma', label: 'DMA 모델 합계', unit: 'MB/s', digits: 0, values: models.map((m) => (m ? m.totalMBs : null)), hint: 'pipeline view memory × fps (압축 ratio 적용 · stat/size 미정 제외)' },
+    { group: 'BW', key: 'dram', label: 'DRAM 모델 합계 (LLC 반영)', unit: 'MB/s', digits: 0, values: models.map((m) => (m ? m.totalDramMBs : null)), hint: 'Σ (W+R) × llc_weight — LLC 상주 buffer의 DRAM 절감 반영' },
     { group: 'Latency · Timing', key: 'preview_lat', label: 'Sensor → Preview 지연 (평균)', unit: 'ms', values: lat('preview'), hint: 'timeline evidence (trace / simulation)' },
     { group: 'Latency · Timing', key: 'video_lat', label: 'Sensor → Video 지연 (평균)', unit: 'ms', values: lat('video') },
     { group: 'Latency · Timing', key: 'frame_latency_ms', label: 'Frame latency (KPI)', unit: 'ms', values: kv('frame_latency_ms') },

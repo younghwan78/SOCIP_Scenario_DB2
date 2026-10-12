@@ -36,6 +36,16 @@ export interface VariantRow {
   design_conditions: Dict
   derived_from_variant?: string | null
   own_condition_keys?: string[]
+  /** variant-matrix: LLC-resident / compressed buffers and vOTF links of the resolved variant */
+  memory_levers?: MemoryLevers
+}
+
+export interface MemoryLevers {
+  llc?: string[]; compressed?: string[]; votf?: string[]; llc_weight_min?: number | null
+  /** LLC MB allocated in this variant (sum of owner partitions) · owners · LLC buffers without a size */
+  llc_mb?: number | null; llc_owners?: string[]; llc_unsized?: number
+  /** WDMA/RDMA ports moving a compressed (SBWC/AFBC) buffer */
+  compressed_dma?: number
 }
 
 export interface ResolvedVariant {
@@ -70,6 +80,9 @@ export interface ViewEdgeData {
   consumer?: string | null
   port_pairs?: { src: string; dst: string }[]
   memory?: Dict | null
+  /** LLC placement of the buffer (llc_allocated / llc_allocation_mb / llc_policy / allocation_owner / llc_weight) */
+  placement?: Dict | null
+  latency_class?: 'streaming' | 'line_delayed' | 'frame_buffered' | null
 }
 
 export interface ViewResponse {
@@ -120,6 +133,9 @@ export interface BufferDef {
   format?: string
   bitdepth?: number
   compression?: string
+  comp_ratio?: number
+  /** LLC placement (llc_allocated, llc_weight = DRAM factor, llc_allocation_mb, llc_policy, allocation_owner) */
+  placement?: Dict
   layer?: number
   size_status?: string
   source_note?: string
@@ -224,7 +240,7 @@ export const api = {
   health: () => getJson<Dict>('/explorer/summary', {}, false),
   summary: (projectRef?: string) => getJson<Dict>('/explorer/summary', { project_ref: projectRef }),
   catalog: (projectRef?: string) => allPages<CatalogItem>('/explorer/scenario-catalog', { project_ref: projectRef }),
-  matrix: (projectRef?: string) => allPages<VariantRow, Paged<VariantRow> & { axis_keys: string[] }>('/explorer/variant-matrix', { project_ref: projectRef }, 1000),
+  matrix: (projectRef?: string, scenarioId?: string) => allPages<VariantRow, Paged<VariantRow> & { axis_keys: string[] }>('/explorer/variant-matrix', { project_ref: projectRef, scenario_id: scenarioId }, 1000),
   projects: () => getJson<Paged<{ id: string; metadata_?: Dict }>>('/projects', { limit: 500 }),
   socs: () => getJson<Paged<{ id: string }>>('/soc-platforms', { limit: 500 }),
   variants: (scenarioId: string) => allPages<ResolvedVariant>(`/scenarios/${enc(scenarioId)}/variants`),

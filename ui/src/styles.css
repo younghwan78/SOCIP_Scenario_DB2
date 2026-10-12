@@ -807,3 +807,21 @@ tr.row-off td { opacity: .6; }
 .lever-iq { display: grid; gap: 4px; padding: 6px 8px; background: var(--warn-soft); border-radius: 6px; }
 .lever-iq-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12px; }
 .tb-mini-table tr.case-group td { font-weight: 600; font-size: 12px; background: var(--surface-soft); padding-top: 6px; }
+
+/* power levers: LLC / SBWC (compression) / vOTF — same colours as the pipeline diagram */
+.lv { display: inline-block; font: 700 10.5px/1 var(--mono); color: #fff; padding: 3px 6px; border-radius: 9px; white-space: nowrap; }
+.lv-llc { background: #15803D; }
+.lv-sbwc { background: #BE185D; }
+.lv-votf { background: #0D9488; }
+.lv-row { display: inline-flex; gap: 3px; flex-wrap: wrap; vertical-align: middle; }
+.lv-legend { display: inline-block; width: 12px; height: 9px; border-radius: 2px; vertical-align: -1px; }
+tr.row-llc > td:first-child { box-shadow: inset 3px 0 0 #15803D; }
+tr.row-sbwc > td:first-child { box-shadow: inset 3px 0 0 #BE185D; }
+td.cell-llc { background: #DCFCE7; }
+td.cell-sbwc { background: #FCE7F3; }
+.chip.lv-sum { border-color: #15803D; }
+td.cell-votf { background: #CCFBF1; }
+/* Compare / variant tables: lever on = coloured left bar (keeps the diff background) */
+td.lvc-llc { box-shadow: inset 4px 0 0 #15803D; color: #14532D; font-weight: 600; }
+td.lvc-sbwc { box-shadow: inset 4px 0 0 #BE185D; color: #831843; font-weight: 600; }
+td.lvc-votf { box-shadow: inset 4px 0 0 #0D9488; color: #134E4A; font-weight: 600; }

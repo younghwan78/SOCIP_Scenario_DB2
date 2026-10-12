@@ -28,8 +28,23 @@ def graph_factory():
         d = read(path)
         catalog[d["id"]] = IpCatalog(id=d["id"], schema_version=d["schema_version"], category=d["category"],
                                      hierarchy=d["hierarchy"], capabilities=d["capabilities"], yaml_sha256="fixture")
-    raw = read(FIXTURE / "02_definition" / "uc-cam-recording-e2600.yaml")
+    raw = _without_mtnr_levers(read(FIXTURE / "02_definition" / "uc-cam-recording-e2600.yaml"))
     return lambda variant: graph_from_fixture(raw, variant, catalog)
+
+
+def _without_mtnr_levers(raw):
+    """Exploration math is tested on the SBWC/LLC-off baseline (pre 2026-10-12 fixture): the fixture now ships
+    MTNR L0/L1 with SBWC (pyramid) + LLC, which makes them 'already compressed' for the compression axis."""
+    from copy import deepcopy
+    raw = deepcopy(raw)
+    docs = raw if isinstance(raw, list) else [raw]
+    for doc in docs:
+        bufs = ((doc or {}).get("pipeline") or {}).get("buffers") or {}
+        for bid in ("PYRAMID_L0", "PYRAMID_L1", "TNR_PREV_L0", "TNR_PREV_L1"):
+            if bid in bufs:
+                bufs[bid]["compression"] = "COMP_OFF"
+                bufs[bid].pop("placement", None)
+    return raw
 
 
 @pytest.fixture(scope="module")

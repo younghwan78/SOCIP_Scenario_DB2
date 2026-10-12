@@ -1668,17 +1668,21 @@
           "width": 4080,
           "height": 2296,
           "fps": 30,
-          "compression": "COMP_OFF"
+          "compression": "COMP_YUV_LOSSLESS"
         },
         "placement": {
-          "llc_allocated": false,
-          "llc_policy": "none"
+          "llc_allocated": true,
+          "llc_allocation_mb": 4.0,
+          "llc_policy": "dedicated",
+          "allocation_owner": "MTNR",
+          "llc_weight": 0.6
         },
         "label": "M2M / PYRAMID_L0",
         "detail_items": [
           "Route: mlsc -> mtnr",
           "Edge type: M2M",
-          "Buffer: Y / mlsc_out / 12b / COMP_OFF"
+          "Buffer: Y / mlsc_out / 12b / COMP_YUV_LOSSLESS",
+          "Placement: LLC 4MB dedicated MTNR"
         ]
       }
     },
@@ -1711,17 +1715,21 @@
           "width": 2040,
           "height": 1148,
           "fps": 30,
-          "compression": "COMP_OFF"
+          "compression": "COMP_YUV_LOSSLESS"
         },
         "placement": {
-          "llc_allocated": false,
-          "llc_policy": "none"
+          "llc_allocated": true,
+          "llc_allocation_mb": 4.0,
+          "llc_policy": "dedicated",
+          "allocation_owner": "MTNR",
+          "llc_weight": 0.6
         },
         "label": "M2M / PYRAMID_L1",
         "detail_items": [
           "Route: mlsc -> mtnr",
           "Edge type: M2M",
-          "Buffer: YUV444 / pyramid_l1 / 12b / COMP_OFF"
+          "Buffer: YUV444 / pyramid_l1 / 12b / COMP_YUV_LOSSLESS",
+          "Placement: LLC 4MB dedicated MTNR"
         ]
       }
     },

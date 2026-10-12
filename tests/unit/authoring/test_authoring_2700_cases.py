@@ -102,6 +102,17 @@ def root(tmp_path: Path) -> Path:
         mode.pop("typical_ratio", None)
         mode.pop("note", None)
     soc.write_text(yaml.safe_dump(sodoc, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    # The inherited snapshot predates the Exynos2600 memory-lever assumptions.
+    for sid in ("uc-cam-recording-e2600", "uc-cam-recording-apv-e2600"):
+        path = r / f"projects/sm-s947b/scenarios/{sid}/scenario.yaml"
+        doc = yamlio.load(path)
+        for name in ("PYRAMID_L0", "PYRAMID_L1", "TNR_PREV_L0", "TNR_PREV_L1"):
+            buf = doc["pipeline"]["buffers"][name]
+            buf.pop("placement", None)
+            buf.pop("source_note", None)
+            if name.startswith("PYRAMID"):
+                buf["compression"] = "COMP_OFF"
+        yamlio.dump(path, doc)
     proj = r / POST_EJECT_PROJECT_2600
     pdoc = yaml.safe_load(proj.read_text(encoding="utf-8"))
     (pdoc["document"].get("globals") or {}).pop("review_policy", None)

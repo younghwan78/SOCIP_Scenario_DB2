@@ -9,7 +9,7 @@ import { PageLayout, Resizer, usePref, useResizable } from '../components/Layout
 import { Icon } from '../components/Icons'
 import { DataTable, type Column } from '../components/DataTable'
 import { SEVERITY_RANK, preferredReference, resFpsKey } from '../lib/defaults'
-import type { VariantRow } from '../lib/api'
+import type { MemoryLevers, VariantRow } from '../lib/api'
 import { archApi, type BoardRow } from '../lib/archExplore'
 import { verdictChip } from '../lib/timingBudget'
 import { ProvBadge } from '../components/Provenance'
@@ -50,6 +50,9 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
   const selected = scenarios.find((s) => s.scenario_id === ctx.scenario) ?? scenarios[0]
   const variantsQ = useAsync(() => (selected ? api.variants(selected.scenario_id) : Promise.resolve({ items: [], total: 0 })), [selected?.scenario_id])
   const rows = useMemo(() => toRows(selected, variantsQ.data?.items ?? []), [selected, variantsQ.data])
+  // memory power levers (LLC / SBWC / vOTF) per variant — server-side summary from the variant matrix
+  const leverQ = useAsync(() => (selected ? api.matrix(undefined, selected.scenario_id).then((r) => new Map(r.items.map((x) => [x.variant_id, x.memory_levers ?? null]))).catch(() => null)
+    : Promise.resolve(null)), [selected?.scenario_id])
   // evidence coverage is optional: an older API without /calibration/coverage just hides the columns' content
   const covQ = useAsync(() => (selected ? calibrationApi.coverage(selected.scenario_id).catch(() => null) : Promise.resolve(null)), [selected?.scenario_id])
   const cov = (v: string): Coverage | undefined => covQ.data?.[v]
@@ -93,6 +96,30 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
     { key: 'mode', label: 'Mode', get: (dc) => [dc.extend_mode && dc.extend_mode !== 'EX_NONE' ? String(dc.extend_mode).replace('EX_', '') : null, dc.subscenario].filter(Boolean).join(' · ') || MISSING, keys: ['extend_mode', 'subscenario'] },
   ]
 
+  const hasLever = [...(leverQ.data?.values() ?? [])].some((m) => !!(m?.llc?.length || m?.compressed?.length || m?.votf?.length))
+  const memOf = (id: string) => leverQ.data?.get(id) ?? null
+  const llcText = (m: MemoryLevers | null) => (!m?.llc?.length ? MISSING : m.llc_mb ? `${m.llc_mb} MB${m.llc_unsized ? ' +?' : ''}` : '크기 미정')
+  const sbwcText = (m: MemoryLevers | null) => (m?.compressed_dma ? `${m.compressed_dma} DMA` : MISSING)
+  const memCols: Column<VariantRow>[] = [
+    { key: 'llc', label: 'LLC', width: 76, align: 'right', firstDir: -1,
+      headTitle: 'LLC 할당 크기 — IP partition(allocation_owner)별 llc_allocation_mb 합 · hover = owner · buffer · DRAM 계수',
+      sort: (r) => memOf(r.variant_id)?.llc_mb ?? (memOf(r.variant_id)?.llc?.length ? 0 : null),
+      title: (r) => { const m = memOf(r.variant_id); return m?.llc?.length ? `owner ${m.llc_owners?.join(', ') || '—'} · buffer ${m.llc.join(', ')}${m.llc_weight_min ? ` · DRAM ×${m.llc_weight_min}` : ''}` : 'LLC 없음' },
+      cellClass: (r) => (r.variant_id !== reference && llcText(memOf(r.variant_id)) !== llcText(memOf(reference)) ? 'chg' : ''),
+      render: (r) => llcText(memOf(r.variant_id)) },
+    { key: 'sbwc', label: '압축 DMA', width: 76, align: 'right', firstDir: -1,
+      headTitle: 'SBWC/AFBC 압축이 적용된 DMA 수 — 압축 buffer를 쓰는 WDMA + RDMA port · hover = buffer',
+      sort: (r) => memOf(r.variant_id)?.compressed_dma || null,
+      title: (r) => { const m = memOf(r.variant_id); return m?.compressed?.length ? `buffer ${m.compressed.join(', ')}` : '압축 없음' },
+      cellClass: (r) => (r.variant_id !== reference && sbwcText(memOf(r.variant_id)) !== sbwcText(memOf(reference)) ? 'chg' : ''),
+      render: (r) => sbwcText(memOf(r.variant_id)) },
+    { key: 'votf', label: 'vOTF', width: 64, align: 'right', firstDir: -1,
+      headTitle: '활성 vOTF 연결 수 — DRAM 왕복 없는 streaming 연결',
+      sort: (r) => memOf(r.variant_id)?.votf?.length ?? null,
+      title: (r) => memOf(r.variant_id)?.votf?.join(', ') || 'vOTF 없음',
+      cellClass: (r) => (r.variant_id !== reference && JSON.stringify(memOf(r.variant_id)?.votf ?? []) !== JSON.stringify(memOf(reference)?.votf ?? []) ? 'chg' : ''),
+      render: (r) => memOf(r.variant_id) ? memOf(r.variant_id)?.votf?.length || MISSING : MISSING },
+  ]
   const diffOf = (r: VariantRow) => new Set(changedKeys(r, refRow, byId))
   const columns: Column<VariantRow>[] = [
     { key: 'pick', label: '', width: 34, minWidth: 30, render: (r) => <input type="checkbox" aria-label={`${r.variant_id} 선택`} checked={picked.has(r.variant_id)} onChange={() => togglePick(r.variant_id)} onClick={(e) => e.stopPropagation()} /> },
@@ -128,6 +155,8 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
       render: (r) => { const b = board.get(r.variant_id), v = b?.verdict; if (!v) return <span className="faint">—</span>; const c = verdictChip(v as 'ok' | 'clock_up' | 'fail')
         return <button className={`badge ${c.cls} badge-btn`} title={b?.verdict_detail?.reasons?.[0] ?? '클릭 = 판정 사유'} aria-label={`${r.variant_id} 판정 상세`}
           onClick={(e) => { e.stopPropagation(); setVerdictAt(b?.verdict_detail ? { id: r.variant_id, x: e.clientX, y: e.clientY } : null) }}>{c.label}</button> } },
+    // LLC allocation (MB) / SBWC DMA count — plain cells like the condition columns, yellow = differs from 기준
+    ...(hasLever ? memCols : []),
     { key: 'load', label: 'Load', width: 84, firstDir: -1, sort: (r) => (r.severity ? SEVERITY_RANK[r.severity] ?? 0 : null), render: (r) => r.severity && <span className={`badge load-${r.severity}`}>{r.severity}</span> },
     { key: 'delta', label: '다른 조건', width: 84, align: 'right', firstDir: -1, headTitle: '기준 variant(파생은 부모)와 값이 다른 조건 수 — 노란 셀이 그 조건', sort: (r) => (r.variant_id === reference ? 0 : diffOf(r).size), render: (r) => <span className="mono">{r.variant_id === reference ? 0 : diffOf(r).size}</span> },
     { key: 'open', label: '', width: 76, render: (r) => <a href="#" onClick={(e) => { e.preventDefault(); ctx.navigate('pipeline', { scenario: r.scenario_id, variant: r.variant_id }) }}>Pipeline</a> },
