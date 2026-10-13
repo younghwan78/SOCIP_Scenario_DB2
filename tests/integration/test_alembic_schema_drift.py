@@ -18,6 +18,8 @@ def _normalize_type_name(type_name: str) -> str:
         return "TEXT"
     if "JSONB" in normalized:
         return "JSONB"
+    if normalized in {"BIGINT", "BIGINTEGER"}:
+        return "BIGINT"
     if "INTEGER" in normalized or normalized == "INT":
         return "INTEGER"
     if "BOOLEAN" in normalized or normalized == "BOOL":

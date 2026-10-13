@@ -2,6 +2,7 @@
 // Every simulation-backed request waits and retries here instead of failing, and a small global store tells the
 // UI that a request is queued behind other users' runs.
 import { useSyncExternalStore } from 'react'
+import { credentialHeaders } from './auth'
 
 export interface AdmissionWait { waiting: number; since: number | null; attempts: number }
 let state: AdmissionWait = { waiting: 0, since: null, attempts: 0 }
@@ -29,10 +30,12 @@ export const ADMISSION_BUDGET_MS = 120_000
 /** fetch with wait-and-retry on 429 (simulation slots busy). Non-429 responses are returned as is. */
 export async function fetchAdmitted(url: string, init: RequestInit, budgetMs = ADMISSION_BUDGET_MS): Promise<Response> {
   const start = Date.now()
+  // Capture identity once so a queued write never switches users during retries.
+  const authenticatedInit = { ...init, headers: credentialHeaders(init.headers) }
   let queued = false
   try {
     for (let i = 0; ; i++) {
-      const res = await fetch(url, init)
+      const res = await fetch(url, authenticatedInit)
       if (res.status !== 429 || Date.now() - start >= budgetMs) return res
       if (!queued) { queued = true; emit({ waiting: state.waiting + 1, since: state.since ?? Date.now(), attempts: state.attempts }) }
       emit({ ...state, attempts: state.attempts + 1 })

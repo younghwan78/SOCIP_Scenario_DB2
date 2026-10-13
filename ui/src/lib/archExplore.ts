@@ -108,7 +108,9 @@ export interface LeverPoint {
 export interface LeverRegisterBody {
   run_id: string; scenario_id: string; variant_id: string; compression: Record<string, string>; options: string[]
   iq_results: { option_key: string; status: 'adopted' | 'rejected'; note: string }[]; reason?: string; expected_project_ref?: string
+  expected_current?: CurrentPredictionGuard[]
 }
+export interface CurrentPredictionGuard { scenario_id: string; variant_id: string; prediction_id: string | null }
 export interface LeverRegisterResult {
   status: 'registered' | 'rejected'; rule?: string; case_key?: string; run_id?: string; rejected?: string[]; message?: string
   promoted: { id: string; total_mw: number }[]; skipped?: { variant_id: string; reason: string }[]
@@ -228,7 +230,7 @@ export interface RunDetail extends RunMeta { spec: Record<string, unknown>; vari
 export interface Power { total_mw: number; cpu_mw: number; hw_mw: number; bw_mw: number; bw_ip_mw?: number; bw_cpu_mw?: number }
 export interface BoardRow {
   id: string; scenario_id: string; variant_id: string; status: string; run_id: string; run_title: string | null; run_created_at: string | null
-  case_key: string; selection_rule: string; selected_by: string; reason: string | null; created_at: string | null
+  case_key: string; selection_rule: string; selected_by: string; selected_by_user?: string | null; reason: string | null; created_at: string | null
   fps: number; power: Power; bw_mbs: number; distribution: Dist | null; compression: string[]; dvfs: Record<string, number>
   verdict: string; eligible_cases: number; alternatives: number; verified: Verified | null; statistic: Statistic; runtime_scale: number
   previous: { id: string; total_mw: number; delta_mw: number } | null
@@ -289,7 +291,7 @@ export interface VerdictDetail {
   stages: VerdictStage[]; intervals: Record<string, number>; period_ms: number | null
   latency?: Record<string, number | null> | null; statistic?: string | null; runtime_scale?: number | null
 }
-export interface HistoryRow { id: string; status: string; run_id: string; selection_rule: string; reason: string | null; created_at: string | null; total_mw: number; power: Power; bw_mbs: number }
+export interface HistoryRow { id: string; status: string; run_id: string; selection_rule: string; selected_by_user?: string | null; reason: string | null; created_at: string | null; total_mw: number; power: Power; bw_mbs: number }
 export interface Factor { category: string; item: string; delta_mw: number; detail: string }
 export interface Attribution {
   old_total_mw: number; new_total_mw: number; delta_mw: number; delta_pct: number | null
@@ -370,9 +372,9 @@ export const archApi = {
   runVariant: (id: string, scenarioId: string, variantId: string) =>
     send<VariantResult>('GET', `/arch/exploration/runs/${encodeURIComponent(id)}/variants/${encodeURIComponent(scenarioId)}/${encodeURIComponent(variantId)}`),
   createRun: (body: ReturnType<typeof runBody>) => send<RunDetail>('POST', '/arch/exploration/runs?view=summary', body),
-  promote: (runId: string, variantIds?: string[], caseKey?: string, reason?: string, scenarioId?: string, expectedProject?: string) =>
+  promote: (runId: string, variantIds?: string[], caseKey?: string, reason?: string, scenarioId?: string, expectedProject?: string, expectedCurrent?: CurrentPredictionGuard[]) =>
     send<{ promoted: { id: string; variant_id: string; total_mw: number }[]; skipped: { variant_id: string; reason: string }[] }>(
-      'POST', '/arch/predictions/promote', { run_id: runId, variant_ids: variantIds, case_key: caseKey, reason, scenario_id: scenarioId, expected_project_ref: expectedProject }),
+      'POST', '/arch/predictions/promote', { run_id: runId, variant_ids: variantIds, case_key: caseKey, reason, scenario_id: scenarioId, expected_project_ref: expectedProject, expected_current: expectedCurrent }),
   board: (scenarioId?: string, projectRef?: string) => send<{ rows: BoardRow[] }>('GET', `/arch/predictions/board${q({ scenario_id: scenarioId, project_ref: projectRef })}`),
   /** lever selector -> current prediction; options need IQ results (adopted) and are re-explored server side */
   registerLever: (body: LeverRegisterBody) => send<LeverRegisterResult>('POST', '/arch/predictions/lever', body),

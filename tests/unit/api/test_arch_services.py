@@ -39,7 +39,8 @@ def test_derived_variants_use_parent_reference_not_only_name():
     assert svc._variant_ids(db, "uc-a", req) == ["custom-name"]
 
 
-def test_run_persists_summary_and_reports_partial_failure(monkeypatch):
+@pytest.mark.parametrize("commit", [True, False])
+def test_run_persists_summary_and_reports_partial_failure(monkeypatch, commit):
     db = MagicMock()
     monkeypatch.setattr(svc, "_scenarios", lambda *a: [scenario()])
     monkeypatch.setattr(svc, "_variant_ids", lambda *a: ["good", "bad"])
@@ -55,7 +56,7 @@ def test_run_persists_summary_and_reports_partial_failure(monkeypatch):
              "counts": {"cases": 12, "eligible": 4}, "recommended": {"total_mw": 10, "verified": {"ok": True}}}
     monkeypatch.setattr(svc, "explore_variant", lambda *a, **kw: deepcopy(value))
     request = ArchExplorationRunRequest(category="camera")
-    result = svc.run_exploration(db, request, "reviewer")
+    result = svc.run_exploration(db, request, "reviewer", commit=commit)
     assert result["project_ref"] == "proj-a" and result["created_by"] == "reviewer"
     assert result["summary"] == {"variants": 1, "errors": 1, "spec_ok": 1, "cases": 12,
                                   "eligible_cases": 4, "verified": 1, "recommended_power_mw": [10, 10],
@@ -65,7 +66,11 @@ def test_run_persists_summary_and_reports_partial_failure(monkeypatch):
         "scenario_id": "uc-a", "variant_id": "bad", "error": "broken pipeline", "stage": "load", "error_type": "ValueError",
     }
     assert failure["location"].startswith("test_arch_services.py:")
-    db.commit.assert_called_once()
+    if commit:
+        db.commit.assert_called_once()
+    else:
+        db.commit.assert_not_called()
+        db.flush.assert_called_once()
     with pytest.raises(UnprocessableError, match="max_variants"):
         svc.run_exploration(db, request.model_copy(update={"max_variants": 1}))
     monkeypatch.setattr(svc, "_variant_ids", lambda *a: ["bad"])
@@ -147,3 +152,6 @@ def test_promote_refuses_a_run_of_another_project(monkeypatch):
     with pytest.raises(UnprocessableError, match="belongs to project"):
         svc.promote(MagicMock(), PromoteRequest(run_id="EXP-1", expected_project_ref="proj-a"))
     assert svc.promote(MagicMock(), PromoteRequest(run_id="EXP-1", expected_project_ref="proj-b")) is not None
+    deferred = MagicMock()
+    assert svc.promote(deferred, PromoteRequest(run_id="EXP-1", expected_project_ref="proj-b"), commit=False) is not None
+    deferred.commit.assert_not_called()

@@ -241,7 +241,7 @@ def register_condition(db: Session, request: Any, user: str | None = None) -> di
     power options; DVFS overrides and the config profile travel in the run's input selection), so freshness, history
     and attribution work exactly like an exploration registration. Rule: ``manual:timing-budget``.
     """
-    from scenario_db.api.schemas.arch_exploration import ArchExplorationRunRequest, PromoteRequest
+    from scenario_db.api.schemas.arch_exploration import ArchExplorationRunRequest, ExpectedCurrentPrediction, PromoteRequest
     from scenario_db.api.services.arch_exploration import promote, run_exploration
     from scenario_db.sim.arch_exploration import ArchExplorationSpec
 
@@ -284,9 +284,13 @@ def register_condition(db: Session, request: Any, user: str | None = None) -> di
     rec = summary.get("recommended")
     if rec is None:
         raise UnprocessableError("이 조건은 spec 미달이라 등록할 수 없습니다: " + "; ".join(summary.get("spec_reasons") or ["no eligible case"]))
+    expected_current: list[ExpectedCurrentPrediction] | None = None
+    if "expected_current_prediction_id" in original.model_fields_set:
+        expected_current = [ExpectedCurrentPrediction(scenario_id=request.scenario_id, variant_id=request.variant_id,
+                                                       prediction_id=original.expected_current_prediction_id)]
     out = promote(db, PromoteRequest(run_id=run["id"], scenario_id=request.scenario_id, variant_ids=[request.variant_id],
                                      case_key=rec["key"], reason=request.reason,
-                                     expected_project_ref=request.expected_project_ref),
+                                     expected_project_ref=request.expected_project_ref, expected_current=expected_current),
                   user, rule="manual:timing-budget")
     return out | {"total_mw": rec.get("total_mw")}
 

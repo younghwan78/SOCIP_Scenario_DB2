@@ -245,9 +245,9 @@ export const timingApi = {
   distribution: (scenarioId: string, variantId: string, options: TimingOptions, configProfileRef?: string | null, config?: TimingConfig | null) =>
     postJson<IntervalDistribution>('/timing-budget/interval-distribution',
       { scenario_id: scenarioId, variant_id: variantId, options: { ...options, include_whatif: false }, config_profile_ref: configProfileRef ?? undefined, ...cfgBody(config) }),
-  register: (scenarioId: string, variantId: string, options: TimingOptions, reason: string, configProfileRef?: string | null, config?: TimingConfig | null, expectedProject?: string | null, expectedHash?: string) =>
+  register: (scenarioId: string, variantId: string, options: TimingOptions, reason: string, configProfileRef?: string | null, config?: TimingConfig | null, expectedProject?: string | null, expectedHash?: string, expectedCurrent?: string | null) =>
     postJson<RegisterResult>('/timing-budget/register',
-      { scenario_id: scenarioId, variant_id: variantId, options: { ...options, include_whatif: false }, reason, config_profile_ref: configProfileRef ?? undefined, expected_project_ref: expectedProject || undefined, expected_condition_hash: expectedHash, ...cfgBody(config) }),
+      { scenario_id: scenarioId, variant_id: variantId, options: { ...options, include_whatif: false }, reason, config_profile_ref: configProfileRef ?? undefined, expected_project_ref: expectedProject || undefined, expected_condition_hash: expectedHash, expected_current_prediction_id: expectedCurrent, ...cfgBody(config) }),
   measuredInputs: (scenarioId: string, variantId: string) =>
     getJson<MeasuredInputOption[]>('/timing-budget/measured-inputs', { scenario_id: scenarioId, variant_id: variantId }, false),
   saveEvidence: (scenarioId: string, variantId: string, options: TimingOptions, configProfileRef?: string | null, config?: TimingConfig | null, expectedHash?: string) =>

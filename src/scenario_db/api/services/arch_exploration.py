@@ -29,7 +29,7 @@ from scenario_db.db.models.exploration import (
     PowerOptionReview,
     Prediction,
 )
-from scenario_db.exceptions import NotFoundError, UnprocessableError
+from scenario_db.exceptions import ConflictError, NotFoundError, UnprocessableError
 from scenario_db.reporting.arch_conclusion import calibration_row, run_lineage
 from scenario_db.reporting.arch_report import build_snapshot, html_sha256, render_html
 from scenario_db.reporting.report_package import package_zip
@@ -126,7 +126,8 @@ def _variant_budget(spec_mw: float | None, ref: dict[str, Any] | None) -> dict[s
     return {"mw": ref["mw"], "source": f"전과제 {ref['source']}", "reference_mw": ref["reference_mw"]}
 
 
-def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str | None = None) -> dict[str, Any]:
+def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str | None = None,
+                    *, commit: bool = True) -> dict[str, Any]:
     scenarios = _scenarios(db, request)
     throughput_from_policy = "throughput_model" not in request.spec.timing.model_fields_set
     # project review policy decides the throughput judgement unless the spec sets it (stored in run.spec)
@@ -238,7 +239,9 @@ def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str |
         engine_rev=ENGINE_REV, input_hash=ihash, created_by=user, created_at=_now(),
     )
     db.add(row)
-    db.commit()
+    db.flush()
+    if commit:
+        db.commit()
     return run_detail(row)
 
 
@@ -393,7 +396,8 @@ def _pred_dict(p: Prediction, *, metrics: bool = True) -> dict[str, Any]:
     return out
 
 
-def promote(db: Session, request: PromoteRequest, user: str | None = None, *, rule: str | None = None) -> dict[str, Any]:
+def promote(db: Session, request: PromoteRequest, user: str | None = None, *, rule: str | None = None,
+            commit: bool = True) -> dict[str, Any]:
     """``rule`` (internal callers only): selection rule recorded instead of the default, e.g. ``manual:timing-budget``."""
     run = get_run(db, request.run_id)
     if request.expected_project_ref is not None and run.project_ref != request.expected_project_ref:
@@ -417,10 +421,21 @@ def promote(db: Session, request: PromoteRequest, user: str | None = None, *, ru
                   .order_by(ScenarioVariant.scenario_id, ScenarioVariant.id).with_for_update().all())
         if len(locked) != len(keys):
             raise UnprocessableError("explored variant no longer exists")
-    currents = {(p.scenario_ref, p.variant_ref): p for p in db.query(Prediction)
+    currents = {(str(p.scenario_ref), str(p.variant_ref)): p for p in db.query(Prediction)
                 .options(load_only(Prediction.id, Prediction.scenario_ref, Prediction.variant_ref, Prediction.status))
+                .populate_existing()
                 .filter(Prediction.status == "current",
                         tuple_(Prediction.scenario_ref, Prediction.variant_ref).in_(keys)).all()} if keys else {}
+    # Check the reviewed baseline only after locking all variants. This also protects a first registration
+    # (expected null) and rejects a whole batch before any current row is changed.
+    if request.expected_current is not None:
+        expected = {(item.scenario_id, item.variant_id): item.prediction_id for item in request.expected_current}
+        if set(expected) != set(keys):
+            raise UnprocessableError("expected_current must contain exactly every selected scenario/variant pair")
+        changed = [f"{sid}/{vid}" for (sid, vid), expected_id in expected.items()
+                   if (currents[(sid, vid)].id if (sid, vid) in currents else None) != expected_id]
+        if changed:
+            raise ConflictError("current prediction changed; reload before registering: " + ", ".join(changed))
     promoted, skipped = [], []
     new_rows: list[tuple[Prediction, float]] = []
     # review policy: the default registration may be the IQ/performance-keeping optimum (no lossy / assumed ratio)
@@ -490,7 +505,8 @@ def promote(db: Session, request: PromoteRequest, user: str | None = None, *, ru
     db.add_all([pred for pred, _ in new_rows])
     db.flush()
     promoted = [_pred_dict(pred, metrics=False) | {"total_mw": total} for pred, total in new_rows]
-    db.commit()
+    if commit:
+        db.commit()
     return {"run_id": run.id, "promoted": promoted, "skipped": skipped}
 
 
@@ -949,9 +965,10 @@ def _review_dict(r: PowerOptionReview) -> dict[str, Any]:
             "updated_by": r.updated_by, "updated_at": r.updated_at.isoformat() if r.updated_at else None}
 
 
-def set_option_review(db: Session, request: PowerOptionReviewRequest, user: str | None = None) -> dict[str, Any]:
+def set_option_review(db: Session, request: PowerOptionReviewRequest, user: str | None = None,
+                      *, commit: bool = True) -> dict[str, Any]:
     # Lock an existing parent even when this review has not been created yet.
-    scenario = db.query(Scenario).filter_by(id=request.scenario_id).with_for_update().one_or_none()
+    scenario = db.query(Scenario).filter_by(id=request.scenario_id).with_for_update(key_share=not commit).one_or_none()
     if scenario is None:
         raise NotFoundError(f"scenario not found: {request.scenario_id}")
     if request.variant_id != "*" and db.query(ScenarioVariant).filter_by(
@@ -971,7 +988,9 @@ def set_option_review(db: Session, request: PowerOptionReviewRequest, user: str 
     else:
         row.history = [*(row.history or []), entry]
     row.status, row.note, row.updated_by, row.updated_at = request.status, request.note, user, now
-    db.commit()
+    db.flush()
+    if commit:
+        db.commit()
     return _review_dict(row)
 
 
@@ -1033,7 +1052,21 @@ def model_status(db: Session, *, project_ref: str | None = None) -> dict[str, An
     latest = rq.order_by(R.created_at.desc()).first()
     lineage = (run_lineage({"variants": [{"model_lineage": x} for x in latest[4] or []], "summary": latest.summary})[0]
                if latest is not None else None)
+    # P0 model basis: which config / power params / DVFS / engine combinations the current predictions rest on
+    from scenario_db.api.services.prediction_basis import prediction_bases
+
+    pq = db.query(Prediction).filter(Prediction.status == "current")
+    if project_ref:
+        pq = pq.filter(Prediction.project_ref == project_ref)
+    basis_rows: dict[str, dict[str, Any]] = {}
+    sw_rows: dict[str, int] = {}
+    for b in prediction_bases(db, pq.all()).values():
+        cur = basis_rows.setdefault(b["basis"]["key"], {**b["basis"], "predictions": 0})
+        cur["predictions"] += 1
+        sw_rows[b["sw"]["label"]] = sw_rows.get(b["sw"]["label"], 0) + 1
     return {
+        "bases": sorted(basis_rows.values(), key=lambda r: -r["predictions"]),
+        "sw": [{"label": k, "predictions": v} for k, v in sorted(sw_rows.items(), key=lambda kv: -kv[1])],
         "engine_rev": ENGINE_REV,
         "project_ref": project_ref,
         "predictions": {"current": n_current, "stale_engine": sum(n for e, n in engines.items() if e != ENGINE_REV),
@@ -1142,6 +1175,40 @@ def _run_variant_sections(db: Session, run_id: str, scenario_id: str, variant_id
 
 # ------------------------------------------------------------------- lever selection -> prediction
 def register_lever(db: Session, request: Any, user: str | None = None) -> dict[str, Any]:
+    """Guarded registrations persist reviews, their calculation and the prediction atomically."""
+    if request.expected_current is None:
+        return _register_lever(db, request, user)
+    # Reviews already lock Scenario. Acquire it before the variant so overlapping review/registration
+    # calls use the same order, and retain both locks through calculation and final persistence.
+    try:
+        _lock_lever_current(db, request)
+        result = _register_lever(db, request, user, commit=False)
+        db.commit()
+        return result
+    except Exception:
+        db.rollback()
+        raise
+
+
+def _lock_lever_current(db: Session, request: Any) -> None:
+    key = (request.scenario_id, request.variant_id)
+    expected = request.expected_current
+    if len(expected) != 1 or (expected[0].scenario_id, expected[0].variant_id) != key:
+        raise UnprocessableError("expected_current must contain exactly the selected scenario/variant pair")
+    # NO KEY UPDATE still serializes reviews, while allowing the Scenario FK's KEY SHARE
+    # when an ordinary promoter already owns the variant row.
+    if db.query(Scenario.id).filter_by(id=request.scenario_id).with_for_update(key_share=True).one_or_none() is None:
+        raise NotFoundError(f"scenario not found: {request.scenario_id}")
+    if db.query(ScenarioVariant.id).filter_by(
+            scenario_id=request.scenario_id, id=request.variant_id).with_for_update().one_or_none() is None:
+        raise NotFoundError(f"variant not found: {request.scenario_id}/{request.variant_id}")
+    current_id = db.query(Prediction.id).filter_by(
+        scenario_ref=request.scenario_id, variant_ref=request.variant_id, status="current").scalar()
+    if current_id != expected[0].prediction_id:
+        raise ConflictError("current prediction changed; reload before registering: " + "/".join(key))
+
+
+def _register_lever(db: Session, request: Any, user: str | None = None, *, commit: bool = True) -> dict[str, Any]:
     """Register the lever selector's combination (compression modes [+ IQ-adopted options]) as the current prediction.
 
     - no option: the case is rebuilt from the run's objective slice (``case_from_selection``) and promoted
@@ -1175,7 +1242,8 @@ def register_lever(db: Session, request: Any, user: str | None = None) -> dict[s
             raise UnprocessableError(f"IQ 평가 결과가 없는 option: {', '.join(missing)}")
         for o in options:
             set_option_review(db, PowerOptionReviewRequest(scenario_id=request.scenario_id, variant_id=request.variant_id,
-                                                           option_key=o, status=iq[o].status, note=iq[o].note), user)
+                                                           option_key=o, status=iq[o].status, note=iq[o].note), user,
+                              commit=commit)
         rejected = [o for o in options if iq[o].status != "adopted"]
         if rejected:
             return {"status": "rejected", "rejected": rejected, "promoted": [],
@@ -1197,7 +1265,8 @@ def register_lever(db: Session, request: Any, user: str | None = None) -> dict[s
             # an empty explicit config would mask the run's config profile -> pass it only when the run set one
             **({"config": sel["config"]} if sel.get("config") else {}), apply_options=options, project_ref=run.project_ref,
             power_budget_from_reference=bool(spec.get("power_budget_from_reference")),
-            spec={k: spec[k] for k in _SPEC_KEYS if k in spec}, **{k: sel[k] for k in _SEL_KEYS if k in sel}), user)
+            spec={k: spec[k] for k in _SPEC_KEYS if k in spec}, **{k: sel[k] for k in _SEL_KEYS if k in sel}), user,
+            commit=commit)
         target_run, summary = new_run["id"], new_run["variants"][0]
         rule = "lever:iq-adopted"
     else:
@@ -1211,7 +1280,8 @@ def register_lever(db: Session, request: Any, user: str | None = None) -> dict[s
     notes = "; ".join(f"{o}: {iq[o].note}" for o in options)
     reason = request.reason or ("Lever 선택 · 화질 무손실" if not options else f"Lever 선택 · IQ 채택 option ({notes})")
     out = promote(db, PromoteRequest(run_id=target_run, scenario_id=request.scenario_id, variant_ids=[request.variant_id],
-                                     case_key=case["key"], reason=reason, expected_project_ref=run.project_ref), user, rule=rule)
+                                     case_key=case["key"], reason=reason, expected_project_ref=run.project_ref,
+                                     expected_current=request.expected_current), user, rule=rule, commit=commit)
     for p in out.get("promoted") or []:
         row = db.get(Prediction, p["id"])
         if row is not None:
@@ -1219,5 +1289,7 @@ def register_lever(db: Session, request: Any, user: str | None = None) -> dict[s
                 "source_run": run.id, "compression": dict(request.compression), "options": options,
                 "iq_results": {o: {"status": iq[o].status, "note": iq[o].note} for o in options},
                 "base_total_mw": (src.get("baseline") or {}).get("total_mw")}}
-    db.commit()
+    db.flush()
+    if commit:
+        db.commit()
     return {"status": "registered", **out, "rule": rule, "case_key": case["key"], "run_id": target_run}

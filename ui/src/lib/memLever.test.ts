@@ -115,3 +115,15 @@ describe('variant table lever column', () => {
     expect(leverColumn<{ m: typeof ml }>((r) => r.m, () => ({ ...ml, llc_weight_min: 0.8 })).cellClass({ m: ml })).toBe('chg')
   })
 })
+
+describe('prediction freshness classification', () => {
+  it('separates basis, data and unknown causes', async () => {
+    const { freshnessOf } = await import('./calibration')
+    const base = { id: 'p', total_mw: 1 }
+    expect(freshnessOf({ ...base, freshness: { status: 'fresh', reasons: [], changed: [] } }).level).toBe('ok')
+    expect(freshnessOf({ ...base, freshness: { status: 'stale', reasons: ['입력 변경: variant_doc'], changed: ['variant_doc'] } }).level).toBe('data')
+    expect(freshnessOf({ ...base, freshness: { status: 'stale', reasons: ['입력 변경: config'], changed: ['config', 'variant_doc'] } }).level).toBe('basis')
+    expect(freshnessOf({ ...base, freshness: { status: 'stale', reasons: ['engine a/9 → a/11', '현재 입력 해석 실패: 기록 없음'], changed: [] } }).text).toBe('⚠ 기준')
+    expect(freshnessOf({ ...base, freshness: { status: 'stale', reasons: ['현재 입력 해석 실패: x'], changed: [] } }).level).toBe('unknown')
+  })
+})

@@ -58,6 +58,8 @@ class TimingBudgetRegisterRequest(TimingBudgetRequest):
 
     reason: str = Field(min_length=1, max_length=500)
     expected_project_ref: str | None = None
+    # Omitted = legacy behavior; explicit null = caller reviewed an unregistered variant.
+    expected_current_prediction_id: str | None = None
 
 
 class TimingBudgetEvidenceRequest(TimingBudgetRequest):

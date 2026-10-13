@@ -17,7 +17,9 @@ from scenario_db.api.schemas.arch_exploration import (
     PromoteRequest,
     ReportStatusRequest,
 )
+from scenario_db.api.schemas.prediction_discussion import PredictionCommentRequest, PredictionNoteRequest
 from scenario_db.api.services import arch_exploration as svc
+from scenario_db.api.services import prediction_discussion as discussion
 from scenario_db.config import get_settings
 from scenario_db.exceptions import UnprocessableError
 
@@ -153,6 +155,37 @@ def set_option_review(
 @router.get("/predictions/{prediction_id}")
 def get_prediction(prediction_id: str, db: Session = Depends(get_db)):
     return svc.get_prediction(db, prediction_id)
+
+
+@router.get("/predictions/{prediction_id}/notes")
+def get_prediction_notes(prediction_id: str, db: Session = Depends(get_db),
+                         _principal: ApiPrincipal = Depends(require_roles("reader", "analyst", "writer", "admin"))):
+    return discussion.get_notes(db, prediction_id)
+
+
+@router.put("/predictions/{prediction_id}/notes")
+def put_prediction_notes(
+    prediction_id: str, request: PredictionNoteRequest, db: Session = Depends(get_db),
+    principal: ApiPrincipal = Depends(require_roles("writer", "admin")),
+):
+    return discussion.put_notes(db, prediction_id, request, principal.subject)
+
+
+@router.get("/predictions/{prediction_id}/comments")
+def list_prediction_comments(
+    prediction_id: str, limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    _principal: ApiPrincipal = Depends(require_roles("reader", "analyst", "writer", "admin")),
+):
+    return discussion.list_comments(db, prediction_id, limit=limit, offset=offset)
+
+
+@router.post("/predictions/{prediction_id}/comments")
+def add_prediction_comment(
+    prediction_id: str, request: PredictionCommentRequest, db: Session = Depends(get_db),
+    principal: ApiPrincipal = Depends(require_roles("analyst", "writer", "admin")),
+):
+    return discussion.add_comment(db, prediction_id, request, principal.subject)
 
 
 # ------------------------------------------------------------------- model status

@@ -69,3 +69,15 @@ describe('statusItems (U2)', () => {
     expect(statusItems({ ...s, dvfs: [], predictions: { current: 0, stale_engine: 0, engines: {} } }).find((i) => i.key === 'dvfs')?.level).toBe('info')
   })
 })
+
+describe('P0 prediction basis in the model status', () => {
+  it('names the bases instead of a count', () => {
+    const items = statusItems({ engine_rev: 'arch-exploration/11', project_ref: 'p', predictions: { current: 54, stale_engine: 54, engines: { 'arch-exploration/9': 54 } },
+      dvfs: [], measurements: { real: 1, synthetic: 34 }, lineage: null,
+      bases: [{ label: '미기록 · e9', key: 'k', recorded: false, predictions: 54, config_profile_ref: null, power_params_ref: null, dvfs_table_ref: 'd', engine_rev: 'arch-exploration/9' }],
+      sw: [{ label: '1.2.3', predictions: 54 }] })
+    const p = items.find((i) => i.key === 'pred')!
+    expect(p.text).toBe('예측 기준 미기록 · e9 54 · SW 1.2.3 · 이전 engine 54/54')
+    expect(p.level).toBe('warn')
+  })
+})

@@ -236,13 +236,27 @@ def coverage(db: Session, scenario_id: str) -> dict[str, dict[str, Any]]:
                 e["shown"] = i == 0
     versions = dict(db.query(Prediction.variant_ref, func.count(Prediction.id))
                     .filter(Prediction.scenario_ref == scenario_id).group_by(Prediction.variant_ref).all())
-    for p in db.query(Prediction).filter_by(scenario_ref=scenario_id, status="current").all():
+    current = db.query(Prediction).filter_by(scenario_ref=scenario_id, status="current").all()
+    # P0 basis: which model basis / SW timing the registered number rests on, and whether today's inputs still give it
+    from scenario_db.api.services.arch_exploration import prediction_freshness
+    from scenario_db.api.services.prediction_basis import prediction_bases
+
+    bases = prediction_bases(db, current)
+    try:
+        fresh = {r["prediction_id"]: r for r in prediction_freshness(db, scenario_id=scenario_id).get("rows", [])}
+    except Exception:  # noqa: BLE001 - freshness is advisory; never break the coverage table
+        fresh = {}
+    for p in current:
         metrics = p.metrics or {}
+        fr = fresh.get(p.id) or {}
         row(p.variant_ref)["current_prediction"] = {
             "id": p.id, "total_mw": metrics.get("power", {}).get("total_mw"), "created_at": _iso(p.created_at),
             "run": p.exploration_run_ref, "case_key": p.case_key, "selection_rule": p.selection_rule,
             "selected_by": p.selected_by, "dvfs_table_ref": p.dvfs_table_ref, "supersedes": p.supersedes_ref,
             "version": int(versions.get(p.variant_ref, 1)),  # n-th registration of this variant (superseded + current)
+            "revision": int(versions.get(p.variant_ref, 1)),  # same count, explicit name (not a model version)
+            **(bases.get(p.id) or {}),
+            "freshness": {"status": fr.get("status", "unknown"), "reasons": fr.get("reasons", []), "changed": fr.get("changed", [])},
         }
     return out
 
