@@ -84,6 +84,10 @@ class TimingBudgetResponse(BaseModel):
     variant_id: str
     config_profile_ref: str | None = None
     dvfs_table_ref: str | None = None
+    # 예측 기준 the calculation resolved to (None = no basis) and the inputs set outside it (B2* when non-empty)
+    basis_ref: str | None = None
+    basis_code: str | None = None
+    basis_overrides: list[str] = []
     report: dict
 
 

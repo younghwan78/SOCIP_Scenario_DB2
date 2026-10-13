@@ -37,3 +37,25 @@ it('never returns one account cached GET results after changing credentials', as
   setApiCredential({ keyId: 'b', secret: 'two' })
   expect(await getJson('/identity-cache')).toEqual({ n: 2 })
 })
+
+it.each(['arch', 'generic'])('deduplicates %s reads within one actor and separates pending reads across actors', async (helper) => {
+  const resolvers: ((response: Response) => void)[] = []
+  const fetcher = vi.fn(() => new Promise<Response>((resolve) => resolvers.push(resolve)))
+  vi.stubGlobal('fetch', fetcher)
+  const read = () => helper === 'arch' ? archApi.board('inflight-scenario') : getJson('/inflight-identity', {}, false)
+  setApiCredential({ keyId: 'a', secret: 'one' })
+  const first = read(), sameActor = read()
+  expect(fetcher).toHaveBeenCalledTimes(1)
+  setApiCredential({ keyId: 'b', secret: 'two' })
+  const otherActor = read()
+  expect(fetcher).toHaveBeenCalledTimes(2)
+  resolvers[1](new Response(JSON.stringify({ actor: 'b' }), { status: 200 }))
+  expect(await otherActor).toEqual({ actor: 'b' })
+  resolvers[0](new Response(JSON.stringify({ actor: 'a' }), { status: 200 }))
+  expect(await first).toEqual({ actor: 'a' })
+  expect(await sameActor).toEqual({ actor: 'a' })
+  const next = read()
+  expect(fetcher).toHaveBeenCalledTimes(3)
+  resolvers[2](new Response('{}', { status: 200 }))
+  await next
+})

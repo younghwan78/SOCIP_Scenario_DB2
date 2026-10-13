@@ -188,15 +188,25 @@ export function invalidateCache(prefix: string): void {
   for (const k of [...cache.keys()]) if (k.startsWith(`${API_BASE}${prefix}`)) cache.delete(k)
 }
 
+const inflight = new Map<string, Promise<unknown>>()
+
 export async function getJson<T>(path: string, params: Record<string, string | number | undefined | null> = {}, useCache = true): Promise<T> {
   const url = `${API_BASE}${path}${qs(params)}`
   const cacheKey = `${url}|auth:${authVersion()}`
   const cached = cache.get(cacheKey)
   if (useCache && cached && cached.expires > Date.now()) return cached.promise as Promise<T>
+  // uncached reads still share one request while it is in flight (StrictMode double effects, two panels at once)
+  const flying = inflight.get(cacheKey)
+  if (!useCache && flying) return flying as Promise<T>
   const promise = fetchAdmitted(url, {}).then(async (res) => {
     if (!res.ok) throw new ApiError(`${res.status} ${res.statusText} — ${path}`, res.status)
     return res.json() as Promise<T>
   })
+  if (!useCache) {
+    inflight.set(cacheKey, promise)
+    const done = () => { if (inflight.get(cacheKey) === promise) inflight.delete(cacheKey) }
+    promise.then(done, done)
+  }
   if (useCache) {
     if (cache.size >= 100) cache.delete(cache.keys().next().value!)
     cache.set(cacheKey, { promise, expires: Date.now() + 60000 })

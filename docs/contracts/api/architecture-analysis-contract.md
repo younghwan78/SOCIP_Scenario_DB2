@@ -164,3 +164,13 @@ token and merge concurrent item results under the same project lock. A result
 from an earlier trial returns 409 instead of updating a restarted trial. Promotion
 requires at least one successful calculation; pending or failed items retain their
 current predictions, and predictions changed since the trial are reported as stale.
+
+`GET /bases/{basis_id}` returns the basis, current catalog component details,
+input drift, trial summary and current prediction counts (including overrides).
+When inputs have changed, component details describe today's catalog values;
+the basis preserves its original input stamp. Timing Budget responses also return
+the resolved `basis_ref`, `basis_code` and `basis_overrides`.
+
+`GET /calibration/coverage` returns evidence and basis information without
+recalculating freshness by default. Set `freshness=true` to include freshness,
+or fetch `/arch/predictions/freshness` separately to avoid delaying the table.

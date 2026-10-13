@@ -1,5 +1,6 @@
 // Timing Budget = prediction workbench: the condition (summary + actions), DVFS level override per domain and the
 // ③ interval / latency spread under per-frame SW variance.
+import { OVERRIDE_LABEL } from '../lib/basis'
 import { useRef, useState } from 'react'
 import { BoxPlot } from './Charts'
 import { boxStats } from '../lib/cadence'
@@ -11,6 +12,8 @@ export interface Condition {
   profile: string | null; overrides: Record<string, number>
   measured?: MeasuredInputs | null
   powerParams?: string | null
+  /** 예측 기준 the calculation resolved to (server); overrides non-empty = B2* */
+  basis?: { code: string; overrides: string[] } | null
 }
 
 export function conditionChips(c: Condition): string[] {
@@ -18,7 +21,8 @@ export function conditionChips(c: Condition): string[] {
   return [
     `SW ${c.statistic} ×${Number.isInteger(c.scale) ? c.scale.toFixed(1) : c.scale}`, `EIS ${c.eis}`, `CPU ${c.cpuModel === 'profile' ? '측정 profile' : '가정'}`,
     c.throughput === 'pipelined' ? 'pipeline (buffer)' : 'stage 1 frame', `margin ${Math.round(c.margin * 100)}%`,
-    `profile ${c.profile ?? '없음'}`,
+    ...(c.basis ? [c.basis.overrides.length ? `기준 외 ${c.basis.code}* (${c.basis.overrides.map((o) => OVERRIDE_LABEL[o] ?? o).join(' · ')})` : `기준 ${c.basis.code}`] : []),
+    ...(!c.basis || c.basis.overrides.includes('config_profile') ? [`profile ${c.profile ?? '없음'}`] : []),
     ov.length ? `DVFS override ${ov.map(([d, l]) => `${d} L${l}`).join(' · ')}` : 'DVFS 자동(계산)',
     ...(c.measured ? [measuredChip(c.measured)] : []),
     ...(c.powerParams ? [`params ${c.powerParams}`] : []),

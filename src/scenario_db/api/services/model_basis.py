@@ -410,3 +410,111 @@ def promote_basis(db: Session, basis_id: str, user: str | None = None, *, reason
                  "result": {"promoted": len(promoted), "kept": len(kept)}}
     db.commit()
     return {"basis": basis_dict(row), "promoted": promoted, "kept": kept}
+
+
+# ------------------------------------------------------------------- detail (UI popover)
+_SYNTHETIC_HINTS = ("synthetic", "sample", "placeholder")
+
+
+def _is_synthetic(*texts: Any) -> bool:
+    blob = " ".join(str(t) for t in texts if t).lower()
+    return any(h in blob for h in _SYNTHETIC_HINTS)
+
+
+def _profile_detail(row: SimConfigProfile | None, ref: str | None) -> dict[str, Any] | None:
+    if not ref:
+        return None
+    if row is None:
+        return {"id": ref, "missing": True}
+    rc = dict(row.run_config or {})
+    return {"id": row.id, "version": row.version, "status": row.status, "approved_by": row.approved_by,
+            "description": row.description, "notes": row.notes, "run_config": rc,
+            "rail_domains": sorted(set((row.rail_domain_map or {}).values())),
+            "synthetic": _is_synthetic(row.description, rc.get("power_params_ref"))}
+
+
+def _power_params_detail(row: PowerModelParams | None, ref: str | None) -> dict[str, Any] | None:
+    if not ref:
+        return None
+    if row is None:
+        return {"ref": ref, "missing": True}
+    p = dict(row.params or {})
+    bw = dict(p.get("bw") or {})
+    cpu = dict(p.get("cpu") or {})
+    clusters = []
+    for c in cpu.get("clusters") or []:
+        opps = [o for o in (c.get("opps") or []) if isinstance(o, dict)]
+        top = max(opps, key=lambda o: o.get("mhz") or 0) if opps else {}
+        clusters.append({"name": c.get("name"), "core_type": c.get("core_type"), "cores": c.get("cores"),
+                         "opps": len(opps), "max_mhz": top.get("mhz"), "max_mv": top.get("mv"),
+                         "max_mw_per_core": top.get("mw_per_core"),
+                         "leak_mw_per_core": (c.get("leakage") or {}).get("mw_per_core_at_ref")})
+    cal = dict(p.get("calibration") or {})
+    return {
+        "ref": ref, "id": row.id, "version": row.version, "status": row.status, "soc_ref": row.soc_ref,
+        "description": row.description, "notes": row.notes,
+        "synthetic": _is_synthetic(row.description, row.notes),
+        "model": {k: p.get(k) for k in ("ip_model", "ref_voltage_mv", "ref_fps", "ip_clock_power_fraction", "bw_model")},
+        "bw": {"mw_per_gbps": bw.get("mw_per_gbps"), "read_mw_per_gbps": bw.get("e_read_mw_per_gbps"),
+               "write_mw_per_gbps": bw.get("e_write_mw_per_gbps"), "llc_hit_scale": bw.get("llc_hit_scale"),
+               "governor_util": bw.get("governor_util"),
+               "mif_opps": [{k: o.get(k) for k in ("mhz", "base_mw", "capacity_mbs")} for o in (bw.get("mif_opps") or [])
+                            if isinstance(o, dict)]},
+        "cpu": {"clusters": clusters, "dsu": bool(cpu.get("dsu")), "source": cpu.get("source")},
+        "calibration": {"fit": bool(cal.get("fit")), "ips": len(cal.get("factor_by_ip") or cal.get("ip_power_scale") or {}),
+                        "evidence": len(cal.get("source_evidence") or [])},
+    }
+
+
+def _dvfs_detail(row: SocDvfsTable | None, ref: str | None) -> dict[str, Any] | None:
+    if not ref:
+        return None
+    if row is None:
+        return {"id": ref, "missing": True}
+    domains = []
+    for name, d in sorted((row.domains or {}).items()):
+        speeds = [lv.get("speed_mhz") for lv in ((d or {}).get("levels") or []) if isinstance(lv, dict) and lv.get("speed_mhz")]
+        domains.append({"name": name, "levels": len(speeds), "min_mhz": min(speeds) if speeds else None,
+                        "max_mhz": max(speeds) if speeds else None})
+    note = (row.source or {}).get("note")
+    return {"id": row.id, "version": row.dvfs_version, "evt_hint": row.evt_hint, "scope": row.compatibility_scope,
+            "source_revision": (row.source or {}).get("source_revision"), "note": note,
+            "synthetic": _is_synthetic(row.evt_hint, note), "domains": domains}
+
+
+def basis_detail(db: Session, basis_id: str) -> dict[str, Any]:
+    """Everything a viewer needs to judge a basis: components with their content, input drift, trial, predictions."""
+    from scenario_db.db.models.exploration import ArchExplorationRun, Prediction
+    from scenario_db.sim.arch_exploration import ENGINE_REV
+
+    row = get_basis(db, basis_id)
+    pp_id = (row.power_params_ref or "").split("@", 1)[0] or None
+    # input drift: the basis froze a hash per component; today's rows may differ (then a new basis is needed)
+    drift: list[str] = []
+    try:
+        now = _input_stamp(db, row.project_ref, row.config_profile_ref, row.power_params_ref, row.dvfs_table_ref)
+        frozen = row.input_stamp or {}
+        drift = [k for k in ("config_profile", "power_params", "dvfs", "default_dvfs_ref", "soc_ref")
+                 if k in now and frozen.get(k) != now.get(k)] if frozen else ["stamp"]
+    except (NotFoundError, UnprocessableError) as exc:
+        drift = [f"error: {exc}"]
+    if row.engine_rev != ENGINE_REV:
+        drift.append("engine")
+    sel = ArchExplorationRun.spec["input_selection"]
+    q = (db.query(Prediction.id, Prediction.scenario_ref, sel["basis_overrides"].label("ov"))
+         .join(ArchExplorationRun, ArchExplorationRun.id == Prediction.exploration_run_ref)
+         .filter(Prediction.project_ref == row.project_ref, Prediction.status == "current",
+                 sel["basis_ref"].astext == row.id))
+    preds = q.all()
+    parent = db.get(ModelBasis, row.parent_ref) if row.parent_ref else None
+    return {
+        "basis": basis_dict(row) | {"trial": trial_summary(row)},
+        "parent": {"id": parent.id, "code": parent.code, "status": parent.status} if parent is not None else None,
+        "inputs": {"current": not drift, "changed": drift, "engine_now": ENGINE_REV},
+        "profile": _profile_detail(db.get(SimConfigProfile, row.config_profile_ref) if row.config_profile_ref else None,
+                                   row.config_profile_ref),
+        "power_params": _power_params_detail(db.get(PowerModelParams, pp_id) if pp_id else None, row.power_params_ref),
+        "dvfs": _dvfs_detail(db.get(SocDvfsTable, row.dvfs_table_ref) if row.dvfs_table_ref else None, row.dvfs_table_ref),
+        "predictions": {"current": len(preds), "ad_hoc": sum(1 for p in preds if p.ov),
+                        "scenarios": len({p.scenario_ref for p in preds})},
+    }

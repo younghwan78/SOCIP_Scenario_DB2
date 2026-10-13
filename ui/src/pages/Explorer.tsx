@@ -14,6 +14,7 @@ import { archApi, type BoardRow } from '../lib/archExplore'
 import { verdictChip } from '../lib/timingBudget'
 import { ProvBadge } from '../components/Provenance'
 import { VERDICT_HELP, VerdictPopover } from '../components/VerdictDetail'
+import { BasisInfoButton } from '../components/BasisDetail'
 import { calibrationApi, freshnessOf, measTooltip, predictionTooltip, simTooltip, uniqueShortIds, type Coverage } from '../lib/calibration'
 import { batteryNote, maText, useBattery } from '../lib/battery'
 import { DEFAULT_CANONICAL, canonicalOf } from '../lib/projects'
@@ -55,7 +56,20 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
     : Promise.resolve(null)), [selected?.scenario_id])
   // evidence coverage is optional: an older API without /calibration/coverage just hides the columns' content
   const covQ = useAsync(() => (selected ? calibrationApi.coverage(selected.scenario_id).catch(() => null) : Promise.resolve(null)), [selected?.scenario_id])
-  const cov = (v: string): Coverage | undefined => covQ.data?.[v]
+  // freshness (re-resolves every prediction's inputs, ~1-2 s) arrives after coverage and only fills the ✓ / ⚠ mark
+  const freshQ = useAsync(() => (selected ? archApi.freshness(selected.scenario_id).catch(() => null) : Promise.resolve(null)), [selected?.scenario_id])
+  const covMerged = useMemo(() => {
+    if (!covQ.data) return null
+    const fr = new Map((freshQ.data?.rows ?? []).map((x) => [x.prediction_id, x]))
+    return Object.fromEntries(Object.entries(covQ.data).map(([k, c]) => {
+      const p = c.current_prediction
+      if (!p || p.freshness || !freshQ.data) return [k, c]
+      const f = fr.get(p.id)
+      return [k, { ...c, current_prediction: { ...p, freshness: { status: f?.status ?? 'unknown', reasons: f?.reasons ?? ['판정 결과 없음'], changed: f?.changed ?? [] } } }]
+    })) as Record<string, Coverage>
+  }, [covQ.data, freshQ.data])
+  const freshPending = freshQ.loading
+  const cov = (v: string): Coverage | undefined => covMerged?.[v]
   const battery = useBattery(ctx.project, ctx.params.cfg)
   // U12: registered prediction power + its timing verdict so the table reads as a dashboard
   const boardQ = useAsync(() => (selected ? archApi.board(selected.scenario_id).catch(() => null) : Promise.resolve(null)), [selected?.scenario_id])
@@ -131,7 +145,7 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
     } },
     // 예측 = which model basis the registered number rests on + whether today's inputs still give it (not a count)
     { key: 'pred', label: '예측 기준', width: 150, firstDir: -1,
-      headTitle: '등록 예측의 기준 = config profile · power params · engine (cfg2 · pmp2 · e11)\n✓ 현재 입력으로 같은 결과 · ⚠ 기준 = 설정/params/DVFS/engine 변경 · ⚠ 데이터 = variant YAML 변경 · ? = 판정 불가\nhover = 기준 구성 · SW timing · 등록 횟수 · 클릭 = ID 복사\n(즉석 Simulate 결과는 표에 표시하지 않음 — hover에 건수)',
+      headTitle: '등록 예측의 기준 = config profile · power params · engine (cfg2 · pmp2 · e11)\n✓ 현재 입력으로 같은 결과 · ⚠ 기준 = 설정/params/DVFS/engine 변경 · ⚠ 데이터 = variant YAML 변경 · ? = 판정 불가\nhover = 기준 구성 · SW timing · 등록 횟수 · B<n> ⓘ 클릭 = 기준 상세 · 그 외 클릭 = ID 복사\n✓/⚠는 표가 뜬 뒤 1~2초 안에 채워짐(…= 확인 중)\n(즉석 Simulate 결과는 표에 표시하지 않음 — hover에 건수)',
       sort: (r) => { const p = cov(r.variant_id)?.current_prediction; return p ? `${({ ok: 0, data: 1, basis: 2, unknown: 3 })[freshnessOf(p).level]}|${p.basis?.label ?? ''}` : null },
       title: (r) => { const c = cov(r.variant_id); if (!c?.current_prediction) return c?.simulation ? `등록 예측 없음 · ${simTooltip(c)}` : '등록 예측 없음'
         return `${predictionTooltip(c.current_prediction, shortIds.get(c.current_prediction.id))}${c.simulation ? `\n\n${simTooltip(c)}` : ''}` },
@@ -139,8 +153,12 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
       render: (r) => { const p = cov(r.variant_id)?.current_prediction; if (!covQ.data) return null
         if (!p) return <span className="faint">—</span>
         const f = freshnessOf(p)
-        return <span style={{ cursor: 'copy' }} onClick={(e) => { e.stopPropagation(); copyId(p.id) }}>
-          <span className={`fr fr-${f.level}`}>{f.text}</span> <span className="mono">{p.basis?.label ?? '기준 ?'}</span></span> } },
+        return <span style={{ cursor: 'copy', display: 'inline-flex', alignItems: 'center', gap: 4 }} onClick={(e) => { e.stopPropagation(); copyId(p.id) }}>
+          {freshPending && !p.freshness ? <span className="fr fr-unknown faint" title="현재 입력으로 다시 계산해도 같은지 확인 중">…</span> : <span className={`fr fr-${f.level}`}>{f.text}</span>}
+          {p.basis?.basis_id
+            ? <BasisInfoButton basisId={p.basis.basis_id} label={p.basis.label} warn={!!p.basis.overrides?.length}
+              title={`예측 기준 ${p.basis.label}${p.basis.overrides?.length ? ` — 기준 외 입력: ${p.basis.overrides.join(', ')}` : ''}\n클릭: 기준 상세`} />
+            : <span className="mono">{p.basis?.label ?? '기준 ?'}</span>}</span> } },
     { key: 'meas', label: '실측', width: 110, firstDir: -1,
       headTitle: '대표 측정 날짜 (실측 우선, 없으면 합성) · SW≠ = 실측 trace로 등록한 예측의 SW build ≠ 측정 SW (정의값 예측은 비교 안 함)\nhover = 측정별 날짜 · SW · silicon · build',
       sort: (r) => { const m = (cov(r.variant_id)?.measurements ?? [])[0]; return m ? `${m.synthetic ? 0 : 1}${m.at ?? ''}` : null },

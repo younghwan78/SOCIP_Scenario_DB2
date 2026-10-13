@@ -190,7 +190,7 @@ def _when(at: str | None) -> datetime:
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
-def coverage(db: Session, scenario_id: str) -> dict[str, dict[str, Any]]:
+def coverage(db: Session, scenario_id: str, *, freshness: bool = False) -> dict[str, dict[str, Any]]:
     """Per variant: simulation evidence count, real / synthetic measurement count, current prediction.
 
     Besides the counts (unchanged), each variant lists its simulation and measurement evidence newest
@@ -242,13 +242,17 @@ def coverage(db: Session, scenario_id: str) -> dict[str, dict[str, Any]]:
     from scenario_db.api.services.prediction_basis import prediction_bases
 
     bases = prediction_bases(db, current)
-    try:
-        fresh = {r["prediction_id"]: r for r in prediction_freshness(db, scenario_id=scenario_id).get("rows", [])}
-    except Exception:  # noqa: BLE001 - freshness is advisory; never break the coverage table
-        fresh = {}
+    # freshness re-resolves every prediction's inputs (~25 ms each); the Scenario table loads it separately
+    # (GET /arch/predictions/freshness) so the 예측 기준 / 실측 columns are not held back by it
+    fresh: dict[str, Any] | None = None
+    if freshness:
+        try:
+            fresh = {r["prediction_id"]: r for r in prediction_freshness(db, scenario_id=scenario_id).get("rows", [])}
+        except Exception:  # noqa: BLE001 - freshness is advisory; never break the coverage table
+            fresh = {}
     for p in current:
         metrics = p.metrics or {}
-        fr = fresh.get(p.id) or {}
+        fr = (fresh or {}).get(p.id) or {}
         row(p.variant_ref)["current_prediction"] = {
             "id": p.id, "total_mw": metrics.get("power", {}).get("total_mw"), "created_at": _iso(p.created_at),
             "run": p.exploration_run_ref, "case_key": p.case_key, "selection_rule": p.selection_rule,
@@ -256,7 +260,8 @@ def coverage(db: Session, scenario_id: str) -> dict[str, dict[str, Any]]:
             "version": int(versions.get(p.variant_ref, 1)),  # n-th registration of this variant (superseded + current)
             "revision": int(versions.get(p.variant_ref, 1)),  # same count, explicit name (not a model version)
             **(bases.get(p.id) or {}),
-            "freshness": {"status": fr.get("status", "unknown"), "reasons": fr.get("reasons", []), "changed": fr.get("changed", [])},
+            **({"freshness": {"status": fr.get("status", "unknown"), "reasons": fr.get("reasons", []),
+                              "changed": fr.get("changed", [])}} if fresh is not None else {}),
         }
     return out
 

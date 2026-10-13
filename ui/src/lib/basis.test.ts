@@ -17,3 +17,16 @@ describe('profile pick follows the active 예측 기준', () => {
     expect(pickProfile(profiles, undefined, { ...basis, config_profile_ref: null })).toBeNull()
   })
 })
+
+describe('basis labels stay short', () => {
+  it('drops the SoC from the DVFS id and the profile prefix', async () => {
+    const { basisShortLabel, shortDvfs } = await import('./basis')
+    expect(shortDvfs('dvfs-exynos2600-sample-v0')).toBe('sample-v0')
+    expect(shortDvfs(null)).toBe('DVFS 기본')
+    expect(basisShortLabel({ code: 'B2', components: 'cfg v2 · pmp v2 · dvfs-exynos2600-sample-v0 · e11', dvfs_table_ref: 'dvfs-exynos2600-sample-v0' }))
+      .toBe('B2 · cfg v2 · pmp v2 · sample-v0 · e11')
+    // an older API spelled the profile id out
+    expect(basisShortLabel({ code: 'B2', components: 'cfg simcfg-proj-sm-s947b-v2 · pmp v2 · DVFS 기본 · e11', dvfs_table_ref: null }))
+      .toBe('B2 · cfg v2 · pmp v2 · DVFS 기본 · e11')
+  })
+})
