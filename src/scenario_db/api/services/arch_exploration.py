@@ -1080,7 +1080,9 @@ def model_status(db: Session, *, project_ref: str | None = None) -> dict[str, An
     for b in prediction_bases(db, pq.all()).values():
         cur = basis_rows.setdefault(b["basis"]["key"], {**b["basis"], "predictions": 0})
         cur["predictions"] += 1
-        sw_rows[b["sw"]["label"]] = sw_rows.get(b["sw"]["label"], 0) + 1
+        # defined timing differs per variant (one hash each): count it as one source, measured builds by label
+        sw_key = "정의값" if b["sw"]["source"] == "defined" else b["sw"]["label"]
+        sw_rows[sw_key] = sw_rows.get(sw_key, 0) + 1
     return {
         "bases": sorted(basis_rows.values(), key=lambda r: -r["predictions"]),
         "sw": [{"label": k, "predictions": v} for k, v in sorted(sw_rows.items(), key=lambda kv: -kv[1])],

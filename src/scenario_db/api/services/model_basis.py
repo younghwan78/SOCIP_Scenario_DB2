@@ -54,7 +54,10 @@ def basis_components(row: Any) -> str:
         if not ref:
             return f"{prefix} 기본"
         tail = str(ref).split("@", 1)
-        return f"{prefix} v{tail[1]}" if len(tail) == 2 and tail[1].isdigit() else f"{prefix} {ref}"
+        if len(tail) == 2 and tail[1].isdigit():
+            return f"{prefix} v{tail[1]}"
+        m = str(ref).rsplit("-v", 1)  # simcfg-proj-x-v2 -> cfg v2
+        return f"{prefix} v{m[1]}" if len(m) == 2 and m[1].isdigit() else f"{prefix} {ref}"
     eng = str(getattr(row, "engine_rev", "") or "").rsplit("/", 1)[-1]
     return " · ".join([ver(row.config_profile_ref, "cfg"), ver(row.power_params_ref, "pmp"),
                        str(row.dvfs_table_ref or "DVFS 기본"), f"e{eng}" if eng.isdigit() else str(row.engine_rev)])
@@ -91,6 +94,10 @@ def create_basis(db: Session, *, project_ref: str, config_profile_ref: str | Non
     if db.get(Project, project_ref) is None:
         raise NotFoundError(f"project not found: {project_ref}")
     cfg = _normalize_profile(db, config_profile_ref)
+    if not power_params_ref and cfg:
+        # pin the profile's own power params so the basis names them (a profile edit cannot change the basis)
+        prof = db.get(SimConfigProfile, cfg)
+        power_params_ref = ((prof.run_config or {}).get("power_params_ref") if prof is not None else None) or None
     pp = _normalize_power_params(db, power_params_ref)
     if dvfs_table_ref and db.get(SocDvfsTable, dvfs_table_ref) is None:
         raise NotFoundError(f"DVFS table not found: {dvfs_table_ref}")

@@ -8,9 +8,8 @@ kind: sim.config_profile
 project_ref: proj-sm-s947b
 soc_ref: soc-exynos2600
 version: 1
-status: approved
-approved_by: system-engineering
-description: "S26+ (SM-S947B) EVT1 정합 기준 설정 — 2026-06 실측 캠페인 합의값"
+status: draft
+description: "단순 모델 데모 기본값 (v1-vfps, BW 80 mW per GB/s 고정, CPU 가정값) — 실측 합의값 아님. 사외 2600 기준은 simcfg v2 (예측 기준 B2)"
 run_config:
   asv_group: 4
   sw_margin: 0.15

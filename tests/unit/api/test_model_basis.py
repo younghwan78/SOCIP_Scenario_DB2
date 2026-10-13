@@ -55,7 +55,7 @@ def test_no_basis_leaves_request_unchanged(monkeypatch):
 def test_diff_components_and_trial_summary():
     new = SimpleNamespace(**{**vars(B), "power_params_ref": "pmp-x-v3@3"})
     assert svc.diff_bases(B, new) == [{"field": "power_params_ref", "from": "pmp-x-v2@2", "to": "pmp-x-v3@3"}]
-    assert svc.basis_components(B) == "cfg simcfg-p-v2 · pmp v2 · dvfs-x-v0 · e11"
+    assert svc.basis_components(B) == "cfg v2 · pmp v2 · dvfs-x-v0 · e11"
     row = SimpleNamespace(trial={"total": 3, "items": {
         "a": {"status": "ok", "delta_mw": -10.0}, "b": {"status": "ok", "delta_mw": 4.0}, "c": {"status": "error"}}})
     s = svc.trial_summary(row)

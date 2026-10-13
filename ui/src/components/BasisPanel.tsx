@@ -70,7 +70,8 @@ export function BasisPanel({ project, socRef, onDone, onClose }: { project: stri
       </tr>)}
       {!q.loading && !(q.data?.items ?? []).length && <tr><td colSpan={7} className="faint">기준이 없습니다. “새 기준”으로 만들고 활성화하면 이후 계산 · 등록이 그 기준으로 기록됩니다.</td></tr>}</tbody>
     </table></div>
-    {draft?.status === 'draft' && active && <TrialView key={draft.id} basis={draft} onPromoted={() => { setTick((t) => t + 1); onDone() }} />}
+    {/* first basis too: promotion re-registers under it and makes it active (the 활성화 button only applies it to new runs) */}
+    {draft?.status === 'draft' && <TrialView key={draft.id} basis={draft} onPromoted={() => { setTick((t) => t + 1); onDone() }} />}
   </section>
 }
 
@@ -106,7 +107,7 @@ function TrialView({ basis, onPromoted }: { basis: ModelBasis; onPromoted: () =>
   return <div style={{ marginTop: 8 }}>
     <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
       <b>{basis.code} 승격</b>
-      {trial?.against && <span className="faint" style={{ fontSize: 12 }}>vs active {trial.against.code}: {trial.diff.length ? trial.diff.map((d) => `${FIELD_LABEL[d.field] ?? d.field} ${d.from ?? '기본'} → ${d.to ?? '기본'}`).join(' · ') : '구성 동일'}</span>}
+      <span className="faint" style={{ fontSize: 12 }}>{trial?.against ? `vs active ${trial.against.code}: ` : '첫 기준 (현재 등록 예측은 기준 미기록): '}{trial ? (trial.diff.length ? trial.diff.map((d) => `${FIELD_LABEL[d.field] ?? d.field} ${d.from ?? '기본'} → ${d.to ?? '기본'}`).join(' · ') : '구성 동일') : ''}</span>
       <span className="grow" />
       {!running && <button className="btn" onClick={start} title="과제의 현재 등록 예측을 이 기준으로 다시 계산 (run만 만들고 등록은 안 함)">{items.length ? '시험 계산 다시' : '시험 계산 시작'}</button>}
       {running && <button className="btn" onClick={() => { stop.current = true }}>중지</button>}
