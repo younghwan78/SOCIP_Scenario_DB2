@@ -186,3 +186,46 @@ def test_catalog_version_selection_is_exact(catalogs):
         svc._normalize_profile(db, "cfg@1")
     with pytest.raises(UnprocessableError):
         svc._normalize_power_params(db, "pmp@1")
+
+
+def test_detail_summaries_of_components():
+    pp = SimpleNamespace(id="pmp-x-v2", version=2, status="draft", soc_ref="soc-x", description="ALL NUMBERS SYNTHETIC", notes=None,
+                         params={"ip_model": "v2-vf", "ref_voltage_mv": 710.0, "ref_fps": 30.0, "ip_clock_power_fraction": 0.3,
+                                 "bw_model": "mif-linear",
+                                 "bw": {"e_read_mw_per_gbps": 50.0, "e_write_mw_per_gbps": 80.0,
+                                        "mif_opps": [{"mhz": 421, "base_mw": 25, "capacity_mbs": 3000}]},
+                                 "cpu": {"clusters": [{"name": "BIG", "core_type": "BIG", "cores": 1,
+                                                       "opps": [{"mhz": 1000.0, "mv": 650.0, "mw_per_core": 100.0},
+                                                                {"mhz": 3000.0, "mv": 950.0, "mw_per_core": 900.0}],
+                                                       "leakage": {"mw_per_core_at_ref": 30.0}}]},
+                                 "calibration": {"source_evidence": [], "factor_by_ip": {}}})
+    d = svc._power_params_detail(pp, "pmp-x-v2@2")
+    assert d["synthetic"] and d["model"]["bw_model"] == "mif-linear"
+    assert d["bw"]["read_mw_per_gbps"] == 50.0 and d["bw"]["mif_opps"] == [{"mhz": 421, "base_mw": 25, "capacity_mbs": 3000}]
+    assert d["cpu"]["clusters"][0] | {} == {"name": "BIG", "core_type": "BIG", "cores": 1, "opps": 2, "max_mhz": 3000.0,
+                                             "max_mv": 950.0, "max_mw_per_core": 900.0, "leak_mw_per_core": 30.0}
+    assert d["calibration"] == {"fit": False, "ips": 0, "evidence": 0}
+    assert svc._power_params_detail(None, "pmp-gone@1") == {"ref": "pmp-gone@1", "missing": True}
+    assert svc._power_params_detail(None, None) is None
+
+    dv = SimpleNamespace(id="dvfs-x-sample-v0", dvfs_version=0, evt_hint="SAMPLE", compatibility_scope="soc",
+                         source={"note": "SYNTHETIC placeholder", "source_revision": "2026-09-25"},
+                         domains={"MIF": {"levels": [{"speed_mhz": 421.0}, {"speed_mhz": 2730.0}]}, "CAM": {"levels": []}})
+    d = svc._dvfs_detail(dv, dv.id)
+    assert d["synthetic"] and d["domains"] == [{"name": "CAM", "levels": 0, "min_mhz": None, "max_mhz": None},
+                                               {"name": "MIF", "levels": 2, "min_mhz": 421.0, "max_mhz": 2730.0}]
+
+    prof = SimpleNamespace(id="simcfg-p-v2", version=2, status="draft", approved_by=None, description="full-feature", notes=None,
+                           run_config={"power_model": "v2-vf", "power_params_ref": "pmp-x-v2"}, rail_domain_map={"R1": "MIF", "R2": "CPU", "R3": "CPU"})
+    d = svc._profile_detail(prof, prof.id)
+    assert d["rail_domains"] == ["CPU", "MIF"] and d["run_config"]["power_model"] == "v2-vf" and not d["synthetic"]
+
+
+def test_timing_response_reports_the_resolved_basis():
+    from scenario_db.api.services.timing_budget import _basis_fields
+
+    db = MagicMock()
+    db.get.return_value = SimpleNamespace(code="B2")
+    shim = SimpleNamespace(basis_ref="basis-p-2", basis_overrides=["power_params", "power_params"])
+    assert _basis_fields(db, shim) == {"basis_ref": "basis-p-2", "basis_code": "B2", "basis_overrides": ["power_params"]}
+    assert _basis_fields(db, SimpleNamespace(basis_ref=None)) == {"basis_ref": None, "basis_code": None, "basis_overrides": []}

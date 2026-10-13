@@ -1,4 +1,4 @@
-# 사외(집) main target용 전체 기능 확인 profile — v1(실측 캠페인 합의값)은 그대로 두고 version 2로 추가.
+# 사외(집) main target용 전체 기능 확인 profile — v1(단순 모델 데모 기본값)은 그대로 두고 version 2로 추가.
 # power_params_ref pmp-exynos2600-v2 (SYNTHETIC): CPU topology · v2-vf IP · mif-linear BW · CPU power 포함.
 # 목록의 최신 version이므로 Compare 즉석 예측과 rail map 조회에 이 profile이 쓰인다.
 id: simcfg-proj-sm-s947b-v2
@@ -8,9 +8,7 @@ project_ref: proj-sm-s947b
 soc_ref: soc-exynos2600
 version: 2
 status: draft
-description: S26+ (SM-S947B) off-site full-feature profile — power model v2 (v2-vf
-  IP, mif-linear BW, CPU topology). SYNTHETIC coefficients (pmp-exynos2600-v2); v1
-  stays the 2026-06 measurement-campaign baseline.
+description: "사외 2600 전체 기능 profile — power model v2 (v2-vf IP · mif-linear BW · CPU topology). 계수는 SYNTHETIC (pmp-exynos2600-v2) — 실측 합의값 아님. v1은 단순 모델 데모 기본값"
 run_config:
   asv_group: 4
   sw_margin: 0.15

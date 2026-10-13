@@ -56,6 +56,18 @@ def _shim(request, variant_id: str) -> SimulateRequest:
     )
 
 
+def _basis_fields(db: Session, shim: SimulateRequest) -> dict:
+    """Basis the shim resolved to (after ``_apply_config_profile``): id, code and the overridden inputs."""
+    ref = getattr(shim, "basis_ref", None)
+    if not isinstance(ref, str) or not ref:
+        return {"basis_ref": None, "basis_code": None, "basis_overrides": []}
+    from scenario_db.db.models.exploration import ModelBasis
+
+    row = db.get(ModelBasis, ref)
+    return {"basis_ref": ref, "basis_code": row.code if row is not None else None,
+            "basis_overrides": sorted(set(getattr(shim, "basis_overrides", None) or []))}
+
+
 def _load(db: Session, shim: SimulateRequest, use_default_dvfs: bool):
     graph = load_canonical_graph(db, shim.scenario_id, shim.variant_id)
     if shim.soc_ref and _graph_soc_ref(graph) and str(shim.soc_ref) != str(_graph_soc_ref(graph)):
@@ -144,6 +156,7 @@ def analyze_timing_budget_request(
         variant_id=request.variant_id,
         config_profile_ref=profile,
         dvfs_table_ref=ref,
+        **_basis_fields(db, shim),
         report=report,
     )
 

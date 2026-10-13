@@ -37,6 +37,13 @@ def create_basis(request: BasisCreateRequest, db: Session = Depends(get_db),
     return svc.create_basis(db, user=principal.subject, **request.model_dump())
 
 
+@router.get("/{basis_id}")
+def basis_detail(basis_id: str, db: Session = Depends(get_db)):
+    """Basis with its components' content (profile run_config, power params summary, DVFS domains), input drift,
+    trial summary and how many current predictions rest on it (UI: 기준 상세)."""
+    return svc.basis_detail(db, basis_id)
+
+
 @router.get("/{basis_id}/trial")
 def get_trial(basis_id: str, db: Session = Depends(get_db)):
     return svc.get_trial(db, basis_id)

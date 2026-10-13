@@ -23,9 +23,11 @@ def coverage_summary(db: Session = Depends(get_db)):
 
 
 @router.get("/calibration/coverage")
-def coverage(scenario_id: str, db: Session = Depends(get_db)):
-    """Per-variant evidence coverage: simulation / real + synthetic measurement counts and current prediction."""
-    return cal.coverage(db, scenario_id)
+def coverage(scenario_id: str, freshness: bool = False, db: Session = Depends(get_db)):
+    """Per-variant evidence coverage: simulation / real + synthetic measurement counts and current prediction.
+    ``freshness=true`` also re-checks each current prediction against today's inputs (slow; the UI uses
+    /arch/predictions/freshness instead)."""
+    return cal.coverage(db, scenario_id, freshness=freshness)
 
 
 @router.get("/calibration/ip-bandwidth")

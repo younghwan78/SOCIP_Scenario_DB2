@@ -89,10 +89,13 @@ def test_routes(monkeypatch):
     c = _client(monkeypatch,
                 **{"cal.list_measurements": lambda db, scenario_id=None: [{"id": "m", "scenario_id": scenario_id}],
                    "cal.measurement_detail_view": lambda db, mid: {"id": mid},
-                   "cal.coverage": lambda db, scenario_id: {"v1": {"simulation": 1, "s": scenario_id}},
+                   "cal.coverage": lambda db, scenario_id, freshness=False: {"v1": {"simulation": 1, "s": scenario_id, "f": freshness}},
                    "cal.coverage_summary": lambda db: {"sc": {"simulation": 3}},
                    "lib.sw_timing": lambda db, scenario_id=None: {"tasks": [], "measured": [], "s": scenario_id}})
     assert c.get("/api/v1/calibration/coverage", params={"scenario_id": "sc"}).json()["v1"]["s"] == "sc"
+    # freshness is opt-in (slow); the Scenario table loads it from /arch/predictions/freshness
+    assert c.get("/api/v1/calibration/coverage", params={"scenario_id": "sc"}).json()["v1"]["f"] is False
+    assert c.get("/api/v1/calibration/coverage", params={"scenario_id": "sc", "freshness": "true"}).json()["v1"]["f"] is True
     assert c.get("/api/v1/calibration/coverage").status_code == 422
     assert c.get("/api/v1/calibration/coverage-summary").json()["sc"]["simulation"] == 3
     assert c.get("/api/v1/calibration/measurements", params={"scenario_id": "s"}).json()[0]["scenario_id"] == "s"

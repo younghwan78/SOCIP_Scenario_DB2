@@ -237,7 +237,7 @@ export interface EvidenceResult { evidence_id: string; existed: boolean; params_
 
 export const timingApi = {
   variant: (scenarioId: string, variantId: string, options: TimingOptions, configProfileRef?: string | null, config?: TimingConfig | null) =>
-    postJson<{ report: TimingReport; dvfs_table_ref: string | null; config_profile_ref?: string | null }>('/timing-budget/variant',
+    postJson<{ report: TimingReport; dvfs_table_ref: string | null; config_profile_ref?: string | null; basis_ref?: string | null; basis_code?: string | null; basis_overrides?: string[] }>('/timing-budget/variant',
       { scenario_id: scenarioId, variant_id: variantId, options, config_profile_ref: configProfileRef ?? undefined, ...cfgBody(config) }),
   dvfsWhatif: (scenarioId: string, variantId: string, options: TimingOptions, configProfileRef?: string | null, shifts = [-2, -1, 1, 2], combos?: Record<string, number>[] | null, config?: TimingConfig | null) =>
     postJson<DvfsWhatIf>('/timing-budget/dvfs-whatif',

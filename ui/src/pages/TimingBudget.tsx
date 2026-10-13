@@ -72,7 +72,10 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
   const guard = useRegistrationGuard([{ scenario_id: scenario, variant_id: variant }], ctx.project, r?.condition_hash ?? '')
   const whatif = wq.data?.report.whatif ?? []
   const effTp = tpParam ?? (r?.stages?.find((x) => x.id === 'nrt')?.throughput === 'pipelined' ? 'pipelined' : r ? 'stage' : policyTp)
-  const cond: Condition = { statistic, scale, eis, cpuModel: measured?.cpu ? 'profile' : cpuModel, throughput: effTp, margin, profile: q.data?.config_profile_ref ?? cfg ?? null, overrides, measured, powerParams: pp || null }
+  const cond: Condition = { statistic, scale, eis, cpuModel: measured?.cpu ? 'profile' : cpuModel, throughput: effTp, margin, profile: q.data?.config_profile_ref ?? cfg ?? null, overrides, measured, powerParams: pp || null,
+    basis: q.data?.basis_code ? { code: q.data.basis_code, overrides: q.data.basis_overrides ?? [] } : null }
+  // B2 vs B2*: the server's resolution once calculated; before that, what the URL already says
+  const basisOv = q.data ? (q.data.basis_overrides ?? []) : sp.basis ? [...(sp.followsBasis ? [] : ['config_profile']), ...(pp && pp !== sp.basis.power_params_ref ? ['power_params'] : [])] : undefined
 
   return (
     <div className="page tb-page">
@@ -96,11 +99,13 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
             onBlur={() => { const v = Math.round(Number(marginDraft)); set('margin', Number.isFinite(v) && v >= 5 && v <= 60 && v !== 25 ? String(v) : undefined) }}
             onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} /><span className="faint" style={{ fontSize: 12 }}>%</span>
         </div>
-        <ProfileSelect profiles={sp.profiles} value={cfg} onChange={(v) => set('cfg', v)} basis={sp.basis} followsBasis={sp.followsBasis} />
+        <ProfileSelect profiles={sp.profiles} value={cfg} onChange={(v) => set('cfg', v)} basis={sp.basis} followsBasis={sp.followsBasis} overrides={basisOv} />
         <MeasuredPicker options={measQ.data ?? []} value={measured} onChange={setMeasured} />
-        <label style={{ display: 'inline-flex', gap: 6, alignItems: 'center', fontSize: 13 }} className="muted" title="power model 계수 버전 — 기본은 설정 profile의 것. 보정(S5)으로 만든 draft를 골라 비교 · 등록">power params
-          <select value={pp} onChange={(e) => set('pp', e.target.value || undefined)} aria-label="power params">
-            <option value="">profile 기본</option>
+        <label style={{ display: 'inline-flex', gap: 6, alignItems: 'center', fontSize: 13 }} className="muted"
+          title={sp.basis ? `power model 계수 버전 — 기본은 예측 기준 ${sp.basis.code}가 고정한 ${sp.basis.power_params_ref ?? 'profile 계수'}. 다른 것을 고르면 ${sp.basis.code}*(기준 외)` : 'power model 계수 버전 — 기본은 설정 profile의 것. 보정(S5)으로 만든 draft를 골라 비교 · 등록'}>power params
+          <select value={pp} onChange={(e) => set('pp', e.target.value || undefined)} aria-label="power params" style={{ maxWidth: 270 }}
+            className={sp.basis && pp && pp !== sp.basis.power_params_ref ? 'sel-off-basis' : undefined}>
+            <option value="">{sp.basis ? `기준 ${sp.basis.code} · ${sp.basis.power_params_ref ?? 'profile 계수'}` : 'profile 기본'}</option>
             {(ppQ.data ?? []).map((p) => <option key={p.ref} value={p.ref}>{p.ref}{p.calibrated ? ' · 보정' : ''}{p.status === 'draft' ? ' · draft' : ''}</option>)}
           </select></label>
         <span className="grow" />

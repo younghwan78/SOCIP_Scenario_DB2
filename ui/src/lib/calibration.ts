@@ -51,6 +51,8 @@ export interface PredictionBasis {
   config_profile_ref: string | null; config_version: number | null
   power_params_ref: string | null; power_params_version: number | null; power_params_hash?: string | null
   dvfs_table_ref: string | null; engine_rev: string | null
+  /** registry basis (B<n>) the run resolved to; overrides non-empty = B<n>* */
+  basis_id?: string | null; code?: string | null; basis_status?: string | null; overrides?: string[]
 }
 
 const DATA_SECTIONS = /^(variant_doc|pipeline|power_options)$/

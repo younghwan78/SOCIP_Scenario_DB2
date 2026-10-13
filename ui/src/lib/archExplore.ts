@@ -353,7 +353,19 @@ export function caseCount(o: RunOptions, domains = 3): number {
   return slices * comp * (o.dvfs_headroom_levels + 1) ** domains
 }
 
-async function send<T>(method: string, path: string, body?: unknown): Promise<T> {
+const inflightGet = new Map<string, Promise<unknown>>()
+function send<T>(method: string, path: string, body?: unknown): Promise<T> {
+  // concurrent identical GETs (StrictMode double effects, two panels) share one request
+  if (method !== 'GET' || body) return sendNow<T>(method, path, body)
+  const hit = inflightGet.get(path)
+  if (hit) return hit as Promise<T>
+  const p = sendNow<T>(method, path)
+  inflightGet.set(path, p)
+  const done = () => { if (inflightGet.get(path) === p) inflightGet.delete(path) }
+  p.then(done, done)
+  return p
+}
+async function sendNow<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetchAdmitted(`${API_BASE}${path}`, { method, headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined })
   if (!res.ok) {
     let detail = ''
