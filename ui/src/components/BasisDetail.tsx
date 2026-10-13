@@ -11,7 +11,7 @@ const STATUS: Record<string, [string, string]> = { active: ['v-ok', 'active · �
 const RUN_CONFIG_LABEL: [string, string, (v: unknown) => string][] = [
   ['power_model', 'power model', (v) => POWER_MODEL_LABEL[String(v)] ?? String(v)],
   ['power_params_ref', 'power params (profile)', String],
-  ['include_cpu_power', 'CPU 전력', (v) => (v ? 'cluster topology (OPP · DSU · leakage)' : '가정값 (flat)')],
+  ['include_cpu_power', 'CPU 전력', (v) => (v ? '포함 (선택한 모델과 입력으로 계산)' : '제외')],
   ['memory_rail', 'memory rail', String],
   ['bw_power_coeff', 'BW 계수 (v1)', (v) => `${v} mW per GB/s`],
   ['asv_group', 'ASV group', String],
@@ -43,6 +43,7 @@ export function BasisDetailBody({ d, overrides }: { d: BasisDetail; overrides?: 
       <KV k="입력 상태">{d.inputs.current
         ? <span className="v-ok-text">✓ 만들 때와 같은 입력 (profile · params · DVFS · engine)</span>
         : <span className="err-text">⚠ 입력이 바뀜: {d.inputs.changed.join(', ')} — 이 기준으로는 계산 · 승격 불가, 새 기준 필요</span>}</KV>
+      {!d.inputs.current && <div className="faint">아래 구성 상세는 현재 DB 값입니다. 생성 당시 입력과 다를 수 있습니다.</div>}
       <KV k="승격">{b.activated_at ? `${dt(b.activated_at)}${b.activated_by ? ` · ${b.activated_by}` : ''}` : '—'}</KV>
       <KV k="생성">{dt(b.created_at)}{b.created_by ? ` · ${b.created_by}` : ''}{d.parent ? <> · 이전 기준 <span className="mono">{d.parent.code}</span> ({d.parent.status})</> : null}</KV>
       {b.notes && <KV k="메모">{b.notes}</KV>}
@@ -84,7 +85,7 @@ export function BasisDetailBody({ d, overrides }: { d: BasisDetail; overrides?: 
           <tbody>{pp.cpu.clusters.map((c) => <tr key={c.name}><td className="mono">{c.name}</td><td className="mono">{c.core_type ?? ''} ×{c.cores ?? '?'}</td><td className="mono">{c.opps}</td>
             <td className="mono">{num(c.max_mhz)} MHz · {num(c.max_mv)} mV</td><td className="mono">{num(c.max_mw_per_core)}</td><td className="mono">{num(c.leak_mw_per_core, 1)}</td></tr>)}</tbody></table>}
         {pp.cpu?.source && <div className="faint">CPU: {pp.cpu.source}</div>}
-        <KV k="보정">{pp.calibration?.fit ? `실측 fit · IP ${pp.calibration.ips}개 · evidence ${pp.calibration.evidence}건` : '없음 (원 계수)'}</KV>
+        <KV k="보정">{pp.calibration?.fit ? `fit · IP ${pp.calibration.ips}개 · evidence ${pp.calibration.evidence}건` : '없음 (원 계수)'}</KV>
         {pp.notes && <KV k="notes"><span className="faint">{pp.notes}</span></KV>}
       </>}
     </Sec>

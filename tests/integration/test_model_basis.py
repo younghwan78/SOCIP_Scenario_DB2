@@ -90,6 +90,44 @@ def test_retired_basis_can_be_recreated_for_rollback(engine, registry):
         svc.activate_basis(db, rollback["id"])
 
 
+def test_detail_counts_current_basis_predictions_and_reports_catalog_drift(engine, registry):
+    from scenario_db.api.services import calibration
+    from scenario_db.db.models.definition import Scenario
+    from scenario_db.db.models.exploration import ArchExplorationRun, Prediction
+    from scenario_db.sim.arch_exploration import ENGINE_REV
+
+    with Session(engine) as db:
+        basis = create(db, registry)
+        sid = f"scenario-{registry[0]}"
+        db.add(Scenario(id=sid, project_ref=registry[0], schema_version="1.0", metadata_={}, pipeline={}, yaml_sha256="test"))
+        db.flush()
+        for label, overrides, basis_ref in (("plain", [], basis["id"]), ("override", ["config"], basis["id"]),
+                                             ("other", [], "another-basis")):
+            db.add(ArchExplorationRun(id=f"run-{sid}-{label}", title=label, scenario_type="test", project_ref=registry[0],
+                                     spec={"input_selection": {"basis_ref": basis_ref, "basis_overrides": overrides}},
+                                     variants=[], errors=[], summary={}, engine_rev=ENGINE_REV, input_hash="test"))
+        db.flush()
+        for label, state, variant in (("plain", "current", "v1"), ("override", "current", "v2"),
+                                       ("plain", "superseded", "v1"), ("other", "current", "v3")):
+            db.add(Prediction(id=f"pred-{sid}-{label}-{state}", scenario_ref=sid, variant_ref=variant,
+                              project_ref=registry[0], status=state, exploration_run_ref=f"run-{sid}-{label}",
+                              case_key="base", selection_rule="auto:min-power", selected_by="auto", metrics={}, input_hash="test"))
+        db.flush()
+        detail = svc.basis_detail(db, basis["id"])
+        assert detail["inputs"]["current"] and detail["inputs"]["changed"] == []
+        assert detail["predictions"] == {"current": 2, "ad_hoc": 1, "scenarios": 1}
+        assert detail["profile"]["version"] == 1
+        assert "freshness" not in calibration.coverage(db, sid)["v1"]["current_prediction"]
+        assert "freshness" in calibration.coverage(db, sid, freshness=True)["v1"]["current_prediction"]
+        profile = db.get(SimConfigProfile, registry[1])
+        profile.run_config = {"bw_power_mw_per_gbps": 99}
+        db.flush()
+        changed = svc.basis_detail(db, basis["id"])
+        assert not changed["inputs"]["current"] and changed["inputs"]["changed"] == ["config_profile"]
+        assert changed["profile"]["run_config"]["bw_power_mw_per_gbps"] == 99
+        assert changed["basis"]["input_stamp"] == basis["input_stamp"]
+
+
 def test_concurrent_creation_deduplicates_and_activation_serializes(engine, registry):
     gate = Barrier(2)
 

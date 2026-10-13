@@ -1,6 +1,7 @@
 // Architecture exploration → predictions (current/superseded) → review reports.
 // Backend: /arch/exploration/runs, /arch/predictions/*, /arch/reports (src/scenario_db/api/routers/arch_exploration.py)
 import { API_BASE, ApiError } from './api'
+import { authVersion } from './auth'
 import { fetchAdmitted, type Statistic } from './timingBudget'
 import type { VariantFailure } from '../components/VariantFailures'
 
@@ -357,11 +358,12 @@ const inflightGet = new Map<string, Promise<unknown>>()
 function send<T>(method: string, path: string, body?: unknown): Promise<T> {
   // concurrent identical GETs (StrictMode double effects, two panels) share one request
   if (method !== 'GET' || body) return sendNow<T>(method, path, body)
-  const hit = inflightGet.get(path)
+  const key = `${path}|auth:${authVersion()}`
+  const hit = inflightGet.get(key)
   if (hit) return hit as Promise<T>
   const p = sendNow<T>(method, path)
-  inflightGet.set(path, p)
-  const done = () => { if (inflightGet.get(path) === p) inflightGet.delete(path) }
+  inflightGet.set(key, p)
+  const done = () => { if (inflightGet.get(key) === p) inflightGet.delete(key) }
   p.then(done, done)
   return p
 }
