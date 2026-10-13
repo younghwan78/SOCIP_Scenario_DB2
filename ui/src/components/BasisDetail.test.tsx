@@ -8,12 +8,14 @@ import { basisApi, type BasisDetail } from '../lib/basis'
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 afterEach(() => vi.restoreAllMocks())
-const detail = {
-  basis: { id: 'basis-p-1', code: 'B1', status: 'active', components: 'cfg v1', content_hash: 'abc', engine_rev: 'engine/1' },
+const detail: BasisDetail = {
+  basis: { id: 'basis-p-1', code: 'B1', status: 'active', components: 'cfg v1', content_hash: 'abc', engine_rev: 'engine/1',
+    project_ref: 'p', seq: 1, title: null, config_profile_ref: 'cfg', power_params_ref: null, dvfs_table_ref: null,
+    parent_ref: null, notes: null, created_by: null, created_at: null, activated_by: null, activated_at: null },
   parent: null, inputs: { current: false, changed: ['config_profile'], engine_now: 'engine/1' },
   profile: { id: 'cfg', version: 2, status: 'draft', run_config: { include_cpu_power: false } },
   power_params: null, dvfs: null, predictions: { current: 0, ad_hoc: 0, scenarios: 0 },
-} as BasisDetail
+}
 
 it('distinguishes changed catalog details from the original basis and excluded CPU power', () => {
   const html = renderToStaticMarkup(<BasisDetailBody d={detail} overrides={['config']} />)
