@@ -78,6 +78,18 @@ def test_reject_foreign_project_and_profile_version(engine, registry):
             db.commit()
 
 
+def test_retired_basis_can_be_recreated_for_rollback(engine, registry):
+    with Session(engine) as db:
+        first = create(db, registry)
+        svc.activate_basis(db, first["id"])
+        other = svc.create_basis(db, project_ref=registry[0])
+        svc.activate_basis(db, other["id"])
+        rollback = create(db, registry, parent_ref=first["id"])
+        assert not rollback["existed"] and rollback["id"] != first["id"]
+        assert rollback["content_hash"] == first["content_hash"]
+        svc.activate_basis(db, rollback["id"])
+
+
 def test_concurrent_creation_deduplicates_and_activation_serializes(engine, registry):
     gate = Barrier(2)
 

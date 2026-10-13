@@ -170,7 +170,8 @@ def create_basis(db: Session, *, project_ref: str, config_profile_ref: str | Non
     stamp = _input_stamp(db, project_ref, cfg, pp, dvfs_table_ref)
     digest = hashlib.sha256((content_hash(project_ref, cfg, pp, dvfs_table_ref, ENGINE_REV)
                              + json.dumps(stamp, sort_keys=True)).encode()).hexdigest()
-    same = db.query(ModelBasis).filter(ModelBasis.project_ref == project_ref, ModelBasis.content_hash == digest).first()
+    same = db.query(ModelBasis).filter(ModelBasis.project_ref == project_ref, ModelBasis.content_hash == digest,
+                                      ModelBasis.status != "retired").first()
     if same is not None:
         return basis_dict(same) | {"existed": True}
     seq = int(db.query(func.coalesce(func.max(ModelBasis.seq), 0)).filter(ModelBasis.project_ref == project_ref).scalar() or 0) + 1

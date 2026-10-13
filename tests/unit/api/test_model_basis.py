@@ -104,3 +104,85 @@ def test_run_trial_item_stores_the_dry_run(monkeypatch):
     assert calls["basis"] is draft and calls["dry_run"] is True
     assert out["status"] == "ok" and out["run_id"] == "EXP-1" and out["delta_mw"] == -20.0
     assert draft.trial["items"]["P1"]["new_total_mw"] == 780.0
+
+
+@pytest.fixture
+def catalogs():
+    from scenario_db.db.models.capability import PowerModelParams, SimConfigProfile, SocDvfsTable
+    from scenario_db.db.models.definition import Project
+
+    rows = {
+        Project: SimpleNamespace(metadata_={"soc_ref": "soc-exynos2600"}, globals_={}),
+        SimConfigProfile: SimpleNamespace(version=2, project_ref="p", soc_ref="soc-exynos2600",
+                                         run_config={"fps": 30, "sw_margin": 1.1}),
+        PowerModelParams: SimpleNamespace(version=2, soc_ref="soc-exynos2600", params={"bw": {"a": 10}}),
+        SocDvfsTable: SimpleNamespace(id="dvfs", dvfs_version=1, soc_ref="soc-exynos2600", domains={},
+                                     compatibility_scope="soc", source_project_ref=None),
+    }
+    db = MagicMock()
+    db.get.side_effect = lambda cls, key: rows.get(cls)
+
+    def query(cls):
+        q = MagicMock()
+        for method in ("filter_by", "populate_existing", "order_by"):
+            getattr(q, method).return_value = q
+        q.one_or_none.return_value = q.first.return_value = rows.get(cls)
+        return q
+
+    db.query.side_effect = query
+    return db, rows
+
+
+def test_basis_stamp_is_canonical_and_detects_same_version_coefficient_edit(catalogs):
+    from scenario_db.db.models.capability import SimConfigProfile
+    from scenario_db.sim.arch_exploration import ENGINE_REV
+
+    db, rows = catalogs
+    stamp = svc._input_stamp(db, "p", "cfg", "pmp@2", "dvfs")
+    rows[SimConfigProfile].run_config = {"sw_margin": 1.1, "fps": 30}
+    assert svc._input_stamp(db, "p", "cfg", "pmp@2", "dvfs") == stamp
+    basis = SimpleNamespace(project_ref="p", config_profile_ref="cfg", power_params_ref="pmp@2",
+                            dvfs_table_ref="dvfs", input_stamp=stamp, engine_rev=ENGINE_REV)
+    svc._assert_inputs(db, basis)
+    rows[SimConfigProfile].run_config = {"fps": 60}
+    with pytest.raises(UnprocessableError, match="inputs changed"):
+        svc._assert_inputs(db, basis)
+
+
+@pytest.mark.parametrize("component,field,value", [
+    ("SimConfigProfile", "project_ref", "foreign"),
+    ("SimConfigProfile", "soc_ref", "foreign-soc"),
+    ("PowerModelParams", "soc_ref", "foreign-soc"),
+    ("SocDvfsTable", "soc_ref", "foreign-soc"),
+])
+def test_stamp_rejects_component_scope_mismatch(catalogs, component, field, value):
+    import scenario_db.db.models.capability as models
+
+    db, rows = catalogs
+    setattr(rows[getattr(models, component)], field, value)
+    with pytest.raises(UnprocessableError, match="another"):
+        svc._input_stamp(db, "p", "cfg", "pmp@2", "dvfs")
+
+
+def test_project_only_dvfs_and_missing_catalog_cannot_be_used(catalogs):
+    from scenario_db.db.models.capability import SocDvfsTable
+    from scenario_db.exceptions import NotFoundError
+
+    db, rows = catalogs
+    rows[SocDvfsTable].compatibility_scope = "project"
+    rows[SocDvfsTable].source_project_ref = "foreign"
+    with pytest.raises(UnprocessableError, match="another project"):
+        svc._input_stamp(db, "p", None, None, "dvfs")
+    rows[SocDvfsTable] = None
+    with pytest.raises(NotFoundError):
+        svc._input_stamp(db, "p", None, None, "missing")
+
+
+def test_catalog_version_selection_is_exact(catalogs):
+    db, _ = catalogs
+    assert svc._normalize_profile(db, "cfg@2") == "cfg"
+    assert svc._normalize_power_params(db, "pmp") == "pmp@2"
+    with pytest.raises(UnprocessableError):
+        svc._normalize_profile(db, "cfg@1")
+    with pytest.raises(UnprocessableError):
+        svc._normalize_power_params(db, "pmp@1")
