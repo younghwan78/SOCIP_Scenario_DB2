@@ -108,6 +108,9 @@ def run_simulation_request(db: Session, request: SimulateRequest, *, requested_b
         config_profile_ref=config_profile_stamp,
     )
     persisted_evidence_payload: dict | None = None
+    if request.basis_ref:
+        evidence = evidence.model_copy(update={"run": evidence.run.model_copy(update={
+            "basis_ref": request.basis_ref, "basis_overrides": request.basis_overrides or None})})
     if request.persist and requested_by:
         evidence = evidence.model_copy(update={"run": evidence.run.model_copy(update={"writer": requested_by})})
     if request.persist:
@@ -159,6 +162,10 @@ def _apply_config_profile(db: Session, request: SimulateRequest) -> str | None:
     profile is the same physics.)
     """
     stamp = None
+    # 예측 기준: the request's basis (or the project's active one) fills profile / params / DVFS first
+    from scenario_db.api.services.model_basis import apply_basis
+
+    apply_basis(db, request)
     if request.config_profile_ref:
         stamp = _merge_config_profile(db, request)
     _apply_power_params(db, request)

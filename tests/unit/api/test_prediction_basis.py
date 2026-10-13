@@ -14,3 +14,14 @@ def test_basis_label_recorded_and_legacy():
 def test_sw_short():
     assert _sw_short("sw-vendor-v1.2.3") == "1.2.3"
     assert _sw_short(None) is None
+
+
+def test_soc_short_and_sw_timing_hash():
+    from scenario_db.api.services.prediction_basis import soc_short, sw_timing_hash
+
+    assert soc_short("soc-exynos2600") == "2600" and soc_short(None) is None
+    doc = {"node_configs": {"eis": {"sw_timing": {"mean_ms": 3.0}}, "mfc": {"mode": "x"}}}
+    h = sw_timing_hash(doc)
+    assert h and len(h) == 6
+    assert sw_timing_hash({"node_configs": {"eis": {"sw_timing": {"mean_ms": 3.1}}}}) != h  # value change -> new id
+    assert sw_timing_hash({"node_configs": {"mfc": {}}}) is None

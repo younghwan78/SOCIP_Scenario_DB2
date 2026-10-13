@@ -19,6 +19,7 @@ import { ThermalWatchView } from '../components/ThermalWatch'
 import { useSimProfiles } from '../lib/simProfile'
 import type { Ctx as AppCtx } from '../App'
 import { RecomputePanel } from '../components/RecomputePanel'
+import { BasisPanel } from '../components/BasisPanel'
 import { PredictionCollaboration } from '../components/PredictionCollaboration'
 
 const regProv = (r: BoardRow): Prov => ({
@@ -115,10 +116,14 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
           {target && <span className="mono">({maText(target, battery)}@Vbat)</span>}</label>
         <span className="faint" style={{ fontSize: 12 }}>등록: Timing Budget (variant 하나 · 조건 지정) 또는 조합 탐색 (일괄 · 최저 power 조합). 조건 열 클릭 = 그 조건으로 Timing Budget 열기.</span>
         <span className="grow" />
+        {ctx.project && <button className="btn" onClick={() => ctx.navigate(undefined, { bp: ctx.params.bp ? undefined : '1' }, true)}
+          title="예측 기준 (설정 profile · power params · DVFS · engine) 관리 · 새 기준 시험 계산 → 승격">예측 기준{simRef.basis ? ` ${simRef.basis.code}` : ''}…</button>}
         <button className="btn" onClick={() => ctx.navigate(undefined, { rc: ctx.params.rc ? undefined : '1' }, true)}
           title="등록 조건 그대로(또는 새 power params로) 다시 계산해 재등록 — 입력 변경(stale) 예측 정리 · 보정 params 반영">재계산…</button>
         <a className="btn" href="#/explore">조합 탐색 →</a>
       </div>
+      {ctx.params.bp && ctx.project && <BasisPanel project={ctx.project} socRef={(ctx.catalog ?? []).find((c) => c.project_id === ctx.project)?.soc_ref}
+        onDone={() => setTick((t) => t + 1)} onClose={() => ctx.navigate(undefined, { bp: undefined }, true)} />}
       {ctx.params.rc && <RecomputePanel key={`${ctx.project}:${sf ?? ''}:${ctx.params.pp ?? ''}`} rows={rows} staleIds={new Set(stale.keys())} params={ppQ.data ?? []} initialParams={ctx.params.pp}
         onDone={() => setTick((t) => t + 1)} onClose={() => ctx.navigate(undefined, { rc: undefined, pp: undefined }, true)} />}
       {q.error && <div className="err">{q.error}</div>}

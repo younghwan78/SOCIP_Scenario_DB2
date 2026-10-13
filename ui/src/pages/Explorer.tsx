@@ -142,13 +142,14 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
         return <span style={{ cursor: 'copy' }} onClick={(e) => { e.stopPropagation(); copyId(p.id) }}>
           <span className={`fr fr-${f.level}`}>{f.text}</span> <span className="mono">{p.basis?.label ?? '기준 ?'}</span></span> } },
     { key: 'meas', label: '실측', width: 110, firstDir: -1,
-      headTitle: '대표 측정 날짜 (실측 우선, 없으면 합성) · SW≠ = 등록 예측의 SW timing과 측정 SW가 다름\nhover = 측정별 날짜 · SW · silicon · build',
+      headTitle: '대표 측정 날짜 (실측 우선, 없으면 합성) · SW≠ = 실측 trace로 등록한 예측의 SW build ≠ 측정 SW (정의값 예측은 비교 안 함)\nhover = 측정별 날짜 · SW · silicon · build',
       sort: (r) => { const m = (cov(r.variant_id)?.measurements ?? [])[0]; return m ? `${m.synthetic ? 0 : 1}${m.at ?? ''}` : null },
       title: (r) => { const c = cov(r.variant_id); return c ? measTooltip(c) : '' },
       render: (r) => { const c = cov(r.variant_id); if (!covQ.data) return null
         const m = (c?.measurements ?? []).find((x) => x.shown) ?? (c?.measurements ?? [])[0]
         if (!c || !m) return c && (c.measurement || c.synthetic) ? <span>{c.measurement ? '실측' : '합성'}</span> : <span className="faint">—</span>
-        const psw = c.current_prediction?.sw?.ref
+        // only a prediction fed by a measured trace has a SW build to compare; defined timing has none
+        const psw = c.current_prediction?.sw?.source === 'measured' ? c.current_prediction.sw.ref : null
         const swDiff = psw && m.sw_baseline_ref && psw !== m.sw_baseline_ref
         return <a href={`#/calibration?scenario=${encodeURIComponent(r.scenario_id)}`} onClick={(e) => e.stopPropagation()} className={m.synthetic ? 'meas-syn' : ''}>
           {m.synthetic ? '합성 ' : ''}{(m.at ?? '').slice(5, 10).replace('-', '/') || '날짜?'}{swDiff ? <span className="fr fr-basis" title={`예측 SW ${psw} ≠ 측정 SW ${m.sw_baseline_ref}`}> · SW≠</span> : null}</a> } },

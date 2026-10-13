@@ -17,6 +17,7 @@ from scenario_db.api.routers import camera_profiling, sensors, driver_models
 from scenario_db.api.routers import timing_budget as timing_budget_router
 from scenario_db.api.routers import arch_exploration as arch_exploration_router
 from scenario_db.api.routers import calibration as calibration_router
+from scenario_db.api.routers import model_basis as model_basis_router
 from scenario_db.api.routers import cpu as cpu_router
 from scenario_db.api.routers import review as review_router
 from scenario_db.api.routers import scenario_whatif as scenario_whatif_router
@@ -105,6 +106,7 @@ def create_app() -> FastAPI:
         timing_budget_router.router,
         arch_exploration_router.router,
         calibration_router.router,
+        model_basis_router.router,
         cpu_router.router,
         review_router.router,
         scenario_whatif_router.router,

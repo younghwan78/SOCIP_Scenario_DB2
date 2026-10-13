@@ -16,6 +16,10 @@ class _DvfsSelection(BaseModel):
     soc_ref: DocumentId | None = None
     dvfs_version: int | None = Field(default=None, ge=0)
     use_default_dvfs: bool = True
+    # 예측 기준 (model basis): fills config profile / power params / DVFS table; None = the project's active basis.
+    # Explicit values above win and are recorded in basis_overrides (ad-hoc condition).
+    basis_ref: str | None = None
+    basis_overrides: list[str] = Field(default_factory=list)
 
 
 class MeasuredInputs(BaseModel):

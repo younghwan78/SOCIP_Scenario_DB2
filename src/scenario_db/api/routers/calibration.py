@@ -52,6 +52,12 @@ def sw_timing(scenario_id: str | None = None, db: Session = Depends(get_db)):
     return lib.sw_timing(db, scenario_id=scenario_id)
 
 
+@router.get("/library/sw-timing/sets")
+def sw_timing_sets(scenario_id: str, variant_id: str, db: Session = Depends(get_db)):
+    """SW timing of one variant per set: defined table (content hash) and each measured SW build (P2 comparison)."""
+    return lib.sw_timing_sets(db, scenario_id=scenario_id, variant_id=variant_id)
+
+
 # ------------------------------------------------------------------- S5: power coefficient fit
 from scenario_db.api.auth import ApiPrincipal, require_roles  # noqa: E402
 from scenario_db.api.schemas.power_fit import PowerFitRequest, PowerParamsCreateRequest  # noqa: E402

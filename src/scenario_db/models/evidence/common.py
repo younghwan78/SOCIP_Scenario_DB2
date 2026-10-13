@@ -50,6 +50,9 @@ class RunInfo(BaseScenarioModel):
     # Which agreed sim.config_profile (id@version) supplied the run defaults —
     # makes "which settings produced this number" answerable from evidence.
     config_profile_ref: str | None = None
+    # 예측 기준 (model basis id) and the inputs set explicitly on top of it (ad-hoc condition)
+    basis_ref: str | None = None
+    basis_overrides: list[str] | None = None
 
 
 class SweepAggregation(BaseScenarioModel):

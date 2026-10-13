@@ -3,6 +3,7 @@
 // (e.g. Exynos2600 off-site: v2-vf + mif-linear + CPU topology) is what Timing / Explore use.
 import { api } from './api'
 import { useAsync } from './route'
+import { basisApi, type ModelBasis } from './basis'
 
 export const NO_PROFILE = 'none'
 export interface SimProfile {
@@ -19,22 +20,39 @@ export const POWER_MODEL_LABEL: Record<string, string> = {
   'v2-vf': 'v2-vf · IP 동적(V²·f, clock gating) + leakage, BW = MIF 선형 모델',
 }
 
-export function pickProfile(profiles: SimProfile[], param: string | undefined): string | null {
+/** URL value meaning "follow the 과제 active 예측 기준" (same as no cfg param). */
+export const FOLLOW_BASIS = 'basis'
+
+export function pickProfile(profiles: SimProfile[], param: string | undefined, basis?: ModelBasis | null): string | null {
   if (param === NO_PROFILE) return null
-  if (param) {
+  if (param && param !== FOLLOW_BASIS) {
     if (profiles.some((p) => p.id === param)) return param
     throw new Error(`설정 profile을 찾을 수 없습니다: ${param}. profile을 다시 선택하세요.`)
   }
+  // default: the active 예측 기준's profile (the server fills its power params / DVFS too), else the latest profile
+  if (basis) return basis.config_profile_ref
   return [...profiles].sort((a, b) => (b.version ?? 0) - (a.version ?? 0))[0]?.id ?? null
 }
 
-export function useSimProfiles(project: string, param: string | undefined): { profiles: SimProfile[]; ref: string | null; ready: boolean; error: string | undefined } {
+export interface SimProfileSel {
+  profiles: SimProfile[]; ref: string | null; ready: boolean; error: string | undefined
+  /** the 과제's active 예측 기준 (null = none yet) */
+  basis: ModelBasis | null
+  /** true = the request follows the basis (no explicit profile choice); false = 기준 외 (ad-hoc, recorded as B?*) */
+  followsBasis: boolean
+}
+
+export function useSimProfiles(project: string, param: string | undefined): SimProfileSel {
   const q = useAsync(() => (project ? api.simConfigs(project).then((r) => r.items) : Promise.resolve([] as SimProfile[])), [project])
+  const bq = useAsync(() => (project ? basisApi.list(project).then((r) => r.active).catch(() => null) : Promise.resolve(null)), [project])
   const profiles = q.data ?? []
+  const basis = bq.data ?? null
   let ref: string | null = null
   let error = q.error
-  if (!q.loading && !error) {
-    try { ref = pickProfile(profiles, param) } catch (e) { error = e instanceof Error ? e.message : String(e) }
+  const loading = q.loading || bq.loading
+  if (!loading && !error) {
+    try { ref = pickProfile(profiles, param, basis) } catch (e) { error = e instanceof Error ? e.message : String(e) }
   }
-  return { profiles, ref, ready: !q.loading && !error, error }
+  const followsBasis = !!basis && (!param || param === FOLLOW_BASIS || (param === basis.config_profile_ref))
+  return { profiles, ref, ready: !loading && !error, error, basis, followsBasis }
 }

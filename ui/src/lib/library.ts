@@ -12,6 +12,10 @@ export interface SwTaskRow {
   scenario_id: string; task: string; variants: number; min_ms: number[] | null; mean_ms: number[] | null; max_ms: number[] | null
   latency_ms: number[] | null; source: string[]; bitrate_scaled: boolean
 }
+/** P2: SW timing of one variant per set (defined table by content hash, measured per SW build). */
+export interface SwTimingSet { id: string; label: string; source: 'defined' | 'measured'; sw_ref: string | null; soc: string | null; synthetic: boolean; evidence: number; latest?: string | null; value_source?: string[] }
+export interface SwTimingCell { min_ms?: number | null; mean_ms?: number | null; p95_ms?: number | null; max_ms?: number | null; evidence?: number; delta_pct?: number }
+export interface SwTimingSets { scenario_id: string; variant_id: string; sets: SwTimingSet[]; tasks: { task: string; values: Record<string, SwTimingCell> }[] }
 export interface SwMeasured { evidence_id: string; scenario_id: string; variant_id: string; task: string; synthetic?: boolean; mean_ms?: number; p95_ms?: number; max_ms?: number; count?: number }
 
 async function catalogPages<T>(path: string): Promise<Paged<T>> {
@@ -30,6 +34,7 @@ export const libraryApi = {
   sensors: () => catalogPages<SensorCatalogRow>('/sensors/catalogs'),
   sensorTiming: () => getJson<{ items: SensorTimingRow[] }>('/sensors/timing-profiles'),
   swTiming: (scenarioId?: string) => getJson<{ tasks: SwTaskRow[]; measured: SwMeasured[] }>('/library/sw-timing', { scenario_id: scenarioId }),
+  swTimingSets: (scenarioId: string, variantId: string) => getJson<SwTimingSets>('/library/sw-timing/sets', { scenario_id: scenarioId, variant_id: variantId }),
 }
 
 /** Flatten the IP catalog fields the table shows. */
