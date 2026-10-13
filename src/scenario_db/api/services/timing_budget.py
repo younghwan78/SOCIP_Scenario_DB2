@@ -51,6 +51,8 @@ def _shim(request, variant_id: str) -> SimulateRequest:
         dvfs_table_ref=request.dvfs_table_ref,
         soc_ref=request.soc_ref,
         dvfs_version=request.dvfs_version,
+        basis_ref=getattr(request, "basis_ref", None),
+        basis_overrides=list(getattr(request, "basis_overrides", None) or []),
     )
 
 
@@ -234,7 +236,7 @@ def interval_distribution_request(db: Session, request: Any) -> dict[str, Any]:
     return {"scenario_id": request.scenario_id, "variant_id": request.variant_id, **out}
 
 
-def register_condition(db: Session, request: Any, user: str | None = None) -> dict[str, Any]:
+def register_condition(db: Session, request: Any, user: str | None = None, *, promote_result: bool = True) -> dict[str, Any]:
     """Register the Timing Budget condition as the current prediction.
 
     The condition becomes a single-case exploration run (one SW statistic x growth, no DVFS headroom, no compression /
@@ -272,7 +274,7 @@ def register_condition(db: Session, request: Any, user: str | None = None) -> di
         scenario_ids=[request.scenario_id], variant_ids=[request.variant_id], include_derived=True, max_variants=1,
         config=request.config, config_profile_ref=request.config_profile_ref, dvfs_tables=request.dvfs_tables,
         dvfs_table_ref=request.dvfs_table_ref, soc_ref=request.soc_ref, dvfs_version=request.dvfs_version,
-        use_default_dvfs=request.use_default_dvfs, spec=spec,
+        use_default_dvfs=request.use_default_dvfs, spec=spec, basis_ref=request.basis_ref,
         timing_budget={"measured": original.measured.model_dump() if original.measured else None,
                        "options": original.options.model_dump(mode="json", exclude_unset=True),
                        "task_runtime": {k: v.model_dump() for k, v in original.options.task_runtime.items()}},
@@ -284,6 +286,9 @@ def register_condition(db: Session, request: Any, user: str | None = None) -> di
     rec = summary.get("recommended")
     if rec is None:
         raise UnprocessableError("이 조건은 spec 미달이라 등록할 수 없습니다: " + "; ".join(summary.get("spec_reasons") or ["no eligible case"]))
+    if not promote_result:
+        # dry run (basis trial): the run is kept; registration happens when the basis is promoted
+        return {"run_id": run["id"], "case_key": rec["key"], "rule": "manual:timing-budget", "total_mw": rec.get("total_mw")}
     expected_current: list[ExpectedCurrentPrediction] | None = None
     if "expected_current_prediction_id" in original.model_fields_set:
         expected_current = [ExpectedCurrentPrediction(scenario_id=request.scenario_id, variant_id=request.variant_id,

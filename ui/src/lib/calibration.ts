@@ -42,7 +42,7 @@ export interface CoveragePrediction { id: string; total_mw: number | null; creat
   /** P0 model basis the number rests on (config profile · power params · DVFS · engine) */
   basis?: PredictionBasis
   /** SW timing source: measured trace's SW, else the project default */
-  sw?: { ref: string | null; label: string; source: 'measured' | 'defined'; measurement_ref?: string | null }
+  sw?: { ref: string | null; label: string; source: 'measured' | 'defined'; measurement_ref?: string | null; soc?: string | null; hash?: string | null }
   /** today's inputs vs the run's frozen inputs */
   freshness?: { status: 'fresh' | 'stale' | 'unknown'; reasons: string[]; changed: string[] }
 }
@@ -107,7 +107,8 @@ export function predictionTooltip(p: CoveragePrediction, short?: string): string
     b ? `  config ${b.config_profile_ref ? `${b.config_profile_ref}${b.config_version != null ? ` (v${b.config_version})` : ''}` : (b.recorded ? '기본' : '미기록 (이전 engine run)')}` : null,
     b ? `  power params ${b.power_params_ref ? `${b.power_params_ref}${b.power_params_version != null ? ` (v${b.power_params_version})` : ''}` : '기본 (내장 계수)'}` : null,
     b ? `  DVFS ${b.dvfs_table_ref ?? '미기록'} · engine ${b.engine_rev ?? '?'}` : null,
-    p.sw ? `SW timing ${p.sw.ref ?? '?'} (${p.sw.source === 'measured' ? `실측 trace ${p.sw.measurement_ref ?? ''}` : '정의값 · 과제 기본 SW'})` : null,
+    p.sw ? (p.sw.source === 'measured' ? `SW timing ${p.sw.label} — 실측 trace ${p.sw.measurement_ref ?? ''} (${p.sw.ref})`
+      : `SW timing ${p.sw.label} — scenario 정의값(assumed)${p.sw.hash ? `, 사용한 값의 hash #${p.sw.hash}` : ' (이전 run: 사용 값 미기록)'} · SW 버전과 무관`) : null,
     p.freshness ? `상태 ${f.text} — ${f.detail.join(' · ')}` : null,
     p.total_mw != null ? `total ${p.total_mw.toFixed(0)} mW` : null,
     p.selection_rule ? `선정 ${p.selection_rule}${p.selected_by ? ` (${p.selected_by})` : ''}` : null,

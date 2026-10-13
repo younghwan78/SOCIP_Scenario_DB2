@@ -1,4 +1,5 @@
-import { NO_PROFILE, POWER_MODEL_LABEL, type SimProfile } from '../lib/simProfile'
+import { FOLLOW_BASIS, NO_PROFILE, POWER_MODEL_LABEL, type SimProfile } from '../lib/simProfile'
+import type { ModelBasis } from '../lib/basis'
 
 /** One-line summary of what a profile changes in the simulation. */
 export function profileSummary(p: SimProfile | undefined): string[] {
@@ -16,8 +17,31 @@ export function profileSummary(p: SimProfile | undefined): string[] {
 }
 
 /** Sim config profile picker; '코드 기본값' = no profile (built-in constants). Shows what the chosen profile is. */
-export function ProfileSelect({ profiles, value, onChange }: { profiles: SimProfile[]; value: string | null; onChange: (v: string) => void }) {
-  if (!profiles.length) return null
+export function ProfileSelect({ profiles, value, onChange, basis, followsBasis }: { profiles: SimProfile[]; value: string | null; onChange: (v: string) => void
+  /** the 과제's active 예측 기준; with it the picker becomes "기준 따르기" vs "기준 외" */
+  basis?: ModelBasis | null; followsBasis?: boolean }) {
+  if (!profiles.length && !basis) return null
+  if (basis) {
+    const tip = `예측 기준 ${basis.code}${basis.title ? ` · ${basis.title}` : ''}\n${basis.components}\n` +
+      (followsBasis ? '이 화면의 계산 · 등록은 이 기준으로 기록됩니다.' : `기준 외: 설정을 직접 바꿨습니다 → 등록하면 ${basis.code}* (기준 외 조건)으로 기록됩니다.`)
+    return (
+      <span className="profile-sel" title={tip}>
+        <label className="cpu-f" style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+          <span className="muted" style={{ fontSize: 13 }}>예측 기준</span>
+          <select className="input" value={followsBasis ? FOLLOW_BASIS : (value ?? NO_PROFILE)} onChange={(e) => onChange(e.target.value)} aria-label="예측 기준">
+            <option value={FOLLOW_BASIS}>{basis.code} · {basis.components}</option>
+            <optgroup label="기준 외 (설정 profile 직접)">
+              {[...profiles].sort((a, b) => (b.version ?? 0) - (a.version ?? 0)).map((p) => <option key={p.id} value={p.id}>{p.id} (v{p.version ?? '?'}{p.status ? ` · ${p.status}` : ''})</option>)}
+              <option value={NO_PROFILE}>코드 기본값 (profile 없음)</option>
+            </optgroup>
+          </select>
+        </label>
+        <span className="faint profile-desc">
+          {followsBasis ? <span className="badge v-ok">기준 {basis.code}</span> : <span className="badge v-warn">기준 외 · {basis.code}*</span>}
+        </span>
+      </span>
+    )
+  }
   const cur = profiles.find((p) => p.id === value)
   const synthetic = !!cur && /synthetic/i.test(`${cur.description ?? ''} ${cur.run_config?.power_params_ref ?? ''}`)
   const tip = [cur ? `${cur.id} v${cur.version ?? '?'} · ${cur.status ?? ''}${cur.approved_by ? ` · 승인 ${cur.approved_by}` : ''}` : '코드 기본값',

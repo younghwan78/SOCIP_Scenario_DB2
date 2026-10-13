@@ -138,7 +138,7 @@ function RunForm({ ctx, onDone }: { ctx: Ctx; onDone: (r: RunDetail) => void }) 
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         <span className="chip" title="파생(-explored-/-timing-) variant는 제외">variant ≤{variants} × 최대 {cases.toLocaleString()} 조합</span>
         <span className="faint" style={{ fontSize: 12 }}>SW 통계·증가 = timeline sim · DVFS·compression = analytic · 추천 조합은 재시뮬레이션 검증</span>
-        <ProfileSelect profiles={sp.profiles} value={sp.ref} onChange={setCfgSel} />
+        <ProfileSelect profiles={sp.profiles} value={sp.ref} onChange={setCfgSel} basis={sp.basis} followsBasis={sp.followsBasis} />
         <span className="grow" />
         {(sp.error || err) && <span className="err" style={{ margin: 0 }}>{sp.error || err}</span>}
         <button className="btn primary" disabled={busy || !sp.ready || !scenarios.length || !o.statistics.length || !o.runtime_scales.length || cases > 200000} onClick={run}>

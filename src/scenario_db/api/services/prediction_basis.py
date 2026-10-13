@@ -3,7 +3,9 @@
 A prediction is defined by three independent axes:
 
 * model basis: sim config profile (+version), power params (+version), DVFS table, exploration engine
-* SW timing: the SW version whose task timing went in (measured trace's SW, else the project default)
+* SW timing: a measured trace's SW build (``1.2.3 실측 · 2600``) or the scenario's defined (assumed) timing table,
+  identified by a hash of the per-node ``sw_timing`` the run actually used (``정의 #a1b2c3``). A SW profile
+  (``sw-vendor-v1.2.3``) is a release descriptor without timing values, so it never labels defined timing.
 * variant data: scenario / variant YAML (reported by ``prediction_freshness`` as ``variant_doc`` changes)
 
 No new table yet (P1): the basis is reconstructed from the run spec, the prediction's model lineage and
@@ -18,9 +20,9 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from scenario_db.db.models.definition import Project
+from scenario_db.db.models.capability import SwProfile
 from scenario_db.db.models.evidence import Evidence
-from scenario_db.db.models.exploration import ArchExplorationRun, Prediction
+from scenario_db.db.models.exploration import ArchExplorationRun, ModelBasis, Prediction
 
 
 def _engine_short(rev: str | None) -> str:
@@ -38,6 +40,41 @@ def _sw_short(ref: str | None) -> str | None:
         if s.startswith(prefix):
             return s[len(prefix):]
     return s
+
+
+def soc_short(soc_ref: str | None) -> str | None:
+    """``soc-exynos2600`` -> ``2600``."""
+    if not soc_ref:
+        return None
+    tail = str(soc_ref).rsplit("-", 1)[-1]
+    digits = "".join(ch for ch in tail if ch.isdigit())
+    return digits[-4:] if len(digits) >= 4 else tail
+
+
+def sw_timing_hash(variant_doc: dict[str, Any] | None) -> str | None:
+    """Short content hash of the per-node ``sw_timing`` in a resolved variant document (None without any)."""
+    nodes = (variant_doc or {}).get("node_configs") or {}
+    timing = {k: v.get("sw_timing") for k, v in sorted(nodes.items()) if isinstance(v, dict) and v.get("sw_timing")}
+    if not timing:
+        return None
+    import json
+
+    return hashlib.sha256(json.dumps(timing, sort_keys=True, default=str).encode()).hexdigest()[:6]
+
+
+def defined_timing_hash(db: Session, p: Prediction) -> str | None:
+    """Hash of the SW timing the prediction's run used: its frozen ``variant_doc`` blob (manifest), None for runs
+    without a manifest (older engines) — no guess from today's YAML."""
+    from sqlalchemy import func, literal, literal_column
+
+    R = ArchExplorationRun
+    digest = db.query(func.jsonb_path_query_first(
+        R.variants, literal_column("'$[*] ? (@.scenario_id == $s && @.variant_id == $v).input_sections.variant_doc'::jsonpath"),
+        func.jsonb_build_object(literal("s"), p.scenario_ref, literal("v"), p.variant_ref))).filter(R.id == p.exploration_run_ref).scalar()
+    if not digest:
+        return None
+    blob = db.query(R.spec["manifest"]["blobs"][str(digest)]).filter(R.id == p.exploration_run_ref).scalar()
+    return sw_timing_hash(blob if isinstance(blob, dict) else None)
 
 
 def _params_id(ref: str | None) -> str | None:
@@ -70,13 +107,10 @@ def prediction_bases(db: Session, preds: list[Prediction]) -> dict[str, dict[str
         if m:
             meas_refs.add(str(m))
     meas_sw = dict(db.query(Evidence.id, Evidence.sw_baseline_ref).filter(Evidence.id.in_(meas_refs)).all()) if meas_refs else {}
-    project_sw: dict[str, str | None] = {}
-    for pid in {p.project_ref for p in preds if p.project_ref}:
-        proj = db.get(Project, pid)
-        meta = (getattr(proj, "metadata_", None) or {}) if proj else {}
-        glob = (getattr(proj, "globals_", None) or {}) if proj else {}
-        project_sw[pid] = meta.get("default_sw_profile_ref") or glob.get("default_sw_profile_ref")
-
+    sw_soc = {r.id: soc_short(((r.metadata_ or {}).get("compatible_soc") or [None])[0])
+              for r in db.query(SwProfile.id, SwProfile.metadata_).filter(SwProfile.id.in_(set(meas_sw.values()))).all()} if meas_sw else {}
+    basis_ids = {str((r.selection or {}).get("basis_ref")) for r in runs.values() if (r.selection or {}).get("basis_ref")}
+    registry = {b.id: b for b in db.query(ModelBasis).filter(ModelBasis.id.in_(basis_ids)).all()} if basis_ids else {}
     out: dict[str, dict[str, Any]] = {}
     for p in preds:
         run = runs.get(p.exploration_run_ref)
@@ -102,15 +136,30 @@ def prediction_bases(db: Session, preds: list[Prediction]) -> dict[str, dict[str
             "dvfs_table_ref": p.dvfs_table_ref or (run.dvfs_table_ref if run is not None else None),
             "engine_rev": run.engine_rev if run is not None else None,
         }
-        basis["label"] = basis_label(basis)
+        reg = registry.get(str(sel.get("basis_ref"))) if sel.get("basis_ref") else None
+        overrides = list(sel.get("basis_overrides") or [])
+        if reg is not None and "config_profile" not in overrides and cfg_ref == reg.config_profile_ref:
+            basis["config_version"] = ((reg.input_stamp or {}).get("config_profile") or {}).get("version")
+        basis["basis_id"] = reg.id if reg is not None else None
+        basis["code"] = reg.code if reg is not None else None
+        basis["basis_status"] = reg.status if reg is not None else None
+        basis["overrides"] = overrides
+        # registered basis -> its code (B3, B3* when inputs were set on top); otherwise the reconstructed components
+        basis["label"] = f"{reg.code}{'*' if overrides else ''}" if reg is not None else basis_label(basis)
+        basis["components"] = basis_label(basis)
         basis["key"] = hashlib.sha256("|".join(str(basis.get(k)) for k in (
             "recorded", "config_profile_ref", "config_version", "power_params_ref", "power_params_version",
-            "power_params_hash", "dvfs_table_ref", "engine_rev")).encode()).hexdigest()[:12]
+            "power_params_hash", "dvfs_table_ref", "engine_rev", "basis_id")).encode()).hexdigest()[:12]
         mref = ((run.tb or {}).get("measured") or {}).get("measurement_ref") if run is not None else None
         measured_sw = bool(((run.tb or {}).get("measured") or {}).get("sw")) if run is not None else False
         sw_ref = meas_sw.get(str(mref)) if mref and measured_sw else None
-        sw = ({"ref": sw_ref, "source": "measured", "measurement_ref": mref} if sw_ref
-              else {"ref": project_sw.get(p.project_ref), "source": "defined", "measurement_ref": None})
-        sw["label"] = _sw_short(sw["ref"]) or "SW ?"
+        if sw_ref:
+            soc = sw_soc.get(sw_ref)
+            sw = {"ref": sw_ref, "source": "measured", "measurement_ref": mref, "soc": soc,
+                  "label": f"{_sw_short(sw_ref)} 실측{f' · {soc}' if soc else ''}"}
+        else:
+            digest = defined_timing_hash(db, p) if run is not None else None
+            sw = {"ref": None, "source": "defined", "measurement_ref": None, "soc": None, "hash": digest,
+                  "label": f"정의 #{digest}" if digest else "정의값"}
         out[p.id] = {"basis": basis, "sw": sw}
     return out

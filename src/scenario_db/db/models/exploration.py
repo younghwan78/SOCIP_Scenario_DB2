@@ -159,3 +159,37 @@ class PowerOptionReview(Base):
     history = Column(JSONB, nullable=False)
     updated_by = Column(Text)
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+class ModelBasis(Base):
+    """예측 기준: the model inputs a registered number rests on (config profile, power params, DVFS, engine).
+
+    Immutable once created (a change = a new basis with ``parent_ref``); one ``active`` basis per project is the
+    default for Timing Budget / exploration / simulation. ``trial`` keeps the dry-run recompute of the project's
+    current predictions under a draft basis (P2 promotion).
+    """
+
+    __tablename__ = "model_bases"
+    __table_args__ = (
+        UniqueConstraint("project_ref", "seq", name="uq_model_bases_project_seq"),
+        CheckConstraint("status in ('draft', 'active', 'retired')", name="ck_model_bases_status"),
+        Index("uq_model_bases_active", "project_ref", unique=True, postgresql_where=text("status = 'active'")),
+    )
+
+    id = Column(Text, primary_key=True)
+    project_ref = Column(Text, ForeignKey("projects.id"), nullable=False, index=True)
+    seq = Column(Integer, nullable=False)
+    code = Column(Text, nullable=False)  # B1, B2 … per project
+    title = Column(Text)
+    status = Column(Text, nullable=False, default="draft")
+    config_profile_ref = Column(Text)
+    power_params_ref = Column(Text)  # id@version
+    dvfs_table_ref = Column(Text)
+    engine_rev = Column(Text, nullable=False)
+    content_hash = Column(Text, nullable=False)
+    input_stamp = Column(JSONB, nullable=False, default=dict)
+    parent_ref = Column(Text)
+    notes = Column(Text)
+    trial = Column(JSONB, nullable=False, default=dict)
+    created_by = Column(Text)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    activated_by = Column(Text)
+    activated_at = Column(DateTime(timezone=True))

@@ -136,6 +136,10 @@ def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str |
     timing = apply_throughput(request.spec.timing, project_policy(db, scenarios[0].project_ref))
     if timing is not request.spec.timing:
         request = request.model_copy(update={"spec": request.spec.model_copy(update={"timing": timing})})
+    # 예측 기준: resolve once for the whole run (recorded in input_selection, applied to every variant)
+    from scenario_db.api.services.model_basis import apply_basis
+
+    apply_basis(db, request, scenarios[0].project_ref)
     plan = [(s, v) for s in scenarios for v in _variant_ids(db, s.id, request)]
     if not plan:
         raise NotFoundError("exploration scope has no variants")
@@ -156,6 +160,7 @@ def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str |
             config_profile_ref=request.config_profile_ref, dvfs_tables=request.dvfs_tables,
             dvfs_table_ref=request.dvfs_table_ref, soc_ref=request.soc_ref,
             dvfs_version=request.dvfs_version, use_default_dvfs=request.use_default_dvfs,
+            basis_ref=request.basis_ref, basis_overrides=request.basis_overrides,
         )
         shim = _shim(tb, variant_id)
         _apply_config_profile(db, shim)
@@ -227,7 +232,9 @@ def run_exploration(db: Session, request: ArchExplorationRunRequest, user: str |
                                                       "config_profile_ref": request.config_profile_ref,
                                                       "input_selection": request.model_dump(mode="json", include={
                                                           "config", "config_profile_ref", "dvfs_tables", "dvfs_table_ref",
-                                                          "soc_ref", "dvfs_version", "use_default_dvfs"}, exclude_unset=True),
+                                                          "soc_ref", "dvfs_version", "use_default_dvfs"}, exclude_unset=True)
+                                                      | ({"basis_ref": request.basis_ref, "basis_overrides": request.basis_overrides}
+                                                         if request.basis_ref else {}),
                                                       "throughput_from_policy": throughput_from_policy,
                                                       "power_budget_from_reference": request.power_budget_from_reference,
                                                       "apply_options": request.apply_options,
@@ -394,6 +401,16 @@ def _pred_dict(p: Prediction, *, metrics: bool = True) -> dict[str, Any]:
     if metrics:
         out["metrics"] = p.metrics
     return out
+
+
+def default_case(db: Session, project_ref: str | None, summary: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
+    """The case ``promote`` registers by default for a run variant (review policy iq_keep, else min power)."""
+    from scenario_db.api.services.review_policy import project_policy
+
+    policy = project_policy(db, project_ref)
+    if policy is not None and policy.register_baseline == "iq_keep":
+        return ((summary.get("tiers") or {}).get("keep") or {}).get("best"), "auto:min-power-iq"
+    return find_case(summary, None)
 
 
 def promote(db: Session, request: PromoteRequest, user: str | None = None, *, rule: str | None = None,
@@ -1063,7 +1080,9 @@ def model_status(db: Session, *, project_ref: str | None = None) -> dict[str, An
     for b in prediction_bases(db, pq.all()).values():
         cur = basis_rows.setdefault(b["basis"]["key"], {**b["basis"], "predictions": 0})
         cur["predictions"] += 1
-        sw_rows[b["sw"]["label"]] = sw_rows.get(b["sw"]["label"], 0) + 1
+        # defined timing differs per variant (one hash each): count it as one source, measured builds by label
+        sw_key = "정의값" if b["sw"]["source"] == "defined" else b["sw"]["label"]
+        sw_rows[sw_key] = sw_rows.get(sw_key, 0) + 1
     return {
         "bases": sorted(basis_rows.values(), key=lambda r: -r["predictions"]),
         "sw": [{"label": k, "predictions": v} for k, v in sorted(sw_rows.items(), key=lambda kv: -kv[1])],

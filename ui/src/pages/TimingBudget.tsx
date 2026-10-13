@@ -96,7 +96,7 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
             onBlur={() => { const v = Math.round(Number(marginDraft)); set('margin', Number.isFinite(v) && v >= 5 && v <= 60 && v !== 25 ? String(v) : undefined) }}
             onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }} /><span className="faint" style={{ fontSize: 12 }}>%</span>
         </div>
-        <ProfileSelect profiles={sp.profiles} value={cfg} onChange={(v) => set('cfg', v)} />
+        <ProfileSelect profiles={sp.profiles} value={cfg} onChange={(v) => set('cfg', v)} basis={sp.basis} followsBasis={sp.followsBasis} />
         <MeasuredPicker options={measQ.data ?? []} value={measured} onChange={setMeasured} />
         <label style={{ display: 'inline-flex', gap: 6, alignItems: 'center', fontSize: 13 }} className="muted" title="power model 계수 버전 — 기본은 설정 profile의 것. 보정(S5)으로 만든 draft를 골라 비교 · 등록">power params
           <select value={pp} onChange={(e) => set('pp', e.target.value || undefined)} aria-label="power params">

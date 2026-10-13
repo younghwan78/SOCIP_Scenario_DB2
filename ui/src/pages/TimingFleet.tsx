@@ -75,7 +75,7 @@ export function TimingFleetPage({ ctx }: { ctx: Ctx }) {
             {ISSUE_ORDER.filter((c) => issueN[c] > 0).map((c) => <button key={c} className={issue === c ? 'on' : ''} onClick={() => setIssue(issue === c ? null : c)}>{ISSUE_LABEL[c]} {issueN[c]}</button>)}
           </div>
         </>}
-        <ProfileSelect profiles={sp.profiles} value={sp.ref} onChange={(v) => ctx.navigate(undefined, { cfg: v }, true)} />
+        <ProfileSelect profiles={sp.profiles} value={sp.ref} onChange={(v) => ctx.navigate(undefined, { cfg: v }, true)} basis={sp.basis} followsBasis={sp.followsBasis} />
         <span className="grow" />
         <ProvBadge prov={{ kind: 'recalc', engine: 'Timing Budget (analytic)', scope: 'CPU + IP + BW', dvfs: q.data?.dvfs_table_ref ?? null, rev: sp.ref ? `profile ${sp.ref}` : 'profile 없음 (코드 기본값)', notes: ['표의 Power·Latency는 현재 조건으로 즉석 계산 — 등록 예측과 다를 수 있음'] }} />
         {q.data && <span className="chip">DVFS {q.data.dvfs_table_ref ?? '미연결'}</span>}

@@ -89,6 +89,9 @@ def preview(db: Session, request: WhatIfPreviewRequest) -> dict:
     shim = _shim(req, req.variant_id)
     try:
         _apply_config_profile(db, shim)
+        # An active basis can fill restricted inputs after the original request was validated.
+        WhatIfPreviewRequest.model_validate(
+            {**request.model_dump(), "config": shim.config.model_dump()})
         graph, tables, ref = _load(db, shim, True)
         _guard(graph, request)
         baseline_hash = baseline_fingerprint(graph)

@@ -16,11 +16,15 @@ from sqlalchemy.orm import Session
 from scenario_db.exceptions import NotFoundError, UnprocessableError
 
 _SPEC_KEYS = ("axes", "constraints", "objective", "timing", "top_n", "max_cases_per_variant", "verify", "verify_tolerance_pct")
-_SEL_KEYS = ("config_profile_ref", "dvfs_tables", "dvfs_table_ref", "soc_ref", "dvfs_version", "use_default_dvfs")
+_SEL_KEYS = ("config_profile_ref", "dvfs_tables", "dvfs_table_ref", "soc_ref", "dvfs_version", "use_default_dvfs", "basis_ref")
 
 
 def recompute_prediction(db: Session, prediction_id: str, *, power_params_ref: str | None = None,
-                         reason: str | None = None, user: str | None = None) -> dict[str, Any]:
+                         reason: str | None = None, user: str | None = None, basis: Any = None,
+                         dry_run: bool = False) -> dict[str, Any]:
+    """``basis``: re-run under that model basis (its profile / params / DVFS replace the stored ones; the rest of the
+    condition is kept). ``dry_run``: create the run but do not register — returns ``run_id`` / ``case_key`` / ``rule``
+    / ``new_total_mw`` so a basis promotion can register them later (P2)."""
     from scenario_db.db.models.exploration import ArchExplorationRun, Prediction
 
     pred = db.get(Prediction, prediction_id)
@@ -34,6 +38,13 @@ def recompute_prediction(db: Session, prediction_id: str, *, power_params_ref: s
     spec = dict(run.spec or {})
     sel = dict(spec.get("input_selection") or {})
     config = dict(sel.get("config") or {})
+    if basis is not None:
+        # the basis decides profile / params / DVFS; drop what the old run pinned for them
+        for k in ("config_profile_ref", "dvfs_tables", "dvfs_table_ref", "soc_ref", "dvfs_version", "basis_overrides"):
+            sel.pop(k, None)
+        config.pop("power_params", None)
+        config.pop("power_params_ref", None)
+        sel["basis_ref"] = basis.id
     if power_params_ref:
         config.pop("power_params", None)
         config["power_params_ref"] = power_params_ref
@@ -64,6 +75,9 @@ def recompute_prediction(db: Session, prediction_id: str, *, power_params_ref: s
                                           config=config, measured=measured, reason=why, expected_project_ref=pred.project_ref,
                                           expected_current_prediction_id=prediction_id,
                                           **{k: sel[k] for k in _SEL_KEYS if k in sel})
+        if dry_run:
+            r = register_condition(db, req, user, promote_result=False)
+            return _dry(pred, old_total, r["run_id"], r["case_key"], r["rule"], r.get("total_mw"))
         out = register_condition(db, req, user)
     else:
         if spec.get("apply_options") or str(pred.selection_rule or "").startswith(("user:", "lever:")):
@@ -78,6 +92,15 @@ def recompute_prediction(db: Session, prediction_id: str, *, power_params_ref: s
             power_budget_from_reference=bool(spec.get("power_budget_from_reference")),
             spec={k: spec[k] for k in _SPEC_KEYS if k in spec}, **{k: sel[k] for k in _SEL_KEYS if k in sel})
         new_run = run_exploration(db, req, user)
+        if dry_run:
+            from scenario_db.api.services.arch_exploration import default_case
+
+            summary = next((v for v in new_run.get("variants") or [] if v.get("variant_id") == pred.variant_ref), None)
+            case, rule = default_case(db, pred.project_ref, summary) if summary else (None, None)
+            if case is None:
+                return {"prediction_id": pred.id, "variant_id": pred.variant_ref, "status": "skipped", "run_id": new_run["id"],
+                        "reason": "; ".join((summary or {}).get("spec_reasons") or ["no eligible case"])}
+            return _dry(pred, old_total, new_run["id"], None, rule, case.get("total_mw"))
         out = promote(db, PromoteRequest(run_id=new_run["id"], scenario_id=pred.scenario_ref, variant_ids=[pred.variant_ref],
                                          reason=why, expected_project_ref=pred.project_ref,
                                          expected_current=[ExpectedCurrentPrediction(
@@ -91,3 +114,11 @@ def recompute_prediction(db: Session, prediction_id: str, *, power_params_ref: s
     return {"prediction_id": pred.id, "variant_id": pred.variant_ref, "scenario_id": pred.scenario_ref, "status": "recomputed",
             "new_prediction_id": promoted[0]["id"], "old_total_mw": old_total, "new_total_mw": new_total,
             "delta_mw": round(new_total - old_total, 3) if new_total is not None and old_total is not None else None}
+
+
+def _dry(pred: Any, old_total: float | None, run_id: str, case_key: str | None, rule: str | None,
+         new_total: float | None) -> dict[str, Any]:
+    return {"prediction_id": pred.id, "scenario_id": pred.scenario_ref, "variant_id": pred.variant_ref, "status": "ok",
+            "run_id": run_id, "case_key": case_key, "rule": rule, "old_total_mw": old_total, "new_total_mw": new_total,
+            "delta_mw": round(new_total - old_total, 3) if new_total is not None and old_total is not None else None,
+            "source": "timing-budget" if case_key else "exploration"}

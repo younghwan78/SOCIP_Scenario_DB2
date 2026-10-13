@@ -141,6 +141,7 @@ function SwTab({ ctx }: { ctx: Ctx }) {
     <Card id="lib-sw" title={`SW timing 가정 (${q.data?.tasks.length ?? 0})`} note="variant 간 범위 · Timing Budget·조합 탐색 입력" defaultWide>
       <div className="table-x"><DataTable id="lib.sw" columns={cols} rows={q.data?.tasks ?? []} rowKey={(r) => `${r.scenario_id}:${r.task}`} defaultSort={{ key: 'max', dir: -1 }} /></div>
     </Card>
+    {!all && ctx.scenario && ctx.variant && <SwSetsCard scenario={ctx.scenario} variant={ctx.variant} />}
     <Card id="lib-sw-meas" title={`SW task 실측 (${q.data?.measured.length ?? 0})`} note="measurement evidence (Perfetto)" defaultWide>
       {q.data?.measured.length ? <table className="tb-mini-table" style={{ width: '100%' }}>
         <thead><tr><th>task</th><th>variant</th><th>mean ms</th><th>p95 ms</th><th>max ms</th><th>evidence</th></tr></thead>
@@ -148,4 +149,25 @@ function SwTab({ ctx }: { ctx: Ctx }) {
       </table> : <div className="empty">실측 SW task 없음</div>}
     </Card>
   </div>
+}
+
+/** P2: one variant's SW timing as sets — defined table (hash) vs each measured SW build (SoC) — mean / max and Δ% vs defined. */
+function SwSetsCard({ scenario, variant }: { scenario: string; variant: string }) {
+  const q = useAsync(() => libraryApi.swTimingSets(scenario, variant), [scenario, variant])
+  const sets = q.data?.sets ?? []
+  const f = (x?: number | null) => (x == null ? '—' : x.toFixed(2))
+  return <Card id="lib-sw-sets" title={`SW timing set 비교 · ${variant}`} defaultWide
+    note="정의값(assumed)은 사용 값의 hash로, 실측은 SW build · SoC별로 구분 (SW profile 이름만으로는 timing이 같다는 보장 없음) · Δ = 정의 mean 대비">
+    {q.error && <div className="err">{q.error}</div>}
+    {q.data && !q.data.tasks.length && <div className="empty">이 variant에는 SW timing 정의 · 실측이 없습니다.</div>}
+    {q.data && q.data.tasks.length > 0 && <div className="table-x"><table className="tb-mini-table" style={{ width: '100%' }}>
+      <thead><tr><th>task</th>{sets.map((s) => <th key={s.id} title={[s.sw_ref ?? '정의값', s.value_source?.join(', '), s.evidence ? `evidence ${s.evidence}` : null, s.latest ? `최근 ${s.latest}` : null].filter(Boolean).join(' · ')}>
+        <span className={s.synthetic ? 'faint' : ''}>{s.label}</span></th>)}</tr>
+        <tr className="faint" style={{ fontSize: 11 }}><th /> {sets.map((s) => <th key={s.id}>mean / max ms{s.source === 'measured' ? ' · Δ' : ''}</th>)}</tr></thead>
+      <tbody>{q.data.tasks.map((t) => <tr key={t.task}><td className="mono">{t.task}</td>
+        {sets.map((s) => { const c = t.values[s.id]
+          return <td key={s.id} className="mono">{c ? <>{f(c.mean_ms)} / {f(c.max_ms)}{c.delta_pct != null && <span style={{ marginLeft: 6, color: Math.abs(c.delta_pct) >= 20 ? 'var(--del-text)' : 'var(--muted)' }}>{c.delta_pct > 0 ? '+' : ''}{c.delta_pct}%</span>}</> : <span className="faint">—</span>}</td> })}
+      </tr>)}</tbody>
+    </table></div>}
+  </Card>
 }

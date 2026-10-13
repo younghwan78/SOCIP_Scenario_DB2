@@ -21,6 +21,9 @@ class SimulateRequest(BaseModel):
     dvfs_table_ref: DocumentId | None = None
     soc_ref: DocumentId | None = None
     dvfs_version: int | None = Field(default=None, ge=0)
+    # 예측 기준 (model basis) — see _DvfsSelection.basis_ref
+    basis_ref: str | None = None
+    basis_overrides: list[str] = Field(default_factory=list)
     persist: bool = False
     force: bool = False
     # Preview-then-save precondition; checked before any cached result or persistence.

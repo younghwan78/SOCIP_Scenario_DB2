@@ -149,3 +149,18 @@ explicit runtime overrides are retained. New Timing Budget registrations preserv
 explicit default-valued choices. Exploration recompute retains reference power
 budgets; manually selected exploration cases are skipped. Superseded predictions
 return 422.
+
+### Model basis registry
+
+`/bases` stores project-scoped, numbered model inputs (configuration profile,
+power parameters, DVFS, engine). Creation captures component versions and content
+hashes, including the selected default DVFS table. Editing a referenced catalog
+entry requires a new basis: calculation, activation and promotion reject changed
+inputs with 422. Parent bases and components must belong to the selected project
+and SoC. Explicit input overrides remain visible as an ad-hoc basis (`B3*`).
+
+Creation and activation are serialized per project. Draft trials keep a restart
+token and merge concurrent item results under the same project lock. A result
+from an earlier trial returns 409 instead of updating a restarted trial. Promotion
+requires at least one successful calculation; pending or failed items retain their
+current predictions, and predictions changed since the trial are reported as stale.
