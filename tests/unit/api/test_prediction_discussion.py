@@ -85,10 +85,10 @@ def test_comment_pagination_and_append_only_routes(discussion_client, monkeypatc
     monkeypatch.setattr(router.discussion, "list_comments",
                         lambda db, pid, **kw: seen.append(kw) or {"items": []})
     path = "/api/v1/arch/predictions/p/comments"
-    assert discussion_client.get(path, params={"limit": 20, "offset": 40}).status_code == 200
+    assert discussion_client.get(path, params={"limit": 20, "offset": 40}, headers=_headers("reader")).status_code == 200
     assert seen == [{"limit": 20, "offset": 40}]
-    assert discussion_client.get(path, params={"limit": 201}).status_code == 422
-    assert discussion_client.get(path, params={"offset": -1}).status_code == 422
+    assert discussion_client.get(path, params={"limit": 201}, headers=_headers("reader")).status_code == 422
+    assert discussion_client.get(path, params={"offset": -1}, headers=_headers("reader")).status_code == 422
     assert discussion_client.delete(path + "/c", headers=_headers("admin")).status_code == 404
     assert discussion_client.patch(path + "/c", json={"body": "edit"}, headers=_headers("admin")).status_code == 404
 
@@ -101,6 +101,15 @@ def test_stale_notes_are_http_conflicts(discussion_client, monkeypatch):
     response = discussion_client.put("/api/v1/arch/predictions/p/notes", json={"expected_revision": 1},
                                      headers=_headers("writer"))
     assert response.status_code == 409
+
+
+@pytest.mark.parametrize("suffix", ["notes", "comments"])
+def test_collaboration_reads_require_authenticated_reader(discussion_client, monkeypatch, suffix):
+    name = "get_notes" if suffix == "notes" else "list_comments"
+    monkeypatch.setattr(router.discussion, name, lambda *args, **kwargs: {})
+    path = f"/api/v1/arch/predictions/p/{suffix}"
+    assert discussion_client.get(path).status_code == 401
+    assert discussion_client.get(path, headers=_headers("reader")).status_code == 200
 
 
 def test_registration_guards_keep_omission_and_explicit_null_distinct():

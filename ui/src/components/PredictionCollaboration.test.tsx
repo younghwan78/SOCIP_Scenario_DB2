@@ -5,11 +5,25 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { PredictionCollaboration } from './PredictionCollaboration'
 import { collaborationApi, type PredictionNotes, type PredictionComment } from '../lib/predictionCollaboration'
 import { ApiError } from '../lib/api'
+import { setApiCredential } from '../lib/auth'
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
-afterEach(() => vi.restoreAllMocks())
+afterEach(() => { vi.restoreAllMocks(); setApiCredential(null) })
 const notes = (id: string, revision = 0, title = ''): PredictionNotes => ({ prediction_id: id, revision, title, purpose: '', description: '', assumptions: '', conclusion: '', tags: [], created_by: 'writer', updated_by: 'writer', created_at: null, updated_at: null })
 const edit = (input: HTMLInputElement | HTMLTextAreaElement, value: string) => { Object.getOwnPropertyDescriptor(input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype, 'value')!.set!.call(input, value); input.dispatchEvent(new Event('input', { bubbles: true })) }
+
+it('clears the previous actor draft when credentials change on the same prediction', async () => {
+  setApiCredential({ keyId: 'first', secret: 'test' })
+  vi.spyOn(collaborationApi, 'notes').mockResolvedValueOnce(notes('p1', 1, 'initial')).mockResolvedValue(notes('p1', 1, 'stored'))
+  vi.spyOn(collaborationApi, 'comments').mockResolvedValue({ prediction_id: 'p1', items: [], total: 0, limit: 25, offset: 0 })
+  const host = document.createElement('div'), root = createRoot(host)
+  try {
+    await act(async () => root.render(<PredictionCollaboration predictionId="p1" />))
+    act(() => edit(host.querySelector<HTMLInputElement>('[aria-label="제목"]')!, 'private draft'))
+    await act(async () => setApiCredential({ keyId: 'second', secret: 'test' }))
+    expect(host.querySelector<HTMLInputElement>('[aria-label="제목"]')!.value).toBe('stored')
+  } finally { act(() => root.unmount()) }
+})
 
 it('keeps the local notes draft through a conflict and saves only after latest revision is reviewed', async () => {
   const reads = vi.spyOn(collaborationApi, 'notes').mockResolvedValueOnce(notes('p1', 1, 'initial')).mockResolvedValue(notes('p1', 2, 'other writer'))

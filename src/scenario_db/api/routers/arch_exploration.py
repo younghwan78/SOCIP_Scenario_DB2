@@ -158,7 +158,8 @@ def get_prediction(prediction_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/predictions/{prediction_id}/notes")
-def get_prediction_notes(prediction_id: str, db: Session = Depends(get_db)):
+def get_prediction_notes(prediction_id: str, db: Session = Depends(get_db),
+                         _principal: ApiPrincipal = Depends(require_roles("reader", "analyst", "writer", "admin"))):
     return discussion.get_notes(db, prediction_id)
 
 
@@ -174,6 +175,7 @@ def put_prediction_notes(
 def list_prediction_comments(
     prediction_id: str, limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
+    _principal: ApiPrincipal = Depends(require_roles("reader", "analyst", "writer", "admin")),
 ):
     return discussion.list_comments(db, prediction_id, limit=limit, offset=offset)
 

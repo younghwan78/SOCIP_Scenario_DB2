@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ApiError } from '../lib/api'
+import { useCredentialKeyId } from '../lib/auth'
 import { useAsync } from '../lib/route'
 import { collaborationApi, type NotesDraft, type PredictionNotes } from '../lib/predictionCollaboration'
 import { Card } from './TimingCharts'
@@ -11,7 +12,8 @@ const errorText = (error: unknown) => error instanceof Error ? error.message : S
 
 /** The keyed boundary resets all drafts when selecting a different prediction. */
 export function PredictionCollaboration({ predictionId }: { predictionId: string }) {
-  return <CollaborationBody key={predictionId} predictionId={predictionId} />
+  const actor = useCredentialKeyId()
+  return <CollaborationBody key={JSON.stringify([predictionId, actor])} predictionId={predictionId} />
 }
 function CollaborationBody({ predictionId }: { predictionId: string }) {
   const [tick, setTick] = useState(0)

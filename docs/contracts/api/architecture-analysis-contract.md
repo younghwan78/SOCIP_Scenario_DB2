@@ -6,7 +6,7 @@ All paths use `/api/v1`. Reads follow the existing unauthenticated read API poli
 Timing analysis and run creation require analyst/writer/admin; promotion and report
 creation/status changes require writer/admin. Actor identity comes from the API principal.
 
-Prediction notes are separate from frozen calculation metrics. `GET/PUT
+Prediction notes are separate from frozen calculation metrics. Note/comment reads require reader/analyst/writer/admin authentication (or the deployment's local auth bypass). Historical catalog versions are not inferred from today's mutable catalog rows; missing version stamps are shown as unknown. SW is labeled measured only when measured SW was selected as input. `GET/PUT
 /arch/predictions/{id}/notes` exposes title, purpose, description, assumptions,
 conclusion, tags, actor/time metadata, and revision. PUT requires writer/admin and
 `expected_revision` (0 for first creation); stale revisions return 409. First saves

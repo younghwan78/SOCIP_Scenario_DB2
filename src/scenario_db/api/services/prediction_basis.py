@@ -18,7 +18,6 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from scenario_db.db.models.capability import PowerModelParams, SimConfigProfile
 from scenario_db.db.models.definition import Project
 from scenario_db.db.models.evidence import Evidence
 from scenario_db.db.models.exploration import ArchExplorationRun, Prediction
@@ -65,8 +64,6 @@ def prediction_bases(db: Session, preds: list[Prediction]) -> dict[str, dict[str
     runs = {r.id: r for r in db.query(R.id, R.engine_rev, R.dvfs_table_ref, R.spec["config_profile_ref"].label("profile"),
                                       R.spec["input_selection"].label("selection"), R.spec["timing_budget"].label("tb"))
             .filter(R.id.in_(run_ids)).all()}
-    profiles = {r.id: r for r in db.query(SimConfigProfile.id, SimConfigProfile.version, SimConfigProfile.run_config).all()}
-    params = {r.id: r.version for r in db.query(PowerModelParams.id, PowerModelParams.version).all()}
     meas_refs: set[str] = set()
     for r in runs.values():
         m = ((r.tb or {}).get("measured") or {}).get("measurement_ref")
@@ -86,20 +83,20 @@ def prediction_bases(db: Session, preds: list[Prediction]) -> dict[str, dict[str
         sel = (run.selection or {}) if run is not None else {}
         cfg_ref = sel.get("config_profile_ref") or (run.profile if run is not None else None)
         recorded = bool(run is not None and run.selection is not None)
-        prof = profiles.get(cfg_ref) if cfg_ref else None
         lineage = ((p.metrics or {}).get("model_lineage") or {})
-        pp_ref = (lineage.get("power_params_ref") or (sel.get("config") or {}).get("power_params_ref")
-                  or ((prof.run_config or {}).get("power_params_ref") if prof is not None else None))
+        pp_ref = lineage.get("power_params_ref") or (sel.get("config") or {}).get("power_params_ref")
         pp_id = _params_id(pp_ref)
         pp_ver = None
         if pp_ref and "@" in str(pp_ref):
             tail = str(pp_ref).split("@", 1)[1]
             pp_ver = int(tail) if tail.isdigit() else None
-        if pp_ver is None and pp_id in params:
-            pp_ver = params[pp_id]
+        cfg_version = None
+        if cfg_ref and "@" in str(cfg_ref):
+            tail = str(cfg_ref).split("@", 1)[1]
+            cfg_version = int(tail) if tail.isdigit() else None
         basis = {
             "recorded": recorded,
-            "config_profile_ref": cfg_ref, "config_version": prof.version if prof is not None else None,
+            "config_profile_ref": cfg_ref, "config_version": cfg_version,
             "power_params_ref": pp_id, "power_params_version": pp_ver,
             "power_params_hash": lineage.get("power_params_hash"),
             "dvfs_table_ref": p.dvfs_table_ref or (run.dvfs_table_ref if run is not None else None),
@@ -108,9 +105,10 @@ def prediction_bases(db: Session, preds: list[Prediction]) -> dict[str, dict[str
         basis["label"] = basis_label(basis)
         basis["key"] = hashlib.sha256("|".join(str(basis.get(k)) for k in (
             "recorded", "config_profile_ref", "config_version", "power_params_ref", "power_params_version",
-            "dvfs_table_ref", "engine_rev")).encode()).hexdigest()[:12]
+            "power_params_hash", "dvfs_table_ref", "engine_rev")).encode()).hexdigest()[:12]
         mref = ((run.tb or {}).get("measured") or {}).get("measurement_ref") if run is not None else None
-        sw_ref = meas_sw.get(str(mref)) if mref else None
+        measured_sw = bool(((run.tb or {}).get("measured") or {}).get("sw")) if run is not None else False
+        sw_ref = meas_sw.get(str(mref)) if mref and measured_sw else None
         sw = ({"ref": sw_ref, "source": "measured", "measurement_ref": mref} if sw_ref
               else {"ref": project_sw.get(p.project_ref), "source": "defined", "measurement_ref": None})
         sw["label"] = _sw_short(sw["ref"]) or "SW ?"
