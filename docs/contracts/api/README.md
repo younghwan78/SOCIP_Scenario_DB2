@@ -39,6 +39,7 @@ Without this optional precondition the existing run behavior is unchanged.
 - [Write API Contract](write-api-contract.md)
 - [Exploration API Contract](exploration-api-contract.md)
 - [Architecture Analysis API Contract](architecture-analysis-contract.md)
+- [Scenario What-if and Experiment Contract](scenario-whatif-contract.md)
 - [CPU Analysis API Contract](cpu-analysis-contract.md)
 - [API Naming Conventions](../../reference/api-conventions.md)
 - [API Status Codes](../../reference/api-status-codes.md)

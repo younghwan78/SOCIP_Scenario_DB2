@@ -19,6 +19,7 @@ import { ThermalWatchView } from '../components/ThermalWatch'
 import { useSimProfiles } from '../lib/simProfile'
 import type { Ctx as AppCtx } from '../App'
 import { RecomputePanel } from '../components/RecomputePanel'
+import { PredictionCollaboration } from '../components/PredictionCollaboration'
 
 const regProv = (r: BoardRow): Prov => ({
   kind: 'registered', engine: r.condition?.source === 'timing-budget' ? 'Timing Budget 조건' : 'Arch exploration', scope: powerScope({ cpu: r.power.cpu_mw, hw: r.power.hw_mw, bw: r.power.bw_mw }),
@@ -98,6 +99,7 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
     { key: 'dvfs', label: 'DVFS', width: 160, sort: (r) => levels(r.dvfs), render: (r) => <span className="mono faint">{levels(r.dvfs)}</span> },
     { key: 'ver', label: '검증', width: 64, align: 'right', sort: (r) => Math.abs(r.verified?.delta_pct ?? 99), render: (r) => (r.verified ? <span style={{ color: r.verified.ok ? 'var(--primary-strong)' : 'var(--del-text)' }}>{r.verified.ok ? '✓' : '✗'}</span> : '—') },
     { key: 'at', label: '등록', width: 120, firstDir: -1, sort: (r) => r.created_at ?? '', render: (r) => <span className="mono faint">{r.created_at?.slice(0, 16).replace('T', ' ')}</span> },
+    { key: 'author', label: '등록 작성자', width: 130, sort: (r) => r.selected_by_user ?? '', render: (r) => r.selected_by_user ?? '—' },
   ]
   return (
     <div className="page tb-page">
@@ -137,6 +139,7 @@ export function PredictionsPage({ ctx }: { ctx: Ctx }) {
             <div key={l} className="panel tb-kpi"><div className="faint" style={{ fontSize: 12 }}>{l}</div><div className="mono" style={{ fontSize: 20, fontWeight: 600 }}>{v}</div><div className="faint" style={{ fontSize: 11 }}>{n}</div></div>)}
         </section>
         <div className="tb-grid">
+          {sel && <PredictionCollaboration predictionId={sel.id} />}
           {sel && <ChangeCard key={sel.id} row={sel} />}
           {sel && <OptionsCard key={`o-${sel.id}`} row={sel} onChanged={() => setTick((t) => t + 1)} />}
           <RiskCard risk={risk} target={target} battery={battery} ctx={ctx} measuredKnown={!!covQ.data} onPick={choose} refs={refs} staleRows={staleRows}
@@ -189,11 +192,12 @@ function ChangeCard({ row }: { row: BoardRow }) {
     </Card>
     <Card id="pr-history" title="등록 이력" note="행 선택 = 비교 기준(이전)">
       <table className="tb-mini-table" style={{ width: '100%' }}>
-        <thead><tr><th /><th>등록</th><th>상태</th><th>Power mW</th><th>규칙</th><th>run</th></tr></thead>
+        <thead><tr><th /><th>등록</th><th>작성자</th><th>상태</th><th>Power mW</th><th>규칙</th><th>run</th></tr></thead>
         <tbody>{(h.data ?? []).map((x: HistoryRow) => (
           <tr key={x.id} className={x.id === oldId ? 'selected' : ''} onClick={() => x.id !== row.id && setOldId(x.id)} style={{ cursor: x.id === row.id ? 'default' : 'pointer' }}>
             <td>{x.id !== row.id && <input type="radio" checked={x.id === oldId} onChange={() => setOldId(x.id)} aria-label="비교 기준" />}</td>
             <td className="mono faint">{x.created_at?.slice(0, 16).replace('T', ' ')}</td>
+            <td>{x.selected_by_user ?? '—'}</td>
             <td><span className={`badge ${x.status === 'current' ? 'v-ok' : ''}`}>{x.status}</span></td>
             <td className="mono">{fmt(x.total_mw, 1)}</td><td title={x.reason ?? ''}>{x.selection_rule}</td><td className="mono faint" style={{ fontSize: 11 }}>{x.run_id}</td>
           </tr>))}</tbody>

@@ -6,6 +6,30 @@ All paths use `/api/v1`. Reads follow the existing unauthenticated read API poli
 Timing analysis and run creation require analyst/writer/admin; promotion and report
 creation/status changes require writer/admin. Actor identity comes from the API principal.
 
+Prediction notes are separate from frozen calculation metrics. `GET/PUT
+/arch/predictions/{id}/notes` exposes title, purpose, description, assumptions,
+conclusion, tags, actor/time metadata, and revision. PUT requires writer/admin and
+`expected_revision` (0 for first creation); stale revisions return 409. First saves
+serialize on the prediction row. `GET/POST /arch/predictions/{id}/comments` provides
+bounded pagination and append-only comments/replies. POST requires analyst/writer/admin;
+reply parents must belong to the same prediction, enforced by a composite FK.
+Migration `0024` adds these collaboration tables.
+
+Promote/lever requests optionally provide `expected_current` entries containing
+`scenario_id`, `variant_id`, and nullable `prediction_id`. When present they must
+cover all selected pairs; null expects no current prediction. The server checks
+the reviewed IDs after canonical variant-row locks and before any promotion.
+Changed current IDs return 409 atomically. Timing Budget registration accepts
+`expected_current_prediction_id`; explicit null also guards first registration.
+Recompute automatically guards its target ID during promotion. Callers omitting
+the new preconditions retain the existing API behavior.
+
+Guarded lever registration retains scenario/variant locks through IQ reviews,
+exploration, and promotion, with one final commit and rollback on failure.
+The scenario uses `FOR NO KEY UPDATE`, compatible with prediction FK key-share
+locks, to avoid cycles with ordinary promotion. Valid rejected IQ results retain
+their existing recorded-review behavior.
+
 - `POST /timing-budget/variant`: analyze one scenario/variant without persistence.
 - `POST /timing-budget/fleet`: analyze at most 200 variants of one scenario. Duplicate
   selections are collapsed; implicit selection also obeys the limit. Derived variants

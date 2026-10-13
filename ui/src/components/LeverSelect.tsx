@@ -9,6 +9,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { fmt } from '../lib/timingBudget'
 import { archApi, IQ_COLOR, IQ_LABEL, REVIEW, type IqClass, type LeverAnalysis, type LeverPoint, type OptionReview, type ReviewStatus } from '../lib/archExplore'
 import { maText, type Battery } from '../lib/battery'
+import { useRegistrationGuard } from '../lib/registration'
+import { RegistrationBasis } from './RegistrationBasis'
 
 export interface Selection { options: string[]; comp: Record<string, string> }
 
@@ -40,6 +42,7 @@ export function LeverSelect({ la, battery, runId, scenarioId, variantId, project
   readOnly: boolean; sel: Selection; setSel: (s: Selection) => void
 }) {
   const points = la.points ?? []
+  const guard = useRegistrationGuard([{ scenario_id: scenarioId, variant_id: variantId }], projectRef, runId)
   const base = la.baseline!
   const keep = la.milestones?.neutral
   const levers = la.levers ?? []
@@ -99,7 +102,7 @@ export function LeverSelect({ la, battery, runId, scenarioId, variantId, project
     } catch (e) { setMsg({ text: e instanceof Error ? e.message : String(e), tone: 'err' }) } finally { busyRef.current = false; setBusy(false) }
   }
   const register = async () => {
-    if (busyRef.current || readOnly) return
+    if (busyRef.current || readOnly || !guard.ready || !guard.expected) return
     busyRef.current = true
     setBusy(true); setMsg(null)
     try {
@@ -107,15 +110,16 @@ export function LeverSelect({ la, battery, runId, scenarioId, variantId, project
       const r = await archApi.registerLever({
         run_id: runId, scenario_id: scenarioId, variant_id: variantId, compression: comp, options: sel.options,
         iq_results: sel.options.map((o) => ({ option_key: o, status: (iqIn[o]?.status || 'adopted') as 'adopted' | 'rejected', note: iqIn[o]?.note ?? '' })),
-        reason: reason || undefined, expected_project_ref: projectRef ?? undefined,
+        reason: reason || undefined, expected_project_ref: projectRef ?? undefined, expected_current: guard.expected,
       })
       await loadReviews()
+      guard.refresh()
       if (r.status === 'rejected') setMsg({ text: `등록 안 함 — 기각: ${(r.rejected ?? []).join(', ')} (review에 기록됨)`, tone: 'err' })
       else setMsg({ text: `등록: ${r.promoted[0]?.id ?? ''} · ${fmt(r.promoted[0]?.total_mw, 1)} mW · ${r.rule}${r.run_id !== runId ? ` · option 적용 재탐색 run ${r.run_id}` : ''}`, tone: 'ok' })
-    } catch (e) { setMsg({ text: e instanceof Error ? e.message : String(e), tone: 'err' }) } finally { busyRef.current = false; setBusy(false) }
+    } catch (e) { setMsg({ text: guard.fail(e), tone: 'err' }) } finally { busyRef.current = false; setBusy(false) }
   }
   const iqReady = sel.options.every((o) => iqIn[o]?.status && (iqIn[o]?.note ?? '').trim())
-  const canRegister = !readOnly && !!point && point.eligible !== false && !busy && (!lossy || !!reason.trim()) && (!sel.options.length || iqReady)
+  const canRegister = guard.ready && !readOnly && !!point && point.eligible !== false && !busy && (!lossy || !!reason.trim()) && (!sel.options.length || iqReady)
   return (
     <fieldset disabled={busy} className="lever-select" style={{ border: 0, margin: 0, padding: 0, minWidth: 0 }}>
       <div className="lever-select-head">
@@ -147,6 +151,7 @@ export function LeverSelect({ la, battery, runId, scenarioId, variantId, project
           </>}
         </section>
         <section className="lever-select-result" style={{ borderLeftColor: IQ_COLOR[iq] }}>
+          <RegistrationBasis guard={guard} />
           {point ? <>
             {point.eligible === false && <div className="err">이 조합은 탐색 제약을 만족하지 않아 등록할 수 없습니다.</div>}
             <div><span className="mono lever-tile-v">{fmt(point.total_mw, 1)}</span> mW <span className="faint">{maText(point.total_mw, battery)}</span>

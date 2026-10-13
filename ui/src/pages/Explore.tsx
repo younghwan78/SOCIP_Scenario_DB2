@@ -1,6 +1,8 @@
 import { Fragment, useMemo, useRef, useState } from 'react'
 import type { Ctx } from '../App'
 import { useAsync } from '../lib/route'
+import { useRegistrationGuard } from '../lib/registration'
+import { RegistrationBasis } from '../components/RegistrationBasis'
 import { fmt, type Statistic } from '../lib/timingBudget'
 import {
   DEFAULT_RUN, IQ_COLOR, METRIC_COLOR, archApi, caseGroups, bestOption, caseCount, caseDelta, coverageOf, levels, promoteTargets, runBody, short, variantKey,
@@ -161,14 +163,17 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
   const choose = (vid: string) => ctx.navigate(undefined, { v: vid === ctx.params.v ? undefined : vid }, true)
   const foreign = !!ctx.project && run.project_ref !== ctx.project
   const targets = promoteTargets(run)
+  // The server locks every spec-OK row before skipping rows without a selectable case.
+  const guard = useRegistrationGuard(run.variants.filter((variant) => variant.spec_ok), run.project_ref, run.id)
   const [confirm, setConfirm] = useState(false)
   const promoteAll = async () => {
-    if (busy || foreign) return
+    if (busy || foreign || !guard.ready || !guard.expected) return
     setBusy(true); setMsg(undefined)
     try {
-      const r = await archApi.promote(run.id, undefined, undefined, undefined, undefined, run.project_ref ?? undefined)
+      const r = await archApi.promote(run.id, undefined, undefined, undefined, undefined, run.project_ref ?? undefined, guard.expected)
+      guard.refresh()
       setMsg(`${r.promoted.length}개 variant를 최저 power 조합으로 등록 (건너뜀 ${r.skipped.length})`); setConfirm(false)
-    } catch (e) { setMsg(e instanceof Error ? e.message : String(e)) } finally { setBusy(false) }
+    } catch (e) { setMsg(guard.fail(e)) } finally { setBusy(false) }
   }
   const report = async () => {
     if (busy) return
@@ -237,7 +242,8 @@ function RunView({ run, ctx }: { run: RunDetail; ctx: Ctx }) {
       <div><b>Project {run.project_ref}</b> · {targets.length}개 variant의 current 예측을 최저 power 조합으로 교체합니다. spec 미달 {run.variants.length - targets.length}개는 건너뜀.</div>
       <div className="faint mono" style={{ fontSize: 12, maxHeight: 120, overflow: 'auto' }}>{targets.map((v) => `${short(v.variant_id)} ${fmt(v.recommended?.total_mw, 1)} mW${coverageOf(v) === 'partial' ? ' (부분 모델)' : ''}`).join(' · ')}</div>
       <div style={{ display: 'flex', gap: 8 }}>
-        <button className="btn primary" disabled={busy} onClick={promoteAll}>{busy ? '등록 중…' : `${targets.length}개 등록`}</button>
+        <RegistrationBasis guard={guard} />
+        <button className="btn primary" disabled={busy || !guard.ready} onClick={promoteAll}>{busy ? '등록 중…' : `${targets.length}개 등록`}</button>
         <button className="btn" disabled={busy} onClick={() => setConfirm(false)}>취소</button></div>
     </section>}
     <VariantFailures errors={run.errors} />
@@ -309,25 +315,28 @@ function VariantDetailBody({ v, run, readOnly, battery, iqKeep = false }: { v: V
   const [busy, setBusy] = useState(false)
   const allCases = groups ? [...groups.keep, ...groups.trade] : candRows.map((x) => x.c)
   const registering = useRef(false)
+  const guard = useRegistrationGuard([v], run.project_ref, run.id)
   const picked = allCases.find((c) => c.key === pick)
   // IQ-keeping case at the resolved DVFS -> lever registration (no reason needed, rule lever:iq-keep)
   const viaLever = !!picked && !!v.design_points?.length && !(picked.lossy && picked.compression.length) && !picked.dvfs_raise
   const needsReason = !viaLever && pick !== serverDefault
   const promote = async () => {
-    if (registering.current || readOnly || !picked?.eligible) return
+    if (registering.current || readOnly || !picked?.eligible || !guard.ready || !guard.expected) return
     registering.current = true
     setBusy(true); setMsg(undefined)
     try {
       if (viaLever && picked) {
         const r = await archApi.registerLever({ run_id: run.id, scenario_id: v.scenario_id, variant_id: v.variant_id,
-          compression: picked.compression_modes ?? {}, options: [], iq_results: [], reason: reason || undefined, expected_project_ref: run.project_ref ?? undefined })
+          compression: picked.compression_modes ?? {}, options: [], iq_results: [], reason: reason || undefined, expected_project_ref: run.project_ref ?? undefined, expected_current: guard.expected })
+        guard.refresh()
         setMsg(r.promoted.length ? `등록: ${r.promoted[0].id} (${fmt(r.promoted[0].total_mw, 1)} mW · ${r.rule})` : `건너뜀: ${r.skipped?.[0]?.reason ?? ''}`)
         return
       }
       const chosen = pick && pick !== serverDefault ? pick : undefined
-      const r = await archApi.promote(run.id, [v.variant_id], chosen, reason || undefined, v.scenario_id, run.project_ref ?? undefined)
+      const r = await archApi.promote(run.id, [v.variant_id], chosen, reason || undefined, v.scenario_id, run.project_ref ?? undefined, guard.expected)
+      guard.refresh()
       setMsg(r.promoted.length ? `등록: ${r.promoted[0].id} (${fmt(r.promoted[0].total_mw, 1)} mW)` : `건너뜀: ${r.skipped[0]?.reason}`)
-    } catch (e) { setMsg(e instanceof Error ? e.message : String(e)) } finally { registering.current = false; setBusy(false) }
+    } catch (e) { setMsg(guard.fail(e)) } finally { registering.current = false; setBusy(false) }
   }
   const m = v.sw_margin
   const tip = useTip()
@@ -382,7 +391,8 @@ function VariantDetailBody({ v, run, readOnly, battery, iqKeep = false }: { v: V
       </table>
       <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <input className="input" style={{ flex: 1, minWidth: 240 }} placeholder={needsReason ? (picked?.lossy ? 'lossy(화질 trade) 선택 사유 (필수)' : '기본 외 조합 선택 사유 (필수)') : '사유 (선택)'} value={reason} onChange={(e) => setReason(e.target.value)} />
-        <button className="btn primary" disabled={busy || readOnly || !v.spec_ok || !picked?.eligible || (needsReason && !reason.trim())} onClick={promote}
+        <RegistrationBasis guard={guard} />
+        <button className="btn primary" disabled={busy || !guard.ready || readOnly || !v.spec_ok || !picked?.eligible || (needsReason && !reason.trim())} onClick={promote}
           title={readOnly ? '다른 과제의 run — 비교 보기 전용' : undefined}>{busy ? '등록 중…' : '예측으로 등록 (current)'}</button>
         {msg && <span className="faint" style={{ fontSize: 12 }}>{msg}</span>}
       </div>

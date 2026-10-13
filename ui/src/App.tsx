@@ -19,6 +19,7 @@ import { CalibrationPage } from './pages/Calibration'
 import { CpuWhatIfPage } from './pages/CpuWhatIf'
 import { LibraryPage } from './pages/Library'
 import { SettingsPage } from './pages/Settings'
+import { ScenarioWhatIfPage } from './pages/ScenarioWhatIf'
 import { PREFERRED_REFERENCE } from './lib/defaults'
 import { addItem, canonicalOf, compareItems, counterpart, defaultScenario, formatItems, projectText, projectsOf, type ProjectInfo } from './lib/projects'
 import { AdmissionWaitPill } from './components/AdmissionWait'
@@ -31,6 +32,7 @@ const NAV: { title: string; items: NavItem[] }[] = [
     { page: 'pipeline', label: 'Pipeline', icon: 'pipeline' },
     { page: 'compare', label: 'Compare', icon: 'compare' }] },
   { title: '2 · 예측', items: [
+    { page: 'whatif', label: '자연어 What-if', icon: 'probe' },
     { page: 'timing', label: 'Timing Budget', icon: 'timer', also: ['timing-fleet'] },
     { page: 'predictions', label: '예측 현황', icon: 'bars' }] },
   { title: '3 · 검증', items: [
@@ -54,7 +56,7 @@ const NEXT: Partial<Record<Page, { page: Page; label: string }>> = {
 
 const TITLES: Record<Page, string> = {
   home: 'Home', explorer: 'Scenario', matrix: 'Scenario', pipeline: 'Pipeline', compare: 'Compare', timing: 'Timing Budget · variant', 'timing-fleet': 'Timing Budget · 전체 variant',
-  explore: '조합 탐색', predictions: '예측 현황', reports: 'Architecture 검토 보고서', calibration: '예측 ↔ 실측', cpu: 'CPU 배치 · 주파수 what-if', library: 'Library', settings: '설정',
+  explore: '조합 탐색', predictions: '예측 현황', reports: 'Architecture 검토 보고서', calibration: '예측 ↔ 실측', cpu: 'CPU 배치 · 주파수 what-if', whatif: '자연어 What-if · 조건 비교', library: 'Library', settings: '설정',
 }
 
 export interface Ctx {
@@ -216,6 +218,7 @@ export default function App() {
         {route.page === 'home' && <HomePage key={scenario} ctx={ctx} />}
         {!catalogQ.error && route.page === 'calibration' && <CalibrationPage key={scenario} ctx={ctx} />}
         {!catalogQ.error && route.page === 'cpu' && <CpuWhatIfPage ctx={ctx} />}
+        {!catalogQ.error && route.page === 'whatif' && <ScenarioWhatIfPage ctx={ctx} />}
         {!catalogQ.error && route.page === 'library' && <LibraryPage ctx={ctx} />}
         {route.page === 'settings' && <SettingsPage />}
       </div>

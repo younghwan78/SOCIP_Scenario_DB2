@@ -14,6 +14,8 @@ import { usePref } from '../components/Layout'
 import { invalidateCache } from '../lib/api'
 import { ConditionBar, DvfsOverrideTable, IntervalBoxes, MeasuredCompareCard, MeasuredPicker, type Condition } from '../components/TimingWorkbench'
 import { calibrationApi } from '../lib/calibration'
+import { useRegistrationGuard } from '../lib/registration'
+import { RegistrationBasis } from '../components/RegistrationBasis'
 
 const SCALES = [1.0, 1.1, 1.2, 1.3, 1.4, 1.5]
 
@@ -67,6 +69,7 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
   const distQ = useAsync<IntervalDistribution | null>(() => (variant && distOn && mainReady && !dq.loading && !wq.loading && !q.loading ? timingApi.distribution(scenario, variant, baseOpts, cfg, config) : Promise.resolve(null)),
     [scenario, variant, distOn, mainReady, dq.loading, wq.loading, q.loading, cfg, margin, statistic, eis, scale, cpuModel, tpParam, warmup, condKey])
   const r = q.data?.report
+  const guard = useRegistrationGuard([{ scenario_id: scenario, variant_id: variant }], ctx.project, r?.condition_hash ?? '')
   const whatif = wq.data?.report.whatif ?? []
   const effTp = tpParam ?? (r?.stages?.find((x) => x.id === 'nrt')?.throughput === 'pipelined' ? 'pipelined' : r ? 'stage' : policyTp)
   const cond: Condition = { statistic, scale, eis, cpuModel: measured?.cpu ? 'profile' : cpuModel, throughput: effTp, margin, profile: q.data?.config_profile_ref ?? cfg ?? null, overrides, measured, powerParams: pp || null }
@@ -108,11 +111,14 @@ export function TimingBudgetPage({ ctx }: { ctx: Ctx }) {
         {r && <span className="chip" title={r.dvfs.tables.join(', ')}>DVFS {r.dvfs.applied ? r.dvfs.table_ref ?? 'custom' : '미연결'}</span>}
         <button className="btn" title="현재 scenario의 모든 variant를 같은 모델(CPU · 처리량 · margin · 통계)로" onClick={() => ctx.navigate('timing-fleet', { cfg: ctx.params.cfg, margin: ctx.params.margin, cpu: ctx.params.cpu, tp: ctx.params.tp, stat: ctx.params.stat })}>전체 variant →</button>
       </div>
-      {r && variant && <ConditionBar key={JSON.stringify([scenario, variant, cond, r.condition_hash])} cond={cond} verdict={r.verdict.status}
+      {r && variant && <RegistrationBasis guard={guard} />}
+      {r && variant && <ConditionBar key={JSON.stringify([scenario, variant, cond, r.condition_hash])} cond={cond} verdict={r.verdict.status} registrationReady={guard.ready}
         onSaveEvidence={async () => { const x = await timingApi.saveEvidence(scenario, variant, baseOpts, cfg, config, r.condition_hash); invalidateCache('/evidence'); invalidateCache('/calibration'); invalidateCache(`/scenarios/${encodeURIComponent(scenario)}`)
           return x.existed ? `이미 저장된 같은 조건 (${x.evidence_id})` : `저장됨 ${x.evidence_id}` }}
-        onRegister={async (reason) => { const x = await timingApi.register(scenario, variant, baseOpts, reason, cfg, config, ctx.project, r.condition_hash)
-          const p = x.promoted[0]; return p ? `등록됨 ${p.id}${x.total_mw ? ` · ${fmt(x.total_mw, 0)} mW` : ''}` : `등록 안 됨: ${x.skipped.map((k) => k.reason).join(', ')}` }}
+        onRegister={async (reason) => { if (!guard.ready || !guard.expected) throw new Error('등록 기준을 먼저 확인하세요.')
+          try { const x = await timingApi.register(scenario, variant, baseOpts, reason, cfg, config, ctx.project, r.condition_hash, guard.expected[0].prediction_id)
+            guard.refresh(); const p = x.promoted[0]; return p ? `등록됨 ${p.id}${x.total_mw ? ` · ${fmt(x.total_mw, 0)} mW` : ''}` : `등록 안 됨: ${x.skipped.map((k) => k.reason).join(', ')}`
+          } catch (e) { throw new Error(guard.fail(e)) } }}
         onOpenPredictions={() => ctx.navigate('predictions', { sf: scenario })} />}
       {(sp.error || q.error) && <div className="err">{sp.error || q.error}</div>}
       {q.loading && !r && !sp.error && <div className="empty">계산 중…</div>}

@@ -1,5 +1,6 @@
 // Thin client for the ScenarioDB FastAPI read endpoints (served under /api/v1).
 import { fetchAdmitted } from './admission'
+import { authVersion } from './auth'
 export const API_BASE: string = (import.meta.env.VITE_SCENARIODB_API_BASE as string | undefined) ?? '/api/v1'
 
 export type Dict = Record<string, unknown>
@@ -189,7 +190,8 @@ export function invalidateCache(prefix: string): void {
 
 export async function getJson<T>(path: string, params: Record<string, string | number | undefined | null> = {}, useCache = true): Promise<T> {
   const url = `${API_BASE}${path}${qs(params)}`
-  const cached = cache.get(url)
+  const cacheKey = `${url}|auth:${authVersion()}`
+  const cached = cache.get(cacheKey)
   if (useCache && cached && cached.expires > Date.now()) return cached.promise as Promise<T>
   const promise = fetchAdmitted(url, {}).then(async (res) => {
     if (!res.ok) throw new ApiError(`${res.status} ${res.statusText} — ${path}`, res.status)
@@ -197,14 +199,14 @@ export async function getJson<T>(path: string, params: Record<string, string | n
   })
   if (useCache) {
     if (cache.size >= 100) cache.delete(cache.keys().next().value!)
-    cache.set(url, { promise, expires: Date.now() + 60000 })
-    promise.catch(() => { if (cache.get(url)?.promise === promise) cache.delete(url) })
+    cache.set(cacheKey, { promise, expires: Date.now() + 60000 })
+    promise.catch(() => { if (cache.get(cacheKey)?.promise === promise) cache.delete(cacheKey) })
   }
   return promise
 }
 
-export async function postJson<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetchAdmitted(`${API_BASE}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+export async function requestJson<T>(method: 'POST' | 'PUT' | 'PATCH', path: string, body: unknown): Promise<T> {
+  const res = await fetchAdmitted(`${API_BASE}${path}`, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
   if (!res.ok) {
     let detail = ''
     try { const j = await res.json() as Dict; detail = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail ?? j).slice(0, 300) } catch { /* not JSON */ }
@@ -212,6 +214,7 @@ export async function postJson<T>(path: string, body: unknown): Promise<T> {
   }
   return res.json() as Promise<T>
 }
+export const postJson = <T>(path: string, body: unknown) => requestJson<T>('POST', path, body)
 
 export interface SimRunRequest {
   scenario_id: string

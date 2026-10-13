@@ -34,6 +34,14 @@ class ArchExplorationRunRequest(_DvfsSelection):
         return self
 
 
+class ExpectedCurrentPrediction(BaseModel):
+    """The current prediction a caller reviewed; null means no registered prediction."""
+
+    scenario_id: str
+    variant_id: str
+    prediction_id: str | None
+
+
 class PromoteRequest(BaseModel):
     run_id: str
     scenario_id: str | None = None
@@ -42,13 +50,20 @@ class PromoteRequest(BaseModel):
     reason: str | None = Field(default=None, max_length=500)
     # Project the caller believes it is changing; a mismatch with the run's project is refused
     expected_project_ref: str | None = None
+    expected_current: list[ExpectedCurrentPrediction] | None = Field(default=None, max_length=500)
 
     @model_validator(mode="after")
     def _user_choice(self) -> PromoteRequest:
         if self.case_key is not None:
             if not self.variant_ids or len(self.variant_ids) != 1:
                 raise ValueError("case_key requires exactly one variant_id")
+        _unique_expectations(self.expected_current)
         return self
+
+
+def _unique_expectations(expected: list[ExpectedCurrentPrediction] | None) -> None:
+    if expected is not None and len({(item.scenario_id, item.variant_id) for item in expected}) != len(expected):
+        raise ValueError("duplicate expected_current scenario/variant pairs")
 
 
 class ArchReportRequest(BaseModel):
@@ -106,6 +121,7 @@ class LeverRegisterRequest(BaseModel):
     iq_results: list[IqResult] = Field(default_factory=list, max_length=16)
     reason: str | None = Field(default=None, max_length=500)
     expected_project_ref: str | None = None
+    expected_current: list[ExpectedCurrentPrediction] | None = Field(default=None, max_length=500)
 
     @model_validator(mode="after")
     def _options(self) -> LeverRegisterRequest:
@@ -118,4 +134,5 @@ class LeverRegisterRequest(BaseModel):
             raise ValueError("IQ result note must contain non-whitespace text")
         if len({r.option_key for r in self.iq_results}) != len(self.iq_results):
             raise ValueError("duplicate IQ result keys")
+        _unique_expectations(self.expected_current)
         return self

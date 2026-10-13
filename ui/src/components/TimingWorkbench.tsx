@@ -33,9 +33,10 @@ export function measuredChip(m: MeasuredInputs): string {
 type Act = { status: 'idle' } | { status: 'busy' } | { status: 'done'; text: string; link?: { label: string; onClick: () => void } } | { status: 'error'; text: string }
 
 /** Condition summary + "Sim evidence 저장" / "예측으로 등록". */
-export function ConditionBar({ cond, verdict, onSaveEvidence, onRegister, onOpenPredictions }: {
+export function ConditionBar({ cond, verdict, onSaveEvidence, onRegister, onOpenPredictions, registrationReady = true }: {
   cond: Condition; verdict: string | null
   onSaveEvidence: () => Promise<string>; onRegister: (reason: string) => Promise<string>; onOpenPredictions: () => void
+  registrationReady?: boolean
 }) {
   const [reason, setReason] = useState('')
   const [asking, setAsking] = useState(false)
@@ -48,7 +49,7 @@ export function ConditionBar({ cond, verdict, onSaveEvidence, onRegister, onOpen
     try { setAct({ status: 'done', text: await f(), link }) } catch (e) { setAct({ status: 'error', text: e instanceof Error ? e.message : String(e) }) }
     finally { busy.current = false }
   }
-  const canRegister = verdict !== 'fail'
+  const canRegister = verdict !== 'fail' && registrationReady
   return <div className="panel tb-cond" style={{ padding: '6px 10px', display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', fontSize: 12 }}>
     <b style={{ fontSize: 12 }}>예측 조건</b>
     {conditionChips(cond).map((c) => <span key={c} className="chip" style={{ fontSize: 11.5 }}>{c}</span>)}
@@ -59,7 +60,7 @@ export function ConditionBar({ cond, verdict, onSaveEvidence, onRegister, onOpen
       title={canRegister ? '이 조건을 이 variant의 current 예측으로 등록 (예측 현황 · 보고서 숫자). 이전 등록은 superseded' : 'timing fail 조건은 등록할 수 없습니다 (fps drop 불가)'}>예측으로 등록…</button>
       : <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
         <input className="input" style={{ width: 220, padding: '3px 6px' }} placeholder="등록 사유 (필수)" value={reason} onChange={(e) => setReason(e.target.value)} aria-label="등록 사유" autoFocus />
-        <button className="btn tb-mini primary" disabled={!reason.trim() || act.status === 'busy'} onClick={() => { setAsking(false); run(() => onRegister(reason.trim()), { label: '예측 현황 →', onClick: onOpenPredictions }) }}>등록</button>
+        <button className="btn tb-mini primary" disabled={!reason.trim() || act.status === 'busy' || !canRegister} onClick={() => { setAsking(false); run(() => onRegister(reason.trim()), { label: '예측 현황 →', onClick: onOpenPredictions }) }}>등록</button>
         <button className="btn tb-mini" onClick={() => setAsking(false)}>취소</button></span>}
     {act.status === 'busy' && <span className="faint">처리 중…</span>}
     {act.status === 'done' && <span className="faint">{act.text}{act.link && <> · <a href="#" onClick={(e) => { e.preventDefault(); act.link!.onClick() }}>{act.link.label}</a></>}</span>}

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Index, Text, UniqueConstraint, func, text
+from sqlalchemy import (
+    CheckConstraint, Column, DateTime, ForeignKey, ForeignKeyConstraint, Index, Integer, Text,
+    UniqueConstraint, func, text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 
 from scenario_db.db.base import Base
@@ -59,6 +62,49 @@ class Prediction(Base):
     input_hash = Column(Text, nullable=False)
     dvfs_table_ref = Column(Text)
     supersedes_ref = Column(Text, ForeignKey("predictions.id"))
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class PredictionNote(Base):
+    """Mutable collaboration notes, separate from a prediction's calculated snapshot."""
+
+    __tablename__ = "prediction_notes"
+    __table_args__ = (
+        CheckConstraint("revision > 0", name="ck_prediction_note_revision"),
+    )
+
+    prediction_ref = Column(Text, ForeignKey("predictions.id", ondelete="CASCADE"), primary_key=True)
+    title = Column(Text, nullable=False, server_default="")
+    purpose = Column(Text, nullable=False, server_default="")
+    description = Column(Text, nullable=False, server_default="")
+    assumptions = Column(Text, nullable=False, server_default="")
+    conclusion = Column(Text, nullable=False, server_default="")
+    tags = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    revision = Column(Integer, nullable=False, server_default=text("1"))
+    created_by = Column(Text, nullable=False)
+    updated_by = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class PredictionComment(Base):
+    """Append-only discussion; a reply belongs to the same prediction as its parent."""
+
+    __tablename__ = "prediction_comments"
+    __table_args__ = (
+        UniqueConstraint("prediction_ref", "id", name="uq_prediction_comment_scope"),
+        ForeignKeyConstraint(
+            ["prediction_ref", "parent_ref"], ["prediction_comments.prediction_ref", "prediction_comments.id"],
+            name="fk_prediction_comment_parent_scope", ondelete="CASCADE",
+        ),
+        Index("idx_prediction_comment_order", "prediction_ref", "created_at", "id"),
+    )
+
+    id = Column(Text, primary_key=True)
+    prediction_ref = Column(Text, ForeignKey("predictions.id", ondelete="CASCADE"), nullable=False)
+    parent_ref = Column(Text)
+    body = Column(Text, nullable=False)
+    created_by = Column(Text, nullable=False)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 

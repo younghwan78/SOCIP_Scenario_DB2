@@ -62,13 +62,14 @@ def recompute_prediction(db: Session, prediction_id: str, *, power_params_ref: s
             timing.pop("cpu_profile", None)
         req = TimingBudgetRegisterRequest(scenario_id=pred.scenario_ref, variant_id=pred.variant_ref, options=timing,
                                           config=config, measured=measured, reason=why, expected_project_ref=pred.project_ref,
+                                          expected_current_prediction_id=prediction_id,
                                           **{k: sel[k] for k in _SEL_KEYS if k in sel})
         out = register_condition(db, req, user)
     else:
         if spec.get("apply_options") or str(pred.selection_rule or "").startswith(("user:", "lever:")):
             return {"prediction_id": pred.id, "variant_id": pred.variant_ref, "status": "skipped",
                     "reason": f"사람이 고른 조합 ({pred.selection_rule}) — 조합 탐색에서 다시 선택 필요"}
-        from scenario_db.api.schemas.arch_exploration import ArchExplorationRunRequest, PromoteRequest
+        from scenario_db.api.schemas.arch_exploration import ArchExplorationRunRequest, ExpectedCurrentPrediction, PromoteRequest
         from scenario_db.api.services.arch_exploration import promote, run_exploration
 
         req = ArchExplorationRunRequest(
@@ -78,7 +79,10 @@ def recompute_prediction(db: Session, prediction_id: str, *, power_params_ref: s
             spec={k: spec[k] for k in _SPEC_KEYS if k in spec}, **{k: sel[k] for k in _SEL_KEYS if k in sel})
         new_run = run_exploration(db, req, user)
         out = promote(db, PromoteRequest(run_id=new_run["id"], scenario_id=pred.scenario_ref, variant_ids=[pred.variant_ref],
-                                         reason=why, expected_project_ref=pred.project_ref), user)
+                                         reason=why, expected_project_ref=pred.project_ref,
+                                         expected_current=[ExpectedCurrentPrediction(
+                                             scenario_id=str(pred.scenario_ref), variant_id=str(pred.variant_ref),
+                                             prediction_id=prediction_id)]), user)
     promoted = out.get("promoted") or []
     if not promoted:
         return {"prediction_id": pred.id, "variant_id": pred.variant_ref, "status": "skipped",
