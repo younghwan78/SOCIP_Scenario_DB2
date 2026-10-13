@@ -11,7 +11,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 
 revision = "0025"
-down_revision = "0024"
+down_revision = "0024_prediction_collaboration"
 branch_labels = None
 depends_on = None
 
@@ -30,6 +30,7 @@ def upgrade() -> None:
         sa.Column("dvfs_table_ref", sa.Text()),
         sa.Column("engine_rev", sa.Text(), nullable=False),
         sa.Column("content_hash", sa.Text(), nullable=False),
+        sa.Column("input_stamp", JSONB, nullable=False, server_default=sa.text("'{}'::jsonb")),
         sa.Column("parent_ref", sa.Text()),
         sa.Column("notes", sa.Text()),
         sa.Column("trial", JSONB, nullable=False, server_default=sa.text("'{}'::jsonb")),

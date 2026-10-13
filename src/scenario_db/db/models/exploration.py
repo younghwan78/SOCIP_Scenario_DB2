@@ -185,6 +185,7 @@ class ModelBasis(Base):
     dvfs_table_ref = Column(Text)
     engine_rev = Column(Text, nullable=False)
     content_hash = Column(Text, nullable=False)
+    input_stamp = Column(JSONB, nullable=False, default=dict)
     parent_ref = Column(Text)
     notes = Column(Text)
     trial = Column(JSONB, nullable=False, default=dict)

@@ -12,8 +12,10 @@ variant data (scenario / variant YAML) — both are reported next to the basis l
 from __future__ import annotations
 
 import hashlib
+import json
 from datetime import UTC, datetime
 from typing import Any
+from uuid import uuid4
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -21,13 +23,67 @@ from sqlalchemy.orm import Session
 from scenario_db.db.models.capability import PowerModelParams, SimConfigProfile, SocDvfsTable
 from scenario_db.db.models.definition import Project, Scenario
 from scenario_db.db.models.exploration import ModelBasis
-from scenario_db.exceptions import NotFoundError, UnprocessableError
+from scenario_db.exceptions import ConflictError, NotFoundError, UnprocessableError
 
 BASIS_FIELDS = ("config_profile_ref", "power_params_ref", "dvfs_table_ref")
 
 
 def _now() -> datetime:
     return datetime.now(UTC)
+
+
+def _lock_project(db: Session, project_ref: str) -> Project:
+    row = db.query(Project).filter_by(id=project_ref).populate_existing().with_for_update(key_share=True).one_or_none()
+    if row is None:
+        raise NotFoundError(f"project not found: {project_ref}")
+    return row
+
+
+def _locked_basis(db: Session, basis_id: str) -> ModelBasis:
+    row = get_basis(db, basis_id)
+    _lock_project(db, row.project_ref)
+    return db.query(ModelBasis).filter_by(id=basis_id).populate_existing().one()
+
+
+def _input_stamp(db: Session, project_ref: str, cfg: str | None, pp: str | None, dvfs: str | None) -> dict:
+    project = db.get(Project, project_ref)
+    if project is None:
+        raise NotFoundError(f"project not found: {project_ref}")
+    soc = (project.metadata_ or {}).get("soc_ref") or (project.globals_ or {}).get("soc_ref")
+    stamp: dict[str, Any] = {"soc_ref": soc}
+    if not dvfs:
+        default = db.query(SocDvfsTable).filter_by(soc_ref=soc).order_by(SocDvfsTable.dvfs_version.desc()).first()
+        stamp["default_dvfs_ref"] = default.id if default is not None else None
+    for key, cls, ref, fields in (
+        ("config_profile", SimConfigProfile, cfg, ("version", "project_ref", "soc_ref", "run_config")),
+        ("power_params", PowerModelParams, pp, ("version", "soc_ref", "params")),
+        ("dvfs", SocDvfsTable, dvfs, ("dvfs_version", "soc_ref", "domains", "compatibility_scope", "source_project_ref")),
+    ):
+        if not ref:
+            stamp[key] = None
+            continue
+        item = db.query(cls).filter_by(id=ref.split("@", 1)[0]).populate_existing().one_or_none()
+        if item is None:
+            raise NotFoundError(f"{key} not found: {ref}")
+        if item.soc_ref and item.soc_ref != soc:
+            raise UnprocessableError(f"{key} belongs to another SoC")
+        owner = getattr(item, "project_ref", None)
+        if getattr(item, "compatibility_scope", None) == "project":
+            owner = item.source_project_ref
+        if owner and owner != project_ref:
+            raise UnprocessableError(f"{key} belongs to another project")
+        values = {field: getattr(item, field) for field in fields}
+        stamp[key] = {"version": values.get("version", values.get("dvfs_version")),
+                      "hash": hashlib.sha256(json.dumps(values, sort_keys=True, separators=(",", ":")).encode()).hexdigest()}
+    return stamp
+
+
+def _assert_inputs(db: Session, row: ModelBasis) -> None:
+    from scenario_db.sim.arch_exploration import ENGINE_REV
+
+    current = _input_stamp(db, row.project_ref, row.config_profile_ref, row.power_params_ref, row.dvfs_table_ref)
+    if not row.input_stamp or current != row.input_stamp or row.engine_rev != ENGINE_REV:
+        raise UnprocessableError("basis inputs changed; create a new basis before calculating or promoting")
 
 
 def content_hash(project_ref: str, config_profile_ref: str | None, power_params_ref: str | None,
@@ -41,7 +97,7 @@ def basis_dict(row: ModelBasis) -> dict[str, Any]:
         "id": row.id, "project_ref": row.project_ref, "seq": row.seq, "code": row.code, "title": row.title,
         "status": row.status, "config_profile_ref": row.config_profile_ref, "power_params_ref": row.power_params_ref,
         "dvfs_table_ref": row.dvfs_table_ref, "engine_rev": row.engine_rev, "content_hash": row.content_hash,
-        "parent_ref": row.parent_ref, "notes": row.notes, "created_by": row.created_by,
+        "input_stamp": row.input_stamp, "parent_ref": row.parent_ref, "notes": row.notes, "created_by": row.created_by,
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "activated_by": row.activated_by, "activated_at": row.activated_at.isoformat() if row.activated_at else None,
         "components": basis_components(row),
@@ -59,7 +115,10 @@ def basis_components(row: Any) -> str:
         m = str(ref).rsplit("-v", 1)  # simcfg-proj-x-v2 -> cfg v2
         return f"{prefix} v{m[1]}" if len(m) == 2 and m[1].isdigit() else f"{prefix} {ref}"
     eng = str(getattr(row, "engine_rev", "") or "").rsplit("/", 1)[-1]
-    return " · ".join([ver(row.config_profile_ref, "cfg"), ver(row.power_params_ref, "pmp"),
+    stamp = getattr(row, "input_stamp", None) or {}
+    cfg_version = (stamp.get("config_profile") or {}).get("version")
+    cfg_label = f"cfg v{cfg_version}" if cfg_version is not None else ver(row.config_profile_ref, "cfg")
+    return " · ".join([cfg_label, ver(row.power_params_ref, "pmp"),
                        str(row.dvfs_table_ref or "DVFS 기본"), f"e{eng}" if eng.isdigit() else str(row.engine_rev)])
 
 
@@ -78,10 +137,12 @@ def _normalize_power_params(db: Session, ref: str | None) -> str | None:
 def _normalize_profile(db: Session, ref: str | None) -> str | None:
     if not ref:
         return None
-    pid = str(ref).split("@", 1)[0]
+    pid, _, version = str(ref).partition("@")
     row = db.get(SimConfigProfile, pid)
     if row is None:
         raise NotFoundError(f"sim.config_profile not found: {ref}")
+    if version and version != str(row.version):
+        raise UnprocessableError("requested config profile version is no longer available")
     return pid
 
 
@@ -91,26 +152,31 @@ def create_basis(db: Session, *, project_ref: str, config_profile_ref: str | Non
     """New draft basis. The same content in the same project returns the existing basis (``existed``)."""
     from scenario_db.sim.arch_exploration import ENGINE_REV
 
-    if db.get(Project, project_ref) is None:
-        raise NotFoundError(f"project not found: {project_ref}")
+    project = _lock_project(db, project_ref)
     cfg = _normalize_profile(db, config_profile_ref)
     if not power_params_ref and cfg:
         # pin the profile's own power params so the basis names them (a profile edit cannot change the basis)
         prof = db.get(SimConfigProfile, cfg)
         power_params_ref = ((prof.run_config or {}).get("power_params_ref") if prof is not None else None) or None
     pp = _normalize_power_params(db, power_params_ref)
+    if not dvfs_table_ref:
+        soc = (project.metadata_ or {}).get("soc_ref") or (project.globals_ or {}).get("soc_ref")
+        default = db.query(SocDvfsTable).filter_by(soc_ref=soc).order_by(SocDvfsTable.dvfs_version.desc()).first()
+        dvfs_table_ref = default.id if default is not None else None
     if dvfs_table_ref and db.get(SocDvfsTable, dvfs_table_ref) is None:
         raise NotFoundError(f"DVFS table not found: {dvfs_table_ref}")
-    if parent_ref and db.get(ModelBasis, parent_ref) is None:
-        raise NotFoundError(f"basis not found: {parent_ref}")
-    digest = content_hash(project_ref, cfg, pp, dvfs_table_ref, ENGINE_REV)
+    if parent_ref and get_basis(db, parent_ref).project_ref != project_ref:
+        raise UnprocessableError("parent basis belongs to another project")
+    stamp = _input_stamp(db, project_ref, cfg, pp, dvfs_table_ref)
+    digest = hashlib.sha256((content_hash(project_ref, cfg, pp, dvfs_table_ref, ENGINE_REV)
+                             + json.dumps(stamp, sort_keys=True)).encode()).hexdigest()
     same = db.query(ModelBasis).filter(ModelBasis.project_ref == project_ref, ModelBasis.content_hash == digest).first()
     if same is not None:
         return basis_dict(same) | {"existed": True}
     seq = int(db.query(func.coalesce(func.max(ModelBasis.seq), 0)).filter(ModelBasis.project_ref == project_ref).scalar() or 0) + 1
     row = ModelBasis(id=f"basis-{project_ref}-{seq}", project_ref=project_ref, seq=seq, code=f"B{seq}", title=title,
                      status="draft", config_profile_ref=cfg, power_params_ref=pp, dvfs_table_ref=dvfs_table_ref,
-                     engine_rev=ENGINE_REV, content_hash=digest, parent_ref=parent_ref, notes=notes, trial={},
+                     engine_rev=ENGINE_REV, content_hash=digest, input_stamp=stamp, parent_ref=parent_ref, notes=notes, trial={},
                      created_by=user, created_at=_now())
     db.add(row)
     db.commit()
@@ -132,14 +198,15 @@ def get_basis(db: Session, basis_id: str) -> ModelBasis:
 def active_basis(db: Session, project_ref: str | None) -> ModelBasis | None:
     if not project_ref:
         return None
-    return db.query(ModelBasis).filter(ModelBasis.project_ref == project_ref, ModelBasis.status == "active").one_or_none()
+    return db.query(ModelBasis).filter(ModelBasis.project_ref == project_ref, ModelBasis.status == "active").populate_existing().one_or_none()
 
 
 def activate_basis(db: Session, basis_id: str, user: str | None = None, *, commit: bool = True) -> dict[str, Any]:
     """Make a basis the project's default; the previous active one is retired (kept for history)."""
-    row = get_basis(db, basis_id)
+    row = _locked_basis(db, basis_id)
     if row.status == "retired":
         raise UnprocessableError("a retired basis cannot be activated again; create a new basis from it")
+    _assert_inputs(db, row)
     if row.status != "active":
         prev = active_basis(db, row.project_ref)
         if prev is not None:
@@ -154,7 +221,7 @@ def activate_basis(db: Session, basis_id: str, user: str | None = None, *, commi
 
 
 def retire_basis(db: Session, basis_id: str) -> dict[str, Any]:
-    row = get_basis(db, basis_id)
+    row = _locked_basis(db, basis_id)
     if row.status == "active":
         raise UnprocessableError("activate another basis first; the project always keeps its active basis")
     row.status = "retired"
@@ -190,13 +257,16 @@ def apply_basis(db: Session, request: Any, project_ref: str | None = None) -> Mo
     """
     if not hasattr(request, "basis_ref"):
         return None
+    project = project_ref or _project_of(db, request)
     if request.basis_ref:
         basis = get_basis(db, request.basis_ref)
     else:
-        project = project_ref or _project_of(db, request)
         basis = active_basis(db, project) if isinstance(project, str) else None
     if basis is None or not isinstance(getattr(basis, "id", None), str):
         return None
+    if basis.project_ref != project:
+        raise UnprocessableError("basis belongs to another project")
+    _assert_inputs(db, basis)
     overrides: list[str] = list(getattr(request, "basis_overrides", None) or [])
     cfg_explicit = request.config_profile_ref
     if cfg_explicit and cfg_explicit.split("@", 1)[0] != (basis.config_profile_ref or ""):
@@ -204,14 +274,16 @@ def apply_basis(db: Session, request: Any, project_ref: str | None = None) -> Mo
     elif not cfg_explicit and basis.config_profile_ref:
         request.config_profile_ref = basis.config_profile_ref
     config = request.config
+    if config.model_fields_set - {"power_params_ref"}:
+        overrides.append("config")
     pp_explicit = "power_params_ref" in config.model_fields_set or config.power_params is not None
     if pp_explicit:
-        mine = (config.power_params_ref or "").split("@", 1)[0]
-        if config.power_params is not None or mine != (basis.power_params_ref or "").split("@", 1)[0]:
+        mine = config.power_params_ref or ""
+        if config.power_params is not None or mine != (basis.power_params_ref or ""):
             overrides.append("power_params")
     elif basis.power_params_ref:
         request.config = config.model_copy(update={"power_params_ref": basis.power_params_ref})
-    if getattr(request, "dvfs_tables", None):
+    if getattr(request, "dvfs_tables", None) or getattr(request, "dvfs_version", None) is not None:
         overrides.append("dvfs")
     elif request.dvfs_table_ref and request.dvfs_table_ref != basis.dvfs_table_ref:
         overrides.append("dvfs")
@@ -242,14 +314,15 @@ def start_trial(db: Session, basis_id: str, user: str | None = None) -> dict[str
     """Snapshot the project's current predictions as the trial set of a draft basis (P2 step 1)."""
     from scenario_db.db.models.exploration import Prediction
 
-    row = get_basis(db, basis_id)
+    row = _locked_basis(db, basis_id)
     if row.status != "draft":
         raise UnprocessableError("only a draft basis is tried; the active one is already the default")
+    _assert_inputs(db, row)
     preds = db.query(Prediction).filter(Prediction.project_ref == row.project_ref, Prediction.status == "current") \
         .order_by(Prediction.scenario_ref, Prediction.variant_ref).all()
     items = {p.id: {"prediction_id": p.id, "scenario_id": p.scenario_ref, "variant_id": p.variant_ref, "status": "pending",
                     "old_total_mw": ((p.metrics or {}).get("power") or {}).get("total_mw")} for p in preds}
-    row.trial = {"started_at": _now().isoformat(), "started_by": user, "total": len(items), "items": items}
+    row.trial = {"trial_id": uuid4().hex, "started_at": _now().isoformat(), "started_by": user, "total": len(items), "items": items}
     db.commit()
     return get_trial(db, basis_id)
 
@@ -259,6 +332,10 @@ def run_trial_item(db: Session, basis_id: str, prediction_id: str, user: str | N
     from scenario_db.api.services.recompute import recompute_prediction
 
     row = get_basis(db, basis_id)
+    if row.status != "draft":
+        raise UnprocessableError("only a draft basis is tried")
+    _assert_inputs(db, row)
+    trial_id = (row.trial or {}).get("trial_id")
     items = _trial_items(row)
     if prediction_id not in items:
         raise NotFoundError(f"prediction {prediction_id} is not in the trial of {row.code}; restart the trial")
@@ -268,7 +345,9 @@ def run_trial_item(db: Session, basis_id: str, prediction_id: str, user: str | N
     except (NotFoundError, UnprocessableError) as exc:
         db.rollback()
         res = {"status": "error", "reason": str(exc)[:300]}
-    row = get_basis(db, basis_id)  # the run creation committed; reload before writing the trial back
+    row = _locked_basis(db, basis_id)
+    if row.status != "draft" or (row.trial or {}).get("trial_id") != trial_id:
+        raise ConflictError("trial changed during calculation; reload the trial")
     items = _trial_items(row)
     items[prediction_id] = {**items[prediction_id], **{k: v for k, v in res.items() if k not in ("prediction_id",)},
                             "tried_at": _now().isoformat()}
@@ -296,11 +375,12 @@ def promote_basis(db: Session, basis_id: str, user: str | None = None, *, reason
     from scenario_db.api.services.arch_exploration import promote
     from scenario_db.exceptions import ConflictError
 
-    row = get_basis(db, basis_id)
+    row = _locked_basis(db, basis_id)
     if row.status != "draft":
         raise UnprocessableError("only a draft basis is promoted")
+    _assert_inputs(db, row)
     items = _trial_items(row)
-    if not items:
+    if not any(it.get("status") == "ok" and it.get("run_id") for it in items.values()):
         raise UnprocessableError("run the trial first (기준 시험 계산)")
     why = reason or f"기준 {row.code} 승격"
     promoted, kept = [], []

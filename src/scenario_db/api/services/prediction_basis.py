@@ -138,6 +138,8 @@ def prediction_bases(db: Session, preds: list[Prediction]) -> dict[str, dict[str
         }
         reg = registry.get(str(sel.get("basis_ref"))) if sel.get("basis_ref") else None
         overrides = list(sel.get("basis_overrides") or [])
+        if reg is not None and "config_profile" not in overrides and cfg_ref == reg.config_profile_ref:
+            basis["config_version"] = ((reg.input_stamp or {}).get("config_profile") or {}).get("version")
         basis["basis_id"] = reg.id if reg is not None else None
         basis["code"] = reg.code if reg is not None else None
         basis["basis_status"] = reg.status if reg is not None else None
@@ -147,7 +149,7 @@ def prediction_bases(db: Session, preds: list[Prediction]) -> dict[str, dict[str
         basis["components"] = basis_label(basis)
         basis["key"] = hashlib.sha256("|".join(str(basis.get(k)) for k in (
             "recorded", "config_profile_ref", "config_version", "power_params_ref", "power_params_version",
-            "power_params_hash", "dvfs_table_ref", "engine_rev")).encode()).hexdigest()[:12]
+            "power_params_hash", "dvfs_table_ref", "engine_rev", "basis_id")).encode()).hexdigest()[:12]
         mref = ((run.tb or {}).get("measured") or {}).get("measurement_ref") if run is not None else None
         measured_sw = bool(((run.tb or {}).get("measured") or {}).get("sw")) if run is not None else False
         sw_ref = meas_sw.get(str(mref)) if mref and measured_sw else None

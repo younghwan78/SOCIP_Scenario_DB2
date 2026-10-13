@@ -18,6 +18,7 @@ def active(monkeypatch):
     monkeypatch.setattr(svc, "active_basis", lambda db, project: B)
     monkeypatch.setattr(svc, "get_basis", lambda db, bid: B)
     monkeypatch.setattr(svc, "_project_of", lambda db, req: "p")
+    monkeypatch.setattr(svc, "_assert_inputs", lambda db, row: None)
 
 
 def test_active_basis_fills_unset_inputs_and_is_recorded(active):
@@ -52,6 +53,20 @@ def test_no_basis_leaves_request_unchanged(monkeypatch):
     assert r.basis_ref is None and r.config_profile_ref is None
 
 
+def test_same_params_id_with_other_version_is_an_override(active):
+    r = TimingBudgetRequest(scenario_id="s", variant_id="v", config={"power_params_ref": "pmp-x-v2@1"})
+    svc.apply_basis(MagicMock(), r)
+    assert r.basis_overrides == ["power_params"]
+
+
+def test_explicit_dvfs_version_and_model_coefficients_are_preserved(active):
+    r = TimingBudgetRequest(scenario_id="s", variant_id="v", dvfs_version=99,
+                            config={"bw_power_mw_per_gbps": 12})
+    svc.apply_basis(MagicMock(), r)
+    assert r.dvfs_table_ref is None and r.dvfs_version == 99
+    assert r.basis_overrides == ["config", "dvfs"]
+
+
 def test_diff_components_and_trial_summary():
     new = SimpleNamespace(**{**vars(B), "power_params_ref": "pmp-x-v3@3"})
     assert svc.diff_bases(B, new) == [{"field": "power_params_ref", "from": "pmp-x-v2@2", "to": "pmp-x-v3@3"}]
@@ -64,6 +79,7 @@ def test_diff_components_and_trial_summary():
 
 def test_trial_and_promote_refuse_non_draft(monkeypatch):
     monkeypatch.setattr(svc, "get_basis", lambda db, bid: B)  # active
+    monkeypatch.setattr(svc, "_locked_basis", lambda db, bid: B)
     with pytest.raises(UnprocessableError):
         svc.start_trial(MagicMock(), "basis-p-2")
     with pytest.raises(UnprocessableError):
@@ -74,6 +90,8 @@ def test_run_trial_item_stores_the_dry_run(monkeypatch):
     draft = SimpleNamespace(**{**vars(B), "status": "draft", "trial": {"total": 1, "items": {
         "P1": {"prediction_id": "P1", "scenario_id": "s", "variant_id": "v", "status": "pending", "old_total_mw": 800.0}}}})
     monkeypatch.setattr(svc, "get_basis", lambda db, bid: draft)
+    monkeypatch.setattr(svc, "_locked_basis", lambda db, bid: draft)
+    monkeypatch.setattr(svc, "_assert_inputs", lambda db, row: None)
     import scenario_db.api.services.recompute as rc
     calls = {}
 
