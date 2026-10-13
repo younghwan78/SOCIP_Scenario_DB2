@@ -825,3 +825,10 @@ td.cell-votf { background: #CCFBF1; }
 td.lvc-llc { box-shadow: inset 4px 0 0 #15803D; color: #14532D; font-weight: 600; }
 td.lvc-sbwc { box-shadow: inset 4px 0 0 #BE185D; color: #831843; font-weight: 600; }
 td.lvc-votf { box-shadow: inset 4px 0 0 #0D9488; color: #134E4A; font-weight: 600; }
+/* P0 prediction basis: freshness marks (plain text, no badge) */
+.fr { font-weight: 700; }
+.fr-ok { color: #15803D; }
+.fr-basis, .fr-data { color: #B45309; }
+.fr-unknown { color: var(--muted); }
+td.fr-stale { background: #FFFBEB; }
+a.meas-syn { color: var(--muted); }

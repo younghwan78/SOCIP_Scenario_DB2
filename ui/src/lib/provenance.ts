@@ -131,6 +131,10 @@ export interface ModelStatus {
   /** real/synthetic = captures with total power; empty = imports without power data */
   measurements: { real: number; synthetic: number; empty?: number }
   lineage: Record<string, unknown> | null
+  /** P0: model bases of the current predictions (config profile · power params · DVFS · engine) */
+  bases?: { label: string; key: string; recorded: boolean; predictions: number; config_profile_ref: string | null; power_params_ref: string | null; dvfs_table_ref: string | null; engine_rev: string | null }[]
+  /** SW timing versions behind the current predictions */
+  sw?: { label: string; predictions: number }[]
 }
 export type StatusLevel = 'ok' | 'warn' | 'info'
 export interface StatusItem { key: string; text: string; title: string; level: StatusLevel; href?: string }
@@ -155,6 +159,13 @@ export function statusItems(s: ModelStatus, project?: string): StatusItem[] {
   const p = s.predictions
   items.push(p.current === 0
     ? { key: 'pred', text: '등록 예측 없음', title: '조합 탐색에서 등록', level: 'info', href: `#/explore${q}` }
+    : s.bases?.length
+      ? { key: 'pred', text: `예측 기준 ${s.bases.slice(0, 2).map((b) => `${b.label} ${b.predictions}`).join(' · ')}${s.bases.length > 2 ? ` 외 ${s.bases.length - 2}` : ''}${s.sw?.length ? ` · SW ${s.sw.map((x) => x.label).join('/')}` : ''}${p.stale_engine ? ` · 이전 engine ${p.stale_engine}/${p.current}` : ''}`,
+        title: [`등록 예측 ${p.current}건의 기준 (config profile · power params · engine):`,
+          ...s.bases.map((b) => `  ${b.label}: ${b.predictions}건${b.recorded ? ` — ${b.config_profile_ref ?? 'config 기본'} · ${b.power_params_ref ?? 'params 기본'} · ${b.dvfs_table_ref ?? 'DVFS ?'} · ${b.engine_rev ?? '?'}` : ' — 이전 engine run이라 설정 선택이 기록되지 않음'}`),
+          ...(s.sw?.length ? [`SW timing: ${s.sw.map((x) => `${x.label} ${x.predictions}건`).join(', ')}`] : []),
+          ...(p.stale_engine ? [`현재 engine ${s.engine_rev} 이전 run ${p.stale_engine}건 → 재탐색 필요`] : [])].join('\n'),
+        level: p.stale_engine > 0 || s.bases.some((b) => !b.recorded) || s.bases.length > 1 ? 'warn' : 'ok', href: `#/predictions${q}` }
     : p.stale_engine > 0
       ? { key: 'pred', text: `등록 예측 ${p.stale_engine}/${p.current} 이전 model`, title: `현재 engine ${s.engine_rev} 이전 run에서 등록됨: ${Object.entries(p.engines).map(([e, n]) => `${e} ${n}`).join(', ')} → 재탐색 필요`, level: 'warn', href: `#/explore${q}` }
       : { key: 'pred', text: `등록 예측 ${p.current}`, title: `모두 ${s.engine_rev}`, level: 'ok', href: `#/predictions${q}` })

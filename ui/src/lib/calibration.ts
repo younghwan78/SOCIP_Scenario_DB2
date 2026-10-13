@@ -36,7 +36,36 @@ export interface MeasDetail {
 
 export interface CoverageSim { id: string; at: string | null; tool?: string | null; tool_version?: string | null; source?: string | null; sw_baseline_ref?: string | null; total_mw?: number | null; shown?: boolean; by?: string | null }
 export interface CoverageMeas { id: string; at: string | null; origin: string; synthetic: boolean; sw_baseline_ref?: string | null; silicon_rev?: string | null; thermal?: string | null; build_id?: string | null; total_mw?: number | null; shown?: boolean }
-export interface CoveragePrediction { id: string; total_mw: number | null; created_at?: string | null; run?: string | null; case_key?: string | null; selection_rule?: string | null; selected_by?: string | null; dvfs_table_ref?: string | null; supersedes?: string | null; version?: number }
+export interface CoveragePrediction { id: string; total_mw: number | null; created_at?: string | null; run?: string | null; case_key?: string | null; selection_rule?: string | null; selected_by?: string | null; dvfs_table_ref?: string | null; supersedes?: string | null
+  /** n-th registration of the variant (count, not a model version) — prefer ``revision`` */
+  version?: number; revision?: number
+  /** P0 model basis the number rests on (config profile · power params · DVFS · engine) */
+  basis?: PredictionBasis
+  /** SW timing source: measured trace's SW, else the project default */
+  sw?: { ref: string | null; label: string; source: 'measured' | 'defined'; measurement_ref?: string | null }
+  /** today's inputs vs the run's frozen inputs */
+  freshness?: { status: 'fresh' | 'stale' | 'unknown'; reasons: string[]; changed: string[] }
+}
+export interface PredictionBasis {
+  recorded: boolean; label: string; key: string
+  config_profile_ref: string | null; config_version: number | null
+  power_params_ref: string | null; power_params_version: number | null; power_params_hash?: string | null
+  dvfs_table_ref: string | null; engine_rev: string | null
+}
+
+const DATA_SECTIONS = /^(variant_doc|pipeline|power_options)$/
+/** Why a registered prediction is (not) current: ok · basis (config / params / DVFS / IP / engine) · data (variant YAML) · unknown. */
+export function freshnessOf(p: CoveragePrediction): { level: 'ok' | 'basis' | 'data' | 'unknown'; text: string; detail: string[] } {
+  const f = p.freshness
+  if (!f || f.status === 'unknown') return { level: 'unknown', text: '?', detail: f?.reasons ?? ['판정 정보 없음'] }
+  if (f.status === 'fresh') return { level: 'ok', text: '✓', detail: ['현재 입력으로 다시 계산해도 같은 결과'] }
+  const data = f.changed.filter((c) => DATA_SECTIONS.test(c))
+  const basis = f.changed.filter((c) => !DATA_SECTIONS.test(c))
+  const engine = f.reasons.some((r) => r.startsWith('engine') || r.startsWith('판정 기준'))
+  const unreadable = f.reasons.some((r) => r.includes('기록 없음') || r.includes('해석 실패'))
+  const level = data.length && !basis.length && !engine ? 'data' : unreadable && !engine && !data.length ? 'unknown' : 'basis'
+  return { level, text: level === 'data' ? '⚠ 데이터' : level === 'unknown' ? '?' : '⚠ 기준', detail: f.reasons }
+}
 export interface Coverage {
   simulation: number; measurement: number; synthetic: number; unknown?: number; current_prediction: CoveragePrediction | null
   /** API ≥ 2026-10-09: newest first, ``shown`` = the representative entry */
@@ -72,7 +101,14 @@ export function simTooltip(c: Coverage): string {
     ...(sims.length > 6 ? [`… 외 ${sims.length - 6}건`] : [])].join('\n')
 }
 export function predictionTooltip(p: CoveragePrediction, short?: string): string {
-  return [`등록 예측 ${short ?? shortId(p.id)} (클릭 = 전체 ID 복사: ${p.id})${p.version ? ` · v${p.version}` : ''} · ${dayOf(p.created_at)}`,
+  const b = p.basis, f = freshnessOf(p)
+  return [`등록 예측 ${short ?? shortId(p.id)} (클릭 = 전체 ID 복사: ${p.id}) · ${dayOf(p.created_at)}${(p.revision ?? p.version) ? ` · 등록 ${p.revision ?? p.version}회째` : ''}`,
+    b ? `기준 ${b.label}` : null,
+    b ? `  config ${b.config_profile_ref ? `${b.config_profile_ref}${b.config_version != null ? ` (v${b.config_version})` : ''}` : (b.recorded ? '기본' : '미기록 (이전 engine run)')}` : null,
+    b ? `  power params ${b.power_params_ref ? `${b.power_params_ref}${b.power_params_version != null ? ` (v${b.power_params_version})` : ''}` : '기본 (내장 계수)'}` : null,
+    b ? `  DVFS ${b.dvfs_table_ref ?? '미기록'} · engine ${b.engine_rev ?? '?'}` : null,
+    p.sw ? `SW timing ${p.sw.ref ?? '?'} (${p.sw.source === 'measured' ? `실측 trace ${p.sw.measurement_ref ?? ''}` : '정의값 · 과제 기본 SW'})` : null,
+    p.freshness ? `상태 ${f.text} — ${f.detail.join(' · ')}` : null,
     p.total_mw != null ? `total ${p.total_mw.toFixed(0)} mW` : null,
     p.selection_rule ? `선정 ${p.selection_rule}${p.selected_by ? ` (${p.selected_by})` : ''}` : null,
     p.run ? `조합 탐색 run ${shortId(p.run)}` : null,

@@ -1033,7 +1033,21 @@ def model_status(db: Session, *, project_ref: str | None = None) -> dict[str, An
     latest = rq.order_by(R.created_at.desc()).first()
     lineage = (run_lineage({"variants": [{"model_lineage": x} for x in latest[4] or []], "summary": latest.summary})[0]
                if latest is not None else None)
+    # P0 model basis: which config / power params / DVFS / engine combinations the current predictions rest on
+    from scenario_db.api.services.prediction_basis import prediction_bases
+
+    pq = db.query(Prediction).filter(Prediction.status == "current")
+    if project_ref:
+        pq = pq.filter(Prediction.project_ref == project_ref)
+    basis_rows: dict[str, dict[str, Any]] = {}
+    sw_rows: dict[str, int] = {}
+    for b in prediction_bases(db, pq.all()).values():
+        cur = basis_rows.setdefault(b["basis"]["key"], {**b["basis"], "predictions": 0})
+        cur["predictions"] += 1
+        sw_rows[b["sw"]["label"]] = sw_rows.get(b["sw"]["label"], 0) + 1
     return {
+        "bases": sorted(basis_rows.values(), key=lambda r: -r["predictions"]),
+        "sw": [{"label": k, "predictions": v} for k, v in sorted(sw_rows.items(), key=lambda kv: -kv[1])],
         "engine_rev": ENGINE_REV,
         "project_ref": project_ref,
         "predictions": {"current": n_current, "stale_engine": sum(n for e, n in engines.items() if e != ENGINE_REV),
