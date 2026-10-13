@@ -2,7 +2,9 @@
 
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
+from datetime import UTC, datetime, timedelta
 from threading import Barrier, Event
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -70,6 +72,38 @@ def test_comments_replies_pagination_and_prediction_delete_cascade(engine, store
         db.commit()
         assert db.query(PredictionNote).filter_by(prediction_ref=pid).count() == 0
         assert db.query(PredictionComment).filter_by(prediction_ref=pid).count() == 0
+
+
+def test_comment_registration_order_survives_timestamp_ties_clock_regression_and_sequence_gaps(engine, stored_run, monkeypatch):
+    rid, ids = stored_run
+    with Session(engine) as db:
+        a = _promote(db, rid, ids[0])
+        b = _promote(db, rid, ids[1])
+        fixed = datetime(2026, 10, 14, tzinfo=UTC)
+        times = iter([fixed, fixed, fixed, fixed - timedelta(minutes=1)])
+        # Reverse lexical UUID order so timestamps plus IDs cannot accidentally satisfy this test.
+        ids_in_order = iter([f"{value:032x}" for value in (9, 8, 7, 6)])
+
+        class CommentClock:
+            @staticmethod
+            def now(tz):
+                return next(times)
+
+        monkeypatch.setattr(discussion, "datetime", CommentClock)
+        monkeypatch.setattr(discussion, "uuid4", lambda: SimpleNamespace(hex=next(ids_in_order)))
+        first = discussion.add_comment(db, a, PredictionCommentRequest(body="first"), "analyst")
+        other = discussion.add_comment(db, b, PredictionCommentRequest(body="other prediction"), "analyst")
+        second = discussion.add_comment(db, a, PredictionCommentRequest(body="second", parent_id=first["id"]), "writer")
+        third = discussion.add_comment(db, a, PredictionCommentRequest(body="third"), "writer")
+        assert first["created_at"] == second["created_at"]
+        assert third["created_at"] < first["created_at"]
+        assert first["id"] > second["id"] > third["id"]
+        assert discussion.list_comments(db, a)["items"] == [first, second, third]
+        assert discussion.list_comments(db, a, limit=1, offset=1)["items"] == [second]
+        assert discussion.list_comments(db, b)["items"] == [other]
+        sequences = [db.get(PredictionComment, item["id"]).sequence for item in (first, other, second, third)]
+        assert sequences == sorted(sequences) and sequences[2] > sequences[0] + 1
+        assert "sequence" not in first and "sequence" not in second and "sequence" not in third
 
 
 def test_cross_prediction_reply_is_rejected_by_service_and_database(engine, stored_run):

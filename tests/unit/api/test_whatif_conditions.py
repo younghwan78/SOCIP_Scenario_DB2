@@ -4,13 +4,13 @@ from copy import deepcopy
 import pytest
 
 from scenario_db.api.schemas.scenario_whatif import WhatIfChange, WhatIfPreviewRequest
+from scenario_db.api.services.whatif_conditions import apply_whatif_changes, whatif_targets
+from scenario_db.api.services.whatif_query import plan_query
 from scenario_db.db.models.definition import Project
 from scenario_db.sim.adapter import build_simulation_inputs
 from scenario_db.sim.measured_timing import baseline_fingerprint
 from scenario_db.sim.models import SimulationRunConfig
-from scenario_db.sim.scenario_whatif import apply_whatif_changes, whatif_targets
 from scenario_db.sim.timing_budget import analyze_timing_budget
-from scenario_db.sim.whatif_query import plan_query
 from tests.unit.sim.test_adapter_runner import _exynos2600_generated_graph
 
 

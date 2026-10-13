@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 from sqlalchemy.orm import Session, load_only
@@ -16,7 +16,7 @@ _NOTE_FIELDS = ("title", "purpose", "description", "assumptions", "conclusion", 
 
 
 def _prediction(db: Session, prediction_id: str, *, lock: bool = False) -> Prediction:
-    query = db.query(Prediction).options(load_only(Prediction.id)).filter_by(id=prediction_id)
+    query = db.query(Prediction).options(load_only(cast(Any, Prediction.id))).filter_by(id=prediction_id)
     if lock:
         query = query.populate_existing().with_for_update()
     prediction = query.one_or_none()
@@ -42,7 +42,8 @@ def get_notes(db: Session, prediction_id: str) -> dict[str, Any]:
 def put_notes(db: Session, prediction_id: str, request: PredictionNoteRequest, actor: str) -> dict[str, Any]:
     # The stable prediction row serializes even two first saves, where a note row does not yet exist.
     _prediction(db, prediction_id, lock=True)
-    row = db.query(PredictionNote).filter_by(prediction_ref=prediction_id).populate_existing().one_or_none()
+    # Legacy Column mappings expose instance values dynamically at runtime.
+    row: Any = db.query(PredictionNote).filter_by(prediction_ref=prediction_id).populate_existing().one_or_none()
     revision = row.revision if row is not None else 0
     if request.expected_revision != revision:
         raise ConflictError(f"prediction notes changed (current revision {revision}); reload before saving")
@@ -70,7 +71,8 @@ def list_comments(db: Session, prediction_id: str, *, limit: int = 50, offset: i
     _prediction(db, prediction_id)
     query = db.query(PredictionComment).filter_by(prediction_ref=prediction_id)
     total = query.count()
-    items = query.order_by(PredictionComment.created_at, PredictionComment.id).offset(offset).limit(limit).all()
+    # Database insertion order is independent of application clock precision or clock corrections.
+    items = query.order_by(PredictionComment.sequence).offset(offset).limit(limit).all()
     return {"prediction_id": prediction_id, "items": [_comment_dict(row) for row in items],
             "total": total, "limit": limit, "offset": offset}
 

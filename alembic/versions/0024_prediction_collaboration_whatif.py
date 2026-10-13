@@ -1,6 +1,6 @@
 """Prediction notes, scoped comments and frozen what-if experiments.
 
-Revision ID: 0024
+Revision ID: 0024_prediction_collaboration
 Revises: 0023
 Create Date: 2026-10-13
 """
@@ -10,7 +10,7 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 
-revision = "0024"
+revision = "0024_prediction_collaboration"
 down_revision = "0023"
 branch_labels = None
 depends_on = None
@@ -37,6 +37,7 @@ def upgrade() -> None:
         "prediction_comments",
         sa.Column("id", sa.Text(), primary_key=True),
         sa.Column("prediction_ref", sa.Text(), sa.ForeignKey("predictions.id", ondelete="CASCADE"), nullable=False),
+        sa.Column("sequence", sa.BigInteger(), sa.Identity(always=True), nullable=False),
         sa.Column("parent_ref", sa.Text()),
         sa.Column("body", sa.Text(), nullable=False),
         sa.Column("created_by", sa.Text(), nullable=False),
@@ -47,7 +48,7 @@ def upgrade() -> None:
             name="fk_prediction_comment_parent_scope", ondelete="CASCADE",
         ),
     )
-    op.create_index("idx_prediction_comment_order", "prediction_comments", ["prediction_ref", "created_at", "id"])
+    op.create_index("idx_prediction_comment_order", "prediction_comments", ["prediction_ref", "sequence"])
     op.create_table(
         "whatif_experiments",
         sa.Column("id", sa.Text(), primary_key=True),

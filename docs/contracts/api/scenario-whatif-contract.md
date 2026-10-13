@@ -49,7 +49,7 @@ Reopening an experiment loads its conditions for calculation against today's inp
 
 ## Persistence and access
 
-Migration `0024` adds `whatif_experiments`. Frozen experiments are separate from
+Migration `0024_prediction_collaboration` adds `whatif_experiments`. Frozen experiments are separate from
 formal variants and current predictions; saving does not promote a prediction.
 `private` records are readable only by their principal; `shared` records are readable
 by authenticated readers under the deployment's existing project/network policy.

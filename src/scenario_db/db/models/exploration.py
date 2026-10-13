@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from sqlalchemy import (
-    CheckConstraint, Column, DateTime, ForeignKey, ForeignKeyConstraint, Index, Integer, Text,
+    BigInteger, CheckConstraint, Column, DateTime, ForeignKey, ForeignKeyConstraint, Identity, Index, Integer, Text,
     UniqueConstraint, func, text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -97,11 +97,12 @@ class PredictionComment(Base):
             ["prediction_ref", "parent_ref"], ["prediction_comments.prediction_ref", "prediction_comments.id"],
             name="fk_prediction_comment_parent_scope", ondelete="CASCADE",
         ),
-        Index("idx_prediction_comment_order", "prediction_ref", "created_at", "id"),
+        Index("idx_prediction_comment_order", "prediction_ref", "sequence"),
     )
 
     id = Column(Text, primary_key=True)
     prediction_ref = Column(Text, ForeignKey("predictions.id", ondelete="CASCADE"), nullable=False)
+    sequence = Column(BigInteger, Identity(always=True), nullable=False)
     parent_ref = Column(Text)
     body = Column(Text, nullable=False)
     created_by = Column(Text, nullable=False)

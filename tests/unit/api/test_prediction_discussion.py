@@ -16,10 +16,10 @@ from scenario_db.api.routers import arch_exploration as router
 from scenario_db.api.schemas.arch_exploration import LeverRegisterRequest, PowerOptionReviewRequest, PromoteRequest
 from scenario_db.api.schemas.prediction_discussion import PredictionCommentRequest, PredictionNoteRequest
 from scenario_db.api.schemas.timing_budget import TimingBudgetRegisterRequest
-from scenario_db.api.services import arch_exploration, timing_budget
+from scenario_db.api.services import arch_exploration, prediction_discussion, timing_budget
 from scenario_db.api.services.recompute import recompute_prediction
 from scenario_db.db.models.definition import Scenario, ScenarioVariant
-from scenario_db.db.models.exploration import PowerOptionReview, Prediction
+from scenario_db.db.models.exploration import PowerOptionReview, Prediction, PredictionComment
 from scenario_db.exceptions import ConflictError, UnprocessableError
 
 
@@ -277,3 +277,11 @@ def test_option_review_can_join_registration_transaction_without_lock_upgrade(co
         db.commit.assert_called_once()
     else:
         db.commit.assert_not_called()
+
+
+def test_comment_registration_sequence_remains_internal_to_the_database():
+    row = PredictionComment(id="comment", prediction_ref="prediction", sequence=42, parent_ref=None,
+        body="review", created_by="analyst", created_at=datetime(2026, 10, 14, tzinfo=UTC))
+    assert prediction_discussion._comment_dict(row) == {
+        "id": "comment", "prediction_id": "prediction", "parent_id": None, "body": "review",
+        "created_by": "analyst", "created_at": "2026-10-14T00:00:00+00:00"}

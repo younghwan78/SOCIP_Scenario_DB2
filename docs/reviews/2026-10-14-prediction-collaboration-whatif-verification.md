@@ -20,24 +20,31 @@ Base: `5ae2916c1cdf7bb99eed068b23e0c6bf681caa40`.
 | frozen dependency sync | 기존 설치 111 packages 확인; lockfile 변경 없음 |
 | 전체 단위 테스트 | 1,949 passed, 6 skipped; coverage 80.19% |
 | 최종 수정 경로 집중 회귀 | 78 passed; combined coverage 80.30%, 80% gate 통과 |
+| API 계층 분리·댓글 순서 보완 후 집중 회귀 | 79 passed; Ruff 및 신규 API 6파일 focused mypy 통과 |
 | PostgreSQL 관련 통합 테스트 | 35 passed; 새 마이그레이션과 실제 동시 등록·rollback·deadlock 회귀 포함 |
+| 별도 migration·댓글 순서 보완 후 PostgreSQL 집중 회귀 | 15 passed; fresh DB에서 새 revision upgrade 포함 |
 | React UI 테스트 | 232 passed, 11 skipped |
 | React typecheck / production build | 통과 |
 | Ruff / diff whitespace | 통과 |
 | 신규 What-if 5파일 focused mypy | `--follow-imports=silent` 통과 |
 | 전체 mypy | 기준 커밋 archive와 기능 브랜치 모두 372 errors / 28 files; 추가 오류 0 |
-| npm audit | 자동 승인 심사가 npm registry 외부 전송을 거부; 사용자 승인 대기 |
+| npm audit | 사용자 승인 후 실행; 전체 severity에서 취약점 0, exit 0 |
 
-전체 mypy의 기존 오류와 미실행 보안 조회 때문에 전체 CI 준비 완료로 판정하지 않는다.
-외부 전송 승인 없이 보안 조회를 우회하지 않았다. 기존 Starlette/httpx deprecation
-warning 및 기존 선택적 테스트 skip은 실행 결과에 포함한다.
+전체 mypy의 기존 오류 때문에 전체 CI 준비 완료로 판정하지 않는다.
+npm 조회는 외부 전송에 대한 사용자 승인 후 실행했다. 기존 Starlette/httpx
+deprecation warning 및 기존 선택적 테스트 skip은 실행 결과에 포함한다.
 
 단위 테스트는 `tests/unit`을 4 workers로 실행했다. 최종 집중 회귀는
 `test_arch_services.py`, `test_prediction_discussion.py`, `test_scenario_whatif.py`,
-`tests/unit/sim/test_scenario_whatif.py`, `test_collaboration_cors.py`를 실행했다.
+`tests/unit/api/test_whatif_conditions.py`, `test_collaboration_cors.py`를 실행했다.
 통합 테스트는 `test_prediction_collaboration.py`, `test_scenario_whatif.py`,
 `test_lever_register.py`, `test_timing_workbench.py`, `test_arch_exploration.py`를
 별도 PostgreSQL 컨테이너에서 실행했다.
+
+API 계층 분리 후 PostgreSQL 재검증에서 동일 작성 시각의 댓글 순서가 UUID 정렬에
+따라 바뀌는 오류를 발견했다. 신규 댓글 테이블에 DB가 발급하는 등록 순서를 추가해
+정렬하고, 같은 시각·시계 역행·다른 예측 등록으로 생기는 번호 공백·페이지 처리를
+검증하는 회귀를 추가했다. 보완 후 협업·What-if 단위 79개와 PostgreSQL 15개가 통과했다.
 
 ## 실제 화면 확인
 
@@ -57,9 +64,15 @@ warning 및 기존 선택적 테스트 skip은 실행 결과에 포함한다.
 
 ## 적용 경계
 
-새 테이블은 migration `0024`로 추가하며 운영 DB에는 적용하지 않았다.
+질문 해석과 임시 조건 적용은 `api/services/whatif_query.py`,
+`api/services/whatif_conditions.py`에 둔다. 기존 Timing Budget 엔진을 호출하며 기준
+커밋 대비 `src/scenario_db/sim/`과 SoC authoring/DB fixture의 변경은 없다.
+이 배치는 simulation 코드와 데이터 작업의 병합 접점을 줄인다.
+
+새 테이블은 migration `0024_prediction_collaboration`으로 추가하며 운영 DB에는 적용하지 않았다.
 별도 작업 폴더에서 구현했고 동시에 진행된 원본 작업의 변경을 보존했다.
-병렬 ModelBasis 작업에도 `0024` migration이 있으므로 두 작업을 병합할 때 revision
-번호와 선행 관계를 정리해야 한다. 이 문서의 결과는 이 브랜치 단독 검증이다.
+병렬 ModelBasis 작업의 `0024`와 revision ID가 겹치지 않도록 별도 식별자를 사용한다.
+두 작업은 `0023`을 공통 부모로 하므로 병합할 때 merge revision으로 heads를 연결해야 한다.
+이 문서의 결과는 이 브랜치 단독 검증이다.
 
 사용법: [예측 설명·댓글과 자연어 What-if](../guides/prediction-collaboration-whatif.md).

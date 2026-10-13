@@ -13,7 +13,9 @@ conclusion, tags, actor/time metadata, and revision. PUT requires writer/admin a
 serialize on the prediction row. `GET/POST /arch/predictions/{id}/comments` provides
 bounded pagination and append-only comments/replies. POST requires analyst/writer/admin;
 reply parents must belong to the same prediction, enforced by a composite FK.
-Migration `0024` adds these collaboration tables.
+Comments are listed by a database-generated registration sequence, including when
+timestamps are equal or application-server clocks differ.
+Migration `0024_prediction_collaboration` adds these collaboration tables.
 
 Promote/lever requests optionally provide `expected_current` entries containing
 `scenario_id`, `variant_id`, and nullable `prediction_id`. When present they must

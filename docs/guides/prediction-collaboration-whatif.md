@@ -2,7 +2,8 @@
 
 Status: Current. Last verified: 2026-10-14.
 Source: `ui/src/pages/ScenarioWhatIf.tsx`, `ui/src/components/PredictionCollaboration.tsx`,
-`src/scenario_db/api/services/scenario_whatif.py`, `prediction_discussion.py`.
+`src/scenario_db/api/services/scenario_whatif.py`, `whatif_conditions.py`,
+`whatif_query.py`, `prediction_discussion.py`.
 
 ## 질문으로 조건 비교하기
 
@@ -17,6 +18,9 @@ Source: `ui/src/pages/ScenarioWhatIf.tsx`, `ui/src/components/PredictionCollabor
 한국어/영어 해상도·FPS·노드 clock 조건을 지원합니다. 외부 LLM을 사용하지 않는
 제한된 문법이며, 압축·codec·EIS·센서 모드 변경은 이 화면에서 지원하지 않습니다.
 지원하는 조건을 화면에서 직접 편집할 수도 있습니다.
+
+질문 해석과 임시 조건 적용은 API service에서 처리하고 기존 Timing Budget 엔진을
+호출합니다. 기존 simulation 계산 모듈과 scenario 데이터는 수정하지 않습니다.
 
 수동 clock 입력은 하한입니다. 요구 clock은 workload 계산값이고 적용 clock은 DVFS 단계·공유 domain 등을 반영한
 값입니다. 크기를 줄여도 적용 clock이 유지될 수 있으므로 함께 확인합니다.

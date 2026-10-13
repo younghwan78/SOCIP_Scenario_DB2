@@ -13,16 +13,16 @@ from scenario_db.api.schemas.scenario_whatif import WhatIfExperimentRequest, Wha
 from scenario_db.api.schemas.timing_budget import TimingBudgetRequest
 from scenario_db.api.services.review_policy import apply_throughput, scenario_policy
 from scenario_db.api.services.timing_budget import _load, _shim
+from scenario_db.api.services.whatif_conditions import apply_whatif_changes, whatif_targets
+from scenario_db.api.services.whatif_query import plan_query
 from scenario_db.db.models.definition import Project, Scenario
 from scenario_db.db.models.whatif import WhatIfExperiment
 from scenario_db.db.repositories.scenario_graph import load_canonical_graph
 from scenario_db.exceptions import ConflictError, NotFoundError, UnprocessableError
 from scenario_db.sim.adapter import build_simulation_inputs
 from scenario_db.sim.measured_timing import baseline_fingerprint
-from scenario_db.sim.scenario_whatif import apply_whatif_changes, whatif_targets
 from scenario_db.sim.service import _apply_config_profile, _enforce_input_limits, _graph_soc_ref
 from scenario_db.sim.timing_budget import analyze_timing_budget
-from scenario_db.sim.whatif_query import plan_query
 
 ENGINE_REV = "scenario-whatif/1"
 
