@@ -37,6 +37,9 @@ Write-Host "postgres: $health (127.0.0.1:15432)"
 Step "Alembic migration"
 Run uv @("run", "alembic", "upgrade", "head")
 
+Step "Schema drift check (ORM vs DB; fails on missing tables/columns)"
+Run uv @("run", "python", "scripts\check_schema_drift.py")
+
 if (-not $SkipLoad) {
     $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
     Step "Rename legacy ids in the runtime DB (authoring/id-renames.yaml; no-op when nothing matches)"
