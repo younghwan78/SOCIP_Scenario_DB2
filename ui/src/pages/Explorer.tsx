@@ -145,7 +145,7 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
     } },
     // 예측 = which model basis the registered number rests on + whether today's inputs still give it (not a count)
     { key: 'pred', label: '예측 기준', width: 150, firstDir: -1,
-      headTitle: '등록 예측의 기준 = config profile · power params · engine (cfg2 · pmp2 · e11)\n✓ 현재 입력으로 같은 결과 · ⚠ 기준 = 설정/params/DVFS/engine 변경 · ⚠ 데이터 = variant YAML 변경 · ? = 판정 불가\nhover = 기준 구성 · SW timing · 등록 횟수 · B<n> ⓘ 클릭 = 기준 상세 · 그 외 클릭 = ID 복사\n✓/⚠는 표가 뜬 뒤 1~2초 안에 채워짐(…= 확인 중)\n(즉석 Simulate 결과는 표에 표시하지 않음 — hover에 건수)',
+      headTitle: '등록 예측의 기준 = config profile · power params · engine (cfg2 · pmp2 · e11)\n셀에는 예외만 표시: ⚠ 기준 = 설정/params/DVFS/engine 변경 · ⚠ 데이터 = variant YAML 변경 (표가 뜬 뒤 1~2초 안에 채워짐)\n표시 없음 = 현재 입력으로 같은 결과 또는 판정 불가 — hover의 상태 줄에서 구분\nhover = 기준 구성 · SW timing · 등록 횟수 · B<n> 클릭 = 기준 상세 · 그 외 클릭 = ID 복사\n(즉석 Simulate 결과는 표에 표시하지 않음 — hover에 건수)',
       sort: (r) => { const p = cov(r.variant_id)?.current_prediction; return p ? `${({ ok: 0, data: 1, basis: 2, unknown: 3 })[freshnessOf(p).level]}|${p.basis?.label ?? ''}` : null },
       title: (r) => { const c = cov(r.variant_id); if (!c?.current_prediction) return c?.simulation ? `등록 예측 없음 · ${simTooltip(c)}` : '등록 예측 없음'
         return `${predictionTooltip(c.current_prediction, shortIds.get(c.current_prediction.id))}${c.simulation ? `\n\n${simTooltip(c)}` : ''}` },
@@ -154,7 +154,8 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
         if (!p) return <span className="faint">—</span>
         const f = freshnessOf(p)
         return <span style={{ cursor: 'copy', display: 'inline-flex', alignItems: 'center', gap: 4 }} onClick={(e) => { e.stopPropagation(); copyId(p.id) }}>
-          {freshPending && !p.freshness ? <span className="fr fr-unknown faint" title="현재 입력으로 다시 계산해도 같은지 확인 중">…</span> : <span className={`fr fr-${f.level}`}>{f.text}</span>}
+          {/* exceptions only: ✓ (normal) / ? (not decidable) / … (checking) stay in the hover, not in the cell */}
+          {!(freshPending && !p.freshness) && (f.level === 'basis' || f.level === 'data') && <span className={`fr fr-${f.level}`}>{f.text}</span>}
           {p.basis?.basis_id
             ? <BasisInfoButton basisId={p.basis.basis_id} label={p.basis.label} warn={!!p.basis.overrides?.length}
               title={`예측 기준 ${p.basis.label}${p.basis.overrides?.length ? ` — 기준 외 입력: ${p.basis.overrides.join(', ')}` : ''}\n클릭: 기준 상세`} />
@@ -180,7 +181,7 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
       sort: (r) => board.get(r.variant_id)?.power.total_mw ?? null,
       render: (r) => { const b = board.get(r.variant_id); return b ? <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}><span className="mono">{b.power.total_mw.toFixed(0)}</span><span className="mono faint" style={{ fontSize: 11 }} title={batteryNote(battery)}>{maText(b.power.total_mw, battery)}</span>
         <ProvBadge compact prov={{ kind: 'registered', engine: 'Arch exploration', id: shortIds.get(b.id) ?? b.id, at: b.created_at, notes: [`CPU ${b.power.cpu_mw.toFixed(0)} · IP ${b.power.hw_mw.toFixed(0)} · BW ${b.power.bw_mw.toFixed(0)} mW`] }} /></span> : <span className="faint">—</span> } },
-    { key: 'vd', label: '판정 ⓘ', width: 84, headTitle: `등록 예측의 timing 판정 — 클릭하면 사유. ${VERDICT_HELP}`, sort: (r) => { const v = board.get(r.variant_id)?.verdict; return v ? ({ fail: 0, clock_up: 1, ok: 2 } as Record<string, number>)[v] ?? 3 : null },
+    { key: 'vd', label: '판정', width: 84, headTitle: `등록 예측의 timing 판정 — 클릭하면 사유. ${VERDICT_HELP}`, sort: (r) => { const v = board.get(r.variant_id)?.verdict; return v ? ({ fail: 0, clock_up: 1, ok: 2 } as Record<string, number>)[v] ?? 3 : null },
       render: (r) => { const b = board.get(r.variant_id), v = b?.verdict; if (!v) return <span className="faint">—</span>; const c = verdictChip(v as 'ok' | 'clock_up' | 'fail')
         return <button className={`badge ${c.cls} badge-btn`} title={b?.verdict_detail?.reasons?.[0] ?? '클릭 = 판정 사유'} aria-label={`${r.variant_id} 판정 상세`}
           onClick={(e) => { e.stopPropagation(); setVerdictAt(b?.verdict_detail ? { id: r.variant_id, x: e.clientX, y: e.clientY } : null) }}>{c.label}</button> } },

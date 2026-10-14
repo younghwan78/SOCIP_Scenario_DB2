@@ -125,7 +125,7 @@ export function BasisPopover({ basisId, at, overrides, onClose }: { basisId: str
   )
 }
 
-/** "B2 ⓘ" trigger: a button that opens the popover. */
+/** "B2" badge trigger: a button that opens the popover. */
 export function BasisInfoButton({ basisId, label, overrides, title, warn }: { basisId: string; label: ReactNode
   /** this screen's inputs set outside the basis (shows the "이 화면의 계산" section); omit where it does not apply */
   overrides?: string[]; title?: string; warn?: boolean }) {
@@ -133,7 +133,7 @@ export function BasisInfoButton({ basisId, label, overrides, title, warn }: { ba
   return <>
     <button type="button" className={`badge badge-btn basis-btn ${warn ?? !!overrides?.length ? 'v-warn' : 'v-ok'}`} aria-label="예측 기준 상세 보기" title={title ?? '클릭: 기준 상세 (profile · power params · DVFS · 시험 계산)'}
       onClick={(e) => { e.stopPropagation(); const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setAt(at ? null : { x: r.left, y: r.bottom }) }}>
-      {label} <span aria-hidden>ⓘ</span></button>
+      {label}</button>
     {at && <BasisPopover basisId={basisId} at={at} overrides={overrides} onClose={() => setAt(null)} />}
   </>
 }

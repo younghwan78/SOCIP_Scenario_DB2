@@ -711,7 +711,7 @@ tr.vp-bad td { color: #B42318; font-weight: 600; }
 .v-ok-text { color: #1E6B3A; }
 .err-text { color: #B42318; }
 .basis-btn { white-space: nowrap; font-family: var(--mono, ui-monospace, monospace); }
-/* 예측 기준 picker (ProfileSelect basis mode): one row — label · select · B2 ⓘ */
+/* 예측 기준 picker (ProfileSelect basis mode): one row — label · select · B2 */
 .basis-sel { display: inline-flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: nowrap; }
 .sel-off-basis { border-color: #E4A11B; background: #FFF7E6; }
 .basis-sel select { max-width: 345px; min-width: 0; text-overflow: ellipsis; }
