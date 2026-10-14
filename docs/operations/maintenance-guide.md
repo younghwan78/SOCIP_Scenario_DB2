@@ -42,6 +42,19 @@ Do not mix unrelated formatting or historical-document cleanup into a behavior c
 - Never edit an already-deployed revision to represent a new change.
 - Define backup/restore and rollback handling before an irreversible data migration.
 
+Revisions 0026/0027 repair development DBs that had already applied earlier
+definitions of 0024/0025. They add missing basis columns and allocate existing
+comment sequence values in `(created_at, id)` order before enabling identity
+allocation. Fresh DBs and repeated upgrades preserve existing values.
+Online upgrades also normalize the historical `0024` revision label before
+resolving migration heads; `alembic current` remains read-only. An incomplete
+legacy schema or unrelated revision branch is rejected rather than restamped.
+
+The new `scripts/check_schema_drift.py` startup check exits nonzero for missing
+ORM tables or columns; other differences are reported as warnings or information.
+Old basis records without an input stamp retain an empty stamp: creating a new
+basis is required to calculate against verified current inputs.
+
 ## 4. Fixture maintenance
 
 Canonical fixture changes require strict ETL and usually API/view smoke tests.

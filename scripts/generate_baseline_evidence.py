@@ -80,8 +80,36 @@ def stage_of(node: str, task_type: str) -> str:
     return "m2m"
 
 
+def _topo(evs: list[dict]) -> list[dict]:
+    """Events of one frame in dependency order (simulation start breaks ties)."""
+    by = {e["task_id"]: e for e in evs}
+    order, seen = [], set()
+
+    def visit(e: dict) -> None:
+        if e["task_id"] in seen:
+            return
+        seen.add(e["task_id"])
+        for p in e.get("predecessors") or []:
+            if p in by:
+                visit(by[p])
+        order.append(e)
+
+    for e in sorted(evs, key=lambda x: (x["start_ms"], x["end_ms"])):
+        visit(e)
+    return order
+
+
 def measured_trace(sim: dict, vid: str, fps: float) -> list[dict]:
-    """Simulation timeline -> measured-like trace (FRAMES frames, frame-relative perturbation)."""
+    """Simulation timeline -> measured-like trace (FRAMES frames), replayed causally.
+
+    Each stage's duration is perturbed (STAGE_SCALE + per-frame jitter), then start times are
+    re-derived from the *perturbed* predecessors so every edge keeps the kind it has in the simulation:
+      * barrier (child starts after the parent ends, M2M / SW hand-off): start >= parent end + gap
+        (gap scaled like the child's stage, plus a small scheduling jitter)
+      * streaming (OTF, child overlaps the parent): start >= parent start + lead, and the child
+        cannot finish before the parent's tail: end >= parent end + (sim child end - sim parent end)
+    plus one occupant per resource across frames. Roots (sensor) stay locked to the frame period.
+    """
     events = [e for e in sim.get("timeline_events") or [] if e.get("task_id") and e.get("start_ms") is not None]
     period = 1000.0 / fps
     by_frame: dict[int, list[dict]] = defaultdict(list)
@@ -92,25 +120,42 @@ def measured_trace(sim: dict, vid: str, fps: float) -> list[dict]:
         return []
     src_frames = frames[1:] if len(frames) > 2 else frames      # drop the warm-up frame as the pattern
     out: list[dict] = []
+    busy_until: dict[str, float] = {}                           # resource -> end of its last occupant
     for f in range(FRAMES):
         sf = src_frames[f % len(src_frames)]
         evs = by_frame[sf]
+        src = {e["task_id"]: e for e in evs}
         origin = min(e["start_ms"] for e in evs)
         base = f * period
-        for e in sorted(evs, key=lambda x: x["start_ms"]):
+        done: dict[str, tuple[float, float]] = {}               # source task_id -> (start, end) in the new trace
+        for e in _topo(evs):
             node = str(e.get("node_id") or e["task_id"].split("#")[0])
             stage = stage_of(node, str(e.get("task_type") or "hw"))
             scale, spread = STAGE_SCALE[stage]
             dur_k = scale * jitter(f"{vid}|{node}", spread * 0.5) * jitter(f"{vid}|{node}|{f}", spread * 0.6)
-            off_k = 1.0 if stage in ("sensor", "rt") else 1.0 + (scale - 1.0) * 0.6
-            rel = (e["start_ms"] - origin) * off_k + (jitter(f"{vid}|{node}|s{f}", 1.0) - 1.0) * (0.05 if stage in ("sensor", "rt") else 0.25)
-            dur = (e["end_ms"] - e["start_ms"]) * dur_k
-            start = max(base, base + rel)
+            gap_k = 1.0 if stage in ("sensor", "rt") else 1.0 + (scale - 1.0) * 0.6
+            sched = (jitter(f"{vid}|{node}|s{f}", 1.0) + 1.0) * 0.5 * (0.02 if stage in ("sensor", "rt") else 0.12)  # >= 0
+            dur = max((e["end_ms"] - e["start_ms"]) * dur_k, 0.01)
+            preds = [(src[p], done[p]) for p in e.get("predecessors") or [] if p in src and p in done]
+            start = base + (e["start_ms"] - origin) if not preds else base
+            min_end = 0.0
+            for ps, (p_start, p_end) in preds:
+                if e["start_ms"] >= ps["end_ms"] - 1e-6:          # barrier edge
+                    start = max(start, p_end + (e["start_ms"] - ps["end_ms"]) * gap_k + sched)
+                else:                                            # streaming edge
+                    start = max(start, p_start + (e["start_ms"] - ps["start_ms"]) * gap_k)
+                    min_end = max(min_end, p_end + max(e["end_ms"] - ps["end_ms"], 0.0))
+            res = str(e.get("resource_id") or node)
+            start = max(start, busy_until.get(res, 0.0))
+            end = max(start + dur, min_end)
+            busy_until[res] = end
+            done[e["task_id"]] = (start, end)
             ev = {"task_id": f"{node}#f{f}", "node_id": node, "hw_name": e.get("hw_name"), "task_type": e.get("task_type"),
-                  "frame_index": f, "start_ms": round(start, 4), "end_ms": round(start + max(dur, 0.01), 4),
+                  "frame_index": f, "start_ms": round(start, 4), "end_ms": round(end, 4),
                   "resource_id": e.get("resource_id"),
                   "predecessors": [f"{p.split('#')[0]}#f{f}" for p in e.get("predecessors") or []]}
             out.append({k: v for k, v in ev.items() if v is not None})
+    out.sort(key=lambda x: (x["frame_index"], x["start_ms"]))
     return out
 
 
@@ -284,7 +329,8 @@ def main() -> int:
         graph = graph_from_fixture(raw, vid, catalog)
         fps = float((graph.variant.design_conditions or {}).get("fps") or 30)
         row: dict = {"variant": vid, "had": sorted(have.get(vid, set())), "added": []}
-        sim = None if args.resimulate else find_sim(vid)
+        own = EVIDENCE / f"sim-baseline-{vid}-mean-{DATE}.yaml"         # this script's own simulation, when present
+        sim = None if args.resimulate else (read(own) if own.exists() else find_sim(vid))
         if sim is None:
             selected, last = simulate(raw, vid, catalog)
             sim = sim_evidence(raw, vid, selected, last)

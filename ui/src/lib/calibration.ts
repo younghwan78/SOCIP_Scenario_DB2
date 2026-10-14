@@ -102,7 +102,7 @@ export function simTooltip(c: Coverage): string {
     ...sims.slice(0, 6).map((s) => `${s.shown ? '▶' : ' '} ${dayOf(s.at)} · ${s.tool ?? 'sim'} v${s.tool_version ?? '?'}${s.source ? ` (${s.source})` : ''} · SW ${s.sw_baseline_ref ?? '—'}${s.total_mw != null ? ` · ${s.total_mw.toFixed(0)} mW` : ''}${s.by ? ` · by ${s.by}` : ''}\n    ${s.id}`),
     ...(sims.length > 6 ? [`… 외 ${sims.length - 6}건`] : [])].join('\n')
 }
-export function predictionTooltip(p: CoveragePrediction, short?: string): string {
+export function predictionTooltip(p: CoveragePrediction, short?: string, checking = false): string {
   const b = p.basis, f = freshnessOf(p)
   return [`등록 예측 ${short ?? shortId(p.id)} (클릭 = 전체 ID 복사: ${p.id}) · ${dayOf(p.created_at)}${(p.revision ?? p.version) ? ` · 등록 ${p.revision ?? p.version}회째` : ''}`,
     b ? `기준 ${b.label}` : null,
@@ -111,7 +111,7 @@ export function predictionTooltip(p: CoveragePrediction, short?: string): string
     b ? `  DVFS ${b.dvfs_table_ref ?? '미기록'} · engine ${b.engine_rev ?? '?'}` : null,
     p.sw ? (p.sw.source === 'measured' ? `SW timing ${p.sw.label} — 실측 trace ${p.sw.measurement_ref ?? ''} (${p.sw.ref})`
       : `SW timing ${p.sw.label} — scenario 정의값(assumed)${p.sw.hash ? `, 사용한 값의 hash #${p.sw.hash}` : ' (이전 run: 사용 값 미기록)'} · SW 버전과 무관`) : null,
-    p.freshness ? `상태 ${f.text} — ${f.detail.join(' · ')}` : null,
+    !p.freshness && checking ? '상태 확인 중' : `상태 ${f.text} — ${f.detail.join(' · ')}`,
     p.total_mw != null ? `total ${p.total_mw.toFixed(0)} mW` : null,
     p.selection_rule ? `선정 ${p.selection_rule}${p.selected_by ? ` (${p.selected_by})` : ''}` : null,
     p.run ? `조합 탐색 run ${shortId(p.run)}` : null,

@@ -18,7 +18,7 @@ export function profileSummary(p: SimProfile | undefined): string[] {
 }
 
 /** Sim config profile picker; '코드 기본값' = no profile (built-in constants). Shows what the chosen profile is.
- * With the 과제's active 예측 기준 it becomes "기준 B<n>" vs "기준 외 (profile 직접)"; the B<n> ⓘ button opens the full detail. */
+ * With the 과제's active 예측 기준 it becomes "기준 B<n>" vs "기준 외 (profile 직접)"; the B<n> badge opens the full detail. */
 export function ProfileSelect({ profiles, value, onChange, basis, followsBasis, overrides }: { profiles: SimProfile[]; value: string | null; onChange: (v: string) => void
   /** the 과제's active 예측 기준; with it the picker becomes "기준 따르기" vs "기준 외" */
   basis?: ModelBasis | null; followsBasis?: boolean
