@@ -5,9 +5,11 @@ from logging.config import fileConfig
 from pathlib import Path
 
 from alembic import context
+from alembic.script import ScriptDirectory
 from sqlalchemy import engine_from_config, pool
 
 from scenario_db.db.base import Base
+from scenario_db.db.migration_compat import normalize_legacy_revision
 import scenario_db.db.models  # noqa: F401 — 모든 ORM 모델 등록
 
 config = context.config
@@ -77,6 +79,13 @@ def run_migrations_online() -> None:
             include_schemas=True,
         )
         with context.begin_transaction():
+            # Upgrade/downgrade/stamp have a destination; read-only current/check commands do not.
+            try:
+                destination = context.get_revision_argument()
+            except KeyError:
+                destination = None
+            if destination is not None:
+                normalize_legacy_revision(connection, ScriptDirectory.from_config(config))
             context.run_migrations()
 
 
