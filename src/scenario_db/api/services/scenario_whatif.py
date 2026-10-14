@@ -21,17 +21,16 @@ from scenario_db.db.repositories.scenario_graph import load_canonical_graph
 from scenario_db.exceptions import ConflictError, NotFoundError, UnprocessableError
 from scenario_db.sim.adapter import build_simulation_inputs
 from scenario_db.sim.measured_timing import baseline_fingerprint
-from scenario_db.sim.service import _apply_config_profile, _enforce_input_limits, _graph_soc_ref
+from scenario_db.sim.service import _apply_config_profile, _enforce_input_limits
 from scenario_db.sim.timing_budget import analyze_timing_budget
 
 ENGINE_REV = "scenario-whatif/1"
 
 
 def _guard(graph, scope: WhatIfScope) -> None:
+    """SoC-agnostic: any project whose Timing Budget evaluates can run What-if (see whatif_targets capability)."""
     if graph.scenario.project_ref != scope.project_ref:
         raise UnprocessableError("What-if project does not own the selected scenario")
-    if _graph_soc_ref(graph) != "soc-exynos2600":
-        raise UnprocessableError("What-if currently supports Exynos2600 only")
 
 
 def _graph(db: Session, scope: WhatIfScope):
@@ -49,7 +48,8 @@ def targets(db: Session, scope: WhatIfScope) -> dict:
         out = whatif_targets(graph)
     except ValueError as exc:
         raise UnprocessableError(str(exc)) from exc
-    return {**scope.model_dump(), "baseline_hash": baseline_fingerprint(graph), **out}
+    return {**scope.model_dump(), "baseline_hash": baseline_fingerprint(graph), **out,
+            "soc_ref": out["capability"]["soc_ref"]}
 
 
 def _baseline_clocks(db: Session, scope: WhatIfScope) -> dict[str, float]:
@@ -234,9 +234,6 @@ def _list_scope(db: Session, project_ref: str, scenario_id: str | None = None):
     project: Any = db.get(Project, project_ref)
     if project is None:
         raise NotFoundError("What-if project not found")
-    soc = (project.metadata_ or {}).get("soc_ref") or (project.globals_ or {}).get("soc_ref")
-    if soc != "soc-exynos2600":
-        raise UnprocessableError("What-if currently supports Exynos2600 only")
     if scenario_id:
         scenario = db.get(Scenario, scenario_id)
         if scenario is None or scenario.project_ref != project_ref:

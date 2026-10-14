@@ -981,8 +981,13 @@ def _demo_generated_graph(scenario_id: str, variant_id: str) -> CanonicalScenari
 
 
 def _exynos2600_generated_graph(scenario_id: str, variant_id: str) -> CanonicalScenarioGraph:
+    return _fixture_graph("db_Exynos2600_SM-S947B", scenario_id, variant_id)
+
+
+def _fixture_graph(fixture: str, scenario_id: str, variant_id: str) -> CanonicalScenarioGraph:
+    """Any compiled fixture DB folder (db_<SoC>_<board>) -> canonical graph (no DB)."""
     root = Path(__file__).resolve().parents[3]
-    fixture_root = root / "db_Exynos2600_SM-S947B"
+    fixture_root = root / fixture
     scenario_raw = _read_yaml(fixture_root / "02_definition" / f"{scenario_id}.yaml")
     scenario = Scenario(
         id=scenario_raw["id"],

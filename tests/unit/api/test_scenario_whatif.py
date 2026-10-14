@@ -49,16 +49,12 @@ def test_preview_uses_timing_budget_and_explains_model_subtotal(monkeypatch):
     db.commit.assert_not_called()
 
 
-def test_project_soc_baseline_and_coefficient_drift_rejected(monkeypatch):
+def test_project_ownership_and_coefficient_drift_rejected(monkeypatch):
     graph = _graph()
     _service(monkeypatch, graph)
     request = _request(graph)
     with pytest.raises(UnprocessableError, match="own"):
         service.preview(MagicMock(), request.model_copy(update={"project_ref": "other"}))
-    graph.project.metadata_ = {"soc_ref": "soc-exynos2700"}
-    with pytest.raises(UnprocessableError, match="Exynos2600"):
-        service.preview(MagicMock(), request)
-    graph.project.metadata_ = {"soc_ref": "soc-exynos2600"}
     ip = next(iter(graph.ip_catalog.values()))
     ip.capabilities = {**ip.capabilities, "model_revision": "new"}
     with pytest.raises(ConflictError, match="baseline changed"):

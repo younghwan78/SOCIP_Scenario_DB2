@@ -5,7 +5,7 @@ import { projectText } from '../lib/projects'
 import { useCredentialKeyId } from '../lib/auth'
 import { useAsync } from '../lib/route'
 import { fmt } from '../lib/timingBudget'
-import { answerLines, CHANGE_LABELS, clockExplanation, describeChange, upsertChange, validChange, whatIfApi, type ExperimentDraft, type FocusMetric, type PreviewRequest, type WhatIfChange, type WhatIfClarification, type WhatIfPlan, type WhatIfResult, type WhatIfScope, type WhatIfTargets } from '../lib/scenarioWhatIf'
+import { answerLines, clockExplanation, describeChange, kindsOf, upsertChange, validChange, whatIfApi, type ChangeKindMeta, type ExperimentDraft, type FocusMetric, type PreviewRequest, type WhatIfChange, type WhatIfClarification, type WhatIfPlan, type WhatIfResult, type WhatIfScope, type WhatIfTargets } from '../lib/scenarioWhatIf'
 import { Card } from '../components/TimingCharts'
 
 const STATUS: Record<WhatIfPlan['status'], { label: string; cls: string }> = {
@@ -17,10 +17,12 @@ const STATUS: Record<WhatIfPlan['status'], { label: string; cls: string }> = {
 function examplesFor(targets: WhatIfTargets | undefined): string[] {
   if (!targets) return []
   const out: string[] = []
-  const record = targets.anchors.find((a) => a.kind === 'output' && /record|video|enc/i.test(a.id))
+  const record = targets.anchors.find((a) => a.kind === 'output' && (a.role === 'record' || (!a.role && /record|video|enc/i.test(a.id))))
   if (record) out.push(record.size[0] * record.size[1] > 1920 * 1080 ? '녹화를 FHD로 낮추면 전력은 얼마나 줄어?' : '녹화를 UHD로 올리면 BW와 전력은?')
   if (targets.fps) out.push(targets.fps >= 60 ? 'FPS 절반이면 clock과 전력은?' : `FPS를 ${targets.fps * 2}으로 올리면 timing 버틸 수 있어?`)
-  const ip = targets.nodes.find((n) => n.clock_supported && /mfc|enc/i.test(n.id)) ?? targets.nodes.find((n) => n.clock_supported)
+  const stream = targets.streams?.find((st) => st.primary)
+  if (!record && stream) out.push(stream.size[0] * stream.size[1] > 1920 * 1080 ? 'FHD로 낮추면 전력과 BW는?' : 'UHD로 올리면 전력과 BW는?')
+  const ip = targets.nodes.find((n) => n.clock_supported && n.category === 'codec') ?? targets.nodes.find((n) => n.clock_supported)
   if (ip) out.push(`${ip.ip ?? ip.id} clock 20% 낮추면 timing 여유는?`)
   if (record && targets.fps) out.push('미리보기는 그대로 두고 녹화 HD, FPS 30이면?')
   return out
@@ -42,8 +44,6 @@ export function ScenarioWhatIfPage({ ctx }: { ctx: Ctx }) {
 function ScopePicker({ ctx }: { ctx: Ctx }) {
   const projects = ctx.projects ?? [], catalog = ctx.catalog ?? []
   const variantsQ = useAsync(() => (ctx.scenario ? api.variants(ctx.scenario).catch(() => ({ items: [], total: 0 })) : Promise.resolve({ items: [], total: 0 })), [ctx.scenario])
-  const item = catalog.find((c) => c.scenario_id === ctx.scenario)
-  const unsupported = !!item?.soc_ref && item.soc_ref !== 'soc-exynos2600'
   const variants = variantsQ.data?.items ?? []
   const go = (params: Record<string, string | undefined>) => ctx.navigate?.('whatif', params)
   const dc = (v: { design_conditions?: Record<string, unknown> | null }) => {
@@ -62,7 +62,6 @@ function ScopePicker({ ctx }: { ctx: Ctx }) {
       <option value="">variant 선택</option>
       {!variants.some((v) => v.id === ctx.variant) && ctx.variant && <option value={ctx.variant}>{ctx.variant}</option>}
       {variants.map((v) => <option key={v.id} value={v.id}>{v.id}{dc(v) ? ` — ${dc(v)}` : ''}</option>)}</select></label>
-    {unsupported && <span className="badge v-warn" title={item?.soc_ref ?? ''}>이 과제는 What-if 미지원 (Exynos2600만)</span>}
   </section>
 }
 function WhatIfBody({ scope }: { scope: WhatIfScope }) {
@@ -104,10 +103,12 @@ function WhatIfBody({ scope }: { scope: WhatIfScope }) {
   })
   const choose = (index: number, change: WhatIfChange) => { updateChanges(upsertChange(changes, change)); setPending((rows) => rows.filter((_, at) => at !== index)) }
   const examples = useMemo(() => examplesFor(targetsQ.data), [targetsQ.data])
-  const canPreview = !busy && !stale && !!(plan?.baseline_hash ?? targetsQ.data?.baseline_hash) && changes.length > 0 && changes.every(validChange)
+  const kinds = useMemo(() => kindsOf(targetsQ.data), [targetsQ.data])
+  const valid = (change: WhatIfChange) => validChange(change, kinds)
+  const canPreview = !busy && !stale && !!(plan?.baseline_hash ?? targetsQ.data?.baseline_hash) && changes.length > 0 && changes.every(valid)
   const baselineHash = plan?.baseline_hash ?? targetsQ.data?.baseline_hash
   const preview = () => run(async (active) => {
-    if (!baselineHash || stale || !changes.length || !changes.every(validChange)) return
+    if (!baselineHash || stale || !changes.length || !changes.every((change) => validChange(change, kindsOf(targetsQ.data)))) return
     const body: PreviewRequest = { ...scope, ...modelSettings, changes, expected_baseline_hash: baselineHash }
     const next = await whatIfApi.preview(body)
     if (active()) { setResult(next); setRequest(body); setMessage('조건 비교를 계산했습니다. 설명과 공개 범위를 정해 실험으로 저장할 수 있습니다.') }
@@ -126,12 +127,16 @@ function WhatIfBody({ scope }: { scope: WhatIfScope }) {
     setStale(false); setBasisTick((n) => n + 1)
     setMessage('저장된 변경 조건을 불러왔습니다. 현재 기준에서 조건을 확인하고 “조건 비교 계산”을 눌러 재실행하세요.')
   })
-  const add = (target: WhatIfChange['target']) => {
-    const targets = targetsQ.data
-    if (!targets || changes.length >= 8) return
-    const anchor = target === 'output_size' ? targets.output_targets[0] : targets.anchors.find((row) => row.supported)?.id
-    const node = targets.nodes.find((row) => target === 'node_clock_mhz' ? row.clock_supported : row.size_supported)?.id
-    updateChanges([...changes, target === 'fps' ? { target, value: 30 } : target === 'node_clock_mhz' ? { target, node_id: node, value: 400 } : target === 'node_size' ? { target, node_id: node, width: 1920, height: 1080 } : { target, anchor_id: anchor, width: 1920, height: 1080 }])
+  /** New editable row from the kind's first available instance (size/value prefilled with the baseline). */
+  const add = (kind: ChangeKindMeta) => {
+    if (changes.length >= 8) return
+    const first = kind.choices[0]
+    const row: WhatIfChange = { target: kind.target }
+    if (kind.selector && first && kind.selector !== null) row[kind.selector] = first.id
+    if (kind.needs_param && first?.param) row.param = first.param
+    if (kind.shape === 'size') { row.width = first?.size?.[0] ?? 1920; row.height = first?.size?.[1] ?? 1080 }
+    else row.value = first?.value ?? (kind.target === 'node_clock_mhz' ? 400 : targetsQ.data?.fps ?? 30)
+    updateChanges([...changes, row])
   }
   const t = targetsQ.data
   const resetQuestion = (value: string) => { invalidate(); setQuery(value); setPlan(null); setPending([]); setChanges([]) }
@@ -172,11 +177,14 @@ function WhatIfBody({ scope }: { scope: WhatIfScope }) {
       <Card id="wi-condition" title="③ 계산할 조건 (직접 조정)" note="해석 결과를 고치거나 질문 없이 직접 추가할 수 있습니다. 명시한 항목만 변경합니다." defaultWide>
         {targetsQ.error && <div className="err">{targetsQ.error}</div>}
         {targetsQ.data && <>
-          <div className="faint">크기 기준: {targetsQ.data.anchors.map((anchor) => `${anchor.id} ${anchor.size.join('×')}${anchor.kind === 'sensor' ? ' (센서 유지)' : ''}`).join(' · ')}</div>
+          {targetsQ.data.anchors.length > 0 && <div className="faint">크기 기준: {targetsQ.data.anchors.map((anchor) => `${anchor.id} ${anchor.size.join('×')}${anchor.kind === 'sensor' ? ' (센서 유지)' : anchor.role ? ` (${anchor.role === 'record' ? '녹화' : '미리보기'})` : ''}`).join(' · ')}</div>}
+          {!!targetsQ.data.streams?.length && <div className="faint">스트림: {targetsQ.data.streams.map((st) => `${st.id}${st.primary ? ' (주)' : ''}`).join(' · ')}</div>}
+          {targetsQ.data.capability && <p className="faint">{targetsQ.data.capability.soc_ref ?? 'SoC 미정'} · DVFS group 정책 {targetsQ.data.capability.soc_profile === 'generic' ? '기본값' : targetsQ.data.capability.soc_profile}{targetsQ.data.capability.notes.map((note) => ` · ${note}`).join('')}</p>}
           <p className="faint">IP clock은 수동 하한이며 요구량·DVFS·공유 domain 제약에 따라 더 높게 적용될 수 있습니다. FPS는 가상 처리 주기의 변경이며 센서 지원 모드나 화질을 검증하지 않습니다.</p>
-          <div className="toolbar" style={{ marginTop: 8, flexWrap: 'wrap' }}>{(Object.keys(CHANGE_LABELS) as WhatIfChange['target'][]).map((target) => <button className="btn tb-mini" key={target} disabled={busy || changes.length >= 8} onClick={() => add(target)}>+ {CHANGE_LABELS[target]}</button>)}</div>
-          {changes.length ? changes.map((change, index) => <ChangeEditor key={index} change={change} targets={targetsQ.data!} disabled={busy} onChange={(next) => updateChanges(changes.map((row, at) => at === index ? next : row))} onRemove={() => updateChanges(changes.filter((_, at) => at !== index))} />) : <p className="faint">질문을 해석하거나 변경 항목을 추가하세요. 모호한 질문은 대상과 값을 직접 지정하세요.</p>}
-          <button className="btn primary" disabled={busy || stale || !baselineHash || !changes.length || !changes.every(validChange)} onClick={preview}>조건 비교 계산</button>{' '}
+          {kinds.length === 0 ? <p className="err">이 variant에는 What-if로 바꿀 수 있는 조건이 없습니다 (크기 기준·스트림·clock 모델이 있는 IP·FPS 모두 없음).</p>
+            : <div className="toolbar" style={{ marginTop: 8, flexWrap: 'wrap' }}>{kinds.map((kind) => <button className="btn tb-mini" key={kind.target} title={kind.description} disabled={busy || changes.length >= 8} onClick={() => add(kind)}>+ {kind.label}</button>)}</div>}
+          {changes.length ? changes.map((change, index) => <ChangeEditor key={index} change={change} kinds={kinds} disabled={busy} onChange={(next) => updateChanges(changes.map((row, at) => at === index ? next : row))} onRemove={() => updateChanges(changes.filter((_, at) => at !== index))} />) : <p className="faint">질문을 해석하거나 변경 항목을 추가하세요. 모호한 질문은 대상과 값을 직접 지정하세요.</p>}
+          <button className="btn primary" disabled={busy || stale || !baselineHash || !changes.length || !changes.every(valid)} onClick={preview}>조건 비교 계산</button>{' '}
           <button className="btn" disabled={busy} onClick={() => { invalidate(); setPlan(null); setStale(false); setBasisTick((n) => n + 1) }}>기준 갱신</button>
           <details><summary className="faint">모델 지원 범위</summary><ul>{targetsQ.data.limitations.map((item) => <li key={item}>{item}</li>)}</ul></details>
         </>}
@@ -202,13 +210,22 @@ function WhatIfBody({ scope }: { scope: WhatIfScope }) {
     {busy && <p role="status">요청 처리 중…</p>}{message && <p role="status" className={stale ? 'err' : ''}>{message}</p>}
   </>
 }
-function ChangeEditor({ change, targets, disabled, onChange, onRemove }: { change: WhatIfChange; targets: WhatIfTargets; disabled: boolean; onChange: (next: WhatIfChange) => void; onRemove: () => void }) {
-  const size = ['anchor_size', 'node_size', 'output_size'].includes(change.target)
-  const node = change.target === 'node_size' || change.target === 'node_clock_mhz'
-  const choices = node ? targets.nodes.filter((row) => change.target === 'node_size' ? row.size_supported : row.clock_supported) : targets.anchors.filter((row) => row.supported && (change.target !== 'output_size' || row.kind === 'output'))
-  return <fieldset className="wi-change" disabled={disabled}><legend>{CHANGE_LABELS[change.target]}</legend>
-    {change.target !== 'fps' && <label>변경 대상<select aria-label={`${CHANGE_LABELS[change.target]} 대상`} value={(node ? change.node_id : change.anchor_id) ?? ''} onChange={(e) => onChange({ ...change, ...(node ? { node_id: e.target.value } : { anchor_id: e.target.value }) })}><option value="">대상 선택</option>{choices.map((row) => <option key={row.id} value={row.id}>{row.id} · {row.size.join('×')}</option>)}</select></label>}
-    {size ? <><label>너비<input className="input" aria-label="변경 너비" type="number" min={16} max={16384} step={1} value={change.width ?? ''} onChange={(e) => onChange({ ...change, width: Number(e.target.value) })} /></label><label>높이<input className="input" aria-label="변경 높이" type="number" min={16} max={16384} step={1} value={change.height ?? ''} onChange={(e) => onChange({ ...change, height: Number(e.target.value) })} /></label></> : <label>{change.target === 'fps' ? 'FPS' : 'MHz'}<input className="input" aria-label={change.target === 'fps' ? '변경 FPS' : '변경 clock MHz'} type="number" min={1} max={change.target === 'fps' ? 240 : 5000} value={change.value ?? ''} onChange={(e) => onChange({ ...change, value: Number(e.target.value) })} /></label>}
+/** Generic editor driven by the change kind's metadata (shape · selector · param · unit · max). */
+function ChangeEditor({ change, kinds, disabled, onChange, onRemove }: { change: WhatIfChange; kinds: ChangeKindMeta[]; disabled: boolean; onChange: (next: WhatIfChange) => void; onRemove: () => void }) {
+  const kind = kinds.find((k) => k.target === change.target)
+  const label = kind?.label ?? change.target
+  const selector = kind?.selector ?? null
+  const choiceText = (row: ChangeKindMeta['choices'][number]) => [row.id, row.size ? row.size.join('×') : null, row.label, row.role === 'record' ? '녹화' : row.role === 'preview' ? '미리보기' : null, row.ip && row.ip !== row.id ? row.ip : null].filter(Boolean).join(' · ')
+  const valueLabel = change.target === 'fps' ? 'FPS' : change.target === 'node_clock_mhz' ? 'MHz' : kind?.unit || '값'
+  const valueAria = change.target === 'fps' ? '변경 FPS' : change.target === 'node_clock_mhz' ? '변경 clock MHz' : `변경 ${label}`
+  return <fieldset className="wi-change" disabled={disabled}><legend title={kind?.description}>{label}</legend>
+    {selector && <label>변경 대상<select aria-label={`${label} 대상`} value={change[selector] ?? ''} onChange={(e) => {
+      const choice = kind?.choices.find((row) => row.id === e.target.value)
+      onChange({ ...change, [selector]: e.target.value || undefined, ...(kind?.needs_param && choice?.param ? { param: choice.param } : {}) })
+    }}><option value="">{kind?.selector_optional ? '자동 (단일 대상)' : '대상 선택'}</option>{(kind?.choices ?? []).map((row) => <option key={`${row.id}-${row.param ?? ''}`} value={row.id}>{choiceText(row)}</option>)}</select></label>}
+    {kind?.shape === 'size' || (!kind && change.width != null)
+      ? <><label>너비<input className="input" aria-label="변경 너비" type="number" min={16} max={16384} step={1} value={change.width ?? ''} onChange={(e) => onChange({ ...change, width: Number(e.target.value) })} /></label><label>높이<input className="input" aria-label="변경 높이" type="number" min={16} max={16384} step={1} value={change.height ?? ''} onChange={(e) => onChange({ ...change, height: Number(e.target.value) })} /></label></>
+      : <label>{valueLabel}<input className="input" aria-label={valueAria} type="number" min={1} max={kind?.max_value ?? undefined} value={change.value ?? ''} onChange={(e) => onChange({ ...change, value: Number(e.target.value) })} /></label>}
     <button className="btn tb-mini" onClick={onRemove}>항목 제거</button>
   </fieldset>
 }

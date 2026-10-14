@@ -2,14 +2,27 @@ import { getJson, postJson } from './api'
 import type { IpRow, TimingReport } from './timingBudget'
 
 export interface WhatIfScope { project_ref: string; scenario_id: string; variant_id: string }
-export interface WhatIfChange { target: 'anchor_size' | 'node_size' | 'output_size' | 'fps' | 'node_clock_mhz'; anchor_id?: string; node_id?: string; width?: number; height?: number; value?: number }
+/** ``target`` names a server-registered change kind (``WhatIfTargets.change_kinds``); the editor is driven by that metadata. */
+export interface WhatIfChange { target: string; anchor_id?: string; node_id?: string; stream_id?: string; param?: string; width?: number; height?: number; value?: number }
+export interface ChangeKindMeta {
+  target: string; label: string; shape: 'size' | 'value'; selector: 'anchor_id' | 'node_id' | 'stream_id' | null
+  selector_optional: boolean; needs_param: boolean; unit: string; max_value: number | null; description: string
+  /** instances available in this variant: id + size / value / ip / param */
+  choices: { id: string; size?: [number, number]; value?: number | null; ip?: string | null; param?: string; label?: string; unit?: string; role?: string | null; primary?: boolean; where?: string[] }[]
+}
 export interface WhatIfTargets extends WhatIfScope {
   baseline_hash: string
-  anchors: { id: string; size: [number, number]; kind: 'sensor' | 'output' | 'intermediate'; supported: boolean }[]
-  nodes: { id: string; label: string; ip?: string | null; size: [number, number]; size_supported: boolean; clock_supported: boolean }[]
+  anchors: { id: string; size: [number, number]; kind: 'sensor' | 'output' | 'intermediate'; supported: boolean; role?: 'record' | 'preview' | null }[]
+  nodes: { id: string; label: string; ip?: string | null; hw_name?: string; category?: string | null; size: [number, number]; size_supported: boolean; clock_supported: boolean }[]
   output_targets: string[]; supported_changes: string[]; limitations: string[]
   /** baseline FPS of the variant (API ≥ 2026-10-15) */
   fps?: number | null
+  /** registry metadata of the change kinds offered for this variant (API ≥ 2026-10-15) */
+  change_kinds?: ChangeKindMeta[]
+  /** anchor-less scenarios (playback/call/game): surfaces grouped by size */
+  streams?: { id: string; size: [number, number]; primary: boolean; where: string[] }[]
+  capability?: { soc_ref: string | null; soc_profile: string; readiness: string | null; notes: string[] }
+  soc_ref?: string | null
 }
 export type FocusMetric = 'power' | 'clock' | 'bw' | 'timing' | 'feasible'
 export interface WhatIfClarification { field: string; message: string; source?: string; choices: { label: string; value: string; change?: WhatIfChange }[] }
@@ -46,19 +59,40 @@ export const whatIfApi = {
   experiments: (scope: WhatIfScope, offset = 0) => getJson<{ items: WhatIfExperiment[]; total: number; limit: number; offset: number; has_next: boolean }>(`${path}/experiments`, { ...scope, limit: 20, offset }, false),
   experiment: (id: string) => getJson<WhatIfExperiment>(`${path}/experiments/${encodeURIComponent(id)}`, {}, false),
 }
-export const CHANGE_LABELS: Record<WhatIfChange['target'], string> = { anchor_size: '크기 기준점', output_size: '출력 크기', node_size: 'IP 처리 크기', fps: 'FPS', node_clock_mhz: 'IP clock 하한' }
+export const CHANGE_LABELS: Record<string, string> = { anchor_size: '크기 기준점', output_size: '출력 크기', node_size: 'IP 처리 크기', stream_size: '스트림 크기', fps: 'FPS', node_clock_mhz: 'IP clock 하한', node_param: 'IP 설정값' }
+/** Fallback metadata for API responses that predate ``change_kinds``. */
+const LEGACY_KINDS: ChangeKindMeta[] = [
+  { target: 'output_size', label: '출력 크기', shape: 'size', selector: 'anchor_id', selector_optional: true, needs_param: false, unit: '', max_value: null, description: '', choices: [] },
+  { target: 'anchor_size', label: '크기 기준점', shape: 'size', selector: 'anchor_id', selector_optional: false, needs_param: false, unit: '', max_value: null, description: '', choices: [] },
+  { target: 'node_size', label: 'IP 처리 크기', shape: 'size', selector: 'node_id', selector_optional: false, needs_param: false, unit: '', max_value: null, description: '', choices: [] },
+  { target: 'fps', label: 'FPS', shape: 'value', selector: null, selector_optional: false, needs_param: false, unit: 'fps', max_value: 240, description: '', choices: [] },
+  { target: 'node_clock_mhz', label: 'IP clock 하한', shape: 'value', selector: 'node_id', selector_optional: false, needs_param: false, unit: 'MHz', max_value: 5000, description: '', choices: [] },
+]
+/** Change kinds for a variant: the server registry when present, otherwise the legacy fixed set filled from targets. */
+export function kindsOf(targets: WhatIfTargets | undefined): ChangeKindMeta[] {
+  if (!targets) return []
+  if (targets.change_kinds) return targets.change_kinds
+  return LEGACY_KINDS.map((kind) => ({ ...kind, choices: kind.target === 'output_size' ? targets.output_targets.map((id) => ({ id, size: targets.anchors.find((a) => a.id === id)?.size }))
+    : kind.target === 'anchor_size' ? targets.anchors.filter((a) => a.supported).map((a) => ({ id: a.id, size: a.size }))
+      : kind.target === 'node_size' ? targets.nodes.filter((n) => n.size_supported).map((n) => ({ id: n.id, size: n.size }))
+        : kind.target === 'node_clock_mhz' ? targets.nodes.filter((n) => n.clock_supported).map((n) => ({ id: n.id, ip: n.ip }))
+          : [{ id: 'fps', value: targets.fps ?? null }] }))
+}
 export function clockExplanation(ip: Pick<IpRow, 'set_reason' | 'domain_leader' | 'clock_reason' | 'basis'>, fallback?: string): string {
   const reasons = { dvfs_floor: '최소 DVFS 단계 유지', dvfs_step: '필요 clock을 만족하는 DVFS 단계로 올림', domain: '공유 domain의 요구 clock 적용', exact: '요구값 적용' }
   const reason = ip.set_reason ? reasons[ip.set_reason] : ip.clock_reason ?? fallback ?? '기존 clock 모델로 계산'
   return `${reason}${ip.domain_leader ? ` · 기준 IP ${ip.domain_leader}` : ''}`
 }
-export function validChange(change: WhatIfChange): boolean {
-  if (change.target === 'fps') return Number.isFinite(change.value) && Number(change.value) > 0 && Number(change.value) <= 240
-  if (change.target === 'node_clock_mhz') return !!change.node_id && Number.isFinite(change.value) && Number(change.value) > 0 && Number(change.value) <= 5000
-  return !!(change.target === 'node_size' ? change.node_id : change.anchor_id) && [change.width, change.height].every((size) => Number.isInteger(size) && Number(size) >= 16 && Number(size) <= 16384)
+export function validChange(change: WhatIfChange, kinds: ChangeKindMeta[] = LEGACY_KINDS): boolean {
+  const kind = kinds.find((k) => k.target === change.target) ?? LEGACY_KINDS.find((k) => k.target === change.target)
+  if (!kind) return false
+  if (kind.selector && !kind.selector_optional && !change[kind.selector]) return false
+  if (kind.needs_param && !change.param) return false
+  if (kind.shape === 'size') return [change.width, change.height].every((size) => Number.isInteger(size) && Number(size) >= 16 && Number(size) <= 16384)
+  return Number.isFinite(change.value) && Number(change.value) > 0 && (kind.max_value == null || Number(change.value) <= kind.max_value)
 }
 
-const sameTarget = (a: WhatIfChange, b: WhatIfChange) => a.target === b.target && (a.anchor_id ?? '') === (b.anchor_id ?? '') && (a.node_id ?? '') === (b.node_id ?? '')
+const sameTarget = (a: WhatIfChange, b: WhatIfChange) => a.target === b.target && (['anchor_id', 'node_id', 'stream_id', 'param'] as const).every((k) => (a[k] ?? '') === (b[k] ?? ''))
 /** Add a change, replacing an existing one on the same target (one value per target, as the API requires). */
 export function upsertChange(changes: WhatIfChange[], change: WhatIfChange): WhatIfChange[] {
   return changes.some((row) => sameTarget(row, change)) ? changes.map((row) => (sameTarget(row, change) ? change : row)) : [...changes, change]
@@ -67,7 +101,9 @@ export function upsertChange(changes: WhatIfChange[], change: WhatIfChange): Wha
 export function describeChange(change: WhatIfChange): string {
   if (change.target === 'fps') return `FPS → ${change.value}`
   if (change.target === 'node_clock_mhz') return `${change.node_id} clock 하한 → ${change.value} MHz`
-  const where = change.target === 'node_size' ? `${change.node_id} 처리 크기` : `${CHANGE_LABELS[change.target]} ${change.anchor_id ?? ''}`
+  if (change.value != null && change.width == null) return `${change.node_id ?? ''}${change.node_id ? ' ' : ''}${change.param ?? CHANGE_LABELS[change.target] ?? change.target} → ${change.value}`
+  const where = change.target === 'node_size' ? `${change.node_id} 처리 크기` : change.target === 'stream_size' ? `스트림 ${change.stream_id}`
+    : `${CHANGE_LABELS[change.target] ?? change.target} ${change.anchor_id ?? ''}`
   return `${where} → ${change.width}×${change.height}`
 }
 const pct = (a: number, b: number) => (a ? ` (${b - a >= 0 ? '+' : ''}${(((b - a) / a) * 100).toFixed(1)}%)` : '')

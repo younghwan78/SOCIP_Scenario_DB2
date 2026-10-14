@@ -13,3 +13,11 @@ it('keeps one value per target and leads the answer with the asked metrics', asy
   expect(upsertChange(a, { target: 'fps', value: 60 })).toEqual([{ target: 'fps', value: 60 }, { target: 'node_clock_mhz', node_id: 'mfc', value: 400 }])
   expect(describeChange({ target: 'output_size', anchor_id: 'record_out', width: 1920, height: 1080 })).toBe('출력 크기 record_out → 1920×1080')
 })
+it('validates any registered kind from its metadata', async () => {
+  const { validChange } = await import('./scenarioWhatIf')
+  const kinds = [{ target: 'node_param', label: 'IP 설정값', shape: 'value' as const, selector: 'node_id' as const, selector_optional: true, needs_param: true, unit: 'Hz', max_value: 240, description: '', choices: [] }]
+  expect(validChange({ target: 'node_param', param: 'refresh_hz', value: 120 }, kinds)).toBe(true)
+  expect(validChange({ target: 'node_param', value: 120 }, kinds)).toBe(false)
+  expect(validChange({ target: 'node_param', param: 'refresh_hz', value: 300 }, kinds)).toBe(false)
+  expect(validChange({ target: 'unknown', value: 1 }, kinds)).toBe(false)
+})

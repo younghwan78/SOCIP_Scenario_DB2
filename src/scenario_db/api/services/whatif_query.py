@@ -53,8 +53,10 @@ UNSUPPORTED_TOPICS: list[tuple[str, str, str | None]] = [
     (r"\bcpu\b|코어|\bcores?\b|cluster|클러스터|\blf\d?\b|\bhf\b|\bbig\b|schedul|스케줄", "CPU 배치·주파수는 별도 화면입니다", "CPU what-if"),
     (r"thermal|온도|발열|throttl|밝기|brightness|contrast|sharpen|rotate|회전|\bfan\b|화질|\biq\b", "모델에 없는 항목입니다", None),
 ]
-IP_ALIASES = {"인코더": "mfc", "encoder": "mfc", "디스플레이": "dpu", "display": "dpu", "스케일러": "mcsc", "scaler": "mcsc",
-              "왜곡": "gdc", "warp": "gdc"}
+# words -> IP catalog category (SoC-agnostic: any IP of that category in the variant matches)
+CATEGORY_WORDS = {"codec": r"인코더|encoder|디코더|decoder", "display": r"디스플레이|display|패널|panel",
+                  "camera": r"\bisp\b|카메라\s*ip", "compute": r"\bgpu\b|\bnpu\b"}
+REFRESH_RE = re.compile(r"(?<![\d.])(?P<v>\d+(?:\.\d+)?)\s*hz\b|(?:주사율|refresh(?:\s*rate)?)\s*(?:을|를|은|는|=|:|to)?\s*(?P<w>\d+(?:\.\d+)?)", re.I | re.A)
 FOCUS = {"power": r"power|전력|소모|소비|\bmw\b|와트|watt|배터리|battery",
          "clock": r"clock|클럭|클록|주파수|\bfreq|dvfs",
          "bw": r"\bbw\b|대역폭|bandwidth|메모리|memory|traffic|트래픽",
@@ -99,17 +101,24 @@ def _factor(half, pct, times, down: bool) -> float | None:
 def _find_nodes(clause: str, targets: dict[str, Any]) -> list[dict]:
     """Nodes named in the clause: id, label, IP stem (ip-gdc-… -> gdc), id prefix (mfc_enc -> mfc), aliases."""
     text = clause
-    for word, stem in IP_ALIASES.items():
-        if re.search(re.escape(word), text, F):
-            text += f" {stem}"
     exact = [n for n in targets["nodes"] if _mentions(text, n["id"])]
     if exact:
         return exact
     hits: dict[str, dict] = {}
     for node in targets["nodes"]:
-        names = {str(node.get("label") or ""), str(node.get("ip") or ""), re.split(r"[_\-]", node["id"])[0]}
+        names = {str(node.get("label") or ""), str(node.get("ip") or ""), str(node.get("hw_name") or ""),
+                 re.split(r"[_\-]", node["id"])[0]}
         if any(len(n) >= 2 and _mentions(text, n) for n in names):
             hits[node["id"]] = node
+    if not hits:
+        for category, words in CATEGORY_WORDS.items():
+            if re.search(words, text, F):
+                hits.update({n["id"]: n for n in targets["nodes"] if n.get("category") == category})
+        # "디코더" vs "인코더" inside the codec category
+        if re.search(r"디코더|decoder", text, F):
+            hits = {k: v for k, v in hits.items() if not re.search(r"enc", k, F)} or hits
+        elif re.search(r"인코더|encoder", text, F):
+            hits = {k: v for k, v in hits.items() if not re.search(r"dec", k, F)} or hits
     if not hits and re.search(r"(?<![A-Za-z])nr(?![A-Za-z])|노이즈|denoise", text, F):
         hits = {n["id"]: n for n in targets["nodes"] if n["id"].endswith("nr")}
     return list(hits.values())
@@ -118,8 +127,9 @@ def _find_nodes(clause: str, targets: dict[str, Any]) -> list[dict]:
 def _output_target(clause: str, targets: dict[str, Any], query: str) -> tuple[str | None, list[str], str | None]:
     """Which output a size without an anchor id refers to: (anchor, choices if ambiguous, assumption note)."""
     outs = list(targets["output_targets"])
-    record = [a for a in outs if re.search(r"record|video|enc", a, F)]
-    preview = [a for a in outs if re.search(r"preview|disp", a, F)]
+    roles = {a["id"]: a.get("role") for a in targets["anchors"]}
+    record = [a for a in outs if roles.get(a) == "record" or (roles.get(a) is None and re.search(r"record|video|enc", a, F))]
+    preview = [a for a in outs if roles.get(a) == "preview" or (roles.get(a) is None and re.search(r"preview|disp", a, F))]
     if PREVIEW_WORD.search(clause):
         return (preview[0], [], None) if len(preview) == 1 else (None, preview or outs, None)
     if RECORD_WORD.search(clause):
@@ -162,6 +172,9 @@ def plan_query(query: str, targets: dict[str, Any]) -> dict[str, Any]:
         out["sources"].append(source.strip())
 
     def clarify(field: str, message: str, choices: list[tuple[str, dict]], source: str) -> None:
+        if not choices:   # nothing in this variant can take the value: say so instead of an empty question
+            ignore(source, "이 variant에는 해당 조건을 바꿀 대상이 없습니다", "다른 scenario/variant 선택")
+            return
         out["clarifications"].append({"field": field, "message": message, "source": source.strip(),
                                       "choices": [{"label": label, "value": label, "change": change} for label, change in choices]})
 
@@ -175,6 +188,24 @@ def plan_query(query: str, targets: dict[str, Any]) -> dict[str, Any]:
             w, h = size if size else (_even(cur[0] * factor), _even(cur[1] * factor))
             rows.append((f"{anchor} → {w}x{h}", {"target": "output_size", "anchor_id": anchor, "width": w, "height": h}))
         return rows
+
+    streams = list(targets.get("streams") or [])
+    main_stream = next((st for st in streams if st.get("primary")), streams[0] if streams else None)
+
+    def stream_change(size: tuple[int, int], clause: str) -> bool:
+        """Scenarios without size anchors (playback, call, game): change the main stream surfaces together."""
+        if targets["output_targets"] or main_stream is None:
+            return False
+        if list(size) == main_stream["size"]:
+            out["notes"].append(f"스트림은 이미 {main_stream['id']}입니다 — 크기 조건은 넣지 않았습니다.")
+            return True
+        add({"target": "stream_size", "stream_id": main_stream["id"], "width": size[0], "height": size[1]}, clause)
+        where = ", ".join(main_stream.get("where") or []) or "design 해상도"
+        out["notes"].append(f"{main_stream['id']} 스트림을 {size[0]}x{size[1]}로 변경 — 같이 바뀌는 설정: {where}")
+        return True
+
+    refresh_params = [r for r in targets.get("params") or [] if r["param"] == "refresh_hz"]
+    modeled_refresh = [r for r in refresh_params if r.get("modeled")]
 
     for clause in _clauses(q):
         topic = next(((r, h) for pat, r, h in UNSUPPORTED_TOPICS if re.search(pat, clause, F)), None)
@@ -193,6 +224,27 @@ def plan_query(query: str, targets: dict[str, Any]) -> dict[str, Any]:
             if topic:
                 ignore(clause, topic[0], topic[1])
             continue
+        refresh = REFRESH_RE.search(clause)
+        if refresh:
+            value = float(refresh["v"] or refresh["w"])
+            if not refresh_params:
+                ignore(clause, "이 variant에는 주사율 설정이 없습니다")
+            elif not any(r.get("modeled") for r in refresh_params):
+                ignore(clause, "주사율은 현재 Timing Budget 전력 모델에 반영되지 않습니다 (DPU driver·panel은 모델 범위 밖)",
+                       "Scenario에서 주사율이 다른 variant 선택")
+            elif not 0 < value <= 240:
+                ignore(clause, "주사율은 0보다 크고 240 Hz 이하여야 합니다")
+            else:
+                named = [r for r in modeled_refresh if r["node_id"] in {n["id"] for n in nodes}]
+                if len(named) == 1:
+                    add({"target": "node_param", "node_id": named[0]["node_id"], "param": "refresh_hz", "value": value}, clause)
+                else:   # display chain refresh moves together (DPU + panel)
+                    add({"target": "node_param", "param": "refresh_hz", "value": value}, clause)
+                    out["notes"].append(f"주사율 {value:g} Hz를 {', '.join(r['node_id'] for r in modeled_refresh)}에 함께 적용합니다.")
+            clause = REFRESH_RE.sub(" ", clause)
+            if not re.search(r"\d", clause):
+                continue
+            sizes, fps_hits, clocks = list(SIZE_RE.finditer(clause)), list(FPS_RE.finditer(clause)), list(CLOCK_RE.finditer(clause))
         modeled = sizes or fps_hits or clocks or (relative and (CLOCK_WORD.search(clause) or FPS_WORD.search(clause) or SIZE_WORD.search(clause)))
         if topic and not modeled:
             ignore(clause, topic[0], topic[1])
@@ -224,6 +276,8 @@ def plan_query(query: str, targets: dict[str, Any]) -> dict[str, Any]:
                 add({"target": "anchor_size", "anchor_id": named[0]["id"], "width": w, "height": h}, clause)
             elif len(size_nodes) == 1 and not (RECORD_WORD.search(clause) or PREVIEW_WORD.search(clause)):
                 add({"target": "node_size", "node_id": size_nodes[0]["id"], "width": w, "height": h}, clause)
+            elif stream_change((w, h), clause):
+                pass
             else:
                 anchor, choices, note = _output_target(clause, targets, q)
                 if anchor:
@@ -243,6 +297,9 @@ def plan_query(query: str, targets: dict[str, Any]) -> dict[str, Any]:
                 clarify("direction", f"{pct['p']}%를 줄일지 늘릴지 고르세요.",
                         [row for f in (1 - float(pct["p"]) / 100, 1 + float(pct["p"]) / 100)
                          for row in output_choices([anchor] if anchor else choices, factor=f)], clause)
+            elif factor and not targets["output_targets"] and main_stream:
+                cur = main_stream["size"]
+                stream_change((_even(cur[0] * factor), _even(cur[1] * factor)), clause)
             elif factor:
                 if anchor:
                     cur = anchors_by_id[anchor]["size"]
@@ -253,6 +310,13 @@ def plan_query(query: str, targets: dict[str, Any]) -> dict[str, Any]:
             else:
                 outs = [anchor] if anchor else choices
                 opts = []
+                if not targets["output_targets"] and main_stream:
+                    cur = main_stream["size"]
+                    for name in ("8K", "UHD", "QHD", "FHD", "HD"):
+                        sw, sh = SIZE_NAMES[name]
+                        if (sw * sh < cur[0] * cur[1]) if down else (sw * sh > cur[0] * cur[1]):
+                            opts.append((f"{main_stream['id']} → {name} {sw}x{sh}",
+                                         {"target": "stream_size", "stream_id": main_stream["id"], "width": sw, "height": sh}))
                 for a in outs:
                     cur = anchors_by_id[a]["size"]
                     for name in ("8K", "UHD", "QHD", "FHD", "HD"):
@@ -329,7 +393,7 @@ def plan_query(query: str, targets: dict[str, Any]) -> dict[str, Any]:
                 ignore(clause, "변경할 대상과 값을 찾지 못했습니다", "예: '녹화 FHD', 'FPS 60', 'mfc clock 20% 낮추면'")
 
     # one value per target: keep the alternatives as a choice instead of silently picking one
-    keys = [(c["target"], c.get("anchor_id"), c.get("node_id")) for c in out["changes"]]
+    keys = [(c["target"], c.get("anchor_id"), c.get("node_id"), c.get("stream_id"), c.get("param")) for c in out["changes"]]
     for key in [k for i, k in enumerate(keys) if keys.count(k) > 1 and keys.index(k) == i]:
         idx = [i for i, k in enumerate(keys) if k == key]
         clarify("duplicate", "같은 대상에 값이 여러 개입니다. 하나를 고르세요.",
