@@ -858,6 +858,18 @@ a.meas-syn { color: var(--muted); }
 .collab-conflict { border: 1px solid var(--line); background: var(--primary-soft); padding: 12px; margin: 12px 0; }
 .collab-plan { margin-top: 12px; }
 .registration-basis { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 12px; margin: 6px 0; overflow-wrap: anywhere; }
+.wi-scope { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; padding: 10px 12px; margin-bottom: 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel, transparent); }
+.wi-scope label { display: grid; gap: 4px; font-size: 12px; }
+.wi-scope select { min-width: 180px; max-width: 360px; }
+.wi-step { font-weight: 700; align-self: center; }
+.wi-plan ul { margin: 6px 0; padding-left: 18px; }
+.wi-interp li { margin: 2px 0; }
+.wi-clarify { margin: 8px 0; padding: 6px 10px; border-left: 3px solid #B45309; }
+.wi-clarify p { margin: 0 0 6px; }
+.wi-ignored { margin: 8px 0; padding: 6px 10px; border-left: 3px solid var(--line); }
+.wi-answer { margin: 4px 0 8px; padding-left: 18px; line-height: 1.7; }
+.wi-answer li.warn { color: var(--del-text, #B91C1C); font-weight: 600; }
+tr.wi-focus th, tr.wi-focus td { background: #FFFBEB; }
 .wi-change { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; margin: 12px 0; border: 1px solid var(--line); border-radius: 6px; }
 .wi-change label { display: grid; gap: 4px; font-size: 12px; }
 .wi-change .input { max-width: 110px; }

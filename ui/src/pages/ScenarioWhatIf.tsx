@@ -1,21 +1,69 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Ctx } from '../App'
-import { ApiError } from '../lib/api'
+import { api, ApiError } from '../lib/api'
+import { projectText } from '../lib/projects'
 import { useCredentialKeyId } from '../lib/auth'
 import { useAsync } from '../lib/route'
 import { fmt } from '../lib/timingBudget'
-import { CHANGE_LABELS, clockExplanation, validChange, whatIfApi, type ExperimentDraft, type PreviewRequest, type WhatIfChange, type WhatIfPlan, type WhatIfResult, type WhatIfScope, type WhatIfTargets } from '../lib/scenarioWhatIf'
+import { answerLines, CHANGE_LABELS, clockExplanation, describeChange, upsertChange, validChange, whatIfApi, type ExperimentDraft, type FocusMetric, type PreviewRequest, type WhatIfChange, type WhatIfClarification, type WhatIfPlan, type WhatIfResult, type WhatIfScope, type WhatIfTargets } from '../lib/scenarioWhatIf'
 import { Card } from '../components/TimingCharts'
 
-const EXAMPLES = ['센서 입력은 유지하고 녹화 출력을 FHD로 변경하면 clock과 power는?', 'FPS를 30으로 바꾸면 power는?', 'Change recording output to 1920x1080 and FPS to 30']
+const STATUS: Record<WhatIfPlan['status'], { label: string; cls: string }> = {
+  ready: { label: '해석 완료 · 조건 확인 후 계산', cls: 'v-ok' }, partial: { label: '일부만 해석 · 나머지는 아래 참고', cls: 'v-warn' },
+  clarification: { label: '선택이 필요합니다', cls: 'v-warn' }, unsupported: { label: '계산할 조건을 찾지 못함', cls: 'v-warn' },
+  no_change: { label: '기준과 같아 바꿀 조건 없음', cls: 'v-warn' },
+}
+/** Questions built from the selected variant's own baseline, so every example is answerable as written. */
+function examplesFor(targets: WhatIfTargets | undefined): string[] {
+  if (!targets) return []
+  const out: string[] = []
+  const record = targets.anchors.find((a) => a.kind === 'output' && /record|video|enc/i.test(a.id))
+  if (record) out.push(record.size[0] * record.size[1] > 1920 * 1080 ? '녹화를 FHD로 낮추면 전력은 얼마나 줄어?' : '녹화를 UHD로 올리면 BW와 전력은?')
+  if (targets.fps) out.push(targets.fps >= 60 ? 'FPS 절반이면 clock과 전력은?' : `FPS를 ${targets.fps * 2}으로 올리면 timing 버틸 수 있어?`)
+  const ip = targets.nodes.find((n) => n.clock_supported && /mfc|enc/i.test(n.id)) ?? targets.nodes.find((n) => n.clock_supported)
+  if (ip) out.push(`${ip.ip ?? ip.id} clock 20% 낮추면 timing 여유는?`)
+  if (record && targets.fps) out.push('미리보기는 그대로 두고 녹화 HD, FPS 30이면?')
+  return out
+}
 const emptyDraft: ExperimentDraft = { title: '', purpose: '', description: '', assumptions: '', conclusion: '', visibility: 'private' }
 const date = (value: string) => new Date(value).toLocaleString('ko-KR')
 const textError = (error: unknown) => error instanceof ApiError && error.status === 409 ? '기준 입력이 변경되었습니다. 조건 해석 또는 기준 갱신 후 다시 계산하세요.' : error instanceof Error ? error.message : String(error)
 
 export function ScenarioWhatIfPage({ ctx }: { ctx: Ctx }) {
   const credential = useCredentialKeyId()
-  if (!ctx.project || !ctx.scenario || !ctx.variant) return <div className="page empty">과제 · scenario · variant를 선택하세요.</div>
-  return <WhatIfBody key={`${ctx.project}|${ctx.scenario}|${ctx.variant}|${credential}`} scope={{ project_ref: ctx.project, scenario_id: ctx.scenario, variant_id: ctx.variant }} />
+  const ready = !!(ctx.project && ctx.scenario && ctx.variant)
+  return <div className="page tb-page">
+    <ScopePicker ctx={ctx} />
+    {ready ? <WhatIfBody key={`${ctx.project}|${ctx.scenario}|${ctx.variant}|${credential}`} scope={{ project_ref: ctx.project, scenario_id: ctx.scenario, variant_id: ctx.variant }} />
+      : <p className="faint">과제 · scenario · variant를 먼저 선택하세요. 질문은 선택한 variant를 기준으로 해석하고 계산합니다.</p>}
+  </div>
+}
+/** ① 과제 → scenario → variant: the question is always asked against an explicit baseline. */
+function ScopePicker({ ctx }: { ctx: Ctx }) {
+  const projects = ctx.projects ?? [], catalog = ctx.catalog ?? []
+  const variantsQ = useAsync(() => (ctx.scenario ? api.variants(ctx.scenario).catch(() => ({ items: [], total: 0 })) : Promise.resolve({ items: [], total: 0 })), [ctx.scenario])
+  const item = catalog.find((c) => c.scenario_id === ctx.scenario)
+  const unsupported = !!item?.soc_ref && item.soc_ref !== 'soc-exynos2600'
+  const variants = variantsQ.data?.items ?? []
+  const go = (params: Record<string, string | undefined>) => ctx.navigate?.('whatif', params)
+  const dc = (v: { design_conditions?: Record<string, unknown> | null }) => {
+    const d = v.design_conditions ?? {}
+    return [d.resolution ?? d.record_resolution, d.fps ? `${d.fps}fps` : null].filter(Boolean).join(' · ')
+  }
+  return <section className="wi-scope" aria-label="What-if 대상 선택">
+    <span className="wi-step">① 대상</span>
+    <label>과제<select aria-label="What-if 과제" value={ctx.project} onChange={(e) => ctx.setProject?.(e.target.value)}>
+      {!projects.some((p) => p.id === ctx.project) && <option value={ctx.project}>{ctx.project || '과제 선택'}</option>}
+      {projects.map((p) => <option key={p.id} value={p.id}>{projectText(p)}</option>)}</select></label>
+    <label>Scenario<select aria-label="What-if scenario" value={ctx.scenario} onChange={(e) => go({ scenario: e.target.value, variant: undefined })}>
+      {!catalog.some((c) => c.scenario_id === ctx.scenario) && <option value={ctx.scenario}>{ctx.scenario || 'scenario 선택'}</option>}
+      {catalog.map((c) => <option key={c.scenario_id} value={c.scenario_id}>{c.scenario_name} ({c.variant_count})</option>)}</select></label>
+    <label>Variant (기준)<select aria-label="What-if variant" value={ctx.variant} onChange={(e) => go({ scenario: ctx.scenario, variant: e.target.value || undefined })}>
+      <option value="">variant 선택</option>
+      {!variants.some((v) => v.id === ctx.variant) && ctx.variant && <option value={ctx.variant}>{ctx.variant}</option>}
+      {variants.map((v) => <option key={v.id} value={v.id}>{v.id}{dc(v) ? ` — ${dc(v)}` : ''}</option>)}</select></label>
+    {unsupported && <span className="badge v-warn" title={item?.soc_ref ?? ''}>이 과제는 What-if 미지원 (Exynos2600만)</span>}
+  </section>
 }
 function WhatIfBody({ scope }: { scope: WhatIfScope }) {
   const credential = useCredentialKeyId()
@@ -26,6 +74,8 @@ function WhatIfBody({ scope }: { scope: WhatIfScope }) {
   const savedQ = useAsync(() => whatIfApi.experiments(scope, offset), [scope.project_ref, scope.scenario_id, scope.variant_id, offset, tick, credential])
   const [query, setQuery] = useState('')
   const [plan, setPlan] = useState<WhatIfPlan | null>(null)
+  const [pending, setPending] = useState<WhatIfClarification[]>([])
+  const [focus, setFocus] = useState<FocusMetric[]>([])
   const [changes, setChanges] = useState<WhatIfChange[]>([])
   const [result, setResult] = useState<WhatIfResult | null>(null)
   const [request, setRequest] = useState<PreviewRequest | null>(null)
@@ -50,8 +100,11 @@ function WhatIfBody({ scope }: { scope: WhatIfScope }) {
   }
   const interpret = () => run(async (active) => {
     const next = await whatIfApi.plan(scope, query.trim())
-    if (active()) { setPlan(next); setChanges(next.changes); setResult(null); setRequest(null); setStale(false) }
+    if (active()) { setPlan(next); setPending(next.clarifications); setFocus(next.focus ?? []); setChanges(next.changes); setResult(null); setRequest(null); setStale(false) }
   })
+  const choose = (index: number, change: WhatIfChange) => { updateChanges(upsertChange(changes, change)); setPending((rows) => rows.filter((_, at) => at !== index)) }
+  const examples = useMemo(() => examplesFor(targetsQ.data), [targetsQ.data])
+  const canPreview = !busy && !stale && !!(plan?.baseline_hash ?? targetsQ.data?.baseline_hash) && changes.length > 0 && changes.every(validChange)
   const baselineHash = plan?.baseline_hash ?? targetsQ.data?.baseline_hash
   const preview = () => run(async (active) => {
     if (!baselineHash || stale || !changes.length || !changes.every(validChange)) return
@@ -67,7 +120,7 @@ function WhatIfBody({ scope }: { scope: WhatIfScope }) {
   const reopen = (id: string) => run(async (active) => {
     const saved = await whatIfApi.experiment(id)
     if (!active() || !saved.preview_request) return
-    setQuery(saved.query ?? ''); setPlan(null); setChanges(saved.preview_request.changes); setResult(null); setRequest(null)
+    setQuery(saved.query ?? ''); setPlan(null); setPending([]); setFocus([]); setChanges(saved.preview_request.changes); setResult(null); setRequest(null)
     setModelSettings({ config: saved.preview_request.config, options: saved.preview_request.options })
     setDraft({ title: saved.title, purpose: saved.purpose ?? '', description: saved.description ?? '', assumptions: saved.assumptions ?? '', conclusion: saved.conclusion ?? '', visibility: saved.visibility })
     setStale(false); setBasisTick((n) => n + 1)
@@ -80,20 +133,43 @@ function WhatIfBody({ scope }: { scope: WhatIfScope }) {
     const node = targets.nodes.find((row) => target === 'node_clock_mhz' ? row.clock_supported : row.size_supported)?.id
     updateChanges([...changes, target === 'fps' ? { target, value: 30 } : target === 'node_clock_mhz' ? { target, node_id: node, value: 400 } : target === 'node_size' ? { target, node_id: node, width: 1920, height: 1080 } : { target, anchor_id: anchor, width: 1920, height: 1080 }])
   }
-  return <div className="page tb-page">
-    <p className="faint">{scope.project_ref} / {scope.scenario_id} / {scope.variant_id} · {modelSettings.config ? '불러온 실험의 모델 설정' : '기본 전력 모델'}과 과제 처리량 정책으로 비교합니다.</p>
+  const t = targetsQ.data
+  const resetQuestion = (value: string) => { invalidate(); setQuery(value); setPlan(null); setPending([]); setChanges([]) }
+  return <>
+    <p className="faint">기준 {scope.variant_id}{t ? ` · FPS ${t.fps ?? '?'} · ${t.anchors.filter((a) => a.kind !== 'intermediate').map((a) => `${a.id} ${a.size.join('×')}`).join(' · ')}` : ''} · {modelSettings.config ? '불러온 실험의 모델 설정' : '기본 전력 모델'}과 과제 처리량 정책으로 비교합니다.</p>
     <div className="tb-grid">
-      <Card id="wi-query" title="자연어 What-if" note="질문 해석 → 변경 대상 확인 → 계산 → 실험 저장" defaultWide>
-        <div className="toolbar" style={{ flexWrap: 'wrap' }}>{EXAMPLES.map((example) => <button key={example} className="btn tb-mini" disabled={busy} onClick={() => { invalidate(); setQuery(example); setPlan(null); setChanges([]) }}>{example}</button>)}</div>
-        <label className="collab-form">변경 조건 질문<textarea className="input" aria-label="변경 조건 질문" rows={3} maxLength={2000} value={query} onChange={(e) => { invalidate(); setQuery(e.target.value); setPlan(null); setChanges([]) }} placeholder="출력 크기 · FPS · IP clock 변경을 질문하세요." /></label>
+      <Card id="wi-query" title="② 질문" note="자유롭게 질문하세요 — 해석한 조건을 확인한 뒤 계산합니다" defaultWide>
+        <label className="collab-form">변경 조건 질문<textarea className="input" aria-label="변경 조건 질문" rows={3} maxLength={2000} value={query} onChange={(e) => resetQuestion(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && query.trim()) interpret() }}
+          placeholder="예: 녹화를 FHD 60으로 바꾸면 BW랑 전력은? · MFC clock 20% 낮추면 timing 여유는? · FPS 절반이면?" /></label>
+        {examples.length > 0 && <div className="toolbar" style={{ flexWrap: 'wrap' }}><span className="faint">예시</span>{examples.map((example) => <button key={example} className="btn tb-mini" disabled={busy} onClick={() => resetQuestion(example)}>{example}</button>)}</div>}
         <button className="btn primary" disabled={busy || !query.trim() || targetsQ.loading || !!targetsQ.error} onClick={interpret}>변경 조건 해석</button>
-        <p className="faint">해상도 · FPS · IP clock의 한국어/영어 질문을 지원합니다. 센서 모드, 압축, 화질, 복잡한 임의 조건은 지원 범위에서 제외됩니다.</p>
-        {plan && <div className="collab-plan"><span className={`badge ${plan.status === 'ready' ? 'v-ok' : 'v-warn'}`}>{plan.status === 'ready' ? '해석 완료 · 조건 확인 필요' : plan.status === 'clarification' ? '대상을 명시하세요' : '지원 범위를 벗어난 질문'}</span>
-          {plan.clarifications.map((item) => <p key={item.field}>{item.message}<br /><span className="faint">선택 가능한 대상: {item.choices.map((choice) => `${choice.label} (${choice.value})`).join(' · ')}</span></p>)}
-          {plan.warnings.map((warning) => <p className="faint" key={warning}>{warning}</p>)}
+        <span className="faint"> Ctrl+Enter</span>
+        <details><summary className="faint">해석할 수 있는 것</summary><ul className="faint">
+          <li>출력 크기: FHD·UHD·QHD·HD·4K·8K·1080p·1920x1080, “절반”, “30% 줄이면” — 녹화/미리보기/anchor 이름으로 대상 지정 (지정이 없으면 녹화 출력)</li>
+          <li>FPS: “60fps”, “FPS 60”, “UHD60”, “4K@30”, “절반”, “2배”</li>
+          <li>IP clock 하한: “mfc 600 MHz”, “인코더 0.6 GHz”, “GDC clock 20% 낮추면” (상대값은 기준 적용 clock 대비)</li>
+          <li>관심 지표: 전력 · clock · BW · timing/여유 · 가능 여부 → 답변에서 먼저 보여줍니다</li>
+          <li>코덱·압축·EIS/HDR·전압·CPU 배치·센서 mode는 해석하지 않고 어느 화면에서 다루는지 알려줍니다</li></ul></details>
+        {plan && <div className="collab-plan wi-plan">
+          <span className={`badge ${STATUS[plan.status].cls}`}>{STATUS[plan.status].label}</span>
+          {changes.length > 0 && <ul className="wi-interp">{changes.map((change, index) => {
+            const at = plan.changes.findIndex((row) => describeChange(row) === describeChange(change))
+            return <li key={index}><b>{describeChange(change)}</b>{at >= 0 && plan.sources?.[at] && <span className="faint"> ← “{plan.sources[at]}”</span>}</li>
+          })}</ul>}
+          {plan.kept?.length ? <p className="faint">유지: {plan.kept.join(' · ')}</p> : null}
+          {plan.notes?.map((note) => <p className="faint" key={note}>{note}</p>)}
+          {pending.map((item, index) => <div className="wi-clarify" key={`${item.field}-${index}`}>
+            <p>{item.message}{item.source && <span className="faint"> — “{item.source}”</span>}</p>
+            <div className="toolbar" style={{ flexWrap: 'wrap' }}>{item.choices.filter((choice) => choice.change).map((choice) => <button key={choice.label} className="btn tb-mini" disabled={busy} onClick={() => choose(index, choice.change!)}>{choice.label}</button>)}</div>
+          </div>)}
+          {plan.ignored?.length ? <div className="wi-ignored"><b>해석하지 않은 부분</b><ul>{plan.ignored.map((item) => <li key={item.text + item.reason}>“{item.text}” — {item.reason}{item.hint && <span className="faint"> → {item.hint}</span>}</li>)}</ul></div> : null}
+          {(plan.status === 'unsupported' || plan.status === 'no_change') && plan.warnings.map((warning) => <p className="faint" key={warning}>{warning}</p>)}
+          {changes.length > 0 && <div className="toolbar"><button className="btn primary" disabled={!canPreview || pending.length > 0} onClick={preview}>이 조건으로 계산</button>
+            {pending.length > 0 && <span className="faint">선택이 남아 있습니다 — 선택하거나 아래에서 직접 조정하세요.</span>}</div>}
         </div>}
       </Card>
-      <Card id="wi-condition" title="계산할 변경 조건 확인" note="입력·중간·출력 크기를 구분하고 명시한 항목만 변경합니다." defaultWide>
+      <Card id="wi-condition" title="③ 계산할 조건 (직접 조정)" note="해석 결과를 고치거나 질문 없이 직접 추가할 수 있습니다. 명시한 항목만 변경합니다." defaultWide>
         {targetsQ.error && <div className="err">{targetsQ.error}</div>}
         {targetsQ.data && <>
           <div className="faint">크기 기준: {targetsQ.data.anchors.map((anchor) => `${anchor.id} ${anchor.size.join('×')}${anchor.kind === 'sensor' ? ' (센서 유지)' : ''}`).join(' · ')}</div>
@@ -105,7 +181,7 @@ function WhatIfBody({ scope }: { scope: WhatIfScope }) {
           <details><summary className="faint">모델 지원 범위</summary><ul>{targetsQ.data.limitations.map((item) => <li key={item}>{item}</li>)}</ul></details>
         </>}
       </Card>
-      {result && <ResultView result={result} />}
+      {result && <ResultView result={result} focus={focus} query={plan ? query : ''} />}
       {result && <Card id="wi-save" title="실험 기록 저장" note="작성자와 계산 근거를 함께 기록합니다." defaultWide>
         <div className="collab-form">{([{ key: 'title', label: '실험 제목', max: 200 }, { key: 'purpose', label: '검토 목적', max: 4000 }, { key: 'description', label: '실험 상세 설명', max: 12000 }, { key: 'assumptions', label: '실험 가정 · 제약', max: 6000 }, { key: 'conclusion', label: '실험 결론', max: 6000 }] as const).map(({ key, label, max }) => <label key={key}>{label}<textarea className="input" aria-label={label} rows={key === 'description' ? 3 : 1} maxLength={max} value={draft[key]} onChange={(e) => setDraft({ ...draft, [key]: e.target.value })} /></label>)}
           <label>공개 범위<select aria-label="실험 공개 범위" value={draft.visibility} onChange={(e) => setDraft({ ...draft, visibility: e.target.value as 'private' | 'shared' })}><option value="private">개인 · 인증 사용자 본인</option><option value="shared">공유 · 인증된 사용자 열람</option></select></label>
@@ -124,7 +200,7 @@ function WhatIfBody({ scope }: { scope: WhatIfScope }) {
       </Card>
     </div>
     {busy && <p role="status">요청 처리 중…</p>}{message && <p role="status" className={stale ? 'err' : ''}>{message}</p>}
-  </div>
+  </>
 }
 function ChangeEditor({ change, targets, disabled, onChange, onRemove }: { change: WhatIfChange; targets: WhatIfTargets; disabled: boolean; onChange: (next: WhatIfChange) => void; onRemove: () => void }) {
   const size = ['anchor_size', 'node_size', 'output_size'].includes(change.target)
@@ -136,16 +212,23 @@ function ChangeEditor({ change, targets, disabled, onChange, onRemove }: { chang
     <button className="btn tb-mini" onClick={onRemove}>항목 제거</button>
   </fieldset>
 }
-function ResultView({ result }: { result: WhatIfResult }) {
+const FOCUS_ROWS: Record<FocusMetric, string[]> = { power: ['modeled_power_mw', 'cpu_power_mw', 'ip_power_mw', 'memory_power_mw'], bw: ['bw_mbs', 'memory_power_mw'], timing: ['period_ms', 'fps'], clock: [], feasible: [] }
+function ResultView({ result, focus, query }: { result: WhatIfResult; focus: FocusMetric[]; query: string }) {
   const before = result.baseline, after = result.candidate
+  const hot = new Set(focus.flatMap((key) => FOCUS_ROWS[key]))
+  const lines = answerLines(result, focus)
   const metrics = [{ key: 'modeled_power_mw', label: '모델 합계', unit: 'mW' }, { key: 'cpu_power_mw', label: 'CPU', unit: 'mW' }, { key: 'ip_power_mw', label: 'IP', unit: 'mW' }, { key: 'memory_power_mw', label: '메모리 BW', unit: 'mW' }, { key: 'bw_mbs', label: 'BW', unit: 'MB/s' }, { key: 'fps', label: 'FPS', unit: 'fps' }, { key: 'period_ms', label: 'Frame period', unit: 'ms' }] as const
   const baseIps = new Map(before.report.ips.map((ip) => [ip.node, ip]))
   const explanations = new Map(result.delta.ips.map((ip) => [ip.node, ip.explanation]))
   const baseStages = new Map(before.report.stages.map((stage) => [stage.id, stage]))
   const delta = (a: number, b: number) => `${b - a >= 0 ? '+' : ''}${fmt(b - a, 2)}`
   return <>
+    <Card id="wi-answer" title="답변" note={query ? `“${query}”` : '저장된 조건 재실행'} defaultWide>
+      <ul className="wi-answer">{lines.map((line) => <li key={line.key} className={line.warn ? 'warn' : ''}>{line.text}</li>)}</ul>
+      <p className="faint">{result.normalized_condition.changes.map(describeChange).join(' · ')} · 모델 범위: {after.coverage.scope}{after.coverage.complete ? '' : ' (부분 모델 — 전체 기기 전력 아님)'}</p>
+    </Card>
     <Card id="wi-result" title="기준 대비 조건 변경 결과" note="요구 clock과 적용 clock을 구분하고 모델 범위를 함께 확인하세요." defaultWide>
-      <table className="tb-mini-table" style={{ width: '100%' }}><thead><tr><th>항목</th><th>기준</th><th>변경</th><th>변화</th></tr></thead><tbody>{metrics.map(({ key, label, unit }) => <tr key={key}><th>{label} ({unit})</th><td className="mono">{fmt(before.metrics[key], 2)}</td><td className="mono">{fmt(after.metrics[key], 2)}</td><td className="mono">{delta(before.metrics[key], after.metrics[key])}</td></tr>)}<tr><th>처리량 조건</th><td>{before.metrics.feasible ? '충족' : '미달'}</td><td>{after.metrics.feasible ? '충족' : '미달'}</td><td>{after.report.verdict.reasons.join(' · ')}</td></tr></tbody></table>
+      <table className="tb-mini-table" style={{ width: '100%' }}><thead><tr><th>항목</th><th>기준</th><th>변경</th><th>변화</th></tr></thead><tbody>{metrics.map(({ key, label, unit }) => <tr key={key} className={hot.has(key) ? 'wi-focus' : ''}><th>{label} ({unit})</th><td className="mono">{fmt(before.metrics[key], 2)}</td><td className="mono">{fmt(after.metrics[key], 2)}</td><td className="mono">{delta(before.metrics[key], after.metrics[key])}</td></tr>)}<tr><th>처리량 조건</th><td>{before.metrics.feasible ? '충족' : '미달'}</td><td>{after.metrics.feasible ? '충족' : '미달'}</td><td>{after.report.verdict.reasons.join(' · ')}</td></tr></tbody></table>
       <div className="table-x"><table className="tb-mini-table" style={{ width: '100%' }}><thead><tr><th>IP</th><th>요구 clock MHz (기준 → 변경)</th><th>적용 clock MHz (기준 → 변경)</th><th>IP power mW (기준 → 변경)</th><th>변경 근거</th></tr></thead><tbody>{after.report.ips.map((ip) => { const base = baseIps.get(ip.node); return <tr key={ip.node}><th>{ip.node}</th><td>{fmt(base?.required_clock_mhz, 1)} → {fmt(ip.required_clock_mhz, 1)}</td><td>{fmt(base?.set_clock_mhz, 1)} → {fmt(ip.set_clock_mhz, 1)}</td><td>{fmt(base?.power_mw, 1)} → {fmt(ip.power_mw, 1)}</td><td title={explanations.get(ip.node)}>{clockExplanation(ip, explanations.get(ip.node))}</td></tr> })}</tbody></table></div>
       <table className="tb-mini-table" style={{ width: '100%' }}><thead><tr><th>Stage</th><th>HW ms (기준 → 변경)</th><th>예산 ms (기준 → 변경)</th><th>SW ms (기준 → 변경)</th></tr></thead><tbody>{after.report.stages.map((stage) => { const base = baseStages.get(stage.id); return <tr key={stage.id}><th>{stage.name}</th><td>{fmt(base?.hw_ms, 2)} → {fmt(stage.hw_ms, 2)}</td><td>{fmt(base?.budget_ms, 2)} → {fmt(stage.budget_ms, 2)}</td><td>{fmt(base?.sw_ms, 2)} → {fmt(stage.sw_ms, 2)}</td></tr> })}</tbody></table>
       {result.warnings.map((warning) => <p className="faint" key={warning}>{warning}</p>)}

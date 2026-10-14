@@ -126,3 +126,21 @@ def test_condition_hash_keeps_baseline_config_when_candidate_overrides_it(monkey
         service.save_experiment(db, WhatIfExperimentRequest(preview_request=alternative,
                 expected_condition_hash=first["condition_hash"], title="changed baseline"), "alice")
     db.add.assert_not_called()
+
+
+def test_plan_resolves_relative_clock_against_baseline_set_clock(monkeypatch):
+    graph = _graph()
+    _service(monkeypatch, graph)
+    monkeypatch.setattr(service, "_graph", lambda db, scope: graph)
+    scope = dict(project_ref=graph.scenario.project_ref, scenario_id=graph.scenario_id, variant_id=graph.variant_id)
+    base = service._baseline_clocks(MagicMock(), service.WhatIfScope(**scope))["mfc_enc"]
+    out = service.plan(MagicMock(), service.WhatIfPlanRequest(**scope, query="MFC 클럭 20% 낮추면 timing 여유는?"))
+    assert out["status"] == "ready"
+    assert out["changes"] == [{"target": "node_clock_mhz", "node_id": "mfc_enc", "value": round(base * 0.8, 1)}]
+    assert any("× 0.8" in note for note in out["notes"])
+    # every clarification choice is a complete, previewable change (no unresolved scale left)
+    out = service.plan(MagicMock(), service.WhatIfPlanRequest(**scope, query="GDC 클럭 10% 올리면"))
+    assert out["status"] == "clarification"
+    changes = [c["change"] for cl in out["clarifications"] for c in cl["choices"]]
+    assert changes and all("scale" not in c and c["value"] > 0 for c in changes)
+    WhatIfPreviewRequest(**scope, expected_baseline_hash=out["baseline_hash"], changes=[changes[0]])

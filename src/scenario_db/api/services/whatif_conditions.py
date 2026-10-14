@@ -52,12 +52,16 @@ def whatif_targets(graph, config=None) -> dict[str, Any]:
         # A node boundary must correspond to one named surface. RT OTF chains and
         # multi-output scalers cannot be resized safely by a single node field.
         size_supported = len(port_sizes) <= 1 and len(size_anchors) == 1 and len(attached_refs) == 1
-        nodes.append({"id": node_id, "label": node.get("label") or node_id,
+        ip_ref = str(node.get("ip_ref") or "")
+        stem = ip_ref[3:].split("-")[0] if ip_ref.startswith("ip-") else ""
+        nodes.append({"id": node_id, "label": node.get("label") or node_id, "ip": stem or None,
                       "size": [workload.width, workload.height], "size_supported": size_supported,
                       "size_anchor_id": size_anchors[0] if size_supported else None,
                       "clock_supported": workload.sim_params.ppc > 0,
                       "input_size": [shape.input.width, shape.input.height] if shape else None})
-    return {"anchors": rows, "nodes": nodes,
+    fps = (config.fps if config is not None and getattr(config, "fps", None) else None) \
+        or (graph.variant.design_conditions or {}).get("fps")
+    return {"anchors": rows, "nodes": nodes, "fps": float(fps) if fps else None,
             "output_targets": [r["id"] for r in rows if r["kind"] == "output" and r["supported"]],
             "supported_changes": ["anchor_size", "node_size", "output_size", "fps", "node_clock_mhz"],
             "limitations": ["Exynos2600 only", "Sensor mode changes require Sensor Explore catalog selection",

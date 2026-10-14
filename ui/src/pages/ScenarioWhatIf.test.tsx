@@ -105,3 +105,40 @@ it('loads experiment conditions without automatically running and preserves save
     expect(preview).toHaveBeenCalledWith({ ...scope, changes: plan.changes, expected_baseline_hash: hash, config: { power_model: 'v1-vfps' }, options: { statistic: 'mean' } })
   } finally { act(() => root.unmount()) }
 })
+it('asks for the 과제 · scenario · variant before any question', async () => {
+  mocks()
+  const navigate = vi.fn()
+  const host = document.createElement('div'), root = createRoot(host)
+  try {
+    await act(async () => root.render(<ScenarioWhatIfPage ctx={{ ...ctx, variant: '', navigate } as unknown as Ctx} />))
+    expect(host.querySelector('[aria-label="What-if variant"]')).not.toBeNull()
+    expect(host.querySelector('[aria-label="변경 조건 질문"]')).toBeNull()
+    expect(host.textContent).toContain('과제 · scenario · variant를 먼저 선택하세요')
+    expect(whatIfApi.targets).not.toHaveBeenCalled()
+  } finally { act(() => root.unmount()) }
+})
+it('resolves a clarification with one click, lists ignored parts and answers the asked metric first', async () => {
+  mocks()
+  const ambiguous: WhatIfPlan = { status: 'clarification', query: 'GDC clock 400MHz, EIS 끄고 전력은?', changes: [], baseline_hash: hash, warnings: [], focus: ['power'],
+    clarifications: [{ field: 'node_id', message: 'clock을 바꿀 IP를 고르세요.', source: 'GDC clock 400MHz', choices: [
+      { label: 'gdc_m 400 MHz', value: 'gdc_m', change: { target: 'node_clock_mhz', node_id: 'gdc_m', value: 400 } },
+      { label: 'gdc_o 400 MHz', value: 'gdc_o', change: { target: 'node_clock_mhz', node_id: 'gdc_o', value: 400 } }] }],
+    ignored: [{ text: 'EIS 끄고', reason: '기능 on/off는 다른 variant입니다', hint: 'Scenario에서 기능이 다른 variant 선택' }] }
+  vi.spyOn(whatIfApi, 'plan').mockResolvedValue(ambiguous)
+  const preview = vi.spyOn(whatIfApi, 'preview').mockResolvedValue(result)
+  const host = document.createElement('div'), root = createRoot(host)
+  try {
+    await act(async () => root.render(<ScenarioWhatIfPage ctx={ctx} />))
+    act(() => edit(host.querySelector<HTMLTextAreaElement>('[aria-label="변경 조건 질문"]')!, ambiguous.query))
+    await act(async () => button(host, '변경 조건 해석').click())
+    expect(host.textContent).toContain('해석하지 않은 부분')
+    expect(host.textContent).toContain('Scenario에서 기능이 다른 variant 선택')
+    expect(host.textContent).not.toContain('이 조건으로 계산')
+    await act(async () => button(host, 'gdc_o 400 MHz').click())
+    expect(host.textContent).toContain('gdc_o clock 하한 → 400 MHz')
+    await act(async () => button(host, '이 조건으로 계산').click())
+    expect(preview).toHaveBeenCalledWith({ ...scope, changes: [{ target: 'node_clock_mhz', node_id: 'gdc_o', value: 400 }], expected_baseline_hash: hash })
+    expect(host.textContent).toContain('모델 전력 200.0 → 150.0 mW (-50.0 mW, -25.0%)')
+    expect(host.textContent).toContain('처리량 조건 충족')
+  } finally { act(() => root.unmount()) }
+})
