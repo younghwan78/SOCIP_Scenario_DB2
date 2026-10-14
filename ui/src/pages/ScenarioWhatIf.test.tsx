@@ -36,7 +36,7 @@ it('requires explicit preview after interpreting and saves the reviewed result a
     await act(async () => root.render(<ScenarioWhatIfPage ctx={ctx} />))
     act(() => edit(host.querySelector<HTMLTextAreaElement>('[aria-label="변경 조건 질문"]')!, '녹화 출력 FHD'))
     await act(async () => button(host, '변경 조건 해석').click())
-    expect(interpret).toHaveBeenCalledWith(scope, '녹화 출력 FHD')
+    expect(interpret).toHaveBeenCalledWith(scope, '녹화 출력 FHD', {})
     expect(preview).not.toHaveBeenCalled()
     await act(async () => { button(host, '조건 비교 계산').click(); button(host, '조건 비교 계산').click() })
     expect(preview).toHaveBeenCalledTimes(1)
@@ -103,5 +103,75 @@ it('loads experiment conditions without automatically running and preserves save
     expect(preview).not.toHaveBeenCalled()
     await act(async () => button(host, '조건 비교 계산').click())
     expect(preview).toHaveBeenCalledWith({ ...scope, changes: plan.changes, expected_baseline_hash: hash, config: { power_model: 'v1-vfps' }, options: { statistic: 'mean' } })
+    const interpret = vi.spyOn(whatIfApi, 'plan').mockResolvedValue(plan)
+    act(() => edit(host.querySelector<HTMLTextAreaElement>('[aria-label="변경 조건 질문"]')!, 'FPS 절반'))
+    await act(async () => button(host, '변경 조건 해석').click())
+    expect(interpret).toHaveBeenCalledWith(scope, 'FPS 절반', { config: { power_model: 'v1-vfps' }, options: { statistic: 'mean' } })
+  } finally { act(() => root.unmount()) }
+})
+it('asks for the 과제 · scenario · variant before any question', async () => {
+  mocks()
+  const navigate = vi.fn()
+  const host = document.createElement('div'), root = createRoot(host)
+  try {
+    await act(async () => root.render(<ScenarioWhatIfPage ctx={{ ...ctx, variant: '', navigate } as unknown as Ctx} />))
+    expect(host.querySelector('[aria-label="What-if variant"]')).not.toBeNull()
+    expect(host.querySelector('[aria-label="변경 조건 질문"]')).toBeNull()
+    expect(host.textContent).toContain('과제 · scenario · variant를 먼저 선택하세요')
+    expect(whatIfApi.targets).not.toHaveBeenCalled()
+  } finally { act(() => root.unmount()) }
+})
+it('resolves a clarification with one click, lists ignored parts and answers the asked metric first', async () => {
+  mocks()
+  const ambiguous: WhatIfPlan = { status: 'clarification', query: 'GDC clock 400MHz, EIS 끄고 전력은?', changes: [], baseline_hash: hash, warnings: [], focus: ['power'],
+    clarifications: [{ field: 'node_id', message: 'clock을 바꿀 IP를 고르세요.', source: 'GDC clock 400MHz', choices: [
+      { label: 'gdc_m 400 MHz', value: 'gdc_m', change: { target: 'node_clock_mhz', node_id: 'gdc_m', value: 400 } },
+      { label: 'gdc_o 400 MHz', value: 'gdc_o', change: { target: 'node_clock_mhz', node_id: 'gdc_o', value: 400 } }] }],
+    ignored: [{ text: 'EIS 끄고', reason: '기능 on/off는 다른 variant입니다', hint: 'Scenario에서 기능이 다른 variant 선택' }] }
+  vi.spyOn(whatIfApi, 'plan').mockResolvedValue(ambiguous)
+  const preview = vi.spyOn(whatIfApi, 'preview').mockResolvedValue(result)
+  const host = document.createElement('div'), root = createRoot(host)
+  try {
+    await act(async () => root.render(<ScenarioWhatIfPage ctx={ctx} />))
+    act(() => edit(host.querySelector<HTMLTextAreaElement>('[aria-label="변경 조건 질문"]')!, ambiguous.query))
+    await act(async () => button(host, '변경 조건 해석').click())
+    expect(host.textContent).toContain('해석하지 않은 부분')
+    expect(host.textContent).toContain('Scenario에서 기능이 다른 variant 선택')
+    expect(host.textContent).not.toContain('이 조건으로 계산')
+    await act(async () => button(host, 'gdc_o 400 MHz').click())
+    expect(host.textContent).toContain('gdc_o clock 하한 → 400 MHz')
+    await act(async () => button(host, '이 조건으로 계산').click())
+    expect(preview).toHaveBeenCalledWith({ ...scope, changes: [{ target: 'node_clock_mhz', node_id: 'gdc_o', value: 400 }], expected_baseline_hash: hash })
+    expect(host.textContent).toContain('모델 전력 200.0 → 150.0 mW (-50.0 mW, -25.0%)')
+    expect(host.textContent).toContain('처리량 조건 충족')
+  } finally { act(() => root.unmount()) }
+})
+it('builds the condition editor from server change kinds for any SoC (anchor-less stream, no allow-list)', async () => {
+  const streamTargets: WhatIfTargets = { ...scope, baseline_hash: hash, anchors: [], nodes: [], output_targets: [], supported_changes: ['stream_size'], limitations: [], fps: 30,
+    streams: [{ id: '1920x1080', size: [1920, 1080], primary: true, where: ['mfc_dec.width'] }],
+    capability: { soc_ref: 'soc-exynos2700', soc_profile: 'generic', readiness: 'warning', notes: ['soc-exynos2700: SoC 전용 DVFS group 정책이 없어 기본 정책을 사용합니다'] },
+    change_kinds: [{ target: 'stream_size', label: '스트림 크기', shape: 'size', selector: 'stream_id', selector_optional: false, needs_param: false, unit: '', max_value: null, description: '같은 크기 surface를 함께 변경', choices: [{ id: '1920x1080', size: [1920, 1080], primary: true }] }] }
+  vi.spyOn(whatIfApi, 'targets').mockResolvedValue(streamTargets)
+  vi.spyOn(whatIfApi, 'experiments').mockResolvedValue({ items: [], total: 0, limit: 20, offset: 0, has_next: false })
+  const preview = vi.spyOn(whatIfApi, 'preview').mockResolvedValue(result)
+  const host = document.createElement('div'), root = createRoot(host)
+  try {
+    await act(async () => root.render(<ScenarioWhatIfPage ctx={ctx} />))
+    expect(host.textContent).toContain('soc-exynos2700')
+    expect(host.textContent).not.toContain('Exynos2600만')
+    expect(button(host, '+ FPS')).toBeUndefined()            // only offered kinds become buttons
+    await act(async () => button(host, '+ 스트림 크기').click())
+    expect(host.querySelector<HTMLSelectElement>('[aria-label="스트림 크기 대상"]')!.value).toBe('1920x1080')
+    await act(async () => button(host, '조건 비교 계산').click())
+    expect(preview).toHaveBeenCalledWith({ ...scope, changes: [{ target: 'stream_size', stream_id: '1920x1080', width: 1920, height: 1080 }], expected_baseline_hash: hash })
+  } finally { act(() => root.unmount()) }
+})
+it('says when a variant has nothing What-if can change', async () => {
+  vi.spyOn(whatIfApi, 'targets').mockResolvedValue({ ...targets, anchors: [], nodes: [], output_targets: [], supported_changes: [], change_kinds: [] })
+  vi.spyOn(whatIfApi, 'experiments').mockResolvedValue({ items: [], total: 0, limit: 20, offset: 0, has_next: false })
+  const host = document.createElement('div'), root = createRoot(host)
+  try {
+    await act(async () => root.render(<ScenarioWhatIfPage ctx={ctx} />))
+    expect(host.textContent).toContain('바꿀 수 있는 조건이 없습니다')
   } finally { act(() => root.unmount()) }
 })

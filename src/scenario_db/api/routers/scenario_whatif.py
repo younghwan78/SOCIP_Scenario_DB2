@@ -25,8 +25,9 @@ def targets(project_ref: str = Query(..., min_length=1, max_length=160),
 @router.post("/plan")
 def plan(request: WhatIfPlanRequest, db: Session = Depends(get_db),
          _principal: ApiPrincipal = Depends(calculate_access)):
-    enforce_request_size(request, get_settings().exploration_max_request_bytes)
-    return service.plan(db, request)
+    settings = _limits(request)
+    with admission_slot("simulation", settings.simulation_max_concurrent_runs):
+        return service.plan(db, request)
 
 
 def _limits(request):

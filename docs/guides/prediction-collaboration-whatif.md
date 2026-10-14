@@ -1,6 +1,6 @@
 # 예측 설명·댓글과 자연어 What-if
 
-Status: Current. Last verified: 2026-10-14.
+Status: Current. Last verified: 2026-10-15.
 Source: `ui/src/pages/ScenarioWhatIf.tsx`, `ui/src/components/PredictionCollaboration.tsx`,
 `src/scenario_db/api/services/scenario_whatif.py`, `whatif_conditions.py`,
 `whatif_query.py`, `prediction_discussion.py`.
@@ -11,13 +11,22 @@ Source: `ui/src/pages/ScenarioWhatIf.tsx`, `ui/src/components/PredictionCollabor
 2. “센서 입력은 유지하고 녹화 출력을 FHD로 변경하면 clock과 power는?”처럼
    변경할 대상과 값을 입력합니다.
 3. **변경 조건 해석**을 누르고 크기·FPS·노드 clock의 대상을 확인합니다.
-   모호한 질문은 대상과 값을 직접 지정합니다.
+   모호한 질문은 표시된 선택지로 대상과 값을 고릅니다. 지원하지 않는 부분은
+   이유와 함께 표시하며, 지원한 조건만 검토 후 계산할 수 있습니다.
 4. **조건 비교 계산**으로 기준과 변경 결과를 비교합니다.
 5. 제목, 목적, 상세 설명, 가정, 결론을 입력하고 개인 또는 공유 실험으로 저장합니다.
 
-한국어/영어 해상도·FPS·노드 clock 조건을 지원합니다. 외부 LLM을 사용하지 않는
+한국어/영어 해상도·FPS·노드 clock 조건과 “FPS 절반”, “MFC clock 20% 낮추면”
+같은 상대값을 지원합니다. 현재 모델 설정을 기준으로 해석하며, 불러온 실험은
+해당 실험의 설정을 사용합니다. 허용 범위를 벗어난 값은 적용하지 않습니다.
+외부 LLM을 사용하지 않는
 제한된 문법이며, 압축·codec·EIS·센서 모드 변경은 이 화면에서 지원하지 않습니다.
 지원하는 조건을 화면에서 직접 편집할 수도 있습니다.
+
+선택한 scenario에 따라 변경 가능한 조건을 표시합니다. 크기 기준점이 없는
+재생 등의 scenario는 같은 크기로 정의된 스트림 surface를 함께 변경하며
+패널·표시 목적지 크기는 유지합니다. 모델에 반영되지 않는 설정은 제공하지
+않으며, 공통 모델로 계산하는 플랫폼에는 검증 범위 안내를 표시합니다.
 
 질문 해석과 임시 조건 적용은 API service에서 처리하고 기존 Timing Budget 엔진을
 호출합니다. 기존 simulation 계산 모듈과 scenario 데이터는 수정하지 않습니다.

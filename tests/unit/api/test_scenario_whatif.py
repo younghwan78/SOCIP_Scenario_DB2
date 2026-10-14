@@ -49,16 +49,12 @@ def test_preview_uses_timing_budget_and_explains_model_subtotal(monkeypatch):
     db.commit.assert_not_called()
 
 
-def test_project_soc_baseline_and_coefficient_drift_rejected(monkeypatch):
+def test_project_ownership_and_coefficient_drift_rejected(monkeypatch):
     graph = _graph()
     _service(monkeypatch, graph)
     request = _request(graph)
     with pytest.raises(UnprocessableError, match="own"):
         service.preview(MagicMock(), request.model_copy(update={"project_ref": "other"}))
-    graph.project.metadata_ = {"soc_ref": "soc-exynos2700"}
-    with pytest.raises(UnprocessableError, match="Exynos2600"):
-        service.preview(MagicMock(), request)
-    graph.project.metadata_ = {"soc_ref": "soc-exynos2600"}
     ip = next(iter(graph.ip_catalog.values()))
     ip.capabilities = {**ip.capabilities, "model_revision": "new"}
     with pytest.raises(ConflictError, match="baseline changed"):
@@ -126,3 +122,95 @@ def test_condition_hash_keeps_baseline_config_when_candidate_overrides_it(monkey
         service.save_experiment(db, WhatIfExperimentRequest(preview_request=alternative,
                 expected_condition_hash=first["condition_hash"], title="changed baseline"), "alice")
     db.add.assert_not_called()
+
+
+def test_plan_resolves_relative_clock_against_baseline_set_clock(monkeypatch):
+    graph = _graph()
+    _service(monkeypatch, graph)
+    monkeypatch.setattr(service, "_graph", lambda db, scope: graph)
+    scope = dict(project_ref=graph.scenario.project_ref, scenario_id=graph.scenario_id, variant_id=graph.variant_id)
+    base = service._baseline_clocks(MagicMock(), service.WhatIfScope(**scope))["mfc_enc"]
+    out = service.plan(MagicMock(), service.WhatIfPlanRequest(**scope, query="MFC 클럭 20% 낮추면 timing 여유는?"))
+    assert out["status"] == "ready"
+    assert out["changes"] == [{"target": "node_clock_mhz", "node_id": "mfc_enc", "value": round(base * 0.8, 1)}]
+    assert any("× 0.8" in note for note in out["notes"])
+    # every clarification choice is a complete, previewable change (no unresolved scale left)
+    out = service.plan(MagicMock(), service.WhatIfPlanRequest(**scope, query="GDC 클럭 10% 올리면"))
+    assert out["status"] == "clarification"
+    changes = [c["change"] for cl in out["clarifications"] for c in cl["choices"]]
+    assert changes and all("scale" not in c and c["value"] > 0 for c in changes)
+    WhatIfPreviewRequest(**scope, expected_baseline_hash=out["baseline_hash"], changes=[changes[0]])
+
+
+def test_relative_fps_uses_resolved_profile_and_explicit_reopened_settings(monkeypatch):
+    graph = _graph()
+    _service(monkeypatch, graph)
+    monkeypatch.setattr(service, "_graph", lambda *a: graph)
+    def profile(db, shim):
+        if "fps" not in shim.config.model_fields_set:
+            shim.config = shim.config.model_copy(update={"fps": 60})
+    monkeypatch.setattr(service, "_apply_config_profile", profile)
+    scope = dict(project_ref=graph.scenario.project_ref, scenario_id=graph.scenario_id, variant_id=graph.variant_id)
+    assert service.targets(MagicMock(), service.WhatIfScope(**scope))["fps"] == 60
+    for config, expected in [({}, 30), ({"fps": 120}, 60)]:
+        out = service.plan(MagicMock(), service.WhatIfPlanRequest(**scope, query="FPS 절반", config=config))
+        assert out["changes"] == [{"target": "fps", "value": expected}]
+        assert out["scope"] == scope
+
+
+@pytest.mark.parametrize("query,expected", [
+    ("MFC clock 100% 낮추면", "unsupported"),
+    ("MFC clock 200% 낮추면, FPS 60", "partial"),
+    ("GDC clock 100% 낮추면", "unsupported"),
+    ("MFC clock 100배", "unsupported"),
+])
+def test_invalid_relative_clocks_are_ignored_without_shifting_sources(monkeypatch, query, expected):
+    graph = _graph()
+    _service(monkeypatch, graph)
+    monkeypatch.setattr(service, "_graph", lambda *a: graph)
+    monkeypatch.setattr(service, "_baseline_clocks", lambda *a: {"mfc_enc": 600, "gdc_o": 600, "gdc_nr": 600})
+    scope = dict(project_ref=graph.scenario.project_ref, scenario_id=graph.scenario_id, variant_id=graph.variant_id)
+    out = service.plan(MagicMock(), service.WhatIfPlanRequest(**scope, query=query))
+    assert out["status"] == expected and out["ignored"] and not out["clarifications"]
+    assert len(out["sources"]) == len(out["changes"])
+    if out["changes"]:
+        assert out["changes"] == [{"target": "fps", "value": 60}]
+        assert out["sources"] == ["FPS 60"]
+
+
+def test_plan_shares_simulation_admission_and_frame_limits(monkeypatch):
+    from scenario_db.api.resource_limits import admission_slot
+    app = create_app()
+    app.dependency_overrides[get_db] = lambda: MagicMock()
+    app.dependency_overrides[require_api_principal] = lambda: ApiPrincipal("analyst", frozenset({"analyst"}))
+    monkeypatch.setattr(router, "get_settings", lambda: SimpleNamespace(
+        exploration_max_request_bytes=100000, simulation_max_timeline_frames=12, simulation_max_concurrent_runs=1))
+    fake = MagicMock(return_value={"status": "ready"})
+    monkeypatch.setattr(service, "plan", fake)
+    request = {"project_ref": "p", "scenario_id": "s", "variant_id": "v", "query": "clock 절반"}
+    with TestClient(app) as client:
+        with admission_slot("simulation", 1):
+            assert client.post("/api/v1/scenario-whatif/plan", json=request).status_code == 429
+        assert client.post("/api/v1/scenario-whatif/plan", json={**request, "options": {"frames": 13}}).status_code == 422
+        assert client.post("/api/v1/scenario-whatif/plan", json={**request, "config": {"measured_clock_ref": "measured"}}).status_code == 422
+        assert client.post("/api/v1/scenario-whatif/plan", json=request).status_code == 200
+    fake.assert_called_once()
+
+
+def test_relative_clock_uses_requested_model_options_and_checks_profile_frames(monkeypatch):
+    from fastapi import HTTPException
+    graph = _graph()
+    _service(monkeypatch, graph)
+    scope = service.WhatIfScope(project_ref=graph.scenario.project_ref, scenario_id=graph.scenario_id, variant_id=graph.variant_id)
+    settings = service.WhatIfPlanRequest(**scope.model_dump(), query="clock 절반", config={"fps": 60}, options={"statistic": "mean"})
+    fake = MagicMock(return_value={"report": {"ips": [{"node": "mfc_enc", "set_clock_mhz": 600}]}})
+    monkeypatch.setattr(service, "_case", fake)
+    assert service._baseline_clocks(MagicMock(), scope, settings) == {"mfc_enc": 600}
+    assert fake.call_args.args[1].fps == 60
+    assert fake.call_args.args[2].statistic == "mean"
+    fake.reset_mock()
+    monkeypatch.setattr(service, "_apply_config_profile", lambda db, shim: setattr(shim, "config", shim.config.model_copy(update={"timeline_frame_count": 100000})))
+    with pytest.raises(HTTPException) as exc:
+        service._baseline_clocks(MagicMock(), scope, settings)
+    assert exc.value.status_code == 422
+    fake.assert_not_called()

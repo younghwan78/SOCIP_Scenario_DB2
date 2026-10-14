@@ -80,6 +80,8 @@ def test_fps_and_clock_are_explicit_bounded_conditions(graph):
     ("센서 입력은 유지하고 녹화 출력을 FHD로 변경하면 clock과 power가?", "output_size", "record_out"),
     ("Keep sensor input unchanged and change recording output from UHD to FHD", "output_size", "record_out"),
     ("record_out을 1920x1080으로 변경", "anchor_size", "record_out"),
+    ("녹화를 FHD로 낮추면 전력이 얼마나 줄어?", "output_size", "record_out"),
+    ("녹화 해상도를 절반으로", "output_size", "record_out"),
 ])
 def test_korean_english_query_is_explicit(graph, query, target, anchor):
     plan = plan_query(query, whatif_targets(graph))
@@ -87,47 +89,96 @@ def test_korean_english_query_is_explicit(graph, query, target, anchor):
     assert plan["changes"] == [{"target": target, "anchor_id": anchor, "width": 1920, "height": 1080}]
 
 
-@pytest.mark.parametrize("query,status", [
-    ("size를 FHD로 변경하면 power는?", "clarification"),
-    ("출력 FHD로 변경", "clarification"),
-    ("clock 600 MHz", "clarification"),
-    ("센서를 UHD와 녹화 FHD 둘다 변경", "unsupported"),
-    ("센서 입력 FHD로 변경", "unsupported"),
-    ("recording output FHD, compression off", "unsupported"),
-    ("recording output FHD and voltage change to 900", "unsupported"),
-    ("mfc_enc clock 400 MHz와 600 MHz를 비교", "clarification"),
-    ("FPS를 60으로 변경하고 밝기를 낮춰줘", "unsupported"),
-    ("녹화 출력을 FHD로 변경하고 코덱을 APV로 바꿔줘", "unsupported"),
-    ("Change recording output to FHD and rotate 90 degrees", "unsupported"),
-    ("recording output FHD and HDR on", "unsupported"),
-    ("Change FPS to 60 and sharpen image", "unsupported"),
-    ("Change recording output to FHD rotate 90 degrees", "unsupported"),
-    ("recording output FHD HDR on", "unsupported"),
-    ("Change FPS to 60 sharpen image", "unsupported"),
-    ("센서 입력은 유지 rotate 90 degrees, 녹화 출력 FHD", "unsupported"),
-    ("Change FPS to 60 and quantum-flux 12", "unsupported"),
-    ("SELECT power FROM scenarios", "unsupported"),
+@pytest.mark.parametrize("query", [
+    "센서를 UHD와 녹화 FHD 둘다 변경",          # which size is the sensor's is undecidable -> nothing runs
+    "센서 입력 FHD로 변경",
+    "센서를 binning 모드로 바꾸면",
+    "codec을 HEVC로 바꾸면?",
+    "SELECT power FROM scenarios",
+    "전력 얼마야?",
 ])
-def test_parser_never_runs_ambiguous_or_partial_unsupported_query(graph, query, status):
+def test_unsupported_query_never_produces_changes(graph, query):
     out = plan_query(query, whatif_targets(graph))
-    assert out["status"] == status
+    assert out["status"] == "unsupported"
     assert out["changes"] == []
 
 
+@pytest.mark.parametrize("query,hint", [
+    ("센서 입력 FHD로 변경", "Sensor Explore"),
+    ("codec을 HEVC로 바꾸면?", "variant"),
+    ("CPU를 HF로 옮기면", "CPU what-if"),
+])
+def test_unsupported_parts_name_where_they_are_handled(graph, query, hint):
+    out = plan_query(query, whatif_targets(graph))
+    assert any(hint in (item["hint"] or "") for item in out["ignored"])
+
+
+@pytest.mark.parametrize("query,change,ignored", [
+    ("recording output FHD, compression off", {"target": "output_size", "anchor_id": "record_out", "width": 1920, "height": 1080}, "compression"),
+    ("recording output FHD and voltage change to 900", {"target": "output_size", "anchor_id": "record_out", "width": 1920, "height": 1080}, "voltage"),
+    ("FPS를 60으로 변경하고 밝기를 낮춰줘", {"target": "fps", "value": 60}, "밝기"),
+    ("녹화 출력을 FHD로 변경하고 코덱을 APV로 바꿔줘", {"target": "output_size", "anchor_id": "record_out", "width": 1920, "height": 1080}, "코덱"),
+    ("녹화 FHD로 바꾸고 EIS 끄면 전력은?", {"target": "output_size", "anchor_id": "record_out", "width": 1920, "height": 1080}, "EIS"),
+    ("Change recording output to FHD and rotate 90 degrees", {"target": "output_size", "anchor_id": "record_out", "width": 1920, "height": 1080}, "rotate"),
+    ("Change FPS to 60 and quantum-flux 12", {"target": "fps", "value": 60}, "quantum-flux"),
+    ("센서 입력은 유지 rotate 90 degrees, 녹화 출력 FHD", {"target": "output_size", "anchor_id": "record_out", "width": 1920, "height": 1080}, "rotate"),
+])
+def test_partial_query_runs_only_supported_part_and_reports_the_rest(graph, query, change, ignored):
+    out = plan_query(query, whatif_targets(graph))
+    assert out["status"] == "partial"
+    assert out["changes"] == [change]
+    assert any(ignored in item["text"] for item in out["ignored"])
+
+
+@pytest.mark.parametrize("query,field", [
+    ("clock 600 MHz", "node_id"),
+    ("GDC clock 400MHz로", "node_id"),
+    ("mfc_enc clock 400 MHz와 600 MHz를 비교", "clock"),
+    ("프레임을 낮추면 전력은?", "fps"),
+    ("해상도를 올리면?", "size"),
+    ("녹화를 FHD로, 녹화를 HD로", "duplicate"),
+])
+def test_ambiguity_never_runs_and_every_choice_is_a_complete_change(graph, query, field):
+    out = plan_query(query, whatif_targets(graph))
+    assert out["status"] == "clarification" and out["changes"] == []
+    clar = next(c for c in out["clarifications"] if c["field"] == field)
+    assert clar["choices"] and all(WhatIfChange(**{k: v for k, v in ch["change"].items() if k != "scale"}) or True
+                                   for ch in clar["choices"])
+    assert all(ch["change"]["target"] for ch in clar["choices"])
+
+
 def test_query_fps_and_node_clock(graph):
-    assert plan_query("FPS를 60으로 변경", whatif_targets(graph))["changes"] == [{"target": "fps", "value": 60}]
-    assert plan_query("mfc_enc clock 600 MHz", whatif_targets(graph))["changes"] == [{"target": "node_clock_mhz", "node_id": "mfc_enc", "value": 600}]
+    targets = whatif_targets(graph)
+    assert plan_query("FPS를 60으로 변경", targets)["changes"] == [{"target": "fps", "value": 60}]
+    assert plan_query("mfc_enc clock 600 MHz", targets)["changes"] == [{"target": "node_clock_mhz", "node_id": "mfc_enc", "value": 600}]
+    assert plan_query("인코더 클럭을 0.6 GHz로 올리면", targets)["changes"] == [{"target": "node_clock_mhz", "node_id": "mfc_enc", "value": 600}]
+    assert plan_query("fps 절반으로 하면?", targets)["changes"] == [{"target": "fps", "value": 15}]
+    # relative clock is resolved to MHz by the service against the baseline set clock
+    assert plan_query("MFC 클럭 20% 낮추면 timing 여유는?", targets)["changes"] == [{"target": "node_clock_mhz", "node_id": "mfc_enc", "scale": 0.8}]
+
+
+def test_combined_size_rate_and_focus(graph):
+    out = plan_query("FHD 60으로 찍으면 BW랑 전력은?", whatif_targets(graph))
+    assert out["changes"] == [{"target": "output_size", "anchor_id": "record_out", "width": 1920, "height": 1080}, {"target": "fps", "value": 60}]
+    assert set(out["focus"]) == {"bw", "power"}
+    assert out["notes"]                         # bare size -> record output is stated, not silent
+    out = plan_query("UHD60으로 바꾸면 timing 버틸 수 있어?", whatif_targets(graph))
+    assert out["changes"] == [{"target": "fps", "value": 60}]      # record_out is already UHD: no-op size dropped
+    assert "timing" in out["focus"] and "feasible" in out["focus"]
 
 
 def test_query_preservation_and_each_clause_target_are_separate(graph):
     targets = whatif_targets(graph)
     out = plan_query("녹화 출력을 FHD로 변경하고 센서 입력 4032x3024는 유지", targets)
     assert out["changes"] == [{"target": "output_size", "anchor_id": "record_out", "width": 1920, "height": 1080}]
+    assert out["kept"]
     out = plan_query("녹화 출력을 FHD로 변경하고 mfc_enc clock을 600 MHz로 변경", targets)
     assert out["changes"] == [{"target": "output_size", "anchor_id": "record_out", "width": 1920, "height": 1080},
                               {"target": "node_clock_mhz", "node_id": "mfc_enc", "value": 600}]
+    out = plan_query("녹화 UHD는 유지하고 FPS를 60으로 변경", targets)
+    assert out["changes"] == [{"target": "fps", "value": 60}]
     out = plan_query("녹화 UHD는 유지하고 FPS를 30으로 변경", targets)
-    assert out["changes"] == [{"target": "fps", "value": 30}]
+    assert out["status"] == "no_change" and out["changes"] == []
 
 
 @pytest.mark.parametrize("query", [
@@ -170,3 +221,10 @@ def test_capability_change_changes_baseline_fingerprint(graph):
     ip.capabilities = deepcopy(ip.capabilities)
     ip.capabilities["sim"] = {**ip.capabilities.get("sim", {}), "unit_power_mw_mp": 99}
     assert baseline_fingerprint(graph) != old
+
+
+@pytest.mark.parametrize("query", ["녹화 99999x99999", "녹화 해상도 200% 줄이면", "녹화 해상도 100배", "녹화 해상도 99.99% 줄이면", "FPS 999와 1000 fps", "mfc_enc 9999 MHz와 10000 MHz"])
+def test_plan_never_returns_out_of_bounds_conditions_or_choices(graph, query):
+    out = plan_query(query, whatif_targets(graph))
+    assert out["status"] == "unsupported"
+    assert out["ignored"] and not out["changes"] and not out["clarifications"]
