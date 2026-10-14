@@ -221,3 +221,10 @@ def test_capability_change_changes_baseline_fingerprint(graph):
     ip.capabilities = deepcopy(ip.capabilities)
     ip.capabilities["sim"] = {**ip.capabilities.get("sim", {}), "unit_power_mw_mp": 99}
     assert baseline_fingerprint(graph) != old
+
+
+@pytest.mark.parametrize("query", ["녹화 99999x99999", "녹화 해상도 200% 줄이면", "녹화 해상도 100배", "녹화 해상도 99.99% 줄이면", "FPS 999와 1000 fps", "mfc_enc 9999 MHz와 10000 MHz"])
+def test_plan_never_returns_out_of_bounds_conditions_or_choices(graph, query):
+    out = plan_query(query, whatif_targets(graph))
+    assert out["status"] == "unsupported"
+    assert out["ignored"] and not out["changes"] and not out["clarifications"]

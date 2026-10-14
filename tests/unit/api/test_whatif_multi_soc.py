@@ -32,6 +32,19 @@ def playback():
     return _g("db_Exynos2600_SM-S947B", "uc-vid-playback-local-e2600", "vplay-local-h264-fhd30-sdr", "soc-exynos2600")
 
 
+def test_stream_groups_cannot_cascade_into_another_selected_group(playback):
+    from copy import deepcopy
+    graph = deepcopy(playback)
+    graph.variant.node_configs["extra_surface"] = {"width": 1280, "height": 720}
+    changes = [WhatIfChange(target="stream_size", stream_id="1920x1080", width=1280, height=720),
+               WhatIfChange(target="stream_size", stream_id="1280x720", width=3840, height=2160)]
+    original = deepcopy(graph.variant.node_configs)
+    for ordered in (changes, list(reversed(changes))):
+        with pytest.raises(ValueError, match="overlap"):
+            apply_whatif_changes(graph, ordered, SimulationRunConfig())
+    assert graph.variant.node_configs == original
+
+
 def test_exynos2700_recording_runs_end_to_end(e2700):
     targets = whatif_targets(e2700)
     assert targets["capability"]["soc_ref"] == "soc-exynos2700"

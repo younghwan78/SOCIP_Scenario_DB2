@@ -36,7 +36,7 @@ it('requires explicit preview after interpreting and saves the reviewed result a
     await act(async () => root.render(<ScenarioWhatIfPage ctx={ctx} />))
     act(() => edit(host.querySelector<HTMLTextAreaElement>('[aria-label="변경 조건 질문"]')!, '녹화 출력 FHD'))
     await act(async () => button(host, '변경 조건 해석').click())
-    expect(interpret).toHaveBeenCalledWith(scope, '녹화 출력 FHD')
+    expect(interpret).toHaveBeenCalledWith(scope, '녹화 출력 FHD', {})
     expect(preview).not.toHaveBeenCalled()
     await act(async () => { button(host, '조건 비교 계산').click(); button(host, '조건 비교 계산').click() })
     expect(preview).toHaveBeenCalledTimes(1)
@@ -103,6 +103,10 @@ it('loads experiment conditions without automatically running and preserves save
     expect(preview).not.toHaveBeenCalled()
     await act(async () => button(host, '조건 비교 계산').click())
     expect(preview).toHaveBeenCalledWith({ ...scope, changes: plan.changes, expected_baseline_hash: hash, config: { power_model: 'v1-vfps' }, options: { statistic: 'mean' } })
+    const interpret = vi.spyOn(whatIfApi, 'plan').mockResolvedValue(plan)
+    act(() => edit(host.querySelector<HTMLTextAreaElement>('[aria-label="변경 조건 질문"]')!, 'FPS 절반'))
+    await act(async () => button(host, '변경 조건 해석').click())
+    expect(interpret).toHaveBeenCalledWith(scope, 'FPS 절반', { config: { power_model: 'v1-vfps' }, options: { statistic: 'mean' } })
   } finally { act(() => root.unmount()) }
 })
 it('asks for the 과제 · scenario · variant before any question', async () => {

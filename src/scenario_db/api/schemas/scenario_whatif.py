@@ -53,18 +53,12 @@ class WhatIfChange(BaseModel):
         return self
 
 
-class WhatIfPlanRequest(WhatIfScope):
-    query: str = Field(min_length=1, max_length=2000)
-
-
-class WhatIfPreviewRequest(WhatIfScope):
-    changes: list[WhatIfChange] = Field(min_length=1, max_length=8)
-    expected_baseline_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+class WhatIfModelSettings(WhatIfScope):
     config: SimulationRunConfig = Field(default_factory=SimulationRunConfig)
     options: TimingBudgetOptions = Field(default_factory=TimingBudgetOptions)
 
     @model_validator(mode="after")
-    def bounded_condition(self):
+    def bounded_model_settings(self):
         if self.config.timing_profile is not None or self.config.sw_timing_projection is not None:
             raise ValueError("measured replay/projection cannot be extrapolated by What-if")
         if self.config.sensor_modes or self.config.sensor_readout:
@@ -78,6 +72,19 @@ class WhatIfPreviewRequest(WhatIfScope):
             raise ValueError("measured task runtime cannot be extrapolated by What-if")
         if self.options.include_whatif:
             raise ValueError("nested What-if sweeps are not supported")
+        return self
+
+
+class WhatIfPlanRequest(WhatIfModelSettings):
+    query: str = Field(min_length=1, max_length=2000)
+
+
+class WhatIfPreviewRequest(WhatIfModelSettings):
+    changes: list[WhatIfChange] = Field(min_length=1, max_length=8)
+    expected_baseline_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def bounded_condition(self):
         keys = [(c.target, c.anchor_id, c.node_id, c.stream_id, c.param) for c in self.changes]
         if len(keys) != len(set(keys)):
             raise ValueError("each change target can appear only once")

@@ -9,7 +9,8 @@ from uuid import uuid4
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from scenario_db.api.schemas.scenario_whatif import WhatIfExperimentRequest, WhatIfPlanRequest, WhatIfPreviewRequest, WhatIfScope
+from scenario_db.api.resource_limits import enforce_timeline_frame_limit
+from scenario_db.api.schemas.scenario_whatif import WhatIfExperimentRequest, WhatIfModelSettings, WhatIfPlanRequest, WhatIfPreviewRequest, WhatIfScope
 from scenario_db.api.schemas.timing_budget import TimingBudgetRequest
 from scenario_db.api.services.review_policy import apply_throughput, scenario_policy
 from scenario_db.api.services.timing_budget import _load, _shim
@@ -18,6 +19,7 @@ from scenario_db.api.services.whatif_query import plan_query
 from scenario_db.db.models.definition import Project, Scenario
 from scenario_db.db.models.whatif import WhatIfExperiment
 from scenario_db.db.repositories.scenario_graph import load_canonical_graph
+from scenario_db.config import get_settings
 from scenario_db.exceptions import ConflictError, NotFoundError, UnprocessableError
 from scenario_db.sim.adapter import build_simulation_inputs
 from scenario_db.sim.measured_timing import baseline_fingerprint
@@ -42,21 +44,32 @@ def _graph(db: Session, scope: WhatIfScope):
     return graph
 
 
-def targets(db: Session, scope: WhatIfScope) -> dict:
+def _planning_inputs(db: Session, scope: WhatIfScope, settings: WhatIfModelSettings | None = None):
+    settings = settings or WhatIfModelSettings(**scope.model_dump())
+    req = TimingBudgetRequest(scenario_id=scope.scenario_id, variant_id=scope.variant_id,
+                              config=settings.config.model_copy(deep=True), options=settings.options.model_copy(deep=True))
+    shim = _shim(req, req.variant_id)
+    _apply_config_profile(db, shim)
+    WhatIfModelSettings(**scope.model_dump(), config=shim.config, options=req.options)
+    return req, shim
+
+
+def targets(db: Session, scope: WhatIfScope, settings: WhatIfModelSettings | None = None) -> dict:
     graph = _graph(db, scope)
     try:
-        out = whatif_targets(graph)
+        _, shim = _planning_inputs(db, scope, settings)
+        out = whatif_targets(graph, shim.config)
     except ValueError as exc:
         raise UnprocessableError(str(exc)) from exc
     return {**scope.model_dump(), "baseline_hash": baseline_fingerprint(graph), **out,
             "soc_ref": out["capability"]["soc_ref"]}
 
 
-def _baseline_clocks(db: Session, scope: WhatIfScope) -> dict[str, float]:
+def _baseline_clocks(db: Session, scope: WhatIfScope, settings: WhatIfModelSettings | None = None) -> dict[str, float]:
     """Set clock per IP in the baseline timing budget (same inputs as preview's baseline case)."""
-    req = TimingBudgetRequest(scenario_id=scope.scenario_id, variant_id=scope.variant_id)
-    shim = _shim(req, req.variant_id)
-    _apply_config_profile(db, shim)
+    req, shim = _planning_inputs(db, scope, settings)
+    enforce_timeline_frame_limit(max(req.options.frames, req.options.timeline_frames + 4,
+                                    shim.config.timeline_frame_count), get_settings().simulation_max_timeline_frames)
     graph, tables, ref = _load(db, shim, True)
     _guard(graph, scope)
     options = apply_throughput(req.options, scenario_policy(db, scope.scenario_id))
@@ -64,14 +77,14 @@ def _baseline_clocks(db: Session, scope: WhatIfScope) -> dict[str, float]:
     return {row["node"]: float(row["set_clock_mhz"]) for row in report["ips"] if row.get("set_clock_mhz")}
 
 
-def _resolve_relative_clocks(db: Session, scope: WhatIfScope, out: dict) -> None:
+def _resolve_relative_clocks(db: Session, scope: WhatIfScope, out: dict, settings: WhatIfModelSettings | None = None) -> None:
     """Relative IP clocks ("20% 낮추면") -> MHz against the baseline set clock, in changes and in choices."""
     pending = [c for c in out["changes"] if "scale" in c] + [
         ch["change"] for cl in out["clarifications"] for ch in cl["choices"] if ch.get("change") and "scale" in ch["change"]]
     if not pending:
         return
     try:
-        clocks = _baseline_clocks(db, scope)
+        clocks = _baseline_clocks(db, scope, settings)
     except (LookupError, ValueError) as exc:
         clocks, reason = {}, str(exc)
     else:
@@ -83,7 +96,11 @@ def _resolve_relative_clocks(db: Session, scope: WhatIfScope, out: dict) -> None
         if base is None:
             change["unresolved"] = f"{change['node_id']} 기준 clock을 구하지 못했습니다 ({reason})"
             continue
-        change["value"] = max(1.0, round(base * scale, 1))
+        value = round(base * scale, 1)
+        if not 0 < value <= 5000:
+            change["unresolved"] = f"{change['node_id']} 상대 clock {value:g} MHz: 0보다 크고 5000 MHz 이하여야 합니다"
+            continue
+        change["value"] = value
         if change in out["changes"] and change["node_id"] not in noted:
             noted.add(change["node_id"])
             out["notes"].append(f"{change['node_id']} 기준 적용 clock {base:g} MHz × {scale:g} = {change['value']:g} MHz (수동 하한)")
@@ -92,7 +109,9 @@ def _resolve_relative_clocks(db: Session, scope: WhatIfScope, out: dict) -> None
         for change in bad:
             out["ignored"].append({"text": change.pop("unresolved"), "reason": "상대 clock을 MHz로 바꾸지 못했습니다",
                                    "hint": "MHz 값으로 직접 지정"})
-        out["changes"] = [c for c in out["changes"] if "value" in c or c["target"] != "node_clock_mhz"]
+        keep = [i for i, c in enumerate(out["changes"]) if "value" in c or c["target"] != "node_clock_mhz"]
+        out["changes"] = [out["changes"][i] for i in keep]
+        out["sources"] = [out["sources"][i] for i in keep]
         if not out["changes"] and not out["clarifications"]:
             out["status"] = "unsupported"
         elif out["status"] == "ready":
@@ -103,14 +122,24 @@ def _resolve_relative_clocks(db: Session, scope: WhatIfScope, out: dict) -> None
             change = ch.get("change") or {}
             if change.get("target") == "node_clock_mhz" and "value" in change and "MHz" not in ch["label"]:
                 ch["label"] = f"{ch['label']} ({change['value']:g} MHz)"
+        if not cl["choices"]:
+            out["ignored"].append({"text": cl.get("source", cl["message"]),
+                                   "reason": "유효한 상대 clock 조건이 없습니다", "hint": "MHz 값으로 직접 지정"})
+    out["clarifications"] = [cl for cl in out["clarifications"] if cl["choices"]]
+    if out["clarifications"]:
+        out["status"] = "clarification"
+    elif not out["changes"]:
+        out["status"] = "unsupported"
+    elif out["ignored"]:
+        out["status"] = "partial"
 
 
 def plan(db: Session, request: WhatIfPlanRequest) -> dict:
-    scope = WhatIfScope(**request.model_dump(exclude={"query"}))
-    available = targets(db, scope)
+    scope = WhatIfScope(**request.model_dump(include={"project_ref", "scenario_id", "variant_id"}))
+    available = targets(db, scope, request)
     out = plan_query(request.query, available)
-    _resolve_relative_clocks(db, scope, out)
-    return {**out, "baseline_hash": available["baseline_hash"], "scope": request.model_dump(exclude={"query"})}
+    _resolve_relative_clocks(db, scope, out, request)
+    return {**out, "baseline_hash": available["baseline_hash"], "scope": scope.model_dump()}
 
 
 def _case(graph, config, options, tables, ref):

@@ -80,7 +80,7 @@ def _clauses(query: str) -> list[str]:
 
 
 def _even(v: float) -> int:
-    return max(16, int(round(v / 2.0)) * 2)
+    return int(round(v / 2.0)) * 2
 
 
 def _fmt(v: float) -> str:
@@ -391,6 +391,31 @@ def plan_query(query: str, targets: dict[str, Any]) -> dict[str, Any]:
                 ignore(clause, "센서 mode·크기는 catalog에서 검증된 mode로만 바꿀 수 있습니다", "Sensor Explore")
             elif re.search(r"\d", leftover) or CHANGE_VERB.search(clause):
                 ignore(clause, "변경할 대상과 값을 찾지 못했습니다", "예: '녹화 FHD', 'FPS 60', 'mfc clock 20% 낮추면'")
+
+    # Plans and one-click choices must satisfy the same bounds as preview.
+    from scenario_db.api.schemas.scenario_whatif import WhatIfChange
+
+    def valid(change: dict) -> bool:
+        if "scale" in change:
+            return change["scale"] > 0
+        try:
+            WhatIfChange(**change)
+        except ValueError:
+            return False
+        return True
+
+    keep = []
+    for i, change in enumerate(out["changes"]):
+        if valid(change):
+            keep.append(i)
+        else:
+            ignore(out["sources"][i], "계산한 조건이 허용 범위를 벗어납니다")
+    out["changes"], out["sources"] = [out["changes"][i] for i in keep], [out["sources"][i] for i in keep]
+    for cl in out["clarifications"]:
+        cl["choices"] = [ch for ch in cl["choices"] if valid(ch["change"])]
+        if not cl["choices"]:
+            ignore(cl["source"], "선택할 조건이 허용 범위를 벗어납니다")
+    out["clarifications"] = [cl for cl in out["clarifications"] if cl["choices"]]
 
     # one value per target: keep the alternatives as a choice instead of silently picking one
     keys = [(c["target"], c.get("anchor_id"), c.get("node_id"), c.get("stream_id"), c.get("param")) for c in out["changes"]]

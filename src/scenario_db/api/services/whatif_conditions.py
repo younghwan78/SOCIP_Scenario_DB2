@@ -474,6 +474,14 @@ def apply_whatif_changes(graph, changes, config):
     variant.buffer_overrides = deepcopy(variant.buffer_overrides or {})
     variant.design_conditions = deepcopy(variant.design_conditions or {})
     ctx = _Apply(candidate, variant, config.model_copy(deep=True), whatif_targets(graph, config))
+    stream_changes = [c.model_dump(exclude_none=True) if hasattr(c, "model_dump") else dict(c)
+                      for c in changes if (c.target if hasattr(c, "target") else c["target"]) == "stream_size"]
+    stream_sizes = {r["id"]: tuple(r["size"]) for r in ctx.targets["streams"]}
+    for change in stream_changes:
+        if any(other["stream_id"] != change["stream_id"]
+               and stream_sizes.get(other["stream_id"]) == (change["width"], change["height"])
+               for other in stream_changes):
+            raise ValueError("stream size changes overlap; compare these conditions separately")
     normalized = []
     for change in changes:
         data = change.model_dump(exclude_none=True) if hasattr(change, "model_dump") else dict(change)

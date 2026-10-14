@@ -53,7 +53,7 @@ export interface ExperimentDraft { title: string; purpose: string; description: 
 const path = '/scenario-whatif'
 export const whatIfApi = {
   targets: (scope: WhatIfScope) => getJson<WhatIfTargets>(`${path}/targets`, { ...scope }, false),
-  plan: (scope: WhatIfScope, query: string) => postJson<WhatIfPlan>(`${path}/plan`, { ...scope, query }),
+  plan: (scope: WhatIfScope, query: string, settings: Pick<PreviewRequest, 'config' | 'options'> = {}) => postJson<WhatIfPlan>(`${path}/plan`, { ...scope, query, ...settings }),
   preview: (body: PreviewRequest) => postJson<WhatIfResult>(`${path}/preview`, body),
   save: (previewRequest: PreviewRequest, result: WhatIfResult, draft: ExperimentDraft, query: string) => postJson<WhatIfExperiment>(`${path}/experiments`, { preview_request: previewRequest, expected_condition_hash: result.condition_hash, ...draft, query: query || null }),
   experiments: (scope: WhatIfScope, offset = 0) => getJson<{ items: WhatIfExperiment[]; total: number; limit: number; offset: number; has_next: boolean }>(`${path}/experiments`, { ...scope, limit: 20, offset }, false),

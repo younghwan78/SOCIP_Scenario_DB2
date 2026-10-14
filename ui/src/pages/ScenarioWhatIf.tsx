@@ -98,7 +98,7 @@ function WhatIfBody({ scope }: { scope: WhatIfScope }) {
     finally { busyRef.current = false; if (live.current) setBusy(false) }
   }
   const interpret = () => run(async (active) => {
-    const next = await whatIfApi.plan(scope, query.trim())
+    const next = await whatIfApi.plan(scope, query.trim(), modelSettings)
     if (active()) { setPlan(next); setPending(next.clarifications); setFocus(next.focus ?? []); setChanges(next.changes); setResult(null); setRequest(null); setStale(false) }
   })
   const choose = (index: number, change: WhatIfChange) => { updateChanges(upsertChange(changes, change)); setPending((rows) => rows.filter((_, at) => at !== index)) }
