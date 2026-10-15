@@ -24,9 +24,8 @@ import { useWidth } from '../components/Charts'
 import { rememberRecent } from '../components/Picker'
 import { PageLayout, Resizer, usePref } from '../components/Layout'
 import { addItem, formatItems, loadCompareSet, parseItems } from '../lib/projects'
+import { usePipelineNavigation, type Lens, type Mode } from '../lib/pipelineNavigation'
 
-type Lens = 'sequence' | 'dma' | 'ip'
-type Mode = 'split' | 'graph' | 'timing'
 type TimingView = 'trace' | 'cadence' | 'compare'
 
 const LENS: { id: Lens; label: string; hint: string }[] = [
@@ -34,7 +33,6 @@ const LENS: { id: Lens; label: string; hint: string }[] = [
   { id: 'dma', label: 'DMA · Memory', hint: 'Buffer 중심: IP WDMA → Buffer → RDMA. W×H · format · bit · 압축 · MB/frame · MB/s, IP 입력→출력 크기, history(f-1) · stat · optional DMA 포함. 상세 값은 하단 DMA 표' },
   { id: 'ip', label: 'IP 내부', hint: '위: 전체 IP 연결 구조 (Sensor → RT → Pre-NRT(CPU SW · M2M) → NRT → Post-NRT(CPU SW · M2M) → Codec → Display, 색 = Voltage domain 또는 BLK). IP 클릭 → 아래: OTF in / RDMA / history read → Core(처리 크기, crop·scale·mode) → OTF out / WDMA / stat 출력과 port 전체 표' },
 ]
-const legacyLens = (l?: string): Lens => (l === 'topology' ? 'sequence' : l === 'transform' ? 'ip' : l === 'dma' || l === 'ip' || l === 'sequence' ? l : 'sequence')
 const OUT_NODES = /^(panel|dpu|mfc|apv)/
 
 /** Which condition produced a timing trace (simulation tool / profile / date, or measurement). */
@@ -75,9 +73,6 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
   const ipBw = useMemo(() => new Map((ipBwQ.data?.rows ?? []).map((r) => [r.node, r])), [ipBwQ.data])
   const hasMeasBw = (ipBwQ.data?.rows ?? []).some((r) => r.meas)
   const varQ = useAsync(() => (variant ? api.variant(scenario, variant).catch(() => null) : Promise.resolve(null)), [scenario, variant])
-  const [lens, setLensState] = useState<Lens>(legacyLens(ctx.params.lens))
-  const setLens = (l: Lens) => { setLensState(l); ctx.navigate(undefined, { lens: l }, true) }
-  useEffect(() => { if (ctx.params.lens) setLensState(legacyLens(ctx.params.lens)) }, [ctx.params.lens])
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [showSw, setShowSw] = usePref('pipeline.sw', true)
   const [elk, setElk] = useState<Layout | null>(null)
@@ -87,6 +82,7 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
   const [showFlows, setShowFlows] = useState(true)
   const [traceId, setTraceId] = useState<string>('')
   const [mode, setMode] = usePref<Mode>('pipeline.mode', 'split')
+  const { lens, setLens, openIpInternal, origin: drillFrom } = usePipelineNavigation(ctx, mode, setMode)
   const [tview, setTview] = usePref<TimingView>('pipeline.timing.view', 'trace')
   const [colorBy, setColorBy] = usePref<'group' | 'frame'>('pipeline.timing.color', 'frame')
   const [split, setSplit] = usePref<number>('pipeline.split', 50)
@@ -275,6 +271,8 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
           {([['split', '나란히'], ['graph', 'Pipeline'], ['timing', 'Timing']] as [Mode, string][]).map(([k, l]) =>
             <button key={k} className={mode === k ? 'on' : ''} onClick={() => setMode(k)}>{l}</button>)}
         </div>}
+        {lens === 'ip' && drillFrom && <button className="btn" onClick={() => window.history.back()}
+          title="IP 내부 보기 전 화면으로 (브라우저 뒤로가기와 같음)">← {LENS.find((l) => l.id === drillFrom.lens)?.label ?? '이전'} 보기로</button>}
         <div className="seg" role="group" aria-label="보기 관점">
           {LENS.map((l) => <button key={l.id} className={lens === l.id ? 'on' : ''} onClick={() => setLens(l.id)} title={l.hint}>{l.label}</button>)}
         </div>
@@ -397,7 +395,7 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
               {selectedIp.mode && <div className="kv"><span>Mode</span><span className="mono">{selectedIp.mode}</span></div>}
               {selectedIp.sw && <div className="kv"><span>SW time (정의)</span><span className="mono">{selectedIp.sw.mean} ms ({selectedIp.sw.min}–{selectedIp.sw.max}) · {selectedIp.sw.source}</span></div>}
               {selectedIp.flags.map(([k, v]) => <div key={k} className="kv"><span>{k}</span><span className="mono">{v}</span></div>)}
-              <a href="#" style={{ fontSize: 12 }} onClick={(e) => { e.preventDefault(); setLens('ip'); if (mode === 'timing') setMode('split') }}>IP 내부 보기 →</a>
+              <a href="#" style={{ fontSize: 12 }} onClick={(e) => { e.preventDefault(); openIpInternal() }}>IP 내부 보기 →</a>
             </> : <span className="faint" style={{ fontSize: 13 }}>그래프 노드, timing slice, 표 행 중 하나를 선택하면 서로 연동됩니다.</span>}
           </div>
           <div style={{ borderRight: 0 }}>
