@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
 import { useWidth } from './Charts'
 import { useTip } from './ChartTip'
 import { usePref } from './Layout'
@@ -15,15 +15,25 @@ export function Card({ id, title, note, children, actions, defaultWide = false, 
   help?: ReactNode
 }) {
   const [wide, setWide] = usePref(`tb.card.${id}.wide`, defaultWide)
+  // height dragged with the bottom-right corner (CSS resize) is kept per card until reset
+  const [height, setHeight] = usePref<number | null>(`tb.card.${id}.h`, null)
+  const ref = useRef<HTMLElement>(null)
   const [showHelp, setShowHelp] = useState(false)
+  const keepHeight = () => {
+    const h = parseInt(ref.current?.style.height ?? '', 10)
+    if (h > 0 && h !== height) setHeight(h)
+  }
+  const resetHeight = () => { if (ref.current) ref.current.style.height = ''; setHeight(null) }
   return (
-    <section className={`panel tb-card ${wide ? 'wide' : ''}`} aria-label={typeof title === 'string' ? title : id} style={{ minHeight }}>
+    <section ref={ref} className={`panel tb-card ${wide ? 'wide' : ''}`} aria-label={typeof title === 'string' ? title : id}
+      style={{ minHeight, ...(height ? { height } : {}) }} onMouseUp={keepHeight}>
       <div className="tb-card-head">
         <h2>{title}</h2>
         {help && <button className={`help-q ${showHelp ? 'on' : ''}`} onClick={() => setShowHelp((v) => !v)} aria-label="도움말" aria-expanded={showHelp} title="이 카드 설명">?</button>}
         {note && <span className="faint tb-note">{note}</span>}
         <span className="grow" />
         {actions}
+        {height !== null && <button className="btn tb-mini" onClick={resetHeight} title="높이를 기본(내용 크기)으로" aria-label="높이 초기화">↕</button>}
         <button className="btn tb-mini wide-toggle" onClick={() => setWide((w) => !w)} title={wide ? '반폭으로' : '전체 폭으로'} aria-label={wide ? '반폭으로' : '전체 폭으로'}>{wide ? '⇤⇥' : '⇔'}</button>
       </div>
       {help && showHelp && <div className="help-panel">{help}</div>}

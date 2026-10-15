@@ -21,7 +21,7 @@ import { LibraryPage } from './pages/Library'
 import { SettingsPage } from './pages/Settings'
 import { ScenarioWhatIfPage } from './pages/ScenarioWhatIf'
 import { PREFERRED_REFERENCE } from './lib/defaults'
-import { addItem, canonicalOf, compareItems, counterpart, defaultScenario, formatItems, projectText, projectsOf, type ProjectInfo } from './lib/projects'
+import { addItem, canonicalOf, compareItems, counterpart, defaultScenario, formatItems, loadCompareSet, parseItems, projectText, projectsOf, type ProjectInfo } from './lib/projects'
 import { AdmissionWaitPill } from './components/AdmissionWait'
 
 type NavItem = { page: Page; label: string; icon: string; also?: Page[] }
@@ -125,7 +125,13 @@ export default function App() {
   }
   const ctx: Ctx = { catalog: scopedCatalog, allCatalog: catalog, projects, setProject, project, scenario, variant, params: route.params, navigate, openPicker: (m = 'open') => setPicker(m) }
   const currentItems = route.page === 'compare' ? compareItems(route.params, scenario, variant) : variant ? [{ scenario, variant }] : []
-  const toCompare = (s: string, v: string) => navigate('compare', { items: formatItems(addItem(currentItems, { scenario: s, variant: v })), variants: undefined })
+  // from another page, "add to compare" extends the kept compare set (not a fresh one from the current variant)
+  const compareBase = () => {
+    if (route.page === 'compare') return currentItems
+    const kept = parseItems(loadCompareSet())
+    return kept.length ? kept : currentItems
+  }
+  const toCompare = (s: string, v: string) => navigate('compare', { items: formatItems(addItem(compareBase(), { scenario: s, variant: v })), variants: undefined })
   const link = (page: Page) => {
     const p = new URLSearchParams(Object.entries({ project, scenario, variant }).filter(([, v]) => v))
     return `#/${page}?${p.toString()}`

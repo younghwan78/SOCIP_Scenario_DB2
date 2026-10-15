@@ -93,3 +93,16 @@ export function compareItems(params: Record<string, string>, scenario: string, v
 export function addItem(items: CompareItem[], add: CompareItem): CompareItem[] {
   return items.some((i) => i.scenario === add.scenario && i.variant === add.variant) ? items : [...items, add]
 }
+
+// ---- Compare set persistence: kept until the user clears it (survives page changes and reloads)
+const COMPARE_KEY = 'scenariodb.compare.items'
+/** Last compare set as the ``items`` URL value, or '' when none is kept. Storage may be unavailable. */
+export function loadCompareSet(): string {
+  try { return window.localStorage.getItem(COMPARE_KEY) ?? '' } catch { return '' }
+}
+export function saveCompareSet(items: string | undefined): void {
+  try {
+    if (items && parseItems(items).length) window.localStorage.setItem(COMPARE_KEY, items)
+    else window.localStorage.removeItem(COMPARE_KEY)
+  } catch { /* private window / blocked storage: the set simply is not kept */ }
+}
