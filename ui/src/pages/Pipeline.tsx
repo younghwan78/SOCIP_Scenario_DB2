@@ -23,9 +23,8 @@ import { DataTable, type Column } from '../components/DataTable'
 import { useWidth } from '../components/Charts'
 import { rememberRecent } from '../components/Picker'
 import { PageLayout, Resizer, usePref } from '../components/Layout'
+import { usePipelineNavigation, type Lens, type Mode } from '../lib/pipelineNavigation'
 
-type Lens = 'sequence' | 'dma' | 'ip'
-type Mode = 'split' | 'graph' | 'timing'
 type TimingView = 'trace' | 'cadence' | 'compare'
 
 const LENS: { id: Lens; label: string; hint: string }[] = [
@@ -33,7 +32,6 @@ const LENS: { id: Lens; label: string; hint: string }[] = [
   { id: 'dma', label: 'DMA · Memory', hint: 'Buffer 중심: IP WDMA → Buffer → RDMA. W×H · format · bit · 압축 · MB/frame · MB/s, IP 입력→출력 크기, history(f-1) · stat · optional DMA 포함. 상세 값은 하단 DMA 표' },
   { id: 'ip', label: 'IP 내부', hint: '위: 전체 IP 연결 구조 (Sensor → RT → Pre-NRT(CPU SW · M2M) → NRT → Post-NRT(CPU SW · M2M) → Codec → Display, 색 = Voltage domain 또는 BLK). IP 클릭 → 아래: OTF in / RDMA / history read → Core(처리 크기, crop·scale·mode) → OTF out / WDMA / stat 출력과 port 전체 표' },
 ]
-const legacyLens = (l?: string): Lens => (l === 'topology' ? 'sequence' : l === 'transform' ? 'ip' : l === 'dma' || l === 'ip' || l === 'sequence' ? l : 'sequence')
 const OUT_NODES = /^(panel|dpu|mfc|apv)/
 
 /** Which condition produced a timing trace (simulation tool / profile / date, or measurement). */
@@ -74,11 +72,6 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
   const ipBw = useMemo(() => new Map((ipBwQ.data?.rows ?? []).map((r) => [r.node, r])), [ipBwQ.data])
   const hasMeasBw = (ipBwQ.data?.rows ?? []).some((r) => r.meas)
   const varQ = useAsync(() => (variant ? api.variant(scenario, variant).catch(() => null) : Promise.resolve(null)), [scenario, variant])
-  const [lens, setLensState] = useState<Lens>(legacyLens(ctx.params.lens))
-  /** Lens tabs replace the history entry; drilling into "IP 내부 보기" pushes one so Back returns here. */
-  const setLens = (l: Lens, push = false) => { setLensState(l); ctx.navigate(undefined, { lens: l }, !push) }
-  // URL is the source of truth (Back/Forward included); a missing lens means the default view
-  useEffect(() => { setLensState(legacyLens(ctx.params.lens)) }, [ctx.params.lens])
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [showSw, setShowSw] = usePref('pipeline.sw', true)
   const [elk, setElk] = useState<Layout | null>(null)
@@ -88,19 +81,7 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
   const [showFlows, setShowFlows] = useState(true)
   const [traceId, setTraceId] = useState<string>('')
   const [mode, setMode] = usePref<Mode>('pipeline.mode', 'split')
-  // drill-down from the 선택 상세 panel: where to come back to (lens + layout mode before the jump)
-  const drillFrom = useRef<{ lens: Lens; mode: Mode } | null>(null)
-  const openIpInternal = () => {
-    drillFrom.current = { lens, mode }
-    if (mode === 'timing') setMode('split')
-    setLens('ip', true)
-  }
-  useEffect(() => {
-    if (lens !== 'ip' && drillFrom.current) {          // came back (Back or the return button): restore the layout too
-      if (drillFrom.current.lens === lens) setMode(drillFrom.current.mode)
-      drillFrom.current = null
-    }
-  }, [lens]) // eslint-disable-line react-hooks/exhaustive-deps
+  const { lens, setLens, openIpInternal, origin: drillFrom } = usePipelineNavigation(ctx, mode, setMode)
   const [tview, setTview] = usePref<TimingView>('pipeline.timing.view', 'trace')
   const [colorBy, setColorBy] = usePref<'group' | 'frame'>('pipeline.timing.color', 'frame')
   const [split, setSplit] = usePref<number>('pipeline.split', 50)
@@ -289,8 +270,8 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
           {([['split', '나란히'], ['graph', 'Pipeline'], ['timing', 'Timing']] as [Mode, string][]).map(([k, l]) =>
             <button key={k} className={mode === k ? 'on' : ''} onClick={() => setMode(k)}>{l}</button>)}
         </div>}
-        {lens === 'ip' && drillFrom.current && <button className="btn" onClick={() => window.history.back()}
-          title="IP 내부 보기 전 화면으로 (브라우저 뒤로가기와 같음)">← {LENS.find((l) => l.id === drillFrom.current?.lens)?.label ?? '이전'} 보기로</button>}
+        {lens === 'ip' && drillFrom && <button className="btn" onClick={() => window.history.back()}
+          title="IP 내부 보기 전 화면으로 (브라우저 뒤로가기와 같음)">← {LENS.find((l) => l.id === drillFrom.lens)?.label ?? '이전'} 보기로</button>}
         <div className="seg" role="group" aria-label="보기 관점">
           {LENS.map((l) => <button key={l.id} className={lens === l.id ? 'on' : ''} onClick={() => setLens(l.id)} title={l.hint}>{l.label}</button>)}
         </div>
