@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import { cpuDiff, cpuDiffHeadline, cpuPickReason, cpuSideOf, pickCpuSide } from './cpuDiff'
+import { cpuDiff, cpuDiffHeadline, cpuPickReason, cpuSideOf, pickCpuSide, storedCpuPower } from './cpuDiff'
 import type { SimState } from './simRun'
 
 // P = k·a/T rows: k = mW at 100 % util, a = active ms/frame, T = period
@@ -93,4 +93,21 @@ it('says why an item has no CPU side: running, failed run, run without CPU model
   expect(cpuPickReason(noModel)).toContain('CPU 모델')
   // a failed rerun does not hide stored CPU totals
   expect(pickCpuSide({ status: 'error', error: 'x' }, { cpu: { total_mw: 40, by_task: { eis: 40 } } }).source).toBe('stored')
+})
+
+it('keeps modeled zero CPU results and finds CPU evidence beyond an empty bucket', () => {
+  const zero = { cpu: { total_mw: 0, by_cluster: {}, by_task: {}, model: { id: 'cpu-linear' } } }
+  expect(cpuSideOf(null, zero)!.total).toBe(0)
+  const empty = { cpu: { total_mw: 0, by_cluster: {} } }
+  expect(storedCpuPower([{ kind: 'evidence.simulation', power_breakdown: empty },
+    { kind: 'evidence.simulation', power_breakdown: zero }])).toBe(zero)
+  const running = pickCpuSide({ status: 'running' }, zero)
+  expect(running.state).toBe('running')
+  expect(running.side!.total).toBe(0)
+})
+
+it('does not infer absent task definitions from missing CPU output rows', () => {
+  const d = cpuDiff(side([row('eis', 'MID_LF0', 300, 4, 33.33)]), side([row('irta', 'MID_LF0', 300, 4, 33.33)]))
+  expect(d.tasks.every((t) => !t.reasons.join(' ').includes('정의에 없음'))).toBe(true)
+  expect(d.tasks.every((t) => t.reasons.join(' ').includes('활성 상태'))).toBe(true)
 })

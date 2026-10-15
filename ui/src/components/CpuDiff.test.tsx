@@ -24,8 +24,9 @@ it('offers a CPU run for items without a same-session result and explains a fail
   expect(el.textContent).toContain('★ A: 예측 실행 실패 — 422 — basis inputs changed')
   const btn = [...el.querySelectorAll('button')].find((b) => b.textContent?.startsWith('CPU 예측 실행'))!
   expect(btn.textContent).toBe('CPU 예측 실행 (2개)')   // the running item is not queued again
+  expect(btn.disabled).toBe(true)
   act(() => btn.click())
-  expect(onRun).toHaveBeenCalledWith([0, 1])
+  expect(onRun).not.toHaveBeenCalled()
 })
 
 it('splits causes once every item has run, and flags mixed sources', () => {

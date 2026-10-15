@@ -51,7 +51,7 @@ export function cpuSideOf(result: Dict | null | undefined, pb: Dict | null | und
   const byCluster: Record<string, number> = Object.fromEntries(Object.entries(obj(cpu.by_cluster)).map(([k, v]) => [k, num(v)]))
   const total = typeof cpu.total_mw === 'number' && Number.isFinite(cpu.total_mw) ? cpu.total_mw
     : Object.values(byCluster).reduce((a, b) => a + b, 0) || Object.values(byTask).reduce((a, b) => a + b, 0)
-  if (!total && !rows?.length && !Object.keys(byTask).length) return null
+  if (!total && !rows?.length && !Object.keys(byTask).length && !Object.keys(obj(cpu.model)).length) return null
   return { total, rows: rows?.length ? rows : null, byTask, byCluster, source: typeof cpu.source === 'string' ? cpu.source : rows?.[0]?.source ?? null }
 }
 
@@ -79,8 +79,8 @@ export function cpuDiff(base: CpuSide, cand: CpuSide): CpuDiff {
     const A = aggregate(base.rows!), B = aggregate(cand.rows!)
     for (const task of new Set([...A.keys(), ...B.keys()])) {
       const b = A.get(task), c = B.get(task)
-      if (b && !c) { effects.removed -= b.power; tasks.push({ task, kind: 'removed', base: b.power, cand: 0, delta: -b.power, effects: { removed: -b.power }, reasons: [`★에만 있음 (${clusterText(b.clusters)}) · 이 항목 SW task 정의에 없음`], clusterBase: clusterText(b.clusters) }); continue }
-      if (!b && c) { effects.added += c.power; tasks.push({ task, kind: 'added', base: 0, cand: c.power, delta: c.power, effects: { added: c.power }, reasons: [`비교 항목에만 있음 (${clusterText(c.clusters)}) · ★ SW task 정의에 없음`], clusterCand: clusterText(c.clusters) }); continue }
+      if (b && !c) { effects.removed -= b.power; tasks.push({ task, kind: 'removed', base: b.power, cand: 0, delta: -b.power, effects: { removed: -b.power }, reasons: [`★ CPU 계산 행에만 있음 (${clusterText(b.clusters)}) · SW 정의·활성 상태·모델 범위 확인`], clusterBase: clusterText(b.clusters) }); continue }
+      if (!b && c) { effects.added += c.power; tasks.push({ task, kind: 'added', base: 0, cand: c.power, delta: c.power, effects: { added: c.power }, reasons: [`비교 항목 CPU 계산 행에만 있음 (${clusterText(c.clusters)}) · SW 정의·활성 상태·모델 범위 확인`], clusterCand: clusterText(c.clusters) }); continue }
       const bb = b!, cc = c!
       const delta = cc.power - bb.power
       const e: Partial<Record<CpuEffect, number>> = {}
@@ -136,6 +136,10 @@ export type CpuPickState = 'ok' | 'running' | 'error' | 'nocpu' | 'none'
 export interface CpuPick { side: CpuSide | null; source: 'sim' | 'stored' | null; state: CpuPickState; error?: string }
 export const CPU_SOURCE_LABEL: Record<'sim' | 'stored', string> = { sim: '즉석 실행', stored: '저장 evidence' }
 
+export function storedCpuPower(items: { kind: string; power_breakdown?: Dict | null }[]): Dict | null {
+  return items.find((e) => e.kind === 'evidence.simulation' && cpuSideOf(null, e.power_breakdown))?.power_breakdown ?? null
+}
+
 /**
  * CPU side of one compare item, independent of the KPI mode: a same-session run first (its task rows
  * give the cause split; totals and rows from that one result), else stored simulation evidence when it
@@ -149,7 +153,7 @@ export function pickCpuSide(sim: SimState | undefined, storedPb: Dict | null | u
     if (side) return { side, source: 'sim', state: 'ok' }
   }
   const stored = storedPb ? cpuSideOf(null, storedPb) : null
-  if (stored) return { side: stored, source: 'stored', state: 'ok' }
+  if (stored) return { side: stored, source: 'stored', state: sim?.status === 'running' ? 'running' : 'ok' }
   if (sim?.status === 'running') return { side: null, source: null, state: 'running' }
   if (sim?.status === 'error') return { side: null, source: null, state: 'error', error: sim.error }
   if (sim?.status === 'done') return { side: null, source: null, state: 'nocpu' }
@@ -161,7 +165,7 @@ export function cpuPickReason(p: CpuPick): string {
   switch (p.state) {
     case 'running': return '예측 실행 중…'
     case 'error': return `예측 실행 실패 — ${p.error ?? '알 수 없는 오류'}`
-    case 'nocpu': return '실행 결과에 CPU 전력 없음 — 설정 profile에 CPU 모델(power params cpu 블록)이 없습니다'
+    case 'nocpu': return '실행 결과에 CPU 전력 없음 — CPU 모델 설정과 활성 task를 확인하세요'
     default: return 'CPU 예측 전력 없음 (저장 evidence에 CPU 미포함) — “CPU 예측 실행”으로 계산'
   }
 }

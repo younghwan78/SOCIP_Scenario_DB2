@@ -17,7 +17,7 @@ export function CpuDiffView({ ids, labels, color, picks, onRun }: {
   // items without same-session task rows (not run, stored totals only, or failed) — running them enables the split
   const needRun = ids.map((_, i) => i).filter((i) => picks[i]?.source !== 'sim' && picks[i]?.state !== 'running' && picks[i]?.state !== 'nocpu')
   const sources = new Set(picks.filter((p) => p.side).map((p) => p.source))
-  const runBtn = onRun && needRun.length > 0 && <button className="btn primary tb-mini" onClick={() => onRun(needRun)}
+  const runBtn = onRun && needRun.length > 0 && <button className="btn primary tb-mini" disabled={picks.some((p) => p.state === 'running')} onClick={() => onRun(needRun)}
     title="같은 기본 조건(현재 예측 기준)으로 즉석 실행 — task별 실행 시간·사용률로 원인을 분해합니다. 저장되지 않습니다.">CPU 예측 실행 ({needRun.length}개)</button>
   return <div className="cpu-diff">
     {(runBtn || sources.size > 1) && <div className="cpu-diff-bar">

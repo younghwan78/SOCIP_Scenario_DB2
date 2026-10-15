@@ -27,7 +27,7 @@ import { useSimRuns } from '../lib/useSimRuns'
 import { SimSaveLine } from '../components/SimSave'
 import { Card } from '../components/TimingCharts'
 import { CpuDiffView } from '../components/CpuDiff'
-import { pickCpuSide } from '../lib/cpuDiff'
+import { pickCpuSide, storedCpuPower } from '../lib/cpuDiff'
 
 const KPI_FIELDS: [string, string, string][] = [
   ['Total power', 'total_power_mw', 'mW'], ['Core power', 'core_power_mw', 'mW'], ['BW power', 'bw_power_mw', 'mW'],
@@ -175,7 +175,7 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
   }).filter((r) => r.parts.length > 0)
   // CPU card source per item: a same-session run (task rows → cause split) before stored evidence, whatever the
   // KPI mode — stored simulation evidence often has no CPU bucket and must not hide a finished run.
-  const cpuPicks = ids.map((id, i) => pickCpuSide(sims[id], storedPb(i)))
+  const cpuPicks = ids.map((id, i) => pickCpuSide(sims[id], storedCpuPower(evQ.data?.[i] ?? [])))
   const noKpi = ids.map((_, i) => i).filter((i) => evQ.data && kpiMode !== 'pred' && (kpiMode === 'sim' || !evidence[i]) && sims[ids[i]]?.status !== 'done' && sims[ids[i]]?.status !== 'running')
   const mixed = kpiMode === 'evidence' && new Set(ids.map((_, i) => kpiOf(i).source).filter(Boolean)).size > 1
   const stream = (i: number, id: string): CadenceResult | undefined => cadences[i]?.results.find((r) => r.stream.id === id)
