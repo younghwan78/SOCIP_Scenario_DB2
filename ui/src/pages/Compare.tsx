@@ -27,7 +27,7 @@ import { useSimRuns } from '../lib/useSimRuns'
 import { SimSaveLine } from '../components/SimSave'
 import { Card } from '../components/TimingCharts'
 import { CpuDiffView } from '../components/CpuDiff'
-import { cpuSideOf } from '../lib/cpuDiff'
+import { pickCpuSide } from '../lib/cpuDiff'
 
 const KPI_FIELDS: [string, string, string][] = [
   ['Total power', 'total_power_mw', 'mW'], ['Core power', 'core_power_mw', 'mW'], ['BW power', 'bw_power_mw', 'mW'],
@@ -159,26 +159,23 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
   }
   const unsaved = ids.filter((id) => { const st = sims[id]; return st?.status === 'done' && !st.res.persisted && (!st.save || st.save.status === 'error') })
   /** power_breakdown per item: same-model simulation first (Simulation 통일), else stored simulation evidence. */
+  const storedPb = (i: number): Dict | null =>
+    (evQ.data?.[i] ?? []).find((e) => e.kind === 'evidence.simulation' && e.power_breakdown)?.power_breakdown ?? null
   const powerOf = (i: number): { pb: Dict | null; source: string | null } => {
     const st = sims[ids[i]]
     const simPb = st?.status === 'done' ? st.res.result?.power_breakdown ?? null : null
-    const stored = (evQ.data?.[i] ?? []).find((e) => e.kind === 'evidence.simulation' && e.power_breakdown)
+    const stored = storedPb(i)
     if (kpiMode === 'sim' && simPb) return { pb: simPb, source: '재계산 (즉석)' }
-    if (stored?.power_breakdown) return { pb: stored.power_breakdown, source: 'Sim evidence (저장)' }
+    if (stored) return { pb: stored, source: 'Sim evidence (저장)' }
     return simPb ? { pb: simPb, source: '재계산 (즉석)' } : { pb: null, source: null }
   }
   const powerRows: PowerRow[] = ids.map((id, i) => {
     const { pb, source } = powerOf(i)
     return { id, label: labels[id] ?? id, parts: powerModelParts(pb), sub: [source, mifSummary(pb), cpuSource(pb)].filter(Boolean).join(' · ') || null }
   }).filter((r) => r.parts.length > 0)
-  // CPU side per item: task rows from a same-session simulation (cause split), else the breakdown totals
-  const cpuSides = ids.map((id, i) => {
-    const st = sims[id]
-    const pb = powerOf(i).pb
-    // Task rows and totals must come from the same selected result.
-    const result = st?.status === 'done' && pb === st.res.result?.power_breakdown ? st.res.result as Dict : null
-    return cpuSideOf(result, pb)
-  })
+  // CPU card source per item: a same-session run (task rows → cause split) before stored evidence, whatever the
+  // KPI mode — stored simulation evidence often has no CPU bucket and must not hide a finished run.
+  const cpuPicks = ids.map((id, i) => pickCpuSide(sims[id], storedPb(i)))
   const noKpi = ids.map((_, i) => i).filter((i) => evQ.data && kpiMode !== 'pred' && (kpiMode === 'sim' || !evidence[i]) && sims[ids[i]]?.status !== 'done' && sims[ids[i]]?.status !== 'running')
   const mixed = kpiMode === 'evidence' && new Set(ids.map((_, i) => kpiOf(i).source).filter(Boolean)).size > 1
   const stream = (i: number, id: string): CadenceResult | undefined => cadences[i]?.results.find((r) => r.stream.id === id)
@@ -370,7 +367,7 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
         </> : <div className="empty">예측 evidence 없음 — 분석 요약의 “예측 실행”으로 계산하면 구성이 표시됩니다</div>}
       </Card>
       <Card id="cmp.cpu" title="CPU 예측 전력 · 차이 원인" note="★ 대비 Δ = SW 부하 + 주기(fps) + cluster 배치·계수 + task 추가/제거 · task별 근거" defaultWide>
-        <CpuDiffView ids={ids} labels={labels} color={color} sides={cpuSides} />
+        <CpuDiffView ids={ids} labels={labels} color={color} picks={cpuPicks} onRun={runSim} />
       </Card>
       <Card id="cmp.dma" title="DMA traffic by IP (W+R MB/s)" note="view memory × fps · stat/size 미정 제외">
         <StackedBars unit="MB/s" rows={dmaStack} labelW={150} /></Card>

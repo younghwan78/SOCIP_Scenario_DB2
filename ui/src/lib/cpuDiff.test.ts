@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest'
-import { cpuDiff, cpuDiffHeadline, cpuSideOf } from './cpuDiff'
+import { cpuDiff, cpuDiffHeadline, cpuPickReason, cpuSideOf, pickCpuSide } from './cpuDiff'
+import type { SimState } from './simRun'
 
 // P = k·a/T rows: k = mW at 100 % util, a = active ms/frame, T = period
 const row = (task: string, cluster: string, k: number, a: number, T: number, extra = {}) =>
@@ -58,4 +59,38 @@ it('keeps unknown causes unsplit and preserves an explicit zero total', () => {
   expect(d.effects.unsplit).toBeCloseTo(d.delta)
   expect(d.tasks[0].reasons.join(' ')).toContain('원인 미분해')
   expect(cpuSideOf(null, { cpu: { total_mw: 0, by_task: { stale: 20 } } })!.total).toBe(0)
+})
+
+// A finished same-session run, as useSimRuns stores it.
+const done = (rows: ReturnType<typeof row>[]): SimState => {
+  const pb = { cpu: { total_mw: rows.reduce((s, r) => s + r.power_mw, 0), by_cluster: { MID_LF1: 1 } } }
+  return { status: 'done', req: { scenario_id: 's', variant_id: 'v' }, res: { evidence_id: 'e', kpi: {}, result: { power_breakdown: pb, cpu_breakdown: rows } } } as unknown as SimState
+}
+
+it('prefers a finished run over stored evidence without CPU (Evidence-first mode regression)', () => {
+  const storedNoCpu = { ip: { total_mw: 130 }, cpu: { total_mw: 0, by_cluster: {} } }
+  // stored evidence alone: nothing to show, and the reason asks for a run
+  const before = pickCpuSide(undefined, storedNoCpu)
+  expect(before.side).toBeNull()
+  expect(before.state).toBe('none')
+  // after the run the card uses its task rows, whatever the stored evidence says
+  const after = pickCpuSide(done([row('eis', 'MID_LF1', 300, 3, 33.33)]), storedNoCpu)
+  expect(after.source).toBe('sim')
+  expect(after.side!.rows).toHaveLength(1)
+  // stored evidence that does carry CPU totals is used until a run exists
+  const storedCpu = { cpu: { total_mw: 40, by_task: { eis: 40 } } }
+  expect(pickCpuSide(undefined, storedCpu).source).toBe('stored')
+  expect(pickCpuSide(done([row('eis', 'MID_LF1', 300, 3, 33.33)]), storedCpu).source).toBe('sim')
+})
+
+it('says why an item has no CPU side: running, failed run, run without CPU model', () => {
+  expect(pickCpuSide({ status: 'running' }, null).state).toBe('running')
+  const failed = pickCpuSide({ status: 'error', error: '422 Unprocessable Entity — basis inputs changed' }, null)
+  expect(failed.state).toBe('error')
+  expect(cpuPickReason(failed)).toContain('basis inputs changed')
+  const noModel = pickCpuSide(done([]), null)   // run finished, CPU bucket empty (profile without cpu block)
+  expect(noModel.state).toBe('nocpu')
+  expect(cpuPickReason(noModel)).toContain('CPU 모델')
+  // a failed rerun does not hide stored CPU totals
+  expect(pickCpuSide({ status: 'error', error: 'x' }, { cpu: { total_mw: 40, by_task: { eis: 40 } } }).source).toBe('stored')
 })
