@@ -32,7 +32,7 @@ const coverage = { complete: false, scope: 'modeled CPU + IP + memory', missing_
 const level4 = { target: 'dvfs_level', domain: 'INTCAM', level: 4 }
 const result: WhatIfResult = { baseline_hash: hash, condition_hash: 'b'.repeat(64), normalized_condition: { scope, changes: [level4], config: {}, options: {} }, baseline: { report, metrics, coverage }, candidate: { report, metrics: { ...metrics, modeled_power_mw: 195 }, coverage }, delta: { metrics: {}, ips: [] }, warnings: [], model_lineage: { engine: 'timing-budget' } }
 const answered = (over: Partial<AskResponse> = {}): AskResponse => ({ scope, baseline_hash: hash, interpretation: null, plan: { ask: 'what_if', changes: [level4], search_domains: [], focus: [] },
-  answer: { verdict: 'ok', headline: '가능 — INTCAM L3→L4 (200 MHz): timing 충족, 최소 여유 NRT 3.74 ms (기준 NRT 4.10 ms)', facts: ['모델 전력 200.0 → 195.0 mW (-5.0 mW)'], actions: [{ label: 'INTCAM 어디까지 낮출 수 있나', ask: 'search_limit', search_domains: ['INTCAM'] }] },
+  answer: { verdict: 'ok', headline: 'INTCAM L3→L4 (200 MHz): timing 충족, 최소 여유 NRT 3.74 ms (기준 NRT 4.10 ms)', facts: ['모델 전력 200.0 → 195.0 mW (-5.0 mW)'], actions: [{ label: 'INTCAM 어디까지 낮출 수 있나', ask: 'search_limit', search_domains: ['INTCAM'] }] },
   result, search: null, diagnose: null, ...over })
 const ctx = { project: 'project', scenario: 'scenario', variant: 'variant', params: {} } as Ctx
 const edit = (input: HTMLTextAreaElement, value: string) => { Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(input, value); input.dispatchEvent(new Event('input', { bubbles: true })) }
@@ -63,7 +63,7 @@ it('builds a DVFS level condition from the ladder and answers first, then saves 
     expect(level.value).toBe('4')                                                             // one level down by default
     await act(async () => button(host, '답 보기').click())
     expect(ask).toHaveBeenCalledWith({ ...scope, ask: 'what_if', changes: [level4] })
-    expect(host.querySelector('.wi-headline')!.textContent).toBe('가능 가능 — INTCAM L3→L4 (200 MHz): timing 충족, 최소 여유 NRT 3.74 ms (기준 NRT 4.10 ms)')
+    expect(host.querySelector('.wi-headline')!.textContent).toBe('가능 INTCAM L3→L4 (200 MHz): timing 충족, 최소 여유 NRT 3.74 ms (기준 NRT 4.10 ms)')
     expect(host.textContent).toContain('기준 대비 조건 변경 결과')
     act(() => { edit(host.querySelector<HTMLTextAreaElement>('[aria-label="실험 제목"]')!, 'intcam'); select(host.querySelector<HTMLSelectElement>('[aria-label="실험 공개 범위"]')!, 'shared') })
     await act(async () => button(host, '실험 저장').click())
@@ -100,7 +100,7 @@ it('marks the answer as outdated when conditions change and warns that a clock f
 it('runs bottleneck and limit questions without any condition rows', async () => {
   mocks()
   const ask = vi.spyOn(whatIfApi, 'ask').mockResolvedValue(answered({ plan: { ask: 'diagnose', changes: [], search_domains: [], focus: [] }, result: null,
-    answer: { verdict: 'ok', headline: 'timing 충족 — 가장 빠듯한 구간 NRT, 여유 3.74 ms', facts: [], actions: [] },
+    answer: { verdict: 'ok', headline: '가장 빠듯한 구간 NRT — 여유 3.74 ms (frame 33.33 ms)', facts: [], actions: [] },
     diagnose: { verdict: 'ok', reasons: [], notes: [], period_ms: 33.33, stages: [{ id: 'nrt', name: 'NRT', slack_ms: 3.74, fill_pct: 89, hw_ms: 18.5, sw_ms: 11 }], tight: { id: 'nrt', name: 'NRT', slack_ms: 3.74 },
       top_ips: [], domains: [{ id: 'INTCAM', level: 3, mhz: 400, down: 2, up: 1, ips: ['msnr', 'mtnr'] }] } }))
   const { host, root } = await mount()
@@ -109,6 +109,7 @@ it('runs bottleneck and limit questions without any condition rows', async () =>
     expect(button(host, '답 보기').disabled).toBe(false)
     await act(async () => button(host, '답 보기').click())
     expect(ask).toHaveBeenCalledWith({ ...scope, ask: 'diagnose' })
+    expect(host.querySelector('.wi-headline')!.textContent).toBe('timing 충족 가장 빠듯한 구간 NRT — 여유 3.74 ms (frame 33.33 ms)')
     expect(host.textContent).toContain('구간별 여유 · 병목')
     expect(host.textContent).toContain('2단계')
     await act(async () => button(host, '어디까지 낮출 수 있나').click())

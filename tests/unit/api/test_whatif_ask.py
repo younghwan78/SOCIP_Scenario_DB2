@@ -51,9 +51,11 @@ def test_targets_list_dvfs_domains_with_ladder_and_offer_the_level_condition(sco
 
 def test_builder_level_change_answers_feasibility_power_and_clocks(scope):
     out = service.ask(None, WhatIfAskRequest(**scope, config=FASTER, changes=[{"target": "dvfs_level", "domain": "INTCAM", "level": 3}]))
+    up = service.ask(None, WhatIfAskRequest(**scope, changes=[{"target": "dvfs_level", "domain": "INTCAM", "level": 4}]))
+    assert up["answer"]["actions"] == []        # baseline already at the lowest OPP: no limit search to offer
     a = out["answer"]
     assert out["interpretation"] is None and a["verdict"] == "ok"
-    assert a["headline"].startswith("가능 — INTCAM L2→L3 (400 MHz)")
+    assert a["headline"].startswith("INTCAM L2→L3 (400 MHz): timing 충족")
     assert out["result"]["delta"]["metrics"]["modeled_power_mw"] < 0
     assert any("mtnr 533→400 MHz" in f for f in a["facts"])
     assert a["actions"] == [{"label": "INTCAM 어디까지 낮출 수 있나", "ask": "search_limit", "search_domains": ["INTCAM"]}]
@@ -73,7 +75,7 @@ def test_diagnose_names_the_tightest_stage_and_domain_room(scope):
     d = out["diagnose"]
     assert d["tight"]["slack_ms"] == min(s["slack_ms"] for s in d["stages"])
     assert {x["id"]: x["down"] for x in d["domains"]} == {"CAM": 0, "INT": 0, "INTCAM": 0}
-    assert out["answer"]["headline"].startswith("timing 충족 — 가장 빠듯한 구간")
+    assert out["answer"]["verdict"] == "ok" and out["answer"]["headline"].startswith("가장 빠듯한 구간 ")
     assert out["answer"]["actions"] == []                           # nothing can go lower
 
 
@@ -90,7 +92,7 @@ def test_llm_level_step_past_the_lowest_opp_is_answered_as_a_boundary(scope, mon
     assert out["interpretation"]["status"] == "boundary" and out["interpretation"]["used"] == "llm"
     assert out["answer"]["verdict"] == "boundary"
     assert out["answer"]["headline"] == "INTCAM는 이미 최저 OPP L5 (133 MHz)라 더 낮출 level이 없습니다"
-    assert out["answer"]["facts"][0].startswith("현재 timing 충족")
+    assert out["answer"]["facts"][0].startswith("현재 timing 충족 · 가장 빠듯한 구간")
 
 
 def test_llm_relative_step_resolves_against_the_baseline_ladder(scope, monkeypatch):

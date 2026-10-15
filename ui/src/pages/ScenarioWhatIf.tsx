@@ -13,8 +13,12 @@ const ASK_FALLBACK: { ask: AskKind; label: string; description: string }[] = [
   { ask: 'search_limit', label: '어디까지 낮출 수 있나', description: 'DVFS domain level을 한 단계씩 낮추며 timing을 충족하는 최저 level 탐색' },
   { ask: 'diagnose', label: '병목 찾기', description: '기준 조건에서 가장 빠듯한 구간 · IP와 domain별 여유' },
 ]
-const VERDICT: Record<string, { label: string; cls: string }> = {
-  ok: { label: '가능', cls: 'v-ok' }, fail: { label: '불가', cls: 'v-fail' }, info: { label: '결과', cls: 'v-na' }, boundary: { label: '더 바꿀 수 없음', cls: 'v-warn' },
+/** Badge per verdict; the wording follows the question kind (a condition is 가능/불가, a baseline is 충족/미달). */
+function verdictBadge(verdict: string, ask: AskKind | undefined): { label: string; cls: string } {
+  if (verdict === 'ok') return { label: ask === 'what_if' ? '가능' : 'timing 충족', cls: 'v-ok' }
+  if (verdict === 'fail') return { label: ask === 'what_if' ? '불가' : 'timing 미달', cls: 'v-fail' }
+  if (verdict === 'boundary') return { label: '더 바꿀 수 없음', cls: 'v-warn' }
+  return { label: '결과', cls: 'v-na' }
 }
 const SIZE_PRESETS: [string, number, number][] = [['HD', 1280, 720], ['FHD', 1920, 1080], ['QHD', 2560, 1440], ['UHD', 3840, 2160], ['8K', 7680, 4320]]
 const FPS_PRESETS = [15, 24, 30, 60, 120]
@@ -224,7 +228,7 @@ function AnswerView({ resp, asked, dirty, busy, onAction, onChoose }: { resp: As
   return <Card id="wi-answer" title="답변" note={asked ? `“${asked}”` : undefined} defaultWide>
     {dirty && <p className="faint">조건이 바뀌었습니다 — “답 보기”로 다시 계산하세요.</p>}
     {a && <>
-      <p className="wi-headline"><span className={`badge ${VERDICT[a.verdict]?.cls ?? ''}`}>{VERDICT[a.verdict]?.label ?? a.verdict}</span> <b>{a.headline}</b></p>
+      {(() => { const badge = verdictBadge(a.verdict, resp.plan?.ask); return <p className="wi-headline"><span className={`badge ${badge.cls}`}>{badge.label}</span> <b>{a.headline}</b></p> })()}
       {a.facts.length > 0 && <ul className="wi-answer">{a.facts.map((f) => <li key={f} className={f.startsWith('미달') ? 'warn' : ''}>{f}</li>)}</ul>}
       {a.actions.length > 0 && <div className="toolbar" style={{ flexWrap: 'wrap' }}><span className="faint">이어서</span>{a.actions.map((x) => <button key={x.label} className="btn tb-mini" disabled={busy} onClick={() => onAction(x)}>{x.label}</button>)}</div>}
     </>}
@@ -279,8 +283,10 @@ function ChangeEditor({ change, kinds, targets, disabled, onChange, onRemove }: 
       if (kind?.shape === 'level' && choice?.ladder) { const at = choice.ladder.findIndex((lv) => lv.level === choice.level); next.level = choice.ladder[Math.max(0, at - 1)]?.level ?? choice.level ?? 0 }
       onChange(next)
     }}><option value="">{kind?.selector_optional ? '자동 (단일 대상)' : '대상 선택'}</option>{(kind?.choices ?? []).map((row) => <option key={`${row.id}-${row.param ?? ''}`} value={row.id}>{choiceText(row)}</option>)}</select></label>}
-    {kind?.shape === 'level' ? <label>level<select aria-label={`${change.domain ?? ''} level`} value={change.level ?? ''} onChange={(e) => onChange({ ...change, level: Number(e.target.value) })}>
-      {ladder.map((lv, j) => <option key={lv.level} value={lv.level}>L{lv.level} · {lv.mhz} MHz{j === cur ? ' (현재)' : j < cur ? ` (−${cur - j})` : ` (+${j - cur})`}</option>)}</select></label>
+    {kind?.shape === 'level' && <label>level<select aria-label={`${change.domain ?? ''} level`} value={change.level ?? ''} onChange={(e) => onChange({ ...change, level: Number(e.target.value) })}>
+      {ladder.map((lv, j) => <option key={lv.level} value={lv.level}>L{lv.level} · {lv.mhz} MHz{j === cur ? ' (현재)' : j < cur ? ` (−${cur - j})` : ` (+${j - cur})`}</option>)}</select></label>}
+    {kind?.shape === 'level' && domain && cur === 0 && <span className="faint">{domain.id}는 이미 최저 OPP — 올리는 방향만 가능합니다</span>}
+    {kind?.shape === 'level' ? null
       : kind?.shape === 'size' || (!kind && change.width != null)
         ? <><label>너비<input className="input" aria-label="변경 너비" type="number" min={16} max={16384} step={1} value={change.width ?? ''} onChange={(e) => onChange({ ...change, width: Number(e.target.value) })} /></label><label>높이<input className="input" aria-label="변경 높이" type="number" min={16} max={16384} step={1} value={change.height ?? ''} onChange={(e) => onChange({ ...change, height: Number(e.target.value) })} /></label>
           <span className="wi-presets">{SIZE_PRESETS.map(([name, w, h]) => <button key={name} type="button" className={`btn tb-mini ${change.width === w && change.height === h ? 'on' : ''}`} onClick={() => onChange({ ...change, width: w, height: h })}>{name}</button>)}</span></>

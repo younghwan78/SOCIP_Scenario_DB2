@@ -366,10 +366,10 @@ def _answer(plan: dict, targets: dict, result, search, diag, boundaries: list[st
         _, s0, n0 = _min_slack(b["report"])
         bm, cm = b["metrics"], c["metrics"]
         if cm["feasible"]:
-            verdict, headline = "ok", f"가능 — {desc}: timing 충족, 최소 여유 {n1} {s1:.2f} ms (기준 {n0} {s0:.2f} ms)"
+            verdict, headline = "ok", f"{desc}: timing 충족, 최소 여유 {n1} {s1:.2f} ms (기준 {n0} {s0:.2f} ms)"
         else:
             verdict = "fail"
-            headline = f"불가 — {desc}: {(c['report']['verdict']['reasons'] or ['timing 미달'])[0]}"
+            headline = f"{desc}: {(c['report']['verdict']['reasons'] or ['timing 미달'])[0]}"
         dp = cm["modeled_power_mw"] - bm["modeled_power_mw"]
         facts = [f"모델 전력 {bm['modeled_power_mw']:.1f} → {cm['modeled_power_mw']:.1f} mW ({dp:+.1f} mW · IP {cm['ip_power_mw'] - bm['ip_power_mw']:+.1f}"
                  f" · 메모리 {cm['memory_power_mw'] - bm['memory_power_mw']:+.1f} · CPU {cm['cpu_power_mw'] - bm['cpu_power_mw']:+.1f})",
@@ -389,8 +389,8 @@ def _answer(plan: dict, targets: dict, result, search, diag, boundaries: list[st
                              + (f" (낮추려면 DVFS level 조건: {dom})" if dom else ""))
             if ch["target"] == "dvfs_level" and ch["domain"] in domains and domains[ch["domain"]]["level"] == ch["level"]:
                 facts.append(f"{ch['domain']}는 기준과 같은 level(L{ch['level']})입니다")
-        for ch in result["normalized_condition"]["changes"]:
-            if ch["target"] == "dvfs_level" and cm["feasible"]:
+        for ch in result["normalized_condition"]["changes"]:   # the limit search starts from the baseline level
+            if ch["target"] == "dvfs_level" and cm["feasible"] and (domains.get(ch["domain"]) or {}).get("index", 0) > 0:
                 actions.append({"label": f"{ch['domain']} 어디까지 낮출 수 있나", "ask": "search_limit", "search_domains": [ch["domain"]]})
         return {"verdict": verdict, "headline": headline, "facts": boundaries + facts, "actions": actions}
     if search is not None:
@@ -415,7 +415,7 @@ def _answer(plan: dict, targets: dict, result, search, diag, boundaries: list[st
     if diag is not None:
         t = diag["tight"]
         ok = diag["verdict"] != "fail"
-        headline = (f"{'timing 충족' if ok else 'timing 미달'} — 가장 빠듯한 구간 {t['name']}, 여유 {t['slack_ms']:.2f} ms"
+        headline = (f"가장 빠듯한 구간 {t['name']} — 여유 {t['slack_ms']:.2f} ms (frame {diag['period_ms']:.2f} ms)"
                     if t else ("timing 충족" if ok else "timing 미달"))
         facts = _diag_facts(diag)[1:] + [f"미달: {r}" for r in diag["reasons"][:3]]
         facts += [f"{d['id']} L{d['level']} ({d['mhz']:g} MHz): " + ("최저 OPP" if d["down"] == 0 else f"{d['down']}단계 낮출 여지")
@@ -423,7 +423,8 @@ def _answer(plan: dict, targets: dict, result, search, diag, boundaries: list[st
         actions = [{"label": f"{d['id']} 어디까지 낮출 수 있나", "ask": "search_limit", "search_domains": [d["id"]]}
                    for d in diag["domains"] if d["down"] > 0]
         if boundaries:   # nothing to change (already at the OPP edge): say so, then the current state
-            return {"verdict": "boundary", "headline": boundaries[0], "facts": boundaries[1:] + [f"현재 {headline}"] + facts,
+            return {"verdict": "boundary", "headline": boundaries[0],
+                    "facts": boundaries[1:] + [f"현재 timing {'충족' if ok else '미달'} · {headline}"] + facts,
                     "actions": actions}
         return {"verdict": "ok" if ok else "fail", "headline": headline, "facts": facts, "actions": actions}
     return None
