@@ -1,27 +1,29 @@
 # 예측 설명·댓글과 자연어 What-if
 
-Status: Current. Last verified: 2026-10-15.
+Status: Current. Last verified: 2026-10-16.
 Source: `ui/src/pages/ScenarioWhatIf.tsx`, `ui/src/components/PredictionCollaboration.tsx`,
 `src/scenario_db/api/services/scenario_whatif.py`, `whatif_conditions.py`,
 `whatif_query.py`, `prediction_discussion.py`.
 
 ## 질문으로 조건 비교하기
 
-1. 과제, scenario, variant를 선택하고 **자연어 What-if**를 엽니다.
-2. “센서 입력은 유지하고 녹화 출력을 FHD로 변경하면 clock과 power는?”처럼
-   변경할 대상과 값을 입력합니다.
-3. **변경 조건 해석**을 누르고 크기·FPS·노드 clock의 대상을 확인합니다.
-   모호한 질문은 표시된 선택지로 대상과 값을 고릅니다. 지원하지 않는 부분은
-   이유와 함께 표시하며, 지원한 조건만 검토 후 계산할 수 있습니다.
-4. **조건 비교 계산**으로 기준과 변경 결과를 비교합니다.
+1. 과제, scenario, variant를 선택하고 **What-if**를 엽니다.
+2. **조건 바꿔보기**, **어디까지 낮출 수 있나**, **병목 찾기** 중 질문 종류를 고릅니다.
+3. 조건 편집기에서 크기·FPS·IP clock 하한·DVFS domain level을 지정합니다.
+   한계 탐색은 domain을 선택하고, 병목 진단은 현재 기준을 사용합니다.
+4. 계산을 실행해 엔진이 산출한 timing·전력·BW와 구간별 여유를 확인합니다.
 5. 제목, 목적, 상세 설명, 가정, 결론을 입력하고 개인 또는 공유 실험으로 저장합니다.
 
-한국어/영어 해상도·FPS·노드 clock 조건과 “FPS 절반”, “MFC clock 20% 낮추면”
-같은 상대값을 지원합니다. 현재 모델 설정을 기준으로 해석하며, 불러온 실험은
-해당 실험의 설정을 사용합니다. 허용 범위를 벗어난 값은 적용하지 않습니다.
-외부 LLM을 사용하지 않는
-제한된 문법이며, 압축·codec·EIS·센서 모드 변경은 이 화면에서 지원하지 않습니다.
-지원하는 조건을 화면에서 직접 편집할 수도 있습니다.
+자연어 질문은 사내 LLM을 설정한 경우 사용할 수 있습니다. 질문과 선택한 variant의
+대상 목록을 전달해 조건으로 해석하며, 계산 결과는 Timing Budget 엔진이 산출합니다.
+모호한 질문은 선택지를 표시하고, 지원하지 않거나 잘못된 응답은 이유와 함께 알립니다.
+사내 LLM이 없거나 응답하지 않으면 조건 편집기로 계산할 수 있습니다.
+불러온 실험은 해당 모델 설정을 사용하며, 허용 범위를 벗어난 값과 알 수 없는
+domain은 적용하지 않습니다. 압축·codec·EIS·센서 모드 변경은 지원하지 않습니다.
+
+DVFS level은 domain의 OPP를 고정하는 조건입니다. IP clock 하한과 달리 적용
+clock을 낮출 수 있으며, 요구 clock보다 낮으면 timing 미달로 판정합니다.
+한계 탐색은 각 domain을 독립적으로 한 단계씩 낮추며 첫 미달에서 멈춥니다.
 
 선택한 scenario에 따라 변경 가능한 조건을 표시합니다. 크기 기준점이 없는
 재생 등의 scenario는 같은 크기로 정의된 스트림 surface를 함께 변경하며

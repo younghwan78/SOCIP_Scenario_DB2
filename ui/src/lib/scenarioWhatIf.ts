@@ -3,17 +3,21 @@ import type { IpRow, TimingReport } from './timingBudget'
 
 export interface WhatIfScope { project_ref: string; scenario_id: string; variant_id: string }
 /** ``target`` names a server-registered change kind (``WhatIfTargets.change_kinds``); the editor is driven by that metadata. */
-export interface WhatIfChange { target: string; anchor_id?: string; node_id?: string; stream_id?: string; param?: string; width?: number; height?: number; value?: number }
+export interface WhatIfChange { target: string; anchor_id?: string; node_id?: string; stream_id?: string; param?: string; width?: number; height?: number; value?: number; domain?: string; level?: number }
 export interface ChangeKindMeta {
-  target: string; label: string; shape: 'size' | 'value'; selector: 'anchor_id' | 'node_id' | 'stream_id' | null
+  target: string; label: string; shape: 'size' | 'value' | 'level'; selector: 'anchor_id' | 'node_id' | 'stream_id' | 'domain' | null
   selector_optional: boolean; needs_param: boolean; unit: string; max_value: number | null; description: string
   /** instances available in this variant: id + size / value / ip / param */
-  choices: { id: string; size?: [number, number]; value?: number | null; ip?: string | null; param?: string; label?: string; unit?: string; role?: string | null; primary?: boolean; where?: string[] }[]
+  choices: { id: string; size?: [number, number]; value?: number | null; ip?: string | null; param?: string; label?: string; unit?: string; role?: string | null; primary?: boolean; where?: string[]
+    /** dvfs_level: current level / clock, member IPs and the OPP ladder (slow -> fast) */
+    level?: number | null; mhz?: number | null; ips?: string[]; ladder?: { level: number; mhz: number }[] }[]
 }
 export interface WhatIfTargets extends WhatIfScope {
   baseline_hash: string
   anchors: { id: string; size: [number, number]; kind: 'sensor' | 'output' | 'intermediate'; supported: boolean; role?: 'record' | 'preview' | null }[]
-  nodes: { id: string; label: string; ip?: string | null; hw_name?: string; category?: string | null; size: [number, number]; size_supported: boolean; clock_supported: boolean }[]
+  nodes: { id: string; label: string; ip?: string | null; hw_name?: string; category?: string | null; size: [number, number]; size_supported: boolean; clock_supported: boolean
+    /** baseline applied clock and DVFS domain (API ≥ 2026-10-16) */
+    clock_mhz?: number | null; dvfs_group?: string | null }[]
   output_targets: string[]; supported_changes: string[]; limitations: string[]
   /** baseline FPS of the variant (API ≥ 2026-10-15) */
   fps?: number | null
@@ -23,6 +27,36 @@ export interface WhatIfTargets extends WhatIfScope {
   streams?: { id: string; size: [number, number]; primary: boolean; where: string[] }[]
   capability?: { soc_ref: string | null; soc_profile: string; readiness: string | null; notes: string[] }
   soc_ref?: string | null
+  /** DVFS domains resolved by the baseline run (API ≥ 2026-10-16) */
+  domains?: WhatIfDomain[]
+  asks?: { ask: AskKind; label: string; description: string }[]
+  /** in-house LLM for natural-language questions; unavailable = condition builder only */
+  llm?: { available: boolean; model: string | null }
+}
+export interface WhatIfDomain { id: string; level: number; mhz: number; ips: string[]; stages: string[]; ladder: { level: number; mhz: number }[]; index: number }
+export type AskKind = 'what_if' | 'search_limit' | 'diagnose'
+export interface AskAction { label: string; ask: AskKind; search_domains?: string[] }
+export interface WhatIfAnswer { verdict: 'ok' | 'fail' | 'info' | 'boundary'; headline: string; facts: string[]; actions: AskAction[] }
+export interface SearchRow {
+  domain: string; level: number; mhz: number; ips: string[]; at_min: boolean
+  rows: { level: number; mhz: number; feasible: boolean; power_mw?: number; delta_mw?: number; min_slack_ms?: number; tight_stage?: string; reason: string | null }[]
+  lowest: SearchRow['rows'][number] | null; first_fail: SearchRow['rows'][number] | null
+}
+export interface Diagnosis {
+  verdict: string; reasons: string[]; notes: string[]; period_ms: number
+  stages: { id: string; name: string; slack_ms: number; fill_pct?: number | null; hw_ms?: number; sw_ms?: number; budget_ms?: number }[]
+  tight: Diagnosis['stages'][number] | null
+  top_ips: { node: string; hw_ms: number; set_clock_mhz: number; required_clock_mhz: number; domain: string | null; level: number | null }[]
+  domains: { id: string; level: number; mhz: number; down: number; up: number; ips: string[] }[]
+}
+export interface AskRequest extends WhatIfScope { query?: string; changes?: WhatIfChange[]; ask?: AskKind; search_domains?: string[]; config?: Record<string, unknown>; options?: Record<string, unknown> }
+export interface AskResponse {
+  scope: WhatIfScope; baseline_hash: string
+  /** null = builder conditions (no interpretation) */
+  interpretation: null | { status: 'ready' | 'clarification' | 'unsupported' | 'boundary' | 'llm_unavailable'; reason?: string; used?: 'llm'; model?: string | null; latency_ms?: number
+    clarification?: { message: string; choices: { label: string; change: WhatIfChange }[] } | null; ignored?: { text: string; reason: string }[]; notes?: string[]; boundaries?: string[] }
+  plan: null | { ask: AskKind; changes: WhatIfChange[]; search_domains: string[]; focus: FocusMetric[] }
+  answer: WhatIfAnswer | null; result: WhatIfResult | null; search: SearchRow[] | null; diagnose: Diagnosis | null
 }
 export type FocusMetric = 'power' | 'clock' | 'bw' | 'timing' | 'feasible'
 export interface WhatIfClarification { field: string; message: string; source?: string; choices: { label: string; value: string; change?: WhatIfChange }[] }
@@ -52,14 +86,18 @@ export interface WhatIfExperiment {
 export interface ExperimentDraft { title: string; purpose: string; description: string; assumptions: string; conclusion: string; visibility: 'private' | 'shared' }
 const path = '/scenario-whatif'
 export const whatIfApi = {
-  targets: (scope: WhatIfScope) => getJson<WhatIfTargets>(`${path}/targets`, { ...scope }, false),
+  targets: (scope: WhatIfScope, settings: Pick<PreviewRequest, 'config' | 'options'> = {}) => settings.config || settings.options
+    ? postJson<WhatIfTargets>(`${path}/targets`, { ...scope, ...settings })
+    : getJson<WhatIfTargets>(`${path}/targets`, { ...scope }, false),
   plan: (scope: WhatIfScope, query: string, settings: Pick<PreviewRequest, 'config' | 'options'> = {}) => postJson<WhatIfPlan>(`${path}/plan`, { ...scope, query, ...settings }),
   preview: (body: PreviewRequest) => postJson<WhatIfResult>(`${path}/preview`, body),
+  /** builder conditions or a question (in-house LLM) -> executed answer */
+  ask: (body: AskRequest) => postJson<AskResponse>(`${path}/ask`, body),
   save: (previewRequest: PreviewRequest, result: WhatIfResult, draft: ExperimentDraft, query: string) => postJson<WhatIfExperiment>(`${path}/experiments`, { preview_request: previewRequest, expected_condition_hash: result.condition_hash, ...draft, query: query || null }),
   experiments: (scope: WhatIfScope, offset = 0) => getJson<{ items: WhatIfExperiment[]; total: number; limit: number; offset: number; has_next: boolean }>(`${path}/experiments`, { ...scope, limit: 20, offset }, false),
   experiment: (id: string) => getJson<WhatIfExperiment>(`${path}/experiments/${encodeURIComponent(id)}`, {}, false),
 }
-export const CHANGE_LABELS: Record<string, string> = { anchor_size: '크기 기준점', output_size: '출력 크기', node_size: 'IP 처리 크기', stream_size: '스트림 크기', fps: 'FPS', node_clock_mhz: 'IP clock 하한', node_param: 'IP 설정값' }
+export const CHANGE_LABELS: Record<string, string> = { anchor_size: '크기 기준점', output_size: '출력 크기', node_size: 'IP 처리 크기', stream_size: '스트림 크기', fps: 'FPS', node_clock_mhz: 'IP clock 하한', node_param: 'IP 설정값', dvfs_level: 'DVFS level' }
 /** Fallback metadata for API responses that predate ``change_kinds``. */
 const LEGACY_KINDS: ChangeKindMeta[] = [
   { target: 'output_size', label: '출력 크기', shape: 'size', selector: 'anchor_id', selector_optional: true, needs_param: false, unit: '', max_value: null, description: '', choices: [] },
@@ -89,10 +127,14 @@ export function validChange(change: WhatIfChange, kinds: ChangeKindMeta[] = LEGA
   if (kind.selector && !kind.selector_optional && !change[kind.selector]) return false
   if (kind.needs_param && !change.param) return false
   if (kind.shape === 'size') return [change.width, change.height].every((size) => Number.isInteger(size) && Number(size) >= 16 && Number(size) <= 16384)
+  if (kind.shape === 'level') {
+    const domain = kind.choices.find((c) => c.id === change.domain)
+    return Number.isInteger(change.level) && (!domain?.ladder || domain.ladder.some((lv) => lv.level === change.level))
+  }
   return Number.isFinite(change.value) && Number(change.value) > 0 && (kind.max_value == null || Number(change.value) <= kind.max_value)
 }
 
-const sameTarget = (a: WhatIfChange, b: WhatIfChange) => a.target === b.target && (['anchor_id', 'node_id', 'stream_id', 'param'] as const).every((k) => (a[k] ?? '') === (b[k] ?? ''))
+const sameTarget = (a: WhatIfChange, b: WhatIfChange) => a.target === b.target && (['anchor_id', 'node_id', 'stream_id', 'param', 'domain'] as const).every((k) => (a[k] ?? '') === (b[k] ?? ''))
 /** Add a change, replacing an existing one on the same target (one value per target, as the API requires). */
 export function upsertChange(changes: WhatIfChange[], change: WhatIfChange): WhatIfChange[] {
   return changes.some((row) => sameTarget(row, change)) ? changes.map((row) => (sameTarget(row, change) ? change : row)) : [...changes, change]
@@ -100,6 +142,7 @@ export function upsertChange(changes: WhatIfChange[], change: WhatIfChange): Wha
 /** "녹화 출력 record_out → 1920×1080" style one-line description of a change. */
 export function describeChange(change: WhatIfChange): string {
   if (change.target === 'fps') return `FPS → ${change.value}`
+  if (change.target === 'dvfs_level') return `${change.domain} → L${change.level}`
   if (change.target === 'node_clock_mhz') return `${change.node_id} clock 하한 → ${change.value} MHz`
   if (change.value != null && change.width == null) return `${change.node_id ?? ''}${change.node_id ? ' ' : ''}${change.param ?? CHANGE_LABELS[change.target] ?? change.target} → ${change.value}`
   const where = change.target === 'node_size' ? `${change.node_id} 처리 크기` : change.target === 'stream_size' ? `스트림 ${change.stream_id}`

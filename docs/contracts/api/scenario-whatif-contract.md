@@ -8,8 +8,10 @@ analyst/writer/admin. Actor identity comes from the API principal.
 
 | Endpoint | Behavior |
 | --- | --- |
-| `GET /targets` | Active size anchors, eligible nodes, streams, registered change kinds, model capability, and baseline hash for an explicit project/scenario/variant. |
-| `POST /plan` | Interpret a bounded Korean/English question into changes, ignored clauses, or one-click clarification choices. Relative clocks calculate the baseline Timing Budget; nothing is persisted. |
+| `GET /targets` | Active size anchors, eligible nodes (with baseline applied clock and DVFS domain), streams, DVFS `domains` (resolved level, member IPs, OPP ladder slow→fast), registered change kinds, `asks`, `llm` availability, model capability, and baseline hash for an explicit project/scenario/variant. |
+| `POST /targets` | Same discovery using supplied `config`/`options`, including reopened experiment settings. Both target routes calculate a baseline under simulation admission/frame limits. |
+| `POST /ask` | One request → executed answer. Builder input (`ask` + `changes` / `search_domains`) runs directly; a `query` alone is interpreted by the in-house LLM into the same form. Returns `interpretation`, executed `plan`, `answer` (verdict, headline, facts, follow-up actions) and `result` / `search` / `diagnose`. Nothing is persisted. |
+| `POST /plan` | Legacy bounded-grammar interpretation (kept for API compatibility; the UI no longer uses it). |
 | `POST /preview` | Compare a baseline and detached candidate using the Timing Budget engine. |
 | `POST /experiments` | Recalculate and freeze the reviewed request, results, explanation, question, and actor; returns 201. |
 | `GET /experiments` | Paginated records visible to the principal within the selected project/scenario/variant. |
@@ -32,7 +34,39 @@ Each dimension is 16–16384 pixels; FPS is positive and at most
 Duplicate/overlapping size targets, sensor-mode changes, ambiguous multi-port
 resizing, and extrapolation of measured timing/CPU/clock inputs are rejected.
 
-Natural-language planning uses a bounded grammar without an external LLM, accepting
+`dvfs_level` pins a DVFS domain to an OPP level of that domain's ladder (`domain` + integer `level`);
+every IP of the shared domain runs at that level, so a level below the required clock fails timing.
+Unlike `node_clock_mhz` (a manual lower bound that cannot lower the applied clock), it can move a
+domain down.
+
+### Ask (`POST /ask`)
+
+| `ask` | Input | Execution | Answer |
+| --- | --- | --- | --- |
+| `what_if` | `changes` (1–8) | Preview (baseline vs candidate) | `ok` / `fail` + minimum stage slack, power/BW deltas, applied clock moves; notes a clock floor below the applied clock |
+| `search_limit` | `search_domains` (empty = all) | Lower each domain one OPP level at a time until the Timing Budget verdict fails | Lowest feasible level, power delta, first failing level and reason; `at_min` when already at the lowest OPP |
+| `diagnose` | — | Baseline report | Tightest stage and slack, its longest IPs, per-domain room to lower/raise |
+
+All numbers come from the Timing Budget engine; the answer text is composed on the server from them.
+Unknown search domains are rejected; an omitted domain list means all available domains.
+The upper bound on evaluated search cases must fit `exploration_max_cases`.
+Duplicate targets and fields incompatible with the selected question kind are rejected.
+Malformed LLM envelopes or conflicting conditions return `llm_unavailable`; invalid
+relative values and unavailable OPPs do not become executable conditions.
+
+Natural-language input (`query` without `ask`/`changes`) is sent to an in-house OpenAI-compatible
+`POST {SCENARIO_DB_WHATIF_LLM_BASE_URL}/chat/completions` (`_MODEL`, optional `_API_KEY`,
+`_TIMEOUT_S`, `_JSON_MODE`; `response_format` is dropped and retried once when the server rejects
+it). The request carries the question and the variant's target catalog only. The model returns a
+plan in the builder's vocabulary; relative forms (`shift`, `pin: min|max`, clock `scale`) are
+resolved against the baseline ladder/clock, then every change is validated like builder input.
+Unknown targets are listed in `interpretation.ignored`; a step past the lowest/highest OPP becomes
+an `interpretation.boundaries` message and a `boundary` answer with the current bottleneck. When the
+endpoint is not configured, times out, errors, or returns non-JSON, `interpretation.status` is
+`llm_unavailable` with the reason and no answer — the UI continues with the condition builder; there
+is no regex fallback.
+
+The legacy `/plan` endpoint uses a bounded grammar without an external LLM, accepting
 explicit dimensions, named sizes/rates, relative size/FPS, and absolute or relative
 IP clock lower bounds. `ready`, `partial`, `clarification`, `unsupported`, and
 `no_change` distinguish complete conditions, supported subsets, choices, rejected

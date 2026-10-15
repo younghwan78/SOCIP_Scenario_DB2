@@ -27,8 +27,8 @@ from scenario_db.sim.soc_profiles import _PROFILES, profile_for_graph
 class ChangeKind:
     target: str
     label: str
-    shape: str                       # "size" (width/height) | "value"
-    selector: str | None = None      # field naming the instance: anchor_id / node_id / stream_id
+    shape: str                       # "size" (width/height) | "value" | "level" (DVFS OPP level)
+    selector: str | None = None      # field naming the instance: anchor_id / node_id / stream_id / domain
     selector_optional: bool = False  # e.g. output_size resolves the single output itself
     needs_param: bool = False
     unit: str = ""
@@ -194,7 +194,9 @@ def _capability(graph) -> dict:
             "readiness": ready.get("status"), "notes": notes}
 
 
-def whatif_targets(graph, config=None) -> dict[str, Any]:
+def whatif_targets(graph, config=None, domains: list[dict] | None = None) -> dict[str, Any]:
+    """Condition targets of a variant. ``domains`` (DVFS domains resolved by a baseline Timing Budget run:
+    current level + ladder) is supplied by the service; without it no DVFS level condition is offered."""
     anchors = dict((graph.scenario.size_profile or {}).get("anchors") or {})
     anchors.update(graph.variant.size_overrides or {})
     buffers = _buffers(graph)
@@ -247,6 +249,7 @@ def whatif_targets(graph, config=None) -> dict[str, Any]:
            # streams only where the scenario has no size anchors (non-camera: playback, call, game…)
            "streams": [] if rows else _streams(graph),
            "params": _node_params(graph),
+           "domains": list(domains or []),
            "capability": _capability(graph)}
     kinds = [k.meta(out) for k in CHANGE_KINDS.values()]
     out["change_kinds"] = [k for k in kinds if k["choices"] or k["target"] == "fps" and out["fps"]]
@@ -429,6 +432,19 @@ def _apply_param(ctx: _Apply, data: dict) -> tuple:
     return ("node_param", data.get("node_id"), data["param"])
 
 
+def _apply_dvfs(ctx: _Apply, data: dict) -> tuple:
+    """Pin a DVFS domain to an OPP level (every IP of the shared domain runs at that level)."""
+    domain, level = data["domain"], data["level"]
+    domains = {d["id"]: d for d in ctx.targets.get("domains") or []}
+    row = domains.get(domain)
+    if row is None:
+        raise ValueError(f"unsupported DVFS domain: {domain} (this variant: {', '.join(domains) or 'none'})")
+    if level not in {lv["level"] for lv in row["ladder"]}:
+        raise ValueError(f"{domain} has no OPP level L{level}")
+    ctx.config.dvfs_overrides = {**ctx.config.dvfs_overrides, domain: level}
+    return ("dvfs_level", domain)
+
+
 register(ChangeKind("output_size", "출력 크기", "size", "anchor_id", selector_optional=True,
                     description="녹화·미리보기 등 출력 surface 크기 (센서 입력은 유지)",
                     discover=lambda t: [{"id": a, "size": next(r["size"] for r in t["anchors"] if r["id"] == a),
@@ -461,11 +477,18 @@ register(ChangeKind("node_param", "IP 설정값", "value", "node_id", needs_para
                     apply=_apply_param))
 
 
+register(ChangeKind("dvfs_level", "DVFS level", "level", "domain", unit="L",
+                    description="domain OPP level 고정 — 같은 domain의 모든 IP가 그 level로 동작 (요구 clock보다 낮으면 timing 미달)",
+                    discover=lambda t: [{"id": d["id"], "level": d.get("level"), "mhz": d.get("mhz"), "ips": d.get("ips") or [],
+                                         "ladder": d.get("ladder") or []} for d in t.get("domains") or []],
+                    apply=_apply_dvfs))
+
+
 def param_max(param: str | None) -> float | None:
     return NODE_PARAMS.get(param or "", (None, None, None, None))[2]
 
 
-def apply_whatif_changes(graph, changes, config):
+def apply_whatif_changes(graph, changes, config, domains: list[dict] | None = None):
     """Return a detached graph/config. The loaded graph and all ORM JSON remain untouched."""
     candidate = replace(graph, scenario=deepcopy(graph.scenario), variant=deepcopy(graph.variant))
     variant = candidate.variant
@@ -473,7 +496,7 @@ def apply_whatif_changes(graph, changes, config):
     variant.size_overrides = deepcopy(variant.size_overrides or {})
     variant.buffer_overrides = deepcopy(variant.buffer_overrides or {})
     variant.design_conditions = deepcopy(variant.design_conditions or {})
-    ctx = _Apply(candidate, variant, config.model_copy(deep=True), whatif_targets(graph, config))
+    ctx = _Apply(candidate, variant, config.model_copy(deep=True), whatif_targets(graph, config, domains))
     stream_changes = [c.model_dump(exclude_none=True) if hasattr(c, "model_dump") else dict(c)
                       for c in changes if (c.target if hasattr(c, "target") else c["target"]) == "stream_size"]
     stream_sizes = {r["id"]: tuple(r["size"]) for r in ctx.targets["streams"]}
