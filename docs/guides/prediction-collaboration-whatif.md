@@ -7,7 +7,7 @@ Source: `ui/src/pages/ScenarioWhatIf.tsx`, `ui/src/components/PredictionCollabor
 
 ## 질문으로 조건 비교하기
 
-1. 과제, scenario, variant를 선택하고 **자연어 What-if**를 엽니다.
+1. 과제, scenario, variant를 선택하고 **What-if**를 엽니다.
 2. **조건 바꿔보기**, **어디까지 낮출 수 있나**, **병목 찾기** 중 질문 종류를 고릅니다.
 3. 조건 편집기에서 크기·FPS·IP clock 하한·DVFS domain level을 지정합니다.
    한계 탐색은 domain을 선택하고, 병목 진단은 현재 기준을 사용합니다.
