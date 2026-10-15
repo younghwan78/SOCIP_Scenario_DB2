@@ -876,6 +876,16 @@ tr.wi-focus th, tr.wi-focus td { background: #FFFBEB; }
 .wi-lineage { display: grid; gap: 8px; }
 .wi-lineage > div { display: grid; grid-template-columns: minmax(130px, 1fr) minmax(0, 3fr); gap: 12px; }
 .wi-lineage dd { margin: 0; overflow-wrap: anywhere; font-size: 12px; }
+.wi-asks { margin-top: 10px; }
+.wi-nl { margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px dashed var(--line); }
+.wi-domains { display: grid; gap: 6px; }
+.wi-chip { display: flex; gap: 6px; align-items: center; font-size: 13px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; width: fit-content; cursor: pointer; }
+.wi-chip.on { border-color: var(--accent, #2563EB); }
+.wi-presets { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.wi-presets .btn.on { border-color: var(--accent, #2563EB); font-weight: 600; }
+.wi-headline { font-size: 15px; line-height: 1.5; margin: 2px 0 6px; }
+.wi-interp-box { margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--line); }
+tr.wi-fail th, tr.wi-fail td { color: var(--del-text, #B91C1C); }
 
 /* ---------- Compare · CPU power difference causes ---------- */
 .cpu-diff { display: grid; gap: 14px; }

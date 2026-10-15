@@ -24,6 +24,8 @@ class WhatIfChange(BaseModel):
     node_id: str | None = Field(default=None, min_length=1, max_length=160)
     stream_id: str | None = Field(default=None, min_length=1, max_length=40)
     param: str | None = Field(default=None, min_length=1, max_length=60)
+    domain: str | None = Field(default=None, min_length=1, max_length=40)
+    level: int | None = Field(default=None, ge=0, le=255)
     width: int | None = Field(default=None, ge=16, le=16384)
     height: int | None = Field(default=None, ge=16, le=16384)
     value: float | None = Field(default=None, gt=0, allow_inf_nan=False)
@@ -38,11 +40,15 @@ class WhatIfChange(BaseModel):
             raise ValueError("size changes require width/height and no value")
         if kind.shape == "value" and (self.value is None or self.width is not None or self.height is not None):
             raise ValueError("FPS/clock changes require value and no width/height")
-        for name in ("anchor_id", "node_id", "stream_id"):
+        if kind.shape == "level" and (self.level is None or self.value is not None or self.width is not None or self.height is not None):
+            raise ValueError("DVFS level changes require level and no value/width/height")
+        if kind.shape != "level" and self.level is not None:
+            raise ValueError("level is only allowed for DVFS level changes")
+        for name in ("anchor_id", "node_id", "stream_id", "domain"):
             given = getattr(self, name) is not None
             if name == kind.selector and not given and not kind.selector_optional:
                 raise ValueError({"anchor_id": "anchor_size requires anchor_id", "node_id": "node changes require node_id",
-                                  "stream_id": "stream_size requires stream_id"}[name])
+                                  "stream_id": "stream_size requires stream_id", "domain": "dvfs_level requires domain"}[name])
             if name != kind.selector and given:
                 raise ValueError(f"{name} is only allowed for targets selected by {name}")
         if kind.needs_param != (self.param is not None):
@@ -79,13 +85,28 @@ class WhatIfPlanRequest(WhatIfModelSettings):
     query: str = Field(min_length=1, max_length=2000)
 
 
+class WhatIfAskRequest(WhatIfModelSettings):
+    """One question -> executed answer. ``changes`` / ``ask`` come from the condition builder and skip
+    interpretation; ``query`` alone is interpreted by the in-house LLM (when configured) into the same form."""
+    query: str = Field(default="", max_length=2000)
+    changes: list[WhatIfChange] | None = Field(default=None, max_length=8)
+    ask: Literal["what_if", "search_limit", "diagnose"] | None = None
+    search_domains: list[str] | None = Field(default=None, max_length=8)
+
+    @model_validator(mode="after")
+    def question_or_changes(self):
+        if not self.query.strip() and not self.changes and self.ask is None:
+            raise ValueError("query, changes or ask is required")
+        return self
+
+
 class WhatIfPreviewRequest(WhatIfModelSettings):
     changes: list[WhatIfChange] = Field(min_length=1, max_length=8)
     expected_baseline_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
 
     @model_validator(mode="after")
     def bounded_condition(self):
-        keys = [(c.target, c.anchor_id, c.node_id, c.stream_id, c.param) for c in self.changes]
+        keys = [(c.target, c.anchor_id, c.node_id, c.stream_id, c.param, c.domain) for c in self.changes]
         if len(keys) != len(set(keys)):
             raise ValueError("each change target can appear only once")
         return self

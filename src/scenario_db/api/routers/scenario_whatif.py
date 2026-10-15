@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from scenario_db.api.auth import ApiPrincipal, require_roles
 from scenario_db.api.deps import get_db
 from scenario_db.api.resource_limits import admission_slot, enforce_request_size, enforce_timeline_frame_limit
-from scenario_db.api.schemas.scenario_whatif import WhatIfExperimentRequest, WhatIfPlanRequest, WhatIfPreviewRequest, WhatIfScope
+from scenario_db.api.schemas.scenario_whatif import WhatIfAskRequest, WhatIfExperimentRequest, WhatIfPlanRequest, WhatIfPreviewRequest, WhatIfScope
 from scenario_db.api.services import scenario_whatif as service
 from scenario_db.config import get_settings
 
@@ -28,6 +28,15 @@ def plan(request: WhatIfPlanRequest, db: Session = Depends(get_db),
     settings = _limits(request)
     with admission_slot("simulation", settings.simulation_max_concurrent_runs):
         return service.plan(db, request)
+
+
+@router.post("/ask")
+def ask(request: WhatIfAskRequest, db: Session = Depends(get_db),
+        _principal: ApiPrincipal = Depends(calculate_access)):
+    """Question (in-house LLM) or builder conditions -> answer: what-if / DVFS level limit search / bottleneck."""
+    settings = _limits(request)
+    with admission_slot("simulation", settings.simulation_max_concurrent_runs):
+        return service.ask(db, request)
 
 
 def _limits(request):
