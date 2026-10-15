@@ -25,7 +25,7 @@ class WhatIfChange(BaseModel):
     stream_id: str | None = Field(default=None, min_length=1, max_length=40)
     param: str | None = Field(default=None, min_length=1, max_length=60)
     domain: str | None = Field(default=None, min_length=1, max_length=40)
-    level: int | None = Field(default=None, ge=0, le=255)
+    level: int | None = Field(default=None, ge=0, le=255, strict=True)
     width: int | None = Field(default=None, ge=16, le=16384)
     height: int | None = Field(default=None, ge=16, le=16384)
     value: float | None = Field(default=None, gt=0, allow_inf_nan=False)
@@ -97,6 +97,13 @@ class WhatIfAskRequest(WhatIfModelSettings):
     def question_or_changes(self):
         if not self.query.strip() and not self.changes and self.ask is None:
             raise ValueError("query, changes or ask is required")
+        keys = [(c.target, c.anchor_id, c.node_id, c.stream_id, c.param, c.domain) for c in self.changes or []]
+        if len(keys) != len(set(keys)):
+            raise ValueError("each change target can appear only once")
+        if self.ask in ("diagnose", "search_limit") and self.changes:
+            raise ValueError("changes are only supported for what_if")
+        if self.search_domains and self.ask != "search_limit":
+            raise ValueError("search_domains require search_limit")
         return self
 
 

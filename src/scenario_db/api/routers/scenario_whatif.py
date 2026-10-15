@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from scenario_db.api.auth import ApiPrincipal, require_roles
 from scenario_db.api.deps import get_db
 from scenario_db.api.resource_limits import admission_slot, enforce_request_size, enforce_timeline_frame_limit
-from scenario_db.api.schemas.scenario_whatif import WhatIfAskRequest, WhatIfExperimentRequest, WhatIfPlanRequest, WhatIfPreviewRequest, WhatIfScope
+from scenario_db.api.schemas.scenario_whatif import WhatIfAskRequest, WhatIfExperimentRequest, WhatIfModelSettings, WhatIfPlanRequest, WhatIfPreviewRequest, WhatIfScope
 from scenario_db.api.services import scenario_whatif as service
 from scenario_db.config import get_settings
 
@@ -19,7 +19,9 @@ def targets(project_ref: str = Query(..., min_length=1, max_length=160),
             scenario_id: str = Query(..., min_length=1, max_length=160),
             variant_id: str = Query(..., min_length=1, max_length=160), db: Session = Depends(get_db),
             _principal: ApiPrincipal = Depends(read_access)):
-    return service.targets(db, WhatIfScope(project_ref=project_ref, scenario_id=scenario_id, variant_id=variant_id))
+    settings = get_settings()
+    with admission_slot("simulation", settings.simulation_max_concurrent_runs):
+        return service.targets(db, WhatIfScope(project_ref=project_ref, scenario_id=scenario_id, variant_id=variant_id))
 
 
 @router.post("/plan")
@@ -28,6 +30,15 @@ def plan(request: WhatIfPlanRequest, db: Session = Depends(get_db),
     settings = _limits(request)
     with admission_slot("simulation", settings.simulation_max_concurrent_runs):
         return service.plan(db, request)
+
+
+@router.post("/targets")
+def configured_targets(request: WhatIfModelSettings, db: Session = Depends(get_db),
+                       _principal: ApiPrincipal = Depends(read_access)):
+    settings = _limits(request)
+    scope = WhatIfScope(**request.model_dump(include={"project_ref", "scenario_id", "variant_id"}))
+    with admission_slot("simulation", settings.simulation_max_concurrent_runs):
+        return service.targets(db, scope, request)
 
 
 @router.post("/ask")

@@ -12,6 +12,7 @@ from scenario_db.api.services import scenario_whatif as service
 from scenario_db.api.services import whatif_llm
 from scenario_db.api.services.whatif_conditions import apply_whatif_changes
 from scenario_db.sim.models import DVFSTable, SimulationRunConfig
+from scenario_db.exceptions import UnprocessableError
 from tests.unit.api.test_scenario_whatif import _graph
 from tests.unit.sim.test_timing_budget import DVFS_PATH
 
@@ -77,6 +78,101 @@ def test_diagnose_names_the_tightest_stage_and_domain_room(scope):
     assert {x["id"]: x["down"] for x in d["domains"]} == {"CAM": 0, "INT": 0, "INTCAM": 0}
     assert out["answer"]["verdict"] == "ok" and out["answer"]["headline"].startswith("가장 빠듯한 구간 ")
     assert out["answer"]["actions"] == []                           # nothing can go lower
+
+
+def test_configured_targets_follow_reopened_model_settings(scope):
+    settings = service.WhatIfModelSettings(**scope, config=FASTER)
+    t = service.targets(None, service.WhatIfScope(**scope), settings)
+    assert next(d for d in t["domains"] if d["id"] == "INTCAM")["level"] == 2
+
+
+@pytest.mark.parametrize("reply", [
+    {"changes": {}}, {"changes": True}, {"focus": {}}, {"search_domains": [["CAM"]]},
+    {"clarification": {"choices": {"label": "x"}}}, {"ask": "execute"},
+    {"clarification": {}},
+    {"clarification": {"choices": [{"change": {"target": "fps", "value": -1}}]}, "changes": [{"target": "fps", "value": 60}]},
+    {"ask": "search_limit", "search_domains": ["ghost"]},
+    {"ask": "diagnose", "changes": [{"target": "fps", "value": 60}]},
+    {"changes": [{"target": "fps", "value": 30}, {"target": "fps", "value": 60}]},
+])
+def test_malformed_llm_plans_do_not_execute_or_expand_scope(monkeypatch, reply):
+    _llm(monkeypatch, reply)
+    with pytest.raises(whatif_llm.LlmUnavailable):
+        whatif_llm.interpret("q", {"nodes": [], "anchors": [], "streams": [], "domains": []})
+
+
+@pytest.mark.parametrize("raw", [
+    {"target": "dvfs_level", "domain": "CAM", "shift": None},
+    {"target": "dvfs_level", "domain": "CAM", "shift": "bad"},
+    {"target": "dvfs_level", "domain": "CAM", "shift": True},
+    {"target": "dvfs_level", "domain": "CAM", "shift": 0.5},
+    {"target": "dvfs_level", "domain": "CAM", "pin": "typo"},
+    {"target": "dvfs_level", "domain": "CAM", "pin": "min", "shift": -1},
+    {"target": "dvfs_level", "domain": "CAM", "level": 255},
+    {"target": "node_clock_mhz", "node_id": "ip", "scale": {}},
+    {"target": "node_clock_mhz", "node_id": "ip", "scale": float("inf")},
+    {"target": "node_clock_mhz", "node_id": "ip", "scale": -1},
+])
+def test_invalid_relative_forms_are_reported_without_coercing_them(raw):
+    targets = {"domains": [{"id": "CAM", "index": 0, "level": 5, "mhz": 133,
+                            "ladder": [{"level": 5, "mhz": 133}]}],
+               "nodes": [{"id": "ip", "clock_mhz": 133}]}
+    change, problem, boundary = whatif_llm.resolve_change(raw, targets)
+    assert change is None and problem and not boundary
+
+
+def test_llm_numeric_values_are_normalized_before_engine_execution():
+    change, problem, _ = whatif_llm.resolve_change({"target": "fps", "value": "60"}, {})
+    assert not problem and change == {"target": "fps", "value": 60.0}
+
+
+def test_search_rejects_unknown_domains_and_bounds_total_cases(monkeypatch):
+    monkeypatch.setattr(service, "get_settings", lambda: SimpleNamespace(exploration_max_cases=2))
+    domains = [{"id": "CAM", "index": 3}]
+    with pytest.raises(UnprocessableError, match="unknown search"):
+        service._search_limit({}, domains, ["ghost"])
+    with pytest.raises(UnprocessableError, match="case limit"):
+        service._search_limit({}, domains, [])
+
+
+def test_dvfs_pins_require_an_available_domain(scope):
+    with pytest.raises(ValueError, match="unsupported DVFS"):
+        apply_whatif_changes(_graph(), [WhatIfChange(target="dvfs_level", domain="CAM", level=5)], SimulationRunConfig(), [])
+
+
+def test_ask_rejects_duplicate_or_incompatible_builder_fields():
+    scope = dict(project_ref="p", scenario_id="s", variant_id="v")
+    for payload in [dict(changes=[dict(target="fps", value=30), dict(target="fps", value=60)]),
+                    dict(ask="diagnose", changes=[dict(target="fps", value=60)]),
+                    dict(ask="what_if", search_domains=["CAM"])]:
+        with pytest.raises(ValidationError):
+            WhatIfAskRequest(**scope, **payload)
+
+
+def test_target_discovery_shares_admission_and_uses_requested_settings(monkeypatch):
+    from unittest.mock import MagicMock
+    from fastapi.testclient import TestClient
+    from scenario_db.api.app import create_app
+    from scenario_db.api.auth import ApiPrincipal, require_api_principal
+    from scenario_db.api.deps import get_db
+    from scenario_db.api.resource_limits import admission_slot
+    from scenario_db.api.routers import scenario_whatif as router
+    app = create_app()
+    app.dependency_overrides[get_db] = lambda: MagicMock()
+    app.dependency_overrides[require_api_principal] = lambda: ApiPrincipal("reader", frozenset({"reader"}))
+    monkeypatch.setattr(router, "get_settings", lambda: SimpleNamespace(simulation_max_concurrent_runs=1,
+        simulation_max_timeline_frames=12, exploration_max_request_bytes=100000))
+    fake = MagicMock(return_value={"domains": []})
+    monkeypatch.setattr(service, "targets", fake)
+    scope = dict(project_ref="p", scenario_id="s", variant_id="v")
+    with TestClient(app) as client:
+        with admission_slot("simulation", 1):
+            assert client.get("/api/v1/scenario-whatif/targets", params=scope).status_code == 429
+            assert client.post("/api/v1/scenario-whatif/targets", json=scope).status_code == 429
+        assert client.post("/api/v1/scenario-whatif/targets", json={**scope, "config": {"fps": 60}}).status_code == 200
+        assert fake.call_args.args[2].config.fps == 60
+        assert client.post("/api/v1/scenario-whatif/targets", json={**scope, "options": {"frames": 64}}).status_code == 422
+    fake.assert_called_once()
 
 
 def test_question_without_llm_returns_the_reason_and_no_answer(scope):

@@ -9,6 +9,7 @@ analyst/writer/admin. Actor identity comes from the API principal.
 | Endpoint | Behavior |
 | --- | --- |
 | `GET /targets` | Active size anchors, eligible nodes (with baseline applied clock and DVFS domain), streams, DVFS `domains` (resolved level, member IPs, OPP ladder slow→fast), registered change kinds, `asks`, `llm` availability, model capability, and baseline hash for an explicit project/scenario/variant. |
+| `POST /targets` | Same discovery using supplied `config`/`options`, including reopened experiment settings. Both target routes calculate a baseline under simulation admission/frame limits. |
 | `POST /ask` | One request → executed answer. Builder input (`ask` + `changes` / `search_domains`) runs directly; a `query` alone is interpreted by the in-house LLM into the same form. Returns `interpretation`, executed `plan`, `answer` (verdict, headline, facts, follow-up actions) and `result` / `search` / `diagnose`. Nothing is persisted. |
 | `POST /plan` | Legacy bounded-grammar interpretation (kept for API compatibility; the UI no longer uses it). |
 | `POST /preview` | Compare a baseline and detached candidate using the Timing Budget engine. |
@@ -47,6 +48,11 @@ domain down.
 | `diagnose` | — | Baseline report | Tightest stage and slack, its longest IPs, per-domain room to lower/raise |
 
 All numbers come from the Timing Budget engine; the answer text is composed on the server from them.
+Unknown search domains are rejected; an omitted domain list means all available domains.
+The upper bound on evaluated search cases must fit `exploration_max_cases`.
+Duplicate targets and fields incompatible with the selected question kind are rejected.
+Malformed LLM envelopes or conflicting conditions return `llm_unavailable`; invalid
+relative values and unavailable OPPs do not become executable conditions.
 
 Natural-language input (`query` without `ask`/`changes`) is sent to an in-house OpenAI-compatible
 `POST {SCENARIO_DB_WHATIF_LLM_BASE_URL}/chat/completions` (`_MODEL`, optional `_API_KEY`,

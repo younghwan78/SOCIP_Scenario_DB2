@@ -175,6 +175,7 @@ it('loads experiment conditions without running and keeps the saved model settin
   try {
     await act(async () => button(host, '조건 불러오기').click())
     expect(ask).not.toHaveBeenCalled()
+    expect(whatIfApi.targets).toHaveBeenLastCalledWith(scope, { config: { power_model: 'v1-vfps' }, options: { statistic: 'mean' } })
     expect(host.querySelector<HTMLSelectElement>('[aria-label="INTCAM level"]')!.value).toBe('4')
     await act(async () => button(host, '답 보기').click())
     expect(ask).toHaveBeenCalledWith({ ...scope, config: { power_model: 'v1-vfps' }, options: { statistic: 'mean' }, ask: 'what_if', changes: [level4] })

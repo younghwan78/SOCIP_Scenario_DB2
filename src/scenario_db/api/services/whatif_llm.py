@@ -12,9 +12,11 @@ from __future__ import annotations
 import json
 import re
 import time
+import math
 from typing import Any
 
 import httpx
+from pydantic import BaseModel, Field, ValidationError
 
 from scenario_db.config import get_settings
 
@@ -25,6 +27,16 @@ CODE_RE = re.compile(r"\b(?:select|insert|delete|drop\s+table|update\s+\w+\s+set
 
 class LlmUnavailable(Exception):
     """Endpoint not configured, unreachable, or the reply was unusable — the reason is shown to the user."""
+
+
+class _LlmPlan(BaseModel):
+    ask: str = "what_if"
+    changes: list[Any] = Field(default_factory=list, max_length=8)
+    search_domains: list[str] = Field(default_factory=list, max_length=8)
+    focus: list[str] = Field(default_factory=list, max_length=5)
+    unsupported: list[dict[str, Any]] = Field(default_factory=list, max_length=20)
+    notes: list[str] = Field(default_factory=list, max_length=5)
+    clarification: dict[str, Any] | None = None
 
 
 def llm_status() -> dict[str, Any]:
@@ -140,10 +152,18 @@ def resolve_change(raw: Any, targets: dict[str, Any]) -> tuple[dict | None, str 
             return None, f"이 variant에 없는 DVFS domain: {change.get('domain')} (있는 domain: {', '.join(domains) or '없음'})", None
         ladder, idx = d["ladder"], d["index"]
         if "shift" in change or "pin" in change:
+            if sum(k in change for k in ("shift", "pin", "level")) != 1:
+                return None, "DVFS level·shift·pin 중 하나만 지정하세요", None
             if "pin" in change:
-                j = 0 if change.pop("pin") == "min" else len(ladder) - 1
+                pin = change.pop("pin")
+                if pin not in ("min", "max"):
+                    return None, "pin은 min 또는 max여야 합니다", None
+                j = 0 if pin == "min" else len(ladder) - 1
             else:
-                j = idx + int(change.pop("shift"))
+                shift = change.pop("shift")
+                if not isinstance(shift, int) or isinstance(shift, bool):
+                    return None, "DVFS shift는 정수여야 합니다", None
+                j = idx + shift
             if not 0 <= j < len(ladder):
                 edge = ladder[0] if j < 0 else ladder[-1]
                 return None, None, (f"{d['id']}는 이미 {'최저' if j < 0 else '최고'} OPP L{edge['level']} ({edge['mhz']:g} MHz)라 "
@@ -155,11 +175,20 @@ def resolve_change(raw: Any, targets: dict[str, Any]) -> tuple[dict | None, str 
         node = next((n for n in targets.get("nodes") or [] if n["id"] == change.get("node_id")), None)
         if node is None or not node.get("clock_mhz"):
             return None, f"{change.get('node_id')}: 기준 clock이 없어 상대값을 MHz로 바꾸지 못했습니다", None
-        change["value"] = round(float(node["clock_mhz"]) * float(change.pop("scale")), 1)
+        scale = change.pop("scale")
+        try:
+            numeric_scale = float(scale) if isinstance(scale, (int, float)) and not isinstance(scale, bool) else float('nan')
+        except OverflowError:
+            numeric_scale = float('nan')
+        if not math.isfinite(numeric_scale) or numeric_scale <= 0 or "value" in change:
+            return None, "clock scale은 양의 유한수여야 하며 value와 함께 지정할 수 없습니다", None
+        change["value"] = round(float(node["clock_mhz"]) * numeric_scale, 1)
     try:
-        WhatIfChange(**change)
+        change = WhatIfChange(**change).model_dump(exclude_none=True)
     except (ValueError, TypeError) as exc:
         return None, f"조건 검증 실패: {str(exc).splitlines()[-1][:160]}", None
+    if target == "dvfs_level" and change.get("level") not in {lv["level"] for lv in d["ladder"]}:
+        return None, f"{d['id']}에 없는 OPP level", None
     ids = {"anchor_id": {a["id"] for a in targets.get("anchors") or []}, "node_id": {n["id"] for n in targets.get("nodes") or []},
            "stream_id": {st["id"] for st in targets.get("streams") or []}}
     for key, known in ids.items():
@@ -175,7 +204,17 @@ def interpret(query: str, targets: dict[str, Any]) -> dict[str, Any]:
     content, latency = _chat([{"role": "system", "content": SYSTEM},
                               {"role": "user", "content": "CATALOG:\n" + json.dumps(catalog(targets), ensure_ascii=False)
                                + "\n\nQUESTION:\n" + query.strip()}])
-    data = _json(content)
+    try:
+        data = _LlmPlan.model_validate(_json(content)).model_dump()
+        if data["ask"] not in ASKS:
+            raise LlmUnavailable("사내 LLM이 지원하지 않는 질문 종류를 반환했습니다")
+        if (data["ask"] != "what_if" and data["changes"]) or (data["ask"] != "search_limit" and data["search_domains"]):
+            raise LlmUnavailable("사내 LLM 응답의 질문 종류와 조건이 일치하지 않습니다")
+        cl = data.get("clarification")
+        if cl is not None and (not isinstance(cl.get("choices"), list) or not cl["choices"] or len(cl["choices"]) > 12):
+            raise LlmUnavailable("사내 LLM 확인 질문 형식이 올바르지 않습니다")
+    except ValidationError as exc:
+        raise LlmUnavailable("사내 LLM 응답 조건 형식이 올바르지 않습니다") from exc
     out: dict[str, Any] = {"ask": data.get("ask") if data.get("ask") in ASKS else "what_if", "changes": [], "search_domains": [],
                            "focus": [f for f in data.get("focus") or [] if f in FOCUS], "clarification": None,
                            "ignored": [], "notes": [str(n)[:300] for n in data.get("notes") or [] if n][:5], "boundaries": [],
@@ -183,7 +222,7 @@ def interpret(query: str, targets: dict[str, Any]) -> dict[str, Any]:
     for item in data.get("unsupported") or []:
         if isinstance(item, dict) and item.get("text"):
             out["ignored"].append({"text": str(item["text"])[:300], "reason": str(item.get("reason") or "모델 범위 밖")[:300]})
-    seen: set[tuple] = set()
+    seen: dict[tuple, dict] = {}
     for raw in (data.get("changes") or [])[:8]:
         change, problem, boundary = resolve_change(raw, targets)
         if boundary:
@@ -192,10 +231,14 @@ def interpret(query: str, targets: dict[str, Any]) -> dict[str, Any]:
             out["ignored"].append({"text": json.dumps(raw, ensure_ascii=False)[:200], "reason": problem})
         elif change is not None:
             key = tuple(change.get(k) for k in ("target", "anchor_id", "node_id", "stream_id", "param", "domain"))
+            if key in seen and seen[key] != change:
+                raise LlmUnavailable("같은 대상에 서로 다른 조건이 있습니다. 조건 편집기에서 하나를 선택하세요")
             if key not in seen:
-                seen.add(key)
+                seen[key] = change
                 out["changes"].append(change)
     domain_ids = {d["id"] for d in targets.get("domains") or []}
+    if any(d not in domain_ids for d in data.get("search_domains") or []):
+        raise LlmUnavailable("사내 LLM이 이 variant에 없는 탐색 domain을 반환했습니다")
     out["search_domains"] = [d for d in data.get("search_domains") or [] if d in domain_ids]
     cl = data.get("clarification")
     if isinstance(cl, dict) and cl.get("choices"):
@@ -208,6 +251,8 @@ def interpret(query: str, targets: dict[str, Any]) -> dict[str, Any]:
                 choices.append({"label": str(ch.get("label") or change.get("target"))[:120], "change": change})
         if choices:
             out["clarification"] = {"message": str(cl.get("message") or "선택이 필요합니다")[:300], "choices": choices}
+        else:
+            raise LlmUnavailable("사내 LLM 확인 질문에 유효한 선택지가 없습니다")
     if out["ask"] == "search_limit" and not out["search_domains"]:
         out["notes"].append("탐색할 DVFS domain을 찾지 못해 모든 domain을 탐색합니다.")
     return out

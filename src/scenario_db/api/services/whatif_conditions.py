@@ -436,12 +436,11 @@ def _apply_dvfs(ctx: _Apply, data: dict) -> tuple:
     """Pin a DVFS domain to an OPP level (every IP of the shared domain runs at that level)."""
     domain, level = data["domain"], data["level"]
     domains = {d["id"]: d for d in ctx.targets.get("domains") or []}
-    if domains:
-        row = domains.get(domain)
-        if row is None:
-            raise ValueError(f"unsupported DVFS domain: {domain} (this variant: {', '.join(domains) or 'none'})")
-        if level not in {lv["level"] for lv in row["ladder"]}:
-            raise ValueError(f"{domain} has no OPP level L{level}")
+    row = domains.get(domain)
+    if row is None:
+        raise ValueError(f"unsupported DVFS domain: {domain} (this variant: {', '.join(domains) or 'none'})")
+    if level not in {lv["level"] for lv in row["ladder"]}:
+        raise ValueError(f"{domain} has no OPP level L{level}")
     ctx.config.dvfs_overrides = {**ctx.config.dvfs_overrides, domain: level}
     return ("dvfs_level", domain)
 

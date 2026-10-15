@@ -297,10 +297,16 @@ def _change_text(change: dict, targets: dict) -> str:
 
 def _search_limit(base: dict, domains: list[dict], ids: list[str]) -> list[dict[str, Any]]:
     """Lower each domain one OPP level at a time until timing fails (the engine verdict decides)."""
+    unknown = set(ids) - {d["id"] for d in domains}
+    if unknown:
+        raise UnprocessableError(f"unknown search domains: {', '.join(sorted(unknown))}")
+    selected = [d for d in domains if not ids or d["id"] in ids]
+    if sum(d["index"] for d in selected) > get_settings().exploration_max_cases:
+        raise UnprocessableError("What-if search exceeds the exploration case limit")
     graph, config, options, tables, ref = base["graph"], base["config"], base["options"], base["tables"], base["ref"]
     base_mw = base["case"]["metrics"]["modeled_power_mw"]
     out = []
-    for d in [d for d in domains if not ids or d["id"] in ids]:
+    for d in selected:
         rows = []
         for j in range(d["index"] - 1, -1, -1):
             lv = d["ladder"][j]

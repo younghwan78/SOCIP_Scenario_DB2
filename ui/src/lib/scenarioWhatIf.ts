@@ -86,7 +86,9 @@ export interface WhatIfExperiment {
 export interface ExperimentDraft { title: string; purpose: string; description: string; assumptions: string; conclusion: string; visibility: 'private' | 'shared' }
 const path = '/scenario-whatif'
 export const whatIfApi = {
-  targets: (scope: WhatIfScope) => getJson<WhatIfTargets>(`${path}/targets`, { ...scope }, false),
+  targets: (scope: WhatIfScope, settings: Pick<PreviewRequest, 'config' | 'options'> = {}) => settings.config || settings.options
+    ? postJson<WhatIfTargets>(`${path}/targets`, { ...scope, ...settings })
+    : getJson<WhatIfTargets>(`${path}/targets`, { ...scope }, false),
   plan: (scope: WhatIfScope, query: string, settings: Pick<PreviewRequest, 'config' | 'options'> = {}) => postJson<WhatIfPlan>(`${path}/plan`, { ...scope, query, ...settings }),
   preview: (body: PreviewRequest) => postJson<WhatIfResult>(`${path}/preview`, body),
   /** builder conditions or a question (in-house LLM) -> executed answer */

@@ -75,7 +75,8 @@ function WhatIfBody({ scope }: { scope: WhatIfScope }) {
   const [tick, setTick] = useState(0)
   const [offset, setOffset] = useState(0)
   const [basisTick, setBasisTick] = useState(0)
-  const targetsQ = useAsync(() => whatIfApi.targets(scope), [scope.project_ref, scope.scenario_id, scope.variant_id, basisTick])
+  const [modelSettings, setModelSettings] = useState<Pick<PreviewRequest, 'config' | 'options'>>({})
+  const targetsQ = useAsync(() => whatIfApi.targets(scope, modelSettings), [scope.project_ref, scope.scenario_id, scope.variant_id, basisTick, modelSettings])
   const savedQ = useAsync(() => whatIfApi.experiments(scope, offset), [scope.project_ref, scope.scenario_id, scope.variant_id, offset, tick, credential])
   const t = targetsQ.data
   const kinds = useMemo(() => kindsOf(t), [t])
@@ -90,7 +91,6 @@ function WhatIfBody({ scope }: { scope: WhatIfScope }) {
   const [resp, setResp] = useState<AskResponse | null>(null)
   const [dirty, setDirty] = useState(false)
   const [request, setRequest] = useState<PreviewRequest | null>(null)
-  const [modelSettings, setModelSettings] = useState<Pick<PreviewRequest, 'config' | 'options'>>({})
   const [draft, setDraft] = useState<ExperimentDraft>({ ...emptyDraft })
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
