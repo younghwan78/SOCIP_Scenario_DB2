@@ -234,7 +234,7 @@ export interface SimRunRequest {
   persist?: boolean
   expected_params_hash?: string
 }
-export interface SimRunResponse { evidence_id: string; kpi: Dict; warnings?: string[]; persisted?: boolean; cached?: boolean; params_hash?: string; evidence?: Dict | null; result?: { power_breakdown?: Dict | null } | null }
+export interface SimRunResponse { evidence_id: string; kpi: Dict; warnings?: string[]; persisted?: boolean; cached?: boolean; params_hash?: string; evidence?: Dict | null; result?: { power_breakdown?: Dict | null; cpu_breakdown?: Dict[] | null } | null }
 
 const enc = encodeURIComponent
 

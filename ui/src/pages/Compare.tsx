@@ -1,9 +1,9 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { Ctx } from '../App'
 import { api, type Dict, type Evidence, type ScenarioDef, type VariantRow, type ViewResponse } from '../lib/api'
 import { useAsync } from '../lib/route'
 import { MISSING, evidenceSource, valueText, varyingKeys } from '../lib/conditions'
-import { compareItems, formatItems, type CompareItem } from '../lib/projects'
+import { compareItems, formatItems, loadCompareSet, saveCompareSet, type CompareItem } from '../lib/projects'
 import { insights, itemLabels, nodeIps, nodeSizes, pixels, type Insight } from '../lib/compare'
 import { memoryText } from '../lib/graph'
 import { buildModel, trafficByIp, type PipelineModel } from '../lib/model'
@@ -24,6 +24,9 @@ import { useBatteries, useBattery } from '../lib/battery'
 import { runPreview } from '../lib/simRun'
 import { useSimRuns } from '../lib/useSimRuns'
 import { SimSaveLine } from '../components/SimSave'
+import { Card } from '../components/TimingCharts'
+import { CpuDiffView } from '../components/CpuDiff'
+import { cpuSideOf } from '../lib/cpuDiff'
 
 const KPI_FIELDS: [string, string, string][] = [
   ['Total power', 'total_power_mw', 'mW'], ['Core power', 'core_power_mw', 'mW'], ['BW power', 'bw_power_mw', 'mW'],
@@ -73,7 +76,12 @@ const num = (s: string | null): number | null => { if (s === null) return null; 
 
 
 export function ComparePage({ ctx }: { ctx: Ctx }) {
-  const cItems: CompareItem[] = compareItems(ctx.params, ctx.scenario, ctx.variant)
+  // The compare set lives in the URL (shareable) and is kept in storage until cleared, so leaving
+  // the page and coming back (sidebar link / another page) restores it instead of resetting.
+  const [kept, setKept] = useState(() => (ctx.params.items || ctx.params.variants ? '' : loadCompareSet()))
+  useEffect(() => { if (kept) ctx.navigate(undefined, { items: kept, variants: undefined }, true) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (ctx.params.items) saveCompareSet(ctx.params.items) }, [ctx.params.items])
+  const cItems: CompareItem[] = compareItems(kept && !ctx.params.items ? { ...ctx.params, items: kept } : ctx.params, ctx.scenario, ctx.variant)
   const ids = cItems.map((it) => `${it.scenario}~${it.variant}`)
   const key = ids.join(',')
   const battery = useBattery(ctx.project, ctx.params.cfg)
@@ -89,7 +97,7 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
   const detailsQ = useAsync(() => Promise.all(cItems.map((it) => api.variant(it.scenario, it.variant))), [key])
   const [evTick, setEvTick] = useState(0)
   const evQ = useAsync(() => Promise.all(cItems.map((it) => api.evidenceList(it.scenario, it.variant, catOf(it.scenario)?.project_id).then((r) => r.items))), [key, ctx.allCatalog.length, evTick])
-  const [onlyDiff, setOnlyDiff] = useState(true)
+  const [onlyDiff, setOnlyDiff] = usePref('compare.onlyDiff', true)
   const [orient, setOrient] = usePref<'items' | 'variants'>('compare.orient', 'items')
   const [show, setShow] = usePref<'both' | 'table' | 'plot'>('compare.show', 'both')
   const simRuns = useSimRuns()
@@ -167,6 +175,12 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
     const { pb, source } = powerOf(i)
     return { id, label: labels[id] ?? id, parts: powerModelParts(pb), sub: [source, mifSummary(pb), cpuSource(pb)].filter(Boolean).join(' · ') || null }
   }).filter((r) => r.parts.length > 0)
+  // CPU side per item: task rows from a same-session simulation (cause split), else the breakdown totals
+  const cpuSides = ids.map((id, i) => {
+    const st = sims[id]
+    const result = st?.status === 'done' ? (st.res.result as Dict | null | undefined) : null
+    return cpuSideOf(result, powerOf(i).pb)
+  })
   const noKpi = ids.map((_, i) => i).filter((i) => evQ.data && kpiMode !== 'pred' && (kpiMode === 'sim' || !evidence[i]) && sims[ids[i]]?.status !== 'done' && sims[ids[i]]?.status !== 'running')
   const mixed = kpiMode === 'evidence' && new Set(ids.map((_, i) => kpiOf(i).source).filter(Boolean)).size > 1
   const stream = (i: number, id: string): CadenceResult | undefined => cadences[i]?.results.find((r) => r.stream.id === id)
@@ -268,6 +282,8 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
 
   const setItems = (next: CompareItem[]) => ctx.navigate(undefined, { items: formatItems(next), variants: undefined })
   const remove = (i: number) => setItems(cItems.filter((_, n) => n !== i))
+  /** 비교 초기화: forget the kept set and start again from the current variant. */
+  const clearSet = () => { saveCompareSet(undefined); setKept(''); ctx.navigate(undefined, { items: undefined, variants: undefined }) }
   const makeRef = (i: number) => setItems([cItems[i], ...cItems.filter((_, n) => n !== i)])
   const condDiff = selected.map((r) => varying.filter((k) => valueText(r.design_conditions[k]) !== valueText(selected[0]?.design_conditions[k])).length)
   const found: Insight[] = insights({
@@ -342,28 +358,31 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
     </div>
   )
   const plots = (
-    <div className="plot-grid">
-      <section className="panel plot-card"><h3>KPI · 기준(점선) 대비 <span className="faint">evidence KPI · 없으면 즉석 예측</span></h3>
+    <div className="tb-page"><div className="tb-grid">
+      <Card id="cmp.kpi" title="KPI · 기준(점선) 대비" note="evidence KPI · 없으면 즉석 예측">
         {kpiRows.length ? kpiRows.map((r) => (
           <div key={r.field} className="kpi-mini"><div className="faint" style={{ fontSize: 11.5 }}>{r.label} ({r.unit})</div>
             <Bars unit={r.unit} base={r.values[0]} labelW={150} title={r.label} lowerIsBetter={r.field !== 'fps_effective'} data={ids.map((id, i) => {
               const v = r.values[i], b = r.values[0]
               return { id, label: labels[id], value: v, color: color(i), note: i > 0 && v !== null && b ? `(${v >= b ? '+' : ''}${(((v - b) / b) * 100).toFixed(1)}%)` : undefined }
             })} /></div>)) : <div className="empty">KPI evidence 없음 — 분석 요약의 “예측 실행”으로 계산</div>}
-      </section>
-      <section className="panel plot-card pm-card"><h3>전력 구성 · 어디서 달라지나 <span className="faint">CPU(cluster) · IP(동작/leakage/clock 초과) · 메모리(traffic/MIF base) · ★ 기준 대비</span></h3>
+      </Card>
+      <Card id="cmp.power" title="전력 구성 · 어디서 달라지나" note="CPU(cluster) · IP(동작/leakage/clock 초과) · 메모리(traffic/MIF base) · ★ 기준 대비" defaultWide>
         {powerRows.length ? <>
           <PowerStack rows={powerRows} />
           {powerRows.length > 1 && <details open style={{ marginTop: 6 }}><summary className="faint" style={{ fontSize: 12 }}>구성별 값 · 기준 대비 Δ</summary><PowerDeltaTable rows={powerRows} /></details>}
         </> : <div className="empty">예측 evidence 없음 — 분석 요약의 “예측 실행”으로 계산하면 구성이 표시됩니다</div>}
-      </section>
-      <section className="panel plot-card"><h3>DMA traffic by IP (W+R MB/s) <span className="faint">view memory × fps · stat/size 미정 제외</span></h3>
-        <StackedBars unit="MB/s" rows={dmaStack} labelW={150} /></section>
-      <section className="panel plot-card"><h3>출력 buffer 간격 / target period (%) <span className="faint">100% = fps 충족 · 분포 폭 = jitter</span></h3>
-        {cadRows.length ? <BoxPlot rows={cadRows} unit="%" target={100} targetLabel="100% (target)" labelW={170} /> : <div className="empty">timeline evidence 없음</div>}</section>
-      <section className="panel plot-card"><h3>Sensor → Preview 지연 (ms)</h3>
-        {latRows.length ? <BoxPlot rows={latRows} labelW={170} /> : <div className="empty">timeline evidence 없음</div>}</section>
-    </div>
+      </Card>
+      <Card id="cmp.cpu" title="CPU 예측 전력 · 차이 원인" note="★ 대비 Δ = SW 부하 + 주기(fps) + cluster 배치·계수 + task 추가/제거 · task별 근거" defaultWide>
+        <CpuDiffView ids={ids} labels={labels} color={color} sides={cpuSides} />
+      </Card>
+      <Card id="cmp.dma" title="DMA traffic by IP (W+R MB/s)" note="view memory × fps · stat/size 미정 제외">
+        <StackedBars unit="MB/s" rows={dmaStack} labelW={150} /></Card>
+      <Card id="cmp.cadence" title="출력 buffer 간격 / target period (%)" note="100% = fps 충족 · 분포 폭 = jitter">
+        {cadRows.length ? <BoxPlot rows={cadRows} unit="%" target={100} targetLabel="100% (target)" labelW={170} /> : <div className="empty">timeline evidence 없음</div>}</Card>
+      <Card id="cmp.latency" title="Sensor → Preview 지연 (ms)">
+        {latRows.length ? <BoxPlot rows={latRows} labelW={170} /> : <div className="empty">timeline evidence 없음</div>}</Card>
+    </div></div>
   )
 
   return (
@@ -379,6 +398,7 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
           </span>
         ))}
         <button className="btn" onClick={() => ctx.openPicker('compare')} title="과제 · scenario · variant 선택 (여러 과제/scenario 혼합 가능)">+ 항목 추가 (Ctrl K)</button>
+        {ids.length > 1 && <button className="btn" onClick={clearSet} title="비교 세트는 다른 화면에 다녀와도 유지됩니다. 초기화하면 현재 variant 하나로 다시 시작합니다.">비교 초기화</button>}
         <span className="grow" />
         <div className="seg sm" role="group" aria-label="표시">
           {([['both', 'Plot + 표'], ['table', '표'], ['plot', 'Plot']] as const).map(([k, l]) => <button key={k} className={show === k ? 'on' : ''} onClick={() => setShow(k)}>{l}</button>)}
