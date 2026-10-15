@@ -23,6 +23,7 @@ import { DataTable, type Column } from '../components/DataTable'
 import { useWidth } from '../components/Charts'
 import { rememberRecent } from '../components/Picker'
 import { PageLayout, Resizer, usePref } from '../components/Layout'
+import { addItem, formatItems, loadCompareSet, parseItems } from '../lib/projects'
 
 type Lens = 'sequence' | 'dma' | 'ip'
 type Mode = 'split' | 'graph' | 'timing'
@@ -286,7 +287,7 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
           {model && <span className="chip" title="이 variant에서 켜진 memory power lever (buffer / 연결 수)">
             <span className="lv-row">{model.levers.llc > 0 && <LeverTag k="llc" text={`LLC ${model.levers.llc}`} />}{model.levers.sbwc > 0 && <LeverTag k="sbwc" text={`SBWC ${model.levers.sbwc}`} />}
               {model.levers.votf > 0 && <LeverTag k="votf" text={`vOTF ${model.levers.votf}`} />}{!model.levers.llc && !model.levers.sbwc && !model.levers.votf && <span className="faint">LLC · SBWC · vOTF 없음</span>}</span></span>}</>}
-        <button className="btn" onClick={() => ctx.navigate('compare', { items: `${scenario}~${variant}`, variants: undefined })}>Compare에 추가</button>
+        <button className="btn" onClick={() => ctx.navigate('compare', { items: formatItems(addItem(parseItems(loadCompareSet()), { scenario, variant })), variants: undefined })}>Compare에 추가</button>
       </div>
       <div className="lens-hint"><b>{LENS.find((l) => l.id === lens)?.label}</b> {LENS.find((l) => l.id === lens)?.hint}</div>
       {graph && lens === 'dma' && mode !== 'timing' && <div className="facet-row">

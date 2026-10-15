@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import type { Ctx } from '../App'
 import { api, type Dict, type Evidence, type ScenarioDef, type VariantRow, type ViewResponse } from '../lib/api'
 import { useAsync } from '../lib/route'
 import { MISSING, evidenceSource, valueText, varyingKeys } from '../lib/conditions'
-import { compareItems, formatItems, loadCompareSet, saveCompareSet, type CompareItem } from '../lib/projects'
+import { formatItems, type CompareItem } from '../lib/projects'
+import { useCompareSet } from '../lib/useCompareSet'
 import { insights, itemLabels, nodeIps, nodeSizes, pixels, type Insight } from '../lib/compare'
 import { memoryText } from '../lib/graph'
 import { buildModel, trafficByIp, type PipelineModel } from '../lib/model'
@@ -76,12 +77,7 @@ const num = (s: string | null): number | null => { if (s === null) return null; 
 
 
 export function ComparePage({ ctx }: { ctx: Ctx }) {
-  // The compare set lives in the URL (shareable) and is kept in storage until cleared, so leaving
-  // the page and coming back (sidebar link / another page) restores it instead of resetting.
-  const [kept, setKept] = useState(() => (ctx.params.items || ctx.params.variants ? '' : loadCompareSet()))
-  useEffect(() => { if (kept) ctx.navigate(undefined, { items: kept, variants: undefined }, true) }, []) // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (ctx.params.items) saveCompareSet(ctx.params.items) }, [ctx.params.items])
-  const cItems: CompareItem[] = compareItems(kept && !ctx.params.items ? { ...ctx.params, items: kept } : ctx.params, ctx.scenario, ctx.variant)
+  const { items: cItems, clear: clearSet } = useCompareSet(ctx)
   const ids = cItems.map((it) => `${it.scenario}~${it.variant}`)
   const key = ids.join(',')
   const battery = useBattery(ctx.project, ctx.params.cfg)
@@ -178,8 +174,10 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
   // CPU side per item: task rows from a same-session simulation (cause split), else the breakdown totals
   const cpuSides = ids.map((id, i) => {
     const st = sims[id]
-    const result = st?.status === 'done' ? (st.res.result as Dict | null | undefined) : null
-    return cpuSideOf(result, powerOf(i).pb)
+    const pb = powerOf(i).pb
+    // Task rows and totals must come from the same selected result.
+    const result = st?.status === 'done' && pb === st.res.result?.power_breakdown ? st.res.result as Dict : null
+    return cpuSideOf(result, pb)
   })
   const noKpi = ids.map((_, i) => i).filter((i) => evQ.data && kpiMode !== 'pred' && (kpiMode === 'sim' || !evidence[i]) && sims[ids[i]]?.status !== 'done' && sims[ids[i]]?.status !== 'running')
   const mixed = kpiMode === 'evidence' && new Set(ids.map((_, i) => kpiOf(i).source).filter(Boolean)).size > 1
@@ -282,8 +280,6 @@ export function ComparePage({ ctx }: { ctx: Ctx }) {
 
   const setItems = (next: CompareItem[]) => ctx.navigate(undefined, { items: formatItems(next), variants: undefined })
   const remove = (i: number) => setItems(cItems.filter((_, n) => n !== i))
-  /** 비교 초기화: forget the kept set and start again from the current variant. */
-  const clearSet = () => { saveCompareSet(undefined); setKept(''); ctx.navigate(undefined, { items: undefined, variants: undefined }) }
   const makeRef = (i: number) => setItems([cItems[i], ...cItems.filter((_, n) => n !== i)])
   const condDiff = selected.map((r) => varying.filter((k) => valueText(r.design_conditions[k]) !== valueText(selected[0]?.design_conditions[k])).length)
   const found: Insight[] = insights({

@@ -37,7 +37,8 @@ const obj = (v: unknown): Dict => (v && typeof v === 'object' && !Array.isArray(
 /** CPU side of one compare item: task rows from a simulation result when present, else the power_breakdown totals. */
 export function cpuSideOf(result: Dict | null | undefined, pb: Dict | null | undefined): CpuSide | null {
   const cpu = obj(pb?.cpu ?? obj(result?.power_breakdown).cpu)
-  const raw = Array.isArray(result?.cpu_breakdown) ? (result!.cpu_breakdown as Dict[]) : null
+  const sameResult = pb == null || pb === result?.power_breakdown
+  const raw = sameResult && Array.isArray(result?.cpu_breakdown) ? (result!.cpu_breakdown as Dict[]) : null
   const rows = raw?.filter((r) => typeof r.task === 'string' && typeof r.power_mw === 'number')
     .map((r): CpuTaskRow => ({ task: String(r.task), cluster: String(r.cluster ?? ''), power_mw: num(r.power_mw), active_ms: num(r.active_ms), util: num(r.util),
       wall_ms: typeof r.wall_ms === 'number' ? r.wall_ms : undefined, invocations_per_frame: typeof r.invocations_per_frame === 'number' ? r.invocations_per_frame : undefined,
@@ -47,7 +48,8 @@ export function cpuSideOf(result: Dict | null | undefined, pb: Dict | null | und
   if (rows?.length) for (const r of rows) byTask[r.task] = (byTask[r.task] ?? 0) + r.power_mw
   else for (const [k, v] of Object.entries(obj(cpu.by_task))) byTask[k] = num(v)
   const byCluster: Record<string, number> = Object.fromEntries(Object.entries(obj(cpu.by_cluster)).map(([k, v]) => [k, num(v)]))
-  const total = num(cpu.total_mw) || Object.values(byCluster).reduce((a, b) => a + b, 0) || Object.values(byTask).reduce((a, b) => a + b, 0)
+  const total = typeof cpu.total_mw === 'number' && Number.isFinite(cpu.total_mw) ? cpu.total_mw
+    : Object.values(byCluster).reduce((a, b) => a + b, 0) || Object.values(byTask).reduce((a, b) => a + b, 0)
   if (!total && !rows?.length && !Object.keys(byTask).length) return null
   return { total, rows: rows?.length ? rows : null, byTask, byCluster, source: typeof cpu.source === 'string' ? cpu.source : rows?.[0]?.source ?? null }
 }
@@ -87,9 +89,10 @@ export function cpuDiff(base: CpuSide, cand: CpuSide): CpuDiff {
         e.load = (kb * (cc.active - bb.active)) / Tb
         e.period = kb * cc.active * (1 / Tc - 1 / Tb)
         e.coef = ((kc - kb) * cc.active) / Tc
-      } else e.load = delta
+      } else e.unsplit = delta
       for (const [k, v] of Object.entries(e)) effects[k as CpuEffect] += v ?? 0
       const reasons: string[] = []
+      if (e.unsplit !== undefined) reasons.push('실행 시간·사용률 근거 부족 (원인 미분해)')
       if (bb.wall !== undefined && cc.wall !== undefined && Math.abs(cc.wall - bb.wall) > 1e-3) reasons.push(`SW 실행 ${f(bb.wall)}→${f(cc.wall)} ms`)
       if (bb.inv !== undefined && cc.inv !== undefined && bb.inv !== cc.inv) reasons.push(`호출 ${f(bb.inv, 1)}→${f(cc.inv, 1)}회/frame`)
       if (bb.ratio !== undefined && cc.ratio !== undefined && Math.abs(bb.ratio - cc.ratio) > 1e-3) reasons.push(`CPU active ${(bb.ratio * 100).toFixed(0)}→${(cc.ratio * 100).toFixed(0)}%`)
