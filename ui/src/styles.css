@@ -879,6 +879,7 @@ tr.wi-focus th, tr.wi-focus td { background: #FFFBEB; }
 
 /* ---------- Compare · CPU power difference causes ---------- */
 .cpu-diff { display: grid; gap: 14px; }
+.cpu-diff-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .cpu-diff-item { display: grid; gap: 6px; }
 .cpu-diff-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 13px; }
 .cpu-up { color: #B91C1C; } .cpu-down { color: #15803D; }
