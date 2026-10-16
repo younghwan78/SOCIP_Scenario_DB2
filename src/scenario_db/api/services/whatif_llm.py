@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from scenario_db.config import get_settings
 
-ASKS = ("what_if", "search_limit", "diagnose")
+ASKS = ("what_if", "combine", "search_limit", "diagnose")
 FOCUS = ("power", "clock", "bw", "timing", "feasible")
 CODE_RE = re.compile(r"\b(?:select|insert|delete|drop\s+table|update\s+\w+\s+set|exec|eval)\b|[;`{}]", re.I)
 
@@ -51,8 +51,8 @@ You never compute or guess results. Use only the targets listed in CATALOG; neve
 
 Return ONLY a JSON object:
 {
-  "ask": "what_if" | "search_limit" | "diagnose",
-  "changes": [ ... ],            // what_if only, at most 8
+  "ask": "what_if" | "combine" | "search_limit" | "diagnose",
+  "changes": [ ... ],            // what_if / combine only, at most 8
   "search_domains": ["..."],     // search_limit only: DVFS domain ids to lower step by step
   "focus": ["power"|"clock"|"bw"|"timing"|"feasible"],
   "clarification": null | {"message": "...", "choices": [{"label": "...", "change": {...}}]},
@@ -67,11 +67,18 @@ Change forms (pick the ones the question asks for; leave everything else unchang
   {"target":"output_size","anchor_id":A,"width":W,"height":H}
   {"target":"fps","value":F}
   {"target":"node_size","node_id":IP,"width":W,"height":H} | {"target":"stream_size","stream_id":S,"width":W,"height":H}
+  {"target":"sensor_mode","node_id":SENSOR,"option":ID}          // another sensor / DT mode (ids in levers.sensors)
+  {"target":"chain_size","node_id":IP,"width":W,"height":H}      // crop/downscale at IP (bayer crop at BYRP, YUV downscale at YUVSC)
+  {"target":"power_knob","param":KNOB,"option":VALUE}            // declared power option, e.g. pyramid_l0=skip (MTNR L0 bypass)
+  {"target":"history_interval","value":N} | {..., "buffer_id":B} // previous-frame DMA once every N frames (30fps -> 15fps = 2)
+  {"target":"ip_mode","node_id":IP,"option":MODE}
+  {"target":"compression","buffer_id":B,"option":MODE}           // COMP_OFF or a listed SBWC mode (lossless / lossy …)
 Rules:
 - "level/단계/OPP 낮추면" on a domain = dvfs_level shift. "어디까지/몇 단계까지/한계" = search_limit. "병목/어디가 빡빡/여유가 제일 적은" = diagnose.
 - Sizes: FHD 1920x1080, UHD/4K 3840x2160, QHD 2560x1440, HD 1280x720, 8K 7680x4320. A bare size in a recording scenario means the record output.
 - If a needed value or target is genuinely ambiguous, return a clarification whose every choice carries a complete change.
-- Codec/bitrate, compression/LLC, feature on/off (EIS, HDR), voltage, CPU placement and sensor modes are NOT changes: list them in "unsupported".
+- "N개 조합 비교 / 같이 적용하면 vs 각각" = ask "combine" with the levers as changes.
+- Codec/bitrate, LLC, feature on/off (EIS, HDR), voltage and CPU placement are NOT changes: list them in "unsupported".
 """
 
 
@@ -87,6 +94,16 @@ def catalog(targets: dict[str, Any]) -> dict[str, Any]:
         "outputs": [{"id": a["id"], "size": a["size"], "role": a.get("role")} for a in targets.get("anchors") or []
                     if a.get("kind") == "output" and a.get("supported")],
         "streams": [{"id": st["id"], "size": st["size"], "primary": st.get("primary")} for st in targets.get("streams") or []],
+        "levers": {
+            "sensors": [{"node": r["node_id"], "current": r["options"][0]["id"] if r["options"] else None,
+                         "options": [o["id"] for o in r["options"][:12]]} for r in targets.get("sensors") or []],
+            "crop_downscale_at": [{"node": r["id"], "size": r["size"], "downstream": r["downstream"]} for r in targets.get("chains") or []],
+            "power_knobs": [{"param": r["param"], "current": r["current"], "options": [o["id"] for o in r["options"]]} for r in targets.get("knobs") or []],
+            "history_buffers": [r["id"] for r in targets.get("history") or []],
+            "ip_modes": [{"node": r["id"], "current": r["mode"], "options": [o["id"] for o in r["options"]]} for r in targets.get("ip_modes") or []],
+            "compression": [{"buffer": r["id"], "current": r["current"], "options": [o["id"] for o in r["options"] if o["supported"] is not False]}
+                            for r in targets.get("buffers") or [] if r["declared"]],
+        },
     }
 
 
@@ -189,8 +206,10 @@ def resolve_change(raw: Any, targets: dict[str, Any]) -> tuple[dict | None, str 
         return None, f"조건 검증 실패: {str(exc).splitlines()[-1][:160]}", None
     if target == "dvfs_level" and change.get("level") not in {lv["level"] for lv in d["ladder"]}:
         return None, f"{d['id']}에 없는 OPP level", None
-    ids = {"anchor_id": {a["id"] for a in targets.get("anchors") or []}, "node_id": {n["id"] for n in targets.get("nodes") or []},
-           "stream_id": {st["id"] for st in targets.get("streams") or []}}
+    ids = {"anchor_id": {a["id"] for a in targets.get("anchors") or []},
+           "node_id": {n["id"] for n in targets.get("nodes") or []} | {r["node_id"] for r in targets.get("sensors") or []},
+           "stream_id": {st["id"] for st in targets.get("streams") or []},
+           "buffer_id": {r["id"] for r in (targets.get("buffers") or []) + (targets.get("history") or [])}}
     for key, known in ids.items():
         if change.get(key) is not None and change[key] not in known:
             return None, f"이 variant에 없는 대상: {change[key]}", None
@@ -208,7 +227,7 @@ def interpret(query: str, targets: dict[str, Any]) -> dict[str, Any]:
         data = _LlmPlan.model_validate(_json(content)).model_dump()
         if data["ask"] not in ASKS:
             raise LlmUnavailable("사내 LLM이 지원하지 않는 질문 종류를 반환했습니다")
-        if (data["ask"] != "what_if" and data["changes"]) or (data["ask"] != "search_limit" and data["search_domains"]):
+        if (data["ask"] not in ("what_if", "combine") and data["changes"]) or (data["ask"] != "search_limit" and data["search_domains"]):
             raise LlmUnavailable("사내 LLM 응답의 질문 종류와 조건이 일치하지 않습니다")
         cl = data.get("clarification")
         if cl is not None and (not isinstance(cl.get("choices"), list) or not cl["choices"] or len(cl["choices"]) > 12):
@@ -230,7 +249,7 @@ def interpret(query: str, targets: dict[str, Any]) -> dict[str, Any]:
         elif problem:
             out["ignored"].append({"text": json.dumps(raw, ensure_ascii=False)[:200], "reason": problem})
         elif change is not None:
-            key = tuple(change.get(k) for k in ("target", "anchor_id", "node_id", "stream_id", "param", "domain"))
+            key = tuple(change.get(k) for k in ("target", "anchor_id", "node_id", "stream_id", "param", "domain", "buffer_id"))
             if key in seen and seen[key] != change:
                 raise LlmUnavailable("같은 대상에 서로 다른 조건이 있습니다. 조건 편집기에서 하나를 선택하세요")
             if key not in seen:

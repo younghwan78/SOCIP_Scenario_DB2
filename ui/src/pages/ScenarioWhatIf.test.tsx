@@ -208,3 +208,60 @@ it('builds editors from server change kinds for any SoC and says when nothing ca
   const empty = await mount()
   try { expect(empty.host.textContent).toContain('바꿀 수 있는 조건이 없습니다') } finally { act(() => empty.root.unmount()) }
 })
+const leverKinds: WhatIfTargets['change_kinds'] = [
+  ...targets.change_kinds!,
+  { target: 'power_knob', label: 'Power option', shape: 'choice', selector: 'param', selector_optional: false, needs_param: true, unit: '', max_value: null, description: '', group: 'temporal', iq: 'required',
+    choices: [{ id: 'pyramid_l0', param: 'pyramid_l0', label: 'MTNR L0 skip', current: 'use', options: [{ id: 'skip', label: 'MTNR L0 skip (skip)', iq_eval: 'required' }] }] },
+  { target: 'history_interval', label: 'Previous DMA 빈도', shape: 'value', selector: 'buffer_id', selector_optional: true, needs_param: false, unit: 'frame', max_value: 8, description: '', group: 'temporal', iq: 'required',
+    choices: [{ id: 'TNR_PREV_L0', node: 'mtnr', ports: 2, value: 1, format: 'Y' }] },
+  { target: 'compression', label: 'SBWC 압축', shape: 'choice', selector: 'buffer_id', selector_optional: false, needs_param: false, unit: '', max_value: null, description: '', group: 'compression', value_optional: true,
+    choices: [{ id: 'PYRAMID_L0', format: 'Y', current: 'COMP_YUV_LOSSLESS', nodes: ['mlsc', 'mtnr'], history: false,
+      options: [{ id: 'COMP_OFF', ratio: 1, ratio_source: 'off', supported: true }, { id: 'COMP_YUV_LOSSLESS', ratio: 0.7, ratio_source: 'typical', supported: true }, { id: 'COMP_YUV_LOSSY', ratio: 0.5, ratio_source: 'catalog', lossy: true, supported: true }, { id: 'COMP_YUV_LOSSY_FP', ratio: 0.6, ratio_source: 'catalog', lossy: true, supported: false }] }] },
+]
+it('groups levers by commercialization task, edits choice levers and compares them in one combine run', async () => {
+  mocks({ ...targets, change_kinds: leverKinds })
+  const combine: AskResponse['combine'] = { mode: 'each', baseline_mw: 800, best: '0+1', interaction_mw: 2.5,
+    levers: [{ index: 0, change: { target: 'power_knob', param: 'pyramid_l0', option: 'skip' }, label: 'MTNR L0 skip (skip)', group: 'temporal', iq_required: true },
+      { index: 1, change: { target: 'history_interval', value: 2 }, label: 'previous DMA 전체 2 frame마다 1회', group: 'temporal', iq_required: true }],
+    rows: [
+      { key: 'baseline', levers: [], metrics: metrics, delta: { modeled_power_mw: 0, cpu_power_mw: 0, ip_power_mw: 0, memory_power_mw: 0, bw_mbs: 0 }, feasible: true, min_slack_ms: 3, tight_stage: 'NRT', reason: null, notes: [] },
+      { key: '0', levers: [0], metrics: metrics, delta: { modeled_power_mw: -40, cpu_power_mw: 0, ip_power_mw: 0, memory_power_mw: -40, bw_mbs: -800 }, feasible: true, min_slack_ms: 3, tight_stage: 'NRT', reason: null, notes: [] },
+      { key: '1', levers: [1], metrics: metrics, delta: { modeled_power_mw: -44, cpu_power_mw: 0, ip_power_mw: 0, memory_power_mw: -44, bw_mbs: -850 }, feasible: true, min_slack_ms: 3, tight_stage: 'NRT', reason: null, notes: [] },
+      { key: '0+1', levers: [0, 1], metrics: metrics, delta: { modeled_power_mw: -81.5, cpu_power_mw: 0, ip_power_mw: 0, memory_power_mw: -81.5, bw_mbs: -1600 }, feasible: true, min_slack_ms: 3, tight_stage: 'NRT', reason: null, notes: [] }] }
+  const ask = vi.spyOn(whatIfApi, 'ask').mockResolvedValue(answered({ plan: { ask: 'combine', changes: combine.levers.map((l) => l.change), search_domains: [], focus: [] }, result: null, combine,
+    answer: { verdict: 'ok', headline: 'fps 충족 최저 전력: #1 + #2 — -81.5 mW (-10.2%)', facts: [], actions: [] } }))
+  const { host, root } = await mount()
+  try {
+    expect([...host.querySelectorAll('.wi-pal-label')].map((x) => x.textContent)).toEqual(['크기 · crop · downscale', 'Temporal · previous DMA', 'DVFS · clock · FPS', 'SBWC 압축'])
+    await act(async () => button(host, '+ SBWC 압축').click())
+    const mode = host.querySelector<HTMLSelectElement>('[aria-label="SBWC 압축 값"]')!
+    expect(mode.value).toBe('COMP_OFF')                                                       // first option that differs from the current mode
+    expect([...mode.options].find((o) => o.value === 'COMP_YUV_LOSSY_FP')!.disabled).toBe(true)   // IP catalog does not list it
+    act(() => select(mode, 'COMP_YUV_LOSSY'))
+    expect(host.textContent).toContain('IQ 평가')                                             // lossy needs image-quality evaluation
+    await act(async () => button(host, '항목 제거').click())
+    await act(async () => button(host, '레버 조합 비교').click())
+    expect(button(host, '답 보기').disabled).toBe(true)                                        // needs two levers
+    await act(async () => button(host, '+ Power option').click())
+    await act(async () => button(host, '+ Previous DMA 빈도').click())
+    expect(host.textContent).toContain('previous DMA 갱신 15.0 fps')
+    await act(async () => button(host, '답 보기').click())
+    expect(ask).toHaveBeenCalledWith({ ...scope, ask: 'combine', combine: 'each', changes: [{ target: 'power_knob', param: 'pyramid_l0', option: 'skip' }, { target: 'history_interval', value: 2 }] })
+    expect(host.textContent).toContain('레버 조합 비교')
+    expect(host.querySelector('.wi-combo tr.wi-focus th')!.textContent).toBe('★ #1 + #2')
+    expect(host.textContent).toContain('모두 적용 − 단독 합 = +2.5 mW')
+  } finally { act(() => root.unmount()) }
+})
+it('steps a DVFS domain ±1/±2 levels from the current OPP', async () => {
+  mocks()
+  vi.spyOn(whatIfApi, 'ask').mockResolvedValue(answered())
+  const { host, root } = await mount()
+  try {
+    await act(async () => button(host, '+ DVFS level').click())
+    await act(async () => button(host, '−2 step').click())
+    expect(host.querySelector<HTMLSelectElement>('[aria-label="INTCAM level"]')!.value).toBe('5')
+    await act(async () => button(host, '+1 step').click())
+    expect(host.querySelector<HTMLSelectElement>('[aria-label="INTCAM level"]')!.value).toBe('2')
+    expect(button(host, '+2 step').disabled).toBe(true)                                       // beyond the ladder
+  } finally { act(() => root.unmount()) }
+})

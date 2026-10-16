@@ -139,6 +139,7 @@ def _buffer_transfers(
     direction: PortType,
     comp_catalog: dict[str, float] | None,
     warnings: list[str] | None,
+    rate: float = 1.0,
 ) -> list[PortTransferSpec]:
     buffer = _effective_buffer(graph, buffer_id)
     if buffer.get("size_status") == "unknown":
@@ -172,7 +173,7 @@ def _buffer_transfers(
         port=name, port_type=direction, width=width, height=height,
         format=fmt, bitwidth=int(buffer.get("bitdepth") or 8),
         compression=compression, comp_ratio=comp_ratio,
-        llc_enabled=llc_on, llc_weight=llc_weight,
+        llc_enabled=llc_on, llc_weight=llc_weight, r_w_rate=rate,
     ) for name in names]
 
 
@@ -207,6 +208,20 @@ def edge_port_transfers(
     return specs
 
 
+def history_rate(history: dict[str, Any], buffer_id: str = "history") -> float:
+    """Average fraction of frames that move the previous-frame buffer.
+
+    ``update_interval: N`` = the history DMA (read + write) runs once every N frames (e.g. a 30 fps
+    temporal filter refreshing its reference at 15 fps -> N=2 -> 0.5). Absent = every frame.
+    """
+    raw = history.get("update_interval")
+    if raw is None:
+        return 1.0
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)) or not math.isfinite(raw) or raw < 1:
+        raise ValueError(f"{buffer_id}: history.update_interval must be a number >= 1")
+    return 1.0 / float(raw)
+
+
 def history_port_transfers(
     graph: CanonicalScenarioGraph,
     workloads: dict[str, IPWorkload],
@@ -222,8 +237,10 @@ def history_port_transfers(
             continue
         if history.get("frame_offset") != -1:
             raise ValueError(f"{buffer_id}: history requires frame_offset=-1")
+        rate = history_rate(history, buffer_id)
         for key, direction in (("read_ports", PortType.DMA_READ), ("write_ports", PortType.DMA_WRITE)):
-            specs.extend(_buffer_transfers(graph, workloads[node_id], buffer_id, history.get(key) or [], direction, comp_catalog, warnings))
+            specs.extend(_buffer_transfers(graph, workloads[node_id], buffer_id, history.get(key) or [], direction,
+                                           comp_catalog, warnings, rate))
     return specs
 
 

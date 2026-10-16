@@ -3,14 +3,31 @@ import type { IpRow, TimingReport } from './timingBudget'
 
 export interface WhatIfScope { project_ref: string; scenario_id: string; variant_id: string }
 /** ``target`` names a server-registered change kind (``WhatIfTargets.change_kinds``); the editor is driven by that metadata. */
-export interface WhatIfChange { target: string; anchor_id?: string; node_id?: string; stream_id?: string; param?: string; width?: number; height?: number; value?: number; domain?: string; level?: number }
+export interface WhatIfChange { target: string; anchor_id?: string; node_id?: string; stream_id?: string; param?: string; buffer_id?: string; option?: string; width?: number; height?: number; value?: number; domain?: string; level?: number }
+/** One selectable value of a "choice" lever (sensor mode · power option value · IP mode · compression mode). */
+export interface LeverOption {
+  id: string; label?: string; current?: boolean
+  /** sensor_mode */
+  ip_ref?: string; mode?: string; sensor?: string; place?: string | null; size?: [number, number]; fps?: number | null; bitwidth?: number | null; readout_ms?: number | null
+  /** power_knob / ip_mode */
+  iq_eval?: string | null; note?: string | null; explorable?: boolean; unit_power_mw_mp?: number | null; ppc?: number | null
+  /** compression */
+  ratio?: number; ratio_source?: string; lossy?: boolean; supported?: boolean | null; compressor?: string | null
+}
+export type LeverGroup = 'sensor' | 'size' | 'temporal' | 'clock' | 'mode' | 'compression' | 'other'
 export interface ChangeKindMeta {
-  target: string; label: string; shape: 'size' | 'value' | 'level'; selector: 'anchor_id' | 'node_id' | 'stream_id' | 'domain' | null
+  target: string; label: string; shape: 'size' | 'value' | 'level' | 'choice'; selector: 'anchor_id' | 'node_id' | 'stream_id' | 'domain' | 'buffer_id' | 'param' | null
   selector_optional: boolean; needs_param: boolean; unit: string; max_value: number | null; description: string
+  /** lever palette group · "required" = image-quality evaluation before adoption · compression accepts a ratio value (API ≥ 2026-10-16) */
+  group?: LeverGroup; iq?: string | null; value_optional?: boolean
   /** instances available in this variant: id + size / value / ip / param */
   choices: { id: string; size?: [number, number]; value?: number | null; ip?: string | null; param?: string; label?: string; unit?: string; role?: string | null; primary?: boolean; where?: string[]
     /** dvfs_level: current level / clock, member IPs and the OPP ladder (slow -> fast) */
-    level?: number | null; mhz?: number | null; ips?: string[]; ladder?: { level: number; mhz: number }[] }[]
+    level?: number | null; mhz?: number | null; ips?: string[]; ladder?: { level: number; mhz: number }[]
+    /** choice levers: current value + options; chain_size: IPs that follow the size; history: node · ports */
+    options?: LeverOption[]; current?: string | null; mode?: string; node_id?: string; downstream?: string[]; hint?: string
+    node?: string; ports?: number; format?: string; family?: string; nodes?: string[]; declared?: string[]; llc?: boolean; history?: boolean
+    readout_ms?: number | null; fps?: number | null; sensor?: string | null; hw_name?: string }[]
 }
 export interface WhatIfTargets extends WhatIfScope {
   baseline_hash: string
@@ -34,7 +51,7 @@ export interface WhatIfTargets extends WhatIfScope {
   llm?: { available: boolean; model: string | null }
 }
 export interface WhatIfDomain { id: string; level: number; mhz: number; ips: string[]; stages: string[]; ladder: { level: number; mhz: number }[]; index: number }
-export type AskKind = 'what_if' | 'search_limit' | 'diagnose'
+export type AskKind = 'what_if' | 'combine' | 'search_limit' | 'diagnose'
 export interface AskAction { label: string; ask: AskKind; search_domains?: string[] }
 export interface WhatIfAnswer { verdict: 'ok' | 'fail' | 'info' | 'boundary'; headline: string; facts: string[]; actions: AskAction[] }
 export interface SearchRow {
@@ -49,7 +66,14 @@ export interface Diagnosis {
   top_ips: { node: string; hw_ms: number; set_clock_mhz: number; required_clock_mhz: number; domain: string | null; level: number | null }[]
   domains: { id: string; level: number; mhz: number; down: number; up: number; ips: string[] }[]
 }
-export interface AskRequest extends WhatIfScope { query?: string; changes?: WhatIfChange[]; ask?: AskKind; search_domains?: string[]; config?: Record<string, unknown>; options?: Record<string, unknown> }
+export interface AskRequest extends WhatIfScope { query?: string; changes?: WhatIfChange[]; ask?: AskKind; search_domains?: string[]; combine?: CombineMode; config?: Record<string, unknown>; options?: Record<string, unknown> }
+export type CombineMode = 'each' | 'factorial'
+export interface CombineRow {
+  key: string; levers: number[]; metrics: WhatIfMetrics | null
+  delta: Record<'modeled_power_mw' | 'cpu_power_mw' | 'ip_power_mw' | 'memory_power_mw' | 'bw_mbs', number> | null
+  feasible: boolean; min_slack_ms: number | null; tight_stage: string | null; reason: string | null; error?: boolean; notes: string[]
+}
+export interface CombineResult { mode: CombineMode; levers: { index: number; change: WhatIfChange; label: string; group: string; iq_required: boolean }[]; rows: CombineRow[]; best: string | null; interaction_mw: number | null; baseline_mw: number }
 export interface AskResponse {
   scope: WhatIfScope; baseline_hash: string
   /** null = builder conditions (no interpretation) */
@@ -57,6 +81,8 @@ export interface AskResponse {
     clarification?: { message: string; choices: { label: string; change: WhatIfChange }[] } | null; ignored?: { text: string; reason: string }[]; notes?: string[]; boundaries?: string[] }
   plan: null | { ask: AskKind; changes: WhatIfChange[]; search_domains: string[]; focus: FocusMetric[] }
   answer: WhatIfAnswer | null; result: WhatIfResult | null; search: SearchRow[] | null; diagnose: Diagnosis | null
+  /** ask = combine (API ≥ 2026-10-16) */
+  combine?: CombineResult | null
 }
 export type FocusMetric = 'power' | 'clock' | 'bw' | 'timing' | 'feasible'
 export interface WhatIfClarification { field: string; message: string; source?: string; choices: { label: string; value: string; change?: WhatIfChange }[] }
@@ -77,6 +103,8 @@ export interface WhatIfResult {
   baseline: { report: TimingReport; metrics: WhatIfMetrics; coverage: WhatIfCoverage }; candidate: { report: TimingReport; metrics: WhatIfMetrics; coverage: WhatIfCoverage }
   delta: { metrics: Record<string, number | null>; ips: { node: string; required_clock_mhz: number; set_clock_mhz: number; power_mw: number; explanation: string }[] }
   warnings: string[]; model_lineage: Record<string, unknown>
+  /** what a structural lever rewrote (sensor reshape, crop chain) · levers that need IQ evaluation (API ≥ 2026-10-16) */
+  lever_notes?: string[]; iq_required?: string[]
 }
 export interface WhatIfExperiment {
   id: string; project_ref: string; scenario_id: string; variant_id: string; title: string; purpose: string | null; description: string | null; assumptions: string | null; conclusion: string | null
@@ -97,7 +125,21 @@ export const whatIfApi = {
   experiments: (scope: WhatIfScope, offset = 0) => getJson<{ items: WhatIfExperiment[]; total: number; limit: number; offset: number; has_next: boolean }>(`${path}/experiments`, { ...scope, limit: 20, offset }, false),
   experiment: (id: string) => getJson<WhatIfExperiment>(`${path}/experiments/${encodeURIComponent(id)}`, {}, false),
 }
-export const CHANGE_LABELS: Record<string, string> = { anchor_size: '크기 기준점', output_size: '출력 크기', node_size: 'IP 처리 크기', stream_size: '스트림 크기', fps: 'FPS', node_clock_mhz: 'IP clock 하한', node_param: 'IP 설정값', dvfs_level: 'DVFS level' }
+export const CHANGE_LABELS: Record<string, string> = { anchor_size: '크기 기준점', output_size: '출력 크기', node_size: 'IP 처리 크기', stream_size: '스트림 크기', fps: 'FPS', node_clock_mhz: 'IP clock 하한', node_param: 'IP 설정값', dvfs_level: 'DVFS level',
+  sensor_mode: '센서 변경', chain_size: 'IP crop · downscale', power_knob: 'Power option', history_interval: 'Previous DMA 빈도', ip_mode: 'IP mode', compression: 'SBWC 압축' }
+/** Lever palette: the commercialization tasks in the order a project usually tries them. */
+export const LEVER_GROUPS: { id: LeverGroup; label: string; hint: string }[] = [
+  { id: 'sensor', label: '센서', hint: '기존 예측 기준 sensor를 다른 sensor · mode로' },
+  { id: 'size', label: '크기 · crop · downscale', hint: 'bayer crop · YUV downscale · MCSC 출력 크기' },
+  { id: 'temporal', label: 'Temporal · previous DMA', hint: 'MTNR L0 skip 등 power option · previous DMA 빈도' },
+  { id: 'clock', label: 'DVFS · clock · FPS', hint: 'domain level ±1~2 · IP clock 하한 · FPS' },
+  { id: 'mode', label: 'IP mode', hint: 'IP 동작 mode (unit power · PPC)' },
+  { id: 'compression', label: 'SBWC 압축', hint: 'on/off · lossless ↔ lossy · footprint mode' },
+  { id: 'other', label: '기타', hint: '' },
+]
+const LEGACY_GROUP: Record<string, LeverGroup> = { output_size: 'size', anchor_size: 'size', node_size: 'size', stream_size: 'size', chain_size: 'size', fps: 'clock', node_clock_mhz: 'clock', dvfs_level: 'clock',
+  sensor_mode: 'sensor', power_knob: 'temporal', history_interval: 'temporal', ip_mode: 'mode', compression: 'compression' }
+export const groupOf = (k: Pick<ChangeKindMeta, 'target' | 'group'>): LeverGroup => (k.group && k.group !== 'other' ? k.group : LEGACY_GROUP[k.target] ?? 'other')
 /** Fallback metadata for API responses that predate ``change_kinds``. */
 const LEGACY_KINDS: ChangeKindMeta[] = [
   { target: 'output_size', label: '출력 크기', shape: 'size', selector: 'anchor_id', selector_optional: true, needs_param: false, unit: '', max_value: null, description: '', choices: [] },
@@ -131,10 +173,17 @@ export function validChange(change: WhatIfChange, kinds: ChangeKindMeta[] = LEGA
     const domain = kind.choices.find((c) => c.id === change.domain)
     return Number.isInteger(change.level) && (!domain?.ladder || domain.ladder.some((lv) => lv.level === change.level))
   }
+  if (kind.shape === 'choice') {
+    const sel = kind.selector ? change[kind.selector] : undefined
+    const inst = kind.choices.find((c) => c.id === sel) ?? (kind.selector ? undefined : kind.choices[0])
+    const opt = inst?.options?.find((o) => o.id === change.option)
+    if (!change.option || (inst?.options && !opt) || opt?.supported === false) return false
+    return change.value == null || (!!kind.value_optional && Number(change.value) > 0 && Number(change.value) <= 1)
+  }
   return Number.isFinite(change.value) && Number(change.value) > 0 && (kind.max_value == null || Number(change.value) <= kind.max_value)
 }
 
-const sameTarget = (a: WhatIfChange, b: WhatIfChange) => a.target === b.target && (['anchor_id', 'node_id', 'stream_id', 'param', 'domain'] as const).every((k) => (a[k] ?? '') === (b[k] ?? ''))
+const sameTarget = (a: WhatIfChange, b: WhatIfChange) => a.target === b.target && (['anchor_id', 'node_id', 'stream_id', 'param', 'domain', 'buffer_id'] as const).every((k) => (a[k] ?? '') === (b[k] ?? ''))
 /** Add a change, replacing an existing one on the same target (one value per target, as the API requires). */
 export function upsertChange(changes: WhatIfChange[], change: WhatIfChange): WhatIfChange[] {
   return changes.some((row) => sameTarget(row, change)) ? changes.map((row) => (sameTarget(row, change) ? change : row)) : [...changes, change]
@@ -142,6 +191,12 @@ export function upsertChange(changes: WhatIfChange[], change: WhatIfChange): Wha
 /** "녹화 출력 record_out → 1920×1080" style one-line description of a change. */
 export function describeChange(change: WhatIfChange): string {
   if (change.target === 'fps') return `FPS → ${change.value}`
+  if (change.target === 'sensor_mode') return `센서 → ${change.option?.split('#').pop() ?? ''}`
+  if (change.target === 'chain_size') return `${change.node_id} crop/downscale → ${change.width}×${change.height}`
+  if (change.target === 'power_knob') return `${change.param} → ${change.option}`
+  if (change.target === 'history_interval') return `previous DMA ${change.buffer_id ?? '전체'} → ${change.value} frame마다`
+  if (change.target === 'ip_mode') return `${change.node_id} mode → ${change.option}`
+  if (change.target === 'compression') return `${change.buffer_id} → ${change.option}${change.value ? ` (×${change.value})` : ''}`
   if (change.target === 'dvfs_level') return `${change.domain} → L${change.level}`
   if (change.target === 'node_clock_mhz') return `${change.node_id} clock 하한 → ${change.value} MHz`
   if (change.value != null && change.width == null) return `${change.node_id ?? ''}${change.node_id ? ' ' : ''}${change.param ?? CHANGE_LABELS[change.target] ?? change.target} → ${change.value}`
@@ -178,4 +233,44 @@ export function answerLines(result: WhatIfResult, focus: FocusMetric[] = []): { 
     }
   }
   return lines
+}
+
+/** Crop / downscale presets: −n % of each axis aligned to 16 px (width) / 2 px (height). EIS 25→15 % ≈ −8 %. */
+export function shrink(size: [number, number], pct: number): [number, number] {
+  const f = 1 - pct / 100
+  return [Math.max(16, Math.floor((size[0] * f) / 16) * 16), Math.max(16, Math.floor((size[1] * f) / 2) * 2)]
+}
+/** One default lever row per kind (the instance not yet used, prefilled with a value worth trying). */
+export function defaultChange(kind: ChangeKindMeta, used: WhatIfChange[], fps?: number | null, clockOf?: (node: string) => number | null | undefined): WhatIfChange {
+  const first = kind.choices.find((c) => !used.some((row) => row.target === kind.target && kind.selector && row[kind.selector] === c.id)) ?? kind.choices[0]
+  const row: WhatIfChange = { target: kind.target }
+  if (kind.selector && first && !(kind.selector_optional && kind.target === 'history_interval')) row[kind.selector] = first.id as never
+  if (kind.needs_param && first?.param) row.param = first.param
+  if (kind.shape === 'size') {
+    const size = (first?.size ?? [1920, 1080]) as [number, number]
+    ;[row.width, row.height] = kind.target === 'chain_size' ? shrink(size, 8) : size
+  } else if (kind.shape === 'level') {
+    const ladder = first?.ladder ?? [], at = ladder.findIndex((lv) => lv.level === first?.level)
+    row.level = ladder[Math.max(0, at - 1)]?.level ?? first?.level ?? 0
+  } else if (kind.shape === 'choice') {
+    const opts = first?.options ?? []
+    const cur = opts.find((o) => o.current)?.id ?? first?.current ?? first?.mode
+    row.option = (opts.find((o) => o.id !== cur && o.supported !== false) ?? opts[0])?.id
+  } else if (kind.target === 'history_interval') row.value = 2
+  else row.value = first?.value ?? (kind.target === 'node_clock_mhz' ? (clockOf?.(String(first?.id)) ?? 400) : fps ?? 30)
+  return row
+}
+/** "추천 레버 담기": one row per available commercialization lever (power options · history · SBWC lossless · DVFS −1), at most ``max``. */
+export function suggestedLevers(kinds: ChangeKindMeta[], max = 5): WhatIfChange[] {
+  const out: WhatIfChange[] = []
+  const k = (t: string) => kinds.find((x) => x.target === t)
+  for (const knob of k('power_knob')?.choices ?? []) { const opt = knob.options?.[0]; if (opt) out.push({ target: 'power_knob', param: knob.param ?? knob.id, option: opt.id }) }
+  if (k('history_interval')?.choices.length) out.push({ target: 'history_interval', value: 2 })
+  const sbwc = (k('compression')?.choices ?? []).find((b) => b.current === 'COMP_OFF' && b.history && b.options?.some((o) => !o.lossy && o.id !== 'COMP_OFF' && o.supported !== false))
+  if (sbwc) out.push({ target: 'compression', buffer_id: sbwc.id, option: sbwc.options!.find((o) => !o.lossy && o.id !== 'COMP_OFF' && o.supported !== false)!.id })
+  for (const d of k('dvfs_level')?.choices ?? []) {
+    const ladder = d.ladder ?? [], at = ladder.findIndex((lv) => lv.level === d.level)
+    if (at > 0) out.push({ target: 'dvfs_level', domain: d.id, level: ladder[at - 1].level })
+  }
+  return out.slice(0, max)
 }

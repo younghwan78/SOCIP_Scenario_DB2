@@ -19,6 +19,7 @@ import { IpInternalView, LeverLegend } from '../components/IpInternalView'
 import { CadenceView, TimingContextStrip } from '../components/CadenceView'
 import { TimingCompare } from '../components/TimingCompare'
 import { BufferTooltip, IpTooltip } from '../components/NodeTooltip'
+import { PowerChip } from '../components/MeasurePopover'
 import { DataTable, type Column } from '../components/DataTable'
 import { useWidth } from '../components/Charts'
 import { rememberRecent } from '../components/Picker'
@@ -279,6 +280,8 @@ export function PipelinePage({ ctx }: { ctx: Ctx }) {
         {lens !== 'ip' && <label className="muted" style={{ fontSize: 13, display: 'flex', gap: 6, alignItems: 'center' }}><input type="checkbox" checked={showSw} onChange={(e) => setShowSw(e.target.checked)} />SW task</label>}
         {notes.map((n) => <span key={n.id} className={`chip mode-${n.tone}`} title={n.detail}>{n.label}</span>)}
         <span className="grow" />
+        {variant && <PowerChip scenarioId={scenario} variantId={variant} project={ctx.project}
+          onEvidence={() => ctx.navigate('calibration', { scenario, m: undefined })} />}
         {view && <><span className="chip">{view.summary.subtitle}</span><span className="chip">period {view.summary.period_ms} ms</span>
           {model && <span className="chip" title={`특성화된 buffer W+R 합계 (압축 ratio 적용) · size 미정 ${model.unknownBuffers}개 제외`}>DMA {model.totalMBs.toFixed(0)} MB/s</span>}
           {model && model.levers.llc > 0 && <span className="chip lv-sum" title="LLC 적용 후 DRAM traffic = Σ (W+R) × llc_weight">DRAM {model.totalDramMBs.toFixed(0)} MB/s</span>}

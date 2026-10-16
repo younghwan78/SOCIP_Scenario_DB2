@@ -5,11 +5,12 @@ import { projectText } from '../lib/projects'
 import { useCredentialKeyId } from '../lib/auth'
 import { useAsync } from '../lib/route'
 import { fmt } from '../lib/timingBudget'
-import { clockExplanation, describeChange, kindsOf, upsertChange, validChange, whatIfApi, type AskKind, type AskRequest, type AskResponse, type ChangeKindMeta, type ExperimentDraft, type FocusMetric, type PreviewRequest, type WhatIfChange, type WhatIfResult, type WhatIfScope, type WhatIfTargets } from '../lib/scenarioWhatIf'
+import { LEVER_GROUPS, clockExplanation, defaultChange, describeChange, groupOf, kindsOf, shrink, suggestedLevers, upsertChange, validChange, whatIfApi, type AskKind, type AskRequest, type AskResponse, type ChangeKindMeta, type CombineMode, type CombineResult, type ExperimentDraft, type FocusMetric, type LeverOption, type PreviewRequest, type WhatIfChange, type WhatIfResult, type WhatIfScope, type WhatIfTargets } from '../lib/scenarioWhatIf'
 import { Card } from '../components/TimingCharts'
 
 const ASK_FALLBACK: { ask: AskKind; label: string; description: string }[] = [
   { ask: 'what_if', label: '조건 바꿔보기', description: 'DVFS level · IP clock · 크기 · FPS를 바꾸면 timing · 전력 · BW가 어떻게 되나' },
+  { ask: 'combine', label: '레버 조합 비교', description: '고른 레버를 각각 · 함께 적용해 전력 차이와 fps 충족 여부 비교' },
   { ask: 'search_limit', label: '어디까지 낮출 수 있나', description: 'DVFS domain level을 한 단계씩 낮추며 timing을 충족하는 최저 level 탐색' },
   { ask: 'diagnose', label: '병목 찾기', description: '기준 조건에서 가장 빠듯한 구간 · IP와 domain별 여유' },
 ]
@@ -84,6 +85,7 @@ function WhatIfBody({ scope }: { scope: WhatIfScope }) {
   const asks = t?.asks ?? ASK_FALLBACK
   const llm = t?.llm?.available ?? false
   const [askKind, setAskKind] = useState<AskKind>('what_if')
+  const [combineMode, setCombineMode] = useState<CombineMode>('each')
   const [changes, setChanges] = useState<WhatIfChange[]>([])
   const [searchDomains, setSearchDomains] = useState<string[]>([])
   const [query, setQuery] = useState('')
@@ -116,14 +118,17 @@ function WhatIfBody({ scope }: { scope: WhatIfScope }) {
     setResp(res); setAsked(label); setDirty(false); setStale(false)
     if (res.plan) {   // what was executed (or interpreted) becomes the builder state, editable from here
       setAskKind(res.plan.ask)
-      if (res.plan.ask === 'what_if') setChanges(res.plan.changes)
+      if (res.plan.ask === 'what_if' || res.plan.ask === 'combine') setChanges(res.plan.changes)
       if (res.plan.ask === 'search_limit') setSearchDomains(res.plan.search_domains)
     }
     setRequest(res.result ? { ...scope, ...modelSettings, changes: res.result.normalized_condition.changes, expected_baseline_hash: res.baseline_hash } : null)
   })
-  const builderReady = !stale && !!t && (askKind !== 'what_if' || (changes.length > 0 && changes.every((c) => validChange(c, kinds))))
-  const answerBuilder = () => ask(askKind === 'what_if' ? { ask: 'what_if', changes } : askKind === 'search_limit' ? { ask: 'search_limit', search_domains: searchDomains } : { ask: 'diagnose' },
-    askKind === 'what_if' ? changes.map(describeChange).join(' · ') : askKind === 'search_limit' ? `한계 탐색: ${searchDomains.join(', ') || '모든 domain'}` : '병목 찾기')
+  const withLevers = askKind === 'what_if' || askKind === 'combine'
+  const builderReady = !stale && !!t && (!withLevers || (changes.length >= (askKind === 'combine' ? 2 : 1) && changes.every((c) => validChange(c, kinds))
+    && (askKind !== 'combine' || combineMode === 'each' || changes.length <= 5)))
+  const answerBuilder = () => ask(askKind === 'what_if' ? { ask: 'what_if', changes } : askKind === 'combine' ? { ask: 'combine', changes, combine: combineMode }
+    : askKind === 'search_limit' ? { ask: 'search_limit', search_domains: searchDomains } : { ask: 'diagnose' },
+    withLevers ? changes.map(describeChange).join(' · ') : askKind === 'search_limit' ? `한계 탐색: ${searchDomains.join(', ') || '모든 domain'}` : '병목 찾기')
   const askQuestion = () => { if (query.trim()) ask({ query: query.trim() }, query.trim()) }
   const save = () => run(async (active) => {
     if (!resp?.result || !request || !draft.title.trim()) return
@@ -142,17 +147,9 @@ function WhatIfBody({ scope }: { scope: WhatIfScope }) {
   /** New row from the kind's first instance, prefilled with something worth asking (one DVFS level down). */
   const add = (kind: ChangeKindMeta) => {
     if (changes.length >= 8) return
-    const first = kind.choices.find((c) => !changes.some((row) => row.target === kind.target && kind.selector && row[kind.selector] === c.id)) ?? kind.choices[0]
-    const row: WhatIfChange = { target: kind.target }
-    if (kind.selector && first) row[kind.selector] = first.id as never
-    if (kind.needs_param && first?.param) row.param = first.param
-    if (kind.shape === 'size') { row.width = first?.size?.[0] ?? 1920; row.height = first?.size?.[1] ?? 1080 }
-    else if (kind.shape === 'level') {
-      const ladder = first?.ladder ?? [], at = ladder.findIndex((lv) => lv.level === first?.level)
-      row.level = ladder[Math.max(0, at - 1)]?.level ?? first?.level ?? 0
-    } else row.value = first?.value ?? (kind.target === 'node_clock_mhz' ? (t?.nodes.find((n) => n.id === first?.id)?.clock_mhz ?? 400) : t?.fps ?? 30)
-    updateChanges([...changes, row])
+    updateChanges([...changes, defaultChange(kind, changes, t?.fps, (id) => t?.nodes.find((n) => n.id === id)?.clock_mhz)])
   }
+  const suggested = useMemo(() => suggestedLevers(kinds), [kinds])
   const interp = resp?.interpretation
   const examples = useMemo(() => (llm ? examplesFor(t) : []), [llm, t])
   return <>
@@ -173,12 +170,19 @@ function WhatIfBody({ scope }: { scope: WhatIfScope }) {
         {interp?.status === 'llm_unavailable' && <p className="err">자연어 해석 불가 — {interp.reason}. 아래에서 조건을 골라 계산하세요.</p>}
         <div className="seg wi-asks" role="group" aria-label="질문 종류">{asks.map((a) => <button key={a.ask} className={askKind === a.ask ? 'on' : ''} title={a.description} onClick={() => { edited(); setAskKind(a.ask) }}>{a.label}</button>)}</div>
         <p className="faint" style={{ margin: '4px 0 8px' }}>{asks.find((a) => a.ask === askKind)?.description}</p>
-        {askKind === 'what_if' && t && <>
-          {kinds.length === 0 ? <p className="err">이 variant에는 What-if로 바꿀 수 있는 조건이 없습니다.</p>
-            : <div className="toolbar" style={{ flexWrap: 'wrap' }}>{kinds.map((kind) => <button className="btn tb-mini" key={kind.target} title={kind.description} disabled={busy || changes.length >= 8} onClick={() => add(kind)}>+ {kind.label}</button>)}</div>}
-          {changes.map((change, index) => <ChangeEditor key={index} change={change} kinds={kinds} targets={t} disabled={busy}
+        {withLevers && t && <>
+          {kinds.length === 0 ? <p className="err">이 variant에는 What-if로 바꿀 수 있는 조건이 없습니다.</p> : <LeverPalette kinds={kinds} busy={busy} full={changes.length >= 8} onAdd={add} />}
+          {askKind === 'combine' && <div className="toolbar wi-combine-opts" style={{ flexWrap: 'wrap' }}>
+            <div className="seg sm" role="group" aria-label="조합 방식">
+              <button className={combineMode === 'each' ? 'on' : ''} onClick={() => { edited(); setCombineMode('each') }} title="기준 · 레버 각각 · 모두 적용">각각 + 모두</button>
+              <button className={combineMode === 'factorial' ? 'on' : ''} onClick={() => { edited(); setCombineMode('factorial') }} title="모든 부분 조합 (레버 5개 이하, 최대 31 case)">모든 조합{changes.length ? ` (${2 ** changes.length - 1})` : ''}</button>
+            </div>
+            {suggested.length >= 2 && <button className="btn tb-mini" disabled={busy} title={suggested.map(describeChange).join('\n')} onClick={() => updateChanges(suggested)}>추천 레버 담기 ({suggested.length})</button>}
+            <span className="faint">{changes.length < 2 ? '레버를 2개 이상 담으세요.' : combineMode === 'factorial' && changes.length > 5 ? '모든 조합은 레버 5개까지입니다.' : `#1~#${changes.length} 레버로 계산합니다.`}</span>
+          </div>}
+          {changes.map((change, index) => <ChangeEditor key={index} index={askKind === 'combine' ? index + 1 : undefined} change={change} kinds={kinds} targets={t} disabled={busy}
             onChange={(next) => updateChanges(changes.map((row, at) => at === index ? next : row))} onRemove={() => updateChanges(changes.filter((_, at) => at !== index))} />)}
-          {!changes.length && <p className="faint">바꿀 조건을 추가하세요. 예: + DVFS level → INTCAM → 한 단계 낮은 level.</p>}
+          {!changes.length && <p className="faint">{askKind === 'combine' ? '비교할 레버를 담으세요. 예: Power option(L0 skip) · Previous DMA 2 frame · DVFS −1.' : '바꿀 조건을 추가하세요. 예: + DVFS level → INTCAM → 한 단계 낮은 level.'}</p>}
         </>}
         {askKind === 'search_limit' && <div className="wi-domains" role="group" aria-label="탐색할 domain">
           {domains.length === 0 ? <p className="err">이 variant에는 level을 바꿀 수 있는 DVFS domain이 없습니다.</p> : domains.map((d) => {
@@ -195,8 +199,11 @@ function WhatIfBody({ scope }: { scope: WhatIfScope }) {
         {t && <details><summary className="faint">모델 지원 범위</summary><ul>{t.limitations.map((item) => <li key={item}>{item}</li>)}</ul></details>}
       </Card>
       {resp && <AnswerView resp={resp} asked={asked} dirty={dirty} busy={busy}
-        onAction={(a) => { setAskKind(a.ask); if (a.search_domains) setSearchDomains(a.search_domains); ask({ ask: a.ask, search_domains: a.search_domains }, a.label) }}
+        onAction={(a) => { setAskKind(a.ask); if (a.search_domains) setSearchDomains(a.search_domains)
+          if (a.ask === 'combine') { const levers = resp.plan?.changes ?? changes; setChanges(levers); ask({ ask: 'combine', changes: levers, combine: combineMode }, a.label) }
+          else ask({ ask: a.ask, search_domains: a.search_domains }, a.label) }}
         onChoose={(change) => { const next = upsertChange(resp.plan?.changes ?? [], change); setAskKind('what_if'); setChanges(next); ask({ ask: 'what_if', changes: next }, next.map(describeChange).join(' · ')) }} />}
+      {resp?.combine && <CombineView combo={resp.combine} />}
       {resp?.result && <ResultView result={resp.result} focus={resp.plan?.focus ?? []} />}
       {resp?.search && <SearchView rows={resp.search} />}
       {resp?.diagnose && <DiagnoseView diag={resp.diagnose} />}
@@ -260,42 +267,112 @@ function DiagnoseView({ diag }: { diag: NonNullable<AskResponse['diagnose']> }) 
     {diag.notes.map((n) => <p className="faint" key={n}>{n}</p>)}
   </Card>
 }
+/** Lever palette: every change kind of this variant, grouped the way a commercialization review goes. */
+function LeverPalette({ kinds, busy, full, onAdd }: { kinds: ChangeKindMeta[]; busy: boolean; full: boolean; onAdd: (kind: ChangeKindMeta) => void }) {
+  const count = (k: ChangeKindMeta) => (k.target === 'fps' ? null : k.choices.length)
+  return <div className="wi-palette" aria-label="레버 팔레트">
+    {LEVER_GROUPS.map((g) => { const list = kinds.filter((k) => groupOf(k) === g.id); if (!list.length) return null
+      return <div key={g.id} className="wi-pal-row"><span className="wi-pal-label" title={g.hint}>{g.label}</span>
+        {list.map((kind) => <button className="btn tb-mini" key={kind.target} disabled={busy || full}
+          title={`${kind.description}${kind.iq === 'required' ? '\n※ 채택 전 IQ(화질) 평가 필요' : ''}`} onClick={() => onAdd(kind)}>+ {kind.label}</button>)}
+        <span className="faint wi-pal-n">{list.map((k) => count(k)).filter((n) => n !== null).length ? list.map((k) => (count(k) != null ? `${k.label} ${count(k)}` : null)).filter(Boolean).join(' · ') : ''}</span>
+      </div> })}
+  </div>
+}
+const optText = (target: string, o: LeverOption): string => {
+  if (target === 'sensor_mode') return `${o.label ?? o.id}${o.readout_ms != null ? ` · readout ${o.readout_ms} ms` : ''}${o.current ? ' (현재)' : ''}`
+  if (target === 'compression') return `${o.id === 'COMP_OFF' ? '압축 끔' : o.id}${o.id !== 'COMP_OFF' && o.ratio != null ? ` · ×${o.ratio} (${o.ratio_source})` : ''}${o.lossy ? ' · lossy' : ''}${o.supported === false ? ' · IP 미지원' : o.supported == null ? ' · 지원 미선언' : ''}`
+  if (target === 'ip_mode') return `${o.label ?? o.id}${o.unit_power_mw_mp != null ? ` · ${o.unit_power_mw_mp} mW/MP` : ''}${o.ppc != null ? ` · PPC ${o.ppc}` : ''}${o.explorable ? '' : ' · 대체 선언 없음'}`
+  return `${o.label ?? o.id}${o.iq_eval === 'required' ? ' · IQ 평가 필요' : ''}`
+}
+const CHAIN_PRESETS = [5, 8, 10, 15, 20, 25]
 /** Editor driven by the change kind's metadata; DVFS level picks from the domain's OPP ladder. */
-function ChangeEditor({ change, kinds, targets, disabled, onChange, onRemove }: { change: WhatIfChange; kinds: ChangeKindMeta[]; targets: WhatIfTargets; disabled: boolean; onChange: (next: WhatIfChange) => void; onRemove: () => void }) {
+function ChangeEditor({ change, kinds, targets, disabled, onChange, onRemove, index }: { change: WhatIfChange; kinds: ChangeKindMeta[]; targets: WhatIfTargets; disabled: boolean; onChange: (next: WhatIfChange) => void; onRemove: () => void; index?: number }) {
   const kind = kinds.find((k) => k.target === change.target)
   const label = kind?.label ?? change.target
   const selector = kind?.selector ?? null
   const node = change.node_id ? targets.nodes.find((n) => n.id === change.node_id) : undefined
   const choiceText = (row: ChangeKindMeta['choices'][number]) => {
     if (kind?.shape === 'level') return `${row.id} · 현재 L${row.level} ${row.mhz} MHz${row.ips?.length ? ` · ${row.ips.join(', ')}` : ''}`
+    if (kind?.target === 'sensor_mode') return `${row.id} · 현재 ${row.sensor ?? ''} ${row.size?.join('×') ?? ''}${row.readout_ms != null ? ` · readout ${row.readout_ms} ms` : ''}`
+    if (kind?.target === 'chain_size') return `${row.id} · ${row.size?.join('×')} · ${row.hint} → ${row.downstream?.join(', ')}`
+    if (kind?.target === 'history_interval') return `${row.id} · ${row.node} · ${row.format ?? ''} · DMA ${row.ports}${row.value && row.value > 1 ? ` · 현재 ${row.value} frame` : ''}`
+    if (kind?.target === 'compression') return `${row.id} · ${row.format} · 현재 ${row.current === 'COMP_OFF' ? '압축 없음' : row.current}${row.llc ? ' · LLC' : ''}${row.history ? ' · f-1' : ''} · ${row.nodes?.join('→')}`
+    if (kind?.target === 'ip_mode') return `${row.id} · 현재 ${row.mode}`
+    if (kind?.target === 'power_knob') return `${row.label ?? row.id} · 현재 ${row.current}`
     const clock = kind?.target === 'node_clock_mhz' ? targets.nodes.find((n) => n.id === row.id)?.clock_mhz : null
     return [row.id, row.size ? row.size.join('×') : null, row.label, row.role === 'record' ? '녹화' : row.role === 'preview' ? '미리보기' : null, row.ip && row.ip !== row.id ? row.ip : null, clock ? `현재 ${clock} MHz` : null].filter(Boolean).join(' · ')
   }
-  const domain = kind?.shape === 'level' ? kind.choices.find((c) => c.id === change.domain) : undefined
+  const inst = kind && selector ? kind.choices.find((c) => c.id === change[selector]) : undefined
+  const domain = kind?.shape === 'level' ? inst : undefined
   const ladder = domain?.ladder ?? []
   const cur = ladder.findIndex((lv) => lv.level === domain?.level)
-  const valueLabel = change.target === 'fps' ? 'FPS' : change.target === 'node_clock_mhz' ? 'MHz' : kind?.unit || '값'
+  const valueLabel = change.target === 'fps' ? 'FPS' : change.target === 'node_clock_mhz' ? 'MHz' : change.target === 'history_interval' ? 'N frame마다' : kind?.unit || '값'
   const valueAria = change.target === 'fps' ? '변경 FPS' : change.target === 'node_clock_mhz' ? '변경 clock MHz' : `변경 ${label}`
-  return <fieldset className="wi-change" disabled={disabled}><legend title={kind?.description}>{label}</legend>
-    {selector && <label>대상<select aria-label={`${label} 대상`} value={change[selector] ?? ''} onChange={(e) => {
-      const choice = kind?.choices.find((row) => row.id === e.target.value)
-      const next: WhatIfChange = { ...change, [selector]: e.target.value || undefined, ...(kind?.needs_param && choice?.param ? { param: choice.param } : {}) }
-      if (kind?.shape === 'level' && choice?.ladder) { const at = choice.ladder.findIndex((lv) => lv.level === choice.level); next.level = choice.ladder[Math.max(0, at - 1)]?.level ?? choice.level ?? 0 }
-      onChange(next)
-    }}><option value="">{kind?.selector_optional ? '자동 (단일 대상)' : '대상 선택'}</option>{(kind?.choices ?? []).map((row) => <option key={`${row.id}-${row.param ?? ''}`} value={row.id}>{choiceText(row)}</option>)}</select></label>}
+  const options = kind?.shape === 'choice' ? (inst?.options ?? []) : []
+  const opt = options.find((o) => o.id === change.option)
+  const pickInstance = (id: string) => {
+    const choice = kind?.choices.find((row) => row.id === id)
+    const next: WhatIfChange = { ...change, [selector!]: id || undefined, ...(kind?.needs_param && (choice?.param || kind.selector === 'param') ? { param: choice?.param ?? id } : {}) }
+    if (kind?.shape === 'level' && choice?.ladder) { const at = choice.ladder.findIndex((lv) => lv.level === choice.level); next.level = choice.ladder[Math.max(0, at - 1)]?.level ?? choice.level ?? 0 }
+    if (kind?.shape === 'choice') { const c = choice?.options?.find((o) => o.current)?.id ?? choice?.current ?? choice?.mode; next.option = (choice?.options?.find((o) => o.id !== c && o.supported !== false) ?? choice?.options?.[0])?.id; delete next.value }
+    if (kind?.target === 'chain_size' && choice?.size) [next.width, next.height] = shrink(choice.size as [number, number], 8)
+    onChange(next)
+  }
+  return <fieldset className={`wi-change ${kind?.iq === 'required' || opt?.lossy ? 'wi-iq' : ''}`} disabled={disabled}><legend title={kind?.description}>{index ? <b className="wi-idx">#{index}</b> : null}{label}{kind?.iq === 'required' || opt?.lossy ? <span className="badge v-warn" style={{ marginLeft: 6 }} title="전력 이득은 화질 평가 후 채택">IQ 평가</span> : null}</legend>
+    {selector && <label>대상<select aria-label={`${label} 대상`} value={change[selector] ?? ''} onChange={(e) => pickInstance(e.target.value)}>
+      <option value="">{kind?.target === 'history_interval' ? '전체 history buffer' : kind?.selector_optional ? '자동 (단일 대상)' : '대상 선택'}</option>{(kind?.choices ?? []).map((row) => <option key={`${row.id}-${row.param ?? ''}`} value={row.id}>{choiceText(row)}</option>)}</select></label>}
+    {kind?.shape === 'choice' && <label>{change.target === 'sensor_mode' ? 'sensor · mode' : change.target === 'compression' ? 'mode' : '값'}<select aria-label={`${label} 값`} value={change.option ?? ''} onChange={(e) => onChange({ ...change, option: e.target.value || undefined })}>
+      <option value="">선택</option>{options.map((o) => <option key={o.id} value={o.id} disabled={o.supported === false}>{optText(change.target, o)}</option>)}</select></label>}
+    {kind?.target === 'compression' && change.option && change.option !== 'COMP_OFF' && <label>ratio<input className="input" aria-label="압축 ratio" type="number" min={0.05} max={1} step={0.05} placeholder={opt?.ratio != null ? String(opt.ratio) : ''} value={change.value ?? ''}
+      onChange={(e) => onChange({ ...change, value: e.target.value === '' ? undefined : Number(e.target.value) })} style={{ width: 70 }} /></label>}
+    {change.target === 'sensor_mode' && opt && <span className="faint">{opt.size?.join('×')} · {opt.fps ?? '?'} fps · RAW{opt.bitwidth ?? '?'}{inst?.size && opt.size && opt.size.join() !== inst.size.join() ? ' · 크기 다름 → RT chain · pyramid 재계산' : ''}</span>}
     {kind?.shape === 'level' && <label>level<select aria-label={`${change.domain ?? ''} level`} value={change.level ?? ''} onChange={(e) => onChange({ ...change, level: Number(e.target.value) })}>
       {ladder.map((lv, j) => <option key={lv.level} value={lv.level}>L{lv.level} · {lv.mhz} MHz{j === cur ? ' (현재)' : j < cur ? ` (−${cur - j})` : ` (+${j - cur})`}</option>)}</select></label>}
+    {kind?.shape === 'level' && ladder.length > 0 && <span className="wi-presets">{[-2, -1, 1, 2].map((d) => { const lv = ladder[cur + d]
+      return <button key={d} type="button" className={`btn tb-mini ${lv && change.level === lv.level ? 'on' : ''}`} disabled={!lv} title={lv ? `L${lv.level} · ${lv.mhz} MHz` : '범위 밖'} onClick={() => lv && onChange({ ...change, level: lv.level })}>{d > 0 ? `+${d}` : `−${-d}`} step</button> })}</span>}
     {kind?.shape === 'level' && domain && cur === 0 && <span className="faint">{domain.id}는 이미 최저 OPP — 올리는 방향만 가능합니다</span>}
-    {kind?.shape === 'level' ? null
+    {kind?.shape === 'level' || kind?.shape === 'choice' ? null
       : kind?.shape === 'size' || (!kind && change.width != null)
         ? <><label>너비<input className="input" aria-label="변경 너비" type="number" min={16} max={16384} step={1} value={change.width ?? ''} onChange={(e) => onChange({ ...change, width: Number(e.target.value) })} /></label><label>높이<input className="input" aria-label="변경 높이" type="number" min={16} max={16384} step={1} value={change.height ?? ''} onChange={(e) => onChange({ ...change, height: Number(e.target.value) })} /></label>
-          <span className="wi-presets">{SIZE_PRESETS.map(([name, w, h]) => <button key={name} type="button" className={`btn tb-mini ${change.width === w && change.height === h ? 'on' : ''}`} onClick={() => onChange({ ...change, width: w, height: h })}>{name}</button>)}</span></>
-        : <><label>{valueLabel}<input className="input" aria-label={valueAria} type="number" min={1} max={kind?.max_value ?? undefined} value={change.value ?? ''} onChange={(e) => onChange({ ...change, value: Number(e.target.value) })} /></label>
+          {change.target === 'chain_size' && inst?.size
+            ? <span className="wi-presets">{CHAIN_PRESETS.map((p) => { const [w, h] = shrink(inst.size as [number, number], p)
+              return <button key={p} type="button" className={`btn tb-mini ${change.width === w && change.height === h ? 'on' : ''}`} title={`${w}×${h}${p === 8 ? ' · EIS margin 25%→15% (1.15/1.25)' : ''}`} onClick={() => onChange({ ...change, width: w, height: h })}>−{p}%</button> })}
+              <span className="faint">현재 {inst.size.join('×')} · 따라 바뀌는 IP {inst.downstream?.length ?? 0}개</span></span>
+            : <span className="wi-presets">{SIZE_PRESETS.map(([name, w, h]) => <button key={name} type="button" className={`btn tb-mini ${change.width === w && change.height === h ? 'on' : ''}`} onClick={() => onChange({ ...change, width: w, height: h })}>{name}</button>)}</span>}</>
+        : <><label>{valueLabel}<input className="input" aria-label={valueAria} type="number" min={1} max={kind?.max_value ?? undefined} step={change.target === 'history_interval' ? 1 : undefined} value={change.value ?? ''} onChange={(e) => onChange({ ...change, value: Number(e.target.value) })} /></label>
           {change.target === 'fps' && <span className="wi-presets">{FPS_PRESETS.map((v) => <button key={v} type="button" className={`btn tb-mini ${change.value === v ? 'on' : ''}`} onClick={() => onChange({ ...change, value: v })}>{v}</button>)}</span>}
+          {change.target === 'history_interval' && <span className="wi-presets">{[1, 2, 3, 4].map((n) => <button key={n} type="button" className={`btn tb-mini ${change.value === n ? 'on' : ''}`} onClick={() => onChange({ ...change, value: n })}>{n === 1 ? '매 frame' : `${n} frame`}</button>)}
+            <span className="faint">{targets.fps ? `previous DMA 갱신 ${(targets.fps / (change.value || 1)).toFixed(1)} fps` : ''} · TNR core 처리는 매 frame 유지</span></span>}
           {change.target === 'node_clock_mhz' && node?.clock_mhz && <span className="wi-presets">{[-20, -10, 10, 20].map((p) => <button key={p} type="button" className="btn tb-mini" onClick={() => onChange({ ...change, value: Math.round(node.clock_mhz! * (1 + p / 100) * 10) / 10 })}>{p > 0 ? '+' : ''}{p}%</button>)}
             <span className="faint">현재 {node.clock_mhz} MHz · 하한이므로 현재보다 낮추면 효과 없음{node.dvfs_group ? ` (낮추려면 DVFS level ${node.dvfs_group})` : ''}</span></span>}</>}
     <button type="button" className="btn tb-mini" onClick={onRemove}>항목 제거</button>
   </fieldset>
+}
+/** ask = combine: baseline + each lever + all together (or every subset) — Δ power, fps verdict, slack on one table. */
+function CombineView({ combo }: { combo: CombineResult }) {
+  const name = (levers: number[]) => (levers.length ? levers.map((i) => `#${i + 1}`).join(' + ') : '기준')
+  const rows = [...combo.rows].sort((a, b) => (a.levers.length ? 1 : 0) - (b.levers.length ? 1 : 0) || (a.delta?.modeled_power_mw ?? 1e9) - (b.delta?.modeled_power_mw ?? 1e9))
+  const lo = Math.min(0, ...combo.rows.map((r) => r.delta?.modeled_power_mw ?? 0)), hi = Math.max(0, ...combo.rows.map((r) => r.delta?.modeled_power_mw ?? 0))
+  const span = hi - lo || 1
+  const base = combo.baseline_mw || 0
+  return <Card id="wi-combine" title="레버 조합 비교" note={`${combo.mode === 'factorial' ? '모든 조합' : '각각 + 모두'} · ${combo.rows.length - 1} case · Δ = 기준 대비 (모델 CPU + IP + 메모리) · ★ = fps 충족 최저 전력`} defaultWide>
+    <ul className="wi-levers">{combo.levers.map((lv) => <li key={lv.index}><b>#{lv.index + 1}</b> {lv.label}{lv.iq_required ? <span className="badge v-warn" style={{ marginLeft: 6 }}>IQ 평가</span> : null}</li>)}</ul>
+    <div className="table-x"><table className="tb-mini-table wi-combo" style={{ width: '100%' }}>
+      <thead><tr><th>조합</th><th>Δ 전력 mW</th><th style={{ width: 160 }} /><th>IP</th><th>메모리</th><th>CPU</th><th>Δ BW MB/s</th><th>fps</th><th>최소 여유 ms</th><th>사유 · 메모</th></tr></thead>
+      <tbody>{rows.map((r) => { const d = r.delta?.modeled_power_mw ?? null, best = r.key === combo.best
+        return <tr key={r.key} className={`${best ? 'wi-focus' : ''} ${r.feasible ? '' : 'wi-fail'}`}>
+          <th>{best ? '★ ' : ''}{name(r.levers)}</th>
+          <td className="mono">{d == null ? '—' : `${d >= 0 ? '+' : ''}${fmt(d, 1)}`}{d != null && base ? <span className="faint"> ({((d / base) * 100).toFixed(1)}%)</span> : null}</td>
+          <td>{d != null && <svg width={150} height={10} aria-hidden="true"><line x1={((0 - lo) / span) * 150} x2={((0 - lo) / span) * 150} y1={0} y2={10} stroke="#9A9387" />
+            <rect x={(Math.min(0, d) - lo) / span * 150} width={Math.abs(d) / span * 150} y={1} height={8} fill={d <= 0 ? '#009E73' : '#D55E00'} /></svg>}</td>
+          {(['ip_power_mw', 'memory_power_mw', 'cpu_power_mw'] as const).map((k) => <td key={k} className="mono">{r.delta ? fmt(r.delta[k], 1) : '—'}</td>)}
+          <td className="mono">{r.delta ? fmt(r.delta.bw_mbs, 0) : '—'}</td>
+          <td>{r.error ? <span className="badge v-na">적용 불가</span> : <span className={`badge ${r.feasible ? 'v-ok' : 'v-fail'}`}>{r.feasible ? '충족' : '미달'}</span>}</td>
+          <td className="mono">{r.min_slack_ms != null ? `${fmt(r.min_slack_ms, 2)}${r.tight_stage ? ` (${r.tight_stage})` : ''}` : '—'}</td>
+          <td className="faint" style={{ maxWidth: 360 }}>{[r.reason, ...r.notes].filter(Boolean).join(' · ')}</td></tr> })}</tbody></table></div>
+    {combo.interaction_mw != null && Math.abs(combo.interaction_mw) >= 0.5 && <p className="faint">모두 적용 − 단독 합 = {combo.interaction_mw >= 0 ? '+' : ''}{fmt(combo.interaction_mw, 1)} mW — 같은 DVFS domain · 같은 buffer를 건드리는 레버는 효과가 단순 합산되지 않습니다.</p>}
+  </Card>
 }
 const FOCUS_ROWS: Record<FocusMetric, string[]> = { power: ['modeled_power_mw', 'cpu_power_mw', 'ip_power_mw', 'memory_power_mw'], bw: ['bw_mbs', 'memory_power_mw'], timing: ['period_ms', 'fps'], clock: [], feasible: [] }
 function ResultView({ result, focus }: { result: WhatIfResult; focus: FocusMetric[] }) {
@@ -311,6 +388,7 @@ function ResultView({ result, focus }: { result: WhatIfResult; focus: FocusMetri
       <table className="tb-mini-table" style={{ width: '100%' }}><thead><tr><th>항목</th><th>기준</th><th>변경</th><th>변화</th></tr></thead><tbody>{metrics.map(({ key, label, unit }) => <tr key={key} className={hot.has(key) ? 'wi-focus' : ''}><th>{label} ({unit})</th><td className="mono">{fmt(before.metrics[key], 2)}</td><td className="mono">{fmt(after.metrics[key], 2)}</td><td className="mono">{delta(before.metrics[key], after.metrics[key])}</td></tr>)}<tr><th>처리량 조건</th><td>{before.metrics.feasible ? '충족' : '미달'}</td><td>{after.metrics.feasible ? '충족' : '미달'}</td><td>{after.report.verdict.reasons.join(' · ')}</td></tr></tbody></table>
       <div className="table-x"><table className="tb-mini-table" style={{ width: '100%' }}><thead><tr><th>IP</th><th>요구 clock MHz (기준 → 변경)</th><th>적용 clock MHz (기준 → 변경)</th><th>IP power mW (기준 → 변경)</th><th>변경 근거</th></tr></thead><tbody>{after.report.ips.map((ip) => { const base = baseIps.get(ip.node); return <tr key={ip.node}><th>{ip.node}</th><td>{fmt(base?.required_clock_mhz, 1)} → {fmt(ip.required_clock_mhz, 1)}</td><td>{fmt(base?.set_clock_mhz, 1)} → {fmt(ip.set_clock_mhz, 1)}</td><td>{fmt(base?.power_mw, 1)} → {fmt(ip.power_mw, 1)}</td><td title={explanations.get(ip.node)}>{clockExplanation(ip, explanations.get(ip.node))}</td></tr> })}</tbody></table></div>
       <table className="tb-mini-table" style={{ width: '100%' }}><thead><tr><th>Stage</th><th>HW ms (기준 → 변경)</th><th>예산 ms (기준 → 변경)</th><th>SW ms (기준 → 변경)</th></tr></thead><tbody>{after.report.stages.map((stage) => { const base = baseStages.get(stage.id); return <tr key={stage.id}><th>{stage.name}</th><td>{fmt(base?.hw_ms, 2)} → {fmt(stage.hw_ms, 2)}</td><td>{fmt(base?.budget_ms, 2)} → {fmt(stage.budget_ms, 2)}</td><td>{fmt(base?.sw_ms, 2)} → {fmt(stage.sw_ms, 2)}</td></tr> })}</tbody></table>
+      {!!result.lever_notes?.length && <ul className="wi-answer">{result.lever_notes.map((n) => <li key={n}>{n}</li>)}</ul>}
       {result.warnings.map((warning) => <p className="faint" key={warning}>{warning}</p>)}
     </Card>
     <Card id="wi-basis" title="전력 모델 범위 · 계산 근거" defaultWide>

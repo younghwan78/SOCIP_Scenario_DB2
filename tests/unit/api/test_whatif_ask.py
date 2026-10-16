@@ -46,7 +46,7 @@ def test_targets_list_dvfs_domains_with_ladder_and_offer_the_level_condition(sco
     assert set(intcam["ips"]) == {"msnr", "mtnr"}
     assert "dvfs_level" in t["supported_changes"]
     assert next(n for n in t["nodes"] if n["id"] == "mtnr")["clock_mhz"] == 133.0
-    assert [a["ask"] for a in t["asks"]] == ["what_if", "search_limit", "diagnose"]
+    assert [a["ask"] for a in t["asks"]] == ["what_if", "combine", "search_limit", "diagnose"]
     assert t["llm"]["available"] is False
 
 
