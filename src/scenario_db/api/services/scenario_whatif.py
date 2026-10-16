@@ -14,7 +14,7 @@ from scenario_db.api.schemas.scenario_whatif import WhatIfAskRequest, WhatIfExpe
 from scenario_db.api.schemas.timing_budget import TimingBudgetRequest
 from scenario_db.api.services.review_policy import apply_throughput, scenario_policy
 from scenario_db.api.services.timing_budget import _load, _shim
-from scenario_db.api.services.whatif_conditions import apply_whatif_changes, whatif_targets
+from scenario_db.api.services.whatif_conditions import CHANGE_KINDS, apply_whatif_changes, whatif_targets
 from scenario_db.api.services.whatif_llm import LlmUnavailable, interpret as llm_interpret, llm_status
 from scenario_db.api.services.whatif_query import plan_query
 from scenario_db.db.models.definition import Project, Scenario
@@ -55,7 +55,8 @@ def _planning_inputs(db: Session, scope: WhatIfScope, settings: WhatIfModelSetti
     return req, shim
 
 
-ASK_KINDS = [{"ask": "what_if", "label": "조건 바꿔보기", "description": "DVFS level · IP clock · 크기 · FPS를 바꾸면 timing · 전력 · BW가 어떻게 되나"},
+ASK_KINDS = [{"ask": "what_if", "label": "조건 바꿔보기", "description": "센서 · crop/downscale · L0 skip · previous DMA 빈도 · 출력 크기 · DVFS level · IP mode · SBWC를 바꾸면 timing · 전력 · BW가 어떻게 되나"},
+             {"ask": "combine", "label": "레버 조합 비교", "description": "고른 레버를 각각 · 함께(또는 모든 조합) 적용해 전력 차이와 fps 충족 여부를 한 표로 비교"},
              {"ask": "search_limit", "label": "어디까지 낮출 수 있나", "description": "DVFS domain level을 한 단계씩 낮추며 timing을 충족하는 최저 level 탐색"},
              {"ask": "diagnose", "label": "병목 찾기", "description": "기준 조건에서 가장 빠듯한 구간 · IP와 domain별 여유"}]
 
@@ -229,8 +230,9 @@ def preview(db: Session, request: WhatIfPreviewRequest) -> dict:
             raise ConflictError("What-if baseline changed; interpret and preview the condition again")
         options = apply_throughput(req.options, scenario_policy(db, request.scenario_id))
         before = _case(graph, shim.config, options, tables, ref)
+        lever_notes: list[str] = []
         candidate, config, changes = apply_whatif_changes(graph, request.changes, shim.config,
-                                                          _domains(before["report"], tables))
+                                                          _domains(before["report"], tables), lever_notes)
         after = _case(candidate, config, options, tables, ref)
     except LookupError as exc:
         raise NotFoundError(str(exc)) from exc
@@ -264,9 +266,13 @@ def preview(db: Session, request: WhatIfPreviewRequest) -> dict:
     warnings = sorted(set(before["report"]["warnings"] + after["report"]["warnings"] + [
         "Calculated model subtotal excludes missing/unmodeled device power; it is not measured whole-device power.",
         "Condition changes keep assumed SW runtime and stream bitrate fixed; review those assumptions before adoption."]))
+    iq = sorted({c["target"] for c in changes if (CHANGE_KINDS.get(c["target"]) and CHANGE_KINDS[c["target"]].iq == "required")
+                 or (c["target"] == "compression" and "LOSSY" in str(c.get("option", "")).upper())})
+    if iq:
+        warnings.append(f"IQ evaluation required before adoption: {', '.join(iq)}")
     return {"persisted": False, "baseline_hash": baseline_hash, "condition_hash": condition_hash,
             "normalized_condition": normalized, "baseline": before, "candidate": after,
-            "delta": {"metrics": metrics_delta, "ips": ips}, "warnings": warnings,
+            "delta": {"metrics": metrics_delta, "ips": ips}, "warnings": warnings, "lever_notes": lever_notes, "iq_required": iq,
             "model_lineage": {"engine": "timing-budget", "engine_rev": ENGINE_REV,
                 "power_model": config.power_model, "power_params_ref": config.power_params_ref,
                 "dvfs_table_ref": ref, "cpu_model": "flat", "baseline_fingerprint": baseline_hash}}
@@ -290,6 +296,23 @@ def _change_text(change: dict, targets: dict) -> str:
         return f"{change['node_id']} clock 하한 {change['value']:g} MHz"
     if t == "fps":
         return f"FPS {change['value']:g}"
+    if t == "sensor_mode":
+        row: dict[str, Any] = next((r for r in targets.get("sensors") or [] if r["node_id"] == change["node_id"]), {})
+        opt = next((o for o in row.get("options") or [] if o["id"] == change["option"]), None)
+        return f"센서 → {opt['label'] if opt else change['option']}"
+    if t == "chain_size":
+        return f"{change['node_id']} crop/downscale → {change['width']}x{change['height']}"
+    if t == "power_knob":
+        knob: dict[str, Any] = next((r for r in targets.get("knobs") or [] if r["param"] == change["param"]), {})
+        pick = next((o for o in knob.get("options") or [] if o["id"] == change["option"]), None)
+        return pick["label"] if pick else f"{change['param']}={change['option']}"
+    if t == "history_interval":
+        return f"previous DMA {change.get('buffer_id') or '전체'} {change['value']:g} frame마다 1회"
+    if t == "ip_mode":
+        return f"{change['node_id']} mode → {change['option']}"
+    if t == "compression":
+        ratio = f" (ratio {change['value']:g})" if change.get("value") else ""
+        return f"{change['buffer_id']} → {change['option']}{ratio}"
     if "width" in change:
         return f"{change.get('anchor_id') or change.get('node_id') or change.get('stream_id') or t} {change['width']}x{change['height']}"
     return f"{change.get('node_id') or ''} {change.get('param') or t} {change.get('value')}".strip()
@@ -329,6 +352,86 @@ def _search_limit(base: dict, domains: list[dict], ids: list[str]) -> list[dict[
     return out
 
 
+_DELTA = ("modeled_power_mw", "cpu_power_mw", "ip_power_mw", "memory_power_mw", "bw_mbs")
+
+
+def _combine(base: dict, targets: dict, changes: list[dict], mode: str) -> dict[str, Any]:
+    """Baseline + every lever alone + all together (``each``) or every subset (``factorial``) on one table."""
+    from itertools import combinations
+    n = len(changes)
+    if mode == "factorial":
+        subsets = [c for k in range(1, n + 1) for c in combinations(range(n), k)]
+    else:
+        subsets = [(i,) for i in range(n)] + [tuple(range(n))]
+    if len(subsets) > get_settings().exploration_max_cases:
+        raise UnprocessableError("What-if combination exceeds the exploration case limit")
+    graph, config, options, tables, ref = base["graph"], base["config"], base["options"], base["tables"], base["ref"]
+    b = base["case"]
+    bm = b["metrics"]
+    _, s0, n0 = _min_slack(b["report"])
+    rows: list[dict[str, Any]] = [{"key": "baseline", "levers": [], "metrics": bm, "delta": {k: 0.0 for k in _DELTA},
+                                   "feasible": bm["feasible"], "min_slack_ms": s0, "tight_stage": n0, "reason": None, "notes": []}]
+    for sub in subsets:
+        notes: list[str] = []
+        try:
+            cand, cfg, _ = apply_whatif_changes(graph, [changes[i] for i in sub], config, targets.get("domains"), notes)
+            case = _case(cand, cfg, options, tables, ref)
+        except ValueError as exc:
+            rows.append({"key": "+".join(map(str, sub)), "levers": list(sub), "metrics": None, "delta": None,
+                         "feasible": False, "min_slack_ms": None, "tight_stage": None, "reason": str(exc), "error": True, "notes": notes})
+            continue
+        m = case["metrics"]
+        _, slack, stage = _min_slack(case["report"])
+        rows.append({"key": "+".join(map(str, sub)), "levers": list(sub), "metrics": m,
+                     "delta": {k: round(m[k] - bm[k], 3) for k in _DELTA}, "feasible": m["feasible"],
+                     "min_slack_ms": slack, "tight_stage": stage, "notes": notes,
+                     "reason": None if m["feasible"] else (case["report"]["verdict"]["reasons"] or ["timing 미달"])[0]})
+    singles = {r["levers"][0]: r for r in rows if len(r["levers"]) == 1}
+    together = next((r for r in rows if len(r["levers"]) == n), None)
+    ok = [r for r in rows[1:] if r["feasible"] and r["delta"] is not None]
+    best = min(ok, key=lambda r: r["delta"]["modeled_power_mw"], default=None)
+    interaction = None
+    if together and together["delta"] and all(singles.get(i, {}).get("delta") for i in range(n)):
+        interaction = round(together["delta"]["modeled_power_mw"] - sum(singles[i]["delta"]["modeled_power_mw"] for i in range(n)), 3)
+    levers = []
+    for i, ch in enumerate(changes):
+        kind = CHANGE_KINDS.get(ch["target"])
+        iq = (kind.iq == "required") if kind else False
+        iq = iq or (ch["target"] == "compression" and "LOSSY" in str(ch.get("option", "")).upper())
+        levers.append({"index": i, "change": ch, "label": _change_text(ch, targets), "group": kind.group if kind else "other", "iq_required": iq})
+    return {"mode": mode, "levers": levers, "rows": rows, "best": best["key"] if best else None,
+            "interaction_mw": interaction, "baseline_mw": bm["modeled_power_mw"]}
+
+
+def _combine_answer(combo: dict) -> dict[str, Any]:
+    rows, levers = combo["rows"], combo["levers"]
+    base_mw = combo["baseline_mw"] or 0.0
+    name = lambda r: " + ".join(f"#{i + 1}" for i in r["levers"])  # noqa: E731
+    pct = lambda d: f"{d / base_mw * 100:+.1f}%" if base_mw else ""  # noqa: E731
+    best = next((r for r in rows if r["key"] == combo["best"]), None)
+    facts = [f"#{lv['index'] + 1} {lv['label']}" + (" · IQ 평가 필요" if lv["iq_required"] else "") for lv in levers]
+    for r in rows[1:]:
+        if len(r["levers"]) != 1:
+            continue
+        if r.get("error"):
+            facts.append(f"{name(r)} 단독: 적용 불가 — {r['reason']}")
+        else:
+            facts.append(f"{name(r)} 단독: {r['delta']['modeled_power_mw']:+.1f} mW ({pct(r['delta']['modeled_power_mw'])}) · "
+                         f"BW {r['delta']['bw_mbs']:+.0f} MB/s · {'fps 충족' if r['feasible'] else '미달: ' + str(r['reason'])}")
+    all_row = next((r for r in rows if len(r["levers"]) == len(levers)), None)
+    if all_row and all_row.get("delta"):
+        facts.append(f"모두 적용: {all_row['delta']['modeled_power_mw']:+.1f} mW ({pct(all_row['delta']['modeled_power_mw'])}) · "
+                     f"{'fps 충족' if all_row['feasible'] else '미달: ' + str(all_row['reason'])}"
+                     + (f" · 단독 합과 차이 {combo['interaction_mw']:+.1f} mW (레버 간 상호작용 — 공유 DVFS domain · 같은 buffer)"
+                        if combo.get("interaction_mw") is not None and abs(combo["interaction_mw"]) >= 0.5 else ""))
+    if best is None:
+        return {"verdict": "fail", "headline": "fps(처리량)를 충족하는 조합이 없습니다", "facts": facts, "actions": []}
+    iq = any(levers[i]["iq_required"] for i in best["levers"])
+    return {"verdict": "ok", "facts": facts, "actions": [],
+            "headline": f"fps 충족 최저 전력: {name(best)} — {best['delta']['modeled_power_mw']:+.1f} mW ({pct(best['delta']['modeled_power_mw'])})"
+                        f" · 최소 여유 {best['tight_stage']} {best['min_slack_ms']:.2f} ms" + (" · IQ 평가 필요" if iq else "")}
+
+
 def _diagnose(base: dict, domains: list[dict]) -> dict[str, Any]:
     report = base["case"]["report"]
     slack = _stage_slack(report)
@@ -363,8 +466,12 @@ def _diag_facts(diag: dict) -> list[str]:
     return facts
 
 
-def _answer(plan: dict, targets: dict, result, search, diag, boundaries: list[str]) -> dict[str, Any] | None:
+def _answer(plan: dict, targets: dict, result, search, diag, boundaries: list[str], combo=None) -> dict[str, Any] | None:
     actions: list[dict[str, Any]] = []
+    if combo is not None:
+        out = _combine_answer(combo)
+        out["facts"] = boundaries + out["facts"]
+        return out
     if result is not None:
         b, c = result["baseline"], result["candidate"]
         desc = " · ".join(_change_text(ch, targets) for ch in result["normalized_condition"]["changes"])
@@ -386,6 +493,12 @@ def _answer(plan: dict, targets: dict, result, search, diag, boundaries: list[st
             facts.append("적용 clock: " + " · ".join(f"{ip['node']} {base_ips[ip['node']]['set_clock_mhz']:g}→"
                                                      f"{base_ips[ip['node']]['set_clock_mhz'] + ip['set_clock_mhz']:g} MHz" for ip in moved))
         facts += [f"미달: {r}" for r in c["report"]["verdict"]["reasons"][1:4]]
+        facts += result.get("lever_notes") or []
+        if result.get("iq_required"):
+            facts.append("IQ 평가 필요: " + ", ".join(CHANGE_KINDS[t].label if t in CHANGE_KINDS else t for t in result["iq_required"])
+                         + " — 전력 이득은 화질 평가 후 채택")
+        if len(result["normalized_condition"]["changes"]) >= 2:
+            actions.append({"label": "레버별로 나눠 비교", "ask": "combine"})
         base_clock = {ip["node"]: ip["set_clock_mhz"] for ip in b["report"]["ips"]}
         domains = {d["id"]: d for d in targets.get("domains") or []}
         for ch in result["normalized_condition"]["changes"]:
@@ -456,7 +569,7 @@ def ask(db: Session, request: WhatIfAskRequest) -> dict:
             got = llm_interpret(request.query, targets_)
         except LlmUnavailable as exc:
             return {**common, "interpretation": {"status": "llm_unavailable", "reason": str(exc), **llm_status()},
-                    "plan": None, "answer": None, "result": None, "search": None, "diagnose": None}
+                    "plan": None, "answer": None, "result": None, "search": None, "diagnose": None, "combine": None}
         boundaries = got["boundaries"]
         plan_ = {k: got[k] for k in ("ask", "changes", "search_domains", "focus")}
         runnable = plan_["ask"] != "what_if" or bool(plan_["changes"])
@@ -466,9 +579,16 @@ def ask(db: Session, request: WhatIfAskRequest) -> dict:
                           "notes": got["notes"], "boundaries": boundaries}
         if status in ("clarification", "unsupported"):
             return {**common, "interpretation": interpretation, "plan": plan_, "answer": None,
-                    "result": None, "search": None, "diagnose": None}
-    result = search = diag = None
-    if plan_["ask"] == "search_limit":
+                    "result": None, "search": None, "diagnose": None, "combine": None}
+    result = search = diag = combo = None
+    if plan_["ask"] == "combine" and len(plan_["changes"]) < 2:
+        plan_["ask"] = "what_if"   # a single lever (e.g. an LLM reading) is just a what-if
+    if plan_["ask"] == "combine":
+        try:
+            combo = _combine(base, targets_, plan_["changes"], request.combine)
+        except ValueError as exc:
+            raise UnprocessableError(str(exc)) from exc
+    elif plan_["ask"] == "search_limit":
         search = _search_limit(base, targets_["domains"], plan_["search_domains"])
     elif plan_["ask"] == "diagnose" or not plan_["changes"]:
         if plan_["ask"] == "what_if" and not boundaries:
@@ -478,8 +598,8 @@ def ask(db: Session, request: WhatIfAskRequest) -> dict:
         result = preview(db, WhatIfPreviewRequest(**scope.model_dump(), config=request.config, options=request.options,
                                                   changes=plan_["changes"], expected_baseline_hash=baseline_hash))
     return {**common, "interpretation": interpretation, "plan": plan_,
-            "answer": _answer(plan_, targets_, result, search, diag, boundaries),
-            "result": result, "search": search, "diagnose": diag}
+            "answer": _answer(plan_, targets_, result, search, diag, boundaries, combo),
+            "result": result, "search": search, "diagnose": diag, "combine": combo}
 
 
 def _record(row, *, detail=False):

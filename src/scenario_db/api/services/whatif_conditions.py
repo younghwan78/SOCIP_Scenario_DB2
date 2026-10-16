@@ -27,8 +27,8 @@ from scenario_db.sim.soc_profiles import _PROFILES, profile_for_graph
 class ChangeKind:
     target: str
     label: str
-    shape: str                       # "size" (width/height) | "value" | "level" (DVFS OPP level)
-    selector: str | None = None      # field naming the instance: anchor_id / node_id / stream_id / domain
+    shape: str                       # "size" (width/height) | "value" | "level" (DVFS OPP level) | "choice" (option id)
+    selector: str | None = None      # field naming the instance: anchor_id / node_id / stream_id / domain / buffer_id / param
     selector_optional: bool = False  # e.g. output_size resolves the single output itself
     needs_param: bool = False
     unit: str = ""
@@ -36,11 +36,16 @@ class ChangeKind:
     description: str = ""
     discover: Callable[[dict], list[dict]] = field(default=lambda targets: [], repr=False)
     apply: Callable[["_Apply", dict], tuple] | None = field(default=None, repr=False)
+    group: str = "other"             # UI lever palette: sensor / size / temporal / clock / mode / compression / other
+    order: int = 50                  # application order: sensor (10) -> power option (20) -> chain size (30) -> rest
+    iq: str | None = None            # "required" = adoption needs image-quality evaluation
+    value_optional: bool = False     # "choice" kinds that accept an optional numeric ``value`` (e.g. compression ratio)
 
     def meta(self, targets: dict) -> dict:
         return {"target": self.target, "label": self.label, "shape": self.shape, "selector": self.selector,
                 "selector_optional": self.selector_optional, "needs_param": self.needs_param, "unit": self.unit,
-                "max_value": self.max_value, "description": self.description, "choices": self.discover(targets)}
+                "max_value": self.max_value, "description": self.description, "group": self.group, "iq": self.iq,
+                "value_optional": self.value_optional, "choices": self.discover(targets)}
 
 
 CHANGE_KINDS: dict[str, ChangeKind] = {}
@@ -67,6 +72,7 @@ class _Apply:
     config: Any
     targets: dict
     seen: set = field(default_factory=set)
+    notes: list = field(default_factory=list)
 
 
 def _buffers(graph):
@@ -251,10 +257,14 @@ def whatif_targets(graph, config=None, domains: list[dict] | None = None) -> dic
            "params": _node_params(graph),
            "domains": list(domains or []),
            "capability": _capability(graph)}
+    from scenario_db.api.services.whatif_levers import lever_targets
+    out.update(lever_targets(graph, out["fps"]))
     kinds = [k.meta(out) for k in CHANGE_KINDS.values()]
     out["change_kinds"] = [k for k in kinds if k["choices"] or k["target"] == "fps" and out["fps"]]
     out["supported_changes"] = [k["target"] for k in out["change_kinds"]]
-    out["limitations"] = ["Sensor mode changes require Sensor Explore catalog selection",
+    out["limitations"] = ["Sensor swap keeps the authored pipeline (same IPs / formats); readout timing and size follow the catalog mode",
+                          "Crop / downscale / L0 skip / lossy compression / IP mode need image-quality evaluation before adoption",
+                          "History interval lowers previous-frame DMA traffic only; temporal-filter IP core work stays per frame",
                           "SW per-frame runtime and bitstream bitrate stay fixed unless modeled by the existing engine",
                           "Node clock values are manual lower bounds; DVFS/domain constraints may select a higher clock",
                           "FPS changes are hypothetical cadence; sensor catalog FPS support is not validated",
@@ -488,8 +498,11 @@ def param_max(param: str | None) -> float | None:
     return NODE_PARAMS.get(param or "", (None, None, None, None))[2]
 
 
-def apply_whatif_changes(graph, changes, config, domains: list[dict] | None = None):
-    """Return a detached graph/config. The loaded graph and all ORM JSON remain untouched."""
+def apply_whatif_changes(graph, changes, config, domains: list[dict] | None = None, notes: list | None = None):
+    """Return a detached graph/config. The loaded graph and all ORM JSON remain untouched.
+
+    Structural levers run first (sensor -> power option -> chain size), the rest in request order, so a later
+    size / compression condition applies to the reshaped pipeline. ``notes`` collects what a lever rewrote."""
     candidate = replace(graph, scenario=deepcopy(graph.scenario), variant=deepcopy(graph.variant))
     variant = candidate.variant
     variant.node_configs = deepcopy(variant.node_configs or {})
@@ -505,15 +518,23 @@ def apply_whatif_changes(graph, changes, config, domains: list[dict] | None = No
                and stream_sizes.get(other["stream_id"]) == (change["width"], change["height"])
                for other in stream_changes):
             raise ValueError("stream size changes overlap; compare these conditions separately")
-    normalized = []
-    for change in changes:
+    rows = []
+    for index, change in enumerate(changes):
         data = change.model_dump(exclude_none=True) if hasattr(change, "model_dump") else dict(change)
         kind = CHANGE_KINDS.get(data["target"])
         if kind is None or kind.apply is None:
             raise ValueError(f"unsupported What-if target: {data['target']}")
+        rows.append((kind.order, index, kind, data))
+    normalized: list[dict | None] = [None] * len(rows)
+    for _order, index, kind, data in sorted(rows, key=lambda r: (r[0], r[1])):
         key = kind.apply(ctx, data)
         if key in ctx.seen:
             raise ValueError("duplicate What-if change target")
         ctx.seen.add(key)
-        normalized.append(data)
+        normalized[index] = data
+    if notes is not None:
+        notes.extend(ctx.notes)
     return candidate, ctx.config, normalized
+
+
+from scenario_db.api.services import whatif_levers as _levers  # noqa: E402,F401  (registers the lever kinds)
