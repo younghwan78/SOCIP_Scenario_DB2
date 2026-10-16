@@ -15,6 +15,7 @@ import { verdictChip } from '../lib/timingBudget'
 import { ProvBadge } from '../components/Provenance'
 import { VERDICT_HELP, VerdictPopover } from '../components/VerdictDetail'
 import { BasisInfoButton } from '../components/BasisDetail'
+import { MeasurePopover } from '../components/MeasurePopover'
 import { calibrationApi, freshnessOf, measTooltip, predictionTooltip, simTooltip, uniqueShortIds, type Coverage } from '../lib/calibration'
 import { batteryNote, maText, useBattery } from '../lib/battery'
 import { DEFAULT_CANONICAL, canonicalOf } from '../lib/projects'
@@ -90,6 +91,7 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
   const isRef = useCallback((r: VariantRow) => r.variant_id === reference, [reference])
   const [descOpen, setDescOpen] = usePref('explorer.desc.open', true)
   const [verdictAt, setVerdictAt] = useState<{ id: string; x: number; y: number } | null>(null)
+  const [measAt, setMeasAt] = useState<{ id: string; scenario: string; x: number; y: number } | null>(null)
 
   const facetKeys = (['resolution', 'fps', 'stab', 'hdr', 'camera'] as FacetKey[]).filter((k) => rows.some((r) => facetValue(k, r.design_conditions) !== null))
   const visible = rows.filter((r) => (showDerived || !r.derived_from_variant)
@@ -161,7 +163,7 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
               title={`${predictionTooltip(p, shortIds.get(p.id), freshPending)}${p.basis.overrides?.length ? `\n기준 외 입력: ${p.basis.overrides.join(', ')}` : ''}\n클릭: 기준 상세`} />
             : <span className="mono">{p.basis?.label ?? '기준 ?'}</span>}</span> } },
     { key: 'meas', label: '실측', width: 110, firstDir: -1,
-      headTitle: '대표 측정 날짜 (실측 우선, 없으면 합성) · SW≠ = 실측 trace로 등록한 예측의 SW build ≠ 측정 SW (정의값 예측은 비교 안 함)\nhover = 측정별 날짜 · SW · silicon · build',
+      headTitle: '대표 측정 날짜 (실측 우선, 없으면 합성) · SW≠ = 실측 trace로 등록한 예측의 SW build ≠ 측정 SW (정의값 예측은 비교 안 함)\nhover = 측정별 날짜 · SW · silicon · build · 클릭 = 실측 상세 (CPU · IP · BW 예측 대비 · rail · SW task) → 예측 ↔ 실측 페이지',
       sort: (r) => { const m = (cov(r.variant_id)?.measurements ?? [])[0]; return m ? `${m.synthetic ? 0 : 1}${m.at ?? ''}` : null },
       title: (r) => { const c = cov(r.variant_id); return c ? measTooltip(c) : '' },
       render: (r) => { const c = cov(r.variant_id); if (!covQ.data) return null
@@ -170,8 +172,9 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
         // only a prediction fed by a measured trace has a SW build to compare; defined timing has none
         const psw = c.current_prediction?.sw?.source === 'measured' ? c.current_prediction.sw.ref : null
         const swDiff = psw && m.sw_baseline_ref && psw !== m.sw_baseline_ref
-        return <a href={`#/calibration?scenario=${encodeURIComponent(r.scenario_id)}`} onClick={(e) => e.stopPropagation()} className={m.synthetic ? 'meas-syn' : ''}>
-          {m.synthetic ? '합성 ' : ''}{(m.at ?? '').slice(5, 10).replace('-', '/') || '날짜?'}{swDiff ? <span className="fr fr-basis" title={`예측 SW ${psw} ≠ 측정 SW ${m.sw_baseline_ref}`}> · SW≠</span> : null}</a> } },
+        return <button type="button" className={`link-btn ${m.synthetic ? 'meas-syn' : ''}`} aria-label={`${r.variant_id} 실측 상세`}
+          onClick={(e) => { e.stopPropagation(); const b = (e.currentTarget as HTMLElement).getBoundingClientRect(); setMeasAt(measAt?.id === m.id ? null : { id: m.id, scenario: r.scenario_id, x: b.left, y: b.bottom }) }}>
+          {m.synthetic ? '합성 ' : ''}{(m.at ?? '').slice(5, 10).replace('-', '/') || '날짜?'}{m.total_mw != null ? <span className="mono faint"> · {m.total_mw.toFixed(0)}</span> : null}{swDiff ? <span className="fr fr-basis" title={`예측 SW ${psw} ≠ 측정 SW ${m.sw_baseline_ref}`}> · SW≠</span> : null}</button> } },
     ...COLS.map((c): Column<VariantRow> => ({ key: c.key, label: c.label, width: c.key === 'codec' ? 190 : c.key === 'mode' ? 170 : 130,
       sort: c.key === 'rf' ? (r) => resFpsKey(r.design_conditions) : (r) => { const v = c.get(r.design_conditions); return v === MISSING ? null : v },
       title: (r) => c.get(r.design_conditions),
@@ -272,6 +275,8 @@ export function ExplorerPage({ ctx }: { ctx: Ctx }) {
             {!variantsQ.loading && !visible.length && <div className="empty">조건에 맞는 variant가 없습니다.</div>}
             {variantsQ.loading && <div className="empty">불러오는 중…</div>}
           </div>
+          {measAt && <MeasurePopover measId={measAt.id} at={measAt} project={ctx.project} onClose={() => setMeasAt(null)}
+            onEvidence={() => { const m = measAt; setMeasAt(null); ctx.navigate('calibration', { scenario: m.scenario, m: m.id }) }} />}
           {verdictAt && board.get(verdictAt.id)?.verdict_detail && <VerdictPopover d={board.get(verdictAt.id)!.verdict_detail!} at={verdictAt} onClose={() => setVerdictAt(null)}
             onTiming={() => { const id = verdictAt.id; setVerdictAt(null); ctx.navigate('timing', { scenario: selected?.scenario_id, variant: id }) }} />}
           <div className="footer-bar">
