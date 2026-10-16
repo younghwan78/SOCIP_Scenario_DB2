@@ -31,8 +31,24 @@ Stream changes resize surfaces grouped by their original size, preserving displa
 destination/panel geometry. Unmodeled parameters are not offered.
 Each dimension is 16–16384 pixels; FPS is positive and at most
 240; the manual clock lower bound is positive and at most 5000 MHz. At most eight changes are accepted.
-Duplicate/overlapping size targets, sensor-mode changes, ambiguous multi-port
+Duplicate/overlapping size targets, ambiguous multi-port
 resizing, and extrapolation of measured timing/CPU/clock inputs are rejected.
+
+Commercialization levers (`whatif_levers.py`, same registry; `group` = palette group, `iq: required`
+= adoption needs image-quality evaluation):
+
+| target | selector · value | effect |
+| --- | --- | --- |
+| `sensor_mode` | `node_id` (active sensor) · `option` = `<ip_ref>#<mode>` | Another catalog sensor / DT mode with `sensor_fps` ≥ scenario FPS. Readout timing follows the mode; when the active size differs, downstream IPs, their anchors (pyramid levels by 2^-k) and explicit buffer sizes are reshaped |
+| `chain_size` | `node_id` · `width`/`height` | Crop / downscale at that IP (bayer crop at BYRP, YUV downscale at YUVSC): every downstream IP processing the same size, its anchors and pyramid levels follow; the IP itself keeps its input size. Must not exceed the current size |
+| `power_knob` | `param` (knob) · `option` (value) | Scenario `power_options.knobs` with `explore` (e.g. `crop_strategy=byrp_bcrop`, `pyramid_l0=skip`), applied with the authoring knob engine |
+| `history_interval` | optional `buffer_id` (none = all history buffers) · `value` N (1–8) | Previous-frame DMA read/write once every N frames: `history.update_interval` → `r_w_rate = 1/N`. IP core work stays per frame |
+| `ip_mode` | `node_id` · `option` (mode) | IP catalog `capabilities.sim.modes.<mode>` (own unit power / PPC) |
+| `compression` | `buffer_id` · `option` (`COMP_OFF` or a SoC catalog mode of the buffer family) · optional `value` ratio (0, 1] | Ratio default: `typical_ratio` → catalog `comp_ratio` < 1 → assumed. Only buffers whose endpoint IPs declare compression are listed; a mode the IP catalog does not list is rejected |
+
+Structural levers apply first (sensor → power option → chain size), then the rest in request order.
+Preview adds `lever_notes` (what was reshaped) and `iq_required` (targets needing IQ evaluation;
+lossy compression included).
 
 `dvfs_level` pins a DVFS domain to an OPP level of that domain's ladder (`domain` + integer `level`);
 every IP of the shared domain runs at that level, so a level below the required clock fails timing.
@@ -44,12 +60,13 @@ domain down.
 | `ask` | Input | Execution | Answer |
 | --- | --- | --- | --- |
 | `what_if` | `changes` (1–8) | Preview (baseline vs candidate) | `ok` / `fail` + minimum stage slack, power/BW deltas, applied clock moves; notes a clock floor below the applied clock |
+| `combine` | `changes` (2–8; `combine: "factorial"` ≤ 5) | Baseline + each lever alone + all together (`each`) or every subset (`factorial`), each case through `apply_whatif_changes` + Timing Budget | `combine.rows` (Δ CPU/IP/memory/BW, verdict, min slack, notes), `best` = fps-feasible lowest power, `interaction_mw` = all − Σ singles |
 | `search_limit` | `search_domains` (empty = all) | Lower each domain one OPP level at a time until the Timing Budget verdict fails | Lowest feasible level, power delta, first failing level and reason; `at_min` when already at the lowest OPP |
 | `diagnose` | — | Baseline report | Tightest stage and slack, its longest IPs, per-domain room to lower/raise |
 
 All numbers come from the Timing Budget engine; the answer text is composed on the server from them.
 Unknown search domains are rejected; an omitted domain list means all available domains.
-The upper bound on evaluated search cases must fit `exploration_max_cases`.
+The upper bound on evaluated search / combine cases must fit `exploration_max_cases`.
 Duplicate targets and fields incompatible with the selected question kind are rejected.
 Malformed LLM envelopes or conflicting conditions return `llm_unavailable`; invalid
 relative values and unavailable OPPs do not become executable conditions.

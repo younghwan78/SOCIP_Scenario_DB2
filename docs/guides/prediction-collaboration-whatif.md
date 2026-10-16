@@ -1,16 +1,24 @@
 # 예측 설명·댓글과 자연어 What-if
 
 Status: Current. Last verified: 2026-10-16.
-Source: `ui/src/pages/ScenarioWhatIf.tsx`, `ui/src/components/PredictionCollaboration.tsx`,
-`src/scenario_db/api/services/scenario_whatif.py`, `whatif_conditions.py`,
+Source: `ui/src/pages/ScenarioWhatIf.tsx`, `ui/src/components/MeasurePopover.tsx`, `ui/src/components/PredictionCollaboration.tsx`,
+`src/scenario_db/api/services/scenario_whatif.py`, `whatif_conditions.py`, `whatif_levers.py`,
 `whatif_query.py`, `prediction_discussion.py`.
 
 ## 질문으로 조건 비교하기
 
 1. 과제, scenario, variant를 선택하고 **What-if**를 엽니다.
-2. **조건 바꿔보기**, **어디까지 낮출 수 있나**, **병목 찾기** 중 질문 종류를 고릅니다.
-3. 조건 편집기에서 크기·FPS·IP clock 하한·DVFS domain level을 지정합니다.
+2. **조건 바꿔보기**, **레버 조합 비교**, **어디까지 낮출 수 있나**, **병목 찾기** 중 질문 종류를 고릅니다.
+3. 레버 팔레트에서 바꿀 항목을 담습니다. 팔레트는 과제 상용화 검토 순서로 묶여 있습니다.
+   - 센서: 다른 sensor · DT mode (readout · 크기가 다르면 RT chain · pyramid 재계산)
+   - 크기: IP crop · downscale (BYRP bayer crop, YUVSC YUV downscale, −5~25% / EIS 25→15% preset), MCSC 출력 크기
+   - Temporal: power option (bayer crop 전략, MTNR L0 skip), previous DMA 빈도 (N frame에 1회)
+   - DVFS · clock: domain level (±1·±2 step), IP clock 하한, FPS
+   - IP mode, SBWC 압축 (끔 · lossless · lossy · catalog의 footprint mode, IP 미지원 mode는 선택 불가)
    한계 탐색은 domain을 선택하고, 병목 진단은 현재 기준을 사용합니다.
+   레버 조합 비교는 레버 2개 이상을 각각 · 함께(또는 모든 조합, 5개 이하) 계산해 fps 충족 최저 전력 조합(★)과
+   레버 간 상호작용(모두 적용 − 단독 합)을 표시합니다. **추천 레버 담기**는 이 variant에서 가능한 power option ·
+   previous DMA · SBWC lossless · DVFS −1을 담습니다. IQ 평가가 필요한 레버는 표시되며, 전력 이득은 화질 평가 후 채택합니다.
 4. 계산을 실행해 엔진이 산출한 timing·전력·BW와 구간별 여유를 확인합니다.
 5. 제목, 목적, 상세 설명, 가정, 결론을 입력하고 개인 또는 공유 실험으로 저장합니다.
 
@@ -19,7 +27,7 @@ Source: `ui/src/pages/ScenarioWhatIf.tsx`, `ui/src/components/PredictionCollabor
 모호한 질문은 선택지를 표시하고, 지원하지 않거나 잘못된 응답은 이유와 함께 알립니다.
 사내 LLM이 없거나 응답하지 않으면 조건 편집기로 계산할 수 있습니다.
 불러온 실험은 해당 모델 설정을 사용하며, 허용 범위를 벗어난 값과 알 수 없는
-domain은 적용하지 않습니다. 압축·codec·EIS·센서 모드 변경은 지원하지 않습니다.
+domain은 적용하지 않습니다. codec·EIS on/off·LLC 변경은 지원하지 않습니다.
 
 DVFS level은 domain의 OPP를 고정하는 조건입니다. IP clock 하한과 달리 적용
 clock을 낮출 수 있으며, 요구 clock보다 낮으면 timing 미달로 판정합니다.
@@ -68,3 +76,10 @@ DB에서 수행하며 운영 DB 반영은 기존 배포 절차를 따릅니다.
 
 API 계약: [Scenario What-if](../contracts/api/scenario-whatif-contract.md),
 [Architecture Analysis](../contracts/api/architecture-analysis-contract.md).
+
+## 실측 · 예측 power popover
+
+- Scenario 표의 **실측** 셀(날짜 · mW)을 클릭하면 측정 상세가 열립니다: 출처(실측 / 합성), 조건, total ± std · n · mA,
+  fps · latency, CPU · IP · BW · 기타의 실측 대비 등록 예측 · 최신 simulation Δ, 비교 조건 동등성, rail 상위, SW task 상위.
+  **예측 ↔ 실측 페이지에서 전체 보기**로 해당 측정이 선택된 Evidence 화면으로 이동합니다.
+- Pipeline toolbar의 **⚡ 예측 · 실측 mW** chip은 등록 예측(구성 · BW · DVFS · timing 판정)과 대표 측정을 한 popover로 보여 줍니다.

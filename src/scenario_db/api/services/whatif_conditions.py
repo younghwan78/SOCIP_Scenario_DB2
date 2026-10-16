@@ -455,28 +455,28 @@ def _apply_dvfs(ctx: _Apply, data: dict) -> tuple:
     return ("dvfs_level", domain)
 
 
-register(ChangeKind("output_size", "출력 크기", "size", "anchor_id", selector_optional=True,
+register(ChangeKind("output_size", "출력 크기 (MCSC out)", "size", "anchor_id", selector_optional=True, group="size",
                     description="녹화·미리보기 등 출력 surface 크기 (센서 입력은 유지)",
                     discover=lambda t: [{"id": a, "size": next(r["size"] for r in t["anchors"] if r["id"] == a),
                                          "role": next(r.get("role") for r in t["anchors"] if r["id"] == a)} for a in t["output_targets"]],
                     apply=_apply_anchor))
-register(ChangeKind("anchor_size", "크기 기준점", "size", "anchor_id",
+register(ChangeKind("anchor_size", "크기 기준점", "size", "anchor_id", group="size",
                     description="size_profile anchor (중간 buffer 포함)",
                     discover=lambda t: [{"id": r["id"], "size": r["size"]} for r in t["anchors"] if r["supported"]],
                     apply=_apply_anchor))
-register(ChangeKind("node_size", "IP 처리 크기", "size", "node_id",
+register(ChangeKind("node_size", "IP 처리 크기", "size", "node_id", group="size",
                     description="단일 surface에 묶인 IP의 처리 크기",
                     discover=lambda t: [{"id": n["id"], "size": n["size"]} for n in t["nodes"] if n["size_supported"]],
                     apply=_apply_node_size))
-register(ChangeKind("stream_size", "스트림 크기", "size", "stream_id",
+register(ChangeKind("stream_size", "스트림 크기", "size", "stream_id", group="size",
                     description="size anchor가 없는 scenario: 같은 크기로 정의된 surface(decoder·layer 등)를 함께 변경",
                     discover=lambda t: [{"id": s["id"], "size": s["size"], "primary": s["primary"], "where": s["where"]} for s in t["streams"]],
                     apply=_apply_stream))
-register(ChangeKind("fps", "FPS", "value", None, unit="fps", max_value=240.0,
+register(ChangeKind("fps", "FPS", "value", None, unit="fps", max_value=240.0, group="clock",
                     description="scenario 처리 주기 (센서 mode 지원은 검증하지 않음)",
                     discover=lambda t: [{"id": "fps", "value": t["fps"]}] if t.get("fps") else [],
                     apply=_apply_fps))
-register(ChangeKind("node_clock_mhz", "IP clock 하한", "value", "node_id", unit="MHz", max_value=5000.0,
+register(ChangeKind("node_clock_mhz", "IP clock 하한", "value", "node_id", unit="MHz", max_value=5000.0, group="clock",
                     description="수동 하한 — DVFS·공유 domain 제약으로 더 높게 적용될 수 있음",
                     discover=lambda t: [{"id": n["id"], "ip": n["ip"]} for n in t["nodes"] if n["clock_supported"]],
                     apply=_apply_clock))
@@ -487,7 +487,7 @@ register(ChangeKind("node_param", "IP 설정값", "value", "node_id", needs_para
                     apply=_apply_param))
 
 
-register(ChangeKind("dvfs_level", "DVFS level", "level", "domain", unit="L",
+register(ChangeKind("dvfs_level", "DVFS level", "level", "domain", unit="L", group="clock",
                     description="domain OPP level 고정 — 같은 domain의 모든 IP가 그 level로 동작 (요구 clock보다 낮으면 timing 미달)",
                     discover=lambda t: [{"id": d["id"], "level": d.get("level"), "mhz": d.get("mhz"), "ips": d.get("ips") or [],
                                          "ladder": d.get("ladder") or []} for d in t.get("domains") or []],

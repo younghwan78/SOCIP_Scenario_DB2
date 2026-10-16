@@ -846,7 +846,7 @@ td.lvc-votf { box-shadow: inset 4px 0 0 #0D9488; color: #134E4A; font-weight: 60
 .fr-basis, .fr-data { color: #B45309; }
 .fr-unknown { color: var(--muted); }
 td.fr-stale { background: #FFFBEB; }
-a.meas-syn { color: var(--muted); }
+a.meas-syn, .link-btn.meas-syn { color: var(--muted); }
 .collab-form { display: grid; gap: 12px; margin: 12px 0; }
 .collab-form label { display: grid; gap: 5px; font-size: 13px; }
 .collab-form .input { width: 100%; max-width: 100%; }
@@ -899,3 +899,24 @@ tr.wi-fail th, tr.wi-fail td { color: var(--del-text, #B91C1C); }
 .cpu-effect-mid { position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--line); }
 .cpu-effect-bar { position: absolute; top: 1px; bottom: 1px; border-radius: 2px; }
 .cpu-effect-val { text-align: right; }
+/* 실측 · 예측 power popover (components/MeasurePopover.tsx) */
+.chip-btn { cursor: pointer; font: inherit; font-size: 12px; white-space: nowrap; }
+.chip-btn:hover { filter: brightness(0.96); text-decoration: underline; }
+.power-chip.v-ok { border-color: #A9CDBF; }
+.power-chip.v-warn { border-color: #F0D29B; }
+.power-chip.v-fail { border-color: #E3A39A; }
+.link-btn { border: 0; background: none; padding: 0; color: var(--primary-strong); cursor: pointer; font: inherit; text-align: left; }
+.link-btn:hover { text-decoration: underline; }
+.meas-pop .bd-table td, .meas-pop .bd-table th { padding: 3px 6px; }
+/* What-if lever palette · combine (pages/ScenarioWhatIf.tsx) */
+.wi-palette { display: grid; gap: 4px; margin: 4px 0 8px; padding: 8px 10px; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--surface-soft, #FAF8F4); }
+.wi-pal-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.wi-pal-label { min-width: 150px; font-size: 11px; font-weight: 600; letter-spacing: .04em; color: var(--sd-group, #6B6458); }
+.wi-pal-n { font-size: 11px; }
+.wi-change.wi-iq { border-color: #F0D29B; }
+.wi-change select { max-width: 460px; }
+.wi-idx { margin-right: 6px; }
+.wi-levers { margin: 0 0 6px; padding-left: 18px; font-size: 12.5px; }
+.wi-combo td, .wi-combo th { white-space: nowrap; }
+.wi-combo td.faint { white-space: normal; }
+.wi-combine-opts { margin: 4px 0; }
