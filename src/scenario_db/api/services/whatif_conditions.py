@@ -532,6 +532,7 @@ def apply_whatif_changes(graph, changes, config, domains: list[dict] | None = No
             raise ValueError("duplicate What-if change target")
         ctx.seen.add(key)
         normalized[index] = data
+    _levers.validate_sensor_fps(ctx)
     if notes is not None:
         notes.extend(ctx.notes)
     return candidate, ctx.config, normalized

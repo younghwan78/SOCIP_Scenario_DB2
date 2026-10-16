@@ -133,9 +133,13 @@ def _reshape(graph, nodes: list[str], anchors: set[str], old: tuple[int, int], n
         if to is not None and to != size:
             variant.size_overrides[key] = f"{to[0]}x{to[1]}"
             touched_anchors.append(key)
+    node_set = set(nodes)
+    local_buffers = {e.get("buffer") for e in graph.pipeline_edges
+                     if {str(edge_source(e)), str(edge_target(e))} & node_set}
     for buffer_id, b in _buffers(graph).items():
         explicit = _size_tuple(b.get("size"))
-        if explicit == (0, 0) or b.get("size_ref") not in touched_anchors and explicit != old:
+        owned = any(str((b.get(key) or {}).get("node_id") or "") in node_set for key in ("history", "dma"))
+        if explicit == (0, 0) or not (buffer_id in local_buffers or owned or b.get("size_ref") in touched_anchors):
             continue
         to = scaled_size(explicit, old, new)
         if to is not None:
@@ -251,6 +255,22 @@ def _apply_sensor(ctx: _Apply, data: dict) -> tuple:
             ctx.notes.append("센서 active 크기가 녹화 출력보다 작음 — upscale 경로 (화질 확인 필요)")
     ctx.notes.append(f"센서 {choice['label']} — readout {choice.get('readout_ms') or '?'} ms (기준 {row.get('readout_ms') or '?'} ms)")
     return ("sensor_mode", node_id)
+
+
+def validate_sensor_fps(ctx: _Apply) -> None:
+    """Validate explicitly selected modes against the final cadence after all conditions."""
+    fps = ctx.config.fps or ctx.variant.design_conditions.get("fps")
+    if not fps:
+        return
+    for row in ctx.targets.get("sensors") or []:
+        if ("sensor_mode", row["node_id"]) not in ctx.seen:
+            continue
+        mode = ctx.variant.node_configs[row["node_id"]]["selected_mode"]
+        node = next(n for n in ctx.candidate.pipeline_nodes if str(n.get("id")) == row["node_id"])
+        choice = next(c for c in row["options"] if c["mode"] == mode and c["ip_ref"] == node.get("ip_ref"))
+        maximum = choice.get("fps")
+        if isinstance(maximum, (int, float)) and maximum + 1e-6 < fps:
+            raise ValueError(f"{row['node_id']}: selected sensor mode supports {maximum:g} fps, below requested {fps:g} fps")
 
 
 # ---------------------------------------------------------------- crop / downscale at one IP

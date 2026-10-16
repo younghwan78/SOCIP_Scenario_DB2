@@ -64,3 +64,15 @@ it('pipeline chip shows registered vs measured power and opens both in one popov
     expect(text).toContain('CPU · IP · BW 예측 vs 실측')
   } finally { act(() => root.unmount()) }
 })
+
+it('shows condition differences for the latest simulation even when the registered prediction matches', async () => {
+  const current = { ...detail.predictions[0], conditions: { overall: 'equivalent' as const, items: [] } }
+  const simulation = { ...detail.predictions[0], id: 'SIM-1', kind: 'simulation' as const }
+  vi.spyOn(calibrationApi, 'detail').mockResolvedValue({ ...detail, predictions: [current, simulation] })
+  vi.spyOn(api, 'simConfigs').mockResolvedValue({ items: [] } as never)
+  const { host, root } = await render(<MeasurePopover measId={detail.id} at={{ x: 10, y: 10 }} onClose={() => undefined} />)
+  try {
+    expect(host.textContent).toContain('Sim 최신: 참고 비교 (조건 불일치)')
+    expect(host.textContent).toContain('sw_baseline_ref: 실측 SW2 / 예측 SW1')
+  } finally { act(() => root.unmount()) }
+})

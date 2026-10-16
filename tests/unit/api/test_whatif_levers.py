@@ -7,7 +7,7 @@ import yaml
 
 from scenario_db.api.schemas.scenario_whatif import WhatIfAskRequest, WhatIfChange, WhatIfPreviewRequest, WhatIfScope
 from scenario_db.api.services import scenario_whatif as service
-from scenario_db.api.services.whatif_levers import scaled_size
+from scenario_db.api.services.whatif_levers import _reshape, scaled_size
 from scenario_db.db.models.definition import Project
 from scenario_db.sim.measured_timing import baseline_fingerprint
 from scenario_db.sim.transfers import history_rate
@@ -143,3 +143,31 @@ def test_scaled_size_tracks_pyramid_rounding():
     assert scaled_size((255, 144), (4080, 2296), (3744, 2112)) == (234, 132)
     assert scaled_size((510, 287), (4080, 2296), (3744, 2112)) == (468, 264)
     assert scaled_size((1920, 1080), (4080, 2296), (3744, 2112)) is None
+
+
+def test_reshape_preserves_unrelated_explicit_buffers():
+    buffers = {key: {"size": "4080x2296"} for key in ("local", "other_camera", "history")}
+    buffers["history"]["history"] = {"node_id": "mtnr"}
+    buffers["pyramid"] = {"size": "2040x1148", "dma": {"node_id": "mtnr"}}
+    variant = SimpleNamespace(node_configs={}, size_overrides={}, buffer_overrides={})
+    graph = SimpleNamespace(variant=variant, scenario=SimpleNamespace(size_profile={}, pipeline={"buffers": buffers}),
+                            pipeline_edges=[{"source": "mtnr", "target": "output", "buffer": "local"}])
+    _reshape(graph, ["mtnr"], set(), (4080, 2296), (3744, 2112))
+    assert variant.buffer_overrides == {"local": {"size": "3744x2112"}, "history": {"size": "3744x2112"},
+                                        "pyramid": {"size": "1872x1056"}}
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_selected_sensor_rejects_final_fps_above_catalog_limit(env, reverse):
+    choice = next(o for o in env[2]["sensors"][0]["options"] if o.get("fps") and o["fps"] < 240)
+    changes = [{"target": "sensor_mode", "node_id": "sensor_rear", "option": choice["id"]},
+               {"target": "fps", "value": choice["fps"] + 1}]
+    with pytest.raises(Exception, match="selected sensor mode supports"):
+        _preview(env, *(reversed(changes) if reverse else changes))
+
+
+@pytest.mark.parametrize("n,mode", [(1, "each"), (6, "factorial"), (9, "each")])
+def test_runtime_combine_limits_also_cover_inferred_plans(n, mode):
+    # An LLM plan can select combine after request-schema validation has run.
+    with pytest.raises(Exception, match="combine requires"):
+        service._combine({}, {}, [{}] * n, mode)

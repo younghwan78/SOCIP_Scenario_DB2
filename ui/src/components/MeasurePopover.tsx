@@ -44,9 +44,6 @@ export function MeasureBody({ d, battery, compact }: { d: MeasDetail; battery: B
   const sims = d.predictions.filter((p) => p.kind === 'simulation')
   const preds = [cur, sims[sims.length - 1]].filter((p): p is PredictionCmp => !!p && !!p.rows)
   const ctxKeys = Object.entries(d.context ?? {}).filter(([, v]) => v !== null && v !== '' && v !== undefined).slice(0, 6)
-  const cond = cur?.conditions ?? preds[0]?.conditions
-  const mismatch = cond?.items.filter((i) => i.status === 'mismatch') ?? []
-  const unrecorded = cond?.items.filter((i) => i.status === 'unrecorded') ?? []
   const rails = [...d.measured.rails].sort((a, b) => b.power_mw - a.power_mw).slice(0, compact ? 4 : 6)
   const tasks = [...d.sw_tasks].sort((a, b) => (b.mean_ms ?? 0) - (a.mean_ms ?? 0)).slice(0, compact ? 3 : 5)
   return <>
@@ -67,9 +64,15 @@ export function MeasureBody({ d, battery, compact }: { d: MeasDetail; battery: B
           <tr><td><b>total</b></td><td className="mono"><b>{fmt(d.total.mean, 1)}</b></td>
             {preds.map((p) => <td key={p.id} className="mono"><b>{fmt(p.total_mw, 1)}</b> <span className={`badge ${errClass(p.delta_pct)}`}>{pct(p.delta_pct)}</span></td>)}</tr></tbody></table>
       {!preds.length && <div className="faint">비교할 예측 없음 — 조합 탐색에서 등록하면 여기에 Δ가 표시됩니다.</div>}
-      {cond && <div style={{ marginTop: 2 }}><span className={`badge ${cond.overall === 'equivalent' ? 'v-ok' : 'v-warn'}`}>{CONDITION_LABEL[cond.overall]}</span>
+      {preds.map((p) => {
+        const cond = p.conditions
+        if (!cond) return null
+        const mismatch = cond.items.filter((i) => i.status === 'mismatch')
+        const unrecorded = cond.items.filter((i) => i.status === 'unrecorded')
+        return <div key={p.id} style={{ marginTop: 2 }}><span>{predName(p)}: </span><span className={`badge ${cond.overall === 'equivalent' ? 'v-ok' : 'v-warn'}`}>{CONDITION_LABEL[cond.overall]}</span>
         {mismatch.length > 0 && <span className="err-text"> {mismatch.map((i) => `${i.item}: 실측 ${String(i.measured ?? '—')} / 예측 ${String(i.predicted ?? '—')}`).join(' · ')}</span>}
-        {unrecorded.length > 0 && <span className="faint" title={unrecorded.map((i) => `${i.item}: 실측 ${String(i.measured ?? '—')} / 예측 ${String(i.predicted ?? '—')}`).join('\n')}> · 예측 쪽 미기록 {unrecorded.length}개 ({unrecorded.map((i) => i.item).join(', ')})</span>}</div>}
+        {unrecorded.length > 0 && <span className="faint" title={unrecorded.map((i) => `${i.item}: 실측 ${String(i.measured ?? '—')} / 예측 ${String(i.predicted ?? '—')}`).join('\n')}> · 예측 쪽 미기록 {unrecorded.length}개 ({unrecorded.map((i) => i.item).join(', ')})</span>}</div>
+      })}
     </Sec>
     {rails.length > 0 && <Sec title={`Rail 상위 ${rails.length}개 (전체 ${d.measured.rails.length})`}>
       <table className="tb-mini-table bd-table"><tbody>{rails.map((r) => <tr key={r.rail}><td className="mono" style={{ fontSize: 11 }}>{r.rail}</td><td className="faint">{CAT_LABEL[r.category]}</td><td className="mono">{fmt(r.power_mw, 1)} mW</td></tr>)}</tbody></table>

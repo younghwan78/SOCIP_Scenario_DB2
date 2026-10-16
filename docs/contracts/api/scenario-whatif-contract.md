@@ -47,6 +47,7 @@ Commercialization levers (`whatif_levers.py`, same registry; `group` = palette g
 | `compression` | `buffer_id` · `option` (`COMP_OFF` or a SoC catalog mode of the buffer family) · optional `value` ratio (0, 1] | Ratio default: `typical_ratio` → catalog `comp_ratio` < 1 → assumed. Only buffers whose endpoint IPs declare compression are listed; a mode the IP catalog does not list is rejected |
 
 Structural levers apply first (sensor → power option → chain size), then the rest in request order.
+An explicitly selected sensor mode must also support the final FPS after all conditions are applied. Plain FPS-only conditions remain hypothetical cadence changes.
 Preview adds `lever_notes` (what was reshaped) and `iq_required` (targets needing IQ evaluation;
 lossy compression included).
 

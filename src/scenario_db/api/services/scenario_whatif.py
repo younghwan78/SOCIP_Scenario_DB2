@@ -204,8 +204,8 @@ def _case(graph, config, options, tables, ref):
     coverage = {"complete": not missing and not excluded, "scope": "modeled CPU + IP + memory",
                 "missing_components": missing, "excluded_components": excluded, "cpu_model": "flat",
                 "assumptions": ["Per-frame SW runtime remains the baseline assumption; no measured extrapolation",
-                                "Existing stream bitrate stays fixed", "Sensor mode and input dimensions stay fixed",
-                                "FPS changes are hypothetical cadence; selected sensor mode support is not validated",
+                                "Existing stream bitrate stays fixed", "Sensor mode and input dimensions change only through explicit conditions",
+                                "FPS-only changes are hypothetical cadence; explicit sensor selections must support the final FPS",
                                 "Model calculation does not validate IQ or wiring compatibility"]}
     metrics = {"modeled_power_mw": p["total_mw"], "total_power_mw": p["total_mw"] if coverage["complete"] else None,
                "cpu_power_mw": p["cpu_mw"], "ip_power_mw": p["hw_mw"], "memory_power_mw": p["bw_mw"],
@@ -359,6 +359,8 @@ def _combine(base: dict, targets: dict, changes: list[dict], mode: str) -> dict[
     """Baseline + every lever alone + all together (``each``) or every subset (``factorial``) on one table."""
     from itertools import combinations
     n = len(changes)
+    if not 2 <= n <= 8 or mode == "factorial" and n > 5:
+        raise UnprocessableError("combine requires 2–8 levers; factorial supports at most 5")
     if mode == "factorial":
         subsets = [c for k in range(1, n + 1) for c in combinations(range(n), k)]
     else:
