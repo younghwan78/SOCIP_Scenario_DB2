@@ -1,0 +1,708 @@
+[
+  {
+    "variant": "cam-rec-r1-fhd30-sdr",
+    "had": [
+      "measurement",
+      "simulation"
+    ],
+    "added": []
+  },
+  {
+    "variant": "cam-rec-r1-fhd30-ois",
+    "had": [
+      "measurement",
+      "simulation"
+    ],
+    "added": []
+  },
+  {
+    "variant": "cam-rec-r1-fhd30-vdis",
+    "had": [
+      "measurement",
+      "simulation"
+    ],
+    "added": []
+  },
+  {
+    "variant": "cam-rec-r1-fhd30-supersteady",
+    "had": [
+      "measurement",
+      "simulation"
+    ],
+    "added": []
+  },
+  {
+    "variant": "cam-rec-r1-fhd30-recursive",
+    "had": [
+      "measurement",
+      "simulation"
+    ],
+    "added": []
+  },
+  {
+    "variant": "cam-rec-r1-fhd30-hdr10",
+    "had": [
+      "measurement",
+      "simulation"
+    ],
+    "added": []
+  },
+  {
+    "variant": "cam-rec-r1-fhd30-hdr10-supersteady",
+    "had": [
+      "measurement",
+      "simulation"
+    ],
+    "added": []
+  },
+  {
+    "variant": "cam-rec-r1-fhd60-sdr",
+    "had": [
+      "measurement",
+      "simulation"
+    ],
+    "added": []
+  },
+  {
+    "variant": "cam-rec-r1-fhd60-supersteady",
+    "had": [
+      "measurement",
+      "simulation"
+    ],
+    "added": []
+  },
+  {
+    "variant": "cam-rec-r1-fhd60-hdr10",
+    "had": [
+      "measurement",
+      "simulation"
+    ],
+    "added": []
+  },
+  {
+    "variant": "cam-rec-r1-fhd120",
+    "had": [
+      "measurement",
+      "simulation"
+    ],
+    "added": []
+  },
+  {
+    "variant": "cam-rec-r1-fhd240",
+    "had": [
+      "measurement",
+      "simulation"
+    ],
+    "added": []
+  },
+  {
+    "variant": "cam-rec-r1-fhd480",
+    "had": [
+      "simulation"
+    ],
+    "added": [
+      "meas-synth-cam-rec-r1-fhd480-evt1-20261016"
+    ],
+    "synthetic_total_mw": 1427.522
+  },
+  {
+    "variant": "cam-rec-r1-fhd960-ssm",
+    "had": [
+      "simulation"
+    ],
+    "added": [
+      "meas-synth-cam-rec-r1-fhd960-ssm-evt1-20261016"
+    ],
+    "synthetic_total_mw": 2327.42
+  },
+  {
+    "variant": "cam-rec-r1-qhd30-supersteady",
+    "had": [
+      "measurement",
+      "simulation"
+    ],
+    "added": []
+  },
+  {
+    "variant": "cam-rec-r1-qhd30-hdr10-supersteady",
+    "had": [
+      "measurement",
+      "simulation"
+    ],
+    "added": []
+  },
+  {
+    "variant": "cam-rec-r1-uhd30-sdr",
+    "had": [
+      "measurement",
+      "simulation"
+    ],
+    "added": []
+  },
+  {
+    "variant": "cam-rec-r1-uhd30-supersteady",
+    "had": [
+      "measurement",
+      "simulation"
+    ],
+    "added": []
+  },
+  {
+    "variant": "cam-rec-r1-uhd30-vdis",
+    "had": [
+      "measurement",
+      "simulation"
+    ],
+    "added": []
+  },
+  {
+    "variant": "cam-rec-r1-uhd30-recursive",
+    "had": [
+      "measurement",
+      "simulation"
+    ],
+    "added": []
+  },
+  {
+    "variant": "cam-rec-r1-uhd30-hdr10",
+    "had": [
+      "measurement",
+      "simulation"
+    ],
+    "added": []
+  },
+  {
+    "variant": "cam-rec-r1-uhd60-sdr",
+    "had": [
+      "measurement",
+      "simulation"
+    ],
+    "added": []
+  },
+  {
+    "variant": "cam-rec-r1-uhd60-supersteady",
+    "had": [
+      "measurement",
+      "simulation"
+    ],
+    "added": []
+  },
+  {
+    "variant": "cam-rec-r1-uhd60-psm",
+    "had": [
+      "measurement",
+      "simulation"
+    ],
+    "added": []
+  },
+  {
+    "variant": "cam-rec-r1-uhd60-hdr10",
+    "had": [
+      "measurement",
+      "simulation"
+    ],
+    "added": []
+  },
+  {
+    "variant": "cam-rec-r1-uhd120",
+    "had": [
+      "measurement",
+      "simulation"
+    ],
+    "added": []
+  },
+  {
+    "variant": "cam-rec-r1-8k24-sdr",
+    "had": [
+      "measurement",
+      "simulation"
+    ],
+    "added": []
+  },
+  {
+    "variant": "cam-rec-r1-8k24-hf",
+    "had": [
+      "measurement",
+      "simulation"
+    ],
+    "added": []
+  },
+  {
+    "variant": "cam-rec-r1-8k24-psm",
+    "had": [
+      "measurement",
+      "simulation"
+    ],
+    "added": []
+  },
+  {
+    "variant": "cam-rec-r1-8k30-sdr",
+    "had": [
+      "measurement",
+      "simulation"
+    ],
+    "added": []
+  },
+  {
+    "variant": "cam-rec-r1-8k30-hf",
+    "had": [
+      "measurement",
+      "simulation"
+    ],
+    "added": []
+  },
+  {
+    "variant": "cam-rec-r1-8k30-psm",
+    "had": [
+      "measurement",
+      "simulation"
+    ],
+    "added": []
+  },
+  {
+    "variant": "cam-rec-rcv-fhd30-sdr",
+    "had": [],
+    "added": [
+      "sim-gapfill-cam-rec-rcv-fhd30-sdr-mean-20261016",
+      "meas-synth-cam-rec-rcv-fhd30-sdr-evt1-20261016"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 1002.092
+  },
+  {
+    "variant": "cam-rec-rcv-uhd30-sdr",
+    "had": [],
+    "added": [
+      "sim-gapfill-cam-rec-rcv-uhd30-sdr-mean-20261016",
+      "meas-synth-cam-rec-rcv-uhd30-sdr-evt1-20261016"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 1049.541
+  },
+  {
+    "variant": "cam-rec-rcv-fhd30-hdr10",
+    "had": [],
+    "added": [
+      "sim-gapfill-cam-rec-rcv-fhd30-hdr10-mean-20261016",
+      "meas-synth-cam-rec-rcv-fhd30-hdr10-evt1-20261016"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 493.929
+  },
+  {
+    "variant": "cam-rec-rcv-uhd30-hdr10",
+    "had": [],
+    "added": [
+      "sim-gapfill-cam-rec-rcv-uhd30-hdr10-mean-20261016",
+      "meas-synth-cam-rec-rcv-uhd30-hdr10-evt1-20261016"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 532.523
+  },
+  {
+    "variant": "cam-rec-rdual-fhd30",
+    "had": [],
+    "added": [
+      "sim-gapfill-cam-rec-rdual-fhd30-mean-20261016",
+      "meas-synth-cam-rec-rdual-fhd30-evt1-20261016"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 492.581
+  },
+  {
+    "variant": "cam-rec-rdual-fhd60",
+    "had": [],
+    "added": [
+      "sim-gapfill-cam-rec-rdual-fhd60-mean-20261016",
+      "meas-synth-cam-rec-rdual-fhd60-evt1-20261016"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 808.586
+  },
+  {
+    "variant": "cam-rec-rdual-uhd30",
+    "had": [],
+    "added": [
+      "sim-gapfill-cam-rec-rdual-uhd30-mean-20261016",
+      "meas-synth-cam-rec-rdual-uhd30-evt1-20261016"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 527.528
+  },
+  {
+    "variant": "cam-rec-rdual-uhd60",
+    "had": [],
+    "added": [
+      "sim-gapfill-cam-rec-rdual-uhd60-mean-20261016",
+      "meas-synth-cam-rec-rdual-uhd60-evt1-20261016"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 868.841
+  },
+  {
+    "variant": "cam-rec-rtriple-fhd30",
+    "had": [],
+    "added": [
+      "sim-gapfill-cam-rec-rtriple-fhd30-mean-20261016",
+      "meas-synth-cam-rec-rtriple-fhd30-evt1-20261016"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 494.544
+  },
+  {
+    "variant": "cam-rec-rtriple-fhd60",
+    "had": [],
+    "added": [
+      "sim-gapfill-cam-rec-rtriple-fhd60-mean-20261016",
+      "meas-synth-cam-rec-rtriple-fhd60-evt1-20261016"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 808.61
+  },
+  {
+    "variant": "cam-rec-rtriple-uhd30",
+    "had": [],
+    "added": [
+      "sim-gapfill-cam-rec-rtriple-uhd30-mean-20261016",
+      "meas-synth-cam-rec-rtriple-uhd30-evt1-20261016"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 525.935
+  },
+  {
+    "variant": "cam-rec-rtriple-uhd60",
+    "had": [],
+    "added": [
+      "sim-gapfill-cam-rec-rtriple-uhd60-mean-20261016",
+      "meas-synth-cam-rec-rtriple-uhd60-evt1-20261016"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 879.213
+  },
+  {
+    "variant": "cam-rec-f1-fhd30",
+    "had": [],
+    "added": [
+      "sim-gapfill-cam-rec-f1-fhd30-mean-20261016",
+      "meas-synth-cam-rec-f1-fhd30-evt1-20261016"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 325.574
+  },
+  {
+    "variant": "cam-rec-f1-fhd30-recursive",
+    "had": [],
+    "added": [
+      "sim-gapfill-cam-rec-f1-fhd30-recursive-mean-20261016",
+      "meas-synth-cam-rec-f1-fhd30-recursive-evt1-20261016"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 318.009
+  },
+  {
+    "variant": "cam-rec-f1-fhd60",
+    "had": [],
+    "added": [
+      "sim-gapfill-cam-rec-f1-fhd60-mean-20261016",
+      "meas-synth-cam-rec-f1-fhd60-evt1-20261016"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 661.721
+  },
+  {
+    "variant": "cam-rec-f1-fhd120",
+    "had": [],
+    "added": [
+      "sim-gapfill-cam-rec-f1-fhd120-mean-20261016",
+      "meas-synth-cam-rec-f1-fhd120-evt1-20261016"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 687.395
+  },
+  {
+    "variant": "cam-rec-f1-uhd30",
+    "had": [],
+    "added": [
+      "sim-gapfill-cam-rec-f1-uhd30-mean-20261016",
+      "meas-synth-cam-rec-f1-uhd30-evt1-20261016"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 592.451
+  },
+  {
+    "variant": "cam-rec-f1-uhd30-recursive",
+    "had": [],
+    "added": [
+      "sim-gapfill-cam-rec-f1-uhd30-recursive-mean-20261016",
+      "meas-synth-cam-rec-f1-uhd30-recursive-evt1-20261016"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 595.408
+  },
+  {
+    "variant": "cam-rec-f1-uhd60",
+    "had": [
+      "measurement",
+      "simulation"
+    ],
+    "added": []
+  },
+  {
+    "variant": "cam-rec-f1-uhd120",
+    "had": [],
+    "added": [
+      "sim-gapfill-cam-rec-f1-uhd120-mean-20261016",
+      "meas-synth-cam-rec-f1-uhd120-evt1-20261016"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 681.778
+  },
+  {
+    "variant": "cam-rec-pip-fhd30",
+    "had": [
+      "simulation"
+    ],
+    "added": [
+      "meas-synth-cam-rec-pip-fhd30-evt1-20261016"
+    ],
+    "synthetic_total_mw": 860.45
+  },
+  {
+    "variant": "cam-rec-pip-uhd30",
+    "had": [
+      "simulation"
+    ],
+    "added": [
+      "meas-synth-cam-rec-pip-uhd30-evt1-20261016"
+    ],
+    "synthetic_total_mw": 900.431
+  },
+  {
+    "variant": "cam-rec-3rdparty-fhd30",
+    "had": [
+      "measurement",
+      "simulation"
+    ],
+    "added": []
+  },
+  {
+    "variant": "cam-rec-3rdparty-binning",
+    "had": [
+      "measurement",
+      "simulation"
+    ],
+    "added": []
+  },
+  {
+    "variant": "cam-rec-3rdparty-hdr10",
+    "had": [],
+    "added": [
+      "sim-gapfill-cam-rec-3rdparty-hdr10-mean-20261016",
+      "meas-synth-cam-rec-3rdparty-hdr10-evt1-20261016"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 498.012
+  },
+  {
+    "variant": "cam-rec-3rdparty-hlg",
+    "had": [],
+    "added": [
+      "sim-gapfill-cam-rec-3rdparty-hlg-mean-20261016",
+      "meas-synth-cam-rec-3rdparty-hlg-evt1-20261016"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 498.39
+  },
+  {
+    "variant": "cam-rec-iq-eval",
+    "had": [],
+    "added": [
+      "sim-gapfill-cam-rec-iq-eval-mean-20261016",
+      "meas-synth-cam-rec-iq-eval-evt1-20261016"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 494.682
+  },
+  {
+    "variant": "cam-rec-r1-fhd30-vdis-timing-min",
+    "had": [],
+    "added": [
+      "sim-gapfill-cam-rec-r1-fhd30-vdis-timing-min-mean-20261016",
+      "meas-synth-cam-rec-r1-fhd30-vdis-timing-min-evt1-20261016"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 618.179
+  },
+  {
+    "variant": "cam-rec-r1-fhd30-vdis-timing-max",
+    "had": [],
+    "added": [
+      "sim-gapfill-cam-rec-r1-fhd30-vdis-timing-max-mean-20261016",
+      "meas-synth-cam-rec-r1-fhd30-vdis-timing-max-evt1-20261016"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 604.351
+  },
+  {
+    "variant": "cam-rec-r1-uhd30-vdis-timing-min",
+    "had": [],
+    "added": [
+      "sim-gapfill-cam-rec-r1-uhd30-vdis-timing-min-mean-20261016",
+      "meas-synth-cam-rec-r1-uhd30-vdis-timing-min-evt1-20261016"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 671.098
+  },
+  {
+    "variant": "cam-rec-r1-uhd30-vdis-timing-max",
+    "had": [],
+    "added": [
+      "sim-gapfill-cam-rec-r1-uhd30-vdis-timing-max-mean-20261016",
+      "meas-synth-cam-rec-r1-uhd30-vdis-timing-max-evt1-20261016"
+    ],
+    "sim_clock_mhz": 300,
+    "sim_check": null,
+    "synthetic_total_mw": 682.54
+  },
+  {
+    "variant": "cam-rec-r1-fhd30-portrait",
+    "had": [
+      "measurement",
+      "simulation"
+    ],
+    "added": []
+  },
+  {
+    "variant": "cam-rec-r1-uhd30-portrait",
+    "had": [
+      "measurement",
+      "simulation"
+    ],
+    "added": []
+  },
+  {
+    "variant": "cam-rec-r1-fhd30-vdis-explored-min",
+    "had": [
+      "simulation"
+    ],
+    "added": [
+      "meas-synth-cam-rec-r1-fhd30-vdis-explored-min-evt1-20261016"
+    ],
+    "synthetic_total_mw": 619.174
+  },
+  {
+    "variant": "cam-rec-r1-fhd30-vdis-explored-mean",
+    "had": [
+      "simulation"
+    ],
+    "added": [
+      "meas-synth-cam-rec-r1-fhd30-vdis-explored-mean-evt1-20261016"
+    ],
+    "synthetic_total_mw": 637.214
+  },
+  {
+    "variant": "cam-rec-r1-fhd30-vdis-explored-max",
+    "had": [
+      "simulation"
+    ],
+    "added": [
+      "meas-synth-cam-rec-r1-fhd30-vdis-explored-max-evt1-20261016"
+    ],
+    "synthetic_total_mw": 633.488
+  },
+  {
+    "variant": "cam-rec-r1-fhd60-supersteady-explored-min",
+    "had": [
+      "simulation"
+    ],
+    "added": [
+      "meas-synth-cam-rec-r1-fhd60-supersteady-explored-min-evt1-20261016"
+    ],
+    "synthetic_total_mw": 1083.553
+  },
+  {
+    "variant": "cam-rec-r1-fhd60-supersteady-explored-mean",
+    "had": [
+      "simulation"
+    ],
+    "added": [
+      "meas-synth-cam-rec-r1-fhd60-supersteady-explored-mean-evt1-20261016"
+    ],
+    "synthetic_total_mw": 1071.946
+  },
+  {
+    "variant": "cam-rec-r1-uhd30-vdis-explored-min",
+    "had": [
+      "simulation"
+    ],
+    "added": [
+      "meas-synth-cam-rec-r1-uhd30-vdis-explored-min-evt1-20261016"
+    ],
+    "synthetic_total_mw": 678.295
+  },
+  {
+    "variant": "cam-rec-r1-uhd30-vdis-explored-mean",
+    "had": [
+      "simulation"
+    ],
+    "added": [
+      "meas-synth-cam-rec-r1-uhd30-vdis-explored-mean-evt1-20261016"
+    ],
+    "synthetic_total_mw": 684.084
+  },
+  {
+    "variant": "cam-rec-r1-uhd30-vdis-explored-max",
+    "had": [
+      "simulation"
+    ],
+    "added": [
+      "meas-synth-cam-rec-r1-uhd30-vdis-explored-max-evt1-20261016"
+    ],
+    "synthetic_total_mw": 679.574
+  },
+  {
+    "variant": "cam-rec-r1-uhd60-supersteady-explored-min",
+    "had": [
+      "simulation"
+    ],
+    "added": [
+      "meas-synth-cam-rec-r1-uhd60-supersteady-explored-min-evt1-20261016"
+    ],
+    "synthetic_total_mw": 1173.989
+  },
+  {
+    "variant": "cam-rec-r1-uhd60-supersteady-explored-mean",
+    "had": [
+      "simulation"
+    ],
+    "added": [
+      "meas-synth-cam-rec-r1-uhd60-supersteady-explored-mean-evt1-20261016"
+    ],
+    "synthetic_total_mw": 1178.892
+  }
+]

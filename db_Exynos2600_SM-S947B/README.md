@@ -109,6 +109,20 @@ Reproduce explicit fixture assumptions and priority checks:
 - `cam-rec-r1-fhd480`, `cam-rec-r1-fhd960-ssm`: sim은 추가했지만 cadence/latency를 만족하는 clock 후보가 없어 `feasible: false`. 합성 측정은 만들지 않는다.
 - 합성 측정의 예측 오차는 모델 검증 근거가 아니다. 실제 capture를 import하면 같은 variant의 `meas-synth-*` 파일을 삭제한다.
 
+## Camera Recording 전 variant 합성 측정 (2026-10-16)
+
+예측 ↔ 실측 fixture 검증용으로 `scripts/generate_rear_recording_evidence.py --all --write`가 `uc-cam-recording-e2600` **75개 variant 전부**에 measurement가 있도록 나머지 40개를 채운다 (front · dual · triple · RCV · PiP · 3rd-party HDR10/HLG · IQ eval · derived `*-explored-*`/`*-timing-*` · sim infeasible). 결과 목록은 `all_recording_gapfill_report.json`.
+
+| 추가 | 개수 | 내용 |
+| --- | ---: | --- |
+| `sim-gapfill-<variant>-mean-20261016` | 26 | simulation evidence가 없던 variant. 2026-09-25와 같은 clock grid · SW timing `mean` (전부 300 MHz 통과) |
+| `meas-synth-<variant>-evt1-20261016` | 40 | **합성(SYNTHETIC) 측정값 — silicon 데이터 아님**. rail rescale 방식은 위와 동일 |
+
+- sim infeasible variant(`r1-fhd480`, `r1-fhd960-ssm`, `pip-fhd30`, `pip-uhd30`)도 합성 측정을 만든다. 모델이 도달한 cadence(`1000 / sink interval`)를 `fps_effective`로 기록하고 IP·BW rail을 처리 frame 비율로 낮추며, `timeline_events`에 `frame_drop`을 남긴다 (예: fhd960-ssm 120 fps, fhd480 235 fps, PiP 23 fps).
+- latency와 SW task 샘플 수도 목표 FPS 대신 모델이 처리한 cadence × 90초로 기록한다.
+- derived variant는 자신의 sim(있으면) 또는 새 `sim-gapfill-*`를 기준으로 rescale한다.
+- 여전히 `device_id: SYNTHETIC` / `collection_method: synthetic_fixture` — Scenario 실측 열에는 `합성` 날짜로, 예측 ↔ 실측 화면에는 `합성 fixture` badge로 표시되고 모델 검증(최대 |Δ|, power fit)에서는 제외된다.
+
 ## Baseline 3종 합성 evidence (2026-10-04)
 
 기준 variant `cam-rec-r1-uhd30-vdis`, `cam-rec-f1-uhd60`, `cam-rec-r1-8k30-psm`이 모든 화면(Scenario 예측/실측, Pipeline Timing 예측↔실측, 예측↔실측, CPU what-if)에서 보이도록 `scripts/generate_baseline_evidence.py`로 만든 **합성** evidence다. 실측이 아니다(`device_id: SYNTHETIC`).

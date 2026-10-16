@@ -17,7 +17,15 @@ per-variant perturbation. They exist to exercise 예측 ↔ 실측 / calibration
 flows and are flagged by ``provenance.collection_method: synthetic_fixture``
 and ``provenance.device_id: SYNTHETIC``. Replace them with real captures.
 
-Run from implementation/:  python scripts/generate_rear_recording_evidence.py [--write]
+``--all`` (2026-10-16) widens the gap fill to every variant of the scenario —
+front / dual / triple / RCV / PiP, derived (``*-explored-*``, ``*-timing-*``) and
+variants whose simulation found no accepted clock — so 예측 ↔ 실측 fixture checks
+cover all variants. New files are ``sim-gapfill-<variant>-mean-20261016`` and
+``meas-synth-<variant>-evt1-20261016``. For an infeasible simulation the synthetic
+capture records the cadence the model reached (``fps_effective`` below target and a
+``frame_drop`` event) instead of being skipped. Still SYNTHETIC, never silicon data.
+
+Run from implementation/:  python scripts/generate_rear_recording_evidence.py [--write] [--all]
 """
 from __future__ import annotations
 
@@ -50,6 +58,9 @@ REF_MEAS = "meas-cam-rec-r1-uhd30-vdis-evt1-sw123-20260614"
 REF_SIM = "sim-priority-cam-rec-r1-uhd30-vdis-mean-20260913"
 DATE = "20260925"
 STAMP = "2026-09-25T10:00:00+09:00"
+SIM_PREFIX = "sim-rear"
+GENERATOR_TAG = "Rear gap-fill"
+ALL_DATE, ALL_STAMP, ALL_SIM_PREFIX = "20261016", "2026-10-16T10:00:00+09:00", "sim-gapfill"
 T_N3 = 4.303  # two-sided 95 % t for n=3
 SYNTH_NOTE = ("SYNTHETIC fixture — not silicon data. Reference rails rescaled by this variant's "
               "simulation (IP core, BW) and SW load (CPU); replace with a real capture.")
@@ -129,17 +140,18 @@ def simulate(raw: dict, vid: str, catalog) -> tuple:
 
 def sim_evidence(raw: dict, vid: str, selected, last) -> dict:
     inputs, result, check = selected or last
-    result.warnings.extend(ASSUMPTIONS)
-    result.warnings.append("Rear gap-fill verification: " + json.dumps(check))
+    result.warnings.extend(ASSUMPTIONS if SIM_PREFIX == "sim-rear" else [
+        *ASSUMPTIONS[:2], f"All-variant recording gap fill ({DATE}): same clock grid and SW timing case 'mean' as priority recording."])
+    result.warnings.append(f"{GENERATOR_TAG} verification: " + json.dumps(check))
     if selected is None:
         result.feasible = False
         result.infeasible_reason = f"no clock candidate met cadence/3-frame latency (latency {check['max_frame_latency_ms']} ms, interval {check['average_sink_interval_ms']} ms)"
     result.calculation_trace["rear_gapfill_verification"] = check
     ev = build_simulation_evidence(result, project_ref=raw["project_ref"], params_hash=params_hash(inputs),
-                                   evidence_id=f"sim-rear-{vid}-mean-{DATE}",
+                                   evidence_id=f"{SIM_PREFIX}-{vid}-mean-{DATE}",
                                    execution_context=ExecutionContext(silicon_rev="EVT1", sw_baseline_ref="sw-vendor-v1.2.3",
                                                                       thermal="room", method="calculation"),
-                                   timestamp="2026-09-25T00:00:00+09:00")
+                                   timestamp=STAMP.replace("T10:", "T00:"))
     return ev.model_dump(mode="json", exclude_none=True)
 
 
@@ -148,7 +160,9 @@ def sim_numbers(doc: dict) -> dict:
     ct = doc.get("calculation_trace") or {}
     trace = ct.get("rear_gapfill_verification") or ct.get("priority_verification") or {}
     return {"core": float(k.get("core_power_mw") or 0.0), "bw": float(k.get("bw_power_mw") or 0.0),
-            "latency": trace.get("max_frame_latency_ms", trace.get("max_latency_ms")), "feasible": (doc.get("resolution_result") or {}).get("overall_feasibility")}
+            "latency": trace.get("max_frame_latency_ms", trace.get("max_latency_ms")),
+            "interval": trace.get("average_sink_interval_ms", trace.get("sink_interval_ms")),
+            "feasible": (doc.get("resolution_result") or {}).get("overall_feasibility")}
 
 
 def find_sim(vid: str) -> dict | None:
@@ -158,7 +172,7 @@ def find_sim(vid: str) -> dict | None:
         if h.get("scenario_ref") == SCENARIO and h.get("variant_ref") == vid:
             candidates.append(read(p))
     def timestamp(doc):
-        raw = (doc.get("run_info") or {}).get("timestamp")
+        raw = (doc.get("run") or doc.get("run_info") or {}).get("timestamp")
         dt = datetime.fromisoformat(raw) if raw else datetime.min.replace(tzinfo=timezone.utc)
         return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
     return max(candidates, key=lambda doc: (timestamp(doc), doc["id"])) if candidates else None
@@ -170,9 +184,15 @@ def simulation_failed(sim: dict) -> bool:
     return (sim.get("resolution_result") or {}).get("overall_feasibility") == "infeasible" or check.get("accepted") is False
 
 
-def synth_measurement(raw: dict, vid: str, graph, sim: dict, ref: dict, ref_sim: dict) -> dict:
+def synth_measurement(raw: dict, vid: str, graph, sim: dict, ref: dict, ref_sim: dict, *, infeasible: bool = False) -> dict:
     dc = graph.variant.design_conditions or {}
     fps = float(dc.get("fps") or 30)
+    # Infeasible model (no accepted clock): the "capture" sustains only the cadence the model reached.
+    interval = sim_numbers(sim)["interval"]
+    achieved = (min(fps, 1000.0 / float(interval)) if infeasible and isinstance(interval, (int, float)) and interval > 0
+                else fps)
+    throughput = achieved / fps  # IP / BW work scales with the frames actually processed
+    processed_samples = int(round(achieved * 90))
     rails = ref["vdd_power"]
     ref_split = measured_split(rails, None)["categories"]
     rs, ts = sim_numbers(ref_sim), sim_numbers(sim)
@@ -180,8 +200,8 @@ def synth_measurement(raw: dict, vid: str, graph, sim: dict, ref: dict, ref_sim:
     load = sum(t["mean_ms"] for t in sw_tasks(graph)) * fps
     ref_load = sum(t["mean_ms"] for t in ref_tasks) * float(30)
     target = {
-        "ip": ref_split["ip"] * (ts["core"] / rs["core"] if rs["core"] else 1.0),
-        "bw": ref_split["bw"] * (ts["bw"] / rs["bw"] if rs["bw"] else 1.0),
+        "ip": ref_split["ip"] * (ts["core"] / rs["core"] if rs["core"] else 1.0) * throughput,
+        "bw": ref_split["bw"] * (ts["bw"] / rs["bw"] if rs["bw"] else 1.0) * throughput,
         "cpu": ref_split["cpu"] * min(2.5, max(0.6, 0.45 + 0.55 * (load / ref_load if ref_load else 1.0))),
         "other": ref_split["other"] * (0.85 + 0.15 * math.sqrt(ts["bw"] / rs["bw"])) if rs["bw"] else ref_split["other"],
     }
@@ -206,7 +226,7 @@ def synth_measurement(raw: dict, vid: str, graph, sim: dict, ref: dict, ref_sim:
         mean = t["mean_ms"] * f
         mx = max(float(t.get("max_ms") or mean * 2), mean * 1.2) * jitter(vid + t["task"] + "max", 0.1) * 1.15
         tasks.append({"task": t["task"], "timing_scope": "exclusive_sw", "mean_ms": round(mean, 3), "p50_ms": round(mean * 0.95, 3),
-                      "p95_ms": round(min(mx, mean * 1.35), 3), "max_ms": round(mx, 3), "samples": int(fps * 90),
+                      "p95_ms": round(min(mx, mean * 1.35), 3), "max_ms": round(mx, 3), "samples": processed_samples,
                       "count_per_frame": 1.0, "value_source": "assumed", "source_note": SYNTH_NOTE})
     cpu_rails = {n: r for n, r in out_rails.items() if rail_category(n, None, r.get("domain")) == "cpu"}
     clusters = {"BIG": r"CPUCL3|BIG", "MID": r"CPUCL1|CPUCL2|MID", "LIT": r"CPUCL0|DSU"}
@@ -225,11 +245,15 @@ def synth_measurement(raw: dict, vid: str, graph, sim: dict, ref: dict, ref_sim:
         "kpi": {"total_power_mw": {"mean": round(total, 3), "p95": round(total + 0.93 * std, 3), "std": round(std, 3),
                                    "ci_95": [round(total - half, 3), round(total + half, 3)], "n": 3},
                 "frame_latency_ms": {"mean": round(lat * jitter(vid + "lat", 0.05) * 1.08, 2),
-                                     "p95": round(lat * 1.22, 2), "n": int(fps * 90)},
-                "fps_effective": round(fps * 0.999, 2)},
+                                     "p95": round(lat * 1.22, 2), "n": processed_samples},
+                "fps_effective": round(achieved * 0.999, 2)},
         "vdd_power": out_rails, "cpu_breakdown": cpu_breakdown, "sw_task_timing": tasks,
         "timeline_events": [{"type": "note", "detail": SYNTH_NOTE}],
     }
+    if achieved < fps:
+        doc["timeline_events"].append({"type": "frame_drop", "count": int(round((fps - achieved) * 90)),
+                                       "detail": f"SYNTHETIC: model reached {achieved:.1f} of {fps:.0f} fps "
+                                                 f"(no clock candidate met cadence/latency)"})
     MeasurementEvidence.model_validate(doc)
     return doc
 
@@ -238,7 +262,12 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--write", action="store_true", help="write YAML into 03_evidence (default: dry run)")
     ap.add_argument("--only", nargs="*", help="limit to these variant ids")
+    ap.add_argument("--all", action="store_true",
+                    help="every variant (any sensor_place, derived, infeasible); writes *-20261016 files")
     args = ap.parse_args()
+    global DATE, STAMP, SIM_PREFIX, GENERATOR_TAG
+    if args.all:
+        DATE, STAMP, SIM_PREFIX, GENERATOR_TAG = ALL_DATE, ALL_STAMP, ALL_SIM_PREFIX, "all-variant gap-fill"
     raw = read(FIXTURE / "02_definition" / f"{SCENARIO}.yaml")
     catalog = load_catalog.cache = load_catalog()
     have = existing_evidence()
@@ -246,10 +275,10 @@ def main() -> int:
     report = []
     for v in raw["variants"]:
         vid = v["id"]
-        if v.get("derived_from_variant") or (args.only and vid not in args.only):
+        if (v.get("derived_from_variant") and not args.all) or (args.only and vid not in args.only):
             continue
         graph = graph_from_fixture(raw, vid, catalog)
-        if (graph.variant.design_conditions or {}).get("sensor_place") != "rear":
+        if not args.all and (graph.variant.design_conditions or {}).get("sensor_place") != "rear":
             continue
         kinds = have.get(vid, set())
         row = {"variant": vid, "had": sorted(kinds), "added": []}
@@ -263,12 +292,12 @@ def main() -> int:
                 row["added"].append(sim["id"])
                 if args.write:
                     (EVIDENCE / f"{sim['id']}.yaml").write_text(yaml.safe_dump(sim, sort_keys=False, allow_unicode=True), encoding="utf-8")
-            if "measurement" not in kinds and sim is not None and simulation_failed(sim):
+            if "measurement" not in kinds and sim is not None and simulation_failed(sim) and not args.all:
                 # No accepted clock candidate: the device cannot sustain this config in the model,
                 # so a rescaled "measurement" would be meaningless.
                 row["skipped_measurement"] = "simulation infeasible (cadence/latency)"
             elif "measurement" not in kinds and sim is not None:
-                meas = synth_measurement(raw, vid, graph, sim, ref, ref_sim)
+                meas = synth_measurement(raw, vid, graph, sim, ref, ref_sim, infeasible=simulation_failed(sim))
                 row["added"].append(meas["id"])
                 row["synthetic_total_mw"] = meas["kpi"]["total_power_mw"]["mean"]
                 if args.write:
@@ -282,7 +311,8 @@ def main() -> int:
         report.append(row)
         print(json.dumps(row, ensure_ascii=False), flush=True)
     if args.write:
-        (FIXTURE / "rear_recording_gapfill_report.json").write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+        report_name = "all_recording_gapfill_report.json" if args.all else "rear_recording_gapfill_report.json"
+        (FIXTURE / report_name).write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
     return 1 if any("error" in row for row in report) else 0
 
 
