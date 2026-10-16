@@ -60,12 +60,13 @@ def test_committed_synthetic_measurements_have_provenance_and_valid_totals(gener
             assert (generator.EVIDENCE / f'{source}.yaml').exists()
 
 
-def test_find_sim_uses_timestamp_not_file_name(generator, monkeypatch, tmp_path):
+@pytest.mark.parametrize('run_key', ['run', 'run_info'])
+def test_find_sim_uses_timestamp_not_file_name(generator, monkeypatch, tmp_path, run_key):
     monkeypatch.setattr(generator, 'EVIDENCE', tmp_path)
     for name, year in [('sim-z', 2024), ('sim-a', 2026)]:
         (tmp_path / f'{name}.yaml').write_text(yaml.safe_dump({
             'id': name, 'kind': 'evidence.simulation', 'scenario_ref': generator.SCENARIO,
-            'variant_ref': 'v', 'run_info': {'timestamp': f'{year}-01-01T00:00:00Z'},
+            'variant_ref': 'v', run_key: {'timestamp': f'{year}-01-01T00:00:00Z'},
         }), encoding='utf-8')
     assert generator.find_sim('v')['id'] == 'sim-a'
 
@@ -77,6 +78,7 @@ def test_all_variant_gapfill_covers_every_recording_variant(generator):
     assert missing == []
     paths = list(generator.EVIDENCE.glob('meas-synth-*-20261016.yaml'))
     assert len(paths) == 40
+    catalog = generator.load_catalog()
     for path in paths:
         doc = yaml.load(path.read_text(encoding='utf-8'), Loader=yaml.CSafeLoader)
         generator.MeasurementEvidence.model_validate(doc)
@@ -87,8 +89,17 @@ def test_all_variant_gapfill_covers_every_recording_variant(generator):
             assert (generator.EVIDENCE / f'{source}.yaml').exists()
         drops = [e for e in doc['timeline_events'] if e['type'] == 'frame_drop']
         sim = generator.read(generator.EVIDENCE / f"{doc['derived_from'][1]}.yaml")
+        graph = generator.graph_from_fixture(raw, doc['variant_ref'], catalog)
+        fps = float(graph.variant.design_conditions.get('fps') or 30)
+        interval = generator.sim_numbers(sim)['interval']
+        achieved = min(fps, 1000 / interval) if generator.simulation_failed(sim) else fps
+        frames = int(round(achieved * 90))
+        assert doc['kpi']['frame_latency_ms']['n'] == frames
+        assert all(t['samples'] == frames for t in doc.get('sw_task_timing', []))
         # an infeasible model is captured as a reduced cadence, a feasible one at target fps
-        assert bool(drops) == (generator.simulation_failed(sim) and doc['kpi']['fps_effective'] < 0.99 * doc['kpi']['frame_latency_ms']['n'] / 90)
+        assert bool(drops) == (achieved < fps)
+        if drops:
+            assert drops[0]['count'] == int(round((fps - achieved) * 90))
 
 
 def test_infeasible_simulation_scales_cadence_and_ip_bw_power(generator, monkeypatch):
@@ -102,5 +113,7 @@ def test_infeasible_simulation_scales_cadence_and_ip_bw_power(generator, monkeyp
     full = generator.synth_measurement(raw, 'cam-rec-r1-fhd960-ssm', graph, sim, ref, ref_sim)
     capped = generator.synth_measurement(raw, 'cam-rec-r1-fhd960-ssm', graph, sim, ref, ref_sim, infeasible=True)
     assert capped['kpi']['fps_effective'] == pytest.approx(120 * .999, abs=.01)
+    assert capped['kpi']['frame_latency_ms']['n'] == 10800
+    assert all(t['samples'] == 10800 for t in capped['sw_task_timing'])
     assert capped['kpi']['total_power_mw']['mean'] < full['kpi']['total_power_mw']['mean'] / 3
     assert any(e['type'] == 'frame_drop' for e in capped['timeline_events'])

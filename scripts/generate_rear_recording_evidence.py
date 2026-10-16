@@ -172,7 +172,7 @@ def find_sim(vid: str) -> dict | None:
         if h.get("scenario_ref") == SCENARIO and h.get("variant_ref") == vid:
             candidates.append(read(p))
     def timestamp(doc):
-        raw = (doc.get("run_info") or {}).get("timestamp")
+        raw = (doc.get("run") or doc.get("run_info") or {}).get("timestamp")
         dt = datetime.fromisoformat(raw) if raw else datetime.min.replace(tzinfo=timezone.utc)
         return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
     return max(candidates, key=lambda doc: (timestamp(doc), doc["id"])) if candidates else None
@@ -192,6 +192,7 @@ def synth_measurement(raw: dict, vid: str, graph, sim: dict, ref: dict, ref_sim:
     achieved = (min(fps, 1000.0 / float(interval)) if infeasible and isinstance(interval, (int, float)) and interval > 0
                 else fps)
     throughput = achieved / fps  # IP / BW work scales with the frames actually processed
+    processed_samples = int(round(achieved * 90))
     rails = ref["vdd_power"]
     ref_split = measured_split(rails, None)["categories"]
     rs, ts = sim_numbers(ref_sim), sim_numbers(sim)
@@ -225,7 +226,7 @@ def synth_measurement(raw: dict, vid: str, graph, sim: dict, ref: dict, ref_sim:
         mean = t["mean_ms"] * f
         mx = max(float(t.get("max_ms") or mean * 2), mean * 1.2) * jitter(vid + t["task"] + "max", 0.1) * 1.15
         tasks.append({"task": t["task"], "timing_scope": "exclusive_sw", "mean_ms": round(mean, 3), "p50_ms": round(mean * 0.95, 3),
-                      "p95_ms": round(min(mx, mean * 1.35), 3), "max_ms": round(mx, 3), "samples": int(fps * 90),
+                      "p95_ms": round(min(mx, mean * 1.35), 3), "max_ms": round(mx, 3), "samples": processed_samples,
                       "count_per_frame": 1.0, "value_source": "assumed", "source_note": SYNTH_NOTE})
     cpu_rails = {n: r for n, r in out_rails.items() if rail_category(n, None, r.get("domain")) == "cpu"}
     clusters = {"BIG": r"CPUCL3|BIG", "MID": r"CPUCL1|CPUCL2|MID", "LIT": r"CPUCL0|DSU"}
@@ -244,7 +245,7 @@ def synth_measurement(raw: dict, vid: str, graph, sim: dict, ref: dict, ref_sim:
         "kpi": {"total_power_mw": {"mean": round(total, 3), "p95": round(total + 0.93 * std, 3), "std": round(std, 3),
                                    "ci_95": [round(total - half, 3), round(total + half, 3)], "n": 3},
                 "frame_latency_ms": {"mean": round(lat * jitter(vid + "lat", 0.05) * 1.08, 2),
-                                     "p95": round(lat * 1.22, 2), "n": int(fps * 90)},
+                                     "p95": round(lat * 1.22, 2), "n": processed_samples},
                 "fps_effective": round(achieved * 0.999, 2)},
         "vdd_power": out_rails, "cpu_breakdown": cpu_breakdown, "sw_task_timing": tasks,
         "timeline_events": [{"type": "note", "detail": SYNTH_NOTE}],

@@ -119,6 +119,7 @@ Reproduce explicit fixture assumptions and priority checks:
 | `meas-synth-<variant>-evt1-20261016` | 40 | **합성(SYNTHETIC) 측정값 — silicon 데이터 아님**. rail rescale 방식은 위와 동일 |
 
 - sim infeasible variant(`r1-fhd480`, `r1-fhd960-ssm`, `pip-fhd30`, `pip-uhd30`)도 합성 측정을 만든다. 모델이 도달한 cadence(`1000 / sink interval`)를 `fps_effective`로 기록하고 IP·BW rail을 처리 frame 비율로 낮추며, `timeline_events`에 `frame_drop`을 남긴다 (예: fhd960-ssm 120 fps, fhd480 235 fps, PiP 23 fps).
+- latency와 SW task 샘플 수도 목표 FPS 대신 모델이 처리한 cadence × 90초로 기록한다.
 - derived variant는 자신의 sim(있으면) 또는 새 `sim-gapfill-*`를 기준으로 rescale한다.
 - 여전히 `device_id: SYNTHETIC` / `collection_method: synthetic_fixture` — Scenario 실측 열에는 `합성` 날짜로, 예측 ↔ 실측 화면에는 `합성 fixture` badge로 표시되고 모델 검증(최대 |Δ|, power fit)에서는 제외된다.
 

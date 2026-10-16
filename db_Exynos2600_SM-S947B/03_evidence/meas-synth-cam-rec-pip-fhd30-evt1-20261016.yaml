@@ -40,7 +40,7 @@ kpi:
   frame_latency_ms:
     mean: 136.58
     p95: 158.76
-    n: 2700
+    n: 2069
   fps_effective: 22.96
 vdd_power:
   B5S4_VDDMIF_AP_L:
@@ -144,7 +144,7 @@ sw_task_timing:
   p50_ms: 0.28
   p95_ms: 0.399
   max_ms: 0.574
-  samples: 2700
+  samples: 2069
   count_per_frame: 1.0
   value_source: assumed
   source_note: SYNTHETIC fixture — not silicon data. Reference rails rescaled by this
@@ -155,7 +155,7 @@ sw_task_timing:
   p50_ms: 2.896
   p95_ms: 4.115
   max_ms: 4.465
-  samples: 2700
+  samples: 2069
   count_per_frame: 1.0
   value_source: assumed
   source_note: SYNTHETIC fixture — not silicon data. Reference rails rescaled by this
@@ -166,7 +166,7 @@ sw_task_timing:
   p50_ms: 5.283
   p95_ms: 7.315
   max_ms: 7.315
-  samples: 2700
+  samples: 2069
   count_per_frame: 1.0
   value_source: assumed
   source_note: SYNTHETIC fixture — not silicon data. Reference rails rescaled by this
@@ -177,7 +177,7 @@ sw_task_timing:
   p50_ms: 0.308
   p95_ms: 0.438
   max_ms: 0.603
-  samples: 2700
+  samples: 2069
   count_per_frame: 1.0
   value_source: assumed
   source_note: SYNTHETIC fixture — not silicon data. Reference rails rescaled by this
@@ -188,7 +188,7 @@ sw_task_timing:
   p50_ms: 2.855
   p95_ms: 4.058
   max_ms: 4.944
-  samples: 2700
+  samples: 2069
   count_per_frame: 1.0
   value_source: assumed
   source_note: SYNTHETIC fixture — not silicon data. Reference rails rescaled by this
@@ -199,7 +199,7 @@ sw_task_timing:
   p50_ms: 4.019
   p95_ms: 5.711
   max_ms: 6.007
-  samples: 2700
+  samples: 2069
   count_per_frame: 1.0
   value_source: assumed
   source_note: SYNTHETIC fixture — not silicon data. Reference rails rescaled by this
@@ -210,7 +210,7 @@ sw_task_timing:
   p50_ms: 3.559
   p95_ms: 5.057
   max_ms: 7.356
-  samples: 2700
+  samples: 2069
   count_per_frame: 1.0
   value_source: assumed
   source_note: SYNTHETIC fixture — not silicon data. Reference rails rescaled by this
@@ -221,7 +221,7 @@ sw_task_timing:
   p50_ms: 4.9
   p95_ms: 6.964
   max_ms: 9.63
-  samples: 2700
+  samples: 2069
   count_per_frame: 1.0
   value_source: assumed
   source_note: SYNTHETIC fixture — not silicon data. Reference rails rescaled by this
@@ -232,7 +232,7 @@ sw_task_timing:
   p50_ms: 6.984
   p95_ms: 9.924
   max_ms: 19.177
-  samples: 2700
+  samples: 2069
   count_per_frame: 1.0
   value_source: assumed
   source_note: SYNTHETIC fixture — not silicon data. Reference rails rescaled by this
