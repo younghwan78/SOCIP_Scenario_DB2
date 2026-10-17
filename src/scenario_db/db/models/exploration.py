@@ -253,6 +253,8 @@ class ReviewCpuSnapshot(Base):
     __table_args__ = (
         CheckConstraint("status in ('active', 'superseded', 'withdrawn')", name="ck_review_cpu_snapshot_status"),
         Index("ix_review_cpu_snapshots_project_ref", "project_ref"),
+        Index("uq_review_cpu_snapshot_active", "project_ref", "scenario_ref", "variant_ref", unique=True,
+              postgresql_where=text("status = 'active'")),
     )
 
     id = Column(Text, primary_key=True)

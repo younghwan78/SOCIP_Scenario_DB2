@@ -75,7 +75,7 @@ def previous_block(p: dict[str, Any] | None) -> str:
              "confidence": "모델 신뢰도"}
     changes = [(label.get(c["item"], c["item"]), c["prev"], c["cur"]) for c in p.get("criteria") or []]
     changes += [(f"기준 · {b['item']}", b["prev"], b["cur"]) for b in p.get("basis") or []]
-    changes += [(f"CPU 허용치 · {_short(c['variant_id'])}", _gx(c["prev"]) if c["prev"] else "—", _gx(c["cur"]) if c["cur"] else "—")
+    changes += [(f"CPU 허용치 · {_short(c['variant_id'])}", _gx(c["prev"]), _gx(c["cur"]))
                 for c in p.get("cpu") or []]
     if changes:
         h += ("<h3 style='margin:10px 0 4px'>판정 · 기준 · 정책 변경</h3><table><tr><th>항목</th><th>직전</th><th>현재</th></tr>"
@@ -95,7 +95,7 @@ def dumbbell(ctx: dict[str, Any] | None, tol: float | None = None) -> str:
     bat = (ctx or {}).get("battery") or {}
     k_ma = 1.0 / (float(bat.get("vbat") or 4.0) * float(bat.get("pmic_efficiency") or 0.85))
     rows.sort(key=lambda r: -(r["reference"].get("delta_pct") or 0))
-    hi = max(max(r["total_mw"], r["reference"]["reference_mw"]) for r in rows) * 1.08
+    hi = max(1.0, max(max(r["total_mw"], r["reference"]["reference_mw"]) for r in rows) * 1.08)
     W, L, R, rh = 820, 210, 200, 22
     X = lambda v: L + v / hi * (W - L - R)  # noqa: E731
     col = {"ok": "#2F6F68", "similar": "#B45309", "over": "#9B1C1C"}
@@ -143,14 +143,15 @@ def power_top(snap: dict[str, Any]) -> str:
     rows.sort(key=lambda r: -r["power"]["total_mw"])
     top = rows[:TOP_N]
     hi = top[0]["power"]["total_mw"] or 1.0
-    ref = {r["variant_id"]: (r.get("reference") or {}) for r in (snap.get("review_context") or {}).get("rows") or []}
+    ref = {(r.get("scenario_id"), r["variant_id"]): (r.get("reference") or {})
+           for r in (snap.get("review_context") or {}).get("rows") or []}
     col = (("cpu_mw", ar.C["cpu"], "CPU"), ("hw_mw", ar.C["hw"], "IP"), ("bw_mw", ar.C["bw"], "BW"))
     body = ""
     for r in top:
         p = r["power"]
         bar = "".join(f"<i style='width:{100 * float(p.get(k) or 0) / hi:.1f}%;background:{c}' title='{lbl} {float(p.get(k) or 0):.0f} mW'></i>"
                       for k, c, lbl in col)
-        rf = ref.get(r["variant_id"]) or {}
+        rf = ref.get((r["scenario_id"], r["variant_id"])) or {}
         body += (f"<tr><td>{escape(_short(r['variant_id']))}</td><td class=n><b>{_f(p['total_mw'], 0)}</b></td>"
                  f"<td style='min-width:320px'><div class='bar' style='max-width:none'>{bar}</div></td>"
                  + "".join(f"<td class=n>{_f(p.get(k), 0)}</td>" for k, _, _ in col)
@@ -281,27 +282,39 @@ def _cls_label(c: Any) -> str:
 _REF_CLS = {"ok": "ok", "similar": "warn", "over": "fail"}
 
 def dossier(snap: dict[str, Any]) -> str:
-    ctx = {r["variant_id"]: r for r in (snap.get("review_context") or {}).get("rows") or []}
-    th = {i["variant_id"]: i for i in (snap.get("thermal") or {}).get("items") or []}
-    opts = {o["variant_id"]: o for o in snap.get("power_options") or []}
-    cal = {c["variant_id"]: c for c in snap.get("calibration") or []}
-    cpu = {c["variant_id"]: c for c in snap.get("cpu") or []}
-    margins = {m["variant_id"]: m for m in (snap.get("sw_margin_top5") or []) + (snap.get("sw_margin_fail") or [])}
+    identities = {(r["scenario_id"], r["variant_id"]) for r in snap["scenarios"]}
+
+    def scoped(rows: list[dict[str, Any]]) -> dict[tuple[str, str], dict[str, Any]]:
+        out = {}
+        for row in rows:
+            keys = [k for k in identities if k[1] == row["variant_id"]
+                    and (not row.get("scenario_id") or k[0] == row["scenario_id"])]
+            if len(keys) == 1:  # legacy unscoped rows are usable only when unambiguous
+                out[keys[0]] = row
+        return out
+
+    ctx = scoped((snap.get("review_context") or {}).get("rows") or [])
+    th = scoped((snap.get("thermal") or {}).get("items") or [])
+    opts = scoped(snap.get("power_options") or [])
+    cal = scoped(snap.get("calibration") or [])
+    cpu = scoped(snap.get("cpu") or [])
+    margins = scoped((snap.get("sw_margin_top5") or []) + (snap.get("sw_margin_fail") or []))
     risks: dict[str, list[dict[str, Any]]] = {}
     for r in snap.get("risk_register") or []:
         if r.get("status") in ("closed", "accepted") or r.get("trend") == "resolve_candidate":
             continue
         for v in r.get("affected") or []:
             risks.setdefault(str(v), []).append(r)
-    doms: dict[str, list[dict[str, Any]]] = {}
+    doms: dict[tuple[str, str], list[dict[str, Any]]] = {}
     for d in snap.get("domains") or []:
-        doms.setdefault(d["variant_id"], []).append(d)
+        doms.setdefault((d["scenario_id"], d["variant_id"]), []).append(d)
     cards = []
     for r in snap["scenarios"]:
         v = r["variant_id"]
+        key = (r["scenario_id"], v)
         p = r.get("power") or {}
-        ref = (ctx.get(v) or {}).get("reference") or {}
-        ma = (ctx.get(v) or {}).get("ma")
+        ref = (ctx.get(key) or {}).get("reference") or {}
+        ma = (ctx.get(key) or {}).get("ma")
         lat = r.get("latency") or {}
         rows: list[tuple[str, str]] = [
             ("판정", f"<b class={'ok' if r['spec_ok'] else 'fail'}>{'fps 만족' if r['spec_ok'] else 'fps 미달'}</b> · {_f(r['fps'], 0)} fps"
@@ -313,33 +326,33 @@ def dossier(snap: dict[str, Any]) -> str:
              f" <span class=meta>({escape(str(ref.get('source') or ''))})</span>" if ref else "<span class=meta>기준 없음</span>"),
             ("Latency", f"video {_f(lat.get('video_ms'))} ms ({_f(lat.get('video_frames'), 2)} frame) · preview {_f(lat.get('preview_ms'))} ms" if lat else "—"),
         ]
-        m = margins.get(v)
+        m = margins.get(key)
         if m:
             mcls = "fail" if m["margin_pct"] < 0 else "warn" if m["margin_pct"] < 10 else "ok"
             rows.append(("SW margin", f"<b class={mcls}>{m['margin_pct']:.1f}%</b>"
                          f" · {escape(str(m.get('stage', '')).upper())} · 병목 {escape(str(m.get('bottleneck') or '—'))}"
                          + (f" · 증가 허용 ×{m['growth_tolerance']:.2f}" if m.get("growth_tolerance") else "")))
-        dv = doms.get(v) or []
+        dv = doms.get(key) or []
         if dv:
             tight = min(dv, key=lambda d: d["headroom_pct"] if d["headroom_pct"] is not None else 1e9)
             rows.append(("IP clock", " · ".join(f"{escape(d['domain'])} L{d['level']} {d['speed_mhz']:.0f} MHz" for d in dv[:5])
                          + (f" · 최소 여유 {escape(tight['domain'])} {tight['headroom_pct']:.0f}%" if tight.get("headroom_pct") is not None else "")))
-        t = th.get(v)
+        t = th.get(key)
         if t:
             rows.append(("발열 대응", " · ".join(f"−{q['ask_pct']:.0f}% {'가능' if q['achieved'] else '<b class=fail>미달</b>'} (필요 {q['need_mw']:.0f} / IQ 항목 {q['saving_mw']:.0f} mW)"
                                               for q in t.get("plans") or []) or "평가 없음"))
-        o = opts.get(v)
+        o = opts.get(key)
         if o and o.get("best"):
             b = o["best"]
             rows.append(("Lever", f"{escape(' + '.join(b['labels']))} <b>{b['delta_mw']:+.0f} mW</b> ({_f(b.get('delta_pct'))}%)"
                          + (" <span class=warn>IQ 평가</span>" if b.get("iq_eval") == "required" else "")))
-        c = cal.get(v)
+        c = cal.get(key)
         if c:
             by = {x["category"]: x for x in c["rows"]}
             rows.append(("실측 대조", f"total {_f(c['delta_pct'])}% · " + " · ".join(
                 f"{k.upper()} {_f((by.get(k) or {}).get('delta_pct'))}%" for k in ("cpu", "ip", "bw"))
                 + (" <b class=warn>상쇄</b>" if c["fit"]["offsetting"] else "") + (" <span class=meta>(합성)</span>" if c.get("synthetic") else "")))
-        cs = cpu.get(v)
+        cs = cpu.get(key)
         if cs:
             s = cs.get("summary") or {}
             rows.append(("CPU", f"SW 증가 허용치 <b>{_gx(s.get('tolerance')) if s.get('tolerance') is not None else '범위 밖'}</b>"
@@ -349,8 +362,8 @@ def dossier(snap: dict[str, Any]) -> str:
             rows.append(("Risk", " ".join(f"{ar._sev(x['severity'])} <span class=mono>{escape(x['label'])}</span> {escape(x['title'])}<br>" for x in rk)))
         sev = "fail" if not r["spec_ok"] or any(x["severity"] == "critical" for x in rk) else "warn" if rk else "ok"
         tag = _cls_label(r.get("cls"))
-        cards.append(({"fail": 0, "warn": 1, "ok": 2}[sev], v, f"<article class='dos d-{sev}' id='d-{escape(v)}' data-k='{escape((v + ' ' + tag).lower())}'>"
-                     f"<h4>{escape(_short(v))} <span class=meta>{escape(tag)}</span></h4><table>"
+        cards.append(({"fail": 0, "warn": 1, "ok": 2}[sev], v, f"<article class='dos d-{sev}' id='d-{escape(r['scenario_id'] + '/' + v)}' data-k='{escape((v + ' ' + tag).lower())}'>"
+                     f"<h4>{escape(_short(v))} <span class=meta>{escape(r['scenario_id'])} · {escape(tag)}</span></h4><table>"
                      + "".join(f"<tr><th>{k}</th><td>{val}</td></tr>" for k, val in rows) + "</table></article>"))
     cards.sort(key=lambda c: (c[0], c[1]))
     return ("<p class=meta>variant 1장 고정 layout — 같은 항목은 항상 같은 줄. 미달 · risk 있는 variant가 먼저. "
@@ -391,7 +404,8 @@ def tiered_sections(snap: dict[str, Any]) -> list[tuple[str, str, str | None, in
     dom_head = {}
     for d in doms:
         if d.get("headroom_pct") is not None:
-            dom_head[d["variant_id"]] = min(dom_head.get(d["variant_id"], 1e9), d["headroom_pct"])
+            key = (d["scenario_id"], d["variant_id"])
+            dom_head[key] = min(dom_head.get(key, 1e9), d["headroom_pct"])
     tight = set(sorted(dom_head, key=lambda v: dom_head[v])[:TOP_N])
     perf = (_lead_perf(snap) + ar._spec(s)
             + f"<h3 style='margin:12px 0 4px'>Latency · 출력 간격 — 미달 · frame 지연 큰 {len(lat_top)}개</h3>" + ar._latency(lat_top)
@@ -399,7 +413,7 @@ def tiered_sections(snap: dict[str, Any]) -> list[tuple[str, str, str | None, in
             + "<h3 style='margin:12px 0 4px'>SW margin</h3>" + (ar._margins(snap["sw_margin_top5"]) if snap["sw_margin_top5"] else "<p class=meta>SW margin 계산 결과 없음</p>")
             + ar._fail_margins(snap.get("sw_margin_fail") or [])
             + f"<h3 style='margin:12px 0 4px'>IP 필요 clock — DVFS 여유 작은 순 (상위 {TOP_N} · spec 만족)</h3>"
-            + ar._domains([d for d in doms if d["variant_id"] in tight])
+            + ar._domains([d for d in doms if (d["scenario_id"], d["variant_id"]) in tight])
             + (_more(f"IP clock 전체 {len(dom_head)} variant", ar._domains(doms)) if len(dom_head) > len(tight) else "")
             + "<details><summary>IP별 상세 (필요 → 설정 MHz)</summary>"
             + ar._clocks([c for c in snap["clocks"] if (c["scenario_id"], c["variant_id"]) in ok_rows]) + "</details>")

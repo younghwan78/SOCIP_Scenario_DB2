@@ -138,7 +138,7 @@ def build_snapshot(
         w = m.get("worst")
         if not w:
             continue
-        margins.append({"variant_id": v["variant_id"], "fps": v["fps"], "verdict": m.get("verdict"), "spec_ok": v["spec_ok"],
+        margins.append({"scenario_id": v["scenario_id"], "variant_id": v["variant_id"], "fps": v["fps"], "verdict": m.get("verdict"), "spec_ok": v["spec_ok"],
                         **w, "growth_tolerance": m.get("growth_tolerance"),
                         "growth_tolerance_fixed": m.get("growth_tolerance_fixed"),
                         "recommendations": m.get("recommendations", [])})

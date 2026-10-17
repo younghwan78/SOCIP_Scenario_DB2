@@ -45,3 +45,23 @@ def test_dumbbell_shows_reference_source_and_ma():
 
 def test_growth_label():
     assert _gx(1.3) == "×1.3" and _gx(1.337) == "×1.34" and _gx(None) == "—"
+
+
+def test_diff_keeps_scenario_identity_when_a_duplicate_variant_is_added():
+    prev = snap({}, crit(1, 0), {}, [])
+    cur = snap({}, crit(2, 0), {}, [])
+    prev['scenarios'] = [{'scenario_id': 'a', 'variant_id': 'shared', 'power': {'total_mw': 100}}]
+    cur['scenarios'] = [
+        {'scenario_id': 'a', 'variant_id': 'shared', 'power': {'total_mw': 120}},
+        {'scenario_id': 'b', 'variant_id': 'shared', 'power': {'total_mw': 300}}]
+    prev['cpu'] = [{'scenario_id': 'a', 'variant_id': 'shared', 'summary': {'tolerance': 1.5}}]
+    cur['cpu'] = [
+        {'scenario_id': 'a', 'variant_id': 'shared', 'summary': {'tolerance': 0}},
+        {'scenario_id': 'b', 'variant_id': 'shared', 'summary': {'tolerance': 1.1}}]
+    diff = report_diff(prev, cur, {})
+    assert diff['power']['changed'][0]['variant_id'] == 'a/shared'
+    assert diff['power']['changed'][0]['delta_mw'] == 20
+    assert diff['power']['added'] == ['b/shared'] and diff['power']['removed'] == []
+    assert diff['cpu'] == [{'variant_id': 'a/shared', 'prev': 1.5, 'cur': 0},
+                           {'variant_id': 'b/shared', 'prev': None, 'cur': 1.1}]
+    assert '×0.0' in previous_block(diff)

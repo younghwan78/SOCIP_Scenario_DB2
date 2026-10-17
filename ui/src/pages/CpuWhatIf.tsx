@@ -95,23 +95,24 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
   // CPU-10: the same sweep on the comparison topology (after the main one; one admission slot each)
   const [cmpSweep, setCmpSweep] = useState<GrowthSweep | null>(null)
   const [cmpSweepErr, setCmpSweepErr] = useState<string | null>(null)
+  const [sweepRequest, setSweepRequest] = useState<(CpuRebalanceRequest & { growths: number[] }) | null>(null)
   const runSweep = async (payload: CpuRebalanceRequest, force = false) => {
     const growths = growthGrid(range.start, range.end, range.step)
-    const key = JSON.stringify([payload, growths])
-    if (!force && key === sweepKey.current) return
+    const key = JSON.stringify([payload, growths, cmpTarget])
+    if (!force && key === sweepKey.current && sweepRequest) return
     const parentRequest = requestId.current
     const id = ++sweepId.current
-    setSweepBusy(true); setSweepErr(null)
+    setSweepBusy(true); setSweepErr(null); setSweepRequest(null); setCmpSweep(null); setCmpSweepErr(null)
     try {
       const r = await sweepApi.run({ ...payload, growths })
-      if (id === sweepId.current && parentRequest === requestId.current) { setSweep(r); sweepKey.current = key }
-      setCmpSweep(null); setCmpSweepErr(null)
+      if (id !== sweepId.current || parentRequest !== requestId.current) return
+      setSweep(r); setSweepRequest({ ...payload, growths }); sweepKey.current = key
       if (cmpTarget && cmpTarget !== payload.power_params_ref && id === sweepId.current) {
         const exclude = Object.fromEntries(Object.entries(payload.locks).filter(([, v]) => v === 'exclude'))
         try {
           const c = await sweepApi.run({ ...payload, growths, power_params_ref: cmpTarget, base_power_params_ref: payload.base_power_params_ref || payload.power_params_ref, pool: [], locks: exclude })
-          if (id === sweepId.current) setCmpSweep(c)
-        } catch (e) { if (id === sweepId.current) setCmpSweepErr(String((e as Error).message ?? e)) }
+          if (id === sweepId.current && parentRequest === requestId.current) setCmpSweep(c)
+        } catch (e) { if (id === sweepId.current && parentRequest === requestId.current) setCmpSweepErr(String((e as Error).message ?? e)) }
       }
     } catch (e) {
       if (id === sweepId.current && parentRequest === requestId.current) { setSweepErr(String((e as Error).message ?? e)); setSweep(null) }
@@ -168,12 +169,13 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
   }
   const runRb = async (payload: CpuRebalanceRequest) => {
     const id = ++requestId.current
+    ++sweepId.current
+    setSweepRequest(null); setCmpSweep(null); setCmpSweepErr(null)
     setBusy(true); setError(null)
     try {
       const r = await rebalanceApi.run(payload)
       if (id !== requestId.current) return
       setRbRaw(r); setRbSel(r.cases[0] ? `c${r.cases[0].rank}` : 'ref')
-      void runSweep(payload)
       setCmpRb(null); setCmpErr(null)
       let cmpRes: CpuRebalance | null = null
       if (cmpTarget && cmpTarget !== payload.power_params_ref) {
@@ -190,6 +192,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
         growth: payload.default_growth ?? 1, bwScale: payload.cpu_bw_scale ?? 1, pgEff: payload.power_gating_eff ?? 0.9,
         ref_mw: r.reference.total_mw, best_mw: r.best?.total_mw ?? null, cmp_ref_mw: cmpRes?.reference.total_mw ?? null, cmp_best_mw: cmpRes?.best?.total_mw ?? null,
         winner: r.strategies?.winner ?? null, bw_mbs: r.cpu_bw_mbs ?? null }])
+      if (id === requestId.current) await runSweep(payload)
     } catch (e) {
       if (id === requestId.current) setError(String((e as Error).message ?? e))
     } finally { if (id === requestId.current) setBusy(false) }
@@ -210,7 +213,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
   // first look: EAS reproduction + automatic range as soon as the inputs are chosen
   useEffect(() => {
     ++sweepId.current
-    setSweepBusy(false); setSweepErr(null)
+    setSweepBusy(false); setSweepErr(null); setSweepRequest(null); setCmpSweep(null); setCmpSweepErr(null)
     const selection = JSON.stringify([profile, target, base])
     const changed = inputSelection.current !== selection
     inputSelection.current = selection
@@ -222,7 +225,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
       else void run(req)
     }
     return () => { ++requestId.current; ++sweepId.current }
-  }, [profile, target, base, reference, mode]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [profile, target, base, reference, mode, cmpTarget]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleCell = (task: string, cl: string) => {
     const auto = result?.range.tasks.find((t) => t.task === task)
@@ -478,8 +481,8 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
         <Card id="cpu-opp-gauge" title="OPP 여유" defaultWide minHeight={120} note="cluster별 OPP 사다리 · 한 단계 내리려면 뺄 util · SW 증가 시 처음 올라가는 배율">
           <OppGauge r={rb} sweep={sweep} />
         </Card>
-        {ctx.project && <CpuReviewSnapshotCard projectRef={ctx.project} variantId={prof?.variant_ref ?? null} canRecord={!!sweep && !!profile}
-          onRecord={() => cpuSnapshotApi.create(ctx.project, { ...rbRequest(request()), growths: growthGrid(range.start, range.end, range.step) })} />}
+        {ctx.project && <CpuReviewSnapshotCard key={ctx.project} projectRef={ctx.project} scenarioId={prof?.scenario_ref ?? null} variantId={prof?.variant_ref ?? null} canRecord={!!sweepRequest && !busy && !sweepBusy}
+          onRecord={() => cpuSnapshotApi.create(ctx.project, sweepRequest!)} />}
         {cmpTarget && <GrowthCompare a={sweep} b={cmpSweep} aName={topo?.soc_ref ?? target} bName={inputs.data?.topologies.find((t) => t.id === cmpTarget)?.soc_ref ?? cmpTarget} busy={sweepBusy} error={cmpSweepErr} />}
       </div>}
       <CpuPurpose rb={rb} cmp={cmpRb} runs={runs} growth={growth} bwScale={bwScale} onClear={() => setRuns([])}

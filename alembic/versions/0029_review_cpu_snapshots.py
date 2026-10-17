@@ -35,8 +35,11 @@ def upgrade() -> None:
         sa.CheckConstraint("status in ('active', 'superseded', 'withdrawn')", name="ck_review_cpu_snapshot_status"),
     )
     op.create_index("ix_review_cpu_snapshots_project_ref", "review_cpu_snapshots", ["project_ref"])
+    op.create_index("uq_review_cpu_snapshot_active", "review_cpu_snapshots", ["project_ref", "scenario_ref", "variant_ref"],
+                    unique=True, postgresql_where=sa.text("status = 'active'"))
 
 
 def downgrade() -> None:
+    op.drop_index("uq_review_cpu_snapshot_active", table_name="review_cpu_snapshots")
     op.drop_index("ix_review_cpu_snapshots_project_ref", table_name="review_cpu_snapshots")
     op.drop_table("review_cpu_snapshots")

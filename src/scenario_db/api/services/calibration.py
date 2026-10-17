@@ -353,7 +353,7 @@ def measurement_detail(db: Session, measurement_id: str) -> dict[str, Any]:
 
 def measurement_detail_view(db: Session, measurement_id: str) -> dict[str, Any]:
     """``measurement_detail`` + the clock-domain residency view (calibration page)."""
-    from scenario_db.api.services.library import sw_timing_sets
+    from scenario_db.api.services.prediction_basis import defined_variant_doc
     from scenario_db.comparison.rail_attribution import clock_compare, sw_task_compare
 
     out = measurement_detail(db, measurement_id)
@@ -363,12 +363,13 @@ def measurement_detail_view(db: Session, measurement_id: str) -> dict[str, Any]:
     cur = _current(db, out["scenario_id"], out["variant_id"])
     # CAL-10: measured task tail vs the defined SW timing the prediction used
     assumed: dict[str, dict[str, Any]] = {}
-    try:
-        sets = sw_timing_sets(db, scenario_id=out["scenario_id"], variant_id=out["variant_id"])
-        base = next((s["id"] for s in sets["sets"] if s["source"] == "defined"), None)
-        assumed = {t["task"]: t["values"][base] for t in sets["tasks"] if base and base in t["values"]}
-    except NotFoundError:
-        pass
+    if cur is not None:
+        frozen = defined_variant_doc(db, cur) or {}
+        scale = float((cur.metrics or {}).get("runtime_scale") or 1.0)
+        assumed = {str(n): {k: float(v) * scale for k, v in cfg["sw_timing"].items()
+                            if k in ("min_ms", "mean_ms", "max_ms") and v is not None}
+                   for n, cfg in (frozen.get("node_configs") or {}).items()
+                   if isinstance(cfg, dict) and isinstance(cfg.get("sw_timing"), dict)}
     drill["sw"] = sw_task_compare(out["sw_tasks"], assumed, statistic=drill.get("statistic"), budget_ms=drill.get("sw_budget_ms"))
     # CAL-11: predicted IP clock per DVFS group vs measured residency of that domain
     drill["clock"] = clock_compare((cur.metrics or {}).get("ips") if cur is not None else None, out["clock_residency"])

@@ -95,3 +95,86 @@ def test_portfolio_uses_frozen_criteria_and_excludes_closed_or_resolved_risks():
     assert summary['thermal'] == {'items': 1, 'reach10': 0}
     assert summary['confidence'] == 'C' and snap == before
     assert _report_summary({}) is None  # legacy run reports remain readable
+
+
+def test_dossier_keeps_same_named_variants_in_their_own_scenarios():
+    from scenario_db.reporting.review_sections import dossier
+
+    snap = snapshot()
+    snap['scenarios'] = [
+        {'scenario_id': sid, 'variant_id': 'shared', 'spec_ok': True, 'fps': 30}
+        for sid in ('scenario-a', 'scenario-b')]
+    snap['cpu'] = [
+        {'scenario_id': 'scenario-a', 'variant_id': 'shared', 'summary': {'tolerance': 1.1}},
+        {'scenario_id': 'scenario-b', 'variant_id': 'shared', 'summary': {'tolerance': 1.5}}]
+    snap['power_options'] = [
+        {'scenario_id': 'scenario-a', 'variant_id': 'shared',
+         'best': {'labels': ['only-a'], 'delta_mw': -20}}]
+    # An old, unscoped margin must not leak into either card when identity is ambiguous.
+    snap['sw_margin_top5'] = [{'variant_id': 'shared', 'margin_pct': 3}]
+    html = dossier(snap)
+    a, b = html.split("<article")[1:]
+    assert 'scenario-a/shared' in a and '×1.1' in a and 'only-a' in a
+    assert 'scenario-b/shared' in b and '×1.5' in b and 'only-a' not in b
+    assert 'SW margin' not in a + b
+
+
+def test_rich_dossier_preserves_frozen_evidence_and_escapes_annotations():
+    from scenario_db.reporting.review_sections import cpu_section, dossier, rail_bias_block
+    import re
+
+    snap = snapshot()
+    snap['scenarios'] = [{'scenario_id': 'camera', 'variant_id': 'cam-rec-hot', 'spec_ok': False, 'fps': 60,
+                           'eis_on': True, 'reasons_explained': [{'text': 'tail <overrun>'}], 'bw_mbs': 500,
+                           'latency': {'video_ms': 40, 'video_frames': 2, 'preview_ms': 20},
+                           'cls': {'category': 'heavy', 'resolution': 'UHD', 'codec': 'hevc', 'eis': True},
+                           'power': {'total_mw': 300, 'cpu_mw': 100, 'hw_mw': 150, 'bw_mw': 50}}]
+    snap['review_context'] = {'rows': [{'scenario_id': 'camera', 'variant_id': 'cam-rec-hot', 'ma': 90,
+                                       'reference': {'reference_mw': 250, 'delta_pct': 20, 'source': 'measurement', 'status': 'over'}}]}
+    snap['sw_margin_top5'] = [{'scenario_id': 'camera', 'variant_id': 'cam-rec-hot', 'margin_pct': -5,
+                              'stage': 'nrt', 'bottleneck': '<task>', 'growth_tolerance': 1.1}]
+    snap['domains'] = [{'scenario_id': 'camera', 'variant_id': 'cam-rec-hot', 'domain': 'CAM', 'level': 2,
+                        'speed_mhz': 400, 'headroom_pct': 3}]
+    snap['thermal'] = {'items': [{'variant_id': 'cam-rec-hot', 'plans': [
+        {'ask_pct': 10, 'need_mw': -30, 'saving_mw': -20, 'achieved': False}]}]}
+    snap['power_options'] = [{'scenario_id': 'camera', 'variant_id': 'cam-rec-hot',
+                              'best': {'labels': ['lever <mode>'], 'delta_mw': -20, 'delta_pct': -6.7, 'iq_eval': 'required'}}]
+    snap['calibration'] = [{'scenario_id': 'camera', 'variant_id': 'cam-rec-hot', 'rows': [], 'delta_pct': 0,
+                            'fit': {'offsetting': True}, 'synthetic': True}]
+    snap['cpu'] = [{'scenario_id': 'camera', 'variant_id': 'cam-rec-hot', 'profile_ref': 'capture',
+                    'power_params_ref': 'topology', 'note': 'verify <silicon>', 'summary': {
+                        'tolerance': 0, 'binding': 'timing', 'profile_origin': 'synthetic', 'growth_range': [1, 2],
+                        'points': [{'growth': 1, 'ref_mw': 100, 'bw_mw': 8}, {'growth': 2, 'ref_mw': 200, 'bw_mw': 16}],
+                        'best_at_start': {'delta_mw': -10, 'moved': ['task']},
+                        'opp_step': {'cluster': 'MID', 'growth_to': 1.2, 'delta_mw': 50}}}]
+    snap['risk_register'] = [risk(1, severity='critical', affected=['cam-rec-hot'])]
+    before = deepcopy(snap)
+    html = dossier(snap) + cpu_section(snap['cpu'])
+    assert snap == before
+    plain = re.sub('<[^>]+>', '', html)
+    assert 'fps 미달' in plain and '40.0 ms' in plain and '−10% 미달' in plain
+    assert '×0.0' in html and 'CAM L2 400 MHz' in html and 'IQ 평가' in html
+    assert '&lt;overrun&gt;' in html and 'lever &lt;mode&gt;' in html and 'verify &lt;silicon&gt;' in html
+    assert '상쇄' in html and '합성' in html and 'R-01' in html
+    bias = rail_bias_block({'rail_bias': [{'label': 'INT <rail>', 'median': 30, 'label_verdict': '공통 오차',
+                                         'n': 3, 'within10': 0, 'median_meas_mw': 100, 'median_abs_delta_mw': 30}],
+                            'latency_bias': {'n': 3, 'median': -5, 'within10': 3, 'label': '양호'}})
+    assert 'INT &lt;rail&gt;' in bias and '공통 오차' in bias and 'Latency (video)' in bias
+
+
+def test_report_top_power_ranks_registered_rows_and_cpu_lead_retains_zero_limit():
+    from scenario_db.reporting.review_sections import _lead_cpu, _lead_model, power_top
+
+    snap = snapshot()
+    snap['scenarios'] = [{'scenario_id': 's', 'variant_id': f'v{i:02}', 'spec_ok': True,
+                           'power': {'total_mw': i + 1, 'cpu_mw': 1}} for i in range(12)]
+    snap['scenarios'].append({'scenario_id': 's', 'variant_id': 'failed-high-power', 'spec_ok': False,
+                              'power': {'total_mw': 999}})
+    html = power_top(snap)
+    assert '상위 10' in html and 'v11' in html and 'v02' in html and 'v01' not in html and 'failed-high-power' not in html
+    assert '범위 안 허용치 제약 없음' in _lead_cpu({'cpu': [{'summary': {}}]})
+    assert '×0.0' in _lead_cpu({'cpu': [{'variant_id': 'a', 'summary': {'tolerance': 0}}]})
+    lead = _lead_model({'model': {'confidence': {'grade': 'B'}, 'offsetting': 2,
+                                 'bias': {'cpu': {'verdict': 'model_common', 'median': 30}},
+                                 'rail_bias': [{'category': 'ip', 'verdict': 'model_common', 'label': '<INT>', 'median': -40}]}})
+    assert 'CPU +30%' in lead and '&lt;INT&gt;' in lead and '상쇄 2건' in lead

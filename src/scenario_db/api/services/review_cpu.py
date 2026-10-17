@@ -71,10 +71,14 @@ def record_cpu_snapshot(db: Session, *, project_ref: str, request: CpuRebalanceS
         raise UnprocessableError(f"profile {request.cpu_profile_ref} is not a measurement of project {project_ref}")
     sweep = run_cpu_rebalance_sweep(db, request)
     summary = sweep_summary(sweep) | {"profile_origin": data_origin(prof.provenance)}
+    # Serialize replacement even when no snapshot exists yet. Do the expensive sweep before
+    # taking the lock, then refresh rows another request may have superseded while we waited.
+    db.query(Project).filter(Project.id == project_ref).with_for_update().one()
     now = datetime.now(UTC)
-    for old in (db.query(ReviewCpuSnapshot).filter_by(project_ref=project_ref, scenario_ref=prof.scenario_ref,
+    for old in (db.query(ReviewCpuSnapshot).populate_existing().filter_by(project_ref=project_ref, scenario_ref=prof.scenario_ref,
                                                        variant_ref=prof.variant_ref, status="active").all()):
         old.status = "superseded"
+    db.flush()  # retire the old active row before inserting its replacement
     row = ReviewCpuSnapshot(id=f"CPUSNAP-{uuid.uuid4().hex[:12]}", project_ref=project_ref, scenario_ref=prof.scenario_ref,
                             variant_ref=prof.variant_ref, profile_ref=request.cpu_profile_ref,
                             power_params_ref=request.power_params_ref, base_power_params_ref=request.base_power_params_ref,

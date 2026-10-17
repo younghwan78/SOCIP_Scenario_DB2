@@ -772,7 +772,7 @@ def _review_extras(db: Session, snapshot: dict[str, Any], project_ref: str | Non
         try:
             tw = review_svc.thermal_watch(db, project_ref)
             thermal = {"items": [{
-                "variant_id": i["variant_id"], "label": i.get("label"), "current_mw": i.get("current_mw"),
+                "scenario_id": i.get("scenario_id"), "variant_id": i["variant_id"], "label": i.get("label"), "current_mw": i.get("current_mw"),
                 "baseline": i.get("baseline"), "reference": i.get("reference"),
                 "plans": [{k: p.get(k) for k in ("ask_pct", "need_mw", "saving_mw", "achieved", "picked")} for p in i.get("plans") or []],
                 "notes": (i.get("notes") or [])[:3]} for i in tw.get("items") or []]}
@@ -911,9 +911,9 @@ def create_project_report(db: Session, request: ArchReportRequest, user: str | N
     # RPT-11: previous project report of the same project → frozen comparison
     from scenario_db.reporting.report_diff import report_diff
 
-    prev = next((r for r in db.query(ArchReport).filter(ArchReport.project_ref == project_ref)
-                 .order_by(ArchReport.generated_at.desc()).limit(20).all()
-                 if ((r.snapshot or {}).get("scope") or {}).get("kind") == "project"), None)
+    prev = (db.query(ArchReport).filter(ArchReport.project_ref == project_ref,
+                                      ArchReport.snapshot["scope"]["kind"].astext == "project")
+            .order_by(ArchReport.generated_at.desc(), ArchReport.id).first())
     if prev is not None:
         snapshot["previous"] = report_diff(prev.snapshot, snapshot, {"id": prev.id, "title": prev.title, "status": prev.status,
                                                                      "generated_at": _iso_dt(prev.generated_at)})

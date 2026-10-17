@@ -11,17 +11,14 @@ from typing import Any
 POWER_DELTA_MIN_MW = 1.0
 
 
-def _totals(snap: dict[str, Any]) -> dict[str, float]:
+def _totals(snap: dict[str, Any], labels: dict[tuple[str, str], str]) -> dict[str, float]:
     """Registered / recommended total per variant; a variant name used by several scenarios gets the
     scenario as prefix so the rows never collide."""
     rows = [r for r in snap.get("scenarios") or [] if (r.get("power") or {}).get("total_mw") is not None]
-    names: dict[str, int] = {}
-    for r in rows:
-        names[str(r["variant_id"])] = names.get(str(r["variant_id"]), 0) + 1
     out = {}
     for r in rows:
         v = str(r["variant_id"])
-        key = f"{r.get('scenario_id')}/{v}" if names[v] > 1 else v
+        key = labels[(str(r.get("scenario_id") or ""), v)]
         out[key] = float(r["power"]["total_mw"])
     return out
 
@@ -49,7 +46,13 @@ def report_diff(prev: dict[str, Any], cur: dict[str, Any], prev_meta: dict[str, 
         "resolved": [r["label"] + " " + r["title"] for r in reg if r.get("trend") == "resolve_candidate"
                      and any(p.get("key") == r.get("key") and p.get("trend") != "resolve_candidate" for p in prev.get("risk_register") or [])],
     }
-    pa, pb = _totals(prev), _totals(cur)
+    # Choose labels over both snapshots: adding/removing a same-named variant must not
+    # rename the surviving scenario and hide its actual power / CPU change.
+    identities = {(str(r.get("scenario_id") or ""), str(r["variant_id"]))
+                  for s in (prev, cur) for section in ("scenarios", "cpu") for r in s.get(section) or []}
+    labels = {(sid, vid): f"{sid}/{vid}" if sum(v == vid for _, v in identities) > 1 else vid
+              for sid, vid in identities}
+    pa, pb = _totals(prev, labels), _totals(cur, labels)
     changed = sorted(({"variant_id": v, "prev_mw": round(pa[v], 1), "cur_mw": round(pb[v], 1), "delta_mw": round(pb[v] - pa[v], 1),
                        "delta_pct": round(100 * (pb[v] - pa[v]) / pa[v], 1) if pa[v] else None}
                       for v in pa.keys() & pb.keys() if abs(pb[v] - pa[v]) >= POWER_DELTA_MIN_MW),
@@ -65,8 +68,10 @@ def report_diff(prev: dict[str, Any], cur: dict[str, Any], prev_meta: dict[str, 
     tb = ((cur.get("criteria") or {}).get("power") or {}).get("tolerance_pct")
     if ta != tb:
         basis.append({"item": "전과제 허용 %", "prev": ta, "cur": tb})
-    cpu_a = {c["variant_id"]: (c.get("summary") or {}).get("tolerance") for c in prev.get("cpu") or []}
-    cpu_b = {c["variant_id"]: (c.get("summary") or {}).get("tolerance") for c in cur.get("cpu") or []}
+    cpu_a = {labels[(str(c.get("scenario_id") or ""), str(c["variant_id"]))]:
+             (c.get("summary") or {}).get("tolerance") for c in prev.get("cpu") or []}
+    cpu_b = {labels[(str(c.get("scenario_id") or ""), str(c["variant_id"]))]:
+             (c.get("summary") or {}).get("tolerance") for c in cur.get("cpu") or []}
     cpu = [{"variant_id": v, "prev": cpu_a.get(v), "cur": cpu_b.get(v)} for v in sorted(cpu_a.keys() | cpu_b.keys())
            if cpu_a.get(v) != cpu_b.get(v)]
     return {"report": prev_meta, "risks": risks, "power": {"changed": changed[:10], "changed_count": len(changed),

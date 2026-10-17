@@ -51,7 +51,7 @@ it('records the sweep for the review and lists snapshots', async () => {
       opp_step: null, opp_step_best_mw: null, growth_range: [1, 1.5] as [number, number], points: [], best_at_start: { total_mw: 1, moved: [], delta_mw: -4.8 } } }
   vi.spyOn(cpuSnapshotApi, 'list').mockResolvedValue([snap])
   const onRecord = vi.fn().mockResolvedValue(snap)
-  const host = await render(<CpuReviewSnapshotCard projectRef="p" variantId="cam-rec-v" canRecord onRecord={onRecord} />)
+  const host = await render(<CpuReviewSnapshotCard projectRef="p" scenarioId="s" variantId="cam-rec-v" canRecord onRecord={onRecord} />)
   expect(host.textContent).toContain('×1.1')
   const btn = [...host.querySelectorAll('button')].find((b) => b.textContent === '갱신') as HTMLButtonElement
   await act(async () => { btn.click() })
