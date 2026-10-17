@@ -93,14 +93,14 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
     const growths = growthGrid(range.start, range.end, range.step)
     const key = JSON.stringify([payload, growths])
     if (!force && key === sweepKey.current) return
-    sweepKey.current = key
+    const parentRequest = requestId.current
     const id = ++sweepId.current
     setSweepBusy(true); setSweepErr(null)
     try {
       const r = await sweepApi.run({ ...payload, growths })
-      if (id === sweepId.current) setSweep(r)
+      if (id === sweepId.current && parentRequest === requestId.current) { setSweep(r); sweepKey.current = key }
     } catch (e) {
-      if (id === sweepId.current) { setSweepErr(String((e as Error).message ?? e)); setSweep(null) }
+      if (id === sweepId.current && parentRequest === requestId.current) { setSweepErr(String((e as Error).message ?? e)); setSweep(null) }
     } finally { if (id === sweepId.current) setSweepBusy(false) }
   }
 
@@ -195,6 +195,8 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
   }
   // first look: EAS reproduction + automatic range as soon as the inputs are chosen
   useEffect(() => {
+    ++sweepId.current
+    setSweepBusy(false); setSweepErr(null)
     const selection = JSON.stringify([profile, target, base])
     const changed = inputSelection.current !== selection
     inputSelection.current = selection
@@ -205,7 +207,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
       if (mode === 'rebalance') void runRb(changed ? { ...req, top: rbTop, pool: [], locks: {}, co_move: [], timing_coupling: timingMode } : rbRequest(req))
       else void run(req)
     }
-    return () => { ++requestId.current }
+    return () => { ++requestId.current; ++sweepId.current }
   }, [profile, target, base, reference, mode]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleCell = (task: string, cl: string) => {

@@ -59,6 +59,25 @@ their existing recorded-review behavior.
   predictions; otherwise use its recommendations, explicitly without a prediction ID.
   Creation accepts `draft` only. The conclusion and scenario table distinguish registered
   predictions from exploration recommendations, including a mixed-source power range.
+  Alternatively, supply `project_ref` without `run_id` for a project report spanning
+  all scenario types and current predictions across runs. Unregistered variants use
+  their newest evaluation, including calculation errors; older successes never hide
+  a newer failed calculation. Source runs remain listed in the snapshot. A project
+  report cannot specify `scenario_type`, because it updates the project-wide risk
+  register. A run report keeps its own risk snapshot without updating that register.
+- `GET /review/risks?project_ref=...` reads the project risk register. Writer/admin
+  may `PATCH /review/risks/{id}` with `owner`, `status`, and `note`; changes keep
+  actor/time history. Status is `open`, `watch`, `mitigating`, `accepted`, or `closed`.
+  Project reports refresh automatic rules; absent rules become resolution candidates
+  for human confirmation. IDs and human annotations persist across reports. First
+  creation serializes on the project row. Migration `0028` adds `review_risks`.
+- `GET /calibration/summary` accepts `scenario_id`, `project_ref`, and
+  `include_synthetic` (default true). Both scope filters apply when supplied together.
+  It selects one representative capture per variant, reports category bias,
+  correction previews and confidence, and distinguishes physical, synthetic and
+  unknown origins. Synthetic captures do not count as silicon validation evidence.
+  `GET /calibration/measurements` also accepts `project_ref`; the UI applies the
+  same project and synthetic filters to the capture list and model summary.
 - `GET /arch/reports[/{id}]`, `/{id}/html`, `/{id}/stale`: metadata, snapshot, HTML,
   and comparison of frozen prediction IDs with current IDs. HTML does not change later.
 - `GET /arch/reports/{id}/xlsx`: export frozen tables as a spreadsheet with numeric cells.

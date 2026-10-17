@@ -140,7 +140,7 @@ export interface PowerParamsCreated { params_ref: string; id: string; version: n
 export const calibrationApi = {
   coverageSummary: () => getJson<Record<string, Record<'simulation' | 'measurement' | 'synthetic' | 'current_prediction', number>>>('/calibration/coverage-summary', {}, false),
   coverage: (scenarioId: string) => getJson<Record<string, Coverage>>('/calibration/coverage', { scenario_id: scenarioId }, false),
-  measurements: (scenarioId?: string) => getJson<MeasRow[]>('/calibration/measurements', { scenario_id: scenarioId }, false),
+  measurements: (scenarioId?: string, projectRef?: string) => getJson<MeasRow[]>('/calibration/measurements', { scenario_id: scenarioId, project_ref: projectRef }, false),
   detail: (id: string) => getJson<MeasDetail>(`/calibration/measurements/${encodeURIComponent(id)}`, {}, false),
   powerFit: (body: { project_ref: string; scenario_id?: string; base_params_ref?: string; config_profile_ref?: string | null; include_synthetic: boolean; statistic: string; measured_sw: boolean }) =>
     postJson<PowerFit>('/calibration/power-fit', body),

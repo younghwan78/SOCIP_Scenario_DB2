@@ -80,6 +80,8 @@ class ArchReportRequest(BaseModel):
     def _scope(self) -> ArchReportRequest:
         if not self.run_id and not self.project_ref:
             raise ValueError("run_id or project_ref is required")
+        if self.project_ref and not self.run_id and self.scenario_type:
+            raise ValueError("project reports must include all scenario types to update the project risk register")
         return self
 
 

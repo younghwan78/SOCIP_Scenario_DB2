@@ -11,9 +11,9 @@ router = APIRouter(tags=["calibration · library"])
 
 
 @router.get("/calibration/measurements")
-def measurements(scenario_id: str | None = None, db: Session = Depends(get_db)):
+def measurements(scenario_id: str | None = None, project_ref: str | None = None, db: Session = Depends(get_db)):
     """Measurement evidence with total-power error vs. current prediction and simulation evidence."""
-    return cal.list_measurements(db, scenario_id=scenario_id)
+    return cal.list_measurements(db, scenario_id=scenario_id, project_ref=project_ref)
 
 
 @router.get("/calibration/coverage-summary")

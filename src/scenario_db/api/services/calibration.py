@@ -291,10 +291,12 @@ def _fit(pred: dict[str, float] | None, meas_cat: dict[str, float] | None, total
     return category_fit(compare_split(pred, meas_cat), total_delta)
 
 
-def list_measurements(db: Session, *, scenario_id: str | None = None) -> list[dict[str, Any]]:
+def list_measurements(db: Session, *, scenario_id: str | None = None, project_ref: str | None = None) -> list[dict[str, Any]]:
     q = db.query(Evidence).filter(Evidence.kind == "evidence.measurement")
     if scenario_id:
         q = q.filter(Evidence.scenario_ref == scenario_id)
+    if project_ref:
+        q = q.filter(Evidence.scenario_ref.in_(db.query(Scenario.id).filter(Scenario.project_ref == project_ref)))
     measurements = q.order_by(Evidence.measured_at.desc().nullslast(), Evidence.id).all()
     scenario_ids = {m.scenario_ref for m in measurements}
     current = {(p.scenario_ref, p.variant_ref): p for p in db.query(Prediction).filter(
@@ -669,7 +671,7 @@ def calibration_summary(db: Session, *, scenario_id: str | None = None, project_
     scen_q = db.query(Scenario.id, Scenario.project_ref)
     if scenario_id:
         scen_q = scen_q.filter(Scenario.id == scenario_id)
-    elif project_ref:
+    if project_ref:
         scen_q = scen_q.filter(Scenario.project_ref == project_ref)
     scenarios = dict(scen_q.all())
     if scenario_id and not scenarios:

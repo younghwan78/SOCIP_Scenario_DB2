@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
 from uuid import uuid4
 
+import pytest
+
 from sqlalchemy import event
 from sqlalchemy.orm import Session
 
@@ -192,3 +194,7 @@ def test_calibration_summary_representative_capture_and_bias(engine):
         assert [p['label'] for p in s['correction']['previews']][0] == '현재'
         only_real = cal.calibration_summary(db, scenario_id=sid, include_synthetic=False)
         assert only_real['coverage']['compared'] == 1
+        from scenario_db.exceptions import NotFoundError
+        with pytest.raises(NotFoundError):
+            cal.calibration_summary(db, scenario_id=sid, project_ref='another-project')
+        assert cal.list_measurements(db, scenario_id=sid, project_ref='another-project') == []

@@ -328,13 +328,25 @@ def growth_limits(points: list[dict[str, Any]], events: list[dict[str, Any]]) ->
     ups = [e for e in events if e["which"] == "reference" and e["mhz"][1] > e["mhz"][0]]
     step = max(ups, key=lambda e: e["delta_mw"], default=None)
     timing_at = None
+    seen_stages: set[str] = set()
     for p in points:
         for st in p.get("stages") or []:
-            if st["sw_ms"] > 0 and st["room_ms"] > 0:
-                g = p["growth"] * st["room_ms"] / st["sw_ms"]
-                timing_at = g if timing_at is None else min(timing_at, g)
-        if timing_at is not None:
-            break  # the first point with a Timing Budget sets the stage room
+            if st["stage"] in seen_stages or st["sw_ms"] <= 0:
+                continue
+            seen_stages.add(st["stage"])
+            # Per-task growth overrides stay fixed while default_growth is swept. Use the
+            # observed affine SW response rather than scaling the fixed share with growth.
+            other = next(((q, t) for q in points if q["growth"] > p["growth"]
+                          for t in q.get("stages") or [] if t["stage"] == st["stage"]), None)
+            slope = ((other[1]["sw_ms"] - st["sw_ms"]) / (other[0]["growth"] - p["growth"])
+                     if other else st["sw_ms"] / p["growth"])
+            if st["room_ms"] <= 0 or slope <= 0 and st["sw_ms"] > st["room_ms"]:
+                g = 0.0
+            elif slope > 0:
+                g = max(0.0, p["growth"] + (st["room_ms"] - st["sw_ms"]) / slope)
+            else:
+                continue  # a fixed SW share within budget imposes no growth limit
+            timing_at = g if timing_at is None else min(timing_at, g)
     cands = [x for x in (step["growth_from"] if step else None, timing_at) if x is not None]
     best_step = None
     if step:
@@ -342,7 +354,7 @@ def growth_limits(points: list[dict[str, Any]], events: list[dict[str, Any]]) ->
         pb = next(p for p in points if p["growth"] == step["growth_to"])
         if pa.get("best") and pb.get("best"):
             best_step = round(pb["best"]["total_mw"] - pa["best"]["total_mw"], 2)
-    return {"opp_step": step, "opp_step_best_mw": best_step, "timing_at": round(timing_at, 3) if timing_at else None,
+    return {"opp_step": step, "opp_step_best_mw": best_step, "timing_at": round(timing_at, 3) if timing_at is not None else None,
             "tolerance": round(min(cands), 3) if cands else None,
             "binding": None if not cands else ("timing" if timing_at is not None and timing_at == min(cands) else "opp")}
 

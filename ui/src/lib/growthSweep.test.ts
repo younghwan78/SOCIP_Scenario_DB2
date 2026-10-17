@@ -11,6 +11,10 @@ describe('growth sweep helpers', () => {
   it('builds a bounded grid', () => {
     expect(growthGrid(1, 1.5, 0.1)).toEqual([1, 1.1, 1.2, 1.3, 1.4, 1.5])
     expect(growthGrid(1, 3, 0.1)).toHaveLength(13)
+    expect(growthGrid(1, 3, 0.1)[12]).toBe(3)
+    expect(growthGrid(1, 1.25, 0.2)).toEqual([1, 1.2, 1.25])
+    expect(growthGrid(1, 1.26, 0.2)).toEqual([1, 1.2, 1.26])
+    expect(growthGrid(1, 1.1, 0.5)).toEqual([1, 1.1])
     expect(growthGrid(1, 1, 0.1)).toEqual([1, 1.1])
   })
   it('makes a growth × strategy matrix with the feasible row minimum', () => {

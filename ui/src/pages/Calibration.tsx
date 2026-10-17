@@ -39,9 +39,10 @@ export function CalibrationPage({ ctx }: { ctx: Ctx }) {
   const all = ctx.params.all === '1'
   const realOnly = ctx.params.real === '1'
   const allCaptures = ctx.params.caps === '1'
-  const list = useAsync(() => calibrationApi.measurements(all ? undefined : ctx.scenario), [ctx.scenario, all])
+  const list = useAsync(() => calibrationApi.measurements(all ? undefined : ctx.scenario, ctx.project || undefined), [ctx.scenario, ctx.project, all])
   // CAL-01..06: model-level summary over one representative capture per variant
-  const summary = useAsync(() => summaryApi.get(all ? { projectRef: ctx.project || undefined } : { scenarioId: ctx.scenario }), [ctx.scenario, ctx.project, all])
+  const summary = useAsync(() => summaryApi.get({ ...(all ? { projectRef: ctx.project || undefined } : { scenarioId: ctx.scenario }),
+    includeSynthetic: !realOnly }), [ctx.scenario, ctx.project, all, realOnly])
   const [mxSort, setMxSort] = usePref<MatrixSort>('cal.mx.sort', 'group')
   const sumRows = (summary.data?.rows ?? []).filter((r) => !realOnly || !r.synthetic)
   const repIds = new Set((summary.data?.rows ?? []).map((r) => r.measurement_id))
@@ -49,7 +50,7 @@ export function CalibrationPage({ ctx }: { ctx: Ctx }) {
   const rows = (list.data ?? []).filter((r) => !realOnly || !r.synthetic).filter((r) => allCaptures || !summary.data || repIds.has(r.id))
   const hiddenCaptures = (list.data ?? []).filter((r) => !realOnly || !r.synthetic).length - rows.length
   // default: the current variant's representative capture (key scenario), then the first compared variant
-  const selId = (list.data ?? []).find((r) => r.id === ctx.params.m)?.id
+  const selId = rows.find((r) => r.id === ctx.params.m)?.id
     ?? sumRows.find((r) => r.variant_id === ctx.variant)?.measurement_id ?? sumRows.find((r) => r.pred)?.measurement_id ?? rows[0]?.id
   const pick = (id: string) => ctx.navigate(undefined, { m: id }, true)
   const detail = useAsync(() => (selId ? calibrationApi.detail(selId) : Promise.resolve(null)), [selId])

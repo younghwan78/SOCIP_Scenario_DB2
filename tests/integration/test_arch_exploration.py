@@ -416,3 +416,61 @@ def test_project_report_merges_current_predictions_and_syncs_risk_register(engin
         db.query(Scenario).filter(Scenario.id.in_([sa, sb])).delete(synchronize_session=False)
         db.query(Project).filter(Project.id == pid).delete()
         db.commit()
+
+
+def test_project_report_keeps_latest_calculation_failure(engine, stored_run):
+    from datetime import UTC, datetime, timedelta
+
+    rid, ids = stored_run
+    new_id = f'{rid}-failed'
+    with Session(engine) as db:
+        old = svc.get_run(db, rid)
+        error = {'scenario_id': ids[1], 'variant_id': 'shared', 'stage': 'load', 'error': 'missing input'}
+        db.add(ArchExplorationRun(id=new_id, title='latest', project_ref=old.project_ref,
+                                  scenario_type='review', spec={}, variants=[summary(ids[0], 12)], errors=[error],
+                                  summary={}, engine_rev='test', input_hash='test',
+                                  created_at=datetime.now(UTC) + timedelta(seconds=1)))
+        db.commit()
+        try:
+            run, _, _ = svc._project_run(db, old.project_ref, 'review')
+            assert [(v['scenario_id'], v['variant_id']) for v in run['variants']] == [(ids[0], 'shared')]
+            assert run['errors'] == [error]
+            assert run['source_run_ids'] == [new_id]
+            with pytest.raises(ValueError, match='all scenario types'):
+                ArchReportRequest(project_ref=old.project_ref, scenario_type='review')
+        finally:
+            db.query(ArchExplorationRun).filter_by(id=new_id).delete()
+            db.commit()
+
+
+def test_concurrent_first_risk_sync_allocates_distinct_ids(engine):
+    from scenario_db.api.services.review_risks import sync_risks
+    from scenario_db.db.models.definition import Project
+    from scenario_db.db.models.exploration import ReviewRisk
+
+    pid = f'proj-risk-race-{uuid4().hex}'
+    with Session(engine) as db:
+        db.add(Project(id=pid, schema_version='1.0', metadata_={}, yaml_sha256='test'))
+        db.commit()
+    barrier = Barrier(2)
+
+    def sync(key):
+        risk = {'key': key, 'rule': key, 'severity': 'high', 'category': 'test', 'title': key,
+                'detail': '', 'affected': [], 'mitigation': None}
+        with Session(engine) as db:
+            barrier.wait(timeout=10)
+            rows = sync_risks(db, pid, [risk], report_ref=None, user='reviewer')
+            db.commit()
+            return next(r['id'] for r in rows if r['key'] == key)
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            ids = list(pool.map(sync, ['first', 'second']))
+        assert len(set(ids)) == 2
+        with Session(engine) as db:
+            assert sorted(r.seq for r in db.query(ReviewRisk).filter_by(project_ref=pid)) == [1, 2]
+    finally:
+        with Session(engine) as db:
+            db.query(ReviewRisk).filter_by(project_ref=pid).delete()
+            db.query(Project).filter_by(id=pid).delete()
+            db.commit()

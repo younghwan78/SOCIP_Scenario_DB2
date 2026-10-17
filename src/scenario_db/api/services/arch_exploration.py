@@ -718,19 +718,28 @@ def _project_run(db: Session, project_ref: str, scenario_type: str | None) -> tu
                   if x.get("scenario_id") == p.scenario_ref and x.get("variant_id") == p.variant_ref), None)
         if v is not None:
             variants[(p.scenario_ref, p.variant_ref)] = v
-    for r in runs:  # newest first
+    claimed = set(variants)
+    errors = []
+    sources = {p.exploration_run_ref for p in currents}
+    for r in runs:  # newest evaluation wins, including failed calculations
         for v in r.variants or []:
             key = (v.get("scenario_id"), v.get("variant_id"))
-            if v.get("variant_id") and key not in variants:
+            if v.get("variant_id") and key not in claimed:
                 variants[key] = v
+                claimed.add(key)
+                sources.add(r.id)
+        for error in r.errors or []:
+            key = (error.get("scenario_id"), error.get("variant_id"))
+            if key not in claimed:
+                errors.append(error)
+                claimed.add(key)
+                sources.add(r.id)
     latest = runs[0]
-    covered = set(variants)
-    errors = [e for e in latest.errors or [] if (e.get("scenario_id"), e.get("variant_id")) not in covered]
     project = db.get(Project, project_ref)
     run = run_detail(latest) | {
         "id": f"project:{project_ref}", "title": f"{project_ref} 과제 현재 예측",
         "variants": sorted(variants.values(), key=lambda v: (v["scenario_id"], v["variant_id"])),
-        "errors": errors, "created_at": latest.created_at,
+        "errors": errors, "created_at": latest.created_at, "source_run_ids": sorted(sources),
         "soc_ref": latest.soc_ref or ((project.globals_ or {}).get("soc_ref") if project is not None else None),
     }
     return run, currents, runs
@@ -885,7 +894,7 @@ def create_project_report(db: Session, request: ArchReportRequest, user: str | N
     scope = {"kind": "project", "project_ref": project_ref, "scenario_type": request.scenario_type,
              "runs": [{"id": r.id, "title": r.title, "created_at": _iso_dt(r.created_at), "current": used.get(r.id, 0),
                        "variants": sum(1 for v in run_dict["variants"] if any(v is x for x in r.variants or []))}
-                      for r in runs if used.get(r.id) or r is latest]}
+                      for r in runs if r.id in run_dict["source_run_ids"] or r is latest]}
     _review_extras(db, snapshot, project_ref, cfg, preds, scope)
     rid = f"RPT-{uuid4().hex}"
     snapshot["risk_register"] = sync_risks(db, project_ref, snapshot["risks"], report_ref=rid, user=user)

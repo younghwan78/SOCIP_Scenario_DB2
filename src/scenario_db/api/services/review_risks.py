@@ -49,10 +49,11 @@ def sync_risks(db: Session, project_ref: str, risks: list[dict[str, Any]], *, re
     trend: ``new`` (first seen now) · ``ongoing`` · ``reopened`` (fired again after resolve candidate / close)
     · ``resolve_candidate`` (rule no longer fires; a person closes it) · ``manual`` rows are left alone.
     """
-    if db.get(Project, project_ref) is None:
+    # The project row also serializes the first sync, when there are no risk rows to lock yet.
+    if db.query(Project).filter(Project.id == project_ref).with_for_update().one_or_none() is None:
         raise NotFoundError(f"project not found: {project_ref}")
     now = _now()
-    existing = {r.risk_key: r for r in db.query(ReviewRisk).filter(ReviewRisk.project_ref == project_ref)
+    existing = {r.risk_key: r for r in db.query(ReviewRisk).populate_existing().filter(ReviewRisk.project_ref == project_ref)
                 .with_for_update().all()}
     seq = max((r.seq for r in existing.values()), default=0)
     trends: dict[str, str] = {}
@@ -85,6 +86,8 @@ def sync_risks(db: Session, project_ref: str, risks: list[dict[str, Any]], *, re
             setattr(row, f, risk.get(f))
         row.auto_state = "active" if row.auto_state != "manual" else "manual"
         row.last_seen_at = now
+        row.updated_at = now
+        row.updated_by = user
         row.last_report_ref = report_ref
         row.history = hist[-50:]
         trends[key] = "reopened" if reopened else "ongoing"

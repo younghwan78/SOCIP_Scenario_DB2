@@ -1,4 +1,6 @@
 """SW-growth sweep helpers: OPP events, tolerance and the scaled Timing Budget coupling."""
+import pytest
+
 from scenario_db.api.services.cpu import growth_limits, opp_events, scale_coupling
 
 
@@ -33,3 +35,18 @@ def test_scale_coupling_keeps_room_and_scales_sw():
     assert st["sw_ms"] == 15.54 and st["room_ms"] == 14.844 and st["slack_ms"] < 0
     assert st["stretch"] == 1.0 and s["stretch"]["pre_me_rta"] == 1.0 and s["runtime_scale"] == 1.4
     assert abs(st["tasks"][0]["ms"] - 7.0) < 1e-9
+
+
+@pytest.mark.parametrize('room', [0.0, -2.0])
+def test_no_stage_room_means_no_sw_growth_tolerance(room):
+    pts = [_p(1.0, 1, 1600, 1, [{'stage': 'nrt', 'sw_ms': 10, 'room_ms': room}])]
+    limits = growth_limits(pts, [])
+    assert limits['timing_at'] == limits['tolerance'] == 0
+    assert limits['binding'] == 'timing'
+
+
+def test_timing_limit_preserves_fixed_per_task_growth():
+    # 8 ms of fixed task work + 2 ms * default_growth: 14 ms room runs out at x3.
+    pts = [_p(1, 1, 1600, 1, [{'stage': 'nrt', 'sw_ms': 10, 'room_ms': 14}]),
+           _p(2, 2, 1600, 2, [{'stage': 'nrt', 'sw_ms': 12, 'room_ms': 14}])]
+    assert growth_limits(pts, [])['timing_at'] == 3

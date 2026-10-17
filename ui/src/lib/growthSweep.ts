@@ -24,8 +24,15 @@ export const sweepApi = {
 /** Growth grid: start..end with step (inclusive, ≤ 13 points, 2 decimals). */
 export function growthGrid(start: number, end: number, step: number): number[] {
   if (!(step > 0) || !(end > start)) return [start, Math.max(start + 0.1, end)].map((g) => Math.round(g * 100) / 100)
-  const n = Math.min(12, Math.round((end - start) / step))
-  return Array.from({ length: n + 1 }, (_, i) => Math.round((start + i * step) * 100) / 100)
+  const boundedStep = Math.max(step, (end - start) / 12)
+  const n = Math.floor((end - start) / boundedStep + 1e-9)
+  const points = Array.from({ length: n + 1 }, (_, i) => Math.round((start + i * boundedStep) * 100) / 100)
+  const last = Math.round(end * 100) / 100
+  if (points[points.length - 1] !== last) {
+    if (points.length === 13) points[12] = last
+    else points.push(last)
+  }
+  return [...new Set(points)]
 }
 
 export const strategyKey = (s: SweepStrategy) => `${s.kind}:${s.clusters.join('+')}`
