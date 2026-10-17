@@ -145,3 +145,50 @@ def test_ip_bandwidth_joins_measured_ip_scope_on_node_or_hw_name(engine):
         # Unknown provenance must not displace an older physical capture.
         assert cal.ip_bandwidth(db, sid, 'v')['measurement']['id'] == f'{sid}-physical'
         assert next(m for m in cal.coverage(db, sid)['v']['measurements'] if m['shown'])['id'] == f'{sid}-physical'
+
+
+def test_calibration_summary_representative_capture_and_bias(engine):
+    from scenario_db.db.models.exploration import ArchExplorationRun, Prediction
+
+    with Session(engine) as db:
+        sid = 'review-sum-' + uuid4().hex
+        project = db.query(Scenario.project_ref).first()[0]
+        db.add(Scenario(id=sid, project_ref=project, schema_version='1.0.0', metadata_={}, pipeline={}, yaml_sha256='test'))
+        db.flush()
+        for v in ('v1', 'v2', 'v3'):
+            db.add(ScenarioVariant(scenario_id=sid, id=v, design_conditions={}))
+        rails = {'B2S2_VDD_CPUCL1_MID_LF0_L': {'power_mw': 260}, 'B5_6S1_VDD_CAM_L': {'power_mw': 200},
+                 'B5S4_VDDMIF_AP_L': {'power_mw': 150}, 'B6S2_VDD_SRAM_L': {'power_mw': 60}}
+        caps = [('v1', 'silicon', 2025, {'collection_method': 'power_monitor', 'device_id': 'EVT1-01'}),
+                ('v1', 'synth-newer', 2026, {'collection_method': 'synthetic_fixture', 'device_id': 'SYNTHETIC'}),
+                ('v2', 'synth', 2026, {'collection_method': 'synthetic_fixture', 'device_id': 'SYNTHETIC'}),
+                ('v3', 'no-total', 2026, {'collection_method': 'synthetic_fixture', 'device_id': 'SYNTHETIC'})]
+        for v, tag, year, prov in caps:
+            db.add(Evidence(id=f'{sid}-{v}-{tag}', scenario_ref=sid, variant_ref=v, schema_version='1.0.0',
+                            kind='evidence.measurement', measured_at=datetime(year, 1, 1, tzinfo=timezone.utc),
+                            execution_context={}, aggregation={}, provenance=prov, yaml_sha256='test',
+                            kpi={'total_power_mw': 670, 'fps_effective': 30} if tag != 'no-total' else {},
+                            vdd_power=rails))
+        db.add(ArchExplorationRun(id=f'run-{sid}', title='t', scenario_type='test', project_ref=project, spec={},
+                                  variants=[], errors=[], summary={}, engine_rev='test', input_hash='test'))
+        db.flush()
+        for v in ('v1', 'v2'):
+            db.add(Prediction(id=f'pred-{sid}-{v}', scenario_ref=sid, variant_ref=v, project_ref=project, status='current',
+                              exploration_run_ref=f'run-{sid}', case_key='base', selection_rule='auto:min-power',
+                              selected_by='auto', input_hash='test',
+                              metrics={'power': {'total_mw': 550, 'cpu_mw': 110, 'hw_mw': 165, 'bw_mw': 275}}))
+        db.flush()
+        s = cal.calibration_summary(db, scenario_id=sid)
+        assert s['coverage']['variants'] == 3 and s['coverage']['with_prediction'] == 2
+        assert s['coverage']['compared'] == 2 and s['coverage']['captures'] == 4
+        rows = {r['variant_id']: r for r in s['rows']}
+        # silicon beats a newer synthetic capture; a capture without total is not representative
+        assert rows['v1']['measurement_id'] == f'{sid}-v1-silicon' and rows['v1']['captures'] == 2
+        assert rows['v1']['origin'] == 'physical_capture' and 'v3' not in rows
+        d = rows['v1']['delta_pct']
+        assert round(d['cpu'], 1) == -57.7 and round(d['bw'], 1) == 83.3 and round(d['total'], 1) == -17.9
+        assert s['bias']['cpu']['median'] == -57.69 and s['bias']['bw']['sign'] == 1
+        assert s['confidence']['real'] == 1 and s['confidence']['grade'] == 'B'
+        assert [p['label'] for p in s['correction']['previews']][0] == '현재'
+        only_real = cal.calibration_summary(db, scenario_id=sid, include_synthetic=False)
+        assert only_real['coverage']['compared'] == 1

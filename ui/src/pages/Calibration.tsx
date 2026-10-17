@@ -10,6 +10,9 @@ import { ProvBadge } from '../components/Provenance'
 import { categoryFit, powerScope, type CategoryFit } from '../lib/provenance'
 import { ClockCompareCard, ClockResidencyCard } from '../components/ClockResidency'
 import { PowerFitCard } from '../components/PowerFit'
+import { BiasDiagnosis, BiasStrip, CorrectionPreview, ErrorMatrix, ErrorWaterfall, ParityGrid, SummaryTiles } from '../components/CalibrationOverview'
+import { summaryApi, type MatrixSort } from '../lib/calibrationSummary'
+import { usePref } from '../components/Layout'
 
 const CATS: Category[] = ['cpu', 'ip', 'bw', 'other']
 type Prov = Parameters<typeof ProvBadge>[0]['prov']
@@ -35,10 +38,20 @@ const pctText = (v: number | null | undefined) => (v === null || v === undefined
 export function CalibrationPage({ ctx }: { ctx: Ctx }) {
   const all = ctx.params.all === '1'
   const realOnly = ctx.params.real === '1'
+  const allCaptures = ctx.params.caps === '1'
   const list = useAsync(() => calibrationApi.measurements(all ? undefined : ctx.scenario), [ctx.scenario, all])
+  // CAL-01..06: model-level summary over one representative capture per variant
+  const summary = useAsync(() => summaryApi.get(all ? { projectRef: ctx.project || undefined } : { scenarioId: ctx.scenario }), [ctx.scenario, ctx.project, all])
+  const [mxSort, setMxSort] = usePref<MatrixSort>('cal.mx.sort', 'group')
+  const sumRows = (summary.data?.rows ?? []).filter((r) => !realOnly || !r.synthetic)
+  const repIds = new Set((summary.data?.rows ?? []).map((r) => r.measurement_id))
   const synthCount = (list.data ?? []).filter((r) => r.synthetic).length
-  const rows = (list.data ?? []).filter((r) => !realOnly || !r.synthetic)
-  const selId = rows.find((r) => r.id === ctx.params.m)?.id ?? rows[0]?.id
+  const rows = (list.data ?? []).filter((r) => !realOnly || !r.synthetic).filter((r) => allCaptures || !summary.data || repIds.has(r.id))
+  const hiddenCaptures = (list.data ?? []).filter((r) => !realOnly || !r.synthetic).length - rows.length
+  // default: the current variant's representative capture (key scenario), then the first compared variant
+  const selId = (list.data ?? []).find((r) => r.id === ctx.params.m)?.id
+    ?? sumRows.find((r) => r.variant_id === ctx.variant)?.measurement_id ?? sumRows.find((r) => r.pred)?.measurement_id ?? rows[0]?.id
+  const pick = (id: string) => ctx.navigate(undefined, { m: id }, true)
   const detail = useAsync(() => (selId ? calibrationApi.detail(selId) : Promise.resolve(null)), [selId])
   const cols: Column<MeasRow>[] = [
     { key: 'v', label: 'Variant', width: 280, sticky: true, sort: (r) => r.variant_id, render: (r) => <span className="mono">{short(r.variant_id)}{r.synthetic && <span className="badge v-warn" style={{ marginLeft: 6 }} title="생성된 fixture — silicon 측정 아님">합성</span>}</span> },
@@ -64,15 +77,40 @@ export function CalibrationPage({ ctx }: { ctx: Ctx }) {
       </div>
       {list.error && <div className="err">{list.error}</div>}
       {list.data && !rows.length && <div className="empty">{realOnly && synthCount ? '실제 측정 evidence가 없습니다 (합성 fixture만 있음).' : '실측 evidence가 없습니다. 측정 결과를 import하면 여기에 나타납니다.'}</div>}
+      {summary.error && <div className="err">{summary.error}</div>}
+      {summary.data && summary.data.coverage.compared > 0 && <SummaryTiles s={summary.data} />}
       {rows.length > 0 && <div className="tb-grid">
-        <Card id="cal-list" title="실측 evidence" note="행 클릭 = 상세" defaultWide minHeight={140}>
+        {summary.data && summary.data.coverage.compared > 0 && <>
+          <Card id="cal-bias" title="구성별 체계 오차" defaultWide minHeight={140}
+            note={`점 = variant (대표 capture) · ${summary.data.coverage.compared}건 · 세로 막대 = median · 점 클릭 = 상세`}
+            help={<>등록 예측과 실측 rail(CPU · IP · BW)의 Δ%를 구성별로 펼칩니다. 같은 방향으로 크게 틀린 구성은 계수 · 모델 형태 · rail mapping 문제(모델 공통)이고, 부호가 섞인 구성은 scenario별 원인입니다. total ±10% 안의 variant도 구성은 크게 틀릴 수 있습니다(상쇄).</>}>
+            <BiasStrip s={summary.data} onPick={(r) => pick(r.measurement_id)} />
+            <BiasDiagnosis s={summary.data} />
+          </Card>
+          <Card id="cal-matrix" title="오차 matrix" defaultWide minHeight={200}
+            note="variant × 구성 · 색 = |Δ| ≤10% / ≤25% / >25% · 행 클릭 = 아래 상세 · ×n = 같은 variant capture 수">
+            <ErrorMatrix rows={sumRows.filter((r) => r.pred)} sort={mxSort} setSort={setMxSort} selected={selId} onPick={(r) => pick(r.measurement_id)} />
+            {sumRows.some((r) => !r.pred) && <div className="faint" style={{ fontSize: 12, marginTop: 6 }}>등록 예측 없는 실측 {sumRows.filter((r) => !r.pred).length} variant는 matrix에서 제외 (아래 capture 목록에 있음)</div>}
+          </Card>
+        </>}
+        {detail.error && <div className="err" style={{ gridColumn: '1 / -1' }}>{detail.error}</div>}
+        {detail.data && <Detail d={detail.data} ctx={ctx} />}
+        {summary.data && summary.data.coverage.compared > 0 && <>
+          <Card id="cal-correct" title="보정 preview" note="구성별 median(실측/예측)을 단일 계수로 적용했을 때 total 오차" minHeight={120}>
+            <CorrectionPreview s={summary.data} />
+          </Card>
+          <Card id="cal-parity" title="Parity · 예측 vs 실측" note="대각선 = 일치 · 띠 = ±10 / ±25% · total 빈 원 = 상쇄" defaultWide minHeight={120}>
+            <ParityGrid rows={sumRows} />
+          </Card>
+        </>}
+        <Card id="cal-list" title={allCaptures ? '실측 capture (전체)' : '실측 capture (variant당 대표)'} defaultWide minHeight={140}
+          note={allCaptures ? '행 클릭 = 상세' : `대표 = total 있음 > 실측 > 합성 아님 > 최신 · 행 클릭 = 상세${hiddenCaptures > 0 ? ` · 나머지 ${hiddenCaptures}건 숨김` : ''}`}
+          actions={summary.data ? <button className="btn tb-mini" onClick={() => ctx.navigate(undefined, { caps: allCaptures ? undefined : '1' }, true)}>{allCaptures ? '대표만' : '모든 capture'}</button> : undefined}>
           <div className="table-x">
-            <DataTable id="cal.list" columns={cols} rows={rows} rowKey={(r) => r.id} onRowClick={(r) => ctx.navigate(undefined, { m: r.id }, true)}
+            <DataTable id="cal.list" columns={cols} rows={rows} rowKey={(r) => r.id} onRowClick={(r) => pick(r.id)}
               rowClass={(r) => (r.id === selId ? 'selected' : '')} defaultSort={{ key: 'at', dir: -1 }} />
           </div>
         </Card>
-        {detail.error && <div className="err" style={{ gridColumn: '1 / -1' }}>{detail.error}</div>}
-        {detail.data && <Detail d={detail.data} ctx={ctx} />}
         <ClockCompareCard scenarioId={all ? undefined : ctx.scenario} selectedId={selId} onPick={(id) => ctx.navigate(undefined, { m: id }, true)} />
         <PowerFitCard key={`${ctx.project}:${ctx.params.cfg ?? ''}`} project={ctx.project} cfgParam={ctx.params.cfg}
           onOpenTiming={(pp) => ctx.navigate('timing', { pp })} onOpenPredictions={(pp) => ctx.navigate('predictions', { pp, rc: '1' })} />
@@ -120,6 +158,9 @@ function Detail({ d, ctx }: { d: MeasDetail; ctx: Ctx }) {
           </tr>))}</tbody>
       </table>
       <div className="faint" style={{ fontSize: 12, marginTop: 6 }}>예측 BW 전력은 모델상 MIF·DRAM rail로 귀속됩니다 (MIF DVFS 미반영). 기타 rail(GPU·SRAM·ICPU 등)은 scenario power model 밖입니다.</div>
+    </Card>
+    <Card id="cal-waterfall" title={`${short(d.variant_id)} — 오차 waterfall`} note="등록 예측 → 구성별 (실측 − 예측) → 실측 total" minHeight={120}>
+      <ErrorWaterfall d={d} />
     </Card>
     {d.clock_residency && <ClockResidencyCard view={d.clock_residency} cpuLink="#/cpu" />}
     {cols.some((p) => p.conditions) && <Card id="cal-cond" title="비교 조건 동등성" note="조건이 다르면 Δ는 참고 비교 · 미기록은 동등성 확인 불가" defaultWide>

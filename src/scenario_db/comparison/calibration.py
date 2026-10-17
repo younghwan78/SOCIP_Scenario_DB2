@@ -105,3 +105,107 @@ def category_fit(rows: list[dict[str, Any]] | None, total_delta_pct: float | Non
     return {"worst_category": worst["category"] if worst else None,
             "worst_delta_pct": worst["delta_pct"] if worst else None,
             "offsetting": bool(offsetting)}
+
+
+# ---------------------------------------------------------------------------
+# Model-level bias across many variants (calibration summary, report "모델 신뢰도")
+# ---------------------------------------------------------------------------
+FIT_OK_PCT = 10.0
+FIT_WARN_PCT = 25.0
+# A category whose errors share one sign in this share of variants, with |median| beyond
+# FIT_WARN_PCT, is a model-wide error (a coefficient or the model form), not a scenario one.
+MODEL_COMMON_SAME_SIGN = 0.8
+
+BIAS_VERDICT_LABEL = {
+    "ok": "일치",
+    "model_common": "모델 공통 오차",
+    "bias": "공통 경향",
+    "scenario": "scenario별 오차",
+    "insufficient": "비교 부족",
+}
+
+
+def _quantile(sorted_vals: list[float], q: float) -> float:
+    if len(sorted_vals) == 1:
+        return sorted_vals[0]
+    pos = (len(sorted_vals) - 1) * q
+    lo = int(pos)
+    hi = min(lo + 1, len(sorted_vals) - 1)
+    return sorted_vals[lo] + (sorted_vals[hi] - sorted_vals[lo]) * (pos - lo)
+
+
+def bias_stats(values: list[float | None], *, min_n: int = 3) -> dict[str, Any]:
+    """Distribution of signed Δ% (prediction − measurement) over variants for one category.
+
+    ``verdict``: ``ok`` (≥ 80 % of variants within ±10 %), ``model_common`` (one sign in
+    ≥ 80 % and |median| > 25 %), ``bias`` (one sign in ≥ 80 %, |median| ≤ 25 %),
+    ``scenario`` (errors spread across signs) or ``insufficient`` (fewer than ``min_n``).
+    """
+    vals = sorted(float(v) for v in values if v is not None)
+    n = len(vals)
+    if n == 0:
+        return {"n": 0, "median": None, "p25": None, "p75": None, "min": None, "max": None,
+                "within10": 0, "within25": 0, "same_sign_pct": None, "sign": 0, "verdict": "insufficient"}
+    med = _quantile(vals, 0.5)
+    pos = sum(1 for v in vals if v > 0)
+    neg = sum(1 for v in vals if v < 0)
+    same = max(pos, neg) / n
+    within10 = sum(1 for v in vals if abs(v) <= FIT_OK_PCT)
+    if n < min_n:
+        verdict = "insufficient"
+    elif within10 / n >= MODEL_COMMON_SAME_SIGN:
+        verdict = "ok"
+    elif same >= MODEL_COMMON_SAME_SIGN and abs(med) > FIT_WARN_PCT:
+        verdict = "model_common"
+    elif same >= MODEL_COMMON_SAME_SIGN:
+        verdict = "bias"
+    else:
+        verdict = "scenario"
+    return {
+        "n": n, "median": round(med, 2), "p25": round(_quantile(vals, 0.25), 2), "p75": round(_quantile(vals, 0.75), 2),
+        "min": round(vals[0], 2), "max": round(vals[-1], 2), "within10": within10,
+        "within25": sum(1 for v in vals if abs(v) <= FIT_WARN_PCT),
+        "same_sign_pct": round(100.0 * same, 1), "sign": 1 if pos > neg else -1 if neg > pos else 0, "verdict": verdict,
+    }
+
+
+def flat_term(pairs: list[tuple[float | None, float | None]], *, base_fps: float = 30.0, min_share: float = 0.5) -> dict[str, Any] | None:
+    """Detect a prediction term that only scales with fps (e.g. a flat CPU model).
+
+    ``pairs`` = (predicted mW, fps). Returns the most common mW-per-``base_fps`` value when it
+    covers at least ``min_share`` of the rows, else ``None``.
+    """
+    buckets: dict[int, list[float]] = {}
+    n = 0
+    for mw, fps in pairs:
+        if mw is None or not fps:
+            continue
+        n += 1
+        v = float(mw) * base_fps / float(fps)  # fps-normalised; 1 mW buckets absorb 29.97 vs 30 fps
+        buckets.setdefault(round(v), []).append(v)
+    if not n:
+        return None
+    vals = max(buckets.values(), key=len)
+    if len(vals) / n < min_share or len(vals) < 3:
+        return None
+    return {"mw_at_base_fps": round(sum(vals) / len(vals), 1), "base_fps": base_fps, "count": len(vals), "n": n}
+
+
+def correction_preview(rows: list[dict[str, Any]], factors: dict[str, float]) -> dict[str, Any]:
+    """Total error if each predicted category were scaled by ``factors`` (CPU / IP / BW).
+
+    ``rows`` carry ``meas.total``, ``meas.other`` and ``pred.{cpu,ip,bw}``. The unmodeled
+    ``other`` rails stay out of the prediction, as in the registered model.
+    """
+    deltas = []
+    for r in rows:
+        pred, meas = r.get("pred") or {}, r.get("meas") or {}
+        mt = meas.get("total")
+        if not mt or any(pred.get(c) is None for c in ("cpu", "ip", "bw")):
+            continue
+        p = sum(float(pred[c]) * float(factors.get(c, 1.0)) for c in ("cpu", "ip", "bw"))
+        deltas.append(100.0 * (p - float(mt)) / float(mt))
+    st = bias_stats(deltas, min_n=1)
+    return {"factors": {c: round(float(factors.get(c, 1.0)), 3) for c in ("cpu", "ip", "bw")},
+            "median": st["median"], "within10": st["within10"], "n": st["n"],
+            "max_abs": round(max((abs(d) for d in deltas), default=0.0), 1) if deltas else None}

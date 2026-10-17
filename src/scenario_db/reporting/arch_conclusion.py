@@ -91,15 +91,29 @@ def _is_real(c: dict[str, Any]) -> bool:
 
 def _confidence(snap: dict[str, Any]) -> dict[str, Any]:
     reasons: list[str] = []
-    cal = snap.get("calibration") or []
-    # a real capture only counts when it can be compared category by category
-    real = [c for c in cal if _is_real(c) and c["fit"]["worst_delta_pct"] is not None]
-    worst = max((abs(c["fit"]["worst_delta_pct"]) for c in real), default=None)
     weak_input = bool(snap["overview"].get("sample_dvfs")) or not snap["overview"].get("dvfs_table_ref")
     if snap["overview"].get("sample_dvfs"):
         reasons.append("DVFS table이 SAMPLE — 전압 · level이 사내 값이 아님")
     elif not snap["overview"].get("dvfs_table_ref"):
         reasons.append("run에 DVFS table 기록 없음 (이전 engine) — 어떤 전압 · level 기준인지 확인 불가")
+    return calibration_confidence(snap.get("calibration") or [], input_reasons=reasons, weak_input=weak_input)
+
+
+GRADE_MEANING = {"A": "실측 대조 구성 오차 ≤10% — 대조 범위 내 검토 가능",
+                 "B": "실측 대조 있음 — 구성 오차 · 상쇄를 확인하며 경향 비교",
+                 "C": "실측 근거 부족 또는 SAMPLE 입력 — 상대 비교 · 후보 선정 용도"}
+
+
+def calibration_confidence(cal: list[dict[str, Any]], *, input_reasons: list[str] | None = None,
+                           weak_input: bool = False) -> dict[str, Any]:
+    """Model confidence grade shared by the report conclusion and the calibration summary (CAL-06).
+
+    ``cal`` rows carry ``origin`` / ``synthetic`` and ``fit`` (``category_fit``); a real capture
+    only counts when it can be compared category by category.
+    """
+    reasons = list(input_reasons or [])
+    real = [c for c in cal if _is_real(c) and c["fit"]["worst_delta_pct"] is not None]
+    worst = max((abs(c["fit"]["worst_delta_pct"]) for c in real), default=None)
     if not real:
         reasons.append("실제 silicon 측정과 대조한 variant 없음" + (f" (합성 fixture {len(cal)}건은 근거 아님)" if cal else ""))
     elif worst is not None and worst > FIT_WARN_PCT:
@@ -113,10 +127,7 @@ def _confidence(snap: dict[str, Any]) -> dict[str, Any]:
     else:
         grade = "B"
         reasons.append(f"실측 대조 최대 |Δ| {worst:.0f}% (≤ {FIT_WARN_PCT:.0f}%)" if worst is not None else "실측 대조 구성 비교 불가")
-    return {"grade": grade, "reasons": reasons,
-            "meaning": {"A": "실측 대조 구성 오차 ≤10% — 대조 범위 내 검토 가능",
-                        "B": "실측 대조 있음 — 구성 오차 · 상쇄를 확인하며 경향 비교",
-                        "C": "실측 근거 부족 또는 SAMPLE 입력 — 상대 비교 · 후보 선정 용도"}[grade]}
+    return {"grade": grade, "reasons": reasons, "meaning": GRADE_MEANING[grade], "real": len(real), "compared": len(cal)}
 
 
 def build_conclusion(snap: dict[str, Any]) -> dict[str, Any]:
