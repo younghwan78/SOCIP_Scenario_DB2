@@ -45,3 +45,21 @@ def test_confidence_shared_rule():
     # weak input (SAMPLE DVFS) downgrades a reasoned grade to C, as in the report
     assert calibration_confidence([{"origin": "physical_capture", "synthetic": False, "fit": fit(30)}],
                                   input_reasons=["DVFS SAMPLE"], weak_input=True)["grade"] == "C"
+
+
+def test_representative_rank_prefers_comparable_physical_captures():
+    from datetime import UTC, datetime
+    from types import SimpleNamespace
+
+    from scenario_db.api.services.calibration import _rep_rank
+
+    physical = SimpleNamespace(kpi={'total_power_mw': 100},
+                               provenance={'device_id': 'device', 'collection_method': 'capture'},
+                               measured_at=datetime(2025, 1, 1))
+    synthetic = SimpleNamespace(kpi={'total_power_mw': {'mean': 100}}, provenance={'device_id': 'SYNTHETIC'},
+                                measured_at=datetime(2026, 1, 1, tzinfo=UTC))
+    missing = SimpleNamespace(kpi={}, provenance=physical.provenance, measured_at=None)
+    assert _rep_rank(physical) > _rep_rank(synthetic) > _rep_rank(missing)
+    newer = SimpleNamespace(kpi=physical.kpi, provenance=physical.provenance,
+                            measured_at=datetime(2026, 1, 1, tzinfo=UTC))
+    assert _rep_rank(newer) > _rep_rank(physical)

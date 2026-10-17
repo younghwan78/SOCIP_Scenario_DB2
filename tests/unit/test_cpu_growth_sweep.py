@@ -1,7 +1,11 @@
 """SW-growth sweep helpers: OPP events, tolerance and the scaled Timing Budget coupling."""
+from types import SimpleNamespace
+from unittest.mock import MagicMock
+
 import pytest
 
 from scenario_db.api.schemas.cpu import CpuRebalanceSweepRequest
+from scenario_db.api.services import cpu as service
 from scenario_db.api.services.cpu import growth_limits, opp_events, scale_coupling
 
 
@@ -57,3 +61,37 @@ def test_timing_limit_preserves_fixed_per_task_growth():
 def test_sweep_rejects_a_grid_that_collapses_to_one_point(growths):
     with pytest.raises(ValueError, match='two distinct values'):
         CpuRebalanceSweepRequest(power_params_ref='topology', growths=growths)
+
+
+@pytest.mark.parametrize('overrides', [{}, {'fixed-task': 1.2}])
+def test_sweep_orders_points_and_reuses_only_uniform_timing(overrides, monkeypatch):
+    timing = MagicMock(return_value={'period_ms': 33.333, 'runtime_scale': 1, 'stages': [], 'stretch': {}})
+    monkeypatch.setattr(service, 'timing_stretch', timing)
+    monkeypatch.setattr(service, 'get_evidence', lambda *_: SimpleNamespace(scenario_ref='scenario', variant_ref='variant'))
+    seen = []
+
+    def rebalance(db, req, *, coupling_base=None):
+        g = req.default_growth
+        seen.append((g, coupling_base))
+        split = {'total_mw': 100 * g, 'mhz': {'MID': 400 if g == 1 else 800, 'dsu': 600}, 'mw': {'MID': 100 * g}}
+        return SimpleNamespace(result={
+            'reference': split, 'best': split if g == 1 else None, 'feasible_count': 1 if g == 1 else 0,
+            'strategies': {'rows': [{'kind': 'spread', 'clusters': ['MID'], 'total_mw': 100 * g,
+                                    'feasible': g == 1, 'mhz': split['mhz']}], 'winner': 'spread'},
+            'cpu_bw_mbs': 100 * g, 'timing_coupling': {'stages': [
+                {'stage': 'nrt', 'sw_ms': g * 10, 'room_ms': 14, 'slack_ms': 14 - g * 10}]}})
+
+    monkeypatch.setattr(service, 'run_cpu_rebalance', rebalance)
+    req = CpuRebalanceSweepRequest(power_params_ref='topology', cpu_profile_ref='measurement',
+                                   timing_coupling='stage_slack', growths=[1.5, 1, 1.5], growth=overrides)
+    result = service.run_cpu_rebalance_sweep(MagicMock(), req)
+    assert [p['growth'] for p in result['points']] == [1, 1.5]
+    assert result['points'][1]['best'] is None and result['points'][1]['stages'][0]['ok'] is False
+    assert result['events'][0]['mhz'] == [400, 800]
+    assert result['limits']['timing_at'] == 1.4
+    if overrides:
+        timing.assert_not_called()
+        assert all(c is None for _, c in seen)
+    else:
+        timing.assert_called_once()
+        assert all(c is timing.return_value for _, c in seen)

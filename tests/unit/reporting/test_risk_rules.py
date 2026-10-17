@@ -44,3 +44,26 @@ def test_rules_and_severity_order():
 
 def test_clean_snapshot_has_no_risk():
     assert build_risks(_snap()) == []
+
+
+def test_register_view_keeps_recent_history_and_orders_active_risks_first():
+    from datetime import UTC, datetime
+    from types import SimpleNamespace
+
+    from scenario_db.api.services.review_risks import _order, risk_view
+
+    now = datetime.now(UTC)
+    row = SimpleNamespace(id='risk', seq=3, project_ref='project', risk_key='fps', rule='fps',
+                          severity='critical', category='performance', title='FPS', detail='proof',
+                          affected=['variant'], mitigation=None, owner='owner', status='open', note=None,
+                          auto_state='active', first_seen_at=now, last_seen_at=now, updated_at=now,
+                          updated_by='reviewer', last_report_ref='report', history=[{'n': n} for n in range(30)])
+    view = risk_view(row, trend='ongoing')
+    assert view['label'] == 'R-03' and view['updated_at'] == now.isoformat()
+    assert view['history'] == [{'n': n} for n in range(10, 30)]
+    view['affected'].append('another')
+    assert row.affected == ['variant']
+    rows = [view | {'id': 'closed', 'status': 'closed'},
+            view | {'id': 'candidate', 'auto_state': 'resolve_candidate'},
+            view | {'id': 'active', 'severity': 'high'}]
+    assert [r['id'] for r in _order(rows)] == ['active', 'candidate', 'closed']
