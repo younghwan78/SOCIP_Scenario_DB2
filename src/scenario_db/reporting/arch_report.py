@@ -138,7 +138,7 @@ def build_snapshot(
         w = m.get("worst")
         if not w:
             continue
-        margins.append({"variant_id": v["variant_id"], "fps": v["fps"], "verdict": m.get("verdict"), "spec_ok": v["spec_ok"],
+        margins.append({"scenario_id": v["scenario_id"], "variant_id": v["variant_id"], "fps": v["fps"], "verdict": m.get("verdict"), "spec_ok": v["spec_ok"],
                         **w, "growth_tolerance": m.get("growth_tolerance"),
                         "growth_tolerance_fixed": m.get("growth_tolerance_fixed"),
                         "recommendations": m.get("recommendations", [])})
@@ -301,6 +301,8 @@ _NUM = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
 
 
 def render_html(title: str, snap: dict[str, Any]) -> str:
+    if snap.get("criteria"):
+        return _render_tiered(title, snap)
     o = snap["overview"]
     secs = _sections(snap)
     shown = [(t, b) for t, b, why in secs if why is None]
@@ -321,6 +323,47 @@ def render_html(title: str, snap: dict[str, Any]) -> str:
         "<nav>" + "".join(f"<a href='#s{i}'>{escape(t)}</a>" for i, (t, _) in enumerate(shown, 1)) + "</nav><main>",
         *(f"<section id='s{i}'><h2>{_NUM[i - 1] if i <= len(_NUM) else i} {escape(t)}</h2>{b}</section>"
           for i, (t, b) in enumerate(shown, 1)),
+        "</main></body></html>",
+    ]
+    return "".join(parts)
+
+
+_TIER_NAME = {1: "Tier 1 · 결론", 2: "Tier 2 · 영역별", 3: "Tier 3 · 상세"}
+
+
+def _render_tiered(title: str, snap: dict[str, Any]) -> str:
+    """RPT-09..12: Tier 1 (결론 · risk · 이전 대비) → Tier 2 areas → Tier 3 dossier; grouped TOC, print breaks."""
+    from scenario_db.reporting.review_sections import TIER_CSS, tiered_sections
+
+    o = snap["overview"]
+    secs = tiered_sections(snap)
+    shown = [(t, b, tier) for t, b, why, tier in secs if why is None]
+    omitted = [(t, why) for t, _, why, _ in secs if why]
+    if omitted:
+        t0, b0, k0 = shown[0]
+        shown[0] = (t0, b0 + "<p class='meta' style='margin-top:12px'><b>생략한 절</b> — "
+                    + " · ".join(f"{escape(t)}: {escape(str(why))}" for t, why in omitted) + "</p>", k0)
+    scope = snap.get("scope") or {}
+    nav, last = [], 0
+    for i, (t, _, tier) in enumerate(shown, 1):
+        if tier != last:
+            nav.append(f"<span class='tier'>{_TIER_NAME[tier]}</span>")
+            last = tier
+        nav.append(f"<a href='#s{i}'>{escape(t)}</a>")
+    last_t1 = max(i for i, (_, _, tier) in enumerate(shown, 1) if tier == 1)
+    first_t3 = min((i for i, (_, _, tier) in enumerate(shown, 1) if tier == 3), default=0)
+    parts = [
+        "<!DOCTYPE html><html lang='ko'><head><meta charset='utf-8'>",
+        f"<title>{escape(title)}</title><style>{_CSS}{TIER_CSS}</style></head><body>",
+        f"<header><h1>{escape(title)}</h1><div class='meta'>{escape(str(o['target_soc']))} · "
+        f"{escape(o['scenario_type'])} · "
+        + (f"과제 {escape(str(scope.get('project_ref')))} · run {len(scope.get('runs') or [])}개" if scope.get("kind") == "project"
+           else escape(o["run_id"]))
+        + f" · DVFS {escape(str(o['dvfs_table_ref']))}{' <b class=warn>SAMPLE</b>' if o['sample_dvfs'] else ''}</div></header>",
+        "<nav>" + "".join(nav) + "</nav><main>",
+        *(f"<section id='s{i}' class='tier{tier}{' tier1-end' if i == last_t1 else ''}{' tier3' if i == first_t3 else ''}'>"
+          f"<h2>{_NUM[i - 1] if i <= len(_NUM) else i} {escape(t)}</h2>{b}</section>"
+          for i, (t, b, tier) in enumerate(shown, 1)),
         "</main></body></html>",
     ]
     return "".join(parts)

@@ -46,7 +46,15 @@ export interface CpuRebalance {
   timing_coupling?: TimingCoupling
   /** API ≥ 2026-10-11: why the best split wins (OPP change per cluster, moves, stretched tasks) */
   why?: RbWhy | null
+  /** CPU-07: units moved one at a time onto one target cluster (x = share of movable util on it) */
+  ratio_curves?: RatioCurve[]
+  /** CPU-09: CPU-caused DRAM BW power with the exploration's BW coefficient */
+  bw_power?: BwPower
 }
+export interface RatioPoint { util_pct: number; moved_unit: string | null; total_mw: number; feasible: boolean; mhz: Record<string, number> }
+export interface RatioCurve { target: string; start_util_pct: number; points: RatioPoint[]; best_index: number | null }
+export interface BwCoefficient { mw_per_mbs: number; source: 'prediction' | 'builtin'; prediction_ref: string | null; bw_power_model: string | null }
+export interface BwPower extends BwCoefficient { cpu_bw_mbs: number | null; bw_mw: number | null; reference_total_mw: number | null; best_total_mw: number | null }
 export interface TimingStage { stage: string; sw_ms: number; hw_ms: number; overhead_ms: number; room_ms: number; slack_ms: number; stretch: number; tasks: { task: string; ms: number }[] }
 export interface TimingImpact { stage: string; sw_ms: number; delta_sw_ms: number; slack_ms: number; chain_ms: number; extra_latency_frames: number; ok: boolean }
 export interface TimingCoupling {

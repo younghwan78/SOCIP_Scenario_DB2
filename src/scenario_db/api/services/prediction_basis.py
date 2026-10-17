@@ -65,6 +65,11 @@ def sw_timing_hash(variant_doc: dict[str, Any] | None) -> str | None:
 def defined_timing_hash(db: Session, p: Prediction) -> str | None:
     """Hash of the SW timing the prediction's run used: its frozen ``variant_doc`` blob (manifest), None for runs
     without a manifest (older engines) — no guess from today's YAML."""
+    return sw_timing_hash(defined_variant_doc(db, p))
+
+
+def defined_variant_doc(db: Session, p: Prediction) -> dict[str, Any] | None:
+    """Frozen resolved variant used by a registered prediction, never today's mutable definition."""
     from sqlalchemy import func, literal, literal_column
 
     R = ArchExplorationRun
@@ -74,7 +79,7 @@ def defined_timing_hash(db: Session, p: Prediction) -> str | None:
     if not digest:
         return None
     blob = db.query(R.spec["manifest"]["blobs"][str(digest)]).filter(R.id == p.exploration_run_ref).scalar()
-    return sw_timing_hash(blob if isinstance(blob, dict) else None)
+    return blob if isinstance(blob, dict) else None
 
 
 def _params_id(ref: str | None) -> str | None:

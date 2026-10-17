@@ -17,7 +17,10 @@ export interface SummaryRow {
   delta_pct: Record<BiasCat, number | null> | null
   fit: { worst_category: string | null; worst_delta_pct: number | null; offsetting: boolean } | null
   conditions: string | null
+  latency?: { pred_ms: number | null; meas_p95_ms: number | null; meas_mean_ms: number | null; delta_pct: number | null } | null
+  rail_groups?: { key: string; label: string; category: string; meas_mw: number; pred_mw: number | null; delta_mw: number | null; delta_pct: number | null }[]
 }
+export interface RailBias extends Omit<BiasStats, 'label'> { key: string; label: string; category: string; label_verdict: string; median_meas_mw: number | null; median_abs_delta_mw: number | null }
 export interface CorrectionPreview { label: string; factors: Record<'cpu' | 'ip' | 'bw', number>; median: number | null; within10: number; n: number; max_abs: number | null }
 export interface CalSummary {
   scope: { scenario_id: string | null; project_ref: string | null; include_synthetic: boolean }
@@ -26,6 +29,8 @@ export interface CalSummary {
   offsetting: number
   flat_cpu: { mw_at_base_fps: number; base_fps: number; count: number; n: number } | null
   unmodeled_share_pct: number | null
+  rail_bias?: RailBias[]
+  latency_bias?: BiasStats
   correction: { ratios: Partial<Record<'cpu' | 'ip' | 'bw', number>>; previews: CorrectionPreview[] }
   confidence: { grade: 'A' | 'B' | 'C'; reasons: string[]; meaning: string; real: number; compared: number }
   rows: SummaryRow[]

@@ -20,6 +20,9 @@ import { ModelCheckDist } from '../components/ClockResidency'
 import { RebalanceWhy } from '../components/RebalanceWhy'
 import { CpuPurpose, type CpuRun } from '../components/CpuPurpose'
 import { GrowthSweepCards } from '../components/GrowthSweep'
+import { GrowthCompare, OppGauge, RatioCurves } from '../components/CpuDistribution'
+import { CpuReviewSnapshotCard } from '../components/CpuReviewSnapshot'
+import { cpuSnapshotApi } from '../lib/reviewCpu'
 import { growthGrid, sweepApi, type GrowthSweep } from '../lib/growthSweep'
 
 type TaskEdit = { sweep: string[] | null; threads: string; budget: string; growth: string }
@@ -88,17 +91,26 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
   const [sweepBusy, setSweepBusy] = useState(false)
   const [sweepErr, setSweepErr] = useState<string | null>(null)
   const sweepId = useRef(0)
-  const sweepKey = useRef('')
-  const runSweep = async (payload: CpuRebalanceRequest, force = false) => {
+  // CPU-10: the same sweep on the comparison topology (after the main one; one admission slot each)
+  const [cmpSweep, setCmpSweep] = useState<GrowthSweep | null>(null)
+  const [cmpSweepErr, setCmpSweepErr] = useState<string | null>(null)
+  const [sweepRequest, setSweepRequest] = useState<(CpuRebalanceRequest & { growths: number[] }) | null>(null)
+  const runSweep = async (payload: CpuRebalanceRequest) => {
     const growths = growthGrid(range.start, range.end, range.step)
-    const key = JSON.stringify([payload, growths])
-    if (!force && key === sweepKey.current) return
     const parentRequest = requestId.current
     const id = ++sweepId.current
-    setSweepBusy(true); setSweepErr(null)
+    setSweepBusy(true); setSweepErr(null); setSweepRequest(null); setCmpSweep(null); setCmpSweepErr(null)
     try {
       const r = await sweepApi.run({ ...payload, growths })
-      if (id === sweepId.current && parentRequest === requestId.current) { setSweep(r); sweepKey.current = key }
+      if (id !== sweepId.current || parentRequest !== requestId.current) return
+      setSweep(r); setSweepRequest({ ...payload, growths })
+      if (cmpTarget && cmpTarget !== payload.power_params_ref && id === sweepId.current) {
+        const exclude = Object.fromEntries(Object.entries(payload.locks).filter(([, v]) => v === 'exclude'))
+        try {
+          const c = await sweepApi.run({ ...payload, growths, power_params_ref: cmpTarget, base_power_params_ref: payload.base_power_params_ref || payload.power_params_ref, pool: [], locks: exclude })
+          if (id === sweepId.current && parentRequest === requestId.current) setCmpSweep(c)
+        } catch (e) { if (id === sweepId.current && parentRequest === requestId.current) setCmpSweepErr(String((e as Error).message ?? e)) }
+      }
     } catch (e) {
       if (id === sweepId.current && parentRequest === requestId.current) { setSweepErr(String((e as Error).message ?? e)); setSweep(null) }
     } finally { if (id === sweepId.current) setSweepBusy(false) }
@@ -154,12 +166,13 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
   }
   const runRb = async (payload: CpuRebalanceRequest) => {
     const id = ++requestId.current
+    ++sweepId.current
+    setSweepBusy(false); setSweepRequest(null); setCmpSweep(null); setCmpSweepErr(null)
     setBusy(true); setError(null)
     try {
       const r = await rebalanceApi.run(payload)
       if (id !== requestId.current) return
       setRbRaw(r); setRbSel(r.cases[0] ? `c${r.cases[0].rank}` : 'ref')
-      void runSweep(payload)
       setCmpRb(null); setCmpErr(null)
       let cmpRes: CpuRebalance | null = null
       if (cmpTarget && cmpTarget !== payload.power_params_ref) {
@@ -176,6 +189,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
         growth: payload.default_growth ?? 1, bwScale: payload.cpu_bw_scale ?? 1, pgEff: payload.power_gating_eff ?? 0.9,
         ref_mw: r.reference.total_mw, best_mw: r.best?.total_mw ?? null, cmp_ref_mw: cmpRes?.reference.total_mw ?? null, cmp_best_mw: cmpRes?.best?.total_mw ?? null,
         winner: r.strategies?.winner ?? null, bw_mbs: r.cpu_bw_mbs ?? null }])
+      if (id === requestId.current) await runSweep(payload)
     } catch (e) {
       if (id === requestId.current) setError(String((e as Error).message ?? e))
     } finally { if (id === requestId.current) setBusy(false) }
@@ -196,11 +210,11 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
   // first look: EAS reproduction + automatic range as soon as the inputs are chosen
   useEffect(() => {
     ++sweepId.current
-    setSweepBusy(false); setSweepErr(null)
+    setSweepBusy(false); setSweepErr(null); setSweepRequest(null); setCmpSweep(null); setCmpSweepErr(null)
     const selection = JSON.stringify([profile, target, base])
     const changed = inputSelection.current !== selection
     inputSelection.current = selection
-    if (changed) { setEdits({}); setDsuExp(null); setDsuReq(null); setPoolSel(null); setTaskStates({}); setRbRaw(null); setSweep(null); sweepKey.current = '' }
+    if (changed) { setEdits({}); setDsuExp(null); setDsuReq(null); setPoolSel(null); setTaskStates({}); setRbRaw(null); setSweep(null) }
     setResult(null)
     if (profile && target) {
       const req = request(changed ? {} : edits, changed ? null : dsuReq)
@@ -208,7 +222,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
       else void run(req)
     }
     return () => { ++requestId.current; ++sweepId.current }
-  }, [profile, target, base, reference, mode]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [profile, target, base, reference, mode, cmpTarget]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleCell = (task: string, cl: string) => {
     const auto = result?.range.tasks.find((t) => t.task === task)
@@ -453,8 +467,21 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
         </Card>}
       </div>}
       {mode === 'rebalance' && <GrowthSweepCards s={sweep} synthetic={prof?.origin === 'synthetic'} busy={sweepBusy} error={sweepErr} range={range} setRange={setRange}
-        onRun={() => { if (rbRaw) void runSweep(rbRequest(request()), true) }}
+        onRun={() => { if (rbRaw) void runSweep(rbRequest(request())) }}
         onPickPool={(c) => { setPoolSel(c); setInputsOpen(true); setPendingRun(true) }} />}
+      {mode === 'rebalance' && rb && <div className="tb-grid">
+        {(rb.ratio_curves?.length ?? 0) > 0 && <Card id="cpu-ratio" title="분배 비율 곡선" defaultWide minHeight={160}
+          note={`현재 SW 배율 · cluster별로 task를 한 개씩 (전력이 가장 낮아지는 순) 옮김 · x = 그 cluster의 util 비중${rb.bw_power?.bw_mw ? ` · CPU 기인 BW ${fmt(rb.bw_power.bw_mw, 1)} mW는 배치와 무관` : ''}`}
+          help={<>한 cluster로 몰수록(집중) 그 cluster의 OPP가 올라가고, 흩을수록(분산) 다른 cluster가 깨어나 DSU · leakage가 늘어 U자 모양이 됩니다. 최저점이 현재 비중(점선)보다 왼쪽/오른쪽에 있는지가 재배치 방향입니다.</>}>
+          <RatioCurves r={rb} />
+        </Card>}
+        <Card id="cpu-opp-gauge" title="OPP 여유" defaultWide minHeight={120} note="cluster별 OPP 사다리 · 한 단계 내리려면 뺄 util · SW 증가 시 처음 올라가는 배율">
+          <OppGauge r={rb} sweep={sweep} />
+        </Card>
+        {ctx.project && <CpuReviewSnapshotCard key={ctx.project} projectRef={ctx.project} scenarioId={prof?.scenario_ref ?? null} variantId={prof?.variant_ref ?? null} canRecord={!!sweepRequest && !busy && !sweepBusy}
+          onRecord={() => cpuSnapshotApi.create(ctx.project, sweepRequest!)} />}
+        {cmpTarget && <GrowthCompare a={sweep} b={cmpSweep} aName={topo?.soc_ref ?? target} bName={inputs.data?.topologies.find((t) => t.id === cmpTarget)?.soc_ref ?? cmpTarget} busy={sweepBusy} error={cmpSweepErr} />}
+      </div>}
       <CpuPurpose rb={rb} cmp={cmpRb} runs={runs} growth={growth} bwScale={bwScale} onClear={() => setRuns([])}
         onRebalance={() => { setMode('rebalance'); setPendingRun(true) }}
         onPreset={(p) => { setMode('rebalance'); if (p.growth !== undefined) setGrowth(p.growth); if (p.bwScale !== undefined) setBwScale(p.bwScale); setPendingRun(true) }} />

@@ -177,6 +177,7 @@ export function ErrorMatrix({ rows, sort, setSort, selected, onPick }: {
       <td className="mono">{fmt1(r.meas.total)}</td><td className="mono">{fmt1(r.pred?.total)}</td>
       {cell(r.delta_pct?.total)}{cell(r.delta_pct?.cpu)}{cell(r.delta_pct?.ip)}{cell(r.delta_pct?.bw)}
       <td className="mono">{fmt1(r.meas.other)}</td><td className="mono">{absGapMw(r)?.toFixed(0) ?? '—'}</td>
+      <td className={`mono cal-cell e-${band(r.latency?.delta_pct) || 'na'}`} title={r.latency ? `예측 ${fmt1(r.latency.pred_ms)} ms · 실측 p95 ${fmt1(r.latency.meas_p95_ms)} ms` : '실측 latency 없음'}>{r.latency?.delta_pct === null || r.latency?.delta_pct === undefined ? '—' : pctS(r.latency.delta_pct)}</td>
       <td className="mono">{r.fps === null ? '—' : r.fps.toFixed(0)}</td>
     </tr>)
   const body: JSX.Element[] = []
@@ -184,7 +185,7 @@ export function ErrorMatrix({ rows, sort, setSort, selected, onPick }: {
     for (const g of GROUPS) {
       const rs = sorted.filter((r) => groupOf(r.variant_id, r.fps) === g)
       if (!rs.length) continue
-      body.push(<tr key={`g-${g}`} className="cal-mx-grp"><td colSpan={10}>{g} · {rs.length} variant · median Total {med(rs, 'total')} · CPU {med(rs, 'cpu')} · IP {med(rs, 'ip')} · BW {med(rs, 'bw')}</td></tr>)
+      body.push(<tr key={`g-${g}`} className="cal-mx-grp"><td colSpan={11}>{g} · {rs.length} variant · median Total {med(rs, 'total')} · CPU {med(rs, 'cpu')} · IP {med(rs, 'ip')} · BW {med(rs, 'bw')}</td></tr>)
       rs.forEach((r) => body.push(line(r)))
     }
   } else sorted.forEach((r) => body.push(line(r)))
@@ -195,7 +196,7 @@ export function ErrorMatrix({ rows, sort, setSort, selected, onPick }: {
       </div>
       <div className="cal-mx-wrap">
         <table className="cal-mx">
-          <thead><tr><th>variant</th><th>실측 mW</th><th>예측 mW</th><th>Total Δ</th><th>CPU Δ</th><th>IP Δ</th><th>BW Δ</th><th title="scenario power model 밖 rail (GPU · SRAM · ICPU …)">미모델 mW</th><th title="|CPU| + |IP| + |BW| 차이 + 미모델 — total이 숨길 수 있는 오차">|ΔmW| 합</th><th>fps</th></tr></thead>
+          <thead><tr><th>variant</th><th>실측 mW</th><th>예측 mW</th><th>Total Δ</th><th>CPU Δ</th><th>IP Δ</th><th>BW Δ</th><th title="scenario power model 밖 rail (GPU · SRAM · ICPU …)">미모델 mW</th><th title="|CPU| + |IP| + |BW| 차이 + 미모델 — total이 숨길 수 있는 오차">|ΔmW| 합</th><th title="예측 pipeline latency(video) vs 실측 frame latency p95">Latency Δ</th><th>fps</th></tr></thead>
           <tbody>{body}</tbody>
         </table>
       </div>

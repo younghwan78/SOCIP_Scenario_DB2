@@ -64,3 +64,30 @@ changes, stage room and a growth tolerance. Per-task growth overrides remain fix
 only `default_growth` is swept. Zero or negative stage room yields zero SW growth
 tolerance. The UI preserves both requested range endpoints when limiting the grid
 to 13 points and discards results from a previously selected profile/topology.
+
+Sweep points are computed in worker processes (`SCENARIO_DB_CPU_SWEEP_WORKERS`,
+0 = min(cpu_count, 8), 1 = in-process); any pool failure falls back to the
+in-process path. Responses report `workers`.
+
+## Distribution curve, CPU-caused BW power (CPU-07, CPU-09)
+
+`POST /cpu/rebalance` additionally returns `ratio_curves`: per pool cluster, units
+moved onto that one cluster one at a time (largest power reduction first) with the
+share of movable util on it, CPU + DSU mW, feasibility and cluster MHz. The curves
+are evaluated outside the search and never change `best` / `cases`. Sweeps skip them.
+
+`bw_power` (rebalance) and `bw_power` + per-point `bw_mw` (sweep) convert
+`cpu_bw_mbs` with the profile variant's registered prediction coefficient
+(IP BW mW / IP BW MB/s, same coefficient and LLC weight as the exploration); without
+a prediction the builtin 80 mW per GB/s is used and `source` says `builtin`.
+
+## Review snapshots (CPU-11)
+
+`POST /review/cpu-snapshots` {project_ref, request (sweep request), note} — writer/admin,
+simulation admission slot. The server reruns the sweep and stores a summary
+(tolerance, binding limit, OPP step, power per growth, best distribution at the first
+growth, BW power). One `active` snapshot per (project, scenario, variant); a newer one
+supersedes it. `GET /review/cpu-snapshots?project_ref` lists active snapshots;
+`POST /review/cpu-snapshots/{id}/withdraw` withdraws one. Project reports freeze the
+active snapshots into `snapshot.cpu` and the `cpu_growth_tolerance` risk rule
+(tolerance < ×1.2, medium).

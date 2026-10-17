@@ -193,3 +193,23 @@ the resolved `basis_ref`, `basis_code` and `basis_overrides`.
 `GET /calibration/coverage` returns evidence and basis information without
 recalculating freshness by default. Set `freshness=true` to include freshness,
 or fetch `/arch/predictions/freshness` separately to avoid delaying the table.
+
+## Tiered review report (RPT-08..12)
+
+Snapshots with `criteria` render as Tier 1 (결론 · Risk register · 이전 보고서 대비),
+Tier 2 area sections whose first line is the area's conclusion (성능 · Timing, Power 구성
+with the previous-project dumbbell, Lever · 발열, CPU · SW, 예측 ↔ 실측 with rail bias,
+분류별 의견, 검토 범위) and Tier 3 (Scenario dossier, 요약 표, 변경 이력, 부록). Long tables show
+the top 10 with the full table folded (`details.more`, hidden in print). Project reports
+freeze `snapshot.previous` (`reporting.report_diff`): new / reopened / resolved risks, power
+changes ≥ 1 mW, criteria / basis / policy / CPU tolerance changes against the previous
+project report of the same project.
+
+## Calibration drill-down (CAL-09..11)
+
+`GET /calibration/measurements/{id}` adds `drilldown`: rail groups (IP per vdd from the
+simulation `dvfs_breakdown`, CPU, BW, unmodeled) with Δ mW / Δ% / error share, latency
+(prediction video latency vs measured p95), SW task p95 vs the defined timing at the
+prediction statistic with stage margin, and predicted IP clock per DVFS group vs measured
+residency. `GET /calibration/summary` adds per-row `rail_groups` / `latency`, `rail_bias`
+and `latency_bias`.

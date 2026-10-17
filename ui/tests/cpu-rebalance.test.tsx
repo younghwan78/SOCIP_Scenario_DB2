@@ -11,6 +11,7 @@ import { CpuWhatIfPage } from '../src/pages/CpuWhatIf'
 import { powerParts } from '../src/components/RebalanceView'
 import { ChartTipProvider } from '../src/components/ChartTip'
 import { sweepApi } from '../src/lib/growthSweep'
+import { cpuSnapshotApi } from '../src/lib/reviewCpu'
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 if (typeof ResizeObserver === 'undefined') Object.assign(globalThis, { ResizeObserver: class { observe() {} unobserve() {} disconnect() {} } })
@@ -210,4 +211,51 @@ it('discards a pending growth sweep when the measurement profile changes', async
       limits: { opp_step: null, opp_step_best_mw: null, timing_at: null, tolerance: null, binding: null }, elapsed_ms: 10 }))
     expect(host.querySelector('[aria-label="CPU what-if 결론"]')).toBeNull()
   } finally { act(() => root.unmount()); inputs.mockRestore(); run.mockRestore(); growth.mockRestore(); localStorage.clear() }
+})
+
+it('refreshes the comparison sweep on topology changes and records the computed request', async () => {
+  localStorage.setItem('sdb.cpu.mode', JSON.stringify('rebalance'))
+  const tasks = E2600.units.flatMap((u) => u.tasks.map((t) => ({ task: t, cluster: u.home })))
+  const inputs = vi.spyOn(cpuApi, 'inputs').mockResolvedValue({
+    profiles: [{ id: 'p1', scenario_ref: 'scenario', variant_ref: 'variant', project_ref: 'project', tasks }],
+    topologies: ['main', 'comparison'].map((id) => ({ id, version: 1, soc_ref: id, clusters: E2600.clusters.map((c) => c.name) })),
+  })
+  const order: string[] = []
+  const run = vi.spyOn(rebalanceApi, 'run').mockImplementation(async (req) => {
+    order.push(`rebalance:${req.power_params_ref}`); return E2600
+  })
+  const growth = vi.spyOn(sweepApi, 'run').mockImplementation(async (req) => {
+    order.push(`sweep:${req.power_params_ref}`)
+    return { profile_ref: 'p1', power_params_ref: req.power_params_ref, fps: 30,
+      points: [1, 1.5].map((g) => ({ growth: g, reference: E2600.reference, best: E2600.best,
+        strategies: [], winner: null, big_gain_mw: null, cpu_bw_mbs: 10, feasible_count: 1, stages: [] })),
+      events: [], limits: { opp_step: null, opp_step_best_mw: null, timing_at: null, tolerance: null, binding: null }, elapsed_ms: 10 }
+  })
+  const list = vi.spyOn(cpuSnapshotApi, 'list').mockResolvedValue([])
+  const create = vi.spyOn(cpuSnapshotApi, 'create').mockResolvedValue({} as never)
+  const host = document.createElement('div'), root = createRoot(host)
+  try {
+    await act(async () => root.render(<ChartTipProvider><CpuWhatIfPage ctx={{ project: 'project' } as Ctx} /></ChartTipProvider>))
+    await act(async () => [...host.querySelectorAll('button')].find((b) => b.textContent?.includes('조건 편집'))!.click())
+    const cmp = host.querySelector<HTMLSelectElement>('select[aria-label="비교할 SoC"]')!
+    await act(async () => { cmp.value = 'comparison'; cmp.dispatchEvent(new Event('change', { bubbles: true })) })
+    expect(order).toEqual(['rebalance:main', 'sweep:main', 'rebalance:main', 'rebalance:comparison', 'sweep:main', 'sweep:comparison'])
+    const computed = growth.mock.calls[1][0]
+    // Edit a condition without recalculating: the snapshot must still use the displayed sweep's request.
+    const end = host.querySelector<HTMLInputElement>('input[aria-label="SW 배율 끝"]')!
+    expect(end).not.toBeNull()
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(end, '2')
+      end.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await act(async () => [...host.querySelectorAll('button')].find((b) => b.textContent === '검토서에 포함')!.click())
+    expect(create).toHaveBeenCalledWith('project', computed)
+    await act(async () => [...host.querySelectorAll('button')].find((b) => b.textContent === '다시 계산')!.click())
+    await act(async () => [...host.querySelectorAll('button')].find((b) => b.textContent === '다시 계산')!.click())
+    expect(order.slice(-4)).toEqual(['rebalance:main', 'rebalance:comparison', 'sweep:main', 'sweep:comparison'])
+    expect([...host.querySelectorAll('button')].find((b) => b.textContent === '검토서에 포함')!.disabled).toBe(false)
+  } finally {
+    act(() => root.unmount()); inputs.mockRestore(); run.mockRestore(); growth.mockRestore()
+    list.mockRestore(); create.mockRestore(); localStorage.clear()
+  }
 })

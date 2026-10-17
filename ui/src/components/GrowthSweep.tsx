@@ -37,22 +37,26 @@ export function SweepTiles({ s, synthetic }: { s: Sweep; synthetic: boolean }) {
       {tile(`분산 vs 집중 · ${gx(p0.growth)}`, svc.spread && svc.concentrate ? `${sg(svc.spread.total_mw - svc.concentrate.total_mw)} mW` : '—',
         svc.spread && svc.concentrate ? `분산 ${svc.spread.clusters.join('+')} ${fmt(svc.spread.total_mw, 1)} vs 집중 ${svc.concentrate.clusters.join('+')} ${fmt(svc.concentrate.total_mw, 1)}` : 'budget 만족 전략 부족',
         svc.spread && svc.concentrate && svc.spread.total_mw < svc.concentrate.total_mw ? 'pm-down' : '')}
-      {tile('CPU → DRAM BW', p0.cpu_bw_mbs === null ? '—' : `${fmt(p0.cpu_bw_mbs, 0)} → ${fmt(pN.cpu_bw_mbs, 0)}`, `MB/s · SW ${gx(p0.growth)} → ${gx(pN.growth)}`)}
+      {tile('CPU 기인 BW power', p0.bw_mw === null || p0.bw_mw === undefined ? '—' : `${fmt(p0.bw_mw, 1)} → ${fmt(pN.bw_mw, 1)} mW`,
+        p0.cpu_bw_mbs === null ? 'CPU → DRAM BW 없음' : `${fmt(p0.cpu_bw_mbs, 0)} → ${fmt(pN.cpu_bw_mbs, 0)} MB/s · ${s.bw_power ? `${(s.bw_power.mw_per_mbs * 1000).toFixed(1)} mW/GB/s (${s.bw_power.source === 'prediction' ? '조합 탐색 계수' : 'builtin'})` : ''}`)}
+      {p0.bw_mw !== null && p0.bw_mw !== undefined && p0.reference && tile('CPU + DSU + BW', `${fmt(p0.reference.total_mw + p0.bw_mw, 1)} mW`,
+        `SW ${gx(pN.growth)}: ${fmt((pN.reference?.total_mw ?? 0) + (pN.bw_mw ?? 0), 1)} mW · BW 비중 ${fmt((100 * p0.bw_mw) / (p0.reference.total_mw + p0.bw_mw), 0)}%`)}
     </section>
   )
 }
 
 /** CPU-02: CPU + DSU vs SW growth — current / best placement / best concentrate, OPP and timing markers. */
-export function GrowthCurve({ s }: { s: Sweep }) {
+export function GrowthCurve({ s, yMax, withBw = true, height = 300 }: { s: Sweep; yMax?: number; withBw?: boolean; height?: number }) {
   const [ref, w] = useWidth<HTMLDivElement>(900)
   const tip = useTip()
   const pts = s.points.filter((p) => p.reference)
   if (pts.length < 2) return <div className="empty">곡선을 그릴 점이 부족합니다.</div>
-  const H = 300, l = 54, r = 20, t = 40, b = 40
+  const H = height, l = 54, r = 20, t = 40, b = 40
   const g0 = pts[0].growth, g1 = pts[pts.length - 1].growth
   const X = (g: number) => l + ((g - g0) / (g1 - g0)) * (w - l - r)
   const conc = pts.map((p) => spreadVsConcentrate(p).concentrate?.total_mw ?? null)
-  const hiRaw = Math.max(...pts.map((p) => p.reference!.total_mw), ...conc.filter((v): v is number => v !== null)) * 1.1
+  const bwLine = withBw && pts.every((p) => p.bw_mw !== null && p.bw_mw !== undefined) ? pts.map((p) => p.reference!.total_mw + (p.bw_mw ?? 0)) : null
+  const hiRaw = (yMax ?? Math.max(...pts.map((p) => p.reference!.total_mw), ...conc.filter((v): v is number => v !== null), ...(bwLine ?? []))) * 1.1
   const step = hiRaw > 1200 ? 400 : hiRaw > 600 ? 200 : 100
   const hi = Math.ceil(hiRaw / step) * step
   const Y = (v: number) => t + (1 - v / hi) * (H - t - b)
@@ -83,6 +87,7 @@ export function GrowthCurve({ s }: { s: Sweep }) {
             <text x={x} y={t - 8 - (i % 2) * 14} fontSize={11} textAnchor="middle" fill="#7A4B12" fontWeight={600}>{e.cluster} {fmt(e.mhz[0], 0)}→{fmt(e.mhz[1], 0)}</text></g>
         })}
         <path d={line(conc)} fill="none" stroke="#9A9387" strokeWidth={1.8} strokeDasharray="5 4" />
+        {bwLine && <path d={line(bwLine)} fill="none" stroke="#0072B2" strokeWidth={1.6} strokeDasharray="2 3" />}
         <path d={line(pts.map((p) => p.reference!.total_mw))} fill="none" stroke="#4A5160" strokeWidth={2.2} />
         <path d={line(pts.map((p) => p.best?.total_mw ?? null))} fill="none" stroke="#2F6F68" strokeWidth={2.6} />
         {pts.map((p, i) => <g key={p.growth}>
@@ -102,7 +107,8 @@ export function GrowthCurve({ s }: { s: Sweep }) {
                 { k: '최적 집중', v: cs.concentrate ? `${fmt(cs.concentrate.total_mw, 1)} mW (${cs.concentrate.clusters.join('+')})` : '—', color: '#9A9387' },
                 { section: `MHz (${mhzClusters(p).join(' / ')})` }, { k: '현재', v: mz(p.reference?.mhz) }, { k: '최적', v: mz(p.best?.mhz) },
                 { k: 'DSU', v: `${fmt(p.reference?.mhz.dsu, 0)} MHz` },
-                { section: 'BW · timing' }, { k: 'CPU → DRAM', v: p.cpu_bw_mbs === null ? '—' : `${fmt(p.cpu_bw_mbs, 0)} MB/s` },
+                { section: 'BW · timing' }, { k: 'CPU → DRAM', v: p.cpu_bw_mbs === null ? '—' : `${fmt(p.cpu_bw_mbs, 0)} MB/s${p.bw_mw !== null && p.bw_mw !== undefined ? ` · ${fmt(p.bw_mw, 1)} mW` : ''}` },
+                ...(p.bw_mw !== null && p.bw_mw !== undefined ? [{ k: '현재 + BW', v: `${fmt(p.reference!.total_mw + p.bw_mw, 1)} mW`, color: '#0072B2' }] : []),
                 ...p.stages.map((st) => ({ k: `${st.stage.toUpperCase()} 여유`, v: `${fmt(st.slack_ms, 2)} ms`, tone: (st.slack_ms < 0 ? 'bad' : undefined) as 'bad' | undefined }))] })} />
         })}
       </svg>
@@ -110,6 +116,7 @@ export function GrowthCurve({ s }: { s: Sweep }) {
         <span className="legend-item"><span style={{ width: 14, height: 3, background: '#4A5160' }} />현재 배치 (측정 placement)</span>
         <span className="legend-item"><span style={{ width: 14, height: 3, background: '#2F6F68' }} />최적 배치 (MID 재분배)</span>
         <span className="legend-item"><span style={{ width: 14, height: 0, borderTop: '2px dashed #9A9387' }} />최적 집중 (cluster 1개)</span>
+        {bwLine && <span className="legend-item"><span style={{ width: 14, height: 0, borderTop: '2px dotted #0072B2' }} />현재 + CPU 기인 BW</span>}
         <span className="legend-item"><span style={{ width: 0, height: 12, borderLeft: '2px dashed #7A4B12' }} />cluster OPP 상향</span>
       </div>
     </div>
@@ -191,7 +198,7 @@ export function GrowthSweepCards({ s, synthetic, busy, error, range, setRange, o
     {s && <SweepTiles s={s} synthetic={synthetic} />}
     <div className="tb-grid">
       <Card id="cpu-growth" title="SW 증가 곡선 · CPU + DSU" defaultWide minHeight={160} actions={controls}
-        note={s ? `${s.points.length}점 · ${(s.elapsed_ms / 1000).toFixed(1)} s · 세로 점선 = cluster OPP 상향 · 빨간 띠 = Timing Budget stage 여유 소진 이후` : '조건이 정해지면 자동 계산'}
+        note={s ? `${s.points.length}점 · ${(s.elapsed_ms / 1000).toFixed(1)} s${s.workers && s.workers > 1 ? ` (병렬 ${s.workers})` : ''} · 세로 점선 = cluster OPP 상향 · 빨간 띠 = Timing Budget stage 여유 소진 이후` : '조건이 정해지면 자동 계산'}
         help={<>같은 측정 profile과 분배 조건으로 SW 부하(instruction · runtime)를 배율만큼 늘려 다시 배치합니다. <b>허용치</b> = min(가장 큰 OPP 상향 직전 배율, Timing Budget stage의 SW 여유가 0이 되는 배율). 여유가 소진되면 fps는 유지돼도 pipeline latency가 늘어납니다.</>}>
         {s ? <GrowthCurve s={s} /> : <div className="empty">{busy ? '계산 중…' : '아직 계산되지 않았습니다.'}</div>}
         {s && s.limits.opp_step && <div className="faint" style={{ fontSize: 12, marginTop: 4 }}>

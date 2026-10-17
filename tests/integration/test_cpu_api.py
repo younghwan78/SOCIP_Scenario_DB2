@@ -66,6 +66,11 @@ def test_rebalance_growth_sweep(api_client, engine):
         totals = [p["reference"]["total_mw"] for p in body["points"]]
         assert totals == sorted(totals) and totals[0] > 0
         assert body["limits"]["timing_at"] is None and isinstance(body["events"], list)
+        # CPU-09: inline profile → builtin BW coefficient; points carry the CPU-caused BW power
+        assert body["bw_power"]["source"] == "builtin" and body["workers"] >= 1
+        assert all(p["bw_mw"] is None or p["bw_mw"] >= 0 for p in body["points"])
+        single = api_client.post("/api/v1/cpu/rebalance", json=request).json()["result"]
+        assert single["bw_power"]["source"] == "builtin" and {c["target"] for c in single["ratio_curves"]} == {"MID1"}
         assert api_client.post("/api/v1/cpu/rebalance/sweep", json=request | {"growths": [1.0]}).status_code == 422
     finally:
         with Session(engine) as db:

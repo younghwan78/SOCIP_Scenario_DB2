@@ -192,9 +192,44 @@ def test_calibration_summary_representative_capture_and_bias(engine):
         assert s['bias']['cpu']['median'] == -57.69 and s['bias']['bw']['sign'] == 1
         assert s['confidence']['real'] == 1 and s['confidence']['grade'] == 'B'
         assert [p['label'] for p in s['correction']['previews']][0] == '현재'
+        # CAL-09 / CAL-11: rail groups per compared variant and their bias (no IP node split → one IP group)
+        assert {g['category'] for g in rows['v1']['rail_groups']} >= {'cpu', 'bw'}
+        assert {b['key'] for b in s['rail_bias']} >= {'cpu', 'bw'} and 'latency_bias' in s
         only_real = cal.calibration_summary(db, scenario_id=sid, include_synthetic=False)
         assert only_real['coverage']['compared'] == 1
         from scenario_db.exceptions import NotFoundError
         with pytest.raises(NotFoundError):
             cal.calibration_summary(db, scenario_id=sid, project_ref='another-project')
         assert cal.list_measurements(db, scenario_id=sid, project_ref='another-project') == []
+
+
+def test_sw_drilldown_uses_frozen_prediction_timing_and_growth(engine):
+    from scenario_db.db.models.exploration import ArchExplorationRun, Prediction
+
+    with Session(engine) as db:
+        sid = 'frozen-sw-' + uuid4().hex
+        project = db.query(Scenario.project_ref).first()[0]
+        db.add(Scenario(id=sid, project_ref=project, schema_version='1.0', metadata_={}, pipeline={}, yaml_sha256='test'))
+        db.flush()
+        db.add(ScenarioVariant(scenario_id=sid, id='v', design_conditions={},
+                               node_configs={'sw': {'sw_timing': {'mean_ms': 99}}}))
+        db.add(Evidence(id=sid, scenario_ref=sid, variant_ref='v', kind='evidence.measurement', schema_version='1.0',
+                        execution_context={}, aggregation={}, kpi={'total_power_mw': 10}, yaml_sha256='test',
+                        sw_task_timing=[{'task': 'sw', 'mean_ms': 2, 'p95_ms': 3}]))
+        run = ArchExplorationRun(id=sid, title='frozen', scenario_type='test', project_ref=project,
+                                 variants=[{'scenario_id': sid, 'variant_id': 'v', 'input_sections': {'variant_doc': 'frozen'}}],
+                                 spec={'manifest': {'blobs': {'frozen': {'node_configs': {'sw': {'sw_timing': {'mean_ms': 1}}}}}}},
+                                 errors=[], summary={}, engine_rev='test', input_hash='test')
+        db.add(run)
+        db.flush()
+        db.add(Prediction(id=sid, scenario_ref=sid, variant_ref='v', project_ref=project, status='current',
+                          exploration_run_ref=sid, case_key='base', selection_rule='auto:min-power', selected_by='auto',
+                          input_hash='test', metrics={'statistic': 'mean', 'runtime_scale': 2, 'power': {'total_mw': 10}}))
+        db.flush()
+        sw = cal.measurement_detail_view(db, sid)['drilldown']['sw']
+        assert sw['rows'][0]['assumed_ms'] == 2 and sw['rows'][0]['delta_ms'] == 1
+        # A historical run without frozen inputs cannot claim today's definition was its assumption.
+        run.spec = {}
+        db.flush()
+        sw = cal.measurement_detail_view(db, sid)['drilldown']['sw']
+        assert sw['rows'][0]['assumed_ms'] is None and sw['rows'][0]['status'] == 'measured_only'

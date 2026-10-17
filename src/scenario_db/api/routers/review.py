@@ -63,3 +63,43 @@ def update_risk(
     """Owner / status / note of one risk; each change is kept in the row's history."""
     return risks_svc.update_risk(db, risk_id, owner=request.owner, status=request.status, note=request.note,
                                  user=principal.subject)
+
+
+# ------------------------------------------------------------------- CPU-11 review snapshots
+from scenario_db.api.schemas.cpu import CpuRebalanceSweepRequest  # noqa: E402
+from scenario_db.api.services import review_cpu as cpu_snap  # noqa: E402
+
+
+class CpuSnapshotRequest(BaseModel):
+    project_ref: str
+    request: CpuRebalanceSweepRequest
+    note: str | None = Field(default=None, max_length=2000)
+
+
+@router.get("/cpu-snapshots", response_model=list)
+def cpu_snapshots(project_ref: str, include_inactive: bool = False, db: Session = Depends(get_db)):
+    """CPU what-if results recorded for the project review (active per variant unless include_inactive)."""
+    return cpu_snap.list_cpu_snapshots(db, project_ref, include_inactive=include_inactive)
+
+
+@router.post("/cpu-snapshots", response_model=dict)
+def create_cpu_snapshot(
+    body: CpuSnapshotRequest,
+    db: Session = Depends(get_db),
+    principal: ApiPrincipal = Depends(require_roles("writer", "admin")),
+):
+    """Re-run the SW growth sweep on the server and record its summary for the next project report."""
+    settings = get_settings()
+    with admission_slot("simulation", settings.simulation_max_concurrent_runs):
+        return cpu_snap.record_cpu_snapshot(db, project_ref=body.project_ref, request=body.request, note=body.note,
+                                            user=principal.subject)
+
+
+@router.post("/cpu-snapshots/{snapshot_id}/withdraw", response_model=dict)
+def withdraw_cpu_snapshot(
+    snapshot_id: str,
+    db: Session = Depends(get_db),
+    _principal: ApiPrincipal = Depends(require_roles("writer", "admin")),
+):
+    """Withdraw a snapshot (kept for history, no longer quoted by new reports)."""
+    return cpu_snap.withdraw_cpu_snapshot(db, snapshot_id)

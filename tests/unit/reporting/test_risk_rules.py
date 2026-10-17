@@ -67,3 +67,18 @@ def test_register_view_keeps_recent_history_and_orders_active_risks_first():
             view | {'id': 'candidate', 'auto_state': 'resolve_candidate'},
             view | {'id': 'active', 'severity': 'high'}]
     assert [r['id'] for r in _order(rows)] == ['active', 'candidate', 'closed']
+
+
+def test_cpu_growth_tolerance_rule_uses_recorded_snapshots():
+    from scenario_db.reporting.risk_rules import build_risks
+
+    base = {"spec_summary": {}, "overview": {}, "review_context": {}}
+    cpu = [{"variant_id": "cam-rec-a", "summary": {"tolerance": 1.1, "binding": "opp",
+                                                 "opp_step": {"cluster": "MID_LF0", "mhz": [1600, 2000], "delta_mw": 135}}},
+           {"variant_id": "cam-rec-b", "summary": {"tolerance": 1.4, "binding": "timing"}},
+           {"variant_id": "cam-rec-c", "summary": {"tolerance": None}}]
+    risks = {r["key"]: r for r in build_risks(base | {"cpu": cpu})}
+    r = risks["cpu_growth_tolerance"]
+    assert r["severity"] == "medium" and r["affected"] == ["cam-rec-a"]
+    assert "×1.10" in r["detail"] and "MID_LF0 OPP 1600→2000" in r["detail"]
+    assert "cpu_growth_tolerance" not in {x["key"] for x in build_risks(base | {"cpu": cpu[1:]})}

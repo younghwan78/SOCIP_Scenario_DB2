@@ -1,12 +1,14 @@
 // CPU what-if: the MID rebalance over SW growth factors (POST /cpu/rebalance/sweep, CPU-02..05).
 import { postAdmitted } from './timingBudget'
-import type { CpuRebalanceRequest } from './rebalance'
+import type { BwCoefficient, CpuRebalanceRequest } from './rebalance'
 
 export interface SweepSplit { total_mw: number; feasible: boolean; mhz: Record<string, number>; mw: Record<string, number>; moved: string[]; min_slack_ms?: number | null }
 export interface SweepStrategy { kind: 'concentrate' | 'spread'; clusters: string[]; total_mw: number; feasible: boolean; mhz: Record<string, number> }
 export interface SweepPoint {
   growth: number; reference: SweepSplit | null; best: SweepSplit | null; strategies: SweepStrategy[]
   winner: string | null; big_gain_mw: number | null; cpu_bw_mbs: number | null; feasible_count: number | null
+  /** CPU-09: cpu_bw_mbs × BW coefficient (API ≥ 2026-10-18) */
+  bw_mw?: number | null
   stages: { stage: string; sw_ms: number; room_ms: number; slack_ms: number; ok: boolean }[]
 }
 export interface OppEvent { which: 'reference' | 'best'; growth_from: number; growth_to: number; cluster: string; mhz: [number, number]; delta_mw: number }
@@ -15,6 +17,19 @@ export interface GrowthSweep {
   points: SweepPoint[]; events: OppEvent[]
   limits: { opp_step: OppEvent | null; opp_step_best_mw: number | null; timing_at: number | null; tolerance: number | null; binding: 'opp' | 'timing' | null }
   elapsed_ms: number
+  /** worker processes used (API ≥ 2026-10-18) */
+  workers?: number
+  bw_power?: BwCoefficient
+}
+
+/** First growth at which ``cluster`` steps up on the reference placement (CPU-08). */
+export function firstStepUp(s: GrowthSweep | null, cluster: string): OppEvent | null {
+  return s?.events.find((e) => e.which === 'reference' && e.cluster === cluster && e.mhz[1] > e.mhz[0]) ?? null
+}
+
+/** Shared y maximum for small multiples (CPU-10). */
+export function sweepYMax(sweeps: (GrowthSweep | null)[]): number {
+  return Math.max(1, ...sweeps.flatMap((s) => (s?.points ?? []).flatMap((p) => [p.reference?.total_mw ?? 0, ...p.strategies.filter((x) => x.kind === 'concentrate' && x.feasible).map((x) => x.total_mw)])))
 }
 
 export const sweepApi = {
