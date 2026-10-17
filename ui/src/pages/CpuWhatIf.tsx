@@ -91,22 +91,19 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
   const [sweepBusy, setSweepBusy] = useState(false)
   const [sweepErr, setSweepErr] = useState<string | null>(null)
   const sweepId = useRef(0)
-  const sweepKey = useRef('')
   // CPU-10: the same sweep on the comparison topology (after the main one; one admission slot each)
   const [cmpSweep, setCmpSweep] = useState<GrowthSweep | null>(null)
   const [cmpSweepErr, setCmpSweepErr] = useState<string | null>(null)
   const [sweepRequest, setSweepRequest] = useState<(CpuRebalanceRequest & { growths: number[] }) | null>(null)
-  const runSweep = async (payload: CpuRebalanceRequest, force = false) => {
+  const runSweep = async (payload: CpuRebalanceRequest) => {
     const growths = growthGrid(range.start, range.end, range.step)
-    const key = JSON.stringify([payload, growths, cmpTarget])
-    if (!force && key === sweepKey.current && sweepRequest) return
     const parentRequest = requestId.current
     const id = ++sweepId.current
     setSweepBusy(true); setSweepErr(null); setSweepRequest(null); setCmpSweep(null); setCmpSweepErr(null)
     try {
       const r = await sweepApi.run({ ...payload, growths })
       if (id !== sweepId.current || parentRequest !== requestId.current) return
-      setSweep(r); setSweepRequest({ ...payload, growths }); sweepKey.current = key
+      setSweep(r); setSweepRequest({ ...payload, growths })
       if (cmpTarget && cmpTarget !== payload.power_params_ref && id === sweepId.current) {
         const exclude = Object.fromEntries(Object.entries(payload.locks).filter(([, v]) => v === 'exclude'))
         try {
@@ -170,7 +167,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
   const runRb = async (payload: CpuRebalanceRequest) => {
     const id = ++requestId.current
     ++sweepId.current
-    setSweepRequest(null); setCmpSweep(null); setCmpSweepErr(null)
+    setSweepBusy(false); setSweepRequest(null); setCmpSweep(null); setCmpSweepErr(null)
     setBusy(true); setError(null)
     try {
       const r = await rebalanceApi.run(payload)
@@ -217,7 +214,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
     const selection = JSON.stringify([profile, target, base])
     const changed = inputSelection.current !== selection
     inputSelection.current = selection
-    if (changed) { setEdits({}); setDsuExp(null); setDsuReq(null); setPoolSel(null); setTaskStates({}); setRbRaw(null); setSweep(null); sweepKey.current = '' }
+    if (changed) { setEdits({}); setDsuExp(null); setDsuReq(null); setPoolSel(null); setTaskStates({}); setRbRaw(null); setSweep(null) }
     setResult(null)
     if (profile && target) {
       const req = request(changed ? {} : edits, changed ? null : dsuReq)
@@ -470,7 +467,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
         </Card>}
       </div>}
       {mode === 'rebalance' && <GrowthSweepCards s={sweep} synthetic={prof?.origin === 'synthetic'} busy={sweepBusy} error={sweepErr} range={range} setRange={setRange}
-        onRun={() => { if (rbRaw) void runSweep(rbRequest(request()), true) }}
+        onRun={() => { if (rbRaw) void runSweep(rbRequest(request())) }}
         onPickPool={(c) => { setPoolSel(c); setInputsOpen(true); setPendingRun(true) }} />}
       {mode === 'rebalance' && rb && <div className="tb-grid">
         {(rb.ratio_curves?.length ?? 0) > 0 && <Card id="cpu-ratio" title="분배 비율 곡선" defaultWide minHeight={160}

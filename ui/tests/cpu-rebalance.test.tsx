@@ -250,6 +250,10 @@ it('refreshes the comparison sweep on topology changes and records the computed 
     })
     await act(async () => [...host.querySelectorAll('button')].find((b) => b.textContent === '검토서에 포함')!.click())
     expect(create).toHaveBeenCalledWith('project', computed)
+    await act(async () => [...host.querySelectorAll('button')].find((b) => b.textContent === '다시 계산')!.click())
+    await act(async () => [...host.querySelectorAll('button')].find((b) => b.textContent === '다시 계산')!.click())
+    expect(order.slice(-4)).toEqual(['rebalance:main', 'rebalance:comparison', 'sweep:main', 'sweep:comparison'])
+    expect([...host.querySelectorAll('button')].find((b) => b.textContent === '검토서에 포함')!.disabled).toBe(false)
   } finally {
     act(() => root.unmount()); inputs.mockRestore(); run.mockRestore(); growth.mockRestore()
     list.mockRestore(); create.mockRestore(); localStorage.clear()
