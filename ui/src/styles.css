@@ -949,3 +949,14 @@ tr.wi-fail th, tr.wi-fail td { color: var(--del-text, #B91C1C); }
 .cal-parity { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
 .cal-parity svg { width: 100%; height: auto; display: block; }
 @media (max-width: 900px) { .cal-parity { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* ---- CPU what-if result first (CPU-01..05) */
+.cpu-ctx { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; padding: 7px 12px; margin-bottom: 8px; background: var(--surface); border: 1px dashed var(--primary-line); border-radius: var(--radius); font-size: 12.5px; }
+.cpu-hm { border-collapse: separate; border-spacing: 3px; font-size: 12.5px; }
+.cpu-hm th { font-weight: 600; color: var(--muted); font-size: 11.5px; padding: 3px 6px; text-align: center; white-space: nowrap; }
+.cpu-hm tbody th { text-align: right; color: var(--text-2); }
+.cpu-hm td { text-align: center; font-family: var(--mono); padding: 6px 8px; border-radius: 5px; min-width: 64px; white-space: nowrap; }
+.cpu-hm td.best { outline: 2px solid var(--text); outline-offset: -2px; font-weight: 700; }
+.cpu-hm td.na, .cpu-hm td.infeasible { background: repeating-linear-gradient(45deg, var(--surface-soft) 0 5px, #DDD5C8 5px 6px); color: var(--faint); }
+.cpu-opp td.chg { background: var(--warn-soft); color: var(--warn-text); font-weight: 600; }
+.cpu-opp th, .cpu-opp td { text-align: right; }

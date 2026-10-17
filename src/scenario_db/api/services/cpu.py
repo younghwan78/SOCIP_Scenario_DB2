@@ -132,7 +132,22 @@ def timing_impact(coupling: dict[str, Any], reference: dict[str, Any], case: dic
     return out
 
 
-def run_cpu_rebalance(db: Session, request: CpuRebalanceRequest) -> CpuWhatIfResponse:
+def scale_coupling(coupling: dict[str, Any], runtime_scale: float) -> dict[str, Any]:
+    """A ``timing_stretch`` result at another uniform SW growth: stage room is fixed, SW scales linearly."""
+    k = runtime_scale / float(coupling["runtime_scale"])
+    stages, stretch = [], {}
+    for st in coupling["stages"]:
+        sw = st["sw_ms"] * k
+        factor = max(1.0, st["room_ms"] / sw) if sw > 0 else 1.0
+        tasks = [{"task": t["task"], "ms": t["ms"] * k} for t in st["tasks"]]
+        for t in tasks:
+            stretch[t["task"]] = min(stretch.get(t["task"], math.inf), factor)
+        stages.append(st | {"sw_ms": round(sw, 3), "slack_ms": round(st["room_ms"] - sw, 3), "stretch": round(factor, 3), "tasks": tasks})
+    return coupling | {"runtime_scale": runtime_scale, "stages": stages, "stretch": {t: round(v, 4) for t, v in stretch.items()}}
+
+
+def run_cpu_rebalance(db: Session, request: CpuRebalanceRequest, *, coupling_base: dict[str, Any] | None = None) -> CpuWhatIfResponse:
+    """``coupling_base``: a ``timing_stretch`` result of the same variant (uniform growth only) reused by a sweep."""
     profile = _profile(db, request)
     target = _model(db, request.power_params_ref)
     base = _model(db, request.base_power_params_ref) if request.base_power_params_ref else None
@@ -144,8 +159,9 @@ def run_cpu_rebalance(db: Session, request: CpuRebalanceRequest) -> CpuWhatIfRes
     row = get_evidence(db, request.cpu_profile_ref) if request.cpu_profile_ref and request.cpu_profile is None else None
     if row is not None and row.scenario_ref and row.variant_ref:
         try:
-            coupling = timing_stretch(db, str(row.scenario_ref), str(row.variant_ref), statistic=request.timing_statistic,
-                                      runtime_scale=request.default_growth, growth=request.growth)
+            coupling = (scale_coupling(coupling_base, request.default_growth) if coupling_base is not None and not request.growth
+                        else timing_stretch(db, str(row.scenario_ref), str(row.variant_ref), statistic=request.timing_statistic,
+                                            runtime_scale=request.default_growth, growth=request.growth))
             if not math.isclose(coupling["period_ms"], 1000.0 / request.fps, rel_tol=1e-3):
                 if enforce:
                     raise UnprocessableError("timing coupling: CPU fps does not match the scenario variant")
@@ -278,3 +294,92 @@ def with_cpu_profile(db: Session, options: Any, scenario_id: str, variant_id: st
     if profile is None:
         return options
     return options.model_copy(update={"cpu_profile": profile, "cpu_profile_ref": ref})
+
+
+# ------------------------------------------------------------------- growth sweep (CPU-02..05)
+def _split_view(s: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not s:
+        return None
+    return {"total_mw": round(float(s["total_mw"]), 2), "feasible": bool(s.get("feasible", True)),
+            "mhz": {k: v for k, v in (s.get("mhz") or {}).items()},
+            "mw": {k: round(float(v), 2) for k, v in (s.get("mw") or {}).items()},
+            "moved": list(s.get("moved") or []), "min_slack_ms": s.get("min_slack_ms")}
+
+
+def opp_events(points: list[dict[str, Any]], which: str) -> list[dict[str, Any]]:
+    """Cluster frequency changes between consecutive growth points of ``which`` (reference / best)."""
+    out = []
+    for a, b in zip(points, points[1:], strict=False):
+        sa, sb = a.get(which), b.get(which)
+        if not sa or not sb:
+            continue
+        for cl, f in sb["mhz"].items():
+            f0 = sa["mhz"].get(cl)
+            if f0 is not None and f != f0 and cl != "dsu":
+                out.append({"which": which, "growth_from": a["growth"], "growth_to": b["growth"], "cluster": cl,
+                            "mhz": [f0, f], "delta_mw": round(sb["total_mw"] - sa["total_mw"], 2)})
+    return out
+
+
+def growth_limits(points: list[dict[str, Any]], events: list[dict[str, Any]]) -> dict[str, Any]:
+    """SW-growth tolerance = min(growth before the largest OPP step-up of the reference placement,
+    growth at which a Timing Budget stage runs out of SW room)."""
+    ups = [e for e in events if e["which"] == "reference" and e["mhz"][1] > e["mhz"][0]]
+    step = max(ups, key=lambda e: e["delta_mw"], default=None)
+    timing_at = None
+    for p in points:
+        for st in p.get("stages") or []:
+            if st["sw_ms"] > 0 and st["room_ms"] > 0:
+                g = p["growth"] * st["room_ms"] / st["sw_ms"]
+                timing_at = g if timing_at is None else min(timing_at, g)
+        if timing_at is not None:
+            break  # the first point with a Timing Budget sets the stage room
+    cands = [x for x in (step["growth_from"] if step else None, timing_at) if x is not None]
+    best_step = None
+    if step:
+        pa = next(p for p in points if p["growth"] == step["growth_from"])
+        pb = next(p for p in points if p["growth"] == step["growth_to"])
+        if pa.get("best") and pb.get("best"):
+            best_step = round(pb["best"]["total_mw"] - pa["best"]["total_mw"], 2)
+    return {"opp_step": step, "opp_step_best_mw": best_step, "timing_at": round(timing_at, 3) if timing_at else None,
+            "tolerance": round(min(cands), 3) if cands else None,
+            "binding": None if not cands else ("timing" if timing_at is not None and timing_at == min(cands) else "opp")}
+
+
+def run_cpu_rebalance_sweep(db: Session, request: Any) -> dict[str, Any]:
+    import time
+
+    from scenario_db.api.schemas.cpu import CpuRebalanceRequest as _Req
+
+    t0 = time.perf_counter()
+    base = request.model_dump(exclude={"growths"})
+    points: list[dict[str, Any]] = []
+    growths = sorted(set(round(float(x), 4) for x in request.growths))
+    # the Timing Budget does not depend on the growth except for the SW share: compute it once (uniform growth)
+    coupling_base = None
+    if request.timing_coupling != "off" and not request.growth and request.cpu_profile_ref and request.cpu_profile is None:
+        row = get_evidence(db, request.cpu_profile_ref)
+        if row is not None and row.scenario_ref and row.variant_ref:
+            try:
+                coupling_base = timing_stretch(db, str(row.scenario_ref), str(row.variant_ref),
+                                               statistic=request.timing_statistic, runtime_scale=growths[0])
+            except (NotFoundError, UnprocessableError):
+                coupling_base = None  # the per-point call reports the error
+    for g in growths:
+        res = run_cpu_rebalance(db, _Req(**(base | {"default_growth": g})), coupling_base=coupling_base).result
+        strat = res.get("strategies") or {}
+        coupling = res.get("timing_coupling") or {}
+        impact = {r["stage"]: r for r in ((coupling.get("impact") or {}).get("reference") or [])}
+        points.append({
+            "growth": g, "reference": _split_view(res.get("reference")), "best": _split_view(res.get("best")),
+            "strategies": [{"kind": r["kind"], "clusters": list(r["clusters"]), "total_mw": round(float(r["total_mw"]), 2),
+                            "feasible": bool(r["feasible"]), "mhz": r.get("mhz") or {}} for r in strat.get("rows") or []],
+            "winner": strat.get("winner"), "big_gain_mw": ((strat.get("big_check") or {}).get("best") or {}).get("delta_mw"),
+            "cpu_bw_mbs": res.get("cpu_bw_mbs"), "feasible_count": res.get("feasible_count"),
+            "stages": [{"stage": s["stage"], "sw_ms": s["sw_ms"], "room_ms": s["room_ms"], "slack_ms": s["slack_ms"],
+                        "ok": (impact.get(s["stage"]) or {}).get("ok", s["slack_ms"] >= 0)} for s in coupling.get("stages") or []],
+        })
+    events = opp_events(points, "reference") + opp_events(points, "best")
+    return {"profile_ref": request.cpu_profile_ref, "power_params_ref": request.power_params_ref, "fps": request.fps,
+            "points": points, "events": events, "limits": growth_limits(points, events),
+            "elapsed_ms": round(1000 * (time.perf_counter() - t0))}

@@ -6,8 +6,12 @@ from sqlalchemy.orm import Session
 from scenario_db.api.auth import ApiPrincipal, require_roles
 from scenario_db.api.deps import get_db
 from scenario_db.api.resource_limits import admission_slot, enforce_request_size
-from scenario_db.api.schemas.cpu import CpuRebalanceRequest, CpuSweepRequest, CpuWhatIfRequest, CpuWhatIfResponse
-from scenario_db.api.services.cpu import list_cpu_inputs, run_cpu_rebalance, run_cpu_sweep, run_cpu_whatif
+from scenario_db.api.schemas.cpu import (
+    CpuRebalanceRequest, CpuRebalanceSweepRequest, CpuSweepRequest, CpuWhatIfRequest, CpuWhatIfResponse,
+)
+from scenario_db.api.services.cpu import (
+    list_cpu_inputs, run_cpu_rebalance, run_cpu_rebalance_sweep, run_cpu_sweep, run_cpu_whatif,
+)
 from scenario_db.config import get_settings
 
 router = APIRouter(prefix="/cpu", tags=["cpu"])
@@ -59,3 +63,17 @@ def cpu_rebalance_route(
     enforce_request_size(request, settings.exploration_max_request_bytes)
     with admission_slot("simulation", settings.simulation_max_concurrent_runs):
         return run_cpu_rebalance(db, request)
+
+
+@router.post("/rebalance/sweep", response_model=dict)
+def cpu_rebalance_sweep_route(
+    request: CpuRebalanceSweepRequest,
+    db: Session = Depends(get_db),
+    _principal: ApiPrincipal = Depends(require_roles("analyst", "writer", "admin")),
+):
+    """The rebalance at several SW growth factors: CPU + DSU curve (current / best / strategies), cluster OPP
+    events and the SW-growth tolerance (OPP step-up vs Timing Budget stage room). Read-only."""
+    settings = get_settings()
+    enforce_request_size(request, settings.exploration_max_request_bytes)
+    with admission_slot("simulation", settings.simulation_max_concurrent_runs):
+        return run_cpu_rebalance_sweep(db, request)

@@ -100,3 +100,9 @@ class CpuRebalanceRequest(CpuSweepRequest):
     # "off" = only the frame period (and budgets_ms) bound the task time.
     timing_coupling: Literal["off", "stage_slack"] = "off"
     timing_statistic: Literal["min", "mean", "max"] = "max"
+
+
+class CpuRebalanceSweepRequest(CpuRebalanceRequest):
+    """The same rebalance at several SW growth factors (CPU-02..05): curve, OPP events, tolerance."""
+
+    growths: list[Annotated[float, Field(gt=0.2, le=5)]] = Field(min_length=2, max_length=13)
