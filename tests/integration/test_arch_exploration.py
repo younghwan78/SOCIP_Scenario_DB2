@@ -401,11 +401,30 @@ def test_project_report_merges_current_predictions_and_syncs_risk_register(engin
         svc.promote(db, PromoteRequest(run_id=f"EXP-new-{token}", scenario_id=sa))
         stale = svc.report_stale(db, rep["id"])
         assert stale["stale"] and stale["changed"][0]["variant_id"] == "shared"
+        # CPU-11: a recorded CPU what-if result is frozen into the next report (and its tolerance rule fires)
+        from scenario_db.api.services import review_cpu
+        from scenario_db.db.models.exploration import ReviewCpuSnapshot
+
+        db.add(ReviewCpuSnapshot(id=f"CPUSNAP-{token}", project_ref=pid, scenario_ref=sa, variant_ref="shared",
+                                 profile_ref="meas-x", power_params_ref="pmp-x", status="active", request={},
+                                 summary={"tolerance": 1.1, "binding": "timing", "points": [], "best_at_start": {}}))
+        db.commit()
+        assert [c["id"] for c in review_cpu.list_cpu_snapshots(db, pid)] == [f"CPUSNAP-{token}"]
         rep2 = svc.create_report(db, ArchReportRequest(project_ref=pid))
         reg2 = {r["key"]: r for r in rep2["snapshot"]["risk_register"]}
         assert reg2["fps_drop"]["id"] == risk_id and reg2["fps_drop"]["trend"] == "ongoing"
         assert reg2["fps_drop"]["owner"] == "sw-arch" and reg2["fps_drop"]["status"] == "mitigating"
         assert rep2["snapshot"]["scenarios"][0]["power"]["total_mw"] == 12
+        # RPT-11: frozen comparison with the previous project report
+        prev = rep2["snapshot"]["previous"]
+        assert prev["report"]["id"] == rep["id"]
+        assert prev["power"]["changed"][0]["prev_mw"] == 10 and prev["power"]["changed"][0]["cur_mw"] == 12
+        assert [c["variant_id"] for c in rep2["snapshot"]["cpu"]] == ["shared"] and "cpu_growth_tolerance" in reg2
+        html2 = svc.get_report(db, rep2["id"]).rendered_html
+        assert "이전 보고서 대비" in html2 and "Scenario dossier" in html2 and "Tier 1" in html2 and "×1.1" in html2
+        assert review_cpu.withdraw_cpu_snapshot(db, f"CPUSNAP-{token}")["status"] == "withdrawn"
+        assert review_cpu.list_cpu_snapshots(db, pid) == []
+        db.query(ReviewCpuSnapshot).filter(ReviewCpuSnapshot.project_ref == pid).delete(synchronize_session=False)
         with pytest.raises(UnprocessableError):
             review_risks.update_risk(db, risk_id, status="bogus")
         db.query(ArchReport).filter(ArchReport.project_ref == pid).delete(synchronize_session=False)

@@ -20,6 +20,9 @@ import { ModelCheckDist } from '../components/ClockResidency'
 import { RebalanceWhy } from '../components/RebalanceWhy'
 import { CpuPurpose, type CpuRun } from '../components/CpuPurpose'
 import { GrowthSweepCards } from '../components/GrowthSweep'
+import { GrowthCompare, OppGauge, RatioCurves } from '../components/CpuDistribution'
+import { CpuReviewSnapshotCard } from '../components/CpuReviewSnapshot'
+import { cpuSnapshotApi } from '../lib/reviewCpu'
 import { growthGrid, sweepApi, type GrowthSweep } from '../lib/growthSweep'
 
 type TaskEdit = { sweep: string[] | null; threads: string; budget: string; growth: string }
@@ -89,6 +92,9 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
   const [sweepErr, setSweepErr] = useState<string | null>(null)
   const sweepId = useRef(0)
   const sweepKey = useRef('')
+  // CPU-10: the same sweep on the comparison topology (after the main one; one admission slot each)
+  const [cmpSweep, setCmpSweep] = useState<GrowthSweep | null>(null)
+  const [cmpSweepErr, setCmpSweepErr] = useState<string | null>(null)
   const runSweep = async (payload: CpuRebalanceRequest, force = false) => {
     const growths = growthGrid(range.start, range.end, range.step)
     const key = JSON.stringify([payload, growths])
@@ -99,6 +105,14 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
     try {
       const r = await sweepApi.run({ ...payload, growths })
       if (id === sweepId.current && parentRequest === requestId.current) { setSweep(r); sweepKey.current = key }
+      setCmpSweep(null); setCmpSweepErr(null)
+      if (cmpTarget && cmpTarget !== payload.power_params_ref && id === sweepId.current) {
+        const exclude = Object.fromEntries(Object.entries(payload.locks).filter(([, v]) => v === 'exclude'))
+        try {
+          const c = await sweepApi.run({ ...payload, growths, power_params_ref: cmpTarget, base_power_params_ref: payload.base_power_params_ref || payload.power_params_ref, pool: [], locks: exclude })
+          if (id === sweepId.current) setCmpSweep(c)
+        } catch (e) { if (id === sweepId.current) setCmpSweepErr(String((e as Error).message ?? e)) }
+      }
     } catch (e) {
       if (id === sweepId.current && parentRequest === requestId.current) { setSweepErr(String((e as Error).message ?? e)); setSweep(null) }
     } finally { if (id === sweepId.current) setSweepBusy(false) }
@@ -455,6 +469,19 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
       {mode === 'rebalance' && <GrowthSweepCards s={sweep} synthetic={prof?.origin === 'synthetic'} busy={sweepBusy} error={sweepErr} range={range} setRange={setRange}
         onRun={() => { if (rbRaw) void runSweep(rbRequest(request()), true) }}
         onPickPool={(c) => { setPoolSel(c); setInputsOpen(true); setPendingRun(true) }} />}
+      {mode === 'rebalance' && rb && <div className="tb-grid">
+        {(rb.ratio_curves?.length ?? 0) > 0 && <Card id="cpu-ratio" title="분배 비율 곡선" defaultWide minHeight={160}
+          note={`현재 SW 배율 · cluster별로 task를 한 개씩 (전력이 가장 낮아지는 순) 옮김 · x = 그 cluster의 util 비중${rb.bw_power?.bw_mw ? ` · CPU 기인 BW ${fmt(rb.bw_power.bw_mw, 1)} mW는 배치와 무관` : ''}`}
+          help={<>한 cluster로 몰수록(집중) 그 cluster의 OPP가 올라가고, 흩을수록(분산) 다른 cluster가 깨어나 DSU · leakage가 늘어 U자 모양이 됩니다. 최저점이 현재 비중(점선)보다 왼쪽/오른쪽에 있는지가 재배치 방향입니다.</>}>
+          <RatioCurves r={rb} />
+        </Card>}
+        <Card id="cpu-opp-gauge" title="OPP 여유" defaultWide minHeight={120} note="cluster별 OPP 사다리 · 한 단계 내리려면 뺄 util · SW 증가 시 처음 올라가는 배율">
+          <OppGauge r={rb} sweep={sweep} />
+        </Card>
+        {ctx.project && <CpuReviewSnapshotCard projectRef={ctx.project} variantId={prof?.variant_ref ?? null} canRecord={!!sweep && !!profile}
+          onRecord={() => cpuSnapshotApi.create(ctx.project, { ...rbRequest(request()), growths: growthGrid(range.start, range.end, range.step) })} />}
+        {cmpTarget && <GrowthCompare a={sweep} b={cmpSweep} aName={topo?.soc_ref ?? target} bName={inputs.data?.topologies.find((t) => t.id === cmpTarget)?.soc_ref ?? cmpTarget} busy={sweepBusy} error={cmpSweepErr} />}
+      </div>}
       <CpuPurpose rb={rb} cmp={cmpRb} runs={runs} growth={growth} bwScale={bwScale} onClear={() => setRuns([])}
         onRebalance={() => { setMode('rebalance'); setPendingRun(true) }}
         onPreset={(p) => { setMode('rebalance'); if (p.growth !== undefined) setGrowth(p.growth); if (p.bwScale !== undefined) setBwScale(p.bwScale); setPendingRun(true) }} />

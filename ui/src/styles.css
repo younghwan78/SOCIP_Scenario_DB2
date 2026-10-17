@@ -985,3 +985,6 @@ tr.wi-fail th, tr.wi-fail td { color: var(--del-text, #B91C1C); }
 .cal-drill-cols ul { margin: 4px 0 0; padding-left: 16px; }
 .cal-rb-lat td { border-top: 2px solid var(--line, #E6E1D8); }
 .warn-text { color: var(--warn-text); }
+
+/* CPU-08 OPP gauge */
+.cpu-gauge td { vertical-align: middle; }

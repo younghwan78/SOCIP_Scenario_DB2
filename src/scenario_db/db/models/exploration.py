@@ -239,3 +239,32 @@ class ReviewRisk(Base):
     last_report_ref = Column(Text)
     # [{at, by, field, old, new}] — people's edits and automatic state changes
     history = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+
+
+class ReviewCpuSnapshot(Base):
+    """CPU what-if result recorded for the project review (CPU-11).
+
+    The server re-runs the SW growth sweep from the stored request, so the report quotes the
+    tolerance / OPP step / best distribution computed by the API, never a client's numbers. One
+    ``active`` snapshot per (project, scenario, variant); a newer one supersedes it.
+    """
+
+    __tablename__ = "review_cpu_snapshots"
+    __table_args__ = (
+        CheckConstraint("status in ('active', 'superseded', 'withdrawn')", name="ck_review_cpu_snapshot_status"),
+        Index("ix_review_cpu_snapshots_project_ref", "project_ref"),
+    )
+
+    id = Column(Text, primary_key=True)
+    project_ref = Column(Text, ForeignKey("projects.id"), nullable=False)
+    scenario_ref = Column(Text, nullable=False)
+    variant_ref = Column(Text, nullable=False)
+    profile_ref = Column(Text, nullable=False)
+    power_params_ref = Column(Text, nullable=False)
+    base_power_params_ref = Column(Text)
+    status = Column(Text, nullable=False, server_default=text("'active'"))
+    note = Column(Text)
+    request = Column(JSONB, nullable=False)
+    summary = Column(JSONB, nullable=False)
+    created_by = Column(Text)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())

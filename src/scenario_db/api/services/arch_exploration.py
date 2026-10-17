@@ -798,7 +798,17 @@ def _review_extras(db: Session, snapshot: dict[str, Any], project_ref: str | Non
         snapshot["model"] = {"coverage": m["coverage"], "offsetting": m["offsetting"], "flat_cpu": m["flat_cpu"],
                              "confidence": m["confidence"],
                              "bias": {c: {k: b.get(k) for k in ("n", "median", "same_sign_pct", "within10", "verdict", "label")}
-                                      for c, b in m["bias"].items()}}
+                                      for c, b in m["bias"].items()},
+                             "rail_bias": [{k: b.get(k) for k in ("key", "label", "category", "n", "median", "same_sign_pct", "within10",
+                                                                     "verdict", "label_verdict", "median_meas_mw", "median_abs_delta_mw")}
+                                           for b in m.get("rail_bias") or []],
+                             "latency_bias": {k: (m.get("latency_bias") or {}).get(k) for k in ("n", "median", "within10", "verdict", "label")}}
+        # CPU-11: CPU what-if results recorded for the review (server-computed sweep summaries)
+        from scenario_db.api.services.review_cpu import list_cpu_snapshots
+
+        snapshot["cpu"] = [{k: c[k] for k in ("id", "scenario_id", "variant_id", "profile_ref", "power_params_ref",
+                                              "base_power_params_ref", "note", "created_by", "created_at", "summary")}
+                           for c in list_cpu_snapshots(db, project_ref)]
     snapshot["risks"] = build_risks(snapshot)
 
 
@@ -898,6 +908,15 @@ def create_project_report(db: Session, request: ArchReportRequest, user: str | N
     _review_extras(db, snapshot, project_ref, cfg, preds, scope)
     rid = f"RPT-{uuid4().hex}"
     snapshot["risk_register"] = sync_risks(db, project_ref, snapshot["risks"], report_ref=rid, user=user)
+    # RPT-11: previous project report of the same project → frozen comparison
+    from scenario_db.reporting.report_diff import report_diff
+
+    prev = next((r for r in db.query(ArchReport).filter(ArchReport.project_ref == project_ref)
+                 .order_by(ArchReport.generated_at.desc()).limit(20).all()
+                 if ((r.snapshot or {}).get("scope") or {}).get("kind") == "project"), None)
+    if prev is not None:
+        snapshot["previous"] = report_diff(prev.snapshot, snapshot, {"id": prev.id, "title": prev.title, "status": prev.status,
+                                                                     "generated_at": _iso_dt(prev.generated_at)})
     scenario_type = request.scenario_type or latest.scenario_type
     title = request.title or f"{run_dict.get('soc_ref') or ''} {project_ref} 과제 검토".strip()
     html = render_html(title, snapshot)

@@ -53,6 +53,7 @@ class RebalanceSpec(SweepSpec):
     # task -> allowed slow-down vs its measured-placement time (e.g. Timing Budget stage SW slack); becomes
     # budgets_ms[task] = reference ms x factor unless budgets_ms already names the task
     stretch_budgets: dict[str, float] = field(default_factory=dict)
+    ratio_curves: bool = True                     # CPU-07 per-target distribution-ratio curves (sweeps skip them)
 
 
 def default_pool(model: CpuPowerModel) -> list[str]:
@@ -476,6 +477,36 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
                                                for i in range(U) if ca[i] != home_idx[i]) / (util_home or 1.0), 1)
         curve.append(pt)
 
+    # ---- CPU-07 distribution-ratio curve: move units one at a time onto ONE target cluster (the unit that
+    # lowers power most first) — x = share of the movable util now on the target, y = CPU + DSU mW.
+    # Evaluated with total() only, so the search results above are unchanged.
+    util_of = [sum(ctx.util(th, home[units[i][0]]) for th in unit_threads[i]) for i in range(U)]
+    util_all = sum(util_of) or 1.0
+    ratio_curves = []
+    for ti, tgt in enumerate(pool if spec.ratio_curves else []):
+        cand_units = [i for i in range(U) if home_idx[i] != ti]
+        if not cand_units:
+            continue
+        cur_r = home_idx
+        on_t = sum(util_of[i] for i in range(U) if home_idx[i] == ti)
+
+        def pt_of(assign: tuple[int, ...], unit: int | None) -> dict[str, Any]:
+            mw_r, ok_r, info_r = total(masks_of(assign))
+            return {"util_pct": round(100 * sum(util_of[i] for i in range(U) if assign[i] == ti) / util_all, 1),
+                    "moved_unit": None if unit is None else "+".join(units[unit]), "total_mw": round(mw_r, 3), "feasible": ok_r,
+                    "mhz": {c: s["mhz"] for c, s in zip(pool, info_r["sts"])} | {"dsu": info_r["dsu_mhz"]}}
+
+        pts_r = [pt_of(cur_r, None)]
+        left = set(cand_units)
+        while left:
+            pick = min(left, key=lambda i: (lambda a: (not total(masks_of(a))[1], total(masks_of(a))[0]))(cur_r[:i] + (ti,) + cur_r[i + 1:]))
+            cur_r = cur_r[:pick] + (ti,) + cur_r[pick + 1:]
+            left.discard(pick)
+            pts_r.append(pt_of(cur_r, pick))
+        feas_idx = [k for k, q in enumerate(pts_r) if q["feasible"]]
+        ratio_curves.append({"target": tgt, "start_util_pct": round(100 * on_t / util_all, 1), "points": pts_r,
+                             "best_index": min(feas_idx, key=lambda k: pts_r[k]["total_mw"]) if feas_idx else None})
+
     def boundaries(assign: tuple[int, ...]) -> list[dict[str, Any]]:
         masks = masks_of(assign)
         out = []
@@ -576,6 +607,7 @@ def cpu_rebalance(profile: Any, *, target: CpuPowerModel, fps: float, spec: Reba
         "reference": describe(home_idx, ref_case) | {"label": "현재 (측정 배치)"},
         "best": cases[0] if cases else None,
         "cases": cases, "strategies": strategies, "opp_states": opp_states[:40], "opp_state_count": len(opp_states), "curve": curve,
+        "ratio_curves": ratio_curves,
         "boundaries": {"reference": boundaries(home_idx), "best": boundaries(best_assign)},
         "dsu_model": dsu_pol.describe() if dsu_pol else None,
         "dsu_measured": prep.dsu_res,

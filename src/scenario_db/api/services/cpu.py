@@ -147,8 +147,12 @@ def scale_coupling(coupling: dict[str, Any], runtime_scale: float) -> dict[str, 
     return coupling | {"runtime_scale": runtime_scale, "stages": stages, "stretch": {t: round(v, 4) for t, v in stretch.items()}}
 
 
-def run_cpu_rebalance(db: Session, request: CpuRebalanceRequest, *, coupling_base: dict[str, Any] | None = None) -> CpuWhatIfResponse:
-    """``coupling_base``: a ``timing_stretch`` result of the same variant (uniform growth only) reused by a sweep."""
+def _rebalance_inputs(db: Session, request: CpuRebalanceRequest, *, coupling_base: dict[str, Any] | None = None
+                      ) -> tuple[Any, CpuPowerModel, CpuPowerModel | None, RebalanceSpec, dict[str, Any] | None, bool]:
+    """DB-side half of a rebalance: profile, models, Timing Budget coupling and the search spec.
+
+    ``coupling_base``: a ``timing_stretch`` result of the same variant (uniform growth only) reused by a sweep.
+    """
     profile = _profile(db, request)
     target = _model(db, request.power_params_ref)
     base = _model(db, request.base_power_params_ref) if request.base_power_params_ref else None
@@ -177,10 +181,19 @@ def run_cpu_rebalance(db: Session, request: CpuRebalanceRequest, *, coupling_bas
                          locks=dict(request.locks), co_move=tuple(tuple(g) for g in request.co_move),
                          verify_k=request.verify_k, max_exhaustive=request.max_exhaustive,
                          stretch_budgets=dict(coupling["stretch"]) if coupling and enforce else {})
+    return profile, target, base, spec, coupling, enforce
+
+
+def _rebalance_compute(profile: Any, target: CpuPowerModel, base: CpuPowerModel | None, fps: float,
+                       spec: RebalanceSpec) -> dict[str, Any]:
+    """Pure compute half (no DB) — runs in a sweep worker process."""
     try:
-        result = cpu_rebalance(profile, target=target, base=base, fps=request.fps, spec=spec)
+        return cpu_rebalance(profile, target=target, base=base, fps=fps, spec=spec)
     except ValueError as exc:
         raise UnprocessableError(str(exc)) from exc
+
+
+def _rebalance_finish(result: dict[str, Any], coupling: dict[str, Any] | None, enforce: bool) -> dict[str, Any]:
     if coupling:
         coupling["enforced"] = enforce
         ref = result["reference"]
@@ -193,6 +206,47 @@ def run_cpu_rebalance(db: Session, request: CpuRebalanceRequest, *, coupling_bas
             rows = timing_impact(coupling, ref, c)
             c["timing_slack_ms"] = min((r["slack_ms"] for r in rows), default=None)
         result["timing_coupling"] = coupling
+    return result
+
+
+BUILTIN_BW_MW_PER_MBS = 80.0 / 1000.0   # bw_power builtin: coeff 80 mW per GB/s, LLC weight 1
+
+
+def bw_coefficient(db: Session, cpu_profile_ref: str | None) -> dict[str, Any]:
+    """mW per MB/s for CPU → DRAM traffic (CPU-09): the BW model of the profile variant's registered
+    prediction (IP BW mW / IP BW MB/s — same coefficient · LLC weight as the exploration), else builtin."""
+    from scenario_db.db.models.exploration import Prediction
+
+    row = get_evidence(db, cpu_profile_ref) if cpu_profile_ref else None
+    if row is not None and row.scenario_ref and row.variant_ref:
+        p = (db.query(Prediction).filter_by(scenario_ref=row.scenario_ref, variant_ref=row.variant_ref, status="current")
+             .one_or_none())
+        metrics: dict[str, Any] = dict(p.metrics or {}) if p is not None else {}
+        pw: dict[str, Any] = metrics.get("power") or {}
+        mbs = float(metrics.get("bw_ip_mbs") or 0.0)
+        if p is not None and mbs > 0 and pw.get("bw_ip_mw") is not None:
+            return {"mw_per_mbs": round(float(pw["bw_ip_mw"]) / mbs, 6), "source": "prediction", "prediction_ref": p.id,
+                    "bw_power_model": (metrics.get("model_lineage") or {}).get("bw_power_model")}
+    return {"mw_per_mbs": BUILTIN_BW_MW_PER_MBS, "source": "builtin", "prediction_ref": None, "bw_power_model": "builtin"}
+
+
+def with_bw_power(result: dict[str, Any], coeff: dict[str, Any]) -> dict[str, Any]:
+    """CPU + DSU + CPU-caused BW power for the reference and the best split (in place)."""
+    mbs = result.get("cpu_bw_mbs")
+    bw = round(float(mbs) * coeff["mw_per_mbs"], 2) if mbs is not None else None
+    ref = (result.get("reference") or {}).get("total_mw")
+    best = (result.get("best") or {}).get("total_mw")
+    result["bw_power"] = coeff | {"cpu_bw_mbs": mbs, "bw_mw": bw,
+                                  "reference_total_mw": round(ref + bw, 2) if ref is not None and bw is not None else None,
+                                  "best_total_mw": round(best + bw, 2) if best is not None and bw is not None else None}
+    return result
+
+
+def run_cpu_rebalance(db: Session, request: CpuRebalanceRequest, *, coupling_base: dict[str, Any] | None = None) -> CpuWhatIfResponse:
+    """``coupling_base``: a ``timing_stretch`` result of the same variant (uniform growth only) reused by a sweep."""
+    profile, target, base, spec, coupling, enforce = _rebalance_inputs(db, request, coupling_base=coupling_base)
+    result = _rebalance_finish(_rebalance_compute(profile, target, base, request.fps, spec), coupling, enforce)
+    with_bw_power(result, bw_coefficient(db, request.cpu_profile_ref if request.cpu_profile is None else None))
     return CpuWhatIfResponse(profile_ref=profile.evidence_ref, power_params_ref=request.power_params_ref, result=result)
 
 
@@ -378,8 +432,13 @@ def run_cpu_rebalance_sweep(db: Session, request: Any) -> dict[str, Any]:
                                                statistic=request.timing_statistic, runtime_scale=growths[0])
             except (NotFoundError, UnprocessableError):
                 coupling_base = None  # the per-point call reports the error
-    for g in growths:
-        res = run_cpu_rebalance(db, _Req(**(base | {"default_growth": g})), coupling_base=coupling_base).result
+    inputs = [_rebalance_inputs(db, _Req(**(base | {"default_growth": g})), coupling_base=coupling_base) for g in growths]
+    from dataclasses import replace as _replace
+
+    computed, workers = _compute_points([(i[0], i[1], i[2], request.fps, _replace(i[3], ratio_curves=False)) for i in inputs])
+    coeff = bw_coefficient(db, request.cpu_profile_ref if request.cpu_profile is None else None)
+    for g, inp, raw in zip(growths, inputs, computed, strict=True):
+        res = _rebalance_finish(raw, inp[4], inp[5])
         strat = res.get("strategies") or {}
         coupling = res.get("timing_coupling") or {}
         impact = {r["stage"]: r for r in ((coupling.get("impact") or {}).get("reference") or [])}
@@ -388,11 +447,65 @@ def run_cpu_rebalance_sweep(db: Session, request: Any) -> dict[str, Any]:
             "strategies": [{"kind": r["kind"], "clusters": list(r["clusters"]), "total_mw": round(float(r["total_mw"]), 2),
                             "feasible": bool(r["feasible"]), "mhz": r.get("mhz") or {}} for r in strat.get("rows") or []],
             "winner": strat.get("winner"), "big_gain_mw": ((strat.get("big_check") or {}).get("best") or {}).get("delta_mw"),
-            "cpu_bw_mbs": res.get("cpu_bw_mbs"), "feasible_count": res.get("feasible_count"),
+            "cpu_bw_mbs": res.get("cpu_bw_mbs"),
+            "bw_mw": round(float(res["cpu_bw_mbs"]) * coeff["mw_per_mbs"], 2) if res.get("cpu_bw_mbs") is not None else None,
+            "feasible_count": res.get("feasible_count"),
             "stages": [{"stage": s["stage"], "sw_ms": s["sw_ms"], "room_ms": s["room_ms"], "slack_ms": s["slack_ms"],
                         "ok": (impact.get(s["stage"]) or {}).get("ok", s["slack_ms"] >= 0)} for s in coupling.get("stages") or []],
         })
     events = opp_events(points, "reference") + opp_events(points, "best")
     return {"profile_ref": request.cpu_profile_ref, "power_params_ref": request.power_params_ref, "fps": request.fps,
             "points": points, "events": events, "limits": growth_limits(points, events),
-            "elapsed_ms": round(1000 * (time.perf_counter() - t0))}
+            "elapsed_ms": round(1000 * (time.perf_counter() - t0)), "workers": workers, "bw_power": coeff}
+
+
+# ------------------------------------------------------------------- sweep worker pool
+_POOL: Any = None
+_POOL_SIZE = 0
+
+
+def _sweep_workers(n_points: int) -> int:
+    import os
+
+    from scenario_db.config import get_settings
+
+    configured = get_settings().cpu_sweep_workers
+    cpus = os.cpu_count() or 1
+    want = configured if configured > 0 else min(cpus, 8)
+    return max(1, min(want, n_points))
+
+
+def _pool(size: int) -> Any:
+    """Persistent process pool (forkserver: workers do not inherit the API's threads / DB connections)."""
+    global _POOL, _POOL_SIZE
+    import multiprocessing as mp
+    from concurrent.futures import ProcessPoolExecutor
+
+    if _POOL is None or _POOL_SIZE < size:
+        if _POOL is not None:
+            _POOL.shutdown(wait=False, cancel_futures=True)
+        method = "forkserver" if "forkserver" in mp.get_all_start_methods() else "spawn"
+        _POOL = ProcessPoolExecutor(max_workers=size, mp_context=mp.get_context(method))
+        _POOL_SIZE = size
+    return _POOL
+
+
+def _compute_points(jobs: list[tuple[Any, CpuPowerModel, CpuPowerModel | None, float, RebalanceSpec]]
+                    ) -> tuple[list[dict[str, Any]], int]:
+    """Rebalance of each sweep point; in parallel processes when more than one worker is allowed.
+
+    Any pool failure (pickling, a broken worker) falls back to the sequential path so the result never
+    depends on the deployment's process limits."""
+    global _POOL
+    workers = _sweep_workers(len(jobs))
+    if workers > 1 and len(jobs) >= 3:
+        try:
+            futs = [_pool(workers).submit(_rebalance_compute, *j) for j in jobs]
+            return [f.result() for f in futs], workers
+        except UnprocessableError:
+            raise
+        except Exception:  # noqa: BLE001 - fall back to the in-process path
+            if _POOL is not None:
+                _POOL.shutdown(wait=False, cancel_futures=True)
+            _POOL = None
+    return [_rebalance_compute(*j) for j in jobs], 1

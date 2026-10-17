@@ -19,6 +19,7 @@ from typing import Any
 SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "info": 3}
 SEVERITY_LABEL = {"critical": "Critical", "high": "High", "medium": "Medium", "info": "Info"}
 LOW_MARGIN_PCT = 10.0
+CPU_TOLERANCE_MIN = 1.2   # SW growth the CPU placement must absorb without an OPP step / timing loss
 
 
 def _short(v: str) -> str:
@@ -98,6 +99,21 @@ def build_risks(snap: dict[str, Any]) -> list[dict[str, Any]]:
                       "title": f"SW timing margin < {LOW_MARGIN_PCT:.0f}% · {len(low)}건",
                       "detail": f"최소 {m0['margin_pct']:.1f}% ({_short(m0['variant_id'])}, {str(m0.get('stage', '')).upper()}, 병목 {m0.get('bottleneck')})",
                       "affected": [m["variant_id"] for m in low], "mitigation": f"{m0.get('bottleneck')} 최적화 · HW offload · core 배치 검토"})
+
+    low_cpu = [c for c in snap.get("cpu") or [] if (c.get("summary") or {}).get("tolerance") is not None
+               and c["summary"]["tolerance"] < CPU_TOLERANCE_MIN]
+    if low_cpu:
+        c0 = min(low_cpu, key=lambda c: c["summary"]["tolerance"])
+        sm = c0["summary"]
+        step = sm.get("opp_step") or {}
+        risks.append({"key": "cpu_growth_tolerance", "rule": "cpu_growth_tolerance", "severity": "medium", "category": "CPU",
+                      "title": f"SW 증가 허용치 < ×{CPU_TOLERANCE_MIN:.1f} · {len(low_cpu)}건",
+                      "detail": f"최소 ×{sm['tolerance']:.2f} ({_short(c0['variant_id'])}, "
+                                + ("timing 여유 소진" if sm.get("binding") == "timing" else
+                                   f"{step.get('cluster')} OPP {step.get('mhz', ['?', '?'])[0]}→{step.get('mhz', ['?', '?'])[1]} MHz {step.get('delta_mw', 0):+.0f} mW")
+                                + ")",
+                      "affected": [c["variant_id"] for c in low_cpu],
+                      "mitigation": "SW 증가 예산 합의 · task offload / 전용 core · cluster 재배분 (CPU what-if)"})
 
     model = snap.get("model") or {}
     common = [(c, b) for c, b in (model.get("bias") or {}).items() if c != "total" and b.get("verdict") == "model_common"]

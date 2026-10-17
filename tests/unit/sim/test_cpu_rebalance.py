@@ -161,3 +161,18 @@ def test_rebalance_exports_measured_dsu_residency_for_client_experiments():
     r = cpu_rebalance(prof, target=_model("2600"), fps=30, spec=RebalanceSpec(dsu_mode="measured"))
     assert r["dsu_measured"] == {400.0: 0.3, 900.0: 0.7}
     assert r["dsu_model"]["mode"] == "measured"
+
+
+def test_ratio_curves_move_units_onto_one_target_and_leave_search_unchanged():
+    r = _run()
+    curves = {c["target"]: c for c in r["ratio_curves"]}
+    assert set(curves) == set(r["pool"]) - {"MID_LF0"}       # every unit already lives on MID_LF0
+    lf1 = curves["MID_LF1"]
+    pts = lf1["points"]
+    assert pts[0]["moved_unit"] is None and pts[0]["total_mw"] == pytest.approx(r["reference"]["total_mw"], abs=0.01)
+    assert lf1["start_util_pct"] == 0.0 and pts[-1]["util_pct"] == pytest.approx(100.0)
+    assert [p["util_pct"] for p in pts] == sorted(p["util_pct"] for p in pts)       # share on the target only grows
+    assert lf1["best_index"] is not None and pts[lf1["best_index"]]["feasible"]
+    off = _run(ratio_curves=False)
+    assert off["ratio_curves"] == []
+    assert off["best"]["total_mw"] == r["best"]["total_mw"] and off["evaluated"] == r["evaluated"]

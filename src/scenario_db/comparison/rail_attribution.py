@@ -190,11 +190,13 @@ def sw_task_compare(measured: list[dict[str, Any]] | None, assumed: dict[str, di
             "compared": sum(1 for r in rows if r["delta_ms"] is not None), "worst": worst}
 
 
-def latency_compare(pred_latency: dict[str, Any] | None, meas_latency: dict[str, Any] | None) -> dict[str, Any] | None:
+def latency_compare(pred_latency: dict[str, Any] | None, meas_latency: dict[str, Any] | float | None) -> dict[str, Any] | None:
     """Predicted pipeline latency (video path) vs measured frame latency p95 / mean (CAL-11)."""
     if not pred_latency and not meas_latency:
         return None
     pred_ms = (pred_latency or {}).get("video_ms") or (pred_latency or {}).get("preview_ms")
+    if isinstance(meas_latency, (int, float)):       # older captures store a single mean value
+        meas_latency = {"mean": float(meas_latency)}
     p95 = (meas_latency or {}).get("p95")
     mean = (meas_latency or {}).get("mean")
     return {"pred_ms": pred_ms, "meas_p95_ms": p95, "meas_mean_ms": mean,
