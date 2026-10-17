@@ -977,3 +977,11 @@ tr.wi-fail th, tr.wi-fail td { color: var(--del-text, #B91C1C); }
 .risk-panel > summary::before { content: '▸'; color: var(--faint); }
 .risk-panel[open] > summary::before { content: '▾'; }
 .risk-table td:first-child, .risk-table td:last-child { white-space: nowrap; }
+
+/* CAL-09..11 drill-down */
+.cal-drill td { vertical-align: top; }
+.cal-drill-sub td { background: var(--surface-2, #FAF8F4); }
+.cal-drill-cols { display: flex; gap: 28px; flex-wrap: wrap; font-size: 12px; }
+.cal-drill-cols ul { margin: 4px 0 0; padding-left: 16px; }
+.cal-rb-lat td { border-top: 2px solid var(--line, #E6E1D8); }
+.warn-text { color: var(--warn-text); }

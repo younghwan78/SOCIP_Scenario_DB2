@@ -32,6 +32,26 @@ export interface MeasDetail {
   sw_tasks: { task: string; mean_ms?: number; p95_ms?: number; max_ms?: number; min_ms?: number; count?: number; thread?: string; cluster?: string }[]
   /** CPU cluster · DSU · GPU frequency residency (absent before the API update / null without residency) */
   clock_residency?: ClockView | null
+  /** CAL-09..11 drill-down against the registered prediction (absent before the API update) */
+  drilldown?: Drilldown
+}
+
+export interface RailGroup {
+  key: string; label: string; category: Category; meas_mw: number; pred_mw: number | null
+  delta_mw: number | null; delta_pct: number | null; share_pct: number | null; note: string | null
+  rails: { rail: string; mw: number }[]; pred_items: { name: string; mw: number; vdd?: string }[]
+}
+export interface SwCompareRow {
+  task: string; assumed_ms: number | null; assumed_stat: string | null; mean_ms: number | null; p95_ms: number | null; max_ms: number | null
+  delta_ms: number | null; delta_pct: number | null; assumed_margin_pct: number | null; measured_margin_pct: number | null
+  status: 'within' | 'under_assumed' | 'over_budget' | 'measured_only' | 'assumed_only'
+}
+export interface Drilldown {
+  rails: { groups: RailGroup[]; notes: string[]; cpu_clusters: { rail: string; cluster: string; mw: number; share_pct: number }[]; vdd_source: string | null }
+  latency: { pred_ms: number | null; meas_p95_ms: number | null; meas_mean_ms: number | null; delta_pct: number | null } | null
+  sw_stage: string | null; sw_budget_ms: number | null; statistic: string | null
+  sw?: { statistic: string; budget_ms: number | null; rows: SwCompareRow[]; optimistic: number; compared: number; worst: SwCompareRow | null }
+  clock?: { group: string; pred_mhz: number; dvfs_level: number | null; nodes: number; meas_mhz: number | null; meas_p50_mhz: number | null; delta_pct: number | null }[]
 }
 
 export interface CoverageSim { id: string; at: string | null; tool?: string | null; tool_version?: string | null; source?: string | null; sw_baseline_ref?: string | null; total_mw?: number | null; shown?: boolean; by?: string | null }

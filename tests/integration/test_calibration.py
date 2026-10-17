@@ -192,6 +192,9 @@ def test_calibration_summary_representative_capture_and_bias(engine):
         assert s['bias']['cpu']['median'] == -57.69 and s['bias']['bw']['sign'] == 1
         assert s['confidence']['real'] == 1 and s['confidence']['grade'] == 'B'
         assert [p['label'] for p in s['correction']['previews']][0] == '현재'
+        # CAL-09 / CAL-11: rail groups per compared variant and their bias (no IP node split → one IP group)
+        assert {g['category'] for g in rows['v1']['rail_groups']} >= {'cpu', 'bw'}
+        assert {b['key'] for b in s['rail_bias']} >= {'cpu', 'bw'} and 'latency_bias' in s
         only_real = cal.calibration_summary(db, scenario_id=sid, include_synthetic=False)
         assert only_real['coverage']['compared'] == 1
         from scenario_db.exceptions import NotFoundError

@@ -353,8 +353,25 @@ def measurement_detail(db: Session, measurement_id: str) -> dict[str, Any]:
 
 def measurement_detail_view(db: Session, measurement_id: str) -> dict[str, Any]:
     """``measurement_detail`` + the clock-domain residency view (calibration page)."""
+    from scenario_db.api.services.library import sw_timing_sets
+    from scenario_db.comparison.rail_attribution import clock_compare, sw_task_compare
+
     out = measurement_detail(db, measurement_id)
-    out["clock_residency"] = clock_residency_of(db, db.get(Evidence, measurement_id))
+    m = db.get(Evidence, measurement_id)
+    out["clock_residency"] = clock_residency_of(db, m)
+    drill = out["drilldown"]
+    cur = _current(db, out["scenario_id"], out["variant_id"])
+    # CAL-10: measured task tail vs the defined SW timing the prediction used
+    assumed: dict[str, dict[str, Any]] = {}
+    try:
+        sets = sw_timing_sets(db, scenario_id=out["scenario_id"], variant_id=out["variant_id"])
+        base = next((s["id"] for s in sets["sets"] if s["source"] == "defined"), None)
+        assumed = {t["task"]: t["values"][base] for t in sets["tasks"] if base and base in t["values"]}
+    except NotFoundError:
+        pass
+    drill["sw"] = sw_task_compare(out["sw_tasks"], assumed, statistic=drill.get("statistic"), budget_ms=drill.get("sw_budget_ms"))
+    # CAL-11: predicted IP clock per DVFS group vs measured residency of that domain
+    drill["clock"] = clock_compare((cur.metrics or {}).get("ips") if cur is not None else None, out["clock_residency"])
     return out
 
 
@@ -445,14 +462,19 @@ def measurement_details(db: Session, measurement_ids: list[str]) -> dict[str, di
     keys = {(m.scenario_ref, m.variant_ref) for m in ms}
     scen_project = dict(db.query(Scenario.id, Scenario.project_ref).filter(Scenario.id.in_({k[0] for k in keys})).all())
     cur_metrics = func.jsonb_build_object(literal("power"), Prediction.metrics["power"],
-                                          literal("statistic"), Prediction.metrics["statistic"])
+                                          literal("statistic"), Prediction.metrics["statistic"],
+                                          literal("ips"), Prediction.metrics["ips"],
+                                          literal("cpu_by_task"), Prediction.metrics["cpu_by_task"],
+                                          literal("latency"), Prediction.metrics["latency"],
+                                          literal("stages"), Prediction.metrics["stages"])
     currents = {(p.scenario_ref, p.variant_ref): (p, pm) for p, pm in db.query(Prediction, cur_metrics)
                 .options(defer(Prediction.metrics))
                 .filter(Prediction.status == "current", tuple_(Prediction.scenario_ref, Prediction.variant_ref).in_(keys)).all()}
     sims: dict[tuple[str, str], list[Evidence]] = {}
     for ev in (db.query(Evidence).options(load_only(
             Evidence.id, Evidence.scenario_ref, Evidence.variant_ref, Evidence.measured_at, Evidence.run_info,
-            Evidence.kpi, Evidence.power_breakdown, Evidence.execution_context, Evidence.sw_baseline_ref))
+            Evidence.kpi, Evidence.power_breakdown, Evidence.execution_context, Evidence.sw_baseline_ref,
+            Evidence.dvfs_breakdown))
             .filter(Evidence.kind == "evidence.simulation",
                     tuple_(Evidence.scenario_ref, Evidence.variant_ref).in_(keys)).all()):
         sims.setdefault((ev.scenario_ref, ev.variant_ref), []).append(ev)
@@ -503,6 +525,7 @@ def _detail(m: Evidence, rail: tuple[dict[str, str], str | None, str], cur: Pred
             "rows": compare_split(sp, meas_cat) if sp else None,
             "conditions": compare_conditions(meas_ctx, sim_ctx),
         })
+    drill = _drilldown(m, split, cur_metrics, sims)
     sw = []
     for task in (m.sw_task_timing or []):
         if isinstance(task, dict):
@@ -518,8 +541,36 @@ def _detail(m: Evidence, rail: tuple[dict[str, str], str | None, str], cur: Pred
         "measured": split, "rail_domain_map_ref": profile_ref, "rail_map_basis": rail_basis,
         "unexplained_mw": None if total["mean"] is None else round(float(total["mean"]) - split["rail_total_mw"], 3),
         "categories": list(CATEGORIES), "predictions": predictions, "sw_tasks": sw,
-        "cpu_clusters": m.cpu_breakdown,
+        "cpu_clusters": m.cpu_breakdown, "drilldown": drill,
     }
+
+
+def _sw_stage(cur_metrics: dict[str, Any] | None) -> tuple[str | None, float | None]:
+    """Stage that carries the SW chain (largest sw_ms) and its budget."""
+    stages = (cur_metrics or {}).get("stages") or {}
+    name, st = max(((k, v) for k, v in stages.items() if isinstance(v, dict)),
+                   key=lambda kv: float(kv[1].get("sw_ms") or 0.0), default=(None, None))
+    if not st or not float(st.get("sw_ms") or 0.0):
+        return None, None
+    return name, (float(st["budget_ms"]) if st.get("budget_ms") is not None else None)
+
+
+def _drilldown(m: Evidence, split: dict[str, Any], cur_metrics: dict[str, Any] | None,
+               sims: list[Evidence]) -> dict[str, Any]:
+    """CAL-09 rail attribution + CAL-11 latency of one measurement against the registered prediction."""
+    from scenario_db.comparison.rail_attribution import ip_power_by_vdd, latency_compare, node_vdd_map, rail_attribution
+
+    sim = next((s for s in reversed(sims) if s.dvfs_breakdown), None)
+    node_vdd, group_vdd = node_vdd_map(sim.dvfs_breakdown if sim is not None else None)
+    pred = _pred_split(cur_metrics["power"]) if cur_metrics and cur_metrics.get("power") else None
+    ips = (cur_metrics or {}).get("ips") or []
+    rails = rail_attribution(split["rails"], pred, ip_power_by_vdd(ips, node_vdd, group_vdd) if ips else None,
+                             (cur_metrics or {}).get("cpu_by_task"))
+    rails["vdd_source"] = sim.id if sim is not None and node_vdd else None
+    stage, budget = _sw_stage(cur_metrics)
+    return {"rails": rails,
+            "latency": latency_compare((cur_metrics or {}).get("latency"), (m.kpi or {}).get("frame_latency_ms")),
+            "sw_stage": stage, "sw_budget_ms": budget, "statistic": (cur_metrics or {}).get("statistic")}
 
 
 _IP_BW_METRICS = {"bandwidth.read": "read", "bandwidth.write": "write", "bandwidth.total": "total"}
@@ -713,11 +764,38 @@ def calibration_summary(db: Session, *, scenario_id: str | None = None, project_
             row["delta_pct"] = {"total": cur["delta_pct"], **{c: by.get(c, {}).get("delta_pct") for c in ("cpu", "ip", "bw")}}
             row["fit"] = category_fit(cur["rows"], cur["delta_pct"])
             row["conditions"] = (cur.get("conditions") or {}).get("overall")
+            drill = d.get("drilldown") or {}
+            row["latency"] = drill.get("latency")
+            row["rail_groups"] = [{k: g.get(k) for k in ("key", "label", "category", "meas_mw", "pred_mw", "delta_mw", "delta_pct")}
+                                  for g in (drill.get("rails") or {}).get("groups") or []]
         rows.append(row)
     compared = [r for r in rows if r["pred"] is not None]
     bias = {c: bias_stats([r["delta_pct"][c] for r in compared]) | {} for c in ("total", "cpu", "ip", "bw")}
     for c, b in bias.items():
         b["label"] = BIAS_VERDICT_LABEL[b["verdict"]]
+    # CAL-09: per rail group (IP per vdd · CPU · BW) — where the category error sits across variants
+    per_group: dict[str, dict[str, Any]] = {}
+    for r in compared:
+        for g in r.get("rail_groups") or []:
+            if g["category"] == "other":
+                continue
+            e = per_group.setdefault(g["key"], {"key": g["key"], "label": g["label"], "category": g["category"],
+                                                "deltas": [], "meas": [], "abs_mw": []})
+            e["deltas"].append(g["delta_pct"])
+            e["meas"].append(g["meas_mw"])
+            if g["delta_mw"] is not None:
+                e["abs_mw"].append(abs(g["delta_mw"]))
+    rail_bias = []
+    for e in per_group.values():
+        b = bias_stats(e["deltas"])
+        meas_sorted = sorted(e["meas"])
+        rail_bias.append({"key": e["key"], "label": e["label"], "category": e["category"], **b,
+                          "label_verdict": BIAS_VERDICT_LABEL[b["verdict"]],
+                          "median_meas_mw": round(meas_sorted[len(meas_sorted) // 2], 1) if meas_sorted else None,
+                          "median_abs_delta_mw": round(sorted(e["abs_mw"])[len(e["abs_mw"]) // 2], 1) if e["abs_mw"] else None})
+    rail_bias.sort(key=lambda b: -(b["median_abs_delta_mw"] or 0.0))
+    lat = bias_stats([(r.get("latency") or {}).get("delta_pct") for r in compared])
+    lat["label"] = BIAS_VERDICT_LABEL[lat["verdict"]]
     flat_cpu = flat_term([(r["pred"]["cpu"], r["fps"]) for r in compared])
     # median measured/predicted ratio per category = the single-coefficient correction a fit would start from
     ratios: dict[str, float] = {}
@@ -742,6 +820,8 @@ def calibration_summary(db: Session, *, scenario_id: str | None = None, project_
         "bias": bias,
         "offsetting": sum(1 for r in compared if r["fit"] and r["fit"]["offsetting"]),
         "flat_cpu": flat_cpu,
+        "rail_bias": rail_bias,
+        "latency_bias": lat,
         "unmodeled_share_pct": (round(sorted(others)[len(others) // 2], 1) if others else None),
         "correction": {"ratios": {c: round(v, 3) for c, v in ratios.items()}, "previews": previews},
         "confidence": calibration_confidence(cal_rows),

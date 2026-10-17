@@ -13,6 +13,7 @@ import { PowerFitCard } from '../components/PowerFit'
 import { BiasDiagnosis, BiasStrip, CorrectionPreview, ErrorMatrix, ErrorWaterfall, ParityGrid, SummaryTiles } from '../components/CalibrationOverview'
 import { summaryApi, type MatrixSort } from '../lib/calibrationSummary'
 import { usePref } from '../components/Layout'
+import { ClockLatency, RailBiasTable, RailDrill, SwCompare } from '../components/CalibrationDrill'
 
 const CATS: Category[] = ['cpu', 'ip', 'bw', 'other']
 type Prov = Parameters<typeof ProvBadge>[0]['prov']
@@ -88,6 +89,11 @@ export function CalibrationPage({ ctx }: { ctx: Ctx }) {
             <BiasStrip s={summary.data} onPick={(r) => pick(r.measurement_id)} />
             <BiasDiagnosis s={summary.data} />
           </Card>
+          {(summary.data.rail_bias?.length ?? 0) > 0 && <Card id="cal-railbias" title="Rail별 체계 오차" defaultWide minHeight={120}
+            note={`IP는 vdd 단위 · CPU · BW 그룹 · ${summary.data.coverage.compared} variant · |ΔmW| 큰 순`}
+            help={<>구성(IP) 오차를 voltage rail 단위로 나눕니다. IP 전체가 −30%여도 실제로는 한 rail(예: INT)만 크게 틀리고 나머지는 맞는 경우가 많습니다. 행 순서 = 오차 mW가 큰 rail부터.</>}>
+            <RailBiasTable s={summary.data} />
+          </Card>}
           <Card id="cal-matrix" title="오차 matrix" defaultWide minHeight={200}
             note="variant × 구성 · 색 = |Δ| ≤10% / ≤25% / >25% · 행 클릭 = 아래 상세 · ×n = 같은 variant capture 수">
             <ErrorMatrix rows={sumRows.filter((r) => r.pred)} sort={mxSort} setSort={setMxSort} selected={selId} onPick={(r) => pick(r.measurement_id)} />
@@ -163,6 +169,13 @@ function Detail({ d, ctx }: { d: MeasDetail; ctx: Ctx }) {
     <Card id="cal-waterfall" title={`${short(d.variant_id)} — 오차 waterfall`} note="등록 예측 → 구성별 (실측 − 예측) → 실측 total" minHeight={120}>
       <ErrorWaterfall d={d} />
     </Card>
+    {d.drilldown && <Card id="cal-raildrill" title={`${short(d.variant_id)} — Rail drill-down`} defaultWide
+      note="rail 그룹별 실측 vs 귀속 예측 · 오차 기여 = |Δ mW| 비중 · 행 클릭 = rail · 예측 항목">
+      <RailDrill d={d.drilldown} />
+    </Card>}
+    {d.drilldown && <Card id="cal-clocklat" title={`${short(d.variant_id)} — Latency · IP clock`} note="예측 vs 실측 · clock = DVFS group 설정 clock vs 측정 residency">
+      <ClockLatency d={d.drilldown} />
+    </Card>}
     {d.clock_residency && <ClockResidencyCard view={d.clock_residency} cpuLink="#/cpu" />}
     {cols.some((p) => p.conditions) && <Card id="cal-cond" title="비교 조건 동등성" note="조건이 다르면 Δ는 참고 비교 · 미기록은 동등성 확인 불가" defaultWide>
       <ConditionTable preds={d.predictions.filter((p) => p.conditions)} />
@@ -171,8 +184,8 @@ function Detail({ d, ctx }: { d: MeasDetail; ctx: Ctx }) {
     <Card id="cal-rails" title="Rail별 실측" note="분류 = sim config rail map → 이름 규칙">
       <RailTable rails={d.measured.rails} />
     </Card>
-    <Card id="cal-sw" title="SW task 실측" note="Timing Budget의 SW 가정과 비교">
-      {d.sw_tasks.length ? <table className="tb-mini-table" style={{ width: '100%' }}>
+    <Card id="cal-sw" title="SW task 실측 vs 가정" note="Timing Budget의 SW 가정(예측 statistic)과 실측 p95" defaultWide={!!d.drilldown?.sw?.rows.length}>
+      {d.drilldown?.sw?.rows.length ? <SwCompare d={d.drilldown} /> : d.sw_tasks.length ? <table className="tb-mini-table" style={{ width: '100%' }}>
         <thead><tr><th>task</th><th>mean ms</th><th>p95 ms</th><th>max ms</th><th>cluster</th></tr></thead>
         <tbody>{d.sw_tasks.map((t) => <tr key={t.task}><td className="mono">{t.task}</td><td className="mono">{fmt(t.mean_ms, 2)}</td><td className="mono">{fmt(t.p95_ms, 2)}</td><td className="mono">{fmt(t.max_ms, 2)}</td><td className="faint">{t.cluster ?? '—'}</td></tr>)}</tbody>
       </table> : <div className="empty">SW task 실측 없음</div>}
