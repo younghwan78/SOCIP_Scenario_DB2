@@ -10,6 +10,7 @@ import { applyDsuRebalance, defaultPool, rebalanceApi, type CpuRebalance, type C
 import { CpuWhatIfPage } from '../src/pages/CpuWhatIf'
 import { powerParts } from '../src/components/RebalanceView'
 import { ChartTipProvider } from '../src/components/ChartTip'
+import { sweepApi } from '../src/lib/growthSweep'
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
 if (typeof ResizeObserver === 'undefined') Object.assign(globalThis, { ResizeObserver: class { observe() {} unobserve() {} disconnect() {} } })
@@ -59,6 +60,8 @@ it('rebalance measured DSU experiments retain the exported residency', () => {
 
 it('rebalance mode: setup, run with locks / co-move, curve and top splits', async () => {
   localStorage.setItem('sdb.cpu.mode', JSON.stringify('rebalance'))
+  localStorage.setItem('sdb.cpu.inputs.open', 'true')   // inputs are folded by default once a result exists
+  const growth = vi.spyOn(sweepApi, 'run').mockRejectedValue(new Error('growth sweep not under test'))
   const tasks = E2600.units.flatMap((u) => u.tasks.map((t) => ({ task: t, cluster: u.home })))
   const inputs = vi.spyOn(cpuApi, 'inputs').mockResolvedValue({
     profiles: [{ id: 'p1', scenario_ref: null, variant_ref: null, project_ref: null, tasks }],
@@ -92,11 +95,13 @@ it('rebalance mode: setup, run with locks / co-move, curve and top splits', asyn
     expect(last.co_move).toEqual([['cam_hal_request', 'cam_hal_result']])
     expect(last.pool).toEqual(['MID_LF0', 'MID_LF1'])
     expect(last.top).toBe(20)
-  } finally { act(() => root.unmount()); inputs.mockRestore(); run.mockRestore(); sweep.mockRestore(); localStorage.clear() }
+  } finally { act(() => root.unmount()); inputs.mockRestore(); run.mockRestore(); sweep.mockRestore(); growth.mockRestore(); localStorage.clear() }
 })
 
 it('과제 비교: second rebalance on the other topology, measured SoC as base, only exclude locks kept', async () => {
   localStorage.setItem('sdb.cpu.mode', JSON.stringify('rebalance'))
+  localStorage.setItem('sdb.cpu.inputs.open', 'true')   // inputs are folded by default once a result exists
+  const growth = vi.spyOn(sweepApi, 'run').mockRejectedValue(new Error('growth sweep not under test'))
   const tasks = E2600.units.flatMap((u) => u.tasks.map((t) => ({ task: t, cluster: u.home })))
   const inputs = vi.spyOn(cpuApi, 'inputs').mockResolvedValue({
     profiles: [{ id: 'p1', scenario_ref: null, variant_ref: null, project_ref: null, tasks }],
@@ -122,7 +127,7 @@ it('과제 비교: second rebalance on the other topology, measured SoC as base,
     const table = host.querySelector('table[aria-label="과제 비교"]')!
     expect(table.textContent).toContain('soc-exynos2800')
     expect(table.textContent).toContain(`${E2800.best!.total_mw.toFixed(1)} mW`)
-  } finally { act(() => root.unmount()); inputs.mockRestore(); run.mockRestore(); localStorage.clear() }
+  } finally { act(() => root.unmount()); inputs.mockRestore(); run.mockRestore(); growth.mockRestore(); localStorage.clear() }
 })
 
 it('가정 민감도: DSU corners instantly, other assumptions rerun sequentially, flags a changed split', async () => {
@@ -144,4 +149,37 @@ it('가정 민감도: DSU corners instantly, other assumptions rerun sequentiall
 it('power breakdown order: DSU → pool clusters (topology order) → outside-pool clusters by name', () => {
   expect(powerParts(E2600).map((p) => p.label)).toEqual(['DSU', 'MID_LF0', 'MID_LF1', 'MID_HF', 'BIG (pool 밖)'])
   expect(powerParts({ ...E2600, pool: ['MID_HF', 'MID_LF0'] }).map((p) => p.label)).toEqual(['DSU', 'MID_LF0', 'MID_HF', 'MID_LF1 + BIG (pool 밖)'])
+})
+
+it('result first: inputs fold after the first result and the growth sweep reuses the rebalance request', async () => {
+  localStorage.setItem('sdb.cpu.mode', JSON.stringify('rebalance'))
+  const tasks = E2600.units.flatMap((u) => u.tasks.map((t) => ({ task: t, cluster: u.home })))
+  const inputs = vi.spyOn(cpuApi, 'inputs').mockResolvedValue({
+    profiles: [{ id: 'p1', scenario_ref: null, variant_ref: null, project_ref: null, tasks, origin: 'synthetic' }],
+    topologies: [{ id: 'pmp-e2600', version: 1, soc_ref: 'soc-exynos2600', clusters: ['MID_LF0', 'MID_LF1', 'MID_HF', 'BIG'] }],
+  })
+  const run = vi.spyOn(rebalanceApi, 'run').mockResolvedValue(E2600)
+  const pts = [1, 1.1].map((g) => ({ growth: g, reference: { total_mw: 237 * g, feasible: true, mhz: { MID_LF0: 1600, dsu: 645 }, mw: {}, moved: [] },
+    best: { total_mw: 232 * g, feasible: true, mhz: { MID_LF0: 1600, dsu: 645 }, mw: {}, moved: ['a'] },
+    strategies: [{ kind: 'spread' as const, clusters: ['MID_LF0', 'MID_LF1'], total_mw: 232 * g, feasible: true, mhz: {} }],
+    winner: 'spread', big_gain_mw: null, cpu_bw_mbs: 870, feasible_count: 1, stages: [] }))
+  const growth = vi.spyOn(sweepApi, 'run').mockResolvedValue({ profile_ref: 'p1', power_params_ref: 'pmp-e2600', fps: 30, points: pts, events: [],
+    limits: { opp_step: null, opp_step_best_mw: null, timing_at: null, tolerance: null, binding: null }, elapsed_ms: 10 })
+  const host = document.createElement('div'), root = createRoot(host)
+  try {
+    await act(async () => root.render(<ChartTipProvider><CpuWhatIfPage ctx={{} as Ctx} /></ChartTipProvider>))
+    expect(run).toHaveBeenCalledTimes(1)
+    expect(growth).toHaveBeenCalledTimes(1)
+    const req = growth.mock.calls[0][0]
+    expect(req.growths).toEqual([1, 1.1, 1.2, 1.3, 1.4, 1.5])
+    expect(req.cpu_profile_ref).toBe('p1')
+    expect(host.querySelector('[aria-label="CPU what-if 결론"]')?.textContent).toContain('합성 profile')
+    const labelled = (sel: string, label: string) => [...host.querySelectorAll(sel)].some((x) => x.getAttribute('aria-label') === label)
+    expect(labelled('svg', 'SW 증가 배율에 따른 CPU + DSU 전력')).toBe(true)
+    expect(host.textContent).toContain('조건 편집')
+    expect(labelled('section', '① 기준')).toBe(false)        // folded
+    const open = [...host.querySelectorAll('button')].find((b) => b.textContent?.includes('조건 편집'))!
+    await act(async () => open.click())
+    expect(labelled('section', '① 기준')).toBe(true)
+  } finally { act(() => root.unmount()); inputs.mockRestore(); run.mockRestore(); growth.mockRestore(); localStorage.clear() }
 })
