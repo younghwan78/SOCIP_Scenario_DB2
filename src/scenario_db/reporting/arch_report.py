@@ -256,36 +256,218 @@ def _review(ctx: dict[str, Any] | None) -> str:
                    f"<tbody>{body}</tbody></table>")
 
 
-def render_html(title: str, snap: dict[str, Any]) -> str:
+def _sections(snap: dict[str, Any]) -> list[tuple[str, str, str | None]]:
+    """(title, body, omitted_reason). A section without data is listed with the reason instead of an
+    empty body (RPT-06) — an empty section reads as "no problem"."""
     o, s = snap["overview"], snap["spec_summary"]
+    ok_rows = {(r["scenario_id"], r["variant_id"]) for r in snap["scenarios"] if r["spec_ok"]}
+    tiered = bool(snap.get("criteria"))
+    out: list[tuple[str, str, str | None]] = [
+        ("결론", _tier1(snap) if tiered else _conclusion(snap.get("conclusion")), None)]
+    if "risk_register" in snap:
+        out.append(("Risk register", _risk_register(snap["risk_register"], snap.get("scope") or {}), None))
+    out += [
+        ("개요", _overview(o) + _scope(snap.get("scope")), None),
+        ("Spec 만족", _spec(s) + _review(snap.get("review_context")), None),
+        ("실측 대조", _model_block(snap.get("model")) + _calibration(snap.get("calibration") or [])
+         + clock_block(snap.get("clock_residency") or []), None),
+    ]
+    if "thermal" in snap:
+        th = snap.get("thermal") or {}
+        out.append(("발열 대응", _thermal(th), None if th.get("items") else
+                    th.get("reason") or "review_policy에 thermal_watch 대상이 없음"))
+    out += [
+        ("분류별 검토 의견", _opinions(snap.get("opinions") or []), None),
+        ("Scenario 요약", _scenarios(snap["scenarios"]), None),
+        ("Latency · 출력 간격", _latency(snap["scenarios"]), None),
+        ("IP 필요 clock", _domains(snap.get("domains") or []) + "<details><summary>IP별 상세 (필요 → 설정 MHz)</summary>"
+         + _clocks([c for c in snap["clocks"] if (c["scenario_id"], c["variant_id"]) in ok_rows]) + "</details>", None),
+        ("Power·BW 분포", _boxes(snap["scenarios"]), None),
+        ("CPU/IP/BW", _split(snap["scenarios"]), None),
+        ("Compression 절감", _compression(snap["compression"], snap["scenarios"]),
+         None if snap["compression"] or not tiered else "BW를 줄이는 compression buffer가 없음 — 조합 탐색 compression 축과 catalog 지원 buffer 확인"),
+        ("Power option (IQ 평가 대상)", _power_options(snap.get("power_options") or []),
+         None if snap.get("power_options") or not tiered else "power option 결과 없음 — 조합 탐색에서 power option을 켜고 실행하면 채워짐"),
+        ("SW margin Top5", _margins(snap["sw_margin_top5"]) + _fail_margins(snap.get("sw_margin_fail") or []),
+         None if snap["sw_margin_top5"] or snap.get("sw_margin_fail") or not tiered else "SW margin 계산 결과 없음"),
+        ("변경 이력", _history(snap["history"]),
+         None if snap["history"] or not tiered else "이전 등록 예측 대비 변경 없음 (첫 등록이거나 같은 예측)"),
+        ("부록", _appendix(snap["appendix"]), None),
+    ]
+    return out
+
+
+_NUM = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳"
+
+
+def render_html(title: str, snap: dict[str, Any]) -> str:
+    o = snap["overview"]
+    secs = _sections(snap)
+    shown = [(t, b) for t, b, why in secs if why is None]
+    omitted = [(t, why) for t, _, why in secs if why]
+    if omitted:
+        t0, b0 = shown[0]
+        shown[0] = (t0, b0 + "<p class='meta' style='margin-top:12px'><b>생략한 절</b> — "
+                    + " · ".join(f"{escape(t)}: {escape(str(why))}" for t, why in omitted) + "</p>")
+    scope = snap.get("scope") or {}
     parts = [
         "<!DOCTYPE html><html lang='ko'><head><meta charset='utf-8'>",
         f"<title>{escape(title)}</title><style>{_CSS}</style></head><body>",
         f"<header><h1>{escape(title)}</h1><div class='meta'>{escape(str(o['target_soc']))} · "
-        f"{escape(o['scenario_type'])} · {escape(o['run_id'])} · DVFS {escape(str(o['dvfs_table_ref']))}"
-        f"{' <b class=warn>SAMPLE</b>' if o['sample_dvfs'] else ''}</div></header>",
-        "<nav>" + "".join(f"<a href='#s{i}'>{t}</a>" for i, t in enumerate(SECTIONS, 1)) + "</nav><main>",
-        _sec(1, _conclusion(snap.get("conclusion"))),
-        _sec(2, _overview(o)),
-        _sec(3, _spec(s) + _review(snap.get("review_context"))),
-        _sec(4, _calibration(snap.get("calibration") or []) + clock_block(snap.get("clock_residency") or [])),
-        _sec(5, _opinions(snap.get("opinions") or [])),
-        _sec(6, _scenarios(snap["scenarios"])),
-        _sec(7, _latency(snap["scenarios"])),
-        _sec(8, _domains(snap.get("domains") or []) + "<details><summary>IP별 상세 (필요 → 설정 MHz)</summary>"
-             + _clocks([c for c in snap["clocks"] if (c["scenario_id"], c["variant_id"]) in
-                        {(r["scenario_id"], r["variant_id"]) for r in snap["scenarios"] if r["spec_ok"]}])
-             + "</details>"),
-        _sec(9, _boxes(snap["scenarios"])),
-        _sec(10, _split(snap["scenarios"])),
-        _sec(11, _compression(snap["compression"], snap["scenarios"])),
-        _sec(12, _power_options(snap.get("power_options") or [])),
-        _sec(13, _margins(snap["sw_margin_top5"]) + _fail_margins(snap.get("sw_margin_fail") or [])),
-        _sec(14, _history(snap["history"])),
-        _sec(15, _appendix(snap["appendix"])),
+        f"{escape(o['scenario_type'])} · "
+        + (f"과제 {escape(str(scope.get('project_ref')))} · run {len(scope.get('runs') or [])}개" if scope.get("kind") == "project"
+           else escape(o["run_id"]))
+        + f" · DVFS {escape(str(o['dvfs_table_ref']))}{' <b class=warn>SAMPLE</b>' if o['sample_dvfs'] else ''}</div></header>",
+        "<nav>" + "".join(f"<a href='#s{i}'>{escape(t)}</a>" for i, (t, _) in enumerate(shown, 1)) + "</nav><main>",
+        *(f"<section id='s{i}'><h2>{_NUM[i - 1] if i <= len(_NUM) else i} {escape(t)}</h2>{b}</section>"
+          for i, (t, b) in enumerate(shown, 1)),
         "</main></body></html>",
     ]
     return "".join(parts)
+
+
+_SEV = {"critical": ("Critical", "fail"), "high": ("High", "warn"), "medium": ("Medium", "med"), "info": ("Info", "meta")}
+_STATUS = {"open": "Open", "watch": "Watch", "mitigating": "대응 중", "accepted": "수용", "closed": "종료"}
+_TREND = {"new": "신규", "ongoing": "유지", "reopened": "재발", "resolve_candidate": "해소 후보", "": "—"}
+
+
+def _sev(sev: str) -> str:
+    label, cls = _SEV.get(sev, (sev, "meta"))
+    return f"<span class='sev {cls}'>{label}</span>"
+
+
+def _tier1(snap: dict[str, Any]) -> str:
+    """RPT-03 one-page conclusion: headline, basis (RPT-05), customer criteria scorecard, confidence,
+    top risks, actions."""
+    c = snap.get("conclusion") or {}
+    cr = snap.get("criteria") or {}
+    basis = snap.get("basis") or {}
+    flags = [f"판정 기준 <b>{escape(str(basis.get('throughput_model') or 'stage'))}</b>",
+             f"정책 {'선언됨' if basis.get('policy_declared') else '없음 (기본 규칙)'}",
+             f"등록 기준 {escape(str(basis.get('register_baseline') or 'min_power'))}",
+             f"DVFS {escape(str(basis.get('dvfs_table_ref') or '—'))}" + (" <b class=warn>SAMPLE</b>" if basis.get("sample_dvfs") else ""),
+             f"engine {escape(str(basis.get('engine_rev') or '—'))}"]
+    h = f"<p class='meta'>{' · '.join(flags)}</p>"
+    h += f"<p style='font-size:17px'><b>{escape(c.get('headline') or '')}</b></p>"
+    fps, pw, th = cr.get("fps") or {}, cr.get("power") or {}, cr.get("thermal") or {}
+
+    def box(q: str, a: str, cls: str, d: str) -> str:
+        return f"<div><span class='q'>{q}</span><span class='a {cls}'>{a}</span><span class='d'>{d}</span></div>"
+
+    fps_cls = "ok" if not fps.get("fail") else "fail"
+    pw_cls = "fail" if pw.get("over") else "warn" if pw.get("missing") or pw.get("similar") else "ok"
+    th_short = [i for i in th.get("items") or [] if i.get("reach10") is False]
+    th_cls = "fail" if th_short else "warn" if th.get("unassessed") else "ok"
+    boxes = [
+        box("① fps drop 없음", f"{fps.get('ok', 0)} / {fps.get('total', 0)}", fps_cls,
+            (f"미달 {len(fps.get('fail') or [])}건: {escape(', '.join(_short(v) for v in (fps.get('fail') or [])[:4]))}"
+             if fps.get("fail") else "모든 평가 variant가 fps 만족") + f" · {escape(str(fps.get('basis') or ''))} 기준"),
+        box("② 전과제 대비 전류", f"이하 {pw.get('ok', 0)} · 유사 {pw.get('similar', 0)} · 초과 {pw.get('over', 0)}", pw_cls,
+            f"기준 variant {pw.get('total', 0)}개 중 예측 없음 {len(pw.get('missing') or [])}"
+            + (f" ({escape(', '.join(_short(v) for v in pw['missing'][:3]))})" if pw.get("missing") else "")
+            + f" · 허용 +{pw.get('tolerance_pct', '—')}%" + (" · 기준값 SAMPLE" if pw.get("sample") else "")),
+        box("③ 발열 대응 여지 (−10 / −20%)",
+            "미평가" if not th.get("items") else f"−10% 가능 {sum(1 for i in th['items'] if i.get('reach10'))} / {len(th['items'])}",
+            th_cls, "; ".join(f"{escape(_short(i['variant_id']))}: −10% {'가능' if i.get('reach10') else '미달' if i.get('reach10') is False else '미평가'}"
+                              f", −20% {'가능' if i.get('reach20') else '미달' if i.get('reach20') is False else '미평가'}" for i in (th.get("items") or [])[:4])
+            or "review_policy에 thermal_watch 없음"),
+    ]
+    h += "<div class='score'>" + "".join(boxes) + "</div>"
+    conf = c.get("confidence") or {}
+    if conf:
+        h += (f"<div class='kpis' style='margin-top:10px'><div class='kpi'>신뢰도<b class='{_GRADE_CLASS.get(str(conf.get('grade')), '')}'>{conf.get('grade')}</b>"
+              f"<span class=meta>{escape(conf.get('meaning', ''))}</span></div></div>")
+        if conf.get("reasons"):
+            h += "<ul>" + "".join(f"<li class=meta>{escape(r)}</li>" for r in conf["reasons"]) + "</ul>"
+    reg = [r for r in snap.get("risk_register") or [] if r.get("status") not in ("closed", "accepted") and r.get("trend") != "resolve_candidate"]
+    h += "<h3 style='margin:14px 0 4px'>Top risk</h3>"
+    if reg:
+        h += ("<table><tr><th>ID</th><th>심각도</th><th>내용</th><th>영향</th><th>상태</th><th>추세</th></tr>"
+              + "".join(f"<tr><td class=mono>{escape(r['label'])}</td><td>{_sev(r['severity'])}</td><td><b>{escape(r['title'])}</b>"
+                        f"<div class=meta>{escape(r.get('detail') or '')}</div></td><td>{len(r.get('affected') or []) or '전체'}</td>"
+                        f"<td>{escape(_STATUS.get(str(r.get('status')), str(r.get('status'))))}</td><td>{escape(_TREND.get(r.get('trend') or '', str(r.get('trend'))))}</td></tr>"
+                        for r in reg[:5]) + "</table>")
+        if len(reg) > 5:
+            h += f"<p class=meta>외 {len(reg) - 5}건 → Risk register</p>"
+    else:
+        h += "<p class=meta>열린 risk 없음</p>"
+    if c.get("actions"):
+        h += "<h3 style='margin:14px 0 4px'>권고 조치</h3><table><tr><th>조치</th><th>대상</th><th>ΔPower</th><th>근거</th><th>필요 검증</th></tr>"
+        for a in c["actions"]:
+            d = f"{a['delta_mw']:+.0f} mW ({_f(a['delta_pct'], 1)}%)" if a["delta_mw"] is not None else "—"
+            h += (f"<tr><td>{escape(a['action'])}</td><td>{escape(_short(str(a['target'])))}</td><td class=n>{d}</td>"
+                  f"<td>{escape(a['basis'])}</td><td>{escape(a['check'])}</td></tr>")
+        h += "</table>"
+    return h
+
+
+def _risk_register(reg: list[dict[str, Any]], scope: dict[str, Any]) -> str:
+    h = ("<p class='meta'>자동 규칙(fps 미달 · 전과제 초과 · 비교 기준 예측 없음 · 발열 미달 · SW margin · 모델 공통 오차 · SAMPLE 입력)으로 "
+         "생성하고 owner · 상태 · 의견은 사람이 기록합니다. ID는 과제 안에서 고정 · 추세는 직전 보고서 대비."
+         + ("" if scope.get("kind") == "project" else " <b class=warn>run 단위 보고서 — 과제 register에 반영되지 않은 보고서 시점 목록</b>") + "</p>")
+    if not reg:
+        return h + "<p class=meta>risk 없음</p>"
+    h += ("<table><tr><th>ID</th><th>심각도</th><th>분류</th><th>내용 · 근거</th><th>영향</th><th>완화안</th><th>Owner</th><th>상태</th><th>추세</th></tr>")
+    for r in reg:
+        aff = r.get("affected") or []
+        h += (f"<tr><td class=mono>{escape(r['label'])}</td><td>{_sev(r['severity'])}</td><td>{escape(r.get('category') or '')}</td>"
+              f"<td><b>{escape(r['title'])}</b><div class=meta>{escape(r.get('detail') or '')}</div>"
+              + (f"<div class=meta>의견: {escape(r['note'])}</div>" if r.get("note") else "")
+              + f"</td><td class=meta>{escape(', '.join(_short(a) for a in aff[:6]) + (f' 외 {len(aff) - 6}' if len(aff) > 6 else '')) or '전체'}</td>"
+              f"<td>{escape(r.get('mitigation') or '—')}</td><td>{escape(r.get('owner') or '—')}</td>"
+              f"<td>{escape(_STATUS.get(str(r.get('status')), str(r.get('status'))))}</td><td>{escape(_TREND.get(r.get('trend') or '', str(r.get('trend'))))}</td></tr>")
+    return h + "</table>"
+
+
+def _scope(scope: dict[str, Any] | None) -> str:
+    if not scope or scope.get("kind") != "project":
+        return ""
+    runs = scope.get("runs") or []
+    return ("<h3 style='margin:14px 0 4px'>입력 범위 — 과제의 현재 등록 예측 전체</h3><table><tr><th>run</th><th>제목</th><th>생성</th>"
+            "<th>현재 예측</th><th>포함 variant</th></tr>"
+            + "".join(f"<tr><td class=mono>{escape(r['id'])}</td><td>{escape(r.get('title') or '')}</td><td>{escape(str(r.get('created_at') or '')[:16])}</td>"
+                      f"<td class=n>{r.get('current', 0)}</td><td class=n>{r.get('variants', 0)}</td></tr>" for r in runs) + "</table>")
+
+
+def _model_block(m: dict[str, Any] | None) -> str:
+    if not m or not m.get("bias"):
+        return ""
+    cov = m.get("coverage") or {}
+    rows = "".join(
+        f"<tr><td>{c.upper()}</td><td class=n>{_f(b.get('median'), 1)}%</td><td class=n>{_f(b.get('same_sign_pct'), 0)}%</td>"
+        f"<td class=n>{b.get('within10', 0)}/{b.get('n', 0)}</td><td>{escape(str(b.get('label') or b.get('verdict')))}</td></tr>"
+        for c, b in m["bias"].items())
+    flat = m.get("flat_cpu")
+    return ("<h3 style='margin:4px 0'>모델 신뢰도 — 구성별 체계 오차 (variant당 대표 capture)</h3>"
+            f"<p class=meta>비교 {cov.get('compared', 0)} variant · 실측 출처 silicon {((cov.get('origin') or {}).get('physical_capture') or 0)}"
+            f" · 합성 {((cov.get('origin') or {}).get('synthetic') or 0)} · total ±10% 중 상쇄 {m.get('offsetting', 0)}건</p>"
+            "<table><tr><th>구성</th><th>median Δ</th><th>같은 부호</th><th>±10% 이내</th><th>판정</th></tr>" + rows + "</table>"
+            + (f"<p class=meta>CPU 예측 {flat['count']}/{flat['n']}건이 {flat['mw_at_base_fps']} mW × fps/{flat['base_fps']:.0f} — SW 부하 미반영 flat 항</p>" if flat else ""))
+
+
+def _thermal(th: dict[str, Any]) -> str:
+    items = th.get("items") or []
+    if not items:
+        return ""
+    h = ("<p class=meta>고객 발열 대응 요청 대비: 화질 유지 기준 power에서 IQ 항목(option · lossy · DVFS)으로 −10 / −20%를 만들 수 있는지. "
+         "DVFS level-down은 보고서에서 계산하지 않음 (예측 현황 ② 발열 대응 카드에서 확인).</p>"
+         "<table><tr><th>Variant</th><th>기준 mW</th><th>전과제 대비</th><th>요청</th><th>필요</th><th>IQ 항목 최대</th><th>선택 항목</th><th>판정</th></tr>")
+    for i in items:
+        ref = i.get("reference") or {}
+        plans = i.get("plans") or []
+        if not plans:
+            h += (f"<tr><td>{escape(_short(i['variant_id']))}</td><td class=n>{_f(i.get('current_mw'), 0)}</td><td>—</td>"
+                  f"<td colspan=5 class=meta>{escape('; '.join(i.get('notes') or []) or '평가 없음')}</td></tr>")
+            continue
+        ref_txt = f"{ref['delta_pct']:+.1f}% ({ref.get('status')})" if ref and ref.get("delta_pct") is not None else "—"
+        for k, p in enumerate(plans):
+            first = k == 0
+            h += (f"<tr><td>{escape(_short(i['variant_id'])) if first else ''}</td><td class=n>{_f(i.get('current_mw'), 0) if first else ''}</td>"
+                  f"<td>{escape(ref_txt) if first else ''}</td>"
+                  f"<td class=n>−{p['ask_pct']:.0f}%</td><td class=n>{_f(p['need_mw'], 0)}</td><td class=n>{_f(p['saving_mw'], 0)}</td>"
+                  f"<td class=meta>{escape(', '.join(p.get('picked') or []) or '—')}</td>"
+                  f"<td class='{'ok' if p['achieved'] else 'fail'}'>{'가능' if p['achieved'] else '미달'}</td></tr>")
+    return h + "</table>"
 
 
 def html_sha256(html: str) -> str:
@@ -325,6 +507,13 @@ header{border:0;padding:0 10mm 4mm}@page{size:A4 landscape;margin:12mm}}
 .q-mit{border-top:3px solid #B45309!important}.q-opt{border-top:3px solid #2F6F68!important;background:#FAFDFB!important}
 @media(max-width:1100px){.q4{grid-template-columns:1fr}}
 @media print{.q4{grid-template-columns:1fr 1fr}}
+.score{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:8px 0}
+.score>div{border:1px solid #E4DED3;border-radius:8px;padding:10px 12px;display:grid;gap:4px;align-content:start}
+.score .q{font-size:13px;color:#7A7468}.score .a{font-weight:700;font-size:16px}.score .d{font-size:13px;color:#3B3F4A}
+.score .a.ok{color:#2F6F68}.score .a.warn{color:#B45309}.score .a.fail{color:#9B1C1C}
+.sev{font-weight:700;font-size:13px;white-space:nowrap}.sev.fail{color:#9B1C1C}.sev.warn{color:#B45309}.sev.med{color:#26406B}
+.mono{font-family:Consolas,'D2Coding',monospace;white-space:nowrap}
+@media(max-width:1000px){.score{grid-template-columns:1fr}}
 """
 
 

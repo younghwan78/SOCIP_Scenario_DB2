@@ -305,6 +305,18 @@ export interface ReportMeta {
   spec_ok: number | null; explored: number | null
   /** latest review entry (publish needs reviewer + note); absent before API 0023 */
   review?: { status: string; reviewer: string | null; note: string | null; by: string | null; at: string } | null; review_count?: number
+  /** RPT-01: 'project' = the project's current predictions across runs (risk register synced); 'run' = one exploration run */
+  scope?: 'project' | 'run'
+  /** RPT-07 Portfolio cell (reports generated with the Tier-1 conclusion; null before) */
+  summary?: ReportSummary | null
+}
+export interface ReportSummary {
+  confidence: 'A' | 'B' | 'C' | null
+  risks: Record<'critical' | 'high' | 'medium' | 'info', number>
+  fps: { ok: number; total: number }
+  power: { ok: number; similar: number; over: number; total: number; missing: number }
+  thermal: { items: number; reach10: number }
+  power_range_mw: [number, number] | null
 }
 
 export interface RunOptions {
@@ -404,11 +416,13 @@ export const archApi = {
     send<{ old: HistoryRow; new: HistoryRow; attribution: Attribution }>('GET', `/arch/predictions/compare${q(p)}`),
   reports: () => send<ReportMeta[]>('GET', '/arch/reports'),
   createReport: (runId: string, title?: string) => send<ReportMeta>('POST', '/arch/reports', { run_id: runId, title }),
+  /** RPT-01: report over the project's current predictions (all runs); syncs the risk register */
+  createProjectReport: (projectRef: string, title?: string) => send<ReportMeta>('POST', '/arch/reports', { project_ref: projectRef, title }),
   setReportStatus: (id: string, status: 'draft' | 'published', review?: { reviewer: string; note: string }) =>
     send<ReportMeta>('PATCH', `/arch/reports/${encodeURIComponent(id)}`, { status, ...review }),
   reportXlsxUrl: (id: string) => `${API_BASE}/arch/reports/${encodeURIComponent(id)}/xlsx`,
   reportPackageUrl: (id: string) => `${API_BASE}/arch/reports/${encodeURIComponent(id)}/package`,
-  reportStale: (id: string) => send<{ stale: boolean; changed: { variant_id: string }[] }>('GET', `/arch/reports/${encodeURIComponent(id)}/stale`),
+  reportStale: (id: string) => send<{ stale: boolean; changed: { variant_id: string; snapshot?: string | null; current?: string | null }[] }>('GET', `/arch/reports/${encodeURIComponent(id)}/stale`),
   reportHtmlUrl: (id: string) => `${API_BASE}/arch/reports/${encodeURIComponent(id)}/html`,
 }
 

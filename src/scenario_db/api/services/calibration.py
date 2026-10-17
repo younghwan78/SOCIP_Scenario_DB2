@@ -291,10 +291,12 @@ def _fit(pred: dict[str, float] | None, meas_cat: dict[str, float] | None, total
     return category_fit(compare_split(pred, meas_cat), total_delta)
 
 
-def list_measurements(db: Session, *, scenario_id: str | None = None) -> list[dict[str, Any]]:
+def list_measurements(db: Session, *, scenario_id: str | None = None, project_ref: str | None = None) -> list[dict[str, Any]]:
     q = db.query(Evidence).filter(Evidence.kind == "evidence.measurement")
     if scenario_id:
         q = q.filter(Evidence.scenario_ref == scenario_id)
+    if project_ref:
+        q = q.filter(Evidence.scenario_ref.in_(db.query(Scenario.id).filter(Scenario.project_ref == project_ref)))
     measurements = q.order_by(Evidence.measured_at.desc().nullslast(), Evidence.id).all()
     scenario_ids = {m.scenario_ref for m in measurements}
     current = {(p.scenario_ref, p.variant_ref): p for p in db.query(Prediction).filter(
@@ -642,3 +644,106 @@ def _bw_comparability(sim: Evidence | None, meas: Evidence | None) -> dict[str, 
     if isinstance(sim_fps, (int, float)) and isinstance(meas_fps, (int, float)) and sim_fps and abs(meas_fps - sim_fps) / sim_fps > 0.02:
         reasons.append(f"fps 다름: 예측 {sim_fps:g} · 실측 {meas_fps:g}")
     return {"equivalent": not reasons, "statistic": "mean", "reasons": reasons}
+
+
+# ------------------------------------------------------------------- summary (CAL-01..06)
+def _rep_rank(m: Evidence) -> tuple[int, int, int, datetime]:
+    """Representative capture of a variant: comparable (has total) > silicon > not synthetic > newest.
+
+    Same order as the report's ``_meas_rank`` (arch_exploration) so the page and the report pick
+    the same measurement.
+    """
+    has_total = _total(m.kpi)["mean"] is not None
+    origin = data_origin(m.provenance)
+    when = m.measured_at if m.measured_at is not None else datetime.min
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    return (int(has_total), int(origin == "physical_capture"), int(origin != "synthetic"), when)
+
+
+def calibration_summary(db: Session, *, scenario_id: str | None = None, project_ref: str | None = None,
+                        include_synthetic: bool = True) -> dict[str, Any]:
+    """Model-level view of prediction ↔ measurement: one representative capture per variant,
+    category bias over all compared variants, offsetting count and the shared confidence grade."""
+    from scenario_db.comparison.calibration import BIAS_VERDICT_LABEL, bias_stats, correction_preview, flat_term
+    from scenario_db.reporting.arch_conclusion import calibration_confidence
+
+    scen_q = db.query(Scenario.id, Scenario.project_ref)
+    if scenario_id:
+        scen_q = scen_q.filter(Scenario.id == scenario_id)
+    if project_ref:
+        scen_q = scen_q.filter(Scenario.project_ref == project_ref)
+    scenarios = dict(scen_q.all())
+    if scenario_id and not scenarios:
+        raise NotFoundError(f"scenario not found: {scenario_id}")
+    ids = set(scenarios)
+    from scenario_db.db.models.definition import ScenarioVariant
+
+    variants = (db.query(func.count()).select_from(ScenarioVariant)
+                .filter(ScenarioVariant.scenario_id.in_(ids)).scalar() if ids else 0)
+    ms = (db.query(Evidence).options(load_only(Evidence.id, Evidence.scenario_ref, Evidence.variant_ref,
+                                                Evidence.measured_at, Evidence.kpi, Evidence.provenance))
+          .filter(Evidence.kind == "evidence.measurement", Evidence.scenario_ref.in_(ids)).all()) if ids else []
+    groups: dict[tuple[str, str], list[Evidence]] = {}
+    for m in ms:
+        if not include_synthetic and is_synthetic(m.provenance):
+            continue
+        groups.setdefault((m.scenario_ref, m.variant_ref), []).append(m)
+    reps = {k: max(v, key=_rep_rank) for k, v in groups.items()}
+    reps = {k: m for k, m in reps.items() if _total(m.kpi)["mean"] is not None}
+    with_pred = (db.query(func.count()).select_from(Prediction)
+                 .filter(Prediction.status == "current", Prediction.scenario_ref.in_(ids)).scalar() if ids else 0)
+    details = measurement_details(db, [m.id for m in reps.values()])
+    rows: list[dict[str, Any]] = []
+    for key, m in sorted(reps.items()):
+        d = details.get(m.id)
+        if d is None:
+            continue
+        cur = next((p for p in d["predictions"] if p["kind"] == "current"), None)
+        meas = {"total": d["total"]["mean"], **{c: d["measured"]["categories"].get(c) for c in CATEGORIES}}
+        row: dict[str, Any] = {
+            "scenario_id": key[0], "variant_id": key[1], "measurement_id": m.id, "measured_at": d["measured_at"],
+            "origin": d["origin"], "synthetic": d["synthetic"], "captures": len(groups[key]),
+            "fps": d.get("fps"), "meas": meas, "pred": None, "delta_pct": None, "fit": None, "conditions": None,
+        }
+        if cur is not None:
+            by = {r["category"]: r for r in cur["rows"] or []}
+            row["pred"] = {"id": cur["id"], "total": cur["total_mw"],
+                           **{c: by.get(c, {}).get("prediction_mw") for c in ("cpu", "ip", "bw")}}
+            row["delta_pct"] = {"total": cur["delta_pct"], **{c: by.get(c, {}).get("delta_pct") for c in ("cpu", "ip", "bw")}}
+            row["fit"] = category_fit(cur["rows"], cur["delta_pct"])
+            row["conditions"] = (cur.get("conditions") or {}).get("overall")
+        rows.append(row)
+    compared = [r for r in rows if r["pred"] is not None]
+    bias = {c: bias_stats([r["delta_pct"][c] for r in compared]) | {} for c in ("total", "cpu", "ip", "bw")}
+    for c, b in bias.items():
+        b["label"] = BIAS_VERDICT_LABEL[b["verdict"]]
+    flat_cpu = flat_term([(r["pred"]["cpu"], r["fps"]) for r in compared])
+    # median measured/predicted ratio per category = the single-coefficient correction a fit would start from
+    ratios: dict[str, float] = {}
+    for c in ("cpu", "ip", "bw"):
+        rs = sorted(r["meas"][c] / r["pred"][c] for r in compared if r["pred"].get(c) and r["meas"].get(c))
+        if rs:
+            ratios[c] = rs[len(rs) // 2] if len(rs) % 2 else (rs[len(rs) // 2 - 1] + rs[len(rs) // 2]) / 2
+    previews = []
+    if ratios:
+        steps = [("현재", {}), ("BW만", {"bw": ratios.get("bw", 1.0)}),
+                 ("BW + CPU", {"bw": ratios.get("bw", 1.0), "cpu": ratios.get("cpu", 1.0)}),
+                 ("BW + CPU + IP", dict(ratios))]
+        previews = [{"label": label} | correction_preview(compared, f) for label, f in steps]
+    others = [r["meas"]["other"] / r["meas"]["total"] * 100 for r in rows if r["meas"].get("other") is not None and r["meas"]["total"]]
+    cal_rows = [{"origin": r["origin"], "synthetic": r["synthetic"], "fit": r["fit"]} for r in compared]
+    origin_counts = {o: sum(1 for r in compared if r["origin"] == o) for o in DATA_ORIGINS}
+    return {
+        "scope": {"scenario_id": scenario_id, "project_ref": project_ref, "include_synthetic": include_synthetic},
+        "coverage": {"variants": int(variants or 0), "with_prediction": int(with_pred or 0),
+                     "with_measurement": len(rows), "compared": len(compared), "origin": origin_counts,
+                     "captures": sum(len(v) for v in groups.values())},
+        "bias": bias,
+        "offsetting": sum(1 for r in compared if r["fit"] and r["fit"]["offsetting"]),
+        "flat_cpu": flat_cpu,
+        "unmodeled_share_pct": (round(sorted(others)[len(others) // 2], 1) if others else None),
+        "correction": {"ratios": {c: round(v, 3) for c, v in ratios.items()}, "previews": previews},
+        "confidence": calibration_confidence(cal_rows),
+        "rows": rows,
+    }

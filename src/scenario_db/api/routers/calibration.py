@@ -11,9 +11,9 @@ router = APIRouter(tags=["calibration · library"])
 
 
 @router.get("/calibration/measurements")
-def measurements(scenario_id: str | None = None, db: Session = Depends(get_db)):
+def measurements(scenario_id: str | None = None, project_ref: str | None = None, db: Session = Depends(get_db)):
     """Measurement evidence with total-power error vs. current prediction and simulation evidence."""
-    return cal.list_measurements(db, scenario_id=scenario_id)
+    return cal.list_measurements(db, scenario_id=scenario_id, project_ref=project_ref)
 
 
 @router.get("/calibration/coverage-summary")
@@ -98,3 +98,12 @@ def list_power_params(soc_ref: str | None = None, db: Session = Depends(get_db))
              "description": r.description, "calibrated": bool(((r.params or {}).get("calibration") or {}).get("fit")),
              "ip_power_scale": ((r.params or {}).get("calibration") or {}).get("ip_power_scale") or {}}
             for r in q.order_by(Row.soc_ref, Row.version).all()]
+
+
+@router.get("/calibration/summary")
+def summary(scenario_id: str | None = None, project_ref: str | None = None, include_synthetic: bool = True,
+            db: Session = Depends(get_db)):
+    """Model-level prediction ↔ measurement view: representative capture per variant, category bias
+    (median · same-sign share · verdict), offsetting count, correction preview and confidence grade."""
+    return cal.calibration_summary(db, scenario_id=scenario_id, project_ref=project_ref,
+                                   include_synthetic=include_synthetic)

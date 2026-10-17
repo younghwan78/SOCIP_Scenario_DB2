@@ -19,6 +19,8 @@ import { AssumptionSensitivity, CrossSocCompare, RebalanceResults, RebalanceSetu
 import { ModelCheckDist } from '../components/ClockResidency'
 import { RebalanceWhy } from '../components/RebalanceWhy'
 import { CpuPurpose, type CpuRun } from '../components/CpuPurpose'
+import { GrowthSweepCards } from '../components/GrowthSweep'
+import { growthGrid, sweepApi, type GrowthSweep } from '../lib/growthSweep'
 
 type TaskEdit = { sweep: string[] | null; threads: string; budget: string; growth: string }
 type Adv = { freqMargin: string; fitsMargin: string; utilModel: '' | 'util_est' | 'pelt_avg'; halflife: string; boost: '' | 'on' | 'off'; emStatic: '' | 'on' | 'off' }
@@ -79,6 +81,28 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
   const [runs, setRuns] = usePref<CpuRun[]>('cpu.runs', [])
   const [pendingRun, setPendingRun] = useState(false)
   const rb = useMemo(() => (rbRaw ? applyDsuRebalance(rbRaw, dsuExp) : null), [rbRaw, dsuExp])
+  // CPU-01..05: result first — SW growth sweep of the same rebalance; inputs fold into a context bar
+  const [inputsOpen, setInputsOpen] = usePref<boolean>('cpu.inputs.open', false)
+  const [range, setRange] = usePref<{ start: number; end: number; step: number }>('cpu.sweep.range', { start: 1.0, end: 1.5, step: 0.1 })
+  const [sweep, setSweep] = useState<GrowthSweep | null>(null)
+  const [sweepBusy, setSweepBusy] = useState(false)
+  const [sweepErr, setSweepErr] = useState<string | null>(null)
+  const sweepId = useRef(0)
+  const sweepKey = useRef('')
+  const runSweep = async (payload: CpuRebalanceRequest, force = false) => {
+    const growths = growthGrid(range.start, range.end, range.step)
+    const key = JSON.stringify([payload, growths])
+    if (!force && key === sweepKey.current) return
+    const parentRequest = requestId.current
+    const id = ++sweepId.current
+    setSweepBusy(true); setSweepErr(null)
+    try {
+      const r = await sweepApi.run({ ...payload, growths })
+      if (id === sweepId.current && parentRequest === requestId.current) { setSweep(r); sweepKey.current = key }
+    } catch (e) {
+      if (id === sweepId.current && parentRequest === requestId.current) { setSweepErr(String((e as Error).message ?? e)); setSweep(null) }
+    } finally { if (id === sweepId.current) setSweepBusy(false) }
+  }
 
   const prof = inputs.data?.profiles.find((p) => p.id === profile)
   const topo = inputs.data?.topologies.find((t) => t.id === target)
@@ -119,6 +143,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
   }
   const poolNames = rbRaw?.clusters.map((c) => c.name) ?? sortClusters(topo?.clusters ?? [])
   const pool = poolSel ?? rbRaw?.default_pool ?? defaultPool(poolNames)
+  const showInputs = mode === 'sweep' || inputsOpen || !rbRaw
   const rbRequest = (base: CpuSweepRequest): CpuRebalanceRequest => {
     const locks: Record<string, string> = {}
     for (const [t, st] of Object.entries(taskStates)) if (st === 'exclude') locks[t] = 'exclude'; else if (st.startsWith('pin:')) locks[t] = st.slice(4)
@@ -134,6 +159,7 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
       const r = await rebalanceApi.run(payload)
       if (id !== requestId.current) return
       setRbRaw(r); setRbSel(r.cases[0] ? `c${r.cases[0].rank}` : 'ref')
+      void runSweep(payload)
       setCmpRb(null); setCmpErr(null)
       let cmpRes: CpuRebalance | null = null
       if (cmpTarget && cmpTarget !== payload.power_params_ref) {
@@ -169,17 +195,19 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
   }
   // first look: EAS reproduction + automatic range as soon as the inputs are chosen
   useEffect(() => {
+    ++sweepId.current
+    setSweepBusy(false); setSweepErr(null)
     const selection = JSON.stringify([profile, target, base])
     const changed = inputSelection.current !== selection
     inputSelection.current = selection
-    if (changed) { setEdits({}); setDsuExp(null); setDsuReq(null); setPoolSel(null); setTaskStates({}); setRbRaw(null) }
+    if (changed) { setEdits({}); setDsuExp(null); setDsuReq(null); setPoolSel(null); setTaskStates({}); setRbRaw(null); setSweep(null); sweepKey.current = '' }
     setResult(null)
     if (profile && target) {
       const req = request(changed ? {} : edits, changed ? null : dsuReq)
       if (mode === 'rebalance') void runRb(changed ? { ...req, top: rbTop, pool: [], locks: {}, co_move: [], timing_coupling: timingMode } : rbRequest(req))
       else void run(req)
     }
-    return () => { ++requestId.current }
+    return () => { ++requestId.current; ++sweepId.current }
   }, [profile, target, base, reference, mode]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleCell = (task: string, cl: string) => {
@@ -295,16 +323,22 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
         </div>
         <span className="faint" style={{ fontSize: 12 }}>{mode === 'rebalance' ? '한 MID cluster에 몰린 task를 같은 tier의 cluster로 나눴을 때 CPU + DSU 전력 최저점' : 'task별 knob 조합 자동 탐색 · 현재보다 전력이 낮은 배치'}</span>
       </div>
-      <CpuPurpose rb={rb} cmp={cmpRb} runs={runs} growth={growth} bwScale={bwScale} onClear={() => setRuns([])}
-        onRebalance={() => { setMode('rebalance'); setPendingRun(true) }}
-        onPreset={(p) => { setMode('rebalance'); if (p.growth !== undefined) setGrowth(p.growth); if (p.bwScale !== undefined) setBwScale(p.bwScale); setPendingRun(true) }} />
+      <div className="cpu-ctx" aria-label="입력 요약">
+        <span className="faint">profile</span>
+        {prof?.origin === 'synthetic' ? <span className="badge v-warn">합성</span> : prof?.origin === 'physical_capture' ? <span className="badge cov-meas">실측</span> : prof ? <span className="badge">출처 미상</span> : null}
+        <span className="mono">{prof?.variant_ref ?? prof?.id ?? '—'}{prof?.measured_at ? ` · ${prof.measured_at.slice(0, 10)}` : ''}</span>
+        <span className="faint">· SoC</span><span>{topo ? `${topo.soc_ref} v${topo.version} · ${sortClusters(topo.clusters).join(' / ')}` : '—'}</span>
+        <span className="faint">· 조건</span><span>{fps} fps · SW ×{growth} · EAS + schedutil{dsuReq ? ` · DSU ${dsuReq.mode}` : ''} · timing {timingMode === 'stage_slack' ? 'latency 유지' : 'fps만'}{mode === 'rebalance' ? ` · pool ${pool.join(' + ')}` : ''}</span>
+        <span className="grow" />
+        {mode === 'rebalance' && <button className="btn tb-mini" onClick={() => setInputsOpen((o) => !o)} aria-expanded={showInputs}>{showInputs ? '조건 접기 ▴' : '조건 편집 ▾'}</button>}
+      </div>
       {inputs.error && <div className="err">{inputs.error}</div>}
       {inputs.data && (!inputs.data.profiles.length || !inputs.data.topologies.length) && <div className="lib-note warn">
         sweep에 필요한 입력이 없습니다 — 측정 CPU profile <b>{inputs.data.profiles.length}건</b> · CPU topology(power_model_params) <b>{inputs.data.topologies.length}건</b>.
         {!inputs.data.profiles.length && <> task별 cycle · thread를 담은 CPU profile을 측정 evidence로 import하세요 (docs/guides/measurement/cpu-profile-import-ko.md, 예시: examples/measurement-import/cpu-profile-sample/).</>}
         {!inputs.data.topologies.length && <> cpu topology가 있는 power_model_params를 등록하세요.</>}
       </div>}
-      <div className="tb-grid">
+      {showInputs && <div className="tb-grid">
         <Card id="cpu-in" title="① 기준" note="측정 profile · 적용할 SoC · 비교 기준" help={CPU_HELP.input}>
           <div className="cpu-step" style={{ display: 'grid', gap: 8 }}>
             <label className="cpu-f"><span className="faint">측정 profile</span>
@@ -417,7 +451,13 @@ export function CpuWhatIfPage({ ctx }: { ctx: Ctx }) {
             <button className="btn primary" disabled={busy || !profile || !target} onClick={() => void run()}>{busy ? '계산 중…' : result ? '다시 계산' : 'Sweep 계산'}</button>
           </div>
         </Card>}
-      </div>
+      </div>}
+      {mode === 'rebalance' && <GrowthSweepCards s={sweep} synthetic={prof?.origin === 'synthetic'} busy={sweepBusy} error={sweepErr} range={range} setRange={setRange}
+        onRun={() => { if (rbRaw) void runSweep(rbRequest(request()), true) }}
+        onPickPool={(c) => { setPoolSel(c); setInputsOpen(true); setPendingRun(true) }} />}
+      <CpuPurpose rb={rb} cmp={cmpRb} runs={runs} growth={growth} bwScale={bwScale} onClear={() => setRuns([])}
+        onRebalance={() => { setMode('rebalance'); setPendingRun(true) }}
+        onPreset={(p) => { setMode('rebalance'); if (p.growth !== undefined) setGrowth(p.growth); if (p.bwScale !== undefined) setBwScale(p.bwScale); setPendingRun(true) }} />
       {error && <div className="err">{error}</div>}
       {mode === 'rebalance' && rb && <div className="tb-grid">
         {cmpTarget && <CrossSocCompare a={rb} b={cmpRb ? applyDsuRebalance(cmpRb, dsuExp) : null} aName={topo?.soc_ref ?? target} bName={inputs.data?.topologies.find((t) => t.id === cmpTarget)?.soc_ref ?? cmpTarget} error={cmpErr} busy={busy} />}
@@ -532,7 +572,9 @@ function CaseDetail({ c, reference, refName, title, clusters, colorOf, budgets }
 type Profile = CpuInputs['profiles'][number]
 /** Profiles with task cycles first; then the current variant, scenario and project. */
 function rankProfiles(list: Profile[], ctx: Ctx): Profile[] {
-  const score = (p: Profile) => (p.tasks?.length ? 8 : 0) + (p.variant_ref === ctx.variant ? 4 : 0) + (p.scenario_ref === ctx.scenario ? 2 : 0) + (p.project_ref === ctx.project ? 1 : 0)
+  // CPU-06: a silicon capture beats a synthetic profile of the same variant; unknown origin sits between
+  const origin = (p: Profile) => (p.origin === 'physical_capture' ? 2 : p.origin === 'synthetic' ? 0 : 1)
+  const score = (p: Profile) => (p.tasks?.length ? 32 : 0) + (p.variant_ref === ctx.variant ? 16 : 0) + (p.scenario_ref === ctx.scenario ? 8 : 0) + origin(p) * 2 + (p.project_ref === ctx.project ? 1 : 0)
   return [...list].sort((a, b) => score(b) - score(a))
 }
 

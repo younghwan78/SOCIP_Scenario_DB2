@@ -87,7 +87,8 @@ def _client(monkeypatch, **fakes):
 
 def test_routes(monkeypatch):
     c = _client(monkeypatch,
-                **{"cal.list_measurements": lambda db, scenario_id=None: [{"id": "m", "scenario_id": scenario_id}],
+                **{"cal.list_measurements": lambda db, scenario_id=None, project_ref=None: [
+                    {"id": "m", "scenario_id": scenario_id, "project_ref": project_ref}],
                    "cal.measurement_detail_view": lambda db, mid: {"id": mid},
                    "cal.coverage": lambda db, scenario_id, freshness=False: {"v1": {"simulation": 1, "s": scenario_id, "f": freshness}},
                    "cal.coverage_summary": lambda db: {"sc": {"simulation": 3}},
@@ -99,6 +100,9 @@ def test_routes(monkeypatch):
     assert c.get("/api/v1/calibration/coverage").status_code == 422
     assert c.get("/api/v1/calibration/coverage-summary").json()["sc"]["simulation"] == 3
     assert c.get("/api/v1/calibration/measurements", params={"scenario_id": "s"}).json()[0]["scenario_id"] == "s"
+    scoped = c.get("/api/v1/calibration/measurements", params={"scenario_id": "s", "project_ref": "p"})
+    assert scoped.status_code == 200
+    assert scoped.json() == [{"id": "m", "scenario_id": "s", "project_ref": "p"}]
     assert c.get("/api/v1/calibration/measurements/abc").json() == {"id": "abc"}
     assert c.get("/api/v1/library/sw-timing", params={"scenario_id": "x"}).json()["s"] == "x"
 

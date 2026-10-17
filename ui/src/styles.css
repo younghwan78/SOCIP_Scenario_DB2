@@ -920,3 +920,60 @@ tr.wi-fail th, tr.wi-fail td { color: var(--del-text, #B91C1C); }
 .wi-combo td, .wi-combo th { white-space: nowrap; }
 .wi-combo td.faint { white-space: normal; }
 .wi-combine-opts { margin: 4px 0; }
+
+/* ---- 예측 ↔ 실측 model-level view (CAL-01..07) */
+.cal-t-ok { color: var(--primary-strong); }
+.cal-t-warn { color: #9A5B0B; }
+.cal-t-fail { color: #8A1F14; }
+.cal-grade.g-A { color: var(--primary-strong); }
+.cal-grade.g-B { color: #9A5B0B; }
+.cal-grade.g-C { color: #8A1F14; }
+.cal-diag { margin-top: 8px; font-size: 12.5px; background: #EEF3FA; color: #1E3A5F; border-radius: 6px; padding: 8px 12px; }
+.cal-diag ul { margin: 4px 0 0 0; padding-left: 16px; }
+.cal-diag li { margin: 3px 0; line-height: 1.5; }
+.cal-mx-wrap { max-height: 520px; overflow: auto; border: 1px solid var(--line-soft); border-radius: 6px; }
+.cal-mx { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 12.5px; min-width: 760px; }
+.cal-mx th, .cal-mx td { padding: 4px 8px; border-bottom: 1px solid var(--line-soft); white-space: nowrap; text-align: right; }
+.cal-mx thead th { position: sticky; top: 0; background: var(--surface-soft); color: var(--muted); font-weight: 600; font-size: 11.5px; z-index: 2; }
+.cal-mx th:first-child, .cal-mx td:first-child { text-align: left; position: sticky; left: 0; background: var(--surface); z-index: 1; }
+.cal-mx thead th:first-child { z-index: 3; background: var(--surface-soft); }
+.cal-mx tr.selected td { box-shadow: inset 0 1px 0 var(--primary), inset 0 -1px 0 var(--primary); }
+.cal-mx tr.selected td:first-child { color: var(--primary-strong); font-weight: 600; }
+.cal-mx tbody tr:hover td:first-child { color: var(--primary); }
+.cal-mx tr.cal-mx-grp td { background: var(--surface-soft); color: var(--text-2); font-weight: 600; font-size: 12px; text-align: left; position: static; }
+.cal-cell { border-left: 2px solid var(--surface); }
+.cal-cell.e-ok { background: #E3EEEB; color: var(--primary-strong); }
+.cal-cell.e-warn { background: var(--warn-soft); color: var(--warn-text); }
+.cal-cell.e-fail { background: #F6D5D1; color: #8A1F14; }
+.cal-cell.e-na { color: var(--faint); }
+.cal-parity { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.cal-parity svg { width: 100%; height: auto; display: block; }
+@media (max-width: 900px) { .cal-parity { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* ---- CPU what-if result first (CPU-01..05) */
+.cpu-ctx { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; padding: 7px 12px; margin-bottom: 8px; background: var(--surface); border: 1px dashed var(--primary-line); border-radius: var(--radius); font-size: 12.5px; }
+.cpu-hm { border-collapse: separate; border-spacing: 3px; font-size: 12.5px; }
+.cpu-hm th { font-weight: 600; color: var(--muted); font-size: 11.5px; padding: 3px 6px; text-align: center; white-space: nowrap; }
+.cpu-hm tbody th { text-align: right; color: var(--text-2); }
+.cpu-hm td { text-align: center; font-family: var(--mono); padding: 6px 8px; border-radius: 5px; min-width: 64px; white-space: nowrap; }
+.cpu-hm td.best { outline: 2px solid var(--text); outline-offset: -2px; font-weight: 700; }
+.cpu-hm td.na, .cpu-hm td.infeasible { background: repeating-linear-gradient(45deg, var(--surface-soft) 0 5px, #DDD5C8 5px 6px); color: var(--faint); }
+.cpu-opp td.chg { background: var(--warn-soft); color: var(--warn-text); font-weight: 600; }
+.cpu-opp th, .cpu-opp td { text-align: right; }
+
+/* ---- review report: portfolio + risk register (RPT-04, RPT-07) */
+.badge.sev-med { background: #E2ECF8; color: #1E3A8A; }
+.risk-table td { vertical-align: top; }
+.risk-table tr.risk-closed td { opacity: .55; }
+.pf-table td, .pf-table th { white-space: nowrap; }
+.pf-table tr { cursor: pointer; }
+.pf-table tr.selected td { background: var(--primary-soft); }
+.pf-cell.ok { color: var(--primary-strong); font-weight: 600; }
+.pf-cell.warn { color: var(--warn-text); font-weight: 600; }
+.pf-cell.fail { color: #8A1F14; font-weight: 600; }
+.risk-panel { padding: 8px 12px; }
+.risk-panel > summary { cursor: pointer; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; list-style: none; }
+.risk-panel > summary::-webkit-details-marker { display: none; }
+.risk-panel > summary::before { content: '▸'; color: var(--faint); }
+.risk-panel[open] > summary::before { content: '▾'; }
+.risk-table td:first-child, .risk-table td:last-child { white-space: nowrap; }

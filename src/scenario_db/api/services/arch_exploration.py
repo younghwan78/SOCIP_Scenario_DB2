@@ -20,7 +20,7 @@ from scenario_db.api.schemas.arch_exploration import (
 )
 from scenario_db.api.schemas.timing_budget import TimingBudgetRequest
 from scenario_db.api.services.timing_budget import _load, _shim
-from scenario_db.db.models.definition import Scenario, ScenarioVariant
+from scenario_db.db.models.definition import Project, Scenario, ScenarioVariant
 from scenario_db.db.models.evidence import Evidence
 from scenario_db.db.models.exploration import (
     POWER_OPTION_STATUSES,
@@ -696,10 +696,118 @@ def compare(db: Session, *, old_id: str | None = None, new_id: str | None = None
 
 
 # ------------------------------------------------------------------- reports
+def _project_run(db: Session, project_ref: str, scenario_type: str | None) -> tuple[dict[str, Any], list[Prediction], list[ArchExplorationRun]]:
+    """The project's current predictions as one exploration-shaped run (RPT-01).
+
+    Each registered variant comes from the run of its current prediction; variants without one
+    (spec misses, calculation failures) from the newest run that evaluated them. Spec, axes and the
+    DVFS table are the newest run's.
+    """
+    rq = db.query(ArchExplorationRun).filter(ArchExplorationRun.project_ref == project_ref)
+    if scenario_type:
+        rq = rq.filter(ArchExplorationRun.scenario_type == scenario_type)
+    runs = rq.order_by(ArchExplorationRun.created_at.desc(), ArchExplorationRun.id.desc()).all()
+    if not runs:
+        raise UnprocessableError(f"no exploration run for project {project_ref}" + (f" ({scenario_type})" if scenario_type else ""))
+    by_id = {r.id: r for r in runs}
+    currents = [p for p in db.query(Prediction).filter(Prediction.project_ref == project_ref, Prediction.status == "current").all()
+                if p.exploration_run_ref in by_id]
+    variants: dict[tuple[str, str], dict[str, Any]] = {}
+    for p in sorted(currents, key=lambda p: (p.scenario_ref, p.variant_ref)):
+        v = next((x for x in by_id[p.exploration_run_ref].variants or []
+                  if x.get("scenario_id") == p.scenario_ref and x.get("variant_id") == p.variant_ref), None)
+        if v is not None:
+            variants[(p.scenario_ref, p.variant_ref)] = v
+    claimed = set(variants)
+    errors = []
+    sources = {p.exploration_run_ref for p in currents}
+    for r in runs:  # newest evaluation wins, including failed calculations
+        for v in r.variants or []:
+            key = (v.get("scenario_id"), v.get("variant_id"))
+            if v.get("variant_id") and key not in claimed:
+                variants[key] = v
+                claimed.add(key)
+                sources.add(r.id)
+        for error in r.errors or []:
+            key = (error.get("scenario_id"), error.get("variant_id"))
+            if key not in claimed:
+                errors.append(error)
+                claimed.add(key)
+                sources.add(r.id)
+    latest = runs[0]
+    project = db.get(Project, project_ref)
+    run = run_detail(latest) | {
+        "id": f"project:{project_ref}", "title": f"{project_ref} 과제 현재 예측",
+        "variants": sorted(variants.values(), key=lambda v: (v["scenario_id"], v["variant_id"])),
+        "errors": errors, "created_at": latest.created_at, "source_run_ids": sorted(sources),
+        "soc_ref": latest.soc_ref or ((project.globals_ or {}).get("soc_ref") if project is not None else None),
+    }
+    return run, currents, runs
+
+
+def _review_extras(db: Session, snapshot: dict[str, Any], project_ref: str | None, config_profile_ref: str | None,
+                   preds: dict[tuple[str, str], dict[str, Any]], scope: dict[str, Any]) -> None:
+    """Tier-1 inputs frozen with the report: basis (RPT-05), customer criteria, references, thermal watch,
+    model bias, automatic risks."""
+    from scenario_db.api.services import review as review_svc
+    from scenario_db.api.services.calibration import calibration_summary
+    from scenario_db.reporting.risk_rules import build_risks
+
+    o, s = snapshot["overview"], snapshot["spec_summary"]
+    ctx = snapshot.get("review_context") or {}
+    policy = ctx.get("policy") or {}
+    snapshot["scope"] = scope
+    snapshot["basis"] = {"throughput_model": policy.get("throughput_model") or "stage", "policy_declared": bool(policy.get("declared")),
+                         "register_baseline": policy.get("register_baseline"), "dvfs_table_ref": o.get("dvfs_table_ref"),
+                         "sample_dvfs": o.get("sample_dvfs"), "engine_rev": o.get("engine_rev")}
+    refs = review_svc.power_references(db, project_ref) if project_ref else {"references": {}, "tolerance_pct": None}
+    pred_vids = {vid for (_, vid) in preds}
+    ref_vids = sorted(refs["references"])
+    missing = [v for v in ref_vids if v not in pred_vids]
+    snapshot["reference_check"] = {"total": len(ref_vids), "missing": missing}
+    judged = [r for r in ctx.get("rows") or [] if r.get("reference")]
+    status = [r["reference"]["status"] for r in judged]
+    thermal: dict[str, Any] | None = None
+    if project_ref:
+        try:
+            tw = review_svc.thermal_watch(db, project_ref)
+            thermal = {"items": [{
+                "variant_id": i["variant_id"], "label": i.get("label"), "current_mw": i.get("current_mw"),
+                "baseline": i.get("baseline"), "reference": i.get("reference"),
+                "plans": [{k: p.get(k) for k in ("ask_pct", "need_mw", "saving_mw", "achieved", "picked")} for p in i.get("plans") or []],
+                "notes": (i.get("notes") or [])[:3]} for i in tw.get("items") or []]}
+        except (NotFoundError, UnprocessableError) as exc:
+            thermal = {"items": [], "reason": str(exc)[:200]}
+    snapshot["thermal"] = thermal or {"items": [], "reason": "과제 범위 없음"}
+
+    def reach(i: dict[str, Any], pct: int) -> bool | None:
+        p = next((p for p in i["plans"] if p["ask_pct"] == pct), None)
+        return None if p is None else bool(p["achieved"])
+
+    snapshot["criteria"] = {
+        "fps": {"ok": s.get("spec_ok", 0), "total": s.get("explored", 0), "fail": [f["variant_id"] for f in s.get("failed") or []],
+                "basis": snapshot["basis"]["throughput_model"]},
+        "power": {"total": len(ref_vids), "ok": status.count("ok"), "similar": status.count("similar"), "over": status.count("over"),
+                  "missing": missing, "tolerance_pct": refs.get("tolerance_pct"),
+                  "sample": any((r.get("source") == "explicit") for r in refs["references"].values())},
+        "thermal": {"items": [{"variant_id": i["variant_id"], "reach10": reach(i, 10), "reach20": reach(i, 20)} for i in snapshot["thermal"]["items"]],
+                    "unassessed": sum(1 for i in snapshot["thermal"]["items"] if i.get("current_mw") is None)},
+    }
+    if project_ref:
+        m = calibration_summary(db, project_ref=project_ref)
+        snapshot["model"] = {"coverage": m["coverage"], "offsetting": m["offsetting"], "flat_cpu": m["flat_cpu"],
+                             "confidence": m["confidence"],
+                             "bias": {c: {k: b.get(k) for k in ("n", "median", "same_sign_pct", "within10", "verdict", "label")}
+                                      for c, b in m["bias"].items()}}
+    snapshot["risks"] = build_risks(snapshot)
+
+
 def create_report(db: Session, request: ArchReportRequest, user: str | None = None) -> dict[str, Any]:
     if request.status != "draft":
         raise UnprocessableError("reports must be created as draft; publishing requires a review")
-    run = get_run(db, request.run_id)
+    if request.project_ref and not request.run_id:
+        return create_project_report(db, request, user)
+    run = get_run(db, request.run_id or "")
     vids = [(v["scenario_id"], v["variant_id"]) for v in run.variants]
     preds: dict[tuple[str, str], dict[str, Any]] = {}
     changes: dict[tuple[str, str], dict[str, Any]] = {}
@@ -728,12 +836,75 @@ def create_report(db: Session, request: ArchReportRequest, user: str | None = No
     config_hash = ((run.variants[0] if run.variants else {}).get("input_sections") or {}).get("config")
     snapshot["review_context"] = report_context(db, run.project_ref, (run.spec or {}).get("config_profile_ref"), preds,
                                                  frozen_config=blobs.get(config_hash))
+    _review_extras(db, snapshot, run.project_ref, (run.spec or {}).get("config_profile_ref"), preds,
+                   {"kind": "run", "project_ref": run.project_ref,
+                    "runs": [{"id": run.id, "title": run.title, "created_at": _iso_dt(run.created_at), "current": len(preds),
+                              "variants": len(run.variants or [])}]})
+    # a run report freezes the risks it sees; only project reports update the register
+    snapshot["risk_register"] = [r | {"label": f"A-{i:02d}", "status": "open", "trend": None, "owner": None, "note": None}
+                                 for i, r in enumerate(snapshot["risks"], 1)]
     title = request.title or f"{run.soc_ref or ''} {run.scenario_type} Architecture 검토".strip()
     html = render_html(title, snapshot)
     row = ArchReport(
         id=f"RPT-{uuid4().hex}", title=title, status=request.status, target_soc_ref=run.soc_ref,
         project_ref=run.project_ref, scenario_type=run.scenario_type, exploration_run_refs=[run.id],
         dvfs_table_ref=run.dvfs_table_ref, engine_rev=run.engine_rev, snapshot=snapshot,
+        rendered_html=html, html_sha256=html_sha256(html), generated_by=user, generated_at=_now(),
+    )
+    db.add(row)
+    db.commit()
+    return report_detail(row)
+
+
+
+def _iso_dt(dt: Any) -> str | None:
+    return dt.isoformat() if dt is not None else None
+
+
+def create_project_report(db: Session, request: ArchReportRequest, user: str | None = None) -> dict[str, Any]:
+    """RPT-01: report over the project's current predictions (all runs), risk register synced (RPT-04)."""
+    from scenario_db.api.services.review_risks import sync_risks
+
+    project_ref = str(request.project_ref)
+    run_dict, currents, runs = _project_run(db, project_ref, request.scenario_type)
+    preds: dict[tuple[str, str], dict[str, Any]] = {}
+    changes: dict[tuple[str, str], dict[str, Any]] = {}
+    olds = {p.id: p for p in db.query(Prediction).filter(
+        Prediction.id.in_([c.supersedes_ref for c in currents if c.supersedes_ref])).all()} if currents else {}
+    for cur in sorted(currents, key=lambda p: (p.scenario_ref, p.variant_ref)):
+        key = (cur.scenario_ref, cur.variant_ref)
+        preds[key] = _pred_dict(cur)
+        old = olds.get(cur.supersedes_ref) if cur.supersedes_ref else None
+        if old is not None:
+            changes[key] = attribute(old.metrics, cur.metrics)
+    snapshot = build_snapshot(run_dict, preds, changes, _report_calibration(db, preds))
+    clock = _report_clock(db, preds)
+    if clock:
+        snapshot["clock_residency"] = clock
+    from scenario_db.api.services.review import report_context as _ctx
+
+    latest = runs[0]
+    cfg = (latest.spec or {}).get("config_profile_ref")
+    blobs = ((latest.spec or {}).get("manifest") or {}).get("blobs") or {}
+    config_hash = ((latest.variants[0] if latest.variants else {}).get("input_sections") or {}).get("config")
+    snapshot["review_context"] = _ctx(db, project_ref, cfg, preds, frozen_config=blobs.get(config_hash))
+    used = {}
+    for p in currents:
+        used[p.exploration_run_ref] = used.get(p.exploration_run_ref, 0) + 1
+    scope = {"kind": "project", "project_ref": project_ref, "scenario_type": request.scenario_type,
+             "runs": [{"id": r.id, "title": r.title, "created_at": _iso_dt(r.created_at), "current": used.get(r.id, 0),
+                       "variants": sum(1 for v in run_dict["variants"] if any(v is x for x in r.variants or []))}
+                      for r in runs if r.id in run_dict["source_run_ids"] or r is latest]}
+    _review_extras(db, snapshot, project_ref, cfg, preds, scope)
+    rid = f"RPT-{uuid4().hex}"
+    snapshot["risk_register"] = sync_risks(db, project_ref, snapshot["risks"], report_ref=rid, user=user)
+    scenario_type = request.scenario_type or latest.scenario_type
+    title = request.title or f"{run_dict.get('soc_ref') or ''} {project_ref} 과제 검토".strip()
+    html = render_html(title, snapshot)
+    row = ArchReport(
+        id=rid, title=title, status=request.status, target_soc_ref=run_dict.get("soc_ref"),
+        project_ref=project_ref, scenario_type=scenario_type, exploration_run_refs=[r["id"] for r in scope["runs"]],
+        dvfs_table_ref=latest.dvfs_table_ref, engine_rev=latest.engine_rev, snapshot=snapshot,
         rendered_html=html, html_sha256=html_sha256(html), generated_by=user, generated_at=_now(),
     )
     db.add(row)
@@ -815,7 +986,24 @@ def _report_meta(r: ArchReport) -> dict[str, Any]:
             "dvfs_table_ref": r.dvfs_table_ref, "engine_rev": r.engine_rev, "html_sha256": r.html_sha256,
             "generated_by": r.generated_by, "generated_at": r.generated_at.isoformat() if r.generated_at else None,
             "spec_ok": ss.get("spec_ok"), "explored": ss.get("explored"),
-            "review": (r.review_history or [None])[-1], "review_count": len(r.review_history or [])}
+            "review": (r.review_history or [None])[-1], "review_count": len(r.review_history or []),
+            "scope": ((r.snapshot or {}).get("scope") or {}).get("kind") or "run",
+            "summary": _report_summary(r.snapshot or {})}
+
+
+def _report_summary(snap: dict[str, Any]) -> dict[str, Any] | None:
+    """Portfolio cell of a report (RPT-07): confidence, open risks per severity, customer criteria."""
+    from scenario_db.reporting.risk_rules import risk_counts
+
+    if "criteria" not in snap:
+        return None
+    cr = snap["criteria"]
+    return {"confidence": ((snap.get("conclusion") or {}).get("confidence") or {}).get("grade"),
+            "risks": risk_counts(snap.get("risk_register") or []),
+            "fps": {"ok": cr["fps"]["ok"], "total": cr["fps"]["total"]},
+            "power": {k: cr["power"][k] for k in ("ok", "similar", "over", "total")} | {"missing": len(cr["power"]["missing"])},
+            "thermal": {"items": len(cr["thermal"]["items"]), "reach10": sum(1 for i in cr["thermal"]["items"] if i["reach10"])},
+            "power_range_mw": (snap.get("spec_summary") or {}).get("power_range_mw")}
 
 
 def report_detail(r: ArchReport) -> dict[str, Any]:
@@ -887,6 +1075,13 @@ def report_stale(db: Session, report_id: str) -> dict[str, Any]:
         cur = current.get((row["scenario_id"], row["variant_id"]))
         if cur != row.get("prediction_id"):
             changed.append({"variant_id": row["variant_id"], "snapshot": row.get("prediction_id"), "current": cur})
+    scope = (r.snapshot or {}).get("scope") or {}
+    if scope.get("kind") == "project" and scope.get("project_ref"):
+        # a project report also goes stale when a variant gains its first current prediction
+        for pid, sid, vid in db.query(Prediction.id, Prediction.scenario_ref, Prediction.variant_ref).filter(
+                Prediction.status == "current", Prediction.project_ref == scope["project_ref"]).all():
+            if (sid, vid) not in keys:
+                changed.append({"variant_id": vid, "snapshot": None, "current": pid})
     return {"report_id": r.id, "stale": bool(changed), "changed": changed}
 
 

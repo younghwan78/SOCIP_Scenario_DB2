@@ -44,3 +44,30 @@ def test_cpu_inputs_and_analysis_use_postgres_topology(api_client, cpu_topology)
     assert unknown.status_code == 422
     coupled = api_client.post("/api/v1/cpu/rebalance", json=request | {"timing_coupling": "stage_slack"})
     assert coupled.status_code == 422 and "inline" in coupled.text
+
+
+def test_rebalance_growth_sweep(api_client, engine):
+    """CPU-02..05: the same rebalance over SW growth factors (inline profile, no timing coupling)."""
+    with Session(engine) as db:
+        db.add(PowerModelParams(id="pmp-cpu-sweep-test", schema_version="2.2", soc_ref="soc-exynos2500", version=9877,
+                                status="draft", yaml_sha256="test", params={"cpu": {"clusters": [
+                                    {"name": name, "cores": 2, "opps": [{"mhz": 400, "mv": 600, "mw_per_core": 20},
+                                                                        {"mhz": 1600, "mv": 750, "mw_per_core": 120}]}
+                                    for name in ("MID0", "MID1")]}}))
+        db.commit()
+    try:
+        request = {"power_params_ref": "pmp-cpu-sweep-test@9877", "cpu_profile": {
+            "tasks": [{"task": "a", "cluster": "MID0", "cycles": 3_000_000}, {"task": "b", "cluster": "MID0", "cycles": 3_000_000}],
+            "clusters": {"MID0": {"freq_residency": {"1600": 1}}}}}
+        sweep = api_client.post("/api/v1/cpu/rebalance/sweep", json=request | {"growths": [1.0, 2.0, 4.0]})
+        assert sweep.status_code == 200, sweep.text
+        body = sweep.json()
+        assert [p["growth"] for p in body["points"]] == [1.0, 2.0, 4.0]
+        totals = [p["reference"]["total_mw"] for p in body["points"]]
+        assert totals == sorted(totals) and totals[0] > 0
+        assert body["limits"]["timing_at"] is None and isinstance(body["events"], list)
+        assert api_client.post("/api/v1/cpu/rebalance/sweep", json=request | {"growths": [1.0]}).status_code == 422
+    finally:
+        with Session(engine) as db:
+            db.delete(db.get(PowerModelParams, "pmp-cpu-sweep-test"))
+            db.commit()

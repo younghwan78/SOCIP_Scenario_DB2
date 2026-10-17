@@ -53,3 +53,14 @@ move/swap search. It returns the method and evaluated counts. The reference and
 top candidates are checked with full scheduler evaluation; `verified` and
 `model_err_mw` expose that check. A local-search best is the best found candidate,
 not a guarantee of a global optimum.
+
+## SW growth sweep
+
+`POST /cpu/rebalance/sweep` accepts the rebalance request plus 2–13 `growths`
+in `(0.2, 5]`, and uses the same analyst/writer/admin role and simulation admission
+slot as rebalance. At least two values must remain distinct after rounding to four
+decimal places. Results contain reference/best/strategy power, cluster OPP
+changes, stage room and a growth tolerance. Per-task growth overrides remain fixed;
+only `default_growth` is swept. Zero or negative stage room yields zero SW growth
+tolerance. The UI preserves both requested range endpoints when limiting the grid
+to 13 points and discards results from a previously selected profile/topology.
