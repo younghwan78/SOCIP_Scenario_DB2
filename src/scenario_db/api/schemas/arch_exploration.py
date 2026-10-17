@@ -67,9 +67,20 @@ def _unique_expectations(expected: list[ExpectedCurrentPrediction] | None) -> No
 
 
 class ArchReportRequest(BaseModel):
-    run_id: str
+    """``run_id`` = one exploration run (legacy scope); ``project_ref`` without run = the project's current
+    predictions across runs (RPT-01) — risk register synced, Tier-1 conclusion."""
+
+    run_id: str | None = None
+    project_ref: str | None = None
+    scenario_type: str | None = Field(default=None, max_length=200)
     title: str | None = Field(default=None, max_length=200)
     status: str = Field(default="draft", pattern="^draft$")
+
+    @model_validator(mode="after")
+    def _scope(self) -> ArchReportRequest:
+        if not self.run_id and not self.project_ref:
+            raise ValueError("run_id or project_ref is required")
+        return self
 
 
 class ReportStatusRequest(BaseModel):

@@ -135,7 +135,8 @@ def timing_impact(coupling: dict[str, Any], reference: dict[str, Any], case: dic
 def scale_coupling(coupling: dict[str, Any], runtime_scale: float) -> dict[str, Any]:
     """A ``timing_stretch`` result at another uniform SW growth: stage room is fixed, SW scales linearly."""
     k = runtime_scale / float(coupling["runtime_scale"])
-    stages, stretch = [], {}
+    stages: list[dict[str, Any]] = []
+    stretch: dict[str, float] = {}
     for st in coupling["stages"]:
         sw = st["sw_ms"] * k
         factor = max(1.0, st["room_ms"] / sw) if sw > 0 else 1.0

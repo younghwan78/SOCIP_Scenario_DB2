@@ -13,6 +13,7 @@ A project's ``sim_config_profile.rail_domain_map`` wins over the name rules.
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from typing import Any
 
 CATEGORIES = ("cpu", "ip", "bw", "other")
@@ -134,7 +135,7 @@ def _quantile(sorted_vals: list[float], q: float) -> float:
     return sorted_vals[lo] + (sorted_vals[hi] - sorted_vals[lo]) * (pos - lo)
 
 
-def bias_stats(values: list[float | None], *, min_n: int = 3) -> dict[str, Any]:
+def bias_stats(values: Sequence[float | None], *, min_n: int = 3) -> dict[str, Any]:
     """Distribution of signed Δ% (prediction − measurement) over variants for one category.
 
     ``verdict``: ``ok`` (≥ 80 % of variants within ±10 %), ``model_common`` (one sign in

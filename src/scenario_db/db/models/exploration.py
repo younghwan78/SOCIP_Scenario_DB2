@@ -193,3 +193,49 @@ class ModelBasis(Base):
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     activated_by = Column(Text)
     activated_at = Column(DateTime(timezone=True))
+
+
+RISK_SEVERITIES = ("critical", "high", "medium", "info")
+RISK_STATUSES = ("open", "watch", "mitigating", "accepted", "closed")
+RISK_AUTO_STATES = ("active", "resolve_candidate", "manual")
+
+
+class ReviewRisk(Base):
+    """Risk register of a project review (RPT-04).
+
+    Report generation applies the automatic rules: a firing rule opens or refreshes its row
+    (``risk_key`` is stable per project), a row whose rule stopped firing becomes a
+    ``resolve_candidate``; owner / status / note are kept by people and never overwritten.
+    """
+
+    __tablename__ = "review_risks"
+    __table_args__ = (
+        UniqueConstraint("project_ref", "risk_key", name="uq_review_risk_key"),
+        UniqueConstraint("project_ref", "seq", name="uq_review_risk_seq"),
+        CheckConstraint("severity in ('critical', 'high', 'medium', 'info')", name="ck_review_risk_severity"),
+        CheckConstraint("status in ('open', 'watch', 'mitigating', 'accepted', 'closed')", name="ck_review_risk_status"),
+        CheckConstraint("auto_state in ('active', 'resolve_candidate', 'manual')", name="ck_review_risk_auto_state"),
+    )
+
+    id = Column(Text, primary_key=True)
+    project_ref = Column(Text, ForeignKey("projects.id"), nullable=False, index=True)
+    seq = Column(Integer, nullable=False)  # R-01, R-02 … in order of first appearance
+    risk_key = Column(Text, nullable=False)
+    rule = Column(Text, nullable=False)
+    severity = Column(Text, nullable=False)
+    category = Column(Text, nullable=False)
+    title = Column(Text, nullable=False)
+    detail = Column(Text, nullable=False, server_default=text("''"))
+    affected = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    mitigation = Column(Text)
+    owner = Column(Text)
+    status = Column(Text, nullable=False, server_default=text("'open'"))
+    note = Column(Text)
+    auto_state = Column(Text, nullable=False, server_default=text("'active'"))
+    first_seen_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    last_seen_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_by = Column(Text)
+    last_report_ref = Column(Text)
+    # [{at, by, field, old, new}] — people's edits and automatic state changes
+    history = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))

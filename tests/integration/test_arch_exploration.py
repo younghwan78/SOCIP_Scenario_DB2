@@ -351,3 +351,68 @@ def test_sql_run_summary_matches_python_trimming(engine, stored_run):
         sql = svc.run_summary(db, rid)
         assert sql["variants"] == py["variants"]
         assert {k: v for k, v in sql.items() if k != "variants"} == {k: v for k, v in py.items() if k != "variants"}
+
+
+def test_project_report_merges_current_predictions_and_syncs_risk_register(engine):
+    """RPT-01/04/05: a project report spans the runs of its current predictions; risks keep their IDs."""
+    from scenario_db.api.services import review_risks
+    from scenario_db.db.models.definition import Project
+    from scenario_db.db.models.exploration import ReviewRisk
+
+    token = uuid4().hex[:10]
+    pid, sa, sb = f"proj-rpt-{token}", f"uc-rpt-a-{token}", f"uc-rpt-b-{token}"
+    with Session(engine) as db:
+        db.add(Project(id=pid, schema_version="1.0", metadata_={}, yaml_sha256="test"))
+        db.flush()
+        for sid in (sa, sb):
+            db.add(Scenario(id=sid, project_ref=pid, schema_version="1.0.0", metadata_={}, pipeline={}, yaml_sha256="test"))
+        db.flush()
+        for sid in (sa, sb):
+            db.add(ScenarioVariant(scenario_id=sid, id="shared", design_conditions={}))
+        failing = summary(sb, 30) | {"spec_ok": False, "spec_reasons": ["nrt: sw 11.1 ms > period 8.33 ms"]}
+        db.add(ArchExplorationRun(id=f"EXP-old-{token}", title="old", scenario_type="review", project_ref=pid,
+                                  spec={"objective": {}, "axes": {}, "constraints": {}}, variants=[summary(sa, 10), failing],
+                                  errors=[], summary={}, engine_rev="test", input_hash="test"))
+        db.commit()  # the newer run gets a later created_at (now() is per transaction)
+        db.add(ArchExplorationRun(id=f"EXP-new-{token}", title="new", scenario_type="review", project_ref=pid,
+                                  spec={"objective": {}, "axes": {}, "constraints": {}}, variants=[summary(sa, 12)],
+                                  errors=[], summary={}, engine_rev="test", input_hash="test"))
+        db.commit()
+        svc.promote(db, PromoteRequest(run_id=f"EXP-old-{token}", scenario_id=sa))
+        with pytest.raises(ValueError):
+            ArchReportRequest()
+        rep = svc.create_report(db, ArchReportRequest(project_ref=pid))
+        snap = rep["snapshot"]
+        assert rep["scope"] == "project" and snap["scope"]["kind"] == "project"
+        assert {r["id"] for r in snap["scope"]["runs"]} == {f"EXP-old-{token}", f"EXP-new-{token}"}
+        rows = {r["scenario_id"]: r for r in snap["scenarios"]}
+        assert rows[sa]["prediction_id"] and rows[sa]["power"]["total_mw"] == 10   # from its prediction's run
+        assert rows[sb]["spec_ok"] is False                                           # unregistered: newest run with it
+        assert snap["criteria"]["fps"] == {"ok": 1, "total": 2, "fail": ["shared"], "basis": "stage"}
+        assert snap["basis"]["throughput_model"] == "stage" and "Risk register" in svc.get_report(db, rep["id"]).rendered_html
+        reg = {r["key"]: r for r in snap["risk_register"]}
+        assert reg["fps_drop"]["severity"] == "critical" and reg["fps_drop"]["label"] == "R-01" and reg["fps_drop"]["trend"] == "new"
+        assert rep["summary"]["risks"]["critical"] == 1 and rep["summary"]["fps"] == {"ok": 1, "total": 2}
+        # people own owner / status / note; the next report keeps them and the ID
+        risk_id = reg["fps_drop"]["id"]
+        upd = review_risks.update_risk(db, risk_id, owner="sw-arch", status="mitigating", note="2-frame batch", user="t")
+        assert upd["owner"] == "sw-arch" and [h["field"] for h in upd["history"][-3:]] == ["owner", "status", "note"]
+        assert svc.report_stale(db, rep["id"])["stale"] is False
+        svc.promote(db, PromoteRequest(run_id=f"EXP-new-{token}", scenario_id=sa))
+        stale = svc.report_stale(db, rep["id"])
+        assert stale["stale"] and stale["changed"][0]["variant_id"] == "shared"
+        rep2 = svc.create_report(db, ArchReportRequest(project_ref=pid))
+        reg2 = {r["key"]: r for r in rep2["snapshot"]["risk_register"]}
+        assert reg2["fps_drop"]["id"] == risk_id and reg2["fps_drop"]["trend"] == "ongoing"
+        assert reg2["fps_drop"]["owner"] == "sw-arch" and reg2["fps_drop"]["status"] == "mitigating"
+        assert rep2["snapshot"]["scenarios"][0]["power"]["total_mw"] == 12
+        with pytest.raises(UnprocessableError):
+            review_risks.update_risk(db, risk_id, status="bogus")
+        db.query(ArchReport).filter(ArchReport.project_ref == pid).delete(synchronize_session=False)
+        db.query(ReviewRisk).filter(ReviewRisk.project_ref == pid).delete(synchronize_session=False)
+        db.query(Prediction).filter(Prediction.project_ref == pid).delete(synchronize_session=False)
+        db.query(ArchExplorationRun).filter(ArchExplorationRun.project_ref == pid).delete(synchronize_session=False)
+        db.query(ScenarioVariant).filter(ScenarioVariant.scenario_id.in_([sa, sb])).delete(synchronize_session=False)
+        db.query(Scenario).filter(Scenario.id.in_([sa, sb])).delete(synchronize_session=False)
+        db.query(Project).filter(Project.id == pid).delete()
+        db.commit()

@@ -960,3 +960,20 @@ tr.wi-fail th, tr.wi-fail td { color: var(--del-text, #B91C1C); }
 .cpu-hm td.na, .cpu-hm td.infeasible { background: repeating-linear-gradient(45deg, var(--surface-soft) 0 5px, #DDD5C8 5px 6px); color: var(--faint); }
 .cpu-opp td.chg { background: var(--warn-soft); color: var(--warn-text); font-weight: 600; }
 .cpu-opp th, .cpu-opp td { text-align: right; }
+
+/* ---- review report: portfolio + risk register (RPT-04, RPT-07) */
+.badge.sev-med { background: #E2ECF8; color: #1E3A8A; }
+.risk-table td { vertical-align: top; }
+.risk-table tr.risk-closed td { opacity: .55; }
+.pf-table td, .pf-table th { white-space: nowrap; }
+.pf-table tr { cursor: pointer; }
+.pf-table tr.selected td { background: var(--primary-soft); }
+.pf-cell.ok { color: var(--primary-strong); font-weight: 600; }
+.pf-cell.warn { color: var(--warn-text); font-weight: 600; }
+.pf-cell.fail { color: #8A1F14; font-weight: 600; }
+.risk-panel { padding: 8px 12px; }
+.risk-panel > summary { cursor: pointer; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; list-style: none; }
+.risk-panel > summary::-webkit-details-marker { display: none; }
+.risk-panel > summary::before { content: '▸'; color: var(--faint); }
+.risk-panel[open] > summary::before { content: '▾'; }
+.risk-table td:first-child, .risk-table td:last-child { white-space: nowrap; }
