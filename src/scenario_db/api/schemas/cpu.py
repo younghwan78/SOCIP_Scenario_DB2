@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from scenario_db.sim.models import CpuProfile
 
@@ -106,3 +106,10 @@ class CpuRebalanceSweepRequest(CpuRebalanceRequest):
     """The same rebalance at several SW growth factors (CPU-02..05): curve, OPP events, tolerance."""
 
     growths: list[Annotated[float, Field(gt=0.2, le=5)]] = Field(min_length=2, max_length=13)
+
+    @field_validator("growths")
+    @classmethod
+    def distinct_growths(cls, values: list[float]) -> list[float]:
+        if len({round(v, 4) for v in values}) < 2:
+            raise ValueError("growths must contain at least two distinct values after rounding")
+        return values

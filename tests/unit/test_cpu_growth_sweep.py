@@ -1,6 +1,7 @@
 """SW-growth sweep helpers: OPP events, tolerance and the scaled Timing Budget coupling."""
 import pytest
 
+from scenario_db.api.schemas.cpu import CpuRebalanceSweepRequest
 from scenario_db.api.services.cpu import growth_limits, opp_events, scale_coupling
 
 
@@ -50,3 +51,9 @@ def test_timing_limit_preserves_fixed_per_task_growth():
     pts = [_p(1, 1, 1600, 1, [{'stage': 'nrt', 'sw_ms': 10, 'room_ms': 14}]),
            _p(2, 2, 1600, 2, [{'stage': 'nrt', 'sw_ms': 12, 'room_ms': 14}])]
     assert growth_limits(pts, [])['timing_at'] == 3
+
+
+@pytest.mark.parametrize('growths', [[1.0, 1.0], [1.00001, 1.00002]])
+def test_sweep_rejects_a_grid_that_collapses_to_one_point(growths):
+    with pytest.raises(ValueError, match='two distinct values'):
+        CpuRebalanceSweepRequest(power_params_ref='topology', growths=growths)

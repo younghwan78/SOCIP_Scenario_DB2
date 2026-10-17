@@ -58,7 +58,8 @@ not a guarantee of a global optimum.
 
 `POST /cpu/rebalance/sweep` accepts the rebalance request plus 2–13 `growths`
 in `(0.2, 5]`, and uses the same analyst/writer/admin role and simulation admission
-slot as rebalance. Results contain reference/best/strategy power, cluster OPP
+slot as rebalance. At least two values must remain distinct after rounding to four
+decimal places. Results contain reference/best/strategy power, cluster OPP
 changes, stage room and a growth tolerance. Per-task growth overrides remain fixed;
 only `default_growth` is swept. Zero or negative stage room yields zero SW growth
 tolerance. The UI preserves both requested range endpoints when limiting the grid
