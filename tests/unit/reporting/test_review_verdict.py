@@ -92,3 +92,12 @@ def test_scoreboard_marks_uncovered_kpi_and_parallel_fps():
     assert b["FHD60"]["fps"]["label"] == "충족 · 병렬 전제" and b["FHD60"]["overall"]["label"].startswith("판정 불가")
     assert not b["APV"]["covered"] and b["APV"]["overall"]["label"] == "미커버"
     assert any(r["key"] == "kpi_uncovered" for r in build_risks(s))
+
+
+def test_drivers_rank_common_causes():
+    from scenario_db.reporting.review_verdict import drivers
+
+    rows = [row(f"v{i}", sw_margin_pct=-5.0, inputs={"sw_timing_source": "assumed"}) for i in range(4)] + [row("hfr", fps=240, spec_ok=False)]
+    ds = {d["key"]: d for d in drivers(snap(scenarios=rows, overview={"sample_dvfs": True}))}
+    assert ds["sw_task"]["label"] == "SW task post_irta" and ds["sw_task"]["count"] == 4
+    assert ds["sw_assumed"]["count"] == 4 and ds["high_fps"]["count"] == 1 and ds["sample_dvfs"]["count"] == 5

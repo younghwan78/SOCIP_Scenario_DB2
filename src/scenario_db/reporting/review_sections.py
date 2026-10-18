@@ -450,14 +450,14 @@ def tiered_sections(snap: dict[str, Any]) -> list[tuple[str, str, str | None, in
     s = snap["spec_summary"]
     ok_rows = {(r["scenario_id"], r["variant_id"]) for r in snap["scenarios"] if r["spec_ok"]}
     th = snap.get("thermal") or {}
-    from scenario_db.reporting.review_summary import glossary, ladder_table, tier0, verdict_table
+    from scenario_db.reporting.review_summary import drivers_table, glossary, ladder_table, tier0, verdict_table
 
     out: list[tuple[str, str, str | None, int]] = []
     if (snap.get("scope") or {}).get("kind") == "project":
         out.append(("경영 요약", tier0(snap), None, 0))
     out.append(("결론", ar._tier1(snap), None, 1))
     if "risk_register" in snap:
-        out.append(("Risk register", ar._risk_register(snap["risk_register"], snap.get("scope") or {}), None, 1))
+        out.append(("Risk register", drivers_table(snap) + ar._risk_register(snap["risk_register"], snap.get("scope") or {}), None, 1))
     out.append(("이전 보고서 대비", previous_block(snap.get("previous")),
                 None if snap.get("previous") else "같은 과제의 이전 과제 보고서 없음 (첫 보고서)", 1))
     lat_rows = [r for r in snap["scenarios"] if r.get("latency")]

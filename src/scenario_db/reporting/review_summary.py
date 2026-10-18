@@ -15,6 +15,7 @@ from scenario_db.reporting.review_verdict import (
     STATE_LABEL,
     VALIDITY_LABEL,
     decisions,
+    drivers,
     lever_actions,
     messages,
     power_verdicts,
@@ -231,3 +232,13 @@ def ladder_table(snap: dict[str, Any]) -> str:
     missing = [LADDER[k][1] for k in (1, 2, 3) if k not in tiers]
     return h + "</table>" + (f"<p class=meta>후보 없음: {escape(' · '.join(missing))} — 해당 단계 여지는 탐색 결과에 없음 "
                              "(clock은 이미 필요 최소 level, compression은 지원 buffer 적용 완료 등)</p>" if missing else "")
+
+
+def drivers_table(snap: dict[str, Any]) -> str:
+    """RISK-04: the causes behind the open risks — where to look first."""
+    ds = drivers(snap)
+    if not ds:
+        return ""
+    return ("<h3 style='margin:4px 0'>원인 driver — 어디를 먼저 볼 것인가</h3><table><tr><th>Driver</th><th>영향 variant</th><th>내용</th><th>먼저 확인</th></tr>"
+            + "".join(f"<tr><td><b>{escape(d['label'])}</b></td><td class=n>{d['count']} / {d['total']}</td><td class=meta>{escape(d['note'])}</td>"
+                      f"<td>{escape(d['check'])}</td></tr>" for d in ds) + "</table>")
