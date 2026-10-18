@@ -20,7 +20,17 @@ from __future__ import annotations
 
 from typing import Any
 
-from scenario_db.reporting.review_verdict import LADDER_TEXT, VALIDITY_LABEL, fps_validity, power_verdicts, scoreboard
+from scenario_db.reporting.review_verdict import (
+    LADDER_TEXT,
+    STATE_LABEL,
+    VALIDITY_LABEL,
+    data_quality,
+    fps_validity,
+    growth_budget_state,
+    power_verdicts,
+    risk_priority,
+    scoreboard,
+)
 
 SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "info": 3}
 SEVERITY_LABEL = {"critical": "Critical", "high": "High", "medium": "Medium", "info": "Info"}
@@ -274,12 +284,64 @@ def build_risks(snap: dict[str, Any]) -> list[dict[str, Any]]:
         risks.append({"key": "sample_input", "rule": "sample_input", "severity": "info", "category": "데이터",
                       "title": "SAMPLE 입력 · 실측 근거 부족", "detail": " · ".join(sample), "affected": [], "validity": "confirmed",
                       "mitigation": "사내 DVFS table · silicon capture로 교체", "checks": ["사내 DVFS table", "silicon capture import"]})
+    # REF-04: a spec upgrade over the previous project with no power headroom left
+    up = [v for v in verdicts if v.get("spec_up") and v["state"] in ("over", "conditional")]
+    if up:
+        risks.append({"key": "spec_up_no_headroom", "rule": "spec_up_no_headroom", "severity": "high", "category": "전력",
+                      "title": f"전과제 대비 spec 상향인데 전력 여유 없음 {len(up)}건",
+                      "detail": "; ".join(f"{_short(v['variant_id'])} {', '.join(v['spec_up'])} · {STATE_LABEL[v['state']]}" for v in up[:3]),
+                      "affected": [v["variant_id"] for v in up], "validity": "confirmed",
+                      "mitigation": "상향 spec의 전력 예산 합의 → " + LADDER_TEXT,
+                      "checks": ["상향 항목별 증가분 (증감 분해)", "clock · compression 여지", "spec 상향 범위 재협의"]})
+    diffs = [v for v in verdicts if v.get("cond_diff") and not v.get("spec_up")]
+    if diffs:
+        risks.append({"key": "reference_condition_diff", "rule": "reference_condition_diff", "severity": "medium", "category": "전력",
+                      "title": f"전과제 비교 조건 차이 {len(diffs)}건 — 판정은 참고",
+                      "detail": "; ".join(f"{_short(v['variant_id'])} " + ", ".join(f"{d['key']} {d['prev']}→{d['cur']}" for d in v["cond_diff"][:3])
+                                          for v in diffs[:3]),
+                      "affected": [v["variant_id"] for v in diffs], "validity": "confirmed",
+                      "mitigation": "같은 조건의 전과제 variant로 mapping (power_reference.mapping) 또는 조건 차이를 판정에 반영",
+                      "checks": ["조건 차이 항목 확인", "mapping 지정"]})
+    # SW-03: the SW growth the next project must absorb (policy sw_growth_budget)
+    budget = ((snap.get("review_context") or {}).get("policy") or {}).get("sw_growth_budget")
+    if budget and snap.get("scenarios"):
+        short_g = [r for r in snap["scenarios"] if r.get("spec_ok") and growth_budget_state(r.get("sw") or {}, budget) == "short"]
+        if short_g:
+            r0 = min(short_g, key=lambda r: r["sw"]["growth_tolerance"])
+            risks.append({"key": "sw_growth_budget", "rule": "sw_growth_budget", "severity": "medium", "category": "SW",
+                          "title": f"SW 증가 예산 ×{float(budget):.1f} 흡수 불가 {len(short_g)}건",
+                          "detail": f"최소 ×{float(r0['sw']['growth_tolerance']):.2f} ({_short(r0['variant_id'])}, 병목 {r0.get('sw_bottleneck')})",
+                          "affected": [r["variant_id"] for r in short_g],
+                          "validity": "input_unverified" if all((r.get("inputs") or {}).get("sw_timing_source") == "assumed" for r in short_g) else "confirmed",
+                          "mitigation": "clock 1 level 상향 비용 확인 → SW 최적화 · CPU 배치 (CPU what-if)",
+                          "checks": ["증가 시 필요 DVFS level · ΔmW", "병목 task 최적화 여지", "SW 증가 예산 재합의"]})
+        untested = [r for r in snap["scenarios"] if r.get("spec_ok")
+                    and growth_budget_state(r.get("sw") or {}, budget) == "unverified"]
+        if untested:
+            risks.append({"key": "sw_growth_unverified", "rule": "sw_growth_unverified", "severity": "medium", "category": "SW",
+                          "title": f"SW 증가 예산 ×{float(budget):.1f}까지 미검증 {len(untested)}건",
+                          "detail": "탐색한 최대 배율까지 유지됨 — 예산 배율에서의 실패 여부는 미확인",
+                          "affected": [r["variant_id"] for r in untested], "validity": "input_unverified",
+                          "mitigation": "SW 증가 예산까지 탐색 범위를 확장하고 재평가",
+                          "checks": ["SW 증가 탐색 최대 배율", "예산 배율의 timing · DVFS 확인"]})
+    dq = data_quality(snap)
+    if any(d["level"] in ("warn",) for d in dq):
+        w = [d for d in dq if d["level"] == "warn"]
+        risks.append({"key": "data_quality", "rule": "data_quality", "severity": "info", "category": "데이터",
+                      "title": f"입력 데이터 확인 필요 {len(w)}건", "detail": "; ".join(d["text"] for d in w[:3]),
+                      "affected": sorted({v for d in w for v in d["variants"]}), "validity": "confirmed",
+                      "mitigation": "입력 정정 후 재탐색", "checks": [d["check"] for d in w[:3]]})
     for r in risks:  # RISK-01: Critical only for confirmed findings
         r.setdefault("validity", "confirmed")
         r.setdefault("checks", [])
         if r["severity"] == "critical" and r["validity"] != "confirmed":
             r["severity"] = "high"
-    risks.sort(key=lambda r: SEVERITY_ORDER[r["severity"]])
+    from scenario_db.reporting.review_verdict import _DECISION  # noqa: PLC0415
+
+    for r in risks:  # RISK-02 / RISK-03
+        r["priority"] = risk_priority(r, snap)
+        r["decision_needed"] = r["key"] in _DECISION
+    risks.sort(key=lambda r: (SEVERITY_ORDER[r["severity"]], -r["priority"]))
     return risks
 
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 from sqlalchemy import func
@@ -13,7 +13,18 @@ from scenario_db.db.models.exploration import RISK_STATUSES, ReviewRisk
 from scenario_db.exceptions import NotFoundError, UnprocessableError
 from scenario_db.reporting.risk_rules import SEVERITY_ORDER
 
-_AUTO_FIELDS = ("rule", "severity", "category", "title", "detail", "affected", "mitigation", "validity", "checks")
+_AUTO_FIELDS = ("rule", "severity", "category", "title", "detail", "affected", "mitigation", "validity", "checks", "priority",
+                "decision_needed")
+
+
+def _auto(risk: dict[str, Any], field: str) -> Any:
+    if field == "checks":
+        return list(risk.get(field) or [])
+    if field == "priority":
+        return int(risk.get(field) or 0)
+    if field == "decision_needed":
+        return bool(risk.get(field))
+    return risk.get(field)
 
 
 def _now() -> datetime:
@@ -24,7 +35,10 @@ def risk_view(r: ReviewRisk, *, trend: str | None = None) -> dict[str, Any]:
     return {"id": r.id, "label": f"R-{r.seq:02d}", "seq": r.seq, "project_ref": r.project_ref, "key": r.risk_key,
             "rule": r.rule, "severity": r.severity, "category": r.category, "title": r.title, "detail": r.detail,
             "affected": list(r.affected or []), "mitigation": r.mitigation,
-            "validity": getattr(r, "validity", None) or "confirmed", "checks": list(getattr(r, "checks", None) or []), "owner": r.owner, "status": r.status,
+            "validity": getattr(r, "validity", None) or "confirmed", "checks": list(getattr(r, "checks", None) or []),
+            "priority": int(getattr(r, "priority", None) or 0), "decision_needed": bool(getattr(r, "decision_needed", False)),
+            "due_date": r.due_date.isoformat() if getattr(r, "due_date", None) else None,
+            "closure_evidence": getattr(r, "closure_evidence", None), "owner": r.owner, "status": r.status,
             "note": r.note, "auto_state": r.auto_state, "trend": trend,
             "first_seen_at": r.first_seen_at.isoformat() if r.first_seen_at else None,
             "last_seen_at": r.last_seen_at.isoformat() if r.last_seen_at else None,
@@ -35,7 +49,7 @@ def risk_view(r: ReviewRisk, *, trend: str | None = None) -> dict[str, Any]:
 def _order(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     closed = ("closed", "accepted")
     return sorted(rows, key=lambda r: (r["status"] in closed, r["auto_state"] == "resolve_candidate",
-                                       SEVERITY_ORDER.get(r["severity"], 9), r["seq"]))
+                                       SEVERITY_ORDER.get(r["severity"], 9), -int(r.get("priority") or 0), r["seq"]))
 
 
 def list_risks(db: Session, project_ref: str) -> list[dict[str, Any]]:
@@ -69,7 +83,7 @@ def sync_risks(db: Session, project_ref: str, risks: list[dict[str, Any]], *, re
                              status="open", auto_state="active", first_seen_at=now, last_seen_at=now, updated_at=now,
                              updated_by=user, last_report_ref=report_ref,
                              history=[{"at": now.isoformat(), "by": user, "field": "auto", "old": None, "new": "opened"}],
-                             **{f: (risk.get(f) if f != "checks" else list(risk.get(f) or [])) for f in _AUTO_FIELDS})
+                             **{f: _auto(risk, f) for f in _AUTO_FIELDS})
             db.add(row)
             existing[key] = row
             trends[key] = "new"
@@ -84,7 +98,7 @@ def sync_risks(db: Session, project_ref: str, risks: list[dict[str, Any]], *, re
         if row.severity != risk["severity"]:
             hist.append({"at": now.isoformat(), "by": user, "field": "severity", "old": row.severity, "new": risk["severity"]})
         for f in _AUTO_FIELDS:
-            setattr(row, f, risk.get(f) if f != "checks" else list(risk.get(f) or []))
+            setattr(row, f, _auto(risk, f))
         row.auto_state = "active" if row.auto_state != "manual" else "manual"
         row.last_seen_at = now
         row.updated_at = now
@@ -106,21 +120,34 @@ def sync_risks(db: Session, project_ref: str, risks: list[dict[str, Any]], *, re
 
 
 def update_risk(db: Session, risk_id: str, *, owner: str | None = None, status: str | None = None,
-                note: str | None = None, user: str | None = None) -> dict[str, Any]:
+                note: str | None = None, user: str | None = None, due_date: str | None = None,
+                closure_evidence: str | None = None) -> dict[str, Any]:
     row = db.query(ReviewRisk).filter_by(id=risk_id).populate_existing().with_for_update().one_or_none()
     if row is None:
         raise NotFoundError(f"risk not found: {risk_id}")
     if status is not None and status not in RISK_STATUSES:
         raise UnprocessableError(f"invalid risk status: {status}")
+    final_evidence = row.closure_evidence if closure_evidence is None else closure_evidence.strip()
+    if (status or row.status) == "closed" and not (final_evidence or "").strip():
+        raise UnprocessableError("closing a risk requires closure evidence (what confirmed it)")
+    try:
+        new_due = date.fromisoformat(due_date.strip()) if due_date is not None and due_date.strip() else None
+    except ValueError as exc:
+        raise UnprocessableError("invalid due_date: expected a valid YYYY-MM-DD date") from exc
     now = _now()
     hist = list(row.history or [])
-    for field, value in (("owner", owner), ("status", status), ("note", note)):
+    for field, value in (("owner", owner), ("status", status), ("note", note), ("closure_evidence", closure_evidence)):
         if value is None:
             continue
         value = (value.strip() or None) if field != "status" else value
         if getattr(row, field) != value:
             hist.append({"at": now.isoformat(), "by": user, "field": field, "old": getattr(row, field), "new": value})
             setattr(row, field, value)
+    if due_date is not None:  # "" clears the date
+        if row.due_date != new_due:
+            hist.append({"at": now.isoformat(), "by": user, "field": "due_date",
+                         "old": row.due_date.isoformat() if row.due_date else None, "new": new_due.isoformat() if new_due else None})
+            row.due_date = new_due
     row.history = hist[-50:]
     row.updated_at = now
     row.updated_by = user

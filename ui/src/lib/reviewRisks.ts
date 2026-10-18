@@ -8,6 +8,8 @@ export interface Risk {
   severity: Severity; category: string; title: string; detail: string; affected: string[]; mitigation: string | null
   // RISK-01: confirmed · model_limit · input_unverified, and what to confirm first
   validity?: 'confirmed' | 'model_limit' | 'input_unverified' | null; checks?: string[]
+  // RISK-02/03: check order within a severity, decision flag, people's due date and closure evidence
+  priority?: number; decision_needed?: boolean; due_date?: string | null; closure_evidence?: string | null
   owner: string | null; status: RiskStatus; note: string | null; auto_state: 'active' | 'resolve_candidate' | 'manual'
   trend: string | null; first_seen_at: string | null; last_seen_at: string | null; updated_at: string | null; updated_by: string | null
   last_report_ref: string | null; history: { at: string; by: string | null; field: string; old: unknown; new: unknown }[]
@@ -15,7 +17,7 @@ export interface Risk {
 
 export const risksApi = {
   list: (projectRef: string) => getJson<Risk[]>('/review/risks', { project_ref: projectRef }, false),
-  update: (id: string, patch: { owner?: string; status?: RiskStatus; note?: string }) =>
+  update: (id: string, patch: { owner?: string; status?: RiskStatus; note?: string; due_date?: string; closure_evidence?: string }) =>
     requestJson<Risk>('PATCH', `/review/risks/${encodeURIComponent(id)}`, patch),
 }
 

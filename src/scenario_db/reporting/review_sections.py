@@ -450,7 +450,7 @@ def tiered_sections(snap: dict[str, Any]) -> list[tuple[str, str, str | None, in
     s = snap["spec_summary"]
     ok_rows = {(r["scenario_id"], r["variant_id"]) for r in snap["scenarios"] if r["spec_ok"]}
     th = snap.get("thermal") or {}
-    from scenario_db.reporting.review_summary import drivers_table, glossary, ladder_table, tier0, verdict_table
+    from scenario_db.reporting.review_summary import decomp_table, dq_table, drivers_table, glossary, ladder_table, sw_table, tier0, verdict_table
 
     out: list[tuple[str, str, str | None, int]] = []
     if (snap.get("scope") or {}).get("kind") == "project":
@@ -472,6 +472,7 @@ def tiered_sections(snap: dict[str, Any]) -> list[tuple[str, str, str | None, in
     perf = (_lead_perf(snap) + ar._spec(s)
             + f"<h3 style='margin:12px 0 4px'>Latency · 출력 간격 — 미달 · frame 지연 큰 {len(lat_top)}개</h3>" + ar._latency(lat_top)
             + (_more(f"Latency 전체 {len(lat_rows)}개", ar._latency(lat_rows)) if len(lat_rows) > len(lat_top) else "")
+            + sw_table(snap)
             + "<h3 style='margin:12px 0 4px'>SW margin</h3>" + (ar._margins(snap["sw_margin_top5"]) if snap["sw_margin_top5"] else "<p class=meta>SW margin 계산 결과 없음</p>")
             + ar._fail_margins(snap.get("sw_margin_fail") or [])
             + f"<h3 style='margin:12px 0 4px'>IP 필요 clock — DVFS 여유 작은 순 (상위 {TOP_N} · spec 만족)</h3>"
@@ -480,7 +481,7 @@ def tiered_sections(snap: dict[str, Any]) -> list[tuple[str, str, str | None, in
             + "<details><summary>IP별 상세 (필요 → 설정 MHz)</summary>"
             + ar._clocks([c for c in snap["clocks"] if (c["scenario_id"], c["variant_id"]) in ok_rows]) + "</details>")
     power = (_lead_power(snap) + dumbbell(snap.get("review_context"), ((snap.get("criteria") or {}).get("power") or {}).get("tolerance_pct"))
-             + (verdict_table(snap) or ar._review(snap.get("review_context")))
+             + (verdict_table(snap) or ar._review(snap.get("review_context"))) + decomp_table(snap)
              + power_top(snap)
              + _more(f"Power · BW 분포 (조합 × SW 통계) 전체", ar._boxes(snap["scenarios"]))
              + _more("CPU / IP / BW 구성 전체", ar._split(snap["scenarios"]))
@@ -502,7 +503,8 @@ def tiered_sections(snap: dict[str, Any]) -> list[tuple[str, str, str | None, in
         ("CPU · SW", _lead_cpu(snap) + cpu_section(snap.get("cpu")), None, 2),
         ("예측 ↔ 실측", model, None, 2),
         ("분류별 검토 의견", ar._opinions(snap.get("opinions") or []), None, 2),
-        ("검토 범위 · 모델", _coverage_table(snap.get("coverage")) + ar._overview(snap["overview"]) + ar._scope(snap.get("scope")) + glossary(),
+        ("검토 범위 · 모델", _coverage_table(snap.get("coverage")) + dq_table(snap) + ar._overview(snap["overview"]) + ar._scope(snap.get("scope"))
+         + glossary(),
          None, 2),
         ("Scenario dossier", dossier(snap), None, 3),
         ("Scenario 요약 표", ar._scenarios(snap["scenarios"]), None, 3),

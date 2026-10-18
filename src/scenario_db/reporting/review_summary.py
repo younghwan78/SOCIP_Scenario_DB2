@@ -14,8 +14,10 @@ from scenario_db.reporting.review_verdict import (
     LADDER,
     STATE_LABEL,
     VALIDITY_LABEL,
+    data_quality,
     decisions,
     drivers,
+    growth_budget_state,
     lever_actions,
     messages,
     power_verdicts,
@@ -118,10 +120,10 @@ def _verdict_cell(v: dict[str, Any] | None) -> str:
     return " · ".join(parts) + f"<div class=meta>기준 {_mw(v['ref_mw'])} mW ({escape(str(v.get('ref_source') or ''))})</div>"
 
 
-def kpi_table(board: list[dict[str, Any]]) -> str:
+def kpi_table(board: list[dict[str, Any]], budget: float | None = None) -> str:
     if not board:
         return "<p class=meta>KPI scenario 없음 — review_policy.kpi 또는 thermal_watch · power_reference를 설정하세요</p>"
-    h = ("<table><tr><th>KPI</th><th>fps</th><th>전력 예측 mW (탐색 범위)</th><th>전과제 대비</th><th>SW 여유</th><th>화질 (IQ)</th><th>종합</th></tr>")
+    h = ("<table><tr><th>KPI</th><th>fps</th><th>전력 예측 mW (탐색 범위)</th><th>전과제 대비</th><th>SW 여유 (증가 허용)</th><th>화질 (IQ)</th><th>종합</th></tr>")
     for k in board:
         fps = k["fps"]
         pw = k.get("power") or {}
@@ -130,6 +132,10 @@ def kpi_table(board: list[dict[str, Any]]) -> str:
                   + ("" if k.get("registered", True) else " <span class=meta>미등록</span>")) if pw.get("mw") is not None else "—"
         sw = k.get("sw_margin_pct")
         sw_txt = (f"<span class='{'fail' if sw < 0 else 'warn' if sw < 10 else ''}'>{sw:+.0f}%</span>" if sw is not None else "—")
+        g = k.get("sw_growth_tolerance")
+        if g is not None:
+            low = budget is not None and float(g) < float(budget) - 1e-6
+            sw_txt += f"<div class='meta {'fail' if low else ''}'>증가 허용 ×{float(g):.2f}</div>"
         iq = k.get("iq")
         iq_txt = "—"
         if iq:
@@ -155,7 +161,8 @@ def top_risks(reg: list[dict[str, Any]], n: int = 5) -> str:
               + (f" {_p(VALIDITY_LABEL.get(val, val), 'org')}" if val != "confirmed" else "") + "</td>"
               f"<td><b>{escape(r['title'])}</b><div class=meta>{escape(r.get('detail') or '')}</div></td>"
               f"<td class=meta>{escape(' → '.join((r.get('checks') or [])[:2]) or r.get('mitigation') or '—')}</td>"
-              f"<td>{escape(r.get('owner') or '—')}</td></tr>")
+              f"<td>{escape(r.get('owner') or '—')}" + (f"<div class=meta>{escape(str(r['due_date']))}</div>" if r.get("due_date") else "")
+              + "</td></tr>")
     return h + "</table>"
 
 
@@ -171,7 +178,12 @@ def tier0(snap: dict[str, Any]) -> str:
     h += (f"<p class=meta>근거 등급 <b>{escape(str(conf.get('grade') or '—'))}</b> — {escape(str(conf.get('meaning') or ''))}"
           + (f" ({escape('; '.join(conf.get('reasons') or []))})" if conf.get("reasons") else "") + "</p>")
     h += conditions_strip(snap.get("project_conditions")) + coverage_strip(snap.get("coverage"))
-    h += "<h3 style='margin:10px 0 4px'>KPI scenario</h3>" + kpi_table(board)
+    budget = (((snap.get("review_context") or {}).get("policy") or {}).get("sw_growth_budget"))
+    h += ("<h3 style='margin:10px 0 4px'>KPI scenario</h3>" + kpi_table(board, budget)
+          + (f"<p class=meta>SW 증가 예산 ×{float(budget):.1f} — 증가 허용이 예산보다 작으면 빨간색 (DVFS 재선택 포함 timing 유지 한계)</p>" if budget else ""))
+    blk = [d for d in data_quality(snap) if d["level"] == "block"]
+    if blk:
+        h += "<p class=fail style='font-size:13.5px'>게시 전 확인 필요: " + escape(" · ".join(d["text"] for d in blk)) + "</p>"
     h += "<ol class='msg'>" + "".join(f"<li>{escape(m)}</li>" for m in msgs) + "</ol>"
     h += ("<div class='two'><div><h3 style='margin:4px 0'>Top risk</h3>" + top_risks(reg) + "</div>"
           "<div class='dec'><b>결정 요청</b>"
@@ -242,3 +254,74 @@ def drivers_table(snap: dict[str, Any]) -> str:
     return ("<h3 style='margin:4px 0'>원인 driver — 어디를 먼저 볼 것인가</h3><table><tr><th>Driver</th><th>영향 variant</th><th>내용</th><th>먼저 확인</th></tr>"
             + "".join(f"<tr><td><b>{escape(d['label'])}</b></td><td class=n>{d['count']} / {d['total']}</td><td class=meta>{escape(d['note'])}</td>"
                       f"<td>{escape(d['check'])}</td></tr>" for d in ds) + "</table>")
+
+
+def decomp_table(snap: dict[str, Any]) -> str:
+    """REF-02/03/04: what changed against the previous project — conditions, CPU / IP / BW split, latency."""
+    vs = [v for v in power_verdicts(snap) if v.get("state") not in ("uncovered",)]
+    rich = [v for v in vs if v.get("decomp") or v.get("cond_diff") is not None or v.get("latency_delta_frames") is not None]
+    if not vs:
+        return ""
+    if not rich:
+        return ("<p class=meta>전과제 증감 분해 · 조건 비교 불가 — 기준이 지정값(총합)뿐. review_policy.power_reference.project_ref로 "
+                "전과제를 지정하면 CPU · IP · BW 분해, 조건 차이, latency 변화가 표시됩니다.</p>")
+    h = ("<h3 style='margin:12px 0 4px'>전과제 대비 증감 분해 · 조건 · 성능</h3><p class=meta>분해 = 현재 예측 − 전과제 예측(구성별). "
+         "기준 차이 = 전과제 예측 총합 − 기준값(실측 등). Δ CPU/IP/BW와 더하면 현재 예측 − 기준값. 조건 차이가 있으면 판정은 참고.</p>"
+         "<table><tr><th>Variant</th><th>Δ CPU</th><th>Δ IP</th><th>Δ BW</th><th>기준 차이</th><th>조건 차이</th><th>spec 상향</th><th>Δ latency (frame)</th></tr>")
+    for v in rich:
+        d = v.get("decomp") or {}
+        cell = lambda k: (f"<td class='n {'fail' if (d.get(k) or 0) > 0.5 else 'ok' if (d.get(k) or 0) < -0.5 else ''}'>{d[k]:+.1f}</td>"  # noqa: E731
+                          if d.get(k) is not None else "<td class=n>—</td>")
+        cd = v.get("cond_diff")
+        cd_txt = "같음" if cd == [] else "—" if cd is None else ", ".join(f"{x['key']} {x['prev']}→{x['cur']}" for x in cd[:4])
+        lat = v.get("latency_delta_frames")
+        h += (f"<tr><td>{escape(short(v['variant_id']))}" + (f" <span class=meta>← {escape(short(v['prev_variant']))}</span>" if v.get("prev_variant") else "")
+              + "</td>" + cell("CPU") + cell("IP") + cell("BW") + cell("기준 차이")
+              + f"<td class=meta>{escape(cd_txt)}</td><td>{escape(', '.join(v.get('spec_up') or [])) or '—'}</td>"
+              + f"<td class=n>{'—' if lat is None else f'{lat:+.2f}'}</td></tr>")
+    return h + "</table>"
+
+
+def sw_table(snap: dict[str, Any]) -> str:
+    """SW-02/03: stage time vs frame period (frames in flight), longest SW task, SW growth the budget asks for."""
+    budget = (((snap.get("review_context") or {}).get("policy") or {}).get("sw_growth_budget"))
+    kpi = {k["variant_ref"]: k["label"] for k in scoreboard(snap)}
+    rows = [r for r in snap.get("scenarios") or [] if r.get("spec_ok") and r.get("sw") and r["sw"].get("hw_ms") is not None
+            and (r["variant_id"] in kpi or (r.get("sw_margin_pct") is not None and r["sw_margin_pct"] < 10))]
+    if not rows:
+        return ""
+    rows.sort(key=lambda r: (r["variant_id"] not in kpi, r.get("sw_margin_pct") if r.get("sw_margin_pct") is not None else 999))
+    scales = sorted({g["scale"] for r in rows for g in r["sw"].get("growth") or []})
+    h = ("<h3 style='margin:12px 0 4px'>SW timing — stage 시간 · 병렬 처리 · SW 증가</h3><p class=meta>stage 시간 = HW + SW (최소 여유 stage). "
+         "frame 주기를 넘으면 그 수만큼 frame이 동시에 처리되어야 fps 유지(pipelined). 증가 허용 = DVFS 재선택 포함 timing 유지 한계 (≥ = 탐색한 최대 배율까지 유지)"
+         + (f", 예산 ×{float(budget):.1f}" if budget else "") + ". 증가별 전력은 목적 통계 기준.</p>"
+         "<table><tr><th>Variant</th><th>stage</th><th>HW + SW ms</th><th>frame ms</th><th>동시 frame</th><th>최장 task ms</th><th>여유</th><th>증가 허용</th>"
+         + "".join(f"<th>×{s:.1f} mW</th>" for s in scales) + "</tr>")
+    for r in rows[:25]:
+        sw = r["sw"]
+        g = sw.get("growth_tolerance")
+        state = growth_budget_state(sw, budget)
+        gm = {x["scale"]: x for x in sw.get("growth") or []}
+        bn = "—" if sw.get("bottleneck_ms") is None else f"{float(sw['bottleneck_ms']):.1f}"
+        capped = g is not None and sw.get("growth_tested_max") is not None and float(g) >= float(sw["growth_tested_max"]) - 1e-6
+        gt = "—" if g is None else f"{'≥' if capped else ''}×{float(g):.2f}"
+        h += (f"<tr><td>{escape(kpi.get(r['variant_id']) or short(r['variant_id']))}</td><td>{escape(str(sw.get('stage') or '').upper())}</td>"
+              f"<td class=n>{float(sw.get('hw_ms') or 0):.1f} + {float(sw.get('sw_ms') or 0):.1f}</td><td class=n>{float(sw.get('period_ms') or 0):.2f}</td>"
+              f"<td class=n>{sw.get('in_flight') or '—'}</td><td class=n>{bn}"
+              f" <span class=meta>{escape(str(r.get('sw_bottleneck') or ''))}</span></td>"
+              f"<td class='n {'fail' if (r.get('sw_margin_pct') or 0) < 0 else ''}'>{float(r.get('sw_margin_pct') or 0):+.0f}%</td>"
+              f"<td class='n {'fail' if state == 'short' else 'warn' if state == 'unverified' else ''}'>{gt}"
+              + (" · 예산까지 미검증" if state == "unverified" else "") + "</td>"
+              + "".join(f"<td class='n {'' if (gm.get(s) or {}).get('ok', True) else 'fail'}'>{_mw((gm.get(s) or {}).get('total_mw'))}</td>" for s in scales)
+              + "</tr>")
+    return h + "</table>" + (f"<p class=meta>외 {len(rows) - 25}건 생략</p>" if len(rows) > 25 else "")
+
+
+def dq_table(snap: dict[str, Any]) -> str:
+    dq = data_quality(snap)
+    if not dq:
+        return "<p class=meta>입력 데이터 확인 항목 없음</p>"
+    lv = {"block": ("게시 전 확인", "fail"), "warn": ("확인 필요", "warn"), "info": ("참고", "mute")}
+    return ("<h3 style='margin:12px 0 4px'>입력 데이터 품질</h3><table><tr><th>수준</th><th>내용</th><th>확인</th></tr>"
+            + "".join(f"<tr><td>{_p(*lv[d['level']])}</td><td>{escape(d['text'])}</td><td class=meta>{escape(d['check'])}</td></tr>" for d in dq)
+            + "</table>")

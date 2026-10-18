@@ -19,6 +19,7 @@ from scenario_db.api.services.review_policy import policy_view, project_policy
 from scenario_db.db.models.evidence import Evidence
 from scenario_db.db.models.definition import Scenario, ScenarioVariant
 from scenario_db.db.models.exploration import ArchExplorationRun, Prediction
+from scenario_db.reporting.arch_report import COMPARE_KEYS
 from scenario_db.exceptions import NotFoundError, UnprocessableError
 
 
@@ -35,12 +36,19 @@ def power_references(db: Session, project_ref: str) -> dict[str, Any]:
     if ref is None:
         return {"policy": policy_view(policy), "tolerance_pct": None, "references": out}
     by_source: dict[str, dict[str, dict[str, Any]]] = {"explicit": {}, "measurement": {}, "prediction": {}, "synthetic": {}}
+    detail: dict[str, dict[str, Any]] = {}  # REF-02/03/04: previous variant's conditions, power split and latency
     if ref.project_ref:
         scopes: dict[str, set[str]] = {}
         for p in db.query(Prediction).filter(Prediction.project_ref == ref.project_ref, Prediction.status == "current").all():
             mw = ((p.metrics or {}).get("power") or {}).get("total_mw")
             if mw is not None:
                 scopes.setdefault(p.variant_ref, set()).add(p.scenario_ref)
+                pw = (p.metrics or {}).get("power") or {}
+                detail.setdefault(p.variant_ref, {})["split"] = {"cpu_mw": pw.get("cpu_mw"), "ip_mw": pw.get("hw_mw"), "bw_mw": pw.get("bw_mw"),
+                                                                "total_mw": pw.get("total_mw"), "basis": "prediction"}
+                lat = (p.metrics or {}).get("latency") or {}
+                if lat.get("video_frames") is not None:
+                    detail[p.variant_ref]["latency_frames"] = lat.get("video_frames")
                 by_source["prediction"].setdefault(p.variant_ref, {"mw": float(mw), "source": "prediction", "project_ref": ref.project_ref,
                                                                    "id": p.id, "at": _iso(p.created_at)})
         meas = (db.query(Evidence).join(Scenario, Evidence.scenario_ref == Scenario.id)
@@ -60,12 +68,35 @@ def power_references(db: Session, project_ref: str) -> dict[str, Any]:
         # Variant IDs are scenario-local. An ambiguous previous-project ID is not a usable reference.
         for src in ("measurement", "prediction", "synthetic"):
             by_source[src] = {vid: value for vid, value in by_source[src].items() if len(scopes.get(vid, set())) == 1}
+        unique = {vid for vid, sids in scopes.items() if len(sids) == 1}
+        for sid, vid, dc in (db.query(ScenarioVariant.scenario_id, ScenarioVariant.id, ScenarioVariant.design_conditions)
+                             .join(Scenario, ScenarioVariant.scenario_id == Scenario.id)
+                             .filter(Scenario.project_ref == ref.project_ref, ScenarioVariant.id.in_(unique)).all() if unique else []):
+            if sid in scopes.get(vid, set()):
+                keys = list(COMPARE_KEYS) if ref.compare_keys is None else ref.compare_keys
+                detail.setdefault(vid, {})["conditions"] = {k: (dc or {}).get(k) for k in keys if (dc or {}).get(k) is not None}
+        for src in ("measurement", "prediction", "synthetic"):
+            by_source[src] = {vid: value | detail.get(vid, {}) for vid, value in by_source[src].items()}
     for vid, mw in ref.values_mw.items():
         by_source["explicit"][vid] = {"mw": float(mw), "source": "explicit", "project_ref": ref.project_ref, "id": None, "at": None,
                                       "note": ref.source_note}
     order = [*ref.source_priority, *[s for s in ("explicit", "measurement", "prediction") if s not in ref.source_priority], "synthetic"]
     for src in reversed(order):  # higher priority written last
         out.update(by_source[src])
+    # REF-02: a current variant compared with a differently named previous variant
+    for cur, prev in ref.mapping.items():
+        if cur in ref.values_mw:
+            continue  # an explicit value for the current id wins
+        for src in order:
+            if prev in by_source[src]:
+                out[cur] = by_source[src][prev] | {"prev_variant": prev}
+                break
+        else:
+            raise UnprocessableError(f"power reference mapping target not found or ambiguous: {cur} -> {prev}")
+    # A renamed baseline is compared under its current ID, not also as an uncovered
+    # old ID. Identity mappings / explicit values retain intentional current IDs.
+    for prev in set(ref.mapping.values()) - set(ref.mapping) - set(ref.values_mw):
+        out.pop(prev, None)
     return {"policy": policy_view(policy), "tolerance_pct": ref.tolerance_pct, "references": out,
             "source_priority": order}
 

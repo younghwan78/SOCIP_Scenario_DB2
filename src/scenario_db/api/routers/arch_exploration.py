@@ -248,4 +248,4 @@ def set_status(
     principal: ApiPrincipal = Depends(require_roles("writer", "admin")),
 ):
     return svc.set_report_status(db, report_id, request.status, reviewer=request.reviewer, note=request.note,
-                                 user=principal.subject)
+                                 user=principal.subject, acknowledge_gaps=request.acknowledge_gaps)

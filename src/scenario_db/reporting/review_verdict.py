@@ -155,8 +155,63 @@ def power_verdicts(snap: dict[str, Any]) -> list[dict[str, Any]]:
             "basis": "measurement" if physical and M is not None else "prediction",
             "state": state, "flip": flip, "iq_conditional": bool(r.get("lossy") or r.get("assumed_ratio")),
             "tolerance_pct": tol, "why": " · ".join(reasons),
+            **compare_previous(r, ref),
         })
     return out
+
+
+_RES_RANK = {"HD": 0, "FHD": 1, "QHD": 2, "UHD": 3, "4K": 3, "8K": 4}
+
+
+def _num(v: Any) -> float | None:
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def compare_previous(row: dict[str, Any], ref: dict[str, Any]) -> dict[str, Any]:
+    """REF-02/03/04 against the previous project's same variant: condition differences, spec upgrade,
+    CPU / IP / BW decomposition of the power change and the video latency change (frames)."""
+    out: dict[str, Any] = {"prev_variant": ref.get("prev_variant"), "cond_diff": None, "spec_up": [], "decomp": None,
+                           "latency_delta_frames": None}
+    prev_c, cur_c = ref.get("conditions"), row.get("conditions") or {}
+    if prev_c is not None:
+        diff = [{"key": k, "prev": prev_c.get(k), "cur": cur_c.get(k)} for k in sorted(set(prev_c) | set(cur_c))
+                if k in prev_c and prev_c.get(k) != cur_c.get(k)]
+        out["cond_diff"] = diff
+        for d in diff:
+            if d["key"] == "fps" and (_num(d["cur"]) or 0) > (_num(d["prev"]) or 0):
+                out["spec_up"].append(f"fps {d['prev']}→{d['cur']}")
+            elif d["key"] == "resolution" and _RES_RANK.get(str(d["cur"]), -1) > _RES_RANK.get(str(d["prev"]), 99):
+                out["spec_up"].append(f"해상도 {d['prev']}→{d['cur']}")
+            elif d["key"] == "hdr" and str(d["prev"] or "SDR") == "SDR" and str(d["cur"] or "SDR") != "SDR":
+                out["spec_up"].append(f"{d['prev']}→{d['cur']}")
+    sp, pw = ref.get("split") or {}, row.get("power") or {}
+    if sp and row.get("spec_ok") and pw.get("total_mw") is not None:
+        parts = {"CPU": (pw.get("cpu_mw"), sp.get("cpu_mw")), "IP": (pw.get("hw_mw"), sp.get("ip_mw")), "BW": (pw.get("bw_mw"), sp.get("bw_mw"))}
+        dec = {k: round(float(a) - float(b), 1) for k, (a, b) in parts.items() if a is not None and b is not None}
+        if dec:
+            known = sum(dec.values())
+            # the reference may be a measurement while the split comes from the previous prediction
+            dec["기준 차이"] = round(float(pw["total_mw"]) - float(ref["mw"]) - known, 1)
+            out["decomp"] = dec
+    lat_prev, lat_cur = ref.get("latency_frames"), (row.get("latency") or {}).get("video_frames")
+    if lat_prev is not None and lat_cur is not None:
+        out["latency_delta_frames"] = round(float(lat_cur) - float(lat_prev), 2)
+    return out
+
+
+def growth_budget_state(sw: dict[str, Any], budget: float | None) -> str:
+    """A tolerance at the largest tested growth is a lower bound, not a known failure above it."""
+    tolerance, tested = sw.get("growth_tolerance"), sw.get("growth_tested_max")
+    if budget is None or tolerance is None:
+        return "unknown"
+    if float(tolerance) >= float(budget) - 1e-6:
+        return "ok"
+    if tested is not None and float(tolerance) >= float(tested) - 1e-6:
+        return "unverified"
+    return "short"
 
 
 # ------------------------------------------------------------------- COV-03 KPI scoreboard
@@ -205,7 +260,9 @@ def scoreboard(snap: dict[str, Any], verdicts: list[dict[str, Any]] | None = Non
             continue
         if r["spec_ok"]:
             par = throughput == "pipelined" and r.get("sw_margin_pct") is not None and r["sw_margin_pct"] < 0
-            fps = {"state": "ok", "label": "충족 · 병렬 전제" if par else "충족", "cls": "warn" if par else "ok"}
+            n = (r.get("sw") or {}).get("in_flight")
+            fps = {"state": "ok", "label": (f"충족 · {n} frame 병렬" if n and n > 1 else "충족 · 병렬 전제") if par else "충족",
+                   "cls": "warn" if par else "ok"}
         else:
             val, why = fps_validity(r)
             fps = {"state": "fail", "validity": val, "why": why, "label": "미달" if val == "confirmed" else f"미달 · {VALIDITY_LABEL[val]}",
@@ -241,6 +298,7 @@ def scoreboard(snap: dict[str, Any], verdicts: list[dict[str, Any]] | None = Non
             "covered": True, "scenario_id": r["scenario_id"], "fps": fps, "registered": bool(r.get("prediction_id")),
             "power": {"mw": p, "band": [dist.get("min"), dist.get("max")] if p is not None and dist.get("min") is not None else None},
             "verdict": v, "sw_margin_pct": r.get("sw_margin_pct"), "sw_bottleneck": r.get("sw_bottleneck"), "iq": iq,
+            "sw_growth_tolerance": (r.get("sw") or {}).get("growth_tolerance"),
             "overall": {"cls": worst if worst != "warn" or label else "warn", "label": label or ("주의" if worst == "warn" else "양호")},
         })
     return out
@@ -393,6 +451,8 @@ _DECISION = {
     "sw_margin_low": "차기 SW 증가 예산 합의 (SW 여유 부족 scenario 기준)",
     "iq_gated_saving": "화질 열화 option IQ 평가 착수 여부 (clock · compression · SW 소진 후)",
     "fps_drop": "fps 미달 scenario의 spec 조정 또는 HW 예산 재배분",
+    "spec_up_no_headroom": "spec 상향 scenario의 전력 예산 재합의",
+    "sw_growth_budget": "SW 증가 예산 초과 scenario의 clock 상향 비용 수용 또는 SW 최적화 목표 설정",
 }
 
 
@@ -405,3 +465,65 @@ def decisions(risks: list[dict[str, Any]]) -> list[str]:
         if d and d not in out:
             out.append(d)
     return out[:4]
+
+
+# ------------------------------------------------------------------- DATA-02 sanity
+_RES_KEYS = ("resolution", "fps")
+
+
+def data_quality(snap: dict[str, Any]) -> list[dict[str, Any]]:
+    """Input problems that would leak into verdicts: identical results for different specs, missing key conditions,
+    fps misses without power, measurements of unknown origin. level: block (publish needs an acknowledgement) · warn · info."""
+    rows = snap.get("scenarios") or []
+    out: list[dict[str, Any]] = []
+    groups: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
+    for r in rows:
+        p = r.get("power") or {}
+        if r.get("spec_ok") and p.get("total_mw") is not None:
+            groups.setdefault((r["scenario_id"], round(float(p["total_mw"]), 1), round(float(r.get("bw_mbs") or 0), 0)), []).append(r)
+    for (_, mw, _), g in groups.items():
+        # only rows whose resolution and fps are both recorded: a missing condition is reported separately
+        full = [r for r in g if all((r.get("conditions") or {}).get(k) is not None for k in _RES_KEYS)]
+        conds = {tuple((r.get("conditions") or {}).get(k) for k in _RES_KEYS) for r in full}
+        if len(full) > 1 and len(conds) > 1:
+            g = full
+            out.append({"key": "identical_result", "level": "warn", "variants": [r["variant_id"] for r in g],
+                        "text": f"조건이 다른 variant의 예측이 같음 ({mw:,.1f} mW): {', '.join(short(r['variant_id']) for r in g[:4])}",
+                        "check": "design_conditions(resolution · fps · sensor mode) 누락 · 기본값 적용 여부"})
+    miss = [r for r in rows if r.get("conditions") is not None and any(k not in (r.get("conditions") or {}) for k in _RES_KEYS)]
+    if miss:
+        out.append({"key": "missing_condition", "level": "warn", "variants": [r["variant_id"] for r in miss],
+                    "text": f"resolution · fps 미기재 {len(miss)}건: {', '.join(short(r['variant_id']) for r in miss[:5])}",
+                    "check": "variant design_conditions에 resolution · fps 기입"})
+    nopw = [r for r in rows if not r.get("spec_ok")]
+    if nopw:
+        out.append({"key": "fail_without_power", "level": "info", "variants": [r["variant_id"] for r in nopw],
+                    "text": f"fps 미달 {len(nopw)}건은 power 미산출 — 전력 · 발열 판정 대상에서 빠짐",
+                    "check": "미달 원인 해소 후 재탐색"})
+    unknown = [c for c in snap.get("calibration") or [] if not c.get("origin") or c.get("origin") == "unknown"]
+    if unknown:
+        out.append({"key": "unknown_provenance", "level": "warn", "variants": [c["variant_id"] for c in unknown],
+                    "text": f"출처 미기록 실측 {len(unknown)}건 — 판정 근거로 쓰지 않음", "check": "measurement provenance 기록"})
+    gap = sorted(k["variant_ref"] for k in scoreboard(snap) if not k["covered"]) \
+        if ((snap.get("review_context") or {}).get("policy") or {}).get("kpi") else []
+    if gap:
+        out.append({"key": "kpi_uncovered", "level": "block", "variants": gap,
+                    "text": f"KPI scenario 미탐색 {len(gap)}건: {', '.join(short(v) for v in gap)}",
+                    "check": "조합 탐색 · 등록 후 재생성, 또는 미포함 사유를 게시 기록에 남김"})
+    return out
+
+
+# ------------------------------------------------------------------- RISK-02 priority
+_CAT_W = {"성능": 5, "전력": 4, "발열": 4, "coverage": 4, "화질": 3, "SW": 3, "CPU": 3, "모델": 2, "데이터": 1}
+_TIER_W = {"thermal": 2.0, "heavy": 2.0, "base": 1.5}
+_SENS = {"verdict_flip": 1.0, "power_over_reference": 0.9, "power_conditional": 0.8, "spec_up_no_headroom": 0.9,
+         "kpi_uncovered": 0.9, "sw_growth_budget": 0.7}
+
+
+def risk_priority(risk: dict[str, Any], snap: dict[str, Any]) -> int:
+    """Check order within a severity: customer criterion × KPI weight × how likely the verdict flips (0..100)."""
+    tiers = {k["variant_ref"]: k.get("tier") or "base" for k in kpi_list(snap)}
+    aff = risk.get("affected") or []
+    kpi_w = max((_TIER_W.get(tiers[v], 1.0) for v in aff if v in tiers), default=1.0)
+    sens = _SENS.get(str(risk.get("key")), 0.6 if risk.get("validity") not in (None, "confirmed") else 0.5)
+    return int(round(_CAT_W.get(str(risk.get("category")), 2) * kpi_w * sens * 10))

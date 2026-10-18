@@ -186,6 +186,18 @@ def test_previous_project_silicon_measurement_wins_over_its_prediction(engine):
             project.globals_ = {"review_policy": {"power_reference": {"project_ref": prev, "source_priority": ["prediction"]}}}
             db.commit()
             assert review.power_references(db, cur)["references"]["both"]["source"] == "prediction"
+            # REF-02/03: conditions and power split of the previous variant; a mapping for a renamed variant
+            db.query(ScenarioVariant).filter_by(scenario_id=sid, id="both").update({"design_conditions": {"fps": 30, "resolution": "UHD"}})
+            project.globals_ = {"review_policy": {"power_reference": {"project_ref": prev, "mapping": {"renamed": "pred_only"}}}}
+            db.commit()
+            refs = review.power_references(db, cur)["references"]
+            assert refs["both"]["conditions"] == {"fps": 30, "resolution": "UHD"} and refs["both"]["split"]["total_mw"] == 10
+            assert refs["renamed"]["prev_variant"] == "pred_only" and refs["renamed"]["source"] == "prediction"
+            assert 'pred_only' not in refs
+            project.globals_ = {"review_policy": {"power_reference": {"project_ref": prev, "mapping": {"renamed": "missing"}}}}
+            db.commit()
+            with pytest.raises(UnprocessableError, match='mapping target'):
+                review.power_references(db, cur)
     finally:
         with Session(engine) as db:
             db.query(Evidence).filter(Evidence.scenario_ref == sid).delete(synchronize_session=False)

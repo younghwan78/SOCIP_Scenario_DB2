@@ -45,6 +45,8 @@ class RiskUpdateRequest(BaseModel):
     owner: str | None = Field(default=None, max_length=120)
     status: str | None = Field(default=None, pattern="^(open|watch|mitigating|accepted|closed)$")
     note: str | None = Field(default=None, max_length=2000)
+    due_date: str | None = Field(default=None, pattern=r"^(\d{4}-\d{2}-\d{2})?$")  # "" clears
+    closure_evidence: str | None = Field(default=None, max_length=2000)
 
 
 @router.get("/risks", response_model=list)
@@ -62,7 +64,7 @@ def update_risk(
 ):
     """Owner / status / note of one risk; each change is kept in the row's history."""
     return risks_svc.update_risk(db, risk_id, owner=request.owner, status=request.status, note=request.note,
-                                 user=principal.subject)
+                                 due_date=request.due_date, closure_evidence=request.closure_evidence, user=principal.subject)
 
 
 # ------------------------------------------------------------------- CPU-11 review snapshots

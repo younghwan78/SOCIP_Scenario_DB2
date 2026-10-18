@@ -11,13 +11,19 @@ function Row({ r, onSaved }: { r: Risk; onSaved: (r: Risk) => void }) {
   const [owner, setOwner] = useState(r.owner ?? '')
   const [status, setStatus] = useState<RiskStatus>(r.status)
   const [note, setNote] = useState(r.note ?? '')
+  const [due, setDue] = useState(r.due_date ?? '')
+  const [evidence, setEvidence] = useState(r.closure_evidence ?? '')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
-  const dirty = owner !== (r.owner ?? '') || status !== r.status || note !== (r.note ?? '')
+  const dirty = owner !== (r.owner ?? '') || status !== r.status || note !== (r.note ?? '') || due !== (r.due_date ?? '')
+    || evidence !== (r.closure_evidence ?? '')
   const save = async () => {
     setBusy(true); setErr(null)
-    try { onSaved(await risksApi.update(r.id, { owner, status, note })) } catch (e) { setErr(e instanceof Error ? e.message : String(e)) } finally { setBusy(false) }
+    try { onSaved(await risksApi.update(r.id, { owner, status, note, due_date: due, closure_evidence: evidence })) } catch (e) { setErr(e instanceof Error ? e.message : String(e)) } finally { setBusy(false) }
   }
+  const now = new Date()
+  const today = new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10)
+  const overdue = !!r.due_date && isOpen(r) && r.due_date < today
   const candidate = r.auto_state === 'resolve_candidate'
   return (
     <tr className={isOpen(r) ? '' : 'risk-closed'}>
@@ -31,10 +37,15 @@ function Row({ r, onSaved }: { r: Risk; onSaved: (r: Risk) => void }) {
         {candidate && <div className="badge v-ok" style={{ marginTop: 3 }}>해소 후보 — 규칙이 더 이상 발생하지 않음, 확인 후 종료</div>}
         {err && <div className="err" style={{ margin: 0 }}>{err}</div>}</td>
       <td className="faint" style={{ fontSize: 11.5 }} title={r.affected.join('\n')}>{r.affected.length ? `${r.affected.length} variant` : '전체'}</td>
-      <td><input className="input" aria-label={`${r.label} owner`} value={owner} placeholder="owner" onChange={(e) => setOwner(e.target.value)} style={{ width: 90 }} /></td>
+      <td><input className="input" aria-label={`${r.label} owner`} value={owner} placeholder="owner" onChange={(e) => setOwner(e.target.value)} style={{ width: 90 }} />
+        <input className="input" type="date" aria-label={`${r.label} 기한`} value={due} onChange={(e) => setDue(e.target.value)} style={{ width: 130, marginTop: 3 }} />
+        {overdue && <div className="badge v-fail" style={{ marginTop: 3 }}>기한 경과</div>}
+        {r.decision_needed && <div className="badge v-warn" style={{ marginTop: 3 }}>결정 필요</div>}</td>
       <td><select aria-label={`${r.label} 상태`} value={status} onChange={(e) => setStatus(e.target.value as RiskStatus)}>
         {(Object.keys(STATUS_LABEL) as RiskStatus[]).map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}</select></td>
-      <td><input className="input" aria-label={`${r.label} 의견`} value={note} placeholder="의견 · 결정" onChange={(e) => setNote(e.target.value)} style={{ width: '100%', minWidth: 140 }} /></td>
+      <td><input className="input" aria-label={`${r.label} 의견`} value={note} placeholder="의견 · 결정" onChange={(e) => setNote(e.target.value)} style={{ width: '100%', minWidth: 140 }} />
+        <input className="input" aria-label={`${r.label} 종료 근거`} value={evidence} placeholder={status === 'closed' ? '종료 근거 (필수)' : '종료 근거 (확인한 데이터)'}
+          onChange={(e) => setEvidence(e.target.value)} style={{ width: '100%', minWidth: 140, marginTop: 3 }} /></td>
       <td className="faint" style={{ fontSize: 11.5 }}>{TREND[r.trend ?? ''] ?? (candidate ? '해소 후보' : '—')}<div>{r.last_seen_at?.slice(0, 10)}</div></td>
       <td><button className="btn tb-mini primary" disabled={!dirty || busy} onClick={save}>{busy ? '…' : '저장'}</button></td>
     </tr>
@@ -62,7 +73,7 @@ export function RiskRegisterCard({ projectRef, tick }: { projectRef: string; tic
       {q.error && <div className="err">{q.error}</div>}
       {q.data && !q.data.length && <div className="empty">아직 risk가 없습니다. “과제 보고서 생성”을 실행하면 자동 규칙이 risk를 엽니다.</div>}
       {rows.length > 0 && <div className="table-x"><table className="tb-mini-table risk-table" style={{ width: '100%' }}>
-        <thead><tr><th>ID</th><th>심각도</th><th>분류</th><th>내용 · 근거</th><th>영향</th><th>Owner</th><th>상태</th><th>의견</th><th>추세</th><th /></tr></thead>
+        <thead><tr><th>ID</th><th>심각도</th><th>분류</th><th>내용 · 근거</th><th>영향</th><th>Owner · 기한</th><th>상태</th><th>의견 · 종료 근거</th><th>추세</th><th /></tr></thead>
         <tbody>{rows.map((r) => <Row key={`${r.id}:${r.updated_at}`} r={r} onSaved={() => setLocal((n) => n + 1)} />)}</tbody>
       </table></div>}
     </details>
