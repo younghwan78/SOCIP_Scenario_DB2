@@ -314,7 +314,7 @@ export interface ReportSummary {
   confidence: 'A' | 'B' | 'C' | null
   risks: Record<'critical' | 'high' | 'medium' | 'info', number>
   fps: { ok: number; total: number }
-  power: { ok: number; similar: number; over: number; total: number; missing: number }
+  power: { ok: number; similar: number; over: number; total: number; missing: number; conditional?: number; flip?: number }
   thermal: { items: number; reach10: number }
   power_range_mw: [number, number] | null
 }

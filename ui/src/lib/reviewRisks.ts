@@ -6,6 +6,8 @@ export type RiskStatus = 'open' | 'watch' | 'mitigating' | 'accepted' | 'closed'
 export interface Risk {
   id: string; label: string; seq: number; project_ref: string; key: string; rule: string
   severity: Severity; category: string; title: string; detail: string; affected: string[]; mitigation: string | null
+  // RISK-01: confirmed · model_limit · input_unverified, and what to confirm first
+  validity?: 'confirmed' | 'model_limit' | 'input_unverified' | null; checks?: string[]
   owner: string | null; status: RiskStatus; note: string | null; auto_state: 'active' | 'resolve_candidate' | 'manual'
   trend: string | null; first_seen_at: string | null; last_seen_at: string | null; updated_at: string | null; updated_by: string | null
   last_report_ref: string | null; history: { at: string; by: string | null; field: string; old: unknown; new: unknown }[]
