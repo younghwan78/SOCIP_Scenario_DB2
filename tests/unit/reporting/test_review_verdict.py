@@ -205,3 +205,28 @@ def test_data_quality_flags_identical_results_missing_conditions_and_kpi_gaps():
     dq = {d["key"]: d for d in data_quality(s)}
     assert dq["identical_result"]["variants"] == ["f1-fhd120", "f1-uhd120"] and dq["missing_condition"]["variants"] == ["x"]
     assert dq["kpi_uncovered"]["level"] == "block"
+
+
+def test_publish_blockers_use_kpi_scenario_scope_and_detect_ambiguous_ids():
+    from scenario_db.api.services.arch_exploration import report_blockers
+
+    s = snap(scenarios=[row('shared', scenario_id='other')], review_context={'policy': {'kpi': [
+        {'variant_ref': 'shared', 'scenario_ref': 'required'}]}})
+    assert report_blockers(s)[0]['key'] == 'kpi_uncovered'
+    s['scenarios'].append(row('shared', scenario_id='required'))
+    assert report_blockers(s) == []
+    s['review_context']['policy']['kpi'][0].pop('scenario_ref')
+    assert report_blockers(s)[0]['key'] == 'kpi_uncovered'
+
+
+def test_sw_growth_at_tested_limit_is_unverified_rather_than_a_proven_failure():
+    from scenario_db.reporting.review_summary import sw_table
+
+    r = row('v', sw_margin_pct=2, sw={'growth_tolerance': 1.2, 'growth_tested_max': 1.2, 'hw_ms': 10})
+    s = snap(scenarios=[r], review_context={'policy': {'sw_growth_budget': 1.5}})
+    risks = {r['key']: r for r in build_risks(s)}
+    assert 'sw_growth_budget' not in risks and risks['sw_growth_unverified']['validity'] == 'input_unverified'
+    assert '예산까지 미검증' in sw_table(s) and '≥×1.20' in sw_table(s)
+    r['sw']['growth_tested_max'] = 1.5
+    risks = {r['key']: r for r in build_risks(s)}
+    assert 'sw_growth_budget' in risks and 'sw_growth_unverified' not in risks

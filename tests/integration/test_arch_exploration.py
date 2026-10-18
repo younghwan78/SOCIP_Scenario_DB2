@@ -432,11 +432,15 @@ def test_project_report_merges_current_predictions_and_syncs_risk_register(engin
             review_risks.update_risk(db, risk_id, status="closed", user="t")
         upd = review_risks.update_risk(db, risk_id, due_date="2026-11-05", user="t")
         assert upd["due_date"] == "2026-11-05" and upd["priority"] > 0
+        with pytest.raises(UnprocessableError, match='invalid due_date'):
+            review_risks.update_risk(db, risk_id, due_date='2026-02-30', owner='must-not-change')
         upd = review_risks.update_risk(db, risk_id, status="closed", closure_evidence="silicon fps 240 OK", due_date="", user="t")
         assert upd["status"] == "closed" and upd["closure_evidence"] == "silicon fps 240 OK" and upd["due_date"] is None
+        with pytest.raises(UnprocessableError, match='closure evidence'):
+            review_risks.update_risk(db, risk_id, closure_evidence='')
         # AUTO-02: a blocking gap (uncovered KPI) must be acknowledged before publishing
         project = db.get(Project, pid)
-        project.globals_ = {"review_policy": {"kpi": [{"variant_ref": "missing-kpi"}]}}
+        project.globals_ = {"review_policy": {"kpi": [{"variant_ref": "shared", "scenario_ref": "uc-missing-scenario"}]}}
         db.commit()
         rep3 = svc.create_report(db, ArchReportRequest(project_ref=pid))
         assert rep3["summary"]["blockers"] == 1

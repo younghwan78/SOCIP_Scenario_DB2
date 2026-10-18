@@ -21,7 +21,9 @@ function Row({ r, onSaved }: { r: Risk; onSaved: (r: Risk) => void }) {
     setBusy(true); setErr(null)
     try { onSaved(await risksApi.update(r.id, { owner, status, note, due_date: due, closure_evidence: evidence })) } catch (e) { setErr(e instanceof Error ? e.message : String(e)) } finally { setBusy(false) }
   }
-  const overdue = !!r.due_date && isOpen(r) && r.due_date < new Date().toISOString().slice(0, 10)
+  const now = new Date()
+  const today = new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10)
+  const overdue = !!r.due_date && isOpen(r) && r.due_date < today
   const candidate = r.auto_state === 'resolve_candidate'
   return (
     <tr className={isOpen(r) ? '' : 'risk-closed'}>

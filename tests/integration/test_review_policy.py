@@ -193,6 +193,11 @@ def test_previous_project_silicon_measurement_wins_over_its_prediction(engine):
             refs = review.power_references(db, cur)["references"]
             assert refs["both"]["conditions"] == {"fps": 30, "resolution": "UHD"} and refs["both"]["split"]["total_mw"] == 10
             assert refs["renamed"]["prev_variant"] == "pred_only" and refs["renamed"]["source"] == "prediction"
+            assert 'pred_only' not in refs
+            project.globals_ = {"review_policy": {"power_reference": {"project_ref": prev, "mapping": {"renamed": "missing"}}}}
+            db.commit()
+            with pytest.raises(UnprocessableError, match='mapping target'):
+                review.power_references(db, cur)
     finally:
         with Session(engine) as db:
             db.query(Evidence).filter(Evidence.scenario_ref == sid).delete(synchronize_session=False)

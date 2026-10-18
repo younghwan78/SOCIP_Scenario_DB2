@@ -26,6 +26,7 @@ from scenario_db.reporting.review_verdict import (
     VALIDITY_LABEL,
     data_quality,
     fps_validity,
+    growth_budget_state,
     power_verdicts,
     risk_priority,
     scoreboard,
@@ -304,8 +305,7 @@ def build_risks(snap: dict[str, Any]) -> list[dict[str, Any]]:
     # SW-03: the SW growth the next project must absorb (policy sw_growth_budget)
     budget = ((snap.get("review_context") or {}).get("policy") or {}).get("sw_growth_budget")
     if budget and snap.get("scenarios"):
-        short_g = [r for r in snap["scenarios"] if r.get("spec_ok") and (r.get("sw") or {}).get("growth_tolerance") is not None
-                   and float(r["sw"]["growth_tolerance"]) < float(budget) - 1e-6]
+        short_g = [r for r in snap["scenarios"] if r.get("spec_ok") and growth_budget_state(r.get("sw") or {}, budget) == "short"]
         if short_g:
             r0 = min(short_g, key=lambda r: r["sw"]["growth_tolerance"])
             risks.append({"key": "sw_growth_budget", "rule": "sw_growth_budget", "severity": "medium", "category": "SW",
@@ -315,6 +315,15 @@ def build_risks(snap: dict[str, Any]) -> list[dict[str, Any]]:
                           "validity": "input_unverified" if all((r.get("inputs") or {}).get("sw_timing_source") == "assumed" for r in short_g) else "confirmed",
                           "mitigation": "clock 1 level 상향 비용 확인 → SW 최적화 · CPU 배치 (CPU what-if)",
                           "checks": ["증가 시 필요 DVFS level · ΔmW", "병목 task 최적화 여지", "SW 증가 예산 재합의"]})
+        untested = [r for r in snap["scenarios"] if r.get("spec_ok")
+                    and growth_budget_state(r.get("sw") or {}, budget) == "unverified"]
+        if untested:
+            risks.append({"key": "sw_growth_unverified", "rule": "sw_growth_unverified", "severity": "medium", "category": "SW",
+                          "title": f"SW 증가 예산 ×{float(budget):.1f}까지 미검증 {len(untested)}건",
+                          "detail": "탐색한 최대 배율까지 유지됨 — 예산 배율에서의 실패 여부는 미확인",
+                          "affected": [r["variant_id"] for r in untested], "validity": "input_unverified",
+                          "mitigation": "SW 증가 예산까지 탐색 범위를 확장하고 재평가",
+                          "checks": ["SW 증가 탐색 최대 배율", "예산 배율의 timing · DVFS 확인"]})
     dq = data_quality(snap)
     if any(d["level"] in ("warn",) for d in dq):
         w = [d for d in dq if d["level"] == "warn"]

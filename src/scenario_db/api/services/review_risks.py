@@ -127,10 +127,15 @@ def update_risk(db: Session, risk_id: str, *, owner: str | None = None, status: 
         raise NotFoundError(f"risk not found: {risk_id}")
     if status is not None and status not in RISK_STATUSES:
         raise UnprocessableError(f"invalid risk status: {status}")
+    final_evidence = row.closure_evidence if closure_evidence is None else closure_evidence.strip()
+    if (status or row.status) == "closed" and not (final_evidence or "").strip():
+        raise UnprocessableError("closing a risk requires closure evidence (what confirmed it)")
+    try:
+        new_due = date.fromisoformat(due_date.strip()) if due_date is not None and due_date.strip() else None
+    except ValueError as exc:
+        raise UnprocessableError("invalid due_date: expected a valid YYYY-MM-DD date") from exc
     now = _now()
     hist = list(row.history or [])
-    if status == "closed" and not (closure_evidence or row.closure_evidence or "").strip():
-        raise UnprocessableError("closing a risk requires closure evidence (what confirmed it)")
     for field, value in (("owner", owner), ("status", status), ("note", note), ("closure_evidence", closure_evidence)):
         if value is None:
             continue
@@ -139,7 +144,6 @@ def update_risk(db: Session, risk_id: str, *, owner: str | None = None, status: 
             hist.append({"at": now.isoformat(), "by": user, "field": field, "old": getattr(row, field), "new": value})
             setattr(row, field, value)
     if due_date is not None:  # "" clears the date
-        new_due = date.fromisoformat(due_date) if due_date.strip() else None
         if row.due_date != new_due:
             hist.append({"at": now.isoformat(), "by": user, "field": "due_date",
                          "old": row.due_date.isoformat() if row.due_date else None, "new": new_due.isoformat() if new_due else None})

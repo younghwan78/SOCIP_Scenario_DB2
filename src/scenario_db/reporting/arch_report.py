@@ -247,7 +247,9 @@ COMPARE_KEYS = ("resolution", "fps", "hdr", "sensor_place", "sensor_board", "sen
 
 
 def _conditions(dc: dict[str, Any]) -> dict[str, Any]:
-    return {k: dc.get(k) for k in COMPARE_KEYS if dc.get(k) is not None}
+    # Preserve custom compare_keys as well as the default keys; the reference selects
+    # which recorded conditions participate in a comparison.
+    return {k: v for k, v in dc.items() if v is not None}
 
 
 def _sw_detail(v: dict[str, Any], statistic: str | None) -> dict[str, Any]:

@@ -202,6 +202,18 @@ def compare_previous(row: dict[str, Any], ref: dict[str, Any]) -> dict[str, Any]
     return out
 
 
+def growth_budget_state(sw: dict[str, Any], budget: float | None) -> str:
+    """A tolerance at the largest tested growth is a lower bound, not a known failure above it."""
+    tolerance, tested = sw.get("growth_tolerance"), sw.get("growth_tested_max")
+    if budget is None or tolerance is None:
+        return "unknown"
+    if float(tolerance) >= float(budget) - 1e-6:
+        return "ok"
+    if tested is not None and float(tolerance) >= float(tested) - 1e-6:
+        return "unverified"
+    return "short"
+
+
 # ------------------------------------------------------------------- COV-03 KPI scoreboard
 def kpi_list(snap: dict[str, Any]) -> list[dict[str, Any]]:
     policy = (snap.get("review_context") or {}).get("policy") or {}
@@ -492,9 +504,8 @@ def data_quality(snap: dict[str, Any]) -> list[dict[str, Any]]:
     if unknown:
         out.append({"key": "unknown_provenance", "level": "warn", "variants": [c["variant_id"] for c in unknown],
                     "text": f"출처 미기록 실측 {len(unknown)}건 — 판정 근거로 쓰지 않음", "check": "measurement provenance 기록"})
-    kpi = {k["variant_ref"] for k in kpi_list(snap)}
-    covered = {r["variant_id"] for r in rows}
-    gap = sorted(v for v in kpi if v not in covered) if ((snap.get("review_context") or {}).get("policy") or {}).get("kpi") else []
+    gap = sorted(k["variant_ref"] for k in scoreboard(snap) if not k["covered"]) \
+        if ((snap.get("review_context") or {}).get("policy") or {}).get("kpi") else []
     if gap:
         out.append({"key": "kpi_uncovered", "level": "block", "variants": gap,
                     "text": f"KPI scenario 미탐색 {len(gap)}건: {', '.join(short(v) for v in gap)}",

@@ -17,6 +17,7 @@ from scenario_db.reporting.review_verdict import (
     data_quality,
     decisions,
     drivers,
+    growth_budget_state,
     lever_actions,
     messages,
     power_verdicts,
@@ -265,7 +266,7 @@ def decomp_table(snap: dict[str, Any]) -> str:
         return ("<p class=meta>전과제 증감 분해 · 조건 비교 불가 — 기준이 지정값(총합)뿐. review_policy.power_reference.project_ref로 "
                 "전과제를 지정하면 CPU · IP · BW 분해, 조건 차이, latency 변화가 표시됩니다.</p>")
     h = ("<h3 style='margin:12px 0 4px'>전과제 대비 증감 분해 · 조건 · 성능</h3><p class=meta>분해 = 현재 예측 − 전과제 예측(구성별). "
-         "기준 차이 = 기준값(실측 등)과 전과제 예측 총합의 차. 조건 차이가 있으면 판정은 참고.</p>"
+         "기준 차이 = 전과제 예측 총합 − 기준값(실측 등). Δ CPU/IP/BW와 더하면 현재 예측 − 기준값. 조건 차이가 있으면 판정은 참고.</p>"
          "<table><tr><th>Variant</th><th>Δ CPU</th><th>Δ IP</th><th>Δ BW</th><th>기준 차이</th><th>조건 차이</th><th>spec 상향</th><th>Δ latency (frame)</th></tr>")
     for v in rich:
         d = v.get("decomp") or {}
@@ -299,7 +300,7 @@ def sw_table(snap: dict[str, Any]) -> str:
     for r in rows[:25]:
         sw = r["sw"]
         g = sw.get("growth_tolerance")
-        low = budget is not None and g is not None and float(g) < float(budget) - 1e-6
+        state = growth_budget_state(sw, budget)
         gm = {x["scale"]: x for x in sw.get("growth") or []}
         bn = "—" if sw.get("bottleneck_ms") is None else f"{float(sw['bottleneck_ms']):.1f}"
         capped = g is not None and sw.get("growth_tested_max") is not None and float(g) >= float(sw["growth_tested_max"]) - 1e-6
@@ -309,7 +310,8 @@ def sw_table(snap: dict[str, Any]) -> str:
               f"<td class=n>{sw.get('in_flight') or '—'}</td><td class=n>{bn}"
               f" <span class=meta>{escape(str(r.get('sw_bottleneck') or ''))}</span></td>"
               f"<td class='n {'fail' if (r.get('sw_margin_pct') or 0) < 0 else ''}'>{float(r.get('sw_margin_pct') or 0):+.0f}%</td>"
-              f"<td class='n {'fail' if low else ''}'>{gt}</td>"
+              f"<td class='n {'fail' if state == 'short' else 'warn' if state == 'unverified' else ''}'>{gt}"
+              + (" · 예산까지 미검증" if state == "unverified" else "") + "</td>"
               + "".join(f"<td class='n {'' if (gm.get(s) or {}).get('ok', True) else 'fail'}'>{_mw((gm.get(s) or {}).get('total_mw'))}</td>" for s in scales)
               + "</tr>")
     return h + "</table>" + (f"<p class=meta>외 {len(rows) - 25}건 생략</p>" if len(rows) > 25 else "")

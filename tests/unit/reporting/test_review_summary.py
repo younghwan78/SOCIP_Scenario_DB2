@@ -57,3 +57,27 @@ def test_default_kpis_preserve_thermal_scenario_scope_and_do_not_duplicate_refer
         {'scenario_ref': 'a', 'variant_ref': 'shared'}, {'scenario_ref': 'b', 'variant_ref': 'shared'}]}})
     kpis = kpi_list(s)
     assert [(k['scenario_ref'], k['variant_ref']) for k in kpis] == [('a', 'shared'), ('b', 'shared'), (None, 'other')]
+
+
+def test_report_renders_custom_comparison_and_sw_growth_evidence():
+    from scenario_db.reporting.arch_report import _conditions, _sw_detail
+    from scenario_db.reporting.review_summary import decomp_table, dq_table, sw_table
+
+    r = row('v', conditions=_conditions({'fps': 30, 'resolution': 'UHD', 'sensor_mode': '<new>'}),
+            sw_margin_pct=5, power={'total_mw': 500, 'cpu_mw': 100, 'hw_mw': 200, 'bw_mw': 200})
+    r['sw'] = _sw_detail({'fps': 30, 'sw_margin': {'worst': {'stage': 'nrt', 'hw_ms': 10, 'sw_ms': 25, 'bottleneck_ms': 15},
+                                                  'growth_tolerance': 1.1, 'growth_tested_max': 1.4},
+                         'slices': [{'statistic': stat, 'runtime_scale': g, 'power': {'total_mw': power},
+                                     'verdict': {'status': status}} for stat, g, power, status in [
+                                         ('max', 1.4, 670, 'fail'), ('mean', 1, 400, 'ok'), ('max', 1, 500, 'ok')]]}, 'max')
+    assert r['sw']['in_flight'] == 2 and [g['scale'] for g in r['sw']['growth']] == [1, 1.4]
+    s = snap(scenarios=[r], references={'v': {'mw': 600, 'prev_variant': 'old-v',
+                'conditions': {'fps': 30, 'resolution': 'FHD', 'sensor_mode': 'old'},
+                'split': {'cpu_mw': 100, 'ip_mw': 180, 'bw_mw': 170}, 'latency_frames': 1}},
+             review_context={'policy': {'kpi': [{'variant_ref': 'v'}], 'sw_growth_budget': 1.2}})
+    r['latency'] = {'video_frames': 2}
+    html = decomp_table(s) + sw_table(s) + dq_table(s)
+    assert 'old-v' in html and 'sensor_mode old→&lt;new&gt;' in html and '해상도 FHD→UHD' in html
+    assert '+20.0' in html and '+30.0' in html and '-150.0' in html and '+1.00' in html
+    assert '10.0 + 25.0' in html and '×1.10' in html and '670' in html and '500' in html and '400' not in html
+    assert '입력 데이터 확인 항목 없음' in html

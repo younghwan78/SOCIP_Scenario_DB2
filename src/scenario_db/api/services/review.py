@@ -73,7 +73,7 @@ def power_references(db: Session, project_ref: str) -> dict[str, Any]:
                              .join(Scenario, ScenarioVariant.scenario_id == Scenario.id)
                              .filter(Scenario.project_ref == ref.project_ref, ScenarioVariant.id.in_(unique)).all() if unique else []):
             if sid in scopes.get(vid, set()):
-                keys = ref.compare_keys or list(COMPARE_KEYS)
+                keys = list(COMPARE_KEYS) if ref.compare_keys is None else ref.compare_keys
                 detail.setdefault(vid, {})["conditions"] = {k: (dc or {}).get(k) for k in keys if (dc or {}).get(k) is not None}
         for src in ("measurement", "prediction", "synthetic"):
             by_source[src] = {vid: value | detail.get(vid, {}) for vid, value in by_source[src].items()}
@@ -91,6 +91,12 @@ def power_references(db: Session, project_ref: str) -> dict[str, Any]:
             if prev in by_source[src]:
                 out[cur] = by_source[src][prev] | {"prev_variant": prev}
                 break
+        else:
+            raise UnprocessableError(f"power reference mapping target not found or ambiguous: {cur} -> {prev}")
+    # A renamed baseline is compared under its current ID, not also as an uncovered
+    # old ID. Identity mappings / explicit values retain intentional current IDs.
+    for prev in set(ref.mapping.values()) - set(ref.mapping) - set(ref.values_mw):
+        out.pop(prev, None)
     return {"policy": policy_view(policy), "tolerance_pct": ref.tolerance_pct, "references": out,
             "source_priority": order}
 

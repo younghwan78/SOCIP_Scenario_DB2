@@ -60,10 +60,10 @@ E2600 (사외 fixture): `values_mw`는 **SAMPLE 가상 값** — 사내에서는
 | 항목 | 규칙 |
 |---|---|
 | 조건 차이 (REF-02) | 전과제가 DB에 있으면(`project_ref`) 같은 variant의 design_conditions를 `compare_keys`로 비교. 차이가 있으면 "조건 차이 — 판정은 참고"(Medium), fps · 해상도 · SDR→HDR 상향은 spec 상향 |
-| 증감 분해 (REF-03) | 현재 예측 − 전과제 예측의 CPU · IP · BW. 기준이 실측이면 "기준 차이"(실측 − 전과제 예측 총합)를 따로 표시. 지정값(총합)만 있으면 분해 불가 표시 |
+| 증감 분해 (REF-03) | 현재 예측 − 전과제 예측의 CPU · IP · BW. 기준이 실측이면 "기준 차이"(전과제 예측 총합 − 실측)를 더해 현재 예측 − 실측과 일치시킴. 지정값(총합)만 있으면 분해 불가 표시 |
 | 성능 (REF-04) | video latency(frame) 변화. spec 상향인데 조건부 · 초과면 `spec_up_no_headroom`(High) |
-| SW timing (SW-02/03) | 최소 여유 stage의 HW + SW 시간 ÷ frame 주기 = 동시 처리 frame 수, 최장 SW task, SW 증가 허용(DVFS 재선택 포함, ≥ = 탐색 최대까지 유지), SW 증가 배율별 전력. `sw_growth_budget`보다 허용이 작으면 `sw_growth_budget`(Medium) |
+| SW timing (SW-02/03) | 최소 여유 stage의 HW + SW 시간 ÷ frame 주기 = 동시 처리 frame 수, 최장 SW task, SW 증가 허용(DVFS 재선택 포함, ≥ = 탐색 최대까지 유지), SW 증가 배율별 전력. 확인된 허용 한계가 `sw_growth_budget`보다 작으면 `sw_growth_budget`(Medium). 탐색 최대까지 통과했지만 예산 배율까지는 탐색하지 않았으면 `sw_growth_unverified`(Medium)로 구분 |
 | 우선순위 (RISK-02) | 같은 심각도 안에서 고객 기준(성능 5 · 전력/발열/coverage 4 · 화질/SW/CPU 3 · 모델 2 · 데이터 1) × KPI tier(thermal/heavy 2 · base 1.5) × 판정 민감도(예측↔실측 반대 1.0 … 일반 0.5) 순 |
-| 추적 (RISK-03) | risk별 기한 · 종료 근거 · 결정 필요. 종료(closed)는 종료 근거가 있어야 함 (alembic 0031) |
+| 추적 (RISK-03) | risk별 기한 · 종료 근거 · 결정 필요. 종료(closed)는 종료 근거가 있어야 하며 종료 상태에서는 근거를 지울 수 없음. 기한은 유효한 달력 날짜여야 함 (alembic 0031) |
 | 데이터 품질 (DATA-02) | 조건이 다른데 결과가 같은 variant, resolution · fps 미기재, fps 미달로 power 미산출, 출처 미기록 실측, KPI 미탐색(block) |
 | 게시 (AUTO-02) | block 항목이 있으면 `acknowledge_gaps: true` + 검토 의견이 있어야 게시. 게시 기록에 확인한 항목이 남음 |
