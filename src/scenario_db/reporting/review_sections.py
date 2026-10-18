@@ -214,7 +214,9 @@ def rail_bias_block(m: dict[str, Any] | None) -> str:
 # ------------------------------------------------------------------- area leads (first line = conclusion)
 def _lead_perf(snap: dict[str, Any]) -> str:
     s = snap["spec_summary"]
-    low = [m for m in snap.get("sw_margin_top5") or [] if m.get("margin_pct") is not None and m["margin_pct"] < 10]
+    low = sorted(({"variant_id": r["variant_id"], "margin_pct": r["sw_margin_pct"]} for r in snap.get("scenarios") or []
+                  if r.get("spec_ok") and r.get("sw_margin_pct") is not None and r["sw_margin_pct"] < 10), key=lambda m: m["margin_pct"]) \
+        or [m for m in snap.get("sw_margin_top5") or [] if m.get("margin_pct") is not None and m["margin_pct"] < 10]
     t = f"fps 만족 <b>{s['spec_ok']}/{s['explored']}</b>"
     if s["spec_fail"]:
         t += f" · 미달 {s['spec_fail']}건 ({escape(', '.join(_short(f['variant_id']) for f in s['failed'][:3]))})"
@@ -227,8 +229,11 @@ def _lead_power(snap: dict[str, Any]) -> str:
     pw = (snap.get("criteria") or {}).get("power") or {}
     rng = snap["spec_summary"].get("power_range_mw")
     t = (f"등록 예측 {_f(rng[0], 0)}–{_f(rng[1], 0)} mW · " if rng else "") + (
-        f"전과제 대비 이하 {pw.get('ok', 0)} · 유사 {pw.get('similar', 0)} · <b>초과 {pw.get('over', 0)}</b> · 예측 없음 {len(pw.get('missing') or [])}")
-    return _lead(t, "fail" if pw.get("over") else "warn" if pw.get("missing") else "ok")
+        f"전과제 대비 이하 {pw.get('ok', 0)} · 유사 {pw.get('similar', 0)}"
+        + (f" · 조건부 {pw.get('conditional', 0)}" if pw.get("basis") == "verdict" else "")
+        + f" · <b>초과 {pw.get('over', 0)}</b> · 판정 불가 {len(pw.get('missing') or [])}"
+        + (f" · <b>예측 ↔ 실측 반대 {len(pw['flip'])}</b>" if pw.get("flip") else ""))
+    return _lead(t, "fail" if pw.get("over") or pw.get("flip") else "warn" if pw.get("missing") or pw.get("conditional") else "ok")
 
 
 def _lead_lever(snap: dict[str, Any]) -> str:
@@ -236,8 +241,8 @@ def _lead_lever(snap: dict[str, Any]) -> str:
     reach = sum(1 for i in th if any(p["ask_pct"] == 10 and p["achieved"] for p in i.get("plans") or []))
     opts = snap.get("power_options") or []
     best = min((o["best"]["delta_mw"] for o in opts if o.get("best")), default=None)
-    t = (f"발열 −10% 가능 <b>{reach}/{len(th)}</b>" if th else "발열 감시 대상 없음") + (
-        f" · power option 최대 {best:+.0f} mW (IQ 평가 필요 항목 포함)" if best is not None else "")
+    t = (f"발열 −10% 가능 <b>{reach}/{len(th)}</b> (화질 열화 option 포함)" if th else "발열 감시 대상 없음") + (
+        f" · 화질 열화 option 최대 {best:+.0f} mW — clock · compression · SW 다음 최후 수단" if best is not None else "")
     return _lead(t, "fail" if th and reach < len(th) else "ok")
 
 
@@ -254,10 +259,12 @@ def _lead_cpu(snap: dict[str, Any]) -> str:
 
 def _lead_model(snap: dict[str, Any]) -> str:
     m = snap.get("model") or {}
-    conf = (m.get("confidence") or {}).get("grade")
+    # UX-03: one grade for the whole report (inputs + model); the model-only grade is shown as a component
+    conf = ((snap.get("conclusion") or {}).get("confidence") or {}).get("grade") or (m.get("confidence") or {}).get("grade")
+    mconf = (m.get("confidence") or {}).get("grade")
     common = [f"{c.upper()} {b['median']:+.0f}%" for c, b in (m.get("bias") or {}).items() if c != "total" and b.get("verdict") == "model_common"]
     rb = [f"{b['label']} {b['median']:+.0f}%" for b in m.get("rail_bias") or [] if b.get("verdict") == "model_common" and b.get("category") == "ip"]
-    t = f"모델 신뢰도 <b>{conf or '—'}</b>"
+    t = f"신뢰도 <b>{conf or '—'}</b>" + (f" (실측 대조 {mconf} · 입력 반영)" if mconf and mconf != conf else "")
     if common:
         t += f" · 공통 오차 {escape(', '.join(common))}"
     if rb:
@@ -276,10 +283,29 @@ def _cls_label(c: Any) -> str:
     if not isinstance(c, dict):
         return str(c or "")
     parts = [_CAT_NAME.get(str(c.get("category")), str(c.get("category") or "")), str(c.get("resolution") or ""),
-             str(c.get("codec") or ""), "EIS" if c.get("eis") else "", str(c.get("heavy_kind") or ""), str(c.get("severity") or "")]
+             str(c.get("codec") or ""), "EIS" if c.get("eis") else "", str(c.get("heavy_kind") or ""),
+             f"부하 {c['severity']}" if c.get("severity") else ""]
     return " · ".join(p for p in parts if p and p != "None")
 
-_REF_CLS = {"ok": "ok", "similar": "warn", "over": "fail"}
+_REF_CLS = {"ok": "ok", "similar": "warn", "over": "fail", "conditional": "warn", "na": "", "uncovered": ""}
+
+
+def _ref_text(v: dict[str, Any] | None, ref: dict[str, Any]) -> str:
+    """REF-05 verdict in one line (falls back to the legacy reference judgement)."""
+    from scenario_db.reporting.review_verdict import STATE_LABEL
+
+    if v is None:
+        if not ref:
+            return "<span class=meta>기준 없음</span>"
+        return (f"{_f(ref.get('reference_mw'), 0)} mW → <b class={_REF_CLS.get(str(ref.get('status')), '')}>{_f(ref.get('delta_pct'))}%</b>"
+                f" <span class=meta>({escape(str(ref.get('source') or ''))})</span>")
+    parts = [f"예측 {v['pred_pct']:+.1f}%" if v.get("pred_pct") is not None else "예측 —"]
+    if v.get("meas_pct") is not None:
+        parts.append(f"{'실측' if v['basis'] == 'measurement' else '합성 실측'} {v['meas_pct']:+.1f}%")
+    cls = "fail" if v.get("flip") else _REF_CLS.get(v["state"], "")
+    return (f"{_f(v['ref_mw'], 0)} mW 기준 · <b class={cls}>{('불일치 · ' if v.get('flip') else '') + STATE_LABEL[v['state']]}</b> · "
+            + " · ".join(parts) + (f" <span class=meta>({escape(v['why'])})</span>" if v.get("why") else "")
+            + f" <span class=meta>[{escape(str(v.get('ref_source') or ''))}]</span>")
 
 def dossier(snap: dict[str, Any]) -> str:
     identities = {(r["scenario_id"], r["variant_id"]) for r in snap["scenarios"]}
@@ -294,6 +320,9 @@ def dossier(snap: dict[str, Any]) -> str:
         return out
 
     ctx = scoped((snap.get("review_context") or {}).get("rows") or [])
+    from scenario_db.reporting.review_verdict import VALIDITY_LABEL, fps_validity, power_verdicts
+
+    verd = {(v["scenario_id"], v["variant_id"]): v for v in power_verdicts(snap) if v.get("scenario_id")}
     th = scoped((snap.get("thermal") or {}).get("items") or [])
     opts = scoped(snap.get("power_options") or [])
     cal = scoped(snap.get("calibration") or [])
@@ -318,12 +347,14 @@ def dossier(snap: dict[str, Any]) -> str:
         lat = r.get("latency") or {}
         rows: list[tuple[str, str]] = [
             ("판정", f"<b class={'ok' if r['spec_ok'] else 'fail'}>{'fps 만족' if r['spec_ok'] else 'fps 미달'}</b> · {_f(r['fps'], 0)} fps"
+             + ("" if r["spec_ok"] or fps_validity(r)[0] == "confirmed" else
+                f" <b class=warn>검증 필요 · {VALIDITY_LABEL[fps_validity(r)[0]]}</b> <span class=meta>{escape(fps_validity(r)[1])}</span>")
+             + ("" if r.get("prediction_id") or not r["spec_ok"] else " <span class=warn>미등록 (탐색값)</span>")
              + (" · EIS" if r.get("eis_on") else "")
              + ("".join(f"<div class=meta>{escape(e.get('text', ''))}</div>" for e in (r.get("reasons_explained") or [])[:2]) if not r["spec_ok"] else "")),
             ("Power", f"<b>{_f(p.get('total_mw'))} mW</b>{f' · {ma:.0f} mA' if ma else ''} · CPU {_f(p.get('cpu_mw'))} · IP {_f(p.get('hw_mw'))} · BW {_f(p.get('bw_mw'))}"
              f" · {_f(r.get('bw_mbs'), 0)} MB/s"),
-            ("전과제", f"{_f(ref.get('reference_mw'), 0)} mW → <b class={_REF_CLS.get(str(ref.get('status')), '')}>{_f(ref.get('delta_pct'))}%</b>"
-             f" <span class=meta>({escape(str(ref.get('source') or ''))})</span>" if ref else "<span class=meta>기준 없음</span>"),
+            ("전과제", _ref_text(verd.get(key), ref)),
             ("Latency", f"video {_f(lat.get('video_ms'))} ms ({_f(lat.get('video_frames'), 2)} frame) · preview {_f(lat.get('preview_ms'))} ms" if lat else "—"),
         ]
         m = margins.get(key)
@@ -344,8 +375,10 @@ def dossier(snap: dict[str, Any]) -> str:
         o = opts.get(key)
         if o and o.get("best"):
             b = o["best"]
-            rows.append(("Lever", f"{escape(' + '.join(b['labels']))} <b>{b['delta_mw']:+.0f} mW</b> ({_f(b.get('delta_pct'))}%)"
-                         + (" <span class=warn>IQ 평가</span>" if b.get("iq_eval") == "required" else "")))
+            iq = {"adopted": "IQ 승인", "iq_eval": "IQ 평가 중", "rejected": "IQ 반려", "candidate": "IQ 평가 대기"}
+            rows.append(("화질 열화 option", f"{escape(' + '.join(b['labels']))} <b>{b['delta_mw']:+.0f} mW</b> ({_f(b.get('delta_pct'))}%)"
+                         + (f" <span class=warn>{iq.get(str(b.get('review_status') or 'candidate'), 'IQ 평가')}</span>"
+                            if b.get("iq_eval") == "required" else "") + " <span class=meta>· 최후 수단</span>"))
         c = cal.get(key)
         if c:
             by = {x["category"]: x for x in c["rows"]}
@@ -357,6 +390,12 @@ def dossier(snap: dict[str, Any]) -> str:
             s = cs.get("summary") or {}
             rows.append(("CPU", f"SW 증가 허용치 <b>{_gx(s.get('tolerance')) if s.get('tolerance') is not None else '범위 밖'}</b>"
                          f" · {'timing' if s.get('binding') == 'timing' else 'OPP'} 제약 · 최적 재배치 {_f((s.get('best_at_start') or {}).get('delta_mw'))} mW"))
+        inp = r.get("inputs") or {}
+        if inp.get("sw_timing_source") or inp.get("sensor_support"):
+            rows.append(("입력 근거", " · ".join(x for x in (
+                f"SW timing {'가정값' if inp.get('sw_timing_source') == 'assumed' else escape(str(inp.get('sw_timing_source')))}"
+                + (f" ({escape(str(inp.get('sw_timing_case')))})" if inp.get("sw_timing_case") else "") if inp.get("sw_timing_source") else "",
+                f"sensor {escape(str(inp['sensor_support']))}" if inp.get("sensor_support") else "") if x)))
         rk = risks.get(v) or []
         if rk:
             rows.append(("Risk", " ".join(f"{ar._sev(x['severity'])} <span class=mono>{escape(x['label'])}</span> {escape(x['title'])}<br>" for x in rk)))
@@ -371,6 +410,24 @@ def dossier(snap: dict[str, Any]) -> str:
             "<input id='dos-q' class='dos-q' placeholder='variant 검색' aria-label='variant 검색' "
             "oninput=\"var q=this.value.toLowerCase();document.querySelectorAll('.dos').forEach(function(e){e.style.display=!q||e.dataset.k.indexOf(q)>=0?'':'none'})\">"
             "<div class='dos-grid'>" + "".join(c[2] for c in cards) + "</div>")
+
+
+def _coverage_table(cov: dict[str, Any] | None) -> str:
+    """COV-02: every scenario of the project, covered or not."""
+    if not cov or not cov.get("rows"):
+        return ""
+    t = cov.get("total") or {}
+    rows = sorted(cov["rows"], key=lambda r: (-r["explored"], r["name"]))
+    return ("<h3 style='margin:4px 0'>Scenario coverage — 과제 전체</h3><p class=meta>제품 variant = 파생 sub-variant(explored · timing) 제외. "
+            "탐색 0인 scenario는 이 보고서의 판정에 포함되지 않음.</p><table><tr><th>Scenario</th><th>제품 variant</th><th>탐색</th><th>등록 예측</th>"
+            "<th>실측 (silicon)</th><th>실측 있으나 예측 없음</th><th>전과제 기준</th></tr>"
+            + "".join(f"<tr><td>{escape(r['name'])} <span class=meta>{escape(r['scenario_id'])}</span></td><td class=n>{r['variants']}</td>"
+                      f"<td class='n {'' if r['explored'] else 'warn'}'>{r['explored']}</td><td class=n>{r['registered']}</td>"
+                      f"<td class=n>{r['measured']} ({r['measured_physical']})</td><td class=n>{r['measured_no_prediction']}</td>"
+                      f"<td class=n>{r['reference']}</td></tr>" for r in rows)
+            + f"<tr><th>합계</th><th class=n>{t.get('variants', 0)}</th><th class=n>{t.get('explored', 0)}</th><th class=n>{t.get('registered', 0)}</th>"
+              f"<th class=n>{t.get('measured', 0)} ({t.get('measured_physical', 0)})</th><th class=n>{t.get('measured_no_prediction', 0)}</th>"
+              f"<th class=n>{t.get('reference', 0)}</th></tr></table>")
 
 
 TIER_CSS = """
@@ -393,9 +450,14 @@ def tiered_sections(snap: dict[str, Any]) -> list[tuple[str, str, str | None, in
     s = snap["spec_summary"]
     ok_rows = {(r["scenario_id"], r["variant_id"]) for r in snap["scenarios"] if r["spec_ok"]}
     th = snap.get("thermal") or {}
-    out: list[tuple[str, str, str | None, int]] = [("결론", ar._tier1(snap), None, 1)]
+    from scenario_db.reporting.review_summary import drivers_table, glossary, ladder_table, tier0, verdict_table
+
+    out: list[tuple[str, str, str | None, int]] = []
+    if (snap.get("scope") or {}).get("kind") == "project":
+        out.append(("경영 요약", tier0(snap), None, 0))
+    out.append(("결론", ar._tier1(snap), None, 1))
     if "risk_register" in snap:
-        out.append(("Risk register", ar._risk_register(snap["risk_register"], snap.get("scope") or {}), None, 1))
+        out.append(("Risk register", drivers_table(snap) + ar._risk_register(snap["risk_register"], snap.get("scope") or {}), None, 1))
     out.append(("이전 보고서 대비", previous_block(snap.get("previous")),
                 None if snap.get("previous") else "같은 과제의 이전 과제 보고서 없음 (첫 보고서)", 1))
     lat_rows = [r for r in snap["scenarios"] if r.get("latency")]
@@ -417,7 +479,8 @@ def tiered_sections(snap: dict[str, Any]) -> list[tuple[str, str, str | None, in
             + (_more(f"IP clock 전체 {len(dom_head)} variant", ar._domains(doms)) if len(dom_head) > len(tight) else "")
             + "<details><summary>IP별 상세 (필요 → 설정 MHz)</summary>"
             + ar._clocks([c for c in snap["clocks"] if (c["scenario_id"], c["variant_id"]) in ok_rows]) + "</details>")
-    power = (_lead_power(snap) + dumbbell(snap.get("review_context"), ((snap.get("criteria") or {}).get("power") or {}).get("tolerance_pct")) + ar._review(snap.get("review_context"))
+    power = (_lead_power(snap) + dumbbell(snap.get("review_context"), ((snap.get("criteria") or {}).get("power") or {}).get("tolerance_pct"))
+             + (verdict_table(snap) or ar._review(snap.get("review_context")))
              + power_top(snap)
              + _more(f"Power · BW 분포 (조합 × SW 통계) 전체", ar._boxes(snap["scenarios"]))
              + _more("CPU / IP / BW 구성 전체", ar._split(snap["scenarios"]))
@@ -426,7 +489,8 @@ def tiered_sections(snap: dict[str, Any]) -> list[tuple[str, str, str | None, in
                 else "<p class=meta>BW를 줄이는 compression buffer가 없음</p>"))
     lever = (_lead_lever(snap) + "<h3 style='margin:4px 0'>발열 대응 (−10 / −20%)</h3>"
              + (ar._thermal(th) if th.get("items") else f"<p class=meta>{escape(th.get('reason') or 'review_policy에 thermal_watch 대상이 없음')}</p>")
-             + "<h3 style='margin:12px 0 4px'>Power option (IQ 유지 · IQ 평가 · 성능 trade)</h3>"
+             + ladder_table(snap)
+             + "<h3 style='margin:12px 0 4px'>화질 열화 option — 최후 수단 (IQ 평가 대상)</h3>"
              + (_options_top(snap.get("power_options") or []) if snap.get("power_options")
                 else "<p class=meta>power option 결과 없음 — 조합 탐색에서 power option을 켜고 실행</p>"))
     model = (_lead_model(snap) + ar._model_block(snap.get("model")) + rail_bias_block(snap.get("model"))
@@ -438,7 +502,8 @@ def tiered_sections(snap: dict[str, Any]) -> list[tuple[str, str, str | None, in
         ("CPU · SW", _lead_cpu(snap) + cpu_section(snap.get("cpu")), None, 2),
         ("예측 ↔ 실측", model, None, 2),
         ("분류별 검토 의견", ar._opinions(snap.get("opinions") or []), None, 2),
-        ("검토 범위 · 모델", ar._overview(snap["overview"]) + ar._scope(snap.get("scope")), None, 2),
+        ("검토 범위 · 모델", _coverage_table(snap.get("coverage")) + ar._overview(snap["overview"]) + ar._scope(snap.get("scope")) + glossary(),
+         None, 2),
         ("Scenario dossier", dossier(snap), None, 3),
         ("Scenario 요약 표", ar._scenarios(snap["scenarios"]), None, 3),
         ("변경 이력", ar._history(snap["history"]), None if snap["history"] else "이전 등록 예측 대비 변경 없음", 3),

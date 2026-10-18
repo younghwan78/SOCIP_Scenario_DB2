@@ -54,8 +54,12 @@ def test_conclusion_risks_actions_and_confidence():
     c = build_conclusion(_snap())
     assert c["headline"].startswith("탐색 3개 중 2개 spec 만족")
     assert [r["title"].split(" ")[0] for r in c["risks"]][:2] == ["spec", "SW"]
-    assert c["actions"][0]["delta_mw"] == -80.0 and c["actions"][0]["check"] == "IQ 평가"
-    assert any("post_irta" in a["action"] for a in c["actions"])
+    # lever ladder: SW optimization (③) comes before the IQ-degrading option (④, last resort)
+    tiers = [a["tier"] for a in c["actions"] if a["tier"]]
+    assert tiers == sorted(tiers) and tiers[-1] == 4
+    iq = next(a for a in c["actions"] if a["tier"] == 4)
+    assert iq["delta_mw"] == -80.0 and iq["check"] == "IQ 평가 후에만 적용" and iq["iq"]
+    assert any("post_irta" in a["action"] and a["tier"] == 3 for a in c["actions"])
     assert c["confidence"]["grade"] == "C"  # no real measurement
 
     real = calibration_row("cam-rec-r1-uhd30-vdis", "uc", _detail(PRED, MEAS, 520.2, 519.9), "PRED-1")

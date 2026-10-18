@@ -76,6 +76,8 @@ def build_snapshot(
             "assumed_ratio": (chosen.get("assumed_ratio", any(b.get("ratio_source") == "assumed"
                                 for b in v.get("buffers", []) if b["buffer"] in chosen.get("compression", [])))
                               if pred else rec.get("assumed_ratio")),
+            # input provenance behind the verdict (RISK-01 validity, COV-01 SW timing source, DATA-02 sanity)
+            "inputs": _inputs(v.get("design_conditions") or {}),
         })
 
     clocks = []
@@ -101,8 +103,13 @@ def build_snapshot(
             opt = next((o for o in d["options"] if o["level"] == lvl), d["options"][0])
             driver = max((c for c in clocks if c["scenario_id"] == v["scenario_id"] and c["variant_id"] == v["variant_id"] and c["dvfs_group"] == d["domain"]
                           and c["required_mhz"]), key=lambda c: c["required_mhz"], default=None)
+            base = next((o for o in d["options"] if o["level"] == d.get("base_level")), None)
             domains.append({"scenario_id": v["scenario_id"], "variant_id": v["variant_id"], "spec_ok": v["spec_ok"], "domain": d["domain"],
                             "level": lvl, "speed_mhz": opt["speed_mhz"], "voltage_mv": opt["voltage_mv"],
+                            # clock lever: the lowest level meeting the requirement vs the chosen one (raised for SW headroom)
+                            "base_level": d.get("base_level"),
+                            "raise_mw": round(float(opt.get("delta_mw") or 0) - float((base or {}).get("delta_mw") or 0), 2)
+                            if lvl != d.get("base_level") else 0.0,
                             "required_mhz": d["max_required_mhz"], "driver": driver["node"] if driver else None,
                             "headroom_pct": round(100 * (opt["speed_mhz"] / d["max_required_mhz"] - 1), 1)
                             if d["max_required_mhz"] else None})
@@ -193,7 +200,7 @@ def build_snapshot(
             "partial": bool(run.get("errors")),
             "power_partial": sum(1 for r in rows if r["power_coverage"] in ("partial", "none")),
             "explored": len(variants), "spec_ok": len(ok), "spec_fail": len(variants) - len(ok),
-            "failed": [{"variant_id": v["variant_id"], "reasons": compact_reasons(v["spec_reasons"])[:3],
+            "failed": [{"scenario_id": v["scenario_id"], "variant_id": v["variant_id"], "reasons": compact_reasons(v["spec_reasons"])[:3],
                         "explained": explain_all(compact_reasons(v["spec_reasons"]), v["fps"])}
                        for v in variants if not v["spec_ok"]],
             "errors": run.get("errors") or [],
@@ -222,6 +229,13 @@ def build_snapshot(
     }
     snap["conclusion"] = build_conclusion(snap)
     return snap
+
+
+_INPUT_KEYS = ("sw_timing_source", "sw_timing_case", "sensor_support", "resolution", "sensor_place", "subscenario")
+
+
+def _inputs(dc: dict[str, Any]) -> dict[str, Any]:
+    return {k: dc.get(k) for k in _INPUT_KEYS if dc.get(k) is not None}
 
 
 def _ctx(c: dict[str, Any]) -> dict[str, Any]:
@@ -328,33 +342,35 @@ def render_html(title: str, snap: dict[str, Any]) -> str:
     return "".join(parts)
 
 
-_TIER_NAME = {1: "Tier 1 · 결론", 2: "Tier 2 · 영역별", 3: "Tier 3 · 상세"}
+_TIER_NAME = {0: "Tier 0 · 경영 요약", 1: "Tier 1 · 결론", 2: "Tier 2 · 영역별", 3: "Tier 3 · 상세"}
 
 
 def _render_tiered(title: str, snap: dict[str, Any]) -> str:
     """RPT-09..12: Tier 1 (결론 · risk · 이전 대비) → Tier 2 areas → Tier 3 dossier; grouped TOC, print breaks."""
     from scenario_db.reporting.review_sections import TIER_CSS, tiered_sections
+    from scenario_db.reporting.review_summary import TIER0_CSS
 
     o = snap["overview"]
     secs = tiered_sections(snap)
     shown = [(t, b, tier) for t, b, why, tier in secs if why is None]
     omitted = [(t, why) for t, _, why, _ in secs if why]
     if omitted:
-        t0, b0, k0 = shown[0]
-        shown[0] = (t0, b0 + "<p class='meta' style='margin-top:12px'><b>생략한 절</b> — "
-                    + " · ".join(f"{escape(t)}: {escape(str(why))}" for t, why in omitted) + "</p>", k0)
+        at = next((i for i, (_, _, tier) in enumerate(shown) if tier == 1), 0)
+        t0, b0, k0 = shown[at]
+        shown[at] = (t0, b0 + "<p class='meta' style='margin-top:12px'><b>생략한 절</b> — "
+                     + " · ".join(f"{escape(t)}: {escape(str(why))}" for t, why in omitted) + "</p>", k0)
     scope = snap.get("scope") or {}
-    nav, last = [], 0
+    nav, last = [], -1
     for i, (t, _, tier) in enumerate(shown, 1):
         if tier != last:
             nav.append(f"<span class='tier'>{_TIER_NAME[tier]}</span>")
             last = tier
         nav.append(f"<a href='#s{i}'>{escape(t)}</a>")
-    last_t1 = max(i for i, (_, _, tier) in enumerate(shown, 1) if tier == 1)
+    last_t1 = max((i for i, (_, _, tier) in enumerate(shown, 1) if tier == 1), default=0)
     first_t3 = min((i for i, (_, _, tier) in enumerate(shown, 1) if tier == 3), default=0)
     parts = [
         "<!DOCTYPE html><html lang='ko'><head><meta charset='utf-8'>",
-        f"<title>{escape(title)}</title><style>{_CSS}{TIER_CSS}</style></head><body>",
+        f"<title>{escape(title)}</title><style>{_CSS}{TIER_CSS}{TIER0_CSS}</style></head><body>",
         f"<header><h1>{escape(title)}</h1><div class='meta'>{escape(str(o['target_soc']))} · "
         f"{escape(o['scenario_type'])} · "
         + (f"과제 {escape(str(scope.get('project_ref')))} · run {len(scope.get('runs') or [])}개" if scope.get("kind") == "project"
@@ -385,9 +401,11 @@ def _tier1(snap: dict[str, Any]) -> str:
     c = snap.get("conclusion") or {}
     cr = snap.get("criteria") or {}
     basis = snap.get("basis") or {}
-    flags = [f"판정 기준 <b>{escape(str(basis.get('throughput_model') or 'stage'))}</b>",
+    tm = str(basis.get("throughput_model") or "stage")
+    rb = str(basis.get("register_baseline") or "min_power")
+    flags = [f"fps 판정 <b>{'프레임 병렬 처리 기준' if tm == 'pipelined' else 'stage 기준'}</b> ({escape(tm)})",
              f"정책 {'선언됨' if basis.get('policy_declared') else '없음 (기본 규칙)'}",
-             f"등록 기준 {escape(str(basis.get('register_baseline') or 'min_power'))}",
+             f"등록 기준 {'화질 유지 조합' if rb == 'iq_keep' else '최저 전력 조합'} ({escape(rb)})",
              f"DVFS {escape(str(basis.get('dvfs_table_ref') or '—'))}" + (" <b class=warn>SAMPLE</b>" if basis.get("sample_dvfs") else ""),
              f"engine {escape(str(basis.get('engine_rev') or '—'))}"]
     h = f"<p class='meta'>{' · '.join(flags)}</p>"
@@ -398,16 +416,27 @@ def _tier1(snap: dict[str, Any]) -> str:
         return f"<div><span class='q'>{q}</span><span class='a {cls}'>{a}</span><span class='d'>{d}</span></div>"
 
     fps_cls = "ok" if not fps.get("fail") else "fail"
-    pw_cls = "fail" if pw.get("over") else "warn" if pw.get("missing") or pw.get("similar") else "ok"
+    if fps.get("fail") and snap.get("scenarios"):
+        from scenario_db.reporting.review_verdict import fps_validity
+
+        rows = [r for r in snap["scenarios"] if not r.get("spec_ok")]
+        if rows and all(fps_validity(r)[0] != "confirmed" for r in rows):
+            fps_cls = "warn"
+    pw_cls = ("fail" if pw.get("over") or pw.get("flip") else
+              "warn" if pw.get("missing") or pw.get("similar") or pw.get("conditional") or pw.get("unregistered") else "ok")
     th_short = [i for i in th.get("items") or [] if i.get("reach10") is False]
     th_cls = "fail" if th_short else "warn" if th.get("unassessed") else "ok"
     boxes = [
         box("① fps drop 없음", f"{fps.get('ok', 0)} / {fps.get('total', 0)}", fps_cls,
             (f"미달 {len(fps.get('fail') or [])}건: {escape(', '.join(_short(v) for v in (fps.get('fail') or [])[:4]))}"
              if fps.get("fail") else "모든 평가 variant가 fps 만족") + f" · {escape(str(fps.get('basis') or ''))} 기준"),
-        box("② 전과제 대비 전류", f"이하 {pw.get('ok', 0)} · 유사 {pw.get('similar', 0)} · 초과 {pw.get('over', 0)}", pw_cls,
-            f"기준 variant {pw.get('total', 0)}개 중 예측 없음 {len(pw.get('missing') or [])}"
+        box("② 전과제 대비 전류",
+            f"이하 {pw.get('ok', 0)} · 유사 {pw.get('similar', 0)}" + (f" · 조건부 {pw.get('conditional', 0)}" if pw.get("basis") == "verdict" else "")
+            + f" · 초과 {pw.get('over', 0)}", pw_cls,
+            f"기준 variant {pw.get('total', 0)}개 중 판정 불가 {len(pw.get('missing') or [])}"
             + (f" ({escape(', '.join(_short(v) for v in pw['missing'][:3]))})" if pw.get("missing") else "")
+            + (f" · 미등록(탐색값) {len(pw['unregistered'])}" if pw.get("unregistered") else "")
+            + (f" · <b>예측 ↔ 실측 반대 {len(pw['flip'])}</b>" if pw.get("flip") else "")
             + f" · 허용 +{pw.get('tolerance_pct', '—')}%" + (" · 기준값 SAMPLE" if pw.get("sample") else "")),
         box("③ 발열 대응 여지 (−10 / −20%)",
             "미평가" if not th.get("items") else f"−10% 가능 {sum(1 for i in th['items'] if i.get('reach10'))} / {len(th['items'])}",
@@ -426,7 +455,10 @@ def _tier1(snap: dict[str, Any]) -> str:
     h += "<h3 style='margin:14px 0 4px'>Top risk</h3>"
     if reg:
         h += ("<table><tr><th>ID</th><th>심각도</th><th>내용</th><th>영향</th><th>상태</th><th>추세</th></tr>"
-              + "".join(f"<tr><td class=mono>{escape(r['label'])}</td><td>{_sev(r['severity'])}</td><td><b>{escape(r['title'])}</b>"
+              + "".join(f"<tr><td class=mono>{escape(r['label'])}</td><td>{_sev(r['severity'])}"
+                        + ("" if (r.get("validity") or "confirmed") == "confirmed" else
+                           f"<div class=warn style='font-size:12px'>{'모델 한계' if r.get('validity') == 'model_limit' else '입력 미확정'}</div>")
+                        + f"</td><td><b>{escape(r['title'])}</b>"
                         f"<div class=meta>{escape(r.get('detail') or '')}</div></td><td>{len(r.get('affected') or []) or '전체'}</td>"
                         f"<td>{escape(_STATUS.get(str(r.get('status')), str(r.get('status'))))}</td><td>{escape(_TREND.get(r.get('trend') or '', str(r.get('trend'))))}</td></tr>"
                         for r in reg[:5]) + "</table>")
@@ -435,29 +467,39 @@ def _tier1(snap: dict[str, Any]) -> str:
     else:
         h += "<p class=meta>열린 risk 없음</p>"
     if c.get("actions"):
-        h += "<h3 style='margin:14px 0 4px'>권고 조치</h3><table><tr><th>조치</th><th>대상</th><th>ΔPower</th><th>근거</th><th>필요 검증</th></tr>"
+        h += ("<h3 style='margin:14px 0 4px'>권고 조치 — clock → compression → SW 순, 화질 열화 option은 마지막</h3>"
+              "<table><tr><th>순서</th><th>조치</th><th>대상</th><th>ΔPower</th><th>근거</th><th>필요 검증</th></tr>")
         for a in c["actions"]:
-            d = f"{a['delta_mw']:+.0f} mW ({_f(a['delta_pct'], 1)}%)" if a["delta_mw"] is not None else "—"
-            h += (f"<tr><td>{escape(a['action'])}</td><td>{escape(_short(str(a['target'])))}</td><td class=n>{d}</td>"
-                  f"<td>{escape(a['basis'])}</td><td>{escape(a['check'])}</td></tr>")
+            d = (f"{a['delta_mw']:+.0f} mW" + (f" ({_f(a['delta_pct'], 1)}%)" if a.get("delta_pct") is not None else "")) if a["delta_mw"] is not None else "—"
+            h += (f"<tr><td class=meta>{escape(str(a.get('tier_label') or '—'))}</td><td>{escape(a['action'])}</td>"
+                  f"<td>{escape(_short(str(a['target'])))}</td><td class=n>{d}</td>"
+                  f"<td>{escape(a['basis'])}</td><td class='{'warn' if a.get('iq') else ''}'>{escape(a['check'])}</td></tr>")
         h += "</table>"
     return h
 
 
 def _risk_register(reg: list[dict[str, Any]], scope: dict[str, Any]) -> str:
-    h = ("<p class='meta'>자동 규칙(fps 미달 · 전과제 초과 · 비교 기준 예측 없음 · 발열 미달 · SW margin · 모델 공통 오차 · SAMPLE 입력)으로 "
-         "생성하고 owner · 상태 · 의견은 사람이 기록합니다. ID는 과제 안에서 고정 · 추세는 직전 보고서 대비."
+    h = ("<p class='meta'>자동 규칙(fps 미달 · 전과제 초과 · 예측↔실측 반대 · 조건부 · KPI 미탐색 · 발열 미달 · SW margin · 화질 열화 option 의존 · "
+         "모델 공통 오차 · SAMPLE 입력)으로 생성하고 owner · 상태 · 의견은 사람이 기록합니다. ID는 과제 안에서 고정 · 추세는 직전 보고서 대비. "
+         "Critical은 확정 판정에만 — 모델 한계 · 입력 미확정은 High '검증 필요'. 먼저 확인 = 판정을 바꿀 수 있는 항목 순."
          + ("" if scope.get("kind") == "project" else " <b class=warn>run 단위 보고서 — 과제 register에 반영되지 않은 보고서 시점 목록</b>") + "</p>")
     if not reg:
         return h + "<p class=meta>risk 없음</p>"
-    h += ("<table><tr><th>ID</th><th>심각도</th><th>분류</th><th>내용 · 근거</th><th>영향</th><th>완화안</th><th>Owner</th><th>상태</th><th>추세</th></tr>")
+    h += ("<table><tr><th>ID</th><th>심각도</th><th>분류</th><th>내용 · 근거</th><th>영향</th><th>먼저 확인</th><th>완화안</th><th>Owner</th><th>상태</th><th>추세</th></tr>")
+    vl = {"model_limit": "모델 한계", "input_unverified": "입력 미확정"}
     for r in reg:
         aff = r.get("affected") or []
-        h += (f"<tr><td class=mono>{escape(r['label'])}</td><td>{_sev(r['severity'])}</td><td>{escape(r.get('category') or '')}</td>"
+        val = r.get("validity") or "confirmed"
+        checks = r.get("checks") or []
+        h += (f"<tr><td class=mono>{escape(r['label'])}</td><td>{_sev(r['severity'])}"
+              + (f"<div class=warn style='font-size:12px'>{vl.get(val, val)}</div>" if val != "confirmed" else "")
+              + f"</td><td>{escape(r.get('category') or '')}</td>"
               f"<td><b>{escape(r['title'])}</b><div class=meta>{escape(r.get('detail') or '')}</div>"
               + (f"<div class=meta>의견: {escape(r['note'])}</div>" if r.get("note") else "")
               + f"</td><td class=meta>{escape(', '.join(_short(a) for a in aff[:6]) + (f' 외 {len(aff) - 6}' if len(aff) > 6 else '')) or '전체'}</td>"
-              f"<td>{escape(r.get('mitigation') or '—')}</td><td>{escape(r.get('owner') or '—')}</td>"
+              + ("<td class=meta><ol style='margin:0 0 0 16px;padding:0'>" + "".join(f"<li>{escape(x)}</li>" for x in checks[:4]) + "</ol></td>"
+                 if checks else "<td class=meta>—</td>")
+              + f"<td>{escape(r.get('mitigation') or '—')}</td><td>{escape(r.get('owner') or '—')}</td>"
               f"<td>{escape(_STATUS.get(str(r.get('status')), str(r.get('status'))))}</td><td>{escape(_TREND.get(r.get('trend') or '', str(r.get('trend'))))}</td></tr>")
     return h + "</table>"
 
@@ -466,10 +508,13 @@ def _scope(scope: dict[str, Any] | None) -> str:
     if not scope or scope.get("kind") != "project":
         return ""
     runs = scope.get("runs") or []
-    return ("<h3 style='margin:14px 0 4px'>입력 범위 — 과제의 현재 등록 예측 전체</h3><table><tr><th>run</th><th>제목</th><th>생성</th>"
+    cur = sum(int(r.get("current") or 0) for r in runs)
+    return (f"<h3 style='margin:14px 0 4px'>입력 범위 — 과제의 현재 등록 예측 전체</h3><p class=meta>run {len(runs)}개 · 현재 예측 {cur}건 "
+            f"(최신 {escape(str(max((str(r.get('created_at') or '') for r in runs), default=''))[:16].replace('T', ' '))})</p>"
+            f"<details class='more'><summary>run 목록 {len(runs)}개 ▸</summary><table><tr><th>run</th><th>제목</th><th>생성</th>"
             "<th>현재 예측</th><th>포함 variant</th></tr>"
             + "".join(f"<tr><td class=mono>{escape(r['id'])}</td><td>{escape(r.get('title') or '')}</td><td>{escape(str(r.get('created_at') or '')[:16])}</td>"
-                      f"<td class=n>{r.get('current', 0)}</td><td class=n>{r.get('variants', 0)}</td></tr>" for r in runs) + "</table>")
+                      f"<td class=n>{r.get('current', 0)}</td><td class=n>{r.get('variants', 0)}</td></tr>" for r in runs) + "</table></details>")
 
 
 def _model_block(m: dict[str, Any] | None) -> str:
@@ -492,9 +537,10 @@ def _thermal(th: dict[str, Any]) -> str:
     items = th.get("items") or []
     if not items:
         return ""
-    h = ("<p class=meta>고객 발열 대응 요청 대비: 화질 유지 기준 power에서 IQ 항목(option · lossy · DVFS)으로 −10 / −20%를 만들 수 있는지. "
-         "DVFS level-down은 보고서에서 계산하지 않음 (예측 현황 ② 발열 대응 카드에서 확인).</p>"
-         "<table><tr><th>Variant</th><th>기준 mW</th><th>전과제 대비</th><th>요청</th><th>필요</th><th>IQ 항목 최대</th><th>선택 항목</th><th>판정</th></tr>")
+    h = ("<p class=meta>고객 발열 대응 요청 대비: 화질 유지 기준 power에서 −10 / −20%를 만들 수 있는지. 항목은 화질 영향 없는 것부터 "
+         "(DVFS level → IQ 승인 option → lossy 압축 → IQ 평가 대상 option) 채택. <b>확정</b> = DVFS · IQ 승인 option만, "
+         "<b>IQ 평가 포함</b> = 화질 열화 option까지 포함한 최대. DVFS level-down은 보고서에서 계산하지 않음 (예측 현황 ② 발열 대응 카드).</p>"
+         "<table><tr><th>Variant</th><th>기준 mW</th><th>전과제 대비</th><th>요청</th><th>필요</th><th>확정 절감</th><th>IQ 평가 포함 최대</th><th>선택 항목</th><th>판정</th></tr>")
     for i in items:
         ref = i.get("reference") or {}
         plans = i.get("plans") or []
@@ -503,13 +549,17 @@ def _thermal(th: dict[str, Any]) -> str:
                   f"<td colspan=5 class=meta>{escape('; '.join(i.get('notes') or []) or '평가 없음')}</td></tr>")
             continue
         ref_txt = f"{ref['delta_pct']:+.1f}% ({ref.get('status')})" if ref and ref.get("delta_pct") is not None else "—"
+        approved = {a["ask_pct"]: a for a in i.get("approved_plans") or []}
         for k, p in enumerate(plans):
             first = k == 0
+            ap = approved.get(p["ask_pct"])
             h += (f"<tr><td>{escape(_short(i['variant_id'])) if first else ''}</td><td class=n>{_f(i.get('current_mw'), 0) if first else ''}</td>"
                   f"<td>{escape(ref_txt) if first else ''}</td>"
-                  f"<td class=n>−{p['ask_pct']:.0f}%</td><td class=n>{_f(p['need_mw'], 0)}</td><td class=n>{_f(p['saving_mw'], 0)}</td>"
+                  f"<td class=n>−{p['ask_pct']:.0f}%</td><td class=n>{_f(p['need_mw'], 0)}</td>"
+                  f"<td class=n>{_f(ap['saving_mw'], 0) if ap else '—'}</td><td class=n>{_f(p['saving_mw'], 0)}</td>"
                   f"<td class=meta>{escape(', '.join(p.get('picked') or []) or '—')}</td>"
-                  f"<td class='{'ok' if p['achieved'] else 'fail'}'>{'가능' if p['achieved'] else '미달'}</td></tr>")
+                  f"<td class='{'ok' if ap and ap['achieved'] else 'warn' if p['achieved'] else 'fail'}'>"
+                  f"{'가능' if ap and ap['achieved'] else 'IQ 조건부 가능' if p['achieved'] else '미달'}</td></tr>")
     return h + "</table>"
 
 
@@ -1006,7 +1056,10 @@ def _lat_text(d: dict[str, Any] | None) -> str:
     return " / ".join(f"{k[0].upper()} {v:+.1f}" for k, v in (("preview", d.get("preview_ms")), ("video", d.get("video_ms"))) if v is not None) + " ms"
 
 
-def _iq_text(iq: str | None) -> str:
+def _iq_text(iq: str | None, status: str | None = None) -> str:
+    if iq == "required" and status in ("adopted", "iq_eval", "rejected"):  # IQ-02: frozen review state
+        return {"adopted": "<span class=ok>IQ 승인</span>", "iq_eval": "<span class=warn>IQ 평가 중</span>",
+                "rejected": "<span class=meta>IQ 반려</span>"}[status]
     return {"required": "<span class=warn>IQ 평가 필요</span>", "not_required": "<span class=ok>IQ 영향 없음(선언)</span>"}.get(str(iq), "—")
 
 
@@ -1025,7 +1078,7 @@ def _power_options(rows: list[dict[str, Any]]) -> str:
         best = escape(" + ".join(b["labels"])) if b else "—"
         h += (f"<tr><td>{escape(_short(r['variant_id']))}</td><td class=n>{_f(r['fps'],0)}</td><td class=n>{_f(r['base_total_mw'],1)}</td>"
               f"<td>{best}</td><td class=n>{delta}</td><td class=n>{_lat_text((b or {}).get('delta_latency_ms'))}</td>"
-              f"<td>{_iq_text((b or {}).get('iq_eval')) if b else '—'}</td><td>{escape(cats)}</td><td>{singles}</td></tr>")
+              f"<td>{_iq_text((b or {}).get('iq_eval'), (b or {}).get('review_status')) if b else '—'}</td><td>{escape(cats)}</td><td>{singles}</td></tr>")
     return h + "</table>"
 
 
@@ -1046,8 +1099,14 @@ def _margins(rows: list[dict[str, Any]]) -> str:
 def _history(rows: list[dict[str, Any]]) -> str:
     if not rows:
         return "<p class='meta'>직전 등록 예측 없음 (첫 등록)</p>"
-    h = "<table><tr><th>Scenario</th><th>ΔP</th><th>원인 (카테고리)</th><th>주요 항목</th><th>입력 변경</th></tr>"
-    for r in rows:
+    # UX-04: only changes that move power (|Δ| ≥ 1 mW) or inputs; the rest is counted
+    shown = [r for r in rows if abs(float(r.get("delta_mw") or 0)) >= 1.0 or r.get("context")]
+    quiet = len(rows) - len(shown)
+    if not shown:
+        return f"<p class='meta'>직전 등록 예측 대비 변화 없음 ({quiet}건 모두 |Δ| &lt; 1 mW · 입력 변경 없음)</p>"
+    h = (f"<p class='meta'>|Δ| ≥ 1 mW 또는 입력 변경 {len(shown)}건" + (f" · 변화 없음 {quiet}건 생략" if quiet else "") + "</p>"
+         "<table><tr><th>Scenario</th><th>ΔP</th><th>원인 (카테고리)</th><th>주요 항목</th><th>입력 변경</th></tr>")
+    for r in sorted(shown, key=lambda r: -abs(float(r.get("delta_mw") or 0))):
         cats = ", ".join(f"{k} {v:+.1f}" for k, v in list(r["by_category"].items())[:4])
         top = ", ".join(f"{t['item']} {t['delta_mw']:+.1f}" for t in r["top"])
         ctx = ", ".join(f"{c['item']}: {c['old']}→{c['new']}" for c in r["context"][:5])
@@ -1058,7 +1117,16 @@ def _history(rows: list[dict[str, Any]]) -> str:
 
 def _appendix(a: dict[str, Any]) -> str:
     c = a.get("counts") or {}
-    h = "<table>" + "".join(f"<tr><th style='width:200px'>{escape(str(k))}</th><td>{escape(str(v))}</td></tr>" for k, v in c.items()) + "</table>"
+
+    def val(v: Any) -> str:  # UX-04: nested counts as "key value" text, never a Python repr
+        if isinstance(v, dict):
+            return " · ".join(f"{k} {val(x)}" for k, x in v.items())
+        if isinstance(v, list):
+            return " – ".join(val(x) for x in v)
+        return str(v)
+
+    h = ("<p class=meta>최신 run의 탐색 집계 (과제 보고서는 여러 run을 합치므로 위 절의 수치가 기준)</p>" if c else "") + \
+        "<table>" + "".join(f"<tr><th style='width:200px'>{escape(str(k))}</th><td>{escape(val(v))}</td></tr>" for k, v in c.items()) + "</table>"
     h += f"<p><b>등록 예측</b> ({len(a['prediction_ids'])}): <span class=meta>{escape(', '.join(a['prediction_ids'][:80]))}</span></p>"
     if a["warnings"]:
         h += "<details><summary>경고 " + str(len(a["warnings"])) + "</summary><ul>" + "".join(f"<li>{escape(w)}</li>" for w in a["warnings"]) + "</ul></details>"

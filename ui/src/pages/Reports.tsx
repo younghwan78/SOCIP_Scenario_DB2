@@ -9,6 +9,13 @@ import { latestProjectReports } from '../lib/reportPortfolio'
 export function ReportsPage({ ctx }: { ctx: Ctx }) {
   const [tick, setTick] = useState(0)
   const list = useAsync(() => archApi.reports(), [tick])
+  // AUTO-04: reports created elsewhere (another tab, API, automatic regeneration) appear when the page regains focus
+  useEffect(() => {
+    const refresh = () => { if (document.visibilityState === 'visible') setTick((t) => t + 1) }
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', refresh)
+    return () => { window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', refresh) }
+  }, [])
   // U7: only the selected 과제's reports open by default; others stay selectable under their own group.
   const { mine, others } = reportsForProject(list.data ?? [], ctx.project)
   // RPT-01: the project report (current predictions across runs) opens first; run snapshots stay selectable
@@ -44,17 +51,17 @@ export function ReportsPage({ ctx }: { ctx: Ctx }) {
           <b>과제 현황</b><span className="faint" style={{ fontSize: 12 }}>과제별 최신 과제 보고서 · 고객 기준 3항목 · 열린 risk · 예측 신뢰도 · 행 클릭 = 그 보고서</span>
         </div>
         <div className="table-x"><table className="tb-mini-table pf-table" style={{ width: '100%' }}>
-          <thead><tr><th>SoC · 과제</th><th>최근 과제 보고서</th><th>① fps</th><th>② 전과제 대비 (이하 · 유사 · 초과 · 없음)</th><th>③ 발열 −10%</th><th>열린 risk (C · H · M)</th><th>신뢰도</th><th>등록 예측 mW</th></tr></thead>
+          <thead><tr><th>SoC · 과제</th><th>최근 과제 보고서</th><th>① fps</th><th>② 전과제 대비 (이하 · 유사 · 조건부 · 초과 · 불가)</th><th>③ 발열 −10%</th><th>열린 risk (C · H · M)</th><th>신뢰도</th><th>등록 예측 mW</th></tr></thead>
           <tbody>{portfolio.map(({ project, report: r }) => {
             const s = r?.summary
             const fpsCls = s ? (s.fps.ok < s.fps.total ? 'fail' : 'ok') : ''
-            const pwCls = s ? (s.power.over ? 'fail' : s.power.missing || s.power.similar ? 'warn' : 'ok') : ''
+            const pwCls = s ? (s.power.over || s.power.flip ? 'fail' : s.power.missing || s.power.similar || s.power.conditional ? 'warn' : 'ok') : ''
             const thCls = s ? (s.thermal.items && s.thermal.reach10 < s.thermal.items ? 'fail' : 'ok') : ''
             return <tr key={project.id} className={r && r.id === id ? 'selected' : ''} onClick={() => (r ? ctx.navigate(undefined, { report: r.id, project: project.id }, true) : ctx.setProject(project.id))}>
               <td><b>{project.soc}</b> <span className="faint">{project.board || project.id}</span></td>
               <td className="faint">{r ? `${r.generated_at?.slice(0, 10)} · ${r.status}` : '과제 보고서 없음'}</td>
               <td className={`pf-cell ${fpsCls}`}>{s ? `${s.fps.ok} / ${s.fps.total}` : '—'}</td>
-              <td className={`pf-cell ${pwCls}`}>{s ? `${s.power.ok} · ${s.power.similar} · ${s.power.over} · ${s.power.missing} / ${s.power.total}` : '—'}</td>
+              <td className={`pf-cell ${pwCls}`} title={s?.power.flip ? `예측 ↔ 실측 반대 ${s.power.flip}건` : undefined}>{s ? `${s.power.ok} · ${s.power.similar} · ${s.power.conditional ?? 0} · ${s.power.over} · ${s.power.missing} / ${s.power.total}${s.power.flip ? ` (반대 ${s.power.flip})` : ''}` : '—'}</td>
               <td className={`pf-cell ${thCls}`}>{s ? (s.thermal.items ? `${s.thermal.reach10} / ${s.thermal.items}` : '대상 없음') : '—'}</td>
               <td>{s ? <><span className="badge v-fail">{s.risks.critical}</span> <span className="badge v-warn">{s.risks.high}</span> <span className="badge sev-med">{s.risks.medium}</span></> : '—'}</td>
               <td>{s?.confidence ? <span className={`badge ${s.confidence === 'A' ? 'v-ok' : s.confidence === 'B' ? 'v-warn' : 'v-fail'}`}>{s.confidence}</span> : '—'}</td>
@@ -102,7 +109,7 @@ export function ReportsPage({ ctx }: { ctx: Ctx }) {
       {list.data && list.data.length > 0 && !cur && <div className="empty">이 과제의 보고서가 없습니다{others.length ? ` (다른 과제 ${others.length}건은 목록의 “다른 과제”에서 열 수 있음)` : ''}. “과제 보고서 생성”을 누르세요.</div>}
       {ctx.project && <RiskRegisterCard projectRef={ctx.project} tick={tick} />}
       {cur && cur.project_ref !== ctx.project && <div className="lib-note warn">선택한 보고서는 다른 과제({cur.project_ref ?? '미정'})의 보고서입니다.</div>}
-      {cur && <div className="faint" style={{ fontSize: 12 }}>{cur.id} · run {cur.run_ids.join(', ')} · DVFS {cur.dvfs_table_ref ?? '—'} · {cur.engine_rev} · sha256 {cur.html_sha256.slice(0, 12)} · snapshot 고정 (예측이 바뀌어도 보고서 수치 불변)</div>}
+      {cur && <div className="faint" style={{ fontSize: 12 }}>{cur.id} · <span title={cur.run_ids.join('\n')}>run {cur.run_ids.length > 1 ? `${cur.run_ids.length}개` : cur.run_ids[0]}</span> · DVFS {cur.dvfs_table_ref ?? '—'} · {cur.engine_rev} · sha256 {cur.html_sha256.slice(0, 12)} · snapshot 고정 (예측이 바뀌어도 보고서 수치 불변)</div>}
       {cur && <section className="panel" style={{ padding: 0 }}><iframe ref={frame} key={cur.id} className="rpt-frame" title={cur.title} src={archApi.reportHtmlUrl(cur.id)} /></section>}
     </div>
   )

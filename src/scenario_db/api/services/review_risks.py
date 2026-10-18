@@ -13,7 +13,7 @@ from scenario_db.db.models.exploration import RISK_STATUSES, ReviewRisk
 from scenario_db.exceptions import NotFoundError, UnprocessableError
 from scenario_db.reporting.risk_rules import SEVERITY_ORDER
 
-_AUTO_FIELDS = ("rule", "severity", "category", "title", "detail", "affected", "mitigation")
+_AUTO_FIELDS = ("rule", "severity", "category", "title", "detail", "affected", "mitigation", "validity", "checks")
 
 
 def _now() -> datetime:
@@ -23,7 +23,8 @@ def _now() -> datetime:
 def risk_view(r: ReviewRisk, *, trend: str | None = None) -> dict[str, Any]:
     return {"id": r.id, "label": f"R-{r.seq:02d}", "seq": r.seq, "project_ref": r.project_ref, "key": r.risk_key,
             "rule": r.rule, "severity": r.severity, "category": r.category, "title": r.title, "detail": r.detail,
-            "affected": list(r.affected or []), "mitigation": r.mitigation, "owner": r.owner, "status": r.status,
+            "affected": list(r.affected or []), "mitigation": r.mitigation,
+            "validity": getattr(r, "validity", None) or "confirmed", "checks": list(getattr(r, "checks", None) or []), "owner": r.owner, "status": r.status,
             "note": r.note, "auto_state": r.auto_state, "trend": trend,
             "first_seen_at": r.first_seen_at.isoformat() if r.first_seen_at else None,
             "last_seen_at": r.last_seen_at.isoformat() if r.last_seen_at else None,
@@ -68,7 +69,7 @@ def sync_risks(db: Session, project_ref: str, risks: list[dict[str, Any]], *, re
                              status="open", auto_state="active", first_seen_at=now, last_seen_at=now, updated_at=now,
                              updated_by=user, last_report_ref=report_ref,
                              history=[{"at": now.isoformat(), "by": user, "field": "auto", "old": None, "new": "opened"}],
-                             **{f: risk.get(f) for f in _AUTO_FIELDS})
+                             **{f: (risk.get(f) if f != "checks" else list(risk.get(f) or [])) for f in _AUTO_FIELDS})
             db.add(row)
             existing[key] = row
             trends[key] = "new"
@@ -83,7 +84,7 @@ def sync_risks(db: Session, project_ref: str, risks: list[dict[str, Any]], *, re
         if row.severity != risk["severity"]:
             hist.append({"at": now.isoformat(), "by": user, "field": "severity", "old": row.severity, "new": risk["severity"]})
         for f in _AUTO_FIELDS:
-            setattr(row, f, risk.get(f))
+            setattr(row, f, risk.get(f) if f != "checks" else list(risk.get(f) or []))
         row.auto_state = "active" if row.auto_state != "manual" else "manual"
         row.last_seen_at = now
         row.updated_at = now

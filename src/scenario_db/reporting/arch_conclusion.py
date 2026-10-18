@@ -145,7 +145,11 @@ def build_conclusion(snap: dict[str, Any]) -> dict[str, Any]:
                       for f in s["failed"] if f.get("explained") or f["reasons"]), "")
         risks.append({"title": f"spec 미달 {s['spec_fail']}/{s['explored']}",
                       "detail": f"{', '.join(names[:5])}{' …' if len(names) > 5 else ''} — {first}"})
-    low = [m for m in snap.get("sw_margin_top5") or [] if m.get("margin_pct") is not None and m["margin_pct"] < LOW_MARGIN_PCT]
+    # SW-01: every spec-ok scenario, not only the Top-5 table
+    low = ([{"variant_id": r["variant_id"], "margin_pct": r["sw_margin_pct"], "stage": r.get("sw_stage"), "bottleneck": r.get("sw_bottleneck")}
+            for r in sorted((r for r in snap.get("scenarios") or [] if r.get("spec_ok") and r.get("sw_margin_pct") is not None
+                             and r["sw_margin_pct"] < LOW_MARGIN_PCT), key=lambda r: r["sw_margin_pct"])]
+           or [m for m in snap.get("sw_margin_top5") or [] if m.get("margin_pct") is not None and m["margin_pct"] < LOW_MARGIN_PCT])
     if low:
         m0 = low[0]
         risks.append({"title": f"SW timing margin < {LOW_MARGIN_PCT:.0f}% · {len(low)}건",
@@ -160,19 +164,15 @@ def build_conclusion(snap: dict[str, Any]) -> dict[str, Any]:
     elif not snap["overview"].get("dvfs_table_ref"):
         risks.append({"title": "DVFS table 미기록", "detail": "이전 engine run이라 사용한 DVFS table이 기록되지 않음 — 현재 engine으로 재탐색 권장"})
 
+    # lever ladder: ① clock → ② compression → ③ SW → ④ IQ-degrading options (last resort), grouped across variants
+    from scenario_db.reporting.review_verdict import LADDER, lever_actions
+
     actions: list[dict[str, Any]] = []
-    for o in sorted((o for o in snap.get("power_options") or [] if o.get("best")), key=lambda o: o["best"]["delta_mw"])[:3]:
-        b = o["best"]
-        actions.append({"action": " + ".join(b["labels"]), "target": o["variant_id"], "delta_mw": b["delta_mw"],
-                        "delta_pct": b["delta_pct"], "basis": "derived (조합 탐색)", "check": "IQ 평가"})
-    seen: set[str] = set()
-    for m in low:
-        task = str(m.get("bottleneck"))
-        if task in seen:
-            continue
-        seen.add(task)
-        actions.append({"action": f"{task} 최적화 · HW offload · big core 배치 검토", "target": m["variant_id"], "delta_mw": None,
-                        "delta_pct": None, "basis": f"SW margin {m['margin_pct']:.1f}% (SW 가정 기반)", "check": "CPU profile 실측"})
+    for a in lever_actions(snap, limit_per_tier=2):
+        t = a["targets"]
+        actions.append({"tier": a["tier"], "tier_label": LADDER[a["tier"]][1], "action": a["action"],
+                        "target": f"{_s(t[0])}{f' 외 {len(t) - 1}' if len(t) > 1 else ''}" if t else "—", "targets": t,
+                        "delta_mw": a["delta_mw"], "delta_pct": None, "basis": a["basis"], "check": a["check"], "iq": a["iq"]})
     by_code: dict[str, list[tuple[str, dict[str, str]]]] = {}
     for f in s["failed"]:
         for e in f.get("explained") or []:
@@ -180,12 +180,17 @@ def build_conclusion(snap: dict[str, Any]) -> dict[str, Any]:
                 by_code.setdefault(e["code"], []).append((f["variant_id"], e))
     for code, items in sorted(by_code.items(), key=lambda kv: -len(kv[1]))[:2]:
         names = sorted({v for v, _ in items})
-        actions.append({"action": items[0][1]["action"], "target": f"{names[0]}{f' 외 {len(names) - 1}' if len(names) > 1 else ''}",
+        act = items[0][1].get("action")
+        actions.append({"tier": 0, "tier_label": "fps 미달",
+                        "action": act if act not in (None, "", "—") else "batch · 병렬 처리 반영 후 재판정 (모델 · 입력 확인)",
+                        "target": f"{_s(names[0])}{f' 외 {len(names) - 1}' if len(names) > 1 else ''}", "targets": names,
                         "delta_mw": None, "delta_pct": None, "basis": f"spec 미달 · {items[0][1]['text']}",
-                        "check": "batch 모델 + 실측" if code == "sw_budget" else "IP 처리량 · DVFS table 확인"})
+                        "check": "batch 모델 + 실측" if code == "sw_budget" else "IP 처리량 · DVFS table 확인", "iq": False})
     if s["spec_fail"] and not by_code:
-        actions.append({"action": "NRT batch · SW 병렬화 또는 HW 예산 재배분", "target": f"spec 미달 {s['spec_fail']}건", "delta_mw": None,
-                        "delta_pct": None, "basis": "timing budget", "check": "batch 모델 + 실측"})
+        actions.append({"tier": 0, "tier_label": "fps 미달", "action": "NRT batch · SW 병렬화 또는 HW 예산 재배분",
+                        "target": f"spec 미달 {s['spec_fail']}건", "targets": [], "delta_mw": None,
+                        "delta_pct": None, "basis": "timing budget", "check": "batch 모델 + 실측", "iq": False})
+    actions.sort(key=lambda a: a["tier"])
     ok, n = s["spec_ok"], s["explored"]
     rng = s.get("power_range_mw")
     sources = s.get("power_sources") or {}
@@ -194,4 +199,8 @@ def build_conclusion(snap: dict[str, Any]) -> dict[str, Any]:
     prefix = (f"[부분 평가] 요청 {s.get('requested', n + len(errors))}개 중 계산 실패 {len(errors)}개 · " if errors else "")
     headline = (prefix + f"탐색 {n}개 중 {ok}개 spec 만족" + (f", {source} {rng[0]:,.0f}–{rng[1]:,.0f} mW" if rng else "")
                 + (f". 미달 {n - ok}개는 조치 필요" if n - ok else (". 평가 완료분 미달 없음" if errors else ". 미달 없음")))
-    return {"headline": headline, "risks": risks[:3], "actions": actions[:6], "confidence": _confidence(snap)}
+    return {"headline": headline, "risks": risks[:3], "actions": actions[:10], "confidence": _confidence(snap)}
+
+
+def _s(v: str) -> str:
+    return str(v).replace("cam-rec-", "")

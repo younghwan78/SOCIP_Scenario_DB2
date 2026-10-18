@@ -5,6 +5,7 @@ import { useAsync } from '../lib/route'
 import { isOpen, risksApi, SEVERITY_CLASS, SEVERITY_LABEL, STATUS_LABEL, type Risk, type RiskStatus } from '../lib/reviewRisks'
 
 const TREND: Record<string, string> = { new: '신규', ongoing: '유지', reopened: '재발', resolve_candidate: '해소 후보' }
+const VALIDITY: Record<string, string> = { model_limit: '모델 한계', input_unverified: '입력 미확정' }
 
 function Row({ r, onSaved }: { r: Risk; onSaved: (r: Risk) => void }) {
   const [owner, setOwner] = useState(r.owner ?? '')
@@ -21,9 +22,11 @@ function Row({ r, onSaved }: { r: Risk; onSaved: (r: Risk) => void }) {
   return (
     <tr className={isOpen(r) ? '' : 'risk-closed'}>
       <td className="mono">{r.label}</td>
-      <td><span className={`badge ${SEVERITY_CLASS[r.severity]}`}>{SEVERITY_LABEL[r.severity]}</span></td>
+      <td><span className={`badge ${SEVERITY_CLASS[r.severity]}`}>{SEVERITY_LABEL[r.severity]}</span>
+        {r.validity && VALIDITY[r.validity] && <div className="badge v-warn" style={{ marginTop: 3 }} title="Critical은 확정된 판정에만 — 모델 한계 · 미확정 입력은 검증 필요">{VALIDITY[r.validity]}</div>}</td>
       <td>{r.category}</td>
       <td><b>{r.title}</b><div className="faint" style={{ fontSize: 11.5 }}>{r.detail}</div>
+        {r.checks && r.checks.length > 0 && <div style={{ fontSize: 11.5 }}>먼저 확인: {r.checks.slice(0, 3).join(' → ')}</div>}
         {r.mitigation && <div style={{ fontSize: 11.5 }}>완화안: {r.mitigation}</div>}
         {candidate && <div className="badge v-ok" style={{ marginTop: 3 }}>해소 후보 — 규칙이 더 이상 발생하지 않음, 확인 후 종료</div>}
         {err && <div className="err" style={{ margin: 0 }}>{err}</div>}</td>
